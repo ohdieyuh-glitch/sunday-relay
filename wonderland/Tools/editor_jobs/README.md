@@ -279,3 +279,41 @@ nothing else in the run may be read.
 
 Same shape as validating a method against known data, one level up: there, you check the method on a case
 whose answer you know; here, you check the instrument on a case whose answer you know.
+
+## A ratio is only a measurement if its two halves can move apart (2026-09-27, internal lane)
+
+Two of the day's wrong numbers were RATIOS rather than readings, and both survived scrutiny of the reasoning
+because the arithmetic was sound and the quantity underneath it could not vary.
+
+**`light_mean` over world brightness.** The bound was derived from the eye glow falling 24 to 8 across the
+crossover: a factor of three, so the ratio should fall by two. `light_mean` averages only cells already above
+0.72 of full white, whose luma is bounded at 1.0, so it sits near 0.9 whatever the emissive does. The entire
+measured movement was the world term. A sound derivation applied to a clipped number is worse than a wrong
+one, because the reasoning holds up when you check it.
+
+**Trough over peak on a flat profile.** Skeleton Flame's eye profile came back with peaks of 0.1843 and 0.1843
+and a trough of 0.1804, giving 0.979 — read as "the two eyes are one mass". The photograph shows two eyes with
+a clear black gap. The band was uniformly at one chroma because the skin's ghostfire covers the head, so the
+numerator and the denominator were the same number wearing two names.
+
+Before publishing a ratio, ask what its numerator would read if the thing being measured were absent, and what
+its denominator would read if the thing were at maximum. If either answer is "about the same", the ratio is
+describing something else. The cheap guards are an absolute CONTRAST floor beside every relative one, and a
+positive control: a case where the effect is known to be present, which must register or the run voids.
+
+## Max-per-column carries an assumption about the subject
+
+`max` down a column finds a small bright thing on a DARK subject. Relay OG's head is WHITE, so every column in
+the eye band returned about 0.999 and the profile was flat — it was measuring the head and reporting it as the
+eyes. The same function was correct in the night-body job, where the subject is dark, and the assumption did
+not travel with it.
+
+CHROMA — max channel minus min channel — separates a neutral white head, a black visor and a coloured glow by
+construction, for warm gold and spectral cyan alike. Across five skins, luma gave 0.946 / 0.949 / 1.000 /
+1.000 / 0.962 and chroma gave 0.094 / 0.333 / 0.452 / 0.733 / 0.252.
+
+It has its own limits, and they are gated rather than hidden: eyes too close to white to have chroma, a band
+whose chroma is uniform, and peaks that do not straddle the head's centre. Each returns UNMEASURABLE.
+
+**And validate a new method against captures already on disk before spending a run on it.** It is free, and it
+is what finally broke a cycle of six unvalidated versions of one profile.
