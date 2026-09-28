@@ -18,11 +18,15 @@
 # Precisely the source defaults. The inference was false and the only reason it never became a finding is
 # that a cvar's value is something to READ, not to derive from a downstream count.
 #
-# So the 31 remains unexplained by the radius, and the real defect turned out to be in the instrument:
-# zzW2's radius-24000 rung settled on three identical reads of 127 and then reported 192 once asked again
-# after an unrelated wait. The assignment PAUSES on its way up. Every flat lit-count in this job's history
-# is suspect for that reason, including the 31s, and B_SETTLED now reads the count either side of an
-# independent wait rather than trusting consecutive samples.
+# AND THE 31 IS NOW EXPLAINED, BY NEITHER OF MY TWO THEORIES. It was not the radius and it was not a
+# pausing assignment: THE PAWN WAS BOUNCING between the Noctis spot and the Golden Arrival spawn, 75,757
+# uu apart, between rungs. Assign() takes its Eye from the pawn, so half the rungs answered a question
+# about a different district under the same label. Matched to where the pawn actually was, every rung
+# fits Lit = Min(Near, Pool) exactly and there is no anomaly at all -- the engine was correct throughout.
+# The "plateau at 127" I built B_SETTLED for was the right answer for a pawn standing at the arrival.
+#
+# B_SETTLED stays, because a convergence check is worth having regardless, and the real lesson is the
+# one above it: record where the subject IS, in every row, not once at placement.
 #
 # THE SWEEP IS TWO LADDERS SO THE TWO KNOBS CANNOT BE CONFUSED:
 #   rungs 1-3 hold the radius and raise the count   -- if lit stays flat, count is not the constraint
@@ -34,10 +38,17 @@
 # rebuild -- and, correctly, trimmed nothing and let the gate void the run. A warm-up before the ladder
 # starts costs seconds and stops spending a whole run on it.
 #
-# Cost comes from the RAW accessor deduplicated by engine frame number, with stat unit issued and
-# re-issued, because a budget question is a question about the TAIL. zzU5's first pass reported every cost
-# cell as None: I went hunting a raw tail without turning the counter on. With it on, the same rungs showed
-# 205.87 ms and 168.38 ms worst frames against medians near 23 -- spikes the filtered field cannot show.
+# COST COMES FROM THE RAW ACCESSOR, and `stat unit` IS ISSUED ONCE AND VERIFIED -- never re-issued.
+#
+# The engine binds `stat unit` to UEngine::ToggleStatUnit, so every call FLIPS the overlay. This job
+# issued it at the top AND once per rung, which switched the counter off on alternate rungs, and
+# FStatUnitData only advances while the overlay draws. The comment that used to sit here said the
+# counter "freezes if left alone" and re-issuing kept it alive; it was describing damage this job was
+# doing to itself. The other lane found the same fault in six of theirs.
+#
+# Issuing once is not the fix either -- that assumes it started off, and a previous job may have left it
+# on. ensure_stat_unit flips at most twice and checks the raw counter actually moves between two
+# rendered frames before believing either state.
 #
 # Saves nothing. Restores count, radius and gain to what it FOUND them at, not to what the source defaults
 # say, and reloads behind the restore.
@@ -171,7 +182,6 @@ def job():
     eye = unreal.Vector(where.x, where.y, where.z + 60.0)
     at = unreal.Vector(where.x + 3000.0, where.y + 1200.0, where.z + 40.0)
     L.pose_camera(world, eye, at, 70.0)
-    command("stat unit")
     RESULT["camera_eye"] = [round(eye.x, 1), round(eye.y, 1), round(eye.z, 1)]
     RESULT["camera_at"] = [round(at.x, 1), round(at.y, 1), round(at.z, 1)]
 
@@ -187,6 +197,10 @@ def job():
                 window.pop(0)
             if len(window) == 3 and (max(window) - min(window)) < 0.004:
                 return
+
+    for step in ensure_stat_unit():
+        yield step
+    RESULT["stat_unit_on"] = bool(globals().get("_STAT_ON"))
 
     # ---- WAIT FOR THE WORLD, THEN WARM UP. zzU5 spent its whole first rung arriving.
     #
@@ -224,6 +238,43 @@ def job():
                 pass
         return total, lit
 
+    def ensure_stat_unit():
+        """Turn the overlay ON and PROVE it, rather than issuing the command and hoping.
+
+        `stat unit` IS A TOGGLE -- the engine binds it to UEngine::ToggleStatUnit -- so every call
+        FLIPS it. This job issued it once at the top AND once per rung, so it spent alternate rungs with
+        the counter switched off. FStatUnitData only advances while the overlay draws, which means the
+        instrument was being disabled by the code written to keep it alive. My comment on that line said
+        "re-issued: the counter freezes if left alone" -- a diagnosis of my own toggling.
+
+        Issuing once is not the fix either: that assumes the overlay started off, and a previous job may
+        have left it on. So this flips at most twice and checks the RAW counter actually changes between
+        two rendered frames before believing either state.
+        """
+        for attempt in range(2):
+            last, moved = None, False
+            for _ in range(12):
+                yield 0.1
+                try:
+                    n = int(H.get_engine_frame_number())
+                    raw = H.get_raw_frame_cost_ms()
+                    v = None if raw is None else float(raw[0])
+                except Exception:                          # noqa: BLE001
+                    continue
+                if v is None or v <= 0.01:
+                    continue
+                if last is not None and n != last[0] and abs(v - last[1]) > 1e-6:
+                    moved = True
+                    break
+                last = (n, v)
+            if moved:
+                globals()["_STAT_ON"] = True
+                RESULT["stat_unit_flips"] = attempt
+                return
+            command("stat unit")
+        globals()["_STAT_ON"] = False
+        RESULT["stat_unit_flips"] = 2
+
     def raw_frame_ms():
         try:
             now = int(H.get_engine_frame_number())
@@ -258,7 +309,6 @@ def job():
                 seen.pop(0)
             if len(seen) == 3 and len(set(seen)) == 1 and seen[0] is not None:
                 break
-        command("stat unit")
         for step in settled():
             yield step
         held = knobs()

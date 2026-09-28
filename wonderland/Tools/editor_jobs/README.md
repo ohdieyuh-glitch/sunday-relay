@@ -589,3 +589,23 @@ record("X_STILL", "the subject is at the measurement spot at EVERY rung, not jus
 
 This applies to anything with a position: the pawn, the camera, a figure, a light. If `Assign()`,
 a capture, or a trace reads it, the row records it.
+
+## `stat unit` is a TOGGLE — issuing it "to keep it alive" turns it off
+
+The engine binds it to `UEngine::ToggleStatUnit`, so **every call flips the overlay**, and
+`FStatUnitData` only advances while the overlay draws. Jobs that re-issued it per rung or per window
+"in case it froze" were switching the instrument off half the time — a fault the frozen-counter guard
+then faithfully detected. The other lane found it in six of their jobs; seven of these issue it more
+than once or issue it inside a loop.
+
+Issuing once is **not** the fix: that assumes it started off, and a previous job may have left it on.
+Flip at most twice and verify the raw counter actually moves between two rendered frames:
+
+```bash
+# the set: anything issuing it more than once, or inside a loop
+grep -c '"stat unit"' zc_*.py | grep -v ':1$'
+```
+
+**OPEN BACKLOG** — still toggling, none in the current loop: `zc_beta_perf` (5), `zc_avatar_cost` (3),
+`zc_nav_cost` (2), and `zc_avatar_ladder`, `zc_nav_invoker`, `zc_night_ladder` (one each, **in a loop**).
+Fixed: `zc_practical_budget`.
