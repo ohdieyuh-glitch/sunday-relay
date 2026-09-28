@@ -1,20 +1,36 @@
 # Landing `relay/julius-beta-qualification`
 
 **This page is the ceremony's input, not a narrative.** It holds the PR body, the
-facts a reviewer needs before reading 40 commits, and the things this branch
-does NOT claim. The landing itself is a founder act: this lane never pushes with
-the founder's credential and never merges its own work — see
-`ceremony/push-as-worker.sh` and the worker-App notes.
+facts a reviewer needs before reading 47 commits, and the things this branch
+does NOT claim.
+
+**The ceremony is `docs/JULIUS_WORKER_PR_RUNBOOK.md`, and until 2026-09-27 this
+line named `ceremony/push-as-worker.sh` — a path that has never existed in this
+repository.** It was the exact failure this page warns about two sections below:
+a reviewer sent chasing a phantom. The runbook is real, it was walked once for
+PR #237, and its three steps divide cleanly by authority:
+
+| Step | What it does | Who |
+|---|---|---|
+| 1 | re-author the candidate's commits as the App on a NEW branch, reference untouched | this lane |
+| 2 | mint an installation token, push, open the PR **as the App** | this lane |
+| 3 | approve at the head SHA, squash-merge at that head | **the founder, and only the founder** |
+
+Step 3 is not a courtesy. `scripts/julius-main-provenance.mjs` requires the
+landed PR's author to be `julius-worker[bot]` and its approver to be a
+*different* login, so the lane that wrote the code is structurally incapable of
+completing its own landing. That is the point of the gate.
 
 ## The state of the candidate
 
 | | |
 |---|---|
-| Branch | `relay/julius-beta-qualification` |
+| Branch | `relay/julius-beta-qualification`, head `c9877602` |
 | Base | `origin/main` `a384b215` (#287), unmoved at the time of writing |
-| Commits ahead | 40 |
+| Commits ahead | 47 |
 | Commits behind | 0 — merges with no conflict (`git merge-tree`: none) |
 | Worktree | clean; `git diff --check` clean |
+| Authored by | `Claude <noreply@anthropic.com>` and `julius-stack-rehearsal <rehearsal@local.invalid>` — **neither is the App**, which is what Step 1 of the runbook exists to correct |
 
 **Gates that can run on the founder's Windows workstation.** Run them, do not
 take this list on trust — the list below is the command, so it can be repeated:
