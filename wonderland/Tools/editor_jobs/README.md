@@ -192,3 +192,55 @@ intensity divided by its 23:00 value *is* `Nightfall`, read off the light the cu
 **A look-at point is not a standing position.** `(0, -1460)` is the Golden Arrival monument, which four
 jobs aimed a camera at from 500 uu away. Standing the pawn on it put the camera against lit stone and
 read luma 0.6917 at night, brighter than noon. Stand at `(-320, -1900)`.
+
+## The instrument answered a question next to the one asked (2026-09-27, internal lane)
+
+Four of these cost a run each today. They share a shape with the settle traps above: the reading is steady,
+plausible and about something else.
+
+| The trap | What it looks like | What detects it |
+| --- | --- | --- |
+| `stat unit`'s fields are SMOOTHED | a p95 and a median that agree; a hitch that never appears | read `GetRawFrameCostMs`, not `GetFrameCostMs`, for anything about extremes |
+| `editor_play_simulate` instead of `editor_request_begin_play` | every capture identical; `pose_camera` has no effect | hash the captures and require them to DIFFER |
+| a clause whose failure condition is a non-empty list | PASS on a run that measured nothing | require a measurement for every subject the clause clears |
+| a bound derived for one quantity, applied to a clipped one | a sound derivation that fails the thing it should pass | check the quantity can actually MOVE by the amount the derivation assumes |
+
+**`FStatUnitData` keeps two parallel sets of fields and its own comment names them.** The block holding
+`FrameTime` is "unit frame times filtered with a simple running average"; the block below is the "raw
+equivalents". The filter is `FrameTime = 0.9 * FrameTime + 0.1 * RawFrameTime`, applied identically to game,
+render and GPU — a ten-frame exponential average, which the engine's own performance snapshot assigns to a
+variable called `AverageFrameTime`. A one-frame 200 ms spike arrives as 15 ms. Medians off the filtered field
+are honest; every p95, worst case and hitch taken from it is a percentile of a curve with its peaks removed.
+`zc_avatar_hitch` existed to measure hitches and read the filtered field for all eleven of its extremes.
+
+**A frame counter advancing is not enough: the STAT has to advance too.** `FStatUnitData` only updates while
+the overlay is drawing. When it stops, every field keeps its last value while `GFrameCounter` carries on, so a
+reading deduped on the frame number is accepted as new and is the previous frame's number. Eight
+byte-identical *raw* reads across advancing frames means the overlay, not a steady world. Re-issue `stat unit`
+inside every sampling loop, not just the one that always did.
+
+**Count FRAMES, not READS.** A loop polling a per-frame stat gets several reads inside one frame and none
+inside the next, so percentiles come out weighted by how often Python happened to run. One ladder reported 253
+"samples" whose median, p95 and worst agreed to the hundredth.
+
+**In simulate mode there is no player camera.** `pose_camera` poses nothing, the viewport keeps showing the
+editor's own fixed view, and the captures are a photograph of the editor. Thirty of them came back on one md5
+while the skins, the hour and the camera all changed. `zc_beam_geom` carries a comment saying this after
+hitting it first; reading the neighbouring jobs would have been cheaper than the run.
+
+**A clause that fails on a non-empty list passes hardest when the list cannot be built.** "No other skin merges
+its eyes" reported PASS over a run that had photographed nothing, because nothing could be flagged. Its two
+neighbours failed honestly on the same empty data, because they asked `isinstance(v, float) and v <= bound` —
+the guard was a habit rather than a decision. Make it a decision.
+
+**A derivation is not safer than a guess if it is applied to the wrong quantity.** An eye-to-world ratio was
+built on `light_mean`, and its bound derived from the eye glow falling 24 to 8 across the crossover: a factor of
+three, so the ratio should fall by two. `light_mean` averages only cells already above 0.72 of full white,
+whose luma is bounded at 1.0, so it sits near 0.9 whatever the emissive does. The entire measured movement was
+the *world* term. A sound derivation applied to a clipped number survives scrutiny of the reasoning, which
+makes it worse than a wrong one.
+
+**And a reading with no place attached is a true sentence about nowhere.** A night-body job reported the mascot
+97 per cent crushed and never recorded where the mascot stood; the world lane read the same district and hour
+four times brighter, because their patch had nobody standing on it. Record the subject's position, and the
+distance to the nearest thing that could explain a good result.
