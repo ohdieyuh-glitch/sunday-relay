@@ -65,8 +65,19 @@ def job():
         return
     record("O00", "the editor exports the raw frame instrument", True)
 
-    if ues.get_game_world() is None:
-        les.editor_play_simulate()
+    # ---- REAL PLAY, NOT SIMULATE. zc_eye_split called editor_play_simulate and wrote thirty byte-identical
+    # captures, because simulate has no player camera. This job takes no pictures, but it does read
+    # pawn->GetActorLocation to place the avatars, and simulate may have no pawn at all -- so it would have
+    # waited out its 180-second pawn gate and voided for a reason that had nothing to do with avatars.
+    #
+    # Every job in this tree that measures a running world uses editor_request_begin_play, and the throttle
+    # suspension belongs with it: an unfocused PIE window throttles into UE's delta clamp, and this job's whole
+    # subject is frame cost.
+    if ues.get_game_world() is not None:
+        les.editor_request_end_play()
+    yield (lambda: ues.get_game_world() is None, 600)
+    L.set_background_throttle_suspended(True)
+    les.editor_request_begin_play()
     yield (lambda: ues.get_game_world() is not None, 300)
     yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 180)
     world = ues.get_game_world()

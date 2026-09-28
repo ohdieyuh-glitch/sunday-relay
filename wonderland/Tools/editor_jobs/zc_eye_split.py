@@ -26,6 +26,7 @@
 # NOT CONCURRENT: this job owns PIE.
 CONCURRENT = False
 
+import hashlib
 import os
 import sys
 import time
@@ -128,8 +129,39 @@ def job():
             "profile": cols,
         }
 
-    if ues.get_game_world() is None:
-        les.editor_play_simulate()
+    # ---- EVERY CAPTURE MUST BE A DIFFERENT PICTURE, and nothing checked that until it was not.
+    #
+    # The first run of zc_eye_split wrote thirty byte-identical PNGs and its "was everything photographed"
+    # clause PASSED, because it counted FILES. Thirty files existed. They were one image. Every downstream
+    # reading was then identical to four decimal places across five skins, three hours and two distances, and
+    # the only reason that was caught is that identical numbers across thirty conditions are absurd on their
+    # face -- which is not a test, it is luck.
+    #
+    # So the hash of each capture is kept and the count of DISTINCT images is a clause. A run whose pictures
+    # are all the same is a run that photographed the editor rather than the game, and it must fail loudly
+    # rather than publish thirty copies of one number.
+    def fingerprint(path):
+        try:
+            with open(path, "rb") as fh:
+                return hashlib.md5(fh.read()).hexdigest()
+        except Exception:                                           # noqa: BLE001
+            return None
+
+    # ---- REAL PLAY, NOT SIMULATE, AND THIS IS WHY EVERY CAPTURE WAS THE SAME IMAGE.
+    #
+    # The first run of zc_eye_split called editor_play_simulate() and wrote THIRTY BYTE-IDENTICAL PNGs: five
+    # skins, three hours and two distances all landing on one hash, 1,589,542 bytes each. In simulate there is
+    # no player camera, so pose_camera has nothing to pose and the viewport keeps showing the editor's own
+    # fixed view -- the skins changed, the hour changed, the camera moved, and the photograph did not.
+    #
+    # Every job in this tree that has ever captured a frame uses editor_request_begin_play, and I wrote
+    # simulate from habit. The throttle suspension comes with it: an unfocused PIE window throttles into UE's
+    # delta clamp, which is a separate way for a capture to be a picture of nothing happening.
+    if ues.get_game_world() is not None:
+        les.editor_request_end_play()
+    yield (lambda: ues.get_game_world() is None, 600)
+    L.set_background_throttle_suspended(True)
+    les.editor_request_begin_play()
     yield (lambda: ues.get_game_world() is not None, 300)
     yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 180)
     world = ues.get_game_world()
@@ -207,6 +239,7 @@ def job():
                         raise RuntimeError("capture_game_viewport returned falsy: the editor window is "
                                            "probably not foreground")
                     shots.append(name)
+                    RESULT.setdefault("capture_hashes", {})[name] = fingerprint(path)
                     readings[key] = profile(path)
                 except Exception as err:                            # noqa: BLE001
                     RESULT.setdefault("errors", {})[key] = str(err)[:160]
@@ -224,6 +257,16 @@ def job():
         pass
 
     RESULT["captures_dir"] = ROOT
+    # THE DISTINCTNESS CLAUSE, before any reading is interpreted.
+    prints = [p for p in (RESULT.get("capture_hashes") or {}).values() if p]
+    distinct = len(set(prints))
+    RESULT["distinct_captures"] = {"files": len(prints), "distinct": distinct}
+    record("E_DISTINCT", "each capture is a different picture", len(prints) > 0 and distinct == len(prints),
+           files=len(prints), distinct=distinct,
+           note="thirty byte-identical PNGs passed a clause that counted files. In simulate mode there is no "
+                "player camera, so the skins, the hour and the camera all changed and the photograph did not. "
+                "A run whose pictures are all the same photographed the editor, not the game.")
+
     record("E01", "every skin was photographed at every hour and distance the founder listed",
            len(shots) >= len(SKINS) * len(HOURS) * len(VIEWS), taken=len(shots),
            wanted=len(SKINS) * len(HOURS) * len(VIEWS), where=ROOT)
