@@ -113,7 +113,14 @@ def job():
             "samples": len(clean),
             "mean_ms": round(sum(v[0] for v in clean) / len(clean), 2) if clean else 0.0,
             "median_ms": at(0),
-            "worst_ms": round(clean[-1][0], 2) if clean else 0.0,
+        # A WORST CASE OFF THE FILTERED FIELD IS NOT A WORST FRAME. FStatUnitData's FrameTime is
+        # 0.9 * FrameTime + 0.1 * RawFrameTime -- a ten-frame exponential average, which the engine's own
+        # performance snapshot calls AverageFrameTime. A single expensive frame arrives here as a fifteenth
+        # of itself, so this value is the worst SMOOTHED reading in the window and cannot be quoted as the
+        # worst frame. Renamed to say so rather than deleted: it still bounds a SUSTAINED stall, because an
+        # exponential average only reaches a high value if the raw cost stayed there for many frames.
+        # GetRawFrameCostMs is the accessor for a real tail; see Tools/editor_jobs/README.md.
+            "worst_smoothed_ms": round(clean[-1][0], 2) if clean else 0.0,
             "game_median": at(1), "render_median": at(2), "gpu_median": at(3),
         }
         # ---- IS THIS FRAME DOING WORK, OR WAITING?

@@ -80,7 +80,14 @@ def job():
         seen.sort()
         out = {"samples": len(seen),
                "median_ms": round(seen[len(seen) // 2], 2) if seen else 0.0,
-               "worst_ms": round(seen[-1], 2) if seen else 0.0}
+        # A WORST CASE OFF THE FILTERED FIELD IS NOT A WORST FRAME. FStatUnitData's FrameTime is
+        # 0.9 * FrameTime + 0.1 * RawFrameTime -- a ten-frame exponential average, which the engine's own
+        # performance snapshot calls AverageFrameTime. A single expensive frame arrives here as a fifteenth
+        # of itself, so this value is the worst SMOOTHED reading in the window and cannot be quoted as the
+        # worst frame. Renamed to say so rather than deleted: it still bounds a SUSTAINED stall, because an
+        # exponential average only reaches a high value if the raw cost stayed there for many frames.
+        # GetRawFrameCostMs is the accessor for a real tail; see Tools/editor_jobs/README.md.
+               "worst_smoothed_ms": round(seen[-1], 2) if seen else 0.0}
         RESULT[label] = out
         emit(label, "INFO", label, out)
         return out
