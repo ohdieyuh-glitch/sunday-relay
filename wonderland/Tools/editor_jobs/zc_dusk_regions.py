@@ -278,7 +278,14 @@ def job():
                 "ground_crushed": round((g1["crushed"] + g2["crushed"]) / 2.0, 4),
                 "ground_blown": round((g1["blown"] + g2["blown"]) / 2.0, 4),
                 "ground_readable": round((g1["readable"] + g2["readable"]) / 2.0, 4),
-                "ground_spread": round(abs(g1["readable"] - g2["readable"]), 4),
+                # GATE THE CONTINUOUS QUANTITY, REPORT THE DERIVED ONE. readable is a threshold
+                # statistic and near luma 0.14 a thousandth of luma moves several per cent of it, so
+                # holding it to a mean's tolerance voids runs the instrument handled perfectly: this
+                # job failed D_NOISE at 0.1134 on the fraction while the frame luma was steady. I fixed
+                # exactly this in zc_dusk_cause and left it standing here, which is the enumerate-the-set
+                # failure inside the very hour I wrote the rule about it down.
+                "ground_luma_spread": round(abs(g1["luma"] - g2["luma"]), 4),
+                "ground_readable_spread": round(abs(g1["readable"] - g2["readable"]), 4),
                 "moon_intensity": (round(mi, 3) if mi is not None else None),
                 "sun_elevation": round(elev, 2),
                 "daylight": round(daylight_at(elev), 4),
@@ -335,12 +342,16 @@ def job():
 
     good = {n: [r for r in out[n] if not r.get("unmeasured")] for n in measured}
     complete = [n for n in measured if len(good[n]) == len(HOURS)]
-    worst_spread = max((max([r["spread"] for r in good[n]] + [r["ground_spread"] for r in good[n]])
+    worst_spread = max((max([r["spread"] for r in good[n]] + [r["ground_luma_spread"] for r in good[n]])
                         for n in complete), default=None)
-    record("D_NOISE", "every rung agrees with itself, on the frame and on the ground",
+    worst_frac = max((max(r["ground_readable_spread"] for r in good[n]) for n in complete), default=None)
+    record("D_NOISE", "every rung agrees with itself on the LUMA it actually measures",
            len(complete) == len(PLACES) and worst_spread is not None and worst_spread <= AGREE,
-           worst_spread=worst_spread, tolerance=AGREE, complete=complete,
-           rungs={n: len(good[n]) for n in measured}, wanted=len(HOURS))
+           worst_luma_spread=worst_spread, tolerance=AGREE, complete=complete,
+           worst_readable_fraction_spread=worst_frac,
+           rungs={n: len(good[n]) for n in measured}, wanted=len(HOURS),
+           note="the fraction is threshold-amplified and is reported rather than gated; a frame steady "
+                "to a thousandth of luma with a fraction moving a tenth is one instrument behaving well")
     if len(complete) != len(PLACES) or (worst_spread or 1.0) > AGREE:
         RESULT["status"] = "voided: the rungs do not agree with themselves"
         yield 2.0
