@@ -295,3 +295,20 @@ describe('C · 9–12 · the terminal row can finally say why', () => {
       .toContain('out[`diag_${key}`]=entry;');
   });
 });
+
+describe('D · 13 · the architect says how it is paid for, on every ending', () => {
+  it('13 · a validated plan and a refused one both name API_BILLED, beside an amount nobody reported', async () => {
+    // BY CONSTRUCTION, NOT BY INFERENCE: this adapter cannot exist without an
+    // OpenAI API key, so every dispatch it makes is billed to that key. The
+    // amount stays unknown — Chat Completions never states a price — and the
+    // ledger can now say "API-billed, amount not reported" instead of UNKNOWN.
+    const result = await architect(succeeded(JSON.stringify(VALID_PLAN))).dispatch({
+      taskId: 'plan-1:task', contextId: 'ctx-diag-1', taskType: 'plan',
+    });
+    expect(result.usage).toMatchObject({ costBasis: 'UNKNOWN', billingPath: 'API_BILLED' });
+    expect((result.usage as Record<string, unknown>).usdMicros, 'the path is known; the amount is not').toBeUndefined();
+    expect(result.diagnostics).toMatchObject({ costBasis: 'UNKNOWN', billingPath: 'API_BILLED' });
+    // Bought and then refused: the same fact, read AFTER the durable allowlist.
+    expect(await refused(succeeded('this is not a plan'))).toMatchObject({ costBasis: 'UNKNOWN', billingPath: 'API_BILLED' });
+  });
+});
