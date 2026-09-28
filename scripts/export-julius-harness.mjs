@@ -211,6 +211,10 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-execution-coordinator.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-lease-keeper.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-workspace-attribution.ts', 'CODING AGENT'],
+  // Whether a worker may CREATE a file: the pre-hoc authority behind the hosted
+  // agent's conditional Write grant. CODING AGENT because it bounds what that
+  // dispatch may do, not what the workspace snapshot later observes.
+  ['src/relay/mission/julius/julius-file-creation.ts', 'CODING AGENT'],
   ['src/relay/mission/julius/julius-policy.ts', 'C.A.R.D. POLICY'],
   ['src/relay/mission/julius/julius-router.ts', 'WORKER REGISTRY / ROUTING'],
   ['src/relay/mission/julius/julius-agent-turn-loop.ts', 'AGENT TURN LOOP'],

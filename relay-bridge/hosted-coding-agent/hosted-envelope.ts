@@ -35,6 +35,11 @@ import { coderMaxRuntimeMs, coderMaxTurns } from './coder-envelope';
  * whole point.
  */
 
+import {
+  juliusFileCreationDecision,
+  type JuliusFileCreationPolicy,
+} from '../../src/relay/mission/julius/julius-file-creation';
+
 /** Tools the hosted agent may use for the safe-edit fixture. */
 export const HOSTED_ALLOWED_TOOLS: readonly string[] = Object.freeze([
   'Read', 'Glob', 'Grep', 'Edit',
@@ -49,6 +54,27 @@ export const HOSTED_DISALLOWED_TOOLS: readonly string[] = Object.freeze([
   'Bash', 'BashOutput', 'KillShell', 'Write', 'NotebookEdit',
   'WebFetch', 'WebSearch', 'Task', 'SlashCommand', 'TodoWrite',
 ]);
+
+/**
+ * THE ONE TOOL GRANTED CONDITIONALLY, AND NEVER WITHOUT AN AUTHORITY.
+ *
+ * `Write` is what makes a mission needing a NEW file possible at all. Without it
+ * every deliverable must be a human-seeded stub: friction for an operator-composed
+ * mission, fatal for a player-composed one, because nobody is there to invent the
+ * file list.
+ *
+ * It is NOT simply moved into the allow-list, and the reason matters. The existing
+ * containment for edits is the workspace tree snapshot taken afterwards, and that
+ * authority is real for everything INSIDE the workspace. A write to an absolute
+ * path outside it is not caught by that snapshot — it is UNSEEN, and this agent is
+ * a child process on the bridge host rather than a process inside the sandbox.
+ * "Not observed" is the one answer a containment control may never give.
+ *
+ * So the tool arrives together with {@link juliusHostedCreationAuthority}, which
+ * answers the SDK's pre-hoc `canUseTool` question from the kernel's pure decision.
+ * `compileHostedEnvelope` refuses to grant the tool without it.
+ */
+export const HOSTED_CREATION_TOOL = 'Write';
 
 /** Bounds for one hosted execution. */
 export interface HostedLimits {
@@ -163,15 +189,31 @@ export function compileHostedEnvelope(input: {
    * could raise `maxTurns` to forty and still stop at twelve. It binds now.
    */
   limits?: HostedLimits;
+  /**
+   * PRESENT MEANS THIS MISSION MAY CREATE FILES, and carries the bounds. Absent
+   * means it may not, which stays the default: a dispatch gains the creation tool
+   * only when the mission said it needs one.
+   *
+   * The policy is not advisory here. It is the same object
+   * {@link juliusHostedCreationAuthority} answers from, so the tool that is
+   * granted and the authority that bounds it cannot drift apart — and the caller
+   * cannot grant one without the other, because there is one field for both.
+   */
+  creation?: JuliusFileCreationPolicy;
 }): HostedEnvelope {
   const requested = typeof input.requestedModel === 'string' && input.requestedModel.trim() !== ''
     ? input.requestedModel.trim()
     : null;
+  const mayCreate = input.creation !== undefined;
   return {
     cwd: input.workspacePath,
     model: requested,
-    allowedTools: [...HOSTED_ALLOWED_TOOLS],
-    disallowedTools: [...HOSTED_DISALLOWED_TOOLS],
+    allowedTools: mayCreate
+      ? [...HOSTED_ALLOWED_TOOLS, HOSTED_CREATION_TOOL]
+      : [...HOSTED_ALLOWED_TOOLS],
+    disallowedTools: mayCreate
+      ? HOSTED_DISALLOWED_TOOLS.filter((tool) => tool !== HOSTED_CREATION_TOOL)
+      : [...HOSTED_DISALLOWED_TOOLS],
     // Edits are applied without a prompt because a hosted run has no operator
     // to prompt. Containment is the tool restriction, the pinned cwd, the
     // empty settings sources and Relay's post-run inspection — never a dialog.
@@ -179,6 +221,76 @@ export function compileHostedEnvelope(input: {
     maxTurns: (input.limits ?? DEFAULT_HOSTED_LIMITS).maxTurns,
     settingSources: [],
     includePartialMessages: false,
+  };
+}
+
+/** One creation the authority permitted or refused, for the record. */
+export interface HostedCreationRecord {
+  readonly tool: string;
+  readonly requestedPath: string;
+  readonly allowed: boolean;
+  /** The kernel's refusal name, or null when it allowed the write. */
+  readonly refusal: string | null;
+  readonly because: string;
+}
+
+/**
+ * JULIUS ANSWERING THE SDK'S PERMISSION QUESTION, BEFORE THE WRITE HAPPENS.
+ *
+ * The SDK asks `canUseTool` before running a tool it has been granted, and takes
+ * `{behavior:'allow'}` or `{behavior:'deny', message}`. That is the seam this
+ * repository needed: the Coding Agent REQUESTS a creation and Julius decides,
+ * which is a real pre-hoc authority rather than a post-hoc observation of a write
+ * that already landed.
+ *
+ * WHAT IS INJECTED AND WHY. `exists` is a filesystem fact, so the caller supplies
+ * `observe`. That keeps the kernel decision pure and keeps THIS function testable
+ * without a disk — and it means the overwrite rule is answered from the same
+ * observation the writer will make rather than from the model's belief about it.
+ *
+ * EVERY DECISION IS RECORDED, allowed ones included. A permission system that logs
+ * only its refusals cannot answer "what did this dispatch create", which is the
+ * question a reviewer and a repair both need.
+ *
+ * ANY OTHER TOOL IS NOT THIS FUNCTION'S BUSINESS: it returns null, which the SDK
+ * reads as "no opinion", and the envelope's allow and deny lists remain the
+ * control for everything else. Refusing tools here as well would put the tool
+ * policy in two places, and the two would disagree.
+ */
+export function juliusHostedCreationAuthority(input: {
+  readonly policy: JuliusFileCreationPolicy;
+  /** Whether a path already exists, resolved by the caller against the workspace. */
+  readonly observe: (relativePath: string) => boolean;
+  readonly record: (entry: HostedCreationRecord) => void;
+}): (request: { readonly toolName: string; readonly input: Record<string, unknown> })
+  => { readonly behavior: 'allow' } | { readonly behavior: 'deny'; readonly message: string } | null {
+  return (request) => {
+    if (request.toolName !== HOSTED_CREATION_TOOL) return null;
+
+    const asked = request.input.file_path ?? request.input.path ?? request.input.filePath;
+    const requestedPath = typeof asked === 'string' ? asked : '';
+    const content = request.input.content;
+    const bytes = typeof content === 'string' ? Buffer.byteLength(content, 'utf8') : 0;
+
+    const decision = juliusFileCreationDecision(
+      { path: requestedPath, bytes, exists: requestedPath === '' ? false : input.observe(requestedPath) },
+      input.policy,
+    );
+
+    if (decision.allowed) {
+      input.record({
+        tool: request.toolName, requestedPath, allowed: true, refusal: null,
+        because: `Permitted: ${decision.path}${decision.overwrites ? ' (replacing an existing file)' : ''}.`,
+      });
+      return { behavior: 'allow' };
+    }
+    input.record({
+      tool: request.toolName, requestedPath, allowed: false,
+      refusal: decision.refusal, because: decision.because,
+    });
+    // The message reaches the model, so it says what to do differently rather
+    // than only that something was refused.
+    return { behavior: 'deny', message: `${decision.refusal}: ${decision.because}` };
   };
 }
 
