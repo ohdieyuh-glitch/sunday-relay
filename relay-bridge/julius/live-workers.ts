@@ -561,6 +561,8 @@ const reviewerDiagnostics = (input: {
   readonly startedAt?: string;
   readonly completedAt?: string;
   readonly usage?: HermesUsage;
+  /** The operator's declared billing path (`juliusReviewerBillingPath`); null says nothing. */
+  readonly billingPath: ReturnType<typeof juliusReviewerBillingPath>;
 }): Record<string, unknown> => {
   const started = input.startedAt === undefined ? Number.NaN : Date.parse(input.startedAt);
   const completed = input.completedAt === undefined ? Number.NaN : Date.parse(input.completedAt);
@@ -588,6 +590,8 @@ const reviewerDiagnostics = (input: {
        the strongest honest basis here is ESTIMATED — and UNKNOWN when even that
        is absent. Neither is ever `PROVIDER_REPORTED`, and neither is zero. */
     costBasis: estimated === null ? 'UNKNOWN' : 'ESTIMATED',
+    // How it is paid for, as the operator declared it; absent when undeclared.
+    ...(input.billingPath === null ? {} : { billingPath: input.billingPath }),
     estimatedCostUsdMicros: estimated,
     inputTokens: input.usage?.inputTokens ?? null,
     outputTokens: input.usage?.outputTokens ?? null,
@@ -657,6 +661,43 @@ const providerFacts = (
   elapsedMs: Date.now() - startedAtMs,
 });
 
+/**
+ * HOW THE PROMPT ARCHITECT IS PAID FOR: its OpenAI API key, by construction.
+ *
+ * `createLiveArchitectAdapter` refuses to exist without an `apiKey`, and the Chat
+ * Completions connector authenticates with nothing else, so the billing path is
+ * not an inference from an amount — there is never an amount — but a fact about
+ * the only way this adapter can run. Stated on every ending, so the ledger can
+ * say "API-billed, amount not reported" instead of UNKNOWN for a role whose
+ * money is real. The founder's accounting requirement names this distinction.
+ */
+const ARCHITECT_BILLING = Object.freeze({ billingPath: 'API_BILLED' as const });
+
+/**
+ * HOW THE INDEPENDENT REVIEWER IS PAID FOR, IN THE OPERATOR'S OWN WORDS.
+ *
+ * Hermes talks to its provider with the credential in its own profile, and
+ * nothing Julius observes can tell an API key from a subscription behind it. So
+ * the only honest source is `RELAY_HERMES_BILLING_MODE`, the operator's
+ * declaration, parsed exactly as `declaredBillingPath` in relay-bridge/attestation.ts
+ * parses it (a test holds the two equal). Undeclared says nothing and returns
+ * null; a word nobody defined is `UNKNOWN`, never agreement with a default.
+ */
+export function juliusReviewerBillingPath(
+  declared: string | undefined,
+): 'API_BILLED' | 'SUBSCRIPTION' | 'NOT_APPLICABLE' | 'UNKNOWN' | null {
+  const value = (declared ?? '').trim().toLowerCase();
+  if (value === '') return null;
+  switch (value) {
+    case 'api_billed': return 'API_BILLED';
+    case 'subscription': return 'SUBSCRIPTION';
+    // A locally hosted model is billed by nobody.
+    case 'local': return 'NOT_APPLICABLE';
+    // `portal`, a misspelling, anything else: paid somehow Julius cannot name.
+    default: return 'UNKNOWN';
+  }
+}
+
 const planDiagnostics = (input: {
   readonly requestedModel: string | null;
   readonly servedModel?: string | null;
@@ -721,6 +762,13 @@ const planDiagnostics = (input: {
    * a table exists, inventing the dollars is exactly what is forbidden.
    */
   costBasis: 'UNKNOWN',
+  /**
+   * BUT IT CAN SAY HOW IT IS PAID FOR, because that is decided by construction.
+   * This adapter is the OpenAI Chat Completions architect and refuses to exist
+   * without an API key, so every dispatch it makes is billed to that key: the
+   * amount is unknown, the billing path is not. See `ARCHITECT_BILLING`.
+   */
+  ...ARCHITECT_BILLING,
   inputTokens: input.inputTokens ?? null,
   /**
    * CACHED INPUT IS BILLED DIFFERENTLY, and the connector has always read it
@@ -1104,6 +1152,7 @@ export function createLiveArchitectAdapter(input: {
             outputTokens: outcome.usage.outputTokens ?? undefined,
             toolCalls: 0,
             costBasis: 'UNKNOWN',
+            ...ARCHITECT_BILLING,
           },
         };
       }
@@ -1160,6 +1209,7 @@ export function createLiveArchitectAdapter(input: {
             outputTokens: outcome.usage.outputTokens ?? undefined,
             toolCalls: 0,
             costBasis: 'UNKNOWN',
+            ...ARCHITECT_BILLING,
           },
         };
       }
@@ -1215,6 +1265,7 @@ export function createLiveArchitectAdapter(input: {
             outputTokens: outcome.usage.outputTokens ?? undefined,
             toolCalls: 0,
             costBasis: 'UNKNOWN',
+            ...ARCHITECT_BILLING,
           },
         };
       }
@@ -1308,6 +1359,7 @@ export function createLiveArchitectAdapter(input: {
           // is UNKNOWN and the reservation stays held rather than settling at
           // zero. Unknown is not free.
           costBasis: 'UNKNOWN',
+          ...ARCHITECT_BILLING,
         },
       };
       }
@@ -1805,6 +1857,8 @@ export function createLiveHermesReviewerAdapter(input: {
   const sleep = input.sleep ?? abortableSleep;
   const transientReaskLimit = input.transientReaskLimit ?? REVIEW_TRANSIENT_REASK_LIMIT;
   if (!Number.isSafeInteger(transientReaskLimit) || transientReaskLimit < 0) throw new Error('hermes_reviewer_adapter_reask_limit_invalid');
+  // The operator's declaration, read once: nothing the review observes can answer it.
+  const billingPath = juliusReviewerBillingPath(input.config.billingMode);
   return {
     adapterId: input.worker.adapterId,
     async dispatch(dispatch): Promise<JuliusProviderResult> {
@@ -2105,7 +2159,7 @@ export function createLiveHermesReviewerAdapter(input: {
         throw new JuliusDispatchError(
           code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape,
           reviewerDiagnostics({
-            diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape,
+            diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath,
             startedAt: outcome.startedAt, completedAt: outcome.completedAt,
             // A FAILED REVIEW STILL ACCOUNTS FOR WHAT IT BOUGHT: tokens, calls
             // and the served model, from the file Hermes writes on failure too.
@@ -2183,7 +2237,7 @@ export function createLiveHermesReviewerAdapter(input: {
          * nowhere at all.
          */
         diagnostics: reviewerDiagnostics({
-          diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape,
+          diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath,
           startedAt: outcome.startedAt, completedAt: outcome.completedAt,
           usage: reviewUsage,
         }),
@@ -2202,6 +2256,8 @@ export function createLiveHermesReviewerAdapter(input: {
           outputTokens: reviewUsage.outputTokens ?? undefined,
           costBasis: harnessEstimateMicros(reviewUsage) === null ? 'UNKNOWN' : 'ESTIMATED',
           estimatedUsdMicros: harnessEstimateMicros(reviewUsage) ?? undefined,
+          // As the operator declared it; the ledger drops it if it contradicts the basis.
+          ...(billingPath === null ? {} : { billingPath }),
         },
       };
     },

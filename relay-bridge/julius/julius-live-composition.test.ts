@@ -42,9 +42,11 @@ import {
   createLiveHostedCodingAdapter,
   diffRef,
   guidanceRef,
+  juliusReviewerBillingPath,
   planRef,
   type ResearchPolicySource,
 } from './live-workers';
+import { declaredBillingPath } from '../attestation';
 import {
   architectWorker,
   CODER_WORKER,
@@ -3110,6 +3112,50 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
     expect(diagnostics.costBasis).toBe('UNKNOWN');
     expect(diagnostics.estimatedCostUsdMicros).toBeNull();
     expect((result.usage as { costBasis: string }).costBasis).toBe('UNKNOWN');
+  });
+
+  /**
+   * HOW THE REVIEWER IS PAID FOR, AND ONLY WHEN SOMEONE WHO KNOWS SAYS SO.
+   *
+   * Hermes reaches its provider with the credential in its own profile, and
+   * nothing the review observes can tell an API key from a subscription. So the
+   * billing path comes from `RELAY_HERMES_BILLING_MODE`, the operator's
+   * declaration — and an undeclared reviewer says nothing at all, which the
+   * ledger then reads as UNKNOWN rather than as agreement with a default.
+   */
+  it('the reviewer states its billing path only when the operator declared one', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const reviewer = (mode: string | undefined) => createLiveHermesReviewerAdapter({
+      worker: LIVE_REVIEWER_WORKER,
+      contexts: { snapshotFor: () => reviewSnapshot('plan-1:review') },
+      artifacts,
+      config: loadHermesConfig({ ...LIVE_ENV, ...(mode === undefined ? {} : { RELAY_HERMES_BILLING_MODE: mode }) } as never),
+      testCommand: 'npm run mission-test',
+      run: fakeReviewer({ order: [] }, [], ['changes_required']) as never,
+    });
+    const dispatch = { taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' };
+
+    const declared = await reviewer('api_billed').dispatch(dispatch);
+    expect(declared.usage, 'API-billed, and still no amount').toMatchObject({ billingPath: 'API_BILLED' });
+    expect((declared.usage as Record<string, unknown>).usdMicros).toBeUndefined();
+    expect(declared.diagnostics).toMatchObject({ billingPath: 'API_BILLED' });
+
+    const undeclared = await reviewer(undefined).dispatch(dispatch);
+    expect(Object.keys(undeclared.usage as object), 'undeclared says nothing').not.toContain('billingPath');
+    expect(Object.keys(undeclared.diagnostics as object)).not.toContain('billingPath');
+  });
+
+  it('the reviewer reads the declaration exactly as the attestation reads it', () => {
+    // ONE PARSER'S VERDICTS, TRANSLATED — not a second parser with its own opinions.
+    const inJuliusWords: Record<string, string> = {
+      api_billed: 'API_BILLED', subscription: 'SUBSCRIPTION', local: 'NOT_APPLICABLE', portal: 'UNKNOWN', unknown: 'UNKNOWN',
+    };
+    for (const declaration of ['api_billed', ' API_BILLED ', 'subscription', 'local', 'portal', 'api-billed', 'bogus', '', undefined]) {
+      const canonical = declaredBillingPath(declaration);
+      expect(juliusReviewerBillingPath(declaration), JSON.stringify(declaration ?? null))
+        .toBe(canonical === null ? null : inJuliusWords[canonical]);
+    }
   });
 
   /**

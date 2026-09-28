@@ -38,6 +38,7 @@ named, and each one is stated here:
 | Provider readiness (`/v1/models`) | probed | **not run** | It contacts the providers. The launch fails fast at `run` if a key is bad. |
 | Paid-slot queue, trusted verifier, main provenance, artifact markers | GitHub | commit pin, clean checkout, local attempt marker, typed confirmation | These gates have no runner to live on locally, so each is replaced by a local one that refuses the same things. |
 | Privilege | runner's passwordless sudo | **the founder's own sudo, typed at launch** | No passwordless account is created or assumed. |
+| Reviewer billing declaration | not set: reviewer rows read `UNKNOWN` | `RELAY_HERMES_BILLING_MODE=api_billed` | This launcher writes an xAI **API key** into Hermes's profile, so every review is API-billed. The ledger then says `API_BILLED` for the reviewer, as it does for the architect by construction. |
 | Live step ceiling | job `timeout-minutes: 120` | `timeout 120m` on the live step | Same number (`JOB_BUDGET_MS`). |
 
 Two shared scripts gained optional switches. Each defaults to CI's exact behaviour, and the
