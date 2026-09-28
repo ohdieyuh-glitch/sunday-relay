@@ -361,6 +361,22 @@ namespace WonderlandJuliusStreamLogic
 		return Line;
 	}
 
+	// EXACT, from the integer micros Julius counts in, trimmed to cents: $0.00, $0.000049, $1.50, $12.345678. "%.4f"
+	// printed every known cost under 50 micros as "$0.0000" -- a real spend reading as none, at the zero end of the
+	// range, which is the one end where the difference is the whole point.
+	FString ExactUsd(int64 Micros)
+	{
+		const bool bNegative = Micros < 0;
+		const uint64 Magnitude = bNegative ? static_cast<uint64>(0) - static_cast<uint64>(Micros) : static_cast<uint64>(Micros);
+		FString Fraction = FString::Printf(TEXT("%06llu"), static_cast<unsigned long long>(Magnitude % 1000000ull));
+		while (Fraction.Len() > 2 && Fraction.EndsWith(TEXT("0")))
+		{
+			Fraction = Fraction.LeftChop(1);
+		}
+		return FString::Printf(TEXT("%s$%llu.%s"), bNegative ? TEXT("-") : TEXT(""),
+			static_cast<unsigned long long>(Magnitude / 1000000ull), *Fraction);
+	}
+
 	FString ResultDetail(const FWonderlandJuliusResultReading& Result)
 	{
 		if (!Result.bKnown)
@@ -387,8 +403,8 @@ namespace WonderlandJuliusStreamLogic
 		// Only a role that may see the cost is given one, and a floor never reads as a total.
 		if (Result.bCostVisible)
 		{
-			const double Usd = static_cast<double>(Result.CostKnownUsdMicros) / 1000000.0;
-			Parts.Add(Result.bCostComplete ? FString::Printf(TEXT("cost $%.4f"), Usd) : FString::Printf(TEXT("cost at least $%.4f"), Usd));
+			const FString Usd = ExactUsd(Result.CostKnownUsdMicros);
+			Parts.Add(Result.bCostComplete ? FString::Printf(TEXT("cost %s"), *Usd) : FString::Printf(TEXT("cost at least %s"), *Usd));
 		}
 		return FString::Join(Parts, TEXT(" · "));
 	}
