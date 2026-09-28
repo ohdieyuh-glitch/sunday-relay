@@ -38,11 +38,16 @@ CAM_YAW = 90.0
 SPAN = 21.0
 #: Past 19:00 on purpose -- the 18-degree threshold hands over at 18.97 and a cliff just outside the
 #: sampled range is indistinguishable from no cliff.
-EVENING = (18.00, 18.10, 18.20, 18.24, 18.25, 18.26, 18.27, 18.30, 18.40, 18.50,
-           18.80, 18.90, 18.95, 19.00, 19.05, 19.10, 19.20, 19.40)
+#: STARTS BEFORE THE MOON IS VISIBLE. cast_always hands over as soon as Nightfall clears 0.002,
+#: which is around 17:50, so the ladder has to begin earlier than the shipped crossover or the new
+#: handover falls off the front of the range -- the same way a delayed one could fall off the back.
+EVENING = (17.70, 17.80, 17.90, 18.00, 18.10, 18.20, 18.24, 18.25, 18.26, 18.27, 18.30, 18.40,
+           18.50, 18.80, 18.90, 18.95, 19.00, 19.05, 19.10, 19.20, 19.40)
 ANCHORS = (23.00, 12.00)
-#: degrees of moon altitude required before it may cast. 0 == shipped.
-ARMS = (0.0, 15.0, 18.0)
+#: (label, MoonCastAltitude, MoonCastAlways). Altitude 15 and 18 were measured 50 and 56 per cent
+#: WORSE than shipped -- kept as one arm rather than two, because their job now is to show the
+#: direction rather than to compete.
+ARMS = (("shipped", 0.0, 0.0), ("delay18", 18.0, 0.0), ("always", 0.0, 1.0))
 
 AGREE = 0.010
 CAM_UP, CAM_AHEAD, CAM_DROP, CAM_FOV = 160.0, 900.0, -250.0, 70.0
@@ -191,7 +196,8 @@ def job():
 
     # ---- THE KNOB MUST EXIST. A missing CVar reads 0.0, which is this knob's shipped default, so
     # ---- "absent" and "inert" are the same reading without a sentinel.
-    KNOB = "wl.Sky.MoonCastAltitude"
+    KNOBS = ("wl.Sky.MoonCastAltitude", "wl.Sky.MoonCastAlways")
+    KNOB = KNOBS[0]
     dll = os.path.join(os.path.dirname(os.path.dirname(CHANNEL)),
                        "Binaries", "Win64", "UnrealEditor-Wonderland.dll")
     try:
@@ -199,19 +205,23 @@ def job():
         built = datetime.datetime.fromtimestamp(os.path.getmtime(dll)).strftime("%Y-%m-%d %H:%M:%S")
     except Exception:                                                  # noqa: BLE001
         built = "unreadable"
-    found = read_f(KNOB)
-    command("%s 37.25" % KNOB)
+    found = {k: read_f(k) for k in KNOBS}
+    for k in KNOBS:
+        command("%s 37.25" % k)
     yield 0.5
-    probe = read_f(KNOB)
-    command("%s %.5f" % (KNOB, found if found is not None else 0.0))
+    probe = {k: read_f(k) for k in KNOBS}
+    for k in KNOBS:
+        command("%s %.5f" % (k, found[k] if found[k] is not None else 0.0))
     yield 0.5
     RESULT["binary_built"] = built
-    record("H_CVAR", "wl.Sky.MoonCastAltitude exists in the RUNNING build, by sentinel round-trip",
-           probe is not None and abs(probe - 37.25) < 1e-3,
+    present = [k for k in KNOBS if probe[k] is not None and abs(probe[k] - 37.25) < 1e-3]
+    record("H_CVAR", "both moon-caster knobs exist in the RUNNING build, by sentinel round-trip",
+           len(present) == len(KNOBS), population=len(KNOBS), answering=present,
+           missing=[k for k in KNOBS if k not in present],
            as_found=found, sentinel_readback=probe, binary_built=built,
-           note="a CVar that does not exist reads 0.0, which is exactly this knob's shipped default")
-    if probe is None or abs(probe - 37.25) >= 1e-3:
-        bail("the running build does not carry %s (binary built %s)" % (KNOB, built))
+           note="a CVar that does not exist reads 0.0, which is exactly the shipped default of both")
+    if len(present) != len(KNOBS):
+        bail("the running build does not carry both moon-caster knobs (binary built %s)" % built)
         yield 2.0
         les.editor_request_end_play()
         yield (lambda: ues.get_game_world() is None, 300)
@@ -307,8 +317,9 @@ def job():
 
     rows = {}
     RESULT["readings"] = rows
-    for arm in ARMS:
-        command("%s %.4f" % (KNOB, arm))
+    for label, alt, always in ARMS:
+        command("wl.Sky.MoonCastAltitude %.4f" % alt)
+        command("wl.Sky.MoonCastAlways %.4f" % always)
         for hour in EVENING + ANCHORS:
             command("wl.Sky.Hour %.4f" % hour)
             yield 1.0
@@ -317,18 +328,18 @@ def job():
             g1, f1, cg = rect(GROUND_RECT), rect(FRAME_RECT), grid()
             yield 1.0
             g2, f2 = rect(GROUND_RECT), rect(FRAME_RECT)
-            key = "a%04.1f_h%05.2f" % (arm, hour)
+            key = "%s_h%05.2f" % (label, hour)
             try:
                 H.capture_viewport_jpeg(os.path.join(ROOT, "%s.jpg" % key), 1300, 86)
             except Exception:                                          # noqa: BLE001
                 pass
             if not (g1 and g2 and f1 and f2 and cg):
-                rows[key] = {"arm": arm, "hour": hour, "unmeasured": True}
+                rows[key] = {"arm": label, "hour": hour, "unmeasured": True}
                 continue
             dirs, sky = lights()
             lo, hi, mid = min(cg), max(cg), median(cg)
             rows[key] = {
-                "arm": arm, "hour": hour,
+                "arm": label, "hour": hour, "cast_altitude": alt, "cast_always": always,
                 "ground_luma": round((g1["luma"] + g2["luma"]) / 2.0, 5),
                 "ground_spread": round(abs(g1["luma"] - g2["luma"]), 5),
                 "frame_spread": round(abs(f1["luma"] - f2["luma"]), 5),
@@ -338,10 +349,11 @@ def job():
                 "sky_intensity": sky, "exposure_bias": exposure(),
                 "shadow_casters": [d["label"] for d in dirs if d["casts"]],
                 "moon_casting": any(d["casts"] and "Moon" in d["label"] for d in dirs),
-                "knob_held": read_f(KNOB),
+                "knobs_held": {k: read_f(k) for k in KNOBS},
                 "moon_altitude_deg": round(-elevation_at(hour), 3)}
 
-    command("%s %.5f" % (KNOB, found if found is not None else 0.0))
+    for k in KNOBS:
+        command("%s %.5f" % (k, found[k] if found[k] is not None else 0.0))
     command("wl.Sky.Hour 12")
     L.release_camera(live())
 
@@ -362,13 +374,16 @@ def job():
         return
     noise = max(worst, 0.002)
 
+    LABELS = [a[0] for a in ARMS]
+
     def g(arm, hour):
-        return good["a%04.1f_h%05.2f" % (arm, hour)]
+        return good["%s_h%05.2f" % (arm, hour)]
 
     # ---- WHERE EACH ARM HANDS OVER, read from the caster census rather than predicted.
     handover = {}
-    for arm in ARMS:
+    for arm in LABELS:
         hv = None
+        casting_at_first = g(arm, EVENING[0])["moon_casting"]
         for i in range(len(EVENING) - 1):
             a, b = g(arm, EVENING[i]), g(arm, EVENING[i + 1])
             if (not a["moon_casting"]) and b["moon_casting"]:
@@ -376,25 +391,32 @@ def job():
                       "step": round(abs(b["ground_luma"] - a["ground_luma"]), 5),
                       "moon_altitude_after": b["moon_altitude_deg"]}
                 break
-        handover[str(arm)] = hv
+        handover[arm] = hv
+        # ALREADY CASTING AT THE FIRST RUNG means the handover is off the front of the ladder and
+        # this arm's flat evening proves nothing -- the same failure as one falling off the back.
+        handover[arm + "_casting_at_first_rung"] = casting_at_first
     RESULT["handover"] = handover
-    moved = [a for a in ARMS if a > 0.0 and handover[str(a)] is not None
-             and handover["0.0"] is not None
-             and handover[str(a)]["between"] != handover["0.0"]["between"]]
-    record("H_MOVED", "the knob actually moves the caster handover, so a flat evening below is a "
-                      "result and not a dead switch",
-           len(ARMS) > 1 and len(moved) == len([a for a in ARMS if a > 0.0]),
-           population=len([a for a in ARMS if a > 0.0]), arms_that_moved=moved,
-           handover_by_arm=handover)
+    others = [a for a in LABELS if a != "shipped"]
+    moved = [a for a in others if handover[a] is not None and handover["shipped"] is not None
+             and handover[a]["between"] != handover["shipped"]["between"]]
+    off_ladder = [a for a in LABELS if handover[a + "_casting_at_first_rung"]]
+    record("H_MOVED", "every candidate actually moves the caster handover, and none of them has it "
+                      "off the end of the ladder where a flat evening would prove nothing",
+           len(others) > 0 and len(moved) == len(others) and not off_ladder,
+           population=len(others), arms_that_moved=moved, handover_by_arm=handover,
+           arms_already_casting_at_first_rung=off_ladder,
+           note="a candidate whose handover falls outside the sampled range looks perfect. The ladder "
+                "starts at 17.70, before the moon is visible, and runs to 19.40, past the latest "
+                "crossover any arm produces")
 
     # ---- STEP PROFILES
     prof = {}
-    for arm in ARMS:
+    for arm in LABELS:
         seq = [g(arm, h)["ground_luma"] for h in EVENING]
         steps = [round(abs(seq[i + 1] - seq[i]), 5) for i in range(len(seq) - 1)]
         pairs = ["%.2f->%.2f" % (EVENING[i], EVENING[i + 1]) for i in range(len(EVENING) - 1)]
         med = median(steps)
-        prof[str(arm)] = {"ground_luma": dict(zip(["%.2f" % h for h in EVENING], seq)),
+        prof[arm] = {"ground_luma": dict(zip(["%.2f" % h for h in EVENING], seq)),
                           "steps": dict(zip(pairs, steps)),
                           "median_step": med, "largest_step": max(steps),
                           "largest_at": pairs[steps.index(max(steps))],
@@ -404,22 +426,22 @@ def job():
                                                     [g(arm, h)["cell_contrast"] for h in EVENING]))}
     RESULT["profiles"] = prof
 
-    base_big = prof["0.0"]["largest_step"]
+    base_big = prof["shipped"]["largest_step"]
     record("H_BASE_CLIFF", "the baseline arm reproduces the cliff, so the candidates are being "
                            "compared against a world that actually has the fault",
-           base_big > noise and (prof["0.0"]["largest_over_median"] or 0) >= DOMINATES,
-           baseline_largest=base_big, at=prof["0.0"]["largest_at"],
-           over_median=prof["0.0"]["largest_over_median"], noise=noise)
+           base_big > noise and (prof["shipped"]["largest_over_median"] or 0) >= DOMINATES,
+           baseline_largest=base_big, at=prof["shipped"]["largest_at"],
+           over_median=prof["shipped"]["largest_over_median"], noise=noise)
 
     best, verdicts = None, {}
-    for arm in ARMS:
-        if arm == 0.0:
+    for arm in LABELS:
+        if arm == "shipped":
             continue
-        p = prof[str(arm)]
+        p = prof[arm]
         shrunk = (base_big / p["largest_step"]) if p["largest_step"] > 1e-6 else None
         c1 = p["largest_step"] <= noise or (shrunk is not None and shrunk >= CLIFF_FACTOR)
         c6 = (p["largest_over_median"] is not None and p["largest_over_median"] <= DOMINATES)
-        verdicts[str(arm)] = {"largest_step": p["largest_step"], "at": p["largest_at"],
+        verdicts[arm] = {"largest_step": p["largest_step"], "at": p["largest_at"],
                               "shrink_vs_baseline": (round(shrunk, 1) if shrunk else None),
                               "over_median": p["largest_over_median"],
                               "C1_cliff_removed": c1, "C6_no_dominating_step": c6,
@@ -439,9 +461,9 @@ def job():
 
     keep = []
     for hour in ANCHORS:
-        b = g(0.0, hour)
-        for arm in ARMS:
-            if arm == 0.0:
+        b = g("shipped", hour)
+        for arm in LABELS:
+            if arm == "shipped":
                 continue
             c = g(arm, hour)
             keep.append({"hour": hour, "arm": arm, "base": b["ground_luma"],
