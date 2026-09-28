@@ -1,0 +1,248 @@
+{
+ "name": "zc_terminal_text_colour",
+ "started": "2026-09-28 03:54:45",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "T00",
+   "name": "the terminal is open with its companion terminals on screen",
+   "pass": true,
+   "detail": {
+    "open": true,
+    "companions": true,
+    "note": "THE PRECONDITION. Every clause below reads pixels, and a shut terminal gives a beautifully consistent set of readings of the world behind it."
+   }
+  },
+  {
+   "id": "T01",
+   "name": "the companion terminal reports where it is",
+   "pass": true,
+   "detail": {
+    "rect": [
+     [
+      0.13900000859784337,
+      0.5934999893992435
+     ],
+     [
+      0.24600001627392162,
+      0.2130000147376371
+     ]
+    ]
+   }
+  },
+  {
+   "id": "T02",
+   "name": "the secondary colour is stored and read back as what was picked",
+   "pass": true,
+   "detail": {
+    "asked": [
+     0.1,
+     1.0,
+     0.25
+    ],
+    "got": [
+     0.1,
+     1.0,
+     0.25
+    ],
+    "note": "written through the same SaveAndApply the Colors tab's swatch calls, not a private path."
+   }
+  },
+  {
+   "id": "T03",
+   "name": "picking the secondary colour changes the terminal's own pixels",
+   "pass": true,
+   "detail": {
+    "before": 0.0235,
+    "after": 0.651,
+    "rise": 0.6275,
+    "floor": 0.05,
+    "note": "THE FOUNDER'S REQUEST, asked of the pixels. A setting that is stored and never drawn is the exact failure this project hit twice tonight -- a material property never applied, and a terminal whose chrome followed nothing at all."
+   }
+  },
+  {
+   "id": "T04",
+   "name": "picking the SECONDARY left the accent alone",
+   "pass": true,
+   "detail": {
+    "accent_before": [
+     0.6939,
+     0.3712,
+     0.0529
+    ],
+    "accent_after": [
+     0.6939,
+     0.3712,
+     0.0529
+    ],
+    "note": "half of independence. A secondary that drags the chrome with it has not been added, it has been aliased onto the primary."
+   }
+  },
+  {
+   "id": "T05",
+   "name": "picking the PRIMARY afterwards left the words' colour alone",
+   "pass": true,
+   "detail": {
+    "text_before": [
+     0.1,
+     1.0,
+     0.25
+    ],
+    "text_after": [
+     0.1,
+     1.0,
+     0.25
+    ],
+    "note": "THE OTHER HALF, and the one that catches a build where both are the same variable and only one of them was ever written to. Checked in both directions for that reason."
+   }
+  },
+  {
+   "id": "T06",
+   "name": "the chrome still answers its own colour while the words keep theirs",
+   "pass": true,
+   "detail": {
+    "blue_before": 0.1882,
+    "blue_after": 0.6196,
+    "blue_rise": 0.4314,
+    "green_still": 0.651,
+    "green_was": 0.651,
+    "note": "both hues present at once is what two independent colours look like. If the accent had swallowed the text, the green would collapse when the blue arrived."
+   }
+  },
+  {
+   "id": "T_RESTORE",
+   "name": "the founder's own terminal colours were put back",
+   "pass": true,
+   "detail": {
+    "before": {
+     "text": [
+      0.8388,
+      0.7991,
+      0.7231
+     ],
+     "accent": [
+      0.6939,
+      0.3712,
+      0.0529
+     ]
+    },
+    "after": {
+     "text": [
+      0.8388,
+      0.7991,
+      0.7231
+     ],
+     "accent": [
+      0.6939,
+      0.3712,
+      0.0529
+     ]
+    }
+   }
+  }
+ ],
+ "before": {
+  "text": [
+   0.8388,
+   0.7991,
+   0.7231
+  ],
+  "accent": [
+   0.6939,
+   0.3712,
+   0.0529
+  ]
+ },
+ "steps": {
+  "baseline": {
+   "text_setting": [
+    0.8388,
+    0.7991,
+    0.7231
+   ],
+   "accent_setting": [
+    0.6939,
+    0.3712,
+    0.0529
+   ],
+   "pixels": {
+    "green_over_red": 0.0235,
+    "blue_over_red": 0.0588,
+    "red_over_blue": 0.651,
+    "mean": [
+     0.3202,
+     0.2425,
+     0.1143
+    ],
+    "sampled": 95748
+   },
+   "capture": "baseline.png"
+  },
+  "text_green": {
+   "text_setting": [
+    0.1,
+    1.0,
+    0.25
+   ],
+   "accent_setting": [
+    0.6939,
+    0.3712,
+    0.0529
+   ],
+   "pixels": {
+    "green_over_red": 0.651,
+    "blue_over_red": 0.1882,
+    "red_over_blue": 0.651,
+    "mean": [
+     0.2983,
+     0.2286,
+     0.094
+    ],
+    "sampled": 95748
+   },
+   "capture": "text_green.png"
+  },
+  "text_green_accent_blue": {
+   "text_setting": [
+    0.1,
+    1.0,
+    0.25
+   ],
+   "accent_setting": [
+    0.1,
+    0.22,
+    1.0
+   ],
+   "pixels": {
+    "green_over_red": 0.651,
+    "blue_over_red": 0.6196,
+    "red_over_blue": 0.4588,
+    "mean": [
+     0.1101,
+     0.1579,
+     0.3001
+    ],
+    "sampled": 95748
+   },
+   "capture": "text_green_accent_blue.png"
+  }
+ },
+ "green_rise_from_the_text_alone": 0.6275,
+ "blue_rise_from_the_accent_alone": 0.4314,
+ "after_restore": {
+  "text": [
+   0.8388,
+   0.7991,
+   0.7231
+  ],
+  "accent": [
+   0.6939,
+   0.3712,
+   0.0529
+  ]
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\terminal_text",
+ "finished": "2026-09-28 03:55:15",
+ "seconds": 29.54,
+ "log": "T00 PASS the terminal is open with its companion terminals on screen {'open': True, 'companions': True, 'note': 'THE PRECONDITION. Every clause below reads pixels, and a shut terminal gives a beautifully consistent set of readings of the world behind it.'}\nT01 PASS the companion terminal reports where it is {'rect': ((0.13900000859784337, 0.5934999893992435), (0.24600001627392162, 0.2130000147376371))}\nT_baseline INFO baseline {'text_setting': (0.8388, 0.7991, 0.7231), 'accent_setting': (0.6939, 0.3712, 0.0529), 'pixels': {'green_over_red': 0.0235, 'blue_over_red': 0.0588, 'red_over_blue': 0.651, 'mean': (0.3202, 0.2425, 0.1143), 'sampled': 95748}, 'capture': 'baseline.png'}\nT_text_green INFO text_green {'text_setting': (0.1, 1.0, 0.25), 'accent_setting': (0.6939, 0.3712, 0.0529), 'pixels': {'green_over_red': 0.651, 'blue_over_red': 0.1882, 'red_over_blue': 0.651, 'mean': (0.2983, 0.2286, 0.094), 'sampled': 95748}, 'capture': 'text_green.png'}\nT_text_green_accent_blue INFO text_green_accent_blue {'text_setting': (0.1, 1.0, 0.25), 'accent_setting': (0.1, 0.22, 1.0), 'pixels': {'green_over_red': 0.651, 'blue_over_red': 0.6196, 'red_over_blue': 0.4588, 'mean': (0.1101, 0.1579, 0.3001), 'sampled': 95748}, 'capture': 'text_green_accent_blue.png'}\nT02 PASS the secondary colour is stored and read back as what was picked {'asked': (0.1, 1.0, 0.25), 'got': (0.1, 1.0, 0.25), 'note': \"written through the same SaveAndApply the Colors tab's swatch calls, not a private path.\"}\nT03 PASS picking the secondary colour changes the terminal's own pixels {'before': 0.0235, 'after': 0.651, 'rise': 0.6275, 'floor': 0.05, 'note': \"THE FOUNDER'S REQUEST, asked of the pixels. A setting that is stored and never drawn is the exact failure this project hit twice tonight -- a material property never applied, and a terminal whose chrome followed nothing at all.\"}\nT04 PASS picking the SECONDARY left the accent alone {'accent_before': (0.6939, 0.3712, 0.0529), 'accent_after': (0.6939, 0.3712, 0.0529), 'note': 'half of independence. A secondary that drags the chrome with it has not been added, it has been aliased onto the primary.'}\nT05 PASS picking the PRIMARY afterwards left the words' colour alone {'text_before': (0.1, 1.0, 0.25), 'text_after': (0.1, 1.0, 0.25), 'note': 'THE OTHER HALF, and the one that catches a build where both are the same variable and only one of them was ever written to. Checked in both directions for that reason.'}\nT06 PASS the chrome still answers its own colour while the words keep theirs {'blue_before': 0.1882, 'blue_after': 0.6196, 'blue_rise': 0.4314, 'green_still': 0.651, 'green_was': 0.651, 'note': 'both hues present at once is what two independent colours look like. If the accent had swallowed the text, the green would collapse when the blue arrived.'}\nT_RESTORE PASS the founder's own terminal colours were put back {'before': {'text': (0.8388, 0.7991, 0.7231), 'accent': (0.6939, 0.3712, 0.0529)}, 'after': {'text': (0.8388, 0.7991, 0.7231), 'accent': (0.6939, 0.3712, 0.0529)}}\n"
+}
