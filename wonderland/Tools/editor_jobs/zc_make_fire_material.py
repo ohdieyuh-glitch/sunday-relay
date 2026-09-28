@@ -122,14 +122,26 @@ def job():
     link(away, "", edge, "")
     soft = node(unreal.MaterialExpressionPower, -620, -160)
     link(edge, "", soft, "Base")
-    link(scalar("EdgeSoftness", 0.85, -760, -90), "", soft, "Exp")
+    # ---- 2.6, NOT 0.85, AND THE SIGN OF THE EXPONENT IS THE WHOLE POINT.
+    #
+    # This is a POWER exponent applied to 1 - |2U - 1|, which is 1 down the middle of the ribbon and 0 at
+    # both edges. An exponent BELOW one pushes that curve UP -- it makes the ribbon uniformly bright almost
+    # all the way across and then drops to nothing in the last few per cent, which is a HARD EDGE. Above one
+    # pulls it down into a broad gradient, which is a soft one.
+    #
+    # 0.85 was therefore producing the opposite of its own name, and it shows: photographed at gameplay
+    # distance at night, this material and the voxel glow it was meant to improve on are both flat
+    # hard-edged saturated polygons, which is precisely the founder's "plastic voxel flames".
+    link(scalar("EdgeSoftness", 2.6, -760, -90), "", soft, "Exp")
 
     # ---- FALLOFF UP THE TONGUE: hot at the foot, nothing at the tip.
     tip = node(unreal.MaterialExpressionOneMinus, -1180, 90)
     link(up, "", tip, "")
     fade = node(unreal.MaterialExpressionPower, -1020, 90)
     link(tip, "", fade, "Base")
-    link(scalar("TipFalloff", 1.45, -1180, 170), "", fade, "Exp")
+    # 2.2 for the same reason one axis over: the tongue should be hot at its foot and gone at its tip, and
+    # 1.45 leaves it still bright most of the way up, which is what makes the tips read as cut-off polygons.
+    link(scalar("TipFalloff", 2.2, -1180, 170), "", fade, "Exp")
 
     # ---- FLICKER: bands that scroll up through the flame, leaning as they climb.
     time = node(unreal.MaterialExpressionTime, -1500, 320)

@@ -117,6 +117,26 @@ def job():
     #
     # So: flip it, then CHECK THE VALUES MOVE, and flip again if they do not. A real frame time never repeats
     # to four decimal places.
+    # ---- FLIPPED HERE, VERIFIED BELOW. `stat unit` is a TOGGLE, so one issue is a coin flip; the
+    # check that its numbers actually move lives after read_frame is defined.
+    SL.execute_console_command(world, "stat unit")
+    yield 2.5
+
+
+    seen_frames = []
+
+    def read_frame():
+        """Raw frame cost plus the engine frame number, so a frozen overlay is visible rather than silent."""
+        try:
+            got = H.get_raw_frame_cost_ms()
+            n = int(H.get_engine_frame_number())
+        except Exception:                                           # noqa: BLE001
+            return None
+        if got is None:
+            return None
+        frame, game, render, gpu = (float(got[0]), float(got[1]), float(got[2]), float(got[3]))
+        return (frame, game, render, gpu, n)
+
     def stat_is_live():
         seen = []
         for _ in range(8):
@@ -152,20 +172,6 @@ def job():
     if not live:
         RESULT["status"] = "VOID: stat unit never started reporting changing numbers"
         return
-
-    seen_frames = []
-
-    def read_frame():
-        """Raw frame cost plus the engine frame number, so a frozen overlay is visible rather than silent."""
-        try:
-            got = H.get_raw_frame_cost_ms()
-            n = int(H.get_engine_frame_number())
-        except Exception:                                           # noqa: BLE001
-            return None
-        if got is None:
-            return None
-        frame, game, render, gpu = (float(got[0]), float(got[1]), float(got[2]), float(got[3]))
-        return (frame, game, render, gpu, n)
 
     # ---- SETTLE BEFORE THE FIRST RUNG, because it is what every other rung is compared against and it has
     # always been the earliest and least settled reading. A fixed wait is a guess about when the world has
