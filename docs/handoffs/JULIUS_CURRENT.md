@@ -337,7 +337,82 @@ refusal (a Hermes decline is a verdict that does not parse — filed as
 malformed), and nothing routes a refusal to a re-plan; the task fails and the
 run does not complete, which is truthful and is where this stops.
 
-#### Not done, by decision or by gate
+#### Then: the claim store, at its minimum
+
+The readiness page's own estimate: "one table and one port would make standing
+durable per entry and give the Learning Loop's promotion somewhere to land …
+roughly +2.5, not +6", because nothing asserts lineage. Built exactly that:
+
+- **Migration 026** `julius_claim_standings` — append-only; a claim's current
+  standing is its highest revision and the rows beneath are the history.
+- **`JuliusClaimStore`** on `JuliusRuntimeStore` — `claimsForRun`,
+  `recordClaimStanding` — implemented by the memory store (with a
+  `claimStandingHistory` read for tests) and `JuliusClaimPostgresRepository`,
+  bound in `postgres-store.ts`; the conformance suite names it.
+- **`julius-claim-ledger.ts`** (kernel, pure): `juliusAdmittedClaimFor` (the
+  derivation applied to the entry — one definition of a standing),
+  `juliusClaimPromotionsOnAccept` (the reviewed work's entries, promoted to
+  VERIFIED on the review's evidence through `promoteJuliusMemoryClaim`, with
+  every refusal returned by name), `mergeJuliusDurableStanding` (the record
+  wins at compile), `juliusClaimStandingKey` (what makes two standings the
+  same, shared by both stores so replay is refused identically).
+- **The pipeline:** all 14 brain writes go through `appendBrainEntryAdmitting`;
+  the compile site merges recorded standings; `verifyExecutedTask` promotes on
+  an ACCEPT that a reviewer's task produced, only when the decision was
+  recorded this tick; `claim.promoted` / `claim.promotion.refused` are on the
+  event vocabulary and the timeline.
+
+**What the real run showed.** In the guidance flow (the one place a plain
+mission writes a promotable memory) three claims rose UNVERIFIED → VERIFIED
+with history — the architect's guidance request and proposal at the guidance
+task's review, the continuation's resume note at the continuation's review —
+and one was REFUSED by name: the guidance ANSWER reaches the continuation as a
+HANDOFF row written on the reviewer's own tick, so its asserter is the reviewer
+and `memory_self_verification` stops the reviewer verifying it. The refusal is
+the trust core doing its job; what it exposes is an attribution question — a
+delivered row is attributed to whoever's completion delivered it, not to its
+author — left open and named rather than papered over. A second drain adds no
+standing and no event.
+
+Tests: `julius-claim-ledger.test.ts` (12), three cases in
+`julius-continuous-lifecycle.e2e` (the suite: 77/77), the real-PostgreSQL suite
+(2/2 against the container, in the workflow), the kernel directory green.
+Readiness: rows 4, 5, 9 → 80, 87, 68; total 77.2 → 78.3, recorded as 78%.
+
+#### Then: what the integration lane found by running the create route for real
+
+The Wonderland↔Julius integration lane ran `dist-relay-bridge/server.cjs`
+from their merged tree (`706dab30`, this branch's `fc8c67c7` inside it) over
+real HTTP against their own isolated PostgreSQL with every provider credential
+stripped, graded by clause: **11 of 13 pass** — 201/READY/`dispatched: false`,
+the served state equal to the create-time state, three NEVER_DISPATCHED slots,
+the same `runId` on re-POST, 401 without the operator, 404 under another
+project WITH a control, 404 for an unknown run. The two failures:
+1. **A percent-encoded run id was `unknown_julius_route`** — a real bug: the
+   state routes matched the raw path, and a standards-correct client (Unreal's
+   `UrlEncode`) encodes the colon. Fixed in `842ac5f0`: each segment decoded
+   before matching, a segment that does not decode is `run_not_found`. Two
+   route cases.
+2. **The same `missionId` with a changed objective made a second run.**
+   Intended: the key is a digest of the contract's content (the job's own
+   rule), so `missionId` is the mission's name and a run's identity is its
+   `runId`. The contract document now says so, and says a client correlates by
+   `runId` only; whether Julius should refuse a second run while an earlier
+   run of the same mission is still open is put to the founder as a product
+   decision.
+
+They also reported that **every shell on this laptop inherits a `DATABASE_URL`
+pointing at the `julius-postgres` container's default database** (from the
+user profile), so a session that set `JULIUS_REAL_POSTGRES=1` and trusted the
+inherited value would write test rows into the live store. Every real-database
+run in this lane set `DATABASE_URL` explicitly to a throwaway database
+(`julius_bridge_seam`, `julius_persistence_local`, `julius_live_chain_local`,
+`julius_claims_local`) and the default `julius` database is unmigrated and
+untouched; the hazard stands for the next session, and the structural fix
+(move the variable into whatever launches the job and the bridge) is the
+founder's to choose. The bridge's two Julius route families now share one
+lazy pool (their other observation).
+
 
 - Driving a run over HTTP — the deployment decision that spends money; the
   contract document says so.

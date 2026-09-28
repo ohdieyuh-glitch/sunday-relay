@@ -344,6 +344,13 @@ jobs:
         env:
           JULIUS_REAL_POSTGRES: '1'
         run: npx vitest run src/relay/persistence/julius-live-chain.e2e.test.ts
+      - name: Claim standings on real PostgreSQL — append-only, replay refused, history read back
+        # Migration 026's table, through the repository the runtime binds: an admission,
+        # its replay (writes nothing), a promotion, the current standing and the history.
+        if: ${{ !cancelled() }}
+        env:
+          JULIUS_REAL_POSTGRES: '1'
+        run: npx vitest run src/relay/persistence/julius-claim-standing.real-postgres.test.ts
       - name: Every evidence query holds against the migrated schema
         # Runs whether or not the preflight passed: the preflight applies the migrations
         # before its executor round trip, so the schema is present at today's failure too.
