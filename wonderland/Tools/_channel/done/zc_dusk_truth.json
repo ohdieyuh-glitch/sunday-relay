@@ -1,0 +1,1021 @@
+{
+ "name": "zc_dusk_truth",
+ "started": "2026-09-28 03:01:56",
+ "status": "voided: no valid vantage, or readings missing or disagreeing with themselves",
+ "tests": [
+  {
+   "id": "T_SHIPPED",
+   "name": "every dusk knob is at its shipped default, so this measures the world as it ships and not a state I introduced",
+   "pass": true,
+   "detail": {
+    "population": 3,
+    "wanted": {
+     "wl.Look.DuskWindow": 0.3,
+     "wl.Look.DuskMoonDamp": 0.0,
+     "wl.Look.DuskSkyBoost": 0.0
+    },
+    "held": {
+     "wl.Look.DuskWindow": 0.3,
+     "wl.Look.DuskMoonDamp": 0.0,
+     "wl.Look.DuskSkyBoost": 0.0
+    }
+   }
+  },
+  {
+   "id": "T_VALID_PLAZA_E",
+   "name": "vantage plaza_e can see the ground it measures, and that ground is open to the sky",
+   "pass": true,
+   "detail": {
+    "spot": [
+     -64.0,
+     -5700.0
+    ],
+    "yaw": 90.0,
+    "view_reach": 1.0,
+    "green_ratio": 1.005,
+    "overhead_hit": null,
+    "ground_open_to_sky": true,
+    "valid": true
+   }
+  },
+  {
+   "id": "T_VALID_PLAZA_SE",
+   "name": "vantage plaza_se can see the ground it measures, and that ground is open to the sky",
+   "pass": true,
+   "detail": {
+    "spot": [
+     -64.0,
+     -5700.0
+    ],
+    "yaw": 135.0,
+    "view_reach": 1.0,
+    "green_ratio": 1.076,
+    "overhead_hit": null,
+    "ground_open_to_sky": true,
+    "valid": true
+   }
+  },
+  {
+   "id": "T_MEASURED",
+   "name": "every hour at every valid vantage produced a reading",
+   "pass": true,
+   "detail": {
+    "population": 24,
+    "valid_vantages": [
+     "plaza_e",
+     "plaza_se"
+    ],
+    "wanted": 24
+   }
+  },
+  {
+   "id": "T_NOISE",
+   "name": "every reading agrees with itself",
+   "pass": false,
+   "detail": {
+    "population": 24,
+    "worst_spread": 0.01475,
+    "tolerance": 0.01
+   }
+  }
+ ],
+ "binary_built": "2026-09-28 03:00:40",
+ "shipped_knobs": {
+  "wl.Look.DuskWindow": 0.3,
+  "wl.Look.DuskMoonDamp": 0.0,
+  "wl.Look.DuskSkyBoost": 0.0
+ },
+ "readings": {
+  "plaza_e_h18.00": {
+   "vantage": "plaza_e",
+   "hour": 18.0,
+   "ground_luma": 0.07944,
+   "ground_spread": 0.00017,
+   "frame_luma": 0.11702,
+   "frame_spread": 0.0036,
+   "cells": [
+    0.07944,
+    0.09102,
+    0.09558,
+    0.077,
+    0.06199,
+    0.07315,
+    0.08333,
+    0.07173
+   ],
+   "cell_min": 0.06199,
+   "cell_max": 0.09558,
+   "cell_median": 0.07822,
+   "cell_spread": 0.03359,
+   "cell_contrast": 0.4294,
+   "crushed_legacy": 0.9453,
+   "sky_intensity": 13.0512,
+   "exposure_bias": 0.9802,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.42857
+  },
+  "plaza_e_h18.10": {
+   "vantage": "plaza_e",
+   "hour": 18.1,
+   "ground_luma": 0.07948,
+   "ground_spread": 0.00096,
+   "frame_luma": 0.11724,
+   "frame_spread": 9e-05,
+   "cells": [
+    0.07811,
+    0.08826,
+    0.09386,
+    0.07788,
+    0.06064,
+    0.07223,
+    0.08286,
+    0.07372
+   ],
+   "cell_min": 0.06064,
+   "cell_max": 0.09386,
+   "cell_median": 0.07799500000000001,
+   "cell_spread": 0.03322,
+   "cell_contrast": 0.4259,
+   "crushed_legacy": 0.9099,
+   "sky_intensity": 14.023,
+   "exposure_bias": 1.1494,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.33882
+  },
+  "plaza_e_h18.20": {
+   "vantage": "plaza_e",
+   "hour": 18.2,
+   "ground_luma": 0.10134,
+   "ground_spread": 0.00028,
+   "frame_luma": 0.13407,
+   "frame_spread": 0.00576,
+   "cells": [
+    0.0988,
+    0.11024,
+    0.11764,
+    0.10227,
+    0.07932,
+    0.0924,
+    0.10511,
+    0.09754
+   ],
+   "cell_min": 0.07932,
+   "cell_max": 0.11764,
+   "cell_median": 0.100535,
+   "cell_spread": 0.03832,
+   "cell_contrast": 0.3812,
+   "crushed_legacy": 0.8426,
+   "sky_intensity": 14.7872,
+   "exposure_bias": 1.2824,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.24913
+  },
+  "plaza_e_h18.24": {
+   "vantage": "plaza_e",
+   "hour": 18.24,
+   "ground_luma": 0.11308,
+   "ground_spread": 0.0001,
+   "frame_luma": 0.14533,
+   "frame_spread": 0.00375,
+   "cells": [
+    0.1107,
+    0.12463,
+    0.13197,
+    0.11439,
+    0.0891,
+    0.10408,
+    0.1166,
+    0.10655
+   ],
+   "cell_min": 0.0891,
+   "cell_max": 0.13197,
+   "cell_median": 0.112545,
+   "cell_spread": 0.04287,
+   "cell_contrast": 0.3809,
+   "crushed_legacy": 0.7877,
+   "sky_intensity": 15.0332,
+   "exposure_bias": 1.3252,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.21329
+  },
+  "plaza_e_h18.25": {
+   "vantage": "plaza_e",
+   "hour": 18.25,
+   "ground_luma": 0.11638,
+   "ground_spread": 0.00051,
+   "frame_luma": 0.1486,
+   "frame_spread": 0.0019,
+   "cells": [
+    0.11404,
+    0.12838,
+    0.13496,
+    0.11638,
+    0.09351,
+    0.10854,
+    0.12014,
+    0.11032
+   ],
+   "cell_min": 0.09351,
+   "cell_max": 0.13496,
+   "cell_median": 0.11521,
+   "cell_spread": 0.04145,
+   "cell_contrast": 0.3598,
+   "crushed_legacy": 0.769,
+   "sky_intensity": 15.0894,
+   "exposure_bias": 1.335,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.20433
+  },
+  "plaza_e_h18.26": {
+   "vantage": "plaza_e",
+   "hour": 18.26,
+   "ground_luma": 0.06604,
+   "ground_spread": 5e-05,
+   "frame_luma": 0.10345,
+   "frame_spread": 0.00043,
+   "cells": [
+    0.05699,
+    0.06867,
+    0.07822,
+    0.06752,
+    0.0486,
+    0.06139,
+    0.0754,
+    0.07129
+   ],
+   "cell_min": 0.0486,
+   "cell_max": 0.07822,
+   "cell_median": 0.06809499999999999,
+   "cell_spread": 0.02962,
+   "cell_contrast": 0.435,
+   "crushed_legacy": 0.9943,
+   "sky_intensity": 15.1433,
+   "exposure_bias": 1.3444,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.19538
+  },
+  "plaza_e_h18.27": {
+   "vantage": "plaza_e",
+   "hour": 18.27,
+   "ground_luma": 0.0676,
+   "ground_spread": 0.00042,
+   "frame_luma": 0.101,
+   "frame_spread": 0.0075,
+   "cells": [
+    0.05841,
+    0.07064,
+    0.07956,
+    0.06866,
+    0.05082,
+    0.06464,
+    0.07686,
+    0.07231
+   ],
+   "cell_min": 0.05082,
+   "cell_max": 0.07956,
+   "cell_median": 0.06964999999999999,
+   "cell_spread": 0.02874,
+   "cell_contrast": 0.4126,
+   "crushed_legacy": 0.993,
+   "sky_intensity": 15.195,
+   "exposure_bias": 1.3534,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.18642
+  },
+  "plaza_e_h18.30": {
+   "vantage": "plaza_e",
+   "hour": 18.3,
+   "ground_luma": 0.07128,
+   "ground_spread": 0.00082,
+   "frame_luma": 0.10245,
+   "frame_spread": 0.00517,
+   "cells": [
+    0.06379,
+    0.07466,
+    0.08202,
+    0.07109,
+    0.05278,
+    0.06515,
+    0.08028,
+    0.07657
+   ],
+   "cell_min": 0.05278,
+   "cell_max": 0.08202,
+   "cell_median": 0.072875,
+   "cell_spread": 0.02924,
+   "cell_contrast": 0.4012,
+   "crushed_legacy": 0.9905,
+   "sky_intensity": 15.337,
+   "exposure_bias": 1.3781,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.15957
+  },
+  "plaza_e_h18.40": {
+   "vantage": "plaza_e",
+   "hour": 18.4,
+   "ground_luma": 0.08222,
+   "ground_spread": 0.00015,
+   "frame_luma": 0.11197,
+   "frame_spread": 0.00651,
+   "cells": [
+    0.07246,
+    0.08719,
+    0.09626,
+    0.08365,
+    0.06098,
+    0.07626,
+    0.0931,
+    0.08788
+   ],
+   "cell_min": 0.06098,
+   "cell_max": 0.09626,
+   "cell_median": 0.08542,
+   "cell_spread": 0.03528,
+   "cell_contrast": 0.413,
+   "crushed_legacy": 0.9684,
+   "sky_intensity": 15.6633,
+   "exposure_bias": 1.4349,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.07019
+  },
+  "plaza_e_h18.50": {
+   "vantage": "plaza_e",
+   "hour": 18.5,
+   "ground_luma": 0.08575,
+   "ground_spread": 0.00062,
+   "frame_luma": 0.11383,
+   "frame_spread": 0.00348,
+   "cells": [
+    0.07826,
+    0.091,
+    0.09755,
+    0.08583,
+    0.06462,
+    0.07918,
+    0.09548,
+    0.09065
+   ],
+   "cell_min": 0.06462,
+   "cell_max": 0.09755,
+   "cell_median": 0.08824,
+   "cell_spread": 0.03293,
+   "cell_contrast": 0.3732,
+   "crushed_legacy": 0.9589,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.0
+  },
+  "plaza_e_h19.00": {
+   "vantage": "plaza_e",
+   "hour": 19.0,
+   "ground_luma": 0.11051,
+   "ground_spread": 0.00111,
+   "frame_luma": 0.13223,
+   "frame_spread": 0.00396,
+   "cells": [
+    0.07496,
+    0.16912,
+    0.1409,
+    0.07841,
+    0.0777,
+    0.16315,
+    0.10929,
+    0.07752
+   ],
+   "cell_min": 0.07496,
+   "cell_max": 0.16912,
+   "cell_median": 0.09384999999999999,
+   "cell_spread": 0.09416,
+   "cell_contrast": 1.0033,
+   "crushed_legacy": 0.7534,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.0
+  },
+  "plaza_e_h23.00": {
+   "vantage": "plaza_e",
+   "hour": 23.0,
+   "ground_luma": 0.10814,
+   "ground_spread": 0.00034,
+   "frame_luma": 0.17436,
+   "frame_spread": 0.00279,
+   "cells": [
+    0.10015,
+    0.09095,
+    0.09967,
+    0.10966,
+    0.10591,
+    0.13435,
+    0.11673,
+    0.10854
+   ],
+   "cell_min": 0.09095,
+   "cell_max": 0.13435,
+   "cell_median": 0.107225,
+   "cell_spread": 0.0434,
+   "cell_contrast": 0.4048,
+   "crushed_legacy": 0.8004,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.0
+  },
+  "plaza_se_h18.00": {
+   "vantage": "plaza_se",
+   "hour": 18.0,
+   "ground_luma": 0.11349,
+   "ground_spread": 0.00121,
+   "frame_luma": 0.17122,
+   "frame_spread": 0.00111,
+   "cells": [
+    0.06806,
+    0.15567,
+    0.1786,
+    0.07196,
+    0.07106,
+    0.1433,
+    0.14087,
+    0.07996
+   ],
+   "cell_min": 0.06806,
+   "cell_max": 0.1786,
+   "cell_median": 0.110415,
+   "cell_spread": 0.11054,
+   "cell_contrast": 1.0011,
+   "crushed_legacy": 0.715,
+   "sky_intensity": 13.0512,
+   "exposure_bias": 0.9802,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.42857
+  },
+  "plaza_se_h18.10": {
+   "vantage": "plaza_se",
+   "hour": 18.1,
+   "ground_luma": 0.13233,
+   "ground_spread": 0.01029,
+   "frame_luma": 0.17628,
+   "frame_spread": 0.00243,
+   "cells": [
+    0.06627,
+    0.16868,
+    0.23312,
+    0.06222,
+    0.07206,
+    0.17379,
+    0.16022,
+    0.08652
+   ],
+   "cell_min": 0.06222,
+   "cell_max": 0.23312,
+   "cell_median": 0.12337000000000001,
+   "cell_spread": 0.1709,
+   "cell_contrast": 1.3853,
+   "crushed_legacy": 0.6713,
+   "sky_intensity": 14.023,
+   "exposure_bias": 1.1494,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.33882
+  },
+  "plaza_se_h18.20": {
+   "vantage": "plaza_se",
+   "hour": 18.2,
+   "ground_luma": 0.15534,
+   "ground_spread": 0.00125,
+   "frame_luma": 0.19148,
+   "frame_spread": 0.00727,
+   "cells": [
+    0.08809,
+    0.14358,
+    0.26225,
+    0.11892,
+    0.09386,
+    0.21934,
+    0.21975,
+    0.10826
+   ],
+   "cell_min": 0.08809,
+   "cell_max": 0.26225,
+   "cell_median": 0.13125,
+   "cell_spread": 0.17416,
+   "cell_contrast": 1.3269,
+   "crushed_legacy": 0.6073,
+   "sky_intensity": 14.7872,
+   "exposure_bias": 1.2824,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.24913
+  },
+  "plaza_se_h18.24": {
+   "vantage": "plaza_se",
+   "hour": 18.24,
+   "ground_luma": 0.17263,
+   "ground_spread": 0.01318,
+   "frame_luma": 0.19989,
+   "frame_spread": 0.01054,
+   "cells": [
+    0.09906,
+    0.1863,
+    0.2826,
+    0.10386,
+    0.10516,
+    0.22921,
+    0.20873,
+    0.11887
+   ],
+   "cell_min": 0.09906,
+   "cell_max": 0.2826,
+   "cell_median": 0.152585,
+   "cell_spread": 0.18354,
+   "cell_contrast": 1.2029,
+   "crushed_legacy": 0.5932,
+   "sky_intensity": 15.0332,
+   "exposure_bias": 1.3252,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.21329
+  },
+  "plaza_se_h18.25": {
+   "vantage": "plaza_se",
+   "hour": 18.25,
+   "ground_luma": 0.17651,
+   "ground_spread": 0.00192,
+   "frame_luma": 0.20202,
+   "frame_spread": 0.00164,
+   "cells": [
+    0.09927,
+    0.23841,
+    0.29998,
+    0.099,
+    0.10785,
+    0.22321,
+    0.21031,
+    0.12295
+   ],
+   "cell_min": 0.099,
+   "cell_max": 0.29998,
+   "cell_median": 0.16663,
+   "cell_spread": 0.20098,
+   "cell_contrast": 1.2061,
+   "crushed_legacy": 0.5817,
+   "sky_intensity": 15.0894,
+   "exposure_bias": 1.335,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.20433
+  },
+  "plaza_se_h18.26": {
+   "vantage": "plaza_se",
+   "hour": 18.26,
+   "ground_luma": 0.0898,
+   "ground_spread": 0.00232,
+   "frame_luma": 0.15388,
+   "frame_spread": 0.00741,
+   "cells": [
+    0.05535,
+    0.09184,
+    0.1227,
+    0.06834,
+    0.0602,
+    0.15705,
+    0.11313,
+    0.06088
+   ],
+   "cell_min": 0.05535,
+   "cell_max": 0.15705,
+   "cell_median": 0.08009,
+   "cell_spread": 0.1017,
+   "cell_contrast": 1.2698,
+   "crushed_legacy": 0.8776,
+   "sky_intensity": 15.1433,
+   "exposure_bias": 1.3444,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.19538
+  },
+  "plaza_se_h18.27": {
+   "vantage": "plaza_se",
+   "hour": 18.27,
+   "ground_luma": 0.09563,
+   "ground_spread": 0.00747,
+   "frame_luma": 0.14846,
+   "frame_spread": 0.0067,
+   "cells": [
+    0.05553,
+    0.11281,
+    0.12611,
+    0.0503,
+    0.06261,
+    0.15386,
+    0.12002,
+    0.05403
+   ],
+   "cell_min": 0.0503,
+   "cell_max": 0.15386,
+   "cell_median": 0.08771,
+   "cell_spread": 0.10356,
+   "cell_contrast": 1.1807,
+   "crushed_legacy": 0.8375,
+   "sky_intensity": 15.195,
+   "exposure_bias": 1.3534,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.18642
+  },
+  "plaza_se_h18.30": {
+   "vantage": "plaza_se",
+   "hour": 18.3,
+   "ground_luma": 0.10068,
+   "ground_spread": 0.00585,
+   "frame_luma": 0.1524,
+   "frame_spread": 0.00839,
+   "cells": [
+    0.0599,
+    0.16107,
+    0.18807,
+    0.05589,
+    0.0667,
+    0.13326,
+    0.10448,
+    0.06042
+   ],
+   "cell_min": 0.05589,
+   "cell_max": 0.18807,
+   "cell_median": 0.08559,
+   "cell_spread": 0.13218,
+   "cell_contrast": 1.5443,
+   "crushed_legacy": 0.8245,
+   "sky_intensity": 15.337,
+   "exposure_bias": 1.3781,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.15957
+  },
+  "plaza_se_h18.40": {
+   "vantage": "plaza_se",
+   "hour": 18.4,
+   "ground_luma": 0.10625,
+   "ground_spread": 0.00037,
+   "frame_luma": 0.16287,
+   "frame_spread": 0.00207,
+   "cells": [
+    0.07202,
+    0.09798,
+    0.13695,
+    0.07617,
+    0.07739,
+    0.18173,
+    0.1362,
+    0.07212
+   ],
+   "cell_min": 0.07202,
+   "cell_max": 0.18173,
+   "cell_median": 0.087685,
+   "cell_spread": 0.10971,
+   "cell_contrast": 1.2512,
+   "crushed_legacy": 0.746,
+   "sky_intensity": 15.6633,
+   "exposure_bias": 1.4349,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.07019
+  },
+  "plaza_se_h18.50": {
+   "vantage": "plaza_se",
+   "hour": 18.5,
+   "ground_luma": 0.1131,
+   "ground_spread": 0.00939,
+   "frame_luma": 0.1577,
+   "frame_spread": 0.01172,
+   "cells": [
+    0.07201,
+    0.18082,
+    0.21527,
+    0.06694,
+    0.08031,
+    0.14302,
+    0.11435,
+    0.07281
+   ],
+   "cell_min": 0.06694,
+   "cell_max": 0.21527,
+   "cell_median": 0.09733,
+   "cell_spread": 0.14833,
+   "cell_contrast": 1.524,
+   "crushed_legacy": 0.7413,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.0
+  },
+  "plaza_se_h19.00": {
+   "vantage": "plaza_se",
+   "hour": 19.0,
+   "ground_luma": 0.11471,
+   "ground_spread": 0.01475,
+   "frame_luma": 0.16903,
+   "frame_spread": 0.01043,
+   "cells": [
+    0.07216,
+    0.11658,
+    0.15015,
+    0.06535,
+    0.07465,
+    0.17442,
+    0.13384,
+    0.07241
+   ],
+   "cell_min": 0.06535,
+   "cell_max": 0.17442,
+   "cell_median": 0.095615,
+   "cell_spread": 0.10907,
+   "cell_contrast": 1.1407,
+   "crushed_legacy": 0.7353,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.0
+  },
+  "plaza_se_h23.00": {
+   "vantage": "plaza_se",
+   "hour": 23.0,
+   "ground_luma": 0.19142,
+   "ground_spread": 0.00053,
+   "frame_luma": 0.21638,
+   "frame_spread": 0.0039,
+   "cells": [
+    0.1032,
+    0.23187,
+    0.25909,
+    0.16345,
+    0.10673,
+    0.2427,
+    0.22675,
+    0.2034
+   ],
+   "cell_min": 0.1032,
+   "cell_max": 0.25909,
+   "cell_median": 0.21507500000000002,
+   "cell_spread": 0.15589,
+   "cell_contrast": 0.7248,
+   "crushed_legacy": 0.3572,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "pred_band": 0.0
+  }
+ },
+ "vantages": {
+  "plaza_e": {
+   "spot": [
+    -64.0,
+    -5700.0
+   ],
+   "yaw": 90.0,
+   "view_reach": 1.0,
+   "green_ratio": 1.005,
+   "overhead_hit": null,
+   "ground_open_to_sky": true,
+   "valid": true
+  },
+  "plaza_se": {
+   "spot": [
+    -64.0,
+    -5700.0
+   ],
+   "yaw": 135.0,
+   "view_reach": 1.0,
+   "green_ratio": 1.076,
+   "overhead_hit": null,
+   "ground_open_to_sky": true,
+   "valid": true
+  }
+ },
+ "finished": "2026-09-28 03:06:12",
+ "seconds": 256.55,
+ "log": "T_SHIPPED PASS every dusk knob is at its shipped default, so this measures the world as it ships and not a state I introduced {'population': 3, 'wanted': {'wl.Look.DuskWindow': 0.3, 'wl.Look.DuskMoonDamp': 0.0, 'wl.Look.DuskSkyBoost': 0.0}, 'held': {'wl.Look.DuskWindow': 0.3, 'wl.Look.DuskMoonDamp': 0.0, 'wl.Look.DuskSkyBoost': 0.0}}\nT_VALID_PLAZA_E PASS vantage plaza_e can see the ground it measures, and that ground is open to the sky {'spot': [-64.0, -5700.0], 'yaw': 90.0, 'view_reach': 1.0, 'green_ratio': 1.005, 'overhead_hit': None, 'ground_open_to_sky': True, 'valid': True}\nT_VALID_PLAZA_SE PASS vantage plaza_se can see the ground it measures, and that ground is open to the sky {'spot': [-64.0, -5700.0], 'yaw': 135.0, 'view_reach': 1.0, 'green_ratio': 1.076, 'overhead_hit': None, 'ground_open_to_sky': True, 'valid': True}\nT_MEASURED PASS every hour at every valid vantage produced a reading {'population': 24, 'valid_vantages': ['plaza_e', 'plaza_se'], 'wanted': 24}\nT_NOISE FAIL every reading agrees with itself {'population': 24, 'worst_spread': 0.01475, 'tolerance': 0.01}\nVOID FAIL no valid vantage, or readings missing or disagreeing with themselves {}\n"
+}

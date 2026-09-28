@@ -1,0 +1,6183 @@
+{
+ "name": "zc_dusk_shape",
+ "started": "2026-09-28 02:35:30",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "D_CVARS",
+   "name": "all three dusk knobs exist in the RUNNING build, proven by sentinel round-trip",
+   "pass": true,
+   "detail": {
+    "knobs_wanted": [
+     "wl.Look.DuskWindow",
+     "wl.Look.DuskMoonDamp",
+     "wl.Look.DuskSkyBoost"
+    ],
+    "knobs_answering": [
+     "wl.Look.DuskWindow",
+     "wl.Look.DuskMoonDamp",
+     "wl.Look.DuskSkyBoost"
+    ],
+    "missing": [],
+    "as_found": {
+     "wl.Look.DuskWindow": 0.3,
+     "wl.Look.DuskMoonDamp": 0.0,
+     "wl.Look.DuskSkyBoost": 0.0
+    },
+    "binary": {
+     "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Binaries\\Win64\\UnrealEditor-Wonderland.dll",
+     "built": "2026-09-28 02:07:10"
+    },
+    "readback": {
+     "wl.Look.DuskWindow": 0.4321,
+     "wl.Look.DuskMoonDamp": 0.4321,
+     "wl.Look.DuskSkyBoost": 0.4321
+    },
+    "note": "a cvar that does not exist reads 0.0, which is the shipped default of two of these three -- so a stale DLL would otherwise pass every readback and the run would measure an unchanged world for no visible reason. This editor was five minutes too old once already today"
+   }
+  },
+  {
+   "id": "D_VALID",
+   "name": "the camera can actually SEE the ground it is about to measure",
+   "pass": true,
+   "detail": {
+    "vantage": {
+     "asked": [
+      -64.0,
+      -5700.0
+     ],
+     "landed": [
+      -64.0,
+      -5700.0,
+      94.1
+     ],
+     "offset_uu": 0.0,
+     "forward_hit": null,
+     "down_hit": {
+      "dist": 249.2,
+      "z": 4.9
+     },
+     "ground_patch_hit": {
+      "dist": 2249.2,
+      "z": 4.9
+     },
+     "ground_patch_world": [
+      -64.0,
+      -5025.0
+     ],
+     "ground_rect_screen": [
+      0.5,
+      0.74,
+      0.28,
+      0.16
+     ],
+     "grid": [
+      4,
+      2
+     ],
+     "figures_within_40m": [
+      {
+       "label": "WonderlandDogPawn0",
+       "dist_to_patch_uu": 3565.6
+      }
+     ],
+     "view_reach": 1.0,
+     "first_hit_uu": null,
+     "ground_point_uu": 718.9,
+     "ground_rgb": {
+      "luma": 0.4906,
+      "rgb": [
+       0.5949,
+       0.4761,
+       0.327
+      ],
+      "green_ratio": 1.033,
+      "crushed": 0.0207,
+      "blown": 0.0,
+      "readable": 0.9793,
+      "sampled": 10700
+     },
+     "sky_rgb": {
+      "luma": 0.2872,
+      "rgb": [
+       0.3351,
+       0.284,
+       0.1772
+      ],
+      "green_ratio": 1.109,
+      "crushed": 0.2556,
+      "blown": 0.0,
+      "readable": 0.7444,
+      "sampled": 19635
+     },
+     "overhead_hit": null,
+     "ground_open_to_sky": true
+    },
+    "pawn_offset_uu": 0.0,
+    "view_reach": 1.0,
+    "clear_line_of_sight": true,
+    "ground_not_foliage": true,
+    "green_ratio": 1.033,
+    "ground_open_to_sky": true,
+    "overhead_hit": null,
+    "thresholds": {
+     "view_reach_at_least": 0.92,
+     "green_ratio_at_most": 1.25
+    },
+    "note": "THREE INDEPENDENT TESTS, because the previous single test passed on a camera buried in a bush for 32 readings. A VISIBILITY trace to the real ground point catches an occluder the colour misses; green dominance catches one the trace misses; and an upward trace FROM THE GROUND PATCH proves the ground being measured is open to the sky, which is the only form of that question a skylight experiment cares about. A frame is also captured before any reading, because the only thing that would have caught the last run in five seconds was opening one"
+   }
+  },
+  {
+   "id": "D_MEASURED",
+   "name": "every arm the sweep asked for produced a reading",
+   "pass": true,
+   "detail": {
+    "measured": 32,
+    "wanted": 32,
+    "missing": []
+   }
+  },
+  {
+   "id": "D_STILL",
+   "name": "the pawn is at the spot at every reading, not just when it was placed",
+   "pass": true,
+   "detail": {
+    "population": 32,
+    "drifted": []
+   }
+  },
+  {
+   "id": "D_NOISE",
+   "name": "every reading agrees with itself on the luma it measures",
+   "pass": true,
+   "detail": {
+    "population": 32,
+    "worst_luma_spread": 0.0053,
+    "tolerance": 0.01
+   }
+  },
+  {
+   "id": "D_NIGHT",
+   "name": "the approved night is unchanged at the most aggressive setting the knobs allow",
+   "pass": true,
+   "detail": {
+    "population": 3,
+    "worst_abs_delta": 0.0006,
+    "noise_floor": 0.0053,
+    "setting": {
+     "window": 0.1,
+     "damp": 1.0,
+     "boost": 20.0
+    },
+    "by_hour": [
+     {
+      "hour": 18.5,
+      "inert_ground": 0.0779,
+      "leak_ground": 0.0773,
+      "delta": -0.0006,
+      "inert_sky": 15.75,
+      "leak_sky": 15.75,
+      "inert_readable": 0.0244,
+      "leak_readable": 0.0243,
+      "pred_band": 0.0,
+      "pred_shape_leak": 0.0,
+      "inert_casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "leak_casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ]
+     },
+     {
+      "hour": 19.0,
+      "inert_ground": 0.1104,
+      "leak_ground": 0.111,
+      "delta": 0.0006,
+      "inert_sky": 15.75,
+      "leak_sky": 15.75,
+      "inert_readable": 0.2457,
+      "leak_readable": 0.2488,
+      "pred_band": 0.0,
+      "pred_shape_leak": 0.0,
+      "inert_casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "leak_casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ]
+     },
+     {
+      "hour": 23.0,
+      "inert_ground": 0.1084,
+      "leak_ground": 0.1085,
+      "delta": 0.0001,
+      "inert_sky": 15.75,
+      "leak_sky": 15.75,
+      "inert_readable": 0.2027,
+      "leak_readable": 0.2026,
+      "pred_band": 0.0,
+      "pred_shape_leak": 0.0,
+      "inert_casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "leak_casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ]
+     }
+    ],
+    "note": "GREEN: TwilightBand is exactly 0 from 18:50 down, so Shape is exactly 0 and neither term can reach these hours at any value -- criterion 4 holds structurally and not by tuning. RED: the structural argument is wrong and this approach is dead as designed"
+   }
+  },
+  {
+   "id": "D_NOON",
+   "name": "noon is unchanged at the most aggressive setting the knobs allow",
+   "pass": true,
+   "detail": {
+    "population": 1,
+    "worst_abs_delta": 0.0004,
+    "noise_floor": 0.0053,
+    "by_hour": [
+     {
+      "hour": 12.0,
+      "inert_ground": 0.1904,
+      "leak_ground": 0.1908,
+      "delta": 0.0004,
+      "inert_sky": 2.25,
+      "leak_sky": 2.25
+     }
+    ]
+   }
+  },
+  {
+   "id": "D_EXPOSURE",
+   "name": "the knobs move light, not exposure -- both arms grade identically at every hour",
+   "pass": true,
+   "detail": {
+    "population": 4,
+    "readable": 4,
+    "mismatched": [],
+    "by_hour": [
+     {
+      "hour": 18.5,
+      "inert": 1.45,
+      "leak": 1.45
+     },
+     {
+      "hour": 19.0,
+      "inert": 1.45,
+      "leak": 1.45
+     },
+     {
+      "hour": 23.0,
+      "inert": 1.45,
+      "leak": 1.45
+     },
+     {
+      "hour": 12.0,
+      "inert": -0.9,
+      "leak": -0.9
+     }
+    ],
+    "note": "a non-numeric reading here is a BROKEN INSTRUMENT, not a pass: it means criterion 3 has no evidence in this run rather than that exposure held still"
+   }
+  },
+  {
+   "id": "S01_NIGHT",
+   "name": "exactly one directional light casts a shadow at EVERY hour measured here, night included",
+   "pass": false,
+   "detail": {
+    "population": 32,
+    "distinct_caster_counts": [
+     1,
+     2
+    ],
+    "hours_with_more_than_one": [
+     18.4,
+     18.5,
+     19.0,
+     23.0
+    ],
+    "note": "OBSERVATIONAL, not a new requirement. zc_shadows S01 samples only after begin play, which is daytime, so a RED here is a long-standing fact this job is the first to be in a position to see -- not a regression caused by these knobs. Reported either way"
+   }
+  },
+  {
+   "id": "D_LIVE_DAMP",
+   "name": "DuskMoonDamp actually changes the picture, so a null result below would mean something",
+   "pass": true,
+   "detail": {
+    "population": 2,
+    "largest_effect": 0.038,
+    "floor": 0.0212,
+    "by_hour": [
+     {
+      "hour": 18.25,
+      "delta": -0.038,
+      "base_sky": 15.0894,
+      "damp_sky": 15.0894,
+      "base_moon": [
+       {
+        "label": "WL_Moon",
+        "intensity": 3121.32861,
+        "casts": false
+       }
+      ],
+      "damp_moon": [
+       {
+        "label": "WL_Moon",
+        "intensity": 749.81415,
+        "casts": false
+       }
+      ]
+     },
+     {
+      "hour": 18.4,
+      "delta": 0.0001,
+      "base_sky": 15.6633,
+      "damp_sky": 15.6633,
+      "base_moon": [
+       {
+        "label": "WL_Moon",
+        "intensity": 3450.69531,
+        "casts": true
+       }
+      ],
+      "damp_moon": [
+       {
+        "label": "WL_Moon",
+        "intensity": 2972.44922,
+        "casts": true
+       }
+      ]
+     }
+    ],
+    "note": "this is the arm that removes the moon flood. If it moves nothing, the knob is dead and every reading in the sizing sweep is a measurement of an unchanged world"
+   }
+  },
+  {
+   "id": "D_LIVE_BOOST",
+   "name": "DuskSkyBoost actually changes the picture across its swept range",
+   "pass": false,
+   "detail": {
+    "population": 4,
+    "largest_effect": 0.0038,
+    "floor": 0.0212,
+    "by_window": [
+     {
+      "hour": 18.25,
+      "window": 0.3,
+      "delta_lowest_to_highest_boost": 0.0038,
+      "sky_lowest": 18.1384,
+      "sky_highest": 76.0711
+     },
+     {
+      "hour": 18.25,
+      "window": 0.6,
+      "delta_lowest_to_highest_boost": 0.0003,
+      "sky_lowest": 16.1686,
+      "sky_highest": 36.6749
+     },
+     {
+      "hour": 18.4,
+      "window": 0.3,
+      "delta_lowest_to_highest_boost": -0.0005,
+      "sky_lowest": 16.2781,
+      "sky_highest": 27.961
+     },
+     {
+      "hour": 18.4,
+      "window": 0.6,
+      "delta_lowest_to_highest_boost": -0.0028,
+      "sky_lowest": 15.8312,
+      "sky_highest": 19.0218
+     }
+    ]
+   }
+  },
+  {
+   "id": "D_REACH",
+   "name": "a continuous sky term reaches the approved night's own ground readability at both dusk hours",
+   "pass": true,
+   "detail": {
+    "population": 20,
+    "night_bar": {
+     "readable_at_least": 0.0244,
+     "crushed_at_most": 0.9756,
+     "cells_mostly_crushed_at_most": 8
+    },
+    "settings_clearing_both": [
+     {
+      "window": 0.3,
+      "boost": 5.0
+     },
+     {
+      "window": 0.3,
+      "boost": 10.0
+     },
+     {
+      "window": 0.3,
+      "boost": 20.0
+     }
+    ],
+    "chosen": {
+     "window": 0.3,
+     "boost": 5.0,
+     "damp": 1.0
+    },
+    "sweep_ceiling": {
+     "largest_boost_tested": 40.0,
+     "by_window": {
+      "window_0.30": {
+       "boost": 40.0,
+       "population": 2,
+       "cleared_every_hour": false,
+       "shortfall_by_hour": {
+        "18.25": -0.0446,
+        "18.40": 0.0016
+       }
+      },
+      "window_0.60": {
+       "boost": 40.0,
+       "population": 2,
+       "cleared_every_hour": false,
+       "shortfall_by_hour": {
+        "18.25": -0.1209,
+        "18.40": 0.0058
+       }
+      }
+     },
+     "limited_by_sweep_not_by_world": false
+    },
+    "conclusion": "a setting reaches the bar",
+    "full_table": [
+     {
+      "hour": 18.25,
+      "window": 0.3,
+      "boost": 2.0,
+      "ground_luma": 0.0728,
+      "readable": 0.0669,
+      "crushed": 0.9331,
+      "cell_readable_med": 0.0781,
+      "cell_readable_min": 0.0105,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 18.1384,
+      "exposure_bias": 1.335,
+      "casters": [
+       "V2_Sun"
+      ],
+      "meets_night_bar": true
+     },
+     {
+      "hour": 18.25,
+      "window": 0.3,
+      "boost": 5.0,
+      "ground_luma": 0.0733,
+      "readable": 0.0678,
+      "crushed": 0.9322,
+      "cell_readable_med": 0.08,
+      "cell_readable_min": 0.0101,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 22.7121,
+      "exposure_bias": 1.335,
+      "casters": [
+       "V2_Sun"
+      ],
+      "meets_night_bar": true
+     },
+     {
+      "hour": 18.25,
+      "window": 0.3,
+      "boost": 10.0,
+      "ground_luma": 0.0738,
+      "readable": 0.0683,
+      "crushed": 0.9316,
+      "cell_readable_med": 0.0786,
+      "cell_readable_min": 0.0106,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 30.3348,
+      "exposure_bias": 1.335,
+      "casters": [
+       "V2_Sun"
+      ],
+      "meets_night_bar": true
+     },
+     {
+      "hour": 18.25,
+      "window": 0.3,
+      "boost": 20.0,
+      "ground_luma": 0.075,
+      "readable": 0.0689,
+      "crushed": 0.931,
+      "cell_readable_med": 0.0802,
+      "cell_readable_min": 0.01,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 45.5802,
+      "exposure_bias": 1.335,
+      "casters": [
+       "V2_Sun"
+      ],
+      "meets_night_bar": true
+     },
+     {
+      "hour": 18.25,
+      "window": 0.3,
+      "boost": 40.0,
+      "ground_luma": 0.0766,
+      "readable": 0.069,
+      "crushed": 0.931,
+      "cell_readable_med": 0.0818,
+      "cell_readable_min": 0.0121,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 76.0711,
+      "exposure_bias": 1.335,
+      "casters": [
+       "V2_Sun"
+      ],
+      "meets_night_bar": true
+     },
+     {
+      "hour": 18.25,
+      "window": 0.6,
+      "boost": 2.0,
+      "ground_luma": 0.0996,
+      "readable": 0.1433,
+      "crushed": 0.8567,
+      "cell_readable_med": 0.1482,
+      "cell_readable_min": 0.0846,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 16.1686,
+      "exposure_bias": 1.335,
+      "casters": [
+       "V2_Sun"
+      ],
+      "meets_night_bar": true
+     },
+     {
+      "hour": 18.25,
+      "window": 0.6,
+      "boost": 5.0,
+      "ground_luma": 0.0996,
+      "readable": 0.1442,
+      "crushed": 0.8558,
+      "cell_readable_med": 0.1493,
+      "cell_readable_min": 0.0871,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 17.7875,
+      "exposure_bias": 1.335,
+      "casters": [
+       "V2_Sun"
+      ],
+      "meets_night_bar": true
+     },
+     {
+      "hour": 18.25,
+      "window": 0.6,
+      "boost": 10.0,
+      "ground_luma": 0.1002,
+      "readable": 0.1466,
+      "crushed": 0.8535,
+      "cell_readable_med": 0.1499,
+      "cell_readable_min": 0.0864,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 20.4857,
+      "exposure_bias": 1.335,
+      "casters": [
+       "V2_Sun"
+      ],
+      "meets_night_bar": true
+     },
+     {
+      "hour": 18.25,
+      "window": 0.6,
+      "boost": 20.0,
+      "ground_luma": 0.1003,
+      "readable": 0.1458,
+      "crushed": 0.8542,
+      "cell_readable_med": 0.1482,
+      "cell_readable_min": 0.0867,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 25.8821,
+      "exposure_bias": 1.335,
+      "casters": [
+       "V2_Sun"
+      ],
+      "meets_night_bar": true
+     },
+     {
+      "hour": 18.25,
+      "window": 0.6,
+      "boost": 40.0,
+      "ground_luma": 0.0999,
+      "readable": 0.1453,
+      "crushed": 0.8547,
+      "cell_readable_med": 0.1512,
+      "cell_readable_min": 0.086,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 36.6749,
+      "exposure_bias": 1.335,
+      "casters": [
+       "V2_Sun"
+      ],
+      "meets_night_bar": true
+     },
+     {
+      "hour": 18.4,
+      "window": 0.3,
+      "boost": 2.0,
+      "ground_luma": 0.0776,
+      "readable": 0.0241,
+      "crushed": 0.9759,
+      "cell_readable_med": 0.0212,
+      "cell_readable_min": 0.0,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 16.2781,
+      "exposure_bias": 1.4349,
+      "casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "meets_night_bar": false
+     },
+     {
+      "hour": 18.4,
+      "window": 0.3,
+      "boost": 5.0,
+      "ground_luma": 0.0779,
+      "readable": 0.0245,
+      "crushed": 0.9755,
+      "cell_readable_med": 0.0217,
+      "cell_readable_min": 0.0,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 17.2005,
+      "exposure_bias": 1.4349,
+      "casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "meets_night_bar": true
+     },
+     {
+      "hour": 18.4,
+      "window": 0.3,
+      "boost": 10.0,
+      "ground_luma": 0.0778,
+      "readable": 0.0245,
+      "crushed": 0.9755,
+      "cell_readable_med": 0.0223,
+      "cell_readable_min": 0.0,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 18.7377,
+      "exposure_bias": 1.4349,
+      "casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "meets_night_bar": true
+     },
+     {
+      "hour": 18.4,
+      "window": 0.3,
+      "boost": 20.0,
+      "ground_luma": 0.0781,
+      "readable": 0.0257,
+      "crushed": 0.9743,
+      "cell_readable_med": 0.0229,
+      "cell_readable_min": 0.0001,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 21.8121,
+      "exposure_bias": 1.4349,
+      "casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "meets_night_bar": true
+     },
+     {
+      "hour": 18.4,
+      "window": 0.3,
+      "boost": 40.0,
+      "ground_luma": 0.0771,
+      "readable": 0.0228,
+      "crushed": 0.9772,
+      "cell_readable_med": 0.021,
+      "cell_readable_min": 0.0,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 27.961,
+      "exposure_bias": 1.4349,
+      "casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "meets_night_bar": false
+     },
+     {
+      "hour": 18.4,
+      "window": 0.6,
+      "boost": 2.0,
+      "ground_luma": 0.0771,
+      "readable": 0.0227,
+      "crushed": 0.9772,
+      "cell_readable_med": 0.0218,
+      "cell_readable_min": 0.0,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 15.8312,
+      "exposure_bias": 1.4349,
+      "casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "meets_night_bar": false
+     },
+     {
+      "hour": 18.4,
+      "window": 0.6,
+      "boost": 5.0,
+      "ground_luma": 0.0777,
+      "readable": 0.0241,
+      "crushed": 0.976,
+      "cell_readable_med": 0.0221,
+      "cell_readable_min": 0.0,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 16.0831,
+      "exposure_bias": 1.4349,
+      "casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "meets_night_bar": false
+     },
+     {
+      "hour": 18.4,
+      "window": 0.6,
+      "boost": 10.0,
+      "ground_luma": 0.0748,
+      "readable": 0.0192,
+      "crushed": 0.9808,
+      "cell_readable_med": 0.0151,
+      "cell_readable_min": 0.0,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 16.5029,
+      "exposure_bias": 1.4349,
+      "casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "meets_night_bar": false
+     },
+     {
+      "hour": 18.4,
+      "window": 0.6,
+      "boost": 20.0,
+      "ground_luma": 0.0746,
+      "readable": 0.019,
+      "crushed": 0.981,
+      "cell_readable_med": 0.0167,
+      "cell_readable_min": 0.0,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 17.3425,
+      "exposure_bias": 1.4349,
+      "casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "meets_night_bar": false
+     },
+     {
+      "hour": 18.4,
+      "window": 0.6,
+      "boost": 40.0,
+      "ground_luma": 0.0743,
+      "readable": 0.0186,
+      "crushed": 0.9814,
+      "cell_readable_med": 0.0152,
+      "cell_readable_min": 0.0,
+      "cells_mostly_crushed": 8,
+      "sky_intensity": 19.0218,
+      "exposure_bias": 1.4349,
+      "casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "meets_night_bar": false
+     }
+    ],
+    "note": "GREEN: the dense ladder is worth running at the chosen setting. RED is NOT a failed job -- it is the measured tradeoff the founder asked for in place of a forced solution. But read `conclusion` before reporting it: a red because the sweep ran out of room is a fact about this job, and a red with headroom left is a fact about Wonderland. Only the second one answers the founder's question"
+   }
+  }
+ ],
+ "knobs": {
+  "as_found": {
+   "wl.Look.DuskWindow": 0.3,
+   "wl.Look.DuskMoonDamp": 0.0,
+   "wl.Look.DuskSkyBoost": 0.0
+  },
+  "sentinel_readback": {
+   "wl.Look.DuskWindow": 0.4321,
+   "wl.Look.DuskMoonDamp": 0.4321,
+   "wl.Look.DuskSkyBoost": 0.4321
+  },
+  "restored": {
+   "wl.Look.DuskWindow": 0.3,
+   "wl.Look.DuskMoonDamp": 0.0,
+   "wl.Look.DuskSkyBoost": 0.0
+  },
+  "sentinel": 0.4321,
+  "binary": {
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Binaries\\Win64\\UnrealEditor-Wonderland.dll",
+   "built": "2026-09-28 02:07:10"
+  }
+ },
+ "vantage": {
+  "asked": [
+   -64.0,
+   -5700.0
+  ],
+  "landed": [
+   -64.0,
+   -5700.0,
+   94.1
+  ],
+  "offset_uu": 0.0,
+  "forward_hit": null,
+  "down_hit": {
+   "dist": 249.2,
+   "z": 4.9
+  },
+  "ground_patch_hit": {
+   "dist": 2249.2,
+   "z": 4.9
+  },
+  "ground_patch_world": [
+   -64.0,
+   -5025.0
+  ],
+  "ground_rect_screen": [
+   0.5,
+   0.74,
+   0.28,
+   0.16
+  ],
+  "grid": [
+   4,
+   2
+  ],
+  "figures_within_40m": [
+   {
+    "label": "WonderlandDogPawn0",
+    "dist_to_patch_uu": 3565.6
+   }
+  ],
+  "view_reach": 1.0,
+  "first_hit_uu": null,
+  "ground_point_uu": 718.9,
+  "ground_rgb": {
+   "luma": 0.4906,
+   "rgb": [
+    0.5949,
+    0.4761,
+    0.327
+   ],
+   "green_ratio": 1.033,
+   "crushed": 0.0207,
+   "blown": 0.0,
+   "readable": 0.9793,
+   "sampled": 10700
+  },
+  "sky_rgb": {
+   "luma": 0.2872,
+   "rgb": [
+    0.3351,
+    0.284,
+    0.1772
+   ],
+   "green_ratio": 1.109,
+   "crushed": 0.2556,
+   "blown": 0.0,
+   "readable": 0.7444,
+   "sampled": 19635
+  },
+  "overhead_hit": null,
+  "ground_open_to_sky": true
+ },
+ "readings": {
+  "h18.50_inert": {
+   "hour": 18.5,
+   "arm": "inert",
+   "window": 0.3,
+   "damp": 0.0,
+   "boost": 0.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "ground_luma": 0.0779,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.0244,
+   "ground_crushed": 0.9756,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1138,
+   "frame_luma_spread": 0.0022,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0746,
+     "crushed": 0.9784,
+     "blown": 0.0,
+     "readable": 0.0216
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0855,
+     "crushed": 0.9541,
+     "blown": 0.0,
+     "readable": 0.0459
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0911,
+     "crushed": 0.9489,
+     "blown": 0.0,
+     "readable": 0.0511
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0806,
+     "crushed": 0.9639,
+     "blown": 0.0,
+     "readable": 0.0361
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0606,
+     "crushed": 1.0,
+     "blown": 0.0,
+     "readable": 0.0
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0719,
+     "crushed": 0.9912,
+     "blown": 0.0,
+     "readable": 0.0088
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0812,
+     "crushed": 0.9804,
+     "blown": 0.0,
+     "readable": 0.0196
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0743,
+     "crushed": 0.998,
+     "blown": 0.0,
+     "readable": 0.002
+    }
+   ],
+   "cell_readable_min": 0.0,
+   "cell_readable_med": 0.0216,
+   "cell_readable_max": 0.0511,
+   "cell_crushed_max": 1.0,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 84.00001,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 3500.0,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=1.000 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -9.398,
+   "pred_band": 0.0,
+   "pred_daylight": 0.0,
+   "pred_nightfall": 1.0,
+   "pred_shape": 0.0
+  },
+  "h18.50_leak": {
+   "hour": 18.5,
+   "arm": "leak",
+   "window": 0.1,
+   "damp": 1.0,
+   "boost": 20.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.1,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 20.0
+   },
+   "ground_luma": 0.0773,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.0243,
+   "ground_crushed": 0.9757,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1128,
+   "frame_luma_spread": 0.0014,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0738,
+     "crushed": 0.9793,
+     "blown": 0.0,
+     "readable": 0.0207
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0846,
+     "crushed": 0.9564,
+     "blown": 0.0,
+     "readable": 0.0436
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0905,
+     "crushed": 0.9487,
+     "blown": 0.0,
+     "readable": 0.0513
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0795,
+     "crushed": 0.9632,
+     "blown": 0.0,
+     "readable": 0.0368
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0599,
+     "crushed": 1.0,
+     "blown": 0.0,
+     "readable": 0.0
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0709,
+     "crushed": 0.9915,
+     "blown": 0.0,
+     "readable": 0.0085
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.081,
+     "crushed": 0.9804,
+     "blown": 0.0,
+     "readable": 0.0196
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0746,
+     "crushed": 0.9975,
+     "blown": 0.0,
+     "readable": 0.0025
+    }
+   ],
+   "cell_readable_min": 0.0,
+   "cell_readable_med": 0.0207,
+   "cell_readable_max": 0.0513,
+   "cell_crushed_max": 1.0,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 84.00001,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 3500.0,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=1.000 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -9.398,
+   "pred_band": 0.0,
+   "pred_daylight": 0.0,
+   "pred_nightfall": 1.0,
+   "pred_shape": 0.0
+  },
+  "h19.00_inert": {
+   "hour": 19.0,
+   "arm": "inert",
+   "window": 0.3,
+   "damp": 0.0,
+   "boost": 0.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "ground_luma": 0.1104,
+   "ground_luma_spread": 0.0004,
+   "ground_readable": 0.2457,
+   "ground_crushed": 0.7542,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1335,
+   "frame_luma_spread": 0.0007,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0754,
+     "crushed": 0.9751,
+     "blown": 0.0,
+     "readable": 0.0249
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.1693,
+     "crushed": 0.4109,
+     "blown": 0.0,
+     "readable": 0.5891
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.1419,
+     "crushed": 0.5904,
+     "blown": 0.0,
+     "readable": 0.4096
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0767,
+     "crushed": 0.9745,
+     "blown": 0.0,
+     "readable": 0.0255
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0778,
+     "crushed": 0.8742,
+     "blown": 0.0,
+     "readable": 0.1258
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.1647,
+     "crushed": 0.3732,
+     "blown": 0.0,
+     "readable": 0.6268
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.1016,
+     "crushed": 0.8141,
+     "blown": 0.0,
+     "readable": 0.1859
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0745,
+     "crushed": 0.9999,
+     "blown": 0.0,
+     "readable": 0.0001
+    }
+   ],
+   "cell_readable_min": 0.0001,
+   "cell_readable_med": 0.1859,
+   "cell_readable_max": 0.6268,
+   "cell_crushed_max": 0.9999,
+   "cells_mostly_crushed": 6,
+   "cells_total": 8,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 84.00001,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 3500.0,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=1.000 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -18.635,
+   "pred_band": 0.0,
+   "pred_daylight": 0.0,
+   "pred_nightfall": 1.0,
+   "pred_shape": 0.0
+  },
+  "h19.00_leak": {
+   "hour": 19.0,
+   "arm": "leak",
+   "window": 0.1,
+   "damp": 1.0,
+   "boost": 20.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.1,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 20.0
+   },
+   "ground_luma": 0.111,
+   "ground_luma_spread": 0.0004,
+   "ground_readable": 0.2488,
+   "ground_crushed": 0.7512,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1358,
+   "frame_luma_spread": 0.0002,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0759,
+     "crushed": 0.9746,
+     "blown": 0.0,
+     "readable": 0.0254
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.1697,
+     "crushed": 0.41,
+     "blown": 0.0,
+     "readable": 0.59
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.1441,
+     "crushed": 0.5723,
+     "blown": 0.0,
+     "readable": 0.4277
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.076,
+     "crushed": 0.9735,
+     "blown": 0.0,
+     "readable": 0.0265
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0778,
+     "crushed": 0.8755,
+     "blown": 0.0,
+     "readable": 0.1245
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.1655,
+     "crushed": 0.3693,
+     "blown": 0.0,
+     "readable": 0.6307
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.1006,
+     "crushed": 0.8205,
+     "blown": 0.0,
+     "readable": 0.1795
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0743,
+     "crushed": 0.9997,
+     "blown": 0.0,
+     "readable": 0.0003
+    }
+   ],
+   "cell_readable_min": 0.0003,
+   "cell_readable_med": 0.1795,
+   "cell_readable_max": 0.6307,
+   "cell_crushed_max": 0.9997,
+   "cells_mostly_crushed": 6,
+   "cells_total": 8,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 84.00001,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 3500.0,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=1.000 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -18.635,
+   "pred_band": 0.0,
+   "pred_daylight": 0.0,
+   "pred_nightfall": 1.0,
+   "pred_shape": 0.0
+  },
+  "h23.00_inert": {
+   "hour": 23.0,
+   "arm": "inert",
+   "window": 0.3,
+   "damp": 0.0,
+   "boost": 0.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "ground_luma": 0.1084,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.2027,
+   "ground_crushed": 0.7973,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1762,
+   "frame_luma_spread": 0.0016,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0998,
+     "crushed": 0.8585,
+     "blown": 0.0,
+     "readable": 0.1415
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0899,
+     "crushed": 0.9206,
+     "blown": 0.0,
+     "readable": 0.0794
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0988,
+     "crushed": 0.8926,
+     "blown": 0.0,
+     "readable": 0.1074
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.1109,
+     "crushed": 0.7828,
+     "blown": 0.0,
+     "readable": 0.2172
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.1053,
+     "crushed": 0.7755,
+     "blown": 0.0,
+     "readable": 0.2245
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.1338,
+     "crushed": 0.6475,
+     "blown": 0.0,
+     "readable": 0.3525
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.1166,
+     "crushed": 0.7496,
+     "blown": 0.0,
+     "readable": 0.2504
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.1102,
+     "crushed": 0.768,
+     "blown": 0.0,
+     "readable": 0.232
+    }
+   ],
+   "cell_readable_min": 0.0794,
+   "cell_readable_med": 0.2245,
+   "cell_readable_max": 0.3525,
+   "cell_crushed_max": 0.9206,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 84.00001,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 3500.0,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=1.000 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -69.547,
+   "pred_band": 0.0,
+   "pred_daylight": 0.0,
+   "pred_nightfall": 1.0,
+   "pred_shape": 0.0
+  },
+  "h23.00_leak": {
+   "hour": 23.0,
+   "arm": "leak",
+   "window": 0.1,
+   "damp": 1.0,
+   "boost": 20.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.1,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 20.0
+   },
+   "ground_luma": 0.1085,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.2026,
+   "ground_crushed": 0.7974,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1754,
+   "frame_luma_spread": 0.0011,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0996,
+     "crushed": 0.857,
+     "blown": 0.0,
+     "readable": 0.143
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0898,
+     "crushed": 0.9205,
+     "blown": 0.0,
+     "readable": 0.0795
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0989,
+     "crushed": 0.8928,
+     "blown": 0.0,
+     "readable": 0.1072
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.1116,
+     "crushed": 0.7802,
+     "blown": 0.0,
+     "readable": 0.2198
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.1051,
+     "crushed": 0.7732,
+     "blown": 0.0,
+     "readable": 0.2268
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.1336,
+     "crushed": 0.6486,
+     "blown": 0.0,
+     "readable": 0.3514
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.1168,
+     "crushed": 0.7504,
+     "blown": 0.0,
+     "readable": 0.2496
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.1102,
+     "crushed": 0.7679,
+     "blown": 0.0,
+     "readable": 0.2321
+    }
+   ],
+   "cell_readable_min": 0.0795,
+   "cell_readable_med": 0.2268,
+   "cell_readable_max": 0.3514,
+   "cell_crushed_max": 0.9205,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 84.00001,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 3500.0,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=1.000 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -69.547,
+   "pred_band": 0.0,
+   "pred_daylight": 0.0,
+   "pred_nightfall": 1.0,
+   "pred_shape": 0.0
+  },
+  "h12.00_inert": {
+   "hour": 12.0,
+   "arm": "inert",
+   "window": 0.3,
+   "damp": 0.0,
+   "boost": 0.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "ground_luma": 0.1904,
+   "ground_luma_spread": 0.0001,
+   "ground_readable": 0.8396,
+   "ground_crushed": 0.1604,
+   "ground_blown": 0.0,
+   "frame_luma": 0.2735,
+   "frame_luma_spread": 0.0005,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.1761,
+     "crushed": 0.1687,
+     "blown": 0.0,
+     "readable": 0.8313
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.2013,
+     "crushed": 0.0711,
+     "blown": 0.0,
+     "readable": 0.9289
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.2066,
+     "crushed": 0.0652,
+     "blown": 0.0,
+     "readable": 0.9348
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.2003,
+     "crushed": 0.2324,
+     "blown": 0.0,
+     "readable": 0.7676
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.1734,
+     "crushed": 0.3386,
+     "blown": 0.0,
+     "readable": 0.6614
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.1616,
+     "crushed": 0.1784,
+     "blown": 0.0,
+     "readable": 0.8216
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.2063,
+     "crushed": 0.0933,
+     "blown": 0.0,
+     "readable": 0.9067
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.1933,
+     "crushed": 0.1391,
+     "blown": 0.0,
+     "readable": 0.8609
+    }
+   ],
+   "cell_readable_min": 0.6614,
+   "cell_readable_med": 0.8609,
+   "cell_readable_max": 0.9348,
+   "cell_crushed_max": 0.3386,
+   "cells_mostly_crushed": 0,
+   "cells_total": 8,
+   "sky_intensity": 2.25,
+   "exposure_bias": -0.9,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 1100.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 2200.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 70000.0,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 2200.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 0.0,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.000 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": 72.0,
+   "pred_band": 1.0,
+   "pred_daylight": 1.0,
+   "pred_nightfall": 0.0,
+   "pred_shape": 1.0
+  },
+  "h12.00_leak": {
+   "hour": 12.0,
+   "arm": "leak",
+   "window": 0.1,
+   "damp": 1.0,
+   "boost": 20.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.1,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 20.0
+   },
+   "ground_luma": 0.1908,
+   "ground_luma_spread": 0.0001,
+   "ground_readable": 0.842,
+   "ground_crushed": 0.158,
+   "ground_blown": 0.0,
+   "frame_luma": 0.278,
+   "frame_luma_spread": 0.0001,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.1768,
+     "crushed": 0.1641,
+     "blown": 0.0,
+     "readable": 0.8359
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.2018,
+     "crushed": 0.0706,
+     "blown": 0.0,
+     "readable": 0.9294
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.207,
+     "crushed": 0.0638,
+     "blown": 0.0,
+     "readable": 0.9362
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.2009,
+     "crushed": 0.2304,
+     "blown": 0.0,
+     "readable": 0.7696
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.1742,
+     "crushed": 0.3297,
+     "blown": 0.0,
+     "readable": 0.6703
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.1625,
+     "crushed": 0.1744,
+     "blown": 0.0,
+     "readable": 0.8256
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.207,
+     "crushed": 0.0912,
+     "blown": 0.0,
+     "readable": 0.9088
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.1939,
+     "crushed": 0.1373,
+     "blown": 0.0,
+     "readable": 0.8627
+    }
+   ],
+   "cell_readable_min": 0.6703,
+   "cell_readable_med": 0.8627,
+   "cell_readable_max": 0.9362,
+   "cell_crushed_max": 0.3297,
+   "cells_mostly_crushed": 0,
+   "cells_total": 8,
+   "sky_intensity": 2.25,
+   "exposure_bias": -0.9,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 1100.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 2200.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 70000.0,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 2200.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 0.0,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.000 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": 72.0,
+   "pred_band": 1.0,
+   "pred_daylight": 1.0,
+   "pred_nightfall": 0.0,
+   "pred_shape": 1.0
+  },
+  "h18.25_base": {
+   "hour": 18.25,
+   "arm": "base",
+   "window": 0.3,
+   "damp": 0.0,
+   "boost": 0.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "ground_luma": 0.1101,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.1951,
+   "ground_crushed": 0.8049,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1466,
+   "frame_luma_spread": 0.0005,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.1118,
+     "crushed": 0.8112,
+     "blown": 0.0,
+     "readable": 0.1888
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.1241,
+     "crushed": 0.7537,
+     "blown": 0.0,
+     "readable": 0.2463
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.1286,
+     "crushed": 0.7308,
+     "blown": 0.0,
+     "readable": 0.2692
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.1121,
+     "crushed": 0.8107,
+     "blown": 0.0,
+     "readable": 0.1893
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0885,
+     "crushed": 0.8764,
+     "blown": 0.0,
+     "readable": 0.1236
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.1009,
+     "crushed": 0.8328,
+     "blown": 0.0,
+     "readable": 0.1672
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.1091,
+     "crushed": 0.7856,
+     "blown": 0.0,
+     "readable": 0.2144
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0982,
+     "crushed": 0.8504,
+     "blown": 0.0,
+     "readable": 0.1496
+    }
+   ],
+   "cell_readable_min": 0.1236,
+   "cell_readable_med": 0.1893,
+   "cell_readable_max": 0.2692,
+   "cell_crushed_max": 0.8764,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 15.0894,
+   "exposure_bias": 1.335,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 3425.5874,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 3121.32861,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.892 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -4.709,
+   "pred_band": 0.20433,
+   "pred_daylight": 0.04894,
+   "pred_nightfall": 0.89181,
+   "pred_shape": 0.75978
+  },
+  "h18.25_damponly": {
+   "hour": 18.25,
+   "arm": "damponly",
+   "window": 0.3,
+   "damp": 1.0,
+   "boost": 0.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "ground_luma": 0.0721,
+   "ground_luma_spread": 0.0001,
+   "ground_readable": 0.0659,
+   "ground_crushed": 0.9341,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1129,
+   "frame_luma_spread": 0.002,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0706,
+     "crushed": 0.9221,
+     "blown": 0.0,
+     "readable": 0.0779
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0813,
+     "crushed": 0.9008,
+     "blown": 0.0,
+     "readable": 0.0992
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0863,
+     "crushed": 0.892,
+     "blown": 0.0,
+     "readable": 0.108
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0741,
+     "crushed": 0.9175,
+     "blown": 0.0,
+     "readable": 0.0825
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0549,
+     "crushed": 0.9904,
+     "blown": 0.0,
+     "readable": 0.0096
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0659,
+     "crushed": 0.9459,
+     "blown": 0.0,
+     "readable": 0.0541
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0735,
+     "crushed": 0.9509,
+     "blown": 0.0,
+     "readable": 0.0491
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0651,
+     "crushed": 0.9753,
+     "blown": 0.0,
+     "readable": 0.0247
+    }
+   ],
+   "cell_readable_min": 0.0096,
+   "cell_readable_med": 0.0779,
+   "cell_readable_max": 0.108,
+   "cell_crushed_max": 0.9904,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 15.0894,
+   "exposure_bias": 1.335,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 3425.5874,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 749.81415,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.892 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -4.709,
+   "pred_band": 0.20433,
+   "pred_daylight": 0.04894,
+   "pred_nightfall": 0.89181,
+   "pred_shape": 0.75978
+  },
+  "h18.25_w0.30_b02.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "window": 0.3,
+   "damp": 1.0,
+   "boost": 2.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 2.0
+   },
+   "ground_luma": 0.0728,
+   "ground_luma_spread": 0.0007,
+   "ground_readable": 0.0669,
+   "ground_crushed": 0.9331,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1135,
+   "frame_luma_spread": 0.0014,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.071,
+     "crushed": 0.9219,
+     "blown": 0.0,
+     "readable": 0.0781
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.081,
+     "crushed": 0.9014,
+     "blown": 0.0,
+     "readable": 0.0986
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0866,
+     "crushed": 0.8918,
+     "blown": 0.0,
+     "readable": 0.1082
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0724,
+     "crushed": 0.9189,
+     "blown": 0.0,
+     "readable": 0.0811
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0562,
+     "crushed": 0.9895,
+     "blown": 0.0,
+     "readable": 0.0105
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.067,
+     "crushed": 0.9449,
+     "blown": 0.0,
+     "readable": 0.0551
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0744,
+     "crushed": 0.9502,
+     "blown": 0.0,
+     "readable": 0.0498
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0659,
+     "crushed": 0.9749,
+     "blown": 0.0,
+     "readable": 0.0251
+    }
+   ],
+   "cell_readable_min": 0.0105,
+   "cell_readable_med": 0.0781,
+   "cell_readable_max": 0.1082,
+   "cell_crushed_max": 0.9895,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 18.1384,
+   "exposure_bias": 1.335,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 3425.5874,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 749.81415,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.892 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -4.709,
+   "pred_band": 0.20433,
+   "pred_daylight": 0.04894,
+   "pred_nightfall": 0.89181,
+   "pred_shape": 0.75978
+  },
+  "h18.25_w0.30_b05.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "window": 0.3,
+   "damp": 1.0,
+   "boost": 5.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 5.0
+   },
+   "ground_luma": 0.0733,
+   "ground_luma_spread": 0.0004,
+   "ground_readable": 0.0678,
+   "ground_crushed": 0.9322,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1137,
+   "frame_luma_spread": 0.0002,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0722,
+     "crushed": 0.92,
+     "blown": 0.0,
+     "readable": 0.08
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0817,
+     "crushed": 0.8999,
+     "blown": 0.0,
+     "readable": 0.1001
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0865,
+     "crushed": 0.8917,
+     "blown": 0.0,
+     "readable": 0.1083
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0744,
+     "crushed": 0.9173,
+     "blown": 0.0,
+     "readable": 0.0827
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0555,
+     "crushed": 0.9899,
+     "blown": 0.0,
+     "readable": 0.0101
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.066,
+     "crushed": 0.9461,
+     "blown": 0.0,
+     "readable": 0.0539
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0753,
+     "crushed": 0.9491,
+     "blown": 0.0,
+     "readable": 0.0509
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0677,
+     "crushed": 0.9719,
+     "blown": 0.0,
+     "readable": 0.0281
+    }
+   ],
+   "cell_readable_min": 0.0101,
+   "cell_readable_med": 0.08,
+   "cell_readable_max": 0.1083,
+   "cell_crushed_max": 0.9899,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 22.7121,
+   "exposure_bias": 1.335,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 3425.5874,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 749.81415,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.892 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -4.709,
+   "pred_band": 0.20433,
+   "pred_daylight": 0.04894,
+   "pred_nightfall": 0.89181,
+   "pred_shape": 0.75978
+  },
+  "h18.25_w0.30_b10.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "window": 0.3,
+   "damp": 1.0,
+   "boost": 10.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 10.0
+   },
+   "ground_luma": 0.0738,
+   "ground_luma_spread": 0.0001,
+   "ground_readable": 0.0683,
+   "ground_crushed": 0.9316,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1128,
+   "frame_luma_spread": 0.0034,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0715,
+     "crushed": 0.9214,
+     "blown": 0.0,
+     "readable": 0.0786
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0809,
+     "crushed": 0.9021,
+     "blown": 0.0,
+     "readable": 0.0979
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0868,
+     "crushed": 0.8913,
+     "blown": 0.0,
+     "readable": 0.1087
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0758,
+     "crushed": 0.916,
+     "blown": 0.0,
+     "readable": 0.084
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0565,
+     "crushed": 0.9894,
+     "blown": 0.0,
+     "readable": 0.0106
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0674,
+     "crushed": 0.944,
+     "blown": 0.0,
+     "readable": 0.056
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0768,
+     "crushed": 0.9484,
+     "blown": 0.0,
+     "readable": 0.0516
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0701,
+     "crushed": 0.9686,
+     "blown": 0.0,
+     "readable": 0.0314
+    }
+   ],
+   "cell_readable_min": 0.0106,
+   "cell_readable_med": 0.0786,
+   "cell_readable_max": 0.1087,
+   "cell_crushed_max": 0.9894,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 30.3348,
+   "exposure_bias": 1.335,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 3425.5874,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 749.81415,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.892 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -4.709,
+   "pred_band": 0.20433,
+   "pred_daylight": 0.04894,
+   "pred_nightfall": 0.89181,
+   "pred_shape": 0.75978
+  },
+  "h18.25_w0.30_b20.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "window": 0.3,
+   "damp": 1.0,
+   "boost": 20.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 20.0
+   },
+   "ground_luma": 0.075,
+   "ground_luma_spread": 0.0,
+   "ground_readable": 0.0689,
+   "ground_crushed": 0.931,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1135,
+   "frame_luma_spread": 0.0002,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0725,
+     "crushed": 0.9198,
+     "blown": 0.0,
+     "readable": 0.0802
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0835,
+     "crushed": 0.899,
+     "blown": 0.0,
+     "readable": 0.101
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0891,
+     "crushed": 0.8894,
+     "blown": 0.0,
+     "readable": 0.1106
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0767,
+     "crushed": 0.9159,
+     "blown": 0.0,
+     "readable": 0.0841
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0568,
+     "crushed": 0.99,
+     "blown": 0.0,
+     "readable": 0.01
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0683,
+     "crushed": 0.9446,
+     "blown": 0.0,
+     "readable": 0.0554
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0775,
+     "crushed": 0.9483,
+     "blown": 0.0,
+     "readable": 0.0517
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.07,
+     "crushed": 0.9703,
+     "blown": 0.0,
+     "readable": 0.0297
+    }
+   ],
+   "cell_readable_min": 0.01,
+   "cell_readable_med": 0.0802,
+   "cell_readable_max": 0.1106,
+   "cell_crushed_max": 0.99,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 45.5802,
+   "exposure_bias": 1.335,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 3425.5874,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 749.81415,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.892 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -4.709,
+   "pred_band": 0.20433,
+   "pred_daylight": 0.04894,
+   "pred_nightfall": 0.89181,
+   "pred_shape": 0.75978
+  },
+  "h18.25_w0.30_b40.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "window": 0.3,
+   "damp": 1.0,
+   "boost": 40.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 40.0
+   },
+   "ground_luma": 0.0766,
+   "ground_luma_spread": 0.0009,
+   "ground_readable": 0.069,
+   "ground_crushed": 0.931,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1144,
+   "frame_luma_spread": 0.0009,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0744,
+     "crushed": 0.9182,
+     "blown": 0.0,
+     "readable": 0.0818
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0857,
+     "crushed": 0.8966,
+     "blown": 0.0,
+     "readable": 0.1034
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0912,
+     "crushed": 0.8877,
+     "blown": 0.0,
+     "readable": 0.1123
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0782,
+     "crushed": 0.916,
+     "blown": 0.0,
+     "readable": 0.084
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.059,
+     "crushed": 0.9879,
+     "blown": 0.0,
+     "readable": 0.0121
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0704,
+     "crushed": 0.9433,
+     "blown": 0.0,
+     "readable": 0.0567
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.08,
+     "crushed": 0.948,
+     "blown": 0.0,
+     "readable": 0.052
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0719,
+     "crushed": 0.9699,
+     "blown": 0.0,
+     "readable": 0.0301
+    }
+   ],
+   "cell_readable_min": 0.0121,
+   "cell_readable_med": 0.0818,
+   "cell_readable_max": 0.1123,
+   "cell_crushed_max": 0.9879,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 76.0711,
+   "exposure_bias": 1.335,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 3425.5874,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 749.81415,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.892 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -4.709,
+   "pred_band": 0.20433,
+   "pred_daylight": 0.04894,
+   "pred_nightfall": 0.89181,
+   "pred_shape": 0.75978
+  },
+  "h18.25_w0.60_b02.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "window": 0.6,
+   "damp": 1.0,
+   "boost": 2.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.6,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 2.0
+   },
+   "ground_luma": 0.0996,
+   "ground_luma_spread": 0.0,
+   "ground_readable": 0.1433,
+   "ground_crushed": 0.8567,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1366,
+   "frame_luma_spread": 0.003,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0996,
+     "crushed": 0.8518,
+     "blown": 0.0,
+     "readable": 0.1482
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.1118,
+     "crushed": 0.8143,
+     "blown": 0.0,
+     "readable": 0.1857
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.117,
+     "crushed": 0.7971,
+     "blown": 0.0,
+     "readable": 0.2029
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.1014,
+     "crushed": 0.8554,
+     "blown": 0.0,
+     "readable": 0.1446
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0785,
+     "crushed": 0.9154,
+     "blown": 0.0,
+     "readable": 0.0846
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0912,
+     "crushed": 0.8789,
+     "blown": 0.0,
+     "readable": 0.1211
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.1001,
+     "crushed": 0.8473,
+     "blown": 0.0,
+     "readable": 0.1527
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0896,
+     "crushed": 0.9039,
+     "blown": 0.0,
+     "readable": 0.0961
+    }
+   ],
+   "cell_readable_min": 0.0846,
+   "cell_readable_med": 0.1482,
+   "cell_readable_max": 0.2029,
+   "cell_crushed_max": 0.9154,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 16.1686,
+   "exposure_bias": 1.335,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 3425.5874,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 2281.89062,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.892 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -4.709,
+   "pred_band": 0.20433,
+   "pred_daylight": 0.04894,
+   "pred_nightfall": 0.89181,
+   "pred_shape": 0.26894
+  },
+  "h18.25_w0.60_b05.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "window": 0.6,
+   "damp": 1.0,
+   "boost": 5.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.6,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 5.0
+   },
+   "ground_luma": 0.0996,
+   "ground_luma_spread": 0.0001,
+   "ground_readable": 0.1442,
+   "ground_crushed": 0.8558,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1381,
+   "frame_luma_spread": 0.0034,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0999,
+     "crushed": 0.8507,
+     "blown": 0.0,
+     "readable": 0.1493
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.1116,
+     "crushed": 0.8142,
+     "blown": 0.0,
+     "readable": 0.1858
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.1168,
+     "crushed": 0.798,
+     "blown": 0.0,
+     "readable": 0.202
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.099,
+     "crushed": 0.8563,
+     "blown": 0.0,
+     "readable": 0.1437
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0796,
+     "crushed": 0.9129,
+     "blown": 0.0,
+     "readable": 0.0871
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0919,
+     "crushed": 0.877,
+     "blown": 0.0,
+     "readable": 0.123
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.1006,
+     "crushed": 0.8447,
+     "blown": 0.0,
+     "readable": 0.1553
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.09,
+     "crushed": 0.9027,
+     "blown": 0.0,
+     "readable": 0.0973
+    }
+   ],
+   "cell_readable_min": 0.0871,
+   "cell_readable_med": 0.1493,
+   "cell_readable_max": 0.202,
+   "cell_crushed_max": 0.9129,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 17.7875,
+   "exposure_bias": 1.335,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 3425.5874,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 2281.89062,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.892 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -4.709,
+   "pred_band": 0.20433,
+   "pred_daylight": 0.04894,
+   "pred_nightfall": 0.89181,
+   "pred_shape": 0.26894
+  },
+  "h18.25_w0.60_b10.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "window": 0.6,
+   "damp": 1.0,
+   "boost": 10.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.6,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 10.0
+   },
+   "ground_luma": 0.1002,
+   "ground_luma_spread": 0.0005,
+   "ground_readable": 0.1466,
+   "ground_crushed": 0.8535,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1394,
+   "frame_luma_spread": 0.0003,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.1004,
+     "crushed": 0.8501,
+     "blown": 0.0,
+     "readable": 0.1499
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.1117,
+     "crushed": 0.8139,
+     "blown": 0.0,
+     "readable": 0.1861
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.117,
+     "crushed": 0.7973,
+     "blown": 0.0,
+     "readable": 0.2027
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0989,
+     "crushed": 0.8569,
+     "blown": 0.0,
+     "readable": 0.1431
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0796,
+     "crushed": 0.9136,
+     "blown": 0.0,
+     "readable": 0.0864
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0916,
+     "crushed": 0.8781,
+     "blown": 0.0,
+     "readable": 0.1219
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.1014,
+     "crushed": 0.841,
+     "blown": 0.0,
+     "readable": 0.159
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0908,
+     "crushed": 0.8999,
+     "blown": 0.0,
+     "readable": 0.1001
+    }
+   ],
+   "cell_readable_min": 0.0864,
+   "cell_readable_med": 0.1499,
+   "cell_readable_max": 0.2027,
+   "cell_crushed_max": 0.9136,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 20.4857,
+   "exposure_bias": 1.335,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 3425.5874,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 2281.89062,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.892 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -4.709,
+   "pred_band": 0.20433,
+   "pred_daylight": 0.04894,
+   "pred_nightfall": 0.89181,
+   "pred_shape": 0.26894
+  },
+  "h18.25_w0.60_b20.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "window": 0.6,
+   "damp": 1.0,
+   "boost": 20.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.6,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 20.0
+   },
+   "ground_luma": 0.1003,
+   "ground_luma_spread": 0.0006,
+   "ground_readable": 0.1458,
+   "ground_crushed": 0.8542,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1366,
+   "frame_luma_spread": 0.0007,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0999,
+     "crushed": 0.8518,
+     "blown": 0.0,
+     "readable": 0.1482
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.1111,
+     "crushed": 0.8167,
+     "blown": 0.0,
+     "readable": 0.1833
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.1171,
+     "crushed": 0.798,
+     "blown": 0.0,
+     "readable": 0.202
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.1022,
+     "crushed": 0.8546,
+     "blown": 0.0,
+     "readable": 0.1454
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0795,
+     "crushed": 0.9133,
+     "blown": 0.0,
+     "readable": 0.0867
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0921,
+     "crushed": 0.8768,
+     "blown": 0.0,
+     "readable": 0.1232
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.1021,
+     "crushed": 0.8373,
+     "blown": 0.0,
+     "readable": 0.1627
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0933,
+     "crushed": 0.8937,
+     "blown": 0.0,
+     "readable": 0.1063
+    }
+   ],
+   "cell_readable_min": 0.0867,
+   "cell_readable_med": 0.1482,
+   "cell_readable_max": 0.202,
+   "cell_crushed_max": 0.9133,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 25.8821,
+   "exposure_bias": 1.335,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 3425.5874,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 2281.89062,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.892 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -4.709,
+   "pred_band": 0.20433,
+   "pred_daylight": 0.04894,
+   "pred_nightfall": 0.89181,
+   "pred_shape": 0.26894
+  },
+  "h18.25_w0.60_b40.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "window": 0.6,
+   "damp": 1.0,
+   "boost": 40.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.6,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 40.0
+   },
+   "ground_luma": 0.0999,
+   "ground_luma_spread": 0.0004,
+   "ground_readable": 0.1453,
+   "ground_crushed": 0.8547,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1382,
+   "frame_luma_spread": 0.0034,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.1012,
+     "crushed": 0.8488,
+     "blown": 0.0,
+     "readable": 0.1512
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.1126,
+     "crushed": 0.8112,
+     "blown": 0.0,
+     "readable": 0.1888
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.117,
+     "crushed": 0.7971,
+     "blown": 0.0,
+     "readable": 0.2029
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0975,
+     "crushed": 0.8611,
+     "blown": 0.0,
+     "readable": 0.1389
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0793,
+     "crushed": 0.914,
+     "blown": 0.0,
+     "readable": 0.086
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0916,
+     "crushed": 0.8778,
+     "blown": 0.0,
+     "readable": 0.1222
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.1012,
+     "crushed": 0.8417,
+     "blown": 0.0,
+     "readable": 0.1583
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0899,
+     "crushed": 0.9031,
+     "blown": 0.0,
+     "readable": 0.0969
+    }
+   ],
+   "cell_readable_min": 0.086,
+   "cell_readable_med": 0.1512,
+   "cell_readable_max": 0.2029,
+   "cell_crushed_max": 0.914,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 36.6749,
+   "exposure_bias": 1.335,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 3425.5874,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 2281.89062,
+     "casts": false
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "caster_count": 1,
+   "practicals": "defined=1464 active=34 pool=48 night=0.892 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -4.709,
+   "pred_band": 0.20433,
+   "pred_daylight": 0.04894,
+   "pred_nightfall": 0.89181,
+   "pred_shape": 0.26894
+  },
+  "h18.40_base": {
+   "hour": 18.4,
+   "arm": "base",
+   "window": 0.3,
+   "damp": 0.0,
+   "boost": 0.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 0.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "ground_luma": 0.0774,
+   "ground_luma_spread": 0.0003,
+   "ground_readable": 0.0233,
+   "ground_crushed": 0.9767,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1107,
+   "frame_luma_spread": 0.003,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0737,
+     "crushed": 0.9799,
+     "blown": 0.0,
+     "readable": 0.0201
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0845,
+     "crushed": 0.9565,
+     "blown": 0.0,
+     "readable": 0.0435
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0898,
+     "crushed": 0.951,
+     "blown": 0.0,
+     "readable": 0.049
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.078,
+     "crushed": 0.9686,
+     "blown": 0.0,
+     "readable": 0.0314
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.059,
+     "crushed": 1.0,
+     "blown": 0.0,
+     "readable": 0.0
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0708,
+     "crushed": 0.9923,
+     "blown": 0.0,
+     "readable": 0.0077
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0827,
+     "crushed": 0.9791,
+     "blown": 0.0,
+     "readable": 0.0209
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0761,
+     "crushed": 0.9975,
+     "blown": 0.0,
+     "readable": 0.0025
+    }
+   ],
+   "cell_readable_min": 0.0,
+   "cell_readable_med": 0.0209,
+   "cell_readable_max": 0.049,
+   "cell_crushed_max": 1.0,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 15.6633,
+   "exposure_bias": 1.4349,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 449.76016,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 3450.69531,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=0.986 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -7.526,
+   "pred_band": 0.07019,
+   "pred_daylight": 0.00643,
+   "pred_nightfall": 0.98591,
+   "pred_shape": 0.1386
+  },
+  "h18.40_damponly": {
+   "hour": 18.4,
+   "arm": "damponly",
+   "window": 0.3,
+   "damp": 1.0,
+   "boost": 0.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 0.0
+   },
+   "ground_luma": 0.0775,
+   "ground_luma_spread": 0.0004,
+   "ground_readable": 0.0236,
+   "ground_crushed": 0.9765,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1124,
+   "frame_luma_spread": 0.0021,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0713,
+     "crushed": 0.9851,
+     "blown": 0.0,
+     "readable": 0.0149
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0829,
+     "crushed": 0.9596,
+     "blown": 0.0,
+     "readable": 0.0404
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0909,
+     "crushed": 0.9446,
+     "blown": 0.0,
+     "readable": 0.0554
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0801,
+     "crushed": 0.9603,
+     "blown": 0.0,
+     "readable": 0.0397
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0589,
+     "crushed": 1.0,
+     "blown": 0.0,
+     "readable": 0.0
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0712,
+     "crushed": 0.9916,
+     "blown": 0.0,
+     "readable": 0.0084
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0838,
+     "crushed": 0.978,
+     "blown": 0.0,
+     "readable": 0.022
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0784,
+     "crushed": 0.9963,
+     "blown": 0.0,
+     "readable": 0.0037
+    }
+   ],
+   "cell_readable_min": 0.0,
+   "cell_readable_med": 0.022,
+   "cell_readable_max": 0.0554,
+   "cell_crushed_max": 1.0,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 15.6633,
+   "exposure_bias": 1.4349,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 449.76016,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 2972.44922,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=0.986 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -7.526,
+   "pred_band": 0.07019,
+   "pred_daylight": 0.00643,
+   "pred_nightfall": 0.98591,
+   "pred_shape": 0.1386
+  },
+  "h18.40_w0.30_b02.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "window": 0.3,
+   "damp": 1.0,
+   "boost": 2.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 2.0
+   },
+   "ground_luma": 0.0776,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.0241,
+   "ground_crushed": 0.9759,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1113,
+   "frame_luma_spread": 0.0046,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0716,
+     "crushed": 0.9844,
+     "blown": 0.0,
+     "readable": 0.0156
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0839,
+     "crushed": 0.9564,
+     "blown": 0.0,
+     "readable": 0.0436
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.091,
+     "crushed": 0.9452,
+     "blown": 0.0,
+     "readable": 0.0548
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0802,
+     "crushed": 0.961,
+     "blown": 0.0,
+     "readable": 0.039
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0584,
+     "crushed": 1.0,
+     "blown": 0.0,
+     "readable": 0.0
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0713,
+     "crushed": 0.9919,
+     "blown": 0.0,
+     "readable": 0.0081
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0831,
+     "crushed": 0.9788,
+     "blown": 0.0,
+     "readable": 0.0212
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0778,
+     "crushed": 0.9969,
+     "blown": 0.0,
+     "readable": 0.0031
+    }
+   ],
+   "cell_readable_min": 0.0,
+   "cell_readable_med": 0.0212,
+   "cell_readable_max": 0.0548,
+   "cell_crushed_max": 1.0,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 16.2781,
+   "exposure_bias": 1.4349,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 449.76016,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 2972.44922,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=0.986 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -7.526,
+   "pred_band": 0.07019,
+   "pred_daylight": 0.00643,
+   "pred_nightfall": 0.98591,
+   "pred_shape": 0.1386
+  },
+  "h18.40_w0.30_b05.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "window": 0.3,
+   "damp": 1.0,
+   "boost": 5.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 5.0
+   },
+   "ground_luma": 0.0779,
+   "ground_luma_spread": 0.0003,
+   "ground_readable": 0.0245,
+   "ground_crushed": 0.9755,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1117,
+   "frame_luma_spread": 0.0022,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0717,
+     "crushed": 0.9834,
+     "blown": 0.0,
+     "readable": 0.0166
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0837,
+     "crushed": 0.9574,
+     "blown": 0.0,
+     "readable": 0.0426
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0915,
+     "crushed": 0.9442,
+     "blown": 0.0,
+     "readable": 0.0558
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0813,
+     "crushed": 0.9571,
+     "blown": 0.0,
+     "readable": 0.0429
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0588,
+     "crushed": 1.0,
+     "blown": 0.0,
+     "readable": 0.0
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0716,
+     "crushed": 0.9901,
+     "blown": 0.0,
+     "readable": 0.0099
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0838,
+     "crushed": 0.9783,
+     "blown": 0.0,
+     "readable": 0.0217
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0778,
+     "crushed": 0.9964,
+     "blown": 0.0,
+     "readable": 0.0036
+    }
+   ],
+   "cell_readable_min": 0.0,
+   "cell_readable_med": 0.0217,
+   "cell_readable_max": 0.0558,
+   "cell_crushed_max": 1.0,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 17.2005,
+   "exposure_bias": 1.4349,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 449.76016,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 2972.44922,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=0.986 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -7.526,
+   "pred_band": 0.07019,
+   "pred_daylight": 0.00643,
+   "pred_nightfall": 0.98591,
+   "pred_shape": 0.1386
+  },
+  "h18.40_w0.30_b10.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "window": 0.3,
+   "damp": 1.0,
+   "boost": 10.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 10.0
+   },
+   "ground_luma": 0.0778,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.0245,
+   "ground_crushed": 0.9755,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1147,
+   "frame_luma_spread": 0.0028,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0715,
+     "crushed": 0.9848,
+     "blown": 0.0,
+     "readable": 0.0152
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0834,
+     "crushed": 0.9579,
+     "blown": 0.0,
+     "readable": 0.0421
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0915,
+     "crushed": 0.9439,
+     "blown": 0.0,
+     "readable": 0.0561
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0801,
+     "crushed": 0.9577,
+     "blown": 0.0,
+     "readable": 0.0423
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0585,
+     "crushed": 1.0,
+     "blown": 0.0,
+     "readable": 0.0
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.071,
+     "crushed": 0.9923,
+     "blown": 0.0,
+     "readable": 0.0077
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.084,
+     "crushed": 0.9777,
+     "blown": 0.0,
+     "readable": 0.0223
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0789,
+     "crushed": 0.9963,
+     "blown": 0.0,
+     "readable": 0.0037
+    }
+   ],
+   "cell_readable_min": 0.0,
+   "cell_readable_med": 0.0223,
+   "cell_readable_max": 0.0561,
+   "cell_crushed_max": 1.0,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 18.7377,
+   "exposure_bias": 1.4349,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 449.76016,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 2972.44922,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=0.986 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -7.526,
+   "pred_band": 0.07019,
+   "pred_daylight": 0.00643,
+   "pred_nightfall": 0.98591,
+   "pred_shape": 0.1386
+  },
+  "h18.40_w0.30_b20.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "window": 0.3,
+   "damp": 1.0,
+   "boost": 20.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 20.0
+   },
+   "ground_luma": 0.0781,
+   "ground_luma_spread": 0.0003,
+   "ground_readable": 0.0257,
+   "ground_crushed": 0.9743,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1132,
+   "frame_luma_spread": 0.0019,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0721,
+     "crushed": 0.9817,
+     "blown": 0.0,
+     "readable": 0.0183
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0834,
+     "crushed": 0.9576,
+     "blown": 0.0,
+     "readable": 0.0424
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0911,
+     "crushed": 0.9448,
+     "blown": 0.0,
+     "readable": 0.0552
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0769,
+     "crushed": 0.9594,
+     "blown": 0.0,
+     "readable": 0.0406
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0604,
+     "crushed": 0.9999,
+     "blown": 0.0,
+     "readable": 0.0001
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0726,
+     "crushed": 0.9873,
+     "blown": 0.0,
+     "readable": 0.0127
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0844,
+     "crushed": 0.9771,
+     "blown": 0.0,
+     "readable": 0.0229
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.078,
+     "crushed": 0.996,
+     "blown": 0.0,
+     "readable": 0.004
+    }
+   ],
+   "cell_readable_min": 0.0001,
+   "cell_readable_med": 0.0229,
+   "cell_readable_max": 0.0552,
+   "cell_crushed_max": 0.9999,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 21.8121,
+   "exposure_bias": 1.4349,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 449.76016,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 2972.44922,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=0.986 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -7.526,
+   "pred_band": 0.07019,
+   "pred_daylight": 0.00643,
+   "pred_nightfall": 0.98591,
+   "pred_shape": 0.1386
+  },
+  "h18.40_w0.30_b40.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "window": 0.3,
+   "damp": 1.0,
+   "boost": 40.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.3,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 40.0
+   },
+   "ground_luma": 0.0771,
+   "ground_luma_spread": 0.0,
+   "ground_readable": 0.0228,
+   "ground_crushed": 0.9772,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1123,
+   "frame_luma_spread": 0.001,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0726,
+     "crushed": 0.9821,
+     "blown": 0.0,
+     "readable": 0.0179
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.083,
+     "crushed": 0.9599,
+     "blown": 0.0,
+     "readable": 0.0401
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0896,
+     "crushed": 0.95,
+     "blown": 0.0,
+     "readable": 0.05
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0777,
+     "crushed": 0.9659,
+     "blown": 0.0,
+     "readable": 0.0341
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0594,
+     "crushed": 1.0,
+     "blown": 0.0,
+     "readable": 0.0
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0712,
+     "crushed": 0.9906,
+     "blown": 0.0,
+     "readable": 0.0094
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0827,
+     "crushed": 0.979,
+     "blown": 0.0,
+     "readable": 0.021
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0766,
+     "crushed": 0.9973,
+     "blown": 0.0,
+     "readable": 0.0027
+    }
+   ],
+   "cell_readable_min": 0.0,
+   "cell_readable_med": 0.021,
+   "cell_readable_max": 0.05,
+   "cell_crushed_max": 1.0,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 27.961,
+   "exposure_bias": 1.4349,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 449.76016,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 2972.44922,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=0.986 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -7.526,
+   "pred_band": 0.07019,
+   "pred_daylight": 0.00643,
+   "pred_nightfall": 0.98591,
+   "pred_shape": 0.1386
+  },
+  "h18.40_w0.60_b02.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "window": 0.6,
+   "damp": 1.0,
+   "boost": 2.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.6,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 2.0
+   },
+   "ground_luma": 0.0771,
+   "ground_luma_spread": 0.0003,
+   "ground_readable": 0.0227,
+   "ground_crushed": 0.9772,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1112,
+   "frame_luma_spread": 0.003,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0718,
+     "crushed": 0.984,
+     "blown": 0.0,
+     "readable": 0.016
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0823,
+     "crushed": 0.9615,
+     "blown": 0.0,
+     "readable": 0.0385
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0896,
+     "crushed": 0.9491,
+     "blown": 0.0,
+     "readable": 0.0509
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0794,
+     "crushed": 0.9613,
+     "blown": 0.0,
+     "readable": 0.0387
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0591,
+     "crushed": 1.0,
+     "blown": 0.0,
+     "readable": 0.0
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.071,
+     "crushed": 0.9911,
+     "blown": 0.0,
+     "readable": 0.0089
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0832,
+     "crushed": 0.9782,
+     "blown": 0.0,
+     "readable": 0.0218
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0785,
+     "crushed": 0.9962,
+     "blown": 0.0,
+     "readable": 0.0038
+    }
+   ],
+   "cell_readable_min": 0.0,
+   "cell_readable_med": 0.0218,
+   "cell_readable_max": 0.0509,
+   "cell_crushed_max": 1.0,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 15.8312,
+   "exposure_bias": 1.4349,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 449.76016,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 3320.08691,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=0.986 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -7.526,
+   "pred_band": 0.07019,
+   "pred_daylight": 0.00643,
+   "pred_nightfall": 0.98591,
+   "pred_shape": 0.03785
+  },
+  "h18.40_w0.60_b05.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "window": 0.6,
+   "damp": 1.0,
+   "boost": 5.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.6,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 5.0
+   },
+   "ground_luma": 0.0777,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.0241,
+   "ground_crushed": 0.976,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1123,
+   "frame_luma_spread": 0.0024,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0718,
+     "crushed": 0.984,
+     "blown": 0.0,
+     "readable": 0.016
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0833,
+     "crushed": 0.9586,
+     "blown": 0.0,
+     "readable": 0.0414
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0906,
+     "crushed": 0.9461,
+     "blown": 0.0,
+     "readable": 0.0539
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0799,
+     "crushed": 0.9597,
+     "blown": 0.0,
+     "readable": 0.0403
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0588,
+     "crushed": 1.0,
+     "blown": 0.0,
+     "readable": 0.0
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.071,
+     "crushed": 0.9912,
+     "blown": 0.0,
+     "readable": 0.0088
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0837,
+     "crushed": 0.9779,
+     "blown": 0.0,
+     "readable": 0.0221
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0788,
+     "crushed": 0.9963,
+     "blown": 0.0,
+     "readable": 0.0037
+    }
+   ],
+   "cell_readable_min": 0.0,
+   "cell_readable_med": 0.0221,
+   "cell_readable_max": 0.0539,
+   "cell_crushed_max": 1.0,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 16.0831,
+   "exposure_bias": 1.4349,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 449.76016,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 3320.08691,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=0.986 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -7.526,
+   "pred_band": 0.07019,
+   "pred_daylight": 0.00643,
+   "pred_nightfall": 0.98591,
+   "pred_shape": 0.03785
+  },
+  "h18.40_w0.60_b10.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "window": 0.6,
+   "damp": 1.0,
+   "boost": 10.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.6,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 10.0
+   },
+   "ground_luma": 0.0748,
+   "ground_luma_spread": 0.0,
+   "ground_readable": 0.0192,
+   "ground_crushed": 0.9808,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1106,
+   "frame_luma_spread": 0.0037,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0711,
+     "crushed": 0.9867,
+     "blown": 0.0,
+     "readable": 0.0133
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0829,
+     "crushed": 0.9604,
+     "blown": 0.0,
+     "readable": 0.0396
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0883,
+     "crushed": 0.9571,
+     "blown": 0.0,
+     "readable": 0.0429
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0766,
+     "crushed": 0.9719,
+     "blown": 0.0,
+     "readable": 0.0281
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0574,
+     "crushed": 1.0,
+     "blown": 0.0,
+     "readable": 0.0
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0689,
+     "crushed": 0.9938,
+     "blown": 0.0,
+     "readable": 0.0062
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0781,
+     "crushed": 0.9849,
+     "blown": 0.0,
+     "readable": 0.0151
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0705,
+     "crushed": 0.9992,
+     "blown": 0.0,
+     "readable": 0.0008
+    }
+   ],
+   "cell_readable_min": 0.0,
+   "cell_readable_med": 0.0151,
+   "cell_readable_max": 0.0429,
+   "cell_crushed_max": 1.0,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 16.5029,
+   "exposure_bias": 1.4349,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 449.76016,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 3320.08691,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=0.986 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -7.526,
+   "pred_band": 0.07019,
+   "pred_daylight": 0.00643,
+   "pred_nightfall": 0.98591,
+   "pred_shape": 0.03785
+  },
+  "h18.40_w0.60_b20.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "window": 0.6,
+   "damp": 1.0,
+   "boost": 20.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.6,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 20.0
+   },
+   "ground_luma": 0.0746,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.019,
+   "ground_crushed": 0.981,
+   "ground_blown": 0.0,
+   "frame_luma": 0.1108,
+   "frame_luma_spread": 0.0012,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0712,
+     "crushed": 0.986,
+     "blown": 0.0,
+     "readable": 0.014
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0819,
+     "crushed": 0.9636,
+     "blown": 0.0,
+     "readable": 0.0364
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0878,
+     "crushed": 0.9581,
+     "blown": 0.0,
+     "readable": 0.0419
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0755,
+     "crushed": 0.9715,
+     "blown": 0.0,
+     "readable": 0.0285
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0585,
+     "crushed": 1.0,
+     "blown": 0.0,
+     "readable": 0.0
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0694,
+     "crushed": 0.9934,
+     "blown": 0.0,
+     "readable": 0.0066
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0783,
+     "crushed": 0.9833,
+     "blown": 0.0,
+     "readable": 0.0167
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0705,
+     "crushed": 0.9989,
+     "blown": 0.0,
+     "readable": 0.0011
+    }
+   ],
+   "cell_readable_min": 0.0,
+   "cell_readable_med": 0.0167,
+   "cell_readable_max": 0.0419,
+   "cell_crushed_max": 1.0,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 17.3425,
+   "exposure_bias": 1.4349,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 449.76016,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 3320.08691,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=0.986 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -7.526,
+   "pred_band": 0.07019,
+   "pred_daylight": 0.00643,
+   "pred_nightfall": 0.98591,
+   "pred_shape": 0.03785
+  },
+  "h18.40_w0.60_b40.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "window": 0.6,
+   "damp": 1.0,
+   "boost": 40.0,
+   "drift_uu": 0.0,
+   "knobs_held": {
+    "wl.Look.DuskWindow": 0.6,
+    "wl.Look.DuskMoonDamp": 1.0,
+    "wl.Look.DuskSkyBoost": 40.0
+   },
+   "ground_luma": 0.0743,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.0186,
+   "ground_crushed": 0.9814,
+   "ground_blown": 0.0,
+   "frame_luma": 0.11,
+   "frame_luma_spread": 0.0053,
+   "cells": [
+    {
+     "row": 0,
+     "col": 0,
+     "luma": 0.0716,
+     "crushed": 0.9857,
+     "blown": 0.0,
+     "readable": 0.0143
+    },
+    {
+     "row": 0,
+     "col": 1,
+     "luma": 0.0821,
+     "crushed": 0.9634,
+     "blown": 0.0,
+     "readable": 0.0366
+    },
+    {
+     "row": 0,
+     "col": 2,
+     "luma": 0.0867,
+     "crushed": 0.9623,
+     "blown": 0.0,
+     "readable": 0.0377
+    },
+    {
+     "row": 0,
+     "col": 3,
+     "luma": 0.0757,
+     "crushed": 0.9744,
+     "blown": 0.0,
+     "readable": 0.0256
+    },
+    {
+     "row": 1,
+     "col": 0,
+     "luma": 0.0584,
+     "crushed": 1.0,
+     "blown": 0.0,
+     "readable": 0.0
+    },
+    {
+     "row": 1,
+     "col": 1,
+     "luma": 0.0688,
+     "crushed": 0.9939,
+     "blown": 0.0,
+     "readable": 0.0061
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "luma": 0.0775,
+     "crushed": 0.9848,
+     "blown": 0.0,
+     "readable": 0.0152
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "luma": 0.0703,
+     "crushed": 0.999,
+     "blown": 0.0,
+     "readable": 0.001
+    }
+   ],
+   "cell_readable_min": 0.0,
+   "cell_readable_med": 0.0152,
+   "cell_readable_max": 0.0377,
+   "cell_crushed_max": 1.0,
+   "cells_mostly_crushed": 8,
+   "cells_total": 8,
+   "sky_intensity": 19.0218,
+   "exposure_bias": 1.4349,
+   "directional_lights": [
+    {
+     "label": "V2_GroundBounce",
+     "intensity": 286.0,
+     "casts": false
+    },
+    {
+     "label": "V2_CanopyFill2",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "V2_Sun",
+     "intensity": 449.76016,
+     "casts": true
+    },
+    {
+     "label": "V2_CanopyFill",
+     "intensity": 572.0,
+     "casts": false
+    },
+    {
+     "label": "WL_Moon",
+     "intensity": 3320.08691,
+     "casts": true
+    }
+   ],
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "caster_count": 2,
+   "practicals": "defined=1464 active=34 pool=48 night=0.986 gain=1.00 count=48 radius=12000 file=../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json problem=",
+   "pred_elevation": -7.526,
+   "pred_band": 0.07019,
+   "pred_daylight": 0.00643,
+   "pred_nightfall": 0.98591,
+   "pred_shape": 0.03785
+  }
+ },
+ "night_invariance": [
+  {
+   "hour": 18.5,
+   "inert_ground": 0.0779,
+   "leak_ground": 0.0773,
+   "delta": -0.0006,
+   "inert_sky": 15.75,
+   "leak_sky": 15.75,
+   "inert_readable": 0.0244,
+   "leak_readable": 0.0243,
+   "pred_band": 0.0,
+   "pred_shape_leak": 0.0,
+   "inert_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "leak_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ]
+  },
+  {
+   "hour": 19.0,
+   "inert_ground": 0.1104,
+   "leak_ground": 0.111,
+   "delta": 0.0006,
+   "inert_sky": 15.75,
+   "leak_sky": 15.75,
+   "inert_readable": 0.2457,
+   "leak_readable": 0.2488,
+   "pred_band": 0.0,
+   "pred_shape_leak": 0.0,
+   "inert_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "leak_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ]
+  },
+  {
+   "hour": 23.0,
+   "inert_ground": 0.1084,
+   "leak_ground": 0.1085,
+   "delta": 0.0001,
+   "inert_sky": 15.75,
+   "leak_sky": 15.75,
+   "inert_readable": 0.2027,
+   "leak_readable": 0.2026,
+   "pred_band": 0.0,
+   "pred_shape_leak": 0.0,
+   "inert_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "leak_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ]
+  }
+ ],
+ "day_invariance": [
+  {
+   "hour": 12.0,
+   "inert_ground": 0.1904,
+   "leak_ground": 0.1908,
+   "delta": 0.0004,
+   "inert_sky": 2.25,
+   "leak_sky": 2.25
+  }
+ ],
+ "exposure_pairs": [
+  {
+   "hour": 18.5,
+   "inert": 1.45,
+   "leak": 1.45
+  },
+  {
+   "hour": 19.0,
+   "inert": 1.45,
+   "leak": 1.45
+  },
+  {
+   "hour": 23.0,
+   "inert": 1.45,
+   "leak": 1.45
+  },
+  {
+   "hour": 12.0,
+   "inert": -0.9,
+   "leak": -0.9
+  }
+ ],
+ "caster_census": {
+  "h12.00_inert": {
+   "hour": 12.0,
+   "arm": "inert",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 1100.0,
+    "V2_CanopyFill2": 2200.0,
+    "V2_Sun": 70000.0,
+    "V2_CanopyFill": 2200.0,
+    "WL_Moon": 0.0
+   }
+  },
+  "h12.00_leak": {
+   "hour": 12.0,
+   "arm": "leak",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 1100.0,
+    "V2_CanopyFill2": 2200.0,
+    "V2_Sun": 70000.0,
+    "V2_CanopyFill": 2200.0,
+    "WL_Moon": 0.0
+   }
+  },
+  "h18.25_base": {
+   "hour": 18.25,
+   "arm": "base",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 3425.5874,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 3121.32861
+   }
+  },
+  "h18.25_damponly": {
+   "hour": 18.25,
+   "arm": "damponly",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 3425.5874,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 749.81415
+   }
+  },
+  "h18.25_w0.30_b02.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 3425.5874,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 749.81415
+   }
+  },
+  "h18.25_w0.30_b05.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 3425.5874,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 749.81415
+   }
+  },
+  "h18.25_w0.30_b10.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 3425.5874,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 749.81415
+   }
+  },
+  "h18.25_w0.30_b20.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 3425.5874,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 749.81415
+   }
+  },
+  "h18.25_w0.30_b40.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 3425.5874,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 749.81415
+   }
+  },
+  "h18.25_w0.60_b02.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 3425.5874,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 2281.89062
+   }
+  },
+  "h18.25_w0.60_b05.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 3425.5874,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 2281.89062
+   }
+  },
+  "h18.25_w0.60_b10.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 3425.5874,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 2281.89062
+   }
+  },
+  "h18.25_w0.60_b20.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 3425.5874,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 2281.89062
+   }
+  },
+  "h18.25_w0.60_b40.0": {
+   "hour": 18.25,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun"
+   ],
+   "count": 1,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 3425.5874,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 2281.89062
+   }
+  },
+  "h18.40_base": {
+   "hour": 18.4,
+   "arm": "base",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 449.76016,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 3450.69531
+   }
+  },
+  "h18.40_damponly": {
+   "hour": 18.4,
+   "arm": "damponly",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 449.76016,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 2972.44922
+   }
+  },
+  "h18.40_w0.30_b02.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 449.76016,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 2972.44922
+   }
+  },
+  "h18.40_w0.30_b05.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 449.76016,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 2972.44922
+   }
+  },
+  "h18.40_w0.30_b10.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 449.76016,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 2972.44922
+   }
+  },
+  "h18.40_w0.30_b20.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 449.76016,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 2972.44922
+   }
+  },
+  "h18.40_w0.30_b40.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 449.76016,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 2972.44922
+   }
+  },
+  "h18.40_w0.60_b02.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 449.76016,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 3320.08691
+   }
+  },
+  "h18.40_w0.60_b05.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 449.76016,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 3320.08691
+   }
+  },
+  "h18.40_w0.60_b10.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 449.76016,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 3320.08691
+   }
+  },
+  "h18.40_w0.60_b20.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 449.76016,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 3320.08691
+   }
+  },
+  "h18.40_w0.60_b40.0": {
+   "hour": 18.4,
+   "arm": "cand",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 449.76016,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 3320.08691
+   }
+  },
+  "h18.50_inert": {
+   "hour": 18.5,
+   "arm": "inert",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 84.00001,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 3500.0
+   }
+  },
+  "h18.50_leak": {
+   "hour": 18.5,
+   "arm": "leak",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 84.00001,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 3500.0
+   }
+  },
+  "h19.00_inert": {
+   "hour": 19.0,
+   "arm": "inert",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 84.00001,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 3500.0
+   }
+  },
+  "h19.00_leak": {
+   "hour": 19.0,
+   "arm": "leak",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 84.00001,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 3500.0
+   }
+  },
+  "h23.00_inert": {
+   "hour": 23.0,
+   "arm": "inert",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 84.00001,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 3500.0
+   }
+  },
+  "h23.00_leak": {
+   "hour": 23.0,
+   "arm": "leak",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "count": 2,
+   "intensities": {
+    "V2_GroundBounce": 286.0,
+    "V2_CanopyFill2": 572.0,
+    "V2_Sun": 84.00001,
+    "V2_CanopyFill": 572.0,
+    "WL_Moon": 3500.0
+   }
+  }
+ },
+ "controls": {
+  "damp": [
+   {
+    "hour": 18.25,
+    "delta": -0.038,
+    "base_sky": 15.0894,
+    "damp_sky": 15.0894,
+    "base_moon": [
+     {
+      "label": "WL_Moon",
+      "intensity": 3121.32861,
+      "casts": false
+     }
+    ],
+    "damp_moon": [
+     {
+      "label": "WL_Moon",
+      "intensity": 749.81415,
+      "casts": false
+     }
+    ]
+   },
+   {
+    "hour": 18.4,
+    "delta": 0.0001,
+    "base_sky": 15.6633,
+    "damp_sky": 15.6633,
+    "base_moon": [
+     {
+      "label": "WL_Moon",
+      "intensity": 3450.69531,
+      "casts": true
+     }
+    ],
+    "damp_moon": [
+     {
+      "label": "WL_Moon",
+      "intensity": 2972.44922,
+      "casts": true
+     }
+    ]
+   }
+  ],
+  "boost": [
+   {
+    "hour": 18.25,
+    "window": 0.3,
+    "delta_lowest_to_highest_boost": 0.0038,
+    "sky_lowest": 18.1384,
+    "sky_highest": 76.0711
+   },
+   {
+    "hour": 18.25,
+    "window": 0.6,
+    "delta_lowest_to_highest_boost": 0.0003,
+    "sky_lowest": 16.1686,
+    "sky_highest": 36.6749
+   },
+   {
+    "hour": 18.4,
+    "window": 0.3,
+    "delta_lowest_to_highest_boost": -0.0005,
+    "sky_lowest": 16.2781,
+    "sky_highest": 27.961
+   },
+   {
+    "hour": 18.4,
+    "window": 0.6,
+    "delta_lowest_to_highest_boost": -0.0028,
+    "sky_lowest": 15.8312,
+    "sky_highest": 19.0218
+   }
+  ]
+ },
+ "night_reference": {
+  "readable": 0.0244,
+  "crushed": 0.9756,
+  "cells_mostly_crushed": 8,
+  "cells_total": 8,
+  "from_hours": [
+   18.5,
+   19.0,
+   23.0
+  ],
+  "note": "worst of the three approved-night hours at this camera"
+ },
+ "sizing": [
+  {
+   "hour": 18.25,
+   "window": 0.3,
+   "boost": 2.0,
+   "ground_luma": 0.0728,
+   "readable": 0.0669,
+   "crushed": 0.9331,
+   "cell_readable_med": 0.0781,
+   "cell_readable_min": 0.0105,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 18.1384,
+   "exposure_bias": 1.335,
+   "casters": [
+    "V2_Sun"
+   ],
+   "meets_night_bar": true
+  },
+  {
+   "hour": 18.25,
+   "window": 0.3,
+   "boost": 5.0,
+   "ground_luma": 0.0733,
+   "readable": 0.0678,
+   "crushed": 0.9322,
+   "cell_readable_med": 0.08,
+   "cell_readable_min": 0.0101,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 22.7121,
+   "exposure_bias": 1.335,
+   "casters": [
+    "V2_Sun"
+   ],
+   "meets_night_bar": true
+  },
+  {
+   "hour": 18.25,
+   "window": 0.3,
+   "boost": 10.0,
+   "ground_luma": 0.0738,
+   "readable": 0.0683,
+   "crushed": 0.9316,
+   "cell_readable_med": 0.0786,
+   "cell_readable_min": 0.0106,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 30.3348,
+   "exposure_bias": 1.335,
+   "casters": [
+    "V2_Sun"
+   ],
+   "meets_night_bar": true
+  },
+  {
+   "hour": 18.25,
+   "window": 0.3,
+   "boost": 20.0,
+   "ground_luma": 0.075,
+   "readable": 0.0689,
+   "crushed": 0.931,
+   "cell_readable_med": 0.0802,
+   "cell_readable_min": 0.01,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 45.5802,
+   "exposure_bias": 1.335,
+   "casters": [
+    "V2_Sun"
+   ],
+   "meets_night_bar": true
+  },
+  {
+   "hour": 18.25,
+   "window": 0.3,
+   "boost": 40.0,
+   "ground_luma": 0.0766,
+   "readable": 0.069,
+   "crushed": 0.931,
+   "cell_readable_med": 0.0818,
+   "cell_readable_min": 0.0121,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 76.0711,
+   "exposure_bias": 1.335,
+   "casters": [
+    "V2_Sun"
+   ],
+   "meets_night_bar": true
+  },
+  {
+   "hour": 18.25,
+   "window": 0.6,
+   "boost": 2.0,
+   "ground_luma": 0.0996,
+   "readable": 0.1433,
+   "crushed": 0.8567,
+   "cell_readable_med": 0.1482,
+   "cell_readable_min": 0.0846,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 16.1686,
+   "exposure_bias": 1.335,
+   "casters": [
+    "V2_Sun"
+   ],
+   "meets_night_bar": true
+  },
+  {
+   "hour": 18.25,
+   "window": 0.6,
+   "boost": 5.0,
+   "ground_luma": 0.0996,
+   "readable": 0.1442,
+   "crushed": 0.8558,
+   "cell_readable_med": 0.1493,
+   "cell_readable_min": 0.0871,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 17.7875,
+   "exposure_bias": 1.335,
+   "casters": [
+    "V2_Sun"
+   ],
+   "meets_night_bar": true
+  },
+  {
+   "hour": 18.25,
+   "window": 0.6,
+   "boost": 10.0,
+   "ground_luma": 0.1002,
+   "readable": 0.1466,
+   "crushed": 0.8535,
+   "cell_readable_med": 0.1499,
+   "cell_readable_min": 0.0864,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 20.4857,
+   "exposure_bias": 1.335,
+   "casters": [
+    "V2_Sun"
+   ],
+   "meets_night_bar": true
+  },
+  {
+   "hour": 18.25,
+   "window": 0.6,
+   "boost": 20.0,
+   "ground_luma": 0.1003,
+   "readable": 0.1458,
+   "crushed": 0.8542,
+   "cell_readable_med": 0.1482,
+   "cell_readable_min": 0.0867,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 25.8821,
+   "exposure_bias": 1.335,
+   "casters": [
+    "V2_Sun"
+   ],
+   "meets_night_bar": true
+  },
+  {
+   "hour": 18.25,
+   "window": 0.6,
+   "boost": 40.0,
+   "ground_luma": 0.0999,
+   "readable": 0.1453,
+   "crushed": 0.8547,
+   "cell_readable_med": 0.1512,
+   "cell_readable_min": 0.086,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 36.6749,
+   "exposure_bias": 1.335,
+   "casters": [
+    "V2_Sun"
+   ],
+   "meets_night_bar": true
+  },
+  {
+   "hour": 18.4,
+   "window": 0.3,
+   "boost": 2.0,
+   "ground_luma": 0.0776,
+   "readable": 0.0241,
+   "crushed": 0.9759,
+   "cell_readable_med": 0.0212,
+   "cell_readable_min": 0.0,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 16.2781,
+   "exposure_bias": 1.4349,
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "meets_night_bar": false
+  },
+  {
+   "hour": 18.4,
+   "window": 0.3,
+   "boost": 5.0,
+   "ground_luma": 0.0779,
+   "readable": 0.0245,
+   "crushed": 0.9755,
+   "cell_readable_med": 0.0217,
+   "cell_readable_min": 0.0,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 17.2005,
+   "exposure_bias": 1.4349,
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "meets_night_bar": true
+  },
+  {
+   "hour": 18.4,
+   "window": 0.3,
+   "boost": 10.0,
+   "ground_luma": 0.0778,
+   "readable": 0.0245,
+   "crushed": 0.9755,
+   "cell_readable_med": 0.0223,
+   "cell_readable_min": 0.0,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 18.7377,
+   "exposure_bias": 1.4349,
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "meets_night_bar": true
+  },
+  {
+   "hour": 18.4,
+   "window": 0.3,
+   "boost": 20.0,
+   "ground_luma": 0.0781,
+   "readable": 0.0257,
+   "crushed": 0.9743,
+   "cell_readable_med": 0.0229,
+   "cell_readable_min": 0.0001,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 21.8121,
+   "exposure_bias": 1.4349,
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "meets_night_bar": true
+  },
+  {
+   "hour": 18.4,
+   "window": 0.3,
+   "boost": 40.0,
+   "ground_luma": 0.0771,
+   "readable": 0.0228,
+   "crushed": 0.9772,
+   "cell_readable_med": 0.021,
+   "cell_readable_min": 0.0,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 27.961,
+   "exposure_bias": 1.4349,
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "meets_night_bar": false
+  },
+  {
+   "hour": 18.4,
+   "window": 0.6,
+   "boost": 2.0,
+   "ground_luma": 0.0771,
+   "readable": 0.0227,
+   "crushed": 0.9772,
+   "cell_readable_med": 0.0218,
+   "cell_readable_min": 0.0,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 15.8312,
+   "exposure_bias": 1.4349,
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "meets_night_bar": false
+  },
+  {
+   "hour": 18.4,
+   "window": 0.6,
+   "boost": 5.0,
+   "ground_luma": 0.0777,
+   "readable": 0.0241,
+   "crushed": 0.976,
+   "cell_readable_med": 0.0221,
+   "cell_readable_min": 0.0,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 16.0831,
+   "exposure_bias": 1.4349,
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "meets_night_bar": false
+  },
+  {
+   "hour": 18.4,
+   "window": 0.6,
+   "boost": 10.0,
+   "ground_luma": 0.0748,
+   "readable": 0.0192,
+   "crushed": 0.9808,
+   "cell_readable_med": 0.0151,
+   "cell_readable_min": 0.0,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 16.5029,
+   "exposure_bias": 1.4349,
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "meets_night_bar": false
+  },
+  {
+   "hour": 18.4,
+   "window": 0.6,
+   "boost": 20.0,
+   "ground_luma": 0.0746,
+   "readable": 0.019,
+   "crushed": 0.981,
+   "cell_readable_med": 0.0167,
+   "cell_readable_min": 0.0,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 17.3425,
+   "exposure_bias": 1.4349,
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "meets_night_bar": false
+  },
+  {
+   "hour": 18.4,
+   "window": 0.6,
+   "boost": 40.0,
+   "ground_luma": 0.0743,
+   "readable": 0.0186,
+   "crushed": 0.9814,
+   "cell_readable_med": 0.0152,
+   "cell_readable_min": 0.0,
+   "cells_mostly_crushed": 8,
+   "sky_intensity": 19.0218,
+   "exposure_bias": 1.4349,
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "meets_night_bar": false
+  }
+ ],
+ "candidate": {
+  "window": 0.3,
+  "boost": 5.0,
+  "damp": 1.0
+ },
+ "sweep_ceiling": {
+  "largest_boost_tested": 40.0,
+  "by_window": {
+   "window_0.30": {
+    "boost": 40.0,
+    "population": 2,
+    "cleared_every_hour": false,
+    "shortfall_by_hour": {
+     "18.25": -0.0446,
+     "18.40": 0.0016
+    }
+   },
+   "window_0.60": {
+    "boost": 40.0,
+    "population": 2,
+    "cleared_every_hour": false,
+    "shortfall_by_hour": {
+     "18.25": -0.1209,
+     "18.40": 0.0058
+    }
+   }
+  },
+  "limited_by_sweep_not_by_world": false
+ },
+ "finished": "2026-09-28 02:40:46",
+ "seconds": 315.59,
+ "log": "D_CVARS PASS all three dusk knobs exist in the RUNNING build, proven by sentinel round-trip {'knobs_wanted': ['wl.Look.DuskWindow', 'wl.Look.DuskMoonDamp', 'wl.Look.DuskSkyBoost'], 'knobs_answering': ['wl.Look.DuskWindow', 'wl.Look.DuskMoonDamp', 'wl.Look.DuskSkyBoost'], 'missing': [], 'as_found': {'wl.Look.DuskWindow': 0.3, 'wl.Look.DuskMoonDamp': 0.0, 'wl.Look.DuskSkyBoost': 0.0}, 'binary': {'path': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Binaries\\\\Win64\\\\UnrealEditor-Wonderland.dll', 'built': '2026-09-28 02:07:10'}, 'readback': {'wl.Look.DuskWindow': 0.4321, 'wl.Look.DuskMoonDamp': 0.4321, 'wl.Look.DuskSkyBoost': 0.4321}, 'note': 'a cvar that does not exist reads 0.0, which is the shipped default of two of these three -- so a stale DLL would otherwise pass every readback and the run would measure an unchanged world for no visible reason. This editor was five minutes too old once already today'}\nD_VALID PASS the camera can actually SEE the ground it is about to measure {'vantage': {'asked': [-64.0, -5700.0], 'landed': [-64.0, -5700.0, 94.1], 'offset_uu': 0.0, 'forward_hit': None, 'down_hit': {'dist': 249.2, 'z': 4.9}, 'ground_patch_hit': {'dist': 2249.2, 'z': 4.9}, 'ground_patch_world': [-64.0, -5025.0], 'ground_rect_screen': [0.5, 0.74, 0.28, 0.16], 'grid': [4, 2], 'figures_within_40m': [{'label': 'WonderlandDogPawn0', 'dist_to_patch_uu': 3565.6}], 'view_reach': 1.0, 'first_hit_uu': None, 'ground_point_uu': 718.9, 'ground_rgb': {'luma': 0.4906, 'rgb': [0.5949, 0.4761, 0.327], 'green_ratio': 1.033, 'crushed': 0.0207, 'blown': 0.0, 'readable': 0.9793, 'sampled': 10700}, 'sky_rgb': {'luma': 0.2872, 'rgb': [0.3351, 0.284, 0.1772], 'green_ratio': 1.109, 'crushed': 0.2556, 'blown': 0.0, 'readable': 0.7444, 'sampled': 19635}, 'overhead_hit': None, 'ground_open_to_sky': True}, 'pawn_offset_uu': 0.0, 'view_reach': 1.0, 'clear_line_of_sight': True, 'ground_not_foliage': True, 'green_ratio': 1.033, 'ground_open_to_sky': True, 'overhead_hit': None, 'thresholds': {'view_reach_at_least': 0.92, 'green_ratio_at_most': 1.25}, 'note': 'THREE INDEPENDENT TESTS, because the previous single test passed on a camera buried in a bush for 32 readings. A VISIBILITY trace to the real ground point catches an occluder the colour misses; green dominance catches one the trace misses; and an upward trace FROM THE GROUND PATCH proves the ground being measured is open to the sky, which is the only form of that question a skylight experiment cares about. A frame is also captured before any reading, because the only thing that would have caught the last run in five seconds was opening one'}\nD_MEASURED PASS every arm the sweep asked for produced a reading {'measured': 32, 'wanted': 32, 'missing': []}\nD_STILL PASS the pawn is at the spot at every reading, not just when it was placed {'population': 32, 'drifted': []}\nD_NOISE PASS every reading agrees with itself on the luma it measures {'population': 32, 'worst_luma_spread': 0.0053, 'tolerance': 0.01}\nD_NIGHT PASS the approved night is unchanged at the most aggressive setting the knobs allow {'population': 3, 'worst_abs_delta': 0.0006, 'noise_floor': 0.0053, 'setting': {'window': 0.1, 'damp': 1.0, 'boost': 20.0}, 'by_hour': [{'hour': 18.5, 'inert_ground': 0.0779, 'leak_ground': 0.0773, 'delta': -0.0006, 'inert_sky': 15.75, 'leak_sky': 15.75, 'inert_readable': 0.0244, 'leak_readable': 0.0243, 'pred_band': 0.0, 'pred_shape_leak': 0.0, 'inert_casters': ['V2_Sun', 'WL_Moon'], 'leak_casters': ['V2_Sun', 'WL_Moon']}, {'hour': 19.0, 'inert_ground': 0.1104, 'leak_ground': 0.111, 'delta': 0.0006, 'inert_sky': 15.75, 'leak_sky': 15.75, 'inert_readable': 0.2457, 'leak_readable': 0.2488, 'pred_band': 0.0, 'pred_shape_leak': 0.0, 'inert_casters': ['V2_Sun', 'WL_Moon'], 'leak_casters': ['V2_Sun', 'WL_Moon']}, {'hour': 23.0, 'inert_ground': 0.1084, 'leak_ground': 0.1085, 'delta': 0.0001, 'inert_sky': 15.75, 'leak_sky': 15.75, 'inert_readable': 0.2027, 'leak_readable': 0.2026, 'pred_band': 0.0, 'pred_shape_leak': 0.0, 'inert_casters': ['V2_Sun', 'WL_Moon'], 'leak_casters': ['V2_Sun', 'WL_Moon']}], 'note': 'GREEN: TwilightBand is exactly 0 from 18:50 down, so Shape is exactly 0 and neither term can reach these hours at any value -- criterion 4 holds structurally and not by tuning. RED: the structural argument is wrong and this approach is dead as designed'}\nD_NOON PASS noon is unchanged at the most aggressive setting the knobs allow {'population': 1, 'worst_abs_delta': 0.0004, 'noise_floor': 0.0053, 'by_hour': [{'hour': 12.0, 'inert_ground': 0.1904, 'leak_ground': 0.1908, 'delta': 0.0004, 'inert_sky': 2.25, 'leak_sky': 2.25}]}\nD_EXPOSURE PASS the knobs move light, not exposure -- both arms grade identically at every hour {'population': 4, 'readable': 4, 'mismatched': [], 'by_hour': [{'hour': 18.5, 'inert': 1.45, 'leak': 1.45}, {'hour': 19.0, 'inert': 1.45, 'leak': 1.45}, {'hour': 23.0, 'inert': 1.45, 'leak': 1.45}, {'hour': 12.0, 'inert': -0.9, 'leak': -0.9}], 'note': 'a non-numeric reading here is a BROKEN INSTRUMENT, not a pass: it means criterion 3 has no evidence in this run rather than that exposure held still'}\nS01_NIGHT FAIL exactly one directional light casts a shadow at EVERY hour measured here, night included {'population': 32, 'distinct_caster_counts': [1, 2], 'hours_with_more_than_one': [18.4, 18.5, 19.0, 23.0], 'note': 'OBSERVATIONAL, not a new requirement. zc_shadows S01 samples only after begin play, which is daytime, so a RED here is a long-standing fact this job is the first to be in a position to see -- not a regression caused by these knobs. Reported either way'}\nD_LIVE_DAMP PASS DuskMoonDamp actually changes the picture, so a null result below would mean something {'population': 2, 'largest_effect': 0.038, 'floor': 0.0212, 'by_hour': [{'hour': 18.25, 'delta': -0.038, 'base_sky': 15.0894, 'damp_sky': 15.0894, 'base_moon': [{'label': 'WL_Moon', 'intensity': 3121.32861, 'casts': False}], 'damp_moon': [{'label': 'WL_Moon', 'intensity': 749.81415, 'casts': False}]}, {'hour': 18.4, 'delta': 0.0001, 'base_sky': 15.6633, 'damp_sky': 15.6633, 'base_moon': [{'label': 'WL_Moon', 'intensity': 3450.69531, 'casts': True}], 'damp_moon': [{'label': 'WL_Moon', 'intensity': 2972.44922, 'casts': True}]}], 'note': 'this is the arm that removes the moon flood. If it moves nothing, the knob is dead and every reading in the sizing sweep is a measurement of an unchanged world'}\nD_LIVE_BOOST FAIL DuskSkyBoost actually changes the picture across its swept range {'population': 4, 'largest_effect': 0.0038, 'floor': 0.0212, 'by_window': [{'hour': 18.25, 'window': 0.3, 'delta_lowest_to_highest_boost': 0.0038, 'sky_lowest': 18.1384, 'sky_highest': 76.0711}, {'hour': 18.25, 'window': 0.6, 'delta_lowest_to_highest_boost': 0.0003, 'sky_lowest': 16.1686, 'sky_highest': 36.6749}, {'hour': 18.4, 'window': 0.3, 'delta_lowest_to_highest_boost': -0.0005, 'sky_lowest': 16.2781, 'sky_highest': 27.961}, {'hour': 18.4, 'window': 0.6, 'delta_lowest_to_highest_boost': -0.0028, 'sky_lowest': 15.8312, 'sky_highest': 19.0218}]}\nD_REACH PASS a continuous sky term reaches the approved night's own ground readability at both dusk hours {'population': 20, 'night_bar': {'readable_at_least': 0.0244, 'crushed_at_most': 0.9756, 'cells_mostly_crushed_at_most': 8}, 'settings_clearing_both': [{'window': 0.3, 'boost': 5.0}, {'window': 0.3, 'boost': 10.0}, {'window': 0.3, 'boost': 20.0}], 'chosen': {'window': 0.3, 'boost': 5.0, 'damp': 1.0}, 'sweep_ceiling': {'largest_boost_tested': 40.0, 'by_window': {'window_0.30': {'boost': 40.0, 'population': 2, 'cleared_every_hour': False, 'shortfall_by_hour': {'18.25': -0.0446, '18.40': 0.0016}}, 'window_0.60': {'boost': 40.0, 'population': 2, 'cleared_every_hour': False, 'shortfall_by_hour': {'18.25': -0.1209, '18.40': 0.0058}}}, 'limited_by_sweep_not_by_world': False}, 'conclusion': 'a setting reaches the bar', 'full_table': [{'hour': 18.25, 'window': 0.3, 'boost': 2.0, 'ground_luma': 0.0728, 'readable': 0.0669, 'crushed': 0.9331, 'cell_readable_med': 0.0781, 'cell_readable_min': 0.0105, 'cells_mostly_crushed': 8, 'sky_intensity': 18.1384, 'exposure_bias': 1.335, 'casters': ['V2_Sun'], 'meets_night_bar': True}, {'hour': 18.25, 'window': 0.3, 'boost': 5.0, 'ground_luma': 0.0733, 'readable': 0.0678, 'crushed': 0.9322, 'cell_readable_med': 0.08, 'cell_readable_min': 0.0101, 'cells_mostly_crushed': 8, 'sky_intensity': 22.7121, 'exposure_bias': 1.335, 'casters': ['V2_Sun'], 'meets_night_bar': True}, {'hour': 18.25, 'window': 0.3, 'boost': 10.0, 'ground_luma': 0.0738, 'readable': 0.0683, 'crushed': 0.9316, 'cell_readable_med': 0.0786, 'cell_readable_min': 0.0106, 'cells_mostly_crushed': 8, 'sky_intensity': 30.3348, 'exposure_bias': 1.335, 'casters': ['V2_Sun'], 'meets_night_bar': True}, {'hour': 18.25, 'window': 0.3, 'boost': 20.0, 'ground_luma': 0.075, 'readable': 0.0689, 'crushed': 0.931, 'cell_readable_med': 0.0802, 'cell_readable_min': 0.01, 'cells_mostly_crushed': 8, 'sky_intensity': 45.5802, 'exposure_bias': 1.335, 'casters': ['V2_Sun'], 'meets_night_bar': True}, {'hour': 18.25, 'window': 0.3, 'boost': 40.0, 'ground_luma': 0.0766, 'readable': 0.069, 'crushed': 0.931, 'cell_readable_med': 0.0818, 'cell_readable_min': 0.0121, 'cells_mostly_crushed': 8, 'sky_intensity': 76.0711, 'exposure_bias': 1.335, 'casters': ['V2_Sun'], 'meets_night_bar': True}, {'hour': 18.25, 'window': 0.6, 'boost': 2.0, 'ground_luma': 0.0996, 'readable': 0.1433, 'crushed': 0.8567, 'cell_readable_med': 0.1482, 'cell_readable_min': 0.0846, 'cells_mostly_crushed': 8, 'sky_intensity': 16.1686, 'exposure_bias': 1.335, 'casters': ['V2_Sun'], 'meets_night_bar': True}, {'hour': 18.25, 'window': 0.6, 'boost': 5.0, 'ground_luma': 0.0996, 'readable': 0.1442, 'crushed': 0.8558, 'cell_readable_med': 0.1493, 'cell_readable_min': 0.0871, 'cells_mostly_crushed': 8, 'sky_intensity': 17.7875, 'exposure_bias': 1.335, 'casters': ['V2_Sun'], 'meets_night_bar': True}, {'hour': 18.25, 'window': 0.6, 'boost': 10.0, 'ground_luma': 0.1002, 'readable': 0.1466, 'crushed': 0.8535, 'cell_readable_med': 0.1499, 'cell_readable_min': 0.0864, 'cells_mostly_crushed': 8, 'sky_intensity': 20.4857, 'exposure_bias': 1.335, 'casters': ['V2_Sun'], 'meets_night_bar': True}, {'hour': 18.25, 'window': 0.6, 'boost': 20.0, 'ground_luma': 0.1003, 'readable': 0.1458, 'crushed': 0.8542, 'cell_readable_med': 0.1482, 'cell_readable_min': 0.0867, 'cells_mostly_crushed': 8, 'sky_intensity': 25.8821, 'exposure_bias': 1.335, 'casters': ['V2_Sun'], 'meets_night_bar': True}, {'hour': 18.25, 'window': 0.6, 'boost': 40.0, 'ground_luma': 0.0999, 'readable': 0.1453, 'crushed': 0.8547, 'cell_readable_med': 0.1512, 'cell_readable_min': 0.086, 'cells_mostly_crushed': 8, 'sky_intensity': 36.6749, 'exposure_bias': 1.335, 'casters': ['V2_Sun'], 'meets_night_bar': True}, {'hour': 18.4, 'window': 0.3, 'boost': 2.0, 'ground_luma': 0.0776, 'readable': 0.0241, 'crushed': 0.9759, 'cell_readable_med': 0.0212, 'cell_readable_min': 0.0, 'cells_mostly_crushed': 8, 'sky_intensity': 16.2781, 'exposure_bias': 1.4349, 'casters': ['V2_Sun', 'WL_Moon'], 'meets_night_bar': False}, {'hour': 18.4, 'window': 0.3, 'boost': 5.0, 'ground_luma': 0.0779, 'readable': 0.0245, 'crushed': 0.9755, 'cell_readable_med': 0.0217, 'cell_readable_min': 0.0, 'cells_mostly_crushed': 8, 'sky_intensity': 17.2005, 'exposure_bias': 1.4349, 'casters': ['V2_Sun', 'WL_Moon'], 'meets_night_bar': True}, {'hour': 18.4, 'window': 0.3, 'boost': 10.0, 'ground_luma': 0.0778, 'readable': 0.0245, 'crushed': 0.9755, 'cell_readable_med': 0.0223, 'cell_readable_min': 0.0, 'cells_mostly_crushed': 8, 'sky_intensity': 18.7377, 'exposure_bias': 1.4349, 'casters': ['V2_Sun', 'WL_Moon'], 'meets_night_bar': True}, {'hour': 18.4, 'window': 0.3, 'boost': 20.0, 'ground_luma': 0.0781, 'readable': 0.0257, 'crushed': 0.9743, 'cell_readable_med': 0.0229, 'cell_readable_min': 0.0001, 'cells_mostly_crushed': 8, 'sky_intensity': 21.8121, 'exposure_bias': 1.4349, 'casters': ['V2_Sun', 'WL_Moon'], 'meets_night_bar': True}, {'hour': 18.4, 'window': 0.3, 'boost': 40.0, 'ground_luma': 0.0771, 'readable': 0.0228, 'crushed': 0.9772, 'cell_readable_med': 0.021, 'cell_readable_min': 0.0, 'cells_mostly_crushed': 8, 'sky_intensity': 27.961, 'exposure_bias': 1.4349, 'casters': ['V2_Sun', 'WL_Moon'], 'meets_night_bar': False}, {'hour': 18.4, 'window': 0.6, 'boost': 2.0, 'ground_luma': 0.0771, 'readable': 0.0227, 'crushed': 0.9772, 'cell_readable_med': 0.0218, 'cell_readable_min': 0.0, 'cells_mostly_crushed': 8, 'sky_intensity': 15.8312, 'exposure_bias': 1.4349, 'casters': ['V2_Sun', 'WL_Moon'], 'meets_night_bar': False}, {'hour': 18.4, 'window': 0.6, 'boost': 5.0, 'ground_luma': 0.0777, 'readable': 0.0241, 'crushed': 0.976, 'cell_readable_med': 0.0221, 'cell_readable_min': 0.0, 'cells_mostly_crushed': 8, 'sky_intensity': 16.0831, 'exposure_bias': 1.4349, 'casters': ['V2_Sun', 'WL_Moon'], 'meets_night_bar': False}, {'hour': 18.4, 'window': 0.6, 'boost': 10.0, 'ground_luma': 0.0748, 'readable': 0.0192, 'crushed': 0.9808, 'cell_readable_med': 0.0151, 'cell_readable_min': 0.0, 'cells_mostly_crushed': 8, 'sky_intensity': 16.5029, 'exposure_bias': 1.4349, 'casters': ['V2_Sun', 'WL_Moon'], 'meets_night_bar': False}, {'hour': 18.4, 'window': 0.6, 'boost': 20.0, 'ground_luma': 0.0746, 'readable': 0.019, 'crushed': 0.981, 'cell_readable_med': 0.0167, 'cell_readable_min': 0.0, 'cells_mostly_crushed': 8, 'sky_intensity': 17.3425, 'exposure_bias': 1.4349, 'casters': ['V2_Sun', 'WL_Moon'], 'meets_night_bar': False}, {'hour': 18.4, 'window': 0.6, 'boost': 40.0, 'ground_luma': 0.0743, 'readable': 0.0186, 'crushed': 0.9814, 'cell_readable_med': 0.0152, 'cell_readable_min': 0.0, 'cells_mostly_crushed': 8, 'sky_intensity': 19.0218, 'exposure_bias': 1.4349, 'casters': ['V2_Sun', 'WL_Moon'], 'meets_night_bar': False}], 'note': \"GREEN: the dense ladder is worth running at the chosen setting. RED is NOT a failed job -- it is the measured tradeoff the founder asked for in place of a forced solution. But read `conclusion` before reporting it: a red because the sweep ran out of room is a fact about this job, and a red with headroom left is a fact about Wonderland. Only the second one answers the founder's question\"}\n"
+}

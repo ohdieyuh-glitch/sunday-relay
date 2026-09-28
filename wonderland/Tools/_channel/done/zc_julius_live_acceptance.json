@@ -1,23 +1,44 @@
 {
  "name": "zc_julius_live_acceptance",
- "started": "2026-09-27 21:17:41",
- "status": "FAIL: A01b, A06k, A06l, A06i, A06j, A06m, A06n",
+ "started": "2026-09-28 02:43:05",
+ "status": "all clauses pass",
  "tests": [
   {
    "id": "A01",
    "name": "the native transport exists on the PIE game instance, beside the Julius subsystem",
    "pass": true,
    "detail": {
-    "stream": "<Object '/Engine/Transient.UnrealEdEngine_0:GameInstance_2.WonderlandJuliusStreamSubsystem_0' (0x00000248818D6400) Class 'WonderlandJuliusStreamSubsystem'>",
-    "julius": "<Object '/Engine/Transient.UnrealEdEngine_0:GameInstance_2.WonderlandJuliusSubsystem_0' (0x00000247C5A67B00) Class 'WonderlandJuliusSubsystem'>"
+    "stream": "<Object '/Engine/Transient.UnrealEdEngine_0:GameInstance_10.WonderlandJuliusStreamSubsystem_0' (0x0000016E68AFD980) Class 'WonderlandJuliusStreamSubsystem'>",
+    "julius": "<Object '/Engine/Transient.UnrealEdEngine_0:GameInstance_10.WonderlandJuliusSubsystem_0' (0x0000016EC9DA2700) Class 'WonderlandJuliusSubsystem'>"
    }
   },
   {
    "id": "A01b",
-   "name": "the bridge address is configuration, https-or-loopback only",
-   "pass": false,
+   "name": "the bridge address is configuration: https is used, loopback http is used, plain http to another host and a non-http URL are REFUSED with a reason -- never silently used",
+   "pass": true,
    "detail": {
-    "reason": "NOT IN THIS BUILD: the transport has no GetBridgeUrl"
+    "probes": {
+     "http://relay.example.com": {
+      "used": "",
+      "problem": "Refusing http://relay.example.com: plain http to a bridge off this machine would send this client's session in the clear. Use https."
+     },
+     "https://relay.example.invalid/": {
+      "used": "https://relay.example.invalid",
+      "problem": ""
+     },
+     "http://localhost:8796": {
+      "used": "http://localhost:8796",
+      "problem": ""
+     },
+     "http://127.0.0.1:1": {
+      "used": "http://127.0.0.1:1",
+      "problem": ""
+     },
+     "ftp://relay.example.invalid": {
+      "used": "",
+      "problem": "Refusing ftp://relay.example.invalid: a bridge is an http(s) URL."
+     }
+    }
    }
   },
   {
@@ -251,50 +272,196 @@
   },
   {
    "id": "A06k",
-   "name": "creation from inside Wonderland",
-   "pass": false,
+   "name": "REFUSED in-world when the project has no execution profile: 409 execution_not_configured -- no task, no run, the world still on what it showed, the terminal says why, and 03a is on disk",
+   "pass": true,
    "detail": {
-    "reason": "NOT IN THIS BUILD: the transport has no CreateMission / paired project"
+    "pairing": [
+     "attempt 1: paired"
+    ],
+    "photo_03a": true,
+    "holds": true,
+    "status": 409,
+    "refusal": "execution_not_configured",
+    "tasks_unchanged": true,
+    "adopted_unchanged": true,
+    "terminal_says_so": true
    }
   },
   {
    "id": "A06l",
-   "name": "creation from inside Wonderland",
-   "pass": false,
+   "name": "REFUSED in-world when the intent is malformed (no acceptance criterion): 400 malformed_mission -- no task, no run, the terminal says why",
+   "pass": true,
    "detail": {
-    "reason": "NOT IN THIS BUILD: the transport has no CreateMission / paired project"
+    "profile": {
+     "status": 200,
+     "version": 1
+    },
+    "holds": true,
+    "status": 400,
+    "refusal": "malformed_mission",
+    "tasks_unchanged": true,
+    "adopted_unchanged": true,
+    "terminal_says_so": true
    }
   },
   {
    "id": "A06i",
-   "name": "creation from inside Wonderland",
-   "pass": false,
+   "name": "the WORLD created a mission as its paired OWNER and SHOWS it. DATA: 201, the bridge's own mission and run ids, followed exactly, ONE task QUEUED over Julius's raw READY. VISIBLE: the strip, the fold, JULIUS 3.3 and its banner all name the created run and mission and none names the previous one, the Created row is there, and 03b and 03c are on disk",
+   "pass": true,
    "detail": {
-    "reason": "NOT IN THIS BUILD: the transport has no CreateMission / paired project"
+    "data_half": true,
+    "visible_half": true,
+    "status": 201,
+    "refusal": "",
+    "created_run": "run:aeeed313cc087c85296ebdc8",
+    "created_mission": "mission:wl-b1f6ca77f29a",
+    "objective": "Acceptance probe: a mission the world created as its player. It is never driven.",
+    "paired_project": "prj-wl-accept-4bf3ad6bc25da3de",
+    "previous_runs": [
+     "run:b0f61d6d82c0161ae5169dc8",
+     "run:0f8667049d5cbd3d9f122126"
+    ],
+    "followed": true,
+    "contract": {
+     "tasks_for_mission": 1,
+     "source": "JULIUS",
+     "state": "QUEUED",
+     "run": [
+      true,
+      "run:aeeed313cc087c85296ebdc8"
+     ],
+     "julius_state": [
+      true,
+      "READY"
+     ]
+    },
+    "rows": "Julius: Following mission:wl-b1f6ca77f29a \u00b7 QUEUED\nResult: not final \u00b7 0 of 0 criteria met\nCreate: Created mission:wl-b1f6ca77f29a from this world",
+    "surfaces": {
+     "adopted": "run:aeeed313cc087c85296ebdc8",
+     "banner": "JULIUS LIVE \u00b7 RUN run:aeeed313cc087c85296ebdc8 \u00b7 READY",
+     "headline": "QUEUED",
+     "fold": "mission:wl-b1f6ca77f29a",
+     "section": "QUEUED",
+     "terminal_banner": "JULIUS LIVE \u00b7 RUN run:aeeed313cc087c85296ebdc8 \u00b7 READY",
+     "following_rows": [
+      "Julius: Following mission:wl-b1f6ca77f29a \u00b7 QUEUED"
+     ],
+     "simulated": false,
+     "ok": true
+    },
+    "photo_03b": true,
+    "photo_03c": true
    }
   },
   {
    "id": "A06j",
-   "name": "creation from inside Wonderland",
-   "pass": false,
+   "name": "a RETRY from Unreal with the same key returns the SAME mission and run: still one task, nothing new followed",
+   "pass": true,
    "detail": {
-    "reason": "NOT IN THIS BUILD: the transport has no CreateMission / paired project"
+    "status": 201,
+    "run": "run:aeeed313cc087c85296ebdc8",
+    "tasks_before": 4,
+    "tasks_after": 4,
+    "contract": {
+     "tasks_for_mission": 1,
+     "source": "JULIUS",
+     "state": "QUEUED",
+     "run": [
+      true,
+      "run:aeeed313cc087c85296ebdc8"
+     ],
+     "julius_state": [
+      true,
+      "READY"
+     ]
+    }
+   }
+  },
+  {
+   "id": "A06o",
+   "name": "the followed run is chosen by IDENTITY: back to the old run, every surface names the old run and mission and none the created one; forward again, every surface names the created run and none the old -- nothing stays on whichever task is first in storage, no task is added or lost, 03e and 03f are on disk",
+   "pass": true,
+   "detail": {
+    "back_to_old": true,
+    "again_created": true,
+    "tasks_unchanged": true,
+    "steps": [
+     {
+      "to": "mission:wonderland-integration-e2e-1",
+      "run": "run:b0f61d6d82c0161ae5169dc8",
+      "paired": true,
+      "attempts": [
+       "attempt 1: paired"
+      ],
+      "adopted": true,
+      "settled": true,
+      "photo": true,
+      "surfaces": {
+       "adopted": "run:b0f61d6d82c0161ae5169dc8",
+       "banner": "JULIUS LIVE \u00b7 RUN run:b0f61d6d82c0161ae5169dc8 \u00b7 READY",
+       "headline": "QUEUED",
+       "fold": "mission:wonderland-integration-e2e-1",
+       "section": "QUEUED",
+       "terminal_banner": "JULIUS LIVE \u00b7 RUN run:b0f61d6d82c0161ae5169dc8 \u00b7 READY",
+       "following_rows": [
+        "Julius: Following mission:wonderland-integration-e2e-1 \u00b7 QUEUED"
+       ],
+       "simulated": false,
+       "ok": true
+      }
+     },
+     {
+      "to": "mission:wl-b1f6ca77f29a",
+      "run": "run:aeeed313cc087c85296ebdc8",
+      "paired": true,
+      "attempts": [
+       "attempt 1: paired"
+      ],
+      "adopted": true,
+      "settled": true,
+      "photo": true,
+      "surfaces": {
+       "adopted": "run:aeeed313cc087c85296ebdc8",
+       "banner": "JULIUS LIVE \u00b7 RUN run:aeeed313cc087c85296ebdc8 \u00b7 READY",
+       "headline": "QUEUED",
+       "fold": "mission:wl-b1f6ca77f29a",
+       "section": "QUEUED",
+       "terminal_banner": "JULIUS LIVE \u00b7 RUN run:aeeed313cc087c85296ebdc8 \u00b7 READY",
+       "following_rows": [
+        "Julius: Following mission:wl-b1f6ca77f29a \u00b7 QUEUED"
+       ],
+       "simulated": false,
+       "ok": true
+      }
+     }
+    ]
    }
   },
   {
    "id": "A06m",
-   "name": "creation from inside Wonderland",
-   "pass": false,
+   "name": "REFUSED in-world for a non-owner (MEMBER): 403 not_authorized -- no task, and the world keeps the mission it follows",
+   "pass": true,
    "detail": {
-    "reason": "NOT IN THIS BUILD: the transport has no CreateMission / paired project"
+    "holds": true,
+    "status": 403,
+    "refusal": "not_authorized",
+    "tasks_unchanged": true,
+    "adopted_unchanged": true,
+    "terminal_says_so": true
    }
   },
   {
    "id": "A06n",
-   "name": "creation from inside Wonderland",
-   "pass": false,
+   "name": "REFUSED in-world when the native session is no longer valid (the bridge restarted): session_invalid or not_paired -- no task, no run, the terminal says to pair again, and 03d is on disk",
+   "pass": true,
    "detail": {
-    "reason": "NOT IN THIS BUILD: the transport has no CreateMission / paired project"
+    "photo_03d": true,
+    "holds": true,
+    "status": 401,
+    "refusal": "session_invalid",
+    "tasks_unchanged": true,
+    "adopted_unchanged": true,
+    "terminal_says_so": true
    }
   },
   {
@@ -304,6 +471,18 @@
    "detail": {
     "before": "",
     "after": ""
+   }
+  },
+  {
+   "id": "A13",
+   "name": "every REQUIRED photograph of this attempt was produced: the helper said yes, the file exists in THIS attempt's directory, it has bytes, and this capture wrote it -- a refused capture, a missing file or one from before is not a photograph, and the photographs are part of the gate",
+   "pass": true,
+   "detail": {
+    "required": 12,
+    "produced": 12,
+    "never_asked": [],
+    "not_produced": [],
+    "dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de"
    }
   },
   {
@@ -317,30 +496,178 @@
  ],
  "url_cvar_found": "",
  "url_cvar_before": "",
- "acceptance_nonce": "e9190ed0ad1e9c1f",
- "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-e9190ed0ad1e9c1f",
+ "acceptance_nonce": "4bf3ad6bc25da3de",
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de",
+ "photos": {
+  "01_following_the_real_run.jpg": {
+   "written": true,
+   "exists": true,
+   "bytes": 572740,
+   "fresh": true,
+   "produced": true,
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de\\01_following_the_real_run.jpg"
+  },
+  "01b_mission_contract_queued.jpg": {
+   "written": true,
+   "exists": true,
+   "bytes": 359491,
+   "fresh": true,
+   "produced": true,
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de\\01b_mission_contract_queued.jpg"
+  },
+  "01c_live_terminal_queued.jpg": {
+   "written": true,
+   "exists": true,
+   "bytes": 584501,
+   "fresh": true,
+   "produced": true,
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de\\01c_live_terminal_queued.jpg"
+  },
+  "01d_live_terminal_result.jpg": {
+   "written": true,
+   "exists": true,
+   "bytes": 587920,
+   "fresh": true,
+   "produced": true,
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de\\01d_live_terminal_result.jpg"
+  },
+  "02_recovered_after_restart.jpg": {
+   "written": true,
+   "exists": true,
+   "bytes": 573859,
+   "fresh": true,
+   "produced": true,
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de\\02_recovered_after_restart.jpg"
+  },
+  "02b_mission_contract_after_restart.jpg": {
+   "written": true,
+   "exists": true,
+   "bytes": 360256,
+   "fresh": true,
+   "produced": true,
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de\\02b_mission_contract_after_restart.jpg"
+  },
+  "03a_refused_no_profile.jpg": {
+   "written": true,
+   "exists": true,
+   "bytes": 587224,
+   "fresh": true,
+   "produced": true,
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de\\03a_refused_no_profile.jpg"
+  },
+  "03b_world_created_mission.jpg": {
+   "written": true,
+   "exists": true,
+   "bytes": 597390,
+   "fresh": true,
+   "produced": true,
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de\\03b_world_created_mission.jpg"
+  },
+  "03c_mission_contract_created.jpg": {
+   "written": true,
+   "exists": true,
+   "bytes": 356690,
+   "fresh": true,
+   "produced": true,
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de\\03c_mission_contract_created.jpg"
+  },
+  "03e_switched_back_to_old.jpg": {
+   "written": true,
+   "exists": true,
+   "bytes": 598881,
+   "fresh": true,
+   "produced": true,
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de\\03e_switched_back_to_old.jpg"
+  },
+  "03f_switched_to_created_again.jpg": {
+   "written": true,
+   "exists": true,
+   "bytes": 599604,
+   "fresh": true,
+   "produced": true,
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de\\03f_switched_to_created_again.jpg"
+  },
+  "03d_refused_session.jpg": {
+   "written": true,
+   "exists": true,
+   "bytes": 608237,
+   "fresh": true,
+   "produced": true,
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\attempt-4bf3ad6bc25da3de\\03d_refused_session.jpg"
+  }
+ },
  "captures": {
   "01b_mission_contract_queued.jpg": {
    "missions_open": true,
-   "frames_drawn": true
+   "frames_drawn": true,
+   "produced": true
   },
   "01c_live_terminal_queued.jpg": {
    "terminal_open": true,
    "frames_drawn": true,
-   "extension_settled": "no accessor in this build"
+   "extension_settled": true,
+   "produced": true
   },
   "01d_live_terminal_result.jpg": {
    "terminal_open": true,
    "frames_drawn": true,
-   "extension_settled": "no accessor in this build"
+   "extension_settled": true,
+   "produced": true
   },
   "02b_mission_contract_after_restart.jpg": {
    "missions_open": true,
-   "frames_drawn": true
+   "frames_drawn": true,
+   "produced": true
+  },
+  "03a_refused_no_profile.jpg": {
+   "terminal_open": true,
+   "frames_drawn": true,
+   "extension_settled": true,
+   "produced": true
+  },
+  "03b_world_created_mission.jpg": {
+   "terminal_open": true,
+   "frames_drawn": true,
+   "extension_settled": true,
+   "produced": true
+  },
+  "03c_mission_contract_created.jpg": {
+   "missions_open": true,
+   "frames_drawn": true,
+   "produced": true
+  },
+  "03e_switched_back_to_old.jpg": {
+   "terminal_open": true,
+   "frames_drawn": true,
+   "extension_settled": true,
+   "produced": true
+  },
+  "03f_switched_to_created_again.jpg": {
+   "terminal_open": true,
+   "frames_drawn": true,
+   "extension_settled": true,
+   "produced": true
+  },
+  "03d_refused_session.jpg": {
+   "terminal_open": true,
+   "frames_drawn": true,
+   "extension_settled": true,
+   "produced": true
   }
  },
- "describe_after_restart": "JULIUS STREAM: following | julius=READY | contract=QUEUED | on-contract=shown as QUEUED (julius READY) | bridge=http://127.0.0.1:8796 | project=prj-wonderland-integration-e2e | run=run:b0f61d6d82c0161ae5169dc8 | paired=yes | cursor=5 | pages=3 | offered=0 | failures=0 | link=Following run:b0f61d6d82c0161ae5169dc8. | result=not final \u00b7 0 of 2 criteria met",
- "finished": "2026-09-27 21:18:39",
- "seconds": 58.29,
- "log": "A01 PASS the native transport exists on the PIE game instance, beside the Julius subsystem {'stream': \"<Object '/Engine/Transient.UnrealEdEngine_0:GameInstance_2.WonderlandJuliusStreamSubsystem_0' (0x00000248818D6400) Class 'WonderlandJuliusStreamSubsystem'>\", 'julius': \"<Object '/Engine/Transient.UnrealEdEngine_0:GameInstance_2.WonderlandJuliusSubsystem_0' (0x00000247C5A67B00) Class 'WonderlandJuliusSubsystem'>\"}\nA01b FAIL the bridge address is configuration, https-or-loopback only {'reason': 'NOT IN THIS BUILD: the transport has no GetBridgeUrl'}\nA02 PASS a signed-in player's code paired this desktop client {'attempts': ['attempt 1: paired']}\nA03 PASS the world ADOPTED the same run Julius created -- same runId, same missionId {'adopted': 'run:b0f61d6d82c0161ae5169dc8', 'created': 'run:b0f61d6d82c0161ae5169dc8', 'mission_seen': 'mission:wonderland-integration-e2e-1', 'mission_created': 'mission:wonderland-integration-e2e-1'}\nA04 PASS the world holds Julius's own state for it: READY {'julius_state': 'READY'}\nA05 PASS the Mission Contract state for it is QUEUED -- created, awaiting the driver, never running {'contract_state': 'QUEUED'}\nA06 PASS the link says Live, and nothing claims the run ended {'link': 'LIVE', 'terminal': False}\nA06b PASS the Mission Contract TASK SET holds the run: one Julius-sourced task for the mission, the same run id, Julius's own READY known on it, QUEUED (the data the surfaces should show) {'contract': {'tasks_for_mission': 1, 'source': 'JULIUS', 'state': 'QUEUED', 'run': (True, 'run:b0f61d6d82c0161ae5169dc8'), 'julius_state': (True, 'READY')}, 'on_contract': 'shown as QUEUED (julius READY)'}\nA06e PASS the VISIBLE Missions panel shows this run's mission -- the surface the founder looks at reads the mission subsystem's fold, so the fold must be this mission {'fold_mission': 'mission:wonderland-integration-e2e-1', 'mission': 'mission:wonderland-integration-e2e-1', 'fixture_running': False}\nA06f PASS the STRIP agrees with the panel: its headline reads the followed run's state (QUEUED), never UNOBSERVED, while its provenance line names JULIUS LIVE, the run and Julius's READY {'headline': 'QUEUED', 'banner': 'JULIUS LIVE \u00b7 RUN run:b0f61d6d82c0161ae5169dc8 \u00b7 READY'}\nA06g PASS the LIVE TERMINAL follows the run: JULIUS 3.3 reads QUEUED, never STANDBY; its banner names JULIUS LIVE, the run and READY; it is not marked simulated; its rows are the follow, with no 'Not connected' {'section': 'QUEUED', 'banner': 'JULIUS LIVE \u00b7 RUN run:b0f61d6d82c0161ae5169dc8 \u00b7 READY', 'rows': 'Julius: Following mission:wonderland-integration-e2e-1 \u00b7 QUEUED\\nResult: not final \u00b7 0 of 2 criteria met', 'simulated': False, 'build_has_terminal_wiring': True}\nA06h PASS the run's USER RESULT reached the world and is shown: not final, 0 criteria met, nothing made, no failure, the owner's exact cost of nothing, tokens UNKNOWN -- and a Result row in the terminal {'has_result': True, 'result': 'not final \u00b7 0 of 2 criteria met\\nnothing made yet \u00b7 no open findings \u00b7 review: none yet \u00b7 tokens UNKNOWN \u00b7 cost $0.0000', 'rows': 'Julius: Following mission:wonderland-integration-e2e-1 \u00b7 QUEUED\\nResult: not final \u00b7 0 of 2 criteria met', 'criteria_total': 2, 'transport': 'not final \u00b7 0 of 2 criteria met'}\nA06c PASS a run SWITCH shows on the Mission Contract: still ONE task for the mission, now carrying the new run and Julius's READY for it {'adopted': 'run:0f8667049d5cbd3d9f122126', 'switch_run': 'run:0f8667049d5cbd3d9f122126', 'contract': {'tasks_for_mission': 1, 'source': 'JULIUS', 'state': 'QUEUED', 'run': (True, 'run:0f8667049d5cbd3d9f122126'), 'julius_state': (True, 'READY')}}\nA06d PASS the task set's OWN rule on a run change, without the transport's reset: re-following the same run keeps Julius's READY (control); a different run forgets it and carries only the new run id {'same_run': {'tasks_for_mission': 1, 'source': 'JULIUS', 'state': 'QUEUED', 'run': (True, 'run:0f8667049d5cbd3d9f122126'), 'julius_state': (True, 'READY')}, 'different_run': {'tasks_for_mission': 1, 'source': 'JULIUS', 'state': 'QUEUED', 'run': (True, 'run:b0f61d6d82c0161ae5169dc8'), 'julius_state': (False, '')}}\nA07 PASS a dropped link reads STALE -- and the mission is untouched: same run, READY, not ended {'link': 'STALE', 'adopted': 'run:b0f61d6d82c0161ae5169dc8', 'julius_state': 'READY', 'terminal': False}\nA08 PASS the link comes back and the world recovers the SAME durable run {'link': 'LIVE', 'adopted': 'run:b0f61d6d82c0161ae5169dc8', 'julius_state': 'READY'}\nA09 PASS a fresh game carries nothing over: unpaired, and holding no run {'paired': False, 'adopted': ''}\nA10 PASS after a restart the world recovers the SAME durable run from Julius -- READY, Queued, not ended {'pairing': ['attempt 1: paired'], 'adopted': 'run:b0f61d6d82c0161ae5169dc8', 'julius_state': 'READY', 'contract_state': 'QUEUED', 'terminal': False}\nA10b PASS after the restart the Mission Contract shows the SAME run once -- no second task, Julius's READY known on it, QUEUED {'contract': {'tasks_for_mission': 1, 'source': 'JULIUS', 'state': 'QUEUED', 'run': (True, 'run:b0f61d6d82c0161ae5169dc8'), 'julius_state': (True, 'READY')}}\nA06k FAIL creation from inside Wonderland {'reason': 'NOT IN THIS BUILD: the transport has no CreateMission / paired project'}\nA06l FAIL creation from inside Wonderland {'reason': 'NOT IN THIS BUILD: the transport has no CreateMission / paired project'}\nA06i FAIL creation from inside Wonderland {'reason': 'NOT IN THIS BUILD: the transport has no CreateMission / paired project'}\nA06j FAIL creation from inside Wonderland {'reason': 'NOT IN THIS BUILD: the transport has no CreateMission / paired project'}\nA06m FAIL creation from inside Wonderland {'reason': 'NOT IN THIS BUILD: the transport has no CreateMission / paired project'}\nA06n FAIL creation from inside Wonderland {'reason': 'NOT IN THIS BUILD: the transport has no CreateMission / paired project'}\nA11 PASS the editor's bridge URL is back to what it was before this job {'before': '', 'after': ''}\nA12 PASS the job ran to its end -- a clause that never ran is not a pass {'missing': []}\n"
+ "describe_after_restart": "JULIUS STREAM: following | julius=READY | contract=QUEUED | on-contract=shown as QUEUED (julius READY) | bridge=http://127.0.0.1:8796 | project=prj-wonderland-integration-e2e | run=run:b0f61d6d82c0161ae5169dc8 | paired=yes | cursor=5 | pages=2 | offered=0 | failures=0 | link=Following run:b0f61d6d82c0161ae5169dc8. | result=not final \u00b7 0 of 2 criteria met",
+ "create_pairing": {
+  "paired": true,
+  "attempts": [
+   "attempt 1: paired"
+  ],
+  "paired_project": "prj-wl-accept-4bf3ad6bc25da3de"
+ },
+ "create_profile": {
+  "status": 200,
+  "version": 1
+ },
+ "finished": "2026-09-28 02:44:12",
+ "seconds": 67.62,
+ "log": "A01 PASS the native transport exists on the PIE game instance, beside the Julius subsystem {'stream': \"<Object '/Engine/Transient.UnrealEdEngine_0:GameInstance_10.WonderlandJuliusStreamSubsystem_0' (0x0000016E68AFD980) Class 'WonderlandJuliusStreamSubsystem'>\", 'julius': \"<Object '/Engine/Transient.UnrealEdEngine_0:GameInstance_10.WonderlandJuliusSubsystem_0' (0x0000016EC9DA2700) Class 'WonderlandJuliusSubsystem'>\"}\nA01b PASS the bridge address is configuration: https is used, loopback http is used, plain http to another host and a non-http URL are REFUSED with a reason -- never silently used {'probes': {'http://relay.example.com': {'used': '', 'problem': \"Refusing http://relay.example.com: plain http to a bridge off this machine would send this client's session in the clear. Use https.\"}, 'https://relay.example.invalid/': {'used': 'https://relay.example.invalid', 'problem': ''}, 'http://localhost:8796': {'used': 'http://localhost:8796', 'problem': ''}, 'http://127.0.0.1:1': {'used': 'http://127.0.0.1:1', 'problem': ''}, 'ftp://relay.example.invalid': {'used': '', 'problem': 'Refusing ftp://relay.example.invalid: a bridge is an http(s) URL.'}}}\nA02 PASS a signed-in player's code paired this desktop client {'attempts': ['attempt 1: paired']}\nA03 PASS the world ADOPTED the same run Julius created -- same runId, same missionId {'adopted': 'run:b0f61d6d82c0161ae5169dc8', 'created': 'run:b0f61d6d82c0161ae5169dc8', 'mission_seen': 'mission:wonderland-integration-e2e-1', 'mission_created': 'mission:wonderland-integration-e2e-1'}\nA04 PASS the world holds Julius's own state for it: READY {'julius_state': 'READY'}\nA05 PASS the Mission Contract state for it is QUEUED -- created, awaiting the driver, never running {'contract_state': 'QUEUED'}\nA06 PASS the link says Live, and nothing claims the run ended {'link': 'LIVE', 'terminal': False}\nA06b PASS the Mission Contract TASK SET holds the run: one Julius-sourced task for the mission, the same run id, Julius's own READY known on it, QUEUED (the data the surfaces should show) {'contract': {'tasks_for_mission': 1, 'source': 'JULIUS', 'state': 'QUEUED', 'run': (True, 'run:b0f61d6d82c0161ae5169dc8'), 'julius_state': (True, 'READY')}, 'on_contract': 'shown as QUEUED (julius READY)'}\nA06e PASS the VISIBLE Missions panel shows this run's mission -- the surface the founder looks at reads the mission subsystem's fold, so the fold must be this mission {'fold_mission': 'mission:wonderland-integration-e2e-1', 'mission': 'mission:wonderland-integration-e2e-1', 'fixture_running': False}\nA06f PASS the STRIP agrees with the panel: its headline reads the followed run's state (QUEUED), never UNOBSERVED, while its provenance line names JULIUS LIVE, the run and Julius's READY {'headline': 'QUEUED', 'banner': 'JULIUS LIVE \u00b7 RUN run:b0f61d6d82c0161ae5169dc8 \u00b7 READY'}\nA06g PASS the LIVE TERMINAL follows the run: JULIUS 3.3 reads QUEUED, never STANDBY; its banner names JULIUS LIVE, the run and READY; it is not marked simulated; its rows are the follow, with no 'Not connected' {'section': 'QUEUED', 'banner': 'JULIUS LIVE \u00b7 RUN run:b0f61d6d82c0161ae5169dc8 \u00b7 READY', 'rows': 'Julius: Following mission:wonderland-integration-e2e-1 \u00b7 QUEUED\\nResult: not final \u00b7 0 of 2 criteria met', 'simulated': False, 'build_has_terminal_wiring': True}\nA06h PASS the run's USER RESULT reached the world and is shown: not final, 0 criteria met, nothing made, no failure, the owner's exact cost of nothing, tokens UNKNOWN -- and a Result row in the terminal {'has_result': True, 'result': 'not final \u00b7 0 of 2 criteria met\\nnothing made yet \u00b7 no open findings \u00b7 review: none yet \u00b7 tokens UNKNOWN \u00b7 cost $0.0000', 'rows': 'Julius: Following mission:wonderland-integration-e2e-1 \u00b7 QUEUED\\nResult: not final \u00b7 0 of 2 criteria met', 'criteria_total': 2, 'transport': 'not final \u00b7 0 of 2 criteria met'}\nA06c PASS a run SWITCH shows on the Mission Contract: still ONE task for the mission, now carrying the new run and Julius's READY for it {'adopted': 'run:0f8667049d5cbd3d9f122126', 'switch_run': 'run:0f8667049d5cbd3d9f122126', 'contract': {'tasks_for_mission': 1, 'source': 'JULIUS', 'state': 'QUEUED', 'run': (True, 'run:0f8667049d5cbd3d9f122126'), 'julius_state': (True, 'READY')}}\nA06d PASS the task set's OWN rule on a run change, without the transport's reset: re-following the same run keeps Julius's READY (control); a different run forgets it and carries only the new run id {'same_run': {'tasks_for_mission': 1, 'source': 'JULIUS', 'state': 'QUEUED', 'run': (True, 'run:0f8667049d5cbd3d9f122126'), 'julius_state': (True, 'READY')}, 'different_run': {'tasks_for_mission': 1, 'source': 'JULIUS', 'state': 'QUEUED', 'run': (True, 'run:b0f61d6d82c0161ae5169dc8'), 'julius_state': (False, '')}}\nA07 PASS a dropped link reads STALE -- and the mission is untouched: same run, READY, not ended {'link': 'STALE', 'adopted': 'run:b0f61d6d82c0161ae5169dc8', 'julius_state': 'READY', 'terminal': False}\nA08 PASS the link comes back and the world recovers the SAME durable run {'link': 'LIVE', 'adopted': 'run:b0f61d6d82c0161ae5169dc8', 'julius_state': 'READY'}\nA09 PASS a fresh game carries nothing over: unpaired, and holding no run {'paired': False, 'adopted': ''}\nA10 PASS after a restart the world recovers the SAME durable run from Julius -- READY, Queued, not ended {'pairing': ['attempt 1: paired'], 'adopted': 'run:b0f61d6d82c0161ae5169dc8', 'julius_state': 'READY', 'contract_state': 'QUEUED', 'terminal': False}\nA10b PASS after the restart the Mission Contract shows the SAME run once -- no second task, Julius's READY known on it, QUEUED {'contract': {'tasks_for_mission': 1, 'source': 'JULIUS', 'state': 'QUEUED', 'run': (True, 'run:b0f61d6d82c0161ae5169dc8'), 'julius_state': (True, 'READY')}}\nA06k PASS REFUSED in-world when the project has no execution profile: 409 execution_not_configured -- no task, no run, the world still on what it showed, the terminal says why, and 03a is on disk {'pairing': ['attempt 1: paired'], 'photo_03a': True, 'holds': True, 'status': 409, 'refusal': 'execution_not_configured', 'tasks_unchanged': True, 'adopted_unchanged': True, 'terminal_says_so': True}\nA06l PASS REFUSED in-world when the intent is malformed (no acceptance criterion): 400 malformed_mission -- no task, no run, the terminal says why {'profile': {'status': 200, 'version': 1}, 'holds': True, 'status': 400, 'refusal': 'malformed_mission', 'tasks_unchanged': True, 'adopted_unchanged': True, 'terminal_says_so': True}\nA06i PASS the WORLD created a mission as its paired OWNER and SHOWS it. DATA: 201, the bridge's own mission and run ids, followed exactly, ONE task QUEUED over Julius's raw READY. VISIBLE: the strip, the fold, JULIUS 3.3 and its banner all name the created run and mission and none names the previous one, the Created row is there, and 03b and 03c are on disk {'data_half': True, 'visible_half': True, 'status': 201, 'refusal': '', 'created_run': 'run:aeeed313cc087c85296ebdc8', 'created_mission': 'mission:wl-b1f6ca77f29a', 'objective': 'Acceptance probe: a mission the world created as its player. It is never driven.', 'paired_project': 'prj-wl-accept-4bf3ad6bc25da3de', 'previous_runs': ['run:b0f61d6d82c0161ae5169dc8', 'run:0f8667049d5cbd3d9f122126'], 'followed': True, 'contract': {'tasks_for_mission': 1, 'source': 'JULIUS', 'state': 'QUEUED', 'run': (True, 'run:aeeed313cc087c85296ebdc8'), 'julius_state': (True, 'READY')}, 'rows': 'Julius: Following mission:wl-b1f6ca77f29a \u00b7 QUEUED\\nResult: not final \u00b7 0 of 0 criteria met\\nCreate: Created mission:wl-b1f6ca77f29a from this world', 'surfaces': {'adopted': 'run:aeeed313cc087c85296ebdc8', 'banner': 'JULIUS LIVE \u00b7 RUN run:aeeed313cc087c85296ebdc8 \u00b7 READY', 'headline': 'QUEUED', 'fold': 'mission:wl-b1f6ca77f29a', 'section': 'QUEUED', 'terminal_banner': 'JULIUS LIVE \u00b7 RUN run:aeeed313cc087c85296ebdc8 \u00b7 READY', 'following_rows': ['Julius: Following mission:wl-b1f6ca77f29a \u00b7 QUEUED'], 'simulated': False, 'ok': True}, 'photo_03b': True, 'photo_03c': True}\nA06j PASS a RETRY from Unreal with the same key returns the SAME mission and run: still one task, nothing new followed {'status': 201, 'run': 'run:aeeed313cc087c85296ebdc8', 'tasks_before': 4, 'tasks_after': 4, 'contract': {'tasks_for_mission': 1, 'source': 'JULIUS', 'state': 'QUEUED', 'run': (True, 'run:aeeed313cc087c85296ebdc8'), 'julius_state': (True, 'READY')}}\nA06o PASS the followed run is chosen by IDENTITY: back to the old run, every surface names the old run and mission and none the created one; forward again, every surface names the created run and none the old -- nothing stays on whichever task is first in storage, no task is added or lost, 03e and 03f are on disk {'back_to_old': True, 'again_created': True, 'tasks_unchanged': True, 'steps': [{'to': 'mission:wonderland-integration-e2e-1', 'run': 'run:b0f61d6d82c0161ae5169dc8', 'paired': True, 'attempts': ['attempt 1: paired'], 'adopted': True, 'settled': True, 'photo': True, 'surfaces': {'adopted': 'run:b0f61d6d82c0161ae5169dc8', 'banner': 'JULIUS LIVE \u00b7 RUN run:b0f61d6d82c0161ae5169dc8 \u00b7 READY', 'headline': 'QUEUED', 'fold': 'mission:wonderland-integration-e2e-1', 'section': 'QUEUED', 'terminal_banner': 'JULIUS LIVE \u00b7 RUN run:b0f61d6d82c0161ae5169dc8 \u00b7 READY', 'following_rows': ['Julius: Following mission:wonderland-integration-e2e-1 \u00b7 QUEUED'], 'simulated': False, 'ok': True}}, {'to': 'mission:wl-b1f6ca77f29a', 'run': 'run:aeeed313cc087c85296ebdc8', 'paired': True, 'attempts': ['attempt 1: paired'], 'adopted': True, 'settled': True, 'photo': True, 'surfaces': {'adopted': 'run:aeeed313cc087c85296ebdc8', 'banner': 'JULIUS LIVE \u00b7 RUN run:aeeed313cc087c85296ebdc8 \u00b7 READY', 'headline': 'QUEUED', 'fold': 'mission:wl-b1f6ca77f29a', 'section': 'QUEUED', 'terminal_banner': 'JULIUS LIVE \u00b7 RUN run:aeeed313cc087c85296ebdc8 \u00b7 READY', 'following_rows': ['Julius: Following mission:wl-b1f6ca77f29a \u00b7 QUEUED'], 'simulated': False, 'ok': True}}]}\nA06m PASS REFUSED in-world for a non-owner (MEMBER): 403 not_authorized -- no task, and the world keeps the mission it follows {'holds': True, 'status': 403, 'refusal': 'not_authorized', 'tasks_unchanged': True, 'adopted_unchanged': True, 'terminal_says_so': True}\nA06n PASS REFUSED in-world when the native session is no longer valid (the bridge restarted): session_invalid or not_paired -- no task, no run, the terminal says to pair again, and 03d is on disk {'photo_03d': True, 'holds': True, 'status': 401, 'refusal': 'session_invalid', 'tasks_unchanged': True, 'adopted_unchanged': True, 'terminal_says_so': True}\nA11 PASS the editor's bridge URL is back to what it was before this job {'before': '', 'after': ''}\nA13 PASS every REQUIRED photograph of this attempt was produced: the helper said yes, the file exists in THIS attempt's directory, it has bytes, and this capture wrote it -- a refused capture, a missing file or one from before is not a photograph, and the photographs are part of the gate {'required': 12, 'produced': 12, 'never_asked': [], 'not_produced': [], 'dir': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\julius_live\\\\attempt-4bf3ad6bc25da3de'}\nA12 PASS the job ran to its end -- a clause that never ran is not a pass {'missing': []}\n"
 }

@@ -1,0 +1,1759 @@
+{
+ "name": "zc_vantage_find",
+ "started": "2026-09-28 02:29:25",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "V_MEASURED",
+   "name": "every candidate viewpoint produced a reading",
+   "pass": true,
+   "detail": {
+    "population": 40,
+    "wanted": 40
+   }
+  },
+  {
+   "id": "V_REPRO",
+   "name": "the viewpoint zc_dusk_shape used is demonstrably obstructed, so the void is diagnosed and not guessed",
+   "pass": true,
+   "detail": {
+    "population": 8,
+    "obstructed_yaws": [
+     0.0,
+     45.0,
+     90.0,
+     135.0,
+     180.0,
+     225.0,
+     270.0,
+     315.0
+    ],
+    "green_ratio_by_yaw": {
+     "000": 1.169,
+     "045": 1.049,
+     "090": 1.041,
+     "135": 1.065,
+     "180": 1.192,
+     "225": 1.258,
+     "270": 1.007,
+     "315": 1.09
+    },
+    "view_reach_by_yaw": {
+     "000": 0.654,
+     "045": 0.654,
+     "090": 0.622,
+     "135": 0.388,
+     "180": 0.654,
+     "225": 0.654,
+     "270": 0.61,
+     "315": 0.654
+    },
+    "note": "green_ratio near or above 1.25 is leaves. The dusk run's camera was higher still (900 uu rather than 160), so this understates how buried it was"
+   }
+  },
+  {
+   "id": "V_FOUND",
+   "name": "at least one viewpoint is open ground with sky above and a clear line of sight",
+   "pass": false,
+   "detail": {
+    "population": 40,
+    "usable_count": 0,
+    "chosen": null,
+    "thresholds": {
+     "view_reach_at_least": 0.9,
+     "green_ratio_at_most": 1.25
+    },
+    "note": "RED means no candidate around the Golden Arrival is open enough to measure ground lighting from, which would itself be the finding -- 89 per cent of this world's triangles are vegetation and the arrival may simply be overgrown"
+   }
+  }
+ ],
+ "candidates": [
+  {
+   "key": "s0_y000",
+   "spot": [
+    -64.0,
+    -5042.0
+   ],
+   "yaw": 0.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.3,
+   "ground_z": 0.7,
+   "view_reach": 0.654,
+   "first_hit_uu": 647.1,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3048,
+    "rgb": [
+     0.3317,
+     0.3079,
+     0.195
+    ],
+    "green_ratio": 1.169,
+    "crushed": 0.0973,
+    "blown": 0.0115,
+    "readable": 0.8912
+   },
+   "sky": {
+    "luma": 0.1517,
+    "rgb": [
+     0.1189,
+     0.1731,
+     0.0362
+    ],
+    "green_ratio": 2.232,
+    "crushed": 0.5278,
+    "blown": 0.0,
+    "readable": 0.4722
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s0_y045",
+   "spot": [
+    -64.0,
+    -5042.0
+   ],
+   "yaw": 45.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.3,
+   "ground_z": 0.7,
+   "view_reach": 0.654,
+   "first_hit_uu": 647.1,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.4466,
+    "rgb": [
+     0.5245,
+     0.4373,
+     0.3091
+    ],
+    "green_ratio": 1.049,
+    "crushed": 0.095,
+    "blown": 0.0,
+    "readable": 0.905
+   },
+   "sky": {
+    "luma": 0.1661,
+    "rgb": [
+     0.1568,
+     0.1788,
+     0.0674
+    ],
+    "green_ratio": 1.595,
+    "crushed": 0.4996,
+    "blown": 0.0,
+    "readable": 0.5004
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s0_y090",
+   "spot": [
+    -64.0,
+    -5042.0
+   ],
+   "yaw": 90.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.3,
+   "ground_z": 0.7,
+   "view_reach": 0.622,
+   "first_hit_uu": 615.0,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.5565,
+    "rgb": [
+     0.6595,
+     0.5432,
+     0.3846
+    ],
+    "green_ratio": 1.041,
+    "crushed": 0.0175,
+    "blown": 0.0001,
+    "readable": 0.9824
+   },
+   "sky": {
+    "luma": 0.2923,
+    "rgb": [
+     0.3426,
+     0.2881,
+     0.1853
+    ],
+    "green_ratio": 1.092,
+    "crushed": 0.2669,
+    "blown": 0.0,
+    "readable": 0.7331
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s0_y135",
+   "spot": [
+    -64.0,
+    -5042.0
+   ],
+   "yaw": 135.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.3,
+   "ground_z": 0.7,
+   "view_reach": 0.388,
+   "first_hit_uu": 383.6,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.4014,
+    "rgb": [
+     0.4631,
+     0.3954,
+     0.2795
+    ],
+    "green_ratio": 1.065,
+    "crushed": 0.0833,
+    "blown": 0.0143,
+    "readable": 0.9024
+   },
+   "sky": {
+    "luma": 0.322,
+    "rgb": [
+     0.3057,
+     0.3289,
+     0.3027
+    ],
+    "green_ratio": 1.081,
+    "crushed": 0.2828,
+    "blown": 0.0008,
+    "readable": 0.7164
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s0_y180",
+   "spot": [
+    -64.0,
+    -5042.0
+   ],
+   "yaw": 180.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.3,
+   "ground_z": 0.7,
+   "view_reach": 0.654,
+   "first_hit_uu": 647.1,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3206,
+    "rgb": [
+     0.3645,
+     0.3221,
+     0.1762
+    ],
+    "green_ratio": 1.192,
+    "crushed": 0.1029,
+    "blown": 0.0,
+    "readable": 0.8971
+   },
+   "sky": {
+    "luma": 0.2083,
+    "rgb": [
+     0.1862,
+     0.2301,
+     0.0572
+    ],
+    "green_ratio": 1.89,
+    "crushed": 0.3158,
+    "blown": 0.0,
+    "readable": 0.6842
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s0_y225",
+   "spot": [
+    -64.0,
+    -5042.0
+   ],
+   "yaw": 225.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.3,
+   "ground_z": 0.7,
+   "view_reach": 0.654,
+   "first_hit_uu": 647.1,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.2397,
+    "rgb": [
+     0.2538,
+     0.2459,
+     0.1372
+    ],
+    "green_ratio": 1.258,
+    "crushed": 0.2357,
+    "blown": 0.0,
+    "readable": 0.7643
+   },
+   "sky": {
+    "luma": 0.2053,
+    "rgb": [
+     0.187,
+     0.2249,
+     0.0658
+    ],
+    "green_ratio": 1.779,
+    "crushed": 0.3576,
+    "blown": 0.0001,
+    "readable": 0.6423
+   },
+   "view_clear": false,
+   "ground_not_foliage": false,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s0_y270",
+   "spot": [
+    -64.0,
+    -5042.0
+   ],
+   "yaw": 270.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.3,
+   "ground_z": 0.7,
+   "view_reach": 0.61,
+   "first_hit_uu": 603.3,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.2072,
+    "rgb": [
+     0.2158,
+     0.2061,
+     0.1936
+    ],
+    "green_ratio": 1.007,
+    "crushed": 0.1764,
+    "blown": 0.0,
+    "readable": 0.8236
+   },
+   "sky": {
+    "luma": 0.2821,
+    "rgb": [
+     0.3163,
+     0.2828,
+     0.1752
+    ],
+    "green_ratio": 1.151,
+    "crushed": 0.1384,
+    "blown": 0.0008,
+    "readable": 0.8608
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": true,
+   "usable": false
+  },
+  {
+   "key": "s0_y315",
+   "spot": [
+    -64.0,
+    -5042.0
+   ],
+   "yaw": 315.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.3,
+   "ground_z": 0.7,
+   "view_reach": 0.654,
+   "first_hit_uu": 647.1,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.2062,
+    "rgb": [
+     0.2124,
+     0.208,
+     0.1693
+    ],
+    "green_ratio": 1.09,
+    "crushed": 0.2519,
+    "blown": 0.0078,
+    "readable": 0.7404
+   },
+   "sky": {
+    "luma": 0.1278,
+    "rgb": [
+     0.1214,
+     0.1371,
+     0.0538
+    ],
+    "green_ratio": 1.566,
+    "crushed": 0.5647,
+    "blown": 0.0008,
+    "readable": 0.4345
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s1_y000",
+   "spot": [
+    -64.0,
+    -4400.0
+   ],
+   "yaw": 0.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 248.5,
+   "ground_z": -0.7,
+   "view_reach": 0.64,
+   "first_hit_uu": 633.3,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.4014,
+    "rgb": [
+     0.4546,
+     0.4002,
+     0.2564
+    ],
+    "green_ratio": 1.126,
+    "crushed": 0.105,
+    "blown": 0.0502,
+    "readable": 0.8449
+   },
+   "sky": {
+    "luma": 0.118,
+    "rgb": [
+     0.0782,
+     0.1394,
+     0.0243
+    ],
+    "green_ratio": 2.721,
+    "crushed": 0.6678,
+    "blown": 0.0,
+    "readable": 0.3322
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s1_y045",
+   "spot": [
+    -64.0,
+    -4400.0
+   ],
+   "yaw": 45.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 248.5,
+   "ground_z": -0.7,
+   "view_reach": 0.608,
+   "first_hit_uu": 601.2,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3923,
+    "rgb": [
+     0.4653,
+     0.383,
+     0.2695
+    ],
+    "green_ratio": 1.042,
+    "crushed": 0.1292,
+    "blown": 0.0013,
+    "readable": 0.8695
+   },
+   "sky": {
+    "luma": 0.1306,
+    "rgb": [
+     0.1097,
+     0.1464,
+     0.0368
+    ],
+    "green_ratio": 1.999,
+    "crushed": 0.6546,
+    "blown": 0.0,
+    "readable": 0.3454
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s1_y090",
+   "spot": [
+    -64.0,
+    -4400.0
+   ],
+   "yaw": 90.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 248.5,
+   "ground_z": -0.7,
+   "view_reach": 0.538,
+   "first_hit_uu": 532.5,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3508,
+    "rgb": [
+     0.4407,
+     0.3326,
+     0.2669
+    ],
+    "green_ratio": 0.94,
+    "crushed": 0.1601,
+    "blown": 0.0002,
+    "readable": 0.8397
+   },
+   "sky": {
+    "luma": 0.3347,
+    "rgb": [
+     0.3762,
+     0.3352,
+     0.207
+    ],
+    "green_ratio": 1.15,
+    "crushed": 0.1694,
+    "blown": 0.0,
+    "readable": 0.8306
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s1_y135",
+   "spot": [
+    -64.0,
+    -4400.0
+   ],
+   "yaw": 135.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 248.5,
+   "ground_z": -0.7,
+   "view_reach": 0.608,
+   "first_hit_uu": 601.2,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.4033,
+    "rgb": [
+     0.4742,
+     0.3916,
+     0.3108
+    ],
+    "green_ratio": 0.998,
+    "crushed": 0.0725,
+    "blown": 0.012,
+    "readable": 0.9155
+   },
+   "sky": {
+    "luma": 0.3334,
+    "rgb": [
+     0.3297,
+     0.3387,
+     0.2917
+    ],
+    "green_ratio": 1.09,
+    "crushed": 0.2606,
+    "blown": 0.013,
+    "readable": 0.7264
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s1_y180",
+   "spot": [
+    -64.0,
+    -4400.0
+   ],
+   "yaw": 180.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 248.5,
+   "ground_z": -0.7,
+   "view_reach": 0.64,
+   "first_hit_uu": 633.3,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3049,
+    "rgb": [
+     0.3337,
+     0.3115,
+     0.1544
+    ],
+    "green_ratio": 1.276,
+    "crushed": 0.2362,
+    "blown": 0.0,
+    "readable": 0.7638
+   },
+   "sky": {
+    "luma": 0.2031,
+    "rgb": [
+     0.1567,
+     0.2333,
+     0.0405
+    ],
+    "green_ratio": 2.366,
+    "crushed": 0.3567,
+    "blown": 0.0,
+    "readable": 0.6433
+   },
+   "view_clear": false,
+   "ground_not_foliage": false,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s1_y225",
+   "spot": [
+    -64.0,
+    -4400.0
+   ],
+   "yaw": 225.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 248.5,
+   "ground_z": -0.7,
+   "view_reach": 0.64,
+   "first_hit_uu": 633.3,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3755,
+    "rgb": [
+     0.4119,
+     0.3845,
+     0.179
+    ],
+    "green_ratio": 1.301,
+    "crushed": 0.0621,
+    "blown": 0.0,
+    "readable": 0.9379
+   },
+   "sky": {
+    "luma": 0.1863,
+    "rgb": [
+     0.1659,
+     0.2048,
+     0.0632
+    ],
+    "green_ratio": 1.788,
+    "crushed": 0.3612,
+    "blown": 0.0,
+    "readable": 0.6388
+   },
+   "view_clear": false,
+   "ground_not_foliage": false,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s1_y270",
+   "spot": [
+    -64.0,
+    -4400.0
+   ],
+   "yaw": 270.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 248.5,
+   "ground_z": -0.7,
+   "view_reach": 0.594,
+   "first_hit_uu": 587.3,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.5522,
+    "rgb": [
+     0.6598,
+     0.5376,
+     0.3808
+    ],
+    "green_ratio": 1.033,
+    "crushed": 0.02,
+    "blown": 0.0006,
+    "readable": 0.9794
+   },
+   "sky": {
+    "luma": 0.2727,
+    "rgb": [
+     0.311,
+     0.2706,
+     0.1811
+    ],
+    "green_ratio": 1.1,
+    "crushed": 0.2555,
+    "blown": 0.0004,
+    "readable": 0.7441
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s1_y315",
+   "spot": [
+    -64.0,
+    -4400.0
+   ],
+   "yaw": 315.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 248.5,
+   "ground_z": -0.7,
+   "view_reach": 0.575,
+   "first_hit_uu": 568.7,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.4645,
+    "rgb": [
+     0.5351,
+     0.4595,
+     0.3063
+    ],
+    "green_ratio": 1.092,
+    "crushed": 0.0428,
+    "blown": 0.0264,
+    "readable": 0.9307
+   },
+   "sky": {
+    "luma": 0.1448,
+    "rgb": [
+     0.1306,
+     0.1583,
+     0.0529
+    ],
+    "green_ratio": 1.725,
+    "crushed": 0.55,
+    "blown": 0.0,
+    "readable": 0.45
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s2_y000",
+   "spot": [
+    600.0,
+    -5042.0
+   ],
+   "yaw": 0.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 235.2,
+   "ground_z": -14.0,
+   "view_reach": 0.608,
+   "first_hit_uu": 601.2,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.2367,
+    "rgb": [
+     0.203,
+     0.2621,
+     0.0846
+    ],
+    "green_ratio": 1.823,
+    "crushed": 0.2491,
+    "blown": 0.0213,
+    "readable": 0.7296
+   },
+   "sky": {
+    "luma": 0.1726,
+    "rgb": [
+     0.159,
+     0.1885,
+     0.0561
+    ],
+    "green_ratio": 1.752,
+    "crushed": 0.4585,
+    "blown": 0.0,
+    "readable": 0.5415
+   },
+   "view_clear": false,
+   "ground_not_foliage": false,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s2_y045",
+   "spot": [
+    600.0,
+    -5042.0
+   ],
+   "yaw": 45.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 235.2,
+   "ground_z": -14.0,
+   "view_reach": 0.299,
+   "first_hit_uu": 296.1,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.106,
+    "rgb": [
+     0.0685,
+     0.1263,
+     0.0151
+    ],
+    "green_ratio": 3.022,
+    "crushed": 0.7483,
+    "blown": 0.0,
+    "readable": 0.2517
+   },
+   "sky": {
+    "luma": 0.1941,
+    "rgb": [
+     0.138,
+     0.2269,
+     0.0347
+    ],
+    "green_ratio": 2.628,
+    "crushed": 0.2927,
+    "blown": 0.0,
+    "readable": 0.7073
+   },
+   "view_clear": false,
+   "ground_not_foliage": false,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s2_y090",
+   "spot": [
+    600.0,
+    -5042.0
+   ],
+   "yaw": 90.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 235.2,
+   "ground_z": -14.0,
+   "view_reach": 0.608,
+   "first_hit_uu": 601.2,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.1645,
+    "rgb": [
+     0.1656,
+     0.1756,
+     0.0509
+    ],
+    "green_ratio": 1.623,
+    "crushed": 0.5252,
+    "blown": 0.0,
+    "readable": 0.4748
+   },
+   "sky": {
+    "luma": 0.2136,
+    "rgb": [
+     0.1887,
+     0.2347,
+     0.0776
+    ],
+    "green_ratio": 1.762,
+    "crushed": 0.3246,
+    "blown": 0.0,
+    "readable": 0.6754
+   },
+   "view_clear": false,
+   "ground_not_foliage": false,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s2_y135",
+   "spot": [
+    600.0,
+    -5042.0
+   ],
+   "yaw": 135.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 235.2,
+   "ground_z": -14.0,
+   "view_reach": 0.365,
+   "first_hit_uu": 361.1,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3363,
+    "rgb": [
+     0.3812,
+     0.3353,
+     0.2139
+    ],
+    "green_ratio": 1.127,
+    "crushed": 0.0651,
+    "blown": 0.015,
+    "readable": 0.9199
+   },
+   "sky": {
+    "luma": 0.3683,
+    "rgb": [
+     0.3945,
+     0.3628,
+     0.3456
+    ],
+    "green_ratio": 0.98,
+    "crushed": 0.2266,
+    "blown": 0.0118,
+    "readable": 0.7615
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": true,
+   "usable": false
+  },
+  {
+   "key": "s2_y180",
+   "spot": [
+    600.0,
+    -5042.0
+   ],
+   "yaw": 180.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 235.2,
+   "ground_z": -14.0,
+   "view_reach": 0.572,
+   "first_hit_uu": 565.7,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3776,
+    "rgb": [
+     0.4336,
+     0.3749,
+     0.2402
+    ],
+    "green_ratio": 1.113,
+    "crushed": 0.015,
+    "blown": 0.0001,
+    "readable": 0.9849
+   },
+   "sky": {
+    "luma": 0.1825,
+    "rgb": [
+     0.1839,
+     0.1921,
+     0.0833
+    ],
+    "green_ratio": 1.438,
+    "crushed": 0.4852,
+    "blown": 0.0,
+    "readable": 0.5148
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s2_y225",
+   "spot": [
+    600.0,
+    -5042.0
+   ],
+   "yaw": 225.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 235.2,
+   "ground_z": -14.0,
+   "view_reach": 0.547,
+   "first_hit_uu": 540.5,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.2614,
+    "rgb": [
+     0.3124,
+     0.2591,
+     0.1339
+    ],
+    "green_ratio": 1.161,
+    "crushed": 0.1081,
+    "blown": 0.0,
+    "readable": 0.8919
+   },
+   "sky": {
+    "luma": 0.2413,
+    "rgb": [
+     0.2725,
+     0.241,
+     0.1525
+    ],
+    "green_ratio": 1.134,
+    "crushed": 0.4005,
+    "blown": 0.0007,
+    "readable": 0.5988
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s2_y270",
+   "spot": [
+    600.0,
+    -5042.0
+   ],
+   "yaw": 270.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 235.2,
+   "ground_z": -14.0,
+   "view_reach": 0.608,
+   "first_hit_uu": 601.2,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.2178,
+    "rgb": [
+     0.2333,
+     0.2289,
+     0.0626
+    ],
+    "green_ratio": 1.547,
+    "crushed": 0.328,
+    "blown": 0.0,
+    "readable": 0.672
+   },
+   "sky": {
+    "luma": 0.1949,
+    "rgb": [
+     0.1873,
+     0.2093,
+     0.0749
+    ],
+    "green_ratio": 1.596,
+    "crushed": 0.3705,
+    "blown": 0.0003,
+    "readable": 0.6292
+   },
+   "view_clear": false,
+   "ground_not_foliage": false,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s2_y315",
+   "spot": [
+    600.0,
+    -5042.0
+   ],
+   "yaw": 315.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 235.2,
+   "ground_z": -14.0,
+   "view_reach": 0.295,
+   "first_hit_uu": 292.0,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.1997,
+    "rgb": [
+     0.1771,
+     0.2176,
+     0.0882
+    ],
+    "green_ratio": 1.64,
+    "crushed": 0.4594,
+    "blown": 0.0258,
+    "readable": 0.5148
+   },
+   "sky": {
+    "luma": 0.19,
+    "rgb": [
+     0.1689,
+     0.2102,
+     0.0519
+    ],
+    "green_ratio": 1.904,
+    "crushed": 0.3897,
+    "blown": 0.0,
+    "readable": 0.6103
+   },
+   "view_clear": false,
+   "ground_not_foliage": false,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s3_y000",
+   "spot": [
+    -700.0,
+    -5042.0
+   ],
+   "yaw": 0.0,
+   "pawn_offset_uu": 29.6,
+   "eye_z": 269.7,
+   "ground_z": -14.0,
+   "view_reach": 0.646,
+   "first_hit_uu": 638.5,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3765,
+    "rgb": [
+     0.4185,
+     0.3771,
+     0.2472
+    ],
+    "green_ratio": 1.133,
+    "crushed": 0.1558,
+    "blown": 0.0557,
+    "readable": 0.7885
+   },
+   "sky": {
+    "luma": 0.1164,
+    "rgb": [
+     0.107,
+     0.1259,
+     0.0502
+    ],
+    "green_ratio": 1.602,
+    "crushed": 0.6703,
+    "blown": 0.0,
+    "readable": 0.3297
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s3_y045",
+   "spot": [
+    -700.0,
+    -5042.0
+   ],
+   "yaw": 45.0,
+   "pawn_offset_uu": 29.6,
+   "eye_z": 269.7,
+   "ground_z": -14.0,
+   "view_reach": 0.66,
+   "first_hit_uu": 652.3,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.2915,
+    "rgb": [
+     0.3228,
+     0.296,
+     0.1548
+    ],
+    "green_ratio": 1.239,
+    "crushed": 0.2208,
+    "blown": 0.0001,
+    "readable": 0.7791
+   },
+   "sky": {
+    "luma": 0.1818,
+    "rgb": [
+     0.1959,
+     0.1855,
+     0.1038
+    ],
+    "green_ratio": 1.238,
+    "crushed": 0.4968,
+    "blown": 0.0,
+    "readable": 0.5032
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s3_y090",
+   "spot": [
+    -700.0,
+    -5042.0
+   ],
+   "yaw": 90.0,
+   "pawn_offset_uu": 29.6,
+   "eye_z": 269.7,
+   "ground_z": -14.0,
+   "view_reach": 0.692,
+   "first_hit_uu": 684.4,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.2461,
+    "rgb": [
+     0.2258,
+     0.2719,
+     0.0502
+    ],
+    "green_ratio": 1.97,
+    "crushed": 0.2086,
+    "blown": 0.0,
+    "readable": 0.7914
+   },
+   "sky": {
+    "luma": 0.2334,
+    "rgb": [
+     0.1968,
+     0.2607,
+     0.0707
+    ],
+    "green_ratio": 1.949,
+    "crushed": 0.2708,
+    "blown": 0.0,
+    "readable": 0.7292
+   },
+   "view_clear": false,
+   "ground_not_foliage": false,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s3_y135",
+   "spot": [
+    -700.0,
+    -5042.0
+   ],
+   "yaw": 135.0,
+   "pawn_offset_uu": 29.6,
+   "eye_z": 269.7,
+   "ground_z": -14.0,
+   "view_reach": 0.692,
+   "first_hit_uu": 684.4,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3579,
+    "rgb": [
+     0.3674,
+     0.3686,
+     0.2238
+    ],
+    "green_ratio": 1.247,
+    "crushed": 0.1512,
+    "blown": 0.0435,
+    "readable": 0.8053
+   },
+   "sky": {
+    "luma": 0.3293,
+    "rgb": [
+     0.3451,
+     0.3399,
+     0.1772
+    ],
+    "green_ratio": 1.302,
+    "crushed": 0.1141,
+    "blown": 0.0128,
+    "readable": 0.8731
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s3_y180",
+   "spot": [
+    -700.0,
+    -5042.0
+   ],
+   "yaw": 180.0,
+   "pawn_offset_uu": 29.6,
+   "eye_z": 269.7,
+   "ground_z": -14.0,
+   "view_reach": 0.692,
+   "first_hit_uu": 684.4,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3099,
+    "rgb": [
+     0.3273,
+     0.3221,
+     0.1385
+    ],
+    "green_ratio": 1.383,
+    "crushed": 0.0167,
+    "blown": 0.0175,
+    "readable": 0.9658
+   },
+   "sky": {
+    "luma": 0.2677,
+    "rgb": [
+     0.2979,
+     0.269,
+     0.1664
+    ],
+    "green_ratio": 1.159,
+    "crushed": 0.2969,
+    "blown": 0.0321,
+    "readable": 0.6709
+   },
+   "view_clear": false,
+   "ground_not_foliage": false,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s3_y225",
+   "spot": [
+    -700.0,
+    -5042.0
+   ],
+   "yaw": 225.0,
+   "pawn_offset_uu": 29.6,
+   "eye_z": 269.7,
+   "ground_z": -14.0,
+   "view_reach": 0.692,
+   "first_hit_uu": 684.4,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.2446,
+    "rgb": [
+     0.2234,
+     0.2705,
+     0.0506
+    ],
+    "green_ratio": 1.975,
+    "crushed": 0.0868,
+    "blown": 0.0,
+    "readable": 0.9132
+   },
+   "sky": {
+    "luma": 0.227,
+    "rgb": [
+     0.2238,
+     0.2424,
+     0.0836
+    ],
+    "green_ratio": 1.577,
+    "crushed": 0.3683,
+    "blown": 0.0,
+    "readable": 0.6317
+   },
+   "view_clear": false,
+   "ground_not_foliage": false,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s3_y270",
+   "spot": [
+    -700.0,
+    -5042.0
+   ],
+   "yaw": 270.0,
+   "pawn_offset_uu": 29.6,
+   "eye_z": 269.7,
+   "ground_z": -14.0,
+   "view_reach": 0.463,
+   "first_hit_uu": 457.9,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.2316,
+    "rgb": [
+     0.2138,
+     0.2544,
+     0.0576
+    ],
+    "green_ratio": 1.875,
+    "crushed": 0.2375,
+    "blown": 0.0,
+    "readable": 0.7625
+   },
+   "sky": {
+    "luma": 0.2017,
+    "rgb": [
+     0.1789,
+     0.222,
+     0.067
+    ],
+    "green_ratio": 1.806,
+    "crushed": 0.3241,
+    "blown": 0.0029,
+    "readable": 0.6731
+   },
+   "view_clear": false,
+   "ground_not_foliage": false,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s3_y315",
+   "spot": [
+    -700.0,
+    -5042.0
+   ],
+   "yaw": 315.0,
+   "pawn_offset_uu": 29.6,
+   "eye_z": 269.7,
+   "ground_z": -14.0,
+   "view_reach": 0.63,
+   "first_hit_uu": 623.5,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.2942,
+    "rgb": [
+     0.3237,
+     0.2954,
+     0.1959
+    ],
+    "green_ratio": 1.137,
+    "crushed": 0.2119,
+    "blown": 0.0516,
+    "readable": 0.7365
+   },
+   "sky": {
+    "luma": 0.2064,
+    "rgb": [
+     0.2227,
+     0.2091,
+     0.1318
+    ],
+    "green_ratio": 1.18,
+    "crushed": 0.3663,
+    "blown": 0.0,
+    "readable": 0.6337
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s4_y000",
+   "spot": [
+    -64.0,
+    -5700.0
+   ],
+   "yaw": 0.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.1,
+   "ground_z": 4.9,
+   "view_reach": 0.414,
+   "first_hit_uu": 409.1,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3274,
+    "rgb": [
+     0.3627,
+     0.3303,
+     0.1941
+    ],
+    "green_ratio": 1.187,
+    "crushed": 0.1262,
+    "blown": 0.0324,
+    "readable": 0.8414
+   },
+   "sky": {
+    "luma": 0.1631,
+    "rgb": [
+     0.1331,
+     0.1836,
+     0.0477
+    ],
+    "green_ratio": 2.032,
+    "crushed": 0.4215,
+    "blown": 0.0,
+    "readable": 0.5785
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s4_y045",
+   "spot": [
+    -64.0,
+    -5700.0
+   ],
+   "yaw": 45.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.1,
+   "ground_z": 4.9,
+   "view_reach": 0.654,
+   "first_hit_uu": 646.8,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.267,
+    "rgb": [
+     0.2999,
+     0.2658,
+     0.1822
+    ],
+    "green_ratio": 1.102,
+    "crushed": 0.189,
+    "blown": 0.0,
+    "readable": 0.811
+   },
+   "sky": {
+    "luma": 0.1072,
+    "rgb": [
+     0.097,
+     0.117,
+     0.0397
+    ],
+    "green_ratio": 1.713,
+    "crushed": 0.6869,
+    "blown": 0.0,
+    "readable": 0.3131
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s4_y090",
+   "spot": [
+    -64.0,
+    -5700.0
+   ],
+   "yaw": 90.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.1,
+   "ground_z": 4.9,
+   "view_reach": 0.608,
+   "first_hit_uu": 601.2,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.1882,
+    "rgb": [
+     0.1853,
+     0.1888,
+     0.1918
+    ],
+    "green_ratio": 1.001,
+    "crushed": 0.1665,
+    "blown": 0.0,
+    "readable": 0.8335
+   },
+   "sky": {
+    "luma": 0.3056,
+    "rgb": [
+     0.3514,
+     0.3034,
+     0.1924
+    ],
+    "green_ratio": 1.116,
+    "crushed": 0.2472,
+    "blown": 0.0,
+    "readable": 0.7528
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": true,
+   "usable": false
+  },
+  {
+   "key": "s4_y135",
+   "spot": [
+    -64.0,
+    -5700.0
+   ],
+   "yaw": 135.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.1,
+   "ground_z": 4.9,
+   "view_reach": 0.654,
+   "first_hit_uu": 646.8,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.2897,
+    "rgb": [
+     0.3214,
+     0.2877,
+     0.2165
+    ],
+    "green_ratio": 1.07,
+    "crushed": 0.1562,
+    "blown": 0.0174,
+    "readable": 0.8264
+   },
+   "sky": {
+    "luma": 0.3215,
+    "rgb": [
+     0.3041,
+     0.3299,
+     0.2898
+    ],
+    "green_ratio": 1.111,
+    "crushed": 0.2551,
+    "blown": 0.0,
+    "readable": 0.7449
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": true,
+   "usable": false
+  },
+  {
+   "key": "s4_y180",
+   "spot": [
+    -64.0,
+    -5700.0
+   ],
+   "yaw": 180.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.1,
+   "ground_z": 4.9,
+   "view_reach": 0.275,
+   "first_hit_uu": 271.6,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3178,
+    "rgb": [
+     0.3768,
+     0.315,
+     0.1717
+    ],
+    "green_ratio": 1.148,
+    "crushed": 0.0841,
+    "blown": 0.0,
+    "readable": 0.9159
+   },
+   "sky": {
+    "luma": 0.1904,
+    "rgb": [
+     0.1653,
+     0.2111,
+     0.0587
+    ],
+    "green_ratio": 1.885,
+    "crushed": 0.3838,
+    "blown": 0.0,
+    "readable": 0.6162
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s4_y225",
+   "spot": [
+    -64.0,
+    -5700.0
+   ],
+   "yaw": 225.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.1,
+   "ground_z": 4.9,
+   "view_reach": 0.396,
+   "first_hit_uu": 391.6,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3375,
+    "rgb": [
+     0.3919,
+     0.3346,
+     0.2057
+    ],
+    "green_ratio": 1.12,
+    "crushed": 0.1367,
+    "blown": 0.0,
+    "readable": 0.8633
+   },
+   "sky": {
+    "luma": 0.233,
+    "rgb": [
+     0.243,
+     0.2416,
+     0.1191
+    ],
+    "green_ratio": 1.334,
+    "crushed": 0.1861,
+    "blown": 0.0004,
+    "readable": 0.8135
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s4_y270",
+   "spot": [
+    -64.0,
+    -5700.0
+   ],
+   "yaw": 270.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.1,
+   "ground_z": 4.9,
+   "view_reach": 0.607,
+   "first_hit_uu": 600.3,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.4044,
+    "rgb": [
+     0.4723,
+     0.395,
+     0.2979
+    ],
+    "green_ratio": 1.026,
+    "crushed": 0.0748,
+    "blown": 0.0,
+    "readable": 0.9252
+   },
+   "sky": {
+    "luma": 0.3094,
+    "rgb": [
+     0.3287,
+     0.3224,
+     0.1244
+    ],
+    "green_ratio": 1.423,
+    "crushed": 0.0609,
+    "blown": 0.0017,
+    "readable": 0.9374
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  },
+  {
+   "key": "s4_y315",
+   "spot": [
+    -64.0,
+    -5700.0
+   ],
+   "yaw": 315.0,
+   "pawn_offset_uu": 0.0,
+   "eye_z": 254.1,
+   "ground_z": 4.9,
+   "view_reach": 0.48,
+   "first_hit_uu": 474.8,
+   "target_uu": 989.0,
+   "ground": {
+    "luma": 0.3448,
+    "rgb": [
+     0.3857,
+     0.3415,
+     0.2574
+    ],
+    "green_ratio": 1.062,
+    "crushed": 0.0898,
+    "blown": 0.0578,
+    "readable": 0.8524
+   },
+   "sky": {
+    "luma": 0.2008,
+    "rgb": [
+     0.2047,
+     0.2104,
+     0.0943
+    ],
+    "green_ratio": 1.407,
+    "crushed": 0.2661,
+    "blown": 0.0,
+    "readable": 0.7339
+   },
+   "view_clear": false,
+   "ground_not_foliage": true,
+   "sky_visible": false,
+   "usable": false
+  }
+ ],
+ "usable": [],
+ "chosen": null,
+ "captures": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\vantage",
+ "must_look": "Every candidate is captured in C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\vantage as sN_yNNN.jpg. The two gates above are proxies of exactly the kind that passed the run this job exists to replace; the JPEG is the evidence.",
+ "finished": "2026-09-28 02:30:36",
+ "seconds": 70.18,
+ "log": "V_MEASURED PASS every candidate viewpoint produced a reading {'population': 40, 'wanted': 40}\nV_REPRO PASS the viewpoint zc_dusk_shape used is demonstrably obstructed, so the void is diagnosed and not guessed {'population': 8, 'obstructed_yaws': [0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0], 'green_ratio_by_yaw': {'000': 1.169, '045': 1.049, '090': 1.041, '135': 1.065, '180': 1.192, '225': 1.258, '270': 1.007, '315': 1.09}, 'view_reach_by_yaw': {'000': 0.654, '045': 0.654, '090': 0.622, '135': 0.388, '180': 0.654, '225': 0.654, '270': 0.61, '315': 0.654}, 'note': \"green_ratio near or above 1.25 is leaves. The dusk run's camera was higher still (900 uu rather than 160), so this understates how buried it was\"}\nV_FOUND FAIL at least one viewpoint is open ground with sky above and a clear line of sight {'population': 40, 'usable_count': 0, 'chosen': None, 'thresholds': {'view_reach_at_least': 0.9, 'green_ratio_at_most': 1.25}, 'note': \"RED means no candidate around the Golden Arrival is open enough to measure ground lighting from, which would itself be the finding -- 89 per cent of this world's triangles are vegetation and the arrival may simply be overgrown\"}\n"
+}

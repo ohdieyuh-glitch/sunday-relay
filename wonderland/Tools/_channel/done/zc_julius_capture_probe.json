@@ -1,0 +1,21 @@
+{
+ "name": "zc_julius_capture_probe",
+ "started": "2026-09-28 02:21:19",
+ "status": "CAPTURE OK",
+ "probe_id": "20260928-022119",
+ "dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\probe-20260928-022119",
+ "dir_writable": true,
+ "idle_before": true,
+ "frames_advanced": 30,
+ "world_up": true,
+ "pawn": true,
+ "viewport_drawing": true,
+ "written": true,
+ "exists": true,
+ "bytes": 570075,
+ "fresh": true,
+ "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\julius_live\\probe-20260928-022119\\probe.jpg",
+ "finished": "2026-09-28 02:21:37",
+ "seconds": 18.05,
+ "log": ""
+}
