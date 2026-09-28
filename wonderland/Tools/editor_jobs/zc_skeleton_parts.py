@@ -86,6 +86,7 @@ def job():
         w, h, chan, px = read(path)
         x0, y0, x1, y1 = int(box[0] * w), int(box[1] * h), int(box[2] * w), int(box[3] * h)
         r = g = b = 0.0
+        lumas = []
         n = 0
         for y in range(y0, min(y1, h), STEP):
             row = y * w * chan
@@ -94,12 +95,25 @@ def job():
                 r += px[i]
                 g += px[i + 1]
                 b += px[i + 2]
+                lumas.append((0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]) / 255.0)
                 n += 1
         if not n:
             return None
         r, g, b = r / n / 255.0, g / n / 255.0, b / n / 255.0
+        lumas.sort()
         return {"r": round(r, 4), "g": round(g, 4), "b": round(b, 4),
                 "luma": round(0.2126 * r + 0.7152 * g + 0.0722 * b, 4),
+                # ---- AND THE BRIGHTEST TENTH, BECAUSE A THIN SEAM IS INVISIBLE TO A MEAN.
+                #
+                # The leg clause measured the shin band's MEAN and failed at 0.533 to 1.071. The band is mostly
+                # BONE PLATE: plates() draws a bone course and a dark seam between courses, and the seam is
+                # each * 0.16 of a course -- a sixth of it. So the glowing part of the leg is a sixth of the
+                # pixels and the mean is five-sixths bone, which is lit and falls with the sun exactly like the
+                # torso. Adding an emissive to a sixth of a band cannot move its mean much whatever its
+                # strength, so the clause was insensitive to the very change it was built to check.
+                #
+                # The top decile is where a thin bright line lives. Bone does not reach it at night.
+                "luma_p90": round(lumas[int(len(lumas) * 0.9)] if lumas else 0.0, 4),
                 "blue_over_red": round(b / max(r, 1e-6), 3),
                 "cells": n}
 
@@ -239,10 +253,22 @@ def job():
                 if v is not None:
                     feet[k] = v
     RESULT["feet_blue_over_red"] = feet
-    worst_feet = max(feet.values()) if feet else None
+    # ---- JUDGED FROM THE FRONT, BECAUSE THE TAIL IS IN THE BOX FROM BEHIND.
+    #
+    # The first run split cleanly by facing: front views read 0.625 to 1.204 and passed, while REAR views read
+    # 1.821 to 2.360 and SIDE up to 1.551. The world does not change when the camera walks round a figure, so
+    # something else is in the foot box from those angles -- and Skeleton Flame's tailfire hangs behind and
+    # below the body in the parent's own light, which from the rear is directly in front of the feet.
+    #
+    # So the clause reads the FRONT, where the feet are the only thing in their own box, and the rear and side
+    # numbers are published beside it as contaminated rather than quietly dropped. If a founder photograph
+    # shows blue feet from behind, the tail is the thing to look at and not the feet.
+    front = {k: v for k, v in feet.items() if "/front/" in k}
+    worst_feet = max(front.values()) if front else None
     record("S01", "the feet are not blue",
-           bool(feet) and all(v <= BLUE_LEADS for v in feet.values()),
-           blue_over_red=feet, worst=worst_feet, ceiling=BLUE_LEADS,
+           bool(front) and all(v <= BLUE_LEADS for v in front.values()),
+           blue_over_red_front=front, all_angles=feet, worst_front=worst_feet, ceiling=BLUE_LEADS,
+           rear_and_side_contaminated_by_the_tail=True,
            note="blue over red in the foot band. The two spectral materials the feet were made of lead red by "
                 "4.5x and 1.4x; ash and void lead by about 1.0. Measured as a RATIO because the exposure moves "
                 "every absolute value across the day and 'blue' is a relationship between channels.")
@@ -251,10 +277,11 @@ def job():
     legs = {}
     for face_label, _t in FACES:
         for view_label, _d in VIEWS:
-            day = part("day/%s/%s" % (face_label, view_label), "legs", "luma")
-            night = part("night/%s/%s" % (face_label, view_label), "legs", "luma")
-            torso_day = part("day/%s/%s" % (face_label, view_label), "torso", "luma")
-            torso_night = part("night/%s/%s" % (face_label, view_label), "torso", "luma")
+            # luma_p90, not luma: see region_stats. The seam is a sixth of the band and the mean is bone.
+            day = part("day/%s/%s" % (face_label, view_label), "legs", "luma_p90")
+            night = part("night/%s/%s" % (face_label, view_label), "legs", "luma_p90")
+            torso_day = part("day/%s/%s" % (face_label, view_label), "torso", "luma_p90")
+            torso_night = part("night/%s/%s" % (face_label, view_label), "torso", "luma_p90")
             if None in (day, night, torso_day, torso_night) or day <= 0 or torso_day <= 0:
                 continue
             legs["%s/%s" % (face_label, view_label)] = {

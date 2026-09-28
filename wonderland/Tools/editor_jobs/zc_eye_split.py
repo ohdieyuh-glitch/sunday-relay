@@ -86,8 +86,19 @@ def job():
         the clause fails rather than measuring something else convincingly.
         """
         w, h, chan, px = read(path)
-        # At 160 uu the head is about a quarter of the frame; everything else follows 1/distance.
-        span = max(0.24 * 160.0 / max(distance, 1.0), 0.02)
+        # ---- THE SPAN IS SOLVED FROM THE LENS, NOT CALIBRATED BY EYE.
+        #
+        # I wrote "at 160 uu the head is about a quarter of the frame" and scaled from it. The camera maths says
+        # otherwise. look() uses a 38 degree field of view, so the frame is 2 * d * tan(19 deg) = 0.689 * d wide
+        # in world units: 110 uu at 160, 620 at 900. A Dog's head is about 14 uu across. So the head is ELEVEN
+        # per cent of the close frame, not twenty-four, and my window was 2.4x too wide at both distances --
+        # which at close range let it reach past the head into the world it was supposed to exclude.
+        #
+        # A guessed calibration that happens to be in the right decade is the most expensive kind of wrong: it
+        # produces plausible readings and nothing in them says the window is oversized.
+        HEAD_UU, MARGIN, FOV_DEG = 14.0, 1.6, 38.0
+        frame_uu = 2.0 * max(distance, 1.0) * math.tan(math.radians(FOV_DEG * 0.5))
+        span = max(HEAD_UU * MARGIN * 0.5 / frame_uu, 0.012)
         x0, x1 = int((0.5 - span) * w), int((0.5 + span) * w)
         y_lo, y_hi = int((0.5 - span) * h), int((0.5 + span) * h)
         best_row, best_val = (y_lo + y_hi) // 2, -1.0
@@ -135,6 +146,8 @@ def job():
             "band_rows": [y0, y1], "band_centre_fraction": round(best_row / float(h), 3),
             # THE WINDOW THE SEARCH WAS CONFINED TO, so a reader can see it was not free to wander.
             "window_span_fraction": round(span, 4), "window_cols": [x0, x1], "window_rows": [y_lo, y_hi],
+            "window_derivation": {"head_uu": HEAD_UU, "margin": MARGIN, "fov_deg": FOV_DEG,
+                                  "frame_uu_at_this_distance": round(frame_uu, 1)},
             "band_peak_luma": round(best_val / 255.0, 4),
             "peak_left": peak_l, "peak_right": peak_r,
             "peak_left_at": round(li / float(len(cols)), 3), "peak_right_at": round(ri / float(len(cols)), 3),

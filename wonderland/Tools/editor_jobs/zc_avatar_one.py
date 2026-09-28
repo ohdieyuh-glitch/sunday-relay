@@ -233,6 +233,12 @@ def job():
     # read 58.94, 124.25, 291.20, 97.40, 127.67, 114.90 -- not monotone, not a curve, and 291 at two avatars
     # against 97 at three. None of it is about avatars.
     #
+    # AND THE CAUSE IS NAMED, WHICH IS BETTER THAN "THE MACHINE WAS BUSY". The integration lane had a cl.exe
+    # compiling at below-normal priority from about 17:34 -- inside this run's window -- and told me so
+    # afterwards without being asked. So the 14-second frame is not a mystery and not a property of avatars: it
+    # is another process on a laptop with 0.8 GB free. A measurement whose noise has a known external cause is
+    # worth more than one whose noise is unexplained, because the next run can exclude it rather than hope.
+    #
     # THE FROZEN GUARD ALSO FIRED 197 TIMES, and the frame counts say the same thing from the other side: ten
     # frames accepted in an eight-second window at rung one, twenty-five at rung two. The stat overlay was off
     # for most of the run, so even the readings that survived came from a handful of frames.
