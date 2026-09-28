@@ -43,9 +43,9 @@ SKINS = ("relay_og", "celestial_light", "apollo", "arden_infernal", "skeleton_fl
 # Side-on, from a distance that puts the whole figure in frame with room under its feet.
 DISTANCE = 420.0
 FOV = 38.0
-# The band of the frame the figure's legs occupy, as fractions of frame height. Published with every reading.
-LEG_BAND = (0.52, 0.86)
-ACROSS = (0.34, 0.66)
+# NO BAND CONSTANTS ANY MORE. Two fractions of the FRAME used to say where the legs were; they said it about
+# a blue and white checkered object that was not the Dog. The figure's box is now measured per capture by
+# differencing against the same frame with it hidden, and the legs are the lower third OF THAT BOX.
 # A column belongs to the figure when it is this far from the background. Measured against the frame's own
 # corner, so it needs no assumption about what the world behind the Dog looks like.
 FIGURE_DELTA = 0.10
@@ -61,9 +61,11 @@ def job():
     from night_figure import read                                   # noqa: WPS433
 
     RESULT["tests"] = []
-    RESULT["framing"] = {"distance_uu": DISTANCE, "fov_deg": FOV, "leg_band": LEG_BAND, "across": ACROSS,
+    RESULT["framing"] = {"distance_uu": DISTANCE, "fov_deg": FOV, "legs": "lower third of the MEASURED box",
                          "note": "the legs only: costumes differ above the waist by design, so a whole "
-                                 "silhouette would report approved ornament as a stance fault."}
+                                 "silhouette would report approved ornament as a stance fault. The box comes "
+                                 "from differencing against the same frame with the figure hidden, so nothing "
+                                 "here assumes where the figure landed."}
 
     def record(tid, name, ok, **detail):
         RESULT["tests"].append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
@@ -76,41 +78,72 @@ def job():
         except Exception:                                           # noqa: BLE001
             return None
 
-    def leg_profile(path):
-        """For each column of the leg band, how far down the figure reaches, as a fraction of the band.
-
-        THE BACKGROUND IS SAMPLED, NOT ASSUMED. A corner of the frame gives the world behind the Dog, and a
-        column belongs to the figure where it departs from that. This is why the job can run at any hour and
-        in any district without a keyed backdrop.
-        """
+    def pixels(path):
         w, h, chan, px = read(path)
+        return w, h, chan, px
 
-        def lum(x, y):
-            i = (y * w + x) * chan
-            return (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]) / 255.0
+    def figure_box(shot, empty):
+        """Where the FIGURE is on screen, found by differencing against the same frame with the Dog hidden.
 
-        corners = [lum(4, 4), lum(w - 5, 4), lum(4, h - 5), lum(w - 5, h - 5)]
-        back = sorted(corners)[len(corners) // 2]
-        x0, x1 = int(ACROSS[0] * w), int(ACROSS[1] * w)
-        y0, y1 = int(LEG_BAND[0] * h), int(LEG_BAND[1] * h)
+        THE FIRST VERSION ASSUMED A BAND AND MEASURED SCENERY. It took rows 0.52 to 0.86 of the frame on the
+        theory that a figure framed from 420 uu would have its legs there, guarded that with "is something in
+        the band", and passed -- on a blue and white checkered object that was not the Dog. The contact sheet
+        showed it instantly and no clause could have: "something is here" is not "the subject is here".
+
+        Differencing removes every assumption about framing, distance, field of view and figure height. What
+        changes between a frame with the Dog and the same frame without it IS the Dog, wherever it turned out
+        to be, and whatever size it turned out to be.
+        """
+        sw, sh, sc, sp = shot
+        ew, eh, ec, ep = empty
+        if (sw, sh) != (ew, eh):
+            return None
+        lo_x, hi_x, lo_y, hi_y, hits = sw, -1, sh, -1, 0
+        for y in range(0, sh, 2):
+            rs, re_ = y * sw * sc, y * sw * ec
+            for x in range(0, sw, 2):
+                i, j = rs + x * sc, re_ + x * ec
+                d = (abs(sp[i] - ep[j]) + abs(sp[i + 1] - ep[j + 1]) + abs(sp[i + 2] - ep[j + 2])) / 765.0
+                if d >= FIGURE_DELTA:
+                    hits += 1
+                    if x < lo_x: lo_x = x
+                    if x > hi_x: hi_x = x
+                    if y < lo_y: lo_y = y
+                    if y > hi_y: hi_y = y
+        if hits < 200 or hi_x <= lo_x or hi_y <= lo_y:
+            return None
+        return {"box": [lo_x, lo_y, hi_x, hi_y], "changed_cells": hits,
+                "width_fraction": round((hi_x - lo_x) / float(sw), 4),
+                "height_fraction": round((hi_y - lo_y) / float(sh), 4)}
+
+    def leg_profile(shot, empty, box):
+        """For each column of the figure's OWN lower third, how far down it reaches.
+
+        Every bound is a fraction of the figure's measured box, so the reading does not change if the camera
+        or the figure's size does.
+        """
+        sw, sh, sc, sp = shot
+        ew, eh, ec, ep = empty
+        bx0, by0, bx1, by1 = box["box"]
+        bh = max(by1 - by0, 1)
+        y0 = by0 + int(bh * 0.66)
+        y1 = by1
         span = max(y1 - y0, 1)
         prof, filled = [], 0
-        for x in range(x0, x1):
+        for x in range(bx0, bx1 + 1):
             deepest = None
-            for y in range(y0, y1):
-                if abs(lum(x, y) - back) >= FIGURE_DELTA:
+            for y in range(y0, y1 + 1):
+                i, j = (y * sw + x) * sc, (y * ew + x) * ec
+                d = (abs(sp[i] - ep[j]) + abs(sp[i + 1] - ep[j + 1]) + abs(sp[i + 2] - ep[j + 2])) / 765.0
+                if d >= FIGURE_DELTA:
                     deepest = y
             if deepest is None:
                 prof.append(0.0)
             else:
                 prof.append(round((deepest - y0) / float(span), 4))
                 filled += 1
-        return {"columns": len(prof), "filled": filled,
-                "background_luma": round(back, 4),
-                "band_rows": [y0, y1], "profile": prof,
-                # A figure that is not in the band at all gives an empty profile, and a comparison of two
-                # empty profiles agrees perfectly. That must not read as a pass.
-                "usable": filled >= len(prof) * 0.25}
+        return {"columns": len(prof), "filled": filled, "rows": [y0, y1], "profile": prof,
+                "usable": filled >= max(len(prof) * 0.25, 8)}
 
     if ues.get_game_world() is not None:
         les.editor_request_end_play()
@@ -177,12 +210,47 @@ def job():
         yield 0.3
         name = "stance_%s.png" % skin
         path = os.path.join(ROOT, name)
+        empty_name = "stance_%s_nofigure.png" % skin
+        empty_path = os.path.join(ROOT, empty_name)
         try:
             shot = L.capture_game_viewport(path)
             if not shot:
                 raise RuntimeError("capture_game_viewport returned falsy: the editor is probably not foreground")
             RESULT.setdefault("capture_hashes", {})[name] = fingerprint(path)
-            readings[skin] = leg_profile(path)
+
+            # ---- AND THE SAME FRAME WITH THE FIGURE HIDDEN, which is what makes the reading attributable.
+            #
+            # The camera does not move between these two. Everything that differs between them is the Dog and
+            # its costume, so the figure's position and size on screen are MEASURED rather than assumed -- and
+            # the first version of this job assumed, and profiled a blue and white checkered object that was
+            # not the Dog.
+            hidden = []
+            for actor in unreal.GameplayStatics.get_all_actors_of_class(live, unreal.Actor):
+                if actor == dog or actor.get_attach_parent_actor() == dog:
+                    actor.set_actor_hidden_in_game(True)
+                    hidden.append(actor)
+            yield 0.4
+            got_empty = L.capture_game_viewport(empty_path)
+            for actor in hidden:
+                try:
+                    actor.set_actor_hidden_in_game(False)
+                except Exception:                                   # noqa: BLE001
+                    pass
+            if not got_empty:
+                raise RuntimeError("the control capture returned falsy")
+            RESULT.setdefault("capture_hashes", {})[empty_name] = fingerprint(empty_path)
+
+            shot_px, empty_px = pixels(path), pixels(empty_path)
+            box = figure_box(shot_px, empty_px)
+            RESULT.setdefault("figure_box", {})[skin] = box
+            if box is None:
+                readings[skin] = None
+                record("T_SEEN_%s" % skin, "the figure was visible in the frame", False,
+                       note="nothing changed between the frame and the same frame with the Dog hidden, so "
+                            "either the camera is not looking at the Dog or the Dog did not hide. Either way "
+                            "there is nothing here to measure and a band would have measured the world.")
+            else:
+                readings[skin] = leg_profile(shot_px, empty_px, box)
         except Exception as err:                                    # noqa: BLE001
             RESULT.setdefault("errors", {})[skin] = str(err)[:160]
         unreal.GameplayStatics.set_game_paused(live, False)
@@ -205,12 +273,34 @@ def job():
                 "the costume did not restage, and identical frames would pass a stance comparison perfectly.")
 
     usable = [s for s in SKINS if (readings.get(s) or {}).get("usable")]
-    record("T01", "every skin's legs are actually in the measured band",
+    record("T01", "the figure was found on screen for every skin, and its legs measured",
            len(usable) == len(SKINS), usable=sorted(usable),
+           figure_box={s: (RESULT.get("figure_box") or {}).get(s) for s in SKINS},
            filled={s: (readings.get(s) or {}).get("filled") for s in SKINS},
-           band=LEG_BAND,
-           note="an empty profile compares equal to another empty profile. If the figure is not in the band, "
-                "this job would report perfect agreement between two pictures of nothing.")
+           note="an empty profile compares equal to another empty profile, so a job that cannot see the "
+                "figure would report perfect agreement between two pictures of nothing. The box is found by "
+                "differencing against the same frame with the Dog hidden, so this cannot pass on scenery.")
+
+    # ---- AND NO TWO SKINS MAY PROFILE IDENTICALLY, which is the tell I saw and did not follow.
+    #
+    # The first run returned worst_column 0.3587 for Celestial Light and 0.3587 for Skeleton Flame -- equal to
+    # four decimals, across two costumes with different legs. That cannot happen if the profiles are of the
+    # costumes; it happens when they are of the same piece of scenery. I noticed the coincidence, called it
+    # suspicious, and went on to report the comparison anyway.
+    #
+    # Costumes differ in the legs by a little even when their STANCE matches, so identical profiles mean the
+    # measurement is not of the costume. This is the distinct-captures guard applied to the REGION rather than
+    # to the frame, which is where it was needed.
+    sigs = {s: tuple((readings.get(s) or {}).get("profile") or []) for s in SKINS}
+    twins = sorted({"%s==%s" % (a, b) for i, a in enumerate(SKINS) for b in SKINS[i + 1:]
+                    if sigs.get(a) and sigs[a] == sigs.get(b)})
+    record("T01b", "no two skins produced the identical profile",
+           not twins, identical_pairs=twins or None,
+           note="two different costumes cannot have byte-identical leg profiles. If they do, the profile is "
+                "of something that is not the costume.")
+    if twins:
+        RESULT["status"] = "VOID: two skins profiled identically, so the profile is not of the costume"
+        return
     if len(usable) < len(SKINS):
         RESULT["status"] = "VOID: at least one skin's legs were not in the band, so no comparison is valid"
         return
