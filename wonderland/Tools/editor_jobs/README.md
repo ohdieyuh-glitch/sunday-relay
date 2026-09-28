@@ -1037,3 +1037,35 @@ And add the same check one level up as a **ladder saturation guard**: if every r
 noise of every other, VOID instead of computing savings. Both of this evening's silent failures — the fire
 reach at 98.61 five times and this at 36.81 six times — would have been caught by that one clause, and both
 produced confident-looking numbers without it.
+
+## Writing a UPROPERTY bitfield is not the same as calling its setter
+
+The Project Avatar optimisation was measured from Python (`set_editor_property`) and then implemented in C++
+as direct assignment plus `MarkRenderStateDirty()`:
+
+```cpp
+Part->bAffectDynamicIndirectLighting = false;   // looks equivalent. is not.
+Part->bAffectDistanceFieldLighting  = false;
+Part->MarkRenderStateDirty();
+```
+
+Read back off the actors the shipped path actually created — 3 avatars, 198 components:
+
+```
+distance_field_off  198 / 198     indirect_off  3 / 198
+```
+
+and the saving collapsed from **170.57 ms to 6.38 ms**. One of the two bits stuck and the one that mattered
+did not. `UPrimitiveComponent::SetAffectDynamicIndirectLighting` does work the assignment does not.
+
+**This is "set a cvar and never read it back" one layer down**, and it would have shipped as a fix that
+compiled, looked right in review, and bought nothing — because the measurement that justified it was taken on
+a *different code path* from the one that shipped.
+
+Two rules:
+
+- **Prefer the engine's setter to the field.** If a `UPROPERTY` has an `ENGINE_API Set…()` beside it, that
+  function exists because assignment is insufficient.
+- **Measure the path that ships, not an equivalent one.** The 170 ms was real and was measured on an actor
+  the job spawned itself. Proving the shipped path does the same thing needed a hook into that path, and
+  adding one was cheaper than the bug it caught.
