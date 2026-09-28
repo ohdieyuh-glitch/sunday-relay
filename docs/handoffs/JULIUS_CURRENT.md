@@ -4,7 +4,7 @@
 > repository evidence does not. Update it whenever meaningful state changes and
 > before ending a session. Never rely on `/resume` as the sole record.
 
-**Most recent session: 2026-09-27, the LANDING pass. Read §000f (the generality audit and PR #288), then §000e, then §000d, then §000c, then §000b, then §000.**
+**Most recent session: 2026-09-27, the LANDING pass. Read §000g (the follow-up branch), then §000f (the audit and PR #288), then §000e, then §000d, then §000c, then §000b, then §000.**
 > The paragraph below it is the record of the session before that.
 
 **Most recent session:** 2026-09-08, the **Claude Code cloud session**. Read
@@ -16,6 +16,97 @@ lifecycle, and the concurrent-proposal fix a real PostgreSQL race found.
 Everything from §0a onward is the earlier local record.
 
 ---
+
+## 000g. THE FOLLOW-UP BRANCH, AND WHY PR #288 DID NOT MOVE
+
+### Three branches, and which one is frozen
+
+| Branch | Head | What it is |
+|---|---|---|
+| `relay/julius-beta-qualification-worker` | `15cf04d7` | **PR #288. FROZEN.** Pushed, App-authored, awaiting founder approval. |
+| `relay/julius-beta-qualification` | `c7afdee2` | The reference the PR was re-authored from, plus the audit record. |
+| `relay/julius-task-generality` | see git | **The follow-up.** Everything after the PR was opened lands here. |
+
+**Nothing after PR #288 was opened touches its head, on purpose.** A candidate the
+founder is being asked to approve must not move underneath them, so the follow-up
+work is a separate branch and becomes the next pull request. `git ls-remote`
+confirms local and remote both still read `15cf04d7`.
+
+### The preflight contradiction is FIXED, and it was the last of three guards
+
+`live-composition.ts` already said of its own check that refusing an empty test
+command "was the third of three guards that made Julius coding-only on the live
+path". Two had been removed. The third was in the gate that decides whether money
+may be spent, and it is gone.
+
+**The replacement is a CONSISTENCY rule, not a presence rule**, because a presence
+rule provably cannot do the job: it cannot tell "this mission has no deterministic
+check" from "the check was deleted", which is exactly why the old one refused both.
+A criterion may now declare `requiredEvidence`, and:
+
+- a criterion may NOT require `TEST` while the command is empty — the evasion case;
+- under an empty command every BLOCKING criterion must name what DOES prove it, so
+  "no check" cannot become "no standard";
+- and the vocabulary is `TEST` and `DIFF` ONLY, because on the live path those are
+  the only rows a BUILD produces. Every `ARTIFACT` row belongs to the architect, a
+  consultation or a rebuttal, and `verifyTask` scopes evidence to the task, so a
+  contract allowed to require `ARTIFACT` would pass every check and then park in
+  VERIFYING forever, AFTER the whole mission's spend.
+
+Seventeen cases in `scripts/julius-contract-verification-modes.test.ts`. **With
+only the gate reverted, 14 of 17 fail**; the three that survive describe behaviour
+the change does not touch. Case B fails on the old gate because it asserts the
+REASON, not merely that something was refused.
+
+**And the runtime half, which is the half that matters.** A live mission with an
+empty command already had a case proving it COMPLETES on its diff with an
+approving reviewer — which proves the happy path and nothing about the standard.
+The same mission is now driven with the reviewer REJECTING and must not complete.
+Without that, permitting an empty command at the gate would have moved the
+verification hole from the door to the runtime, where it costs a mission's spend
+before anyone can see it.
+
+### The nine findings are classified, and four are blockers
+
+`docs/JULIUS_GENERALITY_CLASSIFICATION.md`, with two verdicts per finding because
+the answer differs by WHO composes the mission. An operator can select a slice,
+seed a stub, pick a command and merge a research grant; a player can do none of
+those. Four blockers: **no network** (blocks both callers, and is the most limiting
+of all), **the Node-only image** (blocks game development, a primary MVP workload),
+**no file creation** and **the 4 MiB ceiling** (both block the player path).
+`scripts/julius-generality-classification.test.ts` pins the constants the verdicts
+rest on, so a drift fails rather than leaving the page quietly wrong.
+
+### `main`'s provenance needs no backfill
+
+`julius-main-provenance.mjs` says of itself: "This is a statement about ONE commit,
+not about the branch's history." So #287's missing approval is not something
+permanently spent — provenance returns when a compliant commit becomes the tip.
+The procedure is in `docs/JULIUS_BETA_LANDING.md`: approve #288 at its head,
+squash-merge at that head, re-run the gates. **No approval may be recorded for
+#287 after the fact**, because the code on main was never reviewed and a signature
+added now would describe a tree nobody read.
+
+### A flake on the PAID guard, and a correction to my own reasoning
+
+One case in the paid-attempt guard's mutation suite failed while I was proving the
+gate change had broken nothing, and a control run at HEAD passed — so it looked
+caused. It was not. The same file with identical code gave 170/170 and then one
+failure, and the failure read `Test timed out in 5000ms`, not an assertion:
+fourteen `runGuard` calls each spawning bash plus a stub `gh`, against the default
+five seconds, landing at ~5.7s. Now 60 seconds, with three consecutive clean runs.
+
+**A single control sample is not evidence that a failure is yours.** It took a
+second sample of the same code to show the difference was the clock.
+
+### Still true, and unchanged by any of this
+
+**Paid spend remains $0.00.** The representative mission is frozen and undispatched:
+its 8-case specification is intact, its contract is unmodified since `231369e6`,
+and `julius-live-contract-check.mjs` still answers CONTRACT OK. Nothing was
+modified to make Julius more likely to pass it. Readiness does not move on a better
+description of the same code.
+
 
 ## 000f. PR #288 IS OPEN, AND THE GENERALITY AUDIT FOUND WHERE JULIUS IS NARROW
 
