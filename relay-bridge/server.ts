@@ -42,6 +42,14 @@ import { handleRepositoryRoute, isRepositoryRoute, type RepositoryCaller } from 
 import { handlePspRoute, isPspRoute } from './psp-routes';
 import { createJuliusStatePorts, handleJuliusStateRoute, isJuliusStateRoute } from './julius-state-routes';
 import { composeJuliusMissionBootstrap, handleJuliusMissionRoute, isJuliusMissionRoute, type JuliusMissionRoutePorts } from './julius-mission-routes';
+import {
+  WonderlandExecutionProfilePostgres,
+  handleExecutionProfileRoute,
+  handlePlayerMissionContractRoute,
+  isExecutionProfileRoute,
+  isPlayerMissionContractRoute,
+} from './wonderland-execution-profile-routes';
+import { handleWonderlandMissionCreation, isWonderlandMissionCreationRoute } from './wonderland-mission-creation-routes';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
 import { JULIUS_RUNTIME_DATABASE_ENV_NAMES, juliusRuntimeDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { Pool } from 'pg';
@@ -418,6 +426,15 @@ const juliusPool = (): Pool | null => {
   return juliusPoolCache;
 };
 
+/** The profile store over the SAME pool Julius writes runs to; null when there is no database, and the route says 503. */
+let executionProfileStoreCache: WonderlandExecutionProfilePostgres | null | undefined;
+const executionProfileStore = (): WonderlandExecutionProfilePostgres | null => {
+  if (executionProfileStoreCache !== undefined) return executionProfileStoreCache;
+  const pool = juliusPool();
+  executionProfileStoreCache = pool === null ? null : new WonderlandExecutionProfilePostgres(pool);
+  return executionProfileStoreCache;
+};
+
 let juliusStateCache: ReturnType<typeof createJuliusStatePorts> | null = null;
 const juliusStatePorts = (): ReturnType<typeof createJuliusStatePorts> => {
   if (juliusStateCache !== null) return juliusStateCache;
@@ -711,6 +728,31 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
           return;
         }
 
+        // A PLAYER CREATES A JULIUS MISSION (founder decision 4): the OWNER's four
+        // fields plus the project's operator-written execution profile, through
+        // the operator route's own creation path. In front of the battle routes
+        // for the same prefix reason. See wonderland-mission-creation-routes.ts.
+        if (isWonderlandMissionCreationRoute(path.replace('/relay-api', ''))) {
+          const creation = await handleWonderlandMissionCreation({
+            method,
+            path: path.replace('/relay-api', ''),
+            url: (req.url ?? '/').replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+            origin,
+            idempotencyKey: headerValue(req.headers['x-relay-idempotency-key']),
+            body: method === 'POST' ? await readBody(req) : undefined,
+            now: Date.now(),
+          }, {
+            sessions: browserSessions,
+            membership: (await resolveJuliusWorld())?.membership ?? null,
+            profiles: executionProfileStore(),
+            contracts: executionProfileStore(),
+            missions: juliusMissionPorts(),
+          });
+          if (creation !== null) send(res, creation.status, creation.body, cors);
+          return;
+        }
+
         // THE JULIUS WORLD ROUTES SIT IN FRONT OF THE BATTLE ONES, because
         // `isWonderlandRoute` claims the whole `/wonderland/` prefix and would
         // otherwise swallow these and 404 them.
@@ -959,6 +1001,44 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
           }, juliusMissionPorts());
           if (missionResult !== null) {
             send(res, missionResult.status, missionResult.body, cors);
+            return;
+          }
+        }
+
+        /**
+         * THE PROJECT EXECUTION PROFILE (founder decision 4). Operator-only for
+         * reading AND writing: it names the executor's workspace and the command
+         * it runs. Before the state family, which serves other /julius/ paths.
+         * See `wonderland-execution-profile-routes.ts`.
+         */
+        if (isExecutionProfileRoute(path.replace('/relay-api', ''))) {
+          const profileAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const profileResult = await handleExecutionProfileRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            operator: bearerMatches(profileAuthz, process.env.RELAY_BRIDGE_API_TOKEN),
+            actor: headerValue(req.headers['x-relay-actor']),
+            body: method === 'PUT' ? await readRawBody(req) : undefined,
+          }, executionProfileStore());
+          if (profileResult !== null) {
+            send(res, profileResult.status, profileResult.body, cors);
+            return;
+          }
+        }
+
+        /**
+         * A PLAYER-CREATED MISSION'S CONTRACT, for the operator's paid run.
+         * Operator-only: it carries the executor's workspace and command.
+         */
+        if (isPlayerMissionContractRoute(path.replace('/relay-api', ''))) {
+          const contractAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const contractResult = await handlePlayerMissionContractRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            operator: bearerMatches(contractAuthz, process.env.RELAY_BRIDGE_API_TOKEN),
+          }, executionProfileStore());
+          if (contractResult !== null) {
+            send(res, contractResult.status, contractResult.body, cors);
             return;
           }
         }

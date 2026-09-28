@@ -161,6 +161,22 @@ export function parseExecutionProfile(projectId: string, body: unknown): Parsed<
   return { ok: true, value: profile };
 }
 
+/**
+ * A profile AS STORED -- what the operator route wrote: the validated profile,
+ * carrying its schema version and its project. Re-validated in full on every
+ * read, because a stored row is not trusted merely for having been stored: it
+ * must still be this schema, for THIS project, and still pass today's rules.
+ */
+export function parseStoredExecutionProfile(projectId: string, stored: unknown): Parsed<WonderlandExecutionProfile> {
+  if (!isObject(stored)) return refuse('The stored execution profile is not an object.');
+  const { schemaVersion, projectId: storedProject, ...operatorFields } = stored;
+  if (schemaVersion !== WONDERLAND_EXECUTION_PROFILE_SCHEMA_V1) {
+    return refuse(`The stored execution profile is schema ${String(schemaVersion)}, not ${WONDERLAND_EXECUTION_PROFILE_SCHEMA_V1}.`);
+  }
+  if (storedProject !== projectId) return refuse('The stored execution profile names another project.');
+  return parseExecutionProfile(projectId, operatorFields);
+}
+
 /* --------------------------------------------------------------- the player */
 
 /**
