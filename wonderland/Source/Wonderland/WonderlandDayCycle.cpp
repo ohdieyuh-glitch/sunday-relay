@@ -724,6 +724,28 @@ static FAutoConsoleVariableRef GWonderlandDuskMoonDampRef(
 //
 // The approved night is untouched at any value that matters: at 23:00 the moon is 69.6 degrees up, far
 // above any threshold worth setting, so it casts exactly as it does today.
+// ---- MEASURED 2026-09-28 (zc_dusk_handover): DELAYING THE HANDOVER MAKES IT WORSE, NOT BETTER.
+//
+// Three arms at the proven plaza vantage, cliff size read from the caster census:
+//     MoonCastAltitude  0  ->  handover 18.25->18.26, step 0.0487   (shipped)
+//     MoonCastAltitude 15  ->  handover 18.80->18.90, step 0.0736   50 per cent WORSE
+//     MoonCastAltitude 18  ->  handover 18.95->19.00, step 0.0762   56 per cent WORSE
+//
+// Because the shadowless flood GROWS while you wait: 0.077 at 18:00, 0.183 at 18:48, 0.188 at 18:57.
+// A shadowless moon lights every surface regardless of occlusion, and its contribution rises with both
+// Nightfall and altitude, so the longer the handover is postponed the more there is to lose in one
+// frame. Dusk at 18:48 reads 0.183 against the approved midnight's 0.108 -- brighter than midnight,
+// which is the anomaly rather than the thing to protect.
+//
+// THE STEP IS (shadowless - casting) AT THE HANDOVER MOMENT, and measured across the evening it only
+// grows: 0.047 at 18:16, 0.052 at 18:18, 0.065 at 18:24, 0.087 at 18:30, 0.089 at 18:48. So the
+// cheapest handover is the EARLIEST one, and the post-handover level is fine everywhere -- the casting
+// moon delivers 0.109 to 0.114 from 17 degrees up, against the approved night's 0.108.
+//
+// I ARGUED THE OPPOSITE ABOVE AND WAS WRONG. The altitude reasoning is sound about the post-handover
+// LEVEL -- a grazing moon does deliver almost nothing once it casts -- and I applied it to the STEP,
+// which is a difference of two curves rather than one of them. MoonCastAltitude is kept because its
+// measurement is what shows the direction, and 0 is exactly today's behaviour.
 static float GWonderlandMoonCastAltitude = 0.0f;
 static FAutoConsoleVariableRef GWonderlandMoonCastAltitudeRef(
 	TEXT("wl.Sky.MoonCastAltitude"),
@@ -734,6 +756,18 @@ static FAutoConsoleVariableRef GWonderlandMoonCastAltitudeRef(
 	     "Raising it delays the handover until the moon is high enough for its light to survive the "
 	     "plaza's own geometry: at 4.9 deg a casting moon reaches almost nothing and the shadowless "
 	     "flood it replaces is worth 0.050 of ground luminance, which is the entire measured cliff."),
+	ECVF_Default);
+
+static float GWonderlandMoonCastAlways = 0.0f;
+static FAutoConsoleVariableRef GWonderlandMoonCastAlwaysRef(
+	TEXT("wl.Sky.MoonCastAlways"),
+	GWonderlandMoonCastAlways,
+	TEXT("Above 0.5, the moon casts shadows from the moment it is visible instead of waiting to be "
+	     "brighter than the sun. 0 ships and is today's behaviour. The handover step is the shadowless "
+	     "contribution minus the casting one at that instant, and both rise through the evening while "
+	     "the shadowless one rises faster -- 0.047 at 18:16 growing to 0.089 at 18:48 -- so the "
+	     "earliest possible crossing is the cheapest. It also removes the phase where a shadowless "
+	     "moon lights surfaces that are in shadow and makes dusk brighter than midnight."),
 	ECVF_Default);
 
 static float GWonderlandDuskSkyBoost = 0.0f;
@@ -929,8 +963,20 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 			// the shadowless moon's whole contribution in one frame. MoonAltitude is minus the
 			// elevation curve because the moon is placed opposite the sun. Default 0 changes nothing.
 			const float MoonAltitudeDeg = -ElevationAt(Hour + GWonderlandMoonLeadHours);
-			const bool bMoonShouldCast = (MoonLux > Comp->Intensity)
-				&& (MoonAltitudeDeg >= GWonderlandMoonCastAltitude);
+			// ---- CAST FROM THE MOMENT IT IS VISIBLE, which is the cheapest handover there is.
+			//
+			// The step is the shadowless contribution minus the casting one, and both rise through the
+			// evening while the shadowless rises faster, so the earliest crossing is the smallest.
+			// Casting from first visibility means the moon never accumulates a flood to lose: it is
+			// worth 0.030 of MoonLux at 18:00 against 0.050 later, and it has been obeying the world's
+			// geometry the whole time instead of lighting surfaces that are in shadow.
+			//
+			// Default 0 keeps the brightness-and-altitude test, which is exactly today's behaviour.
+			const bool bMoonVisible = Nightfall > 0.002f;
+			const bool bMoonShouldCast = (GWonderlandMoonCastAlways > 0.5f)
+				? bMoonVisible
+				: ((MoonLux > Comp->Intensity)
+				   && (MoonAltitudeDeg >= GWonderlandMoonCastAltitude));
 			if (MoonComp->CastShadows != bMoonShouldCast)
 			{
 				MoonComp->CastShadows = bMoonShouldCast;
