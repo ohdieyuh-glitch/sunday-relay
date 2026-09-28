@@ -120,24 +120,39 @@ repairs, and returns a verified result with evidence.
   the authority.
 
 **Independent evidence from the integration lane** (quoted verbatim, at their
-request, and attributed to the tree the drill ran on):
+request; the acceptance ran on `relay/wonderland-julius-integration` @
+`f28a61a5`, which carries Julius `00fa52ad`, against Wonderland Core's build
+`8cccaa50`):
 
-> Integration lane: the Wonderland↔Julius drill
-> (`scripts/wonderland-julius-create-observe.mjs`,
-> `relay/wonderland-julius-integration` @ `6191dc11`, which contains Julius
-> `00fa52ad`) passes 36 of 36 clauses at zero spend. It ran against the
-> production bridge binary and an isolated PostgreSQL, and covers: mission
-> creation and read-back; the Mission Contract projection (READY shown as
-> Queued); the native Unreal client's single-use pairing and world stream; and
-> one active run per mission, including the keyed explicit rerun under a real
-> six-way race (exactly one new run, no two answers claiming it). This is
-> wire-level evidence only: the in-engine (PIE) acceptance has not run yet.
+> Integration lane: the first in-engine (PIE) Wonderland↔Julius acceptance
+> passed every data clause at zero spend, on the production bridge against an
+> isolated PostgreSQL. A signed-in player's single-use code paired the Unreal
+> client. The world adopted the exact run Julius created (same runId and
+> missionId, READY, mapped to QUEUED in the Mission Contract's task set). It
+> switched to a second run of the same mission and back. A dropped link read
+> STALE with the mission untouched, and both reconnect and a full play restart
+> recovered the same durable run. From Julius's side both runs stayed READY and
+> never dispatched, and an identical resubmission was the same run. One criterion
+> is NOT yet met: the visible Missions panel still reads the simulated mission
+> presentation, so it shows 'No mission is running' while the world follows the
+> real run. Clause A06e tracks it until the panel is wired.
 
-The diff from `00fa52ad` to this branch's head is documents and test files only
-— no runtime code — so that verdict covers the runtime as it stands. It was
-written by the lane that found three real defects in this one's code (the
-Windows containment hole, and both rerun defects), which is the kind of
-witness worth quoting.
+That acceptance ran on Julius `00fa52ad`. Since then this branch has added the
+`result` view and its criterion-basis fix, the multi-mission evidence, Category E
+and the neutrality sweep — so the in-engine verdict covers the create/observe
+contract it exercised, and NOT the `result` view, which no Unreal client has
+called yet. The witness is the lane that found three real defects in this one's
+code (the Windows containment hole and both rerun defects), which is why it is
+quoted rather than paraphrased.
+
+**What that acceptance settles, and what it does not.** The DATA path is proved
+in the engine: a player pairs, the world adopts the exact run Julius created,
+switches between two runs of one mission, survives a dropped link and a play
+restart, and Julius's own side shows both runs READY and never dispatched. The
+SCREEN is not: the Missions panel still draws the simulated presentation, so a
+player sees "No mission is running" while the world follows a real run. Neither
+half is this branch's to finish — the panel is Wonderland's — and neither is
+claimed here as Julius's proof.
 
 **Where the detail lives**: `docs/handoffs/JULIUS_CURRENT.md` §000d (read that
 first), `docs/JULIUS_BETA_READINESS.md` (the scorecard and its arithmetic),
