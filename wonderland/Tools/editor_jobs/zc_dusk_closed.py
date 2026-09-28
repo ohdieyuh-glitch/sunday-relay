@@ -16,9 +16,16 @@
 # FOUR THINGS HAVE TO BE TRUE AND EACH IS A SEPARATE GATE.
 #
 #   C_CURVE   the build actually carries the new curve. A build that predates it would reproduce zzT2
-#             almost exactly and C_CLOSED would then fail for the right-looking wrong reason -- so the
-#             curve is read back from the engine FIRST, and if it cannot be read the run is marked
-#             evidence-only rather than allowed to pass as proof.
+#             almost exactly and C_CLOSED would then fail for the right-looking wrong reason.
+#
+#             TWO RUNS CAME BACK "EVIDENCE ONLY" ON THIS GATE because both subsystem accessors I tried
+#             returned nothing -- it failed for want of an instrument, not for want of a fix, twice, and
+#             a third guessed API name would have been the same move a third time. It now measures the
+#             MOON instead: MoonLux is strictly linear in Nightfall and Nightfall is exactly 1.0 at
+#             23:00, a rung this job already takes, so the moon's intensity divided by its 23:00 value IS
+#             Nightfall -- read off the light the curve actually drives rather than asked of an accessor
+#             that may not be bound. The old curve is exactly 0.0 above elevation -2, so 18:00 and 18:15
+#             separate the two curves cleanly.
 #   C_DAY     noon is unchanged. I claimed full day is untouched because the band saturates at +12 deg.
 #             That is arithmetic, it is exactly the kind that has been wrong all day, and zzT1 left a noon
 #             reading at this pose to check it against.
@@ -100,31 +107,37 @@ def job():
     def cvar(name, value):
         unreal.SystemLibrary.execute_console_command(live(), "%s %s" % (name, value))
 
-    def read_nightfall():
-        """The engine's own Nightfall, by whatever route this build offers. None if no route works.
+    def moon_intensity():
+        """THE MOON'S OWN INTENSITY, WHICH IS NIGHTFALL IN DISGUISE.
 
-        NOT ASSUMED. I have invented an API name in this tree before, so each route is tried and the one
-        that answered is recorded beside the value. A None here does not fail the run -- it downgrades it
-        from proof to evidence, which is stated rather than quietly glossed.
+        Two attempts to read Nightfall through a subsystem accessor returned nothing on two separate
+        builds -- zzU1 and zzW1 both came back EVIDENCE ONLY with C_CURVE red -- so C_CURVE has failed
+        twice for want of an instrument rather than for want of a fix. Guessing at a third API name would
+        be the same move again.
+
+        There is no need for one. MoonLux = SunIntensityAtNoon * MoonGain * Nightfall, strictly linear in
+        Nightfall, and Nightfall is exactly 1.0 at 23:00 -- which this job already visits as a rung. So
+        the moon's intensity at any hour DIVIDED BY its intensity at 23:00 is Nightfall, measured off the
+        light the curve actually drives rather than asked of an accessor that may not be bound.
+
+        The moon is ADirectionalLight labelled WL_Moon, spawned transient by MakeTheMoon. Found by actor
+        enumeration and label, both of which this tree already uses successfully for the practical pool.
         """
         try:
-            sub = unreal.SubsystemBlueprintLibrary.get_world_subsystem(
-                live(), unreal.WonderlandDayCycleSubsystem)
-            if sub is not None:
-                return float(sub.get_night_amount()), "WonderlandDayCycleSubsystem.get_night_amount"
+            lights = unreal.GameplayStatics.get_all_actors_of_class(live(), unreal.DirectionalLight)
         except Exception:                                              # noqa: BLE001
-            pass
-        try:
-            sub = unreal.SubsystemBlueprintLibrary.get_world_subsystem(
-                live(), unreal.WonderlandPracticalLightsSubsystem)
-            if sub is not None:
-                line = str(sub.describe_practicals())
-                for tok in line.split():
-                    if tok.startswith("night="):
-                        return float(tok.split("=", 1)[1]), "DescribePracticals night="
-        except Exception:                                              # noqa: BLE001
-            pass
-        return None, None
+            return None
+        for a in lights:
+            if a is None:
+                continue
+            try:
+                if str(a.get_actor_label()) != "WL_Moon":
+                    continue
+                comp = a.directional_light_component
+                return float(comp.intensity) if comp is not None else None
+            except Exception:                                          # noqa: BLE001
+                continue
+        return None
 
     L.focus_game_viewport()
     cvar("wl.Sky.DayMinutes", 0)
@@ -162,13 +175,11 @@ def job():
 
     rows = []
     RESULT["after"] = rows
-    route_seen = None
     for hour in HOURS:
         cvar("wl.Sky.Hour", "%.2f" % hour)
         for step in settled():
             yield step
-        nf, route = read_nightfall()
-        route_seen = route or route_seen
+        moon = moon_intensity()
         a = patch(0.5, 0.5, 0.46, 0.44)
         g1 = patch(0.5, 0.78, 0.30, 0.16)
         yield 1.0
@@ -194,14 +205,20 @@ def job():
             # actually looks at stays black.
             "ground_dark": round(((g1 or {}).get("dark", 1.0) + (g2 or {}).get("dark", 1.0)) / 2.0, 4)
             if g1 and g2 else None,
-            "nightfall_read": (round(nf, 4) if nf is not None else None),
+            "moon_intensity": (round(moon, 3) if moon is not None else None),
             "was_luma": was[0], "was_ground": was[1]})
 
     cvar("wl.Sky.Hour", 12)
     L.release_camera(live())
 
     good = [r for r in rows if not r.get("unmeasured")]
-    RESULT["nightfall_route"] = route_seen
+    # ---- NIGHTFALL, DERIVED FROM THE LIGHT THE CURVE DRIVES. MoonLux is linear in Nightfall and
+    # Nightfall is exactly 1.0 at 23:00, so intensity(hour) / intensity(23:00) IS Nightfall.
+    ref = next((r.get("moon_intensity") for r in good if abs(r["hour"] - 23.0) < 0.01), None)
+    RESULT["moon_intensity_at_2300"] = ref
+    for r in good:
+        mi = r.get("moon_intensity")
+        r["nightfall_read"] = (round(mi / ref, 4) if (mi is not None and ref) else None)
 
     worst_spread = max((r["spread"] for r in good), default=None)
     record("C_NOISE", "each rung agrees with itself -- two reads of the same hour",
@@ -225,7 +242,8 @@ def job():
     agreeing = [k for k, v in checked.items() if abs(v["read"] - v["expected_new_curve"]) <= 0.02]
     record("C_CURVE", "the running build carries the complement curve, read back from the engine",
            len(checked) > 0 and len(agreeing) == len(checked),
-           readback_route=route_seen, checked=checked, agreeing=agreeing,
+           readback="moon intensity / its value at 23:00", moon_at_2300=ref,
+           checked=checked, agreeing=agreeing,
            note="if this could not be read at all the run is EVIDENCE, not proof, and says so in status. "
                 "The old curve is exactly 0.0 at every elevation above -2, so it is trivially separable "
                 "from the new one at 18:00 and 18:15")
