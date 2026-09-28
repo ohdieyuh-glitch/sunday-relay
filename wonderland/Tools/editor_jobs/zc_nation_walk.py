@@ -157,6 +157,26 @@ def job():
         # focus rather than of the avenue.
         #
         # Re-armed per nation, so every nation is driven under the same conditions as the first.
+        #
+        # AND FOCUSED AFTER THE SETTLE, NOT BEFORE IT. Focusing here, immediately after the pawn appears,
+        # aims at a viewport the new PIE session has only just created; the call returns happily and the
+        # window it meant is replaced underneath it. Measured: with the focus only here, the FIRST nation of
+        # a session probes at 230 uu/s -- the character's full walk speed -- and the second and third at
+        # 50.9 and 47.8, run after run.
+        #
+        # AND IT IS NOT MEMORY, which is what I expected and instrumented for. Available physical memory ROSE
+        # across the three nations of that run -- 1289, 1713, 1828 MB -- while the actuator collapsed. The
+        # degradation tracks the PIE RESTART COUNT, not the machine, and the number I added to test my own
+        # hypothesis is what refuted it.
+        #
+        # Why a slow session reads as a slow Dog: the engine clamps DeltaTime, so a session running at a
+        # fraction of real time gets a fraction of the SIMULATED seconds in the same 3 s of wall clock. The
+        # probe then measures a Dog that has had less time to accelerate, not a Dog that cannot walk.
+        # REVERTED TO FOCUS-THEN-SETTLE, because moving the focus AFTER the settle made it worse, not
+        # better: all three nations came back at peak 0.0 where the previous ordering gave 230.0, 50.9 and
+        # 47.8. My reasoning -- that focusing immediately after the pawn appears aims at a viewport the new
+        # session has only just created -- sounded right and is not what the world does. Measured, reverted,
+        # and left recorded so nobody re-derives it.
         L.set_background_throttle_suspended(True)
         L.focus_game_viewport()
         yield 4.0
@@ -361,6 +381,15 @@ def job():
             row["memory_when_driven"] = str(L.describe_memory())
         except Exception:                                             # noqa: BLE001
             row["memory_when_driven"] = None
+        # AND HOW FAST THE SESSION WAS ACTUALLY RUNNING, which is the quantity the probe is really sensitive
+        # to. A peak speed well under max_walk_speed with a healthy frame cost is a Dog that is blocked; the
+        # same peak with a frame cost several times larger is a session running slowly, and only this number
+        # tells them apart.
+        try:
+            cost = unreal.WonderlandHudTestLibrary.get_raw_frame_cost_ms()
+            row["frame_ms_when_driven"] = round(float(cost[0]), 2) if cost else None
+        except Exception:                                             # noqa: BLE001
+            row["frame_ms_when_driven"] = None
         # PEAK SPEED IS WHAT TELLS "BLOCKED" FROM "NOT DRIVEN", and displacement alone cannot.
         #
         # The run that produced this distinction: ICARUS moved 0.0 uu at a PEAK SPEED OF 230 -- the
