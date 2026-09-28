@@ -317,20 +317,98 @@ function fakeReviewer(log: FakeLog, packets: ReviewPacket[], verdicts: Array<'ap
   };
 }
 
-function fakeShell(log: FakeLog, invocations: ShellEffectInput[]): ShellEffectPort {
+/**
+ * `diffs` gives each ATTEMPT its own diff, in order, so a repair can genuinely
+ * produce different bytes from the attempt it repairs. Absent, every attempt
+ * reports `DIFF_TEXT`, which is what every existing case here expects.
+ */
+function fakeShell(log: FakeLog, invocations: ShellEffectInput[], diffs?: readonly string[]): ShellEffectPort {
   let n = 0;
+  let diffCall = 0;
   return {
     async run(input) {
       log.order.push(`shell:${input.command.includes('rev-parse') ? 'base' : input.command.startsWith('git status') ? 'status' : input.command.includes('diff') ? 'diff' : 'test'}`);
       invocations.push(input);
       n += 1;
+      const captured = () => {
+        if (diffs === undefined) return DIFF_TEXT;
+        const text = diffs[Math.min(diffCall, diffs.length - 1)] ?? DIFF_TEXT;
+        diffCall += 1;
+        return text;
+      };
       // The change set the executor reports, NUL-separated as `git status -z` prints it.
       const stdout = input.command.includes('rev-parse') ? 'abc123def\n'
         : input.command.startsWith('git status') ? ` M fixtures/live-validation/normalize.ts${String.fromCharCode(0)}`
-          : input.command.includes('diff') ? DIFF_TEXT
+          : input.command.includes('diff') ? captured()
             : 'mission-test: 1 passed\n';
       return { status: 'SUCCEEDED', exitCode: 0, stdout, stderr: '', invocationId: `fake-invocation-${n}` };
     },
+  };
+}
+
+/**
+ * A REVIEWER THAT READS THE DIFF IT WAS GIVEN.
+ *
+ * `fakeReviewer` above answers from an array, which is the right fake for every
+ * case whose subject is Julius's sequencing: the verdict is an input there. It is
+ * the WRONG fake for the one claim that matters most about the Independent
+ * Reviewer — that it can catch something substantive that would otherwise have
+ * shipped — because an array of verdicts proves only that Julius routes a
+ * verdict it was handed.
+ *
+ * `judge` is given the REAL `ReviewPacket` the real reviewer adapter built from
+ * the real artifact exchange, and its answer is computed from the packet's own
+ * bytes. If the coder's diff does not contain the defect, no finding exists to
+ * report; if it does, the finding names the line. The verdict is an OUTPUT.
+ */
+function contentReviewer(
+  log: FakeLog,
+  packets: ReviewPacket[],
+  judge: (packet: ReviewPacket) => { readonly requirement: string; readonly explanation: string; readonly evidence: string } | null,
+) {
+  let call = 0;
+  return async (input: { packet: ReviewPacket }): Promise<HermesOutcome> => {
+    log.order.push('reviewer');
+    packets.push(input.packet);
+    call += 1;
+    const defect = judge(input.packet);
+    const startedAt = new Date().toISOString();
+    return {
+      kind: 'reviewed',
+      result: {
+        verdict: defect === null ? 'approved' : 'changes_required',
+        summary: defect === null ? 'No blocking findings.' : defect.explanation,
+        findings: defect === null ? [] : [{
+          findingId: `finding-${call}`, severity: 'blocking', requirement: defect.requirement,
+          explanation: defect.explanation, evidence: defect.evidence,
+        }],
+        // A compliant reviewer approving a repair answers, by Julius's id, every
+        // prior finding it was shown. Silence would leave them unresolved.
+        ...(defect === null && (input.packet.priorFindings ?? []).length > 0 ? {
+          resolutions: (input.packet.priorFindings ?? []).flatMap((text) => {
+            const id = /REVIEW FINDING (\S+) \[/u.exec(text)?.[1];
+            return id === undefined ? [] : [{
+              findingId: id, status: 'RESOLVED',
+              claim: 'The line the finding named is no longer in the diff.',
+            }];
+          }),
+        } : {}),
+        requirementsChecked: [{
+          requirement: defect?.requirement ?? 'AC-1',
+          status: defect === null ? 'passed' as const : 'failed' as const,
+          evidence: 'the unified diff in this packet',
+        }],
+        parseRepaired: false,
+      },
+      startedAt, completedAt: new Date().toISOString(),
+      requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1', provider: 'xai',
+      diagnostics: reviewDiagnostics({
+        transport: 'local', shape: null, outcome: 'succeeded', provider: 'xai',
+        requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1',
+        elapsedMs: 1_234, timeoutMs: 400_000, processStarted: true, exitObserved: true,
+      }),
+      usage: UNKNOWN_USAGE,
+    } as HermesOutcome;
   };
 }
 
@@ -350,13 +428,17 @@ function liveResolution(overrides: {
   /** How many reviewer dispatches hang until Relay's window closes on them. */
   reviewerHangsFirst?: number;
   reviewerEngineTimesOutFirst?: number;
+  /** A reviewer that derives its verdict from the packet. See `contentReviewer`. */
+  judge?: Parameters<typeof contentReviewer>[2];
+  /** One diff per coder attempt, so a repair can produce different bytes. */
+  diffs?: readonly string[];
 }) {
   const log: FakeLog = { order: [] };
   const prompts: string[] = [];
   const packets: ReviewPacket[] = [];
   const invocations: ShellEffectInput[] = [];
   const artifacts = createLiveArtifactExchange();
-  const shell = overrides.shell === undefined ? fakeShell(log, invocations) : overrides.shell;
+  const shell = overrides.shell === undefined ? fakeShell(log, invocations, overrides.diffs) : overrides.shell;
   const resolution = resolveLiveWorkers({
     env: overrides.env ?? LIVE_ENV,
     projectId: 'prj-live', workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
@@ -366,7 +448,9 @@ function liveResolution(overrides: {
     runners: {
       architect: (overrides.architect ?? fakeArchitect(log)) as never,
       coder: fakeCoder(log, prompts) as never,
-      reviewer: (overrides.reviewerEngineTimesOutFirst !== undefined
+      reviewer: (overrides.judge !== undefined
+        ? contentReviewer(log, packets, overrides.judge)
+        : overrides.reviewerEngineTimesOutFirst !== undefined
         ? engineTimeoutReviewer(log, packets, overrides.reviewerEngineTimesOutFirst, APPROVING_REVIEW)
         : overrides.reviewerHangsFirst !== undefined
         ? hangingReviewer(log, packets, overrides.reviewerHangsFirst, APPROVING_REVIEW)
@@ -585,17 +669,32 @@ async function driveLiveMission(
   reviewerHangsFirst?: number,
   reviewerEngineTimesOutFirst?: number,
   researchPolicyFor?: ResearchPolicySource,
+  /**
+   * The seams a content-derived proof needs. An options object rather than two
+   * more positional parameters: this signature is already seven deep.
+   */
+  options?: {
+    readonly judge?: Parameters<typeof contentReviewer>[2];
+    readonly diffs?: readonly string[];
+    readonly maxRepairRounds?: number;
+  },
 ) {
   const memory = createJuliusMemoryStore();
   // Not narrowed to JuliusRuntimeStore: the drive loop runs the recovery sweep,
   // and the memory store is the recovery driver as well as the store.
   const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
-  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect, reviewerTexts, reviewerHangsFirst, reviewerEngineTimesOutFirst, researchPolicyFor });
+  const fakes = liveResolution({
+    verdicts, contexts: handoffs.contexts, architect, reviewerTexts, reviewerHangsFirst,
+    reviewerEngineTimesOutFirst, researchPolicyFor,
+    ...(options?.judge === undefined ? {} : { judge: options.judge }),
+    ...(options?.diffs === undefined ? {} : { diffs: options.diffs }),
+  });
   expect(fakes.resolution.ok).toBe(true);
   seedMissionRun(memory);
   const runtime = assembleLiveJuliusRuntime({
     store: handoffs.store, entries: fakes.resolution.entries,
-    cardRevision: 'card-test-1', spendCeilingUsdMicros: 5_000_000, maxRepairRounds: 1,
+    cardRevision: 'card-test-1', spendCeilingUsdMicros: 5_000_000,
+    maxRepairRounds: options?.maxRepairRounds ?? 1,
     budget,
   });
   const outcome = await driveJuliusRunToTerminal({
@@ -1091,6 +1190,10 @@ function reviewSnapshot(taskId: string): JuliusContextSnapshot {
     taskContractRevision: 1, taskContractDigest: 'sha256:resume-contract',
     sourceEntryIds: [], dependencyTaskIds: [], evidenceIds: [], findingIds: [],
     acceptanceCriterionIds: ['AC-1'], contentHash: 'sha256:resume-test',
+    // A fixture packet was compiled without claims, so no integrity decision
+    // was made for it. NULL says that; `[]` would say it was checked.
+    integrityVersion: null, integrityConflicts: null,
+    integrityExcludedEntryIds: null, integrityEvictedEntryIds: null,
     characterCount: 24, redactionCount: 0, truncated: false,
     packet: {
       missionId: 'mission-live-1', taskId, workerId, sourceEntryIds: [],
@@ -1310,6 +1413,178 @@ describe('the durable completion rule after a repair', () => {
     expect(outcome.state).toBe('VERIFYING');
     expect(outcome.stalled).toBe(true);
     expect(outcome.haltCause ?? '').toContain('REPAIR');
+  });
+});
+
+/**
+ * THE INDEPENDENT REVIEWER CATCHES SOMETHING THAT WOULD OTHERWISE HAVE SHIPPED.
+ *
+ * WHY THE EXISTING REPAIR CASES DO NOT PROVE THIS. `driveLiveMission(['approved',
+ * 'changes_required', 'approved'])` proves Julius ROUTES a rejection: it plans
+ * the repair, re-dispatches the coder, re-reviews and completes. The verdict
+ * itself is an input — an array — so the reviewer in those cases catches nothing.
+ * It is handed a conclusion.
+ *
+ * HERE THE VERDICT IS AN OUTPUT. The reviewer is the REAL
+ * `createLiveHermesReviewerAdapter`, building the REAL `ReviewPacket` from the
+ * REAL artifact exchange, and `judge` reads the unified diff inside it. The
+ * defect is a genuine violation of one of this repository's own load-bearing
+ * rules — UNKNOWN IS NOT ZERO — introduced as a real added line by the coder's
+ * first attempt:
+ *
+ *     +export const costUsdMicros = reported ?? 0;
+ *
+ * The repair replaces it with `?? null`. Nothing tells the reviewer which round
+ * it is in, and nothing tells it what to conclude; it looks for the pattern and
+ * reports what it finds. The four cases below are what make that claim checkable
+ * rather than decorative:
+ *
+ *   1. the defect is caught, repaired and re-reviewed, and the run completes;
+ *   2. THE SAME reviewer function approves the repaired diff immediately when it
+ *      is the FIRST attempt — so the catch tracks content, not round number;
+ *   3. a repair that does NOT remove the defect is caught AGAIN — no laundering;
+ *   4. the finding, its resolution and the repair lineage are all durable.
+ */
+describe('the Independent Reviewer catches a real defect, and the repair is re-reviewed', () => {
+  /** The rule being violated is one of this repository's own. */
+  const UNKNOWN_IS_NOT_ZERO = 'AC-1';
+
+  const diffWith = (line: string) => [
+    'diff --git a/fixtures/live-validation/normalize.ts b/fixtures/live-validation/normalize.ts',
+    '--- a/fixtures/live-validation/normalize.ts',
+    '+++ b/fixtures/live-validation/normalize.ts',
+    line,
+  ].join('\n');
+
+  /** The defect, as an added line. A real violation, not a marker. */
+  const DEFECTIVE = diffWith('+export const costUsdMicros = reported ?? 0;');
+  const REPAIRED = diffWith('+export const costUsdMicros = reported ?? null;');
+
+  /**
+   * THE CHECK, and it is a real one: an ADDED line that defaults a possibly
+   * absent value to zero. It reads only lines the diff added — a removed `?? 0`
+   * is the repair, not the defect — and it names the line it found, so the
+   * finding a reader sees is the evidence.
+   */
+  const judge = (packet: ReviewPacket) => {
+    const offending = packet.unifiedDiff.split('\n')
+      .filter((line) => line.startsWith('+') && !line.startsWith('+++'))
+      .find((line) => /\?\?\s*0\b/u.test(line));
+    return offending === undefined ? null : {
+      requirement: UNKNOWN_IS_NOT_ZERO,
+      explanation: 'An absent value is defaulted to 0, so an unmeasured cost would be reported as free. Unknown is not zero.',
+      evidence: offending.trim(),
+    };
+  };
+
+  const buildReviews = (packets: readonly ReviewPacket[]) =>
+    packets.filter((packet) => packet.unifiedDiff.length > 0);
+
+  it('catches the defect, sends it back, and completes once the repair removes it', async () => {
+    const { memory, fakes, outcome } = await driveLiveMission(
+      [], undefined, undefined, undefined, undefined, undefined, undefined,
+      { judge, diffs: [DEFECTIVE, REPAIRED] },
+    );
+
+    // THE CATCH. The first review of an implementation saw the defective line
+    // and rejected it; nothing in the harness told it to.
+    const reviews = buildReviews(fakes.packets);
+    expect(reviews.length, 'at least a review and a re-review').toBeGreaterThan(1);
+    expect(reviews[0]!.unifiedDiff).toBe(DEFECTIVE);
+    expect(judge(reviews[0]!), 'the first packet really did contain the defect').not.toBeNull();
+
+    // THE FINDING IS DURABLE, BLOCKING, AND NAMES THE LINE.
+    const findings = await memory.findingsForRun('run-live', 'prj-live');
+    const blocking = findings.filter((finding) => finding.blocking);
+    expect(blocking.length, 'the catch reached the durable record').toBeGreaterThan(0);
+    expect(blocking[0]!.claim, 'and the finding says what the reviewer actually saw')
+      .toContain('Unknown is not zero');
+
+    // THE REPAIR. Julius authorised it, the coder ran again, and the second
+    // review was handed DIFFERENT bytes.
+    const tasks = await memory.tasksForRun('run-live', 'prj-live');
+    const repairs = tasks.filter((item) => item.taskType.startsWith('repair:'));
+    expect(repairs.length, 'a repair task exists').toBeGreaterThan(0);
+    expect(repairs.every((item) => item.state === 'SUCCEEDED')).toBe(true);
+    expect(reviews.at(-1)!.unifiedDiff, 'the re-review judged the repaired bytes').toBe(REPAIRED);
+    expect(judge(reviews.at(-1)!), 'and the defect is gone from them').toBeNull();
+
+    // THE RE-REVIEW WAS SHOWN WHAT IT WAS RESOLVING, by Julius, not by the coder.
+    expect(reviews.at(-1)!.priorFindings ?? [], 'the re-review carries the finding it must answer')
+      .not.toHaveLength(0);
+
+    // AND JULIUS COMPLETED THE MISSION. Not the reviewer: the completion event
+    // is the loop's own.
+    expect(outcome.state).toBe('COMPLETED');
+    expect(outcome.haltCause).toBeNull();
+    expect(memory.events().some((event) => event.type === 'run.completed')).toBe(true);
+  });
+
+  /**
+   * THE CONTROL, and the case that makes this a catch rather than a script. The
+   * SAME `judge`, the SAME composition, the SAME everything — except the coder's
+   * first attempt is already correct. There is then nothing to find, and the
+   * reviewer approves the first implementation it sees.
+   */
+  it('approves the same diff when it arrives first: the catch is content, not a round counter', async () => {
+    const { memory, fakes, outcome } = await driveLiveMission(
+      [], undefined, undefined, undefined, undefined, undefined, undefined,
+      { judge, diffs: [REPAIRED] },
+    );
+    const reviews = buildReviews(fakes.packets);
+    expect(reviews[0]!.unifiedDiff).toBe(REPAIRED);
+    expect(outcome.state).toBe('COMPLETED');
+    const tasks = await memory.tasksForRun('run-live', 'prj-live');
+    expect(tasks.filter((item) => item.taskType.startsWith('repair:')),
+      'no repair round, because there was nothing to repair').toHaveLength(0);
+    const findings = await memory.findingsForRun('run-live', 'prj-live');
+    expect(findings.filter((finding) => finding.blocking),
+      'and no blocking finding was invented').toHaveLength(0);
+  });
+
+  /**
+   * NO LAUNDERING. A repair that does not remove the defect is caught again. The
+   * run then does not complete, because the round ceiling is reached with the
+   * finding still open — which is the honest outcome and the one a scripted
+   * `['changes_required', 'approved']` can never produce.
+   */
+  it('catches the defect again when the repair does not remove it', async () => {
+    const { memory, fakes, outcome } = await driveLiveMission(
+      [], undefined, undefined, undefined, undefined, undefined, undefined,
+      { judge, diffs: [DEFECTIVE, DEFECTIVE] },
+    );
+    const reviews = buildReviews(fakes.packets);
+    expect(reviews.length, 'both rounds were reviewed').toBeGreaterThan(1);
+    for (const packet of reviews) expect(judge(packet)).not.toBeNull();
+    expect(outcome.state, 'a run whose defect survives its repair must not complete')
+      .not.toBe('COMPLETED');
+    const findings = await memory.findingsForRun('run-live', 'prj-live');
+    expect(findings.filter((finding) => finding.blocking).length,
+      'each round recorded its own finding').toBeGreaterThan(1);
+  });
+
+  /**
+   * THE LINEAGE, which is what makes the catch auditable a week later: the
+   * finding, the decision that sent the work back, the repair that answers it,
+   * and the accept on the repair — not on the task the repair replaced.
+   */
+  it('preserves the whole lineage: finding, REPAIR decision, repair task, and its own accept', async () => {
+    const { memory } = await driveLiveMission(
+      [], undefined, undefined, undefined, undefined, undefined, undefined,
+      { judge, diffs: [DEFECTIVE, REPAIRED] },
+    );
+    const decisions = await memory.decisionsForRun('run-live', 'prj-live');
+    expect(decisions.some((decision) => decision.action === 'REPAIR' && decision.taskId === 'build-1'),
+      'the decision that sent the build back is durable').toBe(true);
+    // The repaired task's CURRENT decision is still the REPAIR: completion came
+    // from the repair lineage's own accept, never from re-deciding the original.
+    const build = decisions.filter((decision) => decision.taskId === 'build-1');
+    expect(build.at(-1)?.action).toBe('REPAIR');
+    expect(decisions.some((decision) =>
+      decision.action === 'ACCEPT' && decision.taskId === 'repair:build-1:1:task')).toBe(true);
+    // And the reviewer's evidence rows exist for both rounds.
+    const evidence = await memory.evidenceForRun('run-live', 'prj-live');
+    expect(evidence.filter((item) => item.type === 'REVIEW_FINDING').length).toBeGreaterThan(1);
   });
 });
 

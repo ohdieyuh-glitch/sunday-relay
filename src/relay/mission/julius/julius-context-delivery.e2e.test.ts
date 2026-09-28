@@ -136,10 +136,12 @@ function build(contextCharacterBudget = BUDGET): JuliusHarness {
   return harness;
 }
 
-async function drain(loop: JuliusRunLoop, maxTicks = 20): Promise<void> {
+/** Ticks until nothing is claimable, answering how many ticks that took. */
+async function drain(loop: JuliusRunLoop, maxTicks = 20): Promise<number> {
   for (let tick = 0; tick < maxTicks; tick += 1) {
-    if ((await loop.tick(scope)).claimed === 0) return;
+    if ((await loop.tick(scope)).claimed === 0) return tick;
   }
+  return maxTicks;
 }
 
 /** The durable snapshot the coder's dispatch was recorded against. */

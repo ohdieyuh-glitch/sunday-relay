@@ -62,6 +62,8 @@ function snapshot(taskId: string): JuliusContextSnapshot {
     taskContractRevision: 1, taskContractDigest: 'sha256:contract',
     sourceEntryIds: [], dependencyTaskIds: [], evidenceIds: [], findingIds: [],
     acceptanceCriterionIds: ['AC-1'], contentHash: 'sha256:content',
+    integrityVersion: null, integrityConflicts: null,
+    integrityExcludedEntryIds: null, integrityEvictedEntryIds: null,
     characterCount: 24, redactionCount: 0, truncated: false,
     packet: {
       missionId: 'mission-live-1', taskId, workerId, sourceEntryIds: [],

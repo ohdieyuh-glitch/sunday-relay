@@ -98,6 +98,10 @@ function planSnapshot(taskId: string): JuliusContextSnapshot {
     taskContractRevision: 1, taskContractDigest: 'sha256:diag-contract',
     sourceEntryIds: [], dependencyTaskIds: [], evidenceIds: [], findingIds: [],
     acceptanceCriterionIds: ['AC-1'], contentHash: 'sha256:diag-test',
+    // A fixture packet was compiled without claims, so no integrity decision
+    // was made for it. NULL says that; `[]` would say it was checked.
+    integrityVersion: null, integrityConflicts: null,
+    integrityExcludedEntryIds: null, integrityEvictedEntryIds: null,
     characterCount: 24, redactionCount: 0, truncated: false,
     packet: {
       missionId: 'mission-diag-1', taskId, workerId: 'prompt-architect-openai',
