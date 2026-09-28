@@ -4,7 +4,7 @@
 > repository evidence does not. Update it whenever meaningful state changes and
 > before ending a session. Never rely on `/resume` as the sole record.
 
-**Most recent session: 2026-09-27, the MVP LOOP pass (creation over the bridge). Read §000d, then §000c, then §000b, then §000.**
+**Most recent session: 2026-09-27, the LANDING pass. Read §000e, then §000d, then §000c, then §000b, then §000.**
 > The paragraph below it is the record of the session before that.
 
 **Most recent session:** 2026-09-08, the **Claude Code cloud session**. Read
@@ -16,6 +16,130 @@ lifecycle, and the concurrent-proposal fix a real PostgreSQL race found.
 Everything from §0a onward is the earlier local record.
 
 ---
+
+## 000e. THE LANDING, AND THE FOUR DEFECTS FOUND WHILE PREPARING IT
+
+**Read this first.** It is the newest work.
+
+**Branch:** `relay/julius-beta-qualification`, worktree `C:\dev\iwonder\julius-beta`.
+**Base:** `origin/main` `a384b215` (#287), unmoved, 0 behind, `git merge-tree`
+clean. **Paid API spend this session: $0.00.**
+
+### The ceremony, and who can perform which step
+
+The landing was previously recorded here as blocked at a permission boundary, on
+the belief that the whole ceremony was founder work. That was wrong in a specific
+and correctable way, and reading `docs/JULIUS_WORKER_PR_RUNBOOK.md` rather than
+remembering it is what corrected it. The ceremony has three steps and they divide
+by authority:
+
+| Step | What | Who | State |
+|---|---|---|---|
+| 1 | re-author the commits as the App on a NEW branch | this lane | performed |
+| 2 | mint an installation token, push, open the PR as the App | this lane | performed |
+| 3 | approve at the head SHA, squash-merge at that head | **the founder only** | **OUTSTANDING** |
+
+Step 3 is not a formality this lane could shortcut.
+`scripts/julius-main-provenance.mjs` requires the landed PR's author to be
+`julius-worker[bot]` and its approver to be a DIFFERENT login, so the lane that
+wrote the code is structurally incapable of completing its own landing. The App's
+installation on this repository (`159218171`) grants `contents=write` and
+`pull_requests=write` and deliberately nothing that can merge. **The candidate is
+NOT landed until `origin/main` contains it, and nothing in this file should be
+read as saying otherwise.**
+
+### The complete authoritative gate list, run as gates and not as parts
+
+All nine gates in `docs/JULIUS_BETA_LANDING.md` were run at every head this
+session, aggregate commands only: `npm run typecheck`, not the four `tsc`
+invocations it wraps, which is the substitution that once let a red typecheck sit
+on this branch for four commits. Plus 2,271 tests across 108 files in
+`src/relay/integration` and `src/relay/mission/julius` after the redaction
+change, because that change touches a repository-wide rule.
+
+### Four defects found while preparing the landing
+
+1. **AN API KEY SURVIVED THE REDACTOR.** Reported by the Wonderland integration
+   lane, reproduced here by probe as FOUR leaks. In the boundary set the
+   `authorization` rule ran first and stopped at whitespace, so it ate the word
+   `Bearer` and destroyed the anchor the next rule needed: the key was not
+   missed, it was made unreachable by the rule in front of it. And the
+   repository-wide rule demanded eight alphanumerics straight after `sk-`, so it
+   missed every modern provider key (`sk-ant-api03-`, `sk-proj-`,
+   `sk-svcacct-`), and a bare Anthropic key in prose was never redacted by
+   anything. The table test that should have caught all of it asserted
+   `not.toContain(whole fixture)`, which `[redacted] <token>` satisfies. Fixed in
+   `7a04ab33`; eleven cases fail with only the two source files reverted.
+2. **THIS REPOSITORY'S LANDING PAGE NAMED A SCRIPT THAT HAS NEVER EXISTED**
+   (`ceremony/push-as-worker.sh`), in the same page that warns against sending a
+   reviewer to chase a phantom.
+3. **THE RUNBOOK'S APP ID WAS THE BOT'S USER ID.** `325202980` is the number in
+   the bot's noreply address; the App id is `4838349`. The App id is the JWT's
+   `iss`, so an operator following that line would have met `404 Integration not
+   found` at the first call with nothing to tell them why.
+4. **THE HEREDOC BACKSLASH TRAP FIRED INSIDE THE SENTENCE DESCRIBING IT**,
+   writing a literal 0x08 into the landing page. The new diagnostic: a
+   `SyntaxWarning: invalid escape sequence` in the output is the RECEIPT that the
+   collapse happened, and every VALID escape in that same heredoc was silently
+   converted. No warning is not good news. A sweep of every tracked file for
+   0x08, 0x0c, 0x0b, 0x07 and 0x1b found only binary assets and ANSI escapes in
+   the CLI's renderers.
+
+### Two Windows credential traps, paid for twice
+
+`openssl` will not take a PEM through process substitution, and mingw `curl`
+cannot read `-H @/dev/fd/3` (it answers `Failed to open /proc/<pid>/fd/3`). Both
+need a real path, so an Authorization header belongs in a `mktemp` file at mode
+600 with an `EXIT` trap, never on a command line where a process list carries the
+token. `gh` on this machine holds the FOUNDER's credential, so the ceremony uses
+curl with a minted installation token and does not invoke `gh` at all.
+
+### The representative paid mission: PREPARED, NOT DISPATCHED
+
+`.github/julius-missions/julius-live-mission-6/` targets the cross-platform
+defect the integration lane reported, where `search.find`, `search.glob` and
+`search.grep` build emitted paths with the HOST separator, so on Windows a needle
+written `src/relay` matches nothing in a workspace full of matching files and a
+Coding Agent told there is no such file believes it.
+
+Three things make it a fair test of the C.A.R.D. lifecycle rather than an
+endurance test. The import closure is ONE 63-line file, because its only
+non-builtin import is type-only and Node's type stripping erases it. The seeded
+specification fails on LINUX as well as Windows, because a "does the output
+contain a forward slash" assertion would pass vacuously on the only host that
+gates this repository, so the spec exercises two new pure helpers with backslash
+input on every host. And the budget needs no founder decision, sitting inside the
+DEFAULT $5 and one-repair-cycle bound, argued from the two paid datapoints the
+limits table already cites. `julius-live-contract-check.mjs` answers CONTRACT OK.
+
+**It is not dispatched, and dispatch is the only place money is spent.** This
+repository's own rule, recorded in the runbook after paid run 34311556047: every
+paid mission needs a specific causal question, a justified reason that answering
+it needs provider spend, and explicit founder authorisation for that run. A new
+`main` sha is not a causal question.
+
+### A latent authority defect, recorded rather than changed
+
+`src/relay/mission/project-workspace/project-contracts.ts` grants
+`start_mission` to `developer`, which contradicts the founder decision that only
+an OWNER or an authorised ADMIN may cause paid execution. It is NOT a live hole:
+a grep across `src/` and `relay-bridge/` excluding tests finds NOTHING that reads
+`start_mission` at all. It is a declared grant with no enforcement point, the "a
+declared signature is not a capability" shape again, and therefore a trap primed
+for whoever wires the first dispatch route to it. Not changed mid-landing; the
+integration lane's player creation route gates on its own OWNER-only capability
+and never reads this one.
+
+### What this session did NOT do
+
+- **It did not land anything.** Step 3 is the founder's.
+- **It did not spend.** $0.00, and no provider credential was used.
+- It did not run the paid mission, so no reviewer verdict, repair lineage or
+  durable paid evidence exists for it. Every such row is UNKNOWN, not zero.
+- It did not record the PR number here, because a commit cannot name the pull
+  request that contains it. The number is in the session report and belongs in a
+  post-merge follow-up.
+
 
 ## 000. BETA QUALIFICATION RUN 2026-09-26 — THE TWO STUBS THAT WERE COUNTED AS CAPABILITIES
 
