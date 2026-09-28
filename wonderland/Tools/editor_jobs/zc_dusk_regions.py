@@ -184,25 +184,49 @@ def job():
     RESULT["places"] = out
     RESULT["vantage"] = vantage
 
+    def place_pawn(x, y, tries=3):
+        """Put the pawn at (x, y) and PROVE it arrived, moving it again if it came back somewhere else.
+
+        A long teleport RESPAWNS the pawn in this project, and a fixed sleep afterwards samples whichever
+        moment of the respawn it lands in. The same code and the same coordinates placed Tartarus at
+        offset 0.0 in one run and found NO PAWN AT ALL five seconds after the move in the next -- 153 km
+        from the previous district, so the move is a respawn and a stream at once.
+
+        Waiting on the PREDICATE that a pawn exists, then checking where it actually is and moving it
+        again if it respawned at the old spot, is the difference between a placement and a hope. Result
+        goes through a global because a generator that yields channel steps cannot also return a value.
+        """
+        globals()["_PLACED"] = None
+        for attempt in range(tries):
+            p = unreal.GameplayStatics.get_player_pawn(live(), 0)
+            gz = None
+            if p is not None:
+                h = trace(unreal.Vector(x, y, 20000.0), unreal.Vector(x, y, -5000.0), p)
+                gz = h["z"] if h else None
+                p.set_actor_location(
+                    unreal.Vector(x, y, (gz + 120.0) if gz is not None else 200.0), False, True)
+            # A PREDICATE, NOT A DURATION: wait until a pawn exists again rather than assuming one does.
+            yield (lambda: unreal.GameplayStatics.get_player_pawn(live(), 0) is not None, 120)
+            command("FlushLevelStreaming")
+            yield 2.0
+            p = unreal.GameplayStatics.get_player_pawn(live(), 0)
+            if p is None:
+                continue
+            w = p.get_actor_location()
+            if math.hypot(w.x - x, w.y - y) <= 500.0:
+                globals()["_PLACED"] = {"pawn": p, "where": w, "ground_z": gz, "attempts": attempt + 1}
+                return
+
     for name, (px, py) in PLACES:
-        pawn = unreal.GameplayStatics.get_player_pawn(live(), 0)
-        gz = None
-        if pawn is not None:
-            hit = trace(unreal.Vector(px, py, 20000.0), unreal.Vector(px, py, -5000.0), pawn)
-            gz = hit["z"] if hit else None
-            pawn.set_actor_location(
-                unreal.Vector(px, py, (gz + 120.0) if gz is not None else 200.0), False, True)
-        yield 2.0
-        # A teleport across a partitioned map is a streaming event; a half-loaded district holds still.
-        command("FlushLevelStreaming")
-        yield 3.0
-        pawn = unreal.GameplayStatics.get_player_pawn(live(), 0)      # re-fetch: the move can respawn it
-        if pawn is None:
+        for step in place_pawn(px, py):
+            yield step
+        got = globals().get("_PLACED")
+        if got is None:
             vantage[name] = {"asked": [px, py], "landed": None, "valid": False,
-                             "why": "no pawn after the teleport"}
+                             "why": "the pawn could not be placed in three attempts"}
             out[name] = []
             continue
-        where = pawn.get_actor_location()
+        pawn, where, gz = got["pawn"], got["where"], got["ground_z"]
         off = round(math.hypot(where.x - px, where.y - py), 1)
 
         eye = unreal.Vector(where.x, where.y, where.z + CAM_UP)
@@ -222,6 +246,7 @@ def job():
         vantage[name] = {
             "asked": [px, py], "landed": [round(where.x, 1), round(where.y, 1), round(where.z, 1)],
             "offset_uu": off, "ground_trace_z": gz,
+            "place_attempts": got["attempts"],
             "eye": [round(eye.x, 1), round(eye.y, 1), round(eye.z, 1)],
             "at": [round(at.x, 1), round(at.y, 1), round(at.z, 1)],
             "forward_hit": fwd, "down_hit": down, "ground_patch_hit": gpatch}
