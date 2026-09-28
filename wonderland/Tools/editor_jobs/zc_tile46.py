@@ -108,10 +108,15 @@ def job():
           "heights": RESULT["distinct_surface_heights"]})
 
     record("T00", "every sample point across the tile has a surface under it",
-           len(empty) == 0, no_surface_at=[g["offset"] for g in empty], of=len(grid),
+           len(grid) > 0 and len(empty) == 0,
+           no_surface_at=[g["offset"] for g in empty], of=len(grid), sampled=len(grid),
            note="a handful of dead points in a field of good ones is a GAP IN THE FLOOR and a beta defect. "
                 "All points dead means the cell never arrived and this measured nothing. A consistent floor "
-                "everywhere means the walk's single centre sample was simply unlucky.")
+                "everywhere means the walk's single centre sample was simply unlucky. "
+                "AND len(grid) > 0 IS PART OF THE TEST, not decoration: `empty` is filtered FROM grid, so an "
+                "empty grid yields an empty `empty` and this passed hardest exactly when it had measured "
+                "nothing at all. The note above described that outcome for weeks while the gate went green "
+                "on it -- a clause that fails on a non-empty list passes when the list cannot be built.")
 
     highs = [max(g["surfaces"]) for g in grid if g["surfaces"]]
     if highs:

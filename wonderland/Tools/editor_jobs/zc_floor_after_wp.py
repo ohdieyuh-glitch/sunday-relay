@@ -105,9 +105,14 @@ def job():
            note="traced on the channel a CHARACTER collides with, after the conversion, with the player "
                 "standing near each point so its cell is loaded")
     record("F02", "no floor is visible-but-not-solid",
-           len(look_only) == 0, visible_but_not_collidable=look_only,
+           total == len(RINGS) * PER_RING and len(look_only) == 0,
+           visible_but_not_collidable=look_only, points=total, wanted=len(RINGS) * PER_RING,
            note="a mesh you can see and fall through is what a conversion that dropped collision would leave "
-                "behind, and no count of the map's contents would show it")
+                "behind, and no count of the map's contents would show it. "
+                "THE POINT COUNT IS PART OF THE TEST because look_only is filtered FROM points: with no "
+                "points there is nothing visible-but-not-solid and this went green having traced nothing. "
+                "F00 would have gone red beside it, which is not the same as this one telling the truth -- "
+                "a reader scanning for greens would have banked it.")
 
     RESULT["status"] = "measured"
     yield 2.0

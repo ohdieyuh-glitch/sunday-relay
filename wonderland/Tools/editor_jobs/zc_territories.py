@@ -65,6 +65,13 @@ def job():
         return
 
     rows = list(terr.get_territories())
+    #: Attached to every clause whose collection is filled one entry per territory.
+    NOTE_COUNT = (
+        "A COUNT IS PART OF THIS TEST. The collection is filled one entry per territory, so an empty or "
+        "short registry makes the all() below vacuously true and the clause goes green having examined "
+        "nothing. T01 would be red beside it, which is not the same as this clause telling the truth -- a "
+        "reader scanning for greens banks it. T10 in this file already tied itself to len(rows); these "
+        "six did not until they were counted for.")
     RESULT["territories"] = [{"id": str(r.id), "name": r.display_name,
                               "spec": r.specialisation, "canon": bool(r.specialisation_is_canon),
                               "xy": [round(r.checkpoint_xy.x, 1), round(r.checkpoint_xy.y, 1)],
@@ -121,8 +128,9 @@ def job():
            standing == len(rows) and len(markers) == len(rows),
            standing=standing, expected=len(rows), found=sorted(markers.keys()))
     record("T11", "the markers are architecture, not floating pins",
-           all(v["height"] >= 400.0 for v in markers.values()),
+           len(markers) == len(rows) and all(v["height"] >= 400.0 for v in markers.values()),
            heights=[v["height"] for v in markers.values()], floor=400.0,
+           markers_found=len(markers), territories=len(rows), count_note=NOTE_COUNT,
            note="the founder: 'Do NOT use generic floating map pins.' Six metres of standing stone, on the "
                 "ground, at the scale of a gatepost.")
 
@@ -169,16 +177,20 @@ def job():
         yield 6.5
 
     record("T21", "standing in a territory is recognised, for every territory",
-           all(v["current"] == k for k, v in walked.items()),
-           current_by_territory={k: v["current"] for k, v in walked.items()})
+           len(walked) == len(rows) and all(v["current"] == k for k, v in walked.items()),
+           current_by_territory={k: v["current"] for k, v in walked.items()},
+           walked_count=len(walked), territories=len(rows), count_note=NOTE_COUNT)
 
     record("T22", "every territory is DISCOVERED by walking into it, and none before",
-           all(v["now_discovered"] and not v["was_discovered"] for v in walked.values()),
-           per_territory={k: [v["was_discovered"], v["now_discovered"]] for k, v in walked.items()})
+           len(walked) == len(rows)
+           and all(v["now_discovered"] and not v["was_discovered"] for v in walked.values()),
+           per_territory={k: [v["was_discovered"], v["now_discovered"]] for k, v in walked.items()},
+           walked_count=len(walked), territories=len(rows), count_note=NOTE_COUNT)
 
     record("T23", "the first-entry banner names the territory it was raised for",
-           all(v["announcing"] == k for k, v in walked.items()),
-           announcing_by_territory={k: v["announcing"] for k, v in walked.items()})
+           len(walked) == len(rows) and all(v["announcing"] == k for k, v in walked.items()),
+           announcing_by_territory={k: v["announcing"] for k, v in walked.items()},
+           walked_count=len(walked), territories=len(rows), count_note=NOTE_COUNT)
 
     # AND THE BANNER OBEYS THE SAME RULE ABOUT INVENTED LORE.
     banner_bad = {k: v["banner_spec"] for k, v in walked.items()
@@ -205,12 +217,12 @@ def job():
     RESULT["map_panels"] = panels
     # NAME, SPECIALIZATION, STATE, PURPOSE, PLACES, ACTIVITIES, WAY -- the founder's own list, seven fields.
     record("T31", "selecting a territory shows name, specialisation, state, purpose, places, activities and the way there",
-           all(len(str(v).split("|")) == 7 for v in panels.values()),
+           len(panels) == len(rows) and all(len(str(v).split("|")) == 7 for v in panels.values()),
            fields={k: len(str(v).split("|")) for k, v in panels.items()})
 
     ways = {k: (str(v).split("|")[6] if len(str(v).split("|")) == 7 else "") for k, v in panels.items()}
     record("T32", "the map says which way every territory lies and how far",
-           all(w.strip() for w in ways.values()), way=ways,
+           len(ways) == len(rows) and all(w.strip() for w in ways.values()), way=ways,
            note="the founder: 'Where is ICARUS? Where is NOCTIS? Where is TARTARUS? ... How do I get there?'")
 
     try:
