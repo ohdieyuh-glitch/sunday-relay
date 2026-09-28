@@ -233,6 +233,56 @@ refuses), `docs/JULIUS_TRACE_CORPUS.md`.
 
 ---
 
+## `main` IS UNPROVENANCED TODAY, AND ONE LANDING FIXES IT
+
+`scripts/julius-main-provenance.mjs` against `main`, quoted:
+
+```
+provenance=unprovenanced main=a384b215 pr=287 approved_by=none
+reason=the landed candidate is not approved: no approval exists for this pull request
+```
+
+PR #287 landed with no approval on record. The same rule gates paid execution, so
+this is a real blocker and not a cosmetic state: **until a compliant landing sits
+on main's tip, the provenance route is red however clean any branch is.**
+
+**THE SMALLEST LEGITIMATE PROCEDURE IS THE ONE ALREADY IN FRONT OF US, and no
+backfill is possible or needed.** The rule says so about itself, in its own words:
+
+> WHAT IT DOES NOT PROVE. This is a statement about ONE commit, not about the
+> branch's history.
+
+Every input it takes — `mainSha`, `mainParents`, the merged pull request whose
+`mergeCommitSha` equals that sha, that PR's author, `main`'s tree against the
+reviewed head's tree, review currency at that head — describes the commit
+currently on `main`. Nothing scans history. So provenance is not something #287
+permanently spent; it is a property of the tip, and it returns the moment a
+compliant commit becomes the tip.
+
+**The procedure, then, is exactly steps 2 and 3 of the runbook and nothing more:**
+
+1. The founder approves PR #288 **at head `15cf04d725bef8ea69ae54fe0554e9981580298c`**.
+   The binding that matters is the review's `commit_id`, not its prose: read the
+   `commit_id`.
+2. The founder squash-merges at that exact head:
+   `gh pr merge 288 --squash --match-head-commit 15cf04d725bef8ea69ae54fe0554e9981580298c`.
+3. Re-run the three gates. `provenance` should then answer `provenant`, because
+   main's tip will be a single-parent squash of a `julius-worker[bot]` pull
+   request, approved by a different login at the head that merged, whose tree
+   equals main's.
+
+**WHAT MUST NOT BE DONE.** No approval may be recorded for #287 after the fact —
+the code on main was never reviewed, and a review added now would be a statement
+about a tree nobody read at the time. The gate is correct to call the current
+state unprovenanced, and the honest repair is a new compliant landing, not a
+retroactive signature.
+
+**ONE FAILURE MODE TO WATCH.** If `main` moves before the merge, the
+base-containment rule refuses a head that does not contain the new `main`. The
+remedy is in the runbook: rebase the worker branch as the App, re-run the three
+identity and tree verifications, push, wait for CI, and **re-approve at the new
+head**. Never merge an approval that names an older head.
+
 ## What the reviewer should be sceptical about
 
 1. **The readiness number.** 80%, computed from the table's own weights; the
