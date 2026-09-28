@@ -81,7 +81,43 @@ operator_required`; `503 julius_state_unavailable` (with the missing variable);
 answers the same 404, deliberately, so the route cannot be used to enumerate
 other tenants' run ids.
 
+## How a mission is created
+
+**`POST /relay-api/julius/missions`**, operator `Bearer`, body = a mission
+contract exactly as the contract file is written (`missionId`,
+`markerNamespace`, `projectId`, `tenantId`, `objective`, `requirements`,
+`constraints`, `acceptanceCriteria`, `testCommand` — empty when the mission
+declares no deterministic check — `workspacePath`, optional `limits` and
+`research`). It is validated by the contract file's own parser, so there is no
+second schema for a client to drift from.
+
+**Creation is the bootstrap and nothing more.** The run lands durable in `READY`
+with its plan and build tasks, its task contract as revision 1 DRAFT, its
+criteria and its seed brain — through the same port the mission job uses, over
+the same store — and the read routes above can watch it from that moment. The
+response says what was not done: `dispatched: false`. Nothing composes a
+provider, spends money or ticks the loop; **driving the run is the job's**, and a
+client that rendered "created" as "running" would draw a mission nobody is
+driving. Re-posting the same contract resumes the same run rather than creating
+a second one: the execution identity is derived from `missionId`, exactly as the
+job derives it.
+
+**Refusals:** `401 operator_required`; `503 julius_state_unavailable` (no
+database — no run was created); `503 reviewer_provider_unknown`
+(`RELAY_HERMES_PROVIDER` unset — the reviewer's independence group is part of
+the mission's recorded identity, and a mission that cannot name it is refused
+rather than guessed); `400` carrying the parser's or the bootstrap's own reason
+for a malformed contract, missing or non-blocking criteria, or an underivable
+task contract.
+
 ## What is NOT served yet, and what it would take
+
+**Dispatch is not reachable from a client.** A created run sits in `READY` until
+the mission job drives it, and the job is started from a shell on the machine
+that holds the credentials and the executor. Making the drive reachable over
+HTTP is the deployment decision after this one — it is where money is spent —
+and it is not taken here.
+
 
 **A browser session cannot read it yet.** The operator credential governs this
 surface because it already governs everything that spends money; which fields a

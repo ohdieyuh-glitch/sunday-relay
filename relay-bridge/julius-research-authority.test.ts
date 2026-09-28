@@ -335,6 +335,8 @@ describe('C — reach is reported before the run, and never enforced there', () 
 
 describe('D — the entrypoint actually hands both halves to the runtime', () => {
   const ENTRY = readFileSync(join(process.cwd(), 'relay-bridge/julius-live-mission.ts'), 'utf8');
+  // The contract's shape lives in the library the job and the bridge share.
+  const CONTRACT_LIBRARY = readFileSync(join(process.cwd(), 'relay-bridge/julius/mission-contract.ts'), 'utf8');
 
   /** The body of a call, matched by counting braces rather than by a lazy regex. */
   const callBody = (source: string, callee: string): string => {
@@ -385,7 +387,8 @@ describe('D — the entrypoint actually hands both halves to the runtime', () =>
     // The contract states authority. If it could also state what Relay has
     // seen, a mission document would be vouching for the one fact it cannot
     // know, and Live Reach's readiness gate would become decorative.
-    const clause = ENTRY.slice(ENTRY.indexOf('export interface LiveMissionResearchClause'));
+    const clause = CONTRACT_LIBRARY.slice(CONTRACT_LIBRARY.indexOf('export interface LiveMissionResearchClause'));
+    expect(clause.startsWith('export interface LiveMissionResearchClause'), 'the clause must be found, or the slice is vacuous').toBe(true);
     const body = clause.slice(0, clause.indexOf('}'));
     expect(body).not.toContain('probe');
     expect(body).not.toContain('backend');
