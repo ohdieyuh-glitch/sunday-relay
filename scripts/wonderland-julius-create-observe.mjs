@@ -595,14 +595,20 @@ try {
   await call('PUT', createProfilePath, { headers: { ...operator, 'x-relay-actor': 'drill-operator' }, body: JSON.stringify({ ...CREATE_PROFILE, enabled: false }) });
   const disabled = await call('POST', createPath, { headers: asOwner(), body: JSON.stringify(PLAYER_MISSION) });
   await call('PUT', createProfilePath, { headers: { ...operator, 'x-relay-actor': 'drill-operator' }, body: JSON.stringify({ ...CREATE_PROFILE, enabled: true }) });
+  // An execution field at the top AND an evidence standard inside a criterion: both are the operator's, both named.
   const smuggle = await call('POST', createPath, {
-    headers: asOwner(), body: JSON.stringify({ ...PLAYER_MISSION, workspacePath: '/', limits: { spendUsd: 9999 } }),
+    headers: asOwner(), body: JSON.stringify({
+      ...PLAYER_MISSION, acceptanceCriteria: [{ ...PLAYER_MISSION.acceptanceCriteria[0], requiredEvidence: ['DIFF'] }],
+      workspacePath: '/', limits: { spendUsd: 9999 },
+    }),
   });
-  clause('C01', 'a player can create nothing until the operator has configured AND enabled the project, and can never set an execution field',
+  clause('C01', 'a player can create nothing until the operator has configured AND enabled the project, and can never set an '
+    + 'execution field or a criterion\'s evidence standard',
     noProfile.status === 409 && noProfile.json?.error?.kind === 'execution_not_configured'
       && disabled.status === 403 && disabled.json?.error?.kind === 'execution_disabled'
       && smuggle.status === 400 && smuggle.json?.error?.kind === 'forbidden_field'
-      && JSON.stringify(smuggle.json?.error?.forbidden ?? []) === JSON.stringify(['workspacePath', 'limits'])
+      && JSON.stringify(smuggle.json?.error?.forbidden ?? [])
+        === JSON.stringify(['workspacePath', 'limits', 'acceptanceCriteria[0].requiredEvidence'])
       && (await creationRows()).length === 0,
     { noProfile: `${noProfile.status} ${noProfile.json?.error?.kind ?? 'none'}`, disabled: `${disabled.status} ${disabled.json?.error?.kind ?? 'none'}`,
       smuggled: `${smuggle.status} ${JSON.stringify(smuggle.json?.error?.forbidden ?? [])}` });

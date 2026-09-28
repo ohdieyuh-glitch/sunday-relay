@@ -86,6 +86,12 @@ export const WONDERLAND_EXECUTION_PROFILE_FIELDS = [
 
 /** Exactly the keys a PLAYER may send. Every other contract field is the operator's. */
 export const WONDERLAND_PLAYER_MISSION_FIELDS = ['objective', 'requirements', 'constraints', 'acceptanceCriteria'] as const;
+/**
+ * Exactly the keys a player's acceptance criterion may carry: their words and whether the criterion blocks. Anything
+ * else a contract lets a criterion carry is the operator's -- Julius's requiredEvidence, for one, decides which
+ * evidence verifies the build, and under an empty test command it is the whole standard.
+ */
+export const WONDERLAND_PLAYER_CRITERION_FIELDS = ['id', 'text', 'blocking'] as const;
 
 export interface WonderlandPlayerMissionFields {
   readonly objective: string;
@@ -188,17 +194,27 @@ export function parseStoredExecutionProfile(projectId: string, stored: unknown):
  * What a player sent, validated -- and ONLY those four fields. A body carrying
  * any other contract field (a workspace, a command, a budget, a mission id) is
  * refused and the fields are named: silently dropping them would leave a client
- * believing it had set them.
+ * believing it had set them. The same holds one level down: a criterion carries
+ * id, text and blocking, and a key beyond those is named, not dropped.
  */
 export function parsePlayerMissionFields(body: unknown):
   | { readonly ok: true; readonly value: WonderlandPlayerMissionFields }
   | { readonly ok: false; readonly kind: 'forbidden_field' | 'malformed_mission'; readonly problem: string; readonly forbidden?: readonly string[] } {
   if (!isObject(body)) return { ok: false, kind: 'malformed_mission', problem: 'A mission is a JSON object.' };
   const forbidden = Object.keys(body).filter((key) => !(WONDERLAND_PLAYER_MISSION_FIELDS as readonly string[]).includes(key));
+  if (Array.isArray(body.acceptanceCriteria)) {
+    body.acceptanceCriteria.forEach((item: unknown, index: number) => {
+      if (!isObject(item)) return;
+      for (const key of Object.keys(item)) {
+        if (!(WONDERLAND_PLAYER_CRITERION_FIELDS as readonly string[]).includes(key)) forbidden.push(`acceptanceCriteria[${index}].${key}`);
+      }
+    });
+  }
   if (forbidden.length > 0) {
     return {
       ok: false, kind: 'forbidden_field', forbidden,
-      problem: `A player sets only ${WONDERLAND_PLAYER_MISSION_FIELDS.join(', ')}. Not settable here: ${forbidden.join(', ')}.`,
+      problem: `A player sets only ${WONDERLAND_PLAYER_MISSION_FIELDS.join(', ')}, and each criterion only `
+        + `${WONDERLAND_PLAYER_CRITERION_FIELDS.join(', ')}. Not settable here: ${forbidden.join(', ')}.`,
     };
   }
   const malformed = (problem: string) => ({ ok: false as const, kind: 'malformed_mission' as const, problem });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   WONDERLAND_EXECUTION_PROFILE_SCHEMA_V1,
+  WONDERLAND_PLAYER_CRITERION_FIELDS,
   WONDERLAND_PLAYER_MISSION_FIELDS,
   composeTrustedMissionContract,
   parseExecutionProfile,
@@ -132,6 +133,25 @@ describe('the player\'s four fields, and nothing else of theirs', () => {
       expect(parsed.kind).toBe('forbidden_field');
       expect([...(parsed.forbidden ?? [])].sort()).toEqual(Object.keys(smuggled).sort());
     }
+  });
+
+  it('REFUSES a key inside a criterion beyond id, text and blocking -- the evidence standard is the operator\'s -- and names it', () => {
+    expect(WONDERLAND_PLAYER_CRITERION_FIELDS).toEqual(['id', 'text', 'blocking']);
+    const parsed = parsePlayerMissionFields(playerBody({ acceptanceCriteria: [
+      { id: 'a', text: 'one', blocking: true },
+      { id: 'b', text: 'two', blocking: true, requiredEvidence: ['DIFF'], weight: 3 },
+    ] }));
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok) {
+      expect(parsed.kind).toBe('forbidden_field');
+      expect(parsed.forbidden).toEqual(['acceptanceCriteria[1].requiredEvidence', 'acceptanceCriteria[1].weight']);
+    }
+    // Named alongside a top-level smuggle, never instead of it.
+    const both = parsePlayerMissionFields({
+      ...playerBody({ acceptanceCriteria: [{ id: 'a', text: 'one', blocking: true, requiredEvidence: ['TEST'] }] }), testCommand: '',
+    });
+    expect(both.ok).toBe(false);
+    if (!both.ok) expect(both.forbidden).toEqual(['testCommand', 'acceptanceCriteria[0].requiredEvidence']);
   });
 
   it('refuses a mission with no way to tell it is done, and duplicate criterion ids', () => {

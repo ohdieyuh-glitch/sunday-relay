@@ -219,6 +219,17 @@ describe('what a player may NOT do -- and nothing is recorded, nothing reaches J
     nothingHappened(w);
   });
 
+  it('smuggle an evidence standard into a criterion: refused and named, never dropped', async () => {
+    const w = world();
+    const answer = await handleWonderlandMissionCreation(post(signedIn(w.store), {
+      body: { ...MISSION, acceptanceCriteria: [{ ...MISSION.acceptanceCriteria[0], requiredEvidence: ['DIFF'] }] },
+    }), w.deps);
+    expect(answer?.status).toBe(400);
+    expect(kindOf(answer)).toBe('forbidden_field');
+    expect((answer?.body as { error: { forbidden: string[] } }).error.forbidden).toEqual(['acceptanceCriteria[0].requiredEvidence']);
+    nothingHappened(w);
+  });
+
   it('a member without create_mission is refused; TODAY a MEMBER row is refused by the canonical table', async () => {
     const decided = world({
       membership: members({ [`${PLAYER}|${PROJECT}`]: 'MEMBER' }),
