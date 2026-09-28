@@ -80,15 +80,54 @@ int32 SWonderlandHexBadge::OnPaint(const FPaintArgs& Args, const FGeometry& Allo
 /* ------------------------------------------------------------- terminal */
 
 SWonderlandLiveTerminal::SWonderlandLiveTerminal()
-	: WindowBrush(WonderlandUi::WindowFill(), 10.0f, WonderlandUi::GoldDim(), 1.0f)
-	, SectionBrush(WonderlandUi::SectionFill(), 7.0f, WonderlandUi::GoldDim(), 1.0f)
-	, InputBrush(WonderlandUi::Srgb(5, 6, 9, 0.72f), 6.0f, WonderlandUi::GoldDim(), 1.0f)
-	, SlotBrush(WonderlandUi::Srgb(8, 9, 12, 0.58f), 6.0f, WonderlandUi::Srgb(217, 164, 65, 0.18f), 1.0f)
+	: WindowBrush(WonderlandUi::TintPlate(WonderlandUi::WindowFill(), WonderlandUi::JuliusAccent(), 0.055f),
+		10.0f, WonderlandUi::JuliusGold(0.40f), 1.0f)
+	, SectionBrush(WonderlandUi::TintPlate(WonderlandUi::SectionFill(), WonderlandUi::JuliusAccent(), 0.045f),
+		7.0f, WonderlandUi::JuliusGold(0.40f), 1.0f)
+	, InputBrush(WonderlandUi::TintPlate(WonderlandUi::Srgb(5, 6, 9, 0.72f), WonderlandUi::JuliusAccent(), 0.040f),
+		6.0f, WonderlandUi::JuliusGold(0.40f), 1.0f)
+	, SlotBrush(WonderlandUi::TintPlate(WonderlandUi::Srgb(8, 9, 12, 0.58f), WonderlandUi::JuliusAccent(), 0.040f),
+		6.0f, WonderlandUi::JuliusGold(0.18f), 1.0f)
+	, BrushAccent(WonderlandUi::JuliusAccent())
 {
+}
+
+void SWonderlandLiveTerminal::RebuildChrome()
+{
+	// THE SAME FOUR BRUSHES THE CONSTRUCTOR BUILDS, from whatever the Julius accent is now. Kept in one place
+	// because a constructor and a theme-follower that build the same surface from two copies of the same
+	// expression drift, and the drift shows up as a panel that changes colour only after a restart.
+	WindowBrush = FSlateRoundedBoxBrush(
+		WonderlandUi::TintPlate(WonderlandUi::WindowFill(), WonderlandUi::JuliusAccent(), 0.055f),
+		10.0f, WonderlandUi::JuliusGold(0.40f), 1.0f);
+	SectionBrush = FSlateRoundedBoxBrush(
+		WonderlandUi::TintPlate(WonderlandUi::SectionFill(), WonderlandUi::JuliusAccent(), 0.045f),
+		7.0f, WonderlandUi::JuliusGold(0.40f), 1.0f);
+	InputBrush = FSlateRoundedBoxBrush(
+		WonderlandUi::TintPlate(WonderlandUi::Srgb(5, 6, 9, 0.72f), WonderlandUi::JuliusAccent(), 0.040f),
+		6.0f, WonderlandUi::JuliusGold(0.40f), 1.0f);
+	SlotBrush = FSlateRoundedBoxBrush(
+		WonderlandUi::TintPlate(WonderlandUi::Srgb(8, 9, 12, 0.58f), WonderlandUi::JuliusAccent(), 0.040f),
+		6.0f, WonderlandUi::JuliusGold(0.18f), 1.0f);
+}
+
+EActiveTimerReturnType SWonderlandLiveTerminal::FollowTheme(double InCurrentTime, float InDeltaTime)
+{
+	// TWICE A SECOND, not every frame: a theme changes when the founder changes it and never on its own. The
+	// same cadence the Companion terminal has always used.
+	const FLinearColor Now = WonderlandUi::JuliusAccent();
+	if (!BrushAccent.Equals(Now, 0.002f))
+	{
+		BrushAccent = Now;
+		RebuildChrome();
+		Invalidate(EInvalidateWidgetReason::Paint | EInvalidateWidgetReason::Layout);
+	}
+	return EActiveTimerReturnType::Continue;
 }
 
 void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 {
+	RegisterActiveTimer(0.5f, FWidgetActiveTimerDelegate::CreateSP(this, &SWonderlandLiveTerminal::FollowTheme));
 	OnRequestClose = InArgs._OnRequestClose;
 	OnSubmit = InArgs._OnSubmit;
 	OnGetCommandLabel = InArgs._OnGetCommandLabel;

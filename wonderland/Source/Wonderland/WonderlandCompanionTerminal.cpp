@@ -37,6 +37,18 @@ namespace
 		const FLinearColor A = WonderlandUi::CompanionGold();
 		return FLinearColor(FMath::Min(A.R * 1.06f, 1.0f), A.G * 1.01f, A.B * 0.96f, Alpha);
 	}
+	/**
+	 * THE PANEL'S OWN PLATE, CARRYING A TRACE OF THE ACCENT.
+	 *
+	 * FOUNDER: "just make the terminal color change more apparent." The frame was a 2.5px border and the rest
+	 * of the accent was small text, so a new colour repainted a sliver of the panel. This is the near-black it
+	 * always was, plus a few hundredths of the accent -- the change now reads across the whole terminal
+	 * without a single widget moving.
+	 */
+	FLinearColor CompanionPlate()
+	{
+		return WonderlandUi::TintPlate(WonderlandUi::Srgb(4, 4, 6, 0.93f), WonderlandUi::CompanionGold(), 0.055f);
+	}
 	FLinearColor CompanionTitleGold()
 	{
 		const FLinearColor A = WonderlandUi::CompanionGold();
@@ -159,7 +171,7 @@ bool SWonderlandCompanionTerminal::GetFrameAbsoluteRect(FVector2D& OutTopLeft, F
 }
 
 SWonderlandCompanionTerminal::SWonderlandCompanionTerminal()
-	: FrameBrush(WonderlandUi::Srgb(4, 4, 6, 0.93f), 8.0f, CompanionFrameGold(), 2.5f)
+	: FrameBrush(CompanionPlate(), 8.0f, CompanionFrameGold(), 2.5f)
 	, RuleBrush(CompanionFrameGold(0.9f), 0.0f)
 
 {
@@ -585,7 +597,7 @@ EActiveTimerReturnType SWonderlandCompanionTerminal::FollowTheme(double InCurren
 	if (!BrushAccent.Equals(Now, 0.002f))
 	{
 		BrushAccent = Now;
-		FrameBrush = FSlateRoundedBoxBrush(WonderlandUi::Srgb(4, 4, 6, 0.93f), 8.0f, CompanionFrameGold(), 2.5f);
+		FrameBrush = FSlateRoundedBoxBrush(CompanionPlate(), 8.0f, CompanionFrameGold(), 2.5f);
 		RuleBrush = FSlateRoundedBoxBrush(CompanionFrameGold(0.9f), 0.0f);
 		Invalidate(EInvalidateWidgetReason::Paint | EInvalidateWidgetReason::Layout);
 	}

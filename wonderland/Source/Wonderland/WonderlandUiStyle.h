@@ -59,6 +59,40 @@ namespace WonderlandUi
 
 	// .wl-tm-window and .wl-tmpanel backgrounds: translucent, and the window
 	// lighter than its sections so the sections sit on it.
+	/**
+	 * A DARK PLATE THAT CARRIES A TRACE OF ITS OWN ACCENT.
+	 *
+	 * FOUNDER, 2026-09-28: "I approved the real fire and terminal colors just make the terminal color change
+	 * more apparent."
+	 *
+	 * WHY IT WAS NOT APPARENT. Every accent in both terminals was a hairline border and a few words of small
+	 * text. ReadScreenExtremes exists in this project precisely because of that: a grid of 96 mean readings
+	 * over the Julius terminal moved by 0.008 when the accent changed from gold to a green the photograph
+	 * shows unmistakably. If an instrument built to measure this surface can barely see the change, the
+	 * founder looking at it is not being fussy.
+	 *
+	 * The plate is the largest surface either terminal has, so tinting it is what makes the choice read. It
+	 * moves NO layout, which the standing rule -- a content or colour request is not a licence to redesign --
+	 * requires.
+	 *
+	 * NORMALISED BY THE ACCENT'S PEAK CHANNEL, so a dim accent tints as strongly as a bright one. Without
+	 * that, picking a deep blue would look like picking nothing at all, which is the very complaint.
+	 *
+	 * The weight stays small and the alpha is the plate's own: cream body text sits near 0.83 linear, so a
+	 * plate a few hundredths above black keeps the contrast the terminals are readable at.
+	 */
+	inline FLinearColor TintPlate(const FLinearColor& Plate, const FLinearColor& Accent, float Weight)
+	{
+		const float Peak = FMath::Max3(Accent.R, Accent.G, Accent.B);
+		if (Peak <= UE_SMALL_NUMBER)
+		{
+			return Plate;
+		}
+		FLinearColor Out = Plate + (Accent / Peak) * Weight;
+		Out.A = Plate.A;
+		return Out;
+	}
+
 	inline FLinearColor WindowFill()             { return Srgb(9, 11, 15, 0.58f); }
 	inline FLinearColor SectionFill()            { return Srgb(11, 13, 18, 0.72f); }
 

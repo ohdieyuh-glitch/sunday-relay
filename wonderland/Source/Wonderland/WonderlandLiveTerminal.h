@@ -256,4 +256,23 @@ private:
 	FSlateRoundedBoxBrush InputBrush;
 	FSlateRoundedBoxBrush SlotBrush;
 	FEditableTextBoxStyle InputStyle;
+
+	/**
+	 * THE ACCENT THESE FOUR BRUSHES WERE BUILT FROM, AND THE TIMER THAT NOTICES IT CHANGING.
+	 *
+	 * FOUNDER, P1 item 9: "Add Julius + Companion Terminal color customization", then 2026-09-28: "just make
+	 * the terminal color change more apparent."
+	 *
+	 * THIS WINDOW FOLLOWED NOTHING. The Companion terminal has had a FollowTheme since it was written; this
+	 * one never did. Its four brushes were built once in the constructor and never rebuilt, so choosing a new
+	 * Julius colour repainted only the text that calls JuliusGold() during paint -- the window frame, the
+	 * section frames, the input box and the command slots all kept whatever they were constructed with.
+	 *
+	 * Worse, they were constructed from GoldDim(), which is the GENERAL THEME accent, not JuliusAccent(). So
+	 * the Julius terminal's own colour never reached its own chrome even in principle. That is the larger part
+	 * of why the change did not look apparent, and it is a defect rather than a matter of degree.
+	 */
+	FLinearColor BrushAccent;
+	EActiveTimerReturnType FollowTheme(double InCurrentTime, float InDeltaTime);
+	void RebuildChrome();
 };

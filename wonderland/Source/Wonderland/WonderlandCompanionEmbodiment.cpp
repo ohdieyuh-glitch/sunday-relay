@@ -213,21 +213,28 @@ namespace
 	 * gradient, a soft edge, a taper and bands of flicker climbing it. Dimmer by the meter, and far more like
 	 * fire.
 	 */
-	// BACK TO 0, AND THE FOUNDER'S OWN FOOTAGE IS WHY.
+	// ---- AND NOW IT IS 1, BECAUSE THE FOUNDER APPROVED IT. 2026-09-28: "I approved the real fire."
 	//
-	// 2026-09-26, with a video of the Dog in the plaza and on the lawn: "these are the flames I need back."
-	// What it shows is unambiguous -- tall white-cyan ghostfire plumes rising a head's height above the
-	// shoulders, bright enough to read against a sunlit lawn and against a dark plaza both. That is the
-	// ribbons drawn on the figure's own glow material at full strength, and it is the look that was approved.
+	// THE HISTORY MATTERS, because this default has moved twice and the reasons were not the same.
 	//
-	// M_WL_Fire is a better-behaved surface -- soft across the ribbon, falling off at the tip, flicker
-	// climbing it -- and I shipped it on the strength of a side-by-side where it clipped less. Less clipping
-	// was not what was being asked for. The approved flame IS a bright plume, and the material's shaping takes
-	// exactly the prominence out of it that the founder is pointing at. It stays in the project, reachable
-	// with `wl.Look.FireMaterial 1`, because the shape work is good and may yet be the right base once it can
-	// reach that brightness without losing its colour.
+	// It went to 0 on 2026-09-26 on the strength of a video of the Dog in the plaza and on the lawn -- "these
+	// are the flames I need back" -- showing tall white-cyan plumes rising a head above the shoulders, bright
+	// against a sunlit lawn and a dark plaza both. That is the ribbons on the figure's own glow material at
+	// full strength. I had shipped M_WL_Fire before that on the strength of a side-by-side where it clipped
+	// less, and less clipping was not what was being asked for.
+	//
+	// What changed is not the material and not my reading of the video: it is that the founder has now seen
+	// this material and said so. The surface is the one item 4 asks for -- translucent rather than additive,
+	// noise-cut at the edges, an orange-to-gold ramp up the ribbon, a taper at the tip and flicker climbing
+	// it -- and at the calibrated gain the figure is 26% clipped where the plume clipped 63% and showed no
+	// mascot inside it at all.
+	//
+	// THE OPEN TENSION, RECORDED RATHER THAN QUIETLY TUNED AWAY: the thing the 09-26 footage was about was
+	// PROMINENCE, and shaping a flame is what takes prominence out of it. This ships exactly what was
+	// approved, unretuned. If it reads too dim on the lawn, the gain is `wl.Look.FlameDim` and that is one
+	// word from the founder, not a reason to pre-emptively change what they just signed off.
 	TAutoConsoleVariable<int32> CVarFireMaterial(
-		TEXT("wl.Look.FireMaterial"), 0,
+		TEXT("wl.Look.FireMaterial"), 1,
 		TEXT("1 draws flame ribbons on M_WL_Fire; 0 draws them on the figure's own glow material."));
 
 	TAutoConsoleVariable<int32> CVarFireTongues(
@@ -346,7 +353,7 @@ namespace
 	{
 		const float Dim = FMath::Clamp(CVarFlameDim.GetValueOnAnyThread(), 0.004f, 4.0f);
 		const float Authored = FMath::Max(Strength, 0.0f);
-		// The fallback card (no fire master, which is the shipped state: wl.Look.FireMaterial is 0) used to
+		// The fallback card (no fire master, reachable with `wl.Look.FireMaterial 0`; the shipped state is now 1) used to
 		// be Authored x Dim, calibrated when both that and EmissiveStrength carried the authored strength. With
 		// EmissiveStrength pinned at WonderlandSceneUnits, 4.2 x 0.4 = 1.7 is 1,700 scene units -- a dark teal
 		// against a 25,000 white, which is what the ghostfire photographed as. x12 lands the ember at about
