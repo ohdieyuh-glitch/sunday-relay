@@ -1,0 +1,296 @@
+{
+ "name": "zwB1_dusk_spike",
+ "started": "2026-09-27 20:10:48",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "K_VALID",
+   "name": "the observation point is a real standing position with ground under the patch",
+   "pass": true,
+   "detail": {
+    "vantage": {
+     "asked": [
+      -64.0,
+      -5042.0
+     ],
+     "landed": [
+      -64.0,
+      -5042.0,
+      94.3
+     ],
+     "offset_uu": 0.0,
+     "forward_hit": null,
+     "down_hit": {
+      "dist": 993.6,
+      "z": 0.7
+     },
+     "ground_patch_hit": {
+      "dist": 997.1,
+      "z": -2.9
+     },
+     "ground_rect_screen": [
+      0.5,
+      0.78,
+      0.3,
+      0.16
+     ]
+    }
+   }
+  },
+  {
+   "id": "K_MEASURED",
+   "name": "every hour produced both arms",
+   "pass": true,
+   "detail": {
+    "measured": 8,
+    "wanted": 8,
+    "missing": []
+   }
+  },
+  {
+   "id": "K_STILL",
+   "name": "the pawn is at the spot at every reading, not just when it was placed",
+   "pass": true,
+   "detail": {
+    "drifted": [],
+    "drift_by_reading": {
+     "h18.00_base": 0.0,
+     "h18.00_moon_off": 0.0,
+     "h18.25_base": 0.0,
+     "h18.25_moon_off": 0.0,
+     "h18.50_base": 0.0,
+     "h18.50_moon_off": 0.0,
+     "h18.75_base": 0.0,
+     "h18.75_moon_off": 0.0
+    }
+   }
+  },
+  {
+   "id": "K_NOISE",
+   "name": "every reading agrees with itself on the luma it measures",
+   "pass": true,
+   "detail": {
+    "worst_luma_spread": 0.0005,
+    "tolerance": 0.01
+   }
+  },
+  {
+   "id": "K_PEAK",
+   "name": "the brightest hour is 18:25, which is the overshoot this job exists to explain",
+   "pass": true,
+   "detail": {
+    "peak_hour": 18.25,
+    "base_ground_by_hour": {
+     "18.00": 0.0895,
+     "18.25": 0.1626,
+     "18.50": 0.0988,
+     "18.75": 0.1046
+    },
+    "note": "if the peak has moved, the world is not in the state zzAG2 measured and the decomposition below is about a different thing"
+   }
+  },
+  {
+   "id": "K_MOON",
+   "name": "the spike is the MOON arriving early -- removing it flattens 18:25 to its neighbours",
+   "pass": true,
+   "detail": {
+    "peak_hour": 18.25,
+    "peak_without_moon": 0.0754,
+    "other_hours_without_moon": {
+     "18.00": 0.0523,
+     "18.50": 0.0972,
+     "18.75": 0.0971
+    },
+    "moon_share_by_hour": {
+     "18.00": 0.0372,
+     "18.25": 0.0872,
+     "18.50": 0.0016,
+     "18.75": 0.0075
+    },
+    "note": "GREEN means the crossover curve I wrote is the cause and the fix is mine to make in it. RED means the peak survives with the moon switched off, so it is the sun or the sky at a grazing angle and my curve only revealed what was always going to be there"
+   }
+  }
+ ],
+ "knobs_as_found": {
+  "MoonGain": 0.05,
+  "Fog": 1.0
+ },
+ "vantage": {
+  "asked": [
+   -64.0,
+   -5042.0
+  ],
+  "landed": [
+   -64.0,
+   -5042.0,
+   94.3
+  ],
+  "offset_uu": 0.0,
+  "forward_hit": null,
+  "down_hit": {
+   "dist": 993.6,
+   "z": 0.7
+  },
+  "ground_patch_hit": {
+   "dist": 997.1,
+   "z": -2.9
+  },
+  "ground_rect_screen": [
+   0.5,
+   0.78,
+   0.3,
+   0.16
+  ]
+ },
+ "readings": {
+  "h18.00_base": {
+   "hour": 18.0,
+   "arm": "base",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.05,
+   "ground_luma": 0.0895,
+   "ground_luma_spread": 0.0003,
+   "ground_readable": 0.0516,
+   "ground_crushed": 0.9479,
+   "frame_luma": 0.1137,
+   "frame_luma_spread": 0.0001,
+   "sun_elevation": 0.0,
+   "daylight": 0.1999
+  },
+  "h18.00_moon_off": {
+   "hour": 18.0,
+   "arm": "moon_off",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.0,
+   "ground_luma": 0.0523,
+   "ground_luma_spread": 0.0003,
+   "ground_readable": 0.0074,
+   "ground_crushed": 0.9921,
+   "frame_luma": 0.0718,
+   "frame_luma_spread": 0.0003,
+   "sun_elevation": 0.0,
+   "daylight": 0.1999
+  },
+  "h18.25_base": {
+   "hour": 18.25,
+   "arm": "base",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.05,
+   "ground_luma": 0.1626,
+   "ground_luma_spread": 0.0005,
+   "ground_readable": 0.7731,
+   "ground_crushed": 0.2263,
+   "frame_luma": 0.1847,
+   "frame_luma_spread": 0.0005,
+   "sun_elevation": -4.71,
+   "daylight": 0.0489
+  },
+  "h18.25_moon_off": {
+   "hour": 18.25,
+   "arm": "moon_off",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.0,
+   "ground_luma": 0.0754,
+   "ground_luma_spread": 0.0004,
+   "ground_readable": 0.0153,
+   "ground_crushed": 0.9842,
+   "frame_luma": 0.0909,
+   "frame_luma_spread": 0.0004,
+   "sun_elevation": -4.71,
+   "daylight": 0.0489
+  },
+  "h18.50_base": {
+   "hour": 18.5,
+   "arm": "base",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.05,
+   "ground_luma": 0.0988,
+   "ground_luma_spread": 0.0001,
+   "ground_readable": 0.1172,
+   "ground_crushed": 0.8823,
+   "frame_luma": 0.1122,
+   "frame_luma_spread": 0.0001,
+   "sun_elevation": -9.4,
+   "daylight": 0.0
+  },
+  "h18.50_moon_off": {
+   "hour": 18.5,
+   "arm": "moon_off",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.0,
+   "ground_luma": 0.0972,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.1091,
+   "ground_crushed": 0.8903,
+   "frame_luma": 0.1106,
+   "frame_luma_spread": 0.0001,
+   "sun_elevation": -9.4,
+   "daylight": 0.0
+  },
+  "h18.75_base": {
+   "hour": 18.75,
+   "arm": "base",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.05,
+   "ground_luma": 0.1046,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.1322,
+   "ground_crushed": 0.8673,
+   "frame_luma": 0.1149,
+   "frame_luma_spread": 0.0001,
+   "sun_elevation": -14.05,
+   "daylight": 0.0
+  },
+  "h18.75_moon_off": {
+   "hour": 18.75,
+   "arm": "moon_off",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.0,
+   "ground_luma": 0.0971,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.1082,
+   "ground_crushed": 0.8913,
+   "frame_luma": 0.1106,
+   "frame_luma_spread": 0.0001,
+   "sun_elevation": -14.05,
+   "daylight": 0.0
+  }
+ },
+ "decomposition": {
+  "18.00": {
+   "base_ground": 0.0895,
+   "without_moon": 0.0523,
+   "moon_share": 0.0372,
+   "everything_else": 0.0523,
+   "base_readable": 0.0516,
+   "readable_without_moon": 0.0074
+  },
+  "18.25": {
+   "base_ground": 0.1626,
+   "without_moon": 0.0754,
+   "moon_share": 0.0872,
+   "everything_else": 0.0754,
+   "base_readable": 0.7731,
+   "readable_without_moon": 0.0153
+  },
+  "18.50": {
+   "base_ground": 0.0988,
+   "without_moon": 0.0972,
+   "moon_share": 0.0016,
+   "everything_else": 0.0972,
+   "base_readable": 0.1172,
+   "readable_without_moon": 0.1091
+  },
+  "18.75": {
+   "base_ground": 0.1046,
+   "without_moon": 0.0971,
+   "moon_share": 0.0075,
+   "everything_else": 0.0971,
+   "base_readable": 0.1322,
+   "readable_without_moon": 0.1082
+  }
+ },
+ "finished": "2026-09-27 20:12:17",
+ "seconds": 89.42,
+ "log": "K_VALID PASS the observation point is a real standing position with ground under the patch {'vantage': {'asked': [-64.0, -5042.0], 'landed': [-64.0, -5042.0, 94.3], 'offset_uu': 0.0, 'forward_hit': None, 'down_hit': {'dist': 993.6, 'z': 0.7}, 'ground_patch_hit': {'dist': 997.1, 'z': -2.9}, 'ground_rect_screen': [0.5, 0.78, 0.3, 0.16]}}\nK_MEASURED PASS every hour produced both arms {'measured': 8, 'wanted': 8, 'missing': []}\nK_STILL PASS the pawn is at the spot at every reading, not just when it was placed {'drifted': [], 'drift_by_reading': {'h18.00_base': 0.0, 'h18.00_moon_off': 0.0, 'h18.25_base': 0.0, 'h18.25_moon_off': 0.0, 'h18.50_base': 0.0, 'h18.50_moon_off': 0.0, 'h18.75_base': 0.0, 'h18.75_moon_off': 0.0}}\nK_NOISE PASS every reading agrees with itself on the luma it measures {'worst_luma_spread': 0.0005, 'tolerance': 0.01}\nK_PEAK PASS the brightest hour is 18:25, which is the overshoot this job exists to explain {'peak_hour': 18.25, 'base_ground_by_hour': {'18.00': 0.0895, '18.25': 0.1626, '18.50': 0.0988, '18.75': 0.1046}, 'note': 'if the peak has moved, the world is not in the state zzAG2 measured and the decomposition below is about a different thing'}\nK_MOON PASS the spike is the MOON arriving early -- removing it flattens 18:25 to its neighbours {'peak_hour': 18.25, 'peak_without_moon': 0.0754, 'other_hours_without_moon': {'18.00': 0.0523, '18.50': 0.0972, '18.75': 0.0971}, 'moon_share_by_hour': {'18.00': 0.0372, '18.25': 0.0872, '18.50': 0.0016, '18.75': 0.0075}, 'note': 'GREEN means the crossover curve I wrote is the cause and the fix is mine to make in it. RED means the peak survives with the moon switched off, so it is the sun or the sky at a grazing angle and my curve only revealed what was always going to be there'}\n"
+}
