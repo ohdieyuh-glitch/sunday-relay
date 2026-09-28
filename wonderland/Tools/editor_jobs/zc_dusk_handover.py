@@ -371,7 +371,28 @@ def job():
             except Exception:                                          # noqa: BLE001
                 pass
             if not (g1 and g2 and f1 and f2 and cg):
-                rows[key] = {"arm": label, "hour": hour, "unmeasured": True}
+                # A DEAD WORLD READS AS "unmeasured", WHICH IS NOT THE SAME THING.
+                #
+                # read_screen_rect returns None both when a read fails and when there is no viewport
+                # at all, so 22 consecutive unmeasured rows and one bad reading are indistinguishable
+                # from the row alone. That happened: a run lost PIE partway through the third arm
+                # under memory pressure and recorded the whole remainder as "unmeasured", which reads
+                # like data that did not come out rather than like a world that stopped existing.
+                #
+                # Ask the world directly, and stop rather than fill the result with rows that describe
+                # nothing.
+                alive = live() is not None and unreal.GameplayStatics.get_player_pawn(live(), 0) is not None
+                rows[key] = {"arm": label, "hour": hour, "unmeasured": True,
+                             "world_alive": alive,
+                             "why": ("read returned nothing while the world was up" if alive
+                                     else "THE WORLD IS GONE -- PIE ended under this job")}
+                if not alive:
+                    bail("PIE ended during the %s arm at hour %.2f; every later row would describe "
+                         "a world that no longer exists" % (label, hour))
+                    yield 2.0
+                    les.editor_request_end_play()
+                    yield (lambda: ues.get_game_world() is None, 300)
+                    return
                 continue
             dirs, sky = lights()
             lo, hi, mid = min(cg), max(cg), median(cg)
