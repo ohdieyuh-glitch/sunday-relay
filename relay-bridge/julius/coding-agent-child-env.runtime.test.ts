@@ -273,11 +273,12 @@ describe('the Max login is classified separately, and cannot excuse a key the ch
     const decision = decideClaudeAuth({
       mode: 'CLAUDE_SUBSCRIPTION', apiKeyProvided: false, childEnvNames: seen.child!.names, login: MAX_LOGIN,
     });
-    expect(decision.ok).toBe(true);
-    if (!decision.ok) return;
-    expect(decision.provenance).toMatchObject({
-      provider: 'ANTHROPIC', execution: 'CLAUDE_AGENT_SDK', authentication: 'CLAUDE_SUBSCRIPTION',
-      plan: 'max', apiKeyUsed: false, apiCostApplicable: false,
+    expect(decision).toMatchObject({
+      ok: true,
+      provenance: {
+        provider: 'ANTHROPIC', execution: 'CLAUDE_AGENT_SDK', authentication: 'CLAUDE_SUBSCRIPTION',
+        plan: 'max', apiKeyUsed: false, apiCostApplicable: false,
+      },
     });
   });
 
@@ -291,12 +292,17 @@ describe('the Max login is classified separately, and cannot excuse a key the ch
 
   /**
    * The login probe itself, against a stand-in `claude` that answers `auth status`
-   * as the real CLI did on this workstation. POSIX only: the probe runs the
-   * executable without a shell, as production does, and Windows will not start a
-   * script that way. It runs on Linux CI and in the WSL launch environment, which
-   * is where a subscription qualification is launched.
+   * as the real CLI did on this workstation. The probe runs the executable WITHOUT
+   * A SHELL, as production does, and the two platforms answer differently — so
+   * each branch asserts what is true of its own:
+   *   - POSIX (Linux CI and the WSL launch environment, which is where a
+   *     subscription qualification is launched): the stand-in runs, and a
+   *     first-party Max login is local_subscription / max, approved;
+   *   - Windows: a script cannot be started without a shell, the stand-in never
+   *     answers, and the probe must FAIL CLOSED — never approve a live run on a
+   *     login it could not observe.
    */
-  it.skipIf(process.platform === 'win32')('a first-party Max login classifies as local_subscription / max, approved for a live run', () => {
+  it('the login probe approves a first-party Max login it observed, and nothing it could not', () => {
     const cli = join(scratch, 'claude');
     writeFileSync(cli, [
       '#!/usr/bin/env node',
@@ -307,8 +313,13 @@ describe('the Max login is classified separately, and cannot excuse a key the ch
     // The probe refuses outright when the PARENT holds a key: that is its own first check.
     delete process.env.ANTHROPIC_API_KEY;
     const classified = classifyClaudeAuth(new Date().toISOString(), cli);
-    expect(classified).toMatchObject({
-      loggedIn: true, sourceClass: 'local_subscription', subscriptionLabel: 'max', approvedForLiveRun: true,
-    });
+    if (process.platform === 'win32') {
+      expect(classified.approvedForLiveRun, 'an unobserved login is never approved').toBe(false);
+      expect(classified.sourceClass).not.toBe('local_subscription');
+    } else {
+      expect(classified).toMatchObject({
+        loggedIn: true, sourceClass: 'local_subscription', subscriptionLabel: 'max', approvedForLiveRun: true,
+      });
+    }
   });
 });
