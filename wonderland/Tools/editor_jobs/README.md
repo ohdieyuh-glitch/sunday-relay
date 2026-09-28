@@ -1069,3 +1069,29 @@ Two rules:
 - **Measure the path that ships, not an equivalent one.** The 170 ms was real and was measured on an actor
   the job spawned itself. Proving the shipped path does the same thing needed a hook into that path, and
   adding one was cheaper than the bug it caught.
+
+## Read the id→file table. Do not guess an asset's filename from its id.
+
+`RelaySkins/` contains orphan `.wlvox` files that nothing loads and that differ from current art.
+`Apollo.wlvox` is one: dated 07:36 when `ApolloV2.wlvox` is 18:18, and the generator writes `ApolloV1` and
+`ApolloV2` and never `Apollo`.
+
+The runtime's mapping lives in `WonderlandRelaySkins.cpp`:
+
+```
+apollo          -> ApolloV2.wlvox
+arden_infernal  -> ArdenInfernalV2.wlvox
+skeleton_flame  -> SkeletonFlameV2.wlvox
+```
+
+Guessing `apollo` → `Apollo.wlvox` produced a confident, reproducible, *file-level* measurement — "Apollo's
+legs are authored 6.18 uu below every other skin's" — of an asset the game never opens. Against the files
+actually loaded, every skin's lowest leg box is **3.720**, identical to three decimals.
+
+**What caught it was trying to fix it.** Unwilling to change approved art on a hypothesis, I regenerated the
+figure to a temp directory to confirm which generator line produced the low geometry — and the regenerated
+figure did not have it. A test written to verify a fix found the finding itself was void.
+
+That is the general move worth keeping: **when a measurement implies an edit to authored content, regenerate
+the content and re-measure before editing.** It costs one command and it is the only step that can tell you
+the file you measured is not the file that ships.
