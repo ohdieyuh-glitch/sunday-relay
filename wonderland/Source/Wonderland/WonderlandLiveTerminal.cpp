@@ -123,19 +123,25 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 			.AutoHeight()
 			.Padding(2.0f, 0.0f, 0.0f, 4.0f)
 			[
-				// Never a paid run by accident: while simulated rows are showing, the terminal says so first.
+				// Never a paid run by accident: while simulated rows are showing, the terminal says so first. While a REAL
+				// run is followed, the same line names it -- so the one place that warns of a simulation is also the one
+				// place that says when there is none.
 				SNew(SHorizontalBox)
-				.Visibility_Lambda([this]() { return bSimulated ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; })
+				.Visibility_Lambda([this]() { return GetBannerText().IsEmpty() ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
 					SNew(STextBlock)
-					.Text(FText::FromString(TEXT("DEVELOPMENT PREVIEW \u00B7 SIMULATED JULIUS EXECUTION")))
+					.Text_Lambda([this]() { return FText::FromString(GetBannerText()); })
 					.Font(WonderlandUi::Sans(8, true, 140))
-					.ColorAndOpacity(WonderlandUi::Coral())
+					.ColorAndOpacity_Lambda([this]() { return FSlateColor(bSimulated ? WonderlandUi::Coral() : WonderlandUi::JuliusGold()); })
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(12.0f, 0.0f, 0.0f, 0.0f)
 				[
 					SNew(STextBlock)
+					// A SIMULATION'S ESTIMATE ONLY. The world is not told a live run's tokens -- no read route serves them --
+					// and the Mission Contract's TokensUsed is a nullable tally whose whole purpose is to tell "nobody said"
+					// from zero. Printing any number here for a live run would undo that carrier, so the row goes.
+					.Visibility_Lambda([this]() { return bSimulated ? EVisibility::Visible : EVisibility::Collapsed; })
 					.Text_Lambda([this]()
 					{
 						return FText::Format(INVTEXT("SIM TOKENS {0}"), FText::AsNumber(GetSimulatedTokenCount()));
@@ -750,6 +756,15 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeLiveLine(const FString& Section
 			return FSlateColor(SectionLines.Contains(Section) ? WonderlandUi::Cream() : WonderlandUi::Dim());
 		})
 		.OverflowPolicy(ETextOverflowPolicy::Ellipsis);
+}
+
+FString SWonderlandLiveTerminal::GetBannerText() const
+{
+	if (bSimulated)
+	{
+		return TEXT("DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION");
+	}
+	return LiveProvenance;
 }
 
 void SWonderlandLiveTerminal::SetSectionState(const FString& Section, const FString& State, const FString& Line)

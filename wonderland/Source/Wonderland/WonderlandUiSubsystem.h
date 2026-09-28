@@ -625,6 +625,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FString GetJuliusLatestHeadline() const;
 
+	/** What the Julius terminal's banner line reads: the simulation's warning, a followed run's provenance, or empty. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetJuliusTerminalBanner() const;
+
 	/** The event the Julius terminal last narrated. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FName GetJuliusNarratedEvent() const { return JuliusNarratedEvent; }
@@ -847,6 +851,25 @@ private:
 	FString RoleChakra;
 	FTSTicker::FDelegateHandle RoleTicker;
 	double RoleWorldSeconds = -1.0;
+
+	/**
+	 * THE JULIUS LIVE TERMINAL, FED BY A REAL RUN (founder, 2026-09-27: wire it to the real Julius subsystem, and it
+	 * must not say STANDBY or "Not connected" while a real run is followed). Reads what the world holds -- the run the
+	 * Mission Contract follows, Julius's word for its state, the link -- a few times a second, and writes only what
+	 * changed. A ticker, not OnJuliusChanged: the transport adopts a hydration, which broadcasts, BEFORE it tells the
+	 * task set, so a listener would draw the state before last.
+	 */
+	bool TickLiveJulius(float DeltaSeconds);
+	FTSTicker::FDelegateHandle LiveJuliusTicker;
+	/** What the terminal was last given, so a row is written for a change and never for a re-read. */
+	bool bLiveJuliusShown = false;
+	FString LiveJuliusRun;
+	FString LiveJuliusSaid;
+	FString LiveJuliusLabel;
+	/** The link state last shown, as its enum's number; -1 before this run's first reading. */
+	int32 LiveJuliusLink = -1;
+	/** The result's two lines as last shown, so a row is written when it changes and never for a re-read. */
+	FString LiveJuliusResult;
 	/**
 	 * A pointer click on one widget: hit tested in that widget's own window, routed down the path found there, and
 	 * only when the widget is really on that path. False when it is not under its own centre. The OS cursor never moves.

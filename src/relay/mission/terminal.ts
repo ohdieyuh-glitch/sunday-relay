@@ -61,9 +61,30 @@ export interface RelayTerminalReadModel {
   updatedAt: string;
 }
 
+/**
+ * THE `sk-` RULE USED TO MISS EVERY MODERN PROVIDER KEY.
+ *
+ * It read `/sk-[A-Za-z0-9]{8,}/`, which demands eight ALPHANUMERICS immediately
+ * after `sk-`. Every key the trio actually issues is prefixed and hyphenated —
+ * `sk-ant-api03-…`, `sk-proj-…`, `sk-svcacct-…` — so the match died on the
+ * second hyphen after three or four characters, and an Anthropic key in a
+ * provider adapter's echo of its own configuration reached every surface this
+ * function guards. The legacy unprefixed `sk-<48 alnum>` was the only shape it
+ * ever caught, which is why it looked right for as long as it did.
+ *
+ * Widening the body to `[A-Za-z0-9_-]` needs the `\b`, and the `\b` fixes a
+ * second defect of its own: unanchored, `sk-` matched INSIDE ordinary words —
+ * `task-oriented` contains `sk-oriented`, so the old rule turned it into
+ * `ta[redacted]`. Anchored, `sk` must start a word, and neither `task-` nor
+ * `risk-` can reach it.
+ */
 const SECRET_PATTERNS: RegExp[] = [
-  /sk-[A-Za-z0-9]{8,}/g, /AKIA[0-9A-Z]{12,}/g, /BEGIN [A-Z ]*PRIVATE KEY/g,
+  /\bsk-[A-Za-z0-9_-]{8,}/g, /AKIA[0-9A-Z]{12,}/g, /BEGIN [A-Z ]*PRIVATE KEY/g,
   /gh[pousr]_[A-Za-z0-9]{20,}/g, /xox[baprs]-[A-Za-z0-9-]{10,}/g,
+  /** A fine-grained GitHub PAT: `gh[pousr]_` above cannot see this prefix. */
+  /\bgithub_pat_[A-Za-z0-9_]{20,}/g,
+  /** A Google API key — Gemini is one of the three configured providers. */
+  /\bAIza[A-Za-z0-9_-]{16,}/g,
   /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}/g,
   /\b(?:api[-_]?key|secret|password|token|cookie)\s*[:=]\s*\S{6,}/gi,
 ];

@@ -151,6 +151,142 @@ namespace WonderlandJuliusStreamLogic
 		OutNextCursor = Next;
 		return true;
 	}
+
+	bool ParseResult(const FString& Body, FWonderlandJuliusResultReading& Out)
+	{
+		const TSharedPtr<FJsonObject> Data = Json::DataOf(Body);
+		if (!Data.IsValid())
+		{
+			return false;
+		}
+		// THE SHAPE IS THE PROJECTION'S OWN, and anything else is refused whole. A partial read would show a result
+		// with holes in it that look like answers -- "0 of 0 criteria met" from a body that simply lacked the list.
+		FWonderlandJuliusResultReading Read;
+		FString Schema;
+		const TArray<TSharedPtr<FJsonValue>>* Criteria = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* Deliverables = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* Findings = nullptr;
+		const TSharedPtr<FJsonObject>* Cost = nullptr;
+		if (!Data->TryGetStringField(TEXT("schemaVersion"), Schema) || Schema != TEXT("relay-wonderland-julius-result.v1")
+			|| !Data->TryGetStringField(TEXT("runId"), Read.RunId) || Read.RunId.IsEmpty()
+			|| !Data->TryGetStringField(TEXT("juliusState"), Read.JuliusState)
+			|| !Data->TryGetBoolField(TEXT("verified"), Read.bVerified)
+			|| !Data->TryGetBoolField(TEXT("terminal"), Read.bTerminal)
+			|| !Data->TryGetArrayField(TEXT("criteria"), Criteria) || Criteria == nullptr
+			|| !Data->TryGetArrayField(TEXT("deliverables"), Deliverables) || Deliverables == nullptr
+			|| !Data->TryGetArrayField(TEXT("openFindings"), Findings) || Findings == nullptr
+			|| !Data->TryGetObjectField(TEXT("cost"), Cost) || Cost == nullptr || !Cost->IsValid()
+			|| !(*Cost)->TryGetBoolField(TEXT("visible"), Read.bCostVisible))
+		{
+			return false;
+		}
+		// A null taskState is "no mapping", and stays empty.
+		Data->TryGetStringField(TEXT("taskState"), Read.TaskState);
+		for (const TSharedPtr<FJsonValue>& Value : *Criteria)
+		{
+			const TSharedPtr<FJsonObject>* Criterion = nullptr;
+			bool bSatisfied = false;
+			if (!Value.IsValid() || !Value->TryGetObject(Criterion) || Criterion == nullptr
+				|| !(*Criterion)->TryGetBoolField(TEXT("satisfied"), bSatisfied))
+			{
+				return false;
+			}
+			++Read.CriteriaTotal;
+			Read.CriteriaMet += bSatisfied ? 1 : 0;
+		}
+		for (const TSharedPtr<FJsonValue>& Value : *Deliverables)
+		{
+			const TSharedPtr<FJsonObject>* Deliverable = nullptr;
+			FString EvidenceId;
+			if (!Value.IsValid() || !Value->TryGetObject(Deliverable) || Deliverable == nullptr
+				|| !(*Deliverable)->TryGetStringField(TEXT("evidenceId"), EvidenceId))
+			{
+				return false;
+			}
+			Read.DeliverableIds.Add(EvidenceId);
+		}
+		Read.OpenFindings = Findings->Num();
+		const TSharedPtr<FJsonObject>* Review = nullptr;
+		if (Data->TryGetObjectField(TEXT("review"), Review) && Review != nullptr && Review->IsValid())
+		{
+			(*Review)->TryGetStringField(TEXT("verdict"), Read.Verdict);
+			(*Review)->TryGetNumberField(TEXT("repairRounds"), Read.RepairRounds);
+			(*Review)->TryGetBoolField(TEXT("reReviewedAfterRepair"), Read.bReReviewedAfterRepair);
+		}
+		// A null failure is "no failure"; TryGetObjectField is false for it and the reason stays empty.
+		const TSharedPtr<FJsonObject>* Failure = nullptr;
+		if (Data->TryGetObjectField(TEXT("failure"), Failure) && Failure != nullptr && Failure->IsValid())
+		{
+			(*Failure)->TryGetStringField(TEXT("reasonCode"), Read.FailureReason);
+			(*Failure)->TryGetStringField(TEXT("failureClass"), Read.FailureClass);
+		}
+		// THE COST ONLY WHEN THIS PLAYER MAY SEE IT, and then all three parts or none: a figure without whether it is
+		// complete would be read as a total when it may be a floor.
+		if (Read.bCostVisible
+			&& (!(*Cost)->TryGetNumberField(TEXT("knownUsdMicros"), Read.CostKnownUsdMicros)
+				|| !(*Cost)->TryGetNumberField(TEXT("unknownComponents"), Read.CostUnknownComponents)
+				|| !(*Cost)->TryGetBoolField(TEXT("complete"), Read.bCostComplete)))
+		{
+			return false;
+		}
+		Data->TryGetStringField(TEXT("tokens"), Read.Tokens);
+		Data->TryGetNumberField(TEXT("withheldDetails"), Read.WithheldDetails);
+		Read.bKnown = true;
+		Out = MoveTemp(Read);
+		return true;
+	}
+
+	FString ResultHeadline(const FWonderlandJuliusResultReading& Result)
+	{
+		if (!Result.bKnown)
+		{
+			return FString();
+		}
+		const FString Criteria = FString::Printf(TEXT("%d of %d criteria met"), Result.CriteriaMet, Result.CriteriaTotal);
+		if (!Result.bTerminal)
+		{
+			// NOT A RESULT YET: what is true so far, and labelled so. No verdict is printed before Julius gives one.
+			return FString::Printf(TEXT("not final · %s"), *Criteria);
+		}
+		FString Line = FString::Printf(TEXT("%s · %s"), Result.bVerified ? TEXT("VERIFIED") : TEXT("NOT VERIFIED"), *Criteria);
+		if (!Result.FailureReason.IsEmpty())
+		{
+			Line += FString::Printf(TEXT(" · %s"), *Result.FailureReason);
+		}
+		return Line;
+	}
+
+	FString ResultDetail(const FWonderlandJuliusResultReading& Result)
+	{
+		if (!Result.bKnown)
+		{
+			return FString();
+		}
+		TArray<FString> Parts;
+		const int32 Made = Result.DeliverableIds.Num();
+		Parts.Add(Made > 0 ? FString::Printf(TEXT("%d made"), Made)
+			: FString(Result.bTerminal ? TEXT("nothing made") : TEXT("nothing made yet")));
+		Parts.Add(Result.OpenFindings == 0 ? FString(TEXT("no open findings"))
+			: FString::Printf(TEXT("%d open finding%s"), Result.OpenFindings, Result.OpenFindings == 1 ? TEXT("") : TEXT("s")));
+		FString Review = Result.Verdict.IsEmpty() ? FString(TEXT("review: none yet")) : FString::Printf(TEXT("review: %s"), *Result.Verdict);
+		if (Result.RepairRounds > 0)
+		{
+			Review += FString::Printf(TEXT(" after %d repair%s, %s"), Result.RepairRounds, Result.RepairRounds == 1 ? TEXT("") : TEXT("s"),
+				Result.bReReviewedAfterRepair ? TEXT("re-reviewed") : TEXT("awaiting re-review"));
+		}
+		Parts.Add(Review);
+		if (!Result.Tokens.IsEmpty())
+		{
+			Parts.Add(FString::Printf(TEXT("tokens %s"), *Result.Tokens));
+		}
+		// Only a role that may see the cost is given one, and a floor never reads as a total.
+		if (Result.bCostVisible)
+		{
+			const double Usd = static_cast<double>(Result.CostKnownUsdMicros) / 1000000.0;
+			Parts.Add(Result.bCostComplete ? FString::Printf(TEXT("cost $%.4f"), Usd) : FString::Printf(TEXT("cost at least $%.4f"), Usd));
+		}
+		return FString::Join(Parts, TEXT(" · "));
+	}
 }
 
 /* =========================================================================================== the subsystem */
@@ -313,6 +449,14 @@ void UWonderlandJuliusStreamSubsystem::Follow(const FString& InProjectId, const 
 	// no envelope can land between them. A first-class "follow this run" on the subsystem would say this more
 	// directly; that is its owner's to add.
 	const bool bSwitching = !ProjectId.IsEmpty() && (ProjectId != InProjectId || RunId != InRunId);
+	if (RunId != InRunId || ProjectId != InProjectId)
+	{
+		// Another run's result describes another run. HasResult() would refuse it anyway; forgetting it is plainer.
+		Result = FWonderlandJuliusResultReading();
+		ResultReadFor.Reset();
+		ResultFailures = 0;
+		NextResultAt = 0.0;
+	}
 	ProjectId = InProjectId;
 	RunId = InRunId;
 	if (bSwitching)
@@ -334,6 +478,8 @@ void UWonderlandJuliusStreamSubsystem::Stop()
 
 bool UWonderlandJuliusStreamSubsystem::Tick(float DeltaSeconds)
 {
+	// The result has its own request and its own clock, so it neither waits for a page nor holds one up.
+	TickResult();
 	if (Phase == EPhase::Idle || bInFlight || FPlatformTime::Seconds() < NextAttemptAt)
 	{
 		return true;
@@ -480,6 +626,72 @@ void UWonderlandJuliusStreamSubsystem::ReadPage()
 		SetLink(EWonderlandLinkState::Live, FString::Printf(TEXT("Following %s."), *RunId));
 	});
 	Request->ProcessRequest();
+}
+
+void UWonderlandJuliusStreamSubsystem::TickResult()
+{
+	if (Phase != EPhase::Following || bResultInFlight || FPlatformTime::Seconds() < NextResultAt
+		|| BridgeUrl().IsEmpty() || !TokenSource.IsValid() || TokenSource->CurrentToken().IsEmpty())
+	{
+		return;
+	}
+	// ONLY A RUN THE WORLD HOLDS. A result for a run it has not adopted would describe something that is not on screen.
+	if (RunId.IsEmpty() || GetAdoptedRunId() != RunId)
+	{
+		return;
+	}
+	const FString ReadFor = RunId + TEXT("|") + GetJuliusRunState();
+	if (ReadFor != ResultReadFor)
+	{
+		RequestResult(ReadFor);
+	}
+}
+
+void UWonderlandJuliusStreamSubsystem::RequestResult(const FString& ReadFor)
+{
+	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request =
+		NewRequest(TEXT("GET"), BridgeUrl() + TEXT("/relay-api/wonderland/julius/result?") + RunQuery(0));
+	bResultInFlight = true;
+	InFlight.Add(Request);
+	const FString AskedRun = RunId;
+	Request->OnProcessRequestComplete().BindWeakLambda(this, [this, ReadFor, AskedRun](FHttpRequestPtr Done, FHttpResponsePtr Response, bool bConnected)
+	{
+		InFlight.Remove(Done);
+		bResultInFlight = false;
+		// THE RUN MAY HAVE CHANGED WHILE THIS WAS IN FLIGHT, and a result for the previous one is not this one's.
+		if (AskedRun != RunId)
+		{
+			return;
+		}
+		const int32 Status = Response.IsValid() ? Response->GetResponseCode() : 0;
+		FWonderlandJuliusResultReading Read;
+		const bool bRead = bConnected && Status == 200 && Response.IsValid()
+			&& WonderlandJuliusStreamLogic::ParseResult(Response->GetContentAsString(), Read);
+		if (!bRead || Read.RunId != AskedRun)
+		{
+			// NOT A LINK FAILURE. The run is still followed perfectly well; only its result could not be read, so the
+			// link state is left alone and the result is asked for again after a pause.
+			++ResultFailures;
+			NextResultAt = FPlatformTime::Seconds() + WonderlandJuliusStreamLogic::BackoffSeconds(ResultFailures);
+			UE_LOG(LogWonderlandJuliusStream, Warning, TEXT("JULIUS STREAM: the run's result could not be read (HTTP %d); the follow is unaffected."), Status);
+			return;
+		}
+		ResultFailures = 0;
+		Result = MoveTemp(Read);
+		ResultReadFor = ReadFor;
+		UE_LOG(LogWonderlandJuliusStream, Log, TEXT("JULIUS STREAM: result for %s -- %s"), *AskedRun,
+			*WonderlandJuliusStreamLogic::ResultHeadline(Result));
+	});
+	Request->ProcessRequest();
+}
+
+FString UWonderlandJuliusStreamSubsystem::DescribeResult() const
+{
+	if (!HasResult())
+	{
+		return FString();
+	}
+	return WonderlandJuliusStreamLogic::ResultHeadline(Result) + TEXT("\n") + WonderlandJuliusStreamLogic::ResultDetail(Result);
 }
 
 void UWonderlandJuliusStreamSubsystem::Failed(int32 HttpStatus, bool bConnected, const TCHAR* During)
@@ -645,7 +857,17 @@ FString UWonderlandJuliusStreamSubsystem::Describe() const
 			}
 		}
 	}
-	return FString::Printf(TEXT("JULIUS STREAM: %s | julius=%s | contract=%s | on-contract=%s | bridge=%s | project=%s | run=%s | paired=%s | cursor=%lld | pages=%lld | offered=%lld | failures=%d | link=%s"),
+	// The result goes LAST: proof jobs split this line on the fields before it.
+	FString ResultLine = TEXT("not read yet");
+	if (HasResult())
+	{
+		ResultLine = WonderlandJuliusStreamLogic::ResultHeadline(Result);
+	}
+	else if (ResultFailures > 0)
+	{
+		ResultLine = FString::Printf(TEXT("not read yet (%d failed reads)"), ResultFailures);
+	}
+	return FString::Printf(TEXT("JULIUS STREAM: %s | julius=%s | contract=%s | on-contract=%s | bridge=%s | project=%s | run=%s | paired=%s | cursor=%lld | pages=%lld | offered=%lld | failures=%d | link=%s | result=%s"),
 		PhaseName,
 		*JuliusState,
 		*ContractState,
@@ -656,7 +878,8 @@ FString UWonderlandJuliusStreamSubsystem::Describe() const
 		(TokenSource.IsValid() && !TokenSource->CurrentToken().IsEmpty()) ? TEXT("yes") : TEXT("no"),
 		Julius != nullptr ? Julius->GetResumeAfterSequence() : -1LL,
 		PagesRead, EnvelopesOffered, Failures,
-		Julius != nullptr ? *Julius->GetLinkStatus().Explanation : TEXT("-"));
+		Julius != nullptr ? *Julius->GetLinkStatus().Explanation : TEXT("-"),
+		*ResultLine);
 }
 
 /* ============================================================================================== the console */

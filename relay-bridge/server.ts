@@ -79,11 +79,14 @@ import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
 import {
   handleWonderlandJuliusRoute,
   isWonderlandJuliusRoute,
+  wonderlandJuliusResultsFrom,
 } from './wonderland-julius-routes';
 import type {
   WonderlandJuliusReader,
+  WonderlandJuliusResultSource,
   WonderlandProjectMembershipSource,
 } from './wonderland-julius-routes';
+import type { JuliusRuntimeApi } from '../src/relay/mission/julius/julius-runtime-api';
 import {
   WonderlandJuliusReaderPostgres,
   WonderlandMembershipPostgres,
@@ -182,6 +185,12 @@ export const wonderlandJuliusDatabaseUrl = (env: NodeJS.ProcessEnv): string | nu
 export interface WonderlandJuliusWorld {
   readonly reader: WonderlandJuliusReader;
   readonly membership: WonderlandProjectMembershipSource;
+  /**
+   * Julius's result for a run, through the SAME `JuliusRuntimeApi` Julius's own
+   * routes answer from. Absent where no API was composed; `/result` then says
+   * 503, as the other two do without their reads.
+   */
+  readonly results?: WonderlandJuliusResultSource;
 }
 
 /**
@@ -197,9 +206,10 @@ export interface WonderlandJuliusWorld {
  * from the same database. Two pools would be two connection strings waiting to
  * disagree.
  */
-export const wonderlandJuliusWorld = (pool: Pool): WonderlandJuliusWorld => ({
+export const wonderlandJuliusWorld = (pool: Pool, api: JuliusRuntimeApi | null = null): WonderlandJuliusWorld => ({
   reader: new WonderlandJuliusReaderPostgres(pool),
   membership: new WonderlandMembershipPostgres(pool),
+  ...(api === null ? {} : { results: wonderlandJuliusResultsFrom(api) }),
 });
 
 async function readBody(req: IncomingMessage): Promise<unknown> {
@@ -345,7 +355,8 @@ export function createBridgeServer(
   const resolveJuliusWorld = async () => {
     if (juliusWorldDeps !== undefined) return juliusWorldDeps;
     const pool = juliusPool();
-    juliusWorldDeps = pool === null ? null : wonderlandJuliusWorld(pool);
+    // The result read goes through the API Julius's own routes compose over this same pool -- one authority.
+    juliusWorldDeps = pool === null ? null : wonderlandJuliusWorld(pool, juliusStatePorts().api);
     return juliusWorldDeps;
   };
 
@@ -726,6 +737,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             sessions: browserSessions,
             reader: world?.reader,
             membership: world?.membership,
+            results: world?.results,
             response: res,
             request: req,
           });

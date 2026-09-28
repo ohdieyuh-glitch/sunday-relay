@@ -441,6 +441,63 @@ try {
   native = { Authorization: `Relay-Session ${renewedToken}` };
 
   /* ================================================================
+   * THE USER RESULT -- founder decision 5. The run is READY and was never
+   * dispatched, so its result is Julius's answer for exactly that: not
+   * verified, not over, nothing made, no failure -- and, for its OWNER, an
+   * exact cost of nothing, complete. Read through the bridge the world uses.
+   * ================================================================ */
+  const resultPath = `/relay-api/wonderland/julius/result?${worldQuery}`;
+  const ownResult = await call('GET', resultPath, { headers: native });
+  const shown = ownResult.json?.data ?? {};
+  clause('R01', 'the native client reads the run\'s USER RESULT: READY shown Queued, not verified, not over, nothing made, no failure, tokens UNKNOWN',
+    ownResult.status === 200 && shown.runId === runId && shown.missionId === CONTRACT.missionId
+      && shown.juliusState === 'READY' && shown.taskState === 'Queued' && shown.verified === false
+      && shown.terminal === false && Array.isArray(shown.deliverables) && shown.deliverables.length === 0
+      && shown.failure === null && shown.tokens === 'UNKNOWN',
+    { status: ownResult.status, juliusState: shown.juliusState ?? 'absent', taskState: shown.taskState ?? 'absent',
+      verified: shown.verified ?? 'absent', criteria: Array.isArray(shown.criteria) ? shown.criteria.length : 'absent' });
+  clause('R02', 'the OWNER sees the exact cost: nothing was dispatched, so nothing was spent, and that figure is complete',
+    ownResult.status === 200 && shown.cost?.visible === true && shown.cost?.knownUsdMicros === 0
+      && shown.cost?.unknownComponents === 0 && shown.cost?.complete === true,
+    { cost: shown.cost ?? 'absent' });
+
+  // NOTHING FORBIDDEN RIDES ALONG: no provider, model or slot, no internal task id, no host path, no credential shape.
+  // The WHOLE body: `call` keeps only 600 characters of text, and a scan of a prefix proves nothing about the rest.
+  const resultJson = ownResult.json === null ? '' : JSON.stringify(ownResult.json);
+  const forbidden = [/"providerId"/, /"servedModel"/, /"requestedModel"/, /"taskId"/, /"workerId"/,
+    /[A-Za-z]:\\\\/, /\/(?:home|Users|tmp|srv)\//, /\bsk-[A-Za-z0-9]/, /\bBearer\s/i, /"safeSummary"/];
+  const found = forbidden.filter((re) => re.test(resultJson)).map(String);
+  clause('R03', 'the result carries only the user result: no provider, model, slot or internal task id, no host path, no credential shape',
+    ownResult.status === 200 && resultJson.length > 0 && found.length === 0,
+    { bytes: resultJson.length, found: found.length === 0 ? 'none' : found });
+
+  // FAIL CLOSED, TODAY: the founder decided a MEMBER may read a result without its cost, and nothing in the
+  // product writes that role yet -- so a MEMBER row reads nothing until the route that writes one adds its row.
+  // A second player is signed in, given that row, and refused; R01 is the control, the OWNER admitted.
+  const memberPlayer = `${PLAYER}-member`;
+  const memberGrant = (await call('POST', '/relay-api/browser/pair', {
+    headers: operator, body: JSON.stringify({ origin: SITE, scope: 'control', participantId: memberPlayer }),
+  })).json?.data ?? {};
+  const memberSession = await call('POST', '/relay-api/browser/session', {
+    headers: { Origin: SITE }, body: JSON.stringify({ grantId: memberGrant.grantId, grantSecret: memberGrant.grantSecret }),
+  });
+  const memberRows = new pg.Pool({ connectionString: DB });
+  try {
+    await memberRows.query('INSERT INTO relay_wonderland.players(player_id) VALUES ($1) ON CONFLICT DO NOTHING', [memberPlayer]);
+    await memberRows.query(
+      "INSERT INTO relay_wonderland.project_members(project_id, player_id, role) VALUES ($1, $2, 'MEMBER') ON CONFLICT DO NOTHING",
+      [CONTRACT.projectId, memberPlayer]);
+  } finally {
+    await memberRows.end();
+  }
+  const asMember = await call('GET', resultPath, {
+    headers: { Authorization: `Relay-Session ${memberSession.json?.data?.sessionToken ?? null}`, Origin: SITE },
+  });
+  clause('R04', 'a MEMBER row -- decided, not yet written by the product -- reads nothing: 403, fail closed, while the OWNER is admitted',
+    memberSession.status === 200 && asMember.status === 403 && ownResult.status === 200,
+    { memberSignedIn: memberSession.status, memberResult: asMember.status, ownerResult: ownResult.status });
+
+  /* ================================================================
    * ONE ACTIVE RUN PER MISSION -- founder decision 3, Julius 80b91478.
    * An accidental duplicate must not start a second paid execution; an
    * EXPLICIT rerun must stay possible; runId is the run and missionId the

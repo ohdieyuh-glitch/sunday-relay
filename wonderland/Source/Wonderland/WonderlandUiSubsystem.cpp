@@ -32,6 +32,8 @@
 #include "WonderlandCompanionTerminal.h"
 #include "WonderlandHudPanels.h"
 #include "WonderlandJuliusConnect.h"
+#include "WonderlandJuliusStream.h"
+#include "WonderlandJuliusSubsystem.h"
 #include "WonderlandEntitlements.h"
 #include "WonderlandSidekicks.h"
 #include "WonderlandJuliusConnectPanel.h"
@@ -174,6 +176,9 @@ void UWonderlandUiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			HandlePlayerControllerChanged(LocalPlayer->PlayerController);
 		}
 	}
+	// Five readings a second: a string comparison each, and a write only when the followed run moved.
+	LiveJuliusTicker = FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateUObject(this, &UWonderlandUiSubsystem::TickLiveJulius), 0.2f);
 }
 
 void UWonderlandUiSubsystem::Deinitialize()
@@ -182,6 +187,11 @@ void UWonderlandUiSubsystem::Deinitialize()
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(RoleTicker);
 		RoleTicker.Reset();
+	}
+	if (LiveJuliusTicker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(LiveJuliusTicker);
+		LiveJuliusTicker.Reset();
 	}
 	Detach();
 	if (ULocalPlayer* LocalPlayer = GetLocalPlayer<ULocalPlayer>())
@@ -3860,10 +3870,152 @@ void UWonderlandUiSubsystem::HandleTerminalSubmit(const FString& Text)
 	{
 		return;
 	}
-	// Recorded as the visitor's own line and marked unsent. There is no Julius link in the
-	// world yet, and a terminal that answered anyway would be inventing Julius.
-	Terminal->AddJuliusRow(TEXT("You"), Text, TEXT("Not sent: Julius 3.3 is not connected to this world yet."));
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI terminal line recorded, not sent (no Julius link): %d characters"), Text.Len());
+	// Recorded as the visitor's own line and marked unsent. The world can FOLLOW a Julius run but has no way to
+	// send Julius anything, and a terminal that answered anyway would be inventing Julius. While a real run is
+	// followed the reason says that, rather than claiming there is no connection at all.
+	const UWonderlandMissionSubsystem* Mission = Missions();
+	const bool bFollowing = Mission != nullptr && Mission->IsFollowingRealRun();
+	Terminal->AddJuliusRow(TEXT("You"), Text, bFollowing
+		? FString::Printf(TEXT("Not sent: this world follows run %s read-only and cannot send commands to Julius yet."), *Mission->GetFollowedRunId())
+		: FString(TEXT("Not sent: Julius 3.3 is not connected to this world yet.")));
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI terminal line recorded, not sent (%s): %d characters"),
+		bFollowing ? TEXT("following read-only") : TEXT("no Julius link"), Text.Len());
+}
+
+namespace WonderlandLiveJuliusDetail
+{
+	/** The link, in the words a row gives it. A link event is never a mission event, and none of these is an ending. */
+	const TCHAR* LinkWord(EWonderlandLinkState State)
+	{
+		switch (State)
+		{
+		case EWonderlandLinkState::NeverConnected: return TEXT("NOT CONNECTED");
+		case EWonderlandLinkState::Pairing:        return TEXT("PAIRING");
+		case EWonderlandLinkState::Live:           return TEXT("LIVE");
+		case EWonderlandLinkState::Stale:          return TEXT("STALE · showing the last known state");
+		case EWonderlandLinkState::SessionExpired: return TEXT("SESSION EXPIRED · pair again");
+		case EWonderlandLinkState::Refused:        return TEXT("REFUSED");
+		default: break;
+		}
+		return TEXT("UNKNOWN");
+	}
+}
+
+bool UWonderlandUiSubsystem::TickLiveJulius(float DeltaSeconds)
+{
+	const UWonderlandMissionSubsystem* Mission = Missions();
+	// NOTHING REAL IS FOLLOWED, or a fixture is playing -- IsFollowingRealRun is false for both, since a fixture is a
+	// simulation and the terminal is its to narrate. The live line comes down either way, so the banner can never name
+	// a run no one is following.
+	if (Mission == nullptr || !Mission->IsFollowingRealRun())
+	{
+		if (bLiveJuliusShown && Terminal.IsValid())
+		{
+			Terminal->SetLiveProvenance(FString());
+			// A fixture takes the terminal over itself: its first event is a new mission, which resets it. Anything else
+			// means the Mission Contract stopped following the run -- say so, and put the section back at rest rather
+			// than leave the run's last state standing without the line that named it.
+			if (Mission == nullptr || !Mission->IsFixtureRunning())
+			{
+				Terminal->AddJuliusRow(TEXT("Julius"), FString::Printf(TEXT("No longer following run %s"), *LiveJuliusRun),
+					TEXT("The rows above are what was last known."));
+				Terminal->SetSectionState(TEXT("JULIUS 3.3"), TEXT("STANDBY"), FString());
+				RoleFeeds[static_cast<int32>(EWonderlandJuliusRole::Julius)].Status = TEXT("STANDBY");
+			}
+		}
+		bLiveJuliusShown = false;
+		return true;
+	}
+	// Created the way a narrated mission creates it, so a run followed while the terminal is closed is there to read
+	// when it opens.
+	EnsureLiveTerminal();
+	if (!Terminal.IsValid())
+	{
+		return true;
+	}
+
+	const FString Run = Mission->GetFollowedRunId();
+	const FString Said = Mission->GetFollowedJuliusState();
+	const FString Label = Mission->GetFollowedStateLabel();
+	// FOLLOWING is the founder's own word for a run the world follows before Julius has named a state.
+	const FString Shown = Label.IsEmpty() ? FString(TEXT("FOLLOWING")) : Label;
+	const FString SaidShown = Said.IsEmpty() ? FString(TEXT("no state reported yet")) : Said.ToUpper();
+	const FString Where = FString::Printf(TEXT("run %s · Julius: %s"), *Run, *SaidShown);
+
+	if (!bLiveJuliusShown || Run != LiveJuliusRun)
+	{
+		// WHAT THE TERMINAL HELD BELONGS TO SOMETHING ELSE -- a simulation's rows, or another run's. A fixture's rows
+		// under a JULIUS LIVE line would read as this run's work, so they go, as a new mission's do; and a role still
+		// typing a fixture's lines is stopped, or it would go on writing them under the live line.
+		for (FRoleFeed& Feed : RoleFeeds)
+		{
+			Feed = FRoleFeed();
+		}
+		RoleOccurrences.Reset();
+		Terminal->ResetSimulation();
+		Terminal->SetSimulated(false);
+		Terminal->SetFocusSection(TEXT("JULIUS 3.3"));
+		Terminal->AddJuliusRow(TEXT("Julius"),
+			FString::Printf(TEXT("Following %s · %s"), *Mission->GetFoldMissionId().ToString(), *Shown), Where);
+		Terminal->SetSectionState(TEXT("JULIUS 3.3"), Shown, FString());
+		// The role's own reading says what its section says, or a proof reading GetJuliusRoleStatus would see STANDBY.
+		RoleFeeds[static_cast<int32>(EWonderlandJuliusRole::Julius)].Status = Shown;
+		bLiveJuliusShown = true;
+		LiveJuliusRun = Run;
+		LiveJuliusSaid = Said;
+		LiveJuliusLabel = Shown;
+		LiveJuliusLink = -1;
+		LiveJuliusResult.Reset();
+	}
+	else if (Said != LiveJuliusSaid || Shown != LiveJuliusLabel)
+	{
+		// THE RUN MOVED. Both words, as the founder asked: what a player reads, and what Julius said.
+		Terminal->AddJuliusRow(TEXT("Julius"), FString::Printf(TEXT("%s → %s"), *LiveJuliusLabel, *Shown), Where);
+		Terminal->SetSectionState(TEXT("JULIUS 3.3"), Shown, FString());
+		RoleFeeds[static_cast<int32>(EWonderlandJuliusRole::Julius)].Status = Shown;
+		LiveJuliusSaid = Said;
+		LiveJuliusLabel = Shown;
+	}
+
+	// THE LINK, in its own row and its own words. It never moves the run's state above it: a dropped link is never an
+	// ending, and the terminal keeps the last known state exactly as the world does.
+	const ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	const UGameInstance* Instance = Player != nullptr ? Player->GetGameInstance() : nullptr;
+	if (const UWonderlandJuliusSubsystem* Julius = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusSubsystem>() : nullptr)
+	{
+		const FWonderlandLinkStatus& Link = Julius->GetLinkStatus();
+		const int32 LinkNow = static_cast<int32>(Link.State);
+		if (LinkNow != LiveJuliusLink)
+		{
+			// A LIVE link on the first reading is what "Following" already said; anything else is news.
+			if (LiveJuliusLink != -1 || Link.State != EWonderlandLinkState::Live)
+			{
+				Terminal->AddJuliusRow(TEXT("Link"), WonderlandLiveJuliusDetail::LinkWord(Link.State), Link.Explanation);
+			}
+			LiveJuliusLink = LinkNow;
+		}
+	}
+	// THE USER RESULT (founder decision 5), as the bridge projected it for THIS player: a row when it first arrives
+	// and whenever it changes. Only for the run this terminal follows; the transport reads it for its own followed
+	// run, and the two are one run unless a switch is mid-flight -- when the row simply waits.
+	if (const UWonderlandJuliusStreamSubsystem* Stream = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusStreamSubsystem>() : nullptr)
+	{
+		if (Stream->HasResult() && Stream->GetFollowedRunId() == Run)
+		{
+			const FWonderlandJuliusResultReading& Reading = Stream->GetResultReading();
+			const FString Headline = WonderlandJuliusStreamLogic::ResultHeadline(Reading);
+			const FString Detail = WonderlandJuliusStreamLogic::ResultDetail(Reading);
+			const FString ResultLines = Headline + TEXT("\n") + Detail;
+			if (ResultLines != LiveJuliusResult)
+			{
+				Terminal->AddJuliusRow(TEXT("Result"), Headline, Detail);
+				LiveJuliusResult = ResultLines;
+			}
+		}
+	}
+	// The same sentence the strip and the Missions panel print, so the three surfaces cannot disagree.
+	Terminal->SetLiveProvenance(Mission->GetProvenanceBanner());
+	return true;
 }
 
 void UWonderlandUiSubsystem::HandleTravel(FName DestinationId)
@@ -5135,6 +5287,11 @@ FString UWonderlandUiSubsystem::GetJuliusSectionState(const FString& Section) co
 FString UWonderlandUiSubsystem::GetJuliusLatestHeadline() const
 {
 	return Terminal.IsValid() ? Terminal->GetLatestJuliusHeadline() : FString();
+}
+
+FString UWonderlandUiSubsystem::GetJuliusTerminalBanner() const
+{
+	return Terminal.IsValid() ? Terminal->GetBannerText() : FString();
 }
 
 FString UWonderlandUiSubsystem::GetCompanionTerminalStatus(int32 Index) const

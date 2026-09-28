@@ -16,9 +16,12 @@
 // the section that is working; a command line underneath. The one change is the
 // founder's own, 2026-09-12: the orchestration section reads JULIUS 3.3.
 //
-// NOTHING HERE PRETENDS TO BE CONNECTED. Julius is not wired to the world yet, and
-// the panel says STANDBY rather than LIVE. A command typed into it is recorded as
-// yours and marked "not sent" — never answered — which is the web panel's rule:
+// NOTHING HERE PRETENDS TO BE CONNECTED. With no real Julius run followed, the
+// panel says STANDBY rather than LIVE. While one IS followed (2026-09-27), the
+// JULIUS 3.3 section carries that run's state and the banner line names the run
+// and Julius's own word for its state -- fed from what the world holds, by
+// UWonderlandUiSubsystem, never invented here. A command typed into it is recorded
+// as yours and marked "not sent" — never answered — which is the web panel's rule:
 // "a command typed with nowhere to send it says so rather than being answered."
 #pragma once
 
@@ -150,6 +153,22 @@ public:
 	/** A new mission: the simulated rows and section states go back to rest. */
 	void ResetSimulation();
 
+	// ---------------------------------------------------------------- a REAL Julius run (founder, 2026-09-27)
+	// The banner line that says DEVELOPMENT PREVIEW over a simulation names the run instead while a real one is
+	// followed: JULIUS LIVE, the run, and Julius's own word for its state. The same line, never a new element.
+
+	/**
+	 * The followed run's provenance, or empty when no real run is followed. A simulation's warning still wins.
+	 *
+	 * THE TERMINAL IS GIVEN UWonderlandMissionSubsystem::GetProvenanceBanner() VERBATIM -- the same sentence the strip
+	 * and the Missions panel badge draw, so the three cannot disagree. The price of that is deliberate: a change to
+	 * that sentence's wording moves all three surfaces at once. Edit it there, never here.
+	 */
+	void SetLiveProvenance(const FString& InProvenance) { LiveProvenance = InProvenance; }
+
+	/** What the banner line reads now: the simulation's warning, the live run's provenance, or empty. For proof jobs. */
+	FString GetBannerText() const;
+
 	// ---------------------------------------------------------------- the four components at work (founder, 2026-09-16)
 	// THE TERMINAL ALWAYS LOOKS LIKE THE FOUNDER'S IMAGE: these four sections, their headers, the message line. Each
 	// section's body is a rolling log of its component's work (WonderlandJuliusWorkLog.h). When there is more to show the
@@ -210,6 +229,7 @@ private:
 	FOnGetCommandLabel OnGetCommandLabel;
 	int32 CommandSlotCount = 4;
 	bool bSimulated = false;
+	FString LiveProvenance;
 	int64 SimulatedCharacters = 0;
 	TMap<FString, int32> SimulatedCountedLines;
 	TMap<FString, FString> SectionStates;

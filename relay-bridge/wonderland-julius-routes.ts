@@ -23,6 +23,13 @@
  *   GET /wonderland/julius/events    the tail, as SSE. Everything after a
  *                                    cursor, ordered, scoped and folded.
  *
+ * AND ONE FOR THE END OF THE LOOP (founder decision 5, 2026-09-27):
+ *
+ *   GET /wonderland/julius/result    the run's USER RESULT -- Julius's own
+ *                                    result, projected for a player, with its
+ *                                    exact cost only for a role that carries
+ *                                    `read_mission_cost`.
+ *
  * ─────────────────────────────────────────────────────────────────────────
  * WHY THESE ROUTES REFUSE TO RUN WITHOUT A MEMBERSHIP PORT
  *
@@ -68,6 +75,12 @@ import { openWonderlandCursor } from '../src/relay/mission/wonderland/wonderland
 import type { WonderlandLedgerRow } from '../src/relay/mission/wonderland/wonderland-ledger-adapter';
 import { wonderlandHydrationVerdict } from '../src/relay/mission/wonderland/wonderland-hydration';
 import type { WonderlandHydration } from '../src/relay/mission/wonderland/wonderland-hydration';
+import { projectWonderlandJuliusResult } from '../src/relay/mission/wonderland/wonderland-julius-result';
+import type {
+  JuliusApiIdentity,
+  JuliusApiResult,
+  JuliusMissionResultView,
+} from '../src/relay/mission/julius/julius-runtime-api';
 
 /** The largest page one request will serve. A cursor gets the rest. */
 export const WONDERLAND_JULIUS_PAGE_LIMIT = 500;
@@ -125,6 +138,53 @@ export interface WonderlandJuliusReader {
   }): Promise<{ readonly rows: readonly WonderlandLedgerRow[]; readonly revision: number }>;
 }
 
+/**
+ * JULIUS'S OWN RESULT FOR ONE RUN -- `JuliusRuntimeApi.inspectResult` -- or null
+ * when the project has no such run. The route projects it for a player; the
+ * source never does, so there is one answer to "did it work" and it is Julius's.
+ *
+ * Must THROW when it cannot answer, for the reason the membership port must: an
+ * absence and a failure are different facts with different safe answers.
+ */
+export interface WonderlandJuliusResultSource {
+  result(input: {
+    readonly projectId: string;
+    readonly runId: string;
+    readonly actorId: string;
+  }): Promise<JuliusMissionResultView | null>;
+}
+
+/**
+ * THE TENANT THE WORLD PRESENTS TO JULIUS, and why it is a name and not a value.
+ *
+ * Julius's API asks every caller for a tenant, a project and an actor, and
+ * scopes a run by PROJECT: `loadRun(runId, projectId)`, and a run row carries no
+ * tenant at all. The world knows the player, and the project its membership
+ * authorised -- no tenant. So it names its own context, which grants nothing:
+ * the run is found under the project the MEMBERSHIP authorised, or not at all.
+ * If Julius ever scopes runs by tenant, this must change with it.
+ */
+export const WONDERLAND_WORLD_CALLER_TENANT = 'wonderland' as const;
+
+/** The world's result read, through Julius's own API and nothing else. */
+export function wonderlandJuliusResultsFrom(api: {
+  inspectResult(identity: JuliusApiIdentity, runId: string): Promise<JuliusApiResult<JuliusMissionResultView>>;
+}): WonderlandJuliusResultSource {
+  return {
+    async result({ projectId, runId, actorId }) {
+      const answer = await api.inspectResult(
+        { tenantId: WONDERLAND_WORLD_CALLER_TENANT, projectId, actorId, scopes: ['run:read'] },
+        runId,
+      );
+      if (answer.ok) return answer.value;
+      // Not found and not this project's are one answer in Julius, and one here.
+      if (answer.reason === 'run_not_found') return null;
+      // Anything else is this read being unable to answer -- never "no result".
+      throw new Error(`Julius refused the world's result read: ${answer.reason}`);
+    },
+  };
+}
+
 export interface WonderlandJuliusRouteRequest {
   readonly method: string;
   readonly path: string;
@@ -138,6 +198,15 @@ export interface WonderlandJuliusRouteDeps {
   readonly sessions: BrowserSessionStore;
   readonly reader?: WonderlandJuliusReader;
   readonly membership?: WonderlandProjectMembershipSource;
+  /** Julius's result for a run. Absent, `/wonderland/julius/result` answers 503: fail closed, like the others. */
+  readonly results?: WonderlandJuliusResultSource;
+  /**
+   * The role table decisions are made against. Absent in production, where it is
+   * the canonical `WONDERLAND_ROLE_CAPABILITIES`; injected only so a test can
+   * reach a role the product does not write yet -- the member who may read a
+   * result but not its cost -- without unfreezing the canonical table.
+   */
+  readonly roleCapabilities?: Readonly<Record<string, readonly WonderlandProjectCapability[]>>;
   /** Called with every decision, granted or not. For an operator's log only. */
   readonly onAuthorization?: (decision: WonderlandAuthorizationDecision) => void;
   readonly response?: ServerResponse;
@@ -157,7 +226,8 @@ export const WONDERLAND_JULIUS_POLL_MS = 1_000;
 export type WonderlandJuliusRouteResult = { readonly status: number; readonly body: unknown } | null;
 
 export function isWonderlandJuliusRoute(path: string): boolean {
-  return path === '/wonderland/julius/hydrate' || path === '/wonderland/julius/events';
+  return path === '/wonderland/julius/hydrate' || path === '/wonderland/julius/events'
+    || path === '/wonderland/julius/result';
 }
 
 /**
@@ -197,8 +267,18 @@ export function readWonderlandJuliusQuery(
 export async function authorizeWonderlandJulius(
   input: WonderlandJuliusRouteRequest,
   deps: WonderlandJuliusRouteDeps,
+  /** What the caller must be able to do. The world stream by default; a run's result asks for `read_mission_result`. */
+  capability: WonderlandProjectCapability = WONDERLAND_WORLD_CAPABILITY,
 ): Promise<
-  | { readonly ok: true; readonly grant: WonderlandIngressGrant; readonly playerId: string; readonly cursor: number; readonly sessionId: string }
+  | {
+    readonly ok: true;
+    readonly grant: WonderlandIngressGrant;
+    readonly playerId: string;
+    readonly cursor: number;
+    readonly sessionId: string;
+    /** The row the decision was made from, so a route can ask a NARROWER question of the same record. Never sent. */
+    readonly membership: WonderlandMembership;
+  }
   | { readonly ok: false; readonly status: number; readonly error: string }
 > {
   const query = readWonderlandJuliusQuery(input.url);
@@ -274,12 +354,13 @@ export async function authorizeWonderlandJulius(
     {
       playerId: verified.participantId,
       projectId: query.projectId,
-      capability: WONDERLAND_WORLD_CAPABILITY,
+      capability,
     },
     membership,
+    deps.roleCapabilities,
   );
   deps.onAuthorization?.(decision);
-  if (!decision.granted) {
+  if (!decision.granted || membership === null) {
     // ONE SENTENCE FOR EVERY DENIAL. The decision knows more and that stays in
     // the log: a body that said "not a member" where another said "no such
     // project" is a membership oracle.
@@ -292,6 +373,7 @@ export async function authorizeWonderlandJulius(
     sessionId: verified.sessionId,
     cursor: query.cursor,
     grant: { projectId: query.projectId, runId: query.runId },
+    membership,
   };
 }
 
@@ -353,8 +435,44 @@ export async function handleWonderlandJuliusRoute(
 ): Promise<WonderlandJuliusRouteResult> {
   if (!isWonderlandJuliusRoute(input.path) || input.method !== 'GET') return null;
 
-  const authorized = await authorizeWonderlandJulius(input, deps);
+  const wantsResult = input.path === '/wonderland/julius/result';
+  const authorized = await authorizeWonderlandJulius(
+    input, deps, wantsResult ? 'read_mission_result' : WONDERLAND_WORLD_CAPABILITY);
   if (!authorized.ok) return { status: authorized.status, body: { error: authorized.error } };
+
+  /*
+   * THE RUN'S USER RESULT (founder decision 5). Julius's own result, projected
+   * for a player by `projectWonderlandJuliusResult`: what it made, whether each
+   * criterion was met, what is still open, why it ended -- and its exact cost
+   * only when the SAME membership row also carries `read_mission_cost`.
+   */
+  if (wantsResult) {
+    if (!deps.results) return { status: 503, body: { error: WONDERLAND_UNAVAILABLE_MESSAGE } };
+    let view: JuliusMissionResultView | null;
+    try {
+      view = await deps.results.result({
+        projectId: authorized.grant.projectId,
+        runId: authorized.grant.runId as string,
+        actorId: authorized.playerId,
+      });
+    } catch {
+      // Julius could not answer. Not "no result", and not a denial.
+      return { status: 503, body: { error: WONDERLAND_UNAVAILABLE_MESSAGE } };
+    }
+    // NOT FOUND AND NOT YOURS LOOK THE SAME, as on hydrate. And the answer must be
+    // the run that was asked for: a source that answered for another would be the
+    // one thing between this caller and somebody else's mission.
+    if (view === null || view.runId !== authorized.grant.runId) {
+      return { status: 404, body: { error: WONDERLAND_DENIAL_MESSAGE } };
+    }
+    const costDecision = authorizeWonderlandProjectCapability(
+      { playerId: authorized.playerId, projectId: authorized.grant.projectId, capability: 'read_mission_cost' },
+      authorized.membership,
+      deps.roleCapabilities,
+    );
+    deps.onAuthorization?.(costDecision);
+    return { status: 200, body: { data: projectWonderlandJuliusResult(view, { includeCost: costDecision.granted }) } };
+  }
 
   const reader = deps.reader as WonderlandJuliusReader;
 

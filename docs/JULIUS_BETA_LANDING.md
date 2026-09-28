@@ -1,20 +1,36 @@
 # Landing `relay/julius-beta-qualification`
 
 **This page is the ceremony's input, not a narrative.** It holds the PR body, the
-facts a reviewer needs before reading 40 commits, and the things this branch
-does NOT claim. The landing itself is a founder act: this lane never pushes with
-the founder's credential and never merges its own work — see
-`ceremony/push-as-worker.sh` and the worker-App notes.
+facts a reviewer needs before reading 47 commits, and the things this branch
+does NOT claim.
+
+**The ceremony is `docs/JULIUS_WORKER_PR_RUNBOOK.md`, and until 2026-09-27 this
+line named `ceremony/push-as-worker.sh` — a path that has never existed in this
+repository.** It was the exact failure this page warns about two sections below:
+a reviewer sent chasing a phantom. The runbook is real, it was walked once for
+PR #237, and its three steps divide cleanly by authority:
+
+| Step | What it does | Who |
+|---|---|---|
+| 1 | re-author the candidate's commits as the App on a NEW branch, reference untouched | this lane |
+| 2 | mint an installation token, push, open the PR **as the App** | this lane |
+| 3 | approve at the head SHA, squash-merge at that head | **the founder, and only the founder** |
+
+Step 3 is not a courtesy. `scripts/julius-main-provenance.mjs` requires the
+landed PR's author to be `julius-worker[bot]` and its approver to be a
+*different* login, so the lane that wrote the code is structurally incapable of
+completing its own landing. That is the point of the gate.
 
 ## The state of the candidate
 
 | | |
 |---|---|
-| Branch | `relay/julius-beta-qualification` |
+| Branch | `relay/julius-beta-qualification`, head `c9877602` |
 | Base | `origin/main` `a384b215` (#287), unmoved at the time of writing |
-| Commits ahead | 40 |
+| Commits ahead | 47 |
 | Commits behind | 0 — merges with no conflict (`git merge-tree`: none) |
 | Worktree | clean; `git diff --check` clean |
+| Authored by | `Claude <noreply@anthropic.com>` and `julius-stack-rehearsal <rehearsal@local.invalid>` — **neither is the App**, which is what Step 1 of the runbook exists to correct |
 
 **Gates that can run on the founder's Windows workstation.** Run them, do not
 take this list on trust — the list below is the command, so it can be repeated:
@@ -27,11 +43,21 @@ npm run relay:surface-parity:check && npm run relay:surface-parity:check:strict
 npm run relay:yc-demo:check
 npm run relay:cli:contract-verify
 npm run build && npm run relay:build && npm run relay:hermes:build && npm run relay:bridge:build
-npm run julius:harness:check
+npm run julius:harness:verify       # export THEN check: see the note below
 git diff --check
 ```
 
-All of them pass at this branch's head. **`npm run typecheck` is listed first
+All of them pass at this branch's head. **`npm run julius:harness:verify`, not `:check`.** `generated/JULIUS_HARNESS_SOURCE.txt`
+is gitignored and stamps the HEAD it was generated at, so `--check` alone compares
+an artifact that is stale the instant a commit lands — and on a clean checkout it
+fails outright with "export missing". A gate that cannot pass on a fresh clone
+sends a reviewer chasing a phantom, so the gate is export-then-check, which is
+what actually asserts something: that the TRACKED manifest
+(`JULIUS_HARNESS_MANIFEST.md`) is current, that every exported file still hashes
+to its source, and that the trace reaches what it claims. This lane ran the two
+halves by hand all session and never noticed the list was wrong.
+
+**`npm run typecheck` is listed first
 because it is the one this lane broke and did not notice:** its FOURTH step
 (`scripts/tsconfig.json`) failed for several commits while every individually
 invoked check the lane ran was green, and vitest — which does not typecheck —
@@ -80,6 +106,26 @@ repairs, and returns a verified result with evidence.
   executor mounts. Every POSIX case passed, which is how it survived.
 - A commit message claimed a change (one shared pg pool) that a skipped patch
   had never applied. Corrected in the tree and recorded in the handoff.
+- **This page told its reader to see `ceremony/push-as-worker.sh`, a path that
+  has never existed in this repository** — the exact failure it warns about two
+  sections later. The real ceremony is `docs/JULIUS_WORKER_PR_RUNBOOK.md`, and
+  the three steps are now named here with who performs each.
+- **An API key survived the redactor**, and the table test that should have
+  caught it asserted the wrong string. Two independent defects: in the boundary
+  set the `authorization` rule ran FIRST and its `\S+` ate the word `Bearer`,
+  destroying the anchor the next rule needed, so the key was not missed but made
+  unreachable; and the repository-wide rule `/sk-[A-Za-z0-9]{8,}/` demanded eight
+  alphanumerics straight after `sk-`, so it missed every modern provider key
+  (`sk-ant-api03-`, `sk-proj-`, `sk-svcacct-`) and a bare Anthropic key in prose
+  was never redacted at all. The `` the widened rule needs also fixes the
+  opposite defect in the same line: unanchored, `sk-` matched inside
+  `task-oriented`. Found by the integration lane, reproduced here as four leaks
+  by probe, and proven not vacuous — with only the two source files reverted,
+  eleven cases fail.
+- **The runbook's App id was the bot's USER id** (`325202980`, the number in the
+  bot's noreply address) rather than the App id (`4838349`). It is the JWT's
+  `iss`, so an operator following the line literally would have met `404
+  Integration not found` at the first call with nothing to tell them why.
 
 **What is new**
 
@@ -128,8 +174,13 @@ repairs, and returns a verified result with evidence.
 **What this branch does not claim**
 
 - No paid provider ran for it. Every proof here is deterministic or against a
-  real PostgreSQL; the representative paid qualification mission is still
-  outstanding and is the founder's to authorise.
+  real PostgreSQL. The representative paid mission is PREPARED and
+  contract-checked on this branch — `.github/julius-missions/julius-live-mission-6/`,
+  a real cross-platform defect the integration lane reported, inside the DEFAULT
+  $5 / one-repair-cycle bound so its budget needs no founder decision — and it is
+  **not dispatched**. Dispatch is where money is spent, and by this repository's
+  own rule every paid mission needs a causal question, a reason the answer needs
+  provider spend, and explicit founder authorisation for that run.
 - No Unreal change has been made under Julius's contracts.
 - The Docker executor's sibling proof needs a Linux runner and did not run here.
 - `npm test` whole-suite has no number from this workstation (memory), so CI is
@@ -137,8 +188,8 @@ repairs, and returns a verified result with evidence.
 
 **Independent evidence from the integration lane** (quoted verbatim, at their
 request; the acceptance ran on `relay/wonderland-julius-integration` @
-`f28a61a5`, which carries Julius `00fa52ad`, against Wonderland Core's build
-`8cccaa50`):
+`69dda2a4`, which carries Julius `b46092af`, against Wonderland Core's builds
+`8cccaa50` and `b281f6a1`):
 
 > Integration lane: the first in-engine (PIE) Wonderland↔Julius acceptance
 > passed every data clause at zero spend, on the production bridge against an
@@ -149,26 +200,30 @@ request; the acceptance ran on `relay/wonderland-julius-integration` @
 > STALE with the mission untouched, and both reconnect and a full play restart
 > recovered the same durable run. From Julius's side both runs stayed READY and
 > never dispatched, and an identical resubmission was the same run. One criterion
-> is NOT yet met: the visible Missions panel still reads the simulated mission
-> presentation, so it shows 'No mission is running' while the world follows the
-> real run. Clause A06e tracks it until the panel is wired.
+> A second pass on Core's build b281f6a1 (attempt 853f3956f00747b1, all 23
+> clauses) met the remaining visible criterion: the Missions panel names the
+> mission and shows 'QUEUED through Julius. Run <runId>. Julius reports READY.'
+> under a JULIUS LIVE badge, before and after a full play restart. One surface
+> still disagrees: the HUD strip's headline reads 'UNOBSERVED' beside a live link,
+> and Wonderland Core is correcting it.
 
-That acceptance ran on Julius `00fa52ad`. Since then this branch has added the
-`result` view and its criterion-basis fix, the multi-mission evidence, Category E
-and the neutrality sweep — so the in-engine verdict covers the create/observe
-contract it exercised, and NOT the `result` view, which no Unreal client has
-called yet. The witness is the lane that found three real defects in this one's
+The second pass ran on Julius `b46092af` — this branch's head — so the verdict
+covers the create/observe contract as it stands. It does NOT cover the `result`
+view: no Unreal client has called it yet. The witness is the lane that found three real defects in this one's
 code (the Windows containment hole and both rerun defects), which is why it is
 quoted rather than paraphrased.
 
 **What that acceptance settles, and what it does not.** The DATA path is proved
-in the engine: a player pairs, the world adopts the exact run Julius created,
+in the engine — a player pairs, the world adopts the exact run Julius created,
 switches between two runs of one mission, survives a dropped link and a play
-restart, and Julius's own side shows both runs READY and never dispatched. The
-SCREEN is not: the Missions panel still draws the simulated presentation, so a
-player sees "No mission is running" while the world follows a real run. Neither
-half is this branch's to finish — the panel is Wonderland's — and neither is
-claimed here as Julius's proof.
+restart, and Julius's own side shows both runs READY and never dispatched — and
+the visible panel now names the mission and its run under a JULIUS LIVE badge,
+across a play restart. Three things are still NOT proved, and none of them is
+proved by that acceptance: the HUD strip's headline still reads UNOBSERVED beside
+a live link (Wonderland Core's to correct); **no run in it ever EXECUTED** — both
+runs stayed READY and never dispatched, because dispatch is where money is spent;
+and no Unreal client has called the `result` view, so the projection a user would
+be shown has never been rendered.
 
 **Where the detail lives**: `docs/handoffs/JULIUS_CURRENT.md` §000d (read that
 first), `docs/JULIUS_BETA_READINESS.md` (the scorecard and its arithmetic),
