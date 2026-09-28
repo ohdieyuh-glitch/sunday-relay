@@ -1,0 +1,93 @@
+{
+ "name": "zzBZ2_fire_params",
+ "started": "2026-09-28 00:28:14",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "P00",
+   "name": "the rebuilt material carries the softer values on disk",
+   "pass": true,
+   "detail": {
+    "wanted": {
+     "EdgeSoftness": 2.6,
+     "TipFalloff": 2.2
+    },
+    "on_disk": {
+     "EdgeSoftness": 2.5999999046325684,
+     "TipFalloff": 2.200000047683716
+    },
+    "note": "this is what zc_make_fire_material wrote. If it is still 0.85 the rebuild did not take and nothing downstream can be right."
+   }
+  },
+  {
+   "id": "P01",
+   "name": "the costume on the Dog was found",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "P02",
+   "name": "a flame material instance was found on the dressed figure",
+   "pass": true,
+   "detail": {
+    "materials": [
+     "MID_M_WL_Fire_2",
+     "MID_M_WL_Fire_3"
+    ],
+    "note": "the ribbons wear a MID of M_WL_Fire when wl.Look.FireMaterial is 1. If none is found the figure is not drawing that surface and the comparison was never about it."
+   }
+  },
+  {
+   "id": "P03",
+   "name": "the flame being DRAWN is using the softer values, not the old ones",
+   "pass": true,
+   "detail": {
+    "wanted": {
+     "EdgeSoftness": 2.6,
+     "TipFalloff": 2.2
+    },
+    "worn": {
+     "EdgeSoftness": [
+      2.6
+     ],
+     "TipFalloff": [
+      2.2
+     ]
+    },
+    "asset": {
+     "EdgeSoftness": 2.5999999046325684,
+     "TipFalloff": 2.200000047683716
+    },
+    "note": "THE QUESTION. Item 4's conclusion -- that softening the material changed nothing visible, so the hardness is the ribbon's silhouette and the fix is Niagara -- assumes the softer material is what I photographed. If these disagree with the asset, I compared two pictures of the OLD material and that conclusion has to be withdrawn."
+   }
+  },
+  {
+   "id": "P_SKIN",
+   "name": "Relay OG was put back and the fire knob restored",
+   "pass": true,
+   "detail": {
+    "worn": "relay_og",
+    "fire_material": 0.0
+   }
+  }
+ ],
+ "asset_defaults": {
+  "EdgeSoftness": 2.5999999046325684,
+  "TipFalloff": 2.200000047683716
+ },
+ "materials_seen": [
+  "MID_M_WL_Fire_2",
+  "MID_M_WL_Fire_3"
+ ],
+ "worn_values": {
+  "EdgeSoftness": [
+   2.6
+  ],
+  "TipFalloff": [
+   2.2
+  ]
+ },
+ "finished": "2026-09-28 00:28:52",
+ "seconds": 37.44,
+ "log": "P00 PASS the rebuilt material carries the softer values on disk {'wanted': {'EdgeSoftness': 2.6, 'TipFalloff': 2.2}, 'on_disk': {'EdgeSoftness': 2.5999999046325684, 'TipFalloff': 2.200000047683716}, 'note': 'this is what zc_make_fire_material wrote. If it is still 0.85 the rebuild did not take and nothing downstream can be right.'}\nP01 PASS the costume on the Dog was found {}\nP02 PASS a flame material instance was found on the dressed figure {'materials': ['MID_M_WL_Fire_2', 'MID_M_WL_Fire_3'], 'note': 'the ribbons wear a MID of M_WL_Fire when wl.Look.FireMaterial is 1. If none is found the figure is not drawing that surface and the comparison was never about it.'}\nP03 PASS the flame being DRAWN is using the softer values, not the old ones {'wanted': {'EdgeSoftness': 2.6, 'TipFalloff': 2.2}, 'worn': {'EdgeSoftness': [2.6], 'TipFalloff': [2.2]}, 'asset': {'EdgeSoftness': 2.5999999046325684, 'TipFalloff': 2.200000047683716}, 'note': \"THE QUESTION. Item 4's conclusion -- that softening the material changed nothing visible, so the hardness is the ribbon's silhouette and the fix is Niagara -- assumes the softer material is what I photographed. If these disagree with the asset, I compared two pictures of the OLD material and that conclusion has to be withdrawn.\"}\nP_SKIN PASS Relay OG was put back and the fire knob restored {'worn': 'relay_og', 'fire_material': 0.0}\n"
+}

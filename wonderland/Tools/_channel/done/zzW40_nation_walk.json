@@ -1,0 +1,109 @@
+{
+ "name": "zzW40_nation_walk",
+ "started": "2026-09-27 07:59:52",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "W00",
+   "name": "every nation's walk started with the Dog standing at the gate end of its route",
+   "pass": false,
+   "detail": {
+    "starts": {
+     "ICARUS": 614.72,
+     "NOCTIS": 0.0,
+     "TARTARUS": 0.0
+    },
+    "errors": {
+     "ICARUS": "the Dog is 614.7 m from the start; the cell may not have loaded"
+    }
+   }
+  },
+  {
+   "id": "W01",
+   "name": "the Dog walked gate to band in every nation under its own locomotion",
+   "pass": false,
+   "detail": {
+    "arrived": {
+     "ICARUS": false,
+     "NOCTIS": false,
+     "TARTARUS": false
+    },
+    "reached_m": {
+     "ICARUS": null,
+     "NOCTIS": 600.0,
+     "TARTARUS": 600.0
+    },
+    "route_m": {
+     "ICARUS": null,
+     "NOCTIS": 483.5,
+     "TARTARUS": 481.6
+    },
+    "stuck": {
+     "NOCTIS": {
+      "radius_m": 600.0,
+      "x": -52062,
+      "y": -29827,
+      "z": 112,
+      "waypoint": 1,
+      "ahead": null
+     },
+     "TARTARUS": {
+      "radius_m": 600.0,
+      "x": 51862,
+      "y": -30173,
+      "z": 86,
+      "waypoint": 1,
+      "ahead": null
+     }
+    },
+    "note": "AddMovementInput every tick with bForce, no teleports after the start, no navmesh; a stuck Dog stays stuck and the job records what was in front of it"
+   }
+  }
+ ],
+ "nations": {
+  "ICARUS": {
+   "waypoints": 59,
+   "route_m": null,
+   "reached_m": null,
+   "arrived": false,
+   "stuck_at": null,
+   "start_error_m": 614.72,
+   "error": "the Dog is 614.7 m from the start; the cell may not have loaded"
+  },
+  "NOCTIS": {
+   "waypoints": 59,
+   "route_m": 483.5,
+   "reached_m": 600.0,
+   "arrived": false,
+   "stuck_at": {
+    "radius_m": 600.0,
+    "x": -52062,
+    "y": -29827,
+    "z": 112,
+    "waypoint": 1,
+    "ahead": null
+   },
+   "start_error_m": 0.0,
+   "seconds": 6.0
+  },
+  "TARTARUS": {
+   "waypoints": 59,
+   "route_m": 481.6,
+   "reached_m": 600.0,
+   "arrived": false,
+   "stuck_at": {
+    "radius_m": 600.0,
+    "x": 51862,
+    "y": -30173,
+    "z": 86,
+    "waypoint": 1,
+    "ahead": null
+   },
+   "start_error_m": 0.0,
+   "seconds": 6.0
+  }
+ },
+ "finished": "2026-09-27 08:00:44",
+ "seconds": 52.0,
+ "log": "W_NOCTIS FAIL NOCTIS {'reached_m': 600.0, 'route_m': 483.5, 'seconds': 6.0, 'stuck': {'radius_m': 600.0, 'x': -52062, 'y': -29827, 'z': 112, 'waypoint': 1, 'ahead': None}, 'error': None}\nW_TARTARUS FAIL TARTARUS {'reached_m': 600.0, 'route_m': 481.6, 'seconds': 6.0, 'stuck': {'radius_m': 600.0, 'x': 51862, 'y': -30173, 'z': 86, 'waypoint': 1, 'ahead': None}, 'error': None}\nW00 FAIL every nation's walk started with the Dog standing at the gate end of its route {'starts': {'ICARUS': 614.72, 'NOCTIS': 0.0, 'TARTARUS': 0.0}, 'errors': {'ICARUS': 'the Dog is 614.7 m from the start; the cell may not have loaded'}}\nW01 FAIL the Dog walked gate to band in every nation under its own locomotion {'arrived': {'ICARUS': False, 'NOCTIS': False, 'TARTARUS': False}, 'reached_m': {'ICARUS': None, 'NOCTIS': 600.0, 'TARTARUS': 600.0}, 'route_m': {'ICARUS': None, 'NOCTIS': 483.5, 'TARTARUS': 481.6}, 'stuck': {'NOCTIS': {'radius_m': 600.0, 'x': -52062, 'y': -29827, 'z': 112, 'waypoint': 1, 'ahead': None}, 'TARTARUS': {'radius_m': 600.0, 'x': 51862, 'y': -30173, 'z': 86, 'waypoint': 1, 'ahead': None}}, 'note': 'AddMovementInput every tick with bForce, no teleports after the start, no navmesh; a stuck Dog stays stuck and the job records what was in front of it'}\n"
+}

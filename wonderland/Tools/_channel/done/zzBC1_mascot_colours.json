@@ -1,0 +1,341 @@
+{
+ "name": "zzBC1_mascot_colours",
+ "started": "2026-09-27 22:40:51",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "C00",
+   "name": "the mascot style settings can be read back",
+   "pass": true,
+   "detail": {
+    "as_found": {
+     "primary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "secondary": [
+      1.0,
+      0.78,
+      0.16
+     ],
+     "chosen": null
+    },
+    "note": "a setting that cannot be read cannot be restored, and this job changes a colourway the founder may have chosen."
+   }
+  },
+  {
+   "id": "C01",
+   "name": "the wardrobe is open through the founder's own button",
+   "pass": true,
+   "detail": {
+    "pressed": true
+   }
+  },
+  {
+   "id": "C02",
+   "name": "the preview window reports where it is",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "C03",
+   "name": "the console commands set the colourway the founder typed",
+   "pass": true,
+   "detail": {
+    "asked": {
+     "primary": [
+      0.05,
+      0.85,
+      0.15
+     ],
+     "secondary": [
+      0.95,
+      0.1,
+      0.8
+     ]
+    },
+    "read_back": {
+     "primary": [
+      0.05,
+      0.85,
+      0.15
+     ],
+     "secondary": [
+      0.95,
+      0.1,
+      0.8
+     ],
+     "chosen": null
+    },
+    "note": "read back from the settings object rather than trusting the command. The founder's route is the console; the settings object is the record."
+   }
+  },
+  {
+   "id": "C_RESTORE",
+   "name": "the colourway the job found was put back",
+   "pass": true,
+   "detail": {
+    "as_found": {
+     "primary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "secondary": [
+      1.0,
+      0.78,
+      0.16
+     ],
+     "chosen": null
+    },
+    "restored": {
+     "primary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "secondary": [
+      1.0,
+      0.78,
+      0.16
+     ],
+     "chosen": null
+    },
+    "note": "a job that leaves a colourway changed makes every later capture in this session -- and every other lane's -- a photograph of this job."
+   }
+  },
+  {
+   "id": "C04",
+   "name": "both frames measured the figure",
+   "pass": true,
+   "detail": {
+    "reset": {
+     "lit": 40841,
+     "green_fraction": 0.0,
+     "magenta_fraction": 0.0,
+     "rect": [
+      960,
+      247,
+      1301,
+      623
+     ]
+    },
+    "set": {
+     "lit": 42185,
+     "green_fraction": 0.9131,
+     "magenta_fraction": 0.0003,
+     "rect": [
+      960,
+      247,
+      1301,
+      623
+     ]
+    }
+   }
+  },
+  {
+   "id": "C05",
+   "name": "the two frames are different pictures",
+   "pass": false,
+   "detail": {
+    "files": 3,
+    "distinct": 3,
+    "note": "if setting a colourway changed nothing on screen the frames are identical, and every fraction below would be the same number twice."
+   }
+  },
+  {
+   "id": "C06",
+   "name": "PRIMARY reaches the body",
+   "pass": true,
+   "detail": {
+    "green_fraction": {
+     "before": 0.0,
+     "after": 0.9131
+    },
+    "floor": 0.15,
+    "note": "the founder's PRIMARY is the main colourway, so it should cover a large part of the figure. Judged against the cleared frame, because finding green proves nothing unless the same figure without a colourway has none."
+   }
+  },
+  {
+   "id": "C07",
+   "name": "SECONDARY visibly changes the eye colour, and the body does not follow it",
+   "pass": true,
+   "detail": {
+    "body_followed": 0.0,
+    "reset_rgb": [
+     0.8123,
+     0.7305,
+     0.4262
+    ],
+    "set_rgb": [
+     0.9148,
+     0.3857,
+     0.4492
+    ],
+    "moved": 0.3448,
+    "floor": 0.15,
+    "note": "ASKED AS 'DID THE EYES CHANGE', not 'is there magenta'. The channel multiplies, so a magenta SECONDARY on gold eyes renders PINK -- measured at RGB 0.929, 0.430, 0.483 against 0.485, 0.798, 0.467 for a cyan one, a move of 0.444. The old clause counted magenta pixels and found none through every run while the eyes were plainly changing, and its upper bound -- SECONDARY must not reach the body -- passed just as happily when SECONDARY reached nothing at all."
+   }
+  }
+ ],
+ "asked": {
+  "primary": [
+   0.05,
+   0.85,
+   0.15
+  ],
+  "secondary": [
+   0.95,
+   0.1,
+   0.8
+  ]
+ },
+ "style_as_found": {
+  "primary": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "secondary": [
+   1.0,
+   0.78,
+   0.16
+  ],
+  "chosen": null
+ },
+ "style_after_reset": {
+  "primary": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "secondary": [
+   1.0,
+   0.78,
+   0.16
+  ],
+  "chosen": null
+ },
+ "capture_hashes": {
+  "colours_reset.png": "ad781f4df09e5b9068f01423acc1406d",
+  "colours_set.png": "3d1b9bd4dc8679edc7a12cece11448c6",
+  "colours_secondary_only.png": "c763f0c3c382327f2b35e9f5e524d52b"
+ },
+ "readings": {
+  "reset": {
+   "lit": 40841,
+   "green_fraction": 0.0,
+   "magenta_fraction": 0.0,
+   "rect": [
+    960,
+    247,
+    1301,
+    623
+   ]
+  },
+  "set": {
+   "lit": 42185,
+   "green_fraction": 0.9131,
+   "magenta_fraction": 0.0003,
+   "rect": [
+    960,
+    247,
+    1301,
+    623
+   ]
+  },
+  "secondary_only": {
+   "lit": 44388,
+   "green_fraction": 0.0,
+   "magenta_fraction": 0.0002,
+   "rect": [
+    960,
+    247,
+    1301,
+    623
+   ]
+  }
+ },
+ "eyes": {
+  "reset": {
+   "rgb": [
+    0.8123,
+    0.7305,
+    0.4262
+   ],
+   "chroma": 0.3862,
+   "px": 392
+  },
+  "set": {
+   "rgb": [
+    0.3265,
+    0.9238,
+    0.465
+   ],
+   "chroma": 0.5973,
+   "px": 389
+  },
+  "secondary_only": {
+   "rgb": [
+    0.9148,
+    0.3857,
+    0.4492
+   ],
+   "chroma": 0.5291,
+   "px": 401
+  }
+ },
+ "style_after_set": {
+  "primary": [
+   0.05,
+   0.85,
+   0.15
+  ],
+  "secondary": [
+   0.95,
+   0.1,
+   0.8
+  ],
+  "chosen": null
+ },
+ "style_restored": {
+  "primary": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "secondary": [
+   1.0,
+   0.78,
+   0.16
+  ],
+  "chosen": null
+ },
+ "primary_arrived": {
+  "before": 0.0,
+  "after": 0.9131
+ },
+ "secondary_arrived": {
+  "before": 0.0,
+  "after": 0.0003
+ },
+ "secondary_moved_the_eyes": {
+  "reset_rgb": [
+   0.8123,
+   0.7305,
+   0.4262
+  ],
+  "set_rgb": [
+   0.9148,
+   0.3857,
+   0.4492
+  ],
+  "moved": 0.3448
+ },
+ "body_followed_secondary": 0.0,
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\mascot_colours",
+ "finished": "2026-09-27 22:41:54",
+ "seconds": 63.08,
+ "log": "C00 PASS the mascot style settings can be read back {'as_found': {'primary': [1.0, 1.0, 1.0], 'secondary': [1.0, 0.78, 0.16], 'chosen': None}, 'note': 'a setting that cannot be read cannot be restored, and this job changes a colourway the founder may have chosen.'}\nC01 PASS the wardrobe is open through the founder's own button {'pressed': True}\nC02 PASS the preview window reports where it is {}\nC_reset INFO reset {'lit': 40841, 'green_fraction': 0.0, 'magenta_fraction': 0.0, 'rect': [960, 247, 1301, 623]}\nC03 PASS the console commands set the colourway the founder typed {'asked': {'primary': [0.05, 0.85, 0.15], 'secondary': [0.95, 0.1, 0.8]}, 'read_back': {'primary': [0.05, 0.85, 0.15], 'secondary': [0.95, 0.1, 0.8], 'chosen': None}, 'note': \"read back from the settings object rather than trusting the command. The founder's route is the console; the settings object is the record.\"}\nC_set INFO set {'lit': 42185, 'green_fraction': 0.9131, 'magenta_fraction': 0.0003, 'rect': [960, 247, 1301, 623]}\nC_secondary_only INFO secondary_only {'lit': 44388, 'green_fraction': 0.0, 'magenta_fraction': 0.0002, 'rect': [960, 247, 1301, 623]}\nC_RESTORE PASS the colourway the job found was put back {'as_found': {'primary': [1.0, 1.0, 1.0], 'secondary': [1.0, 0.78, 0.16], 'chosen': None}, 'restored': {'primary': [1.0, 1.0, 1.0], 'secondary': [1.0, 0.78, 0.16], 'chosen': None}, 'note': \"a job that leaves a colourway changed makes every later capture in this session -- and every other lane's -- a photograph of this job.\"}\nC04 PASS both frames measured the figure {'reset': {'lit': 40841, 'green_fraction': 0.0, 'magenta_fraction': 0.0, 'rect': [960, 247, 1301, 623]}, 'set': {'lit': 42185, 'green_fraction': 0.9131, 'magenta_fraction': 0.0003, 'rect': [960, 247, 1301, 623]}}\nC05 FAIL the two frames are different pictures {'files': 3, 'distinct': 3, 'note': 'if setting a colourway changed nothing on screen the frames are identical, and every fraction below would be the same number twice.'}\nC06 PASS PRIMARY reaches the body {'green_fraction': {'before': 0.0, 'after': 0.9131}, 'floor': 0.15, 'note': \"the founder's PRIMARY is the main colourway, so it should cover a large part of the figure. Judged against the cleared frame, because finding green proves nothing unless the same figure without a colourway has none.\"}\nC07 PASS SECONDARY visibly changes the eye colour, and the body does not follow it {'body_followed': 0.0, 'reset_rgb': [0.8123, 0.7305, 0.4262], 'set_rgb': [0.9148, 0.3857, 0.4492], 'moved': 0.3448, 'floor': 0.15, 'note': \"ASKED AS 'DID THE EYES CHANGE', not 'is there magenta'. The channel multiplies, so a magenta SECONDARY on gold eyes renders PINK -- measured at RGB 0.929, 0.430, 0.483 against 0.485, 0.798, 0.467 for a cyan one, a move of 0.444. The old clause counted magenta pixels and found none through every run while the eyes were plainly changing, and its upper bound -- SECONDARY must not reach the body -- passed just as happily when SECONDARY reached nothing at all.\"}\n"
+}

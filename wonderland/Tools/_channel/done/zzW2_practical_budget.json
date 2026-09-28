@@ -1,0 +1,269 @@
+{
+ "name": "zzW2_practical_budget",
+ "started": "2026-09-27 17:01:40",
+ "status": "voided: the rungs do not agree with themselves",
+ "tests": [
+  {
+   "id": "B_WHERE",
+   "name": "the pawn is standing at the densest spot, which is what selects the pool",
+   "pass": true,
+   "detail": {
+    "asked": [
+     -65943.0,
+     -38753.0
+    ],
+    "landed": [
+     -65953.5,
+     -38751.5,
+     131.0
+    ],
+    "horizontal_offset_uu": 10.6,
+    "ground_trace_z": 11.99960708618164,
+    "note": "Assign() takes its Eye from the PAWN. If it did not arrive, the pool was chosen elsewhere"
+   }
+  },
+  {
+   "id": "B_READBACK",
+   "name": "the engine is holding the count and radius this job asked for, read back per rung",
+   "pass": true,
+   "detail": {
+    "knobs_as_found": {
+     "count": 48,
+     "radius": 12000.0,
+     "gain": 1.0
+    },
+    "source_defaults": {
+     "count": 48,
+     "radius": 12000.0,
+     "gain": 1.0
+    },
+    "held_per_rung": [
+     {
+      "count": 48,
+      "radius": 12000.0,
+      "gain": 1.0
+     },
+     {
+      "count": 96,
+      "radius": 12000.0,
+      "gain": 1.0
+     },
+     {
+      "count": 192,
+      "radius": 12000.0,
+      "gain": 1.0
+     },
+     {
+      "count": 192,
+      "radius": 12000.0,
+      "gain": 1.0
+     },
+     {
+      "count": 192,
+      "radius": 24000.0,
+      "gain": 1.0
+     },
+     {
+      "count": 192,
+      "radius": 36000.0,
+      "gain": 1.0
+     }
+    ],
+    "mismatches": [],
+    "note": "zzU5 assumed the radius was the source default of 12000 and read 31 lights lit where 184 are in range. That inference may well be right and it is still an inference: a cvar's value is something to read, not to derive from a downstream count"
+   }
+  },
+  {
+   "id": "B_NOISE",
+   "name": "each rung agrees with itself -- two reads of the same setting",
+   "pass": false,
+   "detail": {
+    "worst_spread": 0.0512,
+    "tolerance": 0.01,
+    "note": "zzU5 failed this at 0.4113 on its first rung alone, while rungs two to four agreed to 0.0036. A warm-up now runs before the ladder starts"
+   }
+  }
+ ],
+ "knobs_as_found": {
+  "count": 48,
+  "radius": 12000.0,
+  "gain": 1.0
+ },
+ "source_defaults": {
+  "count": 48,
+  "radius": 12000.0,
+  "gain": 1.0
+ },
+ "ground_trace_z": 11.99960708618164,
+ "pawn_landed": [
+  -65953.5,
+  -38751.5,
+  131.0
+ ],
+ "camera_eye": [
+  -65953.5,
+  -38751.5,
+  191.0
+ ],
+ "camera_at": [
+  -62953.5,
+  -37551.5,
+  171.0
+ ],
+ "warmed": true,
+ "budget": [
+  {
+   "count_asked": 48,
+   "radius_asked": null,
+   "held": {
+    "count": 48,
+    "radius": 12000.0,
+    "gain": 1.0
+   },
+   "pool_actors": 48,
+   "lit_actors": 48,
+   "lit_settled_on": [
+    48,
+    48,
+    48
+   ],
+   "luma": 0.1821,
+   "spread": 0.0512,
+   "tails": 0.5085,
+   "ground_luma": 0.2283,
+   "ground_dark": 0.2326,
+   "raw_frames": 601,
+   "raw_median_ms": 177.88,
+   "raw_p95_ms": 177.88,
+   "raw_worst_ms": 177.88
+  },
+  {
+   "count_asked": 96,
+   "radius_asked": null,
+   "held": {
+    "count": 96,
+    "radius": 12000.0,
+    "gain": 1.0
+   },
+   "pool_actors": 96,
+   "lit_actors": 31,
+   "lit_settled_on": [
+    31,
+    31,
+    31
+   ],
+   "luma": 0.1557,
+   "spread": 0.0009,
+   "tails": 0.5036,
+   "ground_luma": 0.1661,
+   "ground_dark": 0.2614,
+   "raw_frames": 601,
+   "raw_median_ms": 40.0,
+   "raw_p95_ms": 134.82,
+   "raw_worst_ms": 355.33
+  },
+  {
+   "count_asked": 192,
+   "radius_asked": null,
+   "held": {
+    "count": 192,
+    "radius": 12000.0,
+    "gain": 1.0
+   },
+   "pool_actors": 192,
+   "lit_actors": 31,
+   "lit_settled_on": [
+    31,
+    31,
+    31
+   ],
+   "luma": 0.1569,
+   "spread": 0.0026,
+   "tails": 0.5014,
+   "ground_luma": 0.1675,
+   "ground_dark": 0.2583,
+   "raw_frames": 601,
+   "raw_median_ms": 52.09,
+   "raw_p95_ms": 52.09,
+   "raw_worst_ms": 52.09
+  },
+  {
+   "count_asked": 192,
+   "radius_asked": 12000.0,
+   "held": {
+    "count": 192,
+    "radius": 12000.0,
+    "gain": 1.0
+   },
+   "pool_actors": 192,
+   "lit_actors": 31,
+   "lit_settled_on": [
+    31,
+    31,
+    31
+   ],
+   "luma": 0.1584,
+   "spread": 0.0003,
+   "tails": 0.5035,
+   "ground_luma": 0.169,
+   "ground_dark": 0.2625,
+   "raw_frames": 601,
+   "raw_median_ms": 50.98,
+   "raw_p95_ms": 121.83,
+   "raw_worst_ms": 273.08
+  },
+  {
+   "count_asked": 192,
+   "radius_asked": 24000.0,
+   "held": {
+    "count": 192,
+    "radius": 24000.0,
+    "gain": 1.0
+   },
+   "pool_actors": 192,
+   "lit_actors": 192,
+   "lit_settled_on": [
+    127,
+    127,
+    127
+   ],
+   "luma": 0.2016,
+   "spread": 0.0005,
+   "tails": 0.5215,
+   "ground_luma": 0.2722,
+   "ground_dark": 0.213,
+   "raw_frames": 601,
+   "raw_median_ms": 67.88,
+   "raw_p95_ms": 67.88,
+   "raw_worst_ms": 67.88
+  },
+  {
+   "count_asked": 192,
+   "radius_asked": 36000.0,
+   "held": {
+    "count": 192,
+    "radius": 36000.0,
+    "gain": 1.0
+   },
+   "pool_actors": 192,
+   "lit_actors": 192,
+   "lit_settled_on": [
+    192,
+    192,
+    192
+   ],
+   "luma": 0.1406,
+   "spread": 0.0314,
+   "tails": 0.5335,
+   "ground_luma": 0.1777,
+   "ground_dark": 0.1788,
+   "raw_frames": 601,
+   "raw_median_ms": 80.02,
+   "raw_p95_ms": 170.98,
+   "raw_worst_ms": 1179.68
+  }
+ ],
+ "finished": "2026-09-27 17:08:00",
+ "seconds": 380.34,
+ "log": "B_WHERE PASS the pawn is standing at the densest spot, which is what selects the pool {'asked': [-65943.0, -38753.0], 'landed': [-65953.5, -38751.5, 131.0], 'horizontal_offset_uu': 10.6, 'ground_trace_z': 11.99960708618164, 'note': 'Assign() takes its Eye from the PAWN. If it did not arrive, the pool was chosen elsewhere'}\nB_READBACK PASS the engine is holding the count and radius this job asked for, read back per rung {'knobs_as_found': {'count': 48, 'radius': 12000.0, 'gain': 1.0}, 'source_defaults': {'count': 48, 'radius': 12000.0, 'gain': 1.0}, 'held_per_rung': [{'count': 48, 'radius': 12000.0, 'gain': 1.0}, {'count': 96, 'radius': 12000.0, 'gain': 1.0}, {'count': 192, 'radius': 12000.0, 'gain': 1.0}, {'count': 192, 'radius': 12000.0, 'gain': 1.0}, {'count': 192, 'radius': 24000.0, 'gain': 1.0}, {'count': 192, 'radius': 36000.0, 'gain': 1.0}], 'mismatches': [], 'note': \"zzU5 assumed the radius was the source default of 12000 and read 31 lights lit where 184 are in range. That inference may well be right and it is still an inference: a cvar's value is something to read, not to derive from a downstream count\"}\nB_NOISE FAIL each rung agrees with itself -- two reads of the same setting {'worst_spread': 0.0512, 'tolerance': 0.01, 'note': 'zzU5 failed this at 0.4113 on its first rung alone, while rungs two to four agreed to 0.0036. A warm-up now runs before the ladder starts'}\n"
+}

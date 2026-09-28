@@ -1,0 +1,257 @@
+{
+ "name": "zzCA1_fire_softened",
+ "started": "2026-09-28 00:29:31",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "R_READ",
+   "name": "both fire knobs can be read back before anything is changed",
+   "pass": true,
+   "detail": {
+    "as_found": {
+     "wl.Look.FireMaterial": 0.0,
+     "wl.Look.FireGain": 60.0
+    }
+   }
+  },
+  {
+   "id": "R_CLOCK",
+   "name": "the day clock is stopped",
+   "pass": true,
+   "detail": {
+    "day_minutes": 0.0
+   }
+  },
+  {
+   "id": "R_RESTORE",
+   "name": "both fire knobs this job found were put back",
+   "pass": true,
+   "detail": {
+    "as_found": {
+     "wl.Look.FireMaterial": 0.0,
+     "wl.Look.FireGain": 60.0
+    },
+    "restored": {
+     "wl.Look.FireMaterial": 0.0,
+     "wl.Look.FireGain": 60.0
+    }
+   }
+  },
+  {
+   "id": "R01",
+   "name": "every rung set the material and gain it asked for",
+   "pass": true,
+   "detail": {
+    "refused": null,
+    "note": "wl.Look.FireMaterial is recorded in this tree as having refused a value once, so both knobs are asserted rather than assumed."
+   }
+  },
+  {
+   "id": "R02",
+   "name": "every rung photographed several distinct frames",
+   "pass": true,
+   "detail": {
+    "frames": {
+     "approved_voxel_glow": 6,
+     "shaped_g60": 6,
+     "shaped_g100": 6,
+     "shaped_g140": 6,
+     "shaped_g180": 6
+    },
+    "thin": null,
+    "note": "the flame animates, so identical frames would mean the capture, not the fire, is frozen."
+   }
+  },
+  {
+   "id": "R00",
+   "name": "the rungs do not all answer the same, so the metric can tell them apart",
+   "pass": true,
+   "detail": {
+    "reach_pct_by_rung": {
+     "approved_voxel_glow": 95.15,
+     "shaped_g60": 95.7233,
+     "shaped_g100": 89.935,
+     "shaped_g140": 90.3483,
+     "shaped_g180": 91.6017
+    },
+    "spread": 5.788,
+    "note": "THE GUARD THE FIRST RUN LACKED. Five configurations reading 98.61 to two decimals is a saturated instrument, and it passed the qualifying clause on exactly that."
+   }
+  },
+  {
+   "id": "R04",
+   "name": "the shaped material can reach the approved plume's height while keeping its colour",
+   "pass": true,
+   "detail": {
+    "qualifying": [
+     "shaped_g60",
+     "shaped_g100",
+     "shaped_g140",
+     "shaped_g180"
+    ],
+    "approved_reach_pct": 95.15,
+    "colour_ceiling": 0.45,
+    "table": {
+     "approved_voxel_glow": {
+      "reach_pct": 95.15,
+      "over_white": 0.0,
+      "warm": 0.9997
+     },
+     "shaped_g60": {
+      "reach_pct": 95.7233,
+      "over_white": 0.0,
+      "warm": 0.9997
+     },
+     "shaped_g100": {
+      "reach_pct": 89.935,
+      "over_white": 0.0,
+      "warm": 0.9994
+     },
+     "shaped_g140": {
+      "reach_pct": 90.3483,
+      "over_white": 0.0,
+      "warm": 0.9997
+     },
+     "shaped_g180": {
+      "reach_pct": 91.6017,
+      "over_white": 0.0,
+      "warm": 0.9993
+     }
+    },
+    "note": "THE QUESTION THE SOURCE LEFT OPEN -- M_WL_Fire 'may yet be the right base once it can reach that brightness without losing its colour'. If no rung qualifies, the answer is that gain alone cannot get there and the material itself needs work, which is a far more useful result than another side-by-side."
+   }
+  }
+ ],
+ "as_found": {
+  "wl.Look.FireMaterial": 0.0,
+  "wl.Look.FireGain": 60.0
+ },
+ "day_minutes": 0.0,
+ "rungs": {
+  "approved_voxel_glow": {
+   "asked": {
+    "material": 0,
+    "gain": null
+   },
+   "read_back": {
+    "wl.Look.FireMaterial": 0.0,
+    "wl.Look.FireGain": 60.0
+   },
+   "frames": 6,
+   "distinct_frames": 6,
+   "reach_pct": 95.15,
+   "hot_px": 24790.1667,
+   "over_white_fraction": 0.0,
+   "warm_fraction": 0.9997
+  },
+  "shaped_g60": {
+   "asked": {
+    "material": 1,
+    "gain": 60.0
+   },
+   "read_back": {
+    "wl.Look.FireMaterial": 1.0,
+    "wl.Look.FireGain": 60.0
+   },
+   "frames": 6,
+   "distinct_frames": 6,
+   "reach_pct": 95.7233,
+   "hot_px": 24957.6667,
+   "over_white_fraction": 0.0,
+   "warm_fraction": 0.9997
+  },
+  "shaped_g100": {
+   "asked": {
+    "material": 1,
+    "gain": 100.0
+   },
+   "read_back": {
+    "wl.Look.FireMaterial": 1.0,
+    "wl.Look.FireGain": 100.0
+   },
+   "frames": 6,
+   "distinct_frames": 6,
+   "reach_pct": 89.935,
+   "hot_px": 25486.0,
+   "over_white_fraction": 0.0,
+   "warm_fraction": 0.9994
+  },
+  "shaped_g140": {
+   "asked": {
+    "material": 1,
+    "gain": 140.0
+   },
+   "read_back": {
+    "wl.Look.FireMaterial": 1.0,
+    "wl.Look.FireGain": 140.0
+   },
+   "frames": 6,
+   "distinct_frames": 6,
+   "reach_pct": 90.3483,
+   "hot_px": 24785.3333,
+   "over_white_fraction": 0.0,
+   "warm_fraction": 0.9997
+  },
+  "shaped_g180": {
+   "asked": {
+    "material": 1,
+    "gain": 180.0
+   },
+   "read_back": {
+    "wl.Look.FireMaterial": 1.0,
+    "wl.Look.FireGain": 180.0
+   },
+   "frames": 6,
+   "distinct_frames": 6,
+   "reach_pct": 91.6017,
+   "hot_px": 25608.1667,
+   "over_white_fraction": 0.0,
+   "warm_fraction": 0.9993
+  }
+ },
+ "restored": {
+  "wl.Look.FireMaterial": 0.0,
+  "wl.Look.FireGain": 60.0
+ },
+ "rungs_that_did_not_take": null,
+ "reach_spread": 5.788,
+ "approved_reach_pct": 95.15,
+ "approved_over_white": 0.0,
+ "reach_against_colour": {
+  "approved_voxel_glow": {
+   "reach_pct": 95.15,
+   "over_white": 0.0,
+   "warm": 0.9997
+  },
+  "shaped_g60": {
+   "reach_pct": 95.7233,
+   "over_white": 0.0,
+   "warm": 0.9997
+  },
+  "shaped_g100": {
+   "reach_pct": 89.935,
+   "over_white": 0.0,
+   "warm": 0.9994
+  },
+  "shaped_g140": {
+   "reach_pct": 90.3483,
+   "over_white": 0.0,
+   "warm": 0.9997
+  },
+  "shaped_g180": {
+   "reach_pct": 91.6017,
+   "over_white": 0.0,
+   "warm": 0.9993
+  }
+ },
+ "shaped_rungs_that_match_the_approved_reach": [
+  "shaped_g60",
+  "shaped_g100",
+  "shaped_g140",
+  "shaped_g180"
+ ],
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\fire_reach",
+ "finished": "2026-09-28 00:32:07",
+ "seconds": 156.01,
+ "log": "R_READ PASS both fire knobs can be read back before anything is changed {'as_found': {'wl.Look.FireMaterial': 0.0, 'wl.Look.FireGain': 60.0}}\nR_CLOCK PASS the day clock is stopped {'day_minutes': 0.0}\nR_approved_voxel_glow INFO approved_voxel_glow {'asked': {'material': 0, 'gain': None}, 'read_back': {'wl.Look.FireMaterial': 0.0, 'wl.Look.FireGain': 60.0}, 'frames': 6, 'distinct_frames': 6, 'reach_pct': 95.15, 'hot_px': 24790.1667, 'over_white_fraction': 0.0, 'warm_fraction': 0.9997}\nR_shaped_g60 INFO shaped_g60 {'asked': {'material': 1, 'gain': 60.0}, 'read_back': {'wl.Look.FireMaterial': 1.0, 'wl.Look.FireGain': 60.0}, 'frames': 6, 'distinct_frames': 6, 'reach_pct': 95.7233, 'hot_px': 24957.6667, 'over_white_fraction': 0.0, 'warm_fraction': 0.9997}\nR_shaped_g100 INFO shaped_g100 {'asked': {'material': 1, 'gain': 100.0}, 'read_back': {'wl.Look.FireMaterial': 1.0, 'wl.Look.FireGain': 100.0}, 'frames': 6, 'distinct_frames': 6, 'reach_pct': 89.935, 'hot_px': 25486.0, 'over_white_fraction': 0.0, 'warm_fraction': 0.9994}\nR_shaped_g140 INFO shaped_g140 {'asked': {'material': 1, 'gain': 140.0}, 'read_back': {'wl.Look.FireMaterial': 1.0, 'wl.Look.FireGain': 140.0}, 'frames': 6, 'distinct_frames': 6, 'reach_pct': 90.3483, 'hot_px': 24785.3333, 'over_white_fraction': 0.0, 'warm_fraction': 0.9997}\nR_shaped_g180 INFO shaped_g180 {'asked': {'material': 1, 'gain': 180.0}, 'read_back': {'wl.Look.FireMaterial': 1.0, 'wl.Look.FireGain': 180.0}, 'frames': 6, 'distinct_frames': 6, 'reach_pct': 91.6017, 'hot_px': 25608.1667, 'over_white_fraction': 0.0, 'warm_fraction': 0.9993}\nR_RESTORE PASS both fire knobs this job found were put back {'as_found': {'wl.Look.FireMaterial': 0.0, 'wl.Look.FireGain': 60.0}, 'restored': {'wl.Look.FireMaterial': 0.0, 'wl.Look.FireGain': 60.0}}\nR01 PASS every rung set the material and gain it asked for {'refused': None, 'note': 'wl.Look.FireMaterial is recorded in this tree as having refused a value once, so both knobs are asserted rather than assumed.'}\nR02 PASS every rung photographed several distinct frames {'frames': {'approved_voxel_glow': 6, 'shaped_g60': 6, 'shaped_g100': 6, 'shaped_g140': 6, 'shaped_g180': 6}, 'thin': None, 'note': 'the flame animates, so identical frames would mean the capture, not the fire, is frozen.'}\nR00 PASS the rungs do not all answer the same, so the metric can tell them apart {'reach_pct_by_rung': {'approved_voxel_glow': 95.15, 'shaped_g60': 95.7233, 'shaped_g100': 89.935, 'shaped_g140': 90.3483, 'shaped_g180': 91.6017}, 'spread': 5.788, 'note': 'THE GUARD THE FIRST RUN LACKED. Five configurations reading 98.61 to two decimals is a saturated instrument, and it passed the qualifying clause on exactly that.'}\nR03 INFO how high each fire reaches, and what it costs in colour {'approved_voxel_glow': {'reach_pct': 95.15, 'over_white': 0.0, 'warm': 0.9997}, 'shaped_g60': {'reach_pct': 95.7233, 'over_white': 0.0, 'warm': 0.9997}, 'shaped_g100': {'reach_pct': 89.935, 'over_white': 0.0, 'warm': 0.9994}, 'shaped_g140': {'reach_pct': 90.3483, 'over_white': 0.0, 'warm': 0.9997}, 'shaped_g180': {'reach_pct': 91.6017, 'over_white': 0.0, 'warm': 0.9993}}\nR04 PASS the shaped material can reach the approved plume's height while keeping its colour {'qualifying': ['shaped_g60', 'shaped_g100', 'shaped_g140', 'shaped_g180'], 'approved_reach_pct': 95.15, 'colour_ceiling': 0.45, 'table': {'approved_voxel_glow': {'reach_pct': 95.15, 'over_white': 0.0, 'warm': 0.9997}, 'shaped_g60': {'reach_pct': 95.7233, 'over_white': 0.0, 'warm': 0.9997}, 'shaped_g100': {'reach_pct': 89.935, 'over_white': 0.0, 'warm': 0.9994}, 'shaped_g140': {'reach_pct': 90.3483, 'over_white': 0.0, 'warm': 0.9997}, 'shaped_g180': {'reach_pct': 91.6017, 'over_white': 0.0, 'warm': 0.9993}}, 'note': \"THE QUESTION THE SOURCE LEFT OPEN -- M_WL_Fire 'may yet be the right base once it can reach that brightness without losing its colour'. If no rung qualifies, the answer is that gain alone cannot get there and the material itself needs work, which is a far more useful result than another side-by-side.\"}\n"
+}

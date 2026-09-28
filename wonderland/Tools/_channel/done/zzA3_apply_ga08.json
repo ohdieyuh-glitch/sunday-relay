@@ -1,0 +1,27 @@
+{
+ "name": "zzA3_apply_ga08",
+ "started": "2026-09-27 13:35:47",
+ "status": "done",
+ "map_dirty_before": [
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/XR/KMJ3NV169MHRSX03YW9X4K",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/3/JC/ZBKRMYDNC5C849Q50G72FS",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/Q2/SNNG4FSY3JBF1A4PHTBVCE",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/8B/GJ2VOG0Q5FHWCPBM8NXW7B",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/PO/YVI4TNT0YYHSEDYGVCE03Y",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/XX/DWQVODGPU9XJM6789NLBSP",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/RJ/CSQT1LKEGAGS5N3PD2PV8Z",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/X8/AGCRT25LC25C3ER73GC1DY",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/7T/8UW5UCKGVJ1SOQKMZS0GZJ",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/3/R2/YMSAHBDN8VOYVI0AEP6P6Q",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/E7/RTF6075SM9LH7LFWZMXB2B"
+ ],
+ "removed": 0,
+ "pass": "GA08",
+ "actors": 0,
+ "batches": 3,
+ "instances": 54,
+ "hovers": 0,
+ "finished": "2026-09-27 13:35:47",
+ "seconds": 0.72,
+ "log": "applied GA08 0 actors 3 batches 54 instances\n"
+}

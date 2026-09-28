@@ -1,15 +1,18 @@
 {
  "name": "zc_card_readable",
- "started": "2026-09-25 19:31:11",
+ "started": "2026-09-27 08:19:58",
  "status": "captured; the verdict on readability is the pictures",
  "skins": [
+  "relay_og",
   "celestial_light",
-  "arden_infernal",
-  "skeleton_flame",
+  "apollo_v1",
   "apollo",
-  "relay_og"
+  "arden_infernal_v1",
+  "arden_infernal",
+  "skeleton_flame_v1",
+  "skeleton_flame"
  ],
- "finished": "2026-09-25 19:31:40",
- "seconds": 29.49,
+ "finished": "2026-09-27 08:20:34",
+ "seconds": 36.17,
  "log": ""
 }

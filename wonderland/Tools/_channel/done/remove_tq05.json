@@ -1,0 +1,18 @@
+{
+ "name": "remove_tq05",
+ "started": "2026-09-27 13:00:39",
+ "status": "done",
+ "map_dirty_before": [
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/E/N5/6CC2697LRPQLP00KHY6BJP",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/4M/Z37HYA4Q4GXISQPP2SMYPJ",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/KV/ZVMMB4EEMH1BS6P0BRGN4T",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/8/C3/RQOJR3FUAWTKH1ID3D6OTR",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/D/CD/OV7NI6UWCQJAF2AWBHIYBL",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/E/T8/1M7R73JBAYTN0RK6GE04P7",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/DG/Q5NFUZXH2N0HKEJCEOJWIN"
+ ],
+ "removed": 5,
+ "finished": "2026-09-27 13:00:40",
+ "seconds": 0.66,
+ "log": ""
+}

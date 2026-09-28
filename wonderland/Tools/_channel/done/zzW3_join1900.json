@@ -1,0 +1,268 @@
+{
+ "name": "zzW3_join1900",
+ "started": "2026-09-27 17:08:01",
+ "status": "voided: placement or noise",
+ "tests": [
+  {
+   "id": "J_WHERE",
+   "name": "the pawn reached all three places, so three different surroundings were measured",
+   "pass": true,
+   "detail": {
+    "placement": {
+     "golden_arrival": {
+      "asked": [
+       0.0,
+       -1460.0
+      ],
+      "landed": [
+       0.0,
+       -1460.0,
+       107.2
+      ],
+      "offset_uu": 0.0,
+      "ground_z": 18.02116632461548
+     },
+     "noctis_nc02": {
+      "asked": [
+       -65943.0,
+       -38753.0
+      ],
+      "landed": [
+       -65953.5,
+       -38751.5,
+       131.0
+      ],
+      "offset_uu": 10.6,
+      "ground_z": 11.99960708618164
+     },
+     "tartarus_tq04": {
+      "asked": [
+       87157.0,
+       -50320.0
+      ],
+      "landed": [
+       87157.0,
+       -50320.0,
+       106.0
+      ],
+      "offset_uu": 0.0,
+      "ground_z": -13.99993896484375
+     }
+    },
+    "reached": [
+     "golden_arrival",
+     "noctis_nc02",
+     "tartarus_tq04"
+    ],
+    "note": "if a pawn did not arrive, that place's rows are of somewhere else and the comparison between places is meaningless"
+   }
+  },
+  {
+   "id": "J_NOISE",
+   "name": "each rung agrees with itself -- two reads of the same hour",
+   "pass": false,
+   "detail": {
+    "worst_spread": 0.0812,
+    "tolerance": 0.01,
+    "measured": 18,
+    "wanted": 18
+   }
+  }
+ ],
+ "places": {
+  "golden_arrival": [
+   {
+    "hour": 19.0,
+    "luma": 0.6917,
+    "spread": 0.073,
+    "tails": 0.5036,
+    "ground_luma": 0.7616,
+    "ground_dark": 0.0
+   },
+   {
+    "hour": 19.1,
+    "luma": 0.7391,
+    "spread": 0.0812,
+    "tails": 0.5986,
+    "ground_luma": 0.8165,
+    "ground_dark": 0.0
+   },
+   {
+    "hour": 19.15,
+    "luma": 0.6918,
+    "spread": 0.0506,
+    "tails": 0.436,
+    "ground_luma": 0.7792,
+    "ground_dark": 0.0
+   },
+   {
+    "hour": 19.2,
+    "luma": 0.6611,
+    "spread": 0.0577,
+    "tails": 0.5806,
+    "ground_luma": 0.7451,
+    "ground_dark": 0.0031
+   },
+   {
+    "hour": 19.25,
+    "luma": 0.7298,
+    "spread": 0.0231,
+    "tails": 0.6543,
+    "ground_luma": 0.7997,
+    "ground_dark": 0.0
+   },
+   {
+    "hour": 19.35,
+    "luma": 0.6943,
+    "spread": 0.0371,
+    "tails": 0.4157,
+    "ground_luma": 0.736,
+    "ground_dark": 0.0
+   }
+  ],
+  "noctis_nc02": [
+   {
+    "hour": 19.0,
+    "luma": 0.1553,
+    "spread": 0.0009,
+    "tails": 0.7181,
+    "ground_luma": 0.1414,
+    "ground_dark": 0.7074
+   },
+   {
+    "hour": 19.1,
+    "luma": 0.1552,
+    "spread": 0.0008,
+    "tails": 0.7141,
+    "ground_luma": 0.1445,
+    "ground_dark": 0.6946
+   },
+   {
+    "hour": 19.15,
+    "luma": 0.1664,
+    "spread": 0.0042,
+    "tails": 0.8907,
+    "ground_luma": 0.2177,
+    "ground_dark": 0.7674
+   },
+   {
+    "hour": 19.2,
+    "luma": 0.1673,
+    "spread": 0.002,
+    "tails": 0.8889,
+    "ground_luma": 0.2349,
+    "ground_dark": 0.7372
+   },
+   {
+    "hour": 19.25,
+    "luma": 0.1573,
+    "spread": 0.0009,
+    "tails": 0.7128,
+    "ground_luma": 0.148,
+    "ground_dark": 0.6869
+   },
+   {
+    "hour": 19.35,
+    "luma": 0.1589,
+    "spread": 0.0002,
+    "tails": 0.715,
+    "ground_luma": 0.151,
+    "ground_dark": 0.687
+   }
+  ],
+  "tartarus_tq04": [
+   {
+    "hour": 19.0,
+    "luma": 0.1348,
+    "spread": 0.0002,
+    "tails": 0.7371,
+    "ground_luma": 0.1138,
+    "ground_dark": 0.9318
+   },
+   {
+    "hour": 19.1,
+    "luma": 0.1404,
+    "spread": 0.0024,
+    "tails": 0.722,
+    "ground_luma": 0.1154,
+    "ground_dark": 0.9069
+   },
+   {
+    "hour": 19.15,
+    "luma": 0.1361,
+    "spread": 0.0007,
+    "tails": 0.717,
+    "ground_luma": 0.1171,
+    "ground_dark": 0.8884
+   },
+   {
+    "hour": 19.2,
+    "luma": 0.1409,
+    "spread": 0.0031,
+    "tails": 0.7001,
+    "ground_luma": 0.1194,
+    "ground_dark": 0.8539
+   },
+   {
+    "hour": 19.25,
+    "luma": 0.1371,
+    "spread": 0.0001,
+    "tails": 0.6948,
+    "ground_luma": 0.1201,
+    "ground_dark": 0.8445
+   },
+   {
+    "hour": 19.35,
+    "luma": 0.1364,
+    "spread": 0.0006,
+    "tails": 0.6979,
+    "ground_luma": 0.1177,
+    "ground_dark": 0.8756
+   }
+  ]
+ },
+ "placement": {
+  "golden_arrival": {
+   "asked": [
+    0.0,
+    -1460.0
+   ],
+   "landed": [
+    0.0,
+    -1460.0,
+    107.2
+   ],
+   "offset_uu": 0.0,
+   "ground_z": 18.02116632461548
+  },
+  "noctis_nc02": {
+   "asked": [
+    -65943.0,
+    -38753.0
+   ],
+   "landed": [
+    -65953.5,
+    -38751.5,
+    131.0
+   ],
+   "offset_uu": 10.6,
+   "ground_z": 11.99960708618164
+  },
+  "tartarus_tq04": {
+   "asked": [
+    87157.0,
+    -50320.0
+   ],
+   "landed": [
+    87157.0,
+    -50320.0,
+    106.0
+   ],
+   "offset_uu": 0.0,
+   "ground_z": -13.99993896484375
+  }
+ },
+ "finished": "2026-09-27 17:13:23",
+ "seconds": 322.42,
+ "log": "J_WHERE PASS the pawn reached all three places, so three different surroundings were measured {'placement': {'golden_arrival': {'asked': [0.0, -1460.0], 'landed': [0.0, -1460.0, 107.2], 'offset_uu': 0.0, 'ground_z': 18.02116632461548}, 'noctis_nc02': {'asked': [-65943.0, -38753.0], 'landed': [-65953.5, -38751.5, 131.0], 'offset_uu': 10.6, 'ground_z': 11.99960708618164}, 'tartarus_tq04': {'asked': [87157.0, -50320.0], 'landed': [87157.0, -50320.0, 106.0], 'offset_uu': 0.0, 'ground_z': -13.99993896484375}}, 'reached': ['golden_arrival', 'noctis_nc02', 'tartarus_tq04'], 'note': \"if a pawn did not arrive, that place's rows are of somewhere else and the comparison between places is meaningless\"}\nJ_NOISE FAIL each rung agrees with itself -- two reads of the same hour {'worst_spread': 0.0812, 'tolerance': 0.01, 'measured': 18, 'wanted': 18}\n"
+}

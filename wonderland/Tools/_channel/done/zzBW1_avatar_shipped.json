@@ -1,0 +1,97 @@
+{
+ "name": "zzBW1_avatar_shipped",
+ "started": "2026-09-28 00:20:33",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "S_STAT",
+   "name": "the stat unit overlay is drawing, so its numbers change",
+   "pass": true,
+   "detail": {
+    "note": "a toggle issued once is a coin flip, and the frozen-frame guard cannot see it because the engine frame number keeps advancing while the numbers stand still."
+   }
+  },
+  {
+   "id": "S00",
+   "name": "the founder's own /pa showcase put avatars in the world",
+   "pass": true,
+   "detail": {
+    "returned": true
+   }
+  },
+  {
+   "id": "S01",
+   "name": "the avatars /pa created can be found to be read",
+   "pass": true,
+   "detail": {
+    "found": 3,
+    "note": "matched on the WL_PA_ label the shipped path assigns, rather than on class -- the costume worn by the Dog and the AI Companions are the same class."
+   }
+  },
+  {
+   "id": "S02",
+   "name": "every component of every /pa avatar is out of global illumination, as shipped",
+   "pass": false,
+   "detail": {
+    "components": 198,
+    "indirect_off": 195,
+    "distance_field_off": 195,
+    "note": "READ OFF THE ACTORS THE SHIPPED CODE CREATED, not inferred from a frame time. If the loop in ShowProjectAvatars missed them this says so directly."
+   }
+  },
+  {
+   "id": "S03",
+   "name": "the shipped fix makes the frame measurably cheaper on the founder's own avatars",
+   "pass": false,
+   "detail": {
+    "saved_ms": 14.07,
+    "out_of_gi": {
+     "frames": 24,
+     "frame_ms": 45.11,
+     "game_ms": 45.07,
+     "render_ms": 34.78
+    },
+    "in_gi": {
+     "frames": 24,
+     "frame_ms": 59.18,
+     "game_ms": 45.3,
+     "render_ms": 58.07
+    },
+    "floor_ms": 40.0,
+    "avatars": 3,
+    "note": "both readings taken in THIS run at the same camera on the SAME avatars, so the comparison is not against a number from an earlier session on a differently loaded machine. The floor is deliberately well below the 170.57 measured on one avatar, because /pa shows a whole family and the machine's load is not controlled."
+   }
+  }
+ ],
+ "stat_overlay_live": true,
+ "avatars_found": 3,
+ "as_shipped": {
+  "components": 198,
+  "indirect_off": 195,
+  "distance_field_off": 195
+ },
+ "settled": true,
+ "readings": {
+  "as_shipped_out_of_gi": {
+   "frames": 24,
+   "frame_ms": 45.11,
+   "game_ms": 45.07,
+   "render_ms": 34.78
+  },
+  "put_back_into_gi": {
+   "frames": 24,
+   "frame_ms": 59.18,
+   "game_ms": 45.3,
+   "render_ms": 58.07
+  }
+ },
+ "after_putting_back": {
+  "components": 198,
+  "indirect_off": 0,
+  "distance_field_off": 0
+ },
+ "milliseconds_the_shipped_fix_saves": 14.07,
+ "finished": "2026-09-28 00:21:37",
+ "seconds": 63.69,
+ "log": "S_STAT PASS the stat unit overlay is drawing, so its numbers change {'note': 'a toggle issued once is a coin flip, and the frozen-frame guard cannot see it because the engine frame number keeps advancing while the numbers stand still.'}\nS00 PASS the founder's own /pa showcase put avatars in the world {'returned': True}\nS01 PASS the avatars /pa created can be found to be read {'found': 3, 'note': 'matched on the WL_PA_ label the shipped path assigns, rather than on class -- the costume worn by the Dog and the AI Companions are the same class.'}\nS02 FAIL every component of every /pa avatar is out of global illumination, as shipped {'components': 198, 'indirect_off': 195, 'distance_field_off': 195, 'note': 'READ OFF THE ACTORS THE SHIPPED CODE CREATED, not inferred from a frame time. If the loop in ShowProjectAvatars missed them this says so directly.'}\nS_as_shipped_out_of_gi INFO as_shipped_out_of_gi {'frames': 24, 'frame_ms': 45.11, 'game_ms': 45.07, 'render_ms': 34.78}\nS_put_back_into_gi INFO put_back_into_gi {'frames': 24, 'frame_ms': 59.18, 'game_ms': 45.3, 'render_ms': 58.07}\nS03 FAIL the shipped fix makes the frame measurably cheaper on the founder's own avatars {'saved_ms': 14.07, 'out_of_gi': {'frames': 24, 'frame_ms': 45.11, 'game_ms': 45.07, 'render_ms': 34.78}, 'in_gi': {'frames': 24, 'frame_ms': 59.18, 'game_ms': 45.3, 'render_ms': 58.07}, 'floor_ms': 40.0, 'avatars': 3, 'note': \"both readings taken in THIS run at the same camera on the SAME avatars, so the comparison is not against a number from an earlier session on a differently loaded machine. The floor is deliberately well below the 170.57 measured on one avatar, because /pa shows a whole family and the machine's load is not controlled.\"}\n"
+}

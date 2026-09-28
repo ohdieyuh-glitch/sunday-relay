@@ -1,0 +1,221 @@
+{
+ "name": "zzU1_dusk_closed",
+ "started": "2026-09-27 16:23:01",
+ "status": "measured (EVIDENCE ONLY: the running curve could not be read back)",
+ "tests": [
+  {
+   "id": "C_NOISE",
+   "name": "each rung agrees with itself -- two reads of the same hour",
+   "pass": true,
+   "detail": {
+    "worst_spread": 0.0005,
+    "tolerance": 0.01,
+    "measured": 10,
+    "wanted": 10
+   }
+  },
+  {
+   "id": "C_CURVE",
+   "name": "the running build carries the complement curve, read back from the engine",
+   "pass": false,
+   "detail": {
+    "readback_route": null,
+    "checked": {},
+    "agreeing": [],
+    "note": "if this could not be read at all the run is EVIDENCE, not proof, and says so in status. The old curve is exactly 0.0 at every elevation above -2, so it is trivially separable from the new one at 18:00 and 18:15"
+   }
+  },
+  {
+   "id": "C_DAY",
+   "name": "noon is unchanged -- the day-untouched claim, measured rather than asserted",
+   "pass": true,
+   "detail": {
+    "now": 0.2684,
+    "was": 0.2685,
+    "gap": 0.0001,
+    "tolerance": 0.01,
+    "note": "at +12 deg and above the band is 1 so Nightfall is exactly 0 either way. That is the argument; this is the measurement, and zzT1 left a noon reading at this pose to check it"
+   }
+  },
+  {
+   "id": "C_CLOSED",
+   "name": "the evening no longer dips below night and climb back out",
+   "pass": true,
+   "detail": {
+    "lowest_hour": 18.5,
+    "lowest_luma": 0.0922,
+    "is_interior": true,
+    "margin_below_both_ends": 0.0058,
+    "was_bottom_hour": 18.0,
+    "was_bottom_luma": 0.0365,
+    "note": "zzT2 had an interior minimum at 18:00 sitting 0.059 below both ends. Passing means the evening now falls into night instead of through it"
+   }
+  },
+  {
+   "id": "C_NOREG",
+   "name": "no hour came back darker than zzT2 measured it",
+   "pass": true,
+   "detail": {
+    "rungs_darker": [],
+    "tolerance": 0.01,
+    "deltas": {
+     "12.00": -0.0001,
+     "17.50": 0.0025,
+     "17.75": 0.0271,
+     "18.00": 0.0664,
+     "18.25": 0.1128,
+     "18.50": 0.021,
+     "18.75": 0.0007,
+     "19.00": 0.0015,
+     "19.25": 0.0225,
+     "19.50": -0.0035
+    }
+   }
+  },
+  {
+   "id": "C_GROUND",
+   "name": "the ground is readable at every hour of the crossover",
+   "pass": true,
+   "detail": {
+    "darkest_hour": 18.5,
+    "darkest_ground": 0.0673,
+    "floor": 0.03,
+    "was_darkest": 0.0126,
+    "ground_by_hour": {
+     "12.00": 0.2826,
+     "17.50": 0.0728,
+     "17.75": 0.086,
+     "18.00": 0.0745,
+     "18.25": 0.1303,
+     "18.50": 0.0673,
+     "18.75": 0.0827,
+     "19.00": 0.0706,
+     "19.25": 0.1784,
+     "19.50": 0.1822
+    },
+    "note": "zzT2 failed this at 0.0126. The same floor and the same patch, so the two are comparable"
+   }
+  }
+ ],
+ "camera_eye": [
+  -320.0,
+  -1900.0,
+  200.0
+ ],
+ "camera_at": [
+  0.0,
+  -1460.0,
+  90.0
+ ],
+ "compared_against": {
+  "job": "zzT2_dusk_hole + zzT1 noon",
+  "rows": 10
+ },
+ "after": [
+  {
+   "hour": 12.0,
+   "luma": 0.2684,
+   "spread": 0.0005,
+   "tails": 0.3224,
+   "ground_luma": 0.2826,
+   "nightfall_read": null,
+   "was_luma": 0.2685,
+   "was_ground": 0.2828
+  },
+  {
+   "hour": 17.5,
+   "luma": 0.098,
+   "spread": 0.0001,
+   "tails": 0.8478,
+   "ground_luma": 0.0728,
+   "nightfall_read": null,
+   "was_luma": 0.0955,
+   "was_ground": 0.0702
+  },
+  {
+   "hour": 17.75,
+   "luma": 0.1106,
+   "spread": 0.0001,
+   "tails": 0.8008,
+   "ground_luma": 0.086,
+   "nightfall_read": null,
+   "was_luma": 0.0835,
+   "was_ground": 0.0587
+  },
+  {
+   "hour": 18.0,
+   "luma": 0.1029,
+   "spread": 0.0001,
+   "tails": 0.8032,
+   "ground_luma": 0.0745,
+   "nightfall_read": null,
+   "was_luma": 0.0365,
+   "was_ground": 0.0126
+  },
+  {
+   "hour": 18.25,
+   "luma": 0.1558,
+   "spread": 0.0001,
+   "tails": 0.6186,
+   "ground_luma": 0.1303,
+   "nightfall_read": null,
+   "was_luma": 0.043,
+   "was_ground": 0.0155
+  },
+  {
+   "hour": 18.5,
+   "luma": 0.0922,
+   "spread": 0.0003,
+   "tails": 0.904,
+   "ground_luma": 0.0673,
+   "nightfall_read": null,
+   "was_luma": 0.0712,
+   "was_ground": 0.0444
+  },
+  {
+   "hour": 18.75,
+   "luma": 0.1109,
+   "spread": 0.0001,
+   "tails": 0.8477,
+   "ground_luma": 0.0827,
+   "nightfall_read": null,
+   "was_luma": 0.1102,
+   "was_ground": 0.0817
+  },
+  {
+   "hour": 19.0,
+   "luma": 0.095,
+   "spread": 0.0003,
+   "tails": 0.8918,
+   "ground_luma": 0.0706,
+   "nightfall_read": null,
+   "was_luma": 0.0935,
+   "was_ground": 0.0686
+  },
+  {
+   "hour": 19.25,
+   "luma": 0.1633,
+   "spread": 0.0003,
+   "tails": 0.5518,
+   "ground_luma": 0.1784,
+   "nightfall_read": null,
+   "was_luma": 0.1408,
+   "was_ground": 0.1619
+  },
+  {
+   "hour": 19.5,
+   "luma": 0.1725,
+   "spread": 0.0002,
+   "tails": 0.5091,
+   "ground_luma": 0.1822,
+   "nightfall_read": null,
+   "was_luma": 0.176,
+   "was_ground": 0.1832
+  }
+ ],
+ "nightfall_route": null,
+ "curve_unverified": true,
+ "finished": "2026-09-27 16:24:08",
+ "seconds": 66.86,
+ "log": "C_NOISE PASS each rung agrees with itself -- two reads of the same hour {'worst_spread': 0.0005, 'tolerance': 0.01, 'measured': 10, 'wanted': 10}\nC_CURVE FAIL the running build carries the complement curve, read back from the engine {'readback_route': None, 'checked': {}, 'agreeing': [], 'note': 'if this could not be read at all the run is EVIDENCE, not proof, and says so in status. The old curve is exactly 0.0 at every elevation above -2, so it is trivially separable from the new one at 18:00 and 18:15'}\nC_DAY PASS noon is unchanged -- the day-untouched claim, measured rather than asserted {'now': 0.2684, 'was': 0.2685, 'gap': 0.0001, 'tolerance': 0.01, 'note': 'at +12 deg and above the band is 1 so Nightfall is exactly 0 either way. That is the argument; this is the measurement, and zzT1 left a noon reading at this pose to check it'}\nC_CLOSED PASS the evening no longer dips below night and climb back out {'lowest_hour': 18.5, 'lowest_luma': 0.0922, 'is_interior': True, 'margin_below_both_ends': 0.0058, 'was_bottom_hour': 18.0, 'was_bottom_luma': 0.0365, 'note': 'zzT2 had an interior minimum at 18:00 sitting 0.059 below both ends. Passing means the evening now falls into night instead of through it'}\nC_NOREG PASS no hour came back darker than zzT2 measured it {'rungs_darker': [], 'tolerance': 0.01, 'deltas': {'12.00': -0.0001, '17.50': 0.0025, '17.75': 0.0271, '18.00': 0.0664, '18.25': 0.1128, '18.50': 0.021, '18.75': 0.0007, '19.00': 0.0015, '19.25': 0.0225, '19.50': -0.0035}}\nC_GROUND PASS the ground is readable at every hour of the crossover {'darkest_hour': 18.5, 'darkest_ground': 0.0673, 'floor': 0.03, 'was_darkest': 0.0126, 'ground_by_hour': {'12.00': 0.2826, '17.50': 0.0728, '17.75': 0.086, '18.00': 0.0745, '18.25': 0.1303, '18.50': 0.0673, '18.75': 0.0827, '19.00': 0.0706, '19.25': 0.1784, '19.50': 0.1822}, 'note': 'zzT2 failed this at 0.0126. The same floor and the same patch, so the two are comparable'}\n"
+}

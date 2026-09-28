@@ -1,0 +1,1262 @@
+{
+ "name": "zzN1_night_sweep",
+ "started": "2026-09-27 10:56:17",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "N_SANITY",
+   "name": "the capture can see a lit world at noon -- the reference the night ratios divide by",
+   "pass": true,
+   "detail": {
+    "noon_luma": {
+     "city_arrival": 0.2599,
+     "major_path_march": 0.2574,
+     "plaza_clock_quarter": 0.1813,
+     "entrance_tartarus": 0.2672,
+     "water_gardens": 0.2599,
+     "architecture_noctis": 0.0596,
+     "mascot_at_spawn": 0.2677
+    },
+    "floor": 0.12,
+    "too_dark": [
+     "architecture_noctis"
+    ],
+    "note": "this now reads the same composited frame that is saved beside it as noon__<place>.jpg, so a red here is checkable by eye: open the JPEG. The previous version measured a SceneCapture actor while saving viewport JPEGs -- two cameras, and only one was ever posed"
+   }
+  },
+  {
+   "id": "N00",
+   "name": "the sweep moved the picture -- the instrument is responding",
+   "pass": true,
+   "detail": {
+    "luma_range": [
+     0.0333,
+     0.7887
+    ],
+    "practicals": null
+   }
+  },
+  {
+   "id": "N01",
+   "name": "the world as it stands is NOT readable at every one of the founder's seven places -- i.e. the complaint reproduces before anything is changed",
+   "pass": true,
+   "detail": {
+    "baseline_readable": [],
+    "baseline_dark": {
+     "city_arrival": 0.9231,
+     "major_path_march": 0.971,
+     "plaza_clock_quarter": 0.844,
+     "entrance_tartarus": 0.9705,
+     "water_gardens": 0.9166,
+     "architecture_noctis": 0.9709,
+     "mascot_at_spawn": 0.9671
+    },
+    "note": "if this is green the sweep is measuring somewhere the founder was not looking"
+   }
+  },
+  {
+   "id": "N02",
+   "name": "some combination makes every place readable while every place is still night",
+   "pass": false,
+   "detail": {
+    "best": null,
+    "best_readable": null,
+    "ranked": [
+     [
+      "moon0.050_sky7_prac0.0",
+      -1
+     ],
+     [
+      "moon0.050_sky7_prac1.0",
+      -1
+     ],
+     [
+      "moon0.050_sky10_prac1.0",
+      -1
+     ],
+     [
+      "moon0.080_sky7_prac1.0",
+      -1
+     ],
+     [
+      "moon0.080_sky10_prac1.0",
+      -1
+     ]
+    ],
+    "note": "a combination that stops any place being night is disqualified whatever else it lights"
+   }
+  },
+  {
+   "id": "N03",
+   "name": "no hour-to-hour step in the cycle exceeds a quarter of the day's range",
+   "pass": false,
+   "detail": {
+    "worst_jump_luma": 0.1835,
+    "at_hour": 19.0,
+    "day_range": [
+     0.1104,
+     0.3069
+    ]
+   }
+  }
+ ],
+ "practicals": "UNREADABLE FROM PYTHON -- this is the reporting path, not the subsystem. The editor log is the authority: grep WLLIGHT in the live editor log for 'practicals defined, pool of N'.",
+ "practicals_read_via": null,
+ "noon": {
+  "city_arrival": {
+   "luma": 0.2599,
+   "dark": 0.269,
+   "bright": 0.0034,
+   "sampled": 10506,
+   "ground": {
+    "luma": 0.4235,
+    "dark": 0.0715,
+    "bright": 0.0013,
+    "sampled": 15496
+   }
+  },
+  "major_path_march": {
+   "luma": 0.2574,
+   "dark": 0.1199,
+   "bright": 0.0035,
+   "sampled": 10506,
+   "ground": {
+    "luma": 0.2964,
+    "dark": 0.0188,
+    "bright": 0.0008,
+    "sampled": 15496
+   }
+  },
+  "plaza_clock_quarter": {
+   "luma": 0.1813,
+   "dark": 0.6093,
+   "bright": 0.0171,
+   "sampled": 10506,
+   "ground": {
+    "luma": 0.1543,
+    "dark": 0.4779,
+    "bright": 0.0021,
+    "sampled": 15496
+   }
+  },
+  "entrance_tartarus": {
+   "luma": 0.2672,
+   "dark": 0.0687,
+   "bright": 0.0032,
+   "sampled": 10506,
+   "ground": {
+    "luma": 0.2864,
+    "dark": 0.0192,
+    "bright": 0.0008,
+    "sampled": 15496
+   }
+  },
+  "water_gardens": {
+   "luma": 0.2599,
+   "dark": 0.3152,
+   "bright": 0.0089,
+   "sampled": 10506,
+   "ground": {
+    "luma": 0.3308,
+    "dark": 0.1155,
+    "bright": 0.0217,
+    "sampled": 15496
+   }
+  },
+  "architecture_noctis": {
+   "luma": 0.0596,
+   "dark": 0.9691,
+   "bright": 0.0031,
+   "sampled": 10506,
+   "ground": {
+    "luma": 0.041,
+    "dark": 0.9904,
+    "bright": 0.0008,
+    "sampled": 15496
+   }
+  },
+  "mascot_at_spawn": {
+   "luma": 0.2677,
+   "dark": 0.1347,
+   "bright": 0.0128,
+   "sampled": 10506,
+   "ground": {
+    "luma": 0.2841,
+    "dark": 0.109,
+    "bright": 0.0008,
+    "sampled": 15496
+   }
+  }
+ },
+ "sweep": [
+  {
+   "key": "moon0.050_sky7_prac0.0",
+   "moon": 0.05,
+   "sky": 7.0,
+   "practicals": 0.0,
+   "places": {
+    "city_arrival": {
+     "luma": 0.0575,
+     "dark": 0.9231,
+     "bright": 0.0034,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0756,
+      "dark": 0.8894,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "major_path_march": {
+     "luma": 0.0387,
+     "dark": 0.971,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0306,
+      "dark": 0.9897,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "plaza_clock_quarter": {
+     "luma": 0.0667,
+     "dark": 0.844,
+     "bright": 0.0032,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0742,
+      "dark": 0.7594,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "entrance_tartarus": {
+     "luma": 0.041,
+     "dark": 0.9705,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.031,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "water_gardens": {
+     "luma": 0.0674,
+     "dark": 0.9166,
+     "bright": 0.0033,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0752,
+      "dark": 0.879,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "architecture_noctis": {
+     "luma": 0.0421,
+     "dark": 0.9709,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0188,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "mascot_at_spawn": {
+     "luma": 0.0418,
+     "dark": 0.9671,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0208,
+      "dark": 0.9913,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    }
+   },
+   "readable": [],
+   "still_night": [
+    "city_arrival",
+    "major_path_march",
+    "plaza_clock_quarter",
+    "entrance_tartarus",
+    "water_gardens",
+    "mascot_at_spawn"
+   ],
+   "score": -1
+  },
+  {
+   "key": "moon0.050_sky7_prac1.0",
+   "moon": 0.05,
+   "sky": 7.0,
+   "practicals": 1.0,
+   "places": {
+    "city_arrival": {
+     "luma": 0.0561,
+     "dark": 0.9496,
+     "bright": 0.0127,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0342,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "major_path_march": {
+     "luma": 0.0387,
+     "dark": 0.9706,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0304,
+      "dark": 0.9897,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "plaza_clock_quarter": {
+     "luma": 0.0407,
+     "dark": 0.9631,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0266,
+      "dark": 0.9897,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "entrance_tartarus": {
+     "luma": 0.041,
+     "dark": 0.9711,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0309,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "water_gardens": {
+     "luma": 0.0654,
+     "dark": 0.9181,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0747,
+      "dark": 0.8784,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "architecture_noctis": {
+     "luma": 0.0346,
+     "dark": 0.9713,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.014,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "mascot_at_spawn": {
+     "luma": 0.0872,
+     "dark": 0.8924,
+     "bright": 0.011,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.049,
+      "dark": 0.927,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    }
+   },
+   "readable": [],
+   "still_night": [
+    "city_arrival",
+    "major_path_march",
+    "plaza_clock_quarter",
+    "entrance_tartarus",
+    "water_gardens",
+    "mascot_at_spawn"
+   ],
+   "score": -1
+  },
+  {
+   "key": "moon0.050_sky10_prac1.0",
+   "moon": 0.05,
+   "sky": 10.0,
+   "practicals": 1.0,
+   "places": {
+    "city_arrival": {
+     "luma": 0.0504,
+     "dark": 0.9505,
+     "bright": 0.0035,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0623,
+      "dark": 0.9149,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "major_path_march": {
+     "luma": 0.0418,
+     "dark": 0.9702,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0306,
+      "dark": 0.9897,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "plaza_clock_quarter": {
+     "luma": 0.0391,
+     "dark": 0.9654,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0259,
+      "dark": 0.9894,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "entrance_tartarus": {
+     "luma": 0.0426,
+     "dark": 0.9651,
+     "bright": 0.0032,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0309,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "water_gardens": {
+     "luma": 0.1229,
+     "dark": 0.8539,
+     "bright": 0.0209,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.1503,
+      "dark": 0.8116,
+      "bright": 0.0173,
+      "sampled": 15496
+     }
+    },
+    "architecture_noctis": {
+     "luma": 0.0333,
+     "dark": 0.9818,
+     "bright": 0.003,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0234,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "mascot_at_spawn": {
+     "luma": 0.0541,
+     "dark": 0.9511,
+     "bright": 0.0113,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0318,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    }
+   },
+   "readable": [],
+   "still_night": [
+    "city_arrival",
+    "major_path_march",
+    "plaza_clock_quarter",
+    "entrance_tartarus",
+    "mascot_at_spawn"
+   ],
+   "score": -1
+  },
+  {
+   "key": "moon0.080_sky7_prac1.0",
+   "moon": 0.08,
+   "sky": 7.0,
+   "practicals": 1.0,
+   "places": {
+    "city_arrival": {
+     "luma": 0.0567,
+     "dark": 0.9642,
+     "bright": 0.0036,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0576,
+      "dark": 0.9895,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "major_path_march": {
+     "luma": 0.0528,
+     "dark": 0.9708,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0583,
+      "dark": 0.9894,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "plaza_clock_quarter": {
+     "luma": 0.054,
+     "dark": 0.8983,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0558,
+      "dark": 0.8552,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "entrance_tartarus": {
+     "luma": 0.0654,
+     "dark": 0.87,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0489,
+      "dark": 0.9895,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "water_gardens": {
+     "luma": 0.1395,
+     "dark": 0.7206,
+     "bright": 0.0214,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.201,
+      "dark": 0.6011,
+      "bright": 0.0381,
+      "sampled": 15496
+     }
+    },
+    "architecture_noctis": {
+     "luma": 0.0371,
+     "dark": 0.9709,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0158,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "mascot_at_spawn": {
+     "luma": 0.7203,
+     "dark": 0.0795,
+     "bright": 0.6569,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.8088,
+      "dark": 0.0,
+      "bright": 0.7488,
+      "sampled": 15496
+     }
+    }
+   },
+   "readable": [
+    "mascot_at_spawn"
+   ],
+   "still_night": [
+    "city_arrival",
+    "major_path_march",
+    "plaza_clock_quarter",
+    "entrance_tartarus"
+   ],
+   "score": -1
+  },
+  {
+   "key": "moon0.080_sky10_prac1.0",
+   "moon": 0.08,
+   "sky": 10.0,
+   "practicals": 1.0,
+   "places": {
+    "city_arrival": {
+     "luma": 0.0674,
+     "dark": 0.9368,
+     "bright": 0.009,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0547,
+      "dark": 0.9451,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "major_path_march": {
+     "luma": 0.0528,
+     "dark": 0.9708,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0583,
+      "dark": 0.9894,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "plaza_clock_quarter": {
+     "luma": 0.0512,
+     "dark": 0.9611,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0472,
+      "dark": 0.9894,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "entrance_tartarus": {
+     "luma": 0.0565,
+     "dark": 0.9692,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.058,
+      "dark": 0.9895,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "water_gardens": {
+     "luma": 0.1311,
+     "dark": 0.739,
+     "bright": 0.0224,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.1791,
+      "dark": 0.6263,
+      "bright": 0.0177,
+      "sampled": 15496
+     }
+    },
+    "architecture_noctis": {
+     "luma": 0.0361,
+     "dark": 0.971,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0141,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "mascot_at_spawn": {
+     "luma": 0.7887,
+     "dark": 0.0004,
+     "bright": 0.733,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.8609,
+      "dark": 0.0,
+      "bright": 0.94,
+      "sampled": 15496
+     }
+    }
+   },
+   "readable": [
+    "mascot_at_spawn"
+   ],
+   "still_night": [
+    "city_arrival",
+    "major_path_march",
+    "plaza_clock_quarter",
+    "entrance_tartarus"
+   ],
+   "score": -1
+  },
+  {
+   "key": "moon0.080_sky10_prac1.6",
+   "moon": 0.08,
+   "sky": 10.0,
+   "practicals": 1.6,
+   "places": {
+    "city_arrival": {
+     "luma": 0.0627,
+     "dark": 0.9154,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0568,
+      "dark": 0.9837,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "major_path_march": {
+     "luma": 0.0528,
+     "dark": 0.9705,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0582,
+      "dark": 0.9894,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "plaza_clock_quarter": {
+     "luma": 0.0926,
+     "dark": 0.7664,
+     "bright": 0.0032,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.1135,
+      "dark": 0.6292,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "entrance_tartarus": {
+     "luma": 0.0572,
+     "dark": 0.9689,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0587,
+      "dark": 0.9895,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "water_gardens": {
+     "luma": 0.148,
+     "dark": 0.6977,
+     "bright": 0.0223,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.1904,
+      "dark": 0.6191,
+      "bright": 0.0217,
+      "sampled": 15496
+     }
+    },
+    "architecture_noctis": {
+     "luma": 0.037,
+     "dark": 0.9709,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0159,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "mascot_at_spawn": {
+     "luma": 0.0491,
+     "dark": 0.9703,
+     "bright": 0.003,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0523,
+      "dark": 0.9602,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    }
+   },
+   "readable": [],
+   "still_night": [
+    "city_arrival",
+    "major_path_march",
+    "entrance_tartarus",
+    "mascot_at_spawn"
+   ],
+   "score": -1
+  },
+  {
+   "key": "moon0.120_sky10_prac1.0",
+   "moon": 0.12,
+   "sky": 10.0,
+   "practicals": 1.0,
+   "places": {
+    "city_arrival": {
+     "luma": 0.0888,
+     "dark": 0.8251,
+     "bright": 0.0036,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.169,
+      "dark": 0.4875,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "major_path_march": {
+     "luma": 0.078,
+     "dark": 0.9437,
+     "bright": 0.0035,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0942,
+      "dark": 0.9892,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "plaza_clock_quarter": {
+     "luma": 0.1151,
+     "dark": 0.7425,
+     "bright": 0.0032,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.1614,
+      "dark": 0.5804,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "entrance_tartarus": {
+     "luma": 0.0773,
+     "dark": 0.9673,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0932,
+      "dark": 0.9894,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "water_gardens": {
+     "luma": 0.1752,
+     "dark": 0.6712,
+     "bright": 0.0228,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.2509,
+      "dark": 0.5758,
+      "bright": 0.0401,
+      "sampled": 15496
+     }
+    },
+    "architecture_noctis": {
+     "luma": 0.038,
+     "dark": 0.9709,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0162,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "mascot_at_spawn": {
+     "luma": 0.7189,
+     "dark": 0.1222,
+     "bright": 0.6908,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.882,
+      "dark": 0.0017,
+      "bright": 0.9572,
+      "sampled": 15496
+     }
+    }
+   },
+   "readable": [
+    "mascot_at_spawn"
+   ],
+   "still_night": [
+    "city_arrival",
+    "major_path_march",
+    "entrance_tartarus"
+   ],
+   "score": -1
+  },
+  {
+   "key": "moon0.120_sky14_prac1.0",
+   "moon": 0.12,
+   "sky": 14.0,
+   "practicals": 1.0,
+   "places": {
+    "city_arrival": {
+     "luma": 0.0931,
+     "dark": 0.8864,
+     "bright": 0.01,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0818,
+      "dark": 0.9294,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "major_path_march": {
+     "luma": 0.0719,
+     "dark": 0.9701,
+     "bright": 0.0032,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0939,
+      "dark": 0.9892,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "plaza_clock_quarter": {
+     "luma": 0.0674,
+     "dark": 0.958,
+     "bright": 0.0032,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.074,
+      "dark": 0.9892,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "entrance_tartarus": {
+     "luma": 0.0806,
+     "dark": 0.861,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0793,
+      "dark": 0.9864,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "water_gardens": {
+     "luma": 0.174,
+     "dark": 0.6702,
+     "bright": 0.0175,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.2251,
+      "dark": 0.6122,
+      "bright": 0.0213,
+      "sampled": 15496
+     }
+    },
+    "architecture_noctis": {
+     "luma": 0.0383,
+     "dark": 0.9709,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0164,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "mascot_at_spawn": {
+     "luma": 0.7151,
+     "dark": 0.1367,
+     "bright": 0.7329,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.8448,
+      "dark": 0.0,
+      "bright": 0.9591,
+      "sampled": 15496
+     }
+    }
+   },
+   "readable": [
+    "mascot_at_spawn"
+   ],
+   "still_night": [
+    "city_arrival",
+    "major_path_march",
+    "plaza_clock_quarter",
+    "entrance_tartarus"
+   ],
+   "score": -1
+  },
+  {
+   "key": "moon0.080_sky14_prac1.6",
+   "moon": 0.08,
+   "sky": 14.0,
+   "practicals": 1.6,
+   "places": {
+    "city_arrival": {
+     "luma": 0.0579,
+     "dark": 0.9247,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0568,
+      "dark": 0.9838,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "major_path_march": {
+     "luma": 0.0529,
+     "dark": 0.9705,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0583,
+      "dark": 0.9894,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "plaza_clock_quarter": {
+     "luma": 0.0568,
+     "dark": 0.9603,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0486,
+      "dark": 0.9894,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "entrance_tartarus": {
+     "luma": 0.0571,
+     "dark": 0.9688,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0585,
+      "dark": 0.9895,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "water_gardens": {
+     "luma": 0.0706,
+     "dark": 0.9305,
+     "bright": 0.009,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0546,
+      "dark": 0.9513,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "architecture_noctis": {
+     "luma": 0.0348,
+     "dark": 0.9713,
+     "bright": 0.0031,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0138,
+      "dark": 0.9915,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    },
+    "mascot_at_spawn": {
+     "luma": 0.1021,
+     "dark": 0.7408,
+     "bright": 0.0102,
+     "sampled": 10506,
+     "ground": {
+      "luma": 0.0685,
+      "dark": 0.7235,
+      "bright": 0.0008,
+      "sampled": 15496
+     }
+    }
+   },
+   "readable": [],
+   "still_night": [
+    "city_arrival",
+    "major_path_march",
+    "plaza_clock_quarter",
+    "entrance_tartarus",
+    "water_gardens"
+   ],
+   "score": -1
+  }
+ ],
+ "ladder": [
+  {
+   "hour": 0.0,
+   "luma": 0.1341,
+   "dark": 0.8199,
+   "ground_luma": 0.2307
+  },
+  {
+   "hour": 1.0,
+   "luma": 0.1328,
+   "dark": 0.8135,
+   "ground_luma": 0.2201
+  },
+  {
+   "hour": 2.0,
+   "luma": 0.1276,
+   "dark": 0.8218,
+   "ground_luma": 0.209
+  },
+  {
+   "hour": 3.0,
+   "luma": 0.1202,
+   "dark": 0.844,
+   "ground_luma": 0.2044
+  },
+  {
+   "hour": 4.0,
+   "luma": 0.1199,
+   "dark": 0.8409,
+   "ground_luma": 0.2008
+  },
+  {
+   "hour": 5.0,
+   "luma": 0.1104,
+   "dark": 0.8589,
+   "ground_luma": 0.1803
+  },
+  {
+   "hour": 6.0,
+   "luma": 0.1181,
+   "dark": 0.8556,
+   "ground_luma": 0.1876
+  },
+  {
+   "hour": 7.0,
+   "luma": 0.1573,
+   "dark": 0.6895,
+   "ground_luma": 0.1825
+  },
+  {
+   "hour": 8.0,
+   "luma": 0.2621,
+   "dark": 0.3645,
+   "ground_luma": 0.3371
+  },
+  {
+   "hour": 9.0,
+   "luma": 0.2836,
+   "dark": 0.3252,
+   "ground_luma": 0.393
+  },
+  {
+   "hour": 10.0,
+   "luma": 0.298,
+   "dark": 0.2896,
+   "ground_luma": 0.4326
+  },
+  {
+   "hour": 11.0,
+   "luma": 0.3045,
+   "dark": 0.2689,
+   "ground_luma": 0.4504
+  },
+  {
+   "hour": 12.0,
+   "luma": 0.3069,
+   "dark": 0.2638,
+   "ground_luma": 0.4595
+  },
+  {
+   "hour": 13.0,
+   "luma": 0.3017,
+   "dark": 0.2725,
+   "ground_luma": 0.4612
+  },
+  {
+   "hour": 14.0,
+   "luma": 0.2892,
+   "dark": 0.2895,
+   "ground_luma": 0.4414
+  },
+  {
+   "hour": 15.0,
+   "luma": 0.2638,
+   "dark": 0.3393,
+   "ground_luma": 0.4183
+  },
+  {
+   "hour": 16.0,
+   "luma": 0.1824,
+   "dark": 0.5627,
+   "ground_luma": 0.2959
+  },
+  {
+   "hour": 17.0,
+   "luma": 0.19,
+   "dark": 0.6139,
+   "ground_luma": 0.3093
+  },
+  {
+   "hour": 18.0,
+   "luma": 0.306,
+   "dark": 0.2754,
+   "ground_luma": 0.3903
+  },
+  {
+   "hour": 19.0,
+   "luma": 0.1225,
+   "dark": 0.8253,
+   "ground_luma": 0.1767
+  },
+  {
+   "hour": 20.0,
+   "luma": 0.1383,
+   "dark": 0.8048,
+   "ground_luma": 0.2063
+  },
+  {
+   "hour": 21.0,
+   "luma": 0.1403,
+   "dark": 0.7974,
+   "ground_luma": 0.2119
+  },
+  {
+   "hour": 22.0,
+   "luma": 0.1388,
+   "dark": 0.7861,
+   "ground_luma": 0.2228
+  },
+  {
+   "hour": 23.0,
+   "luma": 0.1414,
+   "dark": 0.7742,
+   "ground_luma": 0.2271
+  },
+  {
+   "hour": 24.0,
+   "luma": 0.1386,
+   "dark": 0.7758,
+   "ground_luma": 0.2363
+  }
+ ],
+ "best": null,
+ "finished": "2026-09-27 11:00:19",
+ "seconds": 242.22,
+ "log": "S_moon0.050_sky7_prac0.0 INFO moon0.050_sky7_prac0.0 {'readable': 0, 'still_night': 6, 'worst_dark': 0.971}\nS_moon0.050_sky7_prac1.0 INFO moon0.050_sky7_prac1.0 {'readable': 0, 'still_night': 6, 'worst_dark': 0.9713}\nS_moon0.050_sky10_prac1.0 INFO moon0.050_sky10_prac1.0 {'readable': 0, 'still_night': 5, 'worst_dark': 0.9818}\nS_moon0.080_sky7_prac1.0 INFO moon0.080_sky7_prac1.0 {'readable': 1, 'still_night': 4, 'worst_dark': 0.9709}\nS_moon0.080_sky10_prac1.0 INFO moon0.080_sky10_prac1.0 {'readable': 1, 'still_night': 4, 'worst_dark': 0.971}\nS_moon0.080_sky10_prac1.6 INFO moon0.080_sky10_prac1.6 {'readable': 0, 'still_night': 4, 'worst_dark': 0.9709}\nS_moon0.120_sky10_prac1.0 INFO moon0.120_sky10_prac1.0 {'readable': 1, 'still_night': 3, 'worst_dark': 0.9709}\nS_moon0.120_sky14_prac1.0 INFO moon0.120_sky14_prac1.0 {'readable': 1, 'still_night': 4, 'worst_dark': 0.9709}\nS_moon0.080_sky14_prac1.6 INFO moon0.080_sky14_prac1.6 {'readable': 0, 'still_night': 5, 'worst_dark': 0.9713}\nN_SANITY PASS the capture can see a lit world at noon -- the reference the night ratios divide by {'noon_luma': {'city_arrival': 0.2599, 'major_path_march': 0.2574, 'plaza_clock_quarter': 0.1813, 'entrance_tartarus': 0.2672, 'water_gardens': 0.2599, 'architecture_noctis': 0.0596, 'mascot_at_spawn': 0.2677}, 'floor': 0.12, 'too_dark': ['architecture_noctis'], 'note': 'this now reads the same composited frame that is saved beside it as noon__<place>.jpg, so a red here is checkable by eye: open the JPEG. The previous version measured a SceneCapture actor while saving viewport JPEGs -- two cameras, and only one was ever posed'}\nN00 PASS the sweep moved the picture -- the instrument is responding {'luma_range': [0.0333, 0.7887], 'practicals': None}\nN01 PASS the world as it stands is NOT readable at every one of the founder's seven places -- i.e. the complaint reproduces before anything is changed {'baseline_readable': [], 'baseline_dark': {'city_arrival': 0.9231, 'major_path_march': 0.971, 'plaza_clock_quarter': 0.844, 'entrance_tartarus': 0.9705, 'water_gardens': 0.9166, 'architecture_noctis': 0.9709, 'mascot_at_spawn': 0.9671}, 'note': 'if this is green the sweep is measuring somewhere the founder was not looking'}\nN02 FAIL some combination makes every place readable while every place is still night {'best': None, 'best_readable': None, 'ranked': [('moon0.050_sky7_prac0.0', -1), ('moon0.050_sky7_prac1.0', -1), ('moon0.050_sky10_prac1.0', -1), ('moon0.080_sky7_prac1.0', -1), ('moon0.080_sky10_prac1.0', -1)], 'note': 'a combination that stops any place being night is disqualified whatever else it lights'}\nN03 FAIL no hour-to-hour step in the cycle exceeds a quarter of the day's range {'worst_jump_luma': 0.1835, 'at_hour': 19.0, 'day_range': [0.1104, 0.3069]}\n"
+}

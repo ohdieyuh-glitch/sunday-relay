@@ -1,0 +1,18 @@
+{
+ "name": "zzW70_perf_after",
+ "started": "2026-09-27 08:03:54",
+ "status": "done",
+ "label": "world after window 2",
+ "frames": {
+  "warm": {
+   "WorldCam12": 50.36
+  },
+  "measured": {
+   "WorldCam12": 50.65
+  }
+ },
+ "mean": 50.65,
+ "finished": "2026-09-27 08:04:45",
+ "seconds": 51.12,
+ "log": ""
+}

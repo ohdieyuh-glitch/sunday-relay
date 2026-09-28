@@ -1,0 +1,19 @@
+{
+ "name": "zzAD2_practical_active",
+ "started": "2026-09-27 18:20:37",
+ "status": "voided: the authoritative active count is not readable in this build",
+ "tests": [
+  {
+   "id": "P_READ",
+   "name": "the engine's own practical report is readable, so active count is not inferred",
+   "pass": false,
+   "detail": {
+    "describe_practicals": null,
+    "note": "the subsystem was UCLASS() without BlueprintType until d9317674, which is why two earlier gates failed for want of an instrument and a budget run counted actors and inferred a radius that turned out to be wrong. Red here means this build predates the specifier and the run is void rather than falling back to inference again"
+   }
+  }
+ ],
+ "finished": "2026-09-27 18:20:59",
+ "seconds": 22.13,
+ "log": "P_READ FAIL the engine's own practical report is readable, so active count is not inferred {'describe_practicals': None, 'note': 'the subsystem was UCLASS() without BlueprintType until d9317674, which is why two earlier gates failed for want of an instrument and a budget run counted actors and inferred a radius that turned out to be wrong. Red here means this build predates the specifier and the run is void rather than falling back to inference again'}\n"
+}

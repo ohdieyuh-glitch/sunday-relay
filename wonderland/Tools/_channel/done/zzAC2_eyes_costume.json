@@ -1,0 +1,153 @@
+{
+ "name": "zzAC2_eyes_costume",
+ "started": "2026-09-27 18:27:22",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "R00",
+   "name": "the wardrobe is open through the founder's own button",
+   "pass": true,
+   "detail": {
+    "pressed": true
+   }
+  },
+  {
+   "id": "R01",
+   "name": "the preview window reports where it is",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "R02",
+   "name": "each capture is a different picture",
+   "pass": true,
+   "detail": {
+    "files": 3,
+    "distinct": 3,
+    "note": "if the wardrobe did not restage, before and after are the same file and this job would pass by photographing one moment three times."
+   }
+  },
+  {
+   "id": "R03",
+   "name": "the face was measurable before and after the costume",
+   "pass": true,
+   "detail": {
+    "before": {
+     "tallest": 0.4118,
+     "outer_span": [
+      55,
+      133
+     ],
+     "outer_span_fraction": 0.32,
+     "middle_over_tallest": 0.277,
+     "middle_peak_over_tallest": 1.0
+    },
+    "after": {
+     "tallest": 0.4078,
+     "outer_span": [
+      60,
+      139
+     ],
+     "outer_span_fraction": 0.324,
+     "middle_over_tallest": 0.165,
+     "middle_peak_over_tallest": 0.337
+    },
+    "note": "an unmeasurable reading here VOIDS the comparison rather than passing it: two Nones are equal, and equality is exactly what this job tests."
+   }
+  },
+  {
+   "id": "R04",
+   "name": "the middle of the visor did not light up after a costume round trip",
+   "pass": true,
+   "detail": {
+    "before_middle": 0.277,
+    "after_middle": 0.165,
+    "tolerance": 0.15,
+    "note": "THE BUG THIS JOB EXISTS FOR puts a third eye BETWEEN the two, because ShowCanonBody would un-hide the original combined pane and draw it alongside both replacements. A gap clause cannot catch it, since the outer peaks do not move, and an absolute peak count cannot be trusted: counting bright runs gives 3 for Relay OG and 8 for Arden on captures that plainly show two eyes."
+   }
+  },
+  {
+   "id": "R05",
+   "name": "the eyes are in the same place after as before",
+   "pass": true,
+   "detail": {
+    "before_span": 0.32,
+    "after_span": 0.324,
+    "tolerance": 0.06
+   }
+  }
+ ],
+ "readings": {
+  "before": {
+   "tallest": 0.4118,
+   "outer_span": [
+    55,
+    133
+   ],
+   "outer_span_fraction": 0.32,
+   "middle_over_tallest": 0.277,
+   "middle_peak_over_tallest": 1.0
+  },
+  "costume": {
+   "tallest": 0.1765,
+   "outer_span": [
+    44,
+    228
+   ],
+   "outer_span_fraction": 0.754,
+   "middle_over_tallest": 0.737,
+   "middle_peak_over_tallest": 0.956
+  },
+  "after": {
+   "tallest": 0.4078,
+   "outer_span": [
+    60,
+    139
+   ],
+   "outer_span_fraction": 0.324,
+   "middle_over_tallest": 0.165,
+   "middle_peak_over_tallest": 0.337
+  }
+ },
+ "capture_hashes": {
+  "eyes_before.png": "7fcf8fb3e7f9ff1e153377d26d6cf097",
+  "eyes_costume.png": "264cfcaaa24e7c96c816f86e4f218a88",
+  "eyes_after.png": "afa0e1082777c11970b02747459d91e7"
+ },
+ "shape": {
+  "before": {
+   "tallest": 0.4118,
+   "outer_span": [
+    55,
+    133
+   ],
+   "outer_span_fraction": 0.32,
+   "middle_over_tallest": 0.277,
+   "middle_peak_over_tallest": 1.0
+  },
+  "costume": {
+   "tallest": 0.1765,
+   "outer_span": [
+    44,
+    228
+   ],
+   "outer_span_fraction": 0.754,
+   "middle_over_tallest": 0.737,
+   "middle_peak_over_tallest": 0.956
+  },
+  "after": {
+   "tallest": 0.4078,
+   "outer_span": [
+    60,
+    139
+   ],
+   "outer_span_fraction": 0.324,
+   "middle_over_tallest": 0.165,
+   "middle_peak_over_tallest": 0.337
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\eyes_after_costume",
+ "finished": "2026-09-27 18:28:16",
+ "seconds": 54.28,
+ "log": "R00 PASS the wardrobe is open through the founder's own button {'pressed': True}\nR01 PASS the preview window reports where it is {}\nR_before INFO before {'tallest': 0.4118, 'outer_span': [55, 133], 'outer_span_fraction': 0.32, 'middle_over_tallest': 0.277, 'middle_peak_over_tallest': 1.0}\nR_costume INFO costume {'tallest': 0.1765, 'outer_span': [44, 228], 'outer_span_fraction': 0.754, 'middle_over_tallest': 0.737, 'middle_peak_over_tallest': 0.956}\nR_after INFO after {'tallest': 0.4078, 'outer_span': [60, 139], 'outer_span_fraction': 0.324, 'middle_over_tallest': 0.165, 'middle_peak_over_tallest': 0.337}\nR02 PASS each capture is a different picture {'files': 3, 'distinct': 3, 'note': 'if the wardrobe did not restage, before and after are the same file and this job would pass by photographing one moment three times.'}\nR03 PASS the face was measurable before and after the costume {'before': {'tallest': 0.4118, 'outer_span': [55, 133], 'outer_span_fraction': 0.32, 'middle_over_tallest': 0.277, 'middle_peak_over_tallest': 1.0}, 'after': {'tallest': 0.4078, 'outer_span': [60, 139], 'outer_span_fraction': 0.324, 'middle_over_tallest': 0.165, 'middle_peak_over_tallest': 0.337}, 'note': 'an unmeasurable reading here VOIDS the comparison rather than passing it: two Nones are equal, and equality is exactly what this job tests.'}\nR04 PASS the middle of the visor did not light up after a costume round trip {'before_middle': 0.277, 'after_middle': 0.165, 'tolerance': 0.15, 'note': 'THE BUG THIS JOB EXISTS FOR puts a third eye BETWEEN the two, because ShowCanonBody would un-hide the original combined pane and draw it alongside both replacements. A gap clause cannot catch it, since the outer peaks do not move, and an absolute peak count cannot be trusted: counting bright runs gives 3 for Relay OG and 8 for Arden on captures that plainly show two eyes.'}\nR05 PASS the eyes are in the same place after as before {'before_span': 0.32, 'after_span': 0.324, 'tolerance': 0.06}\n"
+}

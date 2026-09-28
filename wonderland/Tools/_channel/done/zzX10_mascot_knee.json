@@ -1,0 +1,1073 @@
+{
+ "name": "zzX10_mascot_knee",
+ "started": "2026-09-27 08:05:46",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "M00",
+   "name": "every skin was sampled at every hour at every eye level",
+   "pass": false,
+   "detail": {
+    "got": 31,
+    "wanted": 75,
+    "skins": [
+     "relay_og",
+     "celestial_light",
+     "apollo",
+     "arden_infernal",
+     "skeleton_flame"
+    ],
+    "hours": [
+     "day",
+     "dusk",
+     "night"
+    ],
+    "levels": [
+     0.05,
+     4.0,
+     8.0,
+     12.0,
+     16.0
+    ]
+   }
+  },
+  {
+   "id": "X00",
+   "name": "world exposure is identical before and after -- the experiment is not confounded",
+   "pass": false,
+   "detail": {
+    "before": [
+     [
+      "V2_PostProcess",
+      -0.9,
+      14.2,
+      14.2
+     ]
+    ],
+    "after": [],
+    "note": "the founder required night-world brightness to be justified by the world, not moved here"
+   }
+  },
+  {
+   "id": "M01",
+   "name": "driving the eye level actually changes the rendered eye",
+   "pass": true,
+   "detail": {
+    "readings_that_moved": 22,
+    "of": 31,
+    "note": "a flat response here is a broken capture, not a finding about the eyes"
+   }
+  },
+  {
+   "id": "M02",
+   "name": "eye level 16 renders identically to 12 -- SetEyeGlow's clamp is real and EyeGlowDay 18 has never been reachable",
+   "pass": false,
+   "detail": {
+    "delta_16_minus_12": {
+     "relay_og/day": -0.43287,
+     "relay_og/dusk": 0.0,
+     "celestial_light/day": 0.0,
+     "apollo/day": 0.0,
+     "arden_infernal/day": 0.0,
+     "skeleton_flame/day": 0.0
+    },
+    "identical": 5,
+    "of": 6,
+    "note": "wl.Look.EyeGlowDay ships at 18 and SetEyeGlow clamps to 12; if this passes, every 'eye level' number in the corpus was taken at 12"
+   }
+  },
+  {
+   "id": "M03",
+   "name": "on every skin the eye level arrives at the rendered EYE and not merely at the head",
+   "pass": false,
+   "detail": {
+    "isolation_at_level_12": {
+     "relay_og": 0.322,
+     "celestial_light": 0.00952,
+     "apollo": -1e-05,
+     "arden_infernal": -0.0021,
+     "skeleton_flame": -0.31208
+    },
+    "floor": 0.02,
+    "arriving": [
+     "relay_og"
+    ],
+    "not_arriving": [
+     "celestial_light",
+     "apollo",
+     "arden_infernal",
+     "skeleton_flame"
+    ],
+    "note": "isolation = the eye patch's gain minus the cheek's gain, so a head that glows as a whole cannot pass this; near zero means the emission is not reaching the eye and no knee will fix it"
+   }
+  },
+  {
+   "id": "M04",
+   "name": "the eye is brighter than the face beside it, on every skin at every hour",
+   "pass": false,
+   "detail": {
+    "over_face": {
+     "relay_og/day": 0.00388,
+     "relay_og/dusk": -0.02506,
+     "celestial_light/day": 0.01387,
+     "apollo/day": 0.01387,
+     "arden_infernal/day": -0.00853,
+     "skeleton_flame/day": -0.32893
+    },
+    "positive": 3,
+    "of": 6,
+    "note": "measured against a cheek patch, at eye level 12, which is what the shipped 18 actually resolves to"
+   }
+  },
+  {
+   "id": "M05",
+   "name": "a mascot filling the frame is not blown out at the shipped eye level",
+   "pass": false,
+   "detail": {
+    "worst_clipped": 0.5924,
+    "ceiling": 0.06,
+    "per_skin": {
+     "relay_og": 0.5913,
+     "celestial_light": 0.5805,
+     "apollo": 0.5805,
+     "arden_infernal": 0.5813,
+     "skeleton_flame": 0.5924
+    }
+   }
+  },
+  {
+   "id": "M06",
+   "name": "and that is not achieved by making the picture dark",
+   "pass": true,
+   "detail": {
+    "worst_crushed": 0.3739,
+    "ceiling": 0.6
+   }
+  },
+  {
+   "id": "M07",
+   "name": "the added eye light still points at the skin's authored eye colour",
+   "pass": false,
+   "detail": {
+    "hue_retention": {
+     "relay_og": 0.1369,
+     "celestial_light": null,
+     "apollo": null,
+     "arden_infernal": null,
+     "skeleton_flame": null
+    },
+    "authored": {
+     "relay_og": [
+      1.0,
+      0.72,
+      0.16
+     ],
+     "celestial_light": [
+      0.62,
+      0.88,
+      1.0
+     ],
+     "apollo": [
+      1.0,
+      0.86,
+      0.26
+     ],
+     "arden_infernal": [
+      1.0,
+      0.58,
+      0.1
+     ],
+     "skeleton_flame": [
+      0.36,
+      0.95,
+      1.0
+     ]
+    },
+    "floor": 0.95,
+    "note": "cosine of the ADDED light against the authored RGB; measured on the difference so a pale face behind the eye cannot launder a grey eye into looking coloured"
+   }
+  },
+  {
+   "id": "M08",
+   "name": "the eye is a coloured core rather than a white one",
+   "pass": false,
+   "detail": {
+    "colour_separation": {
+     "relay_og": 0.0,
+     "celestial_light": 0.0,
+     "apollo": 0.0,
+     "arden_infernal": 0.0,
+     "skeleton_flame": 0.0
+    },
+    "floor": 0.25,
+    "note": "channel spread of the added light; a white-clipped eye reads near 0"
+   }
+  },
+  {
+   "id": "M09",
+   "name": "the knee's live range at this asset scale is measured, not assumed",
+   "pass": false,
+   "detail": {
+    "frame_luma_spread_across_knees": {
+     "relay_og": null,
+     "celestial_light": null,
+     "apollo": null,
+     "arden_infernal": null,
+     "skeleton_flame": null
+    },
+    "inert_skins": [],
+    "first_knee_that_changes_the_picture": {},
+    "knees_swept": [
+     700.0,
+     64.0,
+     32.0,
+     16.0,
+     8.0,
+     4.0,
+     2.0
+    ],
+    "note": "body glow spans 3.3-13.2 after the 4000->6 re-baseline, so a knee at the shipped 700 compresses nothing; this says where it starts to bite and whether it helps"
+   }
+  }
+ ],
+ "eye_axis": [
+  {
+   "skin": "relay_og",
+   "hour": "day",
+   "level": 0.05,
+   "eye_luma": 0.55664,
+   "face_luma": 0.55345,
+   "over_face": 0.00319,
+   "clipped": 0.0067,
+   "crushed": 0.0561,
+   "eye_rgb": [
+    0.65199,
+    0.54367,
+    0.40435
+   ],
+   "eye_gain": 0.0,
+   "face_gain": 0.0,
+   "isolation": 0.0,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "relay_og",
+   "hour": "day",
+   "level": 4.0,
+   "eye_luma": 0.61613,
+   "face_luma": 0.61957,
+   "over_face": -0.00344,
+   "clipped": 0.0304,
+   "crushed": 0.0548,
+   "eye_rgb": [
+    0.72553,
+    0.60261,
+    0.42787
+   ],
+   "eye_gain": 0.05949,
+   "face_gain": 0.06612,
+   "isolation": -0.00663,
+   "eye_added_rgb": [
+    0.07354,
+    0.05894,
+    0.02352
+   ],
+   "hue_retention": 0.9921,
+   "colour_separation": 0.6802
+  },
+  {
+   "skin": "relay_og",
+   "hour": "day",
+   "level": 8.0,
+   "eye_luma": 0.55324,
+   "face_luma": 0.5519,
+   "over_face": 0.00134,
+   "clipped": 0.0039,
+   "crushed": 0.0579,
+   "eye_rgb": [
+    0.65678,
+    0.53887,
+    0.39072
+   ],
+   "eye_gain": -0.0034,
+   "face_gain": -0.00155,
+   "isolation": -0.00185,
+   "eye_added_rgb": [
+    0.00479,
+    0.0,
+    0.0
+   ],
+   "hue_retention": 0.8048,
+   "colour_separation": 1.0
+  },
+  {
+   "skin": "relay_og",
+   "hour": "day",
+   "level": 12.0,
+   "eye_luma": 0.55561,
+   "face_luma": 0.55173,
+   "over_face": 0.00388,
+   "clipped": 0.0077,
+   "crushed": 0.0563,
+   "eye_rgb": [
+    0.64301,
+    0.54382,
+    0.41496
+   ],
+   "eye_gain": -0.00103,
+   "face_gain": -0.00172,
+   "isolation": 0.00069,
+   "eye_added_rgb": [
+    0.0,
+    0.00015,
+    0.01061
+   ],
+   "hue_retention": 0.1369,
+   "colour_separation": 1.0
+  },
+  {
+   "skin": "relay_og",
+   "hour": "day",
+   "level": 16.0,
+   "eye_luma": 0.12274,
+   "face_luma": 0.09799,
+   "over_face": 0.02475,
+   "clipped": 0.0794,
+   "crushed": 0.6852,
+   "eye_rgb": [
+    0.16605,
+    0.11604,
+    0.06162
+   ],
+   "eye_gain": -0.4339,
+   "face_gain": -0.45546,
+   "isolation": 0.02156,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "celestial_light",
+   "hour": "day",
+   "level": 0.05,
+   "eye_luma": 0.31696,
+   "face_luma": 0.31261,
+   "over_face": 0.00435,
+   "clipped": 0.0044,
+   "crushed": 0.0563,
+   "eye_rgb": [
+    0.3528,
+    0.31125,
+    0.26803
+   ],
+   "eye_gain": 0.0,
+   "face_gain": 0.0,
+   "isolation": 0.0,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "celestial_light",
+   "hour": "day",
+   "level": 4.0,
+   "eye_luma": 0.62688,
+   "face_luma": 0.33365,
+   "over_face": 0.29323,
+   "clipped": 0.6745,
+   "crushed": 0.0232,
+   "eye_rgb": [
+    0.89285,
+    0.55649,
+    0.54092
+   ],
+   "eye_gain": 0.30992,
+   "face_gain": 0.02104,
+   "isolation": 0.28888,
+   "eye_added_rgb": [
+    0.54005,
+    0.24524,
+    0.27289
+   ],
+   "hue_retention": 0.8585,
+   "colour_separation": 0.5459
+  },
+  {
+   "skin": "celestial_light",
+   "hour": "day",
+   "level": 8.0,
+   "eye_luma": 0.47376,
+   "face_luma": 0.10057,
+   "over_face": 0.37319,
+   "clipped": 0.734,
+   "crushed": 0.0956,
+   "eye_rgb": [
+    0.74125,
+    0.401,
+    0.40692
+   ],
+   "eye_gain": 0.1568,
+   "face_gain": -0.21204,
+   "isolation": 0.36884,
+   "eye_added_rgb": [
+    0.38845,
+    0.08975,
+    0.13889
+   ],
+   "hue_retention": 0.7395,
+   "colour_separation": 0.769
+  },
+  {
+   "skin": "celestial_light",
+   "hour": "day",
+   "level": 12.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.0048,
+   "over_face": 0.01387,
+   "clipped": 0.5805,
+   "crushed": 0.3739,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": -0.29829,
+   "face_gain": -0.30781,
+   "isolation": 0.00952,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "celestial_light",
+   "hour": "day",
+   "level": 16.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.02089,
+   "over_face": -0.00222,
+   "clipped": 0.5796,
+   "crushed": 0.3736,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": -0.29829,
+   "face_gain": -0.29172,
+   "isolation": -0.00657,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "apollo",
+   "hour": "day",
+   "level": 0.05,
+   "eye_luma": 0.01868,
+   "face_luma": 0.0048,
+   "over_face": 0.01388,
+   "clipped": 0.5804,
+   "crushed": 0.3736,
+   "eye_rgb": [
+    0.01349,
+    0.01772,
+    0.04354
+   ],
+   "eye_gain": 0.0,
+   "face_gain": 0.0,
+   "isolation": 0.0,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "apollo",
+   "hour": "day",
+   "level": 4.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.02115,
+   "over_face": -0.00248,
+   "clipped": 0.5781,
+   "crushed": 0.376,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": -1e-05,
+   "face_gain": 0.01635,
+   "isolation": -0.01636,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "apollo",
+   "hour": "day",
+   "level": 8.0,
+   "eye_luma": 0.01861,
+   "face_luma": 0.0048,
+   "over_face": 0.01381,
+   "clipped": 0.5808,
+   "crushed": 0.3746,
+   "eye_rgb": [
+    0.01342,
+    0.01764,
+    0.04348
+   ],
+   "eye_gain": -7e-05,
+   "face_gain": 0.0,
+   "isolation": -7e-05,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "apollo",
+   "hour": "day",
+   "level": 12.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.0048,
+   "over_face": 0.01387,
+   "clipped": 0.5805,
+   "crushed": 0.3737,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": -1e-05,
+   "face_gain": 0.0,
+   "isolation": -1e-05,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "apollo",
+   "hour": "day",
+   "level": 16.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.06109,
+   "over_face": -0.04242,
+   "clipped": 0.5801,
+   "crushed": 0.3743,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": -1e-05,
+   "face_gain": 0.05629,
+   "isolation": -0.0563,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "arden_infernal",
+   "hour": "day",
+   "level": 0.05,
+   "eye_luma": 0.01867,
+   "face_luma": 0.0251,
+   "over_face": -0.00643,
+   "clipped": 0.5833,
+   "crushed": 0.3709,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": 0.0,
+   "isolation": 0.0,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "arden_infernal",
+   "hour": "day",
+   "level": 4.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.02476,
+   "over_face": -0.00609,
+   "clipped": 0.5835,
+   "crushed": 0.3705,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": -0.00034,
+   "isolation": 0.00034,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "arden_infernal",
+   "hour": "day",
+   "level": 8.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.19174,
+   "over_face": -0.17307,
+   "clipped": 0.5816,
+   "crushed": 0.373,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": 0.16664,
+   "isolation": -0.16664,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "arden_infernal",
+   "hour": "day",
+   "level": 12.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.0272,
+   "over_face": -0.00853,
+   "clipped": 0.5813,
+   "crushed": 0.3701,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": 0.0021,
+   "isolation": -0.0021,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "arden_infernal",
+   "hour": "day",
+   "level": 16.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.02933,
+   "over_face": -0.01066,
+   "clipped": 0.5811,
+   "crushed": 0.3702,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": 0.00423,
+   "isolation": -0.00423,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "skeleton_flame",
+   "hour": "day",
+   "level": 0.05,
+   "eye_luma": 0.01867,
+   "face_luma": 0.03552,
+   "over_face": -0.01685,
+   "clipped": 0.5839,
+   "crushed": 0.3705,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": 0.0,
+   "isolation": 0.0,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "skeleton_flame",
+   "hour": "day",
+   "level": 4.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.00496,
+   "over_face": 0.01371,
+   "clipped": 0.5741,
+   "crushed": 0.3813,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": -0.03056,
+   "isolation": 0.03056,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "skeleton_flame",
+   "hour": "day",
+   "level": 8.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.42668,
+   "over_face": -0.40801,
+   "clipped": 0.5911,
+   "crushed": 0.3616,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": 0.39116,
+   "isolation": -0.39116,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "skeleton_flame",
+   "hour": "day",
+   "level": 12.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.3476,
+   "over_face": -0.32893,
+   "clipped": 0.5924,
+   "crushed": 0.3604,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": 0.31208,
+   "isolation": -0.31208,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "skeleton_flame",
+   "hour": "day",
+   "level": 16.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.28247,
+   "over_face": -0.2638,
+   "clipped": 0.5806,
+   "crushed": 0.3607,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": 0.24695,
+   "isolation": -0.24695,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "relay_og",
+   "hour": "dusk",
+   "level": 0.05,
+   "eye_luma": 0.01867,
+   "face_luma": 0.36573,
+   "over_face": -0.34706,
+   "clipped": 0.5911,
+   "crushed": 0.3613,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": 0.0,
+   "isolation": 0.0,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "relay_og",
+   "hour": "dusk",
+   "level": 4.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.01355,
+   "over_face": 0.00512,
+   "clipped": 0.5925,
+   "crushed": 0.3609,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": -0.35218,
+   "isolation": 0.35218,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "relay_og",
+   "hour": "dusk",
+   "level": 8.0,
+   "eye_luma": 0.01868,
+   "face_luma": 0.05081,
+   "over_face": -0.03213,
+   "clipped": 0.593,
+   "crushed": 0.3601,
+   "eye_rgb": [
+    0.01349,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 1e-05,
+   "face_gain": -0.31492,
+   "isolation": 0.31493,
+   "eye_added_rgb": [
+    1e-05,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "relay_og",
+   "hour": "dusk",
+   "level": 12.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.04373,
+   "over_face": -0.02506,
+   "clipped": 0.5913,
+   "crushed": 0.3618,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": -0.322,
+   "isolation": 0.322,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "relay_og",
+   "hour": "dusk",
+   "level": 16.0,
+   "eye_luma": 0.01867,
+   "face_luma": 0.01274,
+   "over_face": 0.00593,
+   "clipped": 0.5931,
+   "crushed": 0.3603,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": -0.35299,
+   "isolation": 0.35299,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  },
+  {
+   "skin": "celestial_light",
+   "hour": "dusk",
+   "level": 0.05,
+   "eye_luma": 0.01867,
+   "face_luma": 0.02961,
+   "over_face": -0.01094,
+   "clipped": 0.5928,
+   "crushed": 0.3607,
+   "eye_rgb": [
+    0.01348,
+    0.01771,
+    0.04353
+   ],
+   "eye_gain": 0.0,
+   "face_gain": 0.0,
+   "isolation": 0.0,
+   "eye_added_rgb": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "hue_retention": null,
+   "colour_separation": 0.0
+  }
+ ],
+ "knee_axis": [],
+ "camera_failures": [],
+ "practicals": "unreadable: 'World' object has no attribute 'get_subsystem'",
+ "exposure_before": [
+  [
+   "V2_PostProcess",
+   -0.9,
+   14.2,
+   14.2
+  ]
+ ],
+ "exposure_after": [],
+ "cvars_restored": [
+  "wl.Look.GlowKnee",
+  "wl.Look.EyeGlowDay",
+  "wl.Look.EyeGlowNight",
+  "wl.Look.FlameDim",
+  "wl.Look.NightGlow"
+ ],
+ "summary": {
+  "eye_isolation_at_12": {
+   "relay_og": 0.322,
+   "celestial_light": 0.00952,
+   "apollo": -1e-05,
+   "arden_infernal": -0.0021,
+   "skeleton_flame": -0.31208
+  },
+  "over_face_at_12": {
+   "relay_og/day": 0.00388,
+   "relay_og/dusk": -0.02506,
+   "celestial_light/day": 0.01387,
+   "apollo/day": 0.01387,
+   "arden_infernal/day": -0.00853,
+   "skeleton_flame/day": -0.32893
+  },
+  "hue_retention": {
+   "relay_og": 0.1369,
+   "celestial_light": null,
+   "apollo": null,
+   "arden_infernal": null,
+   "skeleton_flame": null
+  },
+  "colour_separation": {
+   "relay_og": 0.0,
+   "celestial_light": 0.0,
+   "apollo": 0.0,
+   "arden_infernal": 0.0,
+   "skeleton_flame": 0.0
+  },
+  "knee_spread": {
+   "relay_og": null,
+   "celestial_light": null,
+   "apollo": null,
+   "arden_infernal": null,
+   "skeleton_flame": null
+  },
+  "knee_engages_at": {},
+  "worst_clipped": 0.5924,
+  "worst_crushed": 0.3739
+ },
+ "finished": "2026-09-27 08:09:58",
+ "seconds": 251.71,
+ "log": "B_relay_og_day_00.1 INFO relay_og day eye=0.05 {'eye_luma': 0.55664, 'over_face': 0.00319, 'isolation': 0.0, 'clipped': 0.0067, 'hue_retention': None}\nB_relay_og_day_04.0 INFO relay_og day eye=4.00 {'eye_luma': 0.61613, 'over_face': -0.00344, 'isolation': -0.00663, 'clipped': 0.0304, 'hue_retention': 0.9921}\nB_relay_og_day_08.0 INFO relay_og day eye=8.00 {'eye_luma': 0.55324, 'over_face': 0.00134, 'isolation': -0.00185, 'clipped': 0.0039, 'hue_retention': 0.8048}\nB_relay_og_day_12.0 INFO relay_og day eye=12.00 {'eye_luma': 0.55561, 'over_face': 0.00388, 'isolation': 0.00069, 'clipped': 0.0077, 'hue_retention': 0.1369}\nB_relay_og_day_16.0 INFO relay_og day eye=16.00 {'eye_luma': 0.12274, 'over_face': 0.02475, 'isolation': 0.02156, 'clipped': 0.0794, 'hue_retention': None}\nB_celestial_light_day_00.1 INFO celestial_light day eye=0.05 {'eye_luma': 0.31696, 'over_face': 0.00435, 'isolation': 0.0, 'clipped': 0.0044, 'hue_retention': None}\nB_celestial_light_day_04.0 INFO celestial_light day eye=4.00 {'eye_luma': 0.62688, 'over_face': 0.29323, 'isolation': 0.28888, 'clipped': 0.6745, 'hue_retention': 0.8585}\nB_celestial_light_day_08.0 INFO celestial_light day eye=8.00 {'eye_luma': 0.47376, 'over_face': 0.37319, 'isolation': 0.36884, 'clipped': 0.734, 'hue_retention': 0.7395}\nB_celestial_light_day_12.0 INFO celestial_light day eye=12.00 {'eye_luma': 0.01867, 'over_face': 0.01387, 'isolation': 0.00952, 'clipped': 0.5805, 'hue_retention': None}\nB_celestial_light_day_16.0 INFO celestial_light day eye=16.00 {'eye_luma': 0.01867, 'over_face': -0.00222, 'isolation': -0.00657, 'clipped': 0.5796, 'hue_retention': None}\nB_apollo_day_00.1 INFO apollo day eye=0.05 {'eye_luma': 0.01868, 'over_face': 0.01388, 'isolation': 0.0, 'clipped': 0.5804, 'hue_retention': None}\nB_apollo_day_04.0 INFO apollo day eye=4.00 {'eye_luma': 0.01867, 'over_face': -0.00248, 'isolation': -0.01636, 'clipped': 0.5781, 'hue_retention': None}\nB_apollo_day_08.0 INFO apollo day eye=8.00 {'eye_luma': 0.01861, 'over_face': 0.01381, 'isolation': -7e-05, 'clipped': 0.5808, 'hue_retention': None}\nB_apollo_day_12.0 INFO apollo day eye=12.00 {'eye_luma': 0.01867, 'over_face': 0.01387, 'isolation': -1e-05, 'clipped': 0.5805, 'hue_retention': None}\nB_apollo_day_16.0 INFO apollo day eye=16.00 {'eye_luma': 0.01867, 'over_face': -0.04242, 'isolation': -0.0563, 'clipped': 0.5801, 'hue_retention': None}\nB_arden_infernal_day_00.1 INFO arden_infernal day eye=0.05 {'eye_luma': 0.01867, 'over_face': -0.00643, 'isolation': 0.0, 'clipped': 0.5833, 'hue_retention': None}\nB_arden_infernal_day_04.0 INFO arden_infernal day eye=4.00 {'eye_luma': 0.01867, 'over_face': -0.00609, 'isolation': 0.00034, 'clipped': 0.5835, 'hue_retention': None}\nB_arden_infernal_day_08.0 INFO arden_infernal day eye=8.00 {'eye_luma': 0.01867, 'over_face': -0.17307, 'isolation': -0.16664, 'clipped': 0.5816, 'hue_retention': None}\nB_arden_infernal_day_12.0 INFO arden_infernal day eye=12.00 {'eye_luma': 0.01867, 'over_face': -0.00853, 'isolation': -0.0021, 'clipped': 0.5813, 'hue_retention': None}\nB_arden_infernal_day_16.0 INFO arden_infernal day eye=16.00 {'eye_luma': 0.01867, 'over_face': -0.01066, 'isolation': -0.00423, 'clipped': 0.5811, 'hue_retention': None}\nB_skeleton_flame_day_00.1 INFO skeleton_flame day eye=0.05 {'eye_luma': 0.01867, 'over_face': -0.01685, 'isolation': 0.0, 'clipped': 0.5839, 'hue_retention': None}\nB_skeleton_flame_day_04.0 INFO skeleton_flame day eye=4.00 {'eye_luma': 0.01867, 'over_face': 0.01371, 'isolation': 0.03056, 'clipped': 0.5741, 'hue_retention': None}\nB_skeleton_flame_day_08.0 INFO skeleton_flame day eye=8.00 {'eye_luma': 0.01867, 'over_face': -0.40801, 'isolation': -0.39116, 'clipped': 0.5911, 'hue_retention': None}\nB_skeleton_flame_day_12.0 INFO skeleton_flame day eye=12.00 {'eye_luma': 0.01867, 'over_face': -0.32893, 'isolation': -0.31208, 'clipped': 0.5924, 'hue_retention': None}\nB_skeleton_flame_day_16.0 INFO skeleton_flame day eye=16.00 {'eye_luma': 0.01867, 'over_face': -0.2638, 'isolation': -0.24695, 'clipped': 0.5806, 'hue_retention': None}\nB_relay_og_dusk_00.1 INFO relay_og dusk eye=0.05 {'eye_luma': 0.01867, 'over_face': -0.34706, 'isolation': 0.0, 'clipped': 0.5911, 'hue_retention': None}\nB_relay_og_dusk_04.0 INFO relay_og dusk eye=4.00 {'eye_luma': 0.01867, 'over_face': 0.00512, 'isolation': 0.35218, 'clipped': 0.5925, 'hue_retention': None}\nB_relay_og_dusk_08.0 INFO relay_og dusk eye=8.00 {'eye_luma': 0.01868, 'over_face': -0.03213, 'isolation': 0.31493, 'clipped': 0.593, 'hue_retention': None}\nB_relay_og_dusk_12.0 INFO relay_og dusk eye=12.00 {'eye_luma': 0.01867, 'over_face': -0.02506, 'isolation': 0.322, 'clipped': 0.5913, 'hue_retention': None}\nB_relay_og_dusk_16.0 INFO relay_og dusk eye=16.00 {'eye_luma': 0.01867, 'over_face': 0.00593, 'isolation': 0.35299, 'clipped': 0.5931, 'hue_retention': None}\nB_celestial_light_dusk_00.1 INFO celestial_light dusk eye=0.05 {'eye_luma': 0.01867, 'over_face': -0.01094, 'isolation': 0.0, 'clipped': 0.5928, 'hue_retention': None}\nB_celestial_light_dusk_4.00 WARN eye or cheek off screen {}\nB_celestial_light_dusk_8.00 WARN eye or cheek off screen {}\nB_celestial_light_dusk_12.00 WARN eye or cheek off screen {}\nB_celestial_light_dusk_16.00 WARN eye or cheek off screen {}\nB_apollo_dusk_0.05 WARN eye or cheek off screen {}\nB_apollo_dusk_4.00 WARN eye or cheek off screen {}\nB_apollo_dusk_8.00 WARN eye or cheek off screen {}\nB_apollo_dusk_12.00 WARN eye or cheek off screen {}\nB_apollo_dusk_16.00 WARN eye or cheek off screen {}\nM00 FAIL every skin was sampled at every hour at every eye level {'got': 31, 'wanted': 75, 'skins': ['relay_og', 'celestial_light', 'apollo', 'arden_infernal', 'skeleton_flame'], 'hours': ['day', 'dusk', 'night'], 'levels': [0.05, 4.0, 8.0, 12.0, 16.0]}\nX00 FAIL world exposure is identical before and after -- the experiment is not confounded {'before': [('V2_PostProcess', -0.9, 14.2, 14.2)], 'after': [], 'note': 'the founder required night-world brightness to be justified by the world, not moved here'}\nM01 PASS driving the eye level actually changes the rendered eye {'readings_that_moved': 22, 'of': 31, 'note': 'a flat response here is a broken capture, not a finding about the eyes'}\nM02 FAIL eye level 16 renders identically to 12 -- SetEyeGlow's clamp is real and EyeGlowDay 18 has never been reachable {'delta_16_minus_12': {'relay_og/day': -0.43287, 'relay_og/dusk': 0.0, 'celestial_light/day': 0.0, 'apollo/day': 0.0, 'arden_infernal/day': 0.0, 'skeleton_flame/day': 0.0}, 'identical': 5, 'of': 6, 'note': \"wl.Look.EyeGlowDay ships at 18 and SetEyeGlow clamps to 12; if this passes, every 'eye level' number in the corpus was taken at 12\"}\nM03 FAIL on every skin the eye level arrives at the rendered EYE and not merely at the head {'isolation_at_level_12': {'relay_og': 0.322, 'celestial_light': 0.00952, 'apollo': -1e-05, 'arden_infernal': -0.0021, 'skeleton_flame': -0.31208}, 'floor': 0.02, 'arriving': ['relay_og'], 'not_arriving': ['celestial_light', 'apollo', 'arden_infernal', 'skeleton_flame'], 'note': \"isolation = the eye patch's gain minus the cheek's gain, so a head that glows as a whole cannot pass this; near zero means the emission is not reaching the eye and no knee will fix it\"}\nM04 FAIL the eye is brighter than the face beside it, on every skin at every hour {'over_face': {'relay_og/day': 0.00388, 'relay_og/dusk': -0.02506, 'celestial_light/day': 0.01387, 'apollo/day': 0.01387, 'arden_infernal/day': -0.00853, 'skeleton_flame/day': -0.32893}, 'positive': 3, 'of': 6, 'note': 'measured against a cheek patch, at eye level 12, which is what the shipped 18 actually resolves to'}\nM05 FAIL a mascot filling the frame is not blown out at the shipped eye level {'worst_clipped': 0.5924, 'ceiling': 0.06, 'per_skin': {'relay_og': 0.5913, 'celestial_light': 0.5805, 'apollo': 0.5805, 'arden_infernal': 0.5813, 'skeleton_flame': 0.5924}}\nM06 PASS and that is not achieved by making the picture dark {'worst_crushed': 0.3739, 'ceiling': 0.6}\nM07 FAIL the added eye light still points at the skin's authored eye colour {'hue_retention': {'relay_og': 0.1369, 'celestial_light': None, 'apollo': None, 'arden_infernal': None, 'skeleton_flame': None}, 'authored': {'relay_og': (1.0, 0.72, 0.16), 'celestial_light': (0.62, 0.88, 1.0), 'apollo': (1.0, 0.86, 0.26), 'arden_infernal': (1.0, 0.58, 0.1), 'skeleton_flame': (0.36, 0.95, 1.0)}, 'floor': 0.95, 'note': 'cosine of the ADDED light against the authored RGB; measured on the difference so a pale face behind the eye cannot launder a grey eye into looking coloured'}\nM08 FAIL the eye is a coloured core rather than a white one {'colour_separation': {'relay_og': 0.0, 'celestial_light': 0.0, 'apollo': 0.0, 'arden_infernal': 0.0, 'skeleton_flame': 0.0}, 'floor': 0.25, 'note': 'channel spread of the added light; a white-clipped eye reads near 0'}\nM09 FAIL the knee's live range at this asset scale is measured, not assumed {'frame_luma_spread_across_knees': {'relay_og': None, 'celestial_light': None, 'apollo': None, 'arden_infernal': None, 'skeleton_flame': None}, 'inert_skins': [], 'first_knee_that_changes_the_picture': {}, 'knees_swept': [700.0, 64.0, 32.0, 16.0, 8.0, 4.0, 2.0], 'note': 'body glow spans 3.3-13.2 after the 4000->6 re-baseline, so a knee at the shipped 700 compresses nothing; this says where it starts to bite and whether it helps'}\n"
+}

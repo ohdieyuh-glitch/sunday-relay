@@ -1,0 +1,541 @@
+{
+ "name": "zzCH1_regress_wardrobe",
+ "started": "2026-09-28 01:06:24",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "W00",
+   "name": "the UI subsystem is reachable",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "W01",
+   "name": "the Project Brain is open",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "W02",
+   "name": "SWITCH SKIN was pressed, and the wardrobe opened from that press alone",
+   "pass": true,
+   "detail": {
+    "pressed": true,
+    "skins_open": true,
+    "note": "this is the founder's route. Every earlier proof used SetBrainSkinsOpen, which is not."
+   }
+  },
+  {
+   "id": "W03",
+   "name": "the Project Brain is STILL OPEN with the wardrobe inside it",
+   "pass": true,
+   "detail": {
+    "note": "the founder asked that the Brain not be replaced by the wardrobe"
+   }
+  },
+  {
+   "id": "W04",
+   "name": "the preview window has painted and reports where it is",
+   "pass": true,
+   "detail": {
+    "got": true,
+    "centre": [
+     0.5947,
+     0.4704
+    ],
+    "size": [
+     0.2136,
+     0.4828
+    ]
+   }
+  },
+  {
+   "id": "W10",
+   "name": "the preview's pixels were readable for every skin, in every place looked at",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "W11",
+   "name": "no corner of the preview window is the blank white brain chamber, for any skin",
+   "pass": true,
+   "detail": {
+    "corners_that_look_like_the_chamber": null,
+    "brightest_corner_by_skin": {
+     "relay_og": 0.0321,
+     "arden_infernal": 0.0321,
+     "apollo": 0.4627,
+     "skeleton_flame": 0.0321,
+     "celestial_light": 0.0321
+    },
+    "test": "a corner fails only when it is BOTH bright (luma > 0.60) AND blank (fewer than 5% dark samples), which is what a wall is and what a mascot never is",
+    "note": "the Project Brain chamber the founder photographed is 0.97 white in every corner AND has nothing dark in it. Apollo's crown reaches two corners at 0.41 and 0.51 with 36% and 41% of those boxes still pure backdrop, which is a mascot standing in front of a black room."
+   }
+  },
+  {
+   "id": "W12",
+   "name": "the middle of the window is lit and the corners are not -- a figure is standing there",
+   "pass": true,
+   "detail": {
+    "middle_minus_brightest_corner": {
+     "relay_og": 0.8184,
+     "arden_infernal": 0.6049,
+     "apollo": 0.3791,
+     "skeleton_flame": 0.7991,
+     "celestial_light": 0.8583
+    },
+    "threshold": 0.03,
+    "middle_luma": {
+     "relay_og": 0.8505,
+     "arden_infernal": 0.637,
+     "apollo": 0.8418,
+     "skeleton_flame": 0.8312,
+     "celestial_light": 0.8904
+    }
+   }
+  },
+  {
+   "id": "W13",
+   "name": "the preview as a whole is a room with a mascot in it, not the blank white brain chamber",
+   "pass": true,
+   "detail": {
+    "blanked": null,
+    "whole_luma_by_skin": {
+     "relay_og": 0.3472,
+     "arden_infernal": 0.3911,
+     "apollo": 0.7581,
+     "skeleton_flame": 0.477,
+     "celestial_light": 0.5104
+    },
+    "whole_dark_by_skin": {
+     "relay_og": 0.6161,
+     "arden_infernal": 0.4793,
+     "apollo": 0.1105,
+     "skeleton_flame": 0.4504,
+     "celestial_light": 0.4308
+    },
+    "test": "the window fails only when it is BOTH bright (luma > 0.85) AND blank (fewer than 5% dark samples)",
+    "note": "the chamber fills the window edge to edge at 0.97 with nothing dark in it. Apollo at 0.754 is a mascot that fills its frame, which is what the founder asked for -- 75 to 85 per cent of usable preview height -- and not a fault."
+   }
+  },
+  {
+   "id": "W14",
+   "name": "clicking each skin changes what the preview shows",
+   "pass": true,
+   "detail": {
+    "signatures": [
+     "0.347/0.616",
+     "0.391/0.479",
+     "0.758/0.111",
+     "0.477/0.450",
+     "0.510/0.431"
+    ],
+    "note": "five skins, at least four distinguishable pictures"
+   }
+  },
+  {
+   "id": "W20",
+   "name": "pressing SWITCH SKIN again closes the wardrobe and leaves the Brain open",
+   "pass": true,
+   "detail": {
+    "skins_open": false,
+    "brain_open": true
+   }
+  },
+  {
+   "id": "W21",
+   "name": "closing the Project Brain leaves nothing open behind it",
+   "pass": true,
+   "detail": {
+    "brain_open": false,
+    "skins_open": false
+   }
+  }
+ ],
+ "press_returned": true,
+ "preview_rect": {
+  "got": true,
+  "centre": [
+   0.5947,
+   0.4704
+  ],
+  "size": [
+   0.2136,
+   0.4828
+  ]
+ },
+ "per_skin": {
+  "relay_og": {
+   "worn": true,
+   "whole": {
+    "mean": [
+     0.3503,
+     0.3468,
+     0.3422
+    ],
+    "luma": 0.3472,
+    "dark": 0.6161,
+    "bright": 0.3617,
+    "samples": 11856
+   },
+   "middle": {
+    "mean": [
+     0.8586,
+     0.85,
+     0.8316
+    ],
+    "luma": 0.8505,
+    "dark": 0.0408,
+    "bright": 0.8977,
+    "samples": 25807
+   },
+   "corners": {
+    "tl": {
+     "mean": [
+      0.0047,
+      0.0047,
+      0.0047
+     ],
+     "luma": 0.0047,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "tr": {
+     "mean": [
+      0.0222,
+      0.0304,
+      0.0782
+     ],
+     "luma": 0.0321,
+     "dark": 0.912,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "bl": {
+     "mean": [
+      0.007,
+      0.0082,
+      0.025
+     ],
+     "luma": 0.0092,
+     "dark": 0.9864,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "br": {
+     "mean": [
+      0.0035,
+      0.0035,
+      0.0128
+     ],
+     "luma": 0.0042,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1886
+    }
+   },
+   "capture": "relay_og.png"
+  },
+  "arden_infernal": {
+   "worn": true,
+   "whole": {
+    "mean": [
+     0.4727,
+     0.3802,
+     0.2592
+    ],
+    "luma": 0.3911,
+    "dark": 0.4793,
+    "bright": 0.3501,
+    "samples": 11856
+   },
+   "middle": {
+    "mean": [
+     0.7905,
+     0.6048,
+     0.5046
+    ],
+    "luma": 0.637,
+    "dark": 0.147,
+    "bright": 0.5726,
+    "samples": 25807
+   },
+   "corners": {
+    "tl": {
+     "mean": [
+      0.0047,
+      0.0047,
+      0.0047
+     ],
+     "luma": 0.0047,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "tr": {
+     "mean": [
+      0.0222,
+      0.0304,
+      0.0782
+     ],
+     "luma": 0.0321,
+     "dark": 0.912,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "bl": {
+     "mean": [
+      0.007,
+      0.0082,
+      0.0154
+     ],
+     "luma": 0.0085,
+     "dark": 0.9864,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "br": {
+     "mean": [
+      0.0035,
+      0.0035,
+      0.0078
+     ],
+     "luma": 0.0038,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1886
+    }
+   },
+   "capture": "arden_infernal.png"
+  },
+  "apollo": {
+   "worn": true,
+   "whole": {
+    "mean": [
+     0.7928,
+     0.7621,
+     0.6165
+    ],
+    "luma": 0.7581,
+    "dark": 0.1105,
+    "bright": 0.7575,
+    "samples": 11856
+   },
+   "middle": {
+    "mean": [
+     0.8794,
+     0.845,
+     0.6994
+    ],
+    "luma": 0.8418,
+    "dark": 0.004,
+    "bright": 0.8449,
+    "samples": 25807
+   },
+   "corners": {
+    "tl": {
+     "mean": [
+      0.4804,
+      0.4649,
+      0.3882
+     ],
+     "luma": 0.4627,
+     "dark": 0.4618,
+     "bright": 0.4883,
+     "samples": 1845
+    },
+    "tr": {
+     "mean": [
+      0.4601,
+      0.4518,
+      0.4226
+     ],
+     "luma": 0.4514,
+     "dark": 0.289,
+     "bright": 0.3229,
+     "samples": 1886
+    },
+    "bl": {
+     "mean": [
+      0.007,
+      0.0082,
+      0.025
+     ],
+     "luma": 0.0092,
+     "dark": 0.9864,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "br": {
+     "mean": [
+      0.0036,
+      0.0036,
+      0.0129
+     ],
+     "luma": 0.0042,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1886
+    }
+   },
+   "capture": "apollo.png"
+  },
+  "skeleton_flame": {
+   "worn": true,
+   "whole": {
+    "mean": [
+     0.4571,
+     0.4821,
+     0.4848
+    ],
+    "luma": 0.477,
+    "dark": 0.4504,
+    "bright": 0.496,
+    "samples": 11856
+   },
+   "middle": {
+    "mean": [
+     0.8157,
+     0.8362,
+     0.8282
+    ],
+    "luma": 0.8312,
+    "dark": 0.073,
+    "bright": 0.8709,
+    "samples": 25807
+   },
+   "corners": {
+    "tl": {
+     "mean": [
+      0.0047,
+      0.0047,
+      0.0047
+     ],
+     "luma": 0.0047,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "tr": {
+     "mean": [
+      0.0222,
+      0.0304,
+      0.0782
+     ],
+     "luma": 0.0321,
+     "dark": 0.912,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "bl": {
+     "mean": [
+      0.007,
+      0.0082,
+      0.025
+     ],
+     "luma": 0.0092,
+     "dark": 0.9864,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "br": {
+     "mean": [
+      0.0038,
+      0.0038,
+      0.0132
+     ],
+     "luma": 0.0045,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1886
+    }
+   },
+   "capture": "skeleton_flame.png"
+  },
+  "celestial_light": {
+   "worn": true,
+   "whole": {
+    "mean": [
+     0.5074,
+     0.5107,
+     0.5166
+    ],
+    "luma": 0.5104,
+    "dark": 0.4308,
+    "bright": 0.5342,
+    "samples": 11856
+   },
+   "middle": {
+    "mean": [
+     0.8859,
+     0.8911,
+     0.8957
+    ],
+    "luma": 0.8904,
+    "dark": 0.0278,
+    "bright": 0.9438,
+    "samples": 25807
+   },
+   "corners": {
+    "tl": {
+     "mean": [
+      0.0047,
+      0.0047,
+      0.0047
+     ],
+     "luma": 0.0047,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "tr": {
+     "mean": [
+      0.0222,
+      0.0304,
+      0.0782
+     ],
+     "luma": 0.0321,
+     "dark": 0.912,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "bl": {
+     "mean": [
+      0.007,
+      0.0082,
+      0.025
+     ],
+     "luma": 0.0092,
+     "dark": 0.9864,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "br": {
+     "mean": [
+      0.0035,
+      0.0035,
+      0.0128
+     ],
+     "luma": 0.0042,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1886
+    }
+   },
+   "capture": "celestial_light.png"
+  }
+ },
+ "corners_that_look_like_the_chamber": null,
+ "whole_dark_by_skin": {
+  "relay_og": 0.6161,
+  "arden_infernal": 0.4793,
+  "apollo": 0.1105,
+  "skeleton_flame": 0.4504,
+  "celestial_light": 0.4308
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wardrobe_pixels",
+ "finished": "2026-09-28 01:07:42",
+ "seconds": 77.87,
+ "log": "W00 PASS the UI subsystem is reachable {}\nW01 PASS the Project Brain is open {}\nW02 PASS SWITCH SKIN was pressed, and the wardrobe opened from that press alone {'pressed': True, 'skins_open': True, 'note': \"this is the founder's route. Every earlier proof used SetBrainSkinsOpen, which is not.\"}\nW03 PASS the Project Brain is STILL OPEN with the wardrobe inside it {'note': 'the founder asked that the Brain not be replaced by the wardrobe'}\nW04 PASS the preview window has painted and reports where it is {'got': True, 'centre': [0.5947, 0.4704], 'size': [0.2136, 0.4828]}\nW_relay_og INFO preview pixels for relay_og {'whole_luma': 0.3472, 'middle_luma': 0.8505, 'corner_luma': {'tl': 0.0047, 'tr': 0.0321, 'bl': 0.0092, 'br': 0.0042}}\nW_arden_infernal INFO preview pixels for arden_infernal {'whole_luma': 0.3911, 'middle_luma': 0.637, 'corner_luma': {'tl': 0.0047, 'tr': 0.0321, 'bl': 0.0085, 'br': 0.0038}}\nW_apollo INFO preview pixels for apollo {'whole_luma': 0.7581, 'middle_luma': 0.8418, 'corner_luma': {'tl': 0.4627, 'tr': 0.4514, 'bl': 0.0092, 'br': 0.0042}}\nW_skeleton_flame INFO preview pixels for skeleton_flame {'whole_luma': 0.477, 'middle_luma': 0.8312, 'corner_luma': {'tl': 0.0047, 'tr': 0.0321, 'bl': 0.0092, 'br': 0.0045}}\nW_celestial_light INFO preview pixels for celestial_light {'whole_luma': 0.5104, 'middle_luma': 0.8904, 'corner_luma': {'tl': 0.0047, 'tr': 0.0321, 'bl': 0.0092, 'br': 0.0042}}\nW10 PASS the preview's pixels were readable for every skin, in every place looked at {}\nW11 PASS no corner of the preview window is the blank white brain chamber, for any skin {'corners_that_look_like_the_chamber': None, 'brightest_corner_by_skin': {'relay_og': 0.0321, 'arden_infernal': 0.0321, 'apollo': 0.4627, 'skeleton_flame': 0.0321, 'celestial_light': 0.0321}, 'test': 'a corner fails only when it is BOTH bright (luma > 0.60) AND blank (fewer than 5% dark samples), which is what a wall is and what a mascot never is', 'note': \"the Project Brain chamber the founder photographed is 0.97 white in every corner AND has nothing dark in it. Apollo's crown reaches two corners at 0.41 and 0.51 with 36% and 41% of those boxes still pure backdrop, which is a mascot standing in front of a black room.\"}\nW12 PASS the middle of the window is lit and the corners are not -- a figure is standing there {'middle_minus_brightest_corner': {'relay_og': 0.8184, 'arden_infernal': 0.6049, 'apollo': 0.3791, 'skeleton_flame': 0.7991, 'celestial_light': 0.8583}, 'threshold': 0.03, 'middle_luma': {'relay_og': 0.8505, 'arden_infernal': 0.637, 'apollo': 0.8418, 'skeleton_flame': 0.8312, 'celestial_light': 0.8904}}\nW13 PASS the preview as a whole is a room with a mascot in it, not the blank white brain chamber {'blanked': None, 'whole_luma_by_skin': {'relay_og': 0.3472, 'arden_infernal': 0.3911, 'apollo': 0.7581, 'skeleton_flame': 0.477, 'celestial_light': 0.5104}, 'whole_dark_by_skin': {'relay_og': 0.6161, 'arden_infernal': 0.4793, 'apollo': 0.1105, 'skeleton_flame': 0.4504, 'celestial_light': 0.4308}, 'test': 'the window fails only when it is BOTH bright (luma > 0.85) AND blank (fewer than 5% dark samples)', 'note': 'the chamber fills the window edge to edge at 0.97 with nothing dark in it. Apollo at 0.754 is a mascot that fills its frame, which is what the founder asked for -- 75 to 85 per cent of usable preview height -- and not a fault.'}\nW14 PASS clicking each skin changes what the preview shows {'signatures': ['0.347/0.616', '0.391/0.479', '0.758/0.111', '0.477/0.450', '0.510/0.431'], 'note': 'five skins, at least four distinguishable pictures'}\nW20 PASS pressing SWITCH SKIN again closes the wardrobe and leaves the Brain open {'skins_open': False, 'brain_open': True}\nW21 PASS closing the Project Brain leaves nothing open behind it {'brain_open': False, 'skins_open': False}\n"
+}

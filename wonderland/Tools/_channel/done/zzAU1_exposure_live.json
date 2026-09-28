@@ -1,0 +1,354 @@
+{
+ "name": "zzAU1_exposure_live",
+ "started": "2026-09-27 21:31:41",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "X00",
+   "name": "both terms can be read back before anything is changed",
+   "pass": true,
+   "detail": {
+    "as_found": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewExposure": 0.0
+    }
+   }
+  },
+  {
+   "id": "X01",
+   "name": "the wardrobe is open through the founder's own SWITCH SKIN button",
+   "pass": true,
+   "detail": {
+    "pressed": true,
+    "skins_open": true
+   }
+  },
+  {
+   "id": "X02",
+   "name": "the preview window has painted and reports where it is",
+   "pass": true,
+   "detail": {
+    "got": true,
+    "centre": [
+     0.5947,
+     0.4704
+    ],
+    "size": [
+     0.2136,
+     0.4828
+    ]
+   }
+  },
+  {
+   "id": "X_RESTORE",
+   "name": "the two terms this job found were put back",
+   "pass": true,
+   "detail": {
+    "as_found": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewExposure": 0.0
+    },
+    "restored": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewExposure": 0.0
+    }
+   }
+  },
+  {
+   "id": "X_SKIN",
+   "name": "Relay OG was put back on the Dog, and it went back",
+   "pass": true,
+   "detail": {
+    "worn_after_restore": "relay_og"
+   }
+  },
+  {
+   "id": "X03",
+   "name": "every rung set the exposure it asked for, and the figure held the glow throughout",
+   "pass": true,
+   "detail": {
+    "refused": null,
+    "note": "BOTH ENDS. The exposure is the term being swept, so its cvar is read back; the glow is the term being HELD, so what the figure WEARS is read back. Reading only the cvar is what let a whole sweep run against a knob that was refusing every value."
+   }
+  },
+  {
+   "id": "X04",
+   "name": "the exposure ladder produced more than one picture",
+   "pass": true,
+   "detail": {
+    "luma_ladder": {
+     "skeleton_flame": {
+      "ev_0": 0.5119,
+      "ev_minus2": 0.5137,
+      "ev_minus4": 0.4849,
+      "ev_minus6": 0.4994,
+      "ev_minus8": 0.4985
+     },
+     "relay_og": {
+      "ev_0": 0.3569,
+      "ev_minus2": 0.3317,
+      "ev_minus4": 0.3431,
+      "ev_minus6": 0.3396,
+      "ev_minus8": 0.368
+     }
+    },
+    "distinct": {
+     "skeleton_flame": 5,
+     "relay_og": 5
+    },
+    "note": "THE CONTROL THAT WOULD HAVE CAUGHT THE GLOW TOLERANCE. Several rungs and one picture is a knob refusing its values, and it looks exactly like a term that does not matter. If this fails, nothing below is a finding about exposure."
+   }
+  }
+ ],
+ "as_found": {
+  "wl.Look.PreviewGlow": 0.001,
+  "wl.Look.PreviewExposure": 0.0
+ },
+ "preview_rect": {
+  "got": true,
+  "centre": [
+   0.5947,
+   0.4704
+  ],
+  "size": [
+   0.2136,
+   0.4828
+  ]
+ },
+ "readings": {
+  "skeleton_flame": {
+   "ev_0": {
+    "asked_ev": 0.0,
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.003,
+     "wl.Look.PreviewExposure": 0.0
+    },
+    "glow_applied": 0.003,
+    "whole": {
+     "mean": [
+      0.513,
+      0.5117,
+      0.5101
+     ],
+     "luma": 0.5119,
+     "blue_over_red": -0.0029,
+     "bright": 0.5163,
+     "samples": 11856
+    },
+    "capture": "skeleton_flame__ev_0.png"
+   },
+   "ev_minus2": {
+    "asked_ev": -2.0,
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.003,
+     "wl.Look.PreviewExposure": -2.0
+    },
+    "glow_applied": 0.003,
+    "whole": {
+     "mean": [
+      0.512,
+      0.5142,
+      0.5136
+     ],
+     "luma": 0.5137,
+     "blue_over_red": 0.0016,
+     "bright": 0.519,
+     "samples": 11856
+    },
+    "capture": "skeleton_flame__ev_minus2.png"
+   },
+   "ev_minus4": {
+    "asked_ev": -4.0,
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.003,
+     "wl.Look.PreviewExposure": -4.0
+    },
+    "glow_applied": 0.003,
+    "whole": {
+     "mean": [
+      0.4862,
+      0.4846,
+      0.4848
+     ],
+     "luma": 0.4849,
+     "blue_over_red": -0.0014,
+     "bright": 0.487,
+     "samples": 11856
+    },
+    "capture": "skeleton_flame__ev_minus4.png"
+   },
+   "ev_minus6": {
+    "asked_ev": -6.0,
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.003,
+     "wl.Look.PreviewExposure": -6.0
+    },
+    "glow_applied": 0.003,
+    "whole": {
+     "mean": [
+      0.5007,
+      0.499,
+      0.4995
+     ],
+     "luma": 0.4994,
+     "blue_over_red": -0.0012,
+     "bright": 0.5028,
+     "samples": 11856
+    },
+    "capture": "skeleton_flame__ev_minus6.png"
+   },
+   "ev_minus8": {
+    "asked_ev": -8.0,
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.003,
+     "wl.Look.PreviewExposure": -8.0
+    },
+    "glow_applied": 0.003,
+    "whole": {
+     "mean": [
+      0.4969,
+      0.499,
+      0.4984
+     ],
+     "luma": 0.4985,
+     "blue_over_red": 0.0014,
+     "bright": 0.5015,
+     "samples": 11856
+    },
+    "capture": "skeleton_flame__ev_minus8.png"
+   }
+  },
+  "relay_og": {
+   "ev_0": {
+    "asked_ev": 0.0,
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.003,
+     "wl.Look.PreviewExposure": 0.0
+    },
+    "glow_applied": 0.003,
+    "whole": {
+     "mean": [
+      0.3596,
+      0.3565,
+      0.3538
+     ],
+     "luma": 0.3569,
+     "blue_over_red": -0.0057,
+     "bright": 0.3686,
+     "samples": 11856
+    },
+    "capture": "relay_og__ev_0.png"
+   },
+   "ev_minus2": {
+    "asked_ev": -2.0,
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.003,
+     "wl.Look.PreviewExposure": -2.0
+    },
+    "glow_applied": 0.003,
+    "whole": {
+     "mean": [
+      0.3339,
+      0.3312,
+      0.3299
+     ],
+     "luma": 0.3317,
+     "blue_over_red": -0.004,
+     "bright": 0.3453,
+     "samples": 11856
+    },
+    "capture": "relay_og__ev_minus2.png"
+   },
+   "ev_minus4": {
+    "asked_ev": -4.0,
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.003,
+     "wl.Look.PreviewExposure": -4.0
+    },
+    "glow_applied": 0.003,
+    "whole": {
+     "mean": [
+      0.3455,
+      0.3426,
+      0.341
+     ],
+     "luma": 0.3431,
+     "blue_over_red": -0.0045,
+     "bright": 0.3559,
+     "samples": 11856
+    },
+    "capture": "relay_og__ev_minus4.png"
+   },
+   "ev_minus6": {
+    "asked_ev": -6.0,
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.003,
+     "wl.Look.PreviewExposure": -6.0
+    },
+    "glow_applied": 0.003,
+    "whole": {
+     "mean": [
+      0.342,
+      0.3391,
+      0.3369
+     ],
+     "luma": 0.3396,
+     "blue_over_red": -0.0051,
+     "bright": 0.3531,
+     "samples": 11856
+    },
+    "capture": "relay_og__ev_minus6.png"
+   },
+   "ev_minus8": {
+    "asked_ev": -8.0,
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.003,
+     "wl.Look.PreviewExposure": -8.0
+    },
+    "glow_applied": 0.003,
+    "whole": {
+     "mean": [
+      0.3705,
+      0.3676,
+      0.3647
+     ],
+     "luma": 0.368,
+     "blue_over_red": -0.0059,
+     "bright": 0.3816,
+     "samples": 11856
+    },
+    "capture": "relay_og__ev_minus8.png"
+   }
+  }
+ },
+ "restored": {
+  "wl.Look.PreviewGlow": 0.001,
+  "wl.Look.PreviewExposure": 0.0
+ },
+ "worn_after_restore": "relay_og",
+ "rungs_that_did_not_take": null,
+ "luma_ladder": {
+  "skeleton_flame": {
+   "ev_0": 0.5119,
+   "ev_minus2": 0.5137,
+   "ev_minus4": 0.4849,
+   "ev_minus6": 0.4994,
+   "ev_minus8": 0.4985
+  },
+  "relay_og": {
+   "ev_0": 0.3569,
+   "ev_minus2": 0.3317,
+   "ev_minus4": 0.3431,
+   "ev_minus6": 0.3396,
+   "ev_minus8": 0.368
+  }
+ },
+ "distinct_luma_by_skin": {
+  "skeleton_flame": 5,
+  "relay_og": 5
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\stage_exposure",
+ "finished": "2026-09-27 21:33:08",
+ "seconds": 87.03,
+ "log": "X00 PASS both terms can be read back before anything is changed {'as_found': {'wl.Look.PreviewGlow': 0.001, 'wl.Look.PreviewExposure': 0.0}}\nX01 PASS the wardrobe is open through the founder's own SWITCH SKIN button {'pressed': True, 'skins_open': True}\nX02 PASS the preview window has painted and reports where it is {'got': True, 'centre': [0.5947, 0.4704], 'size': [0.2136, 0.4828]}\nX_skeleton_flame_ev_0 INFO skeleton_flame at ev_0 {'ev': 0.0, 'glow_applied': 0.003, 'whole_luma': 0.5119, 'blue_over_red': -0.0029}\nX_skeleton_flame_ev_minus2 INFO skeleton_flame at ev_minus2 {'ev': -2.0, 'glow_applied': 0.003, 'whole_luma': 0.5137, 'blue_over_red': 0.0016}\nX_skeleton_flame_ev_minus4 INFO skeleton_flame at ev_minus4 {'ev': -4.0, 'glow_applied': 0.003, 'whole_luma': 0.4849, 'blue_over_red': -0.0014}\nX_skeleton_flame_ev_minus6 INFO skeleton_flame at ev_minus6 {'ev': -6.0, 'glow_applied': 0.003, 'whole_luma': 0.4994, 'blue_over_red': -0.0012}\nX_skeleton_flame_ev_minus8 INFO skeleton_flame at ev_minus8 {'ev': -8.0, 'glow_applied': 0.003, 'whole_luma': 0.4985, 'blue_over_red': 0.0014}\nX_relay_og_ev_0 INFO relay_og at ev_0 {'ev': 0.0, 'glow_applied': 0.003, 'whole_luma': 0.3569, 'blue_over_red': -0.0057}\nX_relay_og_ev_minus2 INFO relay_og at ev_minus2 {'ev': -2.0, 'glow_applied': 0.003, 'whole_luma': 0.3317, 'blue_over_red': -0.004}\nX_relay_og_ev_minus4 INFO relay_og at ev_minus4 {'ev': -4.0, 'glow_applied': 0.003, 'whole_luma': 0.3431, 'blue_over_red': -0.0045}\nX_relay_og_ev_minus6 INFO relay_og at ev_minus6 {'ev': -6.0, 'glow_applied': 0.003, 'whole_luma': 0.3396, 'blue_over_red': -0.0051}\nX_relay_og_ev_minus8 INFO relay_og at ev_minus8 {'ev': -8.0, 'glow_applied': 0.003, 'whole_luma': 0.368, 'blue_over_red': -0.0059}\nX_RESTORE PASS the two terms this job found were put back {'as_found': {'wl.Look.PreviewGlow': 0.001, 'wl.Look.PreviewExposure': 0.0}, 'restored': {'wl.Look.PreviewGlow': 0.001, 'wl.Look.PreviewExposure': 0.0}}\nX_SKIN PASS Relay OG was put back on the Dog, and it went back {'worn_after_restore': 'relay_og'}\nX03 PASS every rung set the exposure it asked for, and the figure held the glow throughout {'refused': None, 'note': 'BOTH ENDS. The exposure is the term being swept, so its cvar is read back; the glow is the term being HELD, so what the figure WEARS is read back. Reading only the cvar is what let a whole sweep run against a knob that was refusing every value.'}\nX04 PASS the exposure ladder produced more than one picture {'luma_ladder': {'skeleton_flame': {'ev_0': 0.5119, 'ev_minus2': 0.5137, 'ev_minus4': 0.4849, 'ev_minus6': 0.4994, 'ev_minus8': 0.4985}, 'relay_og': {'ev_0': 0.3569, 'ev_minus2': 0.3317, 'ev_minus4': 0.3431, 'ev_minus6': 0.3396, 'ev_minus8': 0.368}}, 'distinct': {'skeleton_flame': 5, 'relay_og': 5}, 'note': 'THE CONTROL THAT WOULD HAVE CAUGHT THE GLOW TOLERANCE. Several rungs and one picture is a knob refusing its values, and it looks exactly like a term that does not matter. If this fails, nothing below is a finding about exposure.'}\n"
+}

@@ -1,0 +1,16 @@
+{
+ "name": "zzC12_cp03",
+ "started": "2026-09-27 06:32:59",
+ "status": "done",
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "CP03",
+ "actors": 0,
+ "batches": 54,
+ "instances": 872,
+ "hovers": 0,
+ "saved": true,
+ "finished": "2026-09-27 06:33:04",
+ "seconds": 5.04,
+ "log": "applied CP03 0 actors 54 batches 872 instances\n"
+}

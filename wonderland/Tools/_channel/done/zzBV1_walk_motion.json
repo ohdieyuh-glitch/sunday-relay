@@ -1,0 +1,110 @@
+{
+ "name": "zzBV1_walk_motion",
+ "started": "2026-09-28 00:04:49",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "W_SKIN",
+   "name": "Relay OG was put back on the Dog",
+   "pass": true,
+   "detail": {
+    "worn": "relay_og"
+   }
+  },
+  {
+   "id": "W00",
+   "name": "every skin was walked and photographed",
+   "pass": true,
+   "detail": {
+    "measured": [
+     "apollo",
+     "arden_infernal",
+     "celestial_light",
+     "relay_og",
+     "skeleton_flame"
+    ],
+    "wanted": [
+     "apollo",
+     "arden_infernal",
+     "celestial_light",
+     "relay_og",
+     "skeleton_flame"
+    ]
+   }
+  },
+  {
+   "id": "W02",
+   "name": "Relay OG's own silhouette changes while walking, so the Dog really walked",
+   "pass": true,
+   "detail": {
+    "relay_og_change": 0.1809,
+    "floor": 0.004,
+    "note": "THE CONTROL. If the reference does not move, movement input never took and every skin below is a photograph of a standing Dog -- which is exactly how an earlier pose job passed every comparison it made."
+   }
+  },
+  {
+   "id": "W03",
+   "name": "every skin's visible outline moves about as much as Relay OG's",
+   "pass": true,
+   "detail": {
+    "change_by_skin": {
+     "relay_og": 0.1809,
+     "celestial_light": 0.1353,
+     "apollo": 0.2312,
+     "arden_infernal": 0.3097,
+     "skeleton_flame": 0.2603
+    },
+    "reference": 0.1809,
+    "floor_fraction": 0.55,
+    "quiet": null,
+    "note": "the founder's 'walk weird', asked of the thing they can actually see. A skin whose legs copy the stride perfectly but whose visible silhouette is rigid reads as GLIDING, and the two skins with floor-length body-parented drapery are the candidates."
+   }
+  }
+ ],
+ "bystanders_hidden": 2,
+ "walk": {
+  "relay_og": {
+   "frames": 10,
+   "mean_silhouette_change": 0.1809,
+   "max_change": 0.2837,
+   "figure_height_px": 622
+  },
+  "celestial_light": {
+   "frames": 10,
+   "mean_silhouette_change": 0.1353,
+   "max_change": 0.2477,
+   "figure_height_px": 702
+  },
+  "apollo": {
+   "frames": 10,
+   "mean_silhouette_change": 0.2312,
+   "max_change": 0.3073,
+   "figure_height_px": 702
+  },
+  "arden_infernal": {
+   "frames": 10,
+   "mean_silhouette_change": 0.3097,
+   "max_change": 0.42,
+   "figure_height_px": 702
+  },
+  "skeleton_flame": {
+   "frames": 10,
+   "mean_silhouette_change": 0.2603,
+   "max_change": 0.2914,
+   "figure_height_px": 702
+  }
+ },
+ "reference_change": 0.1809,
+ "silhouette_change_by_skin": {
+  "relay_og": 0.1809,
+  "celestial_light": 0.1353,
+  "apollo": 0.2312,
+  "arden_infernal": 0.3097,
+  "skeleton_flame": 0.2603
+ },
+ "skins_whose_outline_barely_moves": null,
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\walk_motion",
+ "finished": "2026-09-28 00:09:03",
+ "seconds": 253.88,
+ "log": "W_relay_og INFO relay_og {'frames': 10, 'mean_silhouette_change': 0.1809, 'max_change': 0.2837, 'figure_height_px': 622}\nW_celestial_light INFO celestial_light {'frames': 10, 'mean_silhouette_change': 0.1353, 'max_change': 0.2477, 'figure_height_px': 702}\nW_apollo INFO apollo {'frames': 10, 'mean_silhouette_change': 0.2312, 'max_change': 0.3073, 'figure_height_px': 702}\nW_arden_infernal INFO arden_infernal {'frames': 10, 'mean_silhouette_change': 0.3097, 'max_change': 0.42, 'figure_height_px': 702}\nW_skeleton_flame INFO skeleton_flame {'frames': 10, 'mean_silhouette_change': 0.2603, 'max_change': 0.2914, 'figure_height_px': 702}\nW_SKIN PASS Relay OG was put back on the Dog {'worn': 'relay_og'}\nW00 PASS every skin was walked and photographed {'measured': ['apollo', 'arden_infernal', 'celestial_light', 'relay_og', 'skeleton_flame'], 'wanted': ['apollo', 'arden_infernal', 'celestial_light', 'relay_og', 'skeleton_flame']}\nW01 INFO how much each skin's outline moves while walking {'relay_og': 0.1809, 'celestial_light': 0.1353, 'apollo': 0.2312, 'arden_infernal': 0.3097, 'skeleton_flame': 0.2603}\nW02 PASS Relay OG's own silhouette changes while walking, so the Dog really walked {'relay_og_change': 0.1809, 'floor': 0.004, 'note': 'THE CONTROL. If the reference does not move, movement input never took and every skin below is a photograph of a standing Dog -- which is exactly how an earlier pose job passed every comparison it made.'}\nW03 PASS every skin's visible outline moves about as much as Relay OG's {'change_by_skin': {'relay_og': 0.1809, 'celestial_light': 0.1353, 'apollo': 0.2312, 'arden_infernal': 0.3097, 'skeleton_flame': 0.2603}, 'reference': 0.1809, 'floor_fraction': 0.55, 'quiet': None, 'note': \"the founder's 'walk weird', asked of the thing they can actually see. A skin whose legs copy the stride perfectly but whose visible silhouette is rigid reads as GLIDING, and the two skins with floor-length body-parented drapery are the candidates.\"}\n"
+}

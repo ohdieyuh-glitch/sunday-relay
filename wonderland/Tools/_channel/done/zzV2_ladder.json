@@ -1,0 +1,442 @@
+{
+ "name": "zzV2_ladder",
+ "started": "2026-09-27 16:31:06",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "A00",
+   "name": "there are Project Avatar figures to spawn",
+   "pass": true,
+   "detail": {
+    "found": 10
+   }
+  },
+  {
+   "id": "A06",
+   "name": "the instrument repeats: one setting read five times disagrees LESS than the settings do",
+   "pass": true,
+   "detail": {
+    "rung_zero_spread": {
+     "reads": 8,
+     "lowest": 22.17,
+     "highest": 23.85,
+     "spread_ms": 1.68,
+     "note": "the median of these is what the ladder uses; the spread is what says whether it means anything"
+    },
+    "ladder_range_ms": 70.35,
+    "note": "five reads of an unchanged world. If they scatter as widely as the rungs, nothing below is a measurement of avatars -- it is a measurement of this machine. Every cause proposed for the unexplained 106.58 ms at one avatar was, until this ran, a single draw from an unchecked distribution."
+   }
+  },
+  {
+   "id": "A01",
+   "name": "every rung of the ladder was measured with the clock running",
+   "pass": true,
+   "detail": {
+    "rungs": [
+     "0",
+     "1",
+     "10",
+     "5"
+    ],
+    "steady_frame_median": {
+     "0": 22.17,
+     "1": 92.52,
+     "5": 28.27,
+     "10": 35.02
+    }
+   }
+  },
+  {
+   "id": "A02",
+   "name": "ten Project Avatars still hold a playable frame",
+   "pass": true,
+   "detail": {
+    "steady_ms": {
+     "0": 22.17,
+     "1": 92.52,
+     "5": 28.27,
+     "10": 35.02
+    },
+    "ceiling": 50.0
+   }
+  },
+  {
+   "id": "A05",
+   "name": "the ladder measured avatars and not the machine warming up",
+   "pass": true,
+   "detail": {
+    "one_avatar_ascending_ms": 92.52,
+    "one_avatar_descending_ms": 98.15,
+    "tolerance": 12.0,
+    "note": "the same crowd size measured twice in one session, once on the way up and once on the way down. A gap here means the first rung paid for shader compiles the later rungs did not, and every marginal cost derived from the ascending pass is worth nothing."
+   }
+  },
+  {
+   "id": "A03",
+   "name": "the cost per avatar does not grow as the crowd does",
+   "pass": false,
+   "detail": {
+    "marginal_ms_per_avatar": {
+     "1st": 70.35,
+     "2nd-5th each": -16.06,
+     "6th-10th each": 1.35
+    },
+    "tolerance": 2.5,
+    "note": "the founder: 'Project Avatars must scale inside one Server Avatar.' A system that scales charges about the same for the tenth as for the second; one that does not charges more."
+   }
+  },
+  {
+   "id": "A04",
+   "name": "arriving avatars do not stall the frame",
+   "pass": false,
+   "detail": {
+    "impossible_negative": null,
+    "p95_during_spawn": {
+     "1": 95.5,
+     "5": 119.74,
+     "10": 29.9
+    },
+    "p95_quiet": 25.04,
+    "over_quiet_ms": {
+     "1": 70.46,
+     "5": 94.7,
+     "10": 4.86
+    },
+    "ceiling": 45.0,
+    "note": "the 95th percentile, not the max: one unrelated shader compile inside a spawn window would otherwise be charged to the avatar, and this project has already read a spawn as SAVING 468 ms for exactly that reason."
+   }
+  }
+ ],
+ "avatar_files": 10,
+ "rung_zero_repeats": [
+  {
+   "frames": 257,
+   "frame_median": 23.85,
+   "raw_p95": 28.75,
+   "raw_worst": 31.74,
+   "raw_median": 23.93,
+   "raw_game_p95": 28.27,
+   "raw_gpu_p95": 19.7,
+   "game_median": 23.82,
+   "render_median": 20.15,
+   "gpu_median": 18.68,
+   "accounted_fraction": 0.999,
+   "unaccounted_ms": 0.03,
+   "foreground": false
+  },
+  {
+   "frames": 258,
+   "frame_median": 23.2,
+   "raw_p95": 26.81,
+   "raw_worst": 31.1,
+   "raw_median": 22.72,
+   "raw_game_p95": 25.33,
+   "raw_gpu_p95": 19.89,
+   "game_median": 23.22,
+   "render_median": 17.61,
+   "gpu_median": 18.97,
+   "accounted_fraction": 1.001,
+   "unaccounted_ms": -0.02,
+   "foreground": false
+  },
+  {
+   "frames": 265,
+   "frame_median": 23.09,
+   "raw_p95": 26.81,
+   "raw_worst": 30.12,
+   "raw_median": 22.56,
+   "raw_game_p95": 24.75,
+   "raw_gpu_p95": 20.5,
+   "game_median": 23.14,
+   "render_median": 17.62,
+   "gpu_median": 19.4,
+   "accounted_fraction": 1.002,
+   "unaccounted_ms": -0.05,
+   "foreground": false
+  },
+  {
+   "frames": 262,
+   "frame_median": 23.21,
+   "raw_p95": 25.02,
+   "raw_worst": 33.64,
+   "raw_median": 22.73,
+   "raw_game_p95": 25.38,
+   "raw_gpu_p95": 20.91,
+   "game_median": 22.87,
+   "render_median": 18.34,
+   "gpu_median": 19.41,
+   "accounted_fraction": 0.985,
+   "unaccounted_ms": 0.34,
+   "foreground": false
+  },
+  {
+   "frames": 266,
+   "frame_median": 22.17,
+   "raw_p95": 25.04,
+   "raw_worst": 35.86,
+   "raw_median": 22.92,
+   "raw_game_p95": 24.48,
+   "raw_gpu_p95": 20.86,
+   "game_median": 21.46,
+   "render_median": 21.35,
+   "gpu_median": 19.91,
+   "accounted_fraction": 0.968,
+   "unaccounted_ms": 0.71,
+   "foreground": false
+  },
+  {
+   "frames": 266,
+   "frame_median": 22.56,
+   "raw_p95": 25.41,
+   "raw_worst": 32.24,
+   "raw_median": 23.77,
+   "raw_game_p95": 25.35,
+   "raw_gpu_p95": 20.26,
+   "game_median": 22.54,
+   "render_median": 18.41,
+   "gpu_median": 19.63,
+   "accounted_fraction": 0.999,
+   "unaccounted_ms": 0.02,
+   "foreground": false
+  },
+  {
+   "frames": 259,
+   "frame_median": 23.09,
+   "raw_p95": 25.95,
+   "raw_worst": 42.86,
+   "raw_median": 22.13,
+   "raw_game_p95": 26.25,
+   "raw_gpu_p95": 20.47,
+   "game_median": 23.07,
+   "render_median": 18.24,
+   "gpu_median": 19.5,
+   "accounted_fraction": 0.999,
+   "unaccounted_ms": 0.02,
+   "foreground": false
+  },
+  {
+   "frames": 265,
+   "frame_median": 22.86,
+   "raw_p95": 25.49,
+   "raw_worst": 33.5,
+   "raw_median": 21.73,
+   "raw_game_p95": 25.66,
+   "raw_gpu_p95": 20.52,
+   "game_median": 22.58,
+   "render_median": 20.16,
+   "gpu_median": 19.69,
+   "accounted_fraction": 0.988,
+   "unaccounted_ms": 0.28,
+   "foreground": false
+  }
+ ],
+ "rung_zero_series": [
+  23.85,
+  23.2,
+  23.09,
+  23.21,
+  22.17,
+  22.56,
+  23.09,
+  22.86
+ ],
+ "rung_zero_warmup_reads": 0,
+ "rungs": {
+  "0": {
+   "steady": {
+    "frames": 266,
+    "frame_median": 22.17,
+    "raw_p95": 25.04,
+    "raw_worst": 35.86,
+    "raw_median": 22.92,
+    "raw_game_p95": 24.48,
+    "raw_gpu_p95": 20.86,
+    "game_median": 21.46,
+    "render_median": 21.35,
+    "gpu_median": 19.91,
+    "accounted_fraction": 0.968,
+    "unaccounted_ms": 0.71,
+    "foreground": false
+   }
+  },
+  "1": {
+   "spawning": {
+    "frames": 46,
+    "frame_median": 49.42,
+    "raw_p95": 95.5,
+    "raw_worst": 270.89,
+    "raw_median": 63.15,
+    "raw_game_p95": 25.29,
+    "raw_gpu_p95": 30.33,
+    "game_median": 23.67,
+    "render_median": 46.37,
+    "gpu_median": 20.15,
+    "accounted_fraction": 0.938,
+    "unaccounted_ms": 3.05,
+    "foreground": false,
+    "reads": 46
+   },
+   "steady": {
+    "frames": 68,
+    "frame_median": 92.52,
+    "raw_p95": 103.63,
+    "raw_worst": 108.29,
+    "raw_median": 98.71,
+    "raw_game_p95": 21.42,
+    "raw_gpu_p95": 24.32,
+    "game_median": 18.68,
+    "render_median": 92.6,
+    "gpu_median": 21.69,
+    "accounted_fraction": 1.001,
+    "unaccounted_ms": -0.08,
+    "foreground": false,
+    "reads": 68
+   }
+  },
+  "5": {
+   "spawning": {
+    "frames": 326,
+    "frame_median": 28.05,
+    "raw_p95": 119.74,
+    "raw_worst": 545.82,
+    "raw_median": 26.85,
+    "raw_game_p95": 31.47,
+    "raw_gpu_p95": 24.59,
+    "game_median": 26.93,
+    "render_median": 27.05,
+    "gpu_median": 20.52,
+    "accounted_fraction": 0.964,
+    "unaccounted_ms": 1.0,
+    "foreground": false,
+    "reads": 326
+   },
+   "steady": {
+    "frames": 211,
+    "frame_median": 28.27,
+    "raw_p95": 32.88,
+    "raw_worst": 36.66,
+    "raw_median": 27.53,
+    "raw_game_p95": 31.58,
+    "raw_gpu_p95": 22.06,
+    "game_median": 27.96,
+    "render_median": 28.08,
+    "gpu_median": 20.39,
+    "accounted_fraction": 0.993,
+    "unaccounted_ms": 0.19,
+    "foreground": false,
+    "reads": 211
+   }
+  },
+  "10": {
+   "spawning": {
+    "frames": 483,
+    "frame_median": 29.69,
+    "raw_p95": 29.9,
+    "raw_worst": 29.9,
+    "raw_median": 29.9,
+    "raw_game_p95": 27.83,
+    "raw_gpu_p95": 20.73,
+    "game_median": 29.08,
+    "render_median": 29.85,
+    "gpu_median": 19.95,
+    "accounted_fraction": 1.005,
+    "unaccounted_ms": -0.16,
+    "foreground": false,
+    "reads": 483
+   },
+   "steady": {
+    "frames": 167,
+    "frame_median": 35.02,
+    "raw_p95": 40.41,
+    "raw_worst": 85.78,
+    "raw_median": 34.59,
+    "raw_game_p95": 39.03,
+    "raw_gpu_p95": 20.73,
+    "game_median": 34.82,
+    "render_median": 28.75,
+    "gpu_median": 19.08,
+    "accounted_fraction": 0.994,
+    "unaccounted_ms": 0.2,
+    "foreground": false,
+    "reads": 167
+   }
+  }
+ },
+ "rung_zero_spread": {
+  "reads": 8,
+  "lowest": 22.17,
+  "highest": 23.85,
+  "spread_ms": 1.68,
+  "note": "the median of these is what the ladder uses; the spread is what says whether it means anything"
+ },
+ "descending": {
+  "5": {
+   "frames": 184,
+   "frame_median": 34.32,
+   "raw_p95": 39.35,
+   "raw_worst": 47.08,
+   "raw_median": 32.4,
+   "raw_game_p95": 39.37,
+   "raw_gpu_p95": 22.01,
+   "game_median": 34.35,
+   "render_median": 34.07,
+   "gpu_median": 19.62,
+   "accounted_fraction": 1.001,
+   "unaccounted_ms": -0.03,
+   "foreground": false
+  },
+  "1": {
+   "frames": 62,
+   "frame_median": 98.15,
+   "raw_p95": 107.15,
+   "raw_worst": 123.31,
+   "raw_median": 91.64,
+   "raw_game_p95": 23.07,
+   "raw_gpu_p95": 22.89,
+   "game_median": 20.78,
+   "render_median": 98.12,
+   "gpu_median": 20.79,
+   "accounted_fraction": 1.0,
+   "unaccounted_ms": 0.03,
+   "foreground": false
+  }
+ },
+ "one_avatar_up_vs_down": {
+  "up": 92.52,
+  "down": 98.15
+ },
+ "_ladder_range_ms": 70.35,
+ "marginal_ms_per_avatar": {
+  "1st": 70.35,
+  "2nd-5th each": -16.06,
+  "6th-10th each": 1.35
+ },
+ "steady_ms": {
+  "0": 22.17,
+  "1": 92.52,
+  "5": 28.27,
+  "10": 35.02
+ },
+ "warm_up_confounded": false,
+ "spawn_p95_ms": {
+  "1": 95.5,
+  "5": 119.74,
+  "10": 29.9
+ },
+ "quiet_p95_ms": 25.04,
+ "hitch_over_quiet_ms": {
+  "1": 70.46,
+  "5": 94.7,
+  "10": 4.86
+ },
+ "impossible_hitches": null,
+ "verdict": {
+  "medians": "readable: the machine repeats more closely than the avatars cost",
+  "tails": "readable from this build onward: p95 and worst now come from RawFrameTime, where one expensive frame is one row. Every tail this job published before build 16:19 came from a ten-frame exponential average and could not represent a spike.",
+  "what_a_hitch_needs": "the raw tails, not the medians. A median answers 'what does it cost'; the founder asked 'why does it stutter', which only the tail can answer."
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\avatar_ladder",
+ "finished": "2026-09-27 16:33:53",
+ "seconds": 167.54,
+ "log": "A00 PASS there are Project Avatar figures to spawn {'found': 10}\nA_0 INFO 0 avatars, five reads {'reads': 8, 'lowest': 22.17, 'highest': 23.85, 'spread_ms': 1.68, 'note': 'the median of these is what the ladder uses; the spread is what says whether it means anything'}\nA_1 INFO 1 avatars {'frames': 68, 'frame_median': 92.52, 'raw_p95': 103.63, 'raw_worst': 108.29, 'raw_median': 98.71, 'raw_game_p95': 21.42, 'raw_gpu_p95': 24.32, 'game_median': 18.68, 'render_median': 92.6, 'gpu_median': 21.69, 'accounted_fraction': 1.001, 'unaccounted_ms': -0.08, 'foreground': False, 'reads': 68}\nA_5 INFO 5 avatars {'frames': 211, 'frame_median': 28.27, 'raw_p95': 32.88, 'raw_worst': 36.66, 'raw_median': 27.53, 'raw_game_p95': 31.58, 'raw_gpu_p95': 22.06, 'game_median': 27.96, 'render_median': 28.08, 'gpu_median': 20.39, 'accounted_fraction': 0.993, 'unaccounted_ms': 0.19, 'foreground': False, 'reads': 211}\nA_10 INFO 10 avatars {'frames': 167, 'frame_median': 35.02, 'raw_p95': 40.41, 'raw_worst': 85.78, 'raw_median': 34.59, 'raw_game_p95': 39.03, 'raw_gpu_p95': 20.73, 'game_median': 34.82, 'render_median': 28.75, 'gpu_median': 19.08, 'accounted_fraction': 0.994, 'unaccounted_ms': 0.2, 'foreground': False, 'reads': 167}\nA_DOWN_5 INFO 5 avatars, coming back down {'frames': 184, 'frame_median': 34.32, 'raw_p95': 39.35, 'raw_worst': 47.08, 'raw_median': 32.4, 'raw_game_p95': 39.37, 'raw_gpu_p95': 22.01, 'game_median': 34.35, 'render_median': 34.07, 'gpu_median': 19.62, 'accounted_fraction': 1.001, 'unaccounted_ms': -0.03, 'foreground': False}\nA_DOWN_1 INFO 1 avatars, coming back down {'frames': 62, 'frame_median': 98.15, 'raw_p95': 107.15, 'raw_worst': 123.31, 'raw_median': 91.64, 'raw_game_p95': 23.07, 'raw_gpu_p95': 22.89, 'game_median': 20.78, 'render_median': 98.12, 'gpu_median': 20.79, 'accounted_fraction': 1.0, 'unaccounted_ms': 0.03, 'foreground': False}\nA06 PASS the instrument repeats: one setting read five times disagrees LESS than the settings do {'rung_zero_spread': {'reads': 8, 'lowest': 22.17, 'highest': 23.85, 'spread_ms': 1.68, 'note': 'the median of these is what the ladder uses; the spread is what says whether it means anything'}, 'ladder_range_ms': 70.35, 'note': 'five reads of an unchanged world. If they scatter as widely as the rungs, nothing below is a measurement of avatars -- it is a measurement of this machine. Every cause proposed for the unexplained 106.58 ms at one avatar was, until this ran, a single draw from an unchecked distribution.'}\nA01 PASS every rung of the ladder was measured with the clock running {'rungs': ['0', '1', '10', '5'], 'steady_frame_median': {'0': 22.17, '1': 92.52, '5': 28.27, '10': 35.02}}\nA_MARGINAL INFO what one more avatar costs {'1st': 70.35, '2nd-5th each': -16.06, '6th-10th each': 1.35}\nA02 PASS ten Project Avatars still hold a playable frame {'steady_ms': {'0': 22.17, '1': 92.52, '5': 28.27, '10': 35.02}, 'ceiling': 50.0}\nA05 PASS the ladder measured avatars and not the machine warming up {'one_avatar_ascending_ms': 92.52, 'one_avatar_descending_ms': 98.15, 'tolerance': 12.0, 'note': 'the same crowd size measured twice in one session, once on the way up and once on the way down. A gap here means the first rung paid for shader compiles the later rungs did not, and every marginal cost derived from the ascending pass is worth nothing.'}\nA03 FAIL the cost per avatar does not grow as the crowd does {'marginal_ms_per_avatar': {'1st': 70.35, '2nd-5th each': -16.06, '6th-10th each': 1.35}, 'tolerance': 2.5, 'note': \"the founder: 'Project Avatars must scale inside one Server Avatar.' A system that scales charges about the same for the tenth as for the second; one that does not charges more.\"}\nA04 FAIL arriving avatars do not stall the frame {'impossible_negative': None, 'p95_during_spawn': {'1': 95.5, '5': 119.74, '10': 29.9}, 'p95_quiet': 25.04, 'over_quiet_ms': {'1': 70.46, '5': 94.7, '10': 4.86}, 'ceiling': 45.0, 'note': 'the 95th percentile, not the max: one unrelated shader compile inside a spawn window would otherwise be charged to the avatar, and this project has already read a spawn as SAVING 468 ms for exactly that reason.'}\n"
+}

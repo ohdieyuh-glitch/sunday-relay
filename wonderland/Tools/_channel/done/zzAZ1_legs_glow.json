@@ -1,0 +1,198 @@
+{
+ "name": "zzAZ1_legs_glow",
+ "started": "2026-09-27 22:18:43",
+ "status": "VOID: the lamp switch did not change the picture",
+ "tests": [
+  {
+   "id": "L_READ",
+   "name": "the stage lamp level can be read back before anything is changed",
+   "pass": true,
+   "detail": {
+    "lights": 0.04
+   }
+  },
+  {
+   "id": "L_RESTORE",
+   "name": "the lamp level this job found was put back",
+   "pass": true,
+   "detail": {
+    "as_found": 0.04,
+    "restored": 0.04
+   }
+  },
+  {
+   "id": "L_SKIN",
+   "name": "Relay OG was put back on the Dog, and it went back",
+   "pass": true,
+   "detail": {
+    "worn": "relay_og"
+   }
+  },
+  {
+   "id": "L_READABLE",
+   "name": "the figure was found against the backdrop in both frames",
+   "pass": true,
+   "detail": {
+    "on_box": [
+     1014,
+     238,
+     1256,
+     584
+    ],
+    "off_box": [
+     1028,
+     236,
+     1272,
+     572
+    ],
+    "on_pct": [
+     66.1,
+     86.1
+    ],
+    "off_pct": [
+     66.7,
+     83.6
+    ]
+   }
+  },
+  {
+   "id": "L00",
+   "name": "turning the stage lamps off actually darkened the figure",
+   "pass": false,
+   "detail": {
+    "torso_lamps_on": 0.6604,
+    "torso_lamps_off": 0.7651,
+    "drop": -0.1047,
+    "read_back_off": 0.0,
+    "note": "THE CONTROL. If the switch does nothing, everything below compares one condition with itself -- which is exactly what a fixed tolerance on SetGlowScale produced earlier tonight, where four rungs photographed one picture and it read as a finding about the stage."
+   }
+  }
+ ],
+ "as_found_lights": 0.04,
+ "preview_rect": {
+  "centre": [
+   0.5947,
+   0.4704
+  ],
+  "size": [
+   0.2136,
+   0.4828
+  ]
+ },
+ "frames": {
+  "lamps_on": {
+   "asked": 0.04,
+   "read_back": 0.04,
+   "measured": {
+    "figure_box": [
+     1014,
+     238,
+     1256,
+     584
+    ],
+    "figure_pct_of_window": [
+     66.1,
+     86.1
+    ],
+    "torso": {
+     "mean": 0.6604,
+     "lit_fraction": 0.9863,
+     "dark_but_lit_fraction": 0.293,
+     "cells": 2263,
+     "box": [
+      1062,
+      355,
+      1207,
+      417
+     ]
+    },
+    "legs": {
+     "mean": 0.82,
+     "lit_fraction": 0.964,
+     "dark_but_lit_fraction": 0.073,
+     "cells": 1891,
+     "box": [
+      1074,
+      452,
+      1195,
+      514
+     ]
+    },
+    "feet": {
+     "mean": 0.6624,
+     "lit_fraction": 0.8511,
+     "dark_but_lit_fraction": 0.0066,
+     "cells": 1525,
+     "box": [
+      1074,
+      528,
+      1195,
+      577
+     ]
+    }
+   }
+  },
+  "lamps_off": {
+   "asked": 0.0,
+   "read_back": 0.0,
+   "measured": {
+    "figure_box": [
+     1028,
+     236,
+     1272,
+     572
+    ],
+    "figure_pct_of_window": [
+     66.7,
+     83.6
+    ],
+    "torso": {
+     "mean": 0.7651,
+     "lit_fraction": 0.905,
+     "dark_but_lit_fraction": 0.0167,
+     "cells": 2220,
+     "box": [
+      1076,
+      350,
+      1223,
+      410
+     ]
+    },
+    "legs": {
+     "mean": 0.7584,
+     "lit_fraction": 0.9246,
+     "dark_but_lit_fraction": 0.0115,
+     "cells": 1830,
+     "box": [
+      1089,
+      444,
+      1211,
+      504
+     ]
+    },
+    "feet": {
+     "mean": 0.5472,
+     "lit_fraction": 0.7268,
+     "dark_but_lit_fraction": 0.0246,
+     "cells": 1464,
+     "box": [
+      1089,
+      518,
+      1211,
+      565
+     ]
+    }
+   }
+  }
+ },
+ "restored_lights": 0.04,
+ "lamp_switch": {
+  "torso_lamps_on": 0.6604,
+  "torso_lamps_off": 0.7651,
+  "drop": -0.1047,
+  "read_back_off": 0.0
+ },
+ "finished": "2026-09-27 22:19:28",
+ "seconds": 44.5,
+ "log": "L_READ PASS the stage lamp level can be read back before anything is changed {'lights': 0.04}\nL_lamps_on INFO lamps_on {'lights': 0.04, 'figure_pct': [66.1, 86.1], 'legs': 0.82}\nL_lamps_off INFO lamps_off {'lights': 0.0, 'figure_pct': [66.7, 83.6], 'legs': 0.7584}\nL_RESTORE PASS the lamp level this job found was put back {'as_found': 0.04, 'restored': 0.04}\nL_SKIN PASS Relay OG was put back on the Dog, and it went back {'worn': 'relay_og'}\nL_READABLE PASS the figure was found against the backdrop in both frames {'on_box': [1014, 238, 1256, 584], 'off_box': [1028, 236, 1272, 572], 'on_pct': [66.1, 86.1], 'off_pct': [66.7, 83.6]}\nL00 FAIL turning the stage lamps off actually darkened the figure {'torso_lamps_on': 0.6604, 'torso_lamps_off': 0.7651, 'drop': -0.1047, 'read_back_off': 0.0, 'note': 'THE CONTROL. If the switch does nothing, everything below compares one condition with itself -- which is exactly what a fixed tolerance on SetGlowScale produced earlier tonight, where four rungs photographed one picture and it read as a finding about the stage.'}\n"
+}

@@ -1,0 +1,24 @@
+{
+ "name": "zzW11_cp02",
+ "started": "2026-09-27 07:55:19",
+ "status": "done",
+ "map_dirty_before": [
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/73/B1476H0BKN1KAR8EYVMT2Q",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/MO/0PL2A64N84Z83CD3B3GU9O",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/ST/GE6Y1Y5EW093SGYP0ZQVK5",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/FP/8FDAJUJT7RYA97N96EEKXM",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/GN/O2BF08T3TPOZUI9WX8AXGE",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/WX/0L8UMA074T3I1H1XI8K56N",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/4/Q6/1ES7G32Y6EPEU7FD0UDJ74",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/B/YM/8YIG0JCVEEO26TNTF1WJYU"
+ ],
+ "removed": 0,
+ "pass": "CP02",
+ "actors": 0,
+ "batches": 54,
+ "instances": 872,
+ "hovers": 0,
+ "finished": "2026-09-27 07:55:21",
+ "seconds": 1.38,
+ "log": "applied CP02 0 actors 54 batches 872 instances\n"
+}

@@ -1,0 +1,223 @@
+{
+ "name": "zzZ6_eyes",
+ "started": "2026-09-27 17:44:35",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "E00",
+   "name": "this build carries the eye spacing controls",
+   "pass": true,
+   "detail": {
+    "settings": {
+     "wl.Dog.EyeSpread": 0.0,
+     "wl.Dog.EyeGap": 0.30000001192092896
+    },
+    "note": "an editor built before the fix reports neither cvar, and every profile below would then describe the OLD eyes while reading as a result for the new ones."
+   }
+  },
+  {
+   "id": "E_DISTINCT",
+   "name": "each capture is a different picture",
+   "pass": true,
+   "detail": {
+    "files": 30,
+    "distinct": 30,
+    "note": "thirty byte-identical PNGs passed a clause that counted files. In simulate mode there is no player camera, so the skins, the hour and the camera all changed and the photograph did not. A run whose pictures are all the same photographed the editor, not the game."
+   }
+  },
+  {
+   "id": "E01",
+   "name": "every skin was photographed at every hour and distance the founder listed",
+   "pass": true,
+   "detail": {
+    "taken": 30,
+    "wanted": 30,
+    "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\eye_split"
+   }
+  },
+  {
+   "id": "E02",
+   "name": "Relay OG shows a dark gap between two eyes at every hour and distance",
+   "pass": false,
+   "detail": {
+    "trough_over_dimmer_peak": {
+     "day/close": null,
+     "day/gameplay": null,
+     "dusk/close": null,
+     "dusk/gameplay": null,
+     "night/close": null,
+     "night/gameplay": null
+    },
+    "ceiling": 0.45,
+    "note": "the darkest point between the two brightest peaks, as a fraction of the dimmer peak. This cannot be passed by dimming the eyes: lowering both peaks lowers the trough with them and leaves the ratio unchanged, which is the failure the founder named explicitly."
+   }
+  },
+  {
+   "id": "E03",
+   "name": "the two eyes are symmetrical about the centreline",
+   "pass": false,
+   "detail": {
+    "symmetry": {
+     "day/close": null,
+     "day/gameplay": null,
+     "dusk/close": null,
+     "dusk/gameplay": null,
+     "night/close": null,
+     "night/gameplay": null
+    },
+    "floor": 0.7,
+    "note": "the dimmer peak over the brighter. The founder asked for them kept 'perfectly symmetrical around the visor/head centerline', and a lit figure photographed from slightly off-axis will never read 1.000, so this asks whether one eye is materially dimmer than the other."
+   }
+  },
+  {
+   "id": "E04",
+   "name": "no other skin merges its eyes into one mass",
+   "pass": false,
+   "detail": {
+    "per_skin": {
+     "skeleton_flame": {
+      "worst_gap_ratio": null,
+      "worst_at": null,
+      "merges": false
+     },
+     "apollo": {
+      "worst_gap_ratio": null,
+      "worst_at": null,
+      "merges": false
+     },
+     "arden_infernal": {
+      "worst_gap_ratio": null,
+      "worst_at": null,
+      "merges": false
+     },
+     "celestial_light": {
+      "worst_gap_ratio": null,
+      "worst_at": null,
+      "merges": false
+     }
+    },
+    "merging": null,
+    "measured": [],
+    "wanted": 4,
+    "ceiling": 0.45,
+    "note": "reported, not corrected. The founder's instruction is to inspect the others and not to redesign the ones that are already right, so this names the ones that are not."
+   }
+  }
+ ],
+ "settings": {
+  "wl.Dog.EyeSpread": 0.0,
+  "wl.Dog.EyeGap": 0.30000001192092896
+ },
+ "readings": {},
+ "capture_hashes": {
+  "eyes_relay_og_day_close.png": "f8d45419325300769d3fb570c20c91c1",
+  "eyes_relay_og_day_gameplay.png": "84751259bf599611ab09b68570de9dc8",
+  "eyes_relay_og_dusk_close.png": "f85ec7c5271e0b1d73c60f2065631c16",
+  "eyes_relay_og_dusk_gameplay.png": "4db0f7cd6fa9c58c0c2d80a499c91cd4",
+  "eyes_relay_og_night_close.png": "8c39e0f2a57ae61e2d075693064c2632",
+  "eyes_relay_og_night_gameplay.png": "6f8ece4179ce078219a7e5953b119269",
+  "eyes_skeleton_flame_day_close.png": "11eb1f7dfa0327c65cb744eea0918698",
+  "eyes_skeleton_flame_day_gameplay.png": "da1cfe53de63b1445c4d5dc6351926c4",
+  "eyes_skeleton_flame_dusk_close.png": "1963dd786b4020cd90780c4ef4fdd5c6",
+  "eyes_skeleton_flame_dusk_gameplay.png": "20a0e818987a4a149079ecf3db369711",
+  "eyes_skeleton_flame_night_close.png": "2e510f6060904d404905d59f293809f5",
+  "eyes_skeleton_flame_night_gameplay.png": "45f2f34400d41a76e09415d4518d66ae",
+  "eyes_apollo_day_close.png": "4e9967c1cfffaacd1a9849314bb4b66e",
+  "eyes_apollo_day_gameplay.png": "a8de635ccfe74f2d01c153d81bef962a",
+  "eyes_apollo_dusk_close.png": "01279327f8d3b5f5fc7824bee153280e",
+  "eyes_apollo_dusk_gameplay.png": "0f51e8e7191142cf5adf44e2f5f3a8a7",
+  "eyes_apollo_night_close.png": "68406333ca12a883e76f954bf0b56f4e",
+  "eyes_apollo_night_gameplay.png": "1c37e07bf9372ce8c85044102e0efb66",
+  "eyes_arden_infernal_day_close.png": "738b37981ee7a074818dfbd51cd0ab15",
+  "eyes_arden_infernal_day_gameplay.png": "f0507fe7d9652a1c9002ded58277a0e9",
+  "eyes_arden_infernal_dusk_close.png": "14a88610c1f0f5df0a3e258c8a833e65",
+  "eyes_arden_infernal_dusk_gameplay.png": "1074b5174217773074035b51064a23a9",
+  "eyes_arden_infernal_night_close.png": "f7b766ba1cc9bf8cb5d5d14fe15db7d1",
+  "eyes_arden_infernal_night_gameplay.png": "556e3e903743f7e360c490d312a5426c",
+  "eyes_celestial_light_day_close.png": "54ca8776c5233f697940e1a35e45baa0",
+  "eyes_celestial_light_day_gameplay.png": "f3ca33bffb1d024366b8506c1154c199",
+  "eyes_celestial_light_dusk_close.png": "213adaaf5a30edd14f3077230f2ed4a8",
+  "eyes_celestial_light_dusk_gameplay.png": "2f7c4936095bc9aae502599e9aa0bb03",
+  "eyes_celestial_light_night_close.png": "f1edd501835626f5777407cdf2eb8620",
+  "eyes_celestial_light_night_gameplay.png": "fc393ca23f17abfa3fad08b9dec3d6a7"
+ },
+ "errors": {
+  "relay_og/day/close": "name 'math' is not defined",
+  "relay_og/day/gameplay": "name 'math' is not defined",
+  "relay_og/dusk/close": "name 'math' is not defined",
+  "relay_og/dusk/gameplay": "name 'math' is not defined",
+  "relay_og/night/close": "name 'math' is not defined",
+  "relay_og/night/gameplay": "name 'math' is not defined",
+  "skeleton_flame/day/close": "name 'math' is not defined",
+  "skeleton_flame/day/gameplay": "name 'math' is not defined",
+  "skeleton_flame/dusk/close": "name 'math' is not defined",
+  "skeleton_flame/dusk/gameplay": "name 'math' is not defined",
+  "skeleton_flame/night/close": "name 'math' is not defined",
+  "skeleton_flame/night/gameplay": "name 'math' is not defined",
+  "apollo/day/close": "name 'math' is not defined",
+  "apollo/day/gameplay": "name 'math' is not defined",
+  "apollo/dusk/close": "name 'math' is not defined",
+  "apollo/dusk/gameplay": "name 'math' is not defined",
+  "apollo/night/close": "name 'math' is not defined",
+  "apollo/night/gameplay": "name 'math' is not defined",
+  "arden_infernal/day/close": "name 'math' is not defined",
+  "arden_infernal/day/gameplay": "name 'math' is not defined",
+  "arden_infernal/dusk/close": "name 'math' is not defined",
+  "arden_infernal/dusk/gameplay": "name 'math' is not defined",
+  "arden_infernal/night/close": "name 'math' is not defined",
+  "arden_infernal/night/gameplay": "name 'math' is not defined",
+  "celestial_light/day/close": "name 'math' is not defined",
+  "celestial_light/day/gameplay": "name 'math' is not defined",
+  "celestial_light/dusk/close": "name 'math' is not defined",
+  "celestial_light/dusk/gameplay": "name 'math' is not defined",
+  "celestial_light/night/close": "name 'math' is not defined",
+  "celestial_light/night/gameplay": "name 'math' is not defined"
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\eye_split",
+ "distinct_captures": {
+  "files": 30,
+  "distinct": 30
+ },
+ "relay_og_gap": {
+  "day/close": null,
+  "day/gameplay": null,
+  "dusk/close": null,
+  "dusk/gameplay": null,
+  "night/close": null,
+  "night/gameplay": null
+ },
+ "relay_og_symmetry": {
+  "day/close": null,
+  "day/gameplay": null,
+  "dusk/close": null,
+  "dusk/gameplay": null,
+  "night/close": null,
+  "night/gameplay": null
+ },
+ "other_skins": {
+  "skeleton_flame": {
+   "worst_gap_ratio": null,
+   "worst_at": null,
+   "merges": false
+  },
+  "apollo": {
+   "worst_gap_ratio": null,
+   "worst_at": null,
+   "merges": false
+  },
+  "arden_infernal": {
+   "worst_gap_ratio": null,
+   "worst_at": null,
+   "merges": false
+  },
+  "celestial_light": {
+   "worst_gap_ratio": null,
+   "worst_at": null,
+   "merges": false
+  }
+ },
+ "skins_that_merge": null,
+ "finished": "2026-09-27 17:48:46",
+ "seconds": 250.89,
+ "log": "E00 PASS this build carries the eye spacing controls {'settings': {'wl.Dog.EyeSpread': 0.0, 'wl.Dog.EyeGap': 0.30000001192092896}, 'note': 'an editor built before the fix reports neither cvar, and every profile below would then describe the OLD eyes while reading as a result for the new ones.'}\nE_relay_og INFO relay_og eye profiles {}\nE_skeleton_flame INFO skeleton_flame eye profiles {}\nE_apollo INFO apollo eye profiles {}\nE_arden_infernal INFO arden_infernal eye profiles {}\nE_celestial_light INFO celestial_light eye profiles {}\nE_DISTINCT PASS each capture is a different picture {'files': 30, 'distinct': 30, 'note': 'thirty byte-identical PNGs passed a clause that counted files. In simulate mode there is no player camera, so the skins, the hour and the camera all changed and the photograph did not. A run whose pictures are all the same photographed the editor, not the game.'}\nE01 PASS every skin was photographed at every hour and distance the founder listed {'taken': 30, 'wanted': 30, 'where': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\eye_split'}\nE02 FAIL Relay OG shows a dark gap between two eyes at every hour and distance {'trough_over_dimmer_peak': {'day/close': None, 'day/gameplay': None, 'dusk/close': None, 'dusk/gameplay': None, 'night/close': None, 'night/gameplay': None}, 'ceiling': 0.45, 'note': 'the darkest point between the two brightest peaks, as a fraction of the dimmer peak. This cannot be passed by dimming the eyes: lowering both peaks lowers the trough with them and leaves the ratio unchanged, which is the failure the founder named explicitly.'}\nE03 FAIL the two eyes are symmetrical about the centreline {'symmetry': {'day/close': None, 'day/gameplay': None, 'dusk/close': None, 'dusk/gameplay': None, 'night/close': None, 'night/gameplay': None}, 'floor': 0.7, 'note': \"the dimmer peak over the brighter. The founder asked for them kept 'perfectly symmetrical around the visor/head centerline', and a lit figure photographed from slightly off-axis will never read 1.000, so this asks whether one eye is materially dimmer than the other.\"}\nE04 FAIL no other skin merges its eyes into one mass {'per_skin': {'skeleton_flame': {'worst_gap_ratio': None, 'worst_at': None, 'merges': False}, 'apollo': {'worst_gap_ratio': None, 'worst_at': None, 'merges': False}, 'arden_infernal': {'worst_gap_ratio': None, 'worst_at': None, 'merges': False}, 'celestial_light': {'worst_gap_ratio': None, 'worst_at': None, 'merges': False}}, 'merging': None, 'measured': [], 'wanted': 4, 'ceiling': 0.45, 'note': \"reported, not corrected. The founder's instruction is to inspect the others and not to redesign the ones that are already right, so this names the ones that are not.\"}\n"
+}

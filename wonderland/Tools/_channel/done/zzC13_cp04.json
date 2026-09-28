@@ -1,0 +1,16 @@
+{
+ "name": "zzC13_cp04",
+ "started": "2026-09-27 06:33:06",
+ "status": "done",
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "CP04",
+ "actors": 0,
+ "batches": 53,
+ "instances": 874,
+ "hovers": 0,
+ "saved": true,
+ "finished": "2026-09-27 06:33:11",
+ "seconds": 4.5,
+ "log": "applied CP04 0 actors 53 batches 874 instances\n"
+}

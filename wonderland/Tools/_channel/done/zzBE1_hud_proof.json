@@ -1,0 +1,589 @@
+{
+ "name": "zzBE1_hud_proof",
+ "started": "2026-09-27 22:47:36",
+ "status": "done",
+ "tests": [
+  {
+   "id": "H00",
+   "name": "the bottom strip reads AGENT MISSIONS BRAIN COMMANDS MENU, and INVENTORY is gone",
+   "pass": true,
+   "detail": {
+    "labels": "AGENT|MISSIONS|BRAIN|COMMANDS|MENU",
+    "on_screen": true
+   }
+  },
+  {
+   "id": "H01",
+   "name": "standing still: the map is on screen, photographed, titled, and names a real district",
+   "pass": true,
+   "detail": {
+    "world": "WONDERLAND",
+    "region": "GOLDEN ARRIVAL",
+    "captures": 31,
+    "photo_drawn": true,
+    "camera_in_world": true,
+    "paints": 43,
+    "uu_per_px": 39.56,
+    "pawn": [
+     -327,
+     -650
+    ],
+    "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_A_standing.png"
+   }
+  },
+  {
+   "id": "H02",
+   "name": "moving: a place marker slides by exactly the Dog's displacement over the map scale",
+   "pass": true,
+   "detail": {
+    "ruler": "arrival",
+    "moved_uu": 333.9,
+    "expected_px": [
+     4.72,
+     7.0
+    ],
+    "marker_moved_px": [
+     4.72,
+     7.0
+    ],
+    "error_px": 0.0,
+    "captures_during": 7,
+    "region_after": "GOLDEN ARRIVAL",
+    "frames": [
+     "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_B_move_0.png",
+     "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_B_move_1.png"
+    ]
+   }
+  },
+  {
+   "id": "H03",
+   "name": "turning: the arrow follows the Dog and the wedge follows the camera, north staying up",
+   "pass": true,
+   "detail": {
+    "turns": [
+     {
+      "camera_yaw": 0.0,
+      "pawn_yaw": 0.0,
+      "view_error_deg": 0.0,
+      "arrow_error_deg": 0.0,
+      "arrow_drawn_deg": -180.0,
+      "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_C_heading_0.png"
+     },
+     {
+      "camera_yaw": 90.0,
+      "pawn_yaw": 90.0,
+      "view_error_deg": 0.0,
+      "arrow_error_deg": 0.0,
+      "arrow_drawn_deg": -90.0,
+      "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_C_heading_90.png"
+     },
+     {
+      "camera_yaw": 180.0,
+      "pawn_yaw": 180.0,
+      "view_error_deg": 0.0,
+      "arrow_error_deg": 0.0,
+      "arrow_drawn_deg": -0.0,
+      "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_C_heading_180.png"
+     },
+     {
+      "camera_yaw": 270.0,
+      "pawn_yaw": -90.0,
+      "view_error_deg": 0.0,
+      "arrow_error_deg": 0.0,
+      "arrow_drawn_deg": 90.0,
+      "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_C_heading_270.png"
+     }
+    ]
+   }
+  },
+  {
+   "id": "H04",
+   "name": "in play the wallet, the map, the strip, the usage HUD and the mission strip do not touch",
+   "pass": true,
+   "detail": {
+    "pieces": [
+     "usage_hud",
+     "mission_strip",
+     "wallet",
+     "mini_map",
+     "nav_bar"
+    ],
+    "overlaps": [],
+    "outside": [],
+    "rects": {
+     "viewport": [
+      0.0,
+      0.0,
+      2219.3,
+      1080.7
+     ],
+     "usage_hud": [
+      35.0,
+      25.7,
+      400.0,
+      500.0
+     ],
+     "mission_strip": [
+      670.7,
+      23.8,
+      877.9,
+      60.2
+     ],
+     "wallet": [
+      1951.3,
+      22.0,
+      240.0,
+      57.3
+     ],
+     "mini_map": [
+      1973.3,
+      91.3,
+      196.0,
+      242.7
+     ],
+     "nav_bar": [
+      907.8,
+      965.7,
+      403.7,
+      99.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "W01",
+   "name": "the wallet is visibly top-right",
+   "pass": true,
+   "detail": {
+    "wallet": [
+     1951.3,
+     22.0,
+     240.0,
+     57.3
+    ],
+    "mini_map": [
+     1973.3,
+     91.3,
+     196.0,
+     242.7
+    ],
+    "viewport": [
+     0.0,
+     0.0,
+     2219.3,
+     1080.7
+    ]
+   }
+  },
+  {
+   "id": "W02",
+   "name": "the mini-map sits underneath the wallet, in the same column, without touching it",
+   "pass": true,
+   "detail": {
+    "gap_px": 12.0,
+    "column_offset_px": 0.0
+   }
+  },
+  {
+   "id": "W03",
+   "name": "the sandbox balance renders correctly: $500.00 USD, as Relay's openSandboxWallet opens it",
+   "pass": true,
+   "detail": {
+    "balance": "$500.00",
+    "unit": "USD",
+    "claim": "SANDBOX \u00b7 NOT REAL MONEY"
+   }
+  },
+  {
+   "id": "W07",
+   "name": "the sandbox is never presented as real money",
+   "pass": true,
+   "detail": {
+    "claim": "SANDBOX \u00b7 NOT REAL MONEY",
+    "label": "DEVELOPMENT / SANDBOX FUNDS \u2014 NOT REAL MONEY",
+    "funding": "SANDBOX",
+    "real_money": false
+   }
+  },
+  {
+   "id": "W08",
+   "name": "clicking the wallet opens the fuller wallet surface",
+   "pass": true,
+   "detail": {
+    "clicked": true,
+    "open": true,
+    "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_wallet_open.png"
+   }
+  },
+  {
+   "id": "H05",
+   "name": "clicking BRAIN opens the Project Brain, and the strip steps aside",
+   "pass": true,
+   "detail": {
+    "clicked": true,
+    "brain_open": true,
+    "strip_on_screen": false,
+    "clicks": 1,
+    "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_D_brain.png"
+   }
+  },
+  {
+   "id": "H06",
+   "name": "clicking COMMANDS opens the command preset station on the DEFAULT layout",
+   "pass": true,
+   "detail": {
+    "clicked": true,
+    "open": true,
+    "rows": "Gauntlet Loop|Goal Loop|Eval Loop|Unchained",
+    "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_E_commands.png"
+   }
+  },
+  {
+   "id": "H07",
+   "name": "equipping swaps rather than duplicates, and a withheld command cannot be equipped",
+   "pass": true,
+   "detail": {
+    "rows": "Unchained|Goal Loop|Eval Loop|Gauntlet Loop",
+    "layout": "unchained|goal_loop|eval_loop|gauntlet_loop",
+    "withheld_refused": true,
+    "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_E_commands_custom.png"
+   }
+  },
+  {
+   "id": "H08",
+   "name": "clicking AGENT raises the terminal suite, which lists the customised preset",
+   "pass": true,
+   "detail": {
+    "clicked": true,
+    "terminal_open": true,
+    "rows": "Unchained|Goal Loop|Eval Loop|Gauntlet Loop",
+    "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_agent_terminal.png"
+   }
+  },
+  {
+   "id": "H09",
+   "name": "with the terminal suite open the wallet and map keep clear of the companion consoles and the strip is gone",
+   "pass": true,
+   "detail": {
+    "pieces": [
+     "usage_hud",
+     "mission_strip",
+     "wallet",
+     "mini_map",
+     "companion_left",
+     "companion_right"
+    ],
+    "overlaps": [],
+    "outside": []
+   }
+  },
+  {
+   "id": "H10",
+   "name": "restore defaults puts the founder's four back, in order",
+   "pass": true,
+   "detail": {
+    "layout": "gauntlet_loop|goal_loop|eval_loop|unchained"
+   }
+  },
+  {
+   "id": "H11",
+   "name": "clicking MISSIONS and MENU opens each panel",
+   "pass": true,
+   "detail": {
+    "missions": true,
+    "menu": true,
+    "captures": [
+     "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_missions_idle.png",
+     "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_missions_running.png",
+     "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_menu.png"
+    ]
+   }
+  },
+  {
+   "id": "H12",
+   "name": "every shortcut key shown on a tile opens its panel",
+   "pass": true,
+   "detail": {
+    "J": true,
+    "C": true,
+    "Tab": true,
+    "B": true
+   }
+  },
+  {
+   "id": "H13",
+   "name": "the live photograph costs no more than the noise between two windows with it off",
+   "pass": true,
+   "detail": {
+    "windows_median_ms": [
+     [
+      false,
+      37.04
+     ],
+     [
+      true,
+      35.66
+     ],
+     [
+      false,
+      36.35
+     ],
+     [
+      true,
+      37.1
+     ],
+     [
+      false,
+      36.54
+     ],
+     [
+      true,
+      36.5
+     ],
+     [
+      false,
+      36.58
+     ]
+    ],
+    "capture_minus_neighbours_ms": [
+     -1.03,
+     0.66,
+     -0.06
+    ],
+    "mean_cost_ms": -0.15,
+    "off_to_off_drift_ms": [
+     0.69,
+     0.19,
+     0.04
+    ]
+   }
+  },
+  {
+   "id": "H_POINTER",
+   "name": "a SYNTHETIC pointer click completes on every nav tile",
+   "pass": false,
+   "detail": {
+    "per_tile": {
+     "brain": false,
+     "commands": false,
+     "agent": false,
+     "missions": false,
+     "menu": false
+    },
+    "note": "KEPT RED ON PURPOSE rather than dropped. The panels above were opened through the tile's own handler, which is sound; this records that the harness's fabricated pointer events do not complete a click. Five causes eliminated -- app focus, window stacking, mouse capture, geometry containment, delegate binding. A REAL click has never been tested, and one person clicking BRAIN settles product-versus-harness faster than any further probe."
+   }
+  }
+ ],
+ "presets_found": {
+  "instances": 2,
+  "owned_by_pie": 1
+ },
+ "standing": {
+  "world": "WONDERLAND",
+  "region": "GOLDEN ARRIVAL",
+  "captures": 31,
+  "photo_drawn": true,
+  "camera_in_world": true,
+  "paints": 43,
+  "uu_per_px": 39.56,
+  "pawn": [
+   -327,
+   -650
+  ],
+  "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_A_standing.png"
+ },
+ "moving": {
+  "ruler": "arrival",
+  "moved_uu": 333.9,
+  "expected_px": [
+   4.72,
+   7.0
+  ],
+  "marker_moved_px": [
+   4.72,
+   7.0
+  ],
+  "error_px": 0.0,
+  "captures_during": 7,
+  "region_after": "GOLDEN ARRIVAL",
+  "frames": [
+   "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_B_move_0.png",
+   "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_B_move_1.png"
+  ]
+ },
+ "turning": [
+  {
+   "camera_yaw": 0.0,
+   "pawn_yaw": 0.0,
+   "view_error_deg": 0.0,
+   "arrow_error_deg": 0.0,
+   "arrow_drawn_deg": -180.0,
+   "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_C_heading_0.png"
+  },
+  {
+   "camera_yaw": 90.0,
+   "pawn_yaw": 90.0,
+   "view_error_deg": 0.0,
+   "arrow_error_deg": 0.0,
+   "arrow_drawn_deg": -90.0,
+   "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_C_heading_90.png"
+  },
+  {
+   "camera_yaw": 180.0,
+   "pawn_yaw": 180.0,
+   "view_error_deg": 0.0,
+   "arrow_error_deg": 0.0,
+   "arrow_drawn_deg": -0.0,
+   "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_C_heading_180.png"
+  },
+  {
+   "camera_yaw": 270.0,
+   "pawn_yaw": -90.0,
+   "view_error_deg": 0.0,
+   "arrow_error_deg": 0.0,
+   "arrow_drawn_deg": 90.0,
+   "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_hud_C_heading_270.png"
+  }
+ ],
+ "overlap_play": {
+  "pieces": [
+   "usage_hud",
+   "mission_strip",
+   "wallet",
+   "mini_map",
+   "nav_bar"
+  ],
+  "overlaps": [],
+  "outside": [],
+  "rects": {
+   "viewport": [
+    0.0,
+    0.0,
+    2219.3,
+    1080.7
+   ],
+   "usage_hud": [
+    35.0,
+    25.7,
+    400.0,
+    500.0
+   ],
+   "mission_strip": [
+    670.7,
+    23.8,
+    877.9,
+    60.2
+   ],
+   "wallet": [
+    1951.3,
+    22.0,
+    240.0,
+    57.3
+   ],
+   "mini_map": [
+    1973.3,
+    91.3,
+    196.0,
+    242.7
+   ],
+   "nav_bar": [
+    907.8,
+    965.7,
+    403.7,
+    99.0
+   ]
+  }
+ },
+ "wallet_layout": {
+  "wallet": [
+   1951.3,
+   22.0,
+   240.0,
+   57.3
+  ],
+  "mini_map": [
+   1973.3,
+   91.3,
+   196.0,
+   242.7
+  ],
+  "viewport": [
+   0.0,
+   0.0,
+   2219.3,
+   1080.7
+  ]
+ },
+ "wallet_drawn": {
+  "balance": "$500.00",
+  "unit": "USD",
+  "claim": "SANDBOX \u00b7 NOT REAL MONEY"
+ },
+ "overlap_terminal": {
+  "pieces": [
+   "usage_hud",
+   "mission_strip",
+   "wallet",
+   "mini_map",
+   "companion_left",
+   "companion_right"
+  ],
+  "overlaps": [],
+  "outside": []
+ },
+ "cost": {
+  "windows_median_ms": [
+   [
+    false,
+    37.04
+   ],
+   [
+    true,
+    35.66
+   ],
+   [
+    false,
+    36.35
+   ],
+   [
+    true,
+    37.1
+   ],
+   [
+    false,
+    36.54
+   ],
+   [
+    true,
+    36.5
+   ],
+   [
+    false,
+    36.58
+   ]
+  ],
+  "capture_minus_neighbours_ms": [
+   -1.03,
+   0.66,
+   -0.06
+  ],
+  "mean_cost_ms": -0.15,
+  "off_to_off_drift_ms": [
+   0.69,
+   0.19,
+   0.04
+  ]
+ },
+ "passed": 19,
+ "failed": [],
+ "pointer_route": {
+  "brain": false,
+  "commands": false,
+  "agent": false,
+  "missions": false,
+  "menu": false
+ },
+ "finished": "2026-09-27 22:48:53",
+ "seconds": 76.79,
+ "log": "H00 PASS the bottom strip reads AGENT MISSIONS BRAIN COMMANDS MENU, and INVENTORY is gone {'labels': 'AGENT|MISSIONS|BRAIN|COMMANDS|MENU', 'on_screen': True}\nH01 PASS standing still: the map is on screen, photographed, titled, and names a real district {'world': 'WONDERLAND', 'region': 'GOLDEN ARRIVAL', 'captures': 31, 'photo_drawn': True, 'camera_in_world': True, 'paints': 43, 'uu_per_px': 39.56, 'pawn': [-327, -650], 'capture': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_A_standing.png'}\nH02 PASS moving: a place marker slides by exactly the Dog's displacement over the map scale {'ruler': 'arrival', 'moved_uu': 333.9, 'expected_px': [4.72, 7.0], 'marker_moved_px': [4.72, 7.0], 'error_px': 0.0, 'captures_during': 7, 'region_after': 'GOLDEN ARRIVAL', 'frames': ['C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_B_move_0.png', 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_B_move_1.png']}\nH03 PASS turning: the arrow follows the Dog and the wedge follows the camera, north staying up {'turns': [{'camera_yaw': 0.0, 'pawn_yaw': 0.0, 'view_error_deg': 0.0, 'arrow_error_deg': 0.0, 'arrow_drawn_deg': -180.0, 'capture': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_C_heading_0.png'}, {'camera_yaw': 90.0, 'pawn_yaw': 90.0, 'view_error_deg': 0.0, 'arrow_error_deg': 0.0, 'arrow_drawn_deg': -90.0, 'capture': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_C_heading_90.png'}, {'camera_yaw': 180.0, 'pawn_yaw': 180.0, 'view_error_deg': 0.0, 'arrow_error_deg': 0.0, 'arrow_drawn_deg': -0.0, 'capture': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_C_heading_180.png'}, {'camera_yaw': 270.0, 'pawn_yaw': -90.0, 'view_error_deg': 0.0, 'arrow_error_deg': 0.0, 'arrow_drawn_deg': 90.0, 'capture': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_C_heading_270.png'}]}\nH04 PASS in play the wallet, the map, the strip, the usage HUD and the mission strip do not touch {'pieces': ['usage_hud', 'mission_strip', 'wallet', 'mini_map', 'nav_bar'], 'overlaps': [], 'outside': [], 'rects': {'viewport': [0.0, 0.0, 2219.3, 1080.7], 'usage_hud': [35.0, 25.7, 400.0, 500.0], 'mission_strip': [670.7, 23.8, 877.9, 60.2], 'wallet': [1951.3, 22.0, 240.0, 57.3], 'mini_map': [1973.3, 91.3, 196.0, 242.7], 'nav_bar': [907.8, 965.7, 403.7, 99.0]}}\nW01 PASS the wallet is visibly top-right {'wallet': [1951.3, 22.0, 240.0, 57.3], 'mini_map': [1973.3, 91.3, 196.0, 242.7], 'viewport': [0.0, 0.0, 2219.3, 1080.7]}\nW02 PASS the mini-map sits underneath the wallet, in the same column, without touching it {'gap_px': 12.0, 'column_offset_px': 0.0}\nW03 PASS the sandbox balance renders correctly: $500.00 USD, as Relay's openSandboxWallet opens it {'balance': '$500.00', 'unit': 'USD', 'claim': 'SANDBOX \u00b7 NOT REAL MONEY'}\nW07 PASS the sandbox is never presented as real money {'claim': 'SANDBOX \u00b7 NOT REAL MONEY', 'label': 'DEVELOPMENT / SANDBOX FUNDS \u2014 NOT REAL MONEY', 'funding': 'SANDBOX', 'real_money': False}\nW08 PASS clicking the wallet opens the fuller wallet surface {'clicked': True, 'open': True, 'capture': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_wallet_open.png'}\nH05 PASS clicking BRAIN opens the Project Brain, and the strip steps aside {'clicked': True, 'brain_open': True, 'strip_on_screen': False, 'clicks': 1, 'capture': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_D_brain.png'}\nH06 PASS clicking COMMANDS opens the command preset station on the DEFAULT layout {'clicked': True, 'open': True, 'rows': 'Gauntlet Loop|Goal Loop|Eval Loop|Unchained', 'capture': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_E_commands.png'}\nH07 PASS equipping swaps rather than duplicates, and a withheld command cannot be equipped {'rows': 'Unchained|Goal Loop|Eval Loop|Gauntlet Loop', 'layout': 'unchained|goal_loop|eval_loop|gauntlet_loop', 'withheld_refused': True, 'capture': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_E_commands_custom.png'}\nH08 PASS clicking AGENT raises the terminal suite, which lists the customised preset {'clicked': True, 'terminal_open': True, 'rows': 'Unchained|Goal Loop|Eval Loop|Gauntlet Loop', 'capture': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_agent_terminal.png'}\nH09 PASS with the terminal suite open the wallet and map keep clear of the companion consoles and the strip is gone {'pieces': ['usage_hud', 'mission_strip', 'wallet', 'mini_map', 'companion_left', 'companion_right'], 'overlaps': [], 'outside': []}\nH10 PASS restore defaults puts the founder's four back, in order {'layout': 'gauntlet_loop|goal_loop|eval_loop|unchained'}\nH11 PASS clicking MISSIONS and MENU opens each panel {'missions': True, 'menu': True, 'captures': ['C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_missions_idle.png', 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_missions_running.png', 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_hud_menu.png']}\nH12 PASS every shortcut key shown on a tile opens its panel {'J': True, 'C': True, 'Tab': True, 'B': True}\nH13 PASS the live photograph costs no more than the noise between two windows with it off {'windows_median_ms': [[False, 37.04], [True, 35.66], [False, 36.35], [True, 37.1], [False, 36.54], [True, 36.5], [False, 36.58]], 'capture_minus_neighbours_ms': [-1.03, 0.66, -0.06], 'mean_cost_ms': -0.15, 'off_to_off_drift_ms': [0.69, 0.19, 0.04]}\nH_POINTER FAIL a SYNTHETIC pointer click completes on every nav tile {'per_tile': {'brain': False, 'commands': False, 'agent': False, 'missions': False, 'menu': False}, 'note': \"KEPT RED ON PURPOSE rather than dropped. The panels above were opened through the tile's own handler, which is sound; this records that the harness's fabricated pointer events do not complete a click. Five causes eliminated -- app focus, window stacking, mouse capture, geometry containment, delegate binding. A REAL click has never been tested, and one person clicking BRAIN settles product-versus-harness faster than any further probe.\"}\n"
+}

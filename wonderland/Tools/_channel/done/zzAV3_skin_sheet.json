@@ -1,0 +1,359 @@
+{
+ "name": "zzAV3_skin_sheet",
+ "started": "2026-09-27 21:46:05",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "W00",
+   "name": "six views of every skin were exported",
+   "pass": true,
+   "detail": {
+    "exported": 48,
+    "wanted": 48
+   }
+  },
+  {
+   "id": "W01",
+   "name": "every view holds a figure filling the founder's band",
+   "pass": false,
+   "detail": {
+    "out_of_band": {
+     "apollo_v1 front": 73.5,
+     "arden_infernal_v1 front": 71.2,
+     "arden_infernal front": 75.4
+    },
+    "front_band": [
+     76.0,
+     94.0
+    ],
+    "rotated_band": [
+     66.0,
+     99.0
+    ]
+   }
+  },
+  {
+   "id": "W02",
+   "name": "no view is a white shape: the figure is mostly NOT pinned at white",
+   "pass": false,
+   "detail": {
+    "pinned": {
+     "apollo_v1 front": 0.713,
+     "apollo_v1 front34": 0.711,
+     "apollo_v1 left": 0.684,
+     "apollo_v1 back34": 0.713,
+     "apollo_v1 back": 0.696,
+     "apollo_v1 right": 0.706
+    },
+    "ceiling": 0.35,
+    "note": "the wardrobe's own picture of the glow re-baseline. Before it, Skeleton Flame's HIGH frames measured 68-80% of the figure over luma 140 from this same stage."
+   }
+  }
+ ],
+ "views": {
+  "relay_og front": "relay_og__front.png",
+  "relay_og front34": "relay_og__front34.png",
+  "relay_og left": "relay_og__left.png",
+  "relay_og back34": "relay_og__back34.png",
+  "relay_og back": "relay_og__back.png",
+  "relay_og right": "relay_og__right.png",
+  "celestial_light front": "celestial_light__front.png",
+  "celestial_light front34": "celestial_light__front34.png",
+  "celestial_light left": "celestial_light__left.png",
+  "celestial_light back34": "celestial_light__back34.png",
+  "celestial_light back": "celestial_light__back.png",
+  "celestial_light right": "celestial_light__right.png",
+  "apollo_v1 front": "apollo_v1__front.png",
+  "apollo_v1 front34": "apollo_v1__front34.png",
+  "apollo_v1 left": "apollo_v1__left.png",
+  "apollo_v1 back34": "apollo_v1__back34.png",
+  "apollo_v1 back": "apollo_v1__back.png",
+  "apollo_v1 right": "apollo_v1__right.png",
+  "apollo front": "apollo__front.png",
+  "apollo front34": "apollo__front34.png",
+  "apollo left": "apollo__left.png",
+  "apollo back34": "apollo__back34.png",
+  "apollo back": "apollo__back.png",
+  "apollo right": "apollo__right.png",
+  "arden_infernal_v1 front": "arden_infernal_v1__front.png",
+  "arden_infernal_v1 front34": "arden_infernal_v1__front34.png",
+  "arden_infernal_v1 left": "arden_infernal_v1__left.png",
+  "arden_infernal_v1 back34": "arden_infernal_v1__back34.png",
+  "arden_infernal_v1 back": "arden_infernal_v1__back.png",
+  "arden_infernal_v1 right": "arden_infernal_v1__right.png",
+  "arden_infernal front": "arden_infernal__front.png",
+  "arden_infernal front34": "arden_infernal__front34.png",
+  "arden_infernal left": "arden_infernal__left.png",
+  "arden_infernal back34": "arden_infernal__back34.png",
+  "arden_infernal back": "arden_infernal__back.png",
+  "arden_infernal right": "arden_infernal__right.png",
+  "skeleton_flame_v1 front": "skeleton_flame_v1__front.png",
+  "skeleton_flame_v1 front34": "skeleton_flame_v1__front34.png",
+  "skeleton_flame_v1 left": "skeleton_flame_v1__left.png",
+  "skeleton_flame_v1 back34": "skeleton_flame_v1__back34.png",
+  "skeleton_flame_v1 back": "skeleton_flame_v1__back.png",
+  "skeleton_flame_v1 right": "skeleton_flame_v1__right.png",
+  "skeleton_flame front": "skeleton_flame__front.png",
+  "skeleton_flame front34": "skeleton_flame__front34.png",
+  "skeleton_flame left": "skeleton_flame__left.png",
+  "skeleton_flame back34": "skeleton_flame__back34.png",
+  "skeleton_flame back": "skeleton_flame__back.png",
+  "skeleton_flame right": "skeleton_flame__right.png"
+ },
+ "framing": {
+  "relay_og": "onBody=1 bodyTall=52.0 bodyWide=30.6 rawTall=52.0 rawWide=30.6 envelope=155 scale=0.329 fill=0.80 glow=0.0002 fitTall=85 fitWide=63 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "celestial_light": "onBody=1 bodyTall=52.0 bodyWide=34.6 rawTall=52.0 rawWide=34.6 envelope=199 scale=0.325 fill=0.80 glow=0.0002 fitTall=85 fitWide=71 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "apollo_v1": "onBody=1 bodyTall=32.8 bodyWide=47.2 rawTall=32.8 rawWide=47.2 envelope=284 scale=0.145 fill=0.80 glow=0.0002 fitTall=54 fitWide=97 distance=67 fov=34.0 target=640x800 predictedHeightPct=64.0",
+  "apollo": "onBody=1 bodyTall=52.0 bodyWide=31.2 rawTall=52.0 rawWide=31.2 envelope=246 scale=0.331 fill=0.80 glow=0.0002 fitTall=85 fitWide=64 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "arden_infernal_v1": "onBody=1 bodyTall=52.0 bodyWide=31.4 rawTall=52.0 rawWide=31.4 envelope=399 scale=0.234 fill=0.80 glow=0.0002 fitTall=85 fitWide=64 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "arden_infernal": "onBody=1 bodyTall=52.0 bodyWide=33.5 rawTall=52.0 rawWide=33.5 envelope=365 scale=0.239 fill=0.80 glow=0.0002 fitTall=85 fitWide=68 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "skeleton_flame_v1": "onBody=1 bodyTall=52.0 bodyWide=35.8 rawTall=52.0 rawWide=35.8 envelope=268 scale=0.328 fill=0.80 glow=0.0002 fitTall=85 fitWide=73 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "skeleton_flame": "onBody=1 bodyTall=52.0 bodyWide=39.9 rawTall=52.0 rawWide=39.9 envelope=226 scale=0.328 fill=0.80 glow=0.0002 fitTall=85 fitWide=81 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0"
+ },
+ "measured": {
+  "relay_og front": {
+   "height_pct": 82.1,
+   "pinned_fraction": 0.011,
+   "subject_px": 13625
+  },
+  "relay_og front34": {
+   "height_pct": 81.4,
+   "pinned_fraction": 0.013,
+   "subject_px": 14592
+  },
+  "relay_og left": {
+   "height_pct": 80.2,
+   "pinned_fraction": 0.011,
+   "subject_px": 14013
+  },
+  "relay_og back34": {
+   "height_pct": 82.9,
+   "pinned_fraction": 0.014,
+   "subject_px": 14384
+  },
+  "relay_og back": {
+   "height_pct": 81.0,
+   "pinned_fraction": 0.01,
+   "subject_px": 14426
+  },
+  "relay_og right": {
+   "height_pct": 82.5,
+   "pinned_fraction": 0.014,
+   "subject_px": 13670
+  },
+  "celestial_light front": {
+   "height_pct": 90.4,
+   "pinned_fraction": 0.007,
+   "subject_px": 23697
+  },
+  "celestial_light front34": {
+   "height_pct": 93.4,
+   "pinned_fraction": 0.008,
+   "subject_px": 25101
+  },
+  "celestial_light left": {
+   "height_pct": 89.6,
+   "pinned_fraction": 0.007,
+   "subject_px": 24233
+  },
+  "celestial_light back34": {
+   "height_pct": 89.6,
+   "pinned_fraction": 0.009,
+   "subject_px": 23957
+  },
+  "celestial_light back": {
+   "height_pct": 93.4,
+   "pinned_fraction": 0.007,
+   "subject_px": 25579
+  },
+  "celestial_light right": {
+   "height_pct": 88.9,
+   "pinned_fraction": 0.008,
+   "subject_px": 23274
+  },
+  "apollo_v1 front": {
+   "height_pct": 73.5,
+   "pinned_fraction": 0.713,
+   "subject_px": 20712
+  },
+  "apollo_v1 front34": {
+   "height_pct": 75.4,
+   "pinned_fraction": 0.711,
+   "subject_px": 21520
+  },
+  "apollo_v1 left": {
+   "height_pct": 77.6,
+   "pinned_fraction": 0.684,
+   "subject_px": 21718
+  },
+  "apollo_v1 back34": {
+   "height_pct": 78.4,
+   "pinned_fraction": 0.713,
+   "subject_px": 21693
+  },
+  "apollo_v1 back": {
+   "height_pct": 78.4,
+   "pinned_fraction": 0.696,
+   "subject_px": 22635
+  },
+  "apollo_v1 right": {
+   "height_pct": 73.9,
+   "pinned_fraction": 0.706,
+   "subject_px": 21411
+  },
+  "apollo front": {
+   "height_pct": 91.5,
+   "pinned_fraction": 0.071,
+   "subject_px": 42751
+  },
+  "apollo front34": {
+   "height_pct": 91.5,
+   "pinned_fraction": 0.121,
+   "subject_px": 40931
+  },
+  "apollo left": {
+   "height_pct": 93.8,
+   "pinned_fraction": 0.062,
+   "subject_px": 42247
+  },
+  "apollo back34": {
+   "height_pct": 88.5,
+   "pinned_fraction": 0.112,
+   "subject_px": 39810
+  },
+  "apollo back": {
+   "height_pct": 94.9,
+   "pinned_fraction": 0.076,
+   "subject_px": 42827
+  },
+  "apollo right": {
+   "height_pct": 92.6,
+   "pinned_fraction": 0.117,
+   "subject_px": 41930
+  },
+  "arden_infernal_v1 front": {
+   "height_pct": 71.2,
+   "pinned_fraction": 0.082,
+   "subject_px": 21887
+  },
+  "arden_infernal_v1 front34": {
+   "height_pct": 94.9,
+   "pinned_fraction": 0.148,
+   "subject_px": 19591
+  },
+  "arden_infernal_v1 left": {
+   "height_pct": 72.0,
+   "pinned_fraction": 0.04,
+   "subject_px": 20789
+  },
+  "arden_infernal_v1 back34": {
+   "height_pct": 91.9,
+   "pinned_fraction": 0.086,
+   "subject_px": 19201
+  },
+  "arden_infernal_v1 back": {
+   "height_pct": 94.5,
+   "pinned_fraction": 0.063,
+   "subject_px": 20118
+  },
+  "arden_infernal_v1 right": {
+   "height_pct": 71.6,
+   "pinned_fraction": 0.088,
+   "subject_px": 22246
+  },
+  "arden_infernal front": {
+   "height_pct": 75.4,
+   "pinned_fraction": 0.079,
+   "subject_px": 26615
+  },
+  "arden_infernal front34": {
+   "height_pct": 91.5,
+   "pinned_fraction": 0.055,
+   "subject_px": 23232
+  },
+  "arden_infernal left": {
+   "height_pct": 69.8,
+   "pinned_fraction": 0.02,
+   "subject_px": 23682
+  },
+  "arden_infernal back34": {
+   "height_pct": 73.9,
+   "pinned_fraction": 0.065,
+   "subject_px": 25550
+  },
+  "arden_infernal back": {
+   "height_pct": 68.2,
+   "pinned_fraction": 0.068,
+   "subject_px": 24032
+  },
+  "arden_infernal right": {
+   "height_pct": 72.8,
+   "pinned_fraction": 0.06,
+   "subject_px": 25619
+  },
+  "skeleton_flame_v1 front": {
+   "height_pct": 93.8,
+   "pinned_fraction": 0.014,
+   "subject_px": 29662
+  },
+  "skeleton_flame_v1 front34": {
+   "height_pct": 90.4,
+   "pinned_fraction": 0.116,
+   "subject_px": 28238
+  },
+  "skeleton_flame_v1 left": {
+   "height_pct": 90.0,
+   "pinned_fraction": 0.001,
+   "subject_px": 27330
+  },
+  "skeleton_flame_v1 back34": {
+   "height_pct": 95.2,
+   "pinned_fraction": 0.067,
+   "subject_px": 29162
+  },
+  "skeleton_flame_v1 back": {
+   "height_pct": 90.0,
+   "pinned_fraction": 0.126,
+   "subject_px": 29176
+  },
+  "skeleton_flame_v1 right": {
+   "height_pct": 93.0,
+   "pinned_fraction": 0.038,
+   "subject_px": 27934
+  },
+  "skeleton_flame front": {
+   "height_pct": 92.6,
+   "pinned_fraction": 0.001,
+   "subject_px": 23466
+  },
+  "skeleton_flame front34": {
+   "height_pct": 91.9,
+   "pinned_fraction": 0.078,
+   "subject_px": 23012
+  },
+  "skeleton_flame left": {
+   "height_pct": 89.2,
+   "pinned_fraction": 0.024,
+   "subject_px": 21583
+  },
+  "skeleton_flame back34": {
+   "height_pct": 90.8,
+   "pinned_fraction": 0.019,
+   "subject_px": 22753
+  },
+  "skeleton_flame back": {
+   "height_pct": 91.1,
+   "pinned_fraction": 0.081,
+   "subject_px": 22787
+  },
+  "skeleton_flame right": {
+   "height_pct": 91.9,
+   "pinned_fraction": 0.001,
+   "subject_px": 23187
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\skin_sheet",
+ "finished": "2026-09-27 21:48:56",
+ "seconds": 171.52,
+ "log": "W_relay_og INFO six views exported {'skin': 'relay_og'}\nW_celestial_light INFO six views exported {'skin': 'celestial_light'}\nW_apollo_v1 INFO six views exported {'skin': 'apollo_v1'}\nW_apollo INFO six views exported {'skin': 'apollo'}\nW_arden_infernal_v1 INFO six views exported {'skin': 'arden_infernal_v1'}\nW_arden_infernal INFO six views exported {'skin': 'arden_infernal'}\nW_skeleton_flame_v1 INFO six views exported {'skin': 'skeleton_flame_v1'}\nW_skeleton_flame INFO six views exported {'skin': 'skeleton_flame'}\nW00 PASS six views of every skin were exported {'exported': 48, 'wanted': 48}\nW01 FAIL every view holds a figure filling the founder's band {'out_of_band': {'apollo_v1 front': 73.5, 'arden_infernal_v1 front': 71.2, 'arden_infernal front': 75.4}, 'front_band': (76.0, 94.0), 'rotated_band': (66.0, 99.0)}\nW02 FAIL no view is a white shape: the figure is mostly NOT pinned at white {'pinned': {'apollo_v1 front': 0.713, 'apollo_v1 front34': 0.711, 'apollo_v1 left': 0.684, 'apollo_v1 back34': 0.713, 'apollo_v1 back': 0.696, 'apollo_v1 right': 0.706}, 'ceiling': 0.35, 'note': \"the wardrobe's own picture of the glow re-baseline. Before it, Skeleton Flame's HIGH frames measured 68-80% of the figure over luma 140 from this same stage.\"}\n"
+}

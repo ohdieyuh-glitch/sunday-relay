@@ -1,0 +1,1051 @@
+{
+ "name": "zzAS1_stage_glow_applied",
+ "started": "2026-09-27 21:12:30",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "S00",
+   "name": "the three stage terms can be read back before anything is changed",
+   "pass": true,
+   "detail": {
+    "as_found": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewLights": 0.04,
+     "wl.Look.PreviewBloom": 0.015
+    },
+    "note": "a knob that cannot be read is a knob that cannot be proved to have been set; wl.Look.FireMaterial and r.DistanceFields have both refused values they were given."
+   }
+  },
+  {
+   "id": "S01",
+   "name": "the wardrobe is open through the founder's own SWITCH SKIN button",
+   "pass": true,
+   "detail": {
+    "pressed": true,
+    "skins_open": true
+   }
+  },
+  {
+   "id": "S02",
+   "name": "the preview window has painted and reports where it is",
+   "pass": true,
+   "detail": {
+    "got": true,
+    "centre": [
+     0.5947,
+     0.4704
+    ],
+    "size": [
+     0.2136,
+     0.4828
+    ]
+   }
+  },
+  {
+   "id": "S_RESTORE",
+   "name": "the stage terms this job found were put back",
+   "pass": true,
+   "detail": {
+    "as_found": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewLights": 0.04,
+     "wl.Look.PreviewBloom": 0.015
+    },
+    "restored": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewLights": 0.04,
+     "wl.Look.PreviewBloom": 0.015
+    }
+   }
+  },
+  {
+   "id": "S_SKIN",
+   "name": "Relay OG was put back on the Dog, and it went back",
+   "pass": true,
+   "detail": {
+    "worn_after_restore": "relay_og"
+   }
+  },
+  {
+   "id": "S03",
+   "name": "every rung's knob took the value it was given",
+   "pass": true,
+   "detail": {
+    "refused": null,
+    "note": "THE CONTROL THAT MAKES THE LADDER A LADDER. wl.Look.FireMaterial and r.DistanceFields have both silently kept their old value in this tree, and a ladder of six identical rungs looks exactly like a term that does not matter."
+   }
+  },
+  {
+   "id": "S04",
+   "name": "every skin was photographed at every rung, and the window read back each time",
+   "pass": true,
+   "detail": {
+    "skins": [
+     "apollo",
+     "relay_og",
+     "skeleton_flame"
+    ],
+    "rungs": [
+     "shipped",
+     "glow_zero",
+     "glow_x3",
+     "glow_x10",
+     "glow_x30",
+     "glow_x100"
+    ]
+   }
+  },
+  {
+   "id": "S06",
+   "name": "the preview figure is wearing the glow scale each rung asked for",
+   "pass": true,
+   "detail": {
+    "refused": null,
+    "note": "THE READBACK THAT WAS MISSING, and the one that matters. S03 above reads the CVAR and passed honestly through an entire run in which the figure wore one value throughout. A knob proved at its input is not a knob proved at all."
+   }
+  }
+ ],
+ "as_found": {
+  "wl.Look.PreviewGlow": 0.001,
+  "wl.Look.PreviewLights": 0.04,
+  "wl.Look.PreviewBloom": 0.015
+ },
+ "preview_rect": {
+  "got": true,
+  "centre": [
+   0.5947,
+   0.4704
+  ],
+  "size": [
+   0.2136,
+   0.4828
+  ]
+ },
+ "readings": {
+  "skeleton_flame": {
+   "shipped": {
+    "asked": {
+     "glow": null,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.001,
+    "whole": {
+     "mean": [
+      0.4972,
+      0.5014,
+      0.5006
+     ],
+     "luma": 0.5005,
+     "blue_over_red": 0.0034,
+     "bright": 0.5084,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8408,
+      0.8467,
+      0.8382
+     ],
+     "luma": 0.8448,
+     "blue_over_red": -0.0026,
+     "bright": 0.8717,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "skeleton_flame__shipped.png"
+   },
+   "glow_zero": {
+    "asked": {
+     "glow": 0.0,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0,
+    "whole": {
+     "mean": [
+      0.3102,
+      0.3073,
+      0.3062
+     ],
+     "luma": 0.3079,
+     "blue_over_red": -0.004,
+     "bright": 0.3022,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.5616,
+      0.5554,
+      0.5483
+     ],
+     "luma": 0.5562,
+     "blue_over_red": -0.0133,
+     "bright": 0.5707,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "skeleton_flame__glow_zero.png"
+   },
+   "glow_x3": {
+    "asked": {
+     "glow": 0.003,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.003,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.003,
+    "whole": {
+     "mean": [
+      0.4748,
+      0.4741,
+      0.4743
+     ],
+     "luma": 0.4743,
+     "blue_over_red": -0.0005,
+     "bright": 0.4745,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8406,
+      0.8408,
+      0.8333
+     ],
+     "luma": 0.8402,
+     "blue_over_red": -0.0073,
+     "bright": 0.8656,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "skeleton_flame__glow_x3.png"
+   },
+   "glow_x10": {
+    "asked": {
+     "glow": 0.01,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.01,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.01,
+    "whole": {
+     "mean": [
+      0.4993,
+      0.4986,
+      0.5001
+     ],
+     "luma": 0.4989,
+     "blue_over_red": 0.0008,
+     "bright": 0.5021,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8727,
+      0.8709,
+      0.8633
+     ],
+     "luma": 0.8707,
+     "blue_over_red": -0.0095,
+     "bright": 0.8963,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "skeleton_flame__glow_x10.png"
+   },
+   "glow_x30": {
+    "asked": {
+     "glow": 0.03,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.03,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.03,
+    "whole": {
+     "mean": [
+      0.5001,
+      0.5002,
+      0.502
+     ],
+     "luma": 0.5003,
+     "blue_over_red": 0.0019,
+     "bright": 0.4933,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.861,
+      0.8592,
+      0.8513
+     ],
+     "luma": 0.859,
+     "blue_over_red": -0.0097,
+     "bright": 0.8765,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "skeleton_flame__glow_x30.png"
+   },
+   "glow_x100": {
+    "asked": {
+     "glow": 0.1,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.1,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.1,
+    "whole": {
+     "mean": [
+      0.5338,
+      0.5473,
+      0.558
+     ],
+     "luma": 0.5452,
+     "blue_over_red": 0.0243,
+     "bright": 0.531,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8769,
+      0.882,
+      0.8753
+     ],
+     "luma": 0.8804,
+     "blue_over_red": -0.0016,
+     "bright": 0.896,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0704
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0504,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "skeleton_flame__glow_x100.png"
+   }
+  },
+  "apollo": {
+   "shipped": {
+    "asked": {
+     "glow": null,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.001,
+    "whole": {
+     "mean": [
+      0.7604,
+      0.7359,
+      0.631
+     ],
+     "luma": 0.7335,
+     "blue_over_red": -0.1294,
+     "bright": 0.7343,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8697,
+      0.8386,
+      0.7149
+     ],
+     "luma": 0.8363,
+     "blue_over_red": -0.1548,
+     "bright": 0.8358,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.4864,
+      0.477,
+      0.4443
+     ],
+     "luma": 0.4766,
+     "blue_over_red": -0.0421,
+     "bright": 0.4125,
+     "samples": 1886
+    },
+    "capture": "apollo__shipped.png"
+   },
+   "glow_zero": {
+    "asked": {
+     "glow": 0.0,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0,
+    "whole": {
+     "mean": [
+      0.6379,
+      0.6121,
+      0.5151
+     ],
+     "luma": 0.6106,
+     "blue_over_red": -0.1228,
+     "bright": 0.5952,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.7518,
+      0.7194,
+      0.5984
+     ],
+     "luma": 0.7176,
+     "blue_over_red": -0.1535,
+     "bright": 0.7136,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.601,
+      0.5867,
+      0.5307
+     ],
+     "luma": 0.5857,
+     "blue_over_red": -0.0703,
+     "bright": 0.4226,
+     "samples": 1886
+    },
+    "capture": "apollo__glow_zero.png"
+   },
+   "glow_x3": {
+    "asked": {
+     "glow": 0.003,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.003,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.003,
+    "whole": {
+     "mean": [
+      0.812,
+      0.7868,
+      0.6846
+     ],
+     "luma": 0.7848,
+     "blue_over_red": -0.1274,
+     "bright": 0.7843,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8718,
+      0.8421,
+      0.7272
+     ],
+     "luma": 0.8401,
+     "blue_over_red": -0.1446,
+     "bright": 0.8467,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.6038,
+      0.5934,
+      0.553
+     ],
+     "luma": 0.5927,
+     "blue_over_red": -0.0509,
+     "bright": 0.473,
+     "samples": 1886
+    },
+    "capture": "apollo__glow_x3.png"
+   },
+   "glow_x10": {
+    "asked": {
+     "glow": 0.01,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.01,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.01,
+    "whole": {
+     "mean": [
+      0.8034,
+      0.7775,
+      0.6774
+     ],
+     "luma": 0.7757,
+     "blue_over_red": -0.126,
+     "bright": 0.7716,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8876,
+      0.8564,
+      0.7352
+     ],
+     "luma": 0.8543,
+     "blue_over_red": -0.1523,
+     "bright": 0.8586,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.5015,
+      0.4921,
+      0.4561
+     ],
+     "luma": 0.4915,
+     "blue_over_red": -0.0454,
+     "bright": 0.351,
+     "samples": 1886
+    },
+    "capture": "apollo__glow_x10.png"
+   },
+   "glow_x30": {
+    "asked": {
+     "glow": 0.03,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.03,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.03,
+    "whole": {
+     "mean": [
+      0.7923,
+      0.7653,
+      0.6615
+     ],
+     "luma": 0.7635,
+     "blue_over_red": -0.1308,
+     "bright": 0.7611,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8838,
+      0.8547,
+      0.7412
+     ],
+     "luma": 0.8527,
+     "blue_over_red": -0.1426,
+     "bright": 0.8632,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.4916,
+      0.4869,
+      0.4736
+     ],
+     "luma": 0.4869,
+     "blue_over_red": -0.018,
+     "bright": 0.3892,
+     "samples": 1886
+    },
+    "capture": "apollo__glow_x30.png"
+   },
+   "glow_x100": {
+    "asked": {
+     "glow": 0.1,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.1,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.1,
+    "whole": {
+     "mean": [
+      0.7968,
+      0.7677,
+      0.6574
+     ],
+     "luma": 0.7659,
+     "blue_over_red": -0.1393,
+     "bright": 0.776,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.9081,
+      0.8779,
+      0.7446
+     ],
+     "luma": 0.8747,
+     "blue_over_red": -0.1634,
+     "bright": 0.9241,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.4878,
+      0.4773,
+      0.4382
+     ],
+     "luma": 0.4767,
+     "blue_over_red": -0.0496,
+     "bright": 0.3881,
+     "samples": 1886
+    },
+    "capture": "apollo__glow_x100.png"
+   }
+  },
+  "relay_og": {
+   "shipped": {
+    "asked": {
+     "glow": null,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.001,
+    "whole": {
+     "mean": [
+      0.3631,
+      0.3598,
+      0.3558
+     ],
+     "luma": 0.3602,
+     "blue_over_red": -0.0073,
+     "bright": 0.3733,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8604,
+      0.8523,
+      0.8357
+     ],
+     "luma": 0.8528,
+     "blue_over_red": -0.0247,
+     "bright": 0.8968,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "relay_og__shipped.png"
+   },
+   "glow_zero": {
+    "asked": {
+     "glow": 0.0,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0,
+    "whole": {
+     "mean": [
+      0.3211,
+      0.3182,
+      0.3178
+     ],
+     "luma": 0.3188,
+     "blue_over_red": -0.0032,
+     "bright": 0.3311,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.7617,
+      0.7538,
+      0.7464
+     ],
+     "luma": 0.755,
+     "blue_over_red": -0.0154,
+     "bright": 0.7878,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "relay_og__glow_zero.png"
+   },
+   "glow_x3": {
+    "asked": {
+     "glow": 0.003,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.003,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.003,
+    "whole": {
+     "mean": [
+      0.3551,
+      0.3521,
+      0.3504
+     ],
+     "luma": 0.3526,
+     "blue_over_red": -0.0047,
+     "bright": 0.367,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.7999,
+      0.7932,
+      0.7816
+     ],
+     "luma": 0.7938,
+     "blue_over_red": -0.0183,
+     "bright": 0.8324,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "relay_og__glow_x3.png"
+   },
+   "glow_x10": {
+    "asked": {
+     "glow": 0.01,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.01,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.01,
+    "whole": {
+     "mean": [
+      0.3449,
+      0.3419,
+      0.3401
+     ],
+     "luma": 0.3424,
+     "blue_over_red": -0.0048,
+     "bright": 0.356,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8151,
+      0.8075,
+      0.7955
+     ],
+     "luma": 0.8082,
+     "blue_over_red": -0.0196,
+     "bright": 0.8388,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "relay_og__glow_x10.png"
+   },
+   "glow_x30": {
+    "asked": {
+     "glow": 0.03,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.03,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.03,
+    "whole": {
+     "mean": [
+      0.3618,
+      0.3588,
+      0.3563
+     ],
+     "luma": 0.3592,
+     "blue_over_red": -0.0055,
+     "bright": 0.3713,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8685,
+      0.8613,
+      0.8491
+     ],
+     "luma": 0.862,
+     "blue_over_red": -0.0194,
+     "bright": 0.9091,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "relay_og__glow_x30.png"
+   },
+   "glow_x100": {
+    "asked": {
+     "glow": 0.1,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.1,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.1,
+    "whole": {
+     "mean": [
+      0.3546,
+      0.3511,
+      0.3468
+     ],
+     "luma": 0.3515,
+     "blue_over_red": -0.0078,
+     "bright": 0.3638,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8819,
+      0.8719,
+      0.8522
+     ],
+     "luma": 0.8726,
+     "blue_over_red": -0.0297,
+     "bright": 0.8995,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "relay_og__glow_x100.png"
+   }
+  }
+ },
+ "restored": {
+  "wl.Look.PreviewGlow": 0.001,
+  "wl.Look.PreviewLights": 0.04,
+  "wl.Look.PreviewBloom": 0.015
+ },
+ "worn_after_restore": "relay_og",
+ "rungs_that_did_not_take": null,
+ "glow_applied_by_rung": {
+  "skeleton_flame/shipped": {
+   "asked": 0.001,
+   "applied": 0.001
+  },
+  "skeleton_flame/glow_zero": {
+   "asked": 0.0,
+   "applied": 0.0
+  },
+  "skeleton_flame/glow_x3": {
+   "asked": 0.003,
+   "applied": 0.003
+  },
+  "skeleton_flame/glow_x10": {
+   "asked": 0.01,
+   "applied": 0.01
+  },
+  "skeleton_flame/glow_x30": {
+   "asked": 0.03,
+   "applied": 0.03
+  },
+  "skeleton_flame/glow_x100": {
+   "asked": 0.1,
+   "applied": 0.1
+  },
+  "apollo/shipped": {
+   "asked": 0.001,
+   "applied": 0.001
+  },
+  "apollo/glow_zero": {
+   "asked": 0.0,
+   "applied": 0.0
+  },
+  "apollo/glow_x3": {
+   "asked": 0.003,
+   "applied": 0.003
+  },
+  "apollo/glow_x10": {
+   "asked": 0.01,
+   "applied": 0.01
+  },
+  "apollo/glow_x30": {
+   "asked": 0.03,
+   "applied": 0.03
+  },
+  "apollo/glow_x100": {
+   "asked": 0.1,
+   "applied": 0.1
+  },
+  "relay_og/shipped": {
+   "asked": 0.001,
+   "applied": 0.001
+  },
+  "relay_og/glow_zero": {
+   "asked": 0.0,
+   "applied": 0.0
+  },
+  "relay_og/glow_x3": {
+   "asked": 0.003,
+   "applied": 0.003
+  },
+  "relay_og/glow_x10": {
+   "asked": 0.01,
+   "applied": 0.01
+  },
+  "relay_og/glow_x30": {
+   "asked": 0.03,
+   "applied": 0.03
+  },
+  "relay_og/glow_x100": {
+   "asked": 0.1,
+   "applied": 0.1
+  }
+ },
+ "rungs_the_figure_did_not_wear": null,
+ "which_term_binds": {
+  "skeleton_flame": {
+   "shipped_luma": 0.5005,
+   "with_no_glow": 0.3079,
+   "with_no_lamps": null,
+   "glow_share": 0.1926,
+   "lamp_share": null
+  },
+  "apollo": {
+   "shipped_luma": 0.7335,
+   "with_no_glow": 0.6106,
+   "with_no_lamps": null,
+   "glow_share": 0.1229,
+   "lamp_share": null
+  },
+  "relay_og": {
+   "shipped_luma": 0.3602,
+   "with_no_glow": 0.3188,
+   "with_no_lamps": null,
+   "glow_share": 0.0414,
+   "lamp_share": null
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\stage_glow_up",
+ "finished": "2026-09-27 21:14:28",
+ "seconds": 118.52,
+ "log": "S00 PASS the three stage terms can be read back before anything is changed {'as_found': {'wl.Look.PreviewGlow': 0.001, 'wl.Look.PreviewLights': 0.04, 'wl.Look.PreviewBloom': 0.015}, 'note': 'a knob that cannot be read is a knob that cannot be proved to have been set; wl.Look.FireMaterial and r.DistanceFields have both refused values they were given.'}\nS01 PASS the wardrobe is open through the founder's own SWITCH SKIN button {'pressed': True, 'skins_open': True}\nS02 PASS the preview window has painted and reports where it is {'got': True, 'centre': [0.5947, 0.4704], 'size': [0.2136, 0.4828]}\nS_skeleton_flame_shipped INFO skeleton_flame at shipped {'glow': 0.001, 'glow_applied': 0.001, 'lights': 0.04, 'whole_luma': 0.5005, 'blue_over_red': 0.0034, 'bright': 0.5084}\nS_skeleton_flame_glow_zero INFO skeleton_flame at glow_zero {'glow': 0.0, 'glow_applied': 0.0, 'lights': 0.04, 'whole_luma': 0.3079, 'blue_over_red': -0.004, 'bright': 0.3022}\nS_skeleton_flame_glow_x3 INFO skeleton_flame at glow_x3 {'glow': 0.003, 'glow_applied': 0.003, 'lights': 0.04, 'whole_luma': 0.4743, 'blue_over_red': -0.0005, 'bright': 0.4745}\nS_skeleton_flame_glow_x10 INFO skeleton_flame at glow_x10 {'glow': 0.01, 'glow_applied': 0.01, 'lights': 0.04, 'whole_luma': 0.4989, 'blue_over_red': 0.0008, 'bright': 0.5021}\nS_skeleton_flame_glow_x30 INFO skeleton_flame at glow_x30 {'glow': 0.03, 'glow_applied': 0.03, 'lights': 0.04, 'whole_luma': 0.5003, 'blue_over_red': 0.0019, 'bright': 0.4933}\nS_skeleton_flame_glow_x100 INFO skeleton_flame at glow_x100 {'glow': 0.1, 'glow_applied': 0.1, 'lights': 0.04, 'whole_luma': 0.5452, 'blue_over_red': 0.0243, 'bright': 0.531}\nS_apollo_shipped INFO apollo at shipped {'glow': 0.001, 'glow_applied': 0.001, 'lights': 0.04, 'whole_luma': 0.7335, 'blue_over_red': -0.1294, 'bright': 0.7343}\nS_apollo_glow_zero INFO apollo at glow_zero {'glow': 0.0, 'glow_applied': 0.0, 'lights': 0.04, 'whole_luma': 0.6106, 'blue_over_red': -0.1228, 'bright': 0.5952}\nS_apollo_glow_x3 INFO apollo at glow_x3 {'glow': 0.003, 'glow_applied': 0.003, 'lights': 0.04, 'whole_luma': 0.7848, 'blue_over_red': -0.1274, 'bright': 0.7843}\nS_apollo_glow_x10 INFO apollo at glow_x10 {'glow': 0.01, 'glow_applied': 0.01, 'lights': 0.04, 'whole_luma': 0.7757, 'blue_over_red': -0.126, 'bright': 0.7716}\nS_apollo_glow_x30 INFO apollo at glow_x30 {'glow': 0.03, 'glow_applied': 0.03, 'lights': 0.04, 'whole_luma': 0.7635, 'blue_over_red': -0.1308, 'bright': 0.7611}\nS_apollo_glow_x100 INFO apollo at glow_x100 {'glow': 0.1, 'glow_applied': 0.1, 'lights': 0.04, 'whole_luma': 0.7659, 'blue_over_red': -0.1393, 'bright': 0.776}\nS_relay_og_shipped INFO relay_og at shipped {'glow': 0.001, 'glow_applied': 0.001, 'lights': 0.04, 'whole_luma': 0.3602, 'blue_over_red': -0.0073, 'bright': 0.3733}\nS_relay_og_glow_zero INFO relay_og at glow_zero {'glow': 0.0, 'glow_applied': 0.0, 'lights': 0.04, 'whole_luma': 0.3188, 'blue_over_red': -0.0032, 'bright': 0.3311}\nS_relay_og_glow_x3 INFO relay_og at glow_x3 {'glow': 0.003, 'glow_applied': 0.003, 'lights': 0.04, 'whole_luma': 0.3526, 'blue_over_red': -0.0047, 'bright': 0.367}\nS_relay_og_glow_x10 INFO relay_og at glow_x10 {'glow': 0.01, 'glow_applied': 0.01, 'lights': 0.04, 'whole_luma': 0.3424, 'blue_over_red': -0.0048, 'bright': 0.356}\nS_relay_og_glow_x30 INFO relay_og at glow_x30 {'glow': 0.03, 'glow_applied': 0.03, 'lights': 0.04, 'whole_luma': 0.3592, 'blue_over_red': -0.0055, 'bright': 0.3713}\nS_relay_og_glow_x100 INFO relay_og at glow_x100 {'glow': 0.1, 'glow_applied': 0.1, 'lights': 0.04, 'whole_luma': 0.3515, 'blue_over_red': -0.0078, 'bright': 0.3638}\nS_RESTORE PASS the stage terms this job found were put back {'as_found': {'wl.Look.PreviewGlow': 0.001, 'wl.Look.PreviewLights': 0.04, 'wl.Look.PreviewBloom': 0.015}, 'restored': {'wl.Look.PreviewGlow': 0.001, 'wl.Look.PreviewLights': 0.04, 'wl.Look.PreviewBloom': 0.015}}\nS_SKIN PASS Relay OG was put back on the Dog, and it went back {'worn_after_restore': 'relay_og'}\nS03 PASS every rung's knob took the value it was given {'refused': None, 'note': 'THE CONTROL THAT MAKES THE LADDER A LADDER. wl.Look.FireMaterial and r.DistanceFields have both silently kept their old value in this tree, and a ladder of six identical rungs looks exactly like a term that does not matter.'}\nS04 PASS every skin was photographed at every rung, and the window read back each time {'skins': ['apollo', 'relay_og', 'skeleton_flame'], 'rungs': ['shipped', 'glow_zero', 'glow_x3', 'glow_x10', 'glow_x30', 'glow_x100']}\nS06 PASS the preview figure is wearing the glow scale each rung asked for {'refused': None, 'note': 'THE READBACK THAT WAS MISSING, and the one that matters. S03 above reads the CVAR and passed honestly through an entire run in which the figure wore one value throughout. A knob proved at its input is not a knob proved at all.'}\nS05 INFO how much of the shipped window each term is responsible for {'skeleton_flame': {'shipped_luma': 0.5005, 'with_no_glow': 0.3079, 'with_no_lamps': None, 'glow_share': 0.1926, 'lamp_share': None}, 'apollo': {'shipped_luma': 0.7335, 'with_no_glow': 0.6106, 'with_no_lamps': None, 'glow_share': 0.1229, 'lamp_share': None}, 'relay_og': {'shipped_luma': 0.3602, 'with_no_glow': 0.3188, 'with_no_lamps': None, 'glow_share': 0.0414, 'lamp_share': None}}\n"
+}

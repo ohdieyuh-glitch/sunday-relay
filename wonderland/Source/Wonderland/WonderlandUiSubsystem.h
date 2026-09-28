@@ -316,6 +316,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Ui")
 	FLinearColor GetCompanionTerminalAccent(int32 Index) const;
 
+	/**
+	 * WHERE A COMPANION TERMINAL AND ITS i.WONDER MARK ARE ON SCREEN, as fractions of the viewport: centre and size.
+	 *
+	 * The same shape as GetSkinPreviewRect and for the same reason: so a proof can read the PIXELS INSIDE the
+	 * mark rather than average a guessed patch of the frame and call the answer the emblem. The mark is a few
+	 * thin strokes over a near-black plate; a rectangle that is even slightly wrong reads the terminal's text
+	 * or the world behind it.
+	 *
+	 * Divided by the SAME widget ReadScreenExtremes screenshots, so the fractions and the pixels agree.
+	 * False when the terminals are not mounted or nothing has painted yet.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool GetCompanionTerminalMarkRect(int32 Index, FVector2D& OutCentre, FVector2D& OutSize) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool GetCompanionTerminalRect(int32 Index, FVector2D& OutCentre, FVector2D& OutSize) const;
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	int32 GetCompanionTerminalLineCount(int32 Index) const;
 

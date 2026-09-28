@@ -138,6 +138,26 @@ int32 SWonderlandPulseMark::OnPaint(const FPaintArgs& Args, const FGeometry& All
 	return Layer;
 }
 
+bool SWonderlandCompanionTerminal::GetMarkAbsoluteRect(FVector2D& OutTopLeft, FVector2D& OutSize) const
+{
+	if (!Pulse.IsValid())
+	{
+		return false;
+	}
+	const FGeometry& G = Pulse->GetCachedGeometry();
+	OutTopLeft = G.GetAbsolutePosition();
+	OutSize = G.GetAbsoluteSize();
+	return OutSize.X >= 1.0 && OutSize.Y >= 1.0;
+}
+
+bool SWonderlandCompanionTerminal::GetFrameAbsoluteRect(FVector2D& OutTopLeft, FVector2D& OutSize) const
+{
+	const FGeometry& G = GetCachedGeometry();
+	OutTopLeft = G.GetAbsolutePosition();
+	OutSize = G.GetAbsoluteSize();
+	return OutSize.X >= 1.0 && OutSize.Y >= 1.0;
+}
+
 SWonderlandCompanionTerminal::SWonderlandCompanionTerminal()
 	: FrameBrush(WonderlandUi::Srgb(4, 4, 6, 0.93f), 8.0f, CompanionFrameGold(), 2.5f)
 	, RuleBrush(CompanionFrameGold(0.9f), 0.0f)

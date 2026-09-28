@@ -1,0 +1,301 @@
+{
+ "name": "zzAH2_stance_preview",
+ "started": "2026-09-27 19:07:09",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "P00",
+   "name": "the wardrobe is open through the founder's own button",
+   "pass": true,
+   "detail": {
+    "pressed": true
+   }
+  },
+  {
+   "id": "P01",
+   "name": "the preview window reports where it is",
+   "pass": true,
+   "detail": {
+    "centre": [
+     0.5947,
+     0.4704
+    ],
+    "size": [
+     0.2136,
+     0.4828
+    ]
+   }
+  },
+  {
+   "id": "P02",
+   "name": "each skin is a different picture",
+   "pass": true,
+   "detail": {
+    "files": 5,
+    "distinct": 5
+   }
+  },
+  {
+   "id": "P03",
+   "name": "every skin was staged and measured",
+   "pass": true,
+   "detail": {
+    "measured": [
+     "apollo",
+     "arden_infernal",
+     "celestial_light",
+     "relay_og",
+     "skeleton_flame"
+    ],
+    "heights": {
+     "relay_og": 328,
+     "celestial_light": 367,
+     "apollo": 341,
+     "arden_infernal": 352,
+     "skeleton_flame": 358
+    },
+    "fills": {
+     "relay_og": 0.872,
+     "celestial_light": 0.976,
+     "apollo": 0.907,
+     "arden_infernal": 0.936,
+     "skeleton_flame": 0.952
+    }
+   }
+  },
+  {
+   "id": "P04",
+   "name": "the five figures are not all the same size on screen",
+   "pass": true,
+   "detail": {
+    "heights": {
+     "relay_og": 328,
+     "celestial_light": 367,
+     "apollo": 341,
+     "arden_infernal": 352,
+     "skeleton_flame": 358
+    },
+    "note": "five different costumes rendering to the identical pixel height means the measurement is of the stage and not of the figures."
+   }
+  },
+  {
+   "id": "P05",
+   "name": "every skin stands the way Relay OG stands",
+   "pass": false,
+   "detail": {
+    "relay_og": {
+     "spread": 0.2683,
+     "offset": 0.0579
+    },
+    "vs_relay_og": {
+     "celestial_light": {
+      "spread_delta": 0.2603,
+      "offset_delta": 0.0511,
+      "spread": 0.5286,
+      "offset": 0.109
+     },
+     "apollo": {
+      "spread_delta": 0.6994,
+      "offset_delta": 0.0418,
+      "spread": 0.9677,
+      "offset": 0.0161
+     },
+     "arden_infernal": {
+      "spread_delta": 0.1518,
+      "offset_delta": 0.3377,
+      "spread": 0.1165,
+      "offset": -0.2798
+     },
+     "skeleton_flame": {
+      "spread_delta": 0.039,
+      "offset_delta": 0.0872,
+      "spread": 0.3073,
+      "offset": -0.0293
+     }
+    },
+    "tolerance": 0.08,
+    "differing": [
+     "apollo",
+     "arden_infernal",
+     "celestial_light",
+     "skeleton_flame"
+    ],
+    "note": "foot spread and foot offset, in units of the figure's own height, on the preview's black ground. This is the idle stance only: the founder's item 3 also asks about walk, run, stop, turns, jump, fall and landing, and none of those are measured here."
+   }
+  }
+ ],
+ "preview_rect": {
+  "centre": [
+   0.5947,
+   0.4704
+  ],
+  "size": [
+   0.2136,
+   0.4828
+  ]
+ },
+ "readings": {
+  "relay_og": {
+   "rect": [
+    960,
+    247,
+    1301,
+    623
+   ],
+   "figure_box": [
+    1027,
+    255,
+    1193,
+    583
+   ],
+   "lit_pixels": 39972,
+   "height_px": 328,
+   "width_px": 166,
+   "ground_row": 583,
+   "foot_columns": 86,
+   "spread_over_height": 0.2683,
+   "offset_over_height": 0.0579,
+   "fills_rect_height": 0.872,
+   "touches_inset_sides": false
+  },
+  "celestial_light": {
+   "rect": [
+    960,
+    247,
+    1301,
+    623
+   ],
+   "figure_box": [
+    973,
+    247,
+    1301,
+    614
+   ],
+   "lit_pixels": 67897,
+   "height_px": 367,
+   "width_px": 328,
+   "ground_row": 614,
+   "foot_columns": 129,
+   "spread_over_height": 0.5286,
+   "offset_over_height": 0.109,
+   "fills_rect_height": 0.976,
+   "touches_inset_sides": true
+  },
+  "apollo": {
+   "rect": [
+    960,
+    247,
+    1301,
+    623
+   ],
+   "figure_box": [
+    960,
+    247,
+    1301,
+    588
+   ],
+   "lit_pixels": 101559,
+   "height_px": 341,
+   "width_px": 341,
+   "ground_row": 588,
+   "foot_columns": 300,
+   "spread_over_height": 0.9677,
+   "offset_over_height": 0.0161,
+   "fills_rect_height": 0.907,
+   "touches_inset_sides": true
+  },
+  "arden_infernal": {
+   "rect": [
+    960,
+    247,
+    1301,
+    623
+   ],
+   "figure_box": [
+    983,
+    247,
+    1289,
+    599
+   ],
+   "lit_pixels": 59127,
+   "height_px": 352,
+   "width_px": 306,
+   "ground_row": 599,
+   "foot_columns": 42,
+   "spread_over_height": 0.1165,
+   "offset_over_height": -0.2798,
+   "fills_rect_height": 0.936,
+   "touches_inset_sides": false
+  },
+  "skeleton_flame": {
+   "rect": [
+    960,
+    247,
+    1301,
+    623
+   ],
+   "figure_box": [
+    1000,
+    247,
+    1277,
+    605
+   ],
+   "lit_pixels": 65454,
+   "height_px": 358,
+   "width_px": 277,
+   "ground_row": 605,
+   "foot_columns": 111,
+   "spread_over_height": 0.3073,
+   "offset_over_height": -0.0293,
+   "fills_rect_height": 0.952,
+   "touches_inset_sides": false
+  }
+ },
+ "capture_hashes": {
+  "stance_relay_og.png": "b066cdf2818b51f99d7e1a4496951b9b",
+  "stance_celestial_light.png": "182e9654d1d6bf03a3ffffd60d5bbf65",
+  "stance_apollo.png": "0a519a14074b8e4f170f4c19775a2276",
+  "stance_arden_infernal.png": "ec957772405022aab3cbdb51458261c4",
+  "stance_skeleton_flame.png": "96d5738bb5b858db56e23756470deb1a"
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\stance_preview",
+ "vs_relay_og": {
+  "celestial_light": {
+   "spread_delta": 0.2603,
+   "offset_delta": 0.0511,
+   "spread": 0.5286,
+   "offset": 0.109
+  },
+  "apollo": {
+   "spread_delta": 0.6994,
+   "offset_delta": 0.0418,
+   "spread": 0.9677,
+   "offset": 0.0161
+  },
+  "arden_infernal": {
+   "spread_delta": 0.1518,
+   "offset_delta": 0.3377,
+   "spread": 0.1165,
+   "offset": -0.2798
+  },
+  "skeleton_flame": {
+   "spread_delta": 0.039,
+   "offset_delta": 0.0872,
+   "spread": 0.3073,
+   "offset": -0.0293
+  }
+ },
+ "relay_og_stance": {
+  "spread": 0.2683,
+  "offset": 0.0579
+ },
+ "skins_that_stand_differently": [
+  "apollo",
+  "arden_infernal",
+  "celestial_light",
+  "skeleton_flame"
+ ],
+ "finished": "2026-09-27 19:08:11",
+ "seconds": 61.97,
+ "log": "P00 PASS the wardrobe is open through the founder's own button {'pressed': True}\nP01 PASS the preview window reports where it is {'centre': [0.5947, 0.4704], 'size': [0.2136, 0.4828]}\nP_relay_og INFO relay_og {'rect': [960, 247, 1301, 623], 'figure_box': [1027, 255, 1193, 583], 'lit_pixels': 39972, 'height_px': 328, 'width_px': 166, 'ground_row': 583, 'foot_columns': 86, 'spread_over_height': 0.2683, 'offset_over_height': 0.0579, 'fills_rect_height': 0.872, 'touches_inset_sides': False}\nP_celestial_light INFO celestial_light {'rect': [960, 247, 1301, 623], 'figure_box': [973, 247, 1301, 614], 'lit_pixels': 67897, 'height_px': 367, 'width_px': 328, 'ground_row': 614, 'foot_columns': 129, 'spread_over_height': 0.5286, 'offset_over_height': 0.109, 'fills_rect_height': 0.976, 'touches_inset_sides': True}\nP_apollo INFO apollo {'rect': [960, 247, 1301, 623], 'figure_box': [960, 247, 1301, 588], 'lit_pixels': 101559, 'height_px': 341, 'width_px': 341, 'ground_row': 588, 'foot_columns': 300, 'spread_over_height': 0.9677, 'offset_over_height': 0.0161, 'fills_rect_height': 0.907, 'touches_inset_sides': True}\nP_arden_infernal INFO arden_infernal {'rect': [960, 247, 1301, 623], 'figure_box': [983, 247, 1289, 599], 'lit_pixels': 59127, 'height_px': 352, 'width_px': 306, 'ground_row': 599, 'foot_columns': 42, 'spread_over_height': 0.1165, 'offset_over_height': -0.2798, 'fills_rect_height': 0.936, 'touches_inset_sides': False}\nP_skeleton_flame INFO skeleton_flame {'rect': [960, 247, 1301, 623], 'figure_box': [1000, 247, 1277, 605], 'lit_pixels': 65454, 'height_px': 358, 'width_px': 277, 'ground_row': 605, 'foot_columns': 111, 'spread_over_height': 0.3073, 'offset_over_height': -0.0293, 'fills_rect_height': 0.952, 'touches_inset_sides': False}\nP02 PASS each skin is a different picture {'files': 5, 'distinct': 5}\nP03 PASS every skin was staged and measured {'measured': ['apollo', 'arden_infernal', 'celestial_light', 'relay_og', 'skeleton_flame'], 'heights': {'relay_og': 328, 'celestial_light': 367, 'apollo': 341, 'arden_infernal': 352, 'skeleton_flame': 358}, 'fills': {'relay_og': 0.872, 'celestial_light': 0.976, 'apollo': 0.907, 'arden_infernal': 0.936, 'skeleton_flame': 0.952}}\nP04 PASS the five figures are not all the same size on screen {'heights': {'relay_og': 328, 'celestial_light': 367, 'apollo': 341, 'arden_infernal': 352, 'skeleton_flame': 358}, 'note': 'five different costumes rendering to the identical pixel height means the measurement is of the stage and not of the figures.'}\nP05 FAIL every skin stands the way Relay OG stands {'relay_og': {'spread': 0.2683, 'offset': 0.0579}, 'vs_relay_og': {'celestial_light': {'spread_delta': 0.2603, 'offset_delta': 0.0511, 'spread': 0.5286, 'offset': 0.109}, 'apollo': {'spread_delta': 0.6994, 'offset_delta': 0.0418, 'spread': 0.9677, 'offset': 0.0161}, 'arden_infernal': {'spread_delta': 0.1518, 'offset_delta': 0.3377, 'spread': 0.1165, 'offset': -0.2798}, 'skeleton_flame': {'spread_delta': 0.039, 'offset_delta': 0.0872, 'spread': 0.3073, 'offset': -0.0293}}, 'tolerance': 0.08, 'differing': ['apollo', 'arden_infernal', 'celestial_light', 'skeleton_flame'], 'note': \"foot spread and foot offset, in units of the figure's own height, on the preview's black ground. This is the idle stance only: the founder's item 3 also asks about walk, run, stop, turns, jump, fall and landing, and none of those are measured here.\"}\n"
+}

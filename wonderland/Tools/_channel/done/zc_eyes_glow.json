@@ -1,6 +1,6 @@
 {
  "name": "zc_eyes_glow",
- "started": "2026-09-27 05:46:11",
+ "started": "2026-09-27 08:23:33",
  "status": "measured",
  "tests": [
   {
@@ -8,8 +8,8 @@
    "name": "the eyes and the face were both read for every skin at every hour",
    "pass": true,
    "detail": {
-    "read": 15,
-    "wanted": 15,
+    "read": 24,
+    "wanted": 24,
     "note": "a missing reading means the figure did not project into frame, not that the eyes are dark"
    }
   },
@@ -20,73 +20,76 @@
    "detail": {
     "at_noon": {
      "relay_og": {
-      "over_face": 0.4884,
-      "eye": 0.5586,
-      "face": 0.0702,
-      "colour": 0.2627,
-      "usable": true
-     },
-     "arden_infernal": {
-      "over_face": 0.0802,
-      "eye": 0.9996,
-      "face": 0.9194,
-      "colour": 0.1098,
-      "usable": false
-     },
-     "apollo": {
-      "over_face": 0.1718,
-      "eye": 0.9991,
-      "face": 0.8273,
-      "colour": 0.0902,
-      "usable": false
-     },
-     "skeleton_flame": {
-      "over_face": 0.4524,
-      "eye": 1.0,
-      "face": 0.5476,
-      "colour": 0.0,
+      "over_face": 0.0018,
+      "eye": 0.5859,
+      "face": 0.5841,
+      "colour": 0.2941,
       "usable": true
      },
      "celestial_light": {
-      "over_face": -0.2167,
-      "eye": 0.7824,
-      "face": 0.9991,
-      "colour": 0.0392,
-      "usable": false
+      "over_face": -0.1491,
+      "eye": 0.441,
+      "face": 0.5901,
+      "colour": 0.0588,
+      "usable": true
+     },
+     "apollo_v1": {
+      "over_face": 0.0,
+      "eye": 0.0,
+      "face": 0.0,
+      "colour": 0.0,
+      "usable": true
+     },
+     "apollo": {
+      "over_face": 0.0,
+      "eye": 0.0,
+      "face": 0.0,
+      "colour": 0.0,
+      "usable": true
+     },
+     "arden_infernal_v1": {
+      "over_face": 0.0,
+      "eye": 0.0,
+      "face": 0.0,
+      "colour": 0.0,
+      "usable": true
+     },
+     "arden_infernal": {
+      "over_face": 0.0,
+      "eye": 0.0,
+      "face": 0.0,
+      "colour": 0.0,
+      "usable": true
+     },
+     "skeleton_flame_v1": {
+      "over_face": 0.0,
+      "eye": 0.0,
+      "face": 0.0,
+      "colour": 0.0,
+      "usable": true
+     },
+     "skeleton_flame": {
+      "over_face": 0.0,
+      "eye": 0.0,
+      "face": 0.0,
+      "colour": 0.0,
+      "usable": true
      }
     },
     "over_face_floor": 0.05,
-    "unusable": [
-     "arden_infernal",
-     "apollo",
-     "celestial_light"
-    ],
+    "unusable": [],
     "note": "local contrast only. The absolute-brightness branch was removed on 2026-09-27: it passed Celestial Light, whose eye is DARKER than its own face at every hour, and Arden Infernal on a clipped head. Daylight is the hard case -- an emissive holds its value while the sunlit stone beside it climbs past."
    }
   },
   {
    "id": "E03",
    "name": "no skin's eyes are proven only by a blown-out head",
-   "pass": false,
+   "pass": true,
    "detail": {
     "unusable_by_hour": {
-     "12.0": [
-      "arden_infernal",
-      "apollo",
-      "celestial_light"
-     ],
-     "18.8": [
-      "arden_infernal",
-      "apollo",
-      "skeleton_flame",
-      "celestial_light"
-     ],
-     "23.5": [
-      "arden_infernal",
-      "apollo",
-      "skeleton_flame",
-      "celestial_light"
-     ]
+     "12.0": [],
+     "18.8": [],
+     "23.5": []
     },
     "saturation_ceiling": 0.9,
     "note": "when the exposure clips both the eye and the face, the frame cannot distinguish a lamp from a white square. That is an UNUSABLE sample, not a passing one, and it must be visible."
@@ -99,25 +102,34 @@
    "detail": {
     "colour_by_hour": {
      "12.0": {
-      "relay_og": 0.2627,
-      "arden_infernal": 0.1098,
-      "apollo": 0.0902,
-      "skeleton_flame": 0.0,
-      "celestial_light": 0.0392
+      "relay_og": 0.2941,
+      "celestial_light": 0.0588,
+      "apollo_v1": 0.0,
+      "apollo": 0.0,
+      "arden_infernal_v1": 0.0,
+      "arden_infernal": 0.0,
+      "skeleton_flame_v1": 0.0,
+      "skeleton_flame": 0.0
      },
      "18.8": {
-      "relay_og": 0.0549,
-      "arden_infernal": 0.0,
+      "relay_og": 0.1412,
+      "celestial_light": 0.1098,
+      "apollo_v1": 0.0,
       "apollo": 0.0,
-      "skeleton_flame": 0.0,
-      "celestial_light": 0.0471
+      "arden_infernal_v1": 0.0,
+      "arden_infernal": 0.0,
+      "skeleton_flame_v1": 0.0,
+      "skeleton_flame": 0.0
      },
      "23.5": {
-      "relay_og": 0.0078,
-      "arden_infernal": 0.0,
+      "relay_og": 0.0196,
+      "celestial_light": 0.102,
+      "apollo_v1": 0.0,
       "apollo": 0.0,
-      "skeleton_flame": 0.0,
-      "celestial_light": 0.0471
+      "arden_infernal_v1": 0.0,
+      "arden_infernal": 0.0,
+      "skeleton_flame_v1": 0.0,
+      "skeleton_flame": 0.0
      }
     },
     "note": "the founder: preserve each skin's established eye colour, and the customised SECONDARY has to show through the glow. Pure white scores zero separation and carries neither."
@@ -129,90 +141,135 @@
    "pass": false,
    "detail": {
     "weakest_over_face_by_hour": {
-     "12.0": -0.2167,
-     "18.8": -0.1181,
-     "23.5": -0.1587
+     "12.0": -0.1491,
+     "18.8": -0.1954,
+     "23.5": -0.1212
     },
     "table": {
      "12.0": {
       "relay_og": {
-       "eye": 0.5586,
-       "face": 0.0702,
-       "over": 0.4884
-      },
-      "arden_infernal": {
-       "eye": 0.9996,
-       "face": 0.9194,
-       "over": 0.0802
-      },
-      "apollo": {
-       "eye": 0.9991,
-       "face": 0.8273,
-       "over": 0.1718
-      },
-      "skeleton_flame": {
-       "eye": 1.0,
-       "face": 0.5476,
-       "over": 0.4524
+       "eye": 0.5859,
+       "face": 0.5841,
+       "over": 0.0018
       },
       "celestial_light": {
-       "eye": 0.7824,
-       "face": 0.9991,
-       "over": -0.2167
+       "eye": 0.441,
+       "face": 0.5901,
+       "over": -0.1491
+      },
+      "apollo_v1": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "apollo": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "arden_infernal_v1": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "arden_infernal": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "skeleton_flame_v1": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "skeleton_flame": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
       }
      },
      "18.8": {
       "relay_og": {
-       "eye": 0.0805,
-       "face": 0.0266,
-       "over": 0.0539
-      },
-      "arden_infernal": {
-       "eye": 1.0,
-       "face": 0.9321,
-       "over": 0.0679
-      },
-      "apollo": {
-       "eye": 1.0,
-       "face": 0.8748,
-       "over": 0.1252
-      },
-      "skeleton_flame": {
-       "eye": 1.0,
-       "face": 0.7889,
-       "over": 0.2111
+       "eye": 0.1356,
+       "face": 0.1498,
+       "over": -0.0142
       },
       "celestial_light": {
-       "eye": 0.8817,
-       "face": 0.9998,
-       "over": -0.1181
+       "eye": 0.5353,
+       "face": 0.7307,
+       "over": -0.1954
+      },
+      "apollo_v1": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "apollo": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "arden_infernal_v1": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "arden_infernal": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "skeleton_flame_v1": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "skeleton_flame": {
+       "eye": 0.0,
+       "face": 0.0001,
+       "over": -0.0001
       }
      },
      "23.5": {
       "relay_og": {
-       "eye": 0.0788,
-       "face": 0.0209,
-       "over": 0.0579
-      },
-      "arden_infernal": {
-       "eye": 1.0,
-       "face": 0.9645,
-       "over": 0.0355
-      },
-      "apollo": {
-       "eye": 1.0,
-       "face": 0.9027,
-       "over": 0.0973
-      },
-      "skeleton_flame": {
-       "eye": 1.0,
-       "face": 0.8581,
-       "over": 0.1419
+       "eye": 0.0861,
+       "face": 0.0813,
+       "over": 0.0048
       },
       "celestial_light": {
-       "eye": 0.841,
-       "face": 0.9997,
-       "over": -0.1587
+       "eye": 0.3812,
+       "face": 0.5024,
+       "over": -0.1212
+      },
+      "apollo_v1": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "apollo": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "arden_infernal_v1": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "arden_infernal": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "skeleton_flame_v1": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
+      },
+      "skeleton_flame": {
+       "eye": 0.0,
+       "face": 0.0,
+       "over": 0.0
       }
      }
     }
@@ -223,292 +280,422 @@
   "12.0": {
    "relay_og": {
     "camera_uu": 300.0,
-    "eye_luma": 0.5586,
+    "eye_luma": 0.5859,
     "eye_blown": 0.0,
     "eye_bright": 0.0,
-    "colour": 0.2627,
-    "face_luma": 0.0702,
+    "colour": 0.2941,
+    "face_luma": 0.5841,
     "face_bright": 0.0,
-    "eye_over_face": 0.4884
-   },
-   "arden_infernal": {
-    "camera_uu": 300.0,
-    "eye_luma": 0.9996,
-    "eye_blown": 1.0,
-    "eye_bright": 1.0,
-    "colour": 0.1098,
-    "face_luma": 0.9194,
-    "face_bright": 1.0,
-    "eye_over_face": 0.0802
-   },
-   "apollo": {
-    "camera_uu": 300.0,
-    "eye_luma": 0.9991,
-    "eye_blown": 1.0,
-    "eye_bright": 1.0,
-    "colour": 0.0902,
-    "face_luma": 0.8273,
-    "face_bright": 1.0,
-    "eye_over_face": 0.1718
-   },
-   "skeleton_flame": {
-    "camera_uu": 300.0,
-    "eye_luma": 1.0,
-    "eye_blown": 1.0,
-    "eye_bright": 1.0,
-    "colour": 0.0,
-    "face_luma": 0.5476,
-    "face_bright": 0.0,
-    "eye_over_face": 0.4524
+    "eye_over_face": 0.0018
    },
    "celestial_light": {
     "camera_uu": 300.0,
-    "eye_luma": 0.7824,
-    "eye_blown": 1.0,
-    "eye_bright": 1.0,
-    "colour": 0.0392,
-    "face_luma": 0.9991,
-    "face_bright": 1.0,
-    "eye_over_face": -0.2167
+    "eye_luma": 0.441,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0588,
+    "face_luma": 0.5901,
+    "face_bright": 0.0,
+    "eye_over_face": -0.1491
+   },
+   "apollo_v1": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "apollo": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "arden_infernal_v1": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "arden_infernal": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "skeleton_flame_v1": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "skeleton_flame": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
    }
   },
   "18.8": {
    "relay_og": {
     "camera_uu": 300.0,
-    "eye_luma": 0.0805,
+    "eye_luma": 0.1356,
     "eye_blown": 0.0,
     "eye_bright": 0.0,
-    "colour": 0.0549,
-    "face_luma": 0.0266,
+    "colour": 0.1412,
+    "face_luma": 0.1498,
     "face_bright": 0.0,
-    "eye_over_face": 0.0539
-   },
-   "arden_infernal": {
-    "camera_uu": 300.0,
-    "eye_luma": 1.0,
-    "eye_blown": 1.0,
-    "eye_bright": 1.0,
-    "colour": 0.0,
-    "face_luma": 0.9321,
-    "face_bright": 1.0,
-    "eye_over_face": 0.0679
-   },
-   "apollo": {
-    "camera_uu": 300.0,
-    "eye_luma": 1.0,
-    "eye_blown": 1.0,
-    "eye_bright": 1.0,
-    "colour": 0.0,
-    "face_luma": 0.8748,
-    "face_bright": 1.0,
-    "eye_over_face": 0.1252
-   },
-   "skeleton_flame": {
-    "camera_uu": 300.0,
-    "eye_luma": 1.0,
-    "eye_blown": 1.0,
-    "eye_bright": 1.0,
-    "colour": 0.0,
-    "face_luma": 0.7889,
-    "face_bright": 1.0,
-    "eye_over_face": 0.2111
+    "eye_over_face": -0.0142
    },
    "celestial_light": {
     "camera_uu": 300.0,
-    "eye_luma": 0.8817,
-    "eye_blown": 1.0,
-    "eye_bright": 1.0,
-    "colour": 0.0471,
-    "face_luma": 0.9998,
-    "face_bright": 1.0,
-    "eye_over_face": -0.1181
+    "eye_luma": 0.5353,
+    "eye_blown": 0.5768,
+    "eye_bright": 0.5768,
+    "colour": 0.1098,
+    "face_luma": 0.7307,
+    "face_bright": 0.9091,
+    "eye_over_face": -0.1954
+   },
+   "apollo_v1": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "apollo": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "arden_infernal_v1": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "arden_infernal": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "skeleton_flame_v1": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "skeleton_flame": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0001,
+    "face_bright": 0.0,
+    "eye_over_face": -0.0001
    }
   },
   "23.5": {
    "relay_og": {
     "camera_uu": 300.0,
-    "eye_luma": 0.0788,
+    "eye_luma": 0.0861,
     "eye_blown": 0.0,
     "eye_bright": 0.0,
-    "colour": 0.0078,
-    "face_luma": 0.0209,
+    "colour": 0.0196,
+    "face_luma": 0.0813,
     "face_bright": 0.0,
-    "eye_over_face": 0.0579
-   },
-   "arden_infernal": {
-    "camera_uu": 300.0,
-    "eye_luma": 1.0,
-    "eye_blown": 1.0,
-    "eye_bright": 1.0,
-    "colour": 0.0,
-    "face_luma": 0.9645,
-    "face_bright": 1.0,
-    "eye_over_face": 0.0355
-   },
-   "apollo": {
-    "camera_uu": 300.0,
-    "eye_luma": 1.0,
-    "eye_blown": 1.0,
-    "eye_bright": 1.0,
-    "colour": 0.0,
-    "face_luma": 0.9027,
-    "face_bright": 1.0,
-    "eye_over_face": 0.0973
-   },
-   "skeleton_flame": {
-    "camera_uu": 300.0,
-    "eye_luma": 1.0,
-    "eye_blown": 1.0,
-    "eye_bright": 1.0,
-    "colour": 0.0,
-    "face_luma": 0.8581,
-    "face_bright": 1.0,
-    "eye_over_face": 0.1419
+    "eye_over_face": 0.0048
    },
    "celestial_light": {
     "camera_uu": 300.0,
-    "eye_luma": 0.841,
-    "eye_blown": 1.0,
-    "eye_bright": 1.0,
-    "colour": 0.0471,
-    "face_luma": 0.9997,
-    "face_bright": 1.0,
-    "eye_over_face": -0.1587
+    "eye_luma": 0.3812,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.102,
+    "face_luma": 0.5024,
+    "face_bright": 0.0,
+    "eye_over_face": -0.1212
+   },
+   "apollo_v1": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "apollo": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "arden_infernal_v1": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "arden_infernal": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "skeleton_flame_v1": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
+   },
+   "skeleton_flame": {
+    "camera_uu": 300.0,
+    "eye_luma": 0.0,
+    "eye_blown": 0.0,
+    "eye_bright": 0.0,
+    "colour": 0.0,
+    "face_luma": 0.0,
+    "face_bright": 0.0,
+    "eye_over_face": 0.0
    }
   }
  },
  "weakest_eye_over_face_by_hour": {
-  "12.0": -0.2167,
-  "18.8": -0.1181,
-  "23.5": -0.1587
+  "12.0": -0.1491,
+  "18.8": -0.1954,
+  "23.5": -0.1212
  },
  "table": {
   "12.0": {
    "relay_og": {
-    "eye": 0.5586,
-    "face": 0.0702,
-    "over": 0.4884
-   },
-   "arden_infernal": {
-    "eye": 0.9996,
-    "face": 0.9194,
-    "over": 0.0802
-   },
-   "apollo": {
-    "eye": 0.9991,
-    "face": 0.8273,
-    "over": 0.1718
-   },
-   "skeleton_flame": {
-    "eye": 1.0,
-    "face": 0.5476,
-    "over": 0.4524
+    "eye": 0.5859,
+    "face": 0.5841,
+    "over": 0.0018
    },
    "celestial_light": {
-    "eye": 0.7824,
-    "face": 0.9991,
-    "over": -0.2167
+    "eye": 0.441,
+    "face": 0.5901,
+    "over": -0.1491
+   },
+   "apollo_v1": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "apollo": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "arden_infernal_v1": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "arden_infernal": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "skeleton_flame_v1": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "skeleton_flame": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
    }
   },
   "18.8": {
    "relay_og": {
-    "eye": 0.0805,
-    "face": 0.0266,
-    "over": 0.0539
-   },
-   "arden_infernal": {
-    "eye": 1.0,
-    "face": 0.9321,
-    "over": 0.0679
-   },
-   "apollo": {
-    "eye": 1.0,
-    "face": 0.8748,
-    "over": 0.1252
-   },
-   "skeleton_flame": {
-    "eye": 1.0,
-    "face": 0.7889,
-    "over": 0.2111
+    "eye": 0.1356,
+    "face": 0.1498,
+    "over": -0.0142
    },
    "celestial_light": {
-    "eye": 0.8817,
-    "face": 0.9998,
-    "over": -0.1181
+    "eye": 0.5353,
+    "face": 0.7307,
+    "over": -0.1954
+   },
+   "apollo_v1": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "apollo": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "arden_infernal_v1": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "arden_infernal": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "skeleton_flame_v1": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "skeleton_flame": {
+    "eye": 0.0,
+    "face": 0.0001,
+    "over": -0.0001
    }
   },
   "23.5": {
    "relay_og": {
-    "eye": 0.0788,
-    "face": 0.0209,
-    "over": 0.0579
-   },
-   "arden_infernal": {
-    "eye": 1.0,
-    "face": 0.9645,
-    "over": 0.0355
-   },
-   "apollo": {
-    "eye": 1.0,
-    "face": 0.9027,
-    "over": 0.0973
-   },
-   "skeleton_flame": {
-    "eye": 1.0,
-    "face": 0.8581,
-    "over": 0.1419
+    "eye": 0.0861,
+    "face": 0.0813,
+    "over": 0.0048
    },
    "celestial_light": {
-    "eye": 0.841,
-    "face": 0.9997,
-    "over": -0.1587
+    "eye": 0.3812,
+    "face": 0.5024,
+    "over": -0.1212
+   },
+   "apollo_v1": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "apollo": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "arden_infernal_v1": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "arden_infernal": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "skeleton_flame_v1": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
+   },
+   "skeleton_flame": {
+    "eye": 0.0,
+    "face": 0.0,
+    "over": 0.0
    }
   }
  },
  "unusable_samples": {
-  "12.0": [
-   "arden_infernal",
-   "apollo",
-   "celestial_light"
-  ],
-  "18.8": [
-   "arden_infernal",
-   "apollo",
-   "skeleton_flame",
-   "celestial_light"
-  ],
-  "23.5": [
-   "arden_infernal",
-   "apollo",
-   "skeleton_flame",
-   "celestial_light"
-  ]
+  "12.0": [],
+  "18.8": [],
+  "23.5": []
  },
  "blown_fraction": {
   "12.0": {
    "relay_og": 0.0,
-   "arden_infernal": 1.0,
-   "apollo": 1.0,
-   "skeleton_flame": 1.0,
-   "celestial_light": 1.0
+   "celestial_light": 0.0,
+   "apollo_v1": 0.0,
+   "apollo": 0.0,
+   "arden_infernal_v1": 0.0,
+   "arden_infernal": 0.0,
+   "skeleton_flame_v1": 0.0,
+   "skeleton_flame": 0.0
   },
   "18.8": {
    "relay_og": 0.0,
-   "arden_infernal": 1.0,
-   "apollo": 1.0,
-   "skeleton_flame": 1.0,
-   "celestial_light": 1.0
+   "celestial_light": 0.5768,
+   "apollo_v1": 0.0,
+   "apollo": 0.0,
+   "arden_infernal_v1": 0.0,
+   "arden_infernal": 0.0,
+   "skeleton_flame_v1": 0.0,
+   "skeleton_flame": 0.0
   },
   "23.5": {
    "relay_og": 0.0,
-   "arden_infernal": 1.0,
-   "apollo": 1.0,
-   "skeleton_flame": 1.0,
-   "celestial_light": 1.0
+   "celestial_light": 0.0,
+   "apollo_v1": 0.0,
+   "apollo": 0.0,
+   "arden_infernal_v1": 0.0,
+   "arden_infernal": 0.0,
+   "skeleton_flame_v1": 0.0,
+   "skeleton_flame": 0.0
   }
  },
  "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\eyes_glow",
- "finished": "2026-09-27 05:48:47",
- "seconds": 156.13,
- "log": "E_12.0 INFO hour 12.0 {'relay_og': {'camera_uu': 300.0, 'eye_luma': 0.5586, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.2627, 'face_luma': 0.0702, 'face_bright': 0.0, 'eye_over_face': 0.4884}, 'arden_infernal': {'camera_uu': 300.0, 'eye_luma': 0.9996, 'eye_blown': 1.0, 'eye_bright': 1.0, 'colour': 0.1098, 'face_luma': 0.9194, 'face_bright': 1.0, 'eye_over_face': 0.0802}, 'apollo': {'camera_uu': 300.0, 'eye_luma': 0.9991, 'eye_blown': 1.0, 'eye_bright': 1.0, 'colour': 0.0902, 'face_luma': 0.8273, 'face_bright': 1.0, 'eye_over_face': 0.1718}, 'skeleton_flame': {'camera_uu': 300.0, 'eye_luma': 1.0, 'eye_blown': 1.0, 'eye_bright': 1.0, 'colour': 0.0, 'face_luma': 0.5476, 'face_bright': 0.0, 'eye_over_face': 0.4524}, 'celestial_light': {'camera_uu': 300.0, 'eye_luma': 0.7824, 'eye_blown': 1.0, 'eye_bright': 1.0, 'colour': 0.0392, 'face_luma': 0.9991, 'face_bright': 1.0, 'eye_over_face': -0.2167}}\nE_18.8 INFO hour 18.8 {'relay_og': {'camera_uu': 300.0, 'eye_luma': 0.0805, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0549, 'face_luma': 0.0266, 'face_bright': 0.0, 'eye_over_face': 0.0539}, 'arden_infernal': {'camera_uu': 300.0, 'eye_luma': 1.0, 'eye_blown': 1.0, 'eye_bright': 1.0, 'colour': 0.0, 'face_luma': 0.9321, 'face_bright': 1.0, 'eye_over_face': 0.0679}, 'apollo': {'camera_uu': 300.0, 'eye_luma': 1.0, 'eye_blown': 1.0, 'eye_bright': 1.0, 'colour': 0.0, 'face_luma': 0.8748, 'face_bright': 1.0, 'eye_over_face': 0.1252}, 'skeleton_flame': {'camera_uu': 300.0, 'eye_luma': 1.0, 'eye_blown': 1.0, 'eye_bright': 1.0, 'colour': 0.0, 'face_luma': 0.7889, 'face_bright': 1.0, 'eye_over_face': 0.2111}, 'celestial_light': {'camera_uu': 300.0, 'eye_luma': 0.8817, 'eye_blown': 1.0, 'eye_bright': 1.0, 'colour': 0.0471, 'face_luma': 0.9998, 'face_bright': 1.0, 'eye_over_face': -0.1181}}\nE_23.5 INFO hour 23.5 {'relay_og': {'camera_uu': 300.0, 'eye_luma': 0.0788, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0078, 'face_luma': 0.0209, 'face_bright': 0.0, 'eye_over_face': 0.0579}, 'arden_infernal': {'camera_uu': 300.0, 'eye_luma': 1.0, 'eye_blown': 1.0, 'eye_bright': 1.0, 'colour': 0.0, 'face_luma': 0.9645, 'face_bright': 1.0, 'eye_over_face': 0.0355}, 'apollo': {'camera_uu': 300.0, 'eye_luma': 1.0, 'eye_blown': 1.0, 'eye_bright': 1.0, 'colour': 0.0, 'face_luma': 0.9027, 'face_bright': 1.0, 'eye_over_face': 0.0973}, 'skeleton_flame': {'camera_uu': 300.0, 'eye_luma': 1.0, 'eye_blown': 1.0, 'eye_bright': 1.0, 'colour': 0.0, 'face_luma': 0.8581, 'face_bright': 1.0, 'eye_over_face': 0.1419}, 'celestial_light': {'camera_uu': 300.0, 'eye_luma': 0.841, 'eye_blown': 1.0, 'eye_bright': 1.0, 'colour': 0.0471, 'face_luma': 0.9997, 'face_bright': 1.0, 'eye_over_face': -0.1587}}\nE00 PASS the eyes and the face were both read for every skin at every hour {'read': 15, 'wanted': 15, 'note': 'a missing reading means the figure did not project into frame, not that the eyes are dark'}\nE_TABLE INFO eye against face, by hour and skin {'12.0': {'relay_og': {'eye': 0.5586, 'face': 0.0702, 'over': 0.4884}, 'arden_infernal': {'eye': 0.9996, 'face': 0.9194, 'over': 0.0802}, 'apollo': {'eye': 0.9991, 'face': 0.8273, 'over': 0.1718}, 'skeleton_flame': {'eye': 1.0, 'face': 0.5476, 'over': 0.4524}, 'celestial_light': {'eye': 0.7824, 'face': 0.9991, 'over': -0.2167}}, '18.8': {'relay_og': {'eye': 0.0805, 'face': 0.0266, 'over': 0.0539}, 'arden_infernal': {'eye': 1.0, 'face': 0.9321, 'over': 0.0679}, 'apollo': {'eye': 1.0, 'face': 0.8748, 'over': 0.1252}, 'skeleton_flame': {'eye': 1.0, 'face': 0.7889, 'over': 0.2111}, 'celestial_light': {'eye': 0.8817, 'face': 0.9998, 'over': -0.1181}}, '23.5': {'relay_og': {'eye': 0.0788, 'face': 0.0209, 'over': 0.0579}, 'arden_infernal': {'eye': 1.0, 'face': 0.9645, 'over': 0.0355}, 'apollo': {'eye': 1.0, 'face': 0.9027, 'over': 0.0973}, 'skeleton_flame': {'eye': 1.0, 'face': 0.8581, 'over': 0.1419}, 'celestial_light': {'eye': 0.841, 'face': 0.9997, 'over': -0.1587}}}\nE01 FAIL at noon every skin's eyes out-read the face they are set into {'at_noon': {'relay_og': {'over_face': 0.4884, 'eye': 0.5586, 'face': 0.0702, 'colour': 0.2627, 'usable': True}, 'arden_infernal': {'over_face': 0.0802, 'eye': 0.9996, 'face': 0.9194, 'colour': 0.1098, 'usable': False}, 'apollo': {'over_face': 0.1718, 'eye': 0.9991, 'face': 0.8273, 'colour': 0.0902, 'usable': False}, 'skeleton_flame': {'over_face': 0.4524, 'eye': 1.0, 'face': 0.5476, 'colour': 0.0, 'usable': True}, 'celestial_light': {'over_face': -0.2167, 'eye': 0.7824, 'face': 0.9991, 'colour': 0.0392, 'usable': False}}, 'over_face_floor': 0.05, 'unusable': ['arden_infernal', 'apollo', 'celestial_light'], 'note': 'local contrast only. The absolute-brightness branch was removed on 2026-09-27: it passed Celestial Light, whose eye is DARKER than its own face at every hour, and Arden Infernal on a clipped head. Daylight is the hard case -- an emissive holds its value while the sunlit stone beside it climbs past.'}\nE03 FAIL no skin's eyes are proven only by a blown-out head {'unusable_by_hour': {'12.0': ['arden_infernal', 'apollo', 'celestial_light'], '18.8': ['arden_infernal', 'apollo', 'skeleton_flame', 'celestial_light'], '23.5': ['arden_infernal', 'apollo', 'skeleton_flame', 'celestial_light']}, 'saturation_ceiling': 0.9, 'note': 'when the exposure clips both the eye and the face, the frame cannot distinguish a lamp from a white square. That is an UNUSABLE sample, not a passing one, and it must be visible.'}\nE04 FAIL the established eye colour is still readable, not washed to white {'colour_by_hour': {'12.0': {'relay_og': 0.2627, 'arden_infernal': 0.1098, 'apollo': 0.0902, 'skeleton_flame': 0.0, 'celestial_light': 0.0392}, '18.8': {'relay_og': 0.0549, 'arden_infernal': 0.0, 'apollo': 0.0, 'skeleton_flame': 0.0, 'celestial_light': 0.0471}, '23.5': {'relay_og': 0.0078, 'arden_infernal': 0.0, 'apollo': 0.0, 'skeleton_flame': 0.0, 'celestial_light': 0.0471}}, 'note': \"the founder: preserve each skin's established eye colour, and the customised SECONDARY has to show through the glow. Pure white scores zero separation and carries neither.\"}\nE02 FAIL the eyes read as lit at every hour tested, not only after dark {'weakest_over_face_by_hour': {'12.0': -0.2167, '18.8': -0.1181, '23.5': -0.1587}, 'table': {'12.0': {'relay_og': {'eye': 0.5586, 'face': 0.0702, 'over': 0.4884}, 'arden_infernal': {'eye': 0.9996, 'face': 0.9194, 'over': 0.0802}, 'apollo': {'eye': 0.9991, 'face': 0.8273, 'over': 0.1718}, 'skeleton_flame': {'eye': 1.0, 'face': 0.5476, 'over': 0.4524}, 'celestial_light': {'eye': 0.7824, 'face': 0.9991, 'over': -0.2167}}, '18.8': {'relay_og': {'eye': 0.0805, 'face': 0.0266, 'over': 0.0539}, 'arden_infernal': {'eye': 1.0, 'face': 0.9321, 'over': 0.0679}, 'apollo': {'eye': 1.0, 'face': 0.8748, 'over': 0.1252}, 'skeleton_flame': {'eye': 1.0, 'face': 0.7889, 'over': 0.2111}, 'celestial_light': {'eye': 0.8817, 'face': 0.9998, 'over': -0.1181}}, '23.5': {'relay_og': {'eye': 0.0788, 'face': 0.0209, 'over': 0.0579}, 'arden_infernal': {'eye': 1.0, 'face': 0.9645, 'over': 0.0355}, 'apollo': {'eye': 1.0, 'face': 0.9027, 'over': 0.0973}, 'skeleton_flame': {'eye': 1.0, 'face': 0.8581, 'over': 0.1419}, 'celestial_light': {'eye': 0.841, 'face': 0.9997, 'over': -0.1587}}}}\nE03 INFO how much colour each eye keeps, reported and not judged {'colour_separation': {'12.0': {'relay_og': 0.2627, 'arden_infernal': 0.1098, 'apollo': 0.0902, 'skeleton_flame': 0.0, 'celestial_light': 0.0392}, '18.8': {'relay_og': 0.0549, 'arden_infernal': 0.0, 'apollo': 0.0, 'skeleton_flame': 0.0, 'celestial_light': 0.0471}, '23.5': {'relay_og': 0.0078, 'arden_infernal': 0.0, 'apollo': 0.0, 'skeleton_flame': 0.0, 'celestial_light': 0.0471}}, 'note': 'white is 0.0. Ranking is stable across runs; absolute values are not, varying by up to 2.5x on one skin at one hour, which is why no threshold is drawn through them.'}\nE_BLOWN INFO how much of each eye patch is over white, reported and not judged {'12.0': {'relay_og': 0.0, 'arden_infernal': 1.0, 'apollo': 1.0, 'skeleton_flame': 1.0, 'celestial_light': 1.0}, '18.8': {'relay_og': 0.0, 'arden_infernal': 1.0, 'apollo': 1.0, 'skeleton_flame': 1.0, 'celestial_light': 1.0}, '23.5': {'relay_og': 0.0, 'arden_infernal': 1.0, 'apollo': 1.0, 'skeleton_flame': 1.0, 'celestial_light': 1.0}}\n"
+ "finished": "2026-09-27 08:26:57",
+ "seconds": 204.22,
+ "log": "E_12.0 INFO hour 12.0 {'relay_og': {'camera_uu': 300.0, 'eye_luma': 0.5859, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.2941, 'face_luma': 0.5841, 'face_bright': 0.0, 'eye_over_face': 0.0018}, 'celestial_light': {'camera_uu': 300.0, 'eye_luma': 0.441, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0588, 'face_luma': 0.5901, 'face_bright': 0.0, 'eye_over_face': -0.1491}, 'apollo_v1': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'apollo': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'arden_infernal_v1': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'arden_infernal': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'skeleton_flame_v1': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'skeleton_flame': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}}\nE_18.8 INFO hour 18.8 {'relay_og': {'camera_uu': 300.0, 'eye_luma': 0.1356, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.1412, 'face_luma': 0.1498, 'face_bright': 0.0, 'eye_over_face': -0.0142}, 'celestial_light': {'camera_uu': 300.0, 'eye_luma': 0.5353, 'eye_blown': 0.5768, 'eye_bright': 0.5768, 'colour': 0.1098, 'face_luma': 0.7307, 'face_bright': 0.9091, 'eye_over_face': -0.1954}, 'apollo_v1': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'apollo': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'arden_infernal_v1': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'arden_infernal': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'skeleton_flame_v1': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'skeleton_flame': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0001, 'face_bright': 0.0, 'eye_over_face': -0.0001}}\nE_23.5 INFO hour 23.5 {'relay_og': {'camera_uu': 300.0, 'eye_luma': 0.0861, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0196, 'face_luma': 0.0813, 'face_bright': 0.0, 'eye_over_face': 0.0048}, 'celestial_light': {'camera_uu': 300.0, 'eye_luma': 0.3812, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.102, 'face_luma': 0.5024, 'face_bright': 0.0, 'eye_over_face': -0.1212}, 'apollo_v1': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'apollo': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'arden_infernal_v1': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'arden_infernal': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'skeleton_flame_v1': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}, 'skeleton_flame': {'camera_uu': 300.0, 'eye_luma': 0.0, 'eye_blown': 0.0, 'eye_bright': 0.0, 'colour': 0.0, 'face_luma': 0.0, 'face_bright': 0.0, 'eye_over_face': 0.0}}\nE00 PASS the eyes and the face were both read for every skin at every hour {'read': 24, 'wanted': 24, 'note': 'a missing reading means the figure did not project into frame, not that the eyes are dark'}\nE_TABLE INFO eye against face, by hour and skin {'12.0': {'relay_og': {'eye': 0.5859, 'face': 0.5841, 'over': 0.0018}, 'celestial_light': {'eye': 0.441, 'face': 0.5901, 'over': -0.1491}, 'apollo_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'apollo': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'arden_infernal_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'arden_infernal': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'skeleton_flame_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'skeleton_flame': {'eye': 0.0, 'face': 0.0, 'over': 0.0}}, '18.8': {'relay_og': {'eye': 0.1356, 'face': 0.1498, 'over': -0.0142}, 'celestial_light': {'eye': 0.5353, 'face': 0.7307, 'over': -0.1954}, 'apollo_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'apollo': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'arden_infernal_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'arden_infernal': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'skeleton_flame_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'skeleton_flame': {'eye': 0.0, 'face': 0.0001, 'over': -0.0001}}, '23.5': {'relay_og': {'eye': 0.0861, 'face': 0.0813, 'over': 0.0048}, 'celestial_light': {'eye': 0.3812, 'face': 0.5024, 'over': -0.1212}, 'apollo_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'apollo': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'arden_infernal_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'arden_infernal': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'skeleton_flame_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'skeleton_flame': {'eye': 0.0, 'face': 0.0, 'over': 0.0}}}\nE01 FAIL at noon every skin's eyes out-read the face they are set into {'at_noon': {'relay_og': {'over_face': 0.0018, 'eye': 0.5859, 'face': 0.5841, 'colour': 0.2941, 'usable': True}, 'celestial_light': {'over_face': -0.1491, 'eye': 0.441, 'face': 0.5901, 'colour': 0.0588, 'usable': True}, 'apollo_v1': {'over_face': 0.0, 'eye': 0.0, 'face': 0.0, 'colour': 0.0, 'usable': True}, 'apollo': {'over_face': 0.0, 'eye': 0.0, 'face': 0.0, 'colour': 0.0, 'usable': True}, 'arden_infernal_v1': {'over_face': 0.0, 'eye': 0.0, 'face': 0.0, 'colour': 0.0, 'usable': True}, 'arden_infernal': {'over_face': 0.0, 'eye': 0.0, 'face': 0.0, 'colour': 0.0, 'usable': True}, 'skeleton_flame_v1': {'over_face': 0.0, 'eye': 0.0, 'face': 0.0, 'colour': 0.0, 'usable': True}, 'skeleton_flame': {'over_face': 0.0, 'eye': 0.0, 'face': 0.0, 'colour': 0.0, 'usable': True}}, 'over_face_floor': 0.05, 'unusable': [], 'note': 'local contrast only. The absolute-brightness branch was removed on 2026-09-27: it passed Celestial Light, whose eye is DARKER than its own face at every hour, and Arden Infernal on a clipped head. Daylight is the hard case -- an emissive holds its value while the sunlit stone beside it climbs past.'}\nE03 PASS no skin's eyes are proven only by a blown-out head {'unusable_by_hour': {'12.0': [], '18.8': [], '23.5': []}, 'saturation_ceiling': 0.9, 'note': 'when the exposure clips both the eye and the face, the frame cannot distinguish a lamp from a white square. That is an UNUSABLE sample, not a passing one, and it must be visible.'}\nE04 FAIL the established eye colour is still readable, not washed to white {'colour_by_hour': {'12.0': {'relay_og': 0.2941, 'celestial_light': 0.0588, 'apollo_v1': 0.0, 'apollo': 0.0, 'arden_infernal_v1': 0.0, 'arden_infernal': 0.0, 'skeleton_flame_v1': 0.0, 'skeleton_flame': 0.0}, '18.8': {'relay_og': 0.1412, 'celestial_light': 0.1098, 'apollo_v1': 0.0, 'apollo': 0.0, 'arden_infernal_v1': 0.0, 'arden_infernal': 0.0, 'skeleton_flame_v1': 0.0, 'skeleton_flame': 0.0}, '23.5': {'relay_og': 0.0196, 'celestial_light': 0.102, 'apollo_v1': 0.0, 'apollo': 0.0, 'arden_infernal_v1': 0.0, 'arden_infernal': 0.0, 'skeleton_flame_v1': 0.0, 'skeleton_flame': 0.0}}, 'note': \"the founder: preserve each skin's established eye colour, and the customised SECONDARY has to show through the glow. Pure white scores zero separation and carries neither.\"}\nE02 FAIL the eyes read as lit at every hour tested, not only after dark {'weakest_over_face_by_hour': {'12.0': -0.1491, '18.8': -0.1954, '23.5': -0.1212}, 'table': {'12.0': {'relay_og': {'eye': 0.5859, 'face': 0.5841, 'over': 0.0018}, 'celestial_light': {'eye': 0.441, 'face': 0.5901, 'over': -0.1491}, 'apollo_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'apollo': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'arden_infernal_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'arden_infernal': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'skeleton_flame_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'skeleton_flame': {'eye': 0.0, 'face': 0.0, 'over': 0.0}}, '18.8': {'relay_og': {'eye': 0.1356, 'face': 0.1498, 'over': -0.0142}, 'celestial_light': {'eye': 0.5353, 'face': 0.7307, 'over': -0.1954}, 'apollo_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'apollo': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'arden_infernal_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'arden_infernal': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'skeleton_flame_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'skeleton_flame': {'eye': 0.0, 'face': 0.0001, 'over': -0.0001}}, '23.5': {'relay_og': {'eye': 0.0861, 'face': 0.0813, 'over': 0.0048}, 'celestial_light': {'eye': 0.3812, 'face': 0.5024, 'over': -0.1212}, 'apollo_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'apollo': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'arden_infernal_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'arden_infernal': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'skeleton_flame_v1': {'eye': 0.0, 'face': 0.0, 'over': 0.0}, 'skeleton_flame': {'eye': 0.0, 'face': 0.0, 'over': 0.0}}}}\nE03 INFO how much colour each eye keeps, reported and not judged {'colour_separation': {'12.0': {'relay_og': 0.2941, 'celestial_light': 0.0588, 'apollo_v1': 0.0, 'apollo': 0.0, 'arden_infernal_v1': 0.0, 'arden_infernal': 0.0, 'skeleton_flame_v1': 0.0, 'skeleton_flame': 0.0}, '18.8': {'relay_og': 0.1412, 'celestial_light': 0.1098, 'apollo_v1': 0.0, 'apollo': 0.0, 'arden_infernal_v1': 0.0, 'arden_infernal': 0.0, 'skeleton_flame_v1': 0.0, 'skeleton_flame': 0.0}, '23.5': {'relay_og': 0.0196, 'celestial_light': 0.102, 'apollo_v1': 0.0, 'apollo': 0.0, 'arden_infernal_v1': 0.0, 'arden_infernal': 0.0, 'skeleton_flame_v1': 0.0, 'skeleton_flame': 0.0}}, 'note': 'white is 0.0. Ranking is stable across runs; absolute values are not, varying by up to 2.5x on one skin at one hour, which is why no threshold is drawn through them.'}\nE_BLOWN INFO how much of each eye patch is over white, reported and not judged {'12.0': {'relay_og': 0.0, 'celestial_light': 0.0, 'apollo_v1': 0.0, 'apollo': 0.0, 'arden_infernal_v1': 0.0, 'arden_infernal': 0.0, 'skeleton_flame_v1': 0.0, 'skeleton_flame': 0.0}, '18.8': {'relay_og': 0.0, 'celestial_light': 0.5768, 'apollo_v1': 0.0, 'apollo': 0.0, 'arden_infernal_v1': 0.0, 'arden_infernal': 0.0, 'skeleton_flame_v1': 0.0, 'skeleton_flame': 0.0}, '23.5': {'relay_og': 0.0, 'celestial_light': 0.0, 'apollo_v1': 0.0, 'apollo': 0.0, 'arden_infernal_v1': 0.0, 'arden_infernal': 0.0, 'skeleton_flame_v1': 0.0, 'skeleton_flame': 0.0}}\n"
 }

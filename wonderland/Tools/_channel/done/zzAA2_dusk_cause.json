@@ -1,0 +1,303 @@
+{
+ "name": "zzAA2_dusk_cause",
+ "started": "2026-09-27 17:57:08",
+ "status": "voided: conditions missing or disagreeing with themselves",
+ "tests": [
+  {
+   "id": "X_LEADKNOB",
+   "name": "wl.Sky.MoonLeadHours exists in this build and takes a value",
+   "pass": true,
+   "detail": {
+    "asked": 1.5,
+    "read_back": 1.5,
+    "as_found": 0.0,
+    "note": "a build without it accepts the command, logs 'not recognized' and carries on, and the moon_up rung would be an identical copy of the baseline reported as 'raising the moon does nothing' -- the exact false negative that would confirm the atmosphere story"
+   }
+  },
+  {
+   "id": "X_VALID",
+   "name": "the observation point is a real standing position with ground under the patch",
+   "pass": true,
+   "detail": {
+    "vantage": {
+     "asked": [
+      -64.0,
+      -5042.0
+     ],
+     "landed": [
+      -64.0,
+      -5042.0,
+      94.3
+     ],
+     "offset_uu": 0.0,
+     "ground_trace_z": 0.7,
+     "forward_hit": null,
+     "down_hit": {
+      "dist": 993.6,
+      "z": 0.7
+     },
+     "ground_patch_hit": {
+      "dist": 997.1,
+      "z": -2.9
+     },
+     "ground_rect_screen": [
+      0.5,
+      0.78,
+      0.3,
+      0.16
+     ]
+    },
+    "note": "the same five checks the region ladder uses: arrived, not embedded in geometry, floor beneath the camera, and something solid under the rectangle being measured"
+   }
+  },
+  {
+   "id": "X_MEASURED",
+   "name": "every condition produced a reading",
+   "pass": true,
+   "detail": {
+    "measured": [
+     "dusk_base",
+     "dusk_fog_off",
+     "dusk_moon_4x",
+     "dusk_moon_off",
+     "dusk_moon_up",
+     "night_base",
+     "night_fog_off",
+     "night_moon_4x",
+     "night_moon_off"
+    ],
+    "wanted": [
+     "dusk_base",
+     "dusk_moon_off",
+     "dusk_moon_4x",
+     "dusk_fog_off",
+     "dusk_moon_up",
+     "night_base",
+     "night_moon_off",
+     "night_moon_4x",
+     "night_fog_off"
+    ]
+   }
+  },
+  {
+   "id": "X_NOISE",
+   "name": "every condition agrees with itself, on the frame and on the ground",
+   "pass": false,
+   "detail": {
+    "worst_spread": 0.0107,
+    "tolerance": 0.01
+   }
+  }
+ ],
+ "knobs_as_found": {
+  "MoonGain": 0.05,
+  "MoonLeadHours": 0.0,
+  "Fog": 1.0,
+  "PracticalRadius": 12000.0,
+  "PracticalCount": 48.0
+ },
+ "vantage": {
+  "asked": [
+   -64.0,
+   -5042.0
+  ],
+  "landed": [
+   -64.0,
+   -5042.0,
+   94.3
+  ],
+  "offset_uu": 0.0,
+  "ground_trace_z": 0.7,
+  "forward_hit": null,
+  "down_hit": {
+   "dist": 993.6,
+   "z": 0.7
+  },
+  "ground_patch_hit": {
+   "dist": 997.1,
+   "z": -2.9
+  },
+  "ground_rect_screen": [
+   0.5,
+   0.78,
+   0.3,
+   0.16
+  ]
+ },
+ "conditions": {
+  "dusk_base": {
+   "hour": 18.0,
+   "held": {
+    "MoonGain": 0.05,
+    "MoonLeadHours": 0.0,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": null,
+    "MoonLeadHours": 0.0,
+    "Fog": 1
+   },
+   "luma": 0.1139,
+   "spread": 0.0001,
+   "ground_luma": 0.0897,
+   "ground_crushed": 0.9462,
+   "ground_readable": 0.0532,
+   "ground_spread": 0.0001
+  },
+  "dusk_moon_off": {
+   "hour": 18.0,
+   "held": {
+    "MoonGain": 0.0,
+    "MoonLeadHours": 0.0,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": 0.0,
+    "MoonLeadHours": 0.0,
+    "Fog": 1
+   },
+   "luma": 0.0723,
+   "spread": 0.0001,
+   "ground_luma": 0.0527,
+   "ground_crushed": 0.9921,
+   "ground_readable": 0.0074,
+   "ground_spread": 0.0
+  },
+  "dusk_moon_4x": {
+   "hour": 18.0,
+   "held": {
+    "MoonGain": 0.2,
+    "MoonLeadHours": 0.0,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": 0.2,
+    "MoonLeadHours": 0.0,
+    "Fog": 1
+   },
+   "luma": 0.1985,
+   "spread": 0.0004,
+   "ground_luma": 0.1694,
+   "ground_crushed": 0.2163,
+   "ground_readable": 0.7832,
+   "ground_spread": 0.0019
+  },
+  "dusk_fog_off": {
+   "hour": 18.0,
+   "held": {
+    "MoonGain": 0.05,
+    "MoonLeadHours": 0.0,
+    "Fog": 0.0
+   },
+   "asked": {
+    "MoonGain": null,
+    "MoonLeadHours": 0.0,
+    "Fog": 0
+   },
+   "luma": 0.1163,
+   "spread": 0.0005,
+   "ground_luma": 0.0922,
+   "ground_crushed": 0.9378,
+   "ground_readable": 0.0617,
+   "ground_spread": 0.0033
+  },
+  "dusk_moon_up": {
+   "hour": 18.0,
+   "held": {
+    "MoonGain": 0.05,
+    "MoonLeadHours": 1.5,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": null,
+    "MoonLeadHours": 1.5,
+    "Fog": 1
+   },
+   "luma": 0.1075,
+   "spread": 0.0,
+   "ground_luma": 0.0907,
+   "ground_crushed": 0.9406,
+   "ground_readable": 0.0589,
+   "ground_spread": 0.0002
+  },
+  "night_base": {
+   "hour": 23.0,
+   "held": {
+    "MoonGain": 0.05,
+    "MoonLeadHours": 0.0,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": null,
+    "MoonLeadHours": 0.0,
+    "Fog": 1
+   },
+   "luma": 0.1651,
+   "spread": 0.0005,
+   "ground_luma": 0.1397,
+   "ground_crushed": 0.584,
+   "ground_readable": 0.4155,
+   "ground_spread": 0.0076
+  },
+  "night_moon_off": {
+   "hour": 23.0,
+   "held": {
+    "MoonGain": 0.0,
+    "MoonLeadHours": 0.0,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": 0.0,
+    "MoonLeadHours": 0.0,
+    "Fog": 1
+   },
+   "luma": 0.1106,
+   "spread": 0.0,
+   "ground_luma": 0.0973,
+   "ground_crushed": 0.8888,
+   "ground_readable": 0.1107,
+   "ground_spread": 0.0022
+  },
+  "night_moon_4x": {
+   "hour": 23.0,
+   "held": {
+    "MoonGain": 0.2,
+    "MoonLeadHours": 0.0,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": 0.2,
+    "MoonLeadHours": 0.0,
+    "Fog": 1
+   },
+   "luma": 0.2581,
+   "spread": 0.0005,
+   "ground_luma": 0.2203,
+   "ground_crushed": 0.2296,
+   "ground_readable": 0.7699,
+   "ground_spread": 0.0082
+  },
+  "night_fog_off": {
+   "hour": 23.0,
+   "held": {
+    "MoonGain": 0.05,
+    "MoonLeadHours": 0.0,
+    "Fog": 0.0
+   },
+   "asked": {
+    "MoonGain": null,
+    "MoonLeadHours": 0.0,
+    "Fog": 0
+   },
+   "luma": 0.1669,
+   "spread": 0.001,
+   "ground_luma": 0.1413,
+   "ground_crushed": 0.5696,
+   "ground_readable": 0.4299,
+   "ground_spread": 0.0107
+  }
+ },
+ "finished": "2026-09-27 17:58:33",
+ "seconds": 85.6,
+ "log": "X_LEADKNOB PASS wl.Sky.MoonLeadHours exists in this build and takes a value {'asked': 1.5, 'read_back': 1.5, 'as_found': 0.0, 'note': \"a build without it accepts the command, logs 'not recognized' and carries on, and the moon_up rung would be an identical copy of the baseline reported as 'raising the moon does nothing' -- the exact false negative that would confirm the atmosphere story\"}\nX_VALID PASS the observation point is a real standing position with ground under the patch {'vantage': {'asked': [-64.0, -5042.0], 'landed': [-64.0, -5042.0, 94.3], 'offset_uu': 0.0, 'ground_trace_z': 0.7, 'forward_hit': None, 'down_hit': {'dist': 993.6, 'z': 0.7}, 'ground_patch_hit': {'dist': 997.1, 'z': -2.9}, 'ground_rect_screen': [0.5, 0.78, 0.3, 0.16]}, 'note': 'the same five checks the region ladder uses: arrived, not embedded in geometry, floor beneath the camera, and something solid under the rectangle being measured'}\nX_MEASURED PASS every condition produced a reading {'measured': ['dusk_base', 'dusk_fog_off', 'dusk_moon_4x', 'dusk_moon_off', 'dusk_moon_up', 'night_base', 'night_fog_off', 'night_moon_4x', 'night_moon_off'], 'wanted': ['dusk_base', 'dusk_moon_off', 'dusk_moon_4x', 'dusk_fog_off', 'dusk_moon_up', 'night_base', 'night_moon_off', 'night_moon_4x', 'night_fog_off']}\nX_NOISE FAIL every condition agrees with itself, on the frame and on the ground {'worst_spread': 0.0107, 'tolerance': 0.01}\n"
+}

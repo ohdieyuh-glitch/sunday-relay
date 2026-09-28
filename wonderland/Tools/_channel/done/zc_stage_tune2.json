@@ -1,0 +1,594 @@
+{
+ "name": "zc_stage_tune2",
+ "started": "2026-09-27 08:06:13",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "T00",
+   "name": "every skin was exported at every setting",
+   "pass": true,
+   "detail": {
+    "read": 40,
+    "wanted": 40
+   }
+  },
+  {
+   "id": "T01",
+   "name": "there is a stage setting where no skin pins, the figure is mid-toned and the glow shows in its own colour",
+   "pass": false,
+   "detail": {
+    "passing": [],
+    "table": {
+     "relay_og g0.3500 l0.000": {
+      "subject_px": 6042,
+      "mean": 0.942,
+      "pinned": 0.867,
+      "top_decile_luma": 0.995,
+      "top_decile_colour": 0.0
+     },
+     "relay_og g0.3500 l-1.500": {
+      "subject_px": 6434,
+      "mean": 0.946,
+      "pinned": 0.824,
+      "top_decile_luma": 0.998,
+      "top_decile_colour": 0.0
+     },
+     "relay_og g0.3500 l-3.000": {
+      "subject_px": 6288,
+      "mean": 0.943,
+      "pinned": 0.864,
+      "top_decile_luma": 0.997,
+      "top_decile_colour": 0.0
+     },
+     "relay_og g0.3500 l-4.500": {
+      "subject_px": 6201,
+      "mean": 0.938,
+      "pinned": 0.844,
+      "top_decile_luma": 0.994,
+      "top_decile_colour": 0.0
+     },
+     "relay_og g1.0000 l0.000": {
+      "subject_px": 6357,
+      "mean": 0.931,
+      "pinned": 0.807,
+      "top_decile_luma": 0.996,
+      "top_decile_colour": 0.0
+     },
+     "relay_og g1.0000 l-1.500": {
+      "subject_px": 6022,
+      "mean": 0.946,
+      "pinned": 0.849,
+      "top_decile_luma": 0.997,
+      "top_decile_colour": 0.0
+     },
+     "relay_og g1.0000 l-3.000": {
+      "subject_px": 6594,
+      "mean": 0.937,
+      "pinned": 0.835,
+      "top_decile_luma": 0.996,
+      "top_decile_colour": 0.0
+     },
+     "relay_og g1.0000 l-4.500": {
+      "subject_px": 5845,
+      "mean": 0.942,
+      "pinned": 0.828,
+      "top_decile_luma": 0.995,
+      "top_decile_colour": 0.0
+     },
+     "apollo g0.3500 l0.000": {
+      "subject_px": 7642,
+      "mean": 0.899,
+      "pinned": 0.708,
+      "top_decile_luma": 1.0,
+      "top_decile_colour": 0.0
+     },
+     "apollo g0.3500 l-1.500": {
+      "subject_px": 7537,
+      "mean": 0.907,
+      "pinned": 0.732,
+      "top_decile_luma": 1.0,
+      "top_decile_colour": 0.0
+     },
+     "apollo g0.3500 l-3.000": {
+      "subject_px": 7667,
+      "mean": 0.903,
+      "pinned": 0.707,
+      "top_decile_luma": 1.0,
+      "top_decile_colour": 0.0
+     },
+     "apollo g0.3500 l-4.500": {
+      "subject_px": 6888,
+      "mean": 0.906,
+      "pinned": 0.714,
+      "top_decile_luma": 1.0,
+      "top_decile_colour": 0.0
+     },
+     "apollo g1.0000 l0.000": {
+      "subject_px": 7480,
+      "mean": 0.936,
+      "pinned": 0.729,
+      "top_decile_luma": 1.0,
+      "top_decile_colour": 0.0
+     },
+     "apollo g1.0000 l-1.500": {
+      "subject_px": 7655,
+      "mean": 0.935,
+      "pinned": 0.737,
+      "top_decile_luma": 1.0,
+      "top_decile_colour": 0.0
+     },
+     "apollo g1.0000 l-3.000": {
+      "subject_px": 7251,
+      "mean": 0.939,
+      "pinned": 0.75,
+      "top_decile_luma": 1.0,
+      "top_decile_colour": 0.0
+     },
+     "apollo g1.0000 l-4.500": {
+      "subject_px": 6956,
+      "mean": 0.935,
+      "pinned": 0.74,
+      "top_decile_luma": 1.0,
+      "top_decile_colour": 0.0
+     },
+     "skeleton_flame g0.3500 l0.000": {
+      "subject_px": 11406,
+      "mean": 0.849,
+      "pinned": 0.399,
+      "top_decile_luma": 0.995,
+      "top_decile_colour": -0.002
+     },
+     "skeleton_flame g0.3500 l-1.500": {
+      "subject_px": 11715,
+      "mean": 0.795,
+      "pinned": 0.372,
+      "top_decile_luma": 0.992,
+      "top_decile_colour": -0.003
+     },
+     "skeleton_flame g0.3500 l-3.000": {
+      "subject_px": 10573,
+      "mean": 0.846,
+      "pinned": 0.405,
+      "top_decile_luma": 0.992,
+      "top_decile_colour": -0.001
+     },
+     "skeleton_flame g0.3500 l-4.500": {
+      "subject_px": 10598,
+      "mean": 0.798,
+      "pinned": 0.36,
+      "top_decile_luma": 0.993,
+      "top_decile_colour": -0.003
+     },
+     "skeleton_flame g1.0000 l0.000": {
+      "subject_px": 11607,
+      "mean": 0.908,
+      "pinned": 0.46,
+      "top_decile_luma": 0.997,
+      "top_decile_colour": 0.001
+     },
+     "skeleton_flame g1.0000 l-1.500": {
+      "subject_px": 11055,
+      "mean": 0.894,
+      "pinned": 0.433,
+      "top_decile_luma": 0.995,
+      "top_decile_colour": -0.0
+     },
+     "skeleton_flame g1.0000 l-3.000": {
+      "subject_px": 12057,
+      "mean": 0.891,
+      "pinned": 0.447,
+      "top_decile_luma": 0.994,
+      "top_decile_colour": 0.001
+     },
+     "skeleton_flame g1.0000 l-4.500": {
+      "subject_px": 11421,
+      "mean": 0.899,
+      "pinned": 0.407,
+      "top_decile_luma": 0.995,
+      "top_decile_colour": -0.0
+     },
+     "celestial_light g0.3500 l0.000": {
+      "subject_px": 12033,
+      "mean": 0.923,
+      "pinned": 0.305,
+      "top_decile_luma": 0.992,
+      "top_decile_colour": -0.001
+     },
+     "celestial_light g0.3500 l-1.500": {
+      "subject_px": 11888,
+      "mean": 0.918,
+      "pinned": 0.337,
+      "top_decile_luma": 0.992,
+      "top_decile_colour": -0.0
+     },
+     "celestial_light g0.3500 l-3.000": {
+      "subject_px": 10923,
+      "mean": 0.92,
+      "pinned": 0.307,
+      "top_decile_luma": 0.992,
+      "top_decile_colour": 0.0
+     },
+     "celestial_light g0.3500 l-4.500": {
+      "subject_px": 11570,
+      "mean": 0.918,
+      "pinned": 0.312,
+      "top_decile_luma": 0.992,
+      "top_decile_colour": -0.001
+     },
+     "celestial_light g1.0000 l0.000": {
+      "subject_px": 11394,
+      "mean": 0.954,
+      "pinned": 0.878,
+      "top_decile_luma": 0.995,
+      "top_decile_colour": 0.005
+     },
+     "celestial_light g1.0000 l-1.500": {
+      "subject_px": 11857,
+      "mean": 0.951,
+      "pinned": 0.87,
+      "top_decile_luma": 0.993,
+      "top_decile_colour": 0.003
+     },
+     "celestial_light g1.0000 l-3.000": {
+      "subject_px": 11568,
+      "mean": 0.952,
+      "pinned": 0.892,
+      "top_decile_luma": 0.995,
+      "top_decile_colour": 0.009
+     },
+     "celestial_light g1.0000 l-4.500": {
+      "subject_px": 10587,
+      "mean": 0.948,
+      "pinned": 0.864,
+      "top_decile_luma": 0.995,
+      "top_decile_colour": 0.007
+     },
+     "arden_infernal g0.3500 l0.000": {
+      "subject_px": 11485,
+      "mean": 0.766,
+      "pinned": 0.246,
+      "top_decile_luma": 1.0,
+      "top_decile_colour": 0.001
+     },
+     "arden_infernal g0.3500 l-1.500": {
+      "subject_px": 12565,
+      "mean": 0.745,
+      "pinned": 0.236,
+      "top_decile_luma": 1.0,
+      "top_decile_colour": 0.006
+     },
+     "arden_infernal g0.3500 l-3.000": {
+      "subject_px": 11615,
+      "mean": 0.754,
+      "pinned": 0.253,
+      "top_decile_luma": 0.999,
+      "top_decile_colour": 0.006
+     },
+     "arden_infernal g0.3500 l-4.500": {
+      "subject_px": 11273,
+      "mean": 0.761,
+      "pinned": 0.243,
+      "top_decile_luma": 1.0,
+      "top_decile_colour": 0.006
+     },
+     "arden_infernal g1.0000 l0.000": {
+      "subject_px": 13006,
+      "mean": 0.866,
+      "pinned": 0.277,
+      "top_decile_luma": 0.999,
+      "top_decile_colour": 0.007
+     },
+     "arden_infernal g1.0000 l-1.500": {
+      "subject_px": 11508,
+      "mean": 0.874,
+      "pinned": 0.284,
+      "top_decile_luma": 1.0,
+      "top_decile_colour": 0.005
+     },
+     "arden_infernal g1.0000 l-3.000": {
+      "subject_px": 11831,
+      "mean": 0.865,
+      "pinned": 0.289,
+      "top_decile_luma": 0.999,
+      "top_decile_colour": 0.005
+     },
+     "arden_infernal g1.0000 l-4.500": {
+      "subject_px": 12310,
+      "mean": 0.878,
+      "pinned": 0.273,
+      "top_decile_luma": 1.0,
+      "top_decile_colour": 0.006
+     }
+    },
+    "note": "PreviewGlow and PreviewLights are baked into WonderlandSkinStage.cpp from this."
+   }
+  }
+ ],
+ "table": {
+  "relay_og g0.3500 l0.000": {
+   "subject_px": 6042,
+   "mean": 0.942,
+   "pinned": 0.867,
+   "top_decile_luma": 0.995,
+   "top_decile_colour": 0.0
+  },
+  "relay_og g0.3500 l-1.500": {
+   "subject_px": 6434,
+   "mean": 0.946,
+   "pinned": 0.824,
+   "top_decile_luma": 0.998,
+   "top_decile_colour": 0.0
+  },
+  "relay_og g0.3500 l-3.000": {
+   "subject_px": 6288,
+   "mean": 0.943,
+   "pinned": 0.864,
+   "top_decile_luma": 0.997,
+   "top_decile_colour": 0.0
+  },
+  "relay_og g0.3500 l-4.500": {
+   "subject_px": 6201,
+   "mean": 0.938,
+   "pinned": 0.844,
+   "top_decile_luma": 0.994,
+   "top_decile_colour": 0.0
+  },
+  "relay_og g1.0000 l0.000": {
+   "subject_px": 6357,
+   "mean": 0.931,
+   "pinned": 0.807,
+   "top_decile_luma": 0.996,
+   "top_decile_colour": 0.0
+  },
+  "relay_og g1.0000 l-1.500": {
+   "subject_px": 6022,
+   "mean": 0.946,
+   "pinned": 0.849,
+   "top_decile_luma": 0.997,
+   "top_decile_colour": 0.0
+  },
+  "relay_og g1.0000 l-3.000": {
+   "subject_px": 6594,
+   "mean": 0.937,
+   "pinned": 0.835,
+   "top_decile_luma": 0.996,
+   "top_decile_colour": 0.0
+  },
+  "relay_og g1.0000 l-4.500": {
+   "subject_px": 5845,
+   "mean": 0.942,
+   "pinned": 0.828,
+   "top_decile_luma": 0.995,
+   "top_decile_colour": 0.0
+  },
+  "apollo g0.3500 l0.000": {
+   "subject_px": 7642,
+   "mean": 0.899,
+   "pinned": 0.708,
+   "top_decile_luma": 1.0,
+   "top_decile_colour": 0.0
+  },
+  "apollo g0.3500 l-1.500": {
+   "subject_px": 7537,
+   "mean": 0.907,
+   "pinned": 0.732,
+   "top_decile_luma": 1.0,
+   "top_decile_colour": 0.0
+  },
+  "apollo g0.3500 l-3.000": {
+   "subject_px": 7667,
+   "mean": 0.903,
+   "pinned": 0.707,
+   "top_decile_luma": 1.0,
+   "top_decile_colour": 0.0
+  },
+  "apollo g0.3500 l-4.500": {
+   "subject_px": 6888,
+   "mean": 0.906,
+   "pinned": 0.714,
+   "top_decile_luma": 1.0,
+   "top_decile_colour": 0.0
+  },
+  "apollo g1.0000 l0.000": {
+   "subject_px": 7480,
+   "mean": 0.936,
+   "pinned": 0.729,
+   "top_decile_luma": 1.0,
+   "top_decile_colour": 0.0
+  },
+  "apollo g1.0000 l-1.500": {
+   "subject_px": 7655,
+   "mean": 0.935,
+   "pinned": 0.737,
+   "top_decile_luma": 1.0,
+   "top_decile_colour": 0.0
+  },
+  "apollo g1.0000 l-3.000": {
+   "subject_px": 7251,
+   "mean": 0.939,
+   "pinned": 0.75,
+   "top_decile_luma": 1.0,
+   "top_decile_colour": 0.0
+  },
+  "apollo g1.0000 l-4.500": {
+   "subject_px": 6956,
+   "mean": 0.935,
+   "pinned": 0.74,
+   "top_decile_luma": 1.0,
+   "top_decile_colour": 0.0
+  },
+  "skeleton_flame g0.3500 l0.000": {
+   "subject_px": 11406,
+   "mean": 0.849,
+   "pinned": 0.399,
+   "top_decile_luma": 0.995,
+   "top_decile_colour": -0.002
+  },
+  "skeleton_flame g0.3500 l-1.500": {
+   "subject_px": 11715,
+   "mean": 0.795,
+   "pinned": 0.372,
+   "top_decile_luma": 0.992,
+   "top_decile_colour": -0.003
+  },
+  "skeleton_flame g0.3500 l-3.000": {
+   "subject_px": 10573,
+   "mean": 0.846,
+   "pinned": 0.405,
+   "top_decile_luma": 0.992,
+   "top_decile_colour": -0.001
+  },
+  "skeleton_flame g0.3500 l-4.500": {
+   "subject_px": 10598,
+   "mean": 0.798,
+   "pinned": 0.36,
+   "top_decile_luma": 0.993,
+   "top_decile_colour": -0.003
+  },
+  "skeleton_flame g1.0000 l0.000": {
+   "subject_px": 11607,
+   "mean": 0.908,
+   "pinned": 0.46,
+   "top_decile_luma": 0.997,
+   "top_decile_colour": 0.001
+  },
+  "skeleton_flame g1.0000 l-1.500": {
+   "subject_px": 11055,
+   "mean": 0.894,
+   "pinned": 0.433,
+   "top_decile_luma": 0.995,
+   "top_decile_colour": -0.0
+  },
+  "skeleton_flame g1.0000 l-3.000": {
+   "subject_px": 12057,
+   "mean": 0.891,
+   "pinned": 0.447,
+   "top_decile_luma": 0.994,
+   "top_decile_colour": 0.001
+  },
+  "skeleton_flame g1.0000 l-4.500": {
+   "subject_px": 11421,
+   "mean": 0.899,
+   "pinned": 0.407,
+   "top_decile_luma": 0.995,
+   "top_decile_colour": -0.0
+  },
+  "celestial_light g0.3500 l0.000": {
+   "subject_px": 12033,
+   "mean": 0.923,
+   "pinned": 0.305,
+   "top_decile_luma": 0.992,
+   "top_decile_colour": -0.001
+  },
+  "celestial_light g0.3500 l-1.500": {
+   "subject_px": 11888,
+   "mean": 0.918,
+   "pinned": 0.337,
+   "top_decile_luma": 0.992,
+   "top_decile_colour": -0.0
+  },
+  "celestial_light g0.3500 l-3.000": {
+   "subject_px": 10923,
+   "mean": 0.92,
+   "pinned": 0.307,
+   "top_decile_luma": 0.992,
+   "top_decile_colour": 0.0
+  },
+  "celestial_light g0.3500 l-4.500": {
+   "subject_px": 11570,
+   "mean": 0.918,
+   "pinned": 0.312,
+   "top_decile_luma": 0.992,
+   "top_decile_colour": -0.001
+  },
+  "celestial_light g1.0000 l0.000": {
+   "subject_px": 11394,
+   "mean": 0.954,
+   "pinned": 0.878,
+   "top_decile_luma": 0.995,
+   "top_decile_colour": 0.005
+  },
+  "celestial_light g1.0000 l-1.500": {
+   "subject_px": 11857,
+   "mean": 0.951,
+   "pinned": 0.87,
+   "top_decile_luma": 0.993,
+   "top_decile_colour": 0.003
+  },
+  "celestial_light g1.0000 l-3.000": {
+   "subject_px": 11568,
+   "mean": 0.952,
+   "pinned": 0.892,
+   "top_decile_luma": 0.995,
+   "top_decile_colour": 0.009
+  },
+  "celestial_light g1.0000 l-4.500": {
+   "subject_px": 10587,
+   "mean": 0.948,
+   "pinned": 0.864,
+   "top_decile_luma": 0.995,
+   "top_decile_colour": 0.007
+  },
+  "arden_infernal g0.3500 l0.000": {
+   "subject_px": 11485,
+   "mean": 0.766,
+   "pinned": 0.246,
+   "top_decile_luma": 1.0,
+   "top_decile_colour": 0.001
+  },
+  "arden_infernal g0.3500 l-1.500": {
+   "subject_px": 12565,
+   "mean": 0.745,
+   "pinned": 0.236,
+   "top_decile_luma": 1.0,
+   "top_decile_colour": 0.006
+  },
+  "arden_infernal g0.3500 l-3.000": {
+   "subject_px": 11615,
+   "mean": 0.754,
+   "pinned": 0.253,
+   "top_decile_luma": 0.999,
+   "top_decile_colour": 0.006
+  },
+  "arden_infernal g0.3500 l-4.500": {
+   "subject_px": 11273,
+   "mean": 0.761,
+   "pinned": 0.243,
+   "top_decile_luma": 1.0,
+   "top_decile_colour": 0.006
+  },
+  "arden_infernal g1.0000 l0.000": {
+   "subject_px": 13006,
+   "mean": 0.866,
+   "pinned": 0.277,
+   "top_decile_luma": 0.999,
+   "top_decile_colour": 0.007
+  },
+  "arden_infernal g1.0000 l-1.500": {
+   "subject_px": 11508,
+   "mean": 0.874,
+   "pinned": 0.284,
+   "top_decile_luma": 1.0,
+   "top_decile_colour": 0.005
+  },
+  "arden_infernal g1.0000 l-3.000": {
+   "subject_px": 11831,
+   "mean": 0.865,
+   "pinned": 0.289,
+   "top_decile_luma": 0.999,
+   "top_decile_colour": 0.005
+  },
+  "arden_infernal g1.0000 l-4.500": {
+   "subject_px": 12310,
+   "mean": 0.878,
+   "pinned": 0.273,
+   "top_decile_luma": 1.0,
+   "top_decile_colour": 0.006
+  }
+ },
+ "settings_passing": [],
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\stage_tune2",
+ "finished": "2026-09-27 08:08:03",
+ "seconds": 109.99,
+ "log": "T_relay_og INFO swept {'relay_og g0.3500 l0.000': {'subject_px': 6042, 'mean': 0.942, 'pinned': 0.867, 'top_decile_luma': 0.995, 'top_decile_colour': 0.0}, 'relay_og g0.3500 l-1.500': {'subject_px': 6434, 'mean': 0.946, 'pinned': 0.824, 'top_decile_luma': 0.998, 'top_decile_colour': 0.0}, 'relay_og g0.3500 l-3.000': {'subject_px': 6288, 'mean': 0.943, 'pinned': 0.864, 'top_decile_luma': 0.997, 'top_decile_colour': 0.0}, 'relay_og g0.3500 l-4.500': {'subject_px': 6201, 'mean': 0.938, 'pinned': 0.844, 'top_decile_luma': 0.994, 'top_decile_colour': 0.0}, 'relay_og g1.0000 l0.000': {'subject_px': 6357, 'mean': 0.931, 'pinned': 0.807, 'top_decile_luma': 0.996, 'top_decile_colour': 0.0}, 'relay_og g1.0000 l-1.500': {'subject_px': 6022, 'mean': 0.946, 'pinned': 0.849, 'top_decile_luma': 0.997, 'top_decile_colour': 0.0}, 'relay_og g1.0000 l-3.000': {'subject_px': 6594, 'mean': 0.937, 'pinned': 0.835, 'top_decile_luma': 0.996, 'top_decile_colour': 0.0}, 'relay_og g1.0000 l-4.500': {'subject_px': 5845, 'mean': 0.942, 'pinned': 0.828, 'top_decile_luma': 0.995, 'top_decile_colour': 0.0}}\nT_apollo INFO swept {'apollo g0.3500 l0.000': {'subject_px': 7642, 'mean': 0.899, 'pinned': 0.708, 'top_decile_luma': 1.0, 'top_decile_colour': 0.0}, 'apollo g0.3500 l-1.500': {'subject_px': 7537, 'mean': 0.907, 'pinned': 0.732, 'top_decile_luma': 1.0, 'top_decile_colour': 0.0}, 'apollo g0.3500 l-3.000': {'subject_px': 7667, 'mean': 0.903, 'pinned': 0.707, 'top_decile_luma': 1.0, 'top_decile_colour': 0.0}, 'apollo g0.3500 l-4.500': {'subject_px': 6888, 'mean': 0.906, 'pinned': 0.714, 'top_decile_luma': 1.0, 'top_decile_colour': 0.0}, 'apollo g1.0000 l0.000': {'subject_px': 7480, 'mean': 0.936, 'pinned': 0.729, 'top_decile_luma': 1.0, 'top_decile_colour': 0.0}, 'apollo g1.0000 l-1.500': {'subject_px': 7655, 'mean': 0.935, 'pinned': 0.737, 'top_decile_luma': 1.0, 'top_decile_colour': 0.0}, 'apollo g1.0000 l-3.000': {'subject_px': 7251, 'mean': 0.939, 'pinned': 0.75, 'top_decile_luma': 1.0, 'top_decile_colour': 0.0}, 'apollo g1.0000 l-4.500': {'subject_px': 6956, 'mean': 0.935, 'pinned': 0.74, 'top_decile_luma': 1.0, 'top_decile_colour': 0.0}}\nT_skeleton_flame INFO swept {'skeleton_flame g0.3500 l0.000': {'subject_px': 11406, 'mean': 0.849, 'pinned': 0.399, 'top_decile_luma': 0.995, 'top_decile_colour': -0.002}, 'skeleton_flame g0.3500 l-1.500': {'subject_px': 11715, 'mean': 0.795, 'pinned': 0.372, 'top_decile_luma': 0.992, 'top_decile_colour': -0.003}, 'skeleton_flame g0.3500 l-3.000': {'subject_px': 10573, 'mean': 0.846, 'pinned': 0.405, 'top_decile_luma': 0.992, 'top_decile_colour': -0.001}, 'skeleton_flame g0.3500 l-4.500': {'subject_px': 10598, 'mean': 0.798, 'pinned': 0.36, 'top_decile_luma': 0.993, 'top_decile_colour': -0.003}, 'skeleton_flame g1.0000 l0.000': {'subject_px': 11607, 'mean': 0.908, 'pinned': 0.46, 'top_decile_luma': 0.997, 'top_decile_colour': 0.001}, 'skeleton_flame g1.0000 l-1.500': {'subject_px': 11055, 'mean': 0.894, 'pinned': 0.433, 'top_decile_luma': 0.995, 'top_decile_colour': -0.0}, 'skeleton_flame g1.0000 l-3.000': {'subject_px': 12057, 'mean': 0.891, 'pinned': 0.447, 'top_decile_luma': 0.994, 'top_decile_colour': 0.001}, 'skeleton_flame g1.0000 l-4.500': {'subject_px': 11421, 'mean': 0.899, 'pinned': 0.407, 'top_decile_luma': 0.995, 'top_decile_colour': -0.0}}\nT_celestial_light INFO swept {'celestial_light g0.3500 l0.000': {'subject_px': 12033, 'mean': 0.923, 'pinned': 0.305, 'top_decile_luma': 0.992, 'top_decile_colour': -0.001}, 'celestial_light g0.3500 l-1.500': {'subject_px': 11888, 'mean': 0.918, 'pinned': 0.337, 'top_decile_luma': 0.992, 'top_decile_colour': -0.0}, 'celestial_light g0.3500 l-3.000': {'subject_px': 10923, 'mean': 0.92, 'pinned': 0.307, 'top_decile_luma': 0.992, 'top_decile_colour': 0.0}, 'celestial_light g0.3500 l-4.500': {'subject_px': 11570, 'mean': 0.918, 'pinned': 0.312, 'top_decile_luma': 0.992, 'top_decile_colour': -0.001}, 'celestial_light g1.0000 l0.000': {'subject_px': 11394, 'mean': 0.954, 'pinned': 0.878, 'top_decile_luma': 0.995, 'top_decile_colour': 0.005}, 'celestial_light g1.0000 l-1.500': {'subject_px': 11857, 'mean': 0.951, 'pinned': 0.87, 'top_decile_luma': 0.993, 'top_decile_colour': 0.003}, 'celestial_light g1.0000 l-3.000': {'subject_px': 11568, 'mean': 0.952, 'pinned': 0.892, 'top_decile_luma': 0.995, 'top_decile_colour': 0.009}, 'celestial_light g1.0000 l-4.500': {'subject_px': 10587, 'mean': 0.948, 'pinned': 0.864, 'top_decile_luma': 0.995, 'top_decile_colour': 0.007}}\nT_arden_infernal INFO swept {'arden_infernal g0.3500 l0.000': {'subject_px': 11485, 'mean': 0.766, 'pinned': 0.246, 'top_decile_luma': 1.0, 'top_decile_colour': 0.001}, 'arden_infernal g0.3500 l-1.500': {'subject_px': 12565, 'mean': 0.745, 'pinned': 0.236, 'top_decile_luma': 1.0, 'top_decile_colour': 0.006}, 'arden_infernal g0.3500 l-3.000': {'subject_px': 11615, 'mean': 0.754, 'pinned': 0.253, 'top_decile_luma': 0.999, 'top_decile_colour': 0.006}, 'arden_infernal g0.3500 l-4.500': {'subject_px': 11273, 'mean': 0.761, 'pinned': 0.243, 'top_decile_luma': 1.0, 'top_decile_colour': 0.006}, 'arden_infernal g1.0000 l0.000': {'subject_px': 13006, 'mean': 0.866, 'pinned': 0.277, 'top_decile_luma': 0.999, 'top_decile_colour': 0.007}, 'arden_infernal g1.0000 l-1.500': {'subject_px': 11508, 'mean': 0.874, 'pinned': 0.284, 'top_decile_luma': 1.0, 'top_decile_colour': 0.005}, 'arden_infernal g1.0000 l-3.000': {'subject_px': 11831, 'mean': 0.865, 'pinned': 0.289, 'top_decile_luma': 0.999, 'top_decile_colour': 0.005}, 'arden_infernal g1.0000 l-4.500': {'subject_px': 12310, 'mean': 0.878, 'pinned': 0.273, 'top_decile_luma': 1.0, 'top_decile_colour': 0.006}}\n"
+}

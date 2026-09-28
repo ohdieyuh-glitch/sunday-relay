@@ -129,6 +129,23 @@ public:
 	 */
 	FLinearColor GetPaintedAccent() const { return BrushAccent; }
 
+	/**
+	 * WHERE THE i.WONDER MARK IS DRAWN, and the terminal's own frame with it, in absolute Slate space.
+	 *
+	 * FOUNDER, P1 item 9: "The emblem is the i.Wonder logo. It must be YELLOW. ONLY THE LOGO. Remove: gray
+	 * outline, black outline, colored background plate... I do NOT want yellow logo inside gray shape."
+	 *
+	 * THAT CANNOT BE SETTLED BY READING THE DRAW CODE, which is all that has been done so far -- and it cannot
+	 * be settled by averaging a patch of the screen either. The mark is a handful of thin strokes, and every
+	 * instrument that tried to measure a small saturated feature inside a GUESSED fraction of the frame
+	 * measured something else: the HUD, the scenery, or the green body of the wrong mascot. A proof needs the
+	 * mark's OWN rectangle, which only the widget knows.
+	 *
+	 * False before the widget has painted, so a caller cannot mistake an unpainted terminal for a missing mark.
+	 */
+	bool GetMarkAbsoluteRect(FVector2D& OutTopLeft, FVector2D& OutSize) const;
+	bool GetFrameAbsoluteRect(FVector2D& OutTopLeft, FVector2D& OutSize) const;
+
 private:
 	struct FLine
 	{

@@ -1,0 +1,134 @@
+{
+ "name": "zzU5_practical_budget",
+ "started": "2026-09-27 16:36:02",
+ "status": "voided: the rungs do not agree with themselves",
+ "tests": [
+  {
+   "id": "B_WHERE",
+   "name": "the pawn is standing at the densest spot, which is what selects the pool",
+   "pass": true,
+   "detail": {
+    "asked": [
+     -65943.0,
+     -38753.0
+    ],
+    "landed": [
+     -65943.0,
+     -38753.0,
+     132.0
+    ],
+    "horizontal_offset_uu": 0.0,
+    "ground_trace_z": 11.99960708618164,
+    "note": "Assign() takes its Eye from the PAWN, not the camera. If the pawn did not arrive, every reading below is of a pool selected somewhere else and none of it means anything"
+   }
+  },
+  {
+   "id": "B_NOISE",
+   "name": "each rung agrees with itself -- two reads of the same setting",
+   "pass": false,
+   "detail": {
+    "worst_spread": 0.4113,
+    "tolerance": 0.01,
+    "measured": 4,
+    "wanted": 4
+   }
+  }
+ ],
+ "ground_trace_z": 11.99960708618164,
+ "pawn_asked": [
+  -65943.0,
+  -38753.0
+ ],
+ "pawn_landed": [
+  -65943.0,
+  -38753.0,
+  132.0
+ ],
+ "camera_eye": [
+  -65943.0,
+  -38753.0,
+  192.0
+ ],
+ "camera_at": [
+  -62943.0,
+  -37553.0,
+  172.0
+ ],
+ "budget": [
+  {
+   "count": 48,
+   "pool_actors": 48,
+   "lit_actors": 31,
+   "lit_settled_on": [
+    31,
+    31,
+    31
+   ],
+   "luma": 0.4932,
+   "spread": 0.4113,
+   "tails": 0.6636,
+   "ground_luma": 0.5276,
+   "raw_frames": 601,
+   "raw_median_ms": 27.81,
+   "raw_p95_ms": 37.08,
+   "raw_worst_ms": 205.87
+  },
+  {
+   "count": 96,
+   "pool_actors": 96,
+   "lit_actors": 30,
+   "lit_settled_on": [
+    30,
+    30,
+    30
+   ],
+   "luma": 0.237,
+   "spread": 0.0009,
+   "tails": 0.4454,
+   "ground_luma": 0.4236,
+   "raw_frames": 601,
+   "raw_median_ms": 23.36,
+   "raw_p95_ms": 23.36,
+   "raw_worst_ms": 23.36
+  },
+  {
+   "count": 144,
+   "pool_actors": 144,
+   "lit_actors": 30,
+   "lit_settled_on": [
+    30,
+    30,
+    30
+   ],
+   "luma": 0.2334,
+   "spread": 0.0041,
+   "tails": 0.4422,
+   "ground_luma": 0.412,
+   "raw_frames": 601,
+   "raw_median_ms": 23.84,
+   "raw_p95_ms": 27.99,
+   "raw_worst_ms": 168.38
+  },
+  {
+   "count": 192,
+   "pool_actors": 192,
+   "lit_actors": 32,
+   "lit_settled_on": [
+    32,
+    32,
+    32
+   ],
+   "luma": 0.2346,
+   "spread": 0.0011,
+   "tails": 0.3807,
+   "ground_luma": 0.3347,
+   "raw_frames": 601,
+   "raw_median_ms": 22.58,
+   "raw_p95_ms": 22.58,
+   "raw_worst_ms": 22.58
+  }
+ ],
+ "finished": "2026-09-27 16:38:15",
+ "seconds": 132.55,
+ "log": "B_WHERE PASS the pawn is standing at the densest spot, which is what selects the pool {'asked': [-65943.0, -38753.0], 'landed': [-65943.0, -38753.0, 132.0], 'horizontal_offset_uu': 0.0, 'ground_trace_z': 11.99960708618164, 'note': 'Assign() takes its Eye from the PAWN, not the camera. If the pawn did not arrive, every reading below is of a pool selected somewhere else and none of it means anything'}\nB_NOISE FAIL each rung agrees with itself -- two reads of the same setting {'worst_spread': 0.4113, 'tolerance': 0.01, 'measured': 4, 'wanted': 4}\n"
+}

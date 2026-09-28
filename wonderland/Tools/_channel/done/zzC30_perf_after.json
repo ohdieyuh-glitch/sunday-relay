@@ -1,0 +1,18 @@
+{
+ "name": "zzC30_perf_after",
+ "started": "2026-09-27 06:34:52",
+ "status": "done",
+ "label": "world with the territory checkpoints",
+ "frames": {
+  "warm": {
+   "WorldCam12": 25.46
+  },
+  "measured": {
+   "WorldCam12": 25.64
+  }
+ },
+ "mean": 25.64,
+ "finished": "2026-09-27 06:35:34",
+ "seconds": 41.94,
+ "log": ""
+}

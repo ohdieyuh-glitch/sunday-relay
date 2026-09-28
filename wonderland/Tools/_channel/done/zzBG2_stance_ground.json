@@ -1,0 +1,15 @@
+{
+ "name": "zzBG2_stance_ground",
+ "started": "2026-09-27 22:54:40",
+ "status": "error",
+ "tests": [],
+ "stood_at": [
+  -327.3,
+  -650.0,
+  109.1
+ ],
+ "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n                                                                  ^^^^^^^^^^^^^^^^\n  File \"C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\_channel\\inbox\\zzBG2_stance_ground.py\", line 86, in job\nAttributeError: type object 'TraceTypeQuery' has no attribute 'CAMERA'\n",
+ "finished": "2026-09-27 22:55:01",
+ "seconds": 21.49,
+ "log": ""
+}

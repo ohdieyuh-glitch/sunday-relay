@@ -1,0 +1,100 @@
+{
+ "name": "zzCE1_make_fire",
+ "started": "2026-09-28 00:55:51",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "R00",
+   "name": "the project has its own fire material",
+   "pass": true,
+   "detail": {
+    "path": "/Game/Wonderland/Materials/M_WL_Fire",
+    "created": false
+   }
+  },
+  {
+   "id": "R01",
+   "name": "it is translucent, unlit and two-sided",
+   "pass": true,
+   "detail": {
+    "properties": {
+     "blend_mode": true,
+     "shading_model": true,
+     "two_sided": true,
+     "used_with_instanced_static_meshes": true,
+     "used_with_static_lighting": true
+    }
+   }
+  },
+  {
+   "id": "R02",
+   "name": "it exposes the \"Color\" parameter the figures already write",
+   "pass": true,
+   "detail": {
+    "vector_parameters": [
+     "Color"
+    ],
+    "note": "the embodiment, the colourway, the heartbeat and the wardrobe's glow scale all dress flames through SetVectorParameterValue('Color'). A different name would leave every flame black."
+   }
+  },
+  {
+   "id": "R04",
+   "name": "something is plugged into the material's emissive output",
+   "pass": false,
+   "detail": {
+    "probe": [
+     "emissive_color failed: Material: Failed to find property 'emissive_color' for attribute 'emis",
+     "EmissiveColor failed: Material: Property 'EmissiveColor' for attribute 'EmissiveColor' on 'M"
+    ],
+    "note": "an additive unlit material draws its emissive and nothing else. Disconnected, it is invisible however it is fed, and every other check here still passes."
+   }
+  },
+  {
+   "id": "R03",
+   "name": "its shape, flicker and falloff are all tunable without a rebuild",
+   "pass": true,
+   "detail": {
+    "scalar_parameters": [
+     "FlowSpeed",
+     "Lean",
+     "EdgeSoftness",
+     "Bands",
+     "EdgeBite",
+     "TipFalloff",
+     "FlickerDepth",
+     "HotCore",
+     "TipShade"
+    ]
+   }
+  }
+ ],
+ "created": false,
+ "properties": {
+  "blend_mode": true,
+  "shading_model": true,
+  "two_sided": true,
+  "used_with_instanced_static_meshes": true,
+  "used_with_static_lighting": true
+ },
+ "vector_parameters": [
+  "Color"
+ ],
+ "scalar_parameters": [
+  "FlowSpeed",
+  "Lean",
+  "EdgeSoftness",
+  "Bands",
+  "EdgeBite",
+  "TipFalloff",
+  "FlickerDepth",
+  "HotCore",
+  "TipShade"
+ ],
+ "emissive_input": [
+  "emissive_color failed: Material: Failed to find property 'emissive_color' for attribute 'emis",
+  "EmissiveColor failed: Material: Property 'EmissiveColor' for attribute 'EmissiveColor' on 'M"
+ ],
+ "finished": "2026-09-28 00:55:57",
+ "seconds": 6.32,
+ "log": "R00 PASS the project has its own fire material {'path': '/Game/Wonderland/Materials/M_WL_Fire', 'created': False}\nR01 PASS it is translucent, unlit and two-sided {'properties': {'blend_mode': True, 'shading_model': True, 'two_sided': True, 'used_with_instanced_static_meshes': True, 'used_with_static_lighting': True}}\nR02 PASS it exposes the \"Color\" parameter the figures already write {'vector_parameters': ['Color'], 'note': \"the embodiment, the colourway, the heartbeat and the wardrobe's glow scale all dress flames through SetVectorParameterValue('Color'). A different name would leave every flame black.\"}\nR04 FAIL something is plugged into the material's emissive output {'probe': [\"emissive_color failed: Material: Failed to find property 'emissive_color' for attribute 'emis\", \"EmissiveColor failed: Material: Property 'EmissiveColor' for attribute 'EmissiveColor' on 'M\"], 'note': 'an additive unlit material draws its emissive and nothing else. Disconnected, it is invisible however it is fed, and every other check here still passes.'}\nR03 PASS its shape, flicker and falloff are all tunable without a rebuild {'scalar_parameters': ['FlowSpeed', 'Lean', 'EdgeSoftness', 'Bands', 'EdgeBite', 'TipFalloff', 'FlickerDepth', 'HotCore', 'TipShade']}\n"
+}

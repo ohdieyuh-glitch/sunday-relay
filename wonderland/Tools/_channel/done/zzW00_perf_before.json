@@ -1,0 +1,18 @@
+{
+ "name": "zzW00_perf_before",
+ "started": "2026-09-27 07:54:25",
+ "status": "done",
+ "label": "world before window 2",
+ "frames": {
+  "warm": {
+   "WorldCam12": 41.28
+  },
+  "measured": {
+   "WorldCam12": 40.79
+  }
+ },
+ "mean": 40.79,
+ "finished": "2026-09-27 07:55:16",
+ "seconds": 50.26,
+ "log": ""
+}

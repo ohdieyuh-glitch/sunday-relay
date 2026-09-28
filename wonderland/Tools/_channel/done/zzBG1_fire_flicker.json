@@ -1,0 +1,105 @@
+{
+ "name": "zzBG1_fire_flicker",
+ "started": "2026-09-27 22:51:57",
+ "status": "VOID: the fire material switch could not be shown to change the picture",
+ "tests": [
+  {
+   "id": "F_READ",
+   "name": "the fire material knob can be read back before anything is changed",
+   "pass": true,
+   "detail": {
+    "fire_material": 0.0
+   }
+  },
+  {
+   "id": "F_CLOCK",
+   "name": "the day clock is stopped, so the hour stays where it was put",
+   "pass": true,
+   "detail": {
+    "day_minutes": 0.0,
+    "note": "a job that runs for minutes against a running clock photographs a moving sky and blames the subject."
+   }
+  },
+  {
+   "id": "F_RESTORE",
+   "name": "the fire material this job found was put back",
+   "pass": true,
+   "detail": {
+    "as_found": 0.0,
+    "restored": 0.0
+   }
+  },
+  {
+   "id": "F_KNOB",
+   "name": "the fire material knob took both values it was given",
+   "pass": true,
+   "detail": {
+    "arm0": 0.0,
+    "arm1": 1.0,
+    "note": "this knob is recorded in this tree as having refused the value it was given, which is why it is asserted rather than assumed."
+   }
+  },
+  {
+   "id": "F_LIVE",
+   "name": "the two fire materials are actually different pictures",
+   "pass": false,
+   "detail": {
+    "arm0_mean_luma": 0.7126,
+    "arm1_mean_luma": 0.7092,
+    "note": "THE CONTROL. If both arms photograph the same, the switch did nothing and neither arm's numbers mean anything -- which from the inside looks exactly like two fires that happen to be identical."
+   }
+  }
+ ],
+ "as_found_fire_material": 0.0,
+ "day_minutes": 0.0,
+ "arms": {
+  "0": {
+   "asked": 0,
+   "read_back": 0.0,
+   "frames": 18,
+   "distinct_frames": 18,
+   "hot_px": {
+    "mean": 83495.4444,
+    "stddev": 8837.7184,
+    "swing": 33324.0,
+    "relative_stddev": 0.1058
+   },
+   "mean_luma": {
+    "mean": 0.7126,
+    "stddev": 0.012,
+    "swing": 0.047,
+    "relative_stddev": 0.0168
+   },
+   "clipped_fraction": 0.0,
+   "warm_fraction": 0.9979
+  },
+  "1": {
+   "asked": 1,
+   "read_back": 1.0,
+   "frames": 18,
+   "distinct_frames": 18,
+   "hot_px": {
+    "mean": 85053.9444,
+    "stddev": 6554.1087,
+    "swing": 18882.0,
+    "relative_stddev": 0.0771
+   },
+   "mean_luma": {
+    "mean": 0.7092,
+    "stddev": 0.0141,
+    "swing": 0.0523,
+    "relative_stddev": 0.0199
+   },
+   "clipped_fraction": 0.0,
+   "warm_fraction": 0.9977
+  }
+ },
+ "restored_fire_material": 0.0,
+ "switch_is_live": {
+  "arm0_mean_luma": 0.7126,
+  "arm1_mean_luma": 0.7092
+ },
+ "finished": "2026-09-27 22:54:39",
+ "seconds": 162.73,
+ "log": "F_READ PASS the fire material knob can be read back before anything is changed {'fire_material': 0.0}\nF_CLOCK PASS the day clock is stopped, so the hour stays where it was put {'day_minutes': 0.0, 'note': 'a job that runs for minutes against a running clock photographs a moving sky and blames the subject.'}\nF_0 INFO fire material 0 {'asked': 0, 'read_back': 0.0, 'frames': 18, 'distinct_frames': 18, 'hot_px': {'mean': 83495.4444, 'stddev': 8837.7184, 'swing': 33324.0, 'relative_stddev': 0.1058}, 'mean_luma': {'mean': 0.7126, 'stddev': 0.012, 'swing': 0.047, 'relative_stddev': 0.0168}, 'clipped_fraction': 0.0, 'warm_fraction': 0.9979}\nF_1 INFO fire material 1 {'asked': 1, 'read_back': 1.0, 'frames': 18, 'distinct_frames': 18, 'hot_px': {'mean': 85053.9444, 'stddev': 6554.1087, 'swing': 18882.0, 'relative_stddev': 0.0771}, 'mean_luma': {'mean': 0.7092, 'stddev': 0.0141, 'swing': 0.0523, 'relative_stddev': 0.0199}, 'clipped_fraction': 0.0, 'warm_fraction': 0.9977}\nF_RESTORE PASS the fire material this job found was put back {'as_found': 0.0, 'restored': 0.0}\nF_KNOB PASS the fire material knob took both values it was given {'arm0': 0.0, 'arm1': 1.0, 'note': 'this knob is recorded in this tree as having refused the value it was given, which is why it is asserted rather than assumed.'}\nF_LIVE FAIL the two fire materials are actually different pictures {'arm0_mean_luma': 0.7126, 'arm1_mean_luma': 0.7092, 'note': \"THE CONTROL. If both arms photograph the same, the switch did nothing and neither arm's numbers mean anything -- which from the inside looks exactly like two fires that happen to be identical.\"}\n"
+}

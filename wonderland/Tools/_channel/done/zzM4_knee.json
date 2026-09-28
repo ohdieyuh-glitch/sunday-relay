@@ -1,0 +1,762 @@
+{
+ "name": "zzM4_knee",
+ "started": "2026-09-27 10:38:24",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "M00",
+   "name": "every skin was sampled at every hour at every eye level",
+   "pass": true,
+   "detail": {
+    "got": 0,
+    "wanted": 0,
+    "skins": [
+     "relay_og",
+     "celestial_light",
+     "apollo_v1",
+     "apollo",
+     "arden_infernal_v1",
+     "arden_infernal",
+     "skeleton_flame_v1",
+     "skeleton_flame"
+    ],
+    "hours": [
+     "day"
+    ],
+    "levels": [
+     0.05,
+     9.0,
+     18.0,
+     24.0,
+     30.0,
+     36.0
+    ]
+   }
+  },
+  {
+   "id": "X00",
+   "name": "the world's pinned exposure range is untouched -- the experiment is not confounded",
+   "pass": true,
+   "detail": {
+    "before": [
+     [
+      "V2_PostProcess",
+      14.2,
+      14.2
+     ]
+    ],
+    "after": [
+     [
+      "V2_PostProcess",
+      14.2,
+      14.2
+     ]
+    ],
+    "bias_before": [
+     -0.9
+    ],
+    "bias_after": [
+     -0.9
+    ],
+    "note": "min/max EV100 is the world setting and must not move; AutoExposureBias is driven by the hour by the day cycle and is expected to differ"
+   }
+  },
+  {
+   "id": "M09",
+   "name": "the knee's live range at this asset scale is measured, not assumed",
+   "pass": true,
+   "detail": {
+    "frame_luma_spread_across_knees": {
+     "relay_og": 0.01436,
+     "celestial_light": 0.15139,
+     "apollo_v1": 0.02884,
+     "apollo": 0.01492,
+     "arden_infernal_v1": 0.06242,
+     "arden_infernal": 0.05294,
+     "skeleton_flame_v1": 0.04515,
+     "skeleton_flame": 0.04138
+    },
+    "inert_skins": [],
+    "highest_knee_that_changes_the_picture": {
+     "relay_og": 64.0,
+     "celestial_light": 64.0,
+     "apollo_v1": 64.0,
+     "apollo": 64.0,
+     "arden_infernal_v1": 64.0,
+     "arden_infernal": 64.0,
+     "skeleton_flame_v1": 32.0,
+     "skeleton_flame": 64.0
+    },
+    "knees_swept": [
+     700.0,
+     64.0,
+     32.0,
+     16.0,
+     8.0,
+     4.0,
+     2.0
+    ],
+    "note": "body glow spans 3.3-13.2 after the 4000->6 re-baseline, so a knee at the shipped 700 compresses nothing; this says where it starts to bite and whether it helps"
+   }
+  }
+ ],
+ "eye_axis": [],
+ "knee_axis": [
+  {
+   "skin": "relay_og",
+   "knee": 700.0,
+   "frame_luma": 0.27308,
+   "clipped": 0.0041,
+   "crushed": 0.1317,
+   "eye_white": 0.6017,
+   "face_luma": 0.57443,
+   "eye_luma": 0.57685
+  },
+  {
+   "skin": "relay_og",
+   "knee": 64.0,
+   "frame_luma": 0.25872,
+   "clipped": 0.0031,
+   "crushed": 0.1583,
+   "eye_white": 0.5942,
+   "face_luma": 0.53791,
+   "eye_luma": 0.54093
+  },
+  {
+   "skin": "relay_og",
+   "knee": 32.0,
+   "frame_luma": 0.2719,
+   "clipped": 0.0041,
+   "crushed": 0.1351,
+   "eye_white": 0.5953,
+   "face_luma": 0.53492,
+   "eye_luma": 0.53768
+  },
+  {
+   "skin": "relay_og",
+   "knee": 16.0,
+   "frame_luma": 0.26997,
+   "clipped": 0.0035,
+   "crushed": 0.1405,
+   "eye_white": 0.593,
+   "face_luma": 0.54018,
+   "eye_luma": 0.54215
+  },
+  {
+   "skin": "relay_og",
+   "knee": 8.0,
+   "frame_luma": 0.26686,
+   "clipped": 0.0044,
+   "crushed": 0.145,
+   "eye_white": 0.592,
+   "face_luma": 0.55286,
+   "eye_luma": 0.55451
+  },
+  {
+   "skin": "relay_og",
+   "knee": 4.0,
+   "frame_luma": 0.265,
+   "clipped": 0.0054,
+   "crushed": 0.1519,
+   "eye_white": 0.5955,
+   "face_luma": 0.55555,
+   "eye_luma": 0.55797
+  },
+  {
+   "skin": "relay_og",
+   "knee": 2.0,
+   "frame_luma": 0.26541,
+   "clipped": 0.0153,
+   "crushed": 0.1502,
+   "eye_white": 0.5834,
+   "face_luma": 0.49526,
+   "eye_luma": 0.49724
+  },
+  {
+   "skin": "celestial_light",
+   "knee": 700.0,
+   "frame_luma": 0.32639,
+   "clipped": 0.0026,
+   "crushed": 0.1164,
+   "eye_white": 0.7732,
+   "face_luma": 0.27844,
+   "eye_luma": 0.24354
+  },
+  {
+   "skin": "celestial_light",
+   "knee": 64.0,
+   "frame_luma": 0.33663,
+   "clipped": 0.0031,
+   "crushed": 0.1272,
+   "eye_white": 0.8827,
+   "face_luma": 0.24181,
+   "eye_luma": 0.38657
+  },
+  {
+   "skin": "celestial_light",
+   "knee": 32.0,
+   "frame_luma": 0.32146,
+   "clipped": 0.0033,
+   "crushed": 0.1241,
+   "eye_white": 0.7827,
+   "face_luma": 0.24666,
+   "eye_luma": 0.25028
+  },
+  {
+   "skin": "celestial_light",
+   "knee": 16.0,
+   "frame_luma": 0.31959,
+   "clipped": 0.0032,
+   "crushed": 0.1158,
+   "eye_white": 0.9014,
+   "face_luma": 0.24693,
+   "eye_luma": 0.44562
+  },
+  {
+   "skin": "celestial_light",
+   "knee": 8.0,
+   "frame_luma": 0.3116,
+   "clipped": 0.0033,
+   "crushed": 0.1114,
+   "eye_white": 0.8422,
+   "face_luma": 0.24261,
+   "eye_luma": 0.33208
+  },
+  {
+   "skin": "celestial_light",
+   "knee": 4.0,
+   "frame_luma": 0.24237,
+   "clipped": 0.0032,
+   "crushed": 0.1199,
+   "eye_white": 0.8499,
+   "face_luma": 0.23694,
+   "eye_luma": 0.29193
+  },
+  {
+   "skin": "celestial_light",
+   "knee": 2.0,
+   "frame_luma": 0.18524,
+   "clipped": 0.0034,
+   "crushed": 0.1814,
+   "eye_white": 0.7699,
+   "face_luma": 0.23202,
+   "eye_luma": 0.22631
+  },
+  {
+   "skin": "apollo_v1",
+   "knee": 700.0,
+   "frame_luma": 0.3064,
+   "clipped": 0.0327,
+   "crushed": 0.1238,
+   "eye_white": 0.151,
+   "face_luma": 0.54339,
+   "eye_luma": 0.72168
+  },
+  {
+   "skin": "apollo_v1",
+   "knee": 64.0,
+   "frame_luma": 0.29631,
+   "clipped": 0.0442,
+   "crushed": 0.1673,
+   "eye_white": 0.0,
+   "face_luma": 0.42084,
+   "eye_luma": 0.42209
+  },
+  {
+   "skin": "apollo_v1",
+   "knee": 32.0,
+   "frame_luma": 0.2936,
+   "clipped": 0.0333,
+   "crushed": 0.1249,
+   "eye_white": 0.1141,
+   "face_luma": 0.41683,
+   "eye_luma": 0.63076
+  },
+  {
+   "skin": "apollo_v1",
+   "knee": 16.0,
+   "frame_luma": 0.29574,
+   "clipped": 0.007,
+   "crushed": 0.123,
+   "eye_white": 0.0074,
+   "face_luma": 0.37124,
+   "eye_luma": 0.39397
+  },
+  {
+   "skin": "apollo_v1",
+   "knee": 8.0,
+   "frame_luma": 0.29284,
+   "clipped": 0.035,
+   "crushed": 0.1317,
+   "eye_white": 0.032,
+   "face_luma": 0.41665,
+   "eye_luma": 0.47194
+  },
+  {
+   "skin": "apollo_v1",
+   "knee": 4.0,
+   "frame_luma": 0.30347,
+   "clipped": 0.0539,
+   "crushed": 0.1385,
+   "eye_white": 0.08,
+   "face_luma": 0.40209,
+   "eye_luma": 0.55634
+  },
+  {
+   "skin": "apollo_v1",
+   "knee": 2.0,
+   "frame_luma": 0.27756,
+   "clipped": 0.0067,
+   "crushed": 0.1548,
+   "eye_white": 0.0,
+   "face_luma": 0.36709,
+   "eye_luma": 0.36785
+  },
+  {
+   "skin": "apollo",
+   "knee": 700.0,
+   "frame_luma": 0.28386,
+   "clipped": 0.0088,
+   "crushed": 0.1588,
+   "eye_white": 0.0855,
+   "face_luma": 0.3711,
+   "eye_luma": 0.58514
+  },
+  {
+   "skin": "apollo",
+   "knee": 64.0,
+   "frame_luma": 0.28915,
+   "clipped": 0.02,
+   "crushed": 0.1701,
+   "eye_white": 0.0,
+   "face_luma": 0.59292,
+   "eye_luma": 0.41854
+  },
+  {
+   "skin": "apollo",
+   "knee": 32.0,
+   "frame_luma": 0.28582,
+   "clipped": 0.0327,
+   "crushed": 0.1683,
+   "eye_white": 0.0,
+   "face_luma": 0.44882,
+   "eye_luma": 0.4026
+  },
+  {
+   "skin": "apollo",
+   "knee": 16.0,
+   "frame_luma": 0.28359,
+   "clipped": 0.0122,
+   "crushed": 0.1649,
+   "eye_white": 0.1356,
+   "face_luma": 0.5586,
+   "eye_luma": 0.70649
+  },
+  {
+   "skin": "apollo",
+   "knee": 8.0,
+   "frame_luma": 0.2865,
+   "clipped": 0.0131,
+   "crushed": 0.1617,
+   "eye_white": 0.0,
+   "face_luma": 0.40759,
+   "eye_luma": 0.40976
+  },
+  {
+   "skin": "apollo",
+   "knee": 4.0,
+   "frame_luma": 0.29851,
+   "clipped": 0.0386,
+   "crushed": 0.1764,
+   "eye_white": 0.1831,
+   "face_luma": 0.69743,
+   "eye_luma": 0.74807
+  },
+  {
+   "skin": "apollo",
+   "knee": 2.0,
+   "frame_luma": 0.28439,
+   "clipped": 0.0084,
+   "crushed": 0.1732,
+   "eye_white": 0.0,
+   "face_luma": 0.4693,
+   "eye_luma": 0.36945
+  },
+  {
+   "skin": "arden_infernal_v1",
+   "knee": 700.0,
+   "frame_luma": 0.29976,
+   "clipped": 0.0048,
+   "crushed": 0.1089,
+   "eye_white": 0.0711,
+   "face_luma": 0.63331,
+   "eye_luma": 0.38925
+  },
+  {
+   "skin": "arden_infernal_v1",
+   "knee": 64.0,
+   "frame_luma": 0.36101,
+   "clipped": 0.0032,
+   "crushed": 0.0743,
+   "eye_white": 0.0,
+   "face_luma": 0.69044,
+   "eye_luma": 0.35452
+  },
+  {
+   "skin": "arden_infernal_v1",
+   "knee": 32.0,
+   "frame_luma": 0.32221,
+   "clipped": 0.0042,
+   "crushed": 0.0914,
+   "eye_white": 0.0,
+   "face_luma": 0.35987,
+   "eye_luma": 0.36123
+  },
+  {
+   "skin": "arden_infernal_v1",
+   "knee": 16.0,
+   "frame_luma": 0.33852,
+   "clipped": 0.0037,
+   "crushed": 0.069,
+   "eye_white": 0.2807,
+   "face_luma": 0.64951,
+   "eye_luma": 0.65146
+  },
+  {
+   "skin": "arden_infernal_v1",
+   "knee": 8.0,
+   "frame_luma": 0.30246,
+   "clipped": 0.0043,
+   "crushed": 0.1256,
+   "eye_white": 0.0,
+   "face_luma": 0.34111,
+   "eye_luma": 0.34261
+  },
+  {
+   "skin": "arden_infernal_v1",
+   "knee": 4.0,
+   "frame_luma": 0.36218,
+   "clipped": 0.003,
+   "crushed": 0.0813,
+   "eye_white": 0.1843,
+   "face_luma": 0.36762,
+   "eye_luma": 0.54306
+  },
+  {
+   "skin": "arden_infernal_v1",
+   "knee": 2.0,
+   "frame_luma": 0.31434,
+   "clipped": 0.0034,
+   "crushed": 0.1008,
+   "eye_white": 0.0,
+   "face_luma": 0.5001,
+   "eye_luma": 0.32709
+  },
+  {
+   "skin": "arden_infernal",
+   "knee": 700.0,
+   "frame_luma": 0.27107,
+   "clipped": 0.0028,
+   "crushed": 0.1376,
+   "eye_white": 0.0,
+   "face_luma": 0.31718,
+   "eye_luma": 0.31884
+  },
+  {
+   "skin": "arden_infernal",
+   "knee": 64.0,
+   "frame_luma": 0.31831,
+   "clipped": 0.0026,
+   "crushed": 0.1542,
+   "eye_white": 0.0,
+   "face_luma": 0.33993,
+   "eye_luma": 0.34121
+  },
+  {
+   "skin": "arden_infernal",
+   "knee": 32.0,
+   "frame_luma": 0.31681,
+   "clipped": 0.0026,
+   "crushed": 0.1634,
+   "eye_white": 0.0,
+   "face_luma": 0.36551,
+   "eye_luma": 0.36658
+  },
+  {
+   "skin": "arden_infernal",
+   "knee": 16.0,
+   "frame_luma": 0.28964,
+   "clipped": 0.0045,
+   "crushed": 0.1871,
+   "eye_white": 0.0395,
+   "face_luma": 0.33043,
+   "eye_luma": 0.36859
+  },
+  {
+   "skin": "arden_infernal",
+   "knee": 8.0,
+   "frame_luma": 0.30476,
+   "clipped": 0.003,
+   "crushed": 0.1466,
+   "eye_white": 0.0,
+   "face_luma": 0.66103,
+   "eye_luma": 0.32795
+  },
+  {
+   "skin": "arden_infernal",
+   "knee": 4.0,
+   "frame_luma": 0.29554,
+   "clipped": 0.0029,
+   "crushed": 0.209,
+   "eye_white": 0.0,
+   "face_luma": 0.36694,
+   "eye_luma": 0.36713
+  },
+  {
+   "skin": "arden_infernal",
+   "knee": 2.0,
+   "frame_luma": 0.32401,
+   "clipped": 0.0039,
+   "crushed": 0.164,
+   "eye_white": 0.187,
+   "face_luma": 0.34104,
+   "eye_luma": 0.53337
+  },
+  {
+   "skin": "skeleton_flame_v1",
+   "knee": 700.0,
+   "frame_luma": 0.30015,
+   "clipped": 0.0548,
+   "crushed": 0.1669,
+   "eye_white": 0.3241,
+   "face_luma": 0.49486,
+   "eye_luma": 0.49635
+  },
+  {
+   "skin": "skeleton_flame_v1",
+   "knee": 64.0,
+   "frame_luma": 0.3008,
+   "clipped": 0.0422,
+   "crushed": 0.176,
+   "eye_white": 0.9456,
+   "face_luma": 0.47914,
+   "eye_luma": 0.77039
+  },
+  {
+   "skin": "skeleton_flame_v1",
+   "knee": 32.0,
+   "frame_luma": 0.26867,
+   "clipped": 0.0043,
+   "crushed": 0.1988,
+   "eye_white": 0.2281,
+   "face_luma": 0.4309,
+   "eye_luma": 0.39905
+  },
+  {
+   "skin": "skeleton_flame_v1",
+   "knee": 16.0,
+   "frame_luma": 0.26811,
+   "clipped": 0.0028,
+   "crushed": 0.1651,
+   "eye_white": 0.9223,
+   "face_luma": 0.3753,
+   "eye_luma": 0.6644
+  },
+  {
+   "skin": "skeleton_flame_v1",
+   "knee": 8.0,
+   "frame_luma": 0.26079,
+   "clipped": 0.0062,
+   "crushed": 0.1756,
+   "eye_white": 0.2119,
+   "face_luma": 0.35248,
+   "eye_luma": 0.36737
+  },
+  {
+   "skin": "skeleton_flame_v1",
+   "knee": 4.0,
+   "frame_luma": 0.27508,
+   "clipped": 0.0086,
+   "crushed": 0.1747,
+   "eye_white": 0.3815,
+   "face_luma": 0.52035,
+   "eye_luma": 0.45898
+  },
+  {
+   "skin": "skeleton_flame_v1",
+   "knee": 2.0,
+   "frame_luma": 0.30594,
+   "clipped": 0.0672,
+   "crushed": 0.1649,
+   "eye_white": 0.9459,
+   "face_luma": 0.66448,
+   "eye_luma": 0.77155
+  },
+  {
+   "skin": "skeleton_flame",
+   "knee": 700.0,
+   "frame_luma": 0.23583,
+   "clipped": 0.0061,
+   "crushed": 0.1926,
+   "eye_white": 0.1732,
+   "face_luma": 0.35489,
+   "eye_luma": 0.35772
+  },
+  {
+   "skin": "skeleton_flame",
+   "knee": 64.0,
+   "frame_luma": 0.2564,
+   "clipped": 0.0269,
+   "crushed": 0.1582,
+   "eye_white": 0.8972,
+   "face_luma": 0.54371,
+   "eye_luma": 0.69847
+  },
+  {
+   "skin": "skeleton_flame",
+   "knee": 32.0,
+   "frame_luma": 0.27508,
+   "clipped": 0.023,
+   "crushed": 0.1576,
+   "eye_white": 0.3209,
+   "face_luma": 0.49048,
+   "eye_luma": 0.4923
+  },
+  {
+   "skin": "skeleton_flame",
+   "knee": 16.0,
+   "frame_luma": 0.26068,
+   "clipped": 0.0344,
+   "crushed": 0.1724,
+   "eye_white": 0.7096,
+   "face_luma": 0.5396,
+   "eye_luma": 0.64817
+  },
+  {
+   "skin": "skeleton_flame",
+   "knee": 8.0,
+   "frame_luma": 0.24723,
+   "clipped": 0.0062,
+   "crushed": 0.1729,
+   "eye_white": 0.9161,
+   "face_luma": 0.40167,
+   "eye_luma": 0.69866
+  },
+  {
+   "skin": "skeleton_flame",
+   "knee": 4.0,
+   "frame_luma": 0.2337,
+   "clipped": 0.015,
+   "crushed": 0.1734,
+   "eye_white": 0.1713,
+   "face_luma": 0.35003,
+   "eye_luma": 0.3538
+  },
+  {
+   "skin": "skeleton_flame",
+   "knee": 2.0,
+   "frame_luma": 0.25029,
+   "clipped": 0.0102,
+   "crushed": 0.1649,
+   "eye_white": 0.2767,
+   "face_luma": 0.54052,
+   "eye_luma": 0.38721
+  }
+ ],
+ "camera_failures": [],
+ "practicals": "unreadable: 'World' object has no attribute 'get_subsystem'",
+ "died_at": null,
+ "exposure_before": [
+  [
+   "V2_PostProcess",
+   -0.9,
+   14.2,
+   14.2
+  ]
+ ],
+ "exposure_after": [
+  [
+   "V2_PostProcess",
+   -0.9,
+   14.2,
+   14.2
+  ]
+ ],
+ "cvars_restored": [
+  "wl.Look.GlowKnee",
+  "wl.Look.EyeGlowDay",
+  "wl.Look.EyeGlowNight",
+  "wl.Look.FlameDim",
+  "wl.Look.NightGlow"
+ ],
+ "axis": "knee",
+ "hour": "day",
+ "summary": {
+  "eye_isolation_at_18": {
+   "relay_og": null,
+   "celestial_light": null,
+   "apollo_v1": null,
+   "apollo": null,
+   "arden_infernal_v1": null,
+   "arden_infernal": null,
+   "skeleton_flame_v1": null,
+   "skeleton_flame": null
+  },
+  "over_face_at_18": {},
+  "hue_retention": {
+   "relay_og": null,
+   "celestial_light": null,
+   "apollo_v1": null,
+   "apollo": null,
+   "arden_infernal_v1": null,
+   "arden_infernal": null,
+   "skeleton_flame_v1": null,
+   "skeleton_flame": null
+  },
+  "colour_separation": {
+   "relay_og": null,
+   "celestial_light": null,
+   "apollo_v1": null,
+   "apollo": null,
+   "arden_infernal_v1": null,
+   "arden_infernal": null,
+   "skeleton_flame_v1": null,
+   "skeleton_flame": null
+  },
+  "knee_spread": {
+   "relay_og": 0.01436,
+   "celestial_light": 0.15139,
+   "apollo_v1": 0.02884,
+   "apollo": 0.01492,
+   "arden_infernal_v1": 0.06242,
+   "arden_infernal": 0.05294,
+   "skeleton_flame_v1": 0.04515,
+   "skeleton_flame": 0.04138
+  },
+  "knee_engages_at": {
+   "relay_og": 64.0,
+   "celestial_light": 64.0,
+   "apollo_v1": 64.0,
+   "apollo": 64.0,
+   "arden_infernal_v1": 64.0,
+   "arden_infernal": 64.0,
+   "skeleton_flame_v1": 32.0,
+   "skeleton_flame": 64.0
+  },
+  "worst_clipped": 1.0,
+  "worst_crushed": 1.0,
+  "eye_white": {
+   "relay_og": [],
+   "celestial_light": [],
+   "apollo_v1": [],
+   "apollo": [],
+   "arden_infernal_v1": [],
+   "arden_infernal": [],
+   "skeleton_flame_v1": [],
+   "skeleton_flame": []
+  }
+ },
+ "finished": "2026-09-27 10:41:08",
+ "seconds": 163.43,
+ "log": "A_relay_og_00700 INFO relay_og knee=700 {'frame_luma': 0.27308, 'clipped': 0.0041}\nA_relay_og_00064 INFO relay_og knee=64 {'frame_luma': 0.25872, 'clipped': 0.0031}\nA_relay_og_00032 INFO relay_og knee=32 {'frame_luma': 0.2719, 'clipped': 0.0041}\nA_relay_og_00016 INFO relay_og knee=16 {'frame_luma': 0.26997, 'clipped': 0.0035}\nA_relay_og_00008 INFO relay_og knee=8 {'frame_luma': 0.26686, 'clipped': 0.0044}\nA_relay_og_00004 INFO relay_og knee=4 {'frame_luma': 0.265, 'clipped': 0.0054}\nA_relay_og_00002 INFO relay_og knee=2 {'frame_luma': 0.26541, 'clipped': 0.0153}\nA_celestial_light_00700 INFO celestial_light knee=700 {'frame_luma': 0.32639, 'clipped': 0.0026}\nA_celestial_light_00064 INFO celestial_light knee=64 {'frame_luma': 0.33663, 'clipped': 0.0031}\nA_celestial_light_00032 INFO celestial_light knee=32 {'frame_luma': 0.32146, 'clipped': 0.0033}\nA_celestial_light_00016 INFO celestial_light knee=16 {'frame_luma': 0.31959, 'clipped': 0.0032}\nA_celestial_light_00008 INFO celestial_light knee=8 {'frame_luma': 0.3116, 'clipped': 0.0033}\nA_celestial_light_00004 INFO celestial_light knee=4 {'frame_luma': 0.24237, 'clipped': 0.0032}\nA_celestial_light_00002 INFO celestial_light knee=2 {'frame_luma': 0.18524, 'clipped': 0.0034}\nA_apollo_v1_00700 INFO apollo_v1 knee=700 {'frame_luma': 0.3064, 'clipped': 0.0327}\nA_apollo_v1_00064 INFO apollo_v1 knee=64 {'frame_luma': 0.29631, 'clipped': 0.0442}\nA_apollo_v1_00032 INFO apollo_v1 knee=32 {'frame_luma': 0.2936, 'clipped': 0.0333}\nA_apollo_v1_00016 INFO apollo_v1 knee=16 {'frame_luma': 0.29574, 'clipped': 0.007}\nA_apollo_v1_00008 INFO apollo_v1 knee=8 {'frame_luma': 0.29284, 'clipped': 0.035}\nA_apollo_v1_00004 INFO apollo_v1 knee=4 {'frame_luma': 0.30347, 'clipped': 0.0539}\nA_apollo_v1_00002 INFO apollo_v1 knee=2 {'frame_luma': 0.27756, 'clipped': 0.0067}\nA_apollo_00700 INFO apollo knee=700 {'frame_luma': 0.28386, 'clipped': 0.0088}\nA_apollo_00064 INFO apollo knee=64 {'frame_luma': 0.28915, 'clipped': 0.02}\nA_apollo_00032 INFO apollo knee=32 {'frame_luma': 0.28582, 'clipped': 0.0327}\nA_apollo_00016 INFO apollo knee=16 {'frame_luma': 0.28359, 'clipped': 0.0122}\nA_apollo_00008 INFO apollo knee=8 {'frame_luma': 0.2865, 'clipped': 0.0131}\nA_apollo_00004 INFO apollo knee=4 {'frame_luma': 0.29851, 'clipped': 0.0386}\nA_apollo_00002 INFO apollo knee=2 {'frame_luma': 0.28439, 'clipped': 0.0084}\nA_arden_infernal_v1_00700 INFO arden_infernal_v1 knee=700 {'frame_luma': 0.29976, 'clipped': 0.0048}\nA_arden_infernal_v1_00064 INFO arden_infernal_v1 knee=64 {'frame_luma': 0.36101, 'clipped': 0.0032}\nA_arden_infernal_v1_00032 INFO arden_infernal_v1 knee=32 {'frame_luma': 0.32221, 'clipped': 0.0042}\nA_arden_infernal_v1_00016 INFO arden_infernal_v1 knee=16 {'frame_luma': 0.33852, 'clipped': 0.0037}\nA_arden_infernal_v1_00008 INFO arden_infernal_v1 knee=8 {'frame_luma': 0.30246, 'clipped': 0.0043}\nA_arden_infernal_v1_00004 INFO arden_infernal_v1 knee=4 {'frame_luma': 0.36218, 'clipped': 0.003}\nA_arden_infernal_v1_00002 INFO arden_infernal_v1 knee=2 {'frame_luma': 0.31434, 'clipped': 0.0034}\nA_arden_infernal_00700 INFO arden_infernal knee=700 {'frame_luma': 0.27107, 'clipped': 0.0028}\nA_arden_infernal_00064 INFO arden_infernal knee=64 {'frame_luma': 0.31831, 'clipped': 0.0026}\nA_arden_infernal_00032 INFO arden_infernal knee=32 {'frame_luma': 0.31681, 'clipped': 0.0026}\nA_arden_infernal_00016 INFO arden_infernal knee=16 {'frame_luma': 0.28964, 'clipped': 0.0045}\nA_arden_infernal_00008 INFO arden_infernal knee=8 {'frame_luma': 0.30476, 'clipped': 0.003}\nA_arden_infernal_00004 INFO arden_infernal knee=4 {'frame_luma': 0.29554, 'clipped': 0.0029}\nA_arden_infernal_00002 INFO arden_infernal knee=2 {'frame_luma': 0.32401, 'clipped': 0.0039}\nA_skeleton_flame_v1_00700 INFO skeleton_flame_v1 knee=700 {'frame_luma': 0.30015, 'clipped': 0.0548}\nA_skeleton_flame_v1_00064 INFO skeleton_flame_v1 knee=64 {'frame_luma': 0.3008, 'clipped': 0.0422}\nA_skeleton_flame_v1_00032 INFO skeleton_flame_v1 knee=32 {'frame_luma': 0.26867, 'clipped': 0.0043}\nA_skeleton_flame_v1_00016 INFO skeleton_flame_v1 knee=16 {'frame_luma': 0.26811, 'clipped': 0.0028}\nA_skeleton_flame_v1_00008 INFO skeleton_flame_v1 knee=8 {'frame_luma': 0.26079, 'clipped': 0.0062}\nA_skeleton_flame_v1_00004 INFO skeleton_flame_v1 knee=4 {'frame_luma': 0.27508, 'clipped': 0.0086}\nA_skeleton_flame_v1_00002 INFO skeleton_flame_v1 knee=2 {'frame_luma': 0.30594, 'clipped': 0.0672}\nA_skeleton_flame_00700 INFO skeleton_flame knee=700 {'frame_luma': 0.23583, 'clipped': 0.0061}\nA_skeleton_flame_00064 INFO skeleton_flame knee=64 {'frame_luma': 0.2564, 'clipped': 0.0269}\nA_skeleton_flame_00032 INFO skeleton_flame knee=32 {'frame_luma': 0.27508, 'clipped': 0.023}\nA_skeleton_flame_00016 INFO skeleton_flame knee=16 {'frame_luma': 0.26068, 'clipped': 0.0344}\nA_skeleton_flame_00008 INFO skeleton_flame knee=8 {'frame_luma': 0.24723, 'clipped': 0.0062}\nA_skeleton_flame_00004 INFO skeleton_flame knee=4 {'frame_luma': 0.2337, 'clipped': 0.015}\nA_skeleton_flame_00002 INFO skeleton_flame knee=2 {'frame_luma': 0.25029, 'clipped': 0.0102}\nM00 PASS every skin was sampled at every hour at every eye level {'got': 0, 'wanted': 0, 'skins': ['relay_og', 'celestial_light', 'apollo_v1', 'apollo', 'arden_infernal_v1', 'arden_infernal', 'skeleton_flame_v1', 'skeleton_flame'], 'hours': ['day'], 'levels': [0.05, 9.0, 18.0, 24.0, 30.0, 36.0]}\nX00 PASS the world's pinned exposure range is untouched -- the experiment is not confounded {'before': [('V2_PostProcess', 14.2, 14.2)], 'after': [('V2_PostProcess', 14.2, 14.2)], 'bias_before': [-0.9], 'bias_after': [-0.9], 'note': 'min/max EV100 is the world setting and must not move; AutoExposureBias is driven by the hour by the day cycle and is expected to differ'}\nM09 PASS the knee's live range at this asset scale is measured, not assumed {'frame_luma_spread_across_knees': {'relay_og': 0.01436, 'celestial_light': 0.15139, 'apollo_v1': 0.02884, 'apollo': 0.01492, 'arden_infernal_v1': 0.06242, 'arden_infernal': 0.05294, 'skeleton_flame_v1': 0.04515, 'skeleton_flame': 0.04138}, 'inert_skins': [], 'highest_knee_that_changes_the_picture': {'relay_og': 64.0, 'celestial_light': 64.0, 'apollo_v1': 64.0, 'apollo': 64.0, 'arden_infernal_v1': 64.0, 'arden_infernal': 64.0, 'skeleton_flame_v1': 32.0, 'skeleton_flame': 64.0}, 'knees_swept': [700.0, 64.0, 32.0, 16.0, 8.0, 4.0, 2.0], 'note': 'body glow spans 3.3-13.2 after the 4000->6 re-baseline, so a knee at the shipped 700 compresses nothing; this says where it starts to bite and whether it helps'}\n"
+}

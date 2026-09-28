@@ -1,0 +1,564 @@
+{
+ "name": "zzAC1_dusk_regions",
+ "started": "2026-09-27 18:04:40",
+ "status": "voided: at least one vantage could not be shown valid",
+ "tests": [
+  {
+   "id": "V_STAND",
+   "name": "the pawn reached every measurement spot",
+   "pass": false,
+   "detail": {
+    "places_measured": [
+     "golden_arrival",
+     "noctis_nc02"
+    ],
+    "wanted": [
+     "golden_arrival",
+     "noctis_nc02",
+     "tartarus_tq04"
+    ],
+    "too_far": [],
+    "vantage": {
+     "golden_arrival": {
+      "asked": [
+       -64.0,
+       -5042.0
+      ],
+      "landed": [
+       -64.0,
+       -5042.0,
+       94.3
+      ],
+      "offset_uu": 0.0,
+      "ground_trace_z": 0.7,
+      "eye": [
+       -64.0,
+       -5042.0,
+       994.3
+      ],
+      "at": [
+       1336.0,
+       -6442.0,
+       -5.7
+      ],
+      "forward_hit": null,
+      "down_hit": {
+       "dist": 993.6,
+       "z": 0.7
+      },
+      "ground_patch_hit": {
+       "dist": 997.1,
+       "z": -2.9
+      }
+     },
+     "noctis_nc02": {
+      "asked": [
+       -65943.0,
+       -38753.0
+      ],
+      "landed": [
+       -65953.5,
+       -38751.5,
+       131.0
+      ],
+      "offset_uu": 10.6,
+      "ground_trace_z": 12.0,
+      "eye": [
+       -65953.5,
+       -38751.5,
+       1031.0
+      ],
+      "at": [
+       -64553.5,
+       -40151.5,
+       31.0
+      ],
+      "forward_hit": null,
+      "down_hit": {
+       "dist": 1019.0,
+       "z": 12.0
+      },
+      "ground_patch_hit": {
+       "dist": 1019.0,
+       "z": 12.0
+      }
+     },
+     "tartarus_tq04": {
+      "asked": [
+       87157.0,
+       -50320.0
+      ],
+      "landed": null,
+      "valid": false,
+      "why": "no pawn after the teleport"
+     }
+    },
+    "note": "re-fetched after each teleport, because a move can respawn the pawn and the stale reference then reports the world origin"
+   }
+  },
+  {
+   "id": "V_CLEAR",
+   "name": "no camera is inside or against geometry",
+   "pass": true,
+   "detail": {
+    "embedded_at": [],
+    "forward_hits": {
+     "golden_arrival": null,
+     "noctis_nc02": null
+    },
+    "floor_uu": 400.0,
+    "note": "the defect that produced luma 0.6917 at night: a camera standing on the monument, reading lit stone and calling it the world"
+   }
+  },
+  {
+   "id": "V_GROUND",
+   "name": "there is floor under every camera, at the height it was placed above it",
+   "pass": true,
+   "detail": {
+    "no_floor_under": [],
+    "unexpected_height": [],
+    "down_hits": {
+     "golden_arrival": {
+      "dist": 993.6,
+      "z": 0.7
+     },
+     "noctis_nc02": {
+      "dist": 1019.0,
+      "z": 12.0
+     }
+    },
+    "placed_at": 900.0
+   }
+  },
+  {
+   "id": "V_PATCH",
+   "name": "the ground rectangle actually contains ground at every place",
+   "pass": true,
+   "detail": {
+    "nothing_under_patch": [],
+    "patch_hits": {
+     "golden_arrival": {
+      "dist": 997.1,
+      "z": -2.9
+     },
+     "noctis_nc02": {
+      "dist": 1019.0,
+      "z": 12.0
+     }
+    },
+    "rect_screen": [
+     0.5,
+     0.78,
+     0.3,
+     0.16
+    ],
+    "note": "a ground patch aimed at sky or at a wall measures neither the ground nor the same thing in two districts"
+   }
+  }
+ ],
+ "lighting_knobs_as_found": {
+  "PracticalCount": 48.0,
+  "PracticalRadius": 12000.0,
+  "PracticalGain": 1.0,
+  "MoonGain": 0.05,
+  "MoonLeadHours": 0.0,
+  "NightShadowLift": 0.62
+ },
+ "ground_rect_screen": [
+  0.5,
+  0.78,
+  0.3,
+  0.16
+ ],
+ "frame_rect_screen": [
+  0.5,
+  0.5,
+  0.46,
+  0.44
+ ],
+ "places": {
+  "golden_arrival": [
+   {
+    "hour": 18.0,
+    "luma": 0.1141,
+    "spread": 0.0004,
+    "frame_crushed": 0.8086,
+    "ground_luma": 0.09,
+    "ground_crushed": 0.9446,
+    "ground_blown": 0.0005,
+    "ground_readable": 0.0549,
+    "ground_spread": 0.0019,
+    "moon_intensity": null,
+    "sun_elevation": 0.0,
+    "daylight": 0.1999,
+    "exposure_bias_predicted": 0.98
+   },
+   {
+    "hour": 18.25,
+    "luma": 0.1849,
+    "spread": 0.0007,
+    "frame_crushed": 0.1852,
+    "ground_luma": 0.1627,
+    "ground_crushed": 0.2271,
+    "ground_blown": 0.0005,
+    "ground_readable": 0.7725,
+    "ground_spread": 0.0031,
+    "moon_intensity": null,
+    "sun_elevation": -4.71,
+    "daylight": 0.0489,
+    "exposure_bias_predicted": 1.335
+   },
+   {
+    "hour": 18.5,
+    "luma": 0.1122,
+    "spread": 0.0,
+    "frame_crushed": 0.847,
+    "ground_luma": 0.0988,
+    "ground_crushed": 0.8859,
+    "ground_blown": 0.0005,
+    "ground_readable": 0.1137,
+    "ground_spread": 0.0027,
+    "moon_intensity": null,
+    "sun_elevation": -9.4,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 18.75,
+    "luma": 0.1144,
+    "spread": 0.0002,
+    "frame_crushed": 0.8318,
+    "ground_luma": 0.1037,
+    "ground_crushed": 0.8752,
+    "ground_blown": 0.0005,
+    "ground_readable": 0.1242,
+    "ground_spread": 0.0009,
+    "moon_intensity": null,
+    "sun_elevation": -14.05,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 19.0,
+    "luma": 0.1227,
+    "spread": 0.0001,
+    "frame_crushed": 0.7415,
+    "ground_luma": 0.1108,
+    "ground_crushed": 0.8034,
+    "ground_blown": 0.0005,
+    "ground_readable": 0.1961,
+    "ground_spread": 0.0019,
+    "moon_intensity": null,
+    "sun_elevation": -18.63,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 19.25,
+    "luma": 0.1216,
+    "spread": 0.0002,
+    "frame_crushed": 0.7436,
+    "ground_luma": 0.1089,
+    "ground_crushed": 0.7781,
+    "ground_blown": 0.0005,
+    "ground_readable": 0.2215,
+    "ground_spread": 0.0045,
+    "moon_intensity": null,
+    "sun_elevation": -23.14,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 19.5,
+    "luma": 0.1318,
+    "spread": 0.0002,
+    "frame_crushed": 0.6534,
+    "ground_luma": 0.1174,
+    "ground_crushed": 0.7083,
+    "ground_blown": 0.0005,
+    "ground_readable": 0.2912,
+    "ground_spread": 0.0044,
+    "moon_intensity": null,
+    "sun_elevation": -27.55,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 19.75,
+    "luma": 0.1349,
+    "spread": 0.0002,
+    "frame_crushed": 0.6395,
+    "ground_luma": 0.1193,
+    "ground_crushed": 0.6854,
+    "ground_blown": 0.0005,
+    "ground_readable": 0.3141,
+    "ground_spread": 0.0056,
+    "moon_intensity": null,
+    "sun_elevation": -31.84,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 20.0,
+    "luma": 0.1382,
+    "spread": 0.0003,
+    "frame_crushed": 0.6257,
+    "ground_luma": 0.12,
+    "ground_crushed": 0.6969,
+    "ground_blown": 0.0008,
+    "ground_readable": 0.3023,
+    "ground_spread": 0.0055,
+    "moon_intensity": null,
+    "sun_elevation": -36.0,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 23.0,
+    "luma": 0.1706,
+    "spread": 0.0005,
+    "frame_crushed": 0.3678,
+    "ground_luma": 0.1466,
+    "ground_crushed": 0.5129,
+    "ground_blown": 0.0005,
+    "ground_readable": 0.4867,
+    "ground_spread": 0.0063,
+    "moon_intensity": null,
+    "sun_elevation": -69.55,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   }
+  ],
+  "noctis_nc02": [
+   {
+    "hour": 18.0,
+    "luma": 0.0427,
+    "spread": 0.0001,
+    "frame_crushed": 0.9625,
+    "ground_luma": 0.024,
+    "ground_crushed": 0.9893,
+    "ground_blown": 0.0009,
+    "ground_readable": 0.0098,
+    "ground_spread": 0.0002,
+    "moon_intensity": null,
+    "sun_elevation": 0.0,
+    "daylight": 0.1999,
+    "exposure_bias_predicted": 0.98
+   },
+   {
+    "hour": 18.25,
+    "luma": 0.0578,
+    "spread": 0.0002,
+    "frame_crushed": 0.9002,
+    "ground_luma": 0.0373,
+    "ground_crushed": 0.9714,
+    "ground_blown": 0.0009,
+    "ground_readable": 0.0277,
+    "ground_spread": 0.0,
+    "moon_intensity": null,
+    "sun_elevation": -4.71,
+    "daylight": 0.0489,
+    "exposure_bias_predicted": 1.335
+   },
+   {
+    "hour": 18.5,
+    "luma": 0.1168,
+    "spread": 0.0015,
+    "frame_crushed": 0.8376,
+    "ground_luma": 0.128,
+    "ground_crushed": 0.8357,
+    "ground_blown": 0.0488,
+    "ground_readable": 0.1156,
+    "ground_spread": 0.0066,
+    "moon_intensity": null,
+    "sun_elevation": -9.4,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 18.75,
+    "luma": 0.1253,
+    "spread": 0.0004,
+    "frame_crushed": 0.832,
+    "ground_luma": 0.1369,
+    "ground_crushed": 0.838,
+    "ground_blown": 0.0468,
+    "ground_readable": 0.1152,
+    "ground_spread": 0.0086,
+    "moon_intensity": null,
+    "sun_elevation": -14.05,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 19.0,
+    "luma": 0.1548,
+    "spread": 0.0003,
+    "frame_crushed": 0.6948,
+    "ground_luma": 0.1414,
+    "ground_crushed": 0.7074,
+    "ground_blown": 0.0005,
+    "ground_readable": 0.2921,
+    "ground_spread": 0.0001,
+    "moon_intensity": null,
+    "sun_elevation": -18.63,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 19.25,
+    "luma": 0.1583,
+    "spread": 0.0001,
+    "frame_crushed": 0.6895,
+    "ground_luma": 0.148,
+    "ground_crushed": 0.6867,
+    "ground_blown": 0.0005,
+    "ground_readable": 0.3127,
+    "ground_spread": 0.0001,
+    "moon_intensity": null,
+    "sun_elevation": -23.14,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 19.5,
+    "luma": 0.1595,
+    "spread": 0.0001,
+    "frame_crushed": 0.6919,
+    "ground_luma": 0.1531,
+    "ground_crushed": 0.6875,
+    "ground_blown": 0.0005,
+    "ground_readable": 0.312,
+    "ground_spread": 0.0003,
+    "moon_intensity": null,
+    "sun_elevation": -27.55,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 19.75,
+    "luma": 0.1445,
+    "spread": 0.0013,
+    "frame_crushed": 0.7889,
+    "ground_luma": 0.1512,
+    "ground_crushed": 0.754,
+    "ground_blown": 0.0314,
+    "ground_readable": 0.2147,
+    "ground_spread": 0.0087,
+    "moon_intensity": null,
+    "sun_elevation": -31.84,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 20.0,
+    "luma": 0.1492,
+    "spread": 0.0024,
+    "frame_crushed": 0.7462,
+    "ground_luma": 0.1544,
+    "ground_crushed": 0.6929,
+    "ground_blown": 0.0297,
+    "ground_readable": 0.2774,
+    "ground_spread": 0.0,
+    "moon_intensity": null,
+    "sun_elevation": -36.0,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   },
+   {
+    "hour": 23.0,
+    "luma": 0.1716,
+    "spread": 0.0019,
+    "frame_crushed": 0.3871,
+    "ground_luma": 0.2056,
+    "ground_crushed": 0.1447,
+    "ground_blown": 0.0467,
+    "ground_readable": 0.8086,
+    "ground_spread": 0.026,
+    "moon_intensity": null,
+    "sun_elevation": -69.55,
+    "daylight": 0.0,
+    "exposure_bias_predicted": 1.45
+   }
+  ],
+  "tartarus_tq04": []
+ },
+ "vantage": {
+  "golden_arrival": {
+   "asked": [
+    -64.0,
+    -5042.0
+   ],
+   "landed": [
+    -64.0,
+    -5042.0,
+    94.3
+   ],
+   "offset_uu": 0.0,
+   "ground_trace_z": 0.7,
+   "eye": [
+    -64.0,
+    -5042.0,
+    994.3
+   ],
+   "at": [
+    1336.0,
+    -6442.0,
+    -5.7
+   ],
+   "forward_hit": null,
+   "down_hit": {
+    "dist": 993.6,
+    "z": 0.7
+   },
+   "ground_patch_hit": {
+    "dist": 997.1,
+    "z": -2.9
+   }
+  },
+  "noctis_nc02": {
+   "asked": [
+    -65943.0,
+    -38753.0
+   ],
+   "landed": [
+    -65953.5,
+    -38751.5,
+    131.0
+   ],
+   "offset_uu": 10.6,
+   "ground_trace_z": 12.0,
+   "eye": [
+    -65953.5,
+    -38751.5,
+    1031.0
+   ],
+   "at": [
+    -64553.5,
+    -40151.5,
+    31.0
+   ],
+   "forward_hit": null,
+   "down_hit": {
+    "dist": 1019.0,
+    "z": 12.0
+   },
+   "ground_patch_hit": {
+    "dist": 1019.0,
+    "z": 12.0
+   }
+  },
+  "tartarus_tq04": {
+   "asked": [
+    87157.0,
+    -50320.0
+   ],
+   "landed": null,
+   "valid": false,
+   "why": "no pawn after the teleport"
+  }
+ },
+ "finished": "2026-09-27 18:07:04",
+ "seconds": 144.67,
+ "log": "V_STAND FAIL the pawn reached every measurement spot {'places_measured': ['golden_arrival', 'noctis_nc02'], 'wanted': ['golden_arrival', 'noctis_nc02', 'tartarus_tq04'], 'too_far': [], 'vantage': {'golden_arrival': {'asked': [-64.0, -5042.0], 'landed': [-64.0, -5042.0, 94.3], 'offset_uu': 0.0, 'ground_trace_z': 0.7, 'eye': [-64.0, -5042.0, 994.3], 'at': [1336.0, -6442.0, -5.7], 'forward_hit': None, 'down_hit': {'dist': 993.6, 'z': 0.7}, 'ground_patch_hit': {'dist': 997.1, 'z': -2.9}}, 'noctis_nc02': {'asked': [-65943.0, -38753.0], 'landed': [-65953.5, -38751.5, 131.0], 'offset_uu': 10.6, 'ground_trace_z': 12.0, 'eye': [-65953.5, -38751.5, 1031.0], 'at': [-64553.5, -40151.5, 31.0], 'forward_hit': None, 'down_hit': {'dist': 1019.0, 'z': 12.0}, 'ground_patch_hit': {'dist': 1019.0, 'z': 12.0}}, 'tartarus_tq04': {'asked': [87157.0, -50320.0], 'landed': None, 'valid': False, 'why': 'no pawn after the teleport'}}, 'note': 're-fetched after each teleport, because a move can respawn the pawn and the stale reference then reports the world origin'}\nV_CLEAR PASS no camera is inside or against geometry {'embedded_at': [], 'forward_hits': {'golden_arrival': None, 'noctis_nc02': None}, 'floor_uu': 400.0, 'note': 'the defect that produced luma 0.6917 at night: a camera standing on the monument, reading lit stone and calling it the world'}\nV_GROUND PASS there is floor under every camera, at the height it was placed above it {'no_floor_under': [], 'unexpected_height': [], 'down_hits': {'golden_arrival': {'dist': 993.6, 'z': 0.7}, 'noctis_nc02': {'dist': 1019.0, 'z': 12.0}}, 'placed_at': 900.0}\nV_PATCH PASS the ground rectangle actually contains ground at every place {'nothing_under_patch': [], 'patch_hits': {'golden_arrival': {'dist': 997.1, 'z': -2.9}, 'noctis_nc02': {'dist': 1019.0, 'z': 12.0}}, 'rect_screen': [0.5, 0.78, 0.3, 0.16], 'note': 'a ground patch aimed at sky or at a wall measures neither the ground nor the same thing in two districts'}\n"
+}

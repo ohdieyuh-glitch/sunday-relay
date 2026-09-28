@@ -1,92 +1,40 @@
 {
  "name": "zc_beta_perf",
- "started": "2026-09-27 01:15:51",
- "status": "FAIL: stat unit did not report",
- "tests": [
-  {
-   "id": "F00",
-   "name": "every stand was measured at noon and at midnight, and the clock was actually running",
-   "pass": false,
-   "detail": {
-    "stands": [
-     "arrival",
-     "icarus_checkpoint",
-     "tartarus_march",
-     "dubel_belt"
-    ],
-    "frame_ms": {
-     "noon/arrival": 22.11,
-     "noon/icarus_checkpoint": 21.36,
-     "noon/tartarus_march": null,
-     "noon/dubel_belt": null,
-     "midnight/arrival": 27.28,
-     "midnight/icarus_checkpoint": 24.38,
-     "midnight/tartarus_march": 19.21,
-     "midnight/dubel_belt": 20.01
-    },
-    "note": "a frame cost of 0.00 is what FStatUnitData reports when the stat unit overlay is not drawing, and it is under every ceiling anyone would set. Asserted here so the two clauses below cannot pass on nothing."
-   }
-  }
- ],
+ "started": "2026-09-27 06:58:57",
+ "status": "error",
+ "tests": [],
  "by_hour": {
   "noon": {
    "arrival": {
     "frames": 141,
-    "frame_ms": 22.11,
-    "game_ms": 22.1,
-    "render_ms": 16.84,
-    "gpu_ms": 19.44
+    "frame_ms": 25.64,
+    "game_ms": 25.18,
+    "render_ms": 0.0,
+    "gpu_ms": 19.75
    },
    "icarus_checkpoint": {
     "frames": 141,
-    "frame_ms": 21.36,
-    "game_ms": 21.38,
-    "render_ms": 17.02,
-    "gpu_ms": 19.5
-   },
-   "tartarus_march": null,
-   "dubel_belt": null
-  },
-  "midnight": {
-   "arrival": {
-    "frames": 141,
-    "frame_ms": 27.28,
-    "game_ms": 27.45,
-    "render_ms": 16.68,
-    "gpu_ms": 14.27
-   },
-   "icarus_checkpoint": {
-    "frames": 141,
-    "frame_ms": 24.38,
-    "game_ms": 24.49,
-    "render_ms": 14.82,
-    "gpu_ms": 16.09
+    "frame_ms": 39.86,
+    "game_ms": 38.96,
+    "render_ms": 0.0,
+    "gpu_ms": 14.29
    },
    "tartarus_march": {
     "frames": 141,
-    "frame_ms": 19.21,
-    "game_ms": 18.82,
-    "render_ms": 18.32,
-    "gpu_ms": 17.18
-   },
-   "dubel_belt": {
-    "frames": 141,
-    "frame_ms": 20.01,
-    "game_ms": 19.95,
-    "render_ms": 15.76,
-    "gpu_ms": 17.06
+    "frame_ms": 34.25,
+    "game_ms": 33.76,
+    "render_ms": 0.0,
+    "gpu_ms": 16.22
    }
   }
  },
  "_windows": [
   141,
   141,
-  141,
-  141,
-  141,
   141
  ],
- "finished": "2026-09-27 01:17:42",
- "seconds": 111.02,
- "log": "F_noon_arrival INFO arrival at noon {'frames': 141, 'frame_ms': 22.11, 'game_ms': 22.1, 'render_ms': 16.84, 'gpu_ms': 19.44}\nF_noon_icarus_checkpoint INFO icarus_checkpoint at noon {'frames': 141, 'frame_ms': 21.36, 'game_ms': 21.38, 'render_ms': 17.02, 'gpu_ms': 19.5}\nF_midnight_arrival INFO arrival at midnight {'frames': 141, 'frame_ms': 27.28, 'game_ms': 27.45, 'render_ms': 16.68, 'gpu_ms': 14.27}\nF_midnight_icarus_checkpoint INFO icarus_checkpoint at midnight {'frames': 141, 'frame_ms': 24.38, 'game_ms': 24.49, 'render_ms': 14.82, 'gpu_ms': 16.09}\nF_midnight_tartarus_march INFO tartarus_march at midnight {'frames': 141, 'frame_ms': 19.21, 'game_ms': 18.82, 'render_ms': 18.32, 'gpu_ms': 17.18}\nF_midnight_dubel_belt INFO dubel_belt at midnight {'frames': 141, 'frame_ms': 20.01, 'game_ms': 19.95, 'render_ms': 15.76, 'gpu_ms': 17.06}\nF00 FAIL every stand was measured at noon and at midnight, and the clock was actually running {'stands': ['arrival', 'icarus_checkpoint', 'tartarus_march', 'dubel_belt'], 'frame_ms': {'noon/arrival': 22.11, 'noon/icarus_checkpoint': 21.36, 'noon/tartarus_march': None, 'noon/dubel_belt': None, 'midnight/arrival': 27.28, 'midnight/icarus_checkpoint': 24.38, 'midnight/tartarus_march': 19.21, 'midnight/dubel_belt': 20.01}, 'note': 'a frame cost of 0.00 is what FStatUnitData reports when the stat unit overlay is not drawing, and it is under every ceiling anyone would set. Asserted here so the two clauses below cannot pass on nothing.'}\n"
+ "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n                                                                  ^^^^^^^^^^^^^^^^\n  File \"C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\_channel\\inbox\\zc_beta_perf.py\", line 163, in job\n  File \"C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\_channel\\inbox\\zc_beta_perf.py\", line 95, in window\nTypeError: SystemLibrary: Failed to convert parameter 'world_context_object' when calling function 'KismetSystemLibrary.ExecuteConsoleCommand' on 'Default__KismetSystemLibrary'\n  TypeError: NativizeProperty: Cannot nativize 'World' as 'WorldContextObject' (ObjectProperty)\n    TypeError: NativizeObject: Cannot nativize 'World' as 'Object' (allowed Class type: 'Object')\n",
+ "finished": "2026-09-27 07:00:15",
+ "seconds": 77.57,
+ "log": "F_noon_arrival INFO arrival at noon {'frames': 141, 'frame_ms': 25.64, 'game_ms': 25.18, 'render_ms': 0.0, 'gpu_ms': 19.75}\nF_noon_icarus_checkpoint INFO icarus_checkpoint at noon {'frames': 141, 'frame_ms': 39.86, 'game_ms': 38.96, 'render_ms': 0.0, 'gpu_ms': 14.29}\nF_noon_tartarus_march INFO tartarus_march at noon {'frames': 141, 'frame_ms': 34.25, 'game_ms': 33.76, 'render_ms': 0.0, 'gpu_ms': 16.22}\n"
 }

@@ -1,0 +1,199 @@
+{
+ "name": "zzAU2_nav_geometry",
+ "started": "2026-09-27 21:33:09",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "N00b",
+   "name": "the editor is the active application, so a pointer click can be routed at all",
+   "pass": true,
+   "detail": {
+    "app_active": 1,
+    "pointing": 0,
+    "note": "THE PRECONDITION. Slate does not route pointer events into an inactive application, so a run taken while the editor is in the background measures focus, not the click path. The first run of this job failed all five tiles AND its own wallet control with app_active 0 and would have read as a product defect."
+   }
+  },
+  {
+   "id": "N00",
+   "name": "the strip is on screen with nothing open over it",
+   "pass": true,
+   "detail": {
+    "strip_on_screen": true,
+    "note": "every clause below is about a tile on this strip; if it is not up, nothing under it means anything."
+   }
+  },
+  {
+   "id": "N01",
+   "name": "the wallet chip still completes a pointer click",
+   "pass": true,
+   "detail": {
+    "was_open": false,
+    "clicked": true,
+    "open_after": true,
+    "note": "THE POSITIVE CONTROL, and it is the reason the two routes below can be compared at all. The wallet counts its clicks through an SButton OnClicked exactly as the tiles do and it passed in the same run that failed all six tile clauses. If it fails here, the pointer route is broken for everything and this run says nothing about the nav bar specifically."
+   }
+  },
+  {
+   "id": "N02",
+   "name": "the tile button's own SimulateClick increments the counter for every tile",
+   "pass": true,
+   "detail": {
+    "per_tile": {
+     "brain": true,
+     "commands": true,
+     "agent": true,
+     "missions": true,
+     "menu": true
+    },
+    "note": "WIRING ONLY. HandleClicked, Clicks[], the Id-to-index mapping and OnNavigate, with the pointer, the hit test and mouse capture all taken out of the question."
+   }
+  },
+  {
+   "id": "N03",
+   "name": "a pointer click increments the counter for every tile",
+   "pass": false,
+   "detail": {
+    "per_tile": {
+     "brain": false,
+     "commands": false,
+     "agent": false,
+     "missions": false,
+     "menu": false
+    },
+    "note": "the founder's actual route. This is the one that failed six clauses."
+   }
+  }
+ ],
+ "app_state_at_start": {
+  "app_active": 1,
+  "pointing": 0
+ },
+ "wallet_control": {
+  "was_open": false,
+  "clicked": true,
+  "open_after": true
+ },
+ "by_tile": {
+  "brain": {
+   "app_state": {
+    "app_active": 1,
+    "pointing": 0
+   },
+   "pointer": {
+    "returned": false,
+    "clicks_before": 0,
+    "clicks_after": 0,
+    "surface_open": false
+   },
+   "diagnosis": "tile 1 928.3 1007.3 53.1 53.1\npointing 0\napp_active 1\nstrip_on_screen 1\ncapture 1 SViewport\npath_len 57\npath_leaf SBox > SWonderlandNavBar > SBorder > SHorizontalBox > SVerticalBox > SBox > SButton > SOverlay > SBorder > SWonderlandBrainIcon\ntile_in_path 1\nwindow Wonderland - Unreal Editor\nown_window Wonderland - Unreal Editor\nown_path_leaf SBorder > SHorizontalBox > SVerticalBox > SBox > SButton > SOverlay > SBorder > SWonderlandBrainIcon\ntile_in_own_window_path 1",
+   "simulate": {
+    "returned": true,
+    "clicks_before": 0,
+    "clicks_after": 1,
+    "surface_open": true
+   },
+   "capture": "brain.png"
+  },
+  "commands": {
+   "app_state": {
+    "app_active": 1,
+    "pointing": 0
+   },
+   "pointer": {
+    "returned": false,
+    "clicks_before": 0,
+    "clicks_after": 0,
+    "surface_open": false
+   },
+   "diagnosis": "tile 1 997.2 1007.3 53.1 53.1\npointing 0\napp_active 1\nstrip_on_screen 1\ncapture 1 SViewport\npath_len 57\npath_leaf SBox > SWonderlandNavBar > SBorder > SHorizontalBox > SVerticalBox > SBox > SButton > SOverlay > SBorder > SWonderlandBrainIcon\ntile_in_path 1\nwindow Wonderland - Unreal Editor\nown_window Wonderland - Unreal Editor\nown_path_leaf SBorder > SHorizontalBox > SVerticalBox > SBox > SButton > SOverlay > SBorder > SWonderlandBrainIcon\ntile_in_own_window_path 1",
+   "simulate": {
+    "returned": true,
+    "clicks_before": 0,
+    "clicks_after": 1,
+    "surface_open": true
+   },
+   "capture": "commands.png"
+  },
+  "agent": {
+   "app_state": {
+    "app_active": 1,
+    "pointing": 0
+   },
+   "pointer": {
+    "returned": false,
+    "clicks_before": 0,
+    "clicks_after": 0,
+    "surface_open": false
+   },
+   "diagnosis": "tile 1 800.6 1007.3 53.1 53.1\npointing 0\napp_active 1\nstrip_on_screen 1\ncapture 1 SViewport\npath_len 57\npath_leaf SBox > SWonderlandNavBar > SBorder > SHorizontalBox > SVerticalBox > SBox > SButton > SOverlay > SBorder > SWonderlandBrainIcon\ntile_in_path 1\nwindow Wonderland - Unreal Editor\nown_window Wonderland - Unreal Editor\nown_path_leaf SBorder > SHorizontalBox > SVerticalBox > SBox > SButton > SOverlay > SBorder > SWonderlandBrainIcon\ntile_in_own_window_path 1",
+   "simulate": {
+    "returned": true,
+    "clicks_before": 0,
+    "clicks_after": 1,
+    "surface_open": true
+   },
+   "capture": "agent.png"
+  },
+  "missions": {
+   "app_state": {
+    "app_active": 1,
+    "pointing": 0
+   },
+   "pointer": {
+    "returned": false,
+    "clicks_before": 0,
+    "clicks_after": 0,
+    "surface_open": null
+   },
+   "diagnosis": "tile 1 864.4 1007.3 53.1 53.1\npointing 0\napp_active 1\nstrip_on_screen 1\ncapture 1 SViewport\npath_len 57\npath_leaf SBox > SWonderlandNavBar > SBorder > SHorizontalBox > SVerticalBox > SBox > SButton > SOverlay > SBorder > SWonderlandBrainIcon\ntile_in_path 1\nwindow Wonderland - Unreal Editor\nown_window Wonderland - Unreal Editor\nown_path_leaf SBorder > SHorizontalBox > SVerticalBox > SBox > SButton > SOverlay > SBorder > SWonderlandBrainIcon\ntile_in_own_window_path 1",
+   "simulate": {
+    "returned": true,
+    "clicks_before": 0,
+    "clicks_after": 1,
+    "surface_open": null
+   },
+   "capture": "missions.png"
+  },
+  "menu": {
+   "app_state": {
+    "app_active": 1,
+    "pointing": 0
+   },
+   "pointer": {
+    "returned": false,
+    "clicks_before": 0,
+    "clicks_after": 0,
+    "surface_open": false
+   },
+   "diagnosis": "tile 1 1066.0 1007.3 53.1 53.1\npointing 0\napp_active 1\nstrip_on_screen 1\ncapture 1 SViewport\npath_len 57\npath_leaf SBox > SWonderlandNavBar > SBorder > SHorizontalBox > SVerticalBox > SBox > SButton > SOverlay > SBorder > SWonderlandBrainIcon\ntile_in_path 1\nwindow Wonderland - Unreal Editor\nown_window Wonderland - Unreal Editor\nown_path_leaf SBorder > SHorizontalBox > SVerticalBox > SBox > SButton > SOverlay > SBorder > SWonderlandBrainIcon\ntile_in_own_window_path 1",
+   "simulate": {
+    "returned": true,
+    "clicks_before": 0,
+    "clicks_after": 1,
+    "surface_open": true
+   },
+   "capture": "menu.png"
+  }
+ },
+ "counter_moved": {
+  "pointer": {
+   "brain": false,
+   "commands": false,
+   "agent": false,
+   "missions": false,
+   "menu": false
+  },
+  "simulate": {
+   "brain": true,
+   "commands": true,
+   "agent": true,
+   "missions": true,
+   "menu": true
+  }
+ },
+ "verdict": "the wiring is sound and the POINTER ROUTE loses the click: HandleClicked, the counter and the Id mapping all work when called directly, so the defect is in delivering a pointer click to a tile -- mouse capture is the live suspect, the viewport takes CapturePermanently on the same frame as every failed click",
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\nav_click_cause",
+ "finished": "2026-09-27 21:33:59",
+ "seconds": 50.75,
+ "log": "N00b PASS the editor is the active application, so a pointer click can be routed at all {'app_active': 1, 'pointing': 0, 'note': 'THE PRECONDITION. Slate does not route pointer events into an inactive application, so a run taken while the editor is in the background measures focus, not the click path. The first run of this job failed all five tiles AND its own wallet control with app_active 0 and would have read as a product defect.'}\nN00 PASS the strip is on screen with nothing open over it {'strip_on_screen': True, 'note': 'every clause below is about a tile on this strip; if it is not up, nothing under it means anything.'}\nN01 PASS the wallet chip still completes a pointer click {'was_open': False, 'clicked': True, 'open_after': True, 'note': 'THE POSITIVE CONTROL, and it is the reason the two routes below can be compared at all. The wallet counts its clicks through an SButton OnClicked exactly as the tiles do and it passed in the same run that failed all six tile clauses. If it fails here, the pointer route is broken for everything and this run says nothing about the nav bar specifically.'}\nN_brain INFO brain {'pointer': {'returned': False, 'clicks_before': 0, 'clicks_after': 0, 'surface_open': False}, 'simulate': {'returned': True, 'clicks_before': 0, 'clicks_after': 1, 'surface_open': True}}\nN_commands INFO commands {'pointer': {'returned': False, 'clicks_before': 0, 'clicks_after': 0, 'surface_open': False}, 'simulate': {'returned': True, 'clicks_before': 0, 'clicks_after': 1, 'surface_open': True}}\nN_agent INFO agent {'pointer': {'returned': False, 'clicks_before': 0, 'clicks_after': 0, 'surface_open': False}, 'simulate': {'returned': True, 'clicks_before': 0, 'clicks_after': 1, 'surface_open': True}}\nN_missions INFO missions {'pointer': {'returned': False, 'clicks_before': 0, 'clicks_after': 0, 'surface_open': None}, 'simulate': {'returned': True, 'clicks_before': 0, 'clicks_after': 1, 'surface_open': None}}\nN_menu INFO menu {'pointer': {'returned': False, 'clicks_before': 0, 'clicks_after': 0, 'surface_open': False}, 'simulate': {'returned': True, 'clicks_before': 0, 'clicks_after': 1, 'surface_open': True}}\nN02 PASS the tile button's own SimulateClick increments the counter for every tile {'per_tile': {'brain': True, 'commands': True, 'agent': True, 'missions': True, 'menu': True}, 'note': 'WIRING ONLY. HandleClicked, Clicks[], the Id-to-index mapping and OnNavigate, with the pointer, the hit test and mouse capture all taken out of the question.'}\nN03 FAIL a pointer click increments the counter for every tile {'per_tile': {'brain': False, 'commands': False, 'agent': False, 'missions': False, 'menu': False}, 'note': \"the founder's actual route. This is the one that failed six clauses.\"}\nN04 INFO which half of the click path is at fault {'verdict': 'the wiring is sound and the POINTER ROUTE loses the click: HandleClicked, the counter and the Id mapping all work when called directly, so the defect is in delivering a pointer click to a tile -- mouse capture is the live suspect, the viewport takes CapturePermanently on the same frame as every failed click'}\n"
+}

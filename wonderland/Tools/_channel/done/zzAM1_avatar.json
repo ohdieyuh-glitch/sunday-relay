@@ -1,0 +1,114 @@
+{
+ "name": "zzAM1_avatar",
+ "started": "2026-09-27 19:34:46",
+ "status": "VOID: the run was not settled (see run_quality)",
+ "tests": [
+  {
+   "id": "O00",
+   "name": "the editor exports the raw frame instrument",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "O01",
+   "name": "there are Project Avatar figures to spawn",
+   "pass": true,
+   "detail": {
+    "found": 10
+   }
+  },
+  {
+   "id": "O_vsm_off",
+   "name": "r.Shadow.Virtual.Enable took the value it was given",
+   "pass": true,
+   "detail": {
+    "asked": "0",
+    "read": 0.0
+   }
+  },
+  {
+   "id": "O_df_off",
+   "name": "r.DistanceFields took the value it was given",
+   "pass": false,
+   "detail": {
+    "asked": "0",
+    "read": 1.0,
+    "note": "the rung is VOID rather than reported: an unrecognised cvar leaves the world exactly as it was, and publishing that as a toggled measurement is how a knob that does nothing gets credited with a result."
+   }
+  },
+  {
+   "id": "O_USABLE",
+   "name": "the run is settled enough to compare rungs at all",
+   "pass": false,
+   "detail": {
+    "rung_zero_median_ms": 895.92,
+    "rung_zero_raw_worst_ms": 8944.22,
+    "rung_zero_spike_ratio": 10.0,
+    "ladder_rungs_under_30_frames": [
+     "n00"
+    ],
+    "other_rungs_under_30_frames": null,
+    "stat_froze": 666,
+    "note": "rung zero is the value every other rung is compared against, so a spike in it poisons the whole ladder. A worst frame more than ten times the median means the world was still arriving; a rung with under thirty frames means the stat overlay was off for most of its window. Either way the numbers below describe this machine's evening, not avatars."
+   }
+  }
+ ],
+ "avatar_files": 10,
+ "stat_froze": 666,
+ "readings": {
+  "n00": {
+   "frames": 8,
+   "frame_median": 895.92,
+   "raw_p95": 8944.22,
+   "raw_worst": 8944.22,
+   "game_median": 3389.01,
+   "render_median": 44.36,
+   "gpu_median": 9.32
+  },
+  "n01": null,
+  "n02": null,
+  "n03": null,
+  "n04": null,
+  "n05": null,
+  "n01_again": null,
+  "vsm_off": null,
+  "df_off": null
+ },
+ "cvar_readback": {
+  "vsm_off": {
+   "cvar": "r.Shadow.Virtual.Enable",
+   "asked": "0",
+   "read": 0.0
+  },
+  "df_off": {
+   "cvar": "r.DistanceFields",
+   "asked": "0",
+   "read": 1.0
+  }
+ },
+ "ladder_ms": {
+  "0": 895.92,
+  "1": null,
+  "2": null,
+  "3": null,
+  "4": null,
+  "5": null
+ },
+ "thin_non_ladder_rungs": null,
+ "run_quality": {
+  "rung_zero_median_ms": 895.92,
+  "rung_zero_raw_worst_ms": 8944.22,
+  "rung_zero_spike_ratio": 10.0,
+  "ladder_rungs_under_30_frames": [
+   "n00"
+  ],
+  "other_rungs_under_30_frames": null,
+  "stat_froze": 666
+ },
+ "verdict": {
+  "reading": "NOT EVIDENCE EITHER WAY. This run neither confirms nor refutes the one-versus-ten finding, and publishing its ladder would have read as a refutation."
+ },
+ "finished": "2026-09-27 19:36:43",
+ "seconds": 117.54,
+ "log": "O00 PASS the editor exports the raw frame instrument {}\nO01 PASS there are Project Avatar figures to spawn {'found': 10}\nn00 INFO n00 {'frames': 8, 'frame_median': 895.92, 'raw_p95': 8944.22, 'raw_worst': 8944.22, 'game_median': 3389.01, 'render_median': 44.36, 'gpu_median': 9.32}\nn01 INFO n01 None\nn02 INFO n02 None\nn03 INFO n03 None\nn04 INFO n04 None\nn05 INFO n05 None\nn01_again INFO n01_again None\nO_vsm_off PASS r.Shadow.Virtual.Enable took the value it was given {'asked': '0', 'read': 0.0}\nvsm_off INFO vsm_off None\nO_df_off FAIL r.DistanceFields took the value it was given {'asked': '0', 'read': 1.0, 'note': 'the rung is VOID rather than reported: an unrecognised cvar leaves the world exactly as it was, and publishing that as a toggled measurement is how a knob that does nothing gets credited with a result.'}\nO_USABLE FAIL the run is settled enough to compare rungs at all {'rung_zero_median_ms': 895.92, 'rung_zero_raw_worst_ms': 8944.22, 'rung_zero_spike_ratio': 10.0, 'ladder_rungs_under_30_frames': ['n00'], 'other_rungs_under_30_frames': None, 'stat_froze': 666, 'note': \"rung zero is the value every other rung is compared against, so a spike in it poisons the whole ladder. A worst frame more than ten times the median means the world was still arriving; a rung with under thirty frames means the stat overlay was off for most of its window. Either way the numbers below describe this machine's evening, not avatars.\"}\n"
+}

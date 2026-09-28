@@ -1,0 +1,15 @@
+{
+ "name": "zzW20_av01",
+ "started": "2026-09-27 07:55:28",
+ "status": "done",
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "AV01",
+ "actors": 0,
+ "batches": 19,
+ "instances": 1096,
+ "hovers": 0,
+ "finished": "2026-09-27 07:55:29",
+ "seconds": 0.8,
+ "log": "applied AV01 0 actors 19 batches 1096 instances\n"
+}

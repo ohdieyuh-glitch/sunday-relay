@@ -1,0 +1,855 @@
+{
+ "name": "zzAV4_skeleton_parts",
+ "started": "2026-09-27 21:48:57",
+ "status": "VOID: day and night did not differ, so nothing below is a day-night comparison",
+ "tests": [
+  {
+   "id": "S_CLOCK",
+   "name": "the day clock is stopped, so an hour stays the hour it was set to",
+   "pass": true,
+   "detail": {
+    "day_minutes": 0.0,
+    "note": "at the default of 24 a game hour passes every real minute, and this job runs for several."
+   }
+  },
+  {
+   "id": "S_DISTINCT",
+   "name": "each capture is a different picture",
+   "pass": true,
+   "detail": {
+    "files": 18,
+    "distinct": 18,
+    "note": "thirty byte-identical PNGs passed a clause that counted files. In simulate mode there is no player camera, so the skins, the hour and the camera all changed and the photograph did not. A run whose pictures are all the same photographed the editor, not the game."
+   }
+  },
+  {
+   "id": "S_HOURS",
+   "name": "noon and midnight are actually different lighting conditions",
+   "pass": false,
+   "detail": {
+    "day_torso_mean": 0.3288,
+    "night_torso_mean": 0.448,
+    "ratio": 1.362,
+    "note": "if they are not, every clause below compares one condition with itself. This job once read night BRIGHTER than day, at 0.2583 against 0.2250, because the day clock was running."
+   }
+  }
+ ],
+ "regions": {
+  "skull": [
+   0.4,
+   0.23,
+   0.6,
+   0.33
+  ],
+  "legs": [
+   0.4,
+   0.64,
+   0.6,
+   0.74
+  ],
+  "feet": [
+   0.4,
+   0.76,
+   0.6,
+   0.84
+  ],
+  "torso": [
+   0.4,
+   0.42,
+   0.6,
+   0.55
+  ]
+ },
+ "day_minutes": 0.0,
+ "readings": {
+  "day/front/close": {
+   "skull": {
+    "r": 0.1144,
+    "g": 0.4442,
+    "b": 0.5324,
+    "luma": 0.3804,
+    "luma_p90": 0.3863,
+    "luma_p10": 0.3785,
+    "blue_over_red": 4.652,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.4911,
+    "g": 0.4971,
+    "b": 0.4457,
+    "luma": 0.4921,
+    "luma_p90": 0.7892,
+    "luma_p10": 0.1938,
+    "blue_over_red": 0.908,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.3513,
+    "g": 0.283,
+    "b": 0.2169,
+    "luma": 0.2928,
+    "luma_p90": 0.4614,
+    "luma_p10": 0.0216,
+    "blue_over_red": 0.617,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.2219,
+    "g": 0.5023,
+    "b": 0.5733,
+    "luma": 0.4478,
+    "luma_p90": 0.6992,
+    "luma_p10": 0.3864,
+    "blue_over_red": 2.583,
+    "cells": 11651
+   }
+  },
+  "day/front/gameplay": {
+   "skull": {
+    "r": 0.1052,
+    "g": 0.1055,
+    "b": 0.0626,
+    "luma": 0.1023,
+    "luma_p90": 0.207,
+    "luma_p10": 0.0185,
+    "blue_over_red": 0.595,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2421,
+    "g": 0.2746,
+    "b": 0.2565,
+    "luma": 0.2664,
+    "luma_p90": 0.3999,
+    "luma_p10": 0.0539,
+    "blue_over_red": 1.059,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.3279,
+    "g": 0.2961,
+    "b": 0.2459,
+    "luma": 0.2992,
+    "luma_p90": 0.5608,
+    "luma_p10": 0.0602,
+    "blue_over_red": 0.75,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.2604,
+    "g": 0.3001,
+    "b": 0.3134,
+    "luma": 0.2926,
+    "luma_p90": 0.4662,
+    "luma_p10": 0.1876,
+    "blue_over_red": 1.204,
+    "cells": 11651
+   }
+  },
+  "day/side/close": {
+   "skull": {
+    "r": 0.411,
+    "g": 0.4982,
+    "b": 0.5901,
+    "luma": 0.4863,
+    "luma_p90": 0.6298,
+    "luma_p10": 0.1928,
+    "blue_over_red": 1.436,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.3309,
+    "g": 0.4103,
+    "b": 0.4436,
+    "luma": 0.3958,
+    "luma_p90": 0.767,
+    "luma_p10": 0.184,
+    "blue_over_red": 1.341,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.2473,
+    "g": 0.2248,
+    "b": 0.2496,
+    "luma": 0.2314,
+    "luma_p90": 0.2775,
+    "luma_p10": 0.1656,
+    "blue_over_red": 1.009,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.3503,
+    "g": 0.4636,
+    "b": 0.4917,
+    "luma": 0.4416,
+    "luma_p90": 0.8182,
+    "luma_p10": 0.1924,
+    "blue_over_red": 1.403,
+    "cells": 11651
+   }
+  },
+  "day/side/gameplay": {
+   "skull": {
+    "r": 0.1252,
+    "g": 0.207,
+    "b": 0.0305,
+    "luma": 0.1768,
+    "luma_p90": 0.1927,
+    "luma_p10": 0.1586,
+    "blue_over_red": 0.244,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.1086,
+    "g": 0.1989,
+    "b": 0.035,
+    "luma": 0.1679,
+    "luma_p90": 0.2686,
+    "luma_p10": 0.1,
+    "blue_over_red": 0.322,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.1024,
+    "g": 0.2054,
+    "b": 0.0336,
+    "luma": 0.1711,
+    "luma_p90": 0.2197,
+    "luma_p10": 0.1278,
+    "blue_over_red": 0.328,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.1269,
+    "g": 0.2047,
+    "b": 0.0214,
+    "luma": 0.1749,
+    "luma_p90": 0.1891,
+    "luma_p10": 0.1605,
+    "blue_over_red": 0.169,
+    "cells": 11651
+   }
+  },
+  "day/rear/close": {
+   "skull": {
+    "r": 0.0986,
+    "g": 0.3977,
+    "b": 0.4803,
+    "luma": 0.3401,
+    "luma_p90": 0.3474,
+    "luma_p10": 0.3385,
+    "blue_over_red": 4.871,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2276,
+    "g": 0.4019,
+    "b": 0.4372,
+    "luma": 0.3674,
+    "luma_p90": 0.6595,
+    "luma_p10": 0.2021,
+    "blue_over_red": 1.921,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.1106,
+    "g": 0.2876,
+    "b": 0.3357,
+    "luma": 0.2535,
+    "luma_p90": 0.3401,
+    "luma_p10": 0.1577,
+    "blue_over_red": 3.034,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.1549,
+    "g": 0.4351,
+    "b": 0.5061,
+    "luma": 0.3806,
+    "luma_p90": 0.6583,
+    "luma_p10": 0.3454,
+    "blue_over_red": 3.268,
+    "cells": 11651
+   }
+  },
+  "day/rear/gameplay": {
+   "skull": {
+    "r": 0.267,
+    "g": 0.1982,
+    "b": 0.1698,
+    "luma": 0.2108,
+    "luma_p90": 0.2366,
+    "luma_p10": 0.1822,
+    "blue_over_red": 0.636,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2993,
+    "g": 0.222,
+    "b": 0.1944,
+    "luma": 0.2364,
+    "luma_p90": 0.264,
+    "luma_p10": 0.2102,
+    "blue_over_red": 0.65,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.3119,
+    "g": 0.2294,
+    "b": 0.1991,
+    "luma": 0.2447,
+    "luma_p90": 0.2617,
+    "luma_p10": 0.229,
+    "blue_over_red": 0.638,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.2934,
+    "g": 0.222,
+    "b": 0.1963,
+    "luma": 0.2353,
+    "luma_p90": 0.264,
+    "luma_p10": 0.2099,
+    "blue_over_red": 0.669,
+    "cells": 11651
+   }
+  },
+  "dusk/front/close": {
+   "skull": {
+    "r": 0.4119,
+    "g": 0.7086,
+    "b": 0.7655,
+    "luma": 0.6496,
+    "luma_p90": 0.6913,
+    "luma_p10": 0.6695,
+    "blue_over_red": 1.858,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2467,
+    "g": 0.3311,
+    "b": 0.3675,
+    "luma": 0.3158,
+    "luma_p90": 0.7036,
+    "luma_p10": 0.0367,
+    "blue_over_red": 1.489,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.0999,
+    "g": 0.0601,
+    "b": 0.0815,
+    "luma": 0.0701,
+    "luma_p90": 0.1064,
+    "luma_p10": 0.0003,
+    "blue_over_red": 0.816,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.4969,
+    "g": 0.7624,
+    "b": 0.8105,
+    "luma": 0.7094,
+    "luma_p90": 0.8726,
+    "luma_p10": 0.6689,
+    "blue_over_red": 1.631,
+    "cells": 11651
+   }
+  },
+  "dusk/front/gameplay": {
+   "skull": {
+    "r": 0.0496,
+    "g": 0.0604,
+    "b": 0.0383,
+    "luma": 0.0565,
+    "luma_p90": 0.1177,
+    "luma_p10": 0.0064,
+    "blue_over_red": 0.772,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2841,
+    "g": 0.3735,
+    "b": 0.3863,
+    "luma": 0.3554,
+    "luma_p90": 0.7831,
+    "luma_p10": 0.0386,
+    "blue_over_red": 1.36,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.1721,
+    "g": 0.1776,
+    "b": 0.1922,
+    "luma": 0.1775,
+    "luma_p90": 0.6075,
+    "luma_p10": 0.0327,
+    "blue_over_red": 1.117,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.2547,
+    "g": 0.295,
+    "b": 0.3212,
+    "luma": 0.2883,
+    "luma_p90": 0.7879,
+    "luma_p10": 0.042,
+    "blue_over_red": 1.261,
+    "cells": 11651
+   }
+  },
+  "dusk/side/close": {
+   "skull": {
+    "r": 0.4882,
+    "g": 0.5779,
+    "b": 0.6455,
+    "luma": 0.5637,
+    "luma_p90": 0.7601,
+    "luma_p10": 0.0577,
+    "blue_over_red": 1.322,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.3079,
+    "g": 0.3518,
+    "b": 0.4077,
+    "luma": 0.3465,
+    "luma_p90": 0.7663,
+    "luma_p10": 0.0697,
+    "blue_over_red": 1.324,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.2146,
+    "g": 0.1971,
+    "b": 0.2898,
+    "luma": 0.2076,
+    "luma_p90": 0.311,
+    "luma_p10": 0.0622,
+    "blue_over_red": 1.35,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.4968,
+    "g": 0.5894,
+    "b": 0.6473,
+    "luma": 0.5739,
+    "luma_p90": 0.7811,
+    "luma_p10": 0.0635,
+    "blue_over_red": 1.303,
+    "cells": 11651
+   }
+  },
+  "dusk/side/gameplay": {
+   "skull": {
+    "r": 0.057,
+    "g": 0.1319,
+    "b": 0.044,
+    "luma": 0.1097,
+    "luma_p90": 0.1205,
+    "luma_p10": 0.0986,
+    "blue_over_red": 0.772,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.0586,
+    "g": 0.1375,
+    "b": 0.0442,
+    "luma": 0.114,
+    "luma_p90": 0.1281,
+    "luma_p10": 0.1009,
+    "blue_over_red": 0.755,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.0578,
+    "g": 0.134,
+    "b": 0.046,
+    "luma": 0.1115,
+    "luma_p90": 0.1272,
+    "luma_p10": 0.0903,
+    "blue_over_red": 0.796,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.0531,
+    "g": 0.1308,
+    "b": 0.045,
+    "luma": 0.1081,
+    "luma_p90": 0.1225,
+    "luma_p10": 0.0919,
+    "blue_over_red": 0.847,
+    "cells": 11651
+   }
+  },
+  "dusk/rear/close": {
+   "skull": {
+    "r": 0.4878,
+    "g": 0.7637,
+    "b": 0.812,
+    "luma": 0.7085,
+    "luma_p90": 0.7417,
+    "luma_p10": 0.7263,
+    "blue_over_red": 1.665,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.4809,
+    "g": 0.7588,
+    "b": 0.8082,
+    "luma": 0.7033,
+    "luma_p90": 0.7339,
+    "luma_p10": 0.7246,
+    "blue_over_red": 1.681,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.4297,
+    "g": 0.6873,
+    "b": 0.7411,
+    "luma": 0.6364,
+    "luma_p90": 0.7266,
+    "luma_p10": 0.3067,
+    "blue_over_red": 1.725,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.5984,
+    "g": 0.8213,
+    "b": 0.8578,
+    "luma": 0.7765,
+    "luma_p90": 0.9048,
+    "luma_p10": 0.733,
+    "blue_over_red": 1.434,
+    "cells": 11651
+   }
+  },
+  "dusk/rear/gameplay": {
+   "skull": {
+    "r": 0.1822,
+    "g": 0.1536,
+    "b": 0.2247,
+    "luma": 0.1648,
+    "luma_p90": 0.184,
+    "luma_p10": 0.1389,
+    "blue_over_red": 1.233,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.1839,
+    "g": 0.1566,
+    "b": 0.2311,
+    "luma": 0.1678,
+    "luma_p90": 0.1852,
+    "luma_p10": 0.1417,
+    "blue_over_red": 1.257,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.1838,
+    "g": 0.1576,
+    "b": 0.2326,
+    "luma": 0.1685,
+    "luma_p90": 0.1768,
+    "luma_p10": 0.1594,
+    "blue_over_red": 1.266,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.1895,
+    "g": 0.1613,
+    "b": 0.2368,
+    "luma": 0.1727,
+    "luma_p90": 0.1922,
+    "luma_p10": 0.1434,
+    "blue_over_red": 1.25,
+    "cells": 11651
+   }
+  },
+  "night/front/close": {
+   "skull": {
+    "r": 0.505,
+    "g": 0.7694,
+    "b": 0.8176,
+    "luma": 0.7167,
+    "luma_p90": 0.7713,
+    "luma_p10": 0.7299,
+    "blue_over_red": 1.619,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.3406,
+    "g": 0.4107,
+    "b": 0.4639,
+    "luma": 0.3996,
+    "luma_p90": 0.7803,
+    "luma_p10": 0.0093,
+    "blue_over_red": 1.362,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.1836,
+    "g": 0.1504,
+    "b": 0.2016,
+    "luma": 0.1611,
+    "luma_p90": 0.2409,
+    "luma_p10": 0.0095,
+    "blue_over_red": 1.098,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.5928,
+    "g": 0.8186,
+    "b": 0.8564,
+    "luma": 0.7733,
+    "luma_p90": 0.9009,
+    "luma_p10": 0.7257,
+    "blue_over_red": 1.445,
+    "cells": 11651
+   }
+  },
+  "night/front/gameplay": {
+   "skull": {
+    "r": 0.0674,
+    "g": 0.1,
+    "b": 0.0656,
+    "luma": 0.0906,
+    "luma_p90": 0.2127,
+    "luma_p10": 0.0185,
+    "blue_over_red": 0.974,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.3253,
+    "g": 0.3991,
+    "b": 0.4108,
+    "luma": 0.3843,
+    "luma_p90": 0.8514,
+    "luma_p10": 0.0605,
+    "blue_over_red": 1.263,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.2335,
+    "g": 0.2443,
+    "b": 0.2762,
+    "luma": 0.2443,
+    "luma_p90": 0.6456,
+    "luma_p10": 0.0478,
+    "blue_over_red": 1.183,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.322,
+    "g": 0.3758,
+    "b": 0.3983,
+    "luma": 0.366,
+    "luma_p90": 0.8623,
+    "luma_p10": 0.0473,
+    "blue_over_red": 1.237,
+    "cells": 11651
+   }
+  },
+  "night/side/close": {
+   "skull": {
+    "r": 0.5654,
+    "g": 0.6373,
+    "b": 0.7461,
+    "luma": 0.6299,
+    "luma_p90": 0.756,
+    "luma_p10": 0.1171,
+    "blue_over_red": 1.32,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2942,
+    "g": 0.3783,
+    "b": 0.4271,
+    "luma": 0.3639,
+    "luma_p90": 0.7711,
+    "luma_p10": 0.0681,
+    "blue_over_red": 1.452,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.2672,
+    "g": 0.2736,
+    "b": 0.3761,
+    "luma": 0.2796,
+    "luma_p90": 0.55,
+    "luma_p10": 0.0488,
+    "blue_over_red": 1.408,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.3797,
+    "g": 0.4354,
+    "b": 0.4842,
+    "luma": 0.4271,
+    "luma_p90": 0.8062,
+    "luma_p10": 0.0681,
+    "blue_over_red": 1.275,
+    "cells": 11651
+   }
+  },
+  "night/side/gameplay": {
+   "skull": {
+    "r": 0.083,
+    "g": 0.2088,
+    "b": 0.0936,
+    "luma": 0.1737,
+    "luma_p90": 0.1914,
+    "luma_p10": 0.1553,
+    "blue_over_red": 1.127,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.067,
+    "g": 0.1896,
+    "b": 0.0726,
+    "luma": 0.1551,
+    "luma_p90": 0.2091,
+    "luma_p10": 0.1088,
+    "blue_over_red": 1.084,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.0667,
+    "g": 0.1934,
+    "b": 0.073,
+    "luma": 0.1578,
+    "luma_p90": 0.1839,
+    "luma_p10": 0.1287,
+    "blue_over_red": 1.094,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.0823,
+    "g": 0.2121,
+    "b": 0.0954,
+    "luma": 0.1761,
+    "luma_p90": 0.1903,
+    "luma_p10": 0.1547,
+    "blue_over_red": 1.159,
+    "cells": 11651
+   }
+  },
+  "night/rear/close": {
+   "skull": {
+    "r": 0.4973,
+    "g": 0.6828,
+    "b": 0.7243,
+    "luma": 0.6464,
+    "luma_p90": 0.8371,
+    "luma_p10": 0.0468,
+    "blue_over_red": 1.456,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.5867,
+    "g": 0.816,
+    "b": 0.8556,
+    "luma": 0.7701,
+    "luma_p90": 0.8058,
+    "luma_p10": 0.6438,
+    "blue_over_red": 1.458,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.4828,
+    "g": 0.7193,
+    "b": 0.7645,
+    "luma": 0.6723,
+    "luma_p90": 0.7976,
+    "luma_p10": 0.3138,
+    "blue_over_red": 1.583,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.6426,
+    "g": 0.8615,
+    "b": 0.895,
+    "luma": 0.8174,
+    "luma_p90": 0.9331,
+    "luma_p10": 0.801,
+    "blue_over_red": 1.393,
+    "cells": 11651
+   }
+  },
+  "night/rear/gameplay": {
+   "skull": {
+    "r": 0.1545,
+    "g": 0.1427,
+    "b": 0.2057,
+    "luma": 0.1497,
+    "luma_p90": 0.2197,
+    "luma_p10": 0.1079,
+    "blue_over_red": 1.331,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.128,
+    "g": 0.1208,
+    "b": 0.1782,
+    "luma": 0.1265,
+    "luma_p90": 0.139,
+    "luma_p10": 0.1112,
+    "blue_over_red": 1.393,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.127,
+    "g": 0.1212,
+    "b": 0.1782,
+    "luma": 0.1265,
+    "luma_p90": 0.1353,
+    "luma_p10": 0.1149,
+    "blue_over_red": 1.403,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.1292,
+    "g": 0.1225,
+    "b": 0.1794,
+    "luma": 0.128,
+    "luma_p90": 0.1412,
+    "luma_p10": 0.1115,
+    "blue_over_red": 1.389,
+    "cells": 11651
+   }
+  }
+ },
+ "capture_hashes": {
+  "skel_day_front_close.png": "3fdaee655b108be1d02e2ba85f006b96",
+  "skel_day_front_gameplay.png": "56014379b09fb4ed1c2f4424879fb2d4",
+  "skel_day_side_close.png": "90bc465e0f9766b8a5bda3942e07a0c4",
+  "skel_day_side_gameplay.png": "4789ad8f2859672e5230c8a8e2d49501",
+  "skel_day_rear_close.png": "ed630ba5ccaf7ab911735469b45a89cf",
+  "skel_day_rear_gameplay.png": "0d95a56e3f913f67b0aeb2485b170c77",
+  "skel_dusk_front_close.png": "168a5ccdefc2a108e280e82d4b01fce5",
+  "skel_dusk_front_gameplay.png": "5d58e7a9a00db3cd4feb623ddc12cff1",
+  "skel_dusk_side_close.png": "1d07dec7c568aa8173d16f77258532b1",
+  "skel_dusk_side_gameplay.png": "16a3a2faf2776e7cff4b10c0529f7665",
+  "skel_dusk_rear_close.png": "0fe5b7e27a8df5b6bc65664ca9e56b7e",
+  "skel_dusk_rear_gameplay.png": "f7f57000044ebb80d23526a3ae4e4fc7",
+  "skel_night_front_close.png": "4086bc9d9103d58b5bbe71bae69624e3",
+  "skel_night_front_gameplay.png": "1aa5deb961665d1b127d5fe9fe4536ef",
+  "skel_night_side_close.png": "d7f9d9fbeea4e360d5419e74ba39b384",
+  "skel_night_side_gameplay.png": "3e9fcd69e231ba898eab4f5a98089ea0",
+  "skel_night_rear_close.png": "3b1ec7af0fada18a4fc4985ae21401e3",
+  "skel_night_rear_gameplay.png": "a6c7fae9de0654115683a1d56b2d20d5"
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\skeleton_parts",
+ "distinct_captures": {
+  "files": 18,
+  "distinct": 18
+ },
+ "day_vs_night": {
+  "day_torso_mean": 0.3288,
+  "night_torso_mean": 0.448,
+  "ratio": 1.362
+ },
+ "finished": "2026-09-27 21:53:24",
+ "seconds": 267.76,
+ "log": "S_CLOCK PASS the day clock is stopped, so an hour stays the hour it was set to {'day_minutes': 0.0, 'note': 'at the default of 24 a game hour passes every real minute, and this job runs for several.'}\nS_day INFO skeleton flame at day {'day/front/close': {'skull': {'r': 0.1144, 'g': 0.4442, 'b': 0.5324, 'luma': 0.3804, 'luma_p90': 0.3863, 'luma_p10': 0.3785, 'blue_over_red': 4.652, 'cells': 8977}, 'legs': {'r': 0.4911, 'g': 0.4971, 'b': 0.4457, 'luma': 0.4921, 'luma_p90': 0.7892, 'luma_p10': 0.1938, 'blue_over_red': 0.908, 'cells': 8977}, 'feet': {'r': 0.3513, 'g': 0.283, 'b': 0.2169, 'luma': 0.2928, 'luma_p90': 0.4614, 'luma_p10': 0.0216, 'blue_over_red': 0.617, 'cells': 7067}, 'torso': {'r': 0.2219, 'g': 0.5023, 'b': 0.5733, 'luma': 0.4478, 'luma_p90': 0.6992, 'luma_p10': 0.3864, 'blue_over_red': 2.583, 'cells': 11651}}, 'day/front/gameplay': {'skull': {'r': 0.1052, 'g': 0.1055, 'b': 0.0626, 'luma': 0.1023, 'luma_p90': 0.207, 'luma_p10': 0.0185, 'blue_over_red': 0.595, 'cells': 8977}, 'legs': {'r': 0.2421, 'g': 0.2746, 'b': 0.2565, 'luma': 0.2664, 'luma_p90': 0.3999, 'luma_p10': 0.0539, 'blue_over_red': 1.059, 'cells': 8977}, 'feet': {'r': 0.3279, 'g': 0.2961, 'b': 0.2459, 'luma': 0.2992, 'luma_p90': 0.5608, 'luma_p10': 0.0602, 'blue_over_red': 0.75, 'cells': 7067}, 'torso': {'r': 0.2604, 'g': 0.3001, 'b': 0.3134, 'luma': 0.2926, 'luma_p90': 0.4662, 'luma_p10': 0.1876, 'blue_over_red': 1.204, 'cells': 11651}}, 'day/side/close': {'skull': {'r': 0.411, 'g': 0.4982, 'b': 0.5901, 'luma': 0.4863, 'luma_p90': 0.6298, 'luma_p10': 0.1928, 'blue_over_red': 1.436, 'cells': 8977}, 'legs': {'r': 0.3309, 'g': 0.4103, 'b': 0.4436, 'luma': 0.3958, 'luma_p90': 0.767, 'luma_p10': 0.184, 'blue_over_red': 1.341, 'cells': 8977}, 'feet': {'r': 0.2473, 'g': 0.2248, 'b': 0.2496, 'luma': 0.2314, 'luma_p90': 0.2775, 'luma_p10': 0.1656, 'blue_over_red': 1.009, 'cells': 7067}, 'torso': {'r': 0.3503, 'g': 0.4636, 'b': 0.4917, 'luma': 0.4416, 'luma_p90': 0.8182, 'luma_p10': 0.1924, 'blue_over_red': 1.403, 'cells': 11651}}, 'day/side/gameplay': {'skull': {'r': 0.1252, 'g': 0.207, 'b': 0.0305, 'luma': 0.1768, 'luma_p90': 0.1927, 'luma_p10': 0.1586, 'blue_over_red': 0.244, 'cells': 8977}, 'legs': {'r': 0.1086, 'g': 0.1989, 'b': 0.035, 'luma': 0.1679, 'luma_p90': 0.2686, 'luma_p10': 0.1, 'blue_over_red': 0.322, 'cells': 8977}, 'feet': {'r': 0.1024, 'g': 0.2054, 'b': 0.0336, 'luma': 0.1711, 'luma_p90': 0.2197, 'luma_p10': 0.1278, 'blue_over_red': 0.328, 'cells': 7067}, 'torso': {'r': 0.1269, 'g': 0.2047, 'b': 0.0214, 'luma': 0.1749, 'luma_p90': 0.1891, 'luma_p10': 0.1605, 'blue_over_red': 0.169, 'cells': 11651}}, 'day/rear/close': {'skull': {'r': 0.0986, 'g': 0.3977, 'b': 0.4803, 'luma': 0.3401, 'luma_p90': 0.3474, 'luma_p10': 0.3385, 'blue_over_red': 4.871, 'cells': 8977}, 'legs': {'r': 0.2276, 'g': 0.4019, 'b': 0.4372, 'luma': 0.3674, 'luma_p90': 0.6595, 'luma_p10': 0.2021, 'blue_over_red': 1.921, 'cells': 8977}, 'feet': {'r': 0.1106, 'g': 0.2876, 'b': 0.3357, 'luma': 0.2535, 'luma_p90': 0.3401, 'luma_p10': 0.1577, 'blue_over_red': 3.034, 'cells': 7067}, 'torso': {'r': 0.1549, 'g': 0.4351, 'b': 0.5061, 'luma': 0.3806, 'luma_p90': 0.6583, 'luma_p10': 0.3454, 'blue_over_red': 3.268, 'cells': 11651}}, 'day/rear/gameplay': {'skull': {'r': 0.267, 'g': 0.1982, 'b': 0.1698, 'luma': 0.2108, 'luma_p90': 0.2366, 'luma_p10': 0.1822, 'blue_over_red': 0.636, 'cells': 8977}, 'legs': {'r': 0.2993, 'g': 0.222, 'b': 0.1944, 'luma': 0.2364, 'luma_p90': 0.264, 'luma_p10': 0.2102, 'blue_over_red': 0.65, 'cells': 8977}, 'feet': {'r': 0.3119, 'g': 0.2294, 'b': 0.1991, 'luma': 0.2447, 'luma_p90': 0.2617, 'luma_p10': 0.229, 'blue_over_red': 0.638, 'cells': 7067}, 'torso': {'r': 0.2934, 'g': 0.222, 'b': 0.1963, 'luma': 0.2353, 'luma_p90': 0.264, 'luma_p10': 0.2099, 'blue_over_red': 0.669, 'cells': 11651}}}\nS_dusk INFO skeleton flame at dusk {'dusk/front/close': {'skull': {'r': 0.4119, 'g': 0.7086, 'b': 0.7655, 'luma': 0.6496, 'luma_p90': 0.6913, 'luma_p10': 0.6695, 'blue_over_red': 1.858, 'cells': 8977}, 'legs': {'r': 0.2467, 'g': 0.3311, 'b': 0.3675, 'luma': 0.3158, 'luma_p90': 0.7036, 'luma_p10': 0.0367, 'blue_over_red': 1.489, 'cells': 8977}, 'feet': {'r': 0.0999, 'g': 0.0601, 'b': 0.0815, 'luma': 0.0701, 'luma_p90': 0.1064, 'luma_p10': 0.0003, 'blue_over_red': 0.816, 'cells': 7067}, 'torso': {'r': 0.4969, 'g': 0.7624, 'b': 0.8105, 'luma': 0.7094, 'luma_p90': 0.8726, 'luma_p10': 0.6689, 'blue_over_red': 1.631, 'cells': 11651}}, 'dusk/front/gameplay': {'skull': {'r': 0.0496, 'g': 0.0604, 'b': 0.0383, 'luma': 0.0565, 'luma_p90': 0.1177, 'luma_p10': 0.0064, 'blue_over_red': 0.772, 'cells': 8977}, 'legs': {'r': 0.2841, 'g': 0.3735, 'b': 0.3863, 'luma': 0.3554, 'luma_p90': 0.7831, 'luma_p10': 0.0386, 'blue_over_red': 1.36, 'cells': 8977}, 'feet': {'r': 0.1721, 'g': 0.1776, 'b': 0.1922, 'luma': 0.1775, 'luma_p90': 0.6075, 'luma_p10': 0.0327, 'blue_over_red': 1.117, 'cells': 7067}, 'torso': {'r': 0.2547, 'g': 0.295, 'b': 0.3212, 'luma': 0.2883, 'luma_p90': 0.7879, 'luma_p10': 0.042, 'blue_over_red': 1.261, 'cells': 11651}}, 'dusk/side/close': {'skull': {'r': 0.4882, 'g': 0.5779, 'b': 0.6455, 'luma': 0.5637, 'luma_p90': 0.7601, 'luma_p10': 0.0577, 'blue_over_red': 1.322, 'cells': 8977}, 'legs': {'r': 0.3079, 'g': 0.3518, 'b': 0.4077, 'luma': 0.3465, 'luma_p90': 0.7663, 'luma_p10': 0.0697, 'blue_over_red': 1.324, 'cells': 8977}, 'feet': {'r': 0.2146, 'g': 0.1971, 'b': 0.2898, 'luma': 0.2076, 'luma_p90': 0.311, 'luma_p10': 0.0622, 'blue_over_red': 1.35, 'cells': 7067}, 'torso': {'r': 0.4968, 'g': 0.5894, 'b': 0.6473, 'luma': 0.5739, 'luma_p90': 0.7811, 'luma_p10': 0.0635, 'blue_over_red': 1.303, 'cells': 11651}}, 'dusk/side/gameplay': {'skull': {'r': 0.057, 'g': 0.1319, 'b': 0.044, 'luma': 0.1097, 'luma_p90': 0.1205, 'luma_p10': 0.0986, 'blue_over_red': 0.772, 'cells': 8977}, 'legs': {'r': 0.0586, 'g': 0.1375, 'b': 0.0442, 'luma': 0.114, 'luma_p90': 0.1281, 'luma_p10': 0.1009, 'blue_over_red': 0.755, 'cells': 8977}, 'feet': {'r': 0.0578, 'g': 0.134, 'b': 0.046, 'luma': 0.1115, 'luma_p90': 0.1272, 'luma_p10': 0.0903, 'blue_over_red': 0.796, 'cells': 7067}, 'torso': {'r': 0.0531, 'g': 0.1308, 'b': 0.045, 'luma': 0.1081, 'luma_p90': 0.1225, 'luma_p10': 0.0919, 'blue_over_red': 0.847, 'cells': 11651}}, 'dusk/rear/close': {'skull': {'r': 0.4878, 'g': 0.7637, 'b': 0.812, 'luma': 0.7085, 'luma_p90': 0.7417, 'luma_p10': 0.7263, 'blue_over_red': 1.665, 'cells': 8977}, 'legs': {'r': 0.4809, 'g': 0.7588, 'b': 0.8082, 'luma': 0.7033, 'luma_p90': 0.7339, 'luma_p10': 0.7246, 'blue_over_red': 1.681, 'cells': 8977}, 'feet': {'r': 0.4297, 'g': 0.6873, 'b': 0.7411, 'luma': 0.6364, 'luma_p90': 0.7266, 'luma_p10': 0.3067, 'blue_over_red': 1.725, 'cells': 7067}, 'torso': {'r': 0.5984, 'g': 0.8213, 'b': 0.8578, 'luma': 0.7765, 'luma_p90': 0.9048, 'luma_p10': 0.733, 'blue_over_red': 1.434, 'cells': 11651}}, 'dusk/rear/gameplay': {'skull': {'r': 0.1822, 'g': 0.1536, 'b': 0.2247, 'luma': 0.1648, 'luma_p90': 0.184, 'luma_p10': 0.1389, 'blue_over_red': 1.233, 'cells': 8977}, 'legs': {'r': 0.1839, 'g': 0.1566, 'b': 0.2311, 'luma': 0.1678, 'luma_p90': 0.1852, 'luma_p10': 0.1417, 'blue_over_red': 1.257, 'cells': 8977}, 'feet': {'r': 0.1838, 'g': 0.1576, 'b': 0.2326, 'luma': 0.1685, 'luma_p90': 0.1768, 'luma_p10': 0.1594, 'blue_over_red': 1.266, 'cells': 7067}, 'torso': {'r': 0.1895, 'g': 0.1613, 'b': 0.2368, 'luma': 0.1727, 'luma_p90': 0.1922, 'luma_p10': 0.1434, 'blue_over_red': 1.25, 'cells': 11651}}}\nS_night INFO skeleton flame at night {'night/front/close': {'skull': {'r': 0.505, 'g': 0.7694, 'b': 0.8176, 'luma': 0.7167, 'luma_p90': 0.7713, 'luma_p10': 0.7299, 'blue_over_red': 1.619, 'cells': 8977}, 'legs': {'r': 0.3406, 'g': 0.4107, 'b': 0.4639, 'luma': 0.3996, 'luma_p90': 0.7803, 'luma_p10': 0.0093, 'blue_over_red': 1.362, 'cells': 8977}, 'feet': {'r': 0.1836, 'g': 0.1504, 'b': 0.2016, 'luma': 0.1611, 'luma_p90': 0.2409, 'luma_p10': 0.0095, 'blue_over_red': 1.098, 'cells': 7067}, 'torso': {'r': 0.5928, 'g': 0.8186, 'b': 0.8564, 'luma': 0.7733, 'luma_p90': 0.9009, 'luma_p10': 0.7257, 'blue_over_red': 1.445, 'cells': 11651}}, 'night/front/gameplay': {'skull': {'r': 0.0674, 'g': 0.1, 'b': 0.0656, 'luma': 0.0906, 'luma_p90': 0.2127, 'luma_p10': 0.0185, 'blue_over_red': 0.974, 'cells': 8977}, 'legs': {'r': 0.3253, 'g': 0.3991, 'b': 0.4108, 'luma': 0.3843, 'luma_p90': 0.8514, 'luma_p10': 0.0605, 'blue_over_red': 1.263, 'cells': 8977}, 'feet': {'r': 0.2335, 'g': 0.2443, 'b': 0.2762, 'luma': 0.2443, 'luma_p90': 0.6456, 'luma_p10': 0.0478, 'blue_over_red': 1.183, 'cells': 7067}, 'torso': {'r': 0.322, 'g': 0.3758, 'b': 0.3983, 'luma': 0.366, 'luma_p90': 0.8623, 'luma_p10': 0.0473, 'blue_over_red': 1.237, 'cells': 11651}}, 'night/side/close': {'skull': {'r': 0.5654, 'g': 0.6373, 'b': 0.7461, 'luma': 0.6299, 'luma_p90': 0.756, 'luma_p10': 0.1171, 'blue_over_red': 1.32, 'cells': 8977}, 'legs': {'r': 0.2942, 'g': 0.3783, 'b': 0.4271, 'luma': 0.3639, 'luma_p90': 0.7711, 'luma_p10': 0.0681, 'blue_over_red': 1.452, 'cells': 8977}, 'feet': {'r': 0.2672, 'g': 0.2736, 'b': 0.3761, 'luma': 0.2796, 'luma_p90': 0.55, 'luma_p10': 0.0488, 'blue_over_red': 1.408, 'cells': 7067}, 'torso': {'r': 0.3797, 'g': 0.4354, 'b': 0.4842, 'luma': 0.4271, 'luma_p90': 0.8062, 'luma_p10': 0.0681, 'blue_over_red': 1.275, 'cells': 11651}}, 'night/side/gameplay': {'skull': {'r': 0.083, 'g': 0.2088, 'b': 0.0936, 'luma': 0.1737, 'luma_p90': 0.1914, 'luma_p10': 0.1553, 'blue_over_red': 1.127, 'cells': 8977}, 'legs': {'r': 0.067, 'g': 0.1896, 'b': 0.0726, 'luma': 0.1551, 'luma_p90': 0.2091, 'luma_p10': 0.1088, 'blue_over_red': 1.084, 'cells': 8977}, 'feet': {'r': 0.0667, 'g': 0.1934, 'b': 0.073, 'luma': 0.1578, 'luma_p90': 0.1839, 'luma_p10': 0.1287, 'blue_over_red': 1.094, 'cells': 7067}, 'torso': {'r': 0.0823, 'g': 0.2121, 'b': 0.0954, 'luma': 0.1761, 'luma_p90': 0.1903, 'luma_p10': 0.1547, 'blue_over_red': 1.159, 'cells': 11651}}, 'night/rear/close': {'skull': {'r': 0.4973, 'g': 0.6828, 'b': 0.7243, 'luma': 0.6464, 'luma_p90': 0.8371, 'luma_p10': 0.0468, 'blue_over_red': 1.456, 'cells': 8977}, 'legs': {'r': 0.5867, 'g': 0.816, 'b': 0.8556, 'luma': 0.7701, 'luma_p90': 0.8058, 'luma_p10': 0.6438, 'blue_over_red': 1.458, 'cells': 8977}, 'feet': {'r': 0.4828, 'g': 0.7193, 'b': 0.7645, 'luma': 0.6723, 'luma_p90': 0.7976, 'luma_p10': 0.3138, 'blue_over_red': 1.583, 'cells': 7067}, 'torso': {'r': 0.6426, 'g': 0.8615, 'b': 0.895, 'luma': 0.8174, 'luma_p90': 0.9331, 'luma_p10': 0.801, 'blue_over_red': 1.393, 'cells': 11651}}, 'night/rear/gameplay': {'skull': {'r': 0.1545, 'g': 0.1427, 'b': 0.2057, 'luma': 0.1497, 'luma_p90': 0.2197, 'luma_p10': 0.1079, 'blue_over_red': 1.331, 'cells': 8977}, 'legs': {'r': 0.128, 'g': 0.1208, 'b': 0.1782, 'luma': 0.1265, 'luma_p90': 0.139, 'luma_p10': 0.1112, 'blue_over_red': 1.393, 'cells': 8977}, 'feet': {'r': 0.127, 'g': 0.1212, 'b': 0.1782, 'luma': 0.1265, 'luma_p90': 0.1353, 'luma_p10': 0.1149, 'blue_over_red': 1.403, 'cells': 7067}, 'torso': {'r': 0.1292, 'g': 0.1225, 'b': 0.1794, 'luma': 0.128, 'luma_p90': 0.1412, 'luma_p10': 0.1115, 'blue_over_red': 1.389, 'cells': 11651}}}\nS_DISTINCT PASS each capture is a different picture {'files': 18, 'distinct': 18, 'note': 'thirty byte-identical PNGs passed a clause that counted files. In simulate mode there is no player camera, so the skins, the hour and the camera all changed and the photograph did not. A run whose pictures are all the same photographed the editor, not the game.'}\nS_HOURS FAIL noon and midnight are actually different lighting conditions {'day_torso_mean': 0.3288, 'night_torso_mean': 0.448, 'ratio': 1.362, 'note': 'if they are not, every clause below compares one condition with itself. This job once read night BRIGHTER than day, at 0.2583 against 0.2250, because the day clock was running.'}\n"
+}

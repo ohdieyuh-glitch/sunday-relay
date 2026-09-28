@@ -1,0 +1,39 @@
+{
+ "name": "zzU4_practical_budget",
+ "started": "2026-09-27 16:33:57",
+ "status": "voided: the pawn did not reach the measurement spot",
+ "tests": [
+  {
+   "id": "B_WHERE",
+   "name": "the pawn is standing at the densest spot, which is what selects the pool",
+   "pass": false,
+   "detail": {
+    "asked": [
+     -65943.0,
+     -38753.0
+    ],
+    "landed": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "horizontal_offset_uu": 76487.1,
+    "ground_trace_z": 11.99960708618164,
+    "note": "Assign() takes its Eye from the PAWN, not the camera. If the pawn did not arrive, every reading below is of a pool selected somewhere else and none of it means anything"
+   }
+  }
+ ],
+ "ground_trace_z": 11.99960708618164,
+ "pawn_asked": [
+  -65943.0,
+  -38753.0
+ ],
+ "pawn_landed": [
+  0.0,
+  0.0,
+  0.0
+ ],
+ "finished": "2026-09-27 16:34:09",
+ "seconds": 11.98,
+ "log": "B_WHERE FAIL the pawn is standing at the densest spot, which is what selects the pool {'asked': [-65943.0, -38753.0], 'landed': [0.0, 0.0, 0.0], 'horizontal_offset_uu': 76487.1, 'ground_trace_z': 11.99960708618164, 'note': 'Assign() takes its Eye from the PAWN, not the camera. If the pawn did not arrive, every reading below is of a pool selected somewhere else and none of it means anything'}\n"
+}

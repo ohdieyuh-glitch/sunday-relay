@@ -1,0 +1,677 @@
+{
+ "name": "zzBA2_eye_secondary",
+ "started": "2026-09-27 22:34:29",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "E00",
+   "name": "the preview eye level can be read back before anything is changed",
+   "pass": true,
+   "detail": {
+    "eye_level": 14.0
+   }
+  },
+  {
+   "id": "E01",
+   "name": "the wardrobe is open with the preview window painted",
+   "pass": true,
+   "detail": {
+    "centre": [
+     0.5947,
+     0.4704
+    ],
+    "size": [
+     0.2136,
+     0.4828
+    ]
+   }
+  },
+  {
+   "id": "E_RESTORE",
+   "name": "the eye level AND the colourway this job found were both put back",
+   "pass": true,
+   "detail": {
+    "eye_as_found": 14.0,
+    "eye_restored": 14.0,
+    "style_as_found": {
+     "primary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "secondary": [
+      1.0,
+      0.78,
+      0.16
+     ],
+     "chosen": null
+    },
+    "style_restored": {
+     "primary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "secondary": [
+      1.0,
+      0.78,
+      0.16
+     ],
+     "chosen": null
+    },
+    "note": "wl.Mascot.Primary and Secondary are SAVED settings, so a job that leaves them changed repaints the mascot for the founder and for every other lane until someone notices."
+   }
+  },
+  {
+   "id": "E02",
+   "name": "every rung set the eye level it asked for",
+   "pass": true,
+   "detail": {
+    "refused": null,
+    "note": "a ladder whose knob refuses its values measures one rung four times, and looks exactly like a term that does not matter. That is how this tree lost an evening to SetGlowScale."
+   }
+  },
+  {
+   "id": "E04",
+   "name": "SECONDARY visibly changes the eyes at some level, with the body unmoved and no clipping",
+   "pass": false,
+   "detail": {
+    "levels_that_work": null,
+    "summary": {
+     "14": {
+      "eye_moved": 0.4346,
+      "eye_rgb_A": [
+       0.9266,
+       0.4298,
+       0.4834
+      ],
+      "eye_rgb_B": [
+       0.492,
+       0.8031,
+       0.475
+      ],
+      "eye_band_moved_for_comparison": 0.0014,
+      "body_moved": 0.0556,
+      "eye_clipped": 0.0,
+      "eye_over_face": 0.2112
+     },
+     "140": {
+      "eye_moved": 0.3453,
+      "eye_rgb_A": [
+       0.9128,
+       0.513,
+       0.5762
+      ],
+      "eye_rgb_B": [
+       0.6121,
+       0.8583,
+       0.6092
+      ],
+      "eye_band_moved_for_comparison": 0.0178,
+      "body_moved": 0.0476,
+      "eye_clipped": 0.0,
+      "eye_over_face": 0.2053
+     },
+     "1400": {
+      "eye_moved": 0.237,
+      "eye_rgb_A": [
+       0.545,
+       0.3381,
+       0.3775
+      ],
+      "eye_rgb_B": [
+       0.4673,
+       0.5751,
+       0.4585
+      ],
+      "eye_band_moved_for_comparison": 0.0943,
+      "body_moved": 0.005,
+      "eye_clipped": 0.0466,
+      "eye_over_face": 0.035
+     },
+     "7000": {
+      "eye_moved": 0.2885,
+      "eye_rgb_A": [
+       0.5942,
+       0.2541,
+       0.2821
+      ],
+      "eye_rgb_B": [
+       0.3347,
+       0.5426,
+       0.306
+      ],
+      "eye_band_moved_for_comparison": 0.0425,
+      "body_moved": 0.0327,
+      "eye_clipped": 0.0,
+      "eye_over_face": 0.1298
+     }
+    },
+    "thresholds": {
+     "eye_moved_over": 0.15,
+     "body_moved_under": 0.02,
+     "eye_clipped_under": 0.02,
+     "eye_over_face_at_least": 0.01
+    },
+    "note": "THE WHOLE QUESTION, and it is three requirements at once because they pull against each other. A level that makes SECONDARY visible by letting the eyes clip is not a fix -- the founder's Skeleton Flame correction is explicit that the eyes must stay individually readable rather than becoming one blown-out light."
+   }
+  },
+  {
+   "id": "E05",
+   "name": "at the SHIPPED level, SECONDARY visibly changes the eyes",
+   "pass": true,
+   "detail": {
+    "shipped": {
+     "eye_moved": 0.4346,
+     "eye_rgb_A": [
+      0.9266,
+      0.4298,
+      0.4834
+     ],
+     "eye_rgb_B": [
+      0.492,
+      0.8031,
+      0.475
+     ],
+     "eye_band_moved_for_comparison": 0.0014,
+     "body_moved": 0.0556,
+     "eye_clipped": 0.0,
+     "eye_over_face": 0.2112
+    },
+    "note": "rung zero, and the founder's actual build. If this is red while E04 is green, item 6's channel is correctly wired and invisible at the level that ships -- which is a real defect with a known fix, not a mystery."
+   }
+  }
+ ],
+ "as_found_style": {
+  "primary": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "secondary": [
+   1.0,
+   0.78,
+   0.16
+  ],
+  "chosen": null
+ },
+ "as_found_eye_level": 14.0,
+ "preview_rect": {
+  "centre": [
+   0.5947,
+   0.4704
+  ],
+  "size": [
+   0.2136,
+   0.4828
+  ]
+ },
+ "by_level": {
+  "14": {
+   "asked_level": 14.0,
+   "read_back": 14.0,
+   "A": {
+    "eye_row": 298,
+    "eye": {
+     "rgb": [
+      0.925,
+      0.92,
+      0.91
+     ],
+     "luma": 0.9204,
+     "peak": 0.9568,
+     "clipped": 0.0,
+     "px": 1952
+    },
+    "eye_colour": {
+     "rgb": [
+      0.9266,
+      0.4298,
+      0.4834
+     ],
+     "chroma": 0.4968,
+     "px": 469
+    },
+    "face": {
+     "rgb": [
+      0.7849,
+      0.688,
+      0.6956
+     ],
+     "luma": 0.7092,
+     "peak": 0.954,
+     "clipped": 0.0,
+     "px": 4217
+    },
+    "body": {
+     "rgb": [
+      0.8578,
+      0.8349,
+      0.827
+     ],
+     "luma": 0.8392,
+     "peak": 0.9529,
+     "clipped": 0.0,
+     "px": 9831
+    }
+   },
+   "B": {
+    "eye_row": 298,
+    "eye": {
+     "rgb": [
+      0.924,
+      0.919,
+      0.9086
+     ],
+     "luma": 0.9193,
+     "peak": 0.954,
+     "clipped": 0.0,
+     "px": 1953
+    },
+    "eye_colour": {
+     "rgb": [
+      0.492,
+      0.8031,
+      0.475
+     ],
+     "chroma": 0.3281,
+     "px": 491
+    },
+    "face": {
+     "rgb": [
+      0.6369,
+      0.7086,
+      0.6192
+     ],
+     "luma": 0.6869,
+     "peak": 0.9529,
+     "clipped": 0.0,
+     "px": 4220
+    },
+    "body": {
+     "rgb": [
+      0.896,
+      0.8905,
+      0.8793
+     ],
+     "luma": 0.8909,
+     "peak": 0.9529,
+     "clipped": 0.0,
+     "px": 9843
+    }
+   }
+  },
+  "140": {
+   "asked_level": 140.0,
+   "read_back": 140.0,
+   "A": {
+    "eye_row": 320,
+    "eye": {
+     "rgb": [
+      0.9256,
+      0.9203,
+      0.91
+     ],
+     "luma": 0.9207,
+     "peak": 0.9608,
+     "clipped": 0.0,
+     "px": 1997
+    },
+    "eye_colour": {
+     "rgb": [
+      0.9128,
+      0.513,
+      0.5762
+     ],
+     "chroma": 0.3998,
+     "px": 458
+    },
+    "face": {
+     "rgb": [
+      0.7634,
+      0.7013,
+      0.7133
+     ],
+     "luma": 0.7154,
+     "peak": 0.9913,
+     "clipped": 0.121,
+     "px": 4323
+    },
+    "body": {
+     "rgb": [
+      0.8973,
+      0.8917,
+      0.8805
+     ],
+     "luma": 0.8921,
+     "peak": 0.9608,
+     "clipped": 0.0,
+     "px": 10007
+    }
+   },
+   "B": {
+    "eye_row": 297,
+    "eye": {
+     "rgb": [
+      0.9078,
+      0.9028,
+      0.8929
+     ],
+     "luma": 0.9031,
+     "peak": 0.9529,
+     "clipped": 0.0,
+     "px": 1863
+    },
+    "eye_colour": {
+     "rgb": [
+      0.6121,
+      0.8583,
+      0.6092
+     ],
+     "chroma": 0.2514,
+     "px": 462
+    },
+    "face": {
+     "rgb": [
+      0.7925,
+      0.8038,
+      0.7775
+     ],
+     "luma": 0.7995,
+     "peak": 1.0,
+     "clipped": 0.0592,
+     "px": 4207
+    },
+    "body": {
+     "rgb": [
+      0.8497,
+      0.8509,
+      0.8331
+     ],
+     "luma": 0.8493,
+     "peak": 1.0,
+     "clipped": 0.0048,
+     "px": 9902
+    }
+   }
+  },
+  "1400": {
+   "asked_level": 1400.0,
+   "read_back": 1400.0,
+   "A": {
+    "eye_row": 328,
+    "eye": {
+     "rgb": [
+      0.8456,
+      0.8245,
+      0.821
+     ],
+     "luma": 0.8287,
+     "peak": 1.0,
+     "clipped": 0.0466,
+     "px": 2058
+    },
+    "eye_colour": {
+     "rgb": [
+      0.545,
+      0.3381,
+      0.3775
+     ],
+     "chroma": 0.207,
+     "px": 492
+    },
+    "face": {
+     "rgb": [
+      0.8159,
+      0.7877,
+      0.7877
+     ],
+     "luma": 0.7937,
+     "peak": 1.0,
+     "clipped": 0.1524,
+     "px": 4422
+    },
+    "body": {
+     "rgb": [
+      0.8937,
+      0.888,
+      0.8768
+     ],
+     "luma": 0.8884,
+     "peak": 0.9568,
+     "clipped": 0.0,
+     "px": 9859
+    }
+   },
+   "B": {
+    "eye_row": 320,
+    "eye": {
+     "rgb": [
+      0.9241,
+      0.9188,
+      0.9087
+     ],
+     "luma": 0.9192,
+     "peak": 0.9568,
+     "clipped": 0.0,
+     "px": 2055
+    },
+    "eye_colour": {
+     "rgb": [
+      0.4673,
+      0.5751,
+      0.4585
+     ],
+     "chroma": 0.117,
+     "px": 467
+    },
+    "face": {
+     "rgb": [
+      0.7754,
+      0.7836,
+      0.7661
+     ],
+     "luma": 0.7806,
+     "peak": 1.0,
+     "clipped": 0.3357,
+     "px": 4426
+    },
+    "body": {
+     "rgb": [
+      0.8982,
+      0.8927,
+      0.8818
+     ],
+     "luma": 0.8931,
+     "peak": 0.9568,
+     "clipped": 0.0,
+     "px": 9993
+    }
+   }
+  },
+  "7000": {
+   "asked_level": 7000.0,
+   "read_back": 7000.0,
+   "A": {
+    "eye_row": 298,
+    "eye": {
+     "rgb": [
+      0.9254,
+      0.9199,
+      0.9096
+     ],
+     "luma": 0.9203,
+     "peak": 0.9532,
+     "clipped": 0.0,
+     "px": 1990
+    },
+    "eye_colour": {
+     "rgb": [
+      0.5942,
+      0.2541,
+      0.2821
+     ],
+     "chroma": 0.3401,
+     "px": 517
+    },
+    "face": {
+     "rgb": [
+      0.8352,
+      0.7784,
+      0.7782
+     ],
+     "luma": 0.7905,
+     "peak": 1.0,
+     "clipped": 0.3039,
+     "px": 4278
+    },
+    "body": {
+     "rgb": [
+      0.8921,
+      0.881,
+      0.8713
+     ],
+     "luma": 0.8827,
+     "peak": 1.0,
+     "clipped": 0.0139,
+     "px": 9720
+    }
+   },
+   "B": {
+    "eye_row": 281,
+    "eye": {
+     "rgb": [
+      0.8829,
+      0.878,
+      0.8679
+     ],
+     "luma": 0.8783,
+     "peak": 0.9529,
+     "clipped": 0.0,
+     "px": 1771
+    },
+    "eye_colour": {
+     "rgb": [
+      0.3347,
+      0.5426,
+      0.306
+     ],
+     "chroma": 0.2367,
+     "px": 524
+    },
+    "face": {
+     "rgb": [
+      0.8609,
+      0.8683,
+      0.8444
+     ],
+     "luma": 0.865,
+     "peak": 1.0,
+     "clipped": 0.0968,
+     "px": 4247
+    },
+    "body": {
+     "rgb": [
+      0.8594,
+      0.8658,
+      0.8437
+     ],
+     "luma": 0.8628,
+     "peak": 1.0,
+     "clipped": 0.0986,
+     "px": 9818
+    }
+   }
+  }
+ },
+ "restored_eye_level": 14.0,
+ "restored_style": {
+  "primary": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "secondary": [
+   1.0,
+   0.78,
+   0.16
+  ],
+  "chosen": null
+ },
+ "levels_that_did_not_take": null,
+ "summary": {
+  "14": {
+   "eye_moved": 0.4346,
+   "eye_rgb_A": [
+    0.9266,
+    0.4298,
+    0.4834
+   ],
+   "eye_rgb_B": [
+    0.492,
+    0.8031,
+    0.475
+   ],
+   "eye_band_moved_for_comparison": 0.0014,
+   "body_moved": 0.0556,
+   "eye_clipped": 0.0,
+   "eye_over_face": 0.2112
+  },
+  "140": {
+   "eye_moved": 0.3453,
+   "eye_rgb_A": [
+    0.9128,
+    0.513,
+    0.5762
+   ],
+   "eye_rgb_B": [
+    0.6121,
+    0.8583,
+    0.6092
+   ],
+   "eye_band_moved_for_comparison": 0.0178,
+   "body_moved": 0.0476,
+   "eye_clipped": 0.0,
+   "eye_over_face": 0.2053
+  },
+  "1400": {
+   "eye_moved": 0.237,
+   "eye_rgb_A": [
+    0.545,
+    0.3381,
+    0.3775
+   ],
+   "eye_rgb_B": [
+    0.4673,
+    0.5751,
+    0.4585
+   ],
+   "eye_band_moved_for_comparison": 0.0943,
+   "body_moved": 0.005,
+   "eye_clipped": 0.0466,
+   "eye_over_face": 0.035
+  },
+  "7000": {
+   "eye_moved": 0.2885,
+   "eye_rgb_A": [
+    0.5942,
+    0.2541,
+    0.2821
+   ],
+   "eye_rgb_B": [
+    0.3347,
+    0.5426,
+    0.306
+   ],
+   "eye_band_moved_for_comparison": 0.0425,
+   "body_moved": 0.0327,
+   "eye_clipped": 0.0,
+   "eye_over_face": 0.1298
+  }
+ },
+ "levels_that_satisfy_all_three": null,
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\eye_secondary",
+ "finished": "2026-09-27 22:35:44",
+ "seconds": 74.89,
+ "log": "E00 PASS the preview eye level can be read back before anything is changed {'eye_level': 14.0}\nE01 PASS the wardrobe is open with the preview window painted {'centre': [0.5947, 0.4704], 'size': [0.2136, 0.4828]}\nE_14 INFO eye level 14 {'read_back': 14.0, 'eye_A': [0.925, 0.92, 0.91], 'eye_B': [0.924, 0.919, 0.9086], 'clipped_A': 0.0}\nE_140 INFO eye level 140 {'read_back': 140.0, 'eye_A': [0.9256, 0.9203, 0.91], 'eye_B': [0.9078, 0.9028, 0.8929], 'clipped_A': 0.0}\nE_1400 INFO eye level 1400 {'read_back': 1400.0, 'eye_A': [0.8456, 0.8245, 0.821], 'eye_B': [0.9241, 0.9188, 0.9087], 'clipped_A': 0.0466}\nE_7000 INFO eye level 7000 {'read_back': 7000.0, 'eye_A': [0.9254, 0.9199, 0.9096], 'eye_B': [0.8829, 0.878, 0.8679], 'clipped_A': 0.0}\nE_RESTORE PASS the eye level AND the colourway this job found were both put back {'eye_as_found': 14.0, 'eye_restored': 14.0, 'style_as_found': {'primary': [1.0, 1.0, 1.0], 'secondary': [1.0, 0.78, 0.16], 'chosen': None}, 'style_restored': {'primary': [1.0, 1.0, 1.0], 'secondary': [1.0, 0.78, 0.16], 'chosen': None}, 'note': 'wl.Mascot.Primary and Secondary are SAVED settings, so a job that leaves them changed repaints the mascot for the founder and for every other lane until someone notices.'}\nE02 PASS every rung set the eye level it asked for {'refused': None, 'note': 'a ladder whose knob refuses its values measures one rung four times, and looks exactly like a term that does not matter. That is how this tree lost an evening to SetGlowScale.'}\nE03 INFO what each eye level bought {'14': {'eye_moved': 0.4346, 'eye_rgb_A': [0.9266, 0.4298, 0.4834], 'eye_rgb_B': [0.492, 0.8031, 0.475], 'eye_band_moved_for_comparison': 0.0014, 'body_moved': 0.0556, 'eye_clipped': 0.0, 'eye_over_face': 0.2112}, '140': {'eye_moved': 0.3453, 'eye_rgb_A': [0.9128, 0.513, 0.5762], 'eye_rgb_B': [0.6121, 0.8583, 0.6092], 'eye_band_moved_for_comparison': 0.0178, 'body_moved': 0.0476, 'eye_clipped': 0.0, 'eye_over_face': 0.2053}, '1400': {'eye_moved': 0.237, 'eye_rgb_A': [0.545, 0.3381, 0.3775], 'eye_rgb_B': [0.4673, 0.5751, 0.4585], 'eye_band_moved_for_comparison': 0.0943, 'body_moved': 0.005, 'eye_clipped': 0.0466, 'eye_over_face': 0.035}, '7000': {'eye_moved': 0.2885, 'eye_rgb_A': [0.5942, 0.2541, 0.2821], 'eye_rgb_B': [0.3347, 0.5426, 0.306], 'eye_band_moved_for_comparison': 0.0425, 'body_moved': 0.0327, 'eye_clipped': 0.0, 'eye_over_face': 0.1298}}\nE04 FAIL SECONDARY visibly changes the eyes at some level, with the body unmoved and no clipping {'levels_that_work': None, 'summary': {'14': {'eye_moved': 0.4346, 'eye_rgb_A': [0.9266, 0.4298, 0.4834], 'eye_rgb_B': [0.492, 0.8031, 0.475], 'eye_band_moved_for_comparison': 0.0014, 'body_moved': 0.0556, 'eye_clipped': 0.0, 'eye_over_face': 0.2112}, '140': {'eye_moved': 0.3453, 'eye_rgb_A': [0.9128, 0.513, 0.5762], 'eye_rgb_B': [0.6121, 0.8583, 0.6092], 'eye_band_moved_for_comparison': 0.0178, 'body_moved': 0.0476, 'eye_clipped': 0.0, 'eye_over_face': 0.2053}, '1400': {'eye_moved': 0.237, 'eye_rgb_A': [0.545, 0.3381, 0.3775], 'eye_rgb_B': [0.4673, 0.5751, 0.4585], 'eye_band_moved_for_comparison': 0.0943, 'body_moved': 0.005, 'eye_clipped': 0.0466, 'eye_over_face': 0.035}, '7000': {'eye_moved': 0.2885, 'eye_rgb_A': [0.5942, 0.2541, 0.2821], 'eye_rgb_B': [0.3347, 0.5426, 0.306], 'eye_band_moved_for_comparison': 0.0425, 'body_moved': 0.0327, 'eye_clipped': 0.0, 'eye_over_face': 0.1298}}, 'thresholds': {'eye_moved_over': 0.15, 'body_moved_under': 0.02, 'eye_clipped_under': 0.02, 'eye_over_face_at_least': 0.01}, 'note': \"THE WHOLE QUESTION, and it is three requirements at once because they pull against each other. A level that makes SECONDARY visible by letting the eyes clip is not a fix -- the founder's Skeleton Flame correction is explicit that the eyes must stay individually readable rather than becoming one blown-out light.\"}\nE05 PASS at the SHIPPED level, SECONDARY visibly changes the eyes {'shipped': {'eye_moved': 0.4346, 'eye_rgb_A': [0.9266, 0.4298, 0.4834], 'eye_rgb_B': [0.492, 0.8031, 0.475], 'eye_band_moved_for_comparison': 0.0014, 'body_moved': 0.0556, 'eye_clipped': 0.0, 'eye_over_face': 0.2112}, 'note': \"rung zero, and the founder's actual build. If this is red while E04 is green, item 6's channel is correctly wired and invisible at the level that ships -- which is a real defect with a known fix, not a mystery.\"}\n"
+}

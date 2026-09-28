@@ -1,0 +1,15 @@
+{
+ "name": "zzA1_apply_nq06",
+ "started": "2026-09-27 13:35:45",
+ "status": "done",
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "NQ06",
+ "actors": 0,
+ "batches": 3,
+ "instances": 45,
+ "hovers": 0,
+ "finished": "2026-09-27 13:35:46",
+ "seconds": 0.71,
+ "log": "applied NQ06 0 actors 3 batches 45 instances\n"
+}

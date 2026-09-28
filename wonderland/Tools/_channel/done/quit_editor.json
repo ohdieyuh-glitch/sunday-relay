@@ -1,0 +1,9 @@
+{
+ "name": "quit_editor",
+ "started": "2026-09-27 09:40:50",
+ "status": "quitting",
+ "dirty_at_quit": [],
+ "finished": "2026-09-27 09:40:50",
+ "seconds": 0.5,
+ "log": ""
+}

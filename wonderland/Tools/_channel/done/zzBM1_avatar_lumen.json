@@ -1,0 +1,10 @@
+{
+ "name": "zzBM1_avatar_lumen",
+ "started": "2026-09-27 23:11:00",
+ "status": "error",
+ "tests": [],
+ "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n                                                                  ^^^^^^^^^^^^^^^^\n  File \"C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\_channel\\inbox\\zzBM1_avatar_lumen.py\", line 135, in job\n  File \"C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\_channel\\inbox\\zzBM1_avatar_lumen.py\", line 123, in stat_is_live\nNameError: cannot access free variable 'read_frame' where it is not associated with a value in enclosing scope\n",
+ "finished": "2026-09-27 23:11:21",
+ "seconds": 21.14,
+ "log": ""
+}

@@ -1,0 +1,32 @@
+{
+ "name": "quit_editor_1",
+ "started": "2026-09-27 13:55:20",
+ "status": "quitting",
+ "dirty_at_quit": [
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/XR/KMJ3NV169MHRSX03YW9X4K",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/3/JC/ZBKRMYDNC5C849Q50G72FS",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/Q2/SNNG4FSY3JBF1A4PHTBVCE",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/8B/GJ2VOG0Q5FHWCPBM8NXW7B",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/PO/YVI4TNT0YYHSEDYGVCE03Y",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/XX/DWQVODGPU9XJM6789NLBSP",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/RJ/CSQT1LKEGAGS5N3PD2PV8Z",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/X8/AGCRT25LC25C3ER73GC1DY",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/7T/8UW5UCKGVJ1SOQKMZS0GZJ",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/3/R2/YMSAHBDN8VOYVI0AEP6P6Q",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/E7/RTF6075SM9LH7LFWZMXB2B",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/RY/V82MH6A1WY4JK7B52HY7GL",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/YR/457WVUT6ZLR59ZC32TAYC3",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/S2/PZS7DTFDD7MNNB0PQ76ZP1",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/EW/16EJQSWQK9PGPQ1N14M4I1",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/E/0Y/K2LHMS06EPY9LOVTQHMM7F",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/DI/HUTWVO2AAH90J8ZNIA4GJZ",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/IZ/NKD7T3GZS9OUXEZQSLK7BJ",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/ZA/EN70HW4SHI20ILHIUD2AKI",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/B/2N/2PUG6KABT14NQQXFJHIIW2",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/I6/MOGD0AP4RUJOES02TFNDZW",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/GJ/CST5Q6HFKWSCWKE089F6OY"
+ ],
+ "finished": "2026-09-27 13:55:20",
+ "seconds": 0.52,
+ "log": ""
+}

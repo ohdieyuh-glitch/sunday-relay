@@ -1,0 +1,15 @@
+{
+ "name": "zzW10_cp01",
+ "started": "2026-09-27 07:55:18",
+ "status": "done",
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "CP01",
+ "actors": 0,
+ "batches": 8,
+ "instances": 23,
+ "hovers": 0,
+ "finished": "2026-09-27 07:55:19",
+ "seconds": 0.71,
+ "log": "applied CP01 0 actors 8 batches 23 instances\n"
+}

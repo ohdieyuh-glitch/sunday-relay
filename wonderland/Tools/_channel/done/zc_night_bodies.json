@@ -1,0 +1,201 @@
+{
+ "name": "zc_night_bodies",
+ "started": "2026-09-27 12:08:43",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "B00",
+   "name": "every skin was photographed at deepest night and at noon",
+   "pass": true,
+   "detail": {
+    "taken": 10,
+    "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\night_bodies"
+   }
+  },
+  {
+   "id": "B01",
+   "name": "at night the BODY is not mostly crushed to black",
+   "pass": false,
+   "detail": {
+    "body_dark_fraction": {
+     "relay_og": 0.9708,
+     "celestial_light": 0.4701,
+     "apollo": 0.8178,
+     "arden_infernal": 0.1468,
+     "skeleton_flame": 0.826
+    },
+    "floor": 0.14,
+    "ceiling": 0.6,
+    "note": "the body is every cell of the figure that is not one of its own lights. This is the reading the founder's 'illuminated subject, not a glowing object in blackness' actually asks for, and raising eye glow cannot move it."
+   }
+  },
+  {
+   "id": "B02",
+   "name": "and it carries enough light to read a surface",
+   "pass": false,
+   "detail": {
+    "body_mean": {
+     "relay_og": 0.0542,
+     "celestial_light": 0.2706,
+     "apollo": 0.145,
+     "arden_infernal": 0.5133,
+     "skeleton_flame": 0.1071
+    },
+    "floor": 0.1
+   }
+  },
+  {
+   "id": "B03",
+   "name": "the figure is not merely a pair of lights in a void",
+   "pass": false,
+   "detail": {
+    "light_fraction": {
+     "relay_og": 0.0215,
+     "celestial_light": 0.0129,
+     "apollo": 0.0557,
+     "arden_infernal": 0.0552,
+     "skeleton_flame": 0.2578
+    },
+    "ceiling": 0.18,
+    "note": "high here with B01 also failing is exactly the failure the founder named: eyes blazing, body gone. It is reported whether or not it passes, so the two can never be traded."
+   }
+  },
+  {
+   "id": "B04",
+   "name": "the ground the character stands on is readable too",
+   "pass": false,
+   "detail": {
+    "ground_dark_fraction": {
+     "relay_og": 0.9813,
+     "celestial_light": 0.4522,
+     "apollo": 0.9346,
+     "arden_infernal": 0.6464,
+     "skeleton_flame": 0.5621
+    },
+    "ceiling": 0.65,
+    "note": "world lighting, not mascot lighting -- reported here because a character reads against the surface under it and the founder asked for both."
+   }
+  },
+  {
+   "id": "B05",
+   "name": "night still looks like night: the body is clearly darker than it is at noon",
+   "pass": false,
+   "detail": {
+    "night_over_noon": {
+     "relay_og": 0.178,
+     "celestial_light": 0.745,
+     "apollo": 0.445,
+     "arden_infernal": 1.36,
+     "skeleton_flame": 0.351
+    },
+    "ceiling": 0.75,
+    "note": "the guard against fixing this by turning night into day. B01 and this one must pass together."
+   }
+  }
+ ],
+ "exposure": [
+  {
+   "volume": "V2_PostProcess",
+   "min_ev100": 14.199999809265137,
+   "max_ev100": 14.199999809265137,
+   "bias": -0.8999998569488525
+  }
+ ],
+ "framing": {
+  "distance_uu": 520.0,
+  "fov": 45.0,
+  "figure_box_fraction": [
+   0.4,
+   0.22,
+   0.6,
+   0.82
+  ],
+  "note": "body cells are everything in the box under the light threshold; the ground band is the strip immediately below it"
+ },
+ "readings": {
+  "relay_og/night": {
+   "body_mean": 0.0542,
+   "body_dark_fraction": 0.9708,
+   "light_fraction": 0.0215,
+   "ground_mean": 0.0453,
+   "ground_dark_fraction": 0.9813,
+   "cells": 52630
+  },
+  "relay_og/noon": {
+   "body_mean": 0.3051,
+   "body_dark_fraction": 0.0506,
+   "light_fraction": 0.0421,
+   "ground_mean": 0.283,
+   "ground_dark_fraction": 0.2794,
+   "cells": 52630
+  },
+  "celestial_light/night": {
+   "body_mean": 0.2706,
+   "body_dark_fraction": 0.4701,
+   "light_fraction": 0.0129,
+   "ground_mean": 0.2088,
+   "ground_dark_fraction": 0.4522,
+   "cells": 52630
+  },
+  "celestial_light/noon": {
+   "body_mean": 0.3632,
+   "body_dark_fraction": 0.0363,
+   "light_fraction": 0.0135,
+   "ground_mean": 0.3183,
+   "ground_dark_fraction": 0.2447,
+   "cells": 52630
+  },
+  "apollo/night": {
+   "body_mean": 0.145,
+   "body_dark_fraction": 0.8178,
+   "light_fraction": 0.0557,
+   "ground_mean": 0.0734,
+   "ground_dark_fraction": 0.9346,
+   "cells": 52630
+  },
+  "apollo/noon": {
+   "body_mean": 0.3261,
+   "body_dark_fraction": 0.036,
+   "light_fraction": 0.0211,
+   "ground_mean": 0.2737,
+   "ground_dark_fraction": 0.1083,
+   "cells": 52630
+  },
+  "arden_infernal/night": {
+   "body_mean": 0.5133,
+   "body_dark_fraction": 0.1468,
+   "light_fraction": 0.0552,
+   "ground_mean": 0.1882,
+   "ground_dark_fraction": 0.6464,
+   "cells": 52630
+  },
+  "arden_infernal/noon": {
+   "body_mean": 0.3773,
+   "body_dark_fraction": 0.0514,
+   "light_fraction": 0.0089,
+   "ground_mean": 0.2114,
+   "ground_dark_fraction": 0.333,
+   "cells": 52630
+  },
+  "skeleton_flame/night": {
+   "body_mean": 0.1071,
+   "body_dark_fraction": 0.826,
+   "light_fraction": 0.2578,
+   "ground_mean": 0.3012,
+   "ground_dark_fraction": 0.5621,
+   "cells": 52630
+  },
+  "skeleton_flame/noon": {
+   "body_mean": 0.3054,
+   "body_dark_fraction": 0.055,
+   "light_fraction": 0.0197,
+   "ground_mean": 0.3199,
+   "ground_dark_fraction": 0.0817,
+   "cells": 52630
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\night_bodies",
+ "finished": "2026-09-27 12:11:27",
+ "seconds": 164.05,
+ "log": "B_relay_og INFO relay_og body at night and noon {'relay_og/night': {'body_mean': 0.0542, 'body_dark_fraction': 0.9708, 'light_fraction': 0.0215, 'ground_mean': 0.0453, 'ground_dark_fraction': 0.9813, 'cells': 52630}, 'relay_og/noon': {'body_mean': 0.3051, 'body_dark_fraction': 0.0506, 'light_fraction': 0.0421, 'ground_mean': 0.283, 'ground_dark_fraction': 0.2794, 'cells': 52630}}\nB_celestial_light INFO celestial_light body at night and noon {'celestial_light/night': {'body_mean': 0.2706, 'body_dark_fraction': 0.4701, 'light_fraction': 0.0129, 'ground_mean': 0.2088, 'ground_dark_fraction': 0.4522, 'cells': 52630}, 'celestial_light/noon': {'body_mean': 0.3632, 'body_dark_fraction': 0.0363, 'light_fraction': 0.0135, 'ground_mean': 0.3183, 'ground_dark_fraction': 0.2447, 'cells': 52630}}\nB_apollo INFO apollo body at night and noon {'apollo/night': {'body_mean': 0.145, 'body_dark_fraction': 0.8178, 'light_fraction': 0.0557, 'ground_mean': 0.0734, 'ground_dark_fraction': 0.9346, 'cells': 52630}, 'apollo/noon': {'body_mean': 0.3261, 'body_dark_fraction': 0.036, 'light_fraction': 0.0211, 'ground_mean': 0.2737, 'ground_dark_fraction': 0.1083, 'cells': 52630}}\nB_arden_infernal INFO arden_infernal body at night and noon {'arden_infernal/night': {'body_mean': 0.5133, 'body_dark_fraction': 0.1468, 'light_fraction': 0.0552, 'ground_mean': 0.1882, 'ground_dark_fraction': 0.6464, 'cells': 52630}, 'arden_infernal/noon': {'body_mean': 0.3773, 'body_dark_fraction': 0.0514, 'light_fraction': 0.0089, 'ground_mean': 0.2114, 'ground_dark_fraction': 0.333, 'cells': 52630}}\nB_skeleton_flame INFO skeleton_flame body at night and noon {'skeleton_flame/night': {'body_mean': 0.1071, 'body_dark_fraction': 0.826, 'light_fraction': 0.2578, 'ground_mean': 0.3012, 'ground_dark_fraction': 0.5621, 'cells': 52630}, 'skeleton_flame/noon': {'body_mean': 0.3054, 'body_dark_fraction': 0.055, 'light_fraction': 0.0197, 'ground_mean': 0.3199, 'ground_dark_fraction': 0.0817, 'cells': 52630}}\nB00 PASS every skin was photographed at deepest night and at noon {'taken': 10, 'where': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\night_bodies'}\nB01 FAIL at night the BODY is not mostly crushed to black {'body_dark_fraction': {'relay_og': 0.9708, 'celestial_light': 0.4701, 'apollo': 0.8178, 'arden_infernal': 0.1468, 'skeleton_flame': 0.826}, 'floor': 0.14, 'ceiling': 0.6, 'note': \"the body is every cell of the figure that is not one of its own lights. This is the reading the founder's 'illuminated subject, not a glowing object in blackness' actually asks for, and raising eye glow cannot move it.\"}\nB02 FAIL and it carries enough light to read a surface {'body_mean': {'relay_og': 0.0542, 'celestial_light': 0.2706, 'apollo': 0.145, 'arden_infernal': 0.5133, 'skeleton_flame': 0.1071}, 'floor': 0.1}\nB03 FAIL the figure is not merely a pair of lights in a void {'light_fraction': {'relay_og': 0.0215, 'celestial_light': 0.0129, 'apollo': 0.0557, 'arden_infernal': 0.0552, 'skeleton_flame': 0.2578}, 'ceiling': 0.18, 'note': 'high here with B01 also failing is exactly the failure the founder named: eyes blazing, body gone. It is reported whether or not it passes, so the two can never be traded.'}\nB04 FAIL the ground the character stands on is readable too {'ground_dark_fraction': {'relay_og': 0.9813, 'celestial_light': 0.4522, 'apollo': 0.9346, 'arden_infernal': 0.6464, 'skeleton_flame': 0.5621}, 'ceiling': 0.65, 'note': 'world lighting, not mascot lighting -- reported here because a character reads against the surface under it and the founder asked for both.'}\nB05 FAIL night still looks like night: the body is clearly darker than it is at noon {'night_over_noon': {'relay_og': 0.178, 'celestial_light': 0.745, 'apollo': 0.445, 'arden_infernal': 1.36, 'skeleton_flame': 0.351}, 'ceiling': 0.75, 'note': 'the guard against fixing this by turning night into day. B01 and this one must pass together.'}\n"
+}

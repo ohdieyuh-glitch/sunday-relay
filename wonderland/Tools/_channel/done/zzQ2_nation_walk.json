@@ -1,0 +1,163 @@
+{
+ "name": "zzQ2_nation_walk",
+ "started": "2026-09-27 13:43:19",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "W0A",
+   "name": "the harness can actually drive the Dog -- these are walks, not stationary readings",
+   "pass": false,
+   "detail": {
+    "harness_proven_by": [],
+    "blocked_at_start": [],
+    "start_clearance": {},
+    "moved_uu": {
+     "ICARUS": 0.0,
+     "NOCTIS": 53.1,
+     "TARTARUS": null
+    },
+    "dog_state": {
+     "ICARUS": {
+      "movement_mode": "<MovementMode.MOVE_WALKING: 1>",
+      "max_walk_speed": 230.0,
+      "is_falling": false,
+      "gravity_scale": 1.0,
+      "controller": "PlayerController_0",
+      "game_paused": false
+     },
+     "NOCTIS": {
+      "movement_mode": "<MovementMode.MOVE_WALKING: 1>",
+      "max_walk_speed": 230.0,
+      "is_falling": false,
+      "gravity_scale": 1.0,
+      "controller": "PlayerController_0",
+      "game_paused": false
+     },
+     "TARTARUS": null
+    },
+    "peak_speed": {
+     "ICARUS": 0.0,
+     "NOCTIS": 0.0,
+     "TARTARUS": null
+    },
+    "note": "3 s of AddMovementInput toward the second waypoint before the route is judged. PEAK SPEED separates the cases and displacement alone cannot: full walk speed with no advance is BLOCKED GEOMETRY and is a finding about that place, while a peak near zero is the harness and withholds the route. The harness counts as proven by any one nation driving."
+   }
+  },
+  {
+   "id": "W0B",
+   "name": "no walk ended because the DOG disappeared -- a pawn destroyed part-way along an avenue is a streaming finding about that avenue, not a harness failure",
+   "pass": true,
+   "detail": {
+    "gone": {},
+    "fell_out_of_the_world": [],
+    "last_z": {},
+    "below_floor_uu": {},
+    "note": "alive() collapses 'the world ended' and 'the Dog was destroyed' into one None, and the message used to blame the world for both. A torn-down PIE says nothing about the route; a Dog destroyed 5 m into a 485 m avenue is the route. last_z against the leg's own floor is the discriminator -- far below means it fell through unstreamed ground"
+   }
+  },
+  {
+   "id": "W00",
+   "name": "every nation's walk started with the Dog standing at the gate end of its route",
+   "pass": false,
+   "detail": {
+    "starts": {
+     "ICARUS": 0.0,
+     "NOCTIS": 0.0,
+     "TARTARUS": null
+    },
+    "errors": {
+     "ICARUS": "the Dog never got moving: 0.0 uu in 3 s at a peak of only 0.0 uu/s. Route NOT judged; this is the harness or the character, not the route.",
+     "NOCTIS": "the Dog never got moving: 53.1 uu in 3 s at a peak of only 0.0 uu/s. Route NOT judged; this is the harness or the character, not the route.",
+     "TARTARUS": "the Dog did not survive being moved to the start cell"
+    }
+   }
+  },
+  {
+   "id": "W01",
+   "name": "the Dog walked gate to band in every nation under its own locomotion",
+   "pass": false,
+   "detail": {
+    "arrived": {
+     "ICARUS": false,
+     "NOCTIS": false,
+     "TARTARUS": false
+    },
+    "travelled_m": {
+     "ICARUS": null,
+     "NOCTIS": null,
+     "TARTARUS": null
+    },
+    "waypoints": {
+     "ICARUS": "None",
+     "NOCTIS": "None",
+     "TARTARUS": "None"
+    },
+    "route_m": {
+     "ICARUS": 487.6,
+     "NOCTIS": 483.5,
+     "TARTARUS": null
+    },
+    "stuck": {},
+    "note": "AddMovementInput every tick with bForce, no teleports after the start, no navmesh; a stuck Dog stays stuck and the job records what was in front of it"
+   }
+  }
+ ],
+ "nations": {
+  "ICARUS": {
+   "waypoints": 59,
+   "route_m": 487.6,
+   "reached_m": null,
+   "arrived": false,
+   "stuck_at": null,
+   "start_stream_wait_s": 1.0,
+   "start_error_m": 0.0,
+   "dog_state": {
+    "movement_mode": "<MovementMode.MOVE_WALKING: 1>",
+    "max_walk_speed": 230.0,
+    "is_falling": false,
+    "gravity_scale": 1.0,
+    "controller": "PlayerController_0",
+    "game_paused": false
+   },
+   "probe_moved_uu": 0.0,
+   "probe_peak_speed": 0.0,
+   "can_be_driven": false,
+   "input_reaching_character": false,
+   "error": "the Dog never got moving: 0.0 uu in 3 s at a peak of only 0.0 uu/s. Route NOT judged; this is the harness or the character, not the route."
+  },
+  "NOCTIS": {
+   "waypoints": 59,
+   "route_m": 483.5,
+   "reached_m": null,
+   "arrived": false,
+   "stuck_at": null,
+   "start_stream_wait_s": 1.0,
+   "start_error_m": 0.0,
+   "dog_state": {
+    "movement_mode": "<MovementMode.MOVE_WALKING: 1>",
+    "max_walk_speed": 230.0,
+    "is_falling": false,
+    "gravity_scale": 1.0,
+    "controller": "PlayerController_0",
+    "game_paused": false
+   },
+   "probe_moved_uu": 53.1,
+   "probe_peak_speed": 0.0,
+   "can_be_driven": false,
+   "input_reaching_character": false,
+   "error": "the Dog never got moving: 53.1 uu in 3 s at a peak of only 0.0 uu/s. Route NOT judged; this is the harness or the character, not the route."
+  },
+  "TARTARUS": {
+   "waypoints": 59,
+   "route_m": null,
+   "reached_m": null,
+   "arrived": false,
+   "stuck_at": null,
+   "start_stream_wait_s": 1.0,
+   "error": "the Dog did not survive being moved to the start cell"
+  }
+ },
+ "finished": "2026-09-27 13:44:27",
+ "seconds": 67.75,
+ "log": "W_ICARUS WARN ICARUS: actuator dead, route withheld {'moved_uu': 0.0, 'peak_speed': 0.0}\nW_NOCTIS WARN NOCTIS: actuator dead, route withheld {'moved_uu': 53.1, 'peak_speed': 0.0}\nW0A FAIL the harness can actually drive the Dog -- these are walks, not stationary readings {'harness_proven_by': [], 'blocked_at_start': [], 'start_clearance': {}, 'moved_uu': {'ICARUS': 0.0, 'NOCTIS': 53.1, 'TARTARUS': None}, 'dog_state': {'ICARUS': {'movement_mode': '<MovementMode.MOVE_WALKING: 1>', 'max_walk_speed': 230.0, 'is_falling': False, 'gravity_scale': 1.0, 'controller': 'PlayerController_0', 'game_paused': False}, 'NOCTIS': {'movement_mode': '<MovementMode.MOVE_WALKING: 1>', 'max_walk_speed': 230.0, 'is_falling': False, 'gravity_scale': 1.0, 'controller': 'PlayerController_0', 'game_paused': False}, 'TARTARUS': None}, 'peak_speed': {'ICARUS': 0.0, 'NOCTIS': 0.0, 'TARTARUS': None}, 'note': '3 s of AddMovementInput toward the second waypoint before the route is judged. PEAK SPEED separates the cases and displacement alone cannot: full walk speed with no advance is BLOCKED GEOMETRY and is a finding about that place, while a peak near zero is the harness and withholds the route. The harness counts as proven by any one nation driving.'}\nW0B PASS no walk ended because the DOG disappeared -- a pawn destroyed part-way along an avenue is a streaming finding about that avenue, not a harness failure {'gone': {}, 'fell_out_of_the_world': [], 'last_z': {}, 'below_floor_uu': {}, 'note': \"alive() collapses 'the world ended' and 'the Dog was destroyed' into one None, and the message used to blame the world for both. A torn-down PIE says nothing about the route; a Dog destroyed 5 m into a 485 m avenue is the route. last_z against the leg's own floor is the discriminator -- far below means it fell through unstreamed ground\"}\nW00 FAIL every nation's walk started with the Dog standing at the gate end of its route {'starts': {'ICARUS': 0.0, 'NOCTIS': 0.0, 'TARTARUS': None}, 'errors': {'ICARUS': 'the Dog never got moving: 0.0 uu in 3 s at a peak of only 0.0 uu/s. Route NOT judged; this is the harness or the character, not the route.', 'NOCTIS': 'the Dog never got moving: 53.1 uu in 3 s at a peak of only 0.0 uu/s. Route NOT judged; this is the harness or the character, not the route.', 'TARTARUS': 'the Dog did not survive being moved to the start cell'}}\nW01 FAIL the Dog walked gate to band in every nation under its own locomotion {'arrived': {'ICARUS': False, 'NOCTIS': False, 'TARTARUS': False}, 'travelled_m': {'ICARUS': None, 'NOCTIS': None, 'TARTARUS': None}, 'waypoints': {'ICARUS': 'None', 'NOCTIS': 'None', 'TARTARUS': 'None'}, 'route_m': {'ICARUS': 487.6, 'NOCTIS': 483.5, 'TARTARUS': None}, 'stuck': {}, 'note': 'AddMovementInput every tick with bForce, no teleports after the start, no navmesh; a stuck Dog stays stuck and the job records what was in front of it'}\n"
+}

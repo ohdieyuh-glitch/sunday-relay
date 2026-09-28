@@ -1,0 +1,478 @@
+{
+ "name": "zzW30_checkpoints",
+ "started": "2026-09-27 07:55:45",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "K00",
+   "name": "the Dog survived every stand and was where it was put, so every reading below is a reading",
+   "pass": true,
+   "detail": {
+    "measured": [
+     "arrival",
+     "ICARUS",
+     "NOCTIS",
+     "TARTARUS",
+     "DUBEL"
+    ],
+    "lost": [],
+    "distances_m": {
+     "arrival": 0.0,
+     "ICARUS": 0.0,
+     "NOCTIS": 0.0,
+     "TARTARUS": 0.0,
+     "DUBEL": 0.0
+    },
+    "note": "v1 parked the Dog inside a tower base; the three sites measured after that read bare lawn"
+   }
+  },
+  {
+   "id": "K07",
+   "name": "every checkpoint pass's actors were resident before it was measured",
+   "pass": true,
+   "detail": {
+    "loaded_expected_waits": {
+     "arrival": [
+      16,
+      8,
+      0.0
+     ],
+     "ICARUS": [
+      108,
+      54,
+      0.0
+     ],
+     "NOCTIS": [
+      108,
+      54,
+      0.0
+     ],
+     "TARTARUS": [
+      106,
+      53,
+      0.0
+     ],
+     "DUBEL": [
+      84,
+      42,
+      0.0
+     ]
+    },
+    "wait_limit_s": 20.0,
+    "note": "polled by WL_PASS_ tag rather than slept for; a photograph of the always-loaded set is not a photograph of the pass"
+   }
+  },
+  {
+   "id": "K01",
+   "name": "there is collidable floor on every checkpoint's court plate",
+   "pass": true,
+   "detail": {
+    "solid": [
+     "arrival",
+     "ICARUS",
+     "NOCTIS",
+     "TARTARUS",
+     "DUBEL"
+    ]
+   }
+  },
+  {
+   "id": "K02",
+   "name": "the build's declared ground IS the traced ground -- the apron neither floats nor sinks",
+   "pass": true,
+   "detail": {
+    "offsets": {
+     "arrival": 5.7,
+     "ICARUS": 0.0,
+     "NOCTIS": 0.0,
+     "TARTARUS": 0.0,
+     "DUBEL": 0.0
+    },
+    "tolerance": 10.0,
+    "note": "the paving is non-colliding by design so the DECLARED z is what is gated; v1 allowed 40 uu and passed a 26 uu float"
+   }
+  },
+  {
+   "id": "K03",
+   "name": "the court is flush with the real ground beside it",
+   "pass": true,
+   "detail": {
+    "steps": {
+     "arrival": 7.5,
+     "ICARUS": 0.0,
+     "NOCTIS": 0.0,
+     "TARTARUS": 0.0,
+     "DUBEL": 0.0
+    },
+    "max_step": 30.0
+   }
+  },
+  {
+   "id": "K04",
+   "name": "the march is still walkable through every checkpoint",
+   "pass": true,
+   "detail": {
+    "blocked": {},
+    "without_floor": {},
+    "roads": [
+     "ICARUS",
+     "NOCTIS",
+     "TARTARUS"
+    ]
+   }
+  },
+  {
+   "id": "K05",
+   "name": "every checkpoint that was given a landmark actually has one standing",
+   "pass": false,
+   "detail": {
+    "rise_uu": {
+     "ICARUS": 5096.1,
+     "NOCTIS": 5096.1,
+     "TARTARUS": 3988.1,
+     "DUBEL": 5070.1
+    },
+    "floor_uu": 4000.0,
+    "expected": {
+     "ICARUS": 7426.0,
+     "NOCTIS": 7426.0,
+     "TARTARUS": 5246.0,
+     "DUBEL": 7426.0
+    }
+   }
+  },
+  {
+   "id": "K06",
+   "name": "every checkpoint is still readable at midnight",
+   "pass": false,
+   "detail": {
+    "court_luma": {
+     "arrival": 0.09321,
+     "ICARUS": 0.09463,
+     "NOCTIS": 0.01763,
+     "TARTARUS": 0.10381,
+     "DUBEL": 0.09378
+    },
+    "floor": 0.05,
+    "crushed_fraction": {
+     "arrival": 0.9078,
+     "ICARUS": 0.9078,
+     "NOCTIS": 1.0,
+     "TARTARUS": 0.8918,
+     "DUBEL": 0.9078
+    },
+    "ceiling": 0.72,
+    "night_actors_loaded": {
+     "arrival": 0,
+     "ICARUS": 0,
+     "NOCTIS": 0,
+     "TARTARUS": 0,
+     "DUBEL": 0
+    }
+   }
+  }
+ ],
+ "sites": {
+  "DUBEL": {
+   "pass": "CP05",
+   "declared_ground_z": -14.0,
+   "bearing": 90.0,
+   "pass_actors_loaded": 84,
+   "pass_actors_expected": 42,
+   "stream_wait_s": 0.0,
+   "dog_distance_from_stand_m": 0.0,
+   "dog_alive_and_placed": true,
+   "court_floor": -14.0,
+   "court_reads": [
+    -14.0,
+    -14.0,
+    -14.0,
+    -14.0
+   ],
+   "outside_floor": -14.0,
+   "tower_top_z": 5056.1,
+   "tower_rise": 5070.1,
+   "tower_expected_rise": 7426.0
+  },
+  "ICARUS": {
+   "pass": "CP02",
+   "declared_ground_z": -14.0,
+   "bearing": 90.0,
+   "pass_actors_loaded": 108,
+   "pass_actors_expected": 54,
+   "stream_wait_s": 0.0,
+   "dog_distance_from_stand_m": 0.0,
+   "dog_alive_and_placed": true,
+   "court_floor": -14.0,
+   "court_reads": [
+    -14.0,
+    -14.0,
+    -14.0,
+    -14.0
+   ],
+   "outside_floor": -14.0,
+   "road_segments": 12,
+   "road_blocked": [],
+   "road_without_floor": [],
+   "tower_top_z": 5082.1,
+   "tower_rise": 5096.1,
+   "tower_expected_rise": 7426.0
+  },
+  "NOCTIS": {
+   "pass": "CP03",
+   "declared_ground_z": -14.0,
+   "bearing": 210.0,
+   "pass_actors_loaded": 108,
+   "pass_actors_expected": 54,
+   "stream_wait_s": 0.0,
+   "dog_distance_from_stand_m": 0.0,
+   "dog_alive_and_placed": true,
+   "court_floor": -14.0,
+   "court_reads": [
+    -14.0,
+    -14.0,
+    -14.0,
+    -14.0
+   ],
+   "outside_floor": -14.0,
+   "road_segments": 12,
+   "road_blocked": [],
+   "road_without_floor": [],
+   "tower_top_z": 5082.1,
+   "tower_rise": 5096.1,
+   "tower_expected_rise": 7426.0
+  },
+  "TARTARUS": {
+   "pass": "CP04",
+   "declared_ground_z": -14.0,
+   "bearing": 330.0,
+   "pass_actors_loaded": 106,
+   "pass_actors_expected": 53,
+   "stream_wait_s": 0.0,
+   "dog_distance_from_stand_m": 0.0,
+   "dog_alive_and_placed": true,
+   "court_floor": -14.0,
+   "court_reads": [
+    -14.0,
+    -14.0,
+    -14.0,
+    -14.0
+   ],
+   "outside_floor": -14.0,
+   "road_segments": 12,
+   "road_blocked": [],
+   "road_without_floor": [],
+   "tower_top_z": 3974.1,
+   "tower_rise": 3988.1,
+   "tower_expected_rise": 5246.0
+  },
+  "arrival": {
+   "pass": "CP01",
+   "declared_ground_z": -0.6950000000000003,
+   "bearing": 90.0,
+   "pass_actors_loaded": 16,
+   "pass_actors_expected": 8,
+   "stream_wait_s": 0.0,
+   "dog_distance_from_stand_m": 0.0,
+   "dog_alive_and_placed": true,
+   "court_floor": 5.0,
+   "court_reads": [
+    -14.0,
+    -14.0,
+    5.0,
+    5.2
+   ],
+   "outside_floor": -2.5
+  }
+ },
+ "partition": "world=WL_V2_GoldenArrival_WP2 partitioned=1 streaming=1 initialised=1 runtimeHash=WorldPartitionRuntimeHashSet subsystem=1",
+ "captures": {
+  "DUBEL": {
+   "noon": {
+    "file": "dubel_noon.png",
+    "actors_loaded": 0,
+    "frame": {
+     "luma": 0.32173,
+     "dark": 0.0956,
+     "bright": 0.0456,
+     "samples": 10506
+    },
+    "court": {
+     "luma": 0.33962,
+     "dark": 0.3244,
+     "bright": 0.1298,
+     "samples": 13260
+    }
+   },
+   "midnight": {
+    "file": "dubel_midnight.png",
+    "actors_loaded": 0,
+    "frame": {
+     "luma": 0.04985,
+     "dark": 0.961,
+     "bright": 0.0077,
+     "samples": 10506
+    },
+    "court": {
+     "luma": 0.09378,
+     "dark": 0.9078,
+     "bright": 0.039,
+     "samples": 13260
+    }
+   }
+  },
+  "ICARUS": {
+   "noon": {
+    "file": "icarus_noon.png",
+    "actors_loaded": 0,
+    "frame": {
+     "luma": 0.24381,
+     "dark": 0.1956,
+     "bright": 0.0069,
+     "samples": 10506
+    },
+    "court": {
+     "luma": 0.29995,
+     "dark": 0.138,
+     "bright": 0.0123,
+     "samples": 13260
+    }
+   },
+   "midnight": {
+    "file": "icarus_midnight.png",
+    "actors_loaded": 0,
+    "frame": {
+     "luma": 0.04852,
+     "dark": 0.9615,
+     "bright": 0.0076,
+     "samples": 10506
+    },
+    "court": {
+     "luma": 0.09463,
+     "dark": 0.9078,
+     "bright": 0.0406,
+     "samples": 13260
+    }
+   }
+  },
+  "NOCTIS": {
+   "noon": {
+    "file": "noctis_noon.png",
+    "actors_loaded": 0,
+    "frame": {
+     "luma": 0.16676,
+     "dark": 0.4984,
+     "bright": 0.0032,
+     "samples": 10506
+    },
+    "court": {
+     "luma": 0.1679,
+     "dark": 0.4252,
+     "bright": 0.0,
+     "samples": 13260
+    }
+   },
+   "midnight": {
+    "file": "noctis_midnight.png",
+    "actors_loaded": 0,
+    "frame": {
+     "luma": 0.03949,
+     "dark": 0.9712,
+     "bright": 0.0031,
+     "samples": 10506
+    },
+    "court": {
+     "luma": 0.01763,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 13260
+    }
+   }
+  },
+  "TARTARUS": {
+   "noon": {
+    "file": "tartarus_noon.png",
+    "actors_loaded": 0,
+    "frame": {
+     "luma": 0.25931,
+     "dark": 0.1069,
+     "bright": 0.0032,
+     "samples": 10506
+    },
+    "court": {
+     "luma": 0.31535,
+     "dark": 0.0,
+     "bright": 0.0,
+     "samples": 13260
+    }
+   },
+   "midnight": {
+    "file": "tartarus_midnight.png",
+    "actors_loaded": 0,
+    "frame": {
+     "luma": 0.05138,
+     "dark": 0.959,
+     "bright": 0.0077,
+     "samples": 10506
+    },
+    "court": {
+     "luma": 0.10381,
+     "dark": 0.8918,
+     "bright": 0.0465,
+     "samples": 13260
+    }
+   }
+  },
+  "arrival": {
+   "noon": {
+    "file": "arrival_noon.png",
+    "actors_loaded": 0,
+    "frame": {
+     "luma": 0.26056,
+     "dark": 0.1189,
+     "bright": 0.004,
+     "samples": 10506
+    },
+    "court": {
+     "luma": 0.33066,
+     "dark": 0.0118,
+     "bright": 0.0028,
+     "samples": 13260
+    }
+   },
+   "midnight": {
+    "file": "arrival_midnight.png",
+    "actors_loaded": 0,
+    "frame": {
+     "luma": 0.05114,
+     "dark": 0.9595,
+     "bright": 0.0074,
+     "samples": 10506
+    },
+    "court": {
+     "luma": 0.09321,
+     "dark": 0.9078,
+     "bright": 0.0397,
+     "samples": 13260
+    }
+   }
+  }
+ },
+ "court_luma_noon": {
+  "arrival": 0.33066,
+  "ICARUS": 0.29995,
+  "NOCTIS": 0.1679,
+  "TARTARUS": 0.31535,
+  "DUBEL": 0.33962
+ },
+ "court_luma_midnight": {
+  "arrival": 0.09321,
+  "ICARUS": 0.09463,
+  "NOCTIS": 0.01763,
+  "TARTARUS": 0.10381,
+  "DUBEL": 0.09378
+ },
+ "finished": "2026-09-27 07:59:52",
+ "seconds": 246.96,
+ "log": "C_DUBEL INFO DUBEL {'actors': '84/42 in 0s', 'court_floor': -14.0, 'outside': -14.0, 'tower_rise': 5070.1, 'road_blocked': 0}\nC_ICARUS INFO ICARUS {'actors': '108/54 in 0s', 'court_floor': -14.0, 'outside': -14.0, 'tower_rise': 5096.1, 'road_blocked': 0}\nC_NOCTIS INFO NOCTIS {'actors': '108/54 in 0s', 'court_floor': -14.0, 'outside': -14.0, 'tower_rise': 5096.1, 'road_blocked': 0}\nC_TARTARUS INFO TARTARUS {'actors': '106/53 in 0s', 'court_floor': -14.0, 'outside': -14.0, 'tower_rise': 3988.1, 'road_blocked': 0}\nC_arrival INFO arrival {'actors': '16/8 in 0s', 'court_floor': 5.0, 'outside': -2.5, 'tower_rise': None, 'road_blocked': 0}\nK00 PASS the Dog survived every stand and was where it was put, so every reading below is a reading {'measured': ['arrival', 'ICARUS', 'NOCTIS', 'TARTARUS', 'DUBEL'], 'lost': [], 'distances_m': {'arrival': 0.0, 'ICARUS': 0.0, 'NOCTIS': 0.0, 'TARTARUS': 0.0, 'DUBEL': 0.0}, 'note': 'v1 parked the Dog inside a tower base; the three sites measured after that read bare lawn'}\nK07 PASS every checkpoint pass's actors were resident before it was measured {'loaded_expected_waits': {'arrival': (16, 8, 0.0), 'ICARUS': (108, 54, 0.0), 'NOCTIS': (108, 54, 0.0), 'TARTARUS': (106, 53, 0.0), 'DUBEL': (84, 42, 0.0)}, 'wait_limit_s': 20.0, 'note': 'polled by WL_PASS_ tag rather than slept for; a photograph of the always-loaded set is not a photograph of the pass'}\nK01 PASS there is collidable floor on every checkpoint's court plate {'solid': ['arrival', 'ICARUS', 'NOCTIS', 'TARTARUS', 'DUBEL']}\nK02 PASS the build's declared ground IS the traced ground -- the apron neither floats nor sinks {'offsets': {'arrival': 5.7, 'ICARUS': 0.0, 'NOCTIS': 0.0, 'TARTARUS': 0.0, 'DUBEL': 0.0}, 'tolerance': 10.0, 'note': 'the paving is non-colliding by design so the DECLARED z is what is gated; v1 allowed 40 uu and passed a 26 uu float'}\nK03 PASS the court is flush with the real ground beside it {'steps': {'arrival': 7.5, 'ICARUS': 0.0, 'NOCTIS': 0.0, 'TARTARUS': 0.0, 'DUBEL': 0.0}, 'max_step': 30.0}\nK04 PASS the march is still walkable through every checkpoint {'blocked': {}, 'without_floor': {}, 'roads': ['ICARUS', 'NOCTIS', 'TARTARUS']}\nK05 FAIL every checkpoint that was given a landmark actually has one standing {'rise_uu': {'ICARUS': 5096.1, 'NOCTIS': 5096.1, 'TARTARUS': 3988.1, 'DUBEL': 5070.1}, 'floor_uu': 4000.0, 'expected': {'ICARUS': 7426.0, 'NOCTIS': 7426.0, 'TARTARUS': 5246.0, 'DUBEL': 7426.0}}\nK06 FAIL every checkpoint is still readable at midnight {'court_luma': {'arrival': 0.09321, 'ICARUS': 0.09463, 'NOCTIS': 0.01763, 'TARTARUS': 0.10381, 'DUBEL': 0.09378}, 'floor': 0.05, 'crushed_fraction': {'arrival': 0.9078, 'ICARUS': 0.9078, 'NOCTIS': 1.0, 'TARTARUS': 0.8918, 'DUBEL': 0.9078}, 'ceiling': 0.72, 'night_actors_loaded': {'arrival': 0, 'ICARUS': 0, 'NOCTIS': 0, 'TARTARUS': 0, 'DUBEL': 0}}\n"
+}

@@ -1,0 +1,16 @@
+{
+ "name": "zzC11_cp02",
+ "started": "2026-09-27 06:32:48",
+ "status": "done",
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "CP02",
+ "actors": 0,
+ "batches": 54,
+ "instances": 872,
+ "hovers": 0,
+ "saved": true,
+ "finished": "2026-09-27 06:32:56",
+ "seconds": 8.21,
+ "log": "applied CP02 0 actors 54 batches 872 instances\n"
+}

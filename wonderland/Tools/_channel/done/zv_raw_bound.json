@@ -1,0 +1,19 @@
+{
+ "name": "zv_raw_bound",
+ "started": "2026-09-27 15:46:11",
+ "status": "measured",
+ "has_raw": true,
+ "has_frame_number": true,
+ "frame_number": {
+  "first": 95,
+  "second": 99,
+  "advanced": 4
+ },
+ "frame_number_moves": true,
+ "raw_outside_pie": "None",
+ "avg_outside_pie": "None",
+ "callable": true,
+ "finished": "2026-09-27 15:46:13",
+ "seconds": 1.33,
+ "log": ""
+}

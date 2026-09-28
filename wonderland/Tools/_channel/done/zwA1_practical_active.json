@@ -1,0 +1,306 @@
+{
+ "name": "zwA1_practical_active",
+ "started": "2026-09-27 19:20:49",
+ "status": "voided: the assignment had not converged",
+ "tests": [
+  {
+   "id": "P_READ",
+   "name": "the engine's own practical report is readable, so active count is not inferred",
+   "pass": true,
+   "detail": {
+    "describe_practicals": {
+     "defined": 1464.0,
+     "active": 31.0,
+     "pool": 48.0,
+     "night": 0.0,
+     "gain": 1.0,
+     "count": 48.0,
+     "radius": 12000.0,
+     "file": "../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json",
+     "problem": ""
+    },
+    "note": "reads H.describe_practical_lights, added at 71114aab, because UE 5.8 Python has no world-subsystem getter at all -- enumerated, after BlueprintType was diagnosed as the cause and was not. Red here means the build predates that accessor, and the run voids rather than falling back to counting actors and inferring a radius again"
+   }
+  },
+  {
+   "id": "P_WHERE",
+   "name": "the pawn is at the densest spot, which is what selects the candidate set",
+   "pass": true,
+   "detail": {
+    "asked": [
+     -65943.0,
+     -38753.0
+    ],
+    "landed": [
+     -65953.5,
+     -38751.5,
+     131.0
+    ],
+    "offset_uu": 10.6,
+    "note": "Assign() takes its Eye from the PAWN. Measured anywhere else this is a different question"
+   }
+  },
+  {
+   "id": "P_RUNGS",
+   "name": "every rung produced an authoritative active count",
+   "pass": true,
+   "detail": {
+    "measured": 5,
+    "wanted": 5
+   }
+  },
+  {
+   "id": "P_STILL",
+   "name": "the pawn is at the measurement spot at EVERY rung, not just when it was placed",
+   "pass": false,
+   "detail": {
+    "drifted_rungs": [
+     {
+      "count": 48,
+      "radius": null,
+      "pawn": [
+       0.0,
+       -1460.0,
+       100.0
+      ],
+      "drift_uu": 75757.8
+     },
+     {
+      "count": 192,
+      "radius": null,
+      "pawn": [
+       0.0,
+       -1460.0,
+       100.0
+      ],
+      "drift_uu": 75757.8
+     },
+     {
+      "count": 192,
+      "radius": 24000.0,
+      "pawn": [
+       0.0,
+       -1460.0,
+       100.0
+      ],
+      "drift_uu": 75757.8
+     }
+    ],
+    "pawn_by_rung": {
+     "c48_rNone": [
+      0.0,
+      -1460.0,
+      100.0
+     ],
+     "c96_rNone": [
+      -65960.2,
+      -38755.2,
+      101.2
+     ],
+     "c192_rNone": [
+      0.0,
+      -1460.0,
+      100.0
+     ],
+     "c192_r6000.0": [
+      -65960.2,
+      -38755.2,
+      101.2
+     ],
+     "c192_r24000.0": [
+      0.0,
+      -1460.0,
+      100.0
+     ]
+    },
+    "in_radius_where_it_is": {
+     "c48_rNone": 31,
+     "c96_rNone": 184,
+     "c192_rNone": 31,
+     "c192_r6000.0": 81,
+     "c192_r24000.0": 127
+    },
+    "note": "placed once before the loop and never checked again. Active read 31 at count 48 and at count 192 with 184 candidates in radius, where Lit = Min(Near, Pool) wants 48 and 184 -- and the only input to Assign other than the two knobs is the Eye, which is this"
+   }
+  },
+  {
+   "id": "P_CONVERGED",
+   "name": "the active count is unchanged across an independent wait at every rung",
+   "pass": false,
+   "detail": {
+    "still_moving": [
+     {
+      "count": 48,
+      "radius": null,
+      "before": 48,
+      "after": 31
+     }
+    ],
+    "actives": {
+     "c48_rNone": 31,
+     "c96_rNone": 96,
+     "c192_rNone": 31,
+     "c192_r6000.0": 81,
+     "c192_r24000.0": 127
+    },
+    "note": "five equal reads is a plateau test and a plateau passes it: the previous run held 127 three times and then reported 192. Only a wait that does nothing else separates a pause from an arrival, and a rung that has not arrived cannot be compared with a budget"
+   }
+  }
+ ],
+ "knobs_as_found": {
+  "count": 48.0,
+  "radius": 12000.0,
+  "gain": 1.0
+ },
+ "defined_in_manifest": 1464.0,
+ "pawn_landed": [
+  -65953.5,
+  -38751.5,
+  131.0
+ ],
+ "rungs": [
+  {
+   "count_asked": 48,
+   "radius_asked": null,
+   "held": {
+    "count": 48.0,
+    "radius": 12000.0,
+    "gain": 1.0
+   },
+   "active_first": 48,
+   "active_after_wait": 31,
+   "converged": false,
+   "pool": 48.0,
+   "defined": 1464.0,
+   "actors_total": 48,
+   "actors_lit": 31,
+   "manifest_in_radius": 184,
+   "pawn_at_rung": [
+    0.0,
+    -1460.0,
+    100.0
+   ],
+   "pawn_drift_uu": 75757.8,
+   "manifest_in_radius_where_pawn_is": 31,
+   "luma": 0.158,
+   "spread": 0.0005,
+   "ground_readable": 0.7371,
+   "ground_crushed": 0.2624
+  },
+  {
+   "count_asked": 96,
+   "radius_asked": null,
+   "held": {
+    "count": 96.0,
+    "radius": 12000.0,
+    "gain": 1.0
+   },
+   "active_first": 96,
+   "active_after_wait": 96,
+   "converged": true,
+   "pool": 96.0,
+   "defined": 1464.0,
+   "actors_total": 96,
+   "actors_lit": 96,
+   "manifest_in_radius": 184,
+   "pawn_at_rung": [
+    -65960.2,
+    -38755.2,
+    101.2
+   ],
+   "pawn_drift_uu": 17.3,
+   "manifest_in_radius_where_pawn_is": 184,
+   "luma": 0.172,
+   "spread": 0.0002,
+   "ground_readable": 0.8117,
+   "ground_crushed": 0.1446
+  },
+  {
+   "count_asked": 192,
+   "radius_asked": null,
+   "held": {
+    "count": 192.0,
+    "radius": 12000.0,
+    "gain": 1.0
+   },
+   "active_first": 31,
+   "active_after_wait": 31,
+   "converged": true,
+   "pool": 192.0,
+   "defined": 1464.0,
+   "actors_total": 192,
+   "actors_lit": 31,
+   "manifest_in_radius": 184,
+   "pawn_at_rung": [
+    0.0,
+    -1460.0,
+    100.0
+   ],
+   "pawn_drift_uu": 75757.8,
+   "manifest_in_radius_where_pawn_is": 31,
+   "luma": 0.1584,
+   "spread": 0.0002,
+   "ground_readable": 0.7357,
+   "ground_crushed": 0.2638
+  },
+  {
+   "count_asked": 192,
+   "radius_asked": 6000.0,
+   "held": {
+    "count": 192.0,
+    "radius": 6000.0,
+    "gain": 1.0
+   },
+   "active_first": 81,
+   "active_after_wait": 81,
+   "converged": true,
+   "pool": 192.0,
+   "defined": 1464.0,
+   "actors_total": 192,
+   "actors_lit": 81,
+   "manifest_in_radius": 81,
+   "pawn_at_rung": [
+    -65960.2,
+    -38755.2,
+    101.2
+   ],
+   "pawn_drift_uu": 17.3,
+   "manifest_in_radius_where_pawn_is": 81,
+   "luma": 0.172,
+   "spread": 0.0003,
+   "ground_readable": 0.804,
+   "ground_crushed": 0.1484
+  },
+  {
+   "count_asked": 192,
+   "radius_asked": 24000.0,
+   "held": {
+    "count": 192.0,
+    "radius": 24000.0,
+    "gain": 1.0
+   },
+   "active_first": 127,
+   "active_after_wait": 127,
+   "converged": true,
+   "pool": 192.0,
+   "defined": 1464.0,
+   "actors_total": 192,
+   "actors_lit": 127,
+   "manifest_in_radius": 286,
+   "pawn_at_rung": [
+    0.0,
+    -1460.0,
+    100.0
+   ],
+   "pawn_drift_uu": 75757.8,
+   "manifest_in_radius_where_pawn_is": 127,
+   "luma": 0.1579,
+   "spread": 0.0006,
+   "ground_readable": 0.7276,
+   "ground_crushed": 0.2719
+  }
+ ],
+ "finished": "2026-09-27 19:22:26",
+ "seconds": 97.13,
+ "log": "P_READ PASS the engine's own practical report is readable, so active count is not inferred {'describe_practicals': {'defined': 1464.0, 'active': 31.0, 'pool': 48.0, 'night': 0.0, 'gain': 1.0, 'count': 48.0, 'radius': 12000.0, 'file': '../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json', 'problem': ''}, 'note': 'reads H.describe_practical_lights, added at 71114aab, because UE 5.8 Python has no world-subsystem getter at all -- enumerated, after BlueprintType was diagnosed as the cause and was not. Red here means the build predates that accessor, and the run voids rather than falling back to counting actors and inferring a radius again'}\nP_WHERE PASS the pawn is at the densest spot, which is what selects the candidate set {'asked': [-65943.0, -38753.0], 'landed': [-65953.5, -38751.5, 131.0], 'offset_uu': 10.6, 'note': 'Assign() takes its Eye from the PAWN. Measured anywhere else this is a different question'}\nP_RUNGS PASS every rung produced an authoritative active count {'measured': 5, 'wanted': 5}\nP_STILL FAIL the pawn is at the measurement spot at EVERY rung, not just when it was placed {'drifted_rungs': [{'count': 48, 'radius': None, 'pawn': [0.0, -1460.0, 100.0], 'drift_uu': 75757.8}, {'count': 192, 'radius': None, 'pawn': [0.0, -1460.0, 100.0], 'drift_uu': 75757.8}, {'count': 192, 'radius': 24000.0, 'pawn': [0.0, -1460.0, 100.0], 'drift_uu': 75757.8}], 'pawn_by_rung': {'c48_rNone': [0.0, -1460.0, 100.0], 'c96_rNone': [-65960.2, -38755.2, 101.2], 'c192_rNone': [0.0, -1460.0, 100.0], 'c192_r6000.0': [-65960.2, -38755.2, 101.2], 'c192_r24000.0': [0.0, -1460.0, 100.0]}, 'in_radius_where_it_is': {'c48_rNone': 31, 'c96_rNone': 184, 'c192_rNone': 31, 'c192_r6000.0': 81, 'c192_r24000.0': 127}, 'note': 'placed once before the loop and never checked again. Active read 31 at count 48 and at count 192 with 184 candidates in radius, where Lit = Min(Near, Pool) wants 48 and 184 -- and the only input to Assign other than the two knobs is the Eye, which is this'}\nP_CONVERGED FAIL the active count is unchanged across an independent wait at every rung {'still_moving': [{'count': 48, 'radius': None, 'before': 48, 'after': 31}], 'actives': {'c48_rNone': 31, 'c96_rNone': 96, 'c192_rNone': 31, 'c192_r6000.0': 81, 'c192_r24000.0': 127}, 'note': 'five equal reads is a plateau test and a plateau passes it: the previous run held 127 three times and then reported 192. Only a wait that does nothing else separates a pause from an arrival, and a rung that has not arrived cannot be compared with a budget'}\n"
+}

@@ -1,0 +1,1074 @@
+{
+ "name": "zzAC1_skel",
+ "started": "2026-09-27 18:22:04",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "S_DISTINCT",
+   "name": "each capture is a different picture",
+   "pass": true,
+   "detail": {
+    "files": 18,
+    "distinct": 18,
+    "note": "thirty byte-identical PNGs passed a clause that counted files. In simulate mode there is no player camera, so the skins, the hour and the camera all changed and the photograph did not. A run whose pictures are all the same photographed the editor, not the game."
+   }
+  },
+  {
+   "id": "S00",
+   "name": "the mascot was photographed from every side at every hour",
+   "pass": true,
+   "detail": {
+    "taken": 18,
+    "wanted": 18,
+    "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\skeleton_parts"
+   }
+  },
+  {
+   "id": "S01",
+   "name": "the feet are not blue",
+   "pass": true,
+   "detail": {
+    "blue_over_red_front": {
+     "day/front/close": 0.622,
+     "day/front/gameplay": 0.757,
+     "dusk/front/close": 0.835,
+     "dusk/front/gameplay": 1.112,
+     "night/front/close": 1.084,
+     "night/front/gameplay": 1.186
+    },
+    "all_angles": {
+     "day/front/close": 0.622,
+     "day/front/gameplay": 0.757,
+     "day/side/close": 1.023,
+     "day/side/gameplay": 0.315,
+     "day/rear/close": 2.712,
+     "day/rear/gameplay": 0.641,
+     "dusk/front/close": 0.835,
+     "dusk/front/gameplay": 1.112,
+     "dusk/side/close": 1.367,
+     "dusk/side/gameplay": 0.794,
+     "dusk/rear/close": 1.8,
+     "dusk/rear/gameplay": 1.266,
+     "night/front/close": 1.084,
+     "night/front/gameplay": 1.186,
+     "night/side/close": 1.558,
+     "night/side/gameplay": 1.093,
+     "night/rear/close": 1.861,
+     "night/rear/gameplay": 1.365
+    },
+    "worst_front": 1.186,
+    "ceiling": 1.25,
+    "rear_and_side_contaminated_by_the_tail": true,
+    "note": "blue over red in the foot band. The two spectral materials the feet were made of lead red by 4.5x and 1.4x; ash and void lead by about 1.0. Measured as a RATIO because the exposure moves every absolute value across the day and 'blue' is a relationship between channels."
+   }
+  },
+  {
+   "id": "S02",
+   "name": "the black leg parts hold their light at night better than the lit body does",
+   "pass": false,
+   "detail": {
+    "legs_glow": {
+     "front/close": {
+      "legs_night_over_day": 1.01,
+      "torso_night_over_day": 1.351,
+      "legs_hold_better_than_torso": 0.747
+     },
+     "front/gameplay": {
+      "legs_night_over_day": 1.435,
+      "torso_night_over_day": 1.628,
+      "legs_hold_better_than_torso": 0.882
+     },
+     "side/close": {
+      "legs_night_over_day": 1.112,
+      "torso_night_over_day": 1.147,
+      "legs_hold_better_than_torso": 0.969
+     },
+     "side/gameplay": {
+      "legs_night_over_day": 0.777,
+      "torso_night_over_day": 1.025,
+      "legs_hold_better_than_torso": 0.758
+     },
+     "rear/close": {
+      "legs_night_over_day": 1.418,
+      "torso_night_over_day": 1.138,
+      "legs_hold_better_than_torso": 1.246
+     },
+     "rear/gameplay": {
+      "legs_night_over_day": 0.559,
+      "torso_night_over_day": 0.572,
+      "legs_hold_better_than_torso": 0.977
+     }
+    },
+    "floor": 1.1,
+    "note": "the leg band's night-over-day, divided by the torso's. Above 1.0 means the legs lose less of their daylight brightness than the lit surfaces beside them, which is what an emissive black does and a LIT black cannot. The seam was `void`, lit, and fell with the sun."
+   }
+  },
+  {
+   "id": "S03",
+   "name": "the skull area is still clearly darker than the body around it",
+   "pass": false,
+   "detail": {
+    "skull_black": {
+     "day/front/close": {
+      "skull_luma": 0.2227,
+      "torso_luma": 0.437,
+      "skull_over_torso": 0.51
+     },
+     "day/side/close": {
+      "skull_luma": 0.2409,
+      "torso_luma": 0.4062,
+      "skull_over_torso": 0.593
+     },
+     "day/rear/close": {
+      "skull_luma": 0.4844,
+      "torso_luma": 0.5596,
+      "skull_over_torso": 0.866
+     },
+     "dusk/front/close": {
+      "skull_luma": 0.7719,
+      "torso_luma": 0.8107,
+      "skull_over_torso": 0.952
+     },
+     "dusk/side/close": {
+      "skull_luma": 0.0644,
+      "torso_luma": 0.4505,
+      "skull_over_torso": 0.143
+     },
+     "dusk/rear/close": {
+      "skull_luma": 0.7092,
+      "torso_luma": 0.7405,
+      "skull_over_torso": 0.958
+     },
+     "night/front/close": {
+      "skull_luma": 0.7442,
+      "torso_luma": 0.7823,
+      "skull_over_torso": 0.951
+     },
+     "night/side/close": {
+      "skull_luma": 0.0728,
+      "torso_luma": 0.334,
+      "skull_over_torso": 0.218
+     },
+     "night/rear/close": {
+      "skull_luma": 0.7117,
+      "torso_luma": 0.7426,
+      "skull_over_torso": 0.958
+     }
+    },
+    "ceiling": 0.75,
+    "note": "asked against the figure's own torso rather than against a fixed level, so a brighter night cannot fail it and a recolour toward the body cannot pass it. The founder's instruction is that this area stays black while other black areas start to glow."
+   }
+  }
+ ],
+ "regions": {
+  "skull": [
+   0.4,
+   0.23,
+   0.6,
+   0.33
+  ],
+  "legs": [
+   0.4,
+   0.64,
+   0.6,
+   0.74
+  ],
+  "feet": [
+   0.4,
+   0.76,
+   0.6,
+   0.84
+  ],
+  "torso": [
+   0.4,
+   0.42,
+   0.6,
+   0.55
+  ]
+ },
+ "readings": {
+  "day/front/close": {
+   "skull": {
+    "r": 0.1049,
+    "g": 0.3985,
+    "b": 0.4803,
+    "luma": 0.342,
+    "luma_p90": 0.3631,
+    "luma_p10": 0.2227,
+    "blue_over_red": 4.577,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.4837,
+    "g": 0.4888,
+    "b": 0.4414,
+    "luma": 0.4843,
+    "luma_p90": 0.7937,
+    "luma_p10": 0.1526,
+    "blue_over_red": 0.912,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.344,
+    "g": 0.2778,
+    "b": 0.214,
+    "luma": 0.2873,
+    "luma_p90": 0.4684,
+    "luma_p10": 0.0137,
+    "blue_over_red": 0.622,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.2199,
+    "g": 0.4893,
+    "b": 0.5581,
+    "luma": 0.437,
+    "luma_p90": 0.6754,
+    "luma_p10": 0.3634,
+    "blue_over_red": 2.538,
+    "cells": 11651
+   }
+  },
+  "day/front/gameplay": {
+   "skull": {
+    "r": 0.1056,
+    "g": 0.1101,
+    "b": 0.0687,
+    "luma": 0.1062,
+    "luma_p90": 0.2075,
+    "luma_p10": 0.0185,
+    "blue_over_red": 0.651,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.3281,
+    "g": 0.3862,
+    "b": 0.3658,
+    "luma": 0.3724,
+    "luma_p90": 0.5584,
+    "luma_p10": 0.1519,
+    "blue_over_red": 1.115,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.3603,
+    "g": 0.3275,
+    "b": 0.2729,
+    "luma": 0.3305,
+    "luma_p90": 0.6028,
+    "luma_p10": 0.0774,
+    "blue_over_red": 0.757,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.3013,
+    "g": 0.3359,
+    "b": 0.3421,
+    "luma": 0.329,
+    "luma_p90": 0.5009,
+    "luma_p10": 0.1876,
+    "blue_over_red": 1.135,
+    "cells": 11651
+   }
+  },
+  "day/side/close": {
+   "skull": {
+    "r": 0.3365,
+    "g": 0.468,
+    "b": 0.5945,
+    "luma": 0.4492,
+    "luma_p90": 0.5654,
+    "luma_p10": 0.2409,
+    "blue_over_red": 1.767,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2883,
+    "g": 0.3561,
+    "b": 0.3651,
+    "luma": 0.3423,
+    "luma_p90": 0.7333,
+    "luma_p10": 0.1966,
+    "blue_over_red": 1.266,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.2519,
+    "g": 0.228,
+    "b": 0.2578,
+    "luma": 0.2353,
+    "luma_p90": 0.2831,
+    "luma_p10": 0.1714,
+    "blue_over_red": 1.023,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.3139,
+    "g": 0.4252,
+    "b": 0.4903,
+    "luma": 0.4062,
+    "luma_p90": 0.7292,
+    "luma_p10": 0.1826,
+    "blue_over_red": 1.562,
+    "cells": 11651
+   }
+  },
+  "day/side/gameplay": {
+   "skull": {
+    "r": 0.1283,
+    "g": 0.2112,
+    "b": 0.0303,
+    "luma": 0.1805,
+    "luma_p90": 0.1958,
+    "luma_p10": 0.1639,
+    "blue_over_red": 0.237,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.111,
+    "g": 0.2018,
+    "b": 0.0346,
+    "luma": 0.1704,
+    "luma_p90": 0.2686,
+    "luma_p10": 0.1031,
+    "blue_over_red": 0.312,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.1051,
+    "g": 0.2091,
+    "b": 0.0331,
+    "luma": 0.1743,
+    "luma_p90": 0.2238,
+    "luma_p10": 0.1289,
+    "blue_over_red": 0.315,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.1316,
+    "g": 0.2117,
+    "b": 0.021,
+    "luma": 0.1809,
+    "luma_p90": 0.193,
+    "luma_p10": 0.1695,
+    "blue_over_red": 0.16,
+    "cells": 11651
+   }
+  },
+  "day/rear/close": {
+   "skull": {
+    "r": 0.2012,
+    "g": 0.5452,
+    "b": 0.6313,
+    "luma": 0.4783,
+    "luma_p90": 0.4948,
+    "luma_p10": 0.4844,
+    "blue_over_red": 3.138,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2638,
+    "g": 0.5597,
+    "b": 0.6263,
+    "luma": 0.5016,
+    "luma_p90": 0.5263,
+    "luma_p10": 0.4869,
+    "blue_over_red": 2.374,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.193,
+    "g": 0.4586,
+    "b": 0.5234,
+    "luma": 0.4068,
+    "luma_p90": 0.4875,
+    "luma_p10": 0.1905,
+    "blue_over_red": 2.712,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.3319,
+    "g": 0.6149,
+    "b": 0.6821,
+    "luma": 0.5596,
+    "luma_p90": 0.7796,
+    "luma_p10": 0.4931,
+    "blue_over_red": 2.055,
+    "cells": 11651
+   }
+  },
+  "day/rear/gameplay": {
+   "skull": {
+    "r": 0.2656,
+    "g": 0.1972,
+    "b": 0.169,
+    "luma": 0.2097,
+    "luma_p90": 0.236,
+    "luma_p10": 0.1805,
+    "blue_over_red": 0.637,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2977,
+    "g": 0.2213,
+    "b": 0.1941,
+    "luma": 0.2356,
+    "luma_p90": 0.2631,
+    "luma_p10": 0.2097,
+    "blue_over_red": 0.652,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.3101,
+    "g": 0.2286,
+    "b": 0.1987,
+    "luma": 0.2438,
+    "luma_p90": 0.2609,
+    "luma_p10": 0.2281,
+    "blue_over_red": 0.641,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.2924,
+    "g": 0.2215,
+    "b": 0.1961,
+    "luma": 0.2347,
+    "luma_p90": 0.2634,
+    "luma_p10": 0.2087,
+    "blue_over_red": 0.671,
+    "cells": 11651
+   }
+  },
+  "dusk/front/close": {
+   "skull": {
+    "r": 0.5629,
+    "g": 0.8199,
+    "b": 0.8633,
+    "luma": 0.7684,
+    "luma_p90": 0.7795,
+    "luma_p10": 0.7719,
+    "blue_over_red": 1.534,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2782,
+    "g": 0.3525,
+    "b": 0.3846,
+    "luma": 0.339,
+    "luma_p90": 0.7898,
+    "luma_p10": 0.0039,
+    "blue_over_red": 1.383,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.1104,
+    "g": 0.0699,
+    "b": 0.0921,
+    "luma": 0.0801,
+    "luma_p90": 0.1142,
+    "luma_p10": 0.0011,
+    "blue_over_red": 0.835,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.6472,
+    "g": 0.8518,
+    "b": 0.8852,
+    "luma": 0.8107,
+    "luma_p90": 0.9252,
+    "luma_p10": 0.7792,
+    "blue_over_red": 1.368,
+    "cells": 11651
+   }
+  },
+  "dusk/front/gameplay": {
+   "skull": {
+    "r": 0.0491,
+    "g": 0.0582,
+    "b": 0.0358,
+    "luma": 0.0547,
+    "luma_p90": 0.118,
+    "luma_p10": 0.0073,
+    "blue_over_red": 0.728,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2515,
+    "g": 0.336,
+    "b": 0.35,
+    "luma": 0.3191,
+    "luma_p90": 0.752,
+    "luma_p10": 0.0386,
+    "blue_over_red": 1.392,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.1536,
+    "g": 0.1552,
+    "b": 0.1708,
+    "luma": 0.156,
+    "luma_p90": 0.394,
+    "luma_p10": 0.035,
+    "blue_over_red": 1.112,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.2558,
+    "g": 0.2958,
+    "b": 0.3216,
+    "luma": 0.2892,
+    "luma_p90": 0.7568,
+    "luma_p10": 0.04,
+    "blue_over_red": 1.257,
+    "cells": 11651
+   }
+  },
+  "dusk/side/close": {
+   "skull": {
+    "r": 0.531,
+    "g": 0.5988,
+    "b": 0.6808,
+    "luma": 0.5903,
+    "luma_p90": 0.7665,
+    "luma_p10": 0.0644,
+    "blue_over_red": 1.282,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2475,
+    "g": 0.3207,
+    "b": 0.3725,
+    "luma": 0.3088,
+    "luma_p90": 0.6863,
+    "luma_p10": 0.065,
+    "blue_over_red": 1.505,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.1997,
+    "g": 0.1828,
+    "b": 0.2729,
+    "luma": 0.1929,
+    "luma_p90": 0.3561,
+    "luma_p10": 0.0513,
+    "blue_over_red": 1.367,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.3926,
+    "g": 0.4617,
+    "b": 0.51,
+    "luma": 0.4505,
+    "luma_p90": 0.893,
+    "luma_p10": 0.0619,
+    "blue_over_red": 1.299,
+    "cells": 11651
+   }
+  },
+  "dusk/side/gameplay": {
+   "skull": {
+    "r": 0.0571,
+    "g": 0.1321,
+    "b": 0.0441,
+    "luma": 0.1098,
+    "luma_p90": 0.1197,
+    "luma_p10": 0.0989,
+    "blue_over_red": 0.772,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.0586,
+    "g": 0.138,
+    "b": 0.0442,
+    "luma": 0.1143,
+    "luma_p90": 0.1298,
+    "luma_p10": 0.1006,
+    "blue_over_red": 0.754,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.058,
+    "g": 0.1349,
+    "b": 0.0461,
+    "luma": 0.1122,
+    "luma_p90": 0.1272,
+    "luma_p10": 0.0905,
+    "blue_over_red": 0.794,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.0533,
+    "g": 0.1313,
+    "b": 0.045,
+    "luma": 0.1085,
+    "luma_p90": 0.1228,
+    "luma_p10": 0.0919,
+    "blue_over_red": 0.845,
+    "cells": 11651
+   }
+  },
+  "dusk/rear/close": {
+   "skull": {
+    "r": 0.4615,
+    "g": 0.7473,
+    "b": 0.8029,
+    "luma": 0.6906,
+    "luma_p90": 0.7286,
+    "luma_p10": 0.7092,
+    "blue_over_red": 1.74,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.4652,
+    "g": 0.7383,
+    "b": 0.7902,
+    "luma": 0.684,
+    "luma_p90": 0.7213,
+    "luma_p10": 0.4645,
+    "blue_over_red": 1.699,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.3991,
+    "g": 0.6611,
+    "b": 0.7185,
+    "luma": 0.6096,
+    "luma_p90": 0.7131,
+    "luma_p10": 0.2975,
+    "blue_over_red": 1.8,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.529,
+    "g": 0.7933,
+    "b": 0.8397,
+    "luma": 0.7405,
+    "luma_p90": 0.893,
+    "luma_p10": 0.7168,
+    "blue_over_red": 1.587,
+    "cells": 11651
+   }
+  },
+  "dusk/rear/gameplay": {
+   "skull": {
+    "r": 0.1817,
+    "g": 0.1532,
+    "b": 0.2242,
+    "luma": 0.1644,
+    "luma_p90": 0.184,
+    "luma_p10": 0.1392,
+    "blue_over_red": 1.234,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.1837,
+    "g": 0.1564,
+    "b": 0.231,
+    "luma": 0.1676,
+    "luma_p90": 0.1852,
+    "luma_p10": 0.1409,
+    "blue_over_red": 1.257,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.1838,
+    "g": 0.1575,
+    "b": 0.2326,
+    "luma": 0.1685,
+    "luma_p90": 0.1768,
+    "luma_p10": 0.1594,
+    "blue_over_red": 1.266,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.1895,
+    "g": 0.1612,
+    "b": 0.2368,
+    "luma": 0.1727,
+    "luma_p90": 0.1922,
+    "luma_p10": 0.1434,
+    "blue_over_red": 1.25,
+    "cells": 11651
+   }
+  },
+  "night/front/close": {
+   "skull": {
+    "r": 0.6003,
+    "g": 0.8084,
+    "b": 0.8442,
+    "luma": 0.7668,
+    "luma_p90": 0.9096,
+    "luma_p10": 0.7442,
+    "blue_over_red": 1.406,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.3459,
+    "g": 0.4124,
+    "b": 0.4639,
+    "luma": 0.402,
+    "luma_p90": 0.8013,
+    "luma_p10": 0.0093,
+    "blue_over_red": 1.341,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.1925,
+    "g": 0.1616,
+    "b": 0.2087,
+    "luma": 0.1716,
+    "luma_p90": 0.2552,
+    "luma_p10": 0.0093,
+    "blue_over_red": 1.084,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.6118,
+    "g": 0.8252,
+    "b": 0.86,
+    "luma": 0.7823,
+    "luma_p90": 0.9126,
+    "luma_p10": 0.7518,
+    "blue_over_red": 1.406,
+    "cells": 11651
+   }
+  },
+  "night/front/gameplay": {
+   "skull": {
+    "r": 0.0693,
+    "g": 0.1019,
+    "b": 0.0687,
+    "luma": 0.0926,
+    "luma_p90": 0.2169,
+    "luma_p10": 0.0185,
+    "blue_over_red": 0.991,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2638,
+    "g": 0.3368,
+    "b": 0.3525,
+    "luma": 0.3224,
+    "luma_p90": 0.8013,
+    "luma_p10": 0.0661,
+    "blue_over_red": 1.336,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.2129,
+    "g": 0.2172,
+    "b": 0.2524,
+    "luma": 0.2188,
+    "luma_p90": 0.4063,
+    "luma_p10": 0.0484,
+    "blue_over_red": 1.186,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.3046,
+    "g": 0.365,
+    "b": 0.3891,
+    "luma": 0.3539,
+    "luma_p90": 0.8153,
+    "luma_p10": 0.0445,
+    "blue_over_red": 1.277,
+    "cells": 11651
+   }
+  },
+  "night/side/close": {
+   "skull": {
+    "r": 0.4564,
+    "g": 0.5013,
+    "b": 0.5832,
+    "luma": 0.4977,
+    "luma_p90": 0.7992,
+    "luma_p10": 0.0728,
+    "blue_over_red": 1.278,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.2612,
+    "g": 0.3096,
+    "b": 0.3778,
+    "luma": 0.3042,
+    "luma_p90": 0.8153,
+    "luma_p10": 0.0521,
+    "blue_over_red": 1.447,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.1981,
+    "g": 0.1983,
+    "b": 0.3087,
+    "luma": 0.2062,
+    "luma_p90": 0.4281,
+    "luma_p10": 0.0544,
+    "blue_over_red": 1.558,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.3029,
+    "g": 0.3391,
+    "b": 0.375,
+    "luma": 0.334,
+    "luma_p90": 0.8364,
+    "luma_p10": 0.072,
+    "blue_over_red": 1.238,
+    "cells": 11651
+   }
+  },
+  "night/side/gameplay": {
+   "skull": {
+    "r": 0.0838,
+    "g": 0.2118,
+    "b": 0.0944,
+    "luma": 0.1761,
+    "luma_p90": 0.1937,
+    "luma_p10": 0.1581,
+    "blue_over_red": 1.127,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.067,
+    "g": 0.1894,
+    "b": 0.0725,
+    "luma": 0.155,
+    "luma_p90": 0.2088,
+    "luma_p10": 0.1076,
+    "blue_over_red": 1.083,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.067,
+    "g": 0.1966,
+    "b": 0.0733,
+    "luma": 0.1602,
+    "luma_p90": 0.192,
+    "luma_p10": 0.1287,
+    "blue_over_red": 1.093,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.0842,
+    "g": 0.2198,
+    "b": 0.0971,
+    "luma": 0.1821,
+    "luma_p90": 0.1979,
+    "luma_p10": 0.162,
+    "blue_over_red": 1.154,
+    "cells": 11651
+   }
+  },
+  "night/rear/close": {
+   "skull": {
+    "r": 0.4737,
+    "g": 0.7444,
+    "b": 0.7954,
+    "luma": 0.6905,
+    "luma_p90": 0.7616,
+    "luma_p10": 0.7117,
+    "blue_over_red": 1.679,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.4737,
+    "g": 0.7376,
+    "b": 0.7888,
+    "luma": 0.6852,
+    "luma_p90": 0.7465,
+    "luma_p10": 0.5132,
+    "blue_over_red": 1.665,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.3521,
+    "g": 0.6007,
+    "b": 0.6553,
+    "luma": 0.5518,
+    "luma_p90": 0.7397,
+    "luma_p10": 0.2482,
+    "blue_over_red": 1.861,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.5356,
+    "g": 0.7943,
+    "b": 0.8398,
+    "luma": 0.7426,
+    "luma_p90": 0.8874,
+    "luma_p10": 0.7056,
+    "blue_over_red": 1.568,
+    "cells": 11651
+   }
+  },
+  "night/rear/gameplay": {
+   "skull": {
+    "r": 0.163,
+    "g": 0.1507,
+    "b": 0.2132,
+    "luma": 0.1578,
+    "luma_p90": 0.2236,
+    "luma_p10": 0.1205,
+    "blue_over_red": 1.308,
+    "cells": 8977
+   },
+   "legs": {
+    "r": 0.1363,
+    "g": 0.1283,
+    "b": 0.185,
+    "luma": 0.1341,
+    "luma_p90": 0.1471,
+    "luma_p10": 0.1194,
+    "blue_over_red": 1.357,
+    "cells": 8977
+   },
+   "feet": {
+    "r": 0.1355,
+    "g": 0.1285,
+    "b": 0.1849,
+    "luma": 0.1341,
+    "luma_p90": 0.1437,
+    "luma_p10": 0.123,
+    "blue_over_red": 1.365,
+    "cells": 7067
+   },
+   "torso": {
+    "r": 0.1377,
+    "g": 0.1304,
+    "b": 0.1865,
+    "luma": 0.136,
+    "luma_p90": 0.1507,
+    "luma_p10": 0.1227,
+    "blue_over_red": 1.354,
+    "cells": 11651
+   }
+  }
+ },
+ "capture_hashes": {
+  "skel_day_front_close.png": "91c9780c71de1cacd01b86e4ec2cea9a",
+  "skel_day_front_gameplay.png": "5db1c0b8a17ba9e3594cbd77458f4223",
+  "skel_day_side_close.png": "3d24aec17ac0691b79a2c94815d51864",
+  "skel_day_side_gameplay.png": "4bf7ecc4ae28134b99cb1416371ac8fa",
+  "skel_day_rear_close.png": "b7bc8baec961236c598c151a12329def",
+  "skel_day_rear_gameplay.png": "d83e72248bf5aade81af811278081428",
+  "skel_dusk_front_close.png": "34fba72a6e6170f6641f57ed747baeaf",
+  "skel_dusk_front_gameplay.png": "44f0de29220f8186aa461fb2ef35079e",
+  "skel_dusk_side_close.png": "ecf2a228d0aa8456a485daccfe2f6058",
+  "skel_dusk_side_gameplay.png": "8904c1022677c7da47dd4d187868a065",
+  "skel_dusk_rear_close.png": "80dc0defbd77bd27f406a552cf934f69",
+  "skel_dusk_rear_gameplay.png": "28e3b6ed29b3cb86224532ccc1735d31",
+  "skel_night_front_close.png": "a05c8fa11e9da98393880d7bcc405a22",
+  "skel_night_front_gameplay.png": "9438de0d1349f5907662e5de5e9c00f5",
+  "skel_night_side_close.png": "a3b12e3c64075ea36420038aeb0b11c5",
+  "skel_night_side_gameplay.png": "37080bc59e7a3e81203860596a842789",
+  "skel_night_rear_close.png": "5a08252df03d656ab8a17ac2e2ebbdf8",
+  "skel_night_rear_gameplay.png": "668b235e23ba624e375f0211f25c7e48"
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\skeleton_parts",
+ "distinct_captures": {
+  "files": 18,
+  "distinct": 18
+ },
+ "feet_blue_over_red": {
+  "day/front/close": 0.622,
+  "day/front/gameplay": 0.757,
+  "day/side/close": 1.023,
+  "day/side/gameplay": 0.315,
+  "day/rear/close": 2.712,
+  "day/rear/gameplay": 0.641,
+  "dusk/front/close": 0.835,
+  "dusk/front/gameplay": 1.112,
+  "dusk/side/close": 1.367,
+  "dusk/side/gameplay": 0.794,
+  "dusk/rear/close": 1.8,
+  "dusk/rear/gameplay": 1.266,
+  "night/front/close": 1.084,
+  "night/front/gameplay": 1.186,
+  "night/side/close": 1.558,
+  "night/side/gameplay": 1.093,
+  "night/rear/close": 1.861,
+  "night/rear/gameplay": 1.365
+ },
+ "legs_glow": {
+  "front/close": {
+   "legs_night_over_day": 1.01,
+   "torso_night_over_day": 1.351,
+   "legs_hold_better_than_torso": 0.747
+  },
+  "front/gameplay": {
+   "legs_night_over_day": 1.435,
+   "torso_night_over_day": 1.628,
+   "legs_hold_better_than_torso": 0.882
+  },
+  "side/close": {
+   "legs_night_over_day": 1.112,
+   "torso_night_over_day": 1.147,
+   "legs_hold_better_than_torso": 0.969
+  },
+  "side/gameplay": {
+   "legs_night_over_day": 0.777,
+   "torso_night_over_day": 1.025,
+   "legs_hold_better_than_torso": 0.758
+  },
+  "rear/close": {
+   "legs_night_over_day": 1.418,
+   "torso_night_over_day": 1.138,
+   "legs_hold_better_than_torso": 1.246
+  },
+  "rear/gameplay": {
+   "legs_night_over_day": 0.559,
+   "torso_night_over_day": 0.572,
+   "legs_hold_better_than_torso": 0.977
+  }
+ },
+ "skull_black": {
+  "day/front/close": {
+   "skull_luma": 0.2227,
+   "torso_luma": 0.437,
+   "skull_over_torso": 0.51
+  },
+  "day/side/close": {
+   "skull_luma": 0.2409,
+   "torso_luma": 0.4062,
+   "skull_over_torso": 0.593
+  },
+  "day/rear/close": {
+   "skull_luma": 0.4844,
+   "torso_luma": 0.5596,
+   "skull_over_torso": 0.866
+  },
+  "dusk/front/close": {
+   "skull_luma": 0.7719,
+   "torso_luma": 0.8107,
+   "skull_over_torso": 0.952
+  },
+  "dusk/side/close": {
+   "skull_luma": 0.0644,
+   "torso_luma": 0.4505,
+   "skull_over_torso": 0.143
+  },
+  "dusk/rear/close": {
+   "skull_luma": 0.7092,
+   "torso_luma": 0.7405,
+   "skull_over_torso": 0.958
+  },
+  "night/front/close": {
+   "skull_luma": 0.7442,
+   "torso_luma": 0.7823,
+   "skull_over_torso": 0.951
+  },
+  "night/side/close": {
+   "skull_luma": 0.0728,
+   "torso_luma": 0.334,
+   "skull_over_torso": 0.218
+  },
+  "night/rear/close": {
+   "skull_luma": 0.7117,
+   "torso_luma": 0.7426,
+   "skull_over_torso": 0.958
+  }
+ },
+ "finished": "2026-09-27 18:26:59",
+ "seconds": 295.17,
+ "log": "S_day INFO skeleton flame at day {'day/front/close': {'skull': {'r': 0.1049, 'g': 0.3985, 'b': 0.4803, 'luma': 0.342, 'luma_p90': 0.3631, 'luma_p10': 0.2227, 'blue_over_red': 4.577, 'cells': 8977}, 'legs': {'r': 0.4837, 'g': 0.4888, 'b': 0.4414, 'luma': 0.4843, 'luma_p90': 0.7937, 'luma_p10': 0.1526, 'blue_over_red': 0.912, 'cells': 8977}, 'feet': {'r': 0.344, 'g': 0.2778, 'b': 0.214, 'luma': 0.2873, 'luma_p90': 0.4684, 'luma_p10': 0.0137, 'blue_over_red': 0.622, 'cells': 7067}, 'torso': {'r': 0.2199, 'g': 0.4893, 'b': 0.5581, 'luma': 0.437, 'luma_p90': 0.6754, 'luma_p10': 0.3634, 'blue_over_red': 2.538, 'cells': 11651}}, 'day/front/gameplay': {'skull': {'r': 0.1056, 'g': 0.1101, 'b': 0.0687, 'luma': 0.1062, 'luma_p90': 0.2075, 'luma_p10': 0.0185, 'blue_over_red': 0.651, 'cells': 8977}, 'legs': {'r': 0.3281, 'g': 0.3862, 'b': 0.3658, 'luma': 0.3724, 'luma_p90': 0.5584, 'luma_p10': 0.1519, 'blue_over_red': 1.115, 'cells': 8977}, 'feet': {'r': 0.3603, 'g': 0.3275, 'b': 0.2729, 'luma': 0.3305, 'luma_p90': 0.6028, 'luma_p10': 0.0774, 'blue_over_red': 0.757, 'cells': 7067}, 'torso': {'r': 0.3013, 'g': 0.3359, 'b': 0.3421, 'luma': 0.329, 'luma_p90': 0.5009, 'luma_p10': 0.1876, 'blue_over_red': 1.135, 'cells': 11651}}, 'day/side/close': {'skull': {'r': 0.3365, 'g': 0.468, 'b': 0.5945, 'luma': 0.4492, 'luma_p90': 0.5654, 'luma_p10': 0.2409, 'blue_over_red': 1.767, 'cells': 8977}, 'legs': {'r': 0.2883, 'g': 0.3561, 'b': 0.3651, 'luma': 0.3423, 'luma_p90': 0.7333, 'luma_p10': 0.1966, 'blue_over_red': 1.266, 'cells': 8977}, 'feet': {'r': 0.2519, 'g': 0.228, 'b': 0.2578, 'luma': 0.2353, 'luma_p90': 0.2831, 'luma_p10': 0.1714, 'blue_over_red': 1.023, 'cells': 7067}, 'torso': {'r': 0.3139, 'g': 0.4252, 'b': 0.4903, 'luma': 0.4062, 'luma_p90': 0.7292, 'luma_p10': 0.1826, 'blue_over_red': 1.562, 'cells': 11651}}, 'day/side/gameplay': {'skull': {'r': 0.1283, 'g': 0.2112, 'b': 0.0303, 'luma': 0.1805, 'luma_p90': 0.1958, 'luma_p10': 0.1639, 'blue_over_red': 0.237, 'cells': 8977}, 'legs': {'r': 0.111, 'g': 0.2018, 'b': 0.0346, 'luma': 0.1704, 'luma_p90': 0.2686, 'luma_p10': 0.1031, 'blue_over_red': 0.312, 'cells': 8977}, 'feet': {'r': 0.1051, 'g': 0.2091, 'b': 0.0331, 'luma': 0.1743, 'luma_p90': 0.2238, 'luma_p10': 0.1289, 'blue_over_red': 0.315, 'cells': 7067}, 'torso': {'r': 0.1316, 'g': 0.2117, 'b': 0.021, 'luma': 0.1809, 'luma_p90': 0.193, 'luma_p10': 0.1695, 'blue_over_red': 0.16, 'cells': 11651}}, 'day/rear/close': {'skull': {'r': 0.2012, 'g': 0.5452, 'b': 0.6313, 'luma': 0.4783, 'luma_p90': 0.4948, 'luma_p10': 0.4844, 'blue_over_red': 3.138, 'cells': 8977}, 'legs': {'r': 0.2638, 'g': 0.5597, 'b': 0.6263, 'luma': 0.5016, 'luma_p90': 0.5263, 'luma_p10': 0.4869, 'blue_over_red': 2.374, 'cells': 8977}, 'feet': {'r': 0.193, 'g': 0.4586, 'b': 0.5234, 'luma': 0.4068, 'luma_p90': 0.4875, 'luma_p10': 0.1905, 'blue_over_red': 2.712, 'cells': 7067}, 'torso': {'r': 0.3319, 'g': 0.6149, 'b': 0.6821, 'luma': 0.5596, 'luma_p90': 0.7796, 'luma_p10': 0.4931, 'blue_over_red': 2.055, 'cells': 11651}}, 'day/rear/gameplay': {'skull': {'r': 0.2656, 'g': 0.1972, 'b': 0.169, 'luma': 0.2097, 'luma_p90': 0.236, 'luma_p10': 0.1805, 'blue_over_red': 0.637, 'cells': 8977}, 'legs': {'r': 0.2977, 'g': 0.2213, 'b': 0.1941, 'luma': 0.2356, 'luma_p90': 0.2631, 'luma_p10': 0.2097, 'blue_over_red': 0.652, 'cells': 8977}, 'feet': {'r': 0.3101, 'g': 0.2286, 'b': 0.1987, 'luma': 0.2438, 'luma_p90': 0.2609, 'luma_p10': 0.2281, 'blue_over_red': 0.641, 'cells': 7067}, 'torso': {'r': 0.2924, 'g': 0.2215, 'b': 0.1961, 'luma': 0.2347, 'luma_p90': 0.2634, 'luma_p10': 0.2087, 'blue_over_red': 0.671, 'cells': 11651}}}\nS_dusk INFO skeleton flame at dusk {'dusk/front/close': {'skull': {'r': 0.5629, 'g': 0.8199, 'b': 0.8633, 'luma': 0.7684, 'luma_p90': 0.7795, 'luma_p10': 0.7719, 'blue_over_red': 1.534, 'cells': 8977}, 'legs': {'r': 0.2782, 'g': 0.3525, 'b': 0.3846, 'luma': 0.339, 'luma_p90': 0.7898, 'luma_p10': 0.0039, 'blue_over_red': 1.383, 'cells': 8977}, 'feet': {'r': 0.1104, 'g': 0.0699, 'b': 0.0921, 'luma': 0.0801, 'luma_p90': 0.1142, 'luma_p10': 0.0011, 'blue_over_red': 0.835, 'cells': 7067}, 'torso': {'r': 0.6472, 'g': 0.8518, 'b': 0.8852, 'luma': 0.8107, 'luma_p90': 0.9252, 'luma_p10': 0.7792, 'blue_over_red': 1.368, 'cells': 11651}}, 'dusk/front/gameplay': {'skull': {'r': 0.0491, 'g': 0.0582, 'b': 0.0358, 'luma': 0.0547, 'luma_p90': 0.118, 'luma_p10': 0.0073, 'blue_over_red': 0.728, 'cells': 8977}, 'legs': {'r': 0.2515, 'g': 0.336, 'b': 0.35, 'luma': 0.3191, 'luma_p90': 0.752, 'luma_p10': 0.0386, 'blue_over_red': 1.392, 'cells': 8977}, 'feet': {'r': 0.1536, 'g': 0.1552, 'b': 0.1708, 'luma': 0.156, 'luma_p90': 0.394, 'luma_p10': 0.035, 'blue_over_red': 1.112, 'cells': 7067}, 'torso': {'r': 0.2558, 'g': 0.2958, 'b': 0.3216, 'luma': 0.2892, 'luma_p90': 0.7568, 'luma_p10': 0.04, 'blue_over_red': 1.257, 'cells': 11651}}, 'dusk/side/close': {'skull': {'r': 0.531, 'g': 0.5988, 'b': 0.6808, 'luma': 0.5903, 'luma_p90': 0.7665, 'luma_p10': 0.0644, 'blue_over_red': 1.282, 'cells': 8977}, 'legs': {'r': 0.2475, 'g': 0.3207, 'b': 0.3725, 'luma': 0.3088, 'luma_p90': 0.6863, 'luma_p10': 0.065, 'blue_over_red': 1.505, 'cells': 8977}, 'feet': {'r': 0.1997, 'g': 0.1828, 'b': 0.2729, 'luma': 0.1929, 'luma_p90': 0.3561, 'luma_p10': 0.0513, 'blue_over_red': 1.367, 'cells': 7067}, 'torso': {'r': 0.3926, 'g': 0.4617, 'b': 0.51, 'luma': 0.4505, 'luma_p90': 0.893, 'luma_p10': 0.0619, 'blue_over_red': 1.299, 'cells': 11651}}, 'dusk/side/gameplay': {'skull': {'r': 0.0571, 'g': 0.1321, 'b': 0.0441, 'luma': 0.1098, 'luma_p90': 0.1197, 'luma_p10': 0.0989, 'blue_over_red': 0.772, 'cells': 8977}, 'legs': {'r': 0.0586, 'g': 0.138, 'b': 0.0442, 'luma': 0.1143, 'luma_p90': 0.1298, 'luma_p10': 0.1006, 'blue_over_red': 0.754, 'cells': 8977}, 'feet': {'r': 0.058, 'g': 0.1349, 'b': 0.0461, 'luma': 0.1122, 'luma_p90': 0.1272, 'luma_p10': 0.0905, 'blue_over_red': 0.794, 'cells': 7067}, 'torso': {'r': 0.0533, 'g': 0.1313, 'b': 0.045, 'luma': 0.1085, 'luma_p90': 0.1228, 'luma_p10': 0.0919, 'blue_over_red': 0.845, 'cells': 11651}}, 'dusk/rear/close': {'skull': {'r': 0.4615, 'g': 0.7473, 'b': 0.8029, 'luma': 0.6906, 'luma_p90': 0.7286, 'luma_p10': 0.7092, 'blue_over_red': 1.74, 'cells': 8977}, 'legs': {'r': 0.4652, 'g': 0.7383, 'b': 0.7902, 'luma': 0.684, 'luma_p90': 0.7213, 'luma_p10': 0.4645, 'blue_over_red': 1.699, 'cells': 8977}, 'feet': {'r': 0.3991, 'g': 0.6611, 'b': 0.7185, 'luma': 0.6096, 'luma_p90': 0.7131, 'luma_p10': 0.2975, 'blue_over_red': 1.8, 'cells': 7067}, 'torso': {'r': 0.529, 'g': 0.7933, 'b': 0.8397, 'luma': 0.7405, 'luma_p90': 0.893, 'luma_p10': 0.7168, 'blue_over_red': 1.587, 'cells': 11651}}, 'dusk/rear/gameplay': {'skull': {'r': 0.1817, 'g': 0.1532, 'b': 0.2242, 'luma': 0.1644, 'luma_p90': 0.184, 'luma_p10': 0.1392, 'blue_over_red': 1.234, 'cells': 8977}, 'legs': {'r': 0.1837, 'g': 0.1564, 'b': 0.231, 'luma': 0.1676, 'luma_p90': 0.1852, 'luma_p10': 0.1409, 'blue_over_red': 1.257, 'cells': 8977}, 'feet': {'r': 0.1838, 'g': 0.1575, 'b': 0.2326, 'luma': 0.1685, 'luma_p90': 0.1768, 'luma_p10': 0.1594, 'blue_over_red': 1.266, 'cells': 7067}, 'torso': {'r': 0.1895, 'g': 0.1612, 'b': 0.2368, 'luma': 0.1727, 'luma_p90': 0.1922, 'luma_p10': 0.1434, 'blue_over_red': 1.25, 'cells': 11651}}}\nS_night INFO skeleton flame at night {'night/front/close': {'skull': {'r': 0.6003, 'g': 0.8084, 'b': 0.8442, 'luma': 0.7668, 'luma_p90': 0.9096, 'luma_p10': 0.7442, 'blue_over_red': 1.406, 'cells': 8977}, 'legs': {'r': 0.3459, 'g': 0.4124, 'b': 0.4639, 'luma': 0.402, 'luma_p90': 0.8013, 'luma_p10': 0.0093, 'blue_over_red': 1.341, 'cells': 8977}, 'feet': {'r': 0.1925, 'g': 0.1616, 'b': 0.2087, 'luma': 0.1716, 'luma_p90': 0.2552, 'luma_p10': 0.0093, 'blue_over_red': 1.084, 'cells': 7067}, 'torso': {'r': 0.6118, 'g': 0.8252, 'b': 0.86, 'luma': 0.7823, 'luma_p90': 0.9126, 'luma_p10': 0.7518, 'blue_over_red': 1.406, 'cells': 11651}}, 'night/front/gameplay': {'skull': {'r': 0.0693, 'g': 0.1019, 'b': 0.0687, 'luma': 0.0926, 'luma_p90': 0.2169, 'luma_p10': 0.0185, 'blue_over_red': 0.991, 'cells': 8977}, 'legs': {'r': 0.2638, 'g': 0.3368, 'b': 0.3525, 'luma': 0.3224, 'luma_p90': 0.8013, 'luma_p10': 0.0661, 'blue_over_red': 1.336, 'cells': 8977}, 'feet': {'r': 0.2129, 'g': 0.2172, 'b': 0.2524, 'luma': 0.2188, 'luma_p90': 0.4063, 'luma_p10': 0.0484, 'blue_over_red': 1.186, 'cells': 7067}, 'torso': {'r': 0.3046, 'g': 0.365, 'b': 0.3891, 'luma': 0.3539, 'luma_p90': 0.8153, 'luma_p10': 0.0445, 'blue_over_red': 1.277, 'cells': 11651}}, 'night/side/close': {'skull': {'r': 0.4564, 'g': 0.5013, 'b': 0.5832, 'luma': 0.4977, 'luma_p90': 0.7992, 'luma_p10': 0.0728, 'blue_over_red': 1.278, 'cells': 8977}, 'legs': {'r': 0.2612, 'g': 0.3096, 'b': 0.3778, 'luma': 0.3042, 'luma_p90': 0.8153, 'luma_p10': 0.0521, 'blue_over_red': 1.447, 'cells': 8977}, 'feet': {'r': 0.1981, 'g': 0.1983, 'b': 0.3087, 'luma': 0.2062, 'luma_p90': 0.4281, 'luma_p10': 0.0544, 'blue_over_red': 1.558, 'cells': 7067}, 'torso': {'r': 0.3029, 'g': 0.3391, 'b': 0.375, 'luma': 0.334, 'luma_p90': 0.8364, 'luma_p10': 0.072, 'blue_over_red': 1.238, 'cells': 11651}}, 'night/side/gameplay': {'skull': {'r': 0.0838, 'g': 0.2118, 'b': 0.0944, 'luma': 0.1761, 'luma_p90': 0.1937, 'luma_p10': 0.1581, 'blue_over_red': 1.127, 'cells': 8977}, 'legs': {'r': 0.067, 'g': 0.1894, 'b': 0.0725, 'luma': 0.155, 'luma_p90': 0.2088, 'luma_p10': 0.1076, 'blue_over_red': 1.083, 'cells': 8977}, 'feet': {'r': 0.067, 'g': 0.1966, 'b': 0.0733, 'luma': 0.1602, 'luma_p90': 0.192, 'luma_p10': 0.1287, 'blue_over_red': 1.093, 'cells': 7067}, 'torso': {'r': 0.0842, 'g': 0.2198, 'b': 0.0971, 'luma': 0.1821, 'luma_p90': 0.1979, 'luma_p10': 0.162, 'blue_over_red': 1.154, 'cells': 11651}}, 'night/rear/close': {'skull': {'r': 0.4737, 'g': 0.7444, 'b': 0.7954, 'luma': 0.6905, 'luma_p90': 0.7616, 'luma_p10': 0.7117, 'blue_over_red': 1.679, 'cells': 8977}, 'legs': {'r': 0.4737, 'g': 0.7376, 'b': 0.7888, 'luma': 0.6852, 'luma_p90': 0.7465, 'luma_p10': 0.5132, 'blue_over_red': 1.665, 'cells': 8977}, 'feet': {'r': 0.3521, 'g': 0.6007, 'b': 0.6553, 'luma': 0.5518, 'luma_p90': 0.7397, 'luma_p10': 0.2482, 'blue_over_red': 1.861, 'cells': 7067}, 'torso': {'r': 0.5356, 'g': 0.7943, 'b': 0.8398, 'luma': 0.7426, 'luma_p90': 0.8874, 'luma_p10': 0.7056, 'blue_over_red': 1.568, 'cells': 11651}}, 'night/rear/gameplay': {'skull': {'r': 0.163, 'g': 0.1507, 'b': 0.2132, 'luma': 0.1578, 'luma_p90': 0.2236, 'luma_p10': 0.1205, 'blue_over_red': 1.308, 'cells': 8977}, 'legs': {'r': 0.1363, 'g': 0.1283, 'b': 0.185, 'luma': 0.1341, 'luma_p90': 0.1471, 'luma_p10': 0.1194, 'blue_over_red': 1.357, 'cells': 8977}, 'feet': {'r': 0.1355, 'g': 0.1285, 'b': 0.1849, 'luma': 0.1341, 'luma_p90': 0.1437, 'luma_p10': 0.123, 'blue_over_red': 1.365, 'cells': 7067}, 'torso': {'r': 0.1377, 'g': 0.1304, 'b': 0.1865, 'luma': 0.136, 'luma_p90': 0.1507, 'luma_p10': 0.1227, 'blue_over_red': 1.354, 'cells': 11651}}}\nS_DISTINCT PASS each capture is a different picture {'files': 18, 'distinct': 18, 'note': 'thirty byte-identical PNGs passed a clause that counted files. In simulate mode there is no player camera, so the skins, the hour and the camera all changed and the photograph did not. A run whose pictures are all the same photographed the editor, not the game.'}\nS00 PASS the mascot was photographed from every side at every hour {'taken': 18, 'wanted': 18, 'where': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\skeleton_parts'}\nS01 PASS the feet are not blue {'blue_over_red_front': {'day/front/close': 0.622, 'day/front/gameplay': 0.757, 'dusk/front/close': 0.835, 'dusk/front/gameplay': 1.112, 'night/front/close': 1.084, 'night/front/gameplay': 1.186}, 'all_angles': {'day/front/close': 0.622, 'day/front/gameplay': 0.757, 'day/side/close': 1.023, 'day/side/gameplay': 0.315, 'day/rear/close': 2.712, 'day/rear/gameplay': 0.641, 'dusk/front/close': 0.835, 'dusk/front/gameplay': 1.112, 'dusk/side/close': 1.367, 'dusk/side/gameplay': 0.794, 'dusk/rear/close': 1.8, 'dusk/rear/gameplay': 1.266, 'night/front/close': 1.084, 'night/front/gameplay': 1.186, 'night/side/close': 1.558, 'night/side/gameplay': 1.093, 'night/rear/close': 1.861, 'night/rear/gameplay': 1.365}, 'worst_front': 1.186, 'ceiling': 1.25, 'rear_and_side_contaminated_by_the_tail': True, 'note': \"blue over red in the foot band. The two spectral materials the feet were made of lead red by 4.5x and 1.4x; ash and void lead by about 1.0. Measured as a RATIO because the exposure moves every absolute value across the day and 'blue' is a relationship between channels.\"}\nS02 FAIL the black leg parts hold their light at night better than the lit body does {'legs_glow': {'front/close': {'legs_night_over_day': 1.01, 'torso_night_over_day': 1.351, 'legs_hold_better_than_torso': 0.747}, 'front/gameplay': {'legs_night_over_day': 1.435, 'torso_night_over_day': 1.628, 'legs_hold_better_than_torso': 0.882}, 'side/close': {'legs_night_over_day': 1.112, 'torso_night_over_day': 1.147, 'legs_hold_better_than_torso': 0.969}, 'side/gameplay': {'legs_night_over_day': 0.777, 'torso_night_over_day': 1.025, 'legs_hold_better_than_torso': 0.758}, 'rear/close': {'legs_night_over_day': 1.418, 'torso_night_over_day': 1.138, 'legs_hold_better_than_torso': 1.246}, 'rear/gameplay': {'legs_night_over_day': 0.559, 'torso_night_over_day': 0.572, 'legs_hold_better_than_torso': 0.977}}, 'floor': 1.1, 'note': \"the leg band's night-over-day, divided by the torso's. Above 1.0 means the legs lose less of their daylight brightness than the lit surfaces beside them, which is what an emissive black does and a LIT black cannot. The seam was `void`, lit, and fell with the sun.\"}\nS03 FAIL the skull area is still clearly darker than the body around it {'skull_black': {'day/front/close': {'skull_luma': 0.2227, 'torso_luma': 0.437, 'skull_over_torso': 0.51}, 'day/side/close': {'skull_luma': 0.2409, 'torso_luma': 0.4062, 'skull_over_torso': 0.593}, 'day/rear/close': {'skull_luma': 0.4844, 'torso_luma': 0.5596, 'skull_over_torso': 0.866}, 'dusk/front/close': {'skull_luma': 0.7719, 'torso_luma': 0.8107, 'skull_over_torso': 0.952}, 'dusk/side/close': {'skull_luma': 0.0644, 'torso_luma': 0.4505, 'skull_over_torso': 0.143}, 'dusk/rear/close': {'skull_luma': 0.7092, 'torso_luma': 0.7405, 'skull_over_torso': 0.958}, 'night/front/close': {'skull_luma': 0.7442, 'torso_luma': 0.7823, 'skull_over_torso': 0.951}, 'night/side/close': {'skull_luma': 0.0728, 'torso_luma': 0.334, 'skull_over_torso': 0.218}, 'night/rear/close': {'skull_luma': 0.7117, 'torso_luma': 0.7426, 'skull_over_torso': 0.958}}, 'ceiling': 0.75, 'note': \"asked against the figure's own torso rather than against a fixed level, so a brighter night cannot fail it and a recolour toward the body cannot pass it. The founder's instruction is that this area stays black while other black areas start to glow.\"}\n"
+}

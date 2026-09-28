@@ -1,0 +1,16 @@
+{
+ "name": "zzC10_cp01",
+ "started": "2026-09-27 06:32:45",
+ "status": "done",
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "CP01",
+ "actors": 0,
+ "batches": 8,
+ "instances": 23,
+ "hovers": 0,
+ "saved": true,
+ "finished": "2026-09-27 06:32:47",
+ "seconds": 2.27,
+ "log": "applied CP01 0 actors 8 batches 23 instances\n"
+}

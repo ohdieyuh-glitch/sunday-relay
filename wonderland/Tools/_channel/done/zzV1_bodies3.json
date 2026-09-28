@@ -1,0 +1,590 @@
+{
+ "name": "zzV1_bodies3",
+ "started": "2026-09-27 16:27:44",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "B00",
+   "name": "every skin was photographed at deepest night and at noon",
+   "pass": true,
+   "detail": {
+    "taken": 18,
+    "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\night_bodies"
+   }
+  },
+  {
+   "id": "B01",
+   "name": "at night the BODY is not mostly crushed to black",
+   "pass": true,
+   "detail": {
+    "body_dark_fraction": {
+     "relay_og": 0.0603,
+     "celestial_light": 0.0788,
+     "apollo": 0.2834,
+     "arden_infernal": 0.107,
+     "skeleton_flame": 0.4085
+    },
+    "floor": 0.14,
+    "ceiling": 0.6,
+    "note": "the body is every cell of the figure that is not one of its own lights. This is the reading the founder's 'illuminated subject, not a glowing object in blackness' actually asks for, and raising eye glow cannot move it."
+   }
+  },
+  {
+   "id": "B02",
+   "name": "and it carries enough light to read a surface",
+   "pass": true,
+   "detail": {
+    "body_mean": {
+     "relay_og": 0.2286,
+     "celestial_light": 0.4042,
+     "apollo": 0.1969,
+     "arden_infernal": 0.5097,
+     "skeleton_flame": 0.1961
+    },
+    "floor": 0.1
+   }
+  },
+  {
+   "id": "B03",
+   "name": "the figure is not merely a pair of lights in a void",
+   "pass": false,
+   "detail": {
+    "light_fraction": {
+     "relay_og": 0.0249,
+     "celestial_light": 0.0168,
+     "apollo": 0.2279,
+     "arden_infernal": 0.2538,
+     "skeleton_flame": 0.3151
+    },
+    "ceiling": 0.18,
+    "note": "high here with B01 also failing is exactly the failure the founder named: eyes blazing, body gone. It is reported whether or not it passes, so the two can never be traded."
+   }
+  },
+  {
+   "id": "B04",
+   "name": "the ground beside the character is readable too",
+   "pass": true,
+   "detail": {
+    "world_beside_dark_fraction": 0.309,
+    "ceiling": 0.65,
+    "per_skin_beside_for_comparison": {
+     "relay_og": 0.2355,
+     "celestial_light": 0.0313,
+     "apollo": 0.4427,
+     "arden_infernal": 0.4688,
+     "skeleton_flame": 0.4709
+    },
+    "under_feet_for_comparison": {
+     "relay_og": 0.3402,
+     "celestial_light": 0.2224,
+     "apollo": 0.3339,
+     "arden_infernal": 0.3376,
+     "skeleton_flame": 0.139
+    },
+    "mascot_spill_on_ground": {
+     "relay_og": -0.0035,
+     "celestial_light": 0.0538,
+     "apollo": 0.0089,
+     "arden_infernal": 0.0062,
+     "skeleton_flame": -0.0266
+    },
+    "note": "measured on the CONTROL frame, with the figure hidden, because the same band beside a figure reads 0.032 for one costume and 0.680 for another at one place and hour. The per-skin bands and the spill are reported beside it rather than gating: a mascot that lights the ground it stands on is not a mascot floating in blackness, whatever its own body reads."
+   }
+  },
+  {
+   "id": "B06",
+   "name": "the mascot's own shadow is deep but not a hole",
+   "pass": false,
+   "detail": {
+    "shadow_depth": {
+     "relay_og": 0.3896,
+     "celestial_light": 0.1062,
+     "apollo": 0.3963,
+     "arden_infernal": -0.0683,
+     "skeleton_flame": -0.4939
+    },
+    "floor": 0.15,
+    "ceiling": 0.85,
+    "note": "the fraction of the beside-ground's light that the figure's shadow removes. Under 0.15 is a mascot that does not appear to be standing on anything; over 0.85 is a black hole where its feet should be. Both are failures and one number cannot be raised to fix the other."
+   }
+  },
+  {
+   "id": "B07",
+   "name": "every figure still has a shape at night, bright or dark",
+   "pass": true,
+   "detail": {
+    "figure_form": {
+     "relay_og": 0.1333,
+     "celestial_light": 0.2269,
+     "apollo": 0.2702,
+     "arden_infernal": 0.236,
+     "skeleton_flame": 0.3147
+    },
+    "form_floor": 0.06,
+    "blown_fraction": {
+     "relay_og": 0.0,
+     "celestial_light": 0.0,
+     "apollo": 0.0,
+     "arden_infernal": 0.0,
+     "skeleton_flame": 0.0
+    },
+    "blown_ceiling": 0.12,
+    "note": "form is the standard deviation across the whole figure: surfaces differing from one another is what makes a figure read as one. This is the clause a luminous skin must pass; whether it should be luminous at all is the founder's call, not this job's."
+   }
+  },
+  {
+   "id": "B05",
+   "name": "night still looks like night: the body is clearly darker than it is at noon",
+   "pass": true,
+   "detail": {
+    "night_over_noon": {
+     "relay_og": 0.719,
+     "celestial_light": 1.094,
+     "apollo": 0.6,
+     "arden_infernal": 1.328,
+     "skeleton_flame": 0.598
+    },
+    "ceiling": 0.75,
+    "night_is_too_bright": null,
+    "self_illuminating_founder_call": {
+     "celestial_light": 1.094,
+     "arden_infernal": 1.328
+    },
+    "glow_share_of_geometry": {
+     "skeleton_flame": 0.83,
+     "celestial_light": 0.72,
+     "arden_infernal": 0.45,
+     "apollo": 0.22,
+     "relay_og": 0.0
+    },
+    "canonical_row": {
+     "relay_og": 0.719
+    },
+    "note": "the guard against fixing this by turning night into day. Above 1.0 the figure is its own light source, which world lighting cannot cause and which is a founder question about the skin; between the ceiling and 1.0 the night is genuinely too bright. Only the second fails."
+   }
+  },
+  {
+   "id": "B08",
+   "name": "no figure is more of a light source at night than it is in daylight",
+   "pass": false,
+   "detail": {
+    "eye_over_world": {
+     "relay_og": {
+      "night": 2.93,
+      "noon": 2.36,
+      "night_over_noon": 1.24
+     },
+     "celestial_light": {
+      "night": 2.34,
+      "noon": 2.34,
+      "night_over_noon": 1.0
+     },
+     "apollo": {
+      "night": 2.47,
+      "noon": 2.07,
+      "night_over_noon": 1.19
+     },
+     "arden_infernal": {
+      "night": 2.42,
+      "noon": 2.27,
+      "night_over_noon": 1.07
+     },
+     "skeleton_flame": {
+      "night": 2.89,
+      "noon": 2.25,
+      "night_over_noon": 1.28
+     }
+    },
+    "judged_on": "relay_og",
+    "canonical_ratio": 1.24,
+    "ceiling": 1.0,
+    "glow_share_of_geometry": {
+     "skeleton_flame": 0.83,
+     "celestial_light": 0.72,
+     "arden_infernal": 0.45,
+     "apollo": 0.22,
+     "relay_og": 0.0
+    },
+    "derivation": "eye glow dims 24 to 8 across the day-night crossover, a factor of three, while the world at the arrival dims about 1.36. So this ratio should fall by roughly two at night. A value above 1.0 means it rose instead, and the bound is the crossover's own arithmetic rather than a threshold chosen here."
+   }
+  }
+ ],
+ "exposure": [
+  {
+   "volume": "V2_PostProcess",
+   "min_ev100": 14.199999809265137,
+   "max_ev100": 14.199999809265137,
+   "bias": -0.8999998569488525
+  }
+ ],
+ "stood_at": {
+  "x": -327.3,
+  "y": -650.0,
+  "z": 109.1,
+  "practicals": {
+   "lights_in_manifest": 1464,
+   "nearest_uu": 1307.0,
+   "nearest_m": 13.1
+  },
+  "note": "the reading below describes THIS place. A body that reads well within a lamp's radius has not shown that the world lights bodies."
+ },
+ "framing": {
+  "distance_uu": 520.0,
+  "fov": 45.0,
+  "figure_box_fraction": [
+   0.4,
+   0.22,
+   0.6,
+   0.82
+  ],
+  "note": "body cells are everything in the box under the light threshold; the ground band is the strip immediately below it"
+ },
+ "readings": {
+  "relay_og/night": {
+   "body_mean": 0.2286,
+   "body_dark_fraction": 0.0603,
+   "blown_fraction": 0.0,
+   "figure_form": 0.1333,
+   "light_mean": 0.9109,
+   "eye_over_world": 2.93,
+   "light_fraction": 0.0249,
+   "ground_mean": 0.1897,
+   "ground_dark_fraction": 0.3402,
+   "beside_mean": 0.3108,
+   "beside_dark_fraction": 0.2355,
+   "shadow_depth": 0.3896,
+   "cells": 52630
+  },
+  "relay_og/dusk": {
+   "body_mean": 0.1288,
+   "body_dark_fraction": 0.7738,
+   "blown_fraction": 0.0001,
+   "figure_form": 0.1346,
+   "light_mean": 0.9121,
+   "eye_over_world": 3.33,
+   "light_fraction": 0.0247,
+   "ground_mean": 0.1152,
+   "ground_dark_fraction": 0.8059,
+   "beside_mean": 0.2735,
+   "beside_dark_fraction": 0.734,
+   "shadow_depth": 0.5788,
+   "cells": 52630
+  },
+  "relay_og/noon": {
+   "body_mean": 0.3178,
+   "body_dark_fraction": 0.051,
+   "blown_fraction": 0.0,
+   "figure_form": 0.173,
+   "light_mean": 0.808,
+   "eye_over_world": 2.36,
+   "light_fraction": 0.033,
+   "ground_mean": 0.2961,
+   "ground_dark_fraction": 0.2507,
+   "beside_mean": 0.3417,
+   "beside_dark_fraction": 0.1406,
+   "shadow_depth": 0.1335,
+   "cells": 52630
+  },
+  "celestial_light/night": {
+   "body_mean": 0.4042,
+   "body_dark_fraction": 0.0788,
+   "blown_fraction": 0.0,
+   "figure_form": 0.2269,
+   "light_mean": 0.8605,
+   "eye_over_world": 2.34,
+   "light_fraction": 0.0168,
+   "ground_mean": 0.329,
+   "ground_dark_fraction": 0.2224,
+   "beside_mean": 0.3681,
+   "beside_dark_fraction": 0.0313,
+   "shadow_depth": 0.1062,
+   "cells": 52630
+  },
+  "celestial_light/dusk": {
+   "body_mean": 0.2319,
+   "body_dark_fraction": 0.4416,
+   "blown_fraction": 0.0,
+   "figure_form": 0.288,
+   "light_mean": 0.7445,
+   "eye_over_world": 2.39,
+   "light_fraction": 0.336,
+   "ground_mean": 0.3101,
+   "ground_dark_fraction": 0.3872,
+   "beside_mean": 0.3117,
+   "beside_dark_fraction": 0.384,
+   "shadow_depth": 0.0051,
+   "cells": 52630
+  },
+  "celestial_light/noon": {
+   "body_mean": 0.3694,
+   "body_dark_fraction": 0.0362,
+   "blown_fraction": 0.0,
+   "figure_form": 0.159,
+   "light_mean": 0.8187,
+   "eye_over_world": 2.34,
+   "light_fraction": 0.0134,
+   "ground_mean": 0.33,
+   "ground_dark_fraction": 0.2443,
+   "beside_mean": 0.3497,
+   "beside_dark_fraction": 0.1273,
+   "shadow_depth": 0.0563,
+   "cells": 52630
+  },
+  "apollo/night": {
+   "body_mean": 0.1969,
+   "body_dark_fraction": 0.2834,
+   "blown_fraction": 0.0,
+   "figure_form": 0.2702,
+   "light_mean": 0.7998,
+   "eye_over_world": 2.47,
+   "light_fraction": 0.2279,
+   "ground_mean": 0.1951,
+   "ground_dark_fraction": 0.3339,
+   "beside_mean": 0.3232,
+   "beside_dark_fraction": 0.4427,
+   "shadow_depth": 0.3963,
+   "cells": 52630
+  },
+  "apollo/dusk": {
+   "body_mean": 0.1985,
+   "body_dark_fraction": 0.7287,
+   "blown_fraction": 0.0,
+   "figure_form": 0.2666,
+   "light_mean": 0.7951,
+   "eye_over_world": 2.98,
+   "light_fraction": 0.0829,
+   "ground_mean": 0.1442,
+   "ground_dark_fraction": 0.6746,
+   "beside_mean": 0.2667,
+   "beside_dark_fraction": 0.7388,
+   "shadow_depth": 0.4593,
+   "cells": 52630
+  },
+  "apollo/noon": {
+   "body_mean": 0.3282,
+   "body_dark_fraction": 0.0352,
+   "blown_fraction": 0.0,
+   "figure_form": 0.1632,
+   "light_mean": 0.7613,
+   "eye_over_world": 2.07,
+   "light_fraction": 0.0553,
+   "ground_mean": 0.2796,
+   "ground_dark_fraction": 0.1154,
+   "beside_mean": 0.3686,
+   "beside_dark_fraction": 0.0908,
+   "shadow_depth": 0.2415,
+   "cells": 52630
+  },
+  "arden_infernal/night": {
+   "body_mean": 0.5097,
+   "body_dark_fraction": 0.107,
+   "blown_fraction": 0.0,
+   "figure_form": 0.236,
+   "light_mean": 0.7742,
+   "eye_over_world": 2.42,
+   "light_fraction": 0.2538,
+   "ground_mean": 0.3424,
+   "ground_dark_fraction": 0.3376,
+   "beside_mean": 0.3205,
+   "beside_dark_fraction": 0.4688,
+   "shadow_depth": -0.0683,
+   "cells": 52630
+  },
+  "arden_infernal/dusk": {
+   "body_mean": 0.5299,
+   "body_dark_fraction": 0.0913,
+   "blown_fraction": 0.0,
+   "figure_form": 0.2282,
+   "light_mean": 0.8772,
+   "eye_over_world": 3.48,
+   "light_fraction": 0.0618,
+   "ground_mean": 0.3069,
+   "ground_dark_fraction": 0.447,
+   "beside_mean": 0.2522,
+   "beside_dark_fraction": 0.7553,
+   "shadow_depth": -0.2169,
+   "cells": 52630
+  },
+  "arden_infernal/noon": {
+   "body_mean": 0.3838,
+   "body_dark_fraction": 0.0577,
+   "blown_fraction": 0.0,
+   "figure_form": 0.1434,
+   "light_mean": 0.8122,
+   "eye_over_world": 2.27,
+   "light_fraction": 0.0083,
+   "ground_mean": 0.2428,
+   "ground_dark_fraction": 0.2507,
+   "beside_mean": 0.3581,
+   "beside_dark_fraction": 0.1036,
+   "shadow_depth": 0.322,
+   "cells": 52630
+  },
+  "skeleton_flame/night": {
+   "body_mean": 0.1961,
+   "body_dark_fraction": 0.4085,
+   "blown_fraction": 0.0,
+   "figure_form": 0.3147,
+   "light_mean": 0.8325,
+   "eye_over_world": 2.89,
+   "light_fraction": 0.3151,
+   "ground_mean": 0.4298,
+   "ground_dark_fraction": 0.139,
+   "beside_mean": 0.2877,
+   "beside_dark_fraction": 0.4709,
+   "shadow_depth": -0.4939,
+   "cells": 52630
+  },
+  "skeleton_flame/dusk": {
+   "body_mean": 0.2301,
+   "body_dark_fraction": 0.6426,
+   "blown_fraction": 0.0,
+   "figure_form": 0.2842,
+   "light_mean": 0.7723,
+   "eye_over_world": 2.85,
+   "light_fraction": 0.1052,
+   "ground_mean": 0.3082,
+   "ground_dark_fraction": 0.3862,
+   "beside_mean": 0.271,
+   "beside_dark_fraction": 0.7341,
+   "shadow_depth": -0.1373,
+   "cells": 52630
+  },
+  "skeleton_flame/noon": {
+   "body_mean": 0.3282,
+   "body_dark_fraction": 0.0551,
+   "blown_fraction": 0.0,
+   "figure_form": 0.1833,
+   "light_mean": 0.7868,
+   "eye_over_world": 2.25,
+   "light_fraction": 0.0691,
+   "ground_mean": 0.396,
+   "ground_dark_fraction": 0.0701,
+   "beside_mean": 0.3498,
+   "beside_dark_fraction": 0.1159,
+   "shadow_depth": -0.1321,
+   "cells": 52630
+  }
+ },
+ "world_control": {
+  "night": {
+   "body_mean": 0.221,
+   "body_dark_fraction": 0.1193,
+   "blown_fraction": 0.0,
+   "figure_form": 0.0965,
+   "light_mean": 0.769,
+   "eye_over_world": 2.45,
+   "light_fraction": 0.0003,
+   "ground_mean": 0.1835,
+   "ground_dark_fraction": 0.4623,
+   "beside_mean": 0.3143,
+   "beside_dark_fraction": 0.309,
+   "shadow_depth": 0.4162,
+   "cells": 52630
+  },
+  "dusk": {
+   "body_mean": 0.129,
+   "body_dark_fraction": 0.6953,
+   "blown_fraction": 0.0,
+   "figure_form": 0.0524,
+   "light_mean": 0.8019,
+   "eye_over_world": 3.45,
+   "light_fraction": 0.0002,
+   "ground_mean": 0.1057,
+   "ground_dark_fraction": 0.6957,
+   "beside_mean": 0.2324,
+   "beside_dark_fraction": 0.7891,
+   "shadow_depth": 0.5452,
+   "cells": 52630
+  },
+  "noon": {
+   "body_mean": 0.282,
+   "body_dark_fraction": 0.0391,
+   "blown_fraction": 0.0,
+   "figure_form": 0.1384,
+   "light_mean": 0.7677,
+   "eye_over_world": 2.05,
+   "light_fraction": 0.0259,
+   "ground_mean": 0.2444,
+   "ground_dark_fraction": 0.4105,
+   "beside_mean": 0.3749,
+   "beside_dark_fraction": 0.0672,
+   "shadow_depth": 0.3481,
+   "cells": 52630
+  }
+ },
+ "mascot_spill_on_ground": {
+  "relay_og": -0.0035,
+  "celestial_light": 0.0538,
+  "apollo": 0.0089,
+  "arden_infernal": 0.0062,
+  "skeleton_flame": -0.0266
+ },
+ "shadow_depth": {
+  "relay_og": 0.3896,
+  "celestial_light": 0.1062,
+  "apollo": 0.3963,
+  "arden_infernal": -0.0683,
+  "skeleton_flame": -0.4939
+ },
+ "figure_form": {
+  "relay_og": 0.1333,
+  "celestial_light": 0.2269,
+  "apollo": 0.2702,
+  "arden_infernal": 0.236,
+  "skeleton_flame": 0.3147
+ },
+ "blown_fraction": {
+  "relay_og": 0.0,
+  "celestial_light": 0.0,
+  "apollo": 0.0,
+  "arden_infernal": 0.0,
+  "skeleton_flame": 0.0
+ },
+ "glow_share_of_geometry": {
+  "skeleton_flame": 0.83,
+  "celestial_light": 0.72,
+  "arden_infernal": 0.45,
+  "apollo": 0.22,
+  "relay_og": 0.0
+ },
+ "clean_instrument": {
+  "skin": "relay_og",
+  "why": "zero glow geometry, so its body is lit entirely by the world, and it is the canonical mascot."
+ },
+ "self_illuminating_at_night": {
+  "celestial_light": 1.094,
+  "arden_infernal": 1.328
+ },
+ "eye_over_world": {
+  "relay_og": {
+   "night": 2.93,
+   "noon": 2.36,
+   "night_over_noon": 1.24
+  },
+  "celestial_light": {
+   "night": 2.34,
+   "noon": 2.34,
+   "night_over_noon": 1.0
+  },
+  "apollo": {
+   "night": 2.47,
+   "noon": 2.07,
+   "night_over_noon": 1.19
+  },
+  "arden_infernal": {
+   "night": 2.42,
+   "noon": 2.27,
+   "night_over_noon": 1.07
+  },
+  "skeleton_flame": {
+   "night": 2.89,
+   "noon": 2.25,
+   "night_over_noon": 1.28
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\night_bodies",
+ "finished": "2026-09-27 16:31:06",
+ "seconds": 201.92,
+ "log": "B_relay_og INFO relay_og body at night and noon {'relay_og/night': {'body_mean': 0.2286, 'body_dark_fraction': 0.0603, 'blown_fraction': 0.0, 'figure_form': 0.1333, 'light_mean': 0.9109, 'eye_over_world': 2.93, 'light_fraction': 0.0249, 'ground_mean': 0.1897, 'ground_dark_fraction': 0.3402, 'beside_mean': 0.3108, 'beside_dark_fraction': 0.2355, 'shadow_depth': 0.3896, 'cells': 52630}, 'relay_og/dusk': {'body_mean': 0.1288, 'body_dark_fraction': 0.7738, 'blown_fraction': 0.0001, 'figure_form': 0.1346, 'light_mean': 0.9121, 'eye_over_world': 3.33, 'light_fraction': 0.0247, 'ground_mean': 0.1152, 'ground_dark_fraction': 0.8059, 'beside_mean': 0.2735, 'beside_dark_fraction': 0.734, 'shadow_depth': 0.5788, 'cells': 52630}, 'relay_og/noon': {'body_mean': 0.3178, 'body_dark_fraction': 0.051, 'blown_fraction': 0.0, 'figure_form': 0.173, 'light_mean': 0.808, 'eye_over_world': 2.36, 'light_fraction': 0.033, 'ground_mean': 0.2961, 'ground_dark_fraction': 0.2507, 'beside_mean': 0.3417, 'beside_dark_fraction': 0.1406, 'shadow_depth': 0.1335, 'cells': 52630}}\nB_celestial_light INFO celestial_light body at night and noon {'celestial_light/night': {'body_mean': 0.4042, 'body_dark_fraction': 0.0788, 'blown_fraction': 0.0, 'figure_form': 0.2269, 'light_mean': 0.8605, 'eye_over_world': 2.34, 'light_fraction': 0.0168, 'ground_mean': 0.329, 'ground_dark_fraction': 0.2224, 'beside_mean': 0.3681, 'beside_dark_fraction': 0.0313, 'shadow_depth': 0.1062, 'cells': 52630}, 'celestial_light/dusk': {'body_mean': 0.2319, 'body_dark_fraction': 0.4416, 'blown_fraction': 0.0, 'figure_form': 0.288, 'light_mean': 0.7445, 'eye_over_world': 2.39, 'light_fraction': 0.336, 'ground_mean': 0.3101, 'ground_dark_fraction': 0.3872, 'beside_mean': 0.3117, 'beside_dark_fraction': 0.384, 'shadow_depth': 0.0051, 'cells': 52630}, 'celestial_light/noon': {'body_mean': 0.3694, 'body_dark_fraction': 0.0362, 'blown_fraction': 0.0, 'figure_form': 0.159, 'light_mean': 0.8187, 'eye_over_world': 2.34, 'light_fraction': 0.0134, 'ground_mean': 0.33, 'ground_dark_fraction': 0.2443, 'beside_mean': 0.3497, 'beside_dark_fraction': 0.1273, 'shadow_depth': 0.0563, 'cells': 52630}}\nB_apollo INFO apollo body at night and noon {'apollo/night': {'body_mean': 0.1969, 'body_dark_fraction': 0.2834, 'blown_fraction': 0.0, 'figure_form': 0.2702, 'light_mean': 0.7998, 'eye_over_world': 2.47, 'light_fraction': 0.2279, 'ground_mean': 0.1951, 'ground_dark_fraction': 0.3339, 'beside_mean': 0.3232, 'beside_dark_fraction': 0.4427, 'shadow_depth': 0.3963, 'cells': 52630}, 'apollo/dusk': {'body_mean': 0.1985, 'body_dark_fraction': 0.7287, 'blown_fraction': 0.0, 'figure_form': 0.2666, 'light_mean': 0.7951, 'eye_over_world': 2.98, 'light_fraction': 0.0829, 'ground_mean': 0.1442, 'ground_dark_fraction': 0.6746, 'beside_mean': 0.2667, 'beside_dark_fraction': 0.7388, 'shadow_depth': 0.4593, 'cells': 52630}, 'apollo/noon': {'body_mean': 0.3282, 'body_dark_fraction': 0.0352, 'blown_fraction': 0.0, 'figure_form': 0.1632, 'light_mean': 0.7613, 'eye_over_world': 2.07, 'light_fraction': 0.0553, 'ground_mean': 0.2796, 'ground_dark_fraction': 0.1154, 'beside_mean': 0.3686, 'beside_dark_fraction': 0.0908, 'shadow_depth': 0.2415, 'cells': 52630}}\nB_arden_infernal INFO arden_infernal body at night and noon {'arden_infernal/night': {'body_mean': 0.5097, 'body_dark_fraction': 0.107, 'blown_fraction': 0.0, 'figure_form': 0.236, 'light_mean': 0.7742, 'eye_over_world': 2.42, 'light_fraction': 0.2538, 'ground_mean': 0.3424, 'ground_dark_fraction': 0.3376, 'beside_mean': 0.3205, 'beside_dark_fraction': 0.4688, 'shadow_depth': -0.0683, 'cells': 52630}, 'arden_infernal/dusk': {'body_mean': 0.5299, 'body_dark_fraction': 0.0913, 'blown_fraction': 0.0, 'figure_form': 0.2282, 'light_mean': 0.8772, 'eye_over_world': 3.48, 'light_fraction': 0.0618, 'ground_mean': 0.3069, 'ground_dark_fraction': 0.447, 'beside_mean': 0.2522, 'beside_dark_fraction': 0.7553, 'shadow_depth': -0.2169, 'cells': 52630}, 'arden_infernal/noon': {'body_mean': 0.3838, 'body_dark_fraction': 0.0577, 'blown_fraction': 0.0, 'figure_form': 0.1434, 'light_mean': 0.8122, 'eye_over_world': 2.27, 'light_fraction': 0.0083, 'ground_mean': 0.2428, 'ground_dark_fraction': 0.2507, 'beside_mean': 0.3581, 'beside_dark_fraction': 0.1036, 'shadow_depth': 0.322, 'cells': 52630}}\nB_skeleton_flame INFO skeleton_flame body at night and noon {'skeleton_flame/night': {'body_mean': 0.1961, 'body_dark_fraction': 0.4085, 'blown_fraction': 0.0, 'figure_form': 0.3147, 'light_mean': 0.8325, 'eye_over_world': 2.89, 'light_fraction': 0.3151, 'ground_mean': 0.4298, 'ground_dark_fraction': 0.139, 'beside_mean': 0.2877, 'beside_dark_fraction': 0.4709, 'shadow_depth': -0.4939, 'cells': 52630}, 'skeleton_flame/dusk': {'body_mean': 0.2301, 'body_dark_fraction': 0.6426, 'blown_fraction': 0.0, 'figure_form': 0.2842, 'light_mean': 0.7723, 'eye_over_world': 2.85, 'light_fraction': 0.1052, 'ground_mean': 0.3082, 'ground_dark_fraction': 0.3862, 'beside_mean': 0.271, 'beside_dark_fraction': 0.7341, 'shadow_depth': -0.1373, 'cells': 52630}, 'skeleton_flame/noon': {'body_mean': 0.3282, 'body_dark_fraction': 0.0551, 'blown_fraction': 0.0, 'figure_form': 0.1833, 'light_mean': 0.7868, 'eye_over_world': 2.25, 'light_fraction': 0.0691, 'ground_mean': 0.396, 'ground_dark_fraction': 0.0701, 'beside_mean': 0.3498, 'beside_dark_fraction': 0.1159, 'shadow_depth': -0.1321, 'cells': 52630}}\nB_CONTROL INFO the same frames with no figure in them {'night': {'body_mean': 0.221, 'body_dark_fraction': 0.1193, 'blown_fraction': 0.0, 'figure_form': 0.0965, 'light_mean': 0.769, 'eye_over_world': 2.45, 'light_fraction': 0.0003, 'ground_mean': 0.1835, 'ground_dark_fraction': 0.4623, 'beside_mean': 0.3143, 'beside_dark_fraction': 0.309, 'shadow_depth': 0.4162, 'cells': 52630}, 'dusk': {'body_mean': 0.129, 'body_dark_fraction': 0.6953, 'blown_fraction': 0.0, 'figure_form': 0.0524, 'light_mean': 0.8019, 'eye_over_world': 3.45, 'light_fraction': 0.0002, 'ground_mean': 0.1057, 'ground_dark_fraction': 0.6957, 'beside_mean': 0.2324, 'beside_dark_fraction': 0.7891, 'shadow_depth': 0.5452, 'cells': 52630}, 'noon': {'body_mean': 0.282, 'body_dark_fraction': 0.0391, 'blown_fraction': 0.0, 'figure_form': 0.1384, 'light_mean': 0.7677, 'eye_over_world': 2.05, 'light_fraction': 0.0259, 'ground_mean': 0.2444, 'ground_dark_fraction': 0.4105, 'beside_mean': 0.3749, 'beside_dark_fraction': 0.0672, 'shadow_depth': 0.3481, 'cells': 52630}}\nB00 PASS every skin was photographed at deepest night and at noon {'taken': 18, 'where': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\night_bodies'}\nB01 PASS at night the BODY is not mostly crushed to black {'body_dark_fraction': {'relay_og': 0.0603, 'celestial_light': 0.0788, 'apollo': 0.2834, 'arden_infernal': 0.107, 'skeleton_flame': 0.4085}, 'floor': 0.14, 'ceiling': 0.6, 'note': \"the body is every cell of the figure that is not one of its own lights. This is the reading the founder's 'illuminated subject, not a glowing object in blackness' actually asks for, and raising eye glow cannot move it.\"}\nB02 PASS and it carries enough light to read a surface {'body_mean': {'relay_og': 0.2286, 'celestial_light': 0.4042, 'apollo': 0.1969, 'arden_infernal': 0.5097, 'skeleton_flame': 0.1961}, 'floor': 0.1}\nB03 FAIL the figure is not merely a pair of lights in a void {'light_fraction': {'relay_og': 0.0249, 'celestial_light': 0.0168, 'apollo': 0.2279, 'arden_infernal': 0.2538, 'skeleton_flame': 0.3151}, 'ceiling': 0.18, 'note': 'high here with B01 also failing is exactly the failure the founder named: eyes blazing, body gone. It is reported whether or not it passes, so the two can never be traded.'}\nB04 PASS the ground beside the character is readable too {'world_beside_dark_fraction': 0.309, 'ceiling': 0.65, 'per_skin_beside_for_comparison': {'relay_og': 0.2355, 'celestial_light': 0.0313, 'apollo': 0.4427, 'arden_infernal': 0.4688, 'skeleton_flame': 0.4709}, 'under_feet_for_comparison': {'relay_og': 0.3402, 'celestial_light': 0.2224, 'apollo': 0.3339, 'arden_infernal': 0.3376, 'skeleton_flame': 0.139}, 'mascot_spill_on_ground': {'relay_og': -0.0035, 'celestial_light': 0.0538, 'apollo': 0.0089, 'arden_infernal': 0.0062, 'skeleton_flame': -0.0266}, 'note': 'measured on the CONTROL frame, with the figure hidden, because the same band beside a figure reads 0.032 for one costume and 0.680 for another at one place and hour. The per-skin bands and the spill are reported beside it rather than gating: a mascot that lights the ground it stands on is not a mascot floating in blackness, whatever its own body reads.'}\nB06 FAIL the mascot's own shadow is deep but not a hole {'shadow_depth': {'relay_og': 0.3896, 'celestial_light': 0.1062, 'apollo': 0.3963, 'arden_infernal': -0.0683, 'skeleton_flame': -0.4939}, 'floor': 0.15, 'ceiling': 0.85, 'note': \"the fraction of the beside-ground's light that the figure's shadow removes. Under 0.15 is a mascot that does not appear to be standing on anything; over 0.85 is a black hole where its feet should be. Both are failures and one number cannot be raised to fix the other.\"}\nB07 PASS every figure still has a shape at night, bright or dark {'figure_form': {'relay_og': 0.1333, 'celestial_light': 0.2269, 'apollo': 0.2702, 'arden_infernal': 0.236, 'skeleton_flame': 0.3147}, 'form_floor': 0.06, 'blown_fraction': {'relay_og': 0.0, 'celestial_light': 0.0, 'apollo': 0.0, 'arden_infernal': 0.0, 'skeleton_flame': 0.0}, 'blown_ceiling': 0.12, 'note': \"form is the standard deviation across the whole figure: surfaces differing from one another is what makes a figure read as one. This is the clause a luminous skin must pass; whether it should be luminous at all is the founder's call, not this job's.\"}\nB05 PASS night still looks like night: the body is clearly darker than it is at noon {'night_over_noon': {'relay_og': 0.719, 'celestial_light': 1.094, 'apollo': 0.6, 'arden_infernal': 1.328, 'skeleton_flame': 0.598}, 'ceiling': 0.75, 'night_is_too_bright': None, 'self_illuminating_founder_call': {'celestial_light': 1.094, 'arden_infernal': 1.328}, 'glow_share_of_geometry': {'skeleton_flame': 0.83, 'celestial_light': 0.72, 'arden_infernal': 0.45, 'apollo': 0.22, 'relay_og': 0.0}, 'canonical_row': {'relay_og': 0.719}, 'note': 'the guard against fixing this by turning night into day. Above 1.0 the figure is its own light source, which world lighting cannot cause and which is a founder question about the skin; between the ceiling and 1.0 the night is genuinely too bright. Only the second fails.'}\nB08 FAIL no figure is more of a light source at night than it is in daylight {'eye_over_world': {'relay_og': {'night': 2.93, 'noon': 2.36, 'night_over_noon': 1.24}, 'celestial_light': {'night': 2.34, 'noon': 2.34, 'night_over_noon': 1.0}, 'apollo': {'night': 2.47, 'noon': 2.07, 'night_over_noon': 1.19}, 'arden_infernal': {'night': 2.42, 'noon': 2.27, 'night_over_noon': 1.07}, 'skeleton_flame': {'night': 2.89, 'noon': 2.25, 'night_over_noon': 1.28}}, 'judged_on': 'relay_og', 'canonical_ratio': 1.24, 'ceiling': 1.0, 'glow_share_of_geometry': {'skeleton_flame': 0.83, 'celestial_light': 0.72, 'arden_infernal': 0.45, 'apollo': 0.22, 'relay_og': 0.0}, 'derivation': \"eye glow dims 24 to 8 across the day-night crossover, a factor of three, while the world at the arrival dims about 1.36. So this ratio should fall by roughly two at night. A value above 1.0 means it rose instead, and the bound is the crossover's own arithmetic rather than a threshold chosen here.\"}\n"
+}

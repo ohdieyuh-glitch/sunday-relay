@@ -1,0 +1,150 @@
+{
+ "name": "zzY1_eyes",
+ "started": "2026-09-27 17:13:23",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "E00",
+   "name": "this build carries the eye spacing controls",
+   "pass": true,
+   "detail": {
+    "settings": {
+     "wl.Dog.EyeSpread": 0.0,
+     "wl.Dog.EyeGap": 0.30000001192092896
+    },
+    "note": "an editor built before the fix reports neither cvar, and every profile below would then describe the OLD eyes while reading as a result for the new ones."
+   }
+  },
+  {
+   "id": "E01",
+   "name": "every skin was photographed at every hour and distance the founder listed",
+   "pass": false,
+   "detail": {
+    "taken": 0,
+    "wanted": 30,
+    "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\eye_split"
+   }
+  },
+  {
+   "id": "E02",
+   "name": "Relay OG shows a dark gap between two eyes at every hour and distance",
+   "pass": false,
+   "detail": {
+    "trough_over_dimmer_peak": {
+     "day/close": null,
+     "day/gameplay": null,
+     "dusk/close": null,
+     "dusk/gameplay": null,
+     "night/close": null,
+     "night/gameplay": null
+    },
+    "ceiling": 0.45,
+    "note": "the darkest point between the two brightest peaks, as a fraction of the dimmer peak. This cannot be passed by dimming the eyes: lowering both peaks lowers the trough with them and leaves the ratio unchanged, which is the failure the founder named explicitly."
+   }
+  },
+  {
+   "id": "E03",
+   "name": "the two eyes are symmetrical about the centreline",
+   "pass": false,
+   "detail": {
+    "symmetry": {
+     "day/close": null,
+     "day/gameplay": null,
+     "dusk/close": null,
+     "dusk/gameplay": null,
+     "night/close": null,
+     "night/gameplay": null
+    },
+    "floor": 0.7,
+    "note": "the dimmer peak over the brighter. The founder asked for them kept 'perfectly symmetrical around the visor/head centerline', and a lit figure photographed from slightly off-axis will never read 1.000, so this asks whether one eye is materially dimmer than the other."
+   }
+  },
+  {
+   "id": "E04",
+   "name": "no other skin merges its eyes into one mass",
+   "pass": true,
+   "detail": {
+    "per_skin": {
+     "skeleton_flame": {
+      "worst_gap_ratio": null,
+      "worst_at": null,
+      "merges": false
+     },
+     "apollo": {
+      "worst_gap_ratio": null,
+      "worst_at": null,
+      "merges": false
+     },
+     "arden_infernal": {
+      "worst_gap_ratio": null,
+      "worst_at": null,
+      "merges": false
+     },
+     "celestial_light": {
+      "worst_gap_ratio": null,
+      "worst_at": null,
+      "merges": false
+     }
+    },
+    "merging": null,
+    "ceiling": 0.45,
+    "note": "reported, not corrected. The founder's instruction is to inspect the others and not to redesign the ones that are already right, so this names the ones that are not."
+   }
+  }
+ ],
+ "settings": {
+  "wl.Dog.EyeSpread": 0.0,
+  "wl.Dog.EyeGap": 0.30000001192092896
+ },
+ "readings": {},
+ "errors": {
+  "relay_og": "type object 'WonderlandUiTestLibrary' has no attribute 'wear_relay_skin'",
+  "skeleton_flame": "type object 'WonderlandUiTestLibrary' has no attribute 'wear_relay_skin'",
+  "apollo": "type object 'WonderlandUiTestLibrary' has no attribute 'wear_relay_skin'",
+  "arden_infernal": "type object 'WonderlandUiTestLibrary' has no attribute 'wear_relay_skin'",
+  "celestial_light": "type object 'WonderlandUiTestLibrary' has no attribute 'wear_relay_skin'"
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\eye_split",
+ "relay_og_gap": {
+  "day/close": null,
+  "day/gameplay": null,
+  "dusk/close": null,
+  "dusk/gameplay": null,
+  "night/close": null,
+  "night/gameplay": null
+ },
+ "relay_og_symmetry": {
+  "day/close": null,
+  "day/gameplay": null,
+  "dusk/close": null,
+  "dusk/gameplay": null,
+  "night/close": null,
+  "night/gameplay": null
+ },
+ "other_skins": {
+  "skeleton_flame": {
+   "worst_gap_ratio": null,
+   "worst_at": null,
+   "merges": false
+  },
+  "apollo": {
+   "worst_gap_ratio": null,
+   "worst_at": null,
+   "merges": false
+  },
+  "arden_infernal": {
+   "worst_gap_ratio": null,
+   "worst_at": null,
+   "merges": false
+  },
+  "celestial_light": {
+   "worst_gap_ratio": null,
+   "worst_at": null,
+   "merges": false
+  }
+ },
+ "skins_that_merge": null,
+ "finished": "2026-09-27 17:13:46",
+ "seconds": 22.97,
+ "log": "E00 PASS this build carries the eye spacing controls {'settings': {'wl.Dog.EyeSpread': 0.0, 'wl.Dog.EyeGap': 0.30000001192092896}, 'note': 'an editor built before the fix reports neither cvar, and every profile below would then describe the OLD eyes while reading as a result for the new ones.'}\nE01 FAIL every skin was photographed at every hour and distance the founder listed {'taken': 0, 'wanted': 30, 'where': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\eye_split'}\nE02 FAIL Relay OG shows a dark gap between two eyes at every hour and distance {'trough_over_dimmer_peak': {'day/close': None, 'day/gameplay': None, 'dusk/close': None, 'dusk/gameplay': None, 'night/close': None, 'night/gameplay': None}, 'ceiling': 0.45, 'note': 'the darkest point between the two brightest peaks, as a fraction of the dimmer peak. This cannot be passed by dimming the eyes: lowering both peaks lowers the trough with them and leaves the ratio unchanged, which is the failure the founder named explicitly.'}\nE03 FAIL the two eyes are symmetrical about the centreline {'symmetry': {'day/close': None, 'day/gameplay': None, 'dusk/close': None, 'dusk/gameplay': None, 'night/close': None, 'night/gameplay': None}, 'floor': 0.7, 'note': \"the dimmer peak over the brighter. The founder asked for them kept 'perfectly symmetrical around the visor/head centerline', and a lit figure photographed from slightly off-axis will never read 1.000, so this asks whether one eye is materially dimmer than the other.\"}\nE04 PASS no other skin merges its eyes into one mass {'per_skin': {'skeleton_flame': {'worst_gap_ratio': None, 'worst_at': None, 'merges': False}, 'apollo': {'worst_gap_ratio': None, 'worst_at': None, 'merges': False}, 'arden_infernal': {'worst_gap_ratio': None, 'worst_at': None, 'merges': False}, 'celestial_light': {'worst_gap_ratio': None, 'worst_at': None, 'merges': False}}, 'merging': None, 'ceiling': 0.45, 'note': \"reported, not corrected. The founder's instruction is to inspect the others and not to redesign the ones that are already right, so this names the ones that are not.\"}\n"
+}

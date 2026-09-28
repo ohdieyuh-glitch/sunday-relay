@@ -1,0 +1,117 @@
+{
+ "name": "zwA2_practical_active",
+ "started": "2026-09-27 19:24:18",
+ "status": "error",
+ "tests": [
+  {
+   "id": "P_READ",
+   "name": "the engine's own practical report is readable, so active count is not inferred",
+   "pass": true,
+   "detail": {
+    "describe_practicals": {
+     "defined": 1464.0,
+     "active": 31.0,
+     "pool": 48.0,
+     "night": 0.0,
+     "gain": 1.0,
+     "count": 48.0,
+     "radius": 12000.0,
+     "file": "../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json",
+     "problem": ""
+    },
+    "note": "reads H.describe_practical_lights, added at 71114aab, because UE 5.8 Python has no world-subsystem getter at all -- enumerated, after BlueprintType was diagnosed as the cause and was not. Red here means the build predates that accessor, and the run voids rather than falling back to counting actors and inferring a radius again"
+   }
+  },
+  {
+   "id": "P_WHERE",
+   "name": "the pawn is at the densest spot, which is what selects the candidate set",
+   "pass": true,
+   "detail": {
+    "asked": [
+     -65943.0,
+     -38753.0
+    ],
+    "landed": [
+     -65953.5,
+     -38751.5,
+     101.2
+    ],
+    "offset_uu": 10.6,
+    "note": "Assign() takes its Eye from the PAWN. Measured anywhere else this is a different question"
+   }
+  }
+ ],
+ "knobs_as_found": {
+  "count": 48.0,
+  "radius": 12000.0,
+  "gain": 1.0
+ },
+ "defined_in_manifest": 1464.0,
+ "pawn_landed": [
+  -65953.5,
+  -38751.5,
+  101.2
+ ],
+ "rungs": [
+  {
+   "count_asked": 48,
+   "radius_asked": null,
+   "held": {
+    "count": 48.0,
+    "radius": 12000.0,
+    "gain": 1.0
+   },
+   "active_first": 48,
+   "active_after_wait": 48,
+   "converged": true,
+   "pool": 48.0,
+   "defined": 1464.0,
+   "actors_total": 48,
+   "actors_lit": 48,
+   "manifest_in_radius": 184,
+   "pawn_at_rung": [
+    -65953.5,
+    -38751.5,
+    75.2
+   ],
+   "pawn_drift_uu": 10.6,
+   "manifest_in_radius_where_pawn_is": 184,
+   "luma": 0.1714,
+   "spread": 0.0002,
+   "ground_readable": 0.7894,
+   "ground_crushed": 0.1654
+  },
+  {
+   "count_asked": 96,
+   "radius_asked": null,
+   "held": {
+    "count": 96.0,
+    "radius": 12000.0,
+    "gain": 1.0
+   },
+   "active_first": 31,
+   "active_after_wait": 31,
+   "converged": true,
+   "pool": 96.0,
+   "defined": 1464.0,
+   "actors_total": 96,
+   "actors_lit": 31,
+   "manifest_in_radius": 184,
+   "pawn_at_rung": [
+    0.0,
+    -1460.0,
+    100.0
+   ],
+   "pawn_drift_uu": 75757.8,
+   "manifest_in_radius_where_pawn_is": 31,
+   "luma": 0.1629,
+   "spread": 0.0012,
+   "ground_readable": 0.7413,
+   "ground_crushed": 0.2581
+  }
+ ],
+ "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n                                                                  ^^^^^^^^^^^^^^^^\n  File \"C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\_channel\\inbox\\zwA2_practical_active.py\", line 289, in job\nNameError: name 'ground_z' is not defined\n",
+ "finished": "2026-09-27 19:25:01",
+ "seconds": 43.03,
+ "log": "P_READ PASS the engine's own practical report is readable, so active count is not inferred {'describe_practicals': {'defined': 1464.0, 'active': 31.0, 'pool': 48.0, 'night': 0.0, 'gain': 1.0, 'count': 48.0, 'radius': 12000.0, 'file': '../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json', 'problem': ''}, 'note': 'reads H.describe_practical_lights, added at 71114aab, because UE 5.8 Python has no world-subsystem getter at all -- enumerated, after BlueprintType was diagnosed as the cause and was not. Red here means the build predates that accessor, and the run voids rather than falling back to counting actors and inferring a radius again'}\nP_WHERE PASS the pawn is at the densest spot, which is what selects the candidate set {'asked': [-65943.0, -38753.0], 'landed': [-65953.5, -38751.5, 101.2], 'offset_uu': 10.6, 'note': 'Assign() takes its Eye from the PAWN. Measured anywhere else this is a different question'}\n"
+}

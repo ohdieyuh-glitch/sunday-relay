@@ -1,0 +1,257 @@
+{
+ "name": "zzW1_dusk_closed",
+ "started": "2026-09-27 16:57:54",
+ "status": "measured (EVIDENCE ONLY: the running curve could not be read back)",
+ "tests": [
+  {
+   "id": "C_NOISE",
+   "name": "each rung agrees with itself -- two reads of the same hour",
+   "pass": true,
+   "detail": {
+    "worst_spread": 0.0005,
+    "tolerance": 0.01,
+    "measured": 11,
+    "wanted": 11
+   }
+  },
+  {
+   "id": "C_CURVE",
+   "name": "the running build carries the complement curve, read back from the engine",
+   "pass": false,
+   "detail": {
+    "readback_route": null,
+    "checked": {},
+    "agreeing": [],
+    "note": "if this could not be read at all the run is EVIDENCE, not proof, and says so in status. The old curve is exactly 0.0 at every elevation above -2, so it is trivially separable from the new one at 18:00 and 18:15"
+   }
+  },
+  {
+   "id": "C_DAY",
+   "name": "noon is unchanged -- the day-untouched claim, measured rather than asserted",
+   "pass": true,
+   "detail": {
+    "now": 0.2769,
+    "was": 0.2685,
+    "gap": 0.0084,
+    "tolerance": 0.01,
+    "note": "at +12 deg and above the band is 1 so Nightfall is exactly 0 either way. That is the argument; this is the measurement, and zzT1 left a noon reading at this pose to check it"
+   }
+  },
+  {
+   "id": "C_CLOSED",
+   "name": "the evening no longer dips below night and climb back out",
+   "pass": true,
+   "detail": {
+    "lowest_hour": 18.5,
+    "lowest_luma": 0.093,
+    "is_interior": true,
+    "margin_below_both_ends": 0.0049,
+    "was_bottom_hour": 18.0,
+    "was_bottom_luma": 0.0365,
+    "note": "zzT2 had an interior minimum at 18:00 sitting 0.059 below both ends. Passing means the evening now falls into night instead of through it"
+   }
+  },
+  {
+   "id": "C_NOREG",
+   "name": "no hour came back darker than zzT2 measured it",
+   "pass": true,
+   "detail": {
+    "rungs_darker": [],
+    "tolerance": 0.01,
+    "deltas": {
+     "12.00": 0.0084,
+     "17.50": 0.0024,
+     "17.75": 0.0271,
+     "18.00": 0.0668,
+     "18.25": 0.1132,
+     "18.50": 0.0218,
+     "18.75": 0.0002,
+     "19.00": 0.0013,
+     "19.25": 0.0224,
+     "19.50": -0.0034,
+     "23.00": null
+    }
+   }
+  },
+  {
+   "id": "C_GROUND",
+   "name": "no hour of the evening leaves the ground more crushed than the night does",
+   "pass": false,
+   "detail": {
+    "worst_hour": 18.5,
+    "worst_ground_dark": 0.9829,
+    "night_ground_dark": 0.5638,
+    "tolerance": 0.01,
+    "ground_dark_by_hour": {
+     "12.00": 0.2827,
+     "17.50": 0.9601,
+     "17.75": 0.9212,
+     "18.00": 0.9325,
+     "18.25": 0.6366,
+     "18.50": 0.9829,
+     "18.75": 0.9065,
+     "19.00": 0.9823,
+     "19.25": 0.3318,
+     "19.50": 0.3138,
+     "23.00": 0.5638
+    },
+    "ground_mean_by_hour": {
+     "12.00": 0.2884,
+     "17.50": 0.0718,
+     "17.75": 0.085,
+     "18.00": 0.0741,
+     "18.25": 0.1295,
+     "18.50": 0.0669,
+     "18.75": 0.081,
+     "19.00": 0.0694,
+     "19.25": 0.1767,
+     "19.50": 0.1809,
+     "23.00": 0.1718
+    },
+    "note": "the founder's complaint was that six in the evening is darker than midnight. This is that sentence as a gate, measured on the crushed FRACTION rather than on a mean that a few lamp pixels can carry"
+   }
+  }
+ ],
+ "camera_eye": [
+  -320.0,
+  -1900.0,
+  200.0
+ ],
+ "camera_at": [
+  0.0,
+  -1460.0,
+  90.0
+ ],
+ "compared_against": {
+  "job": "zzT2_dusk_hole + zzT1 noon",
+  "rows": 10
+ },
+ "after": [
+  {
+   "hour": 12.0,
+   "luma": 0.2769,
+   "spread": 0.0002,
+   "tails": 0.2953,
+   "ground_luma": 0.2884,
+   "ground_dark": 0.2827,
+   "nightfall_read": null,
+   "was_luma": 0.2685,
+   "was_ground": 0.2828
+  },
+  {
+   "hour": 17.5,
+   "luma": 0.0979,
+   "spread": 0.0002,
+   "tails": 0.8501,
+   "ground_luma": 0.0718,
+   "ground_dark": 0.9601,
+   "nightfall_read": null,
+   "was_luma": 0.0955,
+   "was_ground": 0.0702
+  },
+  {
+   "hour": 17.75,
+   "luma": 0.1106,
+   "spread": 0.0004,
+   "tails": 0.8029,
+   "ground_luma": 0.085,
+   "ground_dark": 0.9212,
+   "nightfall_read": null,
+   "was_luma": 0.0835,
+   "was_ground": 0.0587
+  },
+  {
+   "hour": 18.0,
+   "luma": 0.1033,
+   "spread": 0.0003,
+   "tails": 0.8017,
+   "ground_luma": 0.0741,
+   "ground_dark": 0.9325,
+   "nightfall_read": null,
+   "was_luma": 0.0365,
+   "was_ground": 0.0126
+  },
+  {
+   "hour": 18.25,
+   "luma": 0.1562,
+   "spread": 0.0004,
+   "tails": 0.6212,
+   "ground_luma": 0.1295,
+   "ground_dark": 0.6366,
+   "nightfall_read": null,
+   "was_luma": 0.043,
+   "was_ground": 0.0155
+  },
+  {
+   "hour": 18.5,
+   "luma": 0.093,
+   "spread": 0.0005,
+   "tails": 0.9055,
+   "ground_luma": 0.0669,
+   "ground_dark": 0.9829,
+   "nightfall_read": null,
+   "was_luma": 0.0712,
+   "was_ground": 0.0444
+  },
+  {
+   "hour": 18.75,
+   "luma": 0.1104,
+   "spread": 0.0003,
+   "tails": 0.8542,
+   "ground_luma": 0.081,
+   "ground_dark": 0.9065,
+   "nightfall_read": null,
+   "was_luma": 0.1102,
+   "was_ground": 0.0817
+  },
+  {
+   "hour": 19.0,
+   "luma": 0.0948,
+   "spread": 0.0001,
+   "tails": 0.8962,
+   "ground_luma": 0.0694,
+   "ground_dark": 0.9823,
+   "nightfall_read": null,
+   "was_luma": 0.0935,
+   "was_ground": 0.0686
+  },
+  {
+   "hour": 19.25,
+   "luma": 0.1632,
+   "spread": 0.0004,
+   "tails": 0.5531,
+   "ground_luma": 0.1767,
+   "ground_dark": 0.3318,
+   "nightfall_read": null,
+   "was_luma": 0.1408,
+   "was_ground": 0.1619
+  },
+  {
+   "hour": 19.5,
+   "luma": 0.1726,
+   "spread": 0.0001,
+   "tails": 0.5111,
+   "ground_luma": 0.1809,
+   "ground_dark": 0.3138,
+   "nightfall_read": null,
+   "was_luma": 0.176,
+   "was_ground": 0.1832
+  },
+  {
+   "hour": 23.0,
+   "luma": 0.1745,
+   "spread": 0.0002,
+   "tails": 0.5148,
+   "ground_luma": 0.1718,
+   "ground_dark": 0.5638,
+   "nightfall_read": null,
+   "was_luma": null,
+   "was_ground": null
+  }
+ ],
+ "nightfall_route": null,
+ "curve_unverified": true,
+ "finished": "2026-09-27 16:59:34",
+ "seconds": 99.95,
+ "log": "C_NOISE PASS each rung agrees with itself -- two reads of the same hour {'worst_spread': 0.0005, 'tolerance': 0.01, 'measured': 11, 'wanted': 11}\nC_CURVE FAIL the running build carries the complement curve, read back from the engine {'readback_route': None, 'checked': {}, 'agreeing': [], 'note': 'if this could not be read at all the run is EVIDENCE, not proof, and says so in status. The old curve is exactly 0.0 at every elevation above -2, so it is trivially separable from the new one at 18:00 and 18:15'}\nC_DAY PASS noon is unchanged -- the day-untouched claim, measured rather than asserted {'now': 0.2769, 'was': 0.2685, 'gap': 0.0084, 'tolerance': 0.01, 'note': 'at +12 deg and above the band is 1 so Nightfall is exactly 0 either way. That is the argument; this is the measurement, and zzT1 left a noon reading at this pose to check it'}\nC_CLOSED PASS the evening no longer dips below night and climb back out {'lowest_hour': 18.5, 'lowest_luma': 0.093, 'is_interior': True, 'margin_below_both_ends': 0.0049, 'was_bottom_hour': 18.0, 'was_bottom_luma': 0.0365, 'note': 'zzT2 had an interior minimum at 18:00 sitting 0.059 below both ends. Passing means the evening now falls into night instead of through it'}\nC_NOREG PASS no hour came back darker than zzT2 measured it {'rungs_darker': [], 'tolerance': 0.01, 'deltas': {'12.00': 0.0084, '17.50': 0.0024, '17.75': 0.0271, '18.00': 0.0668, '18.25': 0.1132, '18.50': 0.0218, '18.75': 0.0002, '19.00': 0.0013, '19.25': 0.0224, '19.50': -0.0034, '23.00': None}}\nC_GROUND FAIL no hour of the evening leaves the ground more crushed than the night does {'worst_hour': 18.5, 'worst_ground_dark': 0.9829, 'night_ground_dark': 0.5638, 'tolerance': 0.01, 'ground_dark_by_hour': {'12.00': 0.2827, '17.50': 0.9601, '17.75': 0.9212, '18.00': 0.9325, '18.25': 0.6366, '18.50': 0.9829, '18.75': 0.9065, '19.00': 0.9823, '19.25': 0.3318, '19.50': 0.3138, '23.00': 0.5638}, 'ground_mean_by_hour': {'12.00': 0.2884, '17.50': 0.0718, '17.75': 0.085, '18.00': 0.0741, '18.25': 0.1295, '18.50': 0.0669, '18.75': 0.081, '19.00': 0.0694, '19.25': 0.1767, '19.50': 0.1809, '23.00': 0.1718}, 'note': \"the founder's complaint was that six in the evening is darker than midnight. This is that sentence as a gate, measured on the crushed FRACTION rather than on a mean that a few lamp pixels can carry\"}\n"
+}

@@ -1,0 +1,312 @@
+{
+ "name": "zzU2_wrap_step",
+ "started": "2026-09-27 16:24:08",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "W_NOISE",
+   "name": "each rung agrees with itself -- two reads of the same hour",
+   "pass": true,
+   "detail": {
+    "worst_spread": 0.0009,
+    "tolerance": 0.01,
+    "measured": 20,
+    "wanted": 20,
+    "note": "red here voids everything below"
+   }
+  },
+  {
+   "id": "W_BEARING",
+   "name": "the sun's bearing turns the short way by small amounts, with no snap at any boundary",
+   "pass": true,
+   "detail": {
+    "worst_arc_deg": 7.2,
+    "arcs_by_cluster": {
+     "wrap": [
+      7.2,
+      3.6,
+      2.16,
+      1.15,
+      0.58,
+      1.15,
+      2.16,
+      3.6,
+      7.2
+     ],
+     "join_1900": [
+      2.32,
+      1.54,
+      1.44,
+      2.16
+     ],
+     "join_0500": [
+      2.16,
+      1.44,
+      1.54,
+      2.32
+     ]
+    },
+    "note": "the old curve froze the bearing through the night and turned 144 deg by the short arc in one frame at the wrap. A large value here means the running build predates the fix and everything below is measuring the old sun"
+   }
+  },
+  {
+   "id": "W_WRAP",
+   "name": "midnight is no more of a step than any ordinary quarter-hour",
+   "pass": true,
+   "detail": {
+    "wrap_worst_step": 0.0038,
+    "median_step": 0.0021,
+    "allowed": 0.02,
+    "by_cluster": {
+     "wrap": {
+      "steps": [
+       0.0021,
+       0.001,
+       0.0001,
+       0.0006,
+       0.0005,
+       0.0008,
+       0.0006,
+       0.0001,
+       0.0038
+      ],
+      "worst": 0.0038
+     },
+     "join_1900": {
+      "steps": [
+       0.0175,
+       0.0003,
+       0.0035,
+       0.0652
+      ],
+      "worst": 0.0652
+     },
+     "join_0500": {
+      "steps": [
+       0.0104,
+       0.0055,
+       0.0093,
+       0.0061
+      ],
+      "worst": 0.0104
+     }
+    },
+    "note": "zzT3 measured 0.0257 here against a median of 0.0014. A comparison rather than a threshold, because no one has grounds for an absolute number and the question is whether the boundary still stands out from its neighbours"
+   }
+  },
+  {
+   "id": "W_JOIN_1900",
+   "name": "the night arc meets the day arc at 1900 without a tear",
+   "pass": false,
+   "detail": {
+    "worst_step": 0.0652,
+    "allowed": 0.02,
+    "steps": [
+     0.0175,
+     0.0003,
+     0.0035,
+     0.0652
+    ],
+    "note": "a piecewise curve can tear where the pieces meet as well as where the clock wraps, and these two joins have never been looked at"
+   }
+  },
+  {
+   "id": "W_JOIN_0500",
+   "name": "the night arc meets the day arc at 0500 without a tear",
+   "pass": true,
+   "detail": {
+    "worst_step": 0.0104,
+    "allowed": 0.02,
+    "steps": [
+     0.0104,
+     0.0055,
+     0.0093,
+     0.0061
+    ],
+    "note": "a piecewise curve can tear where the pieces meet as well as where the clock wraps, and these two joins have never been looked at"
+   }
+  }
+ ],
+ "camera_eye": [
+  -320.0,
+  -1900.0,
+  200.0
+ ],
+ "camera_at": [
+  0.0,
+  -1460.0,
+  90.0
+ ],
+ "clusters": {
+  "wrap": [
+   {
+    "hour": 23.0,
+    "luma": 0.1713,
+    "spread": 0.0002,
+    "tails": 0.5231,
+    "ground_luma": 0.1704,
+    "sun_bearing": 345.6
+   },
+   {
+    "hour": 23.5,
+    "luma": 0.1692,
+    "spread": 0.0004,
+    "tails": 0.5293,
+    "ground_luma": 0.1648,
+    "sun_bearing": 352.8
+   },
+   {
+    "hour": 23.75,
+    "luma": 0.1682,
+    "spread": 0.0003,
+    "tails": 0.5302,
+    "ground_luma": 0.1619,
+    "sun_bearing": 356.4
+   },
+   {
+    "hour": 23.9,
+    "luma": 0.1681,
+    "spread": 0.0009,
+    "tails": 0.5333,
+    "ground_luma": 0.161,
+    "sun_bearing": 358.56
+   },
+   {
+    "hour": 23.98,
+    "luma": 0.1675,
+    "spread": 0.0,
+    "tails": 0.5344,
+    "ground_luma": 0.1597,
+    "sun_bearing": 359.71
+   },
+   {
+    "hour": 0.02,
+    "luma": 0.168,
+    "spread": 0.0008,
+    "tails": 0.5334,
+    "ground_luma": 0.1602,
+    "sun_bearing": 0.29
+   },
+   {
+    "hour": 0.1,
+    "luma": 0.1672,
+    "spread": 0.0007,
+    "tails": 0.5331,
+    "ground_luma": 0.159,
+    "sun_bearing": 1.44
+   },
+   {
+    "hour": 0.25,
+    "luma": 0.1666,
+    "spread": 0.0004,
+    "tails": 0.5347,
+    "ground_luma": 0.1591,
+    "sun_bearing": 3.6
+   },
+   {
+    "hour": 0.5,
+    "luma": 0.1665,
+    "spread": 0.0006,
+    "tails": 0.54,
+    "ground_luma": 0.16,
+    "sun_bearing": 7.2
+   },
+   {
+    "hour": 1.0,
+    "luma": 0.1627,
+    "spread": 0.0003,
+    "tails": 0.5569,
+    "ground_luma": 0.1596,
+    "sun_bearing": 14.4
+   }
+  ],
+  "join_1900": [
+   {
+    "hour": 18.75,
+    "luma": 0.1107,
+    "spread": 0.0002,
+    "tails": 0.8486,
+    "ground_luma": 0.0823,
+    "sun_bearing": 284.14
+   },
+   {
+    "hour": 18.9,
+    "luma": 0.0932,
+    "spread": 0.0001,
+    "tails": 0.9007,
+    "ground_luma": 0.0681,
+    "sun_bearing": 286.46
+   },
+   {
+    "hour": 19.0,
+    "luma": 0.0935,
+    "spread": 0.0001,
+    "tails": 0.9003,
+    "ground_luma": 0.0685,
+    "sun_bearing": 288.0
+   },
+   {
+    "hour": 19.1,
+    "luma": 0.097,
+    "spread": 0.0001,
+    "tails": 0.8876,
+    "ground_luma": 0.0687,
+    "sun_bearing": 289.44
+   },
+   {
+    "hour": 19.25,
+    "luma": 0.1622,
+    "spread": 0.0001,
+    "tails": 0.5549,
+    "ground_luma": 0.1772,
+    "sun_bearing": 291.6
+   }
+  ],
+  "join_0500": [
+   {
+    "hour": 4.75,
+    "luma": 0.1253,
+    "spread": 0.0005,
+    "tails": 0.7474,
+    "ground_luma": 0.0972,
+    "sun_bearing": 68.4
+   },
+   {
+    "hour": 4.9,
+    "luma": 0.1149,
+    "spread": 0.0003,
+    "tails": 0.7925,
+    "ground_luma": 0.0895,
+    "sun_bearing": 70.56
+   },
+   {
+    "hour": 5.0,
+    "luma": 0.1094,
+    "spread": 0.0003,
+    "tails": 0.8147,
+    "ground_luma": 0.0784,
+    "sun_bearing": 72.0
+   },
+   {
+    "hour": 5.1,
+    "luma": 0.1001,
+    "spread": 0.0001,
+    "tails": 0.8681,
+    "ground_luma": 0.0706,
+    "sun_bearing": 73.54
+   },
+   {
+    "hour": 5.25,
+    "luma": 0.094,
+    "spread": 0.0001,
+    "tails": 0.9001,
+    "ground_luma": 0.0696,
+    "sun_bearing": 75.86
+   }
+  ]
+ },
+ "median_step": 0.0021,
+ "finished": "2026-09-27 16:25:49",
+ "seconds": 100.49,
+ "log": "W_NOISE PASS each rung agrees with itself -- two reads of the same hour {'worst_spread': 0.0009, 'tolerance': 0.01, 'measured': 20, 'wanted': 20, 'note': 'red here voids everything below'}\nW_BEARING PASS the sun's bearing turns the short way by small amounts, with no snap at any boundary {'worst_arc_deg': 7.2, 'arcs_by_cluster': {'wrap': [7.2, 3.6, 2.16, 1.15, 0.58, 1.15, 2.16, 3.6, 7.2], 'join_1900': [2.32, 1.54, 1.44, 2.16], 'join_0500': [2.16, 1.44, 1.54, 2.32]}, 'note': 'the old curve froze the bearing through the night and turned 144 deg by the short arc in one frame at the wrap. A large value here means the running build predates the fix and everything below is measuring the old sun'}\nW_WRAP PASS midnight is no more of a step than any ordinary quarter-hour {'wrap_worst_step': 0.0038, 'median_step': 0.0021, 'allowed': 0.02, 'by_cluster': {'wrap': {'steps': [0.0021, 0.001, 0.0001, 0.0006, 0.0005, 0.0008, 0.0006, 0.0001, 0.0038], 'worst': 0.0038}, 'join_1900': {'steps': [0.0175, 0.0003, 0.0035, 0.0652], 'worst': 0.0652}, 'join_0500': {'steps': [0.0104, 0.0055, 0.0093, 0.0061], 'worst': 0.0104}}, 'note': 'zzT3 measured 0.0257 here against a median of 0.0014. A comparison rather than a threshold, because no one has grounds for an absolute number and the question is whether the boundary still stands out from its neighbours'}\nW_JOIN_1900 FAIL the night arc meets the day arc at 1900 without a tear {'worst_step': 0.0652, 'allowed': 0.02, 'steps': [0.0175, 0.0003, 0.0035, 0.0652], 'note': 'a piecewise curve can tear where the pieces meet as well as where the clock wraps, and these two joins have never been looked at'}\nW_JOIN_0500 PASS the night arc meets the day arc at 0500 without a tear {'worst_step': 0.0104, 'allowed': 0.02, 'steps': [0.0104, 0.0055, 0.0093, 0.0061], 'note': 'a piecewise curve can tear where the pieces meet as well as where the clock wraps, and these two joins have never been looked at'}\n"
+}

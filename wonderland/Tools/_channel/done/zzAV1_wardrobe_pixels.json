@@ -1,0 +1,524 @@
+{
+ "name": "zzAV1_wardrobe_pixels",
+ "started": "2026-09-27 21:43:45",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "W00",
+   "name": "the UI subsystem is reachable",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "W01",
+   "name": "the Project Brain is open",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "W02",
+   "name": "SWITCH SKIN was pressed, and the wardrobe opened from that press alone",
+   "pass": true,
+   "detail": {
+    "pressed": true,
+    "skins_open": true,
+    "note": "this is the founder's route. Every earlier proof used SetBrainSkinsOpen, which is not."
+   }
+  },
+  {
+   "id": "W03",
+   "name": "the Project Brain is STILL OPEN with the wardrobe inside it",
+   "pass": true,
+   "detail": {
+    "note": "the founder asked that the Brain not be replaced by the wardrobe"
+   }
+  },
+  {
+   "id": "W04",
+   "name": "the preview window has painted and reports where it is",
+   "pass": true,
+   "detail": {
+    "got": true,
+    "centre": [
+     0.5947,
+     0.4704
+    ],
+    "size": [
+     0.2136,
+     0.4828
+    ]
+   }
+  },
+  {
+   "id": "W10",
+   "name": "the preview's pixels were readable for every skin, in every place looked at",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "W11",
+   "name": "every corner of the preview window is the wardrobe's black backdrop, for every skin",
+   "pass": false,
+   "detail": {
+    "brightest_corner_by_skin": {
+     "relay_og": 0.0321,
+     "arden_infernal": 0.0494,
+     "apollo": 0.4874,
+     "skeleton_flame": 0.0321,
+     "celestial_light": 0.0321
+    },
+    "threshold": 0.25,
+    "note": "the Project Brain chamber the founder photographed is 0.97 white in every corner. A wardrobe with its backdrop standing reads far below this however luminous the skin is."
+   }
+  },
+  {
+   "id": "W12",
+   "name": "the middle of the window is lit and the corners are not -- a figure is standing there",
+   "pass": true,
+   "detail": {
+    "middle_minus_brightest_corner": {
+     "relay_og": 0.818,
+     "arden_infernal": 0.5853,
+     "apollo": 0.3557,
+     "skeleton_flame": 0.8015,
+     "celestial_light": 0.8576
+    },
+    "threshold": 0.03,
+    "middle_luma": {
+     "relay_og": 0.8501,
+     "arden_infernal": 0.6347,
+     "apollo": 0.8431,
+     "skeleton_flame": 0.8336,
+     "celestial_light": 0.8897
+    }
+   }
+  },
+  {
+   "id": "W13",
+   "name": "the preview as a whole is a dark room and not the white brain chamber",
+   "pass": false,
+   "detail": {
+    "whole_luma_by_skin": {
+     "relay_og": 0.3463,
+     "arden_infernal": 0.3845,
+     "apollo": 0.7543,
+     "skeleton_flame": 0.4807,
+     "celestial_light": 0.508
+    },
+    "threshold": 0.6,
+    "note": "the chamber fills the window edge to edge at 0.97; the brightest skin in the set reaches 0.49 and that is its own halo, standing on black"
+   }
+  },
+  {
+   "id": "W14",
+   "name": "clicking each skin changes what the preview shows",
+   "pass": true,
+   "detail": {
+    "signatures": [
+     "0.346/0.618",
+     "0.385/0.489",
+     "0.754/0.117",
+     "0.481/0.453",
+     "0.508/0.437"
+    ],
+    "note": "five skins, at least four distinguishable pictures"
+   }
+  },
+  {
+   "id": "W20",
+   "name": "pressing SWITCH SKIN again closes the wardrobe and leaves the Brain open",
+   "pass": true,
+   "detail": {
+    "skins_open": false,
+    "brain_open": true
+   }
+  },
+  {
+   "id": "W21",
+   "name": "closing the Project Brain leaves nothing open behind it",
+   "pass": true,
+   "detail": {
+    "brain_open": false,
+    "skins_open": false
+   }
+  }
+ ],
+ "press_returned": true,
+ "preview_rect": {
+  "got": true,
+  "centre": [
+   0.5947,
+   0.4704
+  ],
+  "size": [
+   0.2136,
+   0.4828
+  ]
+ },
+ "per_skin": {
+  "relay_og": {
+   "worn": true,
+   "whole": {
+    "mean": [
+     0.3493,
+     0.3458,
+     0.3413
+    ],
+    "luma": 0.3463,
+    "dark": 0.6178,
+    "bright": 0.3601,
+    "samples": 11856
+   },
+   "middle": {
+    "mean": [
+     0.8582,
+     0.8496,
+     0.8312
+    ],
+    "luma": 0.8501,
+    "dark": 0.041,
+    "bright": 0.8971,
+    "samples": 25807
+   },
+   "corners": {
+    "tl": {
+     "mean": [
+      0.0047,
+      0.0047,
+      0.0047
+     ],
+     "luma": 0.0047,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "tr": {
+     "mean": [
+      0.0222,
+      0.0304,
+      0.0782
+     ],
+     "luma": 0.0321,
+     "dark": 0.912,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "bl": {
+     "mean": [
+      0.007,
+      0.0082,
+      0.025
+     ],
+     "luma": 0.0092,
+     "dark": 0.9864,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "br": {
+     "mean": [
+      0.0035,
+      0.0035,
+      0.0128
+     ],
+     "luma": 0.0042,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1886
+    }
+   },
+   "capture": "relay_og.png"
+  },
+  "arden_infernal": {
+   "worn": true,
+   "whole": {
+    "mean": [
+     0.4645,
+     0.3733,
+     0.2591
+    ],
+    "luma": 0.3845,
+    "dark": 0.4894,
+    "bright": 0.3434,
+    "samples": 11856
+   },
+   "middle": {
+    "mean": [
+     0.7946,
+     0.6006,
+     0.5024
+    ],
+    "luma": 0.6347,
+    "dark": 0.1198,
+    "bright": 0.5799,
+    "samples": 25807
+   },
+   "corners": {
+    "tl": {
+     "mean": [
+      0.0047,
+      0.0047,
+      0.0047
+     ],
+     "luma": 0.0047,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "tr": {
+     "mean": [
+      0.0432,
+      0.048,
+      0.0819
+     ],
+     "luma": 0.0494,
+     "dark": 0.8722,
+     "bright": 0.0042,
+     "samples": 1886
+    },
+    "bl": {
+     "mean": [
+      0.007,
+      0.0082,
+      0.0153
+     ],
+     "luma": 0.0085,
+     "dark": 0.9864,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "br": {
+     "mean": [
+      0.0035,
+      0.0035,
+      0.0035
+     ],
+     "luma": 0.0035,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1886
+    }
+   },
+   "capture": "arden_infernal.png"
+  },
+  "apollo": {
+   "worn": true,
+   "whole": {
+    "mean": [
+     0.7873,
+     0.7579,
+     0.6216
+    ],
+    "luma": 0.7543,
+    "dark": 0.1167,
+    "bright": 0.7529,
+    "samples": 11856
+   },
+   "middle": {
+    "mean": [
+     0.8809,
+     0.8463,
+     0.7004
+    ],
+    "luma": 0.8431,
+    "dark": 0.0047,
+    "bright": 0.8422,
+    "samples": 25807
+   },
+   "corners": {
+    "tl": {
+     "mean": [
+      0.5059,
+      0.4897,
+      0.4089
+     ],
+     "luma": 0.4874,
+     "dark": 0.4358,
+     "bright": 0.5171,
+     "samples": 1845
+    },
+    "tr": {
+     "mean": [
+      0.4373,
+      0.4295,
+      0.4026
+     ],
+     "luma": 0.4292,
+     "dark": 0.3171,
+     "bright": 0.3012,
+     "samples": 1886
+    },
+    "bl": {
+     "mean": [
+      0.0071,
+      0.0083,
+      0.0252
+     ],
+     "luma": 0.0093,
+     "dark": 0.9864,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "br": {
+     "mean": [
+      0.0035,
+      0.0035,
+      0.0128
+     ],
+     "luma": 0.0042,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1886
+    }
+   },
+   "capture": "apollo.png"
+  },
+  "skeleton_flame": {
+   "worn": true,
+   "whole": {
+    "mean": [
+     0.4651,
+     0.4847,
+     0.4869
+    ],
+    "luma": 0.4807,
+    "dark": 0.4529,
+    "bright": 0.4879,
+    "samples": 11856
+   },
+   "middle": {
+    "mean": [
+     0.8195,
+     0.8382,
+     0.8299
+    ],
+    "luma": 0.8336,
+    "dark": 0.0714,
+    "bright": 0.869,
+    "samples": 25807
+   },
+   "corners": {
+    "tl": {
+     "mean": [
+      0.0047,
+      0.0047,
+      0.0047
+     ],
+     "luma": 0.0047,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "tr": {
+     "mean": [
+      0.0222,
+      0.0304,
+      0.0782
+     ],
+     "luma": 0.0321,
+     "dark": 0.912,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "bl": {
+     "mean": [
+      0.007,
+      0.0082,
+      0.025
+     ],
+     "luma": 0.0092,
+     "dark": 0.9864,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "br": {
+     "mean": [
+      0.0035,
+      0.0035,
+      0.0128
+     ],
+     "luma": 0.0042,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1886
+    }
+   },
+   "capture": "skeleton_flame.png"
+  },
+  "celestial_light": {
+   "worn": true,
+   "whole": {
+    "mean": [
+     0.5051,
+     0.5083,
+     0.514
+    ],
+    "luma": 0.508,
+    "dark": 0.4372,
+    "bright": 0.535,
+    "samples": 11856
+   },
+   "middle": {
+    "mean": [
+     0.886,
+     0.8903,
+     0.8947
+    ],
+    "luma": 0.8897,
+    "dark": 0.0039,
+    "bright": 0.9443,
+    "samples": 25807
+   },
+   "corners": {
+    "tl": {
+     "mean": [
+      0.0047,
+      0.0047,
+      0.0047
+     ],
+     "luma": 0.0047,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "tr": {
+     "mean": [
+      0.0222,
+      0.0304,
+      0.0782
+     ],
+     "luma": 0.0321,
+     "dark": 0.912,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "bl": {
+     "mean": [
+      0.007,
+      0.0082,
+      0.025
+     ],
+     "luma": 0.0092,
+     "dark": 0.9864,
+     "bright": 0.0,
+     "samples": 1845
+    },
+    "br": {
+     "mean": [
+      0.0035,
+      0.0035,
+      0.0128
+     ],
+     "luma": 0.0042,
+     "dark": 1.0,
+     "bright": 0.0,
+     "samples": 1886
+    }
+   },
+   "capture": "celestial_light.png"
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wardrobe_pixels",
+ "finished": "2026-09-27 21:45:13",
+ "seconds": 87.58,
+ "log": "W00 PASS the UI subsystem is reachable {}\nW01 PASS the Project Brain is open {}\nW02 PASS SWITCH SKIN was pressed, and the wardrobe opened from that press alone {'pressed': True, 'skins_open': True, 'note': \"this is the founder's route. Every earlier proof used SetBrainSkinsOpen, which is not.\"}\nW03 PASS the Project Brain is STILL OPEN with the wardrobe inside it {'note': 'the founder asked that the Brain not be replaced by the wardrobe'}\nW04 PASS the preview window has painted and reports where it is {'got': True, 'centre': [0.5947, 0.4704], 'size': [0.2136, 0.4828]}\nW_relay_og INFO preview pixels for relay_og {'whole_luma': 0.3463, 'middle_luma': 0.8501, 'corner_luma': {'tl': 0.0047, 'tr': 0.0321, 'bl': 0.0092, 'br': 0.0042}}\nW_arden_infernal INFO preview pixels for arden_infernal {'whole_luma': 0.3845, 'middle_luma': 0.6347, 'corner_luma': {'tl': 0.0047, 'tr': 0.0494, 'bl': 0.0085, 'br': 0.0035}}\nW_apollo INFO preview pixels for apollo {'whole_luma': 0.7543, 'middle_luma': 0.8431, 'corner_luma': {'tl': 0.4874, 'tr': 0.4292, 'bl': 0.0093, 'br': 0.0042}}\nW_skeleton_flame INFO preview pixels for skeleton_flame {'whole_luma': 0.4807, 'middle_luma': 0.8336, 'corner_luma': {'tl': 0.0047, 'tr': 0.0321, 'bl': 0.0092, 'br': 0.0042}}\nW_celestial_light INFO preview pixels for celestial_light {'whole_luma': 0.508, 'middle_luma': 0.8897, 'corner_luma': {'tl': 0.0047, 'tr': 0.0321, 'bl': 0.0092, 'br': 0.0042}}\nW10 PASS the preview's pixels were readable for every skin, in every place looked at {}\nW11 FAIL every corner of the preview window is the wardrobe's black backdrop, for every skin {'brightest_corner_by_skin': {'relay_og': 0.0321, 'arden_infernal': 0.0494, 'apollo': 0.4874, 'skeleton_flame': 0.0321, 'celestial_light': 0.0321}, 'threshold': 0.25, 'note': 'the Project Brain chamber the founder photographed is 0.97 white in every corner. A wardrobe with its backdrop standing reads far below this however luminous the skin is.'}\nW12 PASS the middle of the window is lit and the corners are not -- a figure is standing there {'middle_minus_brightest_corner': {'relay_og': 0.818, 'arden_infernal': 0.5853, 'apollo': 0.3557, 'skeleton_flame': 0.8015, 'celestial_light': 0.8576}, 'threshold': 0.03, 'middle_luma': {'relay_og': 0.8501, 'arden_infernal': 0.6347, 'apollo': 0.8431, 'skeleton_flame': 0.8336, 'celestial_light': 0.8897}}\nW13 FAIL the preview as a whole is a dark room and not the white brain chamber {'whole_luma_by_skin': {'relay_og': 0.3463, 'arden_infernal': 0.3845, 'apollo': 0.7543, 'skeleton_flame': 0.4807, 'celestial_light': 0.508}, 'threshold': 0.6, 'note': 'the chamber fills the window edge to edge at 0.97; the brightest skin in the set reaches 0.49 and that is its own halo, standing on black'}\nW14 PASS clicking each skin changes what the preview shows {'signatures': ['0.346/0.618', '0.385/0.489', '0.754/0.117', '0.481/0.453', '0.508/0.437'], 'note': 'five skins, at least four distinguishable pictures'}\nW20 PASS pressing SWITCH SKIN again closes the wardrobe and leaves the Brain open {'skins_open': False, 'brain_open': True}\nW21 PASS closing the Project Brain leaves nothing open behind it {'brain_open': False, 'skins_open': False}\n"
+}

@@ -9,6 +9,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Engine/GameViewportClient.h"
+#include "Slate/SGameLayerManager.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
@@ -2278,6 +2279,73 @@ bool UWonderlandUiSubsystem::GetSkinPreviewRect(FVector2D& OutCentre, FVector2D&
 	return BrainPanel.IsValid() && BrainPanel->GetSkinPreviewRect(OutCentre, OutSize);
 }
 
+namespace
+{
+	/**
+	 * THE WIDGET ReadScreenExtremes ACTUALLY SCREENSHOTS, so a rect expressed against it lands on the pixels
+	 * the reader walks. Picking a different reference -- the window, the viewport client, the player's own
+	 * geometry -- is how a rectangle comes out plausible and points somewhere else.
+	 */
+	bool WonderlandViewportAbsoluteRect(FVector2D& OutTopLeft, FVector2D& OutSize)
+	{
+		if (!FSlateApplication::IsInitialized() || GEngine == nullptr || GEngine->GameViewport == nullptr)
+		{
+			return false;
+		}
+		TSharedPtr<SWidget> Target;
+		if (TSharedPtr<IGameLayerManager> Layers = GEngine->GameViewport->GetGameLayerManager())
+		{
+			Target = StaticCastSharedPtr<SGameLayerManager>(Layers);
+		}
+		if (!Target.IsValid())
+		{
+			Target = GEngine->GameViewport->GetGameViewportWidget();
+		}
+		if (!Target.IsValid())
+		{
+			return false;
+		}
+		const FGeometry& G = Target->GetCachedGeometry();
+		OutTopLeft = G.GetAbsolutePosition();
+		OutSize = G.GetAbsoluteSize();
+		return OutSize.X >= 1.0 && OutSize.Y >= 1.0;
+	}
+}
+
+bool UWonderlandUiSubsystem::GetCompanionTerminalMarkRect(int32 Index, FVector2D& OutCentre, FVector2D& OutSize) const
+{
+	if (!CompanionTerminals.IsValidIndex(Index) || !CompanionTerminals[Index].IsValid())
+	{
+		return false;
+	}
+	FVector2D MarkTopLeft, MarkSize, ViewTopLeft, ViewSize;
+	if (!CompanionTerminals[Index]->GetMarkAbsoluteRect(MarkTopLeft, MarkSize)
+		|| !WonderlandViewportAbsoluteRect(ViewTopLeft, ViewSize))
+	{
+		return false;
+	}
+	OutSize = MarkSize / ViewSize;
+	OutCentre = (MarkTopLeft - ViewTopLeft) / ViewSize + OutSize * 0.5;
+	return true;
+}
+
+bool UWonderlandUiSubsystem::GetCompanionTerminalRect(int32 Index, FVector2D& OutCentre, FVector2D& OutSize) const
+{
+	if (!CompanionTerminals.IsValidIndex(Index) || !CompanionTerminals[Index].IsValid())
+	{
+		return false;
+	}
+	FVector2D FrameTopLeft, FrameSize, ViewTopLeft, ViewSize;
+	if (!CompanionTerminals[Index]->GetFrameAbsoluteRect(FrameTopLeft, FrameSize)
+		|| !WonderlandViewportAbsoluteRect(ViewTopLeft, ViewSize))
+	{
+		return false;
+	}
+	OutSize = FrameSize / ViewSize;
+	OutCentre = (FrameTopLeft - ViewTopLeft) / ViewSize + OutSize * 0.5;
+	return true;
+}
+
 bool UWonderlandUiSubsystem::ShowProjectAvatarsForTest(const FString& Argument)
 {
 	return ShowProjectAvatars(Argument);
@@ -4364,6 +4432,8 @@ bool UWonderlandUiSubsystem::RouteClickToWidget(const TSharedPtr<SWidget>& Targe
 	// if the viewport holds it the press never reached the button and mouse capture is the fault.
 	FString TookTheDown = TEXT("-");
 	bool bTargetHasCapture = false;
+	bool bPressedAfterDown = false;
+	bool bPressedKnown = false;
 	if (bTileUnderPoint)
 	{
 		App.RoutePointerMoveEvent(Path, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::Invalid, 0.0f, FModifierKeysState()), false);
@@ -4376,6 +4446,21 @@ bool UWonderlandUiSubsystem::RouteClickToWidget(const TSharedPtr<SWidget>& Targe
 				TookTheDown = Captor->GetTypeAsString();
 				bTargetHasCapture = Captor == Target;
 			}
+		}
+		// ---- IS THE BUTTON ACTUALLY PRESSED? The last thing "down 1" has been asked to stand for.
+		//
+		// The captor after the down is the target's own SButton, the point is inside its geometry, app focus
+		// and pointing are both on, nothing else holds capture -- and OnClicked still does not run while the
+		// same button's SimulateClick runs it every time. SButton only calls ExecuteOnClick from
+		// OnMouseButtonUp when bIsPressed is set, and bIsPressed is set by OnMouseButtonDown.
+		//
+		// So this reads IsPressed() BETWEEN the two events. False here means the down reached the widget
+		// (it took capture) without pressing it, which is a different fault from the up being lost, and
+		// nothing measured so far can tell those apart.
+		if (Target->GetTypeAsString() == TEXT("SButton"))
+		{
+			bPressedAfterDown = StaticCastSharedPtr<SButton>(Target)->IsPressed();
+			bPressedKnown = true;
 		}
 		bUp = App.RoutePointerUpEvent(Path, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::LeftMouseButton, 0.0f, FModifierKeysState())).IsEventHandled();
 	}
@@ -4401,6 +4486,8 @@ bool UWonderlandUiSubsystem::RouteClickToWidget(const TSharedPtr<SWidget>& Targe
 		bPointInsideTarget ? 1 : 0,
 		Cached.GetAbsolutePosition().X, Cached.GetAbsolutePosition().Y,
 		Cached.GetAbsoluteSize().X, Cached.GetAbsoluteSize().Y);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI   ...and between the down and the up the button reports pressed: %s"),
+		bPressedKnown ? (bPressedAfterDown ? TEXT("YES") : TEXT("NO")) : TEXT("not an SButton, could not ask"));
 	return bTileUnderPoint;
 }
 

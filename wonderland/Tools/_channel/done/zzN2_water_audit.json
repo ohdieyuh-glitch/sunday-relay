@@ -1,0 +1,321 @@
+{
+ "name": "zzN2_water_audit",
+ "started": "2026-09-27 11:00:19",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "A00",
+   "name": "the master material was read and exposes named parameters",
+   "pass": true,
+   "detail": {
+    "master": {
+     "blend_mode": "<BlendMode.BLEND_TRANSLUCENT: 2>",
+     "shading_model": "<MaterialShadingModel.MSM_DEFAULT_LIT: 1>",
+     "translucency_lighting": "<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>",
+     "parameters": {
+      "scalar": [
+       "FlowSpeedA",
+       "FlowSpeedB",
+       "RippleStrength",
+       "Opacity",
+       "Roughness",
+       "Specular",
+       "Metallic",
+       "Refraction"
+      ],
+      "vector": [
+       "ShallowColor",
+       "DeepColor"
+      ],
+      "texture": [
+       "NormalTex",
+       "NormalA",
+       "NormalB"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "A01",
+   "name": "the water in the level wears M_WL_RealWater, with live values read off a surface",
+   "pass": true,
+   "detail": {
+    "surfaces": 19,
+    "live": {
+     "surface": "D14_hamlet_WellWater",
+     "material": "MID_M_WL_RealWater_0",
+     "values": {
+      "FlowSpeedA": 0.018,
+      "FlowSpeedB": -0.011,
+      "RippleStrength": 0.35,
+      "Opacity": 0.82,
+      "Roughness": 0.035,
+      "Specular": 1.0,
+      "Metallic": 0.0,
+      "Refraction": 1.05,
+      "ShallowColor": [
+       0.16,
+       0.416,
+       0.422,
+       1.0
+      ],
+      "DeepColor": [
+       0.02,
+       0.1,
+       0.16,
+       1.0
+      ]
+     },
+     "surfaces_dressed": 19
+    }
+   }
+  },
+  {
+   "id": "A02",
+   "name": "all nine founder views were photographed with the water in frame",
+   "pass": true,
+   "detail": {
+    "views": [
+     "day_close",
+     "day_elevated",
+     "day_shoreline",
+     "dusk_close",
+     "dusk_elevated",
+     "dusk_shoreline",
+     "night_close",
+     "night_elevated",
+     "night_shoreline"
+    ]
+   }
+  },
+  {
+   "id": "A03",
+   "name": "at night and dusk the water reads as water -- not a black hole, not a glowing blue sheet",
+   "pass": false,
+   "detail": {
+    "night": {
+     "luma": 0.0245,
+     "dark": 0.9904,
+     "bright": 0.0,
+     "blue_over_red": 1.559
+    },
+    "dusk": {
+     "luma": 0.0064,
+     "dark": 0.9986,
+     "bright": 0.0,
+     "blue_over_red": 1.793
+    },
+    "day": {
+     "luma": 0.2433,
+     "dark": 0.1689,
+     "bright": 0.0,
+     "blue_over_red": 0.597
+    },
+    "crushed_ceiling": 0.85,
+    "views_over_85pct_crushed": [
+     "dusk_close",
+     "dusk_elevated",
+     "dusk_shoreline",
+     "night_close",
+     "night_elevated",
+     "night_shoreline"
+    ],
+    "note": "gated on the CRUSHED FRACTION, because a mean of 0.03 passed a surface that was 99% black; over 0.35 luma or a blue/red ratio past 2.5 is the glowing sheet the founder named"
+   }
+  }
+ ],
+ "master": {
+  "blend_mode": "<BlendMode.BLEND_TRANSLUCENT: 2>",
+  "shading_model": "<MaterialShadingModel.MSM_DEFAULT_LIT: 1>",
+  "translucency_lighting": "<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>",
+  "parameters": {
+   "scalar": [
+    "FlowSpeedA",
+    "FlowSpeedB",
+    "RippleStrength",
+    "Opacity",
+    "Roughness",
+    "Specular",
+    "Metallic",
+    "Refraction"
+   ],
+   "vector": [
+    "ShallowColor",
+    "DeepColor"
+   ],
+   "texture": [
+    "NormalTex",
+    "NormalA",
+    "NormalB"
+   ]
+  }
+ },
+ "live": {
+  "surface": "D14_hamlet_WellWater",
+  "material": "MID_M_WL_RealWater_0",
+  "values": {
+   "FlowSpeedA": 0.018,
+   "FlowSpeedB": -0.011,
+   "RippleStrength": 0.35,
+   "Opacity": 0.82,
+   "Roughness": 0.035,
+   "Specular": 1.0,
+   "Metallic": 0.0,
+   "Refraction": 1.05,
+   "ShallowColor": [
+    0.16,
+    0.416,
+    0.422,
+    1.0
+   ],
+   "DeepColor": [
+    0.02,
+    0.1,
+    0.16,
+    1.0
+   ]
+  },
+  "surfaces_dressed": 19
+ },
+ "views": {
+  "day_close": {
+   "file": "day_close.png",
+   "water": {
+    "luma": 0.3321,
+    "dark": 0.1909,
+    "bright": 0.0,
+    "blue_over_red": 0.554
+   },
+   "frame": {
+    "luma": 0.3198,
+    "dark": 0.2204,
+    "bright": 0.0032,
+    "blue_over_red": 0.619
+   }
+  },
+  "day_shoreline": {
+   "file": "day_shoreline.png",
+   "water": {
+    "luma": 0.2433,
+    "dark": 0.1689,
+    "bright": 0.0,
+    "blue_over_red": 0.597
+   },
+   "frame": {
+    "luma": 0.2635,
+    "dark": 0.2801,
+    "bright": 0.0034,
+    "blue_over_red": 0.697
+   }
+  },
+  "day_elevated": {
+   "file": "day_elevated.png",
+   "water": {
+    "luma": 0.287,
+    "dark": 0.2766,
+    "bright": 0.0001,
+    "blue_over_red": 0.59
+   },
+   "frame": {
+    "luma": 0.2551,
+    "dark": 0.3276,
+    "bright": 0.0034,
+    "blue_over_red": 0.646
+   }
+  },
+  "dusk_close": {
+   "file": "dusk_close.png",
+   "water": {
+    "luma": 0.0095,
+    "dark": 1.0,
+    "bright": 0.0,
+    "blue_over_red": 1.58
+   },
+   "frame": {
+    "luma": 0.0349,
+    "dark": 0.967,
+    "bright": 0.0031,
+    "blue_over_red": 1.505
+   }
+  },
+  "dusk_shoreline": {
+   "file": "dusk_shoreline.png",
+   "water": {
+    "luma": 0.0064,
+    "dark": 0.9986,
+    "bright": 0.0,
+    "blue_over_red": 1.793
+   },
+   "frame": {
+    "luma": 0.0356,
+    "dark": 0.9666,
+    "bright": 0.0031,
+    "blue_over_red": 1.668
+   }
+  },
+  "dusk_elevated": {
+   "file": "dusk_elevated.png",
+   "water": {
+    "luma": 0.0081,
+    "dark": 0.9961,
+    "bright": 0.0,
+    "blue_over_red": 2.187
+   },
+   "frame": {
+    "luma": 0.0325,
+    "dark": 0.9692,
+    "bright": 0.0031,
+    "blue_over_red": 1.588
+   }
+  },
+  "night_close": {
+   "file": "night_close.png",
+   "water": {
+    "luma": 0.019,
+    "dark": 0.9824,
+    "bright": 0.0,
+    "blue_over_red": 1.588
+   },
+   "frame": {
+    "luma": 0.0618,
+    "dark": 0.8779,
+    "bright": 0.0031,
+    "blue_over_red": 1.477
+   }
+  },
+  "night_shoreline": {
+   "file": "night_shoreline.png",
+   "water": {
+    "luma": 0.0245,
+    "dark": 0.9904,
+    "bright": 0.0,
+    "blue_over_red": 1.559
+   },
+   "frame": {
+    "luma": 0.0618,
+    "dark": 0.9392,
+    "bright": 0.0031,
+    "blue_over_red": 1.673
+   }
+  },
+  "night_elevated": {
+   "file": "night_elevated.png",
+   "water": {
+    "luma": 0.044,
+    "dark": 0.9503,
+    "bright": 0.0,
+    "blue_over_red": 1.677
+   },
+   "frame": {
+    "luma": 0.0632,
+    "dark": 0.9342,
+    "bright": 0.0031,
+    "blue_over_red": 1.627
+   }
+  }
+ },
+ "finished": "2026-09-27 11:01:13",
+ "seconds": 54.07,
+ "log": "A00 PASS the master material was read and exposes named parameters {'master': {'blend_mode': '<BlendMode.BLEND_TRANSLUCENT: 2>', 'shading_model': '<MaterialShadingModel.MSM_DEFAULT_LIT: 1>', 'translucency_lighting': '<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>', 'parameters': {'scalar': ['FlowSpeedA', 'FlowSpeedB', 'RippleStrength', 'Opacity', 'Roughness', 'Specular', 'Metallic', 'Refraction'], 'vector': ['ShallowColor', 'DeepColor'], 'texture': ['NormalTex', 'NormalA', 'NormalB']}}}\nA01 PASS the water in the level wears M_WL_RealWater, with live values read off a surface {'surfaces': 19, 'live': {'surface': 'D14_hamlet_WellWater', 'material': 'MID_M_WL_RealWater_0', 'values': {'FlowSpeedA': 0.018, 'FlowSpeedB': -0.011, 'RippleStrength': 0.35, 'Opacity': 0.82, 'Roughness': 0.035, 'Specular': 1.0, 'Metallic': 0.0, 'Refraction': 1.05, 'ShallowColor': [0.16, 0.416, 0.422, 1.0], 'DeepColor': [0.02, 0.1, 0.16, 1.0]}, 'surfaces_dressed': 19}}\nA02 PASS all nine founder views were photographed with the water in frame {'views': ['day_close', 'day_elevated', 'day_shoreline', 'dusk_close', 'dusk_elevated', 'dusk_shoreline', 'night_close', 'night_elevated', 'night_shoreline']}\nA03 FAIL at night and dusk the water reads as water -- not a black hole, not a glowing blue sheet {'night': {'luma': 0.0245, 'dark': 0.9904, 'bright': 0.0, 'blue_over_red': 1.559}, 'dusk': {'luma': 0.0064, 'dark': 0.9986, 'bright': 0.0, 'blue_over_red': 1.793}, 'day': {'luma': 0.2433, 'dark': 0.1689, 'bright': 0.0, 'blue_over_red': 0.597}, 'crushed_ceiling': 0.85, 'views_over_85pct_crushed': ['dusk_close', 'dusk_elevated', 'dusk_shoreline', 'night_close', 'night_elevated', 'night_shoreline'], 'note': 'gated on the CRUSHED FRACTION, because a mean of 0.03 passed a surface that was 99% black; over 0.35 luma or a blue/red ratio past 2.5 is the glowing sheet the founder named'}\n"
+}

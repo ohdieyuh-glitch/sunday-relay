@@ -1,0 +1,159 @@
+{
+ "name": "zzAG2_fire",
+ "started": "2026-09-27 18:58:52",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "F_CLOCK",
+   "name": "the clock is stopped so both surfaces are lit the same",
+   "pass": true,
+   "detail": {
+    "day_minutes": 0.0
+   }
+  },
+  {
+   "id": "F_KNOB",
+   "name": "the fire material switch can be read back",
+   "pass": true,
+   "detail": {
+    "as_found": 0,
+    "note": "a switch that cannot be read cannot be restored, and this job must leave the founder's approved configuration exactly as it found it."
+   }
+  },
+  {
+   "id": "F_SET_0",
+   "name": "wl.Look.FireMaterial took the value 0",
+   "pass": true,
+   "detail": {
+    "asked": 0,
+    "read": 0
+   }
+  },
+  {
+   "id": "F_SET_1",
+   "name": "wl.Look.FireMaterial took the value 1",
+   "pass": true,
+   "detail": {
+    "asked": 1,
+    "read": 1
+   }
+  },
+  {
+   "id": "F_RESTORE",
+   "name": "the founder's approved setting was put back",
+   "pass": true,
+   "detail": {
+    "as_found": 0,
+    "restored": 0,
+    "note": "this job changes a look the founder approved on 2026-09-26. Leaving it changed would make every later measurement in this session a reading of this job."
+   }
+  },
+  {
+   "id": "F01",
+   "name": "the candidate fire material draws something at all",
+   "pass": true,
+   "detail": {
+    "luma_on_candidate": {
+     "arden_infernal": 0.14387,
+     "skeleton_flame": 0.12236
+    },
+    "floor": 0.02,
+    "note": "THIS IS THE CONTRADICTION. zc_fire_look records that the candidate is off because it DREW NOTHING; WonderlandCompanionEmbodiment records that it is off because it draws too softly. A pass here refutes the first account and a fail refutes the second, and the fix for each is a different piece of work."
+   }
+  }
+ ],
+ "fire_material_as_found": 0,
+ "readings": {
+  "0/arden_infernal": {
+   "luma": 0.65947,
+   "blown": 0.0086,
+   "dark": 0.0,
+   "samples": 14729,
+   "blue_over_red": 0.0,
+   "red_over_blue": 0.9608,
+   "swing": 0.15168,
+   "series_reads": 17,
+   "mean": 0.63401,
+   "separation": 0.9608
+  },
+  "0/skeleton_flame": {
+   "luma": 0.38778,
+   "blown": 0.4108,
+   "dark": 0.4812,
+   "samples": 14729,
+   "blue_over_red": 0.4392,
+   "red_over_blue": 0.1647,
+   "swing": 0.27048,
+   "series_reads": 17,
+   "mean": 0.43413,
+   "separation": 0.4392
+  },
+  "1/arden_infernal": {
+   "luma": 0.14387,
+   "blown": 0.0,
+   "dark": 0.368,
+   "samples": 14729,
+   "blue_over_red": 0.1255,
+   "red_over_blue": 0.2431,
+   "swing": 0.01438,
+   "series_reads": 15,
+   "mean": 0.14246,
+   "separation": 0.2431
+  },
+  "1/skeleton_flame": {
+   "luma": 0.12236,
+   "blown": 0.0,
+   "dark": 0.6355,
+   "samples": 14729,
+   "blue_over_red": 0.1765,
+   "red_over_blue": 0.2745,
+   "swing": 0.00456,
+   "series_reads": 20,
+   "mean": 0.12189,
+   "separation": 0.1765
+  }
+ },
+ "knob_readback": {
+  "0": 0,
+  "1": 1
+ },
+ "fire_material_restored_to": 0,
+ "candidate_vs_shipped": {
+  "luma_on_candidate": {
+   "arden_infernal": 0.14387,
+   "skeleton_flame": 0.12236
+  },
+  "luma_on_shipped": {
+   "arden_infernal": 0.65947,
+   "skeleton_flame": 0.38778
+  },
+  "blown_on_candidate": {
+   "arden_infernal": 0.0,
+   "skeleton_flame": 0.0
+  },
+  "blown_on_shipped": {
+   "arden_infernal": 0.0086,
+   "skeleton_flame": 0.4108
+  },
+  "swing_on_candidate": {
+   "arden_infernal": 0.01438,
+   "skeleton_flame": 0.00456
+  },
+  "swing_on_shipped": {
+   "arden_infernal": 0.15168,
+   "skeleton_flame": 0.27048
+  },
+  "separation_on_candidate": {
+   "arden_infernal": 0.2431,
+   "skeleton_flame": 0.1765
+  },
+  "separation_on_shipped": {
+   "arden_infernal": 0.9608,
+   "skeleton_flame": 0.4392
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\fire_two_surfaces",
+ "finished": "2026-09-27 19:00:15",
+ "seconds": 82.17,
+ "log": "F_CLOCK PASS the clock is stopped so both surfaces are lit the same {'day_minutes': 0.0}\nF_KNOB PASS the fire material switch can be read back {'as_found': 0, 'note': \"a switch that cannot be read cannot be restored, and this job must leave the founder's approved configuration exactly as it found it.\"}\nF_SET_0 PASS wl.Look.FireMaterial took the value 0 {'asked': 0, 'read': 0}\nF_0_arden_infernal INFO surface 0, arden_infernal {'luma': 0.65947, 'blown': 0.0086, 'dark': 0.0, 'samples': 14729, 'blue_over_red': 0.0, 'red_over_blue': 0.9608, 'swing': 0.15168, 'series_reads': 17, 'mean': 0.63401, 'separation': 0.9608}\nF_0_skeleton_flame INFO surface 0, skeleton_flame {'luma': 0.38778, 'blown': 0.4108, 'dark': 0.4812, 'samples': 14729, 'blue_over_red': 0.4392, 'red_over_blue': 0.1647, 'swing': 0.27048, 'series_reads': 17, 'mean': 0.43413, 'separation': 0.4392}\nF_SET_1 PASS wl.Look.FireMaterial took the value 1 {'asked': 1, 'read': 1}\nF_1_arden_infernal INFO surface 1, arden_infernal {'luma': 0.14387, 'blown': 0.0, 'dark': 0.368, 'samples': 14729, 'blue_over_red': 0.1255, 'red_over_blue': 0.2431, 'swing': 0.01438, 'series_reads': 15, 'mean': 0.14246, 'separation': 0.2431}\nF_1_skeleton_flame INFO surface 1, skeleton_flame {'luma': 0.12236, 'blown': 0.0, 'dark': 0.6355, 'samples': 14729, 'blue_over_red': 0.1765, 'red_over_blue': 0.2745, 'swing': 0.00456, 'series_reads': 20, 'mean': 0.12189, 'separation': 0.1765}\nF_RESTORE PASS the founder's approved setting was put back {'as_found': 0, 'restored': 0, 'note': 'this job changes a look the founder approved on 2026-09-26. Leaving it changed would make every later measurement in this session a reading of this job.'}\nF01 PASS the candidate fire material draws something at all {'luma_on_candidate': {'arden_infernal': 0.14387, 'skeleton_flame': 0.12236}, 'floor': 0.02, 'note': 'THIS IS THE CONTRADICTION. zc_fire_look records that the candidate is off because it DREW NOTHING; WonderlandCompanionEmbodiment records that it is off because it draws too softly. A pass here refutes the first account and a fail refutes the second, and the fix for each is a different piece of work.'}\n"
+}

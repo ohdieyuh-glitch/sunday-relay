@@ -1,0 +1,15 @@
+{
+ "name": "zc_eye_probe",
+ "started": "2026-09-27 09:30:30",
+ "status": "error",
+ "found": {
+  "eye": "Mesh_head_eye",
+  "head": "Mesh_head_ivory",
+  "eye_visible": true,
+  "eye_world_bounds": "(<Struct 'Vector' (0x0000016518C7FDF0) {x: 10.200000, y: -11.400001, z: 17.850000}>, <Struct 'Vector' (0x0000016518C7FEE0) {x: 11.700000, y: 11.400001, z: 25.950001}>)"
+ },
+ "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n                                                                  ^^^^^^^^^^^^^^^^\n  File \"C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\_channel\\inbox\\zc_eye_probe.py\", line 88, in job\n  File \"C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\_channel\\inbox\\zc_eye_probe.py\", line 72, in frame\nAttributeError: 'StaticMeshComponent' object has no attribute 'get_component_transform'\n",
+ "finished": "2026-09-27 09:31:06",
+ "seconds": 36.95,
+ "log": ""
+}

@@ -1,0 +1,192 @@
+{
+ "name": "zzZ3_avatar",
+ "started": "2026-09-27 17:34:07",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "O00",
+   "name": "the editor exports the raw frame instrument",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "O01",
+   "name": "there are Project Avatar figures to spawn",
+   "pass": true,
+   "detail": {
+    "found": 10
+   }
+  },
+  {
+   "id": "O_vsm_off",
+   "name": "r.Shadow.Virtual.Enable took the value it was given",
+   "pass": true,
+   "detail": {
+    "asked": "0",
+    "read": 0.0
+   }
+  },
+  {
+   "id": "O_df_off",
+   "name": "r.DistanceFields took the value it was given",
+   "pass": false,
+   "detail": {
+    "asked": "0",
+    "read": 1.0,
+    "note": "the rung is VOID rather than reported: an unrecognised cvar leaves the world exactly as it was, and publishing that as a toggled measurement is how a knob that does nothing gets credited with a result."
+   }
+  },
+  {
+   "id": "O02",
+   "name": "the run reproduced the finding it was built to explain",
+   "pass": false,
+   "detail": {
+    "ladder_ms": {
+     "0": 58.94,
+     "1": 124.25,
+     "2": 291.2,
+     "3": 97.4,
+     "4": 127.67,
+     "5": 114.9
+    },
+    "one_over_five": 1.08,
+    "note": "if one avatar is NOT expensive on this run, nothing below means anything and the 16:33 reading was a property of that session rather than of avatars."
+   }
+  },
+  {
+   "id": "O03",
+   "name": "the cost at one avatar is a switch rather than a gradient",
+   "pass": false,
+   "detail": {
+    "one": 124.25,
+    "two": 291.2,
+    "fraction_lost_at_two": -1.344,
+    "reading": "NOT A SWITCH: the cost declines gradually across the rungs, so no path is turning on above one instance and the explanation is elsewhere."
+   }
+  },
+  {
+   "id": "O04",
+   "name": "virtual shadow maps explain the cost at one avatar",
+   "pass": false,
+   "detail": {
+    "one_avatar": 210.27,
+    "with_vsm_off": 200.91,
+    "fraction_removed": 0.045,
+    "reading": "shadows are NOT the cost: turning them off left it in place"
+   }
+  }
+ ],
+ "avatar_files": 10,
+ "stat_froze": 197,
+ "readings": {
+  "n00": {
+   "frames": 119,
+   "frame_median": 58.94,
+   "raw_p95": 14394.15,
+   "raw_worst": 14394.15,
+   "game_median": 59.35,
+   "render_median": 33.16,
+   "gpu_median": 16.97
+  },
+  "n01": {
+   "frames": 10,
+   "frame_median": 124.25,
+   "raw_p95": 237.35,
+   "raw_worst": 237.35,
+   "game_median": 40.05,
+   "render_median": 119.05,
+   "gpu_median": 19.15
+  },
+  "n02": {
+   "frames": 25,
+   "frame_median": 291.2,
+   "raw_p95": 440.93,
+   "raw_worst": 454.08,
+   "game_median": 51.14,
+   "render_median": 286.82,
+   "gpu_median": 46.52
+  },
+  "n03": {
+   "frames": 49,
+   "frame_median": 97.4,
+   "raw_p95": 132.1,
+   "raw_worst": 134.44,
+   "game_median": 41.27,
+   "render_median": 97.51,
+   "gpu_median": 19.64
+  },
+  "n04": {
+   "frames": 45,
+   "frame_median": 127.67,
+   "raw_p95": 141.67,
+   "raw_worst": 175.5,
+   "game_median": 51.41,
+   "render_median": 125.36,
+   "gpu_median": 19.89
+  },
+  "n05": {
+   "frames": 46,
+   "frame_median": 114.9,
+   "raw_p95": 134.19,
+   "raw_worst": 172.61,
+   "game_median": 45.35,
+   "render_median": 114.97,
+   "gpu_median": 20.53
+  },
+  "n01_again": {
+   "frames": 37,
+   "frame_median": 210.27,
+   "raw_p95": 250.88,
+   "raw_worst": 265.38,
+   "game_median": 42.54,
+   "render_median": 210.43,
+   "gpu_median": 20.95
+  },
+  "vsm_off": {
+   "frames": 24,
+   "frame_median": 200.91,
+   "raw_p95": 253.47,
+   "raw_worst": 274.47,
+   "game_median": 42.91,
+   "render_median": 200.97,
+   "gpu_median": 25.79
+  },
+  "df_off": null
+ },
+ "cvar_readback": {
+  "vsm_off": {
+   "cvar": "r.Shadow.Virtual.Enable",
+   "asked": "0",
+   "read": 0.0
+  },
+  "df_off": {
+   "cvar": "r.DistanceFields",
+   "asked": "0",
+   "read": 1.0
+  }
+ },
+ "ladder_ms": {
+  "0": 58.94,
+  "1": 124.25,
+  "2": 291.2,
+  "3": 97.4,
+  "4": 127.67,
+  "5": 114.9
+ },
+ "cliff": {
+  "one": 124.25,
+  "two": 291.2,
+  "fraction_lost_at_two": -1.344,
+  "reading": "NOT A SWITCH: the cost declines gradually across the rungs, so no path is turning on above one instance and the explanation is elsewhere."
+ },
+ "shadow_share": {
+  "one_avatar": 210.27,
+  "with_vsm_off": 200.91,
+  "fraction_removed": 0.045,
+  "reading": "shadows are NOT the cost: turning them off left it in place"
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\avatar_one",
+ "finished": "2026-09-27 17:36:17",
+ "seconds": 129.48,
+ "log": "O00 PASS the editor exports the raw frame instrument {}\nO01 PASS there are Project Avatar figures to spawn {'found': 10}\nn00 INFO n00 {'frames': 119, 'frame_median': 58.94, 'raw_p95': 14394.15, 'raw_worst': 14394.15, 'game_median': 59.35, 'render_median': 33.16, 'gpu_median': 16.97}\nn01 INFO n01 {'frames': 10, 'frame_median': 124.25, 'raw_p95': 237.35, 'raw_worst': 237.35, 'game_median': 40.05, 'render_median': 119.05, 'gpu_median': 19.15}\nn02 INFO n02 {'frames': 25, 'frame_median': 291.2, 'raw_p95': 440.93, 'raw_worst': 454.08, 'game_median': 51.14, 'render_median': 286.82, 'gpu_median': 46.52}\nn03 INFO n03 {'frames': 49, 'frame_median': 97.4, 'raw_p95': 132.1, 'raw_worst': 134.44, 'game_median': 41.27, 'render_median': 97.51, 'gpu_median': 19.64}\nn04 INFO n04 {'frames': 45, 'frame_median': 127.67, 'raw_p95': 141.67, 'raw_worst': 175.5, 'game_median': 51.41, 'render_median': 125.36, 'gpu_median': 19.89}\nn05 INFO n05 {'frames': 46, 'frame_median': 114.9, 'raw_p95': 134.19, 'raw_worst': 172.61, 'game_median': 45.35, 'render_median': 114.97, 'gpu_median': 20.53}\nn01_again INFO n01_again {'frames': 37, 'frame_median': 210.27, 'raw_p95': 250.88, 'raw_worst': 265.38, 'game_median': 42.54, 'render_median': 210.43, 'gpu_median': 20.95}\nO_vsm_off PASS r.Shadow.Virtual.Enable took the value it was given {'asked': '0', 'read': 0.0}\nvsm_off INFO vsm_off {'frames': 24, 'frame_median': 200.91, 'raw_p95': 253.47, 'raw_worst': 274.47, 'game_median': 42.91, 'render_median': 200.97, 'gpu_median': 25.79}\nO_df_off FAIL r.DistanceFields took the value it was given {'asked': '0', 'read': 1.0, 'note': 'the rung is VOID rather than reported: an unrecognised cvar leaves the world exactly as it was, and publishing that as a toggled measurement is how a knob that does nothing gets credited with a result.'}\nO02 FAIL the run reproduced the finding it was built to explain {'ladder_ms': {0: 58.94, 1: 124.25, 2: 291.2, 3: 97.4, 4: 127.67, 5: 114.9}, 'one_over_five': 1.08, 'note': 'if one avatar is NOT expensive on this run, nothing below means anything and the 16:33 reading was a property of that session rather than of avatars.'}\nO03 FAIL the cost at one avatar is a switch rather than a gradient {'one': 124.25, 'two': 291.2, 'fraction_lost_at_two': -1.344, 'reading': 'NOT A SWITCH: the cost declines gradually across the rungs, so no path is turning on above one instance and the explanation is elsewhere.'}\nO04 FAIL virtual shadow maps explain the cost at one avatar {'one_avatar': 210.27, 'with_vsm_off': 200.91, 'fraction_removed': 0.045, 'reading': 'shadows are NOT the cost: turning them off left it in place'}\n"
+}

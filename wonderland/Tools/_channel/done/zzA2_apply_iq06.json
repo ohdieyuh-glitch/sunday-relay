@@ -1,0 +1,22 @@
+{
+ "name": "zzA2_apply_iq06",
+ "started": "2026-09-27 13:35:46",
+ "status": "done",
+ "map_dirty_before": [
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/XR/KMJ3NV169MHRSX03YW9X4K",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/3/JC/ZBKRMYDNC5C849Q50G72FS",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/Q2/SNNG4FSY3JBF1A4PHTBVCE",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/8B/GJ2VOG0Q5FHWCPBM8NXW7B",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/PO/YVI4TNT0YYHSEDYGVCE03Y",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/XX/DWQVODGPU9XJM6789NLBSP"
+ ],
+ "removed": 0,
+ "pass": "IQ06",
+ "actors": 0,
+ "batches": 3,
+ "instances": 63,
+ "hovers": 0,
+ "finished": "2026-09-27 13:35:47",
+ "seconds": 0.72,
+ "log": "applied IQ06 0 actors 3 batches 63 instances\n"
+}

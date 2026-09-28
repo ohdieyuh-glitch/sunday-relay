@@ -1,0 +1,51 @@
+{
+ "name": "zc_material_graphs",
+ "started": "2026-09-27 09:12:18",
+ "status": "read",
+ "graphs": {
+  "M_WL_VoxelGlow": {
+   "class": "Material",
+   "blend": "<BlendMode.BLEND_OPAQUE: 0>",
+   "shading": "?",
+   "emissive": "MaterialExpressionMultiply(const_a=0.0 const_b=1.0)",
+   "base": "None",
+   "opacity": "None"
+  },
+  "M_WL_VoxelAdditive": {
+   "class": "Material",
+   "blend": "<BlendMode.BLEND_ADDITIVE: 3>",
+   "shading": "?",
+   "emissive": "MaterialExpressionVectorParameter(parameter_name=Color default_value=<Struct 'LinearColor' (0x0000027225E3D778) {r: 1.000000, g:)",
+   "base": "None",
+   "opacity": "None"
+  },
+  "M_WL_Fire": {
+   "class": "Material",
+   "blend": "<BlendMode.BLEND_ADDITIVE: 3>",
+   "shading": "?",
+   "emissive": "MaterialExpressionMultiply(const_a=0.0 const_b=1.0)",
+   "base": "None",
+   "opacity": "None"
+  },
+  "/Game/Wonderland/Materials/M_V2_Portal.M_V2_Portal": "NOT FOUND",
+  "LevelColorationUnlitMaterial": {
+   "class": "Material",
+   "blend": "<BlendMode.BLEND_OPAQUE: 0>",
+   "shading": "?",
+   "emissive": "MaterialExpressionVectorParameter(parameter_name=Color default_value=<Struct 'LinearColor' (0x0000026FF8438678) {r: 1.000000, g:)",
+   "base": "None",
+   "opacity": "None"
+  },
+  "EmissiveMeshMaterial": {
+   "class": "Material",
+   "blend": "<BlendMode.BLEND_ADDITIVE: 3>",
+   "shading": "?",
+   "emissive": "MaterialExpressionMultiply(const_a=0.0 const_b=1.0)",
+   "base": "None",
+   "opacity": "MaterialExpressionVectorParameter(parameter_name=Color default_value=<Struct 'LinearColor' (0x0000026FF8FE18F8) {r: 1.000000, g:)"
+  }
+ },
+ "finished": "2026-09-27 09:12:18",
+ "seconds": 0.72,
+ "log": "G_M_WL_VoxelGlow INFO graph {'class': 'Material', 'blend': '<BlendMode.BLEND_OPAQUE: 0>', 'shading': '?', 'emissive': 'MaterialExpressionMultiply(const_a=0.0 const_b=1.0)', 'base': 'None', 'opacity': 'None'}\nG_M_WL_VoxelAdditive INFO graph {'class': 'Material', 'blend': '<BlendMode.BLEND_ADDITIVE: 3>', 'shading': '?', 'emissive': \"MaterialExpressionVectorParameter(parameter_name=Color default_value=<Struct 'LinearColor' (0x0000027225E3D778) {r: 1.000000, g:)\", 'base': 'None', 'opacity': 'None'}\nG_M_WL_Fire INFO graph {'class': 'Material', 'blend': '<BlendMode.BLEND_ADDITIVE: 3>', 'shading': '?', 'emissive': 'MaterialExpressionMultiply(const_a=0.0 const_b=1.0)', 'base': 'None', 'opacity': 'None'}\nG_LevelColorationUnlitMaterial INFO graph {'class': 'Material', 'blend': '<BlendMode.BLEND_OPAQUE: 0>', 'shading': '?', 'emissive': \"MaterialExpressionVectorParameter(parameter_name=Color default_value=<Struct 'LinearColor' (0x0000026FF8438678) {r: 1.000000, g:)\", 'base': 'None', 'opacity': 'None'}\nG_EmissiveMeshMaterial INFO graph {'class': 'Material', 'blend': '<BlendMode.BLEND_ADDITIVE: 3>', 'shading': '?', 'emissive': 'MaterialExpressionMultiply(const_a=0.0 const_b=1.0)', 'base': 'None', 'opacity': \"MaterialExpressionVectorParameter(parameter_name=Color default_value=<Struct 'LinearColor' (0x0000026FF8FE18F8) {r: 1.000000, g:)\"}\n"
+}

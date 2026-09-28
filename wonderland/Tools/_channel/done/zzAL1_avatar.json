@@ -1,0 +1,167 @@
+{
+ "name": "zzAL1_avatar",
+ "started": "2026-09-27 19:29:28",
+ "status": "VOID: the run was not settled (see run_quality)",
+ "tests": [
+  {
+   "id": "O00",
+   "name": "the editor exports the raw frame instrument",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "O01",
+   "name": "there are Project Avatar figures to spawn",
+   "pass": true,
+   "detail": {
+    "found": 10
+   }
+  },
+  {
+   "id": "O_vsm_off",
+   "name": "r.Shadow.Virtual.Enable took the value it was given",
+   "pass": true,
+   "detail": {
+    "asked": "0",
+    "read": 0.0
+   }
+  },
+  {
+   "id": "O_df_off",
+   "name": "r.DistanceFields took the value it was given",
+   "pass": false,
+   "detail": {
+    "asked": "0",
+    "read": 1.0,
+    "note": "the rung is VOID rather than reported: an unrecognised cvar leaves the world exactly as it was, and publishing that as a toggled measurement is how a knob that does nothing gets credited with a result."
+   }
+  },
+  {
+   "id": "O_USABLE",
+   "name": "the run is settled enough to compare rungs at all",
+   "pass": false,
+   "detail": {
+    "rung_zero_median_ms": 51.26,
+    "rung_zero_raw_worst_ms": 72.82,
+    "rung_zero_spike_ratio": 1.4,
+    "rungs_under_30_frames": [
+     "vsm_off"
+    ],
+    "stat_froze": 244,
+    "note": "rung zero is the value every other rung is compared against, so a spike in it poisons the whole ladder. A worst frame more than ten times the median means the world was still arriving; a rung with under thirty frames means the stat overlay was off for most of its window. Either way the numbers below describe this machine's evening, not avatars."
+   }
+  }
+ ],
+ "avatar_files": 10,
+ "stat_froze": 244,
+ "readings": {
+  "n00": {
+   "frames": 106,
+   "frame_median": 51.26,
+   "raw_p95": 64.4,
+   "raw_worst": 72.82,
+   "game_median": 44.04,
+   "render_median": 50.98,
+   "gpu_median": 48.1
+  },
+  "n01": {
+   "frames": 30,
+   "frame_median": 115.41,
+   "raw_p95": 163.26,
+   "raw_worst": 163.89,
+   "game_median": 35.49,
+   "render_median": 115.45,
+   "gpu_median": 30.71
+  },
+  "n02": {
+   "frames": 37,
+   "frame_median": 191.98,
+   "raw_p95": 239.32,
+   "raw_worst": 241.4,
+   "game_median": 25.33,
+   "render_median": 191.79,
+   "gpu_median": 23.94
+  },
+  "n03": {
+   "frames": 39,
+   "frame_median": 99.6,
+   "raw_p95": 99.72,
+   "raw_worst": 100.33,
+   "game_median": 28.77,
+   "render_median": 99.99,
+   "gpu_median": 21.91
+  },
+  "n04": {
+   "frames": 71,
+   "frame_median": 79.77,
+   "raw_p95": 132.37,
+   "raw_worst": 145.32,
+   "game_median": 29.68,
+   "render_median": 79.61,
+   "gpu_median": 21.53
+  },
+  "n05": {
+   "frames": 46,
+   "frame_median": 85.26,
+   "raw_p95": 95.74,
+   "raw_worst": 106.39,
+   "game_median": 32.12,
+   "render_median": 85.38,
+   "gpu_median": 22.96
+  },
+  "n01_again": {
+   "frames": 37,
+   "frame_median": 161.85,
+   "raw_p95": 183.33,
+   "raw_worst": 193.42,
+   "game_median": 29.22,
+   "render_median": 161.27,
+   "gpu_median": 21.33
+  },
+  "vsm_off": {
+   "frames": 28,
+   "frame_median": 141.42,
+   "raw_p95": 144.46,
+   "raw_worst": 165.92,
+   "game_median": 23.42,
+   "render_median": 141.33,
+   "gpu_median": 24.4
+  },
+  "df_off": null
+ },
+ "cvar_readback": {
+  "vsm_off": {
+   "cvar": "r.Shadow.Virtual.Enable",
+   "asked": "0",
+   "read": 0.0
+  },
+  "df_off": {
+   "cvar": "r.DistanceFields",
+   "asked": "0",
+   "read": 1.0
+  }
+ },
+ "ladder_ms": {
+  "0": 51.26,
+  "1": 115.41,
+  "2": 191.98,
+  "3": 99.6,
+  "4": 79.77,
+  "5": 85.26
+ },
+ "run_quality": {
+  "rung_zero_median_ms": 51.26,
+  "rung_zero_raw_worst_ms": 72.82,
+  "rung_zero_spike_ratio": 1.4,
+  "rungs_under_30_frames": [
+   "vsm_off"
+  ],
+  "stat_froze": 244
+ },
+ "verdict": {
+  "reading": "NOT EVIDENCE EITHER WAY. This run neither confirms nor refutes the one-versus-ten finding, and publishing its ladder would have read as a refutation."
+ },
+ "finished": "2026-09-27 19:31:25",
+ "seconds": 116.9,
+ "log": "O00 PASS the editor exports the raw frame instrument {}\nO01 PASS there are Project Avatar figures to spawn {'found': 10}\nn00 INFO n00 {'frames': 106, 'frame_median': 51.26, 'raw_p95': 64.4, 'raw_worst': 72.82, 'game_median': 44.04, 'render_median': 50.98, 'gpu_median': 48.1}\nn01 INFO n01 {'frames': 30, 'frame_median': 115.41, 'raw_p95': 163.26, 'raw_worst': 163.89, 'game_median': 35.49, 'render_median': 115.45, 'gpu_median': 30.71}\nn02 INFO n02 {'frames': 37, 'frame_median': 191.98, 'raw_p95': 239.32, 'raw_worst': 241.4, 'game_median': 25.33, 'render_median': 191.79, 'gpu_median': 23.94}\nn03 INFO n03 {'frames': 39, 'frame_median': 99.6, 'raw_p95': 99.72, 'raw_worst': 100.33, 'game_median': 28.77, 'render_median': 99.99, 'gpu_median': 21.91}\nn04 INFO n04 {'frames': 71, 'frame_median': 79.77, 'raw_p95': 132.37, 'raw_worst': 145.32, 'game_median': 29.68, 'render_median': 79.61, 'gpu_median': 21.53}\nn05 INFO n05 {'frames': 46, 'frame_median': 85.26, 'raw_p95': 95.74, 'raw_worst': 106.39, 'game_median': 32.12, 'render_median': 85.38, 'gpu_median': 22.96}\nn01_again INFO n01_again {'frames': 37, 'frame_median': 161.85, 'raw_p95': 183.33, 'raw_worst': 193.42, 'game_median': 29.22, 'render_median': 161.27, 'gpu_median': 21.33}\nO_vsm_off PASS r.Shadow.Virtual.Enable took the value it was given {'asked': '0', 'read': 0.0}\nvsm_off INFO vsm_off {'frames': 28, 'frame_median': 141.42, 'raw_p95': 144.46, 'raw_worst': 165.92, 'game_median': 23.42, 'render_median': 141.33, 'gpu_median': 24.4}\nO_df_off FAIL r.DistanceFields took the value it was given {'asked': '0', 'read': 1.0, 'note': 'the rung is VOID rather than reported: an unrecognised cvar leaves the world exactly as it was, and publishing that as a toggled measurement is how a knob that does nothing gets credited with a result.'}\nO_USABLE FAIL the run is settled enough to compare rungs at all {'rung_zero_median_ms': 51.26, 'rung_zero_raw_worst_ms': 72.82, 'rung_zero_spike_ratio': 1.4, 'rungs_under_30_frames': ['vsm_off'], 'stat_froze': 244, 'note': \"rung zero is the value every other rung is compared against, so a spike in it poisons the whole ladder. A worst frame more than ten times the median means the world was still arriving; a rung with under thirty frames means the stat overlay was off for most of its window. Either way the numbers below describe this machine's evening, not avatars.\"}\n"
+}

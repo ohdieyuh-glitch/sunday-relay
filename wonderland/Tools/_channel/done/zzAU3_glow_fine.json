@@ -1,0 +1,903 @@
+{
+ "name": "zzAU3_glow_fine",
+ "started": "2026-09-27 21:34:06",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "S00",
+   "name": "the three stage terms can be read back before anything is changed",
+   "pass": true,
+   "detail": {
+    "as_found": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewLights": 0.04,
+     "wl.Look.PreviewBloom": 0.015
+    },
+    "note": "a knob that cannot be read is a knob that cannot be proved to have been set; wl.Look.FireMaterial and r.DistanceFields have both refused values they were given."
+   }
+  },
+  {
+   "id": "S01",
+   "name": "the wardrobe is open through the founder's own SWITCH SKIN button",
+   "pass": true,
+   "detail": {
+    "pressed": true,
+    "skins_open": true
+   }
+  },
+  {
+   "id": "S02",
+   "name": "the preview window has painted and reports where it is",
+   "pass": true,
+   "detail": {
+    "got": true,
+    "centre": [
+     0.5947,
+     0.4704
+    ],
+    "size": [
+     0.2136,
+     0.4828
+    ]
+   }
+  },
+  {
+   "id": "S_RESTORE",
+   "name": "the stage terms this job found were put back",
+   "pass": true,
+   "detail": {
+    "as_found": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewLights": 0.04,
+     "wl.Look.PreviewBloom": 0.015
+    },
+    "restored": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewLights": 0.04,
+     "wl.Look.PreviewBloom": 0.015
+    }
+   }
+  },
+  {
+   "id": "S_SKIN",
+   "name": "Relay OG was put back on the Dog, and it went back",
+   "pass": true,
+   "detail": {
+    "worn_after_restore": "relay_og"
+   }
+  },
+  {
+   "id": "S03",
+   "name": "every rung's knob took the value it was given",
+   "pass": true,
+   "detail": {
+    "refused": null,
+    "note": "THE CONTROL THAT MAKES THE LADDER A LADDER. wl.Look.FireMaterial and r.DistanceFields have both silently kept their old value in this tree, and a ladder of six identical rungs looks exactly like a term that does not matter."
+   }
+  },
+  {
+   "id": "S04",
+   "name": "every skin was photographed at every rung, and the window read back each time",
+   "pass": true,
+   "detail": {
+    "skins": [
+     "apollo",
+     "relay_og",
+     "skeleton_flame"
+    ],
+    "rungs": [
+     "shipped",
+     "glow_0002",
+     "glow_0003",
+     "glow_0005",
+     "glow_0008"
+    ]
+   }
+  },
+  {
+   "id": "S06",
+   "name": "the preview figure is wearing the glow scale each rung asked for",
+   "pass": true,
+   "detail": {
+    "refused": null,
+    "note": "THE READBACK THAT WAS MISSING, and the one that matters. S03 above reads the CVAR and passed honestly through an entire run in which the figure wore one value throughout. A knob proved at its input is not a knob proved at all."
+   }
+  }
+ ],
+ "as_found": {
+  "wl.Look.PreviewGlow": 0.001,
+  "wl.Look.PreviewLights": 0.04,
+  "wl.Look.PreviewBloom": 0.015
+ },
+ "preview_rect": {
+  "got": true,
+  "centre": [
+   0.5947,
+   0.4704
+  ],
+  "size": [
+   0.2136,
+   0.4828
+  ]
+ },
+ "readings": {
+  "skeleton_flame": {
+   "shipped": {
+    "asked": {
+     "glow": null,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.001,
+    "whole": {
+     "mean": [
+      0.4979,
+      0.5024,
+      0.5015
+     ],
+     "luma": 0.5014,
+     "blue_over_red": 0.0036,
+     "bright": 0.5097,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8397,
+      0.8461,
+      0.8376
+     ],
+     "luma": 0.8441,
+     "blue_over_red": -0.0021,
+     "bright": 0.871,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "skeleton_flame__shipped.png"
+   },
+   "glow_0002": {
+    "asked": {
+     "glow": 0.0002,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0002,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0002,
+    "whole": {
+     "mean": [
+      0.4254,
+      0.4598,
+      0.4626
+     ],
+     "luma": 0.4527,
+     "blue_over_red": 0.0372,
+     "bright": 0.4539,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.6562,
+      0.7149,
+      0.7046
+     ],
+     "luma": 0.7017,
+     "blue_over_red": 0.0484,
+     "bright": 0.6867,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "skeleton_flame__glow_0002.png"
+   },
+   "glow_0003": {
+    "asked": {
+     "glow": 0.0003,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0003,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0003,
+    "whole": {
+     "mean": [
+      0.4748,
+      0.4886,
+      0.4904
+     ],
+     "luma": 0.4858,
+     "blue_over_red": 0.0157,
+     "bright": 0.4902,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8037,
+      0.8227,
+      0.8158
+     ],
+     "luma": 0.8182,
+     "blue_over_red": 0.0121,
+     "bright": 0.8604,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "skeleton_flame__glow_0003.png"
+   },
+   "glow_0005": {
+    "asked": {
+     "glow": 0.0005,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0005,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0005,
+    "whole": {
+     "mean": [
+      0.487,
+      0.4936,
+      0.4952
+     ],
+     "luma": 0.4923,
+     "blue_over_red": 0.0082,
+     "bright": 0.5003,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.83,
+      0.837,
+      0.8289
+     ],
+     "luma": 0.835,
+     "blue_over_red": -0.0011,
+     "bright": 0.8605,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "skeleton_flame__glow_0005.png"
+   },
+   "glow_0008": {
+    "asked": {
+     "glow": 0.0008,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0008,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0008,
+    "whole": {
+     "mean": [
+      0.4737,
+      0.4844,
+      0.4843
+     ],
+     "luma": 0.4821,
+     "blue_over_red": 0.0107,
+     "bright": 0.4931,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.7939,
+      0.8204,
+      0.8109
+     ],
+     "luma": 0.8141,
+     "blue_over_red": 0.017,
+     "bright": 0.8685,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "skeleton_flame__glow_0008.png"
+   }
+  },
+  "apollo": {
+   "shipped": {
+    "asked": {
+     "glow": null,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.001,
+    "whole": {
+     "mean": [
+      0.7791,
+      0.754,
+      0.6477
+     ],
+     "luma": 0.7517,
+     "blue_over_red": -0.1315,
+     "bright": 0.7465,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8844,
+      0.8538,
+      0.7315
+     ],
+     "luma": 0.8515,
+     "blue_over_red": -0.1528,
+     "bright": 0.8623,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.5518,
+      0.543,
+      0.5111
+     ],
+     "luma": 0.5426,
+     "blue_over_red": -0.0407,
+     "bright": 0.4263,
+     "samples": 1886
+    },
+    "capture": "apollo__shipped.png"
+   },
+   "glow_0002": {
+    "asked": {
+     "glow": 0.0002,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0002,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0002,
+    "whole": {
+     "mean": [
+      0.7625,
+      0.7338,
+      0.6024
+     ],
+     "luma": 0.7304,
+     "blue_over_red": -0.1601,
+     "bright": 0.7363,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8547,
+      0.8223,
+      0.687
+     ],
+     "luma": 0.8194,
+     "blue_over_red": -0.1678,
+     "bright": 0.8162,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.4022,
+      0.3944,
+      0.3714
+     ],
+     "luma": 0.3944,
+     "blue_over_red": -0.0308,
+     "bright": 0.3059,
+     "samples": 1886
+    },
+    "capture": "apollo__glow_0002.png"
+   },
+   "glow_0003": {
+    "asked": {
+     "glow": 0.0003,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0003,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0003,
+    "whole": {
+     "mean": [
+      0.7907,
+      0.7623,
+      0.6285
+     ],
+     "luma": 0.7587,
+     "blue_over_red": -0.1622,
+     "bright": 0.7584,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8716,
+      0.8394,
+      0.7041
+     ],
+     "luma": 0.8365,
+     "blue_over_red": -0.1675,
+     "bright": 0.844,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.5984,
+      0.5867,
+      0.5414
+     ],
+     "luma": 0.5859,
+     "blue_over_red": -0.057,
+     "bright": 0.4496,
+     "samples": 1886
+    },
+    "capture": "apollo__glow_0003.png"
+   },
+   "glow_0005": {
+    "asked": {
+     "glow": 0.0005,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0005,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0005,
+    "whole": {
+     "mean": [
+      0.8046,
+      0.7782,
+      0.6524
+     ],
+     "luma": 0.7747,
+     "blue_over_red": -0.1522,
+     "bright": 0.7726,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8644,
+      0.8343,
+      0.7114
+     ],
+     "luma": 0.8318,
+     "blue_over_red": -0.153,
+     "bright": 0.834,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.5493,
+      0.5414,
+      0.5128
+     ],
+     "luma": 0.5411,
+     "blue_over_red": -0.0365,
+     "bright": 0.4258,
+     "samples": 1886
+    },
+    "capture": "apollo__glow_0005.png"
+   },
+   "glow_0008": {
+    "asked": {
+     "glow": 0.0008,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0008,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0008,
+    "whole": {
+     "mean": [
+      0.7781,
+      0.7532,
+      0.6484
+     ],
+     "luma": 0.7509,
+     "blue_over_red": -0.1297,
+     "bright": 0.7484,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8875,
+      0.8544,
+      0.719
+     ],
+     "luma": 0.8516,
+     "blue_over_red": -0.1685,
+     "bright": 0.8511,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.3753,
+      0.3696,
+      0.3531
+     ],
+     "luma": 0.3696,
+     "blue_over_red": -0.0222,
+     "bright": 0.1548,
+     "samples": 1886
+    },
+    "capture": "apollo__glow_0008.png"
+   }
+  },
+  "relay_og": {
+   "shipped": {
+    "asked": {
+     "glow": null,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.001,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.001,
+    "whole": {
+     "mean": [
+      0.3478,
+      0.3447,
+      0.3418
+     ],
+     "luma": 0.3452,
+     "blue_over_red": -0.0061,
+     "bright": 0.3584,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8196,
+      0.8112,
+      0.7939
+     ],
+     "luma": 0.8118,
+     "blue_over_red": -0.0257,
+     "bright": 0.8452,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "relay_og__shipped.png"
+   },
+   "glow_0002": {
+    "asked": {
+     "glow": 0.0002,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0002,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0002,
+    "whole": {
+     "mean": [
+      0.3676,
+      0.3637,
+      0.3581
+     ],
+     "luma": 0.3641,
+     "blue_over_red": -0.0095,
+     "bright": 0.3769,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8006,
+      0.7918,
+      0.7706
+     ],
+     "luma": 0.7922,
+     "blue_over_red": -0.03,
+     "bright": 0.8292,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "relay_og__glow_0002.png"
+   },
+   "glow_0003": {
+    "asked": {
+     "glow": 0.0003,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0003,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0003,
+    "whole": {
+     "mean": [
+      0.3598,
+      0.3561,
+      0.3509
+     ],
+     "luma": 0.3565,
+     "blue_over_red": -0.0089,
+     "bright": 0.3698,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8643,
+      0.8553,
+      0.8349
+     ],
+     "luma": 0.8558,
+     "blue_over_red": -0.0294,
+     "bright": 0.9027,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "relay_og__glow_0003.png"
+   },
+   "glow_0005": {
+    "asked": {
+     "glow": 0.0005,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0005,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0005,
+    "whole": {
+     "mean": [
+      0.3386,
+      0.3356,
+      0.3319
+     ],
+     "luma": 0.3359,
+     "blue_over_red": -0.0067,
+     "bright": 0.3503,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.8278,
+      0.8191,
+      0.7988
+     ],
+     "luma": 0.8195,
+     "blue_over_red": -0.0289,
+     "bright": 0.856,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "relay_og__glow_0005.png"
+   },
+   "glow_0008": {
+    "asked": {
+     "glow": 0.0008,
+     "lights": null
+    },
+    "read_back": {
+     "wl.Look.PreviewGlow": 0.0008,
+     "wl.Look.PreviewLights": 0.04
+    },
+    "glow_applied": 0.0008,
+    "whole": {
+     "mean": [
+      0.3545,
+      0.3513,
+      0.3484
+     ],
+     "luma": 0.3518,
+     "blue_over_red": -0.0061,
+     "bright": 0.3655,
+     "samples": 11856
+    },
+    "middle": {
+     "mean": [
+      0.7906,
+      0.7836,
+      0.7693
+     ],
+     "luma": 0.784,
+     "blue_over_red": -0.0213,
+     "bright": 0.8213,
+     "samples": 25807
+    },
+    "corner_tr": {
+     "mean": [
+      0.02,
+      0.0274,
+      0.0703
+     ],
+     "luma": 0.0289,
+     "blue_over_red": 0.0503,
+     "bright": 0.0,
+     "samples": 1886
+    },
+    "capture": "relay_og__glow_0008.png"
+   }
+  }
+ },
+ "restored": {
+  "wl.Look.PreviewGlow": 0.001,
+  "wl.Look.PreviewLights": 0.04,
+  "wl.Look.PreviewBloom": 0.015
+ },
+ "worn_after_restore": "relay_og",
+ "rungs_that_did_not_take": null,
+ "glow_applied_by_rung": {
+  "skeleton_flame/shipped": {
+   "asked": 0.001,
+   "applied": 0.001
+  },
+  "skeleton_flame/glow_0002": {
+   "asked": 0.0002,
+   "applied": 0.0002
+  },
+  "skeleton_flame/glow_0003": {
+   "asked": 0.0003,
+   "applied": 0.0003
+  },
+  "skeleton_flame/glow_0005": {
+   "asked": 0.0005,
+   "applied": 0.0005
+  },
+  "skeleton_flame/glow_0008": {
+   "asked": 0.0008,
+   "applied": 0.0008
+  },
+  "apollo/shipped": {
+   "asked": 0.001,
+   "applied": 0.001
+  },
+  "apollo/glow_0002": {
+   "asked": 0.0002,
+   "applied": 0.0002
+  },
+  "apollo/glow_0003": {
+   "asked": 0.0003,
+   "applied": 0.0003
+  },
+  "apollo/glow_0005": {
+   "asked": 0.0005,
+   "applied": 0.0005
+  },
+  "apollo/glow_0008": {
+   "asked": 0.0008,
+   "applied": 0.0008
+  },
+  "relay_og/shipped": {
+   "asked": 0.001,
+   "applied": 0.001
+  },
+  "relay_og/glow_0002": {
+   "asked": 0.0002,
+   "applied": 0.0002
+  },
+  "relay_og/glow_0003": {
+   "asked": 0.0003,
+   "applied": 0.0003
+  },
+  "relay_og/glow_0005": {
+   "asked": 0.0005,
+   "applied": 0.0005
+  },
+  "relay_og/glow_0008": {
+   "asked": 0.0008,
+   "applied": 0.0008
+  }
+ },
+ "rungs_the_figure_did_not_wear": null,
+ "which_term_binds": {
+  "skeleton_flame": {
+   "shipped_luma": 0.5014,
+   "with_no_glow": null,
+   "with_no_lamps": null,
+   "glow_share": null,
+   "lamp_share": null
+  },
+  "apollo": {
+   "shipped_luma": 0.7517,
+   "with_no_glow": null,
+   "with_no_lamps": null,
+   "glow_share": null,
+   "lamp_share": null
+  },
+  "relay_og": {
+   "shipped_luma": 0.3452,
+   "with_no_glow": null,
+   "with_no_lamps": null,
+   "glow_share": null,
+   "lamp_share": null
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\stage_glow_fine",
+ "finished": "2026-09-27 21:35:47",
+ "seconds": 100.9,
+ "log": "S00 PASS the three stage terms can be read back before anything is changed {'as_found': {'wl.Look.PreviewGlow': 0.001, 'wl.Look.PreviewLights': 0.04, 'wl.Look.PreviewBloom': 0.015}, 'note': 'a knob that cannot be read is a knob that cannot be proved to have been set; wl.Look.FireMaterial and r.DistanceFields have both refused values they were given.'}\nS01 PASS the wardrobe is open through the founder's own SWITCH SKIN button {'pressed': True, 'skins_open': True}\nS02 PASS the preview window has painted and reports where it is {'got': True, 'centre': [0.5947, 0.4704], 'size': [0.2136, 0.4828]}\nS_skeleton_flame_shipped INFO skeleton_flame at shipped {'glow': 0.001, 'glow_applied': 0.001, 'lights': 0.04, 'whole_luma': 0.5014, 'blue_over_red': 0.0036, 'bright': 0.5097}\nS_skeleton_flame_glow_0002 INFO skeleton_flame at glow_0002 {'glow': 0.0002, 'glow_applied': 0.0002, 'lights': 0.04, 'whole_luma': 0.4527, 'blue_over_red': 0.0372, 'bright': 0.4539}\nS_skeleton_flame_glow_0003 INFO skeleton_flame at glow_0003 {'glow': 0.0003, 'glow_applied': 0.0003, 'lights': 0.04, 'whole_luma': 0.4858, 'blue_over_red': 0.0157, 'bright': 0.4902}\nS_skeleton_flame_glow_0005 INFO skeleton_flame at glow_0005 {'glow': 0.0005, 'glow_applied': 0.0005, 'lights': 0.04, 'whole_luma': 0.4923, 'blue_over_red': 0.0082, 'bright': 0.5003}\nS_skeleton_flame_glow_0008 INFO skeleton_flame at glow_0008 {'glow': 0.0008, 'glow_applied': 0.0008, 'lights': 0.04, 'whole_luma': 0.4821, 'blue_over_red': 0.0107, 'bright': 0.4931}\nS_apollo_shipped INFO apollo at shipped {'glow': 0.001, 'glow_applied': 0.001, 'lights': 0.04, 'whole_luma': 0.7517, 'blue_over_red': -0.1315, 'bright': 0.7465}\nS_apollo_glow_0002 INFO apollo at glow_0002 {'glow': 0.0002, 'glow_applied': 0.0002, 'lights': 0.04, 'whole_luma': 0.7304, 'blue_over_red': -0.1601, 'bright': 0.7363}\nS_apollo_glow_0003 INFO apollo at glow_0003 {'glow': 0.0003, 'glow_applied': 0.0003, 'lights': 0.04, 'whole_luma': 0.7587, 'blue_over_red': -0.1622, 'bright': 0.7584}\nS_apollo_glow_0005 INFO apollo at glow_0005 {'glow': 0.0005, 'glow_applied': 0.0005, 'lights': 0.04, 'whole_luma': 0.7747, 'blue_over_red': -0.1522, 'bright': 0.7726}\nS_apollo_glow_0008 INFO apollo at glow_0008 {'glow': 0.0008, 'glow_applied': 0.0008, 'lights': 0.04, 'whole_luma': 0.7509, 'blue_over_red': -0.1297, 'bright': 0.7484}\nS_relay_og_shipped INFO relay_og at shipped {'glow': 0.001, 'glow_applied': 0.001, 'lights': 0.04, 'whole_luma': 0.3452, 'blue_over_red': -0.0061, 'bright': 0.3584}\nS_relay_og_glow_0002 INFO relay_og at glow_0002 {'glow': 0.0002, 'glow_applied': 0.0002, 'lights': 0.04, 'whole_luma': 0.3641, 'blue_over_red': -0.0095, 'bright': 0.3769}\nS_relay_og_glow_0003 INFO relay_og at glow_0003 {'glow': 0.0003, 'glow_applied': 0.0003, 'lights': 0.04, 'whole_luma': 0.3565, 'blue_over_red': -0.0089, 'bright': 0.3698}\nS_relay_og_glow_0005 INFO relay_og at glow_0005 {'glow': 0.0005, 'glow_applied': 0.0005, 'lights': 0.04, 'whole_luma': 0.3359, 'blue_over_red': -0.0067, 'bright': 0.3503}\nS_relay_og_glow_0008 INFO relay_og at glow_0008 {'glow': 0.0008, 'glow_applied': 0.0008, 'lights': 0.04, 'whole_luma': 0.3518, 'blue_over_red': -0.0061, 'bright': 0.3655}\nS_RESTORE PASS the stage terms this job found were put back {'as_found': {'wl.Look.PreviewGlow': 0.001, 'wl.Look.PreviewLights': 0.04, 'wl.Look.PreviewBloom': 0.015}, 'restored': {'wl.Look.PreviewGlow': 0.001, 'wl.Look.PreviewLights': 0.04, 'wl.Look.PreviewBloom': 0.015}}\nS_SKIN PASS Relay OG was put back on the Dog, and it went back {'worn_after_restore': 'relay_og'}\nS03 PASS every rung's knob took the value it was given {'refused': None, 'note': 'THE CONTROL THAT MAKES THE LADDER A LADDER. wl.Look.FireMaterial and r.DistanceFields have both silently kept their old value in this tree, and a ladder of six identical rungs looks exactly like a term that does not matter.'}\nS04 PASS every skin was photographed at every rung, and the window read back each time {'skins': ['apollo', 'relay_og', 'skeleton_flame'], 'rungs': ['shipped', 'glow_0002', 'glow_0003', 'glow_0005', 'glow_0008']}\nS06 PASS the preview figure is wearing the glow scale each rung asked for {'refused': None, 'note': 'THE READBACK THAT WAS MISSING, and the one that matters. S03 above reads the CVAR and passed honestly through an entire run in which the figure wore one value throughout. A knob proved at its input is not a knob proved at all.'}\nS05 INFO how much of the shipped window each term is responsible for {'skeleton_flame': {'shipped_luma': 0.5014, 'with_no_glow': None, 'with_no_lamps': None, 'glow_share': None, 'lamp_share': None}, 'apollo': {'shipped_luma': 0.7517, 'with_no_glow': None, 'with_no_lamps': None, 'glow_share': None, 'lamp_share': None}, 'relay_og': {'shipped_luma': 0.3452, 'with_no_glow': None, 'with_no_lamps': None, 'glow_share': None, 'lamp_share': None}}\n"
+}

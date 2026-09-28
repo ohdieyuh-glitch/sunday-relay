@@ -1,0 +1,119 @@
+{
+ "name": "zc_tartarus_night",
+ "started": "2026-09-27 13:02:44",
+ "status": "captured",
+ "tag": "before",
+ "tests": [
+  {
+   "id": "T00",
+   "name": "all six Tartarus night views were captured",
+   "pass": true,
+   "detail": {
+    "taken": 6,
+    "wanted": 6,
+    "tag": "before",
+    "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\tartarus_night",
+    "note": "the verdict is the pictures against the founder's screenshots, not this clause and not the luma below."
+   }
+  },
+  {
+   "id": "T01",
+   "name": "no Tartarus view is a black void",
+   "pass": false,
+   "detail": {
+    "worst_dark_fraction": 0.9651,
+    "ceiling": 0.8,
+    "per_place": {
+     "avenue_dip": {
+      "luma": 0.0323,
+      "dark_fraction": 0.9651,
+      "ground_luma": 0.0093,
+      "ground_dark_fraction": 0.9942
+     },
+     "avenue_dip_feet": {
+      "luma": 0.0431,
+      "dark_fraction": 0.9639,
+      "ground_luma": 0.0231,
+      "ground_dark_fraction": 0.9941
+     },
+     "quarter_plaza": {
+      "luma": 0.0452,
+      "dark_fraction": 0.9633,
+      "ground_luma": 0.0266,
+      "ground_dark_fraction": 0.9939
+     },
+     "quarter_plaza_feet": {
+      "luma": 0.0495,
+      "dark_fraction": 0.9592,
+      "ground_luma": 0.0265,
+      "ground_dark_fraction": 0.9939
+     },
+     "market": {
+      "luma": 0.0439,
+      "dark_fraction": 0.9643,
+      "ground_luma": 0.0249,
+      "ground_dark_fraction": 0.9941
+     },
+     "market_feet": {
+      "luma": 0.0466,
+      "dark_fraction": 0.9604,
+      "ground_luma": 0.0229,
+      "ground_dark_fraction": 0.9941
+     }
+    },
+    "note": "a ceiling, not a target: passing this is not the same as readable, which only the photograph answers."
+   }
+  }
+ ],
+ "practicals": "read WLLIGHT in the editor log for 'N practicals defined, pool of M'; the subsystem loads WorldDesign/Look/practical_lights.json at world start and wl.Look.PracticalReload re-reads it",
+ "readings": {
+  "avenue_dip": {
+   "luma": 0.0323,
+   "dark_fraction": 0.9651,
+   "ground_luma": 0.0093,
+   "ground_dark_fraction": 0.9942
+  },
+  "avenue_dip_feet": {
+   "luma": 0.0431,
+   "dark_fraction": 0.9639,
+   "ground_luma": 0.0231,
+   "ground_dark_fraction": 0.9941
+  },
+  "quarter_plaza": {
+   "luma": 0.0452,
+   "dark_fraction": 0.9633,
+   "ground_luma": 0.0266,
+   "ground_dark_fraction": 0.9939
+  },
+  "quarter_plaza_feet": {
+   "luma": 0.0495,
+   "dark_fraction": 0.9592,
+   "ground_luma": 0.0265,
+   "ground_dark_fraction": 0.9939
+  },
+  "market": {
+   "luma": 0.0439,
+   "dark_fraction": 0.9643,
+   "ground_luma": 0.0249,
+   "ground_dark_fraction": 0.9941
+  },
+  "market_feet": {
+   "luma": 0.0466,
+   "dark_fraction": 0.9604,
+   "ground_luma": 0.0229,
+   "ground_dark_fraction": 0.9941
+  }
+ },
+ "capture_returned": {
+  "avenue_dip": "(1900, 924)",
+  "avenue_dip_feet": "(1900, 924)",
+  "quarter_plaza": "(1900, 924)",
+  "quarter_plaza_feet": "(1900, 924)",
+  "market": "(1900, 924)",
+  "market_feet": "(1900, 924)"
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\tartarus_night",
+ "finished": "2026-09-27 13:05:18",
+ "seconds": 154.21,
+ "log": "T_avenue_dip INFO avenue_dip (before) {'luma': 0.0323, 'dark_fraction': 0.9651, 'ground_luma': 0.0093, 'ground_dark_fraction': 0.9942}\nT_avenue_dip_feet INFO avenue_dip_feet (before) {'luma': 0.0431, 'dark_fraction': 0.9639, 'ground_luma': 0.0231, 'ground_dark_fraction': 0.9941}\nT_quarter_plaza INFO quarter_plaza (before) {'luma': 0.0452, 'dark_fraction': 0.9633, 'ground_luma': 0.0266, 'ground_dark_fraction': 0.9939}\nT_quarter_plaza_feet INFO quarter_plaza_feet (before) {'luma': 0.0495, 'dark_fraction': 0.9592, 'ground_luma': 0.0265, 'ground_dark_fraction': 0.9939}\nT_market INFO market (before) {'luma': 0.0439, 'dark_fraction': 0.9643, 'ground_luma': 0.0249, 'ground_dark_fraction': 0.9941}\nT_market_feet INFO market_feet (before) {'luma': 0.0466, 'dark_fraction': 0.9604, 'ground_luma': 0.0229, 'ground_dark_fraction': 0.9941}\n"
+}

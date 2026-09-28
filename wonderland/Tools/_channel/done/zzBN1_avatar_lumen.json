@@ -1,0 +1,236 @@
+{
+ "name": "zzBN1_avatar_lumen",
+ "started": "2026-09-27 23:12:42",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "A_STAT",
+   "name": "the stat unit overlay is drawing, so its numbers actually change",
+   "pass": true,
+   "detail": {
+    "note": "a TOGGLE issued once is a coin flip. Six rungs of this job once returned identical frame, render and game times because the overlay was off -- and the frozen-frame guard missed it, because the engine frame number was advancing the whole time."
+   }
+  },
+  {
+   "id": "A_WARM",
+   "name": "the world settled before the first rung was taken",
+   "pass": true,
+   "detail": {
+    "reads": 3,
+    "last_three": [
+     33.49,
+     35.23,
+     34.19
+    ],
+    "seconds": 0.2,
+    "settled": true
+   }
+  },
+  {
+   "id": "A00a",
+   "name": "there is a Project Avatar figure on disk to spawn",
+   "pass": true,
+   "detail": {
+    "found": 10,
+    "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\ProjectAvatars"
+   }
+  },
+  {
+   "id": "A00",
+   "name": "one Project Avatar stands in the world to measure",
+   "pass": true,
+   "detail": {
+    "avatars": 1,
+    "figure": "Cherubim_Large.wlvox",
+    "note": "the 110 ms is the cost of the FIRST one, so a world with none in it has nothing to say."
+   }
+  },
+  {
+   "id": "A01",
+   "name": "every rung's knob took the value it was given",
+   "pass": true,
+   "detail": {
+    "refused": null,
+    "note": "r.DistanceFields refused its value in the previous run -- read back 1.0 after being set to 0 -- and voided that rung. A ladder whose knob refuses measures one rung repeatedly and looks exactly like a term that does not matter."
+   }
+  },
+  {
+   "id": "A_SPREAD",
+   "name": "the rungs do not all answer the same, so the ladder can tell them apart",
+   "pass": true,
+   "detail": {
+    "frame_ms_by_rung": {
+     "baseline": 210.27,
+     "vsm_off": 188.16,
+     "lumen_off": 40.8,
+     "shadows_off": 204.43,
+     "avatar_no_shadow": 203.03,
+     "avatar_out_of_lumen": 39.7
+    },
+    "spread_ms": 170.57,
+    "note": "six rungs at exactly 36.81 ms is a dead instrument, not six identical configurations."
+   }
+  },
+  {
+   "id": "A02",
+   "name": "every rung collected enough distinct frames to have a median",
+   "pass": true,
+   "detail": {
+    "frames": {
+     "baseline": 26,
+     "vsm_off": 26,
+     "lumen_off": 26,
+     "shadows_off": 26,
+     "avatar_no_shadow": 26,
+     "avatar_out_of_lumen": 26
+    },
+    "thin": null,
+    "note": "frames are accepted only when the engine frame number ADVANCES, so a stalled overlay shows up as a thin rung instead of as a suspiciously steady reading."
+   }
+  },
+  {
+   "id": "A04",
+   "name": "shadows are NOT where the avatar's cost is",
+   "pass": true,
+   "detail": {
+    "saved_ms": {
+     "vsm_off": 22.11,
+     "lumen_off": 169.47,
+     "shadows_off": 5.84,
+     "avatar_no_shadow": 7.24,
+     "avatar_out_of_lumen": 170.57
+    },
+    "baseline_frame_ms": 210.27,
+    "note": "STATED AS THE NEGATIVE IT IS. The first run measured all shadows off at -4.86 ms and the avatar's own shadow casting at 4.33, against Lumen's 164.89. Shadows were my hypothesis and they are not the answer; recording that is worth more than quietly dropping the rung."
+   }
+  },
+  {
+   "id": "A05",
+   "name": "taking the AVATAR out of global illumination recovers most of what global Lumen off does",
+   "pass": true,
+   "detail": {
+    "saved_ms": 170.57,
+    "floor_ms": 60.0,
+    "global_lumen_off_saved": 169.47,
+    "baseline_frame_ms": 210.27,
+    "all_rungs": {
+     "vsm_off": 22.11,
+     "lumen_off": 169.47,
+     "shadows_off": 5.84,
+     "avatar_no_shadow": 7.24,
+     "avatar_out_of_lumen": 170.57
+    },
+    "note": "THE CANDIDATE FIX. Global Lumen off is 164.89 ms but flattens everything the founder has approved about this world's lighting. This turns off only the AVATAR'S contribution to it, per component, so the scene keeps its global illumination. If it recovers most of the 164.89 it ships as a property on the figure; if it recovers little, the cost is in the avatar being LIT by Lumen rather than contributing to it, which is a different fix."
+   }
+  },
+  {
+   "id": "A_CLEAN",
+   "name": "the avatar this job spawned was taken back out",
+   "pass": true,
+   "detail": {
+    "spawned": 1,
+    "removed": 1,
+    "note": "it costs 110 ms of frame while it stands there, so leaving one behind would quietly tax every later measurement in this session and in every other lane's."
+   }
+  }
+ ],
+ "stat_overlay_live": true,
+ "warm_up": {
+  "reads": 3,
+  "last_three": [
+   33.49,
+   35.23,
+   34.19
+  ],
+  "seconds": 0.2,
+  "settled": true
+ },
+ "avatars_present": 1,
+ "ladder": {
+  "baseline": {
+   "asked": {},
+   "read_back": {},
+   "touched_avatar_components": null,
+   "frames": 26,
+   "frame_ms": 210.27,
+   "game_ms": 39.15,
+   "render_ms": 210.04,
+   "gpu_ms": 20.1
+  },
+  "vsm_off": {
+   "asked": {
+    "r.Shadow.Virtual.Enable": 0
+   },
+   "read_back": {
+    "r.Shadow.Virtual.Enable": 0.0
+   },
+   "touched_avatar_components": null,
+   "frames": 26,
+   "frame_ms": 188.16,
+   "game_ms": 40.95,
+   "render_ms": 188.08,
+   "gpu_ms": 19.25
+  },
+  "lumen_off": {
+   "asked": {
+    "r.Lumen.DiffuseIndirect.Allow": 0
+   },
+   "read_back": {
+    "r.Lumen.DiffuseIndirect.Allow": 0.0
+   },
+   "touched_avatar_components": null,
+   "frames": 26,
+   "frame_ms": 40.8,
+   "game_ms": 40.25,
+   "render_ms": 26.15,
+   "gpu_ms": 11.39
+  },
+  "shadows_off": {
+   "asked": {
+    "r.ShadowQuality": 0
+   },
+   "read_back": {
+    "r.ShadowQuality": 0.0
+   },
+   "touched_avatar_components": null,
+   "frames": 26,
+   "frame_ms": 204.43,
+   "game_ms": 37.29,
+   "render_ms": 204.34,
+   "gpu_ms": 19.89
+  },
+  "avatar_no_shadow": {
+   "asked": {},
+   "read_back": {},
+   "touched_avatar_components": 59,
+   "frames": 26,
+   "frame_ms": 203.03,
+   "game_ms": 40.92,
+   "render_ms": 204.61,
+   "gpu_ms": 19.23
+  },
+  "avatar_out_of_lumen": {
+   "asked": {},
+   "read_back": {},
+   "touched_avatar_components": 118,
+   "frames": 26,
+   "frame_ms": 39.7,
+   "game_ms": 38.91,
+   "render_ms": 30.12,
+   "gpu_ms": 16.98
+  }
+ },
+ "rungs_that_did_not_take": null,
+ "ladder_spread_ms": 170.57,
+ "milliseconds_saved_vs_baseline": {
+  "vsm_off": 22.11,
+  "lumen_off": 169.47,
+  "shadows_off": 5.84,
+  "avatar_no_shadow": 7.24,
+  "avatar_out_of_lumen": 170.57
+ },
+ "avatars_removed": 1,
+ "finished": "2026-09-27 23:14:24",
+ "seconds": 101.64,
+ "log": "A_STAT PASS the stat unit overlay is drawing, so its numbers actually change {'note': 'a TOGGLE issued once is a coin flip. Six rungs of this job once returned identical frame, render and game times because the overlay was off -- and the frozen-frame guard missed it, because the engine frame number was advancing the whole time.'}\nA_WARM PASS the world settled before the first rung was taken {'reads': 3, 'last_three': [33.49, 35.23, 34.19], 'seconds': 0.2, 'settled': True}\nA00a PASS there is a Project Avatar figure on disk to spawn {'found': 10, 'where': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\ProjectAvatars'}\nA00 PASS one Project Avatar stands in the world to measure {'avatars': 1, 'figure': 'Cherubim_Large.wlvox', 'note': 'the 110 ms is the cost of the FIRST one, so a world with none in it has nothing to say.'}\nA_baseline INFO baseline {'asked': {}, 'read_back': {}, 'touched_avatar_components': None, 'frames': 26, 'frame_ms': 210.27, 'game_ms': 39.15, 'render_ms': 210.04, 'gpu_ms': 20.1}\nA_vsm_off INFO vsm_off {'asked': {'r.Shadow.Virtual.Enable': 0}, 'read_back': {'r.Shadow.Virtual.Enable': 0.0}, 'touched_avatar_components': None, 'frames': 26, 'frame_ms': 188.16, 'game_ms': 40.95, 'render_ms': 188.08, 'gpu_ms': 19.25}\nA_lumen_off INFO lumen_off {'asked': {'r.Lumen.DiffuseIndirect.Allow': 0}, 'read_back': {'r.Lumen.DiffuseIndirect.Allow': 0.0}, 'touched_avatar_components': None, 'frames': 26, 'frame_ms': 40.8, 'game_ms': 40.25, 'render_ms': 26.15, 'gpu_ms': 11.39}\nA_shadows_off INFO shadows_off {'asked': {'r.ShadowQuality': 0}, 'read_back': {'r.ShadowQuality': 0.0}, 'touched_avatar_components': None, 'frames': 26, 'frame_ms': 204.43, 'game_ms': 37.29, 'render_ms': 204.34, 'gpu_ms': 19.89}\nA_avatar_no_shadow INFO avatar_no_shadow {'asked': {}, 'read_back': {}, 'touched_avatar_components': 59, 'frames': 26, 'frame_ms': 203.03, 'game_ms': 40.92, 'render_ms': 204.61, 'gpu_ms': 19.23}\nA_avatar_out_of_lumen INFO avatar_out_of_lumen {'asked': {}, 'read_back': {}, 'touched_avatar_components': 118, 'frames': 26, 'frame_ms': 39.7, 'game_ms': 38.91, 'render_ms': 30.12, 'gpu_ms': 16.98}\nA01 PASS every rung's knob took the value it was given {'refused': None, 'note': 'r.DistanceFields refused its value in the previous run -- read back 1.0 after being set to 0 -- and voided that rung. A ladder whose knob refuses measures one rung repeatedly and looks exactly like a term that does not matter.'}\nA_SPREAD PASS the rungs do not all answer the same, so the ladder can tell them apart {'frame_ms_by_rung': {'baseline': 210.27, 'vsm_off': 188.16, 'lumen_off': 40.8, 'shadows_off': 204.43, 'avatar_no_shadow': 203.03, 'avatar_out_of_lumen': 39.7}, 'spread_ms': 170.57, 'note': 'six rungs at exactly 36.81 ms is a dead instrument, not six identical configurations.'}\nA02 PASS every rung collected enough distinct frames to have a median {'frames': {'baseline': 26, 'vsm_off': 26, 'lumen_off': 26, 'shadows_off': 26, 'avatar_no_shadow': 26, 'avatar_out_of_lumen': 26}, 'thin': None, 'note': 'frames are accepted only when the engine frame number ADVANCES, so a stalled overlay shows up as a thin rung instead of as a suspiciously steady reading.'}\nA03 INFO what each rung is worth, in frame milliseconds {'baseline_frame_ms': 210.27, 'saved': {'vsm_off': 22.11, 'lumen_off': 169.47, 'shadows_off': 5.84, 'avatar_no_shadow': 7.24, 'avatar_out_of_lumen': 170.57}}\nA04 PASS shadows are NOT where the avatar's cost is {'saved_ms': {'vsm_off': 22.11, 'lumen_off': 169.47, 'shadows_off': 5.84, 'avatar_no_shadow': 7.24, 'avatar_out_of_lumen': 170.57}, 'baseline_frame_ms': 210.27, 'note': \"STATED AS THE NEGATIVE IT IS. The first run measured all shadows off at -4.86 ms and the avatar's own shadow casting at 4.33, against Lumen's 164.89. Shadows were my hypothesis and they are not the answer; recording that is worth more than quietly dropping the rung.\"}\nA05 PASS taking the AVATAR out of global illumination recovers most of what global Lumen off does {'saved_ms': 170.57, 'floor_ms': 60.0, 'global_lumen_off_saved': 169.47, 'baseline_frame_ms': 210.27, 'all_rungs': {'vsm_off': 22.11, 'lumen_off': 169.47, 'shadows_off': 5.84, 'avatar_no_shadow': 7.24, 'avatar_out_of_lumen': 170.57}, 'note': \"THE CANDIDATE FIX. Global Lumen off is 164.89 ms but flattens everything the founder has approved about this world's lighting. This turns off only the AVATAR'S contribution to it, per component, so the scene keeps its global illumination. If it recovers most of the 164.89 it ships as a property on the figure; if it recovers little, the cost is in the avatar being LIT by Lumen rather than contributing to it, which is a different fix.\"}\nA_CLEAN PASS the avatar this job spawned was taken back out {'spawned': 1, 'removed': 1, 'note': \"it costs 110 ms of frame while it stands there, so leaving one behind would quietly tax every later measurement in this session and in every other lane's.\"}\n"
+}

@@ -1,0 +1,65 @@
+{
+ "name": "zzBT1_stance_look",
+ "started": "2026-09-27 23:54:34",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "K_SKIN",
+   "name": "Relay OG was put back on the Dog, and it went back",
+   "pass": true,
+   "detail": {
+    "worn": "relay_og"
+   }
+  },
+  {
+   "id": "K00",
+   "name": "the Dog stood in one place for every skin",
+   "pass": true,
+   "detail": {
+    "drift_uu": 0.0,
+    "ceiling": 2.0,
+    "note": "THE CONTROL. The whole design is that nothing moves between frames, so a Dog that wandered turns a stance comparison into a comparison of two positions."
+   }
+  },
+  {
+   "id": "K01",
+   "name": "every skin was photographed from the one camera",
+   "pass": true,
+   "detail": {
+    "captured": [
+     "apollo",
+     "arden_infernal",
+     "celestial_light",
+     "relay_og",
+     "skeleton_flame"
+    ],
+    "wanted": [
+     "apollo",
+     "arden_infernal",
+     "celestial_light",
+     "relay_og",
+     "skeleton_flame"
+    ],
+    "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\stance_look"
+   }
+  }
+ ],
+ "bystanders_hidden": 2,
+ "stood_at": [
+  -327.3,
+  -650.0,
+  109.1
+ ],
+ "captures": {
+  "relay_og": "relay_og.png",
+  "celestial_light": "celestial_light.png",
+  "apollo": "apollo.png",
+  "arden_infernal": "arden_infernal.png",
+  "skeleton_flame": "skeleton_flame.png"
+ },
+ "worn_after_restore": "relay_og",
+ "dog_drift_uu": 0.0,
+ "finished": "2026-09-27 23:55:52",
+ "seconds": 78.39,
+ "log": "K_relay_og INFO relay_og {'capture': 'relay_og.png'}\nK_celestial_light INFO celestial_light {'capture': 'celestial_light.png'}\nK_apollo INFO apollo {'capture': 'apollo.png'}\nK_arden_infernal INFO arden_infernal {'capture': 'arden_infernal.png'}\nK_skeleton_flame INFO skeleton_flame {'capture': 'skeleton_flame.png'}\nK_SKIN PASS Relay OG was put back on the Dog, and it went back {'worn': 'relay_og'}\nK00 PASS the Dog stood in one place for every skin {'drift_uu': 0.0, 'ceiling': 2.0, 'note': 'THE CONTROL. The whole design is that nothing moves between frames, so a Dog that wandered turns a stance comparison into a comparison of two positions.'}\nK01 PASS every skin was photographed from the one camera {'captured': ['apollo', 'arden_infernal', 'celestial_light', 'relay_og', 'skeleton_flame'], 'wanted': ['apollo', 'arden_infernal', 'celestial_light', 'relay_og', 'skeleton_flame'], 'where': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\stance_look'}\n"
+}

@@ -1,0 +1,254 @@
+{
+ "name": "zzBJ1_stance_ground",
+ "started": "2026-09-27 23:02:28",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "G00",
+   "name": "there is a fixed datum to measure every skin against",
+   "pass": true,
+   "detail": {
+    "reference_z": 109.12,
+    "stood_at": [
+     -327.3,
+     -650.0,
+     109.1
+    ],
+    "note": "the Dog's own origin, held constant by G02. Relative to it is what the founder's 'copy Relay OG's ground contact' actually means."
+   }
+  },
+  {
+   "id": "G_SKIN",
+   "name": "Relay OG was put back on the Dog, and it went back",
+   "pass": true,
+   "detail": {
+    "worn": "relay_og"
+   }
+  },
+  {
+   "id": "G01",
+   "name": "every skin that IS a costume produced one whose bounds could be read",
+   "pass": true,
+   "detail": {
+    "dressed": [
+     "apollo",
+     "arden_infernal",
+     "celestial_light",
+     "skeleton_flame"
+    ],
+    "wanted": [
+     "apollo",
+     "arden_infernal",
+     "celestial_light",
+     "relay_og",
+     "skeleton_flame"
+    ],
+    "note": "Relay OG is the canon body rather than a costume, so four of five is the expected count and the first run's red was this job's assumption, not a defect."
+   }
+  },
+  {
+   "id": "G02",
+   "name": "the Dog stood still for the whole run, so the skins are compared in one place",
+   "pass": true,
+   "detail": {
+    "drift_uu": 0.0,
+    "ceiling": 2.0,
+    "note": "THE CONTROL. A Dog that wandered between skins turns a ground-contact comparison into a comparison of two different bits of floor."
+   }
+  },
+  {
+   "id": "G03",
+   "name": "every costume's lowest geometry sits at the same height",
+   "pass": false,
+   "detail": {
+    "ground_contact": {
+     "celestial_light": {
+      "below_dog_origin_uu": -89.78,
+      "vs_relay_og": 51.17,
+      "height_uu": 199.25
+     },
+     "apollo": {
+      "below_dog_origin_uu": -91.6,
+      "vs_relay_og": 49.35,
+      "height_uu": 248.98
+     },
+     "arden_infernal": {
+      "below_dog_origin_uu": -140.95,
+      "vs_relay_og": 0.0,
+      "height_uu": 374.98
+     },
+     "skeleton_flame": {
+      "below_dog_origin_uu": -88.14,
+      "vs_relay_og": 52.81,
+      "height_uu": 234.38
+     }
+    },
+    "tolerance_uu": 6.0,
+    "offenders": [
+     "apollo",
+     "celestial_light",
+     "skeleton_flame"
+    ],
+    "note": "REPORTED, NOT TRUSTED AS FEET. An actor's bounds include its EFFECTS: Arden Infernal reads 348.9 uu tall against 199.2 for Celestial Light and its bounds bottom sits 50 uu lower, which is its flame plume rather than its feet. So a red here is a statement about total extent, and the founder's 'ground contact' needs the foot COMPONENTS rather than the actor's bounds. Height is reported alongside so size is not mistaken for stance."
+   }
+  },
+  {
+   "id": "G04",
+   "name": "every costume is rooted on the Dog by the SAME offset, with none set apart",
+   "pass": true,
+   "detail": {
+    "root_offsets": {
+     "celestial_light": [
+      0.0,
+      0.0,
+      -87.07
+     ],
+     "apollo": [
+      0.0,
+      0.0,
+      -87.07
+     ],
+     "arden_infernal": [
+      0.0,
+      0.0,
+      -87.07
+     ],
+     "skeleton_flame": [
+      0.0,
+      0.0,
+      -87.07
+     ]
+    },
+    "offset_spread_z": 0.0,
+    "lateral_offenders": null,
+    "tolerance_uu": 1.0,
+    "note": "a uniform offset is the rig; a DIFFERING one would be the per-skin cosmetic offset the founder asked not to be used as a fix. Measured at [0, 0, -87.07] for all four in the first run, which is evidence AGAINST a per-skin root-pose cause."
+   }
+  }
+ ],
+ "stood_at": [
+  -327.3,
+  -650.0,
+  109.1
+ ],
+ "reference_z": 109.12,
+ "readings": {
+  "relay_og": {
+   "has_costume": false
+  },
+  "celestial_light": {
+   "has_costume": true,
+   "bounds_bottom_z": 19.34,
+   "bounds_top_z": 218.58,
+   "height_uu": 199.25,
+   "below_dog_origin_uu": -89.78,
+   "root_offset_from_dog": [
+    0.0,
+    0.0,
+    -87.07
+   ],
+   "worn_id": "celestial_light"
+  },
+  "apollo": {
+   "has_costume": true,
+   "bounds_bottom_z": 17.52,
+   "bounds_top_z": 266.5,
+   "height_uu": 248.98,
+   "below_dog_origin_uu": -91.6,
+   "root_offset_from_dog": [
+    0.0,
+    0.0,
+    -87.07
+   ],
+   "worn_id": "apollo"
+  },
+  "arden_infernal": {
+   "has_costume": true,
+   "bounds_bottom_z": -31.83,
+   "bounds_top_z": 343.15,
+   "height_uu": 374.98,
+   "below_dog_origin_uu": -140.95,
+   "root_offset_from_dog": [
+    0.0,
+    0.0,
+    -87.07
+   ],
+   "worn_id": "arden_infernal"
+  },
+  "skeleton_flame": {
+   "has_costume": true,
+   "bounds_bottom_z": 20.99,
+   "bounds_top_z": 255.37,
+   "height_uu": 234.38,
+   "below_dog_origin_uu": -88.14,
+   "root_offset_from_dog": [
+    0.0,
+    0.0,
+    -87.07
+   ],
+   "worn_id": "skeleton_flame"
+  }
+ },
+ "worn_after_restore": "relay_og",
+ "skins_with_a_costume_actor": [
+  "apollo",
+  "arden_infernal",
+  "celestial_light",
+  "skeleton_flame"
+ ],
+ "dog_drift_uu": 0.0,
+ "reference_is": "the lowest costume, since Relay OG has no costume actor",
+ "ground_contact": {
+  "celestial_light": {
+   "below_dog_origin_uu": -89.78,
+   "vs_relay_og": 51.17,
+   "height_uu": 199.25
+  },
+  "apollo": {
+   "below_dog_origin_uu": -91.6,
+   "vs_relay_og": 49.35,
+   "height_uu": 248.98
+  },
+  "arden_infernal": {
+   "below_dog_origin_uu": -140.95,
+   "vs_relay_og": 0.0,
+   "height_uu": 374.98
+  },
+  "skeleton_flame": {
+   "below_dog_origin_uu": -88.14,
+   "vs_relay_og": 52.81,
+   "height_uu": 234.38
+  }
+ },
+ "skins_not_standing_where_relay_og_stands": [
+  "apollo",
+  "celestial_light",
+  "skeleton_flame"
+ ],
+ "root_offsets": {
+  "celestial_light": [
+   0.0,
+   0.0,
+   -87.07
+  ],
+  "apollo": [
+   0.0,
+   0.0,
+   -87.07
+  ],
+  "arden_infernal": [
+   0.0,
+   0.0,
+   -87.07
+  ],
+  "skeleton_flame": [
+   0.0,
+   0.0,
+   -87.07
+  ]
+ },
+ "root_offset_spread_z": 0.0,
+ "finished": "2026-09-27 23:03:25",
+ "seconds": 56.6,
+ "log": "G00 PASS there is a fixed datum to measure every skin against {'reference_z': 109.12, 'stood_at': [-327.3, -650.0, 109.1], 'note': \"the Dog's own origin, held constant by G02. Relative to it is what the founder's 'copy Relay OG's ground contact' actually means.\"}\nG_celestial_light INFO celestial_light {'has_costume': True, 'bounds_bottom_z': 19.34, 'bounds_top_z': 218.58, 'height_uu': 199.25, 'below_dog_origin_uu': -89.78, 'root_offset_from_dog': [0.0, 0.0, -87.07], 'worn_id': 'celestial_light'}\nG_apollo INFO apollo {'has_costume': True, 'bounds_bottom_z': 17.52, 'bounds_top_z': 266.5, 'height_uu': 248.98, 'below_dog_origin_uu': -91.6, 'root_offset_from_dog': [0.0, 0.0, -87.07], 'worn_id': 'apollo'}\nG_arden_infernal INFO arden_infernal {'has_costume': True, 'bounds_bottom_z': -31.83, 'bounds_top_z': 343.15, 'height_uu': 374.98, 'below_dog_origin_uu': -140.95, 'root_offset_from_dog': [0.0, 0.0, -87.07], 'worn_id': 'arden_infernal'}\nG_skeleton_flame INFO skeleton_flame {'has_costume': True, 'bounds_bottom_z': 20.99, 'bounds_top_z': 255.37, 'height_uu': 234.38, 'below_dog_origin_uu': -88.14, 'root_offset_from_dog': [0.0, 0.0, -87.07], 'worn_id': 'skeleton_flame'}\nG_SKIN PASS Relay OG was put back on the Dog, and it went back {'worn': 'relay_og'}\nG01 PASS every skin that IS a costume produced one whose bounds could be read {'dressed': ['apollo', 'arden_infernal', 'celestial_light', 'skeleton_flame'], 'wanted': ['apollo', 'arden_infernal', 'celestial_light', 'relay_og', 'skeleton_flame'], 'note': \"Relay OG is the canon body rather than a costume, so four of five is the expected count and the first run's red was this job's assumption, not a defect.\"}\nG02 PASS the Dog stood still for the whole run, so the skins are compared in one place {'drift_uu': 0.0, 'ceiling': 2.0, 'note': 'THE CONTROL. A Dog that wandered between skins turns a ground-contact comparison into a comparison of two different bits of floor.'}\nG03 FAIL every costume's lowest geometry sits at the same height {'ground_contact': {'celestial_light': {'below_dog_origin_uu': -89.78, 'vs_relay_og': 51.17, 'height_uu': 199.25}, 'apollo': {'below_dog_origin_uu': -91.6, 'vs_relay_og': 49.35, 'height_uu': 248.98}, 'arden_infernal': {'below_dog_origin_uu': -140.95, 'vs_relay_og': 0.0, 'height_uu': 374.98}, 'skeleton_flame': {'below_dog_origin_uu': -88.14, 'vs_relay_og': 52.81, 'height_uu': 234.38}}, 'tolerance_uu': 6.0, 'offenders': ['apollo', 'celestial_light', 'skeleton_flame'], 'note': \"REPORTED, NOT TRUSTED AS FEET. An actor's bounds include its EFFECTS: Arden Infernal reads 348.9 uu tall against 199.2 for Celestial Light and its bounds bottom sits 50 uu lower, which is its flame plume rather than its feet. So a red here is a statement about total extent, and the founder's 'ground contact' needs the foot COMPONENTS rather than the actor's bounds. Height is reported alongside so size is not mistaken for stance.\"}\nG04 PASS every costume is rooted on the Dog by the SAME offset, with none set apart {'root_offsets': {'celestial_light': [0.0, 0.0, -87.07], 'apollo': [0.0, 0.0, -87.07], 'arden_infernal': [0.0, 0.0, -87.07], 'skeleton_flame': [0.0, 0.0, -87.07]}, 'offset_spread_z': 0.0, 'lateral_offenders': None, 'tolerance_uu': 1.0, 'note': 'a uniform offset is the rig; a DIFFERING one would be the per-skin cosmetic offset the founder asked not to be used as a fix. Measured at [0, 0, -87.07] for all four in the first run, which is evidence AGAINST a per-skin root-pose cause.'}\n"
+}

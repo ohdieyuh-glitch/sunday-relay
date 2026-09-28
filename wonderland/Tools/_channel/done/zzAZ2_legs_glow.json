@@ -1,0 +1,206 @@
+{
+ "name": "zzAZ2_legs_glow",
+ "started": "2026-09-27 22:21:11",
+ "status": "VOID: the lamp switch could not be shown to reach the stage (matte lit fraction 0.9818)",
+ "tests": [
+  {
+   "id": "L_READ",
+   "name": "the stage lamp level can be read back before anything is changed",
+   "pass": true,
+   "detail": {
+    "lights": 0.04
+   }
+  },
+  {
+   "id": "L_RESTORE",
+   "name": "the lamp level this job found was put back",
+   "pass": true,
+   "detail": {
+    "as_found": 0.04,
+    "restored": 0.04
+   }
+  },
+  {
+   "id": "L_SKIN",
+   "name": "Relay OG was put back on the Dog, and it went back",
+   "pass": true,
+   "detail": {
+    "worn": "relay_og"
+   }
+  },
+  {
+   "id": "L_READABLE",
+   "name": "the figure was found against the backdrop in both frames",
+   "pass": true,
+   "detail": {
+    "on_box": [
+     1010,
+     236,
+     1264,
+     586
+    ],
+    "off_box": [
+     1004,
+     236,
+     1256,
+     588
+    ],
+    "on_pct": [
+     69.4,
+     87.1
+    ],
+    "off_pct": [
+     68.9,
+     87.6
+    ]
+   }
+  },
+  {
+   "id": "L00",
+   "name": "with the lamps off a skin with NO fire nearly disappears -- the switch reaches the stage",
+   "pass": false,
+   "detail": {
+    "read_back_off": 0.0,
+    "matte_torso_lit_fraction": 0.9818,
+    "matte_torso_mean": 0.8242,
+    "skeleton_torso_lamps_on": 0.6675,
+    "skeleton_torso_lamps_off": 0.7529,
+    "matte_ceiling": 0.25,
+    "note": "THE CONTROL, and it is Relay OG rather than the subject. Skeleton Flame barely dims when the lamps go out because most of it is emitting -- which is the finding, not a fault -- so asking IT whether the lamps went off is asking a question it cannot answer. The first version did exactly that and voided on a pose wobble: torso 0.6604 lit against 0.7651 unlit, with the figure box unmoved."
+   }
+  }
+ ],
+ "as_found_lights": 0.04,
+ "preview_rect": {
+  "centre": [
+   0.5947,
+   0.4704
+  ],
+  "size": [
+   0.2136,
+   0.4828
+  ]
+ },
+ "frames": {
+  "lamps_on": {
+   "asked": 0.04,
+   "read_back": 0.04,
+   "measured": {
+    "figure_box": [
+     1010,
+     236,
+     1264,
+     586
+    ],
+    "figure_pct_of_window": [
+     69.4,
+     87.1
+    ],
+    "torso": {
+     "mean": 0.6675,
+     "lit_fraction": 0.983,
+     "dark_but_lit_fraction": 0.2711,
+     "cells": 2464,
+     "box": [
+      1060,
+      355,
+      1213,
+      418
+     ]
+    },
+    "legs": {
+     "mean": 0.8205,
+     "lit_fraction": 0.9492,
+     "dark_but_lit_fraction": 0.0557,
+     "cells": 2048,
+     "box": [
+      1073,
+      453,
+      1200,
+      516
+     ]
+    },
+    "feet": {
+     "mean": 0.6319,
+     "lit_fraction": 0.8119,
+     "dark_but_lit_fraction": 0.0063,
+     "cells": 1600,
+     "box": [
+      1073,
+      530,
+      1200,
+      579
+     ]
+    }
+   }
+  },
+  "lamps_off": {
+   "asked": 0.0,
+   "read_back": 0.0,
+   "measured": {
+    "figure_box": [
+     1004,
+     236,
+     1256,
+     588
+    ],
+    "figure_pct_of_window": [
+     68.9,
+     87.6
+    ],
+    "torso": {
+     "mean": 0.7529,
+     "lit_fraction": 0.8923,
+     "dark_but_lit_fraction": 0.0243,
+     "cells": 2432,
+     "box": [
+      1054,
+      355,
+      1205,
+      419
+     ]
+    },
+    "legs": {
+     "mean": 0.7639,
+     "lit_fraction": 0.9286,
+     "dark_but_lit_fraction": 0.0089,
+     "cells": 2016,
+     "box": [
+      1067,
+      454,
+      1193,
+      517
+     ]
+    },
+    "feet": {
+     "mean": 0.5571,
+     "lit_fraction": 0.7397,
+     "dark_but_lit_fraction": 0.0222,
+     "cells": 1575,
+     "box": [
+      1067,
+      531,
+      1193,
+      580
+     ]
+    }
+   }
+  }
+ },
+ "matte_with_no_lamps": {
+  "found_a_figure": true,
+  "torso_mean": 0.8242,
+  "torso_lit_fraction": 0.9818
+ },
+ "restored_lights": 0.04,
+ "lamp_switch": {
+  "read_back_off": 0.0,
+  "matte_torso_lit_fraction": 0.9818,
+  "matte_torso_mean": 0.8242,
+  "skeleton_torso_lamps_on": 0.6675,
+  "skeleton_torso_lamps_off": 0.7529
+ },
+ "finished": "2026-09-27 22:22:12",
+ "seconds": 60.79,
+ "log": "L_READ PASS the stage lamp level can be read back before anything is changed {'lights': 0.04}\nL_lamps_on INFO lamps_on {'lights': 0.04, 'figure_pct': [69.4, 87.1], 'legs': 0.8205}\nL_lamps_off INFO lamps_off {'lights': 0.0, 'figure_pct': [68.9, 87.6], 'legs': 0.7639}\nL_RESTORE PASS the lamp level this job found was put back {'as_found': 0.04, 'restored': 0.04}\nL_SKIN PASS Relay OG was put back on the Dog, and it went back {'worn': 'relay_og'}\nL_READABLE PASS the figure was found against the backdrop in both frames {'on_box': [1010, 236, 1264, 586], 'off_box': [1004, 236, 1256, 588], 'on_pct': [69.4, 87.1], 'off_pct': [68.9, 87.6]}\nL00 FAIL with the lamps off a skin with NO fire nearly disappears -- the switch reaches the stage {'read_back_off': 0.0, 'matte_torso_lit_fraction': 0.9818, 'matte_torso_mean': 0.8242, 'skeleton_torso_lamps_on': 0.6675, 'skeleton_torso_lamps_off': 0.7529, 'matte_ceiling': 0.25, 'note': 'THE CONTROL, and it is Relay OG rather than the subject. Skeleton Flame barely dims when the lamps go out because most of it is emitting -- which is the finding, not a fault -- so asking IT whether the lamps went off is asking a question it cannot answer. The first version did exactly that and voided on a pose wobble: torso 0.6604 lit against 0.7651 unlit, with the figure box unmoved.'}\n"
+}

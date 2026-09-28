@@ -1,6 +1,6 @@
 {
  "name": "zc_night_ladder",
- "started": "2026-09-27 14:04:00",
+ "started": "2026-09-27 14:08:02",
  "status": "measured",
  "tests": [
   {
@@ -9,10 +9,10 @@
    "pass": true,
    "detail": {
     "readback": {
+     "0.70": 0.699999988079071,
+     "0.65": 0.6499999761581421,
      "0.62": 0.6200000047683716,
-     "0.58": 0.5799999833106995,
-     "0.54": 0.5400000214576721,
-     "0.50": 0.5
+     "0.58": 0.5799999833106995
     },
     "note": "an unknown cvar prints 'Command not recognized' and silently leaves the ladder flat"
    }
@@ -36,16 +36,16 @@
    "pass": true,
    "detail": {
     "per_lift": {
-     "0.62": 0.916,
-     "0.58": 0.9103,
-     "0.54": 0.9038,
-     "0.50": 0.8982
+     "0.70": 0.9017,
+     "0.65": 0.6289,
+     "0.62": 0.3672,
+     "0.58": 0.1115
     },
     "luma": {
-     "0.62": 0.0284,
-     "0.58": 0.0339,
-     "0.54": 0.0327,
-     "0.50": 0.0483
+     "0.70": 0.1116,
+     "0.65": 0.135,
+     "0.62": 0.151,
+     "0.58": 0.175
     }
    }
   },
@@ -55,22 +55,22 @@
    "pass": true,
    "detail": {
     "body_dark": {
-     "0.62": 0.3512,
-     "0.58": 0.2041,
-     "0.54": 0.2332,
-     "0.50": 0.157
+     "0.70": 0.6772,
+     "0.65": 0.2996,
+     "0.62": 0.2201,
+     "0.58": 0.1923
     },
     "body_mean": {
-     "0.62": 0.1559,
-     "0.58": 0.1751,
-     "0.54": 0.1955,
-     "0.50": 0.2329
+     "0.70": 0.1245,
+     "0.65": 0.1475,
+     "0.62": 0.1804,
+     "0.58": 0.1812
     },
     "light_fraction": {
-     "0.62": 0.0258,
-     "0.58": 0.0264,
-     "0.54": 0.0266,
-     "0.50": 0.028
+     "0.70": 0.0239,
+     "0.65": 0.0252,
+     "0.62": 0.0238,
+     "0.58": 0.0268
     },
     "note": "the figure's own lights are excluded from body_mean; light_fraction is reported beside it so a brighter body can never be a brighter pair of eyes."
    }
@@ -81,36 +81,36 @@
    "pass": true,
    "detail": {
     "cost": {
-     "0.62": {
-      "frame_median": 44.48,
-      "game_median": 41.45,
+     "0.70": {
+      "frame_median": 39.22,
+      "game_median": 39.18,
       "render_median": 0.0,
-      "gpu_median": 31.31,
-      "accounted_fraction": 0.932,
-      "samples": 40
-     },
-     "0.58": {
-      "frame_median": 41.56,
-      "game_median": 41.51,
-      "render_median": 0.0,
-      "gpu_median": 29.69,
+      "gpu_median": 31.08,
       "accounted_fraction": 0.999,
       "samples": 40
      },
-     "0.54": {
-      "frame_median": 45.31,
-      "game_median": 45.64,
+     "0.65": {
+      "frame_median": 44.5,
+      "game_median": 44.51,
       "render_median": 0.0,
-      "gpu_median": 29.44,
-      "accounted_fraction": 1.007,
+      "gpu_median": 25.95,
+      "accounted_fraction": 1.0,
       "samples": 40
      },
-     "0.50": {
-      "frame_median": 42.3,
-      "game_median": 42.67,
+     "0.62": {
+      "frame_median": 53.86,
+      "game_median": 53.88,
       "render_median": 0.0,
-      "gpu_median": 29.69,
-      "accounted_fraction": 1.009,
+      "gpu_median": 26.57,
+      "accounted_fraction": 1.0,
+      "samples": 40
+     },
+     "0.58": {
+      "frame_median": 46.12,
+      "game_median": 45.68,
+      "render_median": 0.0,
+      "gpu_median": 30.55,
+      "accounted_fraction": 0.99,
       "samples": 40
      }
     },
@@ -119,95 +119,95 @@
   }
  ],
  "avenue": {
+  "0.70": {
+   "luma": 0.1041,
+   "dark_fraction": 0.8358,
+   "ground_luma": 0.1116,
+   "ground_dark_fraction": 0.9017
+  },
+  "0.65": {
+   "luma": 0.1185,
+   "dark_fraction": 0.7224,
+   "ground_luma": 0.135,
+   "ground_dark_fraction": 0.6289
+  },
   "0.62": {
-   "luma": 0.0427,
-   "dark_fraction": 0.9304,
-   "ground_luma": 0.0284,
-   "ground_dark_fraction": 0.916
+   "luma": 0.1309,
+   "dark_fraction": 0.5394,
+   "ground_luma": 0.151,
+   "ground_dark_fraction": 0.3672
   },
   "0.58": {
-   "luma": 0.0466,
-   "dark_fraction": 0.928,
-   "ground_luma": 0.0339,
-   "ground_dark_fraction": 0.9103
-  },
-  "0.54": {
-   "luma": 0.0481,
-   "dark_fraction": 0.923,
-   "ground_luma": 0.0327,
-   "ground_dark_fraction": 0.9038
-  },
-  "0.50": {
-   "luma": 0.058,
-   "dark_fraction": 0.9229,
-   "ground_luma": 0.0483,
-   "ground_dark_fraction": 0.8982
+   "luma": 0.1479,
+   "dark_fraction": 0.4055,
+   "ground_luma": 0.175,
+   "ground_dark_fraction": 0.1115
   }
  },
  "body": {
+  "0.70": {
+   "body_mean": 0.1245,
+   "body_dark_fraction": 0.6772,
+   "light_fraction": 0.0239
+  },
+  "0.65": {
+   "body_mean": 0.1475,
+   "body_dark_fraction": 0.2996,
+   "light_fraction": 0.0252
+  },
   "0.62": {
-   "body_mean": 0.1559,
-   "body_dark_fraction": 0.3512,
-   "light_fraction": 0.0258
+   "body_mean": 0.1804,
+   "body_dark_fraction": 0.2201,
+   "light_fraction": 0.0238
   },
   "0.58": {
-   "body_mean": 0.1751,
-   "body_dark_fraction": 0.2041,
-   "light_fraction": 0.0264
-  },
-  "0.54": {
-   "body_mean": 0.1955,
-   "body_dark_fraction": 0.2332,
-   "light_fraction": 0.0266
-  },
-  "0.50": {
-   "body_mean": 0.2329,
-   "body_dark_fraction": 0.157,
-   "light_fraction": 0.028
+   "body_mean": 0.1812,
+   "body_dark_fraction": 0.1923,
+   "light_fraction": 0.0268
   }
  },
  "lift_readback": {
+  "0.70": 0.699999988079071,
+  "0.65": 0.6499999761581421,
   "0.62": 0.6200000047683716,
-  "0.58": 0.5799999833106995,
-  "0.54": 0.5400000214576721,
-  "0.50": 0.5
+  "0.58": 0.5799999833106995
  },
  "cost": {
-  "0.62": {
-   "frame_median": 44.48,
-   "game_median": 41.45,
+  "0.70": {
+   "frame_median": 39.22,
+   "game_median": 39.18,
    "render_median": 0.0,
-   "gpu_median": 31.31,
-   "accounted_fraction": 0.932,
-   "samples": 40
-  },
-  "0.58": {
-   "frame_median": 41.56,
-   "game_median": 41.51,
-   "render_median": 0.0,
-   "gpu_median": 29.69,
+   "gpu_median": 31.08,
    "accounted_fraction": 0.999,
    "samples": 40
   },
-  "0.54": {
-   "frame_median": 45.31,
-   "game_median": 45.64,
+  "0.65": {
+   "frame_median": 44.5,
+   "game_median": 44.51,
    "render_median": 0.0,
-   "gpu_median": 29.44,
-   "accounted_fraction": 1.007,
+   "gpu_median": 25.95,
+   "accounted_fraction": 1.0,
    "samples": 40
   },
-  "0.50": {
-   "frame_median": 42.3,
-   "game_median": 42.67,
+  "0.62": {
+   "frame_median": 53.86,
+   "game_median": 53.88,
    "render_median": 0.0,
-   "gpu_median": 29.69,
-   "accounted_fraction": 1.009,
+   "gpu_median": 26.57,
+   "accounted_fraction": 1.0,
+   "samples": 40
+  },
+  "0.58": {
+   "frame_median": 46.12,
+   "game_median": 45.68,
+   "render_median": 0.0,
+   "gpu_median": 30.55,
+   "accounted_fraction": 0.99,
    "samples": 40
   }
  },
  "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\night_ladder",
- "finished": "2026-09-27 14:06:13",
- "seconds": 133.61,
- "log": "L_AV_0.62 INFO avenue at lift 0.62 {'luma': 0.0427, 'dark_fraction': 0.9304, 'ground_luma': 0.0284, 'ground_dark_fraction': 0.916}\nL_BODY_0.62 INFO relay_og body at lift 0.62 {'body_mean': 0.1559, 'body_dark_fraction': 0.3512, 'light_fraction': 0.0258}\nL_AV_0.58 INFO avenue at lift 0.58 {'luma': 0.0466, 'dark_fraction': 0.928, 'ground_luma': 0.0339, 'ground_dark_fraction': 0.9103}\nL_BODY_0.58 INFO relay_og body at lift 0.58 {'body_mean': 0.1751, 'body_dark_fraction': 0.2041, 'light_fraction': 0.0264}\nL_AV_0.54 INFO avenue at lift 0.54 {'luma': 0.0481, 'dark_fraction': 0.923, 'ground_luma': 0.0327, 'ground_dark_fraction': 0.9038}\nL_BODY_0.54 INFO relay_og body at lift 0.54 {'body_mean': 0.1955, 'body_dark_fraction': 0.2332, 'light_fraction': 0.0266}\nL_AV_0.50 INFO avenue at lift 0.50 {'luma': 0.058, 'dark_fraction': 0.9229, 'ground_luma': 0.0483, 'ground_dark_fraction': 0.8982}\nL_BODY_0.50 INFO relay_og body at lift 0.50 {'body_mean': 0.2329, 'body_dark_fraction': 0.157, 'light_fraction': 0.028}\nL00 PASS the build HAS wl.Look.NightShadowLift and each rung took {'readback': {'0.62': 0.6200000047683716, '0.58': 0.5799999833106995, '0.54': 0.5400000214576721, '0.50': 0.5}, 'note': \"an unknown cvar prints 'Command not recognized' and silently leaves the ladder flat\"}\nL01 FAIL THE RANKING ALONE: the avenue at lift 1.0, against the same view before the pool change {'at_lift_1': None, 'previous_build': {'luma': 0.0325, 'dark_fraction': 0.966}, 'note': \"lift 1.0 is arithmetically a no-op, so any difference here is the significance ranking. The previous build's reading was taken with TQ05 applied and the old distance-only pool.\"}\nL02 PASS THE LIFT ALONE: the avenue ground across the ladder, ranking held constant {'per_lift': {'0.62': 0.916, '0.58': 0.9103, '0.54': 0.9038, '0.50': 0.8982}, 'luma': {'0.62': 0.0284, '0.58': 0.0339, '0.54': 0.0327, '0.50': 0.0483}}\nL03 PASS and the Dog's BODY across the same ladder {'body_dark': {'0.62': 0.3512, '0.58': 0.2041, '0.54': 0.2332, '0.50': 0.157}, 'body_mean': {'0.62': 0.1559, '0.58': 0.1751, '0.54': 0.1955, '0.50': 0.2329}, 'light_fraction': {'0.62': 0.0258, '0.58': 0.0264, '0.54': 0.0266, '0.50': 0.028}, 'note': \"the figure's own lights are excluded from body_mean; light_fraction is reported beside it so a brighter body can never be a brighter pair of eyes.\"}\nL04 PASS the night this buys has its render cost recorded, not assumed {'cost': {'0.62': {'frame_median': 44.48, 'game_median': 41.45, 'render_median': 0.0, 'gpu_median': 31.31, 'accounted_fraction': 0.932, 'samples': 40}, '0.58': {'frame_median': 41.56, 'game_median': 41.51, 'render_median': 0.0, 'gpu_median': 29.69, 'accounted_fraction': 0.999, 'samples': 40}, '0.54': {'frame_median': 45.31, 'game_median': 45.64, 'render_median': 0.0, 'gpu_median': 29.44, 'accounted_fraction': 1.007, 'samples': 40}, '0.50': {'frame_median': 42.3, 'game_median': 42.67, 'render_median': 0.0, 'gpu_median': 29.69, 'accounted_fraction': 1.009, 'samples': 40}}, 'note': \"local exposure is a render-thread pass and is ON at night at every one of these rungs. A frame here that game and GPU do not account for is the pass, and the founder's night is being bought with it.\"}\n"
+ "finished": "2026-09-27 14:10:15",
+ "seconds": 132.71,
+ "log": "L_AV_0.70 INFO avenue at lift 0.70 {'luma': 0.1041, 'dark_fraction': 0.8358, 'ground_luma': 0.1116, 'ground_dark_fraction': 0.9017}\nL_BODY_0.70 INFO relay_og body at lift 0.70 {'body_mean': 0.1245, 'body_dark_fraction': 0.6772, 'light_fraction': 0.0239}\nL_AV_0.65 INFO avenue at lift 0.65 {'luma': 0.1185, 'dark_fraction': 0.7224, 'ground_luma': 0.135, 'ground_dark_fraction': 0.6289}\nL_BODY_0.65 INFO relay_og body at lift 0.65 {'body_mean': 0.1475, 'body_dark_fraction': 0.2996, 'light_fraction': 0.0252}\nL_AV_0.62 INFO avenue at lift 0.62 {'luma': 0.1309, 'dark_fraction': 0.5394, 'ground_luma': 0.151, 'ground_dark_fraction': 0.3672}\nL_BODY_0.62 INFO relay_og body at lift 0.62 {'body_mean': 0.1804, 'body_dark_fraction': 0.2201, 'light_fraction': 0.0238}\nL_AV_0.58 INFO avenue at lift 0.58 {'luma': 0.1479, 'dark_fraction': 0.4055, 'ground_luma': 0.175, 'ground_dark_fraction': 0.1115}\nL_BODY_0.58 INFO relay_og body at lift 0.58 {'body_mean': 0.1812, 'body_dark_fraction': 0.1923, 'light_fraction': 0.0268}\nL00 PASS the build HAS wl.Look.NightShadowLift and each rung took {'readback': {'0.70': 0.699999988079071, '0.65': 0.6499999761581421, '0.62': 0.6200000047683716, '0.58': 0.5799999833106995}, 'note': \"an unknown cvar prints 'Command not recognized' and silently leaves the ladder flat\"}\nL01 FAIL THE RANKING ALONE: the avenue at lift 1.0, against the same view before the pool change {'at_lift_1': None, 'previous_build': {'luma': 0.0325, 'dark_fraction': 0.966}, 'note': \"lift 1.0 is arithmetically a no-op, so any difference here is the significance ranking. The previous build's reading was taken with TQ05 applied and the old distance-only pool.\"}\nL02 PASS THE LIFT ALONE: the avenue ground across the ladder, ranking held constant {'per_lift': {'0.70': 0.9017, '0.65': 0.6289, '0.62': 0.3672, '0.58': 0.1115}, 'luma': {'0.70': 0.1116, '0.65': 0.135, '0.62': 0.151, '0.58': 0.175}}\nL03 PASS and the Dog's BODY across the same ladder {'body_dark': {'0.70': 0.6772, '0.65': 0.2996, '0.62': 0.2201, '0.58': 0.1923}, 'body_mean': {'0.70': 0.1245, '0.65': 0.1475, '0.62': 0.1804, '0.58': 0.1812}, 'light_fraction': {'0.70': 0.0239, '0.65': 0.0252, '0.62': 0.0238, '0.58': 0.0268}, 'note': \"the figure's own lights are excluded from body_mean; light_fraction is reported beside it so a brighter body can never be a brighter pair of eyes.\"}\nL04 PASS the night this buys has its render cost recorded, not assumed {'cost': {'0.70': {'frame_median': 39.22, 'game_median': 39.18, 'render_median': 0.0, 'gpu_median': 31.08, 'accounted_fraction': 0.999, 'samples': 40}, '0.65': {'frame_median': 44.5, 'game_median': 44.51, 'render_median': 0.0, 'gpu_median': 25.95, 'accounted_fraction': 1.0, 'samples': 40}, '0.62': {'frame_median': 53.86, 'game_median': 53.88, 'render_median': 0.0, 'gpu_median': 26.57, 'accounted_fraction': 1.0, 'samples': 40}, '0.58': {'frame_median': 46.12, 'game_median': 45.68, 'render_median': 0.0, 'gpu_median': 30.55, 'accounted_fraction': 0.99, 'samples': 40}}, 'note': \"local exposure is a render-thread pass and is ON at night at every one of these rungs. A frame here that game and GPU do not account for is the pass, and the founder's night is being bought with it.\"}\n"
 }

@@ -1,0 +1,31 @@
+{
+ "name": "zzBF1_fire_flicker",
+ "started": "2026-09-27 22:49:40",
+ "status": "error",
+ "tests": [
+  {
+   "id": "F_READ",
+   "name": "the fire material knob can be read back before anything is changed",
+   "pass": true,
+   "detail": {
+    "fire_material": 0.0
+   }
+  },
+  {
+   "id": "F_CLOCK",
+   "name": "the day clock is stopped, so the hour stays where it was put",
+   "pass": true,
+   "detail": {
+    "day_minutes": 0.0,
+    "note": "a job that runs for minutes against a running clock photographs a moving sky and blames the subject."
+   }
+  }
+ ],
+ "as_found_fire_material": 0.0,
+ "day_minutes": 0.0,
+ "arms": {},
+ "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n                                                                  ^^^^^^^^^^^^^^^^\n  File \"C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\_channel\\inbox\\zzBF1_fire_flicker.py\", line 184, in job\nNameError: name 'fingerprint' is not defined\n",
+ "finished": "2026-09-27 22:50:17",
+ "seconds": 37.63,
+ "log": "F_READ PASS the fire material knob can be read back before anything is changed {'fire_material': 0.0}\nF_CLOCK PASS the day clock is stopped, so the hour stays where it was put {'day_minutes': 0.0, 'note': 'a job that runs for minutes against a running clock photographs a moving sky and blames the subject.'}\n"
+}
