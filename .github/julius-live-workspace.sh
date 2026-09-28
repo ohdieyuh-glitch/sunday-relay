@@ -61,6 +61,12 @@ SEED_DIR="$MISSION_DIR/workspace"
 # meaningful after this script has changed directory.
 GITHUB_WORKSPACE_DIR=$(cd "${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}" && pwd)
 
+# A FROZEN MISSION IS PROVEN FROZEN BEFORE ANYTHING IS BUILT FOR IT. The pins name the git object
+# id of the mission, its sliced source and its harness at the revision being sliced; a mismatch or a
+# working tree that disagrees is refused here, before the mount, the images or any credential, so a
+# drifted mission costs a refusal and never a paid run. An unlisted mission is not frozen and passes.
+( cd "$GITHUB_WORKSPACE_DIR" && bash .github/julius-mission-pins.sh "$MISSION_NAME" . "${JULIUS_SLICE_REV:-HEAD}" )
+
 FLEET_ROOT=${JULIUS_FLEET_ROOT:-/tmp/julius-workspace}
 TENANT=${JULIUS_TENANT_ID:-tenant}
 WORKSPACE="$FLEET_ROOT/$TENANT/ws"

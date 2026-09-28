@@ -1,0 +1,17 @@
+# FROZEN MISSIONS — the git object id every pinned path must have at the revision a run slices.
+#
+# `.github/julius-mission-pins.sh` refuses to provision a listed mission unless each path below has
+# exactly this id AND the working tree agrees with that revision (the contract and the seed overlay
+# are read from disk). A mission that is not listed is not frozen, and passes with zero pins.
+#
+# Mission 6 was frozen at 231369e6 on relay/julius-beta-qualification. PR #288 re-authored that
+# history, so the freeze commit is not an ancestor of what lands; a tree or blob id is a CONTENT hash,
+# identical wherever the content is, and these were measured equal at 231369e6, at #288's frozen head
+# 15cf04d7 and at the follow-up branch. Change a line here only with a recorded founder decision to
+# change the mission: this file exists so that the mission cannot drift toward being easier to pass.
+#
+# <mission> <repository path> <git object id>
+julius-live-mission-6 .github/julius-missions/julius-live-mission-6 93dd0ab35fb36496fa4e9042a7abf66250d31fa1
+julius-live-mission-6 src/relay/workspace/julius-tools/node-tool-adapter.ts fec0b40f0f6a0756df48b904cb3b32a2132706da
+julius-live-mission-6 .github/julius-mission-slice/resolve.mjs c222c8c51867ffd31b66b6713dbcd11b92535fff
+julius-live-mission-6 .github/julius-mission-slice/loader.mjs b811ab9107dbe59b25e0d92a84ff5ffd5e6c1ccd

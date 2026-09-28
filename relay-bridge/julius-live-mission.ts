@@ -36,7 +36,7 @@
  * evidence, events, or stdout.
  */
 
-import { claudeAuthLine, decideClaudeAuth, resolveClaudeAuthMode } from './hosted-coding-agent/hosted-auth';
+import { claudeAuthLine, decideClaudeAuth, resolveClaudeAuthMode, type ClaudeAuthProvenance } from './hosted-coding-agent/hosted-auth';
 import { HOSTED_API_KEY_ENV } from './hosted-coding-agent/hosted-readiness';
 import { hostedChildEnvKeys } from './hosted-coding-agent/hosted-envelope';
 // NOT the connector BARREL. Importing it pulled the whole claude-code connector
@@ -68,7 +68,7 @@ import { createPostgresMissionKnowledgeStore } from './julius/mission-knowledge'
 import { createPostgresMissionSeedStore } from './julius/mission-seed';
 import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 import { createExecutorShellPort } from './julius/executor-effects';
-import { createLiveArtifactExchange } from './julius/live-workers';
+import { createLiveArtifactExchange, juliusReviewerBillingPath } from './julius/live-workers';
 import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
@@ -209,6 +209,41 @@ export function liveExecutionScope(env: Record<string, string | undefined>): str
 export function liveLedgerState(store: unknown): 'BOUND' | 'UNBOUND' {
   return store !== null && typeof store === 'object' && typeof (store as { timeline?: unknown }).timeline === 'function'
     ? 'BOUND' : 'UNBOUND';
+}
+
+/**
+ * HOW EACH ROLE WILL BE PAID FOR, answered before anything runs.
+ *
+ * The founder's accounting requirement is that the record can tell an API bill
+ * from a subscription for every role, so the preflight states all three:
+ *   - the Prompt Architect is API-billed BY CONSTRUCTION: the live architect
+ *     cannot exist without its OpenAI key;
+ *   - the Coding Agent is whatever the auth decision above resolved, which is
+ *     `null` here when that decision failed (and the preflight is then blocked
+ *     for its own reason);
+ *   - the Independent Reviewer is the OPERATOR'S DECLARATION,
+ *     `RELAY_HERMES_BILLING_MODE`, because nothing Julius observes can tell what
+ *     credential sits in Hermes's profile.
+ *
+ * AN UNDECLARED REVIEWER BLOCKS A PAID RUN. Its settlements would carry no
+ * billing path, and the owner would read UNKNOWN for a role whose money is real
+ * — decided in advance, by omission. Declared but unrecognised is NOT blocked:
+ * it reads UNKNOWN on this line, where the operator sees it, because refusing a
+ * legitimate word the attestation also knows (`portal`) would be wrong.
+ */
+export function liveBillingPaths(input: {
+  readonly coder: ClaudeAuthProvenance | null;
+  readonly reviewerDeclaration: string | undefined;
+}): { readonly line: string; readonly blocked: string | null } {
+  const coder = input.coder === null ? 'UNDECIDED'
+    : input.coder.authentication === 'CLAUDE_SUBSCRIPTION' ? 'SUBSCRIPTION' : 'API_BILLED';
+  const reviewer = juliusReviewerBillingPath(input.reviewerDeclaration);
+  return {
+    line: `billing paths: architect=API_BILLED coder=${coder} reviewer=${reviewer ?? 'UNDECLARED'}`,
+    blocked: reviewer === null
+      ? 'RELAY_HERMES_BILLING_MODE is not declared, so the Independent Reviewer\'s settlements could not say how they were paid for'
+      : null,
+  };
 }
 
 export function observedResearchBackends(
@@ -624,8 +659,18 @@ async function main(argv: readonly string[]): Promise<number> {
    * returns a class and a coarse plan label and never a credential.
    */
   const authMode = resolveClaudeAuthMode(env);
+  /**
+   * A FAILED AUTH DECISION BLOCKS, whatever the composition said. This printed
+   * "BLOCKED CLAUDE AUTH" and then left the verdict to `preflight.problems`, which
+   * knows nothing about a login: subscription mode with NO login observed resolved
+   * every role, and the preflight answered ready. The Coding Agent would then have
+   * failed at dispatch — after the architect had been paid.
+   */
+  let coderProvenance: ClaudeAuthProvenance | null = null;
+  let claudeAuthBlocked = false;
   if (!authMode.ok) {
     out(`  CLAUDE AUTH: REFUSED — ${authMode.refusal}: ${authMode.because}`);
+    claudeAuthBlocked = true;
   } else {
     const observed = authMode.mode === 'CLAUDE_SUBSCRIPTION'
       ? classifyClaudeAuth(new Date().toISOString(), probeClaudeCapabilities(new Date().toISOString()).executablePath)
@@ -643,6 +688,7 @@ async function main(argv: readonly string[]): Promise<number> {
       }),
     });
     if (decision.ok) {
+      coderProvenance = decision.provenance;
       out(`  ${claudeAuthLine(decision.provenance)}`);
       if (!decision.provenance.apiCostApplicable) {
         out('  note: no Anthropic API billing event exists for a subscription-backed Coding Agent, so its API cost is NOT APPLICABLE rather than zero. Subscription usage is never reported as $0.00 of API spend.');
@@ -651,8 +697,12 @@ async function main(argv: readonly string[]): Promise<number> {
       // FAIL CLOSED, and loudly: a run that wanted the subscription and would have
       // used a key must not proceed quietly on the key.
       out(`  BLOCKED CLAUDE AUTH: ${decision.refusal} — ${decision.because}`);
+      claudeAuthBlocked = true;
     }
   }
+  const billing = liveBillingPaths({ coder: coderProvenance, reviewerDeclaration: env.RELAY_HERMES_BILLING_MODE });
+  out(`  ${billing.line}`);
+  if (billing.blocked !== null) out(`  BLOCKED billing: ${billing.blocked}`);
   for (const problem of preflight.problems.filter((entry) => entry.role !== 'CODING_AGENT' || !entry.missing.some((name) => name.startsWith('executor shell')))) {
     out(`  BLOCKED ${problem.role}: ${problem.reason} — ${problem.missing.join(', ')}`);
   }
@@ -680,7 +730,8 @@ async function main(argv: readonly string[]): Promise<number> {
 
   const preflightBlocked = preflight.problems.some((entry) => entry.role !== 'CODING_AGENT')
     || preflight.problems.some((entry) => entry.role === 'CODING_AGENT' && entry.missing.some((name) => !name.startsWith('executor shell')))
-    || executorMissing.length > 0 || databaseMissing.length > 0 || ledger === 'UNBOUND';
+    || executorMissing.length > 0 || databaseMissing.length > 0 || ledger === 'UNBOUND'
+    || claudeAuthBlocked || billing.blocked !== null;
   if (preflightBlocked) {
     out('RESULT: BLOCKED — nothing was submitted and no provider was contacted.');
     return 1;
