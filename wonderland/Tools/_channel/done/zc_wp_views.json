@@ -1,0 +1,42 @@
+{
+ "name": "zc_wp_views",
+ "started": "2026-09-28 12:15:29",
+ "status": "measured",
+ "views": [
+  {
+   "n": 0,
+   "label": "golden_arrival_overview",
+   "photographed": true
+  },
+  {
+   "n": 1,
+   "label": "icarus_north_edge",
+   "photographed": true
+  },
+  {
+   "n": 2,
+   "label": "noctis_southwest_edge",
+   "photographed": true
+  },
+  {
+   "n": 3,
+   "label": "tartarus_southeast_edge",
+   "photographed": true
+  },
+  {
+   "n": 4,
+   "label": "whole_world_high",
+   "photographed": true
+  }
+ ],
+ "highres": {
+  "golden_arrival_overview": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Saved\\Screenshots\\WindowsEditor\\HighresScreenshot00003.png",
+  "icarus_north_edge": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Saved\\Screenshots\\WindowsEditor\\HighresScreenshot00004.png",
+  "noctis_southwest_edge": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Saved\\Screenshots\\WindowsEditor\\HighresScreenshot00005.png",
+  "tartarus_southeast_edge": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Saved\\Screenshots\\WindowsEditor\\HighresScreenshot00006.png",
+  "whole_world_high": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Saved\\Screenshots\\WindowsEditor\\HighresScreenshot00007.png"
+ },
+ "finished": "2026-09-28 12:16:47",
+ "seconds": 77.74,
+ "log": "VIEW 0 golden_arrival_overview True\nVIEW 1 icarus_north_edge True\nVIEW 2 noctis_southwest_edge True\nVIEW 3 tartarus_southeast_edge True\nVIEW 4 whole_world_high True\n"
+}

@@ -1,0 +1,557 @@
+{
+ "name": "zc_wp_regions",
+ "started": "2026-09-28 12:04:20",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "R01",
+   "name": "the map has user-loaded editor regions, so 'No Loaded Region(s)' no longer applies",
+   "pass": true,
+   "detail": {
+    "regions": 16.0,
+    "before": "world=WL_V2_GoldenArrival_WP2 user_regions=0 has_user_regions=0 union=[none] editor_bounds=[IsValid=true, Min=(X=-409600.000 Y=-409600.000 Z=-409600.000), Max=(X=409600.000 Y=409600.000 Z=38400.000)] runtime_bounds=[IsValid=true, Min=(X=-150000.000 Y=-150000.000 Z=-100002.349), Max=(X=150000.000 Y=150000.000 Z=33160.800)] streaming=1 process_used_mb=2600 available_mb=1926",
+    "after": "world=WL_V2_GoldenArrival_WP2 user_regions=16 has_user_regions=1 union=[IsValid=true, Min=(X=-100629.904 Y=-97633.719 Z=-101002.349), Max=(X=96369.600 Y=104580.000 Z=34160.800)] editor_bounds=[IsValid=true, Min=(X=-409600.000 Y=-409600.000 Z=-409600.000), Max=(X=409600.000 Y=409600.000 Z=38400.000)] runtime_bounds=[IsValid=true, Min=(X=-150000.000 Y=-150000.000 Z=-100002.349), Max=(X=150000.000 Y=150000.000 Z=33160.800)] streaming=1 process_used_mb=2412 available_mb=1150",
+    "note": "SWorldPartitionViewportWidget shows the banner exactly while HasLoadedUserCreatedRegions() is false."
+   }
+  },
+  {
+   "id": "R02",
+   "name": "every spatially loaded actor on disk is a live object in the editor (genuine residency)",
+   "pass": true,
+   "detail": {
+    "resident": 20916,
+    "on_disk": 20916,
+    "loaded_before": 0,
+    "level_actors_before": 627,
+    "level_actors_after": 21543,
+    "missing": []
+   }
+  },
+  {
+   "id": "R03",
+   "name": "the distant rings are resident too, not only the plaza",
+   "pass": true,
+   "detail": {
+    "rings": [
+     {
+      "ring_m": [
+       0.0,
+       500.0
+      ],
+      "actors": 17632,
+      "loaded": 17632
+     },
+     {
+      "ring_m": [
+       500.0,
+       1500.0
+      ],
+      "actors": 3284,
+      "loaded": 3284
+     },
+     {
+      "ring_m": [
+       1500.0,
+       5000.0
+      ],
+      "actors": 0,
+      "loaded": 0
+     },
+     {
+      "ring_m": [
+       5000.0,
+       20000.0
+      ],
+      "actors": 0,
+      "loaded": 0
+     },
+     {
+      "ring_m": [
+       20000.0,
+       "far"
+      ],
+      "actors": 0,
+      "loaded": 0
+     }
+    ],
+    "farthest": [
+     {
+      "label": "TQ03_Tartarus_GVE_05",
+      "class": "StaticMeshActor",
+      "dist_m": 1088,
+      "resident": true
+     },
+     {
+      "label": "TQ03_Tartarus_GVE_02",
+      "class": "StaticMeshActor",
+      "dist_m": 1088,
+      "resident": true
+     },
+     {
+      "label": "IC03_Icarus_GVE_02",
+      "class": "StaticMeshActor",
+      "dist_m": 1046,
+      "resident": true
+     },
+     {
+      "label": "IC03_Icarus_GVE_05",
+      "class": "StaticMeshActor",
+      "dist_m": 1046,
+      "resident": true
+     },
+     {
+      "label": "NC03_Noctis_GVE_02",
+      "class": "StaticMeshActor",
+      "dist_m": 1046,
+      "resident": true
+     },
+     {
+      "label": "NC03_Noctis_GVE_05",
+      "class": "StaticMeshActor",
+      "dist_m": 1046,
+      "resident": true
+     },
+     {
+      "label": "Sky_R2_014_F0_LW1_0_0",
+      "class": "StaticMeshActor",
+      "dist_m": 1006,
+      "resident": true
+     },
+     {
+      "label": "Sky_R2_014_F0_LW0_0_0",
+      "class": "StaticMeshActor",
+      "dist_m": 1006,
+      "resident": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "R04",
+   "name": "the load finished above the memory floor (it did not exhaust the machine)",
+   "pass": true,
+   "detail": {
+    "stopped": null,
+    "available_mb_end": 1150.0,
+    "used_mb_end": 2412.0,
+    "floor_mb": 350,
+    "tiles_loaded": 16,
+    "tiles_planned": 16
+   }
+  },
+  {
+   "id": "R05",
+   "name": "the regions are saved where the editor restores them from",
+   "pass": true,
+   "detail": {
+    "persisted": "PerWorldEditorSettings=((\"/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2_WP.WL_V2_GoldenArrival_WP2_WP\", ()),(\"/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2.WL_V2_GoldenArrival_WP2\", (LoadedEditorRegions=((Min=(X=0.000000,Y=-1155.755366,Z=-101002.349487),Max=(X=0.000000,Y=0.000000,Z=34160.800000),IsValid=True),(Min=(X=0.000000,Y=-1155.755366,Z=-101002.349487),Max=(X=15624.816159,Y=14457.276067,Z=34160.800000),IsValid=True),(Min=(X=-1221.000000,Y=-28174.565592,Z=-101002.349487),Max=(X=15441.581759,Y=-1155.755366,Z=34160.800000),IsValid=True),(Min=(X=-25866.088453,Y=-30872.913043,Z=-101002.34",
+    "ini": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Saved\\Config\\WindowsEditor\\EditorPerProjectUserSettings.ini"
+   }
+  },
+  {
+   "id": "R06",
+   "name": "streaming and the always-loaded set are unchanged (editor residency only)",
+   "pass": true,
+   "detail": {
+    "streaming": 1.0,
+    "always_loaded": 627,
+    "always_resident": 627
+   }
+  }
+ ],
+ "map": "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2.WL_V2_GoldenArrival_WP2",
+ "before": "world=WL_V2_GoldenArrival_WP2 user_regions=0 has_user_regions=0 union=[none] editor_bounds=[IsValid=true, Min=(X=-409600.000 Y=-409600.000 Z=-409600.000), Max=(X=409600.000 Y=409600.000 Z=38400.000)] runtime_bounds=[IsValid=true, Min=(X=-150000.000 Y=-150000.000 Z=-100002.349), Max=(X=150000.000 Y=150000.000 Z=33160.800)] streaming=1 process_used_mb=2600 available_mb=1926",
+ "memory_before": "usedPhysicalMb=2600 availablePhysicalMb=1926 peakUsedPhysicalMb=4604 usedVirtualMb=9347",
+ "level_actors_before": 627,
+ "descs_total": 21543,
+ "descs_spatial": 20916,
+ "descs_always_loaded": 627,
+ "descs_hlod": 0,
+ "spatial_loaded_before": 0,
+ "tiles_planned": 16,
+ "world_extent_m": [
+  -1006,
+  -976,
+  964,
+  1046
+ ],
+ "tiles": [
+  {
+   "tile": 0,
+   "actors": 1307,
+   "box_m": [
+    0,
+    -12,
+    0,
+    0
+   ],
+   "load_s": 2.0,
+   "avail_before_mb": 1961.0,
+   "avail_after_mb": 2162.0,
+   "used_after_mb": 2296.0,
+   "regions": 1.0
+  },
+  {
+   "tile": 1,
+   "actors": 1307,
+   "box_m": [
+    0,
+    -12,
+    156,
+    145
+   ],
+   "load_s": 0.3,
+   "avail_before_mb": 2162.0,
+   "avail_after_mb": 1929.0,
+   "used_after_mb": 2361.0,
+   "regions": 2.0
+  },
+  {
+   "tile": 2,
+   "actors": 1307,
+   "box_m": [
+    -12,
+    -282,
+    154,
+    -12
+   ],
+   "load_s": 1.6,
+   "avail_before_mb": 1929.0,
+   "avail_after_mb": 2011.0,
+   "used_after_mb": 2390.0,
+   "regions": 3.0
+  },
+  {
+   "tile": 3,
+   "actors": 1308,
+   "box_m": [
+    -259,
+    -309,
+    -12,
+    -12
+   ],
+   "load_s": 1.6,
+   "avail_before_mb": 2011.0,
+   "avail_after_mb": 1929.0,
+   "used_after_mb": 2415.0,
+   "regions": 4.0
+  },
+  {
+   "tile": 4,
+   "actors": 1307,
+   "box_m": [
+    -1006,
+    -12,
+    0,
+    0
+   ],
+   "load_s": 0.1,
+   "avail_before_mb": 1929.0,
+   "avail_after_mb": 1931.0,
+   "used_after_mb": 2413.0,
+   "regions": 5.0
+  },
+  {
+   "tile": 5,
+   "actors": 1307,
+   "box_m": [
+    -1006,
+    0,
+    0,
+    79
+   ],
+   "load_s": 0.4,
+   "avail_before_mb": 1931.0,
+   "avail_after_mb": 2048.0,
+   "used_after_mb": 2432.0,
+   "regions": 6.0
+  },
+  {
+   "tile": 6,
+   "actors": 1307,
+   "box_m": [
+    156,
+    -12,
+    964,
+    145
+   ],
+   "load_s": 0.9,
+   "avail_before_mb": 2048.0,
+   "avail_after_mb": 2099.0,
+   "used_after_mb": 2439.0,
+   "regions": 7.0
+  },
+  {
+   "tile": 7,
+   "actors": 1308,
+   "box_m": [
+    154,
+    -163,
+    964,
+    -12
+   ],
+   "load_s": 0.8,
+   "avail_before_mb": 2099.0,
+   "avail_after_mb": 2029.0,
+   "used_after_mb": 2454.0,
+   "regions": 8.0
+  },
+  {
+   "tile": 8,
+   "actors": 1307,
+   "box_m": [
+    0,
+    145,
+    185,
+    1046
+   ],
+   "load_s": 0.8,
+   "avail_before_mb": 2029.0,
+   "avail_after_mb": 1971.0,
+   "used_after_mb": 2486.0,
+   "regions": 9.0
+  },
+  {
+   "tile": 9,
+   "actors": 1307,
+   "box_m": [
+    -12,
+    -976,
+    154,
+    -282
+   ],
+   "load_s": 1.4,
+   "avail_before_mb": 1971.0,
+   "avail_after_mb": 1440.0,
+   "used_after_mb": 2392.0,
+   "regions": 10.0
+  },
+  {
+   "tile": 10,
+   "actors": 1307,
+   "box_m": [
+    -1006,
+    -210,
+    -259,
+    -12
+   ],
+   "load_s": 1.7,
+   "avail_before_mb": 1440.0,
+   "avail_after_mb": 1188.0,
+   "used_after_mb": 2369.0,
+   "regions": 11.0
+  },
+  {
+   "tile": 11,
+   "actors": 1307,
+   "box_m": [
+    -259,
+    -976,
+    -12,
+    -309
+   ],
+   "load_s": 1.2,
+   "avail_before_mb": 1188.0,
+   "avail_after_mb": 1100.0,
+   "used_after_mb": 2395.0,
+   "regions": 12.0
+  },
+  {
+   "tile": 12,
+   "actors": 1308,
+   "box_m": [
+    -1006,
+    79,
+    0,
+    1046
+   ],
+   "load_s": 1.0,
+   "avail_before_mb": 1100.0,
+   "avail_after_mb": 1223.0,
+   "used_after_mb": 2297.0,
+   "regions": 13.0
+  },
+  {
+   "tile": 13,
+   "actors": 1307,
+   "box_m": [
+    154,
+    -976,
+    964,
+    -163
+   ],
+   "load_s": 1.0,
+   "avail_before_mb": 1223.0,
+   "avail_after_mb": 1253.0,
+   "used_after_mb": 2337.0,
+   "regions": 14.0
+  },
+  {
+   "tile": 14,
+   "actors": 1308,
+   "box_m": [
+    185,
+    145,
+    964,
+    1046
+   ],
+   "load_s": 1.0,
+   "avail_before_mb": 1253.0,
+   "avail_after_mb": 1111.0,
+   "used_after_mb": 2371.0,
+   "regions": 15.0
+  },
+  {
+   "tile": 15,
+   "actors": 1307,
+   "box_m": [
+    -1006,
+    -976,
+    -259,
+    -210
+   ],
+   "load_s": 1.3,
+   "avail_before_mb": 1111.0,
+   "avail_after_mb": 1150.0,
+   "used_after_mb": 2412.0,
+   "regions": 16.0
+  }
+ ],
+ "stopped": null,
+ "after": "world=WL_V2_GoldenArrival_WP2 user_regions=16 has_user_regions=1 union=[IsValid=true, Min=(X=-100629.904 Y=-97633.719 Z=-101002.349), Max=(X=96369.600 Y=104580.000 Z=34160.800)] editor_bounds=[IsValid=true, Min=(X=-409600.000 Y=-409600.000 Z=-409600.000), Max=(X=409600.000 Y=409600.000 Z=38400.000)] runtime_bounds=[IsValid=true, Min=(X=-150000.000 Y=-150000.000 Z=-100002.349), Max=(X=150000.000 Y=150000.000 Z=33160.800)] streaming=1 process_used_mb=2412 available_mb=1150",
+ "memory_after": "usedPhysicalMb=2412 availablePhysicalMb=1150 peakUsedPhysicalMb=4604 usedVirtualMb=9479",
+ "rings": [
+  {
+   "ring_m": [
+    0.0,
+    500.0
+   ],
+   "actors": 17632,
+   "loaded": 17632
+  },
+  {
+   "ring_m": [
+    500.0,
+    1500.0
+   ],
+   "actors": 3284,
+   "loaded": 3284
+  },
+  {
+   "ring_m": [
+    1500.0,
+    5000.0
+   ],
+   "actors": 0,
+   "loaded": 0
+  },
+  {
+   "ring_m": [
+    5000.0,
+    20000.0
+   ],
+   "actors": 0,
+   "loaded": 0
+  },
+  {
+   "ring_m": [
+    20000.0,
+    "far"
+   ],
+   "actors": 0,
+   "loaded": 0
+  }
+ ],
+ "spatial_loaded_after": 20916,
+ "missing_examples": [],
+ "always_loaded_resident": 627,
+ "level_actors_after": 21543,
+ "farthest": [
+  {
+   "label": "TQ03_Tartarus_GVE_05",
+   "class": "StaticMeshActor",
+   "dist_m": 1088,
+   "resident": true
+  },
+  {
+   "label": "TQ03_Tartarus_GVE_02",
+   "class": "StaticMeshActor",
+   "dist_m": 1088,
+   "resident": true
+  },
+  {
+   "label": "IC03_Icarus_GVE_02",
+   "class": "StaticMeshActor",
+   "dist_m": 1046,
+   "resident": true
+  },
+  {
+   "label": "IC03_Icarus_GVE_05",
+   "class": "StaticMeshActor",
+   "dist_m": 1046,
+   "resident": true
+  },
+  {
+   "label": "NC03_Noctis_GVE_02",
+   "class": "StaticMeshActor",
+   "dist_m": 1046,
+   "resident": true
+  },
+  {
+   "label": "NC03_Noctis_GVE_05",
+   "class": "StaticMeshActor",
+   "dist_m": 1046,
+   "resident": true
+  },
+  {
+   "label": "Sky_R2_014_F0_LW1_0_0",
+   "class": "StaticMeshActor",
+   "dist_m": 1006,
+   "resident": true
+  },
+  {
+   "label": "Sky_R2_014_F0_LW0_0_0",
+   "class": "StaticMeshActor",
+   "dist_m": 1006,
+   "resident": true
+  }
+ ],
+ "photos": [
+  {
+   "label": "plaza_overview",
+   "file": null,
+   "at_m": [
+    0,
+    0
+   ]
+  },
+  {
+   "label": "far_sector_0_IC03_Icarus_GVE_02",
+   "file": null,
+   "at_m": [
+    43,
+    1045
+   ]
+  },
+  {
+   "label": "far_sector_1_NC03_Noctis_GVE_02",
+   "file": null,
+   "at_m": [
+    -926,
+    -485
+   ]
+  },
+  {
+   "label": "far_sector_2_TQ03_Tartarus_GVE_05",
+   "file": null,
+   "at_m": [
+    963,
+    -506
+   ]
+  }
+ ],
+ "persisted_line": "PerWorldEditorSettings=((\"/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2_WP.WL_V2_GoldenArrival_WP2_WP\", ()),(\"/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2.WL_V2_GoldenArrival_WP2\", (LoadedEditorRegions=((Min=(X=0.000000,Y=-1155.755366,Z=-101002.349487),Max=(X=0.000000,Y=0.000000,Z=34160.800000),IsValid=True),(Min=(X=0.000000,Y=-1155.755366,Z=-101002.349487),Max=(X=15624.816159,Y=14457.276067,Z=34160.800000),IsValid=True),(Min=(X=-1221.000000,Y=-28174.565592,Z=-101002.349487),Max=(X=15441.581759,Y=-1155.755366,Z=34160.800000),IsValid=True),(Min=(X=-25866.088453,Y=-30872.913043,Z=-101002.349487),Max=(X=-1221.000000,Y=-1155.755366,Z=34160.800000),IsValid=True),(Min=(X=-100629.904401,Y=-1155.755366,Z=-101002.349487),Max=(X=0.000000,Y=0.000000,Z=34160.800000),IsValid=True),(Min=(X=-100629.904401,Y=0.000000,Z=-101002.349487),Max=(X=0.000000,Y=7852.390000,Z=34160.800000),IsValid=True),(Min=(X=15624.816159,Y=-1155.755366,Z=-101002.349487),Max=(X=96369.600000,Y=14457.276067,Z=34160.800000),IsValid=True),(Min=(X=15441.581759,Y=-16259.706850,Z=-101002.349487),Max=(X=96369.600000,Y=-1155.755366,Z=34160.800000),IsValid=True),(Min=(X=0.000000,Y=14457.276067,Z=-101002.349487),Max=(X=18484.766950,Y=104580.000000,Z=34160.800000),IsValid=True),(Min=(X=-1221.000000,Y=-97633.719372,Z=-101002.349487),Max=(X=15441.581759,Y=-28174.565592,Z=34160.800000),IsValid=True),(Min=(X=-100629.904401,Y=-20958.785753,Z=-101002.349487),Max=(X=-25866.088453,Y=-1155.755366,Z=34160.800000),IsValid=True),(Min=(X=-25866.088453,Y=-97633.719372,Z=-101002.349487),Max=(X=-1221.000000,Y=-30872.913043,Z=34160.800000),IsValid=True),(Min=(X=-100629.904401,Y=7852.390000,Z=-101002.349487),Max=(X=0.000000,Y=104580.000000,Z=34160.800000),IsValid=True),(Min=(X=15441.581759,Y=-97633.719372,Z=-101002.349487),Max=(X=96369.600000,Y=-16259.706850,Z=34160.800000),IsValid=True),(Min=(X=18484.766950,Y=14457.276067,Z=-101002.349487),Max=(X=96369.600000,Y=104580.000000,Z=34160.800000),IsValid=True),(Min=(X=-100629.904401,Y=-97633.719372,Z=-101002.349487),Max=(X=-25866.088453,Y=-20958.785753,Z=34160.800000),IsValid=True)))))",
+ "finished": "2026-09-28 12:05:47",
+ "seconds": 86.68,
+ "log": "BEFORE world=WL_V2_GoldenArrival_WP2 user_regions=0 has_user_regions=0 union=[none] editor_bounds=[IsValid=true, Min=(X=-409600.000 Y=-409600.000 Z=-409600.000), Max=(X=409600.000 Y=409600.000 Z=38400.000)] runtime_bounds=[IsValid=true, Min=(X=-150000.000 Y=-150000.000 Z=-100002.349), Max=(X=150000.000 Y=150000.000 Z=33160.800)] streaming=1 process_used_mb=2600 available_mb=1926\nDISK spatial=20916 always=627 hlod=0 loaded_before=0\nPLAN 16 tiles over x -1006..964 m, y -976..1046 m\nTILE {'tile': 0, 'actors': 1307, 'box_m': [0, -12, 0, 0], 'load_s': 2.0, 'avail_before_mb': 1961.0, 'avail_after_mb': 2162.0, 'used_after_mb': 2296.0, 'regions': 1.0}\nTILE {'tile': 1, 'actors': 1307, 'box_m': [0, -12, 156, 145], 'load_s': 0.3, 'avail_before_mb': 2162.0, 'avail_after_mb': 1929.0, 'used_after_mb': 2361.0, 'regions': 2.0}\nTILE {'tile': 2, 'actors': 1307, 'box_m': [-12, -282, 154, -12], 'load_s': 1.6, 'avail_before_mb': 1929.0, 'avail_after_mb': 2011.0, 'used_after_mb': 2390.0, 'regions': 3.0}\nTILE {'tile': 3, 'actors': 1308, 'box_m': [-259, -309, -12, -12], 'load_s': 1.6, 'avail_before_mb': 2011.0, 'avail_after_mb': 1929.0, 'used_after_mb': 2415.0, 'regions': 4.0}\nTILE {'tile': 4, 'actors': 1307, 'box_m': [-1006, -12, 0, 0], 'load_s': 0.1, 'avail_before_mb': 1929.0, 'avail_after_mb': 1931.0, 'used_after_mb': 2413.0, 'regions': 5.0}\nTILE {'tile': 5, 'actors': 1307, 'box_m': [-1006, 0, 0, 79], 'load_s': 0.4, 'avail_before_mb': 1931.0, 'avail_after_mb': 2048.0, 'used_after_mb': 2432.0, 'regions': 6.0}\nTILE {'tile': 6, 'actors': 1307, 'box_m': [156, -12, 964, 145], 'load_s': 0.9, 'avail_before_mb': 2048.0, 'avail_after_mb': 2099.0, 'used_after_mb': 2439.0, 'regions': 7.0}\nTILE {'tile': 7, 'actors': 1308, 'box_m': [154, -163, 964, -12], 'load_s': 0.8, 'avail_before_mb': 2099.0, 'avail_after_mb': 2029.0, 'used_after_mb': 2454.0, 'regions': 8.0}\nTILE {'tile': 8, 'actors': 1307, 'box_m': [0, 145, 185, 1046], 'load_s': 0.8, 'avail_before_mb': 2029.0, 'avail_after_mb': 1971.0, 'used_after_mb': 2486.0, 'regions': 9.0}\nTILE {'tile': 9, 'actors': 1307, 'box_m': [-12, -976, 154, -282], 'load_s': 1.4, 'avail_before_mb': 1971.0, 'avail_after_mb': 1440.0, 'used_after_mb': 2392.0, 'regions': 10.0}\nTILE {'tile': 10, 'actors': 1307, 'box_m': [-1006, -210, -259, -12], 'load_s': 1.7, 'avail_before_mb': 1440.0, 'avail_after_mb': 1188.0, 'used_after_mb': 2369.0, 'regions': 11.0}\nTILE {'tile': 11, 'actors': 1307, 'box_m': [-259, -976, -12, -309], 'load_s': 1.2, 'avail_before_mb': 1188.0, 'avail_after_mb': 1100.0, 'used_after_mb': 2395.0, 'regions': 12.0}\nTILE {'tile': 12, 'actors': 1308, 'box_m': [-1006, 79, 0, 1046], 'load_s': 1.0, 'avail_before_mb': 1100.0, 'avail_after_mb': 1223.0, 'used_after_mb': 2297.0, 'regions': 13.0}\nTILE {'tile': 13, 'actors': 1307, 'box_m': [154, -976, 964, -163], 'load_s': 1.0, 'avail_before_mb': 1223.0, 'avail_after_mb': 1253.0, 'used_after_mb': 2337.0, 'regions': 14.0}\nTILE {'tile': 14, 'actors': 1308, 'box_m': [185, 145, 964, 1046], 'load_s': 1.0, 'avail_before_mb': 1253.0, 'avail_after_mb': 1111.0, 'used_after_mb': 2371.0, 'regions': 15.0}\nTILE {'tile': 15, 'actors': 1307, 'box_m': [-1006, -976, -259, -210], 'load_s': 1.3, 'avail_before_mb': 1111.0, 'avail_after_mb': 1150.0, 'used_after_mb': 2412.0, 'regions': 16.0}\nAFTER world=WL_V2_GoldenArrival_WP2 user_regions=16 has_user_regions=1 union=[IsValid=true, Min=(X=-100629.904 Y=-97633.719 Z=-101002.349), Max=(X=96369.600 Y=104580.000 Z=34160.800)] editor_bounds=[IsValid=true, Min=(X=-409600.000 Y=-409600.000 Z=-409600.000), Max=(X=409600.000 Y=409600.000 Z=38400.000)] runtime_bounds=[IsValid=true, Min=(X=-150000.000 Y=-150000.000 Z=-100002.349), Max=(X=150000.000 Y=150000.000 Z=33160.800)] streaming=1 process_used_mb=2412 available_mb=1150\nPHOTO plaza_overview None\nPHOTO far_sector_0_IC03_Icarus_GVE_02 None\nPHOTO far_sector_1_NC03_Noctis_GVE_02 None\nPHOTO far_sector_2_TQ03_Tartarus_GVE_05 None\nR01 PASS the map has user-loaded editor regions, so 'No Loaded Region(s)' no longer applies {'regions': 16.0, 'before': 'world=WL_V2_GoldenArrival_WP2 user_regions=0 has_user_regions=0 union=[none] editor_bounds=[IsValid=true, Min=(X=-409600.000 Y=-409600.000 Z=-409600.000), Max=(X=409600.000 Y=409600.000 Z=38400.000)] runtime_bounds=[IsValid=true, Min=(X=-150000.000 Y=-150000.000 Z=-100002.349), Max=(X=150000.000 Y=150000.000 Z=33160.800)] streaming=1 process_used_mb=2600 available_mb=1926', 'after': 'world=WL_V2_GoldenArrival_WP2 user_regions=16 has_user_regions=1 union=[IsValid=true, Min=(X=-100629.904 Y=-97633.719 Z=-101002.349), Max=(X=96369.600 Y=104580.000 Z=34160.800)] editor_bounds=[IsValid=true, Min=(X=-409600.000 Y=-409600.000 Z=-409600.000), Max=(X=409600.000 Y=409600.000 Z=38400.000)] runtime_bounds=[IsValid=true, Min=(X=-150000.000 Y=-150000.000 Z=-100002.349), Max=(X=150000.000 Y=150000.000 Z=33160.800)] streaming=1 process_used_mb=2412 available_mb=1150', 'note': 'SWorldPartitionViewportWidget shows the banner exactly while HasLoadedUserCreatedRegions() is false.'}\nR02 PASS every spatially loaded actor on disk is a live object in the editor (genuine residency) {'resident': 20916, 'on_disk': 20916, 'loaded_before': 0, 'level_actors_before': 627, 'level_actors_after': 21543, 'missing': []}\nR03 PASS the distant rings are resident too, not only the plaza {'rings': [{'ring_m': [0.0, 500.0], 'actors': 17632, 'loaded': 17632}, {'ring_m': [500.0, 1500.0], 'actors': 3284, 'loaded': 3284}, {'ring_m': [1500.0, 5000.0], 'actors': 0, 'loaded': 0}, {'ring_m': [5000.0, 20000.0], 'actors': 0, 'loaded': 0}, {'ring_m': [20000.0, 'far'], 'actors': 0, 'loaded': 0}], 'farthest': [{'label': 'TQ03_Tartarus_GVE_05', 'class': 'StaticMeshActor', 'dist_m': 1088, 'resident': True}, {'label': 'TQ03_Tartarus_GVE_02', 'class': 'StaticMeshActor', 'dist_m': 1088, 'resident': True}, {'label': 'IC03_Icarus_GVE_02', 'class': 'StaticMeshActor', 'dist_m': 1046, 'resident': True}, {'label': 'IC03_Icarus_GVE_05', 'class': 'StaticMeshActor', 'dist_m': 1046, 'resident': True}, {'label': 'NC03_Noctis_GVE_02', 'class': 'StaticMeshActor', 'dist_m': 1046, 'resident': True}, {'label': 'NC03_Noctis_GVE_05', 'class': 'StaticMeshActor', 'dist_m': 1046, 'resident': True}, {'label': 'Sky_R2_014_F0_LW1_0_0', 'class': 'StaticMeshActor', 'dist_m': 1006, 'resident': True}, {'label': 'Sky_R2_014_F0_LW0_0_0', 'class': 'StaticMeshActor', 'dist_m': 1006, 'resident': True}]}\nR04 PASS the load finished above the memory floor (it did not exhaust the machine) {'stopped': None, 'available_mb_end': 1150.0, 'used_mb_end': 2412.0, 'floor_mb': 350, 'tiles_loaded': 16, 'tiles_planned': 16}\nR05 PASS the regions are saved where the editor restores them from {'persisted': 'PerWorldEditorSettings=((\"/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2_WP.WL_V2_GoldenArrival_WP2_WP\", ()),(\"/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2.WL_V2_GoldenArrival_WP2\", (LoadedEditorRegions=((Min=(X=0.000000,Y=-1155.755366,Z=-101002.349487),Max=(X=0.000000,Y=0.000000,Z=34160.800000),IsValid=True),(Min=(X=0.000000,Y=-1155.755366,Z=-101002.349487),Max=(X=15624.816159,Y=14457.276067,Z=34160.800000),IsValid=True),(Min=(X=-1221.000000,Y=-28174.565592,Z=-101002.349487),Max=(X=15441.581759,Y=-1155.755366,Z=34160.800000),IsValid=True),(Min=(X=-25866.088453,Y=-30872.913043,Z=-101002.34', 'ini': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Saved\\\\Config\\\\WindowsEditor\\\\EditorPerProjectUserSettings.ini'}\nR06 PASS streaming and the always-loaded set are unchanged (editor residency only) {'streaming': 1.0, 'always_loaded': 627, 'always_resident': 627}\n"
+}
