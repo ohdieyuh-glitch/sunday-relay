@@ -1095,3 +1095,34 @@ figure did not have it. A test written to verify a fix found the finding itself 
 That is the general move worth keeping: **when a measurement implies an edit to authored content, regenerate
 the content and re-measure before editing.** It costs one command and it is the only step that can tell you
 the file you measured is not the file that ships.
+
+## An absolute millisecond threshold is a statement about the hardware
+
+A clause demanded a fix save **40 ms**. That number came from a session whose baseline frame was 203 ms —
+about 5 fps, with a compile running. On a quieter machine the whole frame is 59 ms, and the same fix saving
+**14.41 ms — a quarter of the frame** — failed it.
+
+The fix did not change between those runs. The hardware did.
+
+**Express performance thresholds as a fraction of the measured baseline**, and record the baseline beside the
+result. Then the clause means the same thing on a loaded box and an idle one, and a reader a month later can
+tell whether "saved 14 ms" was good.
+
+The same caution applies to quoting a number across sessions: 170.57 ms measured at 5 fps is not comparable
+to this project's own 18.7 ms figure for the same subject. **A term that dominates under load need not
+dominate at all in the condition the user plays in.**
+
+## One green column can be somebody else's line
+
+Through two failed attempts at taking Project Avatars out of global illumination, the survey read:
+
+```
+indirect_off  3 / 198        distance_field_off  198 / 198
+```
+
+I read the second column as proof the loop was reaching the components and only the first property was
+sticking. It was not. `wl.Figure.DistanceField` defaults to 0 and had always set that bit at component
+construction — my code had touched nothing, and one column looked like success because something else had
+already done that job.
+
+**When a readback is partly green, check whether the green part is yours.**
