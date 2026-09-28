@@ -130,3 +130,35 @@ exponents — has been measured and none of them touches it.
 
 `wl.Look.FireMaterial` still ships at 0, so the corrected exponents are inert by default. They are kept
 because 0.85 was backwards on its own terms.
+
+## And downward too, because the arithmetic said the upward sweep could not have worked
+
+The ribbon's UVs run 0→1 **across its width** (`Pile.UVs` takes `(0, Up)` and `(1, Up)`), so the verified
+`EdgeSoftness` of 2.6 really is fading each ribbon's left and right edges. The reason that is invisible at
+gain 60 is that the emissive is far over white: a falloff applied to a value many times white leaves most of
+the ribbon saturated, and the edge you *see* is the hard line where the curve finally crosses white — not the
+gradient below it.
+
+So a soft edge needs the flame **dimmer**, and every gain swept until now was 60 or above. Swept down:
+
+| gain | reach | over-white |
+|---|---|---|
+| 10 | 98.54% | 0.000 |
+| 20 | 90.25% | 0.000 |
+| 35 | 96.35% | 0.000 |
+| 60 | 96.82% | 0.000 |
+
+**Still flat, still hard-edged, at every one.** Photographed side by side with the approved plume, gain 10
+through 35 are the same saturated yellow polygons.
+
+## Item 4's diagnosis, closed
+
+The hard edge survives **every lever reachable from code**:
+
+- both fire surfaces (voxel glow and `M_WL_Fire`)
+- gain from **10 to 180**, swept in both directions
+- `EdgeSoftness` 0.85 → 2.6 and `TipFalloff` 1.45 → 2.2, **verified in the asset and in the drawn instance**
+
+It is not a tuning problem. A flame built from opaque ribbon geometry has a polygon outline, and shading
+*within* those polygons cannot remove it. **Item 4 needs Niagara or camera-facing soft translucent cards** —
+the thing the founder named in their first sentence — and that is asset and geometry work, not a parameter.

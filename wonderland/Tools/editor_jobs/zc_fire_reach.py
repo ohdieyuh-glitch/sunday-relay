@@ -50,10 +50,20 @@ FRAMES = 6
 # (label, material, gain or None to leave it)
 RUNGS = (
     ("approved_voxel_glow", 0, None),
+    # ---- DOWNWARD, AND THE ARITHMETIC SAYS WHY THE UPWARD SWEEP COULD NOT WORK.
+    #
+    # The ribbon's UVs run 0 to 1 ACROSS its width (Pile.UVs gets (0, Up) and (1, Up)), so EdgeSoftness --
+    # now verified at 2.6 in the asset AND in the drawn instance -- really is fading each ribbon's left and
+    # right edges. It is invisible because the emissive is far over white: a falloff applied to a value ten
+    # times white still leaves most of the ribbon saturated, and the edge you SEE is the hard line where the
+    # curve finally crosses white, not the gradient below it.
+    #
+    # So a soft edge needs the flame DIMMER, not brighter, and every gain I have swept was 60 or above. That
+    # is the same mistake as sweeping PreviewGlow downward when the answer was up, in the other direction.
+    ("shaped_g10", 1, 10.0),
+    ("shaped_g20", 1, 20.0),
+    ("shaped_g35", 1, 35.0),
     ("shaped_g60", 1, 60.0),
-    ("shaped_g100", 1, 100.0),
-    ("shaped_g140", 1, 140.0),
-    ("shaped_g180", 1, 180.0),
 )
 HOT = 0.42
 STEP = 2
