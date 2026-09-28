@@ -106,6 +106,26 @@ repairs, and returns a verified result with evidence.
   executor mounts. Every POSIX case passed, which is how it survived.
 - A commit message claimed a change (one shared pg pool) that a skipped patch
   had never applied. Corrected in the tree and recorded in the handoff.
+- **This page told its reader to see `ceremony/push-as-worker.sh`, a path that
+  has never existed in this repository** — the exact failure it warns about two
+  sections later. The real ceremony is `docs/JULIUS_WORKER_PR_RUNBOOK.md`, and
+  the three steps are now named here with who performs each.
+- **An API key survived the redactor**, and the table test that should have
+  caught it asserted the wrong string. Two independent defects: in the boundary
+  set the `authorization` rule ran FIRST and its `\S+` ate the word `Bearer`,
+  destroying the anchor the next rule needed, so the key was not missed but made
+  unreachable; and the repository-wide rule `/sk-[A-Za-z0-9]{8,}/` demanded eight
+  alphanumerics straight after `sk-`, so it missed every modern provider key
+  (`sk-ant-api03-`, `sk-proj-`, `sk-svcacct-`) and a bare Anthropic key in prose
+  was never redacted at all. The `` the widened rule needs also fixes the
+  opposite defect in the same line: unanchored, `sk-` matched inside
+  `task-oriented`. Found by the integration lane, reproduced here as four leaks
+  by probe, and proven not vacuous — with only the two source files reverted,
+  eleven cases fail.
+- **The runbook's App id was the bot's USER id** (`325202980`, the number in the
+  bot's noreply address) rather than the App id (`4838349`). It is the JWT's
+  `iss`, so an operator following the line literally would have met `404
+  Integration not found` at the first call with nothing to tell them why.
 
 **What is new**
 
@@ -154,8 +174,13 @@ repairs, and returns a verified result with evidence.
 **What this branch does not claim**
 
 - No paid provider ran for it. Every proof here is deterministic or against a
-  real PostgreSQL; the representative paid qualification mission is still
-  outstanding and is the founder's to authorise.
+  real PostgreSQL. The representative paid mission is PREPARED and
+  contract-checked on this branch — `.github/julius-missions/julius-live-mission-6/`,
+  a real cross-platform defect the integration lane reported, inside the DEFAULT
+  $5 / one-repair-cycle bound so its budget needs no founder decision — and it is
+  **not dispatched**. Dispatch is where money is spent, and by this repository's
+  own rule every paid mission needs a causal question, a reason the answer needs
+  provider spend, and explicit founder authorisation for that run.
 - No Unreal change has been made under Julius's contracts.
 - The Docker executor's sibling proof needs a Linux runner and did not run here.
 - `npm test` whole-suite has no number from this workstation (memory), so CI is
