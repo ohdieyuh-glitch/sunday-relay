@@ -204,9 +204,14 @@ def job():
     if not on_fire_material:
         emit("R03", "INFO", "how much of the flame band is over white, on the shipped glow material",
              {"fraction_over_white": blown,
-              "note": "the founder asked for these flames back on 2026-09-26 and they are back. The candidate "
-                      "fire material exists and is reachable with wl.Look.FireMaterial 1; it is off because it "
-                      "drew nothing, and that is an open bug rather than a finished feature."})
+              "note": "the founder asked for these flames back on 2026-09-26 and they are back. THE CLAIM "
+                      "THAT THE CANDIDATE DREW NOTHING WAS WRONG and is corrected here: zc_fire_two_surfaces "
+                      "measured both surfaces back to back on one figure at one hour, and M_WL_Fire draws at "
+                      "luma 0.144 for Arden and 0.122 for the Skeleton against the shipped 0.659 and 0.388. "
+                      "It draws; it is about four times dimmer, and it never blows out -- 0.000 over white "
+                      "against the shipped Skeleton's 0.411. So the other account in "
+                      "WonderlandCompanionEmbodiment is the true one: the shaping takes the prominence out. "
+                      "Whether to trade prominence for believability is the founder's call, not a bug."})
         record("R04", "the flames the founder asked for are back on both fire skins",
                all(v["foot"]["luma"] >= 0.5 for v in findings.values()),
                luma_in_the_flame_band={k: v["foot"]["luma"] for k, v in findings.items()}, floor=0.5)
