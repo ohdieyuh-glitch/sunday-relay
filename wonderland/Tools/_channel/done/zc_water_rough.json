@@ -1,0 +1,54 @@
+{
+ "name": "zc_water_rough",
+ "started": "2026-09-28 04:57:35",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "G00",
+   "name": "the water master loads",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "G01",
+   "name": "the roughness and ripple are changed on the asset, read back off it",
+   "pass": true,
+   "detail": {
+    "before": {
+     "Roughness": 0.035,
+     "RippleStrength": 0.35
+    },
+    "after": {
+     "Roughness": 0.1,
+     "RippleStrength": 0.55
+    },
+    "wanted": {
+     "Roughness": 0.1,
+     "RippleStrength": 0.55
+    },
+    "nodes_touched": {
+     "RippleStrength": 0.55,
+     "Roughness": 0.1
+    },
+    "saved": true,
+    "note": "THE READBACK IS THE RESULT. The previous attempt's setter did not exist and its own readback clause is what caught it -- the call raised, the values never moved, and nothing would have told me otherwise."
+   }
+  }
+ ],
+ "before": {
+  "Roughness": 0.035,
+  "RippleStrength": 0.35
+ },
+ "nodes_touched": {
+  "RippleStrength": 0.55,
+  "Roughness": 0.1
+ },
+ "saved": true,
+ "after": {
+  "Roughness": 0.1,
+  "RippleStrength": 0.55
+ },
+ "finished": "2026-09-28 04:57:38",
+ "seconds": 3.02,
+ "log": "G00 PASS the water master loads {}\nG01 PASS the roughness and ripple are changed on the asset, read back off it {'before': {'Roughness': 0.035, 'RippleStrength': 0.35}, 'after': {'Roughness': 0.1, 'RippleStrength': 0.55}, 'wanted': {'Roughness': 0.1, 'RippleStrength': 0.55}, 'nodes_touched': {'RippleStrength': 0.55, 'Roughness': 0.1}, 'saved': True, 'note': \"THE READBACK IS THE RESULT. The previous attempt's setter did not exist and its own readback clause is what caught it -- the call raised, the values never moved, and nothing would have told me otherwise.\"}\n"
+}

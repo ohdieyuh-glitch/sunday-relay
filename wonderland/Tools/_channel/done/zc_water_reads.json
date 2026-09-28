@@ -1,0 +1,103 @@
+{
+ "name": "zc_water_reads",
+ "started": "2026-09-28 04:55:35",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "D00",
+   "name": "the water master loads",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "D01",
+   "name": "the parameters about to be changed are ones this material has",
+   "pass": true,
+   "detail": {
+    "wanted": [
+     "RippleStrength",
+     "Roughness"
+    ],
+    "exposed": [
+     "FlowSpeedA",
+     "FlowSpeedB",
+     "RippleStrength",
+     "Opacity",
+     "Roughness",
+     "Specular",
+     "Metallic",
+     "Refraction"
+    ],
+    "note": "THE GUARD AGAINST MY OWN LAST MISTAKE. I read 'TexScale 0.0, Flow 0.0' off this material and briefly had a cause; both names belong to the OLD M_V2_Surface and the getter returns 0.0 for a parameter that does not exist. A query for something absent is not a measurement."
+   }
+  },
+  {
+   "id": "D02",
+   "name": "the new values are on the asset, read back",
+   "pass": false,
+   "detail": {
+    "before": {
+     "Roughness": 0.035,
+     "RippleStrength": 0.35
+    },
+    "after": {
+     "Roughness": 0.035,
+     "RippleStrength": 0.35
+    },
+    "wanted": {
+     "Roughness": 0.1,
+     "RippleStrength": 0.55
+    }
+   }
+  },
+  {
+   "id": "D03",
+   "name": "the plaza was photographed from player height for a human verdict",
+   "pass": true,
+   "detail": {
+    "captures": {
+     "behind": "behind.png",
+     "side": "side.png"
+    },
+    "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\water_reads",
+    "note": "THE VERDICT IS THE PICTURE. A ratio taken against close masonry said this water was fine while a frame at player height showed a glowing hoop, so the picture is the authority here."
+   }
+  }
+ ],
+ "scalar_parameters_that_exist": [
+  "FlowSpeedA",
+  "FlowSpeedB",
+  "RippleStrength",
+  "Opacity",
+  "Roughness",
+  "Specular",
+  "Metallic",
+  "Refraction"
+ ],
+ "before": {
+  "Roughness": 0.035,
+  "RippleStrength": 0.35
+ },
+ "errors": {
+  "Roughness": "type object 'MaterialEditingLibrary' has no attribute 'set_material_default_scalar_parameter_value'",
+  "RippleStrength": "type object 'MaterialEditingLibrary' has no attribute 'set_material_default_scalar_parameter_value'"
+ },
+ "applied": {},
+ "after": {
+  "Roughness": 0.035,
+  "RippleStrength": 0.35
+ },
+ "dog_at": [
+  -327.3,
+  -650.0,
+  109.1
+ ],
+ "captures": {
+  "behind": "behind.png",
+  "side": "side.png"
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\water_reads",
+ "finished": "2026-09-28 04:56:18",
+ "seconds": 43.82,
+ "log": "D00 PASS the water master loads {}\nD_NAMES INFO the scalars this material really exposes {'names': ['FlowSpeedA', 'FlowSpeedB', 'RippleStrength', 'Opacity', 'Roughness', 'Specular', 'Metallic', 'Refraction']}\nD01 PASS the parameters about to be changed are ones this material has {'wanted': ['RippleStrength', 'Roughness'], 'exposed': ['FlowSpeedA', 'FlowSpeedB', 'RippleStrength', 'Opacity', 'Roughness', 'Specular', 'Metallic', 'Refraction'], 'note': \"THE GUARD AGAINST MY OWN LAST MISTAKE. I read 'TexScale 0.0, Flow 0.0' off this material and briefly had a cause; both names belong to the OLD M_V2_Surface and the getter returns 0.0 for a parameter that does not exist. A query for something absent is not a measurement.\"}\nD02 FAIL the new values are on the asset, read back {'before': {'Roughness': 0.035, 'RippleStrength': 0.35}, 'after': {'Roughness': 0.035, 'RippleStrength': 0.35}, 'wanted': {'Roughness': 0.1, 'RippleStrength': 0.55}}\nD03 PASS the plaza was photographed from player height for a human verdict {'captures': {'behind': 'behind.png', 'side': 'side.png'}, 'where': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\water_reads', 'note': 'THE VERDICT IS THE PICTURE. A ratio taken against close masonry said this water was fine while a frame at player height showed a glowing hoop, so the picture is the authority here.'}\n"
+}
