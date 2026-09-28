@@ -776,3 +776,32 @@ click on them", not "the buttons are broken".
 General form: **a synthetic-input harness that fails is evidence about the harness until something rules the
 harness out.** The four probes that eliminated capture theft, window stacking, app focus and geometry
 mismatch all narrowed *where* the synthetic click dies; none of them showed a real click would die there too.
+
+## "Night is darker than day" is false for emissive subjects — the bar is 19.6%
+
+`AutoExposureBias` is `Lerp(1.45f, -0.9f, Daylight)`: **−0.9 EV at noon, +1.45 at night**. That is
+2.35 EV, a factor of **5.10**. So:
+
+> **Any surface retaining more than 19.6% of its noon LUMINANCE reads brighter at night.**
+
+An emissive surface does not dim when the sun sets — it keeps 100% — so it clears that bar five times
+over. This is why `ScaleGlowsForNight` exists, and a luminous skin reading above 1.0 night-over-noon is
+that compensation being present but incomplete, not a lighting defect.
+
+Measured on 2026-09-27, all after the Nightfall complement landed:
+
+| subject | night / noon | glow geometry |
+|---|---|---|
+| world ground, one camera, one job | **0.596** | — |
+| Relay OG (matte mascot) | 0.625 | none |
+| Arden Infernal | 1.360 | 45% |
+| Skeleton Flame | 1.362 | 83% |
+
+The ground and the matte figure agree closely and sit well under 1. The two luminous skins sit above it.
+**The variable is the subject's own emission, not the world** — and Arden read 1.360 *before* any of the
+night work, so this was never a regression.
+
+When a day/night ratio surprises you, check whether the subject emits before checking whether the world
+changed. And measure the control **in the same job at the same spot**: a matte subject beside the
+luminous one settles it in one rung, where a cross-job comparison produced a four-hour phantom decline
+earlier the same day.
