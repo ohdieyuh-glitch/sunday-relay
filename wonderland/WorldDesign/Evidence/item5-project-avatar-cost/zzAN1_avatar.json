@@ -1,0 +1,242 @@
+{
+ "name": "zzAN1_avatar",
+ "started": "2026-09-27 19:37:50",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "O00",
+   "name": "the editor exports the raw frame instrument",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "O01",
+   "name": "there are Project Avatar figures to spawn",
+   "pass": true,
+   "detail": {
+    "found": 10
+   }
+  },
+  {
+   "id": "O_WARM",
+   "name": "the world settled before rung zero was taken",
+   "pass": true,
+   "detail": {
+    "reads": 3,
+    "first": 99.57,
+    "last_three": [
+     99.57,
+     100.33,
+     99.88
+    ],
+    "seconds": 0.3,
+    "settled": true,
+    "note": "rung zero is what every other rung is compared against, and it has always been the earliest and least settled reading in this job. A fixed wait is a guess about when the world has arrived; this waits for three reads to agree and voids if they never do."
+   }
+  },
+  {
+   "id": "O_vsm_off",
+   "name": "r.Shadow.Virtual.Enable took the value it was given",
+   "pass": true,
+   "detail": {
+    "asked": "0",
+    "read": 0.0
+   }
+  },
+  {
+   "id": "O_df_off",
+   "name": "r.DistanceFields took the value it was given",
+   "pass": false,
+   "detail": {
+    "asked": "0",
+    "read": 1.0,
+    "note": "the rung is VOID rather than reported: an unrecognised cvar leaves the world exactly as it was, and publishing that as a toggled measurement is how a knob that does nothing gets credited with a result."
+   }
+  },
+  {
+   "id": "O_USABLE",
+   "name": "the run is settled enough to compare rungs at all",
+   "pass": true,
+   "detail": {
+    "rung_zero_median_ms": 64.69,
+    "rung_zero_raw_worst_ms": 170.55,
+    "rung_zero_spike_ratio": 2.6,
+    "ladder_rungs_under_30_frames": [],
+    "other_rungs_under_30_frames": null,
+    "stat_froze": 0,
+    "note": "rung zero is the value every other rung is compared against, so a spike in it poisons the whole ladder. A worst frame more than ten times the median means the world was still arriving; a rung with under thirty frames means the stat overlay was off for most of its window. Either way the numbers below describe this machine's evening, not avatars."
+   }
+  },
+  {
+   "id": "O02",
+   "name": "the run reproduced the finding it was built to explain",
+   "pass": false,
+   "detail": {
+    "ladder_ms": {
+     "0": 64.69,
+     "1": 175.61,
+     "2": 195.35,
+     "3": 117.24,
+     "4": 149.58,
+     "5": 169.29
+    },
+    "one_over_five": 1.04,
+    "note": "if one avatar is NOT expensive on this run, nothing below means anything and the 16:33 reading was a property of that session rather than of avatars."
+   }
+  },
+  {
+   "id": "O03",
+   "name": "the cost at one avatar is a switch rather than a gradient",
+   "pass": false,
+   "detail": {
+    "one": 175.61,
+    "two": 195.35,
+    "fraction_lost_at_two": -0.112,
+    "reading": "NOT A SWITCH: the cost declines gradually across the rungs, so no path is turning on above one instance and the explanation is elsewhere."
+   }
+  },
+  {
+   "id": "O04",
+   "name": "virtual shadow maps explain the cost at one avatar",
+   "pass": false,
+   "detail": {
+    "one_avatar": 174.45,
+    "with_vsm_off": 143.14,
+    "fraction_removed": 0.179,
+    "reading": "shadows are NOT the cost: turning them off left it in place"
+   }
+  }
+ ],
+ "avatar_files": 10,
+ "warm_up": {
+  "reads": 3,
+  "first": 99.57,
+  "last_three": [
+   99.57,
+   100.33,
+   99.88
+  ],
+  "seconds": 0.3,
+  "settled": true
+ },
+ "readings": {
+  "n00": {
+   "frames": 126,
+   "frame_median": 64.69,
+   "raw_p95": 80.08,
+   "raw_worst": 170.55,
+   "game_median": 33.22,
+   "render_median": 60.26,
+   "gpu_median": 62.0
+  },
+  "n01": {
+   "frames": 44,
+   "frame_median": 175.61,
+   "raw_p95": 227.81,
+   "raw_worst": 245.48,
+   "game_median": 22.89,
+   "render_median": 172.58,
+   "gpu_median": 167.42
+  },
+  "n02": {
+   "frames": 37,
+   "frame_median": 195.35,
+   "raw_p95": 262.11,
+   "raw_worst": 275.6,
+   "game_median": 24.72,
+   "render_median": 195.24,
+   "gpu_median": 26.78
+  },
+  "n03": {
+   "frames": 63,
+   "frame_median": 117.24,
+   "raw_p95": 198.67,
+   "raw_worst": 202.58,
+   "game_median": 26.3,
+   "render_median": 115.7,
+   "gpu_median": 23.56
+  },
+  "n04": {
+   "frames": 56,
+   "frame_median": 149.58,
+   "raw_p95": 200.78,
+   "raw_worst": 203.55,
+   "game_median": 28.93,
+   "render_median": 147.85,
+   "gpu_median": 137.07
+  },
+  "n05": {
+   "frames": 47,
+   "frame_median": 169.29,
+   "raw_p95": 203.64,
+   "raw_worst": 205.22,
+   "game_median": 28.21,
+   "render_median": 164.93,
+   "gpu_median": 148.48
+  },
+  "n01_again": {
+   "frames": 49,
+   "frame_median": 174.45,
+   "raw_p95": 216.17,
+   "raw_worst": 218.12,
+   "game_median": 30.35,
+   "render_median": 175.54,
+   "gpu_median": 148.57
+  },
+  "vsm_off": {
+   "frames": 55,
+   "frame_median": 143.14,
+   "raw_p95": 209.01,
+   "raw_worst": 241.15,
+   "game_median": 25.41,
+   "render_median": 143.0,
+   "gpu_median": 137.29
+  },
+  "df_off": null
+ },
+ "cvar_readback": {
+  "vsm_off": {
+   "cvar": "r.Shadow.Virtual.Enable",
+   "asked": "0",
+   "read": 0.0
+  },
+  "df_off": {
+   "cvar": "r.DistanceFields",
+   "asked": "0",
+   "read": 1.0
+  }
+ },
+ "ladder_ms": {
+  "0": 64.69,
+  "1": 175.61,
+  "2": 195.35,
+  "3": 117.24,
+  "4": 149.58,
+  "5": 169.29
+ },
+ "thin_non_ladder_rungs": null,
+ "run_quality": {
+  "rung_zero_median_ms": 64.69,
+  "rung_zero_raw_worst_ms": 170.55,
+  "rung_zero_spike_ratio": 2.6,
+  "ladder_rungs_under_30_frames": [],
+  "other_rungs_under_30_frames": null,
+  "stat_froze": 0
+ },
+ "cliff": {
+  "one": 175.61,
+  "two": 195.35,
+  "fraction_lost_at_two": -0.112,
+  "reading": "NOT A SWITCH: the cost declines gradually across the rungs, so no path is turning on above one instance and the explanation is elsewhere."
+ },
+ "shadow_share": {
+  "one_avatar": 174.45,
+  "with_vsm_off": 143.14,
+  "fraction_removed": 0.179,
+  "reading": "shadows are NOT the cost: turning them off left it in place"
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\avatar_one",
+ "finished": "2026-09-27 19:39:52",
+ "seconds": 121.75,
+ "log": "O00 PASS the editor exports the raw frame instrument {}\nO01 PASS there are Project Avatar figures to spawn {'found': 10}\nO_WARM PASS the world settled before rung zero was taken {'reads': 3, 'first': 99.57, 'last_three': [99.57, 100.33, 99.88], 'seconds': 0.3, 'settled': True, 'note': 'rung zero is what every other rung is compared against, and it has always been the earliest and least settled reading in this job. A fixed wait is a guess about when the world has arrived; this waits for three reads to agree and voids if they never do.'}\nn00 INFO n00 {'frames': 126, 'frame_median': 64.69, 'raw_p95': 80.08, 'raw_worst': 170.55, 'game_median': 33.22, 'render_median': 60.26, 'gpu_median': 62.0}\nn01 INFO n01 {'frames': 44, 'frame_median': 175.61, 'raw_p95': 227.81, 'raw_worst': 245.48, 'game_median': 22.89, 'render_median': 172.58, 'gpu_median': 167.42}\nn02 INFO n02 {'frames': 37, 'frame_median': 195.35, 'raw_p95': 262.11, 'raw_worst': 275.6, 'game_median': 24.72, 'render_median': 195.24, 'gpu_median': 26.78}\nn03 INFO n03 {'frames': 63, 'frame_median': 117.24, 'raw_p95': 198.67, 'raw_worst': 202.58, 'game_median': 26.3, 'render_median': 115.7, 'gpu_median': 23.56}\nn04 INFO n04 {'frames': 56, 'frame_median': 149.58, 'raw_p95': 200.78, 'raw_worst': 203.55, 'game_median': 28.93, 'render_median': 147.85, 'gpu_median': 137.07}\nn05 INFO n05 {'frames': 47, 'frame_median': 169.29, 'raw_p95': 203.64, 'raw_worst': 205.22, 'game_median': 28.21, 'render_median': 164.93, 'gpu_median': 148.48}\nn01_again INFO n01_again {'frames': 49, 'frame_median': 174.45, 'raw_p95': 216.17, 'raw_worst': 218.12, 'game_median': 30.35, 'render_median': 175.54, 'gpu_median': 148.57}\nO_vsm_off PASS r.Shadow.Virtual.Enable took the value it was given {'asked': '0', 'read': 0.0}\nvsm_off INFO vsm_off {'frames': 55, 'frame_median': 143.14, 'raw_p95': 209.01, 'raw_worst': 241.15, 'game_median': 25.41, 'render_median': 143.0, 'gpu_median': 137.29}\nO_df_off FAIL r.DistanceFields took the value it was given {'asked': '0', 'read': 1.0, 'note': 'the rung is VOID rather than reported: an unrecognised cvar leaves the world exactly as it was, and publishing that as a toggled measurement is how a knob that does nothing gets credited with a result.'}\nO_USABLE PASS the run is settled enough to compare rungs at all {'rung_zero_median_ms': 64.69, 'rung_zero_raw_worst_ms': 170.55, 'rung_zero_spike_ratio': 2.6, 'ladder_rungs_under_30_frames': [], 'other_rungs_under_30_frames': None, 'stat_froze': 0, 'note': \"rung zero is the value every other rung is compared against, so a spike in it poisons the whole ladder. A worst frame more than ten times the median means the world was still arriving; a rung with under thirty frames means the stat overlay was off for most of its window. Either way the numbers below describe this machine's evening, not avatars.\"}\nO02 FAIL the run reproduced the finding it was built to explain {'ladder_ms': {0: 64.69, 1: 175.61, 2: 195.35, 3: 117.24, 4: 149.58, 5: 169.29}, 'one_over_five': 1.04, 'note': 'if one avatar is NOT expensive on this run, nothing below means anything and the 16:33 reading was a property of that session rather than of avatars.'}\nO03 FAIL the cost at one avatar is a switch rather than a gradient {'one': 175.61, 'two': 195.35, 'fraction_lost_at_two': -0.112, 'reading': 'NOT A SWITCH: the cost declines gradually across the rungs, so no path is turning on above one instance and the explanation is elsewhere.'}\nO04 FAIL virtual shadow maps explain the cost at one avatar {'one_avatar': 174.45, 'with_vsm_off': 143.14, 'fraction_removed': 0.179, 'reading': 'shadows are NOT the cost: turning them off left it in place'}\n"
+}
