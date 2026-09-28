@@ -1,7 +1,7 @@
 # Landing `relay/julius-beta-qualification`
 
 **This page is the ceremony's input, not a narrative.** It holds the PR body, the
-facts a reviewer needs before reading 36 commits, and the things this branch
+facts a reviewer needs before reading 40 commits, and the things this branch
 does NOT claim. The landing itself is a founder act: this lane never pushes with
 the founder's credential and never merges its own work — see
 `ceremony/push-as-worker.sh` and the worker-App notes.
@@ -12,7 +12,7 @@ the founder's credential and never merges its own work — see
 |---|---|
 | Branch | `relay/julius-beta-qualification` |
 | Base | `origin/main` `a384b215` (#287), unmoved at the time of writing |
-| Commits ahead | 36 |
+| Commits ahead | 40 |
 | Commits behind | 0 — merges with no conflict (`git merge-tree`: none) |
 | Worktree | clean; `git diff --check` clean |
 
@@ -104,6 +104,10 @@ repairs, and returns a verified result with evidence.
 - **Provider neutrality is structural**: a sweep fails if any kernel file names
   a vendor, a model or one of the trio's adapter ids in code; two exemptions,
   each with its argument.
+- **The loop's last step has a projection**: `GET .../result` — verified (the
+  runtime's own completion decision, quoted), every criterion with the basis it
+  was judged on, the deliverables (a product, never a reviewer's finding), the
+  cost with its unknowns, and a failure a failed run can always name.
 
 **What this branch does not claim**
 

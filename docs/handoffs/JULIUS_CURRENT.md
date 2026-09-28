@@ -543,6 +543,65 @@ is in a file this lane owns and is worth taking at merge.)
 **Readiness: 78% → 79%** (row 9 → 78, row 11 → 88, row 12 → 92; the table's own
 arithmetic, checked).
 
+#### Then: the founder's list, finished except what needs money or Unreal
+
+**8. PROVIDER NEUTRALITY, MADE STRUCTURAL** (`d925694b`). A sweep over every
+kernel file fails if a vendor name, a model id or one of the trio's adapter ids
+appears in CODE; prose may still explain which paid run taught a rule. Two
+exemptions, each with its argument in the list: the credential-prefix detector
+(which names `xai` in order to REDACT it) and the diagnostics transport
+vocabulary, whose members are already in durable rows — renaming one to improve
+a name would make every recorded row read null. A third exemption costs whoever
+adds it an argument; a stale one fails its own case.
+
+**9. THE FOURTH MISSION CLASS** (`2a64fec5`). Category E — everyday/practical
+work — had no row. E1 drives a household planning mission through the same
+lifecycle; E2 asserts the honest limit: a mission whose acceptance needs an
+action no tool can take does NOT complete. And the ledger's own parser knew only
+the letters A–D, so both new rows sat unchecked the moment they were added — a
+silent skip, now closed and asserted.
+
+**10. MANY MISSIONS, ONE LOOP** (`3ed856df`). The reliability evidence that did
+not exist: three missions interleaved to verified completion; isolation asserted
+per mission over evidence, findings, decisions, brain entries AND the compiled
+packets each worker was handed; a permanently failing mission that does not take
+its neighbours down; the per-run share honoured; twelve missions paying exactly
+48 dispatches in fewer than 48 ticks, timed rather than thresholded. Row 13:
+55 → 72. Found while writing it: my first fixture named the run inside each
+evidence summary and the assertion failed — because a scripted adapter answers
+per WORKER, so which mission receives which queued answer is the queue's
+business. A test that had passed on that fixture would have been proving my
+ordering, not Julius's bookkeeping.
+
+**11. THE LOOP'S LAST STEP** (`ad6f2dd9`, `507e8f1b`). "Returns a truthful
+verified result" had no projection: a surface had to read state, tasks, evidence,
+decisions, findings and the timeline and assemble the answer itself.
+`GET /relay-api/julius/runs/<id>/result` answers it once — `verified` only when
+the runtime's own completion decision says so, every criterion with what
+satisfied it, the deliverables (a product, never a reviewer's finding, with
+`retained: false` where no body was kept), the outstanding blocking findings, the
+review decisions, the cost with its unknowns, and a failure a FAILED run can
+always name. One page walk now serves both the slot and result projections, so
+they cannot describe different moments of one run.
+
+**AND A DEFECT IN IT THAT MY OWN CASE CAUGHT**: `every()` over an empty list is
+true, so a criterion naming no evidence read as SATISFIED on a run that had not
+started — and the bootstrap seeds exactly those. Such a criterion is satisfied by
+COMPLETION or not at all; the view now says which `basis` it used. The
+undriven-run case against real PostgreSQL — the state Wonderland sees between
+creation and the job — is what surfaced it. Row 12: 92 → 95.
+
+**Readiness: 80%**, by the table's own arithmetic, checked after each row moved.
+
+**Where the founder's ten items stand.** 1 (reviewer refusal + routing), 2 (claim
+store, minimal, with the A→B carry proven), 3 (landing prepared:
+`docs/JULIUS_BETA_LANDING.md`), 4 (one active run per mission + the keyed rerun),
+5 (`DATABASE_URL` isolation), 6 (guidance provenance), 7 (contract coordination —
+the integration lane's drill is at 36 of 36 and has found three real defects in
+this lane's code), 9 (provider neutrality) are DONE. 8 (the REAL Wonderland →
+Julius → result chain in the engine) waits on the integration lane's in-engine
+acceptance. 10 (the paid representative mission) is the founder's.
+
 #### Not done, by decision or by gate
 
 - Driving a run over HTTP — the deployment decision that spends money; the
