@@ -98,9 +98,26 @@ the same store — and the read routes above can watch it from that moment. The
 response says what was not done: `dispatched: false`. Nothing composes a
 provider, spends money or ticks the loop; **driving the run is the job's**, and a
 client that rendered "created" as "running" would draw a mission nobody is
-driving. Re-posting the same contract resumes the same run rather than creating
-a second one: the execution identity is derived from `missionId`, exactly as the
-job derives it.
+driving.
+
+**A run's identity is its `runId`; `missionId` is the mission's name.** The
+bootstrap's idempotency key is a digest of the contract's CONTENT — the mission
+job's own rule, so that re-running the same file resumes the same durable run
+rather than paying for a second mission. Re-posting the same bytes therefore
+answers with the same `runId` and the run's real state; a contract that differs
+in any field is a new run, and the earlier run stays exactly where it was. A
+client correlates by `runId` only, never by `missionId`; a user who edits a
+draft and resubmits has created a second run, and the client must follow the
+`runId` it was given. Whether Julius should refuse a second run while an
+earlier run of the same mission is still READY or EXECUTING is a product
+decision not taken here. The `409 mission_already_running` below fires only
+when the same key arrives with a different payload, which a content-derived
+key does not produce in practice.
+
+**Run ids on the wire.** A run id carries a colon (`run:…`). The read routes
+accept it raw or percent-encoded (`run%3A…`) — a standards-correct client may
+encode it — and a segment that is not a valid percent-encoding is
+`404 run_not_found`, never `unknown_julius_route`.
 
 **Refusals:** `401 operator_required`; `503 julius_state_unavailable` (no
 database — no run was created); `503 reviewer_provider_unknown`
