@@ -303,6 +303,29 @@ def job():
                 "it. RED means the peak survives with the moon switched off, so it is the sun or the "
                 "sky at a grazing angle and my curve only revealed what was always going to be there")
 
+    # ---- DID THE SWITCH ACTUALLY DO ANYTHING? The control is the thing to verify hardest.
+    #
+    # Every number below is base MINUS moon_off, so if the moon_off arm silently failed to change
+    # anything the decomposition would report "the moon contributes nothing" -- a dead switch and an
+    # unresponsive subject are indistinguishable from the result alone. The other lane lost an evening
+    # to exactly that: a PreviewGlow sweep whose "off" rung never turned anything off, because
+    # IsNearlyEqual guarded a knob with a tolerance equal to its shipped value, and the cvar readback
+    # passed honestly at every rung.
+    #
+    # NOT "every pair must differ" -- at 18:50 the moon genuinely contributes 0.0011 and the two arms
+    # SHOULD look alike. The question is whether the switch moves the picture ANYWHERE. If it never
+    # does, the arm is dead and nothing here may be read.
+    biggest = max((abs(v["moon_share"]) for v in share.values()), default=0.0)
+    record("K_SWITCH", "the moon_off arm actually changes the picture somewhere, so the control is live",
+           biggest > max(4.0 * (worst or 0.0), 0.005),
+           largest_moon_share=biggest, noise=worst, floor=max(4.0 * (worst or 0.0), 0.005),
+           moon_share_by_hour={k: v["moon_share"] for k, v in share.items()},
+           gain_as_found=found["MoonGain"],
+           note="MoonGain at 0.05 survives the tolerance guards near it by a factor of fifty, which is "
+                "luck rather than design. This fails loudly the day a default is lowered or a guard "
+                "tightened near it -- the scenario nobody can see coming and the one that cost the "
+                "other lane a whole evening")
+
     # ---- STEP OR RAMP? The question the coarse run could not answer and the one that prices a branch.
     seq = sorted(h for h in HOURS if h >= 18.20)
     shares = [(h, share["%.2f" % h]["moon_share"]) for h in seq]

@@ -277,6 +277,25 @@ def job():
     def delta(a, b):
         return round(rd(a) - rd(b), 4)
 
+    # ---- IS THE SWITCH LIVE AT ALL? Before asking what it shows, ask whether it moves anything.
+    #
+    # X_CONTROL below asks whether removing the moon at 23:00 darkens the ground, and would read a DEAD
+    # SWITCH exactly as it reads a world that does not respond -- voiding the run for the wrong reason
+    # and sending me looking at the world. The other lane's PreviewGlow sweep lost an evening to that
+    # shape: an "off" rung that never turned anything off, with the cvar readback passing every time.
+    arms = [abs(rd("dusk_base") - rd("dusk_moon_off")),
+            abs(rd("night_base") - rd("night_moon_off")),
+            abs(rd("dusk_moon_4x") - rd("dusk_base")),
+            abs(rd("night_moon_4x") - rd("night_base"))]
+    record("X_SWITCH", "wl.Sky.MoonGain actually changes the picture, so the control arm is live",
+           max(arms) > max(4.0 * (worst or 0.0), 0.005),
+           largest_arm_effect=round(max(arms), 4), noise=worst,
+           floor=max(4.0 * (worst or 0.0), 0.005), arm_effects=[round(a, 4) for a in arms],
+           gain_as_found=found["MoonGain"],
+           note="a dead switch and an unresponsive world produce the same null. This separates them "
+                "before X_CONTROL is allowed to interpret one, and fails loudly if a default is "
+                "lowered or a tolerance guard tightened near MoonGain's 0.05")
+
     # ---- THE POSITIVE CONTROL. Without this a dusk null result is not evidence of anything.
     night_moon_effect = round(rd("night_base") - rd("night_moon_off"), 4)
     record("X_CONTROL", "turning the moon off at 23:00 clearly darkens the ground -- the test can detect it",
