@@ -76,3 +76,44 @@ contributing to it. That ships as a property on the figure rather than as a scal
 
 If it recovers most of the 164.89, that is item 5's optimisation. If it recovers little, the cost is in the
 avatar being *lit by* Lumen rather than *contributing to* it, which is a different fix and worth knowing.
+
+---
+
+## Correction: the GI finding is not safe, and the fix does not apply
+
+I claimed item 5 was optimised. Verifying the **shipped** path rather than the test spawn says otherwise, and
+two separate things are wrong.
+
+**1. The property does not stick on 195 of 198 components.** Read off the actors `/pa` actually created, both
+before and after switching to the engine setters:
+
+```
+distance_field_off  198 / 198        indirect_off  3 / 198
+```
+
+The setter fix moved the saving from 6.38 ms to 15.34 ms (render 61.24 → 37.4), so *something* improved — but
+`affect_dynamic_indirect_lighting` still reads back true on 195 components. And `distance_field_off` was
+already 198/198 before any change of mine, because **`wl.Figure.DistanceField` defaults to 0**: figures were
+already out of the distance field. That column never measured my fix at all.
+
+**2. The 170 ms was measured on a machine at ~5 fps.** My baseline frame was **203.22 ms**. This project's own
+earlier and more careful work records *"one Large Project Avatar costs 18.7 ms of frame; hiding it gives back
+15.5 of those and turning off its shadows gives back 0.8"*, and concludes the cost is **submitting ~58 movable
+components and ~31,900 instances** — not global illumination.
+
+A 203 ms baseline is an order of magnitude away from 18.7 ms. Those are different regimes, and a term that
+dominates under heavy load need not dominate at all in the condition the founder plays in. **My measurement
+is not comparable to the earlier one and does not overturn it.**
+
+### What stands
+
+- Taking a **test-spawned** avatar out of GI, on a loaded machine, saved 170.57 ms. That reading is real and
+  was honestly taken; it is just not about the shipping path or a representative frame rate.
+- The shipped `/pa` path currently gains 15.34 ms from the change, with the intended property not applying to
+  195 of 198 components.
+
+### What the next step is
+
+Find why `SetAffectDynamicIndirectLighting` does not take on those components — instanced components are the
+obvious suspect — and re-measure **on a quiet machine**, against the project's own 18.7 ms figure rather than
+against a 203 ms one. Until then item 5 is not optimised and I should not have said it was.
