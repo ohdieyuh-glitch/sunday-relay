@@ -56,9 +56,10 @@ standing with history, promotion on an accepted review through the trust core,
 the record winning at compile — which is the +2.5-not-+6 this page estimated
 for it, and no more, because no asserter of lineage exists and none was
 invented. Row 12 also carries the integration lane's graded end-to-end run of
-the create route on the built bridge (11 of 13 clauses; the two failures were
-a percent-encoded run id, fixed, and a question of intent, answered in the
-contract document).
+the create route on the built bridge (12 of 13 clauses at their `39edf442`;
+the one red is a percent-encoded run id, fixed in `842ac5f0` and not yet in
+their tree; the question of intent — a changed contract is a new run — is
+answered in the contract document and now asserted by their drill).
 
 **THIRD PASS, 2026-09-27, later: 78% was an addition error, and the honest figure
 is 77%.** The table's own numbers summed to 76.7 before this pass, not 78; row 12
