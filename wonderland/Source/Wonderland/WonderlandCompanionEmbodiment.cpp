@@ -87,6 +87,40 @@ namespace
 	 * not be chosen by the metric alone, and the pictures decided between 220 and 700 -- 220 is crisper but
 	 * kills the glowing eyes, which are a feature rather than glare.
 	 */
+	/**
+	 * THE LEVEL A SHOWCASE FIGURE'S EYES ARE DRIVEN TO, and why it is a knob now.
+	 *
+	 * The preview eye is computed as (Authored / Peak) * EyeGlowScale * GlowScale * HaloShare -- so although
+	 * the comment below calls it "driven to a level", it is still MULTIPLIED by the wardrobe's own glow
+	 * reduction. 14 was chosen when that reduction was 0.10, for "14 x 0.10 = 1.4 against a stage white near
+	 * 2". The reduction has since gone to 0.001 and then, measured, to 0.0002. Nobody retuned this, so the
+	 * product is now 0.0028 rather than 1.4.
+	 *
+	 * THE RENDERED RESULT IS NEVERTHELESS CORRECT, WHICH IS WHY THIS IS A KNOB AND NOT A FIX. Photographed at
+	 * both values, the eye band against the face below it:
+	 *
+	 *     glow 0.0010   eye 0.916   face 0.932   eye-over-face -0.016   both pinned, no contrast at all
+	 *     glow 0.0002   eye 0.790   face 0.724   eye-over-face +0.066   a coloured core standing off the face
+	 *
+	 * The founder's requirement is "clear contrast against the face" and "individually readable rather than
+	 * one blown-out light", and the second row is the one that satisfies it. The arithmetic looks alarming
+	 * and the picture is right, which is the reverse of the usual trap and the reason not to "correct" a
+	 * number that is currently producing the wanted image.
+	 *
+	 * WHAT IT IS FOR: item 6 asks that SECONDARY colour the eyes. It reaches them -- the eye material carries
+	 * the Eye channel and Want *= Secondary runs -- but the eye's EMISSIVE contribution is small enough at
+	 * this product that the tint cannot show against the lamp-lit surface, so the proof measures no colour
+	 * change. Settling that needs a sweep of this level against three things at once: the eye-over-face
+	 * contrast, whether the eye clips, and whether SECONDARY becomes visible. That is a measurement, not an
+	 * arithmetic correction, and it needs the level to be movable from a job.
+	 */
+	TAutoConsoleVariable<float> CVarPreviewEyeGlow(
+		TEXT("wl.Look.PreviewEyeGlow"),
+		14.0f,
+		TEXT("The level a showcase figure's eyes are driven to before the wardrobe's own glow reduction is "
+		     "applied. Shipped at 14, the value chosen when that reduction was 0.10."),
+		ECVF_Default);
+
 	TAutoConsoleVariable<float> CVarGlowKnee(
 		// ---- TRIED AT 30, REVERTED TO 700, AND THE ATTEMPT IS WORTH KEEPING WRITTEN DOWN.
 		//
@@ -1445,9 +1479,40 @@ void AWonderlandCompanionEmbodiment::SetExposureAware(bool bAware)
 		// 14, not 6, since the stage's glow scale came down to 0.10 with the generator's re-baseline: the eye is
 		// driven to 14 x 0.10 = 1.4 against a stage white near 2 -- a bright coloured core, not a white hole and
 		// not a dull square. The world drives the same eye to 12 against a white near 25.
-		EyeGlowScale = 14.0f;
+		EyeGlowScale = FMath::Max(CVarPreviewEyeGlow.GetValueOnAnyThread(), 0.0f);
 		RepaintColourway();
 	}
+}
+
+void AWonderlandCompanionEmbodiment::SetShowcaseEyeGlow(float Level)
+{
+	// FOR A FIGURE THAT IS OFF THE CLOCK ONLY. An exposure-aware body takes its eye level from the day cycle
+	// and must not be overridden here; SetEyeGlow is that path and guards itself the same way in reverse.
+	//
+	// RE-APPLIED RATHER THAN SET ONCE, so wl.Look.PreviewEyeGlow is live: the showcase level is assigned
+	// during SetExposureAware(false), which runs when the stage builds its body and never again, so without
+	// this the knob could only ever be read at startup. That is the same shape as the glow scale, which was
+	// dead for exactly this reason until it was re-applied per tick.
+	if (bExposureAware)
+	{
+		return;
+	}
+	const float Wanted = FMath::Max(Level, 0.0f);
+	// Relative, with a small absolute floor -- see SetGlowScale, where a FIXED tolerance of 0.001 guarding a
+	// knob shipped at 0.001 made its whole working range inexpressible and silently killed a sweep's control.
+	const float Tolerance = FMath::Max(FMath::Max(FMath::Abs(EyeGlowScale), FMath::Abs(Wanted)) * 1.0e-3f,
+	                                   UE_SMALL_NUMBER);
+	if (FMath::IsNearlyEqual(EyeGlowScale, Wanted, Tolerance))
+	{
+		return;
+	}
+	EyeGlowScale = Wanted;
+	RepaintColourway();
+}
+
+float AWonderlandCompanionEmbodiment::GetEyeGlowScale() const
+{
+	return EyeGlowScale;
 }
 
 void AWonderlandCompanionEmbodiment::SetEyeGlow(float Scale)

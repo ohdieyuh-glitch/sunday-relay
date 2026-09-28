@@ -903,6 +903,16 @@ void AWonderlandSkinStage::Tick(float DeltaSeconds)
 	if (Body != nullptr)
 	{
 		Body->SetGlowScale(GWonderlandPreviewGlow);
+		// AND THE EYE LEVEL, for the same reason and with the same history: assigned once when the body was
+		// built, so without re-applying it here wl.Look.PreviewEyeGlow could only be read at startup.
+		// NOT A STATIC. A function-local static caches the FIRST lookup, including a null one: if this runs
+		// before the cvar is registered it latches null for the life of the process and the knob is dead in
+		// exactly the silent way this file has already been bitten by twice. The lookup is a hash probe on a
+		// path that already rebuilds a capture, so it is not worth the risk to cache it.
+		if (IConsoleVariable* EyeVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Look.PreviewEyeGlow")))
+		{
+			Body->SetShowcaseEyeGlow(EyeVar->GetFloat());
+		}
 	}
 
 	StepLookAround(DeltaSeconds);

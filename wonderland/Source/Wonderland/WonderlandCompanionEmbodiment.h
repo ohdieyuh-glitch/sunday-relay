@@ -115,6 +115,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	void SetGlowScale(float Scale);
 
+	/** The eye level for a figure that is OFF the day cycle. No effect on an exposure-aware body. */
+	void SetShowcaseEyeGlow(float Level);
+
+	/** What the figure's eyes are actually being driven to, for a readback that is not the cvar. */
+	float GetEyeGlowScale() const;
+
 	/**
 	 * HOW HARD THE GLOWING CHANNELS BURN AGAINST THE NIGHT EXPOSURE. Driven by the day cycle; 1 is noon.
 	 *
