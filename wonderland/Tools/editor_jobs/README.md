@@ -556,3 +556,36 @@ Three times in one evening a positive control turned a confident pass into a kno
 Each control cost one extra clause to write. Each caught a failure whose natural signature is a **pass**.
 Build the control before the measurement, and make it VOID the run rather than sit as one red beside the
 greens — a null from an instrument never shown to register a positive is not evidence of anything.
+
+## Record WHERE the subject was, in every row — this one caused four wrong mechanisms in a day
+
+More measurements went wrong this way than any other cause, and each time the wrong reading looked
+fine and produced a confident explanation before anyone doubted it:
+
+| reading | what was wrong | what it produced |
+|---|---|---|
+| mascot 97% crushed at night | the job never recorded where the mascot stood | a true sentence about an unknown place, relayed as evidence about the world |
+| dusk ground 0.69 luma at 19:00 | the camera stood on the monument it had always aimed at | "brighter than noon, in the dark" |
+| three-region ladder | the pawn respawned 153 km away mid-run | a region silently dropped |
+| light-budget ladder | the pawn **alternated** between two districts between rungs | the "31s", a phantom plateau at 127, and a confident inference that the radius was 4,200 when it reads 12,000 |
+
+The last one is the clearest. Placed once, gated once, never watched again. Once each reading was
+matched to where the pawn *actually* was, all five rungs fitted `Lit = Min(Near, Pool)` exactly and
+there was no anomaly at all — the engine had been correct the whole time and a convergence gate had been
+built for a phenomenon that was a teleport.
+
+**A reading whose subject's position is unrecorded is not a measurement.** Put the position in the ROW,
+not just in a setup gate, and re-assert it per rung rather than trusting a placement to hold:
+
+```python
+pnow = unreal.GameplayStatics.get_player_pawn(live(), 0)
+here = None if pnow is None else pnow.get_actor_location()
+row["subject_at"] = None if here is None else [round(here.x, 1), round(here.y, 1), round(here.z, 1)]
+row["drift_uu"]  = None if here is None else round(math.hypot(here.x - SPOT[0], here.y - SPOT[1]), 1)
+# ...and a gate, because a recorded drift nobody reads is the same as no record
+record("X_STILL", "the subject is at the measurement spot at EVERY rung, not just when it was placed",
+       all(r["drift_uu"] is not None and r["drift_uu"] <= 500.0 for r in rows), ...)
+```
+
+This applies to anything with a position: the pawn, the camera, a figure, a light. If `Assign()`,
+a capture, or a trace reads it, the row records it.
