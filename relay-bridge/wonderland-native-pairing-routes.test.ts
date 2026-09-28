@@ -184,6 +184,24 @@ describe('POST /wonderland/native/pair -- only the signed-in player, for themsel
     expect(await pair(store)).toMatch(/\./);
   });
 
+  it('refuses a membership row whose role grants no world -- the world routes\' own question, asked first', async () => {
+    const store = createBrowserSessionStore();
+    const token = signedIn(store);
+    const as = (role: string): WonderlandProjectMembershipSource => ({
+      lookup: async ({ playerId, projectId }) => ({ playerId, projectId, role }),
+    });
+    for (const role of ['MEMBER', 'VIEWER', '']) {
+      const result = await handleNativePairingRoute(
+        req({ authorization: `Relay-Session ${token}`, origin: WEB, body: { projectId: PROJECT } }), deps(store, as(role)));
+      expect(result?.status, role).toBe(403);
+    }
+    expect(store.size.grants).toBe(0);
+    // CONTROL: the same row as OWNER pairs.
+    const owner = await handleNativePairingRoute(
+      req({ authorization: `Relay-Session ${token}`, origin: WEB, body: { projectId: PROJECT } }), deps(store, as('OWNER')));
+    expect(owner?.status).toBe(200);
+  });
+
   it('refuses a project the player does not belong to, and mints nothing', async () => {
     const store = createBrowserSessionStore();
     const result = await handleNativePairingRoute(

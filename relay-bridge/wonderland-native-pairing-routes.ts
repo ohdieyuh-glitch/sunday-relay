@@ -6,7 +6,8 @@ import {
   type BrowserSessionStore,
 } from './browser-session/grants';
 import { sessionTokenFrom } from './browser-session/routes';
-import type { WonderlandProjectMembershipSource } from './wonderland-julius-routes';
+import { WONDERLAND_WORLD_CAPABILITY, type WonderlandProjectMembershipSource } from './wonderland-julius-routes';
+import { authorizeWonderlandProjectCapability } from '../src/relay/mission/wonderland/wonderland-authorization';
 
 /**
  * NATIVE WONDERLAND CLIENT PAIRING.
@@ -147,13 +148,17 @@ export async function handleNativePairingRoute(
     if (deps.membership === null) {
       return err(503, 'membership_unavailable', 'This bridge cannot check project membership, so it cannot pair a desktop client.');
     }
-    let member: unknown = null;
+    let member: Awaited<ReturnType<WonderlandProjectMembershipSource['lookup']>> = null;
     try {
       member = await deps.membership.lookup({ playerId: verified.participantId, projectId });
     } catch {
       return err(503, 'membership_unavailable', 'Project membership could not be checked; nothing was paired.');
     }
-    if (member === null) {
+    // THE WORLD ROUTES' OWN QUESTION, asked of the same row: may this player read this project's world? A row
+    // alone is not enough -- a role this build grants nothing to would pair a client the world then refuses.
+    const decision = authorizeWonderlandProjectCapability(
+      { playerId: verified.participantId, projectId, capability: WONDERLAND_WORLD_CAPABILITY }, member);
+    if (!decision.granted) {
       return err(403, 'not_a_project_member', 'You can pair a desktop client only for a project you belong to.');
     }
     // The participant comes from the SESSION. The request body is not read for

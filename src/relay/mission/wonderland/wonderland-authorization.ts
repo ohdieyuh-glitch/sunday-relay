@@ -52,6 +52,21 @@ export const WONDERLAND_PROJECT_CAPABILITIES = [
    * the scope contracts before anything crosses to a client.
    */
   'read_world_state',
+  /**
+   * Read a run's USER RESULT (founder decision 5, 2026-09-27): its final state,
+   * whether it was verified, what it made, each acceptance criterion and
+   * whether it was met, the reviewer's verdict, what is still open, and why it
+   * failed if it did. Never reasoning, secrets, credentials or host paths --
+   * `wonderland-julius-result.ts` is the projection that keeps that true.
+   */
+  'read_mission_result',
+  /**
+   * Read a run's EXACT SPEND. Founder decision 5: the project OWNER and an
+   * explicitly authorised ADMIN see it; an ordinary member sees the result
+   * without it. Split from `read_mission_result` so that rule is one row here
+   * rather than a branch in a route.
+   */
+  'read_mission_cost',
 ] as const;
 export type WonderlandProjectCapability = (typeof WONDERLAND_PROJECT_CAPABILITIES)[number];
 
@@ -66,11 +81,18 @@ export type WonderlandProjectCapability = (typeof WONDERLAND_PROJECT_CAPABILITIE
  * Absent-means-nothing is the whole safety property. An allow-list that
  * defaulted open would hand every future role every capability the day it was
  * inserted, before anybody had decided what it was for.
+ *
+ * DECIDED, NOT YET WRITTEN (founder decisions 4 and 5, 2026-09-27). An
+ * explicitly authorised ADMIN is to hold what OWNER holds, and an ordinary
+ * MEMBER `read_world_state` and `read_mission_result` -- never
+ * `read_mission_cost`. They are not rows here yet because nothing in the
+ * product writes those roles, and this table names only roles that are written
+ * (the seed test holds that). The route that first writes one adds its row.
  */
 export const WONDERLAND_ROLE_CAPABILITIES: Readonly<
   Record<string, readonly WonderlandProjectCapability[]>
 > = Object.freeze({
-  OWNER: Object.freeze(['read_world_state'] as const),
+  OWNER: Object.freeze(['read_world_state', 'read_mission_result', 'read_mission_cost'] as const),
 });
 
 /**
