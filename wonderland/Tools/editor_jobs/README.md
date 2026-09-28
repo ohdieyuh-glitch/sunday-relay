@@ -805,3 +805,34 @@ When a day/night ratio surprises you, check whether the subject emits before che
 changed. And measure the control **in the same job at the same spot**: a matte subject beside the
 luminous one settles it in one rung, where a cross-job comparison produced a four-hour phantom decline
 earlier the same day.
+
+## A gate that passed may have been wrong all along and merely dim
+
+The other lane's day-versus-night control compared a mostly-emissive skin at noon against the same skin
+at midnight. Given the 19.6% threshold above, **that control could never have worked** — it was asking
+an emissive subject to prove the sun had gone down, which it cannot do at any hour, in any build,
+however correct the clock is.
+
+It had been passing. It only started *failing* when the glow got bright enough to show it.
+
+> **The version that passed was not more correct than the version that voided. It was just dimmer.**
+
+So a green history is not evidence a clause is sound. It is evidence the clause has not yet met the
+input that exposes it, and a value moving somewhere else in the project is enough to change that.
+
+**The specific form to hunt: a clause whose PASS means "this term does not matter".** It passes both
+when the term genuinely does not matter and when the term was never given a chance to. `X_COSINE`
+asserts the moon's brightness does not reach the dusk ground — and would have passed, falsely
+confirming the account it was written to kill, if `MoonGain` had been small for some unrelated reason.
+
+So every such clause needs a companion proving the term COULD have mattered:
+
+```python
+# the term is allowed to be irrelevant; it is not allowed to be untested
+record("X_SWITCH", "the knob actually changes the picture somewhere, so the arm is live",
+       max(effects) > max(4.0 * noise, 0.005), arm_effects=effects, knob_as_found=found,
+       note="a dead switch and an irrelevant term produce the same null")
+```
+
+That is the same rule as verifying a sweep's control, one level up: **a negative result is only evidence
+if the positive case was reachable.**
