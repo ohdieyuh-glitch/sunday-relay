@@ -1,6 +1,8 @@
 #include "WonderlandHudTestLibrary.h"
 #include "Engine/GameInstance.h"
 #include "WonderlandJuliusConnect.h"
+#include "WonderlandPracticalLights.h"
+#include "WonderlandDayCycle.h"
 
 #include "CoreGlobals.h"            // GFrameCounter, for turning reads into frames
 #include "Components/SceneCaptureComponent2D.h"
@@ -264,4 +266,41 @@ FString UWonderlandHudTestLibrary::GetJuliusStartCommand(UObject* WorldContextOb
 {
 	const UWonderlandJuliusConnectSubsystem* Connect = FindConnect(WorldContextObject);
 	return Connect != nullptr ? Connect->GetStartCommand() : FString();
+}
+
+// ---- THE TWO WORLD SUBSYSTEM READINGS, THROUGH THE ONE SURFACE PYTHON CAN REACH.
+//
+// UE 5.8's Python binding offers no way at all to get a WORLD subsystem: only get_editor_subsystem and
+// get_engine_subsystem exist at module level, the World object has no get_subsystem, and the sole
+// subsystem library exposed is EditorSubsystemBlueprintLibrary. Four attempts at reading ActiveCount and
+// Nightfall from Python failed against that, two gates published EVIDENCE ONLY for want of an
+// instrument, and a budget job counted spawned actors and inferred a radius that was wrong.
+//
+// A BlueprintFunctionLibrary static is reachable. The tree already knew: WonderlandUiTestLibrary::GetDemo
+// fetches a world subsystem exactly like this, and another job carries the comment "THROUGH THE TEST
+// LIBRARY. UWorld has no get_subsystem on the Python surface in this build."
+FString UWonderlandHudTestLibrary::DescribePracticalLights(UObject* WorldContextObject)
+{
+	UWorld* World = GEngine != nullptr
+		? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull)
+		: nullptr;
+	const UWonderlandPracticalLightsSubsystem* Practicals =
+		World != nullptr ? World->GetSubsystem<UWonderlandPracticalLightsSubsystem>() : nullptr;
+	return Practicals != nullptr ? Practicals->DescribePracticals() : FString();
+}
+
+bool UWonderlandHudTestLibrary::GetNightfall(UObject* WorldContextObject, float& OutNightfall)
+{
+	OutNightfall = 0.0f;
+	UWorld* World = GEngine != nullptr
+		? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull)
+		: nullptr;
+	const UWonderlandDayCycleSubsystem* Sky =
+		World != nullptr ? World->GetSubsystem<UWonderlandDayCycleSubsystem>() : nullptr;
+	if (Sky == nullptr)
+	{
+		return false;
+	}
+	OutNightfall = Sky->GetNightAmount();
+	return true;
 }

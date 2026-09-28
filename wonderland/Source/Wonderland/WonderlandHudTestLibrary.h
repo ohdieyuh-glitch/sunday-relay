@@ -88,6 +88,36 @@ public:
 	static bool GetDrawCallCount(int32& OutDrawCalls, int32& OutPrimitives);
 
 	/**
+	 * THE TWO WORLD SUBSYSTEM READINGS A PROOF NEEDS, THROUGH THE ONE SURFACE PYTHON CAN REACH.
+	 *
+	 * UE 5.8's Python binding has NO WAY TO GET A WORLD SUBSYSTEM. Enumerated rather than guessed
+	 * (zc_subsystem_probe): the module offers only get_editor_subsystem and get_engine_subsystem, the
+	 * World object has no get_subsystem at all, and the only subsystem library exposed is
+	 * EditorSubsystemBlueprintLibrary. unreal.get_world_subsystem, world.get_subsystem and
+	 * SubsystemBlueprintLibrary all raise AttributeError.
+	 *
+	 * So four separate attempts to read ActiveCount and Nightfall from Python failed, two gates
+	 * published EVIDENCE ONLY for want of an instrument, and a light-budget job COUNTED SPAWNED ACTORS
+	 * and inferred -- which is how "31 lit of a pool of 48" became a confident claim that the radius was
+	 * really 4,200 when the readback says 12,000. Adding BlueprintType to the subsystems made the
+	 * classes visible and changed nothing about the reach, because reach was never the problem.
+	 *
+	 * A BlueprintFunctionLibrary static IS reachable, and this tree already solves it that way
+	 * elsewhere -- WonderlandUiTestLibrary::GetDemo does exactly this and a comment in another job says
+	 * "THROUGH THE TEST LIBRARY. UWorld has no get_subsystem on the Python surface in this build."
+	 * The answer was written down in two places before I went looking for a fourth API name.
+	 *
+	 * DescribePracticals gives defined / ACTIVE / pool / night / gain / count / radius in one line, which
+	 * is every number the clipping question needs and none of them inferred.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static FString DescribePracticalLights(UObject* WorldContextObject);
+
+	/** Nightfall straight from the day cycle: 0 with the sun up, 1 once it is well down. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static bool GetNightfall(UObject* WorldContextObject, float& OutNightfall);
+
+	/**
 	 * A SCENE CAPTURE IN THE RUNNING WORLD, so a proof can READ the picture instead of photographing it.
 	 *
 	 * WHY THIS IS HERE. Two of the founder's items can only be settled by comparing one frame against
