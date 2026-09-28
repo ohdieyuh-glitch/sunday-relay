@@ -101,6 +101,51 @@ interface MissionOutcome {
  * behind; everything else about the two missions is identical by construction —
  * same objective entry, same tasks, same workers, same policies, same budget.
  */
+/**
+ * WHAT ELSE A PREVIOUS MISSION LEAVES IN THE BRAIN.
+ *
+ * A real Project Brain does not contain one tidy finding. It contains everything
+ * the last mission concluded, most of which is about work this mission is not
+ * doing — and the founder's requirement is explicit: prior durable findings must
+ * improve the later mission WITHOUT leaking irrelevant task context.
+ *
+ * So `learned` seeds three pieces of genuine prior-mission residue beside the one
+ * relevant finding, each irrelevant for a different structural reason:
+ *
+ *   - scoped to a task that does not exist in this mission (another task's work);
+ *   - readable only by the Independent Reviewer (another role's material);
+ *   - SECRET (nobody's).
+ *
+ * All three are plausible, all three mention the deploy, and a compiler that
+ * retrieved on relevance would hand every one of them to the coder.
+ */
+const PRIOR_RESIDUE = (runId: string) => [
+  {
+    entryId: `${runId}:prior-other-task`, kind: 'FINDING' as const,
+    text: 'The deploy step in the OTHER task must retry three times before failing.',
+    taskIds: ['prior-mission-task-9'], allowedRoles: ALL_ROLES, sensitivity: 'INTERNAL' as const,
+    provenance: {
+      workerId: 'reviewer', recordedAt: '2026-09-10T02:00:00.000Z',
+      evidenceIds: ['evidence:prior-other-task'],
+    },
+  },
+  {
+    entryId: `${runId}:prior-reviewer-only`, kind: 'FINDING' as const,
+    text: 'Reviewer rubric for deploy changes: reject any unproven retry claim.',
+    taskIds: [], allowedRoles: ['INDEPENDENT_REVIEWER'] as const, sensitivity: 'INTERNAL' as const,
+    provenance: {
+      workerId: 'reviewer', recordedAt: '2026-09-10T02:00:00.000Z',
+      evidenceIds: ['evidence:prior-rubric'],
+    },
+  },
+  {
+    entryId: `${runId}:prior-secret`, kind: 'ARTIFACT' as const,
+    text: 'deploy token: hunter2',
+    taskIds: [], allowedRoles: ALL_ROLES, sensitivity: 'SECRET' as const,
+    provenance: { workerId: 'julius', recordedAt: '2026-09-10T02:00:00.000Z', evidenceIds: [] },
+  },
+];
+
 async function runMission(learned: boolean, runId: string, priceless = false): Promise<MissionOutcome> {
   const priced = <T extends { kind: 'succeed' }>(step: T) =>
     (priceless ? { ...step, usdMicros: null } : step);
@@ -156,6 +201,9 @@ async function runMission(learned: boolean, runId: string, priceless = false): P
         evidenceIds: ['evidence:prior-mission-failure'],
       },
     }] : []),
+    // The residue travels with the learning, because a mission that inherits a
+    // finding inherits the brain it was written into.
+    ...(learned ? PRIOR_RESIDUE(runId) : []),
   ]);
   for (let tick = 0; tick < 24; tick += 1) {
     if ((await harness.loop.tick(scope)).claimed === 0) break;
@@ -372,5 +420,79 @@ describe('the Julius Learning Loop, measured rather than asserted', () => {
       .toMatchObject({ outcome: 'REFUSE', reasonCode: 'learning_policy_threshold_required' });
     expect(decideJuliusLearningPromotion(comparison, { ...POLICY, dimensions: ['recoveries'] }))
       .toMatchObject({ outcome: 'REFUSE', reasonCode: 'learning_policy_dimension_not_compared' });
+  });
+});
+
+/**
+ * THE LEARNING ARRIVES AND THE REST OF THE PRIOR MISSION DOES NOT.
+ *
+ * The matched pair above proves the improvement is real and measured. This proves
+ * the other half of the founder's requirement, which a matched pair alone cannot:
+ * that what improved the mission was the RELEVANT finding, and that the rest of
+ * the previous mission's brain — another task's finding, another role's rubric, a
+ * secret — never reached the worker.
+ *
+ * It reads the packet out of the durable snapshot the coder's dispatch was
+ * recorded against, so it is asserting what the worker was actually handed rather
+ * than what the store contained.
+ */
+describe('prior learning reaches the next mission without leaking the last one', () => {
+  const coderSnapshot = (outcome: MissionOutcome) => {
+    const dispatch = outcome.harness.adapters.get('coder-adapter')!.dispatches.at(0);
+    expect(dispatch, 'the Coding Agent must have been dispatched').toBeTruthy();
+    const snapshot = outcome.harness.store.contexts()
+      .filter((item) => item.contextId === dispatch!.contextId && item.taskId === dispatch!.taskId).at(-1);
+    expect(snapshot, 'every dispatch records a durable context snapshot').toBeTruthy();
+    return snapshot!;
+  };
+
+  it('hands the coder the relevant finding and none of the residue', async () => {
+    const withLearning = await runMission(true, 'run-b');
+    const snapshot = coderSnapshot(withLearning);
+    const text = snapshot.packet.blocks.map((block) => block.text).join('\n');
+
+    expect(snapshot.sourceEntryIds, 'the finding the task needs arrived').toContain('run-b:learned');
+    expect(text).toContain('migration must run before the deploy');
+
+    for (const leaked of ['run-b:prior-other-task', 'run-b:prior-reviewer-only', 'run-b:prior-secret']) {
+      expect(snapshot.sourceEntryIds, `${leaked} leaked into the coder's packet`).not.toContain(leaked);
+      expect(snapshot.integrityExcludedEntryIds, `${leaked} must be reported as excluded, not silently dropped`)
+        .toContain(leaked);
+    }
+    // And not by text either: an exclusion that dropped the id and kept the prose
+    // would be the same leak with the evidence removed.
+    expect(text).not.toContain('OTHER task');
+    expect(text).not.toContain('Reviewer rubric');
+    expect(text).not.toContain('hunter2');
+  });
+
+  it('still measures the improvement with the residue present', async () => {
+    // THE CONTROL FOR THE CONTROL. If the residue changed the measured outcome,
+    // the no-leak case above would be proving that exclusion works and quietly
+    // invalidating the matched pair it sits beside.
+    const without = await runMission(false, 'run-a');
+    const withLearning = await runMission(true, 'run-b');
+    const decision = decideJuliusLearningPromotion(compareJuliusLearningPair({
+      without: { events: eventsOf(without), pairing: without.pairing },
+      with: { events: eventsOf(withLearning), pairing: withLearning.pairing },
+      dimensions: POLICY.dimensions,
+    }), POLICY);
+    expect(decision.outcome).toBe('PROMOTE');
+    if (decision.outcome !== 'PROMOTE') throw new Error('unreachable');
+    expect(decision.improved).toContain('repairs');
+  });
+
+  it('gives the reviewer its own rubric, which is what makes the coder\u2019s exclusion a scope and not a filter', async () => {
+    // The residue is not globally suppressed: the entry the coder may not read is
+    // read by the role it was written for. A guard that hid it from everyone would
+    // pass the case above while destroying the reviewer's own context.
+    const withLearning = await runMission(true, 'run-b');
+    const dispatch = withLearning.harness.adapters.get('reviewer-adapter')!.dispatches.at(0);
+    expect(dispatch, 'the reviewer must have been dispatched').toBeTruthy();
+    const snapshot = withLearning.harness.store.contexts()
+      .filter((item) => item.contextId === dispatch!.contextId).at(-1)!;
+    expect(snapshot.sourceEntryIds).toContain('run-b:prior-reviewer-only');
+    expect(snapshot.integrityExcludedEntryIds, 'and the secret is still nobody\u2019s')
+      .toContain('run-b:prior-secret');
   });
 });

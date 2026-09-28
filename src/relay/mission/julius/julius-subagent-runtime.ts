@@ -204,6 +204,30 @@ export async function spawnJuliusSubagent(
     };
   }
 
+  /* --------------------------------------- the reviewer is not a swarm member */
+  // THE ROLE WAS A SEPARATE QUESTION FROM THE TASK TYPE, and it was unguarded.
+  // The namespace refusal above stops a child impersonating verification
+  // machinery; it does not stop a child BEING the Independent Reviewer under an
+  // ordinary task type. `authorizeSubagent` copies the requested role straight
+  // onto the child, so a Coding Agent could spawn a reviewer-role child that
+  // entered the durable graph and was routed to the reviewer's own worker.
+  //
+  // It could not launder an acceptance — no `review:` type, so the verification
+  // phase never counts it — and it is still a breach: the reviewer is the one
+  // role whose whole value is being no part of the work it judges, and a child of
+  // the coder's task spending the mission's budget on the reviewer's provider is
+  // the reviewer INSIDE the swarm. Julius creates review work. A worker asks for
+  // help; it does not appoint its own judge.
+  //
+  // Exactly one role wide, deliberately: a guard that refused every role but the
+  // parent's would forbid the specialisation a swarm exists for.
+  if (input.role === 'INDEPENDENT_REVIEWER') {
+    return {
+      authorized: false, reasonCode: 'SUBAGENT_ROLE_RESERVED',
+      safeMessage: 'A sub-agent may not hold the Independent Reviewer role; review work belongs to Julius.',
+    };
+  }
+
   /* -------------------------------------------------- already granted? */
   const existing = await deps.store.loadSubagent(input.run.runId, input.requestId);
   if (existing !== null) {
