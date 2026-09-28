@@ -1971,7 +1971,18 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
       }
       expect(runGuard({ completed: '', attempted: '' })).not.toBe(0);
       expect(runGuard({ completed: '', acknowledge: 'RERUN PAID MISSION' }), 'and only the typed phrase overrides it').toBe(0);
-    });
+      /**
+       * THE TIMEOUT IS LOAD-BEARING, and its absence made this case FLAKY.
+       *
+       * Fourteen `runGuard` calls, each spawning bash plus a stub `gh` on a
+       * temporary PATH, against vitest's default five seconds. On this
+       * workstation the same code passed one run and timed out the next at
+       * ~5.7s, and the failure arrived as `Test timed out in 5000ms` — not as an
+       * assertion. That is the worst shape a flake can take on a PAID guard:
+       * a red run that says nothing about the guard, so a real regression here
+       * would be indistinguishable from the noise and get re-run away.
+       */
+    }, 60_000);
 
     it('MUTATION: an unreadable marker list fails closed, and only the phrase overrides it', () => {
       expect(runGuard({ readable: false })).not.toBe(0);
