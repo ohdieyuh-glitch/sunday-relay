@@ -451,7 +451,17 @@ ARelayDogCharacter::ARelayDogCharacter()
 	// cannot reach the instance; more importantly a constructor default is version-controlled,
 	// reviewable, and applies to every future placement of this class rather than to one actor
 	// somebody remembered to tick.
+	// GUARDED, BECAUSE bIsSpatiallyLoaded IS EDITOR-ONLY DATA. It lives behind WITH_EDITORONLY_DATA on
+	// AActor, so an unguarded assignment compiles in the editor target and fails the GAME target with
+	// "undeclared identifier" -- which is the project's own recorded trap: an editor-only API passes every
+	// PIE proof and makes the build unpackageable, and only compiling the game target catches it.
+	//
+	// The guard costs nothing. The property is consumed by World Partition when the level is COOKED or saved,
+	// so setting it in editor builds is where it has to be set; a packaged build reads the value already
+	// baked into the actor rather than the constructor default.
+#if WITH_EDITORONLY_DATA
 	bIsSpatiallyLoaded = false;
+#endif
 
 	// ---- NAVIGATION IS GENERATED AROUND THE DOG, not baked across the world.
 	//
