@@ -933,3 +933,33 @@ Two consequences worth carrying:
 - **A knob that "does not matter" may simply be small.** Before concluding a term is disconnected, check
   what fraction of the result it is responsible for — turning it fully off and measuring the remainder costs
   one rung and distinguishes "this lever is broken" from "this lever was never the dominant one".
+
+## A band across the figure cannot measure a feature that is small and saturated
+
+Item 6 asks whether SECONDARY colours the Relay Dog's eyes. Two instruments said no, and both were wrong in
+the same way.
+
+`zc_mascot_colours` C07 looked for **magenta pixels** after setting SECONDARY to magenta, and found none. But
+the channel is applied by MULTIPLICATION, and Relay OG's eyes are warm gold `(1.0, 0.78, 0.16)` — gold times
+magenta is **pink**, not magenta, and pink fails a `blue > green × 1.35` test.
+
+`zc_eye_secondary` then measured the eye as a horizontal band at the brightest row — which spans the whole
+head, so two small coloured eyes sit in a sea of white bone and black visor and barely move its mean:
+
+| eye level | band says | saturated-pixel measure says | what the capture shows |
+|---|---|---|---|
+| **14 (shipped)** | moved 0.0059 — dead | **moved 0.444** | vividly pink vs vividly green |
+| 1400 | moved 0.0889 — alive | moved 0.230 | blown white with a faint coloured rim |
+
+**The band inverted the answer**, and on the strength of it I was one step from raising a shipped default a
+hundredfold — which the captures show would have blown the eyes out, breaking the founder's "individually
+readable rather than one blown-out light".
+
+Two rules:
+
+- **Match the locator to the feature.** The eyes are the most *saturated* thing on a bone-white figure behind
+  a black visor, so the top few per cent by chroma is exactly them. A mean over a region containing mostly
+  something else measures the something else.
+- **Look at the picture before changing a shipped value.** The founder's own instruction — *judge from the
+  actual rendered mascot, not material values or test variables* — is the check that caught this, and it
+  caught it after two separate instruments had agreed with each other.

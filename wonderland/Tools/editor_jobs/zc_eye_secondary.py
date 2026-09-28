@@ -220,7 +220,42 @@ def job():
                     "luma": round((0.2126 * r + 0.7152 * g + 0.0722 * b) / n / 255.0, 4),
                     "peak": round(peak, 4), "clipped": round(clipped / float(n), 4), "px": n}
 
+        def eye_colour():
+            """The colour of the EYES, found by saturation rather than by a band across the figure.
+
+            THE BAND WAS WRONG AND IT INVERTED THE ANSWER. A horizontal strip at the brightest row spans the
+            whole head, so two small coloured eyes sit in a sea of white bone and black visor and barely move
+            its mean. Measured that way the shipped level looked DEAD (0.0059) and a level a hundred times
+            higher looked ALIVE (0.0889) -- and the captures say the exact opposite: at the shipped level the
+            eyes are vividly pink under a magenta SECONDARY and vividly green under a cyan one, while at the
+            raised level they are blown white with a faint coloured rim. I nearly changed a shipped default
+            on that.
+
+            The eyes are the most SATURATED thing on a bone-white figure with a black visor, so the top few
+            per cent by chroma is exactly them and nothing else. Which is also the founder's own instruction:
+            judge from the rendered mascot, not from a test variable.
+            """
+            picks = []
+            for y in range(y0, min(y0 + int((y1 - y0) * 0.55), h)):
+                for x in range(x0, x1):
+                    i = (y * w + x) * chan
+                    R, G, B = px[i], px[i + 1], px[i + 2]
+                    mx, mn = max(R, G, B), min(R, G, B)
+                    if mx < 60:
+                        continue
+                    picks.append((mx - mn, R, G, B))
+            if not picks:
+                return None
+            picks.sort(reverse=True)
+            top = picks[:max(len(picks) // 50, 50)]
+            n = len(top)
+            return {"rgb": [round(sum(t[1] for t in top) / n / 255.0, 4),
+                            round(sum(t[2] for t in top) / n / 255.0, 4),
+                            round(sum(t[3] for t in top) / n / 255.0, 4)],
+                    "chroma": round(sum(t[0] for t in top) / n / 255.0, 4), "px": n}
+
         return {"eye_row": best_y, "eye": band(best_y - 6, best_y + 7),
+                "eye_colour": eye_colour(),
                 "face": band(best_y + 22, best_y + 50),
                 "body": band(best_y + 60, min(best_y + 130, y1))}
 
@@ -307,7 +342,10 @@ def job():
     for key, row in rows.items():
         A, B = row.get("A") or {}, row.get("B") or {}
         summary[key] = {
-            "eye_moved": gap(A.get("eye"), B.get("eye")),
+            "eye_moved": gap(A.get("eye_colour"), B.get("eye_colour")),
+            "eye_rgb_A": (A.get("eye_colour") or {}).get("rgb"),
+            "eye_rgb_B": (B.get("eye_colour") or {}).get("rgb"),
+            "eye_band_moved_for_comparison": gap(A.get("eye"), B.get("eye")),
             "body_moved": gap(A.get("body"), B.get("body")),
             "eye_clipped": (A.get("eye") or {}).get("clipped"),
             "eye_over_face": (round((A.get("eye") or {}).get("luma", 0) - (A.get("face") or {}).get("luma", 0), 4)
@@ -317,7 +355,9 @@ def job():
     emit("E03", "INFO", "what each eye level bought", summary)
 
     # ---- THE THREE THINGS THAT HAVE TO HOLD AT ONCE, reported per level rather than as one verdict.
-    MOVED, STILL, CLIP, CONTRAST = 0.02, 0.02, 0.02, 0.01
+    # 0.15 because a working SECONDARY moves the eye colour by 0.444 at the shipped level and a dead one by
+    # nothing; there is no ambiguous middle to calibrate against.
+    MOVED, STILL, CLIP, CONTRAST = 0.15, 0.02, 0.02, 0.01
     good = [k for k, v in summary.items()
             if (v["eye_moved"] or 0) > MOVED
             and (v["body_moved"] if v["body_moved"] is not None else 1) <= STILL
