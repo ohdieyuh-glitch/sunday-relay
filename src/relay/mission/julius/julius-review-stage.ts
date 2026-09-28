@@ -188,11 +188,28 @@ const PLAN_MUST_NOT_DEMAND: readonly string[] = Object.freeze([
   'executed test output',
 ]);
 
+/**
+ * WHAT AN IMPLEMENTATION REVIEW ASKS — AND WHY THE LAST ONE NO LONGER SAYS
+ * "TEST".
+ *
+ * It used to read "Is the test evidence sufficient to prove the criteria?", which
+ * made this rubric refuse work it had no business refusing. Julius is not a
+ * coding-only agent: a mission whose deliverable is a report, an analysis, a plan
+ * or a data file produces a real diff of a real file and has no tests at all, and
+ * a reviewer told to weigh TEST EVIDENCE would reject a perfectly good document
+ * for lacking something its contract never asked for.
+ *
+ * The contract already says what is required — `requiredEvidence` and
+ * `requiredChecks` are rendered into the review prompt verbatim — so the judge
+ * asks about THOSE. A build whose contract requires `TEST` is asked exactly what
+ * it was asked before; one whose contract requires `ARTIFACT` is asked about the
+ * artifact. The demand does not weaken, it stops being about one domain.
+ */
 const BUILD_JUDGES: readonly string[] = Object.freeze([
   'Does the implementation satisfy every acceptance criterion, as shown by the diff?',
   'Did the change stay inside the allowed file scope, with prohibited files unchanged?',
   'Is the behaviour correct for the edge cases the requirements imply?',
-  'Is the test evidence sufficient to prove the criteria?',
+  'Is the evidence the contract requires present, and sufficient to prove the criteria?',
 ]);
 
 /**
