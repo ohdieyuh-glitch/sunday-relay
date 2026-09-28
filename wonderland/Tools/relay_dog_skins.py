@@ -2512,7 +2512,22 @@ def cub_ghost(eyes="flat", skin="relay_og"):
         # eye's footprint whichever shape the plate draws. It is named "eyehalo" so the runtime drives it as
         # an eye at the halo share, and its face (ex + 0.27) stands in front of the eye's own (ex + 0.175).
         if "eyehalo" in figure.material_names:
-            figure.box("head", "eyehalo", (ex + 0.12, base[1], base[2]), (0.30, hw * 0.20 * 2.4, hh * 0.13 * 2.4))
+            # ---- AND THE CUB'S HALO STOPS AT ITS OWN EYE, for the same reason the adults' do.
+            #
+            # Checked rather than assumed, because the cubs share this code path and I had only fixed the adult
+            # costume. The cub's eye centre is 0.19 of the head's half width out and its eye is 0.20 wide, so a
+            # halo at 2.4x centred on the eye spans -0.05 to +0.43: it crosses the centreline by 0.05 and the
+            # two halos meet in the middle of a face that is mostly eyes already.
+            #
+            # Shifted outward and narrowed to run from the eye's inner edge to the full 2.4x reach outward,
+            # exactly as the adult pane now does. The outward and vertical spill -- which is where a halo reads
+            # -- is untouched, and no brightness changes anywhere.
+            cub_in = hw * 0.19 - hw * 0.20 * 0.5
+            cub_out = hw * 0.19 + hw * 0.20 * 2.4 * 0.5
+            figure.box("head", "eyehalo",
+                       (ex + 0.12, (base[1] / abs(base[1]) if base[1] else 1.0) * (cub_in + cub_out) * 0.5,
+                        base[2]),
+                       (0.30, cub_out - cub_in, hh * 0.13 * 2.4))
         if eyes == "flat":
             figure.box("head", "eye", base, (0.35, hw * 0.20, hh * 0.13))
         elif eyes == "arc":
