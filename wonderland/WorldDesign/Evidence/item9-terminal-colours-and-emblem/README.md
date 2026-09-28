@@ -119,3 +119,31 @@ colour the panel is painted in, and that the change is now large enough to see. 
 
 **The mark rect samples 484 pixels.** Small — which is exactly why the dedicated rectangle was necessary
 rather than optional, and why the E02 control exists to fail if that rectangle is ever really the whole panel.
+
+---
+
+## Looked at, not only measured
+
+The founder's standing rule is that the rendered thing is the authority and that a visual claim must not rest
+on state variables. So the two captures were opened and compared rather than cited.
+
+`Tools/captures/zc/terminal_look/terminal_blue.png` against `terminal_green.png`:
+
+- **Both companion terminals and the Julius task terminal change colour unmistakably.** Frame, title, plate,
+  the per-row strips and the input box all move together. Side by side there is no squinting involved — this
+  is what "more apparent" was asking for, and the 0.51 channel swing is a fair description of it rather than a
+  generous one.
+- **The emblem is the small mark at the lower left of each companion terminal**, exactly where E07 put it
+  (x 0.049, y 0.748 of the terminal). It holds its gold in both frames while everything around it turns blue
+  and then green.
+
+### One thing checked and found correct
+
+The large teal/white/blue arc mark at the top left of the screen is **identical in both captures** and follows
+no accent. That is right, and it is not the emblem: it is the **usage HUD's meters** — three agents, three
+poly-Bézier arcs — whose control points are, in that file's own words, *"FROZEN by the founder and pinned by
+digest in `src/relay/mission/wonderland/wonderland-hud-canon.test.ts`"*.
+
+It should not follow a terminal accent, it should not be yellow, and it must not be touched. Recorded here
+because a non-yellow mark near a "the emblem must be YELLOW" directive is exactly the kind of thing that
+invites a confident wrong fix from whoever reads this next.
