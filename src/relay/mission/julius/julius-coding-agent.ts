@@ -166,7 +166,12 @@ export interface JuliusCodingAgentObservation {
   readonly inputTokens: number | null;
   readonly outputTokens: number | null;
   readonly costUsdMicros: number | null;
-  readonly costBasis: 'PROVIDER_REPORTED' | 'UNKNOWN';
+  /**
+   * `NOT_APPLICABLE` is the subscription-backed case: the dispatch happened, the
+   * provider is unchanged, and no per-request billing event exists to report. It is
+   * neither UNKNOWN (which says a charge exists and was not read) nor zero.
+   */
+  readonly costBasis: 'PROVIDER_REPORTED' | 'UNKNOWN' | 'NOT_APPLICABLE';
   /**
    * Provider-specific structural facts for the record. Julius narrows them
    * through the diagnostics allowlist on the way to any durable row; a

@@ -92,6 +92,7 @@ import {
   readGptArchitectConfig,
 } from '../../src/relay/connectors/gpt-architect';
 import { HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV } from '../hosted-coding-agent/hosted-readiness';
+import { JULIUS_CLAUDE_AUTH_ENV, resolveClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
 import { loadHermesConfig } from '../hermes-reviewer';
 import type { runGptArchitect } from '../../src/relay/connectors/gpt-architect';
 import type { runHostedCodingAgent, HostedQueryFn } from '../hosted-coding-agent/hosted-runner';
@@ -396,7 +397,29 @@ export function resolveLiveWorkers(options: {
   }
 
   const codingMissing: string[] = [];
-  if (!options.env[HOSTED_API_KEY_ENV]) codingMissing.push(HOSTED_API_KEY_ENV);
+  /**
+   * WHICH CREDENTIAL THIS COMPOSITION EXPECTS, and why an unknown mode is fatal.
+   *
+   * `ANTHROPIC_API` is the default and unchanged: the key is required, as it always
+   * was. `CLAUDE_SUBSCRIPTION` requires its ABSENCE instead — Anthropic documents
+   * that the key takes precedence over subscription authentication, so demanding one
+   * in subscription mode would be demanding the thing that defeats the mode.
+   *
+   * A MISSPELLED MODE IS REFUSED rather than defaulted, because falling back to API
+   * mode would bill a balance nobody chose.
+   */
+  const authMode = resolveClaudeAuthMode(options.env);
+  if (!authMode.ok) {
+    codingMissing.push(`${JULIUS_CLAUDE_AUTH_ENV} (${authMode.refusal}: ${authMode.because})`);
+  } else if (authMode.mode === 'ANTHROPIC_API') {
+    if (!options.env[HOSTED_API_KEY_ENV]) codingMissing.push(HOSTED_API_KEY_ENV);
+  } else if (options.env[HOSTED_API_KEY_ENV]) {
+    // Present in the PARENT is not the same as reaching the child — `hostedChildEnv`
+    // builds from `{}` and omits it in this mode — but a key configured alongside a
+    // subscription request is a contradiction the operator should resolve rather
+    // than one this composition should silently pick a winner for.
+    codingMissing.push(`${HOSTED_API_KEY_ENV} is set while ${JULIUS_CLAUDE_AUTH_ENV}=CLAUDE_SUBSCRIPTION; unset the key for this deployment or choose ANTHROPIC_API`);
+  }
   if (!requested.codingModel) codingMissing.push(HOSTED_MODEL_ENV);
   if (!options.workspacePath) codingMissing.push('mission workspacePath (contract field)');
   // An EMPTY test command is not missing configuration: it is the mission's
@@ -413,7 +436,11 @@ export function resolveLiveWorkers(options: {
       worker: CODER_WORKER,
       adapter: createLiveHostedCodingAdapter({
         worker: CODER_WORKER, contexts: options.contexts, artifacts: options.artifacts,
-        projectId: options.projectId, apiKey: options.env[HOSTED_API_KEY_ENV] ?? '',
+        projectId: options.projectId,
+        // In subscription mode this is the empty string and is never placed in the
+        // child's environment; `hostedChildEnv` omits the variable entirely.
+        apiKey: authMode.ok && authMode.mode === 'CLAUDE_SUBSCRIPTION' ? '' : options.env[HOSTED_API_KEY_ENV] ?? '',
+        ...(authMode.ok ? { authMode: authMode.mode } : {}),
         requestedModel: requested.codingModel ?? '', workspacePath: options.workspacePath,
         testCommand: options.testCommand, shell: options.shell as ShellEffectPort,
         ...(options.researchPolicyFor === undefined ? {} : { researchPolicyFor: options.researchPolicyFor }),
