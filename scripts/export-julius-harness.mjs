@@ -249,13 +249,16 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-memory-trust.ts', 'DURABLE STATE / PROJECT BRAIN'],
   // The context integrity layer: which of those memories may reach a worker's
   // packet, in what order, and what happens when two of them cannot both be
-  // true. Seeded as a STUB for paid Live Mission 5, so nothing imports it yet
-  // and the trace does not reach it — declared now, for the same reason the
-  // trust core above is, so the landing that finally gives it a caller does not
-  // also trip the drift gate. Same subsystem as the Project Brain it reads and
-  // the compiler it will sit inside: `julius-runtime.ts` and
-  // `julius-context-snapshot.ts` are both already here.
+  // true. It was declared here while it was still a STUB nothing imported, so
+  // that the landing which finally gave it a caller would not also trip the
+  // drift gate. That landing has happened: `compileJuliusContext` routes through
+  // it and the trace reaches it from the live root. Same subsystem as the
+  // Project Brain it reads and the compiler it sits inside.
   ['src/relay/mission/julius/julius-context-integrity.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  // And the join that lets it run on a real mission: a durable brain row turned
+  // into a claim, using `worker_id`, `entry_kind`, `evidence_ids` and
+  // `created_at` and nothing else. Reached from the pipeline.
+  ['src/relay/mission/julius/julius-context-provenance.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // Allocation decides what a dispatch MAY spend; this decides what is known
   // about what it DID spend, and on whose authority. Same subsystem: both are

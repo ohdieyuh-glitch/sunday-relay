@@ -536,6 +536,19 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         // entry PUBLIC would be a claim nobody checked.
         allowedRoles: ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'],
         sensitivity: 'INTERNAL',
+        /**
+         * WHO WROTE IT, WHEN, AND WHAT IT CITED. Every one of these arrives on
+         * the append and was being thrown away at the read, so the context
+         * integrity layer had no way to tell a reviewer's cited finding from a
+         * coder's own note. Matching the PostgreSQL read path exactly, because a
+         * model and a database that disagree about provenance is worse than
+         * neither carrying it.
+         */
+        provenance: {
+          workerId: input.workerId,
+          recordedAt: input.occurredAt,
+          evidenceIds: [...input.evidenceIds],
+        },
       }]);
       return true;
     },

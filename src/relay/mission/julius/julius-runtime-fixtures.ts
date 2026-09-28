@@ -424,6 +424,13 @@ export function createJuliusHarness(input: {
   readonly executionScope?: string;
   /** An existing store to run over — a restart of the same durable rows with fresh workers. */
   readonly store?: JuliusMemoryStore;
+  /**
+   * The packet budget, for a case whose subject IS the budget. 4 000 characters
+   * is roomy enough that nothing a normal fixture seeds is ever evicted, which
+   * is right for every other test and useless for proving what survives
+   * eviction.
+   */
+  readonly contextCharacterBudget?: number | ((role: JuliusWorkerRole) => number);
 }): JuliusHarness {
   const store = input.store ?? createJuliusMemoryStore();
   const clock = createSteppingClock();
@@ -455,7 +462,7 @@ export function createJuliusHarness(input: {
     timeline: store,
     ...(input.executionScope === undefined ? {} : { executionScope: input.executionScope }),
     owner: input.owner ?? 'worker-a',
-    contextCharacterBudget: 4_000,
+    contextCharacterBudget: input.contextCharacterBudget ?? 4_000,
   };
 
   const policies: JuliusPolicySource = {
