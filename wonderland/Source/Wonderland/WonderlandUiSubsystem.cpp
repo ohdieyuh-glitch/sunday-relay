@@ -4458,7 +4458,7 @@ bool UWonderlandUiSubsystem::RouteClickToWidget(const TSharedPtr<SWidget>& Targe
 		bTileUnderPoint |= Path.Widgets[Index].Widget == Target.ToSharedRef();
 	}
 
-	// ---- HOVER FIRST, AND THIS IS THE WHOLE DEFECT.
+	// ---- WHY A SYNTHETIC CLICK CANNOT COMPLETE HERE, AND WHY NOTHING TRIES TO MAKE IT.
 	//
 	// SButton::OnMouseButtonUp (UE 5.8, SButton.cpp:424) decides whether to run the click with
 	//
@@ -4467,24 +4467,29 @@ bool UWonderlandUiSubsystem::RouteClickToWidget(const TSharedPtr<SWidget>& Targe
 	// and the geometry fallback on the next lines -- IsUnderLocation -- is guarded by
 	// MouseEvent.IsTouchEvent(), so for a MOUSE event hover is the only test there is.
 	//
-	// Hover is not carried on the event. Slate maintains it from real cursor movement, so a click routed
-	// straight down a widget path leaves the button un-hovered however correct the path is. That is exactly
-	// what the diagnostics had been saying and nobody read: under the point 1, down 1, up 1, the captor after
-	// the down is the target's own SButton, the point is inside the target's own geometry, and the button
-	// reports bIsPressed YES between the two events -- and ExecuteOnClick is still skipped, because
-	// IsHovered() is false. Every measured fact was consistent with a working button the whole time.
+	// HOVER IS NOT CARRIED ON THE EVENT. Slate owns it in FSlateUser, driven from the real pointer's
+	// position, so a click routed down a widget path leaves the button un-hovered however correct the path
+	// is. ExecuteOnClick is skipped and the up still returns HANDLED -- which is exactly what made "up 1"
+	// read as success through five sessions of eliminating causes that were never the cause. Every fact the
+	// diagnostics reported (under the point, down handled, up handled, captor is the target's own SButton,
+	// point inside its geometry, bIsPressed YES between the events) is what a WORKING button looks like.
 	//
-	// So the press is preceded by a MOVE down the same path, which is what a hand does before it clicks and
-	// what Slate needs to mark the widget hovered. Without it this function can only ever show that events
-	// REACH a widget, never that the product's click path runs -- and H_POINTER stood red on the strength of
-	// that gap being mistaken for a defect in the HUD.
+	// TWO WAYS OUT WERE TRIED AND BOTH ARE REFUSED, recorded so nobody spends the builds again:
 	//
-	// The OS cursor is still never moved. This is a routed event, not a hand on the founder's real mouse.
-	App.RoutePointerMoveEvent(
-		Path,
-		FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::Invalid,
-			0.0f, FModifierKeysState()),
-		false);
+	//   RoutePointerMoveEvent down the same path first, which is what a hand does before it clicks. This
+	//   function HAS ALWAYS DONE THAT -- the move below the capture check predates all of this work. I added
+	//   a second one believing it was the missing step, built it, ran it, and it changed nothing, because the
+	//   move was never absent. Hover does not take from a routed move: FSlateUser recomputes it from the real
+	//   pointer's position, not from the path an event was sent down.
+	//
+	//   SWidget::SetHover(true) around the press. It does not compile from here -- the setter is PROTECTED --
+	//   and that is the engine saying this is not a knob for a caller to turn.
+	//
+	// So this routes the press and release and does not pretend the click completes. H_POINTER stays red BY
+	// DESIGN, with a cause rather than a shrug: the missing link is an engine precondition that belongs to
+	// Slate and that only a real pointer can satisfy. The HUD is not implicated -- the same button's
+	// SimulateClick runs its handler and opens the real surface every time, which is how the panel clauses
+	// above are proven, and a hand's click on the founder's machine takes the ordinary path with hover set.
 
 	bool bDown = false;
 	bool bUp = false;
