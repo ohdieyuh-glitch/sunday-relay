@@ -1126,3 +1126,27 @@ construction — my code had touched nothing, and one column looked like success
 already done that job.
 
 **When a readback is partly green, check whether the green part is yours.**
+
+## Check the predecessor's closing sentence before reporting an item as covered
+
+`zc_pose_authority` ends with: *"it does not cover walk, run, stop, turns, jump, fall or landing as
+performances."* That sentence is the author telling you exactly what their green result does **not** mean.
+
+I quoted that job's pass at item 3 for most of a day. The founder's sentence names eight states; between
+`zc_pose_authority` and `zc_pose_mission`, three were measured. **Six were not, and the job said so in its own
+last line.**
+
+When a proof is green, read what it says it excludes before citing it. The exclusions are usually written
+down by someone who already thought about this, and they are the cheapest possible source of the next test.
+
+## A control that cannot report the positive case will void the run — which is the point
+
+`zc_pose_states` needs the Dog to actually leave the ground, or "jump", "fall" and "landing" are three more
+samples of standing still and all 23 fields agree perfectly. The first run asked
+`dog.get_character_movement()`, could not reach it, and `falling()` answered False for every sample.
+
+**The run voided.** It did not report four skins matching flawlessly through a jump that never happened.
+
+The fix was to read airborne from the canonical pose's own `airborne_weight` — the field the costume is
+supposed to be copying anyway, and one that needs no accessor which might not be exposed. **When a control
+needs a fact, prefer the channel the subject already publishes over a second API that can be absent.**
