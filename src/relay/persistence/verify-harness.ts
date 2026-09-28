@@ -70,10 +70,16 @@ export async function runPersistenceContractVerification(): Promise<{
   });
 
   try {
+    if (process.platform === 'win32') {
+      check('this host can spawn the fake provider executables', false, UNSUPPORTED_HOST.join(' '));
+      return { checks, failures: checks.length, processesSpawned };
+    }
     /* Bundle the driver with the repo's own esbuild (no provider call, no
      * new dependency). Same entry code the production module exports. */
     // The repo's own esbuild binary (already a dependency) bundles the driver.
-    execFileSync(join(process.cwd(), 'node_modules', '.bin', 'esbuild'), [
+    const esbuild = repoEsbuild();
+    execFileSync(esbuild.command, [
+      ...esbuild.lead,
       join(process.cwd(), 'src', 'relay', 'persistence', 'driver-main.ts'),
       '--bundle', '--platform=node', '--format=cjs', `--outfile=${driverPath}`, '--log-level=warning',
     ], { encoding: 'utf8', timeout: 120_000 });
@@ -438,3 +444,58 @@ export async function runPersistenceContractVerification(): Promise<{
   checks.push({ name: 'harness artifacts removed', ok: !existsSync(harnessDir) });
   return { checks, failures: checks.filter((c) => !c.ok).length, processesSpawned };
 }
+
+/**
+ * THE REPO'S OWN esbuild, ON A HOST THAT CAN ACTUALLY SPAWN IT.
+ *
+ * `node_modules/.bin/esbuild` is a POSIX shell script. `execFileSync` does not go
+ * through a shell and Windows `CreateProcess` reads a PE header, so spawning that
+ * name failed ENOENT before the drill started — and BOTH durable-persistence
+ * gates were unrunnable on Windows, each reporting "completed without throwing —
+ * spawnSync … ENOENT" and "scenario steps ran across 0 separate Node processes".
+ * A gate a developer cannot run is a gate that stops being run.
+ *
+ * AND THE `.cmd` BESIDE IT IS NOT THE FIX. Node refuses to spawn a `.cmd` or
+ * `.bat` without a shell — `EINVAL` — and passing `shell: true` to fix that would
+ * hand a command line to `cmd.exe`, which is a quoting hazard in a harness whose
+ * arguments include temporary paths.
+ *
+ * SO IT SPAWNS NODE AGAINST esbuild's OWN ENTRY SCRIPT. `node_modules/esbuild/bin/esbuild`
+ * is plain JavaScript with a shebang; `process.execPath` is the interpreter
+ * already running. No shell, no platform branch, no quoting: the same two
+ * arguments on every host. The `.bin` shim is used only as a fallback, so a
+ * layout without the package entry still fails on a real path rather than an
+ * invented one.
+ */
+function repoEsbuild(): { readonly command: string; readonly lead: readonly string[] } {
+  const entry = join(process.cwd(), 'node_modules', 'esbuild', 'bin', 'esbuild');
+  if (existsSync(entry)) return { command: process.execPath, lead: [entry] };
+  return { command: join(process.cwd(), 'node_modules', '.bin', 'esbuild'), lead: [] };
+}
+
+/**
+ * A HOST THAT CANNOT RUN THIS GATE SAYS SO IN ONE LINE.
+ *
+ * Both persistence gates drive REAL child processes against the repository's own
+ * fake provider executables, and those fakes are Node scripts made executable by
+ * a POSIX shebang plus `chmod 0o755`. Windows `CreateProcess` reads a PE header
+ * and honours neither, so the supervised proof inside process A never reaches its
+ * crash boundary: it exits 0 instead of the drill's own 87, and every later step
+ * that reads the state A should have left fails in a way that looks like a
+ * recovery defect and is not.
+ *
+ * SO IT REFUSES UP FRONT, NAMING THE CAUSE, AND IT REFUSES NON-ZERO. A gate that
+ * returned success on a host where it proved nothing would be the vacuous pass
+ * this repository has already paid for once — three MCP scenarios that "passed"
+ * because a spawn failure short-circuited them before they asserted anything.
+ * This is a genuine platform gap, neither hidden nor claimed as covered: the gate
+ * runs on POSIX and in CI, and on Windows it reports that it cannot run rather
+ * than what a broken fixture made it look like.
+ */
+const UNSUPPORTED_HOST: readonly string[] = [
+  'UNSUPPORTED HOST: this gate spawns the repository\'s fake provider executables,',
+  'which are Node scripts made executable by a POSIX shebang and chmod. Windows',
+  'CreateProcess honours neither, so process A cannot reach its crash boundary and',
+  'every step that reads the state it should have left is meaningless.',
+  'Nothing is proven and nothing is claimed. Run it on POSIX or in CI.',
+];
