@@ -233,6 +233,15 @@ def job():
         at = unreal.Vector(where.x + CAM_AHEAD[0], where.y + CAM_AHEAD[1], where.z + CAM_DROP)
         L.pose_camera(live(), eye, at, CAM_FOV)
         yield 2.0
+        # ---- WARM UP AT EACH PLACE BEFORE THE FIRST RUNG.
+        #
+        # zzAE1 voided on ONE rung out of thirty: Tartarus at 18:00, frame spread 0.0494 where every
+        # other rung in the run was under 0.0032. That is the first reading at the THIRD place, right
+        # after a 153 km teleport -- FlushLevelStreaming returned and the per-rung settle found three
+        # reads inside 0.004, and the world went on changing anyway. A plateau, in the one position
+        # where the district had least time to arrive.
+        for step in settled(60):
+            yield step
 
         # ---- IS THIS VANTAGE WORTH MEASURING FROM? Traced, not assumed.
         fwd = trace(eye, unreal.Vector(eye.x + (at.x - eye.x) * 0.02,

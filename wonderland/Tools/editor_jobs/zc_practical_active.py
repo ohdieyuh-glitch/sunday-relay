@@ -13,13 +13,23 @@
 #
 # WHY THIS JOB EXISTS RATHER THAN A THIRD ATTEMPT AT THE OLD ONE:
 #
-#   ActiveCount IS AUTHORITATIVE AND WAS UNREACHABLE. DescribePracticals() has always published
-#   "defined=N active=K pool=M night=... count=... radius=...", and the subsystem was UCLASS() without
-#   BlueprintType, so Python could not see the class. Every earlier run COUNTED SPAWNED ACTORS and their
-#   visibility flags and inferred. That inference produced "31 lit of a pool of 48" and from there "the
-#   radius must really be about 4,200" -- which fitted beautifully and was false; the readback says
-#   12,000, the declared default. d9317674 adds the specifier. This job reads the engine's own answer and
-#   keeps the actor count only as a cross-check, reporting BOTH when they disagree.
+#   ActiveCount IS AUTHORITATIVE AND WAS UNREACHABLE, AND NOT FOR THE REASON I FIRST GAVE.
+#   DescribePracticals() has always published "defined=N active=K pool=M night=... count=... radius=...".
+#   I diagnosed the cause as the subsystem being UCLASS() without BlueprintType, said so with enough
+#   confidence that another lane relayed it onward as a settled fix, added the specifier at d9317674 --
+#   and the read still failed. Enumerating the binding rather than guessing at it (zc_subsystem_probe)
+#   gave the real answer: UE 5.8's Python has NO world-subsystem getter of any kind. Only
+#   get_editor_subsystem and get_engine_subsystem exist, World has no get_subsystem, and
+#   SubsystemBlueprintLibrary is not in the binding. Visibility was never what was missing.
+#
+#   The route that works is a BlueprintFunctionLibrary static, which this tree already used elsewhere and
+#   documented in a comment before I went looking for a fourth API name. H.describe_practical_lights
+#   landed at 71114aab.
+#
+#   What the missing instrument cost: every earlier run COUNTED SPAWNED ACTORS and inferred, which
+#   produced "31 lit of a pool of 48" and from there "the radius must really be about 4,200" -- fitting
+#   the data beautifully and false, since the readback says 12,000. This job reads the engine's own
+#   answer and keeps the actor count only as a cross-check, reporting BOTH when they disagree.
 #
 #   AND A PLATEAU IS NOT CONVERGENCE. The previous run settled on three identical reads of 127 active
 #   lights half a second apart and then reported 192 when asked again after an unrelated wait: the
@@ -99,13 +109,16 @@ def job():
 
     def describe():
         """The engine's own account: defined / active / pool / night / gain / count / radius."""
+        # THROUGH THE TEST LIBRARY, because UE 5.8's Python has no world-subsystem getter of any kind:
+        # only get_editor_subsystem and get_engine_subsystem exist, World has no get_subsystem, and
+        # SubsystemBlueprintLibrary is not in the binding. Enumerated by zc_subsystem_probe after four
+        # attempts at guessing the name. A BlueprintFunctionLibrary static IS reachable.
         try:
-            sub = unreal.SubsystemBlueprintLibrary.get_world_subsystem(
-                live(), unreal.WonderlandPracticalLightsSubsystem)
-            if sub is None:
+            line = str(H.describe_practical_lights(live()))
+            if not line:
                 return None
             out = {}
-            for tok in str(sub.describe_practicals()).split():
+            for tok in line.split():
                 if "=" in tok:
                     k, v = tok.split("=", 1)
                     try:
@@ -145,10 +158,10 @@ def job():
     record("P_READ", "the engine's own practical report is readable, so active count is not inferred",
            probe is not None and "active" in probe and "pool" in probe,
            describe_practicals=probe,
-           note="the subsystem was UCLASS() without BlueprintType until d9317674, which is why two "
-                "earlier gates failed for want of an instrument and a budget run counted actors and "
-                "inferred a radius that turned out to be wrong. Red here means this build predates the "
-                "specifier and the run is void rather than falling back to inference again")
+           note="reads H.describe_practical_lights, added at 71114aab, because UE 5.8 Python has no "
+                "world-subsystem getter at all -- enumerated, after BlueprintType was diagnosed as the "
+                "cause and was not. Red here means the build predates that accessor, and the run voids "
+                "rather than falling back to counting actors and inferring a radius again")
     if not (probe and "active" in probe and "pool" in probe):
         RESULT["status"] = "voided: the authoritative active count is not readable in this build"
         yield 2.0
