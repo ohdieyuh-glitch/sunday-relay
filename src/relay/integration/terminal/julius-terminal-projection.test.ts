@@ -215,40 +215,76 @@ describe('an unrecognised event is rendered safely, never dropped or invented', 
 
 /* ------------------------------------------------------------- redaction */
 
+/**
+ * THIS TABLE USED TO ASSERT THE WRONG STRING, AND PASSED WHILE LEAKING.
+ *
+ * Each row was one value, and the assertion was `not.toContain(secret)` — the
+ * WHOLE fixture. For a composite fixture that is nearly vacuous: redaction turns
+ * `Authorization: Bearer sk-ant-api03-…` into `[redacted] sk-ant-api03-…`, which
+ * does not contain the whole original string, so the row passed with the key
+ * plainly visible. The integration lane found it; a probe then reproduced four
+ * leaks at once on this branch.
+ *
+ * So every row now carries the CREDENTIAL SUBSTRING separately, and that is what
+ * must not survive. Where the fixture IS the credential the two are the same and
+ * the row reads the same as before — the difference only shows on the rows that
+ * were hiding something.
+ */
 describe('secrets never reach the terminal', () => {
-  const SECRETS: ReadonlyArray<[string, string]> = [
-    ['an OpenAI key', 'sk-abcdefghijklmnopqrstuvwx'],
-    ['a GitHub token', 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345'], // relay-boundary:allow-fixture
-    ['an AWS access key', 'AKIAIOSFODNN7EXAMPLE'],
-    ['a Slack token', 'xoxb-' + '1234567890-abcdefghij'], // relay-boundary:allow-fixture
-    ['a JWT', 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig'],
-    ['an Authorization header', 'Authorization: Bearer abcdefghijklmnopqrstuv'],
-    ['a bare bearer credential', 'Bearer abcdefghijklmnopqrstuvwxyz'],
-    ['a basic credential', 'Basic YWxhZGRpbjpvcGVuc2VzYW1l'],
-    ['a provider session id', 'sess_01HQXYZABCDEFGH12345'],
-    ['a connection string', 'postgres://' + 'relay:FAKETESTNOTREAL@invalid/fixture'], // relay-boundary:allow-fixture
-    ['a private key header', '-----BEGIN RSA ' + 'PRIVATE KEY-----'], // relay-boundary:allow-fixture
-    ['an api_key assignment', 'api_key: 9f8e7d6c5b4a39281706'],
-    ['an env-style secret', 'ANTHROPIC_API_KEY=sk-ant-FAKETESTNOTREAL'], // relay-boundary:allow-fixture
-    ['an aws secret assignment', 'aws_secret_access_key=wJalrXUtnFEMI/K7MDENG'],
+  const SECRETS: ReadonlyArray<readonly [label: string, fixture: string, credential: string]> = [
+    ['an OpenAI key', 'sk-abcdefghijklmnopqrstuvwx', 'sk-abcdefghijklmnopqrstuvwx'],
+    ['a GitHub token', 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345', 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345'], // relay-boundary:allow-fixture
+    ['a fine-grained GitHub PAT', 'github_pat_' + 'ABCDEFGHIJKLMNOPQRSTUV_0123456789abcdef', 'github_pat_' + 'ABCDEFGHIJKLMNOPQRSTUV_0123456789abcdef'], // relay-boundary:allow-fixture
+    ['an AWS access key', 'AKIAIOSFODNN7EXAMPLE', 'AKIAIOSFODNN7EXAMPLE'],
+    ['a Slack token', 'xoxb-' + '1234567890-abcdefghij', 'xoxb-' + '1234567890-abcdefghij'], // relay-boundary:allow-fixture
+    ['a JWT', 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig', 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig'],
+    ['a bare bearer credential', 'Bearer abcdefghijklmnopqrstuvwxyz', 'abcdefghijklmnopqrstuvwxyz'],
+    ['a basic credential', 'Basic YWxhZGRpbjpvcGVuc2VzYW1l', 'YWxhZGRpbjpvcGVuc2VzYW1l'],
+    ['a provider session id', 'sess_01HQXYZABCDEFGH12345', 'sess_01HQXYZABCDEFGH12345'],
+    ['a connection string', 'postgres://' + 'relay:FAKETESTNOTREAL@invalid/fixture', 'FAKETESTNOTREAL'], // relay-boundary:allow-fixture
+    ['a private key header', '-----BEGIN RSA ' + 'PRIVATE KEY-----', 'BEGIN RSA ' + 'PRIVATE KEY'], // relay-boundary:allow-fixture
+    ['an api_key assignment', 'api_key: 9f8e7d6c5b4a39281706', '9f8e7d6c5b4a39281706'],
+    ['an env-style secret', 'ANTHROPIC_API_KEY=sk-ant-FAKETESTNOTREAL', 'sk-ant-FAKETESTNOTREAL'], // relay-boundary:allow-fixture
+    ['an aws secret assignment', 'aws_secret_access_key=wJalrXUtnFEMI/K7MDENG', 'wJalrXUtnFEMI/K7MDENG'],
+
+    /* THE FOUR LEAKS A PROBE REPRODUCED ON THIS BRANCH, each now a row. */
+    ['an Authorization header', 'Authorization: Bearer abcdefghijklmnopqrstuv', 'abcdefghijklmnopqrstuv'],
+    ['an Anthropic key behind an Authorization header',
+      'Authorization: Bearer sk-ant-api03-' + 'FAKETESTNOTREALAAAA', 'sk-ant-api03-' + 'FAKETESTNOTREALAAAA'], // relay-boundary:allow-fixture
+    ['an authorization assignment with no space after the scheme',
+      'authorization=Bearer abcdefghijklmnopqrstuvwxyz', 'abcdefghijklmnopqrstuvwxyz'],
+    ['a bare Anthropic key in prose', 'the key sk-ant-api03-' + 'FAKETESTNOTREALBBBB is stale', 'sk-ant-api03-' + 'FAKETESTNOTREALBBBB'], // relay-boundary:allow-fixture
+    ['a bare OpenAI project key in prose', 'the key sk-proj-' + 'FAKETESTNOTREALCCCC is stale', 'sk-proj-' + 'FAKETESTNOTREALCCCC'], // relay-boundary:allow-fixture
+    ['a Google API key in prose', 'the key AIza' + 'FAKETESTNOTREALDDDDDDDD is stale', 'AIza' + 'FAKETESTNOTREALDDDDDDDD'], // relay-boundary:allow-fixture
   ];
 
-  for (const [label, secret] of SECRETS) {
+  for (const [label, fixture, credential] of SECRETS) {
     it(`redacts ${label} from a summary`, () => {
       const entry = projectJuliusEvent(event({
-        kind: 'julius.unknown', safeSummary: `Dispatch failed: ${secret} was rejected.`,
+        kind: 'julius.unknown', safeSummary: `Dispatch failed: ${fixture} was rejected.`,
       }));
-      expect(entry.line, label).not.toContain(secret);
+      expect(entry.line, label).not.toContain(credential);
       expect(entry.redactionsApplied, label).toBeGreaterThan(0);
     });
 
     it(`redacts ${label} from a fact used in a headline`, () => {
       const entry = projectJuliusEvent(event({
-        kind: 'run.paused', actor: 'JULIUS', facts: { reason: `blocked by ${secret}` },
+        kind: 'run.paused', actor: 'JULIUS', facts: { reason: `blocked by ${fixture}` },
       }));
-      expect(entry.line, label).not.toContain(secret);
+      expect(entry.line, label).not.toContain(credential);
     });
   }
+
+  it('does not redact an ordinary hyphenated word that merely contains "sk-"', () => {
+    // Widening the `sk-` body to accept hyphens needs the `\b` anchor, and the
+    // anchor fixes an older defect of its own: unanchored, `task-oriented`
+    // contains `sk-oriented` and came out as `ta[redacted]`.
+    for (const word of ['task-oriented work', 'risk-averse planning', 'a task-list']) {
+      const entry = projectJuliusEvent(event({ kind: 'julius.unknown', safeSummary: word }));
+      expect(entry.line, word).toContain(word);
+      expect(entry.redactionsApplied, word).toBe(0);
+    }
+  });
 
   it('drops a fact whose key could only hold a secret, rather than showing it redacted', () => {
     for (const key of ['apiKey', 'api_key', 'token', 'accessToken', 'secret', 'password',

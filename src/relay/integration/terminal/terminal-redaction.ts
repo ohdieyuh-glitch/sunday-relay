@@ -31,10 +31,31 @@ import { redactTerminalText } from '../../mission/terminal';
  * its own configuration, a recovery record naming the session it resumed.
  */
 const BOUNDARY_SECRET_PATTERNS: readonly RegExp[] = Object.freeze([
-  /** An Authorization header, with any scheme and any value. */
-  /\bauthorization\s*[:=]\s*\S+/gi,
-  /** A bearer or basic credential quoted without the header name. */
+  /**
+   * A bearer or basic credential, WITH OR WITHOUT the header name — and it must
+   * run BEFORE the `authorization` rule below, which is the defect this order
+   * fixes.
+   *
+   * The two rules used to sit the other way round, and on the commonest input
+   * either will ever see — `Authorization: Bearer <token>` — the result was a
+   * visible token. `\bauthorization\s*[:=]\s*\S+` stops at the first whitespace,
+   * so `\S+` consumed the word `Bearer` and nothing more: the output read
+   * `[redacted] sk-ant-api03-…`, and the credential was now UNREACHABLE because
+   * the scheme word this rule anchors on had just been eaten by the rule before
+   * it. One rule destroyed the other's anchor and left the secret standing.
+   *
+   * Running the anchored rule first, `Bearer <token>` is redacted as a unit and
+   * the header rule then mops up the bare header name.
+   */
   /\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{12,}/gi,
+  /**
+   * An Authorization header, with any scheme and any value. It takes an OPTIONAL
+   * SCHEME WORD before the credential so that a scheme this module does not know
+   * — or one whose credential is too short for the rule above — cannot leave its
+   * value behind. Over-redacting a few words of prose on an `authorization:`
+   * line is the safe direction for a boundary; leaving a token is not.
+   */
+  /\bauthorization\s*[:=]\s*(?:[A-Za-z][A-Za-z0-9-]*\s+)?\S+/gi,
   /** A provider or transport session identifier. */
   /\b(?:sess|session|sid|conv|thread|req)[_-][A-Za-z0-9]{12,}/gi,
   /** A connection string with inline credentials. */
