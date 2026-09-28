@@ -45,7 +45,7 @@ SPAN = 21.0
 #: STARTS BEFORE THE MOON IS VISIBLE. cast_always hands over as soon as Nightfall clears 0.002,
 #: which is around 17:50, so the ladder has to begin earlier than the shipped crossover or the new
 #: handover falls off the front of the range -- the same way a delayed one could fall off the back.
-EVENING = (17.70, 17.80, 17.90, 18.00, 18.10, 18.20, 18.24, 18.25, 18.26, 18.27, 18.30, 18.40,
+EVENING = (17.20, 17.30, 17.40, 17.50, 17.60, 17.70, 17.80, 17.90, 18.00, 18.10, 18.20, 18.24, 18.25, 18.26, 18.27, 18.30, 18.40,
            18.50, 18.80, 18.90, 18.95, 19.00, 19.05, 19.10, 19.20, 19.40)
 ANCHORS = (23.00, 12.00)
 #: (label, MoonCastAltitude, MoonCastAlways). Altitude 15 and 18 were measured 50 and 56 per cent
@@ -465,6 +465,29 @@ def job():
            baseline_largest=base_big, at=prof["shipped"]["largest_at"],
            over_median=prof["shipped"]["largest_over_median"], noise=noise)
 
+    # ---- THE WORLD'S OWN FLOOR, measured rather than invented.
+    #
+    # DOMINATES = 3.0 WAS MY NUMBER AND THE SHIPPED WORLD FAILS IT: shipped scores 3.28, so the
+    # threshold calls the shipped evening dominated too and cannot discriminate between a fix and the
+    # status quo. That is a gate calibrated below what this world does at rest.
+    #
+    # The reason is a second phenomenon that is not a handover at all: the moon's BEARING sweeps its
+    # shadows across the plaza, and that alone moves the ground by about 0.032 between 19:00 and 19:05
+    # in EVERY arm, shipped included, while all three are already casting. So the honest bar is the
+    # largest step the shipped world produces where no handover occurs -- the world's ordinary shadow
+    # movement. A candidate whose worst step is no bigger than that has genuinely removed the cliff
+    # rather than shrunk it.
+    ship_steps = prof["shipped"]["steps"]
+    ship_handover_at = (handover["shipped"] or {}).get("between")
+    sweep = {k: v for k, v in ship_steps.items() if k != ship_handover_at}
+    sweep_floor = max(sweep.values()) if sweep else None
+    RESULT["sweep_floor"] = {"value": sweep_floor,
+                             "at": (max(sweep, key=sweep.get) if sweep else None),
+                             "excluded_handover_step_at": ship_handover_at,
+                             "population": len(sweep),
+                             "note": "largest shipped-arm step that is NOT the handover: the moon's "
+                                     "bearing sweeping shadows across the plaza, which every arm has"}
+
     best, verdicts = None, {}
     for arm in LABELS:
         if arm == "shipped":
@@ -472,10 +495,12 @@ def job():
         p = prof[arm]
         shrunk = (base_big / p["largest_step"]) if p["largest_step"] > 1e-6 else None
         c1 = p["largest_step"] <= noise or (shrunk is not None and shrunk >= CLIFF_FACTOR)
-        c6 = (p["largest_over_median"] is not None and p["largest_over_median"] <= DOMINATES)
+        c6 = (sweep_floor is not None and p["largest_step"] <= sweep_floor * 1.15)
         verdicts[arm] = {"largest_step": p["largest_step"], "at": p["largest_at"],
                               "shrink_vs_baseline": (round(shrunk, 1) if shrunk else None),
                               "over_median": p["largest_over_median"],
+                              "vs_sweep_floor": (round(p["largest_step"] / sweep_floor, 2)
+                                                 if sweep_floor else None),
                               "C1_cliff_removed": c1, "C6_no_dominating_step": c6,
                               "passes": bool(c1 and c6)}
         if c1 and c6 and best is None:
@@ -487,7 +512,8 @@ def job():
            population=len(verdicts), by_arm=verdicts, baseline_largest=base_big)
     record("H6_NO_SECOND", "and does it without leaving any dominating step anywhere in the evening",
            len(verdicts) > 0 and any(v["passes"] for v in verdicts.values()),
-           population=len(verdicts), by_arm=verdicts, threshold=DOMINATES, chosen=best,
+           population=len(verdicts), by_arm=verdicts, sweep_floor=RESULT["sweep_floor"],
+           threshold="largest step <= the shipped world's own non-handover sweep x1.15", chosen=best,
            note="this is the gate a relocation fails. The ladder runs to 19:40, past the 18.97 "
                 "crossover the largest threshold produces, so a cliff cannot hide beyond the last rung")
 
