@@ -489,6 +489,62 @@ may only claim what the tree shows, and a patch script's exit status is part of
 the evidence.
 
 
+#### Then: knowledge that outlives its mission, and two defects another lane found
+
+**5. WHAT ONE MISSION VERIFIED, THE NEXT INHERITS.** A context packet is
+compiled from ONE run's brain entries, so until now everything a mission learned
+died with it — and the matched-pair learning proof had to seed the prior fact
+itself, which the readiness page admitted was the fixture's premise. The
+bootstrap now carries the project's VERIFIED and APPROVED claims into each new
+mission (`relay-bridge/julius/mission-knowledge.ts`): capped at 12, newest
+first, never from the run doing the carrying, never across projects, and each
+copy keeps its AUTHOR, its evidence and its standing — so mission B ranks a
+reviewer-verified fact as verified and B's reviewer still cannot self-verify it.
+Relevance is not decided there: the context integrity layer ranks and scopes
+what arrives, which is the whole reason the carry can stay this small. Proven
+against real PostgreSQL (A's verified fact inherited, A's assertion not, a
+replay inheriting nothing twice, another project inheriting nothing), and the
+packet proof now uses the carry's own entry ids and reads the standing off the
+record. Ledger C6, C7; corpus row 18; row 9: 68 → 78.
+
+**6. THE RERUN PATH, CORRECTED BY THE INTEGRATION LANE'S DRILL** (their
+`22b20921`, 31 of 33 clauses against the real bridge binary). Two of mine were
+wrong:
+- `rerun: true` reported the REQUEST, not the outcome, so a client that asked
+  for a rerun and was handed the run it already had would draw a second mission
+  that does not exist. The bootstrap outcome now carries `resumed`, and the
+  route reports `rerun` only when this call both asked and made one.
+- An UNCHANGED contract could never run again: run identity is the contract's
+  digest, so "do that again, exactly" named the run that had already finished.
+  An explicit rerun now folds a KEY into that identity — and the key must come
+  from the caller (`x-relay-julius-rerun-key`), because anything derived from
+  durable state changes the moment the rerun lands: derive it from the mission's
+  latest run and the retry computes a different identity and buys a THIRD
+  execution. Measured, not reasoned — the first implementation did exactly that
+  and the seam suite caught it. Without a key the answer is
+  `400 rerun_key_required`.
+- Their smaller point too: a 201 no longer says "it is driven by the mission
+  job" about a run that has already ended.
+
+**7. A CONTAINMENT HOLE IN THIS LANE'S CODE, ON THIS HOST.**
+`workspaceContained` (`docker-sandbox-adapter.ts`) checked for a leading slash
+and a `..` segment but never `isAbsolute(rel)`. On Windows `path.relative`
+cannot express another volume relatively and returns the target ABSOLUTE, so
+`relative('C:\\ws','D:\\secret\\x')` read as CONTAINED — and that predicate gates
+`permittedWorkspace`, which decides what is mounted. Every POSIX case in the
+containment suite passed, which is exactly how it survived; the suite now has
+the four cases that would have caught it. The integration lane found it by
+measuring the predicate here rather than trusting the suite. (Its two smaller
+notes — a browser-boundary test that compared backslashes to forward-slash
+prefixes and so scanned vacuously on Windows, and `node-tool-adapter`'s
+host-separator grep output — are theirs on their branch, `8de01bed`; the first
+is in a file this lane owns and is worth taking at merge.)
+
+**Readiness: 78% → 79%** (row 9 → 78, row 11 → 88, row 12 → 92; the table's own
+arithmetic, checked).
+
+#### Not done, by decision or by gate
+
 - Driving a run over HTTP — the deployment decision that spends money; the
   contract document says so.
 - Either route against a real PostgreSQL from a running bridge (the paid-run
