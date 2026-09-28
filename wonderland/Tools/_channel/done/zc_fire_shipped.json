@@ -1,0 +1,194 @@
+{
+ "name": "zc_fire_shipped",
+ "started": "2026-09-28 01:56:45",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "F00",
+   "name": "the approved flame surface is still what is on disk: translucent, softened, tapered",
+   "pass": true,
+   "detail": {
+    "blend_mode": "<BlendMode.BLEND_TRANSLUCENT: 2>",
+    "scalars": {
+     "EdgeSoftness": 2.6,
+     "TipFalloff": 2.2
+    },
+    "wanted": {
+     "EdgeSoftness": 2.6,
+     "TipFalloff": 2.2
+    },
+    "note": "the founder approved a SURFACE. Translucent rather than additive, with the noise-cut edge and the tip falloff, is what distinguishes it from the plume it replaced -- so a silent revert of the asset must not be able to pass as a shipped fire just because the name matches."
+   }
+  },
+  {
+   "id": "F01",
+   "name": "a fresh session already has the fire material on, with nobody typing anything",
+   "pass": true,
+   "detail": {
+    "wl_Look_FireMaterial": 1,
+    "note": "THE DIFFERENCE BETWEEN IMPLEMENTED AND SHIPPED. zc_fire_params set this to 1 itself and then proved the material worked, which is why item 4 was reported as done while a founder booting the game still saw the old plume."
+   }
+  },
+  {
+   "id": "F_RESTORE",
+   "name": "Relay OG is back on the Dog and the shipped fire setting is restored",
+   "pass": true,
+   "detail": {
+    "skin": "relay_og",
+    "wl_Look_FireMaterial": 1
+   }
+  },
+  {
+   "id": "F02",
+   "name": "every flame mascot draws the approved fire material at the shipped default",
+   "pass": true,
+   "detail": {
+    "drew": [
+     "arden_infernal",
+     "skeleton_flame"
+    ],
+    "wanted": [
+     "arden_infernal",
+     "skeleton_flame"
+    ],
+    "per_skin": {
+     "arden_infernal": [
+      "MID_M_WL_Fire_2",
+      "MID_M_WL_Fire_3"
+     ],
+     "skeleton_flame": [
+      "MID_M_WL_Fire_7",
+      "MID_M_WL_Fire_8"
+     ]
+    },
+    "note": "read off the instance the figure is WEARING, not off the asset -- an approved material that no component references is not a shipped fire."
+   }
+  },
+  {
+   "id": "F03",
+   "name": "with the knob forced off the fire material is gone, so the reading tracks the setting",
+   "pass": true,
+   "detail": {
+    "still_present": null,
+    "per_skin": {
+     "arden_infernal": [],
+     "skeleton_flame": []
+    },
+    "note": "THE CONTROL, and the reason this run is worth doing. 'A material with Fire in its name was found' proves nothing if it is found in both states: the clause would be satisfied by a figure that ignores the setting entirely."
+   }
+  },
+  {
+   "id": "F04",
+   "name": "the flame being DRAWN carries the approved softness and falloff, not just the right name",
+   "pass": true,
+   "detail": {
+    "softened": [
+     "arden_infernal",
+     "skeleton_flame"
+    ],
+    "wanted": [
+     "arden_infernal",
+     "skeleton_flame"
+    ],
+    "values": {
+     "EdgeSoftness": 2.6,
+     "TipFalloff": 2.2
+    },
+    "per_skin": {
+     "arden_infernal": {
+      "EdgeSoftness": [
+       2.6
+      ],
+      "TipFalloff": [
+       2.2
+      ]
+     },
+     "skeleton_flame": {
+      "EdgeSoftness": [
+       2.6
+      ],
+      "TipFalloff": [
+       2.2
+      ]
+     }
+    },
+    "note": "a material instance can override its parent's scalars. The founder approved the shaped surface, so the shaping has to survive to the instance that renders."
+   }
+  }
+ ],
+ "asset": {
+  "scalars": {
+   "EdgeSoftness": 2.6,
+   "TipFalloff": 2.2
+  },
+  "blend_mode": "<BlendMode.BLEND_TRANSLUCENT: 2>"
+ },
+ "shipped_default": 1,
+ "readings": {
+  "default": {
+   "arden_infernal": {
+    "fire_materials": [
+     "MID_M_WL_Fire_2",
+     "MID_M_WL_Fire_3"
+    ],
+    "count": 2,
+    "scalars_on_the_drawn_instance": {
+     "EdgeSoftness": [
+      2.6
+     ],
+     "TipFalloff": [
+      2.2
+     ]
+    },
+    "capture": "default_arden_infernal.png"
+   },
+   "skeleton_flame": {
+    "fire_materials": [
+     "MID_M_WL_Fire_7",
+     "MID_M_WL_Fire_8"
+    ],
+    "count": 2,
+    "scalars_on_the_drawn_instance": {
+     "EdgeSoftness": [
+      2.6
+     ],
+     "TipFalloff": [
+      2.2
+     ]
+    },
+    "capture": "default_skeleton_flame.png"
+   }
+  },
+  "forced_off": {
+   "arden_infernal": {
+    "fire_materials": [],
+    "count": 0,
+    "scalars_on_the_drawn_instance": {},
+    "capture": "forced_off_arden_infernal.png"
+   },
+   "skeleton_flame": {
+    "fire_materials": [],
+    "count": 0,
+    "scalars_on_the_drawn_instance": {},
+    "capture": "forced_off_skeleton_flame.png"
+   }
+  }
+ },
+ "restored": {
+  "skin": "relay_og",
+  "wl_Look_FireMaterial": 1
+ },
+ "skins_drawing_the_fire_material_by_default": [
+  "arden_infernal",
+  "skeleton_flame"
+ ],
+ "skins_still_showing_fire_with_the_knob_off": null,
+ "skins_whose_drawn_instance_is_softened": [
+  "arden_infernal",
+  "skeleton_flame"
+ ],
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\fire_shipped",
+ "finished": "2026-09-28 01:57:52",
+ "seconds": 67.51,
+ "log": "F00 PASS the approved flame surface is still what is on disk: translucent, softened, tapered {'blend_mode': '<BlendMode.BLEND_TRANSLUCENT: 2>', 'scalars': {'EdgeSoftness': 2.6, 'TipFalloff': 2.2}, 'wanted': {'EdgeSoftness': 2.6, 'TipFalloff': 2.2}, 'note': 'the founder approved a SURFACE. Translucent rather than additive, with the noise-cut edge and the tip falloff, is what distinguishes it from the plume it replaced -- so a silent revert of the asset must not be able to pass as a shipped fire just because the name matches.'}\nF01 PASS a fresh session already has the fire material on, with nobody typing anything {'wl_Look_FireMaterial': 1, 'note': 'THE DIFFERENCE BETWEEN IMPLEMENTED AND SHIPPED. zc_fire_params set this to 1 itself and then proved the material worked, which is why item 4 was reported as done while a founder booting the game still saw the old plume.'}\nF_default_arden_infernal INFO default / arden_infernal {'fire_materials': ['MID_M_WL_Fire_2', 'MID_M_WL_Fire_3'], 'count': 2, 'scalars_on_the_drawn_instance': {'EdgeSoftness': [2.6], 'TipFalloff': [2.2]}, 'capture': 'default_arden_infernal.png'}\nF_default_skeleton_flame INFO default / skeleton_flame {'fire_materials': ['MID_M_WL_Fire_7', 'MID_M_WL_Fire_8'], 'count': 2, 'scalars_on_the_drawn_instance': {'EdgeSoftness': [2.6], 'TipFalloff': [2.2]}, 'capture': 'default_skeleton_flame.png'}\nF_forced_off_arden_infernal INFO forced_off / arden_infernal {'fire_materials': [], 'count': 0, 'scalars_on_the_drawn_instance': {}, 'capture': 'forced_off_arden_infernal.png'}\nF_forced_off_skeleton_flame INFO forced_off / skeleton_flame {'fire_materials': [], 'count': 0, 'scalars_on_the_drawn_instance': {}, 'capture': 'forced_off_skeleton_flame.png'}\nF_RESTORE PASS Relay OG is back on the Dog and the shipped fire setting is restored {'skin': 'relay_og', 'wl_Look_FireMaterial': 1}\nF02 PASS every flame mascot draws the approved fire material at the shipped default {'drew': ['arden_infernal', 'skeleton_flame'], 'wanted': ['arden_infernal', 'skeleton_flame'], 'per_skin': {'arden_infernal': ['MID_M_WL_Fire_2', 'MID_M_WL_Fire_3'], 'skeleton_flame': ['MID_M_WL_Fire_7', 'MID_M_WL_Fire_8']}, 'note': 'read off the instance the figure is WEARING, not off the asset -- an approved material that no component references is not a shipped fire.'}\nF03 PASS with the knob forced off the fire material is gone, so the reading tracks the setting {'still_present': None, 'per_skin': {'arden_infernal': [], 'skeleton_flame': []}, 'note': \"THE CONTROL, and the reason this run is worth doing. 'A material with Fire in its name was found' proves nothing if it is found in both states: the clause would be satisfied by a figure that ignores the setting entirely.\"}\nF04 PASS the flame being DRAWN carries the approved softness and falloff, not just the right name {'softened': ['arden_infernal', 'skeleton_flame'], 'wanted': ['arden_infernal', 'skeleton_flame'], 'values': {'EdgeSoftness': 2.6, 'TipFalloff': 2.2}, 'per_skin': {'arden_infernal': {'EdgeSoftness': [2.6], 'TipFalloff': [2.2]}, 'skeleton_flame': {'EdgeSoftness': [2.6], 'TipFalloff': [2.2]}}, 'note': \"a material instance can override its parent's scalars. The founder approved the shaped surface, so the shaping has to survive to the instance that renders.\"}\n"
+}

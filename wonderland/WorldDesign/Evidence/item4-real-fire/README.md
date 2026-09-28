@@ -232,3 +232,48 @@ and the captures are in `Tools/captures/zc/fire_reach/`.
 **The honest limitation:** at the gain that gives the approved plume's prominence, much of the ramp still
 clips. That is the same tension the previous author recorded — a bright plume and a shaped one pull against
 each other — and it is the reason the founder's own comparison matters more than another sweep of mine.
+
+---
+
+# Shipped and verified, 2026-09-28
+
+> **Founder, 2026-09-28:** "I approved the real fire."
+
+`wl.Look.FireMaterial` now defaults to **1**. That is the whole of what was outstanding: the material had been
+built, measured and left behind a console variable defaulting to 0, so a founder booting the game still saw the
+plume it was meant to replace. **Implemented is not shipped**, and I had been reporting item 4 against the
+former.
+
+## `zc_fire_shipped` — 6/6, status `measured`
+
+| clause | result |
+|---|---|
+| F00 the approved surface is still what is on disk | PASS — `BLEND_TRANSLUCENT`, EdgeSoftness **2.6**, TipFalloff **2.2** |
+| F01 a fresh session already has it on, nobody typing anything | PASS — `wl.Look.FireMaterial` reads **1** before the job writes it |
+| F02 every flame mascot draws it at the shipped default | PASS — Arden Infernal and Skeleton Flame, 2 live instances each |
+| F03 with the knob forced off the fire material is **gone** *(control)* | PASS — count drops to **0** for both |
+| F04 the drawn instance carries the approved shaping | PASS — EdgeSoftness 2.6 / TipFalloff 2.2 on `MID_M_WL_Fire_*` |
+| F_RESTORE Relay OG back, shipped setting restored | PASS |
+
+**F03 is why the run was worth doing.** "A material with Fire in its name was found on the figure" proves
+nothing on its own — if such a surface were present in both states, F02 would be satisfied by a figure that
+ignores the setting entirely. The count going to zero when the knob is forced off is what makes the positive
+reading mean something.
+
+**F04 guards the other silent failure.** A material instance can override its parent's scalars, so the approved
+*name* can render un-approved *shaping*. The softness and falloff are read off the `MID` the component actually
+wears, not off the asset.
+
+## The tension left standing, not tuned away
+
+The default has moved twice for different reasons, and the reasons are not interchangeable. It went to 0 on
+2026-09-26 on the strength of founder footage — *"these are the flames I need back"* — showing tall bright
+plumes; before that I had shipped this material on the strength of a side-by-side where it merely **clipped
+less**, which was not what was being asked for.
+
+What changed now is neither the material nor my reading of that video: **the founder has seen this surface and
+approved it.** So it ships exactly as approved, unretuned.
+
+The honest caveat: shaping a flame is precisely what takes prominence out of it. If it reads dim on the lawn,
+the gain is `wl.Look.FlameDim` and that is one word from the founder — not a licence for me to pre-emptively
+alter what they just signed off.
