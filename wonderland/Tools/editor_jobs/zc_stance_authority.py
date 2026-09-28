@@ -265,10 +265,16 @@ def job():
         pass
 
     RESULT["captures_dir"] = ROOT
-    prints = [p for p in (RESULT.get("capture_hashes") or {}).values() if p]
+    # THE FIGURE FRAMES ONLY. This clause counted the control captures too and failed, correctly reporting a
+    # duplicate -- but the duplicate was two CONTROL frames of the same world from the same camera with the
+    # figure hidden, which SHOULD be identical and says nothing about whether the costume restaged. A clause
+    # that fails on its own control is as useless as one that passes on nothing.
+    prints = [v for k, v in (RESULT.get("capture_hashes") or {}).items()
+              if v and not k.endswith("_nofigure.png")]
     record("T00", "each skin is a different picture",
            len(prints) == len(SKINS) and len(set(prints)) == len(prints),
-           files=len(prints), distinct=len(set(prints)),
+           figure_frames=len(prints), distinct=len(set(prints)),
+           controls_excluded=True,
            note="five skins photographed from one camera is exactly the shape that yields identical frames if "
                 "the costume did not restage, and identical frames would pass a stance comparison perfectly.")
 
@@ -306,22 +312,61 @@ def job():
         return
 
     # ---- RELAY OG IS THE AUTHORITY, so every other skin is compared to IT and not to an average.
-    base = (readings.get("relay_og") or {}).get("profile") or []
+    # ---- RESAMPLED TO A COMMON LENGTH, because every figure's box is a different width.
+    #
+    # The first run of the differencing version compared raw column lists and returned null for all four
+    # skins: Relay OG's box is 684 pixels wide and Celestial Light's is 900, so the lists could not be zipped.
+    # The comparison silently became "no comparison", and the clause below reported all four skins as
+    # standing differently on the strength of four nulls.
+    #
+    # THE CENTRAL HALF OF THE BOX, then resampled. A box's WIDTH is set by ornament -- Celestial Light's wings
+    # make it half again as wide as Relay OG's -- so normalising across the whole box would squeeze one
+    # figure's legs against another's. The legs sit near the centre on every one of these skins.
+    SAMPLES = 64
+
+    def resampled(reading):
+        prof = (reading or {}).get("profile") or []
+        if len(prof) < 8:
+            return None
+        lo = int(len(prof) * 0.25)
+        hi = int(len(prof) * 0.75)
+        core = prof[lo:hi]
+        if len(core) < 8:
+            return None
+        out = []
+        for k in range(SAMPLES):
+            idx = int(k * (len(core) - 1) / float(SAMPLES - 1))
+            out.append(core[idx])
+        return out
+
+    base = resampled(readings.get("relay_og"))
+    RESULT["resampled_to"] = SAMPLES
     diffs = {}
     for skin in SKINS:
         if skin == "relay_og":
             continue
-        other = (readings.get(skin) or {}).get("profile") or []
-        if len(other) != len(base) or not base:
+        other = resampled(readings.get(skin))
+        if base is None or other is None:
             diffs[skin] = None
             continue
         worst = max(abs(a - b) for a, b in zip(base, other))
         mean = sum(abs(a - b) for a, b in zip(base, other)) / float(len(base))
         diffs[skin] = {"worst_column": round(worst, 4), "mean_column": round(mean, 4)}
     RESULT["vs_relay_og"] = diffs
-    off = sorted(k for k, v in diffs.items()
-                 if v is None or v["worst_column"] > PROFILE_TOLERANCE)
+    # A COMPARISON THAT COULD NOT BE MADE IS NOT A DIFFERENCE. The previous run folded "null" into the same
+    # list as "differs", so four failed comparisons were reported as four skins standing wrongly -- which is
+    # the founder being told a defect exists on the strength of an instrument that produced nothing.
+    uncompared = sorted(k for k, v in diffs.items() if v is None)
+    off = sorted(k for k, v in diffs.items() if v is not None and v["worst_column"] > PROFILE_TOLERANCE)
     RESULT["skins_that_stand_differently"] = off or None
+    RESULT["skins_not_compared"] = uncompared or None
+    if uncompared:
+        record("T02", "every skin's legs sit where Relay OG's legs sit", False,
+               vs_relay_og=diffs, could_not_compare=uncompared,
+               note="VOID rather than a verdict: these skins produced no comparable profile, and reporting "
+                    "that as 'stands differently' would hand the founder a defect that has not been measured.")
+        RESULT["status"] = "VOID: at least one skin could not be compared"
+        return
     record("T02", "every skin's legs sit where Relay OG's legs sit",
            not off, vs_relay_og=diffs, tolerance=PROFILE_TOLERANCE, differing=off or None,
            note="the founder's item 3 is that one canonical behaviour stack drives every skin and the skins "
