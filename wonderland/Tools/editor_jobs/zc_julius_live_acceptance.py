@@ -42,7 +42,13 @@ DEAD_BRIDGE = "http://127.0.0.1:1"
 PAIRING_ATTEMPTS = 3
 # Every clause this job declares. A job stopped part-way -- an exception, the editor closing it -- has recorded only
 # passes so far; without this list its status would read "all clauses pass" over clauses that never ran.
-DECLARED = ["A01", "A01b", "A02", "A03", "A04", "A05", "A06", "A06b", "A06e", "A06f", "A06g", "A06h", "A06c", "A06d", "A07", "A08", "A09", "A10", "A10b", "A06k", "A06l", "A06i", "A06j", "A06m", "A06n", "A11"]
+DECLARED = ["A01", "A01b", "A02", "A03", "A04", "A05", "A06", "A06b", "A06e", "A06f", "A06g", "A06h", "A06c", "A06d", "A07", "A08", "A09", "A10", "A10b", "A06k", "A06l", "A06i", "A06j", "A06o", "A06m", "A06n", "A11", "A13"]
+# Every photograph an attempt must produce (founder, 2026-09-28): A13 judges this list, not merely the captures that
+# happened to be attempted, so a path that skipped one cannot pass by never asking.
+REQUIRED_PHOTOS = ["01_following_the_real_run.jpg", "01b_mission_contract_queued.jpg", "01c_live_terminal_queued.jpg",
+                   "01d_live_terminal_result.jpg", "02_recovered_after_restart.jpg", "02b_mission_contract_after_restart.jpg",
+                   "03a_refused_no_profile.jpg", "03b_world_created_mission.jpg", "03c_mission_contract_created.jpg",
+                   "03e_switched_back_to_old.jpg", "03f_switched_to_created_again.jpg", "03d_refused_session.jpg"]
 
 
 def job():
@@ -120,6 +126,27 @@ def job():
         return (view["tasks_for_mission"] == 1 and view.get("source") == "JULIUS" and view.get("state") == "QUEUED"
                 and view.get("run") == (True, run) and view.get("julius_state") == (True, "READY"))
 
+    def photograph(name):
+        # THE PHOTOGRAPH IS PART OF THE GATE, SO ITS ABSENCE IS A RESULT. Attempt 844522424c7b2341 recorded every
+        # capture as drawn and settled while CaptureViewportJpeg returned false for each one and nothing reached the
+        # disk: this job ignored the call's answer. Now the answer and the file are both recorded, and A13 fails on any
+        # photograph that is not on disk with bytes in it.
+        #   A PHOTOGRAPH IS PRODUCED only when all four hold: the helper said yes, the file exists, it has bytes, and it
+        #   was written by THIS call. A file already at the path is removed first, so nothing from before can stand in.
+        path = os.path.join(SHOTS["dir"], name)
+        if os.path.exists(path):
+            os.remove(path)
+        L.focus_game_viewport()
+        asked = time.time()
+        written = bool(H.capture_viewport_jpeg(path, 1900, 94))
+        exists = os.path.isfile(path)
+        size = os.path.getsize(path) if exists else 0
+        fresh = exists and os.path.getmtime(path) >= asked - 2.0
+        produced = written and exists and size > 0 and fresh
+        RESULT.setdefault("photos", {})[name] = {"written": written, "exists": exists, "bytes": size, "fresh": fresh,
+                                                 "produced": produced, "path": path}
+        return produced
+
     def capture_missions(world, name):
         # The Mission Contract VISIBLY, not only its data: open the Missions view, capture, and put it back as found.
         # WAITED ON STATE AND FRAMES, NOT SECONDS: the first half-minute of play runs at up to ~500 ms a frame (Core's
@@ -132,11 +159,12 @@ def job():
         shown = yield from wait(lambda: ui.is_missions_open(), 10)
         first = unreal.SystemLibrary.get_frame_count()
         drawn = yield from wait(lambda: unreal.SystemLibrary.get_frame_count() >= first + 6, 30)
-        H.capture_viewport_jpeg(os.path.join(SHOTS["dir"], name), 1900, 94)
-        RESULT.setdefault("captures", {})[name] = {"missions_open": bool(shown), "frames_drawn": bool(drawn)}
+        produced = photograph(name)
+        RESULT.setdefault("captures", {})[name] = {"missions_open": bool(shown), "frames_drawn": bool(drawn), "produced": produced}
         if not was_open:
             ui.toggle_missions()
             yield from wait(lambda: not ui.is_missions_open(), 10)
+        return produced
 
     def capture_terminal(world, name):
         # The Julius Live Terminal VISIBLY, by the same rule: opened, waited on state and frames, captured, put back.
@@ -164,12 +192,14 @@ def job():
                 return frame - seen["since"] >= 10
 
             settled = yield from wait(extension_settled, 20)
-        H.capture_viewport_jpeg(os.path.join(SHOTS["dir"], name), 1900, 94)
+        produced = photograph(name)
         RESULT.setdefault("captures", {})[name] = {"terminal_open": bool(shown), "frames_drawn": bool(drawn),
-                                                   "extension_settled": "no accessor in this build" if settled is None else bool(settled)}
+                                                   "extension_settled": "no accessor in this build" if settled is None else bool(settled),
+                                                   "produced": produced}
         if not was_open:
             ui.toggle_live_terminal()
             yield from wait(lambda: not ui.is_live_terminal_open(), 10)
+        return produced
 
     def start_play():
         if not (yield from wait(lambda: ues.get_game_world() is None, 600)):
@@ -181,6 +211,11 @@ def job():
         if not (yield from wait(lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 120)):
             return False
         yield 3.0
+        # THE GAME VIEWPORT TAKES FOCUS, as every one of Wonderland Core's jobs does after begin play. Without it the
+        # editor can treat the PIE viewport as background, and CaptureViewportJpeg gets nothing back (attempt
+        # 844522424c7b2341: every capture refused, nothing in the log).
+        L.focus_game_viewport()
+        yield 0.5
         return True
 
     def pair(world, stream, label, project=None):
@@ -321,7 +356,7 @@ def job():
         record("A06b", "the Mission Contract TASK SET holds the run: one Julius-sourced task for the mission, the same "
                "run id, Julius's own READY known on it, QUEUED (the data the surfaces should show)",
                shows_the_run(view, run), contract=view, on_contract=stream.describe().split("on-contract=")[-1].split(" |")[0])
-        H.capture_viewport_jpeg(os.path.join(SHOTS["dir"], "01_following_the_real_run.jpg"), 1900, 94)
+        photograph("01_following_the_real_run.jpg")
         yield from capture_missions(world, "01b_mission_contract_queued.jpg")
         # THE FOUNDER'S CRITERION IS VISIBLE: "the Mission Contract visibly shows QUEUED". The Missions panel shows a
         # mission exactly when the mission subsystem it reads holds a fold for one (SWonderlandMissionsPanel::
@@ -476,7 +511,7 @@ def job():
         record("A10b", "after the restart the Mission Contract shows the SAME run once -- no second task, Julius's READY "
                "known on it, QUEUED",
                shows_the_run(view, run), contract=view)
-        H.capture_viewport_jpeg(os.path.join(SHOTS["dir"], "02_recovered_after_restart.jpg"), 1900, 94)
+        photograph("02_recovered_after_restart.jpg")
         yield from capture_missions(world, "02b_mission_contract_after_restart.jpg")
         RESULT["describe_after_restart"] = stream.describe()
 
@@ -487,13 +522,40 @@ def job():
         # refusal must leave the world exactly as it was -- no task, no run, no QUEUED -- and say so on the terminal.
         create_project = params.get("createProjectId") or ""
         create_key = params.get("createKey") or ""
-        CREATION_CLAUSES = ("A06k", "A06l", "A06i", "A06j", "A06m", "A06n")
+        CREATION_CLAUSES = ("A06k", "A06l", "A06i", "A06j", "A06o", "A06m", "A06n")
         if not (hasattr(stream, "create_mission") and hasattr(stream, "get_paired_project_id")):
             for cid in CREATION_CLAUSES:
                 record(cid, "creation from inside Wonderland", False,
                        reason="NOT IN THIS BUILD: the transport has no CreateMission / paired project")
         else:
             ui = unreal.WonderlandUiTestLibrary.get_ui(world)
+            missions = unreal.WonderlandUiTestLibrary.get_mission(world)
+
+            def visible(run_id, mission_id, other_runs, other_missions):
+                # WHAT A PERSON SEES for ONE run, read from the widgets' own state (founder, after attempt
+                # 844522424c7b2341, whose surfaces stayed on the first Julius task in storage). Every surface names this
+                # run or its mission; none names another; nothing says simulated, UNOBSERVED, STANDBY or "Not connected".
+                banner = str(missions.get_provenance_banner())
+                headline = str(missions.get_headline_label())
+                fold = str(missions.get_fold_mission_id())
+                section = str(ui.get_julius_section_state("JULIUS 3.3"))
+                term_banner = str(ui.get_julius_terminal_banner())
+                rows_now = str(ui.describe_julius_section("JULIUS 3.3", 20))
+                following = [r for r in rows_now.split("\n") if r.startswith("Julius: Following ")]
+                seen = {"adopted": str(stream.get_adopted_run_id()), "banner": banner, "headline": headline, "fold": fold,
+                        "section": section, "terminal_banner": term_banner, "following_rows": following,
+                        "simulated": bool(ui.is_julius_terminal_simulated())}
+                seen["ok"] = bool(
+                    seen["adopted"] == run_id
+                    and "JULIUS LIVE" in banner and run_id in banner and "READY" in banner
+                    and not any(o and o in banner for o in other_runs)
+                    and headline == "QUEUED" and fold == mission_id
+                    and section == "QUEUED" and run_id in term_banner and not any(o and o in term_banner for o in other_runs)
+                    and bool(following) and following[-1].startswith("Julius: Following %s" % mission_id)
+                    and not any(m and ("Following %s" % m) in rows_now for m in other_missions)
+                    and not seen["simulated"] and "Not connected" not in rows_now)
+                return seen
+
             objective = "Acceptance probe: a mission the world created as its player. It is never driven."
             requirements = ["Exists only to prove creation from inside Wonderland."]
             constraints = ["Never dispatch. No provider may be called on its behalf."]
@@ -531,10 +593,11 @@ def job():
             # A06k: NO PROFILE YET -- refused, and nothing pretends otherwise.
             answered = paired_b and (yield from create(create_key))
             check = (yield from refusal_holds("no-profile", (409,), ("execution_not_configured",), tasks_before, adopted_before)) if answered else {"holds": False}
-            yield from capture_terminal(world, "03a_refused_no_profile.jpg")
+            shot_03a = yield from capture_terminal(world, "03a_refused_no_profile.jpg")
             record("A06k", "REFUSED in-world when the project has no execution profile: 409 execution_not_configured -- no task, "
-                   "no run, the world still on what it showed, and the terminal says why",
-                   bool(create_project) and paired_b and answered and check["holds"], pairing=attempts_b, **check)
+                   "no run, the world still on what it showed, the terminal says why, and 03a is on disk",
+                   bool(create_project) and paired_b and answered and check["holds"] and shot_03a, pairing=attempts_b,
+                   photo_03a=shot_03a, **check)
 
             # The operator writes B's profile, the way an operator does.
             profile_answer = yield from ask_orchestrator("profile-b", {"action": "profile", "projectId": create_project})
@@ -548,32 +611,36 @@ def job():
                    profile_answer is not None and answered and check["holds"], profile=profile_answer, **check)
 
             # A06i: THE CREATION -- the same key the no-profile attempt used (it recorded nothing, so it is still free).
+            # DATA AND VISIBLE, both (founder, after attempt 844522424c7b2341): the data half passed there while every
+            # surface still named the previous mission.
             answered = yield from create(create_key)
             created_run = str(stream.get_last_created_run_id())
             created_mission = str(stream.get_last_created_mission_id())
+            previous_runs = [run, switch_run]
+            previous_missions = [mission]
             followed = bool(created_run) and (yield from wait(lambda: stream.get_adopted_run_id() == created_run, 60))
             yield from wait(lambda: ("Create: Created %s" % created_mission) in str(ui.describe_julius_section("JULIUS 3.3", 20)), 15)
+            yield from wait(lambda: visible(created_run, created_mission, previous_runs, previous_missions)["ok"], 15)
             view = contract_view(world, created_mission) if created_mission else {"tasks_for_mission": 0}
-            missions = unreal.WonderlandUiTestLibrary.get_mission(world)
-            yield from wait(lambda: str(missions.get_headline_label()) == "QUEUED" and created_run in str(missions.get_provenance_banner()), 15)
-            yield from capture_terminal(world, "03b_world_created_mission.jpg")
-            yield from capture_missions(world, "03c_mission_contract_created.jpg")
+            shot_03b = yield from capture_terminal(world, "03b_world_created_mission.jpg")
+            shot_03c = yield from capture_missions(world, "03c_mission_contract_created.jpg")
             rows = str(ui.describe_julius_section("JULIUS 3.3", 20))
+            seen = visible(created_run, created_mission, previous_runs, previous_missions)
             tasks_after_create = all_tasks(world)
-            record("A06i", "the WORLD created a mission as its paired OWNER -- 201, the bridge's own mission and run ids -- and "
-                   "follows exactly that run: ONE task on the Mission Contract, QUEUED over Julius's raw READY, the strip and the "
-                   "terminal naming the same run",
-                   answered and stream.get_last_creation_status() == 201 and created_mission.startswith("mission:wl-")
-                   and bool(created_run) and followed and view["tasks_for_mission"] == 1 and view.get("state") == "QUEUED"
-                   and view.get("julius_state") == (True, "READY") and view.get("run") == (True, created_run)
-                   and ("Julius: Following %s" % created_mission) in rows and ("Create: Created %s" % created_mission) in rows
-                   and str(missions.get_headline_label()) == "QUEUED" and created_run in str(missions.get_provenance_banner())
-                   and "READY" in str(missions.get_provenance_banner()),
+            data_half = bool(answered and stream.get_last_creation_status() == 201 and created_mission.startswith("mission:wl-")
+                             and bool(created_run) and followed and view["tasks_for_mission"] == 1
+                             and view.get("state") == "QUEUED" and view.get("julius_state") == (True, "READY")
+                             and view.get("run") == (True, created_run))
+            visible_half = bool(seen["ok"] and ("Create: Created %s" % created_mission) in rows and shot_03b and shot_03c)
+            record("A06i", "the WORLD created a mission as its paired OWNER and SHOWS it. DATA: 201, the bridge's own mission and "
+                   "run ids, followed exactly, ONE task QUEUED over Julius's raw READY. VISIBLE: the strip, the fold, JULIUS 3.3 "
+                   "and its banner all name the created run and mission and none names the previous one, the Created row is "
+                   "there, and 03b and 03c are on disk",
+                   data_half and visible_half, data_half=data_half, visible_half=visible_half,
                    status=stream.get_last_creation_status(), refusal=str(stream.get_last_creation_refusal()),
                    created_run=created_run, created_mission=created_mission, objective=objective,
-                   paired_project=str(stream.get_paired_project_id()),
-                   followed=bool(followed), contract=view, rows=rows, headline=str(missions.get_headline_label()),
-                   banner=str(missions.get_provenance_banner()))
+                   paired_project=str(stream.get_paired_project_id()), previous_runs=previous_runs,
+                   followed=bool(followed), contract=view, rows=rows, surfaces=seen, photo_03b=shot_03b, photo_03c=shot_03c)
 
             # A06j: THE RETRY -- the same key again is the SAME mission and run: no second task, no second follow.
             answered = yield from create(create_key)
@@ -587,6 +654,38 @@ def job():
                    and retry_view["tasks_for_mission"] == 1 and tasks_after_retry == tasks_after_create,
                    status=stream.get_last_creation_status(), run=str(stream.get_last_created_run_id()),
                    tasks_before=len(tasks_after_create), tasks_after=len(tasks_after_retry), contract=retry_view)
+
+            # A06o: THE FOLLOWED RUN IS CHOSEN BY IDENTITY, NOT BY LIST ORDER (founder, after attempt 844522424c7b2341,
+            # whose surfaces stayed on the first Julius task in storage). The old mission's task sits AHEAD of the created
+            # one on the contract, so a list-order rule passes the first step below and fails the second. Each step pairs
+            # for the project it follows -- a native session serves one project -- and follows the way the main walk does.
+            switch_steps = []
+
+            def switch_to(label, project_id, run_id, mission_id, other_runs, other_missions, photo):
+                stream.stop()
+                paired_ok, attempts = yield from pair(world, stream, label, project_id)
+                if paired_ok:
+                    console(world, "wl.Julius.Follow %s %s" % (project_id, run_id))
+                adopted_ok = bool(paired_ok) and (yield from wait(lambda: stream.get_adopted_run_id() == run_id, 60))
+                settled = adopted_ok and (yield from wait(lambda: visible(run_id, mission_id, other_runs, other_missions)["ok"], 20))
+                shot = yield from capture_terminal(world, photo)
+                seen = visible(run_id, mission_id, other_runs, other_missions)
+                switch_steps.append({"to": mission_id, "run": run_id, "paired": bool(paired_ok), "attempts": attempts,
+                                     "adopted": bool(adopted_ok), "settled": bool(settled), "photo": bool(shot),
+                                     "surfaces": seen})
+                return bool(adopted_ok and settled and seen["ok"] and shot)
+
+            back_to_old = yield from switch_to("switch-old", project, run, mission, [created_run], [created_mission],
+                                               "03e_switched_back_to_old.jpg")
+            again_created = yield from switch_to("switch-created", create_project, created_run, created_mission,
+                                                 [run, switch_run], [mission], "03f_switched_to_created_again.jpg")
+            tasks_after_switch = all_tasks(world)
+            record("A06o", "the followed run is chosen by IDENTITY: back to the old run, every surface names the old run and "
+                   "mission and none the created one; forward again, every surface names the created run and none the old -- "
+                   "nothing stays on whichever task is first in storage, no task is added or lost, 03e and 03f are on disk",
+                   back_to_old and again_created and tasks_after_switch == tasks_after_create,
+                   back_to_old=back_to_old, again_created=again_created,
+                   tasks_unchanged=tasks_after_switch == tasks_after_create, steps=switch_steps)
 
             # A06m: NOT THE OWNER -- the operator makes the player a MEMBER of B; creation is refused, the world keeps the
             # mission it follows. Then the role is restored.
@@ -604,10 +703,11 @@ def job():
             restart_answer = yield from ask_orchestrator("restart-bridge", {"action": "restart-bridge"}, timeout=120)
             answered = yield from create("%s-session" % create_key)
             check = (yield from refusal_holds("session", (401, 0), ("session_invalid", "not_paired"), tasks_after_create, created_run)) if answered else {"holds": False}
-            yield from capture_terminal(world, "03d_refused_session.jpg")
+            shot_03d = yield from capture_terminal(world, "03d_refused_session.jpg")
             record("A06n", "REFUSED in-world when the native session is no longer valid (the bridge restarted): session_invalid "
-                   "or not_paired -- no task, no run, and the terminal says to pair again",
-                   restart_answer is not None and bool(restart_answer.get("healthy")) and answered and check["holds"], **check)
+                   "or not_paired -- no task, no run, the terminal says to pair again, and 03d is on disk",
+                   restart_answer is not None and bool(restart_answer.get("healthy")) and answered and check["holds"] and shot_03d,
+                   photo_03d=shot_03d, **check)
     finally:
         # RESTORE THE LINK SETTING WHATEVER HAPPENED -- a failing clause, a TimeoutError, an exception, or the editor
         # closing the generator -- so no later session on this editor inherits the dead port. Non-yielding: a closing
@@ -617,6 +717,15 @@ def job():
         record("A11", "the editor's bridge URL is back to what it was before this job",
                after == original_url, before=original_url, after=after)
         end_play_now()
+        photos = RESULT.get("photos", {})
+        never_asked = [n for n in REQUIRED_PHOTOS if n not in photos]
+        not_produced = [n for n in REQUIRED_PHOTOS if n in photos and not photos[n].get("produced")]
+        record("A13", "every REQUIRED photograph of this attempt was produced: the helper said yes, the file exists in THIS "
+               "attempt's directory, it has bytes, and this capture wrote it -- a refused capture, a missing file or one "
+               "from before is not a photograph, and the photographs are part of the gate",
+               not never_asked and not not_produced, required=len(REQUIRED_PHOTOS),
+               produced=len([n for n in REQUIRED_PHOTOS if photos.get(n, {}).get("produced")]),
+               never_asked=never_asked, not_produced=not_produced, dir=SHOTS["dir"])
         ran = set(t["id"] for t in tests)
         missing = [c for c in DECLARED if c not in ran]
         record("A12", "the job ran to its end -- a clause that never ran is not a pass", not missing, missing=missing)
