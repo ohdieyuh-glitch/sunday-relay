@@ -197,3 +197,38 @@ The interior is still flat — the torn edge is there, the hot-core-to-tip colou
 this gain. The next lever is the colour ramp rather than the silhouette, and that is now the only part of the
 founder's sentence ("flicker, emissive falloff, softness/distortion") without a measured answer: flicker is
 measured (relative stddev 0.106), falloff and distortion are now in the surface.
+
+## And the colour ramp, so the interior is not poster paint
+
+The colour was multiplied in flat — one hue over the whole tongue — so the interior read as paint however
+torn the edge became. `M_WL_Fire` now ramps it: `lerp(deep, hot, fade)`, where `fade` is already
+`(1 - V) ^ TipFalloff` (1 at the foot, 0 at the tip), so the flame is pale and hot where it leaves the body
+and deepens as it rises.
+
+**Both ends are derived from the figure's own `Color`, not from new parameters.** The embodiment, the
+colourway, the heartbeat and the wardrobe's glow scale all dress flames through
+`SetVectorParameterValue("Color")`; a second authored colour would have to be written by every one of them or
+default to something wrong. Deriving means Skeleton Flame's blue ghostfire gets a pale-blue core and a
+deep-blue tip for free, and Arden's ember gets gold and crimson, with nothing else to set. `HotCore` (0.55)
+and `TipShade` (0.45) are exposed.
+
+## Where item 4 stands
+
+All three properties the founder named are now in the surface:
+
+| | |
+|---|---|
+| **flicker** | measured — relative stddev **0.1058**, swing 33,324 px over 18 frames |
+| **emissive falloff** | hot-core → deep-tip ramp, derived from the figure's own colour |
+| **softness / distortion** | translucent with a scrolling turbulent noise cutting the silhouette |
+
+And the silhouette is visibly no longer one solid blob.
+
+**It is still not shipped, deliberately.** `wl.Look.FireMaterial` stays at 0. The founder approved the current
+plume explicitly, on video — *"these are the flames I need back"* — and swapping an explicitly approved look
+for an alternative they have not seen is their call, not mine. The alternative is one console variable away
+and the captures are in `Tools/captures/zc/fire_reach/`.
+
+**The honest limitation:** at the gain that gives the approved plume's prominence, much of the ramp still
+clips. That is the same tension the previous author recorded — a bright plume and a shaped one pull against
+each other — and it is the reason the founder's own comparison matters more than another sweep of mine.

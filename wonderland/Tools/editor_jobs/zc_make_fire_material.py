@@ -228,8 +228,35 @@ def job():
     link(bite, "", mask, "")
     ME.connect_material_property(mask, "", unreal.MaterialProperty.MP_OPACITY)
 
+    # ---- A HOT CORE FADING TO A DEEP TIP, WHICH IS THE FOUNDER'S "EMISSIVE FALLOFF".
+    #
+    # The colour was multiplied in flat: one hue over the whole tongue, so the interior read as poster paint
+    # however torn the edge became. Real flame is pale and hot where it leaves the body and deepens as it
+    # rises and cools.
+    #
+    # BOTH ENDS ARE DERIVED FROM THE FIGURE'S OWN "Color", NOT FROM NEW PARAMETERS. The embodiment, the
+    # colourway, the heartbeat and the wardrobe's glow scale all dress flames through
+    # SetVectorParameterValue("Color"), and a second authored colour would have to be written by every one of
+    # them or default to something wrong. Deriving means Skeleton Flame's blue ghostfire gets a pale-blue
+    # core and a deep-blue tip for free, and Arden's ember gets gold and crimson, with nothing else to set.
+    #
+    # `fade` is already (1 - V) ^ TipFalloff: 1 at the foot, 0 at the tip. So it is exactly the ramp.
+    white = node(unreal.MaterialExpressionConstant3Vector, -620, -110)
+    white.set_editor_property("constant", unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
+    hot = node(unreal.MaterialExpressionLinearInterpolate, -470, -80)
+    link(colour, "", hot, "A")
+    link(white, "", hot, "B")
+    link(scalar("HotCore", 0.55, -620, -180), "", hot, "Alpha")
+    deep = node(unreal.MaterialExpressionMultiply, -470, 10)
+    link(colour, "", deep, "A")
+    link(scalar("TipShade", 0.45, -620, 60), "", deep, "B")
+    ramp = node(unreal.MaterialExpressionLinearInterpolate, -300, -30)
+    link(deep, "", ramp, "A")
+    link(hot, "", ramp, "B")
+    link(fade, "", ramp, "Alpha")
+
     out = node(unreal.MaterialExpressionMultiply, -150, 40)
-    link(colour, "", out, "A")
+    link(ramp, "", out, "A")
     link(lit, "", out, "B")
     ME.connect_material_property(out, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     yield 0.4
