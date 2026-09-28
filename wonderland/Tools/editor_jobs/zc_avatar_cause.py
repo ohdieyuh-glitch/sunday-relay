@@ -56,7 +56,18 @@ RUNGS = (
     ("vsm_off", (("r.Shadow.Virtual.Enable", 0),), False),
     ("lumen_off", (("r.Lumen.DiffuseIndirect.Allow", 0),), False),
     ("shadows_off", (("r.ShadowQuality", 0),), False),
-    ("avatar_no_shadow", (), True),
+    ("avatar_no_shadow", (), "shadow"),
+    # THE RUNG THE FIRST RUN EARNED. Global Lumen off saved 164.89 ms of a 203.22 ms frame -- it is the
+    # dominant cost and shadows are not: vsm_off was 21.53, all shadows off saved NOTHING (-4.86), and
+    # turning the avatar's own shadow casting off saved 4.33. My fix candidate was wrong and its clause said
+    # so. A Project Avatar is tens of thousands of emissive boxes, which is exactly what makes a global
+    # illumination pass expensive.
+    #
+    # So this takes the AVATAR out of Lumen instead of taking Lumen out of the world: per-component
+    # properties, so the scene keeps its global illumination and only the avatar stops contributing to it.
+    # That ships as a property on the figure rather than as a scalability setting that would flatten
+    # everything the founder has approved.
+    ("avatar_out_of_lumen", (), "lumen"),
 )
 SAMPLES = 26
 SETTLE_BUDGET_S = 120.0
@@ -177,6 +188,19 @@ def job():
                     pass
         return touched
 
+    def set_avatar_in_lumen(on):
+        """Whether the avatar CONTRIBUTES to global illumination, leaving the rest of the world untouched."""
+        touched = 0
+        for a in avatars:
+            for comp in a.get_components_by_class(unreal.PrimitiveComponent):
+                for prop in ("affect_dynamic_indirect_lighting", "affect_distance_field_lighting"):
+                    try:
+                        comp.set_editor_property(prop, on)
+                        touched += 1
+                    except Exception:                               # noqa: BLE001
+                        pass
+        return touched
+
     def measure(tag):
         rows, frozen, last_n = [], 0, None
         while len(rows) < SAMPLES:
@@ -206,8 +230,10 @@ def job():
     for name, knobs, touches_avatar in RUNGS:
         for k, v in knobs:
             SL.execute_console_command(world, "%s %d" % (k, v))
-        if touches_avatar:
+        if touches_avatar == "shadow":
             touched_components = set_avatar_shadows(False)
+        elif touches_avatar == "lumen":
+            touched_components = set_avatar_in_lumen(False)
         yield 4.0
         back = {k: cvar(k) for k, _ in knobs}
         rows = []
@@ -231,8 +257,10 @@ def job():
         # put the knobs back before the next rung so the rungs do not accumulate
         for k, _ in knobs:
             SL.execute_console_command(world, "%s -1" % k if k == "r.ShadowQuality" else "%s 1" % k)
-        if touches_avatar:
+        if touches_avatar == "shadow":
             set_avatar_shadows(True)
+        elif touches_avatar == "lumen":
+            set_avatar_in_lumen(True)
         yield 2.0
 
     refused = []
@@ -264,14 +292,22 @@ def job():
     emit("A03", "INFO", "what each rung is worth, in frame milliseconds", {"baseline_frame_ms": base,
                                                                            "saved": saved})
 
-    fix = saved.get("avatar_no_shadow")
-    record("A04", "turning shadow casting off on the AVATAR'S OWN components is worth real milliseconds",
-           fix is not None and fix >= 15.0, saved_ms=fix, floor_ms=15.0,
-           baseline_frame_ms=base, all_rungs=saved,
-           note="THE ONE RUNG THAT IS A CANDIDATE FIX RATHER THAN A PROBE. It leaves the rest of the world "
-                "casting shadows normally, so it ships as a property on the avatar rather than as a "
-                "scalability setting that would degrade the whole scene. Whether the avatars look right "
-                "without their own shadows is the founder's call, and this only says what it would buy.")
+    record("A04", "shadows are NOT where the avatar's cost is",
+           (saved.get("shadows_off") or 0.0) < 15.0 and (saved.get("avatar_no_shadow") or 0.0) < 15.0,
+           saved_ms=saved, baseline_frame_ms=base,
+           note="STATED AS THE NEGATIVE IT IS. The first run measured all shadows off at -4.86 ms and the "
+                "avatar's own shadow casting at 4.33, against Lumen's 164.89. Shadows were my hypothesis "
+                "and they are not the answer; recording that is worth more than quietly dropping the rung.")
+
+    fix = saved.get("avatar_out_of_lumen")
+    record("A05", "taking the AVATAR out of global illumination recovers most of what global Lumen off does",
+           fix is not None and fix >= 60.0, saved_ms=fix, floor_ms=60.0,
+           global_lumen_off_saved=saved.get("lumen_off"), baseline_frame_ms=base, all_rungs=saved,
+           note="THE CANDIDATE FIX. Global Lumen off is 164.89 ms but flattens everything the founder has "
+                "approved about this world's lighting. This turns off only the AVATAR'S contribution to it, "
+                "per component, so the scene keeps its global illumination. If it recovers most of the "
+                "164.89 it ships as a property on the figure; if it recovers little, the cost is in the "
+                "avatar being LIT by Lumen rather than contributing to it, which is a different fix.")
 
     # ---- TAKE THE AVATAR BACK OUT. A figure left standing is a standing 110 ms on every later run in this
     # session, and on every other lane's.

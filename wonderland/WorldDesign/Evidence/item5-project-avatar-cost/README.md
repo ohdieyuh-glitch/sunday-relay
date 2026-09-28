@@ -42,3 +42,37 @@ so per-avatar marginal cost is inside the noise and only the 0-to-1 step is soli
 
 The founder's "must scale inside one Server Avatar" is arguably met: they do scale. The problem is the
 entry price.
+
+---
+
+## The cause, measured 2026-09-27 late (`zzBJ2_avatar_cause`)
+
+One avatar spawned by the job itself and destroyed afterwards. Baseline frame **203.22 ms**.
+
+| rung | frame ms saved |
+|---|---|
+| `r.Lumen.DiffuseIndirect.Allow 0` | **164.89** |
+| `r.Shadow.Virtual.Enable 0` | 21.53 |
+| avatar's own components stop casting shadows | 4.33 |
+| `r.ShadowQuality 0` (all shadows) | **−4.86** |
+
+**It is Lumen, and it is not shadows.** Turning off *all* shadow casting saves nothing at all, and taking the
+avatar's own shadows away saves 4.33 ms. Global illumination is 165 ms of a 203 ms frame.
+
+That makes sense from what a Project Avatar is: tens of thousands of emissive boxes, which is exactly the
+kind of subject that makes a global illumination pass expensive.
+
+**A hypothesis of mine died here and the clause is kept as a negative rather than deleted.** I built the rung
+"turn shadow casting off on the avatar's own components" as a candidate *fix* — targeted, shippable as a
+property, no scene-wide degradation. It buys 4.33 ms. The control said so plainly and the finding is that
+shadows were the wrong place to look.
+
+### What is being tested next
+
+Global Lumen off recovers 164.89 ms but flattens the lighting the founder has approved for this world. The
+targeted version is to take the **avatar** out of global illumination — `affect_dynamic_indirect_lighting`
+and `affect_distance_field_lighting` off per component — so the scene keeps its GI and only the avatar stops
+contributing to it. That ships as a property on the figure rather than as a scalability setting.
+
+If it recovers most of the 164.89, that is item 5's optimisation. If it recovers little, the cost is in the
+avatar being *lit by* Lumen rather than *contributing to* it, which is a different fix and worth knowing.
