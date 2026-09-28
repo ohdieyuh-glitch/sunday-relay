@@ -162,3 +162,38 @@ The hard edge survives **every lever reachable from code**:
 It is not a tuning problem. A flame built from opaque ribbon geometry has a polygon outline, and shading
 *within* those polygons cannot remove it. **Item 4 needs Niagara or camera-facing soft translucent cards** —
 the thing the founder named in their first sentence — and that is asset and geometry work, not a parameter.
+
+---
+
+## Implemented: a translucent, noise-cut edge
+
+**Everything above established what would not work.** The falloff across the ribbon is real and verified —
+`EdgeSoftness` 2.6 in the asset *and* in the drawn instance, multiplying straight into `MP_EMISSIVE_COLOR` —
+and it is invisible at gain 10→180 in both directions and at tongue counts 8, 4, 2 and **1**. At one tongue,
+with nothing left to overlap it, the flame was still a flat hard-edged mass.
+
+**An additive surface has no opacity channel.** It only ever *adds* light, so its silhouette is wherever its
+contribution stops mattering against the background — and a smooth ramp only moves that line rather than
+removing it. That is why every parameter sweep failed, and it is why the founder's word for the result is
+"plastic".
+
+**Fire has a ragged edge, and the way to get one is to cut the surface, not fade it.** `M_WL_Fire` is now:
+
+- **`BLEND_TRANSLUCENT`** instead of additive, so it has an opacity channel at all
+- a **`MaterialExpressionNoise`** (scale 6, 3 levels, turbulent) sampled on `(U, V + time·FlowSpeed)`, so the
+  grain **scrolls up the tongue** with the existing flicker bands rather than sitting still
+- opacity = `clamp((shape × noise) ^ EdgeBite)`, `EdgeBite` exposed at 0.55
+
+Photographed against the approved plume: the silhouette is **no longer one solid blob**. It breaks into
+separate tongues with torn tips and notched sides, and the Dog reads through the fire. That is the founder's
+"softness/distortion" appearing for the first time from a parameter this project controls.
+
+**Nothing approved changed.** `wl.Look.FireMaterial` still ships at 0, so this surface is reachable but not
+live, and the voxel-glow plume the founder's footage approved is untouched.
+
+### What is still short
+
+The interior is still flat — the torn edge is there, the hot-core-to-tip colour gradient is not reading at
+this gain. The next lever is the colour ramp rather than the silhouette, and that is now the only part of the
+founder's sentence ("flicker, emissive falloff, softness/distortion") without a measured answer: flicker is
+measured (relative stddev 0.106), falloff and distortion are now in the surface.

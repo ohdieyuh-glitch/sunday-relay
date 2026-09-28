@@ -43,27 +43,29 @@ SL = unreal.SystemLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "fire_reach")
 FIRE = "wl.Look.FireMaterial"
 GAIN = "wl.Look.FireGain"
+TONGUES = "wl.Look.FireTongues"
 SKIN = "arden_infernal"
 HOUR = 23.6
 DISTANCE = 900.0
 FRAMES = 6
 # (label, material, gain or None to leave it)
+# (label, material, gain, tongues)
 RUNGS = (
-    ("approved_voxel_glow", 0, None),
-    # ---- DOWNWARD, AND THE ARITHMETIC SAYS WHY THE UPWARD SWEEP COULD NOT WORK.
+    ("approved_voxel_glow", 0, None, None),
+    # ---- HOW MANY RIBBONS, AND IT IS THE LAST UNTESTED TERM.
     #
-    # The ribbon's UVs run 0 to 1 ACROSS its width (Pile.UVs gets (0, Up) and (1, Up)), so EdgeSoftness --
-    # now verified at 2.6 in the asset AND in the drawn instance -- really is fading each ribbon's left and
-    # right edges. It is invisible because the emissive is far over white: a falloff applied to a value ten
-    # times white still leaves most of the ribbon saturated, and the edge you SEE is the hard line where the
-    # curve finally crosses white, not the gradient below it.
+    # The ribbon material's edge falloff is verified -- EdgeSoftness 2.6 in the asset AND in the drawn
+    # instance, multiplying straight into MP_EMISSIVE_COLOR -- so each ribbon really does fade to nothing at
+    # its own left and right edges. It is invisible because there are EIGHT tongues, each half-width 0.30 of
+    # the flame's width, packed on a radius of 0.22 of it. They overlap heavily: one ribbon's faded edge is
+    # covered by the next, the stack saturates, and what is left is a solid mass with a hard outer boundary.
     #
-    # So a soft edge needs the flame DIMMER, not brighter, and every gain I have swept was 60 or above. That
-    # is the same mistake as sweeping PreviewGlow downward when the answer was up, in the other direction.
-    ("shaped_g10", 1, 10.0),
-    ("shaped_g20", 1, 20.0),
-    ("shaped_g35", 1, 35.0),
-    ("shaped_g60", 1, 60.0),
+    # So the softness cannot show until the ribbons stop hiding each other. Gain does not fix that, which is
+    # why sweeping it from 10 to 180 in both directions changed nothing.
+    ("shaped_t8", 1, 35.0, 8),
+    ("shaped_t4", 1, 35.0, 4),
+    ("shaped_t2", 1, 35.0, 2),
+    ("shaped_t1", 1, 35.0, 1),
 )
 HOT = 0.42
 STEP = 2
@@ -114,7 +116,7 @@ def job():
         RESULT["status"] = "VOID: no UI subsystem or no pawn"
         return
 
-    as_found = {FIRE: cvar(FIRE), GAIN: cvar(GAIN)}
+    as_found = {FIRE: cvar(FIRE), GAIN: cvar(GAIN), TONGUES: cvar(TONGUES)}
     RESULT["as_found"] = as_found
     record("R_READ", "both fire knobs can be read back before anything is changed",
            all(v is not None for v in as_found.values()), as_found=as_found)
@@ -193,12 +195,14 @@ def job():
 
     rungs = {}
     RESULT["rungs"] = rungs
-    for label, material, gain in RUNGS:
+    for label, material, gain, tongues in RUNGS:
         SL.execute_console_command(world, "%s %d" % (FIRE, material))
         if gain is not None:
             SL.execute_console_command(world, "%s %.2f" % (GAIN, gain))
+        if tongues is not None:
+            SL.execute_console_command(world, "%s %d" % (TONGUES, tongues))
         yield 4.0
-        back = {FIRE: cvar(FIRE), GAIN: cvar(GAIN)}
+        back = {FIRE: cvar(FIRE), GAIN: cvar(GAIN), TONGUES: cvar(TONGUES)}
         shots, prints = [], []
         for k in range(FRAMES):
             look()
@@ -227,7 +231,7 @@ def job():
     for k, v in as_found.items():
         SL.execute_console_command(world, "%s %g" % (k, v))
     yield 2.0
-    RESULT["restored"] = {FIRE: cvar(FIRE), GAIN: cvar(GAIN)}
+    RESULT["restored"] = {FIRE: cvar(FIRE), GAIN: cvar(GAIN), TONGUES: cvar(TONGUES)}
     record("R_RESTORE", "both fire knobs this job found were put back",
            all(RESULT["restored"][k] == as_found[k] for k in as_found),
            as_found=as_found, restored=RESULT["restored"])
@@ -238,7 +242,7 @@ def job():
     yield 3.0
 
     refused = []
-    for label, material, gain in RUNGS:
+    for label, material, gain, tongues in RUNGS:
         row = rungs.get(label) or {}
         b = row.get("read_back") or {}
         if b.get(FIRE) is None or abs(b[FIRE] - material) > 0.001:

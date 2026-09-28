@@ -63,7 +63,10 @@ def job():
     yield 0.3
 
     props = {}
-    for prop, value in (("blend_mode", unreal.BlendMode.BLEND_ADDITIVE),
+    # TRANSLUCENT, NOT ADDITIVE, AND THE OPACITY MASK BELOW IS WHY. An additive surface has no opacity
+    # channel at all: it only ever adds light, so its edge is wherever its contribution stops mattering and
+    # no amount of falloff removes that boundary. Translucent lets the noise CUT the silhouette.
+    for prop, value in (("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT),
                         ("shading_model", unreal.MaterialShadingModel.MSM_UNLIT),
                         # BOTH SIDES. A tongue of flame seen from behind must not vanish, and the ribbons are
                         # single sheets -- the geometry already duplicates its triangles for this, and the
@@ -181,6 +184,50 @@ def job():
     lit = node(unreal.MaterialExpressionMultiply, -300, 140)
     link(shape, "", lit, "A")
     link(flicker, "", lit, "B")
+
+    # ---- AND THE THING THAT WAS MISSING: A TORN EDGE, NOT A SMOOTH ONE.
+    #
+    # MEASURED BEFORE WRITING THIS. The falloff across the ribbon is real -- EdgeSoftness verified at 2.6 in
+    # the asset AND in the drawn instance, multiplying straight into the emissive -- and it is invisible at
+    # every setting tried: gain 10 to 180 in both directions, and tongue counts 8, 4, 2 and 1. At ONE tongue,
+    # with nothing left to overlap it, the flame is still a flat hard-edged mass.
+    #
+    # An ADDITIVE surface cannot dissolve its own edge. It only ever adds light, so the silhouette is wherever
+    # its contribution stops being negligible against the background -- and a smooth ramp just moves that line
+    # rather than removing it. That is why every parameter sweep failed, and the founder's word for the result
+    # is "plastic".
+    #
+    # FIRE HAS A RAGGED EDGE, and the way to get one is to CUT the surface with noise rather than to fade it.
+    # The noise scrolls up the tongue with the flicker bands, so the boundary crawls and breaks up instead of
+    # sitting still -- which is the founder's "softness/distortion" and is what a Niagara fire is doing too.
+    drift_uv = node(unreal.MaterialExpressionAdd, -1040, 430)
+    link(up, "", drift_uv, "A")
+    link(speed, "", drift_uv, "B")
+    grain_uv = node(unreal.MaterialExpressionAppendVector, -900, 420)
+    link(across, "", grain_uv, "A")
+    link(drift_uv, "", grain_uv, "B")
+    grain = node(unreal.MaterialExpressionNoise, -760, 420)
+    try:
+        grain.set_editor_property("scale", 6.0)
+        grain.set_editor_property("levels", 3)
+        grain.set_editor_property("output_min", 0.0)
+        grain.set_editor_property("output_max", 1.0)
+        grain.set_editor_property("turbulence", True)
+    except Exception:                                              # noqa: BLE001
+        pass
+    link(grain_uv, "", grain, "Position")
+
+    # The cut: shape * noise, then hard-ish through a power so the boundary is torn rather than smeared.
+    torn = node(unreal.MaterialExpressionMultiply, -620, 480)
+    link(shape, "", torn, "A")
+    link(grain, "", torn, "B")
+    bite = node(unreal.MaterialExpressionPower, -480, 480)
+    link(torn, "", bite, "Base")
+    link(scalar("EdgeBite", 0.55, -620, 560), "", bite, "Exp")
+    mask = node(unreal.MaterialExpressionClamp, -340, 480)
+    link(bite, "", mask, "")
+    ME.connect_material_property(mask, "", unreal.MaterialProperty.MP_OPACITY)
+
     out = node(unreal.MaterialExpressionMultiply, -150, 40)
     link(colour, "", out, "A")
     link(lit, "", out, "B")
@@ -201,7 +248,7 @@ def job():
     RESULT["vector_parameters"] = names
     RESULT["scalar_parameters"] = scalars
     record("R00", "the project has its own fire material", True, path=PATH, created=made)
-    record("R01", "it is additive, unlit and two-sided",
+    record("R01", "it is translucent, unlit and two-sided",
            props.get("blend_mode") is True and props.get("shading_model") is True
            and props.get("two_sided") is True, properties=props)
     record("R02", 'it exposes the "Color" parameter the figures already write',
