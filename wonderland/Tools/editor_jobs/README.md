@@ -790,16 +790,21 @@ that compensation being present but incomplete, not a lighting defect.
 
 Measured on 2026-09-27, all after the Nightfall complement landed:
 
-| subject | night / noon | glow geometry |
-|---|---|---|
-| world ground, one camera, one job | **0.596** | — |
-| Relay OG (matte mascot) | 0.625 | none |
-| Arden Infernal | 1.360 | 45% |
-| Skeleton Flame | 1.362 | 83% |
+| subject | night / noon | glow geometry | provenance |
+|---|---|---|---|
+| world ground | **0.596** | — | one job, one camera, one vantage |
+| Relay OG (matte mascot) | **0.545** | none | **same run, same spot, same pose as the row below** |
+| Skeleton Flame | **1.357** | 83% | **same run, same spot, same pose as the row above** |
+| Arden Infernal | 1.360 | 45% | earlier run, recorded before any of the night work |
 
-The ground and the matte figure agree closely and sit well under 1. The two luminous skins sit above it.
-**The variable is the subject's own emission, not the world** — and Arden read 1.360 *before* any of the
-night work, so this was never a regression.
+The matte control and the emissive subject were measured **in one run at one spot**, which is what makes
+this a comparison rather than two readings. They land either side of the 19.6% line: 0.545 and 1.357.
+The world ground agrees with the matte figure at 0.596. **The variable is the subject's own emission,
+not the world** — and Arden read 1.360 before any of the night work, so this was never a regression.
+
+An earlier cross-job figure of 0.625 for Relay OG pointed at the same conclusion and was discarded
+rather than used, because it came from a different job at a different place. A number that agrees with
+you is exactly the one to check the provenance of.
 
 When a day/night ratio surprises you, check whether the subject emits before checking whether the world
 changed. And measure the control **in the same job at the same spot**: a matte subject beside the
