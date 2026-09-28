@@ -1,7 +1,17 @@
 # Landing the 34186711214 repair as a worker-authored PR — founder runbook
 
 > **Who runs this:** the founder, on a machine that holds the `julius-worker`
-> GitHub App credential (App id `325202980`, `github.com/apps/julius-worker`).
+> GitHub App credential. **The App id is `4838349`** — read from `GET /app` on
+> 2026-09-27, which answers slug `julius-worker`, owner `ohdieyuh-glitch`. Until
+> that date this line said `325202980`, which is the BOT USER id (it is the number
+> in `325202980+julius-worker[bot]@users.noreply.github.com`, and that email stays
+> correct). A JWT minted with `325202980` as its `iss` is not this App, so the
+> next operator to follow this line would have met `404 Integration not found` at
+> the first call and had nothing to tell them why. The installation on
+> `ohdieyuh-glitch/sunday-relay` is `159218171`, `repository_selection: selected`,
+> granting `contents=write`, `pull_requests=write`, `issues=write`,
+> `actions=read`, `metadata=read`, `statuses=read` — enough for steps 1 and 2 and
+> deliberately not enough to merge.
 > **Why a runbook:** the fix is complete and gated on branch
 > `relay/julius-architect-gate-fix` at `d8c9fab1`, but its eight commits are
 > authored `Claude <noreply@anthropic.com>` and every environment that produced
@@ -21,7 +31,7 @@ flow and was not exercised from the cloud session, which has no App credential.
 >
 > | | |
 > |---|---|
-> | author | `julius-worker[bot]` (App id 325202980) — the provenance route's requirement, met |
+> | author | `julius-worker[bot]` (App id 4838349, bot user id 325202980) — the provenance route's requirement, met |
 > | head | `ebcebe1842b555efcf154ce295ae706fc25f4e7c` |
 > | tree | `868bf1c97d61b0d462945456a843b6e668beda45` — **identical** to the reviewed `d8c9fab1`, `git diff` empty |
 > | shape | 8 commits over `main` `872f1790`, one identity line, App as author AND committer |
@@ -98,6 +108,12 @@ git rev-list --count origin/main..HEAD
 Mint an installation access token for the App on this repository (the
 App-JWT → `POST /app/installations/{id}/access_tokens` flow, or whatever
 minted #234's token), then:
+
+**On Windows (mingw bash), two calls refuse a POSIX idiom.** `openssl` will not
+take a PEM through process substitution, and `curl` cannot read `-H @/dev/fd/3`:
+it answers `Failed to open /proc/<pid>/fd/3`. Both need a real path, so the
+Authorization header goes in a `mktemp` file at mode 600, removed by an `EXIT`
+trap — not on a command line, where a process list would carry the token.
 
 ```bash
 # Authenticate gh AND git from the App's token, read from a file or a prompt —
