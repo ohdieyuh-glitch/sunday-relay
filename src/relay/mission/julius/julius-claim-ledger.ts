@@ -122,6 +122,50 @@ export function juliusClaimPromotionsOnAccept(input: {
 }
 
 /**
+ * A PIECE OF KNOWLEDGE ONE MISSION VERIFIED AND ANOTHER MAY REUSE.
+ *
+ * The claim (its standing, its asserter, the evidence it was verified on) and
+ * the brain row it is about, plus the run that earned it — which the carried
+ * copy records, so a reader of mission B can always ask where a fact came from.
+ * Nothing about ranking or relevance: the context integrity layer decides what
+ * reaches a packet, and it decides it from provenance and standing, which is
+ * exactly what this carries.
+ */
+export interface JuliusCarriedKnowledge {
+  readonly sourceRunId: string;
+  readonly claim: JuliusMemoryClaim;
+  readonly entry: {
+    readonly entryId: string;
+    readonly kind: JuliusBrainEntry['kind'];
+    readonly text: string;
+    readonly evidenceIds: readonly string[];
+  };
+}
+
+/** The entry id a carried copy takes, so its origin is legible and a replay is idempotent. */
+export const juliusCarriedEntryId = (sourceRunId: string, entryId: string): string =>
+  `carried:${sourceRunId}:${entryId}`;
+
+/**
+ * THE CARRIED COPY'S CLAIM: the same standing, the same asserter, the same
+ * evidence — about the new entry id, with the source recorded as the reason.
+ *
+ * WHY THE STANDING TRAVELS. A reviewer in mission A verified this; re-deriving
+ * the copy's standing from its kind would silently demote it to an assertion and
+ * mission B would rank a verified fact as a guess. Carrying it is not a
+ * promotion — nobody is verifying anything here — it is the same claim, about a
+ * copy, and `assertedBy` still names whoever asserted it in A, which is what
+ * keeps self-verification impossible in B too.
+ */
+export function juliusCarriedClaim(carried: JuliusCarriedKnowledge): JuliusMemoryClaim {
+  return {
+    ...carried.claim,
+    claimId: juliusClaimIdFor(juliusCarriedEntryId(carried.sourceRunId, carried.entry.entryId)),
+    entryId: juliusCarriedEntryId(carried.sourceRunId, carried.entry.entryId),
+  };
+}
+
+/**
  * THE RECORD WINS. For every derived claim that has a recorded standing, the
  * recorded claim is used — trust, evidence, lineage and all. Everything else in
  * the qualification (context types, recorded-at, the contract set) is the

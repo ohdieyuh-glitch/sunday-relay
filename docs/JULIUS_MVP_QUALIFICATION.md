@@ -54,7 +54,9 @@ afterwards. Volume is not claimed and would not help.
 | C2 | a rejected document becomes repair, not completion | DETERMINISTIC | `src/relay/mission/julius/julius-mission-breadth.e2e.test.ts` | `still repairs a non-code mission when the reviewer rejects it` |
 | C3 | the same, on the LIVE path with no test command | DETERMINISTIC | `relay-bridge/julius/julius-live-composition.test.ts` | `runs nothing, records no TEST row, and still completes on the diff it produced` |
 | C4 | prior learning improves the next mission, leaking nothing | DETERMINISTIC | `src/relay/mission/julius/julius-learning-loop.e2e.test.ts` | `hands the coder the relevant finding and none of the residue` |
-| C5 | a memory's standing is durable, and a reviewer raises it — with self-verification refused by name | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `raises the architect` |
+| C5 | a memory's standing is durable, and a reviewer raises it | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `raises the architect` |
+| C6 | what mission A VERIFIED is inherited by mission B, and what A only asserted is not (gated on `JULIUS_TEST_DATABASE_URL`) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what mission A VERIFIED is inherited by mission B` |
+| C7 | the inherited fact reaches the next mission's packet AS VERIFIED, with none of the residue | DETERMINISTIC | `src/relay/mission/julius/julius-learning-loop.e2e.test.ts` | `hands the coder the relevant finding and none of the residue` |
 
 ## Category D — failure and recovery
 
@@ -70,7 +72,12 @@ afterwards. Volume is not claimed and would not help.
 | D8 | budget pressure stops the run rather than looping | DETERMINISTIC | `src/relay/mission/julius/julius-chaos.test.ts` | `stops rather than looping when the budget is exhausted mid-run` |
 | D9 | a failed attempt that billed still counts | DETERMINISTIC | `src/relay/mission/julius/julius-evidence-completeness.e2e.test.ts` | `carries the spend of an attempt that billed and then failed` |
 | D10 | context-authority clash fails closed | DETERMINISTIC | `src/relay/mission/julius/julius-context-delivery.e2e.test.ts` | `fails the task with a named failure class instead of throwing out of the tick` |
-| D11 | a provider declining the request itself is named, not filed as a bad credential | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `named CONTENT_REFUSED, never filed as a bad credential, not retried, not completed` |
+| D11 | a provider declining the request itself is re-planned by the architect, not collapsed | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `named, re-planned by the architect, and the mission is NOT collapsed` |
+| D11b | a SECOND refusal after the re-plan fails truthfully — one re-plan per unit | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `one re-plan per unit, and no loop` |
+| D11c | a declined REVIEW is never re-planned, and the mission cannot complete | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `is never re-planned: the work was not judged` |
+| D15 | one active run per mission: a duplicate cannot start a second execution | DETERMINISTIC | `relay-bridge/julius-mission-routes.test.ts` | `refuses a SECOND, different run of a mission that is still in flight` |
+| D16 | the explicit rerun path, and its key: one token, one rerun (gated on `JULIUS_TEST_DATABASE_URL`) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `an explicit rerun of an UNCHANGED contract runs it again` |
+| D17 | a test can no longer reach the live database | DETERMINISTIC | `src/relay/persistence/julius-test-database.test.ts` | `NO test file in this repository reads DATABASE_URL` |
 | D12 | the hosted coder's "content filter" reaches the taxonomy as CONTENT_REFUSED | DETERMINISTIC | `relay-bridge/julius/coding-agent-port.test.ts` | `the response was blocked by the content filter` |
 | D13 | a replayed tick manufactures no claim standing; the history is what happened | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `a replay manufactures no standing` |
 | D14 | claim standings on a REAL PostgreSQL: append-only, replay refused, history read back (gated) | DETERMINISTIC | `src/relay/persistence/julius-claim-standing.real-postgres.test.ts` | `records an admission, refuses its replay, records a promotion` |
@@ -98,12 +105,15 @@ afterwards. Volume is not claimed and would not help.
 - **C — a mission whose result is not a file.** A message sent, a form
   submitted, a booking made has no diff to show, and an implementation review
   still requires one. Named in `julius-mission-breadth.e2e` as a limit.
-- **D — a CONTENT refusal, on two of three peers.** D2 is a provider refusing
-  the CALLER; D11 and D12 are a provider declining the REQUEST, now a class of
-  its own (`CONTENT_REFUSED` → `INVALID_REQUEST`, never retried) on the Coding
-  Agent, and the Prompt Architect's `refused` now carries the same code. The
-  Independent Reviewer's provider still cannot report one: a Hermes decline
-  arrives as a verdict that does not parse, and is filed as malformed.
+- **D — a CONTENT refusal, now on all three peers, but only ROUTED for two.**
+  D2 is a provider refusing the CALLER; D11–D12 are a provider declining the
+  REQUEST — a class of its own on all three peers now (`CONTENT_REFUSED` on the
+  coder, `refused` on the architect, `review_content_refused` on the reviewer,
+  all carried as `INVALID_REQUEST`, never retried). The coder's and architect's
+  refusals are re-planned by the architect and the mission survives (D11); a
+  declined REVIEW is deliberately not re-planned and the mission cannot complete
+  (D11c), because an unjudged change may not be completed around. No LIVE trace
+  of any refusal exists: every row here is deterministic.
 - **Every category — LIVE.** One paid run, one shape. No adversarial shape has a
   live trace, and the improvement in C4 is measured over real runs of the real
   loop but rests on the fixture's stated premise that a worker without the fact

@@ -129,11 +129,25 @@ content, so it resumes the run it already made. A terminal prior run (`FAILED`,
 `COMPLETED`, `CANCELLED`) holds nothing and never locks a mission, and the guard
 is per mission — one mission's live run never blocks another's.
 
-**The explicit rerun.** Send `x-relay-julius-rerun: explicit` to start a
-deliberate second run while one is alive. It must come from a human act (an
-operator flag, a rerun affordance) and never from a retry default; anything but
-that exact word is no intent at all. The response says `rerun: true` when it was
-honoured, so a client that did not ask can never be told it got one.
+**The explicit rerun.** Send `x-relay-julius-rerun: explicit` **and**
+`x-relay-julius-rerun-key: <one stable token per intended rerun>`. Both are
+required: the intent must come from a human act (an operator flag, a rerun
+affordance) and never from a retry default, and the KEY is what makes the rerun
+identifiable — one token means one rerun however many times the request is sent.
+Without it the answer is `400 rerun_key_required`, because nothing derived from
+durable state can stand in: a rerun changes that state as it lands, so a derived
+discriminator would let the retry buy a third execution (measured). Anything but
+the exact word `explicit` is no intent at all.
+
+**An unchanged contract CAN be run again** — that is what the key is for. A plain
+re-POST of the same bytes resumes its own run, whatever state that run is in; an
+explicit rerun with a fresh key makes a distinct run of the same contract, and
+repeating that request with the same key returns the run it already made.
+
+**`rerun` on the wire reports the OUTCOME, not the request.** It is `true` only
+when this call both asked for a rerun and actually made one; a retry that landed
+on an existing run reports `false`. And `next` describes the state: a run that
+has already ended is never described as being driven.
 
 **Under concurrency.** The check and the insert are one SERIALIZABLE transaction,
 so two simultaneous creates cannot both decide a mission is free. Two identical

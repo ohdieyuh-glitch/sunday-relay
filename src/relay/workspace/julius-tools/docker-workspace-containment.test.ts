@@ -12,5 +12,16 @@ describe('workspace containment',()=>{
     ['a sibling','/srv/workspaces','/srv/other',false],
     ['an unrelated absolute path','/srv/workspaces','/etc',false],
     ['a prefix collision','/srv/work','/srv/workspaces',false],
+    /* WINDOWS, WHERE `relative` CANNOT ANSWER RELATIVELY. Across volumes it
+       returns the target absolute, so a predicate that only looked for a leading
+       slash and `..` called another drive contained — and this predicate gates
+       the mount. These cases are written with explicit separators so they mean
+       the same thing on either host: on POSIX they are exotic directory names
+       under the root's parent and still not contained; on Windows they are the
+       hole itself. Found by the integration lane measuring it here. */
+    ['another drive','C:\\ws','D:\\secret\\x',false],
+    ['a UNC share','C:\\ws','\\\\server\\share\\x',false],
+    ['the same drive, outside','C:\\ws','C:\\other',false],
+    ['the same drive, inside','C:\\ws','C:\\ws\\run-1',true],
   ])('%s',(_name,root,candidate,expected)=>expect(workspaceContained(root,candidate)).toBe(expected));
 });

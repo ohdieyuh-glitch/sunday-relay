@@ -36,8 +36,10 @@ import {
   type JuliusBootstrapPort,
   type JuliusBootstrapRequest,
 } from '../../src/relay/integration/julius/julius-port';
+import { createHash } from 'node:crypto';
 import { parseJuliusMissionActiveError } from '../../src/relay/persistence/julius-postgres';
 import { seedJuliusTaskContract, type JuliusMissionState, type JuliusTask, type JuliusTaskContract } from '../../src/relay/mission/julius';
+import { JULIUS_CARRIED_KNOWLEDGE_LIMIT, type MissionKnowledgeStore } from './mission-knowledge';
 import type { MissionSeedStore } from './mission-seed';
 
 /** The store methods bootstrap needs — `JuliusPostgresRepository` satisfies this directly. */
@@ -76,6 +78,8 @@ const REQUIRED_ROLES = ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWE
 export function createLiveJuliusBootstrapPort(deps: {
   readonly runs: RunCreationStore;
   readonly seeds: MissionSeedStore;
+  /** What earlier missions of this project verified. Absent: nothing is inherited. */
+  readonly knowledge?: MissionKnowledgeStore;
   readonly tenantId: string;
   readonly executionId: string;
   readonly now?: () => string;
@@ -103,7 +107,34 @@ export function createLiveJuliusBootstrapPort(deps: {
         }
       }
 
-      const runId = `run:${request.idempotencyKey}`;
+      /**
+       * A RERUN NEEDS AN IDENTITY OF ITS OWN, AND ONLY THE CALLER CAN GIVE IT ONE.
+       *
+       * Run identity is `sha256(contract)`: the same bytes name the same run,
+       * which is what makes a retry safe and what made the commonest rerun
+       * impossible — "run that again, exactly" named the run that had already
+       * finished, so the caller was handed a terminal run and told it was created
+       * (the Wonderland integration lane's drill, D09).
+       *
+       * SO AN EXPLICIT RERUN CARRIES A KEY, AND IT IS THE CALLER'S. A
+       * discriminator DERIVED from durable state cannot be retry-safe: derive it
+       * from the mission's latest run and the rerun itself becomes the latest, so
+       * the retry computes a different identity and buys a third execution —
+       * measured, not reasoned. A count has the same defect. The only value that
+       * is stable across a caller's own retries is one the caller holds, so an
+       * explicit rerun without a key is REFUSED by name rather than served
+       * unsafely. That is the whole of "preserve an explicit rerun path" and "no
+       * double execution from a duplicate request" at the same time.
+       */
+      if (request.rerunIntent === 'EXPLICIT' && (request.rerunKey ?? '').trim() === '') {
+        return refuse('rerun_key_required',
+          'An explicit rerun must carry a key of its own, so that repeating the request cannot buy a second execution. '
+          + 'Send one stable token per intended rerun.');
+      }
+      const identity = request.rerunIntent !== 'EXPLICIT'
+        ? request.idempotencyKey
+        : createHash('sha256').update(`${request.idempotencyKey}:rerun:${(request.rerunKey ?? '').trim()}`).digest('hex').slice(0, 24);
+      const runId = `run:${identity}`;
       const projectBrainRevision = Number.parseInt(request.projectBrain.revision, 10);
       try {
         await deps.seeds.ensureBase({
@@ -116,7 +147,7 @@ export function createLiveJuliusBootstrapPort(deps: {
           canonicalHash: request.missionBindingDigest,
         });
         const created = await deps.runs.createRun({
-          commandId: `bootstrap:${request.idempotencyKey}`,
+          commandId: `bootstrap:${identity}`,
           runId,
           missionId: request.missionId,
           projectId: request.projectId,
@@ -157,6 +188,37 @@ export function createLiveJuliusBootstrapPort(deps: {
             revision: 2 + request.requirements.length + request.constraints.length,
           },
         ]);
+        /**
+         * WHAT EARLIER MISSIONS VERIFIED, HANDED TO THIS ONE.
+         *
+         * A context packet is compiled from ONE run's brain entries, so until
+         * this everything a mission learned died with it and the matched-pair
+         * learning proof had to seed the prior fact itself. Only VERIFIED and
+         * APPROVED claims travel, only from this project, never from this run,
+         * newest first and capped — and each copy keeps its author, its
+         * evidence and its standing, so mission B ranks a reviewer-verified fact
+         * as verified and still cannot self-verify it. Relevance is not decided
+         * here: the context integrity layer ranks and scopes what arrives.
+         *
+         * OPTIONAL PORT, SILENT WHEN ABSENT: a deployment or a test that binds
+         * no knowledge store bootstraps exactly as it did before, and an
+         * unreachable one must not stop a mission starting — a mission with no
+         * inherited knowledge is a mission that has to work it out again, which
+         * is the state every mission was in until now.
+         */
+        if (deps.knowledge !== undefined) {
+          const carried = await deps.knowledge.verifiedProjectKnowledge({
+            projectId: request.projectId, excludeRunId: runId, limit: JULIUS_CARRIED_KNOWLEDGE_LIMIT,
+          }).catch(() => []);
+          if (carried.length > 0) {
+            await deps.knowledge.carryKnowledge({
+              runId, projectId: request.projectId, carried,
+              // After the seed entries, which end at this revision.
+              firstRevision: 3 + request.requirements.length + request.constraints.length,
+              occurredAt: now(),
+            }).catch(() => 0);
+          }
+        }
         await deps.runs.addTask({
           commandId: `bootstrap-task:${planTaskId(runId)}`, runId, projectId: request.projectId,
           task: {
@@ -210,14 +272,14 @@ export function createLiveJuliusBootstrapPort(deps: {
         let version = created.version;
         for (const step of ['PLANNING', 'READY'] as const) {
           const transitioned = await deps.runs.transition({
-            commandId: `bootstrap-${step.toLowerCase()}:${request.idempotencyKey}`,
+            commandId: `bootstrap-${step.toLowerCase()}:${identity}`,
             runId, projectId: request.projectId, expectedVersion: version, to: step,
             reasonCode: 'BOOTSTRAP', safeSummary: `Mission bootstrap advanced the run to ${step}.`,
             evidenceIds: [], occurredAt: now(),
           });
           version = transitioned.version;
         }
-        return { accepted: true, runId, acceptedAt: now(), state: 'READY' };
+        return { accepted: true, runId, acceptedAt: now(), state: 'READY', resumed: false };
       } catch (error) {
         // A replayed bootstrap lands here when the run already advanced past
         // CREATED: createRun idempotently returns the existing run, and the
@@ -229,7 +291,9 @@ export function createLiveJuliusBootstrapPort(deps: {
         const message = error instanceof Error ? error.message : '';
         if (message.includes('optimistic_concurrency_conflict') || message.includes('invalid_julius_transition')) {
           const existing = await deps.runs.loadRun(runId, request.projectId).catch(() => null);
-          return { accepted: true, runId, acceptedAt: now(), state: (existing?.state ?? 'READY') as JuliusMissionState };
+          // FOUND, NOT MADE: this is the duplicate-submit path, and a caller
+          // that is told otherwise will draw a run that does not exist.
+          return { accepted: true, runId, acceptedAt: now(), state: (existing?.state ?? 'READY') as JuliusMissionState, resumed: true };
         }
         if (message.includes('idempotency_payload_conflict')) {
           return refuse('mission_already_running', 'This idempotency key was already used for a different mission payload.');
