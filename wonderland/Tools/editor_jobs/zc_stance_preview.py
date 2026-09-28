@@ -47,6 +47,18 @@ REPO = os.path.dirname(os.path.dirname(CHANNEL))
 SKINS = ("relay_og", "celestial_light", "apollo", "arden_infernal", "skeleton_flame")
 # A pixel belongs to the figure when it is this far above the preview's black ground.
 FIGURE_FLOOR = 0.06
+# ---- THE RECT IS INSET BEFORE ANYTHING IS MEASURED, because the widget's rect INCLUDES ITS CHROME.
+#
+# The first run reported spread 0.906 and offset 0.0011 for all five skins, identical to four decimals, and
+# P04 caught it: every figure box came back as 406 by 446 pixels, which is the rect itself. The preview's
+# border, its 360-degree-view button and its caption are bright, so the box spanned edge to edge for every
+# costume and the "feet" were the bottom corners of a frame.
+#
+# CHOSEN BY MEASUREMENT, NOT GUESSED. Against the five captures already on disk: at no inset all five heights
+# are identical; at 0.08 they are 328, 362, 364, 348 and 358 -- five distinct figures; at 0.12 three of them
+# collapse onto 338 because the inset starts clipping the figures themselves. So 0.08 is the largest inset
+# that still admits the whole figure and the smallest that excludes the chrome.
+RECT_INSET = 0.08
 # Feet are the columns reaching within this fraction of the figure's height of its lowest point.
 FOOT_BAND = 0.04
 # Two stances agree when spread and offset each differ by less than this fraction of figure height.
@@ -76,10 +88,10 @@ def job():
     def stance_of(path, centre, size):
         """Figure extent and foot placement inside the preview rect, on its black ground."""
         w, h, chan, px = read(path)
-        rx0 = max(int((centre.x - size.x * 0.5) * w), 0)
-        ry0 = max(int((centre.y - size.y * 0.5) * h), 0)
-        rx1 = min(int((centre.x + size.x * 0.5) * w), w - 1)
-        ry1 = min(int((centre.y + size.y * 0.5) * h), h - 1)
+        rx0 = max(int((centre.x - size.x * (0.5 - RECT_INSET)) * w), 0)
+        ry0 = max(int((centre.y - size.y * (0.5 - RECT_INSET)) * h), 0)
+        rx1 = min(int((centre.x + size.x * (0.5 - RECT_INSET)) * w), w - 1)
+        ry1 = min(int((centre.y + size.y * (0.5 - RECT_INSET)) * h), h - 1)
         if rx1 - rx0 < 16 or ry1 - ry0 < 16:
             return None
 
@@ -122,6 +134,10 @@ def job():
             "offset_over_height": round(((min(feet) + max(feet)) * 0.5 - centre_x) / float(height), 4),
             # Reported so a reader can see the figure was actually staged and roughly the expected size.
             "fills_rect_height": round(height / float(max(ry1 - ry0, 1)), 3),
+            # WHETHER ORNAMENT IS CLIPPED BY THE INSET, reported and not fatal: the wide costumes reach the
+            # inset edge with their wings and plume, while their FEET sit near the centre, which is what this
+            # job measures. A reader should still be able to see that the width is the window and not the wing.
+            "touches_inset_sides": bool(lo_x <= rx0 + 1 or hi_x >= rx1 - 1),
         }
 
     if ues.get_game_world() is not None:
