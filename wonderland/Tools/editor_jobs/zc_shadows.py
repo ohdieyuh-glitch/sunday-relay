@@ -142,10 +142,38 @@ def job():
                 casters.append(row["label"])
         RESULT["directional_lights"] = census
 
-        record("S01", "no two lights are fighting over the same shadow",
+        # WHAT THIS CLAUSE HAS NEVER BEEN IN A POSITION TO SEE, measured 2026-09-28 (zc_dusk_shape).
+        #
+        # It samples ONCE, immediately after begin play, which is daytime. The day cycle writes only
+        # the MOON's cast_shadows; the sun's comes from the map and is never cleared. So at night
+        # BOTH cast, and this clause has passed every run without ever looking:
+        #
+        #     12:00  count=1  ['V2_Sun']            18:50  count=2  ['V2_Sun', 'WL_Moon']
+        #     18:25  count=1  ['V2_Sun']            19:00  count=2  ['V2_Sun', 'WL_Moon']
+        #     18:40  count=2  ['V2_Sun','WL_Moon']  23:00  count=2  ['V2_Sun', 'WL_Moon']
+        #
+        # Shipped behaviour, knobs at defaults. The comment at the moon's caster site in
+        # WonderlandDayCycle.cpp says "the world never has two directional shadow casters at once",
+        # and that sentence is TRUE for the crossover it was reasoning about and FALSE for the state
+        # that actually ships -- careful code, sound reasoning, a conclusion stated about all time
+        # when the argument only covered dusk.
+        #
+        # NOBODY HAS REPORTED DOUBLED SHADOWS, AND THAT IS A PROPERTY OF THE NUMBERS RATHER THAN OF
+        # THE DESIGN. At 23:00 the sun is at 0.0012 against the moon's 0.05, so its shadows are too
+        # faint to read. Anything that later raises the sun's night floor or lowers the moon turns a
+        # latent defect into a visible one with no code change and nothing to point at.
+        #
+        # A GREEN HERE THEREFORE MEANS "one caster in daylight", not "one caster". Left as it is on
+        # purpose: changing a gate in the middle of the investigation that found the fault destroys
+        # the ability to say what its earlier greens meant. Widen it to an hour sweep afterwards.
+        record("S01", "no two lights are fighting over the same shadow -- IN DAYLIGHT; see the note "
+                      "above, this clause never samples the night",
                len(suns) == 1 and len(casters) == 1,
                atmosphere_suns=suns, shadow_casters=casters, directional_lights=len(census),
-               note="the fills light the scene without casting, so only the sun draws a shadow")
+               sampled_at="once, immediately after begin play (daytime)",
+               known_blind_spot="two casters from ~18:40 to dawn, measured 2026-09-28 in zc_dusk_shape",
+               note="the fills light the scene without casting, so only the sun draws a shadow -- but "
+                    "the MOON does too, all night, and this clause cannot see it")
 
         # ------------------------------------------------------------ BIAS AND LEAKING
         # Two ends of one dial: too little bias is acne on lit surfaces, too much is a shadow that detaches
