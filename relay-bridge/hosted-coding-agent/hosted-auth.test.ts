@@ -11,8 +11,10 @@ import {
   hostedChildEnv, hostedChildEnvKeys,
 } from './hosted-envelope';
 import {
-  JULIUS_COST_BASES, juliusCostComponent, safeJuliusCostBasis, summariseJuliusMissionCost,
+  JULIUS_COST_BASES, consistentJuliusBillingPath, juliusCostComponent, safeJuliusCostBasis, summariseJuliusMissionCost,
 } from '../../src/relay/mission/julius/julius-cost-accounting';
+import { emptyObservation, foldHostedMessage } from './hosted-observation';
+import { hostedCoderCost } from '../julius/claude-code-coding-provider';
 
 /**
  * WHICH CREDENTIAL THE CODING AGENT WOULD USE, ASSERTED RATHER THAN HOPED FOR.
@@ -297,13 +299,48 @@ describe('subscription usage is never reported as API spend', () => {
     expect(summed.knownUsdMicros, 'the BASIS decides what is money, never the presence of a number').toBe(0);
   });
 
-  it('the provider sets the basis from the mode, at every ending', () => {
-    const source = readFileSync(join(process.cwd(), 'relay-bridge/julius/claude-code-coding-provider.ts'), 'utf8');
-    expect(source).toContain("? 'NOT_APPLICABLE'");
-    expect(source, 'and reports no API amount under a subscription')
-      .toMatch(/authMode === 'CLAUDE_SUBSCRIPTION'\s*\n\s*\?\s*null/u);
-    // All three endings must carry the mode, or a failed dispatch would quietly
-    // report the wrong basis.
-    expect(source.match(/authMode: input\.authMode/gu)?.length ?? 0).toBeGreaterThanOrEqual(3);
+  /**
+   * THIS WAS A SOURCE-TEXT TEST, AND IT PASSED WHILE THE SUCCESS ENDING WAS WRONG.
+   *
+   * It checked that the provider's file contained the subscription branch — which
+   * the diagnostics builder alone satisfied — while the SUCCESS ending priced itself
+   * by hand and settled the runtime's notional figure as PROVIDER_REPORTED API
+   * spend. The integration lane found it by reading the ledger path. Every ending
+   * now asks `hostedCoderCost`, and the proof that each one reaches the durable
+   * ledger correctly is `relay-bridge/julius/subscription-settlement.runtime.test.ts`,
+   * which drives real dispatches into the real kernel. This is the shared unit,
+   * fed an observation folded from a real SDK result message.
+   */
+  it('one function decides the cost for every ending, from the mode and never from the amount', () => {
+    const observed = foldHostedMessage(emptyObservation(), {
+      type: 'result', subtype: 'success', is_error: false, result: 'Done.', num_turns: 1, duration_ms: 10,
+      total_cost_usd: 0.42, usage: { input_tokens: 1, output_tokens: 1 }, permission_denials: [], session_id: 's-1',
+    });
+    expect(hostedCoderCost('CLAUDE_SUBSCRIPTION', observed)).toEqual({
+      costUsdMicros: null, costBasis: 'NOT_APPLICABLE', executionCostUsdMicros: 420_000, billingPath: 'SUBSCRIPTION',
+    });
+    expect(hostedCoderCost(undefined, observed)).toEqual({
+      costUsdMicros: 420_000, costBasis: 'PROVIDER_REPORTED', executionCostUsdMicros: null, billingPath: 'API_BILLED',
+    });
+    expect(hostedCoderCost('ANTHROPIC_API', observed), 'naming the default is the default').toEqual(hostedCoderCost(undefined, observed));
+    // NOTHING OBSERVED: no figure of either kind, and the basis still says which world it is.
+    expect(hostedCoderCost('CLAUDE_SUBSCRIPTION', null)).toEqual({
+      costUsdMicros: null, costBasis: 'NOT_APPLICABLE', executionCostUsdMicros: null, billingPath: 'SUBSCRIPTION',
+    });
+    expect(hostedCoderCost(undefined, null)).toEqual({
+      costUsdMicros: null, costBasis: 'UNKNOWN', executionCostUsdMicros: null, billingPath: 'API_BILLED',
+    });
+  });
+
+  it('a billing path that contradicts its basis is never recorded', () => {
+    expect(consistentJuliusBillingPath('SUBSCRIPTION', 'NOT_APPLICABLE')).toBe('SUBSCRIPTION');
+    expect(consistentJuliusBillingPath('API_BILLED', 'PROVIDER_REPORTED')).toBe('API_BILLED');
+    // An API bill whose amount nobody read is still an API bill.
+    expect(consistentJuliusBillingPath('API_BILLED', 'UNKNOWN')).toBe('API_BILLED');
+    expect(consistentJuliusBillingPath('SUBSCRIPTION', 'PROVIDER_REPORTED'), 'no charge beside a charge').toBeNull();
+    expect(consistentJuliusBillingPath('SUBSCRIPTION', 'UNKNOWN'), 'no charge beside a charge nobody read').toBeNull();
+    expect(consistentJuliusBillingPath('API_BILLED', 'NOT_APPLICABLE'), 'a bill beside no billing event').toBeNull();
+    expect(consistentJuliusBillingPath('subscription', 'NOT_APPLICABLE'), 'a word nobody defined').toBeNull();
+    expect(consistentJuliusBillingPath(undefined, 'NOT_APPLICABLE')).toBeNull();
   });
 });

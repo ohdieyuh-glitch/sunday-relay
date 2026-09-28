@@ -35,7 +35,7 @@ import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionOutcome, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
 import { safeReasonCode, type JuliusDispatchWorkspace, type JuliusProviderRouter } from './julius-router';
-import { juliusCostComponent } from './julius-cost-accounting';
+import { consistentJuliusBillingPath, juliusCostComponent } from './julius-cost-accounting';
 import { juliusContractDisposition, juliusContractDispositionFacts } from './julius-contract-disposition';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { deriveJuliusContextQualification } from './julius-context-provenance';
@@ -2885,6 +2885,23 @@ function executionPorts(
         basis: usage.costBasis, usdMicros,
         estimatedUsdMicros: usage.estimatedUsdMicros,
       });
+      /**
+       * WHAT A DISPATCH WITH NO BILL CONSUMED OF THE MISSION'S EXECUTION BUDGET.
+       *
+       * A subscription-backed Coding Agent is charged nothing per request, so its
+       * `usdMicros` stays null and its basis says `NOT_APPLICABLE`. The runtime still
+       * PRICES the work, and that figure is what the slot ledger charges, so a
+       * later round is granted exactly what it would be granted in API mode. Only
+       * ever beside `NOT_APPLICABLE`, and never folded into `usdMicros` or passed
+       * to the budget store, whose committed amount a reader may take for spend.
+       */
+      const executionUsdMicros = component.basis === 'NOT_APPLICABLE' ? maybe('executionUsdMicros') : null;
+      /**
+       * HOW IT WAS PAID FOR, as the adapter that resolved the credential said —
+       * and only when that agrees with the basis. Absent when no adapter said, so
+       * a reader falls back to the basis rather than to a guess.
+       */
+      const billingPath = consistentJuliusBillingPath(usage.billingPath, component.basis);
       // The coordinator emits `budget.reserved` and `budget.denied` and has no
       // event for the settlement, so the amount actually spent had no
       // authoritative record. It does now, and it is the OBSERVED usage rather
@@ -2902,6 +2919,8 @@ function executionPorts(
           // own table is not what anyone was charged, and one column for both
           // is how an estimate becomes a bill.
           estimatedUsdMicros: component.estimatedUsdMicros,
+          ...(component.basis === 'NOT_APPLICABLE' ? { executionUsdMicros } : {}),
+          ...(billingPath === null ? {} : { billingPath }),
         },
       });
       /**
@@ -2962,11 +2981,23 @@ function executionPorts(
         },
       });
     },
-    release: async ({ claim, reservationId, reason, usdMicros, spendUnknown }) => {
+    release: async ({ claim, reservationId, reason, usdMicros, spendUnknown, costBasis, executionUsdMicros, billingPath }) => {
       await deps.budget.release({ reservationId, reason, now: deps.clock.now(), usdMicros: usdMicros ?? null, spendUnknown });
+      /**
+       * NO BILL IS NOT NO CONSUMPTION. A subscription-backed attempt that the
+       * runtime priced has used the mission's execution budget even though nobody
+       * was charged, so its hold is kept exactly as a billed one's would be.
+       */
+      const notApplicable = costBasis === 'NOT_APPLICABLE';
+      const execution = notApplicable && typeof executionUsdMicros === 'number'
+        && Number.isFinite(executionUsdMicros) && executionUsdMicros >= 0 ? executionUsdMicros : null;
       // A failed attempt that billed before it failed is a settlement, not a
       // hand-back, and the record has to be able to say so.
-      const billed = (typeof usdMicros === 'number' && usdMicros > 0) || spendUnknown === true;
+      const billed = (typeof usdMicros === 'number' && usdMicros > 0) || spendUnknown === true
+        || (execution !== null && execution > 0);
+      const rowBasis = notApplicable ? 'NOT_APPLICABLE' : typeof usdMicros === 'number' ? 'PROVIDER_REPORTED' : 'UNKNOWN';
+      // As the provider decided it from its credential, and only when it agrees with the basis.
+      const path = consistentJuliusBillingPath(billingPath, rowBasis);
       /**
        * A RELEASE CLOSES THE RESERVATION EITHER WAY, AND THE ROW SAYS WHICH.
        *
@@ -2990,9 +3021,13 @@ function executionPorts(
           released: !billed,
           // A failure that billed a number the boundary reported is a
           // provider's own figure; one that billed an amount nobody could
-          // name is UNKNOWN, which is why the hold is not released.
-          costBasis: typeof usdMicros === 'number' ? 'PROVIDER_REPORTED' : 'UNKNOWN',
+          // name is UNKNOWN, which is why the hold is not released. One that
+          // could not be billed at all — a subscription-backed dispatch — says
+          // NOT_APPLICABLE, and carries what the runtime priced it at instead.
+          costBasis: rowBasis,
           estimatedUsdMicros: null,
+          ...(notApplicable ? { executionUsdMicros: execution } : {}),
+          ...(path === null ? {} : { billingPath: path }),
         },
       });
     },
@@ -5890,8 +5925,11 @@ async function allocateFor(input: {
     }
     const held: Record<string, number> = {};
     for (const [slot, account] of Object.entries(ledger.bySlot)) {
+      // Execution a subscription dispatch consumed is held like a bill would be:
+      // the billing mode must not change what the mission can still lend.
       held[slot] = account.outstandingUsdMicros
-        + account.settledKnownUsdMicros + account.settledUnknownUsdMicros;
+        + account.settledKnownUsdMicros + account.settledUnknownUsdMicros
+        + account.settledExecutionUsdMicros;
     }
     const runTasks = await input.deps.store.tasksForRun(input.run.runId, input.run.projectId);
     // COUNTED FROM THE RUN'S OWN ROWS, never from a field, so a restarted

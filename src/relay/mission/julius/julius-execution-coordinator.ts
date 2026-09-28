@@ -13,6 +13,28 @@ const reportedUsdMicros=(result:JuliusProviderResult|null):number|null=>{
  return typeof value==='number'&&Number.isFinite(value)?value:null;
 };
 /**
+ * HOW A FAILED ATTEMPT WAS PAID FOR, read off whichever report exists.
+ *
+ * A subscription-backed dispatch has no API charge to report, so its failure must
+ * not settle as `UNKNOWN` — the word for a charge that exists and was not read.
+ * It settles as `NOT_APPLICABLE`, and the runtime's own EXECUTION figure travels
+ * beside it, so the mission's execution budget is consumed as an API dispatch's
+ * would be while no bill is ever recorded. The billing path, which the provider
+ * decided from its credential, travels on every basis. The answered result speaks
+ * first, as it does for money; the failure's diagnostics otherwise. The ledger
+ * validates all of it; this only carries it.
+ */
+const settlementProvenance=(result:JuliusProviderResult|null,diagnostics:Readonly<Record<string,unknown>>|null|undefined):{costBasis?:'NOT_APPLICABLE';executionUsdMicros?:number|null;billingPath?:string}=>{
+ const usage=result!==null&&typeof result.usage==='object'&&result.usage!==null?result.usage as Record<string,unknown>:null;
+ const basis=usage?.costBasis??diagnostics?.costBasis;
+ const figure=usage?.executionUsdMicros??diagnostics?.executionCostUsdMicros;
+ const path=usage?.billingPath??diagnostics?.billingPath;
+ return{
+  ...(basis==='NOT_APPLICABLE'?{costBasis:'NOT_APPLICABLE' as const,executionUsdMicros:typeof figure==='number'&&Number.isFinite(figure)&&figure>=0?figure:null}:{}),
+  ...(typeof path==='string'?{billingPath:path}:{}),
+ };
+};
+/**
  * THE FACTS A SUCCESSFUL ATTEMPT LEAVES BEHIND.
  *
  * Failure has had this since paid run 34311556047: both catch-side endings
@@ -147,8 +169,13 @@ export interface JuliusExecutionPorts {
    * only the signature refused to carry it.
    */
   commit(input:{claim:JuliusExecutionClaim;reservationId:string;result:JuliusProviderResult}):Promise<void>;
-  /** `usdMicros` is what the failed attempt billed, when the boundary reported it. Spent money is charged, not released. */
-  release(input:{claim:JuliusExecutionClaim;reservationId:string;reason:string;usdMicros?:number|null;spendUnknown?:boolean}):Promise<void>;
+  /**
+   * `usdMicros` is what the failed attempt billed, when the boundary reported it. Spent money is charged, not released.
+   * `costBasis: 'NOT_APPLICABLE'` says no bill can exist (a subscription-backed dispatch); `executionUsdMicros` is then
+   * what the runtime priced the attempt at, for the execution budget only — never a charge. `billingPath` is how the
+   * attempt was paid for, as the provider decided it from its credential.
+   */
+  release(input:{claim:JuliusExecutionClaim;reservationId:string;reason:string;usdMicros?:number|null;spendUnknown?:boolean;costBasis?:'NOT_APPLICABLE';executionUsdMicros?:number|null;billingPath?:string}):Promise<void>;
   persistEvidence(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;evidence:readonly JuliusEvidence[]}):Promise<void>;
   /**
    * `evidence` is what this result CITES — the kept evidence, already
@@ -454,7 +481,8 @@ export class JuliusExecutionCoordinator {
      const failure=boundary instanceof JuliusDispatchError?boundary:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');const reported=reportedUsdMicros(answered);
      const billed=reported??(typeof failure.diagnostics?.costUsdMicros==='number'?failure.diagnostics.costUsdMicros:null);
      // A provider that ANSWERED ran, whatever the diagnostics say about it.
-     await this.ports.release({claim:request.claim,reservationId:reservation.reservationId,reason:failure.code,usdMicros:billed,spendUnknown:billed===null&&(answered!==null||failure.diagnostics?.runtimeStarted===true)});
+     // A subscription-backed failure says so, rather than reading as a charge nobody read.
+     await this.ports.release({claim:request.claim,reservationId:reservation.reservationId,reason:failure.code,usdMicros:billed,spendUnknown:billed===null&&(answered!==null||failure.diagnostics?.runtimeStarted===true),...settlementProvenance(answered,failure.diagnostics)});
      /* The class travels with the code on BOTH endings. A retry that is later
       * abandoned and a failure taken at once must leave the same diagnosis
       * behind, or the durable record would explain only the failures that

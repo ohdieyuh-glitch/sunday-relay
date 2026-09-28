@@ -37,6 +37,7 @@ import {
   type JuliusLifecycleDependencies, type JuliusLifecycleStore,
 } from './julius-lifecycle-runtime';
 import type { JuliusClock, JuliusRunRow, JuliusRuntimeStore } from './julius-runtime-ports';
+import { juliusCostComponent } from './julius-cost-accounting';
 
 /* -------------------------------------------------------------- identity */
 
@@ -731,11 +732,19 @@ export function projectJuliusSlotViews(
         account.findingsRaised += 1;
         break;
       case 'budget.settled': {
-        const amount = entry.facts.usdMicros;
+        /**
+         * ONLY A BILL IS KNOWN SPEND. This summed any number on the row whatever
+         * its basis, while the slot ledger's `settlementIsKnown` asked the basis —
+         * two readers of one row disagreeing, and the one this view took is the
+         * path by which a runtime's notional price would become API spend on the
+         * world's screen. `juliusCostComponent` is the one place that decides,
+         * for every reader; a row with no basis is read as it always was.
+         */
+        const component = juliusCostComponent({ taskId: entry.taskId ?? '', basis: entry.facts.costBasis, usdMicros: entry.facts.usdMicros });
         // AN UNKNOWN SETTLEMENT IS NOT A FREE ONE. It is counted as a component
         // nobody priced, which is what turns the sum into a floor.
-        if (typeof amount === 'number' && Number.isFinite(amount) && amount >= 0) {
-          account.knownUsdMicros += amount;
+        if (component.knownUsdMicros !== null) {
+          account.knownUsdMicros += component.knownUsdMicros;
         } else {
           account.unknownCostComponents += 1;
         }
