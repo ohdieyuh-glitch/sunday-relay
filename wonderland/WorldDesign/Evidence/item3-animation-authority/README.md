@@ -159,3 +159,34 @@ this possible — the legs are correct and invisible.
 
 The founder said "stand **and** walk". Standing is now observed to be consistent. Walking is the half nobody
 has looked at, and the drapery question is where I would look first.
+
+### Found: the drapery is rigged to the body, not the legs
+
+Read out of the part hierarchy in the files the runtime loads:
+
+| skin | drapery part | parented to | boxes | feet visible? |
+|---|---|---|---|---|
+| relay_og | — | — | — | yes |
+| celestial_light | — | — | — | yes |
+| skeleton_flame | — (has `footfire_l/r` **parented to the legs**) | — | — | yes |
+| **apollo** | `robe` | **`body`** | **622** | **no** |
+| **arden_infernal** | `robe` | **`body`** | **480** | **no** |
+
+**The two skins the founder would call weird are exactly the two with floor-length drapery rigged to the
+torso.** During a walk their legs swing correctly — the pose is copied field for field, which is measured —
+and the legs are entirely hidden behind a robe that is rigid with the body. What the eye sees is a figure
+whose visible silhouette does not move with its stride. **That reads as gliding.**
+
+This also explains why every pose measurement passes and the complaint persists. The measurements were right:
+the legs *are* copying Relay OG exactly. They just cannot be seen, and the thing that can be seen is welded
+to the chest.
+
+Note the contrast that makes the reading safe rather than a story: Skeleton Flame has `footfire_l` and
+`footfire_r` **parented to the leg parts**, so its effects do follow the gait — and its feet are visible and
+it is not one of the two.
+
+### The fix direction
+
+The robe has to follow the gait: either split it into leg-parented panels so each side swings with its leg,
+or drive a swing on the robe part from the stride phase the pose already publishes. Both are real work in the
+generator and the runtime, and neither is a cosmetic offset — this is the rigging cause the founder asked for.
