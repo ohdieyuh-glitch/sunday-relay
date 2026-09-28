@@ -484,3 +484,33 @@ And if the accessor exists but Python cannot reach it, the answer is a `UBluepri
 static — **not** a fourth guess at a subsystem getter. UE 5.8's Python has no world-subsystem getter of
 any kind; that cost four attempts, a wrong root cause relayed to a third lane, and two `EVIDENCE ONLY`
 gates.
+
+## Before measuring pixels, ask whether the engine already publishes the answer
+
+Seven versions of two jobs tried to decide, from a rendered frame, whether each mascot skin stands the way
+Relay OG stands. They failed seven distinct ways — a fixed band profiled a market stall, a brightest-row
+search found street lamps, raw column lists could not be compared and "could not compare" was reported as
+"differs", a silhouette measured drapery, feet found by differencing measured an edge shared by all five
+skins because hiding the subject also hides UI attached to it, and the preview rect turned out to include the
+widget's chrome so every figure box was the frame.
+
+The seventh works, and its finding is that the question cannot be answered that way at all: every costume
+changes what touches the ground, so a robe's hem is not a foot.
+
+**The Dog had been publishing the answer the whole time.** `GetCanonicalWornPose` is `BlueprintPure` and
+returns the pose built this frame; the costume's `GetWornPose` returns what it is wearing. "Is one canonical
+stack driving every skin" is a field-by-field comparison of two structs, not a photograph.
+
+The same shape appeared in the world lane on the same evening: `DescribePracticalLights` already reported the
+engine's own count of lit lamps, and three attempts inferred it from spawned actors instead, producing a
+confident and false theory about the light radius.
+
+**A photograph is for what only an eye can judge — does it look right.** For anything the engine computes,
+read the value and use the picture to confirm the value agrees.
+
+### And do not let a brief about FIXING become a rule about MEASURING
+
+The instruction was "fix the skeleton/AnimBP/retarget/root-pose cause, not cosmetic offsets". That forbids
+fixing the problem with offsets. It was read as forbidding the pose to be READ, which is a different sentence,
+and that misreading cost the evening. When a constraint seems to rule out the cheap measurement, re-read it:
+it is usually about the remedy, not the instrument.
