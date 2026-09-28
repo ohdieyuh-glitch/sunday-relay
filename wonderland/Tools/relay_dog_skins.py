@@ -1763,7 +1763,16 @@ def skeleton_flame():
     # (0.72, 0.94, 1.00); those are the skin's spectral sections and the founder's instruction is that they
     # stay distinct. A black part that glows must not become a third blue part, so this is barely cool and a
     # fraction of their strength.
-    figure.material("voidglow", "glow", (0.050, 0.065, 0.105), 0.55)
+    # STRENGTH RAISED FROM 0.55 AFTER MEASURING. Glow output in this project is Colour x Strength x the scene
+    # unit, which is pinned at 1000, so 0.55 with a blue of 0.105 emitted about 58 against ghost's 700 -- eight
+    # per cent of the spectral blue, and the leg band is five-sixths LIT BONE which at night is brighter than
+    # that. The seam was emissive and invisible, which measures the same as not emissive at all: the leg clause
+    # came back at 0.73 to 1.00 against the torso, meaning the legs hold their light no better than lit bone.
+    #
+    # 1.6 emits about 168 in blue, a quarter of ghost. Bright enough to read as an inner light at night, dark
+    # enough that a sunlit bone plate beside it is still far brighter by day, and still a long way from being a
+    # third spectral section -- which is the constraint the founder set.
+    figure.material("voidglow", "glow", (0.050, 0.065, 0.105), 1.6)
     figure.material("gold", "rim", (0.905, 0.720, 0.290), 1.0)
     figure.material("soulpulse", "glow", SKELETON_SOUL, 2.2)
     figure.material("soulveilpulse", "glow", SKELETON_SOUL, 0.55)

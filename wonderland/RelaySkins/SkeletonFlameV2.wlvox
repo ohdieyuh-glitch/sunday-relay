@@ -11,7 +11,7 @@ material ghost glow 0.2200 0.7000 1.0000 10.500
 material ghostpale glow 0.7200 0.9400 1.0000 18.000
 material void lit 0.0300 0.0400 0.0600 1.000
 material ash lit 0.6400 0.6100 0.5400 1.000
-material voidglow glow 0.0500 0.0650 0.1050 8.250
+material voidglow glow 0.0500 0.0650 0.1050 24.000
 material gold rim 0.9050 0.7200 0.2900 1.000
 material soulpulse glow 0.3600 0.9500 1.0000 33.000
 material soulveilpulse glow 0.3600 0.9500 1.0000 8.250

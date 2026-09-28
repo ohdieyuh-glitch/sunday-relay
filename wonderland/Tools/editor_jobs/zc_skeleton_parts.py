@@ -114,6 +114,12 @@ def job():
                 #
                 # The top decile is where a thin bright line lives. Bone does not reach it at night.
                 "luma_p90": round(lumas[int(len(lumas) * 0.9)] if lumas else 0.0, 4),
+                # AND THE DARKEST TENTH, for the opposite question. The skull clause measured the head's MEAN
+                # and failed at 0.77 to 1.05 against the torso -- because Skeleton Flame's head is mostly WHITE
+                # BONE with dark insets, so its mean is bone and sits wherever the torso's does. The founder's
+                # "black skull/face area" is the dark inset, which lives in the bottom decile. A head whose
+                # black stays black keeps a low p10 however bright the bone around it gets.
+                "luma_p10": round(lumas[int(len(lumas) * 0.1)] if lumas else 0.0, 4),
                 "blue_over_red": round(b / max(r, 1e-6), 3),
                 "cells": n}
 
@@ -306,7 +312,8 @@ def job():
     for hour_label, _ in HOURS:
         for face_label, _t in FACES:
             k = "%s/%s/close" % (hour_label, face_label)
-            s = part(k, "skull", "luma")
+            # p10, not the mean: the black face is the dark tail of a mostly white head. See region_stats.
+            s = part(k, "skull", "luma_p10")
             t = part(k, "torso", "luma")
             if s is None or t is None or t <= 0:
                 continue
