@@ -148,8 +148,13 @@ def job():
         previous attempt at a lower band. The HUD strip along the bottom is cut off.
         """
         w, h, chan, px = read(path)
+        # BELOW THE MISSION CONTRACT STRIP. The first run started the band at 0.02 and every rung reported
+        # reach 98.61 -- identical to two decimal places across five configurations, which is the signature
+        # of a saturated metric, not of five identical fires. Drawing the band on a capture and looking
+        # showed why: the strip's own gold text sits in the top of the column and was the "topmost hot row"
+        # every time. The flame's real top is far below it.
         x0, x1 = int(w * 0.42), int(w * 0.58)
-        y0, y1 = int(h * 0.02), int(h * 0.80)
+        y0, y1 = int(h * 0.11), int(h * 0.80)
         top_row = None
         hot = 0
         over_white = 0
@@ -239,6 +244,22 @@ def job():
     record("R02", "every rung photographed several distinct frames", not thin,
            frames={k: v.get("distinct_frames") for k, v in rungs.items()}, thin=thin or None,
            note="the flame animates, so identical frames would mean the capture, not the fire, is frozen.")
+
+    # ---- IS THE METRIC SATURATED? If every rung answers the same to two decimal places, it is measuring
+    # something all five share rather than the thing that differs between them, and nothing below is a
+    # finding. This is the guard the first run needed and did not have: it "qualified" all four shaped rungs
+    # on five identical readings.
+    reaches = [v.get("reach_pct") for v in rungs.values() if v.get("reach_pct") is not None]
+    saturated = len(reaches) >= 2 and (max(reaches) - min(reaches)) < 0.5
+    RESULT["reach_spread"] = round(max(reaches) - min(reaches), 3) if reaches else None
+    record("R00", "the rungs do not all answer the same, so the metric can tell them apart",
+           not saturated, reach_pct_by_rung={k: v.get("reach_pct") for k, v in rungs.items()},
+           spread=RESULT["reach_spread"],
+           note="THE GUARD THE FIRST RUN LACKED. Five configurations reading 98.61 to two decimals is a "
+                "saturated instrument, and it passed the qualifying clause on exactly that.")
+    if saturated:
+        RESULT["status"] = "VOID: every rung reached the same height, so the metric cannot discriminate"
+        return
 
     approved = rungs.get("approved_voxel_glow") or {}
     target = approved.get("reach_pct")

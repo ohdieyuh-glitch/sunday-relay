@@ -42,6 +42,7 @@
 CONCURRENT = False
 
 import math
+import os
 import time
 import unreal
 
@@ -133,14 +134,36 @@ def job():
         RESULT["status"] = "VOID: the world never settled, so the baseline would poison the ladder"
         return
 
-    avatars = [a for a in unreal.GameplayStatics.get_all_actors_of_class(
-        world, unreal.WonderlandProjectAvatar)] if hasattr(unreal, "WonderlandProjectAvatar") else []
+    # ---- SPAWN THE ONE AVATAR, THE WAY THE LADDER JOB DOES.
+    #
+    # THERE IS NO AWonderlandProjectAvatar CLASS to search for -- a first version looked for one and found
+    # nothing. What `/pa` puts in the world are plain figure actors, tracked privately on the UI subsystem,
+    # so the reliable route is to spawn one here with the same call the ladder uses and hold the handle.
+    avatar_dir = os.path.join(os.path.dirname(os.path.dirname(CHANNEL)), "ProjectAvatars")
+    files = []
+    if os.path.isdir(avatar_dir):
+        files = [os.path.join(avatar_dir, n) for n in sorted(os.listdir(avatar_dir))
+                 if n.lower().endswith(".wlvox")]
+    record("A00a", "there is a Project Avatar figure on disk to spawn", bool(files),
+           found=len(files), where=avatar_dir)
+    if not files:
+        RESULT["status"] = "VOID: no Project Avatar figures to spawn"
+        return
+
+    pawn = unreal.GameplayStatics.get_player_pawn(world, 0)
+    base = pawn.get_actor_location()
+    spot = unreal.Vector(base.x + 420.0, base.y, base.z)
+    avatars = []
+    body = L.spawn_figure_actor(world, spot, files[0], "WL_CauseAvatar_0")
+    if body is not None:
+        avatars.append(body)
+    yield 4.0
     RESULT["avatars_present"] = len(avatars)
-    record("A00", "there is at least one Project Avatar in the world to measure",
-           len(avatars) >= 1, avatars=len(avatars),
+    record("A00", "one Project Avatar stands in the world to measure",
+           len(avatars) >= 1, avatars=len(avatars), figure=os.path.basename(files[0]),
            note="the 110 ms is the cost of the FIRST one, so a world with none in it has nothing to say.")
     if not avatars:
-        RESULT["status"] = "VOID: no Project Avatar present"
+        RESULT["status"] = "VOID: could not spawn a Project Avatar"
         return
 
     def set_avatar_shadows(on):
@@ -249,6 +272,21 @@ def job():
                 "casting shadows normally, so it ships as a property on the avatar rather than as a "
                 "scalability setting that would degrade the whole scene. Whether the avatars look right "
                 "without their own shadows is the founder's call, and this only says what it would buy.")
+
+    # ---- TAKE THE AVATAR BACK OUT. A figure left standing is a standing 110 ms on every later run in this
+    # session, and on every other lane's.
+    removed = 0
+    for a in avatars:
+        try:
+            a.destroy_actor()
+            removed += 1
+        except Exception:                                           # noqa: BLE001
+            pass
+    RESULT["avatars_removed"] = removed
+    record("A_CLEAN", "the avatar this job spawned was taken back out",
+           removed == len(avatars), spawned=len(avatars), removed=removed,
+           note="it costs 110 ms of frame while it stands there, so leaving one behind would quietly tax "
+                "every later measurement in this session and in every other lane's.")
 
     RESULT["status"] = "measured"
     yield 2.0

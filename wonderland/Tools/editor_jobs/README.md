@@ -987,3 +987,31 @@ unambiguously the most saturated thing and the same locator is sound. Measured t
 **A passing clause is not evidence until you know which pixels it read.** This one was green, on a real
 feature that genuinely works, for a reason that had nothing to do with what it claimed to measure — which
 would have survived indefinitely, because nobody re-examines a pass.
+
+## Five rungs answering to two decimal places is a saturated metric, not five identical subjects
+
+`zc_fire_reach` swept the fire material and gain across five configurations and reported:
+
+```
+approved_voxel_glow  reach 98.61   shaped_g60  reach 98.61   shaped_g100 reach 98.61
+shaped_g140          reach 98.61   shaped_g180 reach 98.61
+```
+
+and its qualifying clause went **green on all four shaped rungs**. Identical to two decimals across a
+material change and a threefold gain change is not a finding about fire.
+
+Drawing the measurement band onto a capture and looking showed it immediately: the column's topmost "hot"
+pixels were the **Mission Contract strip's own gold text**, sitting in the top of the band in every frame.
+The flame's real top was hundreds of pixels lower.
+
+That is the third instrument this evening to measure the HUD instead of its subject — the others put a band
+across the nav strip and over the feet. **The HUD is drawn on every in-world capture and it is bright; any
+band that reaches the top or the bottom of the frame will find it.**
+
+Two rules:
+
+- **Exclude the HUD zones explicitly, and verify by drawing the band on a frame.** Guessing the fractions is
+  what put all three of them there.
+- **Add a saturation guard to every ladder**: if the rungs do not differ by more than the noise, VOID instead
+  of interpreting. A clause that passes on five identical readings would pass on a disconnected knob, a
+  frozen capture, or a band aimed at furniture — and it cannot tell you which.
