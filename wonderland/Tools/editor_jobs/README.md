@@ -514,3 +514,45 @@ The instruction was "fix the skeleton/AnimBP/retarget/root-pose cause, not cosme
 fixing the problem with offsets. It was read as forbidding the pose to be READ, which is a different sentence,
 and that misreading cost the evening. When a constraint seems to rule out the cheap measurement, re-read it:
 it is usually about the remedy, not the instrument.
+
+## Put the skin back, and read it back
+
+Seventy-six jobs in this tree wear a Relay Dog skin. About fifty never restore Relay OG afterwards.
+
+That cost another lane a whole acceptance attempt's photographs: a job wore five skins, restored none, and
+Celestial Light was standing in the world nine minutes later when they captured — a large teal crystal form
+in every frame, which they had to ask about. It invalidated none of their clauses, which read widget state,
+but it would have reached the founder in a screenshot as an unexplained object.
+
+Every render knob in this tree already follows the rule that a job leaving a knob changed makes every later
+measurement a reading of that job. The SKIN is the most visible piece of state in the world and is the one
+place the rule was not applied.
+
+```python
+ui.wear_relay_skin("relay_og")
+yield 3.0
+worn = str(dog.get_worn_skin_id())      # a restore that silently failed is the same as no restore
+record("X", "Relay OG went back", "relay_og" in worn.lower(), worn_after_restore=worn)
+```
+
+```sh
+for f in Tools/editor_jobs/*.py; do
+  grep -q wear_relay_skin "$f" && ! grep -q 'wear_relay_skin("relay_og")' "$f" && echo "NO RESTORE: $f"
+done
+```
+
+## A control that fails is worth more than the clauses it invalidates
+
+Three times in one evening a positive control turned a confident pass into a known unknown.
+
+- Every mascot skin reported the canonical gait pose, field for field, exactly. The control said the Dog's
+  stride phase had moved **0.0000** across six samples — it was standing still, a gait pose at rest is a
+  constant, and two frozen structs agree perfectly.
+- Five costumes measured the identical stance to four decimals. The control said all five figure boxes were
+  the same pixel size, which is the widget's frame and not a figure.
+- A day-versus-night comparison passed a clause about feet. The control said night photographed *brighter*
+  than day, because the sky clock was running.
+
+Each control cost one extra clause to write. Each caught a failure whose natural signature is a **pass**.
+Build the control before the measurement, and make it VOID the run rather than sit as one red beside the
+greens — a null from an instrument never shown to register a positive is not evidence of anything.
