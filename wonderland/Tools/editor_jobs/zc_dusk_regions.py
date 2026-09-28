@@ -430,8 +430,15 @@ def job():
             abs(s["worst_step_ground_luma"]) > max(3.0 * s["median_step_ground_luma"], 0.015)
 
     with_step = [n for n in complete if stepped(n)]
-    record("D_GLOBAL", "the evening step reproduces in more than one region, so it is the world's",
-           len(with_step) >= 2, regions_with_a_step=with_step, regions_measured=complete,
+    # AT THE SAME HOUR, or it is not a reproduction. Two regions stepping at unrelated hours is two
+    # local events, and the first version of this clause would have called that "the world's" -- it
+    # happened to pass honestly here because two of the three share 18:25, but the gate was not checking.
+    hours_of = {n: summary[n]["worst_step_at_hour"] for n in with_step}
+    shared = [h for h in set(hours_of.values())
+              if sum(1 for v in hours_of.values() if abs(v - h) < 0.01) >= 2]
+    record("D_GLOBAL", "the same hour steps in more than one region, so it is the world's and not local",
+           bool(shared), shared_hours=shared, step_hour_by_region=hours_of,
+           regions_with_a_step=with_step, regions_measured=complete,
            per_region={n: {k: summary[n][k] for k in
                            ("worst_step_ground_luma", "worst_step_readable_there",
                             "worst_step_at_hour", "median_step_ground_luma")}
