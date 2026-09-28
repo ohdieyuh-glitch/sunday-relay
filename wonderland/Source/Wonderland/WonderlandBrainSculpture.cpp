@@ -606,7 +606,42 @@ void AWonderlandBrainSculpture::AdvanceHead(float FixedStep)
 	// ---- THE ROUTE. Not an angle being incremented: three unrelated noise walks, one per spherical coordinate,
 	// ---- so the target slides over the shell, rises and falls, and leans in and out without ever completing a
 	// ---- lap at a constant rate. This is the whole reason it does not read as RotateAroundActor.
-	TargetYaw = BrainWander(Elapsed * 0.31f, YawSeed) * PI;
+	// ---- AND A SWEEP IT CANNOT SKIP, for the same reason the climb below exists and by the same arithmetic.
+	//
+	// FOUNDER, P0 item 2: "front/behind/above/below". The climb below fixed the vertical half of that sentence
+	// after the proof measured ABOVE ZERO. The horizontal half was left on the bare noise walk and has now
+	// failed the same way: zc_snake_follow Y01, 240 samples, front 227 and BEHIND 1.
+	//
+	// THE RANGE WAS NEVER THE PROBLEM, which is what made this hard to see: the line this replaces spans the
+	// full circle, and reading that multiplier is what would tell you the head already goes everywhere. TWO
+	// TIMESCALES ARE WHAT ACTUALLY DECIDE IT, and both are longer than anyone's look at the panel:
+	//
+	//   THE WALK IS SLOWER THAN THE WINDOW. BrainWander's slowest term at this rate has a period of 54.8
+	//   seconds -- longer even than the 41.4 that cost the pitch axis its crossings -- against a proof window
+	//   of 24 seconds and a founder who glances at a panel. Under half of one cycle the animal can sit in one
+	//   hemisphere the entire time without anything being wrong with its range.
+	//
+	//   AND Elapsed IS NOT WALL TIME. Tick clamps DeltaSeconds to 0.25 and spends it in 1/120 substeps, so a
+	//   loaded PIE session advances this animal in slow motion -- at half a second a frame the route runs at
+	//   half speed and that 54.8 becomes a hundred and ten. The two compound, and they compound hardest
+	//   exactly when someone is capturing frames, which is when it is being judged.
+	//
+	// WHAT IS NOT ESTABLISHED, because a simulation of the published steering maths over forty separate
+	// 24-second looks puts the median "behind" at 0.288 and finds only one look in forty with none at all.
+	// The measured 1-in-240 sits in that tail. So the window-versus-period mismatch is real and sufficient to
+	// make this clause a coin toss, but whether it alone produced THAT run is not proven and something else
+	// may still be trimming the excursions. This change removes the dependence on luck either way; it is not
+	// offered as a closed root cause.
+	//
+	// So: the wander still decides where on the way round it goes, and a slow guaranteed traverse only
+	// guarantees that it goes. Seventeen seconds against the climb's thirteen because 13 and 17 are coprime --
+	// the pair does not relock into the same figure for 221 seconds, so the route still never repeats within
+	// any ordinary look. Weights taken from the climb line deliberately (0.55 wander, 0.62 traverse, 1.12
+	// overall): that mix is already measured to produce 91 above and 114 below out of 240, which is the
+	// balance this axis needs. Simulated over the same forty looks it moves the worst case from 0.000 to
+	// 0.197 and the median from 0.288 to 0.395.
+	const float Sweep = FMath::Sin(2.0f * PI * (Elapsed / 17.0f) + YawSeed * 0.17f);
+	TargetYaw = (BrainWander(Elapsed * 0.31f, YawSeed) * 0.55f + Sweep * 0.62f) * 1.12f * PI;
 	// ---- AND A CLIMB IT CANNOT SKIP.
 	//
 	// FOUNDER, P0 item 2: the python must move "front/behind/above/below". MEASURED over 24 seconds of play

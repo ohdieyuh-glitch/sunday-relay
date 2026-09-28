@@ -27,7 +27,19 @@ ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "snake_follow")
 
 #: 24 s at 10 Hz. The python's circuit is slow on purpose, and a shorter window can miss a whole side of the
 #: brain and report it as never visited.
-SAMPLES, INTERVAL = 240, 0.1
+# LONG ENOUGH TO CHARACTERISE THE ROUTE RATHER THAN ONE DRAW OF IT.
+#
+# 240 x 0.1 was 24 seconds, and the route's slowest yaw driver has a period of 54.8 seconds -- so the old
+# window watched under half of one cycle of the thing it was judging and then reported a coverage fraction
+# as though it were a property of the animal. Simulated over forty separate 24-second looks at the published
+# steering maths, "behind" ranges from 0.000 to well over a third depending only on WHEN you looked. A clause
+# that answers differently on identical code is not measuring the code.
+#
+# AND Elapsed IS NOT WALL TIME: the sculpture clamps DeltaSeconds to 0.25 and spends it in 1/120 substeps, so
+# a loaded PIE session -- which is exactly what a capture run is -- advances the animal slower than the clock
+# this loop counts on. The window has to be long enough to survive that, which is why the progression control
+# below exists rather than a longer timer alone.
+SAMPLES, INTERVAL = 600, 0.15
 
 #: How many frames of lag to search when matching a segment to the one ahead of it.
 MAX_LAG = 10
@@ -113,6 +125,39 @@ def job():
     }
     RESULT["sides"] = sides
     RESULT["head_reach_uu"] = {"x": round(reach_x, 1), "z": round(reach_z, 1)}
+
+    # ---- THE CONTROL: DID THE ANIMAL ACTUALLY GO ANYWHERE WHILE WE WATCHED?
+    #
+    # Coverage is only a property of the route if the route was travelled. An animal that barely moved gives
+    # the same front-heavy reading as one whose yaw never crosses to the back, and the two want opposite
+    # fixes -- so without this the clause below cannot tell "the head does not go behind" from "the head was
+    # in slow motion and we photographed a quarter of one breath". That distinction is not hypothetical here:
+    # the sculpture's own clock is clamped per tick, so the harder the machine is working the less of the
+    # route fits in this window.
+    #
+    # MEASURED AS ANGLE TURNED, NOT DISTANCE MOVED, because the radius springs in and out on its own and a
+    # head bobbing on the spot covers distance without going anywhere. Two full turns is the floor: less than
+    # that and no arrangement of the route could have shown every side, so the run is VOID rather than failed.
+    turned = 0.0
+    for a, b in zip(head, head[1:]):
+        na = max((a[0] ** 2 + a[1] ** 2 + a[2] ** 2) ** 0.5, 1e-6)
+        nb = max((b[0] ** 2 + b[1] ** 2 + b[2] ** 2) ** 0.5, 1e-6)
+        dot = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (na * nb)
+        turned += math.acos(max(-1.0, min(1.0, dot)))
+    turns = turned / (2.0 * math.pi)
+    RESULT["head_turns_observed"] = round(turns, 3)
+    record("Y00", "the head travelled far enough around the brain for coverage to mean anything",
+           turns >= 2.0, turns_observed=round(turns, 3), floor_turns=2.0,
+           seconds_watched=round(SAMPLES * INTERVAL, 1),
+           note="THE CONTROL. Angle turned, not distance moved: the radius springs in and out on its own, so "
+                "a head bobbing on the spot covers distance without going anywhere. Below the floor the "
+                "coverage reading below cannot distinguish a route that avoids the back from a route that "
+                "was watched in slow motion, and those want opposite fixes.")
+    if turns < 2.0:
+        RESULT["status"] = ("VOID: the head turned %.2f times in %.0fs, too little for coverage to be read"
+                            % (turns, SAMPLES * INTERVAL))
+        return
+
     record("Y01", "the head goes in front, behind, above and below the brain",
            all(v >= SAMPLES * 0.04 for v in sides.values()),
            samples_on_each_side=sides, of=SAMPLES,
