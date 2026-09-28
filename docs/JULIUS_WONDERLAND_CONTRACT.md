@@ -114,6 +114,13 @@ decision not taken here. The `409 mission_already_running` below fires only
 when the same key arrives with a different payload, which a content-derived
 key does not produce in practice.
 
+**Where the database comes from.** The bridge reads `JULIUS_DATABASE_URL`
+first and `DATABASE_URL` after it, from its own launch environment; with
+neither, every Julius route answers `503` naming both. The real-PostgreSQL test
+suites read **neither** — they read `JULIUS_TEST_DATABASE_URL`, which must name
+a throwaway database — so a machine whose profile exports a `DATABASE_URL` for
+the live store can never have a test suite write into it.
+
 **One active run per mission, unless somebody meant two.** A second, DIFFERENT
 contract for a mission that still holds a non-terminal run is refused
 `409 mission_run_already_active`, and the message names the run that holds it —

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { juliusTestDatabaseUrl } from './julius-test-database';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -18,12 +19,13 @@ import { juliusRestoreRequestFor } from '../mission/julius/julius-workspace-attr
  * for one task or one run never sees another's — which is what makes the
  * restore decision reconstructable by a process that did not write it.
  *
- * Runs wherever JULIUS_REAL_POSTGRES=1 (or JULIUS_REAL_INFRA=1) and DATABASE_URL
+ * Runs wherever JULIUS_TEST_DATABASE_URL names a THROWAWAY database (never DATABASE_URL
  * point at a PostgreSQL — the `first-live-topology` job — and is `todo`
  * elsewhere. No provider is involved.
  */
 
-const enabled = process.env.JULIUS_REAL_INFRA === '1' || process.env.JULIUS_REAL_POSTGRES === '1';
+const databaseUrl = juliusTestDatabaseUrl();
+const enabled = databaseUrl !== null;
 const suite = enabled ? describe : describe.todo;
 
 suite('Coding Agent attempt attribution on real PostgreSQL', () => {
@@ -71,7 +73,7 @@ suite('Coding Agent attempt attribution on real PostgreSQL', () => {
   };
 
   beforeAll(async () => {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    pool = new Pool({ connectionString: databaseUrl! });
     await new TransactionalWonderlandDatabase(pool).migrate();
     events = new JuliusEventPostgresRepository(pool);
     timeline = new JuliusTimelinePostgresRepository(pool);

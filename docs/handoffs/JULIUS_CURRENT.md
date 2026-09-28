@@ -430,7 +430,64 @@ to. The lifecycle proof now shows the delivered answer promoted UNVERIFIED →
 VERIFIED by the continuation's reviewer with nothing refused. Minimal: two
 `workerId` expressions and three event facts.
 
-#### Not done, by decision or by gate
+#### Then: the founder's priority list, in order
+
+**1. THE REVIEWER-SIDE CONTENT REFUSAL, AND WHERE A REFUSAL GOES** (`4e29983c`).
+`review_content_refused` is a shape of its own, classified before the engine
+give-ups (a content filter's sentence contains the word "error", and reading it
+as the provider giving up sends the same ask elsewhere to be declined again),
+carried as `INVALID_REQUEST` — the code the coder's `CONTENT_REFUSED` and the
+architect's `refused` carry, so one phenomenon has one code across three peers.
+The anchor is load-bearing and tested: a review that DISCUSSES a content filter
+is a review. Then the routing: one failed task fails the whole run, which is
+right for a crash and wrong for a refusal, so Julius now raises the guidance
+itself — a new `PROVIDER_DECLINED_REQUEST` checkpoint, origin `JULIUS`, authored
+by `JULIUS_COORDINATOR_AUTHOR` and never attributed to the declined worker — the
+existing barrier mints the architect's task and a continuation segment carrying
+the same work, and only then does the refused task end **SKIPPED** (its first
+producer anywhere) rather than FAILED. Bounded by durable state, not a counter:
+a unit that already holds a SKIPPED task has had its re-plan, so a second
+refusal fails truthfully (`REFUSAL_ALREADY_REPLANNED`) and a restart cannot buy
+another round. The reviewer is excluded: a declined review leaves the change
+unjudged, and an unjudged change may not be completed around. Three lifecycle
+e2e cases, including declined → re-planned → **COMPLETED**.
+
+**2. AUTHOR AND DELIVERER** (`4eb8a547`, above) — the same pass, kept minimal.
+
+**3. ONE ACTIVE RUN PER MISSION** (`80b91478`), the founder's decision as the
+integration lane relayed it. A second, DIFFERENT contract for a mission holding
+a non-terminal run is refused `mission_run_already_active` with the live runId in
+the message; an identical contract still resumes (its key is its own content); a
+terminal prior run never locks a mission; the guard is per mission. The explicit
+rerun is `x-relay-julius-rerun: explicit` — a header, because the body is the
+contract file and the parser ignores unknown keys, so a body flag would be
+silently dropped. The check sits INSIDE `createRun`'s SERIALIZABLE transaction,
+so check and insert are one act; `createRun` retries a serialization failure
+once. Five route cases and three against real PostgreSQL, including two
+identical requests racing to exactly one run — where the honest finding is that
+the LOSER may be answered `bootstrap_persistence_failure` (retryable), because a
+whole bootstrap is many writes and a concurrent twin loses one of them; its
+retry returns the one run. Never two runs, so never a second execution to bill.
+
+**4. THE INHERITED `DATABASE_URL`** — the hazard the integration lane reported.
+Every real-PostgreSQL suite now reads `JULIUS_TEST_DATABASE_URL` and nothing
+else; a sweep test walks `git ls-files` and fails if any test file reads
+`DATABASE_URL` again. Measured both ways: inherited variable +
+`JULIUS_REAL_POSTGRES=1` → 8 `todo` and the live database still has no
+`relay_wonderland` schema; a stated throwaway database → 8 passed. The runtime
+reads `JULIUS_DATABASE_URL` then `DATABASE_URL`, from its own launch
+environment, and every Julius route's 503 now names both. CI states the test
+variable beside the container it creates (one line in
+`.github/julius-live-executor.sh`).
+
+**A CORRECTION.** The claim-store commit (`f7330efa`) says "the bridge's two
+Julius route families share one lazy pool". That change was written but never
+applied — the patch that carried it was skipped by an earlier failure in the
+same command, and the message went out anyway. It is applied now, in this pass,
+along with the runtime variable. The lesson is the obvious one: a commit message
+may only claim what the tree shows, and a patch script's exit status is part of
+the evidence.
+
 
 - Driving a run over HTTP — the deployment decision that spends money; the
   contract document says so.
