@@ -1,0 +1,157 @@
+{
+ "name": "zc_sun_caster",
+ "started": "2026-09-28 06:54:39",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "C00",
+   "name": "the two-caster defect reproduces at 23:00 on this build",
+   "pass": true,
+   "detail": {
+    "casters": [
+     "V2_Sun",
+     "WL_Moon"
+    ],
+    "note": "the world lane measured this from the actor list. Reproduced here before anything is changed, because a fix for a defect that is not present is a change with no reason."
+   }
+  },
+  {
+   "id": "C01",
+   "name": "the approved night reads as the world lane measured it",
+   "pass": false,
+   "detail": {
+    "measured": 0.28654,
+    "their_figure": 0.108,
+    "note": "THE GATE'S OWN CALIBRATION. If this vantage does not reproduce their number then the gate below is measuring something else and no verdict from it means anything."
+   }
+  },
+  {
+   "id": "C02",
+   "name": "the sun's light component was found",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "C03",
+   "name": "a knob exists that stops the sun casting AND leaves the approved night where it is",
+   "pass": false,
+   "detail": {
+    "winner": null,
+    "trials": {
+     "dynamic_shadow_distance_movable_light": {
+      "set_to": "0.0",
+      "casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "ground_luma": 0.09947,
+      "night_drift": -0.18707,
+      "night_holds": false,
+      "single_caster": false,
+      "fixes_it": false
+     },
+     "shadow_amount": {
+      "set_to": "0.0",
+      "casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "ground_luma": 0.09895,
+      "night_drift": -0.18759,
+      "night_holds": false,
+      "single_caster": false,
+      "fixes_it": false
+     },
+     "cast_dynamic_shadows": {
+      "set_to": "False",
+      "casters": [
+       "V2_Sun",
+       "WL_Moon"
+      ],
+      "ground_luma": 0.10146,
+      "night_drift": -0.18508,
+      "night_holds": false,
+      "single_caster": false,
+      "fixes_it": false
+     }
+    },
+    "approved": 0.108,
+    "tolerance": 0.01,
+    "note": "BOTH OR IT IS NOT A FIX. Dropping the caster count while lifting the night is the change the founder forbade -- the first attempt at this took dusk from 0.103 to 0.191 and lifted the whole night by half. Holding the night while still casting twice leaves the defect."
+   }
+  },
+  {
+   "id": "C_RESTORE",
+   "name": "every knob was put back and the night is casting as it was",
+   "pass": true,
+   "detail": {
+    "before": [
+     "V2_Sun",
+     "WL_Moon"
+    ],
+    "after": [
+     "V2_Sun",
+     "WL_Moon"
+    ]
+   }
+  }
+ ],
+ "at_2300_as_shipped": {
+  "casters": [
+   "V2_Sun",
+   "WL_Moon"
+  ],
+  "ground_luma": 0.28654
+ },
+ "knobs_this_engine_exposes": {
+  "dynamic_shadow_distance_movable_light": "18000.0",
+  "shadow_amount": "1.0",
+  "cast_dynamic_shadows": "True"
+ },
+ "trials": {
+  "dynamic_shadow_distance_movable_light": {
+   "set_to": "0.0",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "ground_luma": 0.09947,
+   "night_drift": -0.18707,
+   "night_holds": false,
+   "single_caster": false,
+   "fixes_it": false
+  },
+  "shadow_amount": {
+   "set_to": "0.0",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "ground_luma": 0.09895,
+   "night_drift": -0.18759,
+   "night_holds": false,
+   "single_caster": false,
+   "fixes_it": false
+  },
+  "cast_dynamic_shadows": {
+   "set_to": "False",
+   "casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "ground_luma": 0.10146,
+   "night_drift": -0.18508,
+   "night_holds": false,
+   "single_caster": false,
+   "fixes_it": false
+  }
+ },
+ "knob_that_fixes_it": null,
+ "casters_after_restore": [
+  "V2_Sun",
+  "WL_Moon"
+ ],
+ "finished": "2026-09-28 06:55:24",
+ "seconds": 45.31,
+ "log": "C_BASE INFO the shipped night {'casters': ['V2_Sun', 'WL_Moon'], 'ground_luma': 0.28654}\nC00 PASS the two-caster defect reproduces at 23:00 on this build {'casters': ['V2_Sun', 'WL_Moon'], 'note': 'the world lane measured this from the actor list. Reproduced here before anything is changed, because a fix for a defect that is not present is a change with no reason.'}\nC01 FAIL the approved night reads as the world lane measured it {'measured': 0.28654, 'their_figure': 0.108, 'note': \"THE GATE'S OWN CALIBRATION. If this vantage does not reproduce their number then the gate below is measuring something else and no verdict from it means anything.\"}\nC02 PASS the sun's light component was found {}\nC_KNOBS INFO shadow knobs on the sun {'dynamic_shadow_distance_movable_light': '18000.0', 'shadow_amount': '1.0', 'cast_dynamic_shadows': 'True'}\nC_dynamic_shadow_distance_movable_light INFO dynamic_shadow_distance_movable_light {'set_to': '0.0', 'casters': ['V2_Sun', 'WL_Moon'], 'ground_luma': 0.09947, 'night_drift': -0.18707, 'night_holds': False, 'single_caster': False, 'fixes_it': False}\nC_shadow_amount INFO shadow_amount {'set_to': '0.0', 'casters': ['V2_Sun', 'WL_Moon'], 'ground_luma': 0.09895, 'night_drift': -0.18759, 'night_holds': False, 'single_caster': False, 'fixes_it': False}\nC_cast_dynamic_shadows INFO cast_dynamic_shadows {'set_to': 'False', 'casters': ['V2_Sun', 'WL_Moon'], 'ground_luma': 0.10146, 'night_drift': -0.18508, 'night_holds': False, 'single_caster': False, 'fixes_it': False}\nC03 FAIL a knob exists that stops the sun casting AND leaves the approved night where it is {'winner': None, 'trials': {'dynamic_shadow_distance_movable_light': {'set_to': '0.0', 'casters': ['V2_Sun', 'WL_Moon'], 'ground_luma': 0.09947, 'night_drift': -0.18707, 'night_holds': False, 'single_caster': False, 'fixes_it': False}, 'shadow_amount': {'set_to': '0.0', 'casters': ['V2_Sun', 'WL_Moon'], 'ground_luma': 0.09895, 'night_drift': -0.18759, 'night_holds': False, 'single_caster': False, 'fixes_it': False}, 'cast_dynamic_shadows': {'set_to': 'False', 'casters': ['V2_Sun', 'WL_Moon'], 'ground_luma': 0.10146, 'night_drift': -0.18508, 'night_holds': False, 'single_caster': False, 'fixes_it': False}}, 'approved': 0.108, 'tolerance': 0.01, 'note': 'BOTH OR IT IS NOT A FIX. Dropping the caster count while lifting the night is the change the founder forbade -- the first attempt at this took dusk from 0.103 to 0.191 and lifted the whole night by half. Holding the night while still casting twice leaves the defect.'}\nC_RESTORE PASS every knob was put back and the night is casting as it was {'before': ['V2_Sun', 'WL_Moon'], 'after': ['V2_Sun', 'WL_Moon']}\n"
+}

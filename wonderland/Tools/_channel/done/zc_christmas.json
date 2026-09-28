@@ -1,0 +1,92 @@
+{
+ "name": "zc_christmas",
+ "started": "2026-09-28 06:52:22",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "X00",
+   "name": "the two Christmas specs declare batches to look for",
+   "pass": true,
+   "detail": {
+    "count": 8,
+    "batches": [
+     "XM01_Lantern",
+     "XM01_Lantern_glass",
+     "XM02_Lantern_IC04",
+     "XM02_Lantern_NC04",
+     "XM02_Lantern_TQ04",
+     "XM02_Window_IC04",
+     "XM02_Window_NC04",
+     "XM02_Window_TQ04"
+    ]
+   }
+  },
+  {
+   "id": "X01",
+   "name": "every batch the Christmas specs declare exists in the level",
+   "pass": true,
+   "detail": {
+    "declared": 8,
+    "found": 8,
+    "missing": null,
+    "note": "an authored pass with a written spec and no instances placed reads as finished from the repository. That is the gap that had item 4 reported done while its material sat behind a console variable defaulting to off."
+   }
+  },
+  {
+   "id": "X02",
+   "name": "the Christmas batches actually carry instances, not just names",
+   "pass": true,
+   "detail": {
+    "total_instances": 606,
+    "empty_batches": null,
+    "per_batch": {
+     "XM01_Lantern": 228,
+     "XM01_Lantern_glass": 114,
+     "XM02_Lantern_IC04": 33,
+     "XM02_Lantern_NC04": 32,
+     "XM02_Lantern_TQ04": 26,
+     "XM02_Window_IC04": 53,
+     "XM02_Window_NC04": 64,
+     "XM02_Window_TQ04": 56
+    },
+    "note": "a batch with zero instances is as absent as one that does not exist, and is reported separately because the two mean different things to whoever fixes it."
+   }
+  }
+ ],
+ "batches_the_specs_declare": [
+  "XM01_Lantern",
+  "XM01_Lantern_glass",
+  "XM02_Lantern_IC04",
+  "XM02_Lantern_NC04",
+  "XM02_Lantern_TQ04",
+  "XM02_Window_IC04",
+  "XM02_Window_NC04",
+  "XM02_Window_TQ04"
+ ],
+ "christmas_actors_in_the_level": [
+  "XM01_XM01_Lantern",
+  "XM01_XM01_Lantern_glass",
+  "XM02_XM02_Lantern_IC04",
+  "XM02_XM02_Lantern_NC04",
+  "XM02_XM02_Lantern_TQ04",
+  "XM02_XM02_Window_IC04",
+  "XM02_XM02_Window_NC04",
+  "XM02_XM02_Window_TQ04"
+ ],
+ "instances_per_declared_batch": {
+  "XM02_Lantern_IC04": 33,
+  "XM02_Window_NC04": 64,
+  "XM02_Lantern_NC04": 32,
+  "XM02_Window_IC04": 53,
+  "XM01_Lantern": 228,
+  "XM02_Window_TQ04": 56,
+  "XM01_Lantern_glass": 114,
+  "XM02_Lantern_TQ04": 26
+ },
+ "declared_but_absent": null,
+ "present_but_empty": null,
+ "total_christmas_instances": 606,
+ "finished": "2026-09-28 06:52:43",
+ "seconds": 21.65,
+ "log": "X00 PASS the two Christmas specs declare batches to look for {'count': 8, 'batches': ['XM01_Lantern', 'XM01_Lantern_glass', 'XM02_Lantern_IC04', 'XM02_Lantern_NC04', 'XM02_Lantern_TQ04', 'XM02_Window_IC04', 'XM02_Window_NC04', 'XM02_Window_TQ04']}\nX01 PASS every batch the Christmas specs declare exists in the level {'declared': 8, 'found': 8, 'missing': None, 'note': 'an authored pass with a written spec and no instances placed reads as finished from the repository. That is the gap that had item 4 reported done while its material sat behind a console variable defaulting to off.'}\nX02 PASS the Christmas batches actually carry instances, not just names {'total_instances': 606, 'empty_batches': None, 'per_batch': {'XM01_Lantern': 228, 'XM01_Lantern_glass': 114, 'XM02_Lantern_IC04': 33, 'XM02_Lantern_NC04': 32, 'XM02_Lantern_TQ04': 26, 'XM02_Window_IC04': 53, 'XM02_Window_NC04': 64, 'XM02_Window_TQ04': 56}, 'note': 'a batch with zero instances is as absent as one that does not exist, and is reported separately because the two mean different things to whoever fixes it.'}\n"
+}
