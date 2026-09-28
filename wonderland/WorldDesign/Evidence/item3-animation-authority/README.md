@@ -228,3 +228,45 @@ That is an honest dead end rather than a solved item, and worth saying plainly.
 OG's. More motion is not automatically better — drapery swinging harder than the body under it can read as
 wrong just as readily as not swinging at all. That is a qualitative judgement and it belongs to the founder,
 who has the footage and the complaint.
+
+### The six words nobody had measured
+
+`zc_pose_authority` ends with the sentence *"it does not cover walk, run, stop, turns, jump, fall or landing
+as performances"*. Between it and `zc_pose_mission`, idle, walking and the Mission Contract lifecycle were
+measured — and **six of the founder's eight words were not**. I had been reporting item 3 against two thirds
+of their sentence.
+
+`zc_pose_states` drives the Dog through each and compares all 23 pose fields, costume against canon body:
+
+| state | costumes that drift |
+|---|---|
+| run | none |
+| turn | none |
+| stop | none |
+| jump | none |
+| fall | none |
+| landing | none |
+
+**4/4, with both controls green.** `S_AIR` confirms the Dog actually left the ground for all four skins — a
+first attempt could not reach `get_character_movement()`, so `falling()` answered False for every sample and
+the run **voided** rather than reporting four skins agreeing perfectly about a Dog that never jumped.
+Airborne is now read from the canonical pose's own `airborne_weight`, which is the field the costume is
+supposed to be copying anyway. `S02` confirms the states genuinely differ from each other (spread 17–20), so
+these are six conditions and not six labels over one reading.
+
+### Item 3: every measurable claim in the founder's sentence now passes
+
+| the founder's words | verdict |
+|---|---|
+| idle stance | copied field for field |
+| walk | copied field for field |
+| **run, stop, turns, jump, fall, landing** | **copied field for field** |
+| Mission Contract lifecycle | copied field for field |
+| ground contact | identical foot plane (3.720), observed consistent |
+| body bounce | within the 23 fields compared |
+| "skins are cosmetic" | root offset identical, z spread 0.0 |
+
+Every state the founder named is measured and every skin matches the canon body in all of them. What remains
+is a **qualitative** judgement — whether the shared performance itself looks right — and that is theirs, with
+the footage. Arden Infernal's silhouette moving 1.71× as much as Relay OG's is the one number that might be
+what they are seeing, and more motion is not automatically better.
