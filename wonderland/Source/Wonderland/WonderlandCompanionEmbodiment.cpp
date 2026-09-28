@@ -213,29 +213,36 @@ namespace
 	 * gradient, a soft edge, a taper and bands of flicker climbing it. Dimmer by the meter, and far more like
 	 * fire.
 	 */
-	// ---- AND NOW IT IS 1, BECAUSE THE FOUNDER APPROVED IT. 2026-09-28: "I approved the real fire."
+	// ---- BACK TO 0: THE BLACK FLAMES WERE NEVER REQUESTED. FOUNDER, 2026-09-28 (correction pass):
 	//
-	// THE HISTORY MATTERS, because this default has moved twice and the reasons were not the same.
+	//   "The BLACK FLAMES were NEVER requested ... Remove/revert the unwanted black-flame change. I previously
+	//    had a SECOND flame treatment that was correct: DETAILED BLUE + WHITE FLAMES. That is the flame design
+	//    I want restored."
 	//
-	// It went to 0 on 2026-09-26 on the strength of a video of the Dog in the plaza and on the lawn -- "these
-	// are the flames I need back" -- showing tall white-cyan plumes rising a head above the shoulders, bright
-	// against a sunlit lawn and a dark plaza both. That is the ribbons on the figure's own glow material at
-	// full strength. I had shipped M_WL_Fire before that on the strength of a side-by-side where it clipped
-	// less, and less clipping was not what was being asked for.
+	// THE BLACK FLAMES WERE THIS SWITCH. Shipping 1 (78826f13, "I approved the real fire") put every flame on
+	// M_WL_Fire, and zc_fire_shipped's own photograph of it shows what that looks like in the world: Skeleton
+	// Flame wrapped in dark, smoke-edged tongues (captures/zc/fire_shipped/default_skeleton_flame.png). The
+	// same run with the switch forced to 0 shows the ribbons as the founder approved them on 2026-09-26 --
+	// "these are the flames I need back" -- layered cyan-blue tongues with white flame inside, rising above
+	// the shoulders (forced_off_skeleton_flame.png). That run's clauses only COUNTED fire instances; nobody
+	// looked at the colour, which is how a black fire shipped as "the approved fire".
 	//
-	// What changed is not the material and not my reading of the video: it is that the founder has now seen
-	// this material and said so. The surface is the one item 4 asks for -- translucent rather than additive,
-	// noise-cut at the edges, an orange-to-gold ramp up the ribbon, a taper at the tip and flicker climbing
-	// it -- and at the calibrated gain the figure is 26% clipped where the plume clipped 63% and showed no
-	// mascot inside it at all.
+	// WHY M_WL_Fire DRAWS BLACK, so nobody reads the switch as a taste question: it is TRANSLUCENT, and its
+	// emissive IS its Color -- no EmissiveStrength term, no x1000. The ribbons hand it sqrt(strength) x FireGain
+	// x FlameDim, about 75 for a ghost ember, against a world whose white is near 25,000 scene units (see
+	// WonderlandSceneUnits). A translucent surface that covers the background with a near-black emissive is a
+	// black silhouette with a torn, smoky edge -- which is exactly what the capture shows, at every hour.
 	//
-	// THE OPEN TENSION, RECORDED RATHER THAN QUIETLY TUNED AWAY: the thing the 09-26 footage was about was
-	// PROMINENCE, and shaping a flame is what takes prominence out of it. This ships exactly what was
-	// approved, unretuned. If it reads too dim on the lawn, the gain is `wl.Look.FlameDim` and that is one
-	// word from the founder, not a reason to pre-emptively change what they just signed off.
+	// THE SECOND TREATMENT IS THE ONE THIS RESTORES, unchanged: the ribbons on the figure's own glow material,
+	// FireTongues 8 and FireReach 1.18 (set together with it on 09-26 and never moved since), FlameDim 0.40
+	// (the founder's 09-27 dim), each skin's deep ember outside and its pale ember as the hot core inside. Every
+	// flame skin gets the same construction in its own palette, which is the founder's "same detailed flame
+	// language, different colours". M_WL_Fire stays on disk and one console variable away; it is not deleted,
+	// only no longer what a player sees.
 	TAutoConsoleVariable<int32> CVarFireMaterial(
-		TEXT("wl.Look.FireMaterial"), 1,
-		TEXT("1 draws flame ribbons on M_WL_Fire; 0 draws them on the figure's own glow material."));
+		TEXT("wl.Look.FireMaterial"), 0,
+		TEXT("0 (shipped) draws flame ribbons on the figure's own glow material -- the founder's layered blue/white "
+		     "ghostfire. 1 draws them on M_WL_Fire, which renders BLACK in the world (its Color carries no scene scale)."));
 
 	TAutoConsoleVariable<int32> CVarFireTongues(
 		TEXT("wl.Look.FireTongues"), 8,
@@ -353,7 +360,7 @@ namespace
 	{
 		const float Dim = FMath::Clamp(CVarFlameDim.GetValueOnAnyThread(), 0.004f, 4.0f);
 		const float Authored = FMath::Max(Strength, 0.0f);
-		// The fallback card (no fire master, reachable with `wl.Look.FireMaterial 0`; the shipped state is now 1) used to
+		// The fallback card (no fire master, reachable with `wl.Look.FireMaterial 0`, the shipped state again since 2026-09-28) used to
 		// be Authored x Dim, calibrated when both that and EmissiveStrength carried the authored strength. With
 		// EmissiveStrength pinned at WonderlandSceneUnits, 4.2 x 0.4 = 1.7 is 1,700 scene units -- a dark teal
 		// against a 25,000 white, which is what the ghostfire photographed as. x12 lands the ember at about

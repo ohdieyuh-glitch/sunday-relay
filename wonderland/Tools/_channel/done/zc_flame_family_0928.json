@@ -1,0 +1,191 @@
+{
+ "name": "zc_flame_family_0928",
+ "started": "2026-09-28 11:50:47",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "K00",
+   "name": "the flame switch is the shipped 0 (ribbons on the glow material)",
+   "pass": true,
+   "detail": {
+    "fire_material": 0
+   }
+  },
+  {
+   "id": "F_skeleton_flame",
+   "name": "skeleton_flame: its flames are ribbons on the glow material, not M_WL_Fire",
+   "pass": true,
+   "detail": {
+    "surfaces": [
+     "M_WL_VoxelGlow"
+    ],
+    "sections": 2
+   }
+  },
+  {
+   "id": "F_skeleton_flame_v1",
+   "name": "skeleton_flame_v1: its flames are ribbons on the glow material, not M_WL_Fire",
+   "pass": true,
+   "detail": {
+    "surfaces": [
+     "M_WL_VoxelGlow"
+    ],
+    "sections": 2
+   }
+  },
+  {
+   "id": "F_arden_infernal",
+   "name": "arden_infernal: its flames are ribbons on the glow material, not M_WL_Fire",
+   "pass": true,
+   "detail": {
+    "surfaces": [
+     "M_WL_VoxelGlow"
+    ],
+    "sections": 2
+   }
+  },
+  {
+   "id": "F_arden_infernal_v1",
+   "name": "arden_infernal_v1: its flames are ribbons on the glow material, not M_WL_Fire",
+   "pass": true,
+   "detail": {
+    "surfaces": [
+     "M_WL_VoxelGlow"
+    ],
+    "sections": 2
+   }
+  },
+  {
+   "id": "F_apollo",
+   "name": "apollo: its flames are ribbons on the glow material, not M_WL_Fire",
+   "pass": true,
+   "detail": {
+    "surfaces": [
+     "M_WL_VoxelGlow"
+    ],
+    "sections": 2
+   }
+  },
+  {
+   "id": "F_apollo_v1",
+   "name": "apollo_v1: its flames are ribbons on the glow material, not M_WL_Fire",
+   "pass": true,
+   "detail": {
+    "surfaces": [
+     "M_WL_VoxelGlow"
+    ],
+    "sections": 2
+   }
+  },
+  {
+   "id": "K99",
+   "name": "the day clock and the worn skin are back as found",
+   "pass": true,
+   "detail": {
+    "day_minutes": 24.0,
+    "skin": "arden_infernal"
+   }
+  }
+ ],
+ "restore": {
+  "wl.Sky.DayMinutes": 24.0,
+  "skin": "arden_infernal"
+ },
+ "per_skin": {
+  "skeleton_flame": {
+   "flame_surface": [
+    "M_WL_VoxelGlow"
+   ],
+   "flame_sections": 2,
+   "shots": [
+    "skeleton_flame_night_front.png",
+    "skeleton_flame_night_side.png",
+    "skeleton_flame_noon_front.png",
+    "skeleton_flame_noon_side.png"
+   ]
+  },
+  "skeleton_flame_v1": {
+   "flame_surface": [
+    "M_WL_VoxelGlow"
+   ],
+   "flame_sections": 2,
+   "shots": [
+    "skeleton_flame_v1_night_front.png",
+    "skeleton_flame_v1_night_side.png",
+    "skeleton_flame_v1_noon_front.png",
+    "skeleton_flame_v1_noon_side.png"
+   ]
+  },
+  "arden_infernal": {
+   "flame_surface": [
+    "M_WL_VoxelGlow"
+   ],
+   "flame_sections": 2,
+   "shots": [
+    "arden_infernal_night_front.png",
+    "arden_infernal_night_side.png",
+    "arden_infernal_noon_front.png",
+    "arden_infernal_noon_side.png"
+   ]
+  },
+  "arden_infernal_v1": {
+   "flame_surface": [
+    "M_WL_VoxelGlow"
+   ],
+   "flame_sections": 2,
+   "shots": [
+    "arden_infernal_v1_night_front.png",
+    "arden_infernal_v1_night_side.png",
+    "arden_infernal_v1_noon_front.png",
+    "arden_infernal_v1_noon_side.png"
+   ]
+  },
+  "apollo": {
+   "flame_surface": [
+    "M_WL_VoxelGlow"
+   ],
+   "flame_sections": 2,
+   "shots": [
+    "apollo_night_front.png",
+    "apollo_night_side.png",
+    "apollo_noon_front.png",
+    "apollo_noon_side.png"
+   ]
+  },
+  "apollo_v1": {
+   "flame_surface": [
+    "M_WL_VoxelGlow"
+   ],
+   "flame_sections": 2,
+   "shots": [
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  "celestial_light": {
+   "flame_surface": [],
+   "flame_sections": 0,
+   "shots": [
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  "relay_og": {
+   "flame_surface": [],
+   "flame_sections": 0,
+   "shots": [
+    null,
+    null,
+    null,
+    null
+   ]
+  }
+ },
+ "finished": "2026-09-28 11:53:49",
+ "seconds": 182.31,
+ "log": "K00 PASS the flame switch is the shipped 0 (ribbons on the glow material) {'fire_material': 0}\nF_skeleton_flame PASS skeleton_flame: its flames are ribbons on the glow material, not M_WL_Fire {'surfaces': ['M_WL_VoxelGlow'], 'sections': 2}\nSKIN skeleton_flame {'flame_surface': ['M_WL_VoxelGlow'], 'flame_sections': 2, 'shots': ['skeleton_flame_night_front.png', 'skeleton_flame_night_side.png', 'skeleton_flame_noon_front.png', 'skeleton_flame_noon_side.png']}\nF_skeleton_flame_v1 PASS skeleton_flame_v1: its flames are ribbons on the glow material, not M_WL_Fire {'surfaces': ['M_WL_VoxelGlow'], 'sections': 2}\nSKIN skeleton_flame_v1 {'flame_surface': ['M_WL_VoxelGlow'], 'flame_sections': 2, 'shots': ['skeleton_flame_v1_night_front.png', 'skeleton_flame_v1_night_side.png', 'skeleton_flame_v1_noon_front.png', 'skeleton_flame_v1_noon_side.png']}\nF_arden_infernal PASS arden_infernal: its flames are ribbons on the glow material, not M_WL_Fire {'surfaces': ['M_WL_VoxelGlow'], 'sections': 2}\nSKIN arden_infernal {'flame_surface': ['M_WL_VoxelGlow'], 'flame_sections': 2, 'shots': ['arden_infernal_night_front.png', 'arden_infernal_night_side.png', 'arden_infernal_noon_front.png', 'arden_infernal_noon_side.png']}\nF_arden_infernal_v1 PASS arden_infernal_v1: its flames are ribbons on the glow material, not M_WL_Fire {'surfaces': ['M_WL_VoxelGlow'], 'sections': 2}\nSKIN arden_infernal_v1 {'flame_surface': ['M_WL_VoxelGlow'], 'flame_sections': 2, 'shots': ['arden_infernal_v1_night_front.png', 'arden_infernal_v1_night_side.png', 'arden_infernal_v1_noon_front.png', 'arden_infernal_v1_noon_side.png']}\nF_apollo PASS apollo: its flames are ribbons on the glow material, not M_WL_Fire {'surfaces': ['M_WL_VoxelGlow'], 'sections': 2}\nSKIN apollo {'flame_surface': ['M_WL_VoxelGlow'], 'flame_sections': 2, 'shots': ['apollo_night_front.png', 'apollo_night_side.png', 'apollo_noon_front.png', 'apollo_noon_side.png']}\nF_apollo_v1 PASS apollo_v1: its flames are ribbons on the glow material, not M_WL_Fire {'surfaces': ['M_WL_VoxelGlow'], 'sections': 2}\nSKIN apollo_v1 {'flame_surface': ['M_WL_VoxelGlow'], 'flame_sections': 2, 'shots': [None, None, None, None]}\nSKIN celestial_light {'flame_surface': [], 'flame_sections': 0, 'shots': [None, None, None, None]}\nSKIN relay_og {'flame_surface': [], 'flame_sections': 0, 'shots': [None, None, None, None]}\nK99 PASS the day clock and the worn skin are back as found {'day_minutes': 24.0, 'skin': 'arden_infernal'}\n"
+}

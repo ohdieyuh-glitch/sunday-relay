@@ -1,0 +1,392 @@
+{
+ "name": "zc_skull_flame_proof",
+ "started": "2026-09-28 11:13:47",
+ "status": "FAIL",
+ "tests": [
+  {
+   "id": "K00",
+   "name": "a fresh session draws flames on the glow material: wl.Look.FireMaterial reads 0 untouched",
+   "pass": true,
+   "detail": {
+    "fire_material": 0,
+    "dll": "2026-09-28 11:02:25",
+    "note": "1 is the M_WL_Fire surface that photographs black; 0 is the ribbons the founder approved on 09-26."
+   }
+  },
+  {
+   "id": "K01",
+   "name": "the sky clock is held, so each hour is the hour it claims",
+   "pass": true,
+   "detail": {
+    "day_minutes": 0.0
+   }
+  },
+  {
+   "id": "A00",
+   "name": "the worn costume's chest-skull eyes, chest skull, head eyes and visor were all found",
+   "pass": false,
+   "detail": {
+    "found": {}
+   }
+  },
+  {
+   "id": "F00",
+   "name": "the flame ribbons wear the figure's glow material, not M_WL_Fire",
+   "pass": true,
+   "detail": {
+    "flame_parents": [
+     "M_WL_VoxelGlow"
+    ],
+    "flame_surfaces": 1
+   }
+  },
+  {
+   "id": "S_noon_1",
+   "name": "noon: the chest skull's surface is dark -- its eyes read at least 2.5x its brightest decile",
+   "pass": false,
+   "detail": {
+    "eye_luma": null,
+    "skull": {}
+   }
+  },
+  {
+   "id": "S_noon_2",
+   "name": "noon: the chest skull's two eyes are separate lights (the gap between them is dark)",
+   "pass": false,
+   "detail": {
+    "eye_luma": null,
+    "gap": {},
+    "px": null
+   }
+  },
+  {
+   "id": "S_noon_3",
+   "name": "noon: the chest skull's eyes glow cyan (blue and green lead red)",
+   "pass": false,
+   "detail": {
+    "eyes": []
+   }
+  },
+  {
+   "id": "S_noon_4",
+   "name": "noon: the face stays black around the head's eyes, and the two eyes stay separate",
+   "pass": false,
+   "detail": {
+    "head_eye_luma": null,
+    "visor": {},
+    "gap": {},
+    "px": null
+   }
+  },
+  {
+   "id": "S_dusk_1",
+   "name": "dusk: the chest skull's surface is dark -- its eyes read at least 2.5x its brightest decile",
+   "pass": false,
+   "detail": {
+    "eye_luma": null,
+    "skull": {}
+   }
+  },
+  {
+   "id": "S_dusk_2",
+   "name": "dusk: the chest skull's two eyes are separate lights (the gap between them is dark)",
+   "pass": false,
+   "detail": {
+    "eye_luma": null,
+    "gap": {},
+    "px": null
+   }
+  },
+  {
+   "id": "S_dusk_3",
+   "name": "dusk: the chest skull's eyes glow cyan (blue and green lead red)",
+   "pass": false,
+   "detail": {
+    "eyes": []
+   }
+  },
+  {
+   "id": "S_dusk_4",
+   "name": "dusk: the face stays black around the head's eyes, and the two eyes stay separate",
+   "pass": false,
+   "detail": {
+    "head_eye_luma": null,
+    "visor": {},
+    "gap": {},
+    "px": null
+   }
+  },
+  {
+   "id": "S_night_1",
+   "name": "night: the chest skull's surface is dark -- its eyes read at least 2.5x its brightest decile",
+   "pass": false,
+   "detail": {
+    "eye_luma": null,
+    "skull": {}
+   }
+  },
+  {
+   "id": "S_night_2",
+   "name": "night: the chest skull's two eyes are separate lights (the gap between them is dark)",
+   "pass": false,
+   "detail": {
+    "eye_luma": null,
+    "gap": {},
+    "px": null
+   }
+  },
+  {
+   "id": "S_night_3",
+   "name": "night: the chest skull's eyes glow cyan (blue and green lead red)",
+   "pass": false,
+   "detail": {
+    "eyes": []
+   }
+  },
+  {
+   "id": "S_night_4",
+   "name": "night: the face stays black around the head's eyes, and the two eyes stay separate",
+   "pass": false,
+   "detail": {
+    "head_eye_luma": null,
+    "visor": {},
+    "gap": {},
+    "px": null
+   }
+  },
+  {
+   "id": "F01",
+   "name": "the shipped flames are bright and blue-led where the fire-material surface is dark (black flames removed)",
+   "pass": false,
+   "detail": {
+    "shipped": {
+     "fire_material": 0,
+     "file": "flame_a_shipped.png",
+     "samples": 9,
+     "luma_p50": 0.1393,
+     "luma_p90": 0.8133,
+     "blue_over_red": 1.341
+    },
+    "fire_material": {
+     "fire_material": 1,
+     "file": "flame_b_fire_material.png",
+     "samples": 9,
+     "luma_p50": 0.198,
+     "luma_p90": 0.6398,
+     "blue_over_red": 1.225
+    },
+    "note": "b is the control: the same frame on the surface that drew black. If a and b read alike the switch is not what the picture depends on."
+   }
+  },
+  {
+   "id": "F02",
+   "name": "switching back restores the same picture (the switch is the cause, and it is restored)",
+   "pass": true,
+   "detail": {
+    "shipped": {
+     "fire_material": 0,
+     "file": "flame_a_shipped.png",
+     "samples": 9,
+     "luma_p50": 0.1393,
+     "luma_p90": 0.8133,
+     "blue_over_red": 1.341
+    },
+    "restored": {
+     "fire_material": 0,
+     "file": "flame_c_restored.png",
+     "samples": 9,
+     "luma_p50": 0.1275,
+     "luma_p90": 0.8413,
+     "blue_over_red": 1.317
+    }
+   }
+  },
+  {
+   "id": "K99",
+   "name": "every knob this job moved is back (fire switch 0, day clock as found, skin as found)",
+   "pass": true,
+   "detail": {
+    "fire_material": 0,
+    "day_minutes": 24.0,
+    "skin": "arden_infernal"
+   }
+  }
+ ],
+ "dll_mtime": "2026-09-28 11:02:25",
+ "restore": {
+  "wl.Sky.DayMinutes": 24.0,
+  "skin": "arden_infernal"
+ },
+ "anatomy": {},
+ "aim": {
+  "chest_z": -5.0,
+  "head_z": 25.0
+ },
+ "flame_materials": [
+  "M_WL_VoxelGlow"
+ ],
+ "views": [
+  {
+   "hour": "noon",
+   "view": "front_close",
+   "file": "skel_v2_noon_front_close.png",
+   "measure": {}
+  },
+  {
+   "hour": "noon",
+   "view": "side_close",
+   "file": "skel_v2_noon_side_close.png"
+  },
+  {
+   "hour": "noon",
+   "view": "rear_close",
+   "file": "skel_v2_noon_rear_close.png"
+  },
+  {
+   "hour": "noon",
+   "view": "front_full",
+   "file": "skel_v2_noon_front_full.png"
+  },
+  {
+   "hour": "noon",
+   "view": "side_full",
+   "file": "skel_v2_noon_side_full.png"
+  },
+  {
+   "hour": "noon",
+   "view": "rear_full",
+   "file": "skel_v2_noon_rear_full.png"
+  },
+  {
+   "hour": "noon",
+   "view": "front_gameplay",
+   "file": "skel_v2_noon_front_gameplay.png"
+  },
+  {
+   "hour": "noon",
+   "view": "gameplay_camera",
+   "file": "skel_v2_noon_gameplay_camera.png"
+  },
+  {
+   "hour": "dusk",
+   "view": "front_close",
+   "file": "skel_v2_dusk_front_close.png",
+   "measure": {}
+  },
+  {
+   "hour": "dusk",
+   "view": "side_close",
+   "file": "skel_v2_dusk_side_close.png"
+  },
+  {
+   "hour": "dusk",
+   "view": "rear_close",
+   "file": "skel_v2_dusk_rear_close.png"
+  },
+  {
+   "hour": "dusk",
+   "view": "front_full",
+   "file": "skel_v2_dusk_front_full.png"
+  },
+  {
+   "hour": "dusk",
+   "view": "side_full",
+   "file": "skel_v2_dusk_side_full.png"
+  },
+  {
+   "hour": "dusk",
+   "view": "rear_full",
+   "file": "skel_v2_dusk_rear_full.png"
+  },
+  {
+   "hour": "dusk",
+   "view": "front_gameplay",
+   "file": "skel_v2_dusk_front_gameplay.png"
+  },
+  {
+   "hour": "dusk",
+   "view": "gameplay_camera",
+   "file": "skel_v2_dusk_gameplay_camera.png"
+  },
+  {
+   "hour": "night",
+   "view": "front_close",
+   "file": "skel_v2_night_front_close.png",
+   "measure": {}
+  },
+  {
+   "hour": "night",
+   "view": "side_close",
+   "file": "skel_v2_night_side_close.png"
+  },
+  {
+   "hour": "night",
+   "view": "rear_close",
+   "file": "skel_v2_night_rear_close.png"
+  },
+  {
+   "hour": "night",
+   "view": "front_full",
+   "file": "skel_v2_night_front_full.png"
+  },
+  {
+   "hour": "night",
+   "view": "side_full",
+   "file": "skel_v2_night_side_full.png"
+  },
+  {
+   "hour": "night",
+   "view": "rear_full",
+   "file": "skel_v2_night_rear_full.png"
+  },
+  {
+   "hour": "night",
+   "view": "front_gameplay",
+   "file": "skel_v2_night_front_gameplay.png"
+  },
+  {
+   "hour": "night",
+   "view": "gameplay_camera",
+   "file": "skel_v2_night_gameplay_camera.png"
+  }
+ ],
+ "per_hour": {
+  "noon": {},
+  "dusk": {},
+  "night": {}
+ },
+ "control": {
+  "spawned": 2,
+  "night": true,
+  "noon": true
+ },
+ "flame_ab": {
+  "a_shipped": {
+   "fire_material": 0,
+   "file": "flame_a_shipped.png",
+   "samples": 9,
+   "luma_p50": 0.1393,
+   "luma_p90": 0.8133,
+   "blue_over_red": 1.341
+  },
+  "b_fire_material": {
+   "fire_material": 1,
+   "file": "flame_b_fire_material.png",
+   "samples": 9,
+   "luma_p50": 0.198,
+   "luma_p90": 0.6398,
+   "blue_over_red": 1.225
+  },
+  "c_restored": {
+   "fire_material": 0,
+   "file": "flame_c_restored.png",
+   "samples": 9,
+   "luma_p50": 0.1275,
+   "luma_p90": 0.8413,
+   "blue_over_red": 1.317
+  }
+ },
+ "finished": "2026-09-28 11:16:29",
+ "seconds": 161.12,
+ "log": "K00 PASS a fresh session draws flames on the glow material: wl.Look.FireMaterial reads 0 untouched {'fire_material': 0, 'dll': '2026-09-28 11:02:25', 'note': '1 is the M_WL_Fire surface that photographs black; 0 is the ribbons the founder approved on 09-26.'}\nK01 PASS the sky clock is held, so each hour is the hour it claims {'day_minutes': 0.0}\nA00 FAIL the worn costume's chest-skull eyes, chest skull, head eyes and visor were all found {'found': {}}\nF00 PASS the flame ribbons wear the figure's glow material, not M_WL_Fire {'flame_parents': ['M_WL_VoxelGlow'], 'flame_surfaces': 1}\nVIEW {'hour': 'noon', 'view': 'front_close', 'file': 'skel_v2_noon_front_close.png', 'measure': {}}\nVIEW {'hour': 'noon', 'view': 'side_close', 'file': 'skel_v2_noon_side_close.png'}\nVIEW {'hour': 'noon', 'view': 'rear_close', 'file': 'skel_v2_noon_rear_close.png'}\nVIEW {'hour': 'noon', 'view': 'front_full', 'file': 'skel_v2_noon_front_full.png'}\nVIEW {'hour': 'noon', 'view': 'side_full', 'file': 'skel_v2_noon_side_full.png'}\nVIEW {'hour': 'noon', 'view': 'rear_full', 'file': 'skel_v2_noon_rear_full.png'}\nVIEW {'hour': 'noon', 'view': 'front_gameplay', 'file': 'skel_v2_noon_front_gameplay.png'}\nVIEW {'hour': 'dusk', 'view': 'front_close', 'file': 'skel_v2_dusk_front_close.png', 'measure': {}}\nVIEW {'hour': 'dusk', 'view': 'side_close', 'file': 'skel_v2_dusk_side_close.png'}\nVIEW {'hour': 'dusk', 'view': 'rear_close', 'file': 'skel_v2_dusk_rear_close.png'}\nVIEW {'hour': 'dusk', 'view': 'front_full', 'file': 'skel_v2_dusk_front_full.png'}\nVIEW {'hour': 'dusk', 'view': 'side_full', 'file': 'skel_v2_dusk_side_full.png'}\nVIEW {'hour': 'dusk', 'view': 'rear_full', 'file': 'skel_v2_dusk_rear_full.png'}\nVIEW {'hour': 'dusk', 'view': 'front_gameplay', 'file': 'skel_v2_dusk_front_gameplay.png'}\nVIEW {'hour': 'night', 'view': 'front_close', 'file': 'skel_v2_night_front_close.png', 'measure': {}}\nVIEW {'hour': 'night', 'view': 'side_close', 'file': 'skel_v2_night_side_close.png'}\nVIEW {'hour': 'night', 'view': 'rear_close', 'file': 'skel_v2_night_rear_close.png'}\nVIEW {'hour': 'night', 'view': 'front_full', 'file': 'skel_v2_night_front_full.png'}\nVIEW {'hour': 'night', 'view': 'side_full', 'file': 'skel_v2_night_side_full.png'}\nVIEW {'hour': 'night', 'view': 'rear_full', 'file': 'skel_v2_night_rear_full.png'}\nVIEW {'hour': 'night', 'view': 'front_gameplay', 'file': 'skel_v2_night_front_gameplay.png'}\nS_noon_1 FAIL noon: the chest skull's surface is dark -- its eyes read at least 2.5x its brightest decile {'eye_luma': None, 'skull': {}}\nS_noon_2 FAIL noon: the chest skull's two eyes are separate lights (the gap between them is dark) {'eye_luma': None, 'gap': {}, 'px': None}\nS_noon_3 FAIL noon: the chest skull's eyes glow cyan (blue and green lead red) {'eyes': []}\nS_noon_4 FAIL noon: the face stays black around the head's eyes, and the two eyes stay separate {'head_eye_luma': None, 'visor': {}, 'gap': {}, 'px': None}\nS_dusk_1 FAIL dusk: the chest skull's surface is dark -- its eyes read at least 2.5x its brightest decile {'eye_luma': None, 'skull': {}}\nS_dusk_2 FAIL dusk: the chest skull's two eyes are separate lights (the gap between them is dark) {'eye_luma': None, 'gap': {}, 'px': None}\nS_dusk_3 FAIL dusk: the chest skull's eyes glow cyan (blue and green lead red) {'eyes': []}\nS_dusk_4 FAIL dusk: the face stays black around the head's eyes, and the two eyes stay separate {'head_eye_luma': None, 'visor': {}, 'gap': {}, 'px': None}\nS_night_1 FAIL night: the chest skull's surface is dark -- its eyes read at least 2.5x its brightest decile {'eye_luma': None, 'skull': {}}\nS_night_2 FAIL night: the chest skull's two eyes are separate lights (the gap between them is dark) {'eye_luma': None, 'gap': {}, 'px': None}\nS_night_3 FAIL night: the chest skull's eyes glow cyan (blue and green lead red) {'eyes': []}\nS_night_4 FAIL night: the face stays black around the head's eyes, and the two eyes stay separate {'head_eye_luma': None, 'visor': {}, 'gap': {}, 'px': None}\nFLAME a_shipped {'fire_material': 0, 'file': 'flame_a_shipped.png', 'samples': 9, 'luma_p50': 0.1393, 'luma_p90': 0.8133, 'blue_over_red': 1.341}\nFLAME b_fire_material {'fire_material': 1, 'file': 'flame_b_fire_material.png', 'samples': 9, 'luma_p50': 0.198, 'luma_p90': 0.6398, 'blue_over_red': 1.225}\nFLAME c_restored {'fire_material': 0, 'file': 'flame_c_restored.png', 'samples': 9, 'luma_p50': 0.1275, 'luma_p90': 0.8413, 'blue_over_red': 1.317}\nF01 FAIL the shipped flames are bright and blue-led where the fire-material surface is dark (black flames removed) {'shipped': {'fire_material': 0, 'file': 'flame_a_shipped.png', 'samples': 9, 'luma_p50': 0.1393, 'luma_p90': 0.8133, 'blue_over_red': 1.341}, 'fire_material': {'fire_material': 1, 'file': 'flame_b_fire_material.png', 'samples': 9, 'luma_p50': 0.198, 'luma_p90': 0.6398, 'blue_over_red': 1.225}, 'note': 'b is the control: the same frame on the surface that drew black. If a and b read alike the switch is not what the picture depends on.'}\nF02 PASS switching back restores the same picture (the switch is the cause, and it is restored) {'shipped': {'fire_material': 0, 'file': 'flame_a_shipped.png', 'samples': 9, 'luma_p50': 0.1393, 'luma_p90': 0.8133, 'blue_over_red': 1.341}, 'restored': {'fire_material': 0, 'file': 'flame_c_restored.png', 'samples': 9, 'luma_p50': 0.1275, 'luma_p90': 0.8413, 'blue_over_red': 1.317}}\nK99 PASS every knob this job moved is back (fire switch 0, day clock as found, skin as found) {'fire_material': 0, 'day_minutes': 24.0, 'skin': 'arden_infernal'}\n"
+}
