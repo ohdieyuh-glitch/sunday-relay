@@ -1776,6 +1776,17 @@ def skeleton_flame():
     figure.material("gold", "rim", (0.905, 0.720, 0.290), 1.0)
     figure.material("soulpulse", "glow", SKELETON_SOUL, 2.2)
     figure.material("soulveilpulse", "glow", SKELETON_SOUL, 0.55)
+    # THE CHEST SKULL'S EYES, AND ONLY ITS EYES. FOUNDER, 2026-09-28 (correction pass): "Skeleton V2 currently has
+    # the skull itself glowing. That is NOT what I requested. The skull must remain BLACK. ONLY THE EYES should
+    # glow on the skull ... The eyes should remain clearly visible and individually glowing."
+    #
+    # NOT A `pulse` MATERIAL ON PURPOSE. The heartbeat takes anything named "pulse" down to a twelfth between
+    # beats (AWonderlandCompanionEmbodiment::AnimateGlow, DeepBeat), which is how the skull's eyes photographed
+    # BLACK while its glowing surface stayed lit. Every other glow on a body with a heartbeat takes the same
+    # clock at a third of the depth (ShallowBeat, 0.62-1.0): the eyes still beat with the skull's owner and are
+    # never out. Strength 1.2 lands at about 18,000 scene units by day and a fifth of that by night -- lit and
+    # cyan against both whites, and under them, so the eyes do not bloom across the black skull around them.
+    figure.material("soulgaze", "glow", SKELETON_SOUL, 1.2)
     base_dog(figure)
     d = DOG
     tile = d["tile"]
@@ -1788,7 +1799,21 @@ def skeleton_flame():
     hip = d["torso_z"] - th * 0.5
     head_top = d["head_z"] + hh * 0.5
     bone = {"bone": "bone", "dark": "void", "gold": "gold", "gem": "ghostpale"}
-    soul = {"bone": "soulveilpulse", "dark": "soulpulse", "gold": "gold", "gem": "ghostpale"}
+    # THE CHEST SKULL IN THE BODY'S OWN GREY. FOUNDER, 2026-09-28, three notes in one morning, the last one
+    # deciding it: "NO keep the face of the mascot skin of the skeleton mascot skin grey just make the skeleton on
+    # the chest gray as well." Before that: "The skull/head must be the SAME charcoal/dark-gray color as the gray
+    # body portion of this exact mascot skin ... Trace the material/color parameter actually producing the
+    # mascot's gray body and reuse that exact value/material treatment", "Eyes remain WHITE and glowing. Do NOT
+    # make the skull emissive."
+    #
+    # TRACED, NOT PICKED: the grey the founder sees on the face and the body is `bone`, the one coat every plate,
+    # limb and the head are built in (a rim material, 0.898 / 0.871 / 0.800, which reads grey in the evening
+    # light the photographs were taken in). So the chest skull's cranium and jaw take `bone` -- the exact
+    # material, and the same treatment, the mascot PRIMARY colourway included -- and its sockets, nose and teeth
+    # the skin's lit near-black `void`, the same pair the brow and temple skulls on the face have always used.
+    # Was {"bone": "soulveilpulse", "dark": "soulpulse"}: a glowing cyan skull whose sockets went dark between
+    # heartbeats; and for an hour this morning an all-`void` black one, which the founder turned down for grey.
+    grey_skull = bone
 
     def plates(part, centre, size, courses, seam="void", lit=None):
         """STEPPED BONE PLATES with a dark seam between each course -- the SKELETAL ARMOR of the sheet."""
@@ -1814,15 +1839,18 @@ def skeleton_flame():
     figure.flame("earfire", lambda up: "ghost" if up < 0.6 else "ghostpale", (-1.0, 0.0, head_top), hh * 0.6, hw * 0.6, 6, tile * 0.95)
 
     # ---- THE SKULLS. The brow skull between the ears, read before anything else on the face; a small skull
-    # at each temple; and the burning skull at the sternum, its sockets and teeth in the soul light so it goes
-    # dark between beats and lights on them, over the gold chain of the ARCANE CHARM.
+    # at each temple; and the skull at the sternum -- grey like the face and the body, with its two eyes the only
+    # light in it (founder, 2026-09-28) -- over the gold chain of the ARCANE CHARM. Sizes and positions are
+    # unchanged: this is which parts emit and what they are made of, not the silhouette.
     figure.skull_emblem("head", bone, (hd * 0.5 + 0.6, 0.0, d["head_z"] + hh * 0.36), 4.6, tile, deep="dark")
     for side in (-1.0, 1.0):
         figure.skull_emblem("head", bone, (hd * 0.15, side * (hw * 0.5 + 0.5), d["head_z"] + hh * 0.05), 2.6, tile, deep="dark")
     chest_skull = (td * 0.5 + 1.9, 0.0, d["torso_z"] + th * 0.5 - 1.4)
-    figure.skull_emblem("body", soul, chest_skull, 5.2, tile, deep="dark")
+    figure.skull_emblem("body", grey_skull, chest_skull, 5.2, tile, deep="dark")
+    # THE EYES: one block proud of each socket, so each reads as its own white light from the front and the 3/4,
+    # set in a dark socket rather than on the grey.
     for side in (-1.0, 1.0):
-        figure.box("body", "soulpulse", (chest_skull[0] + 1.8, side * 1.25, chest_skull[2] + 1.15), (tile * 0.7, tile * 1.5, tile * 1.3))
+        figure.box("body", "soulgaze", (chest_skull[0] + 1.8, side * 1.25, chest_skull[2] + 1.15), (tile * 0.7, tile * 1.5, tile * 1.3))
     chain_z = chest_skull[2] - 3.4
     figure.chain_run("body", "gold", (td * 0.5 + 1.0, -2.3, chain_z), (td * 0.5 + 1.0, 2.3, chain_z), tile, sag=1.2, link=tile * 0.8)
     figure.pendant("body", bone, (td * 0.5 + 1.2, 0.0, chain_z - 1.0), tile, drop=1.0, gem="gem")

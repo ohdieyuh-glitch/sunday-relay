@@ -1,0 +1,3006 @@
+{
+ "name": "zc_skull_head_proof",
+ "started": "2026-09-28 11:45:24",
+ "status": "FAIL",
+ "tests": [
+  {
+   "id": "A00",
+   "name": "the worn costume is the corrected figure: both eye pairs, the chest skull's dark features, the grey coat",
+   "pass": true,
+   "detail": {
+    "counts": {
+     "head_eyes": 2,
+     "chest_eyes": 2,
+     "skull_features": 7,
+     "body_bone": 772,
+     "face_bone": 288,
+     "visor": 80
+    },
+    "note": "skull_features are the chest skull's void sockets, nose and teeth (7 in the figure); the grey is the `bone` coat's instances -- the chest skull's cranium and jaw are among the body's now."
+   }
+  },
+  {
+   "id": "H1 dusk/front_close_founder_frame",
+   "name": "dusk/front_close_founder_frame: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 68,
+     "p50": 0.1151,
+     "p90": 0.2141
+    },
+    "body": {
+     "n": 271,
+     "p50": 0.103,
+     "p90": 0.1911
+    },
+    "face": {
+     "n": 163,
+     "p50": 0.0845,
+     "p90": 0.5366
+    },
+    "box": [
+     665,
+     606,
+     1212,
+     1104
+    ]
+   }
+  },
+  {
+   "id": "H2 dusk/front_close_founder_frame",
+   "name": "dusk/front_close_founder_frame: the chest skull's two eyes are white and lit, and the gap between them is not",
+   "pass": true,
+   "detail": {
+    "eyes": [
+     {
+      "luma": 0.7729,
+      "min_channel": 0.612
+     },
+     {
+      "luma": 0.771,
+      "min_channel": 0.608
+     }
+    ],
+    "gap": 0.2169,
+    "px": [
+     [
+      1078,
+      710
+     ],
+     [
+      792,
+      713
+     ]
+    ]
+   }
+  },
+  {
+   "id": "H3 dusk/front_close_founder_frame",
+   "name": "dusk/front_close_founder_frame: the skull itself does not glow (its brightest decile no brighter than the body's)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 68,
+     "p50": 0.1151,
+     "p90": 0.2141
+    },
+    "body": {
+     "n": 271,
+     "p50": 0.103,
+     "p90": 0.1911
+    }
+   }
+  },
+  {
+   "id": "H4 dusk/front_close_founder_frame",
+   "name": "dusk/front_close_founder_frame: no white panels on the skull (under 3% of its box is white outside its two eyes)",
+   "pass": true,
+   "detail": {
+    "white": 0.0004,
+    "samples": 34983,
+    "box": [
+     665,
+     606,
+     1212,
+     1104
+    ]
+   }
+  },
+  {
+   "id": "H1 dusk/front_chest",
+   "name": "dusk/front_chest: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 142,
+     "p50": 0.1342,
+     "p90": 0.1782
+    },
+    "body": {
+     "n": 295,
+     "p50": 0.0918,
+     "p90": 0.1608
+    },
+    "face": {
+     "n": 189,
+     "p50": 0.0814,
+     "p90": 0.5128
+    },
+    "box": [
+     738,
+     468,
+     1151,
+     847
+    ]
+   }
+  },
+  {
+   "id": "H2 dusk/front_chest",
+   "name": "dusk/front_chest: the chest skull's two eyes are white and lit, and the gap between them is not",
+   "pass": true,
+   "detail": {
+    "eyes": [
+     {
+      "luma": 0.8297,
+      "min_channel": 0.694
+     },
+     {
+      "luma": 0.8287,
+      "min_channel": 0.694
+     }
+    ],
+    "gap": 0.2197,
+    "px": [
+     [
+      1049,
+      544
+     ],
+     [
+      835,
+      546
+     ]
+    ]
+   }
+  },
+  {
+   "id": "H3 dusk/front_chest",
+   "name": "dusk/front_chest: the skull itself does not glow (its brightest decile no brighter than the body's)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 142,
+     "p50": 0.1342,
+     "p90": 0.1782
+    },
+    "body": {
+     "n": 295,
+     "p50": 0.0918,
+     "p90": 0.1608
+    }
+   }
+  },
+  {
+   "id": "H4 dusk/front_chest",
+   "name": "dusk/front_chest: no white panels on the skull (under 3% of its box is white outside its two eyes)",
+   "pass": true,
+   "detail": {
+    "white": 0.023,
+    "samples": 32237,
+    "box": [
+     738,
+     468,
+     1151,
+     847
+    ]
+   }
+  },
+  {
+   "id": "H1 dusk/front_full",
+   "name": "dusk/front_full: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 119,
+     "p50": 0.1294,
+     "p90": 0.1732
+    },
+    "body": {
+     "n": 627,
+     "p50": 0.0974,
+     "p90": 0.1572
+    },
+    "face": {
+     "n": 284,
+     "p50": 0.0831,
+     "p90": 0.1707
+    },
+    "box": [
+     844,
+     395,
+     1064,
+     596
+    ]
+   }
+  },
+  {
+   "id": "H2 dusk/front_full",
+   "name": "dusk/front_full: the chest skull's two eyes are white and lit, and the gap between them is not",
+   "pass": true,
+   "detail": {
+    "eyes": [
+     {
+      "luma": 0.8582,
+      "min_channel": 0.737
+     },
+     {
+      "luma": 0.8577,
+      "min_channel": 0.737
+     }
+    ],
+    "gap": 0.2095,
+    "px": [
+     [
+      1009,
+      435
+     ],
+     [
+      896,
+      436
+     ]
+    ]
+   }
+  },
+  {
+   "id": "H3 dusk/front_full",
+   "name": "dusk/front_full: the skull itself does not glow (its brightest decile no brighter than the body's)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 119,
+     "p50": 0.1294,
+     "p90": 0.1732
+    },
+    "body": {
+     "n": 627,
+     "p50": 0.0974,
+     "p90": 0.1572
+    }
+   }
+  },
+  {
+   "id": "H4 dusk/front_full",
+   "name": "dusk/front_full: no white panels on the skull (under 3% of its box is white outside its two eyes)",
+   "pass": true,
+   "detail": {
+    "white": 0.0293,
+    "samples": 9157,
+    "box": [
+     844,
+     395,
+     1064,
+     596
+    ]
+   }
+  },
+  {
+   "id": "H1 noon/front_close_founder_frame",
+   "name": "noon/front_close_founder_frame: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 68,
+     "p50": 0.2752,
+     "p90": 0.4542
+    },
+    "body": {
+     "n": 271,
+     "p50": 0.3232,
+     "p90": 0.4815
+    },
+    "face": {
+     "n": 165,
+     "p50": 0.3572,
+     "p90": 0.4927
+    },
+    "box": [
+     716,
+     606,
+     1263,
+     1104
+    ]
+   }
+  },
+  {
+   "id": "H2 noon/front_close_founder_frame",
+   "name": "noon/front_close_founder_frame: the chest skull's two eyes are white and lit, and the gap between them is not",
+   "pass": false,
+   "detail": {
+    "eyes": [
+     {
+      "luma": 0.6178,
+      "min_channel": 0.396
+     },
+     {
+      "luma": 0.6209,
+      "min_channel": 0.404
+     }
+    ],
+    "gap": 0.4411,
+    "px": [
+     [
+      1136,
+      713
+     ],
+     [
+      850,
+      710
+     ]
+    ]
+   }
+  },
+  {
+   "id": "H3 noon/front_close_founder_frame",
+   "name": "noon/front_close_founder_frame: the skull itself does not glow (its brightest decile no brighter than the body's)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 68,
+     "p50": 0.2752,
+     "p90": 0.4542
+    },
+    "body": {
+     "n": 271,
+     "p50": 0.3232,
+     "p90": 0.4815
+    }
+   }
+  },
+  {
+   "id": "H4 noon/front_close_founder_frame",
+   "name": "noon/front_close_founder_frame: no white panels on the skull (under 3% of its box is white outside its two eyes)",
+   "pass": true,
+   "detail": {
+    "white": 0.0005,
+    "samples": 34826,
+    "box": [
+     716,
+     606,
+     1263,
+     1104
+    ]
+   }
+  },
+  {
+   "id": "H1 noon/front_chest",
+   "name": "noon/front_chest: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 145,
+     "p50": 0.3071,
+     "p90": 0.455
+    },
+    "body": {
+     "n": 291,
+     "p50": 0.2867,
+     "p90": 0.4972
+    },
+    "face": {
+     "n": 191,
+     "p50": 0.2822,
+     "p90": 0.4967
+    },
+    "box": [
+     778,
+     468,
+     1191,
+     847
+    ]
+   }
+  },
+  {
+   "id": "H2 noon/front_chest",
+   "name": "noon/front_chest: the chest skull's two eyes are white and lit, and the gap between them is not",
+   "pass": false,
+   "detail": {
+    "eyes": [
+     {
+      "luma": 0.6989,
+      "min_channel": 0.506
+     },
+     {
+      "luma": 0.7005,
+      "min_channel": 0.506
+     }
+    ],
+    "gap": 0.4587,
+    "px": [
+     [
+      1094,
+      546
+     ],
+     [
+      881,
+      544
+     ]
+    ]
+   }
+  },
+  {
+   "id": "H3 noon/front_chest",
+   "name": "noon/front_chest: the skull itself does not glow (its brightest decile no brighter than the body's)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 145,
+     "p50": 0.3071,
+     "p90": 0.455
+    },
+    "body": {
+     "n": 291,
+     "p50": 0.2867,
+     "p90": 0.4972
+    }
+   }
+  },
+  {
+   "id": "H4 noon/front_chest",
+   "name": "noon/front_chest: no white panels on the skull (under 3% of its box is white outside its two eyes)",
+   "pass": true,
+   "detail": {
+    "white": 0.0024,
+    "samples": 32368,
+    "box": [
+     778,
+     468,
+     1191,
+     847
+    ]
+   }
+  },
+  {
+   "id": "H1 noon/front_full",
+   "name": "noon/front_full: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 120,
+     "p50": 0.3211,
+     "p90": 0.4564
+    },
+    "body": {
+     "n": 626,
+     "p50": 0.3183,
+     "p90": 0.4981
+    },
+    "face": {
+     "n": 283,
+     "p50": 0.3234,
+     "p90": 0.5028
+    },
+    "box": [
+     865,
+     395,
+     1085,
+     596
+    ]
+   }
+  },
+  {
+   "id": "H2 noon/front_full",
+   "name": "noon/front_full: the chest skull's two eyes are white and lit, and the gap between them is not",
+   "pass": false,
+   "detail": {
+    "eyes": [
+     {
+      "luma": 0.6876,
+      "min_channel": 0.49
+     },
+     {
+      "luma": 0.6878,
+      "min_channel": 0.49
+     }
+    ],
+    "gap": 0.4499,
+    "px": [
+     [
+      1033,
+      436
+     ],
+     [
+      920,
+      435
+     ]
+    ]
+   }
+  },
+  {
+   "id": "H3 noon/front_full",
+   "name": "noon/front_full: the skull itself does not glow (its brightest decile no brighter than the body's)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 120,
+     "p50": 0.3211,
+     "p90": 0.4564
+    },
+    "body": {
+     "n": 626,
+     "p50": 0.3183,
+     "p90": 0.4981
+    }
+   }
+  },
+  {
+   "id": "H4 noon/front_full",
+   "name": "noon/front_full: no white panels on the skull (under 3% of its box is white outside its two eyes)",
+   "pass": true,
+   "detail": {
+    "white": 0.0008,
+    "samples": 9188,
+    "box": [
+     865,
+     395,
+     1085,
+     596
+    ]
+   }
+  },
+  {
+   "id": "H1 night/front_close_founder_frame",
+   "name": "night/front_close_founder_frame: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 71,
+     "p50": 0.1855,
+     "p90": 0.2853
+    },
+    "body": {
+     "n": 263,
+     "p50": 0.2081,
+     "p90": 0.262
+    },
+    "face": {
+     "n": 169,
+     "p50": 0.2266,
+     "p90": 0.6707
+    },
+    "box": [
+     667,
+     606,
+     1213,
+     1104
+    ]
+   }
+  },
+  {
+   "id": "H2 night/front_close_founder_frame",
+   "name": "night/front_close_founder_frame: the chest skull's two eyes are white and lit, and the gap between them is not",
+   "pass": true,
+   "detail": {
+    "eyes": [
+     {
+      "luma": 0.7794,
+      "min_channel": 0.62
+     },
+     {
+      "luma": 0.7774,
+      "min_channel": 0.62
+     }
+    ],
+    "gap": 0.2977,
+    "px": [
+     [
+      1080,
+      710
+     ],
+     [
+      794,
+      712
+     ]
+    ]
+   }
+  },
+  {
+   "id": "H3 night/front_close_founder_frame",
+   "name": "night/front_close_founder_frame: the skull itself does not glow (its brightest decile no brighter than the body's)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 71,
+     "p50": 0.1855,
+     "p90": 0.2853
+    },
+    "body": {
+     "n": 263,
+     "p50": 0.2081,
+     "p90": 0.262
+    }
+   }
+  },
+  {
+   "id": "H4 night/front_close_founder_frame",
+   "name": "night/front_close_founder_frame: no white panels on the skull (under 3% of its box is white outside its two eyes)",
+   "pass": true,
+   "detail": {
+    "white": 0.008,
+    "samples": 34920,
+    "box": [
+     667,
+     606,
+     1213,
+     1104
+    ]
+   }
+  },
+  {
+   "id": "H1 night/front_chest",
+   "name": "night/front_chest: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 127,
+     "p50": 0.2149,
+     "p90": 0.2807
+    },
+    "body": {
+     "n": 305,
+     "p50": 0.1966,
+     "p90": 0.258
+    },
+    "face": {
+     "n": 199,
+     "p50": 0.2224,
+     "p90": 0.475
+    },
+    "box": [
+     740,
+     468,
+     1152,
+     847
+    ]
+   }
+  },
+  {
+   "id": "H2 night/front_chest",
+   "name": "night/front_chest: the chest skull's two eyes are white and lit, and the gap between them is not",
+   "pass": true,
+   "detail": {
+    "eyes": [
+     {
+      "luma": 0.7982,
+      "min_channel": 0.651
+     },
+     {
+      "luma": 0.7982,
+      "min_channel": 0.651
+     }
+    ],
+    "gap": 0.3085,
+    "px": [
+     [
+      1050,
+      545
+     ],
+     [
+      837,
+      546
+     ]
+    ]
+   }
+  },
+  {
+   "id": "H3 night/front_chest",
+   "name": "night/front_chest: the skull itself does not glow (its brightest decile no brighter than the body's)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 127,
+     "p50": 0.2149,
+     "p90": 0.2807
+    },
+    "body": {
+     "n": 305,
+     "p50": 0.1966,
+     "p90": 0.258
+    }
+   }
+  },
+  {
+   "id": "H4 night/front_chest",
+   "name": "night/front_chest: no white panels on the skull (under 3% of its box is white outside its two eyes)",
+   "pass": true,
+   "detail": {
+    "white": 0.0169,
+    "samples": 32161,
+    "box": [
+     740,
+     468,
+     1152,
+     847
+    ]
+   }
+  },
+  {
+   "id": "H1 night/front_full",
+   "name": "night/front_full: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 117,
+     "p50": 0.2213,
+     "p90": 0.2928
+    },
+    "body": {
+     "n": 624,
+     "p50": 0.1877,
+     "p90": 0.255
+    },
+    "face": {
+     "n": 289,
+     "p50": 0.2303,
+     "p90": 0.2686
+    },
+    "box": [
+     845,
+     395,
+     1064,
+     596
+    ]
+   }
+  },
+  {
+   "id": "H2 night/front_full",
+   "name": "night/front_full: the chest skull's two eyes are white and lit, and the gap between them is not",
+   "pass": true,
+   "detail": {
+    "eyes": [
+     {
+      "luma": 0.7668,
+      "min_channel": 0.6
+     },
+     {
+      "luma": 0.7695,
+      "min_channel": 0.608
+     }
+    ],
+    "gap": 0.3108,
+    "px": [
+     [
+      1010,
+      435
+     ],
+     [
+      897,
+      436
+     ]
+    ]
+   }
+  },
+  {
+   "id": "H3 night/front_full",
+   "name": "night/front_full: the skull itself does not glow (its brightest decile no brighter than the body's)",
+   "pass": true,
+   "detail": {
+    "skull": {
+     "n": 117,
+     "p50": 0.2213,
+     "p90": 0.2928
+    },
+    "body": {
+     "n": 624,
+     "p50": 0.1877,
+     "p90": 0.255
+    }
+   }
+  },
+  {
+   "id": "H4 night/front_full",
+   "name": "night/front_full: no white panels on the skull (under 3% of its box is white outside its two eyes)",
+   "pass": true,
+   "detail": {
+    "white": 0.0066,
+    "samples": 9188,
+    "box": [
+     845,
+     395,
+     1064,
+     596
+    ]
+   }
+  },
+  {
+   "id": "K99",
+   "name": "the day clock and the worn skin are back as found",
+   "pass": true,
+   "detail": {
+    "day_minutes": 24.0,
+    "skin": "arden_infernal"
+   }
+  }
+ ],
+ "restore": {
+  "wl.Sky.DayMinutes": 24.0,
+  "skin": "arden_infernal"
+ },
+ "component_table": [
+  {
+   "n": 390,
+   "mat": "MID_M_WLMaster_0",
+   "color": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "base": [
+    0.898,
+    0.871,
+    0.8
+   ],
+   "z": [
+    115.5,
+    174.7
+   ]
+  },
+  {
+   "n": 80,
+   "mat": "MID_BasicShapeMaterial_1",
+   "color": [
+    0.045,
+    0.042,
+    0.05
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    126.6,
+    138.4
+   ]
+  },
+  {
+   "n": 2,
+   "mat": "MID_M_WL_VoxelGlow_0",
+   "color": [
+    5.453,
+    14.391,
+    15.148
+   ],
+   "base": [
+    8.64,
+    22.8,
+    24.0
+   ],
+   "z": [
+    132.5,
+    132.5
+   ]
+  },
+  {
+   "n": 2,
+   "mat": "MID_M_WL_EyeHalo_0",
+   "color": [
+    4090.088,
+    10793.284,
+    11361.354
+   ],
+   "base": [
+    6.48,
+    17.1,
+    18.0
+   ],
+   "z": [
+    132.5,
+    132.5
+   ]
+  },
+  {
+   "n": 362,
+   "mat": "MID_M_WLMaster_0",
+   "color": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "base": [
+    0.898,
+    0.871,
+    0.8
+   ],
+   "z": [
+    55.8,
+    121.3
+   ]
+  },
+  {
+   "n": 43,
+   "mat": "MID_M_WLMaster_0",
+   "color": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "base": [
+    0.898,
+    0.871,
+    0.8
+   ],
+   "z": [
+    83.8,
+    117.9
+   ]
+  },
+  {
+   "n": 52,
+   "mat": "MID_M_WLMaster_0",
+   "color": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "base": [
+    0.898,
+    0.871,
+    0.8
+   ],
+   "z": [
+    58.0,
+    79.3
+   ]
+  },
+  {
+   "n": 4,
+   "mat": "MID_BasicShapeMaterial_0",
+   "color": [
+    0.69,
+    0.66,
+    0.592
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    52.9,
+    53.0
+   ]
+  },
+  {
+   "n": 43,
+   "mat": "MID_M_WLMaster_0",
+   "color": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "base": [
+    0.898,
+    0.871,
+    0.8
+   ],
+   "z": [
+    83.8,
+    117.9
+   ]
+  },
+  {
+   "n": 52,
+   "mat": "MID_M_WLMaster_0",
+   "color": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "base": [
+    0.898,
+    0.871,
+    0.8
+   ],
+   "z": [
+    58.1,
+    79.3
+   ]
+  },
+  {
+   "n": 4,
+   "mat": "MID_BasicShapeMaterial_0",
+   "color": [
+    0.69,
+    0.66,
+    0.592
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    52.9,
+    53.0
+   ]
+  },
+  {
+   "n": 80,
+   "mat": "MID_M_WLMaster_0",
+   "color": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "base": [
+    0.898,
+    0.871,
+    0.8
+   ],
+   "z": [
+    46.7,
+    65.8
+   ]
+  },
+  {
+   "n": 60,
+   "mat": "MID_M_WLMaster_0",
+   "color": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "base": [
+    0.898,
+    0.871,
+    0.8
+   ],
+   "z": [
+    24.6,
+    43.1
+   ]
+  },
+  {
+   "n": 12,
+   "mat": "MID_BasicShapeMaterial_0",
+   "color": [
+    0.69,
+    0.66,
+    0.592
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    22.6,
+    22.6
+   ]
+  },
+  {
+   "n": 80,
+   "mat": "MID_M_WLMaster_0",
+   "color": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "base": [
+    0.898,
+    0.871,
+    0.8
+   ],
+   "z": [
+    46.7,
+    65.8
+   ]
+  },
+  {
+   "n": 60,
+   "mat": "MID_M_WLMaster_0",
+   "color": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "base": [
+    0.898,
+    0.871,
+    0.8
+   ],
+   "z": [
+    24.6,
+    43.1
+   ]
+  },
+  {
+   "n": 12,
+   "mat": "MID_BasicShapeMaterial_0",
+   "color": [
+    0.69,
+    0.66,
+    0.592
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    22.6,
+    22.6
+   ]
+  },
+  {
+   "n": 21,
+   "mat": "MID_BasicShapeMaterial_2",
+   "color": [
+    0.03,
+    0.04,
+    0.06
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    133.6,
+    158.2
+   ]
+  },
+  {
+   "n": 15,
+   "mat": "MID_BasicShapeMaterial_2",
+   "color": [
+    0.03,
+    0.04,
+    0.06
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    55.8,
+    115.9
+   ]
+  },
+  {
+   "n": 2,
+   "mat": "MID_M_WL_VoxelGlow_12",
+   "color": [
+    4.09,
+    10.793,
+    11.361
+   ],
+   "base": [
+    6.48,
+    17.1,
+    18.0
+   ],
+   "z": [
+    111.3,
+    111.3
+   ]
+  },
+  {
+   "n": 8,
+   "mat": "MID_M_WLMaster_1",
+   "color": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "base": [
+    0.905,
+    0.72,
+    0.29
+   ],
+   "z": [
+    76.3,
+    85.0
+   ]
+  },
+  {
+   "n": 3,
+   "mat": "MID_M_WL_VoxelGlow_4",
+   "color": [
+    8.18,
+    10.68,
+    11.361
+   ],
+   "base": [
+    12.96,
+    16.92,
+    18.0
+   ],
+   "z": [
+    64.2,
+    75.8
+   ]
+  },
+  {
+   "n": 8,
+   "mat": "MID_M_WL_VoxelGlow_8",
+   "color": [
+    1.272,
+    3.357,
+    3.534
+   ],
+   "base": [
+    11.88,
+    31.35,
+    33.0
+   ],
+   "z": [
+    71.6,
+    106.7
+   ]
+  },
+  {
+   "n": 2,
+   "mat": "MID_BasicShapeMaterial_2",
+   "color": [
+    0.03,
+    0.04,
+    0.06
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    104.5,
+    113.4
+   ]
+  },
+  {
+   "n": 1,
+   "mat": "MID_BasicShapeMaterial_3",
+   "color": [
+    0.64,
+    0.61,
+    0.54
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    93.9,
+    93.9
+   ]
+  },
+  {
+   "n": 1,
+   "mat": "MID_BasicShapeMaterial_2",
+   "color": [
+    0.03,
+    0.04,
+    0.06
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    69.7,
+    69.7
+   ]
+  },
+  {
+   "n": 2,
+   "mat": "MID_M_WL_VoxelGlow_10",
+   "color": [
+    0.318,
+    0.839,
+    0.883
+   ],
+   "base": [
+    2.97,
+    7.838,
+    8.25
+   ],
+   "z": [
+    63.2,
+    76.5
+   ]
+  },
+  {
+   "n": 4,
+   "mat": "MID_M_WL_VoxelGlow_4",
+   "color": [
+    8.18,
+    10.68,
+    11.361
+   ],
+   "base": [
+    12.96,
+    16.92,
+    18.0
+   ],
+   "z": [
+    73.7,
+    73.8
+   ]
+  },
+  {
+   "n": 2,
+   "mat": "MID_BasicShapeMaterial_2",
+   "color": [
+    0.03,
+    0.04,
+    0.06
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    104.6,
+    113.4
+   ]
+  },
+  {
+   "n": 1,
+   "mat": "MID_BasicShapeMaterial_3",
+   "color": [
+    0.64,
+    0.61,
+    0.54
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    94.0,
+    94.0
+   ]
+  },
+  {
+   "n": 1,
+   "mat": "MID_BasicShapeMaterial_2",
+   "color": [
+    0.03,
+    0.04,
+    0.06
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    69.7,
+    69.7
+   ]
+  },
+  {
+   "n": 2,
+   "mat": "MID_M_WL_VoxelGlow_10",
+   "color": [
+    0.318,
+    0.839,
+    0.883
+   ],
+   "base": [
+    2.97,
+    7.838,
+    8.25
+   ],
+   "z": [
+    62.9,
+    76.2
+   ]
+  },
+  {
+   "n": 4,
+   "mat": "MID_M_WL_VoxelGlow_4",
+   "color": [
+    8.18,
+    10.68,
+    11.361
+   ],
+   "base": [
+    12.96,
+    16.92,
+    18.0
+   ],
+   "z": [
+    73.7,
+    73.8
+   ]
+  },
+  {
+   "n": 1,
+   "mat": "MID_BasicShapeMaterial_2",
+   "color": [
+    0.03,
+    0.04,
+    0.06
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    57.2,
+    57.2
+   ]
+  },
+  {
+   "n": 1,
+   "mat": "MID_BasicShapeMaterial_3",
+   "color": [
+    0.64,
+    0.61,
+    0.54
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    47.5,
+    47.5
+   ]
+  },
+  {
+   "n": 3,
+   "mat": "MID_M_WL_VoxelGlow_6",
+   "color": [
+    0.757,
+    0.985,
+    1.591
+   ],
+   "base": [
+    1.2,
+    1.56,
+    2.52
+   ],
+   "z": [
+    29.4,
+    38.7
+   ]
+  },
+  {
+   "n": 12,
+   "mat": "MID_BasicShapeMaterial_3",
+   "color": [
+    0.64,
+    0.61,
+    0.54
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    25.5,
+    25.5
+   ]
+  },
+  {
+   "n": 16,
+   "mat": "MID_BasicShapeMaterial_2",
+   "color": [
+    0.03,
+    0.04,
+    0.06
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    22.5,
+    22.5
+   ]
+  },
+  {
+   "n": 1,
+   "mat": "MID_BasicShapeMaterial_2",
+   "color": [
+    0.03,
+    0.04,
+    0.06
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    57.2,
+    57.2
+   ]
+  },
+  {
+   "n": 1,
+   "mat": "MID_BasicShapeMaterial_3",
+   "color": [
+    0.64,
+    0.61,
+    0.54
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    47.5,
+    47.5
+   ]
+  },
+  {
+   "n": 3,
+   "mat": "MID_M_WL_VoxelGlow_6",
+   "color": [
+    0.757,
+    0.985,
+    1.591
+   ],
+   "base": [
+    1.2,
+    1.56,
+    2.52
+   ],
+   "z": [
+    29.5,
+    38.7
+   ]
+  },
+  {
+   "n": 12,
+   "mat": "MID_BasicShapeMaterial_3",
+   "color": [
+    0.64,
+    0.61,
+    0.54
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    25.5,
+    25.5
+   ]
+  },
+  {
+   "n": 16,
+   "mat": "MID_BasicShapeMaterial_2",
+   "color": [
+    0.03,
+    0.04,
+    0.06
+   ],
+   "base": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    22.5,
+    22.5
+   ]
+  }
+ ],
+ "anatomy_counts": {
+  "head_eyes": 2,
+  "chest_eyes": 2,
+  "skull_features": 7,
+  "body_bone": 772,
+  "face_bone": 288,
+  "visor": 80
+ },
+ "aim": {
+  "head_z": 23.4,
+  "chest_z": 2.2
+ },
+ "measures": {
+  "dusk/front_close_founder_frame": {
+   "chest_eyes": {
+    "eyes": [
+     {
+      "luma": 0.7729,
+      "min_channel": 0.612
+     },
+     {
+      "luma": 0.771,
+      "min_channel": 0.608
+     }
+    ],
+    "px": [
+     [
+      1078,
+      710
+     ],
+     [
+      792,
+      713
+     ]
+    ],
+    "gap_luma": 0.2169
+   },
+   "head_eyes": {
+    "eyes": [
+     {
+      "luma": 0.9106,
+      "min_channel": 0.824
+     },
+     {
+      "luma": 0.9101,
+      "min_channel": 0.824
+     }
+    ],
+    "px": [
+     [
+      1033,
+      292
+     ],
+     [
+      806,
+      294
+     ]
+    ],
+    "gap_luma": 0.0106
+   },
+   "skull_box_px": [
+    665,
+    606,
+    1212,
+    1104
+   ],
+   "skull_surface": {
+    "n": 68,
+    "p50": 0.1151,
+    "p90": 0.2141
+   },
+   "body_grey": {
+    "n": 271,
+    "p50": 0.103,
+    "p90": 0.1911
+   },
+   "face_grey": {
+    "n": 163,
+    "p50": 0.0845,
+    "p90": 0.5366
+   },
+   "white_on_skull": 0.0004,
+   "white_samples": 34983
+  },
+  "dusk/front_chest": {
+   "chest_eyes": {
+    "eyes": [
+     {
+      "luma": 0.8297,
+      "min_channel": 0.694
+     },
+     {
+      "luma": 0.8287,
+      "min_channel": 0.694
+     }
+    ],
+    "px": [
+     [
+      1049,
+      544
+     ],
+     [
+      835,
+      546
+     ]
+    ],
+    "gap_luma": 0.2197
+   },
+   "head_eyes": {
+    "eyes": [
+     {
+      "luma": 0.9352,
+      "min_channel": 0.867
+     },
+     {
+      "luma": 0.9349,
+      "min_channel": 0.867
+     }
+    ],
+    "px": [
+     [
+      1016,
+      236
+     ],
+     [
+      844,
+      238
+     ]
+    ],
+    "gap_luma": 0.0108
+   },
+   "skull_box_px": [
+    738,
+    468,
+    1151,
+    847
+   ],
+   "skull_surface": {
+    "n": 142,
+    "p50": 0.1342,
+    "p90": 0.1782
+   },
+   "body_grey": {
+    "n": 295,
+    "p50": 0.0918,
+    "p90": 0.1608
+   },
+   "face_grey": {
+    "n": 189,
+    "p50": 0.0814,
+    "p90": 0.5128
+   },
+   "white_on_skull": 0.023,
+   "white_samples": 32237
+  },
+  "dusk/front_full": {
+   "chest_eyes": {
+    "eyes": [
+     {
+      "luma": 0.8582,
+      "min_channel": 0.737
+     },
+     {
+      "luma": 0.8577,
+      "min_channel": 0.737
+     }
+    ],
+    "px": [
+     [
+      1009,
+      435
+     ],
+     [
+      896,
+      436
+     ]
+    ],
+    "gap_luma": 0.2095
+   },
+   "head_eyes": {
+    "eyes": [
+     {
+      "luma": 0.9514,
+      "min_channel": 0.894
+     },
+     {
+      "luma": 0.951,
+      "min_channel": 0.894
+     }
+    ],
+    "px": [
+     [
+      992,
+      269
+     ],
+     [
+      899,
+      270
+     ]
+    ],
+    "gap_luma": 0.0142
+   },
+   "skull_box_px": [
+    844,
+    395,
+    1064,
+    596
+   ],
+   "skull_surface": {
+    "n": 119,
+    "p50": 0.1294,
+    "p90": 0.1732
+   },
+   "body_grey": {
+    "n": 627,
+    "p50": 0.0974,
+    "p90": 0.1572
+   },
+   "face_grey": {
+    "n": 284,
+    "p50": 0.0831,
+    "p90": 0.1707
+   },
+   "white_on_skull": 0.0293,
+   "white_samples": 9157
+  },
+  "noon/front_close_founder_frame": {
+   "chest_eyes": {
+    "eyes": [
+     {
+      "luma": 0.6178,
+      "min_channel": 0.396
+     },
+     {
+      "luma": 0.6209,
+      "min_channel": 0.404
+     }
+    ],
+    "px": [
+     [
+      1136,
+      713
+     ],
+     [
+      850,
+      710
+     ]
+    ],
+    "gap_luma": 0.4411
+   },
+   "head_eyes": {
+    "eyes": [
+     {
+      "luma": 0.8184,
+      "min_channel": 0.671
+     },
+     {
+      "luma": 0.8287,
+      "min_channel": 0.694
+     }
+    ],
+    "px": [
+     [
+      1158,
+      291
+     ],
+     [
+      933,
+      288
+     ]
+    ],
+    "gap_luma": 0.0152
+   },
+   "skull_box_px": [
+    716,
+    606,
+    1263,
+    1104
+   ],
+   "skull_surface": {
+    "n": 68,
+    "p50": 0.2752,
+    "p90": 0.4542
+   },
+   "body_grey": {
+    "n": 271,
+    "p50": 0.3232,
+    "p90": 0.4815
+   },
+   "face_grey": {
+    "n": 165,
+    "p50": 0.3572,
+    "p90": 0.4927
+   },
+   "white_on_skull": 0.0005,
+   "white_samples": 34826
+  },
+  "noon/front_chest": {
+   "chest_eyes": {
+    "eyes": [
+     {
+      "luma": 0.6989,
+      "min_channel": 0.506
+     },
+     {
+      "luma": 0.7005,
+      "min_channel": 0.506
+     }
+    ],
+    "px": [
+     [
+      1094,
+      546
+     ],
+     [
+      881,
+      544
+     ]
+    ],
+    "gap_luma": 0.4587
+   },
+   "head_eyes": {
+    "eyes": [
+     {
+      "luma": 0.8589,
+      "min_channel": 0.733
+     },
+     {
+      "luma": 0.8634,
+      "min_channel": 0.749
+     }
+    ],
+    "px": [
+     [
+      1112,
+      236
+     ],
+     [
+      942,
+      233
+     ]
+    ],
+    "gap_luma": 0.0143
+   },
+   "skull_box_px": [
+    778,
+    468,
+    1191,
+    847
+   ],
+   "skull_surface": {
+    "n": 145,
+    "p50": 0.3071,
+    "p90": 0.455
+   },
+   "body_grey": {
+    "n": 291,
+    "p50": 0.2867,
+    "p90": 0.4972
+   },
+   "face_grey": {
+    "n": 191,
+    "p50": 0.2822,
+    "p90": 0.4967
+   },
+   "white_on_skull": 0.0024,
+   "white_samples": 32368
+  },
+  "noon/front_full": {
+   "chest_eyes": {
+    "eyes": [
+     {
+      "luma": 0.6876,
+      "min_channel": 0.49
+     },
+     {
+      "luma": 0.6878,
+      "min_channel": 0.49
+     }
+    ],
+    "px": [
+     [
+      1033,
+      436
+     ],
+     [
+      920,
+      435
+     ]
+    ],
+    "gap_luma": 0.4499
+   },
+   "head_eyes": {
+    "eyes": [
+     {
+      "luma": 0.8543,
+      "min_channel": 0.722
+     },
+     {
+      "luma": 0.8585,
+      "min_channel": 0.741
+     }
+    ],
+    "px": [
+     [
+      1044,
+      268
+     ],
+     [
+      952,
+      267
+     ]
+    ],
+    "gap_luma": 0.0153
+   },
+   "skull_box_px": [
+    865,
+    395,
+    1085,
+    596
+   ],
+   "skull_surface": {
+    "n": 120,
+    "p50": 0.3211,
+    "p90": 0.4564
+   },
+   "body_grey": {
+    "n": 626,
+    "p50": 0.3183,
+    "p90": 0.4981
+   },
+   "face_grey": {
+    "n": 283,
+    "p50": 0.3234,
+    "p90": 0.5028
+   },
+   "white_on_skull": 0.0008,
+   "white_samples": 9188
+  },
+  "night/front_close_founder_frame": {
+   "chest_eyes": {
+    "eyes": [
+     {
+      "luma": 0.7794,
+      "min_channel": 0.62
+     },
+     {
+      "luma": 0.7774,
+      "min_channel": 0.62
+     }
+    ],
+    "px": [
+     [
+      1080,
+      710
+     ],
+     [
+      794,
+      712
+     ]
+    ],
+    "gap_luma": 0.2977
+   },
+   "head_eyes": {
+    "eyes": [
+     {
+      "luma": 0.9284,
+      "min_channel": 0.855
+     },
+     {
+      "luma": 0.9297,
+      "min_channel": 0.859
+     }
+    ],
+    "px": [
+     [
+      1097,
+      302
+     ],
+     [
+      872,
+      303
+     ]
+    ],
+    "gap_luma": 0.0224
+   },
+   "skull_box_px": [
+    667,
+    606,
+    1213,
+    1104
+   ],
+   "skull_surface": {
+    "n": 71,
+    "p50": 0.1855,
+    "p90": 0.2853
+   },
+   "body_grey": {
+    "n": 263,
+    "p50": 0.2081,
+    "p90": 0.262
+   },
+   "face_grey": {
+    "n": 169,
+    "p50": 0.2266,
+    "p90": 0.6707
+   },
+   "white_on_skull": 0.008,
+   "white_samples": 34920
+  },
+  "night/front_chest": {
+   "chest_eyes": {
+    "eyes": [
+     {
+      "luma": 0.7982,
+      "min_channel": 0.651
+     },
+     {
+      "luma": 0.7982,
+      "min_channel": 0.651
+     }
+    ],
+    "px": [
+     [
+      1050,
+      545
+     ],
+     [
+      837,
+      546
+     ]
+    ],
+    "gap_luma": 0.3085
+   },
+   "head_eyes": {
+    "eyes": [
+     {
+      "luma": 0.9334,
+      "min_channel": 0.863
+     },
+     {
+      "luma": 0.9351,
+      "min_channel": 0.867
+     }
+    ],
+    "px": [
+     [
+      1065,
+      245
+     ],
+     [
+      895,
+      245
+     ]
+    ],
+    "gap_luma": 0.023
+   },
+   "skull_box_px": [
+    740,
+    468,
+    1152,
+    847
+   ],
+   "skull_surface": {
+    "n": 127,
+    "p50": 0.2149,
+    "p90": 0.2807
+   },
+   "body_grey": {
+    "n": 305,
+    "p50": 0.1966,
+    "p90": 0.258
+   },
+   "face_grey": {
+    "n": 199,
+    "p50": 0.2224,
+    "p90": 0.475
+   },
+   "white_on_skull": 0.0169,
+   "white_samples": 32161
+  },
+  "night/front_full": {
+   "chest_eyes": {
+    "eyes": [
+     {
+      "luma": 0.7668,
+      "min_channel": 0.6
+     },
+     {
+      "luma": 0.7695,
+      "min_channel": 0.608
+     }
+    ],
+    "px": [
+     [
+      1010,
+      435
+     ],
+     [
+      897,
+      436
+     ]
+    ],
+    "gap_luma": 0.3108
+   },
+   "head_eyes": {
+    "eyes": [
+     {
+      "luma": 0.9256,
+      "min_channel": 0.843
+     },
+     {
+      "luma": 0.9304,
+      "min_channel": 0.859
+     }
+    ],
+    "px": [
+     [
+      1019,
+      273
+     ],
+     [
+      927,
+      273
+     ]
+    ],
+    "gap_luma": 0.0286
+   },
+   "skull_box_px": [
+    845,
+    395,
+    1064,
+    596
+   ],
+   "skull_surface": {
+    "n": 117,
+    "p50": 0.2213,
+    "p90": 0.2928
+   },
+   "body_grey": {
+    "n": 624,
+    "p50": 0.1877,
+    "p90": 0.255
+   },
+   "face_grey": {
+    "n": 289,
+    "p50": 0.2303,
+    "p90": 0.2686
+   },
+   "white_on_skull": 0.0066,
+   "white_samples": 9188
+  }
+ },
+ "views": [
+  {
+   "hour": "dusk",
+   "view": "front_close_founder_frame",
+   "file": "skel_v2_head_dusk_front_close_founder_frame.png",
+   "measure": {
+    "chest_eyes": {
+     "eyes": [
+      {
+       "luma": 0.7729,
+       "min_channel": 0.612
+      },
+      {
+       "luma": 0.771,
+       "min_channel": 0.608
+      }
+     ],
+     "px": [
+      [
+       1078,
+       710
+      ],
+      [
+       792,
+       713
+      ]
+     ],
+     "gap_luma": 0.2169
+    },
+    "head_eyes": {
+     "eyes": [
+      {
+       "luma": 0.9106,
+       "min_channel": 0.824
+      },
+      {
+       "luma": 0.9101,
+       "min_channel": 0.824
+      }
+     ],
+     "px": [
+      [
+       1033,
+       292
+      ],
+      [
+       806,
+       294
+      ]
+     ],
+     "gap_luma": 0.0106
+    },
+    "skull_box_px": [
+     665,
+     606,
+     1212,
+     1104
+    ],
+    "skull_surface": {
+     "n": 68,
+     "p50": 0.1151,
+     "p90": 0.2141
+    },
+    "body_grey": {
+     "n": 271,
+     "p50": 0.103,
+     "p90": 0.1911
+    },
+    "face_grey": {
+     "n": 163,
+     "p50": 0.0845,
+     "p90": 0.5366
+    },
+    "white_on_skull": 0.0004,
+    "white_samples": 34983
+   }
+  },
+  {
+   "hour": "dusk",
+   "view": "front_chest",
+   "file": "skel_v2_head_dusk_front_chest.png",
+   "measure": {
+    "chest_eyes": {
+     "eyes": [
+      {
+       "luma": 0.8297,
+       "min_channel": 0.694
+      },
+      {
+       "luma": 0.8287,
+       "min_channel": 0.694
+      }
+     ],
+     "px": [
+      [
+       1049,
+       544
+      ],
+      [
+       835,
+       546
+      ]
+     ],
+     "gap_luma": 0.2197
+    },
+    "head_eyes": {
+     "eyes": [
+      {
+       "luma": 0.9352,
+       "min_channel": 0.867
+      },
+      {
+       "luma": 0.9349,
+       "min_channel": 0.867
+      }
+     ],
+     "px": [
+      [
+       1016,
+       236
+      ],
+      [
+       844,
+       238
+      ]
+     ],
+     "gap_luma": 0.0108
+    },
+    "skull_box_px": [
+     738,
+     468,
+     1151,
+     847
+    ],
+    "skull_surface": {
+     "n": 142,
+     "p50": 0.1342,
+     "p90": 0.1782
+    },
+    "body_grey": {
+     "n": 295,
+     "p50": 0.0918,
+     "p90": 0.1608
+    },
+    "face_grey": {
+     "n": 189,
+     "p50": 0.0814,
+     "p90": 0.5128
+    },
+    "white_on_skull": 0.023,
+    "white_samples": 32237
+   }
+  },
+  {
+   "hour": "dusk",
+   "view": "front_full",
+   "file": "skel_v2_head_dusk_front_full.png",
+   "measure": {
+    "chest_eyes": {
+     "eyes": [
+      {
+       "luma": 0.8582,
+       "min_channel": 0.737
+      },
+      {
+       "luma": 0.8577,
+       "min_channel": 0.737
+      }
+     ],
+     "px": [
+      [
+       1009,
+       435
+      ],
+      [
+       896,
+       436
+      ]
+     ],
+     "gap_luma": 0.2095
+    },
+    "head_eyes": {
+     "eyes": [
+      {
+       "luma": 0.9514,
+       "min_channel": 0.894
+      },
+      {
+       "luma": 0.951,
+       "min_channel": 0.894
+      }
+     ],
+     "px": [
+      [
+       992,
+       269
+      ],
+      [
+       899,
+       270
+      ]
+     ],
+     "gap_luma": 0.0142
+    },
+    "skull_box_px": [
+     844,
+     395,
+     1064,
+     596
+    ],
+    "skull_surface": {
+     "n": 119,
+     "p50": 0.1294,
+     "p90": 0.1732
+    },
+    "body_grey": {
+     "n": 627,
+     "p50": 0.0974,
+     "p90": 0.1572
+    },
+    "face_grey": {
+     "n": 284,
+     "p50": 0.0831,
+     "p90": 0.1707
+    },
+    "white_on_skull": 0.0293,
+    "white_samples": 9157
+   }
+  },
+  {
+   "hour": "dusk",
+   "view": "three_quarter",
+   "file": "skel_v2_head_dusk_three_quarter.png"
+  },
+  {
+   "hour": "dusk",
+   "view": "side",
+   "file": "skel_v2_head_dusk_side.png"
+  },
+  {
+   "hour": "dusk",
+   "view": "front_gameplay_distance",
+   "file": "skel_v2_head_dusk_front_gameplay_distance.png"
+  },
+  {
+   "hour": "dusk",
+   "view": "gameplay_camera",
+   "file": "skel_v2_head_dusk_gameplay_camera.png"
+  },
+  {
+   "hour": "noon",
+   "view": "front_close_founder_frame",
+   "file": "skel_v2_head_noon_front_close_founder_frame.png",
+   "measure": {
+    "chest_eyes": {
+     "eyes": [
+      {
+       "luma": 0.6178,
+       "min_channel": 0.396
+      },
+      {
+       "luma": 0.6209,
+       "min_channel": 0.404
+      }
+     ],
+     "px": [
+      [
+       1136,
+       713
+      ],
+      [
+       850,
+       710
+      ]
+     ],
+     "gap_luma": 0.4411
+    },
+    "head_eyes": {
+     "eyes": [
+      {
+       "luma": 0.8184,
+       "min_channel": 0.671
+      },
+      {
+       "luma": 0.8287,
+       "min_channel": 0.694
+      }
+     ],
+     "px": [
+      [
+       1158,
+       291
+      ],
+      [
+       933,
+       288
+      ]
+     ],
+     "gap_luma": 0.0152
+    },
+    "skull_box_px": [
+     716,
+     606,
+     1263,
+     1104
+    ],
+    "skull_surface": {
+     "n": 68,
+     "p50": 0.2752,
+     "p90": 0.4542
+    },
+    "body_grey": {
+     "n": 271,
+     "p50": 0.3232,
+     "p90": 0.4815
+    },
+    "face_grey": {
+     "n": 165,
+     "p50": 0.3572,
+     "p90": 0.4927
+    },
+    "white_on_skull": 0.0005,
+    "white_samples": 34826
+   }
+  },
+  {
+   "hour": "noon",
+   "view": "front_chest",
+   "file": "skel_v2_head_noon_front_chest.png",
+   "measure": {
+    "chest_eyes": {
+     "eyes": [
+      {
+       "luma": 0.6989,
+       "min_channel": 0.506
+      },
+      {
+       "luma": 0.7005,
+       "min_channel": 0.506
+      }
+     ],
+     "px": [
+      [
+       1094,
+       546
+      ],
+      [
+       881,
+       544
+      ]
+     ],
+     "gap_luma": 0.4587
+    },
+    "head_eyes": {
+     "eyes": [
+      {
+       "luma": 0.8589,
+       "min_channel": 0.733
+      },
+      {
+       "luma": 0.8634,
+       "min_channel": 0.749
+      }
+     ],
+     "px": [
+      [
+       1112,
+       236
+      ],
+      [
+       942,
+       233
+      ]
+     ],
+     "gap_luma": 0.0143
+    },
+    "skull_box_px": [
+     778,
+     468,
+     1191,
+     847
+    ],
+    "skull_surface": {
+     "n": 145,
+     "p50": 0.3071,
+     "p90": 0.455
+    },
+    "body_grey": {
+     "n": 291,
+     "p50": 0.2867,
+     "p90": 0.4972
+    },
+    "face_grey": {
+     "n": 191,
+     "p50": 0.2822,
+     "p90": 0.4967
+    },
+    "white_on_skull": 0.0024,
+    "white_samples": 32368
+   }
+  },
+  {
+   "hour": "noon",
+   "view": "front_full",
+   "file": "skel_v2_head_noon_front_full.png",
+   "measure": {
+    "chest_eyes": {
+     "eyes": [
+      {
+       "luma": 0.6876,
+       "min_channel": 0.49
+      },
+      {
+       "luma": 0.6878,
+       "min_channel": 0.49
+      }
+     ],
+     "px": [
+      [
+       1033,
+       436
+      ],
+      [
+       920,
+       435
+      ]
+     ],
+     "gap_luma": 0.4499
+    },
+    "head_eyes": {
+     "eyes": [
+      {
+       "luma": 0.8543,
+       "min_channel": 0.722
+      },
+      {
+       "luma": 0.8585,
+       "min_channel": 0.741
+      }
+     ],
+     "px": [
+      [
+       1044,
+       268
+      ],
+      [
+       952,
+       267
+      ]
+     ],
+     "gap_luma": 0.0153
+    },
+    "skull_box_px": [
+     865,
+     395,
+     1085,
+     596
+    ],
+    "skull_surface": {
+     "n": 120,
+     "p50": 0.3211,
+     "p90": 0.4564
+    },
+    "body_grey": {
+     "n": 626,
+     "p50": 0.3183,
+     "p90": 0.4981
+    },
+    "face_grey": {
+     "n": 283,
+     "p50": 0.3234,
+     "p90": 0.5028
+    },
+    "white_on_skull": 0.0008,
+    "white_samples": 9188
+   }
+  },
+  {
+   "hour": "noon",
+   "view": "three_quarter",
+   "file": "skel_v2_head_noon_three_quarter.png"
+  },
+  {
+   "hour": "noon",
+   "view": "side",
+   "file": "skel_v2_head_noon_side.png"
+  },
+  {
+   "hour": "noon",
+   "view": "front_gameplay_distance",
+   "file": "skel_v2_head_noon_front_gameplay_distance.png"
+  },
+  {
+   "hour": "noon",
+   "view": "gameplay_camera",
+   "file": "skel_v2_head_noon_gameplay_camera.png"
+  },
+  {
+   "hour": "night",
+   "view": "front_close_founder_frame",
+   "file": "skel_v2_head_night_front_close_founder_frame.png",
+   "measure": {
+    "chest_eyes": {
+     "eyes": [
+      {
+       "luma": 0.7794,
+       "min_channel": 0.62
+      },
+      {
+       "luma": 0.7774,
+       "min_channel": 0.62
+      }
+     ],
+     "px": [
+      [
+       1080,
+       710
+      ],
+      [
+       794,
+       712
+      ]
+     ],
+     "gap_luma": 0.2977
+    },
+    "head_eyes": {
+     "eyes": [
+      {
+       "luma": 0.9284,
+       "min_channel": 0.855
+      },
+      {
+       "luma": 0.9297,
+       "min_channel": 0.859
+      }
+     ],
+     "px": [
+      [
+       1097,
+       302
+      ],
+      [
+       872,
+       303
+      ]
+     ],
+     "gap_luma": 0.0224
+    },
+    "skull_box_px": [
+     667,
+     606,
+     1213,
+     1104
+    ],
+    "skull_surface": {
+     "n": 71,
+     "p50": 0.1855,
+     "p90": 0.2853
+    },
+    "body_grey": {
+     "n": 263,
+     "p50": 0.2081,
+     "p90": 0.262
+    },
+    "face_grey": {
+     "n": 169,
+     "p50": 0.2266,
+     "p90": 0.6707
+    },
+    "white_on_skull": 0.008,
+    "white_samples": 34920
+   }
+  },
+  {
+   "hour": "night",
+   "view": "front_chest",
+   "file": "skel_v2_head_night_front_chest.png",
+   "measure": {
+    "chest_eyes": {
+     "eyes": [
+      {
+       "luma": 0.7982,
+       "min_channel": 0.651
+      },
+      {
+       "luma": 0.7982,
+       "min_channel": 0.651
+      }
+     ],
+     "px": [
+      [
+       1050,
+       545
+      ],
+      [
+       837,
+       546
+      ]
+     ],
+     "gap_luma": 0.3085
+    },
+    "head_eyes": {
+     "eyes": [
+      {
+       "luma": 0.9334,
+       "min_channel": 0.863
+      },
+      {
+       "luma": 0.9351,
+       "min_channel": 0.867
+      }
+     ],
+     "px": [
+      [
+       1065,
+       245
+      ],
+      [
+       895,
+       245
+      ]
+     ],
+     "gap_luma": 0.023
+    },
+    "skull_box_px": [
+     740,
+     468,
+     1152,
+     847
+    ],
+    "skull_surface": {
+     "n": 127,
+     "p50": 0.2149,
+     "p90": 0.2807
+    },
+    "body_grey": {
+     "n": 305,
+     "p50": 0.1966,
+     "p90": 0.258
+    },
+    "face_grey": {
+     "n": 199,
+     "p50": 0.2224,
+     "p90": 0.475
+    },
+    "white_on_skull": 0.0169,
+    "white_samples": 32161
+   }
+  },
+  {
+   "hour": "night",
+   "view": "front_full",
+   "file": "skel_v2_head_night_front_full.png",
+   "measure": {
+    "chest_eyes": {
+     "eyes": [
+      {
+       "luma": 0.7668,
+       "min_channel": 0.6
+      },
+      {
+       "luma": 0.7695,
+       "min_channel": 0.608
+      }
+     ],
+     "px": [
+      [
+       1010,
+       435
+      ],
+      [
+       897,
+       436
+      ]
+     ],
+     "gap_luma": 0.3108
+    },
+    "head_eyes": {
+     "eyes": [
+      {
+       "luma": 0.9256,
+       "min_channel": 0.843
+      },
+      {
+       "luma": 0.9304,
+       "min_channel": 0.859
+      }
+     ],
+     "px": [
+      [
+       1019,
+       273
+      ],
+      [
+       927,
+       273
+      ]
+     ],
+     "gap_luma": 0.0286
+    },
+    "skull_box_px": [
+     845,
+     395,
+     1064,
+     596
+    ],
+    "skull_surface": {
+     "n": 117,
+     "p50": 0.2213,
+     "p90": 0.2928
+    },
+    "body_grey": {
+     "n": 624,
+     "p50": 0.1877,
+     "p90": 0.255
+    },
+    "face_grey": {
+     "n": 289,
+     "p50": 0.2303,
+     "p90": 0.2686
+    },
+    "white_on_skull": 0.0066,
+    "white_samples": 9188
+   }
+  },
+  {
+   "hour": "night",
+   "view": "three_quarter",
+   "file": "skel_v2_head_night_three_quarter.png"
+  },
+  {
+   "hour": "night",
+   "view": "side",
+   "file": "skel_v2_head_night_side.png"
+  },
+  {
+   "hour": "night",
+   "view": "front_gameplay_distance",
+   "file": "skel_v2_head_night_front_gameplay_distance.png"
+  },
+  {
+   "hour": "night",
+   "view": "gameplay_camera",
+   "file": "skel_v2_head_night_gameplay_camera.png"
+  }
+ ],
+ "finished": "2026-09-28 11:47:08",
+ "seconds": 103.97,
+ "log": "A00 PASS the worn costume is the corrected figure: both eye pairs, the chest skull's dark features, the grey coat {'counts': {'head_eyes': 2, 'chest_eyes': 2, 'skull_features': 7, 'body_bone': 772, 'face_bone': 288, 'visor': 80}, 'note': \"skull_features are the chest skull's void sockets, nose and teeth (7 in the figure); the grey is the `bone` coat's instances -- the chest skull's cranium and jaw are among the body's now.\"}\nVIEW {'hour': 'dusk', 'view': 'front_close_founder_frame', 'file': 'skel_v2_head_dusk_front_close_founder_frame.png', 'measure': {'chest_eyes': {'eyes': [{'luma': 0.7729, 'min_channel': 0.612}, {'luma': 0.771, 'min_channel': 0.608}], 'px': [[1078, 710], [792, 713]], 'gap_luma': 0.2169}, 'head_eyes': {'eyes': [{'luma': 0.9106, 'min_channel': 0.824}, {'luma': 0.9101, 'min_channel': 0.824}], 'px': [[1033, 292], [806, 294]], 'gap_luma': 0.0106}, 'skull_box_px': [665, 606, 1212, 1104], 'skull_surface': {'n': 68, 'p50': 0.1151, 'p90': 0.2141}, 'body_grey': {'n': 271, 'p50': 0.103, 'p90': 0.1911}, 'face_grey': {'n': 163, 'p50': 0.0845, 'p90': 0.5366}, 'white_on_skull': 0.0004, 'white_samples': 34983}}\nVIEW {'hour': 'dusk', 'view': 'front_chest', 'file': 'skel_v2_head_dusk_front_chest.png', 'measure': {'chest_eyes': {'eyes': [{'luma': 0.8297, 'min_channel': 0.694}, {'luma': 0.8287, 'min_channel': 0.694}], 'px': [[1049, 544], [835, 546]], 'gap_luma': 0.2197}, 'head_eyes': {'eyes': [{'luma': 0.9352, 'min_channel': 0.867}, {'luma': 0.9349, 'min_channel': 0.867}], 'px': [[1016, 236], [844, 238]], 'gap_luma': 0.0108}, 'skull_box_px': [738, 468, 1151, 847], 'skull_surface': {'n': 142, 'p50': 0.1342, 'p90': 0.1782}, 'body_grey': {'n': 295, 'p50': 0.0918, 'p90': 0.1608}, 'face_grey': {'n': 189, 'p50': 0.0814, 'p90': 0.5128}, 'white_on_skull': 0.023, 'white_samples': 32237}}\nVIEW {'hour': 'dusk', 'view': 'front_full', 'file': 'skel_v2_head_dusk_front_full.png', 'measure': {'chest_eyes': {'eyes': [{'luma': 0.8582, 'min_channel': 0.737}, {'luma': 0.8577, 'min_channel': 0.737}], 'px': [[1009, 435], [896, 436]], 'gap_luma': 0.2095}, 'head_eyes': {'eyes': [{'luma': 0.9514, 'min_channel': 0.894}, {'luma': 0.951, 'min_channel': 0.894}], 'px': [[992, 269], [899, 270]], 'gap_luma': 0.0142}, 'skull_box_px': [844, 395, 1064, 596], 'skull_surface': {'n': 119, 'p50': 0.1294, 'p90': 0.1732}, 'body_grey': {'n': 627, 'p50': 0.0974, 'p90': 0.1572}, 'face_grey': {'n': 284, 'p50': 0.0831, 'p90': 0.1707}, 'white_on_skull': 0.0293, 'white_samples': 9157}}\nVIEW {'hour': 'dusk', 'view': 'three_quarter', 'file': 'skel_v2_head_dusk_three_quarter.png'}\nVIEW {'hour': 'dusk', 'view': 'side', 'file': 'skel_v2_head_dusk_side.png'}\nVIEW {'hour': 'dusk', 'view': 'front_gameplay_distance', 'file': 'skel_v2_head_dusk_front_gameplay_distance.png'}\nVIEW {'hour': 'noon', 'view': 'front_close_founder_frame', 'file': 'skel_v2_head_noon_front_close_founder_frame.png', 'measure': {'chest_eyes': {'eyes': [{'luma': 0.6178, 'min_channel': 0.396}, {'luma': 0.6209, 'min_channel': 0.404}], 'px': [[1136, 713], [850, 710]], 'gap_luma': 0.4411}, 'head_eyes': {'eyes': [{'luma': 0.8184, 'min_channel': 0.671}, {'luma': 0.8287, 'min_channel': 0.694}], 'px': [[1158, 291], [933, 288]], 'gap_luma': 0.0152}, 'skull_box_px': [716, 606, 1263, 1104], 'skull_surface': {'n': 68, 'p50': 0.2752, 'p90': 0.4542}, 'body_grey': {'n': 271, 'p50': 0.3232, 'p90': 0.4815}, 'face_grey': {'n': 165, 'p50': 0.3572, 'p90': 0.4927}, 'white_on_skull': 0.0005, 'white_samples': 34826}}\nVIEW {'hour': 'noon', 'view': 'front_chest', 'file': 'skel_v2_head_noon_front_chest.png', 'measure': {'chest_eyes': {'eyes': [{'luma': 0.6989, 'min_channel': 0.506}, {'luma': 0.7005, 'min_channel': 0.506}], 'px': [[1094, 546], [881, 544]], 'gap_luma': 0.4587}, 'head_eyes': {'eyes': [{'luma': 0.8589, 'min_channel': 0.733}, {'luma': 0.8634, 'min_channel': 0.749}], 'px': [[1112, 236], [942, 233]], 'gap_luma': 0.0143}, 'skull_box_px': [778, 468, 1191, 847], 'skull_surface': {'n': 145, 'p50': 0.3071, 'p90': 0.455}, 'body_grey': {'n': 291, 'p50': 0.2867, 'p90': 0.4972}, 'face_grey': {'n': 191, 'p50': 0.2822, 'p90': 0.4967}, 'white_on_skull': 0.0024, 'white_samples': 32368}}\nVIEW {'hour': 'noon', 'view': 'front_full', 'file': 'skel_v2_head_noon_front_full.png', 'measure': {'chest_eyes': {'eyes': [{'luma': 0.6876, 'min_channel': 0.49}, {'luma': 0.6878, 'min_channel': 0.49}], 'px': [[1033, 436], [920, 435]], 'gap_luma': 0.4499}, 'head_eyes': {'eyes': [{'luma': 0.8543, 'min_channel': 0.722}, {'luma': 0.8585, 'min_channel': 0.741}], 'px': [[1044, 268], [952, 267]], 'gap_luma': 0.0153}, 'skull_box_px': [865, 395, 1085, 596], 'skull_surface': {'n': 120, 'p50': 0.3211, 'p90': 0.4564}, 'body_grey': {'n': 626, 'p50': 0.3183, 'p90': 0.4981}, 'face_grey': {'n': 283, 'p50': 0.3234, 'p90': 0.5028}, 'white_on_skull': 0.0008, 'white_samples': 9188}}\nVIEW {'hour': 'noon', 'view': 'three_quarter', 'file': 'skel_v2_head_noon_three_quarter.png'}\nVIEW {'hour': 'noon', 'view': 'side', 'file': 'skel_v2_head_noon_side.png'}\nVIEW {'hour': 'noon', 'view': 'front_gameplay_distance', 'file': 'skel_v2_head_noon_front_gameplay_distance.png'}\nVIEW {'hour': 'night', 'view': 'front_close_founder_frame', 'file': 'skel_v2_head_night_front_close_founder_frame.png', 'measure': {'chest_eyes': {'eyes': [{'luma': 0.7794, 'min_channel': 0.62}, {'luma': 0.7774, 'min_channel': 0.62}], 'px': [[1080, 710], [794, 712]], 'gap_luma': 0.2977}, 'head_eyes': {'eyes': [{'luma': 0.9284, 'min_channel': 0.855}, {'luma': 0.9297, 'min_channel': 0.859}], 'px': [[1097, 302], [872, 303]], 'gap_luma': 0.0224}, 'skull_box_px': [667, 606, 1213, 1104], 'skull_surface': {'n': 71, 'p50': 0.1855, 'p90': 0.2853}, 'body_grey': {'n': 263, 'p50': 0.2081, 'p90': 0.262}, 'face_grey': {'n': 169, 'p50': 0.2266, 'p90': 0.6707}, 'white_on_skull': 0.008, 'white_samples': 34920}}\nVIEW {'hour': 'night', 'view': 'front_chest', 'file': 'skel_v2_head_night_front_chest.png', 'measure': {'chest_eyes': {'eyes': [{'luma': 0.7982, 'min_channel': 0.651}, {'luma': 0.7982, 'min_channel': 0.651}], 'px': [[1050, 545], [837, 546]], 'gap_luma': 0.3085}, 'head_eyes': {'eyes': [{'luma': 0.9334, 'min_channel': 0.863}, {'luma': 0.9351, 'min_channel': 0.867}], 'px': [[1065, 245], [895, 245]], 'gap_luma': 0.023}, 'skull_box_px': [740, 468, 1152, 847], 'skull_surface': {'n': 127, 'p50': 0.2149, 'p90': 0.2807}, 'body_grey': {'n': 305, 'p50': 0.1966, 'p90': 0.258}, 'face_grey': {'n': 199, 'p50': 0.2224, 'p90': 0.475}, 'white_on_skull': 0.0169, 'white_samples': 32161}}\nVIEW {'hour': 'night', 'view': 'front_full', 'file': 'skel_v2_head_night_front_full.png', 'measure': {'chest_eyes': {'eyes': [{'luma': 0.7668, 'min_channel': 0.6}, {'luma': 0.7695, 'min_channel': 0.608}], 'px': [[1010, 435], [897, 436]], 'gap_luma': 0.3108}, 'head_eyes': {'eyes': [{'luma': 0.9256, 'min_channel': 0.843}, {'luma': 0.9304, 'min_channel': 0.859}], 'px': [[1019, 273], [927, 273]], 'gap_luma': 0.0286}, 'skull_box_px': [845, 395, 1064, 596], 'skull_surface': {'n': 117, 'p50': 0.2213, 'p90': 0.2928}, 'body_grey': {'n': 624, 'p50': 0.1877, 'p90': 0.255}, 'face_grey': {'n': 289, 'p50': 0.2303, 'p90': 0.2686}, 'white_on_skull': 0.0066, 'white_samples': 9188}}\nVIEW {'hour': 'night', 'view': 'three_quarter', 'file': 'skel_v2_head_night_three_quarter.png'}\nVIEW {'hour': 'night', 'view': 'side', 'file': 'skel_v2_head_night_side.png'}\nVIEW {'hour': 'night', 'view': 'front_gameplay_distance', 'file': 'skel_v2_head_night_front_gameplay_distance.png'}\nH1 dusk/front_close_founder_frame PASS dusk/front_close_founder_frame: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it) {'skull': {'n': 68, 'p50': 0.1151, 'p90': 0.2141}, 'body': {'n': 271, 'p50': 0.103, 'p90': 0.1911}, 'face': {'n': 163, 'p50': 0.0845, 'p90': 0.5366}, 'box': [665, 606, 1212, 1104]}\nH2 dusk/front_close_founder_frame PASS dusk/front_close_founder_frame: the chest skull's two eyes are white and lit, and the gap between them is not {'eyes': [{'luma': 0.7729, 'min_channel': 0.612}, {'luma': 0.771, 'min_channel': 0.608}], 'gap': 0.2169, 'px': [[1078, 710], [792, 713]]}\nH3 dusk/front_close_founder_frame PASS dusk/front_close_founder_frame: the skull itself does not glow (its brightest decile no brighter than the body's) {'skull': {'n': 68, 'p50': 0.1151, 'p90': 0.2141}, 'body': {'n': 271, 'p50': 0.103, 'p90': 0.1911}}\nH4 dusk/front_close_founder_frame PASS dusk/front_close_founder_frame: no white panels on the skull (under 3% of its box is white outside its two eyes) {'white': 0.0004, 'samples': 34983, 'box': [665, 606, 1212, 1104]}\nH1 dusk/front_chest PASS dusk/front_chest: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it) {'skull': {'n': 142, 'p50': 0.1342, 'p90': 0.1782}, 'body': {'n': 295, 'p50': 0.0918, 'p90': 0.1608}, 'face': {'n': 189, 'p50': 0.0814, 'p90': 0.5128}, 'box': [738, 468, 1151, 847]}\nH2 dusk/front_chest PASS dusk/front_chest: the chest skull's two eyes are white and lit, and the gap between them is not {'eyes': [{'luma': 0.8297, 'min_channel': 0.694}, {'luma': 0.8287, 'min_channel': 0.694}], 'gap': 0.2197, 'px': [[1049, 544], [835, 546]]}\nH3 dusk/front_chest PASS dusk/front_chest: the skull itself does not glow (its brightest decile no brighter than the body's) {'skull': {'n': 142, 'p50': 0.1342, 'p90': 0.1782}, 'body': {'n': 295, 'p50': 0.0918, 'p90': 0.1608}}\nH4 dusk/front_chest PASS dusk/front_chest: no white panels on the skull (under 3% of its box is white outside its two eyes) {'white': 0.023, 'samples': 32237, 'box': [738, 468, 1151, 847]}\nH1 dusk/front_full PASS dusk/front_full: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it) {'skull': {'n': 119, 'p50': 0.1294, 'p90': 0.1732}, 'body': {'n': 627, 'p50': 0.0974, 'p90': 0.1572}, 'face': {'n': 284, 'p50': 0.0831, 'p90': 0.1707}, 'box': [844, 395, 1064, 596]}\nH2 dusk/front_full PASS dusk/front_full: the chest skull's two eyes are white and lit, and the gap between them is not {'eyes': [{'luma': 0.8582, 'min_channel': 0.737}, {'luma': 0.8577, 'min_channel': 0.737}], 'gap': 0.2095, 'px': [[1009, 435], [896, 436]]}\nH3 dusk/front_full PASS dusk/front_full: the skull itself does not glow (its brightest decile no brighter than the body's) {'skull': {'n': 119, 'p50': 0.1294, 'p90': 0.1732}, 'body': {'n': 627, 'p50': 0.0974, 'p90': 0.1572}}\nH4 dusk/front_full PASS dusk/front_full: no white panels on the skull (under 3% of its box is white outside its two eyes) {'white': 0.0293, 'samples': 9157, 'box': [844, 395, 1064, 596]}\nH1 noon/front_close_founder_frame PASS noon/front_close_founder_frame: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it) {'skull': {'n': 68, 'p50': 0.2752, 'p90': 0.4542}, 'body': {'n': 271, 'p50': 0.3232, 'p90': 0.4815}, 'face': {'n': 165, 'p50': 0.3572, 'p90': 0.4927}, 'box': [716, 606, 1263, 1104]}\nH2 noon/front_close_founder_frame FAIL noon/front_close_founder_frame: the chest skull's two eyes are white and lit, and the gap between them is not {'eyes': [{'luma': 0.6178, 'min_channel': 0.396}, {'luma': 0.6209, 'min_channel': 0.404}], 'gap': 0.4411, 'px': [[1136, 713], [850, 710]]}\nH3 noon/front_close_founder_frame PASS noon/front_close_founder_frame: the skull itself does not glow (its brightest decile no brighter than the body's) {'skull': {'n': 68, 'p50': 0.2752, 'p90': 0.4542}, 'body': {'n': 271, 'p50': 0.3232, 'p90': 0.4815}}\nH4 noon/front_close_founder_frame PASS noon/front_close_founder_frame: no white panels on the skull (under 3% of its box is white outside its two eyes) {'white': 0.0005, 'samples': 34826, 'box': [716, 606, 1263, 1104]}\nH1 noon/front_chest PASS noon/front_chest: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it) {'skull': {'n': 145, 'p50': 0.3071, 'p90': 0.455}, 'body': {'n': 291, 'p50': 0.2867, 'p90': 0.4972}, 'face': {'n': 191, 'p50': 0.2822, 'p90': 0.4967}, 'box': [778, 468, 1191, 847]}\nH2 noon/front_chest FAIL noon/front_chest: the chest skull's two eyes are white and lit, and the gap between them is not {'eyes': [{'luma': 0.6989, 'min_channel': 0.506}, {'luma': 0.7005, 'min_channel': 0.506}], 'gap': 0.4587, 'px': [[1094, 546], [881, 544]]}\nH3 noon/front_chest PASS noon/front_chest: the skull itself does not glow (its brightest decile no brighter than the body's) {'skull': {'n': 145, 'p50': 0.3071, 'p90': 0.455}, 'body': {'n': 291, 'p50': 0.2867, 'p90': 0.4972}}\nH4 noon/front_chest PASS noon/front_chest: no white panels on the skull (under 3% of its box is white outside its two eyes) {'white': 0.0024, 'samples': 32368, 'box': [778, 468, 1191, 847]}\nH1 noon/front_full PASS noon/front_full: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it) {'skull': {'n': 120, 'p50': 0.3211, 'p90': 0.4564}, 'body': {'n': 626, 'p50': 0.3183, 'p90': 0.4981}, 'face': {'n': 283, 'p50': 0.3234, 'p90': 0.5028}, 'box': [865, 395, 1085, 596]}\nH2 noon/front_full FAIL noon/front_full: the chest skull's two eyes are white and lit, and the gap between them is not {'eyes': [{'luma': 0.6876, 'min_channel': 0.49}, {'luma': 0.6878, 'min_channel': 0.49}], 'gap': 0.4499, 'px': [[1033, 436], [920, 435]]}\nH3 noon/front_full PASS noon/front_full: the skull itself does not glow (its brightest decile no brighter than the body's) {'skull': {'n': 120, 'p50': 0.3211, 'p90': 0.4564}, 'body': {'n': 626, 'p50': 0.3183, 'p90': 0.4981}}\nH4 noon/front_full PASS noon/front_full: no white panels on the skull (under 3% of its box is white outside its two eyes) {'white': 0.0008, 'samples': 9188, 'box': [865, 395, 1085, 596]}\nH1 night/front_close_founder_frame PASS night/front_close_founder_frame: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it) {'skull': {'n': 71, 'p50': 0.1855, 'p90': 0.2853}, 'body': {'n': 263, 'p50': 0.2081, 'p90': 0.262}, 'face': {'n': 169, 'p50': 0.2266, 'p90': 0.6707}, 'box': [667, 606, 1213, 1104]}\nH2 night/front_close_founder_frame PASS night/front_close_founder_frame: the chest skull's two eyes are white and lit, and the gap between them is not {'eyes': [{'luma': 0.7794, 'min_channel': 0.62}, {'luma': 0.7774, 'min_channel': 0.62}], 'gap': 0.2977, 'px': [[1080, 710], [794, 712]]}\nH3 night/front_close_founder_frame PASS night/front_close_founder_frame: the skull itself does not glow (its brightest decile no brighter than the body's) {'skull': {'n': 71, 'p50': 0.1855, 'p90': 0.2853}, 'body': {'n': 263, 'p50': 0.2081, 'p90': 0.262}}\nH4 night/front_close_founder_frame PASS night/front_close_founder_frame: no white panels on the skull (under 3% of its box is white outside its two eyes) {'white': 0.008, 'samples': 34920, 'box': [667, 606, 1213, 1104]}\nH1 night/front_chest PASS night/front_chest: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it) {'skull': {'n': 127, 'p50': 0.2149, 'p90': 0.2807}, 'body': {'n': 305, 'p50': 0.1966, 'p90': 0.258}, 'face': {'n': 199, 'p50': 0.2224, 'p90': 0.475}, 'box': [740, 468, 1152, 847]}\nH2 night/front_chest PASS night/front_chest: the chest skull's two eyes are white and lit, and the gap between them is not {'eyes': [{'luma': 0.7982, 'min_channel': 0.651}, {'luma': 0.7982, 'min_channel': 0.651}], 'gap': 0.3085, 'px': [[1050, 545], [837, 546]]}\nH3 night/front_chest PASS night/front_chest: the skull itself does not glow (its brightest decile no brighter than the body's) {'skull': {'n': 127, 'p50': 0.2149, 'p90': 0.2807}, 'body': {'n': 305, 'p50': 0.1966, 'p90': 0.258}}\nH4 night/front_chest PASS night/front_chest: no white panels on the skull (under 3% of its box is white outside its two eyes) {'white': 0.0169, 'samples': 32161, 'box': [740, 468, 1152, 847]}\nH1 night/front_full PASS night/front_full: the chest skull is the body's own grey (its surface within 0.10 of the body plates around it) {'skull': {'n': 117, 'p50': 0.2213, 'p90': 0.2928}, 'body': {'n': 624, 'p50': 0.1877, 'p90': 0.255}, 'face': {'n': 289, 'p50': 0.2303, 'p90': 0.2686}, 'box': [845, 395, 1064, 596]}\nH2 night/front_full PASS night/front_full: the chest skull's two eyes are white and lit, and the gap between them is not {'eyes': [{'luma': 0.7668, 'min_channel': 0.6}, {'luma': 0.7695, 'min_channel': 0.608}], 'gap': 0.3108, 'px': [[1010, 435], [897, 436]]}\nH3 night/front_full PASS night/front_full: the skull itself does not glow (its brightest decile no brighter than the body's) {'skull': {'n': 117, 'p50': 0.2213, 'p90': 0.2928}, 'body': {'n': 624, 'p50': 0.1877, 'p90': 0.255}}\nH4 night/front_full PASS night/front_full: no white panels on the skull (under 3% of its box is white outside its two eyes) {'white': 0.0066, 'samples': 9188, 'box': [845, 395, 1064, 596]}\nK99 PASS the day clock and the worn skin are back as found {'day_minutes': 24.0, 'skin': 'arden_infernal'}\n"
+}
