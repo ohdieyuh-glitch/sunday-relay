@@ -175,6 +175,45 @@ def job():
         RESULT["status"] = "FAIL: no preview rect"
         return
 
+    def eye_colour(path, centre, size):
+        """The colour of the EYES, found by saturation rather than by counting a named hue.
+
+        WHY NOT "IS THERE MAGENTA". The channel is applied by MULTIPLICATION and Relay OG's eyes are warm
+        gold (1.0, 0.78, 0.16), so a magenta SECONDARY produces PINK -- and pink fails the blue > green
+        test that the magenta count uses. The old clause was looking for a colour the renderer cannot make
+        from that starting hue, and read 0.0000 through every run while the eyes were plainly changing.
+
+        AND NOT A BAND EITHER. A strip across the brightest row spans the whole head, so two small eyes sit
+        in a sea of white bone and black visor and barely move its mean -- measured that way the shipped
+        eye level looked dead and a level a hundred times higher looked alive, which is the exact inverse of
+        what the captures show.
+
+        The eyes are the most SATURATED thing on this figure. The top few per cent by chroma is them.
+        """
+        w, h, chan, px = read(path)
+        x0 = max(int((centre.x - size.x * 0.30) * w), 0)
+        x1 = min(int((centre.x + size.x * 0.30) * w), w - 1)
+        y0 = max(int((centre.y - size.y * 0.40) * h), 0)
+        y1 = min(int((centre.y - size.y * 0.02) * h), h - 1)
+        picks = []
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                i = (y * w + x) * chan
+                R, G, B = px[i], px[i + 1], px[i + 2]
+                mx, mn = max(R, G, B), min(R, G, B)
+                if mx < 60:
+                    continue
+                picks.append((mx - mn, R, G, B))
+        if not picks:
+            return None
+        picks.sort(reverse=True)
+        top = picks[:max(len(picks) // 50, 50)]
+        n = len(top)
+        return {"rgb": [round(sum(t[1] for t in top) / n / 255.0, 4),
+                        round(sum(t[2] for t in top) / n / 255.0, 4),
+                        round(sum(t[3] for t in top) / n / 255.0, 4)],
+                "chroma": round(sum(t[0] for t in top) / n / 255.0, 4), "px": n}
+
     def shoot(label):
         name = "colours_%s.png" % label
         path = os.path.join(ROOT, name)
@@ -184,6 +223,7 @@ def job():
                 raise RuntimeError("capture_game_viewport returned falsy: the editor is probably not foreground")
             RESULT.setdefault("capture_hashes", {})[name] = fingerprint(path)
             RESULT.setdefault("readings", {})[label] = tally(path, centre, size)
+            RESULT.setdefault("eyes", {})[label] = eye_colour(path, centre, size)
         except Exception as err:                                    # noqa: BLE001
             RESULT.setdefault("errors", {})[label] = str(err)[:160]
         emit("C_%s" % label, "INFO", label, (RESULT.get("readings") or {}).get(label))
@@ -280,13 +320,22 @@ def job():
            note="the founder's PRIMARY is the main colourway, so it should cover a large part of the figure. "
                 "Judged against the cleared frame, because finding green proves nothing unless the same "
                 "figure without a colourway has none.")
-    record("C07", "SECONDARY reaches the eyes and nothing else",
-           0.001 < set_row["magenta_fraction"] < 0.15
-           and set_row["magenta_fraction"] > reset_row["magenta_fraction"],
-           magenta_fraction=RESULT["secondary_arrived"], floor=0.001, ceiling=0.15,
-           note="the eyes are a small part of the figure, so SECONDARY arriving everywhere would mean it had "
-                "been applied to the body as well -- which is the failure this bound exists to catch, not a "
-                "stronger pass.")
+    eyes = RESULT.get("eyes") or {}
+    e_before, e_after = eyes.get("reset"), eyes.get("set")
+    moved = (round(max(abs(e_before["rgb"][i] - e_after["rgb"][i]) for i in range(3)), 4)
+             if e_before and e_after else None)
+    RESULT["secondary_moved_the_eyes"] = {"reset_rgb": (e_before or {}).get("rgb"),
+                                          "set_rgb": (e_after or {}).get("rgb"), "moved": moved}
+    record("C07", "SECONDARY visibly changes the eye colour, and the body does not follow it",
+           moved is not None and moved >= 0.15 and (set_row["green_fraction"] - reset_row["green_fraction"]) > 0.0,
+           **RESULT["secondary_moved_the_eyes"], floor=0.15,
+           note="ASKED AS 'DID THE EYES CHANGE', not 'is there magenta'. The channel multiplies, so a "
+                "magenta SECONDARY on gold eyes renders PINK -- measured at RGB 0.929, 0.430, 0.483 against "
+                "0.485, 0.798, 0.467 for a cyan one, a move of 0.444. The old clause counted magenta pixels "
+                "and found none through every run while the eyes were plainly changing, and its upper bound "
+                "-- SECONDARY must not reach the body -- passed just as happily when SECONDARY reached "
+                "nothing at all.")
+
 
     RESULT["captures_dir"] = ROOT
     RESULT["status"] = "measured"

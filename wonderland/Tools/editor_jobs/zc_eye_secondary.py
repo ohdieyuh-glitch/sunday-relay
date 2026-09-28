@@ -254,8 +254,39 @@ def job():
                             round(sum(t[3] for t in top) / n / 255.0, 4)],
                     "chroma": round(sum(t[0] for t in top) / n / 255.0, 4), "px": n}
 
+        def shell_colour():
+            """The colour of the BODY, found as the LEAST saturated lit pixels -- the mirror of the eyes.
+
+            A FIXED BAND BELOW THE FACE IS NOT POSE-ROBUST, and the independence half of this job failed on
+            that: body_moved read 0.0556 between two captures of a figure whose body is plainly unchanged
+            white in both. The stage figure breathes and looks around, so a band anchored to a per-frame row
+            lands on slightly different geometry each time, and on an ornate skin it can pick up background.
+
+            The bone shell is the least saturated thing on the figure, exactly as the eyes are the most, so
+            the same trick works in reverse and neither end depends on where the figure happens to be
+            standing.
+            """
+            picks = []
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    i = (y * w + x) * chan
+                    R, G, B = px[i], px[i + 1], px[i + 2]
+                    mx, mn = max(R, G, B), min(R, G, B)
+                    if mx < 90:                      # backdrop and the black visor are not the shell
+                        continue
+                    picks.append((mx - mn, R, G, B))
+            if not picks:
+                return None
+            picks.sort()
+            low = picks[:max(len(picks) // 4, 50)]
+            n = len(low)
+            return {"rgb": [round(sum(t[1] for t in low) / n / 255.0, 4),
+                            round(sum(t[2] for t in low) / n / 255.0, 4),
+                            round(sum(t[3] for t in low) / n / 255.0, 4)],
+                    "chroma": round(sum(t[0] for t in low) / n / 255.0, 4), "px": n}
+
         return {"eye_row": best_y, "eye": band(best_y - 6, best_y + 7),
-                "eye_colour": eye_colour(),
+                "eye_colour": eye_colour(), "shell_colour": shell_colour(),
                 "face": band(best_y + 22, best_y + 50),
                 "body": band(best_y + 60, min(best_y + 130, y1))}
 
@@ -346,7 +377,8 @@ def job():
             "eye_rgb_A": (A.get("eye_colour") or {}).get("rgb"),
             "eye_rgb_B": (B.get("eye_colour") or {}).get("rgb"),
             "eye_band_moved_for_comparison": gap(A.get("eye"), B.get("eye")),
-            "body_moved": gap(A.get("body"), B.get("body")),
+            "body_moved": gap(A.get("shell_colour"), B.get("shell_colour")),
+            "body_band_moved_for_comparison": gap(A.get("body"), B.get("body")),
             "eye_clipped": (A.get("eye") or {}).get("clipped"),
             "eye_over_face": (round((A.get("eye") or {}).get("luma", 0) - (A.get("face") or {}).get("luma", 0), 4)
                               if A.get("eye") and A.get("face") else None),
