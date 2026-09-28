@@ -158,10 +158,29 @@ def job():
         # that actually ships -- careful code, sound reasoning, a conclusion stated about all time
         # when the argument only covered dusk.
         #
-        # NOBODY HAS REPORTED DOUBLED SHADOWS, AND THAT IS A PROPERTY OF THE NUMBERS RATHER THAN OF
-        # THE DESIGN. At 23:00 the sun is at 0.0012 against the moon's 0.05, so its shadows are too
-        # faint to read. Anything that later raises the sun's night floor or lowers the moon turns a
-        # latent defect into a visible one with no code change and nothing to point at.
+        # NOBODY HAS REPORTED DOUBLED SHADOWS, AND THAT IS NOW MEASURED RATHER THAN PRESUMED.
+        # Dark fraction of paving at 23:00 at the plaza vantage, median of four samples with the
+        # first post-pose read discarded (zc_sun_shadow_seen, 2026-09-28):
+        #
+        #     sun shadowing       dark 0.83386
+        #     sun not shadowing   dark 0.83059
+        #     restored            dark 0.83108
+        #
+        #     the sun's second shadow is worth   0.00327
+        #     the same state measured twice by   0.00278
+        #
+        # The effect is the size of the instrument's own noise -- which is what an intensity of
+        # 0.0012 against the moon's 0.05 looks like on screen. Measuring the SAME state twice and
+        # requiring agreement is what makes that reportable; an effect of 0.003 is otherwise
+        # indistinguishable from an instrument that wanders.
+        #
+        # SO THIS IS A LATENT DEFECT: real in the actor list, invisible to a player, and not worth
+        # spending a locked founder approval on -- the documented attempt to clear the sun's flag
+        # lifted the entire night by half again, and the approved nighttime appearance is locked.
+        #
+        # BUT THE INVISIBILITY IS A PROPERTY OF THE CURRENT NUMBERS, NOT OF THE DESIGN. Anything
+        # that later raises the sun's night floor or lowers the moon's turns it visible with no code
+        # change and nothing to point at.
         #
         # A GREEN HERE THEREFORE MEANS "one caster in daylight", not "one caster". Left as it is on
         # purpose: changing a gate in the middle of the investigation that found the fault destroys
