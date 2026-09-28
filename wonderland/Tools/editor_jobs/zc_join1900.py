@@ -192,7 +192,13 @@ def job():
                          "spread": round(abs(a["luma"] - b["luma"]), 4),
                          "tails": round((a["tails"] + b["tails"]) / 2.0, 4),
                          "ground_luma": round(((g1 or {}).get("luma", 0.0)
-                                               + (g2 or {}).get("luma", 0.0)) / 2.0, 4) if g1 and g2 else None})
+                                               + (g2 or {}).get("luma", 0.0)) / 2.0, 4) if g1 and g2 else None,
+                         # THE CRUSHED FRACTION, which is where this step actually lives. zzW1 recorded the
+                         # arrival's ground going 0.9823 crushed at 19:00 to 0.3318 at 19:25 -- two thirds of
+                         # the ground becoming readable in fifteen minutes, against a frame-luma move of only
+                         # +0.0683. The mean barely notices what the distribution does here.
+                         "ground_dark": round(((g1 or {}).get("dark", 1.0)
+                                               + (g2 or {}).get("dark", 1.0)) / 2.0, 4) if g1 and g2 else None})
 
     cvar("wl.Sky.Hour", 12)
     L.release_camera(live())
@@ -225,7 +231,16 @@ def job():
                  for i in range(1, len(rows))]
         mags = sorted(abs(s["d"]) for s in steps)
         worst = max(steps, key=lambda s: abs(s["d"])) if steps else None
+        gsteps = [{"to": rows[i]["hour"],
+                   "d": (round(rows[i]["ground_dark"] - rows[i - 1]["ground_dark"], 4)
+                         if rows[i].get("ground_dark") is not None
+                         and rows[i - 1].get("ground_dark") is not None else None)}
+                  for i in range(1, len(rows))]
+        gmags = [abs(x["d"]) for x in gsteps if x["d"] is not None]
         summary[name] = {"steps": steps,
+                         "ground_dark": {("%.2f" % r["hour"]): r.get("ground_dark") for r in rows},
+                         "ground_dark_steps": gsteps,
+                         "worst_ground_dark_step": (max(gmags) if gmags else None),
                          "worst_step": (worst["d"] if worst else None),
                          "worst_at_hour": (worst["to"] if worst else None),
                          "median_step": (mags[len(mags) // 2] if mags else None),
@@ -239,6 +254,12 @@ def job():
         s = summary[name]
         if s["worst_step"] is None or s["median_step"] is None:
             return False
+        # JUDGED ON THE CRUSHED FRACTION WHERE ONE IS AVAILABLE, because that is where this step lives:
+        # 0.98 to 0.33 of the ground at the arrival, against a frame-luma move of 0.068. A frame mean can
+        # call that a modest step while two thirds of the ground changes state.
+        gw = s.get("worst_ground_dark_step")
+        if gw is not None:
+            return gw > 0.25
         return abs(s["worst_step"]) > 0.03 and abs(s["worst_step"]) > max(3.0 * s["median_step"], 0.02)
 
     with_step = [n for n, _ in PLACES if stepped(n)]
