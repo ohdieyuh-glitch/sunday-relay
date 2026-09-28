@@ -1,0 +1,92 @@
+{
+ "name": "zzRG2_snake",
+ "started": "2026-09-28 02:13:07",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "Y00",
+   "name": "the python's body is readable segment by segment",
+   "pass": true,
+   "detail": {
+    "segments": 46,
+    "note": "follow-through is a claim about the body; only the head was exposed before this"
+   }
+  },
+  {
+   "id": "Y00",
+   "name": "the head travelled far enough around the brain for coverage to mean anything",
+   "pass": true,
+   "detail": {
+    "turns_observed": 9.92,
+    "floor_turns": 2.0,
+    "seconds_watched": 90.0,
+    "note": "THE CONTROL. Angle turned, not distance moved: the radius springs in and out on its own, so a head bobbing on the spot covers distance without going anywhere. Below the floor the coverage reading below cannot distinguish a route that avoids the back from a route that was watched in slow motion, and those want opposite fixes."
+   }
+  },
+  {
+   "id": "Y01",
+   "name": "the head goes in front, behind, above and below the brain",
+   "pass": true,
+   "detail": {
+    "samples_on_each_side": {
+     "front": 287,
+     "behind": 245,
+     "above": 255,
+     "below": 235
+    },
+    "of": 600,
+    "counted_past_uu": {
+     "x": 32.0,
+     "z": 29.4
+    },
+    "note": "each axis judged against its OWN reach, so a route that is naturally wider than it is tall is not failed for it"
+   }
+  },
+  {
+   "id": "Y02",
+   "name": "each segment arrives where the one ahead of it has already been",
+   "pass": true,
+   "detail": {
+    "median_best_lag_frames": 1,
+    "segments_trailing": 45,
+    "of": 45,
+    "note": "the lag at which a segment best matches the one ahead. A rigid body swung on a stick matches at lag 0 and would pass every existing check"
+   }
+  },
+  {
+   "id": "Y03",
+   "name": "the tail travels its own distance rather than being dragged rigidly",
+   "pass": true,
+   "detail": {
+    "head_uu": 13270.6,
+    "tail_uu": 13183.3,
+    "note": "a rigid ring's tail travels exactly as far as its head; a real body's does not"
+   }
+  }
+ ],
+ "sides": {
+  "front": 287,
+  "behind": 245,
+  "above": 255,
+  "below": 235
+ },
+ "head_reach_uu": {
+  "x": 213.3,
+  "z": 196.1
+ },
+ "head_turns_observed": 9.92,
+ "follow_through": {
+  "segments_compared": 45,
+  "median_best_lag_frames": 1,
+  "segments_trailing": 45,
+  "lag_seconds_at_median": 0.15
+ },
+ "travel": {
+  "head_uu": 13270.6,
+  "tail_uu": 13183.3,
+  "ratio": 0.993
+ },
+ "finished": "2026-09-28 02:15:22",
+ "seconds": 135.06,
+ "log": "Y00 PASS the python's body is readable segment by segment {'segments': 46, 'note': 'follow-through is a claim about the body; only the head was exposed before this'}\nY00 PASS the head travelled far enough around the brain for coverage to mean anything {'turns_observed': 9.92, 'floor_turns': 2.0, 'seconds_watched': 90.0, 'note': 'THE CONTROL. Angle turned, not distance moved: the radius springs in and out on its own, so a head bobbing on the spot covers distance without going anywhere. Below the floor the coverage reading below cannot distinguish a route that avoids the back from a route that was watched in slow motion, and those want opposite fixes.'}\nY01 PASS the head goes in front, behind, above and below the brain {'samples_on_each_side': {'front': 287, 'behind': 245, 'above': 255, 'below': 235}, 'of': 600, 'counted_past_uu': {'x': 32.0, 'z': 29.4}, 'note': 'each axis judged against its OWN reach, so a route that is naturally wider than it is tall is not failed for it'}\nY02 PASS each segment arrives where the one ahead of it has already been {'median_best_lag_frames': 1, 'segments_trailing': 45, 'of': 45, 'note': 'the lag at which a segment best matches the one ahead. A rigid body swung on a stick matches at lag 0 and would pass every existing check'}\nY03 PASS the tail travels its own distance rather than being dragged rigidly {'head_uu': 13270.6, 'tail_uu': 13183.3, 'note': \"a rigid ring's tail travels exactly as far as its head; a real body's does not\"}\n"
+}

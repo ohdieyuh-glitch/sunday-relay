@@ -1,0 +1,107 @@
+{
+ "name": "zzRG4_hud",
+ "started": "2026-09-28 02:16:27",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "H00",
+   "name": "the usage HUD is up and painting agent rows",
+   "pass": true,
+   "detail": {
+    "rows": 3,
+    "note": "read from PaintedAgentRows, which only NativePaint writes"
+   }
+  },
+  {
+   "id": "H01",
+   "name": "the three rows the founder named are the three rows painted",
+   "pass": true,
+   "detail": {
+    "painted": [
+     "COMPOUND AGENT",
+     "SINGLE AGENT",
+     "LLM COMPANION"
+    ],
+    "wanted": [
+     "COMPOUND AGENT",
+     "SINGLE AGENT",
+     "LLM COMPANION"
+    ],
+    "note": "order included; the LLM Companion row is gated on bShowLlmCompanionMeter, True in DefaultGame.ini"
+   }
+  },
+  {
+   "id": "H02",
+   "name": "every row says WHO, not only what kind of thing it is",
+   "pass": true,
+   "detail": {
+    "rows": [
+     "COMPOUND AGENT: Julius",
+     "SINGLE AGENT: Claude Code Fable 5",
+     "LLM COMPANION: GPT 6 Astra"
+    ],
+    "unnamed": [],
+    "note": "a row whose label painted without a name records as 'LABEL|' and is caught here"
+   }
+  },
+  {
+   "id": "H03",
+   "name": "rename the three agents and the HUD says the new names",
+   "pass": true,
+   "detail": {
+    "got": [
+     "ZC Compound Vireo",
+     "ZC Coding Agent Quill",
+     "ZC Companion Marrow"
+    ],
+    "wanted": [
+     "ZC Compound Vireo",
+     "ZC Coding Agent Quill",
+     "ZC Companion Marrow"
+    ],
+    "note": "names chosen to match nothing Wonderland ships, so a default cannot pass this by accident"
+   }
+  },
+  {
+   "id": "H04",
+   "name": "the project's own names come back afterwards",
+   "pass": true,
+   "detail": {
+    "restored": [
+     "Julius",
+     "Claude Code Fable 5",
+     "GPT 6 Astra"
+    ],
+    "shipped": {
+     "compound_agent_name": "Julius",
+     "agent_name": "Claude Code Fable 5",
+     "llm_companion_name": "GPT 6 Astra"
+    },
+    "note": "these are Config properties; a job that left its fixtures in them would edit the product"
+   }
+  }
+ ],
+ "shipped_names": {
+  "compound_agent_name": "Julius",
+  "agent_name": "Claude Code Fable 5",
+  "llm_companion_name": "GPT 6 Astra"
+ },
+ "rows_as_shipped": [
+  "COMPOUND AGENT|Julius",
+  "SINGLE AGENT|Claude Code Fable 5",
+  "LLM COMPANION|GPT 6 Astra"
+ ],
+ "rows_when_renamed": [
+  "COMPOUND AGENT|ZC Compound Vireo",
+  "SINGLE AGENT|ZC Coding Agent Quill",
+  "LLM COMPANION|ZC Companion Marrow"
+ ],
+ "rows_restored": [
+  "COMPOUND AGENT|Julius",
+  "SINGLE AGENT|Claude Code Fable 5",
+  "LLM COMPANION|GPT 6 Astra"
+ ],
+ "finished": "2026-09-28 02:16:52",
+ "seconds": 25.24,
+ "log": "H00 PASS the usage HUD is up and painting agent rows {'rows': 3, 'note': 'read from PaintedAgentRows, which only NativePaint writes'}\nH01 PASS the three rows the founder named are the three rows painted {'painted': ['COMPOUND AGENT', 'SINGLE AGENT', 'LLM COMPANION'], 'wanted': ['COMPOUND AGENT', 'SINGLE AGENT', 'LLM COMPANION'], 'note': 'order included; the LLM Companion row is gated on bShowLlmCompanionMeter, True in DefaultGame.ini'}\nH02 PASS every row says WHO, not only what kind of thing it is {'rows': ['COMPOUND AGENT: Julius', 'SINGLE AGENT: Claude Code Fable 5', 'LLM COMPANION: GPT 6 Astra'], 'unnamed': [], 'note': \"a row whose label painted without a name records as 'LABEL|' and is caught here\"}\nH03 PASS rename the three agents and the HUD says the new names {'got': ['ZC Compound Vireo', 'ZC Coding Agent Quill', 'ZC Companion Marrow'], 'wanted': ['ZC Compound Vireo', 'ZC Coding Agent Quill', 'ZC Companion Marrow'], 'note': 'names chosen to match nothing Wonderland ships, so a default cannot pass this by accident'}\nH04 PASS the project's own names come back afterwards {'restored': ['Julius', 'Claude Code Fable 5', 'GPT 6 Astra'], 'shipped': {'compound_agent_name': 'Julius', 'agent_name': 'Claude Code Fable 5', 'llm_companion_name': 'GPT 6 Astra'}, 'note': 'these are Config properties; a job that left its fixtures in them would edit the product'}\n"
+}
