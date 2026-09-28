@@ -878,3 +878,36 @@ on the pose and the Dog does not move.
 
 When the plate is missing the code falls back to frame fractions **and says so in the result**, so a run
 without one degrades visibly instead of silently returning the old wrong numbers.
+
+## Check the subject is IN THE PICTURE before arguing about which band of it you measured
+
+`zc_skeleton_parts` was corrected twice in one evening — first its day-night control (an emissive subject
+cannot prove the sun went down), then its region boxes (fractions of the frame, so the "skull" box held only
+tailfire). Both were real. Neither was the reason it could not answer the founder's question. Looking at its
+own captures:
+
+- **Close view, 260 uu:** the legs and feet are **not in frame**. The camera sits 30 uu above the look-at
+  point at three metres and photographs the tailfire and the top of the skull.
+- **Gameplay view, 900 uu:** the whole figure is framed — with the HUD's own nav strip drawn across the
+  bottom centre, directly over the feet, and two AI Companions standing either side of the Dog.
+
+So both views measured *something* and neither measured legs. Three rounds of fixing how a band was located
+inside a picture that never contained the subject.
+
+**Ask "is the thing I am measuring visible in this frame?" before asking "is my box in the right place".**
+Cheapest possible check, and it is one crop.
+
+## Prefer the knob that answers the question to the proxy that correlates with it
+
+"Do the black parts glow?" was being asked as *"do they hold their brightness at night better than the torso
+does?"* — a day/night ratio in the world. That proxy needed a matte control just to establish the sun had
+gone down, and it is weak anyway: the exposure opens 2.35 EV between noon and midnight, so everything holds
+more of its daylight value than intuition says.
+
+`wl.Look.PreviewLights 0` removes every lamp from the wardrobe stage. With no incident light in the room,
+**anything still visible is emitting its own** — which is not a proxy for "does it glow", it is the
+definition. On an isolated figure against a 0.008 black cyclorama, with no HUD over it and no companions
+beside it, and where locating the subject is "brighter than the backdrop" instead of segmentation guesswork.
+
+When a question has a direct switch, the ratio that merely correlates with it is not the cheap option. It is
+the one that needs a control, a threshold nobody can derive, and a second job to explain its failures.
