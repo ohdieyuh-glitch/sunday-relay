@@ -345,6 +345,22 @@ def job():
             return out
         row["probe_moved_uu"] = round(moved, 1)
         row["probe_peak_speed"] = round(probe_speed, 1)
+        # ---- WHAT THE MACHINE HAD LEFT WHEN THIS NATION WAS DRIVEN.
+        #
+        # W0C has refused this harness's numbers all night, and after the focus fix the remaining spread is
+        # specifically the THIRD nation of a session: ICARUS and NOCTIS probe at 226-230 uu/s and TARTARUS at
+        # 66.7, run after run. The throttle hook is not the cause -- it installs a process-wide delegate once
+        # and survives PIE restarts -- so the degradation is not something this job turns off.
+        #
+        # The likeliest remaining cause is the machine, which has been between 0.45 and 1.05 GB free all
+        # night while three consecutive PIE sessions stream a partitioned world at 60 km offsets. That is a
+        # hypothesis, and recording the memory beside the probe speed is what turns it into an attributable
+        # number instead of a shrug: a degraded actuator that coincides with a collapsing free-memory figure
+        # is the machine, and one that does not is a bug still to be found.
+        try:
+            row["memory_when_driven"] = str(L.describe_memory())
+        except Exception:                                             # noqa: BLE001
+            row["memory_when_driven"] = None
         # PEAK SPEED IS WHAT TELLS "BLOCKED" FROM "NOT DRIVEN", and displacement alone cannot.
         #
         # The run that produced this distinction: ICARUS moved 0.0 uu at a PEAK SPEED OF 230 -- the
