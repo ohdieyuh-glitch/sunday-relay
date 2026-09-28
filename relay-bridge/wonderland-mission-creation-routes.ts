@@ -112,7 +112,12 @@ export async function handleWonderlandMissionCreation(
     { sessions: deps.sessions, membership: deps.membership ?? undefined, roleCapabilities: deps.roleCapabilities },
     WONDERLAND_CREATE_MISSION_CAPABILITY,
   );
-  if (!caller.ok) return { status: caller.status, body: { error: { kind: 'not_authorized', message: caller.error } } };
+  if (!caller.ok) {
+    // THREE DIFFERENT FACTS, three words: no valid session (pair again), a session that may not create here (not the
+    // owner, or paired for another project), and a bridge that cannot check. The client shows each differently.
+    const kind = caller.status === 401 ? 'session_invalid' : caller.status === 403 ? 'not_authorized' : 'unavailable';
+    return { status: caller.status, body: { error: { kind, message: caller.error } } };
+  }
 
   const key = request.idempotencyKey?.trim();
   if (key === undefined || !IDEMPOTENCY_KEY_RE.test(key)) {

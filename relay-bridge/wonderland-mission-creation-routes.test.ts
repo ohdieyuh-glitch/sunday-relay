@@ -231,6 +231,23 @@ describe('what a player may NOT do -- and nothing is recorded, nothing reaches J
     nothingHappened(today);
   });
 
+  it('each refusal of the CALLER has its own word: session_invalid (401), not_authorized (403)', async () => {
+    const w = world({ membership: members({ [`${PLAYER}|${PROJECT}`]: 'MEMBER' }) });
+    const noSession = await handleWonderlandMissionCreation(post(null), w.deps);
+    expect(noSession?.status).toBe(401);
+    expect(kindOf(noSession)).toBe('session_invalid');
+    const member = await handleWonderlandMissionCreation(post(signedIn(w.store)), w.deps);
+    expect(member?.status).toBe(403);
+    expect(kindOf(member)).toBe('not_authorized');
+    // A REVOKED native session is the same 401 as none at all.
+    const token = nativeFor(w.store, PROJECT);
+    w.store.revokeSession({ token, now: NOW });
+    const revoked = await handleWonderlandMissionCreation(post(token, { origin: undefined }), w.deps);
+    expect(revoked?.status).toBe(401);
+    expect(kindOf(revoked)).toBe('session_invalid');
+    nothingHappened(w);
+  });
+
   it('no session is 401; no idempotency key is 400', async () => {
     const w = world();
     expect((await handleWonderlandMissionCreation(post(null), w.deps))?.status).toBe(401);

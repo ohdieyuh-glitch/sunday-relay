@@ -67,7 +67,12 @@ export interface WonderlandExecutionProfile {
   readonly markerNamespacePrefix: string;
   /** Absolute, on the executor machine. Privileged: never served to a player. */
   readonly workspacePath: string;
-  /** Empty when the project has no deterministic check. */
+  /**
+   * Empty when the project has no deterministic check. CAUTION (Julius lane, 2026-09-27): an empty command is valid
+   * for CREATION -- Julius's parser allows it -- but the paid preflight, scripts/julius-live-contract-check.mjs,
+   * currently refuses it. Until that one line is aligned, a project whose missions are meant to be EXECUTED needs a
+   * non-empty command here. Not worked around in this file: the preflight is Julius's gate.
+   */
   readonly testCommand: string;
   readonly limits: WonderlandExecutionProfileLimits;
   /** The research this project's missions may do; null means none. */

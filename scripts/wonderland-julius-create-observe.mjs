@@ -657,16 +657,22 @@ try {
       && exported.json?.data?.playerId === PLAYER && playerExport.status === 401,
     { operator: exported.status, player: playerExport.status });
 
-  // FROM INSIDE WONDERLAND: the native client -- paired for the drill's main project -- reaches creation for its OWN
-  // project (where no profile exists: 409, i.e. authorised and then refused for want of an operator's setup), and is
-  // refused for any other project by its pairing.
+  // FROM INSIDE WONDERLAND: the native client -- paired for the drill's main project -- gets PAST authorisation for its
+  // OWN project and is refused for any other by its pairing. Its own project may or may not have an operator profile
+  // (the PIE acceptance writes one into this same persistent database), so the own-project answer is either a creation
+  // (201, READY, undispatched) or the refusal for want of an operator's setup (409) -- never 401 or 403. The first
+  // version asserted 409 alone and went red the day the acceptance wrote that profile: a clause that depended on
+  // state it does not control.
   const nativeOwn = await call('POST', `/relay-api/wonderland/julius/missions?projectId=${encodeURIComponent(CONTRACT.projectId)}`, {
     headers: { ...native, 'x-relay-idempotency-key': createKey }, body: JSON.stringify(PLAYER_MISSION),
   });
   const nativeOther = await call('POST', createPath, { headers: { ...native, 'x-relay-idempotency-key': createKey }, body: JSON.stringify(PLAYER_MISSION) });
-  clause('C07', 'the native client reaches creation for the project it was paired for, and only that one',
-    nativeOwn.status === 409 && nativeOwn.json?.error?.kind === 'execution_not_configured' && nativeOther.status === 403,
-    { ownProject: `${nativeOwn.status} ${nativeOwn.json?.error?.kind ?? 'none'}`, otherProject: nativeOther.status });
+  const ownAuthorised = (nativeOwn.status === 201 && nativeOwn.json?.data?.dispatched === false && nativeOwn.json?.data?.state === 'READY')
+    || (nativeOwn.status === 409 && nativeOwn.json?.error?.kind === 'execution_not_configured');
+  clause('C07', 'the native client gets past authorisation for the project it was paired for (created READY, or 409 for want of a profile) and is refused 403 for any other',
+    ownAuthorised && nativeOther.status === 403 && nativeOther.json?.error?.kind === 'not_authorized',
+    { ownProject: `${nativeOwn.status} ${nativeOwn.json?.error?.kind ?? nativeOwn.json?.data?.state ?? 'none'}`,
+      otherProject: `${nativeOther.status} ${nativeOther.json?.error?.kind ?? 'none'}` });
 
   /* ================================================================
    * ONE ACTIVE RUN PER MISSION -- founder decision 3, Julius 80b91478.
