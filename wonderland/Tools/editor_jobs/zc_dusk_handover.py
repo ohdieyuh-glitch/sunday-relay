@@ -343,6 +343,20 @@ def job():
     for label, alt, always in ARMS:
         command("wl.Sky.MoonCastAltitude %.4f" % alt)
         command("wl.Sky.MoonCastAlways %.4f" % always)
+        # ---- WARM-UP RUNG, DISCARDED. The first hour of each arm follows a jump from the previous
+        # arm's NOON anchor, and Lumen does not converge inside the settle window after a change that
+        # large. Proof it was not converging, from the run that exposed it: at 17.20 the three arms
+        # read 0.21605 / 0.20788 / 0.26540 -- a spread of 0.0575 between arms that MUST be identical
+        # there, because none of them has the moon casting until 17.39 at the earliest. By 17.30 the
+        # spread is 0.0088 and by 17.50 it is 0.0011.
+        #
+        # That unconverged rung then produced BOTH the largest step in the ladder and the sweep_floor
+        # H6 measures against, so H6 was being computed from the least trustworthy reading in the run
+        # while H1 used mid-sequence intervals and was sound.
+        command("wl.Sky.Hour %.4f" % EVENING[0])
+        yield 2.0
+        for step in settled(40):
+            yield step
         for hour in EVENING + ANCHORS:
             command("wl.Sky.Hour %.4f" % hour)
             yield 1.0
