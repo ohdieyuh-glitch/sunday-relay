@@ -1015,3 +1015,25 @@ Two rules:
 - **Add a saturation guard to every ladder**: if the rungs do not differ by more than the noise, VOID instead
   of interpreting. A clause that passes on five identical readings would pass on a disconnected knob, a
   frozen capture, or a band aimed at furniture — and it cannot tell you which.
+
+## `stat unit` issued ONCE is a coin flip — check the numbers move, not the frame counter
+
+The correction to loops that re-issued `stat unit` "to keep it alive" was to issue it once. That is only
+right if it started OFF. It is a toggle (`FEngineStatToggle` → `ToggleStatUnit`), so if a previous job in the
+session left it on, a single issue turns it **off** — and `FStatUnitData` then returns the same stale numbers
+forever.
+
+Observed: six consecutive rungs of one job returning **frame 36.81, render 26.54, game 37.84**, twenty-six
+frames each, byte identical — including a Lumen rung that had saved 164.89 ms an hour earlier.
+
+**The existing frozen-stat guard missed it, and the reason matters.** It watched the engine *frame number*,
+which was advancing perfectly well the whole time. The frames were live; the *numbers* were frozen. A guard
+aimed at the wrong signal is indistinguishable from no guard.
+
+So: flip it, then read several times and require the values to **differ** — a real frame time never repeats to
+four decimals — and flip again if they do not. VOID if it never reports changing numbers.
+
+And add the same check one level up as a **ladder saturation guard**: if every rung's median lands within the
+noise of every other, VOID instead of computing savings. Both of this evening's silent failures — the fire
+reach at 98.61 five times and this at 36.81 six times — would have been caught by that one clause, and both
+produced confident-looking numbers without it.

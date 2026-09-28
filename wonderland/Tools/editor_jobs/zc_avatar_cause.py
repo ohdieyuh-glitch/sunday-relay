@@ -103,10 +103,55 @@ def job():
     L.focus_game_viewport()
     yield 6.0
 
-    # ---- ISSUED ONCE. `stat unit` is a TOGGLE (FEngineStatToggle -> ToggleStatUnit); re-issuing it in a
-    # loop turns the overlay off, and FStatUnitData only advances while the overlay DRAWS.
+    # ---- `stat unit` IS A TOGGLE, SO ISSUING IT ONCE IS A COIN FLIP, NOT A FIX.
+    #
+    # It is bound as FEngineStatToggle -> ToggleStatUnit, so every call FLIPS the overlay. "Issue it once"
+    # was the correction to loops that re-issued it and switched it off half the time -- but once is only
+    # right if it started OFF. If a previous job in this session left it ON, a single issue turns it OFF,
+    # FStatUnitData stops advancing, and every read returns the same stale numbers forever.
+    #
+    # THAT IS NOT HYPOTHETICAL. A run of this very job returned frame 36.81, render 26.54 and game 37.84 for
+    # SIX consecutive rungs, twenty-six frames each, byte identical -- including the Lumen rung that had
+    # saved 164.89 ms an hour earlier. The frozen-frame guard did not catch it because it watches the ENGINE
+    # FRAME NUMBER, which was advancing perfectly well. The numbers were frozen; the frames were not.
+    #
+    # So: flip it, then CHECK THE VALUES MOVE, and flip again if they do not. A real frame time never repeats
+    # to four decimal places.
+    def stat_is_live():
+        seen = []
+        for _ in range(8):
+            row = read_frame()
+            if row is not None:
+                seen.append(round(row[0], 4))
+            yield 0.15
+        return len(set(seen)) > 1
+
     SL.execute_console_command(world, "stat unit")
-    yield 3.0
+    yield 2.5
+    live = False
+    gen = stat_is_live()
+    try:
+        while True:
+            yield next(gen)
+    except StopIteration as done:
+        live = bool(done.value)
+    if not live:
+        SL.execute_console_command(world, "stat unit")
+        yield 2.5
+        gen = stat_is_live()
+        try:
+            while True:
+                yield next(gen)
+        except StopIteration as done:
+            live = bool(done.value)
+    RESULT["stat_overlay_live"] = live
+    record("A_STAT", "the stat unit overlay is drawing, so its numbers actually change",
+           live, note="a TOGGLE issued once is a coin flip. Six rungs of this job once returned identical "
+                      "frame, render and game times because the overlay was off -- and the frozen-frame "
+                      "guard missed it, because the engine frame number was advancing the whole time.")
+    if not live:
+        RESULT["status"] = "VOID: stat unit never started reporting changing numbers"
+        return
 
     seen_frames = []
 
@@ -275,6 +320,19 @@ def job():
            note="r.DistanceFields refused its value in the previous run -- read back 1.0 after being set to "
                 "0 -- and voided that rung. A ladder whose knob refuses measures one rung repeatedly and "
                 "looks exactly like a term that does not matter.")
+
+    # ---- AND THE SATURATION GUARD, which is the same lesson one level up: if every rung answers
+    # identically, the ladder is measuring something they share rather than what differs between them.
+    frames_ms = [row.get("frame_ms") for row in ladder.values() if row.get("frame_ms") is not None]
+    flat = len(frames_ms) >= 2 and (max(frames_ms) - min(frames_ms)) < 0.5
+    RESULT["ladder_spread_ms"] = round(max(frames_ms) - min(frames_ms), 2) if frames_ms else None
+    record("A_SPREAD", "the rungs do not all answer the same, so the ladder can tell them apart",
+           not flat, frame_ms_by_rung={n: row.get("frame_ms") for n, row in ladder.items()},
+           spread_ms=RESULT["ladder_spread_ms"],
+           note="six rungs at exactly 36.81 ms is a dead instrument, not six identical configurations.")
+    if flat:
+        RESULT["status"] = "VOID: every rung reported the same frame time"
+        return
 
     thin = [n for n, row in ladder.items() if (row.get("frames") or 0) < SAMPLES // 2]
     record("A02", "every rung collected enough distinct frames to have a median",
