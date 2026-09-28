@@ -441,3 +441,46 @@ bottom — three faults at once, none of which any clause was asking about.
 A region expressed as a fraction of the FRAME is only meaningful if the framing is verified, and a job that
 never looks at its own captures cannot verify it. Where a widget can report its own geometry — the wardrobe's
 `GetSkinPreviewRect` — take the region from that and never from a fraction of the screen.
+
+## If every subject measures IDENTICALLY, the instrument is measuring something they share
+
+The other lane's stance profiler was aimed at a widget's chrome instead of the figure inside it, so all
+five skins returned the same numbers — the frame, measured five times. A guard that fails when the
+subjects are indistinguishable caught it on the first run, in a completely different place from the one
+it was written for.
+
+This tree already knew the shape: *flat on both sides means a broken instrument*. Same rule, stated
+positively — if a measurement cannot tell five different things apart, it is not measuring them.
+
+```python
+vals = [round(v, 4) for v in readings.values()]
+record("X_DISTINCT", "the subjects are distinguishable, so this is measuring them and not their frame",
+       len(readings) > 1 and len(set(vals)) > 1,
+       readings=readings,
+       note="identical values across different subjects means the instrument found something they "
+            "share — the window, the background, the chrome — rather than the thing being compared")
+```
+
+Cheap, and it fires in places nobody predicted.
+
+## An answer the engine states exactly beats any amount of measurement
+
+Seven versions of a pixel-based stance profiler measured a market stall, a street lamp, drapery, an
+edge common to all five skins, and twice the widget's own frame — before the seventh worked and showed
+the question is unanswerable from silhouettes at all, because every costume changes what touches the
+ground. The Dog publishes a canonical worn pose and each costume has joint writers for it, so "does
+every skin receive the same pose" is an *exact* question the engine will answer.
+
+It had been ruled out on day one by over-reading "fix the cause, not cosmetic offsets" as forbidding
+*reading* the pose, when it forbids *fixing* the problem with offsets.
+
+Before building a measurement, ask what the engine already knows:
+
+```bash
+grep -rn "UFUNCTION(BlueprintPure\|UFUNCTION(BlueprintCallable" ../../Source/Wonderland/*.h | grep -i "<thing>"
+```
+
+And if the accessor exists but Python cannot reach it, the answer is a `UBlueprintFunctionLibrary`
+static — **not** a fourth guess at a subsystem getter. UE 5.8's Python has no world-subsystem getter of
+any kind; that cost four attempts, a wrong root cause relayed to a third lane, and two `EVIDENCE ONLY`
+gates.
