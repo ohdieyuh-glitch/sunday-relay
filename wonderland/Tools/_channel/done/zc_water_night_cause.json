@@ -1,0 +1,88 @@
+{
+ "name": "zc_water_night_cause",
+ "started": "2026-09-28 03:26:12",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "N00",
+   "name": "the water master material loads",
+   "pass": true,
+   "detail": {
+    "path": "/Game/Wonderland/Materials/M_WL_RealWater.M_WL_RealWater"
+   }
+  },
+  {
+   "id": "N01",
+   "name": "the water surface is allowed to reflect",
+   "pass": false,
+   "detail": {
+    "present": {
+     "screen_space_reflections": "False"
+    },
+    "off": [
+     "screen_space_reflections"
+    ],
+    "note": "A translucent surface shows what is behind it, what it reflects, and its own lit response. In daylight the pond BED is lit and refraction alone carries the surface with no reflection at all -- which is why this has never shown up by day. At night the bed is dark and a surface that cannot reflect has nothing left to show. The builder's own comment says a screen-space reflection 'needs to be allowed to run' and then sets no property."
+   }
+  },
+  {
+   "id": "N02",
+   "name": "the translucency lighting mode is the per-pixel surface one, so specular exists",
+   "pass": true,
+   "detail": {
+    "translucency_lighting_mode": "<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>",
+    "note": "ALREADY VERIFIED BY READING, recorded so the refuted hypothesis stays refuted. The volumetric default gets no specular whatever; this is not that, and it is not the fault."
+   }
+  },
+  {
+   "id": "N03",
+   "name": "something in the level is actually wearing a water material",
+   "pass": true,
+   "detail": {
+    "materials": {
+     "MI_V2_Water": 19
+    },
+    "note": "a master that nothing wears is not the surface the founder is looking at. zzN2's A01 already measured this; it is re-read here so the diagnosis is anchored to the drawn thing."
+   }
+  }
+ ],
+ "master_surface": {
+  "blend_mode": "<BlendMode.BLEND_TRANSLUCENT: 2>",
+  "translucency_lighting_mode": "<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>",
+  "two_sided": "False",
+  "refraction_method": "<RefractionMode.RM_NONE: 3>",
+  "shading_model": "<MaterialShadingModel.MSM_DEFAULT_LIT: 1>",
+  "translucency_pass": "<MaterialTranslucencyPass.MTP_AFTER_DOF: 1>",
+  "b_used_with_static_lighting": null,
+  "translucency_directional_lighting_intensity": "1.0"
+ },
+ "master_reflection_props": {
+  "screen_space_reflections": "False",
+  "b_screen_space_reflections": null,
+  "allow_screen_space_reflection": null,
+  "translucency_screen_space_reflections": null,
+  "b_enable_responsive_aa": null,
+  "dynamic_shadow_and_specular": null
+ },
+ "reflection_properties_that_exist": {
+  "screen_space_reflections": "False"
+ },
+ "reflection_switches_that_are_off": [
+  "screen_space_reflections"
+ ],
+ "water_materials_in_the_level": {
+  "MI_V2_Water": 19
+ },
+ "master_scalar_defaults": {
+  "Roughness": 0.035,
+  "Specular": 1.0,
+  "Metallic": 0.0,
+  "Refraction": 1.05,
+  "Opacity": 0.82,
+  "Flow": 0.0,
+  "TexScale": 0.0
+ },
+ "finished": "2026-09-28 03:26:12",
+ "seconds": 0.23,
+ "log": "N00 PASS the water master material loads {'path': '/Game/Wonderland/Materials/M_WL_RealWater.M_WL_RealWater'}\nN_REFLECT INFO what the engine calls the reflection switch here {'screen_space_reflections': 'False'}\nN01 FAIL the water surface is allowed to reflect {'present': {'screen_space_reflections': 'False'}, 'off': ['screen_space_reflections'], 'note': \"A translucent surface shows what is behind it, what it reflects, and its own lit response. In daylight the pond BED is lit and refraction alone carries the surface with no reflection at all -- which is why this has never shown up by day. At night the bed is dark and a surface that cannot reflect has nothing left to show. The builder's own comment says a screen-space reflection 'needs to be allowed to run' and then sets no property.\"}\nN02 PASS the translucency lighting mode is the per-pixel surface one, so specular exists {'translucency_lighting_mode': '<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>', 'note': 'ALREADY VERIFIED BY READING, recorded so the refuted hypothesis stays refuted. The volumetric default gets no specular whatever; this is not that, and it is not the fault.'}\nN03 PASS something in the level is actually wearing a water material {'materials': {'MI_V2_Water': 19}, 'note': \"a master that nothing wears is not the surface the founder is looking at. zzN2's A01 already measured this; it is re-read here so the diagnosis is anchored to the drawn thing.\"}\nN_SCALARS INFO the master's own scalar defaults {'Roughness': 0.035, 'Specular': 1.0, 'Metallic': 0.0, 'Refraction': 1.05, 'Opacity': 0.82, 'Flow': 0.0, 'TexScale': 0.0}\n"
+}

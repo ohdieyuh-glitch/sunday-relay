@@ -1,0 +1,99 @@
+{
+ "name": "zc_water_reflect",
+ "started": "2026-09-28 03:28:44",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "R00",
+   "name": "the water master loads",
+   "pass": true,
+   "detail": {
+    "path": "/Game/Wonderland/Materials/M_WL_RealWater.M_WL_RealWater"
+   }
+  },
+  {
+   "id": "R01",
+   "name": "this engine offers a refraction mode that is not NONE",
+   "pass": true,
+   "detail": {
+    "offered": [
+     "RM_2D_OFFSET",
+     "RM_INDEX_OF_REFRACTION",
+     "RM_INDEX_OF_REFRACTION_FROM_F0",
+     "RM_NONE",
+     "RM_PIXEL_NORMAL_OFFSET"
+    ],
+    "chosen": "RM_INDEX_OF_REFRACTION",
+    "note": "ENUMERATED RATHER THAN GUESSED. The previous attempt tried three hoped-for spellings inside a try/except and left the material at RM_NONE when none matched, reporting nothing. A guarded guess that silently does nothing is worse than no attempt."
+   }
+  },
+  {
+   "id": "R02",
+   "name": "the asset was saved",
+   "pass": true,
+   "detail": {
+    "saved": true
+   }
+  },
+  {
+   "id": "R03",
+   "name": "the water is now allowed to reflect, read back off the asset",
+   "pass": true,
+   "detail": {
+    "before": "False",
+    "after": "True",
+    "note": "THE READBACK IS THE RESULT. Setting a property and saving is not evidence it took, and four conclusions this week were withdrawn for exactly that mistake."
+   }
+  },
+  {
+   "id": "R04",
+   "name": "the water now refracts, read back off the asset",
+   "pass": true,
+   "detail": {
+    "before": "<RefractionMode.RM_NONE: 3>",
+    "after": "<RefractionMode.RM_INDEX_OF_REFRACTION: 0>",
+    "chosen": "RM_INDEX_OF_REFRACTION"
+   }
+  },
+  {
+   "id": "R05",
+   "name": "the settings that were already right were left alone",
+   "pass": true,
+   "detail": {
+    "blend_before": "<BlendMode.BLEND_TRANSLUCENT: 2>",
+    "blend_after": "<BlendMode.BLEND_TRANSLUCENT: 2>",
+    "tlm_before": "<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>",
+    "tlm_after": "<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>",
+    "note": "the translucency lighting mode was already the per-pixel surface one and the blend mode was already translucent. A fix that quietly rewrites the parts that were working is how a narrow change becomes an unreviewable one."
+   }
+  }
+ ],
+ "before": {
+  "screen_space_reflections": "False",
+  "refraction_method": "<RefractionMode.RM_NONE: 3>",
+  "blend_mode": "<BlendMode.BLEND_TRANSLUCENT: 2>",
+  "translucency_lighting_mode": "<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>"
+ },
+ "refraction_modes_this_engine_offers": [
+  "RM_2D_OFFSET",
+  "RM_INDEX_OF_REFRACTION",
+  "RM_INDEX_OF_REFRACTION_FROM_F0",
+  "RM_NONE",
+  "RM_PIXEL_NORMAL_OFFSET"
+ ],
+ "refraction_mode_chosen": "RM_INDEX_OF_REFRACTION",
+ "applied": {
+  "screen_space_reflections": true,
+  "refraction_method": "RM_INDEX_OF_REFRACTION"
+ },
+ "saved": true,
+ "after": {
+  "screen_space_reflections": "True",
+  "refraction_method": "<RefractionMode.RM_INDEX_OF_REFRACTION: 0>",
+  "blend_mode": "<BlendMode.BLEND_TRANSLUCENT: 2>",
+  "translucency_lighting_mode": "<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>"
+ },
+ "finished": "2026-09-28 03:28:51",
+ "seconds": 7.74,
+ "log": "R00 PASS the water master loads {'path': '/Game/Wonderland/Materials/M_WL_RealWater.M_WL_RealWater'}\nR_BEFORE INFO what the surface was {'screen_space_reflections': 'False', 'refraction_method': '<RefractionMode.RM_NONE: 3>', 'blend_mode': '<BlendMode.BLEND_TRANSLUCENT: 2>', 'translucency_lighting_mode': '<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>'}\nR_MODES INFO the RefractionMode values that exist here {'modes': ['RM_2D_OFFSET', 'RM_INDEX_OF_REFRACTION', 'RM_INDEX_OF_REFRACTION_FROM_F0', 'RM_NONE', 'RM_PIXEL_NORMAL_OFFSET']}\nR01 PASS this engine offers a refraction mode that is not NONE {'offered': ['RM_2D_OFFSET', 'RM_INDEX_OF_REFRACTION', 'RM_INDEX_OF_REFRACTION_FROM_F0', 'RM_NONE', 'RM_PIXEL_NORMAL_OFFSET'], 'chosen': 'RM_INDEX_OF_REFRACTION', 'note': 'ENUMERATED RATHER THAN GUESSED. The previous attempt tried three hoped-for spellings inside a try/except and left the material at RM_NONE when none matched, reporting nothing. A guarded guess that silently does nothing is worse than no attempt.'}\nR02 PASS the asset was saved {'saved': True}\nR_AFTER INFO what the surface is now {'screen_space_reflections': 'True', 'refraction_method': '<RefractionMode.RM_INDEX_OF_REFRACTION: 0>', 'blend_mode': '<BlendMode.BLEND_TRANSLUCENT: 2>', 'translucency_lighting_mode': '<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>'}\nR03 PASS the water is now allowed to reflect, read back off the asset {'before': 'False', 'after': 'True', 'note': 'THE READBACK IS THE RESULT. Setting a property and saving is not evidence it took, and four conclusions this week were withdrawn for exactly that mistake.'}\nR04 PASS the water now refracts, read back off the asset {'before': '<RefractionMode.RM_NONE: 3>', 'after': '<RefractionMode.RM_INDEX_OF_REFRACTION: 0>', 'chosen': 'RM_INDEX_OF_REFRACTION'}\nR05 PASS the settings that were already right were left alone {'blend_before': '<BlendMode.BLEND_TRANSLUCENT: 2>', 'blend_after': '<BlendMode.BLEND_TRANSLUCENT: 2>', 'tlm_before': '<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>', 'tlm_after': '<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>', 'note': 'the translucency lighting mode was already the per-pixel surface one and the blend mode was already translucent. A fix that quietly rewrites the parts that were working is how a narrow change becomes an unreviewable one.'}\n"
+}

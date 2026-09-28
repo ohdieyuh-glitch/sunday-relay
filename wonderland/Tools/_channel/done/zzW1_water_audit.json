@@ -1,0 +1,350 @@
+{
+ "name": "zzW1_water_audit",
+ "started": "2026-09-28 03:34:06",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "A00",
+   "name": "the master material was read and exposes named parameters",
+   "pass": true,
+   "detail": {
+    "master": {
+     "blend_mode": "<BlendMode.BLEND_TRANSLUCENT: 2>",
+     "shading_model": "<MaterialShadingModel.MSM_DEFAULT_LIT: 1>",
+     "translucency_lighting": "<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>",
+     "parameters": {
+      "scalar": [
+       "FlowSpeedA",
+       "FlowSpeedB",
+       "RippleStrength",
+       "Opacity",
+       "Roughness",
+       "Specular",
+       "Metallic",
+       "Refraction"
+      ],
+      "vector": [
+       "ShallowColor",
+       "DeepColor"
+      ],
+      "texture": [
+       "NormalTex",
+       "NormalA",
+       "NormalB"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "A01",
+   "name": "the water in the level wears M_WL_RealWater, with live values read off a surface",
+   "pass": true,
+   "detail": {
+    "surfaces": 19,
+    "live": {
+     "surface": "D14_hamlet_WellWater",
+     "material": "MID_M_WL_RealWater_0",
+     "values": {
+      "FlowSpeedA": 0.018,
+      "FlowSpeedB": -0.011,
+      "RippleStrength": 0.35,
+      "Opacity": 0.82,
+      "Roughness": 0.035,
+      "Specular": 1.0,
+      "Metallic": 0.0,
+      "Refraction": 1.05,
+      "ShallowColor": [
+       0.16,
+       0.416,
+       0.422,
+       1.0
+      ],
+      "DeepColor": [
+       0.02,
+       0.1,
+       0.16,
+       1.0
+      ]
+     },
+     "surfaces_dressed": 19
+    }
+   }
+  },
+  {
+   "id": "A02",
+   "name": "all nine founder views were photographed with the water in frame",
+   "pass": true,
+   "detail": {
+    "views": [
+     "day_close",
+     "day_elevated",
+     "day_shoreline",
+     "dusk_close",
+     "dusk_elevated",
+     "dusk_shoreline",
+     "night_close",
+     "night_elevated",
+     "night_shoreline"
+    ]
+   }
+  },
+  {
+   "id": "A03",
+   "name": "at night and dusk the water reads as water -- not a black hole, not a glowing blue sheet",
+   "pass": true,
+   "detail": {
+    "water_over_frame_luma": {
+     "day_close": 1.037,
+     "day_shoreline": 0.9376,
+     "day_elevated": 1.122,
+     "dusk_close": 0.8877,
+     "dusk_shoreline": 0.8487,
+     "dusk_elevated": 0.999,
+     "night_close": 0.9584,
+     "night_shoreline": 0.8616,
+     "night_elevated": 1.0878
+    },
+    "hole_floor": 0.55,
+    "sheet_ceiling": 2.5,
+    "views_where_water_is_a_hole": null,
+    "views_where_water_is_a_glowing_sheet": null,
+    "night": {
+     "luma": 0.1525,
+     "dark": 0.5118,
+     "bright": 0.0,
+     "blue_over_red": 1.26
+    },
+    "dusk": {
+     "luma": 0.092,
+     "dark": 0.9157,
+     "bright": 0.0,
+     "blue_over_red": 1.3
+    },
+    "day": {
+     "luma": 0.2554,
+     "dark": 0.1381,
+     "bright": 0.0001,
+     "blue_over_red": 0.577
+    },
+    "absolute_crushed_ceiling_no_longer_gated": 0.85,
+    "views_over_85pct_crushed": [
+     "dusk_elevated",
+     "dusk_shoreline"
+    ],
+    "note": "GATED ON THE WATER AGAINST ITS OWN FRAME, because every absolute threshold here is a statement about the exposure rather than about the water: the approved night measures 0.9756 crushed by the same fixed-luma test this clause used to gate on, so 0.85 was a bar nothing could clear after dark. A ratio survives the 2.35 EV the exposure opens between noon and midnight. The old absolute figures are kept in the detail so earlier runs stay comparable."
+   }
+  }
+ ],
+ "master": {
+  "blend_mode": "<BlendMode.BLEND_TRANSLUCENT: 2>",
+  "shading_model": "<MaterialShadingModel.MSM_DEFAULT_LIT: 1>",
+  "translucency_lighting": "<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>",
+  "parameters": {
+   "scalar": [
+    "FlowSpeedA",
+    "FlowSpeedB",
+    "RippleStrength",
+    "Opacity",
+    "Roughness",
+    "Specular",
+    "Metallic",
+    "Refraction"
+   ],
+   "vector": [
+    "ShallowColor",
+    "DeepColor"
+   ],
+   "texture": [
+    "NormalTex",
+    "NormalA",
+    "NormalB"
+   ]
+  }
+ },
+ "live": {
+  "surface": "D14_hamlet_WellWater",
+  "material": "MID_M_WL_RealWater_0",
+  "values": {
+   "FlowSpeedA": 0.018,
+   "FlowSpeedB": -0.011,
+   "RippleStrength": 0.35,
+   "Opacity": 0.82,
+   "Roughness": 0.035,
+   "Specular": 1.0,
+   "Metallic": 0.0,
+   "Refraction": 1.05,
+   "ShallowColor": [
+    0.16,
+    0.416,
+    0.422,
+    1.0
+   ],
+   "DeepColor": [
+    0.02,
+    0.1,
+    0.16,
+    1.0
+   ]
+  },
+  "surfaces_dressed": 19
+ },
+ "views": {
+  "day_close": {
+   "file": "day_close.png",
+   "water": {
+    "luma": 0.3332,
+    "dark": 0.192,
+    "bright": 0.0,
+    "blue_over_red": 0.554
+   },
+   "frame": {
+    "luma": 0.3213,
+    "dark": 0.2179,
+    "bright": 0.0042,
+    "blue_over_red": 0.617
+   }
+  },
+  "day_shoreline": {
+   "file": "day_shoreline.png",
+   "water": {
+    "luma": 0.2554,
+    "dark": 0.1381,
+    "bright": 0.0001,
+    "blue_over_red": 0.577
+   },
+   "frame": {
+    "luma": 0.2724,
+    "dark": 0.2501,
+    "bright": 0.0042,
+    "blue_over_red": 0.683
+   }
+  },
+  "day_elevated": {
+   "file": "day_elevated.png",
+   "water": {
+    "luma": 0.2851,
+    "dark": 0.2806,
+    "bright": 0.0003,
+    "blue_over_red": 0.59
+   },
+   "frame": {
+    "luma": 0.2541,
+    "dark": 0.3251,
+    "bright": 0.0043,
+    "blue_over_red": 0.64
+   }
+  },
+  "dusk_close": {
+   "file": "dusk_close.png",
+   "water": {
+    "luma": 0.098,
+    "dark": 0.793,
+    "bright": 0.0,
+    "blue_over_red": 1.342
+   },
+   "frame": {
+    "luma": 0.1104,
+    "dark": 0.8326,
+    "bright": 0.0041,
+    "blue_over_red": 1.383
+   }
+  },
+  "dusk_shoreline": {
+   "file": "dusk_shoreline.png",
+   "water": {
+    "luma": 0.092,
+    "dark": 0.9157,
+    "bright": 0.0,
+    "blue_over_red": 1.3
+   },
+   "frame": {
+    "luma": 0.1084,
+    "dark": 0.8589,
+    "bright": 0.0041,
+    "blue_over_red": 1.473
+   }
+  },
+  "dusk_elevated": {
+   "file": "dusk_elevated.png",
+   "water": {
+    "luma": 0.0965,
+    "dark": 0.8654,
+    "bright": 0.0,
+    "blue_over_red": 1.458
+   },
+   "frame": {
+    "luma": 0.0966,
+    "dark": 0.8926,
+    "bright": 0.0041,
+    "blue_over_red": 1.497
+   }
+  },
+  "night_close": {
+   "file": "night_close.png",
+   "water": {
+    "luma": 0.1889,
+    "dark": 0.4068,
+    "bright": 0.0,
+    "blue_over_red": 1.281
+   },
+   "frame": {
+    "luma": 0.1971,
+    "dark": 0.394,
+    "bright": 0.0041,
+    "blue_over_red": 1.307
+   }
+  },
+  "night_shoreline": {
+   "file": "night_shoreline.png",
+   "water": {
+    "luma": 0.1525,
+    "dark": 0.5118,
+    "bright": 0.0,
+    "blue_over_red": 1.26
+   },
+   "frame": {
+    "luma": 0.177,
+    "dark": 0.4668,
+    "bright": 0.0041,
+    "blue_over_red": 1.413
+   }
+  },
+  "night_elevated": {
+   "file": "night_elevated.png",
+   "water": {
+    "luma": 0.1907,
+    "dark": 0.4214,
+    "bright": 0.0,
+    "blue_over_red": 1.356
+   },
+   "frame": {
+    "luma": 0.1753,
+    "dark": 0.4508,
+    "bright": 0.0041,
+    "blue_over_red": 1.4
+   }
+  }
+ },
+ "settled_s": {
+  "hour_day": 5.0,
+  "hour_dusk": 9.0,
+  "hour_night": 4.0
+ },
+ "water_over_frame_luma": {
+  "day_close": 1.037,
+  "day_shoreline": 0.9376,
+  "day_elevated": 1.122,
+  "dusk_close": 0.8877,
+  "dusk_shoreline": 0.8487,
+  "dusk_elevated": 0.999,
+  "night_close": 0.9584,
+  "night_shoreline": 0.8616,
+  "night_elevated": 1.0878
+ },
+ "views_where_water_is_a_hole": null,
+ "views_where_water_is_a_glowing_sheet": null,
+ "finished": "2026-09-28 03:35:13",
+ "seconds": 66.28,
+ "log": "A00 PASS the master material was read and exposes named parameters {'master': {'blend_mode': '<BlendMode.BLEND_TRANSLUCENT: 2>', 'shading_model': '<MaterialShadingModel.MSM_DEFAULT_LIT: 1>', 'translucency_lighting': '<TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING: 5>', 'parameters': {'scalar': ['FlowSpeedA', 'FlowSpeedB', 'RippleStrength', 'Opacity', 'Roughness', 'Specular', 'Metallic', 'Refraction'], 'vector': ['ShallowColor', 'DeepColor'], 'texture': ['NormalTex', 'NormalA', 'NormalB']}}}\nA01 PASS the water in the level wears M_WL_RealWater, with live values read off a surface {'surfaces': 19, 'live': {'surface': 'D14_hamlet_WellWater', 'material': 'MID_M_WL_RealWater_0', 'values': {'FlowSpeedA': 0.018, 'FlowSpeedB': -0.011, 'RippleStrength': 0.35, 'Opacity': 0.82, 'Roughness': 0.035, 'Specular': 1.0, 'Metallic': 0.0, 'Refraction': 1.05, 'ShallowColor': [0.16, 0.416, 0.422, 1.0], 'DeepColor': [0.02, 0.1, 0.16, 1.0]}, 'surfaces_dressed': 19}}\nA02 PASS all nine founder views were photographed with the water in frame {'views': ['day_close', 'day_elevated', 'day_shoreline', 'dusk_close', 'dusk_elevated', 'dusk_shoreline', 'night_close', 'night_elevated', 'night_shoreline']}\nA03 PASS at night and dusk the water reads as water -- not a black hole, not a glowing blue sheet {'water_over_frame_luma': {'day_close': 1.037, 'day_shoreline': 0.9376, 'day_elevated': 1.122, 'dusk_close': 0.8877, 'dusk_shoreline': 0.8487, 'dusk_elevated': 0.999, 'night_close': 0.9584, 'night_shoreline': 0.8616, 'night_elevated': 1.0878}, 'hole_floor': 0.55, 'sheet_ceiling': 2.5, 'views_where_water_is_a_hole': None, 'views_where_water_is_a_glowing_sheet': None, 'night': {'luma': 0.1525, 'dark': 0.5118, 'bright': 0.0, 'blue_over_red': 1.26}, 'dusk': {'luma': 0.092, 'dark': 0.9157, 'bright': 0.0, 'blue_over_red': 1.3}, 'day': {'luma': 0.2554, 'dark': 0.1381, 'bright': 0.0001, 'blue_over_red': 0.577}, 'absolute_crushed_ceiling_no_longer_gated': 0.85, 'views_over_85pct_crushed': ['dusk_elevated', 'dusk_shoreline'], 'note': 'GATED ON THE WATER AGAINST ITS OWN FRAME, because every absolute threshold here is a statement about the exposure rather than about the water: the approved night measures 0.9756 crushed by the same fixed-luma test this clause used to gate on, so 0.85 was a bar nothing could clear after dark. A ratio survives the 2.35 EV the exposure opens between noon and midnight. The old absolute figures are kept in the detail so earlier runs stay comparable.'}\n"
+}

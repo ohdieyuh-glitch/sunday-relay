@@ -235,13 +235,53 @@ def job():
     dusk = (shots.get("dusk_shoreline") or {}).get("water")
     dark_enough = [k for k, v in shots.items()
                    if (v.get("water") or {}).get("dark", 1.0) > 0.85]
+
+    # ---- AND THE CRUSHED-FRACTION CEILING IS ITSELF THE WRONG INSTRUMENT AT NIGHT, which is the second time
+    # this clause has had to be rewritten and the reason is recorded both times.
+    #
+    # The first version gated on the MEAN and passed water that was 99% black, because a handful of specular
+    # pixels carries a mean. So it was changed to the crushed fraction with a ceiling of 0.85.
+    #
+    # That ceiling cannot be met by ANY surface at night. read_screen_rect counts "dark" as pixels under a
+    # FIXED linear luma of 0.14, and the world lane has since measured the APPROVED night -- the one the
+    # founder signed off, moonlight shadows across legible paving -- at 0.9756 crushed. A gate of 0.85 at
+    # midnight is a test that cannot pass, which is exactly as useless as the mean was, in the other
+    # direction: the first could not fail and this one could not pass.
+    #
+    # THE FOUNDER'S QUESTION IS RELATIVE. "A black hole" does not mean "dark in absolute terms" -- everything
+    # is dark at midnight. It means the water is a hole in a scene that is otherwise readable. So the gate is
+    # the water against the SAME FRAME it sits in, which is a ratio and therefore survives the exposure
+    # change between noon and midnight that defeats every absolute threshold here.
+    #
+    # Measured before the reflection fix: day 1.04/0.92/1.13, dusk 0.27/0.18/0.25, night 0.31/0.40/0.70. The
+    # water tracked its surroundings by day and fell to a fifth of them at dusk. The absolute numbers stay in
+    # the detail so runs from before this change remain comparable.
+    ratios = {}
+    for k, v in shots.items():
+        w, f = (v.get("water") or {}), (v.get("frame") or {})
+        wl, fl = w.get("luma"), f.get("luma")
+        if isinstance(wl, float) and isinstance(fl, float) and fl > 0.0:
+            ratios[k] = round(wl / fl, 4)
+    RESULT["water_over_frame_luma"] = ratios
+    holes = sorted(k for k, r in ratios.items() if r < 0.55)
+    sheets = sorted(k for k, r in ratios.items() if r > 2.5)
+    RESULT["views_where_water_is_a_hole"] = holes or None
+    RESULT["views_where_water_is_a_glowing_sheet"] = sheets or None
     record("A03", "at night and dusk the water reads as water -- not a black hole, not a glowing blue sheet",
-           night is not None and night["dark"] <= 0.85 and night["luma"] <= 0.35
-           and night["blue_over_red"] <= 2.5 and not dark_enough,
-           night=night, dusk=dusk, day=day, crushed_ceiling=0.85,
+           bool(ratios) and not holes and not sheets
+           and (night or {}).get("blue_over_red", 9.9) <= 2.5,
+           water_over_frame_luma=ratios, hole_floor=0.55, sheet_ceiling=2.5,
+           views_where_water_is_a_hole=holes or None,
+           views_where_water_is_a_glowing_sheet=sheets or None,
+           night=night, dusk=dusk, day=day,
+           absolute_crushed_ceiling_no_longer_gated=0.85,
            views_over_85pct_crushed=sorted(dark_enough),
-           note="gated on the CRUSHED FRACTION, because a mean of 0.03 passed a surface that was 99% "
-                "black; over 0.35 luma or a blue/red ratio past 2.5 is the glowing sheet the founder named")
+           note="GATED ON THE WATER AGAINST ITS OWN FRAME, because every absolute threshold here is a "
+                "statement about the exposure rather than about the water: the approved night measures "
+                "0.9756 crushed by the same fixed-luma test this clause used to gate on, so 0.85 was a bar "
+                "nothing could clear after dark. A ratio survives the 2.35 EV the exposure opens between "
+                "noon and midnight. The old absolute figures are kept in the detail so earlier runs stay "
+                "comparable.")
     RESULT["status"] = "measured"
     yield 2.0
     les.editor_request_end_play()
