@@ -42,7 +42,7 @@ DEAD_BRIDGE = "http://127.0.0.1:1"
 PAIRING_ATTEMPTS = 3
 # Every clause this job declares. A job stopped part-way -- an exception, the editor closing it -- has recorded only
 # passes so far; without this list its status would read "all clauses pass" over clauses that never ran.
-DECLARED = ["A01", "A02", "A03", "A04", "A05", "A06", "A06b", "A06e", "A06f", "A06g", "A06h", "A06c", "A06d", "A07", "A08", "A09", "A10", "A10b", "A11"]
+DECLARED = ["A01", "A01b", "A02", "A03", "A04", "A05", "A06", "A06b", "A06e", "A06f", "A06g", "A06h", "A06c", "A06d", "A07", "A08", "A09", "A10", "A10b", "A06k", "A06l", "A06i", "A06j", "A06m", "A06n", "A11"]
 
 
 def job():
@@ -147,8 +147,26 @@ def job():
         shown = yield from wait(lambda: ui.is_live_terminal_open(), 10)
         first = unreal.SystemLibrary.get_frame_count()
         drawn = yield from wait(lambda: unreal.SystemLibrary.get_frame_count() >= first + 6, 30)
+        # THE TERMINAL GROWS TO FIT ITS ROWS, and it ANIMATES there. Attempt b4e24b8d29fc3433's 01c was taken with the
+        # section state right and the newest sub-line clipped mid-growth. So the capture waits for the extension to hold
+        # still for ten frames -- a predicate on the widget, not a number of seconds. A build without the accessor
+        # captures after the frames alone, and says so.
+        settled = None
+        if hasattr(ui, "get_julius_terminal_extension"):
+            seen = {"value": None, "since": unreal.SystemLibrary.get_frame_count()}
+
+            def extension_settled():
+                value = float(ui.get_julius_terminal_extension())
+                frame = unreal.SystemLibrary.get_frame_count()
+                if seen["value"] is None or abs(value - seen["value"]) > 0.05:
+                    seen["value"], seen["since"] = value, frame
+                    return False
+                return frame - seen["since"] >= 10
+
+            settled = yield from wait(extension_settled, 20)
         H.capture_viewport_jpeg(os.path.join(SHOTS["dir"], name), 1900, 94)
-        RESULT.setdefault("captures", {})[name] = {"terminal_open": bool(shown), "frames_drawn": bool(drawn)}
+        RESULT.setdefault("captures", {})[name] = {"terminal_open": bool(shown), "frames_drawn": bool(drawn),
+                                                   "extension_settled": "no accessor in this build" if settled is None else bool(settled)}
         if not was_open:
             ui.toggle_live_terminal()
             yield from wait(lambda: not ui.is_live_terminal_open(), 10)
@@ -165,25 +183,45 @@ def job():
         yield 3.0
         return True
 
-    def pair(world, stream, label):
-        # RETRYABLE: each attempt asks the orchestrator for a FRESH code at the moment it will be used.
+    def pair(world, stream, label, project=None):
+        # RETRYABLE: each attempt asks the orchestrator for a FRESH code at the moment it will be used. With a project,
+        # the code is minted for THAT project, and "paired" means the client now reports that project -- a client that
+        # was already paired reads is_paired() true before the new code is even redeemed.
         attempts = []
         for attempt in range(1, PAIRING_ATTEMPTS + 1):
             stem = "%s-%d" % (label, attempt)
             flag = os.path.join(HANDSHAKE, "ready-%s.flag" % stem)
             code_path = os.path.join(HANDSHAKE, "code-%s.txt" % stem)
             with open(flag, "w", encoding="utf-8") as handle:
-                handle.write(str(time.time()))
+                handle.write(json.dumps({"projectId": project}) if project else str(time.time()))
             if not (yield from wait(lambda: os.path.exists(code_path), 60)):
                 attempts.append("attempt %d: no code arrived in 60 s" % attempt)
                 continue
             with open(code_path, "r", encoding="utf-8") as handle:
                 console(world, "wl.Julius.Pair %s" % handle.read().strip())
-            if (yield from wait(lambda: stream.is_paired(), 30)):
+            done = (lambda: str(stream.get_paired_project_id()) == project) if project else (lambda: stream.is_paired())
+            if (yield from wait(done, 30)):
                 attempts.append("attempt %d: paired" % attempt)
                 return True, attempts
             attempts.append("attempt %d: code refused or pairing did not complete in 30 s" % attempt)
         return False, attempts
+
+    def ask_orchestrator(stem, payload, timeout=90):
+        # One request to the orchestrator, answered through the same handshake directory as the pairing codes: what an
+        # OPERATOR would do between two moves of the player -- write a profile, change a role, restart the bridge.
+        request = os.path.join(HANDSHAKE, "act-%s.json" % stem)
+        answer = os.path.join(HANDSHAKE, "done-%s.json" % stem)
+        with open(request + ".tmp", "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+        os.replace(request + ".tmp", request)
+        if not (yield from wait(lambda: os.path.exists(answer), timeout)):
+            return None
+        with open(answer, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def all_tasks(world):
+        tasks = unreal.WonderlandUiTestLibrary.get_mission_tasks(world)
+        return [str(t.get_editor_property("ContractId")) for t in (tasks.get_task_list() if tasks else [])]
 
     def end_play_now():
         # Non-yielding on purpose: this also runs from `finally` while the generator may be closing.
@@ -230,6 +268,28 @@ def job():
                stream is not None and julius is not None, stream=str(stream), julius=str(julius))
         if stream is None or julius is None:
             return
+
+        # DECISION 1: the bridge is CONFIGURATION, and the session only travels where it cannot be read on the way --
+        # https anywhere, plain http only to this machine. Probed through the cvar while the transport is idle (no run
+        # is followed yet, so nothing is sent to any of these). A refused address yields no bridge AND says why.
+        if not hasattr(stream, "get_bridge_url"):
+            record("A01b", "the bridge address is configuration, https-or-loopback only", False,
+                   reason="NOT IN THIS BUILD: the transport has no GetBridgeUrl")
+        else:
+            probes = {}
+            for probe in ("http://relay.example.com", "https://relay.example.invalid/", "http://localhost:8796",
+                          "http://127.0.0.1:1", "ftp://relay.example.invalid"):
+                set_url(world, probe)
+                probes[probe] = {"used": str(stream.get_bridge_url()), "problem": str(stream.get_bridge_problem())}
+            record("A01b", "the bridge address is configuration: https is used, loopback http is used, plain http to another "
+                   "host and a non-http URL are REFUSED with a reason -- never silently used",
+                   probes["http://relay.example.com"]["used"] == "" and "Refusing" in probes["http://relay.example.com"]["problem"]
+                   and probes["https://relay.example.invalid/"]["used"] == "https://relay.example.invalid"
+                   and probes["https://relay.example.invalid/"]["problem"] == ""
+                   and probes["http://localhost:8796"]["used"] == "http://localhost:8796"
+                   and probes["http://127.0.0.1:1"]["used"] == "http://127.0.0.1:1"
+                   and probes["ftp://relay.example.invalid"]["used"] == "" and "Refusing" in probes["ftp://relay.example.invalid"]["problem"],
+                   probes=probes)
 
         set_url(world, bridge)
         paired, attempts = yield from pair(world, stream, "first")
@@ -359,6 +419,7 @@ def job():
                and other["tasks_for_mission"] == 1 and other.get("run") == (True, run)
                and other.get("julius_state", (None, None))[0] is False,
                same_run=same, different_run=other)
+
         # Back to the first run for the rest of the walk; the transport re-reads it, so the task is whole again.
         console(world, "wl.Julius.Follow %s %s" % (project, run))
         yield from wait(lambda: stream.get_adopted_run_id() == run, 60)
@@ -418,6 +479,135 @@ def job():
         H.capture_viewport_jpeg(os.path.join(SHOTS["dir"], "02_recovered_after_restart.jpg"), 1900, 94)
         yield from capture_missions(world, "02b_mission_contract_after_restart.jpg")
         RESULT["describe_after_restart"] = stream.describe()
+
+        # ============================================================ CREATE FROM INSIDE WONDERLAND (priority 9)
+        # The Unreal client creates a Julius mission as its paired OWNER -- four fields, nothing else; the bridge composes
+        # the rest from the project's operator profile. In a FRESH project per attempt (B), so "no profile yet" is real:
+        # the client is paired FOR B, which is also the proof that creation uses the pairing's project scope. Every
+        # refusal must leave the world exactly as it was -- no task, no run, no QUEUED -- and say so on the terminal.
+        create_project = params.get("createProjectId") or ""
+        create_key = params.get("createKey") or ""
+        CREATION_CLAUSES = ("A06k", "A06l", "A06i", "A06j", "A06m", "A06n")
+        if not (hasattr(stream, "create_mission") and hasattr(stream, "get_paired_project_id")):
+            for cid in CREATION_CLAUSES:
+                record(cid, "creation from inside Wonderland", False,
+                       reason="NOT IN THIS BUILD: the transport has no CreateMission / paired project")
+        else:
+            ui = unreal.WonderlandUiTestLibrary.get_ui(world)
+            objective = "Acceptance probe: a mission the world created as its player. It is never driven."
+            requirements = ["Exists only to prove creation from inside Wonderland."]
+            constraints = ["Never dispatch. No provider may be called on its behalf."]
+
+            def create(key, ids=("created-in-world",), texts=("The run exists durably in READY with dispatched false.",),
+                       blocking=(True,)):
+                before = stream.get_creation_generation()
+                stream.create_mission(key, objective, requirements, constraints, list(ids), list(texts), list(blocking))
+                answered = yield from wait(lambda: stream.get_creation_generation() > before, 60)
+                return bool(answered)
+
+            def refusal_holds(label, expect_status, expect_kinds, tasks_before, adopted_before):
+                # THE WORLD DID NOT PRETEND: same tasks, same run, no wl- mission appeared, and the terminal said why.
+                kind = str(stream.get_last_creation_refusal())
+                status = stream.get_last_creation_status()
+                shown = yield from wait(lambda: ("Create: Not created · %s" % kind) in str(ui.describe_julius_section("JULIUS 3.3", 20)), 10)
+                tasks_now = all_tasks(world)
+                return {
+                    "holds": status in expect_status and kind in expect_kinds and tasks_now == tasks_before
+                    and stream.get_adopted_run_id() == adopted_before and not str(stream.get_last_created_run_id())
+                    and bool(shown),
+                    "status": status, "refusal": kind, "tasks_unchanged": tasks_now == tasks_before,
+                    "adopted_unchanged": stream.get_adopted_run_id() == adopted_before, "terminal_says_so": bool(shown),
+                }
+
+            # --- pair FOR project B. Following stops first, so the old run is kept as last known rather than re-read
+            # with a session that belongs to another project.
+            stream.stop()
+            paired_b, attempts_b = yield from pair(world, stream, "create", create_project)
+            RESULT["create_pairing"] = {"paired": bool(paired_b), "attempts": attempts_b,
+                                        "paired_project": str(stream.get_paired_project_id())}
+            tasks_before = all_tasks(world)
+            adopted_before = str(stream.get_adopted_run_id())
+
+            # A06k: NO PROFILE YET -- refused, and nothing pretends otherwise.
+            answered = paired_b and (yield from create(create_key))
+            check = (yield from refusal_holds("no-profile", (409,), ("execution_not_configured",), tasks_before, adopted_before)) if answered else {"holds": False}
+            yield from capture_terminal(world, "03a_refused_no_profile.jpg")
+            record("A06k", "REFUSED in-world when the project has no execution profile: 409 execution_not_configured -- no task, "
+                   "no run, the world still on what it showed, and the terminal says why",
+                   bool(create_project) and paired_b and answered and check["holds"], pairing=attempts_b, **check)
+
+            # The operator writes B's profile, the way an operator does.
+            profile_answer = yield from ask_orchestrator("profile-b", {"action": "profile", "projectId": create_project})
+            RESULT["create_profile"] = profile_answer
+
+            # A06l: MALFORMED INTENT -- no acceptance criterion at all.
+            answered = yield from create("%s-malformed" % create_key, ids=(), texts=(), blocking=())
+            check = (yield from refusal_holds("malformed", (400,), ("malformed_mission",), tasks_before, adopted_before)) if answered else {"holds": False}
+            record("A06l", "REFUSED in-world when the intent is malformed (no acceptance criterion): 400 malformed_mission -- no task, "
+                   "no run, the terminal says why",
+                   profile_answer is not None and answered and check["holds"], profile=profile_answer, **check)
+
+            # A06i: THE CREATION -- the same key the no-profile attempt used (it recorded nothing, so it is still free).
+            answered = yield from create(create_key)
+            created_run = str(stream.get_last_created_run_id())
+            created_mission = str(stream.get_last_created_mission_id())
+            followed = bool(created_run) and (yield from wait(lambda: stream.get_adopted_run_id() == created_run, 60))
+            yield from wait(lambda: ("Create: Created %s" % created_mission) in str(ui.describe_julius_section("JULIUS 3.3", 20)), 15)
+            view = contract_view(world, created_mission) if created_mission else {"tasks_for_mission": 0}
+            missions = unreal.WonderlandUiTestLibrary.get_mission(world)
+            yield from wait(lambda: str(missions.get_headline_label()) == "QUEUED" and created_run in str(missions.get_provenance_banner()), 15)
+            yield from capture_terminal(world, "03b_world_created_mission.jpg")
+            yield from capture_missions(world, "03c_mission_contract_created.jpg")
+            rows = str(ui.describe_julius_section("JULIUS 3.3", 20))
+            tasks_after_create = all_tasks(world)
+            record("A06i", "the WORLD created a mission as its paired OWNER -- 201, the bridge's own mission and run ids -- and "
+                   "follows exactly that run: ONE task on the Mission Contract, QUEUED over Julius's raw READY, the strip and the "
+                   "terminal naming the same run",
+                   answered and stream.get_last_creation_status() == 201 and created_mission.startswith("mission:wl-")
+                   and bool(created_run) and followed and view["tasks_for_mission"] == 1 and view.get("state") == "QUEUED"
+                   and view.get("julius_state") == (True, "READY") and view.get("run") == (True, created_run)
+                   and ("Julius: Following %s" % created_mission) in rows and ("Create: Created %s" % created_mission) in rows
+                   and str(missions.get_headline_label()) == "QUEUED" and created_run in str(missions.get_provenance_banner())
+                   and "READY" in str(missions.get_provenance_banner()),
+                   status=stream.get_last_creation_status(), refusal=str(stream.get_last_creation_refusal()),
+                   created_run=created_run, created_mission=created_mission, objective=objective,
+                   paired_project=str(stream.get_paired_project_id()),
+                   followed=bool(followed), contract=view, rows=rows, headline=str(missions.get_headline_label()),
+                   banner=str(missions.get_provenance_banner()))
+
+            # A06j: THE RETRY -- the same key again is the SAME mission and run: no second task, no second follow.
+            answered = yield from create(create_key)
+            yield 2.0
+            retry_view = contract_view(world, created_mission) if created_mission else {"tasks_for_mission": 0}
+            tasks_after_retry = all_tasks(world)
+            record("A06j", "a RETRY from Unreal with the same key returns the SAME mission and run: still one task, nothing new "
+                   "followed",
+                   answered and stream.get_last_creation_status() == 201 and str(stream.get_last_created_run_id()) == created_run
+                   and str(stream.get_last_created_mission_id()) == created_mission and stream.get_adopted_run_id() == created_run
+                   and retry_view["tasks_for_mission"] == 1 and tasks_after_retry == tasks_after_create,
+                   status=stream.get_last_creation_status(), run=str(stream.get_last_created_run_id()),
+                   tasks_before=len(tasks_after_create), tasks_after=len(tasks_after_retry), contract=retry_view)
+
+            # A06m: NOT THE OWNER -- the operator makes the player a MEMBER of B; creation is refused, the world keeps the
+            # mission it follows. Then the role is restored.
+            role_answer = yield from ask_orchestrator("role-member", {"action": "role", "projectId": create_project, "role": "MEMBER"})
+            answered = yield from create("%s-member" % create_key)
+            check = (yield from refusal_holds("member", (403,), ("not_authorized",), tasks_after_create, created_run)) if answered else {"holds": False}
+            restore_answer = yield from ask_orchestrator("role-owner", {"action": "role", "projectId": create_project, "role": "OWNER"})
+            record("A06m", "REFUSED in-world for a non-owner (MEMBER): 403 not_authorized -- no task, and the world keeps the "
+                   "mission it follows",
+                   role_answer is not None and restore_answer is not None and answered and check["holds"], **check)
+
+            # A06n: THE SESSION IS GONE -- the bridge restarts (sessions live in memory, so every one is revoked). Refused
+            # 401 session_invalid by the bridge, or -- if the stream noticed first and forgot the session -- not_paired
+            # before anything is sent. Either way: no task, no run, the terminal says pair again.
+            restart_answer = yield from ask_orchestrator("restart-bridge", {"action": "restart-bridge"}, timeout=120)
+            answered = yield from create("%s-session" % create_key)
+            check = (yield from refusal_holds("session", (401, 0), ("session_invalid", "not_paired"), tasks_after_create, created_run)) if answered else {"holds": False}
+            yield from capture_terminal(world, "03d_refused_session.jpg")
+            record("A06n", "REFUSED in-world when the native session is no longer valid (the bridge restarted): session_invalid "
+                   "or not_paired -- no task, no run, and the terminal says to pair again",
+                   restart_answer is not None and bool(restart_answer.get("healthy")) and answered and check["holds"], **check)
     finally:
         # RESTORE THE LINK SETTING WHATEVER HAPPENED -- a failing clause, a TimeoutError, an exception, or the editor
         # closing the generator -- so no later session on this editor inherits the dead port. Non-yielding: a closing

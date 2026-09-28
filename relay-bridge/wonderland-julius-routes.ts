@@ -285,7 +285,40 @@ export async function authorizeWonderlandJulius(
   if (query === null) {
     return { ok: false, status: 400, error: 'projectId, runId and a whole cursor are required' };
   }
+  // The world routes read Julius; a bridge without the reader is as unconfigured as one without membership.
+  const caller = await authorizeWonderlandCaller(input, query.projectId, deps, capability, deps.reader !== undefined);
+  if (!caller.ok) return caller;
+  return {
+    ok: true,
+    playerId: caller.playerId,
+    sessionId: caller.sessionId,
+    cursor: query.cursor,
+    grant: { projectId: query.projectId, runId: query.runId },
+    membership: caller.membership,
+  };
+}
 
+/**
+ * WHO IS CALLING, AND MAY THEY DO THIS TO THIS PROJECT -- the world routes' caller
+ * check, shared with every Wonderland route that acts for a player on a project
+ * (the result read, the player's mission creation).
+ *
+ * The refusals come in the order the world routes have always given them: no
+ * verifiable player is 401; an unconfigured bridge is 503 (`available` false, or
+ * no membership port); a membership that does not carry `capability` is 403 in
+ * one sentence. The PROJECT is the caller's request, never an authorisation --
+ * the membership row is what makes it one.
+ */
+export async function authorizeWonderlandCaller(
+  input: { readonly authorization: string | undefined; readonly origin: string | undefined; readonly now: number },
+  projectId: string,
+  deps: Pick<WonderlandJuliusRouteDeps, 'sessions' | 'membership' | 'roleCapabilities' | 'onAuthorization'>,
+  capability: WonderlandProjectCapability,
+  available = true,
+): Promise<
+  | { readonly ok: true; readonly playerId: string; readonly sessionId: string; readonly membership: WonderlandMembership }
+  | { readonly ok: false; readonly status: number; readonly error: string }
+> {
   const token = sessionTokenFrom(input.authorization);
   // TWO KINDS OF CALLER, AND THE ORIGIN HEADER TELLS THEM APART.
   //
@@ -305,7 +338,7 @@ export async function authorizeWonderlandJulius(
       // A NATIVE SESSION IS BOUND TO THE PROJECT IT WAS PAIRED FOR (founder decision 2). Asking for another
       // project is refused here, before membership is even consulted -- membership still applies below, so
       // neither guard stands alone.
-      if (native.ok && native.projectId !== query.projectId) {
+      if (native.ok && native.projectId !== projectId) {
         return { ok: false, status: 403, error: 'this desktop session was paired for another project' };
       }
       if (native.ok) verified = { ok: true, participantId: native.participantId, sessionId: native.sessionId };
@@ -322,7 +355,7 @@ export async function authorizeWonderlandJulius(
 
   // FAIL CLOSED. See the header: a route that opened up when its authorisation
   // was unconfigured would work perfectly wherever nobody had wired it.
-  if (!deps.membership || !deps.reader) {
+  if (!available || !deps.membership) {
     return { ok: false, status: 503, error: WONDERLAND_UNAVAILABLE_MESSAGE };
   }
 
@@ -340,7 +373,7 @@ export async function authorizeWonderlandJulius(
   try {
     membership = await deps.membership.lookup({
       playerId: verified.participantId,
-      projectId: query.projectId,
+      projectId,
     });
   } catch {
     // A store that could not answer is NOT a denial. The request may have been
@@ -353,7 +386,7 @@ export async function authorizeWonderlandJulius(
   const decision = authorizeWonderlandProjectCapability(
     {
       playerId: verified.participantId,
-      projectId: query.projectId,
+      projectId,
       capability,
     },
     membership,
@@ -367,14 +400,7 @@ export async function authorizeWonderlandJulius(
     return { ok: false, status: 403, error: WONDERLAND_DENIAL_MESSAGE };
   }
 
-  return {
-    ok: true,
-    playerId: verified.participantId,
-    sessionId: verified.sessionId,
-    cursor: query.cursor,
-    grant: { projectId: query.projectId, runId: query.runId },
-    membership,
-  };
+  return { ok: true, playerId: verified.participantId, sessionId: verified.sessionId, membership };
 }
 
 /**

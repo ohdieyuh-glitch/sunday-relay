@@ -498,6 +498,189 @@ try {
     { memberSignedIn: memberSession.status, memberResult: asMember.status, ownerResult: ownResult.status });
 
   /* ================================================================
+   * THE PROJECT EXECUTION PROFILE -- founder decision 4. The operator's half
+   * of every player-created contract, over the real bridge and migration 027.
+   * A fresh project per walk, so each walk starts at version 1.
+   * ================================================================ */
+  const profileProject = `prj-wl-profile-${randomBytes(4).toString('hex')}`;
+  const profilePath = `/relay-api/julius/projects/${encodeURIComponent(profileProject)}/execution-profile`;
+  const PROFILE = {
+    tenantId: CONTRACT.tenantId, enabled: false, markerNamespacePrefix: 'wl-drill',
+    workspacePath: '/tmp/wonderland-integration-e2e/profile-ws', testCommand: '',
+    limits: { spendUsd: 1, repairCycles: 0, architectMaxOutputTokens: 2000 }, research: null,
+  };
+  const asPlayer = { Authorization: `Relay-Session ${playerToken}`, Origin: SITE };
+  const playerRead = await call('GET', profilePath, { headers: asPlayer });
+  const playerWrite = await call('PUT', profilePath, { headers: asPlayer, body: JSON.stringify(PROFILE) });
+  const anonRead = await call('GET', profilePath);
+  clause('P01', 'no player -- not even the project\'s OWNER -- can read or write a profile, and neither can anyone unauthenticated',
+    playerRead.status === 401 && playerWrite.status === 401 && anonRead.status === 401,
+    { playerRead: playerRead.status, playerWrite: playerWrite.status, anonymousRead: anonRead.status });
+
+  const unattributed = await call('PUT', profilePath, { headers: operator, body: JSON.stringify(PROFILE) });
+  const smuggled = await call('PUT', profilePath, {
+    headers: { ...operator, 'x-relay-actor': 'drill-operator' }, body: JSON.stringify({ ...PROFILE, spendUSD: 500 }),
+  });
+  clause('P02', 'an operator write must name its author, and a misspelt field is refused by name rather than defaulted',
+    unattributed.status === 400 && unattributed.json?.error?.kind === 'actor_required'
+      && smuggled.status === 400 && JSON.stringify(smuggled.json ?? {}).includes('spendUSD'),
+    { unattributed: `${unattributed.status} ${unattributed.json?.error?.kind ?? 'none'}`,
+      smuggled: `${smuggled.status} ${smuggled.json?.error?.kind ?? 'none'}` });
+
+  const profileFirst = await call('PUT', profilePath, { headers: { ...operator, 'x-relay-actor': 'drill-operator' }, body: JSON.stringify(PROFILE) });
+  const profileSecond = await call('PUT', profilePath, {
+    headers: { ...operator, 'x-relay-actor': 'drill-operator-2' }, body: JSON.stringify({ ...PROFILE, enabled: true }),
+  });
+  const profileRead = await call('GET', profilePath, { headers: operator });
+  clause('P03', 'each operator write is the NEXT version; the read is the current one, with who wrote it',
+    profileFirst.status === 200 && profileFirst.json?.data?.version === 1 && profileSecond.status === 200 && profileSecond.json?.data?.version === 2
+      && profileRead.status === 200 && profileRead.json?.data?.version === 2 && profileRead.json?.data?.writtenBy === 'operator:drill-operator-2'
+      && profileRead.json?.data?.profile?.enabled === true && profileRead.json?.data?.profile?.workspacePath === PROFILE.workspacePath,
+    { first: profileFirst.json?.data ?? profileFirst.status, second: profileSecond.json?.data ?? profileSecond.status,
+      current: profileRead.json?.data ? { version: profileRead.json.data.version, writtenBy: profileRead.json.data.writtenBy } : profileRead.status });
+
+  // THE HISTORY IS THE AUDIT TRAIL: version 1 is still in the table, as written, by whom it was written.
+  const history = new pg.Pool({ connectionString: DB });
+  let rows = [];
+  try {
+    rows = (await history.query(
+      'SELECT version, written_by, profile->>\'enabled\' AS enabled FROM relay_wonderland.project_execution_profiles WHERE project_id=$1 ORDER BY version',
+      [profileProject])).rows;
+  } finally {
+    await history.end();
+  }
+  clause('P04', 'nothing is overwritten: both versions survive in the table, each with its author',
+    rows.length === 2 && rows[0].version === 1 && rows[0].written_by === 'operator:drill-operator' && rows[0].enabled === 'false'
+      && rows[1].version === 2 && rows[1].written_by === 'operator:drill-operator-2' && rows[1].enabled === 'true',
+    { rows });
+
+  /* ================================================================
+   * A PLAYER CREATES A MISSION -- founder decision 4. The OWNER sends four
+   * fields; the server composes the rest from the operator's profile; the run
+   * lands READY through the operator route's own bootstrap and is never
+   * dispatched. A fresh project per walk, owned by the drill's player.
+   * ================================================================ */
+  const createProject = `prj-wl-create-${randomBytes(4).toString('hex')}`;
+  const createPath = `/relay-api/wonderland/julius/missions?projectId=${encodeURIComponent(createProject)}`;
+  const createProfilePath = `/relay-api/julius/projects/${encodeURIComponent(createProject)}/execution-profile`;
+  const PLAYER_MISSION = {
+    objective: 'Drill probe: a mission a player created from inside Wonderland. It is never driven.',
+    requirements: ['Exists only to prove the player creation path.'],
+    constraints: ['Never dispatch. No provider may be called on its behalf.'],
+    acceptanceCriteria: [{ id: 'created-by-player', text: 'The run exists durably in READY with dispatched false.', blocking: true }],
+  };
+  const CREATE_PROFILE = { ...PROFILE, markerNamespacePrefix: 'wl-create', workspacePath: '/tmp/wonderland-integration-e2e/create-ws',
+    testCommand: 'npm run probe', limits: { spendUsd: 1.25, repairCycles: 0, architectMaxOutputTokens: 2000 } };
+  const createKey = `drill-${randomBytes(6).toString('hex')}`;
+  const asOwner = (key = createKey) => ({ Authorization: `Relay-Session ${playerToken}`, Origin: SITE, 'x-relay-idempotency-key': key });
+  const creationRows = async () => {
+    const pool = new pg.Pool({ connectionString: DB });
+    try {
+      return (await pool.query('SELECT mission_id, player_id, profile_version, contract, run_id FROM relay_wonderland.player_mission_contracts WHERE project_id=$1', [createProject])).rows;
+    } finally {
+      await pool.end();
+    }
+  };
+  const ownerRows = new pg.Pool({ connectionString: DB });
+  try {
+    await ownerRows.query('INSERT INTO relay_wonderland.projects(project_id) VALUES ($1) ON CONFLICT DO NOTHING', [createProject]);
+    await ownerRows.query(
+      "INSERT INTO relay_wonderland.project_members(project_id, player_id, role) VALUES ($1, $2, 'OWNER') ON CONFLICT DO NOTHING",
+      [createProject, PLAYER]);
+  } finally {
+    await ownerRows.end();
+  }
+
+  const noProfile = await call('POST', createPath, { headers: asOwner(), body: JSON.stringify(PLAYER_MISSION) });
+  await call('PUT', createProfilePath, { headers: { ...operator, 'x-relay-actor': 'drill-operator' }, body: JSON.stringify({ ...CREATE_PROFILE, enabled: false }) });
+  const disabled = await call('POST', createPath, { headers: asOwner(), body: JSON.stringify(PLAYER_MISSION) });
+  await call('PUT', createProfilePath, { headers: { ...operator, 'x-relay-actor': 'drill-operator' }, body: JSON.stringify({ ...CREATE_PROFILE, enabled: true }) });
+  // An execution field at the top AND an evidence standard inside a criterion: both are the operator's, both named.
+  const smuggle = await call('POST', createPath, {
+    headers: asOwner(), body: JSON.stringify({
+      ...PLAYER_MISSION, acceptanceCriteria: [{ ...PLAYER_MISSION.acceptanceCriteria[0], requiredEvidence: ['DIFF'] }],
+      workspacePath: '/', limits: { spendUsd: 9999 },
+    }),
+  });
+  clause('C01', 'a player can create nothing until the operator has configured AND enabled the project, and can never set an '
+    + 'execution field or a criterion\'s evidence standard',
+    noProfile.status === 409 && noProfile.json?.error?.kind === 'execution_not_configured'
+      && disabled.status === 403 && disabled.json?.error?.kind === 'execution_disabled'
+      && smuggle.status === 400 && smuggle.json?.error?.kind === 'forbidden_field'
+      && JSON.stringify(smuggle.json?.error?.forbidden ?? [])
+        === JSON.stringify(['workspacePath', 'limits', 'acceptanceCriteria[0].requiredEvidence'])
+      && (await creationRows()).length === 0,
+    { noProfile: `${noProfile.status} ${noProfile.json?.error?.kind ?? 'none'}`, disabled: `${disabled.status} ${disabled.json?.error?.kind ?? 'none'}`,
+      smuggled: `${smuggle.status} ${JSON.stringify(smuggle.json?.error?.forbidden ?? [])}` });
+
+  const createdOnce = await call('POST', createPath, { headers: asOwner(), body: JSON.stringify(PLAYER_MISSION) });
+  const createdRunId = createdOnce.json?.data?.runId ?? null;
+  const createdMission = createdOnce.json?.data?.missionId ?? '';
+  clause('C02', 'the OWNER creates a mission from four fields: 201, READY, dispatched false, a server-derived mission id',
+    createdOnce.status === 201 && typeof createdRunId === 'string' && createdOnce.json?.data?.state === 'READY'
+      && createdOnce.json?.data?.dispatched === false && /^mission:wl-[0-9a-f]{12}$/.test(createdMission),
+    { status: createdOnce.status, runId: createdRunId ?? 'absent', missionId: createdMission || 'absent',
+      state: createdOnce.json?.data?.state ?? 'absent', dispatched: createdOnce.json?.data?.dispatched ?? 'absent' });
+
+  const createdAgain = await call('POST', createPath, { headers: asOwner(), body: JSON.stringify(PLAYER_MISSION) });
+  clause('C03', 'a retry with the same key is the SAME mission and the SAME run -- a double submit never makes two',
+    createdAgain.status === 201 && createdAgain.json?.data?.runId === createdRunId
+      && createdAgain.json?.data?.missionId === createdMission && createdAgain.json?.data?.rerun === false,
+    { status: createdAgain.status, runId: createdAgain.json?.data?.runId ?? 'absent', rerun: createdAgain.json?.data?.rerun ?? 'absent' });
+
+  // WHAT LANDED: the author and the exact contract, from the operator's profile, beside Julius's own snapshot.
+  const landed = await creationRows();
+  const snapshotPool = new pg.Pool({ connectionString: DB });
+  let snapshotLimits = null;
+  try {
+    snapshotLimits = (await snapshotPool.query('SELECT snapshot->\'limits\' AS limits FROM relay_wonderland.mission_contracts WHERE mission_id=$1', [createdMission])).rows[0]?.limits ?? null;
+  } finally {
+    await snapshotPool.end();
+  }
+  const record = landed[0] ?? {};
+  clause('C04', 'the author and the exact contract are recorded: this player, profile version 2, the OPERATOR\'S workspace, command and ceiling -- and Julius holds that ceiling',
+    landed.length === 1 && record.player_id === PLAYER && record.profile_version === 2 && record.run_id === createdRunId
+      && record.contract?.workspacePath === CREATE_PROFILE.workspacePath && record.contract?.testCommand === CREATE_PROFILE.testCommand
+      && record.contract?.objective === PLAYER_MISSION.objective && snapshotLimits?.spendUsd === 1.25,
+    { rows: landed.length, playerId: record.player_id ?? 'absent', profileVersion: record.profile_version ?? 'absent',
+      runId: record.run_id ?? 'absent', workspace: record.contract?.workspacePath ?? 'absent', juliusSpendCeiling: snapshotLimits?.spendUsd ?? 'absent' });
+
+  // NOTHING WAS SPENT: Julius's own slot view for the run, read the operator's way.
+  const createdSlots = await call('GET', `/relay-api/julius/runs/${encodeURIComponent(createdRunId ?? 'none')}/slots`, {
+    headers: { ...operator, 'X-Relay-Tenant': CREATE_PROFILE.tenantId, 'X-Relay-Project': createProject },
+  });
+  const slotStates = (createdSlots.json?.data ?? []).map((slot) => `${slot.role}:${slot.state}`);
+  clause('C05', 'the created mission was never dispatched: all three C.A.R.D. slots NEVER_DISPATCHED',
+    createdSlots.status === 200 && slotStates.length === 3 && slotStates.every((s) => s.endsWith(':NEVER_DISPATCHED')),
+    { status: createdSlots.status, slots: slotStates });
+
+  // THE OPERATOR'S PAID RUN NEEDS THE CONTRACT: exported to the operator, and to nobody else.
+  const exportPath = `/relay-api/julius/missions/${encodeURIComponent(createdMission)}/contract`;
+  const exported = await call('GET', exportPath, { headers: operator });
+  const playerExport = await call('GET', exportPath, { headers: { Authorization: `Relay-Session ${playerToken}`, Origin: SITE } });
+  clause('C06', 'the operator can export the exact contract for its paid run; the player who created it cannot read it back',
+    exported.status === 200 && exported.json?.data?.contract?.workspacePath === CREATE_PROFILE.workspacePath
+      && exported.json?.data?.playerId === PLAYER && playerExport.status === 401,
+    { operator: exported.status, player: playerExport.status });
+
+  // FROM INSIDE WONDERLAND: the native client -- paired for the drill's main project -- gets PAST authorisation for its
+  // OWN project and is refused for any other by its pairing. Its own project may or may not have an operator profile
+  // (the PIE acceptance writes one into this same persistent database), so the own-project answer is either a creation
+  // (201, READY, undispatched) or the refusal for want of an operator's setup (409) -- never 401 or 403. The first
+  // version asserted 409 alone and went red the day the acceptance wrote that profile: a clause that depended on
+  // state it does not control.
+  const nativeOwn = await call('POST', `/relay-api/wonderland/julius/missions?projectId=${encodeURIComponent(CONTRACT.projectId)}`, {
+    headers: { ...native, 'x-relay-idempotency-key': createKey }, body: JSON.stringify(PLAYER_MISSION),
+  });
+  const nativeOther = await call('POST', createPath, { headers: { ...native, 'x-relay-idempotency-key': createKey }, body: JSON.stringify(PLAYER_MISSION) });
+  const ownAuthorised = (nativeOwn.status === 201 && nativeOwn.json?.data?.dispatched === false && nativeOwn.json?.data?.state === 'READY')
+    || (nativeOwn.status === 409 && nativeOwn.json?.error?.kind === 'execution_not_configured');
+  clause('C07', 'the native client gets past authorisation for the project it was paired for (created READY, or 409 for want of a profile) and is refused 403 for any other',
+    ownAuthorised && nativeOther.status === 403 && nativeOther.json?.error?.kind === 'not_authorized',
+    { ownProject: `${nativeOwn.status} ${nativeOwn.json?.error?.kind ?? nativeOwn.json?.data?.state ?? 'none'}`,
+      otherProject: `${nativeOther.status} ${nativeOther.json?.error?.kind ?? 'none'}` });
+
+  /* ================================================================
    * ONE ACTIVE RUN PER MISSION -- founder decision 3, Julius 80b91478.
    * An accidental duplicate must not start a second paid execution; an
    * EXPLICIT rerun must stay possible; runId is the run and missionId the

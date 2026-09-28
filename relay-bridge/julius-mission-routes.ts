@@ -170,10 +170,42 @@ export async function handleJuliusMissionRoute(
   // would have read from disk, refused for the same reasons in the same words.
   const parsed = parseLiveMissionContract(request.body);
   if (!parsed.ok) return err(400, 'malformed_mission_contract', parsed.problem);
-  const contract: LiveMissionContractFile = parsed.contract;
+  return createJuliusMissionFromTrustedContract(parsed.contract, ports, { intent: request.rerun, key: request.rerunKey });
+}
 
-  const rerunIntent = request.rerun?.trim().toLowerCase() === 'explicit';
-  const rerunKey = request.rerunKey?.trim();
+/**
+ * CREATE A MISSION FROM A CONTRACT THE CALLER ALREADY TRUSTS -- the one creation
+ * path, shared.
+ *
+ * The operator route above reaches it with a contract file it has just parsed;
+ * the Wonderland player route reaches it with a contract the SERVER composed from
+ * an operator's Project Execution Profile and a player's four fields. Both land
+ * in exactly the same compile -> submit, with exactly the same refusal table, so
+ * there is one security boundary for creating a Julius mission rather than two
+ * entry points to keep in step. Extracted verbatim from `handleJuliusMissionRoute`
+ * (integration lane, 2026-09-27, at the Julius lane's request): no behaviour
+ * changed.
+ *
+ * TRUSTED means the contract's execution-sensitive fields -- workspace, command,
+ * limits, research, identity -- did not come from a player. This function cannot
+ * check that and does not try; the callers are what make it true.
+ */
+export async function createJuliusMissionFromTrustedContract(
+  contract: LiveMissionContractFile,
+  ports: JuliusMissionRoutePorts,
+  rerun: { readonly intent?: string | undefined; readonly key?: string | undefined } = {},
+): Promise<JuliusMissionRouteResult> {
+  if (ports.bootstrap === null) {
+    return err(503, 'julius_state_unavailable',
+      `No durable Julius state is reachable from this process: ${ports.missingConfig.join(', ')} is not set. `
+      + 'No run was created.');
+  }
+  if (ports.reviewerProvider === null) {
+    return err(503, 'reviewer_provider_unknown',
+      'RELAY_HERMES_PROVIDER is not set, so the mission’s reviewer independence group cannot be recorded. No run was created.');
+  }
+  const rerunIntent = rerun.intent?.trim().toLowerCase() === 'explicit';
+  const rerunKey = rerun.key?.trim();
   const bootstrapRequest = {
     ...compileBootstrapRequest(contract, missionWorkerRequests(ports.reviewerProvider), ports.cardRevision),
     ...(rerunIntent ? { rerunIntent: 'EXPLICIT' as const } : {}),

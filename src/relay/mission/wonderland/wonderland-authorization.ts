@@ -67,6 +67,16 @@ export const WONDERLAND_PROJECT_CAPABILITIES = [
    * rather than a branch in a route.
    */
   'read_mission_cost',
+  /**
+   * Create a Julius mission for this project from the PLAYER'S four fields and
+   * the project's operator-written execution profile. Founder decision 4: only
+   * the OWNER or an explicitly authorised ADMIN may cause paid execution.
+   * Creating a mission does not dispatch it -- paid execution stays the
+   * operator's `julius-live-mission run --confirm-live` -- but creation is the
+   * first step of paid work, so it takes the same authority. An ordinary member
+   * may later author DRAFTS, which is a different capability, not this one.
+   */
+  'create_mission',
 ] as const;
 export type WonderlandProjectCapability = (typeof WONDERLAND_PROJECT_CAPABILITIES)[number];
 
@@ -85,14 +95,14 @@ export type WonderlandProjectCapability = (typeof WONDERLAND_PROJECT_CAPABILITIE
  * DECIDED, NOT YET WRITTEN (founder decisions 4 and 5, 2026-09-27). An
  * explicitly authorised ADMIN is to hold what OWNER holds, and an ordinary
  * MEMBER `read_world_state` and `read_mission_result` -- never
- * `read_mission_cost`. They are not rows here yet because nothing in the
+ * `read_mission_cost`, and never `create_mission`. They are not rows here yet because nothing in the
  * product writes those roles, and this table names only roles that are written
  * (the seed test holds that). The route that first writes one adds its row.
  */
 export const WONDERLAND_ROLE_CAPABILITIES: Readonly<
   Record<string, readonly WonderlandProjectCapability[]>
 > = Object.freeze({
-  OWNER: Object.freeze(['read_world_state', 'read_mission_result', 'read_mission_cost'] as const),
+  OWNER: Object.freeze(['read_world_state', 'read_mission_result', 'read_mission_cost', 'create_mission'] as const),
 });
 
 /**

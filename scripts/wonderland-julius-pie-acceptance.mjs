@@ -5,9 +5,9 @@
  *   node scripts/wonderland-julius-pie-acceptance.mjs                    (dry run: prepares, drops nothing)
  *   node scripts/wonderland-julius-pie-acceptance.mjs --drop --channel <editor channel dir> [--wait-minutes 45]
  *
- * Needs WONDERLAND_E2E_DATABASE_URL (an isolated, migrated PostgreSQL) and a built bridge
- * (npm run wonderland:julius:e2e:build). The editor it drops into must be running a build that contains
- * UWonderlandJuliusStreamSubsystem.
+ * Needs WONDERLAND_E2E_DATABASE_URL (an isolated, migrated PostgreSQL). It builds the bridge bundle itself
+ * (npm run relay:bridge:build) before starting it, so an acceptance never drives a bundle older than this tree. The
+ * editor it drops into must be running a build that contains UWonderlandJuliusStreamSubsystem.
  *
  * WHAT IT DOES
  *   1. starts the production bridge against the ISOLATED database, every provider credential stripped
@@ -30,7 +30,7 @@
  * check the bridge side at any time; the job goes into the inbox only on purpose, with the channel named.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import {
   copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync,
@@ -95,9 +95,24 @@ const CONTRACT = {
   workspacePath: '/tmp/wonderland-integration-e2e/ws',
   limits: { spendUsd: 1, repairCycles: 0 },
 };
+/**
+ * The acceptance project's EXECUTION PROFILE, which the world's creation clause (A06i) composes a contract from --
+ * written by this orchestrator exactly as an operator writes one (operator credential, x-relay-actor). Nothing it
+ * creates is dispatched, so an empty testCommand is fine here; a project meant for PAID runs needs a real one (the
+ * paid preflight refuses an empty command).
+ */
+const ACCEPT_PROFILE = {
+  tenantId: CONTRACT.tenantId,
+  enabled: true,
+  markerNamespacePrefix: 'wl-accept',
+  workspacePath: '/tmp/wonderland-integration-e2e/acceptance-ws',
+  testCommand: '',
+  limits: { spendUsd: 1, repairCycles: 0, architectMaxOutputTokens: 2000 },
+  research: null,
+};
 // Every clause the editor half declares, its own completeness clause (A12) included. One that never ran is not a pass.
 // Clause ids: A = the editor job's, O = this orchestrator's view of the job, J = Julius's side.
-const JOB_CLAUSES = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A06b', 'A06e', 'A06f', 'A06g', 'A06h', 'A06c', 'A06d', 'A07', 'A08', 'A09', 'A10', 'A10b', 'A11', 'A12'];
+const JOB_CLAUSES = ['A01', 'A01b', 'A02', 'A03', 'A04', 'A05', 'A06', 'A06b', 'A06e', 'A06f', 'A06g', 'A06h', 'A06c', 'A06d', 'A07', 'A08', 'A09', 'A10', 'A10b', 'A06k', 'A06l', 'A06i', 'A06j', 'A06m', 'A06n', 'A11', 'A12'];
 // The key for the SECOND run the job switches to. Fixed, so every attempt resolves to the same run and no attempt
 // makes a new one (Julius 52df8e63: one key is one rerun).
 const SWITCH_RERUN_KEY = 'pie-acceptance-switch-v1';
@@ -145,15 +160,52 @@ async function signIn() {
 
 /* ------------------------------------------------------------------- run */
 
+// THE BRIDGE IT RUNS IS THIS TREE'S. The bundle is gitignored and only rebuilt by whoever last asked for it, so a
+// route changed since then would be judged by its previous self -- a pass or a failure of code that is not here.
+const built = spawnSync('npm', ['run', 'relay:bridge:build', '--silent'], { cwd: ROOT, stdio: 'inherit', shell: true });
+if (built.status !== 0) {
+  console.error(`the bridge bundle did not build (exit ${built.status}); nothing was started.`);
+  process.exit(2);
+}
+
 mkdirSync(HANDSHAKE, { recursive: true });
 for (const stale of readdirSync(HANDSHAKE)) rmSync(join(HANDSHAKE, stale), { force: true });
 
 const log = createWriteStream(join(HANDSHAKE, 'bridge.log'));
-const bridge = spawn('node', ['dist-relay-bridge/server.cjs'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
-bridge.stdout.pipe(log);
-bridge.stderr.pipe(log);
+/**
+ * THE BRIDGE PROCESS, RESTARTABLE ON PURPOSE. Its sessions live in memory, so a restart revokes every one of them --
+ * which is how the job proves, from inside Unreal, what a client does with a session the bridge no longer knows
+ * (A06n). An exit DURING a deliberate restart is not the bridge dying under the job; only an unplanned exit counts.
+ */
+let bridge = null;
 let exited = null;
-bridge.on('exit', (code) => { exited = code; });
+let restarting = false;
+function startBridge() {
+  bridge = spawn('node', ['dist-relay-bridge/server.cjs'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  // `end: false`: the log outlives any one bridge process.
+  bridge.stdout.pipe(log, { end: false });
+  bridge.stderr.pipe(log, { end: false });
+  bridge.on('exit', (code) => { if (!restarting) exited = code; });
+}
+async function waitHealthy() {
+  for (let i = 0; i < 60; i += 1) {
+    try { if ((await fetch(BASE + '/health')).ok) return true; } catch { /* not up yet */ }
+    await sleep(500);
+  }
+  return false;
+}
+async function restartBridge() {
+  restarting = true;
+  try {
+    const old = bridge;
+    await new Promise((resolve) => { old.once('exit', resolve); old.kill(); });
+    startBridge();
+    return await waitHealthy();
+  } finally {
+    restarting = false;
+  }
+}
+startBridge();
 
 const started = new Date().toISOString();
 const clauses = [];
@@ -163,11 +215,11 @@ const summary = { dropped: false, nonce: NONCE, pairing: [], job: null, julius: 
 let playerToken = null;
 
 /** Mint a pairing code as the signed-in player, renewing their session if it expired while the job waited. */
-async function mintCode() {
-  // A code is bound to one project (founder decision 2): the one the job follows.
+async function mintCode(projectId = CONTRACT.projectId) {
+  // A code is bound to one project (founder decision 2): the one the job asked for, or the one it follows.
   const ask = () => call('POST', '/relay-api/wonderland/native/pair', {
     headers: { Authorization: `Relay-Session ${playerToken}`, Origin: SITE },
-    body: JSON.stringify({ projectId: CONTRACT.projectId }),
+    body: JSON.stringify({ projectId }),
   });
   let res = await ask();
   if (res.status === 401) {
@@ -177,13 +229,62 @@ async function mintCode() {
   return res;
 }
 
+/**
+ * WHAT AN OPERATOR DOES BETWEEN TWO MOVES OF THE PLAYER, on the job's request (act-<stem>.json -> done-<stem>.json):
+ * write a project's execution profile, change the player's role in a project, restart the bridge. Each answer is
+ * written atomically; a failure is answered too, so the job records it rather than waiting out its timeout.
+ */
+async function serveActions(served) {
+  for (const name of readdirSync(HANDSHAKE)) {
+    const request = /^act-(.+)\.json$/.exec(name);
+    if (!request || served.has(`act:${request[1]}`)) continue;
+    served.add(`act:${request[1]}`);
+    let payload = {};
+    try { payload = JSON.parse(readFileSync(join(HANDSHAKE, name), 'utf8')); } catch { /* answered as unknown below */ }
+    let answer;
+    if (payload.action === 'profile') {
+      const res = await call('PUT', `/relay-api/julius/projects/${encodeURIComponent(payload.projectId)}/execution-profile`, {
+        headers: { ...operator, 'x-relay-actor': 'acceptance-orchestrator' }, body: JSON.stringify(ACCEPT_PROFILE),
+      });
+      answer = { status: res.status, version: res.json?.data?.version ?? null };
+      summary.createProfileVersion = answer.version;
+    } else if (payload.action === 'role') {
+      const pool = new pg.Pool({ connectionString: DB });
+      try {
+        const updated = await pool.query(
+          'UPDATE relay_wonderland.project_members SET role=$1 WHERE project_id=$2 AND player_id=$3',
+          [payload.role, payload.projectId, PLAYER]);
+        answer = { role: payload.role, rows: updated.rowCount };
+      } finally {
+        await pool.end();
+      }
+    } else if (payload.action === 'restart-bridge') {
+      answer = { healthy: await restartBridge() };
+    } else {
+      answer = { error: `unknown action ${String(payload.action)}` };
+    }
+    const out = join(HANDSHAKE, `done-${request[1]}.json`);
+    writeFileSync(`${out}.tmp`, JSON.stringify(answer));
+    renameSync(`${out}.tmp`, out);
+    summary.actions = [...(summary.actions ?? []), { request: request[1], ...payload, answer }];
+    say(`served action ${request[1]}: ${JSON.stringify(answer)}`);
+  }
+}
+
 /** Answer every request the job has made and not yet had answered. A failed mint is recorded, not fatal: the job asks again. */
 async function serveCodes(served) {
+  await serveActions(served);
   for (const name of readdirSync(HANDSHAKE)) {
     const request = /^ready-(.+)\.flag$/.exec(name);
     if (!request || served.has(request[1])) continue;
     served.add(request[1]);
-    const res = await mintCode();
+    // A flag may name the project the code is for; a bare flag is the project the job follows.
+    let projectId = CONTRACT.projectId;
+    try {
+      const asked = JSON.parse(readFileSync(join(HANDSHAKE, name), 'utf8'));
+      if (asked !== null && typeof asked === 'object' && typeof asked.projectId === 'string') projectId = asked.projectId;
+    } catch { /* a timestamp, not JSON: the default project */ }
+    const res = await mintCode(projectId);
     if (res.status !== 200 || typeof res.json?.data?.code !== 'string') {
       summary.pairing.push({ request: request[1], served: false, status: res.status, body: res.text });
       say(`could NOT mint a code for ${request[1]}: ${res.status}`);
@@ -248,8 +349,25 @@ try {
   }
   say(`player ${PLAYER} signed in and a member of ${CONTRACT.projectId}`);
 
+  // PROJECT B, FRESH PER ATTEMPT, for the creation phase (A06i-A06n): the player OWNS it and it has NO execution
+  // profile, so the job's first creation is refused for real until the operator writes one -- on the job's request,
+  // mid-phase, the way an operator would. The key is this attempt's: a new mission per attempt, a retry the same one.
+  const createProjectId = `prj-wl-accept-${NONCE}`;
+  const owners = new pg.Pool({ connectionString: DB });
+  try {
+    await owners.query('INSERT INTO relay_wonderland.projects(project_id) VALUES ($1) ON CONFLICT DO NOTHING', [createProjectId]);
+    await owners.query(
+      "INSERT INTO relay_wonderland.project_members(project_id, player_id, role) VALUES ($1, $2, 'OWNER') ON CONFLICT DO NOTHING",
+      [createProjectId, PLAYER]);
+  } finally {
+    await owners.end();
+  }
+  const createKey = `accept-${NONCE}`;
+  say(`creation project ${createProjectId}: owned by ${PLAYER}, no execution profile yet`);
+
   writeFileSync(join(HANDSHAKE, 'params.json'), JSON.stringify({
     bridge: BASE, projectId: CONTRACT.projectId, runId, switchRunId, missionId: CONTRACT.missionId, nonce: NONCE,
+    createProjectId, createKey,
   }, null, 1));
 
   if (!DROP) {
@@ -320,6 +438,65 @@ try {
     { switchRunId, state: switchRun.json?.data?.state ?? null, slots: switchSlotList?.map((s) => `${s.role}:${s.state}`) ?? null });
   say(`julius after: ${summary.julius.stateAfter}; slots ${JSON.stringify(summary.julius.slotsAfter)}; ` +
     `resubmission ${summary.julius.resubmission.runId === runId ? 'the same run' : 'NOT the same run'}`);
+
+  if (DROP) {
+    // THE MISSION THE WORLD CREATED (A06i), inspected independently from Julius's side. Read the OPERATOR's way, scoped
+    // to project B, never through anything the world said about it.
+    const created = clauses.find((c) => c.id === 'A06i')?.detail ?? {};
+    const createdRunId = typeof created.created_run === 'string' ? created.created_run : '';
+    const createdMission = typeof created.created_mission === 'string' ? created.created_mission : '';
+    const scopedB = { ...operator, 'X-Relay-Tenant': ACCEPT_PROFILE.tenantId, 'X-Relay-Project': createProjectId };
+    const read = (view) => (createdRunId === '' ? Promise.resolve(null)
+      : call('GET', `/relay-api/julius/runs/${encodeURIComponent(createdRunId)}/${view}`, { headers: scopedB }));
+    const [createdRun, createdSlots, createdResult] = [await read('run'), await read('slots'), await read('result')];
+    const createdSlotList = Array.isArray(createdSlots?.json?.data) ? createdSlots.json.data : null;
+    const cost = createdResult?.json?.data?.cost ?? null;
+    clause('J05', 'JULIUS EXECUTION SAFETY: the run the world created -- the SAME run id -- is READY, all three C.A.R.D. slots '
+      + 'NEVER_DISPATCHED, and its known spend is $0, complete',
+      createdRunId !== '' && createdRun?.json?.data?.runId === createdRunId && createdRun?.json?.data?.state === 'READY'
+        && createdSlotList !== null && createdSlotList.length === 3 && createdSlotList.every((s) => s.state === 'NEVER_DISPATCHED')
+        && cost?.knownUsdMicros === 0 && cost?.unknownComponents === 0 && cost?.complete === true,
+      { createdRunId: createdRunId || 'none', state: createdRun?.json?.data?.state ?? 'absent',
+        slots: createdSlotList?.map((s) => `${s.role}:${s.state}`) ?? 'absent', cost: cost ?? 'absent' });
+
+    const record = createdMission === '' ? null
+      : await call('GET', `/relay-api/julius/missions/${encodeURIComponent(createdMission)}/contract`, { headers: operator });
+    const data = record?.json?.data ?? {};
+    const contract = data.contract ?? {};
+    // EXECUTION-SENSITIVE VALUES CAME FROM THE PROFILE, NOT THE REQUEST: the Unreal request can carry only the four
+    // player fields (the client builds nothing else and the bridge refuses anything else), and each value below equals
+    // the operator's profile while the player's words equal what the job sent.
+    const fromProfile = contract.workspacePath === ACCEPT_PROFILE.workspacePath && contract.testCommand === ACCEPT_PROFILE.testCommand
+      && contract.tenantId === ACCEPT_PROFILE.tenantId
+      && JSON.stringify(contract.limits) === JSON.stringify(ACCEPT_PROFILE.limits)
+      && typeof contract.markerNamespace === 'string' && contract.markerNamespace.startsWith(`${ACCEPT_PROFILE.markerNamespacePrefix}-`)
+      && contract.research === undefined;
+    clause('J06', 'CREATION PROVENANCE: the durable record names the creating player, project B, the profile version the '
+      + 'operator wrote, the authoritative mission and run ids, and a contract whose execution-sensitive values are the profile\'s',
+      record?.status === 200 && data.playerId === PLAYER && data.projectId === createProjectId
+        && data.profileVersion === summary.createProfileVersion && typeof data.profileVersion === 'number'
+        && data.missionId === createdMission && data.runId === createdRunId && contract.missionId === createdMission
+        && contract.objective === created.objective && fromProfile,
+      { status: record?.status ?? 'not asked', playerId: data.playerId ?? 'absent', projectId: data.projectId ?? 'absent',
+        profileVersion: data.profileVersion ?? 'absent', profileWritten: summary.createProfileVersion ?? 'absent',
+        missionId: data.missionId ?? 'absent', runId: data.runId ?? 'absent', executionValuesFromProfile: fromProfile });
+
+    // THE RETRY LEFT NO TRACE: one Julius run for the mission, one creation record in project B -- the refused attempts
+    // recorded nothing and the retry recorded nothing new.
+    const counts = new pg.Pool({ connectionString: DB });
+    let runs = -1;
+    let records = -1;
+    try {
+      runs = Number((await counts.query('SELECT count(*) AS n FROM relay_wonderland.julius_runs WHERE mission_id=$1', [createdMission])).rows[0].n);
+      records = Number((await counts.query('SELECT count(*) AS n FROM relay_wonderland.player_mission_contracts WHERE project_id=$1', [createProjectId])).rows[0].n);
+    } finally {
+      await counts.end();
+    }
+    clause('J07', 'IDEMPOTENCY: after the create, the retry and four refusals, project B holds exactly ONE creation record and '
+      + 'the mission exactly ONE Julius run',
+      createdMission !== '' && runs === 1 && records === 1,
+      { juliusRunsForMission: runs, creationRecordsInProject: records });
+  }
 } catch (err) {
   summary.error = String(err?.message ?? err);
   clause('X00', 'the orchestrator completed', false, { error: summary.error });
