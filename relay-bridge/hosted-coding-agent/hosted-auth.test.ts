@@ -236,8 +236,15 @@ describe('the decision fails closed, and its refusals are named', () => {
  * because the wiring nearly WAS a no-op: the composition passes the mode with a
  * conditional spread, and a spread defeats TypeScript's excess-property check — so
  * before the field was declared on the adapter's options the whole mode typechecked,
- * compiled, and was silently dropped one call before it mattered. A full-dispatch
- * test would prove more, and it cannot run without a provider call.
+ * compiled, and was silently dropped one call before it mattered.
+ *
+ * THE BEHAVIOURAL PROOF NOW EXISTS, and it needed no provider call after all:
+ * `relay-bridge/julius/coding-agent-child-env.runtime.test.ts` composes from the
+ * environment, dispatches through the real adapter, provider, runner and Agent SDK,
+ * and asks the SPAWNED CHILD what environment it received. It fails when the
+ * composition drops the mode and when the child env inherits the parent — both
+ * mutations were run. These source checks stay as the cheap guard on the
+ * declarations, which is the half a spread cannot be trusted to enforce.
  */
 describe('every hop forwards the mode, because one that does not is invisible', () => {
   const ROOT = process.cwd();
