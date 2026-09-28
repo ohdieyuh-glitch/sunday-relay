@@ -1,3 +1,23 @@
+# ======================================================================================================
+# VOID CORPUS -- DO NOT RUN, DO NOT QUOTE. Quarantined 2026-09-28 by the world lane.
+#
+# The "proven valid" below was not. The golden_arrival camera sat CAM_UP 900 uu above SPOT (-64, -5042),
+# inside foliage, obstructed at all 8 yaws on the VISIBILITY channel; V_CLEAR traced on the PAWN channel,
+# which foliage does not block, so it passed while every frame was the inside of a plant. The noctis_nc02
+# and tartarus_tq04 cameras were never shown to be obstructed -- but they passed the same foliage-blind
+# gate at the same 900 uu, so none of their frames can be shown to be of the ground either. Every
+# framebuffer number from this job is void, at all three places. (The "0.0126 dusk hole" is NOT from
+# this job: it was read by zc_dusk_hole/zc_dusk_closed at EYE (-320, -1900, 200), an open view of the
+# monument plinth, before the Nightfall change -- a different camera and a different question.)
+#
+# Results produced by this job: done/zzAA1, zzAC1, zzAD1, zzAE1 and zzAG2 (_dusk_regions.json) and
+# captures/zc/dusk_regions/. Kept as a record of what went wrong, not as evidence.
+#
+# The dusk cliff was re-measured from an open plaza vantage proven with a visibility-channel trace,
+# (-64, -5700) yaw 90 at eye height: zc_dusk_truth and zc_dusk_handover. Use those. job() refuses to
+# run. Re-asking this question means a new job at a proven CAMERA position, not deleting the refusal.
+# ======================================================================================================
+#
 # THE EVENING, IN THREE REGIONS, FROM OBSERVATION POINTS THAT ARE PROVEN VALID BEFORE ANYTHING IS READ.
 #
 # Every dusk number this lane has published came from a camera at (-320, -1900) aimed at (0, -1460). The
@@ -89,6 +109,10 @@ def patch(rect):
 
 
 def job():
+    # QUARANTINED: see the VOID CORPUS banner at the top of this file. The body below is unreachable and
+    # kept only so a reader can see what produced the void numbers.
+    RESULT["status"] = "refused: VOID corpus (camera inside foliage); use zc_dusk_truth / zc_dusk_handover"
+    return
     RESULT["status"] = "running"
     tests = []
     RESULT["tests"] = tests

@@ -1,3 +1,20 @@
+# ======================================================================================================
+# VOID CORPUS -- DO NOT RUN, DO NOT QUOTE. Quarantined 2026-09-28 by the world lane.
+#
+# SPOT (-64, -5042) was proven as a STANDING position. The camera sat CAM_UP 900 uu above it, inside
+# foliage, and was obstructed at all 8 yaws on the VISIBILITY channel. The clear-view gate traced on the
+# PAWN channel, which foliage does not block, so it passed while every frame was the inside of a plant.
+# Every framebuffer number this job produced is void -- the positive control included, because it read
+# the same leaves: a control can only certify an instrument for the surface it actually looked at.
+#
+# Results produced by this job: done/zzAA2_dusk_cause.json, done/zzAC2_dusk_cause.json and
+# captures/zc/dusk_cause/. Kept as a record of what went wrong, not as evidence.
+#
+# The dusk cliff was re-measured from an open plaza vantage proven with a visibility-channel trace,
+# (-64, -5700) yaw 90 at eye height: zc_dusk_truth and zc_dusk_handover. Use those. job() refuses to
+# run. Re-asking this question means a new job at a proven CAMERA position, not deleting the refusal.
+# ======================================================================================================
+#
 # WHAT ACTUALLY DARKENS THE GROUND AT DUSK, AND A DELIBERATE ATTEMPT TO KILL MY OWN EXPLANATION.
 #
 # MY CLAIM, which this job exists to disprove rather than support: the moon's pitch is +Elevation and the
@@ -73,6 +90,10 @@ def patch(rect):
 
 
 def job():
+    # QUARANTINED: see the VOID CORPUS banner at the top of this file. The body below is unreachable and
+    # kept only so a reader can see what produced the void numbers.
+    RESULT["status"] = "refused: VOID corpus (camera inside foliage); use zc_dusk_truth / zc_dusk_handover"
+    return
     RESULT["status"] = "running"
     tests = []
     RESULT["tests"] = tests

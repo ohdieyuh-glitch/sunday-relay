@@ -1,3 +1,21 @@
+# ======================================================================================================
+# VOID CORPUS -- DO NOT RUN, DO NOT QUOTE. Quarantined 2026-09-28 by the world lane.
+#
+# SPOT (-64, -5042) was proven as a STANDING position. The camera sat CAM_UP 900 uu above it, inside
+# foliage, and was obstructed at all 8 yaws on the VISIBILITY channel. The clear-view gate traced on the
+# PAWN channel, which foliage does not block, so it passed while every frame was the inside of a plant.
+# Every framebuffer number this job produced is void, and so is every conclusion the prose below draws
+# from them: the "18:25 spike", the 87x collapse, "the moon is the only discontinuity in dusk". The
+# zzAG2 figures quoted in the header are void too (zc_dusk_regions, same camera).
+#
+# Results produced by this job: done/zwB1_dusk_spike.json, done/zwB2_dusk_spike_fine.json and
+# captures/zc/dusk_spike/. Kept as a record of what went wrong, not as evidence.
+#
+# The dusk cliff was re-measured from an open plaza vantage proven with a visibility-channel trace,
+# (-64, -5700) yaw 90 at eye height: zc_dusk_truth and zc_dusk_handover. Use those. job() refuses to
+# run. Re-asking this question means a new job at a proven CAMERA position, not deleting the refusal.
+# ======================================================================================================
+#
 # WHAT IS THE 18:25 SPIKE MADE OF? Decomposed by removing one contributor at a time.
 #
 # The Nightfall complement at d21c2213 closed the 18:00 hole and created an overshoot at 18:25, and the
@@ -86,6 +104,10 @@ def patch(rect):
 
 
 def job():
+    # QUARANTINED: see the VOID CORPUS banner at the top of this file. The body below is unreachable and
+    # kept only so a reader can see what produced the void numbers.
+    RESULT["status"] = "refused: VOID corpus (camera inside foliage); use zc_dusk_truth / zc_dusk_handover"
+    return
     RESULT["status"] = "running"
     tests = []
     RESULT["tests"] = tests
