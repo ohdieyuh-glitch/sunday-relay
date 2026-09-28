@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **191 production files** across 20/20 subsystems (2 roots, 164 traced, 9 not composed by the live root, 16 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **192 production files** across 20/20 subsystems (2 roots, 164 traced, 9 not composed by the live root, 17 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -381,6 +381,7 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/wonderland-migrations/024_julius_work_artifacts.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-migrations/025_julius_context_integrity.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-migrations/026_julius_claim_standings.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
+| `src/relay/persistence/wonderland-migrations/028_julius_criteria_per_run.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 
 ### 19 LIVE PROVIDER COMPOSITION
@@ -420,6 +421,7 @@ C.A.R.D. roles resolved to live adapters — fail closed, naming every missing v
 - **legacy local execution** — `src/relay/persistence/julius-event-append-conformance.ts`: the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root.
 - **legacy local execution** — `relay-bridge/julius/durable-artifacts.ts`: composes the content-addressed artifact store with the work-artifact record so a body survives the process that made it; not yet reached by the live composition, which still holds bodies in its own exchange — the wiring is the next boundary.
 - **legacy local execution** — `src/relay/persistence/julius-work-artifact-postgres.ts`: the PostgreSQL record of which body belongs to which attempt; reached once the live composition stops holding bodies in memory.
+- **legacy local execution** — `src/relay/persistence/julius-criteria-scope-conformance.ts`: the criteria-scope contract cases themselves: a criterion belongs to a RUN, not to the database. Written once and run by BOTH the in-memory store, which was always right, and real PostgreSQL, where a global primary key on criterion_id silently gave every rerun no criteria at all. Test support, imported by no root.
 - **legacy local execution** — `src/relay/persistence/julius-decision-write-conformance.ts`: the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root.
 - **legacy local execution** — `src/relay/mission/julius/julius-learning-loop.ts`: the Learning Loop’s measurement and promotion gate: it projects a mission’s outcome from the durable trajectory, compares a matched pair and answers whether an artifact may become trusted memory. It is an EVALUATION surface, read after a mission rather than during one, so no dispatch path reaches it — and it deliberately writes nothing: the promotion it authorises is performed by promoteJuliusMemoryClaim, which IS on the kernel path.
 - **legacy local execution** — `src/relay/workspace/julius-tools/node-tool-adapter.ts`: the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests.
