@@ -92,6 +92,28 @@ than an afternoon. `relay-repository-boundary`, `relay-parity-gate`,
 `relay:cli:contract-verify`, `relay:workspace:verify`, `git diff --check`, both
 typecheck passes and all six esbuild bundles pass on this host.
 
+**AND A WHOLE-SUITE FIGURE COULD NOT BE OBTAINED ON THIS HOST AT ALL.** Two full
+runs were killed for low memory: 16 GB total with 6.9 GB free, because a
+Wonderland Unreal editor session held the machine throughout. A third completed
+only while the working tree was being edited under it, which makes its numbers
+worthless — several of the gates it runs read `git ls-files` and the working tree.
+So the honest measurement is per directory at constrained concurrency
+(`--maxWorkers=2`), which fits in the available memory and removes the CPU
+contention that was producing most of the intermittent failures:
+
+| Scope | Result |
+|---|---|
+| `src/relay/mission/julius` + `src/relay/mission/role-slots` | **97 files, 1,894 tests, 0 failures** |
+| `relay-bridge/julius` + `src/relay/persistence` + the four affected `scripts/` suites | 63 files, 916 passed, **11 failed — the same five files and the same five counts as the baseline** |
+
+The eleven are `persistence` (4), `lock-reclaim` (2), `beta-enrollment-node` (3),
+`durable-mission-node` (1) and `julius-research-authority` (1); every one of them
+fails identically on the unmodified base, and the first four share the POSIX
+fake-executable cause described above. **Zero new failures across everything this
+session touched** — and `julius-slot-envelope.e2e`, the one case the earlier
+contaminated runs showed failing, passes at constrained concurrency, which
+identifies it as contention rather than a defect.
+
 What this session can honestly claim about its own delta is measured per
 directory, where the signal is clean: `src/relay/mission/julius` was 1 failing
 case at baseline (`julius-slot-envelope.e2e`, which also passes intermittently
