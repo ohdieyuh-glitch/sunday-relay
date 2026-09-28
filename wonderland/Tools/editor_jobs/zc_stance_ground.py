@@ -78,27 +78,23 @@ def job():
     stood_at = dog.get_actor_location()
     RESULT["stood_at"] = [round(stood_at.x, 1), round(stood_at.y, 1), round(stood_at.z, 1)]
 
-    # ---- THE FLOOR UNDER THE DOG, TRACED ONCE. ECC_Camera rather than Visibility: this map's paving does
-    # not answer on Visibility, which cost an earlier job every one of its candidate spots.
-    start = unreal.Vector(stood_at.x, stood_at.y, stood_at.z + 200.0)
-    end = unreal.Vector(stood_at.x, stood_at.y, stood_at.z - 400.0)
-    hit = unreal.SystemLibrary.line_trace_single(
-        world, start, end, unreal.TraceTypeQuery.CAMERA, False, [dog], unreal.DrawDebugTrace.NONE, True,
-        unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
-    floor_z = None
-    if hit is not None:
-        try:
-            floor_z = float(hit.to_tuple()[4].z)                    # ImpactPoint
-        except Exception:                                           # noqa: BLE001
-            try:
-                floor_z = float(hit.impact_point.z)
-            except Exception:                                       # noqa: BLE001
-                floor_z = None
-    RESULT["floor_z"] = round(floor_z, 2) if floor_z is not None else None
-    record("G00", "the floor under the Dog was found, so 'ground contact' has something to mean",
-           floor_z is not None, floor_z=RESULT["floor_z"], stood_at=RESULT["stood_at"],
-           note="traced on ECC_Camera: this map's paving does not answer on Visibility, which is recorded "
-                "in this tree as having rejected every candidate spot in an earlier job.")
+    # ---- THE REFERENCE IS THE DOG'S OWN ORIGIN, NOT A TRACED FLOOR.
+    #
+    # A first version traced for the floor and died on unreal.TraceTypeQuery.CAMERA, which is not a Python
+    # enum member -- the trace-type enum is project-configured (TRACE_TYPE_QUERY1 and so on) and mapping
+    # ECC_Camera onto it would be a guess about this project's collision settings.
+    #
+    # IT IS ALSO UNNECESSARY. The question is comparative: does each skin stand where RELAY OG stands, on a
+    # Dog that never moves? The Dog's own origin is a fixed datum that serves that exactly, and it cannot be
+    # wrong about the collision channel because it does not use one. A traced floor would only add an
+    # absolute that the founder's sentence never asked for -- they made Relay OG the authority, not the
+    # ground plane.
+    floor_z = float(stood_at.z)
+    RESULT["reference_z"] = round(floor_z, 2)
+    record("G00", "there is a fixed datum to measure every skin against",
+           True, reference_z=RESULT["reference_z"], stood_at=RESULT["stood_at"],
+           note="the Dog's own origin, held constant by G02. Relative to it is what the founder's "
+                "'copy Relay OG's ground contact' actually means.")
 
     def costume():
         """The costume attached to THIS Dog.
@@ -139,7 +135,7 @@ def job():
             "bounds_bottom_z": round(bottom, 2),
             "bounds_top_z": round(top, 2),
             "height_uu": round(top - bottom, 2),
-            "above_floor_uu": round(bottom - floor_z, 2) if floor_z is not None else None,
+            "below_dog_origin_uu": round(bottom - floor_z, 2) if floor_z is not None else None,
             "root_offset_from_dog": [round(here.x - stood_at.x, 2), round(here.y - stood_at.y, 2),
                                      round(here.z - stood_at.z, 2)],
             "worn_id": str(dog.get_worn_skin_id()),
@@ -172,13 +168,13 @@ def job():
         return
 
     ref = readings.get("relay_og") or {}
-    ref_above = ref.get("above_floor_uu")
+    ref_above = ref.get("below_dog_origin_uu")
     ground = {}
     for skin in dressed:
         r = readings[skin]
-        ground[skin] = {"above_floor_uu": r["above_floor_uu"],
-                        "vs_relay_og": (round(r["above_floor_uu"] - ref_above, 2)
-                                        if (r["above_floor_uu"] is not None and ref_above is not None)
+        ground[skin] = {"below_dog_origin_uu": r["below_dog_origin_uu"],
+                        "vs_relay_og": (round(r["below_dog_origin_uu"] - ref_above, 2)
+                                        if (r["below_dog_origin_uu"] is not None and ref_above is not None)
                                         else None),
                         "height_uu": r["height_uu"]}
     RESULT["ground_contact"] = ground
