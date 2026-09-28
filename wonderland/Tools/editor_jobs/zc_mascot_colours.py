@@ -324,11 +324,13 @@ def job():
         return
 
     prints = [v for v in (RESULT.get("capture_hashes") or {}).values() if v]
-    record("C05", "the two frames are different pictures",
-           len(prints) == 2 and len(set(prints)) == 2,
-           files=len(prints), distinct=len(set(prints)),
-           note="if setting a colourway changed nothing on screen the frames are identical, and every "
-                "fraction below would be the same number twice.")
+    record("C05", "every frame is a different picture",
+           len(prints) >= 3 and len(set(prints)) == len(prints),
+           files=len(prints), distinct=len(set(prints)), wanted_at_least=3,
+           note="if setting a colourway changed nothing on screen the frames are identical and every "
+                "fraction below would be the same number twice. Counts ALL frames rather than a hard-coded "
+                "two: this clause went red the moment a third frame was added, on a run where all three "
+                "were distinct, which is a bookkeeping failure wearing the costume of a real one.")
 
     RESULT["primary_arrived"] = {"before": reset_row["green_fraction"], "after": set_row["green_fraction"]}
     RESULT["secondary_arrived"] = {"before": reset_row["magenta_fraction"],

@@ -145,3 +145,49 @@ pixels in it and a mascot always does.
 On (3): the version of that control which *passed* was not more correct than the one that voided — it was
 dimmer. It only began failing once the glow work made the subject bright enough to expose it. A green history
 is not evidence a clause is sound; it is evidence the clause has not yet met the input that exposes it.
+
+---
+
+## Item 6 — mascot colours, and three instruments that were wrong about a feature that works
+
+> "PRIMARY = main/full mascot colorway. SECONDARY = Relay Dog eyes. These channels MUST be genuinely
+> independent."
+
+**Both channels work and are independent.** Photographed: with PRIMARY green and SECONDARY magenta, the body
+is vividly green and the eyes are vividly **pink** — gold `(1.0, 0.78, 0.16)` times magenta, exactly what the
+multiply predicts.
+
+Measured one channel at a time, which is the only way the two can be read apart:
+
+| | eyes | shell / body |
+|---|---|---|
+| SECONDARY alone | gold `(0.812, 0.731, 0.426)` → pink `(0.915, 0.386, 0.449)`, moved **0.3448** | followed by **0.0** |
+| SECONDARY alone (independent job, 4 eye levels) | moved **0.4353** at the shipped level | moved **0.0004** |
+
+### The three wrong instruments
+
+1. **"Is there magenta?"** The channel MULTIPLIES, so magenta on gold eyes renders *pink* — which fails a
+   `blue > green × 1.35` test. It was looking for a colour the renderer cannot produce from that hue, and
+   reported `0.0000` through every run while the eyes were changing in its own captures.
+2. **A band at the brightest row.** It spans the whole head, so two small eyes sit in a sea of white bone and
+   black visor. It called the shipped level dead (0.0059) and a level 100× higher alive (0.0889) — *exactly
+   inverted*. On the strength of it I was one step from raising a shipped default, which the captures show
+   would have blown the eyes out and broken the founder's "individually readable rather than one blown-out
+   light".
+3. **Most-saturated pixels, with both channels set.** PRIMARY drives the whole body to saturated green, so
+   the most saturated pixels *are* the body. This produced a **green 9/9 that was reading the body and
+   calling it the eyes** — a pass, on a real feature, for a reason unrelated to what it claimed to measure.
+
+### What the eye level knob settled, and why it did not move
+
+`wl.Look.PreviewEyeGlow` was added because the preview eye is `(Authored/Peak) × EyeGlowScale × GlowScale ×
+HaloShare` — still multiplied by the wardrobe's glow reduction, which has moved 500× since the 14 was chosen.
+The arithmetic says it should be retuned. **The rendered result says otherwise and the rendered result wins:**
+
+| eye level | eyes under magenta → cyan | moved |
+|---|---|---|
+| **14 (shipped)** | `(0.927, 0.430, 0.483)` → `(0.492, 0.803, 0.475)` | **0.4353** |
+| 1400 | `(0.545, 0.338, 0.378)` → `(0.467, 0.575, 0.459)` | 0.2285 |
+
+The shipped value gives the strongest colour response; raising it washes the eyes toward white. The default
+stays at 14. The knob remains because it made the question answerable, not because the answer was to turn it.
