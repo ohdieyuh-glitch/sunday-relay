@@ -225,10 +225,33 @@ def job():
     yield 3.0
     restored = read_style()
     RESULT["style_restored"] = restored
+    def same_style(a, b):
+        """Is this the same colourway, including the case where there is not one?
+
+        THE BUG THIS REPLACES failed the clause on a run that restored correctly. It read
+
+            near(restored["primary"], as_found["primary"]) if as_found["chosen"] else restored["chosen"] is False
+
+        and `as_found["chosen"]` was None -- nothing chosen -- so the else arm ran and asked whether
+        `restored["chosen"] is False`. It was None too. `None is False` is False, so a colourway that was
+        put back exactly reported as a colourway left changed. Unreal folds a Blueprint bool-with-out-params
+        into tuple-or-None, so "nothing chosen" reaches Python as None here and as False elsewhere in this
+        same file; an identity test against one of the two spellings fails on the other.
+
+        A restore clause that cries wolf is worse than none: this one exists so that a job leaving a
+        colourway behind is caught, and a permanent red teaches the next reader to skip it.
+        """
+        if a is None or b is None:
+            return False
+        if bool(a.get("chosen")) != bool(b.get("chosen")):
+            return False
+        if not bool(a.get("chosen")):
+            return True                                  # nothing was chosen before, nothing is chosen now
+        return (near(a.get("primary"), b.get("primary"))
+                and near(a.get("secondary"), b.get("secondary")))
+
     record("C_RESTORE", "the colourway the job found was put back",
-           restored is not None and (
-               near(restored.get("primary"), as_found["primary"]) if as_found.get("chosen")
-               else restored.get("chosen") is False),
+           same_style(restored, as_found),
            as_found=as_found, restored=restored,
            note="a job that leaves a colourway changed makes every later capture in this session -- and every "
                 "other lane's -- a photograph of this job.")

@@ -4328,15 +4328,41 @@ bool UWonderlandUiSubsystem::RouteClickToWidget(const TSharedPtr<SWidget>& Targe
 	}
 	bool bDown = false;
 	bool bUp = false;
+	// ---- WHO ACTUALLY TOOK THE DOWN, and it is the question six item 7 clauses hang on.
+	//
+	// "down 1" only says SOMETHING in the path handled the press. It has been read as "the button was
+	// pressed" through two runs of diagnosis and it does not say that. With app_active 1, pointing 1, no
+	// prior capture, the tile in its own window's hit path and both events coming back handled, the tile's
+	// click counter still does not move -- while the same button's own SimulateClick moves it every time and
+	// opens the surface. So the press is being handled by somebody, and the open question is whether that
+	// somebody is the button.
+	//
+	// SButton::OnMouseButtonDown CAPTURES THE MOUSE. So the captor immediately after the down names the
+	// widget that took it: the tile itself, or something else in the path -- the viewport is the standing
+	// suspect, since it flips to CapturePermanently on the same frame as every failed click. That
+	// distinction is the whole fork. If the tile holds capture the press landed and the UP is being lost;
+	// if the viewport holds it the press never reached the button and mouse capture is the fault.
+	FString TookTheDown = TEXT("-");
+	bool bTargetHasCapture = false;
 	if (bTileUnderPoint)
 	{
 		App.RoutePointerMoveEvent(Path, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::Invalid, 0.0f, FModifierKeysState()), false);
 		bDown = App.RoutePointerDownEvent(Path, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState())).IsEventHandled();
+		if (const TSharedPtr<FSlateUser> DownUser = App.GetCursorUser())
+		{
+			const TSharedPtr<SWidget> Captor = DownUser->GetCursorCaptor();
+			if (Captor.IsValid())
+			{
+				TookTheDown = Captor->GetTypeAsString();
+				bTargetHasCapture = Captor == Target;
+			}
+		}
 		bUp = App.RoutePointerUpEvent(Path, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::LeftMouseButton, 0.0f, FModifierKeysState())).IsEventHandled();
 	}
 
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI pointer click on %s at (%.0f, %.0f): under the point %d, down %d, up %d"), *What, Centre.X, Centre.Y,
-		bTileUnderPoint ? 1 : 0, bDown ? 1 : 0, bUp ? 1 : 0);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI pointer click on %s at (%.0f, %.0f): under the point %d, down %d, up %d | after the down the captor is %s (is it the target: %d)"),
+		*What, Centre.X, Centre.Y,
+		bTileUnderPoint ? 1 : 0, bDown ? 1 : 0, bUp ? 1 : 0, *TookTheDown, bTargetHasCapture ? 1 : 0);
 	return bTileUnderPoint;
 }
 
