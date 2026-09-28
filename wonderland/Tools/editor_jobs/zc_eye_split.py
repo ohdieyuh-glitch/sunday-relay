@@ -48,6 +48,73 @@ VIEWS = (("close", 160.0), ("gameplay", 900.0))
 GAP_RATIO = 0.45
 
 
+
+# ---- CHROMA, NOT LUMA, AND THE PHOTOGRAPH IS WHY.
+#
+# THE SIXTH VERSION OF THIS PROFILE REPORTED 0.946 -- no gap at all -- FOR A FRAME THAT PLAINLY SHOWS TWO
+# SEPARATED EYES WITH A BLACK VISOR BETWEEN THEM. I cropped the capture, enlarged it and looked at it, which
+# is what the founder's standard has said to do all along, and the picture and the number disagreed completely.
+#
+# THE CAUSE: the profile took the BRIGHTEST PIXEL in each column, and Relay OG's head is WHITE. The band around
+# the visor is full of white head, so every column returned about 0.999 and the profile was flat. It was
+# measuring the head and calling it the eyes. Max-per-column is right for finding a small bright thing on a
+# DARK subject and exactly wrong on a bright one.
+#
+# CHROMA -- max channel minus min channel -- separates all three things by construction: a white head is
+# neutral and reads near zero, a black visor reads near zero, and a coloured glow reads high whatever its hue.
+# It works for warm gold and for spectral cyan without knowing which skin is on.
+#
+# CHECKED ON THE CAPTURES BEFORE BEING SHIPPED, which is the part I had not been doing. Across the five skins
+# already photographed, luma gave 0.946 / 0.949 / 1.000 / 1.000 / 0.962 -- every one of them "no gap" -- and
+# chroma gives 0.094 / 0.333 / 0.452 / 0.733 / 0.252. Relay OG at 0.094 is the deep dark gap the photograph
+# shows.
+#
+# AND IT HAS A KNOWN LIMIT, so it reports rather than guesses. Celestial Light's eyes are (0.62, 0.88, 1.00),
+# nearly white, so its chroma peak is 0.059 -- barely above the noise -- and its 0.733 is not a measurement of
+# anything. A peak under CHROMA_FLOOR means this method cannot see that skin's eyes, and the clause says
+# UNMEASURABLE instead of FAIL. A tool that reports a number it cannot support is how the last six hours went.
+CHROMA_FLOOR = 0.10
+
+
+def two_peaks(cols):
+    """The two brightest separated peaks and the trough between them.
+
+    NOT A MIDPOINT SPLIT. The previous version cut the window in half and took the max of each side, which
+    assumes the face is centred in the window. It was not: the head sat at 0.44 of the window and BOTH halves
+    peaked inside the same eye, so the columns "between the peaks" were all eye and the trough came back at
+    0.945 of the peak. The two peaks are now the global maximum and the best peak at least a tenth of the
+    window away from it, which needs no assumption about where the subject is.
+    """
+    n = len(cols)
+    if n < 8:
+        return None
+    apart = max(n // 10, 3)
+    i1 = max(range(n), key=lambda k: cols[k])
+    cand = [k for k in range(n) if abs(k - i1) >= apart]
+    if not cand:
+        return None
+    i2 = max(cand, key=lambda k: cols[k])
+    a, b = min(i1, i2), max(i1, i2)
+    between = cols[a + 1:b]
+    if not between:
+        return None
+    trough = min(between)
+    dim = min(cols[i1], cols[i2])
+    weak = dim < CHROMA_FLOOR
+    return {
+        "peak_left": round(cols[a], 4), "peak_right": round(cols[b], 4),
+        "peak_left_at": round(a / float(n), 3), "peak_right_at": round(b / float(n), 3),
+        "separation_columns": b - a, "trough": round(trough, 4),
+        "trough_over_dimmer_peak": (None if weak else (round(trough / dim, 3) if dim > 0 else None)),
+        "symmetry": (round(dim / max(cols[i1], cols[i2]), 3) if max(cols[i1], cols[i2]) > 0 else None),
+        "unmeasurable": weak,
+        "why_unmeasurable": ("the chroma peak is %.3f, under the %.2f floor: this skin's eyes are too close to "
+                             "white for a chroma profile to find them, so no ratio is reported"
+                             % (dim, CHROMA_FLOOR)) if weak else None,
+        "profile": cols,
+    }
+
+
 def job():
     ues = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
     les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
@@ -107,7 +174,8 @@ def job():
             peak = 0.0
             for x in range(x0, min(x1, w), 2):
                 i = row + x * chan
-                lum = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]
+                r, g, b = px[i], px[i + 1], px[i + 2]
+                lum = max(r, g, b) - min(r, g, b)          # chroma: see the note above two_peaks
                 if lum > peak:
                     peak = lum
             if peak > best_val:
@@ -119,7 +187,8 @@ def job():
             best = 0.0
             for y in range(y0, y1):
                 i = (y * w + x) * chan
-                lum = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]
+                r, g, b = px[i], px[i + 1], px[i + 2]
+                lum = max(r, g, b) - min(r, g, b)          # chroma: see the note above two_peaks
                 # THE BRIGHTEST PIXEL IN THE COLUMN, NOT THE MEAN. A mean across the band dilutes a small
                 # bright eye with the dark visor around it and turns two eyes into one shallow hill; the
                 # founder is looking at the bright parts, so the profile follows them.
@@ -128,19 +197,10 @@ def job():
             cols.append(round(best / 255.0, 4))
         if not cols:
             return None
-        mid = len(cols) // 2
-        left = cols[:mid]
-        right = cols[mid:]
-        if not left or not right:
+        got = two_peaks(cols)
+        if got is None:
             return None
-        li = max(range(len(left)), key=lambda k: left[k])
-        ri = max(range(len(right)), key=lambda k: right[k]) + mid
-        peak_l, peak_r = cols[li], cols[ri]
-        # the darkest column strictly between the two peaks
-        between = cols[min(li, ri) + 1:max(li, ri)]
-        trough = min(between) if between else None
-        dimmer = min(peak_l, peak_r)
-        return {
+        got.update({
             "columns": len(cols),
             # THE BAND THIS READING USED, so a reader can check it against the capture instead of trusting it.
             "band_rows": [y0, y1], "band_centre_fraction": round(best_row / float(h), 3),
@@ -148,15 +208,9 @@ def job():
             "window_span_fraction": round(span, 4), "window_cols": [x0, x1], "window_rows": [y_lo, y_hi],
             "window_derivation": {"head_uu": HEAD_UU, "margin": MARGIN, "fov_deg": FOV_DEG,
                                   "frame_uu_at_this_distance": round(frame_uu, 1)},
-            "band_peak_luma": round(best_val / 255.0, 4),
-            "peak_left": peak_l, "peak_right": peak_r,
-            "peak_left_at": round(li / float(len(cols)), 3), "peak_right_at": round(ri / float(len(cols)), 3),
-            "separation_columns": abs(ri - li),
-            "trough": trough,
-            "trough_over_dimmer_peak": (round(trough / dimmer, 3) if (trough is not None and dimmer > 0) else None),
-            "symmetry": (round(min(peak_l, peak_r) / max(peak_l, peak_r), 3) if max(peak_l, peak_r) > 0 else None),
-            "profile": cols,
-        }
+            "band_peak_chroma": round(best_val / 255.0, 4),
+        })
+        return got
 
     # ---- EVERY CAPTURE MUST BE A DIFFERENT PICTURE, and nothing checked that until it was not.
     #
