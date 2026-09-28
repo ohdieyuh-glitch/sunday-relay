@@ -1396,3 +1396,29 @@ like a job that ran and found nothing.
     cp job.py CHANNEL/job.staging && python -c "import os,filecmp; assert filecmp.cmp(a,b,shallow=False); os.replace(b, inbox)"
 
 Verify the staged bytes match the source, then rename atomically.
+
+## The pawn goes down with the ground it LEFT
+
+Three lanes spent hours on "the Dog is destroyed 40.6 m into ICARUS", and every hypothesis was about
+the destination: a hole, non-colliding paving, KillZ, a cell that had not streamed in, a safety net
+firing too slowly.
+
+The 20 Hz track ended it in one reading. The Dog LANDS on real ground, stands motionless for three
+hundred milliseconds, and is then destroyed. Nothing about where it arrived was ever wrong.
+
+    is_spatially_loaded True, class BP_RelayDog_C, outer PersistentLevel
+    near  15.0 m -> SURVIVED    far 606.7 m -> DESTROYED 0.7 s after landing
+
+The pawn IS the streaming source. Teleport it out of its home cell and that cell unloads, and a
+level-placed spatially-loaded actor is destroyed with its cell.
+
+**The checks this cost:**
+
+- When something dies after a move, sample the WHOLE move at a rate faster than the event. "Destroyed
+  at waypoint 6" and "destroyed 1.25 s after placement" are the same event; only one of them points
+  at the cause, and the coarse one sent three lanes to the wrong end of the journey.
+- Distance into a journey is not a location. The walk died at 40.6 m in ICARUS and 83.1 m in NOCTIS,
+  which reads like two places and is one clock.
+- A near control turns a correlation into a mechanism. Teleporting is not fatal; teleporting FAR is.
+  Without the 15 m hop, "it dies when teleported" would have been the finding, and the fix would have
+  been aimed at teleporting.
