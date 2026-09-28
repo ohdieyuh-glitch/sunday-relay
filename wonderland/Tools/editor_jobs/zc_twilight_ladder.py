@@ -234,11 +234,48 @@ def job():
         seq.sort(key=lambda r: r["hour"])
         return max((abs(seq[i]["luma"] - seq[i - 1]["luma"]) for i in range(1, len(seq))), default=None)
 
+    # ---- AND CHECKED AS A RELATIVE STEP TOO, because an absolute one is not comparable across
+    # ---- settings that sit at different overall levels -- the trap that made a fixed crushed
+    # ---- fraction score the APPROVED night at 0.9756 and pass everything built on it.
+    #
+    # RE-EXAMINED 2026-09-28 against zzT1's stored ladder, and T01's verdict SURVIVES the better
+    # measure. I expected the opposite: widening lowers Daylight everywhere, which raises
+    # AutoExposureBias, so I assumed a wider span simply made the scene brighter and inflated the
+    # absolute steps. The data refutes that outright --
+    #
+    #          16h      17h      18h      19h
+    #   21   0.1434   0.1360   0.0365   0.0937
+    #   30   0.1255   0.1693   0.0340   0.0935
+    #   39   0.1484   0.2139   0.0327   0.0938
+    #
+    # -- because 18h and 19h are IDENTICAL across all three spans. There is no overall brightening.
+    # Widening raises 17:00 specifically, from 0.136 to 0.214, and leaves dusk exactly where it was,
+    # so the 17->18 drop gets bigger rather than spread. Relative steps agree: worst 1.15, 1.33, 1.47.
+    #
+    # The mechanism is that at 17:00 the sun is 18.6 deg up, which is INSIDE the band at 39 and
+    # clamped at 21 -- so widening only moves the part of the afternoon that was already saturated,
+    # and never reaches the hour where the cliff actually is.
+    #
+    # So TwilightSpan is not the lever for item 12. The plateau and the cliff are both real, and the
+    # thing that causes them is the clamp at elevation SPAN-9 together with the 1.9 exponent, not the
+    # width of the band.
     steps = {s: worst_step(s) for s in SPANS}
+    rel = {}
+    for sp in SPANS:
+        seq = sorted((r for r in good if r["span"] == sp and r["hour"] >= 16.0),
+                     key=lambda r: r["hour"])
+        worst = None
+        for i in range(1, len(seq)):
+            mid = (seq[i]["luma"] + seq[i - 1]["luma"]) / 2.0
+            if mid > 1e-6:
+                v = abs(seq[i]["luma"] - seq[i - 1]["luma"]) / mid
+                worst = v if worst is None else max(worst, v)
+        rel[sp] = worst
+    RESULT["worst_relative_step"] = rel
     base, wide = steps.get(21.0), steps.get(39.0)
     record("T01", "widening the band makes the evening arrive gradually rather than in one step",
            base is not None and wide is not None and wide < base,
-           worst_hour_to_hour_step=steps,
+           worst_hour_to_hour_step=steps, worst_relative_step=rel,
            note="the shipped 21 spends the whole evening in 67 minutes; 39 spreads it over 127. If the "
                 "biggest hour-to-hour step does not fall, widening has not bought what it was for")
 
