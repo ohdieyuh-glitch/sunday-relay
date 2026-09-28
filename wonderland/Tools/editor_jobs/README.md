@@ -1195,3 +1195,50 @@ same time, with no masking, no differencing against a hidden-figure control, and
 
 Look for a property that separates the subject from its background *in the direction you can drive*, before
 reaching for a more elaborate instrument.
+
+## A window is not centred where you named it
+
+`Daylight` is `TwilightBand^1.9`. A window written as `sin(pi * Daylight/0.45)` sounds like it spans
+most of dusk; it actually reads 0.985 at 18:00 -- where the ground is already fine -- and 0.045 at
+18:40, where the hole is deepest. The power collapses the band long before the sky does. Two hours
+named in the same sentence as the problem were nowhere near the window that was supposed to cover them.
+
+Nothing rendered. The shape was committed, a build was spent on it, and the error was found by
+tabulating the window at the eleven hours it was meant to serve.
+
+**The check:** before shipping any window, print its VALUE at every hour or position it claims to
+cover, and at the ones it claims to exclude. If you cannot say what it equals at the worst case, it is
+a name, not a window.
+
+## A damp that rises where its subject rises makes two transitions
+
+`Nightfall * smoothstep(Daylight/0.03)` as a damp on the moon: Nightfall RISES through the evening
+while the smoothstep falls, so the product peaks mid-dusk. The damped moon then went
+0.0119 -> 0.0032 -> 0.0436 across 18:00-18:40 -- a dip and a 13.7x recovery, where the whole task was
+to remove ONE discontinuity.
+
+A monotone result needs a monotone window. Dropping the Nightfall factor left
+`smoothstep(TwilightBand/Window)`, which only falls; a falling damp times a rising Nightfall is a moon
+that only ever brightens.
+
+**The check:** for any `A * (1 - k*W)`, tabulate the PRODUCT across the range, not A and W separately.
+Two sensible-looking curves multiply into a bump.
+
+## Damping a term MOVES a threshold that reads it
+
+`bMoonShouldCast = MoonLux > SunIntensity`. Damping MoonLux does not remove that crossover, it slides
+it: 18.260 -> 18.318 at window 0.30. A claim that damping "shrinks the handover cliff 9.2x" was
+computed with the flip held at 18.260 and was wrong for that reason -- at the new flip the moon is
+recovering steeply and worth 50 per cent of full rather than 90.
+
+**The check:** when you change an input to a comparison, re-solve the comparison. Scan the crossover
+under the new curve before quoting any figure that depends on where it lands.
+
+## py_compile accepts a name that does not exist
+
+`gz` where `ground_z` was meant compiles and fails at the rung. `Tools/find_unbound_names.py` walks
+every binding in a file and reports Name loads that match none of them. Proven against a planted
+fault rather than trusted: substitute `ground_1` for `g1` and it reports UNBOUND at the line while
+py_compile reports OK on the same file.
+
+    python Tools/find_unbound_names.py Tools/editor_jobs/<job>.py
