@@ -117,3 +117,49 @@ is not comparable to the earlier one and does not overturn it.**
 Find why `SetAffectDynamicIndirectLighting` does not take on those components — instanced components are the
 obvious suspect — and re-measure **on a quiet machine**, against the project's own 18.7 ms figure rather than
 against a 203 ms one. Until then item 5 is not optimised and I should not have said it was.
+
+---
+
+## Resolved, on the shipped path (`zzBX1_avatar_shipped`, 5/5)
+
+```
+components 198   indirect_off 195   distance_field_off 195
+saved 14.41 ms = 24.4% of the frame     render 58.07 -> 34.78 ms
+```
+
+Measured through `ShowProjectAvatarsForTest` — the founder's own `/pa` route — A/B against the **same**
+avatars with the properties put back, in one run at one camera, with the `stat unit` overlay verified live.
+
+### The fix, and why the first two attempts did nothing
+
+`AWonderlandCompanionEmbodiment::SetContributeToGlobalIllumination(false)`, called **before** `LoadFigure`.
+The per-part meshes then take `bAffectDynamicIndirectLighting = false` as each one is built, next to the
+`bAffectDistanceFieldLighting` line that has always been there.
+
+Three attempts, and the two failures were both about *when*:
+
+1. **Bitfield assignment on the actor, after `LoadFigure`.** Reached 3 of 198 components. `indirect_off` 3.
+2. **The engine setters, same place.** Still 3 of 198 — the setter is unconditional, so it was never the
+   problem.
+3. **The flag, read at component construction.** 195 of 198.
+
+The meshes are `NewObject`'d inside `LoadFigure` and only join the actor's component list at
+`RegisterComponent`, so any component array taken afterwards sees the default subobjects and none of the 65
+per-part meshes. The 3 that remain are those defaults, left alone deliberately — they are not the figure.
+
+**And `distance_field_off` read 198/198 in the failing runs, which I took as proof the loop worked.** It was
+`wl.Figure.DistanceField`, which defaults to 0 and has always set that bit. My code had done nothing and one
+column looked like success.
+
+### Two thresholds of mine were also wrong
+
+- **S02 demanded 198/198.** The right number is 195: an actor's default subobjects are not its figure.
+- **S03 demanded 40 ms.** That was set from a session whose baseline frame was 203 ms. On a quieter machine
+  the whole frame is 59 ms and a 14 ms saving — *a quarter of it* — failed the same clause. **An absolute
+  millisecond floor is a statement about the hardware.** It is now a fraction of the frame.
+
+### What is not claimed
+
+The earlier 170.57 ms came from a machine running at ~5 fps and is not comparable to this project's own
+18.7 ms figure for one Large avatar. This run says the fix is real and worth about a quarter of the frame on
+this machine, in this scene, with three avatars — not that it recovers 170 ms anywhere else.

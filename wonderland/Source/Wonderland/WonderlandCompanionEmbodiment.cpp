@@ -1029,6 +1029,23 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		{
 			Mesh->bAffectDistanceFieldLighting = false;
 		}
+		// ---- AND OUT OF GLOBAL ILLUMINATION, FOR FIGURES THAT ASK TO BE. Set HERE, before
+		// RegisterComponent, because that is the only place it takes.
+		//
+		// FOUNDER, P0 item 5: "optimize remaining spawn/render cost." Measured on one avatar: turning
+		// affect_dynamic_indirect_lighting off recovers essentially all of what disabling Lumen globally
+		// does, without touching any other surface's lighting.
+		//
+		// A FIRST ATTEMPT SET IT ON THE ACTOR AFTER LoadFigure AND REACHED 3 COMPONENTS OF 198. These
+		// meshes are NewObject'd inside this loop and only join the actor's component list at
+		// RegisterComponent below, so a TInlineComponentArray taken afterwards in the caller sees the
+		// default subobjects and none of the 65 per-part meshes. The distance-field column read 198/198 in
+		// that run and I took it as proof the loop had worked -- it was THIS line, which has been here all
+		// along, and my own code had done nothing.
+		if (!bContributeToGlobalIllumination)
+		{
+			Mesh->bAffectDynamicIndirectLighting = false;
+		}
 		// Light does not cast shadows: an unlit eye or a halo that shadowed the ground would be a dark lamp.
 		Mesh->SetCastShadow(Kind == EWonderlandCompanionMaterialKind::Lit || Kind == EWonderlandCompanionMaterialKind::Rim);
 		Mesh->SetupAttachment(PartPivots[PartIndex]);

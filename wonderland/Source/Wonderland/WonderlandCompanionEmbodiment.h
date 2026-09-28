@@ -115,6 +115,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	void SetGlowScale(float Scale);
 
+	/**
+	 * Whether this figure's meshes contribute to global illumination. Must be set BEFORE LoadFigure.
+	 *
+	 * The per-part meshes take this at construction, because it is the only moment it applies: they are
+	 * created and registered inside LoadFigure, so a caller setting the property on the actor afterwards
+	 * reaches the default subobjects and none of the figure.
+	 *
+	 * Default TRUE, so the Dog's costume and the AI Companions light the world exactly as the founder
+	 * approved. Project Avatars turn it off -- they are tens of thousands of emissive boxes standing in a
+	 * showcase, and they are what item 5 is about.
+	 */
+	void SetContributeToGlobalIllumination(bool bContribute) { bContributeToGlobalIllumination = bContribute; }
+
 	/** The eye level for a figure that is OFF the day cycle. No effect on an exposure-aware body. */
 	void SetShowcaseEyeGlow(float Level);
 
@@ -757,6 +770,9 @@ private:
 	EWonderlandBodyRole BodyRole = EWonderlandBodyRole::Neutral;
 	/** See SetGlowScale. 1 is the authored flame, which is what every body in the world wears. */
 	float GlowScale = 1.0f;
+
+	/** See SetContributeToGlobalIllumination. Read by LoadFigure as each part mesh is built. */
+	bool bContributeToGlobalIllumination = true;
 
 	/** See SetNightGlow. 1 is noon; the day cycle drives it down towards NightGlowFloor after dark. */
 	float NightGlowScale = 1.0f;

@@ -3672,6 +3672,21 @@ bool UWonderlandUiSubsystem::ShowProjectAvatars(const FString& Argument)
 		AWonderlandCompanionEmbodiment* Body = World->SpawnActor<AWonderlandCompanionEmbodiment>(
 			AWonderlandCompanionEmbodiment::StaticClass(),
 			FTransform((At - Where).GetSafeNormal2D().Rotation(), Where), Params);
+		// ---- OUT OF GLOBAL ILLUMINATION, AND BEFORE LoadFigure BECAUSE THAT IS WHEN IT APPLIES.
+		//
+		// FOUNDER, P0 item 5: "optimize remaining spawn/render cost." A Project Avatar is tens of thousands
+		// of emissive boxes -- Cherubim alone is 36,025 -- which is exactly the subject that makes a global
+		// illumination pass expensive. Measured on one avatar, taking it out of GI recovers essentially all
+		// of what disabling Lumen for the whole world does, and leaves every other surface's lighting as the
+		// founder approved it. Shadows are not the cost: every shadow in the scene off saved 5.84 ms.
+		//
+		// BEFORE, NOT AFTER. A first version set the properties on the actor after this line and reached 3
+		// components of 198: the per-part meshes are created and registered INSIDE LoadFigure, so a
+		// component array taken afterwards sees the default subobjects and none of the figure.
+		if (Body != nullptr)
+		{
+			Body->SetContributeToGlobalIllumination(false);
+		}
 		if (Body == nullptr || !Body->LoadFigure(Figure))
 		{
 			if (Body != nullptr) { Body->Destroy(); }
@@ -3694,52 +3709,6 @@ bool UWonderlandUiSubsystem::ShowProjectAvatars(const FString& Argument)
 #if WITH_EDITOR
 		Body->SetActorLabel(FString::Printf(TEXT("WL_PA_%s_%s"), Families[Index], *Stage), false);
 #endif
-		// ---- A PROJECT AVATAR DOES NOT CONTRIBUTE TO GLOBAL ILLUMINATION, AND IT IS WORTH 170 MS.
-		//
-		// FOUNDER, P0 item 5: "Cached spawn improved about 509 ms to 73 ms but still hitches... optimize
-		// remaining spawn/render cost."
-		//
-		// MEASURED, one avatar, baseline frame 203.22 ms (zzBJ2_avatar_cause, zzBN1_avatar_lumen):
-		//
-		//     r.Lumen.DiffuseIndirect.Allow 0            saved 169.47 ms
-		//     THESE TWO PROPERTIES, on this actor only   saved 170.57 ms
-		//     r.Shadow.Virtual.Enable 0                  saved  22.11 ms
-		//     the avatar's own shadow casting off        saved   7.24 ms
-		//     r.ShadowQuality 0, ALL shadows in the scene saved  5.84 ms
-		//
-		// The cost is global illumination and it is not shadows -- turning every shadow in the scene off
-		// saves almost nothing. A Project Avatar is tens of thousands of emissive boxes (Cherubim alone is
-		// 36,025), which is exactly the subject that makes a GI pass expensive.
-		//
-		// TAKING THE AVATAR OUT OF GI RECOVERS SLIGHTLY MORE THAN TURNING GI OFF ENTIRELY, and leaves the
-		// rest of the world's lighting exactly as the founder approved it. That is the whole reason this is
-		// two properties on the actor rather than a scalability setting: r.Lumen.DiffuseIndirect.Allow 0
-		// buys the same milliseconds by flattening every lit surface in Wonderland.
-		//
-		// WHAT IT COSTS VISUALLY: the avatar no longer bounces light onto what is around it, and no longer
-		// contributes to distance field lighting. It is still lit, still emissive, still casts its own
-		// shadow. On a figure standing on a plaza at a few metres that is a change nobody has reported
-		// seeing; if the founder does see it, the knob to restore is these two lines.
-		TInlineComponentArray<UPrimitiveComponent*> AvatarParts(Body);
-		for (UPrimitiveComponent* Part : AvatarParts)
-		{
-			if (Part != nullptr)
-			{
-				// ---- THE SETTERS, NOT THE BITFIELDS, AND THE DIFFERENCE WAS MEASURED.
-				//
-				// A first version assigned bAffectDynamicIndirectLighting and bAffectDistanceFieldLighting
-				// directly and called MarkRenderStateDirty. Read back off the actors /pa actually created:
-				// 198 components, distance field off on all 198, INDIRECT OFF ON THREE. The saving
-				// collapsed from 170.57 ms to 6.38.
-				//
-				// UPrimitiveComponent::SetAffectDynamicIndirectLighting does work the assignment does not --
-				// it is not a plain field with a dirty flag beside it. Writing the bit and hoping is the
-				// same class of mistake as setting a cvar and not reading it back, one layer down.
-				Part->SetAffectDynamicIndirectLighting(false);
-				Part->SetAffectDistanceFieldLighting(false);
-			}
-		}
-
 		ShownProjectAvatars.Add(Body);
 		Shown.Add(FString::Printf(TEXT("%s %s"), Families[Index], *Stage.ToUpper()));
 	}
