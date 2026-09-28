@@ -91,3 +91,39 @@ foot is shared and this is an Apollo-only addition sitting below the shared foot
 **Why this is not the "cosmetic offset" the founder warned against.** Raising that sole to the canon foot
 plane is not hiding a rig fault with a fudge — the rig is proven uniform above. It is correcting art that was
 authored below the plane every other skin shares.
+
+### Correction: that Apollo finding was about a file the game does not load
+
+`RelaySkins/Apollo.wlvox` is **not** what the runtime loads for the `apollo` skin, and it is **not** what the
+current generator produces. `WonderlandRelaySkins.cpp` maps `apollo` → **`ApolloV2.wlvox`**, and the generator
+writes `ApolloV1`/`ApolloV2` and never `Apollo`. The dates say the rest: `Apollo.wlvox` 07:36, `ApolloV2.wlvox`
+18:18.
+
+I picked the filename from the skin id instead of from the id→file table. Measured against the files the
+runtime **actually loads**:
+
+| skin id | file loaded | lowest leg box |
+|---|---|---|
+| relay_og | `RelayOg.wlvox` | **3.720** |
+| celestial_light | `CelestialLight.wlvox` | **3.720** |
+| apollo | `ApolloV2.wlvox` | **3.720** |
+| arden_infernal | `ArdenInfernalV2.wlvox` | **3.720** |
+| skeleton_flame | `SkeletonFlameV2.wlvox` | **3.720** |
+
+**Every shipped skin stands on the same foot plane, to three decimals.** There is no per-skin authoring
+difference. The 6.18 uu was real in the orphan file and means nothing about the game.
+
+### So item 3 has three eliminated causes and no found one
+
+- the pose is copied field for field
+- the costume root offset is identical across skins (spread 0.0)
+- the authored foot plane is identical across skins (3.720)
+
+Whatever the founder is seeing when they say the skins stand weird, it is none of these. That is a genuine
+narrowing and it is also an admission that I do not yet have the cause.
+
+### And a hazard worth its own note
+
+`RelaySkins/` holds orphan `.wlvox` files that nothing loads and that differ from current art —
+`Apollo.wlvox` is one. Any analysis that picks a file by guessing its name from a skin id can land on one and
+produce a confident measurement of nothing. **Read the id→file table in `WonderlandRelaySkins.cpp`.**
