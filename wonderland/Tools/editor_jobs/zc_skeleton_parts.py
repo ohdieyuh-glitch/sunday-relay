@@ -173,6 +173,35 @@ def job():
     if ui is None:
         RESULT["status"] = "VOID: no UI subsystem"
         return
+    # ---- FREEZE THE CLOCK BEFORE SETTING AN HOUR, AND THIS JOB DID NOT.
+    #
+    # wl.Sky.DayMinutes defaults to 24.0: a whole Wonderland day passes every twenty-four REAL minutes, so one
+    # game hour goes by every real minute. This job takes eighteen captures over several minutes, setting the
+    # hour once per block and then photographing six views, so the sky moved hours between the first and last
+    # shot of each block.
+    #
+    # THE RESULT WAS THAT NIGHT PHOTOGRAPHED BRIGHTER THAN DAY. Mean frame luma came back 0.2583 for
+    # "night, front, close" against 0.2250 for the day shot at the same view. Every reading this job has
+    # produced is void, including a feet clause I reported as a pass.
+    #
+    # zc_night_bodies freezes the clock on its second line and I never asked why. The fix is one console
+    # command; the LESSON is that the hour is a request to a running simulation, not a setting, until the
+    # simulation is stopped.
+    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 0")
+    yield 1.0
+    frozen = None
+    try:
+        frozen = float(unreal.SystemLibrary.get_console_variable_float_value("wl.Sky.DayMinutes"))
+    except Exception:                                               # noqa: BLE001
+        frozen = None
+    RESULT["day_minutes"] = frozen
+    record("S_CLOCK", "the day clock is stopped, so an hour stays the hour it was set to",
+           frozen is not None and abs(frozen) < 1e-3, day_minutes=frozen,
+           note="at the default of 24 a game hour passes every real minute, and this job runs for several.")
+    if frozen is None or abs(frozen) >= 1e-3:
+        RESULT["status"] = "VOID: the day clock is running, so no hour below is the hour it claims"
+        return
+
     try:
         ui.wear_relay_skin("skeleton_flame")
     except Exception as err:                                        # noqa: BLE001
@@ -202,6 +231,9 @@ def job():
                     record("S_DEAD_%s_%s_%s" % (hour_label, face_label, view_label),
                            "the world was alive for this reading", False)
                     continue
+                # RE-ISSUED PER CAPTURE, not once per block. Cheap, and it removes any dependence on the
+                # clock having stayed where it was put between one photograph and the next.
+                unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour %.2f" % hour)
                 look(distance, turn)
                 yield 1.2
                 unreal.GameplayStatics.set_game_paused(live, True)
@@ -241,6 +273,32 @@ def job():
            note="thirty byte-identical PNGs passed a clause that counted files. In simulate mode there is no "
                 "player camera, so the skins, the hour and the camera all changed and the photograph did not. "
                 "A run whose pictures are all the same photographed the editor, not the game.")
+
+    # ---- THE CONTROL THAT WOULD HAVE CAUGHT THE RUNNING CLOCK, and it voids rather than fails.
+    #
+    # Every clause in this job compares a night reading with a day one. If the two hours are not actually
+    # different, all of them are comparisons of one lighting condition with itself -- which is how a feet
+    # clause passed and two others failed for reasons that had nothing to do with the mascot.
+    #
+    # The world lane's rule: an instrument that has not been shown to register a KNOWN positive cannot be
+    # trusted for a null. Here the known positive is that noon is brighter than midnight.
+    day_mean = [v.get("luma") for k, r in readings.items() if k.startswith("day/")
+                for kk, v in (r or {}).items() if kk == "torso" and v]
+    night_mean = [v.get("luma") for k, r in readings.items() if k.startswith("night/")
+                  for kk, v in (r or {}).items() if kk == "torso" and v]
+    d_avg = (sum(day_mean) / len(day_mean)) if day_mean else None
+    n_avg = (sum(night_mean) / len(night_mean)) if night_mean else None
+    RESULT["day_vs_night"] = {"day_torso_mean": round(d_avg, 4) if d_avg else None,
+                              "night_torso_mean": round(n_avg, 4) if n_avg else None,
+                              "ratio": round(n_avg / d_avg, 3) if (d_avg and n_avg) else None}
+    lit_apart = bool(d_avg and n_avg and n_avg < d_avg * 0.85)
+    record("S_HOURS", "noon and midnight are actually different lighting conditions",
+           lit_apart, **RESULT["day_vs_night"],
+           note="if they are not, every clause below compares one condition with itself. This job once read "
+                "night BRIGHTER than day, at 0.2583 against 0.2250, because the day clock was running.")
+    if not lit_apart:
+        RESULT["status"] = "VOID: day and night did not differ, so nothing below is a day-night comparison"
+        return
 
     record("S00", "the mascot was photographed from every side at every hour",
            len(shots) >= len(HOURS) * len(FACES) * len(VIEWS), taken=len(shots),

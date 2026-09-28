@@ -254,6 +254,32 @@ def job():
     # THE SKIN IS WORN THROUGH THE UI SUBSYSTEM, NOT THE TEST LIBRARY. The first run of this job errored on
     # every skin with "WonderlandUiTestLibrary has no attribute wear_relay_skin" -- I wrote the call from
     # memory of zc_night_bodies, where it reads ui.wear_relay_skin() and `ui` is L.get_ui(world), not L.
+    # ---- STOP THE CLOCK BEFORE ASKING FOR AN HOUR.
+    #
+    # wl.Sky.DayMinutes defaults to 24.0: a whole day every twenty-four REAL minutes, so a game hour passes
+    # every real minute. This job photographs three hours at two distances across five skins and takes minutes
+    # to do it, so the sky walked on between the request and the shutter, and between one shot and the next.
+    #
+    # FOUND BY SCANNING RATHER THAN BY THINKING. Its sibling zc_skeleton_parts photographed "night" BRIGHTER
+    # than "day" -- 0.2583 against 0.2250 -- and once I had that cause I grepped every job in the tree that
+    # sets wl.Sky.Hour. Eighty of them do; seventy-eight stop the clock first. The two that did not are this
+    # one and the sibling, both written today. Reading would not have found the second: I was not looking at it.
+    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 0")
+    yield 1.0
+    try:
+        RESULT["day_minutes"] = float(
+            unreal.SystemLibrary.get_console_variable_float_value("wl.Sky.DayMinutes"))
+    except Exception:                                               # noqa: BLE001
+        RESULT["day_minutes"] = None
+    frozen = RESULT.get("day_minutes")
+    record("E_CLOCK", "the day clock is stopped, so an hour stays the hour it was set to",
+           frozen is not None and abs(frozen) < 1e-3, day_minutes=frozen,
+           note="at the default of 24 a game hour passes every real minute, and this job runs for several. "
+                "Every per-hour reading it produced before this gate existed is void.")
+    if frozen is None or abs(frozen) >= 1e-3:
+        RESULT["status"] = "VOID: the day clock is running, so no hour below is the hour it claims"
+        return
+
     ui = L.get_ui(world)
     if ui is None:
         RESULT["status"] = "VOID: no UI subsystem"
@@ -302,6 +328,7 @@ def job():
         yield 6.0
         for hour_label, hour in HOURS:
             unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour %.2f" % hour)
+            # Re-issued per VIEW below as well, so a long block cannot drift even if the clock restarts.
             yield 3.0
             for view_label, distance in VIEWS:
                 live = ues.get_game_world()
@@ -309,6 +336,7 @@ def job():
                     record("E_DEAD_%s_%s_%s" % (skin, hour_label, view_label),
                            "the world was alive for this reading", False)
                     continue
+                unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour %.2f" % hour)
                 look(distance)
                 yield 1.2
                 unreal.GameplayStatics.set_game_paused(live, True)
