@@ -16,11 +16,27 @@ the founder's credential and never merges its own work — see
 | Commits behind | 0 — merges with no conflict (`git merge-tree`: none) |
 | Worktree | clean; `git diff --check` clean |
 
-**Gates that can run on the founder's Windows workstation, all passing:** the
-three typechecks (`tsc -b`, `relay-bridge`, `scripts`), the repository boundary
-scan, the parity gate and both surface-parity checks, the YC/demo readiness
-check, the CLI contract verification, the website build, the CLI build, the
-Hermes service build, the bridge bundle, and the Julius harness manifest check.
+**Gates that can run on the founder's Windows workstation.** Run them, do not
+take this list on trust — the list below is the command, so it can be repeated:
+
+```
+npm run typecheck                       # FOUR steps: root, relay-bridge, relay-hermes-service, scripts
+node scripts/relay-repository-boundary.mjs
+node scripts/relay-parity-gate.mjs
+npm run relay:surface-parity:check && npm run relay:surface-parity:check:strict
+npm run relay:yc-demo:check
+npm run relay:cli:contract-verify
+npm run build && npm run relay:build && npm run relay:hermes:build && npm run relay:bridge:build
+npm run julius:harness:check
+git diff --check
+```
+
+All of them pass at this branch's head. **`npm run typecheck` is listed first
+because it is the one this lane broke and did not notice:** its FOURTH step
+(`scripts/tsconfig.json`) failed for several commits while every individually
+invoked check the lane ran was green, and vitest — which does not typecheck —
+ran the offending file happily. The integration lane found it by running the
+gate rather than the parts. Run the gate.
 
 **Gates that cannot run here, and why:** `npm test` whole-suite (the machine has
 ~7 GB free with an Unreal editor resident; two attempts were killed for memory,

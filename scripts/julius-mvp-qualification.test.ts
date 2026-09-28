@@ -29,6 +29,19 @@ interface Row {
 /** The founder's mission classes, plus failure/recovery. Closed on purpose. */
 const CATEGORIES = ['A', 'B', 'C', 'D', 'E'] as const;
 
+/**
+ * A TYPE GUARD, NOT A CAST.
+ *
+ * `CATEGORIES.includes(x as Row['category'])` checks the value and narrows
+ * nothing, so the `category` pushed below stayed a `string` and
+ * `tsc -p scripts/tsconfig.json` refused it — while vitest, which does not
+ * typecheck, ran the file happily. That is the whole reason this is a guard: the
+ * cast asked the compiler to look away at exactly the point where the closed set
+ * is supposed to be enforced.
+ */
+const isCategory = (value: string): value is Row['category'] =>
+  (CATEGORIES as readonly string[]).includes(value);
+
 function rowsOf(markdown: string): readonly Row[] {
   const rows: Row[] = [];
   for (const line of markdown.split('\n')) {
@@ -47,7 +60,7 @@ function rowsOf(markdown: string): readonly Row[] {
      * mean anything.
      */
     const category = id.charAt(0);
-    if (!CATEGORIES.includes(category as Row['category'])) continue;
+    if (!isCategory(category)) continue;
     rows.push({
       id, category, shape,
       kind: kind.replace(/\*/gu, ''),
