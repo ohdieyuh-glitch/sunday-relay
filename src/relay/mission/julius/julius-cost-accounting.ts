@@ -69,6 +69,39 @@ export const safeJuliusCostBasis = (value: unknown): JuliusCostBasis =>
     ? value as JuliusCostBasis
     : 'UNKNOWN';
 
+/**
+ * HOW A DISPATCH WAS PAID FOR — a different question from what it cost.
+ *
+ * `API_BILLED` — a metered provider account was charged per request: an API key.
+ * `SUBSCRIPTION` — a flat subscription carried the work, as the founder's Claude
+ * Max plan carries the Coding Agent in `CLAUDE_SUBSCRIPTION` mode; no per-request
+ * charge exists. `NOT_APPLICABLE` — no billing of any kind applies. `UNKNOWN` —
+ * nobody can say.
+ *
+ * DECIDED FROM THE CREDENTIAL, NEVER FROM AN AMOUNT. Only the adapter that
+ * resolved the credential knows which one it used, so it says; `SUBSCRIPTION` is
+ * never inferred from a `NOT_APPLICABLE` cost basis, which is the wider claim.
+ */
+export const JULIUS_BILLING_PATHS = ['API_BILLED', 'SUBSCRIPTION', 'NOT_APPLICABLE', 'UNKNOWN'] as const;
+export type JuliusBillingPath = (typeof JULIUS_BILLING_PATHS)[number];
+
+/**
+ * A billing path that agrees with its settlement's cost basis, or null.
+ *
+ * A word nobody defined is not a path, and a CONTRADICTION IS NOT RECORDED: a
+ * subscription or "no billing" beside anything but `NOT_APPLICABLE` would claim
+ * there is no charge while the basis claims there is one (or one nobody read), and
+ * an API bill beside `NOT_APPLICABLE` claims the reverse. Two claims that cannot
+ * both be true leave a reader guessing, so neither is written.
+ */
+export function consistentJuliusBillingPath(path: unknown, basis: JuliusCostBasis): JuliusBillingPath | null {
+  if (typeof path !== 'string' || !(JULIUS_BILLING_PATHS as readonly string[]).includes(path)) return null;
+  const billingPath = path as JuliusBillingPath;
+  if ((billingPath === 'SUBSCRIPTION' || billingPath === 'NOT_APPLICABLE') && basis !== 'NOT_APPLICABLE') return null;
+  if (billingPath === 'API_BILLED' && basis === 'NOT_APPLICABLE') return null;
+  return billingPath;
+}
+
 const amount = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 
@@ -120,6 +153,20 @@ export function juliusCostComponent(input: {
   }
   if (declared === 'ESTIMATED' && estimated !== null) {
     return { taskId: input.taskId, role, basis: 'ESTIMATED', knownUsdMicros: null, estimatedUsdMicros: estimated };
+  }
+  /**
+   * NO BILLING EVENT EXISTS, AND THE WORD SAYS SO.
+   *
+   * A subscription-backed dispatch declares `NOT_APPLICABLE`. This branch used to
+   * be missing, so the declaration fell through to the line below and every
+   * durable settlement of a subscription dispatch was written as `UNKNOWN` — a
+   * charge that exists and was not read, which is the one thing it is not. It
+   * keeps its own word now, and carries no amount of either kind: any figure that
+   * travelled beside it is the runtime's PRICE, never a bill, so it is dropped here
+   * rather than summed into anything.
+   */
+  if (declared === 'NOT_APPLICABLE') {
+    return { taskId: input.taskId, role, basis: 'NOT_APPLICABLE', knownUsdMicros: null, estimatedUsdMicros: null };
   }
   // A claim its own data cannot support. Unknown, and said so.
   return { taskId: input.taskId, role, basis: 'UNKNOWN', knownUsdMicros: null, estimatedUsdMicros: null };

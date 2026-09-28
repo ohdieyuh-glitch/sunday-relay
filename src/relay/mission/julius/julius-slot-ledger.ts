@@ -97,9 +97,19 @@ export interface JuliusSlotAccount {
    */
   readonly settledUnknownUsdMicros: number;
   readonly settledUnknownCount: number;
+  /**
+   * Settled with NO BILL but with the runtime's own EXECUTION figure: a
+   * subscription-backed dispatch, basis `NOT_APPLICABLE`. Charged at that figure,
+   * exactly as an API dispatch is charged at its bill, so the billing mode cannot
+   * change what a later round is granted. It is consumption, never money anyone
+   * was charged, which is why it has a column of its own and is never added to
+   * `settledKnown`.
+   */
+  readonly settledExecutionUsdMicros: number;
+  readonly settledExecutionCount: number;
   /** Released without a spend — a dispatch that never reached a provider. */
   readonly releasedUsdMicros: number;
-  /** envelope − outstanding − known − unknown, floored at zero. */
+  /** envelope − outstanding − known − unknown − execution, floored at zero. */
   readonly remainingOwnEnvelopeUsdMicros: number;
   /** Money this slot drew from capacity no slot was holding. */
   readonly borrowedUsdMicros: number;
@@ -173,6 +183,8 @@ const emptyAccount = (
   settledKnownCount: 0,
   settledUnknownUsdMicros: 0,
   settledUnknownCount: 0,
+  settledExecutionUsdMicros: 0,
+  settledExecutionCount: 0,
   releasedUsdMicros: 0,
   remainingOwnEnvelopeUsdMicros: policy === null ? 0 : slotEnvelopeUsdMicros(policy, slot),
   borrowedUsdMicros: 0,
@@ -277,6 +289,24 @@ export function projectJuliusSlotLedger(input: {
       });
       continue;
     }
+    /**
+     * NO BILL, BUT A PRICED EXECUTION. A subscription-backed dispatch reports
+     * `NOT_APPLICABLE` and carries the runtime's own figure beside it; the slot is
+     * charged that figure, as an API dispatch is charged its bill. Without a
+     * figure the consumption is unknown, and it falls through to the rule below:
+     * charged at what it held.
+     */
+    const execution = basis === 'NOT_APPLICABLE' ? num(row.facts.executionUsdMicros) : null;
+    if (execution !== null) {
+      accounts.set(reservation.slot, {
+        ...account,
+        outstandingUsdMicros: account.outstandingUsdMicros - reservation.usdMicros,
+        outstandingCount: account.outstandingCount - 1,
+        settledExecutionUsdMicros: account.settledExecutionUsdMicros + execution,
+        settledExecutionCount: account.settledExecutionCount + 1,
+      });
+      continue;
+    }
     // UNKNOWN. Charged at what it HELD, not at nothing.
     accounts.set(reservation.slot, {
       ...account,
@@ -290,7 +320,8 @@ export function projectJuliusSlotLedger(input: {
   let committed = 0;
   const bySlot: Record<string, JuliusSlotAccount> = {};
   for (const [slot, account] of accounts) {
-    const held = account.outstandingUsdMicros + account.settledKnownUsdMicros + account.settledUnknownUsdMicros;
+    const held = account.outstandingUsdMicros + account.settledKnownUsdMicros + account.settledUnknownUsdMicros
+      + account.settledExecutionUsdMicros;
     committed += held;
     bySlot[slot] = Object.freeze({
       ...account,

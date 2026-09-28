@@ -39,6 +39,65 @@ import {
 export const CLAUDE_CODE_PROVIDER_KIND = 'claude-code-hosted' as const;
 
 /**
+ * WHAT ONE CODER DISPATCH COST, AND ON WHOSE AUTHORITY — ONE ANSWER FOR EVERY ENDING.
+ *
+ * The success ending used to price itself by hand while the failure endings went
+ * through the diagnostics, and only the diagnostics knew about the subscription. So
+ * a SUCCESSFUL subscription-backed dispatch settled the runtime's notional
+ * `total_cost_usd` as `PROVIDER_REPORTED` Anthropic API spend while every failure
+ * was right, and the test guarding it read the source text and was satisfied by the
+ * diagnostics lines alone. The Wonderland integration lane found it by reading the
+ * ledger path. Every ending now asks this function, so they cannot disagree again.
+ *
+ * TWO NUMBERS, BECAUSE THERE ARE TWO QUESTIONS.
+ *   - `costUsdMicros` is a BILL: what the provider charged, or null. Under a
+ *     subscription no per-request charge exists, so it is null and the basis is
+ *     `NOT_APPLICABLE` — never a recorded zero, never `UNKNOWN`.
+ *   - `executionCostUsdMicros` is what the runtime PRICED the work at when that
+ *     price is not a bill. It is the figure the runner already bounds every
+ *     dispatch with (`maxBudgetUsd`, `withinCostCeiling`), and it lets the mission's
+ *     execution budget consume a subscription dispatch exactly as it would an API
+ *     one — so the billing mode cannot change how much of the mission a later round
+ *     is granted. Null in API mode, where the bill already is that figure.
+ */
+export function hostedCoderCost(
+  authMode: ClaudeAuthMode | undefined,
+  observed: HostedObservation | null,
+): {
+  readonly costUsdMicros: number | null;
+  readonly costBasis: 'PROVIDER_REPORTED' | 'UNKNOWN' | 'NOT_APPLICABLE';
+  readonly executionCostUsdMicros: number | null;
+  /**
+   * HOW THE DISPATCH WAS PAID FOR, from the credential this provider resolved and
+   * never from an amount: the subscription login, or the API key. The ledger
+   * records it beside the basis so a reader never has to infer one from the other.
+   */
+  readonly billingPath: 'SUBSCRIPTION' | 'API_BILLED';
+} {
+  const figure = observed?.usage.totalCostUsd;
+  const micros = figure === null || figure === undefined ? null : Math.round(figure * 1_000_000);
+  const attested = observed?.usage.source === 'runtime_reported' && micros !== null;
+  if (authMode === 'CLAUDE_SUBSCRIPTION') {
+    return {
+      costUsdMicros: null,
+      costBasis: 'NOT_APPLICABLE',
+      // Only the runtime's own attested figure may bound the mission. Without one
+      // the execution cost is unknown, and the ledger holds the whole reservation —
+      // the conservative answer it already gives any silent dispatch.
+      executionCostUsdMicros: attested ? micros : null,
+      billingPath: 'SUBSCRIPTION',
+    };
+  }
+  return {
+    costUsdMicros: micros,
+    // `PROVIDER_REPORTED` requires BOTH the runtime's own attestation and a figure.
+    costBasis: attested ? 'PROVIDER_REPORTED' : 'UNKNOWN',
+    executionCostUsdMicros: null,
+    billingPath: 'API_BILLED',
+  };
+}
+
+/**
  * THE CODER'S STRUCTURAL FACTS, ON BOTH ENDINGS, FROM ONE BUILDER.
  *
  * A success and a failure used to be described by two hand-built objects, and
@@ -66,6 +125,7 @@ export const hostedCoderDiagnostics = (input: {
   readonly failureReason?: string | null;
 }): Record<string, unknown> => {
   const observed = input.observed;
+  const cost = hostedCoderCost(input.authMode, observed);
   /**
    * WHETHER THE WORKER ASKED, ON BOTH ENDINGS. A dispatch with no observed final
    * message never gave the worker a place to ask, so every field below is
@@ -135,12 +195,18 @@ export const hostedCoderDiagnostics = (input: {
      * happened. Recording it here would classify subscription usage as Anthropic API
      * spend, which is the one thing this must not do. The figure is not lost — the
      * runner still bounds the run with it through `withinCostCeiling`, so a runaway
-     * dispatch is stopped exactly as before.
+     * dispatch is stopped exactly as before, and it travels as
+     * `executionCostUsdMicros` below for the mission's execution budget.
      */
-    costUsdMicros: input.authMode === 'CLAUDE_SUBSCRIPTION'
-      ? null
-      : observed?.usage.totalCostUsd === null || observed?.usage.totalCostUsd === undefined
-        ? null : Math.round(observed.usage.totalCostUsd * 1_000_000),
+    costUsdMicros: cost.costUsdMicros,
+    /**
+     * WHAT THE RUNTIME PRICED A SUBSCRIPTION DISPATCH AT, NAMED APART FROM A BILL.
+     * Null in API mode and whenever the runtime attested no figure; see
+     * `hostedCoderCost` for why the execution budget needs it.
+     */
+    executionCostUsdMicros: cost.executionCostUsdMicros,
+    /** `SUBSCRIPTION` or `API_BILLED`, from the credential — see `hostedCoderCost`. */
+    billingPath: cost.billingPath,
     costCeilingUsdMicros: input.limits.maxCostCents * 10_000,
     costSource: observed?.usage.source ?? null,
     /** DID THE RUNTIME EVER START? A run that never launched billed nothing. */
@@ -156,11 +222,7 @@ export const hostedCoderDiagnostics = (input: {
     participationAskedReport: asked('report'),
     participationAskedObservations: asked('architectureObservations'),
     /** `PROVIDER_REPORTED` requires BOTH the runtime's own attestation and an actual figure. */
-    costBasis: input.authMode === 'CLAUDE_SUBSCRIPTION'
-      ? 'NOT_APPLICABLE'
-      : observed?.usage.source === 'runtime_reported'
-        && observed.usage.totalCostUsd !== null && observed.usage.totalCostUsd !== undefined
-        ? 'PROVIDER_REPORTED' : 'UNKNOWN',
+    costBasis: cost.costBasis,
     inputTokens: observed?.usage.inputTokens ?? null,
     outputTokens: observed?.usage.outputTokens ?? null,
     /**
@@ -362,6 +424,9 @@ export function createClaudeCodeCodingAgentProvider(input: {
         observed: outcome.observation, limits, ...(input.authMode === undefined ? {} : { authMode: input.authMode }), outcome: 'succeeded',
       });
       const usage = outcome.observation.usage;
+      // THE SAME ANSWER THE DIAGNOSTICS GAVE, from the same function. This ending
+      // priced itself by hand once, and a subscription success became API spend.
+      const cost = hostedCoderCost(input.authMode, outcome.observation);
       return {
         kind: 'completed',
         finalText: outcome.observation.finalText,
@@ -371,9 +436,8 @@ export function createClaudeCodeCodingAgentProvider(input: {
           toolInvocations: outcome.observation.toolInvocations ?? null,
           inputTokens: usage.inputTokens ?? null,
           outputTokens: usage.outputTokens ?? null,
-          costUsdMicros: usage.totalCostUsd === null || usage.totalCostUsd === undefined ? null : Math.round(usage.totalCostUsd * 1_000_000),
-          costBasis: usage.source === 'runtime_reported' && usage.totalCostUsd !== null && usage.totalCostUsd !== undefined
-            ? 'PROVIDER_REPORTED' : 'UNKNOWN',
+          costUsdMicros: cost.costUsdMicros,
+          costBasis: cost.costBasis,
           diagnostics,
         },
       };
