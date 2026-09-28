@@ -8,7 +8,7 @@
 //
 //   AUTHENTICATE   with a NATIVE session. A signed-in player pairs this client from the website and it redeems the
 //                  code (POST /relay-api/wonderland/native/session). The session is held in memory only; a bridge
-//                  restart or its 30-minute expiry means pairing again. Where the token comes from is behind
+//                  restart or its 8-hour expiry (founder decision 2) means pairing again. Where the token comes from is behind
 //                  IWonderlandJuliusTokenSource, so a device-code flow can replace pairing without touching this.
 //   HYDRATE        GET /relay-api/wonderland/julius/hydrate -> WonderlandDecodeHydrationBytes -> AdoptHydration.
 //   FOLLOW         GET /relay-api/wonderland/julius/events?mode=page from the subsystem's OWN cursor
@@ -65,10 +65,66 @@ private:
 };
 
 /**
+ * THE RUN'S USER RESULT, as the bridge projected it for this player -- GET /wonderland/julius/result, founder
+ * decision 5: what the run made, whether each criterion was met, what is still open, why it ended, and its exact
+ * cost only when this player's role may see it.
+ *
+ * PLAIN C++, like everything else in this file: it is read, shown and replaced -- never saved, never replicated --
+ * so it is not a document that crosses the seam and has no place in the parity table. Every field is the
+ * projection's own; nothing here re-derives a verdict.
+ */
+struct WONDERLAND_API FWonderlandJuliusResultReading
+{
+	/** A result has been read for RunId. */
+	bool bKnown = false;
+	FString RunId;
+	/** Julius's own word for the run's state when this was read, verbatim. */
+	FString JuliusState;
+	/** The Mission Contract state it maps to, or empty where it maps to none. */
+	FString TaskState;
+	bool bVerified = false;
+	bool bTerminal = false;
+	int32 CriteriaTotal = 0;
+	int32 CriteriaMet = 0;
+	/** What the run MADE, by evidence id -- products, never judgements. */
+	TArray<FString> DeliverableIds;
+	int32 OpenFindings = 0;
+	/** The latest verification decision (ACCEPT, REPAIR, HALT ...), or empty before any. */
+	FString Verdict;
+	int32 RepairRounds = 0;
+	bool bReReviewedAfterRepair = false;
+	/** Why it is not verified, when Julius named a reason; empty otherwise. */
+	FString FailureReason;
+	FString FailureClass;
+	/** Whether this player's role may see the exact cost. When false, the cost fields below mean nothing. */
+	bool bCostVisible = false;
+	/** A FLOOR unless bCostComplete. */
+	int64 CostKnownUsdMicros = 0;
+	int32 CostUnknownComponents = 0;
+	bool bCostComplete = false;
+	/** "UNKNOWN" today, as the bridge says it; never a number standing in for one. */
+	FString Tokens;
+	/** How many texts or references the bridge withheld, redacted or cut back on the way out. */
+	int32 WithheldDetails = 0;
+};
+
+/**
  * The parts with no HTTP and no UObject, so they can be reasoned about -- and checked -- on their own.
  */
 namespace WonderlandJuliusStreamLogic
 {
+	/**
+	 * A `{ "data": <result> }` body -> the reading, or false when it is not a v1 result. A body missing a field the
+	 * projection always carries is refused whole rather than read as a partial result.
+	 */
+	WONDERLAND_API bool ParseResult(const FString& Body, FWonderlandJuliusResultReading& Out);
+
+	/** One line a player can read, e.g. "not final · 0 of 1 criteria met". Empty when unknown. */
+	WONDERLAND_API FString ResultHeadline(const FWonderlandJuliusResultReading& Result);
+
+	/** The line under it: what was made, what is open, the review, tokens, and the cost only when visible. */
+	WONDERLAND_API FString ResultDetail(const FWonderlandJuliusResultReading& Result);
+
 	/**
 	 * The embodiment for one envelope, by the SAME recipe UWonderlandJuliusSubsystem::AdoptHydration uses for a
 	 * snapshot: the envelope already carries Relay's decision (State, StateSource, SourceState, bTerminal), and the
@@ -158,6 +214,62 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius")
 	bool IsPaired() const { return TokenSource.IsValid() && !TokenSource->CurrentToken().IsEmpty(); }
 
+	/*
+	 * THE RUN'S USER RESULT (founder decision 5), read after each hydration and each change of Julius's state. For
+	 * surfaces and proofs; each reads the result for the run being FOLLOWED, and says nothing about any other.
+	 */
+
+	/** The result for the followed run, when one has been read. */
+	const FWonderlandJuliusResultReading& GetResultReading() const { return Result; }
+
+	/** A result has been read for the run being followed. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	bool HasResult() const { return Result.bKnown && !RunId.IsEmpty() && Result.RunId == RunId; }
+
+	/** Julius's state when the result was read. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	FString GetResultJuliusState() const { return HasResult() ? Result.JuliusState : FString(); }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	bool IsResultVerified() const { return HasResult() && Result.bVerified; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	int32 GetResultCriteriaMet() const { return HasResult() ? Result.CriteriaMet : 0; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	int32 GetResultCriteriaTotal() const { return HasResult() ? Result.CriteriaTotal : 0; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	int32 GetResultDeliverableCount() const { return HasResult() ? Result.DeliverableIds.Num() : 0; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	int32 GetResultOpenFindingCount() const { return HasResult() ? Result.OpenFindings : 0; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	FString GetResultVerdict() const { return HasResult() ? Result.Verdict : FString(); }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	FString GetResultFailureReason() const { return HasResult() ? Result.FailureReason : FString(); }
+
+	/** Whether THIS player's role may see the exact cost (the OWNER; an authorised ADMIN). */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	bool IsResultCostVisible() const { return HasResult() && Result.bCostVisible; }
+
+	/** The known cost in millionths of a dollar -- a FLOOR unless complete. Zero, and meaningless, when not visible. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	int64 GetResultCostKnownUsdMicros() const { return IsResultCostVisible() ? Result.CostKnownUsdMicros : 0; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	bool IsResultCostComplete() const { return IsResultCostVisible() && Result.bCostComplete; }
+
+	/** What the bridge said about tokens: "UNKNOWN" today. Empty before a result. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	FString GetResultTokens() const { return HasResult() ? Result.Tokens : FString(); }
+
+	/** The result's two lines, as the terminal shows them, "\n"-joined. Empty before a result. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
+	FString DescribeResult() const;
+
 private:
 	enum class EPhase : uint8
 	{
@@ -169,6 +281,13 @@ private:
 	bool Tick(float DeltaSeconds);
 	void Hydrate();
 	void ReadPage();
+	/**
+	 * READ THE RESULT when the world holds a run and Julius's state for it is not the one the last result was read
+	 * at -- so once after the hydration, and once per change of state. Its own request and its own backoff: a result
+	 * that cannot be read never marks the LINK stale, because the run is still being followed perfectly well.
+	 */
+	void TickResult();
+	void RequestResult(const FString& ReadFor);
 	/**
 	 * THE MISSION CONTRACT, TOLD WHAT THE WORLD NOW HOLDS -- through the task set's own mutators and nothing else:
 	 * FollowJuliusRun (a Julius-sourced task, by mission id), ResetJuliusCarriers after a hydration (a snapshot is a
@@ -197,6 +316,12 @@ private:
 	int64 EnvelopesOffered = 0;
 	/** Why the followed run is, or is not, on the Mission Contract -- for Describe(), never a failure of the follow. */
 	FString ContractNote = TEXT("not yet shown");
+	/** The result last read, and the "run|state" it was read for. */
+	FWonderlandJuliusResultReading Result;
+	FString ResultReadFor;
+	bool bResultInFlight = false;
+	double NextResultAt = 0.0;
+	int32 ResultFailures = 0;
 	FTSTicker::FDelegateHandle Ticker;
 	TArray<FHttpRequestPtr> InFlight;
 };

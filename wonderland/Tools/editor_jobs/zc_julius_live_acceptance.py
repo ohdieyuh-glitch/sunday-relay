@@ -34,12 +34,15 @@ HANDSHAKE = r"C:\dev\iwonder\wonderland-julius-integration\generated\pie-accepta
 H = unreal.WonderlandHudTestLibrary
 L = unreal.WonderlandUiTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "julius_live")
+# ONE DIRECTORY PER ATTEMPT (Wonderland Core, 2026-09-27: every run writing into one directory let the second eat the
+# first run's before-pictures). Set to ROOT/attempt-<nonce> once the attempt is named; ROOT only until then.
+SHOTS = {"dir": ROOT}
 URL_CVAR = "wl.Julius.Bridge.Url"
 DEAD_BRIDGE = "http://127.0.0.1:1"
 PAIRING_ATTEMPTS = 3
 # Every clause this job declares. A job stopped part-way -- an exception, the editor closing it -- has recorded only
 # passes so far; without this list its status would read "all clauses pass" over clauses that never ran.
-DECLARED = ["A01", "A02", "A03", "A04", "A05", "A06", "A06b", "A06e", "A06f", "A06c", "A06d", "A07", "A08", "A09", "A10", "A10b", "A11"]
+DECLARED = ["A01", "A02", "A03", "A04", "A05", "A06", "A06b", "A06e", "A06f", "A06g", "A06h", "A06c", "A06d", "A07", "A08", "A09", "A10", "A10b", "A11"]
 
 
 def job():
@@ -129,11 +132,26 @@ def job():
         shown = yield from wait(lambda: ui.is_missions_open(), 10)
         first = unreal.SystemLibrary.get_frame_count()
         drawn = yield from wait(lambda: unreal.SystemLibrary.get_frame_count() >= first + 6, 30)
-        H.capture_viewport_jpeg(os.path.join(ROOT, name), 1900, 94)
+        H.capture_viewport_jpeg(os.path.join(SHOTS["dir"], name), 1900, 94)
         RESULT.setdefault("captures", {})[name] = {"missions_open": bool(shown), "frames_drawn": bool(drawn)}
         if not was_open:
             ui.toggle_missions()
             yield from wait(lambda: not ui.is_missions_open(), 10)
+
+    def capture_terminal(world, name):
+        # The Julius Live Terminal VISIBLY, by the same rule: opened, waited on state and frames, captured, put back.
+        ui = unreal.WonderlandUiTestLibrary.get_ui(world)
+        was_open = ui.is_live_terminal_open()
+        if not was_open:
+            ui.toggle_live_terminal()
+        shown = yield from wait(lambda: ui.is_live_terminal_open(), 10)
+        first = unreal.SystemLibrary.get_frame_count()
+        drawn = yield from wait(lambda: unreal.SystemLibrary.get_frame_count() >= first + 6, 30)
+        H.capture_viewport_jpeg(os.path.join(SHOTS["dir"], name), 1900, 94)
+        RESULT.setdefault("captures", {})[name] = {"terminal_open": bool(shown), "frames_drawn": bool(drawn)}
+        if not was_open:
+            ui.toggle_live_terminal()
+            yield from wait(lambda: not ui.is_live_terminal_open(), 10)
 
     def start_play():
         if not (yield from wait(lambda: ues.get_game_world() is None, 600)):
@@ -196,6 +214,9 @@ def job():
         # Names this attempt: the orchestrator takes a result only if it carries its own nonce, because the channel
         # keeps earlier results and an earlier PASS must never be read as this run's.
         RESULT["acceptance_nonce"] = params.get("nonce")
+        SHOTS["dir"] = os.path.join(ROOT, "attempt-%s" % (params.get("nonce") or "unnamed"))
+        os.makedirs(SHOTS["dir"], exist_ok=True)
+        RESULT["captures_dir"] = SHOTS["dir"]
         bridge, project, run, mission = params["bridge"], params["projectId"], params["runId"], params["missionId"]
         switch_run = params.get("switchRunId") or ""
 
@@ -240,7 +261,7 @@ def job():
         record("A06b", "the Mission Contract TASK SET holds the run: one Julius-sourced task for the mission, the same "
                "run id, Julius's own READY known on it, QUEUED (the data the surfaces should show)",
                shows_the_run(view, run), contract=view, on_contract=stream.describe().split("on-contract=")[-1].split(" |")[0])
-        H.capture_viewport_jpeg(os.path.join(ROOT, "01_following_the_real_run.jpg"), 1900, 94)
+        H.capture_viewport_jpeg(os.path.join(SHOTS["dir"], "01_following_the_real_run.jpg"), 1900, 94)
         yield from capture_missions(world, "01b_mission_contract_queued.jpg")
         # THE FOUNDER'S CRITERION IS VISIBLE: "the Mission Contract visibly shows QUEUED". The Missions panel shows a
         # mission exactly when the mission subsystem it reads holds a fold for one (SWonderlandMissionsPanel::
@@ -260,6 +281,56 @@ def job():
                "UNOBSERVED, while its provenance line names JULIUS LIVE, the run and Julius's READY",
                headline == "QUEUED" and "JULIUS LIVE" in banner and run in banner and "READY" in banner,
                headline=headline, banner=banner)
+        # THE LIVE TERMINAL (founder, 2026-09-27: "Stop the terminal saying STANDBY / Not connected while a real run is
+        # followed"). Its JULIUS 3.3 section reads the followed run's state; its banner line names the run exactly as the
+        # strip does; nothing on it is marked simulated; and its rows are the follow -- read from the SECTION'S rows, not
+        # its newest one, because the run's result arrives as a row of its own and may already be the newest. The
+        # terminal is fed by a 5 Hz reading of the world, so the section is WAITED on, never assumed; then photographed.
+        #
+        # A BUILD THAT PREDATES THE WIRING cannot answer the new accessors, and a missing binding must be a FAILED CLAUSE
+        # that says so -- not an AttributeError that ends the job and takes every later clause with it. The terminal is
+        # photographed either way: in such a build it still says STANDBY, and the photograph should show exactly that.
+        ui = unreal.WonderlandUiTestLibrary.get_ui(world)
+        terminal_wired = hasattr(ui, "get_julius_terminal_banner")
+        yield from wait(lambda: str(ui.get_julius_section_state("JULIUS 3.3")) == "QUEUED", 10)
+        yield from capture_terminal(world, "01c_live_terminal_queued.jpg")
+        section = str(ui.get_julius_section_state("JULIUS 3.3"))
+        terminal_banner = str(ui.get_julius_terminal_banner()) if terminal_wired else "NOT IN THIS BUILD"
+        rows = str(ui.describe_julius_section("JULIUS 3.3", 10))
+        record("A06g", "the LIVE TERMINAL follows the run: JULIUS 3.3 reads QUEUED, never STANDBY; its banner names JULIUS "
+               "LIVE, the run and READY; it is not marked simulated; its rows are the follow, with no 'Not connected'",
+               terminal_wired and section == "QUEUED" and "JULIUS LIVE" in terminal_banner and run in terminal_banner
+               and "READY" in terminal_banner and not ui.is_julius_terminal_simulated()
+               and ("Julius: Following %s" % mission) in rows and "Not connected" not in rows,
+               section=section, banner=terminal_banner, rows=rows, simulated=bool(ui.is_julius_terminal_simulated()),
+               build_has_terminal_wiring=terminal_wired)
+
+        # THE USER RESULT (founder decision 5), read by the world through the bridge after the hydration. The run is READY
+        # and was never dispatched, so the result is Julius's answer for exactly that -- not final, NOTHING met (nothing
+        # can be: an evidence criterion needs passed evidence and a completion criterion needs COMPLETED), nothing made,
+        # no failure -- and for its OWNER an exact cost of nothing, complete. Tokens UNKNOWN. Then it is SHOWN: a Result
+        # row in the terminal's JULIUS 3.3 section, photographed.
+        if not hasattr(stream, "has_result"):
+            record("A06h", "the run's USER RESULT reached the world and is shown", False,
+                   reason="NOT IN THIS BUILD: the transport has no result reading (UWonderlandJuliusStreamSubsystem::HasResult)")
+        else:
+            got = yield from wait(lambda: stream.has_result(), 30)
+            yield from wait(lambda: "Result: " in str(ui.describe_julius_section("JULIUS 3.3", 10)), 10)
+            yield from capture_terminal(world, "01d_live_terminal_result.jpg")
+            rows = str(ui.describe_julius_section("JULIUS 3.3", 10))
+            record("A06h", "the run's USER RESULT reached the world and is shown: not final, 0 criteria met, nothing made, no "
+                   "failure, the owner's exact cost of nothing, tokens UNKNOWN -- and a Result row in the terminal",
+                   got and stream.get_result_julius_state() == "READY" and not stream.is_result_verified()
+                   and stream.get_result_criteria_met() == 0 and stream.get_result_deliverable_count() == 0
+                   and stream.get_result_failure_reason() == "" and stream.is_result_cost_visible()
+                   and stream.get_result_cost_known_usd_micros() == 0 and stream.is_result_cost_complete()
+                   and stream.get_result_tokens() == "UNKNOWN" and "Result: not final" in rows,
+                   has_result=bool(got), result=str(stream.describe_result()), rows=rows,
+                   criteria_total=stream.get_result_criteria_total(),
+                   # WHERE IT BROKE, if it did: the transport's own line ends "result=<headline>", "result=not read
+                   # yet", or "result=not read yet (N failed reads)" -- three different facts that has_result alone
+                   # collapses into one False.
+                   transport=str(stream.describe()).split(" | result=")[-1])
 
         # ------------------------------------------------------------- switch runs
         # Wonderland Core, 2026-09-27: the automatic clear on a run CHANGE had no gate. Two halves, because the
@@ -344,7 +415,7 @@ def job():
         record("A10b", "after the restart the Mission Contract shows the SAME run once -- no second task, Julius's READY "
                "known on it, QUEUED",
                shows_the_run(view, run), contract=view)
-        H.capture_viewport_jpeg(os.path.join(ROOT, "02_recovered_after_restart.jpg"), 1900, 94)
+        H.capture_viewport_jpeg(os.path.join(SHOTS["dir"], "02_recovered_after_restart.jpg"), 1900, 94)
         yield from capture_missions(world, "02b_mission_contract_after_restart.jpg")
         RESULT["describe_after_restart"] = stream.describe()
     finally:
