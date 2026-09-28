@@ -68,6 +68,10 @@ ACROSS = (0.20, 0.80)
 # anything. A peak under CHROMA_FLOOR means this method cannot see that skin's eyes, and the clause says
 # UNMEASURABLE instead of FAIL. A tool that reports a number it cannot support is how the last six hours went.
 CHROMA_FLOOR = 0.10
+# Peak minus trough, in absolute chroma. Below this the profile is flat and its ratio describes the flatness.
+FLAT_FLOOR = 0.05
+# How far the midpoint of the two peaks may sit from the window centre before they are not a pair of eyes.
+OFF_CENTRE = 0.18
 
 
 def two_peaks(cols):
@@ -94,17 +98,45 @@ def two_peaks(cols):
         return None
     trough = min(between)
     dim = min(cols[i1], cols[i2])
+    # ---- THREE WAYS THIS METHOD CAN FAIL TO SEE A PAIR OF EYES, all three read off the run that found them.
+    #
+    # TOO PALE. Celestial Light's eyes are (0.62, 0.88, 1.00) against a near-white head, so its chroma peak is
+    # 0.055 and any ratio built on it is noise with a decimal point.
+    #
+    # FLAT. Skeleton Flame's peaks came back 0.1843 and 0.1843 with a trough of 0.1804: the whole band sits at
+    # one chroma because its cyan ghostfire covers the head, so the eyes are not distinguishable FROM THEIR
+    # SURROUNDINGS even though they are plainly distinguishable from each other in the photograph. A ratio of
+    # 0.979 there is a statement about a flat profile, not about two eyes touching.
+    #
+    # OFF-CENTRE. Apollo's peaks landed at 0.045 and 0.148 of the window -- hard against its left edge, which is
+    # its gold crown, not its face. A pair of eyes sits either side of the head's centre; two peaks bunched at
+    # one edge are something else, and the ratio between them means nothing.
+    #
+    # Each returns UNMEASURABLE rather than a number, because a wrong number here costs more than a missing
+    # one: it reports a met requirement as unmet and sends someone to fix a mascot that is correct.
+    contrast = max(cols[i1], cols[i2]) - trough
+    midpoint = (a + b) * 0.5 / float(n)
     weak = dim < CHROMA_FLOOR
+    flat = contrast < FLAT_FLOOR
+    lopsided = abs(midpoint - 0.5) > OFF_CENTRE
+    unusable = weak or flat or lopsided
     return {
         "peak_left": round(cols[a], 4), "peak_right": round(cols[b], 4),
         "peak_left_at": round(a / float(n), 3), "peak_right_at": round(b / float(n), 3),
         "separation_columns": b - a, "trough": round(trough, 4),
-        "trough_over_dimmer_peak": (None if weak else (round(trough / dim, 3) if dim > 0 else None)),
+        "trough_over_dimmer_peak": (None if unusable else (round(trough / dim, 3) if dim > 0 else None)),
+        "chroma_contrast": round(contrast, 4), "peaks_midpoint": round(midpoint, 3),
         "symmetry": (round(dim / max(cols[i1], cols[i2]), 3) if max(cols[i1], cols[i2]) > 0 else None),
-        "unmeasurable": weak,
-        "why_unmeasurable": ("the chroma peak is %.3f, under the %.2f floor: this skin's eyes are too close to "
-                             "white for a chroma profile to find them, so no ratio is reported"
-                             % (dim, CHROMA_FLOOR)) if weak else None,
+        "unmeasurable": unusable,
+        "why_unmeasurable": (
+            ("chroma peak %.3f is under the %.2f floor: this skin's eyes are too close to white for a chroma "
+             "profile to find them" % (dim, CHROMA_FLOOR)) if weak else
+            ("the profile is FLAT -- peak to trough is only %.3f, under %.2f -- so the whole band sits at one "
+             "chroma and the eyes are not separable from their surroundings by colour" % (contrast, FLAT_FLOOR))
+            if flat else
+            ("the two peaks sit at %.3f of the window, %.2f off centre: a pair of eyes straddles the head's "
+             "centre, so these are some other bright feature" % (midpoint, abs(midpoint - 0.5)))
+            if lopsided else None),
         "profile": cols,
     }
 
