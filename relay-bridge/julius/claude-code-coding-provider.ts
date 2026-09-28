@@ -11,6 +11,7 @@
  * A Codex-shaped or Devin-shaped provider replaces THIS FILE and nothing else.
  */
 
+import type { ClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
 import { classifyClaudeCodeResult } from '../../src/relay/connectors/claude-code/result-classification';
 import { classifyHostedFailure } from '../hosted-coding-agent/hosted-failure-reason';
 import { DEFAULT_HOSTED_LIMITS, hostedLimitsForAllocation, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
@@ -45,6 +46,12 @@ export const CLAUDE_CODE_PROVIDER_KIND = 'claude-code-hosted' as const;
  */
 export const hostedCoderDiagnostics = (input: {
   readonly taskType: string | undefined;
+  /**
+   * Which credential the dispatch used. Absent means `ANTHROPIC_API`, unchanged.
+   * It reaches this builder because the BILLING BASIS depends on it: a
+   * subscription-backed dispatch has no API amount to report.
+   */
+  readonly authMode?: ClaudeAuthMode;
   readonly requestedModel: string | null;
   readonly observed: HostedObservation | null;
   readonly limits: HostedLimits;
@@ -120,8 +127,20 @@ export const hostedCoderDiagnostics = (input: {
     implementationPresent: observed === null || observed.resultSubtype === null
       ? null : classifyClaudeCodeResult(observed) === 'SUCCESS',
     /** THE MONEY, BESIDE THE REFUSAL. Unknown stays Unknown, never zero. */
-    costUsdMicros: observed?.usage.totalCostUsd === null || observed?.usage.totalCostUsd === undefined
-      ? null : Math.round(observed.usage.totalCostUsd * 1_000_000),
+    /**
+     * UNDER A SUBSCRIPTION THERE IS NO API AMOUNT TO REPORT, so none is reported.
+     *
+     * The runtime may still state a `total_cost_usd`: that is a PRICED ESTIMATE of
+     * what the same work would have cost through the API, not a billing event that
+     * happened. Recording it here would classify subscription usage as Anthropic API
+     * spend, which is the one thing this must not do. The figure is not lost — the
+     * runner still bounds the run with it through `withinCostCeiling`, so a runaway
+     * dispatch is stopped exactly as before.
+     */
+    costUsdMicros: input.authMode === 'CLAUDE_SUBSCRIPTION'
+      ? null
+      : observed?.usage.totalCostUsd === null || observed?.usage.totalCostUsd === undefined
+        ? null : Math.round(observed.usage.totalCostUsd * 1_000_000),
     costCeilingUsdMicros: input.limits.maxCostCents * 10_000,
     costSource: observed?.usage.source ?? null,
     /** DID THE RUNTIME EVER START? A run that never launched billed nothing. */
@@ -137,9 +156,11 @@ export const hostedCoderDiagnostics = (input: {
     participationAskedReport: asked('report'),
     participationAskedObservations: asked('architectureObservations'),
     /** `PROVIDER_REPORTED` requires BOTH the runtime's own attestation and an actual figure. */
-    costBasis: observed?.usage.source === 'runtime_reported'
-      && observed.usage.totalCostUsd !== null && observed.usage.totalCostUsd !== undefined
-      ? 'PROVIDER_REPORTED' : 'UNKNOWN',
+    costBasis: input.authMode === 'CLAUDE_SUBSCRIPTION'
+      ? 'NOT_APPLICABLE'
+      : observed?.usage.source === 'runtime_reported'
+        && observed.usage.totalCostUsd !== null && observed.usage.totalCostUsd !== undefined
+        ? 'PROVIDER_REPORTED' : 'UNKNOWN',
     inputTokens: observed?.usage.inputTokens ?? null,
     outputTokens: observed?.usage.outputTokens ?? null,
     /**
@@ -215,6 +236,12 @@ export function createClaudeCodeCodingAgentProvider(input: {
   readonly requestedModel: string;
   readonly run?: typeof runHostedCodingAgent;
   readonly queryLoader?: () => Promise<HostedQueryFn>;
+  /**
+   * Which credential the child may use. Absent means `ANTHROPIC_API`, unchanged.
+   * Forwarded to the runner, which omits the key from the child entirely under
+   * `CLAUDE_SUBSCRIPTION`.
+   */
+  readonly authMode?: ClaudeAuthMode;
 }): JuliusCodingAgentProvider {
   const run = input.run ?? runHostedCodingAgent;
   const loadQuery = input.queryLoader ?? loadHostedQuery;
@@ -274,6 +301,7 @@ export function createClaudeCodeCodingAgentProvider(input: {
         workspacePath: request.workspacePath,
         apiKey: input.apiKey,
         requestedModel: input.requestedModel,
+        ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
         limits,
         now: nowIso,
         ...(signal === undefined ? {} : {
@@ -293,7 +321,7 @@ export function createClaudeCodeCodingAgentProvider(input: {
       if (aborted() && outcome.kind === 'completed') {
         const diagnostics = hostedCoderDiagnostics({
           taskType: request.identity.taskType, requestedModel: input.requestedModel,
-          observed: outcome.observation, limits, outcome: 'failed', failureReason: null,
+          observed: outcome.observation, limits, ...(input.authMode === undefined ? {} : { authMode: input.authMode }), outcome: 'failed', failureReason: null,
         });
         return {
           kind: 'failed', failure: 'CANCELLED', runtimeStarted: true,
@@ -308,7 +336,7 @@ export function createClaudeCodeCodingAgentProvider(input: {
         const runnerReason = 'failureReason' in outcome ? outcome.failureReason ?? null : null;
         const diagnostics = hostedCoderDiagnostics({
           taskType: request.identity.taskType, requestedModel: input.requestedModel,
-          observed, limits, outcome: 'failed', failureReason: runnerReason,
+          observed, limits, ...(input.authMode === undefined ? {} : { authMode: input.authMode }), outcome: 'failed', failureReason: runnerReason,
         });
         const reason = typeof diagnostics.failureReason === 'string' ? diagnostics.failureReason : null;
         const failure = codingAgentFailureFromHostedOutcome(outcome, reason);
@@ -331,7 +359,7 @@ export function createClaudeCodeCodingAgentProvider(input: {
 
       const diagnostics = hostedCoderDiagnostics({
         taskType: request.identity.taskType, requestedModel: input.requestedModel,
-        observed: outcome.observation, limits, outcome: 'succeeded',
+        observed: outcome.observation, limits, ...(input.authMode === undefined ? {} : { authMode: input.authMode }), outcome: 'succeeded',
       });
       const usage = outcome.observation.usage;
       return {

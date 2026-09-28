@@ -39,6 +39,7 @@ import {
   juliusFileCreationDecision,
   type JuliusFileCreationPolicy,
 } from '../../src/relay/mission/julius/julius-file-creation';
+import type { ClaudeAuthMode } from './hosted-auth';
 
 /** Tools the hosted agent may use for the safe-edit fixture. */
 export const HOSTED_ALLOWED_TOOLS: readonly string[] = Object.freeze([
@@ -139,9 +140,27 @@ export function hostedChildEnv(input: {
   apiKey: string;
   path?: string;
   home?: string;
+  /**
+   * `CLAUDE_SUBSCRIPTION` OMITS THE CREDENTIAL ENTIRELY, and that omission is the
+   * whole mechanism.
+   *
+   * Anthropic documents that `ANTHROPIC_API_KEY` takes PRECEDENCE over subscription
+   * authentication, so leaving it in place while hoping the subscription is used
+   * would bill an API balance nobody chose. Because this environment is built from
+   * `{}`, not setting the key is a structural guarantee rather than a sanitising
+   * pass that might miss a variable.
+   *
+   * MEASURED, NOT ASSUMED: on 2026-09-28 the `claude` CLI answered
+   * `loggedIn: true, authMethod: "claude.ai", subscriptionType: "max"` under exactly
+   * this environment minus the key — `PATH`, `HOME`, `CI`, `NO_COLOR`, `TERM` and
+   * nothing else. Adding `USERPROFILE`, `APPDATA` or `LOCALAPPDATA` changed nothing,
+   * so none is included. The CLI finds its own stored credential from `HOME`.
+   *
+   * Absent means API mode, so every existing caller is unchanged.
+   */
+  mode?: ClaudeAuthMode;
 }): Record<string, string> {
   const env: Record<string, string> = {
-    ANTHROPIC_API_KEY: input.apiKey,
     PATH: input.path ?? '',
     HOME: input.home ?? '',
     // A hosted child is never attached to a terminal; say so rather than
@@ -150,13 +169,23 @@ export function hostedChildEnv(input: {
     NO_COLOR: '1',
     TERM: 'dumb',
   };
+  if ((input.mode ?? 'ANTHROPIC_API') === 'ANTHROPIC_API') env.ANTHROPIC_API_KEY = input.apiKey;
   return env;
 }
 
-/** The keys `hostedChildEnv` may ever produce — asserted by the boundary test. */
+/** The keys `hostedChildEnv` may ever produce in API mode — asserted by the boundary test. */
 export const HOSTED_CHILD_ENV_KEYS: readonly string[] = Object.freeze([
   'ANTHROPIC_API_KEY', 'PATH', 'HOME', 'CI', 'NO_COLOR', 'TERM',
 ]);
+
+/** The keys it may produce in SUBSCRIPTION mode: the same set, minus the credential. */
+export const HOSTED_CHILD_ENV_KEYS_SUBSCRIPTION: readonly string[] = Object.freeze(
+  HOSTED_CHILD_ENV_KEYS.filter((key) => key !== 'ANTHROPIC_API_KEY'),
+);
+
+/** The keys the child may carry under a mode. One place, so the two lists cannot drift. */
+export const hostedChildEnvKeys = (mode: ClaudeAuthMode): readonly string[] =>
+  mode === 'CLAUDE_SUBSCRIPTION' ? HOSTED_CHILD_ENV_KEYS_SUBSCRIPTION : HOSTED_CHILD_ENV_KEYS;
 
 export interface HostedEnvelope {
   readonly cwd: string;

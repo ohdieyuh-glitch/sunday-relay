@@ -449,7 +449,19 @@ describe('a large graph stays bounded', () => {
       .filter((row) => row.state !== 'SUCCEEDED');
     expect(remaining, `${remaining.length} tasks left after ${ticks} ticks`).toEqual([]);
     expect(ticks).toBeLessThanOrEqual(40);
-  });
+    /**
+     * THE TIMEOUT IS LOAD-BEARING, and its absence made this case FLAKY.
+     *
+     * Three hundred tasks over up to forty ticks against vitest's default five
+     * seconds. Measured on this workstation with IDENTICAL code: pass, fail, fail —
+     * and the failure arrives as `Test timed out in 5000ms`, not as an assertion
+     * about boundedness. That is the worst shape a flake can take on a case whose
+     * whole subject is that no pass is unbounded: a red run that says nothing about
+     * bounds trains a reader to re-run rather than look.
+     *
+     * Same fix, same reasoning, as the paid-attempt guard's mutation case.
+     */
+  }, 60_000);
 
   it('handles a wide fan-in without the claim query offering a blocked task', async () => {
     const harness = createJuliusHarness({

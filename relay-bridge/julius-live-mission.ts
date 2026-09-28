@@ -36,6 +36,14 @@
  * evidence, events, or stdout.
  */
 
+import { claudeAuthLine, decideClaudeAuth, resolveClaudeAuthMode } from './hosted-coding-agent/hosted-auth';
+import { HOSTED_API_KEY_ENV } from './hosted-coding-agent/hosted-readiness';
+import { hostedChildEnvKeys } from './hosted-coding-agent/hosted-envelope';
+// NOT the connector BARREL. Importing it pulled the whole claude-code connector
+// into the Julius harness — 47 unclassified files, and `contract-verify.ts`
+// reaching `src/relay/testing/factories.ts`, so PRODUCTION JULIUS REACHED A TEST
+// FILE. The harness gate caught it. Only the capability probe is needed here.
+import { classifyClaudeAuth, probeClaudeCapabilities } from '../src/relay/connectors/claude-code/capability-probe';
 import { readFileSync } from 'node:fs';
 import { createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
@@ -593,6 +601,58 @@ async function main(argv: readonly string[]): Promise<number> {
   out(`  requested models: architect=${preflight.requested.architectModel ?? 'MISSING'} coder=${preflight.requested.codingModel ?? 'MISSING'} reviewer=${preflight.requested.reviewerProvider ?? 'MISSING'}/${preflight.requested.reviewerModel ?? 'MISSING'}`);
   out(presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV]));
   out('  note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.');
+
+  /**
+   * WHICH CREDENTIAL THE CODING AGENT WOULD USE, ANSWERED BEFORE ANYTHING RUNS.
+   *
+   * The founder's Max subscription can authenticate the Coding Agent, which removes
+   * the need for a separately funded Anthropic API balance during founder-operated
+   * qualification. That is a billing change and NOT a provider change: the Coding
+   * Agent is still Anthropic, still the Claude Agent SDK, and every model and
+   * latency column keeps its meaning.
+   *
+   * THE AUTHORITY HERE IS THE COMPOSED CHILD ENVIRONMENT, not a CLI probe. Measured
+   * on 2026-09-28: with a fake key in an otherwise minimal child environment,
+   * `claude auth status --json` still reported `authMethod: "claude.ai"` and
+   * `apiProvider: "firstParty"`, and only `subscriptionType` changed. So asking the
+   * CLI whether a key is in play would answer SUBSCRIPTION with the key present.
+   * `hostedChildEnv` builds the child from `{}`, so what it omits is absent by
+   * construction, and that is what is checked.
+   *
+   * A login is consulted only for what it does know: whether a first-party
+   * subscription login exists. It is classified by `classifyClaudeAuth`, which
+   * returns a class and a coarse plan label and never a credential.
+   */
+  const authMode = resolveClaudeAuthMode(env);
+  if (!authMode.ok) {
+    out(`  CLAUDE AUTH: REFUSED — ${authMode.refusal}: ${authMode.because}`);
+  } else {
+    const observed = authMode.mode === 'CLAUDE_SUBSCRIPTION'
+      ? classifyClaudeAuth(new Date().toISOString(), probeClaudeCapabilities(new Date().toISOString()).executablePath)
+      : undefined;
+    const decision = decideClaudeAuth({
+      mode: authMode.mode,
+      apiKeyProvided: (env[HOSTED_API_KEY_ENV] ?? '') !== '' && authMode.mode === 'ANTHROPIC_API',
+      childEnvNames: [...hostedChildEnvKeys(authMode.mode)],
+      ...(observed === undefined ? {} : {
+        login: {
+          loggedIn: observed.loggedIn,
+          sourceClass: observed.sourceClass,
+          subscriptionLabel: observed.subscriptionLabel,
+        },
+      }),
+    });
+    if (decision.ok) {
+      out(`  ${claudeAuthLine(decision.provenance)}`);
+      if (!decision.provenance.apiCostApplicable) {
+        out('  note: no Anthropic API billing event exists for a subscription-backed Coding Agent, so its API cost is NOT APPLICABLE rather than zero. Subscription usage is never reported as $0.00 of API spend.');
+      }
+    } else {
+      // FAIL CLOSED, and loudly: a run that wanted the subscription and would have
+      // used a key must not proceed quietly on the key.
+      out(`  BLOCKED CLAUDE AUTH: ${decision.refusal} — ${decision.because}`);
+    }
+  }
   for (const problem of preflight.problems.filter((entry) => entry.role !== 'CODING_AGENT' || !entry.missing.some((name) => name.startsWith('executor shell')))) {
     out(`  BLOCKED ${problem.role}: ${problem.reason} — ${problem.missing.join(', ')}`);
   }

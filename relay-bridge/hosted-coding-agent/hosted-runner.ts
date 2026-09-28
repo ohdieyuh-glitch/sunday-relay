@@ -1,3 +1,4 @@
+import type { ClaudeAuthMode } from './hosted-auth';
 import {
   compileHostedEnvelope, hostedChildEnv, verifyGrantedEnvelope,
   withinCostCeiling, DEFAULT_HOSTED_LIMITS,
@@ -111,6 +112,13 @@ export type HostedRunOutcome =
   };
 
 export interface HostedRunInput {
+  /**
+   * Which credential the child may use. Absent means `ANTHROPIC_API`, the mode
+   * this surface has always had. `CLAUDE_SUBSCRIPTION` omits the API key so the
+   * CLI authenticates from the founder's own subscription login — which
+   * Anthropic's documented precedence makes an omission rather than a preference.
+   */
+  readonly authMode?: ClaudeAuthMode;
   readonly queryFn: HostedQueryFn;
   readonly prompt: string;
   readonly workspacePath: string;
@@ -173,6 +181,11 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
           apiKey: input.apiKey,
           path: process.env.PATH,
           home: process.env.HOME,
+          // ABSENT MEANS API MODE, so every existing caller is unchanged. Under
+          // CLAUDE_SUBSCRIPTION the credential is omitted entirely and the CLI
+          // uses its own stored subscription login, which `decideClaudeAuth`
+          // has already refused to allow without observing.
+          ...(input.authMode === undefined ? {} : { mode: input.authMode }),
         }),
         abortController: controller,
         ...(envelope.model !== null ? { model: envelope.model } : {}),

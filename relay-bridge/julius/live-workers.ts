@@ -23,6 +23,7 @@
  * the store's `persist` and retains each full snapshot under its contextId.
  */
 
+import type { ClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
 import { createHash } from 'node:crypto';
 import type { JuliusContractReviewCharge } from '../../src/relay/mission/julius/julius-task-contract';
 import {
@@ -1687,11 +1688,27 @@ export function createLiveHostedCodingAdapter(input: {
   readonly researchPolicyFor?: ResearchPolicySource;
   readonly run?: typeof runHostedCodingAgent;
   readonly queryLoader?: () => Promise<HostedQueryFn>;
+  /**
+   * Which credential the child may use. Absent means `ANTHROPIC_API`, unchanged.
+   *
+   * THIS FIELD HAD TO BE DECLARED HERE OR THE WIRING WOULD HAVE BEEN A NO-OP. The
+   * composition passes it with a conditional spread, and a spread defeats
+   * TypeScript's excess-property check — so without this line the whole mode would
+   * have typechecked, compiled, and been silently dropped one call before it
+   * mattered.
+   */
+  readonly authMode?: ClaudeAuthMode;
 }): JuliusProviderAdapter {
   // `testCommand` is deliberately NOT in this guard. Empty means the mission
   // declared no deterministic check, which is a valid mission and not a missing
   // configuration; the dispatch below runs nothing and records no TEST row.
-  if (!input.apiKey || !input.requestedModel || !input.workspacePath) {
+  //
+  // NOR IS `apiKey` IN SUBSCRIPTION MODE. An empty key there is the mission's
+  // configuration rather than a gap in it: the credential is deliberately absent so
+  // the CLI authenticates from the founder's own subscription login, and requiring
+  // one would be requiring the thing that defeats the mode.
+  const requiresApiKey = (input.authMode ?? 'ANTHROPIC_API') === 'ANTHROPIC_API';
+  if ((requiresApiKey && !input.apiKey) || !input.requestedModel || !input.workspacePath) {
     throw new Error('hosted_coding_adapter_requires_live_config');
   }
   return createJuliusCodingAgentAdapter({
@@ -1700,6 +1717,7 @@ export function createLiveHostedCodingAdapter(input: {
     ...(input.researchPolicyFor === undefined ? {} : { researchPolicyFor: input.researchPolicyFor }),
     provider: createClaudeCodeCodingAgentProvider({
       apiKey: input.apiKey, requestedModel: input.requestedModel,
+      ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
       ...(input.run === undefined ? {} : { run: input.run }),
       ...(input.queryLoader === undefined ? {} : { queryLoader: input.queryLoader }),
     }),
