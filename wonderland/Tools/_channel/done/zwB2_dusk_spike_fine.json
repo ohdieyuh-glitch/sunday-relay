@@ -1,0 +1,505 @@
+{
+ "name": "zwB2_dusk_spike_fine",
+ "started": "2026-09-27 20:21:58",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "K_VALID",
+   "name": "the observation point is a real standing position with ground under the patch",
+   "pass": true,
+   "detail": {
+    "vantage": {
+     "asked": [
+      -64.0,
+      -5042.0
+     ],
+     "landed": [
+      -64.0,
+      -5042.0,
+      94.3
+     ],
+     "offset_uu": 0.0,
+     "forward_hit": null,
+     "down_hit": {
+      "dist": 993.6,
+      "z": 0.7
+     },
+     "ground_patch_hit": {
+      "dist": 997.1,
+      "z": -2.9
+     },
+     "ground_rect_screen": [
+      0.5,
+      0.78,
+      0.3,
+      0.16
+     ]
+    }
+   }
+  },
+  {
+   "id": "K_MEASURED",
+   "name": "every hour produced both arms",
+   "pass": true,
+   "detail": {
+    "measured": 14,
+    "wanted": 14,
+    "missing": []
+   }
+  },
+  {
+   "id": "K_STILL",
+   "name": "the pawn is at the spot at every reading, not just when it was placed",
+   "pass": true,
+   "detail": {
+    "drifted": [],
+    "drift_by_reading": {
+     "h18.00_base": 0.0,
+     "h18.00_moon_off": 0.0,
+     "h18.22_base": 0.0,
+     "h18.22_moon_off": 0.0,
+     "h18.25_base": 0.0,
+     "h18.25_moon_off": 0.0,
+     "h18.27_base": 0.0,
+     "h18.27_moon_off": 0.0,
+     "h18.32_base": 0.0,
+     "h18.32_moon_off": 0.0,
+     "h18.40_base": 0.0,
+     "h18.40_moon_off": 0.0,
+     "h18.50_base": 0.0,
+     "h18.50_moon_off": 0.0
+    }
+   }
+  },
+  {
+   "id": "K_NOISE",
+   "name": "every reading agrees with itself on the luma it measures",
+   "pass": true,
+   "detail": {
+    "worst_luma_spread": 0.0004,
+    "tolerance": 0.01
+   }
+  },
+  {
+   "id": "K_PEAK",
+   "name": "the brightest hour is 18:25, which is the overshoot this job exists to explain",
+   "pass": true,
+   "detail": {
+    "peak_hour": 18.25,
+    "base_ground_by_hour": {
+     "18.00": 0.0897,
+     "18.22": 0.1526,
+     "18.25": 0.1622,
+     "18.27": 0.0794,
+     "18.32": 0.086,
+     "18.40": 0.0954,
+     "18.50": 0.0982
+    },
+    "note": "if the peak has moved, the world is not in the state zzAG2 measured and the decomposition below is about a different thing"
+   }
+  },
+  {
+   "id": "K_MOON",
+   "name": "the spike is the MOON arriving early -- removing it flattens 18:25 to its neighbours",
+   "pass": true,
+   "detail": {
+    "peak_hour": 18.25,
+    "peak_without_moon": 0.075,
+    "other_hours_without_moon": {
+     "18.00": 0.0523,
+     "18.22": 0.0708,
+     "18.27": 0.0784,
+     "18.32": 0.0851,
+     "18.40": 0.0942,
+     "18.50": 0.0971
+    },
+    "moon_share_by_hour": {
+     "18.00": 0.0374,
+     "18.22": 0.0818,
+     "18.25": 0.0872,
+     "18.27": 0.001,
+     "18.32": 0.0009,
+     "18.40": 0.0012,
+     "18.50": 0.0011
+    },
+    "note": "GREEN means the crossover curve I wrote is the cause and the fix is mine to make in it. RED means the peak survives with the moon switched off, so it is the sun or the sky at a grazing angle and my curve only revealed what was always going to be there"
+   }
+  },
+  {
+   "id": "K_SHAPE",
+   "name": "the collapse is a STEP at the caster flip, not a ramp across the quarter hour",
+   "pass": true,
+   "detail": {
+    "fraction_of_the_drop_at_the_flip": 1.001,
+    "drop_across_the_flip": 0.0862,
+    "total_drop": 0.0861,
+    "moon_share_by_hour": {
+     "18.22": 0.0818,
+     "18.25": 0.0872,
+     "18.27": 0.001,
+     "18.32": 0.0009,
+     "18.4": 0.0012,
+     "18.5": 0.0011
+    },
+    "flip_between": [
+     18.25,
+     18.27
+    ],
+    "note": "GREEN: nearly all the flood disappears in the one quarter-minute the caster flips, so moving the handover earlier buys the whole spike and costs the whole S01 clause. RED: the flood is already draining before the flip, so an earlier handover buys less than the coarse table suggested and the branch is cheaper than it looked. Either answer changes the price of a branch the founder is being asked to choose between"
+   }
+  }
+ ],
+ "knobs_as_found": {
+  "MoonGain": 0.05,
+  "Fog": 1.0
+ },
+ "vantage": {
+  "asked": [
+   -64.0,
+   -5042.0
+  ],
+  "landed": [
+   -64.0,
+   -5042.0,
+   94.3
+  ],
+  "offset_uu": 0.0,
+  "forward_hit": null,
+  "down_hit": {
+   "dist": 993.6,
+   "z": 0.7
+  },
+  "ground_patch_hit": {
+   "dist": 997.1,
+   "z": -2.9
+  },
+  "ground_rect_screen": [
+   0.5,
+   0.78,
+   0.3,
+   0.16
+  ]
+ },
+ "readings": {
+  "h18.00_base": {
+   "hour": 18.0,
+   "arm": "base",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.05,
+   "ground_luma": 0.0897,
+   "ground_luma_spread": 0.0003,
+   "ground_readable": 0.0546,
+   "ground_crushed": 0.9449,
+   "frame_luma": 0.114,
+   "frame_luma_spread": 0.0003,
+   "sun_elevation": 0.0,
+   "daylight": 0.1999,
+   "moon_lux_pred": 0.0303,
+   "sun_int_pred": 0.1999,
+   "moon_casts_pred": false
+  },
+  "h18.00_moon_off": {
+   "hour": 18.0,
+   "arm": "moon_off",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.0,
+   "ground_luma": 0.0523,
+   "ground_luma_spread": 0.0001,
+   "ground_readable": 0.0074,
+   "ground_crushed": 0.9921,
+   "frame_luma": 0.0719,
+   "frame_luma_spread": 0.0002,
+   "sun_elevation": 0.0,
+   "daylight": 0.1999,
+   "moon_lux_pred": 0.0303,
+   "sun_int_pred": 0.1999,
+   "moon_casts_pred": false
+  },
+  "h18.22_base": {
+   "hour": 18.22,
+   "arm": "base",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.05,
+   "ground_luma": 0.1526,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.73,
+   "ground_crushed": 0.2695,
+   "frame_luma": 0.1753,
+   "frame_luma_spread": 0.0002,
+   "sun_elevation": -4.14,
+   "daylight": 0.0619,
+   "moon_lux_pred": 0.0432,
+   "sun_int_pred": 0.0619,
+   "moon_casts_pred": false
+  },
+  "h18.22_moon_off": {
+   "hour": 18.22,
+   "arm": "moon_off",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.0,
+   "ground_luma": 0.0708,
+   "ground_luma_spread": 0.0002,
+   "ground_readable": 0.0095,
+   "ground_crushed": 0.99,
+   "frame_luma": 0.0869,
+   "frame_luma_spread": 0.0001,
+   "sun_elevation": -4.14,
+   "daylight": 0.0619,
+   "moon_lux_pred": 0.0432,
+   "sun_int_pred": 0.0619,
+   "moon_casts_pred": false
+  },
+  "h18.25_base": {
+   "hour": 18.25,
+   "arm": "base",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.05,
+   "ground_luma": 0.1622,
+   "ground_luma_spread": 0.0,
+   "ground_readable": 0.7698,
+   "ground_crushed": 0.2297,
+   "frame_luma": 0.1844,
+   "frame_luma_spread": 0.0,
+   "sun_elevation": -4.71,
+   "daylight": 0.0489,
+   "moon_lux_pred": 0.0446,
+   "sun_int_pred": 0.0489,
+   "moon_casts_pred": false
+  },
+  "h18.25_moon_off": {
+   "hour": 18.25,
+   "arm": "moon_off",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.0,
+   "ground_luma": 0.075,
+   "ground_luma_spread": 0.0003,
+   "ground_readable": 0.0163,
+   "ground_crushed": 0.9831,
+   "frame_luma": 0.0907,
+   "frame_luma_spread": 0.0003,
+   "sun_elevation": -4.71,
+   "daylight": 0.0489,
+   "moon_lux_pred": 0.0446,
+   "sun_int_pred": 0.0489,
+   "moon_casts_pred": false
+  },
+  "h18.27_base": {
+   "hour": 18.27,
+   "arm": "base",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.05,
+   "ground_luma": 0.0794,
+   "ground_luma_spread": 0.0001,
+   "ground_readable": 0.0238,
+   "ground_crushed": 0.9757,
+   "frame_luma": 0.0946,
+   "frame_luma_spread": 0.0,
+   "sun_elevation": -5.09,
+   "daylight": 0.0411,
+   "moon_lux_pred": 0.0454,
+   "sun_int_pred": 0.0411,
+   "moon_casts_pred": true
+  },
+  "h18.27_moon_off": {
+   "hour": 18.27,
+   "arm": "moon_off",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.0,
+   "ground_luma": 0.0784,
+   "ground_luma_spread": 0.0001,
+   "ground_readable": 0.0231,
+   "ground_crushed": 0.9764,
+   "frame_luma": 0.0937,
+   "frame_luma_spread": 0.0001,
+   "sun_elevation": -5.09,
+   "daylight": 0.0411,
+   "moon_lux_pred": 0.0454,
+   "sun_int_pred": 0.0411,
+   "moon_casts_pred": true
+  },
+  "h18.32_base": {
+   "hour": 18.32,
+   "arm": "base",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.05,
+   "ground_luma": 0.086,
+   "ground_luma_spread": 0.0001,
+   "ground_readable": 0.0421,
+   "ground_crushed": 0.9574,
+   "frame_luma": 0.1006,
+   "frame_luma_spread": 0.0001,
+   "sun_elevation": -6.02,
+   "daylight": 0.0244,
+   "moon_lux_pred": 0.0473,
+   "sun_int_pred": 0.0244,
+   "moon_casts_pred": true
+  },
+  "h18.32_moon_off": {
+   "hour": 18.32,
+   "arm": "moon_off",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.0,
+   "ground_luma": 0.0851,
+   "ground_luma_spread": 0.0001,
+   "ground_readable": 0.04,
+   "ground_crushed": 0.9595,
+   "frame_luma": 0.0995,
+   "frame_luma_spread": 0.0001,
+   "sun_elevation": -6.02,
+   "daylight": 0.0244,
+   "moon_lux_pred": 0.0473,
+   "sun_int_pred": 0.0244,
+   "moon_casts_pred": true
+  },
+  "h18.40_base": {
+   "hour": 18.4,
+   "arm": "base",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.05,
+   "ground_luma": 0.0954,
+   "ground_luma_spread": 0.0,
+   "ground_readable": 0.0918,
+   "ground_crushed": 0.9077,
+   "frame_luma": 0.1092,
+   "frame_luma_spread": 0.0001,
+   "sun_elevation": -7.53,
+   "daylight": 0.0064,
+   "moon_lux_pred": 0.0493,
+   "sun_int_pred": 0.0064,
+   "moon_casts_pred": true
+  },
+  "h18.40_moon_off": {
+   "hour": 18.4,
+   "arm": "moon_off",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.0,
+   "ground_luma": 0.0942,
+   "ground_luma_spread": 0.0001,
+   "ground_readable": 0.086,
+   "ground_crushed": 0.9133,
+   "frame_luma": 0.1078,
+   "frame_luma_spread": 0.0002,
+   "sun_elevation": -7.53,
+   "daylight": 0.0064,
+   "moon_lux_pred": 0.0493,
+   "sun_int_pred": 0.0064,
+   "moon_casts_pred": true
+  },
+  "h18.50_base": {
+   "hour": 18.5,
+   "arm": "base",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.05,
+   "ground_luma": 0.0982,
+   "ground_luma_spread": 0.0004,
+   "ground_readable": 0.1151,
+   "ground_crushed": 0.8844,
+   "frame_luma": 0.1114,
+   "frame_luma_spread": 0.0003,
+   "sun_elevation": -9.4,
+   "daylight": 0.0,
+   "moon_lux_pred": 0.05,
+   "sun_int_pred": 0.0012,
+   "moon_casts_pred": true
+  },
+  "h18.50_moon_off": {
+   "hour": 18.5,
+   "arm": "moon_off",
+   "drift_uu": 0.0,
+   "moon_gain_held": 0.0,
+   "ground_luma": 0.0971,
+   "ground_luma_spread": 0.0,
+   "ground_readable": 0.1099,
+   "ground_crushed": 0.8897,
+   "frame_luma": 0.1104,
+   "frame_luma_spread": 0.0001,
+   "sun_elevation": -9.4,
+   "daylight": 0.0,
+   "moon_lux_pred": 0.05,
+   "sun_int_pred": 0.0012,
+   "moon_casts_pred": true
+  }
+ },
+ "decomposition": {
+  "18.00": {
+   "base_ground": 0.0897,
+   "without_moon": 0.0523,
+   "moon_share": 0.0374,
+   "everything_else": 0.0523,
+   "base_readable": 0.0546,
+   "readable_without_moon": 0.0074
+  },
+  "18.22": {
+   "base_ground": 0.1526,
+   "without_moon": 0.0708,
+   "moon_share": 0.0818,
+   "everything_else": 0.0708,
+   "base_readable": 0.73,
+   "readable_without_moon": 0.0095
+  },
+  "18.25": {
+   "base_ground": 0.1622,
+   "without_moon": 0.075,
+   "moon_share": 0.0872,
+   "everything_else": 0.075,
+   "base_readable": 0.7698,
+   "readable_without_moon": 0.0163
+  },
+  "18.27": {
+   "base_ground": 0.0794,
+   "without_moon": 0.0784,
+   "moon_share": 0.001,
+   "everything_else": 0.0784,
+   "base_readable": 0.0238,
+   "readable_without_moon": 0.0231
+  },
+  "18.32": {
+   "base_ground": 0.086,
+   "without_moon": 0.0851,
+   "moon_share": 0.0009,
+   "everything_else": 0.0851,
+   "base_readable": 0.0421,
+   "readable_without_moon": 0.04
+  },
+  "18.40": {
+   "base_ground": 0.0954,
+   "without_moon": 0.0942,
+   "moon_share": 0.0012,
+   "everything_else": 0.0942,
+   "base_readable": 0.0918,
+   "readable_without_moon": 0.086
+  },
+  "18.50": {
+   "base_ground": 0.0982,
+   "without_moon": 0.0971,
+   "moon_share": 0.0011,
+   "everything_else": 0.0971,
+   "base_readable": 0.1151,
+   "readable_without_moon": 0.1099
+  }
+ },
+ "collapse_shape": {
+  "moon_share_by_hour": {
+   "18.22": 0.0818,
+   "18.25": 0.0872,
+   "18.27": 0.001,
+   "18.32": 0.0009,
+   "18.4": 0.0012,
+   "18.5": 0.0011
+  },
+  "last_before_flip": [
+   18.25,
+   0.0872
+  ],
+  "first_after_flip": [
+   18.27,
+   0.001
+  ],
+  "drop_across_the_flip": 0.0862,
+  "total_drop": 0.0861,
+  "fraction_at_the_flip": 1.001
+ },
+ "finished": "2026-09-27 20:23:47",
+ "seconds": 109.09,
+ "log": "K_VALID PASS the observation point is a real standing position with ground under the patch {'vantage': {'asked': [-64.0, -5042.0], 'landed': [-64.0, -5042.0, 94.3], 'offset_uu': 0.0, 'forward_hit': None, 'down_hit': {'dist': 993.6, 'z': 0.7}, 'ground_patch_hit': {'dist': 997.1, 'z': -2.9}, 'ground_rect_screen': [0.5, 0.78, 0.3, 0.16]}}\nK_MEASURED PASS every hour produced both arms {'measured': 14, 'wanted': 14, 'missing': []}\nK_STILL PASS the pawn is at the spot at every reading, not just when it was placed {'drifted': [], 'drift_by_reading': {'h18.00_base': 0.0, 'h18.00_moon_off': 0.0, 'h18.22_base': 0.0, 'h18.22_moon_off': 0.0, 'h18.25_base': 0.0, 'h18.25_moon_off': 0.0, 'h18.27_base': 0.0, 'h18.27_moon_off': 0.0, 'h18.32_base': 0.0, 'h18.32_moon_off': 0.0, 'h18.40_base': 0.0, 'h18.40_moon_off': 0.0, 'h18.50_base': 0.0, 'h18.50_moon_off': 0.0}}\nK_NOISE PASS every reading agrees with itself on the luma it measures {'worst_luma_spread': 0.0004, 'tolerance': 0.01}\nK_PEAK PASS the brightest hour is 18:25, which is the overshoot this job exists to explain {'peak_hour': 18.25, 'base_ground_by_hour': {'18.00': 0.0897, '18.22': 0.1526, '18.25': 0.1622, '18.27': 0.0794, '18.32': 0.086, '18.40': 0.0954, '18.50': 0.0982}, 'note': 'if the peak has moved, the world is not in the state zzAG2 measured and the decomposition below is about a different thing'}\nK_MOON PASS the spike is the MOON arriving early -- removing it flattens 18:25 to its neighbours {'peak_hour': 18.25, 'peak_without_moon': 0.075, 'other_hours_without_moon': {'18.00': 0.0523, '18.22': 0.0708, '18.27': 0.0784, '18.32': 0.0851, '18.40': 0.0942, '18.50': 0.0971}, 'moon_share_by_hour': {'18.00': 0.0374, '18.22': 0.0818, '18.25': 0.0872, '18.27': 0.001, '18.32': 0.0009, '18.40': 0.0012, '18.50': 0.0011}, 'note': 'GREEN means the crossover curve I wrote is the cause and the fix is mine to make in it. RED means the peak survives with the moon switched off, so it is the sun or the sky at a grazing angle and my curve only revealed what was always going to be there'}\nK_SHAPE PASS the collapse is a STEP at the caster flip, not a ramp across the quarter hour {'fraction_of_the_drop_at_the_flip': 1.001, 'drop_across_the_flip': 0.0862, 'total_drop': 0.0861, 'moon_share_by_hour': {18.22: 0.0818, 18.25: 0.0872, 18.27: 0.001, 18.32: 0.0009, 18.4: 0.0012, 18.5: 0.0011}, 'flip_between': [18.25, 18.27], 'note': 'GREEN: nearly all the flood disappears in the one quarter-minute the caster flips, so moving the handover earlier buys the whole spike and costs the whole S01 clause. RED: the flood is already draining before the flip, so an earlier handover buys less than the coarse table suggested and the branch is cheaper than it looked. Either answer changes the price of a branch the founder is being asked to choose between'}\n"
+}
