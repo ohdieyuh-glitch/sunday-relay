@@ -1422,3 +1422,49 @@ level-placed spatially-loaded actor is destroyed with its cell.
 - A near control turns a correlation into a mechanism. Teleporting is not fatal; teleporting FAR is.
   Without the 15 m hop, "it dies when teleported" would have been the finding, and the fix would have
   been aimed at teleporting.
+
+## A job that changes PERSISTED state must restore it on the way out, not on the success path
+
+A dozen jobs here wear a skin and put `relay_og` back at the end. The restore sits after the measurement, so
+any job that errored, voided, or was interrupted between the two left the Dog dressed. The skin choice is
+**persisted**, so it did not clear on restart: the Dog was found wearing `celestial_light` in a *fresh* PIE,
+hours later.
+
+That is how a "glowing hoop around the Dog" appeared in the founder's main plaza. It was Celestial Light's
+halo, and it took four wrong hypotheses — a fountain reflecting, a fire material, practical lights, a scale
+reference actor — before anyone hid the candidates one at a time and found the Dog itself underneath.
+
+**The cost is not the wrong costume, it is the silent contamination of everyone else's evidence.** Acceptance
+photographs from another lane, this lane's water and terminal captures, and every frame of the investigation
+itself were all taken of a world nobody had been told was modified. The world lane hit the identical shape the
+same night with console variables: a `bail()` that sets a status and returns, with the restore loop sitting on
+the success path below it.
+
+Two rules:
+
+**Restore before you can fail.** Put the restore where an early return cannot skip it, or read the value back
+at the START of the next run and put it right there. `zc_worn_skin` does the second — it asks what a fresh
+session is wearing and restores `relay_og` if the answer is anything else.
+
+**If it survives a restart, it is not test state — it is the product's state.** A knob that resets with the
+process is a mess; a persisted setting a test leaves behind is a lie told to every later reader, including
+other people.
+
+## A screenshot helper that returns out params is truthy even when it fails
+
+`CaptureGameViewport(const FString&, int32& OutWidth, int32& OutHeight)` returns `(ok, width, height)` to
+Python, and a non-empty tuple is truthy whatever `ok` says. So
+
+    if L.capture_game_viewport(path):        # passes on total failure
+
+counted four successes that never happened. Unpack it: `ok = got[0] if isinstance(got, (tuple, list))`.
+
+And the reason it was failing at all: **the editor window was MINIMIZED.** `TakeScreenshot` gets no pixels
+from a widget that is not being drawn, and returns false with nothing in the log. `focus_game_viewport()` does
+not fix it — that focuses the game viewport widget *inside* the application and cannot un-minimize an OS
+window. Check `IsIconic` on the main window handle before trusting any capture, and re-assert focus before
+every shot rather than once after `begin_play`.
+
+The same failure ate another lane's entire set of acceptance photographs the same night, with no error
+anywhere. When they asked whether the window had been minimized, the honest answer was "I did not minimize
+it", which is not the same as "it is not minimized" — and the difference cost a rerun.
