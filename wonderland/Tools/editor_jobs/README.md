@@ -352,3 +352,30 @@ fraction beside it so the amplification is visible. The same rule voided a run: 
 `(offset or 9e9) > 500` reported a pawn that landed at offset **exactly 0.0** — a perfect placement — as
 more than 5 m away, and voided a run in which all three vantages were valid. Write `x is None or x > 500`.
 Distinguish three states explicitly: dead subject, empty sample, and a valid zero result.
+
+## When you find a defect, ask what the SET is before fixing the instance
+
+Five times in one day, across two lanes, the fix was applied to the cases in front of us and the set was
+never enumerated:
+
+- Eight jobs implement a settle. Seven were converted to the window spread; `zc_water_audit` still had
+  the original pair test, untouched all day, in the one file neither lane had reason to open.
+- The eye-halo fault had three sites — the gameplay Dog's rings, the costume eye pane, the cub ghost
+  pane. The third was only found because the water-audit story prompted a search.
+- `zc_territories` had six clauses missing a count, while `T10` **twenty lines above them** already had
+  the right pattern.
+- A predicate wait was used for BeginPlay at the top of a file and a hand-rolled sleep for the harder
+  case twenty lines below it.
+- A neighbouring job carried "PLAY, NOT SIMULATE" in a comment; the next job written hit the same trap.
+
+The cheap move is a grep, and it is cheaper than the run that finds the eighth case:
+
+```bash
+# how many jobs do the thing at all, and how many do it the fixed way?
+grep -rln "def settled" zc_*.py | wc -l
+grep -rln "max(window) - min(window)" zc_*.py | wc -l   # the difference is the backlog
+```
+
+When those two numbers differ, the difference is a list, not a rounding error. And check the file you
+just edited for a neighbour that already solved it — three of the five above were sitting in the same
+file as their own answer.
