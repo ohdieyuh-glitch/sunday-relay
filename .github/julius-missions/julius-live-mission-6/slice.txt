@@ -1,0 +1,23 @@
+# Paid Live Mission 6 — the tool that lies about paths on Windows.
+#
+# ONE FILE, AND ITS TYPE IMPORTS VANISH. `node-tool-adapter.ts` imports only Node
+# builtins plus a TYPE-ONLY import from the Julius barrel, and this repository
+# runs TypeScript through Node's own type stripping — so the type import is erased
+# before anything executes and pulls nothing into the sandbox. The closure is
+# therefore this single file, which is what makes this mission small enough to be
+# a representative one rather than an endurance test.
+#
+# THE BUDGET NEEDS NO FOUNDER DECISION, which is part of why this mission was
+# chosen. Every raised ceiling in `scripts/julius-live-contract-check.mjs` is a
+# recorded founder decision; this contract stays inside the DEFAULT bound of $5
+# and one repair cycle, so nothing about it needs authorising beyond the paid
+# dispatch itself. The bound is defensible from the two paid datapoints: Mission 4
+# settled $1.390954 for a ~200-line module and Mission 5 $5.177120 for three
+# integrated files, against this mission's one 63-line file and a narrow change.
+# One repair cycle is enough to prove the repair path WORKS if the reviewer finds
+# a genuine defect; it is not an instruction to find one.
+#
+# The seeded specification (`seed/.../node-tool-search-paths.test.ts`) is
+# provisioned beside it and is NOT listed here: it is the mission's specification,
+# not its deliverable, and the contract forbids editing it.
+src/relay/workspace/julius-tools/node-tool-adapter.ts
