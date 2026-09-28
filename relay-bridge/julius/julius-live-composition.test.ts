@@ -1704,6 +1704,43 @@ describe('a mission that declares no deterministic check', () => {
     const evidence = await memory.evidenceForRun('run-live', 'prj-live');
     expect(evidence.some((item) => item.type === 'TEST' && item.status === 'PASSED')).toBe(true);
   });
+
+  /**
+   * NO DETERMINISTIC CHECK IS NOT NO VERIFICATION, and this is the case that says
+   * so rather than the comment above it.
+   *
+   * The completion above is driven by a reviewer that APPROVED. On its own that
+   * proves the happy path and nothing about the standard: a mission with no test
+   * command could be completing because nothing was judging it. So the same
+   * mission is driven again with the reviewer REJECTING, and it must not complete.
+   *
+   * This is the half the rule turns on — absence of a test command must never mean
+   * absence of verification. Without it, permitting an empty command at the
+   * contract gate would have moved the verification hole from the door to the
+   * runtime, which is worse: the hole would then cost a whole mission's spend
+   * before anyone could see it.
+   */
+  it('a mission with NO deterministic check still does not complete when the reviewer rejects', async () => {
+    const { memory, outcome } = await driveLiveMission(
+      // Every round rejects. The mission's own repair ceiling ends the run; what
+      // matters is that no path reaches COMPLETED without the reviewer's accept.
+      ['changes_required', 'changes_required', 'changes_required'],
+      undefined, undefined, undefined, undefined, undefined, undefined,
+      { testCommand: '' },
+    );
+    expect(outcome.state,
+      'a report mission with nothing deterministic to run must still answer to its reviewer',
+    ).not.toBe('COMPLETED');
+
+    // AND THE REASON IS THE REVIEW, not a missing test: there is still no TEST
+    // row to be missing, and the reviewer's finding is on the record.
+    const evidence = await memory.evidenceForRun('run-live', 'prj-live');
+    expect(evidence.filter((item) => item.type === 'TEST'),
+      'no check was declared, so no exit code may appear as a test').toEqual([]);
+    expect(evidence.some((item) => item.type === 'REVIEW_FINDING'),
+      `the reviewer's finding is what held the run: ${JSON.stringify(evidence.map((item) => [item.type, item.status]))}`,
+    ).toBe(true);
+  });
 });
 
 /**

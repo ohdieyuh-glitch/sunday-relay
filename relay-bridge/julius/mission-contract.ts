@@ -50,7 +50,19 @@ export interface LiveMissionContractFile {
   readonly objective: string;
   readonly requirements: readonly string[];
   readonly constraints: readonly string[];
-  readonly acceptanceCriteria: readonly { readonly id: string; readonly text: string; readonly blocking: boolean }[];
+  readonly acceptanceCriteria: readonly {
+    readonly id: string;
+    readonly text: string;
+    readonly blocking: boolean;
+    /**
+     * WHAT PROVES THIS CRITERION, when the mission's test command does not.
+     * Optional, and read by `julius-live-contract-check.mjs`: a criterion may not
+     * require `TEST` while `testCommand` is empty, and under an empty command a
+     * BLOCKING criterion must name something. See the parser for why the
+     * vocabulary is `TEST` and `DIFF` rather than the kernel's twelve types.
+     */
+    readonly requiredEvidence?: readonly string[];
+  }[];
   readonly testCommand: string;
   readonly workspacePath: string;
   readonly limits?: {
@@ -163,6 +175,34 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
     const item = criterion as Record<string, unknown>;
     if (typeof item.id !== 'string' || typeof item.text !== 'string' || typeof item.blocking !== 'boolean') {
       return { ok: false, problem: 'Every acceptance criterion needs a string id, a string text, and a boolean blocking flag.' };
+    }
+    /**
+     * `requiredEvidence` IS OPTIONAL AND, WHERE PRESENT, IS THE STRUCTURAL ANSWER
+     * TO "WHAT PROVES THIS".
+     *
+     * It exists because an empty `testCommand` is a legitimate declaration and
+     * used to be a silent one: nothing distinguished "this mission has no
+     * deterministic check" from "the check was dropped", so
+     * `julius-live-contract-check.mjs` refused every empty command and with it
+     * every report, analysis and plan mission. That gate now reads THIS field
+     * instead, and the two rules it applies are consistency rules: a criterion may
+     * not require TEST while the command is empty, and a blocking criterion under
+     * an empty command must name what does prove it.
+     *
+     * THE VOCABULARY IS DELIBERATELY NOT THE KERNEL'S TWELVE TYPES. `verifyTask`
+     * scopes evidence to the task, and the only rows a live BUILD produces are
+     * `TEST` and `DIFF` — every `ARTIFACT` row on that path belongs to the
+     * architect, a consultation or a rebuttal. A contract allowed to require
+     * `ARTIFACT` of its build would pass every check and then park in VERIFYING
+     * forever, after the spend. The gate names the producible set and refuses the
+     * rest; this parser only insists on the shape, because the gate is the file
+     * that knows what the live path records.
+     */
+    if (item.requiredEvidence !== undefined) {
+      if (!Array.isArray(item.requiredEvidence) || item.requiredEvidence.length === 0
+        || item.requiredEvidence.some((type) => typeof type !== 'string')) {
+        return { ok: false, problem: 'An acceptance criterion\'s "requiredEvidence" must be a non-empty array of evidence type names; omit it to leave what proves the criterion to the mission\'s test command.' };
+      }
     }
   }
   const list = (field: string): readonly string[] => Array.isArray(value[field]) ? (value[field] as unknown[]).map(String) : [];

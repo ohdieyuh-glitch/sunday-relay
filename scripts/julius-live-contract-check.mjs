@@ -297,11 +297,40 @@ try {
   process.exit(1);
 }
 
-for (const field of ['missionId', 'projectId', 'tenantId', 'objective', 'testCommand', 'workspacePath']) {
+for (const field of ['missionId', 'projectId', 'tenantId', 'objective', 'workspacePath']) {
   if (typeof contract[field] !== 'string' || contract[field].trim() === '') {
     refuse(`field "${field}" must be a non-empty string`);
   }
 }
+
+/**
+ * `testCommand`: PRESENT ALWAYS, EMPTY WHEN THE MISSION DECLARES NO CHECK.
+ *
+ * THIS FIELD USED TO BE IN THE LOOP ABOVE, and that one line refused two of the
+ * founder's four mission classes before a provider was ever contacted.
+ * `relay-bridge/julius/mission-contract.ts` documents at length that an empty
+ * command is a DELIBERATE DECLARATION: "a mission with no deterministic check, a
+ * report, an analysis, a plan, can say so deliberately". The runtime has honoured
+ * it all along. `compileBootstrapRequest` sets `deterministicCheck: { declared:
+ * false }`, the live coder runs nothing and records no TEST row, and the build is
+ * held to the DIFF it produced instead. Every piece of that worked. This gate
+ * refused the contract at the door, with a message that read like a malformed
+ * contract rather than an unsupported mission class, so the whole path was
+ * unreachable through the only route that spends money.
+ *
+ * ABSENT IS STILL MALFORMED. Leaving the field out is not a declaration, it is an
+ * omission, and the difference between "this mission has no deterministic check"
+ * and "nobody thought about it" is the entire reason the field is required.
+ *
+ * The rule that replaces the blanket one is neither "every mission must have a
+ * test command" nor "anyone may drop it". It is a CONSISTENCY rule between the
+ * command and what the mission's own acceptance criteria say proves them, and it
+ * lives below, with the criteria it reads.
+ */
+if (typeof contract.testCommand !== 'string') {
+  refuse('field "testCommand" must be a string — empty when the mission declares no deterministic check, absent never');
+}
+const deterministicDeclared = typeof contract.testCommand === 'string' && contract.testCommand.trim() !== '';
 
 const criteria = contract.acceptanceCriteria;
 if (!Array.isArray(criteria) || criteria.length === 0) {
@@ -318,6 +347,80 @@ if (!Array.isArray(criteria) || criteria.length === 0) {
   for (const [index, criterion] of criteria.entries()) {
     if (!criterion || typeof criterion.id !== 'string' || typeof criterion.text !== 'string' || typeof criterion.blocking !== 'boolean') {
       refuse(`acceptance criterion ${index} needs a string id, a string text and a boolean blocking flag`);
+    }
+  }
+}
+
+/* --------------------------------------------- what proves this mission */
+
+/**
+ * WHAT A LIVE BUILD CAN ACTUALLY PRODUCE, which is why this list is two words
+ * long and not twelve.
+ *
+ * The kernel declares twelve evidence types and a task's `requiredEvidenceTypes`
+ * is a free list of them, so it is tempting to let a contract name any of them
+ * and call that generality. It would not be. `verifyTask` scopes evidence TO THE
+ * TASK, and on the live path the only rows the BUILD task ever produces are
+ * `TEST` and `DIFF`. Every `ARTIFACT` row `live-workers.ts` writes belongs to the
+ * architect, a consultation or a rebuttal — none of them the build. So a contract
+ * permitted to require `ARTIFACT`, `BUILD` or `USER_APPROVAL` of its build would
+ * be accepted here and then PARK IN VERIFYING FOREVER waiting for a row nothing
+ * writes. That is a worse failure than a refusal, because it costs the whole
+ * mission's spend before it is visible.
+ *
+ * So the vocabulary a contract may use is the vocabulary the path can answer. If
+ * the live coder later records a type for its build, it is added HERE, in the one
+ * place, with the same argument.
+ */
+const BUILD_EVIDENCE = ['TEST', 'DIFF'];
+
+if (Array.isArray(criteria)) {
+  /** Criteria that say, structurally rather than in prose, what proves them. */
+  const declaring = criteria.filter((criterion) =>
+    criterion && criterion.requiredEvidence !== undefined);
+
+  for (const criterion of declaring) {
+    const declared = criterion.requiredEvidence;
+    const id = typeof criterion.id === 'string' ? criterion.id : 'an unnamed criterion';
+    if (!Array.isArray(declared) || declared.length === 0) {
+      refuse(`criterion "${id}" declares requiredEvidence but not as a non-empty array; omit the field to leave what proves it to the mission's command`);
+      continue;
+    }
+    for (const type of declared) {
+      if (!BUILD_EVIDENCE.includes(type)) {
+        refuse(`criterion "${id}" requires evidence "${String(type)}", which a live build never records; it can produce ${BUILD_EVIDENCE.join(' or ')}, and requiring anything else parks the run in VERIFYING after the spend`);
+      }
+    }
+  }
+
+  /**
+   * THE EVASION GUARD, and the reason this is a consistency rule rather than a
+   * presence rule. A mission may say it has no deterministic check. A mission may
+   * NOT say a test proves it and then not ship the test: that is the same claim
+   * with the checking removed, which is exactly how a code mission would slip its
+   * verification by deleting one field.
+   */
+  const claimsTest = declaring.some((criterion) =>
+    Array.isArray(criterion.requiredEvidence) && criterion.requiredEvidence.includes('TEST'));
+  if (claimsTest && !deterministicDeclared) {
+    refuse('an acceptance criterion requires TEST evidence while testCommand is empty; a mission may declare that it has no deterministic check, but not that a test proves it while shipping no test');
+  }
+
+  /**
+   * AND THE OTHER HALF: AN EMPTY COMMAND MUST NOT MEAN NO VERIFICATION.
+   *
+   * A mission that declares no deterministic check still has to say what DOES
+   * prove each thing it will be judged on, or "no check" quietly becomes "no
+   * standard". The Independent Reviewer is not the answer to this on its own: it
+   * is structural and unconditional already, and a reviewer asked to judge a
+   * criterion with nothing named as its evidence is being asked for an opinion.
+   */
+  if (typeof contract.testCommand === 'string' && !deterministicDeclared) {
+    for (const criterion of criteria.filter((entry) => entry && entry.blocking === true)) {
+      const id = typeof criterion.id === 'string' ? criterion.id : 'an unnamed criterion';
+      if (criterion.requiredEvidence === undefined) {
+        refuse(`testCommand is empty, so blocking criterion "${id}" must declare requiredEvidence; a mission with no deterministic check must still say what proves it`);
+      }
     }
   }
 }
