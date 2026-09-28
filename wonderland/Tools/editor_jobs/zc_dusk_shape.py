@@ -112,6 +112,24 @@ def cells(rect, cols, rows):
     return out
 
 
+def binary_stamp():
+    """WHEN THE RUNNING CODE WAS BUILT, recorded beside every knob readback.
+
+    Wonderland Core's suggestion, and it closes the other half of the sentinel guard. The sentinel
+    proves a knob is absent; this says WHY. Without it a failure reads "the knob did nothing" and
+    sends the next person looking at the C++; with it the failure reads "this binary predates the
+    commit that added the knob", which is a different and much shorter investigation. It has already
+    been the answer twice today -- an editor five minutes too old, then three and a half."""
+    dll = os.path.join(os.path.dirname(os.path.dirname(CHANNEL)),
+                       "Binaries", "Win64", "UnrealEditor-Wonderland.dll")
+    try:
+        import datetime
+        return {"path": dll, "built": datetime.datetime.fromtimestamp(
+            os.path.getmtime(dll)).strftime("%Y-%m-%d %H:%M:%S")}
+    except Exception:                                                  # noqa: BLE001
+        return {"path": dll, "built": "unreadable"}
+
+
 def job():
     RESULT["status"] = "running"
     tests = []
@@ -263,16 +281,17 @@ def job():
     restored = {n: read_f(n) for n in KNOBS}
     RESULT["knobs"] = {"as_found": found, "sentinel_readback": probe, "restored": restored,
                        "sentinel": SENTINEL}
+    RESULT["knobs"]["binary"] = binary_stamp()
     present = [n for n in KNOBS if probe.get(n) is not None and abs(probe[n] - SENTINEL) < 1e-4]
     record("D_CVARS", "all three dusk knobs exist in the RUNNING build, proven by sentinel round-trip",
            len(present) == len(KNOBS), knobs_wanted=list(KNOBS), knobs_answering=present,
-           missing=[n for n in KNOBS if n not in present], as_found=found, readback=probe,
+           missing=[n for n in KNOBS if n not in present], as_found=found, binary=binary_stamp(), readback=probe,
            note="a cvar that does not exist reads 0.0, which is the shipped default of two of these "
                 "three -- so a stale DLL would otherwise pass every readback and the run would measure "
                 "an unchanged world for no visible reason. This editor was five minutes too old once "
                 "already today")
     if len(present) != len(KNOBS):
-        bail("the running build does not carry all three dusk knobs; it predates e486a0e0")
+        bail("the running build does not carry all three dusk knobs; it predates e486a0e0" + " (binary built %s)" % binary_stamp()["built"])
         yield 2.0
         les.editor_request_end_play()
         yield (lambda: ues.get_game_world() is None, 300)
