@@ -114,8 +114,15 @@ def job():
         RESULT["status"] = "VOID: no pawn"
         return
 
+    # THE SKIN IS WORN THROUGH THE UI SUBSYSTEM, NOT THE TEST LIBRARY. zc_eye_split's first run errored on all
+    # five skins with "WonderlandUiTestLibrary has no attribute wear_relay_skin", because I wrote the call from
+    # memory of zc_night_bodies, where it reads ui.wear_relay_skin() and `ui` is L.get_ui(world), not L.
+    ui = L.get_ui(world)
+    if ui is None:
+        RESULT["status"] = "VOID: no UI subsystem"
+        return
     try:
-        L.wear_relay_skin("skeleton_flame")
+        ui.wear_relay_skin("skeleton_flame")
     except Exception as err:                                        # noqa: BLE001
         RESULT["status"] = "VOID: could not wear skeleton_flame: %s" % str(err)[:120]
         return
@@ -167,7 +174,7 @@ def job():
 
     unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour 12.00")
     try:
-        L.wear_relay_skin("relay_og")
+        ui.wear_relay_skin("relay_og")
     except Exception:                                               # noqa: BLE001
         pass
 

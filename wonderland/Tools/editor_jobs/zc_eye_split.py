@@ -60,16 +60,34 @@ def job():
         RESULT["tests"].append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
         emit(tid, "PASS" if ok else "FAIL", name, detail)
 
-    def profile(path, band=(0.36, 0.52), across=(0.30, 0.70)):
+    def profile(path, across=(0.28, 0.72)):
         """The horizontal luma profile across the eye band, and what it says about two eyes.
 
-        band is the vertical slice of the frame the eyes sit in, as fractions of frame height; across is the
-        horizontal window. Both are wide enough to contain the visor at either framing and narrow enough to
-        exclude the ghostfire above the head and the chest emblem below it.
+        THE BAND FINDS ITSELF, because a fixed one cannot serve two framings. The first version took rows
+        0.36 to 0.52 of the frame at BOTH distances -- and at 160 uu the head fills most of the frame while at
+        900 uu it is a fraction of it, so one band cannot contain the visor in both. The gameplay rung would
+        have profiled the chest at one distance and the face at the other and reported both as eyes.
+
+        The eyes are the brightest thing on this figure, so the band is centred on the BRIGHTEST ROW in the
+        upper half of the frame and is a twelfth of the frame tall. That locates the visor at any distance
+        without knowing the framing, and it fails safe: if the brightest thing in the upper half is not an
+        eye, the profile will not have two peaks and the clause fails rather than quietly measuring elsewhere.
         """
         w, h, chan, px = read(path)
-        y0, y1 = int(band[0] * h), int(band[1] * h)
         x0, x1 = int(across[0] * w), int(across[1] * w)
+        best_row, best_val = h // 4, -1.0
+        for y in range(int(0.10 * h), int(0.60 * h), 2):
+            row = y * w * chan
+            peak = 0.0
+            for x in range(x0, min(x1, w), 2):
+                i = row + x * chan
+                lum = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]
+                if lum > peak:
+                    peak = lum
+            if peak > best_val:
+                best_val, best_row = peak, y
+        half = max(int(h / 24.0), 2)
+        y0, y1 = max(best_row - half, 0), min(best_row + half, h)
         cols = []
         for x in range(x0, x1):
             best = 0.0
@@ -98,6 +116,9 @@ def job():
         dimmer = min(peak_l, peak_r)
         return {
             "columns": len(cols),
+            # THE BAND THIS READING USED, so a reader can check it against the capture instead of trusting it.
+            "band_rows": [y0, y1], "band_centre_fraction": round(best_row / float(h), 3),
+            "band_peak_luma": round(best_val / 255.0, 4),
             "peak_left": peak_l, "peak_right": peak_r,
             "peak_left_at": round(li / float(len(cols)), 3), "peak_right_at": round(ri / float(len(cols)), 3),
             "separation_columns": abs(ri - li),
@@ -115,9 +136,13 @@ def job():
     L.focus_game_viewport()
     yield 6.0
 
-    ui = None
-    for candidate in ("WonderlandUiTestLibrary",):
-        ui = L
+    # THE SKIN IS WORN THROUGH THE UI SUBSYSTEM, NOT THE TEST LIBRARY. The first run of this job errored on
+    # every skin with "WonderlandUiTestLibrary has no attribute wear_relay_skin" -- I wrote the call from
+    # memory of zc_night_bodies, where it reads ui.wear_relay_skin() and `ui` is L.get_ui(world), not L.
+    ui = L.get_ui(world)
+    if ui is None:
+        RESULT["status"] = "VOID: no UI subsystem"
+        return
     dog = unreal.GameplayStatics.get_player_pawn(world, 0)
     if dog is None:
         RESULT["status"] = "VOID: no pawn"
@@ -155,7 +180,7 @@ def job():
     RESULT["readings"] = readings
     for skin in SKINS:
         try:
-            L.wear_relay_skin(skin)
+            ui.wear_relay_skin(skin)
         except Exception as err:                                    # noqa: BLE001
             RESULT.setdefault("errors", {})[skin] = str(err)[:140]
             continue
@@ -194,7 +219,7 @@ def job():
 
     unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour 12.00")
     try:
-        L.wear_relay_skin("relay_og")
+        ui.wear_relay_skin("relay_og")
     except Exception:                                               # noqa: BLE001
         pass
 
@@ -212,6 +237,9 @@ def job():
         for view_label, _d in VIEWS:
             og["%s/%s" % (hour_label, view_label)] = ratio("relay_og/%s/%s" % (hour_label, view_label))
     RESULT["relay_og_gap"] = og
+    # THE isinstance GUARD IS WHAT SAVED E02 AND E03 FROM THE SAME VACUOUS PASS, and it is worth saying so
+    # rather than leaving it as a lucky habit: every value came back None on the first run, isinstance rejected
+    # each one, and both clauses failed honestly. E04 had no such guard and passed. Same run, same data.
     record("E02", "Relay OG shows a dark gap between two eyes at every hour and distance",
            bool(og) and all(isinstance(v, float) and v <= GAP_RATIO for v in og.values()),
            trough_over_dimmer_peak=og, ceiling=GAP_RATIO,
@@ -253,8 +281,17 @@ def job():
     RESULT["other_skins"] = others
     merging = sorted(k for k, v in others.items() if v.get("merges"))
     RESULT["skins_that_merge"] = merging or None
-    record("E04", "no other skin merges its eyes into one mass", not merging,
-           per_skin=others, merging=merging or None, ceiling=GAP_RATIO,
+    # E04 PASSED VACUOUSLY ON ITS FIRST RUN, on zero readings. Every skin errored out, `others` held five
+    # entries whose worst_gap_ratio was None, nothing was flagged as merging, and "no other skin merges its
+    # eyes" reported PASS over a run that had not photographed anything. A clause whose failure condition is a
+    # non-empty list passes hardest when the list could not be built.
+    #
+    # So it now requires a MEASUREMENT for every skin it claims to clear.
+    measured = [k for k, v in others.items() if isinstance(v.get("worst_gap_ratio"), float)]
+    record("E04", "no other skin merges its eyes into one mass",
+           not merging and len(measured) == len(SKINS) - 1,
+           per_skin=others, merging=merging or None, measured=sorted(measured),
+           wanted=len(SKINS) - 1, ceiling=GAP_RATIO,
            note="reported, not corrected. The founder's instruction is to inspect the others and not to "
                 "redesign the ones that are already right, so this names the ones that are not.")
 
