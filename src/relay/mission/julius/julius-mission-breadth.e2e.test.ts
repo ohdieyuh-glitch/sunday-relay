@@ -140,6 +140,28 @@ const GAME_TOOLING: Mission = {
   criterion: 'The blend transition values are changed and the chosen values are written down.',
 };
 
+/**
+ * CATEGORY E — A USEFUL EVERYDAY TASK, of the kind the founder named fourth:
+ * "useful everyday / basic-necessity tasks that available tools can actually
+ * perform safely".
+ *
+ * THE SAFETY CLAUSE IS THE INTERESTING PART, and it is why this mission's
+ * deliverable is a DOCUMENT rather than an action. Julius's tools today read and
+ * write files through an executor; nothing in this repository can place an order,
+ * send a message or move money, and a mission whose acceptance depended on one of
+ * those would be a mission Julius cannot honestly complete. So the everyday task
+ * Julius can do NOW is the preparation: the plan, the list, the comparison a
+ * person then acts on. That is a real deliverable, and pretending otherwise —
+ * scripting a fake "order placed" — is exactly the laundering this suite exists
+ * to refuse.
+ */
+const EVERYDAY: Mission = {
+  objective: 'Plan the week’s meals for two people under £60, using what is already in the cupboard, and write the shopping list that follows from it.',
+  deliverable: { evidence: 'ARTIFACT', summary: 'meal-plan.md and shopping-list.md written: seven dinners, £57.40, cupboard items excluded.' },
+  requiredEvidence: ['ARTIFACT'],
+  criterion: 'A seven-day plan and a shopping list exist, the list totals under the stated budget, and nothing already in the cupboard is on it.',
+};
+
 describe('the mission lifecycle carries work that is not code', () => {
   it('completes a professional-work mission with no tests and no test evidence', async () => {
     const harness = build(RESEARCH);
@@ -170,6 +192,47 @@ describe('the mission lifecycle carries work that is not code', () => {
       .filter((event) => event.kind === 'DISPATCH' && event.outcome === 'COMPLETED')
       .map((event) => event.workerId));
     expect(dispatched).toEqual(new Set(['architect', 'worker', 'reviewer']));
+  });
+
+  it('completes an everyday practical mission — the fourth class, and no code anywhere in it', async () => {
+    // The founder's four mission classes are software, game, professional and
+    // everyday. Three had rows; this is the fourth, and it exercises the same
+    // lifecycle with the same rules: a plan, a deliverable, an independent
+    // review, a verified completion. Nothing about the runtime knows or cares
+    // that the artifact is a shopping list.
+    const harness = build(EVERYDAY);
+    await drain(harness.loop);
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run!.state, 'a household task completes through the same loop as a refactor').toBe('COMPLETED');
+    const evidence = await harness.store.evidenceForRun('run-1', 'prj-1');
+    expect(evidence.filter((item) => item.type === 'TEST'), 'no test was invented for a task that has none').toEqual([]);
+    expect(evidence.some((item) => item.type === 'ARTIFACT' && item.safeSummary.includes('shopping-list.md')),
+      'the deliverable itself is the evidence').toBe(true);
+    // AND THE REVIEWER JUDGED IT: a completion without an independent review is
+    // the failure mode this whole lane exists to prevent, in every class.
+    expect(evidence.some((item) => item.type === 'REVIEW_FINDING' && item.status === 'PASSED')).toBe(true);
+  });
+
+  it('refuses to complete an everyday mission whose acceptance needs an action no tool can take', async () => {
+    // THE HONEST LIMIT, ASSERTED RATHER THAN DESCRIBED. "Order the groceries" is
+    // not a deliverable Julius can produce: no tool in this repository places an
+    // order, so the criterion can never be satisfied by any evidence a worker
+    // could bring. The mission must park unverified rather than complete on a
+    // document that claims the order was placed — which is what a laundered
+    // completion would look like.
+    const ORDERING: Mission = {
+      objective: 'Order the week’s groceries from the shop and confirm the delivery slot.',
+      deliverable: { evidence: 'ARTIFACT', summary: 'order-draft.md written: basket contents and the slot to choose.' },
+      // The contract demands proof of an ACTION — a tool receipt — and no tool here produces one.
+      requiredEvidence: ['TOOL_RESULT'],
+      criterion: 'The groceries are ordered and a delivery slot is confirmed by the shop.',
+    };
+    const harness = build(ORDERING);
+    await drain(harness.loop);
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run!.state, 'a mission whose evidence cannot exist must not complete').not.toBe('COMPLETED');
+    const evidence = await harness.store.evidenceForRun('run-1', 'prj-1');
+    expect(evidence.some((item) => item.type === 'TOOL_RESULT'), 'and no worker invented the receipt').toBe(false);
   });
 
   it('still repairs a non-code mission when the reviewer rejects it', async () => {
