@@ -244,3 +244,38 @@ makes it worse than a wrong one.
 97 per cent crushed and never recorded where the mascot stood; the world lane read the same district and hour
 four times brighter, because their patch had nobody standing on it. Record the subject's position, and the
 distance to the nearest thing that could explain a good result.
+
+## A method carries its assumptions with it
+
+Max-per-column finds a small bright thing on a DARK subject. Carried unchanged to a WHITE one it
+saturates: the other lane's eye-gap profile took the brightest pixel per column across Relay OG's head,
+the head is white, every column returned about 0.999, and the profile was flat. The instrument reported
+"no gap between the eyes" while a 4x crop of the same capture showed two clearly separated glowing eyes
+with a black visor between them. The method had been correct on the night-body job, where the subject
+really is dark, and the assumption did not travel with it.
+
+**Chroma — max channel minus min channel — separates all three by construction**: white head near zero,
+black visor near zero, coloured glow high whatever its hue. On the five captures already on disk, luma
+gave 0.946 / 0.949 / 1.000 / 1.000 / 0.962 and chroma gave 0.094 / 0.333 / 0.452 / 0.733 / 0.252.
+
+Two rules follow, and the second is the cheaper one:
+
+- **Before reusing a measurement technique, name the property of the subject it relies on** and check
+  the new subject has it. Bright-on-dark, dark-on-bright, centred-in-frame, monotone-approach.
+- **Validate a new method against captures you already have** before spending a run on it. That is free
+  and it caught this on the sixth version.
+
+The same job also split its window at the midpoint and took the max of each half, which assumes the face
+is centred. The head sat at 0.44, so both halves peaked inside the same eye and every column "between
+the peaks" was eye.
+
+## Prove the instrument can detect the thing before trusting it to say the thing is absent
+
+A null result from an instrument that has never been shown to register a positive is not evidence.
+`zc_dusk_cause` tests whether the moon's brightness reaches the ground at dusk, where the claim is that
+it cannot — so it first removes the moon at 23:00, where it certainly does, and **voids the entire run**
+if that makes no difference. Failing the positive control is not a red clause beside the others; it means
+nothing else in the run may be read.
+
+Same shape as validating a method against known data, one level up: there, you check the method on a case
+whose answer you know; here, you check the instrument on a case whose answer you know.

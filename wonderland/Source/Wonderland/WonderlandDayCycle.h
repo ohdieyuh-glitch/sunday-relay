@@ -23,7 +23,15 @@ class ASkyLight;
 class AExponentialHeightFog;
 class APostProcessVolume;
 
-UCLASS()
+// BlueprintType SO A PROOF CAN READ Nightfall DIRECTLY. GetNightAmount() is already
+// UFUNCTION(BlueprintPure) and was unreachable from Python for want of this specifier, so the gate that
+// checks whether a build carries the Nightfall complement failed twice on two different builds -- not
+// because the fix was absent but because the instrument was. The workaround was to divide the moon's
+// intensity by its value at 23:00, which is sound arithmetic and still a derivation standing in for a
+// reading the engine was willing to give.
+//
+// Adds no behaviour.
+UCLASS(BlueprintType)
 class WONDERLAND_API UWonderlandDayCycleSubsystem : public UTickableWorldSubsystem
 {
 	GENERATED_BODY()

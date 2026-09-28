@@ -46,7 +46,21 @@ struct FWonderlandPracticalLight
 	UPROPERTY() FString Label;
 };
 
-UCLASS()
+// BlueprintType SO A PROOF CAN READ THE AUTHORITATIVE NUMBERS INSTEAD OF INFERRING THEM.
+//
+// DescribePracticals() below is already UFUNCTION(BlueprintPure) and reports defined, ACTIVE, pool,
+// night, gain, count and radius -- every value a light-budget question needs. None of it was reachable:
+// without BlueprintType the class is not exposed to the Python bindings, so
+// SubsystemBlueprintLibrary.get_world_subsystem returned nothing on two separate builds and two gates
+// came back "EVIDENCE ONLY" for want of an instrument rather than for want of a fix.
+//
+// What a proof did instead was COUNT SPAWNED ACTORS and infer -- which is how "31 lit of a pool of 48"
+// became "the radius must really be 4,200", an inference that fitted the data beautifully and was false:
+// the readback says 12,000, the declared default. ActiveCount is the engine's own answer to that
+// question and it was sitting behind one missing specifier the whole time.
+//
+// Adds no behaviour. Exposes the class to reflection consumers; every member keeps the access it had.
+UCLASS(BlueprintType)
 class WONDERLAND_API UWonderlandPracticalLightsSubsystem : public UTickableWorldSubsystem
 {
 	GENERATED_BODY()
