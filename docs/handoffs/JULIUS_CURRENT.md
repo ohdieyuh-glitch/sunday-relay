@@ -614,13 +614,15 @@ landing page.
 
 So the founder's chain reads, honestly: REAL WONDERLAND → REAL MISSION CONTRACT →
 REAL JULIUS RUN → **(not yet) REAL EXECUTION** → REAL DURABLE STATE → STATE
-RETURNS TO UNREAL → **(not yet) USER SEES THE CORRECT RESULT**. Two links remain,
-and neither is this lane's to close alone: execution needs the paid run (the
-founder's), and the visible Missions panel still draws the simulated presentation
-— a player reads "No mission is running" while the world follows a real run
-(their clause A06e, Wonderland's to wire). The acceptance also predates the
-`result` view, so no Unreal client has called the projection a user would
-actually be shown.
+RETURNS TO UNREAL → **(not yet) USER SEES THE CORRECT RESULT**. ONE link remains and it is the
+founder's to authorise: REAL EXECUTION. Their second pass (all 23 clauses, Core
+build `b281f6a1`, on Julius `b46092af`) closed the visible panel — it names the
+mission and its run under a JULIUS LIVE badge, across a play restart — leaving a
+HUD strip headline that reads UNOBSERVED beside a live link, which Wonderland
+Core is correcting. Neither pass EXECUTED anything: both runs stayed READY and
+never dispatched, which is exactly the link the paid mission closes. And no
+Unreal client has called the `result` view, so the projection a user would be
+shown has never been rendered.
 
 #### Not done, by decision or by gate
 
