@@ -32,6 +32,7 @@
 # NOT CONCURRENT: this job owns PIE.
 CONCURRENT = False
 
+import hashlib
 import math
 import os
 import unreal
@@ -153,6 +154,15 @@ def job():
         return {"hot_px": n, "mean_luma": round(tot / n, 4) if n else 0.0,
                 "clipped_fraction": round(clipped / float(n), 4) if n else 0.0,
                 "warm_fraction": round(warm / float(n), 4) if n else 0.0}
+
+    def fingerprint(path):
+        """md5 of the file. NOT a channel global -- an earlier version assumed it was and died at the
+        eighteenth frame of the first arm, after the run had already stopped the clock and worn the skin."""
+        try:
+            with open(path, "rb") as fh:
+                return hashlib.md5(fh.read()).hexdigest()
+        except Exception:                                           # noqa: BLE001
+            return None
 
     def spread(values):
         if len(values) < 2:
