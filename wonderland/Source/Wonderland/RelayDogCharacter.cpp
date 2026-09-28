@@ -422,6 +422,37 @@ private:
 
 ARelayDogCharacter::ARelayDogCharacter()
 {
+	// ---- THE PLAYER IS NEVER UNLOADED. This one line is why the Dog can leave the place it started.
+	//
+	// MEASURED 2026-09-28 (zc_dog_killz, zc_dog_cell). Teleporting the Dog out of the World Partition
+	// cell it was placed in destroys it, about half a second after it lands:
+	//
+	//     near  15.0 m  ->  SURVIVED   (8 s, standing)
+	//     far  606.7 m  ->  DESTROYED  (0.7 s after landing)
+	//
+	//     t=0.00  z=912.0  MOVE_WALKING   placed 900 uu above the ICARUS gate
+	//     t=0.95  z= 75.2  MOVE_WALKING   LANDED -- floor -14 plus the 89.2 capsule half-height
+	//     t=1.20  z= 75.2  MOVE_WALKING   still standing, motionless
+	//     t=1.25  DESTROYED, world still up
+	//
+	// It lands on real ground and stands there. Nothing about the destination is wrong, which is why
+	// four hypotheses about the destination all failed: a hole, non-colliding paving, KillZ, and a
+	// cell that had not streamed in. The Dog IS the streaming source, so moving it far stops it being
+	// a source where it WAS; those cells unload, and a level-placed spatially-loaded actor is
+	// destroyed with its cell. It goes down with the ground it LEFT.
+	//
+	// A pawn that can be unloaded by moving cannot fast-travel, warp to a checkpoint, or be placed at
+	// a contract -- and a player destroyed by one is unrecoverable, because nothing respawns it. The
+	// nation walks reported "the DOG went away at waypoint 6 after 40.6 m"; that is this, reached on
+	// foot instead of by teleport, and z=75.2 matches exactly.
+	//
+	// IN THE CONSTRUCTOR RATHER THAN ON THE PLACED ACTOR, deliberately. The map is a shared, untracked
+	// Content junction and the external actor packages are not in the asset registry, so a script
+	// cannot reach the instance; more importantly a constructor default is version-controlled,
+	// reviewable, and applies to every future placement of this class rather than to one actor
+	// somebody remembered to tick.
+	bIsSpatiallyLoaded = false;
+
 	// ---- NAVIGATION IS GENERATED AROUND THE DOG, not baked across the world.
 	//
 	// The level had no navigation data whatsoever: NavigationSystemV1 returned no path over 400 m, so nothing
