@@ -379,3 +379,27 @@ grep -rln "max(window) - min(window)" zc_*.py | wc -l   # the difference is the 
 When those two numbers differ, the difference is a list, not a rounding error. And check the file you
 just edited for a neighbour that already solved it — three of the five above were sitting in the same
 file as their own answer.
+
+## Known exposed gates — OPEN BACKLOG, not cleared
+
+These `all()` clauses walk a collection whose only upstream protection is a SUBJECT check
+(`if start is None`, `if terr is None`). That catches a missing subsystem, not an empty result: a walk
+can begin from a perfectly valid start and append nothing. `Tools/find_vacuous_gates.py` does not flag
+them, because its axis 3 accepts any early return — which means these are **argued safe, not shown
+safe**, and the script's own docstring says so.
+
+None is in the current loop. Repair when the job is next touched; do not treat the scan's silence as a
+clean bill.
+
+| job | clauses |
+|---|---|
+| `zc_walk_after_wp.py` | K01, K02, K03 |
+| `zc_streaming_floor.py` | R01, R03 |
+| `zc_checkpoints.py` | K06, K07 |
+| `zc_beta_walk.py` | W02, W06 |
+| `zc_beta_perf.py` | F02 |
+| `zc_avatar_hitch.py` | H00 |
+| `zc_avatar_ladder.py` | A04 |
+
+Repaired already, for contrast: `zc_tile46` T00, `zc_floor_after_wp` F02, and `zc_territories` T11/T21/
+T22/T23/T31/T32 — the last six against `len(rows)`, the pattern T10 in that same file already used.
