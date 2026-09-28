@@ -221,6 +221,21 @@ def job():
 
     # ---- HOW MANY MANIFEST LIGHTS ARE ACTUALLY IN RANGE, computed from the file against the radius the
     # engine reports, not against the declared default.
+    def candidates_at(px, py, radius):
+        """Manifest lights within `radius` of an arbitrary point -- so the count can be taken where the
+        pawn ACTUALLY is rather than where it was asked to be."""
+        try:
+            rows = json.loads(open(MANIFEST, encoding="utf-8").read())["lights"]
+        except Exception:                                              # noqa: BLE001
+            return None
+        r2 = radius * radius
+        n = 0
+        for r in rows:
+            dx, dy = float(r["x"]) - px, float(r["y"]) - py
+            if dx * dx + dy * dy <= r2:
+                n += 1
+        return n
+
     def candidates_within(radius):
         try:
             rows = json.loads(open(MANIFEST, encoding="utf-8").read())["lights"]
@@ -269,6 +284,26 @@ def job():
         yield 3.0                                                      # an independent wait, doing nothing
         d2 = describe()
         second = None if d2 is None else int(d2.get("active", -1))
+        # ---- WHERE IS THE PAWN, AT THIS RUNG? The one datum I never recorded, and the only input to
+        # Assign() other than the two knobs.
+        #
+        # zzAG1 read active = 31 at count 48 and again at count 192, with 96 in between and 184
+        # candidates inside the radius the engine reports, from a position set once before the loop. On
+        # Lit = Min(Near, Pool) those should be 48, 96 and 184. Near = 31 would need a far smaller
+        # radius or a different Eye, and the radius reads 12000 every time -- so the remaining suspect
+        # is the Eye, which is the PAWN, which nothing in this job has been watching after the teleport.
+        # A reading whose subject's position is unrecorded is the mistake I have now watched both lanes
+        # make three times.
+        pnow = unreal.GameplayStatics.get_player_pawn(live(), 0)
+        pwhere = (None if pnow is None else
+                  [round(pnow.get_actor_location().x, 1), round(pnow.get_actor_location().y, 1),
+                   round(pnow.get_actor_location().z, 1)])
+        pdrift = (None if pwhere is None else
+                  round(math.hypot(pwhere[0] - SPOT[0], pwhere[1] - SPOT[1]), 1))
+        # and what the manifest says is in range OF WHERE IT ACTUALLY IS
+        in_range_here = (None if pwhere is None else
+                         candidates_at(pwhere[0], pwhere[1],
+                                       float((d2 or {}).get("radius", 12000.0))))
         stable = (first is not None and second is not None and first == second)
         a_total, a_lit = actors_lit()
         f1, g1 = patch(FRAME_RECT), patch(GROUND_RECT)
@@ -288,6 +323,8 @@ def job():
             "pool": (d2 or {}).get("pool"), "defined": (d2 or {}).get("defined"),
             "actors_total": a_total, "actors_lit": a_lit,
             "manifest_in_radius": in_range,
+            "pawn_at_rung": pwhere, "pawn_drift_uu": pdrift,
+            "manifest_in_radius_where_pawn_is": in_range_here,
             "luma": round(((f1 or {}).get("luma", 0.0) + (f2 or {}).get("luma", 0.0)) / 2.0, 4)
             if f1 and f2 else None,
             "spread": round(abs((f1 or {}).get("luma", 0.0) - (f2 or {}).get("luma", 0.0)), 4)
@@ -312,6 +349,22 @@ def job():
         les.editor_request_end_play()
         yield (lambda: ues.get_game_world() is None, 300)
         return
+
+    # ---- DID THE PAWN STAY PUT? Assign() takes its Eye from the pawn, so a rung measured after a drift
+    # is a different question with the same label.
+    drifted = [{"count": r["count_asked"], "radius": r["radius_asked"],
+                "pawn": r.get("pawn_at_rung"), "drift_uu": r.get("pawn_drift_uu")}
+               for r in good
+               if r.get("pawn_drift_uu") is None or r["pawn_drift_uu"] > 500.0]
+    record("P_STILL", "the pawn is at the measurement spot at EVERY rung, not just when it was placed",
+           len(drifted) == 0, drifted_rungs=drifted,
+           pawn_by_rung={("c%d_r%s" % (r["count_asked"], r["radius_asked"])): r.get("pawn_at_rung")
+                         for r in good},
+           in_radius_where_it_is={("c%d_r%s" % (r["count_asked"], r["radius_asked"])):
+                                  r.get("manifest_in_radius_where_pawn_is") for r in good},
+           note="placed once before the loop and never checked again. Active read 31 at count 48 and at "
+                "count 192 with 184 candidates in radius, where Lit = Min(Near, Pool) wants 48 and 184 "
+                "-- and the only input to Assign other than the two knobs is the Eye, which is this")
 
     moving = [{"count": r["count_asked"], "radius": r["radius_asked"],
                "before": r["active_first"], "after": r["active_after_wait"]}
