@@ -17,6 +17,14 @@
 # One repair cycle is enough to prove the repair path WORKS if the reviewer finds
 # a genuine defect; it is not an instruction to find one.
 #
+# DRY-RUN VERIFIED AT ZERO SPEND (dryrun/dryrun.sh). Three scenarios, all as
+# required: the unfixed slice FAILS naming the missing export; a HALF fix with
+# both helpers exported and no call site touched still FAILS 3 of 8, so the spec
+# enforces its own "a helper nobody calls is not a fix" rule on the Linux runner
+# rather than leaving it to the reviewer; and a minimal correct change passes
+# 8/8. A paid run should never be the first thing to discover that a contract is
+# unsatisfiable or that its test is vacuous.
+#
 # The seeded specification (`seed/.../node-tool-search-paths.test.ts`) is
 # provisioned beside it and is NOT listed here: it is the mission's specification,
 # not its deliverable, and the contract forbids editing it.
