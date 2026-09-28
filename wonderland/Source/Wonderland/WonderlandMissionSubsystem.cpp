@@ -505,7 +505,7 @@ void UWonderlandMissionSubsystem::MountStrip()
 					SNew(SWonderlandPixelText)
 					.CellSize(2.9f)
 					.Color(WonderlandUi::Cream())
-					.Text_Lambda([WeakThis]() { return WeakThis.IsValid() ? WeakThis->GetBeatLabel() : FString(); })
+					.Text_Lambda([WeakThis]() { return WeakThis.IsValid() ? WeakThis->GetHeadlineLabel() : FString(); })
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
@@ -544,7 +544,7 @@ void UWonderlandMissionSubsystem::MountStrip()
 						MissionId.IsNone() ? TEXT("none") : *MissionId.ToString(),
 						Mission->GetPresentedEventType().IsNone() ? TEXT("-") : *Mission->GetPresentedEventType().ToString(),
 						*Mission->GetLastEventVerdict(),
-						*Mission->GetBeatPhase(Mission->GetBeatId()),
+						*Mission->GetHeadlineState(),
 						*Mission->GetChakraName(), Mission->GetChakraStep(), WonderlandChakraSteps,
 						*Mission->GetDogActLabel(), Mission->IsContractAnchored() ? TEXT(" · ANCHORED") : TEXT(""),
 						*Mission->GetCompanionFormation(),
@@ -1578,6 +1578,44 @@ FString UWonderlandMissionSubsystem::GetFollowedStateName() const
 		return FString();
 	}
 	return WonderlandTaskStateName(Tasks->GetFollowedState());
+}
+
+FString UWonderlandMissionSubsystem::GetFollowedStateLabel() const
+{
+	const UWonderlandMissionTaskSubsystem* Tasks = TaskSet();
+	if (Tasks == nullptr || !Tasks->IsFollowingJuliusRun())
+	{
+		return FString();
+	}
+	return WonderlandTaskStateDisplayLabel(Tasks->GetFollowedState());
+}
+
+FString UWonderlandMissionSubsystem::GetHeadlineLabel() const
+{
+	// The fold wins whenever it has observed a beat: that is the stage the Dog is performing. Only the fold's
+	// "nothing observed" gives way, and only to a REAL followed run -- a fixture never reaches this branch.
+	if (Beat == EWonderlandMissionBeat::Unobserved && IsFollowingRealRun())
+	{
+		const FString Label = GetFollowedStateLabel();
+		if (!Label.IsEmpty())
+		{
+			return Label;
+		}
+	}
+	return GetBeatLabel();
+}
+
+FString UWonderlandMissionSubsystem::GetHeadlineState() const
+{
+	if (Beat == EWonderlandMissionBeat::Unobserved && IsFollowingRealRun())
+	{
+		const FString Label = GetFollowedStateLabel();
+		if (!Label.IsEmpty())
+		{
+			return Label;
+		}
+	}
+	return GetBeatPhase(GetBeatId());
 }
 
 FString UWonderlandMissionSubsystem::GetProvenanceBanner() const

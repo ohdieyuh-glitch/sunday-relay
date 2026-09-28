@@ -141,6 +141,26 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FString GetFollowedStateName() const;
 
+	/**
+	 * The followed run's state in the words a PLAYER reads (founder's decision 3: QUEUED, WORKING, REVIEWING,
+	 * COMPLETE ...), shown beside Julius's raw state, never instead of it. Empty when nothing is followed.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetFollowedStateLabel() const;
+
+	/**
+	 * THE STRIP'S HEADLINE. The fold's beat when the fold has observed one; while a real Julius run is followed
+	 * and the fold has observed NOTHING -- a READY run sends no event there -- the followed run's player-facing
+	 * state instead. The beat's own word for that moment, UNOBSERVED, sat in large type beside JULIUS LIVE and
+	 * read as "not connected" (founder, 2026-09-27: "the large headline must NOT say UNOBSERVED").
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetHeadlineLabel() const;
+
+	/** The same rule for the strip's STATE slot: the beat's phase, or the followed run's player-facing state. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetHeadlineState() const;
+
 	/* ------------------------------------------------------------ the deterministic simulation */
 
 	/**

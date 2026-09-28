@@ -215,7 +215,9 @@ void SWonderlandMissionsPanel::Construct(const FArguments& InArgs)
 				// THE MAPPED STATE, NOT THE WORD QUEUED. I wrote QUEUED as a literal here half an hour after
 				// removing three other literals that had gone stale, and it would have printed "QUEUED through
 				// Julius ... Julius reports READY" -- a sentence contradicting itself in its own second clause.
-				const FString Mapped = Weak->GetFollowedStateName();
+				// The player-facing word (founder's decision 3: WORKING / Julius: EXECUTING), with Julius's raw
+				// state beside it in the same sentence.
+				const FString Mapped = Weak->GetFollowedStateLabel();
 				return FText::FromString(FString::Printf(
 					TEXT("%s through Julius. Run %s. Julius reports %s. No event has reached the contract yet, "
 						"so the stage ladder below stays unlit until one does."),

@@ -39,7 +39,7 @@ DEAD_BRIDGE = "http://127.0.0.1:1"
 PAIRING_ATTEMPTS = 3
 # Every clause this job declares. A job stopped part-way -- an exception, the editor closing it -- has recorded only
 # passes so far; without this list its status would read "all clauses pass" over clauses that never ran.
-DECLARED = ["A01", "A02", "A03", "A04", "A05", "A06", "A06b", "A06e", "A06c", "A06d", "A07", "A08", "A09", "A10", "A10b", "A11"]
+DECLARED = ["A01", "A02", "A03", "A04", "A05", "A06", "A06b", "A06e", "A06f", "A06c", "A06d", "A07", "A08", "A09", "A10", "A10b", "A11"]
 
 
 def job():
@@ -251,6 +251,15 @@ def job():
                "the mission subsystem's fold, so the fold must be this mission",
                fold == mission, fold_mission=fold or "(none)", mission=mission,
                fixture_running=bool(missions.is_fixture_running()) if missions else None)
+        # THE STRIP, the two halves together (founder, 2026-09-27: "If a real Julius run is being followed, the large
+        # headline must NOT say UNOBSERVED"). Each half can be right while the pair reads as a contradiction -- the
+        # second run's photo showed a correct JULIUS LIVE line under a headline still saying UNOBSERVED.
+        headline = str(missions.get_headline_label()) if missions else ""
+        banner = str(missions.get_provenance_banner()) if missions else ""
+        record("A06f", "the STRIP agrees with the panel: its headline reads the followed run's state (QUEUED), never "
+               "UNOBSERVED, while its provenance line names JULIUS LIVE, the run and Julius's READY",
+               headline == "QUEUED" and "JULIUS LIVE" in banner and run in banner and "READY" in banner,
+               headline=headline, banner=banner)
 
         # ------------------------------------------------------------- switch runs
         # Wonderland Core, 2026-09-27: the automatic clear on a run CHANGE had no gate. Two halves, because the

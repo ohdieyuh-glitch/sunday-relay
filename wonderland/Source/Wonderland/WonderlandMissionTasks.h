@@ -68,6 +68,15 @@ enum class EWonderlandTaskState : uint8
 
 WONDERLAND_API const TCHAR* WonderlandTaskStateName(EWonderlandTaskState State);
 
+/**
+ * THE WORD A PLAYER READS for a state -- the founder's decision 3 (2026-09-27): show a user-friendly state AND
+ * Julius's authoritative raw state beside it (QUEUED / Julius: READY, WORKING / Julius: EXECUTING, COMPLETE /
+ * Julius: COMPLETED). Separate from WonderlandTaskStateName on purpose: that one is an IDENTIFIER the task
+ * set parses back when it reloads, so its words cannot change for readability. Readability never changes a
+ * meaning either: BLOCKED is not paused, WAITING is not working, CANCELLED is not failed.
+ */
+WONDERLAND_API const TCHAR* WonderlandTaskStateDisplayLabel(EWonderlandTaskState State);
+
 /** True for every state that means a real Mission Contract exists -- that is, everything but DRAFT. */
 WONDERLAND_API bool WonderlandTaskIsContract(EWonderlandTaskState State);
 

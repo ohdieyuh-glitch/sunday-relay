@@ -97,7 +97,7 @@ const CONTRACT = {
 };
 // Every clause the editor half declares, its own completeness clause (A12) included. One that never ran is not a pass.
 // Clause ids: A = the editor job's, O = this orchestrator's view of the job, J = Julius's side.
-const JOB_CLAUSES = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A06b', 'A06e', 'A06c', 'A06d', 'A07', 'A08', 'A09', 'A10', 'A10b', 'A11', 'A12'];
+const JOB_CLAUSES = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A06b', 'A06e', 'A06f', 'A06c', 'A06d', 'A07', 'A08', 'A09', 'A10', 'A10b', 'A11', 'A12'];
 // The key for the SECOND run the job switches to. Fixed, so every attempt resolves to the same run and no attempt
 // makes a new one (Julius 52df8e63: one key is one rerun).
 const SWITCH_RERUN_KEY = 'pie-acceptance-switch-v1';
