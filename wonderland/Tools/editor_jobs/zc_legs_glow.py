@@ -182,8 +182,52 @@ def job():
                          "cells": cells, "box": [bx0, by0, bx1, by1]}
         return out
 
+    # ---- THE CONTROL IS A SKIN WITH NO FIRE, NOT THE SAME SKIN TWICE.
+    #
+    # THE FIRST VERSION COMPARED SKELETON FLAME LAMPS-ON AGAINST LAMPS-OFF and voided itself: the torso read
+    # 0.6604 lit and 0.7651 UNLIT. The figure boxes were near identical, so it was not a framing shift -- the
+    # stage figure looks around and breathes, so two captures seconds apart are two different poses, and on a
+    # mascot that is overwhelmingly emissive the pose moves the mean more than the lamps do.
+    #
+    # THAT SECOND FACT IS THE POINT AND IT MAKES THE COMPARISON THE WRONG ONE. Skeleton Flame barely dims
+    # when the lamps go out, because most of it is emitting. So "did the figure get darker" is a weak
+    # question to put to THIS subject, and a pose wobble is enough to reverse its sign.
+    #
+    # RELAY OG ANSWERS IT INSTEAD: the one skin in the lineup with no fire of its own. With the lamps off it
+    # should very nearly disappear, and if it does not then the knob is not reaching the stage and nothing
+    # below means anything. Same instrument as the day-night control -- put the question to a subject that
+    # can actually answer it -- and it needs no second frame of the subject under test.
+    #
+    # AND THE MEASUREMENT ITSELF NEEDS ONLY THE LAMPS-OFF FRAME. With no incident light in the room, every
+    # visible pixel is emitting. The lamps-on frame is kept only to show what the same bands look like lit.
     frames = {}
     RESULT["frames"] = frames
+
+    SL.execute_console_command(world, "%s %.6f" % (LIGHTS, 0.0))
+    yield 2.0
+    try:
+        ui.wear_relay_skin("relay_og")
+    except Exception:                                               # noqa: BLE001
+        pass
+    yield 6.0
+    control_path = os.path.join(ROOT, "control_relay_og_lamps_off.png")
+    control_seen = None
+    try:
+        if L.capture_game_viewport(control_path):
+            control_seen = figure_and_bands(control_path)
+    except Exception as err:                                        # noqa: BLE001
+        RESULT.setdefault("errors", {})["control"] = str(err)[:140]
+    RESULT["matte_with_no_lamps"] = {
+        "found_a_figure": control_seen is not None,
+        "torso_mean": (control_seen or {}).get("torso", {}).get("mean"),
+        "torso_lit_fraction": (control_seen or {}).get("torso", {}).get("lit_fraction"),
+    }
+    try:
+        ui.wear_relay_skin(SKIN)
+    except Exception:                                               # noqa: BLE001
+        pass
+    yield 6.0
+
     for tag, level in (("lamps_on", as_found), ("lamps_off", 0.0)):
         SL.execute_console_command(world, "%s %.6f" % (LIGHTS, level))
         yield 3.0
@@ -232,17 +276,24 @@ def job():
         return
 
     # ---- THE CONTROL, BEFORE ANY READING IS INTERPRETED.
-    drop = round(on["torso"]["mean"] - off["torso"]["mean"], 4)
-    RESULT["lamp_switch"] = {"torso_lamps_on": on["torso"]["mean"], "torso_lamps_off": off["torso"]["mean"],
-                             "drop": drop, "read_back_off": frames["lamps_off"]["read_back"]}
-    live = bool(frames["lamps_off"]["read_back"] == 0.0 and drop > 0.05)
-    record("L00", "turning the stage lamps off actually darkened the figure",
-           live, **RESULT["lamp_switch"],
-           note="THE CONTROL. If the switch does nothing, everything below compares one condition with "
-                "itself -- which is exactly what a fixed tolerance on SetGlowScale produced earlier tonight, "
-                "where four rungs photographed one picture and it read as a finding about the stage.")
+    matte = RESULT["matte_with_no_lamps"]
+    matte_dark = (matte["torso_lit_fraction"] is not None and matte["torso_lit_fraction"] <= 0.25)
+    live = bool(frames["lamps_off"]["read_back"] == 0.0 and matte_dark)
+    RESULT["lamp_switch"] = {"read_back_off": frames["lamps_off"]["read_back"],
+                             "matte_torso_lit_fraction": matte["torso_lit_fraction"],
+                             "matte_torso_mean": matte["torso_mean"],
+                             "skeleton_torso_lamps_on": on["torso"]["mean"],
+                             "skeleton_torso_lamps_off": off["torso"]["mean"]}
+    record("L00", "with the lamps off a skin with NO fire nearly disappears -- the switch reaches the stage",
+           live, **RESULT["lamp_switch"], matte_ceiling=0.25,
+           note="THE CONTROL, and it is Relay OG rather than the subject. Skeleton Flame barely dims when "
+                "the lamps go out because most of it is emitting -- which is the finding, not a fault -- so "
+                "asking IT whether the lamps went off is asking a question it cannot answer. The first "
+                "version did exactly that and voided on a pose wobble: torso 0.6604 lit against 0.7651 "
+                "unlit, with the figure box unmoved.")
     if not live:
-        RESULT["status"] = "VOID: the lamp switch did not change the picture"
+        RESULT["status"] = ("VOID: the lamp switch could not be shown to reach the stage (matte lit fraction "
+                            "%s)" % matte["torso_lit_fraction"])
         return
 
     # ---- AND THE FOUNDER'S QUESTION, asked directly: with no incident light, what is still emitting?

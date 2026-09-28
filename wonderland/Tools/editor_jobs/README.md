@@ -911,3 +911,25 @@ beside it, and where locating the subject is "brighter than the backdrop" instea
 
 When a question has a direct switch, the ratio that merely correlates with it is not the cheap option. It is
 the one that needs a control, a threshold nobody can derive, and a second job to explain its failures.
+
+## The wardrobe figure is SELF-LIT — the stage lamps are a trim, not the light
+
+`wl.Look.PreviewLights 0` sets all three stage lamps to zero intensity, and the cvar reads back 0.0. With
+them off, **Relay OG — the one skin in the lineup with no fire of its own — is still 98.2% lit, mean 0.8242.**
+Photographed and looked at: a fully visible white figure with glowing gold eyes, not a silhouette.
+
+So the mascot in that preview is not being lit by the lamps in any meaningful sense. They contribute on the
+order of 14% (the whole-window luma moved 0.43 → 0.37 when they were switched off); the rest is the figure
+emitting. That is consistent with this project's voxel material being emissive-based throughout.
+
+**This is probably the unifying explanation for why so many of that stage's knobs looked dead.**
+`PreviewExposure` across eight stops, `PreviewLights` across its whole range, `PreviewGlow` before its
+tolerance was fixed — each is a minor term against a dominant one nobody was measuring.
+
+Two consequences worth carrying:
+
+- **The wardrobe cannot tell "glowing" from "lit".** Any question of the form *does this part emit its own
+  light* is unanswerable there, because every part does. That question has to be asked in the world.
+- **A knob that "does not matter" may simply be small.** Before concluding a term is disconnected, check
+  what fraction of the result it is responsible for — turning it fully off and measuring the remainder costs
+  one rung and distinguishes "this lever is broken" from "this lever was never the dominant one".
