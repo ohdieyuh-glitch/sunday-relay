@@ -623,13 +623,21 @@ The same costume, the same build, measured two ways on 2026-09-27:
 | in-world (differenced against a figure-hidden control) | 0.837 | **0.000** | 0.117 |
 | wardrobe preview | 0.074 | **0.355** | 0.871 |
 
-The skin is blue. The **stage** turns it white — and the same over-exposure was simultaneously failing two
-item 1 clauses on Apollo (corner 0.5758 against a 0.25 ceiling, window 0.7418 against 0.6) and is the live
-suspect for item 6's C07 reading 0.0 magenta on eyes that are a handful of pixels wide.
+The skin is blue and the **panel** does not show it. That difference is measured and stands.
 
-One defect, four symptoms, in three different lanes' clauses. **Before editing an approved asset because it
-looks wrong somewhere, measure it somewhere else.** If the two disagree, the renderer between them is the
-subject, not the asset.
+**WHY it does not is NOT established, and the earlier explanation here was withdrawn on 2026-09-27.** This
+section previously said the stage over-exposes, and named the same over-exposure as the cause of two item 1
+clauses on Apollo and a suspect for item 6's C07. That was inferred from a `PreviewGlow` sweep in which
+five rungs produced five identical pictures — and the sweep could not move the term at all, because
+`IsNearlyEqual(GlowScale, Wanted, 0.001f)` guards a knob that ships at 0.001, so every value it tried was
+silently dropped. See "Verifying the INPUT is not verifying the effect" below.
+
+Keep the measured difference; do not carry the cause. The Apollo and C07 readings are unexplained again
+rather than attributed.
+
+**Before editing an approved asset because it looks wrong somewhere, measure it somewhere else.** If the
+two disagree, the renderer between them is the subject, not the asset — and then find out WHICH part of
+the renderer, with a knob you have shown can move.
 
 ## A window shorter than the subject's slowest period is a coin toss, not a measurement
 
