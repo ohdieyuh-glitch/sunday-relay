@@ -151,6 +151,25 @@ public:
 	static FString DescribeWorldPartition(UWorld* World);
 
 	/**
+	 * LOAD WORLD PARTITION EDITOR REGIONS, the way the editor itself restores them.
+	 *
+	 * FOUNDER, 2026-09-28: the WP2 map opened on "No Loaded Region(s)" -- "Restore the World Partition editor
+	 * regions so the complete Wonderland world is visible/available in the Unreal Editor again ... Use the real
+	 * World Partition editor loading mechanism." Python cannot make a loaded region in 5.8 (the blueprint library
+	 * only pins actor lists), so this calls UWorldPartition::LoadLastLoadedRegions -- the same user-created shape
+	 * adapters the World Partition window lists -- and saves them to this user's per-project settings.
+	 *
+	 * EDITOR RESIDENCY ONLY: no actor moves, nothing becomes always-loaded, and the runtime grid, HLODs and data
+	 * layers are untouched. Refuses a play world. Editor builds only; a packaged game gets the refusal string.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static FString LoadEditorRegions(UWorld* World, const TArray<FBox>& Regions);
+
+	/** The user-loaded editor regions, the editor/runtime bounds, and process + machine memory, in one line. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static FString DescribeEditorRegions(UWorld* World);
+
+	/**
 	 * WHAT THIS PROCESS IS USING, AND WHAT THE MACHINE HAS LEFT, IN MEGABYTES.
 	 *
 	 * Added because Python is offered no memory reading at all here -- SystemLibrary has nothing with
@@ -230,6 +249,19 @@ public:
 	/** What the transcript is actually drawn in now -- Cream until the founder has chosen. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Test")
 	static FLinearColor GetTerminalTextColour(bool bJulius);
+
+	/**
+	 * THE RAW SECONDARY STATE, colours AND chosen flags, so a proof can put the founder's saved choice back exactly
+	 * -- "restore the intended/default customization state unless the current user's saved customization
+	 * specifies otherwise" -- rather than approximating it with a pick that would set a flag they never set.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static void GetTerminalTextState(FLinearColor& OutJulius, bool& bOutJuliusChosen,
+		FLinearColor& OutCompanion, bool& bOutCompanionChosen);
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool SetTerminalTextState(FLinearColor Julius, bool bJuliusChosen,
+		FLinearColor Companion, bool bCompanionChosen);
 
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool PickMenuAccent(FLinearColor Colour);

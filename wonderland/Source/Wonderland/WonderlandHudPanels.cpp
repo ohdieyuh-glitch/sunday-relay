@@ -495,12 +495,15 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 			// THE SECONDARY, DIRECTLY UNDER ITS OWN PRIMARY, which is how the mascot rows above are already
 			// arranged: a colourway and then the eyes. Founder, 2026-09-28: "a secondary live terminal colors
 			// option for the text colors of the words inside the terminal."
+			// AND IT IS EVERY TERMINAL'S LETTERING, not only Julius's (founder, 2026-09-28 correction pass: the same
+			// Secondary "must change the LETTER COLORS of the companion terminals as well"). Picking it clears the
+			// companions' own override, so the last terminal colour picked is the one all three terminals wear.
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				MakeColourRow(TEXT("JULIUS TERMINAL  SECONDARY"),
-					TEXT("The words Julius says inside the terminal. Labels and key hints keep their cream."),
+					TEXT("The letters in the Julius Live Terminal and both companion terminals. Key hints keep their cream."),
 					[Style]() { return Style() != nullptr ? Style()->JuliusTerminalTextColor : FLinearColor::White; },
-					[Style](FLinearColor C) { if (Style()) { Style()->JuliusTerminalTextColor = C; Style()->bJuliusTerminalTextChosen = true; } })
+					[Style](FLinearColor C) { if (Style()) { Style()->JuliusTerminalTextColor = C; Style()->bJuliusTerminalTextChosen = true; Style()->bCompanionTerminalTextChosen = false; } })
 			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
@@ -512,7 +515,7 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				MakeColourRow(TEXT("COMPANION TERMINALS  SECONDARY"),
-					TEXT("The words the companions say inside their terminals."),
+					TEXT("The companions' letters only. Picking the Julius Secondary again brings them back in step."),
 					[Style]() { return Style() != nullptr ? Style()->CompanionTerminalTextColor : FLinearColor::White; },
 					[Style](FLinearColor C) { if (Style()) { Style()->CompanionTerminalTextColor = C; Style()->bCompanionTerminalTextChosen = true; } })
 			]

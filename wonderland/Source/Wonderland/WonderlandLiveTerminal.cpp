@@ -187,7 +187,8 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 					})
 					.ToolTipText(INVTEXT("Simulated usage: one token per four emitted work-log characters, rounded up. Updates with mission output; no provider telemetry or billable tokens."))
 					.Font(WonderlandUi::Mono(8))
-					.ColorAndOpacity(WonderlandUi::Cream())
+					// lettering inside the terminal, so it wears the terminal's Secondary like the section lines
+					.ColorAndOpacity_Lambda([]() { return FSlateColor(WonderlandUi::JuliusText()); })
 				]
 			]
 			// THE TASK TERMINALS, ACROSS THE TOP, above PROMPT ARCHITECT -- which is where the founder asked for
@@ -476,7 +477,9 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeSection(const FString& Title, c
 					SNew(STextBlock)
 					.Text_Lambda([StateNow]() { return FText::FromString(FString::Printf(TEXT("[%s]"), *StateNow())); })
 					.Font(WonderlandUi::Mono(9))
-					.ColorAndOpacity(WonderlandUi::Cream())
+					// THE SECONDARY: the section's letters. Its title and the state word at the right stay on the
+					// Primary accent, which is the terminal's structure rather than its text.
+					.ColorAndOpacity_Lambda([]() { return FSlateColor(WonderlandUi::JuliusText()); })
 				]
 				+ SHorizontalBox::Slot()
 				.FillWidth(1.0f)
@@ -514,7 +517,7 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeRestingLine(const FString& Text
 	return SNew(STextBlock)
 		.Text(FText::FromString(Text))
 		.Font(WonderlandUi::Mono(9))
-		.ColorAndOpacity(WonderlandUi::Dim())
+		.ColorAndOpacity_Lambda([]() { return FSlateColor(WonderlandUi::JuliusTextDim()); })
 		.OverflowPolicy(ETextOverflowPolicy::Ellipsis);
 }
 
@@ -795,7 +798,7 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeLiveLine(const FString& Section
 		.Font(WonderlandUi::Mono(9))
 		.ColorAndOpacity_Lambda([this, Section]()
 		{
-			return FSlateColor(SectionLines.Contains(Section) ? WonderlandUi::Cream() : WonderlandUi::Dim());
+			return FSlateColor(SectionLines.Contains(Section) ? WonderlandUi::JuliusText() : WonderlandUi::JuliusTextDim());
 		})
 		.OverflowPolicy(ETextOverflowPolicy::Ellipsis);
 }

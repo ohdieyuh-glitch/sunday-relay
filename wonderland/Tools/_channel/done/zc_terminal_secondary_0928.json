@@ -1,0 +1,590 @@
+{
+ "name": "zc_terminal_secondary_0928",
+ "started": "2026-09-28 11:48:59",
+ "status": "FAIL",
+ "tests": [
+  {
+   "id": "T00",
+   "name": "the Julius Live Terminal is open with both companion terminals on screen",
+   "pass": true,
+   "detail": {
+    "open": true,
+    "companions": true,
+    "count": 2
+   }
+  },
+  {
+   "id": "T01",
+   "name": "all three terminals report where they are (Julius, Claude Code, ChatGPT)",
+   "pass": true,
+   "detail": {
+    "rects": {
+     "julius": [
+      0.31,
+      0.715,
+      0.69,
+      0.955
+     ],
+     "chatgpt": [
+      0.0308,
+      0.5083,
+      0.2472,
+      0.6872
+     ],
+     "claude_code": [
+      0.7528,
+      0.5083,
+      0.9692,
+      0.6872
+     ]
+    },
+    "titles": {
+     "chatgpt": "GPT 6 Astra",
+     "claude_code": "Claude Code Fable 5"
+    }
+   }
+  },
+  {
+   "id": "T_julius_A",
+   "name": "julius: Secondary GREEN turns its lettering green",
+   "pass": true,
+   "detail": {
+    "baseline": {
+     "green_over_red": 0.0824,
+     "blue_over_red": 0.0902,
+     "red_over_blue": 0.5961,
+     "sampled": 168820
+    },
+    "green": {
+     "green_over_red": 0.6431,
+     "blue_over_red": 0.1843,
+     "red_over_blue": 0.5961,
+     "sampled": 168820
+    }
+   }
+  },
+  {
+   "id": "T_julius_B",
+   "name": "julius: Secondary BLUE turns the SAME lettering blue, and the green goes",
+   "pass": true,
+   "detail": {
+    "baseline": {
+     "green_over_red": 0.0824,
+     "blue_over_red": 0.0902,
+     "red_over_blue": 0.5961,
+     "sampled": 168820
+    },
+    "green": {
+     "green_over_red": 0.6431,
+     "blue_over_red": 0.1843,
+     "red_over_blue": 0.5961,
+     "sampled": 168820
+    },
+    "blue": {
+     "green_over_red": 0.2863,
+     "blue_over_red": 0.6118,
+     "red_over_blue": 0.5961,
+     "sampled": 168820
+    }
+   }
+  },
+  {
+   "id": "T_claude_code_A",
+   "name": "claude_code: Secondary GREEN turns its lettering green",
+   "pass": true,
+   "detail": {
+    "baseline": {
+     "green_over_red": 0.498,
+     "blue_over_red": 0.6392,
+     "red_over_blue": 0.651,
+     "sampled": 71896
+    },
+    "green": {
+     "green_over_red": 0.651,
+     "blue_over_red": 0.1882,
+     "red_over_blue": 0.651,
+     "sampled": 71896
+    }
+   }
+  },
+  {
+   "id": "T_claude_code_B",
+   "name": "claude_code: Secondary BLUE turns the SAME lettering blue, and the green goes",
+   "pass": false,
+   "detail": {
+    "baseline": {
+     "green_over_red": 0.498,
+     "blue_over_red": 0.6392,
+     "red_over_blue": 0.651,
+     "sampled": 71896
+    },
+    "green": {
+     "green_over_red": 0.651,
+     "blue_over_red": 0.1882,
+     "red_over_blue": 0.651,
+     "sampled": 71896
+    },
+    "blue": {
+     "green_over_red": 0.2863,
+     "blue_over_red": 0.6196,
+     "red_over_blue": 0.651,
+     "sampled": 71896
+    }
+   }
+  },
+  {
+   "id": "T_chatgpt_A",
+   "name": "chatgpt: Secondary GREEN turns its lettering green",
+   "pass": true,
+   "detail": {
+    "baseline": {
+     "green_over_red": 0.0118,
+     "blue_over_red": 0.0431,
+     "red_over_blue": 0.651,
+     "sampled": 71896
+    },
+    "green": {
+     "green_over_red": 0.651,
+     "blue_over_red": 0.1882,
+     "red_over_blue": 0.651,
+     "sampled": 71896
+    }
+   }
+  },
+  {
+   "id": "T_chatgpt_B",
+   "name": "chatgpt: Secondary BLUE turns the SAME lettering blue, and the green goes",
+   "pass": true,
+   "detail": {
+    "baseline": {
+     "green_over_red": 0.0118,
+     "blue_over_red": 0.0431,
+     "red_over_blue": 0.651,
+     "sampled": 71896
+    },
+    "green": {
+     "green_over_red": 0.651,
+     "blue_over_red": 0.1882,
+     "red_over_blue": 0.651,
+     "sampled": 71896
+    },
+    "blue": {
+     "green_over_red": 0.2863,
+     "blue_over_red": 0.6196,
+     "red_over_blue": 0.651,
+     "sampled": 71896
+    }
+   }
+  },
+  {
+   "id": "T_PRIMARY",
+   "name": "the PRIMARY accents never moved while the Secondary did (no unrelated recolour)",
+   "pass": true,
+   "detail": {
+    "before": {
+     "julius": [
+      0.6939,
+      0.3712,
+      0.0529
+     ],
+     "companion": [
+      0.6939,
+      0.3712,
+      0.0529
+     ]
+    },
+    "during": {
+     "0_baseline": {
+      "julius_text": [
+       0.8388,
+       0.7991,
+       0.7231
+      ],
+      "companion_text": [
+       0.8388,
+       0.7991,
+       0.7231
+      ],
+      "julius_accent": [
+       0.6939,
+       0.3712,
+       0.0529
+      ],
+      "companion_accent": [
+       0.6939,
+       0.3712,
+       0.0529
+      ]
+     },
+     "1_secondary_green": {
+      "julius_text": [
+       0.1,
+       1.0,
+       0.25
+      ],
+      "companion_text": [
+       0.1,
+       1.0,
+       0.25
+      ],
+      "julius_accent": [
+       0.6939,
+       0.3712,
+       0.0529
+      ],
+      "companion_accent": [
+       0.6939,
+       0.3712,
+       0.0529
+      ]
+     },
+     "2_secondary_blue": {
+      "julius_text": [
+       0.12,
+       0.4,
+       1.0
+      ],
+      "companion_text": [
+       0.12,
+       0.4,
+       1.0
+      ],
+      "julius_accent": [
+       0.6939,
+       0.3712,
+       0.0529
+      ],
+      "companion_accent": [
+       0.6939,
+       0.3712,
+       0.0529
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "T_ONE",
+   "name": "one Secondary: the companions read the colour picked for the Live Terminal",
+   "pass": true,
+   "detail": {
+    "green": {
+     "julius_text": [
+      0.1,
+      1.0,
+      0.25
+     ],
+     "companion_text": [
+      0.1,
+      1.0,
+      0.25
+     ],
+     "julius_accent": [
+      0.6939,
+      0.3712,
+      0.0529
+     ],
+     "companion_accent": [
+      0.6939,
+      0.3712,
+      0.0529
+     ]
+    },
+    "blue": {
+     "julius_text": [
+      0.12,
+      0.4,
+      1.0
+     ],
+     "companion_text": [
+      0.12,
+      0.4,
+      1.0
+     ],
+     "julius_accent": [
+      0.6939,
+      0.3712,
+      0.0529
+     ],
+     "companion_accent": [
+      0.6939,
+      0.3712,
+      0.0529
+     ]
+    }
+   }
+  },
+  {
+   "id": "T_RESTORE",
+   "name": "the founder's own Secondary state is back exactly (colours and chosen flags)",
+   "pass": true,
+   "detail": {
+    "before": {
+     "julius": [
+      0.8388,
+      0.7991,
+      0.7231
+     ],
+     "julius_chosen": false,
+     "companion": [
+      0.8388,
+      0.7991,
+      0.7231
+     ],
+     "companion_chosen": false
+    },
+    "after": {
+     "julius": [
+      0.8388,
+      0.7991,
+      0.7231
+     ],
+     "julius_chosen": false,
+     "companion": [
+      0.8388,
+      0.7991,
+      0.7231
+     ],
+     "companion_chosen": false
+    }
+   }
+  }
+ ],
+ "state_before": {
+  "julius": [
+   0.8388,
+   0.7991,
+   0.7231
+  ],
+  "julius_chosen": false,
+  "companion": [
+   0.8388,
+   0.7991,
+   0.7231
+  ],
+  "companion_chosen": false
+ },
+ "accents_before": {
+  "julius": [
+   0.6939,
+   0.3712,
+   0.0529
+  ],
+  "companion": [
+   0.6939,
+   0.3712,
+   0.0529
+  ]
+ },
+ "rects": {
+  "julius": [
+   0.31,
+   0.715,
+   0.69,
+   0.955
+  ],
+  "chatgpt": [
+   0.0308,
+   0.5083,
+   0.2472,
+   0.6872
+  ],
+  "claude_code": [
+   0.7528,
+   0.5083,
+   0.9692,
+   0.6872
+  ]
+ },
+ "titles": {
+  "chatgpt": "GPT 6 Astra",
+  "claude_code": "Claude Code Fable 5"
+ },
+ "steps": {
+  "0_baseline": {
+   "julius": {
+    "green_over_red": 0.0824,
+    "blue_over_red": 0.0902,
+    "red_over_blue": 0.5961,
+    "sampled": 168820
+   },
+   "chatgpt": {
+    "green_over_red": 0.0118,
+    "blue_over_red": 0.0431,
+    "red_over_blue": 0.651,
+    "sampled": 71896
+   },
+   "claude_code": {
+    "green_over_red": 0.498,
+    "blue_over_red": 0.6392,
+    "red_over_blue": 0.651,
+    "sampled": 71896
+   },
+   "_setting": {
+    "julius_text": [
+     0.8388,
+     0.7991,
+     0.7231
+    ],
+    "companion_text": [
+     0.8388,
+     0.7991,
+     0.7231
+    ],
+    "julius_accent": [
+     0.6939,
+     0.3712,
+     0.0529
+    ],
+    "companion_accent": [
+     0.6939,
+     0.3712,
+     0.0529
+    ]
+   }
+  },
+  "1_secondary_green": {
+   "julius": {
+    "green_over_red": 0.6431,
+    "blue_over_red": 0.1843,
+    "red_over_blue": 0.5961,
+    "sampled": 168820
+   },
+   "chatgpt": {
+    "green_over_red": 0.651,
+    "blue_over_red": 0.1882,
+    "red_over_blue": 0.651,
+    "sampled": 71896
+   },
+   "claude_code": {
+    "green_over_red": 0.651,
+    "blue_over_red": 0.1882,
+    "red_over_blue": 0.651,
+    "sampled": 71896
+   },
+   "_setting": {
+    "julius_text": [
+     0.1,
+     1.0,
+     0.25
+    ],
+    "companion_text": [
+     0.1,
+     1.0,
+     0.25
+    ],
+    "julius_accent": [
+     0.6939,
+     0.3712,
+     0.0529
+    ],
+    "companion_accent": [
+     0.6939,
+     0.3712,
+     0.0529
+    ]
+   }
+  },
+  "2_secondary_blue": {
+   "julius": {
+    "green_over_red": 0.2863,
+    "blue_over_red": 0.6118,
+    "red_over_blue": 0.5961,
+    "sampled": 168820
+   },
+   "chatgpt": {
+    "green_over_red": 0.2863,
+    "blue_over_red": 0.6196,
+    "red_over_blue": 0.651,
+    "sampled": 71896
+   },
+   "claude_code": {
+    "green_over_red": 0.2863,
+    "blue_over_red": 0.6196,
+    "red_over_blue": 0.651,
+    "sampled": 71896
+   },
+   "_setting": {
+    "julius_text": [
+     0.12,
+     0.4,
+     1.0
+    ],
+    "companion_text": [
+     0.12,
+     0.4,
+     1.0
+    ],
+    "julius_accent": [
+     0.6939,
+     0.3712,
+     0.0529
+    ],
+    "companion_accent": [
+     0.6939,
+     0.3712,
+     0.0529
+    ]
+   }
+  },
+  "3_restored": {
+   "julius": {
+    "green_over_red": 0.0863,
+    "blue_over_red": 0.1059,
+    "red_over_blue": 0.5961,
+    "sampled": 168820
+   },
+   "chatgpt": {
+    "green_over_red": 0.0,
+    "blue_over_red": 0.0,
+    "red_over_blue": 0.651,
+    "sampled": 71896
+   },
+   "claude_code": {
+    "green_over_red": 0.0,
+    "blue_over_red": 0.0,
+    "red_over_blue": 0.651,
+    "sampled": 71896
+   },
+   "_setting": {
+    "julius_text": [
+     0.8388,
+     0.7991,
+     0.7231
+    ],
+    "companion_text": [
+     0.8388,
+     0.7991,
+     0.7231
+    ],
+    "julius_accent": [
+     0.6939,
+     0.3712,
+     0.0529
+    ],
+    "companion_accent": [
+     0.6939,
+     0.3712,
+     0.0529
+    ]
+   }
+  }
+ },
+ "state_after": {
+  "julius": [
+   0.8388,
+   0.7991,
+   0.7231
+  ],
+  "julius_chosen": false,
+  "companion": [
+   0.8388,
+   0.7991,
+   0.7231
+  ],
+  "companion_chosen": false
+ },
+ "finished": "2026-09-28 11:49:31",
+ "seconds": 32.12,
+ "log": "T00 PASS the Julius Live Terminal is open with both companion terminals on screen {'open': True, 'companions': True, 'count': 2}\nT01 PASS all three terminals report where they are (Julius, Claude Code, ChatGPT) {'rects': {'julius': [0.31, 0.715, 0.69, 0.955], 'chatgpt': [0.0308, 0.5083, 0.2472, 0.6872], 'claude_code': [0.7528, 0.5083, 0.9692, 0.6872]}, 'titles': {'chatgpt': 'GPT 6 Astra', 'claude_code': 'Claude Code Fable 5'}}\nSTEP 0_baseline {'julius': {'green_over_red': 0.0824, 'blue_over_red': 0.0902, 'red_over_blue': 0.5961, 'sampled': 168820}, 'chatgpt': {'green_over_red': 0.0118, 'blue_over_red': 0.0431, 'red_over_blue': 0.651, 'sampled': 71896}, 'claude_code': {'green_over_red': 0.498, 'blue_over_red': 0.6392, 'red_over_blue': 0.651, 'sampled': 71896}, '_setting': {'julius_text': [0.8388, 0.7991, 0.7231], 'companion_text': [0.8388, 0.7991, 0.7231], 'julius_accent': [0.6939, 0.3712, 0.0529], 'companion_accent': [0.6939, 0.3712, 0.0529]}}\nSTEP 1_secondary_green {'julius': {'green_over_red': 0.6431, 'blue_over_red': 0.1843, 'red_over_blue': 0.5961, 'sampled': 168820}, 'chatgpt': {'green_over_red': 0.651, 'blue_over_red': 0.1882, 'red_over_blue': 0.651, 'sampled': 71896}, 'claude_code': {'green_over_red': 0.651, 'blue_over_red': 0.1882, 'red_over_blue': 0.651, 'sampled': 71896}, '_setting': {'julius_text': [0.1, 1.0, 0.25], 'companion_text': [0.1, 1.0, 0.25], 'julius_accent': [0.6939, 0.3712, 0.0529], 'companion_accent': [0.6939, 0.3712, 0.0529]}}\nSTEP 2_secondary_blue {'julius': {'green_over_red': 0.2863, 'blue_over_red': 0.6118, 'red_over_blue': 0.5961, 'sampled': 168820}, 'chatgpt': {'green_over_red': 0.2863, 'blue_over_red': 0.6196, 'red_over_blue': 0.651, 'sampled': 71896}, 'claude_code': {'green_over_red': 0.2863, 'blue_over_red': 0.6196, 'red_over_blue': 0.651, 'sampled': 71896}, '_setting': {'julius_text': [0.12, 0.4, 1.0], 'companion_text': [0.12, 0.4, 1.0], 'julius_accent': [0.6939, 0.3712, 0.0529], 'companion_accent': [0.6939, 0.3712, 0.0529]}}\nT_julius_A PASS julius: Secondary GREEN turns its lettering green {'baseline': {'green_over_red': 0.0824, 'blue_over_red': 0.0902, 'red_over_blue': 0.5961, 'sampled': 168820}, 'green': {'green_over_red': 0.6431, 'blue_over_red': 0.1843, 'red_over_blue': 0.5961, 'sampled': 168820}}\nT_julius_B PASS julius: Secondary BLUE turns the SAME lettering blue, and the green goes {'baseline': {'green_over_red': 0.0824, 'blue_over_red': 0.0902, 'red_over_blue': 0.5961, 'sampled': 168820}, 'green': {'green_over_red': 0.6431, 'blue_over_red': 0.1843, 'red_over_blue': 0.5961, 'sampled': 168820}, 'blue': {'green_over_red': 0.2863, 'blue_over_red': 0.6118, 'red_over_blue': 0.5961, 'sampled': 168820}}\nT_claude_code_A PASS claude_code: Secondary GREEN turns its lettering green {'baseline': {'green_over_red': 0.498, 'blue_over_red': 0.6392, 'red_over_blue': 0.651, 'sampled': 71896}, 'green': {'green_over_red': 0.651, 'blue_over_red': 0.1882, 'red_over_blue': 0.651, 'sampled': 71896}}\nT_claude_code_B FAIL claude_code: Secondary BLUE turns the SAME lettering blue, and the green goes {'baseline': {'green_over_red': 0.498, 'blue_over_red': 0.6392, 'red_over_blue': 0.651, 'sampled': 71896}, 'green': {'green_over_red': 0.651, 'blue_over_red': 0.1882, 'red_over_blue': 0.651, 'sampled': 71896}, 'blue': {'green_over_red': 0.2863, 'blue_over_red': 0.6196, 'red_over_blue': 0.651, 'sampled': 71896}}\nT_chatgpt_A PASS chatgpt: Secondary GREEN turns its lettering green {'baseline': {'green_over_red': 0.0118, 'blue_over_red': 0.0431, 'red_over_blue': 0.651, 'sampled': 71896}, 'green': {'green_over_red': 0.651, 'blue_over_red': 0.1882, 'red_over_blue': 0.651, 'sampled': 71896}}\nT_chatgpt_B PASS chatgpt: Secondary BLUE turns the SAME lettering blue, and the green goes {'baseline': {'green_over_red': 0.0118, 'blue_over_red': 0.0431, 'red_over_blue': 0.651, 'sampled': 71896}, 'green': {'green_over_red': 0.651, 'blue_over_red': 0.1882, 'red_over_blue': 0.651, 'sampled': 71896}, 'blue': {'green_over_red': 0.2863, 'blue_over_red': 0.6196, 'red_over_blue': 0.651, 'sampled': 71896}}\nT_PRIMARY PASS the PRIMARY accents never moved while the Secondary did (no unrelated recolour) {'before': {'julius': [0.6939, 0.3712, 0.0529], 'companion': [0.6939, 0.3712, 0.0529]}, 'during': {'0_baseline': {'julius_text': [0.8388, 0.7991, 0.7231], 'companion_text': [0.8388, 0.7991, 0.7231], 'julius_accent': [0.6939, 0.3712, 0.0529], 'companion_accent': [0.6939, 0.3712, 0.0529]}, '1_secondary_green': {'julius_text': [0.1, 1.0, 0.25], 'companion_text': [0.1, 1.0, 0.25], 'julius_accent': [0.6939, 0.3712, 0.0529], 'companion_accent': [0.6939, 0.3712, 0.0529]}, '2_secondary_blue': {'julius_text': [0.12, 0.4, 1.0], 'companion_text': [0.12, 0.4, 1.0], 'julius_accent': [0.6939, 0.3712, 0.0529], 'companion_accent': [0.6939, 0.3712, 0.0529]}}}\nT_ONE PASS one Secondary: the companions read the colour picked for the Live Terminal {'green': {'julius_text': [0.1, 1.0, 0.25], 'companion_text': [0.1, 1.0, 0.25], 'julius_accent': [0.6939, 0.3712, 0.0529], 'companion_accent': [0.6939, 0.3712, 0.0529]}, 'blue': {'julius_text': [0.12, 0.4, 1.0], 'companion_text': [0.12, 0.4, 1.0], 'julius_accent': [0.6939, 0.3712, 0.0529], 'companion_accent': [0.6939, 0.3712, 0.0529]}}\nSTEP 3_restored {'julius': {'green_over_red': 0.0863, 'blue_over_red': 0.1059, 'red_over_blue': 0.5961, 'sampled': 168820}, 'chatgpt': {'green_over_red': 0.0, 'blue_over_red': 0.0, 'red_over_blue': 0.651, 'sampled': 71896}, 'claude_code': {'green_over_red': 0.0, 'blue_over_red': 0.0, 'red_over_blue': 0.651, 'sampled': 71896}, '_setting': {'julius_text': [0.8388, 0.7991, 0.7231], 'companion_text': [0.8388, 0.7991, 0.7231], 'julius_accent': [0.6939, 0.3712, 0.0529], 'companion_accent': [0.6939, 0.3712, 0.0529]}}\nT_RESTORE PASS the founder's own Secondary state is back exactly (colours and chosen flags) {'before': {'julius': [0.8388, 0.7991, 0.7231], 'julius_chosen': False, 'companion': [0.8388, 0.7991, 0.7231], 'companion_chosen': False}, 'after': {'julius': [0.8388, 0.7991, 0.7231], 'julius_chosen': False, 'companion': [0.8388, 0.7991, 0.7231], 'companion_chosen': False}}\n"
+}

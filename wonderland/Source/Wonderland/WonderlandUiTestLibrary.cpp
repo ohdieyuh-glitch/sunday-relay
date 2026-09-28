@@ -38,6 +38,7 @@
 
 #if WITH_EDITOR
 #include "Editor/EditorEngine.h"
+#include "WorldPartition/WorldPartitionEditorPerProjectUserSettings.h"
 #endif
 
 namespace
@@ -582,6 +583,8 @@ bool UWonderlandUiTestLibrary::PickTerminalTextColour(bool bJulius, FLinearColor
 	{
 		Style->JuliusTerminalTextColor = Colour;
 		Style->bJuliusTerminalTextChosen = true;
+		// exactly as the Colors row does: the shared Secondary brings the companions back in step
+		Style->bCompanionTerminalTextChosen = false;
 	}
 	else
 	{
@@ -597,6 +600,32 @@ bool UWonderlandUiTestLibrary::PickTerminalTextColour(bool bJulius, FLinearColor
 FLinearColor UWonderlandUiTestLibrary::GetTerminalTextColour(bool bJulius)
 {
 	return bJulius ? WonderlandUi::JuliusText() : WonderlandUi::CompanionText();
+}
+
+void UWonderlandUiTestLibrary::GetTerminalTextState(FLinearColor& OutJulius, bool& bOutJuliusChosen,
+	FLinearColor& OutCompanion, bool& bOutCompanionChosen)
+{
+	const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+	OutJulius = Style.JuliusTerminalTextColor;
+	bOutJuliusChosen = Style.bJuliusTerminalTextChosen;
+	OutCompanion = Style.CompanionTerminalTextColor;
+	bOutCompanionChosen = Style.bCompanionTerminalTextChosen;
+}
+
+bool UWonderlandUiTestLibrary::SetTerminalTextState(FLinearColor Julius, bool bJuliusChosen,
+	FLinearColor Companion, bool bCompanionChosen)
+{
+	UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>();
+	if (Style == nullptr)
+	{
+		return false;
+	}
+	Style->JuliusTerminalTextColor = Julius;
+	Style->bJuliusTerminalTextChosen = bJuliusChosen;
+	Style->CompanionTerminalTextColor = Companion;
+	Style->bCompanionTerminalTextChosen = bCompanionChosen;
+	WonderlandMascotStyle::SaveAndApply();
+	return true;
 }
 
 bool UWonderlandUiTestLibrary::PickMenuAccent(FLinearColor Colour)
@@ -650,6 +679,69 @@ FString UWonderlandUiTestLibrary::DescribeWorldPartition(UWorld* World)
 		Out += TEXT(" subsystem=1");
 	}
 	return Out;
+}
+
+FString UWonderlandUiTestLibrary::LoadEditorRegions(UWorld* World, const TArray<FBox>& Regions)
+{
+#if WITH_EDITOR
+	if (World == nullptr || World->IsGameWorld())
+	{
+		return TEXT("REFUSED: editor regions belong to the editor world, not a play world");
+	}
+	UWorldPartition* Partition = World->GetWorldPartition();
+	if (Partition == nullptr)
+	{
+		return TEXT("REFUSED: this world is not partitioned");
+	}
+	// THE EDITOR'S OWN PATH, NOT A LOOKALIKE. LoadLastLoadedRegions is what the editor runs on opening a map with
+	// saved regions: a user-created shape loader adapter per box, loaded -- the same object "Load Region From
+	// Selection" makes, and exactly what the World Partition window counts as a Loaded Region. Nothing about the
+	// map, its actors, its runtime grid, its HLODs or its data layers is touched; this is editor residency only.
+	Partition->LoadLastLoadedRegions(Regions);
+	// And remembered the way the editor remembers them: into this user's per-project settings, so the next
+	// editor to open the map loads the same regions instead of opening on "No Loaded Region(s)". This is the
+	// region half of UWorldPartition::SavePerUserSettings (private), through the same public setter it calls.
+	GetMutableDefault<UWorldPartitionEditorPerProjectUserSettings>()->SetEditorLoadedRegions(
+		World, Partition->GetUserLoadedEditorRegions());
+	return DescribeEditorRegions(World);
+#else
+	return TEXT("REFUSED: editor only");
+#endif
+}
+
+FString UWonderlandUiTestLibrary::DescribeEditorRegions(UWorld* World)
+{
+#if WITH_EDITOR
+	if (World == nullptr)
+	{
+		return TEXT("no world");
+	}
+	UWorldPartition* Partition = World->GetWorldPartition();
+	if (Partition == nullptr)
+	{
+		return FString::Printf(TEXT("world=%s partitioned=0"), *World->GetName());
+	}
+	const TArray<FBox> Loaded = Partition->GetUserLoadedEditorRegions();
+	FBox Union(ForceInit);
+	for (const FBox& Box : Loaded)
+	{
+		Union += Box;
+	}
+	const FBox Editor = Partition->GetEditorWorldBounds();
+	const FBox Runtime = Partition->GetRuntimeWorldBounds();
+	const FPlatformMemoryStats Memory = FPlatformMemory::GetStats();
+	return FString::Printf(
+		TEXT("world=%s user_regions=%d has_user_regions=%d union=[%s] editor_bounds=[%s] runtime_bounds=[%s] ")
+		TEXT("streaming=%d process_used_mb=%.0f available_mb=%.0f"),
+		*World->GetName(), Loaded.Num(), Partition->HasLoadedUserCreatedRegions() ? 1 : 0,
+		Union.IsValid ? *Union.ToString() : TEXT("none"),
+		Editor.IsValid ? *Editor.ToString() : TEXT("none"),
+		Runtime.IsValid ? *Runtime.ToString() : TEXT("none"),
+		Partition->IsStreamingEnabled() ? 1 : 0,
+		Memory.UsedPhysical / (1024.0 * 1024.0), Memory.AvailablePhysical / (1024.0 * 1024.0));
+#else
+	return TEXT("editor only");
+#endif
 }
 
 bool UWonderlandUiTestLibrary::ReadScreenExtremes(float MinX, float MinY, float MaxX, float MaxY,

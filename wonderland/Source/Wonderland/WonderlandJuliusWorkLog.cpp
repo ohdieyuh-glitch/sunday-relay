@@ -23,6 +23,27 @@ namespace WonderlandWorkLogDetail
 	FLinearColor Comment()  { return WonderlandUi::Srgb(0x67, 0x6E, 0x95); }
 	FLinearColor Punct()    { return WonderlandUi::Srgb(0x89, 0xDD, 0xFF); }
 
+	/**
+	 * THE TERMINAL'S LETTERING -- the founder's Terminal SECONDARY. FOUNDER, 2026-09-28 (correction pass):
+	 * "SECONDARY must control the terminal's intended LETTER/TEXT color ... Do not merely recolor background,
+	 * border, glow, panel, decoration while leaving the letters unchanged."
+	 *
+	 * These rows are what the four sections actually draw. The previous hook coloured SWonderlandLiveTerminal's
+	 * JuliusBody, a widget that is built and never placed in the window, so the Live Terminal's letters could not
+	 * respond at all. Bound at paint time rather than baked, because rows are written once and stay on screen.
+	 * Status colours (pass, fail, findings), syntax colours and the accent-coloured structure keep their own.
+	 */
+	TAttribute<FSlateColor> Words()
+	{
+		return TAttribute<FSlateColor>::CreateLambda([]() { return FSlateColor(WonderlandUi::JuliusText()); });
+	}
+
+	/** The same lettering at the dimmed level the resting lines and sub-lines have always had. */
+	TAttribute<FSlateColor> WordsDim()
+	{
+		return TAttribute<FSlateColor>::CreateLambda([]() { return FSlateColor(WonderlandUi::JuliusTextDim()); });
+	}
+
 	bool IsKeyword(const FString& Word)
 	{
 		static const TSet<FString> Words = {
@@ -65,6 +86,7 @@ void SWonderlandTypedText::Construct(const FArguments& InArgs)
 	Text = InArgs._Text;
 	Font = InArgs._Font;
 	Reveal = -1;
+	bFollowText = InArgs._FollowText;
 	Tokenize(InArgs._Syntax, InArgs._Color);
 }
 
@@ -74,7 +96,7 @@ void SWonderlandTypedText::Tokenize(bool bSyntax, const FLinearColor& Plain)
 	Tokens.Reset();
 	if (!bSyntax)
 	{
-		Tokens.Add({ 0, Text.Len(), Plain });
+		Tokens.Add({ 0, Text.Len(), Plain, true });
 		return;
 	}
 	const int32 Len = Text.Len();
@@ -138,6 +160,7 @@ void SWonderlandTypedText::Tokenize(bool bSyntax, const FLinearColor& Plain)
 			else
 			{
 				Token.Color = WonderlandUi::Cream();
+				Token.bPlain = true;
 			}
 		}
 		else if (FChar::IsWhitespace(C))
@@ -149,6 +172,7 @@ void SWonderlandTypedText::Tokenize(bool bSyntax, const FLinearColor& Plain)
 			}
 			Token.Length = J - I;
 			Token.Color = WonderlandUi::Cream();
+			Token.bPlain = true;
 		}
 		else
 		{
@@ -188,9 +212,11 @@ int32 SWonderlandTypedText::OnPaint(const FPaintArgs& Args, const FGeometry& All
 		const float Width = static_cast<float>(Measure->Measure(Part, Font).X);
 		if (!Part.TrimStartAndEnd().IsEmpty())
 		{
+			// plain letters follow the terminal's Secondary as it is NOW; syntax colours keep their own
+			const FLinearColor Colour = (bFollowText && Token.bPlain) ? WonderlandUi::JuliusText() : Token.Color;
 			FSlateDrawElement::MakeText(OutDrawElements, LayerId,
 				AllottedGeometry.ToPaintGeometry(FVector2f(Width + 2.0f, Height), FSlateLayoutTransform(FVector2f(X, 0.0f))),
-				Part, Font, ESlateDrawEffect::None, Token.Color);
+				Part, Font, ESlateDrawEffect::None, Colour);
 		}
 		X += Width;
 	}
@@ -262,12 +288,12 @@ void SWonderlandWorkLog::Reset()
 		Root->ClearChildren();
 		Root->AddSlot().AutoHeight()
 		[
-			TextRow(RestingText, WonderlandUi::Dim())
+			TextRow(RestingText, WonderlandWorkLogDetail::WordsDim())
 		];
 	}
 }
 
-TSharedRef<SWidget> SWonderlandWorkLog::TextRow(const FString& Text, const FLinearColor& Color, bool bBold, float Indent)
+TSharedRef<SWidget> SWonderlandWorkLog::TextRow(const FString& Text, const TAttribute<FSlateColor>& Color, bool bBold, float Indent)
 {
 	return SNew(SBox)
 		.HeightOverride(RowHeight)
@@ -321,6 +347,7 @@ TSharedRef<SWidget> SWonderlandWorkLog::CodeRow(const FString& Number, TCHAR Mar
 					.Text(Code)
 					.Font(WonderlandUi::Mono(9))
 					.Syntax(true)
+					.FollowText(true)
 				]
 			]
 		];
@@ -405,13 +432,14 @@ void SWonderlandWorkLog::AddJuliusRow(const FString& Time, const FString& Role, 
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 			[
-				SNew(STextBlock).Text(FText::FromString(Headline)).Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::Cream())
+				SNew(STextBlock).Text(FText::FromString(Headline)).Font(WonderlandUi::Mono(9))
+				.ColorAndOpacity(WonderlandWorkLogDetail::Words())
 				.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 			]
 		]);
 	if (!Detail.IsEmpty())
 	{
-		JuliusDetailSeq = AddRow(TextRow(Detail, WonderlandUi::Dim(), false, 18.0f));
+		JuliusDetailSeq = AddRow(TextRow(Detail, WonderlandWorkLogDetail::WordsDim(), false, 18.0f));
 	}
 }
 
@@ -475,7 +503,7 @@ int32 SWonderlandWorkLog::AddLine(EWonderlandRoleLineKind Kind, const FString& T
 			.VAlign(VAlign_Center)
 			.Padding(FMargin(10.0f, 0.0f, 0.0f, 0.0f))
 			[
-				SAssignNew(Typer, SWonderlandTypedText).Text(Text).Font(WonderlandUi::Mono(9)).Syntax(false).Color(WonderlandUi::Cream())
+				SAssignNew(Typer, SWonderlandTypedText).Text(Text).Font(WonderlandUi::Mono(9)).Syntax(false).Color(WonderlandUi::Cream()).FollowText(true)
 			]);
 		break;
 	case K::Pass:
@@ -488,7 +516,7 @@ int32 SWonderlandWorkLog::AddLine(EWonderlandRoleLineKind Kind, const FString& T
 		AddRow(TextRow(TEXT("✓ ") + Text, WonderlandUi::Sage()));
 		break;
 	case K::CheckOpen:
-		AddRow(TextRow(TEXT("○ ") + Text, WonderlandUi::Dim()));
+		AddRow(TextRow(TEXT("○ ") + Text, WordsDim()));
 		break;
 	case K::Finding:
 		AddRow(TextRow(TEXT("! ") + Text, WonderlandUi::Coral()));
@@ -499,18 +527,18 @@ int32 SWonderlandWorkLog::AddLine(EWonderlandRoleLineKind Kind, const FString& T
 		Text.ParseIntoArray(Parts, TEXT("|"), false);
 		AddRow(TextRow(FString::Printf(TEXT("FINDING %s  ·  SEVERITY %s"),
 			Parts.IsValidIndex(0) ? *Parts[0] : TEXT(""), Parts.IsValidIndex(1) ? *Parts[1] : TEXT("")), WonderlandUi::Coral(), true));
-		AddRow(TextRow(Parts.IsValidIndex(2) ? Parts[2] : FString(), WonderlandUi::Cream(), false, 10.0f));
-		AddRow(TextRow(TEXT("FILE  ") + (Parts.IsValidIndex(3) ? Parts[3] : FString()), WonderlandUi::Dim(), false, 10.0f));
+		AddRow(TextRow(Parts.IsValidIndex(2) ? Parts[2] : FString(), Words(), false, 10.0f));
+		AddRow(TextRow(TEXT("FILE  ") + (Parts.IsValidIndex(3) ? Parts[3] : FString()), WordsDim(), false, 10.0f));
 		break;
 	}
 	case K::State:
 		AddRow(TextRow(Text, WonderlandUi::Gold()));
 		break;
 	case K::Wait:
-		AddRow(TextRow(TEXT("… ") + Text, WonderlandUi::Dim()));
+		AddRow(TextRow(TEXT("… ") + Text, WordsDim()));
 		break;
 	default:
-		AddRow(TextRow(TEXT("> ") + Text, WonderlandUi::Cream()));
+		AddRow(TextRow(TEXT("> ") + Text, Words()));
 		break;
 	}
 	if (!Typer.IsValid())

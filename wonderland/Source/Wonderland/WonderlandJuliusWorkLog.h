@@ -33,12 +33,15 @@ public:
 	SLATE_BEGIN_ARGS(SWonderlandTypedText)
 		: _Syntax(true)
 		, _Color(FLinearColor::White)
+		, _FollowText(false)
 	{}
 		SLATE_ARGUMENT(FString, Text)
 		SLATE_ARGUMENT(FSlateFontInfo, Font)
 		/** Colour by syntax (code), or draw the whole line in `Color` (prompt text). */
 		SLATE_ARGUMENT(bool, Syntax)
 		SLATE_ARGUMENT(FLinearColor, Color)
+		/** Plain (non-syntax) letters take the terminal's Secondary colour at paint time instead of a fixed one. */
+		SLATE_ARGUMENT(bool, FollowText)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
@@ -56,6 +59,8 @@ private:
 		int32 Start = 0;
 		int32 Length = 0;
 		FLinearColor Color = FLinearColor::White;
+		/** Plain lettering rather than a syntax colour -- the part the terminal's Secondary colour is allowed to move. */
+		bool bPlain = false;
 	};
 	void Tokenize(bool bSyntax, const FLinearColor& Plain);
 
@@ -63,6 +68,7 @@ private:
 	FSlateFontInfo Font;
 	TArray<FToken> Tokens;
 	int32 Reveal = -1;
+	bool bFollowText = false;
 };
 
 /** The rolling log that is one Julius component's section body. */
@@ -116,7 +122,9 @@ private:
 	void RemoveRow(int32 Seq);
 	void UpdateVisibleFrom();
 	TSharedRef<SWidget> CodeRow(const FString& Number, TCHAR Marker, const FString& Code, TSharedPtr<SWonderlandTypedText>& OutTyper);
-	TSharedRef<SWidget> TextRow(const FString& Text, const FLinearColor& Color, bool bBold = false, float Indent = 0.0f);
+	/** A colour or a paint-time binding: the terminal's lettering is bound, so a Secondary picked while the terminal is
+	 *  open recolours every line already on screen, not only the next one written. */
+	TSharedRef<SWidget> TextRow(const FString& Text, const TAttribute<FSlateColor>& Color, bool bBold = false, float Indent = 0.0f);
 
 	FString RestingText;
 	TSharedPtr<SVerticalBox> Root;

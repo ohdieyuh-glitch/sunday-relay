@@ -298,9 +298,9 @@ namespace WonderlandUi
 	}
 
 	/**
-	 * THE WORDS INSIDE EACH TERMINAL -- the secondary colour, read by the transcript and by nothing else.
+	 * THE WORDS INSIDE EACH TERMINAL -- the secondary colour, read by the lettering and by nothing structural.
 	 *
-	 * Falls back to Cream(), which is what the transcript has always been, so this is invisible until the
+	 * Falls back to Cream(), which is what the lettering has always been, so this is invisible until the
 	 * founder chooses something. Read every time for the same reason the accents are: it is chosen from a
 	 * panel that is open while it is being chosen.
 	 */
@@ -310,10 +310,41 @@ namespace WonderlandUi
 		return Style.bJuliusTerminalTextChosen ? Style.JuliusTerminalTextColor : Cream();
 	}
 
+	/**
+	 * ONE SECONDARY FOR EVERY TERMINAL. FOUNDER, 2026-09-28 (correction pass): "The same Secondary terminal color
+	 * customization must change the LETTER COLORS of the companion terminals as well ... Secondary must propagate
+	 * consistently to: Julius Live Terminal text, Claude Code companion terminal text, ChatGPT companion terminal
+	 * text."
+	 *
+	 * So the companions follow the Julius Live Terminal's Secondary. Their own row still exists and still wins
+	 * when it was picked more recently -- picking the Live Terminal's Secondary clears it (see the Colors page and
+	 * PickTerminalTextColour), so the last colour the founder picked for the terminals is the one all three wear.
+	 */
 	FLinearColor CompanionText()
 	{
 		const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
-		return Style.bCompanionTerminalTextChosen ? Style.CompanionTerminalTextColor : Cream();
+		return Style.bCompanionTerminalTextChosen ? Style.CompanionTerminalTextColor : JuliusText();
+	}
+
+	/**
+	 * THE SAME LETTERING, DIMMED: resting lines, sub-lines, notes. Before anything is chosen this is the Dim()
+	 * those lines have always been drawn in, so an untouched install is unchanged. Once a Secondary is chosen the
+	 * dimmed lines wear it too, at reduced opacity over the dark plate -- otherwise an idle terminal, which is
+	 * almost all resting lines, would show no change at all when the Secondary moves.
+	 */
+	FLinearColor JuliusTextDim()
+	{
+		const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+		const FLinearColor Words = JuliusText();
+		return Style.bJuliusTerminalTextChosen ? FLinearColor(Words.R, Words.G, Words.B, 0.62f) : Dim();
+	}
+
+	FLinearColor CompanionTextDim()
+	{
+		const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+		const FLinearColor Words = CompanionText();
+		return (Style.bCompanionTerminalTextChosen || Style.bJuliusTerminalTextChosen)
+			? FLinearColor(Words.R, Words.G, Words.B, 0.62f) : Dim();
 	}
 
 	/**

@@ -429,7 +429,7 @@ void SWonderlandCompanionTerminal::RebuildLog()
 				// value: rows are built once when the line arrives, so a colour baked in here would leave
 				// everything already on screen at the old one and recolour only what was said next.
 				.ColorAndOpacity_Lambda([bDim = Line.bDim]()
-					{ return FSlateColor(bDim ? WonderlandUi::Dim() : WonderlandUi::CompanionText()); })
+					{ return FSlateColor(bDim ? WonderlandUi::CompanionTextDim() : WonderlandUi::CompanionText()); })
 				.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 			]
 		];
