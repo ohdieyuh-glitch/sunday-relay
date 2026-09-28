@@ -841,3 +841,31 @@ record("X_SWITCH", "the knob actually changes the picture somewhere, so the arm 
 
 That is the same rule as verifying a sweep's control, one level up: **a negative result is only evidence
 if the positive case was reachable.**
+
+## A band down "the figure" that is a fraction of the FRAME measures whatever is at that fraction
+
+`zc_skeleton_parts` has been answering two of the founder's Skeleton Flame questions — do the black leg parts
+glow, is the skull still black — since it was written. Its region boxes were fractions of the frame:
+
+```python
+"skull": (0.40, 0.23, 0.60, 0.33),
+"legs":  (0.40, 0.64, 0.60, 0.74),
+```
+
+Drawn onto one of its own captures and looked at: **the "skull" box contained only cyan tailfire with no
+skull in it, the "torso" box contained a wing, and the "legs" and "feet" boxes were both on the torso.** The
+head was not inside any box. So S02 was comparing a wing against a chest plate, and S03 was asking whether a
+wing was darker than a chest plate. Both failed; neither failure meant anything.
+
+The job could not have been right even in principle: it photographs at 260 uu **and** 900 uu, so the figure's
+on-screen height changes by a factor of three between two of its own views, against one set of fixed
+fractions.
+
+**Find the subject before measuring it.** The fix is one background plate per pose with the Dog *and its
+costume* hidden — `set_actor_hidden_in_game` hides an actor's own components, and the skin is a separate
+attached actor, so hiding only the Dog leaves the mascot standing in the plate — then the figure's box is the
+difference, and the bands are fractions of *that*. One plate per pose, not per hour: the camera depends only
+on the pose and the Dog does not move.
+
+When the plate is missing the code falls back to frame fractions **and says so in the result**, so a run
+without one degrades visibly instead of silently returning the old wrong numbers.

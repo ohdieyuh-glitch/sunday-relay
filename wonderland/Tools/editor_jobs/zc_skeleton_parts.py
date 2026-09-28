@@ -50,7 +50,24 @@ HOURS = (("day", 12.0), ("dusk", 18.0), ("night", 23.6))
 FACES = (("front", 0.0), ("side", 90.0), ("rear", 180.0))
 VIEWS = (("close", 260.0), ("gameplay", 900.0))
 
-# Bands down the figure, as fractions of the frame the figure fills. Published with every reading.
+# ---- BANDS DOWN THE FIGURE, AS FRACTIONS OF THE FIGURE. NOT OF THE FRAME.
+#
+# THEY WERE FRACTIONS OF THE FRAME AND EVERY READING THIS JOB HAS EVER TAKEN WAS OF THE WRONG BODY PART.
+# Drawn onto skel_day_front_close.png and looked at: the "skull" box contained only cyan tailfire with no
+# skull anywhere in it, the "torso" box contained a wing, and the "legs" and "feet" boxes were BOTH on the
+# torso. The head was not inside any box. So S02's "do the legs glow" and S03's "is the skull still black"
+# were comparing a wing against a chest plate, and their failures meant nothing at all.
+#
+# This is the rule this tree already wrote down and I still shipped a job that broke it: a region expressed
+# as a fraction of the FRAME is only meaningful if the framing is verified, and a job that never looks at its
+# own captures cannot verify it. The framing here is a camera posed at 260 or 900 uu from a Dog whose height
+# on screen therefore changes by a factor of three between two of this job's own views -- fixed fractions
+# could not have been right for both even in principle.
+#
+# SO THE FIGURE IS FOUND FIRST, by photographing each pose with the Dog HIDDEN and differencing. That plate
+# is per pose and not per hour, because the camera depends only on the pose and the Dog does not move. The
+# bands below are then fractions of the figure's own measured box, which is the thing they were always
+# described as.
 REGIONS = {
     # the head is the top of the figure; the skull plate and face sit in its lower half
     "skull": (0.40, 0.23, 0.60, 0.33),
@@ -81,10 +98,48 @@ def job():
         RESULT["tests"].append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
         emit(tid, "PASS" if ok else "FAIL", name, detail)
 
-    def region_stats(path, box):
-        """Mean channels and luma inside a box, as fractions of full white."""
+    def figure_box(path, plate_path):
+        """Where the Dog actually is on screen, by differencing this frame against the same pose with it hidden.
+
+        Returns (x0, y0, x1, y1) in pixels, or None when the two frames are too alike to contain a figure --
+        which is itself a finding, and better than a box drawn over whatever happened to be at 40% of the
+        frame.
+        """
         w, h, chan, px = read(path)
-        x0, y0, x1, y1 = int(box[0] * w), int(box[1] * h), int(box[2] * w), int(box[3] * h)
+        w2, h2, chan2, pz = read(plate_path)
+        if (w, h) != (w2, h2):
+            return None
+        xs, ys = [], []
+        for y in range(0, h, STEP):
+            for x in range(0, w, STEP):
+                i = (y * w + x) * chan
+                j = (y * w + x) * chan2
+                if abs(px[i] - pz[j]) + abs(px[i + 1] - pz[j + 1]) + abs(px[i + 2] - pz[j + 2]) > 42:
+                    xs.append(x)
+                    ys.append(y)
+        # A handful of scattered pixels is lighting noise, not a mascot.
+        if len(xs) < 400:
+            return None
+        # Trim the outer 2% each way so a stray bloom pixel cannot stretch the box.
+        xs.sort(); ys.sort()
+        k = max(len(xs) // 50, 1)
+        return (xs[k], ys[k], xs[-k], ys[-k])
+
+    def region_stats(path, box, fig=None):
+        """Mean channels and luma inside a box.
+
+        `box` is a fraction of the FIGURE when `fig` is given -- which is what the bands mean -- and falls
+        back to a fraction of the frame only when the figure could not be located, so that a run without a
+        plate degrades to the old behaviour visibly rather than silently.
+        """
+        w, h, chan, px = read(path)
+        if fig is not None:
+            fx0, fy0, fx1, fy1 = fig
+            fw, fh = max(fx1 - fx0, 1), max(fy1 - fy0, 1)
+            x0 = int(fx0 + box[0] * fw); y0 = int(fy0 + box[1] * fh)
+            x1 = int(fx0 + box[2] * fw); y1 = int(fy0 + box[3] * fh)
+        else:
+            x0, y0, x1, y1 = int(box[0] * w), int(box[1] * h), int(box[2] * w), int(box[3] * h)
         r = g = b = 0.0
         lumas = []
         n = 0
@@ -222,6 +277,65 @@ def job():
     control = {}
     RESULT["readings"] = readings
     shots = []
+    # ---- ONE BACKGROUND PLATE PER POSE, WITH THE DOG HIDDEN, so the figure can be located instead of assumed.
+    #
+    # Per POSE and not per hour: the camera depends only on the face and the view, and the Dog does not move
+    # between hours. Taken at noon because a plate only has to say WHERE the figure is, not how it is lit.
+    def worn_costume():
+        """The costume ACTOR attached to the Dog.
+
+        HIDING THE DOG DOES NOT HIDE IT. set_actor_hidden_in_game hides an actor's own components; the skin
+        is a separate AWonderlandCompanionEmbodiment attached to the Dog, so a plate taken with only the Dog
+        hidden would still have the mascot standing in it and the difference would find nothing. Matched by
+        ATTACH PARENT rather than by class, because the AI Companions are the same class and a class match
+        picks whichever one happens to be floating nearby.
+        """
+        for actor in unreal.GameplayStatics.get_all_actors_of_class(
+                world, unreal.WonderlandCompanionEmbodiment):
+            if actor.get_attach_parent_actor() == dog:
+                return actor
+        return None
+
+    plates = {}
+    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour %.2f" % HOURS[0][1])
+    yield 3.0
+    for face_label, turn in FACES:
+        for view_label, distance in VIEWS:
+            live = ues.get_game_world()
+            if live is None:
+                continue
+            costume = worn_costume()
+            try:
+                dog.set_actor_hidden_in_game(True)
+                if costume is not None:
+                    costume.set_actor_hidden_in_game(True)
+                yield 1.0
+                look(distance, turn)
+                yield 1.2
+                unreal.GameplayStatics.set_game_paused(live, True)
+                yield 0.3
+                pname = "plate_%s_%s.png" % (face_label, view_label)
+                ppath = os.path.join(ROOT, pname)
+                if L.capture_game_viewport(ppath):
+                    plates[(face_label, view_label)] = ppath
+                    RESULT.setdefault("capture_hashes", {})[pname] = fingerprint(ppath)
+                unreal.GameplayStatics.set_game_paused(live, False)
+                L.release_camera(live)
+            except Exception as err:                                # noqa: BLE001
+                RESULT.setdefault("errors", {})["plate/%s/%s" % (face_label, view_label)] = str(err)[:160]
+            finally:
+                dog.set_actor_hidden_in_game(False)
+                if costume is not None:
+                    costume.set_actor_hidden_in_game(False)
+                yield 1.0
+    RESULT["plates_taken"] = sorted("%s/%s" % k for k in plates)
+    record("S_PLATES", "a background plate was taken for every pose, so the figure can be located",
+           len(plates) == len(FACES) * len(VIEWS),
+           taken=RESULT["plates_taken"], wanted=len(FACES) * len(VIEWS),
+           note="without a plate the bands fall back to fractions of the FRAME, which is how every earlier "
+                "run of this job measured a wing and called it a skull.")
+
+    figure_boxes = {}
     for hour_label, hour in HOURS:
         unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour %.2f" % hour)
         unreal.SystemLibrary.execute_console_command(world, "wl.Look.PracticalReload")
@@ -250,7 +364,14 @@ def job():
                                            "probably not foreground")
                     shots.append(name)
                     RESULT.setdefault("capture_hashes", {})[name] = fingerprint(path)
-                    readings[key] = {part: region_stats(path, box) for part, box in REGIONS.items()}
+                    fig = figure_boxes.get((face_label, view_label))
+                    if fig is None:
+                        plate = plates.get((face_label, view_label))
+                        fig = figure_box(path, plate) if plate else None
+                        figure_boxes[(face_label, view_label)] = fig
+                    readings[key] = {part: region_stats(path, box, fig)
+                                     for part, box in REGIONS.items()}
+                    readings[key]["_figure_box"] = list(fig) if fig else None
                 except Exception as err:                            # noqa: BLE001
                     RESULT.setdefault("errors", {})[key] = str(err)[:160]
                 unreal.GameplayStatics.set_game_paused(live, False)
@@ -290,7 +411,8 @@ def job():
                 if L.capture_game_viewport(cpath):
                     shots.append(cname)
                     RESULT.setdefault("capture_hashes", {})[cname] = fingerprint(cpath)
-                    control[hour_label] = region_stats(cpath, REGIONS["torso"])
+                    cfig = figure_boxes.get((FACES[0][0], VIEWS[0][0]))
+                    control[hour_label] = region_stats(cpath, REGIONS["torso"], cfig)
                 unreal.GameplayStatics.set_game_paused(live, False)
                 L.release_camera(live)
                 yield 0.3

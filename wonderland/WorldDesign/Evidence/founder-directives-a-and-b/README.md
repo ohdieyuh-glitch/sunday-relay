@@ -111,3 +111,37 @@ Recorded in full in `Tools/editor_jobs/README.md`:
   connection to the output.
 - **The sweep's control is the thing to verify hardest.** The zero end is exactly where a tolerance guard
   bites, and an off-arm that silently does nothing is indistinguishable from a subject that does not respond.
+
+---
+
+## Where the proofs stand after the corrections (2026-09-27, late)
+
+| proof | before tonight | after |
+|---|---|---|
+| `zc_wardrobe_pixels` (item 1) | 10/12 — W11, W13 red | **12/12** |
+| `zc_snake_follow` (item 2) | 3/4 — front 227 / behind 1 | **5/5** — front 296 / behind 251 / above 240 / below 264, 9.66 turns |
+| `zc_cursor_shape` (item 8) | 4/4 | 4/4 |
+| `zc_theme_accent` (item 9) | 4/4 | 4/4 |
+| `zc_mascot_colours` (item 6) | 7/9 | 8/9 — C_RESTORE was failing on a correct restore |
+| `zc_nav_click_cause` (item 7) | — | wiring proven sound; synthetic pointer route unexplained |
+
+**Item 1's two red clauses were red for the wrong reason and stayed red through a fix that had nothing to do
+with them.** Apollo's crown reaches the upper corners of its preview; a mean cannot tell that from the white
+Project Brain chamber those clauses exist to catch. The corners measured 36% and 41% *pure backdrop* with a
+mascot in front of them. The discriminator is now brightness **and** blankness, because a wall has no dark
+pixels in it and a mascot always does.
+
+## The three corrections that were wrong, kept because they cost the time
+
+1. **"The stage over-exposes bright skins."** Refuted by its own control — and the control was broken.
+2. **"Exposure is the lever."** Eight stops, twice, including after enabling the capture's `EyeAdaptation`
+   show flag. No trend. The flag stays on because it is correct, not because it helped.
+3. **"Night is brighter than day, so something is wrong with the world."** No: the exposure opens 2.35 EV
+   between noon and midnight, a factor of 5.10, so any surface keeping more than **19.6%** of its noon
+   luminance reads brighter at night — and an emissive surface keeps all of it. The day-night control was
+   asking an emissive subject to prove the sun had gone down. It is now measured on Relay OG, the one skin
+   with no fire of its own, in the same run at the same spot.
+
+On (3): the version of that control which *passed* was not more correct than the one that voided — it was
+dimmer. It only began failing once the glow work made the subject bright enough to expose it. A green history
+is not evidence a clause is sound; it is evidence the clause has not yet met the input that exposes it.
