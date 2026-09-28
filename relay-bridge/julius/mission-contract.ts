@@ -197,6 +197,24 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
      * forever, after the spend. The gate names the producible set and refuses the
      * rest; this parser only insists on the shape, because the gate is the file
      * that knows what the live path records.
+     *
+     * IT IS A DECLARATION, NOT A SECOND ENFORCEMENT POINT, and that boundary is
+     * deliberate. The seeded criterion's `requiredEvidenceTypes` stays EMPTY, and
+     * `bootstrap.ts` gives the reason: the runtime checks a criterion's evidence
+     * types against EVERY verified task, so a TEST-typed criterion could never be
+     * satisfied by the plan task and the run would park in VERIFYING forever. The
+     * machine enforcement is the BUILD task's own `requiredEvidenceTypes`, which
+     * `verifyTask` HALTs without. So this field does two things and not a third:
+     * the gate checks it for CONSISTENCY against the command, and it travels to
+     * the reviewer inside the binding digest. Wiring it into the per-criterion
+     * requirement would reintroduce the parking bug, and a case in
+     * `julius-live-composition.test.ts` fails if anyone tries.
+     *
+     * AND IT MUST SURVIVE THIS PARSER. The integration lane found the mirror of
+     * this on its own player route: a criterion rebuilt from id/text/blocking
+     * drops the field SILENTLY, so the gate would be reading something the
+     * runtime never saw. The criteria array is passed through rather than
+     * rebuilt, and a case reproduces the rebuild and fails.
      */
     if (item.requiredEvidence !== undefined) {
       if (!Array.isArray(item.requiredEvidence) || item.requiredEvidence.length === 0

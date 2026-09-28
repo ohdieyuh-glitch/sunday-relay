@@ -546,10 +546,21 @@ describe('scripted and test adapters are unreachable in live mode', () => {
 
 /* --------------------------------------------------- the bootstrap port */
 
+/**
+ * The criteria the bootstrap actually seeded, not just how many. The count alone
+ * cannot see whether a contract's declared evidence leaked into the runtime's
+ * per-criterion requirement, which is a parking bug and is asserted below.
+ */
+const seededCriteria: Array<Record<string, unknown>> = [];
+
 function fakeSeeds(calls: string[]): MissionSeedStore {
   return {
     async ensureBase() { calls.push('ensureBase'); },
-    async insertCriteria(runId, criteria) { calls.push(`criteria:${runId}:${criteria.length}`); },
+    async insertCriteria(runId, criteria) {
+      calls.push(`criteria:${runId}:${criteria.length}`);
+      seededCriteria.length = 0;
+      seededCriteria.push(...(criteria as unknown as Array<Record<string, unknown>>));
+    },
     async insertBrainEntries(runId, _projectId, entries) { calls.push(`brain:${runId}:${entries.length}`); },
   };
 }
@@ -649,6 +660,76 @@ describe('the production JuliusBootstrapPort', () => {
     const build = runCalls.map((call) => call.addTask as { taskId: string; requiredEvidenceTypes: string[] } | undefined)
       .find((task) => task !== undefined && task.taskId.endsWith(':build'));
     expect(build?.requiredEvidenceTypes).toEqual(['TEST']);
+  });
+
+  /**
+   * A CRITERION'S `requiredEvidence` IS A DECLARATION, AND MUST NOT BECOME A
+   * PER-CRITERION RUNTIME REQUIREMENT. This case exists so nobody later "finishes
+   * wiring it up" and reintroduces a parking bug.
+   *
+   * The seeded criterion's `requiredEvidenceTypes` is deliberately EMPTY, and
+   * `bootstrap.ts` gives the reason: the runtime checks a criterion's evidence
+   * types against EVERY verified task, so a TEST-typed criterion could never be
+   * satisfied by the plan task and the run would park in VERIFYING forever. The
+   * machine-testable enforcement is the BUILD task's own `requiredEvidenceTypes`,
+   * proven in the case above, which `verifyTask` HALTs without.
+   *
+   * So the contract field is read by `julius-live-contract-check.mjs` for
+   * consistency — a criterion may not claim TEST while the command is empty, and
+   * a blocking criterion under an empty command must name something — and it
+   * travels to the reviewer inside the binding digest. It is not a second
+   * enforcement point, and a declared field that looks like one is exactly the
+   * shape this repository has been bitten by before.
+   */
+  it('a declared requiredEvidence survives the parser but never becomes a per-criterion requirement', async () => {
+    const withEvidence = {
+      missionId: 'm', markerNamespace: 'julius-live-x', projectId: 'p', tenantId: 't',
+      objective: 'o', requirements: [], constraints: [],
+      acceptanceCriteria: [{ id: 'AC-1', text: 'x', blocking: true, requiredEvidence: ['DIFF'] }],
+      testCommand: '', workspacePath: '/w',
+    };
+
+    // 1. IT IS NOT DROPPED. The integration lane found the mirror of this bug on
+    //    its own player route: a criterion rebuilt from id/text/blocking loses the
+    //    field silently, so the gate would read something the runtime never saw.
+    const parsed = parseLiveMissionContract(JSON.stringify(withEvidence));
+    expect(parsed.ok, 'the contract itself must parse').toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.contract.acceptanceCriteria[0]!.requiredEvidence,
+      'a field the gate reads must survive the parser the route uses').toEqual(['DIFF']);
+
+    // 2. IT IS INSIDE THE AGREEMENT. The binding digest covers the contract, so a
+    //    change to what the mission says proves it is a change to the digest the
+    //    coder and its reviewer are both bound to.
+    const { requiredEvidence: _dropped, ...bare } = withEvidence.acceptanceCriteria[0]!;
+    void _dropped;
+    const without = parseLiveMissionContract(JSON.stringify({ ...withEvidence, acceptanceCriteria: [bare] }));
+    expect(without.ok).toBe(true);
+    if (!without.ok) return;
+    expect(compileBootstrapRequest(parsed.contract, [], 'card').missionBindingDigest)
+      .not.toBe(compileBootstrapRequest(without.contract, [], 'card').missionBindingDigest);
+    // And it is a real digest either way, not two undefineds compared.
+    expect(compileBootstrapRequest(parsed.contract, [], 'card').missionBindingDigest)
+      .toMatch(/^sha256:[0-9a-f]{64}$/u);
+
+    // 3. AND THE SEEDED CRITERION STAYS EMPTY.
+    const runCalls: Record<string, unknown>[] = [];
+    const port = createLiveJuliusBootstrapPort({
+      runs: fakeRuns(runCalls) as never, seeds: fakeSeeds([]),
+      tenantId: 'tenant-live', executionId: 'execution-live',
+    });
+    const outcome = await port.submit({
+      ...BOOTSTRAP_REQUEST(),
+      acceptanceCriteria: parsed.contract.acceptanceCriteria as never,
+      deterministicCheck: { declared: false },
+    });
+    expect(outcome.accepted).toBe(true);
+    expect(seededCriteria.length, 'the criterion was seeded').toBeGreaterThan(0);
+    for (const criterion of seededCriteria) {
+      expect(criterion.requiredEvidenceTypes,
+        `"${String(criterion.criterionId)}" must stay empty, or a criterion no task can satisfy parks the run`,
+      ).toEqual([]);
+    }
   });
 });
 
