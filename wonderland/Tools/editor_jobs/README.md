@@ -670,3 +670,36 @@ the most convincing possible disguise for an instrument that was not plugged in.
 excuse — the wiring clause passed in the same void run (all five tiles increment and their surfaces open via
 `SimulateNavTileClick`), and a passing clause in a run whose control failed is worth keeping only because it
 never depended on the pointer at all.
+
+## Verifying the INPUT is not verifying the effect — even with a passing readback
+
+The strongest version of "instrument the output, not the input", because here the input check **passed
+every time and was honest**.
+
+The other lane swept `wl.Look.PreviewGlow` and read the cvar back after every rung. It had always taken
+the value. Five rungs produced five identical pictures, which read as "this term contributes nothing".
+The term was refusing the values:
+
+```cpp
+if (FMath::IsNearlyEqual(GlowScale, Wanted, 0.001f)) { return; }   // and the knob ships at 0.001
+```
+
+**A fixed tolerance can be the entire working range of the knob it guards.** Every value from 0.0 to
+0.002 is "nearly equal" to the shipped 0.001 and silently dropped — including the sweep's own control,
+"turn it off entirely", which never turned anything off.
+
+So a verified input, a real cvar, a passing gate, and no connection to the output at all. Two checks are
+needed and they are different questions:
+
+```bash
+# does any early-out compare a knob against a tolerance of the same order as its shipped value?
+grep -n "IsNearlyEqual" ../../Source/Wonderland/*.cpp
+grep -n "^static float GWonderland.* = " ../../Source/Wonderland/*.cpp
+```
+
+Audited in this lane after it was reported: the only such guard is
+`IsNearlyEqual(Night, LastNight, 0.002f) && IsNearlyEqual(PracticalGain, LastGain, 0.001f)` — 0.2% and
+0.1% of their respective ranges, so no knob here is being swallowed. Checked, not assumed.
+
+**And the sweep's control is the thing to verify hardest.** If "off" and "on" produce the same picture,
+suspect the switch before the subject — the zero end of a sweep is exactly where a tolerance guard bites.
