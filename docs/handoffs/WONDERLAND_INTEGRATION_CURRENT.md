@@ -70,6 +70,13 @@ in worktree `C:\dev\iwonder\wonderland-julius-integration`, local only.
   - **J08** (the created run's criteria equal its contract's) is added to the orchestrator and must pass on the next rerun.
   - **Priority 9 is held NOT COMPLETE on this one defect.**
   - Cosmetic, Core's surface: the Missions subtitle still clips ("…that is runnin").
+- **PRIORITY 9 COMPLETE: acceptance #5, attempt 110a8b103eca5e34** (Core HEAD 6ce1d740, editor pid 58064 on the 03:33:04 DLL; integration 5bd1a450): **ALL CLAUSES PASS, J08 included.**
+  - Julius's criteria fix (3bd32adf, migration 028) was cherry-picked here as e68e32a4 and applied to the isolated database.
+  - The created run holds exactly its contract's criteria (`created-in-world`), and the world now reads "0 of 1 criteria met".
+  - A13 has 12 of 12 photographs. All were viewed and agree with the data. The Missions subtitle no longer clips.
+  - A capture probe on the same editor produced a real JPEG first.
+  - Evidence: `_qa_handoff\acceptance-captures\attempt-110a8b103eca5e34` (README, all photographs, artifact, logs, criteria-evidence).
+  - Not run on this branch since the cherry-pick: the boundary scan (stopped by the low-memory reaper, and not restarted without the founder's word).
 - **Was blocked on:** an editor built with c638c830. Merging the lane into `local/wonderland-task3` was refused by this session's permission layer (a shared branch: kaisi-1f commits there too), and Wonderland Core will not merge without the founder. Merging c638c830 onto task3 at b2f352ad is clean (`git merge-tree`: no conflicts; 19 files, none with uncommitted changes in task3 at the time). Re-checked at task3 4b9b9774 (21:44): clean for c638c830 and for the lane tip 66d4c312, and task3 had no uncommitted source. Both sides edit `WonderlandUiSubsystem.cpp/.h`: textually clean, but only a build proves it semantically. Recompute it at the moment of merging. **The founder decides who merges.**
 - **For Priority 10, from Julius** (`docs/JULIUS_GENERALITY_CLASSIFICATION.md` on their branch):
   - An empty `testCommand` is accepted only after #288 AND the generality PR (`relay/julius-task-generality` 83395f20) land. Until then the paid preflight refuses it. After that, every blocking criterion must declare `requiredEvidence`, the vocabulary is `TEST` and `DIFF` only, and `TEST` is never allowed with an empty command. The profile composes it; the player never does.
