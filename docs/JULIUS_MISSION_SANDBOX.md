@@ -21,9 +21,20 @@ fails part-way through a paid run.
 |---|---|---|
 | Workspace backing filesystem | **≤ 4 MiB** | `BETA_WORKSPACE_BYTES` in `workspace-provisioning.ts`; `assertEnforceableWorkspaceCeiling` refuses `total > workspaceBytes` |
 | Network | **none** | `--network none` in the container args; `MEDIATED` throws `sandbox_mediated_network_unavailable` |
-| Memory / CPU / pids | 128 MiB / 1 / 32 | `relay-bridge/julius/sandbox-limits.ts` |
-| Wall clock, per command | **15 s** | same |
-| Output, per command | 32 KiB | same |
+| Memory / CPU / pids | **1 GiB / 1 / 256** | `relay-bridge/julius/sandbox-limits.ts` |
+| Wall clock, per command | **300 s** | same |
+| Output, per command | **257,377 bytes** (~251 KiB) | same |
+
+> **THESE THREE ROWS WERE WRONG UNTIL 2026-09-28, EACH BY ROUGHLY AN ORDER OF
+> MAGNITUDE.** The page said 128 MiB, 15 s and 32 KiB; `sandbox-limits.ts` declares
+> 1 GiB, 300,000 ms and 257,377 bytes. The numbers had moved and the page had not.
+>
+> That is not a cosmetic drift, because the page USED one of the stale numbers to
+> justify a limitation: it said the sandbox cannot run Relay's own suite partly
+> because of a 15-second wall clock. The real ceiling is 300 seconds, which would be
+> enough for many suites — so the stated reason was false and the true reason is the
+> one beside it, no `node_modules` and no network to fetch them.
+
 | Coding agent's tools | `Read/Glob/Grep/Edit` — **`Write` denied** | `hosted-coding-agent/hosted-envelope.ts` |
 | Sandbox image | `node:22-bookworm-slim` + util-linux, git, ca-certificates, procps | `.github/julius-live-images.sh` |
 
@@ -179,7 +190,7 @@ cannot is a red `npm test`, not a wasted dispatch.
 
 Stated plainly, because the tempting summary is stronger than the truth:
 
-- **The sandbox cannot run Relay's own test suite.** No `node_modules`, and 15 s
+- **The sandbox cannot run Relay's own test suite.** No `node_modules`, and 300 s
   per command against a suite that takes 12–16 minutes. The full suite runs in
   **CI, after** the worker branch is pushed — which is exactly where the
   founder's pipeline puts it, and is why the sandbox never needed to.

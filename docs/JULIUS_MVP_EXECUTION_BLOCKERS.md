@@ -19,7 +19,7 @@ test asserts that so the gap cannot be mistaken for working.
 | # | Finding | Verdict | The task it stops |
 |---|---|---|---|
 | 1 | Coding Agent cannot create a file | **P0, capability now built, wiring outstanding** | "Add a settings page" — any mission needing a new file |
-| 2 | Workspace ceiling is 4 MiB of FILESYSTEM | **P0** | Any mission on a real repository, including Julius's own |
+| 2 | Workspace ceiling is 4 MiB of FILESYSTEM | **P0, an undefended NUMBER, not a wrong control** | Any mission on a real repository, including Julius's own |
 | 3 | No network in the sandbox | **P0, and the same blocker as 2** | Any project whose tests need installed dependencies |
 | 4 | Node-only image | **P0 for game development** | Compiling or running anything that is not Node |
 | 5 | Agent cannot run a bounded command | **P1** | Iterating: format, typecheck, re-run one test, read output |
@@ -102,39 +102,83 @@ target, run a focused test, run a formatter or typechecker, inspect output.
 should not be read as available. The symmetric shape to file creation would be a
 pure kernel decision over `{toolId, arguments}` plus the same `canUseTool` seam.
 
-## 4. The 4 MiB ceiling: measured, and it is not about model context
+## 4. The 4 MiB ceiling: the right control, in the right place, at a number nothing defends
 
-**What it protects.** `assertEnforceableWorkspaceCeiling` calls `statfs` on the
-workspace and refuses when the FILESYSTEM'S TOTAL SIZE exceeds the ceiling, not
-when the bytes used do. It is a statement about sandbox STORAGE: the workspace must
-be a dedicated store small enough that the kernel enforces the bound, rather than a
-directory on a large filesystem where nothing does. The inode check beside it exists
-because a memory-backed store derives its inode count from host RAM, so an unbounded
-count pins kernel memory that both `df` and `du` report as zero.
+**WHAT IT PROTECTS: host RAM, through the size of the filesystem backing the
+workspace.** `assertEnforceableWorkspaceCeiling` calls `statfs` and refuses when the
+filesystem's TOTAL capacity exceeds the bound, not when the bytes used do. The
+comment beside it gives the measured reason a declared number is not enough: before
+the rule, a 200,000-byte write into a declared 65,536-byte ceiling completed in
+full. The inode branch beside it has its own measurement: 300,000 directories on a
+4 MiB tmpfs pinned 283 MiB of kernel memory while both `df` and `du` reported zero.
 
-**It is not about model context, and the two are already separate.** The agent reads
-files on demand through its own tools; the workspace is not ingested into a prompt.
-So "files tools can reach" and "files loaded into model context" are independent
-today, which is the separation the founder asked to preserve. Raising the storage
-ceiling does not enlarge any context.
+**THE CONTROL IS IN THE RIGHT PLACE, and I said otherwise in the first draft of this
+page.** The live policy is `readWorkspace: true`, so the live path is always a BIND
+MOUNT — and a bind mount carries no size argument. `statfs` on the source is the
+only observable property there is, which makes this check logically necessary rather
+than merely present. The `--tmpfs` branch beside it needs no check because `size=`
+is self-enforcing, which is exactly why it is skipped.
 
-**Measured, in this repository:**
+**THE NUMBER IS WHAT NOTHING DEFENDS.** There is no derivation of 4 MiB anywhere in
+the repository. The constant's own comment is descriptive — "the ceiling the
+real-infrastructure suite declares" — and it entered as a test-suite figure that
+hardened into production policy. Three facts put it in perspective:
 
-| Workload | Bytes | Against 4 MiB |
+- the EXECUTOR's own validator accepts a workspace up to 1 TiB, so 4 MiB is Julius's
+  choice and not a platform limit;
+- the same container is given an UNCHECKED 16 MiB `/tmp` — four times the workspace
+  ceiling, on the same host RAM the ceiling exists to protect;
+- and a 1 GiB memory allowance sits beside it.
+
+There is a defended 4 MiB in this codebase, and it is a different one:
+`MAX_EXECUTOR_RESPONSE_BYTES`, the HTTP response envelope, argued from a measured
+worst case of about 3.7 MB. The two numbers are numerically identical and causally
+unrelated.
+
+**IT IS NOT ABOUT MODEL CONTEXT, and the two are already fully separate.** The
+context packet is built from Project Brain ENTRIES against a character budget
+(200,000 for the coder and architect, 24,000 for the reviewer) and touches no
+filesystem. The agent reads files on demand through its own tools. Only CHANGED
+files come back into a model's view afterwards, at most eight of them at 64 KiB
+each, and the paths come from Relay's inspection rather than from the agent. **A
+40 MiB workspace would not add one token to any prompt.**
+
+**ONE STRUCTURAL FACT THAT MAKES THIS SHARPER THAN A STORAGE QUESTION.** The hosted
+agent runs on the HOST with its `cwd` set to that 4 MiB tmpfs. The Docker sandbox and
+its bind mount are used for the verification effects — snapshot, diff, test. So the
+ceiling is a bound on the AGENT'S OWN WORKING DIRECTORY, not merely on container
+storage.
+
+**MEASURED, through the gate's own `git archive | wc -c` path, which pads every file
+to a 512-byte boundary:**
+
+| Workload | tar bytes | Against 4 MiB |
 |---|---|---|
-| This repository, excluding `node_modules`, `.git`, build output | 26,860,123 | **6.4× over** |
-| `src/relay/mission/julius/` alone | 3,112,442 | 74% of the ceiling |
-| One mission slice file (`node-tool-adapter.ts`) | 12,373 | 0.3% |
+| This repository, excluding dependencies, `.git` and build output | 26,081,280 | **6.2x over** |
+| `src/relay/` | 15,626,240 | **3.7x over** |
+| `relay-bridge/` | 3,952,640 | 94% of the ceiling |
+| `src/relay/mission/julius/` | 3,256,320 | 78% of the ceiling |
+| One mission slice file | 20,480 | 0.5% |
 
-**Julius cannot work on Julius.** Its own source tree is six times its workspace
-ceiling, and its kernel directory alone consumes three quarters of it. The only
-workload that fits comfortably is a hand-picked slice, which is why every mission
-carries a `slice.txt` and why someone must choose it.
+**And the effective ceiling is lower than 4 MiB, because the workspace is a git
+repository.** The provisioning script runs `git init`, `git add` and `git commit`
+inside that same tmpfs, and the loose objects land there too. Adding a
+gzipped-archive proxy for that cost puts both `relay-bridge/` and
+`src/relay/mission/julius/` OVER the ceiling despite each fitting the gate. The
+usable budget for a slice is nearer **3.2 MB of source**.
 
-**So the ceiling is the right control at the wrong number, in the wrong place for
-the MVP.** It is a legitimate storage bound; it is calibrated for a single-file
-fixture. Raising it is not a one-line change, because the mount must be a dedicated
-store of the new size — but nothing about the architecture forbids a larger one.
+**WHAT REAL MISSIONS HAVE USED: at most 2.7%.** Mission 5, the largest, seeded six
+files at 112,640 tar bytes. Missions 4 and 6 used 2.4% and 0.5%. So the ceiling has
+never bound an actual mission — it binds only the missions the design cannot express,
+which is precisely why it reads as harmless until someone asks for a repository.
+
+**AND RAISING IT ALONE WOULD NOT BE ENOUGH, which is the finding that matters for
+sequencing.** A larger ceiling makes "here is my repository" PROVISIONABLE. It does
+not make it WORKABLE, because the sandbox has no network with which to install
+dependencies and until this pass the agent could not create a file. Those three are
+one problem for planning purposes: the ceiling admits the repository, the
+pre-sealed dependency install makes its checks runnable, and creation lets the work
+produce new files. Any one of them alone leaves a mission that still cannot finish.
 
 ## 5. Network: classified, and the answer is not "add network"
 
@@ -159,9 +203,10 @@ sandbox.** Install into the workspace BEFORE sealing it, then run the check with
 which is the property worth keeping.
 
 **Which makes this the SAME blocker as the ceiling.** A populated `node_modules` is
-hundreds of megabytes; a 4 MiB workspace cannot hold one. Findings 2 and 3 are one
-problem wearing two faces, and fixing the ceiling is what makes the no-network
-sandbox viable for real projects rather than only for dependency-free ones.
+hundreds of megabytes; a 4 MiB workspace cannot hold one. Findings 1, 2 and 3 are
+one problem for planning purposes, and the order matters: the ceiling admits the
+repository, the pre-sealed install makes its checks runnable, and creation lets the
+work produce new files. Any one alone leaves a mission that still cannot finish.
 
 ## 6. Game development: what the image actually prevents
 
@@ -199,7 +244,7 @@ performs, the receipt is the evidence.
 | Finding | Mechanism | Smallest safe fix | Security | Kernel or adapter |
 |---|---|---|---|---|
 | Cannot create a file | `Write` denied in the hosted envelope | done: pure kernel decision + pre-hoc authority; wiring outstanding | the first dispatch that writes a file it chose; deny-by-default and named refusals | kernel decision + bridge adapter |
-| 4 MiB workspace | `statfs` total-size refusal | provision a larger dedicated store; the number, not the control | a bigger workspace holds more of the repository, so `permittedPaths` starts carrying real weight | adapter and provisioning only |
+| 4 MiB workspace | `statfs` total-size refusal on a bind mount, which is the only observable bound there | provision a larger dedicated store: the NUMBER, which nothing derives, not the control, which is necessary | a bigger workspace holds more of the repository, so `permittedPaths` starts carrying real weight | adapter and provisioning only |
 | No network | frozen `DENY` + `--network none` | install dependencies before sealing; keep the sandbox offline | none added, which is the point | provisioning only |
 | Node-only image for game dev | one image, no compiler | mediated host build tool, not a bigger image | a host tool runs outside the sandbox and needs its own bound | adapter |
 

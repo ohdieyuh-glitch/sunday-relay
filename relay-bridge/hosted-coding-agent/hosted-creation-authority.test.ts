@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   compileHostedEnvelope, juliusHostedCreationAuthority,
@@ -18,7 +18,14 @@ import type { JuliusFileCreationPolicy } from '../../src/relay/mission/julius/ju
  * refusals and so cannot answer "what did this dispatch create".
  */
 
-const ROOT = resolve(import.meta.dirname, '../..');
+/**
+ * `process.cwd()`, as every other bridge test resolves the repository, and NOT
+ * `import.meta.dirname`: this project's tsconfig sets a module target that refuses
+ * `import.meta`, so the first version of this line typechecked under
+ * `scripts/tsconfig.json` and failed under `relay-bridge/tsconfig.json`. Vitest
+ * runs from the repository root.
+ */
+const ROOT = process.cwd();
 
 const policy: JuliusFileCreationPolicy = Object.freeze({
   permittedPaths: Object.freeze(['src', 'tests']),
