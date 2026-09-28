@@ -118,6 +118,51 @@ export interface JuliusBootstrapRequest {
   readonly card: PinnedRevisionReference;
   readonly projectBrain: PinnedRevisionReference;
   /**
+   * WHETHER THIS MISSION DECLARES A DETERMINISTIC CHECK AT ALL.
+   *
+   * Julius is not a coding-only agent. A research, analysis, planning or
+   * document mission produces a real change to a real file and has no test
+   * command, and a bootstrap that demanded `TEST` evidence of it would park the
+   * run in VERIFYING forever for lacking something the mission never had.
+   * `declared: false` makes the build's required evidence the captured DIFF —
+   * the deliverable itself — instead of a test run nobody declared.
+   *
+   * OPTIONAL, AND ABSENT MEANS DECLARED. Every existing compiler of this request
+   * describes a code mission with a test command, and keeping their behaviour
+   * unchanged is the point; only a compiler that KNOWS there is no check says so.
+   */
+  readonly deterministicCheck?: { readonly declared: boolean };
+  /**
+   * SOMEBODY MEANT TO RUN THIS MISSION AGAIN WHILE A RUN OF IT IS STILL ALIVE.
+   *
+   * Absent is the safe default and the ordinary case: a second, DIFFERENT
+   * execution of a mission that is still in flight is refused, because an
+   * accidental resubmit — an edited draft, a client retry with a changed field
+   * — would otherwise start a second paid execution nobody asked for. A
+   * replayed IDENTICAL request is not affected either way: its idempotency key
+   * is the contract's own content, so it resumes the run it already made.
+   *
+   * `EXPLICIT` may only be set from a deliberate human act — an operator flag,
+   * a client's rerun affordance — and never as a retry default. It is the
+   * founder's "preserve an explicit intentional rerun path", and the reason it
+   * is a separate field rather than a contract change is that rerunning a
+   * mission is not a property OF the mission.
+   */
+  readonly rerunIntent?: 'EXPLICIT';
+  /**
+   * THE TOKEN AN EXPLICIT RERUN IS IDENTIFIED BY. Required with `rerunIntent`.
+   *
+   * A run's identity is derived from the contract's content: the same bytes name
+   * the same run, which makes a retry safe and makes an unchanged contract
+   * unable to run twice. An explicit rerun folds this token into that identity,
+   * so one token means one rerun however many times the request is sent. It has
+   * to come from the CALLER: any discriminator derived from durable state (the
+   * latest run, a count of runs) changes the moment the rerun lands, so the
+   * retry would buy a third execution. Absent it, the bootstrap refuses
+   * `rerun_key_required` rather than serving something unsafe.
+   */
+  readonly rerunKey?: string;
+  /**
    * The repository authority this run REQUESTS. Requested, never granted:
    * Relay's repository resolver narrows it against what a human granted on the
    * registration, and Julius narrows it again per worker and per sub-agent.
@@ -163,6 +208,17 @@ export type JuliusBootstrapOutcome =
     readonly runId: string;
     readonly acceptedAt: string;
     readonly state: JuliusMissionState;
+    /**
+     * TRUE WHEN THIS SUBMIT FOUND THE RUN RATHER THAN MAKING IT — a replay, a
+     * duplicate, a client retrying a lost response.
+     *
+     * Absent the distinction, a caller could not tell "your mission started"
+     * from "the mission you already started is still here", and a rerun
+     * affordance would report a second run that does not exist. Optional
+     * because an older port cannot know it; a reader must treat `undefined` as
+     * "not stated" rather than as `false`.
+     */
+    readonly resumed?: boolean;
   }
   | {
     readonly accepted: false;

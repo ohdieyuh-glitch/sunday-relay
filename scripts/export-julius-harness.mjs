@@ -103,6 +103,8 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'src/relay/persistence/julius-subagent-postgres.ts', reason: 'durable sub-agent grants (JuliusSubagentStore) for julius-subagent-runtime; the live C.A.R.D. policy sets subagents.allowed=false' },
   { path: 'src/relay/persistence/julius-repair-postgres.ts', reason: 'durable repair-cycle scheduling against julius_tasks and julius_repair_cycles; the live root reaches repair through the store aggregate, not this repository' },
   { path: 'src/relay/workspace/julius-tools/registry.ts', reason: 'the default tool catalogue (DEFAULT_JULIUS_TOOL_IDS, createDefaultJuliusToolRegistry); the live root routes tool effects through the executor shell port and does not build a registry' },
+  { path: 'relay-bridge/julius-mission-routes.ts', reason: 'the bridge\u2019s operator-only POST /julius/missions: the contract library\u2019s own parser (julius/mission-contract.ts, shared with the job rather than imported from the job\u2019s entry file, whose require.main guard is true inside the server bundle), the same compileBootstrapRequest and the same createLiveJuliusBootstrapPort the mission job uses, over the same PostgreSQL repositories \u2014 so a mission created here and one read from disk are one mission with one execution identity. Bootstrap only: it composes no provider, spends nothing and ticks nothing; the run lands durable in READY for the state routes to watch and the job to drive. Reached from the HTTP server, which is not a mission root' },
+  { path: 'relay-bridge/julius-state-routes.ts', reason: 'the bridge\u2019s READ-ONLY mount of JuliusRuntimeApi for Wonderland \u2014 /julius/runs/<id>/<run|slots|tasks|evidence|verification|timeline>, operator-only, composed over the SAME createJuliusPostgresRuntimeStore the mission job writes through so there is one state authority. Reached from the HTTP server, which is a Relay surface and not a mission root, and never from a mission; it computes nothing about a run, every answer is the API\u2019s own. Also the first composition root for the subagent and lifecycle repositories' },
   { path: 'src/relay/workspace/julius-tools/local-artifact-store.ts', reason: 'the durable staged→finalized artifact store (StagedArtifactStorePort); the live root uses an in-process artifact exchange, recorded as debt in docs/JULIUS_BETA_READINESS.md' },
 ];
 
@@ -132,6 +134,7 @@ const KERNEL_DEPENDANT_EXCLUSIONS = [
   { path: 'relay-bridge/julius/durable-artifacts.ts', reason: 'composes the content-addressed artifact store with the work-artifact record so a body survives the process that made it; not yet reached by the live composition, which still holds bodies in its own exchange — the wiring is the next boundary' },
   { path: 'src/relay/persistence/julius-work-artifact-postgres.ts', reason: 'the PostgreSQL record of which body belongs to which attempt; reached once the live composition stops holding bodies in memory' },
   { path: 'src/relay/persistence/julius-decision-write-conformance.ts', reason: 'the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root' },
+  { path: 'src/relay/mission/julius/julius-learning-loop.ts', reason: 'the Learning Loop’s measurement and promotion gate: it projects a mission’s outcome from the durable trajectory, compares a matched pair and answers whether an artifact may become trusted memory. It is an EVALUATION surface, read after a mission rather than during one, so no dispatch path reaches it — and it deliberately writes nothing: the promotion it authorises is performed by promoteJuliusMemoryClaim, which IS on the kernel path' },
   { path: 'src/relay/workspace/julius-tools/node-tool-adapter.ts', reason: 'the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests' },
 ];
 
@@ -249,13 +252,18 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-memory-trust.ts', 'DURABLE STATE / PROJECT BRAIN'],
   // The context integrity layer: which of those memories may reach a worker's
   // packet, in what order, and what happens when two of them cannot both be
-  // true. Seeded as a STUB for paid Live Mission 5, so nothing imports it yet
-  // and the trace does not reach it — declared now, for the same reason the
-  // trust core above is, so the landing that finally gives it a caller does not
-  // also trip the drift gate. Same subsystem as the Project Brain it reads and
-  // the compiler it will sit inside: `julius-runtime.ts` and
-  // `julius-context-snapshot.ts` are both already here.
+  // true. It was declared here while it was still a STUB nothing imported, so
+  // that the landing which finally gave it a caller would not also trip the
+  // drift gate. That landing has happened: `compileJuliusContext` routes through
+  // it and the trace reaches it from the live root. Same subsystem as the
+  // Project Brain it reads and the compiler it sits inside.
   ['src/relay/mission/julius/julius-context-integrity.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  // And the join that lets it run on a real mission: a durable brain row turned
+  // into a claim, using `worker_id`, `entry_kind`, `evidence_ids` and
+  // `created_at` and nothing else. Reached from the pipeline.
+  ['src/relay/mission/julius/julius-context-provenance.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  // The claim ledger: admission at every brain write, promotion on an accepted review, the record winning at compile.
+  ['src/relay/mission/julius/julius-claim-ledger.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // Allocation decides what a dispatch MAY spend; this decides what is known
   // about what it DID spend, and on whose authority. Same subsystem: both are
@@ -274,6 +282,13 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-metrics.ts', 'EVENTS / TRAJECTORIES'],
   ['src/relay/mission/julius/julius-run-loop.ts', 'COMPLETION AUTHORITY'],
   ['src/relay/mission/julius/julius-runtime-api.ts', 'COMPLETION AUTHORITY'],
+  // The bridge's read-only HTTP mount of that API, for Wonderland. Same subsystem
+  // because it is the surface completion state is READ through, and it computes
+  // nothing the API did not: a path to a method, a refusal to a status.
+  ['relay-bridge/julius-state-routes.ts', 'COMPLETION AUTHORITY'],
+  // Creation over HTTP: the contract file's parser, the request compiler and the
+  // bootstrap port the job uses, over the same store. Bootstrap only; no dispatch.
+  ['relay-bridge/julius-mission-routes.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   // A unit of coder work that pauses at a checkpoint and resumes as a bounded
   // continuation. The SCHEDULER's, for the same reason the lifecycle above is:
   // it is the coordinator's account of when work stops, and filing it under the
@@ -377,8 +392,11 @@ const FILE_RULES = [
   ['src/relay/mission/trace/', 'EVENTS / TRAJECTORIES'],
   // Bridge-side composition.
   ['relay-bridge/julius-live-mission.ts', 'MISSION CONTRACT / BOOTSTRAP'],
+  ['relay-bridge/julius/mission-contract.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/bootstrap.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/mission-seed.ts', 'MISSION CONTRACT / BOOTSTRAP'],
+  // What one mission verified, inherited by the next: the minimum truthful reuse.
+  ['relay-bridge/julius/mission-knowledge.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['relay-bridge/julius/postgres-store.ts', 'PERSISTENCE'],
   ['relay-bridge/julius/executor-effects.ts', 'TOOLS'],
   ['relay-bridge/julius/sandbox-limits.ts', 'TOOLS'],

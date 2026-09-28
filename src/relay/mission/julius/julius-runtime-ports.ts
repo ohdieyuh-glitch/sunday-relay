@@ -15,7 +15,8 @@
  * these NARROW ports instead. Two things implement them: the Postgres
  * repositories, which already have these shapes (a conformance test in
  * `src/relay/persistence` holds them to it, and lives there because only that
- * layer may import both sides), and a deterministic in-memory store that
+ * layer may import type { JuliusMemoryClaim } from './julius-memory-trust';
+import both sides), and a deterministic in-memory store that
  * models the same semantics precisely enough to prove concurrency, recovery
  * and idempotency invariants without a database.
  *
@@ -38,6 +39,7 @@ import type {
   JuliusVerificationDecision,
   JuliusWorkerRole,
 } from './julius-runtime';
+import type { JuliusMemoryClaim } from './julius-memory-trust';
 import type { JuliusOperationalEvent } from './julius-events';
 import type { JuliusRecoveryAction } from './julius-recovery';
 import type { JuliusReviewerFinding, JuliusAcceptanceCriterion } from './julius-verification-runtime';
@@ -145,7 +147,15 @@ export interface JuliusRunWriter {
   }): Promise<boolean>;
   finishTask(input: {
     taskId: string; owner: string; leaseGeneration: number;
-    state: 'SUCCEEDED' | 'FAILED' | 'CANCELLED'; now: string; nextAttemptAt?: string;
+    /**
+     * `SKIPPED` is how a task ends when its work was SUPERSEDED rather than
+     * done or abandoned — the one producer is a content refusal that Julius
+     * re-planned into a continuation segment. It is the only terminal state
+     * besides SUCCEEDED that `missionMayComplete` accepts, which is exactly
+     * why it may never be reached by any path that has not put the work
+     * somewhere else.
+     */
+    state: 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'SKIPPED'; now: string; nextAttemptAt?: string;
   }): Promise<boolean>;
   appendEvidence(input: {
     runId: string; projectId: string; idempotencyKey: string; evidence: JuliusEvidence;
@@ -440,6 +450,30 @@ export interface JuliusBrainWriter {
 }
 
 /**
+ * THE CLAIM STORE — a memory's standing, durable, with its history.
+ *
+ * One append per standing a claim has held: admission when the entry is
+ * written, a promotion when a reviewer verifies what the entry's task did.
+ * `recordClaimStanding` returns false for a replay whose content equals the
+ * latest row, so a re-run tick cannot manufacture history; `claimsForRun`
+ * answers the CURRENT standing per claim, which is what the context compiler
+ * reads in place of the derived one. See `julius-claim-ledger.ts`.
+ */
+export interface JuliusClaimStandingAppend {
+  readonly runId: string;
+  readonly projectId: string;
+  readonly claim: JuliusMemoryClaim;
+  /** Why this standing was recorded — `ADMITTED`, `REVIEW_ACCEPTED`. */
+  readonly reason: string;
+  readonly occurredAt: string;
+}
+
+export interface JuliusClaimStore {
+  claimsForRun(runId: string, projectId: string): Promise<readonly JuliusMemoryClaim[]>;
+  recordClaimStanding(input: JuliusClaimStandingAppend): Promise<boolean>;
+}
+
+/**
  * THE TASK/SPRINT CONTRACT STORE.
  *
  * `julius-task-contract.ts` decides what a contract MEANS; this stores it. The
@@ -520,7 +554,7 @@ export type JuliusTaskContractLockResult =
 export interface JuliusRuntimeStore
   extends JuliusRunWriter, JuliusResultWriter, JuliusContextWriter,
   JuliusEventWriter, JuliusTrajectoryWriter, JuliusRuntimeReader, JuliusFindingWriter,
-  JuliusBrainWriter, JuliusTaskContractStore {}
+  JuliusBrainWriter, JuliusTaskContractStore, JuliusClaimStore {}
 
 /* --------------------------------------------------- role/task vocabulary */
 

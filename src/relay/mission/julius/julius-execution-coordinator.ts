@@ -197,7 +197,60 @@ export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;re
  * every existing reader keeps working, and `null` means "not classified",
  * never "fine".
  */
-export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean;/** What the worker proposed for its own task contract, unsanitised. Julius decides. */readonly contractProposal?:unknown;/** A coder's request for architect guidance, unsanitised. */readonly guidanceRequest?:unknown;/** An architect's guidance packet, unsanitised. */readonly guidance?:unknown;/** What a continuation segment resumes from, unsanitised. Julius rebuilds it. */readonly segmentResume?:unknown;/** What a worker of any slot needs Julius to go and look at, unsanitised. */readonly researchAsks?:unknown;/** A reviewer's canonical verdict, unsanitised. Julius decides what it means. */readonly reviewVerdict?:unknown;/** An architect's rebuttal to a disagreement, unsanitised. */readonly rebuttal?:unknown;/** An architect's structured architecture state, unsanitised. Advisory, never the contract. */readonly architecture?:unknown;/** An architect's final architecture consistency assessment, unsanitised. */readonly consistency?:unknown;/** A Coding Agent's workspace change set and report, unsanitised. */readonly implementation?:unknown;/** A Coding Agent's observations about the design, unsanitised. */readonly architectureObservations?:unknown}|{
+/**
+ * WHAT AN ATTEMPT OBSERVED ABOUT ITSELF, IN NUMBERS, ON THE PATH THAT SUCCEEDED.
+ *
+ * `JuliusTrajectoryEvent` has carried `providerId`, `usdMicros`, `inputTokens`,
+ * `outputTokens` and `durationMs` since it was written, and on a successful
+ * dispatch every one of them was null — because the pipeline had nothing to put
+ * there. The coordinator saw the provider's usage, committed the budget with it,
+ * and returned `{status, workerId, duplicate}`.
+ *
+ * SO EVERY METRIC DERIVED FROM THE TRAJECTORY WAS STRUCTURALLY EMPTY.
+ * `summariseJuliusEvals` reads cost and duration off DISPATCH rows:
+ * `knownUsdMicros` was always 0, `unknownCostComponents` always equalled the
+ * dispatch count, `costComplete` was always false, and `averageDurationMs` was
+ * always null — for every project, every runtime version and every mission that
+ * has ever run. Not because a provider was silent. Because nobody was asked.
+ *
+ * IT IS NOT A SECOND RECORD OF THE MONEY. `budget.settled` remains the ledger
+ * and the authority; this is the same figure on the row the EVALS read, which is
+ * the row that was designed to hold it. Where the provider reported nothing the
+ * field stays null, so an unreported cost still cannot become a zero.
+ */
+export interface JuliusAttemptMeasurement{
+ /** The provider that actually answered, as the adapter reported itself. */
+ readonly providerId:string;
+ /** What the boundary billed, or null when it reported nothing. Never 0 for unknown. */
+ readonly usdMicros:number|null;
+ readonly inputTokens:number|null;
+ readonly outputTokens:number|null;
+ /** Wall time the runtime observed for the attempt, or null. */
+ readonly durationMs:number|null;
+}
+/**
+ * READ THE NUMBERS OFF THE PROVIDER'S OWN REPORT, and nothing else.
+ *
+ * `usage` is `unknown` by design — it is the provider's shape, not Julius's — so
+ * every field is checked one at a time and a value that is not a finite,
+ * non-negative integer is null. `validateTrajectoryEvent` refuses anything else,
+ * and a NaN reaching the durable row would be a number nobody could act on.
+ */
+function measurementOf(worker:{readonly providerId:string},result:{readonly usage:unknown}):JuliusAttemptMeasurement{
+ const usage=(typeof result.usage==='object'&&result.usage!==null?result.usage:{}) as Record<string,unknown>;
+ const count=(value:unknown):number|null=>
+  typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?value:null;
+ return{
+  providerId:worker.providerId,
+  usdMicros:count(usage.usdMicros),
+  inputTokens:count(usage.inputTokens),
+  outputTokens:count(usage.outputTokens),
+  // `runtimeMs` is what the adapters report; the trajectory column is `durationMs`.
+  durationMs:count(usage.runtimeMs),
+ };
+}
+
+export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean;/** What this attempt measured. Absent only where no provider answered. */readonly measured?:JuliusAttemptMeasurement;/** What the worker proposed for its own task contract, unsanitised. Julius decides. */readonly contractProposal?:unknown;/** A coder's request for architect guidance, unsanitised. */readonly guidanceRequest?:unknown;/** An architect's guidance packet, unsanitised. */readonly guidance?:unknown;/** What a continuation segment resumes from, unsanitised. Julius rebuilds it. */readonly segmentResume?:unknown;/** What a worker of any slot needs Julius to go and look at, unsanitised. */readonly researchAsks?:unknown;/** A reviewer's canonical verdict, unsanitised. Julius decides what it means. */readonly reviewVerdict?:unknown;/** An architect's rebuttal to a disagreement, unsanitised. */readonly rebuttal?:unknown;/** An architect's structured architecture state, unsanitised. Advisory, never the contract. */readonly architecture?:unknown;/** An architect's final architecture consistency assessment, unsanitised. */readonly consistency?:unknown;/** A Coding Agent's workspace change set and report, unsanitised. */readonly implementation?:unknown;/** A Coding Agent's observations about the design, unsanitised. */readonly architectureObservations?:unknown}|{
  readonly status:'RETRY'|'FAILED'|'DENIED';
  readonly code:string;
  readonly failureClass?:string|null;
@@ -370,7 +423,7 @@ export class JuliusExecutionCoordinator {
       const receipt=await this.ports.acceptResult({claim:request.claim,worker,result,idempotencyKey:`${request.operationId}:result`,evidence});
       await this.ports.commit({claim:request.claim,reservationId:reservation.reservationId,result});
       await this.event(request,'worker.completed',{workerId:worker.workerId,duplicate:receipt.duplicate,evidenceCount:evidence.length,...successDiagnostics(request,result)});
-      return{status:'COMPLETED',workerId:worker.workerId,duplicate:receipt.duplicate,...(result.contractProposal===undefined?{}:{contractProposal:result.contractProposal}),...(result.guidanceRequest===undefined?{}:{guidanceRequest:result.guidanceRequest}),...(result.guidance===undefined?{}:{guidance:result.guidance}),
+      return{status:'COMPLETED',workerId:worker.workerId,duplicate:receipt.duplicate,measured:measurementOf(worker,result),...(result.contractProposal===undefined?{}:{contractProposal:result.contractProposal}),...(result.guidanceRequest===undefined?{}:{guidanceRequest:result.guidanceRequest}),...(result.guidance===undefined?{}:{guidance:result.guidance}),
       ...(result.segmentResume===undefined?{}:{segmentResume:result.segmentResume}),
       ...(result.researchAsks===undefined?{}:{researchAsks:result.researchAsks}),
       ...(result.reviewVerdict===undefined?{}:{reviewVerdict:result.reviewVerdict}),

@@ -28,7 +28,7 @@
  * that will eventually forget to catch.
  */
 
-import type { JuliusEvidence, JuliusMissionState, JuliusTask, JuliusVerificationDecision } from './julius-runtime';
+import { JULIUS_DEFAULT_ROLES, type JuliusDefaultRole, type JuliusEvidence, type JuliusMissionState, type JuliusTask, type JuliusVerificationDecision } from './julius-runtime';
 import type { JuliusReviewerFinding } from './julius-verification-runtime';
 import type { JuliusSubagentRecord, JuliusSubagentStore } from './julius-subagent-runtime';
 import {
@@ -92,6 +92,150 @@ export interface JuliusRunView {
   readonly taskCounts: Readonly<Record<JuliusTask['state'], number>>;
   readonly activeTasks: number;
   readonly pendingApprovals: number;
+}
+
+/**
+ * WHAT THE MISSION PRODUCED, AND WHETHER IT MAY BE TRUSTED — the loop's last
+ * step, which had no projection at all.
+ *
+ * THE GAP THIS CLOSES. A surface could read a run's state, its tasks, its
+ * evidence, its decisions, its findings and its timeline, and from those six
+ * reads assemble an answer to the only question a user actually asks: did it
+ * work, what did it make, and can I believe it? Every client would assemble it
+ * differently, and the first one to get it wrong would show a mission as done
+ * because the run said COMPLETED while a criterion had no passing evidence. The
+ * answer is computed once, here, from the record.
+ *
+ * WHAT IT REFUSES TO DO.
+ *   - `verified` is true only when the RUN reached COMPLETED. Completion is the
+ *     runtime's decision under the completion rule; this reports it and never
+ *     re-derives it.
+ *   - A criterion is satisfied by the verification evaluator's own rule — every
+ *     required evidence type present and PASSED — imported rather than re-spelt.
+ *   - An unknown cost is null beside a count of what is unknown, never zero.
+ *   - A deliverable whose body was not retained says `retained: false` rather
+ *     than reading as an empty one.
+ *   - It carries no prose but the safe summaries the record already holds, and
+ *     no reasoning of any kind.
+ */
+export interface JuliusMissionResultView {
+  readonly runId: string;
+  readonly missionId: string;
+  readonly state: JuliusMissionState;
+  /** COMPLETED, and nothing else, is a verified result. */
+  readonly verified: boolean;
+  /** True once the run can no longer change: COMPLETED, FAILED or CANCELLED. */
+  readonly terminal: boolean;
+  readonly criteria: readonly {
+    readonly criterionId: string;
+    readonly description: string;
+    readonly requiredEvidenceTypes: readonly string[];
+    readonly satisfied: boolean;
+    /**
+     * WHAT MAKES IT SATISFIED, because the two are not the same claim.
+     *
+     * `EVIDENCE` — every required type is present and PASSED, the verification
+     * evaluator's own rule. `COMPLETION` — the criterion names NO required
+     * evidence, so no row can satisfy it and the only thing that can is the
+     * mission reaching verified completion under the completion rule.
+     *
+     * THIS FIELD EXISTS BECAUSE THE FIRST VERSION WAS WRONG. `every()` over an
+     * empty list is `true`, so a criterion requiring nothing read as satisfied on
+     * a run that had not started — and the bootstrap seeds exactly such criteria
+     * (deliberately: a TEST-typed criterion checked against every task would park
+     * a plan task in VERIFYING forever). A client would have shown "1 of 1 met"
+     * over a mission that had done nothing at all.
+     */
+    readonly basis: 'EVIDENCE' | 'COMPLETION';
+    /** The PASSED rows that satisfy it, so a reader can go and look. */
+    readonly evidenceIds: readonly string[];
+  }[];
+  /**
+   * WHAT THE MISSION MADE. Every PASSED evidence row that is a product rather
+   * than a judgement — a diff, an artifact, a test result — with the reference
+   * a body can be fetched by and whether one was retained at all.
+   */
+  readonly deliverables: readonly {
+    readonly evidenceId: string;
+    readonly taskId: string;
+    readonly type: JuliusEvidence['type'];
+    readonly safeSummary: string;
+    readonly artifactRef: string | null;
+    readonly integrityHash: string | null;
+    /** False when no body was retained: a reference nobody can resolve is not one. */
+    readonly retained: boolean;
+    readonly occurredAt: string;
+  }[];
+  /** Blocking findings still open, which is why a run is not verified. */
+  readonly outstandingFindings: readonly { readonly findingId: string; readonly taskId: string; readonly claim: string; readonly severity: string }[];
+  /** The independent review's own acceptances, so "who verified this" has an answer. */
+  readonly reviewDecisions: readonly { readonly taskId: string; readonly action: string; readonly reasonCode: string }[];
+  /** Total spend, and what is unknown about it. Never a zero standing in for unknown. */
+  readonly cost: {
+    readonly knownUsdMicros: number;
+    readonly unknownComponents: number;
+    readonly complete: boolean;
+  };
+  /** Why it is not verified, when it is not: the named reason, never a guess. */
+  readonly failure: { readonly reasonCode: string; readonly failureClass: string | null } | null;
+}
+
+/**
+ * WHAT ONE C.A.R.D. SLOT IS DOING, FOR A SURFACE THAT HAS TO DRAW IT.
+ *
+ * WHY THIS EXISTS. Wonderland has to represent three peers — the Prompt
+ * Architect, the Coding Agent, the Independent Reviewer — and `JuliusRunView`
+ * carries a run state and task counts. A surface given only that has two
+ * choices: invent per-role state from task names, or read the timeline and
+ * re-derive the runtime's own conclusions in UI code. Both make the UI a second
+ * authority on Julius, which is the failure this API exists to prevent.
+ *
+ * EVERY FIELD IS PROJECTED FROM THE DURABLE LEDGER. Nothing here is counted
+ * alongside the events; a number that disagreed with the timeline would be
+ * impossible rather than unlikely.
+ *
+ * AND EVERY UNKNOWN IS NULL. A slot whose provider never reported a model has
+ * `servedModel: null`, not the requested one — the two are separate fields
+ * because the provider's answer is the only authority on what actually ran. A
+ * slot whose costs were never reported has `costComplete: false` and a
+ * `knownUsdMicros` that is a FLOOR. A surface that renders a floor as a total is
+ * wrong, and this shape is what lets it know.
+ */
+export interface JuliusSlotView {
+  /**
+   * ONE OF THE THREE PERMANENT PEERS, and deliberately not `JuliusWorkerRole`.
+   * A `SPECIALIST:*` is a bounded child of a slot rather than a slot: it has no
+   * standing peer to draw, and `inspectSubagents` is where its record lives.
+   * Widening this to the full union would promise rows nothing ever produces.
+   */
+  readonly role: JuliusDefaultRole;
+  /** The worker that most recently held this slot, or null if none ever has. */
+  readonly workerId: string | null;
+  /** The provider that answered, as the adapter reported it. Never inferred. */
+  readonly providerId: string | null;
+  /** What was ASKED FOR. */
+  readonly requestedModel: string | null;
+  /** What ANSWERED. Null is the provider's silence, never a copy of the request. */
+  readonly servedModel: string | null;
+  /**
+   * `NEVER_DISPATCHED` is a real state and the commonest one early in a mission.
+   * `ACTIVE` means a dispatch is open — dispatched with nothing recorded after
+   * it. `FAILED` means this slot's last recorded outcome was a failure, which is
+   * not the same as the run having failed.
+   */
+  readonly state: 'NEVER_DISPATCHED' | 'ACTIVE' | 'IDLE' | 'FAILED';
+  readonly dispatches: number;
+  /** The ledger position of this slot's last activity. Null when it has none. */
+  readonly lastSequence: number | null;
+  /** A FLOOR whenever `costComplete` is false. */
+  readonly knownUsdMicros: number;
+  /** Settlements this slot made that reported no amount. Not zero-cost ones. */
+  readonly unknownCostComponents: number;
+  readonly costComplete: boolean;
+  /** The failure class of this slot's last failure, or null. Never prose. */
+  readonly lastFailureClass: string | null;
+  /** Findings this slot RAISED, which is a reviewer's number and nobody else's. */
+  readonly findingsRaised: number;
 }
 
 /** One safe timeline entry. Never a payload, never a prompt, never reasoning. */
@@ -189,6 +333,152 @@ export class JuliusRuntimeApi {
       this.deps.store.findingsForRun(runId, identity.projectId),
     ]);
     return allow({ decisions, findings });
+  }
+
+  /**
+   * THE RESULT, AS A USER WOULD ASK FOR IT. One read, from the record, with the
+   * completion decision quoted rather than recomputed. See
+   * `JuliusMissionResultView` for what it will not say.
+   */
+  async inspectResult(identity: JuliusApiIdentity, runId: string): Promise<JuliusApiResult<JuliusMissionResultView>> {
+    const authorized = await this.#authorizedRun(identity, runId, 'run:read');
+    if (!authorized.ok) return authorized;
+    const run = authorized.value;
+    const [criteria, evidence, findings, decisions, entries] = await Promise.all([
+      this.deps.store.criteriaForRun(runId, identity.projectId),
+      this.deps.store.evidenceForRun(runId, identity.projectId),
+      this.deps.store.findingsForRun(runId, identity.projectId),
+      this.deps.store.decisionsForRun(runId, identity.projectId),
+      // ONE WALK, TWO PROJECTIONS: the slots and the failure both come from the
+      // same entries, so they cannot describe different moments of the run.
+      this.#timelineEntries(runId, identity.projectId),
+    ]);
+    const slots = projectJuliusSlotViews(entries);
+
+    const passed = evidence.filter((item) => item.status === 'PASSED');
+    /**
+     * A CRITERION THAT REQUIRES NOTHING IS NOT SATISFIED BY NOTHING.
+     *
+     * For a criterion that names evidence types, the rule is the verification
+     * evaluator's own: every type present and PASSED. For one that names none —
+     * which the bootstrap seeds on purpose — there is no row that could satisfy
+     * it, so the only thing that can is the mission reaching verified
+     * completion. `every()` over an empty list is `true`, and reporting that as
+     * satisfaction told a client "met" about a run that had not started.
+     */
+    const satisfies = (criterion: { readonly requiredEvidenceTypes: readonly string[] }) =>
+      (criterion.requiredEvidenceTypes.length === 0
+        ? run.state === 'COMPLETED'
+        : criterion.requiredEvidenceTypes.every((type) => passed.some((item) => item.type === type)));
+
+    /**
+     * A JUDGEMENT IS NOT A DELIVERABLE. A review finding and a provider receipt
+     * say what somebody thought or what was billed; a diff, an artifact and a
+     * test result are what the mission produced. A surface that showed the
+     * former as the result would be showing the reviewer's opinion as the work.
+     */
+    const PRODUCT_TYPES: readonly JuliusEvidence['type'][] = ['DIFF', 'ARTIFACT', 'TEST', 'BUILD', 'LINT', 'TYPECHECK', 'COMMAND'];
+
+    const cost = slots.reduce(
+      (total, slot) => ({
+        knownUsdMicros: total.knownUsdMicros + slot.knownUsdMicros,
+        unknownComponents: total.unknownComponents + slot.unknownCostComponents,
+        complete: total.complete && slot.costComplete,
+      }),
+      { knownUsdMicros: 0, unknownComponents: 0, complete: true },
+    );
+
+    /**
+     * WHY IT IS NOT VERIFIED — and a FAILED run must always be able to say.
+     *
+     * Three sources, in the order a reader would want them: the last `task.failed`
+     * row (which carries the dispatch's own code and class), then a HALT or
+     * REPAIR decision (the verification's own reason), then — for a run that is
+     * FAILED with neither, which should not happen and therefore must not be
+     * silent — a named `UNRECORDED` rather than null. `null` is reserved for "no
+     * failure", and a failed run answering null would read as a success.
+     */
+    const lastFailed = [...entries].reverse().find((entry) => entry.type === 'task.failed') ?? null;
+    const text = (value: unknown): string | null =>
+      (typeof value === 'string' && value.trim() !== '' ? value : null);
+    const haltOrRepair = [...decisions].reverse()
+      .find((decision) => decision.action === 'HALT' || decision.action === 'REPAIR') ?? null;
+    const failure = run.state === 'COMPLETED'
+      ? null
+      : lastFailed !== null
+        ? {
+          reasonCode: text(lastFailed.facts.reasonCode) ?? text(lastFailed.facts.code) ?? 'TASK_FAILED',
+          failureClass: text(lastFailed.facts.failureClass),
+        }
+        : haltOrRepair !== null
+          ? { reasonCode: haltOrRepair.reasonCode, failureClass: null }
+          : run.state === 'FAILED' || run.state === 'CANCELLED'
+            ? { reasonCode: 'UNRECORDED', failureClass: null }
+            : null;
+
+    return allow({
+      runId: run.runId,
+      missionId: run.missionId,
+      state: run.state,
+      // NEVER DERIVED. The runtime decided this under the completion rule.
+      verified: run.state === 'COMPLETED',
+      terminal: run.state === 'COMPLETED' || run.state === 'FAILED' || run.state === 'CANCELLED',
+      criteria: criteria.map((criterion) => ({
+        criterionId: criterion.criterionId,
+        description: criterion.description,
+        requiredEvidenceTypes: criterion.requiredEvidenceTypes,
+        satisfied: satisfies(criterion),
+        basis: criterion.requiredEvidenceTypes.length === 0 ? 'COMPLETION' as const : 'EVIDENCE' as const,
+        evidenceIds: passed
+          .filter((item) => criterion.requiredEvidenceTypes.includes(item.type))
+          .map((item) => item.evidenceId),
+      })),
+      deliverables: passed
+        .filter((item) => PRODUCT_TYPES.includes(item.type))
+        .map((item) => ({
+          evidenceId: item.evidenceId, taskId: item.taskId, type: item.type,
+          safeSummary: item.safeSummary, artifactRef: item.artifactRef, integrityHash: item.integrityHash,
+          retained: item.artifactRef !== null,
+          occurredAt: item.occurredAt,
+        })),
+      outstandingFindings: findings
+        .filter((finding) => finding.blocking && finding.status === 'OPEN')
+        .map((finding) => ({ findingId: finding.findingId, taskId: finding.taskId, claim: finding.claim, severity: finding.severity })),
+      reviewDecisions: decisions.map((decision) => ({
+        taskId: decision.taskId, action: decision.action, reasonCode: decision.reasonCode,
+      })),
+      cost,
+      failure,
+    });
+  }
+
+  /**
+   * THE THREE PEER SLOTS, PROJECTED. One page of the timeline per call at the
+   * reader's own limit, walked to the end — the same paging every other
+   * projection here uses, so a long mission does not silently report a prefix.
+   */
+  async inspectSlots(identity: JuliusApiIdentity, runId: string): Promise<JuliusApiResult<readonly JuliusSlotView[]>> {
+    const authorized = await this.#authorizedRun(identity, runId, 'run:read');
+    if (!authorized.ok) return authorized;
+    return allow(projectJuliusSlotViews(await this.#timelineEntries(runId, identity.projectId)));
+  }
+
+  /**
+   * THE WHOLE TIMELINE, WALKED TO THE END — one page at a time, so a long
+   * mission is never reported from a prefix. Shared by every projection that
+   * needs the event record, because two walkers would eventually disagree about
+   * where the end was.
+   */
+  async #timelineEntries(runId: string, projectId: string): Promise<readonly JuliusTimelineEntry[]> {
+    const entries: JuliusTimelineEntry[] = [];
+    let sinceSequence = 0;
+    for (;;) {
+      const page = await this.deps.timeline.timeline({ runId, projectId, sinceSequence, limit: 500 });
+      entries.push(...page.entries);
+      if (page.entries.length === 0 || !page.hasMore) break;
+      sinceSequence = Math.max(...page.entries.map((entry: JuliusTimelineEntry) => entry.sequence));
+    }
+    return entries;
   }
 
   async inspectSubagents(identity: JuliusApiIdentity, runId: string): Promise<JuliusApiResult<readonly JuliusSubagentRecord[]>> {
@@ -354,4 +644,133 @@ export class JuliusRuntimeApi {
     if (run === null) return refuse('run_not_found', 'No such run in this project.');
     return allow(run);
   }
+}
+
+/* ---------------------------------------------------- the slot projection */
+
+/**
+ * THE THREE SLOTS, OUT OF THE LEDGER AND NOTHING ELSE.
+ *
+ * Exported so the projection is testable without an API instance, and so a
+ * bundle exporter can produce the same rows from a dump of the same events.
+ *
+ * ONE PASS, IN LEDGER ORDER. `sequence` is the position the ledger allocates on
+ * append — `UNIQUE(stream_id, sequence)` in PostgreSQL — and NOT `occurredAt`,
+ * which routinely ties: several events of one mission land in the same
+ * millisecond and a wall-clock sort has no deterministic tiebreak.
+ */
+export function projectJuliusSlotViews(
+  entries: readonly JuliusTimelineEntry[],
+): readonly JuliusSlotView[] {
+  const ordered = [...entries].sort((left, right) => left.sequence - right.sequence);
+  const byRole = new Map<JuliusDefaultRole, {
+    workerId: string | null; providerId: string | null;
+    requestedModel: string | null; servedModel: string | null;
+    dispatches: number; lastSequence: number | null;
+    knownUsdMicros: number; unknownCostComponents: number;
+    lastFailureClass: string | null; findingsRaised: number;
+    open: boolean; failed: boolean;
+  }>();
+  const roleOfTask = new Map<string, JuliusDefaultRole>();
+  const slot = (role: JuliusDefaultRole) => {
+    const existing = byRole.get(role);
+    if (existing !== undefined) return existing;
+    const fresh = {
+      workerId: null, providerId: null, requestedModel: null, servedModel: null,
+      dispatches: 0, lastSequence: null as number | null,
+      knownUsdMicros: 0, unknownCostComponents: 0,
+      lastFailureClass: null as string | null, findingsRaised: 0,
+      open: false, failed: false,
+    };
+    byRole.set(role, fresh);
+    return fresh;
+  };
+
+  const text = (value: unknown): string | null =>
+    (typeof value === 'string' && value.trim() !== '' ? value : null);
+  const roleOf = (entry: JuliusTimelineEntry): JuliusDefaultRole | null => {
+    const stated = text(entry.facts.role);
+    if (stated !== null && (JULIUS_DEFAULT_ROLES as readonly string[]).includes(stated)) {
+      return stated as JuliusDefaultRole;
+    }
+    // A row that does not state its role still belongs to a task whose role an
+    // earlier row did state. Nothing is guessed from a task NAME.
+    return entry.taskId === null ? null : roleOfTask.get(entry.taskId) ?? null;
+  };
+
+  for (const entry of ordered) {
+    const role = roleOf(entry);
+    if (role === null) continue;
+    if (entry.taskId !== null) roleOfTask.set(entry.taskId, role);
+    const account = slot(role);
+    account.lastSequence = entry.sequence;
+    if (entry.workerId !== null) account.workerId = entry.workerId;
+    // Provider identity and the two model fields arrive on whichever row carries
+    // the adapter's diagnostics. They are only ever OVERWRITTEN by a later row
+    // that states them, so a silent row cannot erase what an earlier one said.
+    account.providerId = text(entry.facts.provider) ?? text(entry.facts.providerId) ?? account.providerId;
+    account.requestedModel = text(entry.facts.requestedModel) ?? account.requestedModel;
+    account.servedModel = text(entry.facts.servedModel) ?? account.servedModel;
+
+    switch (entry.type) {
+      case 'worker.dispatched':
+        account.dispatches += 1;
+        account.open = true;
+        break;
+      case 'worker.completed':
+        account.open = false;
+        account.failed = false;
+        break;
+      case 'task.failed':
+      case 'provider.failure':
+        account.open = false;
+        account.failed = true;
+        account.lastFailureClass = text(entry.facts.failureClass) ?? account.lastFailureClass;
+        break;
+      case 'finding.recorded':
+        account.findingsRaised += 1;
+        break;
+      case 'budget.settled': {
+        const amount = entry.facts.usdMicros;
+        // AN UNKNOWN SETTLEMENT IS NOT A FREE ONE. It is counted as a component
+        // nobody priced, which is what turns the sum into a floor.
+        if (typeof amount === 'number' && Number.isFinite(amount) && amount >= 0) {
+          account.knownUsdMicros += amount;
+        } else {
+          account.unknownCostComponents += 1;
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  return JULIUS_DEFAULT_ROLES.map((role): JuliusSlotView => {
+    const account = byRole.get(role);
+    if (account === undefined) {
+      return {
+        role, workerId: null, providerId: null, requestedModel: null, servedModel: null,
+        state: 'NEVER_DISPATCHED', dispatches: 0, lastSequence: null,
+        knownUsdMicros: 0, unknownCostComponents: 0, costComplete: true,
+        lastFailureClass: null, findingsRaised: 0,
+      };
+    }
+    return {
+      role,
+      workerId: account.workerId,
+      providerId: account.providerId,
+      requestedModel: account.requestedModel,
+      servedModel: account.servedModel,
+      state: account.dispatches === 0 ? 'NEVER_DISPATCHED'
+        : account.open ? 'ACTIVE' : account.failed ? 'FAILED' : 'IDLE',
+      dispatches: account.dispatches,
+      lastSequence: account.lastSequence,
+      knownUsdMicros: account.knownUsdMicros,
+      unknownCostComponents: account.unknownCostComponents,
+      costComplete: account.unknownCostComponents === 0,
+      lastFailureClass: account.lastFailureClass,
+      findingsRaised: account.findingsRaised,
+    };
+  });
 }

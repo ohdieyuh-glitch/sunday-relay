@@ -212,6 +212,20 @@ export type HermesReviewShape =
   | 'review_engine_context_exceeded'
   | 'review_engine_gave_up'
   /**
+   * THE REVIEWING MODEL DECLINED THE REQUEST ITSELF — a content filter, a
+   * policy, its own refusal — rather than failing to reach the provider or
+   * failing to produce readable JSON.
+   *
+   * A REFUSAL IS NOT A VERDICT AND NOT A CRASH. Before this shape existed a
+   * declining reviewer arrived as `review_engine_gave_up` (the provider's
+   * fault, retried on another route) or as unreadable output (the reviewer's
+   * competence), and an operator could not tell either from "I will not review
+   * this". It is the request that has to change, so it is carried as
+   * `INVALID_REQUEST` — the same code the Coding Agent's `CONTENT_REFUSED` and
+   * the architect's `refused` carry — and never retried on the same ask.
+   */
+  | 'review_content_refused'
+  /**
    * UNREACHABLE UNLESS THE TWO READERS DRIFT APART. The classifier applies the
    * validator's own rules to the validator's own slice, so a review it calls
    * readable is one the validator accepted — and the classifier only runs after
@@ -713,6 +727,24 @@ export function isEngineReportedTimeout(text: string): boolean {
  */
 export function classifyEngineGiveUp(text: string): HermesReviewShape | null {
   const answer = text.replace(/^\s+/u, '');
+  /**
+   * A REFUSAL, FIRST, because a content filter's sentence also contains the
+   * word "error" and would otherwise read as the provider giving up — which
+   * would put the same ask on another route to be declined again.
+   *
+   * NARROW, AND THE ANCHOR MUST STAY LOAD-BEARING. Two shapes only: a TRANSPORT
+   * report (a line that opens `API`/`HTTP`/`Upstream`/`Provider`/`Content
+   * filter`) that names a content filter, a content policy or a refusal stop
+   * reason; and the canonical decline sentence. A loose `[^\n]{0,120}` prefix
+   * here would match a REVIEW that discusses a content filter in the diff it is
+   * judging, which is the opposite of a refusal. A reviewer that merely
+   * apologises stays unreadable output: a coarse class beats a wrong one.
+   * Reached only where no verdict-bearing JSON was found at all.
+   */
+  const refusalReport = /^(?:API|HTTP|Upstream|Provider|Request|Response|Content[ _-]?(?:filter|policy)|Safety)\b[^\n]{0,160}?(?:content[ _-]?(?:filter|policy)|stop_reason["'\s:]{0,4}refusal|refus(?:al|ed|es) by (?:the )?(?:safety|policy)|blocked by (?:the )?(?:content|safety))/iu;
+  if (refusalReport.test(answer) || /^I can(?:'t|not) help with that/iu.test(answer)) {
+    return 'review_content_refused';
+  }
   if (/^Model generated invalid tool call: /u.test(answer)) return 'review_engine_invalid_tool_call';
   if (/^Billing or credits exhausted: /u.test(answer)) return 'review_engine_billing_exhausted';
   if (/^(?:Response truncated due to output length limit|First response truncated due to output length limit|max_tokens exceeds the provider's output cap for this model|\u26a0\ufe0f \*\*Thinking Budget Exhausted\*\*)/u.test(answer)) {
@@ -1123,7 +1155,7 @@ export function buildReviewPrompt(p: ReviewPacket): string {
       'RESULTING FILE CONTENT:',
       p.changedFileContents || '(empty)',
       '',
-      `DETERMINISTIC TEST COMMAND: ${p.testCommand}`,
+      `DETERMINISTIC TEST COMMAND: ${p.testCommand.trim() === '' ? '(none declared by the mission contract — judge the deliverable on the diff and the required evidence)' : p.testCommand}`,
       'TEST OUTPUT:',
       p.testOutput || '(none)',
       '',

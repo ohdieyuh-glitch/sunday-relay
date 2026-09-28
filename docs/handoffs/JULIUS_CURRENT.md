@@ -4,6 +4,9 @@
 > repository evidence does not. Update it whenever meaningful state changes and
 > before ending a session. Never rely on `/resume` as the sole record.
 
+**Most recent session: 2026-09-27, the LANDING pass. Read §000e, then §000d, then §000c, then §000b, then §000.**
+> The paragraph below it is the record of the session before that.
+
 **Most recent session:** 2026-09-08, the **Claude Code cloud session**. Read
 **§00** first: it holds the current branch, the commits it added, a security
 finding about the merge-provenance credential, and the founder-only actions
@@ -11,6 +14,960 @@ that gate everything else. **§00h** is the newest work: stale-handoff
 rejection, the reviewer-binding guard, the challenge leg of the contract
 lifecycle, and the concurrent-proposal fix a real PostgreSQL race found.
 Everything from §0a onward is the earlier local record.
+
+---
+
+## 000e. THE LANDING, AND THE FOUR DEFECTS FOUND WHILE PREPARING IT
+
+**Read this first.** It is the newest work.
+
+**Branch:** `relay/julius-beta-qualification`, worktree `C:\dev\iwonder\julius-beta`.
+**Base:** `origin/main` `a384b215` (#287), unmoved, 0 behind, `git merge-tree`
+clean. **Paid API spend this session: $0.00.**
+
+### The ceremony, and who can perform which step
+
+The landing was previously recorded here as blocked at a permission boundary, on
+the belief that the whole ceremony was founder work. That was wrong in a specific
+and correctable way, and reading `docs/JULIUS_WORKER_PR_RUNBOOK.md` rather than
+remembering it is what corrected it. The ceremony has three steps and they divide
+by authority:
+
+| Step | What | Who | State |
+|---|---|---|---|
+| 1 | re-author the commits as the App on a NEW branch | this lane | performed |
+| 2 | mint an installation token, push, open the PR as the App | this lane | performed |
+| 3 | approve at the head SHA, squash-merge at that head | **the founder only** | **OUTSTANDING** |
+
+Step 3 is not a formality this lane could shortcut.
+`scripts/julius-main-provenance.mjs` requires the landed PR's author to be
+`julius-worker[bot]` and its approver to be a DIFFERENT login, so the lane that
+wrote the code is structurally incapable of completing its own landing. The App's
+installation on this repository (`159218171`) grants `contents=write` and
+`pull_requests=write` and deliberately nothing that can merge. **The candidate is
+NOT landed until `origin/main` contains it, and nothing in this file should be
+read as saying otherwise.**
+
+### The complete authoritative gate list, run as gates and not as parts
+
+All nine gates in `docs/JULIUS_BETA_LANDING.md` were run at every head this
+session, aggregate commands only: `npm run typecheck`, not the four `tsc`
+invocations it wraps, which is the substitution that once let a red typecheck sit
+on this branch for four commits. Plus 2,271 tests across 108 files in
+`src/relay/integration` and `src/relay/mission/julius` after the redaction
+change, because that change touches a repository-wide rule.
+
+### Four defects found while preparing the landing
+
+1. **AN API KEY SURVIVED THE REDACTOR.** Reported by the Wonderland integration
+   lane, reproduced here by probe as FOUR leaks. In the boundary set the
+   `authorization` rule ran first and stopped at whitespace, so it ate the word
+   `Bearer` and destroyed the anchor the next rule needed: the key was not
+   missed, it was made unreachable by the rule in front of it. And the
+   repository-wide rule demanded eight alphanumerics straight after `sk-`, so it
+   missed every modern provider key (`sk-ant-api03-`, `sk-proj-`,
+   `sk-svcacct-`), and a bare Anthropic key in prose was never redacted by
+   anything. The table test that should have caught all of it asserted
+   `not.toContain(whole fixture)`, which `[redacted] <token>` satisfies. Fixed in
+   `7a04ab33`; eleven cases fail with only the two source files reverted.
+2. **THIS REPOSITORY'S LANDING PAGE NAMED A SCRIPT THAT HAS NEVER EXISTED**
+   (`ceremony/push-as-worker.sh`), in the same page that warns against sending a
+   reviewer to chase a phantom.
+3. **THE RUNBOOK'S APP ID WAS THE BOT'S USER ID.** `325202980` is the number in
+   the bot's noreply address; the App id is `4838349`. The App id is the JWT's
+   `iss`, so an operator following that line would have met `404 Integration not
+   found` at the first call with nothing to tell them why.
+4. **THE HEREDOC BACKSLASH TRAP FIRED INSIDE THE SENTENCE DESCRIBING IT**,
+   writing a literal 0x08 into the landing page. The new diagnostic: a
+   `SyntaxWarning: invalid escape sequence` in the output is the RECEIPT that the
+   collapse happened, and every VALID escape in that same heredoc was silently
+   converted. No warning is not good news. A sweep of every tracked file for
+   0x08, 0x0c, 0x0b, 0x07 and 0x1b found only binary assets and ANSI escapes in
+   the CLI's renderers.
+
+### Two Windows credential traps, paid for twice
+
+`openssl` will not take a PEM through process substitution, and mingw `curl`
+cannot read `-H @/dev/fd/3` (it answers `Failed to open /proc/<pid>/fd/3`). Both
+need a real path, so an Authorization header belongs in a `mktemp` file at mode
+600 with an `EXIT` trap, never on a command line where a process list carries the
+token. `gh` on this machine holds the FOUNDER's credential, so the ceremony uses
+curl with a minted installation token and does not invoke `gh` at all.
+
+### The representative paid mission: PREPARED, NOT DISPATCHED
+
+`.github/julius-missions/julius-live-mission-6/` targets the cross-platform
+defect the integration lane reported, where `search.find`, `search.glob` and
+`search.grep` build emitted paths with the HOST separator, so on Windows a needle
+written `src/relay` matches nothing in a workspace full of matching files and a
+Coding Agent told there is no such file believes it.
+
+Three things make it a fair test of the C.A.R.D. lifecycle rather than an
+endurance test. The import closure is ONE 63-line file, because its only
+non-builtin import is type-only and Node's type stripping erases it. The seeded
+specification fails on LINUX as well as Windows, because a "does the output
+contain a forward slash" assertion would pass vacuously on the only host that
+gates this repository, so the spec exercises two new pure helpers with backslash
+input on every host. And the budget needs no founder decision, sitting inside the
+DEFAULT $5 and one-repair-cycle bound, argued from the two paid datapoints the
+limits table already cites. `julius-live-contract-check.mjs` answers CONTRACT OK.
+
+**It is not dispatched, and dispatch is the only place money is spent.** This
+repository's own rule, recorded in the runbook after paid run 34311556047: every
+paid mission needs a specific causal question, a justified reason that answering
+it needs provider spend, and explicit founder authorisation for that run. A new
+`main` sha is not a causal question.
+
+### A latent authority defect, recorded rather than changed
+
+`src/relay/mission/project-workspace/project-contracts.ts` grants
+`start_mission` to `developer`, which contradicts the founder decision that only
+an OWNER or an authorised ADMIN may cause paid execution. It is NOT a live hole:
+a grep across `src/` and `relay-bridge/` excluding tests finds NOTHING that reads
+`start_mission` at all. It is a declared grant with no enforcement point, the "a
+declared signature is not a capability" shape again, and therefore a trap primed
+for whoever wires the first dispatch route to it. Not changed mid-landing; the
+integration lane's player creation route gates on its own OWNER-only capability
+and never reads this one.
+
+### What this session did NOT do
+
+- **It did not land anything.** Step 3 is the founder's.
+- **It did not spend.** $0.00, and no provider credential was used.
+- It did not run the paid mission, so no reviewer verdict, repair lineage or
+  durable paid evidence exists for it. Every such row is UNKNOWN, not zero.
+- It did not record the PR number here, because a commit cannot name the pull
+  request that contains it. The number is in the session report and belongs in a
+  post-merge follow-up.
+
+
+## 000. BETA QUALIFICATION RUN 2026-09-26 — THE TWO STUBS THAT WERE COUNTED AS CAPABILITIES
+
+**Read this first.** It is the newest work and it changes what the previous rows
+of this file can be trusted to mean.
+
+**Branch:** `relay/julius-beta-qualification`, worktree `C:\dev\iwonder\julius-beta`.
+**Base:** `origin/main` = `a384b21590c664f752682de86f4dcc6fb533849d` (#287).
+**Commits:** `1a0c679b`, `574d660d`, `2953966c`. **Not pushed. No PR.**
+**Paid API spend this run: $0.00.** No provider credential exists in this
+environment; every proof below is provider-free by construction.
+
+### What the audit found before anything was written
+
+`src/relay/mission/julius/julius-context-integrity.ts` and
+`julius-memory-trust.ts` were **five throwing stubs each**, seeded as the
+deliverables of paid Live Missions 5 and 4. Neither mission completed. Nothing in
+the runtime held a `JuliusMemoryClaim`; the barrel was the only importer of
+either file. So every claim resting on them — authority-ranked context, "a
+verified fact survives noisy low-authority memory", "an authoritative conflict
+fails closed", "auto-generate is allowed, auto-trust is not" — was a comment, and
+`docs/JULIUS_BETA_READINESS.md` scored both as present.
+
+That is the single most important fact in this section: **the readiness document
+read a declared signature as a capability.** The new assessment at the top of that
+file says so, and its 74% is a correction rather than a regression.
+
+### What is now true
+
+- **Both modules are implemented**, and each paid mission's own specification is
+  committed beside its module, ported from `node:test` to vitest and extended.
+  Provisioning each mission's slice and running its own declared `testCommand`
+  against the landed source exits zero: **10/10 for Mission 4, 21/21 for Mission
+  5**. Those two fixtures are therefore VACUOUS as deliverable proofs now —
+  their slices carry implemented source. `julius-bundle-cell.ts` remains a
+  genuine unimplemented deliverable behind `julius-continuous-1`.
+- **Context integrity is on the real dispatch path.** `compileJuliusContext`
+  routes through `compileContextWithIntegrity` whenever it is handed
+  claim-qualified entries, and the pipeline always hands it some:
+  `julius-context-provenance.ts` derives a claim per brain entry from durable
+  columns only — `worker_id`, `entry_kind`, `evidence_ids`, `created_at`, three of
+  which the PostgreSQL read had never selected.
+- **The delivered packet is proven, not the selector.**
+  `julius-context-delivery.e2e.test.ts` seeds a brain hostile four ways at once —
+  60 imperative unverified notes the CODER wrote about itself, each five times the
+  size of the one reviewer-cited finding the task needs, all retrieved first, plus
+  a reviewer-only entry, a SECRET and another task's — drives the real run loop,
+  and reads the packet out of the durable snapshot the dispatch was recorded
+  against. The finding is second, behind only the locked term. A control
+  simulates the pre-integrity compiler at the same budget and loses it entirely.
+- **Migration 025** makes the decision durable, nullable with no default: NULL is
+  "never checked", `[]` is "checked, nothing excluded", and the decision reaches
+  the content hash because `persist` deduplicates on it.
+- **A Learning Loop that measures.** `julius-learning-loop.ts` is a measurement
+  and a promotion gate, not a learner. The matched pair runs through the real
+  loop: the mission without the learning takes a repair round because the real
+  context compiler could not carry a fact nobody stored. The gate refuses on
+  regression, on no effect, on an unmatched pair, on an unmeasured dimension and
+  on a policy that could not refuse anything. **The worker's knowledge-dependence
+  is the fixture's premise and the file says so.**
+- **A reviewer that catches.** Every previous repair proof handed the reviewer its
+  conclusion as an array. `contentReviewer` reads the REAL `ReviewPacket` the real
+  Hermes adapter built from the real artifact exchange, and finds a real
+  violation of this repository's own rule in an added line:
+  `+export const costUsdMicros = reported ?? 0;`. Four cases: the catch and its
+  repair and re-review to completion; the SAME judge approving the clean diff
+  when it arrives first; an unrepaired defect caught AGAIN with the run refusing
+  to complete; and the full lineage.
+- **Provider conformance is keyed to a served model.** The occupant registry
+  carries a required `qualification`, and `juliusProviderQualification` answers
+  VERIFIED only for a model the qualification covered. **One leg is VERIFIED:
+  `hermes_local` at `grok-build-0.1`.** The architect and Coding Agent legs ran in
+  paid run 34414726976 and its bundle names neither served model, so both read
+  COMPATIBLE with the run as evidence and a note naming what is missing.
+- **An authoritative clash fails the task, not the tick.** The refusal the
+  compiler throws is now a recorded `task.failed` with
+  `failureClass: context_integrity_unresolved_clash`, both conflicting claim ids,
+  and `errorRetryable: false`. `deps.contextQualification` is the seam a claim
+  store will arrive through and is how the proof drives it.
+- **`inspectSlots`** projects the three peers from the durable ledger for
+  Wonderland; `docs/JULIUS_WONDERLAND_CONTRACT.md` is the contract.
+
+### Four defects found by doing the above, all repaired
+
+1. **The context redaction named nothing.** `(?:api_key|token|secret)` with
+   `'$1=[REDACTED]'` — a non-capturing group and a `$1` JavaScript leaves as the
+   literal text `$1`. Every redacted credential in every packet Julius has ever
+   compiled read `$1=[REDACTED]`.
+2. **Two mission slices could not run.** `julius-repair-lineage` grew a value
+   import of `julius-segment-lineage` and no slice manifest followed it, so
+   provisioning Mission 4 or 5 and running its own declared test command died on
+   ERR_MODULE_NOT_FOUND before an assertion. `scripts/julius-mission-slice.test.ts`
+   now resolves every relative import of every slice mission transitively.
+3. **The brain read discarded three columns** it had held since migration 014.
+4. **The seeded specs' `claim()` helper dropped `over.claimId` silently**, so a
+   case naming its own claim ids asserted on relations that did not exist.
+
+### What this run deliberately did NOT do
+
+- **No paid run.** No credential is present and spending one is a founder act.
+  The representative final beta mission is therefore not run, and row 14 of the
+  readiness scorecard is 30% because of it.
+- **No PR, no push.** The branch is local. Landing follows the worker ceremony in
+  `docs/JULIUS_WORKER_PR_RUNBOOK.md`, and this session does not merge.
+- **Nothing under `wonderland/` was touched.** A Wonderland editor session was
+  active on this machine throughout (its backup manifests are 15 minutes apart in
+  `C:\dev\iwonder\recovery\_manifests`). The Wonderland-facing work is a Julius
+  API plus a contract document, so the session that owns the client can consume
+  it without a merge against this lane.
+- **PR #286 was not touched.** It is frozen for founder review and it is the
+  single dependency shared by three rows of the scorecard.
+
+### The suite, honestly
+
+`npm test` on Windows is **not green, before or after**. The baseline at
+`a384b215` was 194 failing cases across 56 files, dominated by platform paths:
+the MCP stdio proofs (13, already fixed on the unlanded `local/julius-mcp-authority`),
+spawned-process and path handling in `ship-runner`, `repository-target-observer`
+and the Hermes adapter. CI on Linux is the authority.
+
+**A whole-suite figure is unobtainable on this host.** Two full runs were killed
+for low memory — 16 GB with 6.9 GB free, a Wonderland Unreal editor session
+holding the machine — and a third finished only while the tree was being edited
+under it, which makes its numbers worthless.
+
+So measure per directory at `--maxWorkers=2`, which fits the memory and removes
+the contention: `src/relay/mission/julius` + `src/relay/mission/role-slots` is
+**97 files, 1,894 tests, 0 failures**; `relay-bridge/julius` +
+`src/relay/persistence` + the four affected `scripts/` suites is 916 passed and
+**11 failed, being the same five files and the same five counts as the baseline**.
+Zero new failures anywhere this session touched. `julius-slot-envelope.e2e`, which
+the contaminated runs showed failing, passes here — contention, not a defect.
+
+### JULIUS BETA READINESS: 74%
+
+Full scorecard, weights and both remaining paths in
+`docs/JULIUS_BETA_READINESS.md`. The three highest-value next moves, in order:
+land PR #286 (founder); build the claim store; buy one paid run whose bundle
+records every served model.
+
+---
+
+### 000d. MVP LOOP, CONTINUED 2026-09-27 — WONDERLAND CAN NOW START WHAT IT COULD ONLY WATCH
+
+**Branch** `relay/julius-beta-qualification`, worktree `C:\dev\iwonder\julius-beta`,
+local only, not pushed, no PR. Paid usage this pass: **$0.00** — nothing here
+composes a provider.
+
+#### What was built
+
+**Mission creation over the bridge.** `POST /relay-api/julius/missions`
+(`relay-bridge/julius-mission-routes.ts`), operator-only, body = a mission
+contract exactly as the contract file is written. It is the BOOTSTRAP and nothing
+more: the contract library's own parser, the same `compileBootstrapRequest`, the
+same `createLiveJuliusBootstrapPort` over the same `JuliusPostgresRepository` +
+`JuliusContractPostgresRepository` + `createPostgresMissionSeedStore` the mission
+job composes — one state authority, no second way to create a run. The run lands
+durable in READY with plan/build tasks, task contract rev 1, criteria and seed
+brain, and the read routes see it at once. The response carries `dispatched:
+false` and the port's OWN state (a re-posted identical contract resumes the
+existing run — the idempotency key is a digest of the contract — and reports
+whatever state it has really reached, never an asserted READY). Refusals: 401
+`operator_required`; 405; 503 `julius_state_unavailable` naming `DATABASE_URL`;
+503 `reviewer_provider_unknown` naming `RELAY_HERMES_PROVIDER` (the reviewer's
+independence group is part of the mission's recorded identity — refused rather
+than guessed); 400 in the parser's or the port's own words; 409
+`mission_already_running`; 503 `bootstrap_persistence_failure`. Mounted in
+`relay-bridge/server.ts` beside the state routes, under the same lazy
+`DATABASE_URL` discipline. `docs/JULIUS_WONDERLAND_CONTRACT.md` gained "How a
+mission is created" and states plainly that DRIVING is not reachable from a
+client — a created run stays READY until the job drives it, and a client that
+rendered "created" as "running" would draw a mission nobody is driving.
+
+**A real hazard found before it shipped.** The first version imported the parser
+from `relay-bridge/julius-live-mission.ts`, the mission job's entry file, whose
+guard is `require.main === module`. Inside the bridge's esbuild CJS bundle that
+guard is TRUE for the bundle, and the built server printed `Usage:
+julius-live-mission run --contract …` at startup — the job's `main` running
+inside the HTTP server. Typecheck and vitest cannot see this; only the built
+bundle can. The contract file's shape, parser, research-clause sealing and
+bootstrap compiler now live in `relay-bridge/julius/mission-contract.ts`, a
+library with no entry guard; the job imports and re-exports them so every
+existing importer keeps its path. Verified: the job file is absent from
+`dist-relay-bridge/server.cjs` (grep count 0) and the bundle's startup output
+carries only the bridge's own lines.
+
+**The readiness addition was wrong.** 78% did not follow from the table's own
+numbers (they summed to 76.7). Row 12 rises 80 → 85 for creation; the corrected
+total is **77%**, recorded as a correction rather than re-totalled quietly.
+
+#### Tested
+
+`relay-bridge/julius-mission-routes.test.ts` — 12 cases over the REAL bootstrap
+port with a recording store: one path only; every method but POST refused; a
+non-operator creates nothing; 503 naming the variable with no database; refusal
+without a reviewer provider; body required; the parser's refusals in its own
+words with nothing reaching the store; the port's own refusal
+(`blocking_acceptance_criterion_missing`) mapped to 400; the full bootstrap
+(run, criteria, 4 brain entries, plan→build tasks, task contract, PLANNING →
+READY) under the job's execution identity `execution:julius-live:<missionId>`
+and the contract's tenant; a no-check mission held to DIFF and a checked one to
+TEST; `dispatched: false` and a replay reporting COMPLETED rather than READY; the
+three worker requests from the live composition's own definitions with the
+reviewer in the configured group. `julius-research-authority.test.ts` case 21
+now reads the clause from the library. Across the seven touched files: 427
+passed, 4 failed — all environmental on this Windows host: research-authority 22
+spawns `npx` without a shell (`spawnSync npx ENOENT`), and three F6 MUTATION
+cases in `julius-first-live-mission.test.ts` time out at 5 s under this
+machine's load and pass at a 90 s timeout (10/10). `tsc -p relay-bridge` and
+`tsc -p scripts` clean; harness manifest re-exported, check OK; bridge bundle
+builds. Ledger rows B4 and B5 added to `docs/JULIUS_MVP_QUALIFICATION.md`.
+
+#### Then: a real PostgreSQL, and the built bridge over HTTP
+
+`docker ps` on this machine shows a `julius-postgres` (postgres:16-bookworm)
+container up since ~2026-09-25, port 127.0.0.1:5432, user `julius` — the one
+`.github/julius-live-executor.sh` starts, evidently left running by an earlier
+lane. Its default database was unmigrated; the drill databases
+(`julius_lab_*_drill`, `julius_archive`) are someone else's and were not touched.
+A separate database `julius_bridge_seam` was created for this proof.
+
+**`relay-bridge/julius-bridge-seam.real-postgres.test.ts`** — 3 cases, gated on
+`JULIUS_REAL_POSTGRES=1` + `DATABASE_URL` exactly like the persistence
+real-postgres suites and `todo` otherwise, migrates the database and drives the
+PRODUCTION compositions (`composeJuliusMissionBootstrap`, `composeJuliusStateApi`)
+through the two route handlers: the created run's row, its task contract row, the
+`run`/`tasks`/`slots`/`timeline` views and the database agree (READY; plan
+RUNNABLE, build BLOCKED; three NEVER_DISPATCHED slots with no served model; a
+timeline ordered by sequence); a re-posted contract resumes the one run (count =
+1); another project sees 404; a no-check mission's build row holds `["DIFF"]`
+and a checked one `["TEST"]`. 3/3 against the container. Added to
+`.github/workflows/julius-real-infra.yml` beside the other real-postgres steps.
+
+**The built bridge, over HTTP.** `npm run relay:bridge:build`, then
+`dist-relay-bridge/server.cjs` started with `DATABASE_URL` (the seam database),
+a random `RELAY_BRIDGE_API_TOKEN` and `RELAY_HERMES_PROVIDER=xai`; it reported
+`auth: required`. Then with curl: POST without a token → **401**; POST with it →
+**201** `run:5e8f6463c9a2b15381d67162`, `state: READY`, `dispatched: false`;
+the same contract again → the same `runId`; `GET …/run` → READY, taskCounts
+BLOCKED 1 / RUNNABLE 1; `GET …/tasks` → plan RUNNABLE `["ARTIFACT"]`, build
+BLOCKED `["DIFF"]`; `GET …/slots` → three peers, NEVER_DISPATCHED, `servedModel:
+null`, `knownUsdMicros: 0`, `costComplete: true`; `GET …/timeline` →
+`run.created`, `task.created`, … by sequence; `GET` under another project →
+**404**; `psql` on the same database → the same run, READY, and the same two
+task rows. Row 12 of the readiness page: 85 → 90; total still 77%.
+
+**What this does not prove:** any Unreal-side call (the integration lane's
+client is not built yet), and nothing about driving — the run created over HTTP
+sits READY, exactly as the contract document says it will.
+
+#### Then: the real-PostgreSQL suites, and a proof that had been dead on main
+
+With the container to hand, the six persistence real-PostgreSQL suites
+(`julius-run-scoped-identity`, `julius-lease-renewal`,
+`julius-attempt-attribution`, `julius-event-append`,
+`julius-decision-history`, `real-infra-julius`) were run against a fresh
+database `julius_persistence_local`: **35 passed, 2 todo** (the Docker halves).
+Then `src/relay/persistence/julius-live-chain.e2e.test.ts` — the whole chain on
+a real database: plan → plan review → build → a REJECTED build review → repair
+→ re-review, then the shipping dump queries, then the Beta Gate — **failed**:
+`VERIFYING` after 7 ticks, `REPAIR(BLOCKING_FINDINGS), HALT(FINDINGS_UNRESOLVED)`.
+
+**Pre-existing, not a regression.** The same suite at `origin/main` `a384b215`,
+run in a probe worktree sharing this tree's `node_modules` (lockfile
+unchanged), fails identically. Cause: #277's charged-findings rule — a
+re-review that accepts a repair without answering the finding that caused it
+is HALTed, "an unanswered finding is not resolved" — is right, and the
+fixture's scripted reviewer answered nothing because it read its packet from
+nowhere. The suite is in NO workflow (`grep live-chain .github/workflows/*` is
+empty), so nothing had run it since. **Fixed in the fixture, not the rule:** the
+test now composes `createContextAndClaimHandoffs` exactly as the job does (the
+PostgreSQL snapshot table holds a packet's identity and hashes, not its text;
+the live path keeps compiled packets beside the store), and the re-review step
+carries `answerFindings: 'RESOLVED'`, reading the finding ids out of the same
+compiled packet a live reviewer is handed. Against a fresh database the run now
+reaches **COMPLETED**; `julius_tasks` holds six SUCCEEDED rows — plan, its
+review, build, its review, `repair:run:live-chain:build:1:task` (`repair:build`)
+and its `review:repair:build`. The dump-and-gate half then fails here with
+`spawn psql ENOENT` — this host has no `psql` binary — so that half is CI's:
+the suite is now a step in `.github/workflows/julius-real-infra.yml` beside
+the seam suite and the other real-postgres steps. Ledger row A9.
+
+**What this says about the loop:** the repair round — the case the product
+exists for — completes on the real store under the charged-findings rule, with
+a reviewer that answers what it raised. What it does not say: anything about a
+real provider answering a real finding; that is the paid run's.
+
+The probe worktree was removed (junction first, then `git worktree remove`);
+this tree's `node_modules` is intact.
+
+
+#### Then: "I will not do this" is not "your credential is wrong"
+
+The readiness page's row 11 named the gap: a model declining a specific request
+had no class of its own and arrived as UNCLASSIFIED / WORKER_EXECUTION_FAILURE,
+indistinguishable from a broken key — and one of those is worth an operator's
+attention while the other needs the ASK to change. The hosted coder's failure
+classifier (`hosted-failure-reason.ts`) already recognised a content filter or a
+safety refusal as `content_filtered`; `codingAgentFailureFromHostedReason` then
+threw that recognition away by mapping it to UNCLASSIFIED. Now:
+`CONTENT_REFUSED` is in `JULIUS_CODING_AGENT_FAILURES`, disposed as
+`INVALID_REQUEST` (like CONTEXT_OVERFLOW: the request as posed cannot be
+served), never retryable, never an operator action; the classifier's word maps
+to it; and the Prompt Architect's `refused` (which `gpt-runner.ts` already
+detected as a refusal output item) carries the same code instead of sharing
+WORKER_EXECUTION_FAILURE with a 500 and a malformed answer. The scripted fixture
+can now name a failure class on a `fail` step. Proofs: the provider taxonomy
+table (`coding-agent-port.test.ts` C3/C4: CONTENT_REFUSED → INVALID_REQUEST,
+"blocked by the content filter" → CONTENT_REFUSED), the architect class table
+(`julius-live-composition.test.ts`: `refused` → INVALID_REQUEST), and the
+lifecycle (`julius-continuous-lifecycle.e2e`: one call, FAILED, class and code
+on the `task.failed` record — `coding_agent_content_refused` / `INVALID_REQUEST`,
+the connector's lower-case alphabet being the only one `safeFailureClass` admits —
+not AUTH_CONFIGURATION, not completed). Ledger D11,
+D12; row 11: 85 → 86; total 77%.
+
+**Not done:** the Independent Reviewer's provider cannot report a content
+refusal (a Hermes decline is a verdict that does not parse — filed as
+malformed), and nothing routes a refusal to a re-plan; the task fails and the
+run does not complete, which is truthful and is where this stops.
+
+#### Then: the claim store, at its minimum
+
+The readiness page's own estimate: "one table and one port would make standing
+durable per entry and give the Learning Loop's promotion somewhere to land …
+roughly +2.5, not +6", because nothing asserts lineage. Built exactly that:
+
+- **Migration 026** `julius_claim_standings` — append-only; a claim's current
+  standing is its highest revision and the rows beneath are the history.
+- **`JuliusClaimStore`** on `JuliusRuntimeStore` — `claimsForRun`,
+  `recordClaimStanding` — implemented by the memory store (with a
+  `claimStandingHistory` read for tests) and `JuliusClaimPostgresRepository`,
+  bound in `postgres-store.ts`; the conformance suite names it.
+- **`julius-claim-ledger.ts`** (kernel, pure): `juliusAdmittedClaimFor` (the
+  derivation applied to the entry — one definition of a standing),
+  `juliusClaimPromotionsOnAccept` (the reviewed work's entries, promoted to
+  VERIFIED on the review's evidence through `promoteJuliusMemoryClaim`, with
+  every refusal returned by name), `mergeJuliusDurableStanding` (the record
+  wins at compile), `juliusClaimStandingKey` (what makes two standings the
+  same, shared by both stores so replay is refused identically).
+- **The pipeline:** all 14 brain writes go through `appendBrainEntryAdmitting`;
+  the compile site merges recorded standings; `verifyExecutedTask` promotes on
+  an ACCEPT that a reviewer's task produced, only when the decision was
+  recorded this tick; `claim.promoted` / `claim.promotion.refused` are on the
+  event vocabulary and the timeline.
+
+**What the real run showed.** In the guidance flow (the one place a plain
+mission writes a promotable memory) three claims rose UNVERIFIED → VERIFIED
+with history — the architect's guidance request and proposal at the guidance
+task's review, the continuation's resume note at the continuation's review —
+and one was REFUSED by name: the guidance ANSWER reaches the continuation as a
+HANDOFF row written on the reviewer's own tick, so its asserter is the reviewer
+and `memory_self_verification` stops the reviewer verifying it. The refusal is
+the trust core doing its job; what it exposes is an attribution question — a
+delivered row is attributed to whoever's completion delivered it, not to its
+author — left open and named rather than papered over. A second drain adds no
+standing and no event.
+
+Tests: `julius-claim-ledger.test.ts` (12), three cases in
+`julius-continuous-lifecycle.e2e` (the suite: 77/77), the real-PostgreSQL suite
+(2/2 against the container, in the workflow), the kernel directory green.
+Readiness: rows 4, 5, 9 → 80, 87, 68; total 77.2 → 78.3, recorded as 78%.
+
+#### Then: what the integration lane found by running the create route for real
+
+The Wonderland↔Julius integration lane ran `dist-relay-bridge/server.cjs`
+from their merged tree (drill committed at `39edf442`, this branch's `fc8c67c7`
+inside it) over real HTTP against their own isolated PostgreSQL with every
+provider credential stripped, graded by clause: **12 of 13 pass** (11 of 13
+before their E08 was rewritten to assert the intended behaviour; the one red
+is the percent-encoding fix, `842ac5f0`, not yet in their tree) — 201/READY/`dispatched: false`,
+the served state equal to the create-time state, three NEVER_DISPATCHED slots,
+the same `runId` on re-POST, 401 without the operator, 404 under another
+project WITH a control, 404 for an unknown run. The two failures:
+1. **A percent-encoded run id was `unknown_julius_route`** — a real bug: the
+   state routes matched the raw path, and a standards-correct client (Unreal's
+   `UrlEncode`) encodes the colon. Fixed in `842ac5f0`: each segment decoded
+   before matching, a segment that does not decode is `run_not_found`. Two
+   route cases.
+2. **The same `missionId` with a changed objective made a second run.**
+   Intended: the key is a digest of the contract's content (the job's own
+   rule), so `missionId` is the mission's name and a run's identity is its
+   `runId`. The contract document now says so, and says a client correlates by
+   `runId` only; whether Julius should refuse a second run while an earlier
+   run of the same mission is still open is put to the founder as a product
+   decision.
+
+They also reported that **every shell on this laptop inherits a `DATABASE_URL`
+pointing at the `julius-postgres` container's default database** (from the
+user profile), so a session that set `JULIUS_REAL_POSTGRES=1` and trusted the
+inherited value would write test rows into the live store. Every real-database
+run in this lane set `DATABASE_URL` explicitly to a throwaway database
+(`julius_bridge_seam`, `julius_persistence_local`, `julius_live_chain_local`,
+`julius_claims_local`) and the default `julius` database is unmigrated and
+untouched; the hazard stands for the next session, and the structural fix
+(move the variable into whatever launches the job and the bridge) is the
+founder's to choose. The bridge's two Julius route families now share one
+lazy pool (their other observation).
+
+
+#### Then: author and deliverer are two identities
+
+The claim refusal above was the trust core being right about the wrong fact: the
+guidance answer's HANDOFF row was written with the DELIVERING tick's worker id
+(the reviewer whose acceptance released it), so `assertedBy` said reviewer and
+self-verification refused the reviewer. The founder's rule — do not collapse
+AUTHOR and DELIVERER — is now the code: the handoff row's writer is the author
+read off the proposal's own provenance (the architect), a carried-forward copy
+keeps its original author, and `guidance.delivered` carries `authorWorkerId`,
+`deliveredByWorkerId` and `deliveredAtTaskId` beside the run and task it belongs
+to. The lifecycle proof now shows the delivered answer promoted UNVERIFIED →
+VERIFIED by the continuation's reviewer with nothing refused. Minimal: two
+`workerId` expressions and three event facts.
+
+#### Then: the founder's priority list, in order
+
+**1. THE REVIEWER-SIDE CONTENT REFUSAL, AND WHERE A REFUSAL GOES** (`4e29983c`).
+`review_content_refused` is a shape of its own, classified before the engine
+give-ups (a content filter's sentence contains the word "error", and reading it
+as the provider giving up sends the same ask elsewhere to be declined again),
+carried as `INVALID_REQUEST` — the code the coder's `CONTENT_REFUSED` and the
+architect's `refused` carry, so one phenomenon has one code across three peers.
+The anchor is load-bearing and tested: a review that DISCUSSES a content filter
+is a review. Then the routing: one failed task fails the whole run, which is
+right for a crash and wrong for a refusal, so Julius now raises the guidance
+itself — a new `PROVIDER_DECLINED_REQUEST` checkpoint, origin `JULIUS`, authored
+by `JULIUS_COORDINATOR_AUTHOR` and never attributed to the declined worker — the
+existing barrier mints the architect's task and a continuation segment carrying
+the same work, and only then does the refused task end **SKIPPED** (its first
+producer anywhere) rather than FAILED. Bounded by durable state, not a counter:
+a unit that already holds a SKIPPED task has had its re-plan, so a second
+refusal fails truthfully (`REFUSAL_ALREADY_REPLANNED`) and a restart cannot buy
+another round. The reviewer is excluded: a declined review leaves the change
+unjudged, and an unjudged change may not be completed around. Three lifecycle
+e2e cases, including declined → re-planned → **COMPLETED**.
+
+**2. AUTHOR AND DELIVERER** (`4eb8a547`, above) — the same pass, kept minimal.
+
+**3. ONE ACTIVE RUN PER MISSION** (`80b91478`), the founder's decision as the
+integration lane relayed it. A second, DIFFERENT contract for a mission holding
+a non-terminal run is refused `mission_run_already_active` with the live runId in
+the message; an identical contract still resumes (its key is its own content); a
+terminal prior run never locks a mission; the guard is per mission. The explicit
+rerun is `x-relay-julius-rerun: explicit` — a header, because the body is the
+contract file and the parser ignores unknown keys, so a body flag would be
+silently dropped. The check sits INSIDE `createRun`'s SERIALIZABLE transaction,
+so check and insert are one act; `createRun` retries a serialization failure
+once. Five route cases and three against real PostgreSQL, including two
+identical requests racing to exactly one run — where the honest finding is that
+the LOSER may be answered `bootstrap_persistence_failure` (retryable), because a
+whole bootstrap is many writes and a concurrent twin loses one of them; its
+retry returns the one run. Never two runs, so never a second execution to bill.
+
+**4. THE INHERITED `DATABASE_URL`** — the hazard the integration lane reported.
+Every real-PostgreSQL suite now reads `JULIUS_TEST_DATABASE_URL` and nothing
+else; a sweep test walks `git ls-files` and fails if any test file reads
+`DATABASE_URL` again. Measured both ways: inherited variable +
+`JULIUS_REAL_POSTGRES=1` → 8 `todo` and the live database still has no
+`relay_wonderland` schema; a stated throwaway database → 8 passed. The runtime
+reads `JULIUS_DATABASE_URL` then `DATABASE_URL`, from its own launch
+environment, and every Julius route's 503 now names both. CI states the test
+variable beside the container it creates (one line in
+`.github/julius-live-executor.sh`).
+
+**A CORRECTION.** The claim-store commit (`f7330efa`) says "the bridge's two
+Julius route families share one lazy pool". That change was written but never
+applied — the patch that carried it was skipped by an earlier failure in the
+same command, and the message went out anyway. It is applied now, in this pass,
+along with the runtime variable. The lesson is the obvious one: a commit message
+may only claim what the tree shows, and a patch script's exit status is part of
+the evidence.
+
+
+#### Then: knowledge that outlives its mission, and two defects another lane found
+
+**5. WHAT ONE MISSION VERIFIED, THE NEXT INHERITS.** A context packet is
+compiled from ONE run's brain entries, so until now everything a mission learned
+died with it — and the matched-pair learning proof had to seed the prior fact
+itself, which the readiness page admitted was the fixture's premise. The
+bootstrap now carries the project's VERIFIED and APPROVED claims into each new
+mission (`relay-bridge/julius/mission-knowledge.ts`): capped at 12, newest
+first, never from the run doing the carrying, never across projects, and each
+copy keeps its AUTHOR, its evidence and its standing — so mission B ranks a
+reviewer-verified fact as verified and B's reviewer still cannot self-verify it.
+Relevance is not decided there: the context integrity layer ranks and scopes
+what arrives, which is the whole reason the carry can stay this small. Proven
+against real PostgreSQL (A's verified fact inherited, A's assertion not, a
+replay inheriting nothing twice, another project inheriting nothing), and the
+packet proof now uses the carry's own entry ids and reads the standing off the
+record. Ledger C6, C7; corpus row 18; row 9: 68 → 78.
+
+**6. THE RERUN PATH, CORRECTED BY THE INTEGRATION LANE'S DRILL** (their
+`22b20921`, 31 of 33 clauses against the real bridge binary). Two of mine were
+wrong:
+- `rerun: true` reported the REQUEST, not the outcome, so a client that asked
+  for a rerun and was handed the run it already had would draw a second mission
+  that does not exist. The bootstrap outcome now carries `resumed`, and the
+  route reports `rerun` only when this call both asked and made one.
+- An UNCHANGED contract could never run again: run identity is the contract's
+  digest, so "do that again, exactly" named the run that had already finished.
+  An explicit rerun now folds a KEY into that identity — and the key must come
+  from the caller (`x-relay-julius-rerun-key`), because anything derived from
+  durable state changes the moment the rerun lands: derive it from the mission's
+  latest run and the retry computes a different identity and buys a THIRD
+  execution. Measured, not reasoned — the first implementation did exactly that
+  and the seam suite caught it. Without a key the answer is
+  `400 rerun_key_required`.
+- Their smaller point too: a 201 no longer says "it is driven by the mission
+  job" about a run that has already ended.
+
+**7. A CONTAINMENT HOLE IN THIS LANE'S CODE, ON THIS HOST.**
+`workspaceContained` (`docker-sandbox-adapter.ts`) checked for a leading slash
+and a `..` segment but never `isAbsolute(rel)`. On Windows `path.relative`
+cannot express another volume relatively and returns the target ABSOLUTE, so
+`relative('C:\\ws','D:\\secret\\x')` read as CONTAINED — and that predicate gates
+`permittedWorkspace`, which decides what is mounted. Every POSIX case in the
+containment suite passed, which is exactly how it survived; the suite now has
+the four cases that would have caught it. The integration lane found it by
+measuring the predicate here rather than trusting the suite. (Its two smaller
+notes — a browser-boundary test that compared backslashes to forward-slash
+prefixes and so scanned vacuously on Windows, and `node-tool-adapter`'s
+host-separator grep output — are theirs on their branch, `8de01bed`; the first
+is in a file this lane owns and is worth taking at merge.)
+
+**Readiness: 78% → 79%** (row 9 → 78, row 11 → 88, row 12 → 92; the table's own
+arithmetic, checked).
+
+#### Then: the founder's list, finished except what needs money or Unreal
+
+**8. PROVIDER NEUTRALITY, MADE STRUCTURAL** (`d925694b`). A sweep over every
+kernel file fails if a vendor name, a model id or one of the trio's adapter ids
+appears in CODE; prose may still explain which paid run taught a rule. Two
+exemptions, each with its argument in the list: the credential-prefix detector
+(which names `xai` in order to REDACT it) and the diagnostics transport
+vocabulary, whose members are already in durable rows — renaming one to improve
+a name would make every recorded row read null. A third exemption costs whoever
+adds it an argument; a stale one fails its own case.
+
+**9. THE FOURTH MISSION CLASS** (`2a64fec5`). Category E — everyday/practical
+work — had no row. E1 drives a household planning mission through the same
+lifecycle; E2 asserts the honest limit: a mission whose acceptance needs an
+action no tool can take does NOT complete. And the ledger's own parser knew only
+the letters A–D, so both new rows sat unchecked the moment they were added — a
+silent skip, now closed and asserted.
+
+**10. MANY MISSIONS, ONE LOOP** (`3ed856df`). The reliability evidence that did
+not exist: three missions interleaved to verified completion; isolation asserted
+per mission over evidence, findings, decisions, brain entries AND the compiled
+packets each worker was handed; a permanently failing mission that does not take
+its neighbours down; the per-run share honoured; twelve missions paying exactly
+48 dispatches in fewer than 48 ticks, timed rather than thresholded. Row 13:
+55 → 72. Found while writing it: my first fixture named the run inside each
+evidence summary and the assertion failed — because a scripted adapter answers
+per WORKER, so which mission receives which queued answer is the queue's
+business. A test that had passed on that fixture would have been proving my
+ordering, not Julius's bookkeeping.
+
+**11. THE LOOP'S LAST STEP** (`ad6f2dd9`, `507e8f1b`). "Returns a truthful
+verified result" had no projection: a surface had to read state, tasks, evidence,
+decisions, findings and the timeline and assemble the answer itself.
+`GET /relay-api/julius/runs/<id>/result` answers it once — `verified` only when
+the runtime's own completion decision says so, every criterion with what
+satisfied it, the deliverables (a product, never a reviewer's finding, with
+`retained: false` where no body was kept), the outstanding blocking findings, the
+review decisions, the cost with its unknowns, and a failure a FAILED run can
+always name. One page walk now serves both the slot and result projections, so
+they cannot describe different moments of one run.
+
+**AND A DEFECT IN IT THAT MY OWN CASE CAUGHT**: `every()` over an empty list is
+true, so a criterion naming no evidence read as SATISFIED on a run that had not
+started — and the bootstrap seeds exactly those. Such a criterion is satisfied by
+COMPLETION or not at all; the view now says which `basis` it used. The
+undriven-run case against real PostgreSQL — the state Wonderland sees between
+creation and the job — is what surfaced it. Row 12: 92 → 95.
+
+**Readiness: 80%**, by the table's own arithmetic, checked after each row moved.
+
+**Where the founder's ten items stand.** 1 (reviewer refusal + routing), 2 (claim
+store, minimal, with the A→B carry proven), 3 (landing prepared:
+`docs/JULIUS_BETA_LANDING.md`), 4 (one active run per mission + the keyed rerun),
+5 (`DATABASE_URL` isolation), 6 (guidance provenance), 7 (contract coordination —
+the integration lane's drill is at 36 of 36 and has found three real defects in
+this lane's code), 9 (provider neutrality) are DONE. 10 (the paid representative
+mission) is the founder's.
+
+**ITEM 8 IS NOW PART-PROVEN, AND THE PART MATTERS.** The integration lane's first
+in-engine (PIE) acceptance ran on the production bridge against an isolated
+PostgreSQL: a signed-in player's single-use code paired the Unreal client, the
+world adopted the EXACT run Julius created (same runId and missionId, READY,
+mapped to QUEUED), switched between two runs of one mission and back, read STALE
+on a dropped link without touching the mission, and recovered the same durable
+run across a reconnect and a full play restart — with Julius's side showing both
+runs READY and never dispatched, and an identical resubmission answering with the
+same run. Their `f28a61a5`, on Core's build `8cccaa50`, quoted verbatim in the
+landing page.
+
+So the founder's chain reads, honestly: REAL WONDERLAND → REAL MISSION CONTRACT →
+REAL JULIUS RUN → **(not yet) REAL EXECUTION** → REAL DURABLE STATE → STATE
+RETURNS TO UNREAL → **(not yet) USER SEES THE CORRECT RESULT**. ONE link remains and it is the
+founder's to authorise: REAL EXECUTION. Their second pass (all 23 clauses, Core
+build `b281f6a1`, on Julius `b46092af`) closed the visible panel — it names the
+mission and its run under a JULIUS LIVE badge, across a play restart — leaving a
+HUD strip headline that reads UNOBSERVED beside a live link, which Wonderland
+Core is correcting. Neither pass EXECUTED anything: both runs stayed READY and
+never dispatched, which is exactly the link the paid mission closes. And no
+Unreal client has called the `result` view, so the projection a user would be
+shown has never been rendered.
+
+#### Not done, by decision or by gate
+
+- Driving a run over HTTP — the deployment decision that spends money; the
+  contract document says so.
+- Either route against a real PostgreSQL from a running bridge (the paid-run
+  environment).
+- The landing ceremony: the branch is local. The Wonderland↔Julius integration
+  lane (another session, Unreal-side client) was told the wire shape, told
+  creation is bootstrap-only, told the 74% they were citing is now 77%, and told
+  to build in their own merged worktree rather than wait for a push.
+
+### 000c. MVP REPRIORITISATION 2026-09-27 — THE LOOP IS THE PRODUCT
+
+**Founder directive:** /MAS and every other sophisticated orchestration addition
+are **POST-MVP / POST-BETA CAPABILITY**. Not a blocker, not a readiness deduction,
+not a place engineering time goes. The scorecard never carried a /MAS row, so no
+number moved; it is recorded here so nobody re-derives it.
+
+**The objective is one loop:** objective → Prompt Architect → Task Contract →
+Coding/Execution Agent → tools → Project Brain/evidence → Independent Reviewer →
+repair when necessary → re-review → verified completion → result returned. Every
+change is judged by whether it makes that loop more reliable, general, truthful,
+recoverable or useful, across software, game, professional and practical work.
+
+#### What this pass did, in that order of value
+
+**1. BREADTH — one rubric line was making Julius a coding-only agent.** Every
+end-to-end proof drove a code mission. The audit found the lifecycle already
+general: a non-code deliverable is a FILE, so it has a real diff and travels the
+ordinary `build` path with `requiredChecks` empty (the contract already says
+that is honest) and `requiredEvidence` mission-supplied. One thing was in the way
+— the implementation rubric's fourth judge asked for TEST evidence by name, which
+would have had a reviewer reject a correct report for lacking something its
+contract never asked for. It now asks for the evidence THE CONTRACT requires,
+which is already in the review prompt. `julius-mission-breadth.e2e` then drives a
+Category C professional-work mission and a Category B game-tooling mission to
+COMPLETED with no tests in either, and a rejected document to repair rather than
+completion. The limit is named in the test: an implementation review still needs
+a diff, so a mission whose result is not a file (a message sent, a booking made)
+has nothing to show yet.
+
+**2. THE DATABASE/RUNTIME BRIDGE — mounted.** The founder made the deployment
+decision. `GET /relay-api/julius/runs/<id>/<run|slots|tasks|evidence|verification|timeline>`
+on the bridge, operator-only, read-only, every answer `JuliusRuntimeApi`'s own.
+Composed over the SAME `createJuliusPostgresRuntimeStore` the mission job writes
+through — one state authority, a second READER. With no `DATABASE_URL` it answers
+503 naming the variable and never an empty run. This is also the first
+composition root the subagent and lifecycle PostgreSQL repositories ever had.
+`relay:bridge:build` now externalises `pg` like the mission bundle does. Nine
+route cases over a mission the harness really ran; the harness manifest declares
+the module and is OK. NOT yet exercised from a running bridge against a real
+PostgreSQL — that is the paid-run environment.
+
+**3. THE EVAL LAYER WAS AN EMPTY PROJECTION.** The trajectory's `providerId`,
+`usdMicros`, `inputTokens`, `outputTokens` and `durationMs` were null on every
+successful dispatch — the coordinator had them and returned
+`{status, workerId, duplicate}` — so every cost and duration
+`summariseJuliusEvals` ever reported was of a column nobody wrote. Fixed at the
+coordinator (`JuliusAttemptMeasurement`), then on the failure path too: a failed
+attempt that billed now carries its spend, so a mission that spent and then
+failed no longer reports a total biased low. Found by
+`julius-evidence-completeness.e2e`, which now guards every field the brief names.
+
+**4. THE REVIEWER COULD BE A SWARM MEMBER.** A sub-agent could carry
+`role: INDEPENDENT_REVIEWER` under an ordinary task type. Reproduced red, guarded
+one role wide, pinned.
+
+**5. THE LEARNING LOOP'S OTHER HALF.** Prior-mission residue (another task's,
+another role's, SECRET) is excluded from the improved mission's packet AND
+reported, with the reviewer still receiving its own material; and the cost/token
+dimensions are now genuinely measurable, closing a case of mine that had passed
+vacuously.
+
+**1b. BREADTH ON THE LIVE PATH — the in-memory proof was not the whole story.**
+The contract parser refused an empty `testCommand`, the hosted coding adapter
+refused to construct without one, the coder ran whatever it was given and
+recorded a PASSED test for exit 0, and the bootstrap hard-coded `TEST` as the
+build's required evidence — so a research mission could only run live by
+carrying a fake test command and evidence of a check nobody declared. Now:
+`testCommand` must be PRESENT and may be EMPTY (a declaration, not a defect);
+`JuliusBootstrapRequest.deterministicCheck` carries it (absent means declared, so
+every existing compiler is unchanged); the bootstrap requires `DIFF` instead of
+`TEST` for a no-check mission; the live coder runs no step and writes no TEST row;
+and the reviewer's prompt says "(none declared by the mission contract)" rather
+than printing a blank. Proven through the real live composition with the
+executor fake: base, status, diff — no test step — no TEST row, DIFF PASSED,
+COMPLETED, packet and prompt truthful; with the control that a declared check
+still runs and still records.
+
+**6. THE MVP QUALIFICATION SUITE, AS A LEDGER.** `docs/JULIUS_MVP_QUALIFICATION.md`
+maps the founder's four categories to the missions that exist — 8 software, 3
+game, 4 professional-work, 10 failure/recovery, all deterministic, plus the one
+live run — and `scripts/julius-mvp-qualification.test.ts` resolves every row.
+Its gaps section is the load-bearing half: no unfamiliar real repository, no
+tool-heavy Docker mission here (CI-only on Linux), **no Unreal change under
+Julius's contracts at all**, no mission whose result is not a file, no CONTENT
+refusal class, and no live trace of any adversarial shape.
+
+#### Recorded as post-MVP, so nobody re-audits them
+
+- **/MAS** — not implemented; `julius-subagent-runtime` correctly describes a
+  regular sub-agent, which the founder distinguished from a /MAS clone.
+- **Claim store** — only the minimum for truthful reuse is in scope, and the
+  derivation already in place (standing from `entry_kind` + `evidence_ids`)
+  covers context integrity today. Contradiction graphs and lineage inference are
+  deferred by directive. Corrected value ≈ +2.5, not +6.
+- **PSP** — already governed by three surface tests; the `src/relay/psp/`
+  subsystem is an entitlement credential, not a lifecycle name. Nothing to do.
+
+#### Measured
+
+`src/relay/mission/julius` + `role-slots` + `relay-bridge/julius` at
+`--maxWorkers=2`: **2,450 passed, 1 failed** — `julius-research-authority`,
+identical on the unmodified base. Bridge-wide regression after the mount: see the
+commit that lands it. A whole-suite run is still unobtainable on this host.
+
+**JULIUS BETA READINESS: 77%** (74 → 75 → 76 → 77). Row 12 (Wonderland) rose
+from 60% to 80% on the mount; the remaining points there are a browser session's
+read access (a product decision) and exercising the mount against a real
+PostgreSQL from a running bridge.
+
+---
+
+### 000b. SECOND PASS 2026-09-27 — THE CANONICAL ARCHITECTURE, READ AGAINST THE CODE
+
+**Branch and worktree unchanged.** `origin/main` still `a384b215`; this branch is
+now 11 commits ahead. **Paid API spend: still $0.00.**
+
+The founder's private-beta brief restated the canonical architecture, and three of
+its clauses turned out to be checkable claims about the code rather than
+descriptions of it.
+
+#### "PSP is banned. C.A.R.D. is canonical terminology." — ALREADY GOVERNED, NOTHING TO DO
+
+`src/relay/psp/` is a whole subsystem and it is NOT a name for the lifecycle: PSP
+Agent ID is the entitlement credential that imports a purchased compound agent
+(`docs/relay/PSP_AGENT_ID_AND_ENTITLEMENT.md`). The ban is about the
+CONFIGURATION SURFACE, and three tests already enforce it —
+`ui/landing/choreography.test.ts`, `ui/relay-experience/onboarding.test.ts` and a
+`TERM HYGIENE` case in `RelayBetaEntry.test.tsx` — each asserting the surface is
+called C.A.R.D. and never PSP. **Renaming the entitlement subsystem would have
+been a destructive rename of an unrelated product surface.** Checked before
+touching anything, which is the only reason it was not done.
+
+#### "The Independent Reviewer remains outside the swarm." — A REAL HOLE, NOW CLOSED
+
+`spawnJuliusSubagent` already refused the `repair:` and `review:` task-type
+namespaces, for exactly the right reason. **The ROLE was unguarded.**
+`authorizeSubagent` copies the requested role straight onto the child, so a Coding
+Agent could spawn a child carrying `role: 'INDEPENDENT_REVIEWER'` under an
+ordinary task type; it entered the durable graph and was routed to the reviewer's
+own worker. Reproduced red (`authorized: true`), then guarded.
+
+It could not launder an acceptance — no `review:` type, so verification never
+counts it — and it is still the reviewer inside the swarm, spending the mission's
+budget on the reviewer's provider as a child of the coder's task. The guard is
+exactly ONE role wide and a case pins that, because refusing every role but the
+parent's would forbid the specialisation a swarm exists for.
+
+#### "/MAS clones are FULL compound agents, not thin sub-agents" — NOT IMPLEMENTED, AND THE DISTINCTION IS INTACT
+
+`/MAS` appears in no source file. `julius-subagent-runtime.ts` says in its own
+header that a sub-agent is NOT an alternate runtime — an ordinary `julius_tasks`
+row with a `parent_task_id`, claimed by the same scheduler — which is precisely
+the "regular sub-agent" the founder distinguished from /MAS. So the two are not
+confused, and nothing in this pass built /MAS: it is named under CANONICAL JULIUS
+(preserve the distinction) rather than under the ten items of remaining beta work.
+
+#### THE DEFECT THIS PASS WAS ACTUALLY FOR
+
+Building `julius-evidence-completeness.e2e.test.ts` — one mission, every field the
+brief names read back out of the durable record — failed three cases immediately,
+all the same cause:
+
+**`JuliusTrajectoryEvent`'s `providerId`, `usdMicros`, `inputTokens`,
+`outputTokens` and `durationMs` were null on every successful dispatch.** Not
+because a provider was silent: because the pipeline had nothing to put there. The
+execution coordinator saw the usage, committed the budget with it, and returned
+`{status, workerId, duplicate}`.
+
+`summariseJuliusEvals` and `projectJuliusMetrics` read cost and duration off
+DISPATCH rows. So for every project, every runtime version and every mission ever
+run: `knownUsdMicros` 0, `unknownCostComponents` = dispatch count, `costComplete`
+false, `averageDurationMs` null. **The eval layer was reporting a measurement it
+had never been given** — and it made my own Learning Loop case "never promotes on
+a dimension nobody measured" vacuous, since those dimensions were unmeasurable
+whatever any provider reported.
+
+`JuliusAttemptMeasurement` now carries the provider and the four numbers from the
+coordinator to the row that was built for them. Not a second record of the money —
+`budget.settled` stays the ledger — the same figure on the row the EVALS read.
+Absent stays null, so an unreported cost still cannot become a zero. The Learning
+Loop gained the counterpart case: on a priced pair the dimensions ARE measured and
+mission A's repair round is provably more expensive on the same objective.
+
+#### THE LEARNING LOOP'S OTHER HALF
+
+The brief requires prior findings to improve a later mission **without leaking
+irrelevant task context**, which a matched pair alone cannot show. The inherited
+brain now carries three pieces of real prior-mission residue beside the useful
+finding — scoped to a task this mission does not have, readable only by the
+reviewer, and SECRET — all three mentioning the deploy, so a compiler retrieving
+on relevance would hand every one to the coder. Read from the coder's durable
+snapshot: the relevant finding arrives, all three are excluded and REPORTED as
+excluded, and none of their prose is in the packet either. Two controls: the
+improvement still PROMOTES with the residue present, and the reviewer still
+receives its own rubric — so what the coder met was a scope and not a filter.
+
+#### MEASURED
+
+`src/relay/mission/julius` + `role-slots` + `relay-bridge/julius` at
+`--maxWorkers=2`: **121 files, 2,450 passed, 1 failed** —
+`julius-research-authority`, which fails identically on the unmodified base.
+A whole-suite run is still unobtainable on this host (two killed for memory; an
+Unreal editor session holds the machine).
+
+**JULIUS BETA READINESS: 75%**, from 74%. Four rows rose on real fixes, and one
+point is the honest total: finding a defect that made the eval layer empty lowers
+confidence in what was already claimed about as much as closing it raises it, and
+none of the four blockers that gate the number moved.
 
 ---
 

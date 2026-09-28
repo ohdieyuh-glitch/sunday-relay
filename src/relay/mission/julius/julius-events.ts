@@ -47,6 +47,10 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
  'context.compiled',
  /* evidence and verification */
  'evidence.recorded','review.started','finding.recorded','verification.decided','repair.scheduled',
+ /* the claim ledger: a memory's standing rose on a reviewer's evidence, or the trust core refused to raise it */
+ 'claim.promoted','claim.promotion.refused',
+ /* a task's work was superseded rather than done: a declined request, re-planned into a continuation */
+ 'task.superseded',
  /* the task/sprint contract: what a worker was charged with, and when it stopped being arguable */
  'contract.proposed','contract.challenged','contract.locked','contract.refused',
  /* WHAT THE EVALUATOR DECIDED, on both branches — because a bundle with no

@@ -173,6 +173,9 @@ export function codingAgentFailureFromHostedReason(reason: string | null | undef
     case 'context_length_exceeded': return 'CONTEXT_OVERFLOW';
     case 'provider_auth_rejected': return 'AUTHENTICATION';
     case 'credit_unavailable': return 'CREDIT_UNAVAILABLE';
+    // The classifier already recognised a content filter or a safety refusal;
+    // mapping it to UNCLASSIFIED threw that recognition away.
+    case 'content_filtered': return 'CONTENT_REFUSED';
     default: return 'UNCLASSIFIED';
   }
 }

@@ -65,6 +65,87 @@ const seedSlice = (overlay: Record<string, string> = {}): string => {
 
 afterAll(() => { for (const dir of scratch) rmSync(dir, { recursive: true, force: true }); });
 
+/**
+ * EVERY SLICE MISSION'S IMPORT CHAIN IS CLOSED — AND THIS IS WHY IT EXISTS.
+ *
+ * `slice.txt` is a hand-maintained list, and the files on it keep growing
+ * imports. Mission 5's `julius-repair-lineage.ts` grew a VALUE import of
+ * `julius-segment-lineage.ts` and the list did not follow it: provisioning that
+ * mission and running its own declared `testCommand` died on
+ * ERR_MODULE_NOT_FOUND before one assertion ran, and no test could see it —
+ * `seedSlice` above exercises a two-file synthetic slice, so a real mission's
+ * closure was checked by nobody. The sandbox has no network and no
+ * `node_modules`, so an unresolvable relative import is fatal rather than slow.
+ *
+ * STATIC, so it costs nothing: it resolves the imports the sandbox's own loader
+ * would resolve (`.julius/resolve.mjs` appends `.ts` to an extensionless
+ * relative specifier) and asserts the target is inside the slice. It follows the
+ * chain transitively, because the file that breaks a slice is usually two hops
+ * from anything the contract mentions.
+ */
+describe("every slice mission's import chain is closed", () => {
+  const MISSIONS = join(REPO, '.github/julius-missions');
+  const slicePathsOf = (mission: string): readonly string[] => {
+    const file = join(MISSIONS, mission, 'slice.txt');
+    if (!existsSync(file)) return [];
+    return readFileSync(file, 'utf8').split('\n')
+      .map((line) => line.replace(/#.*$/u, '').trim()).filter((line) => line.length > 0);
+  };
+  const sliceMissions = readdirSync(MISSIONS, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()
+    .filter((mission) => slicePathsOf(mission).length > 0);
+
+  it('finds a slice mission to check — an empty list would make the case below vacuous', () => {
+    expect(sliceMissions.length).toBeGreaterThan(0);
+  });
+
+  it.each(sliceMissions)('%s: every relative import resolves inside the slice', (mission) => {
+    const declared = slicePathsOf(mission);
+    const inSlice = new Set(declared);
+    for (const path of declared) {
+      expect(existsSync(join(REPO, path)), `${mission}: ${path} is not in this repository`).toBe(true);
+    }
+    // The overlay's seeded specification is part of what the sandbox runs, so
+    // its imports have to resolve too — that is the file the mission is graded on.
+    const overlay = join(MISSIONS, mission, 'seed');
+    const overlayFiles: string[] = [];
+    const walk = (directory: string, prefix: string): void => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        if (entry.isDirectory()) walk(join(directory, entry.name), `${prefix}${entry.name}/`);
+        else if (entry.name.endsWith('.ts')) overlayFiles.push(`${prefix}${entry.name}`);
+      }
+    };
+    if (existsSync(overlay)) walk(overlay, '');
+    for (const file of overlayFiles) inSlice.add(file);
+
+    const readSliced = (path: string): string =>
+      existsSync(join(REPO, path)) ? readFileSync(join(REPO, path), 'utf8')
+        : readFileSync(join(MISSIONS, mission, 'seed', path), 'utf8');
+
+    const missing: string[] = [];
+    const seen = new Set<string>();
+    const queue = [...inSlice];
+    while (queue.length > 0) {
+      const path = queue.pop()!;
+      if (seen.has(path)) continue;
+      seen.add(path);
+      const source = readSliced(path);
+      // Every `from './x'` and `from '../y/z'`, import and export alike. A
+      // `import type` is erased by type stripping and cannot break the sandbox,
+      // so it is deliberately not required to be present.
+      for (const match of source.matchAll(/(?:^|\n)\s*(?:import|export)(?!\s+type\b)[^;\n]*?from\s*'(\.[^']+)'/gu)) {
+        const specifier = match[1]!;
+        const resolved = join(dirname(path), specifier).replace(/\\/gu, '/');
+        const target = resolved.endsWith('.ts') ? resolved : `${resolved}.ts`;
+        if (inSlice.has(target)) { queue.push(target); continue; }
+        missing.push(`${path} -> ${target}`);
+      }
+    }
+    expect(missing, `${mission}: the sandbox has no node_modules and no network, so these are fatal`)
+      .toEqual([]);
+  });
+});
+
 describe('the mission sandbox: a slice of this repository, and a diff that comes back', () => {
   it('seeds files byte-identical to the repository, well inside the 4 MiB ceiling', () => {
     const dir = seedSlice();

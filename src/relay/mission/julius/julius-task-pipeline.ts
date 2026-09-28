@@ -38,6 +38,9 @@ import { safeReasonCode, type JuliusDispatchWorkspace, type JuliusProviderRouter
 import { juliusCostComponent } from './julius-cost-accounting';
 import { juliusContractDisposition, juliusContractDispositionFacts } from './julius-contract-disposition';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
+import { deriveJuliusContextQualification } from './julius-context-provenance';
+import type { JuliusBrainAppend } from './julius-runtime-ports';
+import { juliusAdmittedClaimFor, juliusClaimPromotionsOnAccept, mergeJuliusDurableStanding } from './julius-claim-ledger';
 import { JULIUS_DEFAULT_MAX_CODER_SEGMENTS, evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
 import { juliusWorkUnitRootOf, repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
@@ -90,11 +93,12 @@ import {
 } from './julius-architecture-drift';
 import { juliusResultChannelPermitted } from './julius-worker-authority';
 import {
-  JULIUS_WORKSPACE_LIMITS, juliusScopeViolations, readJuliusCodingAgentImplementation, sanitizeJuliusCodingAgentReport,
+  JULIUS_WORKSPACE_LIMITS, juliusFailureIsContentRefusal, juliusScopeViolations,
+  readJuliusCodingAgentImplementation, sanitizeJuliusCodingAgentReport,
   type JuliusCodingAgentImplementation,
 } from './julius-coding-agent';
 import {
-  JULIUS_CHECKPOINT_LIMITS,
+  JULIUS_CHECKPOINT_LIMITS, JULIUS_COORDINATOR_AUTHOR,
   guidanceSubjectTaskId, isJuliusGuidanceHandoffEntryId, issueJuliusGuidance, juliusCheckpointId,
   JULIUS_GUIDANCE_AUTHORITATIVE_HEADING, JULIUS_GUIDANCE_PROPOSED_HEADING,
   juliusGuidanceHandoffEntryId, juliusGuidanceId, juliusGuidanceProposalEntryId, juliusGuidanceTaskId,
@@ -122,7 +126,7 @@ import {
   type JuliusSharedCeilingPolicy,
 } from './julius-shared-ceiling';
 import type { JuliusTimelineReader } from './julius-runtime-api';
-import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusEvidence, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
+import { JULIUS_RUNTIME_VERSION, JuliusContextIntegrityRefusal, type JuliusBrainEntry, type JuliusContextQualification, type JuliusEvidence, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { juliusDecisionEventId, validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
 import { validateTrajectoryEvent, type JuliusTrajectoryEvent, type JuliusTrajectoryKind } from './julius-trajectory';
 import {
@@ -261,6 +265,19 @@ export interface JuliusPipelineDependencies {
    * given room it cannot carry.
    */
   readonly contextCharacterBudget: number | ((role: JuliusWorkerRole) => number);
+  /**
+   * HOW A BRAIN ENTRY BECOMES A RANKABLE CLAIM. Defaults to
+   * `deriveJuliusContextQualification`, which reads durable columns and nothing
+   * else.
+   *
+   * IT IS A SEAM FOR A CLAIM STORE, not a switch. Today nothing records that one
+   * brain entry supersedes or contradicts another, so the derivation produces no
+   * lineage and the compiler's fail-closed path is unreachable in production. The
+   * day a claim store exists it arrives here, and the pipeline does not change.
+   * Until then this is also how the fail-closed path is driven through the REAL
+   * pipeline by a proof, rather than asserted at the compiler and hoped for here.
+   */
+  readonly contextQualification?: (entries: readonly JuliusBrainEntry[]) => JuliusContextQualification;
 }
 
 export interface JuliusPipelineRequest {
@@ -291,6 +308,16 @@ export type JuliusTaskOutcome =
   | { readonly kind: 'REPAIR_SCHEDULED'; readonly taskId: string; readonly repairTaskId: string; readonly round: number }
   | { readonly kind: 'RETRY'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
   | { readonly kind: 'FAILED'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
+  /**
+   * THE WORK WAS NOT DONE AND THE TASK DID NOT FAIL: a provider declined the
+   * request itself, and Julius re-planned the work into a continuation the
+   * architect will restate. The task ends SKIPPED, the mission is still alive,
+   * and `code`/`failureClass` still say what was declined.
+   */
+  | {
+    readonly kind: 'SUPERSEDED'; readonly taskId: string; readonly code: string;
+    readonly failureClass: string; readonly guidanceTaskId: string; readonly continuationTaskId: string;
+  }
   | { readonly kind: 'DENIED'; readonly taskId: string; readonly reasonCode: string }
   | { readonly kind: 'APPROVAL_REQUIRED'; readonly taskId: string; readonly operation: string; readonly reasonCode: string }
   | { readonly kind: 'HALTED'; readonly taskId: string; readonly reasonCode: string; readonly safeSummary: string }
@@ -669,6 +696,38 @@ export async function prepareClaimedTask(
  * task row are each read once and the policy is evaluated in exactly one place.
  */
 /** The three closed values that name an agreement on a trajectory row; null when the role is unbound. */
+/**
+ * THE MEASUREMENT COLUMNS OF A FAILED ATTEMPT, read out of the boundary's own
+ * flattened diagnostics.
+ *
+ * `flattenDiagnostics` prefixes every key with `diag_` so it cannot collide with
+ * `code`, `failureClass` or `reasonCode`, and it has already sanitised each
+ * value. This reads the five the trajectory row has columns for and refuses
+ * anything that is not a finite non-negative integer — `validateTrajectoryEvent`
+ * would refuse it anyway, and a NaN on a durable row is a number nobody can act
+ * on.
+ *
+ * `diag_elapsedMs` is the reviewer transport's own word for wall time and the
+ * trajectory column is `durationMs`; `diag_provider` is what answered, which on
+ * a failure is the only place the provider identity survives at all.
+ */
+function diagnosedMeasurement(diagnostics: Readonly<Record<string, string | number | boolean | null>> | undefined): {
+  providerId?: string; usdMicros?: number | null;
+  inputTokens?: number | null; outputTokens?: number | null; durationMs?: number | null;
+} {
+  if (diagnostics === undefined) return {};
+  const count = (value: unknown): number | null =>
+    (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null);
+  const provider = diagnostics.diag_provider;
+  return {
+    ...(typeof provider === 'string' && provider.trim() !== '' ? { providerId: provider } : {}),
+    usdMicros: count(diagnostics.diag_costUsdMicros),
+    inputTokens: count(diagnostics.diag_inputTokens),
+    outputTokens: count(diagnostics.diag_outputTokens),
+    durationMs: count(diagnostics.diag_elapsedMs),
+  };
+}
+
 function bindingFacts(binding: JuliusTaskContractBinding | null): Record<string, string | number | null> {
   return {
     contractTaskId: binding?.taskId ?? null,
@@ -864,12 +923,37 @@ export async function runClaimedTask(
      * judge resolution) as FINDING entries scoped to this task and role.
      */
     const priorFindings = repairContextFindings(task, runTasks, findings);
-    const snapshot = createJuliusContextSnapshot({
+    /**
+     * THE CONTEXT INTEGRITY LAYER, ON THE REAL DISPATCH PATH.
+     *
+     * Every packet a live worker receives is now authority-ranked: the locked
+     * terms first, then Julius's own decisions, then the reviewer's cited
+     * findings, and an unverified handoff note last — whatever order the brain
+     * rows happened to be written in, and however imperative their prose. The
+     * qualification is DERIVED from durable columns only
+     * (`julius-context-provenance.ts`); an entry the store cannot attribute is
+     * admitted at the lowest standing rather than left out.
+     *
+     * This is deliberately not behind a flag. A ranking that runs for a fixture
+     * and not for a mission proves nothing about the mission, and the failure it
+     * prevents — one fat unverified memory crowding out the finding a repair
+     * exists to address — is a failure of the real path only.
+     */
+    const contextEntries = [...brain, ...priorFindings.map((finding) => findingEntryFor(task, finding))];
+    const derivedQualification = (deps.contextQualification ?? deriveJuliusContextQualification)(contextEntries);
+    // THE RECORD WINS. A standing the claim ledger recorded — an admission, a
+    // reviewer's promotion — replaces the derived one for the same claim; an
+    // entry with no recorded claim keeps its derivation. `julius-claim-ledger.ts`.
+    const qualification = mergeJuliusDurableStanding(derivedQualification, await deps.store.claimsForRun(run.runId, run.projectId));
+    let snapshot;
+    try {
+      snapshot = createJuliusContextSnapshot({
+      qualification,
       contextId: deps.ids.next('context'),
       runId: run.runId,
       task,
       worker,
-      entries: [...brain, ...priorFindings.map((finding) => findingEntryFor(task, finding))],
+      entries: contextEntries,
       maxCharacters: typeof deps.contextCharacterBudget === 'function'
         ? deps.contextCharacterBudget(worker.role)
         : deps.contextCharacterBudget,
@@ -893,7 +977,46 @@ export async function runClaimedTask(
       evidenceIds: evidence.filter((value) => task.dependencyIds.includes(value.taskId)).map((value) => value.evidenceId),
       findingIds: (priorFindings.length > 0 ? priorFindings : findings.filter((value) => value.taskId === task.taskId)).map((value) => value.findingId),
       acceptanceCriterionIds: criteria.map((value) => value.criterionId),
-    });
+      });
+    } catch (error) {
+      /**
+       * AN AUTHORITATIVE CLASH FAILS THE TASK, IT DOES NOT CRASH THE TICK.
+       *
+       * `compileContextWithIntegrity` refuses to compile a packet when two claims
+       * of equal authority and equal trust contradict and nothing separates them:
+       * handing a worker either side would make the packet assert something
+       * Julius has no basis for. That refusal has to become a RECORDED task
+       * failure — an exception escaping `dispatchJuliusTask` would abort the whole
+       * tick, taking every other claimed task with it, and leave this one ACTIVE
+       * with its lease held until the recovery sweep.
+       *
+       * The conflicting claim ids reach the ledger, because "something
+       * contradicted something" is not a diagnosis. It is not retryable: the same
+       * rows compile the same refusal, and a retry would spend an attempt to
+       * learn what this row already says.
+       */
+      if (!(error instanceof JuliusContextIntegrityRefusal)) throw error;
+      const clash = error.conflicts[0];
+      await ledger.event('task.failed', {
+        taskId: task.taskId,
+        facts: {
+          code: 'INVALID_REQUEST', errorRetryable: false,
+          failureClass: 'context_integrity_unresolved_clash',
+          reasonCode: error.reasonCode,
+          conflicts: error.conflicts.length,
+          clashClaimIds: clash === undefined ? null : clash.claimIds.join('|'),
+          clashEntryIds: clash === undefined ? null : clash.entryIds.join('|'),
+        },
+      });
+      await deps.store.finishTask({
+        taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration,
+        state: 'FAILED', now: deps.clock.now(),
+      });
+      return {
+        kind: 'FAILED', taskId: claim.taskId, code: 'INVALID_REQUEST',
+        failureClass: 'context_integrity_unresolved_clash',
+      };
+    }
     /**
      * WHAT THIS DISPATCH WAS ACTUALLY HANDED — the two effort dimensions Julius
      * can measure itself, and the only point in the runtime that knows them.
@@ -1318,18 +1441,114 @@ export async function runClaimedTask(
      * so the trajectory said RETRY and the outcome said RETRY for a requeue
      * that never happened and belonged to someone else's lease.
      */
+    /**
+     * A DECLINED REQUEST IS RE-PLANNED, NOT COLLAPSED.
+     *
+     * One failed task fails the whole run (`julius-run-loop`: any FAILED task
+     * is a FAILED mission), which is right for a crash and wrong for a refusal:
+     * a provider declining the ASK is the one failure whose cure is a different
+     * ask, and the Prompt Architect is who writes asks. So Julius raises the
+     * guidance itself — `PROVIDER_DECLINED_REQUEST`, origin JULIUS — and the
+     * barrier mints the architect's task plus a continuation segment carrying
+     * the same work. Only then does the refused task end SKIPPED instead of
+     * FAILED: the work is still owed to the continuation, so the mission is not
+     * finished and nothing has been laundered.
+     *
+     * EVERY BOUND IS THE ORDINARY ONE. The reviewer is excluded — a review that
+     * was declined leaves the work UNJUDGED, and re-planning the work would be
+     * answering a question nobody asked; a declined review therefore fails, and
+     * a mission that cannot be reviewed cannot complete. The rest is the
+     * guidance path's own: nothing before the contract is LOCKED (a declining
+     * architect cannot be asked to re-plan its own refusal), one outstanding
+     * guidance task per subject, the segment ceiling, and a route the architect
+     * can actually be reached on. Any of them failing leaves the task FAILED
+     * and the run fails truthfully with the class on the record.
+     */
+    /**
+     * ONE RE-PLAN PER UNIT OF WORK, and no counter to keep: a unit that has
+     * already had a refusal re-planned holds a SKIPPED task, which is durable,
+     * survives a restart, and cannot be double-counted by a replayed tick. If
+     * the architect restated the ask and a provider declines it again, the ask
+     * was not the problem — the run fails truthfully rather than paying for
+     * another round of the same conversation. (The segment ceiling would bound
+     * it eventually; "eventually" is several paid dispatches away.)
+     */
+    const refusalCanReplan = !requeue
+      && juliusFailureIsContentRefusal(outcome.failureClass)
+      && claim.role !== 'INDEPENDENT_REVIEWER'
+      && await (async (): Promise<boolean> => {
+        const rows = await deps.store.tasksForRun(run.runId, run.projectId);
+        const unit = juliusSegmentLineageRootOf(task, rows).taskId;
+        const replayed = rows.some((row) => row.state === 'SKIPPED'
+          && juliusSegmentLineageRootOf(row, rows).taskId === unit);
+        if (replayed) {
+          await ledger.event('checkpoint.verdict', {
+            taskId: claim.taskId, workerId: JULIUS_COORDINATOR_AUTHOR,
+            facts: {
+              checkpointId: null, route: 'CONTINUE', reasonCode: 'REFUSAL_ALREADY_REPLANNED',
+              failureClass: outcome.failureClass ?? null, unitRootTaskId: unit,
+            },
+          });
+        }
+        return !replayed;
+      })();
+    const replanned = refusalCanReplan
+      ? await driveContinuousLifecycle({
+        deps, run, ledger, task, request,
+        // Julius raised this, so Julius is who the record names: the declining
+        // worker is not known here (the coordinator chooses it), and naming the
+        // task's own role would claim a worker asked.
+        workerId: JULIUS_COORDINATOR_AUTHOR,
+        declined: { code: outcome.code, failureClass: outcome.failureClass as string },
+      })
+      : null;
+    const supersededBy = replanned?.continuationTaskId ?? null;
     const finished = await deps.store.finishTask({
       taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration,
-      state: 'FAILED', now: deps.clock.now(),
+      state: supersededBy === null ? 'FAILED' : 'SKIPPED', now: deps.clock.now(),
       ...(requeue ? { nextAttemptAt: deps.clock.now() } : {}),
     });
+    if (supersededBy !== null && finished) {
+      // ANNOUNCE FACTS: the row follows the durable state change, and says both
+      // what was declined and where the work went.
+      await ledger.event('task.superseded', {
+        taskId: claim.taskId, workerId: JULIUS_COORDINATOR_AUTHOR,
+        facts: {
+          reasonCode: 'PROVIDER_DECLINED_REQUEST',
+          code: outcome.code, failureClass: outcome.failureClass ?? null,
+          guidanceTaskId: replanned?.guidanceTaskId ?? null, continuationTaskId: supersededBy,
+        },
+      });
+    }
     const requeued = requeue && finished;
     await ledger.trajectory(requeued ? 'RETRY' : 'DISPATCH', {
       taskId: claim.taskId, contextId, policyRevision: request.policy.revision, outcome: outcome.code,
+      /**
+       * A FAILED ATTEMPT THAT BILLED IS STILL SPEND, AND THE EVAL LAYER READS
+       * THIS ROW.
+       *
+       * The boundary's own diagnostics already reach `task.failed` — flattened
+       * and `diag_`-prefixed — so the money was durable but in a different place
+       * under a different name. `summariseJuliusEvals` reads `usdMicros` off
+       * trajectory rows, so a mission that spent on an attempt and then failed
+       * reported only its SUCCESSFUL spend: a total that looks complete and is
+       * biased low, which is worse than one that says it is a floor.
+       *
+       * Absent stays null. A boundary that reported nothing is unknown, and a
+       * dispatch refused before any provider was reached has nothing to report.
+       */
+      ...diagnosedMeasurement(outcome.diagnostics),
       facts: { failureClass: outcome.failureClass ?? null, ...bindingFacts(preflight.contractBinding) },
     });
     if (requeued) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
     if (outcome.status === 'DENIED') return { kind: 'DENIED', taskId: claim.taskId, reasonCode: outcome.code };
+    if (supersededBy !== null && finished) {
+      return {
+        kind: 'SUPERSEDED', taskId: claim.taskId, code: outcome.code,
+        failureClass: outcome.failureClass as string,
+        guidanceTaskId: replanned!.guidanceTaskId, continuationTaskId: supersededBy,
+      };
+    }
     return { kind: 'FAILED', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
   }
 
@@ -1343,6 +1562,21 @@ export async function runClaimedTask(
   await ledger.trajectory('DISPATCH', {
     taskId: claim.taskId, workerId: outcome.workerId, contextId,
     policyRevision: request.policy.revision, outcome: 'COMPLETED',
+    /**
+     * THE FOUR MEASUREMENT COLUMNS, FILLED AT LAST. They have been on
+     * `JuliusTrajectoryEvent` since it was written and were null on every
+     * successful dispatch, so every eval derived from the trajectory — cost,
+     * cost completeness, average duration — was structurally empty rather than
+     * merely unreported. Absent stays null: an unreported cost must not become a
+     * zero, and `measured` is undefined only where no provider answered.
+     */
+    ...(outcome.measured === undefined ? {} : {
+      providerId: outcome.measured.providerId,
+      usdMicros: outcome.measured.usdMicros,
+      inputTokens: outcome.measured.inputTokens,
+      outputTokens: outcome.measured.outputTokens,
+      durationMs: outcome.measured.durationMs,
+    }),
     facts: { duplicate: outcome.duplicate, ...bindingFacts(preflight.contractBinding) },
   });
 
@@ -1486,6 +1720,20 @@ export async function runClaimedTask(
  * proposal is: failing a task because its optional guidance was unusable would
  * trade worse advice for no mission.
  */
+/**
+ * WHAT A GUIDANCE BARRIER LEFT BEHIND, for a caller that has to act on it.
+ *
+ * `null` means no guidance was raised at all — no request, a refused
+ * checkpoint, a route that was not guidance, an unroutable architect, a ceiling
+ * reached. The pair means the ask exists; `continuationTaskId` is null when the
+ * route was not a barrier, which is a different fact from a barrier that could
+ * not mint one.
+ */
+interface JuliusGuidanceBarrier {
+  readonly guidanceTaskId: string;
+  readonly continuationTaskId: string | null;
+}
+
 async function driveContinuousLifecycle(input: {
   readonly deps: JuliusPipelineDependencies;
   readonly run: JuliusRunRow;
@@ -1497,7 +1745,14 @@ async function driveContinuousLifecycle(input: {
   readonly guidance?: unknown;
   readonly segmentResume?: unknown;
   readonly researchAsks?: unknown;
-}): Promise<void> {
+  /**
+   * JULIUS RAISED THIS ASK ITSELF, because a provider declined the request.
+   * No worker asked, so nothing here may claim one did: the checkpoint is
+   * `PROVIDER_DECLINED_REQUEST` with origin `JULIUS`, and the ask the architect
+   * reads is Julius's own sentence naming the refusal's class.
+   */
+  readonly declined?: { readonly code: string; readonly failureClass: string };
+}): Promise<JuliusGuidanceBarrier | null> {
   const { deps, run, ledger, task } = input;
 
   if (input.guidance !== undefined) {
@@ -1523,11 +1778,12 @@ async function driveContinuousLifecycle(input: {
           facts: { reasonCode: 'RESEARCH_YIELD_TOOK_THE_SEGMENT' },
         });
       }
-      return;
+      return null;
     }
   }
 
-  if (input.guidanceRequest === undefined) return;
+  // A WORKER ASKED, OR JULIUS DID. Nothing else reaches the guidance path.
+  if (input.guidanceRequest === undefined && input.declined === undefined) return null;
 
   // THE SUBJECT IS THE ASKING TASK ITSELF. A coder asks about its own build;
   // routing a request onto some parent would answer a question nobody posed.
@@ -1543,18 +1799,27 @@ async function driveContinuousLifecycle(input: {
   const binding = contract === null ? null : juliusTaskContractBinding(contract);
 
   const request = sanitizeJuliusGuidanceRequest(input.guidanceRequest);
+  const declined = input.declined;
+  /**
+   * WHO RAISED THIS, AND WHO WROTE THE ASK. A worker's request is the worker's,
+   * recorded under its own role; a refusal is JULIUS's observation, and the ask
+   * Julius writes is authored by Julius — see `JULIUS_COORDINATOR_AUTHOR`.
+   */
+  const askAuthorWorkerId = declined === undefined ? input.workerId : JULIUS_COORDINATOR_AUTHOR;
   const recorded = recordJuliusCheckpoint({
     checkpointId: juliusCheckpointId(subjectTaskId, sequence),
     runId: run.runId,
     taskId: subjectTaskId,
     sequence,
-    trigger: 'GUIDANCE_REQUESTED',
-    origin: originForRole(task.role),
+    trigger: declined === undefined ? 'GUIDANCE_REQUESTED' : 'PROVIDER_DECLINED_REQUEST',
+    origin: declined === undefined ? originForRole(task.role) : 'JULIUS',
     binding,
     evidenceIds: [],
     // The worker's own bounded words about what it is stuck on, or Julius's
     // sentence when the request arrived unusable. Never the provider's body.
-    safeSummary: request?.question ?? 'A worker asked for guidance and its request could not be read.',
+    safeSummary: declined !== undefined
+      ? `A provider declined this request (${declined.failureClass}); the ask itself has to change.`
+      : request?.question ?? 'A worker asked for guidance and its request could not be read.',
     recordedAt: deps.clock.now(),
   });
   if (recorded.outcome === 'REFUSED') {
@@ -1562,7 +1827,7 @@ async function driveContinuousLifecycle(input: {
       taskId: subjectTaskId, workerId: input.workerId,
       facts: { reasonCode: recorded.reasonCode, stage: 'checkpoint' },
     });
-    return;
+    return null;
   }
 
   const checkpoint = recorded.checkpoint;
@@ -1598,7 +1863,7 @@ async function driveContinuousLifecycle(input: {
       taskId: subjectTaskId, workerId: input.workerId,
       facts: { checkpointId: checkpoint.checkpointId, route: routing.route, reasonCode: routing.reasonCode },
     });
-    return;
+    return null;
   }
 
   /**
@@ -1620,7 +1885,9 @@ async function driveContinuousLifecycle(input: {
     anchor: guidanceTaskId,
     sourceRole: juliusPeerPartyForRole(task.role) ?? String(task.role),
     targetRole: 'PROMPT_ARCHITECT',
-    reason: 'A worker paused its unit of work and asked the Prompt Architect for guidance.',
+    reason: declined === undefined
+      ? 'A worker paused its unit of work and asked the Prompt Architect for guidance.'
+      : 'A provider declined this request on content grounds; Julius asked the Prompt Architect to restate the work.',
     subjectTaskId,
     carrierTaskId: guidanceTaskId,
     contextRefs: [`brain:guidance-request:${guidanceTaskId}`],
@@ -1638,7 +1905,7 @@ async function driveContinuousLifecycle(input: {
         wouldHaveRouted: routing.route, peerRefusal: permitted.reasonCode,
       },
     });
-    return;
+    return null;
   }
 
   /**
@@ -1667,7 +1934,7 @@ async function driveContinuousLifecycle(input: {
           reasonCode: 'GUIDANCE_UNROUTABLE', wouldHaveRouted: routing.route,
         },
       });
-      return;
+      return null;
     }
   }
 
@@ -1692,7 +1959,7 @@ async function driveContinuousLifecycle(input: {
           continuationTaskId: null, barrier: true, segment: nextSegment, ceiling,
         },
       });
-      return;
+      return null;
     }
   }
 
@@ -1744,7 +2011,14 @@ async function driveContinuousLifecycle(input: {
    * that it was told nothing.
    */
   if (created) {
-    const askText = request === null
+    const askText = declined !== undefined
+      ? [
+        'JULIUS RAISED THIS ASK. No worker asked for guidance: the provider DECLINED this request itself.',
+        `REFUSAL CLASS: ${declined.failureClass} (carried as ${declined.code})`,
+        'WHAT THIS MEANS: the work as currently specified will not be served — by this provider, and on the same wording probably by another.',
+        'WHAT IS NEEDED: restate this unit of work so that it can be served WITHIN the locked contract. Do not widen the scope, do not weaken an acceptance criterion, and do not propose anything the contract forbids. If the work cannot be restated within those terms, say so plainly: Julius will fail the mission truthfully rather than pretend.',
+      ].join('\n')
+      : request === null
       ? 'A worker asked for guidance and its request could not be read. No question, blocking condition, attempt or path is available.'
       : [
         `QUESTION: ${request.question}`,
@@ -1752,11 +2026,11 @@ async function driveContinuousLifecycle(input: {
         `ALREADY ATTEMPTED: ${request.attempted.join(' | ') || '(none stated)'}`,
         `RELEVANT PATHS: ${request.relevantPaths.join(' | ') || '(none stated)'}`,
       ].join('\n');
-    await deps.store.appendBrainEntry({
+    await appendBrainEntryAdmitting(deps, {
       runId: run.runId,
       projectId: run.projectId,
       taskId: guidanceTask.taskId,
-      workerId: input.workerId,
+      workerId: askAuthorWorkerId,
       entryId: `brain:guidance-request:${guidanceTask.taskId}`,
       kind: 'HANDOFF',
       safeText: askText,
@@ -1864,7 +2138,7 @@ async function driveContinuousLifecycle(input: {
         deps, run, ledger, lineage: [segmentRoot, ...segmentChildrenOf(segmentRoot, tasks)],
         continuationTaskId: continuation.taskId, workerId: input.workerId,
       });
-      await deps.store.appendBrainEntry({
+      await appendBrainEntryAdmitting(deps, {
         runId: run.runId,
         projectId: run.projectId,
         taskId: continuation.taskId,
@@ -1893,8 +2167,12 @@ async function driveContinuousLifecycle(input: {
       // Null when the route was not a barrier, which is a different fact from
       // a barrier that failed to mint one.
       continuationTaskId, barrier: routeIsBarrier(routing.route),
+      // WHO RAISED IT, on the row that explains what happened next.
+      raisedBy: declined === undefined ? 'WORKER' : 'JULIUS',
+      declinedFailureClass: declined?.failureClass ?? null,
     },
   });
+  return created ? { guidanceTaskId: guidanceTask.taskId, continuationTaskId } : null;
 }
 
 /**
@@ -2190,7 +2468,7 @@ async function driveResearchCheckpoint(input: {
      * guarded by the continuation's own idempotent write, so a replayed tick
      * adds neither the task nor the entry and the brain revision does not drift.
      */
-    await deps.store.appendBrainEntry({
+    await appendBrainEntryAdmitting(deps, {
       runId: run.runId,
       projectId: run.projectId,
       taskId: continuation.taskId,
@@ -2232,7 +2510,7 @@ async function driveResearchCheckpoint(input: {
     });
 
     if (served.length > 0) {
-      await deps.store.appendBrainEntry({
+      await appendBrainEntryAdmitting(deps, {
         runId: run.runId,
         projectId: run.projectId,
         taskId: null,
@@ -2411,7 +2689,7 @@ async function issueGuidanceFromResult(input: {
    * Rejected guidance is NOT erased: this row, the `guidance.issued` row and the
    * review's own decision stay on the record as provenance.
    */
-  await deps.store.appendBrainEntry({
+  await appendBrainEntryAdmitting(deps, {
     runId: run.runId,
     projectId: run.projectId,
     taskId: task.taskId,
@@ -3117,8 +3395,9 @@ async function carryAcceptedGuidanceForward(input: {
     if (!entry.taskIds.some((taskId) => carried.has(taskId))) continue;
     const revision = /:r([1-9]\d*)$/u.exec(entry.entryId);
     if (revision === null) continue;
-    await deps.store.appendBrainEntry({
-      runId: run.runId, projectId: run.projectId, taskId: input.continuationTaskId, workerId: input.workerId,
+    await appendBrainEntryAdmitting(deps, {
+      // A copy keeps its author; the tick that copies it is not the one that wrote it.
+      runId: run.runId, projectId: run.projectId, taskId: input.continuationTaskId, workerId: entry.provenance?.workerId ?? input.workerId,
       entryId: juliusGuidanceHandoffEntryId(input.continuationTaskId, Number(revision[1])),
       kind: 'HANDOFF', safeText: entry.text, evidenceIds: [], occurredAt: deps.clock.now(),
     });
@@ -3183,8 +3462,20 @@ async function deliverAcceptedGuidance(input: {
   const authoritative = `${JULIUS_GUIDANCE_AUTHORITATIVE_HEADING}\n\n${packet}`;
   if (entries.some((entry) => isJuliusGuidanceHandoffEntryId(entry.entryId) && entry.taskIds.includes(waiting.taskId) && entry.text === authoritative)) return;
   const entryId = juliusGuidanceHandoffEntryId(waiting.taskId, revision);
-  await deps.store.appendBrainEntry({
-    runId: run.runId, projectId: run.projectId, taskId: waiting.taskId, workerId: input.workerId,
+  /**
+   * AUTHOR AND DELIVERER ARE TWO IDENTITIES. The handoff row is the
+   * architect's words reaching the continuation; the tick that delivers it may
+   * belong to anyone — the reviewer whose acceptance released it, most often.
+   * The row's writer is therefore the AUTHOR (the proposal's own provenance),
+   * so the claim ledger's self-verification rule follows authorship: a reviewer
+   * that merely delivered the packet may still verify it, and the architect
+   * that wrote it may not. The DELIVERER is on the event beside it — which
+   * tick, which task, whose completion — so the record still answers who
+   * carried the packet and when.
+   */
+  const authorWorkerId = proposal.provenance?.workerId ?? input.workerId;
+  await appendBrainEntryAdmitting(deps, {
+    runId: run.runId, projectId: run.projectId, taskId: waiting.taskId, workerId: authorWorkerId,
     entryId, kind: 'HANDOFF',
     safeText: authoritative,
     evidenceIds: [], occurredAt: deps.clock.now(),
@@ -3192,6 +3483,7 @@ async function deliverAcceptedGuidance(input: {
   await ledger.event('guidance.delivered', {
     taskId: input.questionTaskId, workerId: input.workerId,
     facts: {
+      authorWorkerId, deliveredByWorkerId: input.workerId, deliveredAtTaskId: input.questionTaskId,
       guidanceTaskId: input.guidanceTaskId, deliveredTo: waiting.taskId, entryId,
       revision, proposalEntryId: proposal.entryId, deliveredAt: input.deliveredAt ?? 'DECISION',
     },
@@ -3628,7 +3920,7 @@ async function recordArchitecture(input: {
      * the reviewer judging this consultation reads it, and no coder builds
      * against a design nobody has accepted.
      */
-    await deps.store.appendBrainEntry({
+    await appendBrainEntryAdmitting(deps, {
       runId: run.runId, projectId: run.projectId, taskId: task.taskId, workerId: input.workerId,
       entryId: juliusArchitectureProposalEntryId(task.taskId), kind: 'DECISION',
       safeText: [
@@ -3643,7 +3935,7 @@ async function recordArchitecture(input: {
      * building against it and the reviewer judging against it see the same
      * revision, and bounded by the same cap the row is.
      */
-    await deps.store.appendBrainEntry({
+    await appendBrainEntryAdmitting(deps, {
       runId: run.runId, projectId: run.projectId, taskId: null, workerId: input.workerId,
       entryId: juliusArchitectureEntryId(run.runId, state.revision), kind: 'DECISION',
       safeText: renderJuliusArchitecture(state), evidenceIds: [], occurredAt: deps.clock.now(),
@@ -3700,7 +3992,7 @@ async function acceptProposedArchitecture(input: {
       taskId: proposedBy, workerId: input.workerId,
       facts: { revision, proposedByTaskId: proposedBy, acceptedByTaskId: input.acceptedTaskId },
     });
-    await deps.store.appendBrainEntry({
+    await appendBrainEntryAdmitting(deps, {
       runId: run.runId, projectId: run.projectId, taskId: null, workerId: input.workerId,
       entryId: juliusArchitectureEntryId(run.runId, revision), kind: 'DECISION',
       safeText: renderJuliusArchitecture(state), evidenceIds: [], occurredAt: deps.clock.now(),
@@ -4226,7 +4518,7 @@ async function openDisagreementFor(input: {
   disagreement = await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'REBUTTAL_SCHEDULED', rebuttalTaskId }, workerId: input.workerId });
 
   const entryId = `brain:disagreement-challenge:${rebuttalTaskId}`;
-  await deps.store.appendBrainEntry({
+  await appendBrainEntryAdmitting(deps, {
     runId: run.runId, projectId: run.projectId, taskId: rebuttalTaskId, workerId: input.workerId, entryId, kind: 'HANDOFF',
     safeText: [
       `DISAGREEMENT ${disagreement.disagreementId}`,
@@ -4367,7 +4659,7 @@ async function settleRebuttal(input: Parameters<typeof verifyExecutedTask>[0] & 
       if (created) {
         disagreement = await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'RE_REVIEW_SCHEDULED', reReviewTaskId }, workerId: input.workerId });
         const entryId = `brain:disagreement-rebuttal:${reReviewTaskId}`;
-        await deps.store.appendBrainEntry({
+        await appendBrainEntryAdmitting(deps, {
           runId: run.runId, projectId: run.projectId, taskId: reReviewTaskId, workerId: input.workerId, entryId, kind: 'HANDOFF',
           safeText: [
             `DISAGREEMENT ${disagreement.disagreementId} — RE-REVIEW`,
@@ -4611,6 +4903,68 @@ function peerContextFor(deps: JuliusPipelineDependencies, run: JuliusRunRow, led
 }
 
 /* ------------------------------------------------------- the verification */
+
+/**
+ * EVERY BRAIN WRITE ADMITS A CLAIM. The entry goes to the store as it always
+ * did; when it is new, the claim ledger's derivation of that same entry is
+ * recorded as its first standing, so the durable claim and the derived one
+ * agree at birth. A replayed append (false) admits nothing again.
+ */
+async function appendBrainEntryAdmitting(deps: JuliusPipelineDependencies, input: JuliusBrainAppend): Promise<boolean> {
+  const appended = await deps.store.appendBrainEntry(input);
+  if (!appended) return false;
+  await deps.store.recordClaimStanding({
+    runId: input.runId, projectId: input.projectId,
+    claim: juliusAdmittedClaimFor(input), reason: 'ADMITTED', occurredAt: input.occurredAt,
+  });
+  return true;
+}
+
+async function promoteClaimsOnAcceptedReview(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly subject: JuliusTask;
+  readonly reviewTask: JuliusTask;
+  readonly reviewer: string;
+  readonly evidence: ReadonlyArray<{ readonly taskId: string; readonly evidenceId: string }>;
+}): Promise<void> {
+  const { deps, run, ledger, subject, reviewTask } = input;
+  const [claims, entries] = await Promise.all([
+    deps.store.claimsForRun(run.runId, run.projectId),
+    deps.store.brainEntriesForRun(run.runId, run.projectId),
+  ]);
+  const at = deps.clock.now();
+  const outcome = juliusClaimPromotionsOnAccept({
+    claims, entries, subjectTaskId: subject.taskId, by: input.reviewer, at,
+    reviewEvidenceIds: input.evidence.filter((item) => item.taskId === reviewTask.taskId).map((item) => item.evidenceId),
+  });
+  for (const promotion of outcome.promoted) {
+    const recorded = await deps.store.recordClaimStanding({
+      runId: run.runId, projectId: run.projectId, claim: promotion.claim, reason: 'REVIEW_ACCEPTED', occurredAt: at,
+    });
+    // ANNOUNCE FACTS: the event follows the durable write, and only a write.
+    if (recorded) {
+      await ledger.event('claim.promoted', {
+        taskId: subject.taskId, workerId: input.reviewer,
+        facts: {
+          claimId: promotion.claim.claimId, entryId: promotion.claim.entryId,
+          from: promotion.from, to: promotion.claim.trust,
+          reviewTaskId: reviewTask.taskId, evidenceCount: promotion.claim.evidence.length,
+        },
+      });
+    }
+  }
+  // A refusal is a fact about the record too: a reviewer who turns out to be
+  // the asserter, or a review that cites nothing, is why a memory stayed where
+  // it was — and a reader asking "why is this still SUPPORTED" needs it.
+  for (const refusal of outcome.refused) {
+    await ledger.event('claim.promotion.refused', {
+      taskId: subject.taskId, workerId: input.reviewer,
+      facts: { claimId: refusal.claimId, reasonCode: refusal.reasonCode, reviewTaskId: reviewTask.taskId },
+    });
+  }
+}
 
 async function verifyExecutedTask(input: {
   request: JuliusPipelineRequest;
@@ -4977,7 +5331,7 @@ async function verifyExecutedTask(input: {
         evidence: evidence.map((item) => ({ taskId: item.taskId, type: item.type, status: item.status, safeSummary: item.safeSummary })),
         repairSummary: evidence.filter((item) => item.taskId === task.taskId).at(-1)?.safeSummary ?? null,
       });
-      await deps.store.appendBrainEntry({
+      await appendBrainEntryAdmitting(deps, {
         runId: run.runId, projectId: run.projectId, taskId: reviewTaskId, workerId: input.workerId,
         entryId: juliusRepairRoundEntryId(reviewTaskId), kind: 'FINDING',
         safeText: renderJuliusRepairRoundDiff(diff), evidenceIds: [], occurredAt: deps.clock.now(),
@@ -5258,6 +5612,17 @@ async function verifyExecutedTask(input: {
       }, juliusDecisionEventId(decisionKey, 'task.runnable', ordinal))),
     ],
   });
+  /**
+   * A REVIEWER'S ACCEPTANCE IS WHAT PROMOTES A MEMORY. The entries the
+   * reviewed task wrote were admitted at whatever standing their kind and
+   * citations earned; an Independent Reviewer accepting that task is the
+   * evidence that raises them to VERIFIED — through the trust core, which is
+   * what refuses a reviewer who is the asserter. Only on a decision this tick
+   * recorded: a replayed decision promotes nothing twice.
+   */
+  if (decisionRecorded && decision.action === 'ACCEPT' && task.role === 'INDEPENDENT_REVIEWER' && task.taskId !== subject.taskId) {
+    await promoteClaimsOnAcceptedReview({ deps, run, ledger, subject, reviewTask: task, reviewer: input.workerId, evidence });
+  }
   await ledger.trajectory('VERIFICATION', {
     taskId: subject.taskId, workerId: input.workerId,
     policyRevision: input.request.verification.revision, outcome: decision.action,
@@ -5292,7 +5657,7 @@ async function verifyExecutedTask(input: {
    * reviewer prose, diff or provider body reaches this row.
    */
   if (decisionRecorded) {
-    await deps.store.appendBrainEntry({
+    await appendBrainEntryAdmitting(deps, {
       runId: run.runId,
       projectId: run.projectId,
       taskId: subject.taskId,

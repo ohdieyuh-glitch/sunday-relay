@@ -75,6 +75,10 @@ function snapshot(): JuliusContextSnapshot {
     taskContractRevision: 2, taskContractDigest: CHARGE.binding.bindingDigest,
     sourceEntryIds: blocks.map((block) => block.entryId), dependencyTaskIds: [], evidenceIds: [], findingIds: [], acceptanceCriterionIds: ['AC-1'],
     contentHash: 'sha256:test', characterCount: 100, redactionCount: 0, truncated: false,
+    // A fixture packet was compiled without claims, so no integrity decision
+    // was made for it. NULL says that; `[]` would say it was checked.
+    integrityVersion: null, integrityConflicts: null,
+    integrityExcludedEntryIds: null, integrityEvictedEntryIds: null,
     packet: {
       missionId: 'mission-1', taskId: 'build-1', workerId: WORKER.workerId,
       sourceEntryIds: blocks.map((block) => block.entryId),
@@ -221,6 +225,8 @@ describe('C3 — a failure is classified by the provider and disposed of by the 
     ['CREDIT_UNAVAILABLE', 'PROVIDER_UNAVAILABLE', false, true],
     ['AUTHENTICATION', 'AUTH_CONFIGURATION', false, true],
     ['CONTEXT_OVERFLOW', 'INVALID_REQUEST', false, false],
+    // A declined request: not the caller's key, not a crash, not worth re-asking.
+    ['CONTENT_REFUSED', 'INVALID_REQUEST', false, false],
     ['MALFORMED_OUTPUT', 'WORKER_EXECUTION_FAILURE', false, false],
     ['UNCLASSIFIED', 'WORKER_EXECUTION_FAILURE', false, false],
   ] as const)('%s fails the dispatch as %s (retryable %s, operator %s), and produces no evidence', async (failure, code, retryable, operator) => {
@@ -276,6 +282,10 @@ describe('C4 — the Claude Code provider translates its runtime into the taxono
     ['API Error: 400 {"message":"Your credit balance is too low to access the Anthropic API."}', 'CREDIT_UNAVAILABLE'],
     ['API Error: 401 authentication_error', 'AUTHENTICATION'],
     ['prompt is too long: 250000 tokens > 200000 maximum', 'CONTEXT_OVERFLOW'],
+    // The classifier's `content_filtered` used to fall through to UNCLASSIFIED,
+    // which is how "I will not do this" read as "something broke".
+    ['the response was blocked by the content filter', 'CONTENT_REFUSED'],
+    ['API Error: 400 stop_reason: refusal', 'CONTENT_REFUSED'],
     ['something nobody recognises', 'UNCLASSIFIED'],
   ])('after launch, "%s" is %s', (text, failure) => {
     // The provider module classifies the runtime's text first and maps the class; this is that path.

@@ -4,6 +4,7 @@ export * from './julius-cost-accounting';
 export * from './julius-contract-disposition';
 export * from './julius-memory-trust';
 export * from './julius-context-integrity';
+export * from './julius-context-provenance';
 export * from './julius-router';
 export * from './julius-bounded-runtime';
 export * from './julius-recovery';

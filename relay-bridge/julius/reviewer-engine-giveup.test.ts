@@ -67,6 +67,14 @@ const GIVE_UPS: ReadonlyArray<readonly [string, string]> = [
   ['API call failed after 1 retries: Connection error.', 'review_engine_gave_up'],
   ['Invalid API response after 1 retries: empty choices', 'review_engine_gave_up'],
   ['I apologize, but I encountered repeated errors: upstream reset', 'review_engine_gave_up'],
+  // A REFUSAL IS ITS OWN SHAPE, and it is classified BEFORE the give-ups: a
+  // content filter's sentence contains the word "error", and reading it as the
+  // provider giving up would send the same ask to another model to be declined
+  // again. The request is what has to change.
+  ['API Error: 400 {"type":"content_policy_violation"}', 'review_content_refused'],
+  ['API call failed: response blocked by the content filter', 'review_content_refused'],
+  ['Upstream returned stop_reason: refusal', 'review_content_refused'],
+  ["I can't help with that.", 'review_content_refused'],
 ];
 
 describe('the classifier names each fixed give-up sentence, and nothing else', () => {
@@ -78,6 +86,19 @@ describe('the classifier names each fixed give-up sentence, and nothing else', (
     expect(classifyEngineGiveUp('The plan is fine. Note: Model generated invalid tool call: read_file')).toBeNull();
     expect(classifyEngineGiveUp('I looked at the plan and it seems okay to me.')).toBeNull();
     expect(classifyEngineGiveUp('')).toBeNull();
+    // A REVIEW THAT DISCUSSES a content policy is a review, not a refusal — the
+    // refusal patterns are anchored, and this one is reached only when no
+    // verdict-bearing JSON was found at all.
+    expect(classifyEngineGiveUp('The diff adds a content filter to the upload path, which is correct.')).toBeNull();
+    // An apology alone stays unclassified: a coarse class beats a wrong one.
+    expect(classifyEngineGiveUp('I am sorry, the diff was hard to follow.')).toBeNull();
+  });
+
+  it('a refusal is not a give-up, and is the one shape that is the REQUEST’s fault', () => {
+    // The distinction the operator needs: the provider was reachable, answered,
+    // and declined. Retrying the same ask anywhere reaches the same answer.
+    expect(classifyEngineGiveUp('API Error: 400 content_filter triggered')).toBe('review_content_refused');
+    expect(classifyEngineGiveUp('API call failed after 2 retries: Connection error.')).toBe('review_engine_gave_up');
   });
 });
 
@@ -169,6 +190,10 @@ function snapshot(taskId: string): JuliusContextSnapshot {
     taskContractRevision: 1, taskContractDigest: 'sha256:contract',
     sourceEntryIds: [], dependencyTaskIds: [], evidenceIds: [], findingIds: [],
     acceptanceCriterionIds: ['AC-1'], contentHash: 'sha256:content',
+    // A fixture packet was compiled without claims, so no integrity decision
+    // was made for it. NULL says that; `[]` would say it was checked.
+    integrityVersion: null, integrityConflicts: null,
+    integrityExcludedEntryIds: null, integrityEvictedEntryIds: null,
     characterCount: 24, redactionCount: 0, truncated: false,
     packet: { missionId: 'mission-live-1', taskId, workerId: worker.workerId, sourceEntryIds: [], blocks: [{ kind: 'CONSTRAINT', text: 'OBJECTIVE: give-up test' }], truncated: false },
   };
@@ -221,6 +246,21 @@ describe('the reviewer adapter: told it has no tools, corrected once if it tries
     expect(rig.prompts[1]).toContain('CORRECTION — your previous answer tried to call a tool. This review has NO tools of any kind.');
     expect(rig.prompts[1]).not.toContain('read_file');
     expect(result.diagnostics.reviewReaskShape).toBe('review_engine_invalid_tool_call');
+  }, 30_000);
+
+  it('a reviewer that DECLINES the request fails it as the request’s fault, never as a provider that gave up', async () => {
+    // The whole point of the class: an operator reading this row can tell "the
+    // model would not review this" from "the provider broke". INVALID_REQUEST is
+    // what the Coding Agent's CONTENT_REFUSED carries, so one phenomenon has one
+    // code across the three peers; and it is never retried, because retrying the
+    // same ask reaches the same answer wherever it is sent.
+    const rig = adapterOver([{ stdout: 'API Error: 400 {"type":"content_policy_violation"}\n', usage: USAGE }]);
+    const failure = await failureOf(rig.dispatch());
+    expect(failure.failureClass).toBe('review_content_refused');
+    expect(failure.code).toBe('INVALID_REQUEST');
+    expect(failure.retryable).toBe(false);
+    // WHAT IT COST IS STILL ON THE ROW: a refusal that was paid for is spend.
+    expect(safeReviewDiagnostics(failure.diagnostics)?.servedModel).toBe('grok-build-0.1');
   }, 30_000);
 
   it('a failed review records the engine\'s tokens, call count and served model on the durable row', async () => {

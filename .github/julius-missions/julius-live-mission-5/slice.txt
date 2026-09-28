@@ -20,4 +20,14 @@ src/relay/mission/julius/julius-memory-trust.ts
 # IMPORT-CHAIN CLOSURE. `julius-runtime` imports `effectivelyAcceptedTaskIds`
 # from here as a VALUE, so this loads at runtime. A slice whose import chain
 # stops halfway is a sandbox that works until it doesn't.
+#
+# AND IT DID. `julius-repair-lineage` later grew a value import of
+# `julius-segment-lineage`, and this list did not follow it: provisioning this
+# mission and running its own declared test command died on
+# ERR_MODULE_NOT_FOUND before a single assertion ran. Nothing caught it, because
+# no test provisioned a real mission slice and resolved its imports. One does
+# now — `scripts/julius-mission-slice.test.ts`, "every slice mission's import
+# chain is closed" — so the next file to grow an import fails `npm test` here
+# instead of a paid run there.
 src/relay/mission/julius/julius-repair-lineage.ts
+src/relay/mission/julius/julius-segment-lineage.ts

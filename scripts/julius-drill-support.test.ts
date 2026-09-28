@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { execFile } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -125,22 +126,23 @@ describe('the capability-proof ledger', () => {
  * THE TWO NEW DRILLS, AGAINST A REAL DATABASE.
  *
  * Env-gated the same way the live-chain proof is — `JULIUS_REAL_POSTGRES=1`
- * with `DATABASE_URL` — and written as a guarded suite rather than an early
+ * with `JULIUS_TEST_DATABASE_URL`, which names a throwaway database and is never
+ * the inherited `DATABASE_URL` — and written as a guarded suite rather than an early
  * return, which is how a test comes to assert nothing and still pass. Each runs
  * through the npm script an operator runs, which builds the bundle first, so
  * neither depends on a CI step having produced an artifact.
  */
-const enabled = (process.env.JULIUS_REAL_INFRA === '1' || process.env.JULIUS_REAL_POSTGRES === '1')
-  && (process.env.DATABASE_URL ?? '') !== '';
+const databaseUrl = juliusTestDatabaseUrl();
+const enabled = databaseUrl !== null;
 const suite = enabled ? describe : describe.todo;
 const runProcess = promisify(execFile);
 
 suite('the failure-recovery and repair-loop drills, run for real', () => {
   const freshDatabase = async (): Promise<string> => {
     const name = `juliusdrill${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
-    const admin = new Pool({ connectionString: process.env.DATABASE_URL });
+    const admin = new Pool({ connectionString: databaseUrl! });
     try { await admin.query(`CREATE DATABASE ${name}`); } finally { await admin.end(); }
-    const url = new URL(process.env.DATABASE_URL!);
+    const url = new URL(databaseUrl!);
     url.pathname = `/${name}`;
     return url.toString();
   };
