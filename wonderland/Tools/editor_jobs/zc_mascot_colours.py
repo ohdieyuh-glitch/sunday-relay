@@ -254,6 +254,25 @@ def job():
                 "the console; the settings object is the record.")
     shoot("set")
 
+    # ---- AND ONE CHANNEL AT A TIME, because both at once cannot be read apart.
+    #
+    # THE "SET" FRAME ABOVE MOVES BOTH CHANNELS, and that makes the eyes unmeasurable in it. With PRIMARY
+    # driving the whole body to saturated green, the most saturated pixels on the figure are the BODY, so an
+    # eye locator built on chroma reports the body's colour and a clause built on that passes for the wrong
+    # reason. Restricting the search to the visor does not save it either: the visor is black and so is the
+    # backdrop around the head, so "the dark region" is most of the frame.
+    #
+    # The founder's requirement is that the two channels be GENUINELY INDEPENDENT, and the direct test of
+    # that is to move one and check the other did not follow. So SECONDARY is set on its own here, against a
+    # body left at its default white, where the eyes are unambiguously the most saturated thing on the
+    # figure and the same locator is sound.
+    unreal.SystemLibrary.execute_console_command(world, "wl.Mascot.Reset")
+    yield 4.0
+    unreal.SystemLibrary.execute_console_command(
+        world, "wl.Mascot.Secondary %.3f,%.3f,%.3f" % SECONDARY)
+    yield 5.0
+    shoot("secondary_only")
+
     # ---- PUT BACK WHAT WAS FOUND, and check it went back.
     unreal.SystemLibrary.execute_console_command(world, "wl.Mascot.Reset")
     yield 2.0
@@ -321,13 +340,17 @@ def job():
                 "Judged against the cleared frame, because finding green proves nothing unless the same "
                 "figure without a colourway has none.")
     eyes = RESULT.get("eyes") or {}
-    e_before, e_after = eyes.get("reset"), eyes.get("set")
+    e_before, e_after = eyes.get("reset"), eyes.get("secondary_only")
     moved = (round(max(abs(e_before["rgb"][i] - e_after["rgb"][i]) for i in range(3)), 4)
              if e_before and e_after else None)
     RESULT["secondary_moved_the_eyes"] = {"reset_rgb": (e_before or {}).get("rgb"),
                                           "set_rgb": (e_after or {}).get("rgb"), "moved": moved}
+    sec_row = (RESULT.get("readings") or {}).get("secondary_only") or {}
+    body_followed = round(sec_row.get("green_fraction", 0.0) - reset_row.get("green_fraction", 0.0), 4)
+    RESULT["body_followed_secondary"] = body_followed
     record("C07", "SECONDARY visibly changes the eye colour, and the body does not follow it",
-           moved is not None and moved >= 0.15 and (set_row["green_fraction"] - reset_row["green_fraction"]) > 0.0,
+           moved is not None and moved >= 0.15 and abs(body_followed) <= 0.02,
+           body_followed=body_followed,
            **RESULT["secondary_moved_the_eyes"], floor=0.15,
            note="ASKED AS 'DID THE EYES CHANGE', not 'is there magenta'. The channel multiplies, so a "
                 "magenta SECONDARY on gold eyes renders PINK -- measured at RGB 0.929, 0.430, 0.483 against "

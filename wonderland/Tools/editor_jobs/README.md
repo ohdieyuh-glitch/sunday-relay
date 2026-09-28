@@ -963,3 +963,27 @@ Two rules:
 - **Look at the picture before changing a shipped value.** The founder's own instruction — *judge from the
   actual rendered mascot, not material values or test variables* — is the check that caught this, and it
   caught it after two separate instruments had agreed with each other.
+
+## Move one channel at a time, or you cannot read them apart
+
+Item 6's proof set PRIMARY and SECONDARY together in one frame and then tried to attribute pixels. It cannot
+be done, and the failure is instructive because it produced a **green 9/9 that was measuring the wrong
+thing**:
+
+- With PRIMARY driving the whole body to saturated green, the most saturated pixels on the figure are the
+  **body**. An eye locator built on chroma then reports the body's colour, and the clause passes on the body
+  having changed.
+- Restricting the search to the visor does not save it: the visor is black and so is the backdrop around the
+  head, so "the dark region in the head area" is a box spanning most of the frame.
+
+The founder's requirement is that the channels be *genuinely independent*, and the direct test of that is to
+**move one and check the other did not follow**. Setting both and attributing afterwards is the hard way to
+ask an easy question.
+
+So SECONDARY is now also set on its own, against a body left at default white, where the eyes are
+unambiguously the most saturated thing and the same locator is sound. Measured that way: the eyes move
+**0.4353** and the shell moves **0.0004**.
+
+**A passing clause is not evidence until you know which pixels it read.** This one was green, on a real
+feature that genuinely works, for a reason that had nothing to do with what it claimed to measure — which
+would have survived indefinitely, because nobody re-examines a pass.
