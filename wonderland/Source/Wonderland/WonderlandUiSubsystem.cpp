@@ -2278,6 +2278,11 @@ bool UWonderlandUiSubsystem::GetSkinPreviewRect(FVector2D& OutCentre, FVector2D&
 	return BrainPanel.IsValid() && BrainPanel->GetSkinPreviewRect(OutCentre, OutSize);
 }
 
+bool UWonderlandUiSubsystem::ShowProjectAvatarsForTest(const FString& Argument)
+{
+	return ShowProjectAvatars(Argument);
+}
+
 float UWonderlandUiSubsystem::GetPreviewGlowApplied()
 {
 	const AWonderlandSkinStage* Stage = SkinStage();

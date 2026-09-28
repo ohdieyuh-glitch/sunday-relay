@@ -196,6 +196,18 @@ public:
 	float GetPreviewGlowApplied();
 
 	/**
+	 * Run the founder's own `/pa` showcase from a test, so the SHIPPED spawn path can be measured.
+	 *
+	 * WHY THIS EXISTS. Project Avatars are spawned by ShowProjectAvatars, which is private and reachable
+	 * only through a slash command -- so a job could measure avatars it spawned ITSELF through the test
+	 * library, but never the ones the founder's own route creates. The optimisation that takes avatars out
+	 * of global illumination lives in THAT path, and "I measured the equivalent change on a different
+	 * actor and then compiled" is not the same as having seen it work.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool ShowProjectAvatarsForTest(const FString& Argument);
+
+	/**
 	 * START OR STOP THE 360 DEGREE INSPECTION of the mascot in the Wardrobe's preview.
 	 *
 	 * FOUNDER, 2026-09-25: "ONLY rotate the preview mascot around its vertical axis inside the preview
