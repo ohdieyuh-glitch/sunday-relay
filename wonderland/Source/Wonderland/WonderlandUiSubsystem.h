@@ -182,6 +182,20 @@ public:
 	bool GetSkinPreviewRect(FVector2D& OutCentre, FVector2D& OutSize) const;
 
 	/**
+	 * The glow scale the wardrobe's preview figure is ACTUALLY WEARING, not the one the cvar holds.
+	 *
+	 * THE READBACK THAT WAS MISSING. A sweep of wl.Look.PreviewGlow verified after every rung that the CVAR
+	 * had taken the value -- and it always had -- then concluded from five identical pictures that the term
+	 * did not matter. The cvar was never the thing being applied: SetGlowScale discarded the values on the
+	 * way through. Reading the input back and calling it proof is the exact trap this tree keeps finding,
+	 * and it needs the OUTPUT to be readable to escape it.
+	 *
+	 * Negative when there is no stage or no figure on it, so "could not read" is never mistaken for zero.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	float GetPreviewGlowApplied();
+
+	/**
 	 * START OR STOP THE 360 DEGREE INSPECTION of the mascot in the Wardrobe's preview.
 	 *
 	 * FOUNDER, 2026-09-25: "ONLY rotate the preview mascot around its vertical axis inside the preview

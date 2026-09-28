@@ -2278,6 +2278,17 @@ bool UWonderlandUiSubsystem::GetSkinPreviewRect(FVector2D& OutCentre, FVector2D&
 	return BrainPanel.IsValid() && BrainPanel->GetSkinPreviewRect(OutCentre, OutSize);
 }
 
+float UWonderlandUiSubsystem::GetPreviewGlowApplied()
+{
+	const AWonderlandSkinStage* Stage = SkinStage();
+	if (Stage == nullptr)
+	{
+		return -1.0f;
+	}
+	const AWonderlandCompanionEmbodiment* Figure = Stage->GetBody();
+	return Figure != nullptr ? Figure->GetGlowScale() : -1.0f;
+}
+
 bool UWonderlandUiSubsystem::ToggleWardrobeInspect()
 {
 	AWonderlandSkinStage* Stage = SkinStage();

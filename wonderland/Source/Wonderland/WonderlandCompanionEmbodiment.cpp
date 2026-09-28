@@ -1252,7 +1252,25 @@ void AWonderlandCompanionEmbodiment::SetBodyRole(EWonderlandBodyRole InRole)
 void AWonderlandCompanionEmbodiment::SetGlowScale(float Scale)
 {
 	const float Wanted = FMath::Clamp(Scale, 0.0f, 4.0f);
-	if (FMath::IsNearlyEqual(GlowScale, Wanted, 0.001f))
+	// ---- A RELATIVE TOLERANCE, BECAUSE THE SHIPPED VALUE IS THE OLD ABSOLUTE ONE.
+	//
+	// This early-out exists so the wardrobe's per-tick re-application costs a float compare instead of a
+	// repaint, which is right. But it was written with a FIXED tolerance of 0.001 and wl.Look.PreviewGlow
+	// now ships at exactly 0.001 -- so every value from 0.0 up to 0.002 is "nearly equal" to the current
+	// one and silently discarded. The knob has a dead band wider than its own working range.
+	//
+	// MEASURED, and it cost a whole evening's conclusion: a sweep across 0.0, 0.000033, 0.0001, 0.00033 and
+	// 0.001 produced five identical pictures, and the run's own control -- "turn the figure's fire off
+	// entirely" -- never turned anything off, because 0.0 is within 0.001 of 0.001. That read as "the glow
+	// contributes 0.001 of the window", i.e. as a dead lever and a finding about the STAGE, when it was
+	// really this line refusing the values. The upward half of the same sweep, whose steps are larger than
+	// the tolerance, moved the picture every time.
+	//
+	// Scaling the tolerance with the value keeps the cheap early-out for a knob sitting still and lets the
+	// knob express its whole range, including an exact zero, which is the one value a control most needs.
+	const float Tolerance = FMath::Max(FMath::Max(FMath::Abs(GlowScale), FMath::Abs(Wanted)) * 1.0e-3f,
+	                                   UE_SMALL_NUMBER);
+	if (FMath::IsNearlyEqual(GlowScale, Wanted, Tolerance))
 	{
 		return;
 	}

@@ -55,6 +55,10 @@ BLOOM = "wl.Look.PreviewBloom"
 # (name, glow, lights). None means "put back whatever this job found".
 RUNGS = [
     ("shipped", None, None),
+    # A GENUINE ZERO, which the previous run could not express: SetGlowScale discarded anything within
+    # 0.001 of the current value and the shipped value IS 0.001, so "turn the fire off" was a no-op that
+    # photographed identically and read as proof the term did not matter.
+    ("glow_zero", 0.0, None),
     ("glow_x3", 0.003, None),
     ("glow_x10", 0.01, None),
     ("glow_x30", 0.03, None),
@@ -163,6 +167,16 @@ def job():
             yield 2.5
             # READ THE KNOBS BACK. Setting is not the same as taking.
             back = {GLOW: cvar(GLOW), LIGHTS: cvar(LIGHTS)}
+            # ---- AND READ BACK WHAT THE FIGURE IS ACTUALLY WEARING, which is a different question.
+            #
+            # THE WHOLE REASON THE LAST RUN WAS WRONG. Its S03 clause verified after every rung that the
+            # CVAR held the value asked for, and it always did -- an honest, green readback of the INPUT
+            # that had no connection to the output. SetGlowScale was dropping the values on the way
+            # through, so five rungs produced one picture and that read as a finding about the stage.
+            try:
+                applied = round(float(ui.get_preview_glow_applied()), 8)
+            except Exception:                                       # noqa: BLE001
+                applied = None
             whole = patch(centre.x, centre.y, size.x * 0.38, size.y * 0.38)
             middle = patch(centre.x, centre.y, size.x * 0.16, size.y * 0.22)
             corner = patch(centre.x + corner_x * size.x, centre.y - corner_y * size.y,
@@ -174,10 +188,11 @@ def job():
                 pass
             yield 0.6
             rows[name] = {"asked": {"glow": glow, "lights": lights}, "read_back": back,
+                          "glow_applied": applied,
                           "whole": whole, "middle": middle, "corner_tr": corner,
                           "capture": os.path.basename(shot)}
             emit("S_%s_%s" % (skin, name), "INFO", "%s at %s" % (skin, name),
-                 {"glow": back[GLOW], "lights": back[LIGHTS],
+                 {"glow": back[GLOW], "glow_applied": applied, "lights": back[LIGHTS],
                   "whole_luma": whole["luma"] if whole else None,
                   "blue_over_red": whole["blue_over_red"] if whole else None,
                   "bright": whole["bright"] if whole else None})
@@ -229,6 +244,26 @@ def job():
     record("S04", "every skin was photographed at every rung, and the window read back each time",
            len(readings) == len(SKINS) and got_all,
            skins=sorted(readings), rungs=[n for n, _, _ in RUNGS])
+
+    # ---- THE CLAUSE THAT WOULD HAVE CAUGHT THE LAST RUN: does the FIGURE wear what the cvar was set to?
+    applied_rows, applied_bad = {}, []
+    for skin, rows_s in readings.items():
+        for name, glow, lights in RUNGS:
+            row = rows_s.get(name)
+            if row is None:
+                continue
+            want = as_found[GLOW] if glow is None else glow
+            got = row.get("glow_applied")
+            applied_rows["%s/%s" % (skin, name)] = {"asked": want, "applied": got}
+            if got is None or abs(got - want) > max(abs(want) * 0.02, 1.0e-6):
+                applied_bad.append("%s/%s asked %g wears %s" % (skin, name, want, got))
+    RESULT["glow_applied_by_rung"] = applied_rows
+    RESULT["rungs_the_figure_did_not_wear"] = applied_bad or None
+    record("S06", "the preview figure is wearing the glow scale each rung asked for",
+           not applied_bad, refused=applied_bad or None,
+           note="THE READBACK THAT WAS MISSING, and the one that matters. S03 above reads the CVAR and "
+                "passed honestly through an entire run in which the figure wore one value throughout. A "
+                "knob proved at its input is not a knob proved at all.")
 
     # ---- AND THE TWO CONTROLS, stated as findings rather than as pass/fail, because WHICH TERM BINDS is
     # what this run is for and either answer is a real answer.
