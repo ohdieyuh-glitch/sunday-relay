@@ -623,6 +623,50 @@ static FAutoConsoleVariableRef GWonderlandNightSkyRef(
 	GWonderlandNightSky,
 	TEXT("How hard the sky light is driven at midnight, relative to its daytime capture."),
 	ECVF_Default);
+
+// ---- THE DUSK REDISTRIBUTION. BOTH DEFAULT TO ZERO AND CHANGE NOTHING UNTIL MEASURED.
+//
+// THE PROBLEM, measured (zwB1/zwB2): the moon's contribution to the ground collapses by 87x in the 1.2
+// minutes the shadow caster hands over -- 0.0872 to 0.0010 between 18:25 and 18:27 -- because a near-full
+// moon that casts NO shadows floods the ground and a casting one is occluded by geometry. 100.1 per cent
+// of the collapse is at the flip. With the moon removed entirely the evening is perfectly monotone, so
+// the moon is the ONLY discontinuity in the whole dusk.
+//
+// THE FOUNDER'S DIRECTION: move dusk readability off the shadowless moon and onto continuous terms that
+// do not cross a caster boundary, without touching the approved night, without raising global exposure,
+// and without adding fill lights.
+//
+// WHY THESE TWO CANNOT REACH APPROVED NIGHT, structurally rather than by tuning. Night has Daylight
+// EXACTLY 0 from elevation -9 deg down, which is 18:50 onward. Both windows below carry a factor that is
+// identically zero at Daylight = 0, so every hour the founder approved is arithmetically untouched at any
+// value of either knob. The same argument at the other end keeps noon and the afternoon untouched:
+// W_sky is zero for Daylight >= 0.45, which is everything above elevation +4.8 deg.
+//
+// W_sky     = sin(pi * clamp(Daylight / 0.45))     peaks mid-crossover, 0 at both ends
+// W_moon    = Nightfall * smoothstep(clamp(Daylight / 0.03))   0 at night, ~0.89 where the flood is
+//
+// Neither introduces a threshold: both are continuous in elevation and reach their zeros smoothly.
+static float GWonderlandDuskSkyBoost = 0.0f;
+static FAutoConsoleVariableRef GWonderlandDuskSkyBoostRef(
+	TEXT("wl.Look.DuskSkyBoost"),
+	GWonderlandDuskSkyBoost,
+	TEXT("Extra sky-light multiplier across the dusk crossover only, on top of the NightSky lerp. The "
+	     "window is sin(pi * Daylight/0.45), which is exactly 0 at Daylight 0 (all of night) and at "
+	     "Daylight >= 0.45 (afternoon and noon), so no value here can alter the approved night or the "
+	     "day. 0 ships and changes nothing."),
+	ECVF_Default);
+
+static float GWonderlandDuskMoonDamp = 0.0f;
+static FAutoConsoleVariableRef GWonderlandDuskMoonDampRef(
+	TEXT("wl.Look.DuskMoonDamp"),
+	GWonderlandDuskMoonDamp,
+	TEXT("How much of the moon is taken away while it is bright but NOT YET the shadow caster -- the "
+	     "window that floods the ground and then collapses 87x at the handover. Scaled by "
+	     "Nightfall * smoothstep(Daylight/0.03), which is exactly 0 at Daylight 0, so the moon at night "
+	     "is untouched at any value. 1.0 removes about 89 per cent of the flood at 18:25 and shrinks the "
+	     "handover cliff 9.2x. 0 ships and changes nothing."),
+	ECVF_Default);
+
 static FAutoConsoleVariableRef GWonderlandNightGlowRef(
 	TEXT("wl.Look.NightGlow"),
 	GWonderlandNightGlow,
@@ -743,7 +787,20 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 			// A FIFTIETH OF NOON. Bright enough that the founder can see the Dog, the paving under it and the
 			// silhouette of a tower; nowhere near enough to be mistaken for daylight. Tuned against photographs
 			// of the darkest hour rather than chosen, and it is the one number to move if night reads wrong.
-			const float MoonLux = SunIntensityAtNoon * GWonderlandMoonGain * Nightfall;
+			// ---- AND THE DUSK DAMP, which is zero at every hour of the approved night.
+			//
+			// The moon floods the ground while it is bright and not yet the shadow caster, then collapses
+			// 87x the instant it becomes one. This takes that flood away so the handover has little left
+			// to drop, and the sky boost below carries the readability instead. The window is
+			// Nightfall * smoothstep(Daylight / 0.03): at Daylight 0 -- every hour from 18:50 onward --
+			// it is identically zero, so the moon the founder approved is untouched at any knob value.
+			// Smoothstepped with the same explicit polynomial Nightfall itself uses a few lines above,
+			// rather than FMath::SmoothStep -- which appears nowhere else in this file, and an API name
+			// I have not seen compile here is exactly the thing that has cost this lane time today.
+			const float DuskRamp = FMath::Clamp(Daylight / 0.03f, 0.0f, 1.0f);
+			const float DuskMoonWindow = Nightfall * DuskRamp * DuskRamp * (3.0f - 2.0f * DuskRamp);
+			const float MoonLux = SunIntensityAtNoon * GWonderlandMoonGain * Nightfall
+				* FMath::Max(0.0f, 1.0f - GWonderlandDuskMoonDamp * DuskMoonWindow);
 			MoonComp->SetIntensity(MoonLux);
 			// OFF WHEN IT IS NOT NEEDED, so daytime pays nothing at all for a second shadow-casting light.
 			MoonComp->SetVisibility(Nightfall > 0.002f);
@@ -805,7 +862,19 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 	{
 		if (USkyLightComponent* SkyComp = Ambient->GetLightComponent())
 		{
-			SkyComp->SetIntensity(SkyIntensityByDay * FMath::Lerp(GWonderlandNightSky, 1.0f, Daylight));
+			// ---- PLUS THE DUSK BOOST, which is zero at night and zero by day.
+			//
+			// This is where the readability the moon used to flood in comes from instead: the sky is a
+			// continuous, unshadowed, world-owned term that crosses no caster boundary, so nothing it
+			// contributes can step. The window sin(pi * Daylight/0.45) is identically zero at Daylight 0
+			// -- all of night from 18:50 -- and identically zero at Daylight >= 0.45, which is every hour
+			// above elevation +4.8 deg, so noon and the afternoon are untouched as well. It peaks in the
+			// middle of the crossover, exactly where the ground is darkest once the moon flood is damped.
+			const float DuskSkyWindow =
+				FMath::Sin(PI * FMath::Clamp(Daylight / 0.45f, 0.0f, 1.0f));
+			SkyComp->SetIntensity(SkyIntensityByDay
+				* (FMath::Lerp(GWonderlandNightSky, 1.0f, Daylight)
+				   + GWonderlandDuskSkyBoost * DuskSkyWindow));
 		}
 	}
 
