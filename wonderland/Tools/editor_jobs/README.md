@@ -711,3 +711,46 @@ Audited in this lane after it was reported: the only such guard is
 
 **And the sweep's control is the thing to verify hardest.** If "off" and "on" produce the same picture,
 suspect the switch before the subject — the zero end of a sweep is exactly where a tolerance guard bites.
+
+## "handled" is not "happened" — name the widget, not the return value
+
+Item 7's six failing clauses all rest on a nav tile click that does not register. Three successive runs read
+this line as proof the press landed:
+
+```
+WLUI pointer click on brain at (955, 1034): under the point 1, down 1, up 1
+```
+
+`down 1` is `RoutePointerDownEvent(...).IsEventHandled()`. It says SOMETHING in a 57-deep path handled the
+press. It does not name what, and `SButton::OnMouseButtonUp` returns Handled whether or not it ever reaches
+the OnClicked delegate — so `up 1` is compatible with no click at all.
+
+Each probe added killed a hypothesis and none of them was the cause:
+
+| probe | answer | what it ruled out |
+|---|---|---|
+| `app_active` | 1 | Slate refusing to route into a background app |
+| captor after the down | the target's **own** `SButton` | capture theft, window stacking, the viewport |
+| point inside target geometry | 1 | render transform / DPI mismatch |
+| `SimulateNavTileClick` | increments **and** opens the surface | the handler, counter, Id mapping, navigation |
+
+The wallet's `SButton` completes through the identical routing, in the same run, with identical probe
+answers. So the two are indistinguishable on every condition measured and differ only in outcome.
+
+The rule that generalises: **a boolean return from a routing call names nothing.** When a click, a message or
+an event "was handled" but nothing happened, log the identity of whatever handled it before forming any
+hypothesis — three runs of diagnosis here rested on an inference from a bool that could not carry it.
+
+## A negative result survives a machine under load; a positive one may not
+
+A peer warned that two of my runs overlapped a window with 0.6 GB free of 15.7 GB, and asked whether the
+readings could be artefacts. Worth taking seriously, and worth being precise about rather than waving away:
+
+The reading was "eight stops of exposure bias change nothing" — luma 0.5014 / 0.4837 / 0.5074 / 0.4831 /
+0.5129 across a 256x change. **Paging can manufacture a change; it cannot erase a monotone trend from a
+ladder.** A stall would have added noise on top of the trend, not flattened one that was there.
+
+The inverse is not true. Had the ladder shown a clean descent, memory pressure would have been a live
+alternative explanation and the run would have needed repeating on a quiet machine. So: when a run overlaps
+a degraded machine, ask which DIRECTION the degradation pushes. Noise-shaped faults invalidate positive
+findings far more readily than negative ones.

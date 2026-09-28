@@ -129,6 +129,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FString GetProvenanceBanner() const;
 
+	/**
+	 * The same provenance claim with the run id elided, for the ONE place that has to share a row.
+	 *
+	 * The Missions panel draws this beside its own subtitle, and the full banner's twenty-eight-character run
+	 * id cut that subtitle off mid-word in another lane's acceptance photograph. The full id stays in the
+	 * contract body directly below, in the strip, in the terminal and in GetProvenanceBanner itself -- which
+	 * the Julius acceptance suite asserts contains the whole run id. Use the BANNER everywhere else.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	FString GetProvenanceBadge() const;
+
 	/** The followed run's id, verbatim, or empty. For a surface that wants the id on its own. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FString GetFollowedRunId() const;

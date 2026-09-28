@@ -37,9 +37,18 @@ LIFTS = (1.0, 0.85, 0.65, 0.5)
 STEP = 2
 DARK = 0.14 * 255.0
 LIGHT = 0.72 * 255.0
-# Tartarus's avenue at its shelf transition: the view the before/after pair was taken at, same numbers.
-AVENUE_EYE = (70234.0, -43552.0, 192.0)
-AVENUE_LOOK = (76557.0, -44200.0, 26.0)
+# THE GROUND VIEW, AND WHY IT IS NOT THE AVENUE ANY MORE.
+#
+# These coordinates were Tartarus's avenue at its shelf transition, derived from the route polyline. They put
+# the camera against a crimson wall: the ladder's ground column then read 54.1% dark at lift 0.65 and 91.6% at
+# 0.62, a jump the wrong way that no lighting change can produce and that is entirely the camera seeing masonry
+# at one rung and not the next. The BODY column was unaffected -- it frames the Dog at its own home -- so the
+# body readings from those runs stand and the ground readings do not.
+#
+# This is the Tartarus checkpoint court, the one viewpoint in this nation that another lane has photographed
+# successfully and that the occlusion trace passes. Borrowed beats derived.
+AVENUE_EYE = (44000.0, -21500.0, 260.0)
+AVENUE_LOOK = (46177.0, -22619.0, 60.0)
 #: the committed reading of this view on the PREVIOUS build, TQ05 applied, old ranking, no lift
 BEFORE_RANKING = {"luma": 0.0325, "dark_fraction": 0.966}
 BODY_BOX = (0.40, 0.22, 0.60, 0.82)

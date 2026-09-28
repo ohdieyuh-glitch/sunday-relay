@@ -253,7 +253,10 @@ void SWonderlandMissionsPanel::Construct(const FArguments& InArgs)
 									SNew(STextBlock)
 									.Text_Lambda([Weak]()
 									{
-										return Weak.IsValid() ? FText::FromString(Weak->GetProvenanceBanner()) : FText::GetEmpty();
+										// THE BADGE SPELLING, NOT THE BANNER: this one shares a row with the subtitle and
+										// was cutting it off mid-word. Same claim, run id elided, full id in the
+										// contract body an inch below. See GetProvenanceBadge.
+										return Weak.IsValid() ? FText::FromString(Weak->GetProvenanceBadge()) : FText::GetEmpty();
 									})
 									.Font(WonderlandUi::Sans(8, true, 120))
 									.ColorAndOpacity_Lambda([Weak]()

@@ -191,6 +191,45 @@ def job():
             RESULT.setdefault("occlusion_probe_errors", {})[name] = str(err)[:90]
         RESULT.setdefault("camera_clear", {})[name] = clear
 
+        # ---- AND A NOON REFERENCE, BECAUSE THE TRACE CANNOT SEE A BUSH.
+        #
+        # Foliage carries no collision. The world lane traced out of a camera demonstrably buried in
+        # leaves and got no hit at 5,000, 10,000, 16,000 or 24,000 uu -- so the trace above, which
+        # catches the crimson wall perfectly, is blind to the exact case that prompted it. Their
+        # darkness check is blind the other way: a lit wall at arm's length reads 0.2254 luma and 13.7%
+        # dark and sails through it.
+        #
+        #     a wall   collides, and is LIT      -> the trace sees it, a darkness check does not
+        #     a bush   no collision, and is DARK -> a darkness check sees it, the trace does not
+        #
+        # Neither alone is the guard, so this takes the same frame at NOON before taking it at night. A
+        # viewpoint that is dark at MIDDAY is inside something or pointed at nothing, whatever the sky
+        # is doing, and its night reading means nothing. It costs one extra capture per place.
+        unreal.SystemLibrary.execute_console_command(live, "wl.Sky.Hour 12.00")
+        yield 3.0
+        L.pose_camera(live, unreal.Vector(*eye), unreal.Vector(*look), 70.0)
+        yield 1.5
+        unreal.GameplayStatics.set_game_paused(live, True)
+        yield 0.3
+        noon_path = os.path.join(ROOT, "tartarus_%s_noon.png" % name)
+        noon_dark = None
+        try:
+            if os.path.exists(noon_path):
+                os.remove(noon_path)
+            got = L.capture_game_viewport(noon_path)
+            if (got[0] if isinstance(got, (tuple, list)) else got) and os.path.exists(noon_path):
+                noon_dark = frame_stats(noon_path)["dark_fraction"]
+        except Exception as err:                                # noqa: BLE001
+            RESULT.setdefault("noon_errors", {})[name] = str(err)[:100]
+        unreal.GameplayStatics.set_game_paused(live, False)
+        L.release_camera(live)
+        RESULT.setdefault("noon_dark", {})[name] = noon_dark
+        if noon_dark is not None and noon_dark > 0.40:
+            clear = False
+            RESULT.setdefault("dark_at_noon", []).append(name)
+        unreal.SystemLibrary.execute_console_command(live, "wl.Sky.Hour 23.60")
+        yield 3.0
+
         L.pose_camera(live, unreal.Vector(*eye), unreal.Vector(*look), 70.0)
         yield 2.0
         unreal.GameplayStatics.set_game_paused(live, True)
@@ -235,9 +274,13 @@ def job():
                   "pass": not RESULT.get("occluded"),
                   "detail": {"occluded": sorted(RESULT.get("occluded", {})),
                              "clear": RESULT.get("camera_clear"),
-                             "note": "a camera inside a bush or against a wall reports the bush or the "
-                                     "wall. Those readings are in RESULT['occluded'] and are excluded "
-                                     "from every clause below."}})
+                             "dark_at_noon": RESULT.get("dark_at_noon", []),
+                             "noon_dark": RESULT.get("noon_dark"),
+                             "note": "TWO checks, because neither catches both: a 2 m trace finds a "
+                                     "colliding wall and is blind to foliage, which has no collision; a "
+                                     "noon-darkness reference finds the bush and is blind to a lit wall. "
+                                     "Readings that fail either are in RESULT['occluded'] and are "
+                                     "excluded from every clause below."}})
     worst = max((v["dark_fraction"] for v in readings.values()), default=1.0)
     tests.append({"id": "T01", "name": "no Tartarus view is a black void",
                   "pass": worst <= 0.80,

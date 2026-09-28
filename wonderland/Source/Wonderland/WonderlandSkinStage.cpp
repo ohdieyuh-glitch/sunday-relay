@@ -142,7 +142,35 @@ static FAutoConsoleVariableRef GWonderlandPreviewBloomFloorRef(
 // white blaze filling the preview (the round-3 wardrobe sheet: Arden a white shape, Apollo and Celestial
 // pinned). At 0.001 the same figures sit at 15 and 12.6 against 25 -- lit, coloured, under white -- and the
 // showcase eye level of 14 lands at 14.
-static float GWonderlandPreviewGlow = 0.001f;
+// ---- 0.0002, AND THIS ONE WAS MEASURED WITH AN INSTRUMENT THAT WORKED.
+//
+// Every previous value on this line was chosen through a SetGlowScale that silently discarded any change
+// within 0.001 -- so with the shipped value AT 0.001, the entire band below it was unreachable and four
+// sweeps photographed the same picture. With that tolerance made relative, asked and applied now agree at
+// every rung, and the band the arithmetic pointed at turns out to be where the colour lives.
+//
+// WHY 0.0002 AND NOT LOWER OR HIGHER. "Blown" means the MINIMUM channel is pinned, and for ghost's
+// (0.22, 0.70, 1.00) that means RED has clipped -- red being 0.22 against blue's 1.00, it clips at roughly
+// 4.5x the level blue does. Saturated blue is therefore the band where blue is near its ceiling and red is
+// still well under it, about a fifth of the old value. Measured on Skeleton Flame in the preview window:
+//
+//     glow 0.0010 (old)  blue 0.098  blown 0.076      spectral sections white, eyes one blown disc
+//     glow 0.0002 (new)  blue 0.279  blown 0.000      spectral sections cyan, eyes two readable discs
+//     glow 0.0003        blue 0.323  blown 0.086      more blue, but the eyes blow out again
+//
+// 0.0003 carries slightly more colour and is NOT taken, because the founder's Skeleton Flame correction
+// asks that the eyes "remain individually readable rather than one blown-out light" -- so a rung that
+// reintroduces clipping loses the thing the change is for. 0.0002 is the brightest rung that blows nothing.
+//
+// IT IS NOT A SKIN CHANGE, and that matters: the founder's same correction says "do not broadly recolor the
+// mascot" and "preserve the spectral blue/cyan sections". Nothing in relay_dog_skins.py moved. The costume
+// measures blue-dominant 0.837 with blown 0.000 IN THE WORLD and always did; this is the wardrobe finally
+// photographing what the world already had.
+//
+// AND IT HELPS THE OTHER SKINS WITHOUT BEING AIMED AT THEM: Apollo's blown fraction goes 0.113 to 0.000,
+// and Relay OG -- which has no fire of its own and was the floor control -- is unmoved at luma 0.305,
+// exactly as a skin with nothing to dim should be.
+static float GWonderlandPreviewGlow = 0.0002f;
 static FAutoConsoleVariableRef GWonderlandPreviewGlowRef(
 	TEXT("wl.Look.PreviewGlow"),
 	GWonderlandPreviewGlow,

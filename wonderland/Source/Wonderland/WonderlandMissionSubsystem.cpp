@@ -1634,6 +1634,53 @@ FString UWonderlandMissionSubsystem::GetProvenanceBanner() const
 		Said.IsEmpty() ? TEXT("NO STATE REPORTED YET") : *Said.ToUpper());
 }
 
+FString UWonderlandMissionSubsystem::GetProvenanceBadge() const
+{
+	// ---- THE SAME CLAIM, SHORT ENOUGH TO SIT BESIDE THE SUBTITLE IT WAS COVERING.
+	//
+	// CAUGHT IN ANOTHER LANE'S ACCEPTANCE PHOTOGRAPH: in the Missions panel the badge
+	// "JULIUS LIVE · RUN run:b0f61d6d82c0161ae5169dc8 · READY" runs into the panel's own subtitle and cuts
+	// it off mid-word -- "The Mission Contract for the task t". That is not cosmetic. The subtitle is the
+	// one line on that panel that says what the contract is FOR, and a full run id is twenty-eight
+	// characters, so this happens for EVERY real run rather than only for unlucky ones.
+	//
+	// THE RUN ID IS NOT LOST, WHICH IS WHY ELIDING IT HERE IS THE RIGHT TRADE. It is printed in full in the
+	// contract body directly beneath this badge ("Run run:b0f61d6d... Julius reports READY"), and again in
+	// the mission strip along the top. A truncated run id is still recognisable against the full one an inch
+	// below it; a truncated sentence is just broken.
+	//
+	// AND THE FULL BANNER IS UNTOUCHED. GetProvenanceBanner stays exactly as it was: the strip and the live
+	// terminal draw it verbatim, and the Julius acceptance suite asserts that the whole run id appears in it
+	// ("run in banner"). This is a second, shorter spelling for the one place that has to share a row, not a
+	// change to what the banner says.
+	//
+	// NO LAYOUT MOVES. The founder's standing rule is that a content request is not a licence to redesign the
+	// HUD, so the badge keeps its row, its position, its colour and its neighbours; only the number of
+	// characters in it changes.
+	if (IsDevelopmentPreview())
+	{
+		return GetProvenanceBanner();
+	}
+	const FString Run = GetFollowedRunId();
+	const FString Said = GetFollowedJuliusState();
+	FString Shown = Run;
+	// Long enough to stay recognisable beside the full id below, short enough to give the subtitle its room.
+	const int32 KeepAfterPrefix = 8;
+	if (!Run.IsEmpty())
+	{
+		int32 Colon = INDEX_NONE;
+		Run.FindChar(TEXT(':'), Colon);
+		const int32 Start = (Colon == INDEX_NONE) ? 0 : Colon + 1;
+		if (Run.Len() - Start > KeepAfterPrefix)
+		{
+			Shown = Run.Left(Start + KeepAfterPrefix) + TEXT("\u2026");
+		}
+	}
+	return FString::Printf(TEXT("JULIUS LIVE · RUN %s · %s"),
+		Shown.IsEmpty() ? TEXT("unnamed") : *Shown,
+		Said.IsEmpty() ? TEXT("NO STATE REPORTED YET") : *Said.ToUpper());
+}
+
 FName UWonderlandMissionSubsystem::GetFoldMissionId() const
 {
 	if (!Fold.MissionId.IsNone())
