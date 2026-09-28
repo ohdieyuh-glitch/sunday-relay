@@ -399,7 +399,12 @@ export function resolveLiveWorkers(options: {
   if (!options.env[HOSTED_API_KEY_ENV]) codingMissing.push(HOSTED_API_KEY_ENV);
   if (!requested.codingModel) codingMissing.push(HOSTED_MODEL_ENV);
   if (!options.workspacePath) codingMissing.push('mission workspacePath (contract field)');
-  if (!options.testCommand) codingMissing.push('mission testCommand');
+  // An EMPTY test command is not missing configuration: it is the mission's
+  // declaration that it has no deterministic check — a report, an analysis, a
+  // plan — and the coder then runs nothing and records no TEST row. Refusing it
+  // here was the third of three guards that made Julius coding-only on the live
+  // path; the field is still required to be a string by the contract parser.
+  if (typeof options.testCommand !== 'string') codingMissing.push('mission testCommand');
   if (options.shell === null) codingMissing.push('executor shell port (JULIUS_EXECUTOR_ENDPOINT and its material)');
   if (codingMissing.length > 0) {
     problems.push({ role: 'CODING_AGENT', reason: 'live_config_missing', missing: codingMissing });

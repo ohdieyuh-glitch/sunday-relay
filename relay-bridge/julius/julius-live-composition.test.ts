@@ -432,6 +432,8 @@ function liveResolution(overrides: {
   judge?: Parameters<typeof contentReviewer>[2];
   /** One diff per coder attempt, so a repair can produce different bytes. */
   diffs?: readonly string[];
+  /** The mission's deterministic check; empty means the mission declared none. */
+  testCommand?: string;
 }) {
   const log: FakeLog = { order: [] };
   const prompts: string[] = [];
@@ -441,7 +443,7 @@ function liveResolution(overrides: {
   const shell = overrides.shell === undefined ? fakeShell(log, invocations, overrides.diffs) : overrides.shell;
   const resolution = resolveLiveWorkers({
     env: overrides.env ?? LIVE_ENV,
-    projectId: 'prj-live', workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
+    projectId: 'prj-live', workspacePath: '/workspace/mission', testCommand: overrides.testCommand ?? 'npm run mission-test',
     contexts: overrides.contexts ?? { snapshotFor: () => null },
     artifacts, shell,
     ...(overrides.researchPolicyFor === undefined ? {} : { researchPolicyFor: overrides.researchPolicyFor }),
@@ -618,11 +620,47 @@ describe('the production JuliusBootstrapPort', () => {
     expect(noReviewer.accepted).toBe(false);
     if (!noReviewer.accepted) expect(noReviewer.reasonCode).toBe('invalid_worker_configuration');
   });
+
+  it('requires the evidence the mission can produce: TEST with a check, DIFF without one', async () => {
+    // A report mission has no test command. Demanding TEST of it parked the run
+    // in VERIFYING forever for lacking something it never had; the deliverable
+    // it CAN produce is the captured diff, and that is what it is held to.
+    for (const [declared, expected] of [[true, 'TEST'], [false, 'DIFF']] as const) {
+      const runCalls: Record<string, unknown>[] = [];
+      const port = createLiveJuliusBootstrapPort({
+        runs: fakeRuns(runCalls) as never, seeds: fakeSeeds([]),
+        tenantId: 'tenant-live', executionId: 'execution-live',
+      });
+      const outcome = await port.submit({ ...BOOTSTRAP_REQUEST(), deterministicCheck: { declared } });
+      expect(outcome.accepted).toBe(true);
+      const build = runCalls.map((call) => call.addTask as { taskId: string; requiredEvidenceTypes: string[] } | undefined)
+        .find((task) => task !== undefined && task.taskId.endsWith(':build'));
+      expect(build?.requiredEvidenceTypes, `declared=${String(declared)}`).toEqual([expected]);
+      const contract = runCalls.map((call) => call.putTaskContract as { requiredEvidence: string[] } | undefined)
+        .find((value) => value !== undefined);
+      expect(contract?.requiredEvidence, `declared=${String(declared)}: the contract quotes the task`).toEqual([expected]);
+    }
+    // ABSENT MEANS DECLARED, so every existing compiler of the request is unchanged.
+    const runCalls: Record<string, unknown>[] = [];
+    const port = createLiveJuliusBootstrapPort({ runs: fakeRuns(runCalls) as never, seeds: fakeSeeds([]), tenantId: 'tenant-live', executionId: 'execution-live' });
+    const { deterministicCheck: _dropped, ...withoutField } = BOOTSTRAP_REQUEST();
+    void _dropped;
+    await port.submit(withoutField as never);
+    const build = runCalls.map((call) => call.addTask as { taskId: string; requiredEvidenceTypes: string[] } | undefined)
+      .find((task) => task !== undefined && task.taskId.endsWith(':build'));
+    expect(build?.requiredEvidenceTypes).toEqual(['TEST']);
+  });
 });
 
 /* ------------------------------------- the full drive, Julius in control */
 
-function seedMissionRun(store: ReturnType<typeof createJuliusMemoryStore>): void {
+/**
+ * `buildEvidence` mirrors the bootstrap's own rule: a mission with a
+ * deterministic check is proven by TEST, one that declared none by the DIFF it
+ * produced. The hand-seeded drive has to say which, or a no-check mission
+ * honestly parks in VERIFYING for lacking a test it never had.
+ */
+function seedMissionRun(store: ReturnType<typeof createJuliusMemoryStore>, buildEvidence: 'TEST' | 'DIFF' = 'TEST'): void {
   store.seedRun({
     runId: 'run-live', missionId: 'mission-live-1', projectId: 'prj-live', state: 'READY',
     cardRevision: 'card-test-1', missionContractRevision: 1, projectBrainRevision: 0, version: 1,
@@ -633,7 +671,7 @@ function seedMissionRun(store: ReturnType<typeof createJuliusMemoryStore>): void
   });
   store.seedTask('run-live', {
     taskId: 'build-1', missionId: 'mission-live-1', parentTaskId: null, dependencyIds: ['plan-1'],
-    requiredEvidenceTypes: ['TEST'], taskType: 'build', role: 'CODING_AGENT', ordinal: 1, state: 'BLOCKED',
+    requiredEvidenceTypes: [buildEvidence], taskType: 'build', role: 'CODING_AGENT', ordinal: 1, state: 'BLOCKED',
   });
   // THE BUILD'S TASK CONTRACT, exactly as `createLiveJuliusBootstrapPort` writes
   // it: revision 1, a DRAFT, authored by Julius from the mission's own terms.
@@ -645,7 +683,7 @@ function seedMissionRun(store: ReturnType<typeof createJuliusMemoryStore>): void
     objective: 'Prove the live chain with a tiny fixture.',
     requirements: ['Normalize a mission label.'], constraints: ['Touch only the fixture.'],
     acceptanceCriteria: [{ id: 'AC-1', text: 'The fixture test passes.', blocking: true }],
-    filesInScope: [], filesOutOfScope: [], spendUsd: 5, repairCycles: 1, requiredEvidence: ['TEST'],
+    filesInScope: [], filesOutOfScope: [], spendUsd: 5, repairCycles: 1, requiredEvidence: [buildEvidence],
   });
   if (!seeded.seeded) throw new Error(`fixture contract not derivable: ${seeded.reasonCode}`);
   void store.putTaskContract({ projectId: 'prj-live', contract: seeded.contract, occurredAt: '2026-09-08T00:00:00.000Z' });
@@ -677,6 +715,7 @@ async function driveLiveMission(
     readonly judge?: Parameters<typeof contentReviewer>[2];
     readonly diffs?: readonly string[];
     readonly maxRepairRounds?: number;
+    readonly testCommand?: string;
   },
 ) {
   const memory = createJuliusMemoryStore();
@@ -688,9 +727,10 @@ async function driveLiveMission(
     reviewerEngineTimesOutFirst, researchPolicyFor,
     ...(options?.judge === undefined ? {} : { judge: options.judge }),
     ...(options?.diffs === undefined ? {} : { diffs: options.diffs }),
+    ...(options?.testCommand === undefined ? {} : { testCommand: options.testCommand }),
   });
-  expect(fakes.resolution.ok).toBe(true);
-  seedMissionRun(memory);
+  expect(fakes.resolution.ok, 'the live resolution must accept this mission').toBe(true);
+  seedMissionRun(memory, options?.testCommand !== undefined && options.testCommand.trim() === '' ? 'DIFF' : 'TEST');
   const runtime = assembleLiveJuliusRuntime({
     store: handoffs.store, entries: fakes.resolution.entries,
     cardRevision: 'card-test-1', spendCeilingUsdMicros: 5_000_000,
@@ -1585,6 +1625,84 @@ describe('the Independent Reviewer catches a real defect, and the repair is re-r
     // And the reviewer's evidence rows exist for both rounds.
     const evidence = await memory.evidenceForRun('run-live', 'prj-live');
     expect(evidence.filter((item) => item.type === 'REVIEW_FINDING').length).toBeGreaterThan(1);
+  });
+});
+
+/**
+ * A MISSION WITH NO DETERMINISTIC CHECK, ON THE LIVE PATH.
+ *
+ * `julius-mission-breadth.e2e` proved the in-memory lifecycle carries a report
+ * or an analysis to completion. The LIVE path did not: the contract parser
+ * refused an empty `testCommand`, the hosted coding adapter refused to construct
+ * without one, and the coder ran whatever it was given as a shell step and
+ * recorded a PASSED test for an exit code of 0 — so the only way to run a
+ * research mission live was to give it a fake test command and let it record
+ * evidence of a check nobody declared.
+ *
+ * These cases hold the honest shape: an empty command is a stated choice, nothing
+ * is run, no TEST row is written, the build is held to the diff it produced, and
+ * the reviewer is told in its packet that no check was declared.
+ */
+describe('a mission that declares no deterministic check', () => {
+  it('parses: the field must be present and may be empty', () => {
+    const base = {
+      missionId: 'm', markerNamespace: 'julius-live-x', projectId: 'p', tenantId: 't',
+      objective: 'Write the comparison.', requirements: [], constraints: [],
+      acceptanceCriteria: [{ id: 'AC-1', text: 'The comparison exists.', blocking: true }],
+      workspacePath: '/w',
+    };
+    const empty = parseLiveMissionContract(JSON.stringify({ ...base, testCommand: '' }));
+    expect(empty.ok, 'an empty command is a declaration, not a defect').toBe(true);
+    const missing = parseLiveMissionContract(JSON.stringify(base));
+    expect(missing.ok, 'leaving it out is still malformed').toBe(false);
+    if (!missing.ok) expect(missing.problem).toContain('testCommand');
+  });
+
+  it('compiles the request to say the check is not declared, and only then', () => {
+    const contract = (testCommand: string) => ({
+      missionId: 'm', markerNamespace: 'julius-live-x', projectId: 'p', tenantId: 't',
+      objective: 'o', requirements: [], constraints: [],
+      acceptanceCriteria: [{ id: 'AC-1', text: 'x', blocking: true }],
+      testCommand, workspacePath: '/w',
+    });
+    expect(compileBootstrapRequest(contract('') as never, [], 'card').deterministicCheck).toEqual({ declared: false });
+    expect(compileBootstrapRequest(contract('   ') as never, [], 'card').deterministicCheck).toEqual({ declared: false });
+    expect(compileBootstrapRequest(contract('npm test') as never, [], 'card').deterministicCheck).toEqual({ declared: true });
+  });
+
+  it('runs nothing, records no TEST row, and still completes on the diff it produced', async () => {
+    const { memory, fakes, outcome } = await driveLiveMission(
+      ['approved'], undefined, undefined, undefined, undefined, undefined, undefined,
+      { testCommand: '' },
+    );
+    expect(outcome.state, 'a report mission reaches verified completion live').toBe('COMPLETED');
+
+    // NOTHING RAN. The executor saw base, status and diff — and no test step.
+    expect(fakes.log.order.filter((step) => step.startsWith('shell:')))
+      .toEqual(['shell:base', 'shell:status', 'shell:diff']);
+
+    // NO TEST ROW, and the deliverable's own evidence is there.
+    const evidence = await memory.evidenceForRun('run-live', 'prj-live');
+    expect(evidence.filter((item) => item.type === 'TEST'),
+      'an exit code nobody produced must not become a PASSED test').toEqual([]);
+    expect(evidence.some((item) => item.type === 'DIFF' && item.status === 'PASSED'),
+      `the captured change is what proves the work; rows: ${JSON.stringify(evidence.map((item) => [item.taskId, item.type, item.status, item.safeSummary]))}`).toBe(true);
+
+    // THE REVIEWER WAS TOLD. Its packet carries the empty command, and the prompt
+    // built from it says so rather than printing a blank line.
+    const buildReview = fakes.packets.find((packet) => packet.unifiedDiff.length > 0)!;
+    expect(buildReview.testCommand).toBe('');
+    expect(buildReview.testOutput).toContain('No deterministic check was declared');
+    expect(buildReviewPrompt(buildReview)).toContain('(none declared by the mission contract');
+  });
+
+  it('is unchanged for a mission that does declare one', async () => {
+    // THE CONTROL: the ordinary code mission still runs its check and still
+    // records the TEST row, so the change above is a branch and not a removal.
+    const { memory, fakes } = await driveLiveMission(['approved']);
+    expect(fakes.log.order.filter((step) => step.startsWith('shell:'))).toContain('shell:test');
+    const evidence = await memory.evidenceForRun('run-live', 'prj-live');
+    expect(evidence.some((item) => item.type === 'TEST' && item.status === 'PASSED')).toBe(true);
   });
 });
 

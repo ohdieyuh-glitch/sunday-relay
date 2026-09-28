@@ -1123,7 +1123,7 @@ export function buildReviewPrompt(p: ReviewPacket): string {
       'RESULTING FILE CONTENT:',
       p.changedFileContents || '(empty)',
       '',
-      `DETERMINISTIC TEST COMMAND: ${p.testCommand}`,
+      `DETERMINISTIC TEST COMMAND: ${p.testCommand.trim() === '' ? '(none declared by the mission contract — judge the deliverable on the diff and the required evidence)' : p.testCommand}`,
       'TEST OUTPUT:',
       p.testOutput || '(none)',
       '',

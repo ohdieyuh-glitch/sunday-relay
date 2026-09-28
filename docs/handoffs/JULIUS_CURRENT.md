@@ -220,6 +220,22 @@ reported, with the reviewer still receiving its own material; and the cost/token
 dimensions are now genuinely measurable, closing a case of mine that had passed
 vacuously.
 
+**1b. BREADTH ON THE LIVE PATH — the in-memory proof was not the whole story.**
+The contract parser refused an empty `testCommand`, the hosted coding adapter
+refused to construct without one, the coder ran whatever it was given and
+recorded a PASSED test for exit 0, and the bootstrap hard-coded `TEST` as the
+build's required evidence — so a research mission could only run live by
+carrying a fake test command and evidence of a check nobody declared. Now:
+`testCommand` must be PRESENT and may be EMPTY (a declaration, not a defect);
+`JuliusBootstrapRequest.deterministicCheck` carries it (absent means declared, so
+every existing compiler is unchanged); the bootstrap requires `DIFF` instead of
+`TEST` for a no-check mission; the live coder runs no step and writes no TEST row;
+and the reviewer's prompt says "(none declared by the mission contract)" rather
+than printing a blank. Proven through the real live composition with the
+executor fake: base, status, diff — no test step — no TEST row, DIFF PASSED,
+COMPLETED, packet and prompt truthful; with the control that a declared check
+still runs and still records.
+
 #### Recorded as post-MVP, so nobody re-audits them
 
 - **/MAS** — not implemented; `julius-subagent-runtime` correctly describes a
