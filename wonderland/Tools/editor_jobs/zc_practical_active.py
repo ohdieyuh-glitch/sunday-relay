@@ -273,6 +273,24 @@ def job():
     rows = []
     RESULT["rungs"] = rows
     for count, radius in RUNGS:
+        # ---- RE-ASSERT THE POSITION AT EVERY RUNG. Placing once was the whole bug.
+        #
+        # zwA1 recorded the pawn per rung for the first time and found it BOUNCING between Noctis and
+        # the Golden Arrival spawn: drift 75,757 uu on three rungs of five, alternating. Once each
+        # reading is matched to where the pawn actually was, every rung fits Lit = Min(Near, Pool)
+        # exactly -- 31/96/31/81/127 against 31/184/31/81/127 candidates in range. The engine was right
+        # the whole time and every anomaly I chased, including the radius of 4,200 that never existed,
+        # was one unwatched variable.
+        pnow = unreal.GameplayStatics.get_player_pawn(live(), 0)
+        if pnow is not None:
+            here = pnow.get_actor_location()
+            if math.hypot(here.x - SPOT[0], here.y - SPOT[1]) > 500.0:
+                pnow.set_actor_location(
+                    unreal.Vector(SPOT[0], SPOT[1], (ground_z + 120.0) if ground_z is not None else 200.0),
+                    False, True)
+                yield (lambda: unreal.GameplayStatics.get_player_pawn(live(), 0) is not None, 120)
+                command("FlushLevelStreaming")
+                yield 2.0
         cvar("wl.Look.PracticalCount", "%d" % count)
         if radius is not None:
             cvar("wl.Look.PracticalRadius", "%.0f" % radius)
