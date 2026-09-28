@@ -1,0 +1,75 @@
+{
+ "name": "zc_sun_shadow_seen",
+ "started": "2026-09-28 07:18:53",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "V00",
+   "name": "the sun's light component was found",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "V01",
+   "name": "the same state measured twice gives the same answer",
+   "pass": true,
+   "detail": {
+    "on": {
+     "luma": 0.09823,
+     "dark": 0.83386,
+     "samples_kept": 4,
+     "spread_dark": 0.00229
+    },
+    "restored": {
+     "luma": 0.10046,
+     "dark": 0.83108,
+     "samples_kept": 4,
+     "spread_dark": 0.00066
+    },
+    "difference": 0.00278,
+    "floor": 0.02,
+    "note": "THE CONTROL. If shadowing-on and shadowing-restored disagree by as much as the effect being looked for, the run is measuring drift rather than the sun."
+   }
+  },
+  {
+   "id": "V02",
+   "name": "the sun's shadow is INVISIBLE at night, so the second caster costs the player nothing",
+   "pass": true,
+   "detail": {
+    "dark_with_sun_shadowing": 0.83386,
+    "dark_without": 0.83059,
+    "difference": 0.00327,
+    "threshold": 0.02,
+    "luma_with": 0.09823,
+    "luma_without": 0.10051,
+    "note": "THE DECISION THIS RUN EXISTS FOR. If the sun's shadow cannot be seen, item 11's second caster is a LATENT defect: real in the actor list, invisible on screen, and not worth spending a locked founder approval to remove -- the documented attempt lifted the whole night by half. If it CAN be seen, the defect is visible and the narrow knob is worth the work. Either way this is the measurement that decides, and nobody had taken it."
+   }
+  }
+ ],
+ "readings": {
+  "sun_shadowing": {
+   "luma": 0.09823,
+   "dark": 0.83386,
+   "samples_kept": 4,
+   "spread_dark": 0.00229
+  },
+  "sun_not_shadowing": {
+   "luma": 0.10051,
+   "dark": 0.83059,
+   "samples_kept": 4,
+   "spread_dark": 0.00139
+  },
+  "restored": {
+   "luma": 0.10046,
+   "dark": 0.83108,
+   "samples_kept": 4,
+   "spread_dark": 0.00066
+  }
+ },
+ "same_state_twice_differs_by": 0.00278,
+ "dark_fraction_the_suns_shadow_is_worth": 0.00327,
+ "the_suns_shadow_is_visible_at_night": false,
+ "finished": "2026-09-28 07:19:37",
+ "seconds": 44.16,
+ "log": "V00 PASS the sun's light component was found {}\nS_sun_shadowing INFO sun_shadowing {'luma': 0.09823, 'dark': 0.83386, 'samples_kept': 4, 'spread_dark': 0.00229}\nS_sun_not_shadowing INFO sun_not_shadowing {'luma': 0.10051, 'dark': 0.83059, 'samples_kept': 4, 'spread_dark': 0.00139}\nS_restored INFO restored {'luma': 0.10046, 'dark': 0.83108, 'samples_kept': 4, 'spread_dark': 0.00066}\nV01 PASS the same state measured twice gives the same answer {'on': {'luma': 0.09823, 'dark': 0.83386, 'samples_kept': 4, 'spread_dark': 0.00229}, 'restored': {'luma': 0.10046, 'dark': 0.83108, 'samples_kept': 4, 'spread_dark': 0.00066}, 'difference': 0.00278, 'floor': 0.02, 'note': 'THE CONTROL. If shadowing-on and shadowing-restored disagree by as much as the effect being looked for, the run is measuring drift rather than the sun.'}\nV02 PASS the sun's shadow is INVISIBLE at night, so the second caster costs the player nothing {'dark_with_sun_shadowing': 0.83386, 'dark_without': 0.83059, 'difference': 0.00327, 'threshold': 0.02, 'luma_with': 0.09823, 'luma_without': 0.10051, 'note': \"THE DECISION THIS RUN EXISTS FOR. If the sun's shadow cannot be seen, item 11's second caster is a LATENT defect: real in the actor list, invisible on screen, and not worth spending a locked founder approval to remove -- the documented attempt lifted the whole night by half. If it CAN be seen, the defect is visible and the narrow knob is worth the work. Either way this is the measurement that decides, and nobody had taken it.\"}\n"
+}
