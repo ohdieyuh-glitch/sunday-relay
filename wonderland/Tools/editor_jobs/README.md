@@ -1287,3 +1287,62 @@ separation: the framebuffer readings were void, and the knob readback, the expos
 
 Withdrawing the whole run would have thrown away a real finding (two directional shadow casters all night)
 that was never in doubt. **When a run is voided, say which of its measurements the fault could not reach.**
+
+## Four ways a camera measured something other than the world, in one night
+
+All four passed every gate that existed at the time. None was a coding error.
+
+**1. The camera was inside a bush.** 32 readings of foliage, edge to edge, including the reference
+frame the whole comparison was anchored to. D_VALID proved the pawn was on the spot, a forward trace
+found nothing within 400 uu, and two downward traces hit ground -- all true. The forward trace ran on
+the PAWN channel and foliage has no pawn collision, so it went straight through solid leaves. The
+gate tested exactly what it claimed and was blind to the only thing that mattered.
+
+Vegetation is 89 per cent of this world's triangles. A camera placed without a visibility-channel
+check is likelier inside a plant than not.
+
+**2. A proof reused with a different subject.** The spot was proven for the PAWN's standing position
+in an earlier job; the camera sat 900 uu above the pawn. A pawn on open paving says nothing about
+what is nine metres above its head. The comment said "proven before use" and that credential carried
+across several jobs. A proof's SUBJECT is part of the proof.
+
+**3. A test that could not pass.** The replacement vantage-finder failed all 40 candidates and nearly
+produced "the Golden Arrival is too overgrown to measure from". It traced to the LOOK TARGET, which
+sits below the ground plane by construction, so the ray always stopped at the paving: a clear view
+capped at reach 0.39 against a 0.90 threshold. Mirror image of (1), which could not fail.
+
+**The check for both:** tabulate what the test returns in the KNOWN-GOOD case and the KNOWN-BAD case
+before trusting it. If you cannot state both numbers, you have an assertion, not a test.
+
+**4. A character standing in the measurement patch.** The second vantage passed all three geometric
+gates with a mascot filling the ground rect -- pale, so the green-dominance test passed; not an
+occluder, so reach was 1.0; under open sky, so the overhead trace passed. It was also animated and
+emissive, which showed up only as reading-to-reading noise. Gate on distance from the patch to every
+non-player pawn.
+
+## A threshold statistic does not survive an exposure change
+
+`read_screen_rect`'s `dark` counts pixels under a FIXED linear luma of 0.14. The APPROVED night --
+plainly legible by eye, moonlight shadows across the paving, slab joints visible, flowers
+distinguishable -- scores 0.9756 crushed and 0.0244 readable.
+
+A bar of "at least as readable as the approved night" therefore passes everything, and a gate built
+on it reported green while measuring nothing. Same family as the 0.38 still-night ceiling that passed
+the night the founder rejected.
+
+**Use structure, not level.** What makes ground traversable is seeing where one slab ends and the
+next begins: cell-to-cell contrast across the patch, compared against the approved night's own
+structure at the same camera. That survives the regime change; an absolute threshold does not.
+
+## A mechanism that explains your data is not evidence your data is wrong
+
+The bush reading showed the moon's contribution collapsing 87x at the caster handover. Foliage
+self-shadowing explains that exactly: a shadowless moon lights leaves from outside, and the instant it
+casts, the canopy shadows its own interior. Correct mechanism, and it licensed the conclusion that the
+whole dusk problem was an artifact.
+
+It was not. At an open plaza the same handover costs 43 per cent of the ground in one minute -- 6.89x
+the median evening step, 45x noise, obvious by eye. The mechanism predicted the bush number and said
+nothing whatever about the plaza.
+
+**The check:** an explanation of why a bad measurement was bad is not a measurement. Re-measure.
