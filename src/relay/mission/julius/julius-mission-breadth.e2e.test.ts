@@ -223,8 +223,9 @@ describe('the mission lifecycle carries work that is not code', () => {
     const ORDERING: Mission = {
       objective: 'Order the week’s groceries from the shop and confirm the delivery slot.',
       deliverable: { evidence: 'ARTIFACT', summary: 'order-draft.md written: basket contents and the slot to choose.' },
-      // The contract demands proof of an ACTION — a tool receipt — and no tool here produces one.
-      requiredEvidence: ['TOOL_RESULT'],
+      // The contract demands proof of an ACTION — a TOOL_RECEIPT, the vocabulary's
+      // own name for it — and no tool in this repository produces one.
+      requiredEvidence: ['TOOL_RECEIPT'],
       criterion: 'The groceries are ordered and a delivery slot is confirmed by the shop.',
     };
     const harness = build(ORDERING);
@@ -232,7 +233,7 @@ describe('the mission lifecycle carries work that is not code', () => {
     const run = await harness.store.loadRun('run-1', 'prj-1');
     expect(run!.state, 'a mission whose evidence cannot exist must not complete').not.toBe('COMPLETED');
     const evidence = await harness.store.evidenceForRun('run-1', 'prj-1');
-    expect(evidence.some((item) => item.type === 'TOOL_RESULT'), 'and no worker invented the receipt').toBe(false);
+    expect(evidence.some((item) => item.type === 'TOOL_RECEIPT'), 'and no worker invented the receipt').toBe(false);
   });
 
   it('still repairs a non-code mission when the reviewer rejects it', async () => {
