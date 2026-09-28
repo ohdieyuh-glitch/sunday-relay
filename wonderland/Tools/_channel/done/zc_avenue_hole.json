@@ -1,0 +1,363 @@
+{
+ "name": "zc_avenue_hole",
+ "started": "2026-09-28 05:22:39",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "H00",
+   "name": "every early waypoint of every avenue has something the CHARACTER can stand on",
+   "pass": true,
+   "detail": {
+    "holes": null,
+    "note": "the pawn channel is what the Dog collides with. Nothing there means the Dog walks into space, which is the reproducible death this run exists to locate."
+   }
+  },
+  {
+   "id": "H01",
+   "name": "what you can SEE and what you can STAND ON are the same surface",
+   "pass": true,
+   "detail": {
+    "disagreements": null,
+    "tolerance_uu": 20.0,
+    "note": "THE WORLD LANE'S MECHANISM, tested here. Non-colliding paving is drawn, looks solid, and is invisible to the pawn channel -- so a visible floor above a standable one is a surface a player walks onto and falls through."
+   }
+  }
+ ],
+ "waypoints": {
+  "ICARUS": [
+   {
+    "i": 0,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 1,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 2,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 3,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 4,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 5,
+    "declared_floor": 12.0,
+    "pawn_z": 12.0,
+    "pawn_hit": "IC02_IC02_CourtBand",
+    "visible_z": 12.0,
+    "visible_hit": "IC02_IC02_CourtBand",
+    "verdict": "solid"
+   },
+   {
+    "i": 6,
+    "declared_floor": 12.0,
+    "pawn_z": 12.0,
+    "pawn_hit": "IC02_IC02_Avenue",
+    "visible_z": 12.0,
+    "visible_hit": "IC02_IC02_Avenue",
+    "verdict": "solid"
+   },
+   {
+    "i": 7,
+    "declared_floor": 12.0,
+    "pawn_z": 12.0,
+    "pawn_hit": "IC02_IC02_Avenue",
+    "visible_z": 12.0,
+    "visible_hit": "IC02_IC02_Avenue",
+    "verdict": "solid"
+   },
+   {
+    "i": 8,
+    "declared_floor": 12.0,
+    "pawn_z": 12.0,
+    "pawn_hit": "IC02_IC02_Avenue",
+    "visible_z": 12.0,
+    "visible_hit": "IC02_IC02_Avenue",
+    "verdict": "solid"
+   },
+   {
+    "i": 9,
+    "declared_floor": 12.0,
+    "pawn_z": 12.0,
+    "pawn_hit": "IC02_IC02_Avenue",
+    "visible_z": 12.0,
+    "visible_hit": "IC02_IC02_Avenue",
+    "verdict": "solid"
+   },
+   {
+    "i": 10,
+    "declared_floor": 12.0,
+    "pawn_z": 12.0,
+    "pawn_hit": "IC02_IC02_Avenue",
+    "visible_z": 12.0,
+    "visible_hit": "IC02_IC02_Avenue",
+    "verdict": "solid"
+   },
+   {
+    "i": 11,
+    "declared_floor": 12.0,
+    "pawn_z": 12.0,
+    "pawn_hit": "IC02_IC02_Avenue",
+    "visible_z": 12.0,
+    "visible_hit": "IC02_IC02_Avenue",
+    "verdict": "solid"
+   }
+  ],
+  "NOCTIS": [
+   {
+    "i": 0,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 1,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 2,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 3,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 4,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 5,
+    "declared_floor": 12.0,
+    "pawn_z": 12.0,
+    "pawn_hit": "NC01_NC01_Avenue",
+    "visible_z": 12.0,
+    "visible_hit": "NC01_NC01_Avenue",
+    "verdict": "solid"
+   },
+   {
+    "i": 6,
+    "declared_floor": 12.0,
+    "pawn_z": 12.0,
+    "pawn_hit": "NC01_NC01_Avenue",
+    "visible_z": 12.0,
+    "visible_hit": "NC01_NC01_Avenue",
+    "verdict": "solid"
+   },
+   {
+    "i": 7,
+    "declared_floor": 12.0,
+    "pawn_z": 12.0,
+    "pawn_hit": "NC01_NC01_Avenue",
+    "visible_z": 12.0,
+    "visible_hit": "NC01_NC01_Avenue",
+    "verdict": "solid"
+   },
+   {
+    "i": 8,
+    "declared_floor": 12.0,
+    "pawn_z": 12.0,
+    "pawn_hit": "NC01_NC01_Avenue",
+    "visible_z": 12.0,
+    "visible_hit": "NC01_NC01_Avenue",
+    "verdict": "solid"
+   },
+   {
+    "i": 9,
+    "declared_floor": 12.0,
+    "pawn_z": 12.0,
+    "pawn_hit": "NC01_NC01_Avenue",
+    "visible_z": 12.0,
+    "visible_hit": "NC01_NC01_Avenue",
+    "verdict": "solid"
+   },
+   {
+    "i": 10,
+    "declared_floor": 12.0,
+    "pawn_z": 12.0,
+    "pawn_hit": "NC01_NC01_Avenue",
+    "visible_z": 12.0,
+    "visible_hit": "NC01_NC01_Avenue",
+    "verdict": "solid"
+   },
+   {
+    "i": 11,
+    "declared_floor": 23.0,
+    "pawn_z": 23.0,
+    "pawn_hit": "NC01_NC01_Ground_Plaza_Medallion_kerb",
+    "visible_z": 23.0,
+    "visible_hit": "NC01_NC01_Ground_Plaza_Medallion_kerb",
+    "verdict": "solid"
+   }
+  ],
+  "TARTARUS": [
+   {
+    "i": 0,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 1,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 2,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 3,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 4,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 5,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 6,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 7,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 8,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 9,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 10,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   },
+   {
+    "i": 11,
+    "declared_floor": 12.0,
+    "pawn_z": -14.0,
+    "pawn_hit": "V2_GroundSlab",
+    "visible_z": -14.0,
+    "visible_hit": "V2_GroundSlab",
+    "verdict": "solid"
+   }
+  ]
+ },
+ "waypoints_with_nothing_to_stand_on": null,
+ "waypoints_where_the_channels_disagree": null,
+ "finished": "2026-09-28 05:23:31",
+ "seconds": 52.78,
+ "log": "H_ICARUS INFO ICARUS {'checked': 12, 'verdicts': ['solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid']}\nH_NOCTIS INFO NOCTIS {'checked': 12, 'verdicts': ['solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid']}\nH_TARTARUS INFO TARTARUS {'checked': 12, 'verdicts': ['solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid', 'solid']}\nH00 PASS every early waypoint of every avenue has something the CHARACTER can stand on {'holes': None, 'note': 'the pawn channel is what the Dog collides with. Nothing there means the Dog walks into space, which is the reproducible death this run exists to locate.'}\nH01 PASS what you can SEE and what you can STAND ON are the same surface {'disagreements': None, 'tolerance_uu': 20.0, 'note': \"THE WORLD LANE'S MECHANISM, tested here. Non-colliding paving is drawn, looks solid, and is invisible to the pawn channel -- so a visible floor above a standable one is a surface a player walks onto and falls through.\"}\n"
+}
