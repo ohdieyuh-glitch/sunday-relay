@@ -1,0 +1,53 @@
+{
+ "name": "zzR5_ring",
+ "started": "2026-09-28 06:14:31",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "R00",
+   "name": "the editor is in its shipped state, so a frame taken here is of the shipped world",
+   "pass": false,
+   "detail": {
+    "as_found": {
+     "wl.Sky.MoonCastAlways": 0.0,
+     "wl.Sky.MoonCastAltitude": 0.0,
+     "wl.Look.DuskMoonDamp": 0.0,
+     "wl.Look.DuskSkyBoost": 0.0,
+     "wl.Look.DuskWindow": 0.3,
+     "wl.Look.FireMaterial": 1
+    },
+    "non_default": [
+     "wl.Look.DuskWindow"
+    ],
+    "note": "THE PRECONDITION NOBODY CHECKED. The world lane's jobs do not restore their knobs when they void, and there have been five voided runs tonight. If any of these is non-zero then every capture anyone has reasoned from today is of a world that was modified without being announced -- which has to be known before the frames mean anything."
+   }
+  },
+  {
+   "id": "R01",
+   "name": "all four frames were taken",
+   "pass": false,
+   "detail": {
+    "captures": [],
+    "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\ring_cause",
+    "note": "as found; with every flame surface off; with the Dog moved 6 m; and of the spot it left. Between them these say whether it is a flame, whether it is attached to the pawn, and whether it is in the world -- without anyone having to guess at an author."
+   }
+  }
+ ],
+ "console_variables_as_found": {
+  "wl.Sky.MoonCastAlways": 0.0,
+  "wl.Sky.MoonCastAltitude": 0.0,
+  "wl.Look.DuskMoonDamp": 0.0,
+  "wl.Look.DuskSkyBoost": 0.0,
+  "wl.Look.DuskWindow": 0.3,
+  "wl.Look.FireMaterial": 1
+ },
+ "world_lane_knobs_left_non_default": [
+  "wl.Look.DuskWindow"
+ ],
+ "captures": {},
+ "moved_by_uu": 600.0,
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\ring_cause",
+ "finished": "2026-09-28 06:15:27",
+ "seconds": 56.3,
+ "log": "R00 FAIL the editor is in its shipped state, so a frame taken here is of the shipped world {'as_found': {'wl.Sky.MoonCastAlways': 0.0, 'wl.Sky.MoonCastAltitude': 0.0, 'wl.Look.DuskMoonDamp': 0.0, 'wl.Look.DuskSkyBoost': 0.0, 'wl.Look.DuskWindow': 0.3, 'wl.Look.FireMaterial': 1}, 'non_default': ['wl.Look.DuskWindow'], 'note': \"THE PRECONDITION NOBODY CHECKED. The world lane's jobs do not restore their knobs when they void, and there have been five voided runs tonight. If any of these is non-zero then every capture anyone has reasoned from today is of a world that was modified without being announced -- which has to be known before the frames mean anything.\"}\nR01 FAIL all four frames were taken {'captures': [], 'where': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\ring_cause', 'note': 'as found; with every flame surface off; with the Dog moved 6 m; and of the spot it left. Between them these say whether it is a flame, whether it is attached to the pawn, and whether it is in the world -- without anyone having to guess at an author.'}\n"
+}

@@ -1,0 +1,688 @@
+{
+ "name": "zc_ring_name",
+ "started": "2026-09-28 06:38:54",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "N00",
+   "name": "actors near the spawn were enumerated",
+   "pass": true,
+   "detail": {
+    "found": 4371,
+    "radius_uu": 1400.0
+   }
+  }
+ ],
+ "spawn": [
+  -327.3,
+  -650.0,
+  109.1
+ ],
+ "actors_near_spawn": [
+  {
+   "label": "Actor0",
+   "class": "Actor",
+   "dist_uu": 0.0,
+   "size_uu": [
+    2000.0,
+    2000.0,
+    2000.0
+   ],
+   "z": 3109.1
+  },
+  {
+   "label": "Scale_CanonicalDog",
+   "class": "BP_RelayDog_C",
+   "dist_uu": 0.0,
+   "size_uu": [
+    2020.0,
+    2020.0,
+    2020.0
+   ],
+   "z": 109.1
+  },
+  {
+   "label": "WL_RelayDog_Costume",
+   "class": "WonderlandCompanionEmbodiment",
+   "dist_uu": 0.0,
+   "size_uu": [
+    177.0,
+    177.0,
+    199.0
+   ],
+   "z": 22.0
+  },
+  {
+   "label": "WL_Companion_GPT6Astra",
+   "class": "WonderlandCompanionEmbodiment",
+   "dist_uu": 102.0,
+   "size_uu": [
+    96.0,
+    110.0,
+    150.0
+   ],
+   "z": 56.0
+  },
+  {
+   "label": "WL_Companion_ClaudeCodeFable5",
+   "class": "WonderlandCompanionEmbodiment",
+   "dist_uu": 123.6,
+   "size_uu": [
+    123.0,
+    111.0,
+    223.0
+   ],
+   "z": 56.0
+  },
+  {
+   "label": "Gate_LeafR",
+   "class": "StaticMeshActor",
+   "dist_uu": 254.2,
+   "size_uu": [
+    48.0,
+    199.0,
+    570.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "PlayerCameraManager0",
+   "class": "PlayerCameraManager",
+   "dist_uu": 280.8,
+   "size_uu": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": 207.8
+  },
+  {
+   "label": "GA05_PlanterR0_GoldLip",
+   "class": "StaticMeshActor",
+   "dist_uu": 286.1,
+   "size_uu": [
+    13.0,
+    348.0,
+    11.0
+   ],
+   "z": 72.5
+  },
+  {
+   "label": "GA05_PlanterR0",
+   "class": "StaticMeshActor",
+   "dist_uu": 314.2,
+   "size_uu": [
+    164.0,
+    357.0,
+    66.0
+   ],
+   "z": 12.0
+  },
+  {
+   "label": "GA01_ArrivalGate_Crest",
+   "class": "StaticMeshActor",
+   "dist_uu": 418.0,
+   "size_uu": [
+    519.0,
+    26.0,
+    368.0
+   ],
+   "z": 35.4
+  },
+  {
+   "label": "Gate_LeafL",
+   "class": "StaticMeshActor",
+   "dist_uu": 571.4,
+   "size_uu": [
+    48.0,
+    199.0,
+    570.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "HeroCam_GoldenArrivalBible",
+   "class": "CameraActor",
+   "dist_uu": 597.6,
+   "size_uu": [
+    2020.0,
+    2020.0,
+    2020.0
+   ],
+   "z": 262.0
+  },
+  {
+   "label": "ScaleCam07",
+   "class": "CameraActor",
+   "dist_uu": 597.6,
+   "size_uu": [
+    2020.0,
+    2020.0,
+    2020.0
+   ],
+   "z": 170.0
+  },
+  {
+   "label": "WorldSettings",
+   "class": "WorldSettings",
+   "dist_uu": 727.8,
+   "size_uu": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "Brush0",
+   "class": "Brush",
+   "dist_uu": 727.8,
+   "size_uu": [
+    256.0,
+    256.0,
+    256.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_facade_panel_MI_V2_IvoryStone",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    12490.0,
+    3564.0,
+    101365.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_roof_cone_steep_MI_V2_RoofPink",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    8134.0,
+    5594.0,
+    3734.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_roof_ogee_MI_V2_RoofPink",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    1271.0,
+    1262.0,
+    1423.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_balloon_envelope_MI_V2_RoofNavy",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    31234.0,
+    48640.0,
+    2123.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_terrace_platform_MI_V2_Water",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    12142.0,
+    46888.0,
+    66.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_canopy_large_MI_V2_LeafLight",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    101804.0,
+    88121.0,
+    6587.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2_SkyLight",
+   "class": "SkyLight",
+   "dist_uu": 727.8,
+   "size_uu": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "z": 500.0
+  },
+  {
+   "label": "V2Batch_canopy_large_MI_V2_LeafCopper",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    87372.0,
+    66396.0,
+    5864.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_castle_dome_MI_V2_RoofNavy",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    54141.0,
+    18051.0,
+    1939.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_gate_finial_ball_MI_V2_RoofBlue",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    37497.0,
+    10954.0,
+    1050.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_stone_ring_base_MI_V2_PlazaGrey",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    25223.0,
+    23919.0,
+    121.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_column_ornate_MI_V2_IvoryStone",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    39416.0,
+    36063.0,
+    101235.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_key_ornate_MI_V2_GoldAged",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    38368.0,
+    34909.0,
+    583.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_balloon_envelope_MI_V2_PetalViolet",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    52759.0,
+    47117.0,
+    2514.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_flower_cluster_MI_V2_PetalPink",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    38265.0,
+    46074.0,
+    341.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_shrub_flowering_MI_V2_LeafDark",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    66010.0,
+    58290.0,
+    336.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_mushroom_medium_MI_V2_MushPurple",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    24456.0,
+    2297.0,
+    1200.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_canopy_medium_MI_V2_LeafCream",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    64851.0,
+    22685.0,
+    1242.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_gate_finial_ball_MI_V2_Gold",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    13077.0,
+    4523.0,
+    2762.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_mushroom_giant_MI_V2_MushRed",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    15429.0,
+    3742.0,
+    1863.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_castle_hall_MI_V2_IvoryStone",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    12622.0,
+    4792.0,
+    1709.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_rose_bush_MI_V2_LeafDark",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    65905.0,
+    61946.0,
+    243.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_ground_flowers_MI_V2_Lavender",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    54699.0,
+    61781.0,
+    45.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_roof_hip_MI_V2_RoofLilac",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    2575.0,
+    2138.0,
+    728.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_gate_pier_MI_V2_IvoryStone",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    56331.0,
+    69213.0,
+    1170.0
+   ],
+   "z": 0.0
+  }
+ ],
+ "big_upright_things_near_spawn": [
+  {
+   "label": "Actor0",
+   "class": "Actor",
+   "dist_uu": 0.0,
+   "size_uu": [
+    2000.0,
+    2000.0,
+    2000.0
+   ],
+   "z": 3109.1
+  },
+  {
+   "label": "Scale_CanonicalDog",
+   "class": "BP_RelayDog_C",
+   "dist_uu": 0.0,
+   "size_uu": [
+    2020.0,
+    2020.0,
+    2020.0
+   ],
+   "z": 109.1
+  },
+  {
+   "label": "GA01_ArrivalGate_Crest",
+   "class": "StaticMeshActor",
+   "dist_uu": 418.0,
+   "size_uu": [
+    519.0,
+    26.0,
+    368.0
+   ],
+   "z": 35.4
+  },
+  {
+   "label": "HeroCam_GoldenArrivalBible",
+   "class": "CameraActor",
+   "dist_uu": 597.6,
+   "size_uu": [
+    2020.0,
+    2020.0,
+    2020.0
+   ],
+   "z": 262.0
+  },
+  {
+   "label": "ScaleCam07",
+   "class": "CameraActor",
+   "dist_uu": 597.6,
+   "size_uu": [
+    2020.0,
+    2020.0,
+    2020.0
+   ],
+   "z": 170.0
+  },
+  {
+   "label": "Brush0",
+   "class": "Brush",
+   "dist_uu": 727.8,
+   "size_uu": [
+    256.0,
+    256.0,
+    256.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_facade_panel_MI_V2_IvoryStone",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    12490.0,
+    3564.0,
+    101365.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_roof_cone_steep_MI_V2_RoofPink",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    8134.0,
+    5594.0,
+    3734.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_roof_ogee_MI_V2_RoofPink",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    1271.0,
+    1262.0,
+    1423.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_balloon_envelope_MI_V2_RoofNavy",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    31234.0,
+    48640.0,
+    2123.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_canopy_large_MI_V2_LeafLight",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    101804.0,
+    88121.0,
+    6587.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_canopy_large_MI_V2_LeafCopper",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    87372.0,
+    66396.0,
+    5864.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_castle_dome_MI_V2_RoofNavy",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    54141.0,
+    18051.0,
+    1939.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_gate_finial_ball_MI_V2_RoofBlue",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    37497.0,
+    10954.0,
+    1050.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_column_ornate_MI_V2_IvoryStone",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    39416.0,
+    36063.0,
+    101235.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_key_ornate_MI_V2_GoldAged",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    38368.0,
+    34909.0,
+    583.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_balloon_envelope_MI_V2_PetalViolet",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    52759.0,
+    47117.0,
+    2514.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_flower_cluster_MI_V2_PetalPink",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    38265.0,
+    46074.0,
+    341.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_shrub_flowering_MI_V2_LeafDark",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    66010.0,
+    58290.0,
+    336.0
+   ],
+   "z": 0.0
+  },
+  {
+   "label": "V2Batch_mushroom_medium_MI_V2_MushPurple",
+   "class": "WonderlandInstancedBatch",
+   "dist_uu": 727.8,
+   "size_uu": [
+    24456.0,
+    2297.0,
+    1200.0
+   ],
+   "z": 0.0
+  }
+ ],
+ "finished": "2026-09-28 06:39:16",
+ "seconds": 22.42,
+ "log": "N_NEAR INFO sizeable actors near the spawn {'count': 4371, 'upright': ['Actor0', 'Scale_CanonicalDog', 'GA01_ArrivalGate_Crest', 'HeroCam_GoldenArrivalBible', 'ScaleCam07', 'Brush0', 'V2Batch_facade_panel_MI_V2_IvoryStone', 'V2Batch_roof_cone_steep_MI_V2_RoofPink', 'V2Batch_roof_ogee_MI_V2_RoofPink', 'V2Batch_balloon_envelope_MI_V2_RoofNavy', 'V2Batch_canopy_large_MI_V2_LeafLight', 'V2Batch_canopy_large_MI_V2_LeafCopper']}\nN00 PASS actors near the spawn were enumerated {'found': 4371}\n"
+}

@@ -1,0 +1,83 @@
+{
+ "name": "zc_dog_vanish",
+ "started": "2026-09-28 06:36:47",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "V_RAN",
+   "name": "both arms ran from the same placement, so they are comparable",
+   "pass": true,
+   "detail": {
+    "still": "never started: the Dog did not survive being moved to the start cell",
+    "walk": "never started: the Dog did not survive being moved to the start cell",
+    "still_stream_wait": null,
+    "walk_stream_wait": null
+   }
+  },
+  {
+   "id": "V_REPRO",
+   "name": "the walking arm reproduces the fault, so this job is looking at the real thing",
+   "pass": false,
+   "detail": {
+    "walk_outcome": "never started: the Dog did not survive being moved to the start cell",
+    "seconds": null,
+    "travelled_m": null,
+    "waypoints": null,
+    "last_seen": null,
+    "note": "RED here does not clear the fault -- it means it did not reproduce in this session, and the still arm below is then the only reading worth anything"
+   }
+  },
+  {
+   "id": "V_NEEDS_MOVEMENT",
+   "name": "the Dog survives standing still where walking kills it -- movement is necessary, so the cause is something it walks INTO",
+   "pass": false,
+   "detail": {
+    "still_outcome": "never started: the Dog did not survive being moved to the start cell",
+    "still_seconds": null,
+    "walk_outcome": "never started: the Dog did not survive being moved to the start cell",
+    "walk_seconds": null,
+    "still_row": {
+     "arm": "still",
+     "walking": false,
+     "seconds_asked": 40.0,
+     "outcome": "never started: the Dog did not survive being moved to the start cell"
+    },
+    "walk_row": {
+     "arm": "walk",
+     "walking": true,
+     "seconds_asked": 40.0,
+     "outcome": "never started: the Dog did not survive being moved to the start cell"
+    },
+    "note": "GREEN: movement is required, so every explanation that does not need the Dog to move is dead -- including a World Partition cell unload around a teleported pawn, which would take it standing still. RED with BOTH destroyed: movement is irrelevant and the cause is the placement, the streaming state around it, or elapsed time, and the walk distance in every earlier report was a coincidence of how long each nation took"
+   }
+  }
+ ],
+ "route": {
+  "nation": "ICARUS",
+  "thinned_waypoints": 58,
+  "start": {
+   "u": 60000.0,
+   "v": -1200.0,
+   "x": 1200.0,
+   "y": 60000.0,
+   "floor": 12.0
+  }
+ },
+ "arms": {
+  "still": {
+   "arm": "still",
+   "walking": false,
+   "seconds_asked": 40.0,
+   "outcome": "never started: the Dog did not survive being moved to the start cell"
+  },
+  "walk": {
+   "arm": "walk",
+   "walking": true,
+   "seconds_asked": 40.0,
+   "outcome": "never started: the Dog did not survive being moved to the start cell"
+  }
+ },
+ "finished": "2026-09-28 06:37:22",
+ "seconds": 34.46,
+ "log": "V_RAN PASS both arms ran from the same placement, so they are comparable {'still': 'never started: the Dog did not survive being moved to the start cell', 'walk': 'never started: the Dog did not survive being moved to the start cell', 'still_stream_wait': None, 'walk_stream_wait': None}\nV_REPRO FAIL the walking arm reproduces the fault, so this job is looking at the real thing {'walk_outcome': 'never started: the Dog did not survive being moved to the start cell', 'seconds': None, 'travelled_m': None, 'waypoints': None, 'last_seen': None, 'note': 'RED here does not clear the fault -- it means it did not reproduce in this session, and the still arm below is then the only reading worth anything'}\nV_NEEDS_MOVEMENT FAIL the Dog survives standing still where walking kills it -- movement is necessary, so the cause is something it walks INTO {'still_outcome': 'never started: the Dog did not survive being moved to the start cell', 'still_seconds': None, 'walk_outcome': 'never started: the Dog did not survive being moved to the start cell', 'walk_seconds': None, 'still_row': {'arm': 'still', 'walking': False, 'seconds_asked': 40.0, 'outcome': 'never started: the Dog did not survive being moved to the start cell'}, 'walk_row': {'arm': 'walk', 'walking': True, 'seconds_asked': 40.0, 'outcome': 'never started: the Dog did not survive being moved to the start cell'}, 'note': 'GREEN: movement is required, so every explanation that does not need the Dog to move is dead -- including a World Partition cell unload around a teleported pawn, which would take it standing still. RED with BOTH destroyed: movement is irrelevant and the cause is the placement, the streaming state around it, or elapsed time, and the walk distance in every earlier report was a coincidence of how long each nation took'}\n"
+}

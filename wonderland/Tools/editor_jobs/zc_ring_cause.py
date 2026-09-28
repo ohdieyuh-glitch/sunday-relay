@@ -125,9 +125,34 @@ def job():
         return tag, where
 
     def capture(tag):
+        # ---- FOCUS BEFORE EVERY SHOT, NOT ONCE AT STARTUP.
+        #
+        # The previous run took none of its four frames and said nothing about why: capture_game_viewport
+        # returned false each time and raised nothing, so `errors` was empty and only the count gave it away.
+        # TakeScreenshot gets no pixels from a widget that is not being drawn, and a viewport that was focused
+        # seven seconds and two console commands ago -- on an unattended machine where another lane's job has
+        # since had the editor -- is not reliably still being drawn.
+        #
+        # The Julius lane reached the same conclusion from the other end tonight: their acceptance run wrote
+        # no photographs at all, with no error in the log, and the fix was to focus before each photograph
+        # rather than once after begin play. Same failure, same remedy.
+        #
+        # THE RETURN IS A TUPLE, NOT A BOOL. The C++ is
+        # CaptureGameViewport(const FString&, int32& OutWidth, int32& OutHeight), so Python hands back
+        # (ok, width, height) -- and a non-empty tuple is truthy whatever `ok` says. Unpacked here, so a
+        # failed capture is recorded as failed instead of counted as a success.
         path = os.path.join(ROOT, "%s.png" % tag)
         try:
-            if L.capture_game_viewport(path):
+            L.focus_game_viewport()
+        except Exception:                                           # noqa: BLE001
+            pass
+        try:
+            got = L.capture_game_viewport(path)
+            ok = bool(got[0]) if isinstance(got, (tuple, list)) else bool(got)
+            size = tuple(got[1:3]) if isinstance(got, (tuple, list)) and len(got) >= 3 else None
+            RESULT.setdefault("capture_calls", {})[tag] = {"ok": ok, "size": size,
+                                                           "on_disk": os.path.exists(path)}
+            if ok and os.path.exists(path):
                 shots[tag] = os.path.basename(path)
         except Exception as err:                                    # noqa: BLE001
             RESULT.setdefault("errors", {})[tag] = str(err)[:140]

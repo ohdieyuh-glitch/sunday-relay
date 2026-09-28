@@ -1,0 +1,29 @@
+{
+ "name": "zc_worn_skin",
+ "started": "2026-09-28 06:43:36",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "S00",
+   "name": "a fresh session starts with the Dog in relay_og, the shipped default",
+   "pass": false,
+   "detail": {
+    "worn": "celestial_light",
+    "note": "THE RING. relay_og has no halo. A Dog wearing something else in a FRESH PIE means the skin is persisted, not merely left in a stale session -- so every capture taken since is of a Dog in the wrong costume, and the founder's plaza has been photographed dressed."
+   }
+  },
+  {
+   "id": "S01",
+   "name": "Relay OG was put back on the Dog",
+   "pass": true,
+   "detail": {
+    "worn": "relay_og"
+   }
+  }
+ ],
+ "worn_at_start_of_a_fresh_pie": "celestial_light",
+ "worn_after_restore": "relay_og",
+ "finished": "2026-09-28 06:43:58",
+ "seconds": 21.74,
+ "log": "S_WORN INFO what the Dog is wearing {'skin': 'celestial_light'}\nS00 FAIL a fresh session starts with the Dog in relay_og, the shipped default {'worn': 'celestial_light', 'note': \"THE RING. relay_og has no halo. A Dog wearing something else in a FRESH PIE means the skin is persisted, not merely left in a stale session -- so every capture taken since is of a Dog in the wrong costume, and the founder's plaza has been photographed dressed.\"}\nS01 PASS Relay OG was put back on the Dog {'worn': 'relay_og'}\n"
+}

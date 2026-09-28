@@ -1,0 +1,240 @@
+{
+ "name": "zc_dog_killz",
+ "started": "2026-09-28 06:40:00",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "K_KILLZ",
+   "name": "KillZ can be read directly from the world settings",
+   "pass": false,
+   "detail": {
+    "kill_z": null,
+    "read_from": "unreadable: type object 'GameplayStatics' has no attribute 'get_world_settings'",
+    "note": "if this is unreadable the rest of the job still measures the fall, but the verdict below becomes 'the Dog died at z=X' with nothing to compare X against"
+   }
+  },
+  {
+   "id": "K_REPRO",
+   "name": "placing the Dog at the nation gate destroys it, with the world still up",
+   "pass": true,
+   "detail": {
+    "destroyed_at_s": 1.25,
+    "world_still_up": true,
+    "rescued_at_s": null,
+    "last_seen": {
+     "t": 1.2,
+     "z": 75.2,
+     "x": 1200.0,
+     "y": 60000.0,
+     "falling": false,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    },
+    "note": "RED means the Dog survived this placement, so the fault is intermittent and the state it needs has not been reproduced here -- not that it is fixed"
+   }
+  },
+  {
+   "id": "K_CATCH_TOO_SLOW",
+   "name": "the Dog is destroyed BEFORE CatchIfTheGroundIsMissing's one-second threshold, so its own safety net cannot fire",
+   "pass": false,
+   "detail": {
+    "seconds_of_falling_before_loss": 1.2,
+    "threshold_s": 1.0,
+    "placement_z": 912.0,
+    "kill_z": null,
+    "z_after_one_second_of_fall": 422.0,
+    "note": "GREEN: the rescue is unreachable for a placement of this height and the fix is the threshold or the placement height, not the streaming. RED: the Dog survived longer than a second of falling, so the net had its chance and something else took the Dog"
+   }
+  }
+ ],
+ "kill_z": {
+  "value": null,
+  "read_from": "unreadable: type object 'GameplayStatics' has no attribute 'get_world_settings'"
+ },
+ "spawned_at": [
+  -327.3,
+  -650.0,
+  109.1
+ ],
+ "placement": {
+  "x": 1200.0,
+  "y": 60000.0,
+  "z": 912.0,
+  "route_floor": 12.0,
+  "metres_from_spawn": 606.7
+ },
+ "fall_track": [
+  {
+   "t": 0.0,
+   "z": 912.0,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "t": 0.05,
+   "z": 912.0,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": true,
+   "mode": "<MovementMode.MOVE_FALLING: 3>"
+  },
+  {
+   "t": 0.1,
+   "z": 908.1,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": true,
+   "mode": "<MovementMode.MOVE_FALLING: 3>"
+  },
+  {
+   "t": 0.15,
+   "z": 903.8,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": true,
+   "mode": "<MovementMode.MOVE_FALLING: 3>"
+  },
+  {
+   "t": 0.2,
+   "z": 887.0,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": true,
+   "mode": "<MovementMode.MOVE_FALLING: 3>"
+  },
+  {
+   "t": 0.25,
+   "z": 867.7,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": true,
+   "mode": "<MovementMode.MOVE_FALLING: 3>"
+  },
+  "...",
+  {
+   "t": 0.65,
+   "z": 528.8,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": true,
+   "mode": "<MovementMode.MOVE_FALLING: 3>"
+  },
+  {
+   "t": 0.7,
+   "z": 462.4,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": true,
+   "mode": "<MovementMode.MOVE_FALLING: 3>"
+  },
+  {
+   "t": 0.75,
+   "z": 395.9,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": true,
+   "mode": "<MovementMode.MOVE_FALLING: 3>"
+  },
+  {
+   "t": 0.8,
+   "z": 359.2,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": true,
+   "mode": "<MovementMode.MOVE_FALLING: 3>"
+  },
+  {
+   "t": 0.85,
+   "z": 244.3,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": true,
+   "mode": "<MovementMode.MOVE_FALLING: 3>"
+  },
+  {
+   "t": 0.9,
+   "z": 146.3,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": true,
+   "mode": "<MovementMode.MOVE_FALLING: 3>"
+  },
+  {
+   "t": 0.95,
+   "z": 75.2,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "t": 1.0,
+   "z": 75.2,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "t": 1.05,
+   "z": 75.2,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "t": 1.1,
+   "z": 75.2,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "t": 1.15,
+   "z": 75.2,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "t": 1.2,
+   "z": 75.2,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  }
+ ],
+ "outcome": {
+  "destroyed_at_s": 1.25,
+  "rescued_at_s": null,
+  "first_falling_at_s": 0.05,
+  "crossed_killz_at_s": null,
+  "last_seen": {
+   "t": 1.2,
+   "z": 75.2,
+   "x": 1200.0,
+   "y": 60000.0,
+   "falling": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  "samples": 25,
+  "world_still_up": true
+ },
+ "catch_arithmetic": {
+  "catch_threshold_s": 1.0,
+  "seconds_of_falling_before_loss": 1.2,
+  "placement_z": 912.0,
+  "kill_z": null,
+  "drop_available_uu": null,
+  "free_fall_1s_uu": 490.0,
+  "z_when_catch_would_fire": 422.0
+ },
+ "finished": "2026-09-28 06:40:20",
+ "seconds": 20.13,
+ "log": "K_KILLZ FAIL KillZ can be read directly from the world settings {'kill_z': None, 'read_from': \"unreadable: type object 'GameplayStatics' has no attribute 'get_world_settings'\", 'note': \"if this is unreadable the rest of the job still measures the fall, but the verdict below becomes 'the Dog died at z=X' with nothing to compare X against\"}\nK_REPRO PASS placing the Dog at the nation gate destroys it, with the world still up {'destroyed_at_s': 1.25, 'world_still_up': True, 'rescued_at_s': None, 'last_seen': {'t': 1.2, 'z': 75.2, 'x': 1200.0, 'y': 60000.0, 'falling': False, 'mode': '<MovementMode.MOVE_WALKING: 1>'}, 'note': 'RED means the Dog survived this placement, so the fault is intermittent and the state it needs has not been reproduced here -- not that it is fixed'}\nK_CATCH_TOO_SLOW FAIL the Dog is destroyed BEFORE CatchIfTheGroundIsMissing's one-second threshold, so its own safety net cannot fire {'seconds_of_falling_before_loss': 1.2, 'threshold_s': 1.0, 'placement_z': 912.0, 'kill_z': None, 'z_after_one_second_of_fall': 422.0, 'note': 'GREEN: the rescue is unreachable for a placement of this height and the fix is the threshold or the placement height, not the streaming. RED: the Dog survived longer than a second of falling, so the net had its chance and something else took the Dog'}\n"
+}

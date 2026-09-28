@@ -1,0 +1,51 @@
+{
+ "name": "zc_ring_hide",
+ "started": "2026-09-28 06:40:21",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "Z00",
+   "name": "every candidate was hidden and photographed",
+   "pass": true,
+   "detail": {
+    "captures": [
+     "as_found",
+     "without_Actor0",
+     "without_Scale_CanonicalDog"
+    ],
+    "candidates": [
+     "Actor0",
+     "Scale_CanonicalDog"
+    ],
+    "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\ring_hide"
+   }
+  }
+ ],
+ "candidates_found": [
+  "Actor0",
+  "Scale_CanonicalDog"
+ ],
+ "captures": {
+  "as_found": "as_found.png",
+  "without_Scale_CanonicalDog": "without_Scale_CanonicalDog.png",
+  "without_Actor0": "without_Actor0.png"
+ },
+ "capture_calls": {
+  "as_found": {
+   "ok": true,
+   "on_disk": true
+  },
+  "without_Scale_CanonicalDog": {
+   "ok": true,
+   "on_disk": true
+  },
+  "without_Actor0": {
+   "ok": true,
+   "on_disk": true
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\ring_hide",
+ "finished": "2026-09-28 06:40:49",
+ "seconds": 28.16,
+ "log": "Z00 PASS every candidate was hidden and photographed {'captures': ['as_found', 'without_Actor0', 'without_Scale_CanonicalDog']}\n"
+}

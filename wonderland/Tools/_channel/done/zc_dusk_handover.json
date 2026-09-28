@@ -1,0 +1,2319 @@
+{
+ "name": "zc_dusk_handover",
+ "started": "2026-09-28 05:54:01",
+ "status": "voided: readings missing or disagreeing with themselves",
+ "tests": [
+  {
+   "id": "H_CVAR",
+   "name": "both moon-caster knobs exist in the RUNNING build, by sentinel round-trip",
+   "pass": true,
+   "detail": {
+    "population": 2,
+    "answering": [
+     "wl.Sky.MoonCastAltitude",
+     "wl.Sky.MoonCastAlways"
+    ],
+    "missing": [],
+    "as_found": {
+     "wl.Sky.MoonCastAltitude": 0.0,
+     "wl.Sky.MoonCastAlways": 0.0
+    },
+    "sentinel_readback": {
+     "wl.Sky.MoonCastAltitude": 37.25,
+     "wl.Sky.MoonCastAlways": 37.25
+    },
+    "binary_built": "2026-09-28 03:51:06",
+    "note": "a CVar that does not exist reads 0.0, which is exactly the shipped default of both"
+   }
+  },
+  {
+   "id": "H_VALID",
+   "name": "the camera sees open ground, that ground is open to the sky, and no character is standing in the patch",
+   "pass": true,
+   "detail": {
+    "spot": [
+     -64.0,
+     -5700.0
+    ],
+    "yaw": 90.0,
+    "view_reach": 1.0,
+    "green_ratio": 0.995,
+    "overhead_hit": null,
+    "nearest_figure_uu": 3565.6,
+    "figures": [
+     {
+      "label": "WonderlandDogPawn0",
+      "dist_uu": 3565.6
+     }
+    ],
+    "valid": true
+   }
+  },
+  {
+   "id": "H_MEASURED",
+   "name": "every arm and hour produced a reading",
+   "pass": false,
+   "detail": {
+    "population": 62,
+    "wanted": 84,
+    "missing": [
+     "always_h17.80",
+     "always_h17.90",
+     "always_h18.00",
+     "always_h18.10",
+     "always_h18.20",
+     "always_h18.24",
+     "always_h18.25",
+     "always_h18.26",
+     "always_h18.27",
+     "always_h18.30",
+     "always_h18.40",
+     "always_h18.50",
+     "always_h18.80",
+     "always_h18.90",
+     "always_h18.95",
+     "always_h19.00",
+     "always_h19.05",
+     "always_h19.10",
+     "always_h19.20",
+     "always_h19.40",
+     "always_h23.00",
+     "always_h12.00"
+    ]
+   }
+  },
+  {
+   "id": "H_NOISE",
+   "name": "every reading agrees with itself on the ground luma the verdict is computed from",
+   "pass": true,
+   "detail": {
+    "population": 62,
+    "worst_ground_spread": 0.00635,
+    "tolerance": 0.01,
+    "worst_frame_spread": 0.00824,
+    "frame_rungs_over_tolerance": [],
+    "note": "ground is the measurement and is gated; the frame rect is the settle monitor and is reported. H_SETTLED below fails if frame instability is widespread"
+   }
+  },
+  {
+   "id": "H_SETTLED",
+   "name": "the scene is settling -- frame instability is isolated, not general",
+   "pass": true,
+   "detail": {
+    "population": 62,
+    "unsettled": 0,
+    "allowed": 6,
+    "which": [],
+    "note": "one transient is a pond or a leaf; a tenth of the ladder is a world that never came to rest, and then no reading in it can be trusted"
+   }
+  }
+ ],
+ "binary_built": "2026-09-28 03:51:06",
+ "vantage": {
+  "spot": [
+   -64.0,
+   -5700.0
+  ],
+  "yaw": 90.0,
+  "view_reach": 1.0,
+  "green_ratio": 0.995,
+  "overhead_hit": null,
+  "nearest_figure_uu": 3565.6,
+  "figures": [
+   {
+    "label": "WonderlandDogPawn0",
+    "dist_uu": 3565.6
+   }
+  ],
+  "valid": true
+ },
+ "readings": {
+  "shipped_h17.20": {
+   "arm": "shipped",
+   "hour": 17.2,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.21143,
+   "ground_spread": 0.00036,
+   "frame_spread": 0.00091,
+   "cells": [
+    0.22814,
+    0.26432,
+    0.24351,
+    0.18025,
+    0.18081,
+    0.2114,
+    0.20774,
+    0.16818
+   ],
+   "cell_spread": 0.09614,
+   "cell_contrast": 0.4587,
+   "crushed_legacy": 0.2158,
+   "sky_intensity": 2.25,
+   "exposure_bias": -0.9,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -14.97
+  },
+  "shipped_h17.30": {
+   "arm": "shipped",
+   "hour": 17.3,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.08289,
+   "ground_spread": 0.00013,
+   "frame_spread": 0.00351,
+   "cells": [
+    0.08408,
+    0.09705,
+    0.10345,
+    0.0792,
+    0.06418,
+    0.07592,
+    0.0861,
+    0.07095
+   ],
+   "cell_spread": 0.03927,
+   "cell_contrast": 0.481,
+   "crushed_legacy": 0.9912,
+   "sky_intensity": 2.25,
+   "exposure_bias": -0.9,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -13.121
+  },
+  "shipped_h17.40": {
+   "arm": "shipped",
+   "hour": 17.4,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.12051,
+   "ground_spread": 0.00022,
+   "frame_spread": 0.00032,
+   "cells": [
+    0.1797,
+    0.12859,
+    0.12359,
+    0.09488,
+    0.13995,
+    0.10095,
+    0.10502,
+    0.08564
+   ],
+   "cell_spread": 0.09406,
+   "cell_contrast": 0.8229,
+   "crushed_legacy": 0.7582,
+   "sky_intensity": 3.1357,
+   "exposure_bias": -0.7458,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -11.263
+  },
+  "shipped_h17.50": {
+   "arm": "shipped",
+   "hour": 17.5,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.1492,
+   "ground_spread": 0.00635,
+   "frame_spread": 0.00042,
+   "cells": [
+    0.15299,
+    0.17129,
+    0.18081,
+    0.14209,
+    0.12806,
+    0.14436,
+    0.16078,
+    0.13509
+   ],
+   "cell_spread": 0.05275,
+   "cell_contrast": 0.3548,
+   "crushed_legacy": 0.3597,
+   "sky_intensity": 5.2503,
+   "exposure_bias": -0.3777,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -9.398
+  },
+  "shipped_h17.60": {
+   "arm": "shipped",
+   "hour": 17.6,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.14294,
+   "ground_spread": 0.00027,
+   "frame_spread": 0.00055,
+   "cells": [
+    0.14455,
+    0.16312,
+    0.17135,
+    0.13608,
+    0.1178,
+    0.1338,
+    0.14892,
+    0.12624
+   ],
+   "cell_spread": 0.05355,
+   "cell_contrast": 0.3816,
+   "crushed_legacy": 0.452,
+   "sky_intensity": 7.1867,
+   "exposure_bias": -0.0406,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -7.526
+  },
+  "shipped_h17.70": {
+   "arm": "shipped",
+   "hour": 17.7,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.14121,
+   "ground_spread": 0.0003,
+   "frame_spread": 0.00746,
+   "cells": [
+    0.14169,
+    0.16024,
+    0.16855,
+    0.13509,
+    0.11625,
+    0.13257,
+    0.14773,
+    0.12593
+   ],
+   "cell_spread": 0.0523,
+   "cell_contrast": 0.3779,
+   "crushed_legacy": 0.4762,
+   "sky_intensity": 8.9399,
+   "exposure_bias": 0.2645,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -5.649
+  },
+  "shipped_h17.80": {
+   "arm": "shipped",
+   "hour": 17.8,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.12743,
+   "ground_spread": 0.00055,
+   "frame_spread": 7e-05,
+   "cells": [
+    0.12672,
+    0.1433,
+    0.15135,
+    0.12291,
+    0.10424,
+    0.11971,
+    0.13468,
+    0.11634
+   ],
+   "cell_spread": 0.04711,
+   "cell_contrast": 0.3774,
+   "crushed_legacy": 0.6494,
+   "sky_intensity": 10.5048,
+   "exposure_bias": 0.5369,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -3.768
+  },
+  "shipped_h17.90": {
+   "arm": "shipped",
+   "hour": 17.9,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.10417,
+   "ground_spread": 0.0002,
+   "frame_spread": 0.0036,
+   "cells": [
+    0.10106,
+    0.11631,
+    0.12318,
+    0.10076,
+    0.08356,
+    0.09825,
+    0.11187,
+    0.09759
+   ],
+   "cell_spread": 0.03962,
+   "cell_contrast": 0.3926,
+   "crushed_legacy": 0.919,
+   "sky_intensity": 11.8768,
+   "exposure_bias": 0.7758,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -1.885
+  },
+  "shipped_h18.00": {
+   "arm": "shipped",
+   "hour": 18.0,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.08911,
+   "ground_spread": 0.00032,
+   "frame_spread": 0.00337,
+   "cells": [
+    0.08359,
+    0.0979,
+    0.10467,
+    0.08728,
+    0.06949,
+    0.0846,
+    0.09828,
+    0.08782
+   ],
+   "cell_spread": 0.03518,
+   "cell_contrast": 0.4018,
+   "crushed_legacy": 0.928,
+   "sky_intensity": 13.0512,
+   "exposure_bias": 0.9802,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -0.0
+  },
+  "shipped_h18.10": {
+   "arm": "shipped",
+   "hour": 18.1,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.0923,
+   "ground_spread": 3e-05,
+   "frame_spread": 0.00234,
+   "cells": [
+    0.08409,
+    0.0972,
+    0.10685,
+    0.09233,
+    0.07222,
+    0.08797,
+    0.10336,
+    0.09577
+   ],
+   "cell_spread": 0.03463,
+   "cell_contrast": 0.3682,
+   "crushed_legacy": 0.8933,
+   "sky_intensity": 14.023,
+   "exposure_bias": 1.1494,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 1.885
+  },
+  "shipped_h18.20": {
+   "arm": "shipped",
+   "hour": 18.2,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.11314,
+   "ground_spread": 0.00036,
+   "frame_spread": 0.00521,
+   "cells": [
+    0.10672,
+    0.11795,
+    0.12749,
+    0.11266,
+    0.08973,
+    0.10644,
+    0.12654,
+    0.11849
+   ],
+   "cell_spread": 0.03776,
+   "cell_contrast": 0.3275,
+   "crushed_legacy": 0.7944,
+   "sky_intensity": 14.7872,
+   "exposure_bias": 1.2824,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 3.768
+  },
+  "shipped_h18.24": {
+   "arm": "shipped",
+   "hour": 18.24,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.12605,
+   "ground_spread": 0.00016,
+   "frame_spread": 0.00174,
+   "cells": [
+    0.11878,
+    0.1326,
+    0.14163,
+    0.12947,
+    0.09997,
+    0.11879,
+    0.13741,
+    0.13182
+   ],
+   "cell_spread": 0.04166,
+   "cell_contrast": 0.3189,
+   "crushed_legacy": 0.7146,
+   "sky_intensity": 15.0332,
+   "exposure_bias": 1.3252,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 4.521
+  },
+  "shipped_h18.25": {
+   "arm": "shipped",
+   "hour": 18.25,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.12895,
+   "ground_spread": 0.00067,
+   "frame_spread": 0.00422,
+   "cells": [
+    0.11904,
+    0.13644,
+    0.14649,
+    0.13299,
+    0.10286,
+    0.12288,
+    0.14207,
+    0.1342
+   ],
+   "cell_spread": 0.04363,
+   "cell_contrast": 0.3266,
+   "crushed_legacy": 0.6919,
+   "sky_intensity": 15.0894,
+   "exposure_bias": 1.335,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 4.709
+  },
+  "shipped_h18.26": {
+   "arm": "shipped",
+   "hour": 18.26,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.08619,
+   "ground_spread": 0.00012,
+   "frame_spread": 0.00217,
+   "cells": [
+    0.06764,
+    0.08047,
+    0.09598,
+    0.08834,
+    0.0654,
+    0.08472,
+    0.10511,
+    0.10248
+   ],
+   "cell_spread": 0.03971,
+   "cell_contrast": 0.4589,
+   "crushed_legacy": 0.9472,
+   "sky_intensity": 15.1433,
+   "exposure_bias": 1.3444,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 4.897
+  },
+  "shipped_h18.27": {
+   "arm": "shipped",
+   "hour": 18.27,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.08802,
+   "ground_spread": 0.00076,
+   "frame_spread": 0.00021,
+   "cells": [
+    0.07022,
+    0.0815,
+    0.09805,
+    0.08986,
+    0.06599,
+    0.08434,
+    0.10679,
+    0.10451
+   ],
+   "cell_spread": 0.0408,
+   "cell_contrast": 0.4684,
+   "crushed_legacy": 0.9406,
+   "sky_intensity": 15.195,
+   "exposure_bias": 1.3534,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 5.085
+  },
+  "shipped_h18.30": {
+   "arm": "shipped",
+   "hour": 18.3,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.09326,
+   "ground_spread": 0.00026,
+   "frame_spread": 0.00824,
+   "cells": [
+    0.07491,
+    0.08643,
+    0.1039,
+    0.09569,
+    0.07148,
+    0.08998,
+    0.11239,
+    0.1104
+   ],
+   "cell_spread": 0.04091,
+   "cell_contrast": 0.4407,
+   "crushed_legacy": 0.9219,
+   "sky_intensity": 15.337,
+   "exposure_bias": 1.3781,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 5.649
+  },
+  "shipped_h18.40": {
+   "arm": "shipped",
+   "hour": 18.4,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.104,
+   "ground_spread": 0.00022,
+   "frame_spread": 0.00225,
+   "cells": [
+    0.08349,
+    0.1004,
+    0.11479,
+    0.10498,
+    0.0807,
+    0.10028,
+    0.12518,
+    0.12167
+   ],
+   "cell_spread": 0.04448,
+   "cell_contrast": 0.4331,
+   "crushed_legacy": 0.8734,
+   "sky_intensity": 15.6633,
+   "exposure_bias": 1.4349,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 7.526
+  },
+  "shipped_h18.50": {
+   "arm": "shipped",
+   "hour": 18.5,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.10877,
+   "ground_spread": 0.00011,
+   "frame_spread": 0.00306,
+   "cells": [
+    0.08872,
+    0.10329,
+    0.12045,
+    0.10961,
+    0.08406,
+    0.10462,
+    0.13182,
+    0.12846
+   ],
+   "cell_spread": 0.04776,
+   "cell_contrast": 0.4459,
+   "crushed_legacy": 0.8363,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 9.398
+  },
+  "shipped_h18.80": {
+   "arm": "shipped",
+   "hour": 18.8,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.12587,
+   "ground_spread": 0.00033,
+   "frame_spread": 0.00145,
+   "cells": [
+    0.09899,
+    0.15754,
+    0.12404,
+    0.11747,
+    0.13052,
+    0.11795,
+    0.13299,
+    0.12993
+   ],
+   "cell_spread": 0.05855,
+   "cell_contrast": 0.4611,
+   "crushed_legacy": 0.6956,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 14.97
+  },
+  "shipped_h18.90": {
+   "arm": "shipped",
+   "hour": 18.9,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.12944,
+   "ground_spread": 0.00325,
+   "frame_spread": 0.0026,
+   "cells": [
+    0.08575,
+    0.19598,
+    0.12119,
+    0.10593,
+    0.11515,
+    0.17381,
+    0.12621,
+    0.12654
+   ],
+   "cell_spread": 0.11023,
+   "cell_contrast": 0.8911,
+   "crushed_legacy": 0.679,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 16.808
+  },
+  "shipped_h18.95": {
+   "arm": "shipped",
+   "hour": 18.95,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.10842,
+   "ground_spread": 0.00074,
+   "frame_spread": 0.00112,
+   "cells": [
+    0.07363,
+    0.17927,
+    0.12673,
+    0.08113,
+    0.0891,
+    0.16217,
+    0.08198,
+    0.0755
+   ],
+   "cell_spread": 0.10564,
+   "cell_contrast": 1.235,
+   "crushed_legacy": 0.7616,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 17.723
+  },
+  "shipped_h19.00": {
+   "arm": "shipped",
+   "hour": 19.0,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.11124,
+   "ground_spread": 3e-05,
+   "frame_spread": 0.00332,
+   "cells": [
+    0.07641,
+    0.17,
+    0.14355,
+    0.08986,
+    0.07946,
+    0.16549,
+    0.09019,
+    0.07369
+   ],
+   "cell_spread": 0.09631,
+   "cell_contrast": 1.0698,
+   "crushed_legacy": 0.7417,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 18.635
+  },
+  "shipped_h19.05": {
+   "arm": "shipped",
+   "hour": 19.05,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.0799,
+   "ground_spread": 0.00066,
+   "frame_spread": 0.00029,
+   "cells": [
+    0.07745,
+    0.08794,
+    0.09299,
+    0.07898,
+    0.06426,
+    0.07532,
+    0.08387,
+    0.07462
+   ],
+   "cell_spread": 0.02873,
+   "cell_contrast": 0.3673,
+   "crushed_legacy": 0.9665,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 19.544
+  },
+  "shipped_h19.10": {
+   "arm": "shipped",
+   "hour": 19.1,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.07978,
+   "ground_spread": 0.0005,
+   "frame_spread": 0.00723,
+   "cells": [
+    0.07741,
+    0.08765,
+    0.09258,
+    0.08025,
+    0.06418,
+    0.07472,
+    0.08356,
+    0.07472
+   ],
+   "cell_spread": 0.0284,
+   "cell_contrast": 0.3603,
+   "crushed_legacy": 0.9674,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 20.449
+  },
+  "shipped_h19.20": {
+   "arm": "shipped",
+   "hour": 19.2,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.1055,
+   "ground_spread": 0.00154,
+   "frame_spread": 0.00041,
+   "cells": [
+    0.07711,
+    0.08611,
+    0.1554,
+    0.19267,
+    0.06315,
+    0.07394,
+    0.0953,
+    0.10567
+   ],
+   "cell_spread": 0.12952,
+   "cell_contrast": 1.4279,
+   "crushed_legacy": 0.7896,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 22.249
+  },
+  "shipped_h19.40": {
+   "arm": "shipped",
+   "hour": 19.4,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.081,
+   "ground_spread": 0.00015,
+   "frame_spread": 0.00105,
+   "cells": [
+    0.0783,
+    0.08867,
+    0.0945,
+    0.08472,
+    0.06408,
+    0.07506,
+    0.08472,
+    0.07719
+   ],
+   "cell_spread": 0.03042,
+   "cell_contrast": 0.3732,
+   "crushed_legacy": 0.9668,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 25.802
+  },
+  "shipped_h23.00": {
+   "arm": "shipped",
+   "hour": 23.0,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.1077,
+   "ground_spread": 9e-05,
+   "frame_spread": 0.00111,
+   "cells": [
+    0.10005,
+    0.09014,
+    0.09791,
+    0.11038,
+    0.10574,
+    0.13437,
+    0.11586,
+    0.10773
+   ],
+   "cell_spread": 0.04423,
+   "cell_contrast": 0.4144,
+   "crushed_legacy": 0.7966,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 69.547
+  },
+  "shipped_h12.00": {
+   "arm": "shipped",
+   "hour": 12.0,
+   "cast_altitude": 0.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.18989,
+   "ground_spread": 0.00012,
+   "frame_spread": 0.00377,
+   "cells": [
+    0.17531,
+    0.20071,
+    0.20619,
+    0.20081,
+    0.1731,
+    0.1608,
+    0.20515,
+    0.19327
+   ],
+   "cell_spread": 0.04539,
+   "cell_contrast": 0.2304,
+   "crushed_legacy": 0.1612,
+   "sky_intensity": 2.25,
+   "exposure_bias": -0.9,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -72.0
+  },
+  "delay18_h17.20": {
+   "arm": "delay18",
+   "hour": 17.2,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.20741,
+   "ground_spread": 2e-05,
+   "frame_spread": 0.0044,
+   "cells": [
+    0.22498,
+    0.26055,
+    0.23899,
+    0.176,
+    0.17755,
+    0.20729,
+    0.20211,
+    0.16206
+   ],
+   "cell_spread": 0.09849,
+   "cell_contrast": 0.4811,
+   "crushed_legacy": 0.2325,
+   "sky_intensity": 2.25,
+   "exposure_bias": -0.9,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -14.97
+  },
+  "delay18_h17.30": {
+   "arm": "delay18",
+   "hour": 17.3,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.07374,
+   "ground_spread": 4e-05,
+   "frame_spread": 0.00295,
+   "cells": [
+    0.07603,
+    0.0877,
+    0.09286,
+    0.07013,
+    0.05712,
+    0.06701,
+    0.07574,
+    0.06109
+   ],
+   "cell_spread": 0.03574,
+   "cell_contrast": 0.49,
+   "crushed_legacy": 0.9969,
+   "sky_intensity": 2.25,
+   "exposure_bias": -0.9,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -13.121
+  },
+  "delay18_h17.40": {
+   "arm": "delay18",
+   "hour": 17.4,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.11016,
+   "ground_spread": 0.0,
+   "frame_spread": 0.00143,
+   "cells": [
+    0.17709,
+    0.1154,
+    0.10864,
+    0.08251,
+    0.14289,
+    0.08924,
+    0.08909,
+    0.07172
+   ],
+   "cell_spread": 0.10537,
+   "cell_contrast": 1.065,
+   "crushed_legacy": 0.8027,
+   "sky_intensity": 3.1357,
+   "exposure_bias": -0.7458,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -11.263
+  },
+  "delay18_h17.50": {
+   "arm": "delay18",
+   "hour": 17.5,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.12136,
+   "ground_spread": 0.00011,
+   "frame_spread": 0.00175,
+   "cells": [
+    0.12477,
+    0.14139,
+    0.14797,
+    0.1148,
+    0.09915,
+    0.11294,
+    0.12447,
+    0.10276
+   ],
+   "cell_spread": 0.04882,
+   "cell_contrast": 0.4081,
+   "crushed_legacy": 0.7009,
+   "sky_intensity": 5.2503,
+   "exposure_bias": -0.3777,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -9.398
+  },
+  "delay18_h17.60": {
+   "arm": "delay18",
+   "hour": 17.6,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.13676,
+   "ground_spread": 1e-05,
+   "frame_spread": 0.00314,
+   "cells": [
+    0.14004,
+    0.15815,
+    0.16497,
+    0.1295,
+    0.11301,
+    0.12787,
+    0.1405,
+    0.11702
+   ],
+   "cell_spread": 0.05196,
+   "cell_contrast": 0.3855,
+   "crushed_legacy": 0.5343,
+   "sky_intensity": 7.1867,
+   "exposure_bias": -0.0406,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -7.526
+  },
+  "delay18_h17.70": {
+   "arm": "delay18",
+   "hour": 17.7,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.13479,
+   "ground_spread": 9e-05,
+   "frame_spread": 0.00522,
+   "cells": [
+    0.13795,
+    0.15575,
+    0.16201,
+    0.12813,
+    0.1115,
+    0.12605,
+    0.13854,
+    0.11554
+   ],
+   "cell_spread": 0.05051,
+   "cell_contrast": 0.3797,
+   "crushed_legacy": 0.5634,
+   "sky_intensity": 8.9399,
+   "exposure_bias": 0.2645,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -5.649
+  },
+  "delay18_h17.80": {
+   "arm": "delay18",
+   "hour": 17.8,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.12293,
+   "ground_spread": 2e-05,
+   "frame_spread": 0.00011,
+   "cells": [
+    0.12395,
+    0.14034,
+    0.1465,
+    0.11693,
+    0.10125,
+    0.11525,
+    0.12814,
+    0.10862
+   ],
+   "cell_spread": 0.04525,
+   "cell_contrast": 0.3757,
+   "crushed_legacy": 0.6999,
+   "sky_intensity": 10.5048,
+   "exposure_bias": 0.5369,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -3.768
+  },
+  "delay18_h17.90": {
+   "arm": "delay18",
+   "hour": 17.9,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.10079,
+   "ground_spread": 8e-05,
+   "frame_spread": 0.00559,
+   "cells": [
+    0.10018,
+    0.11434,
+    0.11973,
+    0.09734,
+    0.08109,
+    0.09433,
+    0.10643,
+    0.09136
+   ],
+   "cell_spread": 0.03864,
+   "cell_contrast": 0.3913,
+   "crushed_legacy": 0.9388,
+   "sky_intensity": 11.8768,
+   "exposure_bias": 0.7758,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -1.885
+  },
+  "delay18_h18.00": {
+   "arm": "delay18",
+   "hour": 18.0,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.0838,
+   "ground_spread": 9e-05,
+   "frame_spread": 0.0022,
+   "cells": [
+    0.08114,
+    0.09344,
+    0.09947,
+    0.08274,
+    0.06553,
+    0.07848,
+    0.09018,
+    0.07908
+   ],
+   "cell_spread": 0.03394,
+   "cell_contrast": 0.4142,
+   "crushed_legacy": 0.9375,
+   "sky_intensity": 13.0512,
+   "exposure_bias": 0.9802,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -0.0
+  },
+  "delay18_h18.10": {
+   "arm": "delay18",
+   "hour": 18.1,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.08539,
+   "ground_spread": 0.00011,
+   "frame_spread": 0.00535,
+   "cells": [
+    0.08065,
+    0.0924,
+    0.10072,
+    0.08708,
+    0.06503,
+    0.07915,
+    0.09328,
+    0.08592
+   ],
+   "cell_spread": 0.03569,
+   "cell_contrast": 0.4126,
+   "crushed_legacy": 0.9061,
+   "sky_intensity": 14.023,
+   "exposure_bias": 1.1494,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 1.885
+  },
+  "delay18_h18.20": {
+   "arm": "delay18",
+   "hour": 18.2,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.10737,
+   "ground_spread": 3e-05,
+   "frame_spread": 0.00132,
+   "cells": [
+    0.10396,
+    0.11471,
+    0.1232,
+    0.11044,
+    0.0852,
+    0.10005,
+    0.11554,
+    0.10745
+   ],
+   "cell_spread": 0.038,
+   "cell_contrast": 0.3488,
+   "crushed_legacy": 0.8247,
+   "sky_intensity": 14.7872,
+   "exposure_bias": 1.2824,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 3.768
+  },
+  "delay18_h18.24": {
+   "arm": "delay18",
+   "hour": 18.24,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.11965,
+   "ground_spread": 0.00015,
+   "frame_spread": 0.00199,
+   "cells": [
+    0.1158,
+    0.12859,
+    0.13655,
+    0.1214,
+    0.09653,
+    0.11219,
+    0.12834,
+    0.11936
+   ],
+   "cell_spread": 0.04002,
+   "cell_contrast": 0.3324,
+   "crushed_legacy": 0.7548,
+   "sky_intensity": 15.0332,
+   "exposure_bias": 1.3252,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 4.521
+  },
+  "delay18_h18.25": {
+   "arm": "delay18",
+   "hour": 18.25,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.12302,
+   "ground_spread": 8e-05,
+   "frame_spread": 0.00213,
+   "cells": [
+    0.11874,
+    0.13293,
+    0.14053,
+    0.1269,
+    0.09902,
+    0.11546,
+    0.13069,
+    0.1221
+   ],
+   "cell_spread": 0.04151,
+   "cell_contrast": 0.3334,
+   "crushed_legacy": 0.734,
+   "sky_intensity": 15.0894,
+   "exposure_bias": 1.335,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 4.709
+  },
+  "delay18_h18.26": {
+   "arm": "delay18",
+   "hour": 18.26,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.12495,
+   "ground_spread": 0.00019,
+   "frame_spread": 0.00313,
+   "cells": [
+    0.12155,
+    0.13498,
+    0.14305,
+    0.12685,
+    0.10117,
+    0.11778,
+    0.1331,
+    0.12331
+   ],
+   "cell_spread": 0.04188,
+   "cell_contrast": 0.3348,
+   "crushed_legacy": 0.7236,
+   "sky_intensity": 15.1433,
+   "exposure_bias": 1.3444,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 4.897
+  },
+  "delay18_h18.27": {
+   "arm": "delay18",
+   "hour": 18.27,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.12771,
+   "ground_spread": 0.00017,
+   "frame_spread": 0.00044,
+   "cells": [
+    0.12439,
+    0.13726,
+    0.14569,
+    0.13071,
+    0.10406,
+    0.12042,
+    0.13581,
+    0.12671
+   ],
+   "cell_spread": 0.04163,
+   "cell_contrast": 0.3234,
+   "crushed_legacy": 0.7033,
+   "sky_intensity": 15.195,
+   "exposure_bias": 1.3534,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 5.085
+  },
+  "delay18_h18.30": {
+   "arm": "delay18",
+   "hour": 18.3,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.13443,
+   "ground_spread": 0.00015,
+   "frame_spread": 7e-05,
+   "cells": [
+    0.13229,
+    0.14489,
+    0.15324,
+    0.13447,
+    0.11081,
+    0.12689,
+    0.1427,
+    0.1323
+   ],
+   "cell_spread": 0.04243,
+   "cell_contrast": 0.3181,
+   "crushed_legacy": 0.6581,
+   "sky_intensity": 15.337,
+   "exposure_bias": 1.3781,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 5.649
+  },
+  "delay18_h18.40": {
+   "arm": "delay18",
+   "hour": 18.4,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.15473,
+   "ground_spread": 0.00028,
+   "frame_spread": 0.00433,
+   "cells": [
+    0.15218,
+    0.16617,
+    0.17514,
+    0.15889,
+    0.12816,
+    0.14544,
+    0.16186,
+    0.15234
+   ],
+   "cell_spread": 0.04698,
+   "cell_contrast": 0.3019,
+   "crushed_legacy": 0.5097,
+   "sky_intensity": 15.6633,
+   "exposure_bias": 1.4349,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 7.526
+  },
+  "delay18_h18.50": {
+   "arm": "delay18",
+   "hour": 18.5,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.16279,
+   "ground_spread": 5e-05,
+   "frame_spread": 0.00085,
+   "cells": [
+    0.16191,
+    0.17641,
+    0.18552,
+    0.16502,
+    0.1357,
+    0.15325,
+    0.17007,
+    0.15814
+   ],
+   "cell_spread": 0.04982,
+   "cell_contrast": 0.3048,
+   "crushed_legacy": 0.4453,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 9.398
+  },
+  "delay18_h18.80": {
+   "arm": "delay18",
+   "hour": 18.8,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.17889,
+   "ground_spread": 0.00069,
+   "frame_spread": 0.00254,
+   "cells": [
+    0.17974,
+    0.19725,
+    0.20468,
+    0.1851,
+    0.14678,
+    0.16591,
+    0.18231,
+    0.16934
+   ],
+   "cell_spread": 0.0579,
+   "cell_contrast": 0.3198,
+   "crushed_legacy": 0.2945,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 14.97
+  },
+  "delay18_h18.90": {
+   "arm": "delay18",
+   "hour": 18.9,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.19508,
+   "ground_spread": 6e-05,
+   "frame_spread": 0.00361,
+   "cells": [
+    0.19539,
+    0.21391,
+    0.2219,
+    0.20157,
+    0.16258,
+    0.18167,
+    0.20015,
+    0.18602
+   ],
+   "cell_spread": 0.05932,
+   "cell_contrast": 0.2999,
+   "crushed_legacy": 0.2001,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 16.808
+  },
+  "delay18_h18.95": {
+   "arm": "delay18",
+   "hour": 18.95,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.19844,
+   "ground_spread": 0.00045,
+   "frame_spread": 0.00079,
+   "cells": [
+    0.19844,
+    0.21769,
+    0.22603,
+    0.20587,
+    0.16661,
+    0.18582,
+    0.20344,
+    0.18811
+   ],
+   "cell_spread": 0.05942,
+   "cell_contrast": 0.2957,
+   "crushed_legacy": 0.182,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 17.723
+  },
+  "delay18_h19.00": {
+   "arm": "delay18",
+   "hour": 19.0,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.12918,
+   "ground_spread": 0.0004,
+   "frame_spread": 0.00065,
+   "cells": [
+    0.08507,
+    0.17742,
+    0.15631,
+    0.11131,
+    0.09112,
+    0.17891,
+    0.12647,
+    0.10835
+   ],
+   "cell_spread": 0.09384,
+   "cell_contrast": 0.7893,
+   "crushed_legacy": 0.6812,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 18.635
+  },
+  "delay18_h19.05": {
+   "arm": "delay18",
+   "hour": 19.05,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.10223,
+   "ground_spread": 9e-05,
+   "frame_spread": 0.00205,
+   "cells": [
+    0.08839,
+    0.10444,
+    0.11327,
+    0.10375,
+    0.0816,
+    0.09912,
+    0.11626,
+    0.11143
+   ],
+   "cell_spread": 0.03466,
+   "cell_contrast": 0.333,
+   "crushed_legacy": 0.8982,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 19.544
+  },
+  "delay18_h19.10": {
+   "arm": "delay18",
+   "hour": 19.1,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.09929,
+   "ground_spread": 3e-05,
+   "frame_spread": 0.0014,
+   "cells": [
+    0.08669,
+    0.09744,
+    0.10921,
+    0.10511,
+    0.07688,
+    0.09411,
+    0.11428,
+    0.11051
+   ],
+   "cell_spread": 0.0374,
+   "cell_contrast": 0.3693,
+   "crushed_legacy": 0.9098,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 20.449
+  },
+  "delay18_h19.20": {
+   "arm": "delay18",
+   "hour": 19.2,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.12545,
+   "ground_spread": 0.00064,
+   "frame_spread": 0.00649,
+   "cells": [
+    0.08644,
+    0.10051,
+    0.17653,
+    0.19854,
+    0.07816,
+    0.09589,
+    0.13145,
+    0.13395
+   ],
+   "cell_spread": 0.12038,
+   "cell_contrast": 1.0379,
+   "crushed_legacy": 0.7192,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 22.249
+  },
+  "delay18_h19.40": {
+   "arm": "delay18",
+   "hour": 19.4,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.08111,
+   "ground_spread": 0.00014,
+   "frame_spread": 0.00264,
+   "cells": [
+    0.07902,
+    0.08878,
+    0.09413,
+    0.08381,
+    0.06498,
+    0.07578,
+    0.08497,
+    0.07668
+   ],
+   "cell_spread": 0.02915,
+   "cell_contrast": 0.358,
+   "crushed_legacy": 0.9688,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 25.802
+  },
+  "delay18_h23.00": {
+   "arm": "delay18",
+   "hour": 23.0,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.10759,
+   "ground_spread": 0.00011,
+   "frame_spread": 0.00302,
+   "cells": [
+    0.09997,
+    0.08907,
+    0.09752,
+    0.11121,
+    0.10495,
+    0.13367,
+    0.11578,
+    0.10883
+   ],
+   "cell_spread": 0.0446,
+   "cell_contrast": 0.4173,
+   "crushed_legacy": 0.7962,
+   "sky_intensity": 15.75,
+   "exposure_bias": 1.45,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": 69.547
+  },
+  "delay18_h12.00": {
+   "arm": "delay18",
+   "hour": 12.0,
+   "cast_altitude": 18.0,
+   "cast_always": 0.0,
+   "ground_luma": 0.18931,
+   "ground_spread": 0.00034,
+   "frame_spread": 0.00085,
+   "cells": [
+    0.17443,
+    0.19971,
+    0.20526,
+    0.20035,
+    0.17244,
+    0.16009,
+    0.20448,
+    0.19295
+   ],
+   "cell_spread": 0.04517,
+   "cell_contrast": 0.2301,
+   "crushed_legacy": 0.1645,
+   "sky_intensity": 2.25,
+   "exposure_bias": -0.9,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 18.0,
+    "wl.Sky.MoonCastAlways": 0.0
+   },
+   "moon_altitude_deg": -72.0
+  },
+  "always_h17.20": {
+   "arm": "always",
+   "hour": 17.2,
+   "cast_altitude": 0.0,
+   "cast_always": 1.0,
+   "ground_luma": 0.2073,
+   "ground_spread": 1e-05,
+   "frame_spread": 0.00595,
+   "cells": [
+    0.22506,
+    0.26062,
+    0.23915,
+    0.17466,
+    0.17753,
+    0.20726,
+    0.20215,
+    0.16216
+   ],
+   "cell_spread": 0.09846,
+   "cell_contrast": 0.481,
+   "crushed_legacy": 0.2331,
+   "sky_intensity": 2.25,
+   "exposure_bias": -0.9,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 1.0
+   },
+   "moon_altitude_deg": -14.97
+  },
+  "always_h17.30": {
+   "arm": "always",
+   "hour": 17.3,
+   "cast_altitude": 0.0,
+   "cast_always": 1.0,
+   "ground_luma": 0.07501,
+   "ground_spread": 0.00043,
+   "frame_spread": 0.00808,
+   "cells": [
+    0.07744,
+    0.08922,
+    0.09456,
+    0.07162,
+    0.05833,
+    0.06837,
+    0.07721,
+    0.06237
+   ],
+   "cell_spread": 0.03623,
+   "cell_contrast": 0.4869,
+   "crushed_legacy": 0.9967,
+   "sky_intensity": 2.25,
+   "exposure_bias": -0.9,
+   "shadow_casters": [
+    "V2_Sun"
+   ],
+   "moon_casting": false,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 1.0
+   },
+   "moon_altitude_deg": -13.121
+  },
+  "always_h17.40": {
+   "arm": "always",
+   "hour": 17.4,
+   "cast_altitude": 0.0,
+   "cast_always": 1.0,
+   "ground_luma": 0.11016,
+   "ground_spread": 4e-05,
+   "frame_spread": 0.00233,
+   "cells": [
+    0.17705,
+    0.11541,
+    0.10861,
+    0.08254,
+    0.14288,
+    0.0892,
+    0.08902,
+    0.07175
+   ],
+   "cell_spread": 0.1053,
+   "cell_contrast": 1.0647,
+   "crushed_legacy": 0.8024,
+   "sky_intensity": 3.1357,
+   "exposure_bias": -0.7458,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 1.0
+   },
+   "moon_altitude_deg": -11.263
+  },
+  "always_h17.50": {
+   "arm": "always",
+   "hour": 17.5,
+   "cast_altitude": 0.0,
+   "cast_always": 1.0,
+   "ground_luma": 0.12074,
+   "ground_spread": 1e-05,
+   "frame_spread": 0.00282,
+   "cells": [
+    0.12402,
+    0.14057,
+    0.14719,
+    0.11428,
+    0.09857,
+    0.1123,
+    0.12385,
+    0.10212
+   ],
+   "cell_spread": 0.04862,
+   "cell_contrast": 0.4083,
+   "crushed_legacy": 0.7068,
+   "sky_intensity": 5.2503,
+   "exposure_bias": -0.3777,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 1.0
+   },
+   "moon_altitude_deg": -9.398
+  },
+  "always_h17.60": {
+   "arm": "always",
+   "hour": 17.6,
+   "cast_altitude": 0.0,
+   "cast_always": 1.0,
+   "ground_luma": 0.13769,
+   "ground_spread": 0.0006,
+   "frame_spread": 0.0002,
+   "cells": [
+    0.14103,
+    0.1593,
+    0.16624,
+    0.13096,
+    0.11402,
+    0.12901,
+    0.14177,
+    0.11842
+   ],
+   "cell_spread": 0.05222,
+   "cell_contrast": 0.384,
+   "crushed_legacy": 0.5229,
+   "sky_intensity": 7.1867,
+   "exposure_bias": -0.0406,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 1.0
+   },
+   "moon_altitude_deg": -7.526
+  },
+  "always_h17.70": {
+   "arm": "always",
+   "hour": 17.7,
+   "cast_altitude": 0.0,
+   "cast_always": 1.0,
+   "ground_luma": 0.13338,
+   "ground_spread": 2e-05,
+   "frame_spread": 0.00143,
+   "cells": [
+    0.13621,
+    0.15389,
+    0.16021,
+    0.12673,
+    0.11028,
+    0.1247,
+    0.13728,
+    0.11456
+   ],
+   "cell_spread": 0.04993,
+   "cell_contrast": 0.3798,
+   "crushed_legacy": 0.5767,
+   "sky_intensity": 8.9399,
+   "exposure_bias": 0.2645,
+   "shadow_casters": [
+    "V2_Sun",
+    "WL_Moon"
+   ],
+   "moon_casting": true,
+   "knobs_held": {
+    "wl.Sky.MoonCastAltitude": 0.0,
+    "wl.Sky.MoonCastAlways": 1.0
+   },
+   "moon_altitude_deg": -5.649
+  },
+  "always_h17.80": {
+   "arm": "always",
+   "hour": 17.8,
+   "unmeasured": true
+  },
+  "always_h17.90": {
+   "arm": "always",
+   "hour": 17.9,
+   "unmeasured": true
+  },
+  "always_h18.00": {
+   "arm": "always",
+   "hour": 18.0,
+   "unmeasured": true
+  },
+  "always_h18.10": {
+   "arm": "always",
+   "hour": 18.1,
+   "unmeasured": true
+  },
+  "always_h18.20": {
+   "arm": "always",
+   "hour": 18.2,
+   "unmeasured": true
+  },
+  "always_h18.24": {
+   "arm": "always",
+   "hour": 18.24,
+   "unmeasured": true
+  },
+  "always_h18.25": {
+   "arm": "always",
+   "hour": 18.25,
+   "unmeasured": true
+  },
+  "always_h18.26": {
+   "arm": "always",
+   "hour": 18.26,
+   "unmeasured": true
+  },
+  "always_h18.27": {
+   "arm": "always",
+   "hour": 18.27,
+   "unmeasured": true
+  },
+  "always_h18.30": {
+   "arm": "always",
+   "hour": 18.3,
+   "unmeasured": true
+  },
+  "always_h18.40": {
+   "arm": "always",
+   "hour": 18.4,
+   "unmeasured": true
+  },
+  "always_h18.50": {
+   "arm": "always",
+   "hour": 18.5,
+   "unmeasured": true
+  },
+  "always_h18.80": {
+   "arm": "always",
+   "hour": 18.8,
+   "unmeasured": true
+  },
+  "always_h18.90": {
+   "arm": "always",
+   "hour": 18.9,
+   "unmeasured": true
+  },
+  "always_h18.95": {
+   "arm": "always",
+   "hour": 18.95,
+   "unmeasured": true
+  },
+  "always_h19.00": {
+   "arm": "always",
+   "hour": 19.0,
+   "unmeasured": true
+  },
+  "always_h19.05": {
+   "arm": "always",
+   "hour": 19.05,
+   "unmeasured": true
+  },
+  "always_h19.10": {
+   "arm": "always",
+   "hour": 19.1,
+   "unmeasured": true
+  },
+  "always_h19.20": {
+   "arm": "always",
+   "hour": 19.2,
+   "unmeasured": true
+  },
+  "always_h19.40": {
+   "arm": "always",
+   "hour": 19.4,
+   "unmeasured": true
+  },
+  "always_h23.00": {
+   "arm": "always",
+   "hour": 23.0,
+   "unmeasured": true
+  },
+  "always_h12.00": {
+   "arm": "always",
+   "hour": 12.0,
+   "unmeasured": true
+  }
+ },
+ "knobs_restored_on_void": {
+  "wl.Sky.MoonCastAltitude": 0.0,
+  "wl.Sky.MoonCastAlways": 0.0
+ },
+ "finished": "2026-09-28 06:14:31",
+ "seconds": 1230.04,
+ "log": "H_CVAR PASS both moon-caster knobs exist in the RUNNING build, by sentinel round-trip {'population': 2, 'answering': ['wl.Sky.MoonCastAltitude', 'wl.Sky.MoonCastAlways'], 'missing': [], 'as_found': {'wl.Sky.MoonCastAltitude': 0.0, 'wl.Sky.MoonCastAlways': 0.0}, 'sentinel_readback': {'wl.Sky.MoonCastAltitude': 37.25, 'wl.Sky.MoonCastAlways': 37.25}, 'binary_built': '2026-09-28 03:51:06', 'note': 'a CVar that does not exist reads 0.0, which is exactly the shipped default of both'}\nH_VALID PASS the camera sees open ground, that ground is open to the sky, and no character is standing in the patch {'spot': [-64.0, -5700.0], 'yaw': 90.0, 'view_reach': 1.0, 'green_ratio': 0.995, 'overhead_hit': None, 'nearest_figure_uu': 3565.6, 'figures': [{'label': 'WonderlandDogPawn0', 'dist_uu': 3565.6}], 'valid': True}\nH_MEASURED FAIL every arm and hour produced a reading {'population': 62, 'wanted': 84, 'missing': ['always_h17.80', 'always_h17.90', 'always_h18.00', 'always_h18.10', 'always_h18.20', 'always_h18.24', 'always_h18.25', 'always_h18.26', 'always_h18.27', 'always_h18.30', 'always_h18.40', 'always_h18.50', 'always_h18.80', 'always_h18.90', 'always_h18.95', 'always_h19.00', 'always_h19.05', 'always_h19.10', 'always_h19.20', 'always_h19.40', 'always_h23.00', 'always_h12.00']}\nH_NOISE PASS every reading agrees with itself on the ground luma the verdict is computed from {'population': 62, 'worst_ground_spread': 0.00635, 'tolerance': 0.01, 'worst_frame_spread': 0.00824, 'frame_rungs_over_tolerance': [], 'note': 'ground is the measurement and is gated; the frame rect is the settle monitor and is reported. H_SETTLED below fails if frame instability is widespread'}\nH_SETTLED PASS the scene is settling -- frame instability is isolated, not general {'population': 62, 'unsettled': 0, 'allowed': 6, 'which': [], 'note': 'one transient is a pond or a leaf; a tenth of the ladder is a world that never came to rest, and then no reading in it can be trusted'}\nVOID FAIL readings missing or disagreeing with themselves {}\n"
+}

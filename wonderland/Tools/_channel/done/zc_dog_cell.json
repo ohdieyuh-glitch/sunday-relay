@@ -1,0 +1,183 @@
+{
+ "name": "zc_dog_cell",
+ "started": "2026-09-28 06:42:20",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "C_PROPS",
+   "name": "the Dog's spatial-loading state can be read off the actor",
+   "pass": true,
+   "detail": {
+    "is_spatially_loaded": "True",
+    "actor_label": "unreadable: Exception",
+    "folder_path": "unreadable: Exception",
+    "class": "BP_RelayDog_C",
+    "package": "PersistentLevel"
+   }
+  },
+  {
+   "id": "C_RAN",
+   "name": "both a near hop and the far placement ran in this session",
+   "pass": true,
+   "detail": {
+    "near": "SURVIVED",
+    "far": "DESTROYED"
+   }
+  },
+  {
+   "id": "C_FAR",
+   "name": "the far placement still destroys the Dog in this session",
+   "pass": true,
+   "detail": {
+    "far": {
+     "arm": "far",
+     "from": [
+      -327.3,
+      -650.0,
+      109.1
+     ],
+     "to": [
+      1200.0,
+      60000.0,
+      912.0
+     ],
+     "distance_m": 606.7,
+     "landed_at_s": 1.0,
+     "destroyed_at_s": 1.7,
+     "outcome": "DESTROYED",
+     "watched_s": 1.7,
+     "world_still_up": true,
+     "last": {
+      "t": 1.65,
+      "z": 75.2,
+      "falling": false
+     },
+     "seconds_standing_before_loss": 0.7
+    },
+    "note": "RED means the fault did not reproduce here and the near arm proves nothing by surviving -- both would simply have survived"
+   }
+  },
+  {
+   "id": "C_NEAR",
+   "name": "a hop that stays inside the streamed cell SURVIVES, so it is the distance and not teleporting as such",
+   "pass": true,
+   "detail": {
+    "near": {
+     "arm": "near",
+     "from": [
+      -327.3,
+      -650.0,
+      109.1
+     ],
+     "to": [
+      1172.7,
+      -650.0,
+      309.1
+     ],
+     "distance_m": 15.0,
+     "landed_at_s": 0.45,
+     "destroyed_at_s": null,
+     "outcome": "SURVIVED",
+     "watched_s": 8.05,
+     "world_still_up": true,
+     "last": {
+      "t": 8.0,
+      "z": 86.7,
+      "falling": false
+     },
+     "seconds_standing_before_loss": null
+    },
+    "far": {
+     "arm": "far",
+     "from": [
+      -327.3,
+      -650.0,
+      109.1
+     ],
+     "to": [
+      1200.0,
+      60000.0,
+      912.0
+     ],
+     "distance_m": 606.7,
+     "landed_at_s": 1.0,
+     "destroyed_at_s": 1.7,
+     "outcome": "DESTROYED",
+     "watched_s": 1.7,
+     "world_still_up": true,
+     "last": {
+      "t": 1.65,
+      "z": 75.2,
+      "falling": false
+     },
+     "seconds_standing_before_loss": 0.7
+    },
+    "near_distance_m": 15.0,
+    "far_distance_m": 606.7,
+    "note": "GREEN: the Dog goes down with the cells it LEFT, not the ones it arrived in, and the fix is to stop the Dog being unloadable -- spatially-loaded off, or spawned at runtime -- rather than anything about nations or their ground. RED with both destroyed: teleporting the Dog at all is fatal and the nations are incidental"
+   }
+  }
+ ],
+ "arms": {
+  "near": {
+   "arm": "near",
+   "from": [
+    -327.3,
+    -650.0,
+    109.1
+   ],
+   "to": [
+    1172.7,
+    -650.0,
+    309.1
+   ],
+   "distance_m": 15.0,
+   "landed_at_s": 0.45,
+   "destroyed_at_s": null,
+   "outcome": "SURVIVED",
+   "watched_s": 8.05,
+   "world_still_up": true,
+   "last": {
+    "t": 8.0,
+    "z": 86.7,
+    "falling": false
+   },
+   "seconds_standing_before_loss": null
+  },
+  "far": {
+   "arm": "far",
+   "from": [
+    -327.3,
+    -650.0,
+    109.1
+   ],
+   "to": [
+    1200.0,
+    60000.0,
+    912.0
+   ],
+   "distance_m": 606.7,
+   "landed_at_s": 1.0,
+   "destroyed_at_s": 1.7,
+   "outcome": "DESTROYED",
+   "watched_s": 1.7,
+   "world_still_up": true,
+   "last": {
+    "t": 1.65,
+    "z": 75.2,
+    "falling": false
+   },
+   "seconds_standing_before_loss": 0.7
+  }
+ },
+ "props": {
+  "is_spatially_loaded": "True",
+  "actor_label": "unreadable: Exception",
+  "folder_path": "unreadable: Exception",
+  "class": "BP_RelayDog_C",
+  "package": "PersistentLevel"
+ },
+ "finished": "2026-09-28 06:42:57",
+ "seconds": 36.96,
+ "log": "C_PROPS PASS the Dog's spatial-loading state can be read off the actor {'is_spatially_loaded': 'True', 'actor_label': 'unreadable: Exception', 'folder_path': 'unreadable: Exception', 'class': 'BP_RelayDog_C', 'package': 'PersistentLevel'}\nC_RAN PASS both a near hop and the far placement ran in this session {'near': 'SURVIVED', 'far': 'DESTROYED'}\nC_FAR PASS the far placement still destroys the Dog in this session {'far': {'arm': 'far', 'from': [-327.3, -650.0, 109.1], 'to': [1200.0, 60000.0, 912.0], 'distance_m': 606.7, 'landed_at_s': 1.0, 'destroyed_at_s': 1.7, 'outcome': 'DESTROYED', 'watched_s': 1.7, 'world_still_up': True, 'last': {'t': 1.65, 'z': 75.2, 'falling': False}, 'seconds_standing_before_loss': 0.7}, 'note': 'RED means the fault did not reproduce here and the near arm proves nothing by surviving -- both would simply have survived'}\nC_NEAR PASS a hop that stays inside the streamed cell SURVIVES, so it is the distance and not teleporting as such {'near': {'arm': 'near', 'from': [-327.3, -650.0, 109.1], 'to': [1172.7, -650.0, 309.1], 'distance_m': 15.0, 'landed_at_s': 0.45, 'destroyed_at_s': None, 'outcome': 'SURVIVED', 'watched_s': 8.05, 'world_still_up': True, 'last': {'t': 8.0, 'z': 86.7, 'falling': False}, 'seconds_standing_before_loss': None}, 'far': {'arm': 'far', 'from': [-327.3, -650.0, 109.1], 'to': [1200.0, 60000.0, 912.0], 'distance_m': 606.7, 'landed_at_s': 1.0, 'destroyed_at_s': 1.7, 'outcome': 'DESTROYED', 'watched_s': 1.7, 'world_still_up': True, 'last': {'t': 1.65, 'z': 75.2, 'falling': False}, 'seconds_standing_before_loss': 0.7}, 'near_distance_m': 15.0, 'far_distance_m': 606.7, 'note': 'GREEN: the Dog goes down with the cells it LEFT, not the ones it arrived in, and the fix is to stop the Dog being unloadable -- spatially-loaded off, or spawned at runtime -- rather than anything about nations or their ground. RED with both destroyed: teleporting the Dog at all is fatal and the nations are incidental'}\n"
+}
