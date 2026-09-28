@@ -4,7 +4,7 @@
 > repository evidence does not. Update it whenever meaningful state changes and
 > before ending a session. Never rely on `/resume` as the sole record.
 
-**Most recent session: 2026-09-27, the PRIVATE-BETA COMPLETION pass. Read §000b, then §000.**
+**Most recent session: 2026-09-27, the MVP REPRIORITISATION pass. Read §000c, then §000b, then §000.**
 > The paragraph below it is the record of the session before that.
 
 **Most recent session:** 2026-09-08, the **Claude Code cloud session**. Read
@@ -155,6 +155,93 @@ Full scorecard, weights and both remaining paths in
 `docs/JULIUS_BETA_READINESS.md`. The three highest-value next moves, in order:
 land PR #286 (founder); build the claim store; buy one paid run whose bundle
 records every served model.
+
+---
+
+### 000c. MVP REPRIORITISATION 2026-09-27 — THE LOOP IS THE PRODUCT
+
+**Founder directive:** /MAS and every other sophisticated orchestration addition
+are **POST-MVP / POST-BETA CAPABILITY**. Not a blocker, not a readiness deduction,
+not a place engineering time goes. The scorecard never carried a /MAS row, so no
+number moved; it is recorded here so nobody re-derives it.
+
+**The objective is one loop:** objective → Prompt Architect → Task Contract →
+Coding/Execution Agent → tools → Project Brain/evidence → Independent Reviewer →
+repair when necessary → re-review → verified completion → result returned. Every
+change is judged by whether it makes that loop more reliable, general, truthful,
+recoverable or useful, across software, game, professional and practical work.
+
+#### What this pass did, in that order of value
+
+**1. BREADTH — one rubric line was making Julius a coding-only agent.** Every
+end-to-end proof drove a code mission. The audit found the lifecycle already
+general: a non-code deliverable is a FILE, so it has a real diff and travels the
+ordinary `build` path with `requiredChecks` empty (the contract already says
+that is honest) and `requiredEvidence` mission-supplied. One thing was in the way
+— the implementation rubric's fourth judge asked for TEST evidence by name, which
+would have had a reviewer reject a correct report for lacking something its
+contract never asked for. It now asks for the evidence THE CONTRACT requires,
+which is already in the review prompt. `julius-mission-breadth.e2e` then drives a
+Category C professional-work mission and a Category B game-tooling mission to
+COMPLETED with no tests in either, and a rejected document to repair rather than
+completion. The limit is named in the test: an implementation review still needs
+a diff, so a mission whose result is not a file (a message sent, a booking made)
+has nothing to show yet.
+
+**2. THE DATABASE/RUNTIME BRIDGE — mounted.** The founder made the deployment
+decision. `GET /relay-api/julius/runs/<id>/<run|slots|tasks|evidence|verification|timeline>`
+on the bridge, operator-only, read-only, every answer `JuliusRuntimeApi`'s own.
+Composed over the SAME `createJuliusPostgresRuntimeStore` the mission job writes
+through — one state authority, a second READER. With no `DATABASE_URL` it answers
+503 naming the variable and never an empty run. This is also the first
+composition root the subagent and lifecycle PostgreSQL repositories ever had.
+`relay:bridge:build` now externalises `pg` like the mission bundle does. Nine
+route cases over a mission the harness really ran; the harness manifest declares
+the module and is OK. NOT yet exercised from a running bridge against a real
+PostgreSQL — that is the paid-run environment.
+
+**3. THE EVAL LAYER WAS AN EMPTY PROJECTION.** The trajectory's `providerId`,
+`usdMicros`, `inputTokens`, `outputTokens` and `durationMs` were null on every
+successful dispatch — the coordinator had them and returned
+`{status, workerId, duplicate}` — so every cost and duration
+`summariseJuliusEvals` ever reported was of a column nobody wrote. Fixed at the
+coordinator (`JuliusAttemptMeasurement`), then on the failure path too: a failed
+attempt that billed now carries its spend, so a mission that spent and then
+failed no longer reports a total biased low. Found by
+`julius-evidence-completeness.e2e`, which now guards every field the brief names.
+
+**4. THE REVIEWER COULD BE A SWARM MEMBER.** A sub-agent could carry
+`role: INDEPENDENT_REVIEWER` under an ordinary task type. Reproduced red, guarded
+one role wide, pinned.
+
+**5. THE LEARNING LOOP'S OTHER HALF.** Prior-mission residue (another task's,
+another role's, SECRET) is excluded from the improved mission's packet AND
+reported, with the reviewer still receiving its own material; and the cost/token
+dimensions are now genuinely measurable, closing a case of mine that had passed
+vacuously.
+
+#### Recorded as post-MVP, so nobody re-audits them
+
+- **/MAS** — not implemented; `julius-subagent-runtime` correctly describes a
+  regular sub-agent, which the founder distinguished from a /MAS clone.
+- **Claim store** — only the minimum for truthful reuse is in scope, and the
+  derivation already in place (standing from `entry_kind` + `evidence_ids`)
+  covers context integrity today. Contradiction graphs and lineage inference are
+  deferred by directive. Corrected value ≈ +2.5, not +6.
+- **PSP** — already governed by three surface tests; the `src/relay/psp/`
+  subsystem is an entitlement credential, not a lifecycle name. Nothing to do.
+
+#### Measured
+
+`src/relay/mission/julius` + `role-slots` + `relay-bridge/julius` at
+`--maxWorkers=2`: **2,450 passed, 1 failed** — `julius-research-authority`,
+identical on the unmodified base. Bridge-wide regression after the mount: see the
+commit that lands it. A whole-suite run is still unobtainable on this host.
+
+**JULIUS BETA READINESS: 77%** (74 → 75 → 76 → 77). Row 12 (Wonderland) rose
+from 60% to 80% on the mount; the remaining points there are a browser session's
+read access (a product decision) and exercising the mount against a real
+PostgreSQL from a running bridge.
 
 ---
 

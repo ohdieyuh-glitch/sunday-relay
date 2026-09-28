@@ -53,25 +53,46 @@ argument and refuses before it reads anything.
    deterministic tiebreak. `lastSequence` is the ledger position the store
    allocates on append.
 
+## How it is served
+
+**`GET /relay-api/julius/runs/<runId>/<view>`** on the bridge, where `<view>` is
+one of `run`, `slots`, `tasks`, `evidence`, `verification`, `timeline`.
+Operator `Bearer` credential; `X-Relay-Tenant` and `X-Relay-Project` headers name
+the scope, never the path. Read-only: any other method answers 405.
+
+**Every answer is `JuliusRuntimeApi`'s own, verbatim.** `relay-bridge/julius-state-routes.ts`
+maps a path to a method and a refusal to a status code, and computes nothing
+about a mission. The API is composed over the SAME `createJuliusPostgresRuntimeStore`
+the mission job writes through, so there is still exactly one state authority —
+Julius's durable rows — and this is a second READER of it, not a second writer
+and not a second opinion.
+
+**With no `DATABASE_URL` the family answers 503 and names the variable.** It never
+answers an empty run. "No durable state is reachable from this process" and "this
+mission has done nothing" are different facts, and a client that confused them
+would tell a founder their mission had done nothing. This is the one deployment
+decision the mount needed — the long-lived HTTP server now holds a read
+connection to Julius's store when configured — and it is made fail-closed rather
+than assumed.
+
+**Refusals a client will see and must render as what they are:** `401
+operator_required`; `503 julius_state_unavailable` (with the missing variable);
+`404 run_not_found` — and a run that exists but belongs to another project
+answers the same 404, deliberately, so the route cannot be used to enumerate
+other tenants' run ids.
+
 ## What is NOT served yet, and what it would take
 
-**Nothing mounts `JuliusRuntimeApi`.** No bridge route and no CLI action reaches
-it; the only callers today are its own tests. So the contract exists, is proven
-against a real mission (`julius-slot-view.e2e.test.ts`), and is not yet reachable
-over a transport.
+**A browser session cannot read it yet.** The operator credential governs this
+surface because it already governs everything that spends money; which fields a
+browser session may see — `providerId` among them — is a product decision that
+comes after the mount, not before it. Wonderland's own client reaches the bridge
+through the operator path today.
 
-**AND THE REASON IS NOT THE CREDENTIAL QUESTION**, which is what this document
-first said. `relay-bridge/server.ts` has **no database**: no pool, no
-`DATABASE_URL`, no import of `pg`. The only process holding durable Julius state
-is the mission job (`julius-live-mission.cjs`). So mounting means giving the
-long-lived HTTP server a PostgreSQL connection — a deployment decision with its
-own failure mode, its own configuration and its own refusal path when unset —
-rather than a route to add beside the others.
-
-The credential question is real and comes AFTER it: the bridge already
-distinguishes an operator `Bearer` from a browser `Relay-Session`, and which may
-read a mission's slots, and whether a browser session may see `providerId` at all,
-is a product decision. But a session cannot read what the process cannot reach.
+**Control is not mounted.** Pause, resume, cancel and approval decisions exist on
+the API and are deliberately not served: they change a run, and a run is changed
+by the process that owns it. `approvers` refuses every approval for the same
+reason.
 
 Two further gaps, both recorded rather than worked around:
 
