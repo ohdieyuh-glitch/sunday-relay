@@ -66,3 +66,31 @@ translucent version would be authored.
 - Neither surface **clips** at gameplay distance at night.
 - The shaped material **already reaches** the approved plume's height, at every gain from 60 to 180.
 - Gain is therefore **not** the lever, and the two-material choice is **not** the question.
+
+---
+
+## Tried: softening the material. Necessary, and not sufficient.
+
+`M_WL_Fire`'s `EdgeSoftness` is a **power exponent** applied to `1 - |2U - 1|` — a curve that is 1 down the
+middle of the ribbon and 0 at both edges. An exponent **below** one pushes that curve *up*: uniformly bright
+almost all the way across, then a drop to nothing in the last few per cent. That is a **hard edge**.
+
+It was set to **0.85**, so the parameter was producing the opposite of its own name. `TipFalloff` at 1.45 was
+mild for the same reason. Raised to 2.6 and 2.2, material rebuilt, re-captured at gameplay distance at night.
+
+**The flame is still flat and hard-edged.** Reach is unchanged (89.9–94.0% against the approved 98.1%) and
+nothing clips, but photographed side by side the softened shaped material is not visibly softer than before.
+
+So the edge that reads as "plastic" is **not** the falloff across a ribbon face — it is the flame's own
+silhouette against the background. Correcting the exponents was right (0.85 was backwards on its own terms)
+and it is kept, but it does not reach the defect. It is also inert by default, since `wl.Look.FireMaterial`
+ships at 0.
+
+## What item 4 actually needs
+
+The founder named it in their first sentence and it is not a tuning job: **Niagara, or camera-facing soft
+translucent cards**. A flame built from opaque geometry has a polygon outline, and no amount of shading
+*within* those polygons removes it. Every lever available from code — two materials, a gain from 60 to 180,
+and now the shaping exponents — has been measured and none of them touches the silhouette.
+
+That is asset authoring rather than a parameter, and it is the honest remaining scope for this item.
