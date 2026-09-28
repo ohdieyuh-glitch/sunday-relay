@@ -754,3 +754,25 @@ The inverse is not true. Had the ladder shown a clean descent, memory pressure w
 alternative explanation and the run would have needed repeating on a quiet machine. So: when a run overlaps
 a degraded machine, ask which DIRECTION the degradation pushes. Noise-shaped faults invalidate positive
 findings far more readily than negative ones.
+
+## Before calling a click failure a product defect, ask whose click it was
+
+Item 7's six red clauses all read as "the HUD buttons do not work". They do not establish that, and the
+distinction matters more than the diagnosis:
+
+- `SimulateNavTileClick` increments the counter **and opens the surface** for all five tiles. The button, its
+  handler, the counter, the Id mapping and the navigation all work end to end.
+- What fails is a *synthetic* pointer click — Slate events this harness fabricates and routes itself. A
+  person clicking the strip generates real OS input that never goes near that code.
+
+So the six failures may be entirely a limitation of the test harness, with the product fine. They may also be
+a real defect that the harness happens to expose. **Nothing measured so far separates those two**, and
+reporting either one as settled would be a guess.
+
+The cheap discriminator is not another probe: it is one human clicking BRAIN in a running editor. Until then
+the honest statement is "the buttons are wired correctly and the automated pointer route cannot complete a
+click on them", not "the buttons are broken".
+
+General form: **a synthetic-input harness that fails is evidence about the harness until something rules the
+harness out.** The four probes that eliminated capture theft, window stacking, app focus and geometry
+mismatch all narrowed *where* the synthetic click dies; none of them showed a real click would die there too.
