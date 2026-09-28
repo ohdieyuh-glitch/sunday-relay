@@ -190,3 +190,41 @@ it is not one of the two.
 The robe has to follow the gait: either split it into leg-parented panels so each side swings with its leg,
 or drive a swing on the robe part from the stride phase the pose already publishes. Both are real work in the
 generator and the runtime, and neither is a cosmetic offset — this is the rigging cause the founder asked for.
+
+### The gliding hypothesis is dead
+
+`zc_walk_motion`: the Dog driven forward with movement input every frame, camera riding beside it, ten
+frames per skin, measuring how much the figure's own silhouette changes frame to frame. Relay OG is the
+reference and W02 confirms it moved, so this is a walking Dog and not a standing one.
+
+| skin | mean silhouette change | vs Relay OG |
+|---|---|---|
+| celestial_light | 0.1353 | 0.75× |
+| **relay_og** | **0.1809** | — |
+| apollo | 0.2312 | 1.28× |
+| skeleton_flame | 0.2603 | 1.44× |
+| **arden_infernal** | **0.3097** | **1.71×** |
+
+**The two skins with floor-length body-parented drapery move MORE than Relay OG, not less.** Apollo and
+Arden are 1.28× and 1.71×. Nothing glides; every skin's visible outline moves at least 0.75× as much as the
+reference.
+
+So the drapery hypothesis was wrong. It was well-formed — the drapery *is* body-parented, the legs *are*
+hidden — and the measurement says the visible shape follows the walk anyway.
+
+### Item 3: five causes eliminated, none found
+
+| candidate | verdict |
+|---|---|
+| pose not copied | **eliminated** — field for field, 23 fields, standing / walking / mission |
+| per-skin root offset | **eliminated** — identical, z spread 0.0 |
+| per-skin foot plane | **eliminated** — identical, 3.720, in the files actually loaded |
+| ground contact when standing | **eliminated** — observed consistent from one camera |
+| visible figure not following the gait | **eliminated** — every skin ≥ 0.75× Relay OG, drapery skins the highest |
+
+That is an honest dead end rather than a solved item, and worth saying plainly.
+
+**One thing the data raises without settling:** Arden Infernal's outline changes **1.71×** as much as Relay
+OG's. More motion is not automatically better — drapery swinging harder than the body under it can read as
+wrong just as readily as not swinging at all. That is a qualitative judgement and it belongs to the founder,
+who has the footage and the complaint.
