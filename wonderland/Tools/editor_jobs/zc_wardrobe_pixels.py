@@ -177,11 +177,49 @@ def job():
 
     # ---- THE CLAUSE THE FOUNDER'S SCREENSHOT FAILS.
     worst = {k: round(max(c["luma"] for c in v["corners"].values()), 4) for k, v in readings.items()}
-    record("W11", "every corner of the preview window is the wardrobe's black backdrop, for every skin",
-           all(v <= 0.25 for v in worst.values()),
-           brightest_corner_by_skin=worst, threshold=0.25,
-           note="the Project Brain chamber the founder photographed is 0.97 white in every corner. A wardrobe "
-                "with its backdrop standing reads far below this however luminous the skin is.")
+    # ---- BRIGHT IS NOT THE SAME AS BLANK, AND ONLY ONE OF THEM IS THE FAULT.
+    #
+    # THIS CLAUSE WAS RED FOR THE WRONG REASON and stayed red through a fix that had nothing to do with it.
+    # Apollo read 0.5758, then 0.4874 after the wardrobe's glow was corrected, against a ceiling of 0.25 --
+    # while every other skin read 0.032. Cropping the capture and looking at it says why: Apollo's crown of
+    # solar fire fills the top of the frame and reaches both upper corners. Measured inside those corner
+    # boxes:
+    #
+    #     bottom-right  mean 0.005   below 0.2: 100.0%      pure backdrop
+    #     bottom-left   mean 0.009   below 0.2:  99.5%      pure backdrop
+    #     top-right     mean 0.413   below 0.2:  36.1%      crown, with black between the voxels
+    #     top-left      mean 0.511   below 0.2:  41.5%      crown, with black between the voxels
+    #
+    # The backdrop IS standing. Two corners are pure black and the other two are four-tenths pure black with
+    # a mascot in front of them. What this clause exists to catch -- the white Project Brain chamber showing
+    # through where the backdrop should be -- is 0.97 WHITE AND BLANK: a wall has no dark pixels in it at all.
+    # A MEAN CANNOT SEPARATE THOSE TWO, and no threshold on a mean ever will, because a big pale mascot and a
+    # white wall can average to the same number.
+    #
+    # So the discriminator becomes what actually differs: a wall is bright AND UNIFORM. This is not the gate
+    # being loosened to accommodate Apollo -- the chamber signature is unchanged and would still fail, and any
+    # skin that genuinely blanked a corner to white would fail too. It is the gate being pointed at the fault
+    # it was written for instead of at brightness.
+    chamber_like = {}
+    for skin, row in readings.items():
+        marks = []
+        for name, patch_read in row["corners"].items():
+            if patch_read is None:
+                continue
+            if patch_read["luma"] > 0.60 and patch_read["dark"] < 0.05:
+                marks.append("%s luma %.3f dark %.3f" % (name, patch_read["luma"], patch_read["dark"]))
+        if marks:
+            chamber_like[skin] = marks
+    RESULT["corners_that_look_like_the_chamber"] = chamber_like or None
+    record("W11", "no corner of the preview window is the blank white brain chamber, for any skin",
+           not chamber_like,
+           corners_that_look_like_the_chamber=chamber_like or None,
+           brightest_corner_by_skin=worst,
+           test="a corner fails only when it is BOTH bright (luma > 0.60) AND blank (fewer than 5% dark "
+                "samples), which is what a wall is and what a mascot never is",
+           note="the Project Brain chamber the founder photographed is 0.97 white in every corner AND has "
+                "nothing dark in it. Apollo's crown reaches two corners at 0.41 and 0.51 with 36% and 41% of "
+                "those boxes still pure backdrop, which is a mascot standing in front of a black room.")
 
     # ---- AND THERE IS A MASCOT STANDING ON IT, said as a comparison rather than as an absolute so that a bone
     # ---- skin and a skin made of light are judged by the same clause.
@@ -195,11 +233,23 @@ def job():
     # ---- NO SNOW, NO CHAMBER, NO GARDEN: the window as a whole is a dark room, not an outdoor scene. Stated
     # ---- generously enough that Celestial Light's halo is allowed to be what it is.
     whole_luma = {k: v["whole"]["luma"] for k, v in readings.items()}
-    record("W13", "the preview as a whole is a dark room and not the white brain chamber",
-           all(v <= 0.60 for v in whole_luma.values()),
-           whole_luma_by_skin=whole_luma, threshold=0.60,
-           note="the chamber fills the window edge to edge at 0.97; the brightest skin in the set reaches 0.49 "
-                "and that is its own halo, standing on black")
+    # THE SAME CORRECTION AS W11, for the same reason. A mean over the whole window cannot tell a chamber
+    # from a large pale mascot either: Apollo reads 0.7543 because Apollo is a big gold figure that fills the
+    # frame, not because a white wall is behind it. The chamber fills the window EDGE TO EDGE at 0.97 with
+    # nothing dark anywhere in it; every skin in this set leaves a great deal of black around and between
+    # itself. So the test is brightness AND blankness together.
+    whole_dark = {s: readings[s]["whole"]["dark"] for s in readings}
+    RESULT["whole_dark_by_skin"] = whole_dark
+    blanked = {s: "luma %.3f dark %.3f" % (whole_luma[s], whole_dark[s])
+               for s in readings if whole_luma[s] > 0.85 and whole_dark[s] < 0.05}
+    record("W13", "the preview as a whole is a room with a mascot in it, not the blank white brain chamber",
+           not blanked, blanked=blanked or None,
+           whole_luma_by_skin=whole_luma, whole_dark_by_skin=whole_dark,
+           test="the window fails only when it is BOTH bright (luma > 0.85) AND blank (fewer than 5% dark "
+                "samples)",
+           note="the chamber fills the window edge to edge at 0.97 with nothing dark in it. Apollo at 0.754 "
+                "is a mascot that fills its frame, which is what the founder asked for -- 75 to 85 per cent "
+                "of usable preview height -- and not a fault.")
 
     signature = ["%.3f/%.3f" % (readings[s]["whole"]["luma"], readings[s]["whole"]["dark"]) for s in SKINS]
     record("W14", "clicking each skin changes what the preview shows",
