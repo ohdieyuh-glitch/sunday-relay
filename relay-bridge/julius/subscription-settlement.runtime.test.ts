@@ -207,11 +207,13 @@ const REVIEW_ACCEPT = { kind: 'succeed' as const, evidence: [{ type: 'REVIEW_FIN
 /** Mission 6's own terms: $5, one repair round. */
 const CEILING = 5_000_000;
 
-async function drain(loop: JuliusRunLoop, maxTicks = 16): Promise<void> {
+/** Ticks until nothing is claimed; returns how many ticks that took. */
+async function drain(loop: JuliusRunLoop, maxTicks = 16): Promise<number> {
   for (let tick = 0; tick < maxTicks; tick += 1) {
     const report = await loop.tick(scope);
-    if (report.claimed === 0) return;
+    if (report.claimed === 0) return tick;
   }
+  return maxTicks;
 }
 
 /**
@@ -256,7 +258,7 @@ async function runMission(mode: ClaudeAuthMode | undefined, sessions: readonly S
     provider: claudeProvider(mode, sdk.queryFn),
   });
   harness.adapters.set(CODER.adapterId, live as never);
-  await drain(harness.loop);
+  expect(await drain(harness.loop), 'the mission settles well inside the tick budget').toBeLessThan(16);
 
   const { entries } = await harness.store.timeline({ runId: 'run-1', projectId: 'prj-1', sinceSequence: 0, limit: 10_000 });
   const settledForBuild = entries.filter((entry) => entry.type === 'budget.settled' && entry.taskId === 'build-1');
