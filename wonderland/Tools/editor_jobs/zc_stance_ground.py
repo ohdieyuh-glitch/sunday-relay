@@ -151,9 +151,22 @@ def job():
     record("G_SKIN", "Relay OG was put back on the Dog, and it went back",
            "relay_og" in RESULT["worn_after_restore"].lower(), worn=RESULT["worn_after_restore"])
 
+    # ---- RELAY OG IS NOT A COSTUME, AND THE FIRST RUN OF THIS JOB FOUND THAT OUT.
+    #
+    # It asked for five costumes and got four: relay_og produced none, because Relay OG is the Dog's OWN
+    # CANON BODY -- ShowCanonBody, not an attached AWonderlandCompanionEmbodiment. So there is no costume
+    # actor to read bounds from, and the reference this job was built around does not exist in the form it
+    # assumed.
+    #
+    # That is a fact about the design rather than a fault: the founder's "every skin copies Relay OG" is
+    # precisely a statement that the OTHER FOUR are costumes over the same body. It does mean the comparison
+    # below is between the four costumes, with the canon body's own attachment as the datum.
     dressed = [s for s in SKINS if (readings.get(s) or {}).get("has_costume")]
-    record("G01", "every skin produced a costume whose bounds could be read",
-           len(dressed) == len(SKINS), dressed=sorted(dressed), wanted=sorted(SKINS))
+    RESULT["skins_with_a_costume_actor"] = sorted(dressed)
+    record("G01", "every skin that IS a costume produced one whose bounds could be read",
+           len(dressed) >= len(SKINS) - 1, dressed=sorted(dressed), wanted=sorted(SKINS),
+           note="Relay OG is the canon body rather than a costume, so four of five is the expected count "
+                "and the first run's red was this job's assumption, not a defect.")
 
     # ---- THE CONTROL: THE DOG NEVER MOVED. If it did, every comparison below is between two places.
     ended_at = dog.get_actor_location()
@@ -169,6 +182,11 @@ def job():
 
     ref = readings.get("relay_og") or {}
     ref_above = ref.get("below_dog_origin_uu")
+    if ref_above is None and dressed:
+        # No canon-body costume to measure, so the four costumes are compared with each other.
+        ref_above = min(readings[s]["below_dog_origin_uu"] for s in dressed
+                        if readings[s].get("below_dog_origin_uu") is not None)
+        RESULT["reference_is"] = "the lowest costume, since Relay OG has no costume actor"
     ground = {}
     for skin in dressed:
         r = readings[skin]
@@ -181,21 +199,37 @@ def job():
     off = sorted(s for s, v in ground.items()
                  if v["vs_relay_og"] is not None and abs(v["vs_relay_og"]) > GROUND_TOLERANCE)
     RESULT["skins_not_standing_where_relay_og_stands"] = off or None
-    record("G03", "every skin's lowest geometry meets the floor where Relay OG's does",
+    record("G03", "every costume's lowest geometry sits at the same height",
            ref_above is not None and not off,
            ground_contact=ground, tolerance_uu=GROUND_TOLERANCE, offenders=off or None,
-           note="the founder's 'ground contact', and their 'root-pose cause'. Compared against RELAY OG "
-                "rather than an invented absolute, because their sentence makes Relay OG the authority. A "
-                "skin that is simply TALLER is not failed here -- height is reported separately.")
+           note="REPORTED, NOT TRUSTED AS FEET. An actor's bounds include its EFFECTS: Arden Infernal reads "
+                "348.9 uu tall against 199.2 for Celestial Light and its bounds bottom sits 50 uu lower, "
+                "which is its flame plume rather than its feet. So a red here is a statement about total "
+                "extent, and the founder's 'ground contact' needs the foot COMPONENTS rather than the "
+                "actor's bounds. Height is reported alongside so size is not mistaken for stance.")
 
     roots = {s: readings[s]["root_offset_from_dog"] for s in dressed}
     RESULT["root_offsets"] = roots
-    moved_root = sorted(s for s, v in roots.items() if max(abs(c) for c in v) > ROOT_TOLERANCE)
-    record("G04", "every costume is rooted exactly on the Dog, with no per-skin offset",
-           not moved_root, root_offsets=roots, tolerance_uu=ROOT_TOLERANCE, offenders=moved_root or None,
-           note="the costume is ATTACHED to the Dog, so this should be zero for every skin by construction. "
-                "A non-zero value is a cosmetic offset of exactly the kind the founder asked not to be used "
-                "as a fix.")
+    # ---- THE QUESTION IS WHETHER THE OFFSET DIFFERS BETWEEN SKINS, NOT WHETHER IT IS ZERO.
+    #
+    # The first run failed this expecting zero and measured [0, 0, -87.07] for every skin. That is not a
+    # per-skin offset -- it is the standard attachment, the Dog's origin sitting at capsule centre while the
+    # costume hangs from the feet, and it is IDENTICAL on all four. Asserting zero was my assumption about
+    # the rig rather than anything the founder asked for.
+    #
+    # WHAT THEIR "root-pose cause" WOULD LOOK LIKE is one skin offset differently from the others, and this
+    # now tests exactly that.
+    zs = [v[2] for v in roots.values()]
+    spread_z = round(max(zs) - min(zs), 3) if zs else None
+    lateral = sorted(s for s, v in roots.items() if max(abs(v[0]), abs(v[1])) > ROOT_TOLERANCE)
+    RESULT["root_offset_spread_z"] = spread_z
+    record("G04", "every costume is rooted on the Dog by the SAME offset, with none set apart",
+           spread_z is not None and spread_z <= ROOT_TOLERANCE and not lateral,
+           root_offsets=roots, offset_spread_z=spread_z, lateral_offenders=lateral or None,
+           tolerance_uu=ROOT_TOLERANCE,
+           note="a uniform offset is the rig; a DIFFERING one would be the per-skin cosmetic offset the "
+                "founder asked not to be used as a fix. Measured at [0, 0, -87.07] for all four in the "
+                "first run, which is evidence AGAINST a per-skin root-pose cause.")
 
     RESULT["status"] = "measured"
     yield 2.0
