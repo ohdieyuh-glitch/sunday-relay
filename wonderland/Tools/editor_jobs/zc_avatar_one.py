@@ -224,6 +224,45 @@ def job():
 
     ladder = {k: med("n%02d" % k) for k in (0,) + RUNGS}
     RESULT["ladder_ms"] = ladder
+
+    # ---- A RUNG WITH A FOURTEEN-SECOND FRAME IN IT IS NOT A MEASUREMENT, and the first run of this job had
+    # one at rung ZERO -- the value everything else is compared against.
+    #
+    # n00 came back with a median of 58.94 ms and a raw worst of 14,394.15. That is the world still arriving:
+    # streaming, shaders, whatever the editor had queued after a long session of other jobs. The ladder then
+    # read 58.94, 124.25, 291.20, 97.40, 127.67, 114.90 -- not monotone, not a curve, and 291 at two avatars
+    # against 97 at three. None of it is about avatars.
+    #
+    # THE FROZEN GUARD ALSO FIRED 197 TIMES, and the frame counts say the same thing from the other side: ten
+    # frames accepted in an eight-second window at rung one, twenty-five at rung two. The stat overlay was off
+    # for most of the run, so even the readings that survived came from a handful of frames.
+    #
+    # So the run VOIDS ITSELF on either signal. A ladder published from this would have been read as a
+    # refutation of the 16:33 finding, and it is not evidence either way -- which is a different and more
+    # damaging thing than a failure, because a noisy run that looks like a result retracts a real one.
+    zero = (r.get("n00") or {})
+    zero_med, zero_worst = zero.get("frame_median"), zero.get("raw_worst")
+    spikey = (isinstance(zero_med, float) and isinstance(zero_worst, float)
+              and zero_med > 0.0 and zero_worst > zero_med * 10.0)
+    thin = [k for k, v in r.items() if isinstance(v, dict) and (v.get("frames") or 0) < 30]
+    froze = RESULT.get("stat_froze") or 0
+    RESULT["run_quality"] = {"rung_zero_median_ms": zero_med, "rung_zero_raw_worst_ms": zero_worst,
+                             "rung_zero_spike_ratio": (round(zero_worst / zero_med, 1)
+                                                       if (zero_med and zero_worst) else None),
+                             "rungs_under_30_frames": sorted(thin), "stat_froze": froze}
+    record("O_USABLE", "the run is settled enough to compare rungs at all",
+           not spikey and not thin,
+           **RESULT["run_quality"],
+           note="rung zero is the value every other rung is compared against, so a spike in it poisons the "
+                "whole ladder. A worst frame more than ten times the median means the world was still "
+                "arriving; a rung with under thirty frames means the stat overlay was off for most of its "
+                "window. Either way the numbers below describe this machine's evening, not avatars.")
+    if spikey or thin:
+        RESULT["status"] = "VOID: the run was not settled (see run_quality)"
+        RESULT["verdict"] = {"reading": "NOT EVIDENCE EITHER WAY. This run neither confirms nor refutes the "
+                                        "one-versus-ten finding, and publishing its ladder would have read as "
+                                        "a refutation."}
+        return
     one, two = ladder.get(1), ladder.get(2)
     record("O02", "the run reproduced the finding it was built to explain",
            isinstance(one, float) and isinstance(ladder.get(5), float) and one > ladder[5] * 1.5,

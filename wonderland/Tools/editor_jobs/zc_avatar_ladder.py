@@ -471,7 +471,19 @@ def job():
     verdict["what_a_hitch_needs"] = ("the raw tails, not the medians. A median answers 'what does it cost'; "
                                      "the founder asked 'why does it stutter', which only the tail can answer.")
 
-    # ---- ONE AVATAR COSTS THREE TIMES WHAT TEN DO, AND IT REPRODUCES IN BOTH DIRECTIONS.
+    # ---- ONE AVATAR COST THREE TIMES WHAT TEN DID AT 16:33, AND IT HAS NOT REPRODUCED SINCE. WITHDRAWN.
+    #
+    # zc_avatar_one was built to explain this and its first run did not reproduce it. That run also voided
+    # itself, so it is not a refutation either: rung zero carried a 14,394 ms raw worst against a 58.94 ms
+    # median -- the world still arriving -- the frozen-stat guard fired 197 times, and rungs came back with ten
+    # and twenty-five accepted frames in eight-second windows. The ladder read 58.94, 124.25, 291.20, 97.40,
+    # 127.67, 114.90: not a curve.
+    #
+    # SO THE STATUS IS UNCONFIRMED, NOT TRUE AND NOT FALSE. The 16:33 reading was internally consistent -- the
+    # instrument repeated to 1.68 ms across eight reads, the cost appeared ascending and descending, and it sat
+    # entirely on the render thread -- and none of that survives a second session failing to show it. What is
+    # below is kept because the reasoning about what it would MEAN is still right, and marked so nobody quotes
+    # it as a measured fact.
     #
     # THE 16:33 RUN, with the instrument finally repeating at 1.68 ms across eight reads of an unchanged world:
     #
@@ -506,6 +518,8 @@ def job():
     down = (RESULT.get("one_avatar_up_vs_down") or {}).get("down")
     if isinstance(single, float) and isinstance(many, float) and single > many * 1.5:
         verdict["one_costs_more_than_ten"] = {
+            "status": "UNCONFIRMED: seen once at 16:33, not reproduced, and the run built to test it voided "
+                      "itself on an unsettled rung zero. Do not quote as a measured fact.",
             "one": single, "ten": many, "one_descending": down,
             "ratio": round(single / max(many, 0.01), 2),
             "render_thread_at_one": ((RESULT.get("descending") or {}).get("1") or {}).get("render_median"),
