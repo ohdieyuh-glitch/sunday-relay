@@ -212,6 +212,11 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-execution-coordinator.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-lease-keeper.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-workspace-attribution.ts', 'CODING AGENT'],
+  // Reached by the live-mission preflight, which asks whether a first-party
+  // subscription login exists before allowing CLAUDE_SUBSCRIPTION mode. It returns
+  // a class and a coarse plan label and never a credential.
+  ['src/relay/connectors/claude-code/capability-probe.ts', 'CODING AGENT'],
+  ['src/relay/connectors/claude-code/contracts.ts', 'CODING AGENT'],
   ['src/relay/mission/julius/julius-policy.ts', 'C.A.R.D. POLICY'],
   ['src/relay/mission/julius/julius-router.ts', 'WORKER REGISTRY / ROUTING'],
   ['src/relay/mission/julius/julius-agent-turn-loop.ts', 'AGENT TURN LOOP'],

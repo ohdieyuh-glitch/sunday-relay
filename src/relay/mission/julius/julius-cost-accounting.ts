@@ -43,9 +43,20 @@
  * mission is holding $3 it has not accounted for" rather than either counting
  * it as spent or letting it read as free.
  * `UNKNOWN` — a settlement arrived and reported nothing. Not zero.
+ * `NOT_APPLICABLE` — there is NO billing event to report, because the dispatch
+ * was not billed through a metered provider account at all. A subscription-backed
+ * worker is the case that needs it: the work happened, the provider is unchanged,
+ * and no per-request charge exists anywhere to be read.
+ *
+ * `NOT_APPLICABLE` IS NOT `UNKNOWN` AND IT IS CERTAINLY NOT ZERO. `UNKNOWN` says a
+ * charge exists and we failed to learn it, which would make a reader keep looking.
+ * A recorded `0` would assert that a billing event happened and cost nothing, which
+ * is the manufactured figure this module exists to refuse. Neither is true of a
+ * subscription dispatch, so it gets its own word — and like every basis outside
+ * `SPEND_BASES` it can never be summed into money anyone was charged.
  */
 export const JULIUS_COST_BASES = [
-  'PROVIDER_REPORTED', 'MEASURED_FROM_USAGE', 'ESTIMATED', 'RESERVED_UNSETTLED', 'UNKNOWN',
+  'PROVIDER_REPORTED', 'MEASURED_FROM_USAGE', 'ESTIMATED', 'RESERVED_UNSETTLED', 'UNKNOWN', 'NOT_APPLICABLE',
 ] as const;
 export type JuliusCostBasis = (typeof JULIUS_COST_BASES)[number];
 

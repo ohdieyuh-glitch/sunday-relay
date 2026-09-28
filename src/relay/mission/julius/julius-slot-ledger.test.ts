@@ -8,7 +8,7 @@ import {
   type JuliusMissionSlotLedger,
 } from './julius-slot-ledger';
 import { juliusSlotEnvelopePolicy, slotRoundShareUsdMicros } from './julius-slot-envelope';
-import { JULIUS_COST_BASES } from './julius-cost-accounting';
+import { JULIUS_COST_BASES, juliusCostComponent, summariseJuliusMissionCost } from './julius-cost-accounting';
 
 /**
  * THE MONEY, AND THE ONE RULE THAT MAKES IT SAFE.
@@ -40,7 +40,27 @@ describe('the vocabularies say what they mean', () => {
   it('names a basis for money that is held and not yet accounted for', () => {
     expect([...JULIUS_COST_BASES]).toEqual([
       'PROVIDER_REPORTED', 'MEASURED_FROM_USAGE', 'ESTIMATED', 'RESERVED_UNSETTLED', 'UNKNOWN',
+      // NOT_APPLICABLE joined the set for the subscription-backed Coding Agent:
+      // the dispatch happened, the provider is unchanged, and NO per-request
+      // billing event exists to report. It is deliberately not UNKNOWN, which says
+      // a charge exists and was not read, and certainly not a recorded zero, which
+      // would assert a billing event that cost nothing.
+      //
+      // THIS ASSERTION IS WHY THE ADDITION WAS DELIBERATE. Extending the
+      // vocabulary failed here, which is exactly what a closed set is for: a new
+      // basis has to be argued into this list rather than appearing in it.
+      'NOT_APPLICABLE',
     ]);
+  });
+
+  it('NOT_APPLICABLE is not a spend basis, so it can never be charged to a slot', () => {
+    // The set above says the word exists. This says what it means for the money,
+    // which is the half a vocabulary test cannot cover on its own.
+    const summary = summariseJuliusMissionCost([
+      juliusCostComponent({ taskId: 'coder', role: 'CODING_AGENT', basis: 'NOT_APPLICABLE', usdMicros: 5_000_000 }),
+    ]);
+    expect(summary.knownUsdMicros, 'the basis decides, never the presence of a figure').toBe(0);
+    expect(summary.complete, 'and a mission carrying one is not completely accounted').toBe(false);
   });
 
   it('names the three places a dispatch\'s money can come from, and no fourth', () => {
