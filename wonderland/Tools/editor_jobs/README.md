@@ -1242,3 +1242,48 @@ fault rather than trusted: substitute `ground_1` for `g1` and it reports UNBOUND
 py_compile reports OK on the same file.
 
     python Tools/find_unbound_names.py Tools/editor_jobs/<job>.py
+
+## When every measured fact is consistent with the thing WORKING, suspect the harness, not the product
+
+H_POINTER stood red for five sessions. Each session eliminated a cause and none found one. What was known:
+
+    under the point 1, down 1, up 1
+    after the down the captor is the target's own SButton
+    the click point is inside the target's own geometry
+    bIsPressed YES between the down and the up
+    and OnClicked never runs
+    while that same button's SimulateClick() runs it every time
+
+Every line of that is what a **working** button looks like. That should have been the signal. A defect narrows
+the space of consistent explanations; this evidence never narrowed it, because the button was fine and the
+thing that was broken was not being measured at all.
+
+The cause was one line of engine source, readable the whole time — UE 5.8 `SButton.cpp:424`:
+
+    bool bEventOverButton = IsHovered();
+
+with the geometry fallback on the next lines guarded by `MouseEvent.IsTouchEvent()`. For a mouse event, hover
+is the only test. **Hover is not carried on the event** — Slate maintains it from real cursor movement — so a
+click routed straight down a widget path leaves the button un-hovered however correct the path is.
+`ExecuteOnClick` is skipped and the up still returns **handled**, which is exactly what made `up 1` read as
+success.
+
+Two rules out of it:
+
+**A harness that can only prove events REACH a widget has not proven the click path runs.** Reaching and
+acting are different claims, and "handled" is the word that blurs them — it means somebody in the path took
+the event, not that the thing you care about happened.
+
+**Read the widget's own source before the fifth session of elimination.** Five rounds of narrowing cost more
+than opening `SButton.cpp` would have on the first day. When a control works (`SimulateClick`) and the routed
+path does not, the difference between those two code paths IS the bug, and it is written down in the engine.
+
+## A retraction that says which results SURVIVE is worth more than one that withdraws everything
+
+The world lane voided a sizing pass after finding the camera was inside a bush — 32 readings of the inside of
+a shrub, including the reference every comparison was anchored to. The useful part of the retraction was the
+separation: the framebuffer readings were void, and the knob readback, the exposure comparison and the
+**caster census** were untouched, because none of those came from a frame.
+
+Withdrawing the whole run would have thrown away a real finding (two directional shadow casters all night)
+that was never in doubt. **When a run is voided, say which of its measurements the fault could not reach.**
