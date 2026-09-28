@@ -85,18 +85,18 @@ export OPENAI_PROMPT_ARCHITECT_MODEL=gpt-5.6-sol
 export RELAY_HOSTED_CODING_MODEL=claude-fable-5
 export RELAY_HERMES_PROVIDER=xai
 export RELAY_HERMES_MODEL=grok-build-0.1
+# HOW THE REVIEWER IS PAID FOR: the workflow's own declaration, which the founder made where the
+# xAI API key is injected. It is true here for the same reason: this launcher, like the workflow's
+# Hermes step, writes XAI_API_KEY into the reviewer's profile, so every review is billed to that
+# key. The reviewer then states API_BILLED on the ledger (`juliusReviewerBillingPath` in
+# relay-bridge/julius/live-workers.ts, parsed as relay-bridge/attestation.ts parses it).
+export RELAY_HERMES_BILLING_MODE=api_billed
 export HERMES_REQUEST_TIMEOUT_SECONDS=480
 # END JOB ENV
 
-# THE THREE LOCAL ADDITIONS. None exists in the workflow, which is what keeps CI unchanged.
+# THE TWO LOCAL ADDITIONS. Neither exists in the workflow, which is what keeps CI unchanged.
 export JULIUS_CLAUDE_AUTH=CLAUDE_SUBSCRIPTION
 export JULIUS_LIVE_PG_PORT=55432
-# HOW THE REVIEWER IS PAID FOR, declared by the one party that knows: this launcher writes the
-# XAI_API_KEY into Hermes's profile, so every review is billed to that API key. The reviewer then
-# states API_BILLED on the ledger (`juliusReviewerBillingPath` in relay-bridge/julius/live-workers.ts,
-# parsed as relay-bridge/attestation.ts parses it); undeclared, the world could say only UNKNOWN
-# for a role whose money is real. The hosted workflow sets nothing here, so its rows are unchanged.
-export RELAY_HERMES_BILLING_MODE=api_billed
 # The workflow job's own ceiling, `timeout-minutes: 120`, which JOB_BUDGET_MS in
 # relay-bridge/reviewer-deadline.ts is shared out from. Applied to the live step here.
 readonly LIVE_TIMEOUT_MINUTES=120

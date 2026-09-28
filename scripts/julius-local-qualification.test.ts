@@ -112,28 +112,33 @@ describe('the local launch mirrors the workflow job, and names every difference'
     }
   });
 
-  it('adds exactly three variables of its own, and the workflow sets none of them', () => {
+  it('adds exactly two variables of its own, and the workflow sets none of them', () => {
     const begin = launcher.indexOf('# BEGIN JOB ENV');
     const end = launcher.indexOf('# END JOB ENV');
     const outside = (launcher.slice(0, begin) + launcher.slice(end)).split('\n')
       .map((line) => /^export ([A-Z][A-Z0-9_]*)=(.*)$/u.exec(line))
       .filter((match): match is RegExpExecArray => match !== null);
-    expect(outside.map((match) => match[1])).toEqual(['JULIUS_CLAUDE_AUTH', 'JULIUS_LIVE_PG_PORT', 'RELAY_HERMES_BILLING_MODE']);
+    expect(outside.map((match) => match[1])).toEqual(['JULIUS_CLAUDE_AUTH', 'JULIUS_LIVE_PG_PORT']);
     const auth = outside[0]![2]!;
     expect((CLAUDE_AUTH_MODES as readonly string[]).includes(auth), 'a mode the composition knows').toBe(true);
     expect(auth).toBe('CLAUDE_SUBSCRIPTION');
     const port = outside[1]![2]!;
     expect(port).toMatch(/^[0-9]+$/u);
     expect(port, '127.0.0.1:5432 inside WSL2 is the live store\'s forward').not.toBe('5432');
-    // The reviewer's billing declaration: a word the attestation's own parser knows, and the one
-    // this launcher makes true by writing an API key into the reviewer's profile.
-    const reviewerBilling = outside[2]![2]!;
-    expect(declaredBillingPath(reviewerBilling), 'a declaration the canonical parser recognises').toBe('api_billed');
     // CI UNCHANGED: every switch added for the local rig defaults to the old behaviour, and the
     // workflow sets none of them.
-    for (const name of ['JULIUS_CLAUDE_AUTH', 'JULIUS_LIVE_PG_PORT', 'RELAY_HERMES_BILLING_MODE', 'HERMES_PHASE', 'HERMES_PYTHON', 'HERMES_VENV_DIR', 'HERMES_SRC_DIR']) {
+    for (const name of ['JULIUS_CLAUDE_AUTH', 'JULIUS_LIVE_PG_PORT', 'HERMES_PHASE', 'HERMES_PYTHON', 'HERMES_VENV_DIR', 'HERMES_SRC_DIR']) {
       expect(workflow, `the workflow must not set ${name}`).not.toContain(name);
     }
+  });
+
+  it('declares how the reviewer is paid for where its API key is injected, and the launcher agrees', () => {
+    // The founder declared it in the workflow job, whose Hermes step writes the xAI API key into
+    // the reviewer's profile. The launcher writes the same key the same way, so the same word is
+    // true in both places; the mirror test above already holds the two values equal.
+    const declared = workflowJobEnv().get('RELAY_HERMES_BILLING_MODE');
+    expect(declaredBillingPath(declared), 'a declaration the canonical parser recognises').toBe('api_billed');
+    expect(launcherJobEnv().get('RELAY_HERMES_BILLING_MODE')).toBe(declared);
   });
 
   it('bounds the live step by the workflow job\'s own ceiling', () => {
