@@ -129,3 +129,66 @@ after the label at 0.72 alpha, `if (!Row.Named.IsEmpty())`. Two names are in `De
 
 Neither is a substitute for a measurement where one is possible -- see `zc_mascot_persist`, which exists
 because "the Wardrobe photograph looked right" hid a colour that never reached the world Dog.
+
+## Waiting for a thing to arrive
+
+Five jobs in one day published or voided on this, and the fix did not transfer on its own even while
+two lanes were holding it. Read this before writing any wait.
+
+**A settle watches the PICTURE. It cannot see whether the thing you are measuring has arrived.**
+Four things that hold perfectly still while still wrong, each of which cost a run:
+
+| looks settled | actually | what sees it |
+|---|---|---|
+| frame cost identical every read | `stat unit` overlay off, `FStatUnitData` frozen while the frame counter advances | re-issue `stat unit`; reject N byte-identical raw reads across advancing frames |
+| light count steady at 127 | pool assignment paused mid-climb, reached 192 later | read the count either side of an **independent wait** |
+| district steady and dark | World Partition still streaming after a teleport | `FlushLevelStreaming`, then settle |
+| world steady after BeginPlay | still arriving; first rung read 0.4932 where the next three agreed at 0.2350 | warm up before the first rung, and let the settle fall through rather than trim |
+
+**No number of CONSECUTIVE reads separates a plateau from an arrival, because consecutive reads share
+the same moment.** A wait between reads is the only thing that does. Three equal samples of something
+pausing on its way up is exactly what a plateau looks like.
+
+For the picture itself, use the **window spread** — `max - min` over the last three reads — not steps:
+
+```python
+window = []
+for _ in range(24):
+    yield 1.0
+    now = patch(0.5, 0.5, 0.46, 0.44)
+    if now is None:
+        continue
+    window.append(now["luma"])
+    if len(window) > 3:
+        window.pop(0)
+    if len(window) == 3 and (max(window) - min(window)) < 0.004:
+        return
+# Fell through: trim NOTHING. The rung's own two-read spread then carries the damage into the noise
+# gate and voids the run, instead of a tidy number taken from the tail of an arrival that never happened.
+```
+
+Steps compound — three of 0.0039 walk the window 0.0117 while every adjacent pair passes — and both the
+pair test and the three-step test return early on `[200, 60, 66, 61, 50, 49, 48.5]`. A window spread
+assumes nothing about direction, rate or shape.
+
+**Take two reads of every rung and gate on their spread before reading any value.** A gate should report
+its own noise first: the traversal harness measured one route at 230, 0, 35.2 and 86.0 in a single
+session and every conclusion drawn from it came from a single draw of a distribution nobody had checked.
+
+## Two more that are not about waiting
+
+**Read the value, do not infer it.** A cvar's value is something to read back from the engine. Inferring
+`PracticalRadius ≈ 4200` from a downstream lit count fitted the data beautifully and was false — the
+readback said 12000.0, the declared default. Same family: a docstring read for behaviour (the
+`PracticalCount` help string described a sort two commits after it changed), a p95 taken off
+`GetFrameCostMs` (the filtered half of `FStatUnitData`, peaks already removed), and a mean standing in
+for a distribution (C_GROUND passed dusk at mean 0.0673 while 78.9% of the same ground was crushed).
+
+**When an accessor will not answer, measure what the value DRIVES.** Two subsystem routes for `Nightfall`
+returned nothing on two builds, so the gate failed twice for want of an instrument rather than for want
+of a fix. `MoonLux` is linear in `Nightfall` and `Nightfall` is exactly 1.0 at 23:00 — so the moon's
+intensity divided by its 23:00 value *is* `Nightfall`, read off the light the curve actually drives.
+
+**A look-at point is not a standing position.** `(0, -1460)` is the Golden Arrival monument, which four
+jobs aimed a camera at from 500 uu away. Standing the pawn on it put the camera against lit stone and
+read luma 0.6917 at night, brighter than noon. Stand at `(-320, -1900)`.

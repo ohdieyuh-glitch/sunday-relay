@@ -162,19 +162,34 @@ def job():
         written for -- and will silently start delivering all of them now, with nothing in either run saying
         which it got.
 
-        This is the same test at any frame rate: two consecutive readings of the same framing within `tol`.
-        Returns the seconds it took, or None if it never settled, so a run can say so rather than assume it.
+        AND IT IS THE WINDOW'S SPREAD, NOT A PAIR. This asked whether two ADJACENT reads agreed, which a
+        world still moving supplies easily: a gentle descent has neighbours inside any tolerance the whole
+        way down, and a world that rises before falling puts two together on the upswing. Shown on
+        [200, 60, 66, 61, 50, 49, 48.5], where a pair test returns on the 60 with a fifth of the fall
+        still to come. Three consecutive STEPS is no better, because steps compound: three of 0.0039 walk
+        the window 0.0117 while every pair passes.
+
+        Max minus min across the last three reads asks the question actually being asked -- are these
+        three the same reading -- and assumes nothing about direction, rate or shape.
+
+        Returns the seconds it took, or None if it never settled, so a run can say so rather than assume.
+
+        AND NOTE WHAT NO SETTLE CAN SEE: this watches the PICTURE. It cannot tell that a stat counter is
+        frozen, that a light assignment is still being recomputed, or that a district is still streaming
+        in -- all three hold perfectly still. See README.md, "Waiting for a thing to arrive".
         """
-        prev = None
+        window = []
         for attempt in range(tries):
             yield step
             now = patch(0.5, 0.5, 0.46, 0.44)
             if now is None:
                 continue
-            if prev is not None and abs(now["luma"] - prev["luma"]) < tol:
+            window.append(now["luma"])
+            if len(window) > 3:
+                window.pop(0)
+            if len(window) == 3 and (max(window) - min(window)) < tol:
                 RESULT.setdefault("settled_s", {})[label] = round(step * (attempt + 1), 1)
                 return
-            prev = now
         RESULT.setdefault("settled_s", {})[label] = None
 
     shots = {}
