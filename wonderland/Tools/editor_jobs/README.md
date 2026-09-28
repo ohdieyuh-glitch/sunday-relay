@@ -403,3 +403,41 @@ clean bill.
 
 Repaired already, for contrast: `zc_tile46` T00, `zc_floor_after_wp` F02, and `zc_territories` T11/T21/
 T22/T23/T31/T32 — the last six against `len(rows)`, the pattern T10 in that same file already used.
+
+## An hour is a request to a running clock, not a setting (2026-09-27, internal lane)
+
+`wl.Sky.DayMinutes` defaults to **24.0**: a whole Wonderland day every twenty-four REAL minutes, so one game
+hour passes every real minute. A job that sets `wl.Sky.Hour` and then takes several photographs has a sky that
+walks on between the request and the shutter, and again between every shot.
+
+Two jobs photographed "night" **brighter** than "day" — mean frame luma 0.2583 against 0.2250 at the same view
+— and every per-hour number they produced was void, including a clause that PASSED and was reported to the
+founder.
+
+**Issue `wl.Sky.DayMinutes 0` first, read it back, and VOID if it is running.** Re-issue the hour before every
+capture rather than once per block.
+
+**And carry a positive control for the hour itself.** If a job compares a night reading with a day one, noon's
+subject must measure clearly brighter than midnight's, or the run voids — otherwise every clause in it is
+comparing one lighting condition with itself, and some of them will pass.
+
+The set was enumerated rather than remembered, and the grep took ten seconds:
+
+```sh
+for f in $(grep -rl "wl.Sky.Hour" Tools/editor_jobs/*.py); do
+  [ "$(grep -c 'wl.Sky.DayMinutes' "$f")" = 0 ] && echo "CLOCK RUNNING: $f"
+done
+```
+
+Eighty jobs set the hour; seventy-eight stopped the clock. The two that did not were both written the same
+day, and reading would not have found the second — nobody was looking at that file.
+
+## Crop the capture and look at it
+
+The clock bug was found by enlarging one frame, not by reading a number. The picture showed a bright cyan sky
+on a shot labelled night, a camera close enough to fill the frame with the chest, and HUD keycaps along the
+bottom — three faults at once, none of which any clause was asking about.
+
+A region expressed as a fraction of the FRAME is only meaningful if the framing is verified, and a job that
+never looks at its own captures cannot verify it. Where a widget can report its own geometry — the wardrobe's
+`GetSkinPreviewRect` — take the region from that and never from a fraction of the screen.
