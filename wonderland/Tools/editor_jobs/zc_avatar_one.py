@@ -46,6 +46,9 @@ SETTLE_S = 3.0
 # Eight identical raw reads across advancing frames means the stat unit overlay stopped drawing, not that the
 # world went perfectly steady. RawFrameTime is unsmoothed, so a byte-identical repeat is the overlay.
 FROZEN_LIMIT = 8
+# How long to wait for the world to stop arriving before rung zero, and how close three reads must lie.
+SETTLE_BUDGET_S = 180.0
+SETTLE_TOLERANCE = 0.12
 
 
 def job():
@@ -173,6 +176,52 @@ def job():
 
     pawn = unreal.GameplayStatics.get_player_pawn(world, 0)
     base = pawn.get_actor_location()
+
+    # ---- WAIT FOR THE WORLD TO ARRIVE, AND DO NOT GUESS HOW LONG THAT TAKES.
+    #
+    # THIS RUN VOIDED TWICE AT RUNG ZERO AND THE SECOND TIME SAID WHY: median 895.92 ms, game thread 3,389 ms,
+    # raw worst 8,944 ms, eight frames accepted. That is not a machine under load, it is a world still
+    # arriving -- streaming, shaders, whatever a long editor session has queued -- and a fixed ten-second wait
+    # after BeginPlay was a guess about when it would be over.
+    #
+    # RUNG ZERO IS THE MEASUREMENT EVERY OTHER RUNG IS COMPARED AGAINST, so it is the one that must be settled
+    # and the one that has always been taken earliest. The world lane and I put that in the README this
+    # morning and this job kept a fixed timer anyway.
+    #
+    # THE TEST IS THE WINDOW'S SPREAD, NOT CONSECUTIVE STEPS. Steps compound: three pairs each inside ten per
+    # cent can walk a window seventeen per cent while every pair passes. Three reads whose max and min lie
+    # within the tolerance of each other cannot be mid-descent at that rate, in either direction, and it needs
+    # no assumption about the shape of the approach.
+    #
+    # IF IT NEVER SETTLES THE RUN VOIDS rather than measuring a world that never arrived.
+    settle_reads, settle_started = [], time.time()
+    while time.time() - settle_started < SETTLE_BUDGET_S:
+        row = read_frame()
+        if row is not None:
+            settle_reads.append(row[0])
+            if len(settle_reads) >= 3:
+                window = settle_reads[-3:]
+                lo, hi = min(window), max(window)
+                if lo > 0.0 and (hi - lo) / lo < SETTLE_TOLERANCE:
+                    break
+        yield 0.1
+    settled = len(settle_reads) >= 3 and (max(settle_reads[-3:]) - min(settle_reads[-3:])) \
+        / max(min(settle_reads[-3:]), 0.01) < SETTLE_TOLERANCE
+    RESULT["warm_up"] = {
+        "reads": len(settle_reads),
+        "first": round(settle_reads[0], 2) if settle_reads else None,
+        "last_three": [round(v, 2) for v in settle_reads[-3:]],
+        "seconds": round(time.time() - settle_started, 1),
+        "settled": bool(settled),
+    }
+    record("O_WARM", "the world settled before rung zero was taken",
+           bool(settled), **RESULT["warm_up"],
+           note="rung zero is what every other rung is compared against, and it has always been the earliest "
+                "and least settled reading in this job. A fixed wait is a guess about when the world has "
+                "arrived; this waits for three reads to agree and voids if they never do.")
+    if not settled:
+        RESULT["status"] = "VOID: the world never settled, so rung zero would poison the whole ladder"
+        return
 
     # ---- QUESTION ONE: WHERE IS THE CLIFF?
     yield from measure("n00")
