@@ -688,12 +688,63 @@ static FAutoConsoleVariableRef GWonderlandDuskMoonDampRef(
 	     "18:25. 0 ships and changes nothing."),
 	ECVF_Default);
 
+// ---- THE ONE THE MEASUREMENTS ACTUALLY POINT AT. Ships inert; 0 is exactly today's behaviour.
+//
+// WHAT THE CLIFF IS, measured 2026-09-28 at an open plaza vantage that a camera can demonstrably see
+// (zc_dusk_truth, plaza_e). Ground luminance across one minute, shipped world, no knob turned:
+//
+//     18:25   0.11638   casters [V2_Sun]
+//     18:26   0.06604   casters [V2_Sun, WL_Moon]
+//
+// 43 per cent of the light gone in a minute, 6.89x the median step of the evening and 45x the noise
+// floor. Plainly a cliff by eye: at 18:25 slab joints are crisp and the flowerbed has colour; at 18:26
+// the far half of the plaza loses its detail and the flowerbed goes grey.
+//
+// WHY IT HAPPENS, and it is not brightness. The moon's pitch is ElevationAt(Hour), so its ALTITUDE
+// above the horizon is minus the sun's elevation -- 4.9 degrees at 18:26, and 69.6 degrees at 23:00.
+// A light 4.9 degrees up grazes: once it starts casting, the columns, trees and walls around the plaza
+// shadow essentially all of it, so the casting moon delivers almost nothing. Before the handover the
+// SHADOWLESS moon was delivering its full 0.050 to every surface regardless of occlusion. The step is
+// that entire 0.050, and the measured cliff is 0.0503.
+//
+// The rest of the evening confirms it: once the moon is casting, ground tracks sin(altitude) closely --
+// 0.066 at 4.9 deg, 0.071 at 5.7, 0.082 at 7.5, 0.086 at 9.4, 0.111 at 18.6, 0.108 at 69.6.
+//
+// SO THE HANDOVER IS LATE-OR-EARLY IN THE WRONG DIRECTION FROM WHAT I FIRST TRIED. Damping the moon
+// moves the crossover later by a few minutes, which is nowhere near enough; moving it EARLIER makes it
+// worse, because the moon is lower still and casts an even more total shadow. It has to be delayed
+// until the moon is high enough that its light actually reaches the ground -- around 18-19 degrees,
+// where a casting moon measures 0.111 against the shadowless flood's 0.116.
+//
+// AND IT COSTS NOTHING THAT IS NOT ALREADY SPENT. bMoonShouldCast compares MoonLux against the sun so
+// that the world never has two directional shadow casters at once. The caster census says the world
+// has two from about 18:40 to dawn anyway, every night, because only the MOON's flag is ever written
+// and the sun's comes from the map. The invariant that put the crossover at its most expensive moment
+// does not hold for a single hour of the night it was protecting.
+//
+// The approved night is untouched at any value that matters: at 23:00 the moon is 69.6 degrees up, far
+// above any threshold worth setting, so it casts exactly as it does today.
+static float GWonderlandMoonCastAltitude = 0.0f;
+static FAutoConsoleVariableRef GWonderlandMoonCastAltitudeRef(
+	TEXT("wl.Sky.MoonCastAltitude"),
+	GWonderlandMoonCastAltitude,
+	TEXT("Degrees above the horizon the moon must reach before it is allowed to become the shadow "
+	     "caster, ON TOP OF already being brighter than the sun. 0 ships and is exactly today's "
+	     "behaviour, because the moon is already 4.9 deg up when the brightness crossover fires. "
+	     "Raising it delays the handover until the moon is high enough for its light to survive the "
+	     "plaza's own geometry: at 4.9 deg a casting moon reaches almost nothing and the shadowless "
+	     "flood it replaces is worth 0.050 of ground luminance, which is the entire measured cliff."),
+	ECVF_Default);
+
 static float GWonderlandDuskSkyBoost = 0.0f;
 static FAutoConsoleVariableRef GWonderlandDuskSkyBoostRef(
 	TEXT("wl.Look.DuskSkyBoost"),
 	GWonderlandDuskSkyBoost,
-	TEXT("Extra sky-light multiplier across the dusk window, on top of the NightSky lerp -- the "
-	     "continuous, unshadowed term that carries the readability the moon flood used to. Scaled by "
+	TEXT("MEASURED AND FOUND INSUFFICIENT, 2026-09-28: driving the skylight from 18.1 to 76.1 -- a "
+	     "4.2x increase, well past anything that could look right -- moved ground luminance by 0.0038 "
+	     "against a cliff of 0.0503, so the sky carries about seven per cent of what is needed. Kept "
+	     "inert rather than removed, because the number is worth not re-discovering. "
+	     "Extra sky-light multiplier across the dusk window, on top of the NightSky lerp. Scaled by "
 	     "Nightfall * smoothstep(TwilightBand/DuskWindow), which is exactly 0 at band 0 (all of the "
 	     "approved night) and exactly 0 above the horizon (all of the day), so neither can be altered at "
 	     "any value. 0 ships and changes nothing."),
@@ -871,7 +922,15 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 			// The moon alone is enough for the founder's clause. It is the newcomer, it is the one that can
 			// disagree with the sun, and switching it off while the sun is brighter means the world never has
 			// two directional shadow casters at once -- which is all "no conflicting lights" asks.
-			const bool bMoonShouldCast = MoonLux > Comp->Intensity;
+			// ---- AND HIGH ENOUGH THAT ITS LIGHT SURVIVES THE GEOMETRY, not merely brighter.
+			//
+			// Brightness alone put the handover at 4.9 degrees of altitude, where a casting moon is
+			// shadowed by everything around the plaza and delivers nearly zero -- so the world lost
+			// the shadowless moon's whole contribution in one frame. MoonAltitude is minus the
+			// elevation curve because the moon is placed opposite the sun. Default 0 changes nothing.
+			const float MoonAltitudeDeg = -ElevationAt(Hour + GWonderlandMoonLeadHours);
+			const bool bMoonShouldCast = (MoonLux > Comp->Intensity)
+				&& (MoonAltitudeDeg >= GWonderlandMoonCastAltitude);
 			if (MoonComp->CastShadows != bMoonShouldCast)
 			{
 				MoonComp->CastShadows = bMoonShouldCast;
