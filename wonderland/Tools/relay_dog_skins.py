@@ -580,8 +580,30 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
             # +0.45 its face is at 4.60 -- clear of the visor, just behind the eye pane's own face at 4.65.
             # 2.4x THE EYE, for M_WL_EyeHalo: full over the eye's own footprint (Inner 0.45 of the pane), fading
             # to nothing at the pane's edge -- so the spill is the eye's own width again on every side.
-            figure.box("head", "eyehalo", (hd * 0.5 + 0.45, side * d["eye_gap"], visor_z),
-                       (0.30, exw * 2.4, exh * 2.4))
+            # ---- AND IT SPILLS OUTWARD AND UPWARD, NEVER INWARD PAST THE EYE.
+            #
+            # FOUNDER, RELAY OG EYE SPACING, applied to the costumes as the same note's last paragraph asks:
+            # "Bloom from one eye must not visually merge with bloom from the other." Centred on its eye at
+            # 2.4x the eye's width, this pane spanned -0.39 to +2.49 about the visor centre -- it crossed the
+            # centreline by a third of an eye's width, and the two halos overlapped through the middle by 0.78.
+            # Same defect as the gameplay Dog's halo rings, one asset over, and the same arithmetic finds it:
+            # 2.4 x 1.2 is wider than 2 x 1.05.
+            #
+            # THE EYE SPACING ITSELF IS NOT THE FAULT HERE AND MUST NOT BE TOUCHED. eye_gap is 1.05 because the
+            # canonical photo puts the centres 23 per cent of the head's width apart, and the comment on the
+            # DOG dict records that setting them wider was once "the loudest error" -- wide-set eyes read as a
+            # different character however correct the body is. The founder's note says not to redesign skins
+            # whose spacing is already right, and this spacing is right against their own reference.
+            #
+            # So the pane is SHIFTED OUTWARD and NARROWED instead of being centred and wide: it runs from the
+            # eye's own inner edge to the full 2.4x reach on the outside. A box cannot be asymmetric about its
+            # centre, so its centre moves to the middle of that span. The glow keeps its outward and vertical
+            # spill -- which is where a halo is read -- and stops dead at the eye's inner edge.
+            halo_in = d["eye_gap"] - exw * 0.5
+            halo_out = d["eye_gap"] + exw * 2.4 * 0.5
+            figure.box("head", "eyehalo",
+                       (hd * 0.5 + 0.45, side * (halo_in + halo_out) * 0.5, visor_z),
+                       (0.30, halo_out - halo_in, exh * 2.4))
 
     # The body and the two legs. Short, plain, and under the dress in every skin but the bare one.
     td, tw, th = d["torso"]
