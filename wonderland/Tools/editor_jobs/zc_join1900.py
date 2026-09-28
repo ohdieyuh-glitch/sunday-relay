@@ -45,13 +45,25 @@ ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "join1900")
 #: Tight around the step zzU2 localised to 19:10-19:25, with a rung either side for shape.
 HOURS = (19.00, 19.10, 19.15, 19.20, 19.25, 19.35)
 #: name -> (x, y). Districts taken from the manifest's own label prefixes.
-PLACES = (("golden_arrival", (0.0, -1460.0)),
+#
+# THE ARRIVAL SPOT IS NOT (0, -1460). That is the point every earlier job LOOKED AT from 500 uu away --
+# the monument itself -- and standing the pawn on it put the camera against lit stone: zzW3 read luma
+# 0.6917 with ground_dark 0.0000 at nineteen hundred, brighter than noon, in the dark. A target to aim at
+# is not a place to stand, and the two had the same coordinates in my head. (-320, -1900) is where zzW1's
+# camera actually stood, which is a real standing position out on the plaza.
+PLACES = (("golden_arrival", (-320.0, -1900.0)),
           ("noctis_nc02", (-65943.0, -38753.0)),
           ("tartarus_tq04", (87157.0, -50320.0)))
 SPAN = 21.0
 AGREE = 0.010
-#: The same world-axis camera offset at every place, so moon bearing relative to the view is constant.
-CAM_AHEAD = (2400.0, -2400.0)
+#: The same world-axis camera offset at every place, so the moon's bearing relative to the view is
+#: identical at all three -- and LOOKING DOWN, not along. An eye-height horizontal view is filled by
+#: whatever building happens to stand 34 m ahead, which differs completely between three districts and is
+#: what made the arrival unreadable against the other two. A shallow downward view puts GROUND in the
+#: ground patch at every place, which is the thing being compared.
+CAM_AHEAD = (1400.0, -1400.0)
+CAM_UP = 900.0
+CAM_DROP = -100.0
 PAWN_CH = unreal.TraceTypeQuery.TRACE_TYPE_QUERY2
 
 
@@ -152,8 +164,8 @@ def job():
         off = round(((where.x - px) ** 2 + (where.y - py) ** 2) ** 0.5, 1)
         placed[name] = {"asked": [px, py], "landed": [round(where.x, 1), round(where.y, 1), round(where.z, 1)],
                         "offset_uu": off, "ground_z": gz}
-        eye = unreal.Vector(where.x, where.y, where.z + 60.0)
-        at = unreal.Vector(where.x + CAM_AHEAD[0], where.y + CAM_AHEAD[1], where.z + 20.0)
+        eye = unreal.Vector(where.x, where.y, where.z + CAM_UP)
+        at = unreal.Vector(where.x + CAM_AHEAD[0], where.y + CAM_AHEAD[1], where.z + CAM_DROP)
         L.pose_camera(live(), eye, at, 70.0)
 
         # ---- WAIT FOR THE WORLD TO ARRIVE, NOT JUST FOR THE PICTURE TO HOLD STILL.

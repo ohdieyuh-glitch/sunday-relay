@@ -11,19 +11,18 @@
 # -- so wl.Look.PracticalRadius decides how many lights are even eligible, and the count only decides how
 # many of THOSE get lit. If Near is about 31, no value of the count can light a 32nd lamp.
 #
-# And the arithmetic fits uncomfortably well. Counting the manifest against distance from that spot:
+# AND THE ARITHMETIC FITTED BEAUTIFULLY AND WAS WRONG, WHICH IS WHY THE READBACK EXISTS. Counting the
+# manifest by distance from that spot gives 30 candidates at radius 4,211, 184 at 12,000 and 286 at
+# 24,000 -- so "the running radius is about 4,200 rather than the declared 12,000" explained the 31
+# exactly, and I nearly reported it. B_READBACK then measured it: count 48, RADIUS 12000.0, gain 1.0.
+# Precisely the source defaults. The inference was false and the only reason it never became a finding is
+# that a cvar's value is something to READ, not to derive from a downstream count.
 #
-#     radius   4211 uu  ->   30 candidates      <-- matches the 31 the engine lit
-#     radius  12000 uu  ->  184 candidates          (12000 is the cvar's DEFAULT)
-#     radius  24000 uu  ->  286
-#
-# So the running radius looks like roughly 4,200 rather than the 12,000 I assumed from the source default.
-#
-# I AM NOT REPORTING THAT AS A FINDING, BECAUSE I INFERRED A CVAR'S VALUE FROM A DOWNSTREAM COUNT. That is
-# the same move as reading a docstring for behaviour, a p95 off a smoothed curve, or a mean for a
-# distribution -- a number standing in for the measurement. Every rung now READS BACK count, radius and
-# gain from the engine and records them beside the result, and B_READBACK voids the run if the values the
-# job asked for are not the values the engine is holding.
+# So the 31 remains unexplained by the radius, and the real defect turned out to be in the instrument:
+# zzW2's radius-24000 rung settled on three identical reads of 127 and then reported 192 once asked again
+# after an unrelated wait. The assignment PAUSES on its way up. Every flat lit-count in this job's history
+# is suspect for that reason, including the 31s, and B_SETTLED now reads the count either side of an
+# independent wait rather than trusting consecutive samples.
 #
 # THE SWEEP IS TWO LADDERS SO THE TWO KNOBS CANNOT BE CONFUSED:
 #   rungs 1-3 hold the radius and raise the count   -- if lit stays flat, count is not the constraint
@@ -263,7 +262,17 @@ def job():
         for step in settled():
             yield step
         held = knobs()
+        # ---- READ THE LIT COUNT EITHER SIDE OF AN INDEPENDENT WAIT, BECAUSE A PLATEAU IS NOT ARRIVAL.
+        #
+        # zzW2's radius-24000 rung settled on [127, 127, 127] -- three identical reads half a second
+        # apart -- and then reported 192 when asked again after the luma settle. The assignment had
+        # PAUSED at 127 on its way up, and three equal samples of something still moving is the
+        # step-settle mistake in a third costume. Comparing before and after an independent wait catches
+        # a plateau in a way that no number of consecutive reads can.
+        lit_before = pool_now()[1]
+        yield 2.0
         total, lit = pool_now()
+        lit_stable = (lit_before == lit)
         a = patch(0.5, 0.5, 0.46, 0.44)
         g1 = patch(0.5, 0.78, 0.30, 0.16)
         frames = []
@@ -289,6 +298,7 @@ def job():
         rows.append({
             "count_asked": count, "radius_asked": radius, "held": held,
             "pool_actors": total, "lit_actors": lit, "lit_settled_on": list(seen),
+            "lit_before_wait": lit_before, "lit_stable": lit_stable,
             "luma": round((a["luma"] + b["luma"]) / 2.0, 4),
             "spread": round(abs(a["luma"] - b["luma"]), 4),
             "tails": round((a["tails"] + b["tails"]) / 2.0, 4),
@@ -347,6 +357,15 @@ def job():
         les.editor_request_end_play()
         yield (lambda: ues.get_game_world() is None, 300)
         return
+
+    unstable = [{"count": r["count_asked"], "radius": r["radius_asked"],
+                 "before": r.get("lit_before_wait"), "after": r.get("lit_actors")}
+                for r in good if not r.get("lit_stable")]
+    record("B_SETTLED", "the lit count is the same either side of an independent wait, so it had arrived",
+           len(unstable) == 0, unstable_rungs=unstable,
+           note="zzW2 settled on three identical reads of 127 and then reported 192. Three equal samples "
+                "of something still moving is a plateau, not arrival, and no number of consecutive reads "
+                "distinguishes them -- only a second look after an unrelated wait does")
 
     built = {r["count_asked"]: r["pool_actors"] for r in good}
     record("B_POOL", "the pool was actually rebuilt to each size asked for, counted from spawned actors",
