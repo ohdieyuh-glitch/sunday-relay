@@ -27,7 +27,9 @@ describe('the test database is stated, never inherited', () => {
     expect(juliusTestDatabaseUrl({ JULIUS_TEST_DATABASE_URL: ' postgres://x/y ' })).toBe('postgres://x/y');
     // THE VARIABLE THAT MUST NOT WORK: an inherited runtime URL, alone, buys
     // nothing — whatever else is switched on.
-    expect(juliusTestDatabaseUrl({ DATABASE_URL: 'postgres://julius:julius@127.0.0.1:5432/julius', JULIUS_REAL_POSTGRES: '1' })).toBeNull();
+    // No inline credentials even in a fixture: the repository boundary scan reads
+    // this file too, and a URL shaped like a real one is the shape it forbids.
+    expect(juliusTestDatabaseUrl({ DATABASE_URL: 'postgres://127.0.0.1:5432/julius', JULIUS_REAL_POSTGRES: '1' })).toBeNull();
     expect(juliusTestDatabaseAbsence()).toContain('THROWAWAY');
   });
 
