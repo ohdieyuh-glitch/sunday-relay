@@ -1346,3 +1346,53 @@ the median evening step, 45x noise, obvious by eye. The mechanism predicted the 
 nothing whatever about the plaza.
 
 **The check:** an explanation of why a bad measurement was bad is not a measurement. Re-measure.
+
+## The first reading after a big change is not a reading
+
+Each arm of a sweep set its first hour and read it immediately. At 17:20 three arms that MUST have
+been identical -- none had the moon casting yet -- read 0.21605, 0.20788 and 0.26540. A spread of
+0.0575 between arms measuring the same world in the same state. By 17:30 the spread was 0.0088, by
+17:50 it was 0.0011.
+
+The settle loop was watching the frame converge, and it did converge; Lumen's indirect had not. The
+jump that preceded it was from the previous arm's NOON anchor back to sunset, which is about as large
+a lighting change as this world has.
+
+That unconverged rung then produced BOTH the largest step in the ladder and the floor another gate
+measured against, so the gate resting on it failed while the gates using mid-sequence intervals
+passed cleanly.
+
+**The check:** set the first state, settle, THROW THE READING AWAY, then begin. And when arms of a
+sweep must agree somewhere by construction, measure that agreement — it is a free calibration of your
+own noise floor, and it is the only way to tell drift from effect.
+
+## The same trick names your drift floor
+
+A candidate that CANNOT affect an hour, but appears to, has measured your drift for you.
+
+`MoonCastAltitude 18` cannot change noon (Nightfall is 0, so the moon is off) or 23:00 (the moon is
+69.6° up, far above the threshold). It read +0.00851 and −0.01077 at those hours anyway. Those
+impossible deltas are the anchor drift floor — and the candidate under test sat 8-26x inside it.
+
+Without that control the preservation gate would have been read as "both candidates disturb the
+approved night", which was false for one of them and unmeasurable for the other.
+
+## A job that fails still owns what it changed
+
+`bail()` set a status and ended play. The restore loop lived on the success path. So every voided run
+left its CVar values resident in the editor, and every capture anyone took afterwards was of a
+modified world with nothing saying so — another lane spent time attributing a visual artifact to a
+commit on the strength of frames from an editor that was not in its shipped state.
+
+**The check:** restore in the failure path, not only the success path, and record what was restored so
+the cleanup is auditable.
+
+## Stage outside the inbox, then rename
+
+`cp` into the watched inbox lets the runner import a half-written file. It reported `started ==
+finished`, 0.0 seconds, an empty log and zero tests, and consumed the job — a silent no-op that looks
+like a job that ran and found nothing.
+
+    cp job.py CHANNEL/job.staging && python -c "import os,filecmp; assert filecmp.cmp(a,b,shallow=False); os.replace(b, inbox)"
+
+Verify the staged bytes match the source, then rename atomically.
