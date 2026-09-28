@@ -49,7 +49,14 @@ patch() { # patch <dir> <script>   — a failure here ends the run
 
 run() { # run <dir> <label> <expect pass|fail>
   local dir="$1" label="$2" expect="$3"
-  ( cd "$dir" && node --import ./.julius/loader.mjs --test "$SPEC" > run.log 2>&1 )
+  # THE ENTRY IS A LITERAL, and `relay-repository-boundary.mjs` is why. It refused
+  # an earlier version of this line for giving `node` a path built at run time
+  # (`--test "$SPEC"`): a deployment-capable path whose entry is a variable cannot
+  # be read, so neither the file nor the commands inside it can be audited. The
+  # rule is correct and the variable bought nothing, since $SPEC was a constant.
+  # It is also all on ONE line: a `\` continuation makes the scan read the token
+  # after `--test` as `\` and refuse it as a path above the repository.
+  ( cd "$dir" && node --import ./.julius/loader.mjs --test src/relay/workspace/julius-tools/node-tool-search-paths.test.ts > run.log 2>&1 )
   local code=$?
   local got; [ "$code" -eq 0 ] && got=pass || got=fail
   printf '%-42s exit %d  %s' "$label" "$code" "$got"
