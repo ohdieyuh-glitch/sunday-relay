@@ -61,23 +61,37 @@ def job():
         RESULT["tests"].append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
         emit(tid, "PASS" if ok else "FAIL", name, detail)
 
-    def profile(path, across=(0.28, 0.72)):
+    def profile(path, distance):
         """The horizontal luma profile across the eye band, and what it says about two eyes.
 
-        THE BAND FINDS ITSELF, because a fixed one cannot serve two framings. The first version took rows
-        0.36 to 0.52 of the frame at BOTH distances -- and at 160 uu the head fills most of the frame while at
-        900 uu it is a fraction of it, so one band cannot contain the visor in both. The gameplay rung would
-        have profiled the chest at one distance and the face at the other and reported both as eyes.
+        THE EYES ARE AT THE CENTRE OF THE FRAME BY CONSTRUCTION, and that is the only reliable thing here.
+        look() aims the camera AT the Dog's eye height, so the visor is on the centre row whatever the
+        distance. Everything else about locating it has been wrong twice.
 
-        The eyes are the brightest thing on this figure, so the band is centred on the BRIGHTEST ROW in the
-        upper half of the frame and is a twelfth of the frame tall. That locates the visor at any distance
-        without knowing the framing, and it fails safe: if the brightest thing in the upper half is not an
-        eye, the profile will not have two peaks and the clause fails rather than quietly measuring elsewhere.
+        VERSION ONE took rows 0.36 to 0.52 at both distances. At 160 uu the head fills much of the frame and
+        at 900 uu it is a twentieth of it, so one band cannot hold the visor in both.
+
+        VERSION TWO searched for the BRIGHTEST ROW in the upper frame, on the theory that the eyes are the
+        brightest thing on the figure. They are not the brightest thing in the PICTURE. The band came back
+        anywhere from 0.108 to 0.592 of frame height across thirty captures of the same subject, with peaks
+        350 to 700 columns apart -- most of the frame wide. It was finding lamps, lit walls and sky, and
+        reporting them as a pair of eyes with a confident ratio.
+
+        SO THE WINDOW IS DERIVED FROM THE CAMERA INSTEAD OF SEARCHED FOR. A head of fixed size subtends an
+        angle that falls as 1/distance, so the window scales the same way from one calibration at the close
+        rung. The search for the brightest row still happens, but only INSIDE that window, so it can pick the
+        eye row out of the visor without being able to wander onto the world.
+
+        It still fails safe: if the window does not contain two bright regions, the profile has no trough and
+        the clause fails rather than measuring something else convincingly.
         """
         w, h, chan, px = read(path)
-        x0, x1 = int(across[0] * w), int(across[1] * w)
-        best_row, best_val = h // 4, -1.0
-        for y in range(int(0.10 * h), int(0.60 * h), 2):
+        # At 160 uu the head is about a quarter of the frame; everything else follows 1/distance.
+        span = max(0.24 * 160.0 / max(distance, 1.0), 0.02)
+        x0, x1 = int((0.5 - span) * w), int((0.5 + span) * w)
+        y_lo, y_hi = int((0.5 - span) * h), int((0.5 + span) * h)
+        best_row, best_val = (y_lo + y_hi) // 2, -1.0
+        for y in range(max(y_lo, 0), min(y_hi, h), 2):
             row = y * w * chan
             peak = 0.0
             for x in range(x0, min(x1, w), 2):
@@ -87,7 +101,7 @@ def job():
                     peak = lum
             if peak > best_val:
                 best_val, best_row = peak, y
-        half = max(int(h / 24.0), 2)
+        half = max(int(span * h * 0.25), 2)
         y0, y1 = max(best_row - half, 0), min(best_row + half, h)
         cols = []
         for x in range(x0, x1):
@@ -119,6 +133,8 @@ def job():
             "columns": len(cols),
             # THE BAND THIS READING USED, so a reader can check it against the capture instead of trusting it.
             "band_rows": [y0, y1], "band_centre_fraction": round(best_row / float(h), 3),
+            # THE WINDOW THE SEARCH WAS CONFINED TO, so a reader can see it was not free to wander.
+            "window_span_fraction": round(span, 4), "window_cols": [x0, x1], "window_rows": [y_lo, y_hi],
             "band_peak_luma": round(best_val / 255.0, 4),
             "peak_left": peak_l, "peak_right": peak_r,
             "peak_left_at": round(li / float(len(cols)), 3), "peak_right_at": round(ri / float(len(cols)), 3),
@@ -240,7 +256,7 @@ def job():
                                            "probably not foreground")
                     shots.append(name)
                     RESULT.setdefault("capture_hashes", {})[name] = fingerprint(path)
-                    readings[key] = profile(path)
+                    readings[key] = profile(path, distance)
                 except Exception as err:                            # noqa: BLE001
                     RESULT.setdefault("errors", {})[key] = str(err)[:160]
                 unreal.GameplayStatics.set_game_paused(live, False)
