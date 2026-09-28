@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   compileHostedEnvelope, juliusHostedCreationAuthority,
@@ -15,6 +17,8 @@ import type { JuliusFileCreationPolicy } from '../../src/relay/mission/julius/ju
  * inspects the wrong argument name, or a permission system that records only its
  * refusals and so cannot answer "what did this dispatch create".
  */
+
+const ROOT = resolve(import.meta.dirname, '../..');
 
 const policy: JuliusFileCreationPolicy = Object.freeze({
   permittedPaths: Object.freeze(['src', 'tests']),
@@ -156,5 +160,37 @@ describe('Julius answers the permission question before the write', () => {
     expect(records.filter((entry) => entry.allowed).map((entry) => entry.requestedPath))
       .toEqual(['src/a.ts', 'tests/b.test.ts']);
     expect(records.filter((entry) => !entry.allowed)).toHaveLength(1);
+  });
+});
+
+/**
+ * THE CAPABILITY EXISTS AND IS NOT YET REACHED, AND THAT IS ASSERTED RATHER THAN
+ * LEFT TO BE ASSUMED.
+ *
+ * Everything above is real: the decision, the authority, the conditional grant,
+ * all tested. What no code yet does is PASS a `creation` policy on the live path,
+ * because the path bounds live in Julius's coding-agent permissions packet while
+ * the invoker seam carries only a tool policy. So a live mission still cannot
+ * create a file, and "the capability is built" is not the same claim as "a
+ * new-file mission can complete".
+ *
+ * This case fails the day someone wires it, which is the point: the wiring is a
+ * deliberate act with a security consequence — the first dispatch that can write
+ * a file it chose — and it should not arrive as a side effect of an unrelated
+ * change. Whoever wires it updates this case and says so.
+ */
+describe('the creation capability is composed but not yet reached', () => {
+  it('no live composition passes a creation policy, so Write is still denied in production', () => {
+    const sources = [
+      'relay-bridge/julius/live-workers.ts',
+      'relay-bridge/julius/live-composition.ts',
+      'relay-bridge/julius/claude-code-coding-provider.ts',
+      'relay-bridge/hosted-coding-agent/hosted-runner.ts',
+      'relay-bridge/hosted-coding-agent/hosted-invoker.ts',
+    ];
+    const wired = sources.filter((path) => /creation\s*:/u.test(readFileSync(join(ROOT, path), 'utf8')));
+    expect(wired,
+      'a live caller now passes `creation`, so a dispatch can create files — update this case, and check the bounds it passes',
+    ).toEqual([]);
   });
 });
