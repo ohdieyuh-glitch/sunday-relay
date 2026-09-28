@@ -142,6 +142,23 @@ def job():
         les.editor_request_begin_play()
         yield (lambda: ues.get_game_world() is not None, 300)
         yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 180)
+        # ---- AND RE-ARM THE TWO THINGS A PIE RESTART DROPS. THIS IS WHY THIS HARNESS DID NOT REPEAT.
+        #
+        # Both of these are set ONCE at the top of the job, before the FIRST begin_play -- and this loop
+        # ends play and begins it again for every nation. A fresh PIE session comes up with its viewport
+        # unfocused and the editor free to throttle a background window, so from the second nation onward the
+        # Dog was being driven at whatever reduced tick rate a throttled editor felt like giving it.
+        #
+        # THAT IS THE SPREAD W0C REFUSES TO ACCEPT. Four runs in one session measured ICARUS at 230, 0, 35.2
+        # and 86.0 uu/s on the same route -- a spread equal to the character's entire walk speed -- and the
+        # first nation of each run is the one that looked healthy. AddMovementInput accumulates per TICK, so
+        # a throttled editor does not make the Dog walk badly, it makes it walk less far per second of wall
+        # clock, and every distance and speed this job reports is then a measurement of the editor's window
+        # focus rather than of the avenue.
+        #
+        # Re-armed per nation, so every nation is driven under the same conditions as the first.
+        L.set_background_throttle_suspended(True)
+        L.focus_game_viewport()
         yield 4.0
         unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.DayMinutes 0")
         unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.Hour 12")
