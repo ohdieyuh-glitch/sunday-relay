@@ -737,6 +737,15 @@ Each probe added killed a hypothesis and none of them was the cause:
 The wallet's `SButton` completes through the identical routing, in the same run, with identical probe
 answers. So the two are indistinguishable on every condition measured and differ only in outcome.
 
+Two further asymmetries were chased and are also dead, recorded so nobody spends the time again:
+
+- **The delegate binding form.** The tile uses `.OnClicked(this, &Method, Index)` and the wallet a lambda —
+  but `SimulateNavTileClick` fires that same delegate and both increments the counter and opens the surface,
+  so the binding is live and correct. The delegate is reached; the path to reaching it is not.
+- **The strip's `Pointing` attribute.** The nav bar takes one and the wallet does not, and `BeginPointing()`
+  flips it at the start of every nav click — a promising way to invalidate a press mid-click. It drives only
+  `ColorAndOpacity`. A tint cannot change layout, visibility or hit-testability.
+
 The rule that generalises: **a boolean return from a routing call names nothing.** When a click, a message or
 an event "was handled" but nothing happened, log the identity of whatever handled it before forming any
 hypothesis — three runs of diagnosis here rested on an inference from a bool that could not carry it.
