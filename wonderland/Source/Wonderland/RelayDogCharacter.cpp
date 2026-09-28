@@ -1601,6 +1601,19 @@ void ARelayDogCharacter::ShowCanonBody(bool bShow)
 		{
 			continue;
 		}
+		// ---- AND THE EYE PANE THE SPLIT REPLACED STAYS HIDDEN.
+		//
+		// THIS WOULD HAVE DRAWN THREE EYES. BuildEyeGlow hides the Blueprint's combined two-pane eye mesh and
+		// draws two panes of its own, farther apart. This loop shows EVERY untagged mesh, so the first time the
+		// Dog came back from a costume it would have un-hidden the combined pane and drawn it alongside both
+		// replacements -- the original pair in the middle plus the split pair either side.
+		//
+		// It would have reached the founder as a worse version of the defect they reported, and I would have
+		// gone looking at the spread arithmetic, which is correct.
+		if (Body->ComponentHasTag(TEXT("WL_EyeReplaced")))
+		{
+			continue;
+		}
 		Body->SetVisibility(bShow, false);
 		++Toggled;
 	}
@@ -1775,6 +1788,10 @@ void ARelayDogCharacter::BuildEyeGlow()
 		// exactly as they drive the original pane.
 		if (Spread > 1.0001 && Cube != nullptr && Glow != nullptr)
 		{
+			// TAGGED BEFORE IT IS HIDDEN, so ShowCanonBody knows to leave it hidden when the Dog returns from a
+			// costume. A hidden component with no mark on it is indistinguishable from one that happens to be
+			// off, and the next thing to iterate the meshes turns it back on.
+			Eye->ComponentTags.Add(TEXT("WL_EyeReplaced"));
 			Eye->SetVisibility(false, true);
 			for (const double Which : {-1.0, 1.0})
 			{
