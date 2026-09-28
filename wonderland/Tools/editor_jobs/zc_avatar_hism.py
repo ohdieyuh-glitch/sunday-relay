@@ -55,6 +55,18 @@ def job():
     yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 180)
     world = ues.get_game_world()
     L.focus_game_viewport()
+    # ---- ISSUED ONCE. `stat unit` IS A TOGGLE, AND RE-ISSUING IT TURNS THE OVERLAY OFF.
+    #
+    # The engine binds it as FEngineStatToggle::CreateUObject(this, &UEngine::ToggleStatUnit), so every call
+    # flips the display. Loops in this tree re-issued it every thirty ticks to "keep it alive" and were
+    # switching it off half the time -- which is why runs reported stat_froze in the hundreds, why frame
+    # samples came back sparse, and why a rung could report ten accepted frames in an eight-second window.
+    #
+    # FStatUnitData only advances while the overlay DRAWS, so the instrument was being disabled by the code
+    # meant to protect it. The frozen-stat guard added this afternoon was detecting a fault this loop caused.
+    #
+    # Issued once at the top and never again. A genuine dropout is then a real signal rather than this job's
+    # own doing, and the guard can be trusted.
     unreal.SystemLibrary.execute_console_command(world, "stat unit")
     unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 0")
     unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour 12.0")
@@ -72,8 +84,6 @@ def job():
             except Exception:
                 pass
             ticks += 1
-            if ticks % 30 == 0:
-                unreal.SystemLibrary.execute_console_command(world, "stat unit")
             yield 0.0
         clean = sorted(seen)
         def mid(i):
