@@ -27,11 +27,21 @@ npm run relay:surface-parity:check && npm run relay:surface-parity:check:strict
 npm run relay:yc-demo:check
 npm run relay:cli:contract-verify
 npm run build && npm run relay:build && npm run relay:hermes:build && npm run relay:bridge:build
-npm run julius:harness:check
+npm run julius:harness:verify       # export THEN check: see the note below
 git diff --check
 ```
 
-All of them pass at this branch's head. **`npm run typecheck` is listed first
+All of them pass at this branch's head. **`npm run julius:harness:verify`, not `:check`.** `generated/JULIUS_HARNESS_SOURCE.txt`
+is gitignored and stamps the HEAD it was generated at, so `--check` alone compares
+an artifact that is stale the instant a commit lands — and on a clean checkout it
+fails outright with "export missing". A gate that cannot pass on a fresh clone
+sends a reviewer chasing a phantom, so the gate is export-then-check, which is
+what actually asserts something: that the TRACKED manifest
+(`JULIUS_HARNESS_MANIFEST.md`) is current, that every exported file still hashes
+to its source, and that the trace reaches what it claims. This lane ran the two
+halves by hand all session and never noticed the list was wrong.
+
+**`npm run typecheck` is listed first
 because it is the one this lane broke and did not notice:** its FOURTH step
 (`scripts/tsconfig.json`) failed for several commits while every individually
 invoked check the lane ran was green, and vitest — which does not typecheck —

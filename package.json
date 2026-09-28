@@ -42,6 +42,7 @@
     "relay:beta-gate": "node scripts/wonderland-beta-gate.mjs",
     "julius:harness:export": "node scripts/export-julius-harness.mjs",
     "julius:harness:check": "node scripts/export-julius-harness.mjs --check",
+    "julius:harness:verify": "node scripts/export-julius-harness.mjs && node scripts/export-julius-harness.mjs --check",
     "relay": "npm run relay:build --silent && node dist-relay/cli.cjs",
     "relay:test": "vitest run src/relay",
     "relay:surface-parity:check": "node scripts/relay-surface-parity.mjs",
