@@ -2006,9 +2006,12 @@ export function createLiveHermesReviewerAdapter(input: {
               ? ['AUTH_CONFIGURATION', false] as const
               : outcome.shape === 'review_provider_http_error'
                 ? ['PROVIDER_UNAVAILABLE', false] as const
-                : outcome.shape === 'review_request_rejected'
+                : outcome.shape === 'review_request_rejected' || outcome.shape === 'review_content_refused'
                   // The request is what has to change, so repeating it verbatim
-                  // only spends the attempt. Never the provider's fault.
+                  // only spends the attempt. Never the provider's fault — and a
+                  // model that DECLINED the request itself belongs here for the
+                  // same reason, carried as the code the Coding Agent's
+                  // CONTENT_REFUSED carries so one phenomenon has one code.
                   ? ['INVALID_REQUEST', false] as const
                   // THE ENGINE'S OWN GIVE-UPS, each named for what clears it.
                   // Exhausted credits and a provider the engine already retried
