@@ -571,6 +571,34 @@ bool UWonderlandUiTestLibrary::PickTerminalAccent(bool bJulius, FLinearColor Col
 	return true;
 }
 
+bool UWonderlandUiTestLibrary::PickTerminalTextColour(bool bJulius, FLinearColor Colour)
+{
+	UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>();
+	if (Style == nullptr)
+	{
+		return false;
+	}
+	if (bJulius)
+	{
+		Style->JuliusTerminalTextColor = Colour;
+		Style->bJuliusTerminalTextChosen = true;
+	}
+	else
+	{
+		Style->CompanionTerminalTextColor = Colour;
+		Style->bCompanionTerminalTextChosen = true;
+	}
+	// SaveAndApply, the same one line the swatch itself calls, so a proof cannot pass through a path the
+	// player does not use -- which is the mistake the wardrobe made for a week.
+	WonderlandMascotStyle::SaveAndApply();
+	return true;
+}
+
+FLinearColor UWonderlandUiTestLibrary::GetTerminalTextColour(bool bJulius)
+{
+	return bJulius ? WonderlandUi::JuliusText() : WonderlandUi::CompanionText();
+}
+
 bool UWonderlandUiTestLibrary::PickMenuAccent(FLinearColor Colour)
 {
 	UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>();

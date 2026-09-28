@@ -264,7 +264,8 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 				.Visibility_Lambda([this]() { return Status == TEXT("WAITING") ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 				.Text(FText::FromString(InArgs._Intro.ToUpper()))
 				.Font(IntroFont)
-				.ColorAndOpacity(WonderlandUi::Cream())
+				// the companion's own opening words, so they follow the same secondary colour as its transcript
+				.ColorAndOpacity_Lambda([]() { return FSlateColor(WonderlandUi::CompanionText()); })
 				.LineHeightPercentage(1.2f)
 			]
 			// A JOINED COMPANION HERE IS A SIMULATION, and says so first.
@@ -424,7 +425,11 @@ void SWonderlandCompanionTerminal::RebuildLog()
 				SNew(STextBlock)
 				.Text(FText::FromString(Line.Text))
 				.Font(WonderlandUi::Mono(10))
-				.ColorAndOpacity(Line.bDim ? WonderlandUi::Dim() : WonderlandUi::Cream())
+				// THE WORDS THE COMPANION SAYS, in the secondary terminal colour. A LAMBDA, not a fixed
+				// value: rows are built once when the line arrives, so a colour baked in here would leave
+				// everything already on screen at the old one and recolour only what was said next.
+				.ColorAndOpacity_Lambda([bDim = Line.bDim]()
+					{ return FSlateColor(bDim ? WonderlandUi::Dim() : WonderlandUi::CompanionText()); })
 				.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 			]
 		];

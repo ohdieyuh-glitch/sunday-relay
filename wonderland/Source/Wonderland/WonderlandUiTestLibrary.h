@@ -217,6 +217,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool PickTerminalAccent(bool bJulius, FLinearColor Colour);
 
+	/**
+	 * THE SECONDARY TERMINAL COLOUR: the words inside, as opposed to the chrome around them.
+	 *
+	 * Founder, 2026-09-28: "Make a secondary live terminal colors option for the text colors of the words
+	 * inside the terminal." Writes the canonical state and calls SaveAndApply, exactly as the Colors tab's
+	 * own swatch does.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool PickTerminalTextColour(bool bJulius, FLinearColor Colour);
+
+	/** What the transcript is actually drawn in now -- Cream until the founder has chosen. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test")
+	static FLinearColor GetTerminalTextColour(bool bJulius);
+
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool PickMenuAccent(FLinearColor Colour);
 

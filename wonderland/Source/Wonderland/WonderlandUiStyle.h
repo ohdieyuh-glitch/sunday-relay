@@ -41,6 +41,9 @@ namespace WonderlandUi
 	/** The Julius Live Terminal's accent, and the AI Companion terminals' accent, chosen separately. */
 	WONDERLAND_API FLinearColor JuliusAccent();
 	WONDERLAND_API FLinearColor CompanionAccent();
+	/** The SECONDARY terminal colour: the words inside each terminal. Cream until the founder chooses. */
+	WONDERLAND_API FLinearColor JuliusText();
+	WONDERLAND_API FLinearColor CompanionText();
 	/** The Menu's accent surfaces only -- never a background and never body text. */
 	WONDERLAND_API FLinearColor MenuAccent();
 

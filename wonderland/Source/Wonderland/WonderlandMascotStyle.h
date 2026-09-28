@@ -100,6 +100,36 @@ public:
 	bool bCompanionTerminalAccentChosen = false;
 
 	/**
+	 * THE SECONDARY TERMINAL COLOUR: THE WORDS INSIDE, as opposed to the chrome around them.
+	 *
+	 * FOUNDER, 2026-09-28: "Make a secondary live terminal colors option for the text colors of the words
+	 * inside the terminal."
+	 *
+	 * The same primary/secondary shape the mascot already has, where PRIMARY is the colourway and SECONDARY
+	 * is the eyes. Here PRIMARY is the accent -- frame, rule, title, the plate's tint -- and SECONDARY is the
+	 * transcript: what the companion and Julius actually SAY.
+	 *
+	 * SCOPED TO THE TRANSCRIPT ON PURPOSE. It colours the spoken lines and nothing structural, because the
+	 * standing rule on the menu accents is "update the intentional accent surfaces WITHOUT making text
+	 * unreadable; do not indiscriminately tint every element." Button labels, key hints and the input box
+	 * keep their cream, so no choice here can leave a terminal the player cannot operate.
+	 *
+	 * Defaults to the cream the transcript has always been, and is inert until chosen, so an install that has
+	 * not asked for this sees no change at all.
+	 */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Terminals")
+	FLinearColor JuliusTerminalTextColor = FLinearColor(FColor(0xEC, 0xE7, 0xDD));
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Terminals")
+	bool bJuliusTerminalTextChosen = false;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Terminals")
+	FLinearColor CompanionTerminalTextColor = FLinearColor(FColor(0xEC, 0xE7, 0xDD));
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Terminals")
+	bool bCompanionTerminalTextChosen = false;
+
+	/**
 	 * THE MENU'S OWN THEME COLOUR (founder, 2026-09-25): "Allow the player to select a Menu theme ... Update the
 	 * intentional accent surfaces WITHOUT making text unreadable. Do not indiscriminately tint every element."
 	 *

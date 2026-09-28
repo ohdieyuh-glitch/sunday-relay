@@ -298,6 +298,25 @@ namespace WonderlandUi
 	}
 
 	/**
+	 * THE WORDS INSIDE EACH TERMINAL -- the secondary colour, read by the transcript and by nothing else.
+	 *
+	 * Falls back to Cream(), which is what the transcript has always been, so this is invisible until the
+	 * founder chooses something. Read every time for the same reason the accents are: it is chosen from a
+	 * panel that is open while it is being chosen.
+	 */
+	FLinearColor JuliusText()
+	{
+		const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+		return Style.bJuliusTerminalTextChosen ? Style.JuliusTerminalTextColor : Cream();
+	}
+
+	FLinearColor CompanionText()
+	{
+		const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+		return Style.bCompanionTerminalTextChosen ? Style.CompanionTerminalTextColor : Cream();
+	}
+
+	/**
 	 * THE MENU'S OWN ACCENT, and only its accent.
 	 *
 	 * FOUNDER: "Update the intentional accent surfaces WITHOUT making text unreadable. Do not indiscriminately

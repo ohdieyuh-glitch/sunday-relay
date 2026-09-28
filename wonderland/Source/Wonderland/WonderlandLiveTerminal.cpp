@@ -659,7 +659,10 @@ void SWonderlandLiveTerminal::RebuildJuliusBody()
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 			[
-				SNew(STextBlock).Text(FText::FromString(Row.Headline)).Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::Cream())
+				// WHAT JULIUS ACTUALLY SAYS, in the secondary terminal colour. The time and the role beside it
+				// stay on the accent: they are structure, not speech.
+				SNew(STextBlock).Text(FText::FromString(Row.Headline)).Font(WonderlandUi::Mono(9))
+				.ColorAndOpacity_Lambda([]() { return FSlateColor(WonderlandUi::JuliusText()); })
 				.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 			]
 		];

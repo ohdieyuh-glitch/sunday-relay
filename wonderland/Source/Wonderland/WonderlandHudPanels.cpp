@@ -492,12 +492,29 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 					[Style]() { return Style() != nullptr ? Style()->JuliusTerminalAccent : FLinearColor::White; },
 					[Style](FLinearColor C) { if (Style()) { Style()->JuliusTerminalAccent = C; Style()->bJuliusTerminalAccentChosen = true; } })
 			]
+			// THE SECONDARY, DIRECTLY UNDER ITS OWN PRIMARY, which is how the mascot rows above are already
+			// arranged: a colourway and then the eyes. Founder, 2026-09-28: "a secondary live terminal colors
+			// option for the text colors of the words inside the terminal."
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				MakeColourRow(TEXT("JULIUS TERMINAL  SECONDARY"),
+					TEXT("The words Julius says inside the terminal. Labels and key hints keep their cream."),
+					[Style]() { return Style() != nullptr ? Style()->JuliusTerminalTextColor : FLinearColor::White; },
+					[Style](FLinearColor C) { if (Style()) { Style()->JuliusTerminalTextColor = C; Style()->bJuliusTerminalTextChosen = true; } })
+			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				MakeColourRow(TEXT("COMPANION TERMINALS"),
 					TEXT("The LLM Companion and Jhinn terminals' accent."),
 					[Style]() { return Style() != nullptr ? Style()->CompanionTerminalAccent : FLinearColor::White; },
 					[Style](FLinearColor C) { if (Style()) { Style()->CompanionTerminalAccent = C; Style()->bCompanionTerminalAccentChosen = true; } })
+			]
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				MakeColourRow(TEXT("COMPANION TERMINALS  SECONDARY"),
+					TEXT("The words the companions say inside their terminals."),
+					[Style]() { return Style() != nullptr ? Style()->CompanionTerminalTextColor : FLinearColor::White; },
+					[Style](FLinearColor C) { if (Style()) { Style()->CompanionTerminalTextColor = C; Style()->bCompanionTerminalTextChosen = true; } })
 			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
@@ -543,6 +560,8 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 						S->bCompanionChosen = false;
 						S->bJuliusTerminalAccentChosen = false;
 						S->bCompanionTerminalAccentChosen = false;
+						S->bJuliusTerminalTextChosen = false;
+						S->bCompanionTerminalTextChosen = false;
 						S->bMenuAccentChosen = false;
 						S->CursorShape = TEXT("system");
 						S->CursorSize = 22.0f;
