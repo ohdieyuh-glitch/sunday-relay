@@ -1,6 +1,6 @@
 import {
   ROLE_SLOTS,
-  type RoleOccupant, type RoleSlot,
+  type OccupantQualificationStatus, type RoleOccupant, type RoleSlot,
 } from './role-slot-contracts';
 
 /**
@@ -108,6 +108,20 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
       'A credential VARIABLE being set is never proof the key is valid; only a call proves that.',
       'Live is enabled by RELAY_PROMPT_ARCHITECT_MODE=live and never inferred from a key being present.',
     ],
+    /**
+     * IT RAN, PAID, AND THE RECORD CANNOT NAME WHAT ANSWERED.
+     *
+     * Paid run 34414726976 completed with a real architect plan that a real
+     * reviewer accepted, so the LEG is proven. Its served model is not in the
+     * bundle: the success-path diagnostics that carry it were emitted only on
+     * the failure path in that build, so `worker-diagnostics.tsv` held zero
+     * rows. A qualification that cannot name the model it qualified is not one.
+     */
+    qualification: {
+      status: 'COMPATIBLE',
+      qualifiedServedModels: Object.freeze([]), evidence: Object.freeze(['github-actions-run:34414726976', 'docs/JULIUS_PAID_RUN_34414726976_LIVE_RUN_3.md']),
+      note: 'A paid mission completed through this leg; the bundle records no served model for it, so no model is VERIFIED.',
+    },
   },
   {
     occupantId: 'fusion_architect',
@@ -125,6 +139,11 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
     verificationNotes: [
       'A development path. This is not the live Prompt Architect and must never be presented as one.',
     ],
+    qualification: {
+      status: 'UNSUPPORTED',
+      qualifiedServedModels: Object.freeze([]), evidence: Object.freeze([]),
+      note: 'A development engine. It is not a provider path and can never be qualified as one.',
+    },
   },
 
   /* ----------------------------------------------------- coding agent --- */
@@ -150,6 +169,11 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
       'Requires the Claude Code CLI installed on the machine running Relay, logged in to a first-party subscription.',
       'An API-key auth source raises a Manual Task rather than an API-billed run.',
     ],
+    qualification: {
+      status: 'COMPATIBLE',
+      qualifiedServedModels: Object.freeze([]), evidence: Object.freeze([]),
+      note: 'Driveable where the CLI is installed; no Julius mission has completed a paid qualification through it.',
+    },
   },
   {
     occupantId: 'claude_agent_sdk_hosted',
@@ -171,6 +195,17 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
       'The SDK extracts a platform-native runtime at run time, so the package must be installed in the deployment.',
       'A credential VARIABLE being set is never proof the key is valid; only a run proves that.',
     ],
+    /**
+     * THE LEG THAT REPORTED A PRICE AND NOT A MODEL. Paid run 34414726976's
+     * Coding Agent settled $0.608861 `PROVIDER_REPORTED` against a real
+     * implementation behind signed executor receipts — and the same missing
+     * diagnostics row that costs the architect its model costs this one too.
+     */
+    qualification: {
+      status: 'COMPATIBLE',
+      qualifiedServedModels: Object.freeze([]), evidence: Object.freeze(['github-actions-run:34414726976', 'docs/JULIUS_PAID_RUN_34414726976_LIVE_RUN_3.md']),
+      note: 'A paid mission implemented and settled a real cost through this leg; its served model is not in the bundle, so no model is VERIFIED.',
+    },
   },
 
   {
@@ -210,6 +245,11 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
       'Selected by RELAY_BRIDGE_FAKE_CLAUDE=1, which is a deployment mode rather than a role choice.',
       'Needs git and node on the host: it builds a throwaway fixture repository and runs the tests itself. Those are process requirements this registry cannot probe, so they are named here rather than claimed absent.',
     ],
+    qualification: {
+      status: 'UNSUPPORTED',
+      qualifiedServedModels: Object.freeze([]), evidence: Object.freeze([]),
+      note: 'A fake. It satisfies the interface deliberately and must never read as a qualified provider.',
+    },
   },
 
   /* --------------------------------------------------------- reviewer --- */
@@ -246,6 +286,11 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
       'Enabled explicitly: the credential already exists for the Prompt Architect, and using it for a second PAID role is an operator decision rather than a default.',
       'Readiness is configuration presence only. Whether the provider answers is proven by the first review, because a probe that proved it would be a paid call.',
     ],
+    qualification: {
+      status: 'COMPATIBLE',
+      qualifiedServedModels: Object.freeze([]), evidence: Object.freeze([]),
+      note: 'No paid mission has reviewed through it, and it shares the architect\u2019s independence group, so a mission using both is refused before spend.',
+    },
   },
   {
     occupantId: 'hermes_local',
@@ -264,6 +309,21 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
       'Requires the Hermes executable on the PATH of the machine running Relay.',
       'Read-only is structural: an isolated profile leaves the model with no toolset at all.',
     ],
+    /**
+     * THE ONE VERIFIED LEG IN THE TRIO, and the only one whose served model the
+     * bundle names. Paid run 34414726976: a real independent review under both
+     * deadlines, reaching VERIFIED COMPLETION with no founder rescue, served by
+     * `grok-build-0.1` — recorded in `evidence.tsv` and nowhere else, which is
+     * itself a gap that run wrote down.
+     *
+     * IT IS THIS MODEL AND NO OTHER. A later `grok-build-0.2` inherits nothing.
+     */
+    qualification: {
+      status: 'VERIFIED',
+      qualifiedServedModels: Object.freeze(['grok-build-0.1']),
+      evidence: Object.freeze(['github-actions-run:34414726976', 'docs/JULIUS_PAID_RUN_34414726976_LIVE_RUN_3.md']),
+      note: 'Full paid end-to-end qualification, served model recorded. The run did NOT exercise the reviewer\u2019s catching power, which it recorded as a named gap.',
+    },
   },
   {
     occupantId: 'hermes_remote_service',
@@ -285,8 +345,42 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
       'A production bridge must additionally list the service origin in RELAY_HERMES_TRUSTED_ORIGINS; the bearer token goes nowhere else.',
       'Configuration proves the bridge is set up to reach a service, never that one answered.',
     ],
+    qualification: {
+      status: 'COMPATIBLE',
+      qualifiedServedModels: Object.freeze([]), evidence: Object.freeze([]),
+      note: 'The paid qualification used the local transport; no mission has reviewed through the remote service.',
+    },
   },
 ]);
+
+/**
+ * HOW FAR THIS OCCUPANT IS QUALIFIED **FOR THE MODEL THAT ACTUALLY ANSWERED**.
+ *
+ * The founder's rule, as a function: one qualified model does not qualify every
+ * model from the same vendor, and an occupant's own VERIFIED standing does not
+ * transfer to a model its qualification never covered.
+ *
+ * THREE WAYS TO FALL SHORT OF VERIFIED, and all three are ordinary:
+ *
+ *   - the occupant was never paid-qualified at all, so nothing a model is named
+ *     can raise it;
+ *   - the occupant IS qualified but the provider did not say what it served, so
+ *     there is no model to check the qualification against. `null` here is the
+ *     provider's silence, and answering VERIFIED to silence is how a swapped
+ *     model ships as a qualified one;
+ *   - the occupant IS qualified and the served model is not on its list. A
+ *     `grok-build-0.2` inherits nothing from `grok-build-0.1`.
+ *
+ * It never returns something HIGHER than the occupant declares.
+ */
+export function juliusProviderQualification(
+  occupant: RoleOccupant,
+  servedModel: string | null,
+): OccupantQualificationStatus {
+  if (occupant.qualification.status !== 'VERIFIED') return occupant.qualification.status;
+  if (servedModel === null || servedModel.trim() === '') return 'COMPATIBLE';
+  return occupant.qualification.qualifiedServedModels.includes(servedModel) ? 'VERIFIED' : 'COMPATIBLE';
+}
 
 /** Look one up. Unknown is `null` — never a nearest match, because binding a
  *  role to something the operator did not name is the whole failure this
