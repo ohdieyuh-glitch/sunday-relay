@@ -117,9 +117,9 @@ repairs, and returns a verified result with evidence.
   unreachable; and the repository-wide rule `/sk-[A-Za-z0-9]{8,}/` demanded eight
   alphanumerics straight after `sk-`, so it missed every modern provider key
   (`sk-ant-api03-`, `sk-proj-`, `sk-svcacct-`) and a bare Anthropic key in prose
-  was never redacted at all. The `` the widened rule needs also fixes the
-  opposite defect in the same line: unanchored, `sk-` matched inside
-  `task-oriented`. Found by the integration lane, reproduced here as four leaks
+  was never redacted at all. The word-boundary anchor the widened rule needs
+  also fixes the opposite defect in the same line: unanchored, `sk-` matched
+  inside `task-oriented`. Found by the integration lane, reproduced here as four leaks
   by probe, and proven not vacuous — with only the two source files reverted,
   eleven cases fail.
 - **The runbook's App id was the bot's USER id** (`325202980`, the number in the
