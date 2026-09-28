@@ -94,3 +94,39 @@ translucent cards**. A flame built from opaque geometry has a polygon outline, a
 and now the shaping exponents — has been measured and none of them touches the silhouette.
 
 That is asset authoring rather than a parameter, and it is the honest remaining scope for this item.
+
+---
+
+## Re-tested on a material that was actually softened — the conclusion holds
+
+The first softening attempt did not reach the material. Read back off the asset **and** off the instance the
+dressed figure wears:
+
+```
+first rebuild    EdgeSoftness 0.85 (unchanged)   TipFalloff 2.2 (took)
+second rebuild   EdgeSoftness 2.60               TipFalloff 2.2
+```
+
+Both parameters are written by the same helper in the same way, and only one took on the first run. So the
+"softened" flame originally photographed had its edge falloff exactly as it always was, and that comparison
+was between two pictures of the same material. **The conclusion was withdrawn and re-tested.**
+
+With `EdgeSoftness` verified at 2.6 in the asset *and* in the drawn instance, re-captured at gameplay
+distance at night:
+
+| rung | reach | over-white |
+|---|---|---|
+| approved voxel glow | 95.15% | 0.000 |
+| shaped, gain 60 | 95.72% | 0.000 |
+| shaped, gain 140 | 90.35% | 0.000 |
+
+**The flames are still flat, hard-edged, saturated yellow polygons.** No visible softening, reach unchanged,
+nothing clips.
+
+So the conclusion stands and is now earned: **the edge that reads as "plastic" is the ribbon's own silhouette
+against the background, not the falloff across its faces.** Shading within a polygon cannot remove that
+polygon's outline. Every lever reachable from code — two materials, gain 60→180, and now verified softening
+exponents — has been measured and none of them touches it.
+
+`wl.Look.FireMaterial` still ships at 0, so the corrected exponents are inert by default. They are kept
+because 0.85 was backwards on its own terms.
