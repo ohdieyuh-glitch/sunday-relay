@@ -818,7 +818,16 @@ const FWonderlandMissionTask* UWonderlandMissionTaskSubsystem::FindFollowedJuliu
 			&& !Row.RunId.Value.IsEmpty();
 	};
 
-	// ---- WHAT THIS SESSION WAS LAST ASKED TO FOLLOW, if it is still a live row.
+	// ---- WHAT THIS SESSION WAS LAST ASKED TO FOLLOW, and NOTHING ELSE once something has been asked for.
+	//
+	// REFUSING BEATS GUESSING HERE, which is the Julius lane's point and it is right. If the followed contract
+	// has been put away, or has lost its run, the honest answer is that nothing is being followed -- not some
+	// other mission that happens to sit first in the array. Falling back in that case would be the same false
+	// statement this function was just fixed for, narrowed to a case nobody had exercised: acceptance #5's
+	// A06o switches runs with every task still in the workspace, so the put-away path is untested by it.
+	//
+	// A surface that reads empty is a surface saying "no mission is running", which is true. A surface naming
+	// a mission the player never asked to follow is a surface lying quietly.
 	if (!FollowedContractId.IsEmpty())
 	{
 		for (const FWonderlandMissionTask& Row : Tasks)
@@ -828,10 +837,12 @@ const FWonderlandMissionTask* UWonderlandMissionTaskSubsystem::FindFollowedJuliu
 				return &Row;
 			}
 		}
+		return nullptr;
 	}
 
-	// ---- OTHERWISE THE FIRST LIVE ROW. This is the restored-contract case, before the transport has adopted
-	// anything: the panel still has to name something rather than report that nothing is running.
+	// ---- THE FIRST LIVE ROW, ONLY WHEN NOTHING HAS BEEN FOLLOWED THIS SESSION. That is the restored-contract
+	// case: contracts came back from disk, the transport has adopted nothing yet, and the panel still has to
+	// name something rather than report that nothing is running.
 	for (const FWonderlandMissionTask& Row : Tasks)
 	{
 		if (IsLiveJuliusRow(Row))
