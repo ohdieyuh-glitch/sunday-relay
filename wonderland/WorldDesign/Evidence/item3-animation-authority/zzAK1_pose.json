@@ -1,0 +1,386 @@
+{
+ "name": "zzAK1_pose",
+ "started": "2026-09-27 19:23:06",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "W00",
+   "name": "the Dog publishes its canonical worn pose",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "W01",
+   "name": "every costume skin produced a costume attached to the Dog",
+   "pass": true,
+   "detail": {
+    "dressed": [
+     "apollo",
+     "arden_infernal",
+     "celestial_light",
+     "skeleton_flame"
+    ],
+    "wanted": 4,
+    "note": "Relay OG is the canonical body and wears no costume, so four of five is the right answer. The costume is matched on its attachment parent, because the AI Companions are the same class and a class match picks one of them."
+   }
+  },
+  {
+   "id": "W02",
+   "name": "the Dog's gait actually advances while it is walking",
+   "pass": true,
+   "detail": {
+    "stride_phase_spread": {
+     "relay_og": 0.7575,
+     "celestial_light": 0.8479,
+     "apollo": 0.5508,
+     "arden_infernal": 0.639,
+     "skeleton_flame": 0.7293
+    },
+    "top_speed_uu": {
+     "relay_og": 25.46,
+     "celestial_light": 13.75,
+     "apollo": 26.1,
+     "arden_infernal": 25.35,
+     "skeleton_flame": 17.14
+    },
+    "note": "THE POSITIVE CONTROL, and it earned its place on the first run. A pose that never moves compares equal to anything, so W04 passed for all four costumes on six samples in which the stride phase moved 0.0000 -- the Dog was standing still and its gait was a constant. Without this clause that would have read as the strongest possible pass."
+   }
+  },
+  {
+   "id": "W03",
+   "name": "every costume reports that its gait is driven from outside",
+   "pass": true,
+   "detail": {
+    "not_driven": null,
+    "note": "the flag says the costume has handed its gait to the canonical stack. A costume computing its own gait is the item 3 defect in its plainest form, whatever the numbers then agree on."
+   }
+  },
+  {
+   "id": "W04",
+   "name": "every costume wears the pose the Dog published, field for field",
+   "pass": true,
+   "detail": {
+    "vs_canonical": {
+     "celestial_light": {
+      "worst_by_field": {
+       "stride_phase": 0.0,
+       "gait_weight": 0.0,
+       "speed_uu": 0.0,
+       "bob_uu": 0.0,
+       "sway_uu": 0.0,
+       "lift_uu": 0.0,
+       "body_pitch_deg": 0.0,
+       "body_yaw_deg": 0.0,
+       "body_roll_deg": 0.0,
+       "head_pitch_deg": 0.0,
+       "head_yaw_deg": 0.0,
+       "tail_pitch_deg": 0.0,
+       "tail_yaw_deg": 0.0,
+       "airborne_weight": 0.0,
+       "stillness": 0.0,
+       "hip_left_deg": 0.0,
+       "hip_right_deg": 0.0,
+       "knee_left_deg": 0.0,
+       "knee_right_deg": 0.0,
+       "shoulder_left_deg": 0.0,
+       "shoulder_right_deg": 0.0,
+       "elbow_left_deg": 0.0,
+       "elbow_right_deg": 0.0
+      },
+      "fields_that_differ": null,
+      "gait_driven_externally": true
+     },
+     "apollo": {
+      "worst_by_field": {
+       "stride_phase": 0.0,
+       "gait_weight": 0.0,
+       "speed_uu": 0.0,
+       "bob_uu": 0.0,
+       "sway_uu": 0.0,
+       "lift_uu": 0.0,
+       "body_pitch_deg": 0.0,
+       "body_yaw_deg": 0.0,
+       "body_roll_deg": 0.0,
+       "head_pitch_deg": 0.0,
+       "head_yaw_deg": 0.0,
+       "tail_pitch_deg": 0.0,
+       "tail_yaw_deg": 0.0,
+       "airborne_weight": 0.0,
+       "stillness": 0.0,
+       "hip_left_deg": 0.0,
+       "hip_right_deg": 0.0,
+       "knee_left_deg": 0.0,
+       "knee_right_deg": 0.0,
+       "shoulder_left_deg": 0.0,
+       "shoulder_right_deg": 0.0,
+       "elbow_left_deg": 0.0,
+       "elbow_right_deg": 0.0
+      },
+      "fields_that_differ": null,
+      "gait_driven_externally": true
+     },
+     "arden_infernal": {
+      "worst_by_field": {
+       "stride_phase": 0.0,
+       "gait_weight": 0.0,
+       "speed_uu": 0.0,
+       "bob_uu": 0.0,
+       "sway_uu": 0.0,
+       "lift_uu": 0.0,
+       "body_pitch_deg": 0.0,
+       "body_yaw_deg": 0.0,
+       "body_roll_deg": 0.0,
+       "head_pitch_deg": 0.0,
+       "head_yaw_deg": 0.0,
+       "tail_pitch_deg": 0.0,
+       "tail_yaw_deg": 0.0,
+       "airborne_weight": 0.0,
+       "stillness": 0.0,
+       "hip_left_deg": 0.0,
+       "hip_right_deg": 0.0,
+       "knee_left_deg": 0.0,
+       "knee_right_deg": 0.0,
+       "shoulder_left_deg": 0.0,
+       "shoulder_right_deg": 0.0,
+       "elbow_left_deg": 0.0,
+       "elbow_right_deg": 0.0
+      },
+      "fields_that_differ": null,
+      "gait_driven_externally": true
+     },
+     "skeleton_flame": {
+      "worst_by_field": {
+       "stride_phase": 0.0,
+       "gait_weight": 0.0,
+       "speed_uu": 0.0,
+       "bob_uu": 0.0,
+       "sway_uu": 0.0,
+       "lift_uu": 0.0,
+       "body_pitch_deg": 0.0,
+       "body_yaw_deg": 0.0,
+       "body_roll_deg": 0.0,
+       "head_pitch_deg": 0.0,
+       "head_yaw_deg": 0.0,
+       "tail_pitch_deg": 0.0,
+       "tail_yaw_deg": 0.0,
+       "airborne_weight": 0.0,
+       "stillness": 0.0,
+       "hip_left_deg": 0.0,
+       "hip_right_deg": 0.0,
+       "knee_left_deg": 0.0,
+       "knee_right_deg": 0.0,
+       "shoulder_left_deg": 0.0,
+       "shoulder_right_deg": 0.0,
+       "elbow_left_deg": 0.0,
+       "elbow_right_deg": 0.0
+      },
+      "fields_that_differ": null,
+      "gait_driven_externally": true
+     }
+    },
+    "tolerance": 0.001,
+    "differing": null,
+    "note": "the founder's 'one canonical Relay Dog behavior stack; skins are cosmetic' as an exact question. This does not say the canonical pose LOOKS right, which is theirs to judge, and it does not cover walk, run, stop, turns, jump, fall or landing as performances."
+   }
+  }
+ ],
+ "fields_compared": [
+  "stride_phase",
+  "gait_weight",
+  "speed_uu",
+  "bob_uu",
+  "sway_uu",
+  "lift_uu",
+  "body_pitch_deg",
+  "body_yaw_deg",
+  "body_roll_deg",
+  "head_pitch_deg",
+  "head_yaw_deg",
+  "tail_pitch_deg",
+  "tail_yaw_deg",
+  "airborne_weight",
+  "stillness",
+  "hip_left_deg",
+  "hip_right_deg",
+  "knee_left_deg",
+  "knee_right_deg",
+  "shoulder_left_deg",
+  "shoulder_right_deg",
+  "elbow_left_deg",
+  "elbow_right_deg"
+ ],
+ "readings": {
+  "relay_og": {
+   "has_costume": false,
+   "idle_samples": 6,
+   "walk_samples": 6
+  },
+  "celestial_light": {
+   "has_costume": true,
+   "gait_driven_externally": true,
+   "idle_samples": 6,
+   "walk_samples": 6
+  },
+  "apollo": {
+   "has_costume": true,
+   "gait_driven_externally": true,
+   "idle_samples": 6,
+   "walk_samples": 6
+  },
+  "arden_infernal": {
+   "has_costume": true,
+   "gait_driven_externally": true,
+   "idle_samples": 6,
+   "walk_samples": 6
+  },
+  "skeleton_flame": {
+   "has_costume": true,
+   "gait_driven_externally": true,
+   "idle_samples": 6,
+   "walk_samples": 6
+  }
+ },
+ "dressed_skins": [
+  "apollo",
+  "arden_infernal",
+  "celestial_light",
+  "skeleton_flame"
+ ],
+ "dog_stride_movement_while_walking": {
+  "relay_og": 0.7575,
+  "celestial_light": 0.8479,
+  "apollo": 0.5508,
+  "arden_infernal": 0.639,
+  "skeleton_flame": 0.7293
+ },
+ "dog_top_speed_while_walking": {
+  "relay_og": 25.46,
+  "celestial_light": 13.75,
+  "apollo": 26.1,
+  "arden_infernal": 25.35,
+  "skeleton_flame": 17.14
+ },
+ "vs_canonical": {
+  "celestial_light": {
+   "worst_by_field": {
+    "stride_phase": 0.0,
+    "gait_weight": 0.0,
+    "speed_uu": 0.0,
+    "bob_uu": 0.0,
+    "sway_uu": 0.0,
+    "lift_uu": 0.0,
+    "body_pitch_deg": 0.0,
+    "body_yaw_deg": 0.0,
+    "body_roll_deg": 0.0,
+    "head_pitch_deg": 0.0,
+    "head_yaw_deg": 0.0,
+    "tail_pitch_deg": 0.0,
+    "tail_yaw_deg": 0.0,
+    "airborne_weight": 0.0,
+    "stillness": 0.0,
+    "hip_left_deg": 0.0,
+    "hip_right_deg": 0.0,
+    "knee_left_deg": 0.0,
+    "knee_right_deg": 0.0,
+    "shoulder_left_deg": 0.0,
+    "shoulder_right_deg": 0.0,
+    "elbow_left_deg": 0.0,
+    "elbow_right_deg": 0.0
+   },
+   "fields_that_differ": null,
+   "gait_driven_externally": true
+  },
+  "apollo": {
+   "worst_by_field": {
+    "stride_phase": 0.0,
+    "gait_weight": 0.0,
+    "speed_uu": 0.0,
+    "bob_uu": 0.0,
+    "sway_uu": 0.0,
+    "lift_uu": 0.0,
+    "body_pitch_deg": 0.0,
+    "body_yaw_deg": 0.0,
+    "body_roll_deg": 0.0,
+    "head_pitch_deg": 0.0,
+    "head_yaw_deg": 0.0,
+    "tail_pitch_deg": 0.0,
+    "tail_yaw_deg": 0.0,
+    "airborne_weight": 0.0,
+    "stillness": 0.0,
+    "hip_left_deg": 0.0,
+    "hip_right_deg": 0.0,
+    "knee_left_deg": 0.0,
+    "knee_right_deg": 0.0,
+    "shoulder_left_deg": 0.0,
+    "shoulder_right_deg": 0.0,
+    "elbow_left_deg": 0.0,
+    "elbow_right_deg": 0.0
+   },
+   "fields_that_differ": null,
+   "gait_driven_externally": true
+  },
+  "arden_infernal": {
+   "worst_by_field": {
+    "stride_phase": 0.0,
+    "gait_weight": 0.0,
+    "speed_uu": 0.0,
+    "bob_uu": 0.0,
+    "sway_uu": 0.0,
+    "lift_uu": 0.0,
+    "body_pitch_deg": 0.0,
+    "body_yaw_deg": 0.0,
+    "body_roll_deg": 0.0,
+    "head_pitch_deg": 0.0,
+    "head_yaw_deg": 0.0,
+    "tail_pitch_deg": 0.0,
+    "tail_yaw_deg": 0.0,
+    "airborne_weight": 0.0,
+    "stillness": 0.0,
+    "hip_left_deg": 0.0,
+    "hip_right_deg": 0.0,
+    "knee_left_deg": 0.0,
+    "knee_right_deg": 0.0,
+    "shoulder_left_deg": 0.0,
+    "shoulder_right_deg": 0.0,
+    "elbow_left_deg": 0.0,
+    "elbow_right_deg": 0.0
+   },
+   "fields_that_differ": null,
+   "gait_driven_externally": true
+  },
+  "skeleton_flame": {
+   "worst_by_field": {
+    "stride_phase": 0.0,
+    "gait_weight": 0.0,
+    "speed_uu": 0.0,
+    "bob_uu": 0.0,
+    "sway_uu": 0.0,
+    "lift_uu": 0.0,
+    "body_pitch_deg": 0.0,
+    "body_yaw_deg": 0.0,
+    "body_roll_deg": 0.0,
+    "head_pitch_deg": 0.0,
+    "head_yaw_deg": 0.0,
+    "tail_pitch_deg": 0.0,
+    "tail_yaw_deg": 0.0,
+    "airborne_weight": 0.0,
+    "stillness": 0.0,
+    "hip_left_deg": 0.0,
+    "hip_right_deg": 0.0,
+    "knee_left_deg": 0.0,
+    "knee_right_deg": 0.0,
+    "shoulder_left_deg": 0.0,
+    "shoulder_right_deg": 0.0,
+    "elbow_left_deg": 0.0,
+    "elbow_right_deg": 0.0
+   },
+   "fields_that_differ": null,
+   "gait_driven_externally": true
+  }
+ },
+ "skins_not_driven_externally": null,
+ "skins_wearing_a_different_pose": null,
+ "finished": "2026-09-27 19:24:11",
+ "seconds": 64.5,
+ "log": "W00 PASS the Dog publishes its canonical worn pose {}\nW_relay_og INFO relay_og {'has_costume': False, 'gait_driven_externally': None, 'first_dog': {'stride_phase': 0.0, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': -0.0, 'sway_uu': -0.2702, 'lift_uu': 0.0, 'body_pitch_deg': 0.0, 'body_yaw_deg': -0.0, 'body_roll_deg': -0.2064, 'head_pitch_deg': -2.8767, 'head_yaw_deg': 7.6748, 'tail_pitch_deg': 0.934, 'tail_yaw_deg': -2.075, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.887, 'shoulder_right_deg': -0.887, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0, 'b_valid': None}, 'first_worn': None}\nW_celestial_light INFO celestial_light {'has_costume': True, 'gait_driven_externally': True, 'first_dog': {'stride_phase': 0.0495, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': -0.0, 'sway_uu': 0.1722, 'lift_uu': 0.0, 'body_pitch_deg': 0.0, 'body_yaw_deg': -0.0, 'body_roll_deg': 0.1316, 'head_pitch_deg': -0.3024, 'head_yaw_deg': 7.5886, 'tail_pitch_deg': -0.8013, 'tail_yaw_deg': 0.1727, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.839, 'shoulder_right_deg': -0.839, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0, 'b_valid': None}, 'first_worn': {'stride_phase': 0.0495, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': -0.0, 'sway_uu': 0.1722, 'lift_uu': 0.0, 'body_pitch_deg': 0.0, 'body_yaw_deg': -0.0, 'body_roll_deg': 0.1316, 'head_pitch_deg': -0.3024, 'head_yaw_deg': 7.5886, 'tail_pitch_deg': -0.8013, 'tail_yaw_deg': 0.1727, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.839, 'shoulder_right_deg': -0.839, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0, 'b_valid': None}}\nW_apollo INFO apollo {'has_costume': True, 'gait_driven_externally': True, 'first_dog': {'stride_phase': 0.4285, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': -0.0, 'sway_uu': -0.1403, 'lift_uu': 0.0, 'body_pitch_deg': -0.0, 'body_yaw_deg': -0.0, 'body_roll_deg': -0.1072, 'head_pitch_deg': -1.2212, 'head_yaw_deg': 0.3569, 'tail_pitch_deg': -1.3671, 'tail_yaw_deg': 2.0621, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.6388, 'shoulder_right_deg': -0.6388, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0, 'b_valid': None}, 'first_worn': {'stride_phase': 0.4285, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': -0.0, 'sway_uu': -0.1403, 'lift_uu': 0.0, 'body_pitch_deg': -0.0, 'body_yaw_deg': -0.0, 'body_roll_deg': -0.1072, 'head_pitch_deg': -1.2212, 'head_yaw_deg': 0.3569, 'tail_pitch_deg': -1.3671, 'tail_yaw_deg': 2.0621, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.6388, 'shoulder_right_deg': -0.6388, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0, 'b_valid': None}}\nW_arden_infernal INFO arden_infernal {'has_costume': True, 'gait_driven_externally': True, 'first_dog': {'stride_phase': 0.0583, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': -0.0, 'sway_uu': 0.11, 'lift_uu': 0.0, 'body_pitch_deg': 0.0, 'body_yaw_deg': -0.0, 'body_roll_deg': 0.084, 'head_pitch_deg': 0.5473, 'head_yaw_deg': 0.687, 'tail_pitch_deg': -0.2496, 'tail_yaw_deg': -1.2951, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.3273, 'shoulder_right_deg': -0.3273, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0, 'b_valid': None}, 'first_worn': {'stride_phase': 0.0583, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': -0.0, 'sway_uu': 0.11, 'lift_uu': 0.0, 'body_pitch_deg': 0.0, 'body_yaw_deg': -0.0, 'body_roll_deg': 0.084, 'head_pitch_deg': 0.5473, 'head_yaw_deg': 0.687, 'tail_pitch_deg': -0.2496, 'tail_yaw_deg': -1.2951, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.3273, 'shoulder_right_deg': -0.3273, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0, 'b_valid': None}}\nW_skeleton_flame INFO skeleton_flame {'has_costume': True, 'gait_driven_externally': True, 'first_dog': {'stride_phase': 0.3189, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': -0.0, 'sway_uu': -0.0584, 'lift_uu': 0.0, 'body_pitch_deg': -0.0, 'body_yaw_deg': -0.0, 'body_roll_deg': -0.0446, 'head_pitch_deg': 0.8637, 'head_yaw_deg': -0.1255, 'tail_pitch_deg': 1.2099, 'tail_yaw_deg': -1.2884, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.017, 'shoulder_right_deg': -0.017, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0, 'b_valid': None}, 'first_worn': {'stride_phase': 0.3189, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': -0.0, 'sway_uu': -0.0584, 'lift_uu': 0.0, 'body_pitch_deg': -0.0, 'body_yaw_deg': -0.0, 'body_roll_deg': -0.0446, 'head_pitch_deg': 0.8637, 'head_yaw_deg': -0.1255, 'tail_pitch_deg': 1.2099, 'tail_yaw_deg': -1.2884, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.017, 'shoulder_right_deg': -0.017, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0, 'b_valid': None}}\nW01 PASS every costume skin produced a costume attached to the Dog {'dressed': ['apollo', 'arden_infernal', 'celestial_light', 'skeleton_flame'], 'wanted': 4, 'note': 'Relay OG is the canonical body and wears no costume, so four of five is the right answer. The costume is matched on its attachment parent, because the AI Companions are the same class and a class match picks one of them.'}\nW02 PASS the Dog's gait actually advances while it is walking {'stride_phase_spread': {'relay_og': 0.7575, 'celestial_light': 0.8479, 'apollo': 0.5508, 'arden_infernal': 0.639, 'skeleton_flame': 0.7293}, 'top_speed_uu': {'relay_og': 25.46, 'celestial_light': 13.75, 'apollo': 26.1, 'arden_infernal': 25.35, 'skeleton_flame': 17.14}, 'note': 'THE POSITIVE CONTROL, and it earned its place on the first run. A pose that never moves compares equal to anything, so W04 passed for all four costumes on six samples in which the stride phase moved 0.0000 -- the Dog was standing still and its gait was a constant. Without this clause that would have read as the strongest possible pass.'}\nW03 PASS every costume reports that its gait is driven from outside {'not_driven': None, 'note': 'the flag says the costume has handed its gait to the canonical stack. A costume computing its own gait is the item 3 defect in its plainest form, whatever the numbers then agree on.'}\nW04 PASS every costume wears the pose the Dog published, field for field {'vs_canonical': {'celestial_light': {'worst_by_field': {'stride_phase': 0.0, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': 0.0, 'sway_uu': 0.0, 'lift_uu': 0.0, 'body_pitch_deg': 0.0, 'body_yaw_deg': 0.0, 'body_roll_deg': 0.0, 'head_pitch_deg': 0.0, 'head_yaw_deg': 0.0, 'tail_pitch_deg': 0.0, 'tail_yaw_deg': 0.0, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.0, 'shoulder_right_deg': 0.0, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0}, 'fields_that_differ': None, 'gait_driven_externally': True}, 'apollo': {'worst_by_field': {'stride_phase': 0.0, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': 0.0, 'sway_uu': 0.0, 'lift_uu': 0.0, 'body_pitch_deg': 0.0, 'body_yaw_deg': 0.0, 'body_roll_deg': 0.0, 'head_pitch_deg': 0.0, 'head_yaw_deg': 0.0, 'tail_pitch_deg': 0.0, 'tail_yaw_deg': 0.0, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.0, 'shoulder_right_deg': 0.0, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0}, 'fields_that_differ': None, 'gait_driven_externally': True}, 'arden_infernal': {'worst_by_field': {'stride_phase': 0.0, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': 0.0, 'sway_uu': 0.0, 'lift_uu': 0.0, 'body_pitch_deg': 0.0, 'body_yaw_deg': 0.0, 'body_roll_deg': 0.0, 'head_pitch_deg': 0.0, 'head_yaw_deg': 0.0, 'tail_pitch_deg': 0.0, 'tail_yaw_deg': 0.0, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.0, 'shoulder_right_deg': 0.0, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0}, 'fields_that_differ': None, 'gait_driven_externally': True}, 'skeleton_flame': {'worst_by_field': {'stride_phase': 0.0, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': 0.0, 'sway_uu': 0.0, 'lift_uu': 0.0, 'body_pitch_deg': 0.0, 'body_yaw_deg': 0.0, 'body_roll_deg': 0.0, 'head_pitch_deg': 0.0, 'head_yaw_deg': 0.0, 'tail_pitch_deg': 0.0, 'tail_yaw_deg': 0.0, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.0, 'shoulder_right_deg': 0.0, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0}, 'fields_that_differ': None, 'gait_driven_externally': True}}, 'tolerance': 0.001, 'differing': None, 'note': \"the founder's 'one canonical Relay Dog behavior stack; skins are cosmetic' as an exact question. This does not say the canonical pose LOOKS right, which is theirs to judge, and it does not cover walk, run, stop, turns, jump, fall or landing as performances.\"}\n"
+}

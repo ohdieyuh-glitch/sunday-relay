@@ -1,0 +1,614 @@
+{
+ "name": "zzAL2_pose_mission",
+ "started": "2026-09-27 19:31:26",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "M00",
+   "name": "the mission subsystem that is on screen was found",
+   "pass": true,
+   "detail": {
+    "candidates": 1,
+    "note": "found by asking which instance is drawing rather than by taking the first: a stale subsystem from an earlier PIE session answers every call and drives nothing."
+   }
+  },
+  {
+   "id": "M_SKIN",
+   "name": "Relay OG was put back on the Dog, and it went back",
+   "pass": true,
+   "detail": {
+    "worn_after_restore": "relay_og"
+   }
+  },
+  {
+   "id": "M01",
+   "name": "every skin produced a costume and started the fixture",
+   "pass": true,
+   "detail": {
+    "dressed": [
+     "apollo",
+     "arden_infernal",
+     "celestial_light",
+     "skeleton_flame"
+    ],
+    "started": {
+     "celestial_light": true,
+     "apollo": true,
+     "arden_infernal": true,
+     "skeleton_flame": true
+    }
+   }
+  },
+  {
+   "id": "M02",
+   "name": "the Dog performed more than one act across the fixture",
+   "pass": true,
+   "detail": {
+    "acts_seen": {
+     "celestial_light": [
+      "NONE",
+      "PREPARATION",
+      "RESEARCH",
+      "IMPLEMENTATION",
+      "REVIEW",
+      "REPAIR",
+      "VERIFICATION"
+     ],
+     "apollo": [
+      "NONE",
+      "PREPARATION",
+      "RESEARCH",
+      "IMPLEMENTATION",
+      "REVIEW",
+      "REPAIR",
+      "VERIFICATION"
+     ],
+     "arden_infernal": [
+      "NONE",
+      "PREPARATION",
+      "RESEARCH",
+      "IMPLEMENTATION",
+      "REVIEW",
+      "REPAIR",
+      "VERIFICATION"
+     ],
+     "skeleton_flame": [
+      "NONE",
+      "PREPARATION",
+      "RESEARCH",
+      "IMPLEMENTATION",
+      "REVIEW",
+      "REPAIR",
+      "VERIFICATION"
+     ]
+    },
+    "note": "THE CONTROL. A fixture that does not drive the Dog leaves one act for the whole run, and every skin then agrees with the canon body about a pose that never changed. The first pose run passed exactly that way on a Dog that was standing still."
+   }
+  },
+  {
+   "id": "M03",
+   "name": "the canonical pose actually moved during the mission",
+   "pass": true,
+   "detail": {
+    "movement": {
+     "celestial_light": {
+      "stride_spread": 0.9963,
+      "body_pitch_spread": 1.5636
+     },
+     "apollo": {
+      "stride_spread": 0.963,
+      "body_pitch_spread": 1.599
+     },
+     "arden_infernal": {
+      "stride_spread": 0.9581,
+      "body_pitch_spread": 1.6008
+     },
+     "skeleton_flame": {
+      "stride_spread": 0.9755,
+      "body_pitch_spread": 1.5955
+     }
+    },
+    "note": "the second control: the acts can change while the pose stays put, and a comparison of two unchanging structs is not a measurement."
+   }
+  },
+  {
+   "id": "M04",
+   "name": "every costume wears the canonical pose through the whole mission",
+   "pass": true,
+   "detail": {
+    "vs_canonical": {
+     "celestial_light": {
+      "samples_compared": 83,
+      "worst_by_field": {
+       "stride_phase": 0.0,
+       "gait_weight": 0.0,
+       "speed_uu": 0.0,
+       "bob_uu": 0.0,
+       "sway_uu": 0.0,
+       "lift_uu": 0.0,
+       "body_pitch_deg": 0.0,
+       "body_yaw_deg": 0.0,
+       "body_roll_deg": 0.0,
+       "head_pitch_deg": 0.0,
+       "head_yaw_deg": 0.0,
+       "tail_pitch_deg": 0.0,
+       "tail_yaw_deg": 0.0,
+       "airborne_weight": 0.0,
+       "stillness": 0.0,
+       "hip_left_deg": 0.0,
+       "hip_right_deg": 0.0,
+       "knee_left_deg": 0.0,
+       "knee_right_deg": 0.0,
+       "shoulder_left_deg": 0.0,
+       "shoulder_right_deg": 0.0,
+       "elbow_left_deg": 0.0,
+       "elbow_right_deg": 0.0
+      },
+      "fields_that_differ": null,
+      "acts": [
+       "NONE",
+       "PREPARATION",
+       "RESEARCH",
+       "IMPLEMENTATION",
+       "REVIEW",
+       "REPAIR",
+       "VERIFICATION"
+      ]
+     },
+     "apollo": {
+      "samples_compared": 84,
+      "worst_by_field": {
+       "stride_phase": 0.0,
+       "gait_weight": 0.0,
+       "speed_uu": 0.0,
+       "bob_uu": 0.0,
+       "sway_uu": 0.0,
+       "lift_uu": 0.0,
+       "body_pitch_deg": 0.0,
+       "body_yaw_deg": 0.0,
+       "body_roll_deg": 0.0,
+       "head_pitch_deg": 0.0,
+       "head_yaw_deg": 0.0,
+       "tail_pitch_deg": 0.0,
+       "tail_yaw_deg": 0.0,
+       "airborne_weight": 0.0,
+       "stillness": 0.0,
+       "hip_left_deg": 0.0,
+       "hip_right_deg": 0.0,
+       "knee_left_deg": 0.0,
+       "knee_right_deg": 0.0,
+       "shoulder_left_deg": 0.0,
+       "shoulder_right_deg": 0.0,
+       "elbow_left_deg": 0.0,
+       "elbow_right_deg": 0.0
+      },
+      "fields_that_differ": null,
+      "acts": [
+       "NONE",
+       "PREPARATION",
+       "RESEARCH",
+       "IMPLEMENTATION",
+       "REVIEW",
+       "REPAIR",
+       "VERIFICATION"
+      ]
+     },
+     "arden_infernal": {
+      "samples_compared": 84,
+      "worst_by_field": {
+       "stride_phase": 0.0,
+       "gait_weight": 0.0,
+       "speed_uu": 0.0,
+       "bob_uu": 0.0,
+       "sway_uu": 0.0,
+       "lift_uu": 0.0,
+       "body_pitch_deg": 0.0,
+       "body_yaw_deg": 0.0,
+       "body_roll_deg": 0.0,
+       "head_pitch_deg": 0.0,
+       "head_yaw_deg": 0.0,
+       "tail_pitch_deg": 0.0,
+       "tail_yaw_deg": 0.0,
+       "airborne_weight": 0.0,
+       "stillness": 0.0,
+       "hip_left_deg": 0.0,
+       "hip_right_deg": 0.0,
+       "knee_left_deg": 0.0,
+       "knee_right_deg": 0.0,
+       "shoulder_left_deg": 0.0,
+       "shoulder_right_deg": 0.0,
+       "elbow_left_deg": 0.0,
+       "elbow_right_deg": 0.0
+      },
+      "fields_that_differ": null,
+      "acts": [
+       "NONE",
+       "PREPARATION",
+       "RESEARCH",
+       "IMPLEMENTATION",
+       "REVIEW",
+       "REPAIR",
+       "VERIFICATION"
+      ]
+     },
+     "skeleton_flame": {
+      "samples_compared": 84,
+      "worst_by_field": {
+       "stride_phase": 0.0,
+       "gait_weight": 0.0,
+       "speed_uu": 0.0,
+       "bob_uu": 0.0,
+       "sway_uu": 0.0,
+       "lift_uu": 0.0,
+       "body_pitch_deg": 0.0,
+       "body_yaw_deg": 0.0,
+       "body_roll_deg": 0.0,
+       "head_pitch_deg": 0.0,
+       "head_yaw_deg": 0.0,
+       "tail_pitch_deg": 0.0,
+       "tail_yaw_deg": 0.0,
+       "airborne_weight": 0.0,
+       "stillness": 0.0,
+       "hip_left_deg": 0.0,
+       "hip_right_deg": 0.0,
+       "knee_left_deg": 0.0,
+       "knee_right_deg": 0.0,
+       "shoulder_left_deg": 0.0,
+       "shoulder_right_deg": 0.0,
+       "elbow_left_deg": 0.0,
+       "elbow_right_deg": 0.0
+      },
+      "fields_that_differ": null,
+      "acts": [
+       "NONE",
+       "PREPARATION",
+       "RESEARCH",
+       "IMPLEMENTATION",
+       "REVIEW",
+       "REPAIR",
+       "VERIFICATION"
+      ]
+     }
+    },
+    "tolerance": 0.001,
+    "differing": null,
+    "note": "the founder's 'same for Mission Contract: start, planning, implementing, verifying, completion, props, return to idle'. Whether each act LOOKS right is theirs to judge; this says whether the costume is driven by the same numbers as the canon body throughout."
+   }
+  }
+ ],
+ "fixture": "full_lifecycle",
+ "readings": {
+  "celestial_light": {
+   "has_costume": true,
+   "fixture_started": true,
+   "acts": [
+    "NONE",
+    "PREPARATION",
+    "RESEARCH",
+    "IMPLEMENTATION",
+    "REVIEW",
+    "REPAIR",
+    "VERIFICATION"
+   ],
+   "beats": [
+    "UNOBSERVED",
+    "MISSION START",
+    "RESEARCHING",
+    "PROMPT ARCHITECT",
+    "GUIDANCE",
+    "CODING AGENT",
+    "WAITING / CHECKPOINT",
+    "APPROVAL / CONTINUE",
+    "INDEPENDENT REVIEWER",
+    "REVIEW CHALLENGE",
+    "REPAIR REQUIRED",
+    "REPAIRING",
+    "VERIFYING",
+    "COMPLETE / VERIFIED",
+    "IDLE"
+   ]
+  },
+  "apollo": {
+   "has_costume": true,
+   "fixture_started": true,
+   "acts": [
+    "NONE",
+    "PREPARATION",
+    "RESEARCH",
+    "IMPLEMENTATION",
+    "REVIEW",
+    "REPAIR",
+    "VERIFICATION"
+   ],
+   "beats": [
+    "IDLE",
+    "MISSION START",
+    "RESEARCHING",
+    "PROMPT ARCHITECT",
+    "GUIDANCE",
+    "CODING AGENT",
+    "WAITING / CHECKPOINT",
+    "APPROVAL / CONTINUE",
+    "INDEPENDENT REVIEWER",
+    "REVIEW CHALLENGE",
+    "REPAIR REQUIRED",
+    "REPAIRING",
+    "VERIFYING",
+    "COMPLETE / VERIFIED"
+   ]
+  },
+  "arden_infernal": {
+   "has_costume": true,
+   "fixture_started": true,
+   "acts": [
+    "NONE",
+    "PREPARATION",
+    "RESEARCH",
+    "IMPLEMENTATION",
+    "REVIEW",
+    "REPAIR",
+    "VERIFICATION"
+   ],
+   "beats": [
+    "IDLE",
+    "MISSION START",
+    "RESEARCHING",
+    "PROMPT ARCHITECT",
+    "GUIDANCE",
+    "CODING AGENT",
+    "WAITING / CHECKPOINT",
+    "APPROVAL / CONTINUE",
+    "INDEPENDENT REVIEWER",
+    "REVIEW CHALLENGE",
+    "REPAIR REQUIRED",
+    "REPAIRING",
+    "VERIFYING",
+    "COMPLETE / VERIFIED"
+   ]
+  },
+  "skeleton_flame": {
+   "has_costume": true,
+   "fixture_started": true,
+   "acts": [
+    "NONE",
+    "PREPARATION",
+    "RESEARCH",
+    "IMPLEMENTATION",
+    "REVIEW",
+    "REPAIR",
+    "VERIFICATION"
+   ],
+   "beats": [
+    "IDLE",
+    "MISSION START",
+    "RESEARCHING",
+    "PROMPT ARCHITECT",
+    "GUIDANCE",
+    "CODING AGENT",
+    "WAITING / CHECKPOINT",
+    "APPROVAL / CONTINUE",
+    "INDEPENDENT REVIEWER",
+    "REVIEW CHALLENGE",
+    "REPAIR REQUIRED",
+    "REPAIRING",
+    "VERIFYING",
+    "COMPLETE / VERIFIED"
+   ]
+  }
+ },
+ "worn_after_restore": "relay_og",
+ "dog_acts_seen": {
+  "celestial_light": [
+   "NONE",
+   "PREPARATION",
+   "RESEARCH",
+   "IMPLEMENTATION",
+   "REVIEW",
+   "REPAIR",
+   "VERIFICATION"
+  ],
+  "apollo": [
+   "NONE",
+   "PREPARATION",
+   "RESEARCH",
+   "IMPLEMENTATION",
+   "REVIEW",
+   "REPAIR",
+   "VERIFICATION"
+  ],
+  "arden_infernal": [
+   "NONE",
+   "PREPARATION",
+   "RESEARCH",
+   "IMPLEMENTATION",
+   "REVIEW",
+   "REPAIR",
+   "VERIFICATION"
+  ],
+  "skeleton_flame": [
+   "NONE",
+   "PREPARATION",
+   "RESEARCH",
+   "IMPLEMENTATION",
+   "REVIEW",
+   "REPAIR",
+   "VERIFICATION"
+  ]
+ },
+ "canonical_pose_movement": {
+  "celestial_light": {
+   "stride_spread": 0.9963,
+   "body_pitch_spread": 1.5636
+  },
+  "apollo": {
+   "stride_spread": 0.963,
+   "body_pitch_spread": 1.599
+  },
+  "arden_infernal": {
+   "stride_spread": 0.9581,
+   "body_pitch_spread": 1.6008
+  },
+  "skeleton_flame": {
+   "stride_spread": 0.9755,
+   "body_pitch_spread": 1.5955
+  }
+ },
+ "vs_canonical": {
+  "celestial_light": {
+   "samples_compared": 83,
+   "worst_by_field": {
+    "stride_phase": 0.0,
+    "gait_weight": 0.0,
+    "speed_uu": 0.0,
+    "bob_uu": 0.0,
+    "sway_uu": 0.0,
+    "lift_uu": 0.0,
+    "body_pitch_deg": 0.0,
+    "body_yaw_deg": 0.0,
+    "body_roll_deg": 0.0,
+    "head_pitch_deg": 0.0,
+    "head_yaw_deg": 0.0,
+    "tail_pitch_deg": 0.0,
+    "tail_yaw_deg": 0.0,
+    "airborne_weight": 0.0,
+    "stillness": 0.0,
+    "hip_left_deg": 0.0,
+    "hip_right_deg": 0.0,
+    "knee_left_deg": 0.0,
+    "knee_right_deg": 0.0,
+    "shoulder_left_deg": 0.0,
+    "shoulder_right_deg": 0.0,
+    "elbow_left_deg": 0.0,
+    "elbow_right_deg": 0.0
+   },
+   "fields_that_differ": null,
+   "acts": [
+    "NONE",
+    "PREPARATION",
+    "RESEARCH",
+    "IMPLEMENTATION",
+    "REVIEW",
+    "REPAIR",
+    "VERIFICATION"
+   ]
+  },
+  "apollo": {
+   "samples_compared": 84,
+   "worst_by_field": {
+    "stride_phase": 0.0,
+    "gait_weight": 0.0,
+    "speed_uu": 0.0,
+    "bob_uu": 0.0,
+    "sway_uu": 0.0,
+    "lift_uu": 0.0,
+    "body_pitch_deg": 0.0,
+    "body_yaw_deg": 0.0,
+    "body_roll_deg": 0.0,
+    "head_pitch_deg": 0.0,
+    "head_yaw_deg": 0.0,
+    "tail_pitch_deg": 0.0,
+    "tail_yaw_deg": 0.0,
+    "airborne_weight": 0.0,
+    "stillness": 0.0,
+    "hip_left_deg": 0.0,
+    "hip_right_deg": 0.0,
+    "knee_left_deg": 0.0,
+    "knee_right_deg": 0.0,
+    "shoulder_left_deg": 0.0,
+    "shoulder_right_deg": 0.0,
+    "elbow_left_deg": 0.0,
+    "elbow_right_deg": 0.0
+   },
+   "fields_that_differ": null,
+   "acts": [
+    "NONE",
+    "PREPARATION",
+    "RESEARCH",
+    "IMPLEMENTATION",
+    "REVIEW",
+    "REPAIR",
+    "VERIFICATION"
+   ]
+  },
+  "arden_infernal": {
+   "samples_compared": 84,
+   "worst_by_field": {
+    "stride_phase": 0.0,
+    "gait_weight": 0.0,
+    "speed_uu": 0.0,
+    "bob_uu": 0.0,
+    "sway_uu": 0.0,
+    "lift_uu": 0.0,
+    "body_pitch_deg": 0.0,
+    "body_yaw_deg": 0.0,
+    "body_roll_deg": 0.0,
+    "head_pitch_deg": 0.0,
+    "head_yaw_deg": 0.0,
+    "tail_pitch_deg": 0.0,
+    "tail_yaw_deg": 0.0,
+    "airborne_weight": 0.0,
+    "stillness": 0.0,
+    "hip_left_deg": 0.0,
+    "hip_right_deg": 0.0,
+    "knee_left_deg": 0.0,
+    "knee_right_deg": 0.0,
+    "shoulder_left_deg": 0.0,
+    "shoulder_right_deg": 0.0,
+    "elbow_left_deg": 0.0,
+    "elbow_right_deg": 0.0
+   },
+   "fields_that_differ": null,
+   "acts": [
+    "NONE",
+    "PREPARATION",
+    "RESEARCH",
+    "IMPLEMENTATION",
+    "REVIEW",
+    "REPAIR",
+    "VERIFICATION"
+   ]
+  },
+  "skeleton_flame": {
+   "samples_compared": 84,
+   "worst_by_field": {
+    "stride_phase": 0.0,
+    "gait_weight": 0.0,
+    "speed_uu": 0.0,
+    "bob_uu": 0.0,
+    "sway_uu": 0.0,
+    "lift_uu": 0.0,
+    "body_pitch_deg": 0.0,
+    "body_yaw_deg": 0.0,
+    "body_roll_deg": 0.0,
+    "head_pitch_deg": 0.0,
+    "head_yaw_deg": 0.0,
+    "tail_pitch_deg": 0.0,
+    "tail_yaw_deg": 0.0,
+    "airborne_weight": 0.0,
+    "stillness": 0.0,
+    "hip_left_deg": 0.0,
+    "hip_right_deg": 0.0,
+    "knee_left_deg": 0.0,
+    "knee_right_deg": 0.0,
+    "shoulder_left_deg": 0.0,
+    "shoulder_right_deg": 0.0,
+    "elbow_left_deg": 0.0,
+    "elbow_right_deg": 0.0
+   },
+   "fields_that_differ": null,
+   "acts": [
+    "NONE",
+    "PREPARATION",
+    "RESEARCH",
+    "IMPLEMENTATION",
+    "REVIEW",
+    "REPAIR",
+    "VERIFICATION"
+   ]
+  }
+ },
+ "skins_that_drift_during_a_mission": null,
+ "finished": "2026-09-27 19:33:49",
+ "seconds": 143.32,
+ "log": "M00 PASS the mission subsystem that is on screen was found {'candidates': 1, 'note': 'found by asking which instance is drawing rather than by taking the first: a stale subsystem from an earlier PIE session answers every call and drives nothing.'}\nM_celestial_light INFO celestial_light {'samples': 83, 'acts': ['NONE', 'PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'REVIEW', 'REPAIR', 'VERIFICATION'], 'beats': ['UNOBSERVED', 'MISSION START', 'RESEARCHING', 'PROMPT ARCHITECT', 'GUIDANCE', 'CODING AGENT', 'WAITING / CHECKPOINT', 'APPROVAL / CONTINUE', 'INDEPENDENT REVIEWER', 'REVIEW CHALLENGE', 'REPAIR REQUIRED', 'REPAIRING', 'VERIFYING', 'COMPLETE / VERIFIED', 'IDLE']}\nM_apollo INFO apollo {'samples': 84, 'acts': ['NONE', 'PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'REVIEW', 'REPAIR', 'VERIFICATION'], 'beats': ['IDLE', 'MISSION START', 'RESEARCHING', 'PROMPT ARCHITECT', 'GUIDANCE', 'CODING AGENT', 'WAITING / CHECKPOINT', 'APPROVAL / CONTINUE', 'INDEPENDENT REVIEWER', 'REVIEW CHALLENGE', 'REPAIR REQUIRED', 'REPAIRING', 'VERIFYING', 'COMPLETE / VERIFIED']}\nM_arden_infernal INFO arden_infernal {'samples': 84, 'acts': ['NONE', 'PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'REVIEW', 'REPAIR', 'VERIFICATION'], 'beats': ['IDLE', 'MISSION START', 'RESEARCHING', 'PROMPT ARCHITECT', 'GUIDANCE', 'CODING AGENT', 'WAITING / CHECKPOINT', 'APPROVAL / CONTINUE', 'INDEPENDENT REVIEWER', 'REVIEW CHALLENGE', 'REPAIR REQUIRED', 'REPAIRING', 'VERIFYING', 'COMPLETE / VERIFIED']}\nM_skeleton_flame INFO skeleton_flame {'samples': 84, 'acts': ['NONE', 'PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'REVIEW', 'REPAIR', 'VERIFICATION'], 'beats': ['IDLE', 'MISSION START', 'RESEARCHING', 'PROMPT ARCHITECT', 'GUIDANCE', 'CODING AGENT', 'WAITING / CHECKPOINT', 'APPROVAL / CONTINUE', 'INDEPENDENT REVIEWER', 'REVIEW CHALLENGE', 'REPAIR REQUIRED', 'REPAIRING', 'VERIFYING', 'COMPLETE / VERIFIED']}\nM_SKIN PASS Relay OG was put back on the Dog, and it went back {'worn_after_restore': 'relay_og'}\nM01 PASS every skin produced a costume and started the fixture {'dressed': ['apollo', 'arden_infernal', 'celestial_light', 'skeleton_flame'], 'started': {'celestial_light': True, 'apollo': True, 'arden_infernal': True, 'skeleton_flame': True}}\nM02 PASS the Dog performed more than one act across the fixture {'acts_seen': {'celestial_light': ['NONE', 'PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'REVIEW', 'REPAIR', 'VERIFICATION'], 'apollo': ['NONE', 'PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'REVIEW', 'REPAIR', 'VERIFICATION'], 'arden_infernal': ['NONE', 'PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'REVIEW', 'REPAIR', 'VERIFICATION'], 'skeleton_flame': ['NONE', 'PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'REVIEW', 'REPAIR', 'VERIFICATION']}, 'note': 'THE CONTROL. A fixture that does not drive the Dog leaves one act for the whole run, and every skin then agrees with the canon body about a pose that never changed. The first pose run passed exactly that way on a Dog that was standing still.'}\nM03 PASS the canonical pose actually moved during the mission {'movement': {'celestial_light': {'stride_spread': 0.9963, 'body_pitch_spread': 1.5636}, 'apollo': {'stride_spread': 0.963, 'body_pitch_spread': 1.599}, 'arden_infernal': {'stride_spread': 0.9581, 'body_pitch_spread': 1.6008}, 'skeleton_flame': {'stride_spread': 0.9755, 'body_pitch_spread': 1.5955}}, 'note': 'the second control: the acts can change while the pose stays put, and a comparison of two unchanging structs is not a measurement.'}\nM04 PASS every costume wears the canonical pose through the whole mission {'vs_canonical': {'celestial_light': {'samples_compared': 83, 'worst_by_field': {'stride_phase': 0.0, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': 0.0, 'sway_uu': 0.0, 'lift_uu': 0.0, 'body_pitch_deg': 0.0, 'body_yaw_deg': 0.0, 'body_roll_deg': 0.0, 'head_pitch_deg': 0.0, 'head_yaw_deg': 0.0, 'tail_pitch_deg': 0.0, 'tail_yaw_deg': 0.0, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.0, 'shoulder_right_deg': 0.0, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0}, 'fields_that_differ': None, 'acts': ['NONE', 'PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'REVIEW', 'REPAIR', 'VERIFICATION']}, 'apollo': {'samples_compared': 84, 'worst_by_field': {'stride_phase': 0.0, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': 0.0, 'sway_uu': 0.0, 'lift_uu': 0.0, 'body_pitch_deg': 0.0, 'body_yaw_deg': 0.0, 'body_roll_deg': 0.0, 'head_pitch_deg': 0.0, 'head_yaw_deg': 0.0, 'tail_pitch_deg': 0.0, 'tail_yaw_deg': 0.0, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.0, 'shoulder_right_deg': 0.0, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0}, 'fields_that_differ': None, 'acts': ['NONE', 'PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'REVIEW', 'REPAIR', 'VERIFICATION']}, 'arden_infernal': {'samples_compared': 84, 'worst_by_field': {'stride_phase': 0.0, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': 0.0, 'sway_uu': 0.0, 'lift_uu': 0.0, 'body_pitch_deg': 0.0, 'body_yaw_deg': 0.0, 'body_roll_deg': 0.0, 'head_pitch_deg': 0.0, 'head_yaw_deg': 0.0, 'tail_pitch_deg': 0.0, 'tail_yaw_deg': 0.0, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.0, 'shoulder_right_deg': 0.0, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0}, 'fields_that_differ': None, 'acts': ['NONE', 'PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'REVIEW', 'REPAIR', 'VERIFICATION']}, 'skeleton_flame': {'samples_compared': 84, 'worst_by_field': {'stride_phase': 0.0, 'gait_weight': 0.0, 'speed_uu': 0.0, 'bob_uu': 0.0, 'sway_uu': 0.0, 'lift_uu': 0.0, 'body_pitch_deg': 0.0, 'body_yaw_deg': 0.0, 'body_roll_deg': 0.0, 'head_pitch_deg': 0.0, 'head_yaw_deg': 0.0, 'tail_pitch_deg': 0.0, 'tail_yaw_deg': 0.0, 'airborne_weight': 0.0, 'stillness': 0.0, 'hip_left_deg': 0.0, 'hip_right_deg': 0.0, 'knee_left_deg': 0.0, 'knee_right_deg': 0.0, 'shoulder_left_deg': 0.0, 'shoulder_right_deg': 0.0, 'elbow_left_deg': 0.0, 'elbow_right_deg': 0.0}, 'fields_that_differ': None, 'acts': ['NONE', 'PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'REVIEW', 'REPAIR', 'VERIFICATION']}}, 'tolerance': 0.001, 'differing': None, 'note': \"the founder's 'same for Mission Contract: start, planning, implementing, verifying, completion, props, return to idle'. Whether each act LOOKS right is theirs to judge; this says whether the costume is driven by the same numbers as the canon body throughout.\"}\n"
+}
