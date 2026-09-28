@@ -598,9 +598,29 @@ store, minimal, with the A→B carry proven), 3 (landing prepared:
 `docs/JULIUS_BETA_LANDING.md`), 4 (one active run per mission + the keyed rerun),
 5 (`DATABASE_URL` isolation), 6 (guidance provenance), 7 (contract coordination —
 the integration lane's drill is at 36 of 36 and has found three real defects in
-this lane's code), 9 (provider neutrality) are DONE. 8 (the REAL Wonderland →
-Julius → result chain in the engine) waits on the integration lane's in-engine
-acceptance. 10 (the paid representative mission) is the founder's.
+this lane's code), 9 (provider neutrality) are DONE. 10 (the paid representative
+mission) is the founder's.
+
+**ITEM 8 IS NOW PART-PROVEN, AND THE PART MATTERS.** The integration lane's first
+in-engine (PIE) acceptance ran on the production bridge against an isolated
+PostgreSQL: a signed-in player's single-use code paired the Unreal client, the
+world adopted the EXACT run Julius created (same runId and missionId, READY,
+mapped to QUEUED), switched between two runs of one mission and back, read STALE
+on a dropped link without touching the mission, and recovered the same durable
+run across a reconnect and a full play restart — with Julius's side showing both
+runs READY and never dispatched, and an identical resubmission answering with the
+same run. Their `f28a61a5`, on Core's build `8cccaa50`, quoted verbatim in the
+landing page.
+
+So the founder's chain reads, honestly: REAL WONDERLAND → REAL MISSION CONTRACT →
+REAL JULIUS RUN → **(not yet) REAL EXECUTION** → REAL DURABLE STATE → STATE
+RETURNS TO UNREAL → **(not yet) USER SEES THE CORRECT RESULT**. Two links remain,
+and neither is this lane's to close alone: execution needs the paid run (the
+founder's), and the visible Missions panel still draws the simulated presentation
+— a player reads "No mission is running" while the world follows a real run
+(their clause A06e, Wonderland's to wire). The acceptance also predates the
+`result` view, so no Unreal client has called the projection a user would
+actually be shown.
 
 #### Not done, by decision or by gate
 
