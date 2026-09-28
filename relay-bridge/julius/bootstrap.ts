@@ -36,6 +36,7 @@ import {
   type JuliusBootstrapPort,
   type JuliusBootstrapRequest,
 } from '../../src/relay/integration/julius/julius-port';
+import { parseJuliusMissionActiveError } from '../../src/relay/persistence/julius-postgres';
 import { seedJuliusTaskContract, type JuliusMissionState, type JuliusTask, type JuliusTaskContract } from '../../src/relay/mission/julius';
 import type { MissionSeedStore } from './mission-seed';
 
@@ -45,6 +46,8 @@ export interface RunCreationStore {
   createRun(input: {
     commandId: string; runId: string; missionId: string; projectId: string;
     cardRevision: string; missionContractRevision: number; projectBrainRevision: number; occurredAt: string;
+    /** Refuse a second, different execution of a mission that is still in flight. */
+    refuseIfMissionActive?: boolean;
   }): Promise<{ readonly runId: string; readonly state: string; readonly version: number }>;
   addTask(input: { commandId: string; runId: string; projectId: string; task: JuliusTask }): Promise<boolean>;
   /**
@@ -121,6 +124,13 @@ export function createLiveJuliusBootstrapPort(deps: {
           missionContractRevision: Math.max(1, request.missionRevision),
           projectBrainRevision: Number.isFinite(projectBrainRevision) ? Math.max(0, projectBrainRevision) : 0,
           occurredAt: now(),
+          /**
+           * THE ACCIDENT THIS REFUSES is a second paid execution of a mission
+           * that is still running. Only an EXPLICIT rerun intent clears it —
+           * never a retry, never a default — and an identical request is
+           * unaffected: its key is the contract's content, so it resumes.
+           */
+          refuseIfMissionActive: request.rerunIntent !== 'EXPLICIT',
         });
         await deps.seeds.insertCriteria(runId, request.acceptanceCriteria.map((criterion) => ({
           criterionId: criterion.id,
@@ -223,6 +233,19 @@ export function createLiveJuliusBootstrapPort(deps: {
         }
         if (message.includes('idempotency_payload_conflict')) {
           return refuse('mission_already_running', 'This idempotency key was already used for a different mission payload.');
+        }
+        /**
+         * THE MISSION IS ALREADY RUNNING SOMETHING ELSE. Named, with the run
+         * that holds it, so a client can follow that runId instead of guessing
+         * — and so the answer to "why was my mission refused" is one line.
+         * Not retryable: repeating it changes nothing until that run ends or
+         * somebody states an explicit rerun.
+         */
+        const active = parseJuliusMissionActiveError(error);
+        if (active !== null) {
+          return refuse('mission_run_already_active',
+            `Mission ${request.missionId} already has an active run (${active.runId}, ${active.state}); `
+            + 'follow that run, wait for it to end, or state an explicit rerun intent to start another.');
         }
         return refuse('bootstrap_persistence_failure', 'The durable store refused or was unavailable while bootstrapping the run; nothing was dispatched.', true);
       }

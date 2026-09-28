@@ -114,6 +114,28 @@ decision not taken here. The `409 mission_already_running` below fires only
 when the same key arrives with a different payload, which a content-derived
 key does not produce in practice.
 
+**One active run per mission, unless somebody meant two.** A second, DIFFERENT
+contract for a mission that still holds a non-terminal run is refused
+`409 mission_run_already_active`, and the message names the run that holds it —
+follow that `runId`. An identical contract is unaffected: its key is its own
+content, so it resumes the run it already made. A terminal prior run (`FAILED`,
+`COMPLETED`, `CANCELLED`) holds nothing and never locks a mission, and the guard
+is per mission — one mission's live run never blocks another's.
+
+**The explicit rerun.** Send `x-relay-julius-rerun: explicit` to start a
+deliberate second run while one is alive. It must come from a human act (an
+operator flag, a rerun affordance) and never from a retry default; anything but
+that exact word is no intent at all. The response says `rerun: true` when it was
+honoured, so a client that did not ask can never be told it got one.
+
+**Under concurrency.** The check and the insert are one SERIALIZABLE transaction,
+so two simultaneous creates cannot both decide a mission is free. Two identical
+requests sent together yield exactly one run: one caller is answered with it, and
+a loser — a whole bootstrap is many writes, and a concurrent twin loses one of
+them — is answered `503 bootstrap_persistence_failure`, which is retryable and
+whose retry returns the one run. Never a second run, so never a second execution
+to bill.
+
 **Run ids on the wire.** A run id carries a colon (`run:…`). The read routes
 accept it raw or percent-encoded (`run%3A…`) — a standards-correct client may
 encode it — and a segment that is not a valid percent-encoding is

@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { JuliusBootstrapPort } from '../src/relay/integration/julius/julius-port';
+import { juliusMissionActiveError } from '../src/relay/persistence/julius-postgres';
 import { createLiveJuliusBootstrapPort, buildTaskId, planTaskId } from './julius/bootstrap';
 import type { MissionSeedStore } from './julius/mission-seed';
 import {
@@ -43,11 +44,25 @@ function fakeSeeds(calls: string[]): MissionSeedStore {
   };
 }
 
+/**
+ * THE ACTIVE-RUN LEDGER THE REAL STORE KEEPS, as little of it as these cases
+ * need: which missions hold a non-terminal run, and under which runId. The
+ * refusal is raised the way PostgreSQL raises it — thrown from inside the
+ * create, with the holding run named — so the port's handling is the real one.
+ */
+const activeRuns = new Map<string, { readonly runId: string; readonly state: string }>();
+
 function fakeRuns(calls: Array<Record<string, unknown>>) {
   let version = 0;
   return {
     async loadRun() { return null; },
-    async createRun(input: { runId: string; missionId: string; projectId: string }) {
+    async createRun(input: { runId: string; missionId: string; projectId: string; refuseIfMissionActive?: boolean }) {
+      const key = `${input.projectId}/${input.missionId}`;
+      const held = activeRuns.get(key);
+      if (input.refuseIfMissionActive === true && held !== undefined && held.runId !== input.runId) {
+        throw juliusMissionActiveError(held.runId, held.state);
+      }
+      activeRuns.set(key, { runId: input.runId, state: 'READY' });
       version = 1; calls.push({ createRun: input }); return { runId: input.runId, state: 'CREATED', version };
     },
     async addTask(input: { task: { taskId: string; requiredEvidenceTypes: readonly string[] } }) { calls.push({ addTask: input.task }); return true; },
@@ -87,10 +102,16 @@ const post = (body: string | undefined, over: Partial<JuliusMissionRouteRequest>
   ({ method: 'POST', path: '/julius/missions', operator: true, body, ...over });
 
 const errorOf = (result: { body: unknown } | null) => (result?.body as { error: { kind: string; message: string } }).error;
-const dataOf = (result: { body: unknown } | null) =>
-  (result?.body as { data: { runId: string; state: string; missionId: string; projectId: string; dispatched: boolean; next: string } }).data;
+const dataOf = <T = { runId: string; state: string; missionId: string; projectId: string; dispatched: boolean; rerun: boolean; next: string },>(
+  result: { body: unknown } | null,
+): T => (result?.body as { data: T }).data;
 
 describe('POST /julius/missions', () => {
+  // THE STORE IS FRESH PER CASE. `activeRuns` models a durable ledger, so one
+  // case's live mission would otherwise refuse the next case's create — which is
+  // the guard working, in the wrong place.
+  beforeEach(() => activeRuns.clear());
+
   it('serves exactly one path, and answers null for every other', async () => {
     expect(isJuliusMissionRoute('/julius/missions')).toBe(true);
     expect(isJuliusMissionRoute('/julius/missions/')).toBe(false);
@@ -210,7 +231,13 @@ describe('POST /julius/missions', () => {
     expect(build.requiredEvidenceTypes).toEqual(['DIFF']);
 
     const checked = stage();
-    const withCheck = await handleJuliusMissionRoute(post(JSON.stringify({ ...CONTRACT, testCommand: 'npm test' })), checked.ports);
+    // A DISTINCT MISSION, because this case is about the TEST/DIFF derivation and
+    // not about mission identity: the same missionId with a changed contract is
+    // now refused while the first run is alive, which is a different case below.
+    const withCheck = await handleJuliusMissionRoute(
+      post(JSON.stringify({ ...CONTRACT, missionId: 'mission:wonderland-checked', markerNamespace: 'wonderland-checked', testCommand: 'npm test' })),
+      checked.ports,
+    );
     const checkedBuild = checked.runCalls.map((call) => call.addTask as { taskId: string; requiredEvidenceTypes: readonly string[] } | undefined)
       .find((task) => task?.taskId === buildTaskId(dataOf(withCheck).runId))!;
     expect(checkedBuild.requiredEvidenceTypes).toEqual(['TEST']);
@@ -234,6 +261,87 @@ describe('POST /julius/missions', () => {
     expect(replayed.state).toBe('COMPLETED');
     expect(replayed.next).toContain('COMPLETED');
     expect(replayed.next).not.toContain('READY');
+  });
+
+  it('refuses a SECOND, different run of a mission that is still in flight, and names the run that holds it', async () => {
+    // The accident this exists for: an operator edits a draft and posts again
+    // while the first run is alive. Two paid executions of one mission is never
+    // what that meant, so it is refused — with the live runId in the message,
+    // because the client's next move is to follow that run.
+    const s = stage();
+    const first = dataOf(await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT)), s.ports));
+    expect(first.state).toBe('READY');
+
+    const edited = { ...CONTRACT, objective: 'Compare only the two formats we actually ship.' };
+    const refused = await handleJuliusMissionRoute(post(JSON.stringify(edited)), s.ports);
+    expect(refused?.status).toBe(409);
+    expect(errorOf(refused).kind).toBe('mission_run_already_active');
+    expect(errorOf(refused).message).toContain(first.runId);
+    expect(errorOf(refused).message).toContain('explicit rerun');
+  });
+
+  it('allows an EXPLICIT rerun, and says on the wire that it was one', async () => {
+    // The founder's other half: a deliberate second run stays possible. The
+    // header is the only way to ask, and the response says it was honoured, so
+    // a client that did not ask can never be told it got one.
+    const s = stage();
+    const first = dataOf(await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT)), s.ports));
+    const edited = { ...CONTRACT, objective: 'Compare only the two formats we actually ship.' };
+    const rerun = await handleJuliusMissionRoute(post(JSON.stringify(edited), { rerun: 'explicit' }), s.ports);
+    expect(rerun?.status).toBe(201);
+    const data = dataOf<{ runId: string; rerun: boolean }>(rerun);
+    expect(data.runId).not.toBe(first.runId);
+    expect(data.rerun).toBe(true);
+    expect(dataOf<{ rerun: boolean }>(await handleJuliusMissionRoute(post(JSON.stringify({ ...CONTRACT, missionId: 'mission:other' }), {}), s.ports)).rerun).toBe(false);
+  });
+
+  it('is not an intent unless it says the word: any other header value is refused like no header at all', async () => {
+    const s = stage();
+    await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT)), s.ports);
+    const edited = JSON.stringify({ ...CONTRACT, objective: 'Something else entirely.' });
+    for (const value of ['true', '1', 'yes', 'EXPLICIT rerun please', '']) {
+      const result = await handleJuliusMissionRoute(post(edited, { rerun: value }), s.ports);
+      expect(result?.status, value).toBe(409);
+    }
+    // The exact word, in any case, IS the intent.
+    expect((await handleJuliusMissionRoute(post(edited, { rerun: ' Explicit ' }), s.ports))?.status).toBe(201);
+  });
+
+  it('a duplicate of the SAME request is not a second run: it resumes the first, and bills nothing twice', async () => {
+    // The distinction the guard rests on. A retry — a lost response, a flaky
+    // client, a queue redelivery — sends the SAME bytes, whose idempotency key
+    // is those bytes; it resumes the one run. Only a CHANGED request is a
+    // second intent, and only that is refused.
+    const s = stage();
+    const first = dataOf(await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT)), s.ports));
+    const again = await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT)), s.ports);
+    expect(again?.status).toBe(201);
+    expect(dataOf(again).runId).toBe(first.runId);
+    // One run created, ever — the second call reached the store and was absorbed
+    // by the run it already held rather than minting another.
+    expect(s.runCalls.filter((call) => 'createRun' in call)).toHaveLength(2);
+    expect(new Set(s.runCalls.filter((call) => 'createRun' in call)
+      .map((call) => (call.createRun as { runId: string }).runId)).size).toBe(1);
+  });
+
+  it('a mission whose run ENDED is not locked, and two missions are independent', async () => {
+    // Terminality is what releases a mission: a FAILED or COMPLETED run holds
+    // nothing. And the guard is per mission — one mission's live run never
+    // blocks another's.
+    const s = stage();
+    const first = dataOf(await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT)), s.ports));
+    // Another mission, while the first is live: allowed, and a distinct run.
+    const other = await handleJuliusMissionRoute(post(JSON.stringify({ ...CONTRACT, missionId: 'mission:wonderland-2', markerNamespace: 'wonderland-two' })), s.ports);
+    expect(other?.status).toBe(201);
+    expect(dataOf(other).runId).not.toBe(first.runId);
+
+    // The first mission's run reaches a terminal state; a new run of it is then
+    // ordinary work, with no rerun intent required.
+    activeRuns.set(`${CONTRACT.projectId}/${CONTRACT.missionId}`, { runId: first.runId, state: 'COMPLETED' });
+    activeRuns.delete(`${CONTRACT.projectId}/${CONTRACT.missionId}`);
+    const next = await handleJuliusMissionRoute(post(JSON.stringify({ ...CONTRACT, objective: 'Now compare the fourth format too.' })), s.ports);
+    expect(next?.status).toBe(201);
+    expect(dataOf(next).runId).not.toBe(first.runId);
   });
 
   it('builds its three worker requests from the live composition’s own definitions, with the reviewer in the named group', () => {

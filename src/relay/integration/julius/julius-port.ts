@@ -133,6 +133,23 @@ export interface JuliusBootstrapRequest {
    */
   readonly deterministicCheck?: { readonly declared: boolean };
   /**
+   * SOMEBODY MEANT TO RUN THIS MISSION AGAIN WHILE A RUN OF IT IS STILL ALIVE.
+   *
+   * Absent is the safe default and the ordinary case: a second, DIFFERENT
+   * execution of a mission that is still in flight is refused, because an
+   * accidental resubmit — an edited draft, a client retry with a changed field
+   * — would otherwise start a second paid execution nobody asked for. A
+   * replayed IDENTICAL request is not affected either way: its idempotency key
+   * is the contract's own content, so it resumes the run it already made.
+   *
+   * `EXPLICIT` may only be set from a deliberate human act — an operator flag,
+   * a client's rerun affordance — and never as a retry default. It is the
+   * founder's "preserve an explicit intentional rerun path", and the reason it
+   * is a separate field rather than a contract change is that rerunning a
+   * mission is not a property OF the mission.
+   */
+  readonly rerunIntent?: 'EXPLICIT';
+  /**
    * The repository authority this run REQUESTS. Requested, never granted:
    * Relay's repository resolver narrows it against what a human granted on the
    * registration, and Julius narrows it again per worker and per sub-agent.
