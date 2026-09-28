@@ -1727,6 +1727,21 @@ def skeleton_flame():
     figure.material("ghostpale", "glow", (0.72, 0.94, 1.00), 1.2)
     figure.material("void", "lit", (0.030, 0.040, 0.060), 1.0)
     figure.material("ash", "lit", (0.640, 0.610, 0.540), 1.0)
+    # FOUNDER, SKELETON FLAME: "The OTHER BLACK SECTIONS OF THE BODY are supposed to participate in the
+    # glowing treatment. In particular, the BLACK PARTS ON THE LEGS need to visibly GLOW. Preserve their
+    # black identity while giving them the intended luminous/glowing behavior."
+    #
+    # THAT IS ONE MATERIAL, NOT A RECOLOUR. `void` is the near-black the skeletal seams are made of and it
+    # is LIT, so it receives light and emits none -- black in daylight and black at night, which is half of
+    # what the founder describes. This is the same near-black as a GLOW at a low strength: it keeps its
+    # identity in daylight, where a twentieth of white against a sunlit bone plate still reads black, and
+    # carries a visible inner light once the world goes dark.
+    #
+    # KEPT FAR DARKER THAN THE SPECTRAL BLUES ON PURPOSE. ghost is (0.22, 0.70, 1.00) and ghostpale
+    # (0.72, 0.94, 1.00); those are the skin's spectral sections and the founder's instruction is that they
+    # stay distinct. A black part that glows must not become a third blue part, so this is barely cool and a
+    # fraction of their strength.
+    figure.material("voidglow", "glow", (0.050, 0.065, 0.105), 0.55)
     figure.material("gold", "rim", (0.905, 0.720, 0.290), 1.0)
     figure.material("soulpulse", "glow", SKELETON_SOUL, 2.2)
     figure.material("soulveilpulse", "glow", SKELETON_SOUL, 0.55)
@@ -1817,10 +1832,27 @@ def skeleton_flame():
         knee = hip - lh * 0.50
         plates(name, (0.0, y, hip - lh * 0.24), (ld * 1.35, lw * 1.35, lh * 0.44), 2)
         figure.box(name, "ash", (0.0, y, knee + 0.4), (ld * 1.2, lw * 1.2, tile * 0.6))
-        plates(shin, (0.0, y, knee - lh * 0.24), (ld * 1.3, lw * 1.3, lh * 0.40), 2)
+        # THE BLACK ON THE LEGS GLOWS. plates() draws a bone course with a dark seam between courses, and that
+        # seam is the black the founder is pointing at. It was `void`, which emits nothing, so the leg read as
+        # black plating and stayed black plating. With the glowing near-black it reads as black plating with
+        # light in its joints, which is what the note asks for without changing one dimension.
+        plates(shin, (0.0, y, knee - lh * 0.24), (ld * 1.3, lw * 1.3, lh * 0.40), 2, seam="voidglow")
         # THE FEET BURN: blocks of pale blue light in a pool of ghostfire.
-        figure.slab(shin, "ghostpale", (ld * 0.32, y, hip - lh + lh * 0.075), (ld * 1.55, lw * 1.25, lh * 0.15), tile=tile)
-        figure.slab(shin, "ghost", (ld * 0.30, y, hip - lh + lh * 0.010), (ld * 1.75, lw * 1.45, lh * 0.04), tile=tile)
+        # ---- THE FEET ARE THE BODY'S COLOURWAY, NOT THE SPECTRE'S.
+        #
+        # FOUNDER: "The FEET should NOT be blue ... they should use the same neutral color family as the
+        # non-blue portions of the mascot -- the existing GRAY/BLACK body colorway ... They should visually
+        # belong to the skeleton/body rather than looking like extensions of the blue spectral areas."
+        #
+        # The upper foot slab was `ghostpale` and the sole `ghost`, which are the two spectral glow materials --
+        # so the feet were not blue-tinted, they were made of the same substance as the ghostfire. `ash` is the
+        # gray already on the ankle and knee bands and `void` the near-black of the seams, so the foot joins the
+        # family of the parts directly above it and no colour arrives that is not already on this skin.
+        #
+        # SIZES, POSITIONS AND TILE UNCHANGED: a material correction, because the founder's instruction is not to
+        # broadly recolour and not to alter the silhouette.
+        figure.slab(shin, "ash", (ld * 0.32, y, hip - lh + lh * 0.075), (ld * 1.55, lw * 1.25, lh * 0.15), tile=tile)
+        figure.slab(shin, "void", (ld * 0.30, y, hip - lh + lh * 0.010), (ld * 1.75, lw * 1.45, lh * 0.04), tile=tile)
         fire = "footfire_%s" % ("l" if side < 0 else "r")
         figure.part(fire, shin, (0.0, y, hip - lh + 0.4), "twinkle", 0.5 + 0.2 * side)
         figure.flame(fire, lambda up: "ghost" if up < 0.5 else "ghostpale", (0.6, y, hip - lh + 0.2), 4.2, 3.2, 5, tile * 0.95)

@@ -93,6 +93,30 @@ def job():
             return None
         if avg is None or raw is None or float(avg[0]) <= 0.01:
             return None
+        # ---- A FROZEN STAT PASSES A FRAME-COUNTER DEDUP, AND ONE DID.
+        #
+        # FStatUnitData only advances while the stat unit overlay is DRAWING. When it stops, every field keeps
+        # its last value while the engine's frame counter carries on, so a reading deduped on the frame number
+        # is accepted as a new frame and is the previous frame's number.
+        #
+        # The 16:33 run caught it: the ten-avatar spawn window reported 483 frames whose median, p95 and worst
+        # were all 29.90. Four hundred and eighty-three distinct frames cannot agree to the hundredth. The one
+        # and five-avatar windows in the same run had real distributions -- 270.89 and 545.82 ms worst cases --
+        # and the flat one was the LONGEST window, which is what a dropout looks like.
+        #
+        # So an unchanged raw value across advancing frames is treated as a dead stat rather than as a steady
+        # world: eight in a row and the reading is refused until it moves. Eight because a genuinely steady
+        # frame still jitters in the hundredths, and RawFrameTime is unsmoothed, so a byte-identical repeat is
+        # the overlay and not the machine.
+        if float(raw[0]) == globals().get("_LAST_RAW"):
+            globals()["_FROZEN"] = globals().get("_FROZEN", 0) + 1
+            globals()["_LAST_FRAME"] = now
+            if globals()["_FROZEN"] >= 8:
+                RESULT["stat_froze"] = RESULT.get("stat_froze", 0) + 1
+                return None
+        else:
+            globals()["_FROZEN"] = 0
+        globals()["_LAST_RAW"] = float(raw[0])
         globals()["_LAST_FRAME"] = now
         return (float(avg[0]), float(avg[1]), float(avg[2]), float(avg[3]),
                 float(raw[0]), float(raw[1]), float(raw[3]))
@@ -280,6 +304,11 @@ def job():
             spawn_reads = 0
             while time.time() - started < 3.0:
                 spawn_reads += 1
+                # RE-ISSUED HERE TOO. watch() has re-issued stat unit every thirty ticks since it was written
+                # and this loop never did, which is why the longest spawn window is the one that went flat.
+                # zc_avatar_cost carries the reason in capitals and I did not read my own file.
+                if spawn_reads % 30 == 0:
+                    unreal.SystemLibrary.execute_console_command(world, "stat unit")
                 row = read_frame()
                 if row is not None:
                     during.append(row)
@@ -441,6 +470,53 @@ def job():
                         "from a ten-frame exponential average and could not represent a spike.")
     verdict["what_a_hitch_needs"] = ("the raw tails, not the medians. A median answers 'what does it cost'; "
                                      "the founder asked 'why does it stutter', which only the tail can answer.")
+
+    # ---- ONE AVATAR COSTS THREE TIMES WHAT TEN DO, AND IT REPRODUCES IN BOTH DIRECTIONS.
+    #
+    # THE 16:33 RUN, with the instrument finally repeating at 1.68 ms across eight reads of an unchanged world:
+    #
+    #   rung 0   22.17 ms
+    #   rung 1   92.52 ms ascending, 98.15 ms descending
+    #   rung 5   28.27 ms ascending, 34.32 ms descending
+    #   rung 10  35.02 ms
+    #
+    # ADDING FOUR MORE AVATARS MADE THE FRAME THREE TIMES CHEAPER, and removing them made it expensive again.
+    # That kills the obvious explanation. A first-time cost -- shaders, a PSO cache, a mesh build paid by
+    # whichever avatar arrives first -- would be gone by the time the ladder came back down to one, and the
+    # descending read is 98.15. Same cost at the start and at the end, with five and ten cheap in between.
+    #
+    # WHERE IT SITS: at one avatar the render thread median is 98.12 against a frame of 98.15, with game at
+    # 20.78 and GPU at 20.79. At five descending, frame 34.32, render 34.07, game 34.35. So the cost at one
+    # avatar is the RENDER THREAD and nothing else, and it is not there at five.
+    #
+    # WHAT THIS DOES TO THE FOUNDER'S QUESTION. Item 5 asks whether Project Avatars scale, on the premise that
+    # more of them cost more. On this machine ten cost 35 ms and one costs 95, so the premise is inverted and
+    # the marginal-cost arithmetic above is meaningless: A03's "2nd-5th each" comes out at MINUS 16 ms per
+    # avatar, which is not a cost, it is the ladder dividing by a rung that does not belong to the same curve.
+    #
+    # I DO NOT KNOW WHY AND THIS RECORDS THAT RATHER THAN A GUESS. What it is not: order (the same value at the
+    # first rung and the last), a first-time cost (see above), a different avatar file (rung 1 spawns files[0],
+    # which every later rung also contains), or the camera (never moved between rungs). What it could be, named
+    # so the next run can refuse it: something that switches to a cheaper render path above one instance, a
+    # shadow or distance-field update that a single object pays in full and a group amortises, or a virtual
+    # shadow map cache that one newly-placed object invalidates per frame. All three are testable at rungs
+    # 1/2/3 with shadows and distance fields toggled, which is the next job and not this one.
+    single = (RESULT.get("steady_ms") or {}).get("1")
+    many = (RESULT.get("steady_ms") or {}).get("10")
+    down = (RESULT.get("one_avatar_up_vs_down") or {}).get("down")
+    if isinstance(single, float) and isinstance(many, float) and single > many * 1.5:
+        verdict["one_costs_more_than_ten"] = {
+            "one": single, "ten": many, "one_descending": down,
+            "ratio": round(single / max(many, 0.01), 2),
+            "render_thread_at_one": ((RESULT.get("descending") or {}).get("1") or {}).get("render_median"),
+            "game_thread_at_one": ((RESULT.get("descending") or {}).get("1") or {}).get("game_median"),
+            "reading": "the founder's premise for item 5 is that more avatars cost more. Measured, one costs "
+                       "about three times ten, it reproduces coming back down, and it is entirely on the "
+                       "render thread. So the per-avatar arithmetic in A03 is dividing across two different "
+                       "curves and its marginal cost is not a cost.",
+        }
+        verdict["medians"] = ("readable, and they say something other than what was asked: see "
+                             "one_costs_more_than_ten. The ladder repeats to 1.68 ms, so this is not noise.")
     RESULT["verdict"] = verdict
 
     RESULT["captures_dir"] = ROOT

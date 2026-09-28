@@ -75,6 +75,32 @@ namespace RelayDogReadTuning
 
 namespace
 {
+	// FOUNDER, RELAY OG EYE SPACING: "Move the LEFT and RIGHT eye elements farther apart horizontally."
+	//
+	// SM_RelayDog_head_eye CARRIES BOTH PANES IN ONE MESH, so there is no component to move: the two lit panes
+	// are about 8.2 units wide with their centres 5.7 out on a 22.8-wide visor, which leaves them 3.2 units
+	// apart -- fourteen per cent of the visor. At that separation they read as one mass at gameplay distance
+	// whatever their halos do, which is why tightening the halos once already failed to fix it.
+	//
+	// So above 1.0 the combined pane is HIDDEN and replaced by two panes of exactly one eye's size, placed this
+	// multiple of the original centre offset apart. Each eye keeps its width, its height, its vertical position,
+	// its colour and its glow material; nothing is enlarged and the head is untouched. 1.55 takes the centres
+	// from 5.7 to 8.8 and opens the gap from 3.2 to 9.5 units, which is 42 per cent of the visor.
+	//
+	// A MULTIPLE RATHER THAN A POSITION, so it stays correct if the mesh is ever re-authored, and 1.0 restores
+	// the original pane exactly for an A/B photograph.
+	//
+	// AND IT IS CLAMPED TO WHAT THE GEOMETRY ALLOWS, WHICH THE FIRST VALUE I PICKED WAS NOT. At 1.55 each eye's
+	// outer edge lands 1.5 units beyond the eye mesh's own half width, so the eyes would sit off the end of the
+	// face they belong to -- fixing a merge in the middle by pushing the eyes off the sides. 0 asks for the
+	// widest spacing the mesh permits, computed from the eye's own width, which is 1.28 on this asset: the gap
+	// goes from 14 to 28 per cent of the visor and both eyes stay wholly on it.
+	//
+	// The founder's "do NOT widen or distort the entire head/visor" is the binding constraint here, and this is
+	// the arithmetic that honours it rather than a number that happened to look generous.
+	TAutoConsoleVariable<float> CVarEyeSpread(TEXT("wl.Dog.EyeSpread"), 0.0f, TEXT("How much farther apart the two eye panes sit than the mesh places them. 0 = the widest the mesh allows without an eye overhanging it; 1.0 draws the mesh's own combined pane unchanged; above 1.0 is taken literally and may overhang."));
+	TAutoConsoleVariable<float> CVarEyeGap(TEXT("wl.Dog.EyeGap"), 0.30f, TEXT("The black visor gap kept clear between the two eye glows, as a fraction of the visor half width. The halos are narrowed to respect it; no brightness changes."));
+
 	// THE MISSION PROPS ARE BUILT, NOT IMPORTED. Engine content only, exactly as the Mission Contract is
 	// built (WonderlandMissionOrb.cpp): a book and a paintbrush assembled from the engine cube, in the
 	// Dog's own voxel language. Nothing comes from the world's Content, so a prop can never be a missing
@@ -255,6 +281,10 @@ namespace RelayDogPoseTuning
 	TAutoConsoleVariable<float> CVarStrokeUp(TEXT("wl.Dog.Pose.StrokeHeight"), 15.0f, TEXT("IMPLEMENTATION: how far a brush stroke travels up and down, uu."));
 	TAutoConsoleVariable<float> CVarStrokeHz(TEXT("wl.Dog.Pose.StrokeHz"), 0.55f, TEXT("IMPLEMENTATION: brush strokes per second."));
 	TAutoConsoleVariable<float> CVarPaintReach(TEXT("wl.Dog.Pose.PaintReach"), 0.82f, TEXT("IMPLEMENTATION: how far out the brush hand reaches, fraction of the arm."));
+	// FOUNDER, RELAY OG EYE SPACING: "There must be a clearly visible BLACK VISOR GAP between the two
+	// glowing eyes" and "Bloom from one eye must not visually merge with bloom from the other." This is that
+	// gap, as a fraction of the visor's half width, and every eye halo is narrowed until its inner edge
+	// respects it. 0.30 leaves just under a third of each half of the visor dark between the two glows.
 	TAutoConsoleVariable<float> CVarLensUp(TEXT("wl.Dog.Pose.LensUp"), 18.0f, TEXT("REVIEW: the eye line the lens is held on, above the neck, uu."));
 	TAutoConsoleVariable<float> CVarLensFwd(TEXT("wl.Dog.Pose.LensForward"), 30.0f, TEXT("REVIEW: how far in front of the eye the lens is held, along the line to the work, uu."));
 	TAutoConsoleVariable<float> CVarLensTurn(TEXT("wl.Dog.Pose.LensTurn"), 66.0f, TEXT("REVIEW: the most the lens is turned from straight ahead toward the Contract, degrees -- inside the head's 70, so the eyes can follow it."));
@@ -1617,6 +1647,10 @@ void ARelayDogCharacter::BuildEyeGlow()
 		Additive = Soft;
 	}
 	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, DogPropCubePath);
+	// Measured inside the loop below and logged after it, so the founder's geometry question is answered with
+	// this mesh's figures rather than with the estimate in the comment that describes it.
+	double VisorWidthMeasured = 0.0;
+	double EyeGapMeasured = 0.0;
 	TInlineComponentArray<UStaticMeshComponent*> Meshes;
 	GetComponents<UStaticMeshComponent>(Meshes);
 	int32 Eyes = 0;
@@ -1678,12 +1712,111 @@ void ARelayDogCharacter::BuildEyeGlow()
 		const double SoftRings[3] = {2.0, 2.8, 2.8};
 		const double* Rings = bSoftEyeHalo ? SoftRings : FlatRings;
 		const int32 RingCount = bSoftEyeHalo ? 2 : 3;
+
+		// ---- AND NO HALO CROSSES THE VISOR CENTRELINE. FOUNDER, RELAY OG EYE SPACING: the two eyes "visually
+		// merge into one central glowing mass", and there must be "a clearly visible BLACK VISOR GAP" with the
+		// bloom of one eye not reaching the other.
+		//
+		// TIGHTENING THE RINGS ONCE ALREADY FAILED, and the comment above says why it looked sufficient: the
+		// pair had merged at {2.2, 3.4}, so the rings came down to {2.0, 2.8} and the photograph improved. It
+		// was never enough, and the arithmetic says so without needing a photograph at all.
+		//
+		// A halo's width along the eye-to-eye axis is Size[Across] * 0.36 * Ring, and its centre is at
+		// Size[Across] * 0.25 from the visor centre. On this mesh Size[Across] is 22.8, so:
+		//
+		//   ring 0 at 2.0   16.4 wide, centred 5.7 out   -> inner edge 2.5 units PAST the centreline
+		//   ring 1 at 2.8   23.0 wide, centred 5.7 out   -> inner edge 5.8 units PAST the centreline
+		//
+		// Both rings of the left eye cover the right eye's half of the visor, and both rings of the right cover
+		// the left's. They do not merely touch: they overlap through the middle, which is the central glowing
+		// mass in the founder's screenshot. No ring multiplier that keeps the inner disc at twice the eye can
+		// fix that, because the fault is a WIDTH compared against a CENTRE, and 0.36 * 2.0 is larger than
+		// 2 * 0.25 whatever the rings are called.
+		//
+		// SO THE INNER EDGE IS CLAMPED INSTEAD OF THE RING BEING GUESSED AT. Each halo is narrowed, along the
+		// eye-to-eye axis only, until its inner edge stops short of the centreline by wl.Dog.EyeGap of the
+		// visor's half width. Nothing else changes: the ring multipliers still set the halo's height and the
+		// spill's reach above and below, the shares are untouched, the colour is untouched, and the glow is not
+		// dimmed anywhere. The founder's instruction is not to hide this by reducing glow, and brightness is
+		// the one thing this does not touch.
+		//
+		// A CLAMP RATHER THAN A SMALLER NUMBER because the gap is then a property that holds for any ring, any
+		// mesh and any future eye spacing, instead of a constant that was correct for one measurement of one
+		// asset and silently wrong for the next.
+		// THE GAP IS DERIVED FROM THE EYE, NOT CHOSEN. A fraction of the visor picked by hand gave halos
+		// NARROWER THAN THE EYES THEY BELONG TO -- at 0.30 of the half visor the rings clamp to 4.56 units
+		// against an 8.2-unit eye, which is a rim that does not reach its own pupil. The eye's own inner edge is
+		// the only defensible limit: a halo may spill up, down and outward as far as its ring says, and inward
+		// no further than the eye it surrounds. The black gap is then exactly the gap between the eyes, which is
+		// a fact about the mesh rather than a number I liked.
+		// THE WIDEST THE MESH ALLOWS: the outer edge of an eye at its new centre must not pass the eye mesh's own
+		// half width. Solved rather than searched -- centre <= half - eyeHalfWidth, and centre is 0.25 * width
+		// * spread.
+		const double EyeHalf = Size[Across] * 0.36 * 0.5;
+		const double Widest = Size[Across] * 0.25 > 0.0
+			? FMath::Max((Size[Across] * 0.5 - EyeHalf) / (Size[Across] * 0.25), 1.0)
+			: 1.0;
+		const double Asked = static_cast<double>(CVarEyeSpread.GetValueOnGameThread());
+		const double Spread = Asked <= 0.0 ? Widest : FMath::Clamp(Asked, 1.0, 2.2);
+		const double EyeCentre = Size[Across] * 0.25 * Spread;
+		const double EyeHalfWidth = Size[Across] * 0.36 * 0.5;
+		VisorWidthMeasured = Size[Across];
+		EyeGapMeasured = FMath::Max((EyeCentre - EyeHalfWidth) * 2.0, 0.0);
+
+		// ---- TWO PANES INSTEAD OF ONE, WHEN THEY HAVE TO MOVE APART.
+		//
+		// The mesh's pane is hidden rather than destroyed, so wl.Dog.EyeSpread 1.0 brings it straight back for
+		// an A/B photograph and nothing about the asset is altered. The replacements are the project's own cube
+		// carrying the same glow material, sized to ONE eye on every axis -- the founder's "do NOT make the
+		// eyes larger to compensate" is met by construction, not by being careful.
+		//
+		// They attach to the eye component, so whatever moves it -- the blink pivots, the head, the walk --
+		// moves them, and their MIDs join EyeCoreMids so the colourway and the day-night glow level drive them
+		// exactly as they drive the original pane.
+		if (Spread > 1.0001 && Cube != nullptr && Glow != nullptr)
+		{
+			Eye->SetVisibility(false, true);
+			for (const double Which : {-1.0, 1.0})
+			{
+				UStaticMeshComponent* Core = NewObject<UStaticMeshComponent>(this,
+					MakeUniqueObjectName(this, UStaticMeshComponent::StaticClass(), TEXT("EyeCoreSplit")));
+				Core->ComponentTags.Add(TEXT("WL_EyeHalo"));   // so a rebuild skips it, like the halos
+				Core->SetMobility(EComponentMobility::Movable);
+				Core->SetStaticMesh(Cube);
+				Core->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				Core->SetCastShadow(false);
+				Core->SetupAttachment(Eye);
+				FVector CoreScale = Size / CubeSide;
+				CoreScale[Across] = Size[Across] * 0.36 / CubeSide;
+				Core->SetRelativeScale3D(CoreScale);
+				FVector CoreAt = PaneCentre;
+				CoreAt[Across] += Which * EyeCentre;
+				Core->SetRelativeLocation(CoreAt);
+				UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Glow, this);
+				Core->SetMaterial(0, Mid);
+				EyeCoreMids.Add(Mid);
+				Core->RegisterComponent();
+			}
+		}
+		const double EyeInnerEdge = FMath::Max(EyeCentre - EyeHalfWidth, 0.0);
+		// And the cvar can push it FURTHER out than the eye, never nearer: 0 means "match the eye".
+		const double Extra = FMath::Clamp(static_cast<double>(CVarEyeGap.GetValueOnGameThread()), 0.0, 0.9)
+			* EyeCentre;
+		const double WantGap = FMath::Min(EyeInnerEdge + Extra, EyeCentre * 0.95);
 		for (int32 Ring = 0; Ring < RingCount; ++Ring)
 		for (const double Which : {-1.0, 1.0})
 		for (const double Side : {-1.0, 1.0})
 		{
 			FVector RingScale = Scale * (Rings[Ring] / 1.45);
 			RingScale[Normal] = Scale[Normal];
+			// The widest this halo may be so its inner edge lands WantGap short of the centreline. Doubled
+			// because the halo is centred on its eye, so half of it lies inboard.
+			const double RoomInboard = FMath::Max(EyeCentre - WantGap, 0.0);
+			const double MaxAcross = RoomInboard * 2.0 / CubeSide;
+			if (MaxAcross > 0.0 && RingScale[Across] > MaxAcross)
+			{
+				RingScale[Across] = MaxAcross;
+			}
 			UStaticMeshComponent* Halo = NewObject<UStaticMeshComponent>(this, MakeUniqueObjectName(this, UStaticMeshComponent::StaticClass(), TEXT("EyeHalo")));
 			Halo->ComponentTags.Add(TEXT("WL_EyeHalo"));
 			Halo->SetMobility(EComponentMobility::Movable);
@@ -1692,7 +1825,8 @@ void ARelayDogCharacter::BuildEyeGlow()
 			Halo->SetCastShadow(false);
 			Halo->SetupAttachment(Eye);
 			FVector Offset = PaneCentre;
-			Offset[Across] += Which * Size[Across] * 0.25;
+			// THE SAME CENTRE THE CORE USES, so a halo cannot end up round where the eye used to be.
+			Offset[Across] += Which * EyeCentre;
 			Offset[Normal] += Side * Size[Normal] * (0.55 + 0.08 * Ring);
 			Halo->SetRelativeLocation(Offset);
 			Halo->SetRelativeScale3D(RingScale);
@@ -1704,7 +1838,22 @@ void ARelayDogCharacter::BuildEyeGlow()
 			EyeHalos.Add(Halo);
 		}
 	}
-	UE_LOG(LogTemp, Display, TEXT("WLDOG eye glow built on %d eye pane(s): %d core, %d halo"), Eyes, EyeCoreMids.Num(), EyeHaloMids.Num());
+	// ---- AND THE MEASUREMENT THE FOUNDER'S NOTE NEEDS, LOGGED RATHER THAN ASSUMED.
+	//
+	// The founder asks whether the merge comes from the geometry, the emissive mask, the bloom radius or a
+	// combination. The halo clamp above removes the bloom half with certainty -- no ring can now reach across
+	// the centreline. What it cannot change is the GEOMETRY half, and the numbers say that is the larger part:
+	// on this mesh each eye is about 8.2 units wide with its centre 5.7 out on a 22.8-wide visor, so the two
+	// lit panes are only about 3.2 units apart -- fourteen per cent of the visor. Two bright panes that close
+	// read as one mass at any gameplay distance however tightly their halos are held.
+	//
+	// Moving the panes needs SM_RelayDog_head_eye re-authored, or the combined pane replaced by two, and this
+	// logs the actual figures so that decision is made against the mesh instead of against this comment.
+	UE_LOG(LogTemp, Display,
+		TEXT("WLDOG eye glow built on %d eye pane(s): %d core, %d halo | eye gap %.2f of visor %.2f = %.1f%%"),
+		Eyes, EyeCoreMids.Num(), EyeHaloMids.Num(),
+		EyeGapMeasured, VisorWidthMeasured,
+		VisorWidthMeasured > 0.0 ? 100.0 * EyeGapMeasured / VisorWidthMeasured : 0.0);
 }
 
 void ARelayDogCharacter::SetEyeGlow(float Level)
