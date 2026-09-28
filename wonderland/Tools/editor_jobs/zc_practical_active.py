@@ -286,7 +286,7 @@ def job():
             here = pnow.get_actor_location()
             if math.hypot(here.x - SPOT[0], here.y - SPOT[1]) > 500.0:
                 pnow.set_actor_location(
-                    unreal.Vector(SPOT[0], SPOT[1], (ground_z + 120.0) if ground_z is not None else 200.0),
+                    unreal.Vector(SPOT[0], SPOT[1], (gz + 120.0) if gz is not None else 200.0),
                     False, True)
                 yield (lambda: unreal.GameplayStatics.get_player_pawn(live(), 0) is not None, 120)
                 command("FlushLevelStreaming")
