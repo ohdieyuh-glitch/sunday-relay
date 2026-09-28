@@ -142,8 +142,53 @@ def job():
             else:
                 prof.append(round((deepest - y0) / float(span), 4))
                 filled += 1
+        # ---- AND WHERE THE FEET ARE, which is the only part of this a robe cannot hide.
+        #
+        # THE PROFILE ALONE COMPARES COSTUME WIDTH, NOT STANCE. Run against the four costumes it returned mean
+        # differences of 0.69 to 0.79 of the band and a worst column of exactly 1.0 for every one of them --
+        # which is not "stands slightly differently", it is two almost unrelated shapes. The reason is that
+        # 0.0 in a profile means BOTH "the figure does not reach here" and "the figure reaches the very top",
+        # so a narrow-legged Relay OG against a robed Arden Infernal compares as a total mismatch. The
+        # difference measured was drapery.
+        #
+        # FEET ARE A STANCE. Two figures standing the same put their ground contacts the same distance apart
+        # and the same distance either side of centre, whatever is draped over the legs above them. So the
+        # lowest row the figure reaches is the ground, the columns within a few pixels of it are the feet, and
+        # what is reported is their spread and their offset -- each as a fraction of the figure's own HEIGHT,
+        # because height is set by the body and width is set by ornament.
+        ground = None
+        for x in range(bx0, bx1 + 1):
+            for y in range(y1, y0 - 1, -1):
+                i, j = (y * sw + x) * sc, (y * ew + x) * ec
+                d = (abs(sp[i] - ep[j]) + abs(sp[i + 1] - ep[j + 1]) + abs(sp[i + 2] - ep[j + 2])) / 765.0
+                if d >= FIGURE_DELTA:
+                    if ground is None or y > ground:
+                        ground = y
+                    break
+        feet = []
+        if ground is not None:
+            near = max(int((by1 - by0) * 0.04), 2)
+            for x in range(bx0, bx1 + 1):
+                for y in range(y1, max(ground - near, y0) - 1, -1):
+                    i, j = (y * sw + x) * sc, (y * ew + x) * ec
+                    d = (abs(sp[i] - ep[j]) + abs(sp[i + 1] - ep[j + 1]) + abs(sp[i + 2] - ep[j + 2])) / 765.0
+                    if d >= FIGURE_DELTA:
+                        feet.append(x)
+                        break
+        stance = None
+        if len(feet) >= 2:
+            bh_all = max(by1 - by0, 1)
+            centre = (bx0 + bx1) * 0.5
+            stance = {
+                "ground_row": ground,
+                "foot_columns": len(feet),
+                # spread and offset in units of the figure's own height, so a bigger figure reads the same
+                "spread_over_height": round((max(feet) - min(feet)) / float(bh_all), 4),
+                "centre_offset_over_height": round(((min(feet) + max(feet)) * 0.5 - centre) / float(bh_all), 4),
+            }
         return {"columns": len(prof), "filled": filled, "rows": [y0, y1], "profile": prof,
-                "usable": filled >= max(len(prof) * 0.25, 8)}
+                "stance": stance,
+                "usable": filled >= max(len(prof) * 0.25, 8) and stance is not None}
 
     if ues.get_game_world() is not None:
         les.editor_request_end_play()
@@ -340,24 +385,35 @@ def job():
         return out
 
     base = resampled(readings.get("relay_og"))
+    base_stance = (readings.get("relay_og") or {}).get("stance")
     RESULT["resampled_to"] = SAMPLES
+    RESULT["stance"] = {s: (readings.get(s) or {}).get("stance") for s in SKINS}
     diffs = {}
     for skin in SKINS:
         if skin == "relay_og":
             continue
         other = resampled(readings.get(skin))
-        if base is None or other is None:
+        mine = (readings.get(skin) or {}).get("stance")
+        if base is None or other is None or base_stance is None or mine is None:
             diffs[skin] = None
             continue
-        worst = max(abs(a - b) for a, b in zip(base, other))
-        mean = sum(abs(a - b) for a, b in zip(base, other)) / float(len(base))
-        diffs[skin] = {"worst_column": round(worst, 4), "mean_column": round(mean, 4)}
+        row = {
+            # THE VERDICT TURNS ON THESE TWO. Both are in units of the figure's own height.
+            "spread_delta": round(abs(mine["spread_over_height"] - base_stance["spread_over_height"]), 4),
+            "offset_delta": round(abs(mine["centre_offset_over_height"]
+                                      - base_stance["centre_offset_over_height"]), 4),
+            # and the silhouette difference, REPORTED and not judged: it is mostly drapery.
+            "silhouette_worst_column": round(max(abs(a - b) for a, b in zip(base, other)), 4),
+            "silhouette_mean_column": round(sum(abs(a - b) for a, b in zip(base, other)) / float(len(base)), 4),
+        }
+        diffs[skin] = row
     RESULT["vs_relay_og"] = diffs
     # A COMPARISON THAT COULD NOT BE MADE IS NOT A DIFFERENCE. The previous run folded "null" into the same
     # list as "differs", so four failed comparisons were reported as four skins standing wrongly -- which is
     # the founder being told a defect exists on the strength of an instrument that produced nothing.
     uncompared = sorted(k for k, v in diffs.items() if v is None)
-    off = sorted(k for k, v in diffs.items() if v is not None and v["worst_column"] > PROFILE_TOLERANCE)
+    off = sorted(k for k, v in diffs.items() if v is not None
+                 and (v["spread_delta"] > PROFILE_TOLERANCE or v["offset_delta"] > PROFILE_TOLERANCE))
     RESULT["skins_that_stand_differently"] = off or None
     RESULT["skins_not_compared"] = uncompared or None
     if uncompared:
@@ -369,10 +425,13 @@ def job():
         return
     record("T02", "every skin's legs sit where Relay OG's legs sit",
            not off, vs_relay_og=diffs, tolerance=PROFILE_TOLERANCE, differing=off or None,
+           stance=RESULT.get("stance"),
            note="the founder's item 3 is that one canonical behaviour stack drives every skin and the skins "
-                "are cosmetic. The plumbing for that exists -- the Dog publishes a worn pose and the costume "
-                "has joint writers for it -- and this is the first reading of whether it ARRIVES. Measured on "
-                "the rendered silhouette rather than by reading the pose back, because the founder ruled out "
+                "are cosmetic. The plumbing exists -- the Dog publishes a worn pose and the costume has joint "
+                "writers for it -- and this is the first reading of whether it ARRIVES. Judged on where the "
+                "FEET land, in units of the figure's own height, because a robe hides the legs and not the "
+                "ground contact; the silhouette difference is reported beside it and is mostly drapery. "
+                "Measured on the render rather than by reading the pose back, because the founder ruled out "
                 "proving a stance from the value that was handed over.")
 
     RESULT["status"] = "measured"
