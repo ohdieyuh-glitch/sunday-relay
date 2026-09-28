@@ -1867,7 +1867,21 @@ def skeleton_flame():
         # seam is the black the founder is pointing at. It was `void`, which emits nothing, so the leg read as
         # black plating and stayed black plating. With the glowing near-black it reads as black plating with
         # light in its joints, which is what the note asks for without changing one dimension.
-        plates(shin, (0.0, y, knee - lh * 0.24), (ld * 1.3, lw * 1.3, lh * 0.40), 2, seam="voidglow")
+        # ---- AND THE PLATE EDGES, NOT JUST THE ONE SEAM.
+        #
+        # COUNTED IN THE GENERATED FIGURE: "voidglow" appeared three times -- the material declaration and one
+        # seam box per leg. TWO BOXES in the whole mascot, because plates() draws a seam only BETWEEN courses
+        # and the shin has two courses. Two thin boxes are not "the BLACK PARTS ON THE LEGS", however bright
+        # they are made, which is why raising the strength from 0.55 to 1.6 moved the measurement by 0.004.
+        #
+        # plates() already takes a `lit` material and puts a strip down the outer edge of EVERY course. Passing
+        # the glowing near-black there doubles the lit geometry and puts it on the edge, where a plate is read,
+        # rather than only in the crack between two of them.
+        #
+        # STILL NO NEW BOXES AND NO SIZE CHANGES: `lit` is a parameter plates() has always had, and the founder's
+        # instruction is a targeted correction to which parts glow, not a redesign of the leg.
+        plates(shin, (0.0, y, knee - lh * 0.24), (ld * 1.3, lw * 1.3, lh * 0.40), 2,
+               seam="voidglow", lit="voidglow")
         # THE FEET BURN: blocks of pale blue light in a pool of ghostfire.
         # ---- THE FEET ARE THE BODY'S COLOURWAY, NOT THE SPECTRE'S.
         #

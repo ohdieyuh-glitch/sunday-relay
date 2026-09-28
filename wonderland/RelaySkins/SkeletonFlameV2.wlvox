@@ -1568,6 +1568,7 @@ box leg_l_shin bone 1.083 -2.039 2.880 1.083 0.878 1.376
 box leg_l_shin bone 1.083 -1.161 2.880 1.083 0.878 1.376
 box leg_l_shin bone 1.083 -0.284 2.880 1.083 0.878 1.376
 box leg_l_shin voidglow 0.000 -1.600 2.080 3.120 3.370 0.256
+box leg_l_shin voidglow 1.625 -1.600 2.880 0.300 1.755 0.800
 box leg_l_shin bone -1.148 -2.995 1.280 1.148 0.930 1.376
 box leg_l_shin bone -1.148 -2.065 1.280 1.148 0.930 1.376
 box leg_l_shin bone -1.148 -1.135 1.280 1.148 0.930 1.376
@@ -1580,6 +1581,7 @@ box leg_l_shin bone 1.148 -2.995 1.280 1.148 0.930 1.376
 box leg_l_shin bone 1.148 -2.065 1.280 1.148 0.930 1.376
 box leg_l_shin bone 1.148 -1.135 1.280 1.148 0.930 1.376
 box leg_l_shin bone 1.148 -0.205 1.280 1.148 0.930 1.376
+box leg_l_shin voidglow 1.723 -1.600 1.280 0.300 1.755 0.800
 box leg_l_shin ash -0.653 -2.725 0.600 0.969 1.125 1.200
 box leg_l_shin ash -0.653 -1.600 0.600 0.969 1.125 1.200
 box leg_l_shin ash -0.653 -0.475 0.600 0.969 1.125 1.200
@@ -1706,6 +1708,7 @@ box leg_r_shin bone 1.083 1.161 2.880 1.083 0.878 1.376
 box leg_r_shin bone 1.083 2.039 2.880 1.083 0.878 1.376
 box leg_r_shin bone 1.083 2.916 2.880 1.083 0.878 1.376
 box leg_r_shin voidglow 0.000 1.600 2.080 3.120 3.370 0.256
+box leg_r_shin voidglow 1.625 1.600 2.880 0.300 1.755 0.800
 box leg_r_shin bone -1.148 0.205 1.280 1.148 0.930 1.376
 box leg_r_shin bone -1.148 1.135 1.280 1.148 0.930 1.376
 box leg_r_shin bone -1.148 2.065 1.280 1.148 0.930 1.376
@@ -1718,6 +1721,7 @@ box leg_r_shin bone 1.148 0.205 1.280 1.148 0.930 1.376
 box leg_r_shin bone 1.148 1.135 1.280 1.148 0.930 1.376
 box leg_r_shin bone 1.148 2.065 1.280 1.148 0.930 1.376
 box leg_r_shin bone 1.148 2.995 1.280 1.148 0.930 1.376
+box leg_r_shin voidglow 1.723 1.600 1.280 0.300 1.755 0.800
 box leg_r_shin ash -0.653 0.475 0.600 0.969 1.125 1.200
 box leg_r_shin ash -0.653 1.600 0.600 0.969 1.125 1.200
 box leg_r_shin ash -0.653 2.725 0.600 0.969 1.125 1.200
