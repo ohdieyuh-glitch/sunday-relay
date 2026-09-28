@@ -406,15 +406,34 @@ def job():
                 row["gone"] = kind
                 row["gone_reason"] = reason
                 # THE LAST PLACE THE DOG WAS, which is what separates "it fell" from "it was deleted".
-                # Every route here runs on the +12 shelf, so a last-known z far below that is a fall.
+                #
+                # MEASURED AGAINST THE FLOOR THAT IS ACTUALLY THERE, not the one the route declares. The old
+                # comment here read "every route here runs on the +12 shelf", and zc_avenue_hole measured
+                # that to be false: waypoints 0-4 of all three avenues stand on V2_GroundSlab at -14, the
+                # ground BESIDE the road, and only reach the declared +12 paving at waypoint 5 -- TARTARUS
+                # not even by 6. That is the measured road-to-verge step of 26 uu.
+                #
+                # WHY IT MATTERED. A capsule origin sits about 88 uu above the feet, so a Dog standing
+                # correctly on a -14 floor has its origin near 74. Against the declared 12 that reads as
+                # "63 uu below the floor", and the sentence below then describes a pawn doing exactly the
+                # right thing as though it had dropped through the world. The `fell` flag itself was never
+                # fooled -- it wants 200 uu -- but the prose was, and so was I.
                 row["last_z"] = round(prev.z, 1)
-                row["floor_z"] = float(pts[min(wp, len(pts) - 1)].get("floor", 12.0))
+                row["declared_floor_z"] = float(pts[min(wp, len(pts) - 1)].get("floor", 12.0))
+                real = floor_at(prev.x, prev.y, prev.z + 400.0)
+                row["real_floor_z"] = None if real is None else round(real, 1)
+                row["floor_z"] = row["declared_floor_z"] if real is None else round(real, 1)
                 row["below_floor_uu"] = round(row["floor_z"] - prev.z, 1)
+                # A standing capsule's origin is ABOVE its floor, so a Dog on solid ground reads negative
+                # here. Falling is a long way BELOW the surface under it.
                 row["fell"] = row["below_floor_uu"] > 200.0
-                row["error"] = ("%s went away at waypoint %d after %.1f m -- %s. Last seen z=%.1f, %.1f uu "
-                                "below this leg's floor of %.1f. Route NOT judged."
+                row["standing_height_above_floor_uu"] = round(prev.z - row["floor_z"], 1)
+                row["error"] = ("%s went away at waypoint %d after %.1f m -- %s. Last seen z=%.1f, standing "
+                                "%.1f uu above the floor actually under it (%.1f); the route declares %.1f "
+                                "there. Route NOT judged."
                                 % ("the WORLD" if kind == "world" else "the DOG", wp, travelled / 100.0,
-                                   reason, prev.z, row["below_floor_uu"], row["floor_z"]))
+                                   reason, prev.z, row["standing_height_above_floor_uu"], row["floor_z"],
+                                   row["declared_floor_z"]))
                 break
             dog = pawn()
             if dog is None:
