@@ -263,7 +263,12 @@ def job():
 
     # ---- THE VANTAGES, BEFORE ANY READING IS ALLOWED TO MEAN ANYTHING.
     measured = [n for n, _ in PLACES if out.get(n)]
-    stand_bad = [n for n in measured if (vantage[n].get("offset_uu") or 9e9) > 500.0]
+    # `(x or 9e9) > 500` READS A PERFECT PLACEMENT AS A MISSING ONE, because 0.0 is falsy in Python.
+    # The first run of this job landed the arrival and Tartarus pawns at offset EXACTLY 0.0 and V_STAND
+    # reported both as more than 5 m away, voiding a run in which all three vantages were valid. A valid
+    # zero result and an absent value are different things and `or` cannot tell them apart.
+    stand_bad = [n for n in measured
+                 if vantage[n].get("offset_uu") is None or vantage[n]["offset_uu"] > 500.0]
     record("V_STAND", "the pawn reached every measurement spot",
            len(measured) == len(PLACES) and not stand_bad,
            places_measured=measured, wanted=[n for n, _ in PLACES], too_far=stand_bad,

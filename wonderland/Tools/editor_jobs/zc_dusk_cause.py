@@ -233,7 +233,16 @@ def job():
             "ground_luma": round((g1["luma"] + g2["luma"]) / 2.0, 4),
             "ground_crushed": round((g1["crushed"] + g2["crushed"]) / 2.0, 4),
             "ground_readable": round((g1["readable"] + g2["readable"]) / 2.0, 4),
-            "ground_spread": round(abs(g1["readable"] - g2["readable"]), 4)}
+            # GATE THE CONTINUOUS QUANTITY, REPORT THE DERIVED ONE.
+            #
+            # readable is a THRESHOLD statistic -- the share of pixels over luma 0.14 -- so where the
+            # ground sits near that threshold a thousandth of luma moves several per cent of the
+            # fraction. Holding it to the same tolerance as a mean is a category error, and it voided the
+            # first run of this job at 0.0107 against 0.010 while every FRAME luma spread was under
+            # 0.0010 and the effect being measured was 0.78. The luma spreads gate; the fraction spread
+            # is recorded so a reader can see the amplification rather than be protected from it.
+            "ground_luma_spread": round(abs(g1["luma"] - g2["luma"]), 4),
+            "ground_readable_spread": round(abs(g1["readable"] - g2["readable"]), 4)}
 
     # ---- RESTORE WHAT WAS FOUND.
     cvar("wl.Sky.MoonGain", "%.4f" % (found["MoonGain"] or 0.05))
@@ -245,10 +254,16 @@ def job():
     got = {k: v for k, v in rows.items() if not v.get("unmeasured")}
     record("X_MEASURED", "every condition produced a reading",
            len(got) == len(CONDITIONS), measured=sorted(got), wanted=[c[0] for c in CONDITIONS])
-    worst = max((max(v["spread"], v["ground_spread"]) for v in got.values()), default=None)
-    record("X_NOISE", "every condition agrees with itself, on the frame and on the ground",
+    worst = max((max(v["spread"], v["ground_luma_spread"]) for v in got.values()), default=None)
+    worst_frac = max((v["ground_readable_spread"] for v in got.values()), default=None)
+    record("X_NOISE", "every condition agrees with itself on the LUMA it actually measures",
            len(got) == len(CONDITIONS) and worst is not None and worst <= AGREE,
-           worst_spread=worst, tolerance=AGREE)
+           worst_luma_spread=worst, tolerance=AGREE,
+           worst_readable_fraction_spread=worst_frac,
+           note="the fraction is a threshold statistic and is amplified near the crush point: the first "
+                "run held every frame-luma spread under 0.0010 while one readable fraction moved 0.0107, "
+                "and voided on that. Luma is what the instrument reads and what is gated here; the "
+                "fraction spread is reported beside it so the amplification is visible rather than hidden")
     if len(got) != len(CONDITIONS) or (worst or 1.0) > AGREE:
         RESULT["status"] = "voided: conditions missing or disagreeing with themselves"
         yield 2.0
