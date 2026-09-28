@@ -45,8 +45,17 @@ L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "dusk_shape")
 
-#: The data-chosen arrival standing spot: 36 m off the monument, open paved ground, proven before use.
-SPOT = (-64.0, -5042.0)
+#: MEASURED AND LOOKED AT, 2026-09-28 (zc_vantage_find s4_y090). Open paved plaza, architecture in
+#: shot, sky above, tree shadows falling across the paving -- which is the point, because the founder's
+#: question is whether SHADOWED traversal ground stays readable, and a patch that is uniformly lit
+#: cannot answer it.
+#:
+#: THE PREVIOUS SPOT, (-64, -5042) WITH A 900 UU CRANE, WAS INSIDE A BUSH. Its 32 readings were leaves
+#: edge to edge at every rung including the approved-night reference, and every gate passed. Obstructed
+#: at all eight yaws when tested on a channel foliage actually blocks. Named here so it is not
+#: reinstated by someone reading the old "proven before use" comment.
+SPOT = (-64.0, -5700.0)
+CAM_YAW = 90.0
 SPAN = 21.0
 
 #: Approved night, and the two hours that bracket its start. 18.50 is the first hour with TwilightBand
@@ -74,8 +83,19 @@ WINDOWS = (0.30, 0.60)
 BOOSTS = (2.0, 5.0, 10.0, 20.0, 40.0)
 
 AGREE = 0.010
-CAM_UP, CAM_AHEAD, CAM_DROP, CAM_FOV = 900.0, (1400.0, -1400.0), -100.0, 70.0
-GROUND_RECT = (0.5, 0.78, 0.30, 0.16)
+#: PLAYER EYE HEIGHT, not a crane. The requirement is that a player can see and traverse the ground;
+#: that is a statement about walking eye level, and the crane is what put the lens in the canopy.
+CAM_UP, CAM_AHEAD, CAM_DROP, CAM_FOV = 160.0, 900.0, -250.0, 70.0
+#: Right edge held at 0.78: the nearest dressed mascot sits at about x=0.85 in this shot and its fire
+#: material now defaults on, so an emissive figure must stay out of a patch used to judge
+#: ENVIRONMENTAL brightness.
+GROUND_RECT = (0.5, 0.74, 0.28, 0.16)
+SKY_RECT = (0.5, 0.16, 0.30, 0.10)
+#: A clear view aims PAST the ground, so the ray is meant to stop at the paving. The test is whether it
+#: stops AT the paving rather than short of it -- see the note at V_CLEAR.
+CLEAR_FRACTION = 0.92
+GREEN_MAX = 1.25
+VIS_CH = unreal.TraceTypeQuery.TRACE_TYPE_QUERY1
 FRAME_RECT = (0.5, 0.5, 0.46, 0.44)
 #: THE GROUND BAND SPLIT INTO CELLS, because the founder ruled out mean luma as acceptance: "A brighter
 #: mean with most traversal ground still crushed is not a pass." A mean cannot tell a floor that is
@@ -181,7 +201,10 @@ def job():
             return None
         mean, dark, bright, sampled = got
         d, b = float(dark), float(bright)
-        return {"luma": round(0.2126 * mean.r + 0.7152 * mean.g + 0.0722 * mean.b, 4),
+        r_, g_, b_c = float(mean.r), float(mean.g), float(mean.b)
+        return {"luma": round(0.2126 * r_ + 0.7152 * g_ + 0.0722 * b_c, 4),
+                "rgb": [round(r_, 4), round(g_, 4), round(b_c, 4)],
+                "green_ratio": round(g_ / max((r_ + b_c) / 2.0, 1e-5), 3),
                 "crushed": round(d, 4), "blown": round(b, 4),
                 "readable": round(max(0.0, 1.0 - d - b), 4), "sampled": int(sampled)}
 
@@ -199,10 +222,10 @@ def job():
                         "readable": round(max(0.0, 1.0 - d - b), 4)})
         return out
 
-    def trace(a, b, ignore):
+    def trace(a, b, ignore, channel=None):
         try:
             hit = unreal.SystemLibrary.line_trace_single(
-                live(), a, b, PAWN_CH, False, [p for p in (ignore,) if p is not None],
+                live(), a, b, channel or PAWN_CH, False, [p for p in (ignore,) if p is not None],
                 unreal.DrawDebugTrace.NONE, True,
                 unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
             if hit is None:
@@ -327,15 +350,37 @@ def job():
         return
     where = pawn.get_actor_location()
     off = round(math.hypot(where.x - SPOT[0], where.y - SPOT[1]), 1)
+    rad = math.radians(CAM_YAW)
     eye = unreal.Vector(where.x, where.y, where.z + CAM_UP)
-    at = unreal.Vector(where.x + CAM_AHEAD[0], where.y + CAM_AHEAD[1], where.z + CAM_DROP)
+    at = unreal.Vector(where.x + math.cos(rad) * CAM_AHEAD,
+                       where.y + math.sin(rad) * CAM_AHEAD, where.z + CAM_DROP)
     L.pose_camera(live(), eye, at, CAM_FOV)
     yield 2.0
-    fwd = trace(eye, unreal.Vector(eye.x + (at.x - eye.x) * 0.02, eye.y + (at.y - eye.y) * 0.02,
-                                   eye.z + (at.z - eye.z) * 0.02), pawn)
-    down = trace(eye, unreal.Vector(eye.x, eye.y, eye.z - 4000.0), pawn)
-    gx, gy = eye.x + (at.x - eye.x) * 0.9, eye.y + (at.y - eye.y) * 0.9
-    gpatch = trace(unreal.Vector(gx, gy, eye.z), unreal.Vector(gx, gy, eye.z - 4000.0), pawn)
+
+    # ---- WHERE THE GROUND PATCH ACTUALLY IS, and whether the camera can see it.
+    #
+    # THE TEST THAT REPLACES THE ONE THAT MISSED A BUSH. The old gate traced forward on the PAWN
+    # channel; foliage has no pawn collision, so it reported clear through solid leaves. This traces on
+    # VISIBILITY, which foliage does block.
+    #
+    # AND IT AIMS AT THE RIGHT POINT. zc_vantage_find got this wrong in the other direction and failed
+    # all 40 candidates: it traced to the LOOK TARGET, which sits below the ground plane by
+    # construction, so the ray always stopped at the paving and "reach" never approached 1.0 even with
+    # a perfectly clear view. The fix is to find the real ground point first and trace to THAT -- then
+    # a clear view reaches it and an occluder is anything that stops the ray short.
+    gx = eye.x + (at.x - eye.x) * 0.75
+    gy = eye.y + (at.y - eye.y) * 0.75
+    gpatch = trace(unreal.Vector(gx, gy, eye.z + 2000.0),
+                   unreal.Vector(gx, gy, eye.z - 4000.0), pawn, VIS_CH)
+    down = trace(eye, unreal.Vector(eye.x, eye.y, eye.z - 4000.0), pawn, VIS_CH)
+    reach, first_hit, want = None, None, None
+    if gpatch is not None:
+        gp = unreal.Vector(gx, gy, gpatch["z"] + 2.0)
+        want = math.sqrt((gp.x - eye.x) ** 2 + (gp.y - eye.y) ** 2 + (gp.z - eye.z) ** 2)
+        seen = trace(eye, gp, pawn, VIS_CH)
+        first_hit = seen["dist"] if seen else None
+        reach = 1.0 if seen is None else (seen["dist"] / want if want > 1.0 else None)
+    fwd = {"dist": first_hit} if first_hit is not None else None
 
     # WHAT ELSE IS STANDING IN THE SHOT. The other lane's fire material now defaults on, so a dressed
     # mascot in frame emits flame and contributes to any brightness reading near it. Every arm here is
@@ -360,12 +405,31 @@ def job():
                          "ground_patch_hit": gpatch, "ground_patch_world": [round(gx, 1), round(gy, 1)],
                          "ground_rect_screen": list(GROUND_RECT),
                          "grid": [GRID_COLS, GRID_ROWS], "figures_within_40m": near_figures}
-    ok_vantage = (off <= 500.0 and (not fwd or fwd["dist"] >= 400.0)
-                  and down is not None and gpatch is not None)
-    record("D_VALID", "the observation point is a real standing position with ground under the patch",
-           ok_vantage, vantage=RESULT["vantage"],
-           note="not on the monument, not a look-at target reused as a camera, not embedded in lit "
-                "geometry -- the three ways this lane has produced a confident wrong answer before")
+    look_g = patch(GROUND_RECT)
+    look_s = patch(SKY_RECT)
+    RESULT["vantage"]["view_reach"] = (round(reach, 3) if reach is not None else None)
+    RESULT["vantage"]["first_hit_uu"] = first_hit
+    RESULT["vantage"]["ground_point_uu"] = (round(want, 1) if want else None)
+    RESULT["vantage"]["ground_rgb"] = look_g
+    RESULT["vantage"]["sky_rgb"] = look_s
+    clear = reach is not None and reach >= CLEAR_FRACTION
+    green = (look_g["green_ratio"] if look_g else None)
+    not_foliage = green is not None and green <= GREEN_MAX
+    sky_ok = bool(look_s and look_g and look_s["luma"] > look_g["luma"])
+    ok_vantage = bool(off <= 500.0 and down is not None and gpatch is not None
+                      and clear and not_foliage and sky_ok)
+    record("D_VALID", "the camera can actually SEE the ground it is about to measure",
+           ok_vantage, vantage=RESULT["vantage"], pawn_offset_uu=off,
+           view_reach=(round(reach, 3) if reach is not None else None),
+           clear_line_of_sight=clear, ground_not_foliage=not_foliage, green_ratio=green,
+           sky_above=sky_ok,
+           thresholds={"view_reach_at_least": CLEAR_FRACTION, "green_ratio_at_most": GREEN_MAX},
+           note="THREE INDEPENDENT TESTS, because the previous single test passed on a camera buried "
+                "in a bush for 32 readings. A VISIBILITY trace to the real ground point catches an "
+                "occluder the colour misses; green dominance catches one the trace misses; and a sky "
+                "band darker than the ground means the viewpoint is under something. A frame is also "
+                "captured before any reading, because the only thing that would have caught the last "
+                "run in five seconds was opening one")
     if not ok_vantage:
         bail("the observation point could not be shown valid")
         yield 2.0
@@ -388,6 +452,10 @@ def job():
 
     for step in settled(60):
         yield step
+    try:
+        H.capture_viewport_jpeg(os.path.join(ROOT, "00_vantage_noon.jpg"), 1400, 88)
+    except Exception:                                                  # noqa: BLE001
+        pass
 
     # ---------------------------------------------------------------- THE READING
     rows = {}
