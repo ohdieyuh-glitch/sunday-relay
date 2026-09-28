@@ -66,7 +66,12 @@ LEAK = {"window": 0.10, "damp": 1.0, "boost": 20.0}
 #: about +10 per cent of it at 18:25 -- not the doubling I first assumed when I guessed NightSky was
 #: below 1. The sweep is scaled to that, not to my guess.
 WINDOWS = (0.30, 0.60)
-BOOSTS = (2.0, 5.0, 10.0, 20.0)
+#: THE TOP OF THIS SWEEP IS ITSELF A RESULT. If the largest boost still falls short of the night bar,
+#: "continuous terms cannot do it" and "I did not sweep far enough" are the same reading, and the first
+#: is a claim about Wonderland while the second is a claim about this job. D_REACH reports which it is,
+#: and 40 is included so the ceiling is somewhere implausible rather than somewhere arguable: at window
+#: 0.30 and 18:25 it multiplies the sky term by about 4x, which is already past what could look right.
+BOOSTS = (2.0, 5.0, 10.0, 20.0, 40.0)
 
 AGREE = 0.010
 CAM_UP, CAM_AHEAD, CAM_DROP, CAM_FOV = 900.0, (1400.0, -1400.0), -100.0, 70.0
@@ -616,7 +621,7 @@ def job():
                                  "cells_total": good["h%05.2f_inert" % NIGHT_HOURS[0]]["cells_total"],
                                  "from_hours": list(NIGHT_HOURS),
                                  "note": "worst of the three approved-night hours at this camera"}
-    table, reaching = [], []
+    table = []
     for hour in SIZE_HOURS:
         for w in WINDOWS:
             for b in BOOSTS:
@@ -633,8 +638,6 @@ def job():
                        "sky_intensity": r["sky_intensity"], "exposure_bias": r["exposure_bias"],
                        "casters": r["shadow_casters"], "meets_night_bar": ok}
                 table.append(row)
-                if ok:
-                    reaching.append(row)
     RESULT["sizing"] = table
 
     # THE CHEAPEST SETTING THAT CLEARS THE BAR AT BOTH HOURS, not the brightest one that clears it.
@@ -646,17 +649,42 @@ def job():
     choice = min(clears_both, key=lambda k: (k[1], -k[0])) if clears_both else None
     RESULT["candidate"] = ({"window": choice[0], "boost": choice[1], "damp": 1.0}
                            if choice else None)
+
+    # IS A RED HERE A FACT ABOUT WONDERLAND OR ABOUT THIS SWEEP? If the LARGEST boost tested still
+    # falls short, the sweep hit its own ceiling and the honest finding is "not within the range
+    # tested" -- which is a different sentence from "continuous terms cannot carry dusk", and only one
+    # of them is about the world. Reported explicitly so the distinction cannot quietly collapse.
+    top = BOOSTS[-1]
+    at_ceiling = {}
+    for w in WINDOWS:
+        rows_top = [r for r in table if r["window"] == w and r["boost"] == top]
+        at_ceiling["window_%.2f" % w] = {
+            "boost": top, "population": len(rows_top),
+            "cleared_every_hour": bool(rows_top) and all(r["meets_night_bar"] for r in rows_top),
+            "shortfall_by_hour": {("%.2f" % r["hour"]):
+                                  round(night_read - r["readable"], 4) for r in rows_top}}
+    ceiling_limited = (choice is None
+                       and not any(v["cleared_every_hour"] for v in at_ceiling.values()))
+    RESULT["sweep_ceiling"] = {"largest_boost_tested": top, "by_window": at_ceiling,
+                               "limited_by_sweep_not_by_world": ceiling_limited}
+
     record("D_REACH", "a continuous sky term reaches the approved night's own ground readability at "
                       "both dusk hours",
            choice is not None, population=len(table),
            night_bar={"readable_at_least": night_read, "crushed_at_most": night_crush,
                       "cells_mostly_crushed_at_most": night_cells_crushed},
            settings_clearing_both=[{"window": k[0], "boost": k[1]} for k in clears_both],
-           chosen=RESULT["candidate"], full_table=table,
+           chosen=RESULT["candidate"], sweep_ceiling=RESULT["sweep_ceiling"],
+           conclusion=("a setting reaches the bar" if choice else
+                       ("NOT WITHIN THE RANGE TESTED -- the largest boost swept still falls short, so "
+                        "this run bounds the answer rather than settling it" if ceiling_limited else
+                        "no single setting clears BOTH hours, though some clear one")),
+           full_table=table,
            note="GREEN: the dense ladder is worth running at the chosen setting. RED is NOT a failed "
                 "job -- it is the measured tradeoff the founder asked for in place of a forced "
-                "solution: continuous dusk illumination cannot reach approved-night readability at any "
-                "setting tested, and the table says how far short and at what cost")
+                "solution. But read `conclusion` before reporting it: a red because the sweep ran out "
+                "of room is a fact about this job, and a red with headroom left is a fact about "
+                "Wonderland. Only the second one answers the founder's question")
 
     RESULT["status"] = "measured"
     yield 2.0
