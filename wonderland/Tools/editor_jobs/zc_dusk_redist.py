@@ -260,6 +260,24 @@ def job():
         except Exception:                                              # noqa: BLE001
             return None
 
+    def practical_field(line, key):
+        """Pull one number out of the subsystem's own status line.
+
+        The line is printed by DescribePracticals as
+            defined=%d active=%d pool=%d night=%.3f gain=%.2f count=%d radius=%.0f file=%s problem=%s
+        so `gain` read back from it is the value the SUBSYSTEM holds, not the value the console was
+        told. That distinction is the whole point: it is the difference between checking an input and
+        checking that the input arrived."""
+        if not line:
+            return None
+        for part in str(line).split():
+            if part.startswith(key + "="):
+                try:
+                    return float(part.split("=", 1)[1])
+                except ValueError:
+                    return None
+        return None
+
     # ---------------------------------------------------------------- THE INSTRUMENT, FIRST
     KNOBS = ("wl.Look.DuskWindow", "wl.Look.DuskMoonDamp", "wl.Look.DuskSkyBoost",
              "wl.Sky.MoonGain", "wl.Look.PracticalGain")
@@ -514,9 +532,34 @@ def job():
                      "something",
            len(decomp) > 0 and biggest_damp > floor and biggest_sky > floor,
            population=len(decomp), moon_flood_largest=biggest_damp, sky_boost_largest=biggest_sky,
-           practicals_largest=biggest_prac, floor=floor,
-           note="the practical figure is reported, not gated: the practicals are allowed to contribute "
-                "nothing at this camera and that would be a fact about the arrival, not a dead switch")
+           practicals_largest=biggest_prac, floor=floor)
+
+    # ---- AND THE PRACTICAL ARM CHECKED AT THE SUBJECT, not at the picture.
+    #
+    # "The practicals contribute nothing at this camera" and "PracticalGain never reached the
+    # subsystem" produce the same 0.0000 in the decomposition, and only the first is a fact about the
+    # arrival. The subsystem publishes its own gain, so this reads it back from BOTH arms instead of
+    # inferring liveness from whether the ground changed -- which is the same mistake as trusting a
+    # cvar readback to prove a knob shipped.
+    prac_rows, prac_dead = [], []
+    for hour in DUSK_HOURS:
+        on = practical_field(g(hour, "cand")["practicals"], "gain")
+        off = practical_field(g(hour, "cand_pracoff")["practicals"], "gain")
+        row = {"hour": hour, "gain_cand": on, "gain_pracoff": off,
+               "active_cand": practical_field(g(hour, "cand")["practicals"], "active"),
+               "active_pracoff": practical_field(g(hour, "cand_pracoff")["practicals"], "active"),
+               "ground_delta": next(d["practicals_contribute"] for d in decomp if d["hour"] == hour)}
+        prac_rows.append(row)
+        if on is None or off is None or not (on > 0.0 and off == 0.0):
+            prac_dead.append(row)
+    RESULT["practical_switch"] = prac_rows
+    record("C_PRAC_SWITCH", "the practical arm actually reaches the subsystem, so a zero contribution "
+                            "means the practicals are dark here and not that the switch is dead",
+           len(prac_rows) > 0 and not prac_dead, population=len(prac_rows), problems=prac_dead,
+           by_hour=prac_rows,
+           note="gain is read back from the subsystem's OWN status line, not from the console. "
+                "GREEN plus a zero practicals_contribute is a real fact about this camera. RED means "
+                "every practical figure in the decomposition is uninterpretable")
 
     # ---- C1: THE 18:25 -> 18:27 CLIFF.
     b_cliff = abs(g(18.27, "base")["ground_luma"] - g(18.25, "base")["ground_luma"])
