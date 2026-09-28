@@ -233,6 +233,27 @@ refuses), `docs/JULIUS_TRACE_CORPUS.md`.
 
 ---
 
+## MIGRATE BEFORE DEPLOYING: 028 IS AN ORDERING CONSTRAINT, NOT A COMPATIBLE ADD
+
+**Nothing in the bridge runs `migrate()` on startup.** Migration 028 re-keys
+`julius_acceptance_criteria` on `(run_id, criterion_id)`, and the seed insert now
+names that exact conflict target. A target that does not exist is not a
+no-op: PostgreSQL refuses the statement, so **every mission creation fails with
+`503 bootstrap_persistence_failure` until 028 is applied.**
+
+Found by the integration lane, whose drill hit exactly that against an unmigrated
+isolated database before they applied the file by hand.
+
+**So the order is: apply migrations, then deploy the bridge.** Reversed, the
+symptom is total — no mission can be created — and the message names persistence
+rather than the migration, which is the wrong place to start looking.
+
+**This is worth a better refusal than it currently gets, and that is not done.**
+A named reason ("the criteria table is not at 028") would send an operator
+straight to the cause instead of into the persistence layer. Recorded here rather
+than fixed, because it is a deployment-time diagnostic and the fix belongs with
+whoever owns the bridge's startup checks.
+
 ## What the reviewer should be sceptical about
 
 1. **The readiness number.** 80%, computed from the table's own weights; the
