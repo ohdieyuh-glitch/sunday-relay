@@ -12,7 +12,8 @@
      644.0
     ],
     "by": {
-     "AV03_AV03_Object_LanternStandard_gold:WL_Object_": 2
+     "AV03_AV03_Object_LanternStandard_stone:WL_Object": 1,
+     "AV03_AV03_Object_LanternStandard_gold:WL_Object_": 1
     }
    },
    {
@@ -59,8 +60,9 @@
      646.0
     ],
     "by": {
-     "IC02_IC02_Verge_topiary_ball:SM_topiary_ball": 2,
-     "IC02_IC02_AvenueTree:SM_tree_slender_trunk": 1
+     "IC02_IC02_AvenueTree:SM_tree_slender_trunk": 1,
+     "IC01_IC01_Gatehouse_Twin_stone:WL_Gatehouse_Twin": 1,
+     "IC02_IC02_Verge_topiary_ball:SM_topiary_ball": 1
     }
    },
    {
@@ -10201,7 +10203,7 @@
      1002.0
     ],
     "by": {
-     "SKY05_SKY05_Tower_Base_Arcaded_TowerBlush:WL_Tow": 1
+     "SKY05_SKY05_Tower_Base_Arcaded_stone_dark_Stone:": 1
     }
    },
    {
@@ -10212,7 +10214,7 @@
      1048.0
     ],
     "by": {
-     "SKY05_SKY05_Tower_Base_Arcaded_TowerCream:WL_Tow": 8,
+     "SKY05_SKY05_Tower_Base_Arcaded_stone_dark_Stone:": 8,
      "SKY05_SKY05_Tower_Base_Buttressed_TowerCream:WL_": 3,
      "SKY05_SKY05_Tower_Base_Arcaded_TowerBlush:WL_Tow": 1
     }
@@ -10225,8 +10227,7 @@
      1146.0
     ],
     "by": {
-     "SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone": 12,
-     "SKY05_SKY05_Tower_Mid_Arcade_glass_GlassAmber:WL": 5,
+     "SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone": 17,
      "SKY05_SKY05_Tower_Base_Terraced_TowerBlush:WL_To": 2,
      "V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass": 2
     }

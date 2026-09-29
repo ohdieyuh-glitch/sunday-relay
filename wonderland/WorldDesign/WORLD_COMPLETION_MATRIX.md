@@ -87,8 +87,19 @@ DISTANT VIEWS · WORLD PARTITION · VISUAL PROOF.
 | S02 seam radials 30° / 150° / 270° | **CORE** | NOT STARTED | -- | -- | -- | NOT STARTED | -- | -- | NOT STARTED | -- | -- | NOT STARTED |
 | S03 packaged world boots Golden Arrival | **CORE** | config correct (GameDefaultMap, MapsToCook, staging incl. RelayCubs b657b9b0) | | | | | | | | | | **no package built since the config change** |
 
-WORLD PARTITION column: VERIFIED means the region's placements are resident in the editor (zc_wp_regions) and
-the Dog survives far travel into it (3a54247e, zzV4_beta_walk W06 23/23 on the 11:02 binary).
+WORLD PARTITION column -- **CORRECTED 2026-09-28 22:25.** It read VERIFIED on editor residency (zc_wp_regions) and
+the Dog surviving far travel. Neither says the instanced world STREAMS IN PLAY, and it did not: every
+WonderlandInstancedBatch reported a point at the origin as its streaming bounds, so all 4,826 spatially loaded
+batches lived in the one cell at the origin, resident near the core and absent beyond it. The beta walk's stands
+beyond ~700 m traced the -14 lawn in play (WORLD session, zzV4 re-read). Fixed in f97ba360 (GetStreamingBounds
+returns the instances' covered box; all 5,033 descriptors re-saved and read back exact). Every region beyond the
+core is **FIX LANDED, PIE RE-PROOF PENDING** until zzW10 / the walk re-run on the fixed map; the VERIFIED marks in
+the table stand for the core only.
+
+DISTANT VIEWS after the fix are a founder decision (runtime streaming): with the map's 512 m loading range and no
+HLODs built, a vantage in the core holds ~85 % of the world's instances and one at 785 m ~35 % (WORLD session's
+table). Options: raise the MainPartition LoadingRange (1,024 m -> ~99 % from the spawn; measure memory), build
+HLODs (canonical, heavy), or keep landmark batches always loaded. Nothing changed until the founder decides.
 
 ## Assignments
 
