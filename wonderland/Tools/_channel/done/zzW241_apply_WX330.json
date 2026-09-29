@@ -1,0 +1,16 @@
+{
+ "name": "zzW241_apply_WX330",
+ "started": "2026-09-29 11:32:47",
+ "status": "done",
+ "waited_for_pie_seconds": 0.0,
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "WX330",
+ "actors": 0,
+ "batches": 227,
+ "instances": 2821,
+ "hovers": 0,
+ "finished": "2026-09-29 11:33:00",
+ "seconds": 13.25,
+ "log": "applied WX330 0 actors 227 batches 2821 instances\n"
+}

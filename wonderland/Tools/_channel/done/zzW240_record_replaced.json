@@ -1,0 +1,14 @@
+{
+ "name": "zzW240_record_replaced",
+ "started": "2026-09-29 11:32:45",
+ "status": "done",
+ "counts": {
+  "S2N246": 57,
+  "S2I088": 90,
+  "TR01": 2
+ },
+ "dirty": [],
+ "finished": "2026-09-29 11:32:45",
+ "seconds": 0.33,
+ "log": ""
+}

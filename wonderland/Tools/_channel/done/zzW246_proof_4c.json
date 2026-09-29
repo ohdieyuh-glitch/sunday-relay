@@ -1,0 +1,351 @@
+{
+ "name": "zzW246_proof_4c",
+ "started": "2026-09-29 11:37:14",
+ "status": "measured (see regions)",
+ "day_minutes_found": 24.0,
+ "regions": [
+  {
+   "pass": "WX330",
+   "walk_points": 280,
+   "stands": [
+    {
+     "at": [
+      120678,
+      -69673
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      124673,
+      -63598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      127673,
+      -57598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      130173,
+      -51598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      132173,
+      -45598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      133673,
+      -39598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      135173,
+      -33598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      136173,
+      -27598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      136673,
+      -21598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      137173,
+      -15598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      137173,
+      -9598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      137173,
+      -3598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      134673,
+      2402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      135173,
+      8402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      135673,
+      14402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      135673,
+      20402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      135673,
+      26402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      134673,
+      32402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      133673,
+      38402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      132173,
+      44402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      130173,
+      50402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      127673,
+      56402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      124673,
+      62402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      121173,
+      68402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 24,
+   "verdict": {
+    "stands_pass": 24,
+    "stands": 24,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 227,
+    "resident_instances": 2821,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2I088",
+   "walk_points": 25,
+   "stands": [
+    {
+     "at": [
+      9498,
+      106283
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      9707,
+      112280
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 2,
+   "verdict": {
+    "stands_pass": 2,
+    "stands": 2,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 80,
+    "resident_instances": 662,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2N246",
+   "walk_points": 0,
+   "stands": [],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "error": "no walk in the sidecar"
+  }
+ ],
+ "day_minutes_restored": 24.0,
+ "finished": "2026-09-29 11:38:36",
+ "seconds": 81.72,
+ "log": "WX330 {'stands_pass': 24, 'stands': 24, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 227, 'resident_instances': 2821, 'dog_died': False, 'stands_not_ground': 0}\nS2I088 {'stands_pass': 2, 'stands': 2, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 80, 'resident_instances': 662, 'dog_died': False, 'stands_not_ground': 0}\n"
+}

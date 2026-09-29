@@ -1,0 +1,45 @@
+{
+ "name": "zzW250_proof_s2n246_residency",
+ "started": "2026-09-29 11:39:14",
+ "status": "proved",
+ "day_minutes_found": 24.0,
+ "regions": [
+  {
+   "pass": "S2N246",
+   "walk_points": 2,
+   "stands": [
+    {
+     "at": [
+      -22160,
+      -43278
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 1,
+   "verdict": {
+    "stands_pass": 1,
+    "stands": 1,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 17,
+    "resident_instances": 295,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  }
+ ],
+ "day_minutes_restored": 24.0,
+ "finished": "2026-09-29 11:39:39",
+ "seconds": 24.34,
+ "log": "S2N246 {'stands_pass': 1, 'stands': 1, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 17, 'resident_instances': 295, 'dog_died': False, 'stands_not_ground': 0}\n"
+}
