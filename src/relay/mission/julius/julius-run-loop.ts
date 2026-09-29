@@ -802,6 +802,26 @@ export class JuliusRunLoop {
       return { runId, from: run.state, to: run.state, changed: false, reasonCode: 'RUN_PAUSED', resumedVerifications: 0 };
     }
 
+    /**
+     * A PENDING APPROVAL IS SOMEBODY'S DECISION TOO, AND THIS LOOP DOES NOT
+     * WALK AROUND IT.
+     *
+     * The sibling of the PAUSED hold, with the same shape: `requestJuliusApproval`
+     * moves the run to BLOCKED, the claim query refuses a BLOCKED run, and so
+     * the gate looked honoured. It was not: an idle tick called `advanceRun`,
+     * the target from the TASKS was READY (`TASKS_RUNNABLE`), BLOCKED -> READY
+     * is legal, and the next tick dispatched — the whole mission ran to
+     * COMPLETED with the approval still PENDING. Only `decideJuliusApproval`
+     * takes a run out of an approval hold (READY when every gate is granted,
+     * FAILED on a denial); cancel still reaches it because cancel does not go
+     * through here. Checked in any non-terminal state, before the verification
+     * sweep, because a resumed verification dispatches the reviewer.
+     */
+    const pendingApprovals = this.deps.store.pendingApprovals;
+    if (pendingApprovals !== undefined && (await pendingApprovals.call(this.deps.store, runId, projectId)).length > 0) {
+      return { runId, from: run.state, to: run.state, changed: false, reasonCode: 'RUN_AWAITING_APPROVAL', resumedVerifications: 0 };
+    }
+
     const resumed = await this.#resumeVerifications(run, tasks, decisions, projectId);
     if (resumed > 0) {
       [tasks, decisions] = await Promise.all([
