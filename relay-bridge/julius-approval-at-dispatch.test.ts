@@ -194,9 +194,11 @@ describe('A. a C.A.R.D. REQUIRE_APPROVAL at dispatch is a grantable approval, no
     expect(types, 'and it did not fail').not.toContain('run.failed');
 
     // Idle ticks and a second job over the same rows neither dispatch nor ask twice.
-    const again = await stage({ approvals: ['DISPATCH_WORKER'], memory: s.memory }).drive(12);
+    // The second job has adapters of its OWN; counting only the first job's could not fail.
+    const second = stage({ approvals: ['DISPATCH_WORKER'], memory: s.memory });
+    const again = await second.drive(12);
     expect(again.state).toBe('BLOCKED');
-    expect(s.dispatches()).toBe(0);
+    expect(s.dispatches() + second.dispatches(), 'neither job asked a provider anything').toBe(0);
     expect(await s.memory.pendingApprovals(RUN, PROJECT)).toHaveLength(1);
   });
 
@@ -397,7 +399,7 @@ describe('B. the hold is enforced where work starts: the claim and the dispatch 
     // Before, `createJuliusPostgresRuntimeStore` bound only `pendingApprovals`: the live job's gate would have
     // found nowhere to ask and failed closed as APPROVAL_UNSERVED. No connection is made to construct it.
     const store = createJuliusPostgresRuntimeStore(new Pool({ connectionString: 'postgres://nobody@127.0.0.1:1/none' }));
-    for (const method of ['requestApproval', 'requestApprovalAndBlock', 'loadApproval', 'pendingApprovals'] as const) {
+    for (const method of ['requestApproval', 'requestApprovalAndBlock', 'loadApproval', 'pendingApprovals', 'deniedApprovals'] as const) {
       expect(typeof store[method], method).toBe('function');
     }
   });
@@ -408,5 +410,137 @@ describe('B. the hold is enforced where work starts: the claim and the dispatch 
     const states = /r\.state IN\(([^)]*)\)/u.exec(claim)?.[1]?.split(',').map((value) => value.trim().replace(/'/gu, ''));
     expect(states, 'the SQL list is the constant, in order').toEqual([...JULIUS_CLAIMABLE_RUN_STATES]);
     expect(claim).toContain("NOT EXISTS(SELECT 1 FROM relay_wonderland.julius_approvals a WHERE a.run_id=t.run_id AND a.state IN('PENDING','DENIED'))");
+  });
+});
+
+/* ======================================== E. the orders an adversary picks */
+
+/**
+ * FOUND BY AN ADVERSARIAL REVIEW OF THIS CHANNEL (2026-09-29), each written RED
+ * against the code it found wanting before anything was changed.
+ *
+ *   F1  A grant took a PAUSED run straight back to READY: only a resume may.
+ *   F2  A denial whose FAILED move lost a race left the run READY for ever:
+ *       nothing ran, but the denial was invisible and the drive "stalled".
+ *   F4  The dispatch boundary held on a PENDING approval and not on a DENIED one.
+ *   F6  Resume took a run still waiting on an approval to READY, a state that
+ *       says it will continue when driven. It will not: it waits on a person.
+ *   F5  Two boundary branches no test could fail: the approval-only hold on a
+ *       run whose state is claimable, and the FAILED branch a denial leaves.
+ */
+describe('E. the governance holds survive the orders an adversary picks', () => {
+  const lifecycle = (memory: Memory) => ({ store: memory as never, clock });
+  const hold = { runId: RUN, projectId: PROJECT, actor: 'ghu-founder', reason: 'Hold.' };
+  const go = { runId: RUN, projectId: PROJECT, actor: 'ghu-founder', reason: 'Go.' };
+  const gateRecord = (approvalId: string, taskId: string) => ({
+    approvalId, runId: RUN, projectId: PROJECT, taskId, operation: 'DISPATCH_WORKER' as const,
+    policyRevision: CARD, reasonCode: 'CARD_APPROVAL_REQUIRED', safeRationale: 'Gate.', state: 'PENDING' as const,
+    requestedAt: clock.now(), decidedAt: null, decidedBy: null, decisionReason: null, idempotencyKey: approvalId,
+  });
+  /** After the claim, something else happens to the run: the window the boundary guards. */
+  const afterClaim = (then: (memory: Memory) => Promise<unknown>) => (store: Store, memory: Memory): Store => {
+    let fired = false;
+    return {
+      ...store,
+      async claimRunnable(input) {
+        const claimed = await store.claimRunnable(input);
+        if (!fired && claimed.length > 0) { fired = true; await then(memory); }
+        return claimed;
+      },
+    } as Store;
+  };
+
+  it('F1 A GRANT DOES NOT DEFEAT A PAUSE: a run paused while it waits stays PAUSED when its approval is granted', async () => {
+    const s = stage({ approvals: ['DISPATCH_WORKER'] });
+    expect((await s.drive()).state).toBe('BLOCKED');
+    const [gate] = await s.memory.pendingApprovals(RUN, PROJECT);
+    expect(await pauseJuliusRun(hold, lifecycle(s.memory))).toMatchObject({ applied: true, to: 'PAUSED' });
+
+    expect(await s.decide(gate!.approvalId, 'APPROVED'), 'the grant is recorded').toMatchObject({ decided: true, state: 'APPROVED' });
+    expect(await stateOf(s.memory), 'only a resume takes a run out of PAUSED').toBe('PAUSED');
+    await s.drive(8);
+    expect(s.dispatches(), 'nothing started while the run was paused').toBe(0);
+
+    // The grant stands, and the resume takes the run on from it.
+    expect((await s.memory.loadApproval(RUN, gate!.approvalId, PROJECT))?.state).toBe('APPROVED');
+    expect(await resumeJuliusRun(go, lifecycle(s.memory))).toMatchObject({ applied: true, to: 'READY' });
+    await s.drive(8);
+    expect(s.dispatches(), 'the granted dispatch runs once the pause is lifted').toBeGreaterThan(0);
+  });
+
+  it('F2 A LOST DENIAL STILL ENDS THE RUN: the next advance fails a run holding a DENIED approval', async () => {
+    const s = stage();
+    await s.memory.requestApproval(gateRecord('apr-denied-lost', `${RUN}:plan-1`));
+    // Decided at the store only: the run's own move to FAILED lost its race and never happened.
+    await s.memory.decideApproval({
+      runId: RUN, approvalId: 'apr-denied-lost', projectId: PROJECT, state: 'DENIED',
+      decidedBy: 'ghu-founder', decisionReason: 'No.', decidedAt: clock.now(),
+    });
+    expect(await stateOf(s.memory)).toBe('READY');
+
+    const outcome = await s.drive(6);
+    expect(s.dispatches(), 'nothing ran').toBe(0);
+    expect(outcome.state, 'and the denial ENDS the run, rather than leaving it READY for ever').toBe('FAILED');
+    expect(outcome.stalled).toBe(false);
+  });
+
+  it('F4 THE DISPATCH BOUNDARY HOLDS ON A DENIAL, not only on a pending approval', async () => {
+    const s = stage({ wrap: afterClaim(async (memory) => {
+      await memory.requestApproval(gateRecord('apr-late-deny', `${RUN}:build-1`));
+      await memory.decideApproval({
+        runId: RUN, approvalId: 'apr-late-deny', projectId: PROJECT, state: 'DENIED',
+        decidedBy: 'ghu-founder', decisionReason: 'No.', decidedAt: clock.now(),
+      });
+    }) });
+    const report = await s.tick();
+    expect(s.dispatches(), 'a denial landing after the claim starts nothing').toBe(0);
+    expect(report.outcomes[0]).toMatchObject({ kind: 'HELD', reasonCode: 'RUN_APPROVAL_DENIED' });
+    expect(s.memory.taskRow(`${RUN}:plan-1`)!.state, 'the run is denied, so its claimed task ends').toBe('FAILED');
+  });
+
+  it('F5a THE BOUNDARY HOLDS ON A PENDING APPROVAL ALONE, while the run state is still claimable', async () => {
+    // Written at the store without moving the run, so only the approval can hold it.
+    const s = stage({ wrap: afterClaim((memory) => memory.requestApproval(gateRecord('apr-state-ready', `${RUN}:build-1`))) });
+    const report = await s.tick();
+    expect(await stateOf(s.memory), 'the run state alone would have admitted it').toBe('READY');
+    expect(report.outcomes[0]).toMatchObject({ kind: 'HELD', reasonCode: 'RUN_AWAITING_APPROVAL' });
+    expect(s.dispatches()).toBe(0);
+    expect(s.memory.taskRow(`${RUN}:plan-1`)!.state, 'handed back for when the hold lifts').toBe('RUNNABLE');
+  });
+
+  it('F5c A DENIAL THAT FAILED THE RUN AFTER THE CLAIM ends the claimed task at the boundary', async () => {
+    const s = stage({ wrap: afterClaim(async (memory) => {
+      await memory.requestApproval(gateRecord('apr-deny-moved', `${RUN}:build-1`));
+      await decideJuliusApproval({
+        runId: RUN, projectId: PROJECT, approvalId: 'apr-deny-moved', decision: 'DENIED', approverId: 'ghu-founder', reason: 'No.',
+      }, { store: memory as never, clock, approvers: anyone });
+    }) });
+    expect((await s.tick()).outcomes[0]).toMatchObject({ kind: 'HELD', reasonCode: 'RUN_FAILED' });
+    expect(await stateOf(s.memory)).toBe('FAILED');
+    expect(s.dispatches()).toBe(0);
+    expect(s.memory.taskRow(`${RUN}:plan-1`)!.state).toBe('FAILED');
+  });
+
+  it('F6 RESUME RETURNS A RUN STILL WAITING ON AN APPROVAL TO BLOCKED, not to READY', async () => {
+    const s = stage({ approvals: ['DISPATCH_WORKER'] });
+    expect((await s.drive()).state).toBe('BLOCKED');
+    expect(await pauseJuliusRun(hold, lifecycle(s.memory))).toMatchObject({ applied: true, to: 'PAUSED' });
+    expect(await resumeJuliusRun(go, lifecycle(s.memory)), 'resumed to what it really is: waiting on a person')
+      .toMatchObject({ applied: true, to: 'BLOCKED' });
+    expect(await stateOf(s.memory)).toBe('BLOCKED');
+    expect(await s.memory.pendingApprovals(RUN, PROJECT)).toHaveLength(1);
+    await s.drive(6);
+    expect(s.dispatches()).toBe(0);
+  });
+
+  it('F6 and a resume that lands in BLOCKED is still announced as a resume', async () => {
+    const s = stage({ approvals: ['DISPATCH_WORKER'] });
+    await s.drive();
+    let sequence = 0;
+    const announced = { store: s.memory as never, clock, events: s.memory, ids: { next: (kind: string) => `${kind}:${String(sequence += 1)}` } };
+    await pauseJuliusRun(hold, announced);
+    expect(await resumeJuliusRun(go, announced)).toMatchObject({ applied: true, to: 'BLOCKED' });
+    const types = s.memory.events().map((event) => event.type);
+    expect(types, 'the operator resumed the run, and the record says so').toContain('run.resumed');
   });
 });
