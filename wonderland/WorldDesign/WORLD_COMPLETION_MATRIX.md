@@ -194,6 +194,10 @@ wild ring's landmark mushrooms and the skyline towers.
 **R51 Dubel path (CORE).** DF01's path is 29 lawn patches 30 m apart. DW01 (`Districts/dubel_walk.py`, 442c89b4, NOT
 APPLIED) lays 333 stepping stones on it, additive, joined to the WI030 / WI122 trail stones; 34 detour round a SKY05
 tower base and hedge masses on DF01's own path line at 115-122°. For CORE's window 2.
+**Dubel <-> wild ring at 122° is SEALED** (found 06:20): DF01's path ends between two SKY05 towers (bases ~110 m and
+~175 m across) behind a V2 hedge-ring mass; no 1.8 m way round within 150 m (grid search on the post-window-1 census).
+Dubel joins the wild ring at 58° only. Opening 122° means a V2 hedge-ring gate: **FOUNDER DECISION**, the same one as
+the ring-road hedge barriers (Q8).
 
 ## Window 1 forensic record and founder process rules (2026-09-29 06:15)
 
