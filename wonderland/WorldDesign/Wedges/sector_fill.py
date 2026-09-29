@@ -238,16 +238,45 @@ class Ground:
 
 
 # ------------------------------------------------------------------------------------------------ stamps
+BENCH = W.V2 + "Props/Garden/SM_garden_bench.SM_garden_bench"
+#: seven hedge blocks a side at 4.8 m pitch: each is 6.06 m long, so they overlap by 1.26 m -- a closed wall -- and
+#: leaving out the middle one opens a 3.5 m door
+WALL = (-1440.0, -960.0, -480.0, 0.0, 480.0, 960.0, 1440.0)
+
+
+def bench(p, u, v, yaw_local):
+    """SM_garden_bench (1.72 m long on its local Y) on the room's floor, turned by the caller to FACE the tree.
+
+    Its seat faces local -X... measured, not assumed: the first rooms used the Golden Arrival clock garden's
+    convention (ga02: yaw = the angle from the centre to the bench, "benches facing the fountain"), and an end-on
+    frame (captures/passes/bench_profile__bench_check.png) showed every bench with its BACK to the tree. So the
+    caller passes the angle from the bench TO the tree."""
+    x, y = W.world(u, v)
+    if p.occ.hits(x, y, 60.0, 110.0, yaw_local + W.BEARING, 10.0, ("existing",)):
+        p.skipped["bench"] += 1
+        return
+    p.add("Bench", BENCH, p.mats.get("stone", "MI_V2_IvoryStone"), u, v, W.PAVING_TOP, yaw_local, 1.0, W.CULL_NEAR,
+          collides=True)
+    p.occ.add("solid", x, y, 60.0, 110.0, yaw_local + W.BEARING, "%s:bench" % p.id)
+    p.stats["bench"] += 1
+
+
 def garden_room(p, uc, vc, leaves, k, doors_v=False):
-    """The rear seam's garden room: hedge walls with a door in the middle of two opposite sides (the sides
-    facing along u, or with doors_v the sides facing across v), topiary corners, four flower beds, a rose."""
-    for e in (-1224.0, -612.0, 0.0, 612.0, 1224.0):
+    """A garden room: closed hedge walls with a door in the middle of two opposite sides (the sides facing along u,
+    or with doors_v the sides facing across v), topiary corners, a paved floor with a rose border, four flower
+    beds, a tree at the centre and a pair of benches facing it."""
+    # CLOSED WALLS. Core, from the door-level frame of 2026-09-29: "the hedge 'walls' read as separate blocks, so
+    # there is no enclosure". The room's own hedges and corner cones overlap each other on purpose, so they are
+    # tested only against what already stands (the census), not against one another.
+    for e in WALL:
         for (du, dv, yaw) in ((e, -H, 0.0), (e, H, 0.0), (-H, e, 90.0), (H, e, 90.0)):
             if e == 0.0 and ((dv == 0.0) if not doors_v else (du == 0.0)):
                 continue
-            p.plant("hedge", uc + du, vc + dv, 1.0, "MI_V2_LeafMid", yaw, margin=0.0, rect=HEDGE)
+            p.plant("hedge", uc + du, vc + dv, 1.0, "MI_V2_LeafMid", yaw, margin=0.0, rect=HEDGE,
+                    layers=("existing",))
     for (du, dv) in ((-H, -H), (-H, H), (H, -H), (H, H)):
-        p.plant("topiary_cone", uc + du, vc + dv, 1.2, leaves[0], 0.0, margin=0.0, radius=90.0)
+        p.plant("topiary_cone", uc + du, vc + dv, 1.2, leaves[0], 0.0, margin=0.0, radius=90.0,
+                layers=("existing",))
     # THE ROOM'S OWN GROUND. Core, from the in-engine frames of 2026-09-29: "from 70 m up the rooms read as thin
     # outlines on the lawn -- low hedges and stepping stones have little height and no ground colour inside".
     # So the room is floored in the nation's warm paving (2 x 4 plates, 28.8 x 29.6 m, inside the hedge line at
@@ -260,11 +289,30 @@ def garden_room(p, uc, vc, leaves, k, doors_v=False):
         for q in range(5):
             p.add_module(FLOWERS[(q + k) % 3], uc + du + (q - 2) * 130.0, vc + dv, W.PAVING_TOP + 2.0, 0.0,
                          cull=W.CULL_NEAR, collide=False, check=False)
+    # A ROSE BORDER on the floor's rim, inside the hedge line, broken at the two doors: the colour that reads
+    # against the pale floor at eye level (Core: "the beds vanish as thin lines"). Roses do not collide.
+    for t in range(-1350, 1351, 300):
+        rim = [(float(t), -1330.0), (float(t), 1330.0)]
+        if abs(t) < 1350:
+            rim += [(-1370.0, float(t)), (1370.0, float(t))]
+        for (du, dv) in rim:
+            on_door_side = (abs(du) == 1370.0) if not doors_v else (abs(dv) == 1330.0)
+            if on_door_side and abs(t) < 300:
+                continue
+            p.plant("rose", uc + du, vc + dv, 0.9, "MI_V2_RosePink", 0.0, margin=0.0, radius=90.0,
+                    layers=("existing",), base_z=W.PAVING_TOP)
     # ...and ONE TALL ELEMENT, which is what reads from the air and from the march: a mature tree in a grate at
     # the room's centre (where the rose stood), allowed on the room's own floor
     p.add_module("WL_Ground_Tree_Grate", uc, vc, W.PAVING_TOP + 0.5, 0.0, cull=W.CULL_NEAR, collide=False,
                  check=False)
-    p.plant("tree_mature", uc, vc, 1.0, leaves[1], 0.0, margin=0.0, layers=("existing", "solid"))
+    p.plant("tree_mature", uc, vc, 1.0, leaves[1], 0.0, margin=0.0, layers=("existing", "solid"),
+            base_z=W.PAVING_TOP)
+    # A BENCH PAIR facing the tree, on the axis the doors are NOT on, so the way in from either door is clear
+    for s in (-1.0, 1.0):
+        if not doors_v:
+            bench(p, uc, vc + s * 420.0, 90.0 * s)
+        else:
+            bench(p, uc + s * 420.0, vc, 0.0 if s > 0 else 180.0)
     p.stats["garden_room"] += 1
 
 

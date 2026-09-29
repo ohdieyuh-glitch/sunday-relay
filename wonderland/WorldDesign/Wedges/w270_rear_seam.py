@@ -388,10 +388,11 @@ class Pass:
         self.stats["anchor"] += 1
 
     def plant(self, kind, u, v, scale, leaf, yaw, margin=120.0, radius=None, rect=None,
-              layers=("existing", "solid", "paved", "way")):
+              layers=("existing", "solid", "paved", "way"), base_z=None):
         """A tree, shrub, hedge or topiary, clear of what stands, of what these passes built, and of the floor.
         `rect` (half-x, half-y, in the plant's own frame) replaces the default square for elongated pieces;
-        `layers` lets a planter that belongs ON a plaza stand on it."""
+        `layers` lets a planter that belongs ON a plaza stand on it; `base_z` stands it on a floor rather than on
+        the lawn (the sector fill's roses on a garden room's paving) -- by default everything grows from the lawn."""
         r = radius if radius is not None else {"tree_slender": 450.0, "tree_mature": 650.0}.get(kind, 150.0)
         hx, hy = rect if rect is not None else (r, r)
         x, y = world(u, v)
@@ -400,9 +401,10 @@ class Pass:
             self.skipped[kind] += 1
             self.skip_why[hit[:60]] += 1
             return False
+        ground = GROUND_Z if base_z is None else base_z
         if kind.startswith("tree_"):
             trunk, th, canopy, dzr, csr = TREES[kind[5:]]
-            z = GROUND_Z - 20.0
+            z = ground - 20.0
             self.add("Trunk_" + kind[5:], VEG[trunk], "MI_V2_Bark", u, v, z, yaw, scale, CULL_MID, collides=True)
             self.add("Canopy_%s_%s" % (kind[5:], leaf.replace("MI_V2_", "")), VEG[canopy], leaf, u, v,
                      z + th * scale * dzr, yaw, scale * csr, CULL_MID, shadow=True)
@@ -411,7 +413,7 @@ class Pass:
             mat = leaf if kind != "waymarker" else "MI_V2_GlassAmber"
             if kind == "rose":
                 mat = "MI_V2_RosePink"
-            self.add(kind.title().replace("_", ""), mesh, mat, u, v, GROUND_Z - 5.0, yaw, scale,
+            self.add(kind.title().replace("_", ""), mesh, mat, u, v, ground - 5.0, yaw, scale,
                      CULL_NEAR if kind in ("shrub", "rose", "hedge") else CULL_MID,
                      collides=kind in ("hedge", "topiary_cone", "topiary_spiral", "topiary_ball"))
         # a tree claims its TRUNK (and root flare), not its canopy: shrubs and roses belong under it, and the

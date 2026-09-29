@@ -1,0 +1,16 @@
+{
+ "name": "zzW44_rooms3_ht356",
+ "started": "2026-09-29 01:11:28",
+ "status": "done",
+ "waited_for_pie_seconds": 0.0,
+ "map_dirty_before": [],
+ "removed": 234,
+ "pass": "HT356",
+ "actors": 0,
+ "batches": 238,
+ "instances": 2943,
+ "hovers": 0,
+ "finished": "2026-09-29 01:11:46",
+ "seconds": 18.09,
+ "log": "applied HT356 0 actors 238 batches 2943 instances\n"
+}
