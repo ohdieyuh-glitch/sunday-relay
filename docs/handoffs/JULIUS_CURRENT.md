@@ -4,7 +4,7 @@
 > repository evidence does not. Update it whenever meaningful state changes and
 > before ending a session. Never rely on `/resume` as the sole record.
 
-**Most recent session: 2026-09-28, CLAUDE SUBSCRIPTION AUTH AND THE LOCAL LIVE-QUALIFICATION PATH. Read §000h first, then §000e, then §000d, then §000c, then §000b, then §000.**
+**Most recent session: 2026-09-28, #288 LANDED, THE FOUNDER'S FINAL PRIORITY 10 DECISION, AND THE FOCUSED FOLLOW-UP. Read §000h first (its first subsection is the current state), then §000e, then §000d, then §000c, then §000b, then §000.**
 > §000f and §000g exist only on `relay/julius-task-generality`, which this branch deliberately does not carry (see §000h).
 > The paragraph below it is the record of the session before that.
 
@@ -12,9 +12,73 @@
 
 ## 000h. CLAUDE SUBSCRIPTION AUTH, THE ACCOUNTING FIX, AND THE LOCAL LAUNCH PATH
 
-**Read this first.** It is the newest work. **Nothing was dispatched: provider dispatches 0, API
-spend $0.00.** The representative live mission is **NOT authorized**. Nothing in this section
-authorizes it, and "continue", "prepare Priority 10" or "verify providers" do not either.
+**Read this first.** It is the newest work. **When this section was written, nothing had been
+dispatched: provider dispatches 0, API spend $0.00.** The founder has authorized exactly ONE
+bounded paid run of Mission 6, on lane `lab`. The authorization is valid only after every gate in
+the next subsection has passed, in that order. Nothing in this section dispatches it, and
+"continue" or "verify providers" do not either.
+
+### Current state at landing: the Priority 10 run is GitHub-hosted and API-billed
+
+**The founder's FINAL decision for this Priority 10 run.** It supersedes the local-launch decision
+recorded further down, which is kept as history:
+
+| Role | Provider | Billing path |
+|---|---|---|
+| Architect | OpenAI | `API_BILLED` |
+| Coding Agent | Anthropic, `JULIUS_CLAUDE_AUTH` absent, so `ANTHROPIC_API` | `API_BILLED` |
+| Independent Reviewer | Hermes → xAI | `API_BILLED` |
+
+- The run is the hosted workflow `julius-first-live-mission.yml`, dispatched from the landed
+  commit. There is no local WSL run, and no WSL provisioning was ever done.
+- **`CLAUDE_SUBSCRIPTION` is preserved in full, not deprecated.** That covers the mode, its
+  child-environment isolation, its settlement accounting and every test. It waits for a supported
+  host that holds an official Max login. No Claude OAuth, session or setup-token goes to GitHub,
+  and there is no self-hosted runner.
+- The expected preflight line is `billing paths: architect=API_BILLED coder=API_BILLED
+  reviewer=API_BILLED`, beside `CLAUDE AUTH: API KEY`.
+
+**What landed, and how.**
+
+- **#288** was squash-merged by the founder at 2026-09-28T18:52:10Z as
+  `c833e2680a5480df6936bfa00fa1ebbca354ca42`.
+  - Its single parent is `a384b215`, and its tree equals #288's frozen head `15cf04d7`.
+  - Provenance: `provenant`, pr=288, approved_by=ohdieyuh-glitch.
+  - accept-main: run 36469349486 succeeded, with artifact 10990198659
+    `julius-accepted-main-c833e268…`.
+  - Relay CI on that push is red for exactly #288's two Linux failures, both fixed in this
+    follow-up (`27d09818`).
+- **The reviewer billing declaration** is the founder's own commit on `main`, and it is this
+  follow-up's parent. The julius-worker App has no `workflows` permission, so it cannot change a
+  workflow file.
+  - It adds `RELAY_HERMES_BILLING_MODE: api_billed` to the workflow's job environment, where the
+    xAI API key is injected.
+  - The local launcher now mirrors it instead of adding it; the drift test holds the two equal.
+  - It was applied by `declare-reviewer-billing.sh`, which refuses unless main is exactly
+    `c833e268` with its accept-main checkpoint, and the change is exactly +5/-0 in that one file.
+    **Run it with Git Bash:** in PowerShell, `bash` is `C:\Windows\system32\bash.exe`, which is
+    WSL, and WSL cannot open a `C:/` path. That was the first attempt's failure.
+- **This follow-up** is 14 commits, re-authored as `julius-worker[bot]` onto the declaration.
+  The content is identical to the reviewed local branch `relay/julius-subscription-local-qualification`
+  (`ced13a80`), plus the launcher commit.
+
+**The gates left, in the founder's order.** None may be reordered.
+
+1. Founder approval and squash-merge of this follow-up at its exact head.
+2. `julius-accept-main` for the new main.
+3. The zero-dispatch preflight: `node scripts/julius-paid-dispatch.mjs --mission
+   julius-live-mission-6 --lane lab`. It must end with the entrypoint's `RESULT: READY` and
+   `PROVIDER DISPATCHES: 0`, and with the billing paths above.
+4. Only then, the ONE paid run: the same command with `--paid`. It finds the successful preflight
+   at the same main and dispatches once, under the idempotency key
+   `julius-live-mission-6@<main12>#lab#a1`. Nothing reruns a paid mission automatically.
+
+**Recorded, not fixed here (the founder's instruction).**
+`src/relay/mission/role-slots/role-slot-registry.ts` (lines 105 and 192) sets `billingPath: 'api'`
+statically for the hosted Claude occupant. That registry serves the older Relay orchestrator and
+the UI, not the Julius live path, whose billing path comes from the resolved auth mode.
+
+**Readiness stays at 80%.** This landing adds no capability that the paid run has not yet proven.
 
 ### Where it lives, and why it is a new branch
 
@@ -47,7 +111,12 @@ its follow-ups), the execution-blocker docs, the paid-guard flake fix (`310c1062
 are identical at `231369e6`, at `15cf04d7` and at this branch's head. It has never been
 dispatched.
 
-### The decision: the first subscription qualification launches LOCALLY
+### SUPERSEDED — the decision: the first subscription qualification launches LOCALLY
+
+> **Superseded the same day**, first by the founder's move of heavy work to GitHub and then by the
+> final Priority 10 decision at the top of this section. It is kept as the record of what was
+> decided and why. The local launch path it produced is kept, and still drift-tested, for a future
+> subscription proof.
 
 Founder decision, 2026-09-28:
 
@@ -93,8 +162,9 @@ All three roles now state it, which is the founder's requirement that accounting
 - **OpenAI architect:** API_BILLED by construction, since the adapter cannot exist without the key.
   The amount is still unreported, because Chat Completions states no price.
 - **Hermes reviewer:** the operator's `RELAY_HERMES_BILLING_MODE`, parsed exactly as
-  `declaredBillingPath`. The local launcher declares `api_billed`, which is true because it writes
-  the xAI API key. The hosted workflow declares nothing, so its reviewer rows stay UNKNOWN.
+  `declaredBillingPath`. It reads `api_billed` in the hosted workflow, by the founder's own
+  declaration, and in the local launcher, which mirrors it. Both are true because both write the
+  xAI API key. Undeclared, the preflight BLOCKS rather than let the reviewer's rows read UNKNOWN.
 
 The real OpenAI and xAI AMOUNTS will still not be in the ledger. After a paid run they have to be
 reconciled from the provider consoles.
@@ -176,7 +246,10 @@ verify, and `git diff --check`. Among the suites:
 Both failures reproduce identically on the untouched `julius-beta` worktree at `b618201c`.
 **CI on Linux is the authority on green.**
 
-### Landing order (the founder's)
+### SUPERSEDED — landing order for the local run
+
+> Steps 1 to 3 happened as written; steps 7 and 8 were replaced by the hosted run. The current
+> order is the gate list at the top of this section.
 
 1. PR #288: founder approval and squash-merge at `15cf04d7`.
 2. Rebase this branch onto the new `main`.
