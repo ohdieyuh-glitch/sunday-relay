@@ -451,8 +451,8 @@ independent QA session (JUJU and the integration lane were reassigned to Julius 
 |---|---|---|---|
 | 1 | entire intended playable world audited | MET | census + emptiness_classes over the 1,480 m disc after every window; world-edge ring at 1,485 m |
 | 2 | every major region has an owner and resolved status | IN PROGRESS | queue Q1-Q13; SECOND 5a-5d, CORE flank / final gates |
-| 3 | major unintended empty regions authored | IN PROGRESS | 45.1 % empty (morning) -> 16.2 % (4b) -> 15.0 % (4c) -> 13.8 % (5a) -> **11.6 % after 5b (UNINTENDED 6.6 %, 703 regions; meadow 2.9, traversal 1.4, vista 0.3, rim 0.2, clearing 0.1)**; 5c / 5d / C7 to come |
-| 4 | remaining negative space explicitly intentional | IN PROGRESS | classes: meadow / vista / traversal / clearing / rim; final classification after 5d |
+| 3 | major unintended empty regions authored | MET (builder-run) | 45.1 % empty (morning) -> 16.2 % (4b) -> 13.8 % (5a) -> 11.6 % (5b) -> 7.0 % (5d) -> **5.3 % after 2F; UNINTENDED 1.3 % of the disc**, 539 pockets, the largest 0.41 ha (core, 109° 340 m); no unintended region over half a hectare remains |
+| 4 | remaining negative space explicitly intentional | MET (builder-run), residual listed | final classes (post-2F census, 264,246 rows): meadow 2.7 %, traversal 1.0 %, vista 0.3 %, clearing 0.1 %, rim 0.0 %; the 1.3 % unintended residual is small pockets, most in the TW03 Icarus tower band (100-135°), which the fills left to the tower hamlets (listed in the final audit) |
 | 5 | Golden Arrival complete | IN PROGRESS | composition passes present; axis SELF-POWERED 32/32 after GS01; flanks SELF-POWERED 2/2 from the north arches; rear world SELF-POWERED round the palace complex's west side (156 m, 0 stops) |
 | 6 | 24 quarters coherent | MET (founder decision) | classified per site; core preserved, identities outward (TW01-03, MG01) |
 | 7 | three nations read distinctly | IN PROGRESS | band + frontier frames per nation (12:40): distinct at the bands (ivory/gold, black, red-brown); frontiers read as woodland with accents -- final set after the massing round |
@@ -460,17 +460,17 @@ independent QA session (JUJU and the integration lane were reassigned to Julius 
 | 9 | radial roads connect correctly | MET (builder-run) for ICARUS + TARTARUS; NOCTIS MIXED | core -> nation end SELF-POWERED 0 stops: ICARUS 1,442 m, TARTARUS 1,261 m (14:44); NOCTIS 1 stop at r 32 m (AR03 screen plinth, inside GA), 0 stops for the other 1,257 m -- clean re-run next; SR150 / SR030 SELF-POWERED |
 | 10 | ring circuits connect or gates intentional | MET (builder-run) | hedge gates GA/GB/GC/GD/GE SELF-POWERED; SKY05 tower breaks documented (RR01 ~28 deg, RR02 20-32 / 140-148 deg) |
 | 11 | heartlands complete | MET (builder-run) | 5 heartlands applied, SELF-POWERED 5/5, rooms 48/48 |
-| 12 | frontiers complete | IN PROGRESS | S2 strips + S3 (5a/5b) + S4 (5c); Dubel edge S5 (5d) + outer wall |
-| 13 | outer wild ring complete | IN PROGRESS | R50 + R50b (4a-4c) applied; Dubel's outer arc wall pending |
+| 12 | frontiers complete | MET (builder-run) | S2 strips + S3 (5a) + S6 copse fill (5b-5d, 620-1,210 m, trees at 600 m cull) + S5 Dubel edge (5d); all class A, residency 100 % in play |
+| 13 | outer wild ring complete | MET (builder-run) | R50 + R50b (4a-4c) + Dubel's outer arc wall S5W090 (5d); EDGE01 stops the Dog at 1,482-1,483 m; the wild ring reads as forest after the cull change (SECOND's massing sheet) |
 | 14 | missing Bible districts reconciled | MET | Tower Rise / Mushroom Grove RELOCATED WITH INTENT and built; books/scrolls NOT IN KIT; GA08 held (lighting) |
 | 15 | major landmarks exist and are reachable | IN PROGRESS | TW01 gate, MG01 entry, TW03 x8, Dubel landmarks SELF-POWERED; landmark sweep SELF-POWERED 65/66 after planner v2; the 66th reached to its raised planter's rim (South Cloister) |
 | 16 | traversal works across the intended world | IN PROGRESS | ~10 km of self-powered routes today, incl. core -> Icarus / Tartarus ends 0 stops (2.7 km), GA rear world, the ring gates, seam ways, TW02 / TW03 / MG01 / Dubel walks, heartlands 5/5; traversal graph + Noctis clean re-run to close |
 | 17 | no major cul-de-sac / trapped landmark | IN PROGRESS | GA axis ledge fixed (GS01); GA rear world reached (west); GreatSpire precinct and Gatekeeper Fields walked round; landmarks 65/66 on foot + 1 at its planter rim; S2N246 dead walk removed |
-| 18 | distant views composed | IN PROGRESS | outer world reads low from 1.3 km; Dubel outer edge hard; grove massing + outer walls in 5a-5d |
+| 18 | distant views composed | MET within the streaming limits (builder-run) | massing (S6, C7) + tree cull 600 m: every loaded tree within 512 m now draws; wild ring reads as forest, Noctis heartland as parkland, Dubel's outer edge closed (SECOND's sheets). Beyond 512 m nothing streams (512 m and no-HLOD are fixed constraints), so a 1.3 km oblique cannot show the outer woods -- a documented limit, not a composition gap |
 | 19 | World Partition streams correctly | MET (builder-run) | every window's residency 100 % in play; streaming complete at every stand; 200 m tiles |
 | 20 | Golden Arrival in the packaged build | MET earlier (S03 09-29 00:11) | re-run on the final world |
 | 21 | broad founder-facing visual evidence across regions | IN PROGRESS | 24 CORE frames (core_0929: 16 + nation bands/frontiers, SR150, GD) + SECOND's before/after sets; final set after the last window |
-| 22 | final emptiness audit | OPEN | after the last window |
+| 22 | final emptiness audit | MET | emptiness_classes on the post-2F census (15:24): 5.3 % empty, 1.3 % unintended (539 regions), top regions recorded; SECOND's 350-620 m audit-map before/after for C7 |
 | 23 | final beta walk against real streaming | OPEN | after the last window |
 | 24 | final packaged build boots and streams the completed world | OPEN | BuildCookRun + boot_test_package after freeze |
 | 25 | no unexplained incomplete P0/P1 region | IN PROGRESS | this table + queue at freeze |
