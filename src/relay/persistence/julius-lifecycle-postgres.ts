@@ -6,6 +6,7 @@ import {
   type JuliusLifecycleStore, type JuliusMissionState, type JuliusPolicyOperation,
 } from '../mission/julius';
 import { transitionJuliusRunWithin } from './julius-postgres';
+import { juliusSerializable } from './julius-serializable';
 
 /**
  * DURABLE APPROVALS AND LIFECYCLE FACTS.
@@ -54,8 +55,14 @@ export class JuliusLifecyclePostgresRepository implements JuliusApprovalStore, J
     return pending.rows[0] ? { created: false, record: this.map(pending.rows[0]) } : { created: false, record };
   }
 
+  /**
+   * THE GATE AND ITS RECORDED MOVE TO BLOCKED, ONE TRANSACTION, ON THE SHARED RETRY POLICY. A 40001 from
+   * the run loop writing the same run is replayed by `juliusSerializable`: the body is SQL over the
+   * caller's record, idempotent by `(run_id, idempotency_key)`, and a stale `expectedRunVersion` is the
+   * caller's own conflict, surfaced at once.
+   */
   async requestApprovalAndBlock(input:{record:JuliusApprovalRecord;expectedRunVersion:number}):Promise<{created:boolean;record:JuliusApprovalRecord;runState:'BLOCKED'}>{
-    const client=await this.pool.connect();try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');const locked=await client.query('SELECT state,version,mission_id FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2 FOR UPDATE',[input.record.runId,input.record.projectId]);if(!locked.rows[0])throw new Error('julius_run_not_found');const prior=await client.query<Record<string,unknown>>('SELECT * FROM relay_wonderland.julius_approvals WHERE run_id=$1 AND idempotency_key=$2 FOR UPDATE',[input.record.runId,input.record.idempotencyKey]);if(prior.rows[0]){if(locked.rows[0].state!=='BLOCKED')throw new Error('approval_run_state_conflict');await client.query('COMMIT');return{created:false,record:this.map(prior.rows[0]),runState:'BLOCKED'};}if(Number(locked.rows[0].version)!==input.expectedRunVersion)throw new Error('julius_run_version_conflict');if(['COMPLETED','FAILED','CANCELLED'].includes(String(locked.rows[0].state)))throw new Error('julius_run_terminal');
+    return juliusSerializable(this.pool,async(client)=>{const locked=await client.query('SELECT state,version,mission_id FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2 FOR UPDATE',[input.record.runId,input.record.projectId]);if(!locked.rows[0])throw new Error('julius_run_not_found');const prior=await client.query<Record<string,unknown>>('SELECT * FROM relay_wonderland.julius_approvals WHERE run_id=$1 AND idempotency_key=$2 FOR UPDATE',[input.record.runId,input.record.idempotencyKey]);if(prior.rows[0]){if(locked.rows[0].state!=='BLOCKED')throw new Error('approval_run_state_conflict');return{created:false,record:this.map(prior.rows[0]),runState:'BLOCKED'};}if(Number(locked.rows[0].version)!==input.expectedRunVersion)throw new Error('julius_run_version_conflict');if(['COMPLETED','FAILED','CANCELLED'].includes(String(locked.rows[0].state)))throw new Error('julius_run_terminal');
       const inserted=await client.query(`INSERT INTO relay_wonderland.julius_approvals(approval_id,run_id,project_id,task_id,operation,policy_revision,reason_code,safe_rationale,state,requested_at,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'PENDING',$9,$10) ON CONFLICT DO NOTHING RETURNING *`,[input.record.approvalId,input.record.runId,input.record.projectId,input.record.taskId,input.record.operation,input.record.policyRevision,input.record.reasonCode,input.record.safeRationale,input.record.requestedAt,input.record.idempotencyKey]);
       let record=input.record;if(!inserted.rows[0]){const collision=await client.query<Record<string,unknown>>('SELECT run_id,project_id FROM relay_wonderland.julius_approvals WHERE approval_id=$1',[input.record.approvalId]);if(collision.rows[0]&&(collision.rows[0].run_id!==input.record.runId||collision.rows[0].project_id!==input.record.projectId))throw new Error('approval_id_scope_conflict');const existing=await client.query<Record<string,unknown>>(`SELECT * FROM relay_wonderland.julius_approvals WHERE run_id=$1 AND COALESCE(task_id,'')=COALESCE($2,'') AND operation=$3 AND state='PENDING' ORDER BY requested_at LIMIT 1 FOR UPDATE`,[input.record.runId,input.record.taskId,input.record.operation]);if(!existing.rows[0])throw new Error('approval_conflict_without_record');record=this.map(existing.rows[0]);}
       // THE MOVE TO BLOCKED IS A TRANSITION, RECORDED AS ONE. It was a bare
@@ -80,8 +87,8 @@ export class JuliusLifecyclePostgresRepository implements JuliusApprovalStore, J
         });
         current={...current,state:step,version:current.version+1};
       }
-      await client.query('COMMIT');return{created:inserted.rowCount===1,record,runState:'BLOCKED'};
-    }catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}
+      return{created:inserted.rowCount===1,record,runState:'BLOCKED'};
+    });
   }
 
   async loadApproval(runId: string, approvalId: string, projectId: string): Promise<JuliusApprovalRecord | null> {

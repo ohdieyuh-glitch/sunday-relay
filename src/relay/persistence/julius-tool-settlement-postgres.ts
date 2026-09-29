@@ -3,23 +3,23 @@ import type {Pool,PoolClient} from 'pg';
 import type {ArtifactStorePort} from '../mission/julius';
 import type {JuliusToolSettlementCommand,JuliusToolSettlementResult,JuliusToolSettlementStore} from '../mission/julius';
 import {decodePgJson,encodePgText,pgJson} from './julius-storage-encoding';
+import {juliusSerializable} from './julius-serializable';
 const json=(value:unknown)=>JSON.stringify(value);
 const stable=(value:any):string=>value===null||typeof value!=='object'?JSON.stringify(value):Array.isArray(value)?`[${value.map(stable).join(',')}]`:`{${Object.keys(value).sort().map(key=>`${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}`;
 const digest=(value:unknown)=>createHash('sha256').update(stable(value)).digest('hex');
 
 /**
- * A SETTLEMENT THAT LOSES A SERIALIZATION RACE IS REPLAYED, A BOUNDED NUMBER OF TIMES.
+ * A SETTLEMENT THAT LOSES A SERIALIZATION RACE IS REPLAYED, ON THE ONE SHARED POLICY.
  *
  * The settlement is SERIALIZABLE and, in a live mission, runs beside the run loop's own writes to the
  * same run: every event append upserts the run's `stream_sequences` row, which the settlement's event
  * upserts too. A 40001 (or a 40P01 deadlock) there is PostgreSQL asking for the transaction to be run
  * again, and it used to end the coder's step instead, with the invocation left DISPATCHING exactly as
- * the 22P05 of paid run 36568129865 left it. Three attempts, jittered; anything else, or a third
- * failure, surfaces as before, and the shell port then closes the dispatch as an unknown outcome.
+ * the 22P05 of paid run 36568129865 left it. This carried its own loop (three attempts, 40001 and 40P01);
+ * it is now `juliusSerializable`, the policy every Julius transaction shares: 40001 and 40P01, six
+ * attempts, exponential jitter, never a caller-owned conflict. Anything else, or the last failure,
+ * surfaces as before, and the shell port then closes the dispatch as an unknown outcome.
  */
-const SERIALIZATION_FAILURES:ReadonlySet<string>=new Set(['40001','40P01']);
-export const JULIUS_SETTLEMENT_ATTEMPTS=3;
-const settlementRetryDelayMs=(attempt:number):number=>{const base=10*2**(attempt-1);return base+Math.floor(Math.random()*base);};
 
 /**
  * The sole DB authority for terminal tool truth. External artifact bytes must be finalized before this call.
@@ -36,26 +36,22 @@ export class JuliusToolSettlementPostgresRepository implements JuliusToolSettlem
  async settle(command:JuliusToolSettlementCommand):Promise<JuliusToolSettlementResult>{
   if(command.result.invocationId!==command.invocationId||digest(command.result)!==command.resultDigest||command.taskOutcome?.state==='SUCCEEDED'&&command.result.status!=='SUCCEEDED'||command.taskOutcome?.state==='FAILED'&&command.result.status==='SUCCEEDED')throw new Error('tool_settlement_result_invalid');
   if(command.artifacts.length&&!this.artifactStore)throw new Error('tool_settlement_artifact_store_required');for(const metadata of command.artifacts){const stored=await this.artifactStore!.get(metadata);if(!stored||stored.metadata.contentHash!==metadata.contentHash||stored.metadata.byteSize!==metadata.byteSize||stored.metadata.storageRef!==metadata.storageRef||stored.metadata.tenantId!==metadata.tenantId||stored.metadata.projectId!==metadata.projectId||stored.metadata.runId!==metadata.runId||stored.metadata.taskId!==metadata.taskId||stored.metadata.invocationId!==metadata.invocationId||stored.content.byteLength!==metadata.byteSize||createHash('sha256').update(stored.content).digest('hex')!==metadata.contentHash)throw new Error('tool_settlement_artifact_bytes_unavailable');}const commandDigest=digest(command);
-  for(let attempt=1;;attempt+=1){
-   try{return await this.settleOnce(command,commandDigest);}
-   catch(error){
-    if(!SERIALIZATION_FAILURES.has(String((error as {code?:unknown}|null)?.code))||attempt>=JULIUS_SETTLEMENT_ATTEMPTS)throw error;
-    await new Promise(resolve=>setTimeout(resolve,settlementRetryDelayMs(attempt)));
-   }
-  }
+  const settled=await juliusSerializable(this.pool,(client)=>this.settleWithin(client,command,commandDigest));
+  // After the commit, never inside the transaction: a fault here is a crash after the settlement landed.
+  if(settled.created)await this.fault?.('AFTER_COMMIT');
+  return settled;
  }
  /**
-  * ONE SERIALIZABLE ATTEMPT, AND WHY IT MAY BE REPLAYED. Everything that is not SQL happens before the
+  * ONE SERIALIZABLE ATTEMPT, AND WHY IT MAY BE REPLAYED. `juliusSerializable` owns BEGIN, COMMIT and ROLLBACK. Everything that is not SQL happens before the
   * first attempt, in `settle`: the command is validated and digested and the artifact bytes are checked
   * there, once. What is left is SQL over the fixed command and over rows it reads itself, plus the
   * test-only fault hooks. PostgreSQL rolls a 40001/40P01 attempt back entirely, and a replay that finds
   * the settlement already committed answers `created:false` from the idempotency check at the top.
   */
- private async settleOnce(command:JuliusToolSettlementCommand,commandDigest:string):Promise<JuliusToolSettlementResult>{
-  const client=await this.pool.connect();
-  try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+ private async settleWithin(client:PoolClient,command:JuliusToolSettlementCommand,commandDigest:string):Promise<JuliusToolSettlementResult>{
+  {
    const prior=await client.query('SELECT settlement_id,invocation_id,result_digest,command_digest FROM relay_wonderland.julius_tool_settlements WHERE settlement_id=$1 OR invocation_id=$2 FOR UPDATE',[command.settlementId,command.invocationId]);
-   if(prior.rows[0]){if(prior.rows[0].settlement_id!==command.settlementId||prior.rows[0].invocation_id!==command.invocationId||prior.rows[0].result_digest!==command.resultDigest||prior.rows[0].command_digest!==commandDigest)throw new Error('tool_settlement_identity_conflict');await client.query('COMMIT');return{created:false,settlementId:command.settlementId,invocationId:command.invocationId,resultDigest:command.resultDigest};}
+   if(prior.rows[0]){if(prior.rows[0].settlement_id!==command.settlementId||prior.rows[0].invocation_id!==command.invocationId||prior.rows[0].result_digest!==command.resultDigest||prior.rows[0].command_digest!==commandDigest)throw new Error('tool_settlement_identity_conflict');return{created:false,settlementId:command.settlementId,invocationId:command.invocationId,resultDigest:command.resultDigest};}
    const owned=await client.query(`SELECT i.*,r.runtime_version,r.card_revision,r.mission_id,r.mission_contract_revision,r.project_brain_revision,t.state task_state,t.lease_generation task_lease_generation,t.worker_id task_worker_id,t.required_evidence_types FROM relay_wonderland.julius_tool_invocations i JOIN relay_wonderland.julius_runs r ON r.run_id=i.run_id AND r.project_id=i.project_id JOIN relay_wonderland.julius_tasks t ON t.task_id=i.task_id AND t.run_id=i.run_id WHERE i.invocation_id=$1 FOR UPDATE OF i,r,t`,[command.invocationId]);
    const invocation=owned.rows[0];if(!invocation||Number(invocation.dispatch_generation)!==command.dispatchGeneration||!['DISPATCHING','RUNNING'].includes(String(invocation.state)))throw new Error('tool_settlement_authority_lost');
    const receipt=await client.query(`SELECT * FROM relay_wonderland.julius_tool_execution_receipts WHERE invocation_id=$1 AND project_id=$2 AND dispatch_generation=$3 AND state IN('COMPLETED_WITH_RESULT','FAILED_WITH_RESULT') AND result_digest=$4 FOR UPDATE`,[command.invocationId,invocation.project_id,command.dispatchGeneration,command.resultDigest]);if(!receipt.rows[0])throw new Error('tool_settlement_receipt_missing');
@@ -73,8 +69,8 @@ export class JuliusToolSettlementPostgresRepository implements JuliusToolSettlem
    const completed=await client.query(`UPDATE relay_wonderland.julius_tool_invocations SET state=$2,exit_code=$3,safe_summary=$4,stdout_preview=$5,stdout_artifact_id=$6,stderr_preview=$7,stderr_artifact_id=$8,evidence_ids=$9::jsonb,artifact_ids=$10::jsonb,duration_ms=$11,completed_at=clock_timestamp(),recovery_state='RECONCILED' WHERE invocation_id=$1 AND dispatch_generation=$12 AND state IN('DISPATCHING','RUNNING')`,[command.invocationId,terminal,command.result.exitCode,encodePgText(command.result.safeSummary.slice(0,500)),encodePgText(command.result.stdout.slice(0,8192)),command.result.stdoutRef,encodePgText(command.result.stderr.slice(0,8192)),command.result.stderrRef,json(command.evidence.map(x=>x.evidenceId)),json(command.artifacts.map(x=>x.artifactId)),command.result.durationMs,command.dispatchGeneration]);if(completed.rowCount!==1)throw new Error('tool_settlement_invocation_conflict');
    const delivered=await client.query(`UPDATE relay_wonderland.julius_tool_outbox SET state='DELIVERED',claimed_by=NULL,claimed_until=NULL,delivered_at=clock_timestamp() WHERE invocation_id=$1 AND state IN('PENDING','CLAIMED')`,[command.invocationId]);if(delivered.rowCount!==1)throw new Error('tool_settlement_outbox_conflict');
    await client.query(`INSERT INTO relay_wonderland.julius_tool_settlements(invocation_id,project_id,budget_reservation_id,receipt_digest,resource_usage,settlement_state,settled_at,settlement_id,dispatch_generation,result_digest,command_digest,result) VALUES($1,$2,$3,$4,$5::jsonb,$6,clock_timestamp(),$7,$8,$9,$10,$11::jsonb)`,[command.invocationId,invocation.project_id,invocation.budget_reservation_id,command.resultDigest,json(command.result.resourceUsage),budgetState,command.settlementId,command.dispatchGeneration,command.resultDigest,commandDigest,pgJson(command.result)]);
-   await this.fault?.('BEFORE_COMMIT');await client.query('COMMIT');await this.fault?.('AFTER_COMMIT');return{created:true,settlementId:command.settlementId,invocationId:command.invocationId,resultDigest:command.resultDigest};
-  }catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}
+   await this.fault?.('BEFORE_COMMIT');return{created:true,settlementId:command.settlementId,invocationId:command.invocationId,resultDigest:command.resultDigest};
+  }
  }
  private async appendEvent(client:PoolClient,i:any,c:JuliusToolSettlementCommand){const sequence=await client.query<{sequence:string}>('INSERT INTO relay_wonderland.stream_sequences(stream_id,next_sequence) VALUES($1,2) ON CONFLICT(stream_id) DO UPDATE SET next_sequence=relay_wonderland.stream_sequences.next_sequence+1 RETURNING next_sequence-1 AS sequence',[i.run_id]);const eventId=`julius:tool-settlement:${c.settlementId}`;await client.query(`INSERT INTO relay_wonderland.events(event_id,stream_id,project_id,sequence,event_type,visibility,payload,occurred_at) VALUES($1,$2,$3,$4,'julius.worker.completed','PROJECT',$5::jsonb,$6)`,[eventId,i.run_id,i.project_id,Number(sequence.rows[0].sequence),pgJson({schemaVersion:'relay-julius-event.v1',runId:i.run_id,taskId:i.task_id,invocationId:c.invocationId,status:c.result.status,evidenceIds:c.evidence.map(x=>x.evidenceId),artifactIds:c.artifacts.map(x=>x.artifactId)}),c.occurredAt]);await client.query('INSERT INTO relay_wonderland.outbox(outbox_id,event_id,project_id) VALUES($1,$2,$3)',[`outbox:${eventId}`,eventId,i.project_id]);}
  private async appendTrajectory(client:PoolClient,i:any,c:JuliusToolSettlementCommand){await client.query(`INSERT INTO relay_wonderland.julius_trajectory_events(trajectory_event_id,run_id,project_id,event_kind,task_id,worker_id,runtime_version,policy_version,card_revision,mission_contract_revision,project_brain_revision,duration_ms,usd_micros,input_tokens,output_tokens,outcome,safe_facts,idempotency_key,occurred_at) VALUES($1,$2,$3,'DISPATCH',$4,$5,$6,'tool-settlement.v1',$7,$8,$9,$10,0,0,0,$11,$12::jsonb,$13,$14)`,[`trajectory:tool-settlement:${c.settlementId}`,i.run_id,i.project_id,i.task_id,i.worker_id,i.runtime_version,i.card_revision,i.mission_contract_revision,i.project_brain_revision,c.result.durationMs,c.result.status,pgJson({invocationId:c.invocationId,toolId:i.tool_id,evidenceCount:c.evidence.length,artifactCount:c.artifacts.length}),`tool-settlement:${c.settlementId}`,c.occurredAt]);}
