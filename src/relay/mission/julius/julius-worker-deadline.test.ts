@@ -444,11 +444,24 @@ describe('18 · nothing that advances the mission runs before the deadline is aw
     expect(body, 'the execute body must be findable').not.toBe('');
     const awaitedAt = body.indexOf('await dispatchWithinDeadline(');
     expect(awaitedAt, 'the deadline must be awaited at all').toBeGreaterThan(-1);
-    for (const step of ['this.ports.persistEvidence(', 'this.ports.acceptResult(', 'this.ports.commit(']) {
+    for (const step of ['this.ports.persistEvidence(', 'this.ports.acceptResult(']) {
       const at = body.indexOf(step);
       expect(at, `${step} must exist`).toBeGreaterThan(-1);
       expect(at, `${step} must not run before the deadline is awaited`).toBeGreaterThan(awaitedAt);
     }
+    /*
+     * THE SETTLEMENT LIVES IN `afterAccept`, which runs only once the store has
+     * the result and is outside the catch, so a failed settlement can never be
+     * turned into a failed attempt. The ordering is pinned through it: its one
+     * call site is below the await, and `commit` is called from nowhere else.
+     */
+    const handoffAt = body.indexOf('this.afterAccept(');
+    expect(handoffAt, 'execute must hand a result it accepted to afterAccept').toBeGreaterThan(awaitedAt);
+    expect(source.split('this.afterAccept(').length - 1, 'afterAccept must have exactly one call site').toBe(1);
+    const afterAccept = /private async afterAccept\([\s\S]*?\n  \}\n/u.exec(source)?.[0] ?? '';
+    expect(afterAccept, 'the afterAccept body must be findable').not.toBe('');
+    expect(afterAccept).toContain('this.ports.commit(');
+    expect(source.split('this.ports.commit(').length - 1, 'commit must be called from afterAccept alone').toBe(1);
     // And the dispatch really is raced, not merely awaited with a timer beside it.
     expect(source).toContain('return await Promise.race([');
   });

@@ -179,7 +179,9 @@ function structuralRefusal(situation: JuliusContinuation): JuliusContinuationDec
  * handed along intact through however many layers. An authentication failure
  * and a malformed request are the same on the second attempt as on the first.
  */
-const RETRYABLE_CODES: readonly JuliusErrorCode[] = Object.freeze(['RATE_LIMIT', 'TIMEOUT', 'PROVIDER_UNAVAILABLE']);
+// `PERSISTENCE_FAILURE` is retryable only where the coordinator says so: before the work was
+// handed, when a retry repeats Julius's bookkeeping and nothing that was paid for.
+const RETRYABLE_CODES: readonly JuliusErrorCode[] = Object.freeze(['RATE_LIMIT', 'TIMEOUT', 'PROVIDER_UNAVAILABLE', 'PERSISTENCE_FAILURE']);
 
 /* ------------------------------------------------------------ the decision */
 
