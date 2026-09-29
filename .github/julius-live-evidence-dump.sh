@@ -111,7 +111,29 @@ dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.
 #   `unknown_components`   — settlements that reported no amount at all. NOT zero-cost ones.
 #
 # Adding these three together would produce the very number this file exists to prevent.
-dump "SELECT COALESCE(e.payload->'facts'->>'role','UNKNOWN_ROLE') AS role,count(*)::text AS components,COALESCE(sum(CASE WHEN e.payload->'facts'->>'costBasis' IN ('PROVIDER_REPORTED','MEASURED_FROM_USAGE') THEN (e.payload->'facts'->>'usdMicros')::numeric ELSE 0 END),0)::text AS known_usd_micros,COALESCE(sum(COALESCE((e.payload->'facts'->>'estimatedUsdMicros')::numeric,0)),0)::text AS estimated_usd_micros,count(*) FILTER (WHERE e.payload->'facts'->>'usdMicros' IS NULL)::text AS unknown_components,count(*) FILTER (WHERE e.payload->'facts'->>'costBasis'='ESTIMATED')::text AS estimated_components FROM relay_wonderland.events e WHERE e.event_type='julius.budget.settled' GROUP BY 1 ORDER BY 1" cost-accounting.tsv
+# AN UNSETTLED RESERVATION IS AN UNKNOWN COMPONENT, never $0 and never absent.
+#
+# A reservation whose settlement could not be written (#297: the store failed after the result
+# was accepted, and the hold was deliberately NOT released) has a `budget.reserved` row and no
+# `budget.settled` row. Counting settled rows alone made it vanish from this rollup, so a mission
+# could read as cheaper than it was. It now counts as a component whose spend is unknown, and
+# `unsettled_components` says how many of the unknowns are that case. Settled rows remain the
+# ONLY source of known spend: a reservation is never a charge.
+dump "SELECT COALESCE(c.role,'UNKNOWN_ROLE') AS role,count(*)::text AS components,COALESCE(sum(CASE WHEN c.basis IN ('PROVIDER_REPORTED','MEASURED_FROM_USAGE') THEN c.usd::numeric ELSE 0 END),0)::text AS known_usd_micros,COALESCE(sum(COALESCE(c.estimated::numeric,0)),0)::text AS estimated_usd_micros,count(*) FILTER (WHERE c.usd IS NULL)::text AS unknown_components,count(*) FILTER (WHERE c.basis='ESTIMATED')::text AS estimated_components,count(*) FILTER (WHERE c.unsettled)::text AS unsettled_components FROM (SELECT e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'costBasis' AS basis,e.payload->'facts'->>'usdMicros' AS usd,e.payload->'facts'->>'estimatedUsdMicros' AS estimated,false AS unsettled FROM relay_wonderland.events e WHERE e.event_type='julius.budget.settled' UNION ALL SELECT r.payload->'facts'->>'role',NULL,NULL,NULL,true FROM relay_wonderland.events r WHERE r.event_type='julius.budget.reserved' AND NOT EXISTS (SELECT 1 FROM relay_wonderland.events s WHERE s.event_type='julius.budget.settled' AND s.stream_id=r.stream_id AND s.payload->'facts'->>'reservationId'=r.payload->'facts'->>'reservationId')) c GROUP BY 1 ORDER BY 1" cost-accounting.tsv
+
+# SETTLEMENT INTEGRITY: a reservation settled more than once is FLAGGED, never deduplicated.
+#
+# The rollup above sums every settled row, deliberately: deduplicating would hide the defect
+# #297 fixed (a release after a commit wrote a second `budget.settled`, and the spend was counted
+# twice). This file lists every reservation with more than one settled row. An empty file is the
+# healthy answer. The count is printed on its own line, so a regression is visible in the job log
+# without anyone opening the bundle.
+dump "SELECT e.stream_id AS run_id,e.payload->'facts'->>'reservationId' AS reservation_id,COALESCE(e.payload->'facts'->>'role','UNKNOWN_ROLE') AS role,count(*)::text AS settled_rows FROM relay_wonderland.events e WHERE e.event_type='julius.budget.settled' GROUP BY 1,2,3 HAVING count(*) > 1 ORDER BY 1,2" settlement-integrity.tsv
+if [ "$(head -n 1 "$out/settlement-integrity.tsv")" = 'unavailable' ]; then
+  echo 'JULIUS_SETTLEMENT_INTEGRITY unavailable'
+else
+  echo "JULIUS_SETTLEMENT_INTEGRITY duplicate_reservations=$(tail -n +2 "$out/settlement-integrity.tsv" | grep -cv '^(' || true)"
+fi
 
 # THE FACTS THAT LET SOMEONE DEBUG THE CLASS, WITHOUT BUYING A SECOND PAID RUN.
 #
