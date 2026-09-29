@@ -563,3 +563,100 @@ describe('E. the governance holds survive the orders an adversary picks', () => 
     expect(types, 'the operator resumed the run, and the record says so').toContain('run.resumed');
   });
 });
+
+/* ============================== F. admission is the last check before money */
+
+/**
+ * F3, FOUND BY THE SAME ADVERSARIAL REVIEW, written RED first.
+ *
+ * The dispatch boundary reads the run and its approvals; the context is then
+ * compiled, the contract checked, and only after all of that does `admitTask`
+ * spend the attempt and let the provider be called. A pause, an approval gate
+ * or a denial committed in that window was never seen: admission was a lease
+ * check and nothing else, so a run its operator had just paused still bought a
+ * provider call. Wherever a bridge and a mission job share a database, that
+ * window is real.
+ *
+ * Admission now re-reads the run and its approvals AS PART OF THE ADMISSION,
+ * and a held run's task is refused there: handed back unspent (paused,
+ * blocked, awaiting a person), or ended (denied, terminal), exactly as the
+ * boundary would have done.
+ */
+describe('F. admission is the last governance check before money (F3)', () => {
+  const lifecycle = (memory: Memory) => ({ store: memory as never, clock });
+  const hold = { runId: RUN, projectId: PROJECT, actor: 'ghu-founder', reason: 'Hold.' };
+  const go = { runId: RUN, projectId: PROJECT, actor: 'ghu-founder', reason: 'Go.' };
+  const gateRecord = (approvalId: string, taskId: string) => ({
+    approvalId, runId: RUN, projectId: PROJECT, taskId, operation: 'DISPATCH_WORKER' as const,
+    policyRevision: CARD, reasonCode: 'CARD_APPROVAL_REQUIRED', safeRationale: 'Gate.', state: 'PENDING' as const,
+    requestedAt: clock.now(), decidedAt: null, decidedBy: null, decisionReason: null, idempotencyKey: approvalId,
+  });
+  /** After the dispatch boundary, immediately before the admission: the window F3 is about. */
+  const beforeAdmission = (then: (memory: Memory) => Promise<unknown>) => (store: Store, memory: Memory): Store => {
+    let fired = false;
+    return {
+      ...store,
+      async admitTask(input) {
+        if (!fired) { fired = true; await then(memory); }
+        return store.admitTask(input);
+      },
+    } as Store;
+  };
+
+  it('F3a A PAUSE LANDING AFTER THE BOUNDARY CHECK starts nothing: admission refuses, and the task goes back unspent', async () => {
+    const s = stage({ wrap: beforeAdmission((memory) => pauseJuliusRun(hold, lifecycle(memory))) });
+    const report = await s.tick();
+    expect(s.dispatches(), 'a run paused before its admission bought no provider call').toBe(0);
+    expect(report.outcomes[0]).toMatchObject({ kind: 'HELD', reasonCode: 'RUN_PAUSED' });
+    const row = s.memory.taskRow(`${RUN}:plan-1`)!;
+    expect(row.state, 'handed back for when the pause lifts').toBe('RUNNABLE');
+    expect(row.attempt, 'and no execution attempt was spent on it').toBe(0);
+
+    expect(await resumeJuliusRun(go, lifecycle(s.memory))).toMatchObject({ applied: true, to: 'READY' });
+    expect((await s.drive()).state, 'resumed, the mission runs to the end as it would have').toBe('COMPLETED');
+  });
+
+  it('F3b AN APPROVAL GATE LANDING AFTER THE BOUNDARY CHECK holds the dispatch until a person answers', async () => {
+    // Written at the store without moving the run, so only the approval can hold it.
+    const s = stage({ wrap: beforeAdmission((memory) => memory.requestApproval(gateRecord('apr-at-admission', `${RUN}:plan-1`))) });
+    const report = await s.tick();
+    expect(s.dispatches()).toBe(0);
+    expect(report.outcomes[0]).toMatchObject({ kind: 'HELD', reasonCode: 'RUN_AWAITING_APPROVAL' });
+    const row = s.memory.taskRow(`${RUN}:plan-1`)!;
+    expect(row.state).toBe('RUNNABLE');
+    expect(row.attempt).toBe(0);
+  });
+
+  it('F3c A DENIAL LANDING AFTER THE BOUNDARY CHECK ends the claimed task, and nothing is dispatched', async () => {
+    const s = stage({ wrap: beforeAdmission(async (memory) => {
+      await memory.requestApproval(gateRecord('apr-denied-at-admission', `${RUN}:plan-1`));
+      await memory.decideApproval({
+        runId: RUN, approvalId: 'apr-denied-at-admission', projectId: PROJECT, state: 'DENIED',
+        decidedBy: 'ghu-founder', decisionReason: 'No.', decidedAt: clock.now(),
+      });
+    }) });
+    const report = await s.tick();
+    expect(s.dispatches()).toBe(0);
+    expect(report.outcomes[0]).toMatchObject({ kind: 'HELD', reasonCode: 'RUN_APPROVAL_DENIED' });
+    expect(s.memory.taskRow(`${RUN}:plan-1`)!.state, 'a denied run will not resume, so its task ends').toBe('FAILED');
+    expect((await s.drive(6)).state, 'and the run ends with it').toBe('FAILED');
+    expect(s.dispatches()).toBe(0);
+  });
+
+  it('F3d A CANCEL LANDING AFTER THE BOUNDARY CHECK: admission finds the task gone, and nothing runs', async () => {
+    const s = stage({ wrap: beforeAdmission((memory) => cancelJuliusRun(
+      { runId: RUN, projectId: PROJECT, actor: 'ghu-founder', reason: 'Stop.' }, lifecycle(memory))) });
+    const report = await s.tick();
+    expect(s.dispatches()).toBe(0);
+    expect(report.lostLeases, 'the cancelled task is nobody\'s to run').toBe(1);
+    expect(s.memory.taskRow(`${RUN}:plan-1`)!.state).toBe('CANCELLED');
+  });
+
+  it('F3e NOTHING HELD, NOTHING CHANGES: an unheld mission admits and completes with the same dispatches as before', async () => {
+    const plain = stage();
+    const watched = stage({ wrap: beforeAdmission(async () => undefined) });
+    expect((await plain.drive()).state).toBe('COMPLETED');
+    expect((await watched.drive()).state).toBe('COMPLETED');
+    expect(watched.dispatches(), 'admission added no hold to a run nobody held').toBe(plain.dispatches());
+  });
+});

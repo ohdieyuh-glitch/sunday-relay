@@ -408,6 +408,17 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       const task = tasks.get(input.taskId);
       if (task === undefined || task.state !== 'ACTIVE') return null;
       if (task.leaseOwner !== input.owner || task.leaseGeneration !== input.leaseGeneration) return null;
+      // THE CLAIM'S RULE, AGAIN, AT THE LAST MOMENT: a run that was held after
+      // this task was claimed spends nothing. The PostgreSQL admission carries
+      // the same rule under a lock on the run row.
+      const run = runs.get(task.runId);
+      if (run === undefined) return null;
+      const held = [...approvals.values()].filter((row) => row.runId === task.runId);
+      const pendingApprovals = held.filter((row) => row.state === 'PENDING').length;
+      const deniedApprovals = held.filter((row) => row.state === 'DENIED').length;
+      if (!CLAIMABLE_RUN_STATES.includes(run.state) || pendingApprovals > 0 || deniedApprovals > 0) {
+        return { held: true, runState: run.state, pendingApprovals, deniedApprovals };
+      }
       task.attempt += 1;
       task.version += 1;
       return task.attempt;
