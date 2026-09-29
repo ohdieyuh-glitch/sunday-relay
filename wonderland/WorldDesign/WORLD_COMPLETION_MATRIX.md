@@ -358,6 +358,13 @@ no save):**
   - Every stop gets a floor profile and eight named sweeps, then a placement-resume.
 
   Designed fixes follow the diagnosis: steps like GS01, hedge relocation like the ring gates, or detour paving.
+- **Planner v2 smoke test (13:02, editor 77328 after SECOND's 5b, read-only):** the three landmark misses re-walked
+  SELF-POWERED and ARRIVED: both giant-mushroom landmarks at (-5,427, 8,603) and TC03's neighbour. **Landmarks: 65/66
+  reached on foot.** The 66th (V2 mushroom landmark at (11,292, -28,059)) stands in a raised planter inside the South
+  Cloister: its kerb rim is at +130..+161 over a +15 floor. The Dog reaches the rim 2.4 m from the landmark's centre, so
+  it counts as reached to its base, not stood beside. GA's designed rear leg (integration lane, zzJ01) runs into the V2
+  palace complex (castle halls and towers from x -2,000 to +2,500, y 9,700-14,500), so there is no way along it at all.
+  The rear world (y > 14,500) is being tested round the complex's west and east sides.
 - **8 more frames** (`core_0929`: the three nation bands and frontiers, SR150 from height, gate GD from above).
   - At the bands the nations read distinctly: ICARUS ivory and gold towers with giant-mushroom tables, NOCTIS black
     spires round a dark domed palace, TARTARUS red-brown towers on cream and pink terraces.
@@ -373,7 +380,7 @@ independent QA session (JUJU and the integration lane were reassigned to Julius 
 |---|---|---|---|
 | 1 | entire intended playable world audited | MET | census + emptiness_classes over the 1,480 m disc after every window; world-edge ring at 1,485 m |
 | 2 | every major region has an owner and resolved status | IN PROGRESS | queue Q1-Q13; SECOND 5a-5d, CORE flank / final gates |
-| 3 | major unintended empty regions authored | IN PROGRESS | 45.1 % empty -> 16.2 % after 4b (UNINTENDED 10.2 %); staged 5a-5d project ~10.6 % / 6.3 % |
+| 3 | major unintended empty regions authored | IN PROGRESS | 45.1 % empty (morning) -> 16.2 % (4b) -> 15.0 % (4c) -> 13.8 % (5a) -> **11.6 % after 5b (UNINTENDED 6.6 %, 703 regions; meadow 2.9, traversal 1.4, vista 0.3, rim 0.2, clearing 0.1)**; 5c / 5d / C7 to come |
 | 4 | remaining negative space explicitly intentional | IN PROGRESS | classes: meadow / vista / traversal / clearing / rim; final classification after 5d |
 | 5 | Golden Arrival complete | IN PROGRESS | composition passes present; axis SELF-POWERED 32/32 after GS01; flanks SELF-POWERED 2/2 from the north arches; rear world OPEN (castle hall on the planned leg) |
 | 6 | 24 quarters coherent | MET (founder decision) | classified per site; core preserved, identities outward (TW01-03, MG01) |
@@ -385,7 +392,7 @@ independent QA session (JUJU and the integration lane were reassigned to Julius 
 | 12 | frontiers complete | IN PROGRESS | S2 strips + S3 (5a/5b) + S4 (5c); Dubel edge S5 (5d) + outer wall |
 | 13 | outer wild ring complete | IN PROGRESS | R50 + R50b (4a-4c) applied; Dubel's outer arc wall pending |
 | 14 | missing Bible districts reconciled | MET | Tower Rise / Mushroom Grove RELOCATED WITH INTENT and built; books/scrolls NOT IN KIT; GA08 held (lighting) |
-| 15 | major landmarks exist and are reachable | IN PROGRESS | TW01 gate, MG01 entry, TW03 x8, Dubel landmarks SELF-POWERED; landmark sweep SELF-POWERED 62/66 (2 misses instrument, 2 real stops -> planner v2) |
+| 15 | major landmarks exist and are reachable | IN PROGRESS | TW01 gate, MG01 entry, TW03 x8, Dubel landmarks SELF-POWERED; landmark sweep SELF-POWERED 65/66 after planner v2; the 66th reached to its raised planter's rim (South Cloister) |
 | 16 | traversal works across the intended world | IN PROGRESS | ~6 km of self-powered routes arrived today; whole-world route still to run |
 | 17 | no major cul-de-sac / trapped landmark | IN PROGRESS | GA axis ledge fixed (GS01); S2N246 dead walk removed; GA east flank access open |
 | 18 | distant views composed | IN PROGRESS | outer world reads low from 1.3 km; Dubel outer edge hard; grove massing + outer walls in 5a-5d |
