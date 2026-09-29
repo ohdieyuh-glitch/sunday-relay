@@ -2630,10 +2630,14 @@ describe('the event dumps are ordered by the ledger position, not by the wall cl
 describe('every fact the peer telemetry writes reaches the exported bundle', () => {
   const pipeline = () => read('src/relay/mission/julius/julius-task-pipeline.ts');
 
-  /** The `facts: { … }` object of one `ledger.event(<type>, …)` call, brace-matched. */
+  /**
+   * The `facts: { … }` object of one `ledger.event(<type>, …)` call, brace-matched.
+   * A `ledger.eventOnce(<key>, <type>, …)` call is the same emission, composed once so a
+   * repeated write is the same event (the settlement rows), and is read the same way.
+   */
   const factKeys = (source: string, type: string, nth = 0): readonly string[] => {
-    let from = -1;
-    for (let seen = 0; seen <= nth; seen += 1) from = source.indexOf(`event('${type}'`, from + 1);
+    const emission = new RegExp(`\\bevent(?:Once)?\\((?:\`[^\`]*\`,\\s*)?'${type.replace(/\./gu, '\\.')}'`, 'gu');
+    const from = [...source.matchAll(emission)][nth]?.index ?? -1;
     expect(from, `${type} must be emitted by the pipeline`).toBeGreaterThan(-1);
     const open = source.indexOf('facts: {', from);
     expect(open, `${type} must carry a facts object`).toBeGreaterThan(-1);
