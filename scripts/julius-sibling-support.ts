@@ -17,6 +17,8 @@ export const digestOf=(value:unknown)=>sha(stable(value));
 export const TENANT=process.env.JULIUS_TENANT_ID??'tenant',PROJECT='project',RUN='run',TASK='task',WORKER='worker',LEASE=3,POLICY='card';
 /** The evaluation suite gets its own run and task so completing the lifecycle task cannot strand it. */
 export const EVAL_RUN='run-evals',EVAL_TASK='task-evals',COMPLETION_RUN='run-completion',COMPLETION_TASK='task-completion';
+/** So does the tool-failure path, whose task must stay ACTIVE after its tool fails. */
+export const FAILURE_RUN='run-tool-failure',FAILURE_TASK='task-tool-failure';
 export interface SandboxLimits {readonly cpuCount:number;readonly memoryBytes:number;readonly pids:number;readonly openFiles:number;readonly workspaceBytes:number;readonly outputBytes:number;readonly wallClockMs:number;readonly concurrentProcesses:number;}
 export const LIMITS:SandboxLimits={cpuCount:1,memoryBytes:134_217_728,pids:32,openFiles:128,workspaceBytes:BETA_WORKSPACE_BYTES,outputBytes:32_768,wallClockMs:15_000,concurrentProcesses:4};
 export const FULL_POLICY={readWorkspace:true,mutateWorkspace:true,executeProcess:true,network:'DENY' as const,allowedTools:['shell.bash']};
