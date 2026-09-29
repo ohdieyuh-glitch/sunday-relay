@@ -1,0 +1,38 @@
+{
+ "name": "zzW447_cull_readback",
+ "started": "2026-09-29 15:03:03",
+ "status": "proved",
+ "spots": [
+  {
+   "spot": "heartland_N227",
+   "streaming_complete": true,
+   "tree_batches_of_plan_loaded": 42
+  },
+  {
+   "spot": "frontier_T316",
+   "streaming_complete": true,
+   "tree_batches_of_plan_loaded": 107
+  },
+  {
+   "spot": "ring_WN150",
+   "streaming_complete": true,
+   "tree_batches_of_plan_loaded": 256
+  },
+  {
+   "spot": "ring_WI030",
+   "streaming_complete": true,
+   "tree_batches_of_plan_loaded": 214
+  }
+ ],
+ "batches_read": 619,
+ "passes_seen": 17,
+ "actor_cull_distance": {
+  "60000": 619
+ },
+ "component_end_cull": {
+  "60000": 619
+ },
+ "finished": "2026-09-29 15:03:42",
+ "seconds": 39.3,
+ "log": ""
+}
