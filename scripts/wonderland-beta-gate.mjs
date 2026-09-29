@@ -714,6 +714,43 @@ const CAPABILITIES = [
         : failed(`${unfinished.length} tool invocation(s) did not reach SUCCEEDED (${unfinished.map((row) => row.state).join(', ')})`);
     },
   },
+  {
+    /**
+     * EVERY RESERVATION SETTLED AT MOST ONCE, read from the run itself.
+     *
+     * `cost-accounting.tsv` sums every `budget.settled` row per role, and
+     * deliberately does not deduplicate. A reservation settled twice therefore
+     * counts twice, which is the defect a release after a commit used to cause
+     * (#297). The dump lists every reservation with more than one settled row in
+     * `settlement-integrity.tsv`. Any row there FAILS this capability, and names
+     * the reservation.
+     *
+     * An unreadable file (absent, or the dump's `unavailable`) is UNKNOWN, never
+     * a pass: "no duplicate was found" and "nobody looked" are opposite facts.
+     * A drill cannot stand in for it (`missionRequired`), because the question is
+     * what THIS run's ledger says. The drill ledger's own rows are untouched: this
+     * is a row of its own, and a drill evaluation reads it as UNKNOWN, like every
+     * other mission row.
+     */
+    id: 'SETTLEMENT INTEGRITY', path: false, missionRequired: true,
+    files: ['src/relay/mission/julius/julius-execution-coordinator.ts', 'src/relay/mission/julius/julius-task-pipeline.ts', 'src/relay/mission/julius/julius-cost-accounting.ts'],
+    prove: (ev) => {
+      if (ev.file('settlement-integrity.tsv') === null) {
+        return unknown('this bundle carries no readable settlement-integrity dump (absent, or the dump wrote `unavailable`), so whether any reservation was settled twice is unknown');
+      }
+      const duplicates = ev.rows('settlement-integrity.tsv');
+      if (duplicates.length > 0) {
+        return failed(`${duplicates.length} reservation(s) settled more than once, so cost-accounting.tsv overstates the spend: ${duplicates.map((row) => `${row.reservation_id} (${row.role}) x${row.settled_rows}`).join(', ')}`);
+      }
+      if (ev.file('budget.tsv') === null) {
+        return unknown('no reservation is listed as settled twice, but the budget dump is unreadable, so there is no settlement it was checked against');
+      }
+      const settled = ev.rows('budget.tsv').filter((row) => row.event_type === 'julius.budget.settled');
+      return settled.length === 0
+        ? notExercised('no reservation was settled, so none could be settled twice')
+        : exercised(`${settled.length} settlement(s) across ${new Set(settled.map((row) => row.reservation_id)).size} reservation(s), none settled twice`);
+    },
+  },
 ];
 
 /* ------------------------------------------------------------- evaluation */
