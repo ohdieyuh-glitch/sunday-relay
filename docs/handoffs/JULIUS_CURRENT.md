@@ -58,13 +58,53 @@ recorded further down, which is kept as history:
     `c833e268` with its accept-main checkpoint, and the change is exactly +5/-0 in that one file.
     **Run it with Git Bash:** in PowerShell, `bash` is `C:\Windows\system32\bash.exe`, which is
     WSL, and WSL cannot open a `C:/` path. That was the first attempt's failure.
-- **This follow-up** is 14 commits, re-authored as `julius-worker[bot]` onto the declaration.
-  The content is identical to the reviewed local branch `relay/julius-subscription-local-qualification`
-  (`ced13a80`), plus the launcher commit.
+- **The reviewer billing declaration landed** as `ec375f7012a281f0efe44a3b53523e2f38a427fa`.
+  - Its single parent is `c833e268`, and it is exactly +5/-0 in the workflow file.
+  - Its tree equals the simulation this follow-up was tested on.
+- **This follow-up** (PR #289) is 18 commits, all authored as `julius-worker[bot]`, on the
+  declaration:
+  - the 13 reviewed commits, identical in content to the local branch
+    `relay/julius-subscription-local-qualification` (`ced13a80`);
+  - the launcher mirroring the declaration;
+  - this handoff;
+  - the evidence columns;
+  - the carried confinement commit;
+  - this note.
+
+**Workspace confinement is carried BEFORE the paid run. Founder decision, 2026-09-28: Option 2,
+CONTAIN FIRST.**
+
+- **The gap.** It was found by the read-only Priority 10 readiness audit and proven by the
+  Wonderland integration session.
+  - On `main` since #288, the hosted Coding Agent's envelope is bare `allowedTools`
+    Read/Glob/Grep/Edit under `acceptEdits`, with no hook.
+  - The Agent SDK approves a bare allow rule at ANY path, and `acceptEdits` confines only its own
+    approvals.
+  - So the coder could read or edit all of these:
+    - `/proc/<parent>/environ`, which holds the architect's OpenAI key;
+    - the reviewer's Hermes profile, which holds the xAI key;
+    - the runner's checkout, including the evidence and reviewer scripts that run AFTER it.
+  - A qualification whose coder can edit the steps that judge it cannot produce evidence anyone
+    should trust. So Priority 10 does not run with the gap.
+- **The fix is carried, not re-implemented**, as ONE attributable commit from the local lane
+  `relay/julius-mvp-capabilities`:
+  - `15ef6947`, the kernel: the workspace-path normaliser and the location rules;
+  - `d0926adb`, the `PreToolUse` hook and the runner wiring.
+  - The commit message names both.
+- **What the hook does, on every hosted run:**
+  - it confines every file tool by real path;
+  - it refuses `..`, dangling links, and edits in control, credential and workflow locations;
+  - it refuses `Write`, which also stays in the envelope's disallowed tools.
+- **Left behind:** file creation and its contract grant, out-of-scope enforcement at the tool, the
+  prompt section, and new diagnostics.
+- **What Mission 6 can observe:** only that an edit to `.julius/`, which its contract already
+  forbids, is refused at the tool. It has no links, its provisioner creates none, and its pins are
+  untouched.
 
 **The gates left, in the founder's order.** None may be reordered.
 
-1. Founder approval and squash-merge of this follow-up at its exact head.
+1. Founder approval and squash-merge of this follow-up, INCLUDING the confinement commit, at its
+   exact head.
 2. `julius-accept-main` for the new main.
 3. The zero-dispatch preflight: `node scripts/julius-paid-dispatch.mjs --mission
    julius-live-mission-6 --lane lab`. It must end with the entrypoint's `RESULT: READY` and
