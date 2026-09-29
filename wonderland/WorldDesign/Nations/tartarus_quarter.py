@@ -171,12 +171,16 @@ def main():
     for side in (-1.0, 1.0):
         n = int((QUARTER_U - U0) // run)
         for i in range(n):
-            add_module("WL_Ground_Kerb_Run", U0 + run * (i + 0.5), side * PLATE["len_x"], PAVING_TOP, 90.0,
-                       cull=CULL_NEAR, collide=False)
+            # Kerb run: 800 along local X (so yaw 0/180 lies it ALONG the road; 90 stood it across the verge),
+            # local Y -62..+257 with the kerb stone at -Y. Laid on the paving's edge, stone at the edge, gutter
+            # inward: pivot 62 cm inside the edge, turned 180 on the +v side so the stone faces out on both.
+            add_module("WL_Ground_Kerb_Run", U0 + run * (i + 0.5), side * (PLATE["len_x"] - 62.0), PAVING_TOP,
+                       0.0 if side < 0 else 180.0, cull=CULL_NEAR, collide=False)
         n = int((U1 - QUARTER_U - PLATE["len_y"] * 4) // run)
         for i in range(n):
             add_module("WL_Ground_Kerb_Run", QUARTER_U + PLATE["len_y"] * 4 + run * (i + 0.5),
-                       side * FLOOR_HALF, PAVING_TOP, 90.0, cull=CULL_NEAR, collide=False)
+                       side * (FLOOR_HALF - 62.0), PAVING_TOP, 0.0 if side < 0 else 180.0, cull=CULL_NEAR,
+                       collide=False)
 
     # ---------------------------------------------------------------- 2. the foundry approach
     lamp_step = 1600.0

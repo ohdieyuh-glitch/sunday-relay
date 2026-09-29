@@ -176,7 +176,10 @@ def build(pass_id, cfg):
             if blocked(plans, u, side * (ROAD_HALF + 160.0)):
                 stats["skipped_under_building"] += 1
                 continue
-            add_module("WL_Ground_Kerb_Run", u, side * (ROAD_HALF + 160.0), 0.0, 90.0 * side,
+            # Kerb run: 800 along local X (so yaw 0/180 lies it ALONG the road; 90 stood it across the verge),
+            # local Y -62..+257 with the kerb stone at -Y. Laid on the paving's edge, stone at the edge, gutter
+            # inward: pivot 62 cm inside the edge, turned 180 on the +v side so the stone faces out on both.
+            add_module("WL_Ground_Kerb_Run", u, side * (ROAD_HALF - 62.0), 0.0, 0.0 if side < 0 else 180.0,
                        cull=CULL_MID, collide=False)
 
     # ---------------------------------------------------------------- 3. planted edges beyond the kerb

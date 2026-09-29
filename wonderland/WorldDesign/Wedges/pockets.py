@@ -96,10 +96,14 @@ def build_pocket(occ, pid, P):
 
 
 def main():
-    occ = W.Occupancy()
-    n = W.load_census(occ)
     rows = []
+    n = 0
     for pid, P in POCKETS.items():
+        # EACH POCKET LOADS ITS OWN SECTOR: the census is filtered by the current frame, so the frame is set
+        # first (loading once, before any frame was set, loaded the rear seam's wedge for both pockets)
+        set_frame(P["bearing"], P["half"])
+        occ = W.Occupancy()
+        n += W.load_census(occ)
         p = build_pocket(occ, pid, P)
         spec = p.spec()
         (HERE / P["out"]).write_text(json.dumps(spec, indent=1), encoding="utf-8")

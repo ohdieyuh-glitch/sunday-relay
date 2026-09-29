@@ -226,6 +226,11 @@ def load_census(occ, exclude=()):
     are not world; ground plates are the floor; flowers and grass are not obstacles to anything. `exclude`
     lists (x, y) centres of SM_hedge_mass pieces to leave out -- the world as it will be after a hedge gate."""
     n = 0
+    # THE WEDGE IS THE CURRENT FRAME'S, plus 7 degrees. It was hard-coded to 238..302 -- this seam's 270 +/- 32 --
+    # and the pockets, which borrow these functions at bearings 165 and 15, therefore loaded NOTHING from their
+    # own sectors: every "clear of the census" test they passed was a test against an empty world (found on
+    # 2026-09-28 when Core's outer ring ran through 66 and 76 of their hedges; neither pocket had been applied).
+    half = SEAM_HALF_DEG + 7.0
     with gzip.open(CENSUS, "rt", encoding="utf-8") as f:
         for r in csv.DictReader(f):
             if r["kind"] == "OTHER":
@@ -235,7 +240,7 @@ def load_census(occ, exclude=()):
                 continue
             rad = math.hypot(x, y)
             b = math.degrees(math.atan2(y, x)) % 360.0
-            if not (238.0 <= b <= 302.0 and 44000.0 <= rad <= 125000.0):
+            if not (abs((b - BEARING + 180.0) % 360.0 - 180.0) <= half and 44000.0 <= rad <= 125000.0):
                 continue
             ex, ey, ez = float(r["ex"]), float(r["ey"]), float(r["ez"])
             if max(ex, ey) > 5000.0 and ez < 300.0:
@@ -304,7 +309,10 @@ class Pass:
         self.occ.add(layer, x, y, hw, hd, yaw_local + BEARING, "%s:%s" % (self.id, tag))
 
     def add_module(self, name, u, v, z, yaw_local, scale=1.0, cull=CULL_NEAR, collide=True, record=False,
-                   check=True, margin=150.0, mats=None, layer="solid", layers=("existing", "solid", "way")):
+                   check=True, margin=150.0, mats=None, layer="solid", layers=("existing", "solid", "way"),
+                   part_dv=0.0, part_yaw=None):
+        """part_dv / part_yaw place the MESH off the claimed centre, for a module whose pivot is not the centre
+        of its footprint: the claim (clearance, occupancy, the NEW rows) stays on the footprint's true centre."""
         sz = KIT[name]["size"]
         hw, hd = sz[0] * scale * 0.5, sz[1] * scale * 0.5
         if check and not self._clear(name, u, v, hw, hd, yaw_local, margin, layers):
@@ -315,8 +323,8 @@ class Pass:
                 continue
             mat = mats.get(part["part"], part["material"])
             blocks = collide and part["part"] not in nations.NO_COLLIDE_PARTS
-            self.add("%s_%s" % (name.replace("WL_", ""), part["part"]), part["mesh"], mat, u, v, z, yaw_local,
-                     scale, cull, collides=blocks)
+            self.add("%s_%s" % (name.replace("WL_", ""), part["part"]), part["mesh"], mat, u, v + part_dv, z,
+                     yaw_local if part_yaw is None else part_yaw, scale, cull, collides=blocks)
         if check:
             self.claim(u, v, hw, hd, yaw_local, name, layer)
         if record:
@@ -464,10 +472,15 @@ def build_way(occ, through_wall=False):
         if not opening(u):
             lo, hi = edges(u)
             for (vv, side) in ((lo, -1.0), (hi, 1.0)):
-                # yaw 0: the run's length is its local X, which yaw 0 lays ALONG the way (it was 90, which
-                # stood every kerb run across the verge like a bench -- the same misreading as the plates)
+                # The run's length is its local X, so it lies ALONG the way (at yaw 90 it stood across the verge
+                # like a bench). And it is NOT centred on its pivot across its depth: local Y runs -62..+257,
+                # with the kerb stone at the -Y end (seen in captures/passes/kerb_oblique_from_lawn_w270s). The
+                # claim -- the 319 cm strip just outside the paving edge -- is centred 160 out; the mesh goes
+                # 97 cm further out on the west edge (yaw 0: -Y faces out) and 97 cm on the east edge turned
+                # 180 (so -Y faces out there too): gutter against the paving, kerb stone at the lawn, both sides.
                 p.add_module("WL_Ground_Kerb_Run", u, vv + side * 160.0, PAVING_TOP, 0.0, cull=CULL_NEAR,
-                             collide=False, margin=40.0, layer="paved", layers=("existing", "solid"))
+                             collide=False, margin=40.0, layer="paved", layers=("existing", "solid"),
+                             part_dv=side * 97.0, part_yaw=0.0 if side < 0 else 180.0)
         u += run
     flowers = ("WL_Flower_Rose_Run", "WL_Flower_Lavender_Run", "WL_Flower_Daisy_Run")
     frun = KIT["WL_Flower_Rose_Run"]["size"][0]

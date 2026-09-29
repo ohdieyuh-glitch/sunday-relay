@@ -239,10 +239,13 @@ def build(pass_id, cfg):
     n = int((U1 - band_u0 - PLATE["len_y"] * 4) // run)
     for side in (-1.0, 1.0):
         for i in range(n):
-            # yaw 0: the run's 800 length is its local X, which yaw 0 lays ALONG the band (it was 90: across the
-            # verge). NOTE its local Y is -62..+257, not centred, so at +/-FLOOR_HALF it sits ~1 m off the edge line.
+            # The run's 800 length is its local X, so it lies ALONG the band (at yaw 90 it stood across the
+            # verge). Its local Y runs -62..+257 -- not centred -- with the kerb stone at the -Y end. Laid ON the
+            # paving's edge, stone at the edge and gutter inward (the grass fringe is just outside, at +20..70):
+            # pivot 62 cm inside the edge, turned 180 on the +v side so the stone faces out on both.
             add_module("WL_Ground_Kerb_Run", band_u0 + PLATE["len_y"] * 4 + run * (i + 0.5),
-                       side * FLOOR_HALF, PAVING_TOP, 0.0, cull=CULL_NEAR, collide=False)
+                       side * (FLOOR_HALF - 62.0), PAVING_TOP, 0.0 if side < 0 else 180.0, cull=CULL_NEAR,
+                       collide=False)
     tuft = KIT["WL_Garden_Grass_Tuft"]["parts"][0]
     u = band_u0 + PLATE["len_y"] * 4
     while u < U1:
