@@ -283,6 +283,20 @@ streaming bounds, not always-loaded) plus the R50b forest wall at 1,420-1,478 m.
 wilderness tile) was calibrated to the pre-wild-ring world: with R50 applied every wilderness tile is planted and the
 clearings are sub-tile. Replaced by JUJU's direct clearing test (JQ22) against the clearing specs.
 
+**Ring continuity through the new gates, SELF-POWERED 4/4 (CORE-run, builder-side, 09:33-09:38; zc_trail_walk,
+one placement per start, 229.5 cm/s, 40-49 fps, 0 stuck):** GA RR01 43.5-52 deg 113/117 m; GC RR02 64.5-71.5 deg
+137/139 m; GD RR02 146.5-155.5 deg with the SKY05 bypass stones spliced 189/194 m; TW02 lane RR01 -> TW01 gate ->
+court 278/294 m. (GB was proven by SECOND's zzW113.) JUJU's handed-over jq_ring_arc_1..3 were run and are VOID: their
+actuator probe needs the editor in the OS foreground (the founder was using the machine); every walk verdict was
+withheld by the harness, PIE ended by CORE, nothing judged. Not independent qualification: a separate QA session is a
+founder decision (JUJU and the integration lane were reassigned to Julius at ~09:00).
+**Window 2C (CORE, applied 09:40-09:43, class A).** TW03 Icarus tower approaches, 290 batches / 1,006 inst: 8 tower
+hamlets (courts, kit-stacked ivory towers, attendants, grove clumps, walks joined 8/8) on the unintended pockets of
+100-135 deg. Fresh editor, checkpoint `2026-09-29-pre-window2c`, ONE gated save (commit 35.9 GB, 291 dirty all
+matched), hash +291 / -0 / stub only. Projected: emptiness 21.8 -> 20.9 %, unintended 13.2 -> 12.3 %.
+**Emptiness after window 3 (08:37 census): 21.8 % empty = 13.2 % UNINTENDED + 3.1 % meadow + 2.8 % traversal + 1.7 %
+rim + 1.1 % forest / clearings.**
+
 ## Assignments
 
 | # | to | region | notes |
