@@ -260,11 +260,16 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         // The SAME decision the PostgreSQL sweep takes, taken by the same
         // function, so the two stores cannot drift on which bound stopped a
         // task or on what it is called.
+        // HANDED is read from the same durable fact the PostgreSQL sweep reads: a
+        // `worker.dispatched` event for this task at its current attempt.
+        const handed = eventLog.some((event) => event.type === 'worker.dispatched'
+          && event.runId === task.runId && event.taskId === task.taskId && event.facts.attempt === task.attempt);
         const action = planJuliusRecovery({
           runId: task.runId, projectId: run.projectId, runState: run.state, taskId: task.taskId,
           attempt: task.attempt, maxRetries: RECOVERY_MAX_ATTEMPTS - 1,
           leaseGeneration: task.leaseGeneration,
           recoveries: task.recoveries, maxRecoveries: MAX_TASK_RECOVERIES,
+          handed,
         });
         const requeue = action.action === 'REQUEUE';
         task.state = requeue ? 'RUNNABLE' : action.action === 'CANCEL_TASK' ? 'CANCELLED' : 'FAILED';
