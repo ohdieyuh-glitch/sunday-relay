@@ -159,7 +159,7 @@ MAP WRITE REQUEST / COMPLETE messages. CORE = "Wonderland" session, SECOND = "Ne
 | Q7 | MG01 Mushroom Grove (297° 984 m) + entry | CORE (+ SECOND's entry S2M297) | **APPLIED** (window 1; entry window 2A). **SELF-POWERED: entry 241/250 m** (zzW113) | mushroom identity spreads via SECOND's S4T294 mushroom wood | -- |
 | Q8 | DESIGNED HEDGE GATES in the V2 hedge ring (founder 2026-09-29) | CORE | **ALL APPLIED** (2A: GB, GE; 2B: GA, GC, GD; class A; 12 hedges relocated, 3 trimmed by SINK_UU, guarded + reversible records). **SELF-POWERED through every gate: GA 113/117, GC 137/139, GD 189/194 (bypass), GB (SR030) 564/568, GE (Dubel 58°->122°->WI122) 1,553/1,576 m** | independent re-test | -- |
 | Q9 | R41 / R42 seams 150° / 30°, 500-1,200 m (fills) | SECOND | UNBLOCKED (polylines sent 05:31; keep 20 m off each road's centreline) | seam identity between two nations | Q5 polylines |
-| Q10 | R00 / R01 Golden Arrival + 24 quarters | CORE | **GA AXIS SELF-POWERED END TO END 32/32** after GS01 fixed the floating-flagstone ledge (GA-F01, window 2D). Core district walks 9/12 SELF-POWERED (CL02 ends at its landmark tower; WG02 / RG02 stops are route artifacts). 24 quarters classified (founder: preserve core, identities outward) | GA rear-world + flank-garden legs need an in-play navigator (the zzJ harness cannot drive the Dog from spawn) | -- |
+| Q10 | R00 / R01 Golden Arrival + 24 quarters | CORE | **GA AXIS SELF-POWERED END TO END 32/32** after GS01 fixed the floating-flagstone ledge (GA-F01, window 2D). Core district walks 9/12 SELF-POWERED (CL02 ends at its landmark tower; WG02 / RG02 stops are route artifacts). 24 quarters classified (founder: preserve core, identities outward) | GA rear-world leg (a castle hall on the planned way; planner v2). Flanks SELF-POWERED 2/2 from the north arches (12:10) | -- |
 | Q11 | R02 core rim 400-600 m | SECOND (in sector fill 2) | APPLIED in window 3: S2I073, S2N179, S2T300 (S2N246's walk to be removed in 4c); smaller rim pockets are in S3 (S3N232, S3N260, S3T002, S3I065, S3N152) | -- | 5a/5b |
 | Q12 | P5 Bible reconciliation | CORE | **FIRST CUT DONE**: Bible features by census; Tower Rise / Mushroom Grove RELOCATED WITH INTENT and built; 24 quarters SUPERSEDED WITH DOCUMENTED REASON (founder); books/scrolls NOT IN KIT; GA08 arrival lamps HELD (lighting hold) | founder review of the table | -- |
 | Q13 | Final gates: emptiness, beta walk on real streaming, packaged boot + streaming, independent qualification | CORE | PENDING: after SECOND's windows 4c / 5a / 5b / 5c / S5. Independent QA needs a separate session (founder: JUJU and the integration lane reassigned to Julius) | -- | everything above |
@@ -333,6 +333,37 @@ band -- the ground slab's edge -- with no forest wall (WX stops at Dubel's arc);
 reads as lawn with lone skyline towers (the fills are low: drifts, stones, single trees), so remaining windows favour
 grove massing. Two frames (SR150 road, gate GD) are bad camera poses, to retake -- not world findings.
 
+**CORE read-only proofs, 12:05-12:40 (editor 76780 lent by SECOND between windows; zc_nav_walk, CORE-run; no writes,
+no save):**
+- **GA flank gardens reached from the clock plaza's NORTH arches, SELF-POWERED 2/2:** east 72.6 m, west 72.1 m, 13/13
+  waypoints each. The arches are the designed entrances; the east plaza-edge planters are decorative. GA's REAR WORLD
+  (behind the palace) stays OPEN: the palace-entrance -> rear leg meets a castle hall at (1,693, 9,638).
+- **Landmark reachability, SELF-POWERED 62/66** (V2 mushroom and district landmarks, 745 m walked). The four misses:
+  two placements set the Dog on a giant mushroom's cap 13 m up at (-5,427, 8,603), an instrument fault, not a world
+  finding; one stopped at TC03's Landmark2 stones (164 m); one at V2 kerb stones at (11,530, -28,029) (303 m). All
+  four are re-tested by planner v2.
+- **Avenues AV01-AV03: NOT PROVEN.** The straight centrelines stop at the palaces standing on them: AV01 at the IC02
+  dome (703 m), AV03 at the TQ01 dome (810 m). The census-paved lines stop in three places:
+  - AV01 at 515 m. The route ran through CP02's 15 m stone ring base (the checkpoint's centrepiece), so this is a
+    route artefact.
+  - AV02 at 718-722 m, twice, with no blocker named.
+  - AV03 at 811 m, at SF03's Garden_Retaining_Run.
+
+  SECOND's census also puts V2 hedge masses on the AV01 line at 848 m and on RR02 at 205° (1,236 m).
+  Next is `Tools/editor_jobs/zc_pie_planned_walk2.py`:
+  - A* on play collision. A cell is free when a capsule standing STEP cm up overlaps nothing.
+  - 25 cm midpoint step checks, both directions.
+  - A target inside an obstacle snaps to the nearest free cell.
+  - The planner hovers the Dog so streaming is complete before tracing.
+  - Every stop gets a floor profile and eight named sweeps, then a placement-resume.
+
+  Designed fixes follow the diagnosis: steps like GS01, hedge relocation like the ring gates, or detour paving.
+- **8 more frames** (`core_0929`: the three nation bands and frontiers, SR150 from height, gate GD from above).
+  - At the bands the nations read distinctly: ICARUS ivory and gold towers with giant-mushroom tables, NOCTIS black
+    spires round a dark domed palace, TARTARUS red-brown towers on cream and pink terraces.
+  - At the frontiers they read as woodland with nation accents: Noctis a mixed orchard with bush drifts, Tartarus
+    autumn trees with a pink mushroom cluster, Icarus an orchard with a walled mushroom-capped tower.
+
 ## DEFINITION OF WORLD COMPLETE -- tracking (CORE, 2026-09-29 12:00; founder's 25 conditions)
 
 Status words: MET / MET (builder-run) / IN PROGRESS / OPEN / FOUNDER. "Builder-run" = proven by CORE or SECOND, not an
@@ -344,23 +375,23 @@ independent QA session (JUJU and the integration lane were reassigned to Julius 
 | 2 | every major region has an owner and resolved status | IN PROGRESS | queue Q1-Q13; SECOND 5a-5d, CORE flank / final gates |
 | 3 | major unintended empty regions authored | IN PROGRESS | 45.1 % empty -> 16.2 % after 4b (UNINTENDED 10.2 %); staged 5a-5d project ~10.6 % / 6.3 % |
 | 4 | remaining negative space explicitly intentional | IN PROGRESS | classes: meadow / vista / traversal / clearing / rim; final classification after 5d |
-| 5 | Golden Arrival complete | IN PROGRESS | composition passes present; axis SELF-POWERED 32/32 after GS01; flank-garden access (east) under test |
+| 5 | Golden Arrival complete | IN PROGRESS | composition passes present; axis SELF-POWERED 32/32 after GS01; flanks SELF-POWERED 2/2 from the north arches; rear world OPEN (castle hall on the planned leg) |
 | 6 | 24 quarters coherent | MET (founder decision) | classified per site; core preserved, identities outward (TW01-03, MG01) |
-| 7 | three nations read distinctly | IN PROGRESS | nation palettes on bands / quarters / rings; broad frames per nation still to shoot |
+| 7 | three nations read distinctly | IN PROGRESS | band + frontier frames per nation (12:40): distinct at the bands (ivory/gold, black, red-brown); frontiers read as woodland with accents -- final set after the massing round |
 | 8 | major seams complete | MET (builder-run) | W270 (18/18), SR030 + SR150 seam ways SELF-POWERED, R41/R42 seam ground filled by S2/S3 |
-| 9 | radial roads connect correctly | IN PROGRESS | AV01-03 built; SR150 / SR030 SELF-POWERED; avenue end-to-end self-walk still to run |
+| 9 | radial roads connect correctly | IN PROGRESS | SR150 / SR030 SELF-POWERED; AV01-03 NOT PROVEN: self-walks stop at 515 m (route artefact), 703, 718-722, 810-811 m -- planner v2 diagnosis, then designed fixes |
 | 10 | ring circuits connect or gates intentional | MET (builder-run) | hedge gates GA/GB/GC/GD/GE SELF-POWERED; SKY05 tower breaks documented (RR01 ~28 deg, RR02 20-32 / 140-148 deg) |
 | 11 | heartlands complete | MET (builder-run) | 5 heartlands applied, SELF-POWERED 5/5, rooms 48/48 |
 | 12 | frontiers complete | IN PROGRESS | S2 strips + S3 (5a/5b) + S4 (5c); Dubel edge S5 (5d) + outer wall |
 | 13 | outer wild ring complete | IN PROGRESS | R50 + R50b (4a-4c) applied; Dubel's outer arc wall pending |
 | 14 | missing Bible districts reconciled | MET | Tower Rise / Mushroom Grove RELOCATED WITH INTENT and built; books/scrolls NOT IN KIT; GA08 held (lighting) |
-| 15 | major landmarks exist and are reachable | IN PROGRESS | TW01 gate, MG01 entry, TW03 x8, Dubel landmarks SELF-POWERED; district landmarks CL02 reached; remaining landmark sweep |
+| 15 | major landmarks exist and are reachable | IN PROGRESS | TW01 gate, MG01 entry, TW03 x8, Dubel landmarks SELF-POWERED; landmark sweep SELF-POWERED 62/66 (2 misses instrument, 2 real stops -> planner v2) |
 | 16 | traversal works across the intended world | IN PROGRESS | ~6 km of self-powered routes arrived today; whole-world route still to run |
 | 17 | no major cul-de-sac / trapped landmark | IN PROGRESS | GA axis ledge fixed (GS01); S2N246 dead walk removed; GA east flank access open |
 | 18 | distant views composed | IN PROGRESS | outer world reads low from 1.3 km; Dubel outer edge hard; grove massing + outer walls in 5a-5d |
 | 19 | World Partition streams correctly | MET (builder-run) | every window's residency 100 % in play; streaming complete at every stand; 200 m tiles |
 | 20 | Golden Arrival in the packaged build | MET earlier (S03 09-29 00:11) | re-run on the final world |
-| 21 | broad founder-facing visual evidence across regions | IN PROGRESS | 16 CORE frames (core_0929) + SECOND's before/after sets; nations / final set to shoot |
+| 21 | broad founder-facing visual evidence across regions | IN PROGRESS | 24 CORE frames (core_0929: 16 + nation bands/frontiers, SR150, GD) + SECOND's before/after sets; final set after the last window |
 | 22 | final emptiness audit | OPEN | after the last window |
 | 23 | final beta walk against real streaming | OPEN | after the last window |
 | 24 | final packaged build boots and streams the completed world | OPEN | BuildCookRun + boot_test_package after freeze |
