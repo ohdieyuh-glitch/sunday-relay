@@ -50,10 +50,12 @@
  * attestation the moment the code it describes changes — which is the whole
  * point: a capability proof that cannot expire becomes folklore.
  *
- *   DATABASE_URL=… node dist-relay-bridge/julius-recovery-drill.cjs [--out <dir>]
+ *   DATABASE_URL=…/julius_recovery_drill node dist-relay-bridge/julius-recovery-drill.cjs [--out <dir>]
  *
- * Exit 0 when every step passes, 8 when any does not, 2 when it was not given
- * a database to drive.
+ * Exit 0 when every step passes, 8 when any does not (a database holding any
+ * run but its own included), 2 when it was not given a THROWAWAY database —
+ * one named as a drill's (`julius_<drill>_drill`, `juliusdrill…`) or the one
+ * `JULIUS_TEST_DATABASE_URL` names; `…/julius` is refused before connecting.
  */
 
 import { execFile } from 'node:child_process';
@@ -69,7 +71,7 @@ import { createJuliusPostgresRuntimeStore } from '../relay-bridge/julius/postgre
 import { createPostgresMissionSeedStore } from '../relay-bridge/julius/mission-seed';
 import { assembleLiveJuliusRuntime, driveJuliusRunToTerminal } from '../relay-bridge/julius/live-composition';
 import { scriptedAdapter, seededTaskContract, worker } from '../src/relay/mission/julius';
-import { DrillRecord, auditProviders, scalarReader, writeAttestation } from './julius-drill-support';
+import { DrillRecord, auditProviders, drillDatabaseTarget, foreignJuliusRuns, scalarReader, writeDrillAttestation } from './julius-drill-support';
 import type { JuliusProviderAdapter, JuliusTask } from '../src/relay/mission/julius';
 
 
@@ -255,8 +257,16 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
    * would still be FAILED — the crash steps cannot pass twice — but a drill
    * that can report a step it did not exercise is a drill whose transcript is
    * not testimony. So the first thing it does is refuse a database that
-   * already holds its run.
+   * already holds its run — and, before that, one holding anybody else's:
+   * whatever its name, a database with foreign runs is somebody's store.
    */
+  const foreign = await foreignJuliusRuns(scalar, [RUN_ID]);
+  if (foreign > 0) {
+    step('the drill was given a throwaway database, holding no Julius run but its own', false,
+      `${foreign} run(s) here are not ${RUN_ID}; a drill writes only where nothing else lives`);
+    fileAttestation(outDir, repoRoot, record, record.seal(DRILL_NAME));
+    return 8;
+  }
   const priorRun = await scalar(`SELECT count(*) FROM relay_wonderland.julius_runs WHERE run_id=$1`, [RUN_ID])
     .catch(() => '0');
   if (priorRun !== '0' && priorRun !== null) {
@@ -327,7 +337,7 @@ export const DRILL_COMMAND = 'npm run julius:recovery-drill';
 export const INFRASTRUCTURE = 'real-postgres,two-processes,real-lease-expiry,no-provider-call';
 
 const fileAttestation = (outDir: string, repoRoot: string, record: DrillRecord, verified: boolean): void =>
-  writeAttestation({
+  writeDrillAttestation({
     outDir, repoRoot, record, verified,
     capability: CAPABILITY, drill: DRILL_COMMAND, exercised: EXERCISED,
     infrastructure: INFRASTRUCTURE, transcriptFile: TRANSCRIPT_FILE,
@@ -343,9 +353,14 @@ export async function runRecoveryDrill(input: {
   readonly argv: readonly string[];
   readonly repoRoot: string;
   readonly databaseUrl: string | undefined;
+  /** The repository's declared throwaway, which a drill may also be pointed at. */
+  readonly testDatabaseUrl?: string | undefined;
 }): Promise<number> {
-  if (input.databaseUrl === undefined || input.databaseUrl.trim() === '') {
-    process.stderr.write('julius_recovery_drill_requires_database_url: set DATABASE_URL to a PostgreSQL this drill may destroy\n');
+  // REFUSED BEFORE ANY CONNECTION: a drill writes fake-provider missions, and
+  // only a database that is a throwaway by name may receive them.
+  const target = drillDatabaseTarget({ databaseUrl: input.databaseUrl, testDatabaseUrl: input.testDatabaseUrl });
+  if (!target.ok) {
+    process.stderr.write(`julius_recovery_drill_refused_database: ${target.code}: ${target.reason}\n`);
     return 2;
   }
   const mode = input.argv[0] === 'crash' || input.argv[0] === 'resume' ? input.argv[0] : 'orchestrate';
@@ -353,7 +368,7 @@ export async function runRecoveryDrill(input: {
   const outDir = outIndex >= 0 && input.argv[outIndex + 1] !== undefined
     ? resolve(input.argv[outIndex + 1]!)
     : join(input.repoRoot, 'julius-capability-proofs');
-  const pool = new Pool({ connectionString: input.databaseUrl });
+  const pool = new Pool({ connectionString: target.url });
   try {
     if (mode === 'crash') { await crash(pool); return 0; }
     if (mode === 'resume') { await resume(pool); return 0; }
