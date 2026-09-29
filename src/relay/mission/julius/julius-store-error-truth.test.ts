@@ -168,7 +168,9 @@ describe('P2: a paid answer is recorded by retrying the bookkeeping, never the d
   it('a result the store will not take after three attempts: FAILED as PERSISTENCE_FAILURE, NOT retried, and charged what the answer cost', async () => {
     const h = harness({ ports: { acceptResult: failing([lost(), lost(), lost()]) as never } });
     const outcome = await h.coordinator.execute(request);
-    expect(outcome).toMatchObject({ status: 'FAILED', code: 'PERSISTENCE_FAILURE', failureClass: 'persist_after_answer', diagnostics: { diag_storeErrorClass: 'connection' } });
+    // A paid answer came back, so the record must say the runtime started: the ending
+    // event is what a reader of the bundle has, and "nothing ran" there would be false.
+    expect(outcome).toMatchObject({ status: 'FAILED', code: 'PERSISTENCE_FAILURE', failureClass: 'persist_after_answer', diagnostics: { diag_storeErrorClass: 'connection', diag_runtimeStarted: true } });
     expect(h.log.dispatches, 'a task retry would have paid for the same answer twice').toBe(1);
     expect(h.log.releases).toEqual([{ usdMicros: 4_250_000, spendUnknown: false }]);
     expect(h.log.events).toContain('task.failed');
