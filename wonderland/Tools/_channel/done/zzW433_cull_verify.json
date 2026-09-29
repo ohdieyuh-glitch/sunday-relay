@@ -1,0 +1,189 @@
+{
+ "name": "zzW433_cull_verify",
+ "started": "2026-09-29 14:09:14",
+ "status": "measured",
+ "throttle_suspended": true,
+ "raised_to_cm": 60000.0,
+ "cvars": {
+  "t.MaxFPS": 0.0,
+  "r.VSync": 0.0,
+  "r.ScreenPercentage": 0.0
+ },
+ "viewport": [
+  1928,
+  952
+ ],
+ "views": [
+  {
+   "view": "frontier_T316_outward",
+   "streaming_complete": true,
+   "camera": {
+    "yaw": -44.3,
+    "pitch": -19.0,
+    "at": [
+     75135,
+     -73134,
+     262
+    ]
+   },
+   "components": 116,
+   "read_before": [
+    [
+     20800,
+     26000
+    ],
+    [
+     20800,
+     26000
+    ],
+    [
+     20800,
+     26000
+    ]
+   ],
+   "read_base": [
+    [
+     20800,
+     26000
+    ],
+    [
+     20800,
+     26000
+    ],
+    [
+     20800,
+     26000
+    ]
+   ],
+   "read_raised": [
+    [
+     48000,
+     60000
+    ],
+    [
+     48000,
+     60000
+    ],
+    [
+     48000,
+     60000
+    ]
+   ],
+   "read_restored": [
+    [
+     20800,
+     26000
+    ],
+    [
+     20800,
+     26000
+    ],
+    [
+     20800,
+     26000
+    ]
+   ],
+   "shots": {
+    "base": {
+     "path": "C:/dev/iwonder/wonderland-task3/wonderland/Tools/captures/zc/cull_ab/frontier_T316_outward__base.png",
+     "ok": true
+    },
+    "raised": {
+     "path": "C:/dev/iwonder/wonderland-task3/wonderland/Tools/captures/zc/cull_ab/frontier_T316_outward__raised.png",
+     "ok": true
+    },
+    "restored": {
+     "path": "C:/dev/iwonder/wonderland-task3/wonderland/Tools/captures/zc/cull_ab/frontier_T316_outward__restored.png",
+     "ok": true
+    }
+   }
+  },
+  {
+   "view": "heartland_N227_to_ring",
+   "streaming_complete": true,
+   "camera": {
+    "yaw": -132.6,
+    "pitch": -15.5,
+    "at": [
+     -60471,
+     -65861,
+     240
+    ]
+   },
+   "components": 56,
+   "read_before": [
+    [
+     20800,
+     26000
+    ],
+    [
+     20800,
+     26000
+    ],
+    [
+     20800,
+     26000
+    ]
+   ],
+   "read_base": [
+    [
+     20800,
+     26000
+    ],
+    [
+     20800,
+     26000
+    ],
+    [
+     20800,
+     26000
+    ]
+   ],
+   "read_raised": [
+    [
+     48000,
+     60000
+    ],
+    [
+     48000,
+     60000
+    ],
+    [
+     48000,
+     60000
+    ]
+   ],
+   "read_restored": [
+    [
+     20800,
+     26000
+    ],
+    [
+     20800,
+     26000
+    ],
+    [
+     20800,
+     26000
+    ]
+   ],
+   "shots": {
+    "base": {
+     "path": "C:/dev/iwonder/wonderland-task3/wonderland/Tools/captures/zc/cull_ab/heartland_N227_to_ring__base.png",
+     "ok": true
+    },
+    "raised": {
+     "path": "C:/dev/iwonder/wonderland-task3/wonderland/Tools/captures/zc/cull_ab/heartland_N227_to_ring__raised.png",
+     "ok": true
+    },
+    "restored": {
+     "path": "C:/dev/iwonder/wonderland-task3/wonderland/Tools/captures/zc/cull_ab/heartland_N227_to_ring__restored.png",
+     "ok": true
+    }
+   }
+  }
+ ],
+ "finished": "2026-09-29 14:10:22",
+ "seconds": 68.44,
+ "log": ""
+}

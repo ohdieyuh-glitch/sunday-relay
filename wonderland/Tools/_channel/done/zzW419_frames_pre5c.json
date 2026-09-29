@@ -1,0 +1,20 @@
+{
+ "name": "zzW419_frames_pre5c",
+ "started": "2026-09-29 13:51:28",
+ "status": "done",
+ "shots": [
+  {
+   "camera": "ground_hn238_outward",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\ground_hn238_outward__pre5c.png",
+   "ok": true
+  },
+  {
+   "camera": "ground_ht308_outward",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\ground_ht308_outward__pre5c.png",
+   "ok": true
+  }
+ ],
+ "finished": "2026-09-29 13:51:36",
+ "seconds": 8.21,
+ "log": ""
+}

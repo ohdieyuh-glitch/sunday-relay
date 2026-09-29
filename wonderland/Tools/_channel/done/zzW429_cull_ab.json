@@ -1,0 +1,59 @@
+{
+ "name": "zzW429_cull_ab",
+ "started": "2026-09-29 14:03:06",
+ "status": "error",
+ "throttle_suspended": true,
+ "raised_to_cm": 60000.0,
+ "cvars": {
+  "t.MaxFPS": 0.0,
+  "r.VSync": 0.0,
+  "r.ScreenPercentage": 0.0
+ },
+ "viewport": [
+  1928,
+  952
+ ],
+ "rover": "MushroomGroveCam14",
+ "views": [
+  {
+   "view": "frontier_T316_outward",
+   "streaming_complete": true,
+   "tree_batches_at_260m_loaded": 116,
+   "instances_raised": 1713,
+   "warm": {
+    "median_ms": 29.47,
+    "p95_ms": 32.3,
+    "mean_fps": 33.9,
+    "p5_fps": 31.0,
+    "samples": 136
+   },
+   "baseline": {
+    "median_ms": 29.75,
+    "p95_ms": 34.3,
+    "mean_fps": 33.1,
+    "p5_fps": 29.2,
+    "samples": 331
+   },
+   "raised": {
+    "median_ms": 26.37,
+    "p95_ms": 32.06,
+    "mean_fps": 35.4,
+    "p5_fps": 31.2,
+    "samples": 355
+   },
+   "baseline_again": {
+    "median_ms": 24.6,
+    "p95_ms": 28.41,
+    "mean_fps": 40.0,
+    "p5_fps": 35.2,
+    "samples": 400
+   },
+   "mean_fps_change_pct": 6.9,
+   "noise_pct": 20.8
+  }
+ ],
+ "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n                                                                  ^^^^^^^^^^^^^^^^\n  File \"C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\_channel\\inbox\\zzW429_cull_ab.py\", line 39, in job\n  File \"C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\_channel\\inbox\\zzW429_cull_ab.py\", line 109, in _run\nException: CameraActor: Internal Error - ObjectInstance is null!\n",
+ "finished": "2026-09-29 14:04:14",
+ "seconds": 67.5,
+ "log": ""
+}
