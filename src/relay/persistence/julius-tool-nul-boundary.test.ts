@@ -13,6 +13,7 @@ import type { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
 import type { ToolInvocationResult } from '../mission/julius';
 import { JuliusPostgresRepository } from './julius-postgres';
+import { JULIUS_SERIALIZABLE_ATTEMPTS } from './julius-serializable';
 import { JULIUS_ENCODED_TEXT_MARKER, decodePgJson, decodePgText, encodePgText } from './julius-storage-encoding';
 import { JuliusToolPostgresRepository } from './julius-tool-postgres';
 import { JuliusToolRecoveryPostgresRepository } from './julius-tool-recovery-postgres';
@@ -163,10 +164,10 @@ describe('a settlement that loses a serialization race is replayed, a bounded nu
     expect(client.commands.filter((sql) => sql === 'COMMIT')).toHaveLength(1);
   });
 
-  it('three in a row surface as the database said, after exactly three attempts', async () => {
-    const client = racing(['40001', '40P01', '40001']);
-    await expect(new JuliusToolSettlementPostgresRepository(poolOf(client)).settle(command)).rejects.toMatchObject({ code: '40001' });
-    expect(begins(client)).toBe(3);
+  it('the shared policy\'s limit in a row surfaces as the database said, after exactly that many attempts', async () => {
+    const client = racing(Array.from({ length: JULIUS_SERIALIZABLE_ATTEMPTS }, (_, index) => (index % 2 === 0 ? '40001' : '40P01')));
+    await expect(new JuliusToolSettlementPostgresRepository(poolOf(client)).settle(command)).rejects.toMatchObject({ code: JULIUS_SERIALIZABLE_ATTEMPTS % 2 === 1 ? '40001' : '40P01' });
+    expect(begins(client)).toBe(JULIUS_SERIALIZABLE_ATTEMPTS);
     expect(client.commands).not.toContain('COMMIT');
   });
 
