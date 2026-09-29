@@ -782,6 +782,26 @@ export class JuliusRunLoop {
       return { runId, from: run.state, to: run.state, changed: false, reasonCode: 'RUN_TERMINAL', resumedVerifications: 0 };
     }
 
+    /**
+     * A PAUSED RUN IS HELD BY SOMEBODY, AND ADVANCING IT IS NOT THIS LOOP'S CALL.
+     *
+     * The claim query already refuses a PAUSED run, which is why a pause looked
+     * honoured. It was not: the live driver calls `advanceRun` exactly when a
+     * tick claimed nothing, the target computed from the tasks is READY
+     * (`TASKS_RUNNABLE`), and `PAUSED -> READY` is a legal transition — so the
+     * very next idle tick UN-PAUSED the run under the reason `TASKS_RUNNABLE`
+     * and the tick after it dispatched. A pause held for one tick. Found by the
+     * operator lifecycle channel's route proof, driving the live driver.
+     *
+     * AND BEFORE THE VERIFICATION SWEEP, because a resumed verification
+     * dispatches the reviewer, and pause means "start nothing further". Only
+     * `resumeJuliusRun` — somebody's decision, recorded — takes a run out of
+     * PAUSED; cancel still reaches it because cancel does not go through here.
+     */
+    if (run.state === 'PAUSED') {
+      return { runId, from: run.state, to: run.state, changed: false, reasonCode: 'RUN_PAUSED', resumedVerifications: 0 };
+    }
+
     const resumed = await this.#resumeVerifications(run, tasks, decisions, projectId);
     if (resumed > 0) {
       [tasks, decisions] = await Promise.all([
