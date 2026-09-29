@@ -2392,6 +2392,431 @@ def bee():
     return figure
 
 
+# ============================================================================ THE 2026-09-29 ROSTER
+#
+# FOUNDER, 2026-09-29, SKIN ROSTER UPDATE: "REMOVE / REPLACE: 1. Arden Infernal 2. Apollo. REPLACE THEM WITH:
+# 1. JACK FLAME RELAY DOG 2. BAAL RELAY DOG ... These are replacements, NOT additional roster slots." The premium
+# roster is now Relay OG, Celestial Light, Skeleton Flame, Jack Flame and Baal. The two sheets are the visual
+# authority and are kept beside the others: RelaySkins/_reference/JackFlame_reference_2026-09-29.png and
+# RelaySkins/_reference/Baal_reference_2026-09-29.jpg.
+#
+# THE CANONICAL RULE, restated with the order: "Every skin must preserve the canonical Relay Dog body type. The skin
+# is a costume/material/accessory transformation wrapped around the Relay Dog -- do NOT replace the underlying
+# character silhouette with a humanoid or a different creature." So both builders call base_dog() first, exactly as
+# every other skin does, and everything below is dress laid over that body: no limb is lengthened, no head is
+# replaced, and the visor with its two status panes stays where the canonical Dog carries it.
+#
+# ARDEN INFERNAL AND APOLLO ARE UNREGISTERED, NOT DELETED -- the Bee/Hagoromo precedent. Their builders stay and the
+# forge still writes their figures, so nothing reusable is destroyed; the runtime registry no longer offers them and
+# migrates anyone wearing them (arden_infernal* -> jack_flame, apollo* -> baal; WonderlandRelaySkins.cpp).
+
+#: JACK FLAME'S EYES: the sheet's amber panes in the black visor.
+JACK_EYES = (1.00, 0.66, 0.10)
+#: BAAL'S EYES AND FIRE: the one blue the sheet lights it with -- eyes, flames, feet.
+BAAL_SOUL = (0.30, 0.66, 1.00)
+
+
+def simple_tail(figure, material, tile, flame_mats=None):
+    """THE SIMPLE SINGLE-LINE RELAY DOG TAIL: one block thick, straight out behind the hip, then up once.
+
+    Jack Flame's sheet draws it in its SINGLE LINE TAIL inset -- a white L of cubes with a flame at its end -- and the
+    Baal order asks for "the simple canonical Relay Dog tail rather than a large decorative tail". One function, so
+    the two skins carry the same tail and neither grows an ornament.
+    """
+    d = DOG
+    td, tw, th = d["torso"]
+    hip = d["torso_z"] - th * 0.5
+    root = (-td * 0.5 - 0.3, 0.0, hip + 1.2)
+    figure.part("tail", "body", root, "tail", 4.0, 6.0)
+    pts = [(root[0] - 0.95 * (k + 1), 0.0, root[2]) for k in range(4)]
+    corner = pts[-1]
+    pts += [(corner[0] - 0.35, 0.0, corner[2] + 0.95 * (k + 1)) for k in range(4)]
+    for k, p in enumerate(pts):
+        s = tile * (0.95 if k < 6 else 0.82)
+        figure.box("tail", material, p, (s, s, s))
+    tip = (pts[-1][0], 0.0, pts[-1][2] + 0.55)
+    if flame_mats:
+        figure.part("tailfire", "tail", tip, "twinkle", 0.45)
+        figure.flame("tailfire", lambda up: flame_mats[0] if up < 0.5 else flame_mats[1], tip, 4.8, 2.2, 4, tile * 0.9)
+    return tip
+
+
+def pinstripe_block(figure, part, centre, size, tile, faces=("+x", "-x", "+y", "-y"), pitch=0.85, cloth="suit", stripe="stripe"):
+    """A BLOCK OF BLACK PINSTRIPE CLOTH: a suit slab with thin white lines running down the faces named.
+
+    The sheet's CLASSIC JACK OUTFIT is the pinstripe as much as the black: every sleeve, lapel panel and trouser leg
+    carries fine white verticals. A line one tenth of a block proud of the cloth reads as a stripe from the 3/4 view
+    without thickening the silhouette."""
+    cx, cy, cz = centre
+    sx, sy, sz = size
+    figure.slab(part, cloth, centre, size, tile=tile)
+    for face in faces:
+        axis, sign = face[1], (1.0 if face[0] == "+" else -1.0)
+        span = sy if axis == "x" else sx
+        n = max(1, int(span / pitch))
+        for i in range(n):
+            t = (i + 0.5) / n - 0.5
+            if axis == "x":
+                p = (cx + sign * (sx * 0.5 + 0.04), cy + t * span, cz)
+                figure.box(part, stripe, p, (0.10, 0.16, sz * 0.98))
+            else:
+                p = (cx + t * span, cy + sign * (sy * 0.5 + 0.04), cz)
+                figure.box(part, stripe, p, (0.16, 0.10, sz * 0.98))
+
+
+def jack_flame():
+    """JACK FLAME RELAY DOG -- "SAME SOUL. NEW FLAME." Written from the founder's sheet (2026-09-29).
+
+    The sheet's inventory, in the order it is built:
+      FLAMING HEAD       orange infernal fire rising off the crown and the ears. The FACE stays clear, so the visor
+                         and its two amber panes read exactly as the Relay Dog's own -- with the stitched grin under
+                         them that the FLAMING HEAD inset shows.
+      NIGHTMARE COLLAR   a wide fan of black spikes at the neck, edged white, with a burning heart at its centre.
+      CLASSIC JACK OUTFIT  a black pinstripe suit: jacket open in a white V, sleeves, trousers.
+      FLAME PAWS         both hands in orange fire.
+      FLAME FEET         both feet in orange fire (every view of the sheet stands the Dog in fire).
+      SINGLE LINE TAIL   the simple white tail, with a flame at its end.
+    """
+    figure = start("RELAY DOG SKIN -- JACK FLAME", 7301, JACK_EYES, 7.5)
+    figure.material("suit", "lit", (0.034, 0.032, 0.040), 1.0)
+    figure.material("stripe", "lit", (0.780, 0.760, 0.720), 1.0)
+    figure.material("flame", "glow", (1.00, 0.36, 0.04), 0.65)
+    figure.material("flamepale", "glow", (1.00, 0.74, 0.20), 1.05)
+    figure.material("heart", "glow", (1.00, 0.20, 0.05), 1.3)
+    base_dog(figure)
+    d = DOG
+    tile = d["tile"]
+    td, tw, th = d["torso"]
+    hd, hw, hh = d["head"]
+    ad, aw, ah = d["arm"]
+    ld, lw, lh = d["leg"]
+    ed, ew, eh = d["ear"]
+    head_top = d["head_z"] + hh * 0.5
+    torso_top = d["torso_z"] + th * 0.5
+    hip = d["torso_z"] - th * 0.5
+    fire = lambda up: "flame" if up < 0.52 else "flamepale"      # noqa: E731
+
+    # ================================================================== FLAMING HEAD
+    # Rows of tongues across the crown, tallest at the back and the middle, the front row short so the face and the
+    # visor are never behind fire ("Preserve the Relay Dog visor/eye identity underneath the costume treatment").
+    figure.part("headfire", "head", (0.0, 0.0, head_top), "twinkle", 0.16)
+    # THE EARS STAY READABLE INSIDE THE FIRE. Round 1 ran a row of tongues straight through the ear posts (x 0) and
+    # the ears vanished into a band of orange; the sheet shows them standing white inside the blaze. So the tall
+    # rows burn BEHIND the ears, one low row burns in front of them, and the tongues are fatter so they read as fire
+    # rather than as a comb.
+    for x, tall, width, tongues in ((-3.4, 8.8, hw * 0.94, 6), (-1.9, 7.4, hw * 0.98, 6), (2.5, 3.0, hw * 0.62, 4)):
+        figure.flame("headfire", fire, (x, 0.0, head_top - 0.2), tall, width, tongues, tile * 1.35)
+    for side in (-1.0, 1.0):
+        y = side * (hw * 0.5 - ew * 0.9)
+        # the ears burn too: a tongue off each ear post, so they stay readable as ears inside the fire
+        figure.flame("headfire", fire, (0.0, y, head_top + eh * 0.9), 3.6, 1.6, 3, tile * 0.9)
+        # and the fire runs down the back corners of the head, as on the side and rear views
+        figure.flame("headfire", fire, (-hd * 0.45, side * (hw * 0.5 - 0.3), d["head_z"] + 0.6), 4.6, 1.4, 2, tile * 0.95)
+    # THE STITCHED GRIN, under the visor: a black seam across the lower face, its ends turned up, crossed by stitches.
+    visor_z = d["head_z"] - hh * 0.07
+    grin_z = d["head_z"] - hh * 0.34
+    for k in range(13):
+        y = -2.9 + k * (5.8 / 12.0)
+        figure.box("head", "visor", (hd * 0.5 + 0.08, y, grin_z + 0.30 * (y / 2.9) ** 2), (0.16, 0.52, 0.26))
+    for k in range(7):
+        y = -2.4 + k * 0.8
+        figure.box("head", "visor", (hd * 0.5 + 0.10, y, grin_z + 0.30 * (y / 2.9) ** 2), (0.16, 0.18, 0.95))
+
+    # ================================================================== NIGHTMARE COLLAR
+    collar_z = torso_top - 0.2
+    figure.part("collar", "body", (0.4, 0.0, collar_z), "none")
+    # BROAD BLADES, NOT WHISKERS. Round 1 drew each spike 0.66 across and about one block tall, and from the front the
+    # collar read as a spray of thin lines. The sheet's NIGHTMARE COLLAR is a fan of wide black bat-wing blades that
+    # overlap at the throat into one dark mass, each edged in white. So each blade is now tall at its root, tapering
+    # to a point, overlapping its neighbours, and fans both up past the jaw and down over the shoulders.
+    for side in (-1.0, 1.0):
+        for i, (deg, length) in enumerate(((-38.0, 5.6), (-22.0, 7.0), (-8.0, 8.2), (6.0, 8.8), (19.0, 8.4), (32.0, 7.2), (45.0, 5.8))):
+            a = math.radians(deg)
+            steps = max(5, int(round(length / 0.55)))
+            for s in range(steps):
+                f = (s + 0.5) / steps
+                r = 1.0 + f * length
+                tall = 1.70 * (1.0 - f) ** 0.8 + 0.30
+                p = (0.9 - 0.6 * f - (i % 2) * 0.4, side * r * math.cos(a), collar_z + r * math.sin(a))
+                figure.box("collar", "suit", p, (0.9, 0.62, tall))
+                # the white edge along the top of each blade: the sheet's collar is black lined in white
+                if s % 2 == 0 and f < 0.92:
+                    figure.box("collar", "stripe", (p[0] + 0.12, p[1], p[2] + tall * 0.5), (0.7, 0.58, 0.12))
+    # THE BURNING HEART AT THE COLLAR'S CENTRE, where the blades meet -- set on a black bow-knot so it reads as the
+    # collar's jewel and not as something hanging from the chin (round 1), and BELOW the head's underside (z 15.7):
+    # the head overhangs to x 4.1 and would otherwise swallow it.
+    heart = (td * 0.5 + 1.15, 0.0, torso_top - 1.9)
+    figure.box("collar", "suit", (heart[0] - 0.45, 0.0, heart[2] + 0.2), (0.9, 3.4, 2.8))
+    for dy in (-1.0, 1.0):
+        figure.box("collar", "suit", (heart[0] - 0.35, dy * 1.9, heart[2] + 0.25), (0.8, 1.2, 2.2))
+    # a heart in five blocks: two lobes, a broad middle, and the point
+    for (dy, dz, sy, sz) in ((-0.52, 0.55, 0.95, 0.85), (0.52, 0.55, 0.95, 0.85), (0.0, 0.05, 1.9, 0.95), (0.0, -0.62, 1.15, 0.6), (0.0, -1.05, 0.5, 0.45)):
+        figure.box("collar", "heart", (heart[0] + 0.1, dy, heart[2] + dz), (0.5, sy, sz))
+
+    # ================================================================== CLASSIC JACK OUTFIT
+    jz = d["torso_z"] - 0.2
+    jh = th + 0.8
+    pinstripe_block(figure, "body", (-td * 0.5 - 0.30, 0.0, jz), (0.6, tw + 1.2, jh), tile, faces=("-x",))
+    for side in (-1.0, 1.0):
+        pinstripe_block(figure, "body", (0.0, side * (tw * 0.5 + 0.30), jz), (td + 1.2, 0.6, jh), tile, faces=("+y" if side > 0 else "-y",))
+    # THE FRONT, OPEN IN A V: the white V is the Dog's own bone torso showing through -- the shirt of the sheet.
+    rows = int(round(jh))
+    v_top, v_bottom = jz + jh * 0.5, d["torso_z"] - 1.2
+    for r in range(rows):
+        z = jz - jh * 0.5 + r + 0.5
+        vh = 1.45 * max(0.0, (z - v_bottom) / (v_top - v_bottom))
+        for side in (-1.0, 1.0):
+            inner, outer = vh, tw * 0.5 + 0.6
+            if outer - inner < 0.2:
+                continue
+            yc = side * (inner + outer) * 0.5
+            figure.box("body", "suit", (td * 0.5 + 0.30, yc, z), (0.6, outer - inner, 1.02))
+            if vh > 0.05:
+                # the lapel: a fold proud of the jacket along the V, edged white
+                figure.box("body", "suit", (td * 0.5 + 0.66, side * (inner + 0.28), z), (0.22, 0.56, 1.02))
+                figure.box("body", "stripe", (td * 0.5 + 0.80, side * (inner + 0.04), z), (0.10, 0.12, 1.02))
+            y = side * (inner + 0.75)
+            while abs(y) < outer - 0.2:
+                figure.box("body", "stripe", (td * 0.5 + 0.64, y, z), (0.10, 0.16, 1.0))
+                y += side * 0.85
+    # two buttons at the bottom of the V
+    for k in range(2):
+        figure.box("body", "stripe", (td * 0.5 + 0.66, 0.0, v_bottom - 0.9 - k * 1.3), (0.2, 0.42, 0.42))
+    # SLEEVES and TROUSERS, on the canonical limbs. The hands and feet stay out of the cloth: they are fire.
+    for side, name in ((-1.0, "arm_l"), (1.0, "arm_r")):
+        y = side * (tw * 0.5 + 0.55 + aw * 0.5)
+        pz = d["torso_z"] + th * 0.34
+        pinstripe_block(figure, name, (0.0, y, pz - ah * 0.22), (ad + 0.6, aw + 0.6, ah * 0.48), tile)
+        pinstripe_block(figure, name + "_fore", (0.0, y, pz - ah * 0.66), (ad + 0.5, aw + 0.5, ah * 0.36), tile)
+        # FLAME PAWS: the hand wrapped in fire -- a burning block round it and tongues climbing off it
+        pf = "pawfire_%s" % ("l" if side < 0 else "r")
+        wrist = pz - ah * 0.95
+        figure.part(pf, name + "_fore", (0.0, y, wrist), "twinkle", 0.30 + 0.2 * side)
+        # A FIST OF FIRE, bigger than the hand (the FLAME PAWS inset): a burning block round the paw, fingers of flame
+        # below it, and tongues climbing the cuff.
+        for dx in (-0.75, 0.0, 0.75):
+            for dy in (-0.75, 0.75):
+                for dz in (-0.7, 0.2):
+                    figure.box(pf, "flame" if dz < 0 else "flamepale", (dx * 1.1, y + dy * 1.1, wrist + dz), (1.05, 1.1, 1.0))
+        for k in range(3):
+            figure.box(pf, "flame", (0.6 + 0.3 * k, y + (k - 1) * 0.7, wrist - 1.5), (0.7, 0.6, 0.9))
+        figure.flame(pf, fire, (0.0, y, wrist + 0.9), 5.2, 2.8, 5, tile * 1.0)
+    for side, name in ((-1.0, "leg_l"), (1.0, "leg_r")):
+        y = side * d["leg_gap"]
+        pinstripe_block(figure, name, (0.0, y, hip - lh * 0.26), (ld + 0.5, lw + 0.5, lh * 0.56), tile)
+        pinstripe_block(figure, name + "_shin", (0.0, y, hip - lh * 0.66), (ld + 0.4, lw + 0.4, lh * 0.36), tile)
+        # FLAME FEET: the foot as a block of fire, and fire standing up off it
+        ff = "footfire_%s" % ("l" if side < 0 else "r")
+        figure.part(ff, name + "_shin", (0.0, y, hip - lh + 0.4), "twinkle", 0.55 + 0.2 * side)
+        # the whole foot in fire: round 1 left the bone sole showing under the flame blocks
+        for dx in (-1.0, 0.2, 1.4):
+            for dy in (-0.8, 0.8):
+                figure.box(ff, "flame", (ld * 0.30 + dx, y + dy, hip - lh + 0.5), (1.35, 1.65, 1.15))
+        figure.flame(ff, fire, (ld * 0.35, y, hip - lh + 1.1), 3.8, 2.8, 5, tile * 0.95)
+        figure.flame(ff, fire, (-0.8, y, hip - lh + 1.0), 2.6, 2.0, 3, tile * 0.85)
+
+    # ================================================================== SINGLE LINE TAIL
+    simple_tail(figure, "bone", tile, flame_mats=("flame", "flamepale"))
+    return figure
+
+
+def baal():
+    """BAAL RELAY DOG -- "SHADOWS HUNT. SIGNAL NEVER DIES." Written from the founder's sheet (2026-09-29).
+
+    The sheet's inventory, in the order it is built:
+      DEER SKULL MASK   an oversized, full-face skeletal deer skull over the Relay Dog's face, with great branching
+                        antlers. The rear view shows the plain canonical head and ears behind it, so the mask is worn
+                        ON the head, not in place of it.
+      GLOWING BLUE EYES in the skull's sockets -- the Dog's own status panes, carried forward to the socket mouth.
+      CURSED ARMOR      dark layered ritual armour: patchwork plates of bone on near-black, a long tattered skirt of
+                        dark layers to below the knee.
+      RITUAL BONES / ARCANE CHARM  a gold chain down the chest to a bone skull charm.
+      SHADOW ENERGY     blue supernatural flame up both flanks, around the head and at the forearms; feet of blue light.
+      TAIL              the simple canonical tail, and nothing decorative on it.
+    """
+    figure = start("RELAY DOG SKIN -- BAAL", 7302, BAAL_SOUL, 8.0)
+    figure.material("armor", "lit", (0.075, 0.085, 0.120), 1.0)
+    figure.material("armordeep", "lit", (0.030, 0.034, 0.050), 1.0)
+    figure.material("antler", "rim", (0.800, 0.660, 0.420), 1.0)
+    figure.material("gold", "rim", (0.905, 0.720, 0.290), 1.0)
+    figure.material("spirit", "glow", (0.18, 0.50, 1.00), 0.75)
+    figure.material("spiritpale", "glow", (0.62, 0.86, 1.00), 1.2)
+    base_dog(figure)
+    d = DOG
+    tile = d["tile"]
+    td, tw, th = d["torso"]
+    hd, hw, hh = d["head"]
+    ad, aw, ah = d["arm"]
+    ld, lw, lh = d["leg"]
+    head_top = d["head_z"] + hh * 0.5
+    torso_top = d["torso_z"] + th * 0.5
+    hip = d["torso_z"] - th * 0.5
+    shoulder = d["torso_z"] + th * 0.48
+    visor_z = d["head_z"] - hh * 0.07
+    blue = lambda up: "spirit" if up < 0.55 else "spiritpale"      # noqa: E731
+
+    def patchwork(part, centre, size, seed, bone_share=0.42, cell=0.9):
+        """CURSED ARMOUR: a plate built as a patchwork of cells, bone on near-black, as every limb of the sheet is."""
+        rng = random.Random(seed)
+        cx, cy, cz = centre
+        sx, sy, sz = size
+        nx, ny, nz = max(1, int(round(sx / cell))), max(1, int(round(sy / cell))), max(1, int(round(sz / cell)))
+        for ix in range(nx):
+            for iy in range(ny):
+                for iz in range(nz):
+                    if 0 < ix < nx - 1 and 0 < iy < ny - 1 and 0 < iz < nz - 1:
+                        continue
+                    roll = rng.random()
+                    mat = "bone" if roll < bone_share else ("armor" if roll < 0.80 else "armordeep")
+                    p = (cx - sx * 0.5 + sx * (ix + 0.5) / nx, cy - sy * 0.5 + sy * (iy + 0.5) / ny, cz - sz * 0.5 + sz * (iz + 0.5) / nz)
+                    figure.box(part, mat, p, (sx / nx * 1.01, sy / ny * 1.01, sz / nz * 1.01))
+
+    # ================================================================== DEER SKULL MASK
+    face = hd * 0.5
+    figure.part("mask", "head", (face, 0.0, d["head_z"]), "none")
+    socket_half = 0.95
+    step = 0.6
+    ny, nz = 13, 11
+    # A SKULL, NOT A SECOND FACE. Round 1 laid the plate across the full width of the head, and from the front the mask
+    # read as another box head. A deer's skull is wide at the brow and narrows hard toward the muzzle, so the plate
+    # keeps the full width only down to the sockets and draws in below them into the snout.
+    for iy in range(ny):
+        for iz in range(nz):
+            y = -3.6 + iy * step
+            z = visor_z - 1.35 + iz * step
+            if any(abs(y - s * d["eye_gap"]) < socket_half and abs(z - visor_z) < socket_half for s in (-1.0, 1.0)):
+                continue
+            if abs(y) > 3.0 and z > head_top - 0.6:
+                continue                                        # the cranium's rounded upper corners
+            half = 3.9 if z >= visor_z - 0.4 else 3.9 - (visor_z - 0.4 - z) * 1.6
+            if abs(y) > half:
+                continue                                        # the skull drawing in below the sockets
+            figure.box("mask", "bone", (face + 0.45, y, z), (0.9, step * 1.02, step * 1.02))
+    # the brow ridge over the sockets, and the dark rims inside them
+    for s in (-1.0, 1.0):
+        figure.box("mask", "bone", (face + 1.0, s * d["eye_gap"], visor_z + 1.25), (0.5, 2.3, 0.5))
+        figure.box("mask", "armordeep", (face + 0.85, s * d["eye_gap"], visor_z - 1.05), (0.4, 1.9, 0.2))
+        # THE STATUS EYES, CARRIED TO THE SOCKET MOUTH. The panes base_dog set in the visor stay exactly where they
+        # are; these are the same material ("eye": the runtime drives them as the status eyes), the same size and
+        # at the same height and spacing, brought forward so the skull does not bury them. Plus the halo pane,
+        # outboard of each eye and never across the centreline, as base_dog lays its own.
+        figure.box("mask", "eye", (face + 0.95, s * d["eye_gap"], visor_z), (0.3, d["eye"][0], d["eye"][1]))
+        halo_in = d["eye_gap"] - d["eye"][0] * 0.5
+        halo_out = d["eye_gap"] + d["eye"][0] * 2.4 * 0.5
+        # BEHIND the pane's face (5.20) and just proud of the mask's (5.00), so the rim spills onto the bone round the
+        # socket and never over the core -- the same arrangement base_dog uses against the visor.
+        figure.box("mask", "eyehalo", (face + 0.84, s * (halo_in + halo_out) * 0.5, visor_z), (0.2, halo_out - halo_in, d["eye"][1] * 2.2))
+    # THE SNOUT: long, narrowing and angled down and forward over the chest, as a deer's skull is.
+    for k in range(9):
+        z = visor_z - 1.5 - k * 0.62
+        w = 3.8 - k * 0.34
+        x = face + 0.7 + k * 0.16
+        figure.box("mask", "bone", (x, 0.0, z), (1.15, w, 0.66))
+        if 1 <= k <= 3:
+            for s in (-1.0, 1.0):
+                figure.box("mask", "armordeep", (x + 0.6, s * 0.55, z), (0.14, 0.42, 0.62))   # the nasal openings
+        if k >= 7:
+            for t in range(3):
+                figure.box("mask", "armordeep", (x + 0.6, (t - 1) * 0.55, z - 0.2), (0.14, 0.2, 0.4))  # the teeth
+    figure.box("mask", "bone", (face + 1.25, 0.0, visor_z - 2.6), (0.4, 0.7, 3.6))           # the nasal ridge
+    # THE ANTLERS: a main beam out and up from each temple, with tines off its upper side.
+    figure.part("antlers", "head", (0.0, 0.0, head_top), "none")
+    # A HEAVY BEAM THAT SWEEPS OUT AND THEN UP, with long tines -- round 1's beam was a thin ladder of cubes.
+    for s in (-1.0, 1.0):
+        beam = []
+        n = 16
+        for k in range(n):
+            f = k / (n - 1.0)
+            y = s * (2.6 + 6.2 * math.sin(f * math.pi * 0.55))
+            z = head_top + 0.3 + 8.8 * f ** 1.15
+            x = face - 1.5 - 2.2 * f
+            beam.append((x, y, z))
+            size = 1.45 - 0.70 * f
+            figure.box("antlers", "antler", (x, y, z), (size, size, size * 1.1))
+        for k, length, lean in ((4, 3.8, 0.35), (7, 4.4, 0.20), (10, 4.0, 0.05), (13, 3.2, -0.10), (15, 2.4, -0.2)):
+            bx, by, bz = beam[k]
+            steps = int(length / 0.5)
+            for t in range(steps):
+                f = (t + 1) * 0.5
+                w = 0.85 - 0.45 * t / max(steps - 1, 1)
+                figure.box("antlers", "antler", (bx + lean * f, by + s * 0.12 * f, bz + f), (w, w, 0.55))
+        # a brow tine forward over the mask, as the front view shows
+        for t in range(4):
+            figure.box("antlers", "antler", (face - 0.6 + t * 0.55, s * 2.8, head_top + 0.4 + t * 0.35), (0.62, 0.62, 0.62))
+
+    # ================================================================== CURSED ARMOR
+    ch = th + 0.6
+    patchwork("body", (-td * 0.5 - 0.35, 0.0, d["torso_z"]), (0.7, tw + 1.4, ch), 11, bone_share=0.25)
+    for s in (-1.0, 1.0):
+        patchwork("body", (0.0, s * (tw * 0.5 + 0.35), d["torso_z"]), (td + 1.4, 0.7, ch), 12 + int(s), bone_share=0.25)
+    # the front: dark layered bands, each a little prouder than the one above it, as the plate steps down the chest
+    for k in range(7):
+        z = torso_top - 0.6 - k * 1.05
+        figure.box("body", "armor" if k % 2 == 0 else "armordeep", (td * 0.5 + 0.35 + 0.05 * k, 0.0, z), (0.7, tw + 1.2 + 0.1 * k, 1.0))
+    # layered pauldrons: three plates stepping down and out over each shoulder, patchwork like the sheet's
+    for s in (-1.0, 1.0):
+        for k in range(3):
+            patchwork("body", (0.1 - 0.2 * k, s * (tw * 0.5 + 1.6 + 0.45 * k), shoulder + 0.9 - 1.0 * k), (4.4 - 0.3 * k, 3.2, 0.9), 30 + k + int(3 * s), bone_share=0.5)
+    # ARCANE CHARM: a gold chain from each shoulder to the sternum, one link down the middle, a bone skull at the end
+    sternum = (td * 0.5 + 1.0, 0.0, torso_top - 2.3)
+    for s in (-1.0, 1.0):
+        figure.chain_run("body", "gold", (td * 0.5 + 0.9, s * (tw * 0.5 + 0.2), torso_top - 0.3), sternum, tile * 0.8, sag=0.5, link=tile * 0.7)
+    figure.chain_run("body", "gold", sternum, (sternum[0] + 0.2, 0.0, sternum[2] - 2.6), tile * 0.8, link=tile * 0.7)
+    figure.skull_emblem("body", {"bone": "bone", "dark": "armordeep"}, (sternum[0] + 0.6, 0.0, sternum[2] - 4.4), 2.8, tile * 0.7, deep="dark")
+    # sleeves and leggings of the same patchwork on the canonical limbs; hands stay the Dog's own
+    for s, name in ((-1.0, "arm_l"), (1.0, "arm_r")):
+        y = s * (tw * 0.5 + 0.55 + aw * 0.5)
+        pz = d["torso_z"] + th * 0.34
+        patchwork(name, (0.0, y, pz - ah * 0.22), (ad + 0.6, aw + 0.6, ah * 0.48), 40 + int(s))
+        patchwork(name + "_fore", (0.0, y, pz - ah * 0.66), (ad + 0.5, aw + 0.5, ah * 0.36), 42 + int(s))
+        # SHADOW ENERGY at the forearm, climbing off the elbow
+        af = "armfire_%s" % ("l" if s < 0 else "r")
+        figure.part(af, name, (0.0, y, pz - ah * 0.46), "twinkle", 0.34 + 0.2 * s)
+        figure.flame(af, blue, (-0.8, y + s * 1.3, pz - ah * 0.60), 4.4, 2.4, 4, tile * 0.9)
+    for s, name in ((-1.0, "leg_l"), (1.0, "leg_r")):
+        y = s * d["leg_gap"]
+        patchwork(name, (0.0, y, hip - lh * 0.26), (ld + 0.5, lw + 0.5, lh * 0.56), 50 + int(s), bone_share=0.35)
+        patchwork(name + "_shin", (0.0, y, hip - lh * 0.66), (ld + 0.4, lw + 0.4, lh * 0.36), 52 + int(s), bone_share=0.35)
+        # FEET OF BLUE LIGHT: the sheet stands Baal on two glowing blocks with fire at their edges
+        ff = "footfire_%s" % ("l" if s < 0 else "r")
+        figure.part(ff, name + "_shin", (0.0, y, hip - lh + 0.4), "twinkle", 0.50 + 0.2 * s)
+        figure.slab(ff, "spiritpale", (ld * 0.30, y, hip - lh + 0.45), (ld * 1.5, lw * 1.2, 0.9), tile=tile)
+        figure.flame(ff, blue, (ld * 0.30, y, hip - lh + 0.95), 2.6, 2.6, 4, tile * 0.85)
+    # THE TATTERED SKIRT: long dark layers from the waist to below the knee, all the way round, ragged at the hem
+    rng = random.Random(7302)
+    figure.part("skirt", "body", (0.0, 0.0, hip + 0.6), "trail", 0.5)
+    strands = 26
+    for k in range(strands):
+        a = 2.0 * math.pi * (k + 0.5) / strands
+        rx, ry = td * 0.5 + 0.9, tw * 0.5 + 1.0
+        drop = 5.0 + 1.6 * rng.random() + (0.8 if math.cos(a) < 0 else 0.0)
+        mat = "armor" if k % 3 else "armordeep"
+        steps = int(round(drop / 0.9))
+        for sidx in range(steps):
+            f = sidx / max(steps - 1, 1)
+            flare = 1.0 + 0.35 * f
+            x = math.cos(a) * rx * flare
+            y = math.sin(a) * ry * flare
+            z = hip + 0.3 - 0.9 * sidx
+            w = 1.25 * (1.0 - 0.35 * f)
+            figure.box("skirt", mat, (x, y, z), (w, w, 0.95))
+    # SHADOW ENERGY up both flanks and round the back of the head -- the sheet's blue fire framing the figure
+    for s in (-1.0, 1.0):
+        name = "flankfire_%s" % ("l" if s < 0 else "r")
+        y = s * (tw * 0.5 + aw + 2.3)
+        figure.part(name, "body", (0.0, y, shoulder - 2.0), "twinkle", 0.40 + 0.22 * s)
+        figure.flame(name, blue, (-1.6, y, hip - 1.0), 9.0, 4.4, 7, tile * 1.05)
+        figure.flame(name, blue, (-2.8, y + s * 1.2, hip + 2.0), 6.0, 3.4, 5, tile * 0.95)
+    figure.part("headfire", "head", (-hd * 0.5, 0.0, head_top), "twinkle", 0.20)
+    for s in (-1.0, 1.0):
+        figure.flame("headfire", blue, (-hd * 0.30, s * (hw * 0.5 + 0.6), d["head_z"] - 1.0), 7.5, 2.6, 5, tile * 1.0)
+    figure.flame("headfire", blue, (-hd * 0.45, 0.0, head_top - 0.4), 5.0, hw * 0.8, 6, tile * 1.0)
+
+    # ================================================================== THE SIMPLE CANONICAL TAIL
+    simple_tail(figure, "bone", tile)
+    return figure
+
+
 # ============================================================================ the sub-agent cub
 
 # ============================================================================ the cubs, one per skin
@@ -2414,6 +2839,10 @@ CUB_SKINS = {
     "apollo":          ("Apollo",         (1.00, 0.86, 0.26), BONE,                  BONE_DEEP,             (1.00, 0.80, 0.30)),
     "skeleton_flame":  ("SkeletonFlame",  SKELETON_SOUL,      BONE,                  BONE_DEEP,             (0.40, 0.85, 1.00)),
     "celestial_light": ("CelestialLight", (0.62, 0.88, 1.00), (0.930, 0.960, 1.000), (0.720, 0.820, 1.000), (0.80, 0.92, 1.00)),
+    # 2026-09-29 roster. APPENDED, NOT INSERTED: a cub's seed is its skin's index in this dict, so an entry placed
+    # anywhere else would re-seed every cub after it and quietly change Skeleton Flame's and Celestial Light's.
+    "jack_flame":      ("JackFlame",      JACK_EYES,          BONE,                  BONE_DEEP,             (1.00, 0.46, 0.08)),
+    "baal":            ("Baal",           BAAL_SOUL,          BONE,                  BONE_DEEP,             (0.35, 0.66, 1.00)),
 }
 
 
@@ -2487,6 +2916,44 @@ def dress_cub(figure, skin, k, head_z, hd, hw, hh, tile):
         halo_c = (-hd * 0.36, 0.0, head_z + hh * 0.25)
         figure.part("halo", "head", halo_c, "none")
         figure.ring("halo", lambda a: "edge", halo_c, hw * 0.74, tile * k * 0.9, tile * k * 0.9)
+    elif skin == "jack_flame":
+        # Jack's signature at the cub's scale: the crown of orange fire, the stitched grin under the visor, and a
+        # small black collar with the burning heart under the chin. The cub's eyes are its expression and are never
+        # covered.
+        figure.material("flame", "glow", (1.00, 0.36, 0.04), 0.65)
+        figure.material("flamepale", "glow", (1.00, 0.74, 0.20), 1.05)
+        figure.material("suit", "lit", (0.034, 0.032, 0.040), 1.0)
+        figure.material("heart", "glow", (1.00, 0.20, 0.05), 1.3)
+        figure.part("headfire", "head", (0.0, 0.0, top), "twinkle", 0.16)
+        figure.flame("headfire", lambda up: "flame" if up < 0.52 else "flamepale", (-0.6, 0.0, top - 0.2), hh * 1.0, hw * 0.80, 5, tile * k * 1.05)
+        for r in range(9):
+            y = -hw * 0.30 + r * (hw * 0.60 / 8.0)
+            figure.box("head", "visor", (hd * 0.5 + 0.06, y, head_z - hh * 0.30), (0.12, hw * 0.08, tile * k * 0.22))
+        for side in (-1.0, 1.0):
+            for i, deg in enumerate((-20.0, 5.0, 30.0)):
+                a = math.radians(deg)
+                for sidx in range(4):
+                    r = 0.8 + sidx * 0.55
+                    figure.box("head", "suit", (0.3, side * r * math.cos(a), head_z - hh * 0.62 + r * math.sin(a)), (tile * k * 0.8, tile * k * 0.6, tile * k * (0.8 - 0.12 * sidx)))
+        figure.box("head", "heart", (hd * 0.30, 0.0, head_z - hh * 0.66), (tile * k * 0.6, tile * k * 1.3, tile * k * 1.1))
+    elif skin == "baal":
+        # Baal's signature at the cub's scale: the deer skull's snout under the visor (the cub's eyes are its face,
+        # so the skull does not cover them), the two branching antlers, and a wisp of blue fire behind the head.
+        figure.material("antler", "rim", (0.800, 0.660, 0.420), 1.0)
+        figure.material("spirit", "glow", (0.18, 0.50, 1.00), 0.75)
+        figure.material("spiritpale", "glow", (0.62, 0.86, 1.00), 1.2)
+        figure.material("socket", "lit", (0.030, 0.034, 0.050), 1.0)
+        for r in range(5):
+            figure.box("head", "bone", (hd * 0.5 + 0.35 + r * 0.12, 0.0, head_z - hh * 0.30 - r * 0.42), (0.7, hw * (0.52 - 0.07 * r), 0.44))
+        for side in (-1.0, 1.0):
+            figure.box("head", "socket", (hd * 0.5 + 0.72, side * 0.38, head_z - hh * 0.40), (0.1, 0.3, 0.5))
+            for s_ in range(7):
+                f = s_ / 6.0
+                figure.box("head", "antler", (-0.2, side * (hw * 0.30 + 2.8 * math.sin(f * 1.4)), top + 0.2 + 3.6 * f), (tile * k * (0.9 - 0.3 * f),) * 3)
+            for s_ in range(3):
+                figure.box("head", "antler", (0.2, side * (hw * 0.30 + 1.6), top + 1.6 + s_ * 0.5), (tile * k * 0.55,) * 3)
+        figure.part("headfire", "head", (-hd * 0.5, 0.0, top), "twinkle", 0.2)
+        figure.flame("headfire", lambda up: "spirit" if up < 0.55 else "spiritpale", (-hd * 0.45, 0.0, top - 0.6), hh * 0.8, hw * 0.6, 4, tile * k * 1.0)
 
 
 def cub_ghost(eyes="flat", skin="relay_og"):
@@ -2617,6 +3084,9 @@ SKINS = [
     ("Hagoromo", hagoromo),
     ("CelestialLight", celestial_light),
     ("Bee", bee),
+    # 2026-09-29: the two replacements. One version each -- they are new skins, not redos, so there is no V1/V2 pair.
+    ("JackFlame", jack_flame),
+    ("Baal", baal),
 ]
 
 

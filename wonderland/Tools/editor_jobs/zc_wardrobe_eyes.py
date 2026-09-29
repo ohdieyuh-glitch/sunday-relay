@@ -32,7 +32,7 @@ L = unreal.WonderlandUiTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "wardrobe_eyes")
 REPO = os.path.dirname(os.path.dirname(CHANNEL))
 
-SKINS = ("relay_og", "skeleton_flame", "apollo", "arden_infernal", "celestial_light")
+SKINS = ("relay_og", "skeleton_flame", "baal", "jack_flame", "celestial_light")
 # A trough this dark relative to the dimmer eye counts as a black gap. Same judgement as the in-world job, so
 # the two are comparable; stated as a judgement rather than a standard.
 GAP_RATIO = 0.45

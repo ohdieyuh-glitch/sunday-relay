@@ -24,7 +24,7 @@ import unreal
 L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "wardrobe_regress")
-SKINS = ("relay_og", "arden_infernal", "apollo", "skeleton_flame", "celestial_light")
+SKINS = ("relay_og", "jack_flame", "baal", "skeleton_flame", "celestial_light")
 
 # Primary then secondary, as six floats. The extremes are the point: pure white on cyan and near-black on
 # violet are the two combinations most likely to expose a solve that is really reading brightness.

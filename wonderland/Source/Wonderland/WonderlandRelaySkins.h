@@ -9,7 +9,7 @@
 //
 // WHAT A SKIN IS NOT, and these are the founder's own boundaries:
 //   * NOT a change of capability. "Skins do not change agent capability."
-//   * NOT a change of authority. "Do not replace Julius identity/authority based on skin." The Dog wearing Apollo has
+//   * NOT a change of authority. "Do not replace Julius identity/authority based on skin." The Dog wearing Baal has
 //     exactly the mission authority the Dog wearing nothing has.
 //   * NOT a different creature. "The Bee skin must still clearly be a Relay Dog." Every figure in this registry is
 //     built from one base dog by wonderland/Tools/relay_dog_skins.py and dressed afterwards, so the silhouette cannot
@@ -64,7 +64,7 @@ struct WONDERLAND_API FWonderlandRelaySkin
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Skins")
 	FString DisplayName;
 
-	/** The family a skin belongs to, for surfaces that group them: RELAY, INFERNAL, CELESTIAL, SPECTRAL, HIVE. */
+	/** The family a skin belongs to, for surfaces that group them: RELAY, INFERNAL, CELESTIAL, SPECTRAL, SHADOW, HIVE. */
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Skins")
 	FString Family;
 
@@ -187,6 +187,14 @@ public:
 	/** The skins as lines, for a proof job and for `wl.Skins.List`. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
 	TArray<FString> DescribeSkins() const;
+
+	/**
+	 * A RETIRED SKIN ID'S SUCCESSOR (founder, 2026-09-29): arden_infernal and arden_infernal_v1 -> jack_flame, apollo and
+	 * apollo_v1 -> baal. Any other id comes back unchanged. EquipSkin, ApplyRemoteSkin and the remembered-skin load all
+	 * pass ids through this; it is exposed so a proof job can check the mapping without touching the player's file.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	FName MigrateLegacySkinId(FName SkinId) const;
 
 	/** Raised after the equipped skin actually changed. Not raised when an equip was refused or was a no-op. */
 	FOnWonderlandSkinChanged OnSkinChanged;

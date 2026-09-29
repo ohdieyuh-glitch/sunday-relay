@@ -31,7 +31,7 @@ import unreal
 L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "wardrobe_pixels")
-SKINS = ["relay_og", "arden_infernal", "apollo", "skeleton_flame", "celestial_light"]
+SKINS = ["relay_og", "jack_flame", "baal", "skeleton_flame", "celestial_light"]
 
 
 def job():

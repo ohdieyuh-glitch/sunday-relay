@@ -23,7 +23,7 @@ import unreal
 L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "wardrobe20")
-SKINS = ("relay_og", "celestial_light", "apollo_v1", "apollo", "arden_infernal_v1", "arden_infernal", "skeleton_flame_v1", "skeleton_flame")
+SKINS = ("relay_og", "celestial_light", "baal", "jack_flame", "skeleton_flame_v1", "skeleton_flame")
 ANGLES = (("front", 0.0), ("left", 90.0), ("back", 180.0), ("right", 270.0))
 
 

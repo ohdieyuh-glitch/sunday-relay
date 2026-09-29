@@ -15,6 +15,32 @@ namespace
 	{
 		return FLinearColor(FColor(R, G, B));
 	}
+
+	/**
+	 * RETIRED SKIN IDS, AND WHAT BECAME OF THEM.
+	 *
+	 * FOUNDER, 2026-09-29: "Preserve existing save compatibility where practical: old Arden Infernal ownership/selection
+	 * should migrate to Jack Flame, and old Apollo ownership/selection should migrate to Baal rather than disappearing."
+	 * Both versions of each (the V2 id and its _v1 twin) land on the one replacement. Every place an id enters the
+	 * registry from outside -- the remembered file, a remote report, an equip by id from the console, the wardrobe or
+	 * the /skin command -- passes through here, so a retired id is never simply dropped.
+	 */
+	FName MigrateRetired(FName Id)
+	{
+		static const TMap<FName, FName> Retired = {
+			{FName(TEXT("arden_infernal")), FName(TEXT("jack_flame"))},
+			{FName(TEXT("arden_infernal_v1")), FName(TEXT("jack_flame"))},
+			{FName(TEXT("apollo")), FName(TEXT("baal"))},
+			{FName(TEXT("apollo_v1")), FName(TEXT("baal"))},
+		};
+		const FName* Now = Retired.Find(Id);
+		return Now != nullptr ? *Now : Id;
+	}
+}
+
+FName UWonderlandRelaySkinSubsystem::MigrateLegacySkinId(FName SkinId) const
+{
+	return MigrateRetired(SkinId);
 }
 
 void UWonderlandRelaySkinSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -51,32 +77,21 @@ void UWonderlandRelaySkinSubsystem::BuildRegistry()
 		Skins.Add(MoveTemp(Skin));
 	};
 
+	// THE ROSTER, IN THE FOUNDER'S ORDER (2026-09-29): "Relay OG, Celestial Light, Skeleton Flame, Jack Flame, Baal."
 	Add(TEXT("relay_og"), TEXT("RELAY OG"), TEXT("RELAY"),
 		TEXT("The Dog as it is. Bone coat, black visor, warm gold status eyes."),
 		TEXT("RelayOg.wlvox"), Rgb(0xE5, 0xDE, 0xCB), Rgb(0xFF, 0xC7, 0x4D), true);
 
-	// ---- V1 AND V2, BOTH IN THE WORLD.
+	Add(TEXT("celestial_light"), TEXT("CELESTIAL LIGHT"), TEXT("CELESTIAL"),
+		TEXT("A coat of light, a star at the brow, a marked banner, and a halo standing behind."),
+		TEXT("CelestialLight.wlvox"), Rgb(0x8C, 0xCC, 0xFF), Rgb(0x8C, 0xE6, 0xFF), false);
+
+	// ---- SKELETON FLAME, V1 AND V2 (unchanged by the 2026-09-29 roster update: "Do NOT disturb Relay OG,
+	// Celestial Light, or Skeleton Flame").
 	//
 	// FOUNDER, 2026-09-27: "Call the previous one V1 and keep them in the Wonderland world and make the new
-	// ones called V2." The three premium skins were redone from the founder's reference sheets; the designs
-	// that stood before are not retired but worn as V1 beside them. The ids the rest of the project already
-	// uses -- arden_infernal, apollo, skeleton_flame -- stay and now mean the V2 (the redo is the default a
-	// player gets), and each has a _v1 twin pointing at the previous figure. The generator writes both from
-	// one file: V1 verbatim from the pre-redo builders, V2 fresh from the sheets.
-	Add(TEXT("arden_infernal_v1"), TEXT("ARDEN INFERNAL V1"), TEXT("INFERNAL"),
-		TEXT("The previous Arden: a flaming halo, gold chains, a demonic arm and an infernal tail, no robe."),
-		TEXT("ArdenInfernalV1.wlvox"), Rgb(0xFF, 0x4C, 0x1E), Rgb(0xFF, 0x8C, 0x1F), false);
-	Add(TEXT("arden_infernal"), TEXT("ARDEN INFERNAL V2"), TEXT("INFERNAL"),
-		TEXT("From the sheet: a gem-set flaming halo, six chains over a bare chest, a robe of cream, crimson and black to the floor, the demonic arm and the infernal tail."),
-		TEXT("ArdenInfernalV2.wlvox"), Rgb(0xFF, 0x4C, 0x1E), Rgb(0xFF, 0x8C, 0x1F), false);
-
-	Add(TEXT("apollo_v1"), TEXT("APOLLO V1"), TEXT("CELESTIAL"),
-		TEXT("The previous Apollo: a sunburst of rays, baroque winged pauldrons, gold armour, no drapery."),
-		TEXT("ApolloV1.wlvox"), Rgb(0xE6, 0xB8, 0x4C), Rgb(0xFF, 0xD6, 0x52), false);
-	Add(TEXT("apollo"), TEXT("APOLLO V2"), TEXT("CELESTIAL"),
-		TEXT("From the sheet: a plain gold ring enclosing a crown of fire, winged cherub pauldrons, a sun on the chest, lamp-orbs at the hips, white drapery to the floor."),
-		TEXT("ApolloV2.wlvox"), Rgb(0xE6, 0xB8, 0x4C), Rgb(0xFF, 0xD6, 0x52), false);
-
+	// ones called V2." skeleton_flame means the V2 (the redo is the default a player gets) and skeleton_flame_v1
+	// the previous figure.
 	Add(TEXT("skeleton_flame_v1"), TEXT("SKELETON FLAME V1"), TEXT("SPECTRAL"),
 		TEXT("The previous Skeleton Flame: a ribcage cut into the chest, tall ghostfire, jointed bone limbs."),
 		TEXT("SkeletonFlameV1.wlvox"), Rgb(0x6E, 0xD8, 0xFF), Rgb(0x73, 0xEA, 0xFF), false);
@@ -84,9 +99,18 @@ void UWonderlandRelaySkinSubsystem::BuildRegistry()
 		TEXT("From the sheet: a broad figure in stepped bone plates, skulls at brow, temples and sternum, ghostfire at ears, elbows and spine, feet of pale blue light."),
 		TEXT("SkeletonFlameV2.wlvox"), Rgb(0x6E, 0xD8, 0xFF), Rgb(0x73, 0xEA, 0xFF), false);
 
-	Add(TEXT("celestial_light"), TEXT("CELESTIAL LIGHT"), TEXT("CELESTIAL"),
-		TEXT("A coat of light, a star at the brow, a marked banner, and a halo standing behind."),
-		TEXT("CelestialLight.wlvox"), Rgb(0x8C, 0xCC, 0xFF), Rgb(0x8C, 0xE6, 0xFF), false);
+	// ---- JACK FLAME AND BAAL REPLACE ARDEN INFERNAL AND APOLLO.
+	//
+	// FOUNDER, 2026-09-29: "REMOVE / REPLACE: 1. Arden Infernal 2. Apollo. REPLACE THEM WITH: 1. JACK FLAME RELAY
+	// DOG 2. BAAL RELAY DOG ... These are replacements, NOT additional roster slots." Both figures are dressed on the
+	// canonical Relay Dog by Tools/relay_dog_skins.py from the founder's sheets (RelaySkins/_reference/), and anyone
+	// still holding a retired id is carried to its replacement by MigrateRetired above.
+	Add(TEXT("jack_flame"), TEXT("JACK FLAME"), TEXT("INFERNAL"),
+		TEXT("From the sheet: a black pinstripe suit and a nightmare collar with a burning heart, orange fire at the head, the paws and the feet, and the single-line tail with a flame at its end."),
+		TEXT("JackFlame.wlvox"), Rgb(0xFF, 0x6A, 0x14), Rgb(0xFF, 0xA8, 0x1A), false);
+	Add(TEXT("baal"), TEXT("BAAL"), TEXT("SHADOW"),
+		TEXT("From the sheet: a skeletal deer mask with great antlers and glowing blue eyes, dark layered ritual armour with bone plates and a skull charm, blue fire, the simple tail."),
+		TEXT("Baal.wlvox"), Rgb(0x3E, 0x8E, 0xFF), Rgb(0x4C, 0xA8, 0xFF), false);
 
 	// BEE AND HAGOROMO ARE OUT OF THE LINEUP (founder, 2026-09-23): "REMOVE THE BEE / BUMBLEBEE SKIN... REMOVE
 	// HAGOROMO from the active mascot lineup as well. Same rule: no Wardrobe entry, no active selection, no
@@ -97,7 +121,11 @@ void UWonderlandRelaySkinSubsystem::BuildRegistry()
 	// equipped lands softly: LoadPersisted already drops a remembered skin the registry no longer knows and
 	// leaves the Dog in its base form, so no stored data is invalidated and no id is broken.
 	//
-	// The active lineup is Relay OG, Arden Infernal, Apollo, Skeleton Flame and Celestial Light.
+	// ARDEN INFERNAL AND APOLLO LEAVE THE SAME WAY (founder, 2026-09-29): unregistered, their figures left on disk and
+	// still built by the forge. Unlike Bee and Hagoromo they do not drop to the base form -- they have successors, and
+	// MigrateRetired carries a remembered arden_infernal* to jack_flame and apollo* to baal.
+	//
+	// The active lineup is Relay OG, Celestial Light, Skeleton Flame (V2, with its V1 twin), Jack Flame and Baal.
 }
 
 const FWonderlandRelaySkin* UWonderlandRelaySkinSubsystem::Find(FName SkinId) const
@@ -111,8 +139,11 @@ FString UWonderlandRelaySkinSubsystem::GetEquippedSkinName() const
 	return Skin != nullptr ? Skin->DisplayName : FString(TEXT("RELAY OG"));
 }
 
-bool UWonderlandRelaySkinSubsystem::EquipSkin(FName SkinId)
+bool UWonderlandRelaySkinSubsystem::EquipSkin(FName RequestedId)
 {
+	// A retired id is its successor: `wl.Skins.Wear apollo`, `/skin arden_infernal` and an old wardrobe binding all
+	// dress the Dog in the replacement rather than being refused.
+	const FName SkinId = MigrateRetired(RequestedId);
 	const FWonderlandRelaySkin* Skin = Find(SkinId);
 	if (Skin == nullptr)
 	{
@@ -142,7 +173,8 @@ bool UWonderlandRelaySkinSubsystem::UnequipSkin()
 
 void UWonderlandRelaySkinSubsystem::ApplyRemoteSkin(const FWonderlandEquippedSkin& Reported)
 {
-	FName Wanted = Reported.SkinId;
+	// A machine still on the old roster reports the old id; this one draws the successor.
+	FName Wanted = MigrateRetired(Reported.SkinId);
 	if (Find(Wanted) == nullptr)
 	{
 		// A DOG IN A SKIN THIS BUILD DOES NOT KNOW still has to be drawn. The base form is the answer; an invisible
@@ -197,13 +229,21 @@ void UWonderlandRelaySkinSubsystem::LoadPersisted()
 	{
 		return;
 	}
-	const FName Remembered(*Text.TrimStartAndEnd());
+	const FName Stored(*Text.TrimStartAndEnd());
+	// A RETIRED SKIN IS CARRIED TO ITS SUCCESSOR, and the file is rewritten so the migration happens once: a player
+	// who wore Arden Infernal wakes up in Jack Flame, one who wore Apollo in Baal (founder, 2026-09-29).
+	const FName Remembered = MigrateRetired(Stored);
 	const FWonderlandRelaySkin* Skin = Find(Remembered);
 	// A REMEMBERED SKIN THAT NO LONGER EXISTS, or that has since been locked, is not worn. Silently keeping the base
 	// form is right here: the player did nothing wrong, and a startup error about a cosmetic is noise.
 	if (Skin != nullptr && Skin->Access != EWonderlandSkinAccess::Locked)
 	{
 		Equipped.SkinId = Remembered;
+		if (Remembered != Stored)
+		{
+			UE_LOG(LogTemp, Display, TEXT("WLSKIN migrated remembered skin '%s' -> '%s'"), *Stored.ToString(), *Remembered.ToString());
+			SavePersisted();
+		}
 	}
 }
 
@@ -244,7 +284,7 @@ namespace
 
 	FAutoConsoleCommandWithWorldAndArgs GWearSkin(
 		TEXT("wl.Skins.Wear"),
-		TEXT("Wear a Relay Dog skin by id, e.g. wl.Skins.Wear apollo"),
+		TEXT("Wear a Relay Dog skin by id, e.g. wl.Skins.Wear jack_flame"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			UWonderlandRelaySkinSubsystem* Skins = SkinsFor(World);

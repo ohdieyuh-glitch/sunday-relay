@@ -16,7 +16,7 @@ import unreal
 
 L = unreal.WonderlandUiTestLibrary
 
-SKINS = ["relay_og", "arden_infernal", "celestial_light"]
+SKINS = ["relay_og", "jack_flame", "celestial_light"]
 
 
 def job():

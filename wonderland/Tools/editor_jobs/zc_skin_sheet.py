@@ -27,7 +27,7 @@ import unreal
 L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "skin_sheet")
-SKINS = ("relay_og", "celestial_light", "apollo_v1", "apollo", "arden_infernal_v1", "arden_infernal", "skeleton_flame_v1", "skeleton_flame")
+SKINS = ("relay_og", "celestial_light", "baal", "jack_flame", "skeleton_flame_v1", "skeleton_flame")
 VIEWS = (("front", 0.0), ("front34", 45.0), ("left", 90.0), ("back34", 225.0), ("back", 180.0), ("right", 270.0))
 # The founder's opening-view band, from zc_wardrobe_20's V03; rotated views take the wider envelope of V05.
 FRONT_BAND = (76.0, 94.0)

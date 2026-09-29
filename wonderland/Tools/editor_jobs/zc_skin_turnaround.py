@@ -19,7 +19,7 @@ ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "skin_turnaround
 # run inside the authoritative project would have photographed a DIFFERENT worktree's figures and reported
 # on them -- which is the same class of mistake as the skins going stale in proof earlier today.
 SKINS_DIR = unreal.Paths.project_dir() + "RelaySkins"
-SKINS = [("apollo", "Apollo"), ("arden_infernal", "ArdenInfernal"), ("skeleton_flame", "SkeletonFlame"),
+SKINS = [("baal", "Baal"), ("jack_flame", "JackFlame"), ("skeleton_flame", "SkeletonFlame"),
          ("hagoromo", "Hagoromo"), ("celestial_light", "CelestialLight"), ("bee", "Bee"), ("relay_og", "RelayOg")]
 # OFF THE PLAZA ENTIRELY, ONTO OPEN LAWN, because the plaza cannot hold a turnaround. (-170, -346) photographed
 # Apollo and Arden through the gold gate's posts; (-330, -420) fixed the front view but its SIDE camera still

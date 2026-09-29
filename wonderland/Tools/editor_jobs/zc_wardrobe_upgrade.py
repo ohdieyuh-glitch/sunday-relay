@@ -29,7 +29,7 @@ import unreal
 L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "wardrobe_upgrade")
-SKINS = ["relay_og", "arden_infernal", "apollo", "skeleton_flame", "celestial_light"]
+SKINS = ["relay_og", "jack_flame", "baal", "skeleton_flame", "celestial_light"]
 #: The widest and the tallest of the set: the founder asked for front, side and back of these in particular.
 TURNED = ["arden_infernal", "celestial_light"]
 STRIPS = 16

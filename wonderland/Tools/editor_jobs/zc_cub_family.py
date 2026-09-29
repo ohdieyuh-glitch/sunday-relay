@@ -25,7 +25,7 @@ import unreal
 L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "cub_family")
-SKINS = ("relay_og", "celestial_light", "apollo_v1", "apollo", "arden_infernal_v1", "arden_infernal", "skeleton_flame_v1", "skeleton_flame")
+SKINS = ("relay_og", "celestial_light", "baal", "jack_flame", "skeleton_flame_v1", "skeleton_flame")
 # The plate's plain cubs, as the generator writes them. A dressed cub is heavier than any of these.
 PLAIN_CUB_BOXES = (595, 601, 603)
 FLOCK = 3
