@@ -1,0 +1,68 @@
+{
+ "name": "zzW107_selfwalk_heart",
+ "started": "2026-09-29 07:12:24",
+ "status": "walked",
+ "day_minutes_found": 24.0,
+ "proof_class": "SELF-POWERED (one placement at each route's start)",
+ "throttle_error": "AttributeError(\"module 'unreal' has no attribute 'EditorPerformanceSettings'\")",
+ "routes": [
+  {
+   "route": "ht356_walk.json",
+   "pass": "HT356",
+   "waypoints": 63,
+   "arrived": false,
+   "wall_seconds": 474.5,
+   "game_seconds": 473.3,
+   "fps_seen": 12.7,
+   "mean_speed_cm_s": 123.5,
+   "waypoints_reached": 56,
+   "fraction": 0.889,
+   "walked_m": 584.4,
+   "route_m": 661.1,
+   "seconds": 473.3,
+   "low_z": 75.2,
+   "timed_out": true
+  },
+  {
+   "route": "hn181_walk.json",
+   "pass": "HN181",
+   "waypoints": 55,
+   "dog_destroyed": true,
+   "at_waypoint": 14,
+   "arrived": false,
+   "wall_seconds": 209.8,
+   "game_seconds": 206.6,
+   "fps_seen": 14.1,
+   "mean_speed_cm_s": 66.3,
+   "waypoints_reached": 14,
+   "fraction": 0.255,
+   "walked_m": 137.0,
+   "route_m": 561.9,
+   "seconds": 206.6,
+   "low_z": 75.2
+  },
+  {
+   "route": "hn238_walk.json",
+   "pass": "HN238",
+   "waypoints": 65,
+   "error": "no pawn at start"
+  },
+  {
+   "route": "hi057_walk.json",
+   "pass": "HI057",
+   "waypoints": 52,
+   "error": "no pawn at start"
+  },
+  {
+   "route": "ht308_walk.json",
+   "pass": "HT308",
+   "waypoints": 60,
+   "error": "no pawn at start"
+  }
+ ],
+ "all_arrived": false,
+ "day_minutes_restored": 24.0,
+ "finished": "2026-09-29 07:25:10",
+ "seconds": 766.65,
+ "log": "ht356_walk.json NOT ARRIVED 0.889\nhn181_walk.json NOT ARRIVED 0.255\n"
+}

@@ -1,0 +1,63 @@
+{
+ "name": "zzW113_selfwalk_core",
+ "started": "2026-09-29 07:52:21",
+ "status": "walked",
+ "day_minutes_found": 24.0,
+ "proof_class": "SELF-POWERED (one placement at each route's start)",
+ "throttle_error": "AttributeError(\"module 'unreal' has no attribute 'EditorPerformanceSettings'\")",
+ "routes": [
+  {
+   "route": "route_sr030_sx01.json",
+   "pass": "SR030+SX01",
+   "waypoints": 131,
+   "arrived": true,
+   "wall_seconds": 245.9,
+   "game_seconds": 245.2,
+   "fps_seen": 32.8,
+   "mean_speed_cm_s": 229.9,
+   "waypoints_reached": 131,
+   "fraction": 1.0,
+   "walked_m": 563.6,
+   "route_m": 568.4,
+   "seconds": 245.2,
+   "low_z": 75.2
+  },
+  {
+   "route": "route_dw01.json",
+   "pass": "DW01",
+   "waypoints": 180,
+   "arrived": true,
+   "wall_seconds": 675.6,
+   "game_seconds": 675.6,
+   "fps_seen": 41.8,
+   "mean_speed_cm_s": 229.9,
+   "waypoints_reached": 180,
+   "fraction": 1.0,
+   "walked_m": 1553.3,
+   "route_m": 1576.0,
+   "seconds": 675.6,
+   "low_z": 75.2
+  },
+  {
+   "route": "s2m297_walk.json",
+   "pass": "S2M297",
+   "waypoints": 27,
+   "arrived": true,
+   "wall_seconds": 105.0,
+   "game_seconds": 105.0,
+   "fps_seen": 40.7,
+   "mean_speed_cm_s": 229.7,
+   "waypoints_reached": 27,
+   "fraction": 1.0,
+   "walked_m": 241.1,
+   "route_m": 249.8,
+   "seconds": 105.0,
+   "low_z": 75.2
+  }
+ ],
+ "all_arrived": true,
+ "day_minutes_restored": 24.0,
+ "finished": "2026-09-29 08:10:23",
+ "seconds": 1081.83,
+ "log": "route_sr030_sx01.json ARRIVED 1.0\nroute_dw01.json ARRIVED 1.0\ns2m297_walk.json ARRIVED 1.0\n"
+}
