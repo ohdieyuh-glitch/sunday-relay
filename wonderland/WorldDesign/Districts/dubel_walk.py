@@ -26,6 +26,7 @@ sys.path.insert(0, str(WD / "Rings"))
 import dubel_forest as DF                                                 # noqa: E402
 import forge_districts as FD                                              # noqa: E402
 import ring_roads as RR                                                   # noqa: E402
+import seam_bypass as SB                                                  # noqa: E402
 
 PASS = "DW01"
 FLAGS = ("WL_Ground_Flagstone_A", "WL_Ground_Flagstone_B", "WL_Ground_Flagstone_C")
@@ -55,7 +56,7 @@ def main():
     lines = [[TRAIL_ENDS["58"][:2], path[0]], path, [path[-1], TRAIL_ENDS["122"][:2]]]
     site = FD.Site(0.0, 132000.0, 95000.0)
     spec = RR.Spec(PASS, "Wonderland/Authored/DW01_DubelWalk")
-    k = 0
+    stones = []                                   # (x, y, yaw) in walking order
     for line in lines:
         for (x, y, head) in densify(line, STEP):
             jx, jy = x + rng.uniform(-40.0, 40.0), y + rng.uniform(-40.0, 40.0)
@@ -71,15 +72,49 @@ def main():
                 else:
                     spec.stats["stone_refused"] += 1
                     continue
-            name = FLAGS[k % 3]
-            yaw = head + rng.uniform(-8.0, 8.0)
-            for part in RR.KIT[name]["parts"]:
-                if part["part"] == "veg_anchor":
-                    continue
-                spec.add("%s_%s" % (name.replace("WL_", ""), part["part"]), part["mesh"], part["material"], jx, jy, Z,
-                         yaw, SCALE, SCALE, SCALE, collides=False, cull=CULL)
-            k += 1
-            spec.stats["stone"] += 1
+            stones.append((jx, jy, head + rng.uniform(-8.0, 8.0)))
+    # BRIDGES. Where refusals or side-flipping detours leave a step longer than 7 m -- DF01's path ENDS inside the
+    # SKY05 tower base at 122 deg (the World session's Dog landed on the tower there) -- a 1 m grid search round
+    # whatever stands between (seam_bypass.bfs, the SR030 bypass instrument) lays stones on the way it finds.
+    walked = [stones[0]]
+    for st in stones[1:]:
+        a = walked[-1]
+        if math.hypot(st[0] - a[0], st[1] - a[1]) > 700.0:
+            way = SB.bfs(site, a[:2], st[:2], 0.5 * (a[0] + st[0]), 0.5 * (a[1] + st[1]))
+            if way:
+                last = a
+                for (x, y) in way[1:-1]:
+                    if math.hypot(x - last[0], y - last[1]) >= STEP:
+                        walked.append((x, y, rng.uniform(0.0, 360.0)))
+                        last = (x, y)
+                        spec.stats["stone_bridge"] += 1
+            else:
+                spec.stats["gap_unbridged"] += 1
+        walked.append(st)
+    # ONLY WHAT CONNECTS. Group the stones into chains (8 m); keep the chain that starts at the 58 deg trail join and
+    # the chain that ends at the 122 deg one, drop any chain stranded between them. At 116-122 deg a V2 hedge-ring
+    # mass seals DF01's path between two SKY05 towers (no 1.8 m way round within 150 m): stones across it would
+    # promise a way that is not there. The seal is recorded in the matrix beside the ring-road hedge barriers.
+    chain = list(range(len(walked)))
+    def root(i):
+        while chain[i] != i:
+            chain[i] = chain[chain[i]]
+            i = chain[i]
+        return i
+    for i in range(1, len(walked)):
+        if math.hypot(walked[i][0] - walked[i - 1][0], walked[i][1] - walked[i - 1][1]) <= 800.0:
+            chain[root(i)] = root(i - 1)
+    keep = {root(0), root(len(walked) - 1)}
+    spec.stats["stone_stranded_dropped"] = sum(1 for i in range(len(walked)) if root(i) not in keep)
+    walked = [w for i, w in enumerate(walked) if root(i) in keep]
+    for k, (jx, jy, yaw) in enumerate(walked):
+        name = FLAGS[k % 3]
+        for part in RR.KIT[name]["parts"]:
+            if part["part"] == "veg_anchor":
+                continue
+            spec.add("%s_%s" % (name.replace("WL_", ""), part["part"]), part["mesh"], part["material"], jx, jy, Z,
+                     yaw, SCALE, SCALE, SCALE, collides=False, cull=CULL)
+        spec.stats["stone"] += 1
     out = spec.out(["WL_AUTHORED", "WL_PASS_%s" % PASS, "WL_DISTRICT_DUBEL_FOREST"])
     out["title"] = "Dubel Walk: stepping stones on Dubel Forest's path, joined to the wild-ring trail"
     (HERE / "dw01_dubel_walk.json").write_text(json.dumps(out, indent=1), encoding="utf-8")
