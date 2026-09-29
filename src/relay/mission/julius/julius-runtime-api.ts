@@ -36,7 +36,7 @@ import {
   type JuliusApprovalRecord, type JuliusApprovalStore, type JuliusApproverAuthority,
   type JuliusLifecycleDependencies, type JuliusLifecycleStore,
 } from './julius-lifecycle-runtime';
-import type { JuliusClock, JuliusRunRow, JuliusRuntimeStore } from './julius-runtime-ports';
+import type { JuliusClock, JuliusEventWriter, JuliusIdFactory, JuliusRunRow, JuliusRuntimeStore } from './julius-runtime-ports';
 import { juliusCostComponent } from './julius-cost-accounting';
 
 /* -------------------------------------------------------------- identity */
@@ -280,6 +280,15 @@ export interface JuliusRuntimeApiDependencies {
   readonly timeline: JuliusTimelineReader;
   readonly approvers: JuliusApproverAuthority;
   readonly clock: JuliusClock;
+  /**
+   * WHERE A CONTROL OPERATION ANNOUNCES ITSELF. Optional, like the lifecycle
+   * runtime's own: absent, a pause still moves the run (and the store writes
+   * its transition), but no `run.paused` / `run.resumed` / `run.cancelled`
+   * event with the actor and reason reaches the ledger. The bridge's control
+   * composition supplies both.
+   */
+  readonly events?: JuliusEventWriter;
+  readonly ids?: JuliusIdFactory;
 }
 
 /** The most timeline entries one page will carry. */
@@ -586,7 +595,10 @@ export class JuliusRuntimeApi {
    */
 
   #lifecycleDeps(): JuliusLifecycleDependencies {
-    return { store: this.deps.store, clock: this.deps.clock };
+    return {
+      store: this.deps.store, clock: this.deps.clock,
+      ...(this.deps.events === undefined || this.deps.ids === undefined ? {} : { events: this.deps.events, ids: this.deps.ids }),
+    };
   }
 
   async #control<T>(
