@@ -22,7 +22,7 @@ from emptiness import write_png                                    # noqa: E402
 
 CENSUS = HERE.parent.parent / "Tools" / "captures" / "zc" / "census" / "world_census.csv.gz"
 NEW = HERE / "w270_new_placements.csv.gz"
-COL = {"existing": (150, 150, 150), "W270S": (230, 190, 70), "W270N": (150, 110, 220),
+COL = {"existing": (150, 150, 150), "HN181": (150, 110, 220), "HN238": (150, 110, 220), "HT356": (215, 60, 60), "HT308": (215, 60, 60), "HI057": (235, 235, 245), "W270S": (230, 190, 70), "W270N": (150, 110, 220),
        "W270T": (215, 60, 60), "W270G": (70, 210, 230), "P165N": (150, 110, 220), "P015T": (215, 60, 60)}
 
 

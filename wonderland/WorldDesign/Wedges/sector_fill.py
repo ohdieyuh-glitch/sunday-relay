@@ -1,0 +1,528 @@
+#!/usr/bin/env python3
+"""SECTOR FILL -- structured garden districts in the empty nation heartlands.
+
+WHY. The census after the ring roads (2026-09-28, 195,938 rows) puts the walkable disc at 50.1% empty with
+structure only, and the empty ground is not scattered: it is five heartland regions of 12-25 hectares, one
+between each nation's band avenue and its seams, all at 600-1,150 m (emptiness.py --structure, regions_top):
+
+    NOCTIS    bearing 181  255,075 m2      TARTARUS  bearing 356  204,975 m2
+    NOCTIS    bearing 238  194,350 m2      ICARUS    bearing  57  152,000 m2
+    TARTARUS  bearing 308  118,900 m2
+
+The founder's rule for completion is "aggressive environmental completion ... density must not be random
+clutter ... empty space only where intentional". So nothing here is scattered. The ground is measured first,
+then filled largest-first with DESIGNED GROUPS, each already proven on the rear seam (w270_rear_seam.py):
+
+  * GARDEN QUARTERS -- four 30 m garden rooms around a cross of stepping-stone lanes, where 80 m is clear;
+  * one MUSHROOM WOOD per region (the Bible's mushroom woods, in the nation's cap colours);
+  * single GARDEN ROOMS where 36 m is clear;
+  * GROVES of six to eleven trees with a shrub-and-rose rim where 30 m is clear;
+  * MEADOW DRIFTS -- one species to an arc -- in the gaps between;
+  * and what is left stays LAWN, on purpose: the spaces between groups are part of the design.
+Every door of every room is joined to the nearest existing paving (a band avenue, a ring road, a court) by
+stepping stones laid along a path searched through the free ground, so nothing is marooned in the grass.
+
+THE GROUND IS THE CENSUS, THROUGH w270_rear_seam's occupancy -- with its load_census filtering by the CURRENT
+frame (the fix of 2026-09-28: it used to hard-code the rear seam's wedge, and the pockets built on it tested
+clearance against an empty world). Every stamp is then placed with that occupancy's own exact tests.
+
+    python sector_fill.py [--only HN181,...]      writes <id>_<nation>_heartland.json + a plan per region
+"""
+import argparse
+import csv
+import gzip
+import json
+import math
+import random
+import sys
+from collections import Counter, deque
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import w270_rear_seam as W                                       # noqa: E402  frame, occupancy, Pass, stamps
+
+CELL = 500.0                                                     # the free-ground raster, cm
+LAYERS = ("existing", "solid", "paved", "way")
+
+#: the five heartlands (bearing and radial span from emptiness.py's regions_top; the half-angle holds the region)
+REGIONS = {
+    "HN181": dict(nation_cfg="NC03", bearing=181.0, half=22.0, r=(62000.0, 115000.0)),
+    "HT356": dict(nation_cfg="TQ03", bearing=356.0, half=20.0, r=(61000.0, 110000.0)),
+    "HN238": dict(nation_cfg="NC03", bearing=238.0, half=17.0, r=(61000.0, 114000.0)),
+    "HI057": dict(nation_cfg="IC03", bearing=57.0, half=17.0, r=(60000.0, 112000.0)),
+    "HT308": dict(nation_cfg="TQ03", bearing=308.0, half=14.0, r=(60000.0, 111000.0)),
+}
+LEAVES = {"NOCTIS": ("MI_V2_LeafDark", "MI_V2_LeafDark", "MI_V2_LeafMid", "MI_V2_PetalWhite"),
+          "TARTARUS": ("MI_V2_LeafCopper", "MI_V2_LeafGold", "MI_V2_LeafMid", "MI_V2_LeafDark"),
+          "ICARUS": ("MI_V2_LeafMid", "MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_PetalWhite")}
+CAPS = {"NOCTIS": ("MI_V2_MushPurple", "MI_V2_MushCream"), "TARTARUS": ("MI_V2_MushRed", "MI_V2_MushTerracotta"),
+        "ICARUS": ("MI_V2_MushCream", "MI_V2_PetalWhite")}
+FLOWERS = ("WL_Flower_Rose_Run", "WL_Flower_Lavender_Run", "WL_Flower_Daisy_Run")
+FLAGS = ("WL_Ground_Flagstone_A", "WL_Ground_Flagstone_B", "WL_Ground_Flagstone_C")
+
+H = 1620.0                     # a garden room's half-size to its hedge line (the rear seam's room)
+HEDGE = (303.0, 71.0)          # SM_hedge_block half-extents (6.06 x 1.42 m)
+#: clearance needed (cm, from the group's centre to anything standing) and caps per region
+NEED = {"quarter": 4000.0, "room": 1800.0, "wood": 3600.0, "grove": 2000.0, "drift": 900.0}
+CAP = {"quarter": 3, "room": 8, "wood": 1, "grove": 14, "drift": 16}
+
+
+def set_frame(bearing, half_deg):
+    W.BEARING = bearing
+    r = math.radians(bearing)
+    W.DIR = (math.cos(r), math.sin(r))
+    W.LEFT = (-math.sin(r), math.cos(r))
+    W.SEAM_HALF_DEG = half_deg
+
+
+class Ground:
+    """The region's free ground on a 5 m raster in the (u, v) frame, and each free cell's clearance."""
+
+    def __init__(self, occ, r0, r1):
+        self.occ = occ
+        self.u0, self.u1 = r0, r1
+        vmax = W.edge_v(r1)
+        self.v0 = -vmax
+        self.nu = int((r1 - r0) // CELL) + 1
+        self.nv = int((2 * vmax) // CELL) + 1
+        self.free = [[False] * self.nv for _ in range(self.nu)]
+        self.paved = [[False] * self.nv for _ in range(self.nu)]
+        for i in range(self.nu):
+            u = self.u(i)
+            e = W.edge_v(u)
+            for j in range(self.nv):
+                v = self.v(j)
+                if abs(v) > e:
+                    continue
+                x, y = W.world(u, v)
+                if occ.hits(x, y, CELL * 0.5, CELL * 0.5, W.BEARING, 0.0, ("paved", "way")):
+                    self.paved[i][j] = True
+                    continue
+                self.free[i][j] = not occ.hits(x, y, CELL * 0.5, CELL * 0.5, W.BEARING, 150.0, LAYERS)
+        self.recompute()
+
+    def u(self, i):
+        return self.u0 + CELL * (i + 0.5)
+
+    def v(self, j):
+        return self.v0 + CELL * (j + 0.5)
+
+    def cell(self, u, v):
+        return int((u - self.u0) // CELL), int((v - self.v0) // CELL)
+
+    def recompute(self):
+        """Clearance in cm: distance (8-connected BFS, in cells) from each free cell to the nearest non-free."""
+        INF = 10 ** 9
+        d = [[INF if self.free[i][j] else 0 for j in range(self.nv)] for i in range(self.nu)]
+        q = deque((i, j) for i in range(self.nu) for j in range(self.nv) if d[i][j] == 0)
+        while q:
+            i, j = q.popleft()
+            for di in (-1, 0, 1):
+                for dj in (-1, 0, 1):
+                    a, b = i + di, j + dj
+                    if 0 <= a < self.nu and 0 <= b < self.nv and d[a][b] > d[i][j] + 1:
+                        d[a][b] = d[i][j] + 1
+                        q.append((a, b))
+        self.clear = [[(d[i][j] - 0.5) * CELL if d[i][j] < INF else 0.0 for j in range(self.nv)]
+                      for i in range(self.nu)]
+
+    def best(self, need):
+        top, at = 0.0, None
+        for i in range(self.nu):
+            row = self.clear[i]
+            for j in range(self.nv):
+                if row[j] >= need and row[j] > top:
+                    top, at = row[j], (i, j)
+        return (self.u(at[0]), self.v(at[1]), top) if at else None
+
+    def block(self, cells, r):
+        """Mark every cell within r cells of the given cells as used (one clearance refresh for all)."""
+        for (i, j) in cells:
+            for a in range(max(0, i - r), min(self.nu, i + r + 1)):
+                for b in range(max(0, j - r), min(self.nv, j + r + 1)):
+                    self.free[a][b] = False
+        self.recompute()
+
+    def take(self, u, v, half_u, half_v):
+        """Mark a box (in the frame) as used, then refresh clearances."""
+        i0, j0 = self.cell(u - half_u, v - half_v)
+        i1, j1 = self.cell(u + half_u, v + half_v)
+        for i in range(max(0, i0), min(self.nu, i1 + 1)):
+            for j in range(max(0, j0), min(self.nv, j1 + 1)):
+                self.free[i][j] = False
+        self.recompute()
+
+    def nearest_free(self, u, v, radius_cells=12):
+        """The free cell nearest (u, v), searching outward; or None."""
+        c = self.cell(u, v)
+        best = None
+        for i in range(max(0, c[0] - radius_cells), min(self.nu, c[0] + radius_cells + 1)):
+            for j in range(max(0, c[1] - radius_cells), min(self.nv, c[1] + radius_cells + 1)):
+                if self.free[i][j]:
+                    d = (i - c[0]) ** 2 + (j - c[1]) ** 2
+                    if best is None or d < best[0]:
+                        best = (d, (i, j))
+        return best[1] if best else None
+
+    def spine(self, a, b):
+        """A walk from cell a to cell b through free cells, preferring clearance (Dijkstra, cost falls with
+        clearance so the walk keeps to the middle of open ground rather than hugging what stands); or None."""
+        import heapq
+        dist = {a: 0.0}
+        prev = {a: None}
+        h = [(0.0, a)]
+        while h:
+            d, c = heapq.heappop(h)
+            if c == b:
+                out = []
+                while c is not None:
+                    out.append(c)
+                    c = prev[c]
+                return list(reversed(out))
+            if d > dist.get(c, 1e18):
+                continue
+            i, j = c
+            for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
+                n = (i + di, j + dj)
+                if not (0 <= n[0] < self.nu and 0 <= n[1] < self.nv):
+                    continue
+                # A WALK MAY CROSS A ROAD: the ring roads run straight through every heartland, and a walk that
+                # stopped at them would leave half the region unreachable. Paving costs a little more than
+                # open lawn, so the walk crosses a road rather than following it.
+                if self.paved[n[0]][n[1]]:
+                    step = math.hypot(di, dj) * 3.0
+                elif self.free[n[0]][n[1]]:
+                    step = math.hypot(di, dj) * (1.0 + 6.0 / (1.0 + self.clear[n[0]][n[1]] / CELL))
+                else:
+                    continue
+                nd = d + step
+                if nd < dist.get(n, 1e18):
+                    dist[n] = nd
+                    prev[n] = c
+                    heapq.heappush(h, (nd, n))
+        return None
+
+    def path_to_paving(self, u, v, max_cells=60):
+        """Cells from (u, v) to the nearest free cell touching paving, through free cells (BFS); or None."""
+        s = self.cell(u, v)
+        if not (0 <= s[0] < self.nu and 0 <= s[1] < self.nv):
+            return None
+        prev = {s: None}
+        q = deque([s])
+        while q:
+            c = q.popleft()
+            i, j = c
+            touch = any(0 <= i + a < self.nu and 0 <= j + b < self.nv and self.paved[i + a][j + b]
+                        for a in (-1, 0, 1) for b in (-1, 0, 1))
+            if touch:
+                out = []
+                while c is not None:
+                    out.append(c)
+                    c = prev[c]
+                return list(reversed(out))
+            for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                n = (i + a, j + b)
+                if n in prev or not (0 <= n[0] < self.nu and 0 <= n[1] < self.nv):
+                    continue
+                if not self.free[n[0]][n[1]] and n != s:
+                    continue
+                if abs(n[0] - s[0]) + abs(n[1] - s[1]) > max_cells:
+                    continue
+                prev[n] = c
+                q.append(n)
+        return None
+
+
+# ------------------------------------------------------------------------------------------------ stamps
+def garden_room(p, uc, vc, leaves, k, doors_v=False):
+    """The rear seam's garden room: hedge walls with a door in the middle of two opposite sides (the sides
+    facing along u, or with doors_v the sides facing across v), topiary corners, four flower beds, a rose."""
+    for e in (-1224.0, -612.0, 0.0, 612.0, 1224.0):
+        for (du, dv, yaw) in ((e, -H, 0.0), (e, H, 0.0), (-H, e, 90.0), (H, e, 90.0)):
+            if e == 0.0 and ((dv == 0.0) if not doors_v else (du == 0.0)):
+                continue
+            p.plant("hedge", uc + du, vc + dv, 1.0, "MI_V2_LeafMid", yaw, margin=0.0, rect=HEDGE)
+    for (du, dv) in ((-H, -H), (-H, H), (H, -H), (H, H)):
+        p.plant("topiary_cone", uc + du, vc + dv, 1.2, leaves[0], 0.0, margin=0.0, radius=90.0)
+    for (du, dv) in ((-600.0, -600.0), (600.0, -600.0), (-600.0, 600.0), (600.0, 600.0)):
+        for q in range(5):
+            p.add_module(FLOWERS[(q + k) % 3], uc + du + (q - 2) * 130.0, vc + dv, W.GROUND_Z + 2.0, 0.0,
+                         cull=W.CULL_NEAR, collide=False, check=False)
+    p.plant("rose", uc, vc, 1.3, "MI_V2_RosePink", 0.0, margin=0.0, radius=120.0)
+    p.stats["garden_room"] += 1
+
+
+def stepping(p, cells, g, rng):
+    """Stepping flags every ~4.5 m along a raster path."""
+    last = None
+    k = 0
+    for (i, j) in cells:
+        u, v = g.u(i), g.v(j)
+        if last is not None and math.hypot(u - last[0], v - last[1]) < 450.0:
+            continue
+        p.add_module(FLAGS[k % 3], u + rng.uniform(-40.0, 40.0), v + rng.uniform(-40.0, 40.0), W.GROUND_Z + 1.0,
+                     rng.uniform(-8.0, 8.0), scale=0.55, cull=W.CULL_NEAR, collide=False, margin=10.0,
+                     layer="paved", layers=("existing", "solid"))
+        last = (u, v)
+        k += 1
+    p.stats["stepping_stones"] += k
+
+
+def join(p, g, doors, rng):
+    """Join a group to the paving from whichever of its doors has the shorter free path."""
+    best = None
+    for (u, v) in doors:
+        path = g.path_to_paving(u, v)
+        if path and (best is None or len(path) < len(best)):
+            best = path
+    if best:
+        stepping(p, best, g, rng)
+        p.stats["joined"] += 1
+    else:
+        p.stats["not_joined"] += 1
+
+
+def grove(p, gu, gv, leaves, rng):
+    gr = rng.uniform(1300.0, 1700.0)          # trees inside gr, the understorey rim to gr + 7 m: inside NEED + 1 m
+    n_tree = rng.randint(6, 11)
+    placed = 0
+    for _ in range(n_tree * 4):
+        if placed >= n_tree:
+            break
+        t, d = rng.uniform(0, math.tau), gr * math.sqrt(rng.random())
+        kind = "tree_slender" if rng.random() < 0.8 else "tree_mature"
+        if p.plant(kind, gu + math.cos(t) * d, gv + math.sin(t) * d, rng.uniform(0.85, 1.2), rng.choice(leaves),
+                   rng.uniform(0, 360), margin=60.0):
+            placed += 1
+    for _ in range(rng.randint(5, 9)):
+        t = rng.uniform(0, math.tau)
+        d = gr + rng.uniform(200.0, 700.0)
+        p.plant(rng.choice(("shrub", "shrub", "rose")), gu + math.cos(t) * d, gv + math.sin(t) * d,
+                rng.uniform(0.8, 1.25), leaves[2], rng.uniform(0, 360), margin=0.0, radius=110.0)
+    p.stats["trees"] += placed
+    p.stats["grove"] += 1
+
+
+def drift(p, gu, gv, rng):
+    sp = FLOWERS[rng.randint(0, 2)]
+    arc0 = rng.uniform(0, math.tau)
+    for q in range(rng.randint(8, 14)):
+        t = arc0 + q * 0.22
+        d = rng.uniform(300.0, 700.0)
+        p.add_module(sp, gu + math.cos(t) * d, gv + math.sin(t) * d, W.GROUND_Z + 2.0, math.degrees(t) + 90.0,
+                     cull=W.CULL_NEAR, collide=False, check=False)
+    p.stats["meadow_drift"] += 1
+
+
+def wood(p, mu, mv, nation, leaves, rng):
+    caps = CAPS[nation]
+    n = 0
+    for _ in range(70):
+        if n >= 16:
+            break
+        t, d = rng.uniform(0, math.tau), 2800.0 * math.sqrt(rng.random())
+        name = rng.choice(("WL_Mushroom_Toadstool", "WL_Mushroom_Tall", "WL_Mushroom_Tall", "WL_Mushroom_Button"))
+        sc = rng.uniform(1.2, 3.2) if name != "WL_Mushroom_Button" else rng.uniform(1.0, 1.8)
+        mm = {"mush_cap": caps[n % 2], "mush_gill": "MI_V2_MushCream", "mush_spot": "MI_V2_PetalWhite",
+              "mush_stem": "MI_V2_MushStem"}
+        if p.add_module(name, mu + math.cos(t) * d, mv + math.sin(t) * d, W.GROUND_Z, rng.uniform(0, 360),
+                        scale=sc, cull=W.CULL_MID, record=True, margin=150.0, mats=mm, layers=LAYERS):
+            n += 1
+    for _ in range(10):
+        t, d = rng.uniform(0, math.tau), rng.uniform(2600.0, 3600.0)
+        p.plant("tree_slender", mu + math.cos(t) * d, mv + math.sin(t) * d, rng.uniform(0.9, 1.15), leaves[0],
+                rng.uniform(0, 360), margin=60.0)
+    p.stats["mushrooms"] += n
+    p.stats["wood"] += 1
+
+
+# ------------------------------------------------------------------------------------------------ a region
+def fill(pid, R):
+    set_frame(R["bearing"], R["half"])
+    cfg = W.NB.NATIONS[R["nation_cfg"]]
+    nation = cfg["nation"]
+    leaves = LEAVES[nation]
+    occ = W.Occupancy()
+    n_census = W.load_census(occ)
+    g = Ground(occ, *R["r"])
+    free0 = sum(sum(1 for f in row if f) for row in g.free) * (CELL / 100.0) ** 2
+    rng = random.Random("sector-fill-" + pid)
+    p = W.Pass(pid, ["WL_SECTOR_FILL", "WL_NATION_" + nation, "WL_DISTRICT_%s_HEARTLAND" % nation],
+               "Wonderland/Authored/%s_%sHeartland" % (pid, nation.title()), dict(cfg["materials"]), occ, pid)
+    groups = []
+    off = H + 600.0                                       # a quarter's rooms stand at +/-off from its centre
+
+    def quarter(uc, vc):
+        for k, (su, sv) in enumerate(((-1, -1), (-1, 1), (1, -1), (1, 1))):
+            garden_room(p, uc + su * off, vc + sv * off, leaves, k)
+        lane = [(g.cell(uc + t, vc)) for t in range(-int(2 * off), int(2 * off) + 1, 450)] + \
+               [(g.cell(uc, vc + t)) for t in range(-int(2 * off), int(2 * off) + 1, 450)]
+        stepping(p, lane, g, rng)
+        p.plant("topiary_spiral", uc, vc, 1.4, leaves[0], 0.0, margin=0.0, radius=150.0)
+        g.take(uc, vc, off + H + 300.0, off + H + 300.0)
+        p.stats["quarter"] += 1
+        groups.append(("quarter", uc, vc))
+
+    def room(uc, vc, doors_v=False):
+        garden_room(p, uc, vc, leaves, p.stats["room_single"], doors_v=doors_v)
+        g.take(uc, vc, H + 300.0, H + 300.0)
+        p.stats["room_single"] += 1
+        groups.append(("room", uc, vc))
+
+    def link(u0, v0, u1, v1):
+        """A short straight line of stepping stones (a room's door to the walk beside it)."""
+        n = max(1, int(math.hypot(u1 - u0, v1 - v0) // 450.0))
+        for q in range(1, n + 1):
+            t = q / float(n + 1)
+            p.add_module(FLAGS[q % 3], u0 + (u1 - u0) * t, v0 + (v1 - v0) * t, W.GROUND_Z + 1.0,
+                         rng.uniform(-8.0, 8.0), scale=0.55, cull=W.CULL_NEAR, collide=False, margin=10.0,
+                         layer="paved", layers=("existing", "solid"))
+            p.stats["stepping_stones"] += 1
+
+    qboxes = []
+
+    def clearance_at(u, v):
+        i, j = g.cell(u, v)
+        return g.clear[i][j] if 0 <= i < g.nu and 0 <= j < g.nv else 0.0
+
+    # 1. THE GARDEN WALK: a spine through the heartland's open ground, from its inner edge to its outer one,
+    #    keeping to the middle of the open ground. Everything else is composed along it.
+    a = g.nearest_free(R["r"][0] + 3000.0, 0.0, 20)
+    b = g.nearest_free(R["r"][1] - 3000.0, 0.0, 20)
+    walk = g.spine(a, b) if (a and b) else None
+    if walk:
+        p.stats["walk_m"] = int(len(walk) * CELL / 100)
+        # 2. ALONG IT: a garden quarter where the walk crosses room enough (the walk becomes its cross lane),
+        #    otherwise single rooms either side of it; every ~45 m
+        k = 12
+        while k < len(walk) - 12:
+            i, j = walk[k]
+            u, v = g.u(i), g.v(j)
+            du = g.u(walk[k + 4][0]) - g.u(walk[k - 4][0])
+            dv = g.v(walk[k + 4][1]) - g.v(walk[k - 4][1])
+            n = math.hypot(du, dv) or 1.0
+            pu, pv = -dv / n, du / n                              # perpendicular to the walk
+            if p.stats["quarter"] < CAP["quarter"] and clearance_at(u, v) >= NEED["quarter"]:
+                quarter(u, v)
+                qboxes.append((u, v, off + H + 300.0))
+                k += 18
+                continue
+            placed = False
+            for s in (1.0, -1.0):
+                ru, rv = u + s * pu * (H + 900.0), v + s * pv * (H + 900.0)
+                if p.stats["room_single"] < CAP["room"] and clearance_at(ru, rv) >= NEED["room"]:
+                    # beside a walk that runs along u, the room's doors face across v -- toward the walk
+                    room(ru, rv, doors_v=abs(pv) >= abs(pu))
+                    # and its near door is joined to the walk by a few stepping stones
+                    du_, dv_ = (0.0, -s * H * (1 if pv >= 0 else -1)) if abs(pv) >= abs(pu) else \
+                        (-s * H * (1 if pu >= 0 else -1), 0.0)
+                    link(ru + du_, rv + dv_, u, v)
+                    placed = True
+            k += 10 if placed else 3
+        # the walk's corridor is kept: nothing else stands within 3 m of it
+        g.block(walk, 1)
+        # 3. THE MUSHROOM WOOD, the walk's destination: the most open ground within 150 m of its outer end
+        eu, ev = g.u(walk[-1][0]), g.v(walk[-1][1])
+        best = None
+        for i in range(g.nu):
+            for j in range(g.nv):
+                c = g.clear[i][j]
+                if c >= NEED["wood"] and math.hypot(g.u(i) - eu, g.v(j) - ev) < 15000.0:
+                    if best is None or c > best[0]:
+                        best = (c, g.u(i), g.v(j))
+        if best:
+            wood(p, best[1], best[2], nation, leaves, rng)
+            g.take(best[1], best[2], 3600.0, 3600.0)
+            groups.append(("wood", best[1], best[2]))
+    else:
+        p.stats["no_walk"] += 1
+
+    # 4. GROVES in a belt beyond the rooms (within 130 m of the walk when there is one), largest ground first
+    near_walk = set(walk or [])
+
+    def in_belt(u, v):
+        if not walk:
+            return True
+        i, j = g.cell(u, v)
+        r = int(13000.0 // CELL)
+        return any((i + a_, j + b_) in near_walk for a_ in range(-r, r + 1, 3) for b_ in range(-r, r + 1, 3))
+
+    tries = 0
+    while p.stats["grove"] < CAP["grove"] and tries < 200:
+        tries += 1
+        at = g.best(NEED["grove"])
+        if at is None:
+            break
+        if not in_belt(at[0], at[1]):
+            g.take(at[0], at[1], 1000.0, 1000.0)                  # leave that ground as lawn, look elsewhere
+            continue
+        grove(p, at[0], at[1], leaves, rng)
+        g.take(at[0], at[1], 2400.0, 2400.0)
+        groups.append(("grove", at[0], at[1]))
+
+    # the walk itself, in stepping stones, and joined to the paving at both ends (laid last, round the groups)
+    if walk:
+        # through a quarter the walk IS the quarter's cross lane, which already has its stones
+        outside = [c for c in walk if not g.paved[c[0]][c[1]]
+                   and not any(abs(g.u(c[0]) - qu) <= qh and abs(g.v(c[1]) - qv) <= qh for (qu, qv, qh) in qboxes)]
+        stepping(p, outside, g, rng)
+        # the corridor was blocked for the groves; the ends' joins search from free ground just beyond it
+        for end, beyond in ((walk[0], -1), (walk[-1], 1)):
+            eu, ev = g.u(end[0]), g.v(end[1])
+            c = g.nearest_free(eu + beyond * 1000.0, ev, 6)
+            if c is not None:
+                cells = g.path_to_paving(g.u(c[0]), g.v(c[1]))
+                if cells:
+                    stepping(p, cells, g, rng)
+                    p.stats["joined"] += 1
+                    continue
+            p.stats["not_joined"] += 1
+    while p.stats["meadow_drift"] < CAP["drift"]:
+        at = g.best(NEED["drift"])
+        if at is None:
+            break
+        drift(p, at[0], at[1], rng)
+        g.take(at[0], at[1], 900.0, 900.0)
+        groups.append(("drift", at[0], at[1]))
+
+    free1 = sum(sum(1 for f in row if f) for row in g.free) * (CELL / 100.0) ** 2
+    return p, n_census, free0, free1, groups
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--only", default="")
+    a = ap.parse_args()
+    want = [s for s in a.only.split(",") if s] or list(REGIONS)
+    with gzip.open(W.CENSUS, "rt", encoding="utf-8") as f:
+        text = f.read()
+    rows = []
+    for pid in want:
+        if ("," + pid + "_") in text:
+            raise SystemExit("REFUSED: the census already contains %s -- a fill must not regenerate itself from a "
+                             "world that holds it" % pid)
+        R = REGIONS[pid]
+        p, n_census, free0, free1, groups = fill(pid, R)
+        spec = p.spec()
+        nation = W.NB.NATIONS[R["nation_cfg"]]["nation"]
+        out = "%s_%s_heartland.json" % (pid.lower(), nation.lower())
+        (HERE / out).write_text(json.dumps(spec, indent=1), encoding="utf-8")
+        total = sum(len(b["instances"]) for b in spec["batches"])
+        print("%s -> %s  bearing %.0f  census rows %d  free %.1f ha -> %.1f ha left as lawn  batches %d  "
+              "instances %d" % (pid, out, R["bearing"], n_census, free0 / 1e4, free1 / 1e4, len(spec["batches"]),
+                                total))
+        print("   " + ", ".join("%s %d" % kv for kv in sorted(p.stats.items()) if kv[0] in
+                                  ("quarter", "wood", "room_single", "garden_room", "grove", "trees", "meadow_drift",
+                                   "mushrooms", "stepping_stones", "joined", "not_joined", "walk_m", "no_walk")))
+        if p.skipped:
+            print("   refused by the occupancy: " + ", ".join("%s %d" % kv for kv in p.skipped.most_common(8)))
+        rows += [(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], pid) for r in p.new_rows]
+    with gzip.open(HERE / "sector_fill_new_placements.csv.gz", "wt", encoding="utf-8", newline="") as f:
+        f.write("kind,x,y,z,ex,ey,ez,yaw,mesh,owner\n")
+        for (k, x, y, z, ex, ey, ez, mesh, owner) in rows:
+            f.write("%s,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,0,%s,%s\n" % (k, x, y, z, ex, ey, ez, mesh, owner))
+
+
+if __name__ == "__main__":
+    main()
