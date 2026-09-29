@@ -214,6 +214,7 @@ def main():
     want = [s for s in a.only.split(",") if s] or list(WOODS)
     with gzip.open(W.CENSUS, "rt", encoding="utf-8") as f:
         text = f.read()
+    rows = []
     for pid in want:
         if ("," + pid + "_") in text:
             raise SystemExit("REFUSED: the census already contains %s" % pid)
@@ -230,6 +231,12 @@ def main():
         print("%s -> %s  %s  arc %.0f-%.0f  census rows %d  batches %d  instances %d" % (
             pid, out, nation, D["b0"], D["b1"], n_census, len(spec["batches"]), total))
         print("   " + ", ".join("%s %d" % kv for kv in sorted(p.stats.items())))
+        rows += [(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], pid) for r in p.new_rows]
+    # the placements as census rows, like w270's and sector_fill's: emptiness.py can project the wood before it exists
+    with gzip.open(HERE / "wild_ring_new_placements.csv.gz", "wt", encoding="utf-8", newline="") as f:
+        f.write("kind,x,y,z,ex,ey,ez,yaw,mesh,owner\n")
+        for (k, x, y, z, ex, ey, ez, mesh, owner) in rows:
+            f.write("%s,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,0,%s,%s\n" % (k, x, y, z, ex, ey, ez, mesh, owner))
 
 
 if __name__ == "__main__":
