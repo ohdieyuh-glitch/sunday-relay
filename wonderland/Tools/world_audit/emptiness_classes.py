@@ -54,17 +54,13 @@ def spec_points(path, id_has=None):
     return out
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--census", default=E.DEFAULT_CENSUS)
-    ap.add_argument("--json")
-    ap.add_argument("--png")
-    ap.add_argument("--top", type=int, default=20)
-    a = ap.parse_args()
+def classify(census=E.DEFAULT_CENSUS):
+    """The classified raster: {n, x0, C, cls (bytearray, 0 = covered/outside, else a CLASSES key), covered, R2}.
+    Shared with the generators that build on the UNINTENDED cells (TW03)."""
     C, REACH, RAD = 500.0, 900.0, 148000.0
     n = int(math.ceil(2 * RAD / C))
     x0 = -RAD
-    rows, _dropped = E.load(a.census, True)
+    rows, _dropped = E.load(census, True)
     covered = bytearray(n * n)
 
     def stamp(grid, x, y, r, val=1, only_zero=False):
@@ -141,7 +137,7 @@ def main():
     import csv
     import gzip
     forest = []
-    with gzip.open(a.census, "rt", encoding="utf-8") as fh:
+    with gzip.open(census, "rt", encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
             if r["kind"] == "OTHER":
                 continue
@@ -178,6 +174,18 @@ def main():
     for k in range(n * n):
         if cls[k] == 255:
             cls[k] = 1
+    return {"n": n, "x0": x0, "C": C, "cls": cls, "covered": covered, "R2": R2}
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--census", default=E.DEFAULT_CENSUS)
+    ap.add_argument("--json")
+    ap.add_argument("--png")
+    ap.add_argument("--top", type=int, default=20)
+    a = ap.parse_args()
+    g = classify(a.census)
+    n, x0, C, cls, covered, R2 = g["n"], g["x0"], g["C"], g["cls"], g["covered"], g["R2"]
     cell_m2 = (C / 100.0) ** 2
     tot = {CLASSES[v]: round(sum(1 for k in range(n * n) if cls[k] == v) * cell_m2) for v in CLASSES}
     disc = round(sum(1 for j in range(n) for i in range(n)
