@@ -1389,7 +1389,7 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     expect(filtered).toContain('0 line(s) kept; 5 unrecognised');
     expect(output).toContain('  claude auth source: subscription_oauth_token\n');
     // A token-shaped line that DOES match an allowed shape is still refused by the secret rejector.
-    const tokenShaped = buildEvidence('  cause: CLAUDE_CODE_OAUTH_TOKEN=FAKETESTNOTREAL-oauth-token-sentinel\n  cause: sk-ant-oat01-FAKETESTNOTREAL');
+    const tokenShaped = buildEvidence('  cause: CLAUDE_CODE_OAUTH_TOKEN=FAKETESTNOTREAL\n  cause: sk-ant-oat01-FAKETESTNOTREAL');
     expect(tokenShaped).toContain('0 line(s) kept; 0 unrecognised and 2 secret-shaped');
   });
 
