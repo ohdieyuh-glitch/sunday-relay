@@ -1,8 +1,9 @@
 import { JULIUS_CODING_AGENT_FAILURES } from './julius-coding-agent';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
 import { JULIUS_BILLING_PATHS, JULIUS_COST_BASES } from './julius-cost-accounting';
+import { JULIUS_STORE_ERROR_CLASSES, isJuliusPostgresError, juliusStoreErrorClass } from './julius-store-failure';
 import type{JuliusWorker,JuliusWorkerRegistry,JuliusWorkerRole}from'./julius-runtime';import{workerAllowedByCard,type JuliusCardPolicy}from'./julius-policy';
-export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PROVIDER_UNAVAILABLE','INVALID_REQUEST','WORKER_EXECUTION_FAILURE','POLICY_DENIED','BUDGET_DENIED','CANCELLED']as const;export type JuliusErrorCode=typeof JULIUS_ERROR_CODES[number];
+export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PROVIDER_UNAVAILABLE','INVALID_REQUEST','WORKER_EXECUTION_FAILURE','POLICY_DENIED','BUDGET_DENIED','CANCELLED','PERSISTENCE_FAILURE']as const;export type JuliusErrorCode=typeof JULIUS_ERROR_CODES[number];
 /**
  * THE CONNECTOR'S OWN CLASSIFICATION, NARROWED TO A MACHINE TOKEN.
  *
@@ -260,6 +261,12 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   verdictValid:safeNullableBool(v.verdictValid),
   summaryPresent:safeNullableBool(v.summaryPresent),
   failureShape:safeToken(v.failureShape),
+  /**
+   * WHAT KIND OF STORE FAILURE ended a `PERSISTENCE_FAILURE`, from the driver's own
+   * code and never its message. Null on every attempt that was not Julius's own
+   * write failing, and null too when the thrown error was not a store error at all.
+   */
+  storeErrorClass:safeEnum(v.storeErrorClass,JULIUS_STORE_ERROR_CLASSES),
   providerHttpStatus:safeHttpStatus(v.providerHttpStatus),
   serviceHttpStatus:safeHttpStatus(v.serviceHttpStatus),
   /* --- What the reviewer's PROCESS did. Null for a transport that ran none.
@@ -778,4 +785,11 @@ export class JuliusProviderRouter{constructor(private readonly workers:JuliusWor
  }
  async dispatch(worker:JuliusWorker,input:JuliusDispatchInput){const adapter=this.adapters.get(worker.adapterId);if(!adapter)throw new JuliusDispatchError('PROVIDER_UNAVAILABLE',false,'Worker adapter is unavailable.');try{return await adapter.dispatch(input);}catch(error){throw normalizeProviderError(error);}}
 }
-export function normalizeProviderError(error:unknown):JuliusDispatchError{if(error instanceof JuliusDispatchError)return error;const code=error!==null&&typeof error==='object'&&'code'in error?String((error as{code:unknown}).code).toUpperCase():'';if(code==='429'||code==='RATE_LIMIT')return new JuliusDispatchError('RATE_LIMIT',true,'Provider rate limit reached.');if(code==='ETIMEDOUT'||code==='TIMEOUT'||error instanceof DOMException&&error.name==='TimeoutError')return new JuliusDispatchError('TIMEOUT',true,'Provider timed out.');if(['401','403','AUTH','CONFIGURATION'].includes(code))return new JuliusDispatchError('AUTH_CONFIGURATION',false,'Provider authentication or configuration failed.');if(code==='ABORT_ERR')return new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.');return new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Worker execution failed.');}
+/**
+ * A POSTGRESQL ERROR OUT OF AN ADAPTER is Julius's own store, from a write the
+ * adapter made for Julius, such as the executor's tool settlement. It is never the
+ * worker's failure. It may follow a paid call, so it is not retried; the ending
+ * keeps the hold. The check is the driver's shape (a SQLSTATE and a severity),
+ * so no provider code is ever read as one.
+ */
+export function normalizeProviderError(error:unknown):JuliusDispatchError{if(error instanceof JuliusDispatchError)return error;if(isJuliusPostgresError(error))return new JuliusDispatchError('PERSISTENCE_FAILURE',false,'Julius could not record its own bookkeeping during the dispatch.','persist_during_dispatch',{runtimeStarted:true,storeErrorClass:juliusStoreErrorClass(error)});const code=error!==null&&typeof error==='object'&&'code'in error?String((error as{code:unknown}).code).toUpperCase():'';if(code==='429'||code==='RATE_LIMIT')return new JuliusDispatchError('RATE_LIMIT',true,'Provider rate limit reached.');if(code==='ETIMEDOUT'||code==='TIMEOUT'||error instanceof DOMException&&error.name==='TimeoutError')return new JuliusDispatchError('TIMEOUT',true,'Provider timed out.');if(['401','403','AUTH','CONFIGURATION'].includes(code))return new JuliusDispatchError('AUTH_CONFIGURATION',false,'Provider authentication or configuration failed.');if(code==='ABORT_ERR')return new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.');return new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Worker execution failed.');}
