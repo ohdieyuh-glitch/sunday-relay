@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { JULIUS_TEST_DATABASE_ENV, juliusTestDatabaseAbsence, juliusTestDatabaseUrl } from './julius-test-database';
+import { JULIUS_REAL_POSTGRES_ENV, JULIUS_TEST_DATABASE_ENV, juliusTestDatabaseAbsence, juliusTestDatabaseUrl } from './julius-test-database';
 
 /**
  * THE RULE THAT KEEPS TEST WRITES OUT OF THE LIVE STORE, held to by a sweep.
@@ -26,11 +26,26 @@ describe('the test database is stated, never inherited', () => {
     expect(juliusTestDatabaseUrl({ JULIUS_TEST_DATABASE_URL: '   ' })).toBeNull();
     expect(juliusTestDatabaseUrl({ JULIUS_TEST_DATABASE_URL: ' postgres://x/y ' })).toBe('postgres://x/y');
     // THE VARIABLE THAT MUST NOT WORK: an inherited runtime URL, alone, buys
-    // nothing — whatever else is switched on.
+    // nothing.
     // No inline credentials even in a fixture: the repository boundary scan reads
     // this file too, and a URL shaped like a real one is the shape it forbids.
-    expect(juliusTestDatabaseUrl({ DATABASE_URL: 'postgres://127.0.0.1:5432/julius', JULIUS_REAL_POSTGRES: '1' })).toBeNull();
+    expect(juliusTestDatabaseUrl({ DATABASE_URL: 'postgres://127.0.0.1:5432/julius' })).toBeNull();
     expect(juliusTestDatabaseAbsence()).toContain('THROWAWAY');
+  });
+
+  it('a launcher that DEMANDS the real suites without a test database fails loudly, never reads green', () => {
+    // julius-real-infra set JULIUS_REAL_POSTGRES=1 and no test database from #288
+    // on, and every real-PostgreSQL step went green on all-todo suites (run
+    // 36587881843: 0 of 28 cases executed). The demand with nothing to run on is
+    // a launcher error, and it still never falls back to the inherited URL.
+    expect(JULIUS_REAL_POSTGRES_ENV).toBe('JULIUS_REAL_POSTGRES');
+    expect(() => juliusTestDatabaseUrl({ JULIUS_REAL_POSTGRES: '1' })).toThrow(/julius_real_postgres_without_test_database/u);
+    expect(() => juliusTestDatabaseUrl({ DATABASE_URL: 'postgres://127.0.0.1:5432/julius', JULIUS_REAL_POSTGRES: '1' }))
+      .toThrow(/JULIUS_TEST_DATABASE_URL is not set/u);
+    expect(() => juliusTestDatabaseUrl({ JULIUS_REAL_POSTGRES: '1', JULIUS_TEST_DATABASE_URL: '  ' })).toThrow();
+    expect(juliusTestDatabaseUrl({ JULIUS_REAL_POSTGRES: '1', JULIUS_TEST_DATABASE_URL: 'postgres://x/y' })).toBe('postgres://x/y');
+    // Anything but the literal demand leaves the old answer: a todo, not an error.
+    expect(juliusTestDatabaseUrl({ JULIUS_REAL_POSTGRES: '0' })).toBeNull();
   });
 
   it('NO test file in this repository reads DATABASE_URL', () => {
