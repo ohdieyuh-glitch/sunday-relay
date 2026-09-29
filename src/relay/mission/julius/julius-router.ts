@@ -223,6 +223,13 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
    * three accounts travel beside the verdict so a reader sees the difference
    * between them, not only the answer. --- */
   servedModelBasis:safeEnum(v.servedModelBasis,JULIUS_SERVED_MODEL_BASES),
+  /**
+   * The `modelUsage` entry that credited the served model: its key, and the
+   * SDK's `canonicalModel` for it. This is the runtime's own resolution of an
+   * alias, and the only mapping a requested-versus-served comparison may use.
+   */
+  servedModelUsageKey:safeModel(v.servedModelUsageKey),
+  servedModelUsageCanonical:safeModel(v.servedModelUsageCanonical),
   /** What `init` announced before any turn existed. A claim about configuration, never about serving. */
   announcedModel:safeModel(v.announcedModel),
   /** The model that produced the most output across the session's turns. */

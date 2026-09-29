@@ -167,6 +167,14 @@ export const hostedCoderDiagnostics = (input: {
     /** Why `servedModel` is what it is, from a closed set. Null only when nothing was observed. */
     servedModelBasis: served?.basis ?? null,
     /**
+     * THE RUNTIME'S OWN NAME FOR WHAT SERVED: the key and `canonicalModel` of the
+     * `modelUsage` entry that credited the served model. Comparing the served model
+     * with the requested one may use this mapping and nothing else, and never a
+     * string prefix. Null whenever nothing is attested.
+     */
+    servedModelUsageKey: served?.credit?.model ?? null,
+    servedModelUsageCanonical: served?.credit?.canonicalModel ?? null,
+    /**
      * The THREE ACCOUNTS, SIDE BY SIDE, so a reader sees the distinction and not
      * only the verdict. What `init` announced before any turn existed:
      */
