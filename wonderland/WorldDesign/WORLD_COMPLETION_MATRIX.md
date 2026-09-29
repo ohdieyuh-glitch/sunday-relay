@@ -442,6 +442,43 @@ no save):**
   - At the frontiers they read as woodland with nation accents: Noctis a mixed orchard with bush drifts, Tartarus
     autumn trees with a pink mushroom cluster, Icarus an orchard with a walled mushroom-capped tower.
 
+## TRAVERSAL GRAPH -- the intended world joined by walks (CORE, 2026-09-29 15:30; builder-run)
+
+Every region is a node, and an edge is a walk that was actually made in play. Proof classes follow the founder's
+rule: only SELF-POWERED proves continuity. The graph is joined through the three radial walks: each crosses both
+ring roads, and everything else hangs off a ring, a seam way or the core.
+
+| edge | walk | class |
+|---|---|---|
+| GA arrival gate (0, -6,300) -> palace entrance (300, 9,650) | GA axis 32/32 over GS01 (window 2D) | SELF-POWERED |
+| clock plaza north arches -> GA east / west flank gardens | 13/13 each (12:10) | SELF-POWERED |
+| palace entrance -> GA rear world (0, 16,500), round the palace complex west | 156 m (13:42) | SELF-POWERED |
+| GA core -> ICARUS end (1,122 m): rear world, GreatSpire precinct, AP01 causeway, CP02, AV01 x RR01 x RR02, IC02 / IC03 | 1,442 m, 0 stops (14:44; re-walked after 2F) | SELF-POWERED |
+| GA core -> TARTARUS end (1,162 m): Gatekeeper Fields, AP01, CP04, AV03 x RR01 x RR02, TQ01 / SF03 | 1,261 m, 0 stops (14:44; re-walked after 2F) | SELF-POWERED |
+| GA core -> NOCTIS end (1,192 m): AP01, CP03, AV02 x RR01 x RR02, NC01 / NC02 | V21: 1 stop at r 32 m (AR03 screen), then 1,257 m with 0 stops; V22 (clear start) after 2F | MIXED -> see 2F proofs |
+| RR01 through hedge gate GA (43.5-52°) | 113/117 m | SELF-POWERED |
+| RR02 through GC (64.5-71.5°) and GD (146.5-155.5°, SKY05 bypass) | 137/139 m, 189/194 m | SELF-POWERED |
+| RR02 -> gate GB -> SX01 -> SR030 seam way | 564/568 m (zzW113) | SELF-POWERED |
+| SR150 seam way | 428/432 m | SELF-POWERED |
+| RR01 -> TW02 lane -> TW01 gate -> court | 278/294 m | SELF-POWERED |
+| TW03 hamlets (8) -> nearest paving | 8/8 | SELF-POWERED |
+| S2M297 entry -> MG01 Mushroom Grove | 241/250 m (zzW113) | SELF-POWERED |
+| Dubel 58° -> gate GE -> 122° -> WI122 wild-ring trail | 1,553/1,576 m (zzW113) | SELF-POWERED |
+| heartland walks x 5 (rooms 48/48) | zzW112 and the heartland proofs | SELF-POWERED 5/5 |
+| sector-fill walks (S2) | 12/13 arrived, 2,531 m; S2N246's dead walk removed | SELF-POWERED |
+| W270 rear seam | 18/18 | as recorded (W270 proof) |
+| wild ring -> world edge | EDGE01 stops the walking Dog at 1,482-1,483 m (0° / 89.5°) | SELF-POWERED (the stop is the pass) |
+| landmarks | 65/66 on foot + 1 reached to its raised planter's rim | SELF-POWERED |
+| every applied walk sidecar (44) + whole-disc floor / residency | SECOND's final pre-package check (zzW470 / zzW471) | TELEPORT regression |
+
+What the graph does not claim:
+- The ring roads are not full circles. The SKY05 tower breaks are documented (RR01 ~28°, RR02 20-32° and 140-148°),
+  and the radial walks join the rings on either side of them.
+- The heartland and sector-fill walks prove their own ground. Where their ends meet a ring or an avenue, the join
+  is by the sidecars' endpoints (paving within a few metres), not a separate walk.
+- The whole graph is BUILDER-RUN: CORE and SECOND. Independent qualification needs a separate QA session, which is
+  the founder's decision.
+
 ## DEFINITION OF WORLD COMPLETE -- tracking (CORE, 2026-09-29 12:00; founder's 25 conditions)
 
 Status words: MET / MET (builder-run) / IN PROGRESS / OPEN / FOUNDER. "Builder-run" = proven by CORE or SECOND, not an
@@ -451,7 +488,7 @@ independent QA session (JUJU and the integration lane were reassigned to Julius 
 |---|---|---|---|
 | 1 | entire intended playable world audited | MET | census + emptiness_classes over the 1,480 m disc after every window; world-edge ring at 1,485 m |
 | 2 | every major region has an owner and resolved status | IN PROGRESS | queue Q1-Q13; SECOND 5a-5d, CORE flank / final gates |
-| 3 | major unintended empty regions authored | MET (builder-run) | 45.1 % empty (morning) -> 16.2 % (4b) -> 13.8 % (5a) -> 11.6 % (5b) -> 7.0 % (5d) -> **5.3 % after 2F; UNINTENDED 1.3 % of the disc**, 539 pockets, the largest 0.41 ha (core, 109° 340 m); no unintended region over half a hectare remains |
+| 3 | major unintended empty regions authored | MET (builder-run) | 45.1 % empty (morning) -> 16.2 % (4b) -> 13.8 % (5a) -> 11.6 % (5b) -> 8.9 % (5c) -> 7.0 % (5d) -> **5.3 % after 2F; UNINTENDED 1.3 % of the disc**, 539 pockets, the largest 0.41 ha (core, 109° 340 m); no unintended region over half a hectare remains |
 | 4 | remaining negative space explicitly intentional | MET (builder-run), residual listed | final classes (post-2F census, 264,246 rows): meadow 2.7 %, traversal 1.0 %, vista 0.3 %, clearing 0.1 %, rim 0.0 %; the 1.3 % unintended residual is small pockets, most in the TW03 Icarus tower band (100-135°), which the fills left to the tower hamlets (listed in the final audit) |
 | 5 | Golden Arrival complete | IN PROGRESS | composition passes present; axis SELF-POWERED 32/32 after GS01; flanks SELF-POWERED 2/2 from the north arches; rear world SELF-POWERED round the palace complex's west side (156 m, 0 stops) |
 | 6 | 24 quarters coherent | MET (founder decision) | classified per site; core preserved, identities outward (TW01-03, MG01) |
