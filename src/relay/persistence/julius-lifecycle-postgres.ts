@@ -1,9 +1,11 @@
 import type { Pool } from 'pg';
 
-import type {
-  JuliusApprovalRecord, JuliusApprovalState, JuliusApprovalStore,
-  JuliusLifecycleStore, JuliusPolicyOperation,
+import {
+  planRunStatePath,
+  type JuliusApprovalRecord, type JuliusApprovalState, type JuliusApprovalStore,
+  type JuliusLifecycleStore, type JuliusMissionState, type JuliusPolicyOperation,
 } from '../mission/julius';
+import { transitionJuliusRunWithin } from './julius-postgres';
 
 /**
  * DURABLE APPROVALS AND LIFECYCLE FACTS.
@@ -53,10 +55,32 @@ export class JuliusLifecyclePostgresRepository implements JuliusApprovalStore, J
   }
 
   async requestApprovalAndBlock(input:{record:JuliusApprovalRecord;expectedRunVersion:number}):Promise<{created:boolean;record:JuliusApprovalRecord;runState:'BLOCKED'}>{
-    const client=await this.pool.connect();try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');const locked=await client.query('SELECT state,version FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2 FOR UPDATE',[input.record.runId,input.record.projectId]);if(!locked.rows[0])throw new Error('julius_run_not_found');const prior=await client.query<Record<string,unknown>>('SELECT * FROM relay_wonderland.julius_approvals WHERE run_id=$1 AND idempotency_key=$2 FOR UPDATE',[input.record.runId,input.record.idempotencyKey]);if(prior.rows[0]){if(locked.rows[0].state!=='BLOCKED')throw new Error('approval_run_state_conflict');await client.query('COMMIT');return{created:false,record:this.map(prior.rows[0]),runState:'BLOCKED'};}if(Number(locked.rows[0].version)!==input.expectedRunVersion)throw new Error('julius_run_version_conflict');if(['COMPLETED','FAILED','CANCELLED'].includes(String(locked.rows[0].state)))throw new Error('julius_run_terminal');
+    const client=await this.pool.connect();try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');const locked=await client.query('SELECT state,version,mission_id FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2 FOR UPDATE',[input.record.runId,input.record.projectId]);if(!locked.rows[0])throw new Error('julius_run_not_found');const prior=await client.query<Record<string,unknown>>('SELECT * FROM relay_wonderland.julius_approvals WHERE run_id=$1 AND idempotency_key=$2 FOR UPDATE',[input.record.runId,input.record.idempotencyKey]);if(prior.rows[0]){if(locked.rows[0].state!=='BLOCKED')throw new Error('approval_run_state_conflict');await client.query('COMMIT');return{created:false,record:this.map(prior.rows[0]),runState:'BLOCKED'};}if(Number(locked.rows[0].version)!==input.expectedRunVersion)throw new Error('julius_run_version_conflict');if(['COMPLETED','FAILED','CANCELLED'].includes(String(locked.rows[0].state)))throw new Error('julius_run_terminal');
       const inserted=await client.query(`INSERT INTO relay_wonderland.julius_approvals(approval_id,run_id,project_id,task_id,operation,policy_revision,reason_code,safe_rationale,state,requested_at,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'PENDING',$9,$10) ON CONFLICT DO NOTHING RETURNING *`,[input.record.approvalId,input.record.runId,input.record.projectId,input.record.taskId,input.record.operation,input.record.policyRevision,input.record.reasonCode,input.record.safeRationale,input.record.requestedAt,input.record.idempotencyKey]);
       let record=input.record;if(!inserted.rows[0]){const collision=await client.query<Record<string,unknown>>('SELECT run_id,project_id FROM relay_wonderland.julius_approvals WHERE approval_id=$1',[input.record.approvalId]);if(collision.rows[0]&&(collision.rows[0].run_id!==input.record.runId||collision.rows[0].project_id!==input.record.projectId))throw new Error('approval_id_scope_conflict');const existing=await client.query<Record<string,unknown>>(`SELECT * FROM relay_wonderland.julius_approvals WHERE run_id=$1 AND COALESCE(task_id,'')=COALESCE($2,'') AND operation=$3 AND state='PENDING' ORDER BY requested_at LIMIT 1 FOR UPDATE`,[input.record.runId,input.record.taskId,input.record.operation]);if(!existing.rows[0])throw new Error('approval_conflict_without_record');record=this.map(existing.rows[0]);}
-      const moved=await client.query(`UPDATE relay_wonderland.julius_runs SET state='BLOCKED',version=version+1,updated_at=$3 WHERE run_id=$1 AND project_id=$2 AND version=$4`,[input.record.runId,input.record.projectId,input.record.requestedAt,input.expectedRunVersion]);if(moved.rowCount!==1)throw new Error('julius_run_version_conflict');await client.query('COMMIT');return{created:inserted.rowCount===1,record,runState:'BLOCKED'};
+      // THE MOVE TO BLOCKED IS A TRANSITION, RECORDED AS ONE. It was a bare
+      // UPDATE: no transition-table check, no `julius_transitions` row and no
+      // `julius.run.transitioned` event, so a gated run's history showed a
+      // BLOCKED -> READY grant with no BLOCKED before it. It now takes the walk
+      // the in-memory store takes (`planRunStatePath`: READY reaches BLOCKED
+      // through EXECUTING), every step checked by `transitionMission` and
+      // written by `transitionJuliusRunWithin` — inside THIS transaction, so the
+      // PENDING row and the recorded move still commit together or not at all.
+      const from=String(locked.rows[0].state) as JuliusMissionState;
+      const path=from==='BLOCKED'?[]:planRunStatePath(from,'BLOCKED');
+      if(from!=='BLOCKED'&&path.length===0)throw new Error('approval_block_unreachable');
+      let current={runId:input.record.runId,projectId:input.record.projectId,missionId:String(locked.rows[0].mission_id),state:from,version:input.expectedRunVersion};
+      for(const [index,step] of path.entries()){
+        const last=index===path.length-1;
+        await transitionJuliusRunWithin(client,current,{
+          commandId:`approval:${input.record.approvalId}:${current.version}:${step}`,to:step,
+          reasonCode:last?'APPROVAL_REQUIRED':'PASSED_THROUGH',
+          safeSummary:last?`Waiting on an authorized approval for ${input.record.operation}.`:`Run passed through ${step} on the way to BLOCKED.`,
+          evidenceIds:[],occurredAt:input.record.requestedAt,
+        });
+        current={...current,state:step,version:current.version+1};
+      }
+      await client.query('COMMIT');return{created:inserted.rowCount===1,record,runState:'BLOCKED'};
     }catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}
   }
 
