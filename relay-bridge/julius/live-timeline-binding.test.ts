@@ -172,7 +172,8 @@ describe('C — no live ledger, no paid run', () => {
   it('preflight blocks on UNBOUND, and the live path refuses the wrapped store before bootstrap', () => {
     const source = read('relay-bridge/julius-live-mission.ts');
     expect(source).toContain("out(`  live_ledger: ${ledger}`);");
-    expect(source, 'an unbound ledger is a preflight block').toMatch(/\|\| ledger === 'UNBOUND';/u);
+    const blocked = /const preflightBlocked = [^;]*;/u.exec(source)?.[0] ?? '';
+    expect(blocked, 'an unbound ledger is a preflight block').toMatch(/\|\| ledger === 'UNBOUND'\s/u);
     const refusal = source.indexOf("if (liveLedgerState(handoffs.store) !== 'BOUND') {");
     expect(refusal, 'the live path asks the store the runtime will receive').toBeGreaterThan(-1);
     expect(refusal, 'and asks before the run is bootstrapped').toBeLessThan(source.indexOf('const bootstrapRuns = new JuliusPostgresRepository(pool);'));
