@@ -68,6 +68,10 @@ class Site:
             for r in csv.DictReader(f):
                 if r["kind"] == "OTHER":
                     continue
+                # the hidden in-map reference scaffold (VISUAL_AUTHORITY.md): one 205 x 313 m box over the whole core.
+                # Loaded, it refused every slot inside 150 m (QK01's first run placed nothing at any of 24 quarters)
+                if r["owner"] == "V2_MarbleWorld_Scaffold":
+                    continue
                 x, y, z = float(r["x"]), float(r["y"]), float(r["z"])
                 if z < -50000.0 or z > 20000.0 or math.hypot(x - cx, y - cy) > radius + 6000.0:
                     continue
