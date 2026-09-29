@@ -387,6 +387,19 @@ no save):**
 
     Planner v2.1 (no corner cutting, 48 cm planning clearance, 80 m retry boxes, planned-z resume) re-tests all three
     approaches with targets round the precinct and the gatehouse.
+- **CORE -> NATION END, planner v2.1 (14:11-14:44, 1,974 s, editor 78436 after SECOND's 5c, read-only; CORE-run):**
+  - **ICARUS: SELF-POWERED ARRIVED, 0 stops**, 37/37 pairs planned on play collision, 1,442 m in 627 s. Route: GA
+    (0, 2,000) -> axis -> palace entrance -> round the palace complex west -> rear world -> round the GreatSpire
+    precinct -> AP01 causeway (385-500 m) -> CP02 -> AV01 -> IC02 / IC03 -> Icarus end (1,122 m).
+  - **TARTARUS: SELF-POWERED ARRIVED, 0 stops**, 35/35 planned, 1,261 m in 548 s: core -> round the Gatekeeper Fields
+    gatehouse (north end) -> AP01 -> CP04 -> AV03 -> TQ01 / SF03 -> end (1,162 m).
+  - **NOCTIS: MIXED, 1 stop**, 33/33 planned, 1,257 m. The one stop is at r 32 m, still inside Golden Arrival: the
+    stepped plinth of an AR03 trefoil screen at (-2,804, -1,710). The plinth rises 17 / 26 / 34 / 43 cm under a
+    solid screen. From the resume point (~10 m on) to the Noctis end (1,192 m) the walk had 0 stops, including the
+    castle-arcade gap at 362 m that snagged v2. A clean single-leg re-run with a start clear of the screen is next.
+  - **No approach fix is needed.** The palace complex, the GreatSpire precinct and the Gatekeeper Fields are
+    walked round on existing paving and lawn. The census-drawn and axis-straight routes of the morning were the
+    only things that "failed".
 - **8 more frames** (`core_0929`: the three nation bands and frontiers, SR150 from height, gate GD from above).
   - At the bands the nations read distinctly: ICARUS ivory and gold towers with giant-mushroom tables, NOCTIS black
     spires round a dark domed palace, TARTARUS red-brown towers on cream and pink terraces.
@@ -408,15 +421,15 @@ independent QA session (JUJU and the integration lane were reassigned to Julius 
 | 6 | 24 quarters coherent | MET (founder decision) | classified per site; core preserved, identities outward (TW01-03, MG01) |
 | 7 | three nations read distinctly | IN PROGRESS | band + frontier frames per nation (12:40): distinct at the bands (ivory/gold, black, red-brown); frontiers read as woodland with accents -- final set after the massing round |
 | 8 | major seams complete | MET (builder-run) | W270 (18/18), SR030 + SR150 seam ways SELF-POWERED, R41/R42 seam ground filled by S2/S3 |
-| 9 | radial roads connect correctly | IN PROGRESS | SR150 / SR030 SELF-POWERED; AV01-03 walk with 0 stops from their checkpoints to the nation ends on planned routes (13:42; the earlier stops were route artefacts); city -> checkpoint approaches under re-test (planner v2.1) |
+| 9 | radial roads connect correctly | MET (builder-run) for ICARUS + TARTARUS; NOCTIS MIXED | core -> nation end SELF-POWERED 0 stops: ICARUS 1,442 m, TARTARUS 1,261 m (14:44); NOCTIS 1 stop at r 32 m (AR03 screen plinth, inside GA), 0 stops for the other 1,257 m -- clean re-run next; SR150 / SR030 SELF-POWERED |
 | 10 | ring circuits connect or gates intentional | MET (builder-run) | hedge gates GA/GB/GC/GD/GE SELF-POWERED; SKY05 tower breaks documented (RR01 ~28 deg, RR02 20-32 / 140-148 deg) |
 | 11 | heartlands complete | MET (builder-run) | 5 heartlands applied, SELF-POWERED 5/5, rooms 48/48 |
 | 12 | frontiers complete | IN PROGRESS | S2 strips + S3 (5a/5b) + S4 (5c); Dubel edge S5 (5d) + outer wall |
 | 13 | outer wild ring complete | IN PROGRESS | R50 + R50b (4a-4c) applied; Dubel's outer arc wall pending |
 | 14 | missing Bible districts reconciled | MET | Tower Rise / Mushroom Grove RELOCATED WITH INTENT and built; books/scrolls NOT IN KIT; GA08 held (lighting) |
 | 15 | major landmarks exist and are reachable | IN PROGRESS | TW01 gate, MG01 entry, TW03 x8, Dubel landmarks SELF-POWERED; landmark sweep SELF-POWERED 65/66 after planner v2; the 66th reached to its raised planter's rim (South Cloister) |
-| 16 | traversal works across the intended world | IN PROGRESS | ~6 km of self-powered routes arrived today; whole-world route still to run |
-| 17 | no major cul-de-sac / trapped landmark | IN PROGRESS | GA axis ledge fixed (GS01); S2N246 dead walk removed; GA east flank access open |
+| 16 | traversal works across the intended world | IN PROGRESS | ~10 km of self-powered routes today, incl. core -> Icarus / Tartarus ends 0 stops (2.7 km), GA rear world, the ring gates, seam ways, TW02 / TW03 / MG01 / Dubel walks, heartlands 5/5; traversal graph + Noctis clean re-run to close |
+| 17 | no major cul-de-sac / trapped landmark | IN PROGRESS | GA axis ledge fixed (GS01); GA rear world reached (west); GreatSpire precinct and Gatekeeper Fields walked round; landmarks 65/66 on foot + 1 at its planter rim; S2N246 dead walk removed |
 | 18 | distant views composed | IN PROGRESS | outer world reads low from 1.3 km; Dubel outer edge hard; grove massing + outer walls in 5a-5d |
 | 19 | World Partition streams correctly | MET (builder-run) | every window's residency 100 % in play; streaming complete at every stand; 200 m tiles |
 | 20 | Golden Arrival in the packaged build | MET earlier (S03 09-29 00:11) | re-run on the final world |
