@@ -2,7 +2,7 @@
 /**
  * THE WONDERLAND BETA GATE.
  *
- * Fifteen capabilities. The gate answers TWO questions about each of them, and
+ * Sixteen capabilities. The gate answers TWO questions about each of them, and
  * keeps the answers apart, because collapsing them is how a readiness document
  * starts lying:
  *
@@ -28,34 +28,54 @@
  *                      The probe looked for named files and did not find them.
  *   FAIL               An implementation exists and nothing shows it works:
  *                      this run did not exercise it (or exercised it and it
- *                      broke), and no authoritative drill proves it either.
- *                      "We have the code" is not a pass at a beta gate;
- *                      neither is a green unit test.
- *   CAPABILITY PROVEN  This run did not exercise it, but a recorded drill did,
- *                      against the real production path, and the code it drove
- *                      has not changed since. Never available where the mission
- *                      itself must walk the capability (see MISSION-REQUIRED).
- *   PASS               This run exercised it and it worked. Mission proof is
- *                      the strongest answer and needs no drill.
+ *                      broke, or cannot say), and no authoritative drill may
+ *                      stand in for it either. "We have the code" is not a pass
+ *                      at a beta gate; neither is a green unit test.
+ *   CAPABILITY PROVEN  This run's readable rows show it GENUINELY did not reach
+ *                      the behaviour, and a recorded drill did, against the real
+ *                      production path, and nothing that drill drove has changed
+ *                      since. Never available where the mission itself must walk
+ *                      the capability (see MISSION-REQUIRED).
+ *   PASS               This run exercised it, it worked, and the run is bound to
+ *                      this checkout. Mission proof is the strongest answer and
+ *                      needs no drill.
  *
- * THREE RULES KEEP THE THIRD VERDICT FROM BECOMING A LAUNDRY:
+ * SIX RULES KEEP THE VERDICTS FROM BECOMING A LAUNDRY:
  *
  *   A FAILED MISSION IS NEVER RESCUED. If the run exercised the capability and
  *   it broke, the verdict is FAIL whatever any drill says. A drill proves the
  *   path works; it cannot un-break what this run did.
  *
- *   MISSION-REQUIRED CAPABILITIES CANNOT BE DRILLED PAST. The eight a mission
- *   must itself walk to reach VERIFIED COMPLETION — creation, start, plan,
- *   build, contract lock, review, verification, completion — admit no
- *   capability proof at all. No drill makes a mission that never completed
- *   into one that did.
+ *   MISSION-REQUIRED CAPABILITIES CANNOT BE DRILLED PAST. The nine a mission
+ *   must itself walk and account for — creation, start, plan, build, contract
+ *   lock, review, verification, completion, settlement — admit no capability
+ *   proof at all. No drill makes a mission that never completed into one that
+ *   did.
+ *
+ *   A DRILL STANDS IN ONLY FOR WHAT GENUINELY DID NOT HAPPEN. NOT EXERCISED is
+ *   a claim the run's readable rows must support: no REPAIR decision, no
+ *   retryable failure, no recovery action. A bundle that cannot say (UNKNOWN)
+ *   is never rescued, because "nobody could look" is not "nothing happened".
+ *
+ *   A BUNDLE PROVES NOTHING ABOUT CODE IT DID NOT RUN. Its `bundle-manifest.txt`
+ *   must name the commit this checkout is at, `mode=paid`, and the one Julius
+ *   run it is about; every table is then scoped to that run. A bundle that
+ *   cannot be bound keeps its FAILURES and loses everything else to UNKNOWN.
+ *
+ *   A ROLE IS CREDITED ONLY FOR WORK A REAL PROVIDER DID. The architect, the
+ *   coder and the reviewer (and so a verified completion, and a repair) pass
+ *   only on a worker-diagnostics row naming a real transport, provider and
+ *   served model — and a response id where the role has one. A drill's
+ *   scripted provider, a fake or a stub reads NOT A REAL PROVIDER; a missing
+ *   identity reads UNKNOWN.
  *
  *   A CAPABILITY PROOF IS EVIDENCE, NOT AN ASSERTION. It is admissible only if
- *   a drill attestation names the production files it drove AND their content
- *   digests still match this repository AND those files cover the very probe
- *   this row is built on AND the drill's own transcript is present with every
- *   declared step passing. A drill that has gone stale against the code it
- *   proved reports CAPABILITY STALE and passes nothing.
+ *   a drill attestation names EVERY file the drill drives (read from the tree,
+ *   `julius-drill-closure.mjs`) AND their content digests still match this
+ *   repository AND those files include the very probe this row is built on AND
+ *   the drill's own transcript is present with every declared step passing. A
+ *   drill that has gone stale against the code it drove reports CAPABILITY
+ *   STALE and passes nothing.
  *
  * WHY IT CANNOT FLATTER ITSELF. No verdict above FAIL is reachable from
  * repository state. Mission proof needs a LIVE MISSION EVIDENCE BUNDLE — the
@@ -73,16 +93,20 @@
  * where <dir> is a downloaded run artifact directory (the gate finds the
  * `julius-live-evidence` folder inside it, or accepts that folder directly),
  * and --capability points at a directory holding `capability-proofs.tsv` and
- * its transcripts when they did not travel inside the bundle.
+ * its transcripts when they did not travel inside the bundle. Read a bundle at
+ * the commit it was produced at: anywhere else it is UNBOUND.
  *
  * Exit 0 only when every capability is PASS or CAPABILITY PROVEN. Anything
  * else exits 1, which is the honest answer to "are we ready for beta".
  */
 
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { drillDrivenFiles } from './julius-drill-closure.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -136,7 +160,7 @@ function probe(capability) {
  * the product applies to its own Unknown values.
  */
 function loadEvidence(dir) {
-  const empty = { present: false, source: null, root: null, file: () => null, rows: () => [] };
+  const empty = { present: false, source: null, root: null, file: () => null, rows: () => [], header: () => null };
   if (dir === null || dir === undefined) return empty;
   let root = resolve(dir);
   if (!existsSync(root)) return { ...empty, source: `absent: ${root}` };
@@ -172,19 +196,256 @@ function readers(root) {
     const text = readFileSync(path, 'utf8');
     return text.trim() === 'unavailable' ? null : text;
   };
-  /** TSV rows as objects. The trailing `(n rows)` line psql writes is not a row. */
-  const rows = (name) => {
+  /** Header and rows. The trailing `(n rows)` line psql writes is not a row. */
+  const table = (name) => {
     const text = file(name);
-    if (text === null) return [];
-    const lines = text.split('\n').filter((line) => line.length > 0 && !/^\(\d+ rows?\)$/.test(line));
-    if (lines.length < 2) return [];
+    if (text === null) return null;
+    const lines = text.split('\n').map((line) => line.replace(/\r$/u, ''))
+      .filter((line) => line.length > 0 && !/^\(\d+ rows?\)$/.test(line));
+    if (lines.length === 0) return { header: [], rows: [] };
     const header = lines[0].split('\t');
-    return lines.slice(1).map((line) => {
-      const cells = line.split('\t');
-      return Object.fromEntries(header.map((key, index) => [key, cells[index] ?? '']));
-    });
+    return {
+      header,
+      rows: lines.slice(1).map((line) => {
+        const cells = line.split('\t');
+        return Object.fromEntries(header.map((key, index) => [key, cells[index] ?? '']));
+      }),
+    };
   };
-  return { file, rows };
+  const rows = (name) => table(name)?.rows ?? [];
+  /** The column names a readable table was dumped with, or null when it is not readable. */
+  const header = (name) => table(name)?.header ?? null;
+  return { file, rows, header };
+}
+
+/* ------------------------------------------------------------- provenance */
+
+/**
+ * WHICH CODE, WHICH MODE, WHICH RUN — or the bundle is UNBOUND.
+ *
+ * Paid run 36568129865's bundle was produced at main. Read at a stack whose
+ * run loop, task pipeline and repositories had all moved, it still scored
+ * JULIUS MISSION START a PASS for code it never ran. Nothing in the bundle said
+ * which commit it came from, whether it was a paid mission or a free dry run,
+ * or which of the runs in its database it was about — so the gate scored every
+ * bundle against whatever tree read it, a dry run's receipts as a mission's,
+ * and an older completed run in the same database as this run's completion.
+ *
+ * `.github/julius-live-evidence-dump.sh` now writes `bundle-manifest.txt`
+ * first. A bundle is BOUND only when that manifest names the commit this
+ * checkout is at, `mode=paid`, and one Julius run that `runs.tsv` holds (and
+ * that the entrypoint's own accepted line, where there is one, agrees with),
+ * and every table the gate reads carries the `run_id` column it is scoped by.
+ *
+ * AN UNBOUND BUNDLE KEEPS ITS FAILURES. What it cannot do is vouch for
+ * anything: a row it would have read as exercised, or as not exercised, reads
+ * UNKNOWN instead — so it can neither PASS nor be stood in for by a drill. A
+ * failure is still a failure: a broken run does not become sound by being read
+ * at the wrong commit.
+ */
+export const BUNDLE_MANIFEST = 'bundle-manifest.txt';
+
+/** Every table the gate reads whose rows belong to one run and say which. */
+const RUN_SCOPED_FILES = [
+  'runs.tsv', 'tasks.tsv', 'evidence.tsv', 'decisions.tsv', 'findings.tsv', 'tool-invocations.tsv',
+  'failures.tsv', 'budget.tsv', 'settlement-integrity.tsv', 'worker-diagnostics.tsv', 'project-brain.tsv',
+  'task-contracts.tsv', 'contract-events.tsv', 'trajectory.tsv', 'scope.tsv',
+];
+
+const ACCEPTED_LINE = /^Run (\S+) accepted in state READY; driving the Julius run loop\.$/gmu;
+const acceptedRuns = (ev) => {
+  const text = ev.file('live-mission.evidence.txt');
+  return text === null ? [] : [...new Set([...text.matchAll(ACCEPTED_LINE)].map((match) => match[1]))];
+};
+
+/**
+ * THE ENTRYPOINT'S OWN WORD ON HOW A RUN ENDED: `RESULT: <state>[ (stalled …)]
+ * after N ticks`, followed by `  run: <id>` (relay-bridge/julius-live-mission.ts).
+ * A bundle from before the `run:` line, holding one RESULT and one accepted
+ * run, attributes it to that run. Anything else is no answer — never the
+ * first of several.
+ */
+const RESULT_LINE = /^RESULT: ([A-Z_]+)( \(stalled before terminal state\))?( after \d+ ticks)?$/u;
+function resultsOf(ev) {
+  const text = ev.file('live-mission.evidence.txt');
+  if (text === null) return [];
+  const lines = text.split('\n').map((line) => line.replace(/\r$/u, ''));
+  const found = [];
+  lines.forEach((line, index) => {
+    const match = RESULT_LINE.exec(line);
+    if (match === null) return;
+    const run = lines.slice(index + 1, index + 4).map((next) => /^\s+run: (\S+)$/u.exec(next)?.[1]).find((value) => value !== undefined) ?? null;
+    found.push({ state: match[1], stalled: match[2] !== undefined, run });
+  });
+  return found;
+}
+function resultFor(ev, runId) {
+  const results = resultsOf(ev);
+  const named = results.filter((result) => result.run === runId);
+  if (named.length === 1) return named[0];
+  const accepted = acceptedRuns(ev);
+  if (named.length === 0 && results.length === 1 && results[0].run === null && accepted.length === 1 && accepted[0] === runId) return results[0];
+  return null;
+}
+
+function readManifest(ev) {
+  const text = ev.file(BUNDLE_MANIFEST);
+  if (text === null) return null;
+  const fields = {};
+  for (const line of text.split('\n')) {
+    const match = /^([a-z_]+)=(.*)$/u.exec(line.trim());
+    if (match !== null && !(match[1] in fields)) fields[match[1]] = match[2];
+  }
+  return fields;
+}
+
+let readingCommitMemo;
+/** The commit of the checkout this gate is reading from, or null when git cannot say. */
+function readingCommit() {
+  if (readingCommitMemo !== undefined) return readingCommitMemo;
+  try {
+    // A literal command (the repository boundary scan reads every command this
+    // file can run); the checkout is chosen by `cwd`.
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    readingCommitMemo = /^[0-9a-f]{40}$/u.test(head) ? head : null;
+  } catch {
+    readingCommitMemo = null;
+  }
+  return readingCommitMemo;
+}
+
+function bindingOf(ev) {
+  if (!ev.present) return { bound: false, reason: 'no live evidence bundle was read', manifest: null, run: null };
+  const manifest = readManifest(ev);
+  const runs = ev.rows('runs.tsv');
+  const accepted = acceptedRuns(ev);
+  // THE RUN THIS BUNDLE IS ABOUT: the manifest's; for a bundle from before
+  // manifests, the entrypoint's one accepted line, or else the only run. Never
+  // the first of several, which is how an older completed run once decided
+  // this run's VERIFIED COMPLETION.
+  const named = manifest?.julius_run_id && manifest.julius_run_id !== 'none' ? manifest.julius_run_id
+    : accepted.length === 1 ? accepted[0]
+      : runs.length === 1 ? runs[0].run_id : null;
+  const run = named === null ? null : runs.find((row) => row.run_id === named) ?? null;
+  const unbound = (reason) => ({ bound: false, reason, manifest, run });
+  if (manifest === null) return unbound(`the bundle carries no ${BUNDLE_MANIFEST}, so the commit, the workflow run and the mode it was produced in are unknown`);
+  if (manifest.manifest_version !== '1') return unbound(`${BUNDLE_MANIFEST} is version ${manifest.manifest_version ?? '(none)'}, which this gate cannot read`);
+  if (!/^[0-9a-f]{40}$/u.test(manifest.commit ?? '')) return unbound(`${BUNDLE_MANIFEST} names no commit (${manifest.commit ?? 'absent'})`);
+  const reading = readingCommit();
+  if (reading === null) return unbound('the commit of the checkout reading this bundle is unknown (git could not say), so nothing ties the bundle to it');
+  if (manifest.commit !== reading) {
+    return unbound(`it was produced at ${manifest.commit.slice(0, 12)} and is being read at ${reading.slice(0, 12)}, so its rows describe code this checkout does not hold`);
+  }
+  if (manifest.mode !== 'paid') {
+    return unbound(`it is mode=${manifest.mode ?? '(absent)'} (${manifest.mode_basis ?? 'no basis'}), and only a paid mission's rows can prove what a paid mission does`);
+  }
+  if (!manifest.julius_run_id || manifest.julius_run_id === 'none') return unbound('its manifest names no Julius run, so no row can be scoped to one');
+  if (run === null) return unbound(`its manifest names run ${manifest.julius_run_id}, which runs.tsv does not hold`);
+  const stray = accepted.filter((id) => id !== run.run_id);
+  if (stray.length > 0) return unbound(`the entrypoint accepted ${stray.join(', ')} while the manifest names ${run.run_id}`);
+  const elsewhere = resultsOf(ev).filter((result) => result.run !== null && result.run !== run.run_id);
+  if (elsewhere.length > 0) return unbound(`the entrypoint's RESULT names ${elsewhere.map((result) => result.run).join(', ')} while the manifest names ${run.run_id}`);
+  const unscoped = RUN_SCOPED_FILES.filter((name) => {
+    const header = ev.header(name);
+    return header !== null && header.length > 0 && !header.includes('run_id');
+  });
+  if (unscoped.length > 0) {
+    return unbound(`${unscoped.join(', ')} ${unscoped.length === 1 ? 'carries' : 'carry'} no run_id column, so ${unscoped.length === 1 ? 'its' : 'their'} rows cannot be tied to run ${run.run_id}`);
+  }
+  return { bound: true, reason: null, manifest, run };
+}
+
+/**
+ * EVERY TABLE, SCOPED TO THE ONE RUN. A table that names its run is filtered
+ * to it; sessions are scoped by the run's mission; a table from a bundle older
+ * than the `run_id` column is read whole, and the binding above has already
+ * refused to let such a bundle vouch for anything.
+ */
+function scoped(ev, binding) {
+  const run = binding.run ?? null;
+  const runId = run?.run_id ?? null;
+  const rows = (name) => {
+    const all = ev.rows(name);
+    if (runId === null) return all;
+    if (name === 'sessions.tsv') return run.mission_id ? all.filter((row) => row.mission_id === run.mission_id) : all;
+    return (ev.header(name) ?? []).includes('run_id') ? all.filter((row) => row.run_id === runId) : all;
+  };
+  return { ...ev, rows, allRows: ev.rows, run, runId };
+}
+
+/* ------------------------------------------------------- provider identity */
+
+/**
+ * WHO DID THE WORK — A REAL PROVIDER, OR A STAND-IN.
+ *
+ * The bundle has always carried the provider, the served model, the transport
+ * and the response id; no row read them. So the repair drill's own database,
+ * dumped in the mission's shape — three scripted adapters, `providerId: 'drill'`
+ * — read PASS for the architect, the coder, the reviewer and the completion.
+ *
+ * A role's task is credited only on a worker-diagnostics row for THAT task
+ * naming a transport this runtime has, a provider, a served model (for the
+ * coder, one the `served_model_basis` column attests where the bundle has it),
+ * and — for the architect and the coder, whose providers answer with one — a
+ * response id. The trajectory's own record of the dispatch must agree: the
+ * adapter a live mission composes always ends `-live`, and a provider or model
+ * carrying a stand-in token below is not a provider at all.
+ */
+export const NOT_A_PROVIDER_TOKENS = Object.freeze([
+  'drill', 'fake', 'stub', 'mock', 'sim', 'simulated', 'scripted', 'fixture', 'dummy', 'placeholder', 'recorded', 'replay', 'noop',
+]);
+const TRANSPORTS = new Set(['openai', 'hosted', 'local', 'remote']);
+const RESPONSE_ID_ROLES = new Set(['PROMPT_ARCHITECT', 'CODING_AGENT']);
+const standIn = (value) => typeof value === 'string' && value !== ''
+  && value.toLowerCase().split(/[^a-z0-9]+/u).some((token) => NOT_A_PROVIDER_TOKENS.includes(token));
+const adapterOf = (facts) => {
+  try {
+    const parsed = JSON.parse(facts);
+    return typeof parsed?.adapterId === 'string' ? parsed.adapterId : null;
+  } catch {
+    return null;
+  }
+};
+
+function identityOf(ev, task) {
+  const notReal = (detail) => ({ state: 'NOT REAL', detail: `${task.task_id}: ${detail}` });
+  const missing = (detail) => ({ state: 'UNKNOWN', detail: `${task.task_id}: ${detail}` });
+  for (const row of ev.rows('trajectory.tsv').filter((entry) => entry.task_id === task.task_id)) {
+    if (row.event_kind === 'PROVIDER_SELECTED' && standIn(row.provider_id)) return notReal(`the trajectory routed it to provider ${row.provider_id}`);
+    if (row.event_kind === 'WORKER_SELECTED') {
+      const adapter = adapterOf(row.safe_facts);
+      if (adapter !== null && (standIn(adapter) || !adapter.endsWith('-live'))) return notReal(`it was dispatched to adapter ${adapter}, which is not a live adapter`);
+    }
+  }
+  if (ev.file('worker-diagnostics.tsv') === null) return missing('worker-diagnostics.tsv is unreadable, so which provider answered is unknown');
+  const diagnostics = ev.rows('worker-diagnostics.tsv').filter((row) => row.task_id === task.task_id);
+  if (diagnostics.length === 0) return missing('no worker-diagnostics row names it, so no provider identity was recorded');
+  const row = [...diagnostics].reverse().find((entry) => entry.outcome === 'succeeded' || entry.event_type === 'julius.worker.completed') ?? diagnostics.at(-1);
+  for (const column of ['transport', 'provider', 'served_model', 'requested_model', 'response_id']) {
+    if (standIn(row[column])) return notReal(`its ${column} is ${row[column]}`);
+  }
+  if (!row.transport) return missing('its diagnostics name no transport');
+  if (!TRANSPORTS.has(row.transport)) return notReal(`its transport ${row.transport} is none this runtime has`);
+  if (!row.provider) return missing('its diagnostics name no provider');
+  if (task.role === 'CODING_AGENT' && (ev.header('worker-diagnostics.tsv') ?? []).includes('served_model_basis')) {
+    if (row.served_model_basis !== 'attested' || !row.served_model) {
+      return missing(`its served model is not attested (served_model_basis ${row.served_model_basis || 'empty'})`);
+    }
+  } else if (!row.served_model) {
+    return missing('its diagnostics name no served model');
+  }
+  if (RESPONSE_ID_ROLES.has(task.role) && !row.response_id) return missing('its diagnostics carry no provider response id');
+  return { state: 'REAL', detail: `${row.provider}/${row.served_model} over ${row.transport}` };
+}
+
+/** Judges the identity of every task given, and says which way it fell. */
+function identities(ev, tasks) {
+  const judged = tasks.map((task) => identityOf(ev, task));
+  return {
+    notReal: judged.filter((entry) => entry.state === 'NOT REAL').map((entry) => entry.detail),
+    unknown: judged.filter((entry) => entry.state === 'UNKNOWN').map((entry) => entry.detail),
+    real: [...new Set(judged.filter((entry) => entry.state === 'REAL').map((entry) => entry.detail))],
+  };
 }
 
 /* ------------------------------------------------------ capability proofs */
@@ -194,29 +455,38 @@ function readers(root) {
  *
  * `capability-proofs.tsv` is the ledger a drill writes about itself: which
  * capability it claims, which command it was, how many steps it declared, what
- * infrastructure it drove, WHICH PRODUCTION FILES it exercised with their
- * content digests at the moment it ran, and the transcript it left behind. One
- * row per exercised file; the gate groups by (capability, drill).
+ * infrastructure it drove, WHICH FILES it exercised with their content digests
+ * at the moment it ran, and the transcript it left behind. One row per file;
+ * the gate groups by (capability, drill).
  *
- * Four things are checked, and a proof that misses any of them is inadmissible
+ * Five things are checked, and a proof that misses any of them is inadmissible
  * rather than merely quiet:
  *
  *   OUTCOME. The drill said VERIFIED. Anything else is a drill that did not
  *   pass, and a drill that did not pass proves nothing.
  *
- *   CURRENCY. Every exercised file still exists and still hashes to the digest
+ *   CURRENCY. Every attested file still exists and still hashes to the digest
  *   the drill recorded. A proof whose subject has been edited since is STALE:
  *   it describes code that is no longer here. This is why capability proofs
  *   expire on their own rather than accumulating as folklore.
  *
- *   COVERAGE. The exercised set contains every file this row's own build probe
- *   names. A drill for something else cannot be pointed at this capability,
- *   and a drill that touched one of two implementation files has not proven
- *   the capability the row is about.
+ *   THE WHOLE DRILL. The attested set contains EVERY file the drill's command
+ *   builds and runs, read from the tree (`julius-drill-closure.mjs`), never
+ *   from the ledger: the drill's own npm script, its esbuild entry, and every
+ *   relative import from there. Attesting only the row's own files let a proof
+ *   outlive the pipeline, repositories and composition it drove through.
+ *
+ *   COVERAGE. The attested set contains every file this row's own build probe
+ *   names, and the drill really imports each of them. A drill for something
+ *   else cannot be pointed at this capability.
  *
  *   TRANSCRIPT. The drill's own output is present, carries exactly the declared
  *   number of `[PASS]` steps, carries no `[FAIL]`, and ends on a VERIFIED line.
  *   The gate reads the drill's words rather than a summary word about them.
+ *
+ * WHAT THIS STILL CANNOT CATCH, stated rather than implied: the digests are
+ * recomputable from the tree, so a ledger typed by hand with every digest right
+ * is indistinguishable from one a drill wrote. The attestation is unsigned.
  */
 export const CAPABILITY_PROOF_COLUMNS = [
   'capability', 'drill', 'outcome', 'steps', 'infrastructure',
@@ -292,9 +562,19 @@ function capabilityProof(proofs, capability, probed) {
       .find((column) => new Set(claimed.map((row) => row[column])).size > 1);
     if (inconsistent !== undefined) { refuse('UNPROVEN', `its rows disagree about ${inconsistent}, so they do not describe one run`); continue; }
 
+    const driven = drillDrivenFiles(REPO, drill);
+    if ('error' in driven) { refuse('UNPROVEN', `${driven.error}, so the code this drill drives cannot be known and no attestation of it can cover it`); continue; }
     const exercised = new Set(claimed.map((row) => row.exercised_path));
+    const unattested = driven.files.filter((path) => !exercised.has(path));
+    if (unattested.length > 0) {
+      refuse('UNPROVEN', `the drill drives ${driven.files.length} file(s) and ${unattested.length} of them are not attested (${unattested.slice(0, 3).join(', ')}${unattested.length > 3 ? ', …' : ''}), so the proof cannot show the code it drove is unchanged`);
+      continue;
+    }
+
     const uncovered = probed.files.filter((path) => !exercised.has(path));
     if (uncovered.length > 0) { refuse('UNPROVEN', `it did not exercise ${uncovered.join(', ')}`); continue; }
+    const undriven = probed.files.filter((path) => !driven.files.includes(path));
+    if (undriven.length > 0) { refuse('UNPROVEN', `the drill does not import ${undriven.join(', ')}, so it cannot have exercised ${undriven.length === 1 ? 'it' : 'them'}`); continue; }
 
     const transcriptName = claimed[0].transcript;
     const transcript = proofs.file(transcriptName);
@@ -306,11 +586,15 @@ function capabilityProof(proofs, capability, probed) {
     if (failures > 0) { refuse('UNPROVEN', `its transcript records ${failures} failed step(s)`); continue; }
     if (passes !== declared) { refuse('UNPROVEN', `it declares ${declared} step(s) and its transcript shows ${passes}`); continue; }
     const verdictLine = transcript.split('\n').map((line) => line.trim()).filter((line) => line.length > 0).pop() ?? '';
-    if (!/^[A-Z][A-Z /-]* VERIFIED$/u.test(verdictLine)) { refuse('UNPROVEN', 'its transcript does not end on a VERIFIED line'); continue; }
+    // `NOT VERIFIED` is capitals ending in VERIFIED too; a verdict that negates
+    // itself, or says FAILED anywhere, is not a verified one.
+    if (!/^[A-Z][A-Z /-]* VERIFIED$/u.test(verdictLine) || /\b(?:NOT|FAILED|UNVERIFIED)\b/u.test(verdictLine)) {
+      refuse('UNPROVEN', 'its transcript does not end on a VERIFIED line'); continue;
+    }
 
     return {
       state: 'PROVEN',
-      basis: `${drill} drove ${claimed.length} production file(s) against ${claimed[0].infrastructure || '(unstated infrastructure)'} and passed ${passes} step(s) on ${claimed[0].recorded_at || '(no recorded instant)'}`,
+      basis: `${drill} drove every one of the ${driven.files.length} file(s) its build reaches, unchanged since, against what it names as ${claimed[0].infrastructure || '(unstated infrastructure)'}, and passed ${passes} step(s) on ${claimed[0].recorded_at || '(no recorded instant)'}`,
     };
   }
   const stale = refusals.find((row) => row.state === 'STALE');
@@ -325,27 +609,85 @@ function capabilityProof(proofs, capability, probed) {
  *
  *   EXERCISED      the run did it, and it worked
  *   FAILED         the run did it, and it did not work
- *   NOT EXERCISED  the run never reached this behaviour — a flawless mission
- *                  never crashes, so it never recovers, and saying it FAILED
- *                  at recovery would be false
+ *   NOT EXERCISED  the run's READABLE rows show it never reached this
+ *                  behaviour — a flawless mission never crashes, so it never
+ *                  recovers, and saying it FAILED at recovery would be false
  *   UNKNOWN        the bundle cannot say. Never a default, never zero, never
- *                  inferred from the fact that something else is present.
+ *                  inferred from the fact that something else is present, and
+ *                  never something a drill may stand in for.
  */
 const exercised = (basis) => ({ mission: 'EXERCISED', basis });
 const failed = (basis) => ({ mission: 'FAILED', basis });
 const notExercised = (basis) => ({ mission: 'NOT EXERCISED', basis });
 const unknown = (basis) => ({ mission: 'UNKNOWN', basis });
 
+const TERMINAL_TASK_STATES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED', 'SKIPPED']);
+const TERMINAL_RUN_STATES = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
+const WORK_ROLES = new Set(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']);
+
+/** The first of `names` this bundle cannot read, or null when every one is readable. */
+const unreadable = (ev, ...names) => names.find((name) => ev.file(name) === null) ?? null;
+const cannotRead = (name, what) => unknown(`${name} is unreadable (absent, or the dump wrote \`unavailable\`), so ${what} is unknown`);
+const count = (value) => (/^\d+$/u.test(value ?? '') ? Number(value) : null);
+/** An instant the dump or the runtime wrote (`2026-09-29 12:33:45.141+00`, ISO), as milliseconds, or null. */
+const instant = (value) => {
+  const match = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(\.\d+)?(Z|[+-]\d{2}(?::?\d{2})?)?$/u.exec((value ?? '').trim());
+  if (match === null) return null;
+  const zone = match[4] === undefined || match[4] === 'Z' ? 'Z'
+    : match[4].length === 3 ? `${match[4]}:00` : match[4].includes(':') ? match[4] : `${match[4].slice(0, 3)}:${match[4].slice(3)}`;
+  const parsed = Date.parse(`${match[1]}T${match[2]}${(match[3] ?? '').slice(0, 4)}${zone}`);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+const sha256Hex = (text) => createHash('sha256').update(text).digest('hex');
+
+/** The evidence rows a task produced: by `task_id` where the dump carries it, else by the `<task>:<attempt>:<n>` id. */
+const evidenceOf = (ev, taskId) => {
+  const rows = ev.rows('evidence.tsv');
+  if ((ev.header('evidence.tsv') ?? []).includes('task_id')) return rows.filter((row) => row.task_id === taskId);
+  return rows.filter((row) => row.evidence_id.startsWith(`${taskId}:`) && /^\d+:\d+$/u.test(row.evidence_id.slice(taskId.length + 1)));
+};
+/** Why a task failed, from the failure dump, or nothing. */
+const why = (ev, taskId) => {
+  const row = ev.rows('failures.tsv').filter((entry) => entry.task_id === taskId && (entry.julius_code || entry.failure_class)).pop();
+  return row === undefined ? '' : ` (${row.julius_code || 'no code'}/${row.failure_class || 'no class'})`;
+};
+const runLabel = (ev) => (ev.run === null ? 'the run' : `run ${ev.run.run_id}`);
+const noRun = (ev) => unknown(ev.allRows('runs.tsv').length === 0
+  ? 'no run row in the evidence bundle'
+  : `the bundle holds ${ev.allRows('runs.tsv').length} run(s) and names none of them as its own`);
+
 /**
- * THE OPERATOR IDENTITY, WHICH IS NOT AN ACCOUNT.
+ * AN ACCOUNT IS WHAT THE ACCOUNT SYSTEM MINTS, NOT ANY NAME BUT TWO.
  *
- * Both bounded live missions declare `"tenantId": "tenant"`, and the workflow
- * runs them under `RELAY_BRIDGE_API_TOKEN` with `method: 'operator_token'`. A
- * mission owned by that identity proves the pipeline; it proves nothing about a
- * person signing up, creating a project and starting a run. Anything else in
- * `player_id` is a real account, and that is what flips the row.
+ * Both bounded live missions declare `"tenantId": "tenant"`, and the session's
+ * `player_id` is that contract field verbatim: the operator can type anything
+ * there. The row used to refuse only `tenant` and `operator`, so a contract
+ * naming its tenant `founder` read as a person who had signed up. The one way
+ * this repository creates an account is GitHub sign-in, which mints the
+ * participant id `ghu-<GitHub numeric id>` (`participantIdForIdentity`,
+ * relay-bridge/github-auth-routes.ts; a test holds the two equal). Only that
+ * shape is an account; everything else is the operator by another name.
  */
-const OPERATOR_PLAYER_IDS = new Set(['tenant', 'operator']);
+export const ACCOUNT_PARTICIPANT_ID = /^ghu-\d+$/u;
+
+/**
+ * THE REFUSALS THAT END A REPAIR BEFORE IT EXISTS. The pipeline proves a repair
+ * routable and affordable BEFORE creating it, and halts with `run.failed`
+ * otherwise — "no reservation, no task, no attempt" — so the absence of a
+ * repair task is exactly what a BROKEN loop leaves behind, and cannot be read
+ * as "nothing was rejected". The planner's own refusals are lower-case tokens
+ * (`repair_round_limit`, `repair_not_plannable`).
+ */
+const REPAIR_REFUSAL = /^(?:REPAIR_(?:UNROUTABLE|BUDGET_DENIED|ROUNDS_EXHAUSTED|NOT_PLANNABLE)|repair_[a-z0-9_]+)$/u;
+
+/**
+ * THE EXECUTOR REFUSALS THAT MEAN A WORKER REACHED PAST ITS AUTHORITY. The
+ * others (unavailable, a malformed request, an unknown outcome) are
+ * infrastructure, and an unknown outcome is judged by the invocation it left.
+ */
+const BOUNDARY_REFUSALS = new Set(['executor_scope_refused', 'executor_authorization_refused', 'executor_security_failure', 'executor_invocation_unauthorized']);
+const OPEN_INVOCATION_STATES = new Set(['REQUESTED', 'AUTHORIZED', 'DISPATCHING', 'RUNNING']);
+const EXECUTED_INVOCATION_STATES = new Set(['SUCCEEDED', 'FAILED', 'TIMED_OUT']);
 
 /**
  * `path: true` marks a capability on the creation path a mission must walk to
@@ -354,10 +696,10 @@ const OPERATOR_PLAYER_IDS = new Set(['tenant', 'operator']);
  *
  * `missionRequired: true` is the stronger statement, and it is what fences the
  * third verdict in: THIS capability must be exercised by the mission itself,
- * and no drill may stand in for it. The eight that carry it are the eight a run
- * physically walks between "a project exists" and "the run COMPLETED" — a drill
- * proving a coder can code does not make a mission that never built anything
- * into one that did.
+ * and no drill may stand in for it. The nine that carry it are the eight a run
+ * physically walks between "a project exists" and "the run COMPLETED", and the
+ * settlement of what it spent — a drill proving a coder can code does not make
+ * a mission that never built anything into one that did.
  *
  * REPAIR LOOP, RESTART / RECOVERY and FAILURE RECOVERY deliberately do NOT
  * carry it. Each is reached only by something going wrong, and a beta gate that
@@ -373,47 +715,71 @@ const CAPABILITIES = [
         return unknown('this bundle carries no readable execution-session dump, so the account the mission ran for is unknown');
       }
       const sessions = ev.rows('sessions.tsv');
-      if (sessions.length === 0) return notExercised('no execution session was recorded, so no account owns this run');
+      if (sessions.length === 0) return notExercised(`no execution session was recorded for ${runLabel(ev)}'s mission, so no account owns it`);
       const owners = [...new Set(sessions.map((row) => row.player_id))];
-      const real = owners.filter((owner) => !OPERATOR_PLAYER_IDS.has(owner));
+      const real = owners.filter((owner) => ACCOUNT_PARTICIPANT_ID.test(owner));
       return real.length > 0
-        ? exercised(`a mission ran for a non-operator account (${real.join(', ')})`)
-        : notExercised(`every session is owned by the operator identity (${owners.join(', ')}), so no real account has started a mission`);
+        ? exercised(`a mission ran for a signed-up account (${real.join(', ')})`)
+        : notExercised(`every session is owned by an operator-named tenant (${owners.join(', ')}), none of them an account GitHub sign-in minted, so no real account has started a mission`);
     },
   },
   {
     id: 'PROJECT CREATION', path: true, missionRequired: true,
     files: ['relay-bridge/julius/bootstrap.ts', 'relay-bridge/julius/mission-seed.ts'],
     prove: (ev) => {
-      const runs = ev.rows('runs.tsv');
-      if (runs.length === 0) return unknown('no run row in the evidence bundle');
-      const projectBearing = ev.rows('tasks.tsv').length > 0 && runs[0].mission_id;
-      return projectBearing
-        ? exercised(`run ${runs[0].run_id} was created for mission ${runs[0].mission_id}`)
-        : failed('a run row exists but names no mission');
+      if (ev.file('runs.tsv') === null) return cannotRead('runs.tsv', 'whether a run was created');
+      if (ev.run === null) return noRun(ev);
+      if (ev.file('tasks.tsv') === null) return cannotRead('tasks.tsv', `whether ${runLabel(ev)} was created with its work`);
+      if (!ev.run.mission_id) return failed(`${runLabel(ev)} names no mission`);
+      const tasks = ev.rows('tasks.tsv');
+      return tasks.length > 0
+        ? exercised(`${runLabel(ev)} was created for mission ${ev.run.mission_id} with ${tasks.length} task(s)`)
+        : failed(`${runLabel(ev)} was created for mission ${ev.run.mission_id} with no task in it`);
     },
   },
   {
     id: 'JULIUS MISSION START', path: true, missionRequired: true,
     files: ['relay-bridge/julius-live-mission.ts', 'src/relay/mission/julius/julius-run-loop.ts'],
     prove: (ev) => {
-      const text = ev.file('live-mission.evidence.txt');
-      if (text === null) return unknown('this bundle carries no readable mission evidence, so how the run started is unknown');
-      return /^Run \S+ accepted in state READY; driving the Julius run loop\.$/m.test(text)
-        ? exercised('the entrypoint recorded a run accepted in READY and drove the loop')
-        : failed('no accepted-and-driving line in the mission evidence');
+      if (ev.file('live-mission.evidence.txt') === null) return unknown('this bundle carries no readable mission evidence, so how the run started is unknown');
+      const accepted = acceptedRuns(ev);
+      if (ev.runId === null) {
+        return accepted.length > 0
+          ? exercised(`the entrypoint recorded ${accepted.join(', ')} accepted in READY and drove the loop`)
+          : failed('no accepted-and-driving line in the mission evidence');
+      }
+      return accepted.includes(ev.runId)
+        ? exercised(`the entrypoint accepted ${runLabel(ev)} in READY and drove the loop`)
+        : failed(`no accepted-and-driving line for ${runLabel(ev)} in the mission evidence${accepted.length > 0 ? ` (it names ${accepted.join(', ')})` : ''}`);
     },
   },
   {
     id: 'PROMPT ARCHITECT', path: true, missionRequired: true,
     files: ['src/relay/connectors/gpt-architect/index.ts', 'src/relay/mission/prompt-architect/prompt-architect-plan.ts'],
     prove: (ev) => {
-      const plan = ev.rows('tasks.tsv').find((row) => row.role === 'PROMPT_ARCHITECT');
-      if (plan === undefined) return notExercised('no PROMPT_ARCHITECT task in the run');
-      const artifact = ev.rows('evidence.tsv').find((row) => row.evidence_type === 'ARTIFACT' && row.status === 'PASSED');
-      return plan.state === 'SUCCEEDED' && artifact !== undefined
-        ? exercised(`${plan.task_id} SUCCEEDED and stored a validated plan artifact`)
-        : failed(`the architect task is ${plan.state} with ${artifact === undefined ? 'no' : 'an'} accepted artifact`);
+      const gap = unreadable(ev, 'tasks.tsv', 'evidence.tsv');
+      if (gap !== null) return cannotRead(gap, "what the architect's tasks did");
+      const tasks = ev.rows('tasks.tsv').filter((row) => row.role === 'PROMPT_ARCHITECT');
+      const ran = tasks.filter((row) => TERMINAL_TASK_STATES.has(row.state));
+      if (ran.length === 0) {
+        return notExercised(tasks.length === 0 ? 'no PROMPT_ARCHITECT task in the run' : `no architect task ran to an end (${tasks.map((row) => row.state).join(', ')})`);
+      }
+      // EVERY ARCHITECT TASK, and each plan's artifact must be ITS OWN: the
+      // first task and any artifact in the bundle is how one good plan hid a
+      // broken one.
+      const broken = [];
+      for (const task of ran) {
+        if (task.state !== 'SUCCEEDED') { broken.push(`${task.task_id} is ${task.state}${why(ev, task.task_id)}`); continue; }
+        if ((task.task_type === 'plan' || task.task_type === 'repair:plan')
+          && !evidenceOf(ev, task.task_id).some((row) => row.evidence_type === 'ARTIFACT' && row.status === 'PASSED')) {
+          broken.push(`${task.task_id} SUCCEEDED with no accepted plan artifact of its own`);
+        }
+      }
+      if (broken.length > 0) return failed(broken.join('; '));
+      const who = identities(ev, ran);
+      if (who.notReal.length > 0) return failed(`NOT A REAL PROVIDER — ${who.notReal.join('; ')}`);
+      if (who.unknown.length > 0) return unknown(`the architect's work SUCCEEDED, but which provider did it is unknown — ${who.unknown.join('; ')}`);
+      return exercised(`${ran.length} architect task(s) SUCCEEDED on a real provider (${who.real.join(', ')}), each plan with its own validated artifact`);
     },
   },
   {
@@ -427,11 +793,19 @@ const CAPABILITIES = [
     // class of lie as reporting PASS for something that is not.
     files: ['relay-bridge/hosted-coding-agent/hosted-runner.ts', 'relay-bridge/julius/live-workers.ts', 'src/relay/mission/julius/julius-allocation-runtime.ts'],
     prove: (ev) => {
-      const build = ev.rows('tasks.tsv').find((row) => row.task_type === 'build');
+      if (ev.file('tasks.tsv') === null) return cannotRead('tasks.tsv', "what the coder's tasks did");
+      const coder = ev.rows('tasks.tsv').filter((row) => row.role === 'CODING_AGENT');
+      const broken = coder.filter((row) => row.state === 'FAILED');
+      if (broken.length > 0) return failed(broken.map((row) => `${row.task_id} is FAILED${why(ev, row.task_id)}`).join('; '));
+      const build = coder.find((row) => row.task_type === 'build');
       if (build === undefined) return notExercised('no build task in the run');
-      if (build.state === 'SUCCEEDED') return exercised(`${build.task_id} SUCCEEDED`);
-      const why = ev.rows('failures.tsv').find((row) => row.task_id === build.task_id);
-      return failed(`${build.task_id} is ${build.state}${why ? ` (${why.julius_code}/${why.failure_class || 'no class'})` : ''}`);
+      if (!TERMINAL_TASK_STATES.has(build.state)) return notExercised(`${build.task_id} never ran to an end (${build.state})`);
+      if (build.state !== 'SUCCEEDED') return failed(`${build.task_id} is ${build.state}`);
+      const done = coder.filter((row) => row.state === 'SUCCEEDED');
+      const who = identities(ev, done);
+      if (who.notReal.length > 0) return failed(`NOT A REAL PROVIDER — ${who.notReal.join('; ')}`);
+      if (who.unknown.length > 0) return unknown(`${build.task_id} SUCCEEDED, but which provider did the coding is unknown — ${who.unknown.join('; ')}`);
+      return exercised(`${build.task_id} SUCCEEDED${done.length > 1 ? ` with ${done.length - 1} further coder task(s)` : ''} on a real provider (${who.real.join(', ')})`);
     },
   },
   {
@@ -452,7 +826,6 @@ const CAPABILITIES = [
       'src/relay/persistence/wonderland-migrations/023_julius_task_contracts.sql',
     ],
     prove: (ev) => {
-      if (!ev.present) return unknown('no live evidence bundle');
       if (ev.file('task-contracts.tsv') === null) {
         return unknown('this bundle carries no readable task-contract dump, so what the coder was charged with is unknown');
       }
@@ -462,6 +835,7 @@ const CAPABILITIES = [
       if (locked.length === 0) {
         return failed(`${contracts.length} contract revision(s) exist and none was ever locked, so no build could be dispatched`);
       }
+      if (ev.file('tasks.tsv') === null) return cannotRead('tasks.tsv', 'which build the locked contract governed');
       const build = ev.rows('tasks.tsv').find((row) => row.task_type === 'build');
       if (build === undefined) return notExercised('a contract is locked but the run has no build task to have been governed by it');
       const governing = locked.find((row) => row.task_id === build.task_id);
@@ -481,12 +855,17 @@ const CAPABILITIES = [
        * lock table alone cannot tell. The claim rows in `contract-events.tsv`
        * carry the revision and digest each bound task actually executed under,
        * and a `julius.contract.refused` row carrying a binding reason is the
-       * runtime saying it refused to run one of them. An older bundle without
-       * that dump keeps the weaker proof, and SAYS it is the weaker one.
+       * runtime saying it refused to run one of them.
+       *
+       * A bundle without that dump used to keep "the weaker proof" and PASS on
+       * the lock table alone. Without the claims, neither the binding the build
+       * ran under nor whether the lock came BEFORE it can be shown, and a
+       * contract agreed after the work is the thing this row exists to refuse,
+       * so that is UNKNOWN now.
        */
       const contractEvents = ev.file('contract-events.tsv') === null ? null : ev.rows('contract-events.tsv');
       if (contractEvents === null) {
-        return exercised(`${governing.contract_id} revision ${governing.contract_revision} locked at ${governing.locked_at} by ${governing.locked_by_evaluator_id || '(unrecorded)'}, governing ${build.task_id}; the binding it was RUN under is not measurable — this bundle carries no contract-events dump`);
+        return unknown(`${governing.contract_id} revision ${governing.contract_revision} reads locked at ${governing.locked_at}, but the bundle carries no readable contract-events dump, so the binding ${build.task_id} ran under, and whether the lock preceded it, are not measurable`);
       }
       const review = ev.rows('tasks.tsv').find((row) => row.role === 'INDEPENDENT_REVIEWER' && row.parent_task_id === build.task_id);
       const claimOf = (taskId) => contractEvents.filter((row) => row.event_type === 'julius.task.claimed' && row.task_id === taskId).pop();
@@ -510,71 +889,196 @@ const CAPABILITIES = [
         const reviewMismatch = bindingMismatch(`review ${review.task_id}`, claimOf(review.task_id));
         if (reviewMismatch !== null) return failed(reviewMismatch);
       }
-      return exercised(`${governing.contract_id} revision ${governing.contract_revision} locked at ${governing.locked_at} by ${governing.locked_by_evaluator_id || '(unrecorded)'}, governing ${build.task_id}; the build${review === undefined ? '' : ' and its review'} were claimed under that revision and digest`);
+      /**
+       * THE LOCK CAME FIRST. Every claim of the build must follow the lock, by
+       * the contract's own lock instant and by the ledger's order where the
+       * lock event is dumped. A contract whose lock instant is later than a
+       * claim of the work it governs was agreed after the fact.
+       */
+      const claims = contractEvents.filter((row) => row.event_type === 'julius.task.claimed' && row.task_id === build.task_id);
+      const lockedAt = instant(governing.locked_at);
+      const early = claims.find((row) => lockedAt !== null && instant(row.occurred_at) !== null && instant(row.occurred_at) < lockedAt);
+      if (early !== undefined) {
+        return failed(`${build.task_id} was claimed at ${early.occurred_at}, before ${governing.contract_id} revision ${governing.contract_revision} was locked at ${governing.locked_at}: the terms were agreed after the work began`);
+      }
+      const lockEvent = contractEvents.find((row) => row.event_type === 'julius.contract.locked' && row.contract_revision === governing.contract_revision);
+      const sequenced = lockEvent !== undefined && count(lockEvent.sequence) !== null;
+      const beforeLock = sequenced ? claims.find((row) => count(row.sequence) !== null && count(row.sequence) < count(lockEvent.sequence)) : undefined;
+      if (beforeLock !== undefined) {
+        return failed(`${build.task_id} was claimed at ledger position ${beforeLock.sequence}, before the lock at ${lockEvent.sequence}: the terms were agreed after the work began`);
+      }
+      const ordered = sequenced || (lockedAt !== null && claims.every((row) => instant(row.occurred_at) !== null));
+      if (!ordered) {
+        return unknown(`${governing.contract_id} is locked and ${build.task_id} was claimed under it, but neither the instants nor the ledger positions order the lock against the claim`);
+      }
+      return exercised(`${governing.contract_id} revision ${governing.contract_revision} locked at ${governing.locked_at} by ${governing.locked_by_evaluator_id || '(unrecorded)'}, governing ${build.task_id}; the build${review === undefined ? ' was' : ' and its review were'} claimed under that revision and digest`);
     },
   },
   {
     id: 'INDEPENDENT REVIEWER', path: true, missionRequired: true,
     files: ['relay-bridge/hermes-reviewer.ts', 'relay-bridge/hermes-remote-review.ts', 'src/relay/mission/reviewer-gate.ts'],
     prove: (ev) => {
-      const review = ev.rows('tasks.tsv').find((row) => row.role === 'INDEPENDENT_REVIEWER');
-      if (review === undefined) return notExercised('no INDEPENDENT_REVIEWER task in the run');
+      const gap = unreadable(ev, 'tasks.tsv', 'evidence.tsv');
+      if (gap !== null) return cannotRead(gap, 'what the reviews did');
+      const tasks = ev.rows('tasks.tsv');
+      const reviews = tasks.filter((row) => row.role === 'INDEPENDENT_REVIEWER');
+      const ran = reviews.filter((row) => row.state === 'SUCCEEDED' || row.state === 'FAILED');
+      if (ran.length === 0) {
+        return notExercised(reviews.length === 0 ? 'no INDEPENDENT_REVIEWER task in the run' : `no review ran to an end (${reviews.map((row) => row.state).join(', ')})`);
+      }
       /**
        * A REVIEW THAT FOUND NOTHING IS THE BEST REVIEW, not a missing one.
-       * Counting findings made an approving verdict score as a failure, which
-       * would have marked the very run this gate exists to certify. What proves
-       * the reviewer worked is a REVIEW_FINDING evidence row: the adapter writes
-       * one on the approve path (`status: PASSED`) and one per finding on the
-       * changes-required path, so it is present either way and absent only when
-       * no review happened.
+       * What proves a reviewer worked is a REVIEW_FINDING evidence row OF ITS
+       * OWN: the adapter writes one on the approve path (`status: PASSED`) and
+       * one per finding on the changes-required path.
+       *
+       * AND EVERY REVIEW IS JUDGED. A successful plan review used to carry the
+       * row while the build's review had FAILED. A failed review stands unless
+       * a LATER review of the same work (the work itself, or its repair)
+       * succeeded.
        */
-      const reviewed = ev.rows('evidence.tsv').filter((row) => row.evidence_type === 'REVIEW_FINDING');
-      const findings = ev.rows('findings.tsv').length;
-      return review.state === 'SUCCEEDED' && reviewed.length > 0
-        ? exercised(`${review.task_id} SUCCEEDED and returned a structured review (${reviewed.length} review evidence row(s), ${findings} finding(s))`)
-        : failed(`the reviewer task is ${review.state} with ${reviewed.length} review evidence row(s)`);
+      const byId = new Map(tasks.map((row) => [row.task_id, row]));
+      const workOf = (taskId) => {
+        const task = byId.get(taskId);
+        return task !== undefined && task.task_type.startsWith('repair:') && task.parent_task_id ? task.parent_task_id : taskId;
+      };
+      const reviewed = (row) => evidenceOf(ev, row.task_id).filter((entry) => entry.evidence_type === 'REVIEW_FINDING');
+      const broken = [];
+      const good = [];
+      for (const review of ran) {
+        if (review.state === 'SUCCEEDED') {
+          if (reviewed(review).length === 0) broken.push(`${review.task_id} SUCCEEDED with no review evidence of its own`);
+          else good.push(review);
+          continue;
+        }
+        const later = ran.find((other) => other.state === 'SUCCEEDED' && other.task_id !== review.task_id
+          && workOf(other.parent_task_id) === workOf(review.parent_task_id)
+          && count(other.ordinal) !== null && count(review.ordinal) !== null && count(other.ordinal) > count(review.ordinal)
+          && reviewed(other).length > 0);
+        if (later === undefined) {
+          broken.push(`${review.task_id} FAILED${why(ev, review.task_id)} and no later review of ${workOf(review.parent_task_id) || 'its work'} succeeded`);
+        }
+      }
+      if (broken.length > 0) return failed(broken.join('; '));
+      const who = identities(ev, good);
+      if (who.notReal.length > 0) return failed(`NOT A REAL PROVIDER — ${who.notReal.join('; ')}`);
+      if (who.unknown.length > 0) return unknown(`the reviews SUCCEEDED, but which provider reviewed is unknown — ${who.unknown.join('; ')}`);
+      const rows = good.reduce((sum, review) => sum + reviewed(review).length, 0);
+      return exercised(`${good.length} review(s) SUCCEEDED, each with its own structured review (${rows} review evidence row(s), ${ev.rows('findings.tsv').length} finding(s)), on a real provider (${who.real.join(', ')})`);
     },
   },
   {
     /**
-     * A MISSION THAT NEVER NEEDED A REPAIR HAS NOT FAILED AT REPAIRING.
+     * A MISSION THAT NEVER NEEDED A REPAIR HAS NOT FAILED AT REPAIRING — and a
+     * mission whose repair could not even be created has.
      *
-     * This row used to read FAIL whenever no repair task existed, which made
-     * "the reviewer approved the build first time" — the best outcome the
-     * product has — score identically to "the repair loop is broken". A run
-     * with no rejection reports NOT EXERCISED, and the capability axis is then
-     * the one that answers whether the loop works at all.
+     * The row once read FAIL whenever no repair task existed, which made "the
+     * reviewer approved the build first time" score identically to "the repair
+     * loop is broken". It then read NOT EXERCISED whenever no repair task
+     * existed, which made a REJECTED build whose repair was refused
+     * (REPAIR_UNROUTABLE, REPAIR_BUDGET_DENIED: halted before any task exists)
+     * read "no review rejected anything" — and a drill then rescued it. The
+     * row is decided from what TRIGGERS a repair: a REPAIR decision is the
+     * loop exercised, and it is FAILED unless a repair of that work SUCCEEDED
+     * and was ACCEPTED on re-review.
      */
     id: 'REPAIR LOOP', path: true, missionRequired: false,
     files: ['src/relay/mission/julius/julius-repair-runtime.ts'],
     prove: (ev) => {
-      const repairs = ev.rows('tasks.tsv').filter((row) => row.task_type.startsWith('repair:'));
-      if (repairs.length === 0) return notExercised('no review rejected anything in this run, so no repair was created');
-      const succeeded = repairs.filter((row) => row.state === 'SUCCEEDED');
-      return succeeded.length > 0
-        ? exercised(`${succeeded.length} of ${repairs.length} repair task(s) SUCCEEDED`)
-        : failed(`${repairs.length} repair task(s) created, none SUCCEEDED (${repairs.map((row) => row.state).join(', ')})`);
+      const gap = unreadable(ev, 'tasks.tsv', 'decisions.tsv', 'failures.tsv');
+      if (gap !== null) return cannotRead(gap, 'whether any review rejected work, and what became of it,');
+      const tasks = ev.rows('tasks.tsv');
+      const decisions = ev.rows('decisions.tsv');
+      const byId = new Map(tasks.map((row) => [row.task_id, row]));
+      const workOf = (taskId) => {
+        const task = byId.get(taskId);
+        return task !== undefined && task.task_type.startsWith('repair:') && task.parent_task_id ? task.parent_task_id : taskId;
+      };
+      const refusals = ev.rows('failures.tsv').filter((row) => row.event_type === 'julius.run.failed' && REPAIR_REFUSAL.test(row.reason_code ?? ''));
+      if (refusals.length > 0) {
+        return failed(`a review demanded a repair and the repair was refused: ${refusals.map((row) => `${row.reason_code}${row.task_id ? ` for ${row.task_id}` : ''}`).join(', ')} — no repair task, no attempt, no second review`);
+      }
+      const demanded = decisions.filter((row) => row.action === 'REPAIR');
+      const repairs = tasks.filter((row) => row.task_type.startsWith('repair:'));
+      if (demanded.length === 0 && repairs.length === 0) {
+        return notExercised('decisions.tsv, tasks.tsv and failures.tsv are readable and hold no REPAIR decision, no repair task and no refused repair: no review rejected anything in this run');
+      }
+      const accepted = (task) => decisions.some((row) => row.task_id === task.task_id && (row.action === 'ACCEPT' || row.action === 'COMPLETE'));
+      const subjects = [...new Set([...demanded.map((row) => workOf(row.task_id)), ...repairs.map((row) => row.parent_task_id)])];
+      const broken = [];
+      const repaired = [];
+      for (const subject of subjects) {
+        const mine = repairs.filter((row) => row.parent_task_id === subject);
+        const good = mine.filter((row) => row.state === 'SUCCEEDED' && accepted(row));
+        if (good.length === 0) {
+          broken.push(mine.length === 0
+            ? `${subject} was sent back for repair and no repair task exists`
+            : `${subject}'s repair(s) ${mine.map((row) => `${row.task_id} ${row.state}${accepted(row) ? '' : ', not accepted'}`).join('; ')}: none SUCCEEDED and was ACCEPTED on re-review`);
+          continue;
+        }
+        repaired.push(...good);
+      }
+      if (broken.length > 0) return failed(broken.join('; '));
+      const who = identities(ev, repaired);
+      if (who.notReal.length > 0) return failed(`NOT A REAL PROVIDER — ${who.notReal.join('; ')}`);
+      if (who.unknown.length > 0) return unknown(`the repair(s) were accepted, but which provider made them is unknown — ${who.unknown.join('; ')}`);
+      return exercised(`${subjects.length} piece(s) of work sent back for repair came back ACCEPTED on re-review (${repaired.map((row) => row.task_id).join(', ')}), repaired on a real provider (${who.real.join(', ')})`);
     },
   },
   {
     id: 'VERIFICATION', path: true, missionRequired: true,
     files: ['src/relay/mission/julius/julius-verification-runtime.ts'],
     prove: (ev) => {
+      const gap = unreadable(ev, 'decisions.tsv', 'tasks.tsv');
+      if (gap !== null) return cannotRead(gap, 'what verification decided');
       const decisions = ev.rows('decisions.tsv');
-      return decisions.length > 0
-        ? exercised(`verification recorded ${decisions.length} decision(s): ${decisions.map((row) => `${row.action}/${row.reason_code}`).join(', ')}`)
-        : notExercised('verification recorded no decision');
+      if (decisions.length === 0) return notExercised('decisions.tsv is readable and verification recorded no decision in this run');
+      // WORK THAT WAS REVIEWED MUST HAVE BEEN DECIDED. A successful review with
+      // no decision about its work is verification that did not happen.
+      const tasks = ev.rows('tasks.tsv');
+      const byId = new Map(tasks.map((row) => [row.task_id, row]));
+      const verifiable = (taskId) => ['plan', 'build', 'repair:plan', 'repair:build'].includes(byId.get(taskId)?.task_type ?? '');
+      const reviewedWork = [...new Set(tasks
+        .filter((row) => row.role === 'INDEPENDENT_REVIEWER' && row.state === 'SUCCEEDED' && verifiable(row.parent_task_id))
+        .map((row) => row.parent_task_id))];
+      const undecided = reviewedWork.filter((taskId) => !decisions.some((row) => row.task_id === taskId));
+      if (undecided.length > 0) {
+        return failed(`${undecided.join(', ')} ${undecided.length === 1 ? 'was' : 'were'} reviewed successfully and verification recorded no decision about ${undecided.length === 1 ? 'it' : 'them'}`);
+      }
+      return exercised(`verification recorded ${decisions.length} decision(s): ${decisions.map((row) => `${row.action}/${row.reason_code}`).join(', ')}`);
     },
   },
   {
     id: 'VERIFIED COMPLETION', path: true, missionRequired: true,
     files: ['src/relay/mission/julius/julius-lifecycle-runtime.ts'],
     prove: (ev) => {
-      const runs = ev.rows('runs.tsv');
-      if (runs.length === 0) return unknown('no run row in the evidence bundle');
-      return runs[0].state === 'COMPLETED'
-        ? exercised(`run ${runs[0].run_id} reached COMPLETED`)
-        : failed(`run ${runs[0].run_id} ended ${runs[0].state}`);
+      if (ev.file('runs.tsv') === null) return cannotRead('runs.tsv', 'how the run ended');
+      if (ev.run === null) return noRun(ev);
+      if (ev.run.state !== 'COMPLETED') return failed(`${runLabel(ev)} ended ${ev.run.state}`);
+      /**
+       * AND THE ENTRYPOINT MUST SAY SO TOO. A two-run bundle once printed BETA:
+       * READY because the gate read the older, COMPLETED run's row while the
+       * accepted run's own evidence said `RESULT: FAILED after 2 ticks`. The
+       * accepted run's RESULT line is required and must agree: absent or
+       * ambiguous is no completion, and a different word is a failure.
+       */
+      const result = resultFor(ev, ev.run.run_id);
+      if (result === null) {
+        return unknown(`${runLabel(ev)} reads COMPLETED in runs.tsv, but the entrypoint's RESULT line for it is absent, unreadable or ambiguous, so the job's own account of how it ended is missing`);
+      }
+      if (result.state !== 'COMPLETED' || result.stalled) {
+        return failed(`the entrypoint reported RESULT: ${result.state}${result.stalled ? ' (stalled)' : ''} for ${runLabel(ev)}, while runs.tsv says COMPLETED`);
+      }
+      // COMPLETED BY REAL PROVIDERS, or it is not a verified completion: a run
+      // a drill's scripted adapters drove to COMPLETED proves the pipeline, not
+      // that Julius can deliver a mission.
+      if (ev.file('tasks.tsv') === null) return cannotRead('tasks.tsv', `which providers did ${runLabel(ev)}'s work`);
+      const done = ev.rows('tasks.tsv').filter((row) => WORK_ROLES.has(row.role) && row.state === 'SUCCEEDED');
+      if (done.length === 0) return unknown(`${runLabel(ev)} reads COMPLETED with no role task that succeeded, so what it completed is unknown`);
+      const who = identities(ev, done);
+      if (who.notReal.length > 0) return failed(`${runLabel(ev)} reached COMPLETED, but NOT A REAL PROVIDER did its work — ${who.notReal.join('; ')}`);
+      if (who.unknown.length > 0) return unknown(`${runLabel(ev)} reached COMPLETED, but which provider did its work is unknown — ${who.unknown.join('; ')}`);
+      return exercised(`${runLabel(ev)} reached COMPLETED, and every one of its ${done.length} role task(s) ran on a real provider (${who.real.join(', ')})`);
     },
   },
   {
@@ -591,8 +1095,9 @@ const CAPABILITIES = [
        * one row per mission output actually opened. Naming it here is the
        * contract: build the surface, dump what it opened, and the row flips.
        */
-      const runs = ev.rows('runs.tsv');
-      if (runs.length === 0 || runs[0].state !== 'COMPLETED') {
+      if (ev.file('runs.tsv') === null) return cannotRead('runs.tsv', 'whether the run produced anything to open');
+      if (ev.run === null && ev.allRows('runs.tsv').length > 0) return noRun(ev);
+      if (ev.run === null || ev.run.state !== 'COMPLETED') {
         return notExercised('no completed run, so there is no mission output for Wonder Web to open');
       }
       if (ev.file('wonder-web.tsv') === null) {
@@ -608,10 +1113,11 @@ const CAPABILITIES = [
     id: 'PROJECT BRAIN PERSISTENCE', path: false, missionRequired: false,
     files: ['src/relay/mission/julius/julius-context-snapshot.ts', 'src/relay/shared/llmops/brain-memory.ts'],
     prove: (ev) => {
-      if (!ev.present) return unknown('no live evidence bundle');
       if (ev.file('project-brain.tsv') === null) {
         return unknown('this bundle carries no readable Project Brain dump, so no durable brain write is observable');
       }
+      if (ev.file('tasks.tsv') === null) return cannotRead('tasks.tsv', 'whether any worker ran to write the brain');
+      if (ev.run === null) return noRun(ev);
       /**
        * SEEDED IS NOT WRITTEN, and neither is a FAILURE TO WRITE the same as
        * never having had the chance. The bootstrap inserts the mission's
@@ -623,7 +1129,7 @@ const CAPABILITIES = [
        * unexercised path, because the workers ran.
        */
       const entries = ev.rows('project-brain.tsv');
-      if (entries.length === 0) return failed('the Project Brain is empty: not even the mission seed persisted');
+      if (entries.length === 0) return failed(`the Project Brain is empty for ${runLabel(ev)}: not even the mission seed persisted`);
       const written = entries.filter((row) => row.worker_id !== 'relay-bootstrap' || row.task_id !== '');
       if (written.length > 0) {
         return exercised(`${written.length} of ${entries.length} Project Brain entries were written during the run (kinds: ${[...new Set(written.map((row) => row.entry_kind))].join(', ')})`);
@@ -646,8 +1152,11 @@ const CAPABILITIES = [
      * picking the run back up out of PostgreSQL — has been driven for real by a
      * drill whose attestation is current against this tree.
      *
-     * The two never merge: a run that DID crash and recover still reads PASS
-     * here, and stays distinguishable from one that never had to.
+     * ONLY A RECOVERY THAT RECOVERED IS ONE. Any recovery action used to read
+     * as proof, including the sweep FAILING a task (RETRIES_EXHAUSTED,
+     * RECOVERY_LIMIT_REACHED) and the terminal sweep closing an invocation the
+     * run left unsettled — which is an INTEGRITY failure, not a recovery. A
+     * REQUEUE counts only when its task then SUCCEEDED.
      */
     id: 'RESTART / RECOVERY', path: false, missionRequired: false,
     // THE TWO FILES THAT ARE THE CAPABILITY, and not the barrel beside them.
@@ -658,60 +1167,192 @@ const CAPABILITIES = [
     // plan, and the transactional sweep that reclaims an expired lease.
     files: ['src/relay/mission/julius/julius-recovery.ts', 'src/relay/persistence/julius-recovery-postgres.ts'],
     prove: (ev) => {
-      if (ev.file('failures.tsv') === null) {
-        return unknown('this bundle carries no readable failure dump, so whether anything was recovered is unknown');
+      const gap = unreadable(ev, 'failures.tsv', 'tasks.tsv');
+      if (gap !== null) return cannotRead(gap, 'whether anything was interrupted and recovered');
+      const failures = ev.rows('failures.tsv');
+      const integrity = failures.filter((row) => row.recovery_action === 'CLOSE_UNSETTLED_TOOL_INVOCATION'
+        || row.julius_code === 'TOOL_INVOCATION_UNRESOLVED' || row.failure_class === 'infrastructure_evidence_integrity');
+      if (integrity.length > 0) {
+        return failed(`INTEGRITY FAILURE — ${integrity.length} tool invocation(s) of ${[...new Set(integrity.map((row) => row.task_id || 'the run'))].join(', ')} outlived the run and were closed unresolved (TOOL_INVOCATION_UNRESOLVED): an unsettled effect is never a recovery`);
       }
-      const recovered = ev.rows('failures.tsv').filter((row) => row.recovery_action);
-      return recovered.length > 0
-        ? exercised(`${recovered.length} recovery action(s) recorded (${[...new Set(recovered.map((row) => row.recovery_action))].join(', ')})`)
-        : notExercised('nothing was interrupted in this run, so no lease was ever reclaimed');
+      const actions = failures.filter((row) => row.event_type === 'julius.recovery.action' || row.recovery_action);
+      const gaveUp = actions.filter((row) => row.recovery_action === 'FAIL_TASK');
+      if (gaveUp.length > 0) {
+        return failed(`the recovery sweep FAILED ${gaveUp.map((row) => `${row.task_id || 'a task'} (${row.reason_code || 'no reason'})`).join(', ')}: recovery gave up on the work it reclaimed`);
+      }
+      const tasks = new Map(ev.rows('tasks.tsv').map((row) => [row.task_id, row]));
+      const broken = [];
+      const pending = [];
+      const recovered = [];
+      for (const taskId of new Set(actions.filter((row) => row.recovery_action === 'REQUEUE').map((row) => row.task_id))) {
+        const task = tasks.get(taskId);
+        if (task === undefined) pending.push(`${taskId} was requeued and is not in tasks.tsv`);
+        else if (task.state === 'SUCCEEDED') recovered.push(taskId);
+        else if (TERMINAL_TASK_STATES.has(task.state)) broken.push(`${taskId} was requeued and then ended ${task.state}`);
+        else pending.push(`${taskId} was requeued and is still ${task.state}`);
+      }
+      if (broken.length > 0) return failed(broken.join('; '));
+      if (pending.length > 0) return unknown(`recovery requeued work whose outcome this bundle does not show: ${pending.join('; ')}`);
+      if (recovered.length > 0) {
+        return exercised(`${recovered.length} task(s) whose lease expired were reclaimed, requeued and then SUCCEEDED (${recovered.join(', ')})`);
+      }
+      if (actions.length > 0) {
+        return unknown(`recovery acted (${[...new Set(actions.map((row) => row.recovery_action || row.event_type))].join(', ')}) and no reclaimed task shows whether it recovered anything`);
+      }
+      const held = [...tasks.values()].filter((row) => row.state === 'ACTIVE');
+      if (ev.run !== null && TERMINAL_RUN_STATES.has(ev.run.state) && held.length > 0) {
+        return unknown(`${held.map((row) => row.task_id).join(', ')} ${held.length === 1 ? 'was' : 'were'} left ACTIVE by a run that ended ${ev.run.state}: whether a lease expired and was never reclaimed is not in this bundle`);
+      }
+      return notExercised('failures.tsv and tasks.tsv are readable, and show no recovery action and no task left holding a lease: nothing was interrupted in this run');
     },
   },
   {
+    /**
+     * A RETRYABLE FAILURE IS WHAT TRIGGERS RECOVERY, and the absence of a
+     * `retry.scheduled` row is not its absence: the row used to read "nothing
+     * failed retryably" while a task had FAILED with `errorRetryable=true`.
+     *
+     * AND A SCHEDULED RETRY IS NOT A RETRY. The coordinator writes
+     * `retry.scheduled` when it classifies a failure retryable; the pipeline
+     * then asks the run's policy, which may decline — a SUPERVISED run stops
+     * and waits for a person (`SUPERVISED_STOP`), a review's ceiling is one
+     * attempt — and writes the `task.failed` that ends the task. With automatic
+     * retry off the coordinator writes that `task.failed` itself and schedules
+     * nothing. Those are the run's policy working, not recovery failing, and a
+     * reading that called them FAILED would fail correct supervised runs. So
+     * every task that failed retryably is judged by what actually happened: it
+     * recovered if it then SUCCEEDED; recovery failed if it WAS retried and
+     * still ended FAILED; and recovery was not exercised if no retry ever ran.
+     */
     id: 'FAILURE RECOVERY', path: false, missionRequired: false,
     files: ['src/relay/mission/julius/julius-execution-coordinator.ts', 'src/relay/mission/julius/julius-continuation.ts'],
     prove: (ev) => {
-      if (ev.file('failures.tsv') === null) {
-        return unknown('this bundle carries no readable failure dump, so whether anything was retried is unknown');
+      const gap = unreadable(ev, 'failures.tsv', 'tasks.tsv');
+      if (gap !== null) return cannotRead(gap, 'whether anything failed retryably and was recovered');
+      const failures = ev.rows('failures.tsv');
+      const triggers = failures.filter((row) => row.task_id && (row.error_retryable === 'true' || row.event_type === 'julius.retry.scheduled'));
+      if (triggers.length === 0) {
+        return notExercised('failures.tsv and tasks.tsv are readable and no failure in this run was retryable, so there was nothing to recover from');
       }
-      const retries = ev.rows('failures.tsv').filter((row) => row.event_type === 'julius.retry.scheduled');
-      if (retries.length === 0) return notExercised('nothing failed retryably in this run, so no retry was scheduled');
-      const tasks = new Map(ev.rows('tasks.tsv').map((row) => [row.task_id, row.state]));
-      const recovered = retries.filter((row) => tasks.get(row.task_id) === 'SUCCEEDED');
-      return recovered.length > 0
-        ? exercised(`${recovered.length} task(s) failed retryably and then SUCCEEDED (e.g. ${recovered[0].failure_class || recovered[0].julius_code})`)
-        : failed(`${retries.length} retry(s) scheduled, none reached SUCCEEDED`);
+      const tasks = new Map(ev.rows('tasks.tsv').map((row) => [row.task_id, row]));
+      const broken = [];
+      const pending = [];
+      const recovered = [];
+      const stopped = [];
+      for (const taskId of new Set(triggers.map((row) => row.task_id))) {
+        const cause = triggers.filter((row) => row.task_id === taskId).map((row) => row.failure_class || row.julius_code).find(Boolean) ?? 'retryable';
+        const task = tasks.get(taskId);
+        if (task === undefined) { pending.push(`${taskId} (${cause}) is not in tasks.tsv`); continue; }
+        if (task.state === 'SUCCEEDED') { recovered.push(`${taskId} (${cause})`); continue; }
+        if (task.state !== 'FAILED') { pending.push(`${taskId} (${cause}) is ${task.state}`); continue; }
+        // Each `retry.scheduled` the run went on from is a retry that ran. The
+        // last one is declined when the ending `task.failed` is the retryable
+        // decline the pipeline writes.
+        const scheduled = failures.filter((row) => row.task_id === taskId && row.event_type === 'julius.retry.scheduled').length;
+        const end = failures.filter((row) => row.task_id === taskId && row.event_type === 'julius.task.failed').pop();
+        const declined = end !== undefined && end.error_retryable === 'true';
+        const ran = Math.max(0, scheduled - (declined && scheduled > 0 ? 1 : 0));
+        const reason = end?.reason_code ? ` (${end.reason_code})` : '';
+        if (ran > 0) broken.push(`${taskId} failed retryably (${cause}), was retried ${ran} time(s), and still ended FAILED${reason}`);
+        else stopped.push(`${taskId} failed retryably (${cause}) and no retry ran${reason || ' (none was scheduled: the run does not retry automatically)'}`);
+      }
+      if (broken.length > 0) return failed(broken.join('; '));
+      if (pending.length > 0) return unknown(`a retryable failure's outcome is not in this bundle: ${pending.join('; ')}`);
+      if (recovered.length > 0) return exercised(`${recovered.length} task(s) failed retryably and then SUCCEEDED (${recovered.join(', ')})`);
+      return notExercised(`${stopped.join('; ')}: the run's policy did not retry, so automatic recovery was never engaged — a policy stop, not a recovery that failed`);
     },
   },
   {
+    /**
+     * THE BOUNDARY, NOT THE TEST.
+     *
+     * This row judges whether the mission stayed inside its boundaries: a
+     * permission denial, an executor refusing an effect as outside the
+     * worker's authority, a change to a path the locked contract did not
+     * allow, a tool effect left unsettled or closed with an unknown outcome,
+     * or an effect Julius recorded that the independent executor holds no
+     * receipt for.
+     * It does NOT judge whether a command exited zero: the mission's own test
+     * starts red by design, and a failing test that was run, receipted and
+     * settled with its exit code is the repair loop's business, not a breach.
+     *
+     * AND IT PASSES ONLY ON SOMETHING CHECKED. Zero invocations, or a dump that
+     * could not be read, used to read PASS ("0 tool invocation(s) all
+     * SUCCEEDED") beside whatever receipts the executor root held — including a
+     * preflight's. Receipts are now tied to THIS run's invocations (a receipt
+     * scope is the sha256 of the invocation id the executor was handed) and
+     * the others are only counted. `receipt-ids.txt` lists scope NAMES: the
+     * receipts' signatures are not in the bundle, and this row says so rather
+     * than calling them signed.
+     */
     id: 'PERMISSIONS / MISSION BOUNDARIES', path: false, missionRequired: false,
     files: ['relay-bridge/hosted-coding-agent/hosted-envelope.ts', 'relay-bridge/julius/sandbox-limits.ts', 'src/relay/workspace/julius-tools/executor-operation-request.ts'],
     prove: (ev) => {
-      /**
-       * THE EVIDENCE OF A HELD BOUNDARY IS NOT A FAILED WORKER.
-       *
-       * `worker-diagnostics.tsv` carries a row only where `diag_transport` was
-       * written, and that happens on the FAILURE paths — a run in which nothing
-       * failed produces no rows at all. Requiring one made a clean run score
-       * worse than a broken one, which is precisely backwards for a boundary.
-       *
-       * What proves containment on any run is the executor: signed receipts
-       * exist, and every tool invocation it admitted reached a terminal
-       * SUCCEEDED. Reported denials are then read as corroboration where they
-       * exist — a NONZERO denial fails the row wherever it appears.
-       */
-      const receiptFile = ev.file('receipt-ids.txt');
-      const receipts = (receiptFile ?? '').split('\n').filter((line) => /^[0-9a-f]{64}$/.test(line));
+      if (ev.file('tool-invocations.tsv') === null) return cannotRead('tool-invocations.tsv', 'what ran inside the boundary');
+      // FAILURES FIRST: each is a breach whatever else the bundle cannot say.
+      if (ev.file('worker-diagnostics.tsv') !== null) {
+        const denied = ev.rows('worker-diagnostics.tsv').filter((row) => row.permission_denials && row.permission_denials !== '0');
+        if (denied.length > 0) return failed(`${denied.length} worker run(s) reported a permission denial (${[...new Set(denied.map((row) => row.task_id))].join(', ')})`);
+        const refused = ev.rows('worker-diagnostics.tsv').filter((row) => BOUNDARY_REFUSALS.has(row.executor_refusal));
+        if (refused.length > 0) return failed(`the executor refused ${refused.length} effect(s) as outside the worker's authority (${[...new Set(refused.map((row) => `${row.task_id}: ${row.executor_refusal}`))].join(', ')})`);
+      }
+      const scope = ev.file('scope.tsv') === null ? [] : ev.rows('scope.tsv');
+      const violations = scope.filter((row) => row.event_type === 'julius.coder.scope.violated'
+        || (count(row.scope_violations) ?? 0) > 0 || (count(row.own_scope_violations) ?? 0) > 0);
+      const scopeEvidence = ev.file('evidence.tsv') === null ? [] : ev.rows('evidence.tsv')
+        .filter((row) => /:scope$/u.test(row.evidence_id) && row.evidence_type === 'DIFF' && row.status === 'FAILED');
+      if (violations.length > 0 || scopeEvidence.length > 0) {
+        const named = [...new Set([...violations.map((row) => `${row.task_id}${row.rule ? ` ${row.rule}` : ''}`), ...scopeEvidence.map((row) => row.evidence_id)])];
+        return failed(`the coder changed what its locked contract did not allow (${named.join(', ')})`);
+      }
       const invocations = ev.rows('tool-invocations.tsv');
-      const denials = ev.rows('worker-diagnostics.tsv').filter((row) => row.permission_denials !== '');
-      const denied = denials.filter((row) => row.permission_denials !== '0');
-      if (denied.length > 0) return failed(`${denied.length} worker run(s) reported a permission denial`);
-      if (receiptFile === null) return unknown('this bundle carries no readable receipt list, so no boundary is observable');
-      if (receipts.length === 0) return notExercised('no signed executor receipt exists, so nothing ran inside the boundary');
-      const unfinished = invocations.filter((row) => row.state !== 'SUCCEEDED');
-      return unfinished.length === 0
-        ? exercised(`${receipts.length} signed executor receipt(s), ${invocations.length} tool invocation(s) all SUCCEEDED, ${denials.length} worker run(s) reporting 0 denials`)
-        : failed(`${unfinished.length} tool invocation(s) did not reach SUCCEEDED (${unfinished.map((row) => row.state).join(', ')})`);
+      const open = invocations.filter((row) => OPEN_INVOCATION_STATES.has(row.state));
+      if (open.length > 0) {
+        return failed(`${open.length} tool invocation(s) were left unsettled (${open.map((row) => `${row.invocation_id} ${row.state}`).join(', ')}): an effect whose outcome nobody recorded is a boundary nobody can vouch for`);
+      }
+      const unknownOutcome = invocations.filter((row) => row.recovery_state === 'UNKNOWN_OUTCOME');
+      const closed = ev.rows('failures.tsv').filter((row) => row.recovery_action === 'CLOSE_UNSETTLED_TOOL_INVOCATION');
+      if (unknownOutcome.length > 0 || closed.length > 0) {
+        return failed(`${Math.max(unknownOutcome.length, closed.length)} tool invocation(s) were closed with an UNKNOWN outcome (${[...new Set([...unknownOutcome.map((row) => row.invocation_id), ...closed.map((row) => row.task_id)])].join(', ')}): whether the executor ran them is unknown to Julius`);
+      }
+      const policyDenied = invocations.filter((row) => row.state === 'DENIED');
+      if (policyDenied.length > 0) return failed(`${policyDenied.length} tool invocation(s) were DENIED by policy: a worker asked for an effect outside its boundary`);
+      const receiptFile = ev.file('receipt-ids.txt');
+      const receipts = new Set((receiptFile ?? '').split('\n').map((line) => line.trim()).filter((line) => /^[0-9a-f]{64}$/u.test(line)));
+      const executed = invocations.filter((row) => EXECUTED_INVOCATION_STATES.has(row.state));
+      if (receiptFile !== null) {
+        const unsigned = executed.filter((row) => !receipts.has(sha256Hex(row.invocation_id)));
+        if (unsigned.length > 0) {
+          return failed(`${unsigned.length} tool invocation(s) settled with no executor receipt scope of their own (${unsigned.map((row) => `${row.invocation_id} ${row.state}`).join(', ')}): Julius recorded an effect the independent executor holds no receipt for`);
+        }
+      }
+      // THEN WHAT THE BUNDLE CANNOT SAY, which is never a pass.
+      const gap = unreadable(ev, 'worker-diagnostics.tsv', 'receipt-ids.txt', 'scope.tsv', 'evidence.tsv');
+      if (gap !== null) return cannotRead(gap, 'whether the boundary held');
+      if (invocations.length === 0) {
+        return unknown(`no tool invocation of ${runLabel(ev)} is recorded, so no effect was shown to run inside the boundary — a bundle that checked nothing cannot pass`);
+      }
+      const unchecked = scope.filter((row) => row.event_type === 'julius.coder.implementation.recorded' && row.scope_checked === 'false');
+      if (unchecked.length > 0) {
+        return unknown(`${[...new Set(unchecked.map((row) => row.task_id))].join(', ')} changed the workspace and ${unchecked.length === 1 ? 'its change set was' : 'their change sets were'} never checked against a scope, so a forbidden edit could not have been seen`);
+      }
+      const unfinished = executed.filter((row) => row.state !== 'SUCCEEDED');
+      if (unfinished.length > 0 && !(ev.header('tool-invocations.tsv') ?? []).includes('exit_code')) {
+        return unknown(`${unfinished.length} invocation(s) ended ${[...new Set(unfinished.map((row) => row.state))].join(', ')} and this bundle carries no exit codes, so a test that ran and failed cannot be told from an effect that never settled`);
+      }
+      const exitless = unfinished.filter((row) => row.exit_code === '');
+      if (exitless.length > 0) {
+        return unknown(`${exitless.map((row) => `${row.invocation_id} ${row.state}`).join(', ')} ended with no exit code, so whether the executor ran ${exitless.length === 1 ? 'it' : 'them'} to an end is unknown`);
+      }
+      const evidenced = new Set(ev.rows('evidence.tsv').map((row) => row.evidence_id));
+      const unevidenced = executed.filter((row) => !evidenced.has(`tool:${row.invocation_id}`));
+      if (unevidenced.length > 0) {
+        return unknown(`${unevidenced.map((row) => row.invocation_id).join(', ')} settled with no evidence row of its own, so what ${unevidenced.length === 1 ? 'it' : 'they'} did is not on the record`);
+      }
+      const mine = new Set(executed.map((row) => sha256Hex(row.invocation_id)));
+      const others = [...receipts].filter((scope) => !mine.has(scope)).length;
+      const nonZero = unfinished.length;
+      return exercised(`${executed.length} tool invocation(s) of ${runLabel(ev)} ran under an executor receipt scope of their own (its name only: the receipt's signature is the executor's to verify, not this gate's) and settled with evidence (${executed.length - nonZero} SUCCEEDED, ${nonZero} ended non-zero with an exit code recorded: a failing test is the repair loop's business, not a breach); none left open; no permission denial; no scope violation${others > 0 ? `; ${others} other receipt scope(s) in the executor root belong to no invocation of this run and are not counted` : ''}`);
     },
   },
   {
@@ -761,20 +1402,22 @@ const CAPABILITIES = [
  * EXERCISED wins outright — mission proof is the strongest thing a gate can
  * hold and needs no drill. FAILED loses outright, and this is the line that
  * stops the third verdict becoming a laundry: a run that exercised a capability
- * and broke it reads FAIL even where a drill proves the path works, because the
- * question "what did this run prove" has an answer and the answer is bad.
- * Only where the mission is silent — NOT EXERCISED, or a bundle that cannot say
- * — does the capability axis get to speak at all.
+ * and broke it reads FAIL even where a drill proves the path works. And a drill
+ * speaks only where the mission's READABLE rows say it genuinely did not reach
+ * the behaviour: UNKNOWN is a bundle that cannot say, and a drill proving the
+ * path cannot say what this run did either.
  */
 function verdictOf(mission, capability, admissible) {
   if (mission === 'EXERCISED') return 'PASS';
   if (mission === 'FAILED') return 'FAIL';
-  return admissible && capability === 'PROVEN' ? 'CAPABILITY PROVEN' : 'FAIL';
+  return admissible && mission === 'NOT EXERCISED' && capability === 'PROVEN' ? 'CAPABILITY PROVEN' : 'FAIL';
 }
 
 export function evaluate(evidenceDir, options = {}) {
-  const ev = loadEvidence(evidenceDir);
-  const proofs = loadProofs(ev, options.capabilityDir ?? null);
+  const loaded = loadEvidence(evidenceDir);
+  const binding = bindingOf(loaded);
+  const ev = scoped(loaded, binding);
+  const proofs = loadProofs(loaded, options.capabilityDir ?? null);
   const results = CAPABILITIES.map((capability) => {
     const probed = probe(capability);
     // `implementedBy` is reported, not merely used: a drill has to exercise
@@ -791,7 +1434,14 @@ export function evaluate(evidenceDir, options = {}) {
         basis: probed.where, capabilityBasis: 'nothing is built to have been drilled',
       };
     }
-    const { mission, basis } = capability.prove(ev);
+    let { mission, basis } = loaded.present
+      ? capability.prove(ev)
+      : unknown('no live evidence bundle was read, so this run cannot say');
+    // AN UNBOUND BUNDLE KEEPS ITS FAILURES AND VOUCHES FOR NOTHING ELSE.
+    if (loaded.present && !binding.bound && (mission === 'EXERCISED' || mission === 'NOT EXERCISED')) {
+      basis = `UNBOUND — ${binding.reason}. Its rows alone would say: ${basis}`;
+      mission = 'UNKNOWN';
+    }
     // The proof is looked up even where it is inadmissible, so a ledger that
     // claims a mission-required capability is REPORTED as inadmissible rather
     // than silently ignored. A gate that quietly drops evidence teaches whoever
@@ -802,18 +1452,19 @@ export function evaluate(evidenceDir, options = {}) {
     const capabilityBasis = admissible
       ? proof.basis
       : `a drill cannot stand in for this capability: a mission must walk it itself${proof.state === 'UNPROVEN' && proof.basis.startsWith('no drill') ? '' : ` (an attestation is present and inadmissible: ${proof.basis})`}`;
+    let rowBasis = basis;
+    if (verdict === 'CAPABILITY PROVEN') {
+      rowBasis = `NOT EXERCISED THIS MISSION — ${basis}; proven instead by a drill: ${proof.basis}`;
+    } else if (admissible && mission === 'UNKNOWN' && proof.state === 'PROVEN') {
+      rowBasis = `THIS MISSION CANNOT SAY WHETHER IT WAS EXERCISED — ${basis}; a drill proves the path (${proof.basis}), but a drill stands in only for a mission whose readable rows show it did not happen, never for one that cannot say`;
+    } else if (admissible && proof.state === 'STALE') {
+      rowBasis = `${basis}; the drill that once proved it is stale: ${proof.basis}`;
+    }
     return {
       ...common, verdict, mission,
       capability: admissible ? proof.state : 'NOT ADMISSIBLE',
       capabilityBasis,
-      // "NOT EXERCISED THIS MISSION" is a claim about the run, so it is only
-      // made where the run's own rows support it. A bundle that could not say
-      // whether the behaviour happened says THAT instead — reporting the two
-      // as one sentence is the same substitution the Unknown rule forbids
-      // everywhere else in this product.
-      basis: verdict === 'CAPABILITY PROVEN'
-        ? `${mission === 'NOT EXERCISED' ? 'NOT EXERCISED THIS MISSION' : 'THIS MISSION CANNOT SAY WHETHER IT WAS EXERCISED'} — ${basis}; proven instead by a drill: ${proof.basis}`
-        : (admissible && proof.state === 'STALE' ? `${basis}; the drill that once proved it is stale: ${proof.basis}` : basis),
+      basis: rowBasis,
     };
   });
   /**
@@ -827,23 +1478,33 @@ export function evaluate(evidenceDir, options = {}) {
     ...results.filter((row) => row.path && open(row)),
     ...results.filter((row) => !row.path && open(row)),
   ].slice(0, 3);
-  const count = (key, ...values) => results.filter((row) => values.includes(row[key])).length;
+  const tally = (key, ...values) => results.filter((row) => values.includes(row[key])).length;
   return {
-    evidence: ev.present ? ev.source : null,
-    evidenceNote: ev.source,
+    evidence: loaded.present ? loaded.source : null,
+    evidenceNote: loaded.source,
     capabilitySource: proofs.rows.length > 0 ? proofs.source : null,
+    binding: {
+      bound: binding.bound,
+      reason: binding.reason,
+      runId: binding.run?.run_id ?? null,
+      runState: binding.run?.state ?? null,
+      commit: binding.manifest?.commit ?? null,
+      readingCommit: readingCommit(),
+      mode: binding.manifest?.mode ?? null,
+      workflowRunId: binding.manifest?.workflow_run_id ?? null,
+    },
     results,
     gaps,
     summary: {
       total: results.length,
-      exercised: count('mission', 'EXERCISED'),
-      failed: count('mission', 'FAILED'),
-      notExercised: count('mission', 'NOT EXERCISED'),
-      unknown: count('mission', 'UNKNOWN'),
-      provenByMission: count('verdict', 'PASS'),
-      provenByDrill: count('verdict', 'CAPABILITY PROVEN'),
-      unproven: count('verdict', 'FAIL'),
-      notBuilt: count('verdict', 'NOT BUILT'),
+      exercised: tally('mission', 'EXERCISED'),
+      failed: tally('mission', 'FAILED'),
+      notExercised: tally('mission', 'NOT EXERCISED'),
+      unknown: tally('mission', 'UNKNOWN'),
+      provenByMission: tally('verdict', 'PASS'),
+      provenByDrill: tally('verdict', 'CAPABILITY PROVEN'),
+      unproven: tally('verdict', 'FAIL'),
+      notBuilt: tally('verdict', 'NOT BUILT'),
     },
   };
 }
@@ -857,10 +1518,14 @@ function main() {
   } else {
     const out = (line) => process.stdout.write(`${line}\n`);
     const s = report.summary;
+    const b = report.binding;
     out('WONDERLAND BETA GATE');
     out(`  evidence:   ${report.evidence ?? `NONE (${report.evidenceNote ?? 'no --evidence given'})`}`);
+    out(`  binding:    ${b.bound
+      ? `BOUND — run ${b.runId} (ended ${b.runState}), mode=${b.mode}, commit ${String(b.commit).slice(0, 12)}, workflow run ${b.workflowRunId}`
+      : `UNBOUND — ${b.reason}`}`);
     out(`  capability: ${report.capabilitySource ?? 'NONE (no drill attestation was supplied)'}`);
-    out('  PASS = this run exercised it and it worked. CAPABILITY PROVEN = this run did not exercise it,');
+    out('  PASS = this run exercised it and it worked. CAPABILITY PROVEN = this run genuinely did not reach it,');
     out('  a drill on the real production path did. FAIL = neither. NOT BUILT = no implementation exists.');
     out('');
     const width = Math.max(...report.results.map((row) => row.id.length));
@@ -873,6 +1538,7 @@ function main() {
     for (const [index, gap] of report.gaps.entries()) out(`  ${index + 1}. ${gap.id} — ${gap.verdict}: ${gap.basis}`);
     out('');
     out('RESULT');
+    out(`  THE RUN:                    ${b.runId === null ? 'none named' : `${b.runId} ended ${b.runState}`}; ${b.bound ? 'bound to this checkout as a paid mission' : 'UNBOUND, so it can prove nothing but its failures'}.`);
     out(`  WHAT THIS RUN PROVED:       ${s.exercised} of ${s.total} exercised and working; ${s.failed} exercised and broken; ${s.notExercised} never reached; ${s.unknown} the bundle cannot say.`);
     out(`  WHAT JULIUS IS READY TO DO: ${s.provenByMission + s.provenByDrill} of ${s.total} proven — ${s.provenByMission} by this mission, ${s.provenByDrill} by drill; ${s.unproven} unproven; ${s.notBuilt} not built.`);
     out(`  BETA: ${s.provenByMission + s.provenByDrill === s.total ? 'READY' : 'NOT READY'}`);

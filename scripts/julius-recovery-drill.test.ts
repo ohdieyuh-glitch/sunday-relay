@@ -53,10 +53,12 @@ suite('the Julius restart/recovery drill, run for real', () => {
     expect(stdout).not.toContain('[FAIL]');
 
     // THE JOIN NOBODY OTHERWISE TESTS: the gate reading the drill's own file.
+    // The capability axis is the drill's; with no mission bundle the mission
+    // axis is UNKNOWN, and a drill never stands in for a bundle that cannot say.
     const row = evaluate(null, { capabilityDir: out }).results.find((value) => value.id === CAPABILITY)!;
     expect(row.capability, row.capabilityBasis).toBe('PROVEN');
-    expect(row.verdict).toBe('CAPABILITY PROVEN');
-    expect(row.basis).toContain('real-postgres,two-processes,real-lease-expiry,no-provider-call');
+    expect(row.verdict).toBe('FAIL');
+    expect(row.capabilityBasis).toContain('real-postgres,two-processes,real-lease-expiry,no-provider-call');
 
     /**
      * AND THE FAILING DIRECTION, ON THE SAME DATABASE. Everything above is the
