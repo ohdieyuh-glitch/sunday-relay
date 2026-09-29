@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 
 import {
@@ -34,9 +35,11 @@ import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
  *     This module maps a path to a method and a refusal to a status code. It
  *     computes nothing about a mission, and a projection it disagreed with would
  *     be impossible rather than merely wrong.
- *   - **Not a control surface.** Reads only. Pause, resume, cancel and approval
- *     decisions exist on the API and are not mounted here: they change a run, and
- *     a run is changed by the process that owns it. `approvers` therefore refuses
+ *   - **Not a control surface.** Reads only. Approval decisions exist on the API
+ *     and are not mounted anywhere. Pause, resume and cancel are mounted by their
+ *     own family, `julius-lifecycle-routes.ts`, over the same composed API: they
+ *     record operator intent in the store, and the run loop (in the process that
+ *     drives the run) honours it. `approvers` therefore refuses
  *     every approval, which is the honest wiring for a read-only mount rather
  *     than a stub that would answer yes if anything ever called it.
  *   - **Not a database the bridge assumes it has.** With no `DATABASE_URL` the
@@ -234,6 +237,13 @@ export function composeJuliusStateApi(pool: Pool): JuliusRuntimeApi {
     // yes would be a permission granted by a surface that never asked for one.
     approvers: { mayApprove: async () => false },
     clock: { now: () => new Date().toISOString() },
+    // THE CONTROL OPERATIONS' LEDGER. The read routes never call a control
+    // method; the operator lifecycle channel (`julius-lifecycle-routes.ts`)
+    // mounts pause / resume / cancel over THIS api, so a pause is announced as
+    // `run.paused` with its actor and reason on the same event ledger the
+    // timeline view reads — not only as a bare state transition.
+    events: store,
+    ids: { next: (kind) => `${kind}:${randomUUID()}` },
   });
 }
 
