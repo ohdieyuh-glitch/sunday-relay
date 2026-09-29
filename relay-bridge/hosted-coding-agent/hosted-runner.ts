@@ -10,6 +10,7 @@ import {
 } from './hosted-observation';
 import { classifyHostedFailure, type HostedFailureReason } from './hosted-failure-reason';
 import { HOSTED_ADAPTER_ID, HOSTED_SDK_PACKAGE } from './hosted-readiness';
+import { juliusHostedToolAuthority } from './hosted-tool-authority';
 
 /**
  * ONE HOSTED CODING AGENT EXECUTION.
@@ -156,6 +157,16 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
   input.onCancel?.(() => { cancelled = true; controller.abort(); });
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, limits.maxRuntimeMs);
 
+  /**
+   * JULIUS'S AUTHORITY, AS THE FIRST STEP OF EVERY TOOL CALL, ON EVERY RUN. A
+   * `PreToolUse` hook runs before deny rules, the permission mode and the allow
+   * list, and its deny holds in every mode; without it the allow list and
+   * `acceptEdits` approve `Read` and `Edit` at ANY path the host user can reach.
+   * It confines every file tool to this workspace by real path and refuses edits
+   * in control, credential and workflow locations (`hosted-tool-authority.ts`).
+   */
+  const authority = juliusHostedToolAuthority({ workspacePath: input.workspacePath, signal: controller.signal });
+
   let observation = emptyObservation();
   try {
     const stream = input.queryFn({
@@ -188,6 +199,9 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
           ...(input.authMode === undefined ? {} : { mode: input.authMode }),
         }),
         abortController: controller,
+        // No matcher: every tool call reaches the authority, which answers only
+        // for file tools and has no opinion on the rest.
+        hooks: { PreToolUse: [{ hooks: [authority] }] },
         ...(envelope.model !== null ? { model: envelope.model } : {}),
       },
     });

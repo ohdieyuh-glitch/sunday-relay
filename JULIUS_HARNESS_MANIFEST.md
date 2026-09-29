@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **195 production files** across 20/20 subsystems (2 roots, 167 traced, 9 not composed by the live root, 17 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **198 production files** across 20/20 subsystems (2 roots, 170 traced, 9 not composed by the live root, 17 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -26,7 +26,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | from | to | edges | type |
 | --- | --- | --- | --- |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | connectors (gpt-architect, prompt-architect contracts) | 2 | 0 |
-| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 7 | 2 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 9 | 2 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | live composition (relay-bridge/julius/) | 6 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | other | 4 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | persistence (src/relay/persistence/) | 4 | 0 |
@@ -183,6 +183,7 @@ The implementation role: one hosted Claude Agent SDK execution behind a pure saf
 | `relay-bridge/hosted-coding-agent/hosted-observation.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-readiness.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-runner.ts` | traced | `relay-bridge/julius/live-workers.ts` |
+| `relay-bridge/hosted-coding-agent/hosted-tool-authority.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
 | `relay-bridge/julius/claude-code-coding-provider.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/julius/coder-workspace.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `src/relay/connectors/claude-code/capability-probe.ts` | traced | `relay-bridge/julius-live-mission.ts` |
@@ -224,10 +225,12 @@ Tool ids and kinds, invocation requests and results, the tool controller’s C.A
 | --- | --- | --- |
 | `relay-bridge/julius/executor-effects.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/julius/sandbox-limits.ts` | traced | `relay-bridge/julius/executor-effects.ts` |
+| `src/relay/mission/julius/julius-file-authority.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-tool-authority.ts` |
 | `src/relay/mission/julius/julius-sandbox.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-tool-lifecycle.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-tool-settlement.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-tools.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-workspace-paths.ts` | traced | `src/relay/mission/julius/julius-file-authority.ts` |
 | `src/relay/workspace/julius-tools/registry.ts` | not composed by the live root | — |
 | `src/relay/workspace/julius-tools/workspace-provisioning.ts` | traced | `relay-bridge/julius/sandbox-limits.ts` |
 
