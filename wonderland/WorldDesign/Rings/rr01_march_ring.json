@@ -435,7 +435,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t0_-4_LeafMid",
@@ -479,7 +479,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Object_LanternStandard_glass_t0_-3_TartarusEmber",
@@ -1755,7 +1755,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t0_-3_LeafMid",
@@ -1865,7 +1865,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Kerb_t1_-3_TartarusBlack",
@@ -3460,7 +3460,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t1_-3_LeafMid",
@@ -3614,7 +3614,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Object_LanternStandard_glass_t1_-3_TartarusEmber",
@@ -4263,7 +4263,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t2_-3_LeafMid",
@@ -4296,7 +4296,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Kerb_t2_-2_TartarusBlack",
@@ -6111,7 +6111,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t2_-2_LeafMid",
@@ -6254,7 +6254,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Kerb_t2_-1_TartarusBlack",
@@ -7486,7 +7486,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t3_-1_LeafMid",
@@ -7552,7 +7552,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueTree_t2_-1_Bark",
@@ -7596,7 +7596,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t2_-1_LeafMid",
@@ -7640,7 +7640,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Kerb_t3_-1_TartarusBlack",
@@ -9642,7 +9642,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t2_0_LeafMid",
@@ -9752,7 +9752,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueTree_t2_1_Bark",
@@ -9840,7 +9840,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t2_1_LeafMid",
@@ -9928,7 +9928,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Plate_t2_1_GroundFlag_PlazaShade",
@@ -11952,7 +11952,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t2_2_LeafMid",
@@ -11974,7 +11974,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Plate_t1_2_GroundFlag_PlazaCream",
@@ -13624,7 +13624,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t1_2_LeafMid",
@@ -13745,7 +13745,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Kerb_t0_2_MarblePale",
@@ -14735,7 +14735,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t0_2_LeafMid",
@@ -14834,7 +14834,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Object_LanternStandard_glass_t0_2_IcarusGlass",
@@ -15428,7 +15428,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t0_3_LeafMid",
@@ -15472,7 +15472,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Plate_t-1_3_GroundFlag_PlazaCream",
@@ -16638,7 +16638,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-1_3_LeafMid",
@@ -16726,7 +16726,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueTree_t-1_2_Bark",
@@ -16748,7 +16748,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-1_2_LeafMid",
@@ -16770,7 +16770,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Kerb_t-1_2_MarblePale",
@@ -18123,7 +18123,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-2_2_LeafMid",
@@ -18156,7 +18156,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Plate_t-2_3_GroundFlag_PlazaCream",
@@ -18673,7 +18673,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-2_3_LeafMid",
@@ -18761,7 +18761,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Kerb_t-3_3_MarblePale",
@@ -20774,7 +20774,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-3_2_LeafMid",
@@ -20928,7 +20928,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Plate_t-3_1_GroundFlag_PlazaCream",
@@ -21610,7 +21610,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-3_1_LeafMid",
@@ -21753,7 +21753,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Object_LanternStandard_glass_t-3_1_IcarusGlass",
@@ -24228,7 +24228,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-4_0_LeafMid",
@@ -24316,7 +24316,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Object_LanternStandard_glass_t-4_0_NoctisLuminous",
@@ -24536,7 +24536,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-3_0_LeafMid",
@@ -24569,7 +24569,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Plate_t-3_-1_GroundFlag_PlazaGrey",
@@ -26021,7 +26021,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-4_-1_LeafMid",
@@ -26098,7 +26098,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueTree_t-3_-1_Bark",
@@ -26175,7 +26175,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-3_-1_LeafMid",
@@ -26252,7 +26252,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Object_LanternStandard_glass_t-3_-1_NoctisLuminous",
@@ -27913,7 +27913,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-3_-2_LeafMid",
@@ -28067,7 +28067,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Object_LanternStandard_glass_t-3_-2_NoctisLuminous",
@@ -28573,7 +28573,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-3_-3_LeafMid",
@@ -28628,7 +28628,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Plate_t-3_-3_GroundFlag_PlazaGrey",
@@ -31004,7 +31004,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-2_-3_LeafMid",
@@ -31136,7 +31136,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Plate_t-1_-3_GroundFlag_PlazaGrey",
@@ -32346,7 +32346,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-1_-3_LeafMid",
@@ -32423,7 +32423,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Kerb_t-1_-4_NoctisCharcoal",
@@ -32709,7 +32709,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_AvenueCanopy_t-1_-4_LeafMid",
@@ -32731,7 +32731,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "RR01_Object_LanternStandard_glass_t-1_-4_NoctisLuminous",

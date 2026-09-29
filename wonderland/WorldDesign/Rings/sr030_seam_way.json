@@ -930,7 +930,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "SR030_AvenueCanopy_t2_2_LeafMid",
@@ -985,7 +985,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "SR030_Object_LanternStandard_glass_t2_2_IcarusGlass",
@@ -2811,7 +2811,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "SR030_AvenueCanopy_t3_2_LeafMid",
@@ -2899,7 +2899,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "SR030_Kerb_t4_2_MarblePale",
@@ -3955,7 +3955,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "SR030_AvenueCanopy_t4_2_LeafMid",
@@ -3988,7 +3988,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "SR030_Object_LanternStandard_glass_t4_2_IcarusGlass",

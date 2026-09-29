@@ -400,6 +400,42 @@ no save):**
   - **No approach fix is needed.** The palace complex, the GreatSpire precinct and the Gatekeeper Fields are
     walked round on existing paving and lawn. The census-drawn and axis-straight routes of the morning were the
     only things that "failed".
+
+**TREE CULL 260 -> 600 m (founder-rule performance change, CORE decision 2026-09-29 ~13:10).** With no HLODs and
+512 m streaming, a 260 m tree cull hid more than half of the trees that were loaded (SECOND's measurement: 14,699 of
+25,634 applied tree instances culled at 260 m).
+- Gate, CORE's rule: the raised mean fps is at least 85 % of baseline and no view falls under 30 fps.
+- SECOND's A/B, zzW432, in PIE on the gameplay camera, throttle off, t.MaxFPS 0, VSync 0:
+  - frontier T316: 36.0 -> 39.1 fps mean (p5 29.3 -> 32.3), inside the view's own 16 % drift;
+  - heartland N227 -> ring: 38.8 -> 40.0;
+  - RR02 at 250°: 38.9 -> 39.8.
+  **PASS, flat within noise.** zzW433 verified the instrument: the component read-back changed and back, and the
+  horizon band showed 18,027 changed px raised against 6,077 px base -> restored.
+- Applied in place:
+  - SECOND 5d (zzW446): 1,718 batches / 13,609 inst in 41 passes. 10 W270T market awnings wrongly caught by a
+    "canopy" substring were reverted before the save; the filter is now SM_tree_* / SM_canopy_*.
+  - CORE 2F: RR01 56, RR02 88, SR030 6, SR150 6, IC02 2, S4N182 9 = 167 batches / 1,090 inst.
+- Specs and generators were updated to match (dd496f0e SECOND; ring_roads.py + icarus_district.py 07e0a33f; the six
+  CORE specs with 2F).
+- The in-PIE read-back (zzW447): 619 loaded tree batches, all at 60,000 on both the actor property and the runtime
+  component. CORE's read-back comes with the 2F proofs.
+
+**Window 2F (CORE, applied 15:12-15:14, CLASS A).**
+- Fresh editor (PID 57912, launched 15:07, save count 0), checkpoint `2026-09-29-pre-window2f` (30,308 actors / 445
+  objects).
+- C7 core copse: 17 passes, 393 batches / 1,836 inst / 820 trees, on the 350-620 m rim and marches. Regenerated on
+  the post-5d census, 20 m corridors kept round the proven radial walks (`Districts/radial_routes.json`). Every
+  apply removed 0.
+- The in-place cull edit above: exactly 167 changed, no per-pass mismatch.
+- ONE gated save (zc_gated_save.py): memory gate 36.9 GB commit / editor 13.9 GB / 577 dirty = 393 C7 + 167 edited
+  batches + 17 folders, 0 unexpected, 7.4 s, 0 dirty after.
+- Hash vs the checkpoint:
+  - +410: 393 attributed by embedded tag, each C7 pass exactly its batch count, + 17 folders;
+  - -0;
+  - changed 168: exactly the 167 recorded packages + the stub.
+- Editor closed (PID 57912, save count 1) and relaunched (PID 79588).
+- **SECOND's queue is DONE**: 4a-5d all class A and proven (53372e30); the post-5d audit read 7.0 % empty / 2.8 %
+  unintended, before C7.
 - **8 more frames** (`core_0929`: the three nation bands and frontiers, SR150 from height, gate GD from above).
   - At the bands the nations read distinctly: ICARUS ivory and gold towers with giant-mushroom tables, NOCTIS black
     spires round a dark domed palace, TARTARUS red-brown towers on cream and pink terraces.

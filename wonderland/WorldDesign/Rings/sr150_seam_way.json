@@ -1667,7 +1667,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "SR150_AvenueCanopy_t-4_1_LeafMid",
@@ -1832,7 +1832,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "SR150_Object_LanternStandard_glass_t-4_1_NoctisLuminous",
@@ -2536,7 +2536,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "SR150_AvenueCanopy_t-5_1_LeafMid",
@@ -2613,7 +2613,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "SR150_Plate_t-5_1_GroundFlag_PlazaGrey",
@@ -3427,7 +3427,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "SR150_AvenueCanopy_t-5_2_LeafMid",
@@ -3515,7 +3515,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "SR150_Plate_t-5_2_GroundFlag_PlazaGrey",
