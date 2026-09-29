@@ -1,0 +1,17 @@
+{
+ "name": "zzW41_floors_ht356",
+ "started": "2026-09-29 00:54:12",
+ "status": "done",
+ "waited_for_pie_seconds": 0.0,
+ "map_dirty_before": [],
+ "removed": 213,
+ "pass": "HT356",
+ "actors": 0,
+ "batches": 234,
+ "instances": 2439,
+ "hovers": 0,
+ "saved": true,
+ "finished": "2026-09-29 00:56:12",
+ "seconds": 120.33,
+ "log": "applied HT356 0 actors 234 batches 2439 instances\n"
+}

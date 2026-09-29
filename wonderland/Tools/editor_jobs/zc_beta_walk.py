@@ -452,6 +452,21 @@ def _walk():
         yield 0.3
         unreal.SystemLibrary.execute_console_command(world, "FlushLevelStreaming")
         yield 0.7
+        # AND THEN WORLD PARTITION'S OWN WORD: is_world_partition_streaming_complete (Core's wrapper of
+        # IsAllStreamingCompleted, 2026-09-28), polled to a 20 s cap -- the subject-count below is the second check.
+        streaming_began = time.time()
+        r["streaming_complete"] = None
+        if hasattr(L, "is_world_partition_streaming_complete"):
+            while time.time() - streaming_began < 20.0:
+                try:
+                    r["streaming_complete"] = bool(L.is_world_partition_streaming_complete(world))
+                except Exception as exc:          # noqa: BLE001
+                    r["streaming_error"] = repr(exc)
+                    break
+                if r["streaming_complete"]:
+                    break
+                yield 0.25
+        r["streaming_wait_s"] = round(time.time() - streaming_began, 1)
         # WHAT IS AUTHORED HERE, IS IT HERE IN PLAY? Counted while the Dog is held, over the same tile the
         # editor census counted -- and counted AGAIN a second later until two readings agree. The flush alone
         # is not a promise: zzW11 read [8,4] at 152 of 304 and [7,1] at 208 of 303 after a long jump, and
@@ -585,7 +600,7 @@ def _walk():
                            "mesh_actors": r["mesh_actors"], "authored_world": r["authored_world"], "landed_z": None,
                            "expected_near_z": round(gz), "fell_through": None,
                            "unmeasured": "the Dog did not survive the stand",
-                           "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"),
+                           "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"), "streaming_complete": r.get("streaming_complete"),
                            "was_empty": r["mesh_actors"] == 0})
             continue
         pawn = live
@@ -603,7 +618,7 @@ def _walk():
                            "expected_near_z": round(gz), "surface_z": surface, "fell_through": None,
                            "unmeasured": "the Dog had not landed 10 s after release",
                            "airborne_z": round(float(at.z)), "movement_mode": mode,
-                           "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"),
+                           "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"), "streaming_complete": r.get("streaming_complete"),
                            "was_empty": r["mesh_actors"] == 0})
             H.capture_viewport_jpeg(os.path.join(ROOT, "%02d_r%04dm_airborne.jpg" % (n + 1, r["radius_metres"])),
                                     1600, 90)
@@ -612,7 +627,7 @@ def _walk():
                        "mesh_actors": r["mesh_actors"], "authored_world": r["authored_world"], "landed_z": round(float(at.z)),
                        "expected_near_z": round(gz), "surface_z": surface, "fell_through": bool(fell),
                        "landed": landed, "settle_s": settle_s,
-                       "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"),
+                       "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"), "streaming_complete": r.get("streaming_complete"),
                        "was_empty": r["mesh_actors"] == 0})
         H.capture_viewport_jpeg(os.path.join(ROOT, "%02d_r%04dm.jpg" % (n + 1, r["radius_metres"])), 1600, 90)
 

@@ -248,11 +248,23 @@ def garden_room(p, uc, vc, leaves, k, doors_v=False):
             p.plant("hedge", uc + du, vc + dv, 1.0, "MI_V2_LeafMid", yaw, margin=0.0, rect=HEDGE)
     for (du, dv) in ((-H, -H), (-H, H), (H, -H), (H, H)):
         p.plant("topiary_cone", uc + du, vc + dv, 1.2, leaves[0], 0.0, margin=0.0, radius=90.0)
+    # THE ROOM'S OWN GROUND. Core, from the in-engine frames of 2026-09-29: "from 70 m up the rooms read as thin
+    # outlines on the lawn -- low hedges and stepping stones have little height and no ground colour inside".
+    # So the room is floored in the nation's warm paving (2 x 4 plates, 28.8 x 29.6 m, inside the hedge line at
+    # 32.4), 26 cm up -- a step at the doors, as at every court -- and its beds stand on that floor.
+    floor = p.mats.get("paving_warm") or p.mats.get("paving")
+    for c in (-0.5, 0.5):
+        for r in (-1.5, -0.5, 0.5, 1.5):
+            p.plate(uc + r * W.PLATE["len_y"], vc + c * W.PLATE["len_x"], floor, "RoomFloor", layer="paved")
     for (du, dv) in ((-600.0, -600.0), (600.0, -600.0), (-600.0, 600.0), (600.0, 600.0)):
         for q in range(5):
-            p.add_module(FLOWERS[(q + k) % 3], uc + du + (q - 2) * 130.0, vc + dv, W.GROUND_Z + 2.0, 0.0,
+            p.add_module(FLOWERS[(q + k) % 3], uc + du + (q - 2) * 130.0, vc + dv, W.PAVING_TOP + 2.0, 0.0,
                          cull=W.CULL_NEAR, collide=False, check=False)
-    p.plant("rose", uc, vc, 1.3, "MI_V2_RosePink", 0.0, margin=0.0, radius=120.0)
+    # ...and ONE TALL ELEMENT, which is what reads from the air and from the march: a mature tree in a grate at
+    # the room's centre (where the rose stood), allowed on the room's own floor
+    p.add_module("WL_Ground_Tree_Grate", uc, vc, W.PAVING_TOP + 0.5, 0.0, cull=W.CULL_NEAR, collide=False,
+                 check=False)
+    p.plant("tree_mature", uc, vc, 1.0, leaves[1], 0.0, margin=0.0, layers=("existing", "solid"))
     p.stats["garden_room"] += 1
 
 
