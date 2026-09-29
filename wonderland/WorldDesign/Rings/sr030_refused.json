@@ -1,0 +1,47 @@
+[
+ {
+  "bearing": 31.44,
+  "r_m": 1116,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": 95199.9,
+  "y": 58196.9,
+  "yaw": 120.0,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 37.44,
+  "r_m": 722,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Buttressed_TowerLavender:WL_Tower_Base",
+  "x": 57326.7,
+  "y": 43890.7,
+  "yaw": 60.96,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 37.84,
+  "r_m": 720,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Buttressed_TowerLavender:WL_Tower_Base",
+  "x": 56848.3,
+  "y": 44162.0,
+  "yaw": 59.36,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 38.25,
+  "r_m": 718,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Buttressed_TowerLavender:WL_Tower_Base",
+  "x": 56375.1,
+  "y": 44442.3,
+  "yaw": 59.36,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 38.66,
+  "r_m": 716,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Buttressed_TowerLavender:WL_Tower_Base",
+  "x": 55900.3,
+  "y": 44719.9,
+  "yaw": 62.73,
+  "half_x": 720.0
+ }
+]

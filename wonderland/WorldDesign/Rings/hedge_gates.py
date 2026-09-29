@@ -206,6 +206,8 @@ def plan_moves(gate, rects, hedges, others, all_rects, ways):
 
 
 def main():
+    # NOTE: window 2A was applied from hg2a_hedge_gates.json as committed at 0d29db29. Later edits to this file
+    # change the random yaws of 2A's stones; never re-apply HG2A from a regenerated spec without re-checking.
     rng = random.Random(29)
     hedges, others = load()
     print("census: %d hedge masses, others %s" % (len(hedges), {k: sum(len(v) for v in d.values()) for k, d in others.layers.items()}))
@@ -267,6 +269,34 @@ def main():
                     if not others.hits(kx, ky, RR.PLATE_STEP * 0.5, RR.KERB_W * 0.5, p["yaw"] - 90.0, 0.0, ("existing",)):
                         spec.add("Kerb", RR.KERB_MESH, mats.get("kerb", "MI_V2_Kerb"), kx, ky, RR.GROUND_Z, p["yaw"] - 90.0,
                                  sx=(RR.PLATE_STEP + 60.0) / RR.KERB_LEN, collides=False)
+            # A PLATE THAT STILL CANNOT GO DOWN (GD: two stand in a SKY05 tower base once the hedges are gone) leaves
+            # a hole in the ring. Walk round it, as SX01 walks round SR030's tower: stepping stones on the way a grid
+            # search finds between the laid plates either side (hedges ignored -- they are the ones being moved).
+            stuck = [p for p in c["plates"]
+                     if others.hits(p["x"], p["y"], p["half_x"], PLATE_HALF_ALONG, p["yaw"], 0.0, ("existing",))]
+            if stuck:
+                sx_, sy_ = sum(p["x"] for p in stuck) / len(stuck), sum(p["y"] for p in stuck) / len(stuck)
+                laid = [(i[0], i[1]) for bt in json.loads((HERE / "rr02_outer_ring.json").read_text(encoding="utf-8"))["batches"]
+                        if "_Plate_" in bt["id"] for i in bt["instances"]]
+                laid += [(p["x"], p["y"]) for p in c["plates"] if p not in stuck]
+                near = sorted(laid, key=lambda q: math.hypot(q[0] - sx_, q[1] - sy_))
+                a = near[0]
+                b = next((q for q in near[1:] if ((q[0] - sx_) * (a[0] - sx_) + (q[1] - sy_) * (a[1] - sy_)) < 0), None)
+                way = bfs(others, a, b, half=45.0) if b else None
+                if way:
+                    last = None
+                    for (x, y) in way:
+                        if last is None or math.hypot(x - last[0], y - last[1]) >= 450.0:
+                            name = FLAGS[spec.stats["%s_bypass_stone" % g] % 3]
+                            for part in RR.KIT[name]["parts"]:
+                                if part["part"] != "veg_anchor":
+                                    spec.add("%s_%s" % (name.replace("WL_", ""), part["part"]), part["mesh"],
+                                             part["material"], x, y, -13.0, rng.uniform(0.0, 360.0), 0.55, 0.55, 0.55,
+                                             collides=False, cull=26000.0)
+                            spec.stats["%s_bypass_stone" % g] += 1
+                            last = (x, y)
+                else:
+                    spec.stats["%s_bypass_none" % g] += 1
             half_open = max(p["half_x"] for p in c["plates"]) + 250.0
         else:
             last = None
