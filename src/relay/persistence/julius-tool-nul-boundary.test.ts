@@ -45,9 +45,10 @@ class BoundaryClient {
   async query(sql: string, params: readonly unknown[] = []): Promise<{ rows: unknown[]; rowCount: number }> {
     const jsonb = new Set([...sql.matchAll(/\$(\d+)::jsonb/gu)].map((match) => Number(match[1]) - 1));
     params.forEach((value, index) => {
-      if (typeof value !== 'string') return;
-      if (jsonb.has(index) && holdsNul(JSON.parse(value))) throw Object.assign(new Error('unsupported Unicode escape sequence'), { code: '22P05' });
-      if (!jsonb.has(index) && value.includes('\u0000')) throw Object.assign(new Error('invalid byte sequence for encoding "UTF8": 0x00'), { code: '22021' });
+      if (typeof value === 'string') {
+        if (jsonb.has(index) && holdsNul(JSON.parse(value))) throw Object.assign(new Error('unsupported Unicode escape sequence'), { code: '22P05' });
+        if (!jsonb.has(index) && value.includes('\u0000')) throw Object.assign(new Error('invalid byte sequence for encoding "UTF8": 0x00'), { code: '22021' });
+      }
     });
     this.commands.push(sql);
     this.params.push([...params]);
