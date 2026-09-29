@@ -78,6 +78,27 @@ const percentile = (values: readonly number[], p: number): number => {
   return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))]!;
 };
 
+/**
+ * EVERY ERROR A STORE METHOD THREW, by method and code. The run loop turns some
+ * of them into worker failures ("Execution boundary failed."), which says
+ * nothing about the database; this keeps the real cause beside the verdict.
+ */
+const STORE_ERRORS: string[] = [];
+function instrumented<S extends object>(store: S, owner: string): S {
+  const out: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(store)) {
+    out[name] = typeof value !== 'function' ? value : async (...args: unknown[]) => {
+      try { return await (value as (...a: unknown[]) => unknown)(...args); }
+      catch (error) {
+        const code = String((error as { code?: unknown }).code ?? '');
+        STORE_ERRORS.push(`${owner} ${name} ${code} ${String((error as Error).message).slice(0, 80)}`);
+        throw error;
+      }
+    };
+  }
+  return out as S;
+}
+
 suite('many missions, two run loops, one real PostgreSQL', () => {
   let pool: Pool;
   let runs: JuliusPostgresRepository;
@@ -132,7 +153,7 @@ suite('many missions, two run loops, one real PostgreSQL', () => {
       const coder = scriptedAdapter(CODER_WORKER, [{ kind: 'succeed', evidence: BUILD, usdMicros: 1_000 }]);
       const reviewer = scriptedAdapter(reviewerWorker('hermes'), [{ kind: 'succeed', evidence: REVIEW, usdMicros: null }]);
       const runtime = assembleLiveJuliusRuntime({
-        store: createContextAndClaimHandoffs(createJuliusPostgresRuntimeStore(pool)).store,
+        store: createContextAndClaimHandoffs(instrumented(createJuliusPostgresRuntimeStore(pool), owner)).store,
         entries: [
           { worker: architectWorker({}), adapter: architect },
           { worker: CODER_WORKER, adapter: coder },
@@ -175,7 +196,16 @@ suite('many missions, two run loops, one real PostgreSQL', () => {
 
     const states = await pool.query<{ run_id: string; state: string }>(
       'SELECT run_id, state FROM relay_wonderland.julius_runs WHERE run_id = ANY($1) ORDER BY run_id', [runIds]);
-    expect(states.rows.map((row) => row.state), JSON.stringify(states.rows)).toEqual(runIds.map(() => 'COMPLETED'));
+    // A RUN THAT DID NOT COMPLETE EXPLAINS ITSELF: its tasks, its transitions and the reasons its failures give,
+    // read before the throwaway database is dropped.
+    const unfinished = states.rows.filter((row) => row.state !== 'COMPLETED');
+    const explained = await Promise.all(unfinished.map(async (row) => ({
+      run: row.run_id, state: row.state,
+      tasks: (await pool.query('SELECT task_type, state, attempt, lease_generation FROM relay_wonderland.julius_tasks WHERE run_id=$1 ORDER BY ordinal, created_at', [row.run_id])).rows,
+      transitions: (await pool.query('SELECT from_state, to_state, reason_code FROM relay_wonderland.julius_transitions WHERE run_id=$1 ORDER BY sequence', [row.run_id])).rows,
+      failures: (await pool.query(`SELECT event_type, payload->'facts' AS facts FROM relay_wonderland.events WHERE stream_id=$1 AND (event_type LIKE '%failed%' OR event_type LIKE '%denied%' OR event_type LIKE '%refused%') ORDER BY sequence`, [row.run_id])).rows,
+    })));
+    expect(states.rows.map((row) => row.state), JSON.stringify({ explained, storeErrors: STORE_ERRORS }, null, 1)).toEqual(runIds.map(() => 'COMPLETED'));
 
     // NOTHING TWICE: a task dispatched by both loops, or claimed more than once, would be here.
     const dispatched = workers.flatMap((worker) => worker.dispatched());
@@ -207,7 +237,9 @@ suite('many missions, two run loops, one real PostgreSQL', () => {
         maxMs: Math.round(Math.max(0, ...result.tickMs)),
       })),
     };
+    // stderr as well: vitest does not reliably print a PASSING test's console output, and this line is the evidence.
     console.log(`JULIUS_REAL_PG_CONCURRENCY ${JSON.stringify(summary)}`);
+    process.stderr.write(`JULIUS_REAL_PG_CONCURRENCY ${JSON.stringify(summary)}\n`);
     expect(wallMs, 'six scripted missions finish well inside the bound').toBeLessThan(120_000);
   }, 180_000);
 });
