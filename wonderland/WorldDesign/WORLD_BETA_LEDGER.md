@@ -421,6 +421,54 @@ results and three capture folders are marked VOID, and the jobs refuse to run. T
 was a persisted mascot skin state, not lighting, and is not this lane's.
 
 
+## 2026-09-28 (late) -- what a player could actually reach: streaming, the floors, and a walk that can fail
+
+**Until f97ba360 (22:18), every authored batch streamed from ONE cell at the origin.**
+- A WonderlandInstancedBatch holds its instances on an editor-only component until BeginPlay.
+- AActor::GetStreamingBounds skips editor-only components and falls back to the actor's location.
+- So all 4,826 spatially loaded batches reported a point at the origin: resident near the core, gone ~700 m out, in PIE and in a cooked build alike.
+- Core fixed it: GetStreamingBounds now returns the instances' true box, and every batch was re-saved.
+- zzW10b: resident batches now vary with position (807-2,340), with 178-433 within 150 m of each probe point where there were 0-107.
+
+**So the section above overstates the walk.** Its "6/6" was true about FLOORS and void about the WORLD.
+- In zzV4 every stand past ~700 m traced -14, the always-loaded V2 lawn. For example, [5,10] at 728 m has 43 m of structure in the editor and read as lawn in play.
+- The same holds for the 07:26 stand photos and the first W270 PIE proof.
+- A lawn is a floor, so W03/W04 passed.
+
+**The walk can now fail on it (4b7f6b52).**
+- It counts the AUTHORED world in the editor world.
+- W08 checks the World Partition descriptors against the loaded actors.
+- Each stand does a frame, then FlushLevelStreaming, then a count repeated until two readings a second apart agree.
+- W07 needs at least 90% of the tile's authored world content (batches plus StaticMeshActors) to be resident in play.
+  - Characters are excluded on both sides: the voxel Dog and its companions put 5,202 instances into every tile the Dog stands in.
+  - A W07 that counted them passed the origin-cell fault at 5,016 "resident" against 136 authored.
+- Simulator: the origin-cell fault is RED, correct streaming and lagging cells are GREEN, and unloaded editor regions are W08 RED.
+- Live, zzW14:
+  - W08 PASS: 22,313 descriptors, all loaded.
+  - W01/W03/W04/W05/W06 PASS.
+  - Every stand's world content equals the editor's, except [8,4] at 614 m. It settled at 272 of 304, and zzW13 found all 304 there after 2 s, so the content arrives in waves. W07 is RED until the settle rule can wait on the streaming state itself.
+  - W02 RED on [12,7] at 1,032 m, which is empty in the editor as well.
+
+**Striped avenues: FIXED (dca810ca).**
+- SM_terrace_platform is 1,440 along its LOCAL X. nation_band.py (NC03/TQ03/IC03) and the W270 generator laid it at yaw = bearing, so the long side ran ALONG the road while the columns stood 1,440 apart ACROSS it.
+- The result was 7.4 m paving strips with 7 m of lawn between them, and avenue centrelines on lawn 26 cm below the paving.
+- noctis_quarter.py already had this fix; it had regressed.
+- Proven first: each corrected generator reproduces the applied specs, differing only in yaw.
+- Re-yawed in place: 3,201 instances in 86 batches, with one save. The hash check against the checkpoint shows exactly those 86 packages plus the map stub's header changed.
+- Straight-down before/after: captures/passes/reyaw_*.
+- STILL OPEN:
+  - Kerb runs stand across the verge in NC01, TQ01 and SF01-03.
+  - The kerb module's local Y is -62..+257 (not centred), so even a turned kerb sits ~1 m off its line.
+  - The combined fix is approved in principle, pending the same proof.
+
+**Distant views: a founder decision, via Core.** With real streaming and no HLODs, the share of instances resident is:
+- 85% from the spawn;
+- 35% from 785-950 m out;
+- 23% at 1.4 km.
+A 1,024 m loading range gives 99% from the spawn.
+
+**The W270 PIE proof after the re-yaw is pending.** It waits on an editor relaunch: system commit is at 45.8/47.7 GB after a full-rewrite save.
+
 ## 2026-09-27, later -- window 2 applied, and four red gates of which three were my own instruments
 
 **HEAD `4b94f8e5`.** The editor is shared with Internal Development by message; both lanes serialise.
