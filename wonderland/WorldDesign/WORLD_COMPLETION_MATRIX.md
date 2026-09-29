@@ -272,6 +272,17 @@ zc_hedge_gates plan_2b (9 relocations + 1 trim), HG2B 28 / TW02 44 batches, ONE 
 10.3 GB, 76 dirty all matched), hash vs checkpoint +74 / -0 / stub + 2 hedge batches. Relaunched (PID 71964). Ring
 continuity through GA / GC / GD: JUJU self-powered arcs -- pending.
 
+**World edge (JQ-F01, JUJU 08:24; P2 walk-off-the-world; CORE decision).** The only floor is `V2_GroundSlab`, a
+3,000 m SQUARE (ext 150,000 uu, z -44): it ends at 1,500 m on the axes and ~2,120 m at the corners, and nothing
+confines the rim, so a walker heading out along 0/90/180/270 deg past the wild ring can fall off the world. The census
+holds nothing beyond 1,485 m but sky clouds; the beta-walk tiles centred at ~1,552 m were off the floor. FIX
+(SECOND, window 4): an invisible pawn-only blocking ring at ~1,485 m (continuous, <= 200 m segments with real
+streaming bounds, not always-loaded) plus the R50b forest wall at 1,420-1,478 m. Proof: SELF-POWERED walk outward on
+0 deg and 90 deg stopping at the ring; JUJU re-test.
+**Gate retired with reason: beta walk W05** ("the wilderness belt has DF01's clearings" as >= 1 wholly empty 200 m
+wilderness tile) was calibrated to the pre-wild-ring world: with R50 applied every wilderness tile is planted and the
+clearings are sub-tile. Replaced by JUJU's direct clearing test (JQ22) against the clearing specs.
+
 ## Assignments
 
 | # | to | region | notes |
