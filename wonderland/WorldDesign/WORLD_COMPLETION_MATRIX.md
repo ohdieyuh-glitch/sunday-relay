@@ -92,11 +92,11 @@ walk runs in the generator (proven red on the first routing, green on the fix).
 
 | heartland | spec | STATUS | TRAV | PROOF |
 |---|---|---|---|---|
-| HT356 TARTARUS 336-16°, 610-1,100 m | ht356_tartarus_heartland.json | **APPLIED** 2026-09-29 00:37 (fixed walk, 213 batches / 2,283 inst; hash-clean) | **VERIFIED** in play: zzW38 stands 11/11, walk capsule blocks 0, rooms 12/12, streaming complete | IN PROGRESS (CORE before/after frames, same cameras) |
-| HN181 NOCTIS 159-203°, 620-1,150 m | hn181_noctis_heartland.json | **APPLIED** 2026-09-29 00:37 (fixed walk, 157 batches / 1,899 inst; hash-clean) | **VERIFIED** in play: zzW38 stands 9/9, walk capsule blocks 0, rooms 8/8, streaming complete | IN PROGRESS (CORE before/after frames, same cameras) |
-| HN238 NOCTIS 221-255° | hn238_noctis_heartland.json | PLANNED (2,273 inst), HELD for review | -- | -- |
-| HI057 ICARUS 40-74° | hi057_icarus_heartland.json | PLANNED (1,861 inst), HELD for review | -- | -- |
-| HT308 TARTARUS 294-322° | ht308_tartarus_heartland.json | PLANNED (1,861 inst), HELD for review | -- | -- |
+| HT356 TARTARUS 336-16°, 610-1,100 m | ht356_tartarus_heartland.json | **APPLIED** 2026-09-29 01:14, rooms v3 (floors, closed walls, rose borders, centre tree, benches): 238 batches / 2,943 inst; hash-clean. Bench delta (180°, 24) pending a fresh session | **VERIFIED** in play: zzW47 stands 11/11, walk capsule blocks 0, rooms 12/12, streaming complete | IN PROGRESS (room pairs zzW40/42/46; CORE before/after) |
+| HN181 NOCTIS 159-203°, 620-1,150 m | hn181_noctis_heartland.json | **APPLIED** 2026-09-29 01:14, rooms v3: 170 batches / 2,339 inst; hash-clean. Bench delta (16) pending | **VERIFIED** in play: zzW47 stands 9/9, walk capsule blocks 0, rooms 8/8, streaming complete | IN PROGRESS (CORE before/after frames) |
+| HN238 NOCTIS 221-255° | hn238_noctis_heartland.json | PLANNED, rooms v3 (2,933 inst), HELD for review | -- | -- |
+| HI057 ICARUS 40-74° | hi057_icarus_heartland.json | PLANNED, rooms v3 (2,301 inst), HELD for review | -- | -- |
+| HT308 TARTARUS 294-322° | ht308_tartarus_heartland.json | PLANNED, rooms v3 (2,301 inst), HELD for review | -- | -- |
 
 R41 / R42 (the 150° and 30° seams): the pockets P165N / P015T were WITHDRAWN (their clearance was tested against
 an empty world -- load_census hard-coded the rear seam's wedge; fixed 786be14b). The seams' own axes are lined with
