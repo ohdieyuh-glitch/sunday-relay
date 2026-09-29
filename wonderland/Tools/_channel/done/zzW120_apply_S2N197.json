@@ -1,0 +1,16 @@
+{
+ "name": "zzW120_apply_S2N197",
+ "started": "2026-09-29 08:28:51",
+ "status": "done",
+ "waited_for_pie_seconds": 0.0,
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "S2N197",
+ "actors": 0,
+ "batches": 116,
+ "instances": 966,
+ "hovers": 0,
+ "finished": "2026-09-29 08:28:57",
+ "seconds": 6.0,
+ "log": "applied S2N197 0 actors 116 batches 966 instances\n"
+}
