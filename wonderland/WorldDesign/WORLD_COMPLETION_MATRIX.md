@@ -30,15 +30,15 @@ flat ground with ~100 lone skyline towers, three nation districts standing as is
 | Golden Arrival (axis, plaza, flank gardens, rear world, flower border, parterres, walls) | GA02/04/07, FL04, LF01, GF01/02, BC01, WB01, SD01, FD01-05 ... | 0-150 m | built |
 | The core quarters | CQ01/02 Clock Quarter, EQ01 East Quarter, SM01-03 South Meadows, TC01-03 Teapot Court, CL01 Cloister, CK01-03 Colossal Key, ER01-03, WW01-03, WG01/03, RG01, FO01/02, LH01/02, DC01 | 100-320 m | built; **forge canon names 24 quarters -- reconciliation OPEN** |
 | Radial avenues | AV01 Icarus (90°), AV02 Noctis (210°), AV03 Tartarus (330°) | 599-1,060 m | built, one per nation |
-| Arrival approaches | AP01 | 384-500 m, 91° | **Icarus side only** |
+| Arrival approaches | AP01 | 384-500 m at 90°, 210° and 330° | built on all three bearings (the first cut of this table said Icarus only: wrong) |
 | Checkpoints | CP02/03/04 | ~527 m on each avenue | built |
 | Nation quarters | IC02; NC01+NC02; TQ01+TQ02 | 500-850 m, along each avenue | built, **narrow strips** |
 | Nation bands | IC03/04, NC03/04, TQ03/04 | 820-1,200 m | built |
-| Marches | IC01 | 500-640 m | **Icarus only** |
+| Marches | IC01; the NOCTIS and TARTARUS marches are the causeways of NC01 / TQ01 (508-815 m) through CP03 / CP04, with their gate arches at ~640 m | 500-640 m | built for all three |
 | Frontiers | FR02 (+FR01/03/04 small) | 1,000-1,300 m | thin |
 | Dubel Forest | DF01 | 1,231-1,479 m, 90° | built |
 | Skyline towers | SKY05 | 425-1,458 m, all bearings | ~100 lone towers |
-| **Ring circuit** | RR01 march ring, RR02 outer ring (`Rings/ring_probe.py` -> `ring_roads.py`) | 548-722 m, 980-1,250 m | **specs built, apply pending** |
+| **Ring circuit** | RR01 march ring, RR02 outer ring (`Rings/ring_probe.py` -> `ring_roads.py`) | 560-716 m, 980-1,246 m | **applied 2026-09-28**: plates, kerbs, lanterns, avenue trees; bend smoothing re-apply pending |
 | Outer-ring garden fills | GF03/04/05, re-seated on the real ground (`City/outer_ring_ground.py`) and tiled to 200 m | 400-500 m | **applied 2026-09-28**: 3,071 pieces, 174 batches |
 
 ## Where the world is empty (60° wedges × radial bands, structure-only)
@@ -111,7 +111,7 @@ HLODs (canonical, heavy), or keep landmark batches always loaded. Nothing change
 | 4 | WORLD | R22 / R32 / R12 frontiers, then R50 wild ring | forest, mushroom woods, meadows with purpose -- Dubel's clearings are the model |
 | C1 | CORE | R02 core rim: re-apply GF03/04/05 | **DONE 2026-09-28**, corrected and tiled; see the note on the corner-cell bug below |
 | C2 | CORE | S01 ring circuit + S02 seam radials | the roads every fill hangs on; polylines to WORLD before their layouts |
-| C3 | CORE | nation marches for NOCTIS and TARTARUS (Icarus has IC01) | gates/landmarks where each avenue enters its nation |
+| C3 | CORE | nation marches for NOCTIS and TARTARUS | **not needed**: NC01 / TQ01 causeways + CP03 / CP04 + gate arches already are those marches (census, 2026-09-28) |
 | C4 | CORE | forge-canon reconciliation: the 24 quarters, radial roads and ring circuit of the core | forge `WORLD_LEDGER.md` 611-616, `layout_v2.py` |
 | C5 | CORE | traversal (walkable on the census), packaged build | |
 

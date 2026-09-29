@@ -71,6 +71,7 @@ def load(occ):
                 continue
             if "canopy" in mesh.lower():
                 occ.add("existing", x, y, 80.0, 80.0, 0.0, r["owner"] + ":trunk")
+                occ.add("solid", x, y, max(ex, 20.0), max(ey, 20.0), float(r["yaw"]), r["owner"] + ":canopy")
                 kept["trunk"] += 1
                 continue
             if any(w in mesh for w in PAVED_WORDS):
@@ -79,6 +80,10 @@ def load(occ):
                 continue
             occ.add("existing", x, y, max(ex, 20.0), max(ey, 20.0), float(r["yaw"]), r["owner"] + ":" + mesh)
             kept["existing"] += 1
+            if ez >= 300.0:
+                # TALL: 6 m and up -- what a tree's canopy, 7.6 m over the ground, could actually grow into
+                occ.add("solid", x, y, max(ex, 20.0), max(ey, 20.0), float(r["yaw"]), r["owner"] + ":" + mesh)
+                kept["tall"] += 1
     return kept
 
 
@@ -129,7 +134,10 @@ def search(occ, nominal, rmin, rmax, anchors):
             local = abs(rad - nominal) / 1000.0 + (BLOCK if level == 2 else (NARROW_COST if level == 1 else 0.0))
             best, bj = INF, 0
             for j in range(max(0, i - span), min(len(radii), i + span + 1)):
-                c = cost[j] + abs(radii[j] - rad) / 100.0
+                dr = abs(radii[j] - rad) / 100.0
+                # QUADRATIC in the sideways step: a 2 m jump costs 6, two 1 m jumps cost 3. The linear cost of the
+                # first build let the path zig-zag 3 m per step and the plates stepped at every S-bend.
+                c = cost[j] + dr + 1.0 * dr * dr
                 if c < best:
                     best, bj = c, j
             new[i] = best + local

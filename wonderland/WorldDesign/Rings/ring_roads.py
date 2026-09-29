@@ -30,6 +30,7 @@ names the stretch: those are decisions (a gate, a detour), never a road through 
 """
 import json
 import math
+import random
 import sys
 from collections import Counter
 from pathlib import Path
@@ -52,6 +53,11 @@ PAVING_TOP = 12.0
 GROUND_Z = -14.0
 KERB_LEN, KERB_W = 120.0, 36.2          # SM_kerb_stone at scale 1 (mesh_bounds: ext 60 x 18.1 x 14.1, base pivot)
 LAMP_EVERY = 2400.0
+PLATE_STEP = 550.0              # rows every 5.5 m: a 7.4 m plate overlaps the next by 1.9 m and covers the outer wedge on a bend
+SMOOTH = 9                      # route points averaged (0.25 deg each): ~2 deg takes the Viterbi kinks out
+TREE_EVERY = 2400.0              # avenue trees, both sides, staggered half a step from the lanterns
+TRUNK_MESH = "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk"
+CANOPY_MESH = "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium"
 LAMP_OFF = 900.0
 TILE = 20000.0
 CULL_MID, CULL_FAR = 26000.0, 60000.0
@@ -69,13 +75,15 @@ def palette(nation_id):
 def resample(points, step):
     """The probe's 0.25 deg route, smoothed and walked at a fixed arc length: (x, y, heading, status)."""
     pts = [(p[2], p[3], p[4]) for p in points]
-    # a 5-point moving average takes the 2 m radius quantisation out of the curve
+    # a moving average takes the 2 m radius quantisation and the Viterbi's kinks out of the curve. The first
+    # build averaged 5 points (1.25 deg) and its S-bends read as stepped plates with lawn wedges between them.
     sm = []
     n = len(pts) - 1                                    # the last point repeats the first (the loop closes)
+    h = SMOOTH // 2
     for i in range(n):
-        xs = [pts[(i + k) % n][0] for k in range(-2, 3)]
-        ys = [pts[(i + k) % n][1] for k in range(-2, 3)]
-        sm.append((sum(xs) / 5.0, sum(ys) / 5.0, pts[i][2]))
+        xs = [pts[(i + k) % n][0] for k in range(-h, h + 1)]
+        ys = [pts[(i + k) % n][1] for k in range(-h, h + 1)]
+        sm.append((sum(xs) / len(xs), sum(ys) / len(ys), max(pts[(i + k) % n][2] for k in range(-h, h + 1))))
     out, carry = [], 0.0
     for i in range(n):
         a, b = sm[i], sm[(i + 1) % n]
@@ -97,6 +105,7 @@ class Spec:
         self.id, self.folder = pass_id, folder
         self.batches, self.stats = {}, Counter()
         self.refused = []
+        self.tree_why = Counter()
 
     def add(self, key, mesh, material, x, y, z, yaw, sx=1.0, sy=1.0, sz=1.0, collides=False, cull=CULL_MID):
         tkey = "%s_t%d_%d" % (key, math.floor(x / TILE), math.floor(y / TILE))
@@ -123,16 +132,20 @@ class Spec:
 def build(name, ring, occ):
     pass_id, fname, folder = PASSES[name]
     spec = Spec(pass_id, folder)
-    samples = resample(ring["points"], PLATE_Y)
+    samples = resample(ring["points"], PLATE_STEP)
     lamp_at, lamp_side, along = 0.0, 1.0, 0.0
+    tree_at = -TREE_EVERY * 0.5
+    rng = random.Random(pass_id)
     placed_runs, current = [], 0
     for k, (x, y, head, status) in enumerate(samples):
         if k:
             along += math.hypot(x - samples[k - 1][0], y - samples[k - 1][1])
         nation = nations.nation_at(x, y) or "ICARUS"
         mats, luminous = palette(nation)
-        narrow = status == 1
-        half_x = PLATE_X * (0.25 if narrow else 0.5)
+        # The plate's own clearance test decides the width, not the probe's mark: smoothing smears a "narrow" point
+        # over its neighbours, and trusting it narrowed 308 rows of the outer ring that fit at full width.
+        narrow = False
+        half_x = PLATE_X * 0.5
         yaw = head + 90.0                                  # the plate's X runs ACROSS the road
         h = math.radians(head)
         lx, ly = -math.sin(h), math.cos(h)
@@ -154,7 +167,8 @@ def build(name, ring, occ):
                 spec.stats["plate_refused_in_standing"] += 1
                 spec.refused.append((round(math.degrees(math.atan2(y, x)) % 360.0, 2),
                                      round(math.hypot(x, y) / 100.0),
-                                     (occ.hits(x, y, half_x, PLATE_Y * 0.5, yaw, 0.0, ("existing",)) or "?")[:70]))
+                                     (occ.hits(x, y, half_x, PLATE_Y * 0.5, yaw, 0.0, ("existing",)) or "?")[:70],
+                                     round(x, 1), round(y, 1), round(yaw, 2), half_x))
                 current = 0
                 continue
             x, y, narrow, half_x = fit
@@ -163,8 +177,11 @@ def build(name, ring, occ):
             spec.stats["plate_skipped_existing_floor"] += 1
             current = 0
             continue
+        # Alternate rows stand 6 mm apart in height: on a bend the inside corners of neighbouring rows overlap,
+        # and two top faces at exactly +12 would z-fight there. 6 mm is invisible and far under the Dog's step.
+        lift = 0.6 if (spec.stats["plate"] + spec.stats["plate_narrow"]) % 2 else 0.0
         spec.add("Plate", PLATE_MESH, mats.get("paving", "MI_V2_GroundFlag_PlazaCream"), x, y,
-                 PAVING_TOP - PLATE_TOP_LOCAL, yaw, sx=(0.5 if narrow else 1.0), collides=True, cull=CULL_FAR)
+                 PAVING_TOP - PLATE_TOP_LOCAL + lift, yaw, sx=(0.5 if narrow else 1.0), collides=True, cull=CULL_FAR)
         spec.stats["plate_narrow" if narrow else "plate"] += 1
         current += 1
         if current == 1:
@@ -173,14 +190,16 @@ def build(name, ring, occ):
         # --- kerbs on the ground at both edges, stretched along the row
         for side in (-1.0, 1.0):
             kx, ky = x + lx * side * (half_x + KERB_W * 0.5), y + ly * side * (half_x + KERB_W * 0.5)
-            if occ.hits(kx, ky, PLATE_Y * 0.5, KERB_W * 0.5, head, 0.0, ("existing",)):
+            if occ.hits(kx, ky, PLATE_STEP * 0.5, KERB_W * 0.5, head, 0.0, ("existing",)):
                 spec.stats["kerb_refused"] += 1
                 continue
             spec.add("Kerb", KERB_MESH, mats.get("kerb", "MI_V2_Kerb"), kx, ky, GROUND_Z, head,
-                     sx=PLATE_Y / KERB_LEN, collides=False)
+                     sx=(PLATE_STEP + 60.0) / KERB_LEN, collides=False)
             spec.stats["kerb"] += 1
         # --- a lantern every 24 m, alternating sides, not on the narrow stretches
+        lamp_here = False
         if along - lamp_at >= LAMP_EVERY and not narrow:
+            lamp_here = True
             lamp_at = along
             lamp_side = -lamp_side
             off = half_x + LAMP_OFF - PLATE_X * 0.5 + 150.0
@@ -192,6 +211,28 @@ def build(name, ring, occ):
                             luminous=luminous, glow=("glass",))
                 spec.stats["lantern"] += 1
                 occ.add("existing", px, py, 350.0, 120.0, head, "%s:lantern" % pass_id)
+        # --- AVENUE TREES, the IC02 recipe (slender trunk, medium canopy 7.6 m up), both sides, on the ground
+        #     just outside the kerbs. A ring through open lawn reads as a boulevard only with trees; a tree is
+        #     refused where its trunk or its canopy would stand in anything already there.
+        # never on the lantern's own plate: both keep a 24 m step on 7.4 m plates, and after any break in the road
+        # they fell into step -- the first build refused 292 trees against the ring's own lanterns
+        if along - tree_at >= TREE_EVERY and not narrow and not lamp_here:
+            tree_at = along
+            for side in (-1.0, 1.0):
+                off = half_x + KERB_W + 330.0
+                tx, ty = x + lx * side * off, y + ly * side * off
+                why = occ.hits(tx, ty, 150.0, 150.0, head, 50.0, ("existing",)) or                     occ.hits(tx, ty, 420.0, 420.0, head, 0.0, ("solid",))
+                if why:
+                    spec.stats["tree_refused"] += 1
+                    spec.tree_why[why.split(":")[0] + ":" + why.split(":")[-1][:28]] += 1
+                    continue
+                spec.add("AvenueTree", TRUNK_MESH, "MI_V2_Bark", tx, ty, GROUND_Z, rng.uniform(0.0, 360.0),
+                         *([rng.uniform(0.9, 1.1)] * 3), collides=True)
+                spec.add("AvenueCanopy", CANOPY_MESH, "MI_V2_LeafMid", tx, ty, GROUND_Z + 760.0,
+                         rng.uniform(0.0, 360.0), *([rng.uniform(0.9, 1.15)] * 3), collides=False)
+                occ.add("existing", tx, ty, 150.0, 150.0, head, "%s:tree" % pass_id)
+                occ.add("solid", tx, ty, 420.0, 420.0, head, "%s:canopy" % pass_id)
+                spec.stats["tree"] += 1
     tags = ["WL_AUTHORED", "WL_PASS_%s" % pass_id, "WL_RING_ROAD"]
     out = spec.out(tags)
     out["route_source"] = "ring_routes.json %s: %d m, clear %.1f%%, narrow %.1f%%" % (
@@ -203,13 +244,17 @@ def build(name, ring, occ):
     print("%s %s: %d instances in %d batches (widest %.0f m) -> %s" % (
         pass_id, name, total, len(out["batches"]), max(spans) / 100.0, fname))
     print("    %s" % ", ".join("%s %d" % kv for kv in sorted(spec.stats.items())))
+    print("    trees refused by: %s" % ", ".join("%s %d" % kv for kv in spec.tree_why.most_common(6)))
     print("    paved runs: %d, longest %d plates (%.0f m); plates laid %.0f m of %.0f m" % (
         len(placed_runs), max(placed_runs) if placed_runs else 0,
         (max(placed_runs) if placed_runs else 0) * PLATE_Y / 100.0,
         (spec.stats["plate"] + spec.stats["plate_narrow"]) * PLATE_Y / 100.0, along / 100.0))
     # the refusals, grouped into the stretches where the road is actually broken
     groups = []
-    for b, r, why in sorted(spec.refused):
+    (HERE / ("%s_refused.json" % pass_id.lower())).write_text(json.dumps(
+        [{"bearing": b, "r_m": r, "blocker": why, "x": x, "y": y, "yaw": yw, "half_x": hx}
+         for b, r, why, x, y, yw, hx in sorted(spec.refused)], indent=1), encoding="utf-8")
+    for b, r, why, _x, _y, _yw, _hx in sorted(spec.refused):
         if groups and b - groups[-1]["to"] <= 1.0:
             groups[-1]["to"] = b
             groups[-1]["n"] += 1
