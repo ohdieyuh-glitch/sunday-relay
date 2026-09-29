@@ -232,7 +232,7 @@ check_secrets_file_mode() {
 credential_scan() {
   local dir=$1 needles leaked=0 value
   [ -d "$dir" ] || return 0
-  if grep -rEq '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,})' "$dir"; then
+  if grep -rEq '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' "$dir"; then
     return 1
   fi
   needles=$(umask 077; mktemp)

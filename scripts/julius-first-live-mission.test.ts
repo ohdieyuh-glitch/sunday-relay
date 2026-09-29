@@ -8,6 +8,7 @@ import { liveBillingPaths, parseLiveMissionContract } from '../relay-bridge/juli
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/executor-effects';
 import { HOSTED_ALLOWED_TOOLS, HOSTED_DISALLOWED_TOOLS } from '../relay-bridge/hosted-coding-agent/hosted-envelope';
 import { claudeAuthLine, claudeAuthSourceLine, type ClaudeAuthProvenance } from '../relay-bridge/hosted-coding-agent/hosted-auth';
+import { sdkExecutableCandidates } from '../relay-bridge/hosted-coding-agent/hosted-login-probe';
 import { PREFLIGHT_LIMITS, PREFLIGHT_POLICY } from './julius-live-preflight';
 
 /**
@@ -215,9 +216,75 @@ describe('the paid stage is gated, and the unpaid stage cannot pay', () => {
 
 describe('no credential is committed, and none can leave the runner', () => {
   it('references every provider secret by name only', () => {
-    for (const name of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'XAI_API_KEY']) {
+    for (const name of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'XAI_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN']) {
       expect(workflow, `${name} must be read from the secrets context`).toContain(`secrets.${name}`);
     }
+  });
+
+  /**
+   * FOUNDER RULE: the Coding Agent runs on the Claude Max subscription, never on
+   * Anthropic API billing. Paid attempt 1 (run 36568129865) ran it on
+   * ANTHROPIC_API_KEY and died on `credit_unavailable`.
+   */
+  it('the roles preflight and LIVE run the Coding Agent on the subscription token, never on an Anthropic key', () => {
+    const stepNamed = (name: string): string => {
+      const start = workflow.indexOf(`- name: ${name}`);
+      expect(start, name).toBeGreaterThan(-1);
+      const rest = workflow.slice(start);
+      return rest.slice(0, rest.indexOf('\n      - ', 1));
+    };
+    for (const name of ["'Preflight: all three roles resolve to the expected models, nothing dispatched'", "'LIVE: run the first real Julius mission'"]) {
+      const step = stepNamed(name);
+      expect(step, name).toMatch(/\n\s+JULIUS_CLAUDE_AUTH: CLAUDE_SUBSCRIPTION\n/u);
+      expect(step, name).toContain('CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}');
+      expect(step, `${name} must not hand the Coding Agent an API key`).not.toContain('secrets.ANTHROPIC_API_KEY');
+    }
+    const roles = stepNamed("'Preflight: all three roles resolve to the expected models, nothing dispatched'");
+    expect(roles).toContain("grep -qx '  billing paths: architect=API_BILLED coder=SUBSCRIPTION reviewer=API_BILLED' preflight-roles.log");
+    expect(roles).toContain("grep -qx '  claude auth source: subscription_oauth_token' preflight-roles.log");
+    expect(roles).toContain("grep -qx '  ANTHROPIC_API_KEY: MISSING' preflight-roles.log");
+    expect(roles).toMatch(/for name in OPENAI_API_KEY CLAUDE_CODE_OAUTH_TOKEN /u);
+    const readiness = stepNamed("'Preflight: each provider accepts its credential and serves the pinned model, nothing generated'");
+    expect(readiness, 'the Anthropic API-key probe is gone').not.toContain('api.anthropic.com');
+    expect(readiness).toContain('node scripts/julius-subscription-check.mjs env-check --model "$RELAY_HOSTED_CODING_MODEL"');
+    expect(readiness).toContain('node scripts/julius-subscription-check.mjs status-verdict --model "$RELAY_HOSTED_CODING_MODEL" < "$sub/status.json"');
+    expect(readiness).toContain(`${SUBSCRIPTION_CLI} auth status --json > "$sub/status.json" 2>/dev/null`);
+    expect(readiness, 'the readiness check never generates').not.toMatch(/claude" -p /u);
+  });
+
+  /**
+   * THE CLI RUNS AS A LITERAL COMMAND IN THE WORKFLOW, never from a script, so the
+   * repository boundary scan can read it; the check script only judges its JSON.
+   * Every invocation is the same `env -i` allow-list, from an empty directory.
+   */
+  const SUBSCRIPTION_CLI = `"$PWD/node_modules/${sdkExecutableCandidates('linux', 'x64')[0]}"`;
+  const ENV_ALLOW_LIST = 'env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \\';
+
+  it('every subscription CLI call is the SDK\'s bundled linux-x64 CLI under the exact env -i allow-list', () => {
+    const lines = workflow.split('\n');
+    const calls = lines.map((line, index) => ({ line, index })).filter(({ line }) => line.includes('claude-agent-sdk-'));
+    expect(calls.length, 'status in the readiness step; status and one request in the smoke').toBe(3);
+    for (const { line, index } of calls) {
+      expect(line.trim().startsWith(`${SUBSCRIPTION_CLI} `), line).toBe(true);
+      expect(lines[index - 1].trim(), line).toBe(ENV_ALLOW_LIST);
+      expect(line, 'stdout to a file the check script judges; stderr discarded').toMatch(/ > "\$sub\/(status|smoke)\.json" 2>\/dev\/null$/u);
+    }
+    expect(workflow, 'the file a paid run executes starts no process').not.toMatch(/julius-subscription-check\.mjs" /u);
+  });
+
+  it('the subscription smoke is optional, gated on its own exact phrase, and sends one literal request', () => {
+    const start = workflow.indexOf("- name: 'Subscription smoke:");
+    expect(start).toBeGreaterThan(-1);
+    const rest = workflow.slice(start);
+    const step = rest.slice(0, rest.indexOf('\n      - ', 1));
+    expect(step).toMatch(/if: success\(\) && inputs\.subscription_smoke == 'RUN SUBSCRIPTION SMOKE'/u);
+    expect(step).toContain('node scripts/julius-subscription-check.mjs env-check --for smoke');
+    expect(step).toContain('node scripts/julius-subscription-check.mjs status-verdict --for smoke');
+    expect(step).toContain('node scripts/julius-subscription-check.mjs smoke-verdict --model "$RELAY_HOSTED_CODING_MODEL" --status-file "$sub/status.json" < "$sub/smoke.json"');
+    expect(step.match(/claude" -p /gu)?.length, 'exactly one request').toBe(1);
+    expect(step).toContain(`${SUBSCRIPTION_CLI} -p 'Reply with exactly OK' --max-turns 1 --output-format json --model "$RELAY_HOSTED_CODING_MODEL" --setting-sources user --strict-mcp-config --no-session-persistence > "$sub/smoke.json" 2>/dev/null`);
+    expect(step).not.toMatch(/API_KEY/u);
+    expect(step).not.toContain('--confirm-live');
   });
 
   it('contains no credential-shaped literal', () => {
