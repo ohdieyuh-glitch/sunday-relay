@@ -55,10 +55,14 @@ export class JuliusRecoveryPostgresRepository {
     // failure is retried (`juliusSerializable`) — the kernel sweeps before every
     // tick, so an unretried 40001 here threw the tick itself.
     return juliusSerializable(this.pool, async (client) => {
-      const rows = await client.query<Record<string, unknown>>(`SELECT t.task_id,t.run_id,t.attempt,t.recoveries,t.lease_generation,2 AS max_retries,r.project_id,r.state AS run_state FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.state='ACTIVE' AND t.lease_expires_at<=$1 AND ($3::text IS NULL OR r.project_id=$3) ORDER BY t.lease_expires_at,t.created_at FOR UPDATE OF t SKIP LOCKED LIMIT $2`, [now,limit,projectId??null]);
+      // HANDED: the coordinator writes `worker.dispatched` for the claimed attempt
+      // before it hands the work to a provider, so the event is the durable
+      // answer to "may this attempt have been paid for?". A handed attempt is
+      // never requeued (`planJuliusRecovery`).
+      const rows = await client.query<Record<string, unknown>>(`SELECT t.task_id,t.run_id,t.attempt,t.recoveries,t.lease_generation,2 AS max_retries,r.project_id,r.state AS run_state,EXISTS(SELECT 1 FROM relay_wonderland.events e WHERE e.stream_id=t.run_id AND e.event_type='julius.worker.dispatched' AND e.payload->>'taskId'=t.task_id AND e.payload->'facts'->>'attempt'=t.attempt::text) AS handed FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.state='ACTIVE' AND t.lease_expires_at<=$1 AND ($3::text IS NULL OR r.project_id=$3) ORDER BY t.lease_expires_at,t.created_at FOR UPDATE OF t SKIP LOCKED LIMIT $2`, [now,limit,projectId??null]);
       const actions: JuliusRecoveryAction[] = [];
       for (const row of rows.rows) {
-        const candidate: JuliusRecoveryCandidate = { runId:String(row.run_id),projectId:String(row.project_id),runState:String(row.run_state) as JuliusMissionState,taskId:String(row.task_id),attempt:Number(row.attempt),maxRetries:Number(row.max_retries),leaseGeneration:Number(row.lease_generation),recoveries:Number(row.recoveries),maxRecoveries:MAX_TASK_RECOVERIES };
+        const candidate: JuliusRecoveryCandidate = { runId:String(row.run_id),projectId:String(row.project_id),runState:String(row.run_state) as JuliusMissionState,taskId:String(row.task_id),attempt:Number(row.attempt),maxRetries:Number(row.max_retries),leaseGeneration:Number(row.lease_generation),recoveries:Number(row.recoveries),maxRecoveries:MAX_TASK_RECOVERIES,handed:row.handed===true };
         const action = planJuliusRecovery(candidate); actions.push(action);
         const state = action.action === 'REQUEUE' ? 'RUNNABLE' : action.action === 'CANCEL_TASK' ? 'CANCELLED' : 'FAILED';
         // COUNTED ON THE WAY OUT, in the same statement that hands the task
