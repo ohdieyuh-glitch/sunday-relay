@@ -118,7 +118,7 @@ existing buildings between the rings (plans 2026-09-28); their open ground is wh
 
 **Emptiness, structure-only (emptiness.py --structure, 1,480 m disc).** 57.5% -> 50.1% after the ring roads -> 48.0% on the 01:54 census -> **45.1% actual** on the census re-exported 2026-09-29 05:05 after HN238 / HI057 / HT308 (3,103,775 of 6,881,500 m2; `captures/zc/census/emptiness_structure_0929_fill3.png`). The 1,200-1,480 m band holds 1.80 of the 3.10 km2 still empty. Projected from specs, not built: 27.0% with the wild ring as well. A projection counts ground within 9 m of a placement as covered.
 
-| S01 ring circuit (march ring 560-716 m, outer ring 980-1,246 m; pinned to W270's plazas at 645 / 1,075 m) | **CORE** | STRUCT. COMPLETE | -- | -- | STRUCT. COMPLETE (487 avenue trees) | STRUCT. COMPLETE (RR01 + RR02 applied, smoothed; breaks only at SKY05 clusters, hedge gardens and junctions) | -- | STRUCT. COMPLETE (290 lanterns) | IN PROGRESS: zc_ring_walk 32/32 proves PLATE PRESENCE at 32 teleported stands (16 per ring, ~260 m / ~450 m apart), streaming complete at each; it cannot see a gap between stands, so CONTINUITY IS UNPROVEN (instrument note, integration lane 2026-09-29). Walked-arc re-test: JUJU | -- | VERIFIED (tiled 200 m, real streaming bounds) | IN PROGRESS (before/after + in-play frames sent) |
+| S01 ring circuit (march ring 560-716 m, outer ring 980-1,246 m; pinned to W270's plazas at 645 / 1,075 m) | **CORE** | STRUCT. COMPLETE | -- | -- | STRUCT. COMPLETE (487 avenue trees) | STRUCT. COMPLETE (RR01 + RR02 applied, smoothed; breaks only at SKY05 clusters, hedge gardens and junctions) | -- | STRUCT. COMPLETE (290 lanterns) | IN PROGRESS: **32/32 SAMPLED ROAD SURFACES PRESENT** (TELEPORT proof): zc_ring_walk proves plate presence at 32 teleported stands (16 per ring, ~260 m / ~450 m apart), streaming complete at each; it cannot see a gap between stands, so CONTINUITY IS UNPROVEN (instrument note, integration lane 2026-09-29). Walked-arc re-test: JUJU | -- | VERIFIED (tiled 200 m, real streaming bounds) | IN PROGRESS (before/after + in-play frames sent) |
 | S02 seam radials 30° / 150° / 270° | **CORE** | NOT STARTED | -- | -- | -- | NOT STARTED | -- | -- | NOT STARTED | -- | -- | NOT STARTED |
 | S03 packaged world boots Golden Arrival | **CORE** | **VERIFIED 2026-09-29 00:11**: BuildCookRun Win64 Development SUCCESSFUL (2 min; 285 streaming-cell packages generated for WL_V2_GoldenArrival_WP2; RelayCubs + RelaySkins staged); the packaged exe boots into Golden Arrival (LoadMap 4.45 s) and the runtime hash overlay shows 52 cells loaded around the player | | | | | | | | | VERIFIED | `Tools/boot_test_package.ps1`; frame `captures/zc/package_0929/packaged_boot_golden_arrival.png`; package `C:/dev/iwonder/_wonderland_package_20260929` |
 
@@ -194,6 +194,30 @@ wild ring's landmark mushrooms and the skyline towers.
 **R51 Dubel path (CORE).** DF01's path is 29 lawn patches 30 m apart. DW01 (`Districts/dubel_walk.py`, 442c89b4, NOT
 APPLIED) lays 333 stepping stones on it, additive, joined to the WI030 / WI122 trail stones; 34 detour round a SKY05
 tower base and hedge masses on DF01's own path line at 115-122°. For CORE's window 2.
+
+## Window 1 forensic record and founder process rules (2026-09-29 06:15)
+
+**MAP RECOVERY: window 1 = A (CLEAN).** The editor (PID 70880) died 20 ms after `save_map` completed ("took 165.160"),
+in an autosave assert (ExternalPackage->IsDirty(), FileHelpers.cpp:3527). Forensics against checkpoint
+`recovery/_map_checkpoints/2026-09-29-2026-09-29-pre-window1`, from the files, not timestamps:
+- every one of the 25,955 live actor and object packages carries the package tag 0x9E2A83C1 at header and footer; 0
+  zero-byte; the .umap stub's header and footer are valid;
+- full sha256 inventory: +2,782 actor packages, +10 folder objects, -992; only the stub changed among pre-existing
+  files;
+- ADDED by embedded WL_PASS tag = the 15-apply transaction exactly: WI030 200, WI122 168, WN150 368, WN210 348,
+  WT270 317, WT330 304, HT356 241, HN181 172, HN238 235, HI057 165, HT308 190, TW01 17, MG01 13, SR030 21, SR150 23;
+  0 unattributed;
+- DELETED, attributed from the checkpoint copies: HT356 238, HN181 170, HN238 232, HI057 164, HT308 188 (the old
+  heartland actors, their prior counts exactly); nothing from any other pass.
+Autosave is now off (bAutoSaveEnable=False, SECOND). Script: CORE scratchpad forensic_w1.py (to be moved into Tools/).
+
+**Founder process rules (06:13, via JUJU):**
+- Future write windows are SPLIT into small transactions (e.g. A HN238+HI057+HT308 / B R50 / C TW01+MG01 /
+  D SR030+SR150), smaller if needed.
+- A MEMORY GATE is recorded before every save: editor private GB, system commit GB, dirty count; no save above the
+  line.
+- Every walk proof is classified SELF-POWERED / TELEPORT / MIXED in this matrix.
+- The ring baseline reads "32/32 SAMPLED ROAD SURFACES PRESENT".
 
 ## Assignments
 
