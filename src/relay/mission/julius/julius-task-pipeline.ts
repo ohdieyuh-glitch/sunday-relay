@@ -35,7 +35,7 @@ import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import { requestJuliusApproval, type JuliusApprovalStore } from './julius-lifecycle-runtime';
 import { JULIUS_CLAIMABLE_RUN_STATES } from './julius-state-path';
 import { decideJuliusContinuation } from './julius-continuation';
-import { JuliusExecutionCoordinator, type JuliusExecutionOutcome, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
+import { JuliusExecutionCoordinator, type JuliusExecutionOutcome, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest, type JuliusUnrecordedBookkeeping } from './julius-execution-coordinator';
 import { safeReasonCode, type JuliusDispatchWorkspace, type JuliusProviderRouter } from './julius-router';
 import { consistentJuliusBillingPath, juliusCostComponent } from './julius-cost-accounting';
 import { juliusContractDisposition, juliusContractDispositionFacts } from './julius-contract-disposition';
@@ -376,6 +376,32 @@ class RuntimeLedger {
     input: { taskId: string | null; workerId?: string | null; causationId?: string | null; facts: Record<string, string | number | boolean | null> },
   ): Promise<void> {
     await this.deps.store.appendEvent(this.compose(type, input));
+  }
+
+  /** Events composed by `eventOnce`, by the caller's key, for the life of this ledger (one dispatch). */
+  private readonly composedOnce = new Map<string, JuliusOperationalEvent>();
+
+  /**
+   * THE SAME EVENT, HOWEVER OFTEN ITS WRITE IS REPEATED.
+   *
+   * `event` composes afresh on every call: a new id and a new timestamp. So a
+   * write repeated after a lost acknowledgement would record the event twice,
+   * and a repeated `budget.settled` is money counted twice, because
+   * `cost-accounting.tsv` sums the rows. This composes ONCE per key and appends
+   * that same value every time. Both stores answer an identical event with
+   * `recorded: false`, and refuse a different event under the same id.
+   */
+  async eventOnce(
+    key: string,
+    type: JuliusOperationalEventType,
+    input: { taskId: string | null; workerId?: string | null; causationId?: string | null; facts: Record<string, string | number | boolean | null> },
+  ): Promise<void> {
+    let event = this.composedOnce.get(key);
+    if (event === undefined) {
+      event = this.compose(type, input);
+      this.composedOnce.set(key, event);
+    }
+    await this.deps.store.appendEvent(event);
   }
 
   /**
@@ -922,6 +948,25 @@ function bindingFacts(binding: JuliusTaskContractBinding | null): Record<string,
     contractTaskId: binding?.taskId ?? null,
     contractRevision: binding?.contractRevision ?? null,
     bindingDigest: binding?.bindingDigest ?? null,
+  };
+}
+
+/**
+ * WHAT A COMPLETED DISPATCH COULD NOT RECORD, on the row that says it completed.
+ *
+ * The store accepted the result, so the dispatch completed. The coordinator
+ * could not then write the settlement or its completion event, even after
+ * retrying. The reservation it did not settle is still held, so the money
+ * stays counted and is never read as $0. This row is where a reader learns
+ * WHY the settlement is missing. Nothing is added when nothing was missing,
+ * so every ordinary row is unchanged.
+ */
+function unrecordedFacts(unrecorded: readonly JuliusUnrecordedBookkeeping[] | undefined): Record<string, string | boolean | null> {
+  if (unrecorded === undefined || unrecorded.length === 0) return {};
+  return {
+    settlementUnrecorded: unrecorded.some((entry) => entry.step === 'settlement'),
+    completedEventUnrecorded: unrecorded.some((entry) => entry.step === 'completed_event'),
+    bookkeepingStoreErrorClass: unrecorded[0]!.storeErrorClass,
   };
 }
 
@@ -1766,7 +1811,7 @@ export async function runClaimedTask(
       outputTokens: outcome.measured.outputTokens,
       durationMs: outcome.measured.durationMs,
     }),
-    facts: { duplicate: outcome.duplicate, ...bindingFacts(preflight.contractBinding) },
+    facts: { duplicate: outcome.duplicate, ...bindingFacts(preflight.contractBinding), ...unrecordedFacts(outcome.unrecorded) },
   });
 
   /* ------------------------------- 3b. a contract revision the worker proposed */
@@ -3096,7 +3141,8 @@ function executionPorts(
       // authoritative record. It does now, and it is the OBSERVED usage rather
       // than the estimate that was reserved — or `null`, which says the
       // boundary reported none rather than claiming it cost nothing.
-      await ledger.event('budget.settled', {
+      // ONCE per reservation, however often the coordinator repeats this write.
+      await ledger.eventOnce(`commit:${reservationId}:budget.settled`, 'budget.settled', {
         taskId: claim.taskId,
         facts: {
           reservationId, usdMicros, inputTokens: number('inputTokens'), outputTokens: number('outputTokens'),
@@ -3141,7 +3187,7 @@ function executionPorts(
       const verdicts = claim.task.role === 'INDEPENDENT_REVIEWER'
         ? evidence.filter((item) => (item as { type?: unknown }).type === 'REVIEW_FINDING').length
         : 0;
-      await ledger.event('worker.effort', {
+      await ledger.eventOnce(`commit:${reservationId}:worker.effort`, 'worker.effort', {
         taskId: claim.taskId,
         facts: {
           role: claim.task.role, taskType: claim.task.taskType,
@@ -3202,7 +3248,7 @@ function executionPorts(
        * reached only when the boundary reported NO spend and did NOT report
        * unknown spend — nothing was sent, so there is nothing to hold.
        */
-      await ledger.event('budget.settled', {
+      await ledger.eventOnce(`release:${reservationId}:budget.settled`, 'budget.settled', {
         taskId: claim.taskId,
         facts: {
           reservationId, usdMicros: typeof usdMicros === 'number' ? usdMicros : null, reason,
@@ -3246,7 +3292,7 @@ function executionPorts(
       });
       return { duplicate: receipt.duplicate };
     },
-    recordEvent: async ({ type, taskId, payload }) => {
+    recordEvent: async ({ type, taskId, payload, idempotencyKey }) => {
       const facts: Record<string, string | number | boolean | null> = {};
       for (const [key, value] of Object.entries(payload)) {
         facts[key] = value === null || ['string', 'number', 'boolean'].includes(typeof value) ? value as string | number | boolean | null : String(value);
@@ -3257,7 +3303,8 @@ function executionPorts(
       // shape the first paid mission failed in. (This port also carries
       // `worker.selected`, `budget.reserved` and `worker.dispatched`, which name
       // the same claimed task, as do the coordinator's other events.)
-      await ledger.event(type, { taskId, facts: { ...facts, runId: run.runId } });
+      // Keyed by the coordinator's own idempotency key, so a write it repeats is the same event.
+      await ledger.eventOnce(idempotencyKey, type, { taskId, facts: { ...facts, runId: run.runId } });
     },
   };
 }
