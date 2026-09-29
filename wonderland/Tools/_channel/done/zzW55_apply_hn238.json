@@ -1,0 +1,16 @@
+{
+ "name": "zzW55_apply_hn238",
+ "started": "2026-09-29 04:58:17",
+ "status": "done",
+ "waited_for_pie_seconds": 0.0,
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "HN238",
+ "actors": 0,
+ "batches": 232,
+ "instances": 2933,
+ "hovers": 0,
+ "finished": "2026-09-29 04:58:26",
+ "seconds": 9.4,
+ "log": "applied HN238 0 actors 232 batches 2933 instances\n"
+}

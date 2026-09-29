@@ -1,0 +1,26 @@
+{
+ "name": "zzW58_fill3_gate_save",
+ "started": "2026-09-29 05:00:35",
+ "status": "done",
+ "dirty_before_count": 587,
+ "pass_actor_counts": {
+  "HN238": 232,
+  "HI057": 164,
+  "HT308": 188
+ },
+ "dirty_matched_pass_actors": 584,
+ "dirty_external_objects": [
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/A2/YAQ3VUK9JROD550GHALDQ0",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/D/J6/WPP37XUO50PDWPADYNCALB",
+  "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/ZX/1VITQ8DDS88RMOBERUQLZB"
+ ],
+ "dirty_stub": [],
+ "dirty_unexpected": [],
+ "gate_ok": true,
+ "saved": true,
+ "save_seconds": 4.3,
+ "dirty_after": [],
+ "finished": "2026-09-29 05:00:40",
+ "seconds": 4.78,
+ "log": ""
+}

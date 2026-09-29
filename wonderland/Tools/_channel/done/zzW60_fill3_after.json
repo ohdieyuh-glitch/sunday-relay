@@ -1,0 +1,55 @@
+{
+ "name": "zzW60_fill3_after",
+ "started": "2026-09-29 05:05:54",
+ "status": "done",
+ "shots": [
+  {
+   "camera": "hn238_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hn238_aerial__fill3_after.png",
+   "ok": true
+  },
+  {
+   "camera": "hn238_walk",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hn238_walk__fill3_after.png",
+   "ok": true
+  },
+  {
+   "camera": "hi057_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hi057_aerial__fill3_after.png",
+   "ok": true
+  },
+  {
+   "camera": "hi057_walk",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hi057_walk__fill3_after.png",
+   "ok": true
+  },
+  {
+   "camera": "ht308_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\ht308_aerial__fill3_after.png",
+   "ok": true
+  },
+  {
+   "camera": "ht308_walk",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\ht308_walk__fill3_after.png",
+   "ok": true
+  },
+  {
+   "camera": "hn238_distant",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hn238_distant__fill3_after.png",
+   "ok": true
+  },
+  {
+   "camera": "hi057_distant",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hi057_distant__fill3_after.png",
+   "ok": true
+  },
+  {
+   "camera": "ht308_distant",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\ht308_distant__fill3_after.png",
+   "ok": true
+  }
+ ],
+ "finished": "2026-09-29 05:06:14",
+ "seconds": 20.33,
+ "log": ""
+}

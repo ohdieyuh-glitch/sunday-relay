@@ -1,0 +1,92 @@
+{
+ "name": "zzW61_hi057_drift_probe",
+ "started": "2026-09-29 05:05:04",
+ "status": "proved",
+ "day_minutes_found": 24.0,
+ "regions": [
+  {
+   "pass": "HI057",
+   "walk_points": 3,
+   "stands": [
+    {
+     "at": [
+      81762,
+      72184
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 1,
+   "verdict": {
+    "stands_pass": 1,
+    "stands": 1,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 45,
+    "resident_instances": 542,
+    "dog_died": false,
+    "stands_not_ground": 0
+   },
+   "resident_labels": [
+    "HI057_HI057_Canopy_mature_LeafDark_t3_4",
+    "HI057_HI057_Canopy_mature_LeafMid_t3_3",
+    "HI057_HI057_Canopy_mature_PetalWhite_t2_4",
+    "HI057_HI057_Canopy_slender_LeafDark_t1_3",
+    "HI057_HI057_Canopy_slender_LeafDark_t2_4",
+    "HI057_HI057_Canopy_slender_LeafDark_t3_4",
+    "HI057_HI057_Canopy_slender_LeafMid_t2_4",
+    "HI057_HI057_Canopy_slender_LeafMid_t3_3",
+    "HI057_HI057_Canopy_slender_LeafMid_t3_4",
+    "HI057_HI057_Canopy_slender_PetalWhite_t2_4",
+    "HI057_HI057_Canopy_slender_PetalWhite_t3_3",
+    "HI057_HI057_Canopy_slender_PetalWhite_t3_4",
+    "HI057_HI057_Flower_Daisy_Run_leaf_t4_3",
+    "HI057_HI057_Flower_Daisy_Run_petal_centre_t4_3",
+    "HI057_HI057_Flower_Daisy_Run_petal_t4_3",
+    "HI057_HI057_Flower_Lavender_Run_leaf_t2_3",
+    "HI057_HI057_Flower_Lavender_Run_leaf_t3_3",
+    "HI057_HI057_Flower_Lavender_Run_petal_t2_3",
+    "HI057_HI057_Flower_Lavender_Run_petal_t3_3",
+    "HI057_HI057_Flower_Rose_Run_leaf_t1_3",
+    "HI057_HI057_Flower_Rose_Run_petal_t1_3",
+    "HI057_HI057_Ground_Flagstone_A_moss_t2_4",
+    "HI057_HI057_Ground_Flagstone_A_paving_shade_t2_4",
+    "HI057_HI057_Ground_Flagstone_A_paving_t2_4",
+    "HI057_HI057_Ground_Flagstone_A_paving_warm_t2_4",
+    "HI057_HI057_Ground_Flagstone_B_moss_t2_4",
+    "HI057_HI057_Ground_Flagstone_B_paving_shade_t2_4",
+    "HI057_HI057_Ground_Flagstone_B_paving_t2_4",
+    "HI057_HI057_Ground_Flagstone_B_paving_warm_t2_4",
+    "HI057_HI057_Ground_Flagstone_C_moss_t2_4",
+    "HI057_HI057_Ground_Flagstone_C_paving_shade_t2_4",
+    "HI057_HI057_Ground_Flagstone_C_paving_t2_4",
+    "HI057_HI057_Ground_Flagstone_C_paving_warm_t2_4",
+    "HI057_HI057_Rose_t2_4",
+    "HI057_HI057_Rose_t3_4",
+    "HI057_HI057_Shrub_t2_4",
+    "HI057_HI057_Shrub_t3_3",
+    "HI057_HI057_Shrub_t3_4",
+    "HI057_HI057_Trunk_mature_t2_4",
+    "HI057_HI057_Trunk_mature_t3_3",
+    "HI057_HI057_Trunk_mature_t3_4",
+    "HI057_HI057_Trunk_slender_t1_3",
+    "HI057_HI057_Trunk_slender_t2_4",
+    "HI057_HI057_Trunk_slender_t3_3",
+    "HI057_HI057_Trunk_slender_t3_4"
+   ]
+  }
+ ],
+ "day_minutes_restored": 24.0,
+ "finished": "2026-09-29 05:05:39",
+ "seconds": 34.98,
+ "log": "HI057 {'stands_pass': 1, 'stands': 1, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 45, 'resident_instances': 542, 'dog_died': False, 'stands_not_ground': 0}\n"
+}
