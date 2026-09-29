@@ -108,6 +108,9 @@ describe('the control case: paid attempt 1, replayed', () => {
     expect(row.diag_announcedModel).toBe('claude-fable-5');
     expect(row.diag_turnModel).toBeNull();
     expect(row.diag_turnModelCount).toBe(0);
+    // Nothing credited, so there is no runtime mapping to compare the request with.
+    expect(row.diag_servedModelUsageKey).toBeNull();
+    expect(row.diag_servedModelUsageCanonical).toBeNull();
   });
 
   it('the placeholder model is not what excludes the turn: zero output is', () => {
@@ -129,6 +132,7 @@ describe('a served model is named only when the turns and the result agree', () 
     const row = durableRow([init(), turn('claude-fable-5', 400), turn('claude-fable-5', 500), result()]);
     expect(row).toMatchObject({
       diag_servedModel: 'claude-fable-5', diag_servedModelBasis: 'attested', diag_announcedModel: 'claude-fable-5',
+      diag_servedModelUsageKey: 'claude-fable-5', diag_servedModelUsageCanonical: null,
       diag_turnModel: 'claude-fable-5', diag_turnModelCount: 1, diag_resultModelCount: 1,
       diag_resultModelFirst: 'claude-fable-5', diag_resultModelFirstOutputTokens: 900,
       diag_resultModelSecond: null, diag_resultModelSecondOutputTokens: null,
@@ -141,6 +145,8 @@ describe('a served model is named only when the turns and the result agree', () 
     })]);
     expect(row).toMatchObject({
       diag_servedModel: 'claude-fable-5', diag_servedModelBasis: 'attested', diag_resultModelCount: 2,
+      // The crediting entry is the served model's, never the helper's.
+      diag_servedModelUsageKey: 'claude-fable-5',
       // Largest producer first, whatever order the runtime wrote them in.
       diag_resultModelFirst: 'claude-fable-5', diag_resultModelFirstOutputTokens: 900,
       diag_resultModelSecond: 'claude-helper-1', diag_resultModelSecondInputTokens: 40, diag_resultModelSecondOutputTokens: 12,
@@ -191,11 +197,45 @@ describe('a served model is named only when the turns and the result agree', () 
     expect(row.diag_servedModelBasis).toBe('result_disagrees');
   });
 
-  it('an alias key is matched through the SDK\'s own canonical model id', () => {
+  it('an alias key is matched through the SDK\'s own canonical model id, and the mapping is on the row', () => {
     const row = durableRow([init(), turn('claude-fable-5', 800), result({
       modelUsage: modelUsage({ fable: { out: 800, canonical: 'claude-fable-5' } }),
     })]);
-    expect(row).toMatchObject({ diag_servedModel: 'claude-fable-5', diag_servedModelBasis: 'attested', diag_resultModelFirst: 'fable' });
+    expect(row).toMatchObject({
+      diag_servedModel: 'claude-fable-5', diag_servedModelBasis: 'attested', diag_resultModelFirst: 'fable',
+      diag_servedModelUsageKey: 'fable', diag_servedModelUsageCanonical: 'claude-fable-5',
+    });
+  });
+
+  it('a dated id in the turns: the runtime\'s own canonical name for it is what a reader compares with the request', () => {
+    const row = durableRow([init('claude-fable-5'), turn('claude-fable-5-20260901', 800), result({
+      modelUsage: modelUsage({ 'claude-fable-5-20260901': { out: 800, canonical: 'claude-fable-5' } }),
+    })]);
+    expect(row).toMatchObject({
+      diag_requestedModel: 'claude-fable-5', diag_servedModel: 'claude-fable-5-20260901', diag_servedModelBasis: 'attested',
+      diag_servedModelUsageKey: 'claude-fable-5-20260901', diag_servedModelUsageCanonical: 'claude-fable-5',
+    });
+  });
+
+  it('STATED RESIDUAL: dated turns against an entry keyed and canonicalised by the alias are NOT attested, and no prefix rescues them', () => {
+    // A prefix match would make this attested, and a prefix match is also how
+    // `claude-fable-5-mini` would pass for `claude-fable-5`. The row keeps
+    // both accounts, so a person can see the case and decide it.
+    const row = durableRow([init('claude-fable-5'), turn('claude-fable-5-20260901', 800), result({
+      modelUsage: modelUsage({ 'claude-fable-5': { out: 800, canonical: 'claude-fable-5' } }),
+    })]);
+    expect(row).toMatchObject({
+      diag_servedModel: null, diag_servedModelBasis: 'result_disagrees',
+      diag_turnModel: 'claude-fable-5-20260901', diag_resultModelFirst: 'claude-fable-5',
+      diag_servedModelUsageKey: null, diag_servedModelUsageCanonical: null,
+    });
+  });
+
+  it('two entries that could credit the model: the larger producer is the one named', () => {
+    const observed = observeHostedMessages([init(), turn('claude-fable-5', 800), result({
+      modelUsage: modelUsage({ 'claude-fable-5': { out: 30 }, fable: { out: 770, canonical: 'claude-fable-5' } }),
+    })]);
+    expect(hostedServedModel(observed).credit).toMatchObject({ model: 'fable', canonicalModel: 'claude-fable-5', outputTokens: 770 });
   });
 
   it('a subagent\'s turn and an error delivered as a message are not the session\'s turns', () => {
@@ -206,7 +246,7 @@ describe('a served model is named only when the turns and the result agree', () 
       result({ modelUsage: modelUsage({ 'claude-fable-5': { out: 800 }, 'claude-helper-1': { out: 500 } }) }),
     ]);
     expect(observed.turnModels).toEqual([{ model: 'claude-fable-5', turns: 1, outputTokens: 800 }]);
-    expect(hostedServedModel(observed)).toEqual({ servedModel: 'claude-fable-5', basis: 'attested' });
+    expect(hostedServedModel(observed)).toMatchObject({ servedModel: 'claude-fable-5', basis: 'attested', credit: { model: 'claude-fable-5' } });
   });
 
   it('more entries than the columns hold: the count says so, and the largest three are kept', () => {
@@ -239,10 +279,12 @@ describe('the new columns survive the allowlist, and only as what they are', () 
     const safe = safeReviewDiagnostics({
       servedModelBasis: 'trust_me', announcedModel: 'sk-ant-api03-notakey', turnModel: 'claude fable', resultModelFirst: 'Bearer abc',
       resultModelFirstOutputTokens: -5, resultModelSecondInputTokens: 1.5, turnModelCount: 2, resultModelCount: 3,
+      servedModelUsageKey: 'sk-ant-api03-notakey', servedModelUsageCanonical: 'claude-fable-5',
     });
     expect(safe).toMatchObject({
       servedModelBasis: null, announcedModel: null, turnModel: null, resultModelFirst: null,
       resultModelFirstOutputTokens: null, resultModelSecondInputTokens: null, turnModelCount: 2, resultModelCount: 3,
+      servedModelUsageKey: null, servedModelUsageCanonical: 'claude-fable-5',
     });
   });
 
@@ -250,7 +292,7 @@ describe('the new columns survive the allowlist, and only as what they are', () 
     const row = flattenDiagnostics(safeReviewDiagnostics(hostedCoderDiagnostics({
       taskType: 'build', requestedModel: 'claude-fable-5', observed: null, limits: DEFAULT_HOSTED_LIMITS, outcome: 'failed',
     })));
-    for (const key of ['diag_servedModel', 'diag_servedModelBasis', 'diag_announcedModel', 'diag_turnModel', 'diag_turnModelCount', 'diag_resultModelCount', 'diag_resultModelFirst']) {
+    for (const key of ['diag_servedModel', 'diag_servedModelBasis', 'diag_servedModelUsageKey', 'diag_servedModelUsageCanonical', 'diag_announcedModel', 'diag_turnModel', 'diag_turnModelCount', 'diag_resultModelCount', 'diag_resultModelFirst']) {
       expect(row[key], `${key} must be unknown when nothing was observed`).toBeNull();
     }
   });

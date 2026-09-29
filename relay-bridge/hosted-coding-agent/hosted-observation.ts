@@ -475,15 +475,26 @@ export type HostedServedModelBasis = (typeof HOSTED_SERVED_MODEL_BASES)[number];
 export function hostedServedModel(o: HostedObservation): {
   readonly servedModel: string | null;
   readonly basis: HostedServedModelBasis;
+  /**
+   * THE `modelUsage` ENTRY THAT CREDITED THE SERVED MODEL, when one did: its key
+   * and the SDK's `canonicalModel` for it. A reader comparing the served model
+   * with the REQUESTED one needs this entry's mapping and no other, because it
+   * is the runtime's own resolution of the name it was asked for. Null
+   * whenever nothing is attested.
+   */
+  readonly credit: HostedResultModelUsage | null;
 } {
-  if (o.turnModels.length === 0) return { servedModel: null, basis: 'no_output_turns' };
-  if (o.turnModels.length > 1) return { servedModel: null, basis: 'mixed_turn_models' };
-  if (o.resultSubtype === null) return { servedModel: null, basis: 'no_result' };
-  if (o.resultModelUsage === null) return { servedModel: null, basis: 'no_model_usage' };
+  if (o.turnModels.length === 0) return { servedModel: null, basis: 'no_output_turns', credit: null };
+  if (o.turnModels.length > 1) return { servedModel: null, basis: 'mixed_turn_models', credit: null };
+  if (o.resultSubtype === null) return { servedModel: null, basis: 'no_result', credit: null };
+  if (o.resultModelUsage === null) return { servedModel: null, basis: 'no_model_usage', credit: null };
   const turn = o.turnModels[0].model;
-  const credited = o.resultModelUsage.some((entry) =>
-    (entry.model === turn || entry.canonicalModel === turn) && entry.outputTokens !== null && entry.outputTokens > 0);
-  return credited ? { servedModel: turn, basis: 'attested' } : { servedModel: null, basis: 'result_disagrees' };
+  // The entries are ordered largest producer first, so the first to credit the turns' model is the one that did most.
+  const credit = o.resultModelUsage.find((entry) =>
+    (entry.model === turn || entry.canonicalModel === turn) && entry.outputTokens !== null && entry.outputTokens > 0) ?? null;
+  return credit === null
+    ? { servedModel: null, basis: 'result_disagrees', credit: null }
+    : { servedModel: turn, basis: 'attested', credit };
 }
 
 /**
