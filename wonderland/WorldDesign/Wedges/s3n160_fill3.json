@@ -62,7 +62,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3N160_Canopy_slender_LeafMid_t-5_1",
@@ -106,7 +106,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3N160_Trunk_mature_t-5_1",
@@ -128,7 +128,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3N160_Canopy_mature_LeafDark_t-5_1",
@@ -150,7 +150,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3N160_Canopy_slender_LeafDark_t-5_1",
@@ -172,7 +172,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3N160_Rose_t-5_1",

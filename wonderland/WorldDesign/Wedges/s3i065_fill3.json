@@ -84,7 +84,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3I065_Canopy_slender_LeafMid_t0_1",
@@ -117,7 +117,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3I065_Trunk_slender_t1_1",
@@ -139,7 +139,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3I065_Canopy_slender_LeafMid_t1_1",
@@ -161,7 +161,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3I065_Canopy_slender_LeafDark_t0_1",
@@ -194,7 +194,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3I065_Canopy_slender_PetalWhite_t0_1",
@@ -227,7 +227,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3I065_Shrub_t1_1",
@@ -359,7 +359,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3I065_Canopy_mature_LeafMid_t1_2",
@@ -381,7 +381,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3I065_Trunk_slender_t1_2",
@@ -414,7 +414,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3I065_Canopy_slender_LeafMid_t1_2",
@@ -436,7 +436,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3I065_Canopy_slender_LeafDark_t1_2",
@@ -458,7 +458,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S3I065_Shrub_t1_2",

@@ -84,7 +84,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2T300_Canopy_slender_LeafCopper_t1_-2",
@@ -139,7 +139,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2T300_Canopy_slender_LeafGold_t1_-2",
@@ -172,7 +172,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2T300_Shrub_t1_-2",
@@ -326,7 +326,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2T300_Canopy_slender_LeafCopper_t1_-3",
@@ -381,7 +381,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2T300_Canopy_slender_LeafGold_t1_-3",
@@ -414,7 +414,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2T300_Shrub_t1_-3",

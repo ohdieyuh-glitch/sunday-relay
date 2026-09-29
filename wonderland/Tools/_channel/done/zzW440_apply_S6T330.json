@@ -1,0 +1,16 @@
+{
+ "name": "zzW440_apply_S6T330",
+ "started": "2026-09-29 14:49:36",
+ "status": "done",
+ "waited_for_pie_seconds": 0.0,
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "S6T330",
+ "actors": 0,
+ "batches": 69,
+ "instances": 266,
+ "hovers": 0,
+ "finished": "2026-09-29 14:49:42",
+ "seconds": 5.64,
+ "log": "applied S6T330 0 actors 69 batches 266 instances\n"
+}

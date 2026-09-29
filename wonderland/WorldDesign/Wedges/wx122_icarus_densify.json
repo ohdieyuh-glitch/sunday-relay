@@ -1305,7 +1305,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafGold_t-5_5",
@@ -3098,7 +3098,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Trunk_mature_t-7_4",
@@ -5540,7 +5540,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_PetalWhite_t-5_5",
@@ -5738,7 +5738,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Shrub_t-5_5",
@@ -7047,7 +7047,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafMid_t-6_5",
@@ -7828,7 +7828,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafGold_t-6_4",
@@ -8048,7 +8048,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafMid_t-5_5",
@@ -8609,7 +8609,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Shrub_t-6_4",
@@ -9225,7 +9225,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafDark_t-7_4",
@@ -9951,7 +9951,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafCopper_t-6_3",
@@ -10061,7 +10061,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Rose_t-6_3",
@@ -10501,7 +10501,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafCopper_t-6_5",
@@ -11436,7 +11436,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafCopper_t-5_4",
@@ -11590,7 +11590,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Trunk_slender_t-4_5",
@@ -11887,7 +11887,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafMid_t-4_5",
@@ -11964,7 +11964,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Shrub_t-4_5",
@@ -12162,7 +12162,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Trunk_slender_t-4_4",
@@ -12316,7 +12316,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafMid_t-4_4",
@@ -12371,7 +12371,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafGold_t-6_3",
@@ -12470,7 +12470,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Trunk_mature_t-6_3",
@@ -12591,7 +12591,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafDark_t-6_3",
@@ -12624,7 +12624,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafMid_t-5_4",
@@ -12789,7 +12789,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafCopper_t-4_4",
@@ -12844,7 +12844,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafGold_t-5_4",
@@ -12976,7 +12976,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_PetalWhite_t-4_5",
@@ -13075,7 +13075,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Rose_t-5_4",
@@ -13273,7 +13273,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_PetalWhite_t-4_4",
@@ -13317,7 +13317,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Shrub_t-4_4",
@@ -13372,7 +13372,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafMid_t-5_3",
@@ -13394,7 +13394,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Trunk_mature_t-4_4",
@@ -13504,7 +13504,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafMid_t-4_4",
@@ -13570,7 +13570,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_PetalWhite_t-6_3",
@@ -13614,7 +13614,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafMid_t-6_3",
@@ -13812,7 +13812,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_PetalWhite_t-5_4",
@@ -13955,7 +13955,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_PetalWhite_t-4_4",
@@ -13988,7 +13988,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Trunk_mature_t-5_4",
@@ -14153,7 +14153,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafMid_t-5_4",
@@ -14252,7 +14252,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafCopper_t-4_5",
@@ -14307,7 +14307,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafGold_t-4_4",
@@ -14329,7 +14329,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafDark_t-4_4",
@@ -14351,7 +14351,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafGold_t-6_3",
@@ -14373,7 +14373,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Shrub_t-6_3",
@@ -14450,7 +14450,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafMid_t-6_3",
@@ -14505,7 +14505,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafDark_t-4_5",
@@ -14538,7 +14538,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafCopper_t-5_4",
@@ -14571,7 +14571,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafGold_t-5_4",
@@ -14604,7 +14604,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Trunk_mature_t-4_5",
@@ -14637,7 +14637,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafDark_t-4_5",
@@ -14659,7 +14659,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Rose_t-4_4",
@@ -14758,7 +14758,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafGold_t-4_5",
@@ -14835,7 +14835,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Trunk_slender_t-5_3",
@@ -14857,7 +14857,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_PetalWhite_t-5_3",
@@ -14879,7 +14879,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_mature_LeafMid_t-4_5",
@@ -14901,7 +14901,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafDark_t-4_4",
@@ -14923,7 +14923,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "WX122_Canopy_slender_LeafGold_t-4_4",
@@ -14945,7 +14945,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   }
  ]
 }

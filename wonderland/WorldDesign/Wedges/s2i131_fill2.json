@@ -832,7 +832,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2I131_Canopy_slender_LeafMid_t-4_4",
@@ -920,7 +920,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2I131_Trunk_slender_t-5_4",
@@ -942,7 +942,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2I131_Canopy_slender_LeafMid_t-5_4",
@@ -964,7 +964,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2I131_Trunk_mature_t-4_4",
@@ -1008,7 +1008,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2I131_Canopy_mature_PetalWhite_t-4_4",
@@ -1030,7 +1030,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2I131_Canopy_slender_PetalWhite_t-4_4",
@@ -1063,7 +1063,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2I131_Rose_t-4_4",
@@ -1250,7 +1250,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2I131_Canopy_mature_LeafMid_t-4_4",
@@ -1272,7 +1272,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2I131_Canopy_mature_LeafDark_t-4_4",
@@ -1294,7 +1294,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2I131_Ground_Flagstone_A_moss_t-4_4",

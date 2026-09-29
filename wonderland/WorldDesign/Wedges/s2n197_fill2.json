@@ -931,7 +931,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_slender_LeafDark_t-6_-2",
@@ -1030,7 +1030,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Trunk_mature_t-4_-2",
@@ -1052,7 +1052,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_mature_LeafMid_t-4_-2",
@@ -1074,7 +1074,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Trunk_slender_t-4_-2",
@@ -1151,7 +1151,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_slender_PetalWhite_t-4_-2",
@@ -1195,7 +1195,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Trunk_slender_t-4_-1",
@@ -1217,7 +1217,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_slender_LeafDark_t-4_-1",
@@ -1239,7 +1239,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_slender_LeafMid_t-4_-2",
@@ -1272,7 +1272,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_slender_LeafDark_t-4_-2",
@@ -1294,7 +1294,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Shrub_t-4_-2",
@@ -1437,7 +1437,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_mature_LeafDark_t-5_-2",
@@ -1459,7 +1459,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Trunk_slender_t-5_-2",
@@ -1668,7 +1668,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_slender_PetalWhite_t-5_-2",
@@ -1756,7 +1756,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_slender_LeafDark_t-5_-2",
@@ -1877,7 +1877,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Rose_t-5_-2",
@@ -2097,7 +2097,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_mature_LeafDark_t-6_-2",
@@ -2130,7 +2130,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_slender_LeafMid_t-6_-2",
@@ -2152,7 +2152,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Rose_t-6_-2",
@@ -2383,7 +2383,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_slender_LeafDark_t-5_-1",
@@ -2416,7 +2416,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_slender_LeafMid_t-5_-2",
@@ -2438,7 +2438,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Shrub_t-5_-1",
@@ -2515,7 +2515,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_slender_PetalWhite_t-6_-2",
@@ -2548,7 +2548,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Canopy_mature_LeafMid_t-6_-2",
@@ -2570,7 +2570,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "S2N197_Ground_Flagstone_A_moss_t-4_-1",

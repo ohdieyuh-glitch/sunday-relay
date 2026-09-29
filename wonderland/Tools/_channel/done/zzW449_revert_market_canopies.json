@@ -1,0 +1,51 @@
+{
+ "name": "zzW449_revert_market_canopies",
+ "started": "2026-09-29 14:51:52",
+ "status": "done",
+ "reverted": [
+  [
+   "W270T_W270T_Market_Canopy_stone_t0_-4",
+   "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/PK/LTC4NRTQIC6OGBR3P4Z5JJ"
+  ],
+  [
+   "W270T_W270T_Market_Canopy_stone_t0_-5",
+   "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/4/SY/XIXSBMCBTZVOW9LFMR2DJ7"
+  ],
+  [
+   "W270T_W270T_Market_Canopy_roof_alt_t0_-5",
+   "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/MU/MMUVDYX220BTJIYJ27VU7R"
+  ],
+  [
+   "W270T_W270T_Market_Canopy_metal_t0_-5",
+   "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/BE/IXV42IKQM4RSAJX7XMX3FH"
+  ],
+  [
+   "W270T_W270T_Market_Canopy_gold_t0_-5",
+   "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/RT/BZ4AIPK130WVJK5VUUTJYC"
+  ],
+  [
+   "W270T_W270T_Market_Canopy_gold_t0_-4",
+   "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/4/1L/VWQC79VCERK6H6E18KLSAG"
+  ],
+  [
+   "W270T_W270T_Market_Canopy_roof_t0_-4",
+   "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/4/XC/ZJOPWMYYCSE9BQ7CJCOX0Q"
+  ],
+  [
+   "W270T_W270T_Market_Canopy_roof_t0_-5",
+   "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/QK/L9EI6WA4CHY9Y550US9DOM"
+  ],
+  [
+   "W270T_W270T_Market_Canopy_metal_t0_-4",
+   "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/LN/QYJ0JPLA814MI4Q2CHDP4X"
+  ],
+  [
+   "W270T_W270T_Market_Canopy_roof_alt_t0_-4",
+   "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/D/JF/16SD2RV6RI34P9FO5FMAY1"
+  ]
+ ],
+ "count": 10,
+ "finished": "2026-09-29 14:51:52",
+ "seconds": 0.34,
+ "log": ""
+}

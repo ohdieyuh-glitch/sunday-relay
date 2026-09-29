@@ -406,11 +406,13 @@ class Pass:
             return False
         ground = GROUND_Z if base_z is None else base_z
         if kind.startswith("tree_"):
+            # TREES CULL AT CULL_FAR (600 m), not CULL_MID: at 260 m more than half of what the 512 m streaming
+            # radius loads was never drawn (14,699 of 25,634 tree instances; CORE's A/B gate, 2026-09-29)
             trunk, th, canopy, dzr, csr = TREES[kind[5:]]
             z = ground - 20.0
-            self.add("Trunk_" + kind[5:], VEG[trunk], "MI_V2_Bark", u, v, z, yaw, scale, CULL_MID, collides=True)
+            self.add("Trunk_" + kind[5:], VEG[trunk], "MI_V2_Bark", u, v, z, yaw, scale, CULL_FAR, collides=True)
             self.add("Canopy_%s_%s" % (kind[5:], leaf.replace("MI_V2_", "")), VEG[canopy], leaf, u, v,
-                     z + th * scale * dzr, yaw, scale * csr, CULL_MID, shadow=True)
+                     z + th * scale * dzr, yaw, scale * csr, CULL_FAR, shadow=True)
         else:
             mesh = VEG[kind]
             mat = leaf if kind != "waymarker" else "MI_V2_GlassAmber"

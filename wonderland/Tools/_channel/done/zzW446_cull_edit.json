@@ -1,0 +1,19 @@
+{
+ "name": "zzW446_cull_edit",
+ "started": "2026-09-29 14:50:14",
+ "status": "mismatch",
+ "changed": 1728,
+ "per_pass_mismatch": {
+  "W270T": [
+   37,
+   27
+  ]
+ },
+ "skipped": {
+  "cull_60000": 451
+ },
+ "dirty_after": 2190,
+ "finished": "2026-09-29 14:50:15",
+ "seconds": 1.14,
+ "log": ""
+}

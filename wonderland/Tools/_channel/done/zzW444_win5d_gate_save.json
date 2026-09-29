@@ -1,0 +1,44 @@
+{
+ "name": "zzW444_win5d_gate_save",
+ "started": "2026-09-29 14:52:20",
+ "status": "done",
+ "dirty_before_count": 2190,
+ "memory_gate": {
+  "system_commit_gb": 37.3,
+  "editor_private_gb": 14.5,
+  "dirty_count": 2190,
+  "commit_max_gb": 42.0
+ },
+ "pass_actor_counts": {
+  "S6T330": 69,
+  "S6T350": 34,
+  "S5D090": 203,
+  "S5W090": 152
+ },
+ "count_mismatch": {},
+ "guard_tr01_intact": true,
+ "dirty": {
+  "new_pass": 458,
+  "replaced_deleted": 0,
+  "modified": 1728,
+  "objects": [
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/8D/2XY2OTIVN6RZXO3471VRVW",
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/B/KO/GDP6TTY6CYUKNIM96XUEK2",
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/F/1D/7DHEB3YVRNMWRBXTKBRVAU",
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/62/O9LACMRY42R1KQQCTYO91P"
+  ],
+  "stub": [],
+  "unexpected": []
+ },
+ "gate_ok": true,
+ "saved": true,
+ "save_seconds": 14.3,
+ "dirty_after": [],
+ "memory_after": {
+  "system_commit_gb": 37.3,
+  "editor_private_gb": 14.5
+ },
+ "finished": "2026-09-29 14:52:39",
+ "seconds": 18.54,
+ "log": ""
+}
