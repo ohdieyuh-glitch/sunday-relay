@@ -38,7 +38,7 @@ import { planRunStatePath, transitionIsLegal } from './julius-state-path';
  */
 export { planRunStatePath, transitionIsLegal };
 import {
-  juliusArchitectureGateFor, juliusFindingsGateFor, prepareClaimedTask, resumeUnverifiedTasks, runClaimedTask, serveArchitectureTriggers,
+  holdClaimAtAdmission, juliusArchitectureGateFor, juliusFindingsGateFor, prepareClaimedTask, resumeUnverifiedTasks, runClaimedTask, serveArchitectureTriggers,
   type JuliusPipelineDependencies, type JuliusTaskOutcome,
 } from './julius-task-pipeline';
 import { continuationConcurrency } from './julius-continuation';
@@ -493,15 +493,26 @@ export class JuliusRunLoop {
        * `null` means the lease moved while we decided. The task is somebody
        * else's now: do not run it, and do not finish it either, because
        * finishing needs the generation we no longer hold.
+       *
+       * A HELD ADMISSION means the RUN refused it: paused, blocked, or holding
+       * an approval after the dispatch boundary had already looked (F3).
+       * Nothing was spent and the lease is still ours, so the task is handed
+       * back or ended exactly as the boundary would have done.
        */
-      const attempt = await this.deps.store.admitTask({
+      const admission = await this.deps.store.admitTask({
         taskId: claim.taskId, owner: this.deps.owner,
         leaseGeneration: claim.leaseGeneration, now: this.deps.clock.now(),
       });
-      if (attempt === null) {
+      if (admission === null) {
         lostLeases += 1;
         continue;
       }
+      if (typeof admission !== 'number') {
+        refusedBeforeAdmission += 1;
+        outcomes.push(await holdClaimAtAdmission(request, this.deps, scope));
+        continue;
+      }
+      const attempt = admission;
       /**
        * THE LEASE IS RENEWED FROM ADMISSION, not trusted from the claim. A task
        * queued behind another in this tick spent its lease waiting; the first
