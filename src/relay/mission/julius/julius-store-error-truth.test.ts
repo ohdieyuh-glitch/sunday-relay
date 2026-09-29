@@ -120,6 +120,23 @@ describe('P0: before the work is handed, nothing is spent and the failure is Jul
     expect(h.log.pauses).toEqual([]);
     expect(h.log.dispatches).toBe(0);
   });
+
+  /**
+   * THE SAME RULE ONE WRITE LATER. `worker.dispatched` is written inside the
+   * dispatch phase but BEFORE the work is handed, so its failure is judged by a
+   * second branch (`!handed ? persistenceFailure('persist_before_dispatch', …)`),
+   * not by the reservation phase's. The case above never reaches it; without
+   * this one, that branch could call every store error transient and retry an
+   * integrity violation at the task level unobserved.
+   */
+  it('an INTEGRITY error writing worker.dispatched (still before the handoff) fails once, is not retried, and frees the hold', async () => {
+    const h = harness({ failEvents: { 'worker.dispatched': [pg('23505')] } });
+    const outcome = await h.coordinator.execute(request);
+    expect(outcome).toMatchObject({ status: 'FAILED', code: 'PERSISTENCE_FAILURE', failureClass: 'persist_before_dispatch', diagnostics: { diag_storeErrorClass: 'integrity', diag_runtimeStarted: false } });
+    expect(h.log.pauses, 'an integrity error is not retried as bookkeeping either').toEqual([]);
+    expect(h.log.dispatches, 'nothing was handed').toBe(0);
+    expect(h.log.releases, 'the hold is released as spending nothing').toEqual([{ usdMicros: null, spendUnknown: false }]);
+  });
 });
 
 describe('P1: out of the dispatch, only the worker\'s boundary is the worker\'s', () => {
