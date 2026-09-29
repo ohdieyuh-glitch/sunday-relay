@@ -786,7 +786,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'worker-diagnostics.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -1038,6 +1038,94 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     expect(dumps.find((dump) => dump.file === 'evidence.tsv')?.columns).toContain('evidence_type');
     expect(dumps.find((dump) => dump.file === 'findings.tsv')?.table).toBe('julius_reviewer_findings');
+  });
+
+  /**
+   * WHICH CODE, WHICH MODE, WHICH RUN (GATE_AUDIT.md P0-2). A bundle carried
+   * none of them, so the Beta Gate scored a main bundle against a stack tree and
+   * a free dry run's receipts as a paid mission's. The manifest is written
+   * FIRST, from machine tokens only, and nothing in it can abort the dump that
+   * runs under `set -e`.
+   */
+  it('names the commit, the mode and the one Julius run in a manifest written before any query', () => {
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const called = script.indexOf("write_manifest || echo 'JULIUS_EVIDENCE_MANIFEST unavailable'");
+    expect(called, 'the manifest is written, and a failure to write it cannot stop the dump').toBeGreaterThan(0);
+    expect(called, 'before the first table').toBeLessThan(script.indexOf('dump "SELECT'));
+    for (const key of ['manifest_version=1', 'commit=', 'tree=', 'mode=', 'mode_basis=', 'julius_run_id=', 'workflow_run_id=', 'workflow_run_attempt=', 'workflow_ref=', 'event=']) {
+      expect(script, `the manifest records ${key}`).toContain(`echo "${key}`.replace('echo "manifest_version=1', "echo 'manifest_version=1"));
+    }
+    expect(script, 'the file the gate reads').toContain('"$out/bundle-manifest.txt"');
+    // PAID ONLY ON THE ONE PAID PATH: a workflow_dispatch whose typed confirmation is exact.
+    expect(script).toContain('[ "${GITHUB_EVENT_NAME:-}" = workflow_dispatch ]');
+    expect(script).toContain(`grep -Eq '"confirm_live"[[:space:]]*:[[:space:]]*"RUN LIVE MISSION"' "$GITHUB_EVENT_PATH"`);
+    expect(script, 'off a runner the launcher must say it; undeclared is never paid').toContain('*) mode=unknown; mode_basis=undeclared ;;');
+    // THE RUN is the entrypoint's own accepted line, never a row order.
+    expect(script).toContain("s/^Run \\([^ ]*\\) accepted in state READY; driving the Julius run loop\\.$/\\1/p");
+    // The local launcher declares its mode for the one paid path it has.
+    const launcher = read('scripts/julius-local-qualification.sh');
+    expect(launcher).toContain('JULIUS_EVIDENCE_MODE="$evidence_mode" PGPASSWORD="$DB_PASSWORD_VALUE" ./.github/julius-live-evidence-dump.sh "$out"');
+  });
+
+  it('every run-scoped table names its run, so a database holding two runs cannot mix them (GATE_AUDIT.md P1-3)', () => {
+    const simple = queries();
+    for (const dump of simple.filter((entry) => entry.file !== 'sessions.tsv')) {
+      expect(dump.columns, `${dump.file} carries run_id`).toContain('run_id');
+    }
+    const script = read('.github/julius-live-evidence-dump.sh');
+    for (const file of ['failures.tsv', 'budget.tsv', 'settlement-integrity.tsv', 'worker-diagnostics.tsv', 'contract-events.tsv', 'effort.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'finding-lifecycle.tsv']) {
+      const query = script.split('\n').find((line) => line.startsWith('dump "SELECT') && line.endsWith(` ${file}`)) ?? '';
+      expect(query, `${file} exports its stream as run_id`).toContain('e.stream_id AS run_id');
+    }
+    const cost = script.split('\n').find((line) => line.startsWith('dump "SELECT') && line.endsWith(' cost-accounting.tsv')) ?? '';
+    expect(cost, 'the rollup is per run as well as per role').toContain('GROUP BY 1,2 ORDER BY 1,2');
+    expect(cost).toContain('SELECT c.run_id,');
+    const status = script.split('\n').find((line) => line.startsWith('dump "SELECT') && line.endsWith(' finding-status.tsv')) ?? '';
+    expect(status).toContain('SELECT f.run_id,');
+  });
+
+  /**
+   * WHAT A VERDICT RESTED ON (boundary hunt B1, B2, B5). A resolved finding read
+   * OPEN in every export because its life is only `finding.transitioned`
+   * events; the approval could not be tied to the evidence it cited; and the
+   * boundary row could see neither a failing test's exit code nor a scope
+   * violation. Tokens and identifiers only: no reviewer claim, no warnings or
+   * resolutions prose, no path a coder wrote.
+   */
+  it('exports the finding lifecycle, the verdict tokens, the evidence ties and the boundary facts, and no prose', () => {
+    const tables = schema();
+    const dumps = queries();
+    const columns = (file: string) => dumps.find((dump) => dump.file === file)?.columns ?? [];
+    expect(columns('evidence.tsv')).toEqual(expect.arrayContaining(['task_id', 'integrity_hash']));
+    expect(columns('decisions.tsv')).toContain('evidence_ids');
+    expect(columns('findings.tsv')).toEqual(expect.arrayContaining(['task_id', 'evidence_ids']));
+    expect(columns('tool-invocations.tsv')).toEqual(expect.arrayContaining(['task_id', 'exit_code', 'recovery_state', 'completed_at']));
+    expect(tables.get('julius_tool_invocations')?.has('recovery_state'), 'recovery_state is a migrated column').toBe(true);
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const line = (file: string) => script.split('\n').find((entry) => entry.startsWith('dump "SELECT') && entry.endsWith(` ${file}`)) ?? '';
+    const lifecycle = line('finding-lifecycle.tsv');
+    for (const type of ['julius.finding.recorded', 'julius.finding.transitioned', 'julius.review.verdict.declared', 'julius.review.verdict.refused', 'julius.review.verdict.applied']) {
+      expect(lifecycle, `the lifecycle dump selects ${type}`).toContain(`'${type}'`);
+    }
+    for (const key of ['findingId', 'move', 'to', 'reviewTaskId', 'repairTaskId', 'verdict', 'declared', 'derived', 'route', 'category']) {
+      expect(lifecycle, `the lifecycle dump exports ${key}`).toContain(`'${key}'`);
+    }
+    for (const prose of ["'claim'", "'warnings'", "'resolutions'", "'explanation'"]) {
+      expect(lifecycle.includes(prose), `the lifecycle dump must not export ${prose}`).toBe(false);
+    }
+    expect(line('finding-status.tsv'), 'the status now is the last transition, else the recorded OPEN')
+      .toContain("COALESCE((SELECT t.payload->'facts'->>'to' FROM relay_wonderland.events t WHERE t.event_type='julius.finding.transitioned' AND t.stream_id=f.run_id AND t.payload->'facts'->>'findingId'=f.finding_id ORDER BY t.sequence DESC LIMIT 1),f.status)");
+    const scope = line('scope.tsv');
+    for (const type of ['julius.coder.scope.violated', 'julius.coder.implementation.recorded', 'julius.coder.attempt.workspace']) {
+      expect(scope, `the scope dump selects ${type}`).toContain(`'${type}'`);
+    }
+    for (const key of ['rule', 'scopeChecked', 'scopeViolations', 'ownScopeViolations']) expect(scope).toContain(`'${key}'`);
+    for (const text of ["'path'", "'paths'", "'own'", "'inherited'"]) {
+      expect(scope.includes(text), `the scope dump must not export ${text}, which a coder's changes wrote`).toBe(false);
+    }
+    for (const query of [lifecycle, line('finding-status.tsv'), scope]) {
+      expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+    }
   });
 });
 
@@ -2562,8 +2650,8 @@ describe('the event dumps are ordered by the ledger position, not by the wall cl
 
   it('covers every chronological event dump, so a new one cannot arrive unordered', () => {
     expect(eventDumps().map(named).sort())
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'effort.tsv', 'failures.tsv',
-        'participation.tsv', 'research.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'effort.tsv', 'failures.tsv', 'finding-lifecycle.tsv',
+        'participation.tsv', 'research.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
   });
 
   it('carries the position the ledger allocated, and the stream it is a position within', () => {
