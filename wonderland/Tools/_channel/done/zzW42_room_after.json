@@ -1,0 +1,20 @@
+{
+ "name": "zzW42_room_after",
+ "started": "2026-09-29 01:00:15",
+ "status": "done",
+ "shots": [
+  {
+   "camera": "room_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\room_aerial__room_after.png",
+   "ok": true
+  },
+  {
+   "camera": "room_door",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\room_door__room_after.png",
+   "ok": true
+  }
+ ],
+ "finished": "2026-09-29 01:00:26",
+ "seconds": 10.78,
+ "log": ""
+}
