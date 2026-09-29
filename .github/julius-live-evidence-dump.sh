@@ -21,6 +21,82 @@ dump() {
   fi
 }
 
+# WHICH CODE, WHICH WORKFLOW RUN, WHICH MODE AND WHICH JULIUS RUN THIS BUNDLE IS.
+#
+# A bundle used to carry none of them, so the Beta Gate scored any bundle against whatever tree
+# read it: paid run 36568129865's bundle, produced at main, "proved" at a stack code it never ran,
+# and a free dry run's executor receipts read as a paid mission's. `bundle-manifest.txt` is written
+# FIRST, so a dump that stops half way still says what it was, and the gate refuses to let a
+# bundle's mission rows PASS when the manifest is missing, names another commit, is not
+# `mode=paid`, or names no Julius run.
+#
+# Machine tokens only: a commit, a tree, the workflow run and attempt, the event, the mode and the
+# run id the entrypoint's own accepted line names. Nothing is read from a provider, a prompt or a
+# secret. Every value is reduced to a token alphabet, and every command is guarded: this script
+# runs under `set -e`, and a manifest that could abort the dump would cost the evidence it names.
+#
+# MODE. On a runner the dispatch input decides it: a `workflow_dispatch` whose `confirm_live` is
+# exactly `RUN LIVE MISSION` is the one paid path the mission workflow has. Anything else — a
+# preflight, a pull-request regression, an unreadable event — is not paid. Off a runner the
+# launcher must declare it (`JULIUS_EVIDENCE_MODE=paid|preflight`); undeclared is `unknown`, which
+# the gate reads as not paid.
+manifest_token() { printf '%s' "${1:-}" | tr -c 'A-Za-z0-9._:/@#+=-' '_' | cut -c1-200; }
+write_manifest() {
+  local commit tree tracked status mode mode_basis source run_id accepted count
+  commit=$(git rev-parse HEAD 2>/dev/null || echo unknown)
+  tree=$(git rev-parse 'HEAD^{tree}' 2>/dev/null || echo unknown)
+  if status=$(git status --porcelain --untracked-files=no 2>/dev/null); then
+    tracked=$(printf '%s' "$status" | grep -c . || true)
+  else
+    tracked=unknown
+  fi
+  if [ "${GITHUB_ACTIONS:-}" = true ]; then
+    source=github-actions
+    if [ ! -r "${GITHUB_EVENT_PATH:-}" ]; then
+      mode=unknown; mode_basis=event_unreadable
+    elif [ "${GITHUB_EVENT_NAME:-}" = workflow_dispatch ] \
+      && grep -Eq '"confirm_live"[[:space:]]*:[[:space:]]*"RUN LIVE MISSION"' "$GITHUB_EVENT_PATH"; then
+      mode=paid; mode_basis=dispatch_confirm_live
+    else
+      mode=preflight; mode_basis="$(manifest_token "${GITHUB_EVENT_NAME:-unknown}")_not_confirmed_live"
+    fi
+  else
+    source=local
+    case "${JULIUS_EVIDENCE_MODE:-}" in
+      paid|preflight) mode=$JULIUS_EVIDENCE_MODE; mode_basis=launcher_declared ;;
+      *) mode=unknown; mode_basis=undeclared ;;
+    esac
+  fi
+  # THE RUN THIS BUNDLE IS ABOUT, in the entrypoint's own words: the one `Run … accepted` line of
+  # the mission evidence the workflow and the local launcher both rebuild before this dump runs.
+  # None, or more than one, is `none`: the gate then scopes nothing to a run it would have guessed.
+  run_id=none
+  if [ -f "$out/live-mission.evidence.txt" ]; then
+    accepted=$(sed -n 's/^Run \([^ ]*\) accepted in state READY; driving the Julius run loop\.$/\1/p' "$out/live-mission.evidence.txt" | sort -u || true)
+    count=$(printf '%s' "$accepted" | grep -c . || true)
+    [ "$count" = 1 ] && run_id=$accepted
+  fi
+  {
+    echo 'manifest_version=1'
+    echo "source=$source"
+    echo "commit=$(manifest_token "$commit")"
+    echo "tree=$(manifest_token "$tree")"
+    echo "tracked_changes=$(manifest_token "$tracked")"
+    echo "mode=$mode"
+    echo "mode_basis=$(manifest_token "$mode_basis")"
+    echo "julius_run_id=$(manifest_token "$run_id")"
+    echo "workflow_run_id=$(manifest_token "${GITHUB_RUN_ID:-none}")"
+    echo "workflow_run_attempt=$(manifest_token "${GITHUB_RUN_ATTEMPT:-none}")"
+    echo "workflow_ref=$(manifest_token "${GITHUB_WORKFLOW_REF:-none}")"
+    echo "event=$(manifest_token "${GITHUB_EVENT_NAME:-none}")"
+    echo "ref=$(manifest_token "${GITHUB_REF:-none}")"
+    echo "github_sha=$(manifest_token "${GITHUB_SHA:-none}")"
+    echo "produced_at=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  } > "$out/bundle-manifest.txt"
+  echo "JULIUS_EVIDENCE_MANIFEST mode=$mode commit=$(manifest_token "$commit") julius_run_id=$(manifest_token "$run_id") workflow_run_id=$(manifest_token "${GITHUB_RUN_ID:-none}")"
+}
+write_manifest || echo 'JULIUS_EVIDENCE_MANIFEST unavailable'
+
 # ORDERING IS THE LEDGER'S, NOT THE CLOCK'S.
 #
 # Every query below that reads `relay_wonderland.events` selects `e.sequence` and orders by it.
@@ -44,12 +120,26 @@ dump() {
 # it: `julius_trajectory_events` has no sequence column at all and keeps its own
 # `occurred_at,trajectory_event_id` tiebreak, and `cost-accounting.tsv` is an aggregate whose
 # order is its grouping. Those are stated rather than papered over.
+#
+# EVERY FILE NAMES ITS RUN. The Beta Gate scopes each file to the one run the manifest names, so a
+# database that also holds an older, completed run (a rerun on one rig) cannot decide this run's
+# verdicts. `run_id` is APPENDED where a table carries it, so no column a reader uses moves.
+# `execution_sessions` has no run: it is scoped by the run's mission instead.
+#
+# WHAT A VERDICT RESTED ON (B5). `evidence.tsv` carries the task each row belongs to and its
+# `integrity_hash` (the DIFF's is the sha256 of the bytes a review judged), and `decisions.tsv` and
+# `findings.tsv` carry the `evidence_ids` they cite, so "the re-review accepted citing the repair's
+# evidence" is readable from the artifact rather than asserted about it.
+#
+# HOW EACH TOOL INVOCATION ENDED. `exit_code` tells a test that ran and failed (settled, the thing
+# the repair loop exists for) from an invocation that never settled; `recovery_state` names the
+# UNKNOWN_OUTCOME the terminal sweep closes an unsettled one as; `task_id` ties it to its task.
 dump "SELECT run_id,mission_id,state,card_revision,created_at,updated_at FROM relay_wonderland.julius_runs ORDER BY created_at" runs.tsv
-dump "SELECT task_id,task_type,role,state,ordinal,parent_task_id FROM relay_wonderland.julius_tasks ORDER BY ordinal,task_id" tasks.tsv
-dump "SELECT evidence_id,evidence_type,status,safe_summary,occurred_at FROM relay_wonderland.julius_evidence ORDER BY occurred_at" evidence.tsv
-dump "SELECT decision_id,task_id,action,reason_code,occurred_at FROM relay_wonderland.julius_verification_decisions ORDER BY occurred_at" decisions.tsv
-dump "SELECT finding_id,blocking,status,claim FROM relay_wonderland.julius_reviewer_findings ORDER BY created_at" findings.tsv
-dump "SELECT invocation_id,tool_id,state,requested_at FROM relay_wonderland.julius_tool_invocations ORDER BY requested_at" tool-invocations.tsv
+dump "SELECT task_id,task_type,role,state,ordinal,parent_task_id,run_id FROM relay_wonderland.julius_tasks ORDER BY ordinal,task_id" tasks.tsv
+dump "SELECT evidence_id,evidence_type,status,safe_summary,occurred_at,run_id,task_id,integrity_hash FROM relay_wonderland.julius_evidence ORDER BY occurred_at" evidence.tsv
+dump "SELECT decision_id,task_id,action,reason_code,occurred_at,run_id,evidence_ids FROM relay_wonderland.julius_verification_decisions ORDER BY occurred_at" decisions.tsv
+dump "SELECT finding_id,blocking,status,claim,run_id,task_id,evidence_ids FROM relay_wonderland.julius_reviewer_findings ORDER BY created_at" findings.tsv
+dump "SELECT invocation_id,tool_id,state,requested_at,run_id,task_id,exit_code,recovery_state,completed_at FROM relay_wonderland.julius_tool_invocations ORDER BY requested_at" tool-invocations.tsv
 
 # WHY A TASK FAILED, WITHOUT A RAW LOG.
 #
@@ -119,7 +209,10 @@ dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.
 # could read as cheaper than it was. It now counts as a component whose spend is unknown, and
 # `unsettled_components` says how many of the unknowns are that case. Settled rows remain the
 # ONLY source of known spend: a reservation is never a charge.
-dump "SELECT COALESCE(c.role,'UNKNOWN_ROLE') AS role,count(*)::text AS components,COALESCE(sum(CASE WHEN c.basis IN ('PROVIDER_REPORTED','MEASURED_FROM_USAGE') THEN c.usd::numeric ELSE 0 END),0)::text AS known_usd_micros,COALESCE(sum(COALESCE(c.estimated::numeric,0)),0)::text AS estimated_usd_micros,count(*) FILTER (WHERE c.usd IS NULL)::text AS unknown_components,count(*) FILTER (WHERE c.basis='ESTIMATED')::text AS estimated_components,count(*) FILTER (WHERE c.unsettled)::text AS unsettled_components FROM (SELECT e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'costBasis' AS basis,e.payload->'facts'->>'usdMicros' AS usd,e.payload->'facts'->>'estimatedUsdMicros' AS estimated,false AS unsettled FROM relay_wonderland.events e WHERE e.event_type='julius.budget.settled' UNION ALL SELECT r.payload->'facts'->>'role',NULL,NULL,NULL,true FROM relay_wonderland.events r WHERE r.event_type='julius.budget.reserved' AND NOT EXISTS (SELECT 1 FROM relay_wonderland.events s WHERE s.event_type='julius.budget.settled' AND s.stream_id=r.stream_id AND s.payload->'facts'->>'reservationId'=r.payload->'facts'->>'reservationId')) c GROUP BY 1 ORDER BY 1" cost-accounting.tsv
+#
+# PER RUN AS WELL AS PER ROLE: a database holding two runs (a rerun on one rig) would otherwise add
+# one run's spend to another's under the same role.
+dump "SELECT c.run_id,COALESCE(c.role,'UNKNOWN_ROLE') AS role,count(*)::text AS components,COALESCE(sum(CASE WHEN c.basis IN ('PROVIDER_REPORTED','MEASURED_FROM_USAGE') THEN c.usd::numeric ELSE 0 END),0)::text AS known_usd_micros,COALESCE(sum(COALESCE(c.estimated::numeric,0)),0)::text AS estimated_usd_micros,count(*) FILTER (WHERE c.usd IS NULL)::text AS unknown_components,count(*) FILTER (WHERE c.basis='ESTIMATED')::text AS estimated_components,count(*) FILTER (WHERE c.unsettled)::text AS unsettled_components FROM (SELECT e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'costBasis' AS basis,e.payload->'facts'->>'usdMicros' AS usd,e.payload->'facts'->>'estimatedUsdMicros' AS estimated,false AS unsettled,e.stream_id AS run_id FROM relay_wonderland.events e WHERE e.event_type='julius.budget.settled' UNION ALL SELECT r.payload->'facts'->>'role',NULL,NULL,NULL,true,r.stream_id FROM relay_wonderland.events r WHERE r.event_type='julius.budget.reserved' AND NOT EXISTS (SELECT 1 FROM relay_wonderland.events s WHERE s.event_type='julius.budget.settled' AND s.stream_id=r.stream_id AND s.payload->'facts'->>'reservationId'=r.payload->'facts'->>'reservationId')) c GROUP BY 1,2 ORDER BY 1,2" cost-accounting.tsv
 
 # SETTLEMENT INTEGRITY: a reservation settled more than once is FLAGGED, never deduplicated.
 #
@@ -219,7 +312,7 @@ dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,t.
 # declare tenant `tenant` and run under an operator token, so today it reads as the operator and
 # the ACCOUNT / ONBOARDING row correctly FAILS; the day a real account starts a mission it reads
 # as that account. Identifiers only — the same class the run and mission columns already carry.
-dump "SELECT entry_id,entry_kind,worker_id,task_id,revision,created_at FROM relay_wonderland.julius_brain_entries ORDER BY revision" project-brain.tsv
+dump "SELECT entry_id,entry_kind,worker_id,task_id,revision,created_at,run_id FROM relay_wonderland.julius_brain_entries ORDER BY revision" project-brain.tsv
 dump "SELECT execution_id,mission_id,project_id,player_id,agent_id,state FROM relay_wonderland.execution_sessions ORDER BY execution_id" sessions.tsv
 
 # WHAT THE CODER WAS CHARGED WITH, AND WHETHER IT WAS AGREED BEFORE IT RAN.
@@ -233,7 +326,7 @@ dump "SELECT execution_id,mission_id,project_id,player_id,agent_id,state FROM re
 # criteria statements and the scope are prose, and some of it is architect-authored after a
 # revision, which is exactly the class this bundle refuses a column. `binding_digest` IS selected
 # and is safe by construction: it is a sha256 of the terms, never the terms.
-dump "SELECT contract_id,contract_revision,task_id,state,binding_digest,locked_at,locked_by_evaluator_id,created_at FROM relay_wonderland.julius_task_contracts ORDER BY contract_id,contract_revision" task-contracts.tsv
+dump "SELECT contract_id,contract_revision,task_id,state,binding_digest,locked_at,locked_by_evaluator_id,created_at,run_id FROM relay_wonderland.julius_task_contracts ORDER BY contract_id,contract_revision" task-contracts.tsv
 
 # WHAT HAPPENED TO THE AGREEMENT, as identifiers and tokens only. A refusal here is the
 # reason a coder or reviewer was NOT dispatched — a stale handoff, a review that did not hold
@@ -304,4 +397,27 @@ dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.
 # a refused ask hit and what it reached for.
 dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'requestKey' AS request_key,e.payload->'facts'->>'attemptKey' AS attempt_key,e.payload->'facts'->>'askCount' AS ask_count,e.payload->'facts'->>'guard' AS attempt_guard,e.payload->'facts'->>'outcome' AS outcome,e.payload->'facts'->>'counted' AS counted,e.payload->'facts'->>'evidenceId' AS evidence_id,e.payload->'facts'->>'signalled' AS injection_signals,e.payload->'facts'->>'segment' AS segment,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'reachRefusal' AS reach_refusal,e.payload->'facts'->>'requestedSource' AS requested_source,e.payload->'facts'->>'requestedCapability' AS requested_capability,e.payload->'facts'->>'requestedHost' AS requested_host,e.payload->'facts'->>'bytes' AS bytes,e.payload->'facts'->>'bytesRecorded' AS bytes_recorded,e.payload->'facts'->>'askOrdinal' AS ask_ordinal,e.payload->'facts'->>'resourcePath' AS resource_path,e.payload->'facts'->>'mechanism' AS mechanism,e.payload->'facts'->>'contentDigest' AS content_digest,e.payload->'facts'->>'readableChars' AS readable_chars,e.payload->'facts'->>'deliveredFrom' AS delivered_from,e.payload->'facts'->>'deliveredChars' AS delivered_chars,e.payload->'facts'->>'deliveryCut' AS delivery_cut,e.payload->'facts'->>'deliveryAnchor' AS delivery_anchor,e.payload->'facts'->>'handoffTaskId' AS handoff_task_id,e.payload->'facts'->>'handoffEntryId' AS handoff_entry_id,e.payload->'facts'->>'stage' AS stage,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.research.attempted','julius.research.retrieved','julius.research.refused') ORDER BY e.stream_id,e.sequence" research.tsv
 
-dump "SELECT event_kind,task_id,worker_id,provider_id,outcome,usd_micros,duration_ms,input_tokens,output_tokens,safe_facts,occurred_at FROM relay_wonderland.julius_trajectory_events ORDER BY occurred_at,trajectory_event_id" trajectory.tsv
+dump "SELECT event_kind,task_id,worker_id,provider_id,outcome,usd_micros,duration_ms,input_tokens,output_tokens,safe_facts,occurred_at,run_id FROM relay_wonderland.julius_trajectory_events ORDER BY occurred_at,trajectory_event_id" trajectory.tsv
+
+# WHAT THE CODER CHANGED THAT ITS CONTRACT DID NOT ALLOW (B2). The Beta Gate's PERMISSIONS /
+# MISSION BOUNDARIES row judges BOUNDARIES — a scope violation, a denial, an effect left
+# unsettled — and never whether a test exited non-zero, which is the repair loop's business. The
+# scope check's verdicts reached only the durable ledger, which dies with the runner, so no bundle
+# could show a forbidden-path edit. Counts, the closed rule (`OUT_OF_SCOPE`,
+# `OUTSIDE_PERMITTED_PATHS`) and who it is attributed to; never a path or a coder's report, which
+# are worker-influenced text.
+dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'rule' AS rule,e.payload->'facts'->>'resolvedBy' AS resolved_by,e.payload->'facts'->>'attributedTo' AS attributed_to,e.payload->'facts'->>'attempt' AS attempt,e.payload->'facts'->>'scopeChecked' AS scope_checked,e.payload->'facts'->>'scopeViolations' AS scope_violations,e.payload->'facts'->>'ownScopeViolations' AS own_scope_violations,e.payload->'facts'->>'cleanliness' AS cleanliness,e.payload->'facts'->>'workspaceCaptured' AS workspace_captured,e.payload->'facts'->>'captured' AS attempt_captured,e.payload->'facts'->>'changedPaths' AS changed_paths,e.payload->'facts'->>'attemptOutcome' AS attempt_outcome,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.coder.scope.violated','julius.coder.implementation.recorded','julius.coder.attempt.workspace') ORDER BY e.stream_id,e.sequence" scope.tsv
+
+# WHAT BECAME OF EACH FINDING, AND WHAT EACH REVIEW SAID (B1). A finding row is written OPEN once
+# and never updated: its life (ADDRESSED, RESOLVED, SUPERSEDED) exists only as
+# `finding.transitioned` events, so `findings.tsv` alone makes a clean catch, repair and
+# resolution read as "COMPLETED over an open blocking finding". The lifecycle and the reviewer's
+# verdict events are exported here as tokens and identifiers: the verdict, its category, target,
+# route and source, the finding ids and the moves. The declaration's `claim`, `warnings` and
+# `resolutions` are reviewer prose and have no column.
+dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'findingId' AS finding_id,e.payload->'facts'->>'move' AS finding_move,e.payload->'facts'->>'to' AS to_status,e.payload->'facts'->>'reviewTaskId' AS review_task_id,e.payload->'facts'->>'repairTaskId' AS repair_task_id,e.payload->'facts'->>'supersededByFindingId' AS superseded_by_finding_id,e.payload->'facts'->>'blocking' AS blocking,e.payload->'facts'->>'category' AS category,e.payload->'facts'->>'evidenceId' AS evidence_id,e.payload->'facts'->>'reviewedTaskId' AS reviewed_task_id,e.payload->'facts'->>'verdict' AS verdict,e.payload->'facts'->>'declared' AS declared_verdict,e.payload->'facts'->>'derived' AS derived_verdict,e.payload->'facts'->>'source' AS verdict_source,e.payload->'facts'->>'route' AS verdict_route,e.payload->'facts'->>'target' AS verdict_target,e.payload->'facts'->>'warningCount' AS warning_count,e.payload->'facts'->>'resolutionCount' AS resolution_count,e.payload->'facts'->>'warningsRetained' AS warnings_retained,e.payload->'facts'->>'warningsPromoted' AS warnings_promoted,e.payload->'facts'->>'reasonCode' AS reason_code,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.finding.recorded','julius.finding.transitioned','julius.review.verdict.declared','julius.review.verdict.refused','julius.review.verdict.applied') ORDER BY e.stream_id,e.sequence" finding-lifecycle.tsv
+
+# AND EACH FINDING'S STATUS NOW: its last `finding.transitioned` move, or the recorded OPEN when it
+# never moved. Every transition the runtime writes was legal when written, so the last one is the
+# state the pipeline's own fold reached; `transitions` says how many moves it took.
+dump "SELECT f.run_id,f.finding_id,f.task_id,f.blocking,f.status AS recorded_status,COALESCE((SELECT t.payload->'facts'->>'to' FROM relay_wonderland.events t WHERE t.event_type='julius.finding.transitioned' AND t.stream_id=f.run_id AND t.payload->'facts'->>'findingId'=f.finding_id ORDER BY t.sequence DESC LIMIT 1),f.status) AS effective_status,(SELECT count(*) FROM relay_wonderland.events t WHERE t.event_type='julius.finding.transitioned' AND t.stream_id=f.run_id AND t.payload->'facts'->>'findingId'=f.finding_id)::text AS transitions FROM relay_wonderland.julius_reviewer_findings f ORDER BY f.run_id,f.created_at" finding-status.tsv
