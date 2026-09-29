@@ -1,0 +1,1982 @@
+{
+ "pass": "S6I050",
+ "tags": [
+  "WL_SECTOR_FILL6",
+  "WL_COPSE",
+  "WL_NATION_ICARUS"
+ ],
+ "folder": "Wonderland/Authored/S6I050_IcarusCopse",
+ "actors": [],
+ "batches": [
+  {
+   "id": "S6I050_Trunk_slender_t3_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     76921.3,
+     68772.9,
+     -34.0,
+     0.0,
+     244.6,
+     0.0,
+     1.328,
+     1.328,
+     1.328
+    ],
+    [
+     77377.3,
+     66069.4,
+     -34.0,
+     0.0,
+     107.9,
+     0.0,
+     1.321,
+     1.321,
+     1.321
+    ],
+    [
+     78124.7,
+     66669.6,
+     -34.0,
+     0.0,
+     57.3,
+     0.0,
+     1.137,
+     1.137,
+     1.137
+    ],
+    [
+     79696.2,
+     68264.5,
+     -34.0,
+     0.0,
+     110.5,
+     0.0,
+     1.008,
+     1.008,
+     1.008
+    ],
+    [
+     79650.4,
+     67341.9,
+     -34.0,
+     0.0,
+     188.1,
+     0.0,
+     0.95,
+     0.95,
+     0.95
+    ],
+    [
+     77781.8,
+     70083.3,
+     -34.0,
+     0.0,
+     140.9,
+     0.0,
+     0.951,
+     0.951,
+     0.951
+    ],
+    [
+     78567.0,
+     70570.0,
+     -34.0,
+     0.0,
+     98.3,
+     0.0,
+     1.19,
+     1.19,
+     1.19
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafDark_t3_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     76921.3,
+     68772.9,
+     971.2,
+     0.0,
+     244.6,
+     0.0,
+     1.528,
+     1.528,
+     1.528
+    ],
+    [
+     78567.0,
+     70570.0,
+     866.5,
+     0.0,
+     98.3,
+     0.0,
+     1.368,
+     1.368,
+     1.368
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Trunk_mature_t3_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_mature_trunk.SM_tree_mature_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     76587.8,
+     67934.8,
+     -34.0,
+     0.0,
+     244.7,
+     0.0,
+     1.218,
+     1.218,
+     1.218
+    ],
+    [
+     77298.6,
+     66850.0,
+     -34.0,
+     0.0,
+     92.8,
+     0.0,
+     1.319,
+     1.319,
+     1.319
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_mature_LeafCopper_t3_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafCopper",
+   "instances": [
+    [
+     76587.8,
+     67934.8,
+     1245.0,
+     0.0,
+     244.7,
+     0.0,
+     1.583,
+     1.583,
+     1.583
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_mature_LeafGold_t3_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafGold",
+   "instances": [
+    [
+     77298.6,
+     66850.0,
+     1350.6,
+     0.0,
+     92.8,
+     0.0,
+     1.714,
+     1.714,
+     1.714
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafMid_t3_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     77377.3,
+     66069.4,
+     965.6,
+     0.0,
+     107.9,
+     0.0,
+     1.519,
+     1.519,
+     1.519
+    ],
+    [
+     78124.7,
+     66669.6,
+     826.6,
+     0.0,
+     57.3,
+     0.0,
+     1.308,
+     1.308,
+     1.308
+    ],
+    [
+     79696.2,
+     68264.5,
+     728.5,
+     0.0,
+     110.5,
+     0.0,
+     1.159,
+     1.159,
+     1.159
+    ],
+    [
+     79650.4,
+     67341.9,
+     685.2,
+     0.0,
+     188.1,
+     0.0,
+     1.093,
+     1.093,
+     1.093
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Trunk_slender_t2_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     59828.1,
+     75335.4,
+     -34.0,
+     0.0,
+     191.1,
+     0.0,
+     1.171,
+     1.171,
+     1.171
+    ],
+    [
+     58987.9,
+     74822.9,
+     -34.0,
+     0.0,
+     0.7,
+     0.0,
+     1.036,
+     1.036,
+     1.036
+    ],
+    [
+     58985.8,
+     75833.6,
+     -34.0,
+     0.0,
+     124.8,
+     0.0,
+     1.152,
+     1.152,
+     1.152
+    ],
+    [
+     57823.1,
+     61086.7,
+     -34.0,
+     0.0,
+     63.4,
+     0.0,
+     1.338,
+     1.338,
+     1.338
+    ],
+    [
+     50643.5,
+     60264.1,
+     -34.0,
+     0.0,
+     286.6,
+     0.0,
+     1.128,
+     1.128,
+     1.128
+    ],
+    [
+     49356.8,
+     60629.9,
+     -34.0,
+     0.0,
+     105.4,
+     0.0,
+     1.08,
+     1.08,
+     1.08
+    ],
+    [
+     47739.9,
+     60917.0,
+     -34.0,
+     0.0,
+     327.0,
+     0.0,
+     1.267,
+     1.267,
+     1.267
+    ],
+    [
+     48157.5,
+     60021.8,
+     -34.0,
+     0.0,
+     253.0,
+     0.0,
+     1.236,
+     1.236,
+     1.236
+    ],
+    [
+     47009.0,
+     61312.5,
+     -34.0,
+     0.0,
+     155.0,
+     0.0,
+     1.011,
+     1.011,
+     1.011
+    ],
+    [
+     48379.4,
+     61388.5,
+     -34.0,
+     0.0,
+     221.8,
+     0.0,
+     1.248,
+     1.248,
+     1.248
+    ],
+    [
+     55933.3,
+     60032.7,
+     -34.0,
+     0.0,
+     115.5,
+     0.0,
+     1.179,
+     1.179,
+     1.179
+    ],
+    [
+     58794.4,
+     66674.8,
+     -34.0,
+     0.0,
+     57.4,
+     0.0,
+     1.045,
+     1.045,
+     1.045
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafMid_t2_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     59828.1,
+     75335.4,
+     851.9,
+     0.0,
+     191.1,
+     0.0,
+     1.346,
+     1.346,
+     1.346
+    ],
+    [
+     58985.8,
+     75833.6,
+     837.8,
+     0.0,
+     124.8,
+     0.0,
+     1.325,
+     1.325,
+     1.325
+    ],
+    [
+     47739.9,
+     60917.0,
+     925.1,
+     0.0,
+     327.0,
+     0.0,
+     1.458,
+     1.458,
+     1.458
+    ],
+    [
+     58794.4,
+     66674.8,
+     756.7,
+     0.0,
+     57.4,
+     0.0,
+     1.202,
+     1.202,
+     1.202
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafDark_t2_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     58987.9,
+     74822.9,
+     749.9,
+     0.0,
+     0.7,
+     0.0,
+     1.191,
+     1.191,
+     1.191
+    ],
+    [
+     57823.1,
+     61086.7,
+     978.6,
+     0.0,
+     63.4,
+     0.0,
+     1.539,
+     1.539,
+     1.539
+    ],
+    [
+     50643.5,
+     60264.1,
+     819.6,
+     0.0,
+     286.6,
+     0.0,
+     1.297,
+     1.297,
+     1.297
+    ],
+    [
+     48157.5,
+     60021.8,
+     901.0,
+     0.0,
+     253.0,
+     0.0,
+     1.421,
+     1.421,
+     1.421
+    ],
+    [
+     48379.4,
+     61388.5,
+     910.6,
+     0.0,
+     221.8,
+     0.0,
+     1.435,
+     1.435,
+     1.435
+    ],
+    [
+     55933.3,
+     60032.7,
+     858.4,
+     0.0,
+     115.5,
+     0.0,
+     1.356,
+     1.356,
+     1.356
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Trunk_slender_t3_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     78281.6,
+     87148.1,
+     -34.0,
+     0.0,
+     31.2,
+     0.0,
+     1.328,
+     1.328,
+     1.328
+    ],
+    [
+     78865.5,
+     87664.7,
+     -34.0,
+     0.0,
+     214.1,
+     0.0,
+     1.165,
+     1.165,
+     1.165
+    ],
+    [
+     63892.5,
+     98014.4,
+     -34.0,
+     0.0,
+     137.4,
+     0.0,
+     1.148,
+     1.148,
+     1.148
+    ],
+    [
+     68265.2,
+     88605.1,
+     -34.0,
+     0.0,
+     162.7,
+     0.0,
+     0.999,
+     0.999,
+     0.999
+    ],
+    [
+     68676.4,
+     87783.6,
+     -34.0,
+     0.0,
+     354.6,
+     0.0,
+     0.976,
+     0.976,
+     0.976
+    ],
+    [
+     61769.3,
+     84658.3,
+     -34.0,
+     0.0,
+     213.6,
+     0.0,
+     1.041,
+     1.041,
+     1.041
+    ],
+    [
+     72741.8,
+     84764.4,
+     -34.0,
+     0.0,
+     133.4,
+     0.0,
+     1.279,
+     1.279,
+     1.279
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafDark_t3_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     78281.6,
+     87148.1,
+     970.9,
+     0.0,
+     31.2,
+     0.0,
+     1.527,
+     1.527,
+     1.527
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafMid_t3_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     78865.5,
+     87664.7,
+     847.5,
+     0.0,
+     214.1,
+     0.0,
+     1.34,
+     1.34,
+     1.34
+    ],
+    [
+     63892.5,
+     98014.4,
+     834.6,
+     0.0,
+     137.4,
+     0.0,
+     1.32,
+     1.32,
+     1.32
+    ],
+    [
+     68265.2,
+     88605.1,
+     722.3,
+     0.0,
+     162.7,
+     0.0,
+     1.149,
+     1.149,
+     1.149
+    ],
+    [
+     68676.4,
+     87783.6,
+     704.8,
+     0.0,
+     354.6,
+     0.0,
+     1.123,
+     1.123,
+     1.123
+    ],
+    [
+     61769.3,
+     84658.3,
+     753.6,
+     0.0,
+     213.6,
+     0.0,
+     1.197,
+     1.197,
+     1.197
+    ],
+    [
+     72741.8,
+     84764.4,
+     934.0,
+     0.0,
+     133.4,
+     0.0,
+     1.471,
+     1.471,
+     1.471
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Rose_t3_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush.SM_rose_bush",
+   "material": "MI_V2_RosePink",
+   "instances": [
+    [
+     78739.8,
+     87227.9,
+     -19.0,
+     0.0,
+     272.0,
+     0.0,
+     1.021,
+     1.021,
+     1.021
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S6I050_Trunk_slender_t2_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     49688.2,
+     49798.4,
+     -34.0,
+     0.0,
+     214.3,
+     0.0,
+     1.343,
+     1.343,
+     1.343
+    ],
+    [
+     50146.2,
+     50362.6,
+     -34.0,
+     0.0,
+     34.0,
+     0.0,
+     1.248,
+     1.248,
+     1.248
+    ],
+    [
+     48957.2,
+     49400.1,
+     -34.0,
+     0.0,
+     185.3,
+     0.0,
+     1.021,
+     1.021,
+     1.021
+    ],
+    [
+     50876.7,
+     58262.1,
+     -34.0,
+     0.0,
+     283.8,
+     0.0,
+     0.989,
+     0.989,
+     0.989
+    ],
+    [
+     51684.9,
+     58134.1,
+     -34.0,
+     0.0,
+     106.1,
+     0.0,
+     1.312,
+     1.312,
+     1.312
+    ],
+    [
+     50190.5,
+     53748.6,
+     -34.0,
+     0.0,
+     353.9,
+     0.0,
+     1.346,
+     1.346,
+     1.346
+    ],
+    [
+     52688.4,
+     58702.0,
+     -34.0,
+     0.0,
+     4.6,
+     0.0,
+     1.258,
+     1.258,
+     1.258
+    ],
+    [
+     53288.3,
+     58065.7,
+     -34.0,
+     0.0,
+     118.6,
+     0.0,
+     1.268,
+     1.268,
+     1.268
+    ],
+    [
+     53741.0,
+     57324.1,
+     -34.0,
+     0.0,
+     94.2,
+     0.0,
+     0.958,
+     0.958,
+     0.958
+    ],
+    [
+     51726.1,
+     55803.9,
+     -34.0,
+     0.0,
+     96.5,
+     0.0,
+     1.225,
+     1.225,
+     1.225
+    ],
+    [
+     52370.3,
+     56216.8,
+     -34.0,
+     0.0,
+     19.8,
+     0.0,
+     0.995,
+     0.995,
+     0.995
+    ],
+    [
+     55243.2,
+     59388.2,
+     -34.0,
+     0.0,
+     6.1,
+     0.0,
+     1.188,
+     1.188,
+     1.188
+    ],
+    [
+     49676.3,
+     53185.9,
+     -34.0,
+     0.0,
+     236.7,
+     0.0,
+     1.161,
+     1.161,
+     1.161
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafCopper_t2_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafCopper",
+   "instances": [
+    [
+     49688.2,
+     49798.4,
+     982.6,
+     0.0,
+     214.3,
+     0.0,
+     1.545,
+     1.545,
+     1.545
+    ],
+    [
+     48957.2,
+     49400.1,
+     738.9,
+     0.0,
+     185.3,
+     0.0,
+     1.175,
+     1.175,
+     1.175
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafMid_t2_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     50146.2,
+     50362.6,
+     910.5,
+     0.0,
+     34.0,
+     0.0,
+     1.435,
+     1.435,
+     1.435
+    ],
+    [
+     50876.7,
+     58262.1,
+     714.6,
+     0.0,
+     283.8,
+     0.0,
+     1.138,
+     1.138,
+     1.138
+    ],
+    [
+     50190.5,
+     53748.6,
+     984.8,
+     0.0,
+     353.9,
+     0.0,
+     1.548,
+     1.548,
+     1.548
+    ],
+    [
+     53288.3,
+     58065.7,
+     925.2,
+     0.0,
+     118.6,
+     0.0,
+     1.458,
+     1.458,
+     1.458
+    ],
+    [
+     51726.1,
+     55803.9,
+     892.9,
+     0.0,
+     96.5,
+     0.0,
+     1.409,
+     1.409,
+     1.409
+    ],
+    [
+     52370.3,
+     56216.8,
+     718.8,
+     0.0,
+     19.8,
+     0.0,
+     1.144,
+     1.144,
+     1.144
+    ],
+    [
+     55243.2,
+     59388.2,
+     865.2,
+     0.0,
+     6.1,
+     0.0,
+     1.366,
+     1.366,
+     1.366
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Shrub_t2_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Shrubs/SM_shrub_flowering.SM_shrub_flowering",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     50408.7,
+     50942.3,
+     -19.0,
+     0.0,
+     40.9,
+     0.0,
+     1.019,
+     1.019,
+     1.019
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S6I050_Trunk_mature_t3_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_mature_trunk.SM_tree_mature_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     64195.1,
+     98827.9,
+     -34.0,
+     0.0,
+     316.8,
+     0.0,
+     1.228,
+     1.228,
+     1.228
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_mature_LeafMid_t3_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     64195.1,
+     98827.9,
+     1255.9,
+     0.0,
+     316.8,
+     0.0,
+     1.597,
+     1.597,
+     1.597
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Trunk_mature_t4_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_mature_trunk.SM_tree_mature_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     88666.6,
+     78323.8,
+     -34.0,
+     0.0,
+     351.7,
+     0.0,
+     1.017,
+     1.017,
+     1.017
+    ],
+    [
+     90764.1,
+     76186.7,
+     -34.0,
+     0.0,
+     287.1,
+     0.0,
+     1.172,
+     1.172,
+     1.172
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_mature_LeafMid_t4_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     88666.6,
+     78323.8,
+     1033.5,
+     0.0,
+     351.7,
+     0.0,
+     1.322,
+     1.322,
+     1.322
+    ],
+    [
+     90764.1,
+     76186.7,
+     1196.6,
+     0.0,
+     287.1,
+     0.0,
+     1.523,
+     1.523,
+     1.523
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Trunk_slender_t4_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     89211.8,
+     77601.2,
+     -34.0,
+     0.0,
+     359.2,
+     0.0,
+     1.052,
+     1.052,
+     1.052
+    ],
+    [
+     88276.9,
+     77654.2,
+     -34.0,
+     0.0,
+     231.4,
+     0.0,
+     1.258,
+     1.258,
+     1.258
+    ],
+    [
+     86630.5,
+     79283.8,
+     -34.0,
+     0.0,
+     55.7,
+     0.0,
+     1.184,
+     1.184,
+     1.184
+    ],
+    [
+     86450.7,
+     78311.8,
+     -34.0,
+     0.0,
+     224.8,
+     0.0,
+     0.958,
+     0.958,
+     0.958
+    ],
+    [
+     87556.0,
+     79333.9,
+     -34.0,
+     0.0,
+     295.4,
+     0.0,
+     1.167,
+     1.167,
+     1.167
+    ],
+    [
+     80433.5,
+     68442.5,
+     -34.0,
+     0.0,
+     91.3,
+     0.0,
+     1.088,
+     1.088,
+     1.088
+    ],
+    [
+     90856.9,
+     77140.4,
+     -34.0,
+     0.0,
+     323.2,
+     0.0,
+     1.326,
+     1.326,
+     1.326
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafMid_t4_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     89211.8,
+     77601.2,
+     761.8,
+     0.0,
+     359.2,
+     0.0,
+     1.209,
+     1.209,
+     1.209
+    ],
+    [
+     88276.9,
+     77654.2,
+     917.8,
+     0.0,
+     231.4,
+     0.0,
+     1.446,
+     1.446,
+     1.446
+    ],
+    [
+     86450.7,
+     78311.8,
+     690.8,
+     0.0,
+     224.8,
+     0.0,
+     1.101,
+     1.101,
+     1.101
+    ],
+    [
+     87556.0,
+     79333.9,
+     849.1,
+     0.0,
+     295.4,
+     0.0,
+     1.342,
+     1.342,
+     1.342
+    ],
+    [
+     80433.5,
+     68442.5,
+     789.3,
+     0.0,
+     91.3,
+     0.0,
+     1.251,
+     1.251,
+     1.251
+    ],
+    [
+     90856.9,
+     77140.4,
+     969.5,
+     0.0,
+     323.2,
+     0.0,
+     1.525,
+     1.525,
+     1.525
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafDark_t4_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     86630.5,
+     79283.8,
+     861.7,
+     0.0,
+     55.7,
+     0.0,
+     1.361,
+     1.361,
+     1.361
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Trunk_slender_t4_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     86392.9,
+     80025.1,
+     -34.0,
+     0.0,
+     8.6,
+     0.0,
+     1.178,
+     1.178,
+     1.178
+    ],
+    [
+     85713.1,
+     81298.3,
+     -34.0,
+     0.0,
+     132.6,
+     0.0,
+     1.209,
+     1.209,
+     1.209
+    ],
+    [
+     85151.1,
+     81851.3,
+     -34.0,
+     0.0,
+     316.7,
+     0.0,
+     0.956,
+     0.956,
+     0.956
+    ],
+    [
+     85656.3,
+     80324.2,
+     -34.0,
+     0.0,
+     359.8,
+     0.0,
+     1.144,
+     1.144,
+     1.144
+    ],
+    [
+     80345.9,
+     86151.5,
+     -34.0,
+     0.0,
+     162.5,
+     0.0,
+     1.282,
+     1.282,
+     1.282
+    ],
+    [
+     81279.5,
+     85980.6,
+     -34.0,
+     0.0,
+     120.1,
+     0.0,
+     1.286,
+     1.286,
+     1.286
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafMid_t4_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     86392.9,
+     80025.1,
+     857.6,
+     0.0,
+     8.6,
+     0.0,
+     1.355,
+     1.355,
+     1.355
+    ],
+    [
+     85713.1,
+     81298.3,
+     881.1,
+     0.0,
+     132.6,
+     0.0,
+     1.391,
+     1.391,
+     1.391
+    ],
+    [
+     80345.9,
+     86151.5,
+     936.0,
+     0.0,
+     162.5,
+     0.0,
+     1.474,
+     1.474,
+     1.474
+    ],
+    [
+     81279.5,
+     85980.6,
+     938.9,
+     0.0,
+     120.1,
+     0.0,
+     1.478,
+     1.478,
+     1.478
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Shrub_t4_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Shrubs/SM_shrub_flowering.SM_shrub_flowering",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     87037.9,
+     78276.2,
+     -19.0,
+     0.0,
+     223.8,
+     0.0,
+     1.193,
+     1.193,
+     1.193
+    ],
+    [
+     91320.3,
+     76082.9,
+     -19.0,
+     0.0,
+     275.9,
+     0.0,
+     1.037,
+     1.037,
+     1.037
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S6I050_Trunk_mature_t2_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_mature_trunk.SM_tree_mature_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     57284.3,
+     61694.7,
+     -34.0,
+     0.0,
+     165.7,
+     0.0,
+     1.347,
+     1.347,
+     1.347
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_mature_LeafMid_t2_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     57284.3,
+     61694.7,
+     1380.0,
+     0.0,
+     165.7,
+     0.0,
+     1.75,
+     1.75,
+     1.75
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafDark_t2_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     51684.9,
+     58134.1,
+     958.5,
+     0.0,
+     106.1,
+     0.0,
+     1.508,
+     1.508,
+     1.508
+    ],
+    [
+     53741.0,
+     57324.1,
+     691.2,
+     0.0,
+     94.2,
+     0.0,
+     1.102,
+     1.102,
+     1.102
+    ],
+    [
+     49676.3,
+     53185.9,
+     844.9,
+     0.0,
+     236.7,
+     0.0,
+     1.336,
+     1.336,
+     1.336
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Rose_t2_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush.SM_rose_bush",
+   "material": "MI_V2_RosePink",
+   "instances": [
+    [
+     51023.9,
+     57847.6,
+     -19.0,
+     0.0,
+     109.6,
+     0.0,
+     0.845,
+     0.845,
+     0.845
+    ],
+    [
+     50393.2,
+     54112.9,
+     -19.0,
+     0.0,
+     108.7,
+     0.0,
+     1.153,
+     1.153,
+     1.153
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafDark_t4_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     85151.1,
+     81851.3,
+     689.2,
+     0.0,
+     316.7,
+     0.0,
+     1.099,
+     1.099,
+     1.099
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafGold_t4_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafGold",
+   "instances": [
+    [
+     85656.3,
+     80324.2,
+     831.5,
+     0.0,
+     359.8,
+     0.0,
+     1.315,
+     1.315,
+     1.315
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Rose_t4_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush.SM_rose_bush",
+   "material": "MI_V2_RosePink",
+   "instances": [
+    [
+     86225.1,
+     81730.2,
+     -19.0,
+     0.0,
+     22.1,
+     0.0,
+     0.857,
+     0.857,
+     0.857
+    ],
+    [
+     85307.8,
+     81493.8,
+     -19.0,
+     0.0,
+     261.6,
+     0.0,
+     1.035,
+     1.035,
+     1.035
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S6I050_Trunk_mature_t2_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_mature_trunk.SM_tree_mature_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     49783.9,
+     59776.2,
+     -34.0,
+     0.0,
+     112.7,
+     0.0,
+     1.271,
+     1.271,
+     1.271
+    ],
+    [
+     50561.9,
+     59171.8,
+     -34.0,
+     0.0,
+     301.6,
+     0.0,
+     1.33,
+     1.33,
+     1.33
+    ],
+    [
+     51252.0,
+     54776.3,
+     -34.0,
+     0.0,
+     141.6,
+     0.0,
+     1.23,
+     1.23,
+     1.23
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_mature_LeafMid_t2_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     49783.9,
+     59776.2,
+     1300.3,
+     0.0,
+     112.7,
+     0.0,
+     1.652,
+     1.652,
+     1.652
+    ],
+    [
+     51252.0,
+     54776.3,
+     1257.9,
+     0.0,
+     141.6,
+     0.0,
+     1.599,
+     1.599,
+     1.599
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_mature_LeafDark_t2_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     50561.9,
+     59171.8,
+     1362.3,
+     0.0,
+     301.6,
+     0.0,
+     1.729,
+     1.729,
+     1.729
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafCopper_t2_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafCopper",
+   "instances": [
+    [
+     49356.8,
+     60629.9,
+     783.6,
+     0.0,
+     105.4,
+     0.0,
+     1.243,
+     1.243,
+     1.243
+    ],
+    [
+     47009.0,
+     61312.5,
+     731.0,
+     0.0,
+     155.0,
+     0.0,
+     1.163,
+     1.163,
+     1.163
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Rose_t2_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush.SM_rose_bush",
+   "material": "MI_V2_RosePink",
+   "instances": [
+    [
+     48852.9,
+     60070.6,
+     -19.0,
+     0.0,
+     158.9,
+     0.0,
+     1.023,
+     1.023,
+     1.023
+    ],
+    [
+     46800.3,
+     61806.5,
+     -19.0,
+     0.0,
+     339.6,
+     0.0,
+     0.807,
+     0.807,
+     0.807
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafGold_t2_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafGold",
+   "instances": [
+    [
+     52688.4,
+     58702.0,
+     918.1,
+     0.0,
+     4.6,
+     0.0,
+     1.447,
+     1.447,
+     1.447
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Shrub_t4_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Shrubs/SM_shrub_flowering.SM_shrub_flowering",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     80400.1,
+     85467.2,
+     -19.0,
+     0.0,
+     175.2,
+     0.0,
+     0.854,
+     0.854,
+     0.854
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S6I050_Trunk_slender_t2_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     58830.2,
+     86617.3,
+     -34.0,
+     0.0,
+     119.4,
+     0.0,
+     1.144,
+     1.144,
+     1.144
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafMid_t2_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     58830.2,
+     86617.3,
+     831.4,
+     0.0,
+     119.4,
+     0.0,
+     1.315,
+     1.315,
+     1.315
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "S6I050_Canopy_slender_LeafGold_t3_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafGold",
+   "instances": [
+    [
+     77781.8,
+     70083.3,
+     685.8,
+     0.0,
+     140.9,
+     0.0,
+     1.094,
+     1.094,
+     1.094
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  }
+ ],
+ "title": "S6I050: tree massing, ICARUS, 40-60 deg (CORE's silhouette review)"
+}

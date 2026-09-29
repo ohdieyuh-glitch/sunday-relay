@@ -1,42 +1,54 @@
 #!/usr/bin/env python3
-"""S5 DUBEL EDGE -- Dubel Forest's inner margin, graded out into the frontier: meadow, groves, forest fringe.
+"""S5 DUBEL EDGE and S5b DUBEL WALL -- Dubel Forest's inner margin graded out into the frontier (meadow, groves, forest
+fringe), and its outer edge closed with a forest wall.
 
-WHY. After window 4b the largest unintended ground left in SECOND's lane is Dubel Forest's inner edge: pockets at
-64 / 76 / 97 / 111 deg, 1,093-1,340 m, ~4.5 ha (emptiness_classes, built walks only). DF01's tree density is 1 - t^2
-across 1,230-1,480 m -- ZERO at its inner edge, by design, "so the nations' outskirts are not walled off" -- and the
-frontier's fills stop at 1,100-1,160 m, so between them lies lawn that nothing explains. CORE (2026-09-29): "a forest
+WHY (S5, S5D090). After window 4b the largest unintended ground left in SECOND's lane is Dubel Forest's inner edge:
+pockets at 64 / 76 / 97 / 111 deg, 1,093-1,340 m, ~4.5 ha (emptiness_classes, built walks only). DF01's tree density is
+1 - t^2 across 1,230-1,480 m -- ZERO at its inner edge, by design, "so the nations' outskirts are not walled off" -- and
+the frontier's fills stop at 1,100-1,160 m, so between them lies lawn that nothing explains. CORE (2026-09-29): "a forest
 edge should grade into meadow and groves, not stop dead." Keep DF01's clearings open, +/-5 m round the DW01 stones,
 DF01's three landmarks and CP05's ground; no clones of the wild-ring woods; grade Dubel's own palette out.
 
+WHY (S5b, S5W090). CORE's visual review (11:48): from the Dubel walk "the world ENDS in a hard dark band right behind
+the landmark mushroom" -- DF01's density falls to zero at its outer edge too, and the wild ring's forest wall (WX030 /
+WX122, R50b) stops at Dubel's arc. S5b is that wall carried across Dubel: 1,420-1,478 m at the wild ring's 15 trees a
+degree, in DF01's palette, meeting WX030's and WX122's walls at 58 and 122 deg, inside EDGE01 (1,485 m).
+
 WHAT, by radius -- the ecotone a real woodland edge has, from the open side in:
-  MEADOW MARGIN  1,050-1,230 m  drifts: the heartlands' daisy / lavender runs nearest the frontier, DF01's flower
-                                clusters and small mushrooms nearer the trees; a rare solitary tree
-  GROVES         1,150-1,290 m  3-6 trees in DF01's pairing (slender 62 % / mature 38 %) and leaf mix, with DF01's
+  MEADOW MARGIN  1,050-1,210 m  drifts: the heartlands' daisy / lavender runs nearest the frontier, DF01's flower
+                                clusters and small mushrooms nearer the trees; solitary trees
+  GROVES         1,060-1,290 m  3-6 trees, half of them mature pairs (large canopies), DF01's leaf mix, with DF01's
                                 undergrowth (flowering shrub 42 %, flower cluster 30 %, small mushroom 28 %)
   FOREST FRINGE  1,230-1,345 m  single trees thickening toward DF01's heart, each with undergrowth
-The zones overlap and each feature is drawn by weight, so the edge grades instead of banding.
+  THE WALL       1,420-1,478 m  15 trees a degree (S5b), a quarter with undergrowth
+The zones overlap and each feature is drawn by weight, so the edge grades instead of banding. CORE's review also said
+drifts read least and groves most from a distance: the drift weight is held at 0.35.
 
-WHERE. Only on cells CORE's class audit calls UNINTENDED (emptiness_classes.classify on the planning census): it builds
-where the world is unexplained and nowhere else. A feature, once placed, retires the target cells within its reach, so
-the fill stops when the ground is explained -- it does not carpet what is already a meadow, a verge or a clearing.
+WHERE. The edge seeds only cells CORE's class audit calls UNINTENDED (emptiness_classes.classify on the planning census):
+it builds where the world is unexplained and nowhere else, and a placed feature retires the target cells within its
+reach, so the fill stops when the ground is explained. The wall is a band, like the wild ring's.
 
 KEPT CLEAR (solid / way occupancy on top of the census): DF01's five clearings (+6 m; the three landmarks stand in
 them), DF01's path (+/-7 m; its own tree rule is 6.2 m), every DW01 stone (+5 m), CP05's ground and the 90 deg
-sightline (sector_fill2.vista_blocks), CORE's TW03 band (100-135 deg inside 1,210 m), SKY05's towers and the HG2A hedge
-gates (+15 m). The script re-checks each rule on its own output and refuses to write if any is broken.
+sightline (sector_fill2.vista_blocks), CORE's TW03 band (100-135 deg inside 1,210 m), SKY05's base / foot modules and
+the HG2A hedge gates (+15 m). SKY05 is STACKED (CORE): its rows at z >= 500 are sky-level and neither reserved nor
+treated as obstacles. The script re-checks each rule on its own output and refuses to write if any is broken.
 
-Dubel is not a nation (CANON: "never force it into a nation"): the pass carries WL_DUBEL / WL_WILDERNESS, no nation.
+Dubel is not a nation (CANON: "never force it into a nation"): the passes carry WL_DUBEL / WL_WILDERNESS, no nation.
 
-    python dubel_edge.py --census PATH [--proof-walk OUT.json]
-        writes s5d090_dubel_edge.json + dubel_edge_new_placements.csv.gz (census-format rows for projections)
+    python dubel_edge.py --census PATH [--proof-dir DIR]
+        writes s5d090_dubel_edge.json, s5w090_dubel_wall.json and dubel_edge_new_placements.csv.gz (census-format rows)
 """
 import argparse
 import csv
 import gzip
 import json
 import math
+import os
 import random
 import sys
+import tempfile
+from collections import Counter
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -50,9 +62,12 @@ import dubel_forest as DF                                                # noqa:
 import emptiness_classes as EC                                           # noqa: E402
 W = S.W
 
-PID = "S5D090"
+PID, WALL_PID = "S5D090", "S5W090"
 ARC = (58.0, 122.0)
 R_LO, R_HI = 105000.0, 134500.0
+WALL = (142000.0, 147800.0)                      # the wild ring's wall band (wild_ring_densify.WALL)
+WALL_PER_DEG = 15.0
+EDGE_CLAMP = 147900.0                            # EDGE01 stands at 1,485 m; nothing past 1,479 m
 TW03 = (100.0, 135.0, 121000.0)                  # CORE's tower approaches: sector_fill2.KEEP_OUT_BANDS + 10 m
 V2 = "/Game/WonderlandV2/"
 W.VEG.setdefault("flower_cluster", V2 + "Vegetation/Flowers/SM_flower_cluster.SM_flower_cluster")
@@ -62,6 +77,9 @@ LEAF_W = [w for _, w in DF.LEAF]
 MEADOW_RUNS = ("WL_Flower_Daisy_Run", "WL_Flower_Lavender_Run")
 #: how far a placed feature explains the ground round it (cm): its own spread plus most of the audit's 9 m reach
 REACH = {"drift": 1300.0, "solitary": 1500.0, "grove": 2300.0, "fringe": 1100.0}
+#: DF01 plants 62 % slender; the edge and the wall are seen from the heartlands, so half their trees are mature pairs
+#: (the large canopy) -- CORE: "prefer 2-3 large canopies per clump over many small ones"
+SLENDER_SHARE = 0.5
 
 
 def ramp(r, a, b):
@@ -69,10 +87,12 @@ def ramp(r, a, b):
 
 
 def weights(r):
-    """Each feature's weight at radius r: meadow nearest the frontier, groves mid-margin, fringe toward DF01's heart."""
-    return {"drift": 1.0 - ramp(r, 115000.0, 123000.0),
-            "solitary": 0.2 * (1.0 - ramp(r, 113000.0, 119000.0)),
-            "grove": min(ramp(r, 115000.0, 119000.0), 1.0 - ramp(r, 125000.0, 129000.0)),
+    """Each feature's weight at radius r: a thin meadow margin nearest the frontier, groves from 1,060 m, fringe toward
+    DF01's heart. CORE's review (11:48): drifts read least from a distance and groves and walls most, so the drift weight
+    is held at 0.35 and the groves start at the frontier's side of the margin."""
+    return {"drift": 0.35 * (1.0 - ramp(r, 113000.0, 119000.0)),
+            "solitary": 0.35 * (1.0 - ramp(r, 115000.0, 121000.0)),
+            "grove": min(ramp(r, 106000.0, 112000.0), 1.0 - ramp(r, 125000.0, 129000.0)),
             "fringe": ramp(r, 123000.0, 129000.0)}
 
 
@@ -96,6 +116,25 @@ def path_line(step=500.0):
         n = max(1, int(math.hypot(bx - ax, by - ay) // step))
         out += [(ax + (bx - ax) * k / n, ay + (by - ay) * k / n) for k in range(n)]
     return out + [pts[-1]]
+
+
+def ground_census(census):
+    """The census without SKY05's sky-level rows (z >= 500): CORE, 2026-09-29 -- SKY05 is stacked, its Mid / Crown
+    modules stand 40-200 m up with 30-45 m half-extents, and as obstacles they refused ~1,800 ground placements."""
+    fd, path = tempfile.mkstemp(suffix=".csv.gz")
+    os.close(fd)
+    with gzip.open(census, "rt", encoding="utf-8", newline="") as f, gzip.open(path, "wt", encoding="utf-8",
+                                                                                newline="") as g:
+        r = csv.reader(f)
+        w = csv.writer(g)
+        head = next(r)
+        w.writerow(head)
+        io, iz = head.index("owner"), head.index("z")
+        for row in r:
+            if row[io].startswith("SKY05") and float(row[iz]) >= 500.0:
+                continue
+            w.writerow(row)
+    return path
 
 
 def keep_clear(occ, census):
@@ -124,6 +163,8 @@ def keep_clear(occ, census):
             if pre == "DW01":
                 occ.add("way", x, y, ex + 500.0, ey + 500.0, yaw, "keep:dw01")
                 stones.append((x, y, ex, ey))
+            elif pre == "SKY05" and float(r["z"]) >= 500.0:
+                continue                # CORE: SKY05 is stacked; only its base / foot modules (z < 500) stand on the ground
             else:
                 occ.add("solid", x, y, ex + 1500.0, ey + 1500.0, yaw, "keep:" + pre.lower())
                 guarded.append((x, y, ex, ey, pre))
@@ -131,7 +172,7 @@ def keep_clear(occ, census):
 
 
 def tree(p, rng, u, v, margin=40.0):
-    kind = "tree_slender" if rng.random() < DF.KINDS[0][5] else "tree_mature"
+    kind = "tree_slender" if rng.random() < SLENDER_SHARE else "tree_mature"
     leaf = rng.choices(LEAF, weights=LEAF_W)[0]
     return p.plant(kind, u, v, rng.uniform(0.82, 1.38), leaf, rng.uniform(0.0, 360.0), margin=margin)
 
@@ -194,22 +235,8 @@ def grove(p, rng, u, v):
     return len(placed) >= 2
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--census", required=True, help="the planning census (a projection holding every staged pass)")
-    ap.add_argument("--proof-walk", default=None, help="write the in-play proof's walk (DF01's path in the arc) here")
-    a = ap.parse_args()
-    W.CENSUS = a.census
-    S.set_frame(90.0, 35.0)
-    W.CENSUS_R = (R_LO - 5000.0, R_HI + 7000.0)
-    occ = W.Occupancy()
-    n_census = W.load_census(occ)
-    stones, guarded = keep_clear(occ, a.census)
-    p = W.Pass(PID, ["WL_DUBEL", "WL_WILDERNESS", "WL_DUBEL_EDGE"], "Wonderland/Authored/%s_DubelEdge" % PID, {},
-               occ, PID)
-    rng = random.Random("dubel-edge-" + PID)
-
-    g = EC.classify(a.census)
+def plan_edge(p, rng, census):
+    g = EC.classify(census)
     n, x0, C, cls = g["n"], g["x0"], g["C"], g["cls"]
     target = {}
     for k in range(n * n):
@@ -222,7 +249,7 @@ def main():
     area0 = len(target) * (C / 100.0) ** 2
     order = sorted(target)
     rng.shuffle(order)
-    feats = {"drift": 0, "solitary": 0, "grove": 0, "fringe": 0, "failed": 0}
+    feats = Counter()
 
     def retire(x, y, reach):
         i0, i1 = int((x - reach - x0) // C), int((x + reach - x0) // C)
@@ -256,65 +283,124 @@ def main():
         else:
             feats["failed"] += 1
             del target[k]
+    return area0, dict(feats)
 
-    spec = p.spec()
+
+def plan_wall(p, rng):
+    """The wild ring's wall band carried across Dubel's arc, at the wild ring's density, in DF01's palette."""
+    target = int(WALL_PER_DEG * (ARC[1] - ARC[0]))
+    placed, tries = 0, 0
+    while placed < target and tries < target * 40:
+        tries += 1
+        b = rng.uniform(ARC[0], ARC[1])
+        r = rng.uniform(*WALL)
+        u, v = to_uv(r * math.cos(math.radians(b)), r * math.sin(math.radians(b)))
+        if tree(p, rng, u, v, margin=40.0):
+            placed += 1
+            if rng.random() < 0.25:
+                undergrowth(p, rng, u, v, 1)
+    return {"wall_trees": placed, "target": target}
+
+
+def finish(spec, title):
     for bt in spec["batches"]:
         if "Trunk" in bt["id"] or "Canopy" in bt["id"]:
             bt["cull_distance"] = W.CULL_FAR        # DF01's trees are seen from the heartlands (900 m); the edge's too
         elif "Flower_Daisy" not in bt["id"] and "Flower_Lavender" not in bt["id"]:
             bt["cull_distance"] = W.CULL_MID        # DF01's undergrowth keeps 350 m; the meadow runs keep 120 m
-    spec["title"] = "S5D090: Dubel Forest's inner edge graded into the frontier (meadow, groves, forest fringe)"
-    inst = [t for bt in spec["batches"] for t in bt["instances"]]
+        # EDGE01 stands at 1,485 m: an undergrowth offset from a wall tree may not pass 1,479 m
+        bt["instances"] = [t for t in bt["instances"] if math.hypot(t[0], t[1]) <= EDGE_CLAMP]
+    spec["batches"] = [bt for bt in spec["batches"] if bt["instances"]]
+    spec["title"] = title
+    return spec
 
-    # ---- THE SELF-CHECK: every rule of the brief, on the output, before anything is written ----------------
+
+def self_check(inst, stones, cps, wall):
     bad = []
-    ux, uy = 0.0, 1.0
-    cps = F2.checkpoints(a.census)
     for (x, y, *_r) in inst:
         b = math.degrees(math.atan2(y, x)) % 360.0
         rr = math.hypot(x, y)
         if any(math.hypot(x - cx, y - cy) <= cr + 600.0 for (cx, cy, cr) in DF.CLEARINGS):
-            bad.append(("df01_clearing", x, y))
+            bad.append("df01_clearing")
         if any(abs(x - sx) <= ex + 500.0 and abs(y - sy) <= ey + 500.0 for (sx, sy, ex, ey) in stones):
-            bad.append(("dw01_stone", x, y))
-        if 0.0 < x * ux + y * uy <= 130000.0 and abs(-x * uy + y * ux) <= 2500.0:
-            bad.append(("sightline_90", x, y))
+            bad.append("dw01_stone")
+        if 0.0 < y <= 130000.0 and abs(x) <= 2500.0:
+            bad.append("sightline_90")
         if any(abs(x - cx) <= max(5000.0, cr + 3000.0) - 500.0 and abs(y - cy) <= max(5000.0, cr + 3000.0) - 500.0
                for (cx, cy, cr, _k) in cps):
-            bad.append(("checkpoint_ground", x, y))
+            bad.append("checkpoint_ground")
         if TW03[0] <= b <= TW03[1] and rr < TW03[2] - 900.0:
-            bad.append(("tw03_band", x, y))
+            bad.append("tw03_band")
         if not (ARC[0] - 1.0 <= b <= ARC[1] + 1.0):
-            bad.append(("outside_arc", x, y))
-    # DF01's path, swept with a Dog-sized square against the new solids only (the census was clear before)
-    blocked = 0
+            bad.append("outside_arc")
+        if rr > EDGE_CLAMP:
+            bad.append("past_edge01")
+        if wall and rr < WALL[0] - 1200.0:
+            bad.append("wall_inside_band")
+    return Counter(bad)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--census", required=True, help="the planning census (a projection holding every staged pass)")
+    ap.add_argument("--proof-dir", default=None, help="write the in-play proofs' walks here")
+    a = ap.parse_args()
+    W.CENSUS = ground_census(a.census)
+    S.set_frame(90.0, 35.0)
+    W.CENSUS_R = (R_LO - 5000.0, WALL[1] + 4000.0)
+    occ = W.Occupancy()
+    n_census = W.load_census(occ)
+    stones, guarded = keep_clear(occ, a.census)
+    tags = ["WL_DUBEL", "WL_WILDERNESS"]
+    p = W.Pass(PID, tags + ["WL_DUBEL_EDGE"], "Wonderland/Authored/%s_DubelEdge" % PID, {}, occ, PID)
+    pw = W.Pass(WALL_PID, tags + ["WL_DUBEL_WALL"], "Wonderland/Authored/%s_DubelWall" % WALL_PID, {}, occ, WALL_PID)
+    area0, feats = plan_edge(p, random.Random("dubel-edge-" + PID), a.census)
+    wall = plan_wall(pw, random.Random("dubel-wall-" + WALL_PID))
+    spec = finish(p.spec(), "S5D090: Dubel Forest's inner edge graded into the frontier (meadow, groves, forest fringe)")
+    wspec = finish(pw.spec(), "S5W090: Dubel Forest's outer wall, 1,420-1,478 m, meeting WX030 and WX122")
+    cps = F2.checkpoints(a.census)
+    bad = self_check([t for bt in spec["batches"] for t in bt["instances"]], stones, cps, False) + \
+        self_check([t for bt in wspec["batches"] for t in bt["instances"]], stones, cps, True)
+    # DF01's path, swept with a Dog-sized square against the new trunks of both passes
     new_solid = W.Occupancy()
-    for (k, x, y, z, hx, hy, hz, mesh, owner) in p.new_rows:
-        if mesh.startswith("tree_"):
-            new_solid.add("solid", x, y, 180.0, 180.0, 0.0, mesh)
-    for (x, y) in path_line(250.0):
-        if in_scope(x, y) or math.hypot(x, y) <= R_HI + 1000.0:
-            if new_solid.hits(x, y, 60.0, 60.0, 0.0, 0.0, ("solid",)):
-                blocked += 1
-    print("%s  census rows %d  target %.2f ha  features %s" % (PID, n_census, area0 / 1e4, feats))
-    print("  batches %d  instances %d  r %.0f-%.0f m  stones kept %d  guarded rows %d  path blocked %d" % (
-        len(spec["batches"]), len(inst), min(math.hypot(t[0], t[1]) for t in inst) / 100,
-        max(math.hypot(t[0], t[1]) for t in inst) / 100, len(stones), len(guarded), blocked))
-    print("  skipped", dict(p.skipped), " why", dict(p.skip_why.most_common(6)))
+    for q in (p, pw):
+        for (k, x, y, z, hx, hy, hz, mesh, owner) in q.new_rows:
+            if mesh.startswith("tree_"):
+                new_solid.add("solid", x, y, 180.0, 180.0, 0.0, mesh)
+    blocked = sum(1 for (x, y) in path_line(250.0) if new_solid.hits(x, y, 60.0, 60.0, 0.0, 0.0, ("solid",)))
+    for (label, sp, st) in ((PID, spec, feats), (WALL_PID, wspec, wall)):
+        inst = [t for bt in sp["batches"] for t in bt["instances"]]
+        trunks = sum(len(bt["instances"]) for bt in sp["batches"] if "Trunk" in bt["id"])
+        print("%s  batches %d  instances %d  trees %d  r %.0f-%.0f m  %s" % (
+            label, len(sp["batches"]), len(inst), trunks, min(math.hypot(t[0], t[1]) for t in inst) / 100,
+            max(math.hypot(t[0], t[1]) for t in inst) / 100, st))
+    print("  census rows %d  edge target %.2f ha  stones kept %d  guarded ground rows %d  path blocked %d" % (
+        n_census, area0 / 1e4, len(stones), len(guarded), blocked))
+    print("  skipped", dict(p.skipped), dict(pw.skipped), " why", dict((p.skip_why + pw.skip_why).most_common(6)))
+    os.remove(W.CENSUS)
     if bad or blocked:
-        from collections import Counter
-        raise SystemExit("REFUSED: rule breaks %s, path blocked %d" % (dict(Counter(b[0] for b in bad)), blocked))
+        raise SystemExit("REFUSED: rule breaks %s, path blocked %d" % (dict(bad), blocked))
 
     (HERE / ("%s_dubel_edge.json" % PID.lower())).write_text(json.dumps(spec, indent=1), encoding="utf-8")
+    (HERE / ("%s_dubel_wall.json" % WALL_PID.lower())).write_text(json.dumps(wspec, indent=1), encoding="utf-8")
     with gzip.open(HERE / "dubel_edge_new_placements.csv.gz", "wt", encoding="utf-8", newline="") as f:
         f.write("kind,x,y,z,ex,ey,ez,yaw,mesh,owner\n")
-        for (k, x, y, z, ex, ey, ez, mesh, owner) in p.new_rows:
-            f.write("%s,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,0,%s,%s\n" % (k, x, y, z, ex, ey, ez, mesh, owner))
-    if a.proof_walk:
-        walk = [[round(x, 1), round(y, 1)] for (x, y) in path_line(500.0)]
+        for q in (p, pw):
+            for (k, x, y, z, ex, ey, ez, mesh, owner) in q.new_rows:
+                f.write("%s,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,0,%s,%s\n" % (k, x, y, z, ex, ey, ez, mesh, owner))
+    if a.proof_dir:
+        # the edge: DF01's path through the arc, cut at 119.5 deg -- SKY05's base already stands across ~52 m of it at
+        # 119.8-121 deg (CORE's item, not S5's); the wall: stands in DF01's two outer clearings, inside the wall band
+        walk = [[round(x, 1), round(y, 1)] for (x, y) in path_line(500.0)
+                if math.degrees(math.atan2(y, x)) % 360.0 <= 119.5]
         json.dump({"pass": PID, "bearing": 90.0, "walk": walk, "groups": [],
-                   "note": "DF01's path through the arc (DW01's stones lie on it): S5 must leave it walkable"},
-                  open(a.proof_walk, "w", encoding="utf-8"), indent=1)
+                   "note": "DF01's path through the arc to 119.5 deg (DW01's stones lie on it): S5 must leave it walkable"},
+                  open(os.path.join(a.proof_dir, "proofwalk_s5d090.json"), "w", encoding="utf-8"), indent=1)
+        outer = [(cx, cy) for (cx, cy, cr) in DF.CLEARINGS if math.hypot(cx, cy) >= WALL[0]]
+        json.dump({"pass": WALL_PID, "bearing": 90.0,
+                   "walk": [[round(outer[0][0], 1), round(outer[0][1], 1)], [round(outer[0][0], 1), round(outer[0][1] - 300.0, 1)]],
+                   "groups": [], "note": "residency stand in DF01's outer clearing %s (kept +6 m clear of the wall)" % (outer[0],)},
+                  open(os.path.join(a.proof_dir, "proofwalk_s5w090.json"), "w", encoding="utf-8"), indent=1)
 
 
 if __name__ == "__main__":
