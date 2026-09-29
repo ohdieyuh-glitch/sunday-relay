@@ -141,6 +141,29 @@ override; from the march looking down the rear seam 1,713 / 77k vs 4,979 / 167k.
 (a few far structures on the horizon): skyline batches sit on high grid levels and show at both ranges. CORE's
 recommendation to the founder: keep the shipped 512 m. Frames: captures/zc/distant_views_0928.
 
+## CURRENT REGION QUEUE (CORE, 2026-09-29 ~05:40, founder directive "COMPLETE WONDERLAND TODAY")
+
+Start SHA b4c58c4a. Measured base: structure-only emptiness **45.1 %** (3.10 km²; 1.80 km² of it at 1,200-1,480 m).
+Empty by wedge x band (ha, 05:05 census): 600-1,000 m 7.6-14.7 per 60° wedge; 1,000-1,200 m 6.0-9.3; 400-600 m 2.1-3.9.
+Map: editor 33092 has used its ONE save (zzW58). **The next writer relaunches first.** Writes are serialized by
+MAP WRITE REQUEST / COMPLETE messages. CORE = "Wonderland" session, SECOND = "New second wonder".
+
+| # | region | owner | status | biggest missing element | dependency / blocker |
+|---|---|---|---|---|---|
+| Q1 | R50 wild ring 1,200-1,480 m (outside Dubel) | SECOND | ACTIVE (offline audit) | the whole ring: 1.80 km², the largest single gap | 7 trail breaks at the wood seams and Dubel joins; visual audit of the plan before any apply |
+| Q2 | Sector fill 2: heartland pockets < 1,200 m (N166/196/253/220, T7/294, I88/36/74) | SECOND | ACTIVE (offline plan) | ~53 ha of unbuilt heartland between avenues and seams | keep clear of TR01 footprint (Q6) and MG01 footprint (Q7) |
+| Q3 | Frontiers R12 / R22 / R32, 1,000-1,200 m | SECOND | QUEUED | frontier identity (woods, meadows with purpose) | after Q1/Q2; MG01 sits in R32 (Q7) |
+| Q4 | Distant readability of 5 heartland fills (cull tiers 120/260 m) | SECOND | ACTIVE | rooms read as bare slabs past 120 m | Second's own specs. CORE's look call: hedges/trees ≥ 260 m and one tall marker per quarter are accepted; A/B test in-engine before and after |
+| Q5 | S02 seam radials 30° / 150° / 270°, plus the ring breaks that belong to the seams | CORE | ACTIVE | a radial road on each seam; RR02 23-32° and 140-148° SKY05 clusters; RR01 27.7-29.5° | R41/R42 fills hang on these polylines; CORE publishes them to SECOND before its layouts |
+| Q6 | TR01 Tower Rise, relocated outward to the ICARUS march edge (~105-125°, ~300-650 m; empty region at 111°, 3.8 ha) | CORE | ACTIVE (offline) | the missing forge district: capped towers round a dominant one, clock tower, walled court | directive P5 "prefer outward expansion": RELOCATED WITH INTENT. Needs a census clearance check, then a CORE write window |
+| Q7 | MG01 Mushroom Grove, relocated to the TARTARUS frontier on its forge bearing (~300°, 1,000-1,200 m) | CORE | QUEUED | the missing forge district: giant mushrooms on stone rings plus a landmark | footprint published to SECOND before its R32 / Q2 T294 layouts |
+| Q8 | Hedge gates on the rings: RR01 46.7-49.2°, RR02 68.1-69.1°, RR02 149.8-153.1° | CORE | QUEUED | ring circuits broken at V2 hedge masses | same method as W270G |
+| Q9 | R41 / R42 seams 150° / 30°, 500-1,200 m (fills) | SECOND after Q5 | BLOCKED on Q5 | seam identity between two nations | Q5 polylines |
+| Q10 | R00 / R01 Golden Arrival + 24 quarters: verification (composition checklist, TRAV / DIST / PROOF) | CORE | QUEUED | broad frames + in-play walk of every quarter | offline census check first; PIE is serialized with SECOND |
+| Q11 | R02 core rim 400-600 m (~18 ha, 2-4 ha per wedge) | CORE | QUEUED | ground between the rim gardens and the marches | after Q6 (TR01 takes part of 90-150°) |
+| Q12 | P5 Bible reconciliation (all districts/features -> BUILT / RELOCATED / SUPERSEDED / FOUNDER DECISION) | CORE | ACTIVE (offline) | the full list beyond the 14 forge districts | none |
+| Q13 | Final gates: emptiness, beta walk on real streaming, packaged boot + streaming | CORE | LAST | -- | everything above |
+
 ## Assignments
 
 | # | to | region | notes |
