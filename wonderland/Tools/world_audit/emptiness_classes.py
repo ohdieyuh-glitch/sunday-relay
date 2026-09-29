@@ -11,7 +11,8 @@ Tools/captures/zc/census/world_census.csv.gz). An EMPTY cell takes the first cla
                                  wild ring's walk sidecars (WorldDesign/Wedges/w[int]*_walk.json); and FOREST FLOOR,
                                  within 15 m of a Dubel or wild-ring trunk (checked after vistas and ways)
   3 INTENTIONAL VISTA            the Golden Arrival axis and the three avenues' sightlines (+/-25 m of 90 / 210 / 330
-                                 deg, 0-1,200 m), and 50 m of ceremonial ground round each checkpoint CP02-04
+                                 deg, 0-1,200 m), and each checkpoint's ceremonial ground: its paving + 30 m (CP01-05;
+                                 the planners reserve the same, sector_fill2.vista_blocks)
   5 TRAVERSAL SPACE              within 20 m of a way: ring and seam plates, avenue plates, the heartland / fill /
                                  wild-ring walks (sidecars), Dubel's walk and the gate walks
   4 PLAZA / COURT                inside a paved footprint wider than the 9 m reach (a plaza's middle)
@@ -21,6 +22,11 @@ Tools/captures/zc/census/world_census.csv.gz). An EMPTY cell takes the first cla
   7 OTHER JUSTIFIED              the world's rim apron beyond 1,460 m
   1 UNINTENDED EMPTY             none of the above
 The largest UNINTENDED regions are listed first: those are what gets built next.
+
+ONLY WHAT IS BUILT COUNTS. A planner writes its walk sidecar when it PLANS a pass, so Wedges/ holds the walks of passes
+that are staged, or never applied. A sidecar (and a checkpoint spec) counts only when its pass id is an owner prefix in
+the census being measured. Before this rule the 38 staged S3 walks were credited as traversal: post-4a UNINTENDED read
+11.3 % against 12.0 % built (2026-09-29). A projected census carries its passes' rows, so projections still count them.
 """
 import argparse
 import glob
@@ -54,6 +60,25 @@ def spec_points(path, id_has=None):
     return out
 
 
+CEREMONY_MARGIN = 3000.0        # cm of ceremonial ground beyond a checkpoint's paving
+
+
+def census_passes(census):
+    """The owner prefixes the census holds: the passes that are BUILT (or, in a projected census, projected)."""
+    import csv
+    import gzip
+    out = set()
+    with gzip.open(census, "rt", encoding="utf-8") as fh:
+        for r in csv.DictReader(fh):
+            out.add(r["owner"].split("_")[0].upper())
+    return out
+
+
+def sidecar_pass(path):
+    """wn210_walk.json -> WN210, s3n232_walk.json -> S3N232"""
+    return os.path.basename(path).split("_")[0].upper()
+
+
 def classify(census=E.DEFAULT_CENSUS):
     """The classified raster: {n, x0, C, cls (bytearray, 0 = covered/outside, else a CLASSES key), covered, R2}.
     Shared with the generators that build on the UNINTENDED cells (TW03)."""
@@ -61,6 +86,7 @@ def classify(census=E.DEFAULT_CENSUS):
     n = int(math.ceil(2 * RAD / C))
     x0 = -RAD
     rows, _dropped = E.load(census, True)
+    built = census_passes(census)
     covered = bytearray(n * n)
 
     def stamp(grid, x, y, r, val=1, only_zero=False):
@@ -105,6 +131,8 @@ def classify(census=E.DEFAULT_CENSUS):
     for (cx, cy, cr) in DF.CLEARINGS:
         mark(6, cx, cy, cr)
     for f in glob.glob(os.path.join(WD, "Wedges", "w[int]*_walk.json")):
+        if sidecar_pass(f) not in built:
+            continue
         for g in json.load(open(f, encoding="utf-8")).get("groups", []):
             if g.get("kind") == "clearing":
                 mark(6, g["centre"][0], g["centre"][1], g["radius"])
@@ -113,10 +141,13 @@ def classify(census=E.DEFAULT_CENSUS):
         t = math.radians(b)
         for d in range(0, 120001, 400):
             mark(3, d * math.cos(t), d * math.sin(t), 2500.0)
-    for cp in ("cp02_icarus_checkpoint.json", "cp03_noctis_checkpoint.json", "cp04_tartarus_checkpoint.json"):
-        pts = spec_points(os.path.join(WD, "Districts", cp))
+    for f in sorted(glob.glob(os.path.join(WD, "Districts", "cp0*_*_checkpoint.json"))):
+        if "CP" + os.path.basename(f)[2:4] not in built:
+            continue
+        pts = spec_points(f)
         if pts:
-            mark(3, sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts), 5000.0)
+            cx, cy = sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
+            mark(3, cx, cy, max(math.hypot(x - cx, y - cy) for (x, y) in pts) + CEREMONY_MARGIN)
     # 5 TRAVERSAL: 20 m of every way
     ways = []
     for f in ("Rings/rr01_march_ring.json", "Rings/rr02_outer_ring.json", "Rings/sr030_seam_way.json",
@@ -126,6 +157,8 @@ def classify(census=E.DEFAULT_CENSUS):
         if os.path.exists(p):
             ways += spec_points(p, ("Plate", "Flagstone", "Plaza", "Kerb"))[::2]
     for f in glob.glob(os.path.join(WD, "Wedges", "*_walk.json")):
+        if sidecar_pass(f) not in built:
+            continue
         ways += [tuple(q[:2]) for q in json.load(open(f, encoding="utf-8")).get("walk", [])]
     for f in ("Districts/dw01_dubel_walk.json", "Rings/hg2a_hedge_gates.json", "Rings/sx01_seam_bypass.json"):
         p = os.path.join(WD, f)
