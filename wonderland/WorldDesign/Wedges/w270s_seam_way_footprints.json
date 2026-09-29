@@ -1,0 +1,52 @@
+[
+ {
+  "module": "WL_Arch_Ceremonial",
+  "u": 52040.0,
+  "v": -720.0,
+  "z": 12.0,
+  "yaw": 90.0,
+  "w": 2310.0,
+  "d": 776.2,
+  "scale": 1.0
+ },
+ {
+  "module": "WL_Object_LanternStandard",
+  "u": 52040.0,
+  "v": -2940.0,
+  "z": -14.0,
+  "yaw": 0.0,
+  "w": 628.1,
+  "d": 160.0,
+  "scale": 1.0
+ },
+ {
+  "module": "WL_Object_PocketClock",
+  "u": 80000.0,
+  "v": 0.0,
+  "z": 14.0,
+  "yaw": 90.0,
+  "w": 188.8,
+  "d": 979.2,
+  "scale": 3.2
+ },
+ {
+  "module": "WL_Palace_Pavilion",
+  "u": 107500.0,
+  "v": 0.0,
+  "z": 12.0,
+  "yaw": 0.0,
+  "w": 1208.0,
+  "d": 1208.0,
+  "scale": 0.8
+ },
+ {
+  "module": "WL_Gatehouse_Screen",
+  "u": 111420.0,
+  "v": 0.0,
+  "z": 12.0,
+  "yaw": 90.0,
+  "w": 1218.1,
+  "d": 188.1,
+  "scale": 1.0
+ }
+]

@@ -1,0 +1,2679 @@
+{
+ "census": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\census\\world_census.csv.gz",
+ "placements_used": 177325,
+ "dropped": {
+  "sink": 282,
+  "sky": 1438,
+  "plate": 41,
+  "other": 49,
+  "cover": 0
+ },
+ "sectors": [
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    0,
+    100
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    100,
+    200
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    200,
+    300
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    300,
+    400
+   ],
+   "zone": "core",
+   "empty_pct": 11.3,
+   "empty_m2": 2075
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    400,
+    500
+   ],
+   "zone": "core",
+   "empty_pct": 22.8,
+   "empty_m2": 5375
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    500,
+    600
+   ],
+   "zone": "TARTARUS/march",
+   "empty_pct": 38.5,
+   "empty_m2": 11100
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    600,
+    700
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 80.6,
+   "empty_m2": 27450
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    700,
+    800
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 65.4,
+   "empty_m2": 25700
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    800,
+    900
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 37.8,
+   "empty_m2": 16800
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    900,
+    1000
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 34.6,
+   "empty_m2": 17225
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    1000,
+    1100
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 52.8,
+   "empty_m2": 29075
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    1100,
+    1200
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 44.5,
+   "empty_m2": 26725
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    1200,
+    1300
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 66.2,
+   "empty_m2": 43375
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    1300,
+    1400
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 100.0,
+   "empty_m2": 70700
+  },
+  {
+   "bearing": [
+    0,
+    30
+   ],
+   "ring_m": [
+    1400,
+    1500
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 100.0,
+   "empty_m2": 60350
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    0,
+    100
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    100,
+    200
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    200,
+    300
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    300,
+    400
+   ],
+   "zone": "core",
+   "empty_pct": 3.0,
+   "empty_m2": 550
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    400,
+    500
+   ],
+   "zone": "core",
+   "empty_pct": 21.1,
+   "empty_m2": 5000
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    500,
+    600
+   ],
+   "zone": "ICARUS/march",
+   "empty_pct": 32.4,
+   "empty_m2": 9325
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    600,
+    700
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 19.0,
+   "empty_m2": 6450
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    700,
+    800
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 43.9,
+   "empty_m2": 17300
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    800,
+    900
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 48.8,
+   "empty_m2": 21725
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    900,
+    1000
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 32.1,
+   "empty_m2": 15925
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    1000,
+    1100
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 41.9,
+   "empty_m2": 23075
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    1100,
+    1200
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 59.6,
+   "empty_m2": 35925
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    1200,
+    1300
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 45.6,
+   "empty_m2": 29850
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    1300,
+    1400
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 70.1,
+   "empty_m2": 49425
+  },
+  {
+   "bearing": [
+    30,
+    60
+   ],
+   "ring_m": [
+    1400,
+    1500
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 66.0,
+   "empty_m2": 39825
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    0,
+    100
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    100,
+    200
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    200,
+    300
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    300,
+    400
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    400,
+    500
+   ],
+   "zone": "core",
+   "empty_pct": 63.1,
+   "empty_m2": 14850
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    500,
+    600
+   ],
+   "zone": "ICARUS/march",
+   "empty_pct": 66.3,
+   "empty_m2": 19100
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    600,
+    700
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 49.7,
+   "empty_m2": 16925
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    700,
+    800
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 48.4,
+   "empty_m2": 19025
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    800,
+    900
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 61.5,
+   "empty_m2": 27325
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    900,
+    1000
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 21.7,
+   "empty_m2": 10800
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    1000,
+    1100
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 48.7,
+   "empty_m2": 26775
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    1100,
+    1200
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 69.8,
+   "empty_m2": 41925
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    1200,
+    1300
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 39.2,
+   "empty_m2": 25650
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    1300,
+    1400
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 12.8,
+   "empty_m2": 9025
+  },
+  {
+   "bearing": [
+    60,
+    90
+   ],
+   "ring_m": [
+    1400,
+    1500
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 36.3,
+   "empty_m2": 21900
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    0,
+    100
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    100,
+    200
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    200,
+    300
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    300,
+    400
+   ],
+   "zone": "core",
+   "empty_pct": 5.2,
+   "empty_m2": 950
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    400,
+    500
+   ],
+   "zone": "core",
+   "empty_pct": 43.6,
+   "empty_m2": 10275
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    500,
+    600
+   ],
+   "zone": "ICARUS/march",
+   "empty_pct": 39.7,
+   "empty_m2": 11425
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    600,
+    700
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 55.7,
+   "empty_m2": 18950
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    700,
+    800
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 30.7,
+   "empty_m2": 12075
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    800,
+    900
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 18.0,
+   "empty_m2": 7975
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    900,
+    1000
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 40.2,
+   "empty_m2": 20025
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    1000,
+    1100
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 51.0,
+   "empty_m2": 28075
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    1100,
+    1200
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 45.9,
+   "empty_m2": 27600
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    1200,
+    1300
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 37.2,
+   "empty_m2": 24325
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    1300,
+    1400
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 9.4,
+   "empty_m2": 6675
+  },
+  {
+   "bearing": [
+    90,
+    120
+   ],
+   "ring_m": [
+    1400,
+    1500
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 20.1,
+   "empty_m2": 12150
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    0,
+    100
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    100,
+    200
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    200,
+    300
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    300,
+    400
+   ],
+   "zone": "core",
+   "empty_pct": 6.7,
+   "empty_m2": 1225
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    400,
+    500
+   ],
+   "zone": "core",
+   "empty_pct": 37.4,
+   "empty_m2": 8850
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    500,
+    600
+   ],
+   "zone": "ICARUS/march",
+   "empty_pct": 28.9,
+   "empty_m2": 8300
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    600,
+    700
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 24.8,
+   "empty_m2": 8425
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    700,
+    800
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 37.2,
+   "empty_m2": 14675
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    800,
+    900
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 27.7,
+   "empty_m2": 12325
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    900,
+    1000
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 13.4,
+   "empty_m2": 6650
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    1000,
+    1100
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 41.4,
+   "empty_m2": 22775
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    1100,
+    1200
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 44.7,
+   "empty_m2": 26950
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    1200,
+    1300
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 54.6,
+   "empty_m2": 35700
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    1300,
+    1400
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 87.6,
+   "empty_m2": 61825
+  },
+  {
+   "bearing": [
+    120,
+    150
+   ],
+   "ring_m": [
+    1400,
+    1500
+   ],
+   "zone": "ICARUS/heartland",
+   "empty_pct": 84.3,
+   "empty_m2": 50925
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    0,
+    100
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    100,
+    200
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    200,
+    300
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    300,
+    400
+   ],
+   "zone": "core",
+   "empty_pct": 4.5,
+   "empty_m2": 825
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    400,
+    500
+   ],
+   "zone": "core",
+   "empty_pct": 36.8,
+   "empty_m2": 8675
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    500,
+    600
+   ],
+   "zone": "NOCTIS/march",
+   "empty_pct": 47.8,
+   "empty_m2": 13775
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    600,
+    700
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 88.1,
+   "empty_m2": 30000
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    700,
+    800
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 79.4,
+   "empty_m2": 31200
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    800,
+    900
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 65.0,
+   "empty_m2": 28875
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    900,
+    1000
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 30.2,
+   "empty_m2": 15050
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    1000,
+    1100
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 59.8,
+   "empty_m2": 32925
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    1100,
+    1200
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 59.8,
+   "empty_m2": 35950
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    1200,
+    1300
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 69.3,
+   "empty_m2": 45375
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    1300,
+    1400
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 96.1,
+   "empty_m2": 67925
+  },
+  {
+   "bearing": [
+    150,
+    180
+   ],
+   "ring_m": [
+    1400,
+    1500
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 100.0,
+   "empty_m2": 60350
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    0,
+    100
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    100,
+    200
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    200,
+    300
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    300,
+    400
+   ],
+   "zone": "core",
+   "empty_pct": 7.4,
+   "empty_m2": 1350
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    400,
+    500
+   ],
+   "zone": "core",
+   "empty_pct": 26.6,
+   "empty_m2": 6275
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    500,
+    600
+   ],
+   "zone": "NOCTIS/march",
+   "empty_pct": 51.6,
+   "empty_m2": 14875
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    600,
+    700
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 77.4,
+   "empty_m2": 26350
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    700,
+    800
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 70.3,
+   "empty_m2": 27600
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    800,
+    900
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 70.1,
+   "empty_m2": 31125
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    900,
+    1000
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 47.8,
+   "empty_m2": 23825
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    1000,
+    1100
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 62.7,
+   "empty_m2": 34500
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    1100,
+    1200
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 69.3,
+   "empty_m2": 41625
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    1200,
+    1300
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 65.6,
+   "empty_m2": 42975
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    1300,
+    1400
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 94.2,
+   "empty_m2": 66575
+  },
+  {
+   "bearing": [
+    180,
+    210
+   ],
+   "ring_m": [
+    1400,
+    1500
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 100.0,
+   "empty_m2": 60350
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    0,
+    100
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    100,
+    200
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    200,
+    300
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    300,
+    400
+   ],
+   "zone": "core",
+   "empty_pct": 1.4,
+   "empty_m2": 250
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    400,
+    500
+   ],
+   "zone": "core",
+   "empty_pct": 24.2,
+   "empty_m2": 5725
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    500,
+    600
+   ],
+   "zone": "NOCTIS/march",
+   "empty_pct": 48.3,
+   "empty_m2": 13900
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    600,
+    700
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 71.4,
+   "empty_m2": 24250
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    700,
+    800
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 52.0,
+   "empty_m2": 20525
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    800,
+    900
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 56.5,
+   "empty_m2": 25125
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    900,
+    1000
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 46.5,
+   "empty_m2": 23100
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    1000,
+    1100
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 61.6,
+   "empty_m2": 33875
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    1100,
+    1200
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 33.3,
+   "empty_m2": 20075
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    1200,
+    1300
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 78.9,
+   "empty_m2": 51600
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    1300,
+    1400
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 100.0,
+   "empty_m2": 70550
+  },
+  {
+   "bearing": [
+    210,
+    240
+   ],
+   "ring_m": [
+    1400,
+    1500
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 100.0,
+   "empty_m2": 60375
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    0,
+    100
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    100,
+    200
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    200,
+    300
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    300,
+    400
+   ],
+   "zone": "core",
+   "empty_pct": 4.8,
+   "empty_m2": 875
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    400,
+    500
+   ],
+   "zone": "core",
+   "empty_pct": 19.0,
+   "empty_m2": 4475
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    500,
+    600
+   ],
+   "zone": "NOCTIS/march",
+   "empty_pct": 69.7,
+   "empty_m2": 20075
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    600,
+    700
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 90.2,
+   "empty_m2": 30725
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    700,
+    800
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 92.9,
+   "empty_m2": 36475
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    800,
+    900
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 80.8,
+   "empty_m2": 35875
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    900,
+    1000
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 55.5,
+   "empty_m2": 27675
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    1000,
+    1100
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 58.9,
+   "empty_m2": 32425
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    1100,
+    1200
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 78.3,
+   "empty_m2": 47050
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    1200,
+    1300
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 79.3,
+   "empty_m2": 51950
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    1300,
+    1400
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 100.0,
+   "empty_m2": 70700
+  },
+  {
+   "bearing": [
+    240,
+    270
+   ],
+   "ring_m": [
+    1400,
+    1500
+   ],
+   "zone": "NOCTIS/heartland",
+   "empty_pct": 100.0,
+   "empty_m2": 60350
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    0,
+    100
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    100,
+    200
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    200,
+    300
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    300,
+    400
+   ],
+   "zone": "core",
+   "empty_pct": 1.4,
+   "empty_m2": 250
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    400,
+    500
+   ],
+   "zone": "core",
+   "empty_pct": 12.3,
+   "empty_m2": 2900
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    500,
+    600
+   ],
+   "zone": "TARTARUS/march",
+   "empty_pct": 66.3,
+   "empty_m2": 19100
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    600,
+    700
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 91.9,
+   "empty_m2": 31275
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    700,
+    800
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 93.0,
+   "empty_m2": 36525
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    800,
+    900
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 72.4,
+   "empty_m2": 32125
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    900,
+    1000
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 58.9,
+   "empty_m2": 29350
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    1000,
+    1100
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 78.7,
+   "empty_m2": 43300
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    1100,
+    1200
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 76.7,
+   "empty_m2": 46100
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    1200,
+    1300
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 68.8,
+   "empty_m2": 45025
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    1300,
+    1400
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 99.5,
+   "empty_m2": 70350
+  },
+  {
+   "bearing": [
+    270,
+    300
+   ],
+   "ring_m": [
+    1400,
+    1500
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 100.0,
+   "empty_m2": 60350
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    0,
+    100
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    100,
+    200
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    200,
+    300
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    300,
+    400
+   ],
+   "zone": "core",
+   "empty_pct": 11.5,
+   "empty_m2": 2100
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    400,
+    500
+   ],
+   "zone": "core",
+   "empty_pct": 16.8,
+   "empty_m2": 3975
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    500,
+    600
+   ],
+   "zone": "TARTARUS/march",
+   "empty_pct": 60.6,
+   "empty_m2": 17425
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    600,
+    700
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 80.7,
+   "empty_m2": 27400
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    700,
+    800
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 70.8,
+   "empty_m2": 27950
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    800,
+    900
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 37.0,
+   "empty_m2": 16450
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    900,
+    1000
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 23.3,
+   "empty_m2": 11575
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    1000,
+    1100
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 71.2,
+   "empty_m2": 39175
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    1100,
+    1200
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 37.4,
+   "empty_m2": 22525
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    1200,
+    1300
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 88.2,
+   "empty_m2": 57675
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    1300,
+    1400
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 100.0,
+   "empty_m2": 70550
+  },
+  {
+   "bearing": [
+    300,
+    330
+   ],
+   "ring_m": [
+    1400,
+    1500
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 100.0,
+   "empty_m2": 60375
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    0,
+    100
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    100,
+    200
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    200,
+    300
+   ],
+   "zone": "core",
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    300,
+    400
+   ],
+   "zone": "core",
+   "empty_pct": 16.8,
+   "empty_m2": 3075
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    400,
+    500
+   ],
+   "zone": "core",
+   "empty_pct": 34.3,
+   "empty_m2": 8075
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    500,
+    600
+   ],
+   "zone": "TARTARUS/march",
+   "empty_pct": 28.0,
+   "empty_m2": 8075
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    600,
+    700
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 75.6,
+   "empty_m2": 25725
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    700,
+    800
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 74.7,
+   "empty_m2": 29350
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    800,
+    900
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 76.6,
+   "empty_m2": 34000
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    900,
+    1000
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 42.5,
+   "empty_m2": 21175
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    1000,
+    1100
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 56.2,
+   "empty_m2": 30950
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    1100,
+    1200
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 78.8,
+   "empty_m2": 47375
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    1200,
+    1300
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 84.2,
+   "empty_m2": 55150
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    1300,
+    1400
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 98.3,
+   "empty_m2": 69500
+  },
+  {
+   "bearing": [
+    330,
+    360
+   ],
+   "ring_m": [
+    1400,
+    1500
+   ],
+   "zone": "TARTARUS/heartland",
+   "empty_pct": 100.0,
+   "empty_m2": 60350
+  }
+ ],
+ "cell_m": 5.0,
+ "reach_m": 9.0,
+ "structure_only": false,
+ "disc_m2": 6881500,
+ "empty_m2": 3945725,
+ "empty_pct": 57.3,
+ "covered_only_by_unloaded_descriptors_m2": 0,
+ "rings": [
+  {
+   "ring_m": [
+    0,
+    100
+   ],
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "ring_m": [
+    100,
+    200
+   ],
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "ring_m": [
+    200,
+    300
+   ],
+   "empty_pct": 0.0,
+   "empty_m2": 0
+  },
+  {
+   "ring_m": [
+    300,
+    400
+   ],
+   "empty_pct": 6.1,
+   "empty_m2": 13525
+  },
+  {
+   "ring_m": [
+    400,
+    500
+   ],
+   "empty_pct": 29.8,
+   "empty_m2": 84450
+  },
+  {
+   "ring_m": [
+    500,
+    600
+   ],
+   "empty_pct": 48.2,
+   "empty_m2": 166475
+  },
+  {
+   "ring_m": [
+    600,
+    700
+   ],
+   "empty_pct": 67.1,
+   "empty_m2": 273925
+  },
+  {
+   "ring_m": [
+    700,
+    800
+   ],
+   "empty_pct": 63.2,
+   "empty_m2": 298400
+  },
+  {
+   "ring_m": [
+    800,
+    900
+   ],
+   "empty_pct": 54.3,
+   "empty_m2": 289725
+  },
+  {
+   "ring_m": [
+    900,
+    1000
+   ],
+   "empty_pct": 37.2,
+   "empty_m2": 222375
+  },
+  {
+   "ring_m": [
+    1000,
+    1100
+   ],
+   "empty_pct": 57.1,
+   "empty_m2": 376925
+  },
+  {
+   "ring_m": [
+    1100,
+    1200
+   ],
+   "empty_pct": 58.2,
+   "empty_m2": 419825
+  },
+  {
+   "ring_m": [
+    1200,
+    1300
+   ],
+   "empty_pct": 64.8,
+   "empty_m2": 508650
+  },
+  {
+   "ring_m": [
+    1300,
+    1400
+   ],
+   "empty_pct": 80.7,
+   "empty_m2": 683800
+  },
+  {
+   "ring_m": [
+    1400,
+    1500
+   ],
+   "empty_pct": 83.9,
+   "empty_m2": 607650
+  }
+ ],
+ "regions_top": [
+  {
+   "area_m2": 3727800,
+   "built_world_m2": 1999575,
+   "centre_uu": [
+    303,
+    -23131
+   ],
+   "centre_radius_m": 231,
+   "bearing_deg": 271,
+   "zone": "core",
+   "radius_span_m": [
+    367,
+    1480
+   ]
+  },
+  {
+   "area_m2": 125500,
+   "built_world_m2": 98150,
+   "centre_uu": [
+    4817,
+    109395
+   ],
+   "centre_radius_m": 1095,
+   "bearing_deg": 87,
+   "zone": "ICARUS/heartland",
+   "radius_span_m": [
+    834,
+    1309
+   ]
+  },
+  {
+   "area_m2": 8650,
+   "built_world_m2": 8650,
+   "centre_uu": [
+    42935,
+    32844
+   ],
+   "centre_radius_m": 541,
+   "bearing_deg": 37,
+   "zone": "ICARUS/march",
+   "radius_span_m": [
+    412,
+    637
+   ]
+  },
+  {
+   "area_m2": 5025,
+   "built_world_m2": 5025,
+   "centre_uu": [
+    -42695,
+    38379
+   ],
+   "centre_radius_m": 574,
+   "bearing_deg": 138,
+   "zone": "ICARUS/march",
+   "radius_span_m": [
+    534,
+    612
+   ]
+  },
+  {
+   "area_m2": 3500,
+   "built_world_m2": 3500,
+   "centre_uu": [
+    -34314,
+    27864
+   ],
+   "centre_radius_m": 442,
+   "bearing_deg": 141,
+   "zone": "core",
+   "radius_span_m": [
+    375,
+    510
+   ]
+  },
+  {
+   "area_m2": 2800,
+   "built_world_m2": 2800,
+   "centre_uu": [
+    32719,
+    -24777
+   ],
+   "centre_radius_m": 410,
+   "bearing_deg": 323,
+   "zone": "core",
+   "radius_span_m": [
+    358,
+    474
+   ]
+  },
+  {
+   "area_m2": 2575,
+   "built_world_m2": 2575,
+   "centre_uu": [
+    99988,
+    46507
+   ],
+   "centre_radius_m": 1103,
+   "bearing_deg": 25,
+   "zone": "TARTARUS/heartland",
+   "radius_span_m": [
+    1043,
+    1157
+   ]
+  },
+  {
+   "area_m2": 2500,
+   "built_world_m2": 2500,
+   "centre_uu": [
+    -33270,
+    49700
+   ],
+   "centre_radius_m": 598,
+   "bearing_deg": 124,
+   "zone": "ICARUS/march",
+   "radius_span_m": [
+    561,
+    647
+   ]
+  },
+  {
+   "area_m2": 2450,
+   "built_world_m2": 2450,
+   "centre_uu": [
+    -37939,
+    18148
+   ],
+   "centre_radius_m": 421,
+   "bearing_deg": 154,
+   "zone": "core",
+   "radius_span_m": [
+    382,
+    457
+   ]
+  },
+  {
+   "area_m2": 2225,
+   "built_world_m2": 2225,
+   "centre_uu": [
+    28711,
+    28733
+   ],
+   "centre_radius_m": 406,
+   "bearing_deg": 45,
+   "zone": "core",
+   "radius_span_m": [
+    382,
+    435
+   ]
+  },
+  {
+   "area_m2": 2175,
+   "built_world_m2": 2175,
+   "centre_uu": [
+    81612,
+    34957
+   ],
+   "centre_radius_m": 888,
+   "bearing_deg": 23,
+   "zone": "TARTARUS/heartland",
+   "radius_span_m": [
+    843,
+    927
+   ]
+  },
+  {
+   "area_m2": 2150,
+   "built_world_m2": 2150,
+   "centre_uu": [
+    -83174,
+    60180
+   ],
+   "centre_radius_m": 1027,
+   "bearing_deg": 144,
+   "zone": "ICARUS/heartland",
+   "radius_span_m": [
+    1002,
+    1055
+   ]
+  }
+ ],
+ "regions_total": 231,
+ "wedge": {
+  "bearing": [
+   245.0,
+   295.0
+  ],
+  "radius_m": [
+   600.0,
+   1200.0
+  ],
+  "area_m2": 471150,
+  "empty_m2": 362425,
+  "empty_pct": 76.9
+ },
+ "png": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\census\\emptiness_all.png"
+}
