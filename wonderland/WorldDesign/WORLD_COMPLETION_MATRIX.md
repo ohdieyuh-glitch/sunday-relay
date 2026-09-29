@@ -78,11 +78,29 @@ DISTANT VIEWS · WORLD PARTITION · VISUAL PROOF.
 | R30 TARTARUS march + quarter 500-900 | CORE spine / WORLD fill | IN PROGRESS | NOT STARTED | IN PROGRESS | NOT STARTED | STRUCT. COMPLETE (AV03) | NOT STARTED | NOT STARTED | IN PROGRESS | NOT STARTED | VERIFIED | NOT STARTED |
 | R31 TARTARUS band 900-1000 | CORE | STRUCT. COMPLETE | IN PROGRESS | STRUCT. COMPLETE | IN PROGRESS | STRUCT. COMPLETE | IN PROGRESS | IN PROGRESS | IN PROGRESS | NOT STARTED | VERIFIED | IN PROGRESS |
 | R32 TARTARUS frontier 1000-1200 | WORLD | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | VERIFIED | NOT STARTED |
-| R40 SEAM 270° rear, 500-1200 | **WORLD (assigned #1)** | IN PROGRESS | IN PROGRESS | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | VERIFIED | NOT STARTED |
+| R40 SEAM 270° rear, 500-1200 | **WORLD (assigned #1)** | STRUCT. COMPLETE (W270S/N/T + hedge gate W270G applied) | STRUCT. COMPLETE (flank groves, meadows, 2 mushroom woods) | STRUCT. COMPLETE (courts, halls, street houses, arches, gatehouse) | STRUCT. COMPLETE (garden rooms, groves) | STRUCT. COMPLETE (the seam way 511-1,111 m; floor re-yawed dca810ca, kerbs re-laid 786be14b) | STRUCT. COMPLETE (pocket watch, pavilion, gatehouse screen, ceremonial + rose arches) | IN PROGRESS | **VERIFIED** in play: zc_w270_proof 18/18 stands, 0 gaps / unpaved / steps / capsule blocks, GATE_OPEN (zzW24) | NOT STARTED | VERIFIED (200 m tiles, real streaming bounds) | IN PROGRESS (plate before/after in captures/passes; founder views to shoot) |
 | R41 SEAM 150° (Icarus/Noctis), 500-1200 | WORLD (assigned #2) | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | VERIFIED | NOT STARTED |
 | R42 SEAM 30° (Tartarus/Icarus), 500-1200 | WORLD (assigned #3) | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | VERIFIED | NOT STARTED |
 | R50 WILD ring 1200-1480 (outside Dubel) | WORLD (after R40-R42) | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | NOT STARTED | VERIFIED | NOT STARTED |
 | R51 Dubel Forest 1230-1480, 90° | CORE (review) | STRUCT. COMPLETE | STRUCT. COMPLETE | NOT STARTED | STRUCT. COMPLETE | IN PROGRESS | NOT STARTED | IN PROGRESS | IN PROGRESS | NOT STARTED | VERIFIED | IN PROGRESS |
+
+**Heartland fills (WORLD, 2026-09-29; `WorldDesign/Wedges/sector_fill.py`).** The five empty heartlands between each
+band avenue and its seams, filled as a GARDEN WALK (stepping stones from ring to ring, crossing both) with garden
+quarters on it, rooms beside it, a mushroom wood at its end, groves in a belt and meadow drifts between; the rest
+lawn on purpose. Planned against the census through the frame-aware load_census; an offline capsule sweep of each
+walk runs in the generator (proven red on the first routing, green on the fix).
+
+| heartland | spec | STATUS | TRAV | PROOF |
+|---|---|---|---|---|
+| HT356 TARTARUS 336-16°, 610-1,100 m | ht356_tartarus_heartland.json | **APPLIED** 0dffc71d (2,213 inst); fixed walk (2,283) re-apply pending a fresh session | IN PROGRESS: zzW35 stands 10/10, rooms 12/12, 12 walk blocks -> fixed offline (1ee27840) | IN PROGRESS (CORE before-frames taken) |
+| HN181 NOCTIS 159-203°, 620-1,150 m | hn181_noctis_heartland.json | **APPLIED** 0dffc71d (2,197 inst); fixed walk (1,899) re-apply pending | IN PROGRESS: zzW35 stands 9/9, rooms 10/10, 6 walk blocks -> fixed offline | IN PROGRESS (CORE before-frames taken) |
+| HN238 NOCTIS 221-255° | hn238_noctis_heartland.json | PLANNED (2,273 inst), HELD for review | -- | -- |
+| HI057 ICARUS 40-74° | hi057_icarus_heartland.json | PLANNED (1,861 inst), HELD for review | -- | -- |
+| HT308 TARTARUS 294-322° | ht308_tartarus_heartland.json | PLANNED (1,861 inst), HELD for review | -- | -- |
+
+R41 / R42 (the 150° and 30° seams): the pockets P165N / P015T were WITHDRAWN (their clearance was tested against
+an empty world -- load_census hard-coded the rear seam's wedge; fixed 786be14b). The seams' own axes are lined with
+existing buildings between the rings (plans 2026-09-28); their open ground is what the heartland fills take.
 | S01 ring circuit (march ring 560-716 m, outer ring 980-1,246 m; pinned to W270's plazas at 645 / 1,075 m) | **CORE** | STRUCT. COMPLETE | -- | -- | STRUCT. COMPLETE (487 avenue trees) | STRUCT. COMPLETE (RR01 + RR02 applied, smoothed; breaks only at SKY05 clusters, hedge gardens and junctions) | -- | STRUCT. COMPLETE (290 lanterns) | **VERIFIED** in play: zc_ring_walk 32/32 stands on the paving, streaming complete at each | -- | VERIFIED (tiled 200 m, real streaming bounds) | IN PROGRESS (before/after + in-play frames sent) |
 | S02 seam radials 30° / 150° / 270° | **CORE** | NOT STARTED | -- | -- | -- | NOT STARTED | -- | -- | NOT STARTED | -- | -- | NOT STARTED |
 | S03 packaged world boots Golden Arrival | **CORE** | **VERIFIED 2026-09-29 00:11**: BuildCookRun Win64 Development SUCCESSFUL (2 min; 285 streaming-cell packages generated for WL_V2_GoldenArrival_WP2; RelayCubs + RelaySkins staged); the packaged exe boots into Golden Arrival (LoadMap 4.45 s) and the runtime hash overlay shows 52 cells loaded around the player | | | | | | | | | VERIFIED | `Tools/boot_test_package.ps1`; frame `captures/zc/package_0929/packaged_boot_golden_arrival.png`; package `C:/dev/iwonder/_wonderland_package_20260929` |
