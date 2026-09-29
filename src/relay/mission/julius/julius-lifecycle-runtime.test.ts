@@ -70,6 +70,22 @@ describe('a gated operation waits instead of being refused', () => {
     expect(ctx.harness.adapters.get(CODER.adapterId)!.dispatches).toHaveLength(0);
   });
 
+  it('is not walked out of BLOCKED by advanceRun while the approval is pending', async () => {
+    // The test above ticks once and stops. The live driver does not: a tick
+    // that claims nothing is followed by `advanceRun`, whose target from the
+    // tasks is READY, and BLOCKED -> READY is legal. Before this guard the
+    // idle tick walked the run to READY and the next tick dispatched.
+    const ctx = build();
+    await ask(ctx);
+    for (let i = 0; i < 3; i += 1) {
+      expect((await ctx.harness.loop.tick(scope)).claimed).toBe(0);
+      const advance = await ctx.harness.loop.advanceRun('run-1', 'prj-1');
+      expect(advance).toMatchObject({ from: 'BLOCKED', to: 'BLOCKED', changed: false, reasonCode: 'RUN_AWAITING_APPROVAL' });
+    }
+    expect(ctx.harness.adapters.get(CODER.adapterId)!.dispatches).toHaveLength(0);
+    expect((await runRow(ctx.harness)).state).toBe('BLOCKED');
+  });
+
   it('produces ONE request when two workers reach the same gate', async () => {
     const ctx = build();
     const first = await ask(ctx);
