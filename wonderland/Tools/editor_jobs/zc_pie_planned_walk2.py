@@ -19,6 +19,11 @@
 #     eight Pawn-profile sweeps round the Dog, naming the instance hit -- and, with RESUME, the Dog is placed at the plan
 #     point 10 m on. A leg with a stop is NOT a proof (it is then MIXED); the stop list is the verdict, and one run
 #     finds every stop on the leg instead of only the first.
+# v2.1 (after the first nation run, 13:43): the Noctis walk snagged at a narrow arcade gap the plan had squeezed
+# through diagonally, and a resume set the Dog down on top of a 3 m glass screen. Now: a diagonal move needs both of
+# its orthogonal cells free (no corner cutting); cells are cleared for PLAN_RADIUS (48 cm, the Dog's 36 + 12) so a plan
+# keeps off walls; the midpoint of every move is cleared too; failing pairs retry in an 80 m box; and every plan
+# point carries its planned floor z, which a resume placement uses instead of tracing down onto whatever is highest.
 # Globals: LEGS = [{"id": str, "points": [[x, y], ...]}, ...]; RESUME (True). PIE-owning: CONCURRENT is False.
 CONCURRENT = False
 import heapq
@@ -29,11 +34,12 @@ LEGS = globals().get("LEGS", [])
 RESUME = globals().get("RESUME", True)
 CELL = globals().get("CELL", 50.0)
 MARGIN = globals().get("MARGIN", 1500.0)
-MARGIN_WIDE = globals().get("MARGIN_WIDE", 4000.0)
+MARGIN_WIDE = globals().get("MARGIN_WIDE", 8000.0)
 SNAP = globals().get("SNAP", 1200.0)
-MAX_EXPAND = globals().get("MAX_EXPAND", 60000)
+MAX_EXPAND = globals().get("MAX_EXPAND", 200000)
 MAX_STOPS = globals().get("MAX_STOPS", 12)
 RADIUS, HALF = 36.0, 87.0            # BP_RelayDog_C's capsule, measured in PIE (zc2E_11): 35.9 / 87.1
+PLAN_RADIUS = globals().get("PLAN_RADIUS", 48.0)   # planning clearance: the Dog's radius + 12 cm off every wall
 STEP = globals().get("STEP", 30.0)   # BP_RelayDog_C MaxStepHeight (zc2E_11)
 SYMMETRIC = globals().get("SYMMETRIC", True)
 ARRIVE = 80.0
@@ -105,11 +111,11 @@ def _run(ues, les):
             fcache[key] = None if t_ is None else float(t_[4].z)
         return fcache[key]
 
-    def blocker(x, y, z, bottom_above=STEP + 1.0):
+    def blocker(x, y, z, bottom_above=STEP + 1.0, radius=PLAN_RADIUS):
         """None when a Pawn capsule standing on z (bottom bottom_above cm up) overlaps nothing, else what it hits."""
         c = z + bottom_above + HALF
         hit = unreal.SystemLibrary.capsule_trace_single_by_profile(world(), unreal.Vector(x, y, c),
-                                                                  unreal.Vector(x, y, c + 1.0), RADIUS, HALF, "Pawn",
+                                                                  unreal.Vector(x, y, c + 1.0), radius, HALF, "Pawn",
                                                                   False, ignore(), unreal.DrawDebugTrace.NONE, True,
                                                                   unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
         if hit is None:
@@ -232,16 +238,25 @@ def _run(ues, les):
                 yield 0.0
             xa, ya = xy(c)
             za = zc[c]
+
+            def open_cell(q):
+                if not inside(q):
+                    return False
+                zq = floor(*xy(q), za)
+                return zq is not None and abs(zq - za) <= STEP and free(*xy(q), zq)
             for di, dj in NB8:
                 nb = (c[0] + di, c[1] + dj)
                 if nb in closed or not inside(nb):
                     continue
+                if di and dj and not (open_cell((c[0] + di, c[1])) and open_cell((c[0], c[1] + dj))):
+                    continue                                         # no corner cutting
                 xb, yb = xy(nb)
                 zb = floor(xb, yb, za)
                 if zb is None or not free(xb, yb, zb):
                     continue
-                zm = floor((xa + xb) * 0.5, (ya + yb) * 0.5, za)
-                if zm is None or not step_ok(za, zm) or not step_ok(zm, zb):
+                xm, ym = (xa + xb) * 0.5, (ya + yb) * 0.5
+                zm = floor(xm, ym, za)
+                if zm is None or not step_ok(za, zm) or not step_ok(zm, zb) or not free(xm, ym, zm):
                     continue
                 ng = gc + (1.41421356 if di and dj else 1.0)
                 if ng < gcost.get(nb, 1e18):
@@ -283,7 +298,7 @@ def _run(ues, les):
             if d_in != d_out or far:
                 keep.append(cells[k])
         keep.append(cells[-1])
-        out.update({"ok": True, "path": [xy(q) for q in keep], "z_end": zc[g],
+        out.update({"ok": True, "path": [xy(q) + (zc[q],) for q in keep], "z_end": zc[g],
                     "length_m": round(sum(math.hypot(cells[k][0] - cells[k - 1][0], cells[k][1] - cells[k - 1][1])
                                           for k in range(1, len(cells))) * CELL / 100.0, 1)})
         return out
@@ -310,11 +325,16 @@ def _run(ues, les):
         fcache.clear()                                               # a trace made before the load may be of nothing
         ccache.clear()
 
-    def place(x, y, zhint):
-        """THE placement: over x, y with streaming complete, then set down on the floor and handed to the walker."""
+    def place(x, y, zhint, planned=False):
+        """THE placement: over x, y with streaming complete, then set down on the floor and handed to the walker.
+        A planned point's zhint IS its floor: trace from just above it, never down onto a roof or a screen top."""
         yield from hover(x, y)
         dog = pawn()
-        z = floor(x, y, zhint)
+        if planned:
+            t_ = trace_down(x, y, zhint + 60.0, zhint - 200.0)
+            z = zhint if t_ is None else float(t_[4].z)
+        else:
+            z = floor(x, y, zhint)
         dog.set_actor_location(unreal.Vector(x, y, (z if z is not None else zhint) + HALF + 30.0), False, True)
         dog.character_movement.set_movement_mode(unreal.MovementMode.MOVE_WALKING)
 
@@ -339,6 +359,8 @@ def _run(ues, les):
             prow.update({k: v for k, v in res.items() if k != "path"})
             rec["pairs"].append(prow)
             if res.get("ok"):
+                if len(route) == 1:
+                    route[0] = res["path"][0]                        # the planned (snapped) start, with its z
                 route.extend(res["path"][1:])
                 zhint = res["z_end"]
                 rec["planned_pairs"] += 1
@@ -348,7 +370,10 @@ def _run(ues, les):
         rec["route_points"] = len(route)
         emit("PLAN", leg["id"], "%d/%d pairs planned" % (rec["planned_pairs"], len(pts) - 1), len(route))
         # THE WALK: ONE placement at the first plan point, then forced input along the plan
-        yield from place(route[0][0], route[0][1], globals().get("ZHINT", 0.0))
+        if len(route[0]) == 3:
+            yield from place(route[0][0], route[0][1], route[0][2], planned=True)
+        else:
+            yield from place(route[0][0], route[0][1], globals().get("ZHINT", 0.0))
         yield 1.0
         wp, best_d, since, walked, last = 1, None, 0.0, 0.0, None
         stops = []
@@ -371,7 +396,7 @@ def _run(ues, les):
             if last is not None:
                 walked += math.hypot(loc.x - last[0], loc.y - last[1])
             last = (loc.x, loc.y)
-            tx, ty = route[wp]
+            tx, ty = route[wp][0], route[wp][1]
             dx, dy = tx - loc.x, ty - loc.y
             d = math.hypot(dx, dy)
             if d <= ARRIVE:
@@ -394,7 +419,10 @@ def _run(ues, les):
                     k = wp
                     while k < len(route) - 1 and math.hypot(route[k][0] - loc.x, route[k][1] - loc.y) < 1000.0:
                         k += 1
-                    yield from place(route[k][0], route[k][1], loc.z - HALF)
+                    if len(route[k]) == 3:
+                        yield from place(route[k][0], route[k][1], route[k][2], planned=True)
+                    else:
+                        yield from place(route[k][0], route[k][1], loc.z - HALF)
                     yield 1.0
                     wp, best_d, since, last = k + 1, None, 0.0, None
                     continue

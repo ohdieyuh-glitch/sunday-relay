@@ -365,6 +365,28 @@ no save):**
   it counts as reached to its base, not stood beside. GA's designed rear leg (integration lane, zzJ01) runs into the V2
   palace complex (castle halls and towers from x -2,000 to +2,500, y 9,700-14,500), so there is no way along it at all.
   The rear world (y > 14,500) is being tested round the complex's west and east sides.
+- **Core-to-nation traversal, planner v2 (13:07-13:42, 2,107 s, read-only):**
+  - **GA REAR WORLD: SELF-POWERED ARRIVED** round the palace complex's WEST side: entrance (300, 9,650) -> (0, 16,500),
+    156 m, 0 stops. The east side is closed by PL01's palace wing and castle halls; one designed way is enough.
+  - **AVENUES WALKABLE ON PLANNED ROUTES, 0 stops:**
+    - AV02: CP03 -> Noctis end (1,192 m).
+    - AV03: AP01 -> CP04 -> end (1,162 m).
+    - AV01: CP02 + 10 m -> end, through IC02, IC03's ceremonial arch (824 m) and the 848 m hedge.
+
+    The morning's 515 / 703 / 718-722 / 810 m stops were artefacts of census-drawn routes, not world defects. The
+    walks resumed by placement after earlier stops, so they are recorded as MIXED legs; the avenue stretches ran with
+    0 stops.
+  - **The open questions are the city -> checkpoint approaches, inside the V2 core (90-370 m):**
+    - ICARUS (90°): the palace complex, the GreatSpire precinct (body centre (0, 33,000), a +216 podium ~49 m round,
+      a ring of 20 rose cones at 75 m) and a castle hall at (0, 36,000) stand across the line. The AP01 causeway starts
+      inside the cone ring at 385 m.
+    - TARTARUS (330°): Gatekeeper Fields' gatehouse (12 x 30 m, (16,555, -8,899)) and glass screen (21 m,
+      (19,194, -10,711)) cross the line at 185-220 m.
+    - NOCTIS (210°): one snag in a narrow castle-arcade gap at 362 m, which the plan squeezed through diagonally.
+    - CP02's side ground sits behind the causeway's 32 cm kerbs; the causeway runs straight on to AV01.
+
+    Planner v2.1 (no corner cutting, 48 cm planning clearance, 80 m retry boxes, planned-z resume) re-tests all three
+    approaches with targets round the precinct and the gatehouse.
 - **8 more frames** (`core_0929`: the three nation bands and frontiers, SR150 from height, gate GD from above).
   - At the bands the nations read distinctly: ICARUS ivory and gold towers with giant-mushroom tables, NOCTIS black
     spires round a dark domed palace, TARTARUS red-brown towers on cream and pink terraces.
@@ -382,11 +404,11 @@ independent QA session (JUJU and the integration lane were reassigned to Julius 
 | 2 | every major region has an owner and resolved status | IN PROGRESS | queue Q1-Q13; SECOND 5a-5d, CORE flank / final gates |
 | 3 | major unintended empty regions authored | IN PROGRESS | 45.1 % empty (morning) -> 16.2 % (4b) -> 15.0 % (4c) -> 13.8 % (5a) -> **11.6 % after 5b (UNINTENDED 6.6 %, 703 regions; meadow 2.9, traversal 1.4, vista 0.3, rim 0.2, clearing 0.1)**; 5c / 5d / C7 to come |
 | 4 | remaining negative space explicitly intentional | IN PROGRESS | classes: meadow / vista / traversal / clearing / rim; final classification after 5d |
-| 5 | Golden Arrival complete | IN PROGRESS | composition passes present; axis SELF-POWERED 32/32 after GS01; flanks SELF-POWERED 2/2 from the north arches; rear world OPEN (castle hall on the planned leg) |
+| 5 | Golden Arrival complete | IN PROGRESS | composition passes present; axis SELF-POWERED 32/32 after GS01; flanks SELF-POWERED 2/2 from the north arches; rear world SELF-POWERED round the palace complex's west side (156 m, 0 stops) |
 | 6 | 24 quarters coherent | MET (founder decision) | classified per site; core preserved, identities outward (TW01-03, MG01) |
 | 7 | three nations read distinctly | IN PROGRESS | band + frontier frames per nation (12:40): distinct at the bands (ivory/gold, black, red-brown); frontiers read as woodland with accents -- final set after the massing round |
 | 8 | major seams complete | MET (builder-run) | W270 (18/18), SR030 + SR150 seam ways SELF-POWERED, R41/R42 seam ground filled by S2/S3 |
-| 9 | radial roads connect correctly | IN PROGRESS | SR150 / SR030 SELF-POWERED; AV01-03 NOT PROVEN: self-walks stop at 515 m (route artefact), 703, 718-722, 810-811 m -- planner v2 diagnosis, then designed fixes |
+| 9 | radial roads connect correctly | IN PROGRESS | SR150 / SR030 SELF-POWERED; AV01-03 walk with 0 stops from their checkpoints to the nation ends on planned routes (13:42; the earlier stops were route artefacts); city -> checkpoint approaches under re-test (planner v2.1) |
 | 10 | ring circuits connect or gates intentional | MET (builder-run) | hedge gates GA/GB/GC/GD/GE SELF-POWERED; SKY05 tower breaks documented (RR01 ~28 deg, RR02 20-32 / 140-148 deg) |
 | 11 | heartlands complete | MET (builder-run) | 5 heartlands applied, SELF-POWERED 5/5, rooms 48/48 |
 | 12 | frontiers complete | IN PROGRESS | S2 strips + S3 (5a/5b) + S4 (5c); Dubel edge S5 (5d) + outer wall |
