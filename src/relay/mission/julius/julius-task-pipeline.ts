@@ -32,7 +32,8 @@
  */
 
 import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
-import type { JuliusApprovalStore } from './julius-lifecycle-runtime';
+import { requestJuliusApproval, type JuliusApprovalStore } from './julius-lifecycle-runtime';
+import { JULIUS_CLAIMABLE_RUN_STATES } from './julius-state-path';
 import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionOutcome, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
 import { safeReasonCode, type JuliusDispatchWorkspace, type JuliusProviderRouter } from './julius-router';
@@ -220,7 +221,8 @@ export interface JuliusPipelineDependencies {
    * PostgreSQL and in-memory stores serve it; a store that does not cannot
    * hold an approval at all.
    */
-  readonly store: JuliusRuntimeStore & JuliusRecoveryDriver & Partial<Pick<JuliusApprovalStore, 'pendingApprovals'>>;
+  readonly store: JuliusRuntimeStore & JuliusRecoveryDriver
+    & Partial<Pick<JuliusApprovalStore, 'pendingApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>>;
   readonly router: JuliusProviderRouter;
   readonly budget: JuliusBudgetPort;
   readonly clock: JuliusClock;
@@ -326,7 +328,18 @@ export type JuliusTaskOutcome =
     readonly failureClass: string; readonly guidanceTaskId: string; readonly continuationTaskId: string;
   }
   | { readonly kind: 'DENIED'; readonly taskId: string; readonly reasonCode: string }
-  | { readonly kind: 'APPROVAL_REQUIRED'; readonly taskId: string; readonly operation: string; readonly reasonCode: string }
+  /**
+   * WAITING ON A PERSON. `approvalId` names the PENDING record an authorized
+   * approver answers; null only when the store could not hold one
+   * (`APPROVAL_UNSERVED`) and the task was refused instead.
+   */
+  | { readonly kind: 'APPROVAL_REQUIRED'; readonly taskId: string; readonly operation: string; readonly reasonCode: string; readonly approvalId: string | null }
+  /**
+   * GOVERNANCE-HELD AT THE DISPATCH BOUNDARY: the run was paused, blocked,
+   * awaiting an approval or terminal when the claimed task reached its
+   * preflight. Not a failure of the task; `holdAtDispatchBoundary`.
+   */
+  | { readonly kind: 'HELD'; readonly taskId: string; readonly reasonCode: string; readonly runState: string }
   | { readonly kind: 'HALTED'; readonly taskId: string; readonly reasonCode: string; readonly safeSummary: string }
   /**
    * NO DECISION YET, ON PURPOSE. A material challenge is open against the work,
@@ -593,6 +606,174 @@ export function juliusContractSubjectTaskId(task: JuliusTask, tasks: readonly Ju
   return null;
 }
 
+/**
+ * THE KEY OF A C.A.R.D. GATE AT DISPATCH: one approval per run, task, gated
+ * operation, capability and C.A.R.D. revision. Deterministic, so every claim of
+ * the task — a second worker, a re-run of the mission job — finds the SAME
+ * record rather than asking a person the same question twice; and revision-
+ * bound, so an answer given under one C.A.R.D. never authorises dispatch under
+ * another.
+ */
+export function juliusDispatchApprovalId(input: {
+  readonly runId: string; readonly taskId: string; readonly operation: 'DISPATCH_WORKER' | 'USE_CAPABILITY';
+  readonly capability: string; readonly policyRevision: string;
+}): string {
+  const subject = input.operation === 'USE_CAPABILITY' ? `${input.operation}:${input.capability}` : input.operation;
+  return `approval:dispatch:${input.runId}:${input.taskId}:${subject}:${input.policyRevision}`;
+}
+
+/** A gate that could not be recorded is asked again this long after, not in a hot loop. */
+const APPROVAL_REQUEST_RETRY_MS = 5_000;
+
+/**
+ * THE DISPATCH BOUNDARY REFUSES A GOVERNANCE-HELD RUN, WHATEVER THE CLAIM SAW.
+ *
+ * The claim query refuses a run that is PAUSED, BLOCKED or terminal, or that
+ * holds a PENDING or DENIED approval — at the instant it claims. A pause, a
+ * gate or a cancellation can land between that claim and this preflight (an
+ * operator over the bridge, another worker's gate), and "pause means start
+ * nothing further" has to hold for a task claimed but not yet admitted. So the
+ * run read at the top of the preflight — after the claim — is judged again
+ * here, before any attempt is spent:
+ *  - PAUSED, BLOCKED, or a PENDING approval on the run: the task is handed back
+ *    RUNNABLE and untouched. The hold is somebody's decision, not the task's
+ *    failure, and the claim query keeps it from being offered until it lifts.
+ *  - CANCELLED: the task ends CANCELLED, as cancellation ends every task.
+ *  - FAILED or COMPLETED (a denial fails the run): the task ends FAILED.
+ * Work already admitted is not reached from here: pause does not kill work in
+ * flight (`julius-lifecycle-runtime.ts`).
+ */
+async function holdAtDispatchBoundary(
+  input: {
+    readonly claim: JuliusPipelineRequest['claim'];
+    readonly run: JuliusRunRow;
+    readonly ledger: RuntimeLedger;
+    readonly policyRevision: string;
+  },
+  deps: JuliusPipelineDependencies,
+): Promise<JuliusTaskPreflight | null> {
+  const { claim, run } = input;
+  const pending = deps.store.pendingApprovals === undefined
+    ? [] : await deps.store.pendingApprovals(run.runId, run.projectId);
+  if (JULIUS_CLAIMABLE_RUN_STATES.includes(run.state) && pending.length === 0) return null;
+
+  const terminal = run.state === 'CANCELLED' || run.state === 'FAILED' || run.state === 'COMPLETED';
+  const reasonCode = pending.length > 0 && !terminal ? 'RUN_AWAITING_APPROVAL' : `RUN_${run.state}`;
+  const now = deps.clock.now();
+  await deps.store.finishTask({
+    taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration,
+    state: run.state === 'CANCELLED' ? 'CANCELLED' : 'FAILED', now,
+    ...(terminal ? {} : { nextAttemptAt: now }),
+  });
+  await input.ledger.trajectory('DISPATCH', {
+    taskId: claim.taskId, policyRevision: input.policyRevision, outcome: 'GOVERNANCE_HELD',
+    facts: { reasonCode, runState: run.state, pendingApprovals: pending.length, handedBack: !terminal },
+  });
+  return { kind: 'REFUSED', outcome: { kind: 'HELD', taskId: claim.taskId, reasonCode, runState: run.state } };
+}
+
+/**
+ * A C.A.R.D. GATE AT DISPATCH IS A QUESTION FOR A PERSON, NOT A REFUSAL.
+ *
+ * WHAT IT WAS. REQUIRE_APPROVAL here ended the claimed task FAILED and
+ * announced `run.paused` — for a run nobody had paused — and wrote no approval
+ * record, because `requestJuliusApproval` had no production caller. A gated
+ * operation could only ever be refused: there was nothing for an authorized
+ * person to grant, and the task it gated was already dead.
+ *
+ * WHAT IT IS. The gate is keyed (`juliusDispatchApprovalId`), and its record
+ * decides:
+ *  - APPROVED — somebody authorized answered exactly this gate: returns `null`
+ *    and dispatch goes on. The record (who, when, why) is the evidence.
+ *  - DENIED or CANCELLED — the task ends FAILED as `APPROVAL_DENIED` and
+ *    nothing is dispatched. (A denial also fails the run, so this is the
+ *    defensive branch: a denied run offers no claims.)
+ *  - anything else — the approval is REQUESTED through the one production path
+ *    (the run moves to BLOCKED, atomically where the store can), and only THEN
+ *    is the task handed back RUNNABLE: never FAILED, and at no execution
+ *    attempt's cost, because this gate runs before `admitTask`. Requesting
+ *    first means the task is never claimable in a run that is not yet held;
+ *    and the claim query refuses any run with a PENDING approval besides.
+ *  - a store that cannot hold an approval keeps the old ending: FAILED, as
+ *    `APPROVAL_UNSERVED`. A gate with nowhere to wait is refused, never
+ *    walked through.
+ *
+ * UNCHAINED is not consulted here and cannot be: `evaluateJuliusPolicy` only
+ * returns REQUIRE_APPROVAL when autonomy did not already waive the gate.
+ */
+async function holdClaimForApproval(
+  input: {
+    readonly claim: JuliusPipelineRequest['claim'];
+    readonly run: JuliusRunRow;
+    readonly operation: 'DISPATCH_WORKER' | 'USE_CAPABILITY';
+    readonly capability: string;
+    readonly verdict: { readonly reasonCode: string; readonly policyRevision: string; readonly safeRationale: string };
+    readonly ledger: RuntimeLedger;
+  },
+  deps: JuliusPipelineDependencies,
+): Promise<JuliusTaskPreflight | null> {
+  const { claim, run, operation, verdict, ledger } = input;
+  const store = deps.store;
+  const release = (nextAttemptAt?: string): Promise<boolean> => store.finishTask({
+    taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state: 'FAILED',
+    now: deps.clock.now(), ...(nextAttemptAt === undefined ? {} : { nextAttemptAt }),
+  });
+  const waiting = (reasonCode: string, approvalId: string | null): JuliusTaskPreflight => ({
+    kind: 'REFUSED', outcome: { kind: 'APPROVAL_REQUIRED', taskId: claim.taskId, operation, reasonCode, approvalId },
+  });
+
+  if (store.requestApproval === undefined || store.loadApproval === undefined) {
+    await release();
+    await ledger.event('run.failed', {
+      taskId: claim.taskId,
+      facts: { reasonCode: 'APPROVAL_UNSERVED', gateReasonCode: verdict.reasonCode, policyRevision: verdict.policyRevision },
+    });
+    return waiting('APPROVAL_UNSERVED', null);
+  }
+
+  const approvalId = juliusDispatchApprovalId({
+    runId: run.runId, taskId: claim.taskId, operation, capability: input.capability, policyRevision: verdict.policyRevision,
+  });
+  const prior = await store.loadApproval(run.runId, approvalId, run.projectId);
+  if (prior?.state === 'APPROVED') return null;
+  if (prior?.state === 'DENIED' || prior?.state === 'CANCELLED') {
+    await release();
+    await ledger.event('run.failed', {
+      taskId: claim.taskId, facts: { reasonCode: 'APPROVAL_DENIED', approvalId, policyRevision: verdict.policyRevision },
+    });
+    await ledger.trajectory('DISPATCH', { taskId: claim.taskId, policyRevision: verdict.policyRevision, outcome: 'APPROVAL_DENIED' });
+    return { kind: 'REFUSED', outcome: { kind: 'DENIED', taskId: claim.taskId, reasonCode: 'APPROVAL_DENIED' } };
+  }
+
+  let asked: string;
+  try {
+    const requested = await requestJuliusApproval({
+      run, approvalId, taskId: claim.taskId, operation, policyRevision: verdict.policyRevision,
+      reasonCode: verdict.reasonCode, safeRationale: verdict.safeRationale, idempotencyKey: approvalId,
+    }, {
+      store: {
+        requestApproval: store.requestApproval.bind(store),
+        ...(store.requestApprovalAndBlock === undefined ? {} : { requestApprovalAndBlock: store.requestApprovalAndBlock.bind(store) }),
+        loadRun: store.loadRun.bind(store),
+        transition: store.transition.bind(store),
+      },
+      clock: deps.clock, events: store, ids: deps.ids,
+    });
+    // THE RECORD A PERSON WILL ACTUALLY ANSWER. Usually this gate's own key;
+    // the one-PENDING-per-operation index can instead hand back a request that
+    // was already open for this task and operation, and that is the one to name.
+    asked = requested.requested ? requested.record.approvalId : approvalId;
+  } catch {
+    // THE RUN MOVED UNDER THE REQUEST (a version race, a concurrent lifecycle
+    // change). Nothing was dispatched; the task goes back with a short wait and
+    // its next claim asks again — idempotently, by the same key.
+    await release(new Date(Date.parse(deps.clock.now()) + APPROVAL_REQUEST_RETRY_MS).toISOString());
+    return waiting('APPROVAL_REQUEST_RETRY', approvalId);
+  }
+  await release(deps.clock.now());
+  return waiting(verdict.reasonCode, asked);
+}
+
 export async function prepareClaimedTask(
   request: JuliusPipelineRequest,
   deps: JuliusPipelineDependencies,
@@ -610,6 +791,10 @@ export async function prepareClaimedTask(
   const correlationId = `${claim.taskId}:${claim.leaseGeneration}`;
   const ledger = new RuntimeLedger(deps, run, correlationId);
 
+  /* --------------------------------- 0. the governance hold, at dispatch */
+  const held = await holdAtDispatchBoundary({ claim, run, ledger, policyRevision: request.policy.revision }, deps);
+  if (held !== null) return held;
+
   const role = resolveWorkerRole(claim.role);
   if (role === null) {
     await deps.store.finishTask({ taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state: 'FAILED', now: deps.clock.now() });
@@ -620,17 +805,14 @@ export async function prepareClaimedTask(
   /* -------------------------------------------------- 1. policy, first */
   const dispatchVerdict = evaluateJuliusPolicy(request.policy, { operation: 'DISPATCH_WORKER' });
   const capabilityVerdict = evaluateJuliusPolicy(request.policy, { operation: 'USE_CAPABILITY', capability: request.capability });
-  for (const verdict of [dispatchVerdict, capabilityVerdict]) {
+  const verdicts = [['DISPATCH_WORKER', dispatchVerdict], ['USE_CAPABILITY', capabilityVerdict]] as const;
+  for (const [operation, verdict] of verdicts) {
     if (verdict.effect === 'REQUIRE_APPROVAL') {
-      // The lease is released at once, so the approval can be answered without
-      // the claim expiring underneath it. The task itself ends FAILED: this
-      // call passes no next attempt time, and under the hand-back rule both
-      // stores now share, only a call that does returns a task to RUNNABLE.
-      // (An earlier comment here said it returned to RUNNABLE; it did not, in
-      // either store.)
-      await deps.store.finishTask({ taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state: 'FAILED', now: deps.clock.now() });
-      await ledger.event('run.paused', { taskId: claim.taskId, facts: { reasonCode: verdict.reasonCode, policyRevision: verdict.policyRevision } });
-      return { kind: 'REFUSED', outcome: { kind: 'APPROVAL_REQUIRED', taskId: claim.taskId, operation: 'DISPATCH_WORKER', reasonCode: verdict.reasonCode } };
+      const held = await holdClaimForApproval(
+        { claim, run, operation, capability: request.capability, verdict, ledger }, deps);
+      // `null` is an authorized person's APPROVED answer to exactly this gate: dispatch goes on.
+      if (held === null) continue;
+      return held;
     }
     if (verdict.effect === 'DENY') {
       await deps.store.finishTask({ taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state: 'FAILED', now: deps.clock.now() });

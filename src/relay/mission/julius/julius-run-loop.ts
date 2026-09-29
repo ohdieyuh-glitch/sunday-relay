@@ -455,12 +455,17 @@ export class JuliusRunLoop {
       };
       const preflight = await prepareClaimedTask(request, this.deps, scope);
       if (preflight.kind === 'REFUSED') {
-        // No execution happened, so no attempt is spent. Three of the five
-        // gates also END the task; the two that do not — a run outside this
-        // scope, which must write nothing at all, and a task that has vanished
-        // from its run — leave the lease to expire and the sweep to reclaim it.
-        // Neither is reachable from a real claim: the claim query is scoped by
-        // project, and a claimed task is in `tasksForRun` by construction.
+        // No execution happened, so no attempt is spent. An unresolvable role,
+        // a C.A.R.D. denial and an unlocked contract END the task. A
+        // governance hold does not: a C.A.R.D. approval gate records a PENDING
+        // approval and holds the run BLOCKED, and a run found held at the
+        // dispatch boundary (paused, blocked, awaiting an approval) keeps its
+        // task — both hand it back RUNNABLE for the claim after the hold lifts.
+        // The two that write nothing — a run outside this scope, and a task
+        // that has vanished from its run — leave the lease to expire and the
+        // sweep to reclaim it. Neither is reachable from a real claim: the
+        // claim query is scoped by project, and a claimed task is in
+        // `tasksForRun` by construction.
         refusedBeforeAdmission += 1;
         outcomes.push(preflight.outcome);
         continue;
