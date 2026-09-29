@@ -197,7 +197,8 @@ async function main():Promise<void>{
     if(Number(recorded.rows[0]?.exit_code)!==3)throw new Error(`tool_failure_exit_code_not_recorded:${String(recorded.rows[0]?.exit_code)}`);
     if(await lines('tool-failure-attempts.log')!==1)throw new Error('tool_failure_attempt_not_exactly_one');
     await client.destroySandbox({sandboxId:failing.identity.sandboxId,expectedLeaseGeneration:LEASE,reason:'sibling-ci-cleanup'});
-    await pool.end();process.stdout.write(`SIBLING_TOOL_FAILURE_GREEN ${JSON.stringify({...failureTruth,exitCode:failed.exitCode,evidence:'FAILED'})}\n`);return;
+    // The counts keep their own keys; the status and the exit code are named apart, so no count is overwritten.
+    await pool.end();process.stdout.write(`SIBLING_TOOL_FAILURE_GREEN ${JSON.stringify({...failureTruth,evidenceStatus:'FAILED',exitCode:failed.exitCode})}\n`);return;
   }
 
   const proof=JSON.parse(await readFile(proofPath(),'utf8')) as {invocationId:string;dispatchGeneration:number;original:Awaited<ReturnType<typeof client.executeTool>>};
