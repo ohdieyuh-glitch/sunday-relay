@@ -30,12 +30,29 @@
  *     coding agent. Proving `git rev-parse` alone would not catch it.
  *
  * IT SPENDS NOTHING. No provider client is constructed and no credential is
- * printed; the only commands it runs are `git rev-parse HEAD`, `git ls-files`
- * and `git --no-pager diff` — reads, two of them the ones the live coding
- * adapter itself issues — and it restores, byte for byte, the one file it
- * touched. WHICH file that is, it asks git rather than assuming: see
+ * printed; the commands it runs are `git rev-parse HEAD`, `git ls-files`,
+ * `git --no-pager diff` and the coding adapter's own attempt start and
+ * close-out snapshots — reads, apart from the unreferenced tree objects a
+ * snapshot writes, and all but `ls-files` the ones the live coding adapter
+ * itself issues — and it restores, byte for byte, the one file it touched. WHICH file that is, it asks git rather than assuming: see
  * `julius-live-probe-file.ts`, and run 34433098911, where the assumed name did
  * not exist in the first mission sliced out of Sunday Relay.
+ *
+ * AND THE CLOSE-OUT, SETTLED — paid run 36568129865. The coder's attempt
+ * close-out (`juliusAttemptCloseCommand`) prints NUL-separated sections by
+ * design, and no provider-free path had ever run it: the executor's receipt
+ * insert died on it with SQLSTATE 22P05, answered 500, and left the invocation
+ * DISPATCHING. So this probe now takes the attempt's start snapshot and its
+ * close-out with the adapter's OWN commands (they write only unreferenced git
+ * objects and a temporary index in the sandbox's tmpfs, never the real index),
+ * and SETTLES every effect it runs through the production settlement
+ * repository, exactly as the live shell port does (`shell-settlement.ts`). It
+ * then proves, on this database: the close-out settled SUCCEEDED, a failing
+ * close-out settled FAILED with its exit code, both stored under the explicit
+ * `nul-escaped-v1` marker and decoded to the exact bytes Julius received,
+ * nothing it dispatched was left open, the pre-fix write forms are still
+ * refused here (the control), and a run made terminal with a dispatch still
+ * open closes it and says so (the terminal-state invariant).
  *
  * IT IS A LEGITIMATE PARTICIPANT IN THE DURABLE SCHEMA. Free dry run #2
  * (run 33635375764) failed at its first `createSandbox` with SQLSTATE 23503:
@@ -56,7 +73,13 @@ import { join } from 'node:path';
 import { Pool } from 'pg';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
 import type { ExecutorOperation } from '../src/relay/workspace/julius-tools/executor-operation-request';
+import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
+import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
+import { JuliusToolSettlementPostgresRepository } from '../src/relay/persistence/julius-tool-settlement-postgres';
+import { JULIUS_ENCODED_TEXT_MARKER, decodePgJson, decodePgText, pgJson } from '../src/relay/persistence/julius-storage-encoding';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/sandbox-limits';
+import { juliusAttemptCloseCommand, juliusAttemptStartCommand, parseJuliusAttemptClose, parseJuliusAttemptStart } from '../relay-bridge/julius/coder-workspace';
+import { classifyExecutorRefusal, shellDispatchClosure, shellEffectSettlement, type ShellEffectStage } from '../relay-bridge/julius/shell-settlement';
 import { cleanupPreflightIdentity, migrateIfNeeded, preflightIdentityFor, preflightNonce, seedPreflightIdentity, seedPreflightInvocation, type PreflightIdentity } from './julius-live-preflight-identity';
 import { resolveProbeFile } from './julius-live-probe-file';
 import type {
@@ -221,29 +244,39 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
 
   const { leaseGeneration, projectId } = identity;
   let step = 0;
+  const tools = new JuliusToolPostgresRepository(pool);
+  const settlement = new JuliusToolSettlementPostgresRepository(pool);
 
-  /** One full create → prepare → execute → destroy round-trip, as the mission does it. */
+  /** The request every preflight invocation makes: the live shell port's shape, one command. */
+  const requestFor = (invocationId: string, command: string): ToolInvocationRequest => ({
+    invocationId,
+    runId: identity.runId,
+    taskId: identity.taskId,
+    projectId,
+    workerId: identity.workerId,
+    toolId: 'shell.bash', toolVersion: '1',
+    arguments: { command },
+    cwd: '.',
+    idempotencyKey: invocationId,
+    timeoutMs: 30_000,
+    expectedMutation: 'WORKSPACE',
+  });
+
   /* Receipts live at the host path the executor was given (the mission's transport) or under the
    * executor's private root; either way a sandbox must never see that path itself. */
   const hostReceiptRoot = process.env.JULIUS_RECEIPT_HOST_ROOT?.trim() || '/executor-private/receipts';
   /** The sandbox that ran before the current one, for the sibling-scope check. */
   let previousSandboxId = '';
+  /**
+   * One full create → prepare → execute → destroy round-trip, as the mission does it, SETTLED as the
+   * live shell port settles it (`shellEffectSettlement` through the production settlement repository)
+   * and, when the executor refuses, CLOSED as the live port closes it (`shellDispatchClosure`). Paid run
+   * 36568129865 failed on a settlement no provider-free path had ever made; now every effect here makes one.
+   */
   const runInSandbox = async (command: string, afterPrepare?: (sandboxId: string) => Promise<void>): Promise<ToolInvocationResult> => {
     step += 1;
     const invocationId = `preflight:${identity.nonce}:${step}`;
-    const request: ToolInvocationRequest = {
-      invocationId,
-      runId: identity.runId,
-      taskId: identity.taskId,
-      projectId,
-      workerId: identity.workerId,
-      toolId: 'shell.bash', toolVersion: '1',
-      arguments: { command },
-      cwd: '.',
-      idempotencyKey: invocationId,
-      timeoutMs: 30_000,
-      expectedMutation: 'WORKSPACE',
-    };
+    const request = requestFor(invocationId, command);
     const sandboxIdentity = {
       sandboxId: invocationId, invocationId, tenantId,
       projectId, runId: request.runId, taskId: request.taskId,
@@ -255,18 +288,30 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
     // asked to record a sandbox that references it — the order the live
     // mission follows and the order the foreign keys enforce.
     const { dispatchGeneration } = await seedPreflightInvocation(pool, identity, { invocationId, requestDigest: digestOf(request), requestedAt: sandboxIdentity.createdAt });
+    const close = (stage: ShellEffectStage, failureClass: string, refusal: ReturnType<typeof classifyExecutorRefusal>['refusal'] | null) =>
+      tools.failDispatch(shellDispatchClosure({ invocationId, invocationKey: invocationId, dispatchGeneration, stage, refusal, failureClass, completedAt: new Date().toISOString() }))
+        .catch(() => false);
+    let stage: ShellEffectStage = 'create';
+    let result: ToolInvocationResult;
     try {
       await client.createSandbox({ identity: sandboxIdentity, policy: PREFLIGHT_POLICY, limits: PREFLIGHT_LIMITS });
+      stage = 'prepare';
       await client.prepareWorkspace({
         sandboxId: invocationId, sourceRef: workspace, expectedLeaseGeneration: leaseGeneration,
       });
       if (afterPrepare) await afterPrepare(invocationId);
-      return await client.executeTool({
+      stage = 'execute';
+      result = await client.executeTool({
         sandboxId: invocationId, expectedLeaseGeneration: leaseGeneration,
         dispatchGeneration, requestDigest: digestOf(request),
         executionTokenHash: sha(`token:${invocationId}`),
         effectClassification: 'NON_IDEMPOTENT_MUTATION', request,
       });
+    } catch (error) {
+      // Closed as what it was, never left DISPATCHING; the refusal itself is still the answer.
+      const { refusal } = classifyExecutorRefusal(error);
+      await close(stage, refusal, refusal);
+      throw error;
     } finally {
       await client.destroySandbox({
         sandboxId: invocationId, expectedLeaseGeneration: leaseGeneration,
@@ -274,6 +319,97 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
       }).catch(() => undefined);
       previousSandboxId = invocationId;
     }
+    try {
+      const settled = await settlement.settle(shellEffectSettlement({
+        invocationId, dispatchGeneration, result,
+        safeSummary: `Preflight shell effect ${step} settled: exit ${result.exitCode ?? 'unknown'}.`,
+        occurredAt: new Date().toISOString(),
+      }));
+      if (!settled.created) throw new Error('settlement_not_created');
+    } catch (error) {
+      await close('settle', 'tool_settlement_failed', null);
+      throw new Error(`preflight_settlement_failed:${invocationId}:${error instanceof Error ? error.message.slice(0, 160) : 'unknown'}`);
+    }
+    return result;
+  };
+
+  /**
+   * WHAT THE STORE HOLDS FOR ONE SETTLED CLOSE-OUT, read back and checked against what Julius received.
+   * The invocation reached the state its exit code says; the preview, the receipt's result and the
+   * settlement's result each carry the `nul-escaped-v1` marker and decode to the exact bytes; every
+   * stored digest covers the DECODED value; and the parser reads the raw output as the adapter does.
+   */
+  const proveSettledCloseOut = async (result: ToolInvocationResult, expected: { readonly exitCode: number; readonly state: 'SUCCEEDED' | 'FAILED' }, probe: string): Promise<string[]> => {
+    const problems: string[] = [];
+    if (result.exitCode !== expected.exitCode || result.status !== expected.state) problems.push(`the executor answered ${result.status}/exit ${result.exitCode ?? 'unknown'}, expected ${expected.state}/exit ${expected.exitCode}`);
+    if (!result.stdout.includes('\u0000')) problems.push('the output reached Julius without a NUL, so the NUL-separated path was not exercised');
+    const parsed = parseJuliusAttemptClose(result.stdout, true);
+    if (parsed.endTree === null) problems.push('the parser found no end tree in the close-out');
+    if (!(parsed.own ?? []).some((change) => change.path === probe)) problems.push(`the attempt's own changes do not name ${probe}`);
+    if (!parsed.status.changes.some((change) => change.path === probe)) problems.push(`the change set does not name ${probe}`);
+    const invocation = (await pool.query<{ state: string; exit_code: number | null; stdout_preview: string; recovery_state: string }>(
+      'SELECT state, exit_code, stdout_preview, recovery_state FROM relay_wonderland.julius_tool_invocations WHERE invocation_id=$1', [result.invocationId])).rows[0];
+    if (invocation === undefined) return [...problems, 'the invocation row is missing'];
+    if (invocation.state !== expected.state || Number(invocation.exit_code) !== expected.exitCode) problems.push(`the invocation settled ${invocation.state}/exit ${invocation.exit_code ?? 'none'}`);
+    if (invocation.recovery_state !== 'RECONCILED') problems.push(`the invocation's recovery state is ${invocation.recovery_state}`);
+    if (!invocation.stdout_preview.startsWith(JULIUS_ENCODED_TEXT_MARKER)) problems.push('the stored preview carries no encoding marker');
+    else if (decodePgText(invocation.stdout_preview) !== result.stdout.slice(0, 8192)) problems.push('the stored preview does not decode to the bytes Julius received');
+    const receipt = (await pool.query<{ result: { stdout?: unknown }; result_digest: string }>(
+      'SELECT result, result_digest FROM relay_wonderland.julius_tool_execution_receipts WHERE invocation_id=$1', [result.invocationId])).rows[0];
+    if (receipt === undefined) return [...problems, 'the executor recorded no receipt row'];
+    const recorded = decodePgJson<ToolInvocationResult>(receipt.result);
+    if (!String(receipt.result.stdout ?? '').startsWith(JULIUS_ENCODED_TEXT_MARKER)) problems.push('the receipt result carries no encoding marker');
+    if (recorded.stdout !== result.stdout) problems.push('the receipt result does not decode to the bytes Julius received');
+    if (digestOf(recorded) !== receipt.result_digest) problems.push('the receipt digest does not cover the decoded result');
+    const settled = (await pool.query<{ result: unknown; result_digest: string }>(
+      'SELECT result, result_digest FROM relay_wonderland.julius_tool_settlements WHERE invocation_id=$1', [result.invocationId])).rows[0];
+    if (settled === undefined) problems.push('no settlement row');
+    else if (digestOf(decodePgJson(settled.result)) !== settled.result_digest || settled.result_digest !== receipt.result_digest) problems.push('the settlement does not decode to the receipt\'s result');
+    return problems;
+  };
+
+  /**
+   * THE TERMINAL-STATE INVARIANT, with this preflight's own disposable run: a dispatch claimed and
+   * never executed, then the run made FAILED through the production repository, as paid run
+   * 36568129865's run was with its close-out still DISPATCHING. Afterwards nothing of the run may be
+   * open, the dispatch must read FAILED/UNKNOWN_OUTCOME, a `recovery.action` must name it, and a new
+   * invocation on the finished run must be refused. No executor request is made, so nothing here can
+   * add an executor refusal to the topology job's diagnostics.
+   */
+  const proveTerminalInvariant = async (): Promise<string[]> => {
+    step += 1;
+    const invocationId = `preflight:${identity.nonce}:${step}`;
+    await seedPreflightInvocation(pool, identity, { invocationId, requestDigest: digestOf(requestFor(invocationId, 'true')), requestedAt: new Date().toISOString() });
+    const runs = new JuliusPostgresRepository(pool);
+    const run = await runs.loadRun(identity.runId, projectId);
+    if (run === null) return ['the preflight run is missing'];
+    await runs.transition({
+      commandId: `preflight-invariant:${identity.nonce}`, runId: identity.runId, projectId, expectedVersion: run.version,
+      to: 'FAILED', reasonCode: 'PREFLIGHT_INVARIANT_PROBE',
+      safeSummary: 'The provider-free preflight ended its disposable run with one dispatch still open, to prove the terminal-state invariant.',
+      evidenceIds: [], occurredAt: new Date().toISOString(),
+    });
+    const problems: string[] = [];
+    const closed = (await pool.query<{ state: string; recovery_state: string }>(
+      'SELECT state, recovery_state FROM relay_wonderland.julius_tool_invocations WHERE invocation_id=$1', [invocationId])).rows[0];
+    if (closed?.state !== 'FAILED' || closed.recovery_state !== 'UNKNOWN_OUTCOME') problems.push(`the open dispatch was left ${closed?.state ?? 'missing'}/${closed?.recovery_state ?? 'missing'}`);
+    const stillOpen = (await pool.query<{ open: string }>(
+      `SELECT count(*) AS open FROM relay_wonderland.julius_tool_invocations WHERE run_id=$1 AND project_id=$2 AND state IN('REQUESTED','AUTHORIZED','DISPATCHING','RUNNING')`,
+      [identity.runId, projectId])).rows[0];
+    if (Number(stillOpen?.open ?? 0) !== 0) problems.push(`${stillOpen?.open ?? '?'} invocation(s) of the terminal run are still open`);
+    const surfaced = (await pool.query<{ code: string | null }>(
+      `SELECT payload->'facts'->>'code' AS code FROM relay_wonderland.events WHERE event_id=$1 AND event_type='julius.recovery.action'`,
+      [`julius:tool-invocation-closed:${invocationId}`])).rows[0];
+    if (surfaced?.code !== 'TOOL_INVOCATION_UNRESOLVED') problems.push('no integrity event names the closed dispatch');
+    const late = `preflight:${identity.nonce}:late`;
+    const answer = await tools.request({
+      invocationId: late, idempotencyKey: late, requestDigest: digestOf(requestFor(late, 'true')),
+      tenantId, projectId, runId: identity.runId, taskId: identity.taskId, workerId: identity.workerId,
+      leaseGeneration, policyRevision: identity.policyRevision, toolId: 'shell.bash', toolVersion: '1',
+      mutationClass: 'WORKSPACE', requestedAt: new Date().toISOString(),
+    }).then(() => 'ACCEPTED', (error: unknown) => (error instanceof Error ? error.message : 'refused'));
+    if (answer !== 'tool_run_terminal') problems.push(`a new invocation on the terminal run was answered ${answer}`);
+    return problems;
   };
 
   /* THE RECEIPT SCOPE, FROM THE DAEMON'S OWN MOUNT TABLE. The workload inside a sandbox runs as
@@ -373,6 +509,19 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
     restore = resolved.content;
     out(`  hand-off probe file, chosen from git's own tracked list: ${probePath} (${restore.length} bytes; ${resolved.examined} of ${resolved.tracked} tracked path(s) examined)`);
 
+    /* THE ATTEMPT'S START, taken with the coding adapter's own command before the host writes
+     * anything, so the probe's edit below is exactly what an attempt's "own" change looks like. */
+    const started = await runInSandbox(juliusAttemptStartCommand(null));
+    const attemptStart = started.status === 'SUCCEEDED' ? parseJuliusAttemptStart(started.stdout, null) : null;
+    if (attemptStart === null || attemptStart.baseTree === null || attemptStart.startTree === null) {
+      out('PREFLIGHT FAILED: the attempt start snapshot (juliusAttemptStartCommand) could not be taken inside the sandbox.');
+      out(`  exit=${started.exitCode ?? 'unknown'}; stderr (first 400 chars): ${started.stderr.slice(0, 400)}`);
+      out('  Without it every coder attempt closes out with no start tree, and its attribution is empty.');
+      return 1;
+    }
+    const attemptTrees = { baseTree: attemptStart.baseTree, startTree: attemptStart.startTree };
+    out(`  attempt start snapshot (the adapter's own command): base tree ${attemptTrees.baseTree}, start tree ${attemptTrees.startTree}; settled ${started.status}.`);
+
     /* The hand-off itself: write on the HOST exactly as the coding agent
      * does, then capture the diff from a sandbox exactly as the mission does,
      * and require the change to be visible. An empty diff here means the
@@ -398,6 +547,32 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
     }
     out(`  host-written change to ${probePath} is visible in the sandbox diff (${diff.stdout.length} bytes) — the reviewer will see real work.`);
 
+    /* THE ATTEMPT CLOSE-OUT: the step paid run 36568129865 died on. The adapter's own command, whose
+     * output is NUL-separated by design, through the real executor and settled through the real store.
+     * Before the fix the executor's receipt insert refused it (22P05) and answered 500 here. */
+    const closeCommand = juliusAttemptCloseCommand(attemptTrees);
+    const closeOut = await runInSandbox(closeCommand);
+    const closeProblems = await proveSettledCloseOut(closeOut, { exitCode: 0, state: 'SUCCEEDED' }, probePath);
+    if (closeProblems.length > 0) {
+      out('PREFLIGHT FAILED: the attempt close-out did not settle as the mission needs it to.');
+      for (const problem of closeProblems) out(`  ${problem}`);
+      return 1;
+    }
+    const nulCount = [...closeOut.stdout].filter((character) => character === '\u0000').length;
+    out(`  attempt close-out (the adapter's own command): exit 0, ${nulCount} NUL byte(s) in ${closeOut.stdout.length} chars, parsed to its end tree and ${probePath} as the attempt's own change.`);
+    out(`  settled SUCCEEDED through the production settlement repository; preview, receipt and settlement stored as ${JULIUS_ENCODED_TEXT_MARKER.trim()} and decoded to the exact bytes; every digest covers the decoded value.`);
+
+    /* A FAILED CLOSE-OUT SETTLES TRUTHFULLY: the same output, a non-zero exit, recorded as FAILED with
+     * that exit code rather than lost or left open. */
+    const failedClose = await runInSandbox(`${closeCommand}\nexit 3`);
+    const failedProblems = await proveSettledCloseOut(failedClose, { exitCode: 3, state: 'FAILED' }, probePath);
+    if (failedProblems.length > 0) {
+      out('PREFLIGHT FAILED: a failing attempt close-out did not settle truthfully.');
+      for (const problem of failedProblems) out(`  ${problem}`);
+      return 1;
+    }
+    out('  a failing close-out (same output, exit 3) settled FAILED with exit 3, stored and decoded the same way.');
+
     /* The receipt transport's isolation. The scope itself is proven from the daemon's mount
      * table while THE SANDBOX THAT RUNS THE SCOPE PROBE exists (`proveReceiptScope`, between
    * prepare and execute) — named by its role, not counted, because the number of round-trips
@@ -419,7 +594,43 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
       return 1;
     }
     out('  sandbox workload (uid 65532): the receipt mount exists but cannot be listed; nothing under /executor-private is reachable.');
-    out('PREFLIGHT OK: executor, scoped credentials, attestation, workspace ceiling, in-sandbox git, the host→sandbox diff hand-off and the receipt scope all proven. No provider was contacted.');
+
+    /* NOTHING THIS PREFLIGHT DISPATCHED IS LEFT OPEN: every effect above settled, through the store. */
+    const open = await pool.query<{ invocation_id: string; state: string }>(
+      `SELECT invocation_id, state FROM relay_wonderland.julius_tool_invocations
+       WHERE run_id=$1 AND project_id=$2 AND state IN('REQUESTED','AUTHORIZED','DISPATCHING','RUNNING')`, [identity.runId, projectId]);
+    if (open.rows.length > 0) {
+      out(`PREFLIGHT FAILED: ${open.rows.length} dispatched invocation(s) were left open: ${open.rows.map((row) => `${row.invocation_id}=${row.state}`).join(', ')}.`);
+      return 1;
+    }
+    out(`  all ${step} preflight effects settled through the production settlement repository; none is left DISPATCHING.`);
+
+    /* THE CONTROL: the pre-fix write forms, against THIS database. What the executor's receipt insert
+     * handed `$n::jsonb` before the fix, and what the settlement handed a `text` preview, must still be
+     * refused here, or the encoding above proved nothing; the encoded form must be accepted and exact. */
+    const refusedAs = (attempt: Promise<unknown>): Promise<string | null> => attempt.then(() => null, (error: { code?: unknown }) => String(error?.code ?? 'refused'));
+    const rawJson = await refusedAs(pool.query('SELECT $1::jsonb AS stored', [JSON.stringify({ stdout: closeOut.stdout })]));
+    const rawText = await refusedAs(pool.query('SELECT $1::text AS stored', [closeOut.stdout.slice(0, 8192)]));
+    const encoded = await pool.query<{ stored: unknown }>('SELECT $1::jsonb AS stored', [pgJson({ stdout: closeOut.stdout })]);
+    const exact = decodePgJson<{ stdout?: string }>(encoded.rows[0]?.stored).stdout === closeOut.stdout;
+    if (rawJson === null || rawText === null || !exact) {
+      out(`PREFLIGHT FAILED: the storage control did not hold (unencoded jsonb ${rawJson ?? 'ACCEPTED'}, unencoded text ${rawText ?? 'ACCEPTED'}, encoded exact=${String(exact)}).`);
+      return 1;
+    }
+    out(`  storage control on this PostgreSQL: the pre-fix forms are refused (jsonb ${rawJson}, text ${rawText}), exactly as paid run 36568129865 was; the encoded form is accepted and exact.`);
+
+    /* THE TERMINAL-STATE INVARIANT, on the database the mission will use. One more dispatch is
+     * claimed and never executed (the state the close-out was left in), and the disposable run is
+     * made terminal through the production repository: the dispatch must be closed as an unknown
+     * outcome, the closure surfaced by name, and nothing new admitted to the finished run. */
+    const invariantProblems = await proveTerminalInvariant();
+    if (invariantProblems.length > 0) {
+      out('PREFLIGHT FAILED: a terminal run left a tool invocation open, or did not say so.');
+      for (const problem of invariantProblems) out(`  ${problem}`);
+      return 1;
+    }
+    out('  terminal-state invariant: a run made terminal with a dispatch still open closed it FAILED/UNKNOWN_OUTCOME, surfaced TOOL_INVOCATION_UNRESOLVED, and refused a new invocation.');
+    out('PREFLIGHT OK: executor, scoped credentials, attestation, workspace ceiling, in-sandbox git, the host→sandbox diff hand-off, the receipt scope, the NUL-separated attempt close-out settled through the store, and the terminal-state invariant all proven. No provider was contacted.');
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';
