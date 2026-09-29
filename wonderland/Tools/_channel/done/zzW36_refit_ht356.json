@@ -1,0 +1,16 @@
+{
+ "name": "zzW36_refit_ht356",
+ "started": "2026-09-29 00:38:02",
+ "status": "done",
+ "waited_for_pie_seconds": 0.0,
+ "map_dirty_before": [],
+ "removed": 198,
+ "pass": "HT356",
+ "actors": 0,
+ "batches": 213,
+ "instances": 2283,
+ "hovers": 0,
+ "finished": "2026-09-29 00:38:18",
+ "seconds": 16.37,
+ "log": "applied HT356 0 actors 213 batches 2283 instances\n"
+}

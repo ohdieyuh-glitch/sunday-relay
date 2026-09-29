@@ -92,8 +92,8 @@ walk runs in the generator (proven red on the first routing, green on the fix).
 
 | heartland | spec | STATUS | TRAV | PROOF |
 |---|---|---|---|---|
-| HT356 TARTARUS 336-16°, 610-1,100 m | ht356_tartarus_heartland.json | **APPLIED** 0dffc71d (2,213 inst); fixed walk (2,283) re-apply pending a fresh session | IN PROGRESS: zzW35 stands 10/10, rooms 12/12, 12 walk blocks -> fixed offline (1ee27840) | IN PROGRESS (CORE before-frames taken) |
-| HN181 NOCTIS 159-203°, 620-1,150 m | hn181_noctis_heartland.json | **APPLIED** 0dffc71d (2,197 inst); fixed walk (1,899) re-apply pending | IN PROGRESS: zzW35 stands 9/9, rooms 10/10, 6 walk blocks -> fixed offline | IN PROGRESS (CORE before-frames taken) |
+| HT356 TARTARUS 336-16°, 610-1,100 m | ht356_tartarus_heartland.json | **APPLIED** 2026-09-29 00:37 (fixed walk, 213 batches / 2,283 inst; hash-clean) | **VERIFIED** in play: zzW38 stands 11/11, walk capsule blocks 0, rooms 12/12, streaming complete | IN PROGRESS (CORE before/after frames, same cameras) |
+| HN181 NOCTIS 159-203°, 620-1,150 m | hn181_noctis_heartland.json | **APPLIED** 2026-09-29 00:37 (fixed walk, 157 batches / 1,899 inst; hash-clean) | **VERIFIED** in play: zzW38 stands 9/9, walk capsule blocks 0, rooms 8/8, streaming complete | IN PROGRESS (CORE before/after frames, same cameras) |
 | HN238 NOCTIS 221-255° | hn238_noctis_heartland.json | PLANNED (2,273 inst), HELD for review | -- | -- |
 | HI057 ICARUS 40-74° | hi057_icarus_heartland.json | PLANNED (1,861 inst), HELD for review | -- | -- |
 | HT308 TARTARUS 294-322° | ht308_tartarus_heartland.json | PLANNED (1,861 inst), HELD for review | -- | -- |
