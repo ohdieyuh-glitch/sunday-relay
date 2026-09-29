@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { JULIUS_RUNTIME_VERSION, JULIUS_TERMINAL_MISSION_STATES, transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusOperationalEvent, type JuliusTask, type JuliusVerificationDecision } from '../mission/julius';
+import { JULIUS_RUNTIME_VERSION, JULIUS_TERMINAL_MISSION_STATES, transitionMission, validateJuliusEvent, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusOperationalEvent, type JuliusTask, type JuliusVerificationDecision } from '../mission/julius';
 import { brainKindToStored } from './julius-brain-kinds';
 import { appendJuliusEventWithin } from './julius-event-postgres';
 
@@ -104,7 +105,54 @@ export class JuliusPostgresRepository {
       const transition=transitionMission({transitionId:`transition:${input.commandId}`,missionId:run.missionId,current:run.state,to:input.to,reasonCode:input.reasonCode,safeSummary:input.safeSummary,evidenceIds:input.evidenceIds,occurredAt:input.occurredAt});
       const updated=await client.query('UPDATE relay_wonderland.julius_runs SET state=$2,version=version+1,updated_at=$3 WHERE run_id=$1 AND version=$4 RETURNING *',[input.runId,input.to,input.occurredAt,input.expectedVersion]);if(updated.rowCount!==1)throw Object.assign(new Error('optimistic_concurrency_conflict'),{code:'40001'});
       await client.query(`INSERT INTO relay_wonderland.julius_transitions(transition_id,run_id,from_state,to_state,reason_code,safe_summary,evidence_ids,runtime_version,occurred_at,sequence) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10)`,[transition.transitionId,input.runId,transition.from,transition.to,transition.reasonCode,transition.safeSummary,json(transition.evidenceIds),transition.runtimeVersion,transition.occurredAt,run.version]);
-      await this.event(client,{eventId:`julius:${input.commandId}`,projectId:input.projectId,streamId:input.runId,type:'julius.run.transitioned',occurredAt:input.occurredAt,payload:transition});return this.mapRun(updated.rows[0]);});
+      await this.event(client,{eventId:`julius:${input.commandId}`,projectId:input.projectId,streamId:input.runId,type:'julius.run.transitioned',occurredAt:input.occurredAt,payload:transition});
+      if(JULIUS_TERMINAL_MISSION_STATES.includes(input.to))await this.closeUnsettledToolInvocations(client,{runId:input.runId,projectId:input.projectId,terminalState:input.to,occurredAt:input.occurredAt});
+      return this.mapRun(updated.rows[0]);});
+  }
+  /**
+   * A FINISHED RUN LEAVES NO TOOL INVOCATION OPEN: the terminal-state invariant.
+   *
+   * Paid run 36568129865 ended FAILED with `…:build:status:g1` still DISPATCHING. The executor had
+   * answered 500, the shell port threw, and nothing ever wrote that invocation's end: a finished run
+   * whose record said one of its effects was still in flight, for ever. So the transition that makes a
+   * run terminal closes, in the SAME transaction, every invocation of that run that is not terminal,
+   * as what it is:
+   *   - REQUESTED or AUTHORIZED was never handed to the executor, so nothing can have run: CANCELLED.
+   *   - DISPATCHING or RUNNING was handed over and never settled, so Julius does not know what happened:
+   *     FAILED with `recovery_state` UNKNOWN_OUTCOME. An unresolved infrastructure record, classified
+   *     as one, and never a success. The executor's receipt, if it wrote one, stays as the record.
+   * Each closure writes a `recovery.action` event (code TOOL_INVOCATION_UNRESOLVED, failure class
+   * infrastructure_evidence_integrity) in the same transaction, so the terminal record carries the
+   * integrity failure and the evidence bundle's `failures.tsv` shows it by name. A settlement arriving
+   * afterwards finds the invocation closed and is refused (`tool_settlement_authority_lost`), and
+   * `JuliusToolPostgresRepository.request` refuses to open a new one on a terminal run.
+   *
+   * IT NEVER KEEPS A RUN FROM ENDING. The event facts are checked before they are written; one the
+   * event rules would refuse names the invocation by digest instead, and one they would still refuse
+   * is left to the invocation's own row, which is closed and classified whatever happens to the event.
+   */
+  private async closeUnsettledToolInvocations(client:any,input:{runId:string;projectId:string;terminalState:JuliusMissionState;occurredAt:string}):Promise<number>{
+    const closed=await client.query(`WITH open AS (SELECT invocation_id,state AS prior_state FROM relay_wonderland.julius_tool_invocations WHERE run_id=$1 AND project_id=$2 AND state IN('REQUESTED','AUTHORIZED','DISPATCHING','RUNNING') FOR UPDATE)
+      UPDATE relay_wonderland.julius_tool_invocations i SET
+        state=CASE WHEN o.prior_state IN('REQUESTED','AUTHORIZED') THEN 'CANCELLED' ELSE 'FAILED' END,
+        recovery_state=CASE WHEN o.prior_state IN('REQUESTED','AUTHORIZED') THEN i.recovery_state ELSE 'UNKNOWN_OUTCOME' END,
+        safe_summary=CASE WHEN o.prior_state IN('REQUESTED','AUTHORIZED') THEN $3 ELSE $4 END,
+        recovery_claimed_by=NULL,recovery_claimed_until=NULL,completed_at=clock_timestamp()
+      FROM open o WHERE i.invocation_id=o.invocation_id
+      RETURNING i.invocation_id,i.task_id,o.prior_state,i.state,i.recovery_state`,[input.runId,input.projectId,
+      `The run became ${input.terminalState} before this tool invocation was dispatched; nothing was executed.`,
+      `The run became ${input.terminalState} while this tool invocation was unsettled; its outcome is unknown to Julius (unresolved infrastructure record).`]);
+    const rows=[...(closed.rows as {invocation_id:string;task_id:string;prior_state:string;state:string;recovery_state:string}[])].sort((a,b)=>a.invocation_id<b.invocation_id?-1:a.invocation_id>b.invocation_id?1:0);
+    if(rows.length===0)return 0;
+    await client.query(`UPDATE relay_wonderland.julius_tool_outbox SET state='DEAD',claimed_by=NULL,claimed_until=NULL,last_error='run_terminal_unsettled' WHERE invocation_id=ANY($1::text[]) AND state IN('PENDING','CLAIMED')`,[rows.map(row=>row.invocation_id)]);
+    for(const row of rows){
+      const eventFor=(named:Record<string,string>):JuliusOperationalEvent=>({eventId:`julius:tool-invocation-closed:${row.invocation_id}`,runId:input.runId,projectId:input.projectId,type:'recovery.action',taskId:String(row.task_id),workerId:null,correlationId:String(row.task_id),causationId:null,occurredAt:input.occurredAt,
+        facts:{action:'CLOSE_UNSETTLED_TOOL_INVOCATION',reasonCode:'RUN_TERMINAL_WITH_UNSETTLED_TOOL_INVOCATION',code:'TOOL_INVOCATION_UNRESOLVED',failureClass:'infrastructure_evidence_integrity',...named,priorState:String(row.prior_state),closedAs:String(row.state),recoveryState:String(row.recovery_state),runTerminalState:input.terminalState}});
+      const candidates=[eventFor({invocationId:String(row.invocation_id)}),eventFor({invocationDigest:createHash('sha256').update(String(row.invocation_id)).digest('hex')})];
+      const event=candidates.find(candidate=>{try{validateJuliusEvent(candidate);return true;}catch{return false;}});
+      if(event!==undefined)await appendJuliusEventWithin(client,event);
+    }
+    return rows.length;
   }
   async addTask(input:{commandId:string;runId:string;projectId:string;task:JuliusTask}):Promise<boolean>{return this.transaction(async client=>{const run=await client.query('SELECT project_id,mission_id FROM relay_wonderland.julius_runs WHERE run_id=$1 FOR UPDATE',[input.runId]);if(!run.rows[0]||run.rows[0].project_id!==input.projectId||run.rows[0].mission_id!==input.task.missionId)throw new Error('julius_run_not_found');
     const inserted=await client.query(`INSERT INTO relay_wonderland.julius_tasks(task_id,run_id,parent_task_id,role,task_type,state,ordinal,required_evidence_types) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb) ON CONFLICT(task_id) DO NOTHING`,[input.task.taskId,input.runId,input.task.parentTaskId,input.task.role,input.task.taskType,input.task.state,input.task.ordinal,json(input.task.requiredEvidenceTypes)]);if(inserted.rowCount!==1)return false;

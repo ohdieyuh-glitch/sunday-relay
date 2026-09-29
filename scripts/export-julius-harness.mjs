@@ -410,6 +410,9 @@ const FILE_RULES = [
   ['relay-bridge/julius/postgres-store.ts', 'PERSISTENCE'],
   ['relay-bridge/julius/executor-effects.ts', 'TOOLS'],
   ['relay-bridge/julius/sandbox-limits.ts', 'TOOLS'],
+  // How one shell effect is settled, and how one that cannot be is closed: shared by the
+  // live shell port and the provider-free preflight, so both settle the same command.
+  ['relay-bridge/julius/shell-settlement.ts', 'TOOLS'],
   ['relay-bridge/julius/live-composition.ts', 'LIVE PROVIDER COMPOSITION'],
   // The one place the sealed mission policy and Live Reach's bounded fetch
   // meet, and the service it wraps. Composition, both of them: the domain has
