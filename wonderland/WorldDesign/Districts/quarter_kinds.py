@@ -6,8 +6,10 @@
 WHY (2026-09-29, CORE Q10). The forge's core has 24 quarters: the ring of 12 (`_QUARTERS`) and the first round
 of 12 audit-placed `_QUARTER_SITES` (wonderland-blender-forge/wonderland/v2/layout_v2.py). Each has a kind:
 garden, towers or grove. The census (05:05, within 25 m of each centre) finds every one of them built on,
-74-1,378 pieces. Garden quarters read as gardens. But not one of the 7 tower quarters has a tower in it,
-and 1 of the 7 grove quarters has a mushroom. The kinds exist in the plan and not in the world.
+74-1,378 pieces. Garden quarters read as gardens. Counted by mesh (towers = castle_tower*, tower_capped,
+tower_clock, WL_Tower_*, WL_Spire_*; castle HALLS are not towers), towers survive at 2 of the 7 tower quarters
+(Q08, S05), partly at 2, not at 3; groves at 1 of 7 (S06), partly at 3, not at 3. (A first cut read only each
+site's top four categories and said "0/7" and "1/7": wrong; corrected in the matrix 2026-09-29.)
 WHAT. Additive, nothing through anything standing (forge_districts.Site: the shared oriented-rectangle
 Occupancy over the census, spiral search to 9 m, a slot with no room is left out and counted):
   TOWERS  up to 3 capped towers (tower_capped + steep cone roof + gold finial), the forge's
