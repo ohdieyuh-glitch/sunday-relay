@@ -157,7 +157,7 @@ MAP WRITE REQUEST / COMPLETE messages. CORE = "Wonderland" session, SECOND = "Ne
 | Q5 | S02 seam radials 30° / 150° / 270°, plus the ring breaks that belong to the seams | CORE | APPLIED in window 1 (unsaved): SR150 434 m, 0 breaks; SR030 569 m, 2 recorded breaks (SKY05 ~710 m, hedge at RR02). 270° = W270S. `Rings/seam_radials.py` 605abbec | a radial road on each seam; RR02 23-32° and 140-148° SKY05 clusters; RR01 27.7-29.5° | R41/R42 fills hang on these polylines; CORE publishes them to SECOND before its layouts |
 | Q6 | TW01 Tower Rise (pass TW01: TR01 is GA clock-plaza steps), relocated outward to the ICARUS march edge (~105-125°, ~300-650 m; empty region at 111°, 3.8 ha) | CORE | APPLIED in window 1 (unsaved; 17 batches / 67 inst, removed 0) at 111° 478 m | the missing forge district: 7/7 towers, clock tower, walled court open to the city | directive P5 "prefer outward expansion": RELOCATED WITH INTENT. Needs a census clearance check, then a CORE write window |
 | Q7 | MG01 Mushroom Grove, relocated on its forge bearing to 297° 984 m (TARTARUS outer heartland, 2.7 ha empty) | CORE | APPLIED in window 1 (unsaved; 13 batches / 86 inst, removed 0) | the missing forge district: giant mushrooms on stone rings plus a landmark | footprint published to SECOND before its R32 / Q2 T294 layouts |
-| Q8 | Hedge gates on the rings: RR01 46.7-49.2°, RR02 68.1-69.1°, RR02 149.8-153.1° | CORE | HELD (FOUNDER) | ring circuits broken at V2 hedge masses | founder 2026-09-29: "do not change ring-road hedge barriers"; `ring_hedge_gates.py` also finds no clear move for any of the 11 hedges within 60 m. Documented as intentional barriers unless the founder reverses |
+| Q8 | DESIGNED HEDGE GATES in the V2 hedge ring (founder decision 2026-09-29: cut designed gates; continuity over an unbroken hedge) | CORE | 2A APPLIED 07:00 (GB: SR030 -> RR02 by a 55 m walk round a SKY05 base, 2 hedges relocated; GE: Dubel ~118° to its 122° chain and WI122, 1 hedge trimmed by SINK_UU); 2B PLANNED (GA RR01 ~47°, GC RR02 ~68°, GD RR02 ~150°: 9 hedges relocated, 1 trimmed, 21 plates re-laid, GD tower bypass 6 stones) | the ring gaps at hedges | `Rings/hedge_gates.py`, `Tools/editor_jobs/zc_hedge_gates.py` (guarded, reversible: `Rings/hedge_gate_record_2a.json`); SELF-POWERED proof by SECOND / JUJU after each window |
 | Q9 | R41 / R42 seams 150° / 30°, 500-1,200 m (fills) | SECOND | UNBLOCKED (polylines sent 05:31; keep 20 m off each road's centreline) | seam identity between two nations | Q5 polylines |
 | Q10 | R00 / R01 Golden Arrival + 24 quarters: verification (composition checklist, TRAV / DIST / PROOF) | CORE (composition) / integration lane (in-play) | IN PROGRESS | tower / grove KINDS (table below; the first cut's "0/7 towers, 1/7 groves" was WRONG -- it read only each site's top four categories): towers survive at 2 of 7 (Q08, S05), partly at 2, not at 3; groves at 1 of 7 (S06), partly at 3, not at 3 | **FOUNDER DECIDED 2026-09-29: PRESERVE THE CORE, carry identities outward.** Room for 3 of 21 towers and 0 of 7 giants without replacing accepted core planting (`Districts/quarter_kinds.py`, 51c2f242). Identities carried outward instead (TW01, MG01, heartland mushroom woods). In-play GA + quarter walk: integration lane (zzJ) after window 1 |
 | Q11 | R02 core rim 400-600 m | SECOND (merged into sector fill 2) | PLANNED in Q2: S2N246 (246°), S2I073 (73°), S2N179 (179°), S2T300 (300°); pockets < 1.5 ha stay lawn between groups | -- | window 3 |
@@ -256,6 +256,16 @@ Autosave is now off (bAutoSaveEnable=False, SECOND). Script: CORE scratchpad for
   line.
 - Every walk proof is classified SELF-POWERED / TELEPORT / MIXED in this matrix.
 - The ring baseline reads "32/32 SAMPLED ROAD SURFACES PRESENT".
+
+**Window 2A (CORE, applied 2026-09-29 06:38-07:00, class A).** Fresh editor (save count 0), checkpoint
+`2026-09-29-pre-window2a`, zc_hedge_gates (2 relocations + 1 SINK_UU trim), HG2A 52 / DW01 120 / SX01 12 / S2M297 12
+batches, ONE gated save (memory gate: commit 33.6 GB, 202 dirty = 196 pass + 2 hedge batches + 4 folders, 0
+unexpected). Hash vs the checkpoint: +200 (the four passes to the unit + 4 folders), -0, changed = stub + the two
+hedge batch packages. Editor closed and relaunched (PID 74528). Proof: SELF-POWERED walks by SECOND (zzW110:
+SR030 + SX01 + GB, Dubel 58° -> GE -> 122° -> WI122, MG01 entry) -- pending.
+**TW02 Tower Lane (CORE, NOT APPLIED, window 2B).** TW01's gate joined to RR01 (285 m of stones), three small tower
+groups (9 towers, three roof palettes) in the 111° pocket. TW01 is reached from the city by the 90° approach and
+RR01; the direct leg to the core is sealed by the inner V2 hedge ring (400-550 m) and is not a required route.
 
 ## Assignments
 
