@@ -219,6 +219,10 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-tool-lifecycle.ts', 'TOOLS'],
   ['src/relay/mission/julius/julius-tool-settlement.ts', 'TOOLS'],
   ['src/relay/mission/julius/julius-sandbox.ts', 'TOOLS'],
+  // The Coding Agent's file authority: the one workspace-path normaliser and the
+  // creation/edit decisions the hosted tool authority enforces on every file tool.
+  ['src/relay/mission/julius/julius-workspace-paths.ts', 'TOOLS'],
+  ['src/relay/mission/julius/julius-file-creation.ts', 'TOOLS'],
   ['src/relay/mission/julius/julius-artifacts.ts', 'ARTIFACTS / EVIDENCE'],
   ['src/relay/mission/julius/julius-verification-runtime.ts', 'VERIFICATION'],
   ['src/relay/mission/julius/julius-repair-runtime.ts', 'REPAIR'],

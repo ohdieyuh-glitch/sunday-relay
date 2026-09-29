@@ -150,6 +150,7 @@ import {
   createLiveHermesReviewerAdapter,
   createLiveHostedCodingAdapter,
   type CompiledContextSource,
+  type FileCreationGrantSource,
   type LiveArtifactExchange,
   type ResearchPolicySource,
 } from './live-workers';
@@ -339,6 +340,11 @@ export function resolveLiveWorkers(options: {
    * mediator, which is what DECIDES; absent, each prompt says it was not told.
    */
   readonly researchPolicyFor?: ResearchPolicySource;
+  /**
+   * The mission's own file-creation grant, from its trusted contract, handed to
+   * the Coding Agent's adapter. Absent: no mission's coder may create files.
+   */
+  readonly fileCreationGrantFor?: FileCreationGrantSource;
   /** Test seams: inject fakes here; production callers omit them. */
   readonly runners?: {
     readonly architect?: typeof runGptArchitect;
@@ -417,6 +423,7 @@ export function resolveLiveWorkers(options: {
         requestedModel: requested.codingModel ?? '', workspacePath: options.workspacePath,
         testCommand: options.testCommand, shell: options.shell as ShellEffectPort,
         ...(options.researchPolicyFor === undefined ? {} : { researchPolicyFor: options.researchPolicyFor }),
+        ...(options.fileCreationGrantFor === undefined ? {} : { fileCreationGrantFor: options.fileCreationGrantFor }),
         run: options.runners?.coder, queryLoader: options.runners?.queryLoader,
       }),
     });

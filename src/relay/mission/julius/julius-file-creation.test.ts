@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  JULIUS_FILE_AUTHORITY_REFUSALS,
   JULIUS_FILE_CREATION_LIMITS,
   juliusFileCreationDecision,
   juliusFileCreationPolicyFor,
   juliusFileEditDecision,
   type JuliusFileCreationPolicy,
 } from './julius-file-creation';
+import { safeReviewDiagnostics } from './julius-router';
 
 /**
  * JULIUS DECIDES WHETHER A WORKER MAY CREATE -- OR EDIT -- A FILE.
@@ -174,6 +176,36 @@ describe('who may grant creation: the MISSION, never a worker -- and a bad grant
     }
     const tooMany = { permittedPaths: Array.from({ length: JULIUS_FILE_CREATION_LIMITS.maxPrefixes + 1 }, (_, i) => `d${String(i)}`) };
     expect(juliusFileCreationPolicyFor(tooMany, null).policy).toBeNull();
+  });
+});
+
+describe('what the authority decided reaches the durable record as counts and a CLOSED refusal name', () => {
+  it('every kernel refusal name is in the closed set the record admits', () => {
+    const produced = new Set<string>();
+    const bounds = policy();
+    for (const path of ['', '/x', 'C:/x', '../x', 'a\u0000b', 'a:b', 'x./y', 'CON', 'a'.repeat(2000), '.git/x', '.ssh/x', '.github/workflows/x', 'src/vendor/x', 'nope/x']) {
+      const decision = juliusFileCreationDecision(ask(path), bounds);
+      if (!decision.allowed) produced.add(decision.refusal);
+    }
+    for (const request of [ask('src/x.ts', { bytes: -1 }), ask('src/x.ts', { bytes: 10_000 }), ask('src/app.ts', { exists: true })]) {
+      const decision = juliusFileCreationDecision(request, bounds);
+      if (!decision.allowed) produced.add(decision.refusal);
+    }
+    for (const name of produced) expect(JULIUS_FILE_AUTHORITY_REFUSALS, name).toContain(name);
+    expect(produced.size).toBeGreaterThanOrEqual(15);
+  });
+
+  it('the diagnostics allowlist keeps the counters and a known name, and drops an invented one', () => {
+    const kept = safeReviewDiagnostics({
+      fileWritesAllowed: 2, fileWritesRefused: 1, fileEditsAllowed: 3, fileEditsRefused: 0, fileOtherRefused: 1,
+      fileFirstRefusal: 'path_out_of_scope', filesCreated: 2,
+    });
+    expect(kept).toMatchObject({
+      fileWritesAllowed: 2, fileWritesRefused: 1, fileEditsAllowed: 3, fileEditsRefused: 0, fileOtherRefused: 1,
+      fileFirstRefusal: 'path_out_of_scope', filesCreated: 2,
+    });
+    const hostile = safeReviewDiagnostics({ fileFirstRefusal: 'path_out_of_scope: /home/runner/.ssh/id_rsa', filesCreated: -1, fileWritesAllowed: 'many' });
+    expect(hostile).toMatchObject({ fileFirstRefusal: null, filesCreated: null, fileWritesAllowed: null });
   });
 });
 

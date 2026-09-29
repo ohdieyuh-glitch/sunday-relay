@@ -1,6 +1,7 @@
 import { JULIUS_CODING_AGENT_FAILURES } from './julius-coding-agent';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
 import { JULIUS_COST_BASES } from './julius-cost-accounting';
+import { JULIUS_FILE_AUTHORITY_REFUSALS } from './julius-file-creation';
 import type{JuliusWorker,JuliusWorkerRegistry,JuliusWorkerRole}from'./julius-runtime';import{workerAllowedByCard,type JuliusCardPolicy}from'./julius-policy';
 export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PROVIDER_UNAVAILABLE','INVALID_REQUEST','WORKER_EXECUTION_FAILURE','POLICY_DENIED','BUDGET_DENIED','CANCELLED']as const;export type JuliusErrorCode=typeof JULIUS_ERROR_CODES[number];
 /**
@@ -513,6 +514,17 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   participationAskedReport:safeNullableBool(v.participationAskedReport),
   /** Whether the coder reported what the design did under real code. */
   participationAskedObservations:safeNullableBool(v.participationAskedObservations),
+  /* --- WHAT JULIUS'S FILE AUTHORITY DECIDED in the coder's session: counts, and
+   * the first refusal's NAME from a closed set. Never a path or a sentence; the
+   * created files are in the attempt's DIFF evidence. Null when the authority
+   * reported nothing, which is not the same as "it refused nothing". --- */
+  fileWritesAllowed:safeCount(v.fileWritesAllowed),
+  fileWritesRefused:safeCount(v.fileWritesRefused),
+  fileEditsAllowed:safeCount(v.fileEditsAllowed),
+  fileEditsRefused:safeCount(v.fileEditsRefused),
+  fileOtherRefused:safeCount(v.fileOtherRefused),
+  fileFirstRefusal:safeEnum(v.fileFirstRefusal,JULIUS_FILE_AUTHORITY_REFUSALS),
+  filesCreated:safeCount(v.filesCreated),
  });
 };
 /**

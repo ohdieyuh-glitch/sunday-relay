@@ -9,6 +9,11 @@ import {
 } from './hosted-observation';
 import { classifyHostedFailure, type HostedFailureReason } from './hosted-failure-reason';
 import { HOSTED_ADAPTER_ID, HOSTED_SDK_PACKAGE } from './hosted-readiness';
+import {
+  juliusHostedToolAuthority,
+  type HostedToolAuthorityPolicy,
+  type HostedToolDecision,
+} from './hosted-tool-authority';
 
 /**
  * ONE HOSTED CODING AGENT EXECUTION.
@@ -120,7 +125,21 @@ export interface HostedRunInput {
   readonly now: () => string;
   /** Lets a browser Stop abort a hosted run. */
   readonly onCancel?: (cancel: () => void) => void;
+  /**
+   * WHAT JULIUS'S FILE AUTHORITY ENFORCES FOR THIS RUN, and where its decisions
+   * go. Absent means the strictest policy -- no creation, nothing out of scope
+   * beyond the kernel's own locations -- with the decisions discarded: the
+   * authority itself is installed on EVERY run either way, because confining the
+   * agent to its workspace is containment, not an option a caller may forget.
+   */
+  readonly toolAuthority?: {
+    readonly policy: HostedToolAuthorityPolicy;
+    readonly record: (decision: HostedToolDecision) => void;
+  };
 }
+
+/** The policy a run gets when its caller names none: confined, and unable to create. */
+export const HOSTED_STRICTEST_TOOL_POLICY: HostedToolAuthorityPolicy = Object.freeze({ creation: null, outOfScope: Object.freeze([]) });
 
 export const HOSTED_RUN_ADAPTER_ID = HOSTED_ADAPTER_ID;
 
@@ -133,12 +152,26 @@ export const HOSTED_RUN_ADAPTER_ID = HOSTED_ADAPTER_ID;
  */
 export async function runHostedCodingAgent(input: HostedRunInput): Promise<HostedRunOutcome> {
   const limits = input.limits ?? DEFAULT_HOSTED_LIMITS;
+  const toolPolicy = input.toolAuthority?.policy ?? HOSTED_STRICTEST_TOOL_POLICY;
   const envelope = compileHostedEnvelope({
     workspacePath: input.workspacePath,
     requestedModel: input.requestedModel,
     // The SAME limits the abort timer and the budget stop below use. Passing
     // them is what makes `maxTurns` an operative limit rather than a field.
     limits,
+    // The creation tool exists for the agent only when the mission granted it.
+    mayCreateFiles: toolPolicy.creation !== null,
+  });
+  /**
+   * JULIUS'S AUTHORITY, AS THE FIRST STEP OF EVERY TOOL CALL. A `PreToolUse`
+   * hook runs before deny rules, the permission mode and the allow list, and its
+   * deny holds in every mode; the allow list and `acceptEdits` would otherwise
+   * approve these calls without asking anyone.
+   */
+  const authority = juliusHostedToolAuthority({
+    workspacePath: input.workspacePath,
+    policy: toolPolicy,
+    record: input.toolAuthority?.record ?? (() => undefined),
   });
   const startedAt = input.now();
 
@@ -175,6 +208,9 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
           home: process.env.HOME,
         }),
         abortController: controller,
+        // No matcher: every tool call reaches the authority, which answers only
+        // for file tools and has no opinion on the rest.
+        hooks: { PreToolUse: [{ hooks: [authority] }] },
         ...(envelope.model !== null ? { model: envelope.model } : {}),
       },
     });

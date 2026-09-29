@@ -143,6 +143,8 @@ describe('C1 — a provider is shown a governed request, in sections by authorit
     expect(request.permissions).toEqual({
       mayEditFiles: true, mayRunCommands: false, mayUseNetwork: false,
       permittedPaths: ['src/slug.ts', 'src/slug.test.ts'], outOfScope: ['src/persistence/'], prohibitedActions: ['adding a dependency'],
+      // No mission grant was composed, so no creation: the default, stated rather than omitted.
+      fileCreation: null, fileCreationProblem: null,
     });
     expect(request.budget).toEqual({ usdMicros: 2_000_000 });
     expect(request.identity).toEqual({ runId: 'run-live', missionId: 'mission-1', taskId: 'build-1', taskType: 'build', contextId: 'ctx-1' });
@@ -164,13 +166,17 @@ describe('C1 — a provider is shown a governed request, in sections by authorit
         findings: [{ entryId: 'f', kind: 'FINDING', text: 'FINDING TEXT' }],
         continuation: [], missionContext: [{ entryId: 'o', kind: 'OBJECTIVE', text: 'OBJECTIVE TEXT' }],
       },
-      permissions: { mayEditFiles: true, mayRunCommands: false, mayUseNetwork: false, permittedPaths: [], outOfScope: [], prohibitedActions: [] },
+      permissions: { mayEditFiles: true, mayRunCommands: false, mayUseNetwork: false, permittedPaths: [], outOfScope: [], prohibitedActions: [], fileCreation: null, fileCreationProblem: null },
       requiredEvidence: ['TEST'], budget: { usdMicros: null }, protocol: { participation: 'HOW TO ASK', researchAuthority: 'WHAT TO READ' },
     } as unknown as JuliusCodingAgentRequest;
     const prompt = renderJuliusCodingAgentPrompt(request, JULIUS_CODING_AGENT_CHARTER);
     const at = (needle: string) => prompt.indexOf(needle);
     expect(at('OBJECTIVE TEXT')).toBeLessThan(at('THE PLAN'));
     expect(at('THE PLAN')).toBeLessThan(at('--- TASK CONTRACT'));
+    // THE FILE AUTHORITY sits beside the terms it enforces, ahead of anything advisory.
+    expect(at('--- TASK CONTRACT')).toBeLessThan(at('--- FILE AUTHORITY'));
+    expect(at('--- FILE AUTHORITY')).toBeLessThan(at('--- ACCEPTED GUIDANCE'));
+    expect(prompt).toContain('FILE CREATION: NOT PERMITTED');
     expect(at('--- TASK CONTRACT')).toBeLessThan(at('--- ACCEPTED GUIDANCE'));
     expect(at('--- ACCEPTED GUIDANCE')).toBeLessThan(at('--- ARCHITECTURE CONTEXT (advisory'));
     expect(at('--- ARCHITECTURE CONTEXT')).toBeLessThan(at('--- REVIEW FINDINGS'));
@@ -520,5 +526,97 @@ describe('a diff the executor never captured', () => {
     expect(diff.integrityHash, 'and it names no bytes').toBeNull();
     expect(evidence.find((item) => item.type === 'TEST')!.integrityHash, 'the captured body still does')
       .toMatch(/^[0-9a-f]{64}$/u);
+  });
+});
+
+/* ------------------------------------------------- file creation (P0) */
+
+describe('C6 — a mission\'s creation grant reaches the coder, narrowed by the contract, and nothing else can grant it', () => {
+  const adapterGranting = (
+    provider: Parameters<typeof createJuliusCodingAgentAdapter>[0]['provider'],
+    fileCreationGrantFor: Parameters<typeof createJuliusCodingAgentAdapter>[0]['fileCreationGrantFor'],
+  ) => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), PLAN);
+    return createJuliusCodingAgentAdapter({
+      worker: WORKER, contexts: { snapshotFor: () => snapshot() }, artifacts, projectId: 'prj-live',
+      workspacePath: '/workspace/mission', testCommand: 'npm test', shell: createFakeExecutorShell({}), provider,
+      ...(fileCreationGrantFor === undefined ? {} : { fileCreationGrantFor }),
+    });
+  };
+
+  it('the grant is looked up by THIS dispatch\'s mission, and the contract narrows and excludes it', async () => {
+    const asked: string[] = [];
+    const provider = createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] });
+    await adapterGranting(provider, (missionId) => { asked.push(missionId); return { permittedPaths: ['src'] }; }).dispatch(DISPATCH);
+    expect(asked).toEqual(['mission-1']);
+    const request = provider.requests[0]!;
+    expect(request.permissions.fileCreation).toEqual({
+      permittedPaths: ['src'],
+      // The locked contract's own permitted paths NARROW the grant; its exclusions still apply.
+      alsoWithin: ['src/slug.ts', 'src/slug.test.ts'], outOfScope: ['src/persistence/'],
+      maxBytes: 256 * 1024, mayOverwrite: false,
+    });
+    expect(request.permissions.fileCreationProblem).toBeNull();
+    const prompt = renderJuliusCodingAgentPrompt(request, JULIUS_CODING_AGENT_CHARTER);
+    expect(prompt).toContain('FILE CREATION: permitted with Write under: src');
+    expect(prompt).toContain('Replacing an existing file with Write is NOT permitted');
+  });
+
+  it('no grant for this mission is no creation; a malformed grant fails CLOSED and says why', async () => {
+    const none = createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] });
+    await adapterGranting(none, () => null).dispatch(DISPATCH);
+    expect(none.requests[0]!.permissions).toMatchObject({ fileCreation: null, fileCreationProblem: null });
+
+    const bad = createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] });
+    await adapterGranting(bad, () => ({ permittedPaths: ['../outside'] })).dispatch(DISPATCH);
+    expect(bad.requests[0]!.permissions.fileCreation).toBeNull();
+    expect(bad.requests[0]!.permissions.fileCreationProblem).toMatch(/refused/u);
+  });
+
+  it('the Claude provider hands the runner THAT policy -- creation and exclusions -- and reports what the authority decided', async () => {
+    const seen: HostedRunInput[] = [];
+    const run = async (input: HostedRunInput): Promise<HostedRunOutcome> => {
+      seen.push(input);
+      // What the installed hook would have recorded during the session.
+      input.toolAuthority?.record({ tool: 'Write', allowed: true, path: 'src/slug-format.ts', refusal: null, because: 'Permitted.' });
+      input.toolAuthority?.record({ tool: 'Write', allowed: false, path: 'src/persistence/x.ts', refusal: 'path_out_of_scope', because: 'Out of scope.' });
+      input.toolAuthority?.record({ tool: 'Read', allowed: false, path: null, refusal: 'path_outside_workspace', because: 'Outside.' });
+      return {
+        kind: 'completed',
+        observation: {
+          initSeen: true, sessionId: 'sess', actualModel: 'claude-x', runtimeVersion: 't', apiKeySource: 'env', reportedCwd: input.workspacePath,
+          reportedTools: ['Read', 'Edit', 'Write'], toolTargets: [], toolsUsed: ['Write'], toolInvocations: 3, permissionDenials: 2, numTurns: 2, durationMs: 1,
+          usage: { inputTokens: 10, outputTokens: 10, totalCostUsd: 0.01, source: 'runtime_reported' },
+          streamUsage: { messages: 1, abortedMessages: 0, inputTokens: 10, outputTokens: 10, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+          resultSubtype: 'success', isError: false, terminalReason: null, finalText: 'Created the formatter.', thinkingBlocksOmitted: 0, unknownMessageCount: 0,
+        },
+        envelope: compileHostedEnvelope({ workspacePath: input.workspacePath, mayCreateFiles: true }), startedAt: 't', completedAt: 't',
+      } as never;
+    };
+    const provider = createClaudeCodeCodingAgentProvider({ apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-x', run: run as never, queryLoader: async () => (() => (async function* () { /* none */ })()) as HostedQueryFn });
+    const result = await adapterGranting(provider, () => ({ permittedPaths: ['src'] })).dispatch(DISPATCH) as JuliusProviderResult;
+    expect(seen[0]!.toolAuthority?.policy).toEqual({
+      creation: { permittedPaths: ['src'], alsoWithin: ['src/slug.ts', 'src/slug.test.ts'], outOfScope: ['src/persistence/'], maxBytes: 256 * 1024, mayOverwrite: false },
+      outOfScope: ['src/persistence/'],
+    });
+    // The decisions survive into the durable diagnostics as counts and one refusal NAME -- never a path.
+    const facts = JSON.stringify(result.diagnostics ?? {});
+    expect(result.diagnostics).toMatchObject({
+      fileWritesAllowed: 1, fileWritesRefused: 1, fileEditsAllowed: 0, fileEditsRefused: 0, fileOtherRefused: 1,
+      fileFirstRefusal: 'path_out_of_scope', filesCreated: 1,
+    });
+    expect(facts).not.toContain('src/persistence/x.ts');
+  });
+
+  it('with NO grant, the Claude provider still installs the authority -- no creation, the contract\'s exclusions kept', async () => {
+    const seen: HostedRunInput[] = [];
+    const run = async (input: HostedRunInput): Promise<HostedRunOutcome> => {
+      seen.push(input);
+      return { kind: 'launch_failed', safeMessage: 'x', failureReason: null, observation: null as never, startedAt: 't', completedAt: 't' } as never;
+    };
+    const provider = createClaudeCodeCodingAgentProvider({ apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-x', run: run as never, queryLoader: async () => (() => (async function* () { /* none */ })()) as HostedQueryFn });
+    await refusalOf(adapterWith(provider).adapter.dispatch(DISPATCH));
+    expect(seen[0]!.toolAuthority?.policy).toEqual({ creation: null, outOfScope: ['src/persistence/'] });
   });
 });

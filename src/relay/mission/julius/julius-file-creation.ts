@@ -218,6 +218,23 @@ export function juliusFileCreationPolicyFor(
   };
 }
 
+/**
+ * EVERY REFUSAL NAME A FILE-AUTHORITY DECISION CAN PRODUCE -- the kernel's own
+ * and the bridge adapter's (a path outside the workspace, a glob that climbs out,
+ * a mission with no grant, a cancelled dispatch, an unresolvable workspace). A
+ * CLOSED set, so a durable record's column cannot come to hold a word nobody
+ * defined; the adapter's test holds its refusals to it.
+ */
+export const JULIUS_FILE_AUTHORITY_REFUSALS = Object.freeze([
+  'path_empty', 'path_absolute', 'path_drive_qualified', 'path_traversal', 'path_invalid_character',
+  'path_ambiguous_segment', 'path_reserved_name', 'path_too_long',
+  'path_control_location', 'path_credential_location', 'path_workflow_location', 'path_out_of_scope', 'path_not_permitted',
+  'content_too_large', 'content_negative', 'overwrite_not_authorized',
+  'path_outside_workspace', 'path_unreadable', 'creation_not_granted', 'glob_outside_workspace',
+  'dispatch_cancelled', 'workspace_unresolvable',
+] as const);
+export type JuliusFileAuthorityRefusal = (typeof JULIUS_FILE_AUTHORITY_REFUSALS)[number];
+
 /* ----------------------------------------------------------------- editing */
 
 export type JuliusFileEditRefusal =

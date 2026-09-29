@@ -77,6 +77,7 @@ import {
   renderJuliusCodingAgentContract,
   type JuliusCodingAgentProvider,
 } from '../../src/relay/mission/julius/julius-coding-agent';
+import type { JuliusFileCreationGrant } from '../../src/relay/mission/julius/julius-file-creation';
 import { createClaudeCodeCodingAgentProvider } from './claude-code-coding-provider';
 import {
   hermesReviewVerdict,
@@ -295,7 +296,15 @@ const RESEARCH_FIELD_GUIDANCE = juliusResearchAskFieldGuidance();
  * reads this text.
  */
 export type ResearchPolicySource = (missionId: string) => JuliusResearchPolicy;
-const researchAuthorityFor = (source: ResearchPolicySource | undefined, missionId: string, role: string): string =>
+
+/**
+ * THE MISSION'S OWN AUTHORISATION TO CREATE FILES, by mission id, from its
+ * trusted contract. Null for a mission means its coder may not create files.
+ * The same shape as {@link ResearchPolicySource}, for the same reason: the
+ * composition owns mission-level authority, and a dispatch only looks it up.
+ */
+export type FileCreationGrantSource = (missionId: string) => JuliusFileCreationGrant | null;
+const researchAuthorityFor =(source: ResearchPolicySource | undefined, missionId: string, role: string): string =>
   (source === undefined ? RESEARCH_AUTHORITY_NOT_STATED : renderJuliusResearchAuthority({ policy: source(missionId), role }));
 
 /**
@@ -1357,6 +1366,12 @@ export function createJuliusCodingAgentAdapter(input: {
   readonly provider: JuliusCodingAgentProvider;
   /** The mission's sealed research policy, the same source the mediator decides with. */
   readonly researchPolicyFor?: ResearchPolicySource;
+  /**
+   * THE MISSION'S OWN GRANT TO CREATE FILES, looked up by mission id from its
+   * trusted contract. Absent, or null for a mission, means that mission's coder
+   * may not create files -- the default. Never derived from a worker's proposal.
+   */
+  readonly fileCreationGrantFor?: FileCreationGrantSource;
 }): JuliusProviderAdapter {
   return {
     adapterId: input.worker.adapterId,
@@ -1426,6 +1441,7 @@ export function createJuliusCodingAgentAdapter(input: {
         workspacePath: input.workspacePath, plan, contract: dispatch.contract, allocation: dispatch.allocation,
         participationProtocol: juliusParticipationProtocol(),
         researchAuthority: researchAuthorityFor(input.researchPolicyFor, snapshot.packet.missionId, input.worker.role),
+        fileCreationGrant: input.fileCreationGrantFor?.(snapshot.packet.missionId) ?? null,
       });
       const outcome = await input.provider.execute(request, dispatch.signal);
 
@@ -1685,6 +1701,8 @@ export function createLiveHostedCodingAdapter(input: {
   readonly shell: ShellEffectPort;
   /** The mission's sealed research policy, the same source the mediator decides with. */
   readonly researchPolicyFor?: ResearchPolicySource;
+  /** The mission's own file-creation grant, by mission id. Absent means no mission may create files. */
+  readonly fileCreationGrantFor?: FileCreationGrantSource;
   readonly run?: typeof runHostedCodingAgent;
   readonly queryLoader?: () => Promise<HostedQueryFn>;
 }): JuliusProviderAdapter {
@@ -1698,6 +1716,7 @@ export function createLiveHostedCodingAdapter(input: {
     worker: input.worker, contexts: input.contexts, artifacts: input.artifacts, projectId: input.projectId,
     workspacePath: input.workspacePath, testCommand: input.testCommand, shell: input.shell,
     ...(input.researchPolicyFor === undefined ? {} : { researchPolicyFor: input.researchPolicyFor }),
+    ...(input.fileCreationGrantFor === undefined ? {} : { fileCreationGrantFor: input.fileCreationGrantFor }),
     provider: createClaudeCodeCodingAgentProvider({
       apiKey: input.apiKey, requestedModel: input.requestedModel,
       ...(input.run === undefined ? {} : { run: input.run }),

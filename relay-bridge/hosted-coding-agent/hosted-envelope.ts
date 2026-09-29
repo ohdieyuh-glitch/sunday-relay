@@ -50,6 +50,17 @@ export const HOSTED_DISALLOWED_TOOLS: readonly string[] = Object.freeze([
   'WebFetch', 'WebSearch', 'Task', 'SlashCommand', 'TodoWrite',
 ]);
 
+/**
+ * THE ONE TOOL GRANTED CONDITIONALLY, AND NEVER WITHOUT AN AUTHORITY.
+ *
+ * `Write` makes a mission needing a NEW file possible at all. It is granted only
+ * when the mission's own creation grant produced a policy, and the runner installs
+ * Julius's `PreToolUse` authority (`hosted-tool-authority.ts`) on every run, so
+ * each write is judged before it happens -- an allow-list entry alone would
+ * approve every call.
+ */
+export const HOSTED_CREATION_TOOL = 'Write';
+
 /** Bounds for one hosted execution. */
 export interface HostedLimits {
   readonly maxTurns: number;
@@ -163,18 +174,29 @@ export function compileHostedEnvelope(input: {
    * could raise `maxTurns` to forty and still stop at twelve. It binds now.
    */
   limits?: HostedLimits;
+  /**
+   * TRUE ONLY WHEN THE MISSION GRANTED FILE CREATION. Then, and only then, the
+   * agent is given `Write`; every call to it still passes Julius's authority.
+   * Absent or false keeps the default: no creation tool at all.
+   */
+  mayCreateFiles?: boolean;
 }): HostedEnvelope {
   const requested = typeof input.requestedModel === 'string' && input.requestedModel.trim() !== ''
     ? input.requestedModel.trim()
     : null;
+  const mayCreate = input.mayCreateFiles === true;
   return {
     cwd: input.workspacePath,
     model: requested,
-    allowedTools: [...HOSTED_ALLOWED_TOOLS],
-    disallowedTools: [...HOSTED_DISALLOWED_TOOLS],
+    allowedTools: mayCreate ? [...HOSTED_ALLOWED_TOOLS, HOSTED_CREATION_TOOL] : [...HOSTED_ALLOWED_TOOLS],
+    disallowedTools: mayCreate
+      ? HOSTED_DISALLOWED_TOOLS.filter((tool) => tool !== HOSTED_CREATION_TOOL)
+      : [...HOSTED_DISALLOWED_TOOLS],
     // Edits are applied without a prompt because a hosted run has no operator
     // to prompt. Containment is the tool restriction, the pinned cwd, the
-    // empty settings sources and Relay's post-run inspection — never a dialog.
+    // empty settings sources, Julius's `PreToolUse` authority on every file
+    // tool (`hosted-tool-authority.ts`) and Relay's post-run inspection --
+    // never a dialog.
     permissionMode: 'acceptEdits',
     maxTurns: (input.limits ?? DEFAULT_HOSTED_LIMITS).maxTurns,
     settingSources: [],

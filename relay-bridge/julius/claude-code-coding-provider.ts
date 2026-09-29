@@ -22,6 +22,11 @@ import {
   type HostedRunOutcome,
 } from '../hosted-coding-agent/hosted-runner';
 import {
+  summariseHostedToolDecisions,
+  type HostedToolAuthoritySummary,
+  type HostedToolDecision,
+} from '../hosted-coding-agent/hosted-tool-authority';
+import {
   JULIUS_CODING_AGENT_CHARTER,
   renderJuliusCodingAgentPrompt,
   type JuliusCodingAgentFailure,
@@ -57,6 +62,8 @@ export const hostedCoderDiagnostics = (input: {
    * stream had managed to emit before it.
    */
   readonly failureReason?: string | null;
+  /** What Julius's file authority decided during the session, when the runner reported it. */
+  readonly toolAuthority?: HostedToolAuthoritySummary | null;
 }): Record<string, unknown> => {
   const observed = input.observed;
   /**
@@ -152,6 +159,20 @@ export const hostedCoderDiagnostics = (input: {
     streamOutputTokens: observed?.streamUsage.outputTokens ?? null,
     streamCacheReadInputTokens: observed?.streamUsage.cacheReadInputTokens ?? null,
     streamCacheCreationInputTokens: observed?.streamUsage.cacheCreationInputTokens ?? null,
+    /* --------------------------- what Julius's file authority decided ---- */
+    /**
+     * COUNTS AND ONE REFUSAL NAME, never a path or a sentence: the created files
+     * themselves are in the attempt's DIFF evidence, which is where a reviewer
+     * reads them. Null when no authority summary was supplied, which is a
+     * different fact from "it decided nothing".
+     */
+    fileWritesAllowed: input.toolAuthority?.writesAllowed ?? null,
+    fileWritesRefused: input.toolAuthority?.writesRefused ?? null,
+    fileEditsAllowed: input.toolAuthority?.editsAllowed ?? null,
+    fileEditsRefused: input.toolAuthority?.editsRefused ?? null,
+    fileOtherRefused: input.toolAuthority?.othersRefused ?? null,
+    fileFirstRefusal: input.toolAuthority?.firstRefusal ?? null,
+    filesCreated: input.toolAuthority === undefined || input.toolAuthority === null ? null : input.toolAuthority.created.length,
   };
 };
 
@@ -268,6 +289,13 @@ export function createClaudeCodeCodingAgentProvider(input: {
        * detaches when the run is over. A second abort is a no-op on both sides.
        */
       let detach = (): void => undefined;
+      /**
+       * EVERY FILE DECISION JULIUS'S AUTHORITY MAKES IN THE SESSION, gathered so
+       * each ending below can report them. The policy is the request's own:
+       * creation only when the MISSION granted it, out-of-scope from the contract.
+       */
+      const toolDecisions: HostedToolDecision[] = [];
+      const toolAuthority = (): HostedToolAuthoritySummary => summariseHostedToolDecisions(toolDecisions);
       const outcome: HostedRunOutcome = await run({
         queryFn,
         prompt: renderJuliusCodingAgentPrompt(request, JULIUS_CODING_AGENT_CHARTER),
@@ -276,6 +304,10 @@ export function createClaudeCodeCodingAgentProvider(input: {
         requestedModel: input.requestedModel,
         limits,
         now: nowIso,
+        toolAuthority: {
+          policy: { creation: request.permissions.fileCreation, outOfScope: request.permissions.outOfScope },
+          record: (decision) => { toolDecisions.push(decision); },
+        },
         ...(signal === undefined ? {} : {
           onCancel: (cancel: () => void): void => {
             if (signal.aborted) { cancel(); return; }
@@ -294,6 +326,7 @@ export function createClaudeCodeCodingAgentProvider(input: {
         const diagnostics = hostedCoderDiagnostics({
           taskType: request.identity.taskType, requestedModel: input.requestedModel,
           observed: outcome.observation, limits, outcome: 'failed', failureReason: null,
+          toolAuthority: toolAuthority(),
         });
         return {
           kind: 'failed', failure: 'CANCELLED', runtimeStarted: true,
@@ -309,6 +342,7 @@ export function createClaudeCodeCodingAgentProvider(input: {
         const diagnostics = hostedCoderDiagnostics({
           taskType: request.identity.taskType, requestedModel: input.requestedModel,
           observed, limits, outcome: 'failed', failureReason: runnerReason,
+          toolAuthority: toolAuthority(),
         });
         const reason = typeof diagnostics.failureReason === 'string' ? diagnostics.failureReason : null;
         const failure = codingAgentFailureFromHostedOutcome(outcome, reason);
@@ -332,6 +366,7 @@ export function createClaudeCodeCodingAgentProvider(input: {
       const diagnostics = hostedCoderDiagnostics({
         taskType: request.identity.taskType, requestedModel: input.requestedModel,
         observed: outcome.observation, limits, outcome: 'succeeded',
+        toolAuthority: toolAuthority(),
       });
       const usage = outcome.observation.usage;
       return {

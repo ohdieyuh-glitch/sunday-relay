@@ -3,6 +3,11 @@ import type { JuliusContextSnapshot } from './julius-context-snapshot';
 import { guardJuliusPeerResponse } from './julius-peer-channel';
 import type { JuliusDispatchAllocation, JuliusErrorCode } from './julius-router';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
+import {
+  juliusFileCreationPolicyFor,
+  type JuliusFileCreationGrant,
+  type JuliusFileCreationPolicy,
+} from './julius-file-creation';
 
 /**
  * THE CODING AGENT, AS A JULIUS ROLE RATHER THAN A PROVIDER.
@@ -290,6 +295,16 @@ export interface JuliusCodingAgentPermissions {
   readonly permittedPaths: readonly string[];
   readonly outOfScope: readonly string[];
   readonly prohibitedActions: readonly string[];
+  /**
+   * WHERE THIS DISPATCH MAY CREATE NEW FILES, or null when it may not -- the
+   * default. Composed from the MISSION's grant and narrowed by the locked task
+   * contract (`juliusFileCreationPolicyFor`); a worker can neither grant nor widen
+   * it. The adapter enforces it pre-hoc on every write, so it binds rather than
+   * describes.
+   */
+  readonly fileCreation: JuliusFileCreationPolicy | null;
+  /** A creation grant that was present but unusable, named. Null when there was none, or it was usable. */
+  readonly fileCreationProblem: string | null;
 }
 
 export interface JuliusCodingAgentRequest {
@@ -326,8 +341,11 @@ export function buildJuliusCodingAgentRequest(input: {
   readonly allocation: JuliusDispatchAllocation | undefined;
   readonly participationProtocol: string;
   readonly researchAuthority: string;
+  /** The MISSION's own authorisation to create files, from its trusted contract. Absent means none. */
+  readonly fileCreationGrant?: JuliusFileCreationGrant | null;
 }): JuliusCodingAgentRequest {
   const contract = input.contract ?? null;
+  const creation = juliusFileCreationPolicyFor(input.fileCreationGrant, contract);
   return Object.freeze({
     version: JULIUS_CODING_AGENT_CONTRACT_VERSION,
     identity: Object.freeze({
@@ -343,6 +361,8 @@ export function buildJuliusCodingAgentRequest(input: {
       permittedPaths: Object.freeze([...(contract?.permittedPaths ?? [])]),
       outOfScope: Object.freeze([...(contract?.outOfScope ?? [])]),
       prohibitedActions: Object.freeze([...(contract?.prohibitedActions ?? [])]),
+      fileCreation: creation.policy,
+      fileCreationProblem: creation.problem,
     }),
     requiredEvidence: Object.freeze([...(contract?.requiredEvidence ?? [])]),
     budget: Object.freeze({ usdMicros: input.allocation?.usdMicros ?? null }),
@@ -406,6 +426,37 @@ const section = (heading: string, blocks: readonly JuliusCodingAgentBlock[]): st
  * must answer, then where paused work resumes — and last, how to ask instead of
  * guessing, so it is the most recent thing read before the work starts.
  */
+/**
+ * WHAT THE WORKER MAY DO WITH FILES, SAID TO IT IN WORDS.
+ *
+ * The authority is enforced by the adapter whatever this says, so this is not a
+ * control -- it is what lets a worker USE a capability it was granted, and not
+ * waste a dispatch trying one it was not. A worker that does not know it may
+ * create files will squeeze a new module into an existing one; a worker that is
+ * not told it may not will try, be refused, and spend turns finding out why.
+ */
+export function renderJuliusFileAuthority(permissions: JuliusCodingAgentPermissions): string {
+  const lines = [
+    '--- FILE AUTHORITY (Julius enforces this on every file tool call) ---',
+    'Every file tool is confined to the mission workspace: a path outside it, a path containing "..", and a link that points out of it are all refused.',
+    'Edits are refused in control locations (.git, .claude, hook directories), credential files (.env, .npmrc, keys) and CI workflows (.github/workflows), and under out-of-scope paths.',
+  ];
+  // A request built before this field existed has none: that is "no creation",
+  // the same answer as an explicit null, never an error.
+  const creation = permissions.fileCreation ?? null;
+  if (creation === null) {
+    lines.push('FILE CREATION: NOT PERMITTED in this mission. Edit existing files only; if the work genuinely needs a new file, say so in your report instead of working around it.');
+  } else {
+    lines.push(
+      `FILE CREATION: permitted with Write under: ${creation.permittedPaths.join(', ')}`
+      + (creation.alsoWithin.length > 0 ? ` -- and only within the contract's permitted paths: ${creation.alsoWithin.join(', ')}` : '')
+      + `. Each file at most ${String(creation.maxBytes)} bytes. `
+      + (creation.mayOverwrite ? 'Replacing an existing file with Write is permitted.' : 'Replacing an existing file with Write is NOT permitted; use Edit on existing files.'),
+    );
+  }
+  return lines.join('\n');
+}
+
 export function renderJuliusCodingAgentPrompt(request: JuliusCodingAgentRequest, charter: string): string {
   const { sections } = request;
   return [
@@ -415,6 +466,7 @@ export function renderJuliusCodingAgentPrompt(request: JuliusCodingAgentRequest,
     '--- ARCHITECT PLAN ---',
     request.plan,
     ...(request.contract === null ? [] : [renderJuliusCodingAgentContract(request.contract)]),
+    renderJuliusFileAuthority(request.permissions),
     ...section('--- ACCEPTED GUIDANCE (Julius accepted it after independent review; follow it inside the contract above) ---', sections.acceptedGuidance),
     ...section('--- ARCHITECTURE CONTEXT (advisory design state; where it disagrees with the contract, the contract wins) ---', sections.architecture),
     ...section('--- REVIEW FINDINGS THIS WORK MUST ANSWER ---', sections.findings),
