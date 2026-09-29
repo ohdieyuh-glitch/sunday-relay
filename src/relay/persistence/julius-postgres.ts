@@ -34,6 +34,46 @@ export interface CreateJuliusRun {
 }
 const json=(value:unknown)=>JSON.stringify(value);
 
+/** A connection inside the caller's transaction. */
+export interface JuliusSqlClient { query(sql:string,values?:readonly unknown[]):Promise<{rows:any[];rowCount:number|null}> }
+export interface JuliusRunStreamEvent { eventId:string;projectId:string;streamId:string;type:string;occurredAt:string;payload:unknown }
+
+/**
+ * ONE EVENT ON A RUN'S STREAM, inside the caller's transaction: the stream
+ * sequence, the `events` row and its `outbox` row. The one writer of the
+ * ledger rows every other mutation here announces itself with — exported so a
+ * repository holding its own transaction (the atomic approval gate) writes
+ * them the same way rather than skipping them.
+ */
+export async function appendJuliusRunStreamEventWithin(client:JuliusSqlClient,input:JuliusRunStreamEvent):Promise<void>{
+  const sequence=await client.query('INSERT INTO relay_wonderland.stream_sequences(stream_id,next_sequence) VALUES($1,2) ON CONFLICT(stream_id) DO UPDATE SET next_sequence=relay_wonderland.stream_sequences.next_sequence+1 RETURNING next_sequence-1 AS sequence',[input.streamId]);
+  await client.query(`INSERT INTO relay_wonderland.events(event_id,stream_id,project_id,sequence,event_type,visibility,payload,occurred_at) VALUES($1,$2,$3,$4,$5,'PROJECT',$6::jsonb,$7)`,[input.eventId,input.streamId,input.projectId,Number(sequence.rows[0].sequence),input.type,json({schemaVersion:'relay-julius-event.v1',...input}),input.occurredAt]);
+  await client.query('INSERT INTO relay_wonderland.outbox(outbox_id,event_id,project_id) VALUES($1,$2,$3)',[`outbox:${input.eventId}`,input.eventId,input.projectId]);
+}
+
+/**
+ * ONE RUN TRANSITION, inside the caller's transaction, written the one way a
+ * transition is written: `transitionMission` decides whether the move is legal
+ * (it throws when it is not), then the run row moves under its version, the
+ * `julius_transitions` row records it (sequence = the version it moved FROM),
+ * and `julius.run.transitioned` announces it. `JuliusPostgresRepository
+ * .transition` is this inside its own transaction; the atomic approval gate is
+ * this inside the transaction that writes the approval, so its move to BLOCKED
+ * is a recorded transition and not a bare UPDATE the history never saw.
+ * Returns the run row as it now stands.
+ */
+export async function transitionJuliusRunWithin(
+  client:JuliusSqlClient,
+  run:{readonly runId:string;readonly projectId:string;readonly missionId:string;readonly state:JuliusMissionState;readonly version:number},
+  input:{readonly commandId:string;readonly to:JuliusMissionState;readonly reasonCode:string;readonly safeSummary:string;readonly evidenceIds:readonly string[];readonly occurredAt:string},
+):Promise<Record<string,unknown>>{
+  const transition=transitionMission({transitionId:`transition:${input.commandId}`,missionId:run.missionId,current:run.state,to:input.to,reasonCode:input.reasonCode,safeSummary:input.safeSummary,evidenceIds:input.evidenceIds,occurredAt:input.occurredAt});
+  const updated=await client.query('UPDATE relay_wonderland.julius_runs SET state=$2,version=version+1,updated_at=$3 WHERE run_id=$1 AND version=$4 RETURNING *',[run.runId,input.to,input.occurredAt,run.version]);if(updated.rowCount!==1)throw Object.assign(new Error('optimistic_concurrency_conflict'),{code:'40001'});
+  await client.query(`INSERT INTO relay_wonderland.julius_transitions(transition_id,run_id,from_state,to_state,reason_code,safe_summary,evidence_ids,runtime_version,occurred_at,sequence) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10)`,[transition.transitionId,run.runId,transition.from,transition.to,transition.reasonCode,transition.safeSummary,json(transition.evidenceIds),transition.runtimeVersion,transition.occurredAt,run.version]);
+  await appendJuliusRunStreamEventWithin(client,{eventId:`julius:${input.commandId}`,projectId:run.projectId,streamId:run.runId,type:'julius.run.transitioned',occurredAt:input.occurredAt,payload:transition});
+  return updated.rows[0] as Record<string,unknown>;
+}
+
 /** PostgreSQL authority for Julius. Every externally visible mutation writes the existing event/outbox ledger in the same serializable transaction. */
 export class JuliusPostgresRepository {
   constructor(private readonly pool:Pool){}
@@ -101,10 +141,7 @@ export class JuliusPostgresRepository {
   async loadRun(runId:string,projectId:string):Promise<JuliusRunRecord|null>{const result=await this.pool.query<Record<string,unknown>>('SELECT * FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2',[runId,projectId]);return result.rows[0]?this.mapRun(result.rows[0]):null;}
   async transition(input:{commandId:string;runId:string;projectId:string;expectedVersion:number;to:JuliusMissionState;reasonCode:string;safeSummary:string;evidenceIds:readonly string[];occurredAt:string}):Promise<JuliusRunRecord>{
     return this.transaction(async client=>{const current=await client.query('SELECT * FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2 FOR UPDATE',[input.runId,input.projectId]);if(!current.rows[0])throw new Error('julius_run_not_found');const run=this.mapRun(current.rows[0]);if(run.version!==input.expectedVersion)throw Object.assign(new Error('optimistic_concurrency_conflict'),{code:'40001',retryable:false});
-      const transition=transitionMission({transitionId:`transition:${input.commandId}`,missionId:run.missionId,current:run.state,to:input.to,reasonCode:input.reasonCode,safeSummary:input.safeSummary,evidenceIds:input.evidenceIds,occurredAt:input.occurredAt});
-      const updated=await client.query('UPDATE relay_wonderland.julius_runs SET state=$2,version=version+1,updated_at=$3 WHERE run_id=$1 AND version=$4 RETURNING *',[input.runId,input.to,input.occurredAt,input.expectedVersion]);if(updated.rowCount!==1)throw Object.assign(new Error('optimistic_concurrency_conflict'),{code:'40001'});
-      await client.query(`INSERT INTO relay_wonderland.julius_transitions(transition_id,run_id,from_state,to_state,reason_code,safe_summary,evidence_ids,runtime_version,occurred_at,sequence) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10)`,[transition.transitionId,input.runId,transition.from,transition.to,transition.reasonCode,transition.safeSummary,json(transition.evidenceIds),transition.runtimeVersion,transition.occurredAt,run.version]);
-      await this.event(client,{eventId:`julius:${input.commandId}`,projectId:input.projectId,streamId:input.runId,type:'julius.run.transitioned',occurredAt:input.occurredAt,payload:transition});return this.mapRun(updated.rows[0]);});
+      return this.mapRun(await transitionJuliusRunWithin(client,{runId:input.runId,projectId:input.projectId,missionId:run.missionId,state:run.state,version:run.version},input));});
   }
   async addTask(input:{commandId:string;runId:string;projectId:string;task:JuliusTask}):Promise<boolean>{return this.transaction(async client=>{const run=await client.query('SELECT project_id,mission_id FROM relay_wonderland.julius_runs WHERE run_id=$1 FOR UPDATE',[input.runId]);if(!run.rows[0]||run.rows[0].project_id!==input.projectId||run.rows[0].mission_id!==input.task.missionId)throw new Error('julius_run_not_found');
     const inserted=await client.query(`INSERT INTO relay_wonderland.julius_tasks(task_id,run_id,parent_task_id,role,task_type,state,ordinal,required_evidence_types) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb) ON CONFLICT(task_id) DO NOTHING`,[input.task.taskId,input.runId,input.task.parentTaskId,input.task.role,input.task.taskType,input.task.state,input.task.ordinal,json(input.task.requiredEvidenceTypes)]);if(inserted.rowCount!==1)return false;
@@ -224,7 +261,7 @@ export class JuliusPostgresRepository {
     );
     return result.rowCount===1;
   }
-  private async event(client:{query:(sql:string,values?:readonly unknown[])=>Promise<{rows:any[];rowCount:number|null}>},input:{eventId:string;projectId:string;streamId:string;type:string;occurredAt:string;payload:unknown}){const sequence=await client.query('INSERT INTO relay_wonderland.stream_sequences(stream_id,next_sequence) VALUES($1,2) ON CONFLICT(stream_id) DO UPDATE SET next_sequence=relay_wonderland.stream_sequences.next_sequence+1 RETURNING next_sequence-1 AS sequence',[input.streamId]);await client.query(`INSERT INTO relay_wonderland.events(event_id,stream_id,project_id,sequence,event_type,visibility,payload,occurred_at) VALUES($1,$2,$3,$4,$5,'PROJECT',$6::jsonb,$7)`,[input.eventId,input.streamId,input.projectId,Number(sequence.rows[0].sequence),input.type,json({schemaVersion:'relay-julius-event.v1',...input}),input.occurredAt]);await client.query('INSERT INTO relay_wonderland.outbox(outbox_id,event_id,project_id) VALUES($1,$2,$3)',[`outbox:${input.eventId}`,input.eventId,input.projectId]);}
+  private async event(client:JuliusSqlClient,input:JuliusRunStreamEvent){await appendJuliusRunStreamEventWithin(client,input);}
   private mapRun(row:Record<string,unknown>):JuliusRunRecord{return{runId:String(row.run_id),missionId:String(row.mission_id),projectId:String(row.project_id),state:String(row.state)as JuliusMissionState,cardRevision:String(row.card_revision),missionContractRevision:Number(row.mission_contract_revision),projectBrainRevision:Number(row.project_brain_revision),version:Number(row.version)};}
   private parseRun(value:unknown):JuliusRunRecord{return typeof value==='string'?JSON.parse(value)as JuliusRunRecord:value as JuliusRunRecord;}
   private async transaction<T>(effect:(client:any)=>Promise<T>):Promise<T>{const client=await this.pool.connect();try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');const value=await effect(client);await client.query('COMMIT');return value;}catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}}
