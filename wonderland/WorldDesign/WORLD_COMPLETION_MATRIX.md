@@ -150,19 +150,50 @@ MAP WRITE REQUEST / COMPLETE messages. CORE = "Wonderland" session, SECOND = "Ne
 
 | # | region | owner | status | biggest missing element | dependency / blocker |
 |---|---|---|---|---|---|
-| Q1 | R50 wild ring 1,200-1,480 m (outside Dubel) | SECOND | ACTIVE (offline audit) | the whole ring: 1.80 km², the largest single gap | 7 trail breaks at the wood seams and Dubel joins; visual audit of the plan before any apply |
+| Q1 | R50 wild ring 1,200-1,480 m (outside Dubel) | SECOND | APPLIED in window 1 (unsaved at 05:47; 6 passes, 1,705 batches) | the whole ring: 1.80 km², the largest single gap | 7 trail breaks at the wood seams and Dubel joins; visual audit of the plan before any apply |
 | Q2 | Sector fill 2: heartland pockets < 1,200 m (N166/196/253/220, T7/294, I88/36/74) | SECOND | ACTIVE (offline plan) | ~53 ha of unbuilt heartland between avenues and seams | keep clear of TW01 footprint (Q6) and MG01 footprint (Q7) |
 | Q3 | Frontiers R12 / R22 / R32, 1,000-1,200 m | SECOND | QUEUED | frontier identity (woods, meadows with purpose) | after Q1/Q2; MG01 sits in R32 (Q7) |
-| Q4 | Distant readability of 5 heartland fills (cull tiers 120/260 m) | SECOND | ACTIVE | rooms read as bare slabs past 120 m | Second's own specs. CORE's look call: hedges/trees ≥ 260 m and one tall marker per quarter are accepted; A/B test in-engine before and after |
-| Q5 | S02 seam radials 30° / 150° / 270°, plus the ring breaks that belong to the seams | CORE | ACTIVE | a radial road on each seam; RR02 23-32° and 140-148° SKY05 clusters; RR01 27.7-29.5° | R41/R42 fills hang on these polylines; CORE publishes them to SECOND before its layouts |
-| Q6 | TW01 Tower Rise (pass TW01: TR01 is GA clock-plaza steps), relocated outward to the ICARUS march edge (~105-125°, ~300-650 m; empty region at 111°, 3.8 ha) | CORE | ACTIVE (offline) | the missing forge district: capped towers round a dominant one, clock tower, walled court | directive P5 "prefer outward expansion": RELOCATED WITH INTENT. Needs a census clearance check, then a CORE write window |
-| Q7 | MG01 Mushroom Grove, relocated to the TARTARUS frontier on its forge bearing (~300°, 1,000-1,200 m) | CORE | QUEUED | the missing forge district: giant mushrooms on stone rings plus a landmark | footprint published to SECOND before its R32 / Q2 T294 layouts |
-| Q8 | Hedge gates on the rings: RR01 46.7-49.2°, RR02 68.1-69.1°, RR02 149.8-153.1° | CORE | QUEUED | ring circuits broken at V2 hedge masses | same method as W270G |
-| Q9 | R41 / R42 seams 150° / 30°, 500-1,200 m (fills) | SECOND after Q5 | BLOCKED on Q5 | seam identity between two nations | Q5 polylines |
-| Q10 | R00 / R01 Golden Arrival + 24 quarters: verification (composition checklist, TRAV / DIST / PROOF) | CORE | QUEUED | broad frames + in-play walk of every quarter | offline census check first; PIE is serialized with SECOND |
+| Q4 | Distant readability of 5 heartland fills (cull tiers 120/260 m) | SECOND | RE-APPLIED in window 1 (cull delta + 11 markers; A/B pending) | rooms read as bare slabs past 120 m | Second's own specs. CORE's look call: hedges/trees ≥ 260 m and one tall marker per quarter are accepted; A/B test in-engine before and after |
+| Q5 | S02 seam radials 30° / 150° / 270°, plus the ring breaks that belong to the seams | CORE | APPLIED in window 1 (unsaved): SR150 434 m, 0 breaks; SR030 569 m, 2 recorded breaks (SKY05 ~710 m, hedge at RR02). 270° = W270S. `Rings/seam_radials.py` 605abbec | a radial road on each seam; RR02 23-32° and 140-148° SKY05 clusters; RR01 27.7-29.5° | R41/R42 fills hang on these polylines; CORE publishes them to SECOND before its layouts |
+| Q6 | TW01 Tower Rise (pass TW01: TR01 is GA clock-plaza steps), relocated outward to the ICARUS march edge (~105-125°, ~300-650 m; empty region at 111°, 3.8 ha) | CORE | APPLIED in window 1 (unsaved; 17 batches / 67 inst, removed 0) at 111° 478 m | the missing forge district: 7/7 towers, clock tower, walled court open to the city | directive P5 "prefer outward expansion": RELOCATED WITH INTENT. Needs a census clearance check, then a CORE write window |
+| Q7 | MG01 Mushroom Grove, relocated on its forge bearing to 297° 984 m (TARTARUS outer heartland, 2.7 ha empty) | CORE | APPLIED in window 1 (unsaved; 13 batches / 86 inst, removed 0) | the missing forge district: giant mushrooms on stone rings plus a landmark | footprint published to SECOND before its R32 / Q2 T294 layouts |
+| Q8 | Hedge gates on the rings: RR01 46.7-49.2°, RR02 68.1-69.1°, RR02 149.8-153.1° | CORE | HELD (FOUNDER) | ring circuits broken at V2 hedge masses | founder 2026-09-29: "do not change ring-road hedge barriers"; `ring_hedge_gates.py` also finds no clear move for any of the 11 hedges within 60 m. Documented as intentional barriers unless the founder reverses |
+| Q9 | R41 / R42 seams 150° / 30°, 500-1,200 m (fills) | SECOND | UNBLOCKED (polylines sent 05:31; keep 20 m off each road's centreline) | seam identity between two nations | Q5 polylines |
+| Q10 | R00 / R01 Golden Arrival + 24 quarters: verification (composition checklist, TRAV / DIST / PROOF) | CORE (composition) / integration lane (in-play) | IN PROGRESS | tower / grove KINDS: the 24 forge quarters (12 `_QUARTERS` + first 12 `_QUARTER_SITES`) are all built (74-1,378 pieces within 25 m) but 0/7 tower quarters have towers and 1/7 groves has mushrooms | **FOUNDER DECISION**: room for 3 of 21 towers and 0 of 7 giants without replacing accepted core planting (`Districts/quarter_kinds.py`, 51c2f242). Identities carried outward instead (TW01, MG01, heartland mushroom woods). In-play GA + quarter walk: integration lane (zzJ) after window 1 |
 | Q11 | R02 core rim 400-600 m (~18 ha, 2-4 ha per wedge) | CORE | QUEUED | ground between the rim gardens and the marches | after Q6 (TR01 takes part of 90-150°) |
-| Q12 | P5 Bible reconciliation (all districts/features -> BUILT / RELOCATED / SUPERSEDED / FOUNDER DECISION) | CORE | ACTIVE (offline) | the full list beyond the 14 forge districts | none |
+| Q12 | P5 Bible reconciliation (all districts/features -> BUILT / RELOCATED / SUPERSEDED / FOUNDER DECISION) | CORE | IN PROGRESS | outer-world Bible landmarks (below) | see "Bible reconciliation" under this table |
 | Q13 | Final gates: emptiness, beta walk on real streaming, packaged boot + streaming | CORE | LAST | -- | everything above |
+
+**Bible reconciliation (CORE Q12, first cut 2026-09-29, census 05:05).** The Bible is the board set in
+`wonderland-blender-forge/wonderland/v2/reference/boards` (visual authority, not a district list); the district canon
+is the forge's 14 districts + 3 nations. Features by census count and median radius:
+
+| Bible feature | in the world | status |
+|---|---|---|
+| Gold gates & ornamental metalwork | SM_gate_arch_gold 387, gate leaves 375, piers 310, heart finials 7 (median ~330 m) | BUILT |
+| Clocks & timepieces | 89 (SM_clock_ornate 46, SM_tower_clock 34; p90 647 m) | BUILT (core); TW01 adds a clock tower at 478 m |
+| Giant mushroom landmarks | 129 pieces (p90 535 m) | BUILT in the core; outer world thin -> MG01 (984 m), heartland mushroom woods, wild ring landmark mushrooms |
+| Royal gardens & topiary, heart topiary | topiary 1,323; SM_heart_topiary 5; GA06 heart arch | BUILT |
+| Arches & bridges | 7,462 arch pieces; WL_Bridge_Sky 84 sets (median 885 m) | BUILT |
+| Turrets & spires / distant skyline | 754 spire pieces; SKY05 ~100 towers to 1,458 m | BUILT |
+| Columns & ornaments | SM_column_ornate 799 (p90 398 m) | BUILT (core) |
+| Water features | fountains 66 pieces (p90 342 m) | BUILT (core only) |
+| Floating islands / balloons | 22 island pieces, 54 balloon pieces (p90 <= 379 m) | BUILT (core sky) |
+| Paths, plazas, medallions | medallions 172 (median 731 m); ring roads, avenues, seam ways | BUILT |
+| Props: keys, teapots/tea sets, signs | keys 19, tea 181, signs 174 | BUILT |
+| Props: books & scrolls | 0 -- no mesh in the kit | NOT IN KIT (small prop; add when the kit has one) |
+| Butterflies / petals (atmosphere) | not census geometry | runtime effect, outside the world audit |
+| Tower Rise (forge district) | none in the core | RELOCATED WITH INTENT -> TW01, 111° 478 m |
+| Mushroom Grove (forge district) | none in the core | RELOCATED WITH INTENT -> MG01, 297° 984 m |
+| 24 core quarters' kinds | built, kinds weak (Q10) | FOUNDER DECISION (replace core planting, or keep outward) |
+
+Pattern: the Bible's landmark language (clocks, fountains, columns, giant mushrooms, sky islands) is almost all
+inside ~650 m. The outer world's identity has to come from the heartland rooms, mushroom woods, TW01 / MG01, the
+wild ring's landmark mushrooms and the skyline towers.
+
+**R51 Dubel path (CORE).** DF01's path is 29 lawn patches 30 m apart. DW01 (`Districts/dubel_walk.py`, 442c89b4, NOT
+APPLIED) lays 333 stepping stones on it, additive, joined to the WI030 / WI122 trail stones; 34 detour round a SKY05
+tower base and hedge masses on DF01's own path line at 115-122°. For CORE's window 2.
 
 ## Assignments
 
