@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * THE CODING AGENT'S SUBSCRIPTION, CHECKED WITHOUT AN API KEY AND WITHOUT PRINTING A SECRET.
+ * THE CODING AGENT'S SUBSCRIPTION, JUDGED WITHOUT AN API KEY AND WITHOUT PRINTING A SECRET.
  *
  * FOUNDER RULE: the Coding Agent (Claude Agent SDK) authenticates with the founder's
  * Claude Max subscription and never bills the Anthropic API. On a GitHub runner the
@@ -8,33 +8,37 @@
  * This replaces the workflow's `GET /v1/models` API-key probe for the Coding Agent,
  * which could only ever prove an API key.
  *
- *   status   zero generation. Runs `claude auth status --json` with the Agent SDK's
- *            own bundled CLI in an environment built from NOTHING but PATH, a fresh
- *            HOME, CI/NO_COLOR/TERM and the token — the same shape `hostedChildEnv`
- *            gives the Coding Agent. Passes only for a logged-in first-party
- *            subscription path (`oauth_token` or `claude.ai`) with no API-key source.
- *   smoke    `status`, then ONE `claude -p "Reply with exactly OK" --max-turns 1`
- *            in an empty temporary directory, same environment. It consumes a
- *            trivial amount of SUBSCRIPTION usage and no API credit, and proves the
- *            token is live and the pinned model is served on the subscription —
- *            which `auth status` cannot (it classified a placeholder token offline).
+ * THIS FILE STARTS NO PROCESS. The workflow runs the Agent SDK's bundled CLI itself,
+ * as a literal command in the YAML — `env -i` with an allow-list of PATH, a fresh
+ * HOME, CI/NO_COLOR/TERM and the token, from an empty temporary directory — so the
+ * repository boundary scan can read every command a paid run executes. This script
+ * only judges what the CLI wrote, and the step's own environment:
  *
- * NOTHING THE CLI PRINTS IS REPEATED. stdout is parsed for closed fields and
- * discarded; stderr is never read. Every line this script prints is built from a
- * closed vocabulary. The token reaches the child through its environment object —
- * never argv — and is never read, compared, logged or returned: its PRESENCE is
- * the only thing checked.
+ *   env-check       before the CLI runs: the token is PRESENT and no variable that
+ *                   outranks it or leaves the subscription path is set in the step.
+ *                   Silent on success; one closed SUBSCRIPTION_NOT_READY line if not.
+ *   status-verdict  `auth status --json` on stdin. Passes only for a logged-in
+ *                   first-party subscription path (`oauth_token` or `claude.ai`)
+ *                   with no API-key source. Repeats env-check first.
+ *   smoke-verdict   `claude -p "Reply with exactly OK" --output-format json` on stdin,
+ *                   with `--status-file` naming the status JSON of the same run.
+ *                   PASS only for a clean exact "OK" beside a subscription status.
+ *
+ * FAIL CLOSED. There is no fallback: an API-key method, an API-key source, a third
+ * party, an unreadable answer or a missing token is SUBSCRIPTION_NOT_READY / FAIL,
+ * never a reason to try ANTHROPIC_API_KEY.
+ *
+ * NOTHING THE CLI PRINTS IS REPEATED. Its JSON is parsed for closed fields and
+ * discarded; its stderr is never read. Every line printed here is built from a
+ * closed vocabulary. The token is never read, compared, logged or returned: its
+ * PRESENCE is the only thing checked.
  */
 
-import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const TOKEN_ENV = 'CLAUDE_CODE_OAUTH_TOKEN';
-export const EXECUTABLE_ENV = 'JULIUS_CODER_CLAUDE_EXECUTABLE';
 /**
  * Every name documented to outrank the setup-token token or to leave the
  * subscription path. Kept equal to `ANTHROPIC_CREDENTIAL_ENV_NAMES` in
@@ -46,37 +50,19 @@ export const OUTRANKING_ENV_NAMES = Object.freeze([
   'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'AWS_BEARER_TOKEN_BEDROCK',
 ]);
 const PLANS = Object.freeze(['max', 'pro', 'team', 'enterprise']);
-const SMOKE_PROMPT = 'Reply with exactly OK';
-
-/** The Agent SDK's own candidate order (sdk.mjs 0.3.220). */
-export function sdkExecutableCandidates(platform = process.platform, arch = process.arch) {
-  const suffix = platform === 'win32' ? '.exe' : '';
-  const prefix = '@anthropic-ai/claude-agent-sdk';
-  const packages = platform === 'linux'
-    ? [`${prefix}-linux-${arch}`, `${prefix}-linux-${arch}-musl`]
-    : [`${prefix}-${platform}-${arch}`];
-  return packages.map((name) => `${name}/claude${suffix}`);
-}
-
-export function resolveCli(env = process.env) {
-  const explicit = env[EXECUTABLE_ENV];
-  if (explicit !== undefined && explicit.trim() !== '') return existsSync(explicit) ? explicit : null;
-  const require = createRequire(import.meta.url);
-  for (const candidate of sdkExecutableCandidates()) {
-    try {
-      const resolved = require.resolve(candidate);
-      if (existsSync(resolved)) return resolved;
-    } catch { /* not installed for this platform */ }
-  }
-  return null;
-}
-
-/** The child's environment, from nothing. The token is passed through, never read. */
-export function composeChildEnv(parent, home) {
-  return { PATH: parent.PATH ?? '', HOME: home, CI: '1', NO_COLOR: '1', TERM: 'dumb', [TOKEN_ENV]: parent[TOKEN_ENV] ?? '' };
-}
+const SUBSCRIPTION_METHODS = Object.freeze(['oauth_token', 'claude.ai']);
 
 const closed = (value, allowed, fallback) => (allowed.includes(value) ? value : fallback);
+
+/**
+ * The step's environment, by PRESENCE only. `null` when the subscription path is
+ * clear; otherwise a closed reason. The token's value is never read.
+ */
+export function envReason(env) {
+  if (!env[TOKEN_ENV]) return 'TOKEN_MISSING';
+  const outranking = OUTRANKING_ENV_NAMES.filter((name) => env[name]);
+  return outranking.length > 0 ? `OUTRANKED_BY_${outranking.join('+')}` : null;
+}
 
 /**
  * `auth status --json` stdout → closed fields and a verdict. The raw text is not kept.
@@ -103,7 +89,7 @@ export function statusVerdict(raw, requirePlan = null) {
   if (!loggedIn) reason = 'NOT_LOGGED_IN';
   else if (keySource !== 'none' || method === 'api_key') reason = 'API_KEY_IN_PLAY';
   else if (provider !== 'firstParty') reason = 'NOT_FIRST_PARTY';
-  else if (method !== 'oauth_token' && method !== 'claude.ai') reason = 'NOT_A_SUBSCRIPTION_METHOD';
+  else if (!SUBSCRIPTION_METHODS.includes(method)) reason = 'NOT_A_SUBSCRIPTION_METHOD';
   else if (plan === 'other') reason = 'PLAN_NOT_A_SUBSCRIPTION';
   else if (requirePlan !== null && plan !== requirePlan) reason = 'PLAN_NOT_REQUIRED_PLAN';
   return { ok: reason === null, method, provider, plan, keySource, reason };
@@ -121,55 +107,54 @@ export function smokeVerdict(raw) {
 }
 
 const safeLabel = (value) => (typeof value === 'string' && /^[A-Za-z0-9._-]{1,64}$/u.test(value) ? value : 'unpinned');
+const readStdin = () => { try { return readFileSync(0, 'utf8'); } catch { return ''; } };
+const readFile = (path) => { try { return readFileSync(path, 'utf8'); } catch { return ''; } };
 
-const run = (cli, args, env, cwd, timeout) => {
-  const result = spawnSync(cli, args, {
-    env, cwd, encoding: 'utf8', timeout, windowsHide: true,
-    stdio: ['ignore', 'pipe', 'ignore'],
-  });
-  return { stdout: typeof result.stdout === 'string' ? result.stdout : '', status: result.status, failed: result.error !== undefined };
-};
+const USAGE = 'usage: julius-subscription-check.mjs env-check|status-verdict|smoke-verdict'
+  + ' [--for status|smoke] [--model <id>] [--require-plan max|pro|team|enterprise] [--status-file <path>] (CLI JSON on stdin)';
 
-export function main(argv, env = process.env, print = (line) => process.stdout.write(`${line}\n`)) {
+/**
+ * @param argv  the arguments after the script
+ * @param env   the STEP's environment, inspected by presence only
+ * @param io    `print` for the closed lines; `stdin` and `readFile` for the CLI's JSON
+ */
+export function main(argv, env = process.env, io = {}) {
+  const print = io.print ?? ((line) => process.stdout.write(`${line}\n`));
+  const stdin = io.stdin ?? readStdin;
+  const read = io.readFile ?? readFile;
   const mode = argv[0];
   const flag = (name) => { const at = argv.indexOf(`--${name}`); return at >= 0 ? argv[at + 1] ?? null : null; };
   const model = safeLabel(flag('model'));
   const requirePlan = flag('require-plan');
-  if (mode !== 'status' && mode !== 'smoke') {
-    print('usage: julius-subscription-check.mjs status|smoke [--model <id>] [--require-plan max|pro|team|enterprise]');
+  const purpose = flag('for') ?? (mode === 'smoke-verdict' ? 'smoke' : 'status');
+  if (!['env-check', 'status-verdict', 'smoke-verdict'].includes(mode) || !['status', 'smoke'].includes(purpose)) {
+    print(USAGE);
     return 2;
   }
   if (requirePlan !== null && !PLANS.includes(requirePlan)) { print('subscription_check result=REQUIRE_PLAN_UNKNOWN'); return 2; }
-  const label = mode === 'status' ? 'provider_readiness provider=anthropic' : 'subscription_smoke_auth provider=anthropic';
+  const label = purpose === 'status' ? 'provider_readiness provider=anthropic' : 'subscription_smoke_auth provider=anthropic';
   const notReady = (reason) => { print(`${label} model=${model} http=none auth=CLAUDE_SUBSCRIPTION reason=${reason} result=SUBSCRIPTION_NOT_READY`); return 1; };
 
-  // PRESENCE ONLY. The value is never read here.
-  if (!env[TOKEN_ENV]) return notReady('TOKEN_MISSING');
-  const outranking = OUTRANKING_ENV_NAMES.filter((name) => env[name]);
-  if (outranking.length > 0) return notReady(`OUTRANKED_BY_${outranking.join('+')}`);
-  const cli = resolveCli(env);
-  if (cli === null) return notReady('CLI_NOT_INSTALLED');
+  // PRESENCE ONLY, and repeated by every mode: no verdict is given in a step whose
+  // environment could have put the CLI on anything but the token.
+  const blocked = envReason(env);
+  if (blocked !== null) return notReady(blocked);
+  if (mode === 'env-check') return 0;
 
-  const home = mkdtempSync(join(tmpdir(), 'julius-subscription-home-'));
-  const work = mkdtempSync(join(tmpdir(), 'julius-subscription-smoke-'));
-  try {
-    const child = composeChildEnv(env, home);
-    const status = run(cli, ['auth', 'status', '--json'], child, work, 30_000);
-    const verdict = status.failed ? { ok: false, reason: 'CLI_DID_NOT_START', method: 'none', plan: 'absent' } : statusVerdict(status.stdout, requirePlan);
+  if (mode === 'status-verdict') {
+    const verdict = statusVerdict(stdin(), requirePlan);
     if (!verdict.ok) return notReady(verdict.reason);
     print(`${label} model=${model} http=none auth=CLAUDE_SUBSCRIPTION method=${verdict.method} plan=${verdict.plan} result=SUBSCRIPTION_LOGIN_PRESENT`);
-    if (mode === 'status') return 0;
-
-    const args = ['-p', SMOKE_PROMPT, '--max-turns', '1', '--output-format', 'json'];
-    if (model !== 'unpinned') args.push('--model', model);
-    const smoke = run(cli, args, child, work, 180_000);
-    const answer = smoke.failed ? { ok: false, reply: 'DID_NOT_START' } : smokeVerdict(smoke.stdout);
-    print(`subscription_smoke provider=anthropic model=${model} auth=CLAUDE_SUBSCRIPTION method=${verdict.method} reply=${answer.reply} result=${answer.ok ? 'PASS' : 'FAIL'}`);
-    return answer.ok ? 0 : 1;
-  } finally {
-    rmSync(home, { recursive: true, force: true });
-    rmSync(work, { recursive: true, force: true });
+    return 0;
   }
+
+  // smoke-verdict: a reply counts only beside a subscription status from the same run.
+  const statusFile = flag('status-file');
+  const status = statusVerdict(statusFile === null ? '' : read(statusFile), requirePlan);
+  const method = status.ok ? status.method : 'none';
+  const answer = status.ok ? smokeVerdict(stdin()) : { ok: false, reply: 'NO_SUBSCRIPTION_STATUS' };
+  print(`subscription_smoke provider=anthropic model=${model} auth=CLAUDE_SUBSCRIPTION method=${method} reply=${answer.reply} result=${answer.ok ? 'PASS' : 'FAIL'}`);
+  return answer.ok ? 0 : 1;
 }
 
 if (process.argv[1] !== undefined && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {

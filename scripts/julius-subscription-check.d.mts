@@ -1,22 +1,15 @@
 /**
- * Type declarations for the workflow's subscription check and smoke.
+ * Type declarations for the workflow's subscription verdicts.
  *
  * Plain `.mjs` so the paid workflow runs it with `node` and no build step; the
- * tests import the same functions.
+ * tests import the same functions. It starts no process: the workflow runs the
+ * CLI as a literal command and pipes its JSON here.
  */
 
 export declare const TOKEN_ENV: 'CLAUDE_CODE_OAUTH_TOKEN';
-export declare const EXECUTABLE_ENV: 'JULIUS_CODER_CLAUDE_EXECUTABLE';
 export declare const OUTRANKING_ENV_NAMES: readonly string[];
 
-export declare function sdkExecutableCandidates(platform?: string, arch?: string): string[];
-
-export declare function resolveCli(env?: Readonly<Record<string, string | undefined>>): string | null;
-
-export declare function composeChildEnv(
-  parent: Readonly<Record<string, string | undefined>>,
-  home: string,
-): Record<string, string>;
+export declare function envReason(env: Readonly<Record<string, string | undefined>>): string | null;
 
 export interface SubscriptionStatusVerdict {
   readonly ok: boolean;
@@ -36,8 +29,14 @@ export interface SubscriptionSmokeVerdict {
 
 export declare function smokeVerdict(raw: string): SubscriptionSmokeVerdict;
 
+export interface SubscriptionCheckIo {
+  readonly print?: (line: string) => void;
+  readonly stdin?: () => string;
+  readonly readFile?: (path: string) => string;
+}
+
 export declare function main(
   argv: readonly string[],
   env?: Readonly<Record<string, string | undefined>>,
-  print?: (line: string) => void,
+  io?: SubscriptionCheckIo,
 ): number;
