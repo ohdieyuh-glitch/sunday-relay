@@ -15,10 +15,14 @@ from collections import deque
 
 L = unreal.WonderlandUiTestLibrary
 LEGS = globals().get("LEGS", [])
-CELL = 100.0
+CELL = globals().get("CELL", 50.0)
 MARGIN = 1500.0
-RADIUS, HALF = 32.0, 60.0
-STEP_UP_CM = 30.0
+RADIUS, HALF = 36.0, 87.0          # BP_RelayDog_C's capsule, measured in PIE (zc2E_11): 35.9 / 87.1
+STEP_UP_CM = globals().get("STEP_UP_CM", 45.0)
+# PLANNING IS ONLY ROUTE-FINDING; THE WALK IS THE PROOF. The Dog's MaxStepHeight is 30 cm, but a flight of 20 cm
+# risers on 30 cm treads rises 40+ cm between 1 m cells: the first planner (1 m, 30 cm) could not see up any stair.
+# Cells are 0.5 m and a rise of 45 cm between neighbours is allowed; a ledge the Dog cannot climb still stops the
+# self-powered walk, and that stop is the verdict.
 ARRIVE = 150.0
 STUCK = 6.0
 PAWN = unreal.TraceTypeQuery.TRACE_TYPE_QUERY2
