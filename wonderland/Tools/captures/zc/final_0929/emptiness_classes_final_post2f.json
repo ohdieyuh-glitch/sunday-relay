@@ -1,0 +1,449 @@
+{
+ "census": "C:\\Users\\Kaisi\\AppData\\Local\\Temp\\claude\\C--Users-Kaisi\\3fac451f-d692-4e52-82cc-49dd0ba99485\\scratchpad\\final\\census_post2f.csv.gz",
+ "disc_m2": 6881500,
+ "empty_m2": 366375,
+ "empty_pct": 5.3,
+ "by_class_m2": {
+  "UNINTENDED EMPTY": 86700,
+  "INTENTIONAL MEADOW": 183000,
+  "INTENTIONAL VISTA": 20475,
+  "PLAZA/COURT": 0,
+  "TRAVERSAL SPACE": 68075,
+  "LANDSCAPE/FOREST CLEARING": 7475,
+  "OTHER JUSTIFIED": 650
+ },
+ "by_class_pct_of_disc": {
+  "UNINTENDED EMPTY": 1.3,
+  "INTENTIONAL MEADOW": 2.7,
+  "INTENTIONAL VISTA": 0.3,
+  "PLAZA/COURT": 0.0,
+  "TRAVERSAL SPACE": 1.0,
+  "LANDSCAPE/FOREST CLEARING": 0.1,
+  "OTHER JUSTIFIED": 0.0
+ },
+ "unintended_pct_of_disc": 1.3,
+ "unintended_regions_top": [
+  {
+   "area_m2": 4100,
+   "centre_uu": [
+    -10820,
+    32216
+   ],
+   "bearing_deg": 109,
+   "centre_radius_m": 340,
+   "radius_span_m": [
+    298,
+    389
+   ],
+   "zone": "core"
+  },
+  {
+   "area_m2": 3600,
+   "centre_uu": [
+    -67333,
+    88552
+   ],
+   "bearing_deg": 127,
+   "centre_radius_m": 1112,
+   "radius_span_m": [
+    1077,
+    1153
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 3350,
+   "centre_uu": [
+    -77511,
+    81675
+   ],
+   "bearing_deg": 134,
+   "centre_radius_m": 1126,
+   "radius_span_m": [
+    1094,
+    1154
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 3325,
+   "centre_uu": [
+    -71006,
+    72498
+   ],
+   "bearing_deg": 134,
+   "centre_radius_m": 1015,
+   "radius_span_m": [
+    973,
+    1054
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 2550,
+   "centre_uu": [
+    -25569,
+    68706
+   ],
+   "bearing_deg": 110,
+   "centre_radius_m": 733,
+   "radius_span_m": [
+    684,
+    789
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 2500,
+   "centre_uu": [
+    -33270,
+    49700
+   ],
+   "bearing_deg": 124,
+   "centre_radius_m": 598,
+   "radius_span_m": [
+    561,
+    647
+   ],
+   "zone": "ICARUS/march"
+  },
+  {
+   "area_m2": 2375,
+   "centre_uu": [
+    -36961,
+    76766
+   ],
+   "bearing_deg": 116,
+   "centre_radius_m": 852,
+   "radius_span_m": [
+    827,
+    879
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 2150,
+   "centre_uu": [
+    -47273,
+    110256
+   ],
+   "bearing_deg": 113,
+   "centre_radius_m": 1200,
+   "radius_span_m": [
+    1167,
+    1248
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 2100,
+   "centre_uu": [
+    -24792,
+    28714
+   ],
+   "bearing_deg": 131,
+   "centre_radius_m": 379,
+   "radius_span_m": [
+    351,
+    403
+   ],
+   "zone": "core"
+  },
+  {
+   "area_m2": 2050,
+   "centre_uu": [
+    -13860,
+    69262
+   ],
+   "bearing_deg": 101,
+   "centre_radius_m": 706,
+   "radius_span_m": [
+    658,
+    747
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 1700,
+   "centre_uu": [
+    -7831,
+    45676
+   ],
+   "bearing_deg": 100,
+   "centre_radius_m": 463,
+   "radius_span_m": [
+    431,
+    498
+   ],
+   "zone": "core"
+  },
+  {
+   "area_m2": 1600,
+   "centre_uu": [
+    -40961,
+    42578
+   ],
+   "bearing_deg": 134,
+   "centre_radius_m": 591,
+   "radius_span_m": [
+    573,
+    612
+   ],
+   "zone": "ICARUS/march"
+  },
+  {
+   "area_m2": 1600,
+   "centre_uu": [
+    -51734,
+    83734
+   ],
+   "bearing_deg": 122,
+   "centre_radius_m": 984,
+   "radius_span_m": [
+    960,
+    998
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 1375,
+   "centre_uu": [
+    -18586,
+    137614
+   ],
+   "bearing_deg": 98,
+   "centre_radius_m": 1389,
+   "radius_span_m": [
+    1374,
+    1423
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 1250,
+   "centre_uu": [
+    -73430,
+    92040
+   ],
+   "bearing_deg": 129,
+   "centre_radius_m": 1177,
+   "radius_span_m": [
+    1158,
+    1199
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 1200,
+   "centre_uu": [
+    102500,
+    45635
+   ],
+   "bearing_deg": 24,
+   "centre_radius_m": 1122,
+   "radius_span_m": [
+    1102,
+    1143
+   ],
+   "zone": "TARTARUS/heartland"
+  },
+  {
+   "area_m2": 1200,
+   "centre_uu": [
+    -67302,
+    97375
+   ],
+   "bearing_deg": 125,
+   "centre_radius_m": 1184,
+   "radius_span_m": [
+    1164,
+    1203
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 1000,
+   "centre_uu": [
+    6275,
+    46538
+   ],
+   "bearing_deg": 82,
+   "centre_radius_m": 470,
+   "radius_span_m": [
+    450,
+    498
+   ],
+   "zone": "core"
+  },
+  {
+   "area_m2": 975,
+   "centre_uu": [
+    -30519,
+    35199
+   ],
+   "bearing_deg": 131,
+   "centre_radius_m": 466,
+   "radius_span_m": [
+    436,
+    495
+   ],
+   "zone": "core"
+  },
+  {
+   "area_m2": 975,
+   "centre_uu": [
+    -40109,
+    113404
+   ],
+   "bearing_deg": 109,
+   "centre_radius_m": 1203,
+   "radius_span_m": [
+    1184,
+    1216
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 850,
+   "centre_uu": [
+    -21191,
+    110485
+   ],
+   "bearing_deg": 101,
+   "centre_radius_m": 1125,
+   "radius_span_m": [
+    1103,
+    1142
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 825,
+   "centre_uu": [
+    -6053,
+    58977
+   ],
+   "bearing_deg": 96,
+   "centre_radius_m": 593,
+   "radius_span_m": [
+    572,
+    606
+   ],
+   "zone": "ICARUS/march"
+  },
+  {
+   "area_m2": 750,
+   "centre_uu": [
+    -51983,
+    -19500
+   ],
+   "bearing_deg": 201,
+   "centre_radius_m": 555,
+   "radius_span_m": [
+    532,
+    573
+   ],
+   "zone": "NOCTIS/march"
+  },
+  {
+   "area_m2": 725,
+   "centre_uu": [
+    -39440,
+    90819
+   ],
+   "bearing_deg": 113,
+   "centre_radius_m": 990,
+   "radius_span_m": [
+    981,
+    998
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 725,
+   "centre_uu": [
+    -34267,
+    118181
+   ],
+   "bearing_deg": 106,
+   "centre_radius_m": 1230,
+   "radius_span_m": [
+    1207,
+    1249
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 700,
+   "centre_uu": [
+    40607,
+    -82571
+   ],
+   "bearing_deg": 296,
+   "centre_radius_m": 920,
+   "radius_span_m": [
+    911,
+    929
+   ],
+   "zone": "TARTARUS/heartland"
+  },
+  {
+   "area_m2": 700,
+   "centre_uu": [
+    -19411,
+    32554
+   ],
+   "bearing_deg": 121,
+   "centre_radius_m": 379,
+   "radius_span_m": [
+    364,
+    395
+   ],
+   "zone": "core"
+  },
+  {
+   "area_m2": 675,
+   "centre_uu": [
+    -17380,
+    55380
+   ],
+   "bearing_deg": 107,
+   "centre_radius_m": 580,
+   "radius_span_m": [
+    569,
+    603
+   ],
+   "zone": "ICARUS/march"
+  },
+  {
+   "area_m2": 625,
+   "centre_uu": [
+    -40470,
+    133090
+   ],
+   "bearing_deg": 107,
+   "centre_radius_m": 1391,
+   "radius_span_m": [
+    1374,
+    1405
+   ],
+   "zone": "ICARUS/heartland"
+  },
+  {
+   "area_m2": 600,
+   "centre_uu": [
+    114583,
+    46938
+   ],
+   "bearing_deg": 22,
+   "centre_radius_m": 1238,
+   "radius_span_m": [
+    1221,
+    1255
+   ],
+   "zone": "TARTARUS/heartland"
+  }
+ ],
+ "unintended_regions_total": 539,
+ "png": "c7_final.png"
+}
