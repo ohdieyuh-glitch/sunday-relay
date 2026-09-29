@@ -96,6 +96,18 @@ export interface JuliusClaimedTask {
   readonly attempt: number;
 }
 
+/**
+ * An admission the RUN refused, not the lease: the run was held (paused,
+ * blocked, terminal, or holding a PENDING or DENIED approval) when the attempt
+ * would have been spent. Nothing was spent, and the caller still holds the lease.
+ */
+export interface JuliusAdmissionHeld {
+  readonly held: true;
+  readonly runState: JuliusMissionState;
+  readonly pendingApprovals: number;
+  readonly deniedApprovals: number;
+}
+
 /** Structurally identical to `JuliusResultReceipt`. */
 export interface JuliusResultReceiptRow {
   readonly recorded: boolean;
@@ -138,10 +150,20 @@ export interface JuliusRunWriter {
    *
    * Returns the NEW execution attempt, or null when the lease has moved on —
    * the caller no longer owns the task and must not run it or finish it.
+   *
+   * AND THE LAST GOVERNANCE CHECK BEFORE MONEY. The dispatch boundary read the
+   * run and its approvals before the context was compiled and the contract
+   * checked; a pause, an approval gate or a denial committed in between was
+   * never seen, and the provider was called for a run its operator had just
+   * paused. So admission re-reads them in the same atomic write, and a run that
+   * may not start new work (`JULIUS_CLAIMABLE_RUN_STATES`, and no PENDING or
+   * DENIED approval, exactly as the claim) answers `JuliusAdmissionHeld`:
+   * nothing is spent, and the caller still owns the task and must hand it back
+   * or end it.
    */
   admitTask(input: {
     taskId: string; owner: string; leaseGeneration: number; now: string;
-  }): Promise<number | null>;
+  }): Promise<number | null | JuliusAdmissionHeld>;
   heartbeat(input: {
     taskId: string; owner: string; leaseGeneration: number; now: string; leaseExpiresAt: string;
   }): Promise<boolean>;
