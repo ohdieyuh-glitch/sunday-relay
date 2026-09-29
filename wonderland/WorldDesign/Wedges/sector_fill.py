@@ -310,9 +310,9 @@ def garden_room(p, uc, vc, leaves, k, doors_v=False):
     # A BENCH PAIR facing the tree, on the axis the doors are NOT on, so the way in from either door is clear
     for s in (-1.0, 1.0):
         if not doors_v:
-            bench(p, uc, vc + s * 420.0, 90.0 * s)
+            bench(p, uc, vc + s * 420.0, -90.0 * s)                  # yaw = the angle from the bench to the tree
         else:
-            bench(p, uc + s * 420.0, vc, 0.0 if s > 0 else 180.0)
+            bench(p, uc + s * 420.0, vc, 180.0 if s > 0 else 0.0)
     p.stats["garden_room"] += 1
 
 

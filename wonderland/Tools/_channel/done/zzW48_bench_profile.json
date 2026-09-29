@@ -1,0 +1,15 @@
+{
+ "name": "zzW48_bench_profile",
+ "started": "2026-09-29 01:17:55",
+ "status": "done",
+ "shots": [
+  {
+   "camera": "bench_profile",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\bench_profile__bench_check.png",
+   "ok": true
+  }
+ ],
+ "finished": "2026-09-29 01:17:57",
+ "seconds": 2.56,
+ "log": ""
+}
