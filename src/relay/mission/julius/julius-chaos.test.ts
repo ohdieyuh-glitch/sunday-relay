@@ -301,10 +301,18 @@ describe('nothing is executed twice across a crash', () => {
   });
 
   it('holds no reservation open after a dispatch failure', async () => {
-    const harness = build([{ kind: 'fail', code: 'AUTH_CONFIGURATION' }]);
+    // A credential refusal is a refusal of an unprocessed request, and says so.
+    const harness = build([{ kind: 'fail', code: 'AUTH_CONFIGURATION', runtimeStarted: false }]);
     await harness.loop.tick(scope);
     expect(harness.budget.reservations().filter((row) => row.state === 'RESERVED')).toEqual([]);
     expect(harness.budget.remainingUsdMicros()).toBe(1_000_000);
+  });
+
+  it('and a failure that says nothing about what ran closes its reservation as unknown spend, never as free', async () => {
+    const harness = build([{ kind: 'fail', code: 'AUTH_CONFIGURATION' }]);
+    await harness.loop.tick(scope);
+    expect(harness.budget.reservations().filter((row) => row.state === 'RESERVED'), 'closed, not left open').toEqual([]);
+    expect(harness.budget.remainingUsdMicros(), 'and its hold is kept').toBeLessThan(1_000_000);
   });
 });
 

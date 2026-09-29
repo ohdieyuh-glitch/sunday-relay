@@ -6,7 +6,7 @@ const resources={usdMicros:10,inputTokens:10,outputTokens:10,toolCalls:1,runtime
 const harness=(adapter:JuliusProviderAdapter,overrides:Partial<JuliusExecutionPorts>={})=>{const order:string[]=[];const registry=new JuliusWorkerRegistry();registry.register({workerId:'worker',role:'CODING_AGENT',adapterId:'adapter',providerId:'provider',capabilities:['code'],taskTypes:['implementation'],concurrencyLimit:1,timeoutMs:100,maxRetries:2,status:'AVAILABLE'});const ports:JuliusExecutionPorts={async reserve(){order.push('reserve');return{reservationId:'reservation',state:'RESERVED',denialReason:null}},async commit(){order.push('commit')},async release(){order.push('release')},async persistEvidence(){order.push('evidence')},async acceptResult(){order.push('result');return{duplicate:false}},async recordEvent(input){order.push(input.type)},...overrides};return{order,coordinator:new JuliusExecutionCoordinator(new JuliusProviderRouter(registry,new Map([['adapter',adapter]]),new JuliusProviderHealthRegistry()),ports)};};
 const success:JuliusProviderAdapter={adapterId:'adapter',async dispatch(){return{workerId:'worker',providerId:'provider',status:'SUCCEEDED',safeSummary:'done',evidence:[{type:'TEST',status:'PASSED',safeSummary:'tests pass'}],usage:{usdMicros:8}}}};
 const request={claim,policy,role:'CODING_AGENT' as const,taskType:'implementation',capability:'code',resources,operationId:'operation'};
-describe('authoritative Julius execution coordinator',()=>{it('enforces selection and reservation before dispatch, then evidence, result, and settlement',async()=>{const h=harness(success);expect(await h.coordinator.execute(request)).toMatchObject({status:'COMPLETED',workerId:'worker'});expect(h.order.indexOf('reserve')).toBeLessThan(h.order.indexOf('worker.dispatched'));expect(h.order.indexOf('evidence')).toBeLessThan(h.order.indexOf('result'));expect(h.order.indexOf('result')).toBeLessThan(h.order.indexOf('commit'));});it('never dispatches when policy or budget denies',async()=>{const adapter={...success,async dispatch(){throw new Error('must not dispatch')}};const policyDenied=harness(adapter);expect((await policyDenied.coordinator.execute({...request,policy:{...policy,allowedProviders:[]}})).status).toBe('DENIED');expect(policyDenied.order).not.toContain('reserve');const budget=harness(adapter,{async reserve(){return{reservationId:'denied',state:'DENIED',denialReason:'usd'}}});expect(await budget.coordinator.execute(request)).toMatchObject({status:'DENIED',code:'BUDGET_DENIED'});expect(budget.order).not.toContain('worker.dispatched');});it('releases reservations and retries only transient policy-authorized failures',async()=>{const timeout:JuliusProviderAdapter={adapterId:'adapter',async dispatch(){throw{code:'TIMEOUT'}}};const h=harness(timeout);expect(await h.coordinator.execute(request)).toEqual({status:'RETRY',code:'TIMEOUT',failureClass:null});expect(h.order).toContain('release');expect(h.order).toContain('retry.scheduled');const auth=harness({adapterId:'adapter',async dispatch(){throw{code:401}}});expect(await auth.coordinator.execute(request)).toEqual({status:'FAILED',code:'AUTH_CONFIGURATION',failureClass:null});expect(auth.order).not.toContain('retry.scheduled');});it('releases budget when evidence persistence or provider validation fails',async()=>{const malformed=harness({adapterId:'adapter',async dispatch(){return{workerId:'forged',providerId:'provider',status:'SUCCEEDED',safeSummary:'done',evidence:[],usage:{}}}});expect(await malformed.coordinator.execute(request)).toMatchObject({status:'FAILED',code:'INVALID_REQUEST'});expect(malformed.order).toContain('release');const persistence=harness(success,{async persistEvidence(){throw new Error('database unavailable')}});expect((await persistence.coordinator.execute(request)).status).toBe('FAILED');expect(persistence.order).toContain('release');expect(persistence.order).not.toContain('result');});
+describe('authoritative Julius execution coordinator',()=>{it('enforces selection and reservation before dispatch, then evidence, result, and settlement',async()=>{const h=harness(success);expect(await h.coordinator.execute(request)).toMatchObject({status:'COMPLETED',workerId:'worker'});expect(h.order.indexOf('reserve')).toBeLessThan(h.order.indexOf('worker.dispatched'));expect(h.order.indexOf('evidence')).toBeLessThan(h.order.indexOf('result'));expect(h.order.indexOf('result')).toBeLessThan(h.order.indexOf('commit'));});it('never dispatches when policy or budget denies',async()=>{const adapter={...success,async dispatch(){throw new Error('must not dispatch')}};const policyDenied=harness(adapter);expect((await policyDenied.coordinator.execute({...request,policy:{...policy,allowedProviders:[]}})).status).toBe('DENIED');expect(policyDenied.order).not.toContain('reserve');const budget=harness(adapter,{async reserve(){return{reservationId:'denied',state:'DENIED',denialReason:'usd'}}});expect(await budget.coordinator.execute(request)).toMatchObject({status:'DENIED',code:'BUDGET_DENIED'});expect(budget.order).not.toContain('worker.dispatched');});it('releases reservations and retries only transient policy-authorized failures',async()=>{const timeout:JuliusProviderAdapter={adapterId:'adapter',async dispatch(){throw{code:'TIMEOUT'}}};const h=harness(timeout);expect(await h.coordinator.execute(request)).toEqual({status:'RETRY',code:'TIMEOUT',failureClass:null});expect(h.order).toContain('release');expect(h.order).toContain('retry.scheduled');const auth=harness({adapterId:'adapter',async dispatch(){throw{code:401}}});expect(await auth.coordinator.execute(request)).toMatchObject({status:'FAILED',code:'AUTH_CONFIGURATION',failureClass:null,/* a 401 is a refusal of an unprocessed request, and says so */diagnostics:{diag_runtimeStarted:false}});expect(auth.order).not.toContain('retry.scheduled');});it('releases budget when evidence persistence or provider validation fails',async()=>{const malformed=harness({adapterId:'adapter',async dispatch(){return{workerId:'forged',providerId:'provider',status:'SUCCEEDED',safeSummary:'done',evidence:[],usage:{}}}});expect(await malformed.coordinator.execute(request)).toMatchObject({status:'FAILED',code:'INVALID_REQUEST'});expect(malformed.order).toContain('release');const persistence=harness(success,{async persistEvidence(){throw new Error('database unavailable')}});expect((await persistence.coordinator.execute(request)).status).toBe('FAILED');expect(persistence.order).toContain('release');expect(persistence.order).not.toContain('result');});
 /**
  * A THROW THAT IS NOT A DISPATCH ERROR MUST STILL NAME A CAUSE.
  *
@@ -286,5 +286,62 @@ describe('safe diagnostics reach the durable event on the succeeding ending too'
         `${JSON.stringify(nothing)} must not become a row of nulls`).toEqual([]);
       expect(row.evidenceCount, 'and the event itself is unchanged').toBe(1);
     }
+  });
+});
+
+/**
+ * AFTER THE HANDOFF, NO AMOUNT IS UNKNOWN, NOT FREE.
+ *
+ * The ending used to release a failure's whole hold unless something said the
+ * runtime had started. A timeout normalised from a raw error says nothing, so a
+ * request the provider had received, and may have billed, settled as free. Now
+ * only a refusal of an unprocessed request (a 429, a 401, a 403) or an adapter
+ * that says outright that nothing ran may release a hold that has no amount.
+ * Before the handoff nothing was sent, and the hold is released as it always was.
+ */
+describe('a failure after the handoff with no amount keeps its hold', () => {
+  const failing = (error: unknown): JuliusProviderAdapter => ({
+    adapterId: 'adapter',
+    async dispatch(): Promise<never> { throw error; },
+  });
+  const raw = (code: string) => Object.assign(new Error(`provider ${code}`), { code });
+  const releaseOf = async (error: unknown, input: typeof request = request) => {
+    const seen: Array<{ usdMicros?: number | null; spendUnknown?: boolean }> = [];
+    const h = harness(failing(error), {
+      async release(release) { seen.push({ usdMicros: release.usdMicros, spendUnknown: release.spendUnknown }); },
+    });
+    await h.coordinator.execute(input);
+    return seen;
+  };
+
+  it('a TIMEOUT after the handoff keeps its hold: the provider may have billed a request it received', async () => {
+    expect(await releaseOf(raw('ETIMEDOUT'))).toEqual([{ usdMicros: null, spendUnknown: true }]);
+  });
+  it('so does any other failure that says nothing about what ran', async () => {
+    expect(await releaseOf(new Error('socket hang up'))).toEqual([{ usdMicros: null, spendUnknown: true }]);
+    expect(await releaseOf(new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'coder_refused')))
+      .toEqual([{ usdMicros: null, spendUnknown: true }]);
+  });
+  it('a 429, a 401 and a 403 are refusals of an unprocessed request, and release it', async () => {
+    for (const code of ['429', '401', '403']) {
+      expect(await releaseOf(raw(code)), code).toEqual([{ usdMicros: null, spendUnknown: false }]);
+    }
+  });
+  it('their string aliases attest nothing, and keep it', async () => {
+    for (const code of ['RATE_LIMIT', 'AUTH', 'CONFIGURATION']) {
+      expect(await releaseOf(raw(code)), code).toEqual([{ usdMicros: null, spendUnknown: true }]);
+    }
+  });
+  it('an adapter that says outright its runtime never started is believed', async () => {
+    const said = new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, 'safe', 'launch_failed', { runtimeStarted: false });
+    expect(await releaseOf(said)).toEqual([{ usdMicros: null, spendUnknown: false }]);
+  });
+  it('attempt 1\'s coder, replayed (paid run 36568129865): a runtime-reported $0 is a provider-attested release', async () => {
+    const coder = new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, 'safe', 'provider_unavailable', { runtimeStarted: true, costUsdMicros: 0 });
+    expect(await releaseOf(coder)).toEqual([{ usdMicros: 0, spendUnknown: false }]);
+  });
+  it('BEFORE the handoff nothing was sent, so the hold is released whatever the failure says', async () => {
+    const before = { ...request, signal: AbortSignal.abort('cancelled_before_dispatch') };
+    expect(await releaseOf(raw('ETIMEDOUT'), before)).toEqual([{ usdMicros: null, spendUnknown: false }]);
   });
 });
