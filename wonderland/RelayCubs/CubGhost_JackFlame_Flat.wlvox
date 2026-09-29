@@ -8,10 +8,10 @@ material visor lit 0.0450 0.0420 0.0500 1.000
 material eye glow 1.0000 0.6600 0.1000 120.000
 material eyehalo add 1.0000 0.6600 0.1000 42.000
 material ghost add 1.0000 0.4600 0.0800 22.500
-material flame glow 1.0000 0.3600 0.0400 9.750
-material flamepale glow 1.0000 0.7400 0.2000 15.750
+material flame glow 1.0000 0.2000 0.0200 8.250
+material flamepale glow 1.0000 0.4400 0.0600 12.750
 material suit lit 0.0340 0.0320 0.0400 1.000
-material heart glow 1.0000 0.2000 0.0500 19.500
+material heart glow 0.9500 0.0800 0.0200 9.000
 part root - 0.000 0.000 0.000 float
 part head root 0.000 0.000 0.000 head
 part hand_l root 1.191 -5.336 -0.739 trail 1.000 2.000

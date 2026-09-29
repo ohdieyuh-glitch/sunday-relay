@@ -1,0 +1,274 @@
+{
+ "name": "zzS08_skin_sheet",
+ "started": "2026-09-29 10:10:04",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "W00",
+   "name": "six views of every skin were exported",
+   "pass": true,
+   "detail": {
+    "exported": 36,
+    "wanted": 36
+   }
+  },
+  {
+   "id": "W01",
+   "name": "every view holds a figure filling the founder's band",
+   "pass": true,
+   "detail": {
+    "out_of_band": {},
+    "front_band": [
+     76.0,
+     94.0
+    ],
+    "rotated_band": [
+     66.0,
+     99.0
+    ]
+   }
+  },
+  {
+   "id": "W02",
+   "name": "no view is a white shape: the figure is mostly NOT pinned at white",
+   "pass": true,
+   "detail": {
+    "pinned": {},
+    "ceiling": 0.35,
+    "note": "the wardrobe's own picture of the glow re-baseline. Before it, Skeleton Flame's HIGH frames measured 68-80% of the figure over luma 140 from this same stage."
+   }
+  }
+ ],
+ "views": {
+  "relay_og front": "relay_og__front.png",
+  "relay_og front34": "relay_og__front34.png",
+  "relay_og left": "relay_og__left.png",
+  "relay_og back34": "relay_og__back34.png",
+  "relay_og back": "relay_og__back.png",
+  "relay_og right": "relay_og__right.png",
+  "celestial_light front": "celestial_light__front.png",
+  "celestial_light front34": "celestial_light__front34.png",
+  "celestial_light left": "celestial_light__left.png",
+  "celestial_light back34": "celestial_light__back34.png",
+  "celestial_light back": "celestial_light__back.png",
+  "celestial_light right": "celestial_light__right.png",
+  "baal front": "baal__front.png",
+  "baal front34": "baal__front34.png",
+  "baal left": "baal__left.png",
+  "baal back34": "baal__back34.png",
+  "baal back": "baal__back.png",
+  "baal right": "baal__right.png",
+  "jack_flame front": "jack_flame__front.png",
+  "jack_flame front34": "jack_flame__front34.png",
+  "jack_flame left": "jack_flame__left.png",
+  "jack_flame back34": "jack_flame__back34.png",
+  "jack_flame back": "jack_flame__back.png",
+  "jack_flame right": "jack_flame__right.png",
+  "skeleton_flame_v1 front": "skeleton_flame_v1__front.png",
+  "skeleton_flame_v1 front34": "skeleton_flame_v1__front34.png",
+  "skeleton_flame_v1 left": "skeleton_flame_v1__left.png",
+  "skeleton_flame_v1 back34": "skeleton_flame_v1__back34.png",
+  "skeleton_flame_v1 back": "skeleton_flame_v1__back.png",
+  "skeleton_flame_v1 right": "skeleton_flame_v1__right.png",
+  "skeleton_flame front": "skeleton_flame__front.png",
+  "skeleton_flame front34": "skeleton_flame__front34.png",
+  "skeleton_flame left": "skeleton_flame__left.png",
+  "skeleton_flame back34": "skeleton_flame__back34.png",
+  "skeleton_flame back": "skeleton_flame__back.png",
+  "skeleton_flame right": "skeleton_flame__right.png"
+ },
+ "framing": {
+  "relay_og": "onBody=1 bodyTall=52.7 bodyWide=31.0 rawTall=52.7 rawWide=31.0 envelope=155 scale=0.334 fill=0.80 glow=0.0002 fitTall=86 fitWide=63 distance=86 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "celestial_light": "onBody=1 bodyTall=52.8 bodyWide=35.2 rawTall=52.8 rawWide=35.2 envelope=199 scale=0.331 fill=0.80 glow=0.0002 fitTall=86 fitWide=72 distance=86 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "baal": "onBody=1 bodyTall=52.7 bodyWide=37.4 rawTall=52.7 rawWide=37.4 envelope=203 scale=0.337 fill=0.80 glow=0.0002 fitTall=86 fitWide=76 distance=86 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "jack_flame": "onBody=1 bodyTall=52.7 bodyWide=30.9 rawTall=52.7 rawWide=30.9 envelope=208 scale=0.335 fill=0.80 glow=0.0002 fitTall=86 fitWide=63 distance=86 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "skeleton_flame_v1": "onBody=1 bodyTall=52.7 bodyWide=35.4 rawTall=52.7 rawWide=35.4 envelope=268 scale=0.332 fill=0.80 glow=0.0002 fitTall=86 fitWide=72 distance=86 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "skeleton_flame": "onBody=1 bodyTall=52.7 bodyWide=40.6 rawTall=52.7 rawWide=40.6 envelope=226 scale=0.328 fill=0.80 glow=0.0002 fitTall=86 fitWide=83 distance=86 fov=34.0 target=640x800 predictedHeightPct=80.0"
+ },
+ "measured": {
+  "relay_og front": {
+   "height_pct": 82.1,
+   "pinned_fraction": 0.011,
+   "subject_px": 13533
+  },
+  "relay_og front34": {
+   "height_pct": 81.4,
+   "pinned_fraction": 0.012,
+   "subject_px": 14548
+  },
+  "relay_og left": {
+   "height_pct": 80.2,
+   "pinned_fraction": 0.012,
+   "subject_px": 13826
+  },
+  "relay_og back34": {
+   "height_pct": 82.9,
+   "pinned_fraction": 0.014,
+   "subject_px": 14270
+  },
+  "relay_og back": {
+   "height_pct": 81.0,
+   "pinned_fraction": 0.01,
+   "subject_px": 14411
+  },
+  "relay_og right": {
+   "height_pct": 82.5,
+   "pinned_fraction": 0.014,
+   "subject_px": 13649
+  },
+  "celestial_light front": {
+   "height_pct": 89.6,
+   "pinned_fraction": 0.007,
+   "subject_px": 23422
+  },
+  "celestial_light front34": {
+   "height_pct": 93.4,
+   "pinned_fraction": 0.008,
+   "subject_px": 25051
+  },
+  "celestial_light left": {
+   "height_pct": 90.0,
+   "pinned_fraction": 0.007,
+   "subject_px": 24177
+  },
+  "celestial_light back34": {
+   "height_pct": 90.0,
+   "pinned_fraction": 0.009,
+   "subject_px": 23834
+  },
+  "celestial_light back": {
+   "height_pct": 91.9,
+   "pinned_fraction": 0.007,
+   "subject_px": 25148
+  },
+  "celestial_light right": {
+   "height_pct": 87.0,
+   "pinned_fraction": 0.009,
+   "subject_px": 22809
+  },
+  "baal front": {
+   "height_pct": 91.9,
+   "pinned_fraction": 0.001,
+   "subject_px": 18346
+  },
+  "baal front34": {
+   "height_pct": 91.9,
+   "pinned_fraction": 0.003,
+   "subject_px": 19265
+  },
+  "baal left": {
+   "height_pct": 93.8,
+   "pinned_fraction": 0.001,
+   "subject_px": 17855
+  },
+  "baal back34": {
+   "height_pct": 88.9,
+   "pinned_fraction": 0.004,
+   "subject_px": 17499
+  },
+  "baal back": {
+   "height_pct": 93.0,
+   "pinned_fraction": 0.002,
+   "subject_px": 20100
+  },
+  "baal right": {
+   "height_pct": 91.1,
+   "pinned_fraction": 0.003,
+   "subject_px": 19829
+  },
+  "jack_flame front": {
+   "height_pct": 91.9,
+   "pinned_fraction": 0.011,
+   "subject_px": 12932
+  },
+  "jack_flame front34": {
+   "height_pct": 90.0,
+   "pinned_fraction": 0.014,
+   "subject_px": 12785
+  },
+  "jack_flame left": {
+   "height_pct": 92.6,
+   "pinned_fraction": 0.011,
+   "subject_px": 13631
+  },
+  "jack_flame back34": {
+   "height_pct": 87.0,
+   "pinned_fraction": 0.016,
+   "subject_px": 11129
+  },
+  "jack_flame back": {
+   "height_pct": 92.2,
+   "pinned_fraction": 0.011,
+   "subject_px": 13592
+  },
+  "jack_flame right": {
+   "height_pct": 90.4,
+   "pinned_fraction": 0.014,
+   "subject_px": 12794
+  },
+  "skeleton_flame_v1 front": {
+   "height_pct": 93.8,
+   "pinned_fraction": 0.101,
+   "subject_px": 28940
+  },
+  "skeleton_flame_v1 front34": {
+   "height_pct": 85.5,
+   "pinned_fraction": 0.013,
+   "subject_px": 26486
+  },
+  "skeleton_flame_v1 left": {
+   "height_pct": 92.2,
+   "pinned_fraction": 0.103,
+   "subject_px": 29128
+  },
+  "skeleton_flame_v1 back34": {
+   "height_pct": 90.4,
+   "pinned_fraction": 0.09,
+   "subject_px": 27184
+  },
+  "skeleton_flame_v1 back": {
+   "height_pct": 88.5,
+   "pinned_fraction": 0.002,
+   "subject_px": 27263
+  },
+  "skeleton_flame_v1 right": {
+   "height_pct": 95.2,
+   "pinned_fraction": 0.137,
+   "subject_px": 30430
+  },
+  "skeleton_flame front": {
+   "height_pct": 89.6,
+   "pinned_fraction": 0.091,
+   "subject_px": 22744
+  },
+  "skeleton_flame front34": {
+   "height_pct": 91.1,
+   "pinned_fraction": 0.029,
+   "subject_px": 21351
+  },
+  "skeleton_flame left": {
+   "height_pct": 88.5,
+   "pinned_fraction": 0.014,
+   "subject_px": 21148
+  },
+  "skeleton_flame back34": {
+   "height_pct": 91.5,
+   "pinned_fraction": 0.087,
+   "subject_px": 21507
+  },
+  "skeleton_flame back": {
+   "height_pct": 92.2,
+   "pinned_fraction": 0.001,
+   "subject_px": 21745
+  },
+  "skeleton_flame right": {
+   "height_pct": 92.2,
+   "pinned_fraction": 0.077,
+   "subject_px": 23451
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\skin_sheet",
+ "finished": "2026-09-29 10:12:08",
+ "seconds": 124.23,
+ "log": "W_relay_og INFO six views exported {'skin': 'relay_og'}\nW_celestial_light INFO six views exported {'skin': 'celestial_light'}\nW_baal INFO six views exported {'skin': 'baal'}\nW_jack_flame INFO six views exported {'skin': 'jack_flame'}\nW_skeleton_flame_v1 INFO six views exported {'skin': 'skeleton_flame_v1'}\nW_skeleton_flame INFO six views exported {'skin': 'skeleton_flame'}\nW00 PASS six views of every skin were exported {'exported': 36, 'wanted': 36}\nW01 PASS every view holds a figure filling the founder's band {'out_of_band': {}, 'front_band': (76.0, 94.0), 'rotated_band': (66.0, 99.0)}\nW02 PASS no view is a white shape: the figure is mostly NOT pinned at white {'pinned': {}, 'ceiling': 0.35, 'note': \"the wardrobe's own picture of the glow re-baseline. Before it, Skeleton Flame's HIGH frames measured 68-80% of the figure over luma 140 from this same stage.\"}\n"
+}

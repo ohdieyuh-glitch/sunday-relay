@@ -1,0 +1,342 @@
+{
+ "name": "zzS07_skin_parity_all",
+ "started": "2026-09-29 10:06:56",
+ "status": "measured",
+ "skins": [
+  {
+   "skin": "relay_og",
+   "worn": true,
+   "dressed": false,
+   "is_the_authority": true,
+   "boxes": 0,
+   "field_mismatches": 0,
+   "first_mismatches": [],
+   "costume_parity": "n/a -- this skin IS the canonical body, there is no costume over it",
+   "fields_that_changed_when_walking": [
+    "bob_uu",
+    "body_pitch_deg",
+    "body_roll_deg",
+    "body_yaw_deg",
+    "elbow_left_deg",
+    "elbow_right_deg",
+    "gait_weight",
+    "head_pitch_deg"
+   ],
+   "moves_when_walking": true,
+   "act_lift_uu": 77.9,
+   "act_stillness": 1.0,
+   "wears_the_pose": true,
+   "performs_the_act": true,
+   "verdict": "REFERENCE"
+  },
+  {
+   "skin": "celestial_light",
+   "worn": true,
+   "dressed": true,
+   "is_the_authority": false,
+   "boxes": 1632,
+   "field_mismatches": 0,
+   "first_mismatches": [],
+   "costume_parity": "compared field for field",
+   "fields_that_changed_when_walking": [
+    "bob_uu",
+    "body_pitch_deg",
+    "body_roll_deg",
+    "body_yaw_deg",
+    "elbow_left_deg",
+    "elbow_right_deg",
+    "gait_weight",
+    "head_pitch_deg"
+   ],
+   "moves_when_walking": true,
+   "act_lift_uu": 77.99,
+   "act_stillness": 1.0,
+   "wears_the_pose": true,
+   "performs_the_act": true,
+   "verdict": "PASS"
+  },
+  {
+   "skin": "baal",
+   "worn": true,
+   "dressed": true,
+   "is_the_authority": false,
+   "boxes": 1863,
+   "field_mismatches": 0,
+   "first_mismatches": [],
+   "costume_parity": "compared field for field",
+   "fields_that_changed_when_walking": [
+    "bob_uu",
+    "body_pitch_deg",
+    "body_roll_deg",
+    "body_yaw_deg",
+    "elbow_left_deg",
+    "elbow_right_deg",
+    "gait_weight",
+    "head_pitch_deg"
+   ],
+   "moves_when_walking": true,
+   "act_lift_uu": 77.99,
+   "act_stillness": 1.0,
+   "wears_the_pose": true,
+   "performs_the_act": true,
+   "verdict": "PASS"
+  },
+  {
+   "skin": "jack_flame",
+   "worn": true,
+   "dressed": true,
+   "is_the_authority": false,
+   "boxes": 1565,
+   "field_mismatches": 0,
+   "first_mismatches": [],
+   "costume_parity": "compared field for field",
+   "fields_that_changed_when_walking": [
+    "body_roll_deg",
+    "elbow_left_deg",
+    "head_pitch_deg",
+    "head_yaw_deg",
+    "hip_left_deg",
+    "hip_right_deg",
+    "knee_left_deg",
+    "knee_right_deg"
+   ],
+   "moves_when_walking": true,
+   "act_lift_uu": 77.91,
+   "act_stillness": 1.0,
+   "wears_the_pose": true,
+   "performs_the_act": true,
+   "verdict": "PASS"
+  },
+  {
+   "skin": "skeleton_flame_v1",
+   "worn": true,
+   "dressed": true,
+   "is_the_authority": false,
+   "boxes": 1177,
+   "field_mismatches": 0,
+   "first_mismatches": [],
+   "costume_parity": "compared field for field",
+   "fields_that_changed_when_walking": [
+    "body_roll_deg",
+    "head_pitch_deg",
+    "head_yaw_deg",
+    "shoulder_left_deg",
+    "shoulder_right_deg",
+    "sway_uu",
+    "tail_pitch_deg",
+    "tail_yaw_deg"
+   ],
+   "moves_when_walking": true,
+   "act_lift_uu": 77.98,
+   "act_stillness": 1.0,
+   "wears_the_pose": true,
+   "performs_the_act": true,
+   "verdict": "PASS"
+  },
+  {
+   "skin": "skeleton_flame",
+   "worn": true,
+   "dressed": true,
+   "is_the_authority": false,
+   "boxes": 1481,
+   "field_mismatches": 0,
+   "first_mismatches": [],
+   "costume_parity": "compared field for field",
+   "fields_that_changed_when_walking": [
+    "body_roll_deg",
+    "head_pitch_deg",
+    "head_yaw_deg",
+    "shoulder_left_deg",
+    "shoulder_right_deg",
+    "sway_uu",
+    "tail_pitch_deg",
+    "tail_yaw_deg"
+   ],
+   "moves_when_walking": true,
+   "act_lift_uu": 77.99,
+   "act_stillness": 1.0,
+   "wears_the_pose": true,
+   "performs_the_act": true,
+   "verdict": "PASS"
+  }
+ ],
+ "unmeasured": [],
+ "failing": [],
+ "all_pass": true,
+ "tests": [
+  {
+   "id": "S01",
+   "name": "every active skin goes on, and every one but the canon body (Relay OG) is dressed",
+   "pass": true,
+   "detail": {
+    "skins": [
+     "relay_og",
+     "celestial_light",
+     "baal",
+     "jack_flame",
+     "skeleton_flame_v1",
+     "skeleton_flame"
+    ],
+    "not_dressed": [
+     "relay_og"
+    ]
+   }
+  },
+  {
+   "id": "S02",
+   "name": "no skin mismatches the pose it was handed, on any field",
+   "pass": true,
+   "detail": {
+    "mismatches": {
+     "relay_og": "n/a",
+     "celestial_light": 0,
+     "baal": 0,
+     "jack_flame": 0,
+     "skeleton_flame_v1": 0,
+     "skeleton_flame": 0
+    },
+    "note": "the authority reads n/a, not 0. It has no costume to be compared against, and a zero there would be a claim that was never tested."
+   }
+  },
+  {
+   "id": "S03",
+   "name": "every skin wears the pose AND performs the act",
+   "pass": true,
+   "detail": {
+    "wears": {
+     "relay_og": true,
+     "celestial_light": true,
+     "baal": true,
+     "jack_flame": true,
+     "skeleton_flame_v1": true,
+     "skeleton_flame": true
+    },
+    "performs": {
+     "relay_og": true,
+     "celestial_light": true,
+     "baal": true,
+     "jack_flame": true,
+     "skeleton_flame_v1": true,
+     "skeleton_flame": true
+    }
+   }
+  },
+  {
+   "id": "S05",
+   "name": "the rig is moving, so parity is not agreement between two frozen figures",
+   "pass": true,
+   "detail": {
+    "moves": {
+     "relay_og": true,
+     "celestial_light": true,
+     "baal": true,
+     "jack_flame": true,
+     "skeleton_flame_v1": true,
+     "skeleton_flame": true
+    },
+    "changed": {
+     "relay_og": [
+      "bob_uu",
+      "body_pitch_deg",
+      "body_roll_deg",
+      "body_yaw_deg",
+      "elbow_left_deg",
+      "elbow_right_deg",
+      "gait_weight",
+      "head_pitch_deg"
+     ],
+     "celestial_light": [
+      "bob_uu",
+      "body_pitch_deg",
+      "body_roll_deg",
+      "body_yaw_deg",
+      "elbow_left_deg",
+      "elbow_right_deg",
+      "gait_weight",
+      "head_pitch_deg"
+     ],
+     "baal": [
+      "bob_uu",
+      "body_pitch_deg",
+      "body_roll_deg",
+      "body_yaw_deg",
+      "elbow_left_deg",
+      "elbow_right_deg",
+      "gait_weight",
+      "head_pitch_deg"
+     ],
+     "jack_flame": [
+      "body_roll_deg",
+      "elbow_left_deg",
+      "head_pitch_deg",
+      "head_yaw_deg",
+      "hip_left_deg",
+      "hip_right_deg",
+      "knee_left_deg",
+      "knee_right_deg"
+     ],
+     "skeleton_flame_v1": [
+      "body_roll_deg",
+      "head_pitch_deg",
+      "head_yaw_deg",
+      "shoulder_left_deg",
+      "shoulder_right_deg",
+      "sway_uu",
+      "tail_pitch_deg",
+      "tail_yaw_deg"
+     ],
+     "skeleton_flame": [
+      "body_roll_deg",
+      "head_pitch_deg",
+      "head_yaw_deg",
+      "shoulder_left_deg",
+      "shoulder_right_deg",
+      "sway_uu",
+      "tail_pitch_deg",
+      "tail_yaw_deg"
+     ]
+    },
+    "note": "zero mismatches is satisfied just as well by a skin copying a dead Dog, so the parity clauses above mean nothing without this one."
+   }
+  },
+  {
+   "id": "S04",
+   "name": "and none of them is failing, and none of them went unmeasured",
+   "pass": true,
+   "detail": {
+    "failing": [],
+    "unmeasured": [],
+    "note": "two lists, not one. FAILING is a statement about the product; UNMEASURED is a statement about this proof. Either turns the gate red, and merging them once planted a false blocker on the default mascot."
+   }
+  },
+  {
+   "id": "S00",
+   "name": "every active skin was actually tested, none silently dropped",
+   "pass": true,
+   "detail": {
+    "expected": [
+     "relay_og",
+     "celestial_light",
+     "baal",
+     "jack_flame",
+     "skeleton_flame_v1",
+     "skeleton_flame"
+    ],
+    "tested": [
+     "baal",
+     "celestial_light",
+     "jack_flame",
+     "relay_og",
+     "skeleton_flame",
+     "skeleton_flame_v1"
+    ],
+    "missing": [],
+    "unexpected": [],
+    "note": "Relay OG was absent from this list until 2026-09-27, so every clause reported a clean result for a lineup that did not include the default mascot. Coverage is asserted here so that cannot recur quietly."
+   }
+  }
+ ],
+ "finished": "2026-09-29 10:10:03",
+ "seconds": 187.03,
+ "log": "relay_og REFERENCE wears the canonical pose and performs the act {'skin': 'relay_og', 'worn': True, 'dressed': False, 'is_the_authority': True, 'boxes': 0, 'field_mismatches': 0, 'first_mismatches': [], 'costume_parity': 'n/a -- this skin IS the canonical body, there is no costume over it', 'fields_that_changed_when_walking': ['bob_uu', 'body_pitch_deg', 'body_roll_deg', 'body_yaw_deg', 'elbow_left_deg', 'elbow_right_deg', 'gait_weight', 'head_pitch_deg'], 'moves_when_walking': True, 'act_lift_uu': 77.9, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'REFERENCE'}\ncelestial_light PASS wears the canonical pose and performs the act {'skin': 'celestial_light', 'worn': True, 'dressed': True, 'is_the_authority': False, 'boxes': 1632, 'field_mismatches': 0, 'first_mismatches': [], 'costume_parity': 'compared field for field', 'fields_that_changed_when_walking': ['bob_uu', 'body_pitch_deg', 'body_roll_deg', 'body_yaw_deg', 'elbow_left_deg', 'elbow_right_deg', 'gait_weight', 'head_pitch_deg'], 'moves_when_walking': True, 'act_lift_uu': 77.99, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\nbaal PASS wears the canonical pose and performs the act {'skin': 'baal', 'worn': True, 'dressed': True, 'is_the_authority': False, 'boxes': 1863, 'field_mismatches': 0, 'first_mismatches': [], 'costume_parity': 'compared field for field', 'fields_that_changed_when_walking': ['bob_uu', 'body_pitch_deg', 'body_roll_deg', 'body_yaw_deg', 'elbow_left_deg', 'elbow_right_deg', 'gait_weight', 'head_pitch_deg'], 'moves_when_walking': True, 'act_lift_uu': 77.99, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\njack_flame PASS wears the canonical pose and performs the act {'skin': 'jack_flame', 'worn': True, 'dressed': True, 'is_the_authority': False, 'boxes': 1565, 'field_mismatches': 0, 'first_mismatches': [], 'costume_parity': 'compared field for field', 'fields_that_changed_when_walking': ['body_roll_deg', 'elbow_left_deg', 'head_pitch_deg', 'head_yaw_deg', 'hip_left_deg', 'hip_right_deg', 'knee_left_deg', 'knee_right_deg'], 'moves_when_walking': True, 'act_lift_uu': 77.91, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\nskeleton_flame_v1 PASS wears the canonical pose and performs the act {'skin': 'skeleton_flame_v1', 'worn': True, 'dressed': True, 'is_the_authority': False, 'boxes': 1177, 'field_mismatches': 0, 'first_mismatches': [], 'costume_parity': 'compared field for field', 'fields_that_changed_when_walking': ['body_roll_deg', 'head_pitch_deg', 'head_yaw_deg', 'shoulder_left_deg', 'shoulder_right_deg', 'sway_uu', 'tail_pitch_deg', 'tail_yaw_deg'], 'moves_when_walking': True, 'act_lift_uu': 77.98, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\nskeleton_flame PASS wears the canonical pose and performs the act {'skin': 'skeleton_flame', 'worn': True, 'dressed': True, 'is_the_authority': False, 'boxes': 1481, 'field_mismatches': 0, 'first_mismatches': [], 'costume_parity': 'compared field for field', 'fields_that_changed_when_walking': ['body_roll_deg', 'head_pitch_deg', 'head_yaw_deg', 'shoulder_left_deg', 'shoulder_right_deg', 'sway_uu', 'tail_pitch_deg', 'tail_yaw_deg'], 'moves_when_walking': True, 'act_lift_uu': 77.99, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\nS01 PASS every active skin goes on, and every one but the canon body (Relay OG) is dressed {'skins': ['relay_og', 'celestial_light', 'baal', 'jack_flame', 'skeleton_flame_v1', 'skeleton_flame'], 'not_dressed': ['relay_og']}\nS02 PASS no skin mismatches the pose it was handed, on any field {'mismatches': {'relay_og': 'n/a', 'celestial_light': 0, 'baal': 0, 'jack_flame': 0, 'skeleton_flame_v1': 0, 'skeleton_flame': 0}, 'note': 'the authority reads n/a, not 0. It has no costume to be compared against, and a zero there would be a claim that was never tested.'}\nS03 PASS every skin wears the pose AND performs the act {'wears': {'relay_og': True, 'celestial_light': True, 'baal': True, 'jack_flame': True, 'skeleton_flame_v1': True, 'skeleton_flame': True}, 'performs': {'relay_og': True, 'celestial_light': True, 'baal': True, 'jack_flame': True, 'skeleton_flame_v1': True, 'skeleton_flame': True}}\nS05 PASS the rig is moving, so parity is not agreement between two frozen figures {'moves': {'relay_og': True, 'celestial_light': True, 'baal': True, 'jack_flame': True, 'skeleton_flame_v1': True, 'skeleton_flame': True}, 'changed': {'relay_og': ['bob_uu', 'body_pitch_deg', 'body_roll_deg', 'body_yaw_deg', 'elbow_left_deg', 'elbow_right_deg', 'gait_weight', 'head_pitch_deg'], 'celestial_light': ['bob_uu', 'body_pitch_deg', 'body_roll_deg', 'body_yaw_deg', 'elbow_left_deg', 'elbow_right_deg', 'gait_weight', 'head_pitch_deg'], 'baal': ['bob_uu', 'body_pitch_deg', 'body_roll_deg', 'body_yaw_deg', 'elbow_left_deg', 'elbow_right_deg', 'gait_weight', 'head_pitch_deg'], 'jack_flame': ['body_roll_deg', 'elbow_left_deg', 'head_pitch_deg', 'head_yaw_deg', 'hip_left_deg', 'hip_right_deg', 'knee_left_deg', 'knee_right_deg'], 'skeleton_flame_v1': ['body_roll_deg', 'head_pitch_deg', 'head_yaw_deg', 'shoulder_left_deg', 'shoulder_right_deg', 'sway_uu', 'tail_pitch_deg', 'tail_yaw_deg'], 'skeleton_flame': ['body_roll_deg', 'head_pitch_deg', 'head_yaw_deg', 'shoulder_left_deg', 'shoulder_right_deg', 'sway_uu', 'tail_pitch_deg', 'tail_yaw_deg']}, 'note': 'zero mismatches is satisfied just as well by a skin copying a dead Dog, so the parity clauses above mean nothing without this one.'}\nS04 PASS and none of them is failing, and none of them went unmeasured {'failing': [], 'unmeasured': [], 'note': 'two lists, not one. FAILING is a statement about the product; UNMEASURED is a statement about this proof. Either turns the gate red, and merging them once planted a false blocker on the default mascot.'}\n"
+}

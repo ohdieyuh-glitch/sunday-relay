@@ -9,8 +9,8 @@ material eye glow 0.3000 0.6600 1.0000 120.000
 material eyehalo add 0.3000 0.6600 1.0000 42.000
 material ghost add 0.3500 0.6600 1.0000 22.500
 material antler rim 0.8000 0.6600 0.4200 1.000
-material spirit glow 0.1800 0.5000 1.0000 11.250
-material spiritpale glow 0.6200 0.8600 1.0000 18.000
+material spirit glow 0.0600 0.2800 1.0000 9.000
+material spiritpale glow 0.3000 0.6000 1.0000 13.500
 material socket lit 0.0300 0.0340 0.0500 1.000
 part root - 0.000 0.000 0.000 float
 part head root 0.000 0.000 0.000 head

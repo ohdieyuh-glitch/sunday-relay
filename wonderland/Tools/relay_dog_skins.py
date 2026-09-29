@@ -2480,9 +2480,12 @@ def jack_flame():
     figure = start("RELAY DOG SKIN -- JACK FLAME", 7301, JACK_EYES, 7.5)
     figure.material("suit", "lit", (0.034, 0.032, 0.040), 1.0)
     figure.material("stripe", "lit", (0.780, 0.760, 0.720), 1.0)
-    figure.material("flame", "glow", (1.00, 0.36, 0.04), 0.65)
-    figure.material("flamepale", "glow", (1.00, 0.74, 0.20), 1.05)
-    figure.material("heart", "glow", (1.00, 0.20, 0.05), 1.3)
+    # ORANGE, NOT YELLOW. The first in-engine sheet (zzS06) rendered the fire YELLOW and the heart a yellow slab: the
+    # engine's real-fire surfaces lift a flame's colour toward white, so the colour has to be authored deeper and
+    # more saturated than the orange the sheet shows, and the heart dimmer, so it stays red rather than blooming.
+    figure.material("flame", "glow", (1.00, 0.20, 0.02), 0.55)
+    figure.material("flamepale", "glow", (1.00, 0.44, 0.06), 0.85)
+    figure.material("heart", "glow", (0.95, 0.08, 0.02), 0.6)
     base_dog(figure)
     d = DOG
     tile = d["tile"]
@@ -2639,8 +2642,10 @@ def baal():
     figure.material("armordeep", "lit", (0.030, 0.034, 0.050), 1.0)
     figure.material("antler", "rim", (0.800, 0.660, 0.420), 1.0)
     figure.material("gold", "rim", (0.905, 0.720, 0.290), 1.0)
-    figure.material("spirit", "glow", (0.18, 0.50, 1.00), 0.75)
-    figure.material("spiritpale", "glow", (0.62, 0.86, 1.00), 1.2)
+    # DEEP BLUE, NOT ICE. The first in-engine sheet (zzS06) rendered the fire pale ice-blue: the real-fire surfaces
+    # lift toward white, so the sheet's saturated blue is authored deeper and less bright than it looks.
+    figure.material("spirit", "glow", (0.06, 0.28, 1.00), 0.6)
+    figure.material("spiritpale", "glow", (0.30, 0.60, 1.00), 0.9)
     base_dog(figure)
     d = DOG
     tile = d["tile"]
@@ -2920,10 +2925,10 @@ def dress_cub(figure, skin, k, head_z, hd, hw, hh, tile):
         # Jack's signature at the cub's scale: the crown of orange fire, the stitched grin under the visor, and a
         # small black collar with the burning heart under the chin. The cub's eyes are its expression and are never
         # covered.
-        figure.material("flame", "glow", (1.00, 0.36, 0.04), 0.65)
-        figure.material("flamepale", "glow", (1.00, 0.74, 0.20), 1.05)
+        figure.material("flame", "glow", (1.00, 0.20, 0.02), 0.55)
+        figure.material("flamepale", "glow", (1.00, 0.44, 0.06), 0.85)
         figure.material("suit", "lit", (0.034, 0.032, 0.040), 1.0)
-        figure.material("heart", "glow", (1.00, 0.20, 0.05), 1.3)
+        figure.material("heart", "glow", (0.95, 0.08, 0.02), 0.6)
         figure.part("headfire", "head", (0.0, 0.0, top), "twinkle", 0.16)
         figure.flame("headfire", lambda up: "flame" if up < 0.52 else "flamepale", (-0.6, 0.0, top - 0.2), hh * 1.0, hw * 0.80, 5, tile * k * 1.05)
         for r in range(9):
@@ -2940,8 +2945,8 @@ def dress_cub(figure, skin, k, head_z, hd, hw, hh, tile):
         # Baal's signature at the cub's scale: the deer skull's snout under the visor (the cub's eyes are its face,
         # so the skull does not cover them), the two branching antlers, and a wisp of blue fire behind the head.
         figure.material("antler", "rim", (0.800, 0.660, 0.420), 1.0)
-        figure.material("spirit", "glow", (0.18, 0.50, 1.00), 0.75)
-        figure.material("spiritpale", "glow", (0.62, 0.86, 1.00), 1.2)
+        figure.material("spirit", "glow", (0.06, 0.28, 1.00), 0.6)
+        figure.material("spiritpale", "glow", (0.30, 0.60, 1.00), 0.9)
         figure.material("socket", "lit", (0.030, 0.034, 0.050), 1.0)
         for r in range(5):
             figure.box("head", "bone", (hd * 0.5 + 0.35 + r * 0.12, 0.0, head_z - hh * 0.30 - r * 0.42), (0.7, hw * (0.52 - 0.07 * r), 0.44))

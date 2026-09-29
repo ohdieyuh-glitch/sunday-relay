@@ -9,9 +9,9 @@ material eye glow 1.0000 0.6600 0.1000 112.500
 material eyehalo add 1.0000 0.6600 0.1000 39.375
 material suit lit 0.0340 0.0320 0.0400 1.000
 material stripe lit 0.7800 0.7600 0.7200 1.000
-material flame glow 1.0000 0.3600 0.0400 9.750
-material flamepale glow 1.0000 0.7400 0.2000 15.750
-material heart glow 1.0000 0.2000 0.0500 19.500
+material flame glow 1.0000 0.2000 0.0200 8.250
+material flamepale glow 1.0000 0.4400 0.0600 12.750
+material heart glow 0.9500 0.0800 0.0200 9.000
 part root - 0.000 0.000 0.000 spine 0.850 0.000
 part body root 0.000 0.000 11.850 none
 part head body 0.000 0.000 19.700 head

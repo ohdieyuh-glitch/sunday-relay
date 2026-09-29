@@ -210,9 +210,15 @@ def job():
         tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
         emit(tid, "PASS" if ok else "FAIL", name, detail)
 
-    record("S01", "every active skin goes on and is dressed",
-           bool(rows) and all(r.get("worn") and r.get("dressed") for r in rows),
-           skins=[r["skin"] for r in rows])
+    # RELAY OG IS NEVER DRESSED, BY DESIGN: it is the canon body, and WearSkin destroys the costume for it. When Relay
+    # OG joined EXPECTED_ACTIVE_SKINS, S02-S04 learned to treat it as the authority but this clause did not, so it
+    # could only pass by Relay OG wearing a costume it must never wear (found 2026-09-29, zzS05: every other skin
+    # dressed and PASS, S01 red on relay_og alone). Every skin must still GO ON; only the authority is exempt from
+    # being dressed.
+    record("S01", "every active skin goes on, and every one but the canon body (Relay OG) is dressed",
+           bool(rows) and all(r.get("worn") and (r.get("dressed") or r.get("is_the_authority")) for r in rows),
+           skins=[r["skin"] for r in rows],
+           not_dressed=[r["skin"] for r in rows if not r.get("dressed")])
     record("S02", "no skin mismatches the pose it was handed, on any field",
            all(int(r.get("field_mismatches", 1)) == 0 for r in rows),
            mismatches={r["skin"]: ("n/a" if r.get("is_the_authority") else r.get("field_mismatches"))
