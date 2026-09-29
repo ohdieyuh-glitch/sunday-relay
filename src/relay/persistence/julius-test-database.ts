@@ -26,14 +26,35 @@
 export const JULIUS_TEST_DATABASE_ENV = 'JULIUS_TEST_DATABASE_URL';
 
 /**
+ * The switch a launcher sets to say the real-PostgreSQL suites MUST run here.
+ * It names no database: it is a demand, and the database is still only ever
+ * the one `JULIUS_TEST_DATABASE_URL` states.
+ */
+export const JULIUS_REAL_POSTGRES_ENV = 'JULIUS_REAL_POSTGRES';
+
+/**
  * The URL a real-PostgreSQL suite may use, or null when none was stated.
  *
  * Null means the suite must be `todo`: a skipped proof, never a passing one and
  * never a silent write somewhere else.
+ *
+ * EXCEPT WHERE THE LAUNCHER DEMANDED THE REAL SUITES. From #288 to the workflow
+ * fix, julius-real-infra set `JULIUS_REAL_POSTGRES=1` and no test database, so
+ * every real-PostgreSQL suite there answered `todo` and every step went green:
+ * run 36587881843 executed 0 of 28 cases. A demand for the real suites with
+ * nothing to run them against is a launcher error, so it now THROWS — naming
+ * both variables — instead of reading as a pass. The inherited `DATABASE_URL`
+ * is still never read.
  */
 export function juliusTestDatabaseUrl(env: NodeJS.ProcessEnv = process.env): string | null {
   const stated = env[JULIUS_TEST_DATABASE_ENV];
-  return typeof stated === 'string' && stated.trim() !== '' ? stated.trim() : null;
+  if (typeof stated === 'string' && stated.trim() !== '') return stated.trim();
+  if (env[JULIUS_REAL_POSTGRES_ENV] === '1') {
+    throw new Error(`julius_real_postgres_without_test_database: ${JULIUS_REAL_POSTGRES_ENV}=1 demands the `
+      + `real-PostgreSQL suites, and ${JULIUS_TEST_DATABASE_ENV} is not set, so they would all be todo. `
+      + juliusTestDatabaseAbsence());
+  }
+  return null;
 }
 
 /**
