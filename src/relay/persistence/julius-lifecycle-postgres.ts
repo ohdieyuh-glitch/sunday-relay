@@ -108,6 +108,16 @@ export class JuliusLifecyclePostgresRepository implements JuliusApprovalStore, J
     return result.rows.map((row) => this.map(row));
   }
 
+  /** A denial ends the run; the claim already refuses a run holding one (the same state list). */
+  async deniedApprovals(runId: string, projectId: string): Promise<readonly JuliusApprovalRecord[]> {
+    const result = await this.pool.query<Record<string, unknown>>(
+      `SELECT * FROM relay_wonderland.julius_approvals
+        WHERE run_id=$1 AND project_id=$2 AND state='DENIED' ORDER BY decided_at,approval_id LIMIT 200`,
+      [runId, projectId],
+    );
+    return result.rows.map((row) => this.map(row));
+  }
+
   async decideApproval(input: {
     runId: string; approvalId: string; projectId: string;
     state: Extract<JuliusApprovalState, 'APPROVED' | 'DENIED' | 'CANCELLED'>;

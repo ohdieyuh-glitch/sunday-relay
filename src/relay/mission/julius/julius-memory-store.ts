@@ -872,6 +872,12 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         .map((row) => ({ ...row }));
     },
 
+    async deniedApprovals(runId, projectId) {
+      return [...approvals.values()]
+        .filter((row) => row.runId === runId && row.projectId === projectId && row.state === 'DENIED')
+        .map((row) => ({ ...row }));
+    },
+
     async decideApproval(input) {
       const record = approvals.get(input.approvalId);
       if (record === undefined || record.runId !== input.runId || record.projectId !== input.projectId) return false;

@@ -222,7 +222,7 @@ export interface JuliusPipelineDependencies {
    * hold an approval at all.
    */
   readonly store: JuliusRuntimeStore & JuliusRecoveryDriver
-    & Partial<Pick<JuliusApprovalStore, 'pendingApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>>;
+    & Partial<Pick<JuliusApprovalStore, 'pendingApprovals' | 'deniedApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>>;
   readonly router: JuliusProviderRouter;
   readonly budget: JuliusBudgetPort;
   readonly clock: JuliusClock;
@@ -666,6 +666,11 @@ const APPROVAL_REQUEST_RETRY_MS = 5_000;
  *    failure, and the claim query keeps it from being offered until it lifts.
  *  - CANCELLED: the task ends CANCELLED, as cancellation ends every task.
  *  - FAILED or COMPLETED (a denial fails the run): the task ends FAILED.
+ *  - A DENIED approval on a run whose state has not caught up (its move to
+ *    FAILED lost a race, or lands a moment later): the task ends FAILED too.
+ *    The claim refuses such a run, so only a denial landing after the claim
+ *    reaches here, and a denial ends the run (`advanceRun`, APPROVAL_DENIED).
+ *    This boundary used to check PENDING only, so that work was dispatched.
  * Work already admitted is not reached from here: pause does not kill work in
  * flight (`julius-lifecycle-runtime.ts`).
  */
@@ -681,19 +686,26 @@ async function holdAtDispatchBoundary(
   const { claim, run } = input;
   const pending = deps.store.pendingApprovals === undefined
     ? [] : await deps.store.pendingApprovals(run.runId, run.projectId);
-  if (JULIUS_CLAIMABLE_RUN_STATES.includes(run.state) && pending.length === 0) return null;
+  const denied = deps.store.deniedApprovals === undefined
+    ? [] : await deps.store.deniedApprovals(run.runId, run.projectId);
+  if (JULIUS_CLAIMABLE_RUN_STATES.includes(run.state) && pending.length === 0 && denied.length === 0) return null;
 
   const terminal = run.state === 'CANCELLED' || run.state === 'FAILED' || run.state === 'COMPLETED';
-  const reasonCode = pending.length > 0 && !terminal ? 'RUN_AWAITING_APPROVAL' : `RUN_${run.state}`;
+  const refused = !terminal && denied.length > 0;
+  const reasonCode = refused ? 'RUN_APPROVAL_DENIED'
+    : pending.length > 0 && !terminal ? 'RUN_AWAITING_APPROVAL' : `RUN_${run.state}`;
   const now = deps.clock.now();
   await deps.store.finishTask({
     taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration,
     state: run.state === 'CANCELLED' ? 'CANCELLED' : 'FAILED', now,
-    ...(terminal ? {} : { nextAttemptAt: now }),
+    ...(terminal || refused ? {} : { nextAttemptAt: now }),
   });
   await input.ledger.trajectory('DISPATCH', {
     taskId: claim.taskId, policyRevision: input.policyRevision, outcome: 'GOVERNANCE_HELD',
-    facts: { reasonCode, runState: run.state, pendingApprovals: pending.length, handedBack: !terminal },
+    facts: {
+      reasonCode, runState: run.state, pendingApprovals: pending.length, deniedApprovals: denied.length,
+      handedBack: !terminal && !refused,
+    },
   });
   return { kind: 'REFUSED', outcome: { kind: 'HELD', taskId: claim.taskId, reasonCode, runState: run.state } };
 }

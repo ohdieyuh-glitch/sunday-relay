@@ -54,7 +54,7 @@ import { JuliusLifecyclePostgresRepository } from '../../src/relay/persistence/j
 export function createJuliusPostgresRuntimeStore(
   pool: Pool,
 ): JuliusRuntimeStore & JuliusRecoveryDriver & JuliusTimelineReader
-  & Pick<JuliusApprovalStore, 'pendingApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'> {
+  & Required<Pick<JuliusApprovalStore, 'pendingApprovals' | 'deniedApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>> {
   const runs = new JuliusPostgresRepository(pool);
   const results = new JuliusRecoveryPostgresRepository(pool);
   const contexts = new JuliusContextPostgresRepository(pool);
@@ -106,6 +106,10 @@ export function createJuliusPostgresRuntimeStore(
     // the bridge's lifecycle repository, same table) is never walked out of
     // BLOCKED by the task graph. Without it the live job could not see a gate.
     pendingApprovals: lifecycle.pendingApprovals.bind(lifecycle),
+    // And the denials: a run holding one ENDS (`advanceRun`), and its claimed
+    // task ends at the dispatch boundary, even when the denial's own move to
+    // FAILED lost a race and never happened.
+    deniedApprovals: lifecycle.deniedApprovals.bind(lifecycle),
     // THE C.A.R.D. GATE AT DISPATCH ASKS THROUGH THESE (`prepareClaimedTask`).
     // Bound from the same repository and table the bridge decides approvals
     // in. Without them the live job's gate has nowhere to put the question and
