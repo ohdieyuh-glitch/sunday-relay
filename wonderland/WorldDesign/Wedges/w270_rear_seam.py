@@ -332,7 +332,12 @@ class Pass:
         # a plate is tested against what ALREADY stands, never against this pass's own floor or buildings
         if not self._clear("plate_" + key, u, v, hd, hw, 0.0, 60.0, layers=("existing",)):
             return False
-        self.add(key, PLATE["mesh"], material, u, v, PAVING_TOP - PLATE["top_local"], 0.0, cull=CULL_FAR,
+        # YAW 90, NOT 0. The plate's 1,440 side is its LOCAL X, and yaw 0 lays local X along u (the garden-room
+        # hedges below say so, correctly). At yaw 0 -- as this was applied on 2026-09-28 -- every plate ran
+        # 1,440 ALONG the way while the columns stood 1,440 apart ACROSS it: 7.4 m paving strips with 7 m of
+        # lawn between them, and neighbouring rows overlapping by 7 m. The PIE proof (zzW15) found it: every
+        # stand on the axis traced the lawn. The claim above was always the intended 1,440-across footprint.
+        self.add(key, PLATE["mesh"], material, u, v, PAVING_TOP - PLATE["top_local"], 90.0, cull=CULL_FAR,
                  collides=True, shadow=False)
         self.claim(u, v, hd, hw, 0.0, "plate", layer=layer)
         x, y = world(u, v)
@@ -459,7 +464,9 @@ def build_way(occ, through_wall=False):
         if not opening(u):
             lo, hi = edges(u)
             for (vv, side) in ((lo, -1.0), (hi, 1.0)):
-                p.add_module("WL_Ground_Kerb_Run", u, vv + side * 160.0, PAVING_TOP, 90.0, cull=CULL_NEAR,
+                # yaw 0: the run's length is its local X, which yaw 0 lays ALONG the way (it was 90, which
+                # stood every kerb run across the verge like a bench -- the same misreading as the plates)
+                p.add_module("WL_Ground_Kerb_Run", u, vv + side * 160.0, PAVING_TOP, 0.0, cull=CULL_NEAR,
                              collide=False, margin=40.0, layer="paved", layers=("existing", "solid"))
         u += run
     flowers = ("WL_Flower_Rose_Run", "WL_Flower_Lavender_Run", "WL_Flower_Daisy_Run")

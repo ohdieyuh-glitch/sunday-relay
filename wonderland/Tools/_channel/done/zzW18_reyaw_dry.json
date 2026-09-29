@@ -1,0 +1,39 @@
+{
+ "name": "zzW18_reyaw_dry",
+ "started": "2026-09-28 22:53:50",
+ "status": "dry run: 705 instances in 65 batches would turn",
+ "dry": true,
+ "map_dirty_before": [],
+ "found": {
+  "W270G/kerb": [
+   16,
+   168
+  ],
+  "W270G/plate": [
+   4,
+   49
+  ],
+  "W270N/plate": [
+   4,
+   93
+  ],
+  "W270S/kerb": [
+   24,
+   160
+  ],
+  "W270S/plate": [
+   13,
+   142
+  ],
+  "W270T/plate": [
+   4,
+   93
+  ]
+ },
+ "record": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\WorldDesign\\Wedges\\w270_reyaw_record.json",
+ "instances": 705,
+ "dirty": [],
+ "finished": "2026-09-28 22:53:51",
+ "seconds": 1.16,
+ "log": ""
+}

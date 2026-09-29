@@ -220,8 +220,11 @@ def build(pass_id, cfg):
         for c in range(c0, c1):
             v = (c + 0.5) * PLATE["len_x"]
             for j in range(row0, rows):
+                # YAW 90, NOT 0: the plate's 1,440 side is its LOCAL X, and yaw 0 lays local X ALONG the band -- as
+                # applied until 2026-09-28, when every band avenue was 7.4 m paving strips with 7 m of lawn between
+                # (columns stand 1,440 apart ACROSS). Re-yawed in place by zc_floor_reyaw; this makes a re-run agree.
                 add(key, PLATE["mesh"], material, band_u0 + PLATE["len_y"] * (j + 0.5), v,
-                    PAVING_TOP - PLATE["top_local"], 0.0, cull=CULL_FAR, collides=True, shadow=False)
+                    PAVING_TOP - PLATE["top_local"], 90.0, cull=CULL_FAR, collides=True, shadow=False)
 
     pave(-1, 1, mats["paving_warm"], "Avenue")
     pave(-3, -1, mats["paving"], "CourtBand")
@@ -236,8 +239,10 @@ def build(pass_id, cfg):
     n = int((U1 - band_u0 - PLATE["len_y"] * 4) // run)
     for side in (-1.0, 1.0):
         for i in range(n):
+            # yaw 0: the run's 800 length is its local X, which yaw 0 lays ALONG the band (it was 90: across the
+            # verge). NOTE its local Y is -62..+257, not centred, so at +/-FLOOR_HALF it sits ~1 m off the edge line.
             add_module("WL_Ground_Kerb_Run", band_u0 + PLATE["len_y"] * 4 + run * (i + 0.5),
-                       side * FLOOR_HALF, PAVING_TOP, 90.0, cull=CULL_NEAR, collide=False)
+                       side * FLOOR_HALF, PAVING_TOP, 0.0, cull=CULL_NEAR, collide=False)
     tuft = KIT["WL_Garden_Grass_Tuft"]["parts"][0]
     u = band_u0 + PLATE["len_y"] * 4
     while u < U1:

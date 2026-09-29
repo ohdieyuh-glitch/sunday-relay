@@ -1,0 +1,790 @@
+{
+ "reason": "terrace plates +90 / kerb runs -90: the axis misreading in w270_rear_seam.py and nation_band.py (see zc_floor_reyaw.py)",
+ "undo": "run zc_floor_reyaw with each delta negated and APPLIED set to the new yaws",
+ "applied": true,
+ "passes": [
+  "W270S",
+  "W270N",
+  "W270T",
+  "W270G",
+  "NC03",
+  "TQ03",
+  "IC03"
+ ],
+ "batches": [
+  {
+   "label": "IC03_IC03_WorkBlock",
+   "pass": "IC03",
+   "kind": "plate",
+   "instances": 252,
+   "old_yaw": 90.0,
+   "new_yaw": 180.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/YF/BU5F64FCFKRE5EH3GMYUFN"
+  },
+  {
+   "label": "IC03_IC03_Avenue",
+   "pass": "IC03",
+   "kind": "plate",
+   "instances": 92,
+   "old_yaw": 90.0,
+   "new_yaw": 180.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/ZE/GO35BWNZV4JXK9CXU6MHSU"
+  },
+  {
+   "label": "IC03_IC03_CourtBand",
+   "pass": "IC03",
+   "kind": "plate",
+   "instances": 184,
+   "old_yaw": 90.0,
+   "new_yaw": 180.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/L6/UICWW073D9KZ1EKFPR3F4C"
+  },
+  {
+   "label": "IC03_IC03_Ground_Kerb_Run_paving_warm",
+   "pass": "IC03",
+   "kind": "kerb",
+   "instances": 76,
+   "old_yaw": 180.0,
+   "new_yaw": 90.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/0/7I/FYSHAJ1GDM3FYMDBIZ48JT"
+  },
+  {
+   "label": "IC03_IC03_Ground_Kerb_Run_paving_shade",
+   "pass": "IC03",
+   "kind": "kerb",
+   "instances": 76,
+   "old_yaw": 180.0,
+   "new_yaw": 90.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/VC/QDIZOV9CD7DI7K8FGVLS2I"
+  },
+  {
+   "label": "IC03_IC03_Ground_Kerb_Run_paving",
+   "pass": "IC03",
+   "kind": "kerb",
+   "instances": 76,
+   "old_yaw": 180.0,
+   "new_yaw": 90.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/6D/YZP4EII57OHLLI6G8AUXUS"
+  },
+  {
+   "label": "IC03_IC03_Ground_Kerb_Run_kerb",
+   "pass": "IC03",
+   "kind": "kerb",
+   "instances": 76,
+   "old_yaw": 180.0,
+   "new_yaw": 90.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/8Y/BDGUUQ5M62T1PMVQK1M3QW"
+  },
+  {
+   "label": "W270G_W270G_Way_t-1_-5",
+   "pass": "W270G",
+   "kind": "plate",
+   "instances": 19,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/3/49/B3ZIIAJN0VPM0N1WMS4BOH"
+  },
+  {
+   "label": "W270S_W270S_Way_t-1_-4",
+   "pass": "W270S",
+   "kind": "plate",
+   "instances": 27,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/FZ/UCWH8EPNFK2LTC4PIX6JQT"
+  },
+  {
+   "label": "W270S_W270S_Way_t-1_-5",
+   "pass": "W270S",
+   "kind": "plate",
+   "instances": 4,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/B/72/PU46DUCUD0CVWZKY3MAQNL"
+  },
+  {
+   "label": "W270S_W270S_Way_t-1_-3",
+   "pass": "W270S",
+   "kind": "plate",
+   "instances": 12,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/D/5Y/46L82M6XRL3GYK66GZ0UTN"
+  },
+  {
+   "label": "W270S_W270S_Way_t0_-4",
+   "pass": "W270S",
+   "kind": "plate",
+   "instances": 25,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/TF/4EFGO31GCYRW4TSXD10CUT"
+  },
+  {
+   "label": "W270S_W270S_Plaza_t0_-4",
+   "pass": "W270S",
+   "kind": "plate",
+   "instances": 12,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/8/90/OX1RO9AWIJWLFTCRLTIY14"
+  },
+  {
+   "label": "W270G_W270G_Way_t0_-5",
+   "pass": "W270G",
+   "kind": "plate",
+   "instances": 23,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/MO/P3QX3TLLZEP0MLBXRFPJJN"
+  },
+  {
+   "label": "W270T_W270T_Lane_t0_-4",
+   "pass": "W270T",
+   "kind": "plate",
+   "instances": 7,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/9Q/IYHHXXB8L8FBO3BHZLK752"
+  },
+  {
+   "label": "W270S_W270S_Way_t0_-5",
+   "pass": "W270S",
+   "kind": "plate",
+   "instances": 4,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/65/47W12JAY9V5TI9ODUH1MI4"
+  },
+  {
+   "label": "W270T_W270T_Lane_t0_-5",
+   "pass": "W270T",
+   "kind": "plate",
+   "instances": 6,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/3Y/8UT85BTKJQDHFBJGVIOLMP"
+  },
+  {
+   "label": "W270S_W270S_Plaza_t0_-5",
+   "pass": "W270S",
+   "kind": "plate",
+   "instances": 4,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/D/EH/K5QLP67ZZ7HYT77JRWBMR5"
+  },
+  {
+   "label": "W270T_W270T_Court_t0_-4",
+   "pass": "W270T",
+   "kind": "plate",
+   "instances": 40,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/4/PB/MVSUYUGLGCHOLHH5ABISH8"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_kerb_t-1_-5",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 15,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/9X/DPFM2MDFRS1MNUE3LA0OQ0"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_paving_t-1_-5",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 15,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/8/Y5/H74MN3VD7KA9IGZWO64PG1"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_paving_shade_t-1_-5",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 15,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/BK/A08J6UIJ2XTM7D2P0PI4H7"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_paving_warm_t-1_-5",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 15,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/E/O2/WAD6RBVTAPCL3CD2RKFMWK"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_kerb_t0_-4",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 7,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/0/8X/88TI1PV7UM0RH7EKYE8CEV"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_t-1_-4",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 7,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/0/AF/LKHN7PINFO2W10NW7UYHQO"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_t0_-4",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 7,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/64/AHA3MUYJ6R89UIPESGNJHK"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_warm_t0_-4",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 7,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/B9/J35W609CLLB3XNLHCCKSJT"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_warm_t-1_-4",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 7,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/XT/X5SLFI1D498V87I3EJXA0L"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_shade_t0_-4",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 7,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/2Q/5MU4IAL4VOUCM29XSBDC7H"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_shade_t-1_-4",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 7,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/HT/648NMRGQRR8B2AYXQKVJUM"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_kerb_t-1_-4",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 7,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/KD/Q0MQ3HCJXYNHV47QUEV2SF"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_shade_t0_-3",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 11,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/G3/H4GHQFDTI0QWZPRMSOCRTA"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_warm_t-1_-3",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 11,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/GK/VP36SZZ91XC52E4AK1QXPA"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_t0_-3",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 11,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/3/DN/L1BEKACFXTGKM9CDBKQDHV"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_t-1_-3",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 11,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/IW/1GFFP5W9QP55DQVX2SEBKO"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_shade_t-1_-3",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 11,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/TG/2IADJ1ANLFR266V6M4VV7Q"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_warm_t0_-3",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 11,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/Z8/42R6KI1WN21P6QJ5QFL8F3"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_kerb_t0_-3",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 11,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/28/85T2YL5IR4V6BSWMCB2L0W"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_kerb_t-1_-3",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 11,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/E/U9/MTW5LD4UNY9ZCI03IHCIZV"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_kerb_t0_-5",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 19,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/0/C1/ENN2XTFUQBDJV42RB9LLTD"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_paving_t0_-5",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 19,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/E1/Z6XTPTPOT15CBHM3ZNZKTN"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_paving_shade_t0_-5",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 19,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/I0/2OH57FC2YCDBFIVTSPJQYO"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_paving_warm_t0_-5",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 19,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/W5/JLFSZCEDL6JHKZ3T6H3IRL"
+  },
+  {
+   "label": "W270S_W270S_Plaza_t-1_-4",
+   "pass": "W270S",
+   "kind": "plate",
+   "instances": 12,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/A5/OP5KF2B27ZTM0TIUJ0GXF5"
+  },
+  {
+   "label": "W270N_W270N_Lane_t-1_-5",
+   "pass": "W270N",
+   "kind": "plate",
+   "instances": 6,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/0/4E/PRIF8RW3U5EOR5Y4CMHBV5"
+  },
+  {
+   "label": "W270S_W270S_Plaza_t-1_-5",
+   "pass": "W270S",
+   "kind": "plate",
+   "instances": 4,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/DP/M79XMGCKSFNAN2Q56733FF"
+  },
+  {
+   "label": "W270N_W270N_Lane_t-1_-4",
+   "pass": "W270N",
+   "kind": "plate",
+   "instances": 7,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/5H/0SN6356V32ZG61LJSHN7LT"
+  },
+  {
+   "label": "W270N_W270N_Court_t-1_-4",
+   "pass": "W270N",
+   "kind": "plate",
+   "instances": 40,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/8/S3/L2EJUU72I0TT6G1DN1YA6J"
+  },
+  {
+   "label": "TQ03_TQ03_CourtBand",
+   "pass": "TQ03",
+   "kind": "plate",
+   "instances": 184,
+   "old_yaw": 330.0,
+   "new_yaw": 60.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/ZI/QF41SY0UKH7ERB944R9FQ1"
+  },
+  {
+   "label": "TQ03_TQ03_Avenue",
+   "pass": "TQ03",
+   "kind": "plate",
+   "instances": 92,
+   "old_yaw": 330.0,
+   "new_yaw": 60.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/PU/PKV3738NTNQI6M62308RCX"
+  },
+  {
+   "label": "TQ03_TQ03_WorkBlock",
+   "pass": "TQ03",
+   "kind": "plate",
+   "instances": 252,
+   "old_yaw": 330.0,
+   "new_yaw": 60.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/CY/8JF46YV4GT5VRX26SIIESE"
+  },
+  {
+   "label": "TQ03_TQ03_Ground_Kerb_Run_paving_warm",
+   "pass": "TQ03",
+   "kind": "kerb",
+   "instances": 76,
+   "old_yaw": 60.0,
+   "new_yaw": 330.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/3M/RKBYDEZ6PD4Q46JQKS7DVZ"
+  },
+  {
+   "label": "TQ03_TQ03_Ground_Kerb_Run_paving_shade",
+   "pass": "TQ03",
+   "kind": "kerb",
+   "instances": 76,
+   "old_yaw": 60.0,
+   "new_yaw": 330.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/ZE/F8TWE8VABW7HL5HFT79A5G"
+  },
+  {
+   "label": "TQ03_TQ03_Ground_Kerb_Run_paving",
+   "pass": "TQ03",
+   "kind": "kerb",
+   "instances": 76,
+   "old_yaw": 60.0,
+   "new_yaw": 330.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/O2/B8ZW3BCGB5XZAZEENQTT1D"
+  },
+  {
+   "label": "TQ03_TQ03_Ground_Kerb_Run_kerb",
+   "pass": "TQ03",
+   "kind": "kerb",
+   "instances": 76,
+   "old_yaw": 60.0,
+   "new_yaw": 330.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/8/5H/NOH0T2GBU20947E553HVL7"
+  },
+  {
+   "label": "NC03_NC03_WorkBlock",
+   "pass": "NC03",
+   "kind": "plate",
+   "instances": 252,
+   "old_yaw": 210.0,
+   "new_yaw": 300.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/3O/729M5NTY0A393WQR77J7FY"
+  },
+  {
+   "label": "NC03_NC03_Avenue",
+   "pass": "NC03",
+   "kind": "plate",
+   "instances": 92,
+   "old_yaw": 210.0,
+   "new_yaw": 300.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/OA/Y4AVK7GXYGL2F3535VADO7"
+  },
+  {
+   "label": "NC03_NC03_CourtBand",
+   "pass": "NC03",
+   "kind": "plate",
+   "instances": 184,
+   "old_yaw": 210.0,
+   "new_yaw": 300.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/1J/GQVLSPCMOYNDLZU2CV0XGW"
+  },
+  {
+   "label": "NC03_NC03_Ground_Kerb_Run_paving_shade",
+   "pass": "NC03",
+   "kind": "kerb",
+   "instances": 76,
+   "old_yaw": 300.0,
+   "new_yaw": 210.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/4/6E/5MSANK89ZHQO4WTVU15RKJ"
+  },
+  {
+   "label": "NC03_NC03_Ground_Kerb_Run_paving_warm",
+   "pass": "NC03",
+   "kind": "kerb",
+   "instances": 76,
+   "old_yaw": 300.0,
+   "new_yaw": 210.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/FC/QSOQE9LGQU9RLOV98TYROQ"
+  },
+  {
+   "label": "NC03_NC03_Ground_Kerb_Run_paving",
+   "pass": "NC03",
+   "kind": "kerb",
+   "instances": 76,
+   "old_yaw": 300.0,
+   "new_yaw": 210.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/CX/VTVBXVN8PO65ZL1X7G3Q4L"
+  },
+  {
+   "label": "NC03_NC03_Ground_Kerb_Run_kerb",
+   "pass": "NC03",
+   "kind": "kerb",
+   "instances": 76,
+   "old_yaw": 300.0,
+   "new_yaw": 210.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/E/LB/19Q75M9C1COFN7HY54G4UV"
+  },
+  {
+   "label": "W270G_W270G_Way_t-1_-6",
+   "pass": "W270G",
+   "kind": "plate",
+   "instances": 2,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/7H/OD4B9B9BQ7BB8OI4F7RFYB"
+  },
+  {
+   "label": "W270S_W270S_Way_t-1_-6",
+   "pass": "W270S",
+   "kind": "plate",
+   "instances": 11,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/58/796U064LOGT1TAUW0JWPAZ"
+  },
+  {
+   "label": "W270N_W270N_Court_t-1_-6",
+   "pass": "W270N",
+   "kind": "plate",
+   "instances": 40,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/O0/O7TN56NRKJVPQYX4K5IAHG"
+  },
+  {
+   "label": "W270S_W270S_Plaza_t-1_-6",
+   "pass": "W270S",
+   "kind": "plate",
+   "instances": 8,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/DG/OWOVFBPWF60W7V7VOG5X5D"
+  },
+  {
+   "label": "W270T_W270T_Court_t0_-6",
+   "pass": "W270T",
+   "kind": "plate",
+   "instances": 40,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/CD/HVOR1MOCLXGH983J9NKA2U"
+  },
+  {
+   "label": "W270S_W270S_Way_t0_-6",
+   "pass": "W270S",
+   "kind": "plate",
+   "instances": 11,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/87/FAC8XR8Q20TI6S3YJX31F1"
+  },
+  {
+   "label": "W270G_W270G_Way_t0_-6",
+   "pass": "W270G",
+   "kind": "plate",
+   "instances": 5,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/YH/90U1MLRGD1UABCXNPN4XTB"
+  },
+  {
+   "label": "W270S_W270S_Plaza_t0_-6",
+   "pass": "W270S",
+   "kind": "plate",
+   "instances": 8,
+   "old_yaw": 270.0,
+   "new_yaw": 0.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/F/13/BEMN51SLBORR2O21RQB98N"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_t-1_-6",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 2,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/0/HH/03SRO1Y4PZGYVDDTKGA867"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_kerb_t-1_-6",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 3,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/K8/VH9LVHBSKHW5MVVU4UG355"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_warm_t-1_-6",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 2,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/WN/3A3K3H3EBZC2PLLW0WAC6O"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_shade_t-1_-6",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 2,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/Y7/Y8USFHAHFKHE8OVBVRANS6"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_paving_t-1_-6",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 3,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/M5/4BVNQ5WTZFWOX7SD2TI57M"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_paving_warm_t-1_-6",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 3,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/H5/BUP3HYTXDO5N6A4BVAGHX1"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_paving_shade_t-1_-6",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 3,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/RN/IIUMXF5V5G0YNB5TSGIO83"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_kerb_t-1_-6",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 2,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/E/P7/H808WIQ5FBALJ7MBJF4E9U"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_kerb_t0_-6",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 5,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/F8/WMC9MXBY81EHZ2XFFRFZ3B"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_t0_-6",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 2,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/I2/HMYS32QCPKI0X9DOOI82L8"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_paving_t0_-6",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 5,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/KE/9T32BZ3KR6Z3D58DBL2ZAO"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_paving_warm_t0_-6",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 5,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/46/2M8BW69UJ7UIUZJIS3R4HU"
+  },
+  {
+   "label": "W270G_W270G_Ground_Kerb_Run_paving_shade_t0_-6",
+   "pass": "W270G",
+   "kind": "kerb",
+   "instances": 5,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/P9/W201BMY5F3NUWFXTHHN7MM"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_shade_t0_-6",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 2,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/B/G5/HQE2K5VV1JZVK412PJWFBB"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_paving_warm_t0_-6",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 2,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/B/L0/4OBBNGXMX5SS65F6YRA47V"
+  },
+  {
+   "label": "W270S_W270S_Ground_Kerb_Run_kerb_t0_-6",
+   "pass": "W270S",
+   "kind": "kerb",
+   "instances": 2,
+   "old_yaw": 0.0,
+   "new_yaw": 270.0,
+   "package": "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/O3/R3RI4O340FZ1R87ZCV1UWR"
+  }
+ ]
+}

@@ -20,6 +20,7 @@ import time
 
 L = unreal.WonderlandUiTestLibrary
 CAPSULE_R, CAPSULE_HH = 45.0, 89.0
+PAVING_TOP_Z = 12.0          # the way's paving top; the floor profile traces from 5 m above it
 STANDS = [
     # name, x, y, expected floor z (+12 paving, -14 lawn)
     ("S01_rear_path", -720.0, -52500.0, 12.0),
@@ -195,10 +196,29 @@ def _prove(ues, les):
         if p is None:
             RESULT["died_at"] = "floor %.0f m" % (seg / 100.0)
             break
+        # THE FLOOR IS TRACED FROM 5 m ABOVE THE PAVING, NOT FROM 30 m. From 30 m the trace met the CROWNS of
+        # the arches the way passes under (the rose arches at 845 and 1,025 m, 13.8 m; the ceremonial arch at
+        # 907-913 m, 25.8 m) and zzW15 logged them as 7 "steps" in a floor a walker never leaves.
+        # AND THE STRETCH IS READ UNTIL IT HOLDS STILL: zzW15 read 511-561 m as lawn, straight after the jump
+        # back from 1,030 m, while its own stand S01 at 525 m stood on the paving. Two readings a second apart
+        # that agree, or six tries.
+        us = []
         u = seg
         while u < min(seg + 6000.0, 111800.0):
+            us.append(u)
+            u += 200.0
+        reading, settled = None, False
+        for _ in range(6):
+            again = [down(line_x(uu), -uu, z_top=PAVING_TOP_Z + 500.0, ignore=p) for uu in us]
+            if again == reading:
+                settled = True
+                break
+            reading = again
+            yield 1.0
+        if not settled:
+            RESULT.setdefault("floor_unsettled_m", []).append(round(seg / 100.0))
+        for u, z in zip(us, reading):
             x = line_x(u)
-            z = down(x, -u, ignore=p)
             floor.append((round(u / 100.0, 1), None if z is None else round(z, 1)))
             if z is None or z < -1000.0:
                 gaps.append(round(u / 100.0, 1))
@@ -222,7 +242,6 @@ def _prove(ues, les):
                     if hit is not None:
                         t = hit.to_tuple()
                         blocked.append((round(u / 100.0, 1), t[9].get_actor_label() if t[9] is not None else "?"))
-            u += 200.0
         seg += 6000.0
     RESULT["floor_samples"] = len(floor)
     RESULT["floor_gaps_m"] = gaps

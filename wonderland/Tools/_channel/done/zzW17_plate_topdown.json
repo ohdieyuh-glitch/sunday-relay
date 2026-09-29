@@ -1,0 +1,35 @@
+{
+ "name": "zzW17_plate_topdown",
+ "started": "2026-09-28 22:40:32",
+ "status": "done",
+ "shots": [
+  {
+   "camera": "topdown_w270_way_u700",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\topdown_w270_way_u700__plate_check.png",
+   "ok": true
+  },
+  {
+   "camera": "topdown_w270_rear_path_u560",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\topdown_w270_rear_path_u560__plate_check.png",
+   "ok": true
+  },
+  {
+   "camera": "topdown_ic03_avenue_900m",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\topdown_ic03_avenue_900m__plate_check.png",
+   "ok": true
+  },
+  {
+   "camera": "topdown_tq03_avenue_900m",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\topdown_tq03_avenue_900m__plate_check.png",
+   "ok": true
+  },
+  {
+   "camera": "ortho_w270_way_u640_760",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\ortho_w270_way_u640_760__plate_check.png",
+   "ok": true
+  }
+ ],
+ "finished": "2026-09-28 22:40:43",
+ "seconds": 11.01,
+ "log": ""
+}

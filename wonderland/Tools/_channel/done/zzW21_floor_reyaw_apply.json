@@ -1,0 +1,161 @@
+{
+ "name": "zzW21_floor_reyaw_apply",
+ "started": "2026-09-28 23:03:49",
+ "status": "re-yawed 3201 instances in 86 batches (saved)",
+ "dry": false,
+ "passes": [
+  "W270S",
+  "W270N",
+  "W270T",
+  "W270G",
+  "NC03",
+  "TQ03",
+  "IC03"
+ ],
+ "map_dirty_before": [],
+ "found": {
+  "IC03/kerb": [
+   4,
+   304
+  ],
+  "IC03/plate": [
+   3,
+   528
+  ],
+  "NC03/kerb": [
+   4,
+   304
+  ],
+  "NC03/plate": [
+   3,
+   528
+  ],
+  "TQ03/kerb": [
+   4,
+   304
+  ],
+  "TQ03/plate": [
+   3,
+   528
+  ],
+  "W270G/kerb": [
+   16,
+   168
+  ],
+  "W270G/plate": [
+   4,
+   49
+  ],
+  "W270N/plate": [
+   4,
+   93
+  ],
+  "W270S/kerb": [
+   24,
+   160
+  ],
+  "W270S/plate": [
+   13,
+   142
+  ],
+  "W270T/plate": [
+   4,
+   93
+  ]
+ },
+ "record": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\WorldDesign\\Wedges\\floor_reyaw_record.json",
+ "instances": 3201,
+ "dirty": [
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/YF/BU5F64FCFKRE5EH3GMYUFN",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/ZE/GO35BWNZV4JXK9CXU6MHSU",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/L6/UICWW073D9KZ1EKFPR3F4C",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/8Y/BDGUUQ5M62T1PMVQK1M3QW",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/VC/QDIZOV9CD7DI7K8FGVLS2I",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/6D/YZP4EII57OHLLI6G8AUXUS",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/0/7I/FYSHAJ1GDM3FYMDBIZ48JT",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/3/49/B3ZIIAJN0VPM0N1WMS4BOH",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/FZ/UCWH8EPNFK2LTC4PIX6JQT",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/B/72/PU46DUCUD0CVWZKY3MAQNL",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/D/5Y/46L82M6XRL3GYK66GZ0UTN",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/TF/4EFGO31GCYRW4TSXD10CUT",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/8/90/OX1RO9AWIJWLFTCRLTIY14",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/MO/P3QX3TLLZEP0MLBXRFPJJN",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/9Q/IYHHXXB8L8FBO3BHZLK752",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/65/47W12JAY9V5TI9ODUH1MI4",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/3Y/8UT85BTKJQDHFBJGVIOLMP",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/D/EH/K5QLP67ZZ7HYT77JRWBMR5",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/4/PB/MVSUYUGLGCHOLHH5ABISH8",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/9X/DPFM2MDFRS1MNUE3LA0OQ0",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/8/Y5/H74MN3VD7KA9IGZWO64PG1",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/BK/A08J6UIJ2XTM7D2P0PI4H7",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/E/O2/WAD6RBVTAPCL3CD2RKFMWK",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/0/8X/88TI1PV7UM0RH7EKYE8CEV",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/0/AF/LKHN7PINFO2W10NW7UYHQO",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/64/AHA3MUYJ6R89UIPESGNJHK",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/B9/J35W609CLLB3XNLHCCKSJT",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/XT/X5SLFI1D498V87I3EJXA0L",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/2Q/5MU4IAL4VOUCM29XSBDC7H",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/HT/648NMRGQRR8B2AYXQKVJUM",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/KD/Q0MQ3HCJXYNHV47QUEV2SF",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/G3/H4GHQFDTI0QWZPRMSOCRTA",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/GK/VP36SZZ91XC52E4AK1QXPA",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/3/DN/L1BEKACFXTGKM9CDBKQDHV",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/IW/1GFFP5W9QP55DQVX2SEBKO",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/TG/2IADJ1ANLFR266V6M4VV7Q",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/Z8/42R6KI1WN21P6QJ5QFL8F3",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/28/85T2YL5IR4V6BSWMCB2L0W",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/E/U9/MTW5LD4UNY9ZCI03IHCIZV",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/0/C1/ENN2XTFUQBDJV42RB9LLTD",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/E1/Z6XTPTPOT15CBHM3ZNZKTN",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/I0/2OH57FC2YCDBFIVTSPJQYO",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/W5/JLFSZCEDL6JHKZ3T6H3IRL",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/A5/OP5KF2B27ZTM0TIUJ0GXF5",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/0/4E/PRIF8RW3U5EOR5Y4CMHBV5",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/DP/M79XMGCKSFNAN2Q56733FF",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/5H/0SN6356V32ZG61LJSHN7LT",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/8/S3/L2EJUU72I0TT6G1DN1YA6J",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/ZI/QF41SY0UKH7ERB944R9FQ1",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/PU/PKV3738NTNQI6M62308RCX",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/CY/8JF46YV4GT5VRX26SIIESE",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/3M/RKBYDEZ6PD4Q46JQKS7DVZ",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/ZE/F8TWE8VABW7HL5HFT79A5G",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/O2/B8ZW3BCGB5XZAZEENQTT1D",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/8/5H/NOH0T2GBU20947E553HVL7",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/3O/729M5NTY0A393WQR77J7FY",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/OA/Y4AVK7GXYGL2F3535VADO7",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/1J/GQVLSPCMOYNDLZU2CV0XGW",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/4/6E/5MSANK89ZHQO4WTVU15RKJ",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/FC/QSOQE9LGQU9RLOV98TYROQ",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/CX/VTVBXVN8PO65ZL1X7G3Q4L",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/E/LB/19Q75M9C1COFN7HY54G4UV",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/7H/OD4B9B9BQ7BB8OI4F7RFYB",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/58/796U064LOGT1TAUW0JWPAZ",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/O0/O7TN56NRKJVPQYX4K5IAHG",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/DG/OWOVFBPWF60W7V7VOG5X5D",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/CD/HVOR1MOCLXGH983J9NKA2U",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/87/FAC8XR8Q20TI6S3YJX31F1",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/YH/90U1MLRGD1UABCXNPN4XTB",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/F/13/BEMN51SLBORR2O21RQB98N",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/0/HH/03SRO1Y4PZGYVDDTKGA867",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/K8/VH9LVHBSKHW5MVVU4UG355",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/WN/3A3K3H3EBZC2PLLW0WAC6O",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/Y7/Y8USFHAHFKHE8OVBVRANS6",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/M5/4BVNQ5WTZFWOX7SD2TI57M",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/H5/BUP3HYTXDO5N6A4BVAGHX1",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/RN/IIUMXF5V5G0YNB5TSGIO83",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/E/P7/H808WIQ5FBALJ7MBJF4E9U",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/1/F8/WMC9MXBY81EHZ2XFFRFZ3B",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/I2/HMYS32QCPKI0X9DOOI82L8",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/KE/9T32BZ3KR6Z3D58DBL2ZAO",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/46/2M8BW69UJ7UIUZJIS3R4HU",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/9/P9/W201BMY5F3NUWFXTHHN7MM",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/B/G5/HQE2K5VV1JZVK412PJWFBB",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/B/L0/4OBBNGXMX5SS65F6YRA47V",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/O3/R3RI4O340FZ1R87ZCV1UWR"
+ ],
+ "saved": true,
+ "dirty_after_save": [],
+ "finished": "2026-09-28 23:04:18",
+ "seconds": 29.55,
+ "log": ""
+}

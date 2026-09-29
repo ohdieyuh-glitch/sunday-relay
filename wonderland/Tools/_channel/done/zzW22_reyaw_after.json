@@ -1,0 +1,40 @@
+{
+ "name": "zzW22_reyaw_after",
+ "started": "2026-09-28 23:06:43",
+ "status": "done",
+ "shots": [
+  {
+   "camera": "reyaw_ic03_avenue_1000m",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\reyaw_ic03_avenue_1000m__after_reyaw.png",
+   "ok": true
+  },
+  {
+   "camera": "reyaw_ic03_band_1000m_wide",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\reyaw_ic03_band_1000m_wide__after_reyaw.png",
+   "ok": true
+  },
+  {
+   "camera": "reyaw_tq03_avenue_1030m",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\reyaw_tq03_avenue_1030m__after_reyaw.png",
+   "ok": true
+  },
+  {
+   "camera": "reyaw_nc03_avenue_1000m",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\reyaw_nc03_avenue_1000m__after_reyaw.png",
+   "ok": true
+  },
+  {
+   "camera": "reyaw_w270_way_u700",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\reyaw_w270_way_u700__after_reyaw.png",
+   "ok": true
+  },
+  {
+   "camera": "reyaw_w270_rear_path_u560",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\reyaw_w270_rear_path_u560__after_reyaw.png",
+   "ok": true
+  }
+ ],
+ "finished": "2026-09-28 23:07:07",
+ "seconds": 24.2,
+ "log": ""
+}

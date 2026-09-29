@@ -1,0 +1,831 @@
+{
+ "name": "zzW15_w270_proof",
+ "started": "2026-09-28 22:34:21",
+ "status": "measured (see verdict)",
+ "day_minutes_found": 24.0,
+ "stands": [
+  {
+   "name": "S01_rear_path",
+   "x": -720.0,
+   "y": -52500.0,
+   "surface_traced": 12.000024318695068,
+   "landed": true,
+   "feet_z": 12.0,
+   "floor_expected": 12.0,
+   "pass": true,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "S02_march_plaza",
+   "x": 0.0,
+   "y": -64500.0,
+   "surface_traced": -14.0000581741333,
+   "landed": true,
+   "feet_z": -14.0,
+   "floor_expected": 12.0,
+   "pass": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "S03_noctis_court_A",
+   "x": -5000.0,
+   "y": -71500.0,
+   "surface_traced": 12.000024318695068,
+   "landed": true,
+   "feet_z": 12.0,
+   "floor_expected": 12.0,
+   "pass": true,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "S04_tartarus_court_A",
+   "x": 5000.0,
+   "y": -71500.0,
+   "surface_traced": 12.000024318695068,
+   "landed": true,
+   "feet_z": 12.0,
+   "floor_expected": 12.0,
+   "pass": true,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "S05_clock_plaza",
+   "x": -2000.0,
+   "y": -78500.0,
+   "surface_traced": 12.000024318695068,
+   "landed": true,
+   "feet_z": 12.0,
+   "floor_expected": 12.0,
+   "pass": true,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "S06_noctis_street",
+   "x": -5140.0,
+   "y": -80500.0,
+   "surface_traced": 12.000024318695068,
+   "landed": true,
+   "feet_z": 12.0,
+   "floor_expected": 12.0,
+   "pass": true,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "S07_tartarus_street",
+   "x": 5140.0,
+   "y": -80500.0,
+   "surface_traced": 12.000024318695068,
+   "landed": true,
+   "feet_z": 12.0,
+   "floor_expected": 12.0,
+   "pass": true,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "S08_exchange_plaza",
+   "x": -2200.0,
+   "y": -105500.0,
+   "surface_traced": 12.000024318695068,
+   "landed": true,
+   "feet_z": 12.0,
+   "floor_expected": 12.0,
+   "pass": true,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "S09_noctis_court_B",
+   "x": -6480.0,
+   "y": -107500.0,
+   "surface_traced": 12.000024318695068,
+   "landed": true,
+   "feet_z": 12.0,
+   "floor_expected": 12.0,
+   "pass": true,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "S10_tartarus_court_B",
+   "x": 6480.0,
+   "y": -107500.0,
+   "surface_traced": 12.000024318695068,
+   "landed": true,
+   "feet_z": 12.0,
+   "floor_expected": 12.0,
+   "pass": true,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "S11_frontier_end",
+   "x": 0.0,
+   "y": -111300.0,
+   "surface_traced": -14.0000581741333,
+   "landed": true,
+   "feet_z": -14.0,
+   "floor_expected": 12.0,
+   "pass": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "S12_noctis_garden_lawn",
+   "x": -12400.0,
+   "y": -73500.0,
+   "surface_traced": -14.0000581741333,
+   "landed": true,
+   "feet_z": -14.0,
+   "floor_expected": -14.0,
+   "pass": true,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "S13_tartarus_meadow_lawn",
+   "x": 22000.0,
+   "y": -79000.0,
+   "surface_traced": -14.0000581741333,
+   "landed": true,
+   "feet_z": -14.0,
+   "floor_expected": -14.0,
+   "pass": true,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "G01_gate_entry",
+   "x": 0.0,
+   "y": -85500.0,
+   "surface_traced": -14.0000581741333,
+   "landed": true,
+   "feet_z": -14.0,
+   "floor_expected": 12.0,
+   "pass": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "G02_gate_a",
+   "x": 0.0,
+   "y": -89000.0,
+   "surface_traced": -14.0000581741333,
+   "landed": true,
+   "feet_z": -14.0,
+   "floor_expected": 12.0,
+   "pass": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "G03_gate_b",
+   "x": 0.0,
+   "y": -93800.0,
+   "surface_traced": -14.0000581741333,
+   "landed": true,
+   "feet_z": -14.0,
+   "floor_expected": 12.0,
+   "pass": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "G04_gate_c",
+   "x": 720.0,
+   "y": -99000.0,
+   "surface_traced": 12.000024318695068,
+   "landed": true,
+   "feet_z": 12.0,
+   "floor_expected": 12.0,
+   "pass": true,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  },
+  {
+   "name": "G05_gate_exit",
+   "x": 0.0,
+   "y": -103000.0,
+   "surface_traced": -14.0000581741333,
+   "landed": true,
+   "feet_z": -14.0,
+   "floor_expected": 12.0,
+   "pass": false,
+   "mode": "<MovementMode.MOVE_WALKING: 1>"
+  }
+ ],
+ "floor_samples": 304,
+ "floor_gaps_m": [],
+ "floor_unpaved": [
+  [
+   511.4,
+   -14.0
+  ],
+  [
+   513.4,
+   -14.0
+  ],
+  [
+   515.4,
+   -14.0
+  ],
+  [
+   517.4,
+   -14.0
+  ],
+  [
+   519.4,
+   -14.0
+  ],
+  [
+   521.4,
+   -14.0
+  ],
+  [
+   523.4,
+   -14.0
+  ],
+  [
+   525.4,
+   -14.0
+  ],
+  [
+   527.4,
+   -14.0
+  ],
+  [
+   529.4,
+   -14.0
+  ],
+  [
+   531.4,
+   -14.0
+  ],
+  [
+   533.4,
+   -14.0
+  ],
+  [
+   535.4,
+   -14.0
+  ],
+  [
+   537.4,
+   -14.0
+  ],
+  [
+   539.4,
+   -14.0
+  ],
+  [
+   541.4,
+   -14.0
+  ],
+  [
+   543.4,
+   -14.0
+  ],
+  [
+   545.4,
+   -14.0
+  ],
+  [
+   547.4,
+   -14.0
+  ],
+  [
+   549.4,
+   -14.0
+  ],
+  [
+   551.4,
+   -14.0
+  ],
+  [
+   553.4,
+   -14.0
+  ],
+  [
+   555.4,
+   -14.0
+  ],
+  [
+   557.4,
+   -14.0
+  ],
+  [
+   559.4,
+   -14.0
+  ],
+  [
+   561.4,
+   -14.0
+  ],
+  [
+   563.4,
+   -14.0
+  ],
+  [
+   565.4,
+   -14.0
+  ],
+  [
+   567.4,
+   -14.0
+  ],
+  [
+   569.4,
+   -14.0
+  ],
+  [
+   615.4,
+   -14.0
+  ],
+  [
+   617.4,
+   -14.0
+  ],
+  [
+   619.4,
+   -14.0
+  ],
+  [
+   621.4,
+   -14.0
+  ],
+  [
+   623.4,
+   -14.0
+  ],
+  [
+   625.4,
+   -14.0
+  ],
+  [
+   627.4,
+   -14.0
+  ],
+  [
+   629.4,
+   -14.0
+  ],
+  [
+   631.4,
+   -14.0
+  ],
+  [
+   633.4,
+   -14.0
+  ],
+  [
+   635.4,
+   -14.0
+  ],
+  [
+   637.4,
+   -14.0
+  ],
+  [
+   639.4,
+   -14.0
+  ],
+  [
+   641.4,
+   -14.0
+  ],
+  [
+   643.4,
+   -14.0
+  ],
+  [
+   645.4,
+   -14.0
+  ],
+  [
+   647.4,
+   -14.0
+  ],
+  [
+   649.4,
+   -14.0
+  ],
+  [
+   651.4,
+   -14.0
+  ],
+  [
+   653.4,
+   -14.0
+  ],
+  [
+   655.4,
+   -14.0
+  ],
+  [
+   657.4,
+   -14.0
+  ],
+  [
+   659.4,
+   -14.0
+  ],
+  [
+   661.4,
+   -14.0
+  ],
+  [
+   663.4,
+   -14.0
+  ],
+  [
+   665.4,
+   -14.0
+  ],
+  [
+   667.4,
+   -14.0
+  ],
+  [
+   669.4,
+   -14.0
+  ],
+  [
+   671.4,
+   -14.0
+  ],
+  [
+   673.4,
+   -14.0
+  ],
+  [
+   675.4,
+   -14.0
+  ],
+  [
+   677.4,
+   -14.0
+  ],
+  [
+   679.4,
+   -14.0
+  ],
+  [
+   681.4,
+   -14.0
+  ],
+  [
+   683.4,
+   -14.0
+  ],
+  [
+   685.4,
+   -14.0
+  ],
+  [
+   687.4,
+   -14.0
+  ],
+  [
+   689.4,
+   -14.0
+  ],
+  [
+   691.4,
+   -14.0
+  ],
+  [
+   693.4,
+   -14.0
+  ],
+  [
+   695.4,
+   -14.0
+  ],
+  [
+   697.4,
+   -14.0
+  ],
+  [
+   699.4,
+   -14.0
+  ],
+  [
+   701.4,
+   -14.0
+  ],
+  [
+   703.4,
+   -14.0
+  ],
+  [
+   705.4,
+   -14.0
+  ],
+  [
+   707.4,
+   -14.0
+  ],
+  [
+   709.4,
+   -14.0
+  ],
+  [
+   711.4,
+   -14.0
+  ],
+  [
+   713.4,
+   -14.0
+  ]
+ ],
+ "floor_unpaved_count": 197,
+ "floor_steps": [
+  [
+   845.4,
+   -14.0,
+   1378.4
+  ],
+  [
+   847.4,
+   1378.4,
+   -14.0
+  ],
+  [
+   907.4,
+   -14.0,
+   2582.0
+  ],
+  [
+   913.4,
+   2582.0,
+   2215.6
+  ],
+  [
+   915.4,
+   2215.6,
+   -14.0
+  ],
+  [
+   1025.4,
+   -14.0,
+   1378.4
+  ],
+  [
+   1027.4,
+   1378.4,
+   -14.0
+  ]
+ ],
+ "floor_profile_every_10m": [
+  [
+   511.4,
+   -14.0
+  ],
+  [
+   521.4,
+   -14.0
+  ],
+  [
+   531.4,
+   -14.0
+  ],
+  [
+   541.4,
+   -14.0
+  ],
+  [
+   551.4,
+   -14.0
+  ],
+  [
+   561.4,
+   -14.0
+  ],
+  [
+   571.4,
+   12.0
+  ],
+  [
+   581.4,
+   12.0
+  ],
+  [
+   591.4,
+   12.0
+  ],
+  [
+   601.4,
+   12.0
+  ],
+  [
+   611.4,
+   12.0
+  ],
+  [
+   621.4,
+   -14.0
+  ],
+  [
+   631.4,
+   -14.0
+  ],
+  [
+   641.4,
+   -14.0
+  ],
+  [
+   651.4,
+   -14.0
+  ],
+  [
+   661.4,
+   -14.0
+  ],
+  [
+   671.4,
+   -14.0
+  ],
+  [
+   681.4,
+   -14.0
+  ],
+  [
+   691.4,
+   -14.0
+  ],
+  [
+   701.4,
+   -14.0
+  ],
+  [
+   711.4,
+   -14.0
+  ],
+  [
+   721.4,
+   -14.0
+  ],
+  [
+   731.4,
+   -14.0
+  ],
+  [
+   741.4,
+   -14.0
+  ],
+  [
+   751.4,
+   -14.0
+  ],
+  [
+   761.4,
+   -14.0
+  ],
+  [
+   771.4,
+   -14.0
+  ],
+  [
+   781.4,
+   12.0
+  ],
+  [
+   791.4,
+   12.0
+  ],
+  [
+   801.4,
+   12.0
+  ],
+  [
+   811.4,
+   12.0
+  ],
+  [
+   821.4,
+   12.0
+  ],
+  [
+   831.4,
+   -14.0
+  ],
+  [
+   841.4,
+   -14.0
+  ],
+  [
+   851.4,
+   -14.0
+  ],
+  [
+   861.4,
+   -14.0
+  ],
+  [
+   871.4,
+   -14.0
+  ],
+  [
+   881.4,
+   -14.0
+  ],
+  [
+   891.4,
+   -14.0
+  ],
+  [
+   901.4,
+   -14.0
+  ],
+  [
+   911.4,
+   2582.0
+  ],
+  [
+   921.4,
+   -14.0
+  ],
+  [
+   931.4,
+   -14.0
+  ],
+  [
+   941.4,
+   -14.0
+  ],
+  [
+   951.4,
+   -14.0
+  ],
+  [
+   961.4,
+   -14.0
+  ],
+  [
+   971.4,
+   12.0
+  ],
+  [
+   981.4,
+   12.0
+  ],
+  [
+   991.4,
+   12.0
+  ],
+  [
+   1001.4,
+   12.0
+  ],
+  [
+   1011.4,
+   12.0
+  ],
+  [
+   1021.4,
+   -14.0
+  ],
+  [
+   1031.4,
+   -14.0
+  ],
+  [
+   1041.4,
+   -14.0
+  ],
+  [
+   1051.4,
+   12.0
+  ],
+  [
+   1061.4,
+   12.0
+  ],
+  [
+   1071.4,
+   12.0
+  ],
+  [
+   1081.4,
+   12.0
+  ],
+  [
+   1091.4,
+   12.0
+  ],
+  [
+   1101.4,
+   12.0
+  ],
+  [
+   1111.4,
+   -14.0
+  ]
+ ],
+ "capsule_blocked": [],
+ "capsule_blocked_count": 0,
+ "verdict": {
+  "stands_pass": 12,
+  "stands": 18,
+  "gate_stands_pass": 1,
+  "gate_stands": 5,
+  "floor_gaps": 0,
+  "floor_unpaved": 197,
+  "floor_steps_over_45cm": 7,
+  "capsule_blocks": 0,
+  "GATE_OPEN": false
+ },
+ "day_minutes_restored": 24.0,
+ "finished": "2026-09-28 22:35:30",
+ "seconds": 68.6,
+ "log": "S01_rear_path PASS {'name': 'S01_rear_path', 'x': -720.0, 'y': -52500.0, 'surface_traced': 12.000024318695068, 'landed': True, 'feet_z': 12.0, 'floor_expected': 12.0, 'pass': True, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nS02_march_plaza FAIL {'name': 'S02_march_plaza', 'x': 0.0, 'y': -64500.0, 'surface_traced': -14.0000581741333, 'landed': True, 'feet_z': -14.0, 'floor_expected': 12.0, 'pass': False, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nS03_noctis_court_A PASS {'name': 'S03_noctis_court_A', 'x': -5000.0, 'y': -71500.0, 'surface_traced': 12.000024318695068, 'landed': True, 'feet_z': 12.0, 'floor_expected': 12.0, 'pass': True, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nS04_tartarus_court_A PASS {'name': 'S04_tartarus_court_A', 'x': 5000.0, 'y': -71500.0, 'surface_traced': 12.000024318695068, 'landed': True, 'feet_z': 12.0, 'floor_expected': 12.0, 'pass': True, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nS05_clock_plaza PASS {'name': 'S05_clock_plaza', 'x': -2000.0, 'y': -78500.0, 'surface_traced': 12.000024318695068, 'landed': True, 'feet_z': 12.0, 'floor_expected': 12.0, 'pass': True, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nS06_noctis_street PASS {'name': 'S06_noctis_street', 'x': -5140.0, 'y': -80500.0, 'surface_traced': 12.000024318695068, 'landed': True, 'feet_z': 12.0, 'floor_expected': 12.0, 'pass': True, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nS07_tartarus_street PASS {'name': 'S07_tartarus_street', 'x': 5140.0, 'y': -80500.0, 'surface_traced': 12.000024318695068, 'landed': True, 'feet_z': 12.0, 'floor_expected': 12.0, 'pass': True, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nS08_exchange_plaza PASS {'name': 'S08_exchange_plaza', 'x': -2200.0, 'y': -105500.0, 'surface_traced': 12.000024318695068, 'landed': True, 'feet_z': 12.0, 'floor_expected': 12.0, 'pass': True, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nS09_noctis_court_B PASS {'name': 'S09_noctis_court_B', 'x': -6480.0, 'y': -107500.0, 'surface_traced': 12.000024318695068, 'landed': True, 'feet_z': 12.0, 'floor_expected': 12.0, 'pass': True, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nS10_tartarus_court_B PASS {'name': 'S10_tartarus_court_B', 'x': 6480.0, 'y': -107500.0, 'surface_traced': 12.000024318695068, 'landed': True, 'feet_z': 12.0, 'floor_expected': 12.0, 'pass': True, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nS11_frontier_end FAIL {'name': 'S11_frontier_end', 'x': 0.0, 'y': -111300.0, 'surface_traced': -14.0000581741333, 'landed': True, 'feet_z': -14.0, 'floor_expected': 12.0, 'pass': False, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nS12_noctis_garden_lawn PASS {'name': 'S12_noctis_garden_lawn', 'x': -12400.0, 'y': -73500.0, 'surface_traced': -14.0000581741333, 'landed': True, 'feet_z': -14.0, 'floor_expected': -14.0, 'pass': True, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nS13_tartarus_meadow_lawn PASS {'name': 'S13_tartarus_meadow_lawn', 'x': 22000.0, 'y': -79000.0, 'surface_traced': -14.0000581741333, 'landed': True, 'feet_z': -14.0, 'floor_expected': -14.0, 'pass': True, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nG01_gate_entry FAIL {'name': 'G01_gate_entry', 'x': 0.0, 'y': -85500.0, 'surface_traced': -14.0000581741333, 'landed': True, 'feet_z': -14.0, 'floor_expected': 12.0, 'pass': False, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nG02_gate_a FAIL {'name': 'G02_gate_a', 'x': 0.0, 'y': -89000.0, 'surface_traced': -14.0000581741333, 'landed': True, 'feet_z': -14.0, 'floor_expected': 12.0, 'pass': False, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nG03_gate_b FAIL {'name': 'G03_gate_b', 'x': 0.0, 'y': -93800.0, 'surface_traced': -14.0000581741333, 'landed': True, 'feet_z': -14.0, 'floor_expected': 12.0, 'pass': False, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nG04_gate_c PASS {'name': 'G04_gate_c', 'x': 720.0, 'y': -99000.0, 'surface_traced': 12.000024318695068, 'landed': True, 'feet_z': 12.0, 'floor_expected': 12.0, 'pass': True, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\nG05_gate_exit FAIL {'name': 'G05_gate_exit', 'x': 0.0, 'y': -103000.0, 'surface_traced': -14.0000581741333, 'landed': True, 'feet_z': -14.0, 'floor_expected': 12.0, 'pass': False, 'mode': '<MovementMode.MOVE_WALKING: 1>'}\n"
+}

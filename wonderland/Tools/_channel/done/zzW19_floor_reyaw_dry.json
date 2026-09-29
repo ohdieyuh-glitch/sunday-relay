@@ -1,0 +1,72 @@
+{
+ "name": "zzW19_floor_reyaw_dry",
+ "started": "2026-09-28 23:01:22",
+ "status": "dry run: 3201 instances in 86 batches would turn",
+ "dry": true,
+ "passes": [
+  "W270S",
+  "W270N",
+  "W270T",
+  "W270G",
+  "NC03",
+  "TQ03",
+  "IC03"
+ ],
+ "map_dirty_before": [],
+ "found": {
+  "IC03/kerb": [
+   4,
+   304
+  ],
+  "IC03/plate": [
+   3,
+   528
+  ],
+  "NC03/kerb": [
+   4,
+   304
+  ],
+  "NC03/plate": [
+   3,
+   528
+  ],
+  "TQ03/kerb": [
+   4,
+   304
+  ],
+  "TQ03/plate": [
+   3,
+   528
+  ],
+  "W270G/kerb": [
+   16,
+   168
+  ],
+  "W270G/plate": [
+   4,
+   49
+  ],
+  "W270N/plate": [
+   4,
+   93
+  ],
+  "W270S/kerb": [
+   24,
+   160
+  ],
+  "W270S/plate": [
+   13,
+   142
+  ],
+  "W270T/plate": [
+   4,
+   93
+  ]
+ },
+ "record": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\WorldDesign\\Wedges\\floor_reyaw_DRY_record.json",
+ "instances": 3201,
+ "dirty": [],
+ "finished": "2026-09-28 23:01:51",
+ "seconds": 29.01,
+ "log": ""
+}
