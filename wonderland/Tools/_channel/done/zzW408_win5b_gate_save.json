@@ -1,0 +1,41 @@
+{
+ "name": "zzW408_win5b_gate_save",
+ "started": "2026-09-29 12:49:50",
+ "status": "done",
+ "dirty_before_count": 445,
+ "pass_actor_counts": {
+  "S6T010": 65,
+  "S6I030": 66,
+  "S6I050": 44,
+  "S6I070": 49,
+  "S6I090": 39,
+  "S6I130": 31,
+  "S6N150": 75,
+  "S6N170": 68
+ },
+ "count_mismatch": {},
+ "guard_tr01_intact": true,
+ "dirty": {
+  "new_pass": 437,
+  "replaced_deleted": 0,
+  "objects": [
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/L8/4FKFIHQR83FEA3BVIUQMT0",
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/FU/ZN4YAPKKTQUKZMMI5SFZ40",
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/B/V8/HCCVM2OABPOS9EZJL2YV0J",
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/A/IC/GP8RKWQKBXN9TUZQIPAPCQ",
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/BT/PLEZXA605DM51OF4VMZL8H",
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/7/F3/6GZO17192ZVF6KSNZZRFAK",
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/AR/FXHXO8E9KQMGAF003DX8VJ",
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/8/PX/QG3A37JZN76I9RH8R9CNHT"
+  ],
+  "stub": [],
+  "unexpected": []
+ },
+ "gate_ok": true,
+ "saved": true,
+ "save_seconds": 10.0,
+ "dirty_after": [],
+ "finished": "2026-09-29 12:50:02",
+ "seconds": 11.39,
+ "log": ""
+}

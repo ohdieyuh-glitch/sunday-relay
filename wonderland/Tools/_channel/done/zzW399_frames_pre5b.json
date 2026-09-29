@@ -1,0 +1,30 @@
+{
+ "name": "zzW399_frames_pre5b",
+ "started": "2026-09-29 12:48:08",
+ "status": "done",
+ "shots": [
+  {
+   "camera": "hn238_distant",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hn238_distant__pre5b.png",
+   "ok": true
+  },
+  {
+   "camera": "hi057_distant",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hi057_distant__pre5b.png",
+   "ok": true
+  },
+  {
+   "camera": "ht308_distant",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\ht308_distant__pre5b.png",
+   "ok": true
+  },
+  {
+   "camera": "core_world_oblique",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\core_world_oblique__pre5b.png",
+   "ok": true
+  }
+ ],
+ "finished": "2026-09-29 12:48:24",
+ "seconds": 16.54,
+ "log": ""
+}

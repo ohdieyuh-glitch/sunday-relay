@@ -1,0 +1,16 @@
+{
+ "name": "zzW400_apply_S6T010",
+ "started": "2026-09-29 12:48:42",
+ "status": "done",
+ "waited_for_pie_seconds": 0.0,
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "S6T010",
+ "actors": 0,
+ "batches": 65,
+ "instances": 483,
+ "hovers": 0,
+ "finished": "2026-09-29 12:48:47",
+ "seconds": 5.06,
+ "log": "applied S6T010 0 actors 65 batches 483 instances\n"
+}
