@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import {
   DEFAULT_ANALYTICAL_MODEL, MAX_REVIEWER_ATTEMPTS, MEASURED_ENGINE_STARTUP_MS,
@@ -211,7 +212,8 @@ describe('6–7 · the share admits the normal path, and the constant is the enf
     const emitted = JSON.parse(execFileSync(
       process.execPath,
       ['--input-type=module', '-e', [
-        `const m = await import(${JSON.stringify(join(ROOT, 'scripts/julius-reviewer-deadline.mjs'))});`,
+        // A file URL, not a path: to Node on Windows, `import('C:\\...')` is a URL whose scheme is `c:`.
+        `const m = await import(${JSON.stringify(pathToFileURL(join(ROOT, 'scripts/julius-reviewer-deadline.mjs')).href)});`,
         'process.stdout.write(JSON.stringify(m.resolveReviewerDeadline({ headroomRatio: 0.5 })));',
       ].join('')],
       { encoding: 'utf8' },
