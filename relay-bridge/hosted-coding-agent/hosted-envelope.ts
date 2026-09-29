@@ -204,7 +204,10 @@ export function compileHostedEnvelope(input: {
     disallowedTools: [...HOSTED_DISALLOWED_TOOLS],
     // Edits are applied without a prompt because a hosted run has no operator
     // to prompt. Containment is the tool restriction, the pinned cwd, the
-    // empty settings sources and Relay's post-run inspection — never a dialog.
+    // empty settings sources, Julius's `PreToolUse` authority on every file
+    // tool (`hosted-tool-authority.ts`) and Relay's post-run inspection —
+    // never a dialog. The allow list alone confines nothing: it approves
+    // `Read` and `Edit` at any path, which is why the authority exists.
     permissionMode: 'acceptEdits',
     maxTurns: (input.limits ?? DEFAULT_HOSTED_LIMITS).maxTurns,
     settingSources: [],
