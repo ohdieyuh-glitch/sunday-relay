@@ -19,6 +19,7 @@
 # it that way throughout: Golden Arrival inside 500 m, the nation bands out to ~1,155 m, Dubel Forest at
 # 1,230-1,480 m. So the core is a DISC about the origin, not a box about the outliers -- and a disc needs one
 # number, which the actors themselves can be asked for.
+import math
 import time
 import os
 
@@ -545,11 +546,59 @@ def _walk():
                 break
             yield 0.25
         r["cell_streamed_in"] = arrived
-        drop_z = (surface_z if surface_z is not None else gz) + 900.0
+        # A CLEAR COLUMN TO DROP DOWN. zzW39 dropped the Dog at [8,7] beside an overhang: it caught an edge 5.6 m
+        # up and slid there in FALLING mode for ten seconds -- an unmeasured stand, from where the instrument let
+        # go rather than from anything a walking player meets. So a Dog-sized capsule is swept down the column
+        # first, and if anything stands in it the stand moves (2-8 m, eight directions) to the nearest clear one,
+        # with its own floor re-traced. The offset is recorded; a stand with no clear column stays where it was.
+        drop_x, drop_y = float(r["centre"][0]), float(r["centre"][1])
+        base = surface_z if surface_z is not None else gz
+        capsule = getattr(unreal.SystemLibrary, "capsule_trace_single_for_objects", None)
+        if capsule is not None and surface_z is not None:
+            objs = [unreal.ObjectTypeQuery.OBJECT_TYPE_QUERY1, unreal.ObjectTypeQuery.OBJECT_TYPE_QUERY2]
+
+            def column_clear(x, y, floor_z):
+                try:
+                    hit = capsule(world, unreal.Vector(x, y, floor_z + 900.0), unreal.Vector(x, y, floor_z + 120.0),
+                                  45.0, 89.0, objs, False, [live] if live else [], unreal.DrawDebugTrace.NONE, True,
+                                  unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+                except Exception:                 # noqa: BLE001
+                    return True
+                return hit is None
+
+            if not column_clear(drop_x, drop_y, base):
+                moved = None
+                for d in (200.0, 400.0, 600.0, 800.0):
+                    for a in range(8):
+                        t = math.radians(45.0 * a)
+                        x, y = drop_x + math.cos(t) * d, drop_y + math.sin(t) * d
+                        try:
+                            h2 = unreal.SystemLibrary.line_trace_single(
+                                world, unreal.Vector(x, y, gz + 20000.0), unreal.Vector(x, y, gz - 20000.0),
+                                unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [live] if live else [],
+                                unreal.DrawDebugTrace.NONE, True, unreal.LinearColor.RED, unreal.LinearColor.GREEN,
+                                0.0)
+                        except Exception:         # noqa: BLE001
+                            h2 = None
+                        if h2 is None:
+                            continue
+                        z2 = float(h2.to_tuple()[4].z)
+                        if column_clear(x, y, z2):
+                            moved = (x, y, z2, d)
+                            break
+                    if moved:
+                        break
+                if moved:
+                    drop_x, drop_y, surface_z = moved[0], moved[1], moved[2]
+                    base = surface_z
+                    r["drop_moved_m"] = round(moved[3] / 100.0, 1)
+                else:
+                    r["drop_moved_m"] = "no clear column within 8 m"
+        drop_z = base + 900.0
         live = living()
         if live is not None:
             try:
-                live.set_actor_location(unreal.Vector(r["centre"][0], r["centre"][1], drop_z), False, False)
+                live.set_actor_location(unreal.Vector(drop_x, drop_y, drop_z), False, False)
                 moving = mover(live)
                 if moving is not None:
                     moving.set_editor_property("velocity", unreal.Vector(0.0, 0.0, 0.0))
@@ -600,7 +649,7 @@ def _walk():
                            "mesh_actors": r["mesh_actors"], "authored_world": r["authored_world"], "landed_z": None,
                            "expected_near_z": round(gz), "fell_through": None,
                            "unmeasured": "the Dog did not survive the stand",
-                           "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"), "streaming_complete": r.get("streaming_complete"),
+                           "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"), "streaming_complete": r.get("streaming_complete"), "drop_moved_m": r.get("drop_moved_m"),
                            "was_empty": r["mesh_actors"] == 0})
             continue
         pawn = live
@@ -618,7 +667,7 @@ def _walk():
                            "expected_near_z": round(gz), "surface_z": surface, "fell_through": None,
                            "unmeasured": "the Dog had not landed 10 s after release",
                            "airborne_z": round(float(at.z)), "movement_mode": mode,
-                           "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"), "streaming_complete": r.get("streaming_complete"),
+                           "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"), "streaming_complete": r.get("streaming_complete"), "drop_moved_m": r.get("drop_moved_m"),
                            "was_empty": r["mesh_actors"] == 0})
             H.capture_viewport_jpeg(os.path.join(ROOT, "%02d_r%04dm_airborne.jpg" % (n + 1, r["radius_metres"])),
                                     1600, 90)
@@ -627,7 +676,7 @@ def _walk():
                        "mesh_actors": r["mesh_actors"], "authored_world": r["authored_world"], "landed_z": round(float(at.z)),
                        "expected_near_z": round(gz), "surface_z": surface, "fell_through": bool(fell),
                        "landed": landed, "settle_s": settle_s,
-                       "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"), "streaming_complete": r.get("streaming_complete"),
+                       "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"), "streaming_complete": r.get("streaming_complete"), "drop_moved_m": r.get("drop_moved_m"),
                        "was_empty": r["mesh_actors"] == 0})
         H.capture_viewport_jpeg(os.path.join(ROOT, "%02d_r%04dm.jpg" % (n + 1, r["radius_metres"])), 1600, 90)
 
