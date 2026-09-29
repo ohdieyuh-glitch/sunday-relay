@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { JULIUS_BOOTSTRAP_REQUEST_VERSION, type JuliusBootstrapRequest } from '../../src/relay/integration/julius/julius-port';
 import { sealJuliusResearchPolicy, type JuliusResearchPolicy } from '../../src/relay/mission/julius';
+import { juliusFileCreationPolicyFor, type JuliusFileCreationGrant } from '../../src/relay/mission/julius/julius-file-creation';
 
 /**
  * THE MISSION CONTRACT — its shape, its parser, its sealing, its compilation.
@@ -84,6 +85,21 @@ export interface LiveMissionContractFile {
    * asserting the one thing it is not in a position to know.
    */
   readonly research?: LiveMissionResearchClause;
+  /**
+   * THE MISSION'S AUTHORITY TO CREATE NEW FILES, GRANTED BY THE CONTRACT ITSELF.
+   *
+   * ABSENT MEANS NO CREATION, and absent is the default: the Coding Agent is not
+   * even given the `Write` tool, and every mission written before this field
+   * existed -- Mission 6 among them -- compiles to the same binding digest it
+   * always had, because an absent field is not spread into the parsed contract.
+   *
+   * Only this operator-authored contract may grant it. The locked task contract
+   * a Prompt Architect drafts can narrow where files land and never widen it;
+   * a player-facing route composes its own contract and cannot pass this field.
+   * Checked against the domain's own rules at PARSE time, like `research`, so a
+   * malformed grant stops the mission before anything is paid for.
+   */
+  readonly fileCreation?: JuliusFileCreationGrant;
 }
 
 /**
@@ -195,6 +211,44 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
     research = clause;
   }
 
+  /**
+   * THE CREATION GRANT IS CHECKED HERE, OR THE CONTRACT IS REFUSED -- for the
+   * research clause's reason. Only the three documented keys are admitted: a key
+   * this parser does not know is a grant nobody reviewed, so it is refused by
+   * name rather than dropped.
+   */
+  let fileCreation: JuliusFileCreationGrant | undefined;
+  if (value.fileCreation !== undefined) {
+    const grant = value.fileCreation;
+    if (grant === null || typeof grant !== 'object' || Array.isArray(grant)) {
+      return { ok: false, problem: 'The contract field "fileCreation" must be an object when present.' };
+    }
+    const fields = grant as Record<string, unknown>;
+    const unknownKey = Object.keys(fields).find((key) => !['permittedPaths', 'maxBytes', 'mayOverwrite'].includes(key));
+    if (unknownKey !== undefined) {
+      return { ok: false, problem: `The contract's fileCreation grant has an unknown field "${unknownKey}".` };
+    }
+    if (!Array.isArray(fields.permittedPaths) || !fields.permittedPaths.every((path) => typeof path === 'string')) {
+      return { ok: false, problem: 'The contract\'s fileCreation grant needs a "permittedPaths" array of strings.' };
+    }
+    if (fields.maxBytes !== undefined && (typeof fields.maxBytes !== 'number' || !Number.isInteger(fields.maxBytes) || fields.maxBytes <= 0)) {
+      return { ok: false, problem: 'The contract\'s fileCreation "maxBytes" must be a positive integer when present.' };
+    }
+    if (fields.mayOverwrite !== undefined && typeof fields.mayOverwrite !== 'boolean') {
+      return { ok: false, problem: 'The contract\'s fileCreation "mayOverwrite" must be a boolean when present.' };
+    }
+    const candidate: JuliusFileCreationGrant = {
+      permittedPaths: [...(fields.permittedPaths as string[])],
+      ...(fields.maxBytes === undefined ? {} : { maxBytes: fields.maxBytes as number }),
+      ...(fields.mayOverwrite === undefined ? {} : { mayOverwrite: fields.mayOverwrite as boolean }),
+    };
+    const checked = juliusFileCreationPolicyFor(candidate, null);
+    if (checked.policy === null) {
+      return { ok: false, problem: `The contract's fileCreation grant was refused: ${checked.problem ?? 'unusable'}` };
+    }
+    fileCreation = candidate;
+  }
+
   return {
     ok: true,
     contract: {
@@ -206,8 +260,20 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
       testCommand: value.testCommand as string, workspacePath: value.workspacePath as string,
       limits: typeof value.limits === 'object' && value.limits !== null ? value.limits as LiveMissionContractFile['limits'] : undefined,
       ...(research === undefined ? {} : { research }),
+      ...(fileCreation === undefined ? {} : { fileCreation }),
     },
   };
+}
+
+/**
+ * THE GRANT LOOKUP THE LIVE COMPOSITION TAKES, for exactly this contract's
+ * mission and no other. A composition that ran two missions could not have one
+ * contract's grant answer for the other's dispatch.
+ */
+export function liveMissionFileCreationGrantFor(
+  contract: LiveMissionContractFile,
+): (missionId: string) => JuliusFileCreationGrant | null {
+  return (missionId) => (missionId === contract.missionId ? contract.fileCreation ?? null : null);
 }
 
 const stable = (value: unknown): string => value === null || typeof value !== 'object'

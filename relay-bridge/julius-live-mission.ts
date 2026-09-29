@@ -50,6 +50,7 @@ import type { ExecutorOperation } from '../src/relay/workspace/julius-tools/exec
 import { type JuliusBootstrapRequest } from '../src/relay/integration/julius/julius-port';
 import {
   compileBootstrapRequest,
+  liveMissionFileCreationGrantFor,
   parseLiveMissionContract,
   sealLiveMissionResearchPolicy,
   type LiveMissionContractFile,
@@ -709,6 +710,8 @@ async function main(argv: readonly string[]): Promise<number> {
       testCommand: contract.testCommand, contexts: handoffs.contexts, artifacts, shell,
       architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
       researchPolicyFor: researchPolicyOf,
+      // The contract's own creation grant, for this mission only. Absent: no Write tool at all.
+      fileCreationGrantFor: liveMissionFileCreationGrantFor(contract),
     });
     if (!resolution.ok) {
       for (const problem of resolution.problems) out(`BLOCKED ${problem.role}: ${problem.missing.join(', ')}`);
@@ -775,6 +778,15 @@ async function main(argv: readonly string[]): Promise<number> {
         researchProbes: observed.probes,
       }),
     });
+    /* THE FILE AUTHORITY, SAID BEFORE THE FIRST DISPATCH, beside the research
+       authority: whether the Coding Agent may create files, and where. Every
+       file tool is confined to the workspace either way. */
+    if (contract.fileCreation === undefined) {
+      out('  file creation: NOT GRANTED (no contract clause) — the Coding Agent may edit existing files only');
+    } else {
+      out(`  file creation: granted under ${contract.fileCreation.permittedPaths.join(', ')}`
+        + ` (max ${String(contract.fileCreation.maxBytes ?? 'default')} bytes per file; overwrite ${contract.fileCreation.mayOverwrite === true ? 'permitted' : 'refused'})`);
+    }
     if (researchClause === undefined) {
       out('  research: NOT AUTHORISED (no contract clause) — every ask is refused research_not_authorized');
     } else {
