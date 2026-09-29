@@ -36,10 +36,26 @@ const NETWORK_CODES: ReadonlySet<string> = new Set([
   'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'EHOSTUNREACH', 'ENETUNREACH', 'EAI_AGAIN',
 ]);
 
-/** pg and pg-pool raise these with no code. They are the driver's fixed strings, compared whole. */
+/**
+ * pg and pg-pool raise these with NO code. They are the driver's own fixed strings
+ * (pg 8.23 `lib/client.js`, pg-pool `index.js`), compared whole.
+ *
+ * The first one is what a lost connection actually looks like. A real
+ * PostgreSQL case terminated a pooled client's backend and queried the client:
+ * the driver answered "Client has encountered a connection error and is not
+ * queryable" with no code at all. That string was not in this set, so a lost
+ * acknowledgement was called non-transient and a mission FAILED for it. The set
+ * is now taken from the driver's source, not guessed. SSL and protocol-state
+ * errors are left out: repeating them cannot help.
+ */
 const DRIVER_CONNECTION_MESSAGES: ReadonlySet<string> = new Set([
-  'timeout exceeded when trying to connect',
+  'Client has encountered a connection error and is not queryable',
+  'Client was closed and is not queryable',
   'Connection terminated unexpectedly',
+  'Connection terminated',
+  'Query read timeout',
+  'timeout expired',
+  'timeout exceeded when trying to connect',
 ]);
 
 export function juliusStoreErrorClass(error: unknown): JuliusStoreErrorClass | null {
