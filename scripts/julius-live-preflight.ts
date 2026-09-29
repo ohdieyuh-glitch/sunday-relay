@@ -273,7 +273,11 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
    * and, when the executor refuses, CLOSED as the live port closes it (`shellDispatchClosure`). Paid run
    * 36568129865 failed on a settlement no provider-free path had ever made; now every effect here makes one.
    */
-  const runInSandbox = async (command: string, afterPrepare?: (sandboxId: string) => Promise<void>): Promise<ToolInvocationResult> => {
+  const runInSandbox = async (
+    command: string,
+    afterPrepare?: (sandboxId: string) => Promise<void>,
+    via: { readonly settle: JuliusToolSettlementPostgresRepository['settle'] } = settlement,
+  ): Promise<ToolInvocationResult> => {
     step += 1;
     const invocationId = `preflight:${identity.nonce}:${step}`;
     const request = requestFor(invocationId, command);
@@ -320,7 +324,7 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
       previousSandboxId = invocationId;
     }
     try {
-      const settled = await settlement.settle(shellEffectSettlement({
+      const settled = await via.settle(shellEffectSettlement({
         invocationId, dispatchGeneration, result,
         safeSummary: `Preflight shell effect ${step} settled: exit ${result.exitCode ?? 'unknown'}.`,
         occurredAt: new Date().toISOString(),
@@ -563,15 +567,31 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
     out(`  settled SUCCEEDED through the production settlement repository; preview, receipt and settlement stored as ${JULIUS_ENCODED_TEXT_MARKER.trim()} and decoded to the exact bytes; every digest covers the decoded value.`);
 
     /* A FAILED CLOSE-OUT SETTLES TRUTHFULLY: the same output, a non-zero exit, recorded as FAILED with
-     * that exit code rather than lost or left open. */
-    const failedClose = await runInSandbox(`${closeCommand}\nexit 3`);
+     * that exit code rather than lost or left open. And it settles through a REAL serialization
+     * conflict: in a live mission the settlement runs beside the run loop, whose every event append
+     * upserts the same `stream_sequences` row the settlement's event does. Here, once the settlement's
+     * first attempt holds its snapshot, a concurrent transaction commits a change to that row, so
+     * PostgreSQL refuses the attempt (40001, "could not serialize access due to concurrent update")
+     * and the settlement must replay it. A refusal there used to end the coder's step and leave the
+     * invocation DISPATCHING, exactly as the 22P05 of paid run 36568129865 did. */
+    const conflict = { attempts: 0, forced: 0 };
+    const conflicted = new JuliusToolSettlementPostgresRepository(pool, undefined, async (point) => {
+      if (point !== 'AFTER_BUDGET') return;
+      conflict.attempts += 1;
+      if (conflict.forced > 0) return;
+      conflict.forced += 1;
+      await pool.query('UPDATE relay_wonderland.stream_sequences SET next_sequence=next_sequence+1 WHERE stream_id=$1', [identity.runId]);
+    });
+    const failedClose = await runInSandbox(`${closeCommand}\nexit 3`, undefined, conflicted);
     const failedProblems = await proveSettledCloseOut(failedClose, { exitCode: 3, state: 'FAILED' }, probePath);
+    if (conflict.forced !== 1 || conflict.attempts !== 2) failedProblems.push(`the forced serialization conflict was not met and replayed exactly once (forced ${conflict.forced}, attempts ${conflict.attempts})`);
     if (failedProblems.length > 0) {
       out('PREFLIGHT FAILED: a failing attempt close-out did not settle truthfully.');
       for (const problem of failedProblems) out(`  ${problem}`);
       return 1;
     }
-    out('  a failing close-out (same output, exit 3) settled FAILED with exit 3, stored and decoded the same way.');
+    out('  a failing close-out (same output, exit 3) settled FAILED with exit 3, stored and decoded the same way,');
+    out('  through a real serialization conflict on the run\'s event stream (40001 on the first attempt, settled on the replay).');
 
     /* The receipt transport's isolation. The scope itself is proven from the daemon's mount
      * table while THE SANDBOX THAT RUNS THE SCOPE PROBE exists (`proveReceiptScope`, between

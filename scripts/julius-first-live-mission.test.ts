@@ -1175,7 +1175,8 @@ describe('paid run 36568129865 — the zero-dispatch preflight runs and settles 
     expect(preflight).toContain('await runInSandbox(juliusAttemptStartCommand(null))');
     expect(preflight).toContain('const closeCommand = juliusAttemptCloseCommand(attemptTrees);');
     expect(preflight).toContain('const closeOut = await runInSandbox(closeCommand);');
-    expect(preflight, 'a failing close-out is settled too').toMatch(/await runInSandbox\(`\$\{closeCommand\}\\nexit 3`\)/u);
+    expect(preflight, 'a failing close-out is settled too, through a forced serialization conflict').toMatch(/await runInSandbox\(`\$\{closeCommand\}\\nexit 3`, undefined, conflicted\)/u);
+    expect(preflight, 'the conflict is a concurrent commit to the row the settlement\'s event upserts').toContain("await pool.query('UPDATE relay_wonderland.stream_sequences SET next_sequence=next_sequence+1 WHERE stream_id=$1', [identity.runId]);");
     expect(preflight.indexOf('juliusAttemptStartCommand(null)'), 'the start is taken before the host writes the probe')
       .toBeLessThan(preflight.indexOf('writeFileSync(probeFile, Buffer.concat('));
   });
@@ -1183,7 +1184,8 @@ describe('paid run 36568129865 — the zero-dispatch preflight runs and settles 
   it('settles every effect exactly as the live shell port does, and closes a refused one as the port does', () => {
     const port = read('relay-bridge/julius/executor-effects.ts');
     expect(preflight).toContain("import { classifyExecutorRefusal, shellDispatchClosure, shellEffectSettlement, type ShellEffectStage } from '../relay-bridge/julius/shell-settlement';");
-    expect(preflight).toContain('await settlement.settle(shellEffectSettlement({');
+    expect(preflight).toContain('await via.settle(shellEffectSettlement({');
+    expect(preflight, 'and `via` is the production repository unless a step names another').toMatch(/via: \{ readonly settle: JuliusToolSettlementPostgresRepository\['settle'\] \} = settlement,/u);
     expect(port, 'one builder for both, so the preflight settles what the mission settles').toContain('await config.settlement.settle(shellEffectSettlement({');
     expect(preflight).toContain('tools.failDispatch(shellDispatchClosure({');
     expect(port).toContain('await config.tools.failDispatch(shellDispatchClosure({');
@@ -1195,6 +1197,7 @@ describe('paid run 36568129865 — the zero-dispatch preflight runs and settles 
       'the output reached Julius without a NUL', 'the stored preview carries no encoding marker', 'the stored preview does not decode to the bytes Julius received',
       'the receipt result carries no encoding marker', 'the receipt digest does not cover the decoded result', 'the settlement does not decode to the receipt',
       'dispatched invocation(s) were left open', 'the storage control did not hold', 'a terminal run left a tool invocation open',
+      'the forced serialization conflict was not met and replayed exactly once',
       'no integrity event names the closed dispatch', 'a new invocation on the terminal run was answered',
     ]) expect(preflight, `the preflight must be able to refuse: ${refusal}`).toContain(refusal);
     // The invariant probe makes no executor request, so it cannot add a refusal to the topology job's diagnostics.
