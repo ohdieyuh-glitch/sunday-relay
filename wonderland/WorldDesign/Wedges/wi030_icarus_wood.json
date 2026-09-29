@@ -15698,6 +15698,17 @@
      0.55,
      0.55,
      0.55
+    ],
+    [
+     73248.8,
+     116222.9,
+     -13.0,
+     0.0,
+     50.8,
+     0.0,
+     0.55,
+     0.55,
+     0.55
     ]
    ],
    "collides": false,
@@ -15749,6 +15760,17 @@
      -13.0,
      0.0,
      47.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     73248.8,
+     116222.9,
+     -13.0,
+     0.0,
+     50.8,
      0.0,
      0.55,
      0.55,
@@ -15808,6 +15830,17 @@
      0.55,
      0.55,
      0.55
+    ],
+    [
+     73248.8,
+     116222.9,
+     -13.0,
+     0.0,
+     50.8,
+     0.0,
+     0.55,
+     0.55,
+     0.55
     ]
    ],
    "collides": false,
@@ -15859,6 +15892,17 @@
      -13.0,
      0.0,
      47.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     73248.8,
+     116222.9,
+     -13.0,
+     0.0,
+     50.8,
      0.0,
      0.55,
      0.55,
@@ -15918,6 +15962,17 @@
      0.55,
      0.55,
      0.55
+    ],
+    [
+     73270.0,
+     116745.4,
+     -13.0,
+     0.0,
+     37.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
     ]
    ],
    "collides": false,
@@ -15969,6 +16024,17 @@
      -13.0,
      0.0,
      49.9,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     73270.0,
+     116745.4,
+     -13.0,
+     0.0,
+     37.0,
      0.0,
      0.55,
      0.55,
@@ -16028,6 +16094,17 @@
      0.55,
      0.55,
      0.55
+    ],
+    [
+     73270.0,
+     116745.4,
+     -13.0,
+     0.0,
+     37.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
     ]
    ],
    "collides": false,
@@ -16079,6 +16156,17 @@
      -13.0,
      0.0,
      49.9,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     73270.0,
+     116745.4,
+     -13.0,
+     0.0,
+     37.0,
      0.0,
      0.55,
      0.55,
@@ -16138,6 +16226,17 @@
      0.55,
      0.55,
      0.55
+    ],
+    [
+     73201.5,
+     115675.2,
+     -13.0,
+     0.0,
+     37.5,
+     0.0,
+     0.55,
+     0.55,
+     0.55
     ]
    ],
    "collides": false,
@@ -16189,6 +16288,17 @@
      -13.0,
      0.0,
      38.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     73201.5,
+     115675.2,
+     -13.0,
+     0.0,
+     37.5,
      0.0,
      0.55,
      0.55,
@@ -16248,6 +16358,17 @@
      0.55,
      0.55,
      0.55
+    ],
+    [
+     73201.5,
+     115675.2,
+     -13.0,
+     0.0,
+     37.5,
+     0.0,
+     0.55,
+     0.55,
+     0.55
     ]
    ],
    "collides": false,
@@ -16299,6 +16420,193 @@
      -13.0,
      0.0,
      38.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     73201.5,
+     115675.2,
+     -13.0,
+     0.0,
+     37.5,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "WI030_Ground_Flagstone_C_moss_t6_3",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_moss.WL_Ground_Flagstone_C_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     120174.5,
+     70009.0,
+     -13.0,
+     0.0,
+     42.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "WI030_Ground_Flagstone_C_paving_t6_3",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving.WL_Ground_Flagstone_C_paving",
+   "material": "MI_V2_GroundFlag_PlazaCream",
+   "instances": [
+    [
+     120174.5,
+     70009.0,
+     -13.0,
+     0.0,
+     42.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "WI030_Ground_Flagstone_C_paving_shade_t6_3",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_shade.WL_Ground_Flagstone_C_paving_shade",
+   "material": "MI_V2_GroundFlag_PlazaShade",
+   "instances": [
+    [
+     120174.5,
+     70009.0,
+     -13.0,
+     0.0,
+     42.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "WI030_Ground_Flagstone_C_paving_warm_t6_3",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_warm.WL_Ground_Flagstone_C_paving_warm",
+   "material": "MI_V2_GroundFlag_PlazaWarm",
+   "instances": [
+    [
+     120174.5,
+     70009.0,
+     -13.0,
+     0.0,
+     42.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "WI030_Ground_Flagstone_A_moss_t6_3",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_moss.WL_Ground_Flagstone_A_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     120528.9,
+     69551.6,
+     -13.0,
+     0.0,
+     50.1,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "WI030_Ground_Flagstone_A_paving_t6_3",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving.WL_Ground_Flagstone_A_paving",
+   "material": "MI_V2_GroundFlag_PlazaCream",
+   "instances": [
+    [
+     120528.9,
+     69551.6,
+     -13.0,
+     0.0,
+     50.1,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "WI030_Ground_Flagstone_A_paving_shade_t6_3",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_shade.WL_Ground_Flagstone_A_paving_shade",
+   "material": "MI_V2_GroundFlag_PlazaShade",
+   "instances": [
+    [
+     120528.9,
+     69551.6,
+     -13.0,
+     0.0,
+     50.1,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "WI030_Ground_Flagstone_A_paving_warm_t6_3",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_warm.WL_Ground_Flagstone_A_paving_warm",
+   "material": "MI_V2_GroundFlag_PlazaWarm",
+   "instances": [
+    [
+     120528.9,
+     69551.6,
+     -13.0,
+     0.0,
+     50.1,
      0.0,
      0.55,
      0.55,

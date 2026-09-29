@@ -1,0 +1,16 @@
+{
+ "name": "zzW84_apply_WI030",
+ "started": "2026-09-29 05:41:03",
+ "status": "done",
+ "waited_for_pie_seconds": 0.0,
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "WI030",
+ "actors": 0,
+ "batches": 200,
+ "instances": 1310,
+ "hovers": 0,
+ "finished": "2026-09-29 05:41:13",
+ "seconds": 10.26,
+ "log": "applied WI030 0 actors 200 batches 1310 instances\n"
+}

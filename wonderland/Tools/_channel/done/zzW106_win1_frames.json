@@ -1,0 +1,125 @@
+{
+ "name": "zzW106_win1_frames",
+ "started": "2026-09-29 06:10:10",
+ "status": "done",
+ "shots": [
+  {
+   "camera": "hn238_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hn238_aerial__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "hn238_walk",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hn238_walk__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "hi057_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hi057_aerial__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "hi057_walk",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hi057_walk__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "ht308_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\ht308_aerial__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "ht308_walk",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\ht308_walk__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "hn238_distant",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hn238_distant__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "hi057_distant",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hi057_distant__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "ht308_distant",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\ht308_distant__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "wi030_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wi030_aerial__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "wi030_trail",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wi030_trail__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "wi122_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wi122_aerial__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "wi122_trail",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wi122_trail__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "wn150_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wn150_aerial__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "wn150_trail",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wn150_trail__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "wn210_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wn210_aerial__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "wn210_trail",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wn210_trail__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "wt270_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wt270_aerial__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "wt270_trail",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wt270_trail__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "wt330_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wt330_aerial__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "wt330_trail",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wt330_trail__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "seam150",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\seam150__win1_after.png",
+   "ok": true
+  },
+  {
+   "camera": "seam030",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\seam030__win1_after.png",
+   "ok": true
+  }
+ ],
+ "finished": "2026-09-29 06:11:00",
+ "seconds": 50.67,
+ "log": ""
+}

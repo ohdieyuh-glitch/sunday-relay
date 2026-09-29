@@ -56,8 +56,38 @@ LANDMARK_MAT = {"ICARUS": "MI_V2_MushCream", "NOCTIS": "MI_V2_MushPurple", "TART
 
 
 def trail_r(b_deg):
-    """Dubel's path radius at a bearing (its formula, so the woods' trails meet it and each other)."""
+    """Dubel's path radius at a bearing (its formula, so the woods' trails meet it and each other).
+
+    The bearing is taken mod 360 first. The formula is not periodic (sin(2.3 b)), so WT330's end at 390 degrees
+    and WI030's start at 30 degrees were given radii 30 m apart. That was the 35 m break at the 30-degree seam
+    (review 2026-09-29)."""
+    b_deg = b_deg % 360.0
     return MID + 5200.0 * math.sin(math.radians(b_deg * 2.3)) + 2100.0 * math.sin(math.radians(b_deg * 5.7))
+
+
+def _dubel_ends():
+    """Dubel Forest's own path endpoints, {58: (x, y), 122: (x, y)}. Dubel uses its own MID (1,355 m against this
+    ring's 1,340 m), so its trail_r differs by ~15 m. The woods either side join Dubel's actual path, not the formula."""
+    sys.path.insert(0, str(HERE.parent / "Districts"))
+    import dubel_forest as DF                                    # noqa: E402
+    pts = DF.path_points()
+    return {DF.ARC_LO: pts[0], DF.ARC_HI: pts[-1]}
+
+
+def seam_point(b_deg):
+    """THE ONE POINT two neighbouring trails share at an arc boundary: Dubel's path end at 58 / 122 degrees,
+    elsewhere trail_r on the boundary bearing. Both woods run their trails onto it, so the loop has no gaps. Before
+    this, each trail stopped 0.4 degrees inside its own arc and snapped to the nearest free cell, which left
+    15-35 m of lawn at all seven junctions."""
+    b = b_deg % 360.0
+    ends = _dubel_ends()
+    if b in ends:
+        return ends[b]
+    r = trail_r(b)
+    return r * math.cos(math.radians(b)), r * math.sin(math.radians(b))
+
+
+BRIDGE_STEP = 450.0            # cm between stones, as S.stepping
 
 
 def density_at(r):
@@ -159,6 +189,17 @@ def wood(pid, D):
                            "radius": round(rad)})
         # the trail's corridor is reserved before the trees
         g.block(walk, 1)
+        # THE SEAM BRIDGES: from each end of the raster trail straight on to the seam point it shares with the
+        # neighbouring trail. The corridor is claimed as "way" before any tree, so nothing is planted on it.
+        bridges = []
+        for (cell, b_end) in ((walk[0], D["b0"]), (walk[-1], D["b1"])):
+            sx, sy = W.world(g.u(cell[0]), g.v(cell[1]))
+            ex, ey = seam_point(b_end)
+            n = max(1, int(math.hypot(ex - sx, ey - sy) // BRIDGE_STEP))
+            pts = [(sx + (ex - sx) * k / n, sy + (ey - sy) * k / n) for k in range(1, n + 1)]
+            for (x, y) in pts:
+                occ.add("way", x, y, 150.0, 150.0, W.BEARING, "%s:bridge" % pid)
+            bridges.append(pts)
     else:
         p.stats["no_trail"] += 1
 
@@ -199,12 +240,41 @@ def wood(pid, D):
     # 5. THE TRAIL'S STONES, laid last round everything
     if walk:
         S.stepping(p, [c for c in walk if not g.paved[c[0]][c[1]]], g, rng)
+        # the bridges' stones: same flags, same scale, the last one on the seam point itself. A stone where
+        # something already stands (Dubel's own paving at its join) is skipped, since that floor is the junction.
+        # A refused stone steps up to 3 m sideways before it is given up. At 122 degrees Dubel's undergrowth
+        # mushrooms stood on the straight line, and the bridge stopped 13 m short of Dubel's path.
+        k = p.stats["stepping_stones"]
+        for pts in bridges:
+            for q, (x, y) in enumerate(pts):
+                px, py = pts[q - 1] if q else (x, y)
+                dx, dy = x - px, y - py
+                n = math.hypot(dx, dy) or 1.0
+                nx, ny = -dy / n, dx / n
+                jx, jy = rng.uniform(-40.0, 40.0), rng.uniform(-40.0, 40.0)
+                for off in (0.0, 150.0, -150.0, 300.0, -300.0):
+                    wx, wy = x + nx * off, y + ny * off
+                    u, v = wx * W.DIR[0] + wy * W.DIR[1], wx * W.LEFT[0] + wy * W.LEFT[1]
+                    if p.add_module(S.FLAGS[k % 3], u + jx, v + jy, W.GROUND_Z + 1.0, rng.uniform(-8.0, 8.0),
+                                    scale=0.55, cull=W.CULL_NEAR, collide=False, margin=10.0, layer="paved",
+                                    layers=("existing", "solid")):
+                        p.stats["bridge_stones"] += 1
+                        p.stats["bridge_stones_offset"] += 1 if off else 0
+                        k += 1
+                        break
+                else:
+                    p.stats["bridge_stone_skipped"] += 1
         # the offline sweep: every trail cell, a Dog-sized square, against what stands and what this wood made solid
         for (i, j) in walk:
             x, y = W.world(g.u(i), g.v(j))
             if occ.hits(x, y, 60.0, 60.0, W.BEARING, 0.0, ("existing", "solid")) and not g.paved[i][j]:
                 p.stats["trail_blocked_offline"] += 1
-    return p, n_census, groups, [(g.u(i), g.v(j)) for (i, j) in (walk or [])]
+    walk_uv = [(g.u(i), g.v(j)) for (i, j) in (walk or [])]
+    if walk:
+        # the sidecar's walk runs seam point to seam point, so the in-play proof walks the bridges too
+        to_uv = lambda xy: (xy[0] * W.DIR[0] + xy[1] * W.DIR[1], xy[0] * W.LEFT[0] + xy[1] * W.LEFT[1])  # noqa: E731
+        walk_uv = [to_uv(xy) for xy in reversed(bridges[0])] + walk_uv + [to_uv(xy) for xy in bridges[1]]
+    return p, n_census, groups, walk_uv
 
 
 def main():

@@ -1700,7 +1700,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_TopiaryCone_t3_-1",
@@ -1986,7 +1986,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_RoomFloor_t3_-1",
@@ -7343,7 +7343,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Ground_Tree_Grate_kerb_t3_-1",
@@ -7695,7 +7695,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_mature_LeafGold_t3_-1",
@@ -7761,7 +7761,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Bench_t3_-1",
@@ -7882,7 +7882,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Ground_Flagstone_A_moss_t3_-1",
@@ -11787,7 +11787,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_TopiaryCone_t3_-2",
@@ -11831,7 +11831,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_RoomFloor_t3_-2",
@@ -13536,7 +13536,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Ground_Tree_Grate_kerb_t3_-2",
@@ -13657,7 +13657,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_mature_LeafGold_t3_-2",
@@ -13690,7 +13690,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Bench_t3_-2",
@@ -13723,7 +13723,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Hedge_t4_-2",
@@ -14592,7 +14592,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Hedge_t4_-1",
@@ -15208,7 +15208,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_TopiaryCone_t4_-2",
@@ -15362,7 +15362,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_RoomFloor_t4_-2",
@@ -18497,7 +18497,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Ground_Tree_Grate_kerb_t4_-2",
@@ -18728,7 +18728,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_mature_LeafGold_t4_-2",
@@ -18783,7 +18783,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Bench_t4_-2",
@@ -18860,7 +18860,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_TopiaryCone_t4_-1",
@@ -18948,7 +18948,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_RoomFloor_t4_-1",
@@ -21753,7 +21753,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Ground_Tree_Grate_kerb_t4_-1",
@@ -21984,7 +21984,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_mature_LeafGold_t4_-1",
@@ -22039,7 +22039,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Bench_t4_-1",
@@ -22116,7 +22116,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Ground_Flagstone_B_moss_t4_-1",
@@ -25548,7 +25548,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Toadstool_mush_gill_t4_0",
@@ -25592,7 +25592,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Toadstool_mush_spot_t4_0",
@@ -25636,7 +25636,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Toadstool_mush_stem_t4_0",
@@ -25680,7 +25680,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Tall_mush_cap_t5_0",
@@ -25713,7 +25713,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Tall_mush_gill_t5_0",
@@ -25746,7 +25746,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Tall_mush_spot_t5_0",
@@ -25779,7 +25779,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Tall_mush_stem_t5_0",
@@ -25812,7 +25812,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Button_mush_cap_t5_0",
@@ -25856,7 +25856,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Button_mush_gill_t5_0",
@@ -25900,7 +25900,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Button_mush_spot_t5_0",
@@ -25944,7 +25944,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Button_mush_stem_t5_0",
@@ -25988,7 +25988,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Tall_mush_cap_t4_0",
@@ -26021,7 +26021,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Tall_mush_gill_t4_0",
@@ -26054,7 +26054,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Tall_mush_spot_t4_0",
@@ -26087,7 +26087,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Tall_mush_stem_t4_0",
@@ -26120,7 +26120,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Toadstool_mush_cap_t5_0",
@@ -26142,7 +26142,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Toadstool_mush_gill_t5_0",
@@ -26164,7 +26164,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Toadstool_mush_spot_t5_0",
@@ -26186,7 +26186,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Toadstool_mush_stem_t5_0",
@@ -26208,7 +26208,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Button_mush_cap_t4_0",
@@ -26230,7 +26230,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Button_mush_gill_t4_0",
@@ -26252,7 +26252,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Button_mush_spot_t4_0",
@@ -26274,7 +26274,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Mushroom_Button_mush_stem_t4_0",
@@ -26296,7 +26296,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Trunk_slender_t5_0",
@@ -26318,7 +26318,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafCopper_t5_0",
@@ -26340,7 +26340,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Trunk_slender_t3_0",
@@ -26516,7 +26516,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafMid_t3_0",
@@ -26571,7 +26571,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Trunk_mature_t3_0",
@@ -26604,7 +26604,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_mature_LeafDark_t3_0",
@@ -26626,7 +26626,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafCopper_t3_0",
@@ -26670,7 +26670,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafDark_t3_0",
@@ -26747,7 +26747,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Rose_t3_0",
@@ -26835,7 +26835,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Shrub_t3_0",
@@ -26945,7 +26945,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Trunk_slender_t3_-1",
@@ -27220,7 +27220,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafGold_t3_-1",
@@ -27264,7 +27264,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Trunk_slender_t3_-2",
@@ -27484,7 +27484,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafGold_t3_-2",
@@ -27572,7 +27572,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafDark_t3_-1",
@@ -27660,7 +27660,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafCopper_t3_-1",
@@ -27715,7 +27715,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Shrub_t3_-1",
@@ -27880,7 +27880,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Shrub_t3_-2",
@@ -28078,7 +28078,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Trunk_slender_t4_-2",
@@ -28155,7 +28155,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafMid_t4_-2",
@@ -28199,7 +28199,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafGold_t4_-2",
@@ -28232,7 +28232,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafCopper_t4_-2",
@@ -28254,7 +28254,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Shrub_t4_-2",
@@ -28320,7 +28320,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Trunk_slender_t4_-1",
@@ -28463,7 +28463,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafDark_t4_-1",
@@ -28507,7 +28507,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafMid_t4_-1",
@@ -28551,7 +28551,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafGold_t4_-1",
@@ -28584,7 +28584,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Shrub_t4_-1",
@@ -28672,7 +28672,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafGold_t3_0",
@@ -28705,7 +28705,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Trunk_mature_t4_0",
@@ -28727,7 +28727,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_mature_LeafCopper_t4_0",
@@ -28749,7 +28749,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Trunk_slender_t4_0",
@@ -28815,7 +28815,7 @@
    "collides": true,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafDark_t4_0",
@@ -28837,7 +28837,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafCopper_t4_0",
@@ -28870,7 +28870,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafGold_t4_0",
@@ -28903,7 +28903,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Shrub_t4_0",
@@ -28958,7 +28958,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Rose_t4_0",
@@ -28991,7 +28991,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 12000.0
+   "cull_distance": 26000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafCopper_t4_-1",
@@ -29046,7 +29046,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafCopper_t3_-2",
@@ -29090,7 +29090,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafMid_t3_-2",
@@ -29145,7 +29145,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafDark_t3_-2",
@@ -29211,7 +29211,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_mature_LeafGold_t3_0",
@@ -29233,7 +29233,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_slender_LeafMid_t3_-1",
@@ -29354,7 +29354,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Canopy_mature_LeafMid_t3_-1",
@@ -29387,7 +29387,7 @@
    "collides": false,
    "cast_shadow": true,
    "affect_df": false,
-   "cull_distance": 26000.0
+   "cull_distance": 60000.0
   },
   {
    "id": "HT356_Ground_Flagstone_A_moss_t5_-2",
@@ -34998,6 +34998,72 @@
    "cast_shadow": true,
    "affect_df": false,
    "cull_distance": 12000.0
+  },
+  {
+   "id": "HT356_Marker_Landmark_q0",
+   "mesh": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_landmark.SM_mushroom_landmark",
+   "material": "MI_V2_MushRed",
+   "instances": [
+    [
+     64106.3,
+     -14483.4,
+     -19.0,
+     0.0,
+     167.3,
+     0.0,
+     1.3,
+     1.3,
+     1.3
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HT356_Marker_Landmark_q1",
+   "mesh": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_landmark.SM_mushroom_landmark",
+   "material": "MI_V2_MushRed",
+   "instances": [
+    [
+     83748.0,
+     -14274.0,
+     -19.0,
+     0.0,
+     170.3,
+     0.0,
+     1.3,
+     1.3,
+     1.3
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HT356_Marker_Landmark_q2",
+   "mesh": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_landmark.SM_mushroom_landmark",
+   "material": "MI_V2_MushRed",
+   "instances": [
+    [
+     91918.4,
+     -26452.5,
+     -19.0,
+     0.0,
+     163.9,
+     0.0,
+     1.3,
+     1.3,
+     1.3
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
   }
  ]
 }
