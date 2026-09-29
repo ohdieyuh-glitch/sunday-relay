@@ -63,3 +63,13 @@ export function planRunStatePath(
   }
   return [];
 }
+
+/**
+ * THE RUN STATES THAT MAY START NEW WORK: the claim's set, and the dispatch
+ * boundary's re-check of it. PAUSED, BLOCKED and the three terminal states
+ * start nothing. One constant, because the claim and the dispatch boundary must
+ * agree; the PostgreSQL claim's SQL literal is pinned to it by a test.
+ */
+export const JULIUS_CLAIMABLE_RUN_STATES: readonly JuliusMissionState[] = Object.freeze([
+  'READY', 'EXECUTING', 'WAITING', 'REVIEWING', 'REPAIRING', 'VERIFYING',
+]);
