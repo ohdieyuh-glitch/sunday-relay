@@ -264,6 +264,8 @@ describe('C4 — the Claude Code provider translates its runtime into the taxono
     reportedTools: ['Read', 'Edit'], toolTargets: [], toolsUsed: ['Edit'], toolInvocations: 5, permissionDenials: 0, numTurns: 4, durationMs: 1,
     usage: { inputTokens: 900, outputTokens: 300, totalCostUsd: 0.31, source: 'runtime_reported' },
     streamUsage: { messages: 4, abortedMessages: 0, inputTokens: 880, outputTokens: 290, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+    turnModels: [{ model: 'claude-x', turns: 4, outputTokens: 290 }],
+    resultModelUsage: [{ model: 'claude-x', canonicalModel: null, inputTokens: 900, outputTokens: 300 }],
     resultSubtype: 'error_during_execution', isError: true, finalText: null, thinkingBlocksOmitted: 0, unknownMessageCount: 0,
     ...over,
   });
@@ -331,6 +333,8 @@ describe('C5 — swap the provider, keep the semantics', () => {
       reportedTools: ['Read', 'Edit'], toolTargets: [], toolsUsed: ['Edit'], toolInvocations: 4, permissionDenials: 0, numTurns: 3, durationMs: 1,
       usage: { inputTokens: 500, outputTokens: 200, totalCostUsd: 0.02, source: 'runtime_reported' },
       streamUsage: { messages: 3, abortedMessages: 0, inputTokens: 480, outputTokens: 190, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+      turnModels: [{ model: 'claude-x', turns: 3, outputTokens: 190 }],
+      resultModelUsage: [{ model: 'claude-x', canonicalModel: null, inputTokens: 500, outputTokens: 200 }],
       resultSubtype: 'success', isError: false, terminalReason: null, finalText: 'Implemented the slug.', thinkingBlocksOmitted: 0, unknownMessageCount: 0,
     },
     envelope: compileHostedEnvelope({ workspacePath: input.workspacePath }), startedAt: 't', completedAt: 't',
