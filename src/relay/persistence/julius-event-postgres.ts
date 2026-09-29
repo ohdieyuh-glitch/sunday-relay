@@ -1,4 +1,4 @@
-import type{Pool}from'pg';import{JuliusEventIdConflict,canonicalJuliusEventIdentity,validateJuliusEvent,type JuliusOperationalEvent}from'../mission/julius';const json=(v:unknown)=>JSON.stringify(v);
+import type{Pool}from'pg';import{juliusSerializable}from'./julius-serializable';import{JuliusEventIdConflict,canonicalJuliusEventIdentity,validateJuliusEvent,type JuliusOperationalEvent}from'../mission/julius';const json=(v:unknown)=>JSON.stringify(v);
 /**
  * IS THE ROW ALREADY THIS EVENT?
  *
@@ -39,5 +39,13 @@ export async function appendJuliusEventWithin(client:JuliusEventTransaction,even
  await client.query('INSERT INTO relay_wonderland.outbox(outbox_id,event_id,project_id) VALUES($1,$2,$3)',[`outbox:${event.eventId}`,event.eventId,event.projectId]);
  return{recorded:true,sequence};
 }
-/** Safe authoritative source only. Presentation and terminal wording are downstream concerns. */
-export class JuliusEventPostgresRepository{constructor(private readonly pool:Pool){}async append(event:JuliusOperationalEvent):Promise<{recorded:boolean;sequence:number}>{const client=await this.pool.connect();try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');const outcome=await appendJuliusEventWithin(client,event);await client.query('COMMIT');return outcome;}catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}}}
+/**
+ * Safe authoritative source only. Presentation and terminal wording are downstream concerns.
+ *
+ * The append is ONE serializable transaction, and a serialization failure is
+ * retried (bounded) by `juliusSerializable`: the body is SQL over an event the
+ * caller built, and a replay of the same event is idempotent by its id anyway.
+ * Unretried, one 40001 against a concurrent writer threw out of the run loop's
+ * tick and stranded every task it had claimed.
+ */
+export class JuliusEventPostgresRepository{constructor(private readonly pool:Pool){}async append(event:JuliusOperationalEvent):Promise<{recorded:boolean;sequence:number}>{return juliusSerializable(this.pool,(client)=>appendJuliusEventWithin(client,event));}}
