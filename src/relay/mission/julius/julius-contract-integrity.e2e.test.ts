@@ -184,7 +184,7 @@ async function execute(harness: JuliusHarness, request: JuliusPipelineRequest, p
   const attempt = await harness.store.admitTask({
     taskId: request.claim.taskId, owner: harness.deps.owner, leaseGeneration: request.claim.leaseGeneration, now: harness.clock.now(),
   });
-  if (attempt === null) throw new Error('lease lost');
+  if (typeof attempt !== 'number') throw new Error('not admitted');
   return runClaimedTask({ ...request, claim: { ...request.claim, attempt } }, harness.deps, preflight);
 }
 

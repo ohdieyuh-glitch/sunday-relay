@@ -730,6 +730,37 @@ async function holdAtDispatchBoundary(
 }
 
 /**
+ * THE ADMISSION REFUSED A HELD RUN (F3), AND THE BOUNDARY'S RULE DECIDES WHAT
+ * HAPPENS TO THE TASK.
+ *
+ * `admitTask` re-read the run under a lock and found it held after the
+ * boundary had let the task through: paused, blocked, awaiting a person,
+ * denied or ended. The same rule answers here, from a fresh read, so the task
+ * goes back unspent or ends exactly as it would have at the boundary. If the
+ * hold has already lifted by this read, the task still goes back unspent, and
+ * the next claim admits it.
+ */
+export async function holdClaimAtAdmission(
+  request: JuliusPipelineRequest,
+  deps: JuliusPipelineDependencies,
+  scope: { readonly projectId: string },
+): Promise<JuliusTaskOutcome> {
+  const { claim } = request;
+  const run = await deps.store.loadRun(claim.runId, scope.projectId);
+  if (run === null) {
+    return { kind: 'HALTED', taskId: claim.taskId, reasonCode: 'RUN_NOT_IN_SCOPE', safeSummary: 'The claimed task belongs to a run outside this scope.' };
+  }
+  const ledger = new RuntimeLedger(deps, run, `${claim.taskId}:${claim.leaseGeneration}`);
+  const held = await holdAtDispatchBoundary({ claim, run, ledger, policyRevision: request.policy.revision }, deps);
+  if (held !== null && held.kind === 'REFUSED') return held.outcome;
+  const now = deps.clock.now();
+  await deps.store.finishTask({
+    taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state: 'FAILED', now, nextAttemptAt: now,
+  });
+  return { kind: 'HELD', taskId: claim.taskId, reasonCode: 'RUN_HELD_AT_ADMISSION', runState: run.state };
+}
+
+/**
  * A C.A.R.D. GATE AT DISPATCH IS A QUESTION FOR A PERSON, NOT A REFUSAL.
  *
  * WHAT IT WAS. REQUIRE_APPROVAL here ended the claimed task FAILED and
