@@ -333,6 +333,39 @@ band -- the ground slab's edge -- with no forest wall (WX stops at Dubel's arc);
 reads as lawn with lone skyline towers (the fills are low: drifts, stones, single trees), so remaining windows favour
 grove massing. Two frames (SR150 road, gate GD) are bad camera poses, to retake -- not world findings.
 
+## DEFINITION OF WORLD COMPLETE -- tracking (CORE, 2026-09-29 12:00; founder's 25 conditions)
+
+Status words: MET / MET (builder-run) / IN PROGRESS / OPEN / FOUNDER. "Builder-run" = proven by CORE or SECOND, not an
+independent QA session (JUJU and the integration lane were reassigned to Julius ~09:00).
+
+| # | condition | status | evidence / remaining |
+|---|---|---|---|
+| 1 | entire intended playable world audited | MET | census + emptiness_classes over the 1,480 m disc after every window; world-edge ring at 1,485 m |
+| 2 | every major region has an owner and resolved status | IN PROGRESS | queue Q1-Q13; SECOND 5a-5d, CORE flank / final gates |
+| 3 | major unintended empty regions authored | IN PROGRESS | 45.1 % empty -> 16.2 % after 4b (UNINTENDED 10.2 %); staged 5a-5d project ~10.6 % / 6.3 % |
+| 4 | remaining negative space explicitly intentional | IN PROGRESS | classes: meadow / vista / traversal / clearing / rim; final classification after 5d |
+| 5 | Golden Arrival complete | IN PROGRESS | composition passes present; axis SELF-POWERED 32/32 after GS01; flank-garden access (east) under test |
+| 6 | 24 quarters coherent | MET (founder decision) | classified per site; core preserved, identities outward (TW01-03, MG01) |
+| 7 | three nations read distinctly | IN PROGRESS | nation palettes on bands / quarters / rings; broad frames per nation still to shoot |
+| 8 | major seams complete | MET (builder-run) | W270 (18/18), SR030 + SR150 seam ways SELF-POWERED, R41/R42 seam ground filled by S2/S3 |
+| 9 | radial roads connect correctly | IN PROGRESS | AV01-03 built; SR150 / SR030 SELF-POWERED; avenue end-to-end self-walk still to run |
+| 10 | ring circuits connect or gates intentional | MET (builder-run) | hedge gates GA/GB/GC/GD/GE SELF-POWERED; SKY05 tower breaks documented (RR01 ~28 deg, RR02 20-32 / 140-148 deg) |
+| 11 | heartlands complete | MET (builder-run) | 5 heartlands applied, SELF-POWERED 5/5, rooms 48/48 |
+| 12 | frontiers complete | IN PROGRESS | S2 strips + S3 (5a/5b) + S4 (5c); Dubel edge S5 (5d) + outer wall |
+| 13 | outer wild ring complete | IN PROGRESS | R50 + R50b (4a-4c) applied; Dubel's outer arc wall pending |
+| 14 | missing Bible districts reconciled | MET | Tower Rise / Mushroom Grove RELOCATED WITH INTENT and built; books/scrolls NOT IN KIT; GA08 held (lighting) |
+| 15 | major landmarks exist and are reachable | IN PROGRESS | TW01 gate, MG01 entry, TW03 x8, Dubel landmarks SELF-POWERED; district landmarks CL02 reached; remaining landmark sweep |
+| 16 | traversal works across the intended world | IN PROGRESS | ~6 km of self-powered routes arrived today; whole-world route still to run |
+| 17 | no major cul-de-sac / trapped landmark | IN PROGRESS | GA axis ledge fixed (GS01); S2N246 dead walk removed; GA east flank access open |
+| 18 | distant views composed | IN PROGRESS | outer world reads low from 1.3 km; Dubel outer edge hard; grove massing + outer walls in 5a-5d |
+| 19 | World Partition streams correctly | MET (builder-run) | every window's residency 100 % in play; streaming complete at every stand; 200 m tiles |
+| 20 | Golden Arrival in the packaged build | MET earlier (S03 09-29 00:11) | re-run on the final world |
+| 21 | broad founder-facing visual evidence across regions | IN PROGRESS | 16 CORE frames (core_0929) + SECOND's before/after sets; nations / final set to shoot |
+| 22 | final emptiness audit | OPEN | after the last window |
+| 23 | final beta walk against real streaming | OPEN | after the last window |
+| 24 | final packaged build boots and streams the completed world | OPEN | BuildCookRun + boot_test_package after freeze |
+| 25 | no unexplained incomplete P0/P1 region | IN PROGRESS | this table + queue at freeze |
+
 ## Assignments
 
 | # | to | region | notes |
