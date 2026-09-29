@@ -402,6 +402,25 @@ describe('B. the hold is enforced where work starts: the claim and the dispatch 
     for (const method of ['requestApproval', 'requestApprovalAndBlock', 'loadApproval', 'pendingApprovals', 'deniedApprovals'] as const) {
       expect(typeof store[method], method).toBe('function');
     }
+    // BOUND TO THE RIGHT READ, not merely present. `deniedApprovals` bound to the PENDING read would end
+    // every run holding a pending approval as APPROVAL_DENIED; only the real-PostgreSQL ENACTMENT case
+    // could see that, and nothing runs it before the founder's catch-all. The bound name says it offline.
+    expect(store.pendingApprovals.name).toBe('bound pendingApprovals');
+    expect(store.deniedApprovals.name).toBe('bound deniedApprovals');
+  });
+
+  it('PARITY: the PostgreSQL approval reads select the state their names promise', () => {
+    // The offline half of the real-PostgreSQL ENACTMENT case: a `deniedApprovals` whose SQL read PENDING
+    // would pass every in-memory test and fail every run with a pending approval.
+    const source = readFileSync(join(__dirname, '..', 'src', 'relay', 'persistence', 'julius-lifecycle-postgres.ts'), 'utf8');
+    const read = (name: string) => {
+      const start = source.indexOf(`async ${name}(`);
+      return source.slice(start, source.indexOf('\n  }\n', start));
+    };
+    expect(read('pendingApprovals')).toContain("state='PENDING'");
+    expect(read('pendingApprovals')).not.toContain("state='DENIED'");
+    expect(read('deniedApprovals')).toContain("state='DENIED'");
+    expect(read('deniedApprovals')).not.toContain("state='PENDING'");
   });
 
   it('PARITY: the PostgreSQL claim uses JULIUS_CLAIMABLE_RUN_STATES and refuses PENDING and DENIED approvals', () => {
