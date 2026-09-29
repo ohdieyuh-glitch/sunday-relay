@@ -751,6 +751,24 @@ export class JuliusRunLoop {
     ]);
 
     /**
+     * A RECORDED DENIAL ENDS THE RUN, WHATEVER ELSE HOLDS IT.
+     *
+     * `decideJuliusApproval` writes DENIED and then moves the run to FAILED, and
+     * that move can lose a version race: a concurrent advance walks BLOCKED ->
+     * READY between the two, and the FAILED move is not retried. The claim
+     * refuses a run holding a DENIED approval, so nothing ran. But the run then
+     * sat READY for ever: the denial was invisible, and the drive "stalled" with
+     * no cause. So the denial is enacted here, before the pause and the pending
+     * holds (a denied run is not waiting on anyone) and before the verification
+     * sweep (which dispatches a reviewer).
+     */
+    const deniedApprovals = this.deps.store.deniedApprovals;
+    if (!JULIUS_TERMINAL_MISSION_STATES.includes(run.state) && deniedApprovals !== undefined
+      && (await deniedApprovals.call(this.deps.store, runId, projectId)).length > 0) {
+      return this.#applyTarget(run, { state: 'FAILED', reasonCode: 'APPROVAL_DENIED' }, tasks, decisions, 0);
+    }
+
+    /**
      * A VERIFICATION THAT NEVER RAN IS RESUMED BEFORE THE STATE IS COMPUTED.
      *
      * A process that dies between `acceptWorkerResult` and the decision leaves
@@ -904,6 +922,22 @@ export class JuliusRunLoop {
         roles: new Set(tasks.map((item) => item.role)).size,
       },
     });
+    return this.#applyTarget(run, target, tasks, decisions, resumed);
+  }
+
+  /**
+   * Move a run to `target` along a legal path, recording the completion fact and
+   * the terminal event. One place, used by the task graph's target and by a
+   * recorded denial, so a denial ends a run exactly the way anything else does.
+   */
+  async #applyTarget(
+    run: JuliusRunRow,
+    target: { state: JuliusMissionState; reasonCode: string },
+    tasks: readonly JuliusTask[],
+    decisions: readonly JuliusRecordedDecision[],
+    resumed: number,
+  ): Promise<JuliusRunAdvance> {
+    const { runId, projectId } = run;
     const path = planRunStatePath(run.state, target.state);
     if (path.length === 0) {
       return { runId, from: run.state, to: run.state, changed: false, reasonCode: target.reasonCode, resumedVerifications: resumed };

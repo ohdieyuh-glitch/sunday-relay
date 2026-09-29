@@ -14,7 +14,9 @@ import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgr
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { composeJuliusMissionBootstrap, handleJuliusMissionRoute } from './julius-mission-routes';
-import { architectWorker, CODER_WORKER, assembleLiveJuliusRuntime, createContextAndClaimHandoffs, reviewerWorker } from './julius/live-composition';
+import {
+  architectWorker, CODER_WORKER, assembleLiveJuliusRuntime, createContextAndClaimHandoffs, driveJuliusRunToTerminal, reviewerWorker,
+} from './julius/live-composition';
 import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 
 /**
@@ -30,6 +32,9 @@ import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
  *   - the claim offers nothing from a run holding a PENDING approval, or a
  *     DENIED one, while its run row still says READY (the NOT EXISTS against
  *     `julius_approvals`), and offers the work again once it is granted;
+ *   - such a denial ENDS the run at the next advance, through the production
+ *     store's `deniedApprovals`: FAILED as APPROVAL_DENIED, announced, and
+ *     nothing dispatched;
  *   - one tick of a gated run writes the PENDING approval and moves the run to
  *     BLOCKED in one transaction, as RECORDED transitions (READY -> EXECUTING
  *     -> BLOCKED, `APPROVAL_REQUIRED`, with their events), hands the task back
@@ -135,6 +140,43 @@ suite('the C.A.R.D. gate at dispatch and the claim hold over a real PostgreSQL',
     });
     expect(await runState(run.runId)).toBe('READY');
     expect(await claim(run.projectId), 'a denial stops the work whatever the run row says').toEqual([]);
+  });
+
+  it('ENACTMENT: that denial ENDS the run at the next advance through the production store, and nothing is dispatched', async () => {
+    const run = await created();
+    const key = nonce();
+    await lifecycle.requestApproval(record(run, key));
+    await lifecycle.decideApproval({
+      runId: run.runId, approvalId: `apr-${key}`, projectId: run.projectId, state: 'DENIED',
+      decidedBy: 'ghu-founder', decisionReason: 'No.', decidedAt: new Date().toISOString(),
+    });
+    expect(await runState(run.runId), 'the denial landed and the run row never moved').toBe('READY');
+
+    const store = createContextAndClaimHandoffs(createJuliusPostgresRuntimeStore(pool)).store;
+    expect((await store.deniedApprovals(run.runId, run.projectId)).map((row) => row.approvalId), 'the production store reads it')
+      .toEqual([`apr-${key}`]);
+    const architect = scriptedAdapter(architectWorker({}), []);
+    const coder = scriptedAdapter(CODER_WORKER, []);
+    const reviewer = scriptedAdapter(reviewerWorker('hermes'), []);
+    const runtime = assembleLiveJuliusRuntime({
+      store,
+      entries: [
+        { worker: architectWorker({}), adapter: architect },
+        { worker: CODER_WORKER, adapter: coder },
+        { worker: reviewerWorker('hermes'), adapter: reviewer },
+      ],
+      cardRevision: CARD, spendCeilingUsdMicros: 20_000_000, maxRepairRounds: 1,
+    });
+
+    const outcome = await driveJuliusRunToTerminal({ loop: runtime.loop, store, runId: run.runId, projectId: run.projectId, maxTicks: 4 });
+    expect(outcome, 'ended, not stalled READY for ever').toMatchObject({ state: 'FAILED', stalled: false });
+    expect(architect.dispatches.length + coder.dispatches.length + reviewer.dispatches.length, 'nothing dispatched').toBe(0);
+    const last = await pool.query<{ to_state: string; reason_code: string }>(
+      'SELECT to_state, reason_code FROM relay_wonderland.julius_transitions WHERE run_id=$1 ORDER BY sequence DESC LIMIT 1', [run.runId]);
+    expect(last.rows[0], 'a RECORDED move, with the denial as its reason').toEqual({ to_state: 'FAILED', reason_code: 'APPROVAL_DENIED' });
+    const announced = await pool.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM relay_wonderland.events WHERE stream_id=$1 AND event_type='julius.run.failed'`, [run.runId]);
+    expect(announced.rows[0]!.n, 'and announced once').toBe(1);
   });
 
   it('THE GATE: one tick writes the PENDING approval and a RECORDED move to BLOCKED; a grant dispatches exactly the gated work', async () => {
