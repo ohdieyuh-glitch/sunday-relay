@@ -210,6 +210,9 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-state-path.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-task-pipeline.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-execution-coordinator.ts', 'TASK GRAPH / SCHEDULER'],
+  // Which store failures are transient, read from the driver's code; the coordinator retries
+  // its own bookkeeping on it and never the dispatch.
+  ['src/relay/mission/julius/julius-store-failure.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-lease-keeper.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-workspace-attribution.ts', 'CODING AGENT'],
   // Reached by the live-mission preflight, which asks whether a first-party
