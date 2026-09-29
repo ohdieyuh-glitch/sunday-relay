@@ -23,6 +23,7 @@
  * the store's `persist` and retains each full snapshot under its contextId.
  */
 
+import type { ClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
 import { createHash } from 'node:crypto';
 import type { JuliusContractReviewCharge } from '../../src/relay/mission/julius/julius-task-contract';
 import {
@@ -560,6 +561,8 @@ const reviewerDiagnostics = (input: {
   readonly startedAt?: string;
   readonly completedAt?: string;
   readonly usage?: HermesUsage;
+  /** The operator's declared billing path (`juliusReviewerBillingPath`); null says nothing. */
+  readonly billingPath: ReturnType<typeof juliusReviewerBillingPath>;
 }): Record<string, unknown> => {
   const started = input.startedAt === undefined ? Number.NaN : Date.parse(input.startedAt);
   const completed = input.completedAt === undefined ? Number.NaN : Date.parse(input.completedAt);
@@ -587,6 +590,8 @@ const reviewerDiagnostics = (input: {
        the strongest honest basis here is ESTIMATED — and UNKNOWN when even that
        is absent. Neither is ever `PROVIDER_REPORTED`, and neither is zero. */
     costBasis: estimated === null ? 'UNKNOWN' : 'ESTIMATED',
+    // How it is paid for, as the operator declared it; absent when undeclared.
+    ...(input.billingPath === null ? {} : { billingPath: input.billingPath }),
     estimatedCostUsdMicros: estimated,
     inputTokens: input.usage?.inputTokens ?? null,
     outputTokens: input.usage?.outputTokens ?? null,
@@ -656,6 +661,43 @@ const providerFacts = (
   elapsedMs: Date.now() - startedAtMs,
 });
 
+/**
+ * HOW THE PROMPT ARCHITECT IS PAID FOR: its OpenAI API key, by construction.
+ *
+ * `createLiveArchitectAdapter` refuses to exist without an `apiKey`, and the Chat
+ * Completions connector authenticates with nothing else, so the billing path is
+ * not an inference from an amount — there is never an amount — but a fact about
+ * the only way this adapter can run. Stated on every ending, so the ledger can
+ * say "API-billed, amount not reported" instead of UNKNOWN for a role whose
+ * money is real. The founder's accounting requirement names this distinction.
+ */
+const ARCHITECT_BILLING = Object.freeze({ billingPath: 'API_BILLED' as const });
+
+/**
+ * HOW THE INDEPENDENT REVIEWER IS PAID FOR, IN THE OPERATOR'S OWN WORDS.
+ *
+ * Hermes talks to its provider with the credential in its own profile, and
+ * nothing Julius observes can tell an API key from a subscription behind it. So
+ * the only honest source is `RELAY_HERMES_BILLING_MODE`, the operator's
+ * declaration, parsed exactly as `declaredBillingPath` in relay-bridge/attestation.ts
+ * parses it (a test holds the two equal). Undeclared says nothing and returns
+ * null; a word nobody defined is `UNKNOWN`, never agreement with a default.
+ */
+export function juliusReviewerBillingPath(
+  declared: string | undefined,
+): 'API_BILLED' | 'SUBSCRIPTION' | 'NOT_APPLICABLE' | 'UNKNOWN' | null {
+  const value = (declared ?? '').trim().toLowerCase();
+  if (value === '') return null;
+  switch (value) {
+    case 'api_billed': return 'API_BILLED';
+    case 'subscription': return 'SUBSCRIPTION';
+    // A locally hosted model is billed by nobody.
+    case 'local': return 'NOT_APPLICABLE';
+    // `portal`, a misspelling, anything else: paid somehow Julius cannot name.
+    default: return 'UNKNOWN';
+  }
+}
+
 const planDiagnostics = (input: {
   readonly requestedModel: string | null;
   readonly servedModel?: string | null;
@@ -720,6 +762,13 @@ const planDiagnostics = (input: {
    * a table exists, inventing the dollars is exactly what is forbidden.
    */
   costBasis: 'UNKNOWN',
+  /**
+   * BUT IT CAN SAY HOW IT IS PAID FOR, because that is decided by construction.
+   * This adapter is the OpenAI Chat Completions architect and refuses to exist
+   * without an API key, so every dispatch it makes is billed to that key: the
+   * amount is unknown, the billing path is not. See `ARCHITECT_BILLING`.
+   */
+  ...ARCHITECT_BILLING,
   inputTokens: input.inputTokens ?? null,
   /**
    * CACHED INPUT IS BILLED DIFFERENTLY, and the connector has always read it
@@ -1103,6 +1152,7 @@ export function createLiveArchitectAdapter(input: {
             outputTokens: outcome.usage.outputTokens ?? undefined,
             toolCalls: 0,
             costBasis: 'UNKNOWN',
+            ...ARCHITECT_BILLING,
           },
         };
       }
@@ -1159,6 +1209,7 @@ export function createLiveArchitectAdapter(input: {
             outputTokens: outcome.usage.outputTokens ?? undefined,
             toolCalls: 0,
             costBasis: 'UNKNOWN',
+            ...ARCHITECT_BILLING,
           },
         };
       }
@@ -1214,6 +1265,7 @@ export function createLiveArchitectAdapter(input: {
             outputTokens: outcome.usage.outputTokens ?? undefined,
             toolCalls: 0,
             costBasis: 'UNKNOWN',
+            ...ARCHITECT_BILLING,
           },
         };
       }
@@ -1307,6 +1359,7 @@ export function createLiveArchitectAdapter(input: {
           // is UNKNOWN and the reservation stays held rather than settling at
           // zero. Unknown is not free.
           costBasis: 'UNKNOWN',
+          ...ARCHITECT_BILLING,
         },
       };
       }
@@ -1322,6 +1375,53 @@ export function createLiveArchitectAdapter(input: {
  */
 export function coderContractBrief(contract: JuliusContractReviewCharge): string {
   return renderJuliusCodingAgentContract(contract);
+}
+
+/** What a finished session reported about its cost, as the coding provider observed it. */
+interface SessionCost {
+  readonly costUsdMicros: number | null;
+  readonly costBasis?: string;
+  readonly diagnostics?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * HOW THE SESSION WAS PAID FOR, and — only when no bill can exist — what the
+ * runtime priced it at. Both come from the provider's own diagnostics, which the
+ * provider decided from the credential it resolved.
+ *
+ * `billingPath` is the provider's word (`SUBSCRIPTION`, `API_BILLED`), carried to
+ * the ledger unchanged; the ledger drops it if it contradicts the basis.
+ * `executionUsdMicros` travels ONLY beside `NOT_APPLICABLE`: it is consumption of
+ * the mission's execution budget, and beside any other basis it could be read as
+ * a second bill.
+ */
+function sessionPaymentFacts(session: SessionCost): Record<string, unknown> {
+  const path = session.diagnostics?.billingPath;
+  const execution = session.diagnostics?.executionCostUsdMicros;
+  return {
+    ...(typeof path === 'string' ? { billingPath: path } : {}),
+    ...(session.costBasis === 'NOT_APPLICABLE' && typeof execution === 'number' ? { executionUsdMicros: execution } : {}),
+  };
+}
+
+/**
+ * WHAT A FINISHED SESSION COST, AS IT RIDES ON A LATER FAILURE.
+ *
+ * An executor step or a cancellation after the session still owes the session's
+ * cost to the ledger. In API mode that is the bill. Under a subscription there is
+ * no bill, so the failure carries the basis that says so, the billing path, and
+ * the runtime's execution figure — or the settlement would read `UNKNOWN`, a
+ * charge that exists and was not read. Named as the provider names them on its
+ * own failure endings, which is what the coordinator reads.
+ */
+function sessionCostFacts(session: SessionCost): Record<string, unknown> {
+  const payment = sessionPaymentFacts(session);
+  return {
+    ...(session.costUsdMicros === null ? {} : { costUsdMicros: session.costUsdMicros }),
+    ...(session.costBasis === 'NOT_APPLICABLE' ? { costBasis: 'NOT_APPLICABLE' } : {}),
+    ...(typeof payment.billingPath === 'string' ? { billingPath: payment.billingPath } : {}),
+    ...(typeof payment.executionUsdMicros === 'number' ? { executionCostUsdMicros: payment.executionUsdMicros } : {}),
+  };
 }
 
 /**
@@ -1384,11 +1484,11 @@ export function createJuliusCodingAgentAdapter(input: {
        * from reading the workspace, writing a diff artifact or running the tests
        * under a claim that may by now be another attempt's.
        */
-      const stopIfCancelled = (step: 'base' | 'status' | 'diff' | 'test', spent: { readonly costUsdMicros: number | null } | null): void => {
+      const stopIfCancelled = (step: 'base' | 'status' | 'diff' | 'test', spent: SessionCost | null): void => {
         if (dispatch.signal?.aborted !== true) return;
         throw new JuliusDispatchError('CANCELLED', false, 'The dispatch was cancelled; no further executor effect ran.', `coder_cancelled_before_${step}`, {
           runtimeStarted: spent !== null,
-          ...(spent === null || spent.costUsdMicros === null ? {} : { costUsdMicros: spent.costUsdMicros }),
+          ...(spent === null ? {} : sessionCostFacts(spent)),
         });
       };
       stopIfCancelled('base', null);
@@ -1518,7 +1618,7 @@ export function createJuliusCodingAgentAdapter(input: {
           throw new JuliusDispatchError(error.code, error.retryable, error.safeMessage, error.failureClass, {
             ...(error.diagnostics ?? {}),
             runtimeStarted: true,
-            ...(outcome.observation.costUsdMicros === null ? {} : { costUsdMicros: outcome.observation.costUsdMicros }),
+            ...sessionCostFacts(outcome.observation),
           });
         }
       };
@@ -1657,9 +1757,13 @@ export function createJuliusCodingAgentAdapter(input: {
           /**
            * `PROVIDER_REPORTED` only when the provider actually reported a figure.
            * Anything else is UNKNOWN, which the ledger holds as an unreleased
-           * reservation rather than a settlement of zero.
+           * reservation rather than a settlement of zero — except a subscription
+           * dispatch, which is `NOT_APPLICABLE`: no bill can exist.
            */
           costBasis: observation.costBasis,
+          // How it was paid for, and — under a subscription only — what the
+          // runtime priced it at for the EXECUTION budget. Neither is a bill.
+          ...sessionPaymentFacts(observation),
         },
       };
     },
@@ -1687,11 +1791,27 @@ export function createLiveHostedCodingAdapter(input: {
   readonly researchPolicyFor?: ResearchPolicySource;
   readonly run?: typeof runHostedCodingAgent;
   readonly queryLoader?: () => Promise<HostedQueryFn>;
+  /**
+   * Which credential the child may use. Absent means `ANTHROPIC_API`, unchanged.
+   *
+   * THIS FIELD HAD TO BE DECLARED HERE OR THE WIRING WOULD HAVE BEEN A NO-OP. The
+   * composition passes it with a conditional spread, and a spread defeats
+   * TypeScript's excess-property check — so without this line the whole mode would
+   * have typechecked, compiled, and been silently dropped one call before it
+   * mattered.
+   */
+  readonly authMode?: ClaudeAuthMode;
 }): JuliusProviderAdapter {
   // `testCommand` is deliberately NOT in this guard. Empty means the mission
   // declared no deterministic check, which is a valid mission and not a missing
   // configuration; the dispatch below runs nothing and records no TEST row.
-  if (!input.apiKey || !input.requestedModel || !input.workspacePath) {
+  //
+  // NOR IS `apiKey` IN SUBSCRIPTION MODE. An empty key there is the mission's
+  // configuration rather than a gap in it: the credential is deliberately absent so
+  // the CLI authenticates from the founder's own subscription login, and requiring
+  // one would be requiring the thing that defeats the mode.
+  const requiresApiKey = (input.authMode ?? 'ANTHROPIC_API') === 'ANTHROPIC_API';
+  if ((requiresApiKey && !input.apiKey) || !input.requestedModel || !input.workspacePath) {
     throw new Error('hosted_coding_adapter_requires_live_config');
   }
   return createJuliusCodingAgentAdapter({
@@ -1700,6 +1820,7 @@ export function createLiveHostedCodingAdapter(input: {
     ...(input.researchPolicyFor === undefined ? {} : { researchPolicyFor: input.researchPolicyFor }),
     provider: createClaudeCodeCodingAgentProvider({
       apiKey: input.apiKey, requestedModel: input.requestedModel,
+      ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
       ...(input.run === undefined ? {} : { run: input.run }),
       ...(input.queryLoader === undefined ? {} : { queryLoader: input.queryLoader }),
     }),
@@ -1736,6 +1857,8 @@ export function createLiveHermesReviewerAdapter(input: {
   const sleep = input.sleep ?? abortableSleep;
   const transientReaskLimit = input.transientReaskLimit ?? REVIEW_TRANSIENT_REASK_LIMIT;
   if (!Number.isSafeInteger(transientReaskLimit) || transientReaskLimit < 0) throw new Error('hermes_reviewer_adapter_reask_limit_invalid');
+  // The operator's declaration, read once: nothing the review observes can answer it.
+  const billingPath = juliusReviewerBillingPath(input.config.billingMode);
   return {
     adapterId: input.worker.adapterId,
     async dispatch(dispatch): Promise<JuliusProviderResult> {
@@ -2036,7 +2159,7 @@ export function createLiveHermesReviewerAdapter(input: {
         throw new JuliusDispatchError(
           code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape,
           reviewerDiagnostics({
-            diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape,
+            diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath,
             startedAt: outcome.startedAt, completedAt: outcome.completedAt,
             // A FAILED REVIEW STILL ACCOUNTS FOR WHAT IT BOUGHT: tokens, calls
             // and the served model, from the file Hermes writes on failure too.
@@ -2114,7 +2237,7 @@ export function createLiveHermesReviewerAdapter(input: {
          * nowhere at all.
          */
         diagnostics: reviewerDiagnostics({
-          diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape,
+          diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath,
           startedAt: outcome.startedAt, completedAt: outcome.completedAt,
           usage: reviewUsage,
         }),
@@ -2133,6 +2256,8 @@ export function createLiveHermesReviewerAdapter(input: {
           outputTokens: reviewUsage.outputTokens ?? undefined,
           costBasis: harnessEstimateMicros(reviewUsage) === null ? 'UNKNOWN' : 'ESTIMATED',
           estimatedUsdMicros: harnessEstimateMicros(reviewUsage) ?? undefined,
+          // As the operator declared it; the ledger drops it if it contradicts the basis.
+          ...(billingPath === null ? {} : { billingPath }),
         },
       };
     },

@@ -1,3 +1,4 @@
+import type { ClaudeAuthMode } from './hosted-auth';
 import {
   compileHostedEnvelope, hostedChildEnv, verifyGrantedEnvelope,
   withinCostCeiling, DEFAULT_HOSTED_LIMITS,
@@ -9,6 +10,7 @@ import {
 } from './hosted-observation';
 import { classifyHostedFailure, type HostedFailureReason } from './hosted-failure-reason';
 import { HOSTED_ADAPTER_ID, HOSTED_SDK_PACKAGE } from './hosted-readiness';
+import { juliusHostedToolAuthority } from './hosted-tool-authority';
 
 /**
  * ONE HOSTED CODING AGENT EXECUTION.
@@ -111,6 +113,13 @@ export type HostedRunOutcome =
   };
 
 export interface HostedRunInput {
+  /**
+   * Which credential the child may use. Absent means `ANTHROPIC_API`, the mode
+   * this surface has always had. `CLAUDE_SUBSCRIPTION` omits the API key so the
+   * CLI authenticates from the founder's own subscription login — which
+   * Anthropic's documented precedence makes an omission rather than a preference.
+   */
+  readonly authMode?: ClaudeAuthMode;
   readonly queryFn: HostedQueryFn;
   readonly prompt: string;
   readonly workspacePath: string;
@@ -148,6 +157,16 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
   input.onCancel?.(() => { cancelled = true; controller.abort(); });
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, limits.maxRuntimeMs);
 
+  /**
+   * JULIUS'S AUTHORITY, AS THE FIRST STEP OF EVERY TOOL CALL, ON EVERY RUN. A
+   * `PreToolUse` hook runs before deny rules, the permission mode and the allow
+   * list, and its deny holds in every mode; without it the allow list and
+   * `acceptEdits` approve `Read` and `Edit` at ANY path the host user can reach.
+   * It confines every file tool to this workspace by real path and refuses edits
+   * in control, credential and workflow locations (`hosted-tool-authority.ts`).
+   */
+  const authority = juliusHostedToolAuthority({ workspacePath: input.workspacePath, signal: controller.signal });
+
   let observation = emptyObservation();
   try {
     const stream = input.queryFn({
@@ -173,8 +192,16 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
           apiKey: input.apiKey,
           path: process.env.PATH,
           home: process.env.HOME,
+          // ABSENT MEANS API MODE, so every existing caller is unchanged. Under
+          // CLAUDE_SUBSCRIPTION the credential is omitted entirely and the CLI
+          // uses its own stored subscription login, which `decideClaudeAuth`
+          // has already refused to allow without observing.
+          ...(input.authMode === undefined ? {} : { mode: input.authMode }),
         }),
         abortController: controller,
+        // No matcher: every tool call reaches the authority, which answers only
+        // for file tools and has no opinion on the rest.
+        hooks: { PreToolUse: [{ hooks: [authority] }] },
         ...(envelope.model !== null ? { model: envelope.model } : {}),
       },
     });

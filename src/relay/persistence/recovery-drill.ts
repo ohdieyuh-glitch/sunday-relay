@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -127,11 +127,29 @@ export async function runRecoveryDrill(): Promise<{ lines: string[]; exitCode: n
  * arguments on every host. The `.bin` shim is used only as a fallback, so a
  * layout without the package entry still fails on a real path rather than an
  * invented one.
+ *
+ * EXCEPT THAT ONE PATH MEANS TWO THINGS — see the same function in
+ * verify-harness.ts. esbuild's installer replaces this entry with the native
+ * binary on Linux and macOS, so `node <entry>` died on the CI runner's ELF
+ * header. It is spawned through Node only when it IS a script.
  */
 function repoEsbuild(): { readonly command: string; readonly lead: readonly string[] } {
   const entry = join(process.cwd(), 'node_modules', 'esbuild', 'bin', 'esbuild');
-  if (existsSync(entry)) return { command: process.execPath, lead: [entry] };
+  if (existsSync(entry)) {
+    return startsWithShebang(entry) ? { command: process.execPath, lead: [entry] } : { command: entry, lead: [] };
+  }
   return { command: join(process.cwd(), 'node_modules', '.bin', 'esbuild'), lead: [] };
+}
+
+/** Whether a file is a script (`#!`) rather than a native binary. Reads two bytes. */
+function startsWithShebang(path: string): boolean {
+  const fd = openSync(path, 'r');
+  try {
+    const head = Buffer.alloc(2);
+    return readSync(fd, head, 0, 2, 0) === 2 && head.toString('latin1') === '#!';
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**

@@ -1,6 +1,6 @@
 import { JULIUS_CODING_AGENT_FAILURES } from './julius-coding-agent';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
-import { JULIUS_COST_BASES } from './julius-cost-accounting';
+import { JULIUS_BILLING_PATHS, JULIUS_COST_BASES } from './julius-cost-accounting';
 import type{JuliusWorker,JuliusWorkerRegistry,JuliusWorkerRole}from'./julius-runtime';import{workerAllowedByCard,type JuliusCardPolicy}from'./julius-policy';
 export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PROVIDER_UNAVAILABLE','INVALID_REQUEST','WORKER_EXECUTION_FAILURE','POLICY_DENIED','BUDGET_DENIED','CANCELLED']as const;export type JuliusErrorCode=typeof JULIUS_ERROR_CODES[number];
 /**
@@ -441,6 +441,20 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
    * vocabulary every role answers in. --- */
   /** `PROVIDER_REPORTED`, `MEASURED_FROM_USAGE`, `ESTIMATED` or `UNKNOWN`. Never absent. */
   costBasis:safeEnum(v.costBasis,JULIUS_COST_BASES),
+  /**
+   * HOW THE ATTEMPT WAS PAID FOR, from the credential the provider resolved:
+   * `API_BILLED`, `SUBSCRIPTION`, `NOT_APPLICABLE` or `UNKNOWN`. Its own column,
+   * because a basis answers "how do you know the amount" and this answers "was
+   * there a bill at all" — one column for both is how a subscription became spend.
+   */
+  billingPath:safeEnum(v.billingPath,JULIUS_BILLING_PATHS),
+  /**
+   * WHAT THE RUNTIME PRICED A SUBSCRIPTION DISPATCH AT — NEVER A BILL. Present
+   * only beside `costBasis: NOT_APPLICABLE`: the figure the mission's execution
+   * budget is charged with, and the record of what the same work would have cost
+   * through the API. Named apart from `costUsdMicros` so no reader can sum them.
+   */
+  executionCostUsdMicros:safeCount(v.executionCostUsdMicros),
   /**
    * A HARNESS'S OWN ARITHMETIC, KEPT APART FROM WHAT A PROVIDER BILLED.
    *

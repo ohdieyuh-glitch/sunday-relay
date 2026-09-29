@@ -31,6 +31,12 @@ const ALLOWED = [
   /^JULIUS LIVE MISSION — preflight$/u,
   /^  mission: [\w:.-]+ \(project [\w:.-]+\)$/u,
   /^  requested models: architect=\S+ coder=\S+ reviewer=\S+$/u,
+  // HOW EACH ROLE IS PAID FOR, which credential the Coding Agent resolved, and whether the
+  // live store can serve its own ledger: the three facts a paid run is admitted on. Closed
+  // tokens only, exactly as `liveBillingPaths`, `claudeAuthLine` and the ledger check print them.
+  /^  billing paths: architect=(API_BILLED|SUBSCRIPTION|NOT_APPLICABLE|UNKNOWN) coder=(API_BILLED|SUBSCRIPTION|UNDECIDED) reviewer=(API_BILLED|SUBSCRIPTION|NOT_APPLICABLE|UNKNOWN|UNDECLARED)$/u,
+  /^  CLAUDE AUTH: (API KEY|SUBSCRIPTION) provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=(n\/a|max|pro|team|enterprise|unknown) api_key_used=(true|false) api_cost_applicable=(true|false)$/u,
+  /^  live_ledger: (BOUND|UNBOUND|UNKNOWN)$/u,
   /^  [A-Z][A-Z0-9_]*: (SET|MISSING)$/u,
   /^  BLOCKED [a-z_ ]+: .+$/iu,
   /^RESULT: [A-Z_]+( \(stalled before terminal state\))?( after \d+ ticks)?$/u,

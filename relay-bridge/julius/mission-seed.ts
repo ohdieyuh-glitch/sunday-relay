@@ -66,8 +66,24 @@ export function createPostgresMissionSeedStore(pool: Pool): MissionSeedStore {
     async insertCriteria(runId, criteria) {
       for (const [ordinal, criterion] of criteria.entries()) {
         await pool.query(
+          /**
+           * `ON CONFLICT (run_id,criterion_id)`, NEVER A BARE `ON CONFLICT`.
+           *
+           * A bare conflict target means "any constraint", and while
+           * `criterion_id` was the primary key ON ITS OWN that included the id
+           * alone — so the SECOND run ever to use `criterion-test` or
+           * `created-in-world` got NO row, silently, across every project and
+           * every tenant. Every explicit rerun lost all of its criteria, because
+           * a rerun reuses the ids by definition, and the run then reported
+           * "0 of 0 criteria met" with nothing anywhere saying why.
+           *
+           * Migration 028 re-keys the table on `(run_id, criterion_id)`. Naming
+           * the target HERE is what keeps this insert idempotent for the same run,
+           * which is what it was for, while never again swallowing a different
+           * run's criterion.
+           */
           `INSERT INTO relay_wonderland.julius_acceptance_criteria(criterion_id,run_id,description,required_evidence_types,ordinal)
-           VALUES($1,$2,$3,$4::jsonb,$5) ON CONFLICT DO NOTHING`,
+           VALUES($1,$2,$3,$4::jsonb,$5) ON CONFLICT (run_id,criterion_id) DO NOTHING`,
           [criterion.criterionId, runId, criterion.description, JSON.stringify(criterion.requiredEvidenceTypes), ordinal],
         );
       }

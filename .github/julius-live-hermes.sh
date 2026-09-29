@@ -28,9 +28,26 @@
 # 0600 mode, and is never printed, logged, or placed anywhere else.
 set -euo pipefail
 
+# FOUR OPTIONAL SWITCHES FOR THE FOUNDER'S LOCAL RIG, each defaulting to exactly
+# what the workflow ran before — the workflow sets none of them.
+#   HERMES_PHASE    install | bootstrap | all (default all, the workflow's one pass).
+#                   The local rig (scripts/julius-local-qualification.sh) installs the
+#                   pinned engine BEFORE any credential exists, so "the reviewer runtime
+#                   is present" is proven on its own; `bootstrap` later writes the
+#                   profile from an already-installed engine.
+#   HERMES_PYTHON   the interpreter the virtualenv is built from (default python3).
+#                   The runner's python3 is 3.12; a local distro may ship a newer one
+#                   that the pinned engine's dependency wheels predate.
+#   HERMES_VENV_DIR / HERMES_SRC_DIR  where the engine and its source live (default
+#                   /opt/hermes-venv and /opt/hermes-src). A local operator who does not
+#                   own /opt keeps them in a directory of their own.
+HERMES_PHASE=${HERMES_PHASE:-all}
+case "$HERMES_PHASE" in install|bootstrap|all) ;; *) echo "hermes_phase_unknown:$HERMES_PHASE" >&2; exit 1 ;; esac
+
 : "${HERMES_PROFILE_HOME:?missing HERMES_PROFILE_HOME}"
 : "${HERMES_WRAPPER_DIR:?missing HERMES_WRAPPER_DIR}"
-: "${XAI_API_KEY:?missing XAI_API_KEY}"
+# The credential is needed to BOOTSTRAP the profile, never to install the engine.
+[ "$HERMES_PHASE" = install ] || : "${XAI_API_KEY:?missing XAI_API_KEY}"
 # BOTH DEADLINES ARE REQUIRED, because their ORDER is the invariant this script
 # now enforces and a missing one would silently switch the enforcement off.
 : "${HERMES_REQUEST_TIMEOUT_SECONDS:?missing HERMES_REQUEST_TIMEOUT_SECONDS}"
@@ -50,11 +67,16 @@ set -euo pipefail
 # messaging gateway, which the reviewer's one-shot CLI path never touches.
 HERMES_REF=${HERMES_REF:-2ea39daeb1f675d72e5c21c9400f2d58d7e6d71a}
 HERMES_PROVIDER=${RELAY_HERMES_PROVIDER:-xai}
+HERMES_VENV=${HERMES_VENV_DIR:-/opt/hermes-venv}
 
+# THE INSTALL, skipped only when the phase is `bootstrap`. Its body is left at
+# the left margin on purpose: it is the workflow's install, line for line, and
+# the cases that hold it to account match those lines.
+if [ "$HERMES_PHASE" != bootstrap ]; then
 # Install into its own virtualenv so the runner's Python stays untouched and
 # the executable path is predictable.
-python3 -m venv /opt/hermes-venv
-/opt/hermes-venv/bin/pip install --quiet --upgrade pip
+"${HERMES_PYTHON:-python3}" -m venv "$HERMES_VENV"
+"$HERMES_VENV"/bin/pip install --quiet --upgrade pip
 case "$HERMES_REF" in
   *[!0-9a-f]*|'') echo "hermes_ref_not_a_commit_sha:$HERMES_REF" >&2; exit 1;;
 esac
@@ -80,7 +102,7 @@ esac
 # avoid. Waiting is the cheaper trade: the limit is transient and this step
 # still runs before anything can reach a provider, so a refusal here costs a
 # job and never money.
-HERMES_SRC=/opt/hermes-src
+HERMES_SRC=${HERMES_SRC_DIR:-/opt/hermes-src}
 rm -rf "$HERMES_SRC"
 mkdir -p "$HERMES_SRC"
 git -C "$HERMES_SRC" init --quiet
@@ -100,11 +122,19 @@ git -C "$HERMES_SRC" checkout --quiet FETCH_HEAD
 got="$(git -C "$HERMES_SRC" rev-parse HEAD)"
 [ "$got" = "$HERMES_REF" ] || {
   echo "hermes_source_not_pinned: checked out $got, expected $HERMES_REF" >&2; exit 1; }
-/opt/hermes-venv/bin/pip install --quiet "$HERMES_SRC"
+"$HERMES_VENV"/bin/pip install --quiet "$HERMES_SRC"
+fi
 
 
-HERMES_BIN=/opt/hermes-venv/bin/hermes
+HERMES_BIN="$HERMES_VENV"/bin/hermes
 test -x "$HERMES_BIN" || { echo 'hermes_not_installed' >&2; exit 1; }
+
+# An install-only pass ends here, having proven the pinned engine runs. Nothing
+# below it may happen without the credential, and nothing below it happened.
+if [ "$HERMES_PHASE" = install ]; then
+  echo "hermes_installed=$HERMES_BIN ref=$HERMES_REF version=$("$HERMES_BIN" --version 2>/dev/null | head -n 1)"
+  exit 0
+fi
 
 mkdir -p "$HERMES_PROFILE_HOME"
 chmod 0700 "$HERMES_PROFILE_HOME"
@@ -232,7 +262,7 @@ chmod 0755 "$HERMES_WRAPPER_DIR/hermes"
 # ("will the reviewer find a key here?") and it is a file read: no provider is
 # contacted, which is the whole contract of the preflight stage. It prints
 # nothing but its exit status.
-if ! env -u HERMES_HOME HOME="$HERMES_PROFILE_HOME" /opt/hermes-venv/bin/python -c \
+if ! env -u HERMES_HOME HOME="$HERMES_PROFILE_HOME" "$HERMES_VENV"/bin/python -c \
   'import sys; from hermes_cli.config import get_env_value_prefer_dotenv as resolve; sys.exit(0 if (resolve("XAI_API_KEY") or "").strip() else 1)' \
   >/dev/null 2>&1; then
   echo "hermes_credential_not_resolvable_for_provider:$HERMES_PROVIDER" >&2
@@ -247,7 +277,7 @@ fi
 # AND THE DEADLINE IS PROVEN THE SAME WAY THE CREDENTIAL IS: by asking Hermes's
 # own resolver what it will use, rather than trusting that a file exists. Reading
 # a config file contacts nothing, so the preflight's zero-provider contract holds.
-resolved_timeout=$(env -u HERMES_HOME HOME="$HERMES_PROFILE_HOME" /opt/hermes-venv/bin/python -c \
+resolved_timeout=$(env -u HERMES_HOME HOME="$HERMES_PROFILE_HOME" "$HERMES_VENV"/bin/python -c \
   'import sys; from hermes_cli.timeouts import get_provider_request_timeout as t; sys.stdout.write(str(t(sys.argv[1]) or 0))' \
   "$HERMES_PROVIDER" 2>/dev/null || echo 0)
 if [ "${resolved_timeout%%.*}" != "$HERMES_REQUEST_TIMEOUT_SECONDS" ]; then

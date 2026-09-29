@@ -32,6 +32,7 @@ import { fixedResourceEstimate, juliusContractSubjectTaskId, type JuliusPipeline
 import { JuliusRunLoop, type JuliusPolicySource, type JuliusRunLoopConfig } from './julius-run-loop';
 import type { JuliusBudgetPort, JuliusClock, JuliusIdFactory } from './julius-runtime-ports';
 import type { JuliusAllocationPolicy } from './julius-allocation-runtime';
+import type { JuliusSharedCeilingPolicy } from './julius-shared-ceiling';
 import type { JuliusSlotEnvelopePolicy } from './julius-slot-envelope';
 import type { JuliusResearchPort } from './julius-research-protocol';
 
@@ -434,11 +435,14 @@ export function createJuliusHarness(input: {
   readonly budgetUsdMicros?: number;
   /**
    * An allocation policy for the pipeline; absent, dispatches reserve the fixed
-   * estimate. Either rule: `julius-allocation.v1`, which funds the coder from
-   * the ceiling and hands the peers an estimate, or `julius-allocation.v2`,
-   * which gives all three slots an envelope out of the same ceiling.
+   * estimate. Any rule the pipeline accepts: `julius-allocation.v1`, which funds
+   * the coder from the ceiling and hands the peers an estimate;
+   * `julius-allocation.v2`, which gives all three slots an envelope out of the
+   * same ceiling; or `julius-allocation.v3`, the shared ceiling with protected
+   * floors that the LIVE composition runs. This union once stopped at v2, so a
+   * harness could not run the rule production does.
    */
-  readonly allocation?: JuliusAllocationPolicy | JuliusSlotEnvelopePolicy;
+  readonly allocation?: JuliusAllocationPolicy | JuliusSlotEnvelopePolicy | JuliusSharedCeilingPolicy;
   /** How Julius goes and looks; absent, a research ask is recorded as unserved. */
   readonly research?: JuliusResearchPort;
   readonly config?: Partial<JuliusRunLoopConfig>;

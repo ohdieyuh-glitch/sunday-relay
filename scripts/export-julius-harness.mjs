@@ -133,6 +133,7 @@ const KERNEL_DEPENDANT_EXCLUSIONS = [
   { path: 'src/relay/persistence/julius-event-append-conformance.ts', reason: 'the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root' },
   { path: 'relay-bridge/julius/durable-artifacts.ts', reason: 'composes the content-addressed artifact store with the work-artifact record so a body survives the process that made it; not yet reached by the live composition, which still holds bodies in its own exchange — the wiring is the next boundary' },
   { path: 'src/relay/persistence/julius-work-artifact-postgres.ts', reason: 'the PostgreSQL record of which body belongs to which attempt; reached once the live composition stops holding bodies in memory' },
+  { path: 'src/relay/persistence/julius-criteria-scope-conformance.ts', reason: 'the criteria-scope contract cases themselves: a criterion belongs to a RUN, not to the database. Written once and run by BOTH the in-memory store, which was always right, and real PostgreSQL, where a global primary key on criterion_id silently gave every rerun no criteria at all. Test support, imported by no root' },
   { path: 'src/relay/persistence/julius-decision-write-conformance.ts', reason: 'the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root' },
   { path: 'src/relay/mission/julius/julius-learning-loop.ts', reason: 'the Learning Loop’s measurement and promotion gate: it projects a mission’s outcome from the durable trajectory, compares a matched pair and answers whether an artifact may become trusted memory. It is an EVALUATION surface, read after a mission rather than during one, so no dispatch path reaches it — and it deliberately writes nothing: the promotion it authorises is performed by promoteJuliusMemoryClaim, which IS on the kernel path' },
   { path: 'src/relay/workspace/julius-tools/node-tool-adapter.ts', reason: 'the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests' },
@@ -211,6 +212,11 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-execution-coordinator.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-lease-keeper.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-workspace-attribution.ts', 'CODING AGENT'],
+  // Reached by the live-mission preflight, which asks whether a first-party
+  // subscription login exists before allowing CLAUDE_SUBSCRIPTION mode. It returns
+  // a class and a coarse plan label and never a credential.
+  ['src/relay/connectors/claude-code/capability-probe.ts', 'CODING AGENT'],
+  ['src/relay/connectors/claude-code/contracts.ts', 'CODING AGENT'],
   ['src/relay/mission/julius/julius-policy.ts', 'C.A.R.D. POLICY'],
   ['src/relay/mission/julius/julius-router.ts', 'WORKER REGISTRY / ROUTING'],
   ['src/relay/mission/julius/julius-agent-turn-loop.ts', 'AGENT TURN LOOP'],
@@ -219,6 +225,10 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-tool-lifecycle.ts', 'TOOLS'],
   ['src/relay/mission/julius/julius-tool-settlement.ts', 'TOOLS'],
   ['src/relay/mission/julius/julius-sandbox.ts', 'TOOLS'],
+  // The Coding Agent's file authority: the one workspace-path normaliser and the
+  // edit decision the hosted tool authority enforces on every file tool.
+  ['src/relay/mission/julius/julius-workspace-paths.ts', 'TOOLS'],
+  ['src/relay/mission/julius/julius-file-authority.ts', 'TOOLS'],
   ['src/relay/mission/julius/julius-artifacts.ts', 'ARTIFACTS / EVIDENCE'],
   ['src/relay/mission/julius/julius-verification-runtime.ts', 'VERIFICATION'],
   ['src/relay/mission/julius/julius-repair-runtime.ts', 'REPAIR'],

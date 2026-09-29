@@ -22,6 +22,12 @@ describe('workspace containment',()=>{
     ['another drive','C:\\ws','D:\\secret\\x',false],
     ['a UNC share','C:\\ws','\\\\server\\share\\x',false],
     ['the same drive, outside','C:\\ws','C:\\other',false],
-    ['the same drive, inside','C:\\ws','C:\\ws\\run-1',true],
+    /* THE ONE CASE WHOSE ANSWER DEPENDS ON THE HOST, and it was written as if it
+       did not. On Windows `C:\ws\run-1` IS inside `C:\ws`. On POSIX both are single
+       exotic names side by side — exactly what the paragraph above says of the
+       others — so it is NOT contained, and asserting `true` failed the Linux CI
+       runner, where this predicate actually gates the mount. The expectation now
+       says what each host's path semantics make true; both hosts still assert. */
+    ['the same drive, inside','C:\\ws','C:\\ws\\run-1',process.platform === 'win32'],
   ])('%s',(_name,root,candidate,expected)=>expect(workspaceContained(root,candidate)).toBe(expected));
 });

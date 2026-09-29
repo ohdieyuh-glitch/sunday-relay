@@ -41,13 +41,22 @@ set -euo pipefail
 : "${JULIUS_TENANT_ID:?missing JULIUS_TENANT_ID}"; : "${JULIUS_PUBLIC_KEY_PATH:?missing JULIUS_PUBLIC_KEY_PATH}"
 fleet_root=${JULIUS_FLEET_ROOT:-/tmp/julius-workspace}
 
-docker run -d --name julius-postgres -p 127.0.0.1:5432:5432 \
+# THE HOST PORT IS THE ONE LOCAL SWITCH, and unset it is 5432: exactly what both workflows ran
+# before. The founder's local qualification rig (scripts/julius-local-qualification.sh) sets it,
+# because inside WSL2 127.0.0.1:5432 is ALREADY TAKEN by Docker Desktop's forward to Julius's live
+# durable store: every WSL2 distro shares one network namespace, so a disposable qualification
+# database published there would collide with, or be mistaken for, the real one. Digits only, so
+# nothing but a port can reach the `-p` argument or the connection URL.
+pg_port=${JULIUS_LIVE_PG_PORT:-5432}
+case "$pg_port" in ''|*[!0-9]*) echo "pg_port_refused:$pg_port" >&2; exit 1 ;; esac
+
+docker run -d --name julius-postgres -p "127.0.0.1:${pg_port}:5432" \
   -e POSTGRES_USER="$PGUSER" -e POSTGRES_PASSWORD="$PGPASSWORD" -e POSTGRES_DB="$PGDATABASE" postgres:16-bookworm
 for _ in $(seq 1 40); do docker exec julius-postgres pg_isready -U "$PGUSER" && break; sleep 1; done
 # Assembled at runtime from parts, so this file carries a format string rather than a connection
 # URL with inline credentials.
-printf 'DATABASE_URL=postgresql://%s:%s@127.0.0.1:5432/%s\n' "$PGUSER" "$PGPASSWORD" "$PGDATABASE" >> "${GITHUB_ENV:?missing GITHUB_ENV}"
-DATABASE_URL=$(printf 'postgresql://%s:%s@127.0.0.1:5432/%s' "$PGUSER" "$PGPASSWORD" "$PGDATABASE")
+printf 'DATABASE_URL=postgresql://%s:%s@127.0.0.1:%s/%s\n' "$PGUSER" "$PGPASSWORD" "$pg_port" "$PGDATABASE" >> "${GITHUB_ENV:?missing GITHUB_ENV}"
+DATABASE_URL=$(printf 'postgresql://%s:%s@127.0.0.1:%s/%s' "$PGUSER" "$PGPASSWORD" "$pg_port" "$PGDATABASE")
 
 receipt_root=/executor-private/receipts
 receipt_mount=()

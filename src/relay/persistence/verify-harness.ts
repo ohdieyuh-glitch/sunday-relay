@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import {
-  appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync,
+  appendFileSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync,
   statSync, symlinkSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -466,11 +466,33 @@ export async function runPersistenceContractVerification(): Promise<{
  * arguments on every host. The `.bin` shim is used only as a fallback, so a
  * layout without the package entry still fails on a real path rather than an
  * invented one.
+ *
+ * EXCEPT THAT ONE PATH MEANS TWO THINGS, and "the same two arguments on every
+ * host" was measured on one host. esbuild's installer REPLACES this entry with
+ * the platform's native binary wherever it can (Linux, macOS) and leaves the
+ * JavaScript launcher only where it cannot (Windows). So on the Linux CI runner
+ * `node <entry>` handed Node an ELF header, died with "SyntaxError: Invalid or
+ * unexpected token", and this gate could not start there — the host it is
+ * supposed to run on. The entry is now spawned through Node only when it IS a
+ * script (its first two bytes are `#!`), and directly when it is the binary.
  */
 function repoEsbuild(): { readonly command: string; readonly lead: readonly string[] } {
   const entry = join(process.cwd(), 'node_modules', 'esbuild', 'bin', 'esbuild');
-  if (existsSync(entry)) return { command: process.execPath, lead: [entry] };
+  if (existsSync(entry)) {
+    return startsWithShebang(entry) ? { command: process.execPath, lead: [entry] } : { command: entry, lead: [] };
+  }
   return { command: join(process.cwd(), 'node_modules', '.bin', 'esbuild'), lead: [] };
+}
+
+/** Whether a file is a script (`#!`) rather than a native binary. Reads two bytes. */
+function startsWithShebang(path: string): boolean {
+  const fd = openSync(path, 'r');
+  try {
+    const head = Buffer.alloc(2);
+    return readSync(fd, head, 0, 2, 0) === 2 && head.toString('latin1') === '#!';
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**

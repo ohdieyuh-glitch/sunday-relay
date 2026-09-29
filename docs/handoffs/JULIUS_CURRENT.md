@@ -4,8 +4,302 @@
 > repository evidence does not. Update it whenever meaningful state changes and
 > before ending a session. Never rely on `/resume` as the sole record.
 
-**Most recent session: 2026-09-27, the LANDING pass. Read §000e, then §000d, then §000c, then §000b, then §000.**
+**Most recent session: 2026-09-28, #288 LANDED, THE FOUNDER'S FINAL PRIORITY 10 DECISION, AND THE FOCUSED FOLLOW-UP. Read §000h first (its first subsection is the current state), then §000e, then §000d, then §000c, then §000b, then §000.**
+> §000f and §000g exist only on `relay/julius-task-generality`, which this branch deliberately does not carry (see §000h).
 > The paragraph below it is the record of the session before that.
+
+---
+
+## 000h. CLAUDE SUBSCRIPTION AUTH, THE ACCOUNTING FIX, AND THE LOCAL LAUNCH PATH
+
+**Read this first.** It is the newest work. **When this section was written, nothing had been
+dispatched: provider dispatches 0, API spend $0.00.** The founder has authorized exactly ONE
+bounded paid run of Mission 6, on lane `lab`. The authorization is valid only after every gate in
+the next subsection has passed, in that order. Nothing in this section dispatches it, and
+"continue" or "verify providers" do not either.
+
+### Current state at landing: the Priority 10 run is GitHub-hosted and API-billed
+
+**The founder's FINAL decision for this Priority 10 run.** It supersedes the local-launch decision
+recorded further down, which is kept as history:
+
+| Role | Provider | Billing path |
+|---|---|---|
+| Architect | OpenAI | `API_BILLED` |
+| Coding Agent | Anthropic, `JULIUS_CLAUDE_AUTH` absent, so `ANTHROPIC_API` | `API_BILLED` |
+| Independent Reviewer | Hermes → xAI | `API_BILLED` |
+
+- The run is the hosted workflow `julius-first-live-mission.yml`, dispatched from the landed
+  commit. There is no local WSL run, and no WSL provisioning was ever done.
+- **`CLAUDE_SUBSCRIPTION` is preserved in full, not deprecated.** That covers the mode, its
+  child-environment isolation, its settlement accounting and every test. It waits for a supported
+  host that holds an official Max login. No Claude OAuth, session or setup-token goes to GitHub,
+  and there is no self-hosted runner.
+- The expected preflight line is `billing paths: architect=API_BILLED coder=API_BILLED
+  reviewer=API_BILLED`, beside `CLAUDE AUTH: API KEY`.
+
+**What landed, and how.**
+
+- **#288** was squash-merged by the founder at 2026-09-28T18:52:10Z as
+  `c833e2680a5480df6936bfa00fa1ebbca354ca42`.
+  - Its single parent is `a384b215`, and its tree equals #288's frozen head `15cf04d7`.
+  - Provenance: `provenant`, pr=288, approved_by=ohdieyuh-glitch.
+  - accept-main: run 36469349486 succeeded, with artifact 10990198659
+    `julius-accepted-main-c833e268…`.
+  - Relay CI on that push is red for exactly #288's two Linux failures, both fixed in this
+    follow-up (`27d09818`).
+- **The reviewer billing declaration** is the founder's own commit on `main`, and it is this
+  follow-up's parent. The julius-worker App has no `workflows` permission, so it cannot change a
+  workflow file.
+  - It adds `RELAY_HERMES_BILLING_MODE: api_billed` to the workflow's job environment, where the
+    xAI API key is injected.
+  - The local launcher now mirrors it instead of adding it; the drift test holds the two equal.
+  - It was applied by `declare-reviewer-billing.sh`, which refuses unless main is exactly
+    `c833e268` with its accept-main checkpoint, and the change is exactly +5/-0 in that one file.
+    **Run it with Git Bash:** in PowerShell, `bash` is `C:\Windows\system32\bash.exe`, which is
+    WSL, and WSL cannot open a `C:/` path. That was the first attempt's failure.
+- **The reviewer billing declaration landed** as `ec375f7012a281f0efe44a3b53523e2f38a427fa`.
+  - Its single parent is `c833e268`, and it is exactly +5/-0 in the workflow file.
+  - Its tree equals the simulation this follow-up was tested on.
+- **This follow-up** (PR #289) is 18 commits, all authored as `julius-worker[bot]`, on the
+  declaration:
+  - the 13 reviewed commits, identical in content to the local branch
+    `relay/julius-subscription-local-qualification` (`ced13a80`);
+  - the launcher mirroring the declaration;
+  - this handoff;
+  - the evidence columns;
+  - the carried confinement commit;
+  - this note.
+
+**Workspace confinement is carried BEFORE the paid run. Founder decision, 2026-09-28: Option 2,
+CONTAIN FIRST.**
+
+- **The gap.** It was found by the read-only Priority 10 readiness audit and proven by the
+  Wonderland integration session.
+  - On `main` since #288, the hosted Coding Agent's envelope is bare `allowedTools`
+    Read/Glob/Grep/Edit under `acceptEdits`, with no hook.
+  - The Agent SDK approves a bare allow rule at ANY path, and `acceptEdits` confines only its own
+    approvals.
+  - So the coder could read or edit all of these:
+    - `/proc/<parent>/environ`, which holds the architect's OpenAI key;
+    - the reviewer's Hermes profile, which holds the xAI key;
+    - the runner's checkout, including the evidence and reviewer scripts that run AFTER it.
+  - A qualification whose coder can edit the steps that judge it cannot produce evidence anyone
+    should trust. So Priority 10 does not run with the gap.
+- **The fix is carried, not re-implemented**, as ONE attributable commit from the local lane
+  `relay/julius-mvp-capabilities`:
+  - `15ef6947`, the kernel: the workspace-path normaliser and the location rules;
+  - `d0926adb`, the `PreToolUse` hook and the runner wiring.
+  - The commit message names both.
+- **What the hook does, on every hosted run:**
+  - it confines every file tool by real path;
+  - it refuses `..`, dangling links, and edits in control, credential and workflow locations;
+  - it refuses `Write`, which also stays in the envelope's disallowed tools.
+- **Left behind:** file creation and its contract grant, out-of-scope enforcement at the tool, the
+  prompt section, and new diagnostics.
+- **What Mission 6 can observe:** only that an edit to `.julius/`, which its contract already
+  forbids, is refused at the tool. It has no links, its provisioner creates none, and its pins are
+  untouched.
+
+**The gates left, in the founder's order.** None may be reordered.
+
+1. Founder approval and squash-merge of this follow-up, INCLUDING the confinement commit, at its
+   exact head.
+2. `julius-accept-main` for the new main.
+3. The zero-dispatch preflight: `node scripts/julius-paid-dispatch.mjs --mission
+   julius-live-mission-6 --lane lab`. It must end with the entrypoint's `RESULT: READY` and
+   `PROVIDER DISPATCHES: 0`, and with the billing paths above.
+4. Only then, the ONE paid run: the same command with `--paid`. It finds the successful preflight
+   at the same main and dispatches once, under the idempotency key
+   `julius-live-mission-6@<main12>#lab#a1`. Nothing reruns a paid mission automatically.
+
+**Recorded, not fixed here (the founder's instruction).**
+`src/relay/mission/role-slots/role-slot-registry.ts` (lines 105 and 192) sets `billingPath: 'api'`
+statically for the hosted Claude occupant. That registry serves the older Relay orchestrator and
+the UI, not the Julius live path, whose billing path comes from the resolved auth mode.
+
+**Readiness stays at 80%.** This landing adds no capability that the paid run has not yet proven.
+
+### Where it lives, and why it is a new branch
+
+**Branch:** `relay/julius-subscription-local-qualification`, worktree `C:\dev\iwonder\julius-local-qual`.
+It is built on **PR #288's frozen head `15cf04d725bef8ea69ae54fe0554e9981580298c`**, so once #288 is
+squash-merged the rebase onto the new `main` is mechanical (`git rebase --onto <new main> 15cf04d7`).
+
+The founder's order is to land the auth and local-launch work WITHOUT the unrelated generality
+work that sits on the same historical branch. So this branch carries only what the subscription
+qualification needs. The first four are cherry-picked with `-x`, so each names its source:
+
+| Commit | What | Source |
+|---|---|---|
+| criterion id / migration 028 | every rerun lost its criteria; 028 re-keys criteria per run | `3bd32adf` |
+| harness classification of the conformance file | | `40975e11` |
+| migrate before deploy: 028 is an ordering constraint | only 028's own landing-page section | `de19199a` |
+| the Coding Agent can authenticate from the Max subscription | conflicts resolved WITHOUT the file-creation work (`b48f4f0f`) | `b618201c` |
+| `bf799dbb` | the accounting fix (below) | new |
+| `5138ae02` | the runtime child-environment proof (below) | new |
+| `4d46722a` | the local launch path (below) | new |
+| `297088ef` | the test-accounting gate refused two of the new tests (a `skipIf`, a bare `return`); both fixed | new |
+| `d6fde812` | the architect and the reviewer state their billing path (below) | new |
+
+Left on `relay/julius-task-generality`, **not landed here**: the requiredEvidence consistency rule
+(`b982396d`, `18dd26a3`, `900c0ac4`), the Coding Agent's conditional Write grant (`b48f4f0f` and
+its follow-ups), the execution-blocker docs, the paid-guard flake fix (`310c1062`), and the
+§000f/§000g audit record. Mission 6 needs none of them: it was frozen against #288's code.
+
+**Mission 6 is frozen and intact.** Its tree `93dd0ab3` and its one sliced file's blob `fec0b40f`
+are identical at `231369e6`, at `15cf04d7` and at this branch's head. It has never been
+dispatched.
+
+### SUPERSEDED — the decision: the first subscription qualification launches LOCALLY
+
+> **Superseded the same day**, first by the founder's move of heavy work to GitHub and then by the
+> final Priority 10 decision at the top of this section. It is kept as the record of what was
+> decided and why. The local launch path it produced is kept, and still drift-tested, for a future
+> subscription proof.
+
+Founder decision, 2026-09-28:
+
+- **Claude subscription auth is READY locally.** The entrypoint preflight on this laptop printed
+  `CLAUDE AUTH: SUBSCRIPTION provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=max
+  api_key_used=false api_cost_applicable=false`, and a misspelled mode was refused
+  `auth_mode_unknown`.
+- **The hosted GitHub workflow stays API-key-backed.** `julius-first-live-mission.yml` never sets
+  `JULIUS_CLAUDE_AUTH`, injects `ANTHROPIC_API_KEY` from the `julius-live-validation`
+  environment, and probes api.anthropic.com in its readiness step. A hosted runner has no Max
+  login. **Do not dispatch Mission 6 there expecting the subscription**: it would bill the
+  Anthropic key.
+- **No personal Claude OAuth or session credential is moved to GitHub**, or copied anywhere,
+  ever. There is no self-hosted runner.
+
+### The accounting defect, and the fix (`bf799dbb`)
+
+**The defect.** Found by the Wonderland integration lane and verified here. In subscription
+mode a SUCCESSFUL coder dispatch settled the runtime's notional `total_cost_usd` as
+`PROVIDER_REPORTED` API spend: the success ending priced itself by hand and ignored the auth
+mode. The kernel's `juliusCostComponent` also had no `NOT_APPLICABLE` branch, so even a correct
+provider was written to the ledger as `UNKNOWN`.
+
+**The fix.** Every ending now asks `hostedCoderCost`. A subscription settlement row reads:
+
+- `usdMicros: null`
+- `costBasis: 'NOT_APPLICABLE'`
+- `billingPath: 'SUBSCRIPTION'`
+- `executionUsdMicros: <the runtime's price>`
+
+`executionUsdMicros` is read ONLY by the slot ledger, into `settledExecutionUsdMicros`, never
+`settledKnown`. That keeps v3 grants identical between API and subscription runs: the founder's
+"preserve both" rule, where the execution budget uses the runtime estimate and billing uses the
+basis. The per-dispatch ceilings (`maxBudgetUsd`, `withinCostCeiling`) are unchanged.
+
+`billingPath` (API_BILLED / SUBSCRIPTION / NOT_APPLICABLE / UNKNOWN) is decided from the
+credential, never from an amount. It is validated against the basis, and a contradiction is never
+written. The integration lane's owner-only billing field reads it (their commit `a3e00594`).
+All three roles now state it, which is the founder's requirement that accounting distinguish them
+(`d6fde812`):
+
+- **Coding Agent:** SUBSCRIPTION or API_BILLED, from the resolved auth mode.
+- **OpenAI architect:** API_BILLED by construction, since the adapter cannot exist without the key.
+  The amount is still unreported, because Chat Completions states no price.
+- **Hermes reviewer:** the operator's `RELAY_HERMES_BILLING_MODE`, parsed exactly as
+  `declaredBillingPath`. It reads `api_billed` in the hosted workflow, by the founder's own
+  declaration, and in the local launcher, which mirrors it. Both are true because both write the
+  xAI API key. Undeclared, the preflight BLOCKS rather than let the reviewer's rows read UNKNOWN.
+
+The real OpenAI and xAI AMOUNTS will still not be in the ledger. After a paid run they have to be
+reconciled from the provider consoles.
+
+**Also closed:**
+
+- `/slots` (`projectJuliusSlotViews`) summed any number on a settled row; it now asks the basis.
+- `JuliusDispatchError` sanitises diagnostics at construction, so the new facts are on the
+  allowlist and in the evidence dump's columns.
+
+**Still open, and a founder contract question.** `summariseJuliusMissionCost` counts a
+NOT_APPLICABLE component among `unknownComponents`, so `complete` is false. The Wonderland wire's
+presentation of that is the integration lane's.
+
+### The runtime proof the founder asked for (`5138ae02`)
+
+`relay-bridge/julius/coding-agent-child-env.runtime.test.ts` composes from the environment and
+dispatches through the real adapter, provider, runner and **the real Agent SDK**. It asks the
+**spawned child** what environment it received; the SDK spawns a recording stand-in, so no
+session starts and nothing is dispatched. It proves:
+
+- In subscription mode: no Anthropic variable of any kind, **even with a key in the parent**.
+- The provider is Anthropic, and the child was started by the Claude Agent SDK
+  (`CLAUDE_CODE_ENTRYPOINT`).
+- The mode was not rewritten to API mode.
+- API mode carries the configured key, never the parent's.
+- An unknown mode spawns nothing.
+- The Max login classification is separate and cannot excuse an observed key.
+
+Mutation-checked: dropping the mode, or inheriting `process.env`, fails it.
+
+**Measured on Windows:** libuv copies ten system variables into every child whatever it was given
+(`HOMEDRIVE`, `HOMEPATH`, `LOGONSERVER`, `SYSTEMDRIVE`, `SYSTEMROOT`, `TEMP`, `USERDOMAIN`,
+`USERNAME`, `USERPROFILE`, `WINDIR`). None is a credential, and the test pins the list. On POSIX
+(WSL, CI) the child receives exactly its allow-list.
+
+### The local launch path (`4d46722a`): prerequisites
+
+`scripts/julius-local-qualification.sh` is run inside the WSL `Ubuntu` distro, as the founder's
+own user; the runbook is `docs/JULIUS_LOCAL_QUALIFICATION.md`. It runs the workflow's own shared
+scripts, the entrypoint bundle and the contract. Its differences are named and tested:
+
+- PostgreSQL on **127.0.0.1:55432**, database `julius_qualification`. Inside WSL, **5432 is Docker
+  Desktop's forward to the live store**.
+- **This distro's own Docker**, never Docker Desktop, where `julius-postgres` IS the live store.
+- No provider readiness probes.
+- A local attempt marker. **A hosted dispatch cannot see it**: record a local paid run before
+  anyone dispatches the hosted workflow.
+- The founder's own sudo.
+
+**Prerequisites, all founder steps, in the WSL terminal.** None has been done: this session
+installed nothing in WSL.
+
+1. A Linux clone at the landed commit.
+2. `docker.io docker-buildx`, the engine started, and Docker socket access (group or ACL; the
+   founder's choice).
+3. `nodejs npm` (22.22).
+4. uv with Python 3.12.
+5. The Claude CLI, then `claude` → `/login`. This is the official flow; nothing is copied from
+   Windows.
+6. `secrets` for `OPENAI_API_KEY` and `XAI_API_KEY` (hidden input, stored 0600).
+7. `rig-up`, then `preflight`. It must print `RESULT: READY`, with `PROVIDER DISPATCHES: 0`.
+
+**The in-WSL bring-up has NEVER been executed.** Everything above is proven repository-side only:
+the drift test, the boundary gate, and the gate list below. A passwordless runner account was
+proposed and dropped after the permission classifier flagged it as unauthorised persistence.
+
+**Measured on this Windows workstation.** The lane's gate list passes: typecheck (four steps),
+boundary, parity, both surface-parity checks, yc-demo, CLI contract, all four builds, harness
+verify, and `git diff --check`. Among the suites:
+
+- Julius kernel: all pass.
+- Hosted Coding Agent: all pass.
+- Bridge Julius: all pass except `julius-research-authority` case 22, the Windows-only
+  `spawnSync npx ENOENT`.
+- `scripts/`: all pass except the six `julius-main-provenance` "against a stubbed GitHub" cases.
+  Their stub is not picked up on Windows, so the real `gh` answers 404.
+
+Both failures reproduce identically on the untouched `julius-beta` worktree at `b618201c`.
+**CI on Linux is the authority on green.**
+
+### SUPERSEDED — landing order for the local run
+
+> Steps 1 to 3 happened as written; steps 7 and 8 were replaced by the hosted run. The current
+> order is the gate list at the top of this section.
+
+1. PR #288: founder approval and squash-merge at `15cf04d7`.
+2. Rebase this branch onto the new `main`.
+3. Push through the julius-worker App.
+4. Open the follow-up PR.
+5. All gates run on it.
+6. Founder review and merge.
+7. Only then, from the landed commit: the local provisioning, `rig-up`, and `preflight`.
+8. Then the founder's explicit live authorization, then `run --confirm "RUN LIVE MISSION"
+   --commit <landed sha>`.
 
 **Most recent session:** 2026-09-08, the **Claude Code cloud session**. Read
 **§00** first: it holds the current branch, the commits it added, a security
