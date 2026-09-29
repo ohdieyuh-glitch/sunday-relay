@@ -329,6 +329,64 @@ opens, which is exactly the kind of shared-resource decision this session does n
 moves from BLOCKING to **READY** rather than to PASS.
 
 
+## 2026-09-29 (15:10) -- windows 4a-5d: the wild ring and Dubel closed, the heartlands massed, emptiness 26.3 % -> 7.0 %
+
+SECOND (regional completion) under CORE (lead / integrator). Every window ran the same way:
+- MAP WRITE REQUEST / COMPLETE between the two lanes.
+- A fresh editor and a checkpoint.
+- The applies, then ONE gated save behind a memory gate (< 42 GB system commit).
+- A hash check that classifies every added file by its embedded pass tag.
+- A relaunch, then the proof in play.
+
+**All seven windows class A.**
+
+| window | content | batches / inst | in play |
+|---|---|---|---|
+| 4a | EDGE01 world-edge ring + wild-ring densify WX030 / 122 / 150 | 546 / 4,976 | outward self-powered walks stop at 1,482 m; 498/498 resident |
+| 4b | densify WX210 / WX270 | 468 / 5,825 | 46/46 stands, 0 blocks, all resident |
+| 4c | WX330; S2N246 walk out of a castle hall; S2I088 plants off the 90 deg axis | 324 new, 147 replaced | 27/27 stands, all resident |
+| 5a | sector fill 3, first half | 443 / 3,657 | 36/36 stands, 443/443 |
+| 5b / 5c | S6 copse fill, 15 sectors | 907 / 5,033 | 181/181 stands, 0 blocks on 11 walks and 29 road stretches, 907/907 |
+| 5d | S6 last 2, S5 Dubel edge, S5b Dubel outer wall, the tree-cull edit | 458 / 3,198 + 1,718 edited | 77/77, 458/458, cull 600 m read back on 619 batches |
+
+**Emptiness** (structure-only; class audit after 12c2c67b):
+- Empty: 45.1 % (morning) -> 26.3 (w1) -> 21.8 (w3) -> 19.0 (4a) -> 16.2 (4b) -> 15.0 (4c) -> 13.8 (5a) -> 11.6 (5b)
+  -> 8.9 (5c) -> **7.0 % (5d)**.
+- Unintended: 11.8 % (4a) -> **2.8 % (5d)**.
+- Every pocket left over 0.28 ha is core, march or TW03 ground, which is CORE's.
+
+**What changed how the work was done.**
+1. The class audit credited walks that were only planned: post-4a unintended read 11.3 % against 12.0 % built. It
+   now counts a sidecar only if the census holds its pass (12c2c67b).
+2. The fill planner guarded CORE's footprints but not the views. S2I088 had planted slender trees on the 90 deg axis in
+   front of CP05; they were removed in 4c, and sector_fill2 now reserves the sightlines and checkpoint ground
+   (15e5aafd).
+3. Fills met the metric without reading at a distance: 5a was 57 trees against 1,795 flower-run pieces (CORE's
+   11:48 review).
+   - The unapplied S3 second half and S4 were retired; a massing re-plan with the same recipe still gave 118 trees.
+   - Replaced by copse_fill.py: 2,490 trees seeded only on unexplained ground.
+4. **57 % of all tree instances culled at 260 m**, so inside the 512 m streaming radius half of what was loaded was
+   never drawn.
+   - CORE's gate, read-only in PIE: fps flat within noise at three heavy views (zzW432).
+   - Verified before it was believed: culls read back, and the heartland frame draws the ring (zzW433).
+   - Then 260 -> 600 m on SECOND's 1,718 tree batches. CORE's 167 follow in its window.
+5. One mid-sector stand under-read a 20 deg pass's residency (42/66). The proofs now settle over every 200 m tile a pass
+   occupies.
+
+**Honest limits.**
+- CORE's 1.34 km world oblique cannot show trees: everything it sees is past the 600 m cull.
+- At ground level in the heartlands the near lawns stay open, because they are walk and meadow ground.
+- Found for CORE, not SECOND's:
+  - IC03's ceremonial arch on AV01's line;
+  - SF03's retaining wall on AV03's paving line;
+  - a DF01 trunk on Dubel's path line;
+  - SKY05's base across 52 m of Dubel's path.
+- CORE's own planned walks reach every nation's end from Golden Arrival.
+
+**Evidence:** 635e8c7d (4a), 6969efe7 (4b), a4fc0bce (4c), cc10a39a (5a), e736f366 (5b), 4972b413 (5c and the gate),
+dd496f0e / 53372e30 (5d). Before/after sheets are in Tools/captures/zc/massing_0929/.
+
+
 ## 2026-09-29 (05:00) -- the three heartlands are in the world, proved in play; the wild ring waits for review
 
 **HN238 / HI057 / HT308 APPLIED on the founder's explicit approval.** Nothing else was changed.
