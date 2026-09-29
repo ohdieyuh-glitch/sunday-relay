@@ -1,0 +1,16 @@
+{
+ "name": "zzW230_apply_WX210",
+ "started": "2026-09-29 10:49:32",
+ "status": "done",
+ "waited_for_pie_seconds": 0.0,
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "WX210",
+ "actors": 0,
+ "batches": 248,
+ "instances": 2888,
+ "hovers": 0,
+ "finished": "2026-09-29 10:49:46",
+ "seconds": 14.91,
+ "log": "applied WX210 0 actors 248 batches 2888 instances\n"
+}
