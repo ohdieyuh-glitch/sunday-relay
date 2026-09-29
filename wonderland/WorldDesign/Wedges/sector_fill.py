@@ -87,6 +87,7 @@ class Ground:
         self.nu = int((r1 - r0) // CELL) + 1
         self.nv = int((2 * vmax) // CELL) + 1
         self.free = [[False] * self.nv for _ in range(self.nu)]
+        self.lanes = set()
         self.paved = [[False] * self.nv for _ in range(self.nu)]
         for i in range(self.nu):
             u = self.u(i)
@@ -192,6 +193,8 @@ class Ground:
                 # open lawn, so the walk crosses a road rather than following it.
                 if self.paved[n[0]][n[1]]:
                     step = math.hypot(di, dj) * 3.0
+                elif n in self.lanes:
+                    step = math.hypot(di, dj) * 1.0          # a quarter's cross lane: the walk's own way through
                 elif self.free[n[0]][n[1]]:
                     step = math.hypot(di, dj) * (1.0 + 6.0 / (1.0 + self.clear[n[0]][n[1]] / CELL))
                 else:
@@ -403,7 +406,7 @@ def fill(pid, R):
         lane = [(g.cell(uc + t, vc)) for t in range(-int(2 * off), int(2 * off) + 1, 450)] + \
                [(g.cell(uc, vc + t)) for t in range(-int(2 * off), int(2 * off) + 1, 450)]
         stepping(p, lane, g, rng)
-        p.plant("topiary_spiral", uc, vc, 1.4, leaves[0], 0.0, margin=0.0, radius=150.0)
+        # (no centrepiece in the crossing: the garden walk runs through it -- zzW35 swept into the old one)
         g.take(uc, vc, off + H + 300.0, off + H + 300.0)
         p.stats["quarter"] += 1
         groups.append(("quarter", uc, vc))
@@ -436,36 +439,58 @@ def fill(pid, R):
     b = g.nearest_free(R["r"][1] - 3000.0, 0.0, 20)
     walk = g.spine(a, b) if (a and b) else None
     if walk:
+        # 2a. GARDEN QUARTERS ON THE WALK, where it crosses 80 m of clear ground (every ~45 m)
+        k = 12
+        while k < len(walk) - 12 and p.stats["quarter"] < CAP["quarter"]:
+            u, v = g.u(walk[k][0]), g.v(walk[k][1])
+            if clearance_at(u, v) >= NEED["quarter"]:
+                quarter(u, v)
+                qboxes.append((u, v, off + H + 300.0))
+                k += 18
+            else:
+                k += 3
+        # 2b. THE WALK REDRAWN THROUGH THEIR LANES. The first route was drawn before the quarters stood, and
+        #     inside a quarter it wandered off the cross lane into the rooms' corners: the in-play proof (zzW35)
+        #     swept 12 blocks into topiary in HT356. Each quarter's lanes are reopened as the walk's preferred
+        #     ground (3 m either side of the lane's centre line), and the walk is drawn again.
+        for (qu, qv, qh) in qboxes:
+            i0, j0 = g.cell(qu - qh, qv - qh)
+            i1, j1 = g.cell(qu + qh, qv + qh)
+            for i in range(max(0, i0), min(g.nu, i1 + 1)):
+                for j in range(max(0, j0), min(g.nv, j1 + 1)):
+                    if abs(g.u(i) - qu) <= 300.0 or abs(g.v(j) - qv) <= 300.0:
+                        g.free[i][j] = True
+                        g.lanes.add((i, j))
+        g.recompute()
+        again = g.spine(a, b)
+        if again:
+            walk = again
+        # 2c. ...and its corridor is RESERVED before any room is placed beside it: HN181's rooms stood on the walk
+        #     where it bent toward them (zzW35: 6 blocks into hedges), their clearance having been tested against
+        #     a corridor nothing had claimed yet
+        g.block(walk, 1)
         p.stats["walk_m"] = int(len(walk) * CELL / 100)
-        # 2. ALONG IT: a garden quarter where the walk crosses room enough (the walk becomes its cross lane),
-        #    otherwise single rooms either side of it; every ~45 m
+        # 2d. SINGLE ROOMS BESIDE THE WALK, a door turned to it, every ~45 m where there is room
         k = 12
         while k < len(walk) - 12:
             i, j = walk[k]
             u, v = g.u(i), g.v(j)
+            if any(abs(u - qu) <= qh + 1500.0 and abs(v - qv) <= qh + 1500.0 for (qu, qv, qh) in qboxes):
+                k += 3
+                continue
             du = g.u(walk[k + 4][0]) - g.u(walk[k - 4][0])
             dv = g.v(walk[k + 4][1]) - g.v(walk[k - 4][1])
             n = math.hypot(du, dv) or 1.0
             pu, pv = -dv / n, du / n                              # perpendicular to the walk
-            if p.stats["quarter"] < CAP["quarter"] and clearance_at(u, v) >= NEED["quarter"]:
-                quarter(u, v)
-                qboxes.append((u, v, off + H + 300.0))
-                k += 18
-                continue
             placed = False
-            for s in (1.0, -1.0):
-                ru, rv = u + s * pu * (H + 900.0), v + s * pv * (H + 900.0)
+            for s_ in (1.0, -1.0):
+                ru, rv = u + s_ * pu * (H + 900.0), v + s_ * pv * (H + 900.0)
                 if p.stats["room_single"] < CAP["room"] and clearance_at(ru, rv) >= NEED["room"]:
-                    # beside a walk that runs along u, the room's doors face across v -- toward the walk
                     room(ru, rv, doors_v=abs(pv) >= abs(pu))
-                    # and its near door is joined to the walk by a few stepping stones
-                    du_, dv_ = (0.0, -s * H * (1 if pv >= 0 else -1)) if abs(pv) >= abs(pu) else \
-                        (-s * H * (1 if pu >= 0 else -1), 0.0)
+                    du_, dv_ = (0.0, -s_ * H * (1 if pv >= 0 else -1)) if abs(pv) >= abs(pu) else                         (-s_ * H * (1 if pu >= 0 else -1), 0.0)
                     link(ru + du_, rv + dv_, u, v)
                     placed = True
             k += 10 if placed else 3
-        # the walk's corridor is kept: nothing else stands within 3 m of it
-        g.block(walk, 1)
         # 3. THE MUSHROOM WOOD, the walk's destination: the most open ground within 150 m of its outer end
         eu, ev = g.u(walk[-1][0]), g.v(walk[-1][1])
         best = None
@@ -533,6 +558,13 @@ def fill(pid, R):
         groups.append(("drift", at[0], at[1]))
 
     free1 = sum(sum(1 for f in row if f) for row in g.free) * (CELL / 100.0) ** 2
+    # THE OFFLINE SWEEP, before any editor sees it: every walk cell, a Dog-sized square (45 cm + 15 cm), against
+    # what stands (the census) and what this fill made solid -- the in-play proof's capsule, approximated
+    if walk:
+        for (i, j) in walk:
+            x, y = W.world(g.u(i), g.v(j))
+            if occ.hits(x, y, 60.0, 60.0, W.BEARING, 0.0, ("existing", "solid")) and not g.paved[i][j]:
+                p.stats["walk_blocked_offline"] += 1
     return p, n_census, free0, free1, groups, [(g.u(i), g.v(j)) for (i, j) in (walk or [])]
 
 
@@ -582,7 +614,7 @@ def main():
                                 total))
         print("   " + ", ".join("%s %d" % kv for kv in sorted(p.stats.items()) if kv[0] in
                                   ("quarter", "wood", "room_single", "garden_room", "grove", "trees", "meadow_drift",
-                                   "mushrooms", "stepping_stones", "junction_stones", "junction_refused", "joined", "not_joined", "walk_m", "no_walk")))
+                                   "mushrooms", "stepping_stones", "junction_stones", "junction_refused", "joined", "not_joined", "walk_m", "no_walk", "walk_blocked_offline")))
         if p.skipped:
             print("   refused by the occupancy: " + ", ".join("%s %d" % kv for kv in p.skipped.most_common(8)))
         rows += [(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], pid) for r in p.new_rows]
