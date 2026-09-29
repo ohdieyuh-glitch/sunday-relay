@@ -932,6 +932,9 @@ export async function driveJuliusRunToTerminal(input: {
   });
   const terminal = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
   const stallCause = async (state: string): Promise<string | null> => {
+    // HELD, NOT STUCK. A paused run stops because an operator said so; the
+    // cause names that, so the job's RESULT line cannot read as a defect.
+    if (state === 'PAUSED') return 'run_paused_by_operator: the run is PAUSED and claims no new work until an operator resumes it';
     if (state !== 'VERIFYING') return null;
     const decisions = await input.store.decisionsForRun(input.runId, input.projectId);
     const nonAccept = decisions.filter((decision) => decision.action !== 'ACCEPT');
