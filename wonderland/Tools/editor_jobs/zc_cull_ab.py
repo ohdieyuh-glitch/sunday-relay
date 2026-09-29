@@ -130,11 +130,11 @@ def _run(ues):
         n_batches = 0
         for a in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.WonderlandInstancedBatch):
             try:
-                mp = str(a.get_editor_property("mesh_path")).lower()
+                mp = str(a.get_editor_property("mesh_path")).split(".")[-1]
                 cd = float(a.get_editor_property("cull_distance"))
             except Exception:                                             # noqa: BLE001
                 continue
-            if not ("trunk" in mp or "canopy" in mp) or abs(cd - OLD) > 1.0:
+            if not mp.startswith(("SM_tree_", "SM_canopy_")) or abs(cd - OLD) > 1.0:   # trees only (not WL_Market_Canopy)
                 continue
             n_batches += 1
             for c in a.get_components_by_class(unreal.InstancedStaticMeshComponent):

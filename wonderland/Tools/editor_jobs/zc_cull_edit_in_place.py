@@ -31,8 +31,10 @@ def job():
         pid = next((t[len("WL_PASS_"):] for t in tags if t.startswith("WL_PASS_")), None)
         if pid not in passes:
             continue
-        mp = str(a.get_editor_property("mesh_path")).lower()
-        if not ("trunk" in mp or "canopy" in mp):
+        # TREES ONLY, by the asset's own name: a case-insensitive "canopy" also caught WL_Market_Canopy* (market-stall
+        # awnings) -- 10 W270T batches in SECOND's window 5d, reverted before the save
+        name = str(a.get_editor_property("mesh_path")).split(".")[-1]
+        if not name.startswith(("SM_tree_", "SM_canopy_")):
             continue
         cd = float(a.get_editor_property("cull_distance"))
         if abs(cd - OLD) > 1.0:
