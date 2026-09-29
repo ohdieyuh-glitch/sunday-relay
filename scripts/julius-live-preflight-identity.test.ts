@@ -801,9 +801,10 @@ suite('paid run 36568129865 — the NUL-separated close-out settles on real Post
   const conflictedSettlement = (identity: PreflightIdentity, conflicts: number) => {
     const seen = { attempts: 0 };
     const settlement = new JuliusToolSettlementPostgresRepository(pool, undefined, async (point) => {
-      if (point !== 'AFTER_BUDGET') return;
-      seen.attempts += 1;
-      if (seen.attempts <= conflicts) await pool.query('UPDATE relay_wonderland.stream_sequences SET next_sequence=next_sequence+1 WHERE stream_id=$1', [identity.runId]);
+      if (point === 'AFTER_BUDGET') {
+        seen.attempts += 1;
+        if (seen.attempts <= conflicts) await pool.query('UPDATE relay_wonderland.stream_sequences SET next_sequence=next_sequence+1 WHERE stream_id=$1', [identity.runId]);
+      }
     });
     return { settlement, seen };
   };
