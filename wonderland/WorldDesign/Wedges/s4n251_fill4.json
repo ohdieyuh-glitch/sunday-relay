@@ -1,0 +1,1113 @@
+{
+ "pass": "S4N251",
+ "tags": [
+  "WL_SECTOR_FILL",
+  "WL_NATION_NOCTIS",
+  "WL_DISTRICT_NOCTIS_HEARTLAND",
+  "WL_SECTOR_FILL4"
+ ],
+ "folder": "Wonderland/Authored/S4N251_NoctisHeartland",
+ "actors": [],
+ "batches": [
+  {
+   "id": "S4N251_Trunk_slender_t-3_-6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     -48151.7,
+     -110813.8,
+     -34.0,
+     0.0,
+     19.4,
+     0.0,
+     1.155,
+     1.155,
+     1.155
+    ],
+    [
+     -45901.5,
+     -111354.2,
+     -34.0,
+     0.0,
+     182.8,
+     0.0,
+     0.928,
+     0.928,
+     0.928
+    ],
+    [
+     -47310.1,
+     -112018.8,
+     -34.0,
+     0.0,
+     81.6,
+     0.0,
+     0.924,
+     0.924,
+     0.924
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S4N251_Canopy_slender_LeafDark_t-3_-6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     -48151.7,
+     -110813.8,
+     840.1,
+     0.0,
+     19.4,
+     0.0,
+     1.328,
+     1.328,
+     1.328
+    ],
+    [
+     -45901.5,
+     -111354.2,
+     668.6,
+     0.0,
+     182.8,
+     0.0,
+     1.068,
+     1.068,
+     1.068
+    ],
+    [
+     -47310.1,
+     -112018.8,
+     665.6,
+     0.0,
+     81.6,
+     0.0,
+     1.063,
+     1.063,
+     1.063
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S4N251_Trunk_mature_t-3_-6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_mature_trunk.SM_tree_mature_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     -46942.5,
+     -110464.6,
+     -34.0,
+     0.0,
+     2.3,
+     0.0,
+     0.965,
+     0.965,
+     0.965
+    ],
+    [
+     -45984.2,
+     -109707.4,
+     -34.0,
+     0.0,
+     132.2,
+     0.0,
+     1.191,
+     1.191,
+     1.191
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S4N251_Canopy_mature_LeafDark_t-3_-6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     -46942.5,
+     -110464.6,
+     979.4,
+     0.0,
+     2.3,
+     0.0,
+     1.255,
+     1.255,
+     1.255
+    ],
+    [
+     -45984.2,
+     -109707.4,
+     1216.1,
+     0.0,
+     132.2,
+     0.0,
+     1.548,
+     1.548,
+     1.548
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S4N251_Shrub_t-3_-6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Shrubs/SM_shrub_flowering.SM_shrub_flowering",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     -44988.9,
+     -109668.9,
+     -19.0,
+     0.0,
+     253.1,
+     0.0,
+     0.862,
+     0.862,
+     0.862
+    ],
+    [
+     -45761.0,
+     -112342.0,
+     -19.0,
+     0.0,
+     17.6,
+     0.0,
+     0.8,
+     0.8,
+     0.8
+    ],
+    [
+     -46654.6,
+     -109095.0,
+     -19.0,
+     0.0,
+     192.7,
+     0.0,
+     0.832,
+     0.832,
+     0.832
+    ],
+    [
+     -48407.7,
+     -111493.1,
+     -19.0,
+     0.0,
+     184.1,
+     0.0,
+     1.158,
+     1.158,
+     1.158
+    ],
+    [
+     -45664.8,
+     -109575.3,
+     -19.0,
+     0.0,
+     120.5,
+     0.0,
+     1.088,
+     1.088,
+     1.088
+    ],
+    [
+     -47592.6,
+     -112415.8,
+     -19.0,
+     0.0,
+     91.2,
+     0.0,
+     0.984,
+     0.984,
+     0.984
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S4N251_Rose_t-3_-6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush.SM_rose_bush",
+   "material": "MI_V2_RosePink",
+   "instances": [
+    [
+     -44985.3,
+     -110115.0,
+     -19.0,
+     0.0,
+     256.0,
+     0.0,
+     0.832,
+     0.832,
+     0.832
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S4N251_Trunk_slender_t-2_-6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     -31719.1,
+     -111639.9,
+     -34.0,
+     0.0,
+     37.0,
+     0.0,
+     1.003,
+     1.003,
+     1.003
+    ],
+    [
+     -32720.1,
+     -112082.3,
+     -34.0,
+     0.0,
+     213.1,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -31671.7,
+     -110240.1,
+     -34.0,
+     0.0,
+     56.6,
+     0.0,
+     0.853,
+     0.853,
+     0.853
+    ],
+    [
+     -33270.3,
+     -111547.4,
+     -34.0,
+     0.0,
+     317.0,
+     0.0,
+     0.98,
+     0.98,
+     0.98
+    ],
+    [
+     -33743.5,
+     -110753.4,
+     -34.0,
+     0.0,
+     330.0,
+     0.0,
+     1.024,
+     1.024,
+     1.024
+    ],
+    [
+     -32824.4,
+     -110732.3,
+     -34.0,
+     0.0,
+     320.7,
+     0.0,
+     0.916,
+     0.916,
+     0.916
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S4N251_Canopy_slender_LeafDark_t-2_-6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     -31719.1,
+     -111639.9,
+     725.0,
+     0.0,
+     37.0,
+     0.0,
+     1.153,
+     1.153,
+     1.153
+    ],
+    [
+     -32720.1,
+     -112082.3,
+     711.1,
+     0.0,
+     213.1,
+     0.0,
+     1.132,
+     1.132,
+     1.132
+    ],
+    [
+     -33270.3,
+     -111547.4,
+     707.7,
+     0.0,
+     317.0,
+     0.0,
+     1.127,
+     1.127,
+     1.127
+    ],
+    [
+     -33743.5,
+     -110753.4,
+     741.1,
+     0.0,
+     330.0,
+     0.0,
+     1.178,
+     1.178,
+     1.178
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S4N251_Canopy_slender_LeafMid_t-2_-6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     -31671.7,
+     -110240.1,
+     611.3,
+     0.0,
+     56.6,
+     0.0,
+     0.981,
+     0.981,
+     0.981
+    ],
+    [
+     -32824.4,
+     -110732.3,
+     659.1,
+     0.0,
+     320.7,
+     0.0,
+     1.053,
+     1.053,
+     1.053
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S4N251_Trunk_mature_t-2_-6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_mature_trunk.SM_tree_mature_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     -33115.4,
+     -109807.0,
+     -34.0,
+     0.0,
+     73.2,
+     0.0,
+     1.041,
+     1.041,
+     1.041
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S4N251_Canopy_mature_LeafDark_t-2_-6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     -33115.4,
+     -109807.0,
+     1059.7,
+     0.0,
+     73.2,
+     0.0,
+     1.354,
+     1.354,
+     1.354
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S4N251_Shrub_t-2_-6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Shrubs/SM_shrub_flowering.SM_shrub_flowering",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     -32936.0,
+     -108963.6,
+     -19.0,
+     0.0,
+     120.3,
+     0.0,
+     1.166,
+     1.166,
+     1.166
+    ],
+    [
+     -33353.7,
+     -109454.0,
+     -19.0,
+     0.0,
+     44.6,
+     0.0,
+     1.187,
+     1.187,
+     1.187
+    ],
+    [
+     -30998.4,
+     -110503.6,
+     -19.0,
+     0.0,
+     128.5,
+     0.0,
+     1.088,
+     1.088,
+     1.088
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S4N251_Rose_t-2_-6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush.SM_rose_bush",
+   "material": "MI_V2_RosePink",
+   "instances": [
+    [
+     -31270.9,
+     -109421.9,
+     -19.0,
+     0.0,
+     193.7,
+     0.0,
+     1.103,
+     1.103,
+     1.103
+    ],
+    [
+     -31002.9,
+     -110023.7,
+     -19.0,
+     0.0,
+     263.0,
+     0.0,
+     1.104,
+     1.104,
+     1.104
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S4N251_Flower_Daisy_Run_leaf_t-2_-6",
+   "mesh": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Daisy_Run_leaf.WL_Flower_Daisy_Run_leaf",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     -34066.6,
+     -105787.3,
+     -12.0,
+     0.0,
+     173.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34182.5,
+     -105619.9,
+     -12.0,
+     0.0,
+     186.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34251.3,
+     -105834.1,
+     -12.0,
+     0.0,
+     198.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34448.0,
+     -105686.7,
+     -12.0,
+     0.0,
+     211.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34400.9,
+     -105935.6,
+     -12.0,
+     0.0,
+     224.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34492.7,
+     -105982.1,
+     -12.0,
+     0.0,
+     236.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34660.2,
+     -106023.6,
+     -12.0,
+     0.0,
+     249.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34482.1,
+     -106177.5,
+     -12.0,
+     0.0,
+     261.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S4N251_Flower_Daisy_Run_petal_t-2_-6",
+   "mesh": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Daisy_Run_petal.WL_Flower_Daisy_Run_petal",
+   "material": "MI_V2_PetalPink",
+   "instances": [
+    [
+     -34066.6,
+     -105787.3,
+     -12.0,
+     0.0,
+     173.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34182.5,
+     -105619.9,
+     -12.0,
+     0.0,
+     186.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34251.3,
+     -105834.1,
+     -12.0,
+     0.0,
+     198.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34448.0,
+     -105686.7,
+     -12.0,
+     0.0,
+     211.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34400.9,
+     -105935.6,
+     -12.0,
+     0.0,
+     224.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34492.7,
+     -105982.1,
+     -12.0,
+     0.0,
+     236.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34660.2,
+     -106023.6,
+     -12.0,
+     0.0,
+     249.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34482.1,
+     -106177.5,
+     -12.0,
+     0.0,
+     261.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S4N251_Flower_Daisy_Run_petal_centre_t-2_-6",
+   "mesh": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Daisy_Run_petal_centre.WL_Flower_Daisy_Run_petal_centre",
+   "material": "MI_V2_LeafGold",
+   "instances": [
+    [
+     -34066.6,
+     -105787.3,
+     -12.0,
+     0.0,
+     173.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34182.5,
+     -105619.9,
+     -12.0,
+     0.0,
+     186.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34251.3,
+     -105834.1,
+     -12.0,
+     0.0,
+     198.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34448.0,
+     -105686.7,
+     -12.0,
+     0.0,
+     211.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34400.9,
+     -105935.6,
+     -12.0,
+     0.0,
+     224.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34492.7,
+     -105982.1,
+     -12.0,
+     0.0,
+     236.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34660.2,
+     -106023.6,
+     -12.0,
+     0.0,
+     249.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -34482.1,
+     -106177.5,
+     -12.0,
+     0.0,
+     261.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S4N251_Flower_Lavender_Run_leaf_t-2_-6",
+   "mesh": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Lavender_Run_leaf.WL_Flower_Lavender_Run_leaf",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     -31699.8,
+     -116281.2,
+     -12.0,
+     0.0,
+     277.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31625.3,
+     -116368.8,
+     -12.0,
+     0.0,
+     289.7,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31558.4,
+     -116440.0,
+     -12.0,
+     0.0,
+     302.3,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31596.9,
+     -116605.1,
+     -12.0,
+     0.0,
+     314.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31474.4,
+     -116633.9,
+     -12.0,
+     0.0,
+     327.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31339.6,
+     -116575.9,
+     -12.0,
+     0.0,
+     340.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31283.0,
+     -116783.5,
+     -12.0,
+     0.0,
+     352.7,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31164.6,
+     -116719.8,
+     -12.0,
+     0.0,
+     5.3,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31044.2,
+     -116736.5,
+     -12.0,
+     0.0,
+     17.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31033.1,
+     -116522.3,
+     -12.0,
+     0.0,
+     30.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -30902.1,
+     -116550.3,
+     -12.0,
+     0.0,
+     43.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S4N251_Flower_Lavender_Run_petal_t-2_-6",
+   "mesh": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Lavender_Run_petal.WL_Flower_Lavender_Run_petal",
+   "material": "MI_V2_PetalPink",
+   "instances": [
+    [
+     -31699.8,
+     -116281.2,
+     -12.0,
+     0.0,
+     277.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31625.3,
+     -116368.8,
+     -12.0,
+     0.0,
+     289.7,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31558.4,
+     -116440.0,
+     -12.0,
+     0.0,
+     302.3,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31596.9,
+     -116605.1,
+     -12.0,
+     0.0,
+     314.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31474.4,
+     -116633.9,
+     -12.0,
+     0.0,
+     327.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31339.6,
+     -116575.9,
+     -12.0,
+     0.0,
+     340.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31283.0,
+     -116783.5,
+     -12.0,
+     0.0,
+     352.7,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31164.6,
+     -116719.8,
+     -12.0,
+     0.0,
+     5.3,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31044.2,
+     -116736.5,
+     -12.0,
+     0.0,
+     17.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -31033.1,
+     -116522.3,
+     -12.0,
+     0.0,
+     30.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -30902.1,
+     -116550.3,
+     -12.0,
+     0.0,
+     43.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  }
+ ]
+}
