@@ -32,6 +32,7 @@ import {
   juliusSharedCeilingPolicy,
   type JuliusBudgetPort,
   type JuliusCardPolicy,
+  type JuliusPolicyOperation,
   type JuliusClaimedTask,
   type JuliusContextSnapshot,
   type JuliusPipelineDependencies,
@@ -722,6 +723,16 @@ export function assembleLiveJuliusRuntime(options: {
    * supplying an observed probe is asserting something they have seen.
    */
   readonly researchProbes?: readonly BackendProbe[];
+  /**
+   * THE OPERATIONS THIS MISSION'S C.A.R.D. HOLDS FOR A PERSON.
+   *
+   * Absent, none — every live mission so far ran ungated, and that stays the
+   * default. Present, each listed operation is REQUIRE_APPROVAL under this
+   * AUTONOMOUS card: its dispatch writes a PENDING approval, the run holds
+   * BLOCKED, and it goes on only when an authorized approver grants it
+   * (`decideJuliusApproval`). A gate is mission authority, not a code change.
+   */
+  readonly approvals?: readonly JuliusPolicyOperation[];
 }): LiveJuliusRuntime {
   const registry = new JuliusWorkerRegistry();
   const adapters = new Map<string, JuliusProviderAdapter>();
@@ -744,7 +755,7 @@ export function assembleLiveJuliusRuntime(options: {
     subagents: { allowed: false, maxDepth: 1, maxActive: 0, maxTotal: 0 },
     iterativeReview: { allowed: true, maxRounds: Math.max(1, options.maxRepairRounds + 1) },
     concurrency: 1,
-    approvals: [],
+    approvals: [...(options.approvals ?? [])],
   };
   const verification: JuliusVerificationPolicy = {
     revision: `verify:${options.cardRevision}`,

@@ -53,7 +53,8 @@ import { JuliusLifecyclePostgresRepository } from '../../src/relay/persistence/j
  */
 export function createJuliusPostgresRuntimeStore(
   pool: Pool,
-): JuliusRuntimeStore & JuliusRecoveryDriver & JuliusTimelineReader & Pick<JuliusApprovalStore, 'pendingApprovals'> {
+): JuliusRuntimeStore & JuliusRecoveryDriver & JuliusTimelineReader
+  & Pick<JuliusApprovalStore, 'pendingApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'> {
   const runs = new JuliusPostgresRepository(pool);
   const results = new JuliusRecoveryPostgresRepository(pool);
   const contexts = new JuliusContextPostgresRepository(pool);
@@ -105,5 +106,14 @@ export function createJuliusPostgresRuntimeStore(
     // the bridge's lifecycle repository, same table) is never walked out of
     // BLOCKED by the task graph. Without it the live job could not see a gate.
     pendingApprovals: lifecycle.pendingApprovals.bind(lifecycle),
+    // THE C.A.R.D. GATE AT DISPATCH ASKS THROUGH THESE (`prepareClaimedTask`).
+    // Bound from the same repository and table the bridge decides approvals
+    // in. Without them the live job's gate has nowhere to put the question and
+    // fails closed as APPROVAL_UNSERVED — refused, never granted.
+    // `requestApprovalAndBlock` is the atomic one: the PENDING row and the run's
+    // move to BLOCKED are one serializable transaction.
+    requestApproval: lifecycle.requestApproval.bind(lifecycle),
+    requestApprovalAndBlock: lifecycle.requestApprovalAndBlock.bind(lifecycle),
+    loadApproval: lifecycle.loadApproval.bind(lifecycle),
   };
 }
