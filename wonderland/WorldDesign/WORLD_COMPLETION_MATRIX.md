@@ -159,10 +159,44 @@ MAP WRITE REQUEST / COMPLETE messages. CORE = "Wonderland" session, SECOND = "Ne
 | Q7 | MG01 Mushroom Grove, relocated on its forge bearing to 297° 984 m (TARTARUS outer heartland, 2.7 ha empty) | CORE | APPLIED in window 1 (unsaved; 13 batches / 86 inst, removed 0) | the missing forge district: giant mushrooms on stone rings plus a landmark | footprint published to SECOND before its R32 / Q2 T294 layouts |
 | Q8 | Hedge gates on the rings: RR01 46.7-49.2°, RR02 68.1-69.1°, RR02 149.8-153.1° | CORE | HELD (FOUNDER) | ring circuits broken at V2 hedge masses | founder 2026-09-29: "do not change ring-road hedge barriers"; `ring_hedge_gates.py` also finds no clear move for any of the 11 hedges within 60 m. Documented as intentional barriers unless the founder reverses |
 | Q9 | R41 / R42 seams 150° / 30°, 500-1,200 m (fills) | SECOND | UNBLOCKED (polylines sent 05:31; keep 20 m off each road's centreline) | seam identity between two nations | Q5 polylines |
-| Q10 | R00 / R01 Golden Arrival + 24 quarters: verification (composition checklist, TRAV / DIST / PROOF) | CORE (composition) / integration lane (in-play) | IN PROGRESS | tower / grove KINDS: the 24 forge quarters (12 `_QUARTERS` + first 12 `_QUARTER_SITES`) are all built (74-1,378 pieces within 25 m) but 0/7 tower quarters have towers and 1/7 groves has mushrooms | **FOUNDER DECISION**: room for 3 of 21 towers and 0 of 7 giants without replacing accepted core planting (`Districts/quarter_kinds.py`, 51c2f242). Identities carried outward instead (TW01, MG01, heartland mushroom woods). In-play GA + quarter walk: integration lane (zzJ) after window 1 |
+| Q10 | R00 / R01 Golden Arrival + 24 quarters: verification (composition checklist, TRAV / DIST / PROOF) | CORE (composition) / integration lane (in-play) | IN PROGRESS | tower / grove KINDS (table below; the first cut's "0/7 towers, 1/7 groves" was WRONG -- it read only each site's top four categories): towers survive at 2 of 7 (Q08, S05), partly at 2, not at 3; groves at 1 of 7 (S06), partly at 3, not at 3 | **FOUNDER DECIDED 2026-09-29: PRESERVE THE CORE, carry identities outward.** Room for 3 of 21 towers and 0 of 7 giants without replacing accepted core planting (`Districts/quarter_kinds.py`, 51c2f242). Identities carried outward instead (TW01, MG01, heartland mushroom woods). In-play GA + quarter walk: integration lane (zzJ) after window 1 |
 | Q11 | R02 core rim 400-600 m | SECOND (merged into sector fill 2) | PLANNED in Q2: S2N246 (246°), S2I073 (73°), S2N179 (179°), S2T300 (300°); pockets < 1.5 ha stay lawn between groups | -- | window 3 |
 | Q12 | P5 Bible reconciliation (all districts/features -> BUILT / RELOCATED / SUPERSEDED / FOUNDER DECISION) | CORE | IN PROGRESS | outer-world Bible landmarks (below) | see "Bible reconciliation" under this table |
 | Q13 | Final gates: emptiness, beta walk on real streaming, packaged boot + streaming | CORE | LAST | -- | everything above |
+
+**The 24 core quarters, classified (CORE Q10, census re-exported 05:55 after window 1; founder decision 2026-09-29:
+preserve the accepted core, carry missing identities outward).** Kind pieces counted by mesh: towers = castle_tower*,
+tower_capped, tower_clock, WL_Tower_*, WL_Spire_* (castle HALLS are not towers); groves = mushroom giant / landmark /
+medium / small; gardens = hedge, topiary, rose, flower, parterre, shrub, urn, planter, fountain. Survives: towers >= 3,
+groves a giant or landmark and >= 6 mushrooms, gardens >= 50 pieces; PARTLY = some.
+
+| site | bearing / r | original kind | current built identity (census within 25 m) | kind pieces | survives locally | carried outward |
+|---|---|---|---|---|---|---|
+| Q01 | 200° 110 m | garden | Grand Clock / Tea Terraces, lawn fill, V2 base garden (697 pieces) | 299 garden | YES | -- |
+| Q02 | 232° 135 m | towers | V2 base garden, seat detail, city fill (383 pieces) | 0 tower | NO | TW01 Tower Rise (111° 478 m); SKY05 skyline towers; ICARUS march |
+| Q03 | 263° 102 m | grove | Water Gardens, V2 base garden, lawn fill (1378 pieces) | 0 mushroom (0 giant/landmark) | NO | MG01 Mushroom Grove (297° 984 m); HI057 / HT308 mushroom woods; Dubel; wild-ring landmark mushrooms |
+| Q04 | 295° 140 m | garden | V2 base garden, city fill, seat detail (198 pieces) | 19 garden | PARTLY | -- |
+| Q05 | 326° 112 m | towers | V2 base garden, seat detail (124 pieces) | 0 tower | NO | TW01 Tower Rise (111° 478 m); SKY05 skyline towers; ICARUS march |
+| Q06 | 356° 130 m | grove | Grand Clock / Tea Terraces, V2 base garden, Clock Quarter (923 pieces) | 0 mushroom (0 giant/landmark) | NO | MG01 Mushroom Grove (297° 984 m); HI057 / HT308 mushroom woods; Dubel; wild-ring landmark mushrooms |
+| Q07 | 25° 115 m | garden | lawn fill, V2 base garden, seat detail (465 pieces) | 366 garden | YES | -- |
+| Q08 | 56° 138 m | towers | Cloister, lawn fill, V2 base garden (1162 pieces) | 6 tower | YES | -- |
+| Q09 | 128° 125 m | grove | V2 base garden (80 pieces) | 4 mushroom (1 giant/landmark) | PARTLY | MG01 Mushroom Grove (297° 984 m); HI057 / HT308 mushroom woods; Dubel; wild-ring landmark mushrooms |
+| Q10 | 152° 108 m | garden | V2 base garden, lawn fill, seat detail (393 pieces) | 203 garden | YES | -- |
+| Q11 | 176° 142 m | towers | lawn fill, V2 base garden, seat detail (524 pieces) | 0 tower | NO | TW01 Tower Rise (111° 478 m); SKY05 skyline towers; ICARUS march |
+| Q12 | 108° 155 m | garden | V2 base garden, garden court, SKY (132 pieces) | 27 garden | PARTLY | -- |
+| S01 | 324° 95 m | garden | V2 base garden, S, border course (115 pieces) | 33 garden | PARTLY | -- |
+| S02 | 213° 93 m | towers | V2 base garden, lawn fill, tea set (368 pieces) | 1 tower | PARTLY | TW01 Tower Rise (111° 478 m); SKY05 skyline towers; ICARUS march |
+| S03 | 47° 152 m | grove | lawn fill, V2 base garden, Cloister (1060 pieces) | 3 mushroom (1 giant/landmark) | PARTLY | MG01 Mushroom Grove (297° 984 m); HI057 / HT308 mushroom woods; Dubel; wild-ring landmark mushrooms |
+| S04 | 133° 156 m | garden | V2 base garden, SKY, Way (74 pieces) | 18 garden | PARTLY | -- |
+| S05 | 83° 131 m | towers | Royal Gardens, V2 base garden, border course (199 pieces) | 3 tower | YES | -- |
+| S06 | 115° 98 m | grove | V2 base garden, SKY, border course (165 pieces) | 12 mushroom (3 giant/landmark) | YES | -- |
+| S07 | 64° 98 m | garden | Royal Gardens, V2 base garden, seat detail (966 pieces) | 248 garden | YES | -- |
+| S08 | 314° 137 m | grove | V2 base garden, wall border, lawn fill (164 pieces) | 5 mushroom (1 giant/landmark) | PARTLY | MG01 Mushroom Grove (297° 984 m); HI057 / HT308 mushroom woods; Dubel; wild-ring landmark mushrooms |
+| S09 | 225° 134 m | garden | V2 base garden, seat detail, Teapot Court (423 pieces) | 124 garden | YES | -- |
+| S10 | 13° 115 m | towers | Clock Quarter, V2 base garden, lawn fill (1163 pieces) | 1 tower | PARTLY | TW01 Tower Rise (111° 478 m); SKY05 skyline towers; ICARUS march |
+| S11 | 169° 116 m | grove | V2 base garden, seat detail, lawn fill (574 pieces) | 0 mushroom (0 giant/landmark) | NO | MG01 Mushroom Grove (297° 984 m); HI057 / HT308 mushroom woods; Dubel; wild-ring landmark mushrooms |
+| S12 | 270° 106 m | garden | Water Gardens, lawn fill, V2 base garden (1206 pieces) | 441 garden | YES | -- |
+
 
 **Bible reconciliation (CORE Q12, first cut 2026-09-29, census 05:05).** The Bible is the board set in
 `wonderland-blender-forge/wonderland/v2/reference/boards` (visual authority, not a district list); the district canon
@@ -185,7 +219,7 @@ is the forge's 14 districts + 3 nations. Features by census count and median rad
 | Butterflies / petals (atmosphere) | not census geometry | runtime effect, outside the world audit |
 | Tower Rise (forge district) | none in the core | RELOCATED WITH INTENT -> TW01, 111° 478 m |
 | Mushroom Grove (forge district) | none in the core | RELOCATED WITH INTENT -> MG01, 297° 984 m |
-| 24 core quarters' kinds | built, kinds weak (Q10) | FOUNDER DECISION (replace core planting, or keep outward) |
+| 24 core quarters' kinds | built; towers 2 yes / 2 partly / 3 no, groves 1 / 3 / 3 (Q10 table) | SUPERSEDED WITH DOCUMENTED REASON: core preserved (founder 2026-09-29); tower identity carried to TW01, grove identity to MG01 and the mushroom woods |
 
 Pattern: the Bible's landmark language (clocks, fountains, columns, giant mushrooms, sky islands) is almost all
 inside ~650 m. The outer world's identity has to come from the heartland rooms, mushroom woods, TW01 / MG01, the
