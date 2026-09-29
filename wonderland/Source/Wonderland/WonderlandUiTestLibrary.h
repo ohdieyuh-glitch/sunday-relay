@@ -170,6 +170,18 @@ public:
 	static FString DescribeEditorRegions(UWorld* World);
 
 	/**
+	 * HAS WORLD PARTITION FINISHED STREAMING, asked of World Partition itself.
+	 *
+	 * Every proof before this waited on a proxy -- FlushLevelStreaming, a fixed delay, two readings that agree --
+	 * and every proxy was fooled once: a tile read 272 resident batches twice, then 304 two seconds later (the
+	 * WORLD session, 2026-09-28). Python cannot reach UWorldPartitionSubsystem (GetWorldSubsystem is
+	 * BlueprintInternalUseOnly), so this asks IsAllStreamingCompleted() for the given world. True for a world
+	 * with no partition. Runtime API: builds in the game target too.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static bool IsWorldPartitionStreamingComplete(UObject* WorldContextObject);
+
+	/**
 	 * WHAT THIS PROCESS IS USING, AND WHAT THE MACHINE HAS LEFT, IN MEGABYTES.
 	 *
 	 * Added because Python is offered no memory reading at all here -- SystemLibrary has nothing with

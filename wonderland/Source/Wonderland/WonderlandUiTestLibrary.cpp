@@ -831,6 +831,17 @@ FString UWonderlandUiTestLibrary::GetCursorShape()
 	return FString(WonderlandCursor::NameOf(WonderlandCursor::Chosen()));
 }
 
+bool UWonderlandUiTestLibrary::IsWorldPartitionStreamingComplete(UObject* WorldContextObject)
+{
+	UWorld* World = GEngine != nullptr ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	if (World == nullptr)
+	{
+		return false;
+	}
+	UWorldPartitionSubsystem* Streaming = World->GetSubsystem<UWorldPartitionSubsystem>();
+	return Streaming == nullptr || Streaming->IsAllStreamingCompleted();
+}
+
 FString UWonderlandUiTestLibrary::DescribeMemory()
 {
 	const FPlatformMemoryStats Stats = FPlatformMemory::GetStats();

@@ -100,6 +100,11 @@ DISTANT VIEWS after the fix are a founder decision (runtime streaming): with the
 HLODs built, a vantage in the core holds ~85 % of the world's instances and one at 785 m ~35 % (WORLD session's
 table). Options: raise the MainPartition LoadingRange (1,024 m -> ~99 % from the spawn; measure memory), build
 HLODs (canonical, heavy), or keep landmark batches always loaded. Nothing changed until the founder decides.
+**Measured 2026-09-28 23:36** (zc_distant_views, waiting on World Partition's own IsAllStreamingCompleted):
+from the plaza 2,753 batches / 124k instances resident at 512 m vs 5,116 / 175k with a runtime-only 1,024 m
+override; from the march looking down the rear seam 1,713 / 77k vs 4,979 / 167k. The VISIBLE difference is small
+(a few far structures on the horizon): skyline batches sit on high grid levels and show at both ranges. CORE's
+recommendation to the founder: keep the shipped 512 m. Frames: captures/zc/distant_views_0928.
 
 ## Assignments
 

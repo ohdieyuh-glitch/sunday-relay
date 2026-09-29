@@ -59,7 +59,21 @@ def job():
             L.pose_camera(w, unreal.Vector(*eye), unreal.Vector(*target), 70.0)
             yield 1.0
             SL.execute_console_command(w, "FlushLevelStreaming")
-            yield 6.0
+            yield 2.0
+            # WAIT ON WORLD PARTITION ITSELF, not on a delay: every proxy (flush, a fixed wait, two readings that
+            # agree) has been fooled on this map. Capped at 30 s; the result says if it never completed.
+            done = [False]
+
+            def streamed():
+                ww = ues.get_game_world()
+                done[0] = ww is not None and L.is_world_partition_streaming_complete(ww)
+                return done[0]
+
+            try:
+                yield (streamed, 30.0)
+            except TimeoutError:
+                pass
+            yield 2.0
             w, pawn = alive()
             if w is None:
                 rows.append({"vantage": label, "range": rlabel, "void": "play world died"})
@@ -78,7 +92,8 @@ def job():
             path = os.path.join(ROOT, "%s_%s.png" % (label, rlabel))
             L.capture_game_viewport(path)
             unreal.GameplayStatics.set_game_paused(w, False)
-            row = {"vantage": label, "range": rlabel, "batches_loaded": len(batches), "instances_built": inst,
+            row = {"vantage": label, "range": rlabel, "streaming_complete": done[0],
+                   "batches_loaded": len(batches), "instances_built": inst,
                    "process_used_mb": used, "shot": os.path.basename(path) if os.path.isfile(path) else None}
             rows.append(row)
             emit("VIEW", row)
