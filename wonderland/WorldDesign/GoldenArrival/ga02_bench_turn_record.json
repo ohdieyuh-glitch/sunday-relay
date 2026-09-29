@@ -1,0 +1,27 @@
+{
+ "reason": "Golden Arrival's fountain benches sat with their backs to the fountain (SM_garden_bench faces its local +X; the generator used yaw = the angle FROM the fountain). Turned 180 to face the water, 2026-09-29.",
+ "evidence": "Tools/captures/zc/ga02_bench_check (end-on frame before the turn)",
+ "benches": [
+  {
+   "label": "GA02_Bench0",
+   "old_yaw": 45.0,
+   "new_yaw": 225.0
+  },
+  {
+   "label": "GA02_Bench1",
+   "old_yaw": 135.0,
+   "new_yaw": 315.0
+  },
+  {
+   "label": "GA02_Bench2",
+   "old_yaw": 225.0,
+   "new_yaw": 45.0
+  },
+  {
+   "label": "GA02_Bench3",
+   "old_yaw": 315.0,
+   "new_yaw": 135.0
+  }
+ ],
+ "reverse": "run Tools/editor_jobs/zc_ga02_bench_turn.py with old and new swapped"
+}

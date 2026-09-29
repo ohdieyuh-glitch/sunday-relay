@@ -208,10 +208,13 @@ def build():
                   leaf="MI_V2_LeafDark" if k % 2 else "MI_V2_LeafMid")
 
     # Benches facing the fountain, and rose-glass lamps around the rim.
+    # SM_garden_bench's seat faces its local +X, so yaw = the angle FROM the fountain seated each bench with its
+    # back to the fountain -- the opposite of the line above -- and the heartland garden rooms copied it before an
+    # end-on frame caught it (2026-09-29, captures/zc/ga02_bench_check). Turned 180 to face the water.
     for k, ang in enumerate((45.0, 135.0, 225.0, 315.0)):
         x, y = cx + 800.0 * math.cos(math.radians(ang)), cy + 800.0 * math.sin(math.radians(ang))
         if clear(x, y, 90.0, margin=10.0):
-            actor("Bench%d" % k, "bench", (x, y, GROUND + 13.0), ["MI_V2_IvoryStone"], 1.0, yaw=ang)
+            actor("Bench%d" % k, "bench", (x, y, GROUND + 13.0), ["MI_V2_IvoryStone"], 1.0, yaw=(ang + 180.0) % 360.0)
     for k, ang in enumerate((20.0, 55.0, 125.0, 160.0, 200.0, 235.0, 305.0, 340.0)):
         x, y = cx + 1160.0 * math.cos(math.radians(ang)), cy + 1160.0 * math.sin(math.radians(ang))
         if clear(x, y, 70.0, margin=20.0):
