@@ -30,7 +30,12 @@ describe('juliusStoreErrorClass names the store failure from the driver\'s code'
       expect(juliusStoreErrorClass(coded(code))).toBe('connection');
     });
 
-  it.each(['timeout exceeded when trying to connect', 'Connection terminated unexpectedly'])(
+  it.each([
+    // The one a real terminated backend produced, and that this set used to miss.
+    'Client has encountered a connection error and is not queryable',
+    'Client was closed and is not queryable', 'Connection terminated unexpectedly', 'Connection terminated',
+    'Query read timeout', 'timeout expired', 'timeout exceeded when trying to connect',
+  ])(
     'pg\'s fixed driver string "%s" is a lost connection', (message) => {
       expect(juliusStoreErrorClass(new Error(message))).toBe('connection');
     });
