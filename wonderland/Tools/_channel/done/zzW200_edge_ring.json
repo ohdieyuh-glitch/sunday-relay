@@ -1,0 +1,12 @@
+{
+ "name": "zzW200_edge_ring",
+ "started": "2026-09-29 10:28:46",
+ "status": "done",
+ "removed": 0,
+ "segments": 48,
+ "segment_length_m": 198.2,
+ "chord_midpoint_radius_m": 1481.8,
+ "finished": "2026-09-29 10:28:50",
+ "seconds": 3.43,
+ "log": ""
+}

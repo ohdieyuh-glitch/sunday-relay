@@ -1,0 +1,603 @@
+{
+ "name": "zzW221_proof_wx",
+ "started": "2026-09-29 10:37:24",
+ "status": "measured (see regions)",
+ "day_minutes_found": 24.0,
+ "regions": [
+  {
+   "pass": "WX030",
+   "walk_points": 152,
+   "stands": [
+    {
+     "at": [
+      120536,
+      69592
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      117102,
+      74784
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      113294,
+      79448
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      109485,
+      84111
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      105317,
+      88427
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      100430,
+      92048
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      95902,
+      96017
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      91734,
+      100333
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      87566,
+      104649
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      88062,
+      112773
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      84613,
+      117784
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      78647,
+      120364
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      74331,
+      116196
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 13,
+   "verdict": {
+    "stands_pass": 13,
+    "stands": 13,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 111,
+    "resident_instances": 845,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "WX122",
+   "walk_points": 131,
+   "stands": [
+    {
+     "at": [
+      -68632,
+      109835
+     ],
+     "surface": 364.0,
+     "feet": 364.0,
+     "landed": true,
+     "ground": false,
+     "pass": false
+    },
+    {
+     "at": [
+      -74485,
+      108839
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -77574,
+      103481
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -82821,
+      100207
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -88068,
+      96932
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -92955,
+      93311
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -98202,
+      90037
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -102010,
+      85374
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -106178,
+      81058
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -109986,
+      76394
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -113435,
+      71384
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [
+    {
+     "at": [
+      -68632,
+      109835
+     ],
+     "by": "SKY05_SKY05_Tower_Base_Battered_TowerBlush"
+    }
+   ],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 11,
+   "verdict": {
+    "stands_pass": 10,
+    "stands": 11,
+    "walk_blocks": 1,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 120,
+    "resident_instances": 1238,
+    "dog_died": false,
+    "stands_not_ground": 1
+   }
+  },
+  {
+   "pass": "WX150",
+   "walk_points": 276,
+   "stands": [
+    {
+     "at": [
+      -116168,
+      67070
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -119673,
+      61098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -122673,
+      55098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -124673,
+      49098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -127173,
+      43098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -129173,
+      37098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -130673,
+      31098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -132173,
+      25098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -133673,
+      19098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -134673,
+      13098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -135673,
+      7098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -136673,
+      1098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -137173,
+      -4902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -137173,
+      -10902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -137173,
+      -16902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -137173,
+      -22902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -136673,
+      -28902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -135673,
+      -34902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -134673,
+      -40902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -132673,
+      -46902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -130673,
+      -52902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -127673,
+      -58902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -124673,
+      -64902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 23,
+   "verdict": {
+    "stands_pass": 23,
+    "stands": 23,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 267,
+    "resident_instances": 2893,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  }
+ ],
+ "day_minutes_restored": 24.0,
+ "finished": "2026-09-29 10:39:28",
+ "seconds": 124.15,
+ "log": "WX030 {'stands_pass': 13, 'stands': 13, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 111, 'resident_instances': 845, 'dog_died': False, 'stands_not_ground': 0}\nWX122 {'stands_pass': 10, 'stands': 11, 'walk_blocks': 1, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 120, 'resident_instances': 1238, 'dog_died': False, 'stands_not_ground': 1}\nWX150 {'stands_pass': 23, 'stands': 23, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 267, 'resident_instances': 2893, 'dog_died': False, 'stands_not_ground': 0}\n"
+}

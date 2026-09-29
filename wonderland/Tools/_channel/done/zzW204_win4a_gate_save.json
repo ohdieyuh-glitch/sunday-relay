@@ -1,0 +1,33 @@
+{
+ "name": "zzW204_win4a_gate_save",
+ "started": "2026-09-29 10:29:59",
+ "status": "done",
+ "dirty_before_count": 550,
+ "pass_actor_counts": {
+  "EDGE01": 48,
+  "WX030": 111,
+  "WX122": 120,
+  "WX150": 267
+ },
+ "count_mismatch": {},
+ "guard_tr01_intact": true,
+ "dirty": {
+  "new_pass": 546,
+  "replaced_deleted": 0,
+  "objects": [
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/D/4S/56AQNCYPI76L88EUEXMTKE",
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/B/O0/82WIXLEJ1TEOZSUN6LWERL",
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/HM/UBYTYS17RGUS01HB54Z523",
+   "/Game/__ExternalObjects__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/L0/CPABIB0VX0X3UBC3KJTEUP"
+  ],
+  "stub": [],
+  "unexpected": []
+ },
+ "gate_ok": true,
+ "saved": true,
+ "save_seconds": 11.4,
+ "dirty_after": [],
+ "finished": "2026-09-29 10:30:11",
+ "seconds": 12.22,
+ "log": ""
+}

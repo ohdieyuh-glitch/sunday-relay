@@ -1,0 +1,69 @@
+{
+ "name": "zzW220_edge_walk",
+ "started": "2026-09-29 10:35:36",
+ "status": "walked",
+ "day_minutes_found": 24.0,
+ "proof_class": "SELF-POWERED (one placement at each route's start)",
+ "throttle_error": "AttributeError(\"module 'unreal' has no attribute 'EditorPerformanceSettings'\")",
+ "routes": [
+  {
+   "route": "route_edge_001p75.json",
+   "pass": "EDGE01",
+   "waypoints": 25,
+   "stuck": {
+    "at": [
+     148118,
+     4515,
+     75
+    ],
+    "waypoint": 9,
+    "radius_m": 1481.9,
+    "blocked_by": "EDGE01_Segment_00",
+    "streaming_complete": true
+   },
+   "arrived": false,
+   "wall_seconds": 24.3,
+   "game_seconds": 24.3,
+   "fps_seen": 36.6,
+   "mean_speed_cm_s": 172.9,
+   "waypoints_reached": 9,
+   "fraction": 0.36,
+   "walked_m": 42.0,
+   "route_m": 120.0,
+   "seconds": 24.3,
+   "low_z": 75.2
+  },
+  {
+   "route": "route_edge_089p50.json",
+   "pass": "EDGE01",
+   "waypoints": 25,
+   "stuck": {
+    "at": [
+     1268,
+     148331,
+     75
+    ],
+    "waypoint": 10,
+    "radius_m": 1483.4,
+    "blocked_by": "EDGE01_Segment_11",
+    "streaming_complete": true
+   },
+   "arrived": false,
+   "wall_seconds": 24.9,
+   "game_seconds": 24.9,
+   "fps_seen": 43.8,
+   "mean_speed_cm_s": 175.0,
+   "waypoints_reached": 10,
+   "fraction": 0.4,
+   "walked_m": 43.6,
+   "route_m": 120.0,
+   "seconds": 24.9,
+   "low_z": 75.2
+  }
+ ],
+ "all_arrived": false,
+ "day_minutes_restored": 24.0,
+ "finished": "2026-09-29 10:36:53",
+ "seconds": 76.37,
+ "log": "route_edge_001p75.json NOT ARRIVED 0.36\nroute_edge_089p50.json NOT ARRIVED 0.4\n"
+}
