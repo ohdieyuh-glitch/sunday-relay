@@ -9,7 +9,7 @@ import { evaluate, type BetaGateReport, type BetaVerdict } from './wonderland-be
 /**
  * THE GATE, HELD TO ITS OWN RULE.
  *
- * What is worth testing here is not that fifteen rows appear. It is that the
+ * What is worth testing here is not that sixteen rows appear. It is that the
  * gate CANNOT be talked into an optimistic answer: no repository state, however
  * complete, may produce a PASS for a capability that runs at mission time. Every
  * PASS has to be read out of a real run — and, since the gate now also answers
@@ -113,7 +113,7 @@ describe('the Wonderland Beta Gate', () => {
 
   it('answers with exactly four values, whatever it is pointed at', () => {
     for (const report of [evaluate(null), evaluate(failingBundle()), evaluate(completingBundle())]) {
-      expect(report.results.length, 'the fifteen declared capabilities').toBe(15);
+      expect(report.results.length, 'the sixteen declared capabilities').toBe(16);
       for (const row of report.results) {
         expect(VERDICTS, `${row.id} answered ${row.verdict}`).toContain(row.verdict);
         expect(row.basis.length, `${row.id} must name what it read`).toBeGreaterThan(0);
@@ -285,7 +285,7 @@ describe('the Wonderland Beta Gate', () => {
    * and if someone builds it, this test starts demanding a passing bundle for
    * it too.
    */
-  it('every capability that is built can be reached: one good run passes all fourteen', () => {
+  it('every capability that is built can be reached: one good run passes all fifteen', () => {
     const dir = mkdtempSync(join(tmpdir(), 'beta-gate-ideal-'));
     const bundle = join(dir, 'julius-live-evidence');
     mkdirSync(bundle);
@@ -336,6 +336,11 @@ describe('the Wonderland Beta Gate', () => {
       [`${RUN}:build:review`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '2', `sha256:${'b'.repeat(64)}`, '', '', '', '', 'INDEPENDENT_REVIEWER', 't4'],
     ]));
 
+    // And every reservation was settled exactly once, which the dump says in its own file.
+    write('budget.tsv', tsv(['run_id', 'sequence', 'task_id', 'event_type', 'role', 'reservation_id'], [
+      [RUN, '9', `${RUN}:build`, 'julius.budget.settled', 'CODING_AGENT', 'reservation:build'],
+    ]));
+    write('settlement-integrity.tsv', tsv(['run_id', 'reservation_id', 'role', 'settled_rows'], []));
     const report = evaluate(dir);
     const notPassing = report.results.filter((row) => row.verdict !== 'PASS');
     expect(notPassing.map((row) => `${row.id}: ${row.verdict} — ${row.basis}`),
@@ -535,7 +540,7 @@ describe('the Beta Gate’s capability axis', () => {
    * AND THE MEANINGS DO NOT COLLAPSE. A run that DID crash and recover is a
    * different fact from one that never had to, and the gate keeps them apart:
    * the first reads PASS/EXERCISED, the second CAPABILITY PROVEN/NOT EXERCISED.
-   * Reaching 15/15 by making those one value is the thing this test forbids.
+   * Reaching 16/16 by making those one value is the thing this test forbids.
    */
   it('still reports a mission that DID crash and recover as having done so', () => {
     const dir = withProof(completingBundle());
@@ -572,7 +577,7 @@ describe('the Beta Gate’s capability axis', () => {
   /**
    * AND NO DRILL WALKS THE MISSION'S OWN PATH FOR IT. The eight capabilities a
    * run must physically walk between "a project exists" and "COMPLETED" admit
-   * no capability proof at all, so 15/15 cannot be reached by drilling.
+   * no capability proof at all, so 16/16 cannot be reached by drilling.
    */
   it('refuses a drill attestation for a capability the mission itself must walk', () => {
     const dir = withProof(failingBundle(), { capability: 'VERIFIED COMPLETION', drill: 'npm run lifecycle-drill' });
@@ -776,11 +781,80 @@ describe('the Beta Gate’s capability axis', () => {
   it('summarises what the run proved and what Julius is ready to do as different counts', () => {
     const report = evaluate(withProof(completingBundle()));
     const s = report.summary;
-    expect(s.total).toBe(15);
+    expect(s.total).toBe(16);
     expect(s.exercised + s.failed + s.notExercised + s.unknown, 'the mission axis partitions every built row')
       .toBe(s.total - s.notBuilt);
     expect(s.provenByMission + s.provenByDrill + s.unproven + s.notBuilt, 'and the verdict partitions all of them').toBe(s.total);
     expect(s.provenByDrill, 'recovery, proven by drill and not by this run').toBe(1);
     expect(s.provenByMission).toBe(report.results.filter((row) => row.verdict === 'PASS').length);
+  });
+
+  /**
+   * SETTLEMENT INTEGRITY: a reservation settled twice is counted twice.
+   *
+   * `cost-accounting.tsv` sums every settled row and never deduplicates, so the
+   * dump lists any reservation settled more than once, and this row FAILS on it.
+   * An unreadable file is UNKNOWN and never a pass. A drill evaluation, which has
+   * no mission bundle at all, leaves the drill rows exactly as they were.
+   */
+  const INTEGRITY_COLUMNS = ['run_id', 'reservation_id', 'role', 'settled_rows'];
+  const BUDGET_COLUMNS = ['run_id', 'sequence', 'task_id', 'event_type', 'role', 'reservation_id'];
+  const settledOnce = (dir: string) => {
+    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
+    write('budget.tsv', tsv(BUDGET_COLUMNS, [
+      [RUN, '4', `${RUN}:build`, 'julius.budget.reserved', 'CODING_AGENT', 'reservation:build'],
+      [RUN, '9', `${RUN}:build`, 'julius.budget.settled', 'CODING_AGENT', 'reservation:build'],
+    ]));
+    write('settlement-integrity.tsv', tsv(INTEGRITY_COLUMNS, []));
+    return dir;
+  };
+
+  it('SETTLEMENT INTEGRITY passes when every reservation settled at most once, and names the count', () => {
+    const row = rowFor(evaluate(settledOnce(completingBundle())), 'SETTLEMENT INTEGRITY');
+    expect(row.verdict).toBe('PASS');
+    expect(row.basis).toContain('1 settlement(s) across 1 reservation(s), none settled twice');
+  });
+
+  it('SETTLEMENT INTEGRITY FAILS on a reservation settled twice, and names it', () => {
+    const dir = settledOnce(completingBundle());
+    writeFileSync(join(dir, 'julius-live-evidence', 'settlement-integrity.tsv'),
+      tsv(INTEGRITY_COLUMNS, [[RUN, 'reservation:review', 'INDEPENDENT_REVIEWER', '2']]));
+    const row = rowFor(evaluate(dir), 'SETTLEMENT INTEGRITY');
+    expect(row.verdict).toBe('FAIL');
+    expect(row.mission).toBe('FAILED');
+    expect(row.basis).toContain('reservation:review (INDEPENDENT_REVIEWER) x2');
+  });
+
+  it('SETTLEMENT INTEGRITY is UNKNOWN, never a pass, when the dump could not be read or is absent', () => {
+    const unreadable = settledOnce(completingBundle());
+    writeFileSync(join(unreadable, 'julius-live-evidence', 'settlement-integrity.tsv'), 'unavailable\n');
+    const absent = completingBundle();
+    for (const dir of [unreadable, absent]) {
+      const row = rowFor(evaluate(dir), 'SETTLEMENT INTEGRITY');
+      expect(row.mission, 'nobody looked is not the same as nothing found').toBe('UNKNOWN');
+      expect(row.verdict).toBe('FAIL');
+    }
+  });
+
+  it('SETTLEMENT INTEGRITY with no settlement at all was not exercised, and a drill cannot stand in for it', () => {
+    const dir = completingBundle();
+    writeFileSync(join(dir, 'julius-live-evidence', 'budget.tsv'), tsv(BUDGET_COLUMNS, []));
+    writeFileSync(join(dir, 'julius-live-evidence', 'settlement-integrity.tsv'), tsv(INTEGRITY_COLUMNS, []));
+    const row = rowFor(evaluate(dir), 'SETTLEMENT INTEGRITY');
+    expect(row.mission).toBe('NOT EXERCISED');
+    expect(row.capability).toBe('NOT ADMISSIBLE');
+    expect(row.verdict).toBe('FAIL');
+  });
+
+  it('a DRILL evaluation, exactly as julius-real-infra calls it, leaves the drill rows as they were', () => {
+    // No mission bundle at all: the workflow's own call, `evaluate(null, { capabilityDir })`.
+    const outside = mkdtempSync(join(tmpdir(), 'beta-gate-drills-'));
+    const staged = withProof(completingBundle());
+    for (const name of ['capability-proofs.tsv', 'julius-recovery-drill.transcript.txt']) {
+      writeFileSync(join(outside, name), readFileSync(join(staged, 'julius-live-evidence', name), 'utf8'));
+    }
+    const report = evaluate(null, { capabilityDir: outside });
+    expect(rowFor(report, 'RESTART / RECOVERY').capability, 'the drill still proves its row').toBe('PROVEN');
+    expect(rowFor(report, 'SETTLEMENT INTEGRITY').mission, 'and the new row reads the missing bundle as unknown, not as a failure').toBe('UNKNOWN');
   });
 });
