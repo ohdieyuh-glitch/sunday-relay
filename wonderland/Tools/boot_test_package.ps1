@@ -23,12 +23,15 @@ public class WlBoot {
   }
 }
 '@
+# the game process is found (and stopped) by the package folder the -Exe lives in; the first version hard-coded the
+# 2026-09-29 folder, so any other package would boot, take no frame and be left running
+$PkgDir = Split-Path (Split-Path $Exe -Parent) -Parent
 New-Item -ItemType Directory -Force $Out | Out-Null
 $args = '-windowed -ResX=1600 -ResY=900 -nosound -log -ExecCmds="wp.Runtime.ToggleDrawRuntimeHash2D"'
 $p = Start-Process -FilePath $Exe -ArgumentList $args -PassThru
 "launched bootstrap pid $($p.Id) at $(Get-Date -Format HH:mm:ss)"
 Start-Sleep -Seconds 75
-$game = Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*_wonderland_package_20260929*' }
+$game = Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PkgDir*" }
 $game | Select-Object Name, Id, @{n='PrivMB';e={[int]($_.PrivateMemorySize64/1MB)}} | Format-Table -AutoSize | Out-String
 foreach ($g in $game) {
   $h = [WlBoot]::Largest([uint32]$g.Id)
@@ -44,5 +47,5 @@ foreach ($g in $game) {
   }
 }
 Start-Sleep -Seconds 2
-Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*_wonderland_package_20260929*' } | Stop-Process -Force
+Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PkgDir*" } | Stop-Process -Force
 "stopped at $(Get-Date -Format HH:mm:ss)"
