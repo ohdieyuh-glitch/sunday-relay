@@ -94,6 +94,86 @@ describe('a serialization failure is retried, because PostgreSQL guarantees it r
     }
   });
 
+  /**
+   * THE CONFLICT MOST OFTEN ARRIVES AT COMMIT. Under SERIALIZABLE, PostgreSQL
+   * reports a read/write dependency cycle when the transaction tries to commit,
+   * not while its statements run — so a helper that retried statement errors
+   * but let COMMIT fail outside its try would never have retried the common
+   * case, and would have leaked an un-rolled-back connection doing it.
+   */
+  it('a 40001 raised BY COMMIT is rolled back, released and retried, like one raised by a statement', async () => {
+    const log: string[] = [];
+    let attempt = 0;
+    let releases = 0;
+    const pool = {
+      async connect() {
+        attempt += 1;
+        const mine = attempt;
+        return {
+          async query(sql: string) {
+            log.push(`${mine}:${sql.split(/\s+/u)[0]}`);
+            if (sql === 'COMMIT' && mine === 1) throw serialization();
+            return { rows: [], rowCount: 1 };
+          },
+          release() { releases += 1; },
+        };
+      },
+    } as never;
+    const value = await juliusSerializable(pool, async (client) => {
+      await client.query('INSERT INTO t VALUES(1)');
+      return 'committed on the second attempt';
+    }, { pause: noPause });
+    expect(value).toBe('committed on the second attempt');
+    expect(attempt, 'the commit-time conflict was retried').toBe(2);
+    expect(releases, 'both connections were given back').toBe(2);
+    expect(log, 'attempt 1 rolled back AFTER its failed COMMIT; attempt 2 committed')
+      .toEqual(['1:BEGIN', '1:INSERT', '1:COMMIT', '1:ROLLBACK', '2:BEGIN', '2:INSERT', '2:COMMIT']);
+  });
+
+  /**
+   * THE BOUND IS A MEASURED NUMBER, NOT WHATEVER THE CONSTANT HAPPENS TO SAY.
+   * The storm case above counts attempts against JULIUS_SERIALIZABLE_ATTEMPTS
+   * itself, so shrinking the constant to 1 (no retry at all) or growing it
+   * without measurement would pass it. Six is what two run loops over six
+   * missions needed (see the constant's comment); this pins it.
+   */
+  it('the default bound is exactly SIX attempts, and an explicit bound below one still makes one attempt', async () => {
+    expect(JULIUS_SERIALIZABLE_ATTEMPTS).toBe(6);
+    const storm = flakyPool(Array.from({ length: 10 }, serialization));
+    await expect(juliusSerializable(storm.pool, async (client) => {
+      await client.query('INSERT INTO t VALUES(1)');
+    }, { pause: noPause })).rejects.toMatchObject({ code: '40001' });
+    expect(storm.attempts(), 'five retries after the first attempt, then the conflict surfaces').toBe(6);
+    const once = flakyPool([serialization()]);
+    await expect(juliusSerializable(once.pool, async (client) => {
+      await client.query('INSERT INTO t VALUES(1)');
+    }, { pause: noPause, attempts: 0 })).rejects.toMatchObject({ code: '40001' });
+    expect(once.attempts(), 'attempts:0 is not "never run"').toBe(1);
+  });
+
+  /**
+   * THE BACKOFF DOUBLES AND IS JITTERED, so two writers that conflicted once do
+   * not collide again in step. Pinned through the injected pause with
+   * Math.random held: removing the doubling, the jitter or the pause itself
+   * each changes this exact schedule.
+   */
+  it('pauses between attempts on the doubling, jittered schedule (up to 10, 20, 40, 80, 160 ms)', async () => {
+    const random = Math.random;
+    try {
+      for (const [r, expected] of [[0.999, [9, 19, 39, 79, 159]], [0.5, [5, 10, 20, 40, 80]], [0, [0, 0, 0, 0, 0]]] as const) {
+        Math.random = () => r;
+        const pauses: number[] = [];
+        const storm = flakyPool(Array.from({ length: 10 }, serialization));
+        await expect(juliusSerializable(storm.pool, async (client) => {
+          await client.query('INSERT INTO t VALUES(1)');
+        }, { pause: async (ms) => { pauses.push(ms); } })).rejects.toMatchObject({ code: '40001' });
+        expect(pauses, `Math.random=${r}: one pause before each retry, never after the last attempt`).toEqual(expected);
+      }
+    } finally {
+      Math.random = random;
+    }
+  });
+
   it('THE EVENT APPEND retries a 40001 instead of throwing it into the run loop', async () => {
     const event: JuliusOperationalEvent = {
       eventId: 'event:1', runId: 'run-1', projectId: 'prj-1', type: 'verification.decided',
