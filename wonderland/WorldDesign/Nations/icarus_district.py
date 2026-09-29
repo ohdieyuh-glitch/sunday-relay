@@ -413,11 +413,11 @@ def main():
             x = side * (spine_half + 420.0)
             add_module("WL_Ground_Tree_Grate", x, y, PAVING_TOP, 0.0, cull=CULL_NEAR, collide=False)
             add("AvenueTree", "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
-                "MI_V2_Bark", x, y, PAVING_TOP, rng.uniform(0, 360), scale=rng.uniform(0.9, 1.1), cull=CULL_MID,
+                "MI_V2_Bark", x, y, PAVING_TOP, rng.uniform(0, 360), scale=rng.uniform(0.9, 1.1), cull=CULL_FAR,
                 collides=True)
             add("AvenueCanopy", "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
                 "MI_V2_LeafMid", x, y, PAVING_TOP + 760.0, rng.uniform(0, 360), scale=rng.uniform(0.9, 1.15),
-                cull=CULL_MID)
+                cull=CULL_FAR)   # trees draw to 600 m: CORE 2026-09-29, after the zzW432/433 cull A/B
 
     # drainage where the courts shed water: a channel down both sides of the avenue at the court crossings
     drain = KIT["WL_Ground_Drain_Channel"]["size"][0]

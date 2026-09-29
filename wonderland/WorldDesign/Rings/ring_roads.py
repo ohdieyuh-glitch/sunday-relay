@@ -211,6 +211,8 @@ def build(name, ring, occ):
                             luminous=luminous, glow=("glass",))
                 spec.stats["lantern"] += 1
                 occ.add("existing", px, py, 350.0, 120.0, head, "%s:lantern" % pass_id)
+        # Trees draw to CULL_FAR (600 m): at 260 m more than half of what the 512 m streaming radius loads was never
+        # drawn (SECOND's cull A/B zzW432/433, CORE decision 2026-09-29).
         # --- AVENUE TREES, the IC02 recipe (slender trunk, medium canopy 7.6 m up), both sides, on the ground
         #     just outside the kerbs. A ring through open lawn reads as a boulevard only with trees; a tree is
         #     refused where its trunk or its canopy would stand in anything already there.
@@ -227,9 +229,9 @@ def build(name, ring, occ):
                     spec.tree_why[why.split(":")[0] + ":" + why.split(":")[-1][:28]] += 1
                     continue
                 spec.add("AvenueTree", TRUNK_MESH, "MI_V2_Bark", tx, ty, GROUND_Z, rng.uniform(0.0, 360.0),
-                         *([rng.uniform(0.9, 1.1)] * 3), collides=True)
+                         *([rng.uniform(0.9, 1.1)] * 3), collides=True, cull=CULL_FAR)
                 spec.add("AvenueCanopy", CANOPY_MESH, "MI_V2_LeafMid", tx, ty, GROUND_Z + 760.0,
-                         rng.uniform(0.0, 360.0), *([rng.uniform(0.9, 1.15)] * 3), collides=False)
+                         rng.uniform(0.0, 360.0), *([rng.uniform(0.9, 1.15)] * 3), collides=False, cull=CULL_FAR)
                 occ.add("existing", tx, ty, 150.0, 150.0, head, "%s:tree" % pass_id)
                 occ.add("solid", tx, ty, 420.0, 420.0, head, "%s:canopy" % pass_id)
                 spec.stats["tree"] += 1
