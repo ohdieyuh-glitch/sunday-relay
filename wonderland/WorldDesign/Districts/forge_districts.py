@@ -136,8 +136,8 @@ def polar(bearing, r_m):
     return r_m * 100.0 * math.cos(t), r_m * 100.0 * math.sin(t)
 
 
-def tower_rise():
-    cx, cy = polar(120.0, 130.0)
+def tower_rise(bearing=120.0, r_m=130.0):
+    cx, cy = polar(bearing, r_m)
     site = Site(cx, cy, 5500.0)
     spec = Spec("TR01", "Wonderland/Authored/TR01_TowerRise", ["WL_DISTRICT", "WL_DISTRICT_TOWER_RISE"])
     rng = random.Random(1201)
@@ -187,7 +187,7 @@ def tower_rise():
         x, y = spot
         mesh, mat = (("SM_topiary_cone_plain", "MI_V2_LeafDark"), ("SM_shrub_flowering", "MI_V2_LeafMid"),
                      ("SM_topiary_ball", "MI_V2_LeafMid"), ("SM_topiary_spiral", "MI_V2_LeafDark"))[i % 4]
-        spec.add("Court", mesh, mat, x, y, site.ground(x, y), 40.0 * i, 0.9, cull=12000.0)
+        spec.add("Court", mesh, mat, x, y, site.ground(x, y), 40.0 * i, 0.9, cull=26000.0)
         site.occ.add("existing", x, y, 130.0, 130.0, 0.0, "TR01:plant")
     # A NEIGHBOURHOOD, NOT TOWERS ON GRASS: a garden wall round the cluster, open toward the city
     wall_r = 3400.0
@@ -216,8 +216,8 @@ def tower_rise():
     return spec.out("Tower Rise: the forge's tower neighbourhood, a clockyard and a walled court"), placed, spec.stats
 
 
-def mushroom_grove():
-    cx, cy = polar(300.0, 140.0)
+def mushroom_grove(bearing=300.0, r_m=140.0):
+    cx, cy = polar(bearing, r_m)
     site = Site(cx, cy, 5500.0)
     spec = Spec("MG01", "Wonderland/Authored/MG01_MushroomGrove", ["WL_DISTRICT", "WL_DISTRICT_MUSHROOM_GROVE"])
     rng = random.Random(3001)
@@ -272,14 +272,22 @@ def mushroom_grove():
             x, y = spot
             mat = ("MI_V2_MushPurple", "MI_V2_MushRed")[k % 2]
             spec.add("Small", "SM_mushroom_small", mat, x, y, site.ground(x, y), rng.uniform(0, 360),
-                     rng.uniform(0.6, 1.3), cull=12000.0)
+                     rng.uniform(0.6, 1.3), cull=26000.0)
             site.occ.add("existing", x, y, 70.0, 70.0, 0.0, "MG01:small")
     return spec.out("Mushroom Grove: giant mushrooms on stone rings, a landmark, and the small ones at their feet"), feet, spec.stats
 
 
+# RELOCATED WITH INTENT (2026-09-29, founder directive "prefer outward expansion over destroying good completed core
+# work"). Both forge seeds lie inside the fully planted core (TR01 found room for 3 of 7 towers there, MG01 for no
+# giant). Each keeps its forge bearing and moves out along it to the nearest large empty region the structure-only
+# emptiness audit reports (05:05 census): TR01 to the ICARUS march edge, MG01 to the TARTARUS outer heartland.
+SITES = {"TR01": (111.0, 478.0), "MG01": (297.0, 984.0)}
+
+
 def main():
-    for build, fname in ((tower_rise, "tr01_tower_rise.json"), (mushroom_grove, "mg01_mushroom_grove.json")):
-        spec, placed, stats = build()
+    for build, fname, pid in ((tower_rise, "tr01_tower_rise.json", "TR01"),
+                              (mushroom_grove, "mg01_mushroom_grove.json", "MG01")):
+        spec, placed, stats = build(*SITES[pid])
         (HERE / fname).write_text(json.dumps(spec, indent=1), encoding="utf-8")
         total = sum(len(b["instances"]) for b in spec["batches"])
         print("%s: %d instances in %d batches, %d anchors placed -> %s" % (spec["pass"], total, len(spec["batches"]),

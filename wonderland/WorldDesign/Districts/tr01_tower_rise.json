@@ -1,0 +1,938 @@
+{
+ "pass": "TR01",
+ "folder": "Wonderland/Authored/TR01_TowerRise",
+ "title": "Tower Rise: the forge's tower neighbourhood, a clockyard and a walled court",
+ "tags": [
+  "WL_AUTHORED",
+  "WL_PASS_TR01",
+  "WL_DISTRICT",
+  "WL_DISTRICT_TOWER_RISE"
+ ],
+ "actors": [],
+ "batches": [
+  {
+   "id": "TR01_Tower_t-1_2_IvoryStone",
+   "mesh": "/Game/WonderlandV2/Architecture/Castle/SM_tower_capped.SM_tower_capped",
+   "material": "MI_V2_IvoryStone",
+   "instances": [
+    [
+     -17130.0,
+     44625.1,
+     -14.0,
+     0.0,
+     69.8,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ],
+    [
+     -15555.0,
+     45570.1,
+     -14.0,
+     0.0,
+     132.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18495.0,
+     45780.1,
+     -14.0,
+     0.0,
+     139.8,
+     0.0,
+     1.15,
+     1.15,
+     1.15
+    ],
+    [
+     -16395.0,
+     43050.1,
+     -14.0,
+     0.0,
+     15.1,
+     0.0,
+     0.85,
+     0.85,
+     0.85
+    ],
+    [
+     -18810.0,
+     43680.1,
+     -14.0,
+     0.0,
+     336.0,
+     0.0,
+     1.05,
+     1.05,
+     1.05
+    ],
+    [
+     -14925.0,
+     42425.1,
+     -14.0,
+     0.0,
+     41.2,
+     0.0,
+     1.22,
+     1.22,
+     1.22
+    ],
+    [
+     -19650.0,
+     46830.1,
+     -14.0,
+     0.0,
+     349.8,
+     0.0,
+     0.95,
+     0.95,
+     0.95
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "TR01_TowerCap_t-1_2_RoofPink",
+   "mesh": "/Game/WonderlandV2/Architecture/Castle/SM_roof_cone_steep.SM_roof_cone_steep",
+   "material": "MI_V2_RoofPink",
+   "instances": [
+    [
+     -17130.0,
+     44625.1,
+     1471.0,
+     0.0,
+     69.8,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ],
+    [
+     -14925.0,
+     42425.1,
+     1328.0,
+     0.0,
+     41.2,
+     0.0,
+     1.22,
+     1.22,
+     1.22
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "TR01_TowerSpire_t-1_2_Gold",
+   "mesh": "/Game/WonderlandV2/Architecture/Castle/SM_finial_spire.SM_finial_spire",
+   "material": "MI_V2_Gold",
+   "instances": [
+    [
+     -17130.0,
+     44625.1,
+     2092.0,
+     0.0,
+     69.8,
+     0.0,
+     0.945,
+     0.945,
+     0.945
+    ],
+    [
+     -15555.0,
+     45570.1,
+     1546.0,
+     0.0,
+     132.4,
+     0.0,
+     0.7,
+     0.7,
+     0.7
+    ],
+    [
+     -18495.0,
+     45780.1,
+     1780.0,
+     0.0,
+     139.8,
+     0.0,
+     0.805,
+     0.805,
+     0.805
+    ],
+    [
+     -16395.0,
+     43050.1,
+     1312.0,
+     0.0,
+     15.1,
+     0.0,
+     0.595,
+     0.595,
+     0.595
+    ],
+    [
+     -18810.0,
+     43680.1,
+     1624.0,
+     0.0,
+     336.0,
+     0.0,
+     0.735,
+     0.735,
+     0.735
+    ],
+    [
+     -14925.0,
+     42425.1,
+     1889.2,
+     0.0,
+     41.2,
+     0.0,
+     0.854,
+     0.854,
+     0.854
+    ],
+    [
+     -19650.0,
+     46830.1,
+     1468.0,
+     0.0,
+     349.8,
+     0.0,
+     0.665,
+     0.665,
+     0.665
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "TR01_TowerBalcony_t-1_2_GoldAged",
+   "mesh": "/Game/WonderlandV2/Architecture/Castle/SM_balcony_ring.SM_balcony_ring",
+   "material": "MI_V2_GoldAged",
+   "instances": [
+    [
+     -17130.0,
+     44625.1,
+     775.8,
+     0.0,
+     69.8,
+     0.0,
+     0.878,
+     0.878,
+     0.878
+    ],
+    [
+     -18495.0,
+     45780.1,
+     658.8,
+     0.0,
+     139.8,
+     0.0,
+     0.747,
+     0.747,
+     0.747
+    ],
+    [
+     -14925.0,
+     42425.1,
+     699.7,
+     0.0,
+     41.2,
+     0.0,
+     0.793,
+     0.793,
+     0.793
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "TR01_TowerCap_t-1_2_RoofLilac",
+   "mesh": "/Game/WonderlandV2/Architecture/Castle/SM_roof_cone_steep.SM_roof_cone_steep",
+   "material": "MI_V2_RoofLilac",
+   "instances": [
+    [
+     -15555.0,
+     45570.1,
+     1086.0,
+     0.0,
+     132.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "TR01_TowerCap_t-1_2_RoofBlue",
+   "mesh": "/Game/WonderlandV2/Architecture/Castle/SM_roof_cone_steep.SM_roof_cone_steep",
+   "material": "MI_V2_RoofBlue",
+   "instances": [
+    [
+     -18495.0,
+     45780.1,
+     1251.0,
+     0.0,
+     139.8,
+     0.0,
+     1.15,
+     1.15,
+     1.15
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "TR01_TowerCap_t-1_2_RoofRose",
+   "mesh": "/Game/WonderlandV2/Architecture/Castle/SM_roof_cone_steep.SM_roof_cone_steep",
+   "material": "MI_V2_RoofRose",
+   "instances": [
+    [
+     -16395.0,
+     43050.1,
+     921.0,
+     0.0,
+     15.1,
+     0.0,
+     0.85,
+     0.85,
+     0.85
+    ],
+    [
+     -19650.0,
+     46830.1,
+     1031.0,
+     0.0,
+     349.8,
+     0.0,
+     0.95,
+     0.95,
+     0.95
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "TR01_TowerCap_t-1_2_RoofNavy",
+   "mesh": "/Game/WonderlandV2/Architecture/Castle/SM_roof_cone_steep.SM_roof_cone_steep",
+   "material": "MI_V2_RoofNavy",
+   "instances": [
+    [
+     -18810.0,
+     43680.1,
+     1141.0,
+     0.0,
+     336.0,
+     0.0,
+     1.05,
+     1.05,
+     1.05
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "TR01_ClockTower_t-1_2_GoldAged",
+   "mesh": "/Game/WonderlandV2/Architecture/Castle/SM_tower_clock.SM_tower_clock",
+   "material": "MI_V2_GoldAged",
+   "instances": [
+    [
+     -16628.3,
+     43618.1,
+     -14.0,
+     0.0,
+     290.9,
+     0.0,
+     1.15,
+     1.15,
+     1.15
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "TR01_ClockCap_t-1_2_RoofNavy",
+   "mesh": "/Game/WonderlandV2/Architecture/Castle/SM_roof_cone_steep.SM_roof_cone_steep",
+   "material": "MI_V2_RoofNavy",
+   "instances": [
+    [
+     -16628.3,
+     43618.1,
+     1354.5,
+     0.0,
+     290.9,
+     0.0,
+     1.05,
+     1.05,
+     1.05
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "TR01_ClockSpire_t-1_2_Gold",
+   "mesh": "/Game/WonderlandV2/Architecture/Castle/SM_finial_spire.SM_finial_spire",
+   "material": "MI_V2_Gold",
+   "instances": [
+    [
+     -16628.3,
+     43618.1,
+     1984.5,
+     0.0,
+     290.9,
+     0.0,
+     0.8,
+     0.8,
+     0.8
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "TR01_Court_t-1_2_LeafDark",
+   "mesh": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_plain.SM_topiary_cone_plain",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     -16162.9,
+     45034.0,
+     -14.0,
+     0.0,
+     0.0,
+     0.0,
+     0.9,
+     0.9,
+     0.9
+    ],
+    [
+     -18103.0,
+     45019.9,
+     -14.0,
+     0.0,
+     120.0,
+     0.0,
+     0.9,
+     0.9,
+     0.9
+    ],
+    [
+     -18097.1,
+     44216.3,
+     -14.0,
+     0.0,
+     160.0,
+     0.0,
+     0.9,
+     0.9,
+     0.9
+    ],
+    [
+     -16157.0,
+     44230.4,
+     -14.0,
+     0.0,
+     280.0,
+     0.0,
+     0.9,
+     0.9,
+     0.9
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "TR01_Court_t-1_2_LeafMid",
+   "mesh": "/Game/WonderlandV2/Vegetation/Shrubs/SM_shrub_flowering.SM_shrub_flowering",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     -16735.3,
+     45598.1,
+     -14.0,
+     0.0,
+     40.0,
+     0.0,
+     0.9,
+     0.9,
+     0.9
+    ],
+    [
+     -17538.9,
+     45592.3,
+     -14.0,
+     0.0,
+     80.0,
+     0.0,
+     0.9,
+     0.9,
+     0.9
+    ],
+    [
+     -17524.7,
+     43652.2,
+     -14.0,
+     0.0,
+     200.0,
+     0.0,
+     0.9,
+     0.9,
+     0.9
+    ],
+    [
+     -16721.1,
+     44058.0,
+     -14.0,
+     0.0,
+     240.0,
+     0.0,
+     0.9,
+     0.9,
+     0.9
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "TR01_Wall_t-1_2_IvoryStone",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_garden_wall.SM_garden_wall",
+   "material": "MI_V2_IvoryStone",
+   "instances": [
+    [
+     -13730.0,
+     44625.1,
+     -14.0,
+     0.0,
+     90.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -13769.8,
+     45144.2,
+     -14.0,
+     0.0,
+     98.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -13888.4,
+     45651.0,
+     -14.0,
+     0.0,
+     107.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -14083.0,
+     46133.8,
+     -14.0,
+     0.0,
+     116.3,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -14349.0,
+     46581.2,
+     -14.0,
+     0.0,
+     125.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -14680.2,
+     46982.8,
+     -14.0,
+     0.0,
+     133.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15068.8,
+     47329.1,
+     -14.0,
+     0.0,
+     142.7,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15505.7,
+     47612.1,
+     -14.0,
+     0.0,
+     151.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15980.7,
+     47825.0,
+     -14.0,
+     0.0,
+     160.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -16482.7,
+     47963.0,
+     -14.0,
+     0.0,
+     169.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -16999.8,
+     48022.6,
+     -14.0,
+     0.0,
+     177.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -17519.9,
+     48002.7,
+     -14.0,
+     0.0,
+     186.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18030.9,
+     47903.6,
+     -14.0,
+     0.0,
+     195.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18520.8,
+     47727.7,
+     -14.0,
+     0.0,
+     204.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18978.1,
+     47479.0,
+     -14.0,
+     0.0,
+     212.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18978.1,
+     41771.3,
+     -14.0,
+     0.0,
+     327.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18520.8,
+     41522.6,
+     -14.0,
+     0.0,
+     335.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18030.9,
+     41346.7,
+     -14.0,
+     0.0,
+     344.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -17519.9,
+     41247.6,
+     -14.0,
+     0.0,
+     353.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -14349.0,
+     42669.1,
+     -14.0,
+     0.0,
+     54.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -14083.0,
+     43116.5,
+     -14.0,
+     0.0,
+     63.7,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -13888.4,
+     43599.3,
+     -14.0,
+     0.0,
+     72.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -13769.8,
+     44106.1,
+     -14.0,
+     0.0,
+     81.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "TR01_Wall_t-2_2_IvoryStone",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_garden_wall.SM_garden_wall",
+   "material": "MI_V2_IvoryStone",
+   "instances": [
+    [
+     -20052.5,
+     46362.6,
+     -14.0,
+     0.0,
+     239.3,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -20283.5,
+     45896.1,
+     -14.0,
+     0.0,
+     248.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -20440.6,
+     45399.8,
+     -14.0,
+     0.0,
+     256.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -20520.0,
+     44885.4,
+     -14.0,
+     0.0,
+     265.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -20520.0,
+     44364.9,
+     -14.0,
+     0.0,
+     274.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -20440.6,
+     43850.4,
+     -14.0,
+     0.0,
+     283.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -20283.5,
+     43354.2,
+     -14.0,
+     0.0,
+     292.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "TR01_GatePier_t-1_2_IvoryStone",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_pier.SM_gate_pier",
+   "material": "MI_V2_IvoryStone",
+   "instances": [
+    [
+     -17189.3,
+     41225.7,
+     -14.0,
+     0.0,
+     291.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "TR01_GateFinial_t-1_2_Gold",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_ball.SM_gate_finial_ball",
+   "material": "MI_V2_Gold",
+   "instances": [
+    [
+     -17189.3,
+     41225.7,
+     636.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  }
+ ]
+}
