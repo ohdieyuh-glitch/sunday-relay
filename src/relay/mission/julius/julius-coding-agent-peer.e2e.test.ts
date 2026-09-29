@@ -375,7 +375,8 @@ describe('P27b — the same result delivered twice is read once', () => {
     const preflight = await prepareClaimedTask(request, harness.deps, { projectId: 'prj-1' });
     if (preflight.kind !== 'ELIGIBLE') throw new Error(`not eligible: ${preflight.kind}`);
     const attempt = await harness.store.admitTask({ taskId: 'build-1', owner: harness.deps.owner, leaseGeneration: claim!.leaseGeneration, now: harness.clock.now() });
-    const admitted = { ...request, claim: { ...request.claim, attempt: attempt! } };
+    if (typeof attempt !== 'number') throw new Error('not admitted');
+    const admitted = { ...request, claim: { ...request.claim, attempt } };
 
     await runClaimedTask(admitted, harness.deps, preflight);
     // The process delivers the same attempt again — a redelivery after a crash, a retried handler.
