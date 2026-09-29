@@ -42,7 +42,12 @@ def memory_gate():
     commit = (m.ullTotalPageFile - m.ullAvailPageFile) / 1024.0 ** 3
     p = _PMC()
     p.cb = ctypes.sizeof(p)
-    ctypes.windll.psapi.GetProcessMemoryInfo(ctypes.windll.kernel32.GetCurrentProcess(), ctypes.byref(p), p.cb)
+    # 64-bit handles: without argtypes ctypes passes the pseudo-handle as a 32-bit int and the call fails silently
+    # (window 2A's first run recorded editor_private_gb 0.0)
+    k32 = ctypes.windll.kernel32
+    k32.GetCurrentProcess.restype = ctypes.c_void_p
+    k32.K32GetProcessMemoryInfo.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong]
+    k32.K32GetProcessMemoryInfo(k32.GetCurrentProcess(), ctypes.byref(p), p.cb)
     return round(commit, 1), round(p.PrivateUsage / 1024.0 ** 3, 1)
 
 
@@ -67,7 +72,8 @@ def job():
         except Exception:
             continue
         owner[pkg] = a
-        yield 0.0 if len(owner) % 2000 else 0.01
+        if len(owner) % 2000 == 0:
+            yield 0.0          # ONE tick per 2,000 actors: a yield per actor took 21 min at 3-31 ticks/s (window 2A)
     matched, objects, stub, unexpected = {}, 0, 0, []
     for name in dirty:
         if name == MAP:
