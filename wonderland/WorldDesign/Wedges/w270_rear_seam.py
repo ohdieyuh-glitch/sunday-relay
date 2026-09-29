@@ -248,6 +248,13 @@ def load_census(occ, exclude=()):
                 continue
             if r["mesh"] == "SM_hedge_mass" and any(math.hypot(x - ex_, y - ey_) < 200.0 for ex_, ey_ in exclude):
                 continue
+            # FLOOR ABUTS FLOOR. A plate already in the world (a nation band's, or this lane's own applied way)
+            # keeps plants off like any paving, but must not refuse a new plate laid against it: W270G's end
+            # rows were refused for touching W270S's applied rows by a 60 cm margin.
+            if r["mesh"] == "SM_terrace_platform":
+                occ.add("paved", x, y, max(ex, 20.0), max(ey, 20.0), float(r["yaw"]), r["owner"])
+                n += 1
+                continue
             occ.add("existing", x, y, max(ex, 20.0), max(ey, 20.0), float(r["yaw"]), r["owner"])
             n += 1
     return n
@@ -546,7 +553,8 @@ def build_flank(occ, pass_id, cfg_id, side, gve_names):
     nation = cfg["nation"]
     p = Pass(pass_id, ["WL_WEDGE_270", "WL_NATION_" + nation, "WL_DISTRICT_%s_SEAM" % nation],
              "Wonderland/Authored/%s_%sSeam" % (pass_id, nation.title()), dict(mats), occ, pass_id)
-    leaves = FLANK_LEAVES[pass_id]
+    # foliage follows the NATION (a pocket's pass ids are not W270's)
+    leaves = FLANK_LEAVES.get(pass_id) or FLANK_LEAVES["W270N" if nation == "NOCTIS" else "W270T"]
 
     def ring_corridor(u):
         return any(abs(u - NODES[n]) <= RING_CLEAR for n in ("MARCH", "EXCHANGE"))
@@ -694,7 +702,8 @@ def build_flank(occ, pass_id, cfg_id, side, gve_names):
     p.stats["groves"] = groves
 
     # THE MUSHROOM WOOD: one per flank, a third of the way out toward the heartland, inside the hedge ring
-    caps = ("MI_V2_MushPurple", "MI_V2_MushCream") if side < 0 else ("MI_V2_MushRed", "MI_V2_MushTerracotta")
+    # caps follow the NATION, not the side: a Tartarus pocket has a west half too
+    caps = ("MI_V2_MushPurple", "MI_V2_MushCream") if nation == "NOCTIS" else ("MI_V2_MushRed", "MI_V2_MushTerracotta")
     mu = 74000.0
     mv = side * min(edge_v(mu) - 6000.0, 26000.0)
     wood = 0
@@ -733,6 +742,16 @@ def build_flank(occ, pass_id, cfg_id, side, gve_names):
 
 # ---------------------------------------------------------------------------------------- run
 def main():
+    # A GENERATOR MUST NOT REGENERATE ITSELF FROM A WORLD THAT ALREADY CONTAINS IT. Once W270S/N/T are applied
+    # the census holds them, every piece would collide with its own applied copy, and the committed specs would
+    # be overwritten with near-empty ones -- which is what nearly happened on 2026-09-28 (a syntax error saved
+    # it). Run against the census taken BEFORE the apply, or use --gate-only.
+    census = Path(sys.argv[sys.argv.index("--census") + 1]) if "--census" in sys.argv else CENSUS
+    with gzip.open(census, "rt", encoding="utf-8") as f:
+        if any(",W270S_" in line or ",W270N_" in line or ",W270T_" in line for line in f):
+            raise SystemExit("REFUSED: %s already contains W270S/N/T. Pass --census <the pre-apply census> "
+                             "(captures/zc/census/world_census_before_w270.csv.gz)." % census)
+    globals()["CENSUS"] = census
     occ = Occupancy()
     existing = load_census(occ)
     canon = {n["id"]: n.get("gve_spaces", []) for n in NB.CANON["nations"]}
@@ -774,5 +793,48 @@ def main():
         print("   %s at u=850 m v=%+.0f m lands in %s" % (label, v / 100, nations.zone_at(x, y)))
 
 
+def gate_only():
+    """W270G alone, against the world AS IT NOW STANDS -- for after the hedge gate has been moved.
+
+    W270S/N/T are applied by then and sit in the census themselves, so regenerating them from it would make
+    each collide with its own applied copy and skip everything. This rebuilds only the stretch through the
+    ring, testing it against everything that is really there: the relocated hedges, the applied passes and
+    the rest of the world. No exclusion list: the hedges are wherever the census says they now are."""
+    occ = Occupancy()
+    load_census(occ)
+    gate = build_way(occ, through_wall=True)
+    spec = gate.spec()
+    out = "w270g_hedge_gate.json"
+    (HERE / out).write_text(json.dumps(spec, indent=1), encoding="utf-8")
+    (HERE / out.replace(".json", "_footprints.json")).write_text(json.dumps(gate.footprints, indent=1),
+                                                                  encoding="utf-8")
+    total = sum(len(b["instances"]) for b in spec["batches"])
+    print("W270G (gate-only, post-move) -> %s   batches %d  instances %d" % (out, len(spec["batches"]), total))
+    print("   placed:  " + ", ".join("%s %d" % kv for kv in gate.stats.most_common(10)))
+    if gate.skipped:
+        print("   SKIPPED: " + ", ".join("%s %d" % kv for kv in gate.skipped.most_common(10)))
+        for s in gate.skip_at[:30]:
+            print("     ", s)
+    # THE TRAVERSAL QUESTION IS CONTINUITY, not a zero count: a row with one of its two plates refused is a
+    # 14.4 m squeeze (the third hedge, 971-1,014 m, narrows the way like that), a row with none is a wall.
+    placed_rows = {}
+    for b in spec["batches"]:
+        if "_Way_" not in b["id"]:
+            continue
+        for r in b["instances"]:
+            placed_rows.setdefault(round(-r[1]), 0)
+            placed_rows[round(-r[1])] += 1
+    want = [round(U0 + PLATE["len_y"] * (j + 0.5)) for j in range(ROWS)
+            if WALL[0] <= U0 + PLATE["len_y"] * (j + 0.5) < WALL[1]]
+    closed = [u for u in want if placed_rows.get(u, 0) == 0]
+    narrow = [u for u in want if placed_rows.get(u, 0) == 1]
+    print("   rows through the ring: %d; OPEN %d, narrowed to one column %d, CLOSED %d%s"
+          % (len(want), len(want) - len(closed), len(narrow), len(closed),
+             "" if not closed else "  <- no passage at u(m) = %s" % [u // 100 for u in closed]))
+
+
 if __name__ == "__main__":
-    main()
+    if "--gate-only" in sys.argv:
+        gate_only()
+    else:
+        main()

@@ -1,0 +1,70 @@
+{
+ "name": "zzW6a_hedge_gate_dry",
+ "started": "2026-09-28 21:48:47",
+ "status": "dry run: exactly one match per move",
+ "dry": true,
+ "batches_found": {
+  "V2Batch_hedge_mass_MI_V2_LeafDark": 4,
+  "V2Batch_hedge_mass_MI_V2_LeafMid": 5
+ },
+ "record": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\WorldDesign\\Wedges\\w270_hedge_gate.json",
+ "moves": [
+  {
+   "which": "A (west)",
+   "batch": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "index": 238,
+   "old": [
+    -1924.115966796875,
+    -88269.203125,
+    -900.0,
+    0.0,
+    175.1353302001953,
+    0.0,
+    11.478507995605469,
+    8.264525413513184,
+    4.691395282745361
+   ],
+   "new": [
+    -5924.0,
+    -87069.0,
+    -900.0,
+    0.0,
+    175.0,
+    0.0,
+    11.478507995605469,
+    8.264525413513184,
+    4.691395282745361
+   ]
+  },
+  {
+   "which": "B (east)",
+   "batch": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "index": 306,
+   "old": [
+    2264.811767578125,
+    -93809.6640625,
+    -900.0,
+    0.0,
+    167.94187927246094,
+    0.0,
+    11.699777603149414,
+    8.423840522766113,
+    4.911330223083496
+   ],
+   "new": [
+    4865.0,
+    -93810.0,
+    -900.0,
+    0.0,
+    258.0,
+    0.0,
+    11.699777603149414,
+    8.423840522766113,
+    4.911330223083496
+   ]
+  }
+ ],
+ "finished": "2026-09-28 21:48:47",
+ "seconds": 0.21,
+ "log": ""
+}

@@ -1,0 +1,53 @@
+{
+ "name": "zzW6d_hedge_state",
+ "started": "2026-09-28 21:50:57",
+ "status": "read",
+ "state": {
+  "A": [
+   {
+    "actor": "WonderlandInstancedBatch_285",
+    "floats": [
+     -5924.0,
+     -87069.0,
+     -900.0,
+     0.0,
+     175.1353302001953,
+     0.0,
+     11.478507995605469,
+     8.264525413513184,
+     4.691395282745361
+    ],
+    "preview_instances": 289,
+    "declared": 289,
+    "near_old": false
+   }
+  ],
+  "B": [
+   {
+    "actor": "WonderlandInstancedBatch_286",
+    "floats": [
+     4865.0,
+     -93810.0,
+     -900.0,
+     0.0,
+     257.94189453125,
+     0.0,
+     11.699777603149414,
+     8.423840522766113,
+     4.911330223083496
+    ],
+    "preview_instances": 366,
+    "declared": 366,
+    "near_old": false
+   }
+  ]
+ },
+ "dirty": [
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/6/DF/NP1W893LHG4KRW6K4GOD0H",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/3/T4/9T2YLK681XD8PIZYUDUWKZ"
+ ],
+ "b_expected_yaw_f32": 257.94189453125,
+ "finished": "2026-09-28 21:50:57",
+ "seconds": 0.15,
+ "log": ""
+}

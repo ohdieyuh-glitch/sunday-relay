@@ -1,0 +1,56 @@
+{
+ "reason": "open a hedge gate through the V2 hedge ring on the 270 seam (Core approval 2026-09-28): relocate, delete nothing",
+ "corridor_cm": [
+  83000.0,
+  104000.0,
+  1590.0
+ ],
+ "moves": [
+  {
+   "which": "A (west)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "old_approx": {
+    "x": -1924,
+    "y": -88269,
+    "z": -900,
+    "yaw": 175.0
+   },
+   "half_extent_m": [
+    38.5,
+    22.5
+   ],
+   "new": {
+    "x": -5924,
+    "y": -87069,
+    "z": -900,
+    "yaw": 175.0
+   },
+   "moved_across_m": -40.0,
+   "moved_along_m": -12.0,
+   "turned_deg": 0.0
+  },
+  {
+   "which": "B (east)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "old_approx": {
+    "x": 2265,
+    "y": -93810,
+    "z": -900,
+    "yaw": 168.0
+   },
+   "half_extent_m": [
+    39.3,
+    22.9
+   ],
+   "new": {
+    "x": 4865,
+    "y": -93810,
+    "z": -900,
+    "yaw": 258.0
+   },
+   "moved_across_m": 26.0,
+   "moved_along_m": 0.0,
+   "turned_deg": 90.0
+  }
+ ]
+}

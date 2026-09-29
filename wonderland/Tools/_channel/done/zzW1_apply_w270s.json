@@ -1,0 +1,19 @@
+{
+ "name": "zzW1_apply_w270s",
+ "started": "2026-09-28 21:18:54",
+ "status": "done",
+ "waited_for_pie_seconds": 0.0,
+ "map_dirty_before": [
+  "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/3U/U9UDQGY6BLFZXXH4U8JTGD"
+ ],
+ "removed": 0,
+ "pass": "W270S",
+ "actors": 0,
+ "batches": 128,
+ "instances": 1800,
+ "hovers": 0,
+ "finished": "2026-09-28 21:19:06",
+ "seconds": 11.97,
+ "log": "applied W270S 0 actors 128 batches 1800 instances\n"
+}

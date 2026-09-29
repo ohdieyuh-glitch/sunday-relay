@@ -1,0 +1,634 @@
+{
+ "name": "zzW9_wp_desc_compare",
+ "started": "2026-09-28 21:59:47",
+ "status": "read",
+ "groups": {
+  "W270S": [
+   {
+    "label": "W270S_W270S_Fringe_t-1_-6",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     -2619,
+     -107862,
+     -7
+    ],
+    "actor_bounds_extent": [
+     48,
+     3850,
+     19
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   },
+   {
+    "label": "W270S_W270S_Palace_Pavilion_stone_dark_t-1_-6",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     0,
+     -107500,
+     232
+    ],
+    "actor_bounds_extent": [
+     565,
+     565,
+     176
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   },
+   {
+    "label": "W270S_W270S_Ground_Kerb_Run_kerb_t0_-4",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     880,
+     -68340,
+     28
+    ],
+    "actor_bounds_extent": [
+     1120,
+     8017,
+     16
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   }
+  ],
+  "W270N": [
+   {
+    "label": "W270N_W270N_Lane_t-1_-5",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     -5140,
+     -82030,
+     -58
+    ],
+    "actor_bounds_extent": [
+     370,
+     2570,
+     70
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   },
+   {
+    "label": "W270N_W270N_Mushroom_Tall_mush_cap_t-2_-4",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     -25402,
+     -73856,
+     1303
+    ],
+    "actor_bounds_extent": [
+     2121,
+     3038,
+     203
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   },
+   {
+    "label": "W270N_W270N_House_Jettied_stone_t-1_-5",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     -5140,
+     -81540,
+     448
+    ],
+    "actor_bounds_extent": [
+     1431,
+     1544,
+     479
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   }
+  ],
+  "W270G": [
+   {
+    "label": "W270G_W270G_Way_t-1_-5",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     -720,
+     -89990,
+     -58
+    ],
+    "actor_bounds_extent": [
+     370,
+     7380,
+     70
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   },
+   {
+    "label": "W270G_W270G_Way_t0_-5",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     720,
+     -91470,
+     -58
+    ],
+    "actor_bounds_extent": [
+     370,
+     8860,
+     70
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   },
+   {
+    "label": "W270G_W270G_Way_t0_-6",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     720,
+     -101830,
+     -58
+    ],
+    "actor_bounds_extent": [
+     370,
+     2200,
+     70
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   }
+  ],
+  "GF03": [
+   {
+    "label": "GF03_GF03_Run_petal_centre_LeafGold_t0_-2",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     6999,
+     -39757,
+     9
+    ],
+    "actor_bounds_extent": [
+     3527,
+     286,
+     11
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   },
+   {
+    "label": "GF03_GF03_LampPost_t1_-2",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     26361,
+     -32752,
+     475
+    ],
+    "actor_bounds_extent": [
+     4966,
+     3152,
+     489
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   },
+   {
+    "label": "GF03_GF03_Run_leaf_LeafDark_t-1_-2",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     -18408,
+     -36523,
+     13
+    ],
+    "actor_bounds_extent": [
+     1230,
+     599,
+     27
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   }
+  ],
+  "FR03": [
+   {
+    "label": "FR03_FR03_Flower_Daisy_Run_petal",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     1490,
+     -117749,
+     25
+    ],
+    "actor_bounds_extent": [
+     5269,
+     5573,
+     15
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   },
+   {
+    "label": "FR03_FR03_Flower_Lavender_Run_leaf",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     -327,
+     -119334,
+     28
+    ],
+    "actor_bounds_extent": [
+     5535,
+     7078,
+     28
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   },
+   {
+    "label": "FR03_FR03_Ground_Tree_Grate_kerb",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     1005,
+     -119060,
+     16
+    ],
+    "actor_bounds_extent": [
+     6382,
+     7000,
+     16
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   }
+  ],
+  "TQ03": [
+   {
+    "label": "TQ03_TQ03_Ground_Plaza_Medallion_kerb",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     89530,
+     -51690,
+     18
+    ],
+    "actor_bounds_extent": [
+     615,
+     615,
+     5
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   },
+   {
+    "label": "TQ03_TQ03_Tower_Base_Terraced_stone",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     92625,
+     -44989,
+     350
+    ],
+    "actor_bounds_extent": [
+     10397,
+     7000,
+     422
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   },
+   {
+    "label": "TQ03_TQ03_Market_Canopy_roof_alt",
+    "loc": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "actor_bounds_centre": [
+     89600,
+     -51730,
+     343
+    ],
+    "actor_bounds_extent": [
+     13819,
+     11908,
+     62
+    ],
+    "is_spatially_loaded": true,
+    "runtime_grid": "None",
+    "data_layers": [],
+    "desc_bounds_min": [
+     0,
+     0,
+     0
+    ],
+    "desc_bounds_max": [
+     0,
+     0,
+     0
+    ],
+    "desc_spatially_loaded": true,
+    "desc_runtime_grid": "None",
+    "desc_data_layers": []
+   }
+  ]
+ },
+ "finished": "2026-09-28 21:59:47",
+ "seconds": 0.12,
+ "log": ""
+}
