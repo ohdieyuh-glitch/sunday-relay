@@ -64,6 +64,18 @@ def load(path, structure_only):
             if kind == "OTHER":
                 dropped["other"] += 1
                 continue
+            # THE HIDDEN REFERENCE SCAFFOLD (VISUAL_AUTHORITY.md) is not world: one 205 x 313 m box at the origin whose
+            # 156 m half-extent + reach covered every cell within ~165 m, so the audit could not see the core at all
+            # (found 2026-09-29 while routing Golden Arrival; the placement and walk occupancies skip it too)
+            if r.get("owner") == "V2_MarbleWorld_Scaffold":
+                dropped["hidden"] = dropped.get("hidden", 0) + 1
+                continue
+            # THE INVISIBLE WORLD-EDGE RING (EDGE01, window 4a): 48 hidden pawn-only wall segments, 198 m long. As
+            # discs of their half-length + reach they "covered" a ~110 m band inside the rim that is forest floor,
+            # clearing or bare -- an invisible wall is not world content
+            if r.get("owner", "").startswith("EDGE01"):
+                dropped["hidden"] = dropped.get("hidden", 0) + 1
+                continue
             x, y, z = float(r["x"]), float(r["y"]), float(r["z"])
             ex, ey, ez = float(r["ex"]), float(r["ey"]), float(r["ez"])
             name = r["mesh"].lower()
