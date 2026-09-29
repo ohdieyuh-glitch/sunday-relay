@@ -1,4 +1,5 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { juliusSerializable } from './julius-serializable';
 import type { JuliusDurableToolInvocation,JuliusToolDispatchClaim,JuliusToolInvocationState,JuliusToolInvocationStore,JuliusToolId,ToolInvocationResult,JuliusToolArtifact,JuliusToolEvidence } from '../mission/julius';
 import { JULIUS_TERMINAL_MISSION_STATES } from '../mission/julius/julius-runtime';
 import { decodePgText,encodePgText } from './julius-storage-encoding';
@@ -18,20 +19,28 @@ const parsed=<T>(value:unknown,fallback:T):T=>value===null||value===undefined?fa
 type JuliusToolRequestInput=Omit<JuliusDurableToolInvocation,'state'|'sandboxId'|'budgetReservationId'|'exitCode'|'safeSummary'|'stdoutPreview'|'stdoutArtifactId'|'stderrPreview'|'stderrArtifactId'|'evidenceIds'|'artifactIds'|'durationMs'|'authorizedAt'|'startedAt'|'completedAt'>;
 export class JuliusToolPostgresRepository implements JuliusToolInvocationStore {
  constructor(private readonly pool:Pool){}
- async request(input:JuliusToolRequestInput):Promise<{created:boolean;invocation:JuliusDurableToolInvocation}>{for(let attempt=0;;attempt++){try{return await this.requestOnce(input);}catch(error){if((error as {code?:string}).code!=='40001'||attempt>=4)throw error;await new Promise(resolve=>setTimeout(resolve,5*(attempt+1)));}}}
- private async requestOnce(input:JuliusToolRequestInput):Promise<{created:boolean;invocation:JuliusDurableToolInvocation}>{
-  const client=await this.pool.connect();try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+ /**
+  * ONE RETRY POLICY. This carried its own loop: 40001 only, five attempts,
+  * 5-25 ms, with no 40P01 and no jitter. It is now the shared
+  * `juliusSerializable`: 40001 and 40P01, six attempts, exponential jitter, and
+  * never a caller-owned conflict. The body is SQL over the caller's request,
+  * idempotent by `(project_id, run_id, idempotency_key)`, with the lease fenced
+  * inside the same transaction.
+  */
+ async request(input:JuliusToolRequestInput):Promise<{created:boolean;invocation:JuliusDurableToolInvocation}>{return juliusSerializable(this.pool,(client)=>this.requestWithin(client,input));}
+ private async requestWithin(client:PoolClient,input:JuliusToolRequestInput):Promise<{created:boolean;invocation:JuliusDurableToolInvocation}>{
+  {
    const task=await client.query(`SELECT t.lease_generation,t.state,t.worker_id,t.lease_owner,(t.lease_expires_at>clock_timestamp()) AS lease_valid,r.card_revision,r.state AS run_state,EXISTS(SELECT 1 FROM relay_wonderland.project_members m WHERE m.project_id=r.project_id AND m.player_id=$4) AS tenant_member FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.task_id=$1 AND t.run_id=$2 AND r.project_id=$3 FOR UPDATE OF t,r`,[input.taskId,input.runId,input.projectId,input.tenantId]);
    if(!task.rows[0]||task.rows[0].tenant_member!==true)throw new Error('tool_task_not_found');
    // A FINISHED RUN OPENS NO NEW INVOCATION. Its terminal transition closed every one it had
-   // (JuliusPostgresRepository.transition); one requested after it would be the orphan that sweep exists to prevent.
+   // (transitionJuliusRunWithin, on every path that ends a run); one requested after it would be the orphan that sweep exists to prevent.
    if((JULIUS_TERMINAL_MISSION_STATES as readonly string[]).includes(String(task.rows[0].run_state)))throw new Error('tool_run_terminal');
    if(Number(task.rows[0].lease_generation)!==input.leaseGeneration||task.rows[0].state!=='ACTIVE'||task.rows[0].worker_id!==input.workerId||!task.rows[0].lease_owner||task.rows[0].lease_valid!==true||task.rows[0].card_revision!==input.policyRevision)throw new Error('tool_stale_authority');
    const existing=await client.query('SELECT * FROM relay_wonderland.julius_tool_invocations WHERE project_id=$1 AND run_id=$2 AND idempotency_key=$3 FOR UPDATE',[input.projectId,input.runId,input.idempotencyKey]);
-   if(existing.rows[0]){if(existing.rows[0].request_digest!==input.requestDigest)throw new Error('tool_idempotency_digest_conflict');await client.query('COMMIT');return{created:false,invocation:this.map(existing.rows[0])};}
+   if(existing.rows[0]){if(existing.rows[0].request_digest!==input.requestDigest)throw new Error('tool_idempotency_digest_conflict');return{created:false,invocation:this.map(existing.rows[0])};}
    const inserted=await client.query(`INSERT INTO relay_wonderland.julius_tool_invocations(invocation_id,idempotency_key,request_digest,tenant_id,project_id,run_id,task_id,worker_id,lease_generation,policy_revision,tool_id,tool_version,mutation_class,state,requested_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'REQUESTED',$14) RETURNING *`,[input.invocationId,input.idempotencyKey,input.requestDigest,input.tenantId,input.projectId,input.runId,input.taskId,input.workerId,input.leaseGeneration,input.policyRevision,input.toolId,input.toolVersion,input.mutationClass,input.requestedAt]);
-   await client.query('INSERT INTO relay_wonderland.julius_tool_outbox(invocation_id,project_id) VALUES($1,$2)',[input.invocationId,input.projectId]);await client.query('COMMIT');return{created:true,invocation:this.map(inserted.rows[0])};
-  }catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}}
+   await client.query('INSERT INTO relay_wonderland.julius_tool_outbox(invocation_id,project_id) VALUES($1,$2)',[input.invocationId,input.projectId]);return{created:true,invocation:this.map(inserted.rows[0])};
+  }}
  async authorize(input:{invocationId:string;tenantId:string;projectId:string;requestDigest:string;policyRevision:string;budgetReservationId:string;authorizedAt:string}):Promise<boolean>{const result=await this.pool.query(`UPDATE relay_wonderland.julius_tool_invocations SET state='AUTHORIZED',budget_reservation_id=$6,authorized_at=$7 WHERE invocation_id=$1 AND tenant_id=$2 AND project_id=$3 AND request_digest=$4 AND policy_revision=$5 AND state='REQUESTED'`,[input.invocationId,input.tenantId,input.projectId,input.requestDigest,input.policyRevision,input.budgetReservationId,input.authorizedAt]);return result.rowCount===1;}
  async deny(input:{invocationId:string;tenantId:string;projectId:string;requestDigest:string;safeSummary:string;completedAt:string}):Promise<boolean>{const client=await this.pool.connect();try{await client.query('BEGIN');const result=await client.query(`UPDATE relay_wonderland.julius_tool_invocations SET state='DENIED',safe_summary=$5,completed_at=$6 WHERE invocation_id=$1 AND tenant_id=$2 AND project_id=$3 AND request_digest=$4 AND state='REQUESTED'`,[input.invocationId,input.tenantId,input.projectId,input.requestDigest,encodePgText(input.safeSummary.slice(0,500)),input.completedAt]);if(result.rowCount===1)await client.query(`UPDATE relay_wonderland.julius_tool_outbox SET state='DELIVERED',delivered_at=$2 WHERE invocation_id=$1`,[input.invocationId,input.completedAt]);await client.query('COMMIT');return result.rowCount===1;}catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}}
  /**
