@@ -201,7 +201,7 @@ describe('the decision fails closed, and its refusals are named', () => {
     if (answer.ok) {
       expect(answer.provenance).toEqual({
         provider: 'ANTHROPIC', execution: 'CLAUDE_AGENT_SDK',
-        authentication: 'CLAUDE_SUBSCRIPTION', plan: 'max',
+        authentication: 'CLAUDE_SUBSCRIPTION', plan: 'max', credentialSource: 'local_subscription',
         apiKeyUsed: false, apiCostApplicable: false,
       });
       // THE PROVIDER IS UNCHANGED BY ANY OF THIS. Billing moved; the vendor did not.

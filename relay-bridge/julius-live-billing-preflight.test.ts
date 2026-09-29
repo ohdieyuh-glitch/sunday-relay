@@ -100,22 +100,91 @@ describe('the preflight states every role\'s billing path before any dispatch', 
   });
 
   it('a FAILED Claude auth decision blocks — it used to print BLOCKED and answer ready', () => {
-    // Subscription mode, no Anthropic key, and no `claude` on PATH: no login can be
-    // observed. Every role still RESOLVES (subscription needs no key), which is exactly
-    // why the composition's problems alone could not catch it.
+    // Subscription mode, no Anthropic key, and a Coding Agent executable that does not
+    // exist: no login can be observed. (Named explicitly since the login is observed
+    // with the SDK's own bundled binary, which IS installed here and would find this
+    // workstation's stored login.) Every role still RESOLVES (subscription needs no
+    // key), which is exactly why the composition's problems alone could not catch it.
     const { ANTHROPIC_API_KEY: _key, ...withoutKey } = READY_RIG;
-    const run = preflight({ ...withoutKey, JULIUS_CLAUDE_AUTH: 'CLAUDE_SUBSCRIPTION', RELAY_HERMES_BILLING_MODE: 'api_billed' });
+    const run = preflight({
+      ...withoutKey, JULIUS_CLAUDE_AUTH: 'CLAUDE_SUBSCRIPTION', RELAY_HERMES_BILLING_MODE: 'api_billed',
+      JULIUS_CODER_CLAUDE_EXECUTABLE: join(dir, 'no-such-claude'),
+    });
     expect(run.output).toContain('  BLOCKED CLAUDE AUTH: subscription_login_absent');
     expect(run.output).toContain('coder=UNDECIDED');
     expect(run.output).toContain('RESULT: BLOCKED');
     expect(run.code).toBe(1);
-  });
+  }, 60_000);
+});
+
+/**
+ * THE SETUP-TOKEN PATH, END TO END THROUGH THE REAL ENTRYPOINT AND THE REAL CLI.
+ *
+ * A GitHub runner has no stored login; the founder's Max subscription reaches it as
+ * `CLAUDE_CODE_OAUTH_TOKEN`. Here the token is a FAKE placeholder marked
+ * FAKETESTNOTREAL — no real credential exists on this machine or in this test — and
+ * the login is observed by the Agent SDK's own bundled `claude` in the composed child
+ * environment. Measured: `auth status` classifies a placeholder token offline as
+ * `authMethod: "oauth_token"` without contacting anything, and the token outranks
+ * any stored login, so the answer does not depend on who is logged in here.
+ */
+describe('the subscription token path: SUBSCRIPTION, observed in the child environment', () => {
+  const TOKEN_SENTINEL = 'FAKETESTNOTREAL-oauth-sentinel-0000';
+  const SUBSCRIPTION_RIG = (() => {
+    const { ANTHROPIC_API_KEY: _key, ...withoutKey } = READY_RIG;
+    return {
+      ...withoutKey, JULIUS_CLAUDE_AUTH: 'CLAUDE_SUBSCRIPTION', RELAY_HERMES_BILLING_MODE: 'api_billed',
+      CLAUDE_CODE_OAUTH_TOKEN: TOKEN_SENTINEL,
+    } as Record<string, string>;
+  })();
+
+  it('token only: coder=SUBSCRIPTION, source subscription_oauth_token, ready, and the token never printed', () => {
+    const run = preflight({ ...SUBSCRIPTION_RIG, HOME: dir });
+    expect(run.output).toContain('  CLAUDE_CODE_OAUTH_TOKEN: SET');
+    expect(run.output).toContain('  ANTHROPIC_API_KEY: MISSING');
+    expect(run.output).toMatch(/^ {2}CLAUDE AUTH: SUBSCRIPTION provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=[a-z]+ api_key_used=false api_cost_applicable=false$/mu);
+    expect(run.output).toContain('  claude auth source: subscription_oauth_token\n');
+    expect(run.output).toContain('  billing paths: architect=API_BILLED coder=SUBSCRIPTION reviewer=API_BILLED\n');
+    expect(run.output).toContain('API cost is NOT APPLICABLE rather than zero');
+    expect(run.output).not.toContain('BLOCKED');
+    expect(run.code, 'exit 5 is the only answer that means ready').toBe(5);
+    expect(run.output, 'the token VALUE never appears in a printed line').not.toContain(TOKEN_SENTINEL);
+    expect(run.output).not.toContain('oauth-sentinel');
+  }, 60_000);
+
+  it('token + ANTHROPIC_API_KEY in the parent: refused before anything runs', () => {
+    const run = preflight({ ...SUBSCRIPTION_RIG, HOME: dir, ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic' });
+    expect(run.output).toContain('ANTHROPIC_API_KEY is set while JULIUS_CLAUDE_AUTH=CLAUDE_SUBSCRIPTION');
+    expect(run.output).toContain('RESULT: BLOCKED');
+    expect(run.code).toBe(1);
+    expect(run.output).not.toContain(TOKEN_SENTINEL);
+    expect(run.output).not.toContain('FAKETESTNOTREAL-anthropic');
+  }, 60_000);
+
+  it.each(['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_USE_BEDROCK'])(
+    'token + %s in the parent: refused, because it outranks the subscription', (name) => {
+      const run = preflight({ ...SUBSCRIPTION_RIG, HOME: dir, [name]: 'FAKETESTNOTREAL-route' });
+      expect(run.output).toContain(`${name} is set while JULIUS_CLAUDE_AUTH=CLAUDE_SUBSCRIPTION`);
+      expect(run.output).toContain('RESULT: BLOCKED');
+      expect(run.code).toBe(1);
+      expect(run.output).not.toContain(TOKEN_SENTINEL);
+    }, 60_000);
+
+  it('API mode with a token in the parent stays API mode: API_BILLED, and the token is not its credential', () => {
+    const run = preflight({ ...READY_RIG, HOME: dir, RELAY_HERMES_BILLING_MODE: 'api_billed', CLAUDE_CODE_OAUTH_TOKEN: TOKEN_SENTINEL });
+    expect(run.output).toContain('  CLAUDE AUTH: API KEY provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=n/a api_key_used=true api_cost_applicable=true');
+    expect(run.output).toContain('  claude auth source: anthropic_api_key');
+    expect(run.output).toContain('  billing paths: architect=API_BILLED coder=API_BILLED reviewer=API_BILLED');
+    expect(run.code).toBe(5);
+    expect(run.output).not.toContain(TOKEN_SENTINEL);
+  }, 60_000);
 });
 
 describe('liveBillingPaths, the rule the preflight prints', () => {
   const provenance = (authentication: ClaudeAuthProvenance['authentication']): ClaudeAuthProvenance => ({
     provider: 'ANTHROPIC', execution: 'CLAUDE_AGENT_SDK', authentication,
     plan: authentication === 'CLAUDE_SUBSCRIPTION' ? 'max' : null,
+    credentialSource: authentication === 'CLAUDE_SUBSCRIPTION' ? 'subscription_oauth_token' : null,
     apiKeyUsed: authentication !== 'CLAUDE_SUBSCRIPTION', apiCostApplicable: authentication !== 'CLAUDE_SUBSCRIPTION',
   });
 

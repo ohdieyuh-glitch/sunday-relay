@@ -1,4 +1,4 @@
-import type { ClaudeAuthMode } from './hosted-auth';
+import { CLAUDE_SUBSCRIPTION_TOKEN_ENV, CODER_CLAUDE_EXECUTABLE_ENV, type ClaudeAuthMode } from './hosted-auth';
 import {
   compileHostedEnvelope, hostedChildEnv, verifyGrantedEnvelope,
   withinCostCeiling, DEFAULT_HOSTED_LIMITS,
@@ -193,11 +193,19 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
           path: process.env.PATH,
           home: process.env.HOME,
           // ABSENT MEANS API MODE, so every existing caller is unchanged. Under
-          // CLAUDE_SUBSCRIPTION the credential is omitted entirely and the CLI
-          // uses its own stored subscription login, which `decideClaudeAuth`
+          // CLAUDE_SUBSCRIPTION the API key is omitted entirely and the CLI
+          // authenticates from the subscription — a setup-token token when one
+          // is supplied, else its own stored login — which `decideClaudeAuth`
           // has already refused to allow without observing.
           ...(input.authMode === undefined ? {} : { mode: input.authMode }),
+          // Passed through, never read. `hostedChildEnv` places it ONLY under
+          // CLAUDE_SUBSCRIPTION; in API mode it is dropped.
+          oauthToken: process.env[CLAUDE_SUBSCRIPTION_TOKEN_ENV],
         }),
+        // The binary the preflight observed, when the operator named one.
+        ...(process.env[CODER_CLAUDE_EXECUTABLE_ENV]
+          ? { pathToClaudeCodeExecutable: process.env[CODER_CLAUDE_EXECUTABLE_ENV] }
+          : {}),
         abortController: controller,
         // No matcher: every tool call reaches the authority, which answers only
         // for file tools and has no opinion on the rest.

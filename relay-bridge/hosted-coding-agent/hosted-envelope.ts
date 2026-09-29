@@ -35,7 +35,7 @@ import { coderMaxRuntimeMs, coderMaxTurns } from './coder-envelope';
  * whole point.
  */
 
-import type { ClaudeAuthMode } from './hosted-auth';
+import { CLAUDE_SUBSCRIPTION_TOKEN_ENV, type ClaudeAuthMode } from './hosted-auth';
 
 /** Tools the hosted agent may use for the safe-edit fixture. */
 export const HOSTED_ALLOWED_TOOLS: readonly string[] = Object.freeze([
@@ -134,6 +134,13 @@ export function hostedChildEnv(input: {
    * Absent means API mode, so every existing caller is unchanged.
    */
   mode?: ClaudeAuthMode;
+  /**
+   * A `claude setup-token` subscription token, placed in the child as
+   * `CLAUDE_CODE_OAUTH_TOKEN` UNDER `CLAUDE_SUBSCRIPTION` ONLY and only when
+   * non-empty. In API mode it is ignored: API mode carries the API key alone.
+   * The value is passed through and never read, compared or logged.
+   */
+  oauthToken?: string;
 }): Record<string, string> {
   const env: Record<string, string> = {
     PATH: input.path ?? '',
@@ -145,6 +152,7 @@ export function hostedChildEnv(input: {
     TERM: 'dumb',
   };
   if ((input.mode ?? 'ANTHROPIC_API') === 'ANTHROPIC_API') env.ANTHROPIC_API_KEY = input.apiKey;
+  else if (typeof input.oauthToken === 'string' && input.oauthToken !== '') env[CLAUDE_SUBSCRIPTION_TOKEN_ENV] = input.oauthToken;
   return env;
 }
 
@@ -153,7 +161,12 @@ export const HOSTED_CHILD_ENV_KEYS: readonly string[] = Object.freeze([
   'ANTHROPIC_API_KEY', 'PATH', 'HOME', 'CI', 'NO_COLOR', 'TERM',
 ]);
 
-/** The keys it may produce in SUBSCRIPTION mode: the same set, minus the credential. */
+/**
+ * The keys it ALWAYS produces in SUBSCRIPTION mode: the same set, minus the API key.
+ * `CLAUDE_CODE_OAUTH_TOKEN` is added on top when a setup-token token is supplied;
+ * a preflight therefore decides over `Object.keys` of the environment it actually
+ * composed, not over this list.
+ */
 export const HOSTED_CHILD_ENV_KEYS_SUBSCRIPTION: readonly string[] = Object.freeze(
   HOSTED_CHILD_ENV_KEYS.filter((key) => key !== 'ANTHROPIC_API_KEY'),
 );
