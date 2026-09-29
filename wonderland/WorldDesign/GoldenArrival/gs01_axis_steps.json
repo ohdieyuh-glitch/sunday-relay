@@ -1,0 +1,36 @@
+{
+ "pass": "GS01",
+ "folder": "Wonderland/Authored/GS01_GoldenArrivalAxisSteps",
+ "title": "Golden Arrival axis: steps from the heart garden lawn up onto the palace-walk flagstones",
+ "tags": [
+  "WL_AUTHORED",
+  "WL_PASS_GS01",
+  "WL_GOLDEN_ARRIVAL"
+ ],
+ "actors": [],
+ "batches": [
+  {
+   "id": "GS01_AxisSteps_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Architecture/Stairs/SM_path_steps.SM_path_steps",
+   "material": "MI_V2_PlazaCream",
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true,
+   "cull_distance": 26000.0,
+   "instances": [
+    [
+     -67.9,
+     6680.0,
+     -14.0,
+     0.0,
+     350.0,
+     0.0,
+     0.8,
+     0.9,
+     0.642
+    ]
+   ]
+  }
+ ],
+ "why": "CORE 2026-09-29: the self-powered GA axis walk stopped reproducibly at (67, 6868): in PIE a Pawn-profile sweep hit MQ04_Flagstone_C_paving. MQ04's first two flagstones float at pivot z 19 (top +25) over the heart-garden lawn (-14), a 39 cm rise the Relay Dog does not step. One flight of SM_path_steps (the GA03 dais step, scaled to the rise) up onto the walkway's south edge; additive, MQ04 untouched."
+}
