@@ -262,6 +262,11 @@ jobs:
       RELAY_HOSTED_CODING_MODEL: claude-fable-5
       RELAY_HERMES_PROVIDER: xai
       RELAY_HERMES_MODEL: grok-build-0.1
+      # HOW THE REVIEWER IS PAID FOR, declared by the operator who knows: the Hermes step
+      # writes the xAI API key into the reviewer's profile, so every review is billed to that
+      # key. Julius records it as the reviewer's billingPath, API_BILLED; undeclared, the
+      # owner could only be told UNKNOWN for a role whose money is real.
+      RELAY_HERMES_BILLING_MODE: api_billed
       # TWO DEADLINES, IN THIS ORDER, and the order is the point.
       #
       # Paid run 34311556047's reviewer failed three times on `review:plan` at
