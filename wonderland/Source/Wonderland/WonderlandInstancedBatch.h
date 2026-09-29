@@ -207,6 +207,23 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Batch")
 	int32 EditorPreviewInstanceCount() const;
 
+#if WITH_EDITOR
+	// WORLD PARTITION PAGES THIS ACTOR BY WHAT THIS RETURNS -- and until 2026-09-28 it returned a POINT AT THE ORIGIN.
+	//
+	// AActor::GetStreamingBounds sums only components that are not editor-only, and falls back to the actor's own
+	// location when there are none. A batch's instances live on the editor-only preview until BeginPlay builds the
+	// runtime component, and every batch actor stands at (0,0,0) with world-space transforms -- so every batch's
+	// descriptor read [0,0,0]-[0,0,0] and World Partition put every spatially loaded batch in the one cell at the
+	// origin. In play the instanced world beyond the core was simply absent (the WORLD session measured the same 207
+	// batches loaded at every pawn position, and lawn under the nation bands' paving). This returns the box the
+	// instances actually cover, from the transforms and the mesh's own bounds, as both runtime and editor bounds.
+	// Descriptors only change when a batch's package is saved again.
+	virtual void GetStreamingBounds(FBox& OutRuntimeBounds, FBox& OutEditorBounds) const override;
+
+	/** The world-space box every instance covers (mesh bounds x each transform), invalid when there are none. */
+	FBox InstancesWorldBounds() const;
+#endif
+
 protected:
 	virtual void BeginPlay() override;
 

@@ -339,6 +339,43 @@ void AWonderlandInstancedBatch::PostEditChangeProperty(FPropertyChangedEvent& Pr
 	RefreshEditorPreview(true);
 }
 
+FBox AWonderlandInstancedBatch::InstancesWorldBounds() const
+{
+	FBox Covered(ForceInit);
+	const UStaticMesh* MeshAsset = ResolveMesh();
+	if (MeshAsset == nullptr)
+	{
+		return Covered;
+	}
+	const FBox MeshBox = MeshAsset->GetBoundingBox();
+	TArray<FTransform> Locals;
+	AppendInstanceTransforms(Locals);
+	const FTransform ActorToWorld = GetActorTransform();
+	for (const FTransform& Local : Locals)
+	{
+		Covered += MeshBox.TransformBy(Local * ActorToWorld);
+	}
+	return Covered;
+}
+
+void AWonderlandInstancedBatch::GetStreamingBounds(FBox& OutRuntimeBounds, FBox& OutEditorBounds) const
+{
+	Super::GetStreamingBounds(OutRuntimeBounds, OutEditorBounds);
+	// The engine's answer for this actor is a point at its location (see the header): replace it with the ground
+	// the instances actually stand on, so World Partition pages each batch with the cells it covers.
+	//
+	// BOTH boxes are replaced, not extended. The runtime Instances component stays empty in the editor and sits at
+	// the actor's origin, and the engine counts it: the first build ADDED the instances to the editor box and every
+	// descriptor then stretched from its instances to (0,0,0) -- a W270 flower bed read y -101,782..0. The preview
+	// draws exactly these instances, so the covered box is the whole truth for both.
+	const FBox Covered = InstancesWorldBounds();
+	if (Covered.IsValid)
+	{
+		OutRuntimeBounds = Covered;
+		OutEditorBounds = Covered;
+	}
+}
+
 void AWonderlandInstancedBatch::RefreshEditorPreview(bool bRebuild)
 {
 	const UWorld* World = GetWorld();
