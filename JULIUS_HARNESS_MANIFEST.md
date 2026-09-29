@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **198 production files** across 20/20 subsystems (2 roots, 170 traced, 9 not composed by the live root, 17 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **197 production files** across 20/20 subsystems (2 roots, 169 traced, 9 not composed by the live root, 17 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -34,9 +34,8 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | kernel (src/relay/mission/julius/) | 1 | 0 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
 | connectors (gpt-architect, prompt-architect contracts) | other | 2 | 0 |
-| connectors (gpt-architect, prompt-architect contracts) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
-| entrypoint (relay-bridge/julius-live-mission.ts) | bridge provider stacks (hosted Claude, Hermes, redaction) | 4 | 0 |
-| entrypoint (relay-bridge/julius-live-mission.ts) | connectors (gpt-architect, prompt-architect contracts) | 2 | 0 |
+| entrypoint (relay-bridge/julius-live-mission.ts) | bridge provider stacks (hosted Claude, Hermes, redaction) | 5 | 0 |
+| entrypoint (relay-bridge/julius-live-mission.ts) | connectors (gpt-architect, prompt-architect contracts) | 1 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 1 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | kernel (src/relay/mission/julius/) | 1 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | live composition (relay-bridge/julius/) | 8 | 0 |
@@ -67,7 +66,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 - **Relay↔Julius port (src/relay/integration/julius/)** depends on: C.A.R.D. record (src/relay/integration/compound-agent/, entitlement); kernel (src/relay/mission/julius/); Relay vocabulary (mission/contracts.ts, protocol/enums.ts).
 - **C.A.R.D. record (src/relay/integration/compound-agent/, entitlement)** depends on: kernel (src/relay/mission/julius/); Relay vocabulary (mission/contracts.ts, protocol/enums.ts).
 - **executor + tool substrate (src/relay/workspace/julius-tools/)** depends on: kernel (src/relay/mission/julius/); persistence (src/relay/persistence/).
-- **connectors (gpt-architect, prompt-architect contracts)** depends on: other; Relay vocabulary (mission/contracts.ts, protocol/enums.ts).
+- **connectors (gpt-architect, prompt-architect contracts)** depends on: other.
 - **Relay vocabulary (mission/contracts.ts, protocol/enums.ts)** depends on nothing outside itself (among included files).
 
 No included file under `src/relay` imports `relay-bridge` (the generator fails otherwise).
@@ -180,14 +179,13 @@ The implementation role: one hosted Claude Agent SDK execution behind a pure saf
 | `relay-bridge/hosted-coding-agent/hosted-auth.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-envelope.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-failure-reason.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
+| `relay-bridge/hosted-coding-agent/hosted-login-probe.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-observation.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-readiness.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-runner.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-tool-authority.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
 | `relay-bridge/julius/claude-code-coding-provider.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/julius/coder-workspace.ts` | traced | `relay-bridge/julius/live-workers.ts` |
-| `src/relay/connectors/claude-code/capability-probe.ts` | traced | `relay-bridge/julius-live-mission.ts` |
-| `src/relay/connectors/claude-code/contracts.ts` | traced | `src/relay/connectors/claude-code/capability-probe.ts` |
 | `src/relay/connectors/claude-code/result-classification.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-observation.ts` |
 | `src/relay/mission/julius/julius-coding-agent.ts` | traced | `src/relay/mission/julius/julius-router.ts` |
 | `src/relay/mission/julius/julius-workspace-attribution.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
@@ -281,7 +279,7 @@ Artifact metadata, scope and the staged→finalized store port with its durable 
 | `src/relay/mission/live-reach/live-reach-registry.ts` | traced | `src/relay/mission/live-reach/index.ts` |
 | `src/relay/protocol/enums.ts` | traced | `src/relay/mission/entitlement.ts` |
 | `src/relay/protocol/errors.ts` | traced | `src/relay/protocol/ids.ts` |
-| `src/relay/protocol/ids.ts` | traced | `src/relay/connectors/claude-code/contracts.ts` |
+| `src/relay/protocol/ids.ts` | traced | `src/relay/mcp/domain/mcp-invocation.ts` |
 | `src/relay/workspace/julius-tools/local-artifact-store.ts` | not composed by the live root | — |
 
 ### 13 VERIFICATION

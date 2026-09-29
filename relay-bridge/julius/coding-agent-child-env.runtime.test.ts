@@ -90,12 +90,13 @@ const FAKE_CHILD = [
   "writeFileSync(new URL('./child-env.json', import.meta.url), JSON.stringify({",
   '  names: Object.keys(process.env).sort(),',
   "  anthropicKeySha256: key === undefined ? null : createHash('sha256').update(key).digest('hex'),",
+  "  oauthTokenSha256: process.env.CLAUDE_CODE_OAUTH_TOKEN === undefined ? null : createHash('sha256').update(process.env.CLAUDE_CODE_OAUTH_TOKEN).digest('hex'),",
   '}));',
   'process.exit(1);',
   '',
 ].join('\n');
 
-interface ChildRecord { readonly names: readonly string[]; readonly anthropicKeySha256: string | null }
+interface ChildRecord { readonly names: readonly string[]; readonly anthropicKeySha256: string | null; readonly oauthTokenSha256: string | null }
 
 const CHARGE = Object.freeze({
   stage: 'build' as const,
@@ -128,7 +129,10 @@ let scratch = '';
  */
 let workspace = '';
 let parentKey: string | undefined;
+let parentToken: string | undefined;
 beforeEach(() => {
+  parentToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
   scratch = mkdtempSync(join(tmpdir(), 'julius-child-env-'));
   workspace = join(scratch, 'workspace');
   mkdirSync(workspace);
@@ -137,6 +141,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   if (parentKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = parentKey;
+  if (parentToken === undefined) delete process.env.CLAUDE_CODE_OAUTH_TOKEN; else process.env.CLAUDE_CODE_OAUTH_TOKEN = parentToken;
   rmSync(scratch, { recursive: true, force: true });
 });
 
@@ -223,6 +228,47 @@ describe('CLAUDE_SUBSCRIPTION: the actual child process carries no Anthropic cre
     expect(diagnostics.costBasis).toBe('NOT_APPLICABLE');
     expect(diagnostics.costUsdMicros).toBeNull();
     expect(seen.loaderCalls).toBe(1);
+  });
+});
+
+/**
+ * THE SETUP-TOKEN PATH, ASKED OF THE ACTUAL CHILD. A GitHub runner holds the founder's
+ * subscription as `CLAUDE_CODE_OAUTH_TOKEN` in the parent process; the runner passes it
+ * to `hostedChildEnv`, which admits it under CLAUDE_SUBSCRIPTION only. Note the SDK
+ * marker pattern above would also match `CLAUDE_CODE_OAUTH_TOKEN`, so its presence and
+ * absence are asserted by name and by digest rather than left to the "no inherited
+ * variable" filter.
+ */
+const PARENT_TOKEN = 'FAKETESTNOTREAL-oauth-token-in-the-parent';
+
+describe('CLAUDE_SUBSCRIPTION with a setup-token token: the child carries the token and nothing Anthropic', () => {
+  it('token in the parent, subscription mode: the child holds exactly that token, no key, and bills SUBSCRIPTION', async () => {
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = PARENT_TOKEN;
+    process.env.ANTHROPIC_API_KEY = PARENT_KEY;
+    const seen = await dispatchAndInspect({ ...BASE, [JULIUS_CLAUDE_AUTH_ENV]: 'CLAUDE_SUBSCRIPTION' });
+    expect(seen.child, 'the SDK must actually have spawned the child').not.toBeNull();
+    const names = seen.child!.names;
+    expect(names).toContain('CLAUDE_CODE_OAUTH_TOKEN');
+    expect(seen.child!.oauthTokenSha256, 'the token the parent held, by digest').toBe(sha256(PARENT_TOKEN));
+    for (const credential of ANTHROPIC_CREDENTIAL_ENV_NAMES) expect(names, credential).not.toContain(credential);
+    expect(seen.child!.anthropicKeySha256).toBeNull();
+    expect(names.filter((name) => !COMPOSED_NAMES.includes(name) && !SDK_MARKER.test(name)), 'no inherited variable').toEqual([]);
+    const diagnostics = seen.failure!.diagnostics!;
+    expect(diagnostics.billingPath).toBe('SUBSCRIPTION');
+    expect(diagnostics.costBasis).toBe('NOT_APPLICABLE');
+    expect(diagnostics.costUsdMicros, 'null, never a fabricated 0').toBeNull();
+    expect(JSON.stringify(diagnostics), 'no diagnostic carries the token value').not.toContain(PARENT_TOKEN);
+    expect(JSON.stringify(seen.failure!.message ?? '')).not.toContain(PARENT_TOKEN);
+  });
+
+  it('token in the parent, API mode: the child carries the configured key and NOT the token', async () => {
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = PARENT_TOKEN;
+    const seen = await dispatchAndInspect({ ...BASE, [HOSTED_API_KEY_ENV]: CONFIGURED_KEY });
+    expect(seen.child).not.toBeNull();
+    expect(seen.child!.names).not.toContain('CLAUDE_CODE_OAUTH_TOKEN');
+    expect(seen.child!.oauthTokenSha256).toBeNull();
+    expect(seen.child!.anthropicKeySha256).toBe(sha256(CONFIGURED_KEY));
+    expect(seen.failure!.diagnostics!.billingPath).toBe('API_BILLED');
   });
 });
 

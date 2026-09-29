@@ -7,7 +7,7 @@ import { join, resolve, sep } from 'node:path';
 import { liveBillingPaths, parseLiveMissionContract } from '../relay-bridge/julius-live-mission';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/executor-effects';
 import { HOSTED_ALLOWED_TOOLS, HOSTED_DISALLOWED_TOOLS } from '../relay-bridge/hosted-coding-agent/hosted-envelope';
-import { claudeAuthLine, type ClaudeAuthProvenance } from '../relay-bridge/hosted-coding-agent/hosted-auth';
+import { claudeAuthLine, claudeAuthSourceLine, type ClaudeAuthProvenance } from '../relay-bridge/hosted-coding-agent/hosted-auth';
 import { PREFLIGHT_LIMITS, PREFLIGHT_POLICY } from './julius-live-preflight';
 
 /**
@@ -1357,7 +1357,8 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     const provenance = (subscription: boolean): ClaudeAuthProvenance => ({
       provider: 'ANTHROPIC', execution: 'CLAUDE_AGENT_SDK',
       authentication: subscription ? 'CLAUDE_SUBSCRIPTION' : 'ANTHROPIC_API_KEY',
-      plan: subscription ? 'max' : null, apiKeyUsed: !subscription, apiCostApplicable: !subscription,
+      plan: subscription ? 'max' : null, credentialSource: subscription ? 'subscription_oauth_token' : null,
+      apiKeyUsed: !subscription, apiCostApplicable: !subscription,
     });
     const printed = [
       `  ${liveBillingPaths({ coder: provenance(false), reviewerDeclaration: 'api_billed' }).line}`,
@@ -1366,6 +1367,8 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
       `  ${liveBillingPaths({ coder: provenance(false), reviewerDeclaration: 'api-billed' }).line}`,
       `  ${claudeAuthLine(provenance(false))}`,
       `  ${claudeAuthLine(provenance(true))}`,
+      `  ${claudeAuthSourceLine(provenance(false))}`,
+      `  ${claudeAuthSourceLine(provenance(true))}`,
       '  live_ledger: BOUND',
     ];
     const output = buildEvidence(printed.join('\n'));
@@ -1379,10 +1382,15 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
       '  billing paths: architect=FREE coder=API_BILLED reviewer=API_BILLED',
       `  CLAUDE AUTH: API KEY provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=${'x'.repeat(40)} api_key_used=true api_cost_applicable=true`,
       '  live_ledger: BOUND because',
+      '  claude auth source: FAKETESTNOTREAL-oauth-token-sentinel',
     ];
     const filtered = buildEvidence(lookalikes.join('\n'));
     for (const line of lookalikes) expect(filtered, `kept a lookalike: ${line}`).not.toContain(line);
-    expect(filtered).toContain('0 line(s) kept; 4 unrecognised');
+    expect(filtered).toContain('0 line(s) kept; 5 unrecognised');
+    expect(output).toContain('  claude auth source: subscription_oauth_token\n');
+    // A token-shaped line that DOES match an allowed shape is still refused by the secret rejector.
+    const tokenShaped = buildEvidence('  cause: CLAUDE_CODE_OAUTH_TOKEN=FAKETESTNOTREAL\n  cause: sk-ant-oat01-FAKETESTNOTREAL');
+    expect(tokenShaped).toContain('0 line(s) kept; 0 unrecognised and 2 secret-shaped');
   });
 
   /**

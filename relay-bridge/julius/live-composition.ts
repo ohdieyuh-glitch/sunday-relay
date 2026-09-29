@@ -92,7 +92,7 @@ import {
   readGptArchitectConfig,
 } from '../../src/relay/connectors/gpt-architect';
 import { HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV } from '../hosted-coding-agent/hosted-readiness';
-import { JULIUS_CLAUDE_AUTH_ENV, resolveClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
+import { ANTHROPIC_CREDENTIAL_ENV_NAMES, JULIUS_CLAUDE_AUTH_ENV, resolveClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
 import { loadHermesConfig } from '../hermes-reviewer';
 import type { runGptArchitect } from '../../src/relay/connectors/gpt-architect';
 import type { runHostedCodingAgent, HostedQueryFn } from '../hosted-coding-agent/hosted-runner';
@@ -419,6 +419,16 @@ export function resolveLiveWorkers(options: {
     // subscription request is a contradiction the operator should resolve rather
     // than one this composition should silently pick a winner for.
     codingMissing.push(`${HOSTED_API_KEY_ENV} is set while ${JULIUS_CLAUDE_AUTH_ENV}=CLAUDE_SUBSCRIPTION; unset the key for this deployment or choose ANTHROPIC_API`);
+  }
+  if (authMode.ok && authMode.mode === 'CLAUDE_SUBSCRIPTION') {
+    // THE SAME CONTRADICTION FOR EVERY OTHER ROUTE OFF THE SUBSCRIPTION. None of these
+    // reaches the child either, but each is documented to outrank the setup-token
+    // token, and an operator who configured one next to a subscription request has
+    // not decided which they meant. Names only; no value is read.
+    for (const name of ANTHROPIC_CREDENTIAL_ENV_NAMES) {
+      if (name === HOSTED_API_KEY_ENV || !options.env[name]) continue;
+      codingMissing.push(`${name} is set while ${JULIUS_CLAUDE_AUTH_ENV}=CLAUDE_SUBSCRIPTION; it outranks the subscription, so unset it or choose ANTHROPIC_API`);
+    }
   }
   if (!requested.codingModel) codingMissing.push(HOSTED_MODEL_ENV);
   if (!options.workspacePath) codingMissing.push('mission workspacePath (contract field)');

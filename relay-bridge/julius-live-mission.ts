@@ -36,14 +36,16 @@
  * evidence, events, or stdout.
  */
 
-import { claudeAuthLine, decideClaudeAuth, resolveClaudeAuthMode, type ClaudeAuthProvenance } from './hosted-coding-agent/hosted-auth';
+import {
+  CLAUDE_SUBSCRIPTION_TOKEN_ENV, claudeAuthLine, claudeAuthSourceLine, decideClaudeAuth,
+  resolveClaudeAuthMode, type ClaudeAuthProvenance,
+} from './hosted-coding-agent/hosted-auth';
 import { HOSTED_API_KEY_ENV } from './hosted-coding-agent/hosted-readiness';
-import { hostedChildEnvKeys } from './hosted-coding-agent/hosted-envelope';
-// NOT the connector BARREL. Importing it pulled the whole claude-code connector
-// into the Julius harness — 47 unclassified files, and `contract-verify.ts`
-// reaching `src/relay/testing/factories.ts`, so PRODUCTION JULIUS REACHED A TEST
-// FILE. The harness gate caught it. Only the capability probe is needed here.
-import { classifyClaudeAuth, probeClaudeCapabilities } from '../src/relay/connectors/claude-code/capability-probe';
+import { hostedChildEnv, hostedChildEnvKeys } from './hosted-coding-agent/hosted-envelope';
+// The login is observed with the executable the Agent SDK will run, in the
+// environment `hostedChildEnv` composes for it — not with the operator's `claude`
+// on PATH in this process's environment, which a GitHub runner does not have.
+import { observeCoderLogin, resolveCoderClaudeExecutable } from './hosted-coding-agent/hosted-login-probe';
 import { readFileSync } from 'node:fs';
 import { createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
@@ -634,7 +636,7 @@ async function main(argv: readonly string[]): Promise<number> {
   out('JULIUS LIVE MISSION — preflight');
   out(`  mission: ${contract.missionId} (project ${contract.projectId})`);
   out(`  requested models: architect=${preflight.requested.architectModel ?? 'MISSING'} coder=${preflight.requested.codingModel ?? 'MISSING'} reviewer=${preflight.requested.reviewerProvider ?? 'MISSING'}/${preflight.requested.reviewerModel ?? 'MISSING'}`);
-  out(presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV]));
+  out(presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', CLAUDE_SUBSCRIPTION_TOKEN_ENV, 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV]));
   out('  note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.');
 
   /**
@@ -655,8 +657,11 @@ async function main(argv: readonly string[]): Promise<number> {
    * construction, and that is what is checked.
    *
    * A login is consulted only for what it does know: whether a first-party
-   * subscription login exists. It is classified by `classifyClaudeAuth`, which
-   * returns a class and a coarse plan label and never a credential.
+   * subscription path exists. Since 2026-09-29 it is observed IN THE CHILD'S OWN
+   * ENVIRONMENT with the SDK's own executable (`observeCoderLogin`), so a
+   * `claude setup-token` token in `CLAUDE_CODE_OAUTH_TOKEN` — the only way the
+   * subscription reaches a GitHub runner — is seen exactly as the child will see
+   * it. It returns a class and a coarse plan label and never a credential.
    */
   const authMode = resolveClaudeAuthMode(env);
   /**
@@ -672,13 +677,22 @@ async function main(argv: readonly string[]): Promise<number> {
     out(`  CLAUDE AUTH: REFUSED — ${authMode.refusal}: ${authMode.because}`);
     claudeAuthBlocked = true;
   } else {
-    const observed = authMode.mode === 'CLAUDE_SUBSCRIPTION'
-      ? classifyClaudeAuth(new Date().toISOString(), probeClaudeCapabilities(new Date().toISOString()).executablePath)
-      : undefined;
+    // THE CHILD'S OWN ENVIRONMENT, composed by the same function and from the same
+    // sources the runner uses (PATH, HOME, the token), so the names decided over
+    // and the environment observed are the ones the Coding Agent will get.
+    const subscriptionChild = authMode.mode === 'CLAUDE_SUBSCRIPTION'
+      ? hostedChildEnv({
+        apiKey: '', path: env.PATH, home: env.HOME, mode: 'CLAUDE_SUBSCRIPTION',
+        oauthToken: env[CLAUDE_SUBSCRIPTION_TOKEN_ENV],
+      })
+      : null;
+    const observed = subscriptionChild === null
+      ? undefined
+      : observeCoderLogin({ executable: resolveCoderClaudeExecutable(env), childEnv: subscriptionChild });
     const decision = decideClaudeAuth({
       mode: authMode.mode,
       apiKeyProvided: (env[HOSTED_API_KEY_ENV] ?? '') !== '' && authMode.mode === 'ANTHROPIC_API',
-      childEnvNames: [...hostedChildEnvKeys(authMode.mode)],
+      childEnvNames: subscriptionChild === null ? [...hostedChildEnvKeys(authMode.mode)] : Object.keys(subscriptionChild),
       ...(observed === undefined ? {} : {
         login: {
           loggedIn: observed.loggedIn,
@@ -690,6 +704,7 @@ async function main(argv: readonly string[]): Promise<number> {
     if (decision.ok) {
       coderProvenance = decision.provenance;
       out(`  ${claudeAuthLine(decision.provenance)}`);
+      out(`  ${claudeAuthSourceLine(decision.provenance)}`);
       if (!decision.provenance.apiCostApplicable) {
         out('  note: no Anthropic API billing event exists for a subscription-backed Coding Agent, so its API cost is NOT APPLICABLE rather than zero. Subscription usage is never reported as $0.00 of API spend.');
       }
@@ -703,8 +718,16 @@ async function main(argv: readonly string[]): Promise<number> {
   const billing = liveBillingPaths({ coder: coderProvenance, reviewerDeclaration: env.RELAY_HERMES_BILLING_MODE });
   out(`  ${billing.line}`);
   if (billing.blocked !== null) out(`  BLOCKED billing: ${billing.blocked}`);
-  for (const problem of preflight.problems.filter((entry) => entry.role !== 'CODING_AGENT' || !entry.missing.some((name) => name.startsWith('executor shell')))) {
-    out(`  BLOCKED ${problem.role}: ${problem.reason} — ${problem.missing.join(', ')}`);
+  // The preflight composes with no executor shell, so the Coding Agent ALWAYS lists
+  // one as missing; that entry is reported by the executor line below. Anything ELSE
+  // the Coding Agent is missing is printed — this used to drop the whole entry, so a
+  // key configured beside a subscription request blocked with no reason on the page.
+  for (const problem of preflight.problems) {
+    const missing = problem.role === 'CODING_AGENT'
+      ? problem.missing.filter((name) => !name.startsWith('executor shell'))
+      : problem.missing;
+    if (problem.role === 'CODING_AGENT' && missing.length === 0) continue;
+    out(`  BLOCKED ${problem.role}: ${problem.reason} — ${missing.join(', ')}`);
   }
   if (executorMissing.length > 0) out(`  BLOCKED executor: missing ${executorMissing.join(', ')}`);
   if (databaseMissing.length > 0) out(`  BLOCKED durable store: set ${databaseMissing.join(' or ')}`);

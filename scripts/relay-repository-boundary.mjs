@@ -130,7 +130,7 @@ const SECRET_PATTERNS = [
   [/\b(SUPABASE_SERVICE_ROLE_KEY|service_role_key)\s*[:=]\s*['"]?[A-Za-z0-9._-]{20,}/g, 'Supabase service-role assignment'],
   // A database URL that embeds a password in the userinfo component.
   [/\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:[^\s:/@]{6,}@[^\s/]+/g, 'connection URL with inline credentials'],
-  [/\b(ANTHROPIC_API_KEY|OPENAI_API_KEY|GEMINI_API_KEY|GROQ_API_KEY|MISTRAL_API_KEY)\s*[:=]\s*['"]?[A-Za-z0-9_-]{16,}/g,
+  [/\b(ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|CLAUDE_CODE_OAUTH_TOKEN|OPENAI_API_KEY|GEMINI_API_KEY|GROQ_API_KEY|MISTRAL_API_KEY)\s*[:=]\s*['"]?[A-Za-z0-9_-]{16,}/g,
     'provider key environment assignment'],
 ];
 

@@ -36,6 +36,8 @@ const ALLOWED = [
   // tokens only, exactly as `liveBillingPaths`, `claudeAuthLine` and the ledger check print them.
   /^  billing paths: architect=(API_BILLED|SUBSCRIPTION|NOT_APPLICABLE|UNKNOWN) coder=(API_BILLED|SUBSCRIPTION|UNDECIDED) reviewer=(API_BILLED|SUBSCRIPTION|NOT_APPLICABLE|UNKNOWN|UNDECLARED)$/u,
   /^  CLAUDE AUTH: (API KEY|SUBSCRIPTION) provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=(n\/a|max|pro|team|enterprise|unknown) api_key_used=(true|false) api_cost_applicable=(true|false)$/u,
+  // WHICH subscription credential (stored login or setup-token token) — a class name, never a value.
+  /^  claude auth source: (local_subscription|subscription_oauth_token|anthropic_api_key)$/u,
   /^  live_ledger: (BOUND|UNBOUND|UNKNOWN)$/u,
   /^  [A-Z][A-Z0-9_]*: (SET|MISSING)$/u,
   /^  BLOCKED [a-z_ ]+: .+$/iu,
@@ -70,6 +72,9 @@ const ALLOWED = [
 const SECRET_SHAPES = [
   /\b(sk|xai|rk|pk)-[A-Za-z0-9_-]{12,}/u,
   /\bsk-(ant|proj|svcacct|admin)-[A-Za-z0-9_-]{8,}/u,
+  // A `claude setup-token` subscription token (CLAUDE_CODE_OAUTH_TOKEN), named for itself.
+  /\bsk-ant-oat\d*-[A-Za-z0-9_-]{8,}/u,
+  /\bCLAUDE_CODE_OAUTH_TOKEN\s*[:=]\s*\S{8,}/u,
   /\bgh[pousr]_[A-Za-z0-9]{16,}/u,
   /\bgithub_pat_[A-Za-z0-9_]{16,}/u,
   /\bAKIA[0-9A-Z]{12,}/u,

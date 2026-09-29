@@ -25,6 +25,14 @@
  * environment, which Julius owns, and `auth status` is used only for what it does
  * know: whether a subscription login exists at all.
  *
+ * THE SETUP-TOKEN PATH (2026-09-29). A GitHub runner has no stored login, so the
+ * founder's subscription reaches it as a `claude setup-token` token in
+ * `CLAUDE_CODE_OAUTH_TOKEN` — the one credential variable subscription mode admits
+ * into the child, and never admits in API mode. Every higher-precedence name in
+ * `ANTHROPIC_CREDENTIAL_ENV_NAMES` must still be absent. The login observation is
+ * taken by running `auth status` in the SAME composed environment the child gets
+ * (`hosted-login-probe.ts`) and classified by `classifyClaudeAuthStatus` below.
+ *
  * NO CREDENTIAL VALUE IS READ, COMPARED, LOGGED OR RETURNED by anything in this
  * file. It works in variable NAMES and in a coarse plan label.
  *
@@ -58,9 +66,44 @@ export const ANTHROPIC_CREDENTIAL_ENV_NAMES: readonly string[] = Object.freeze([
   'AWS_BEARER_TOKEN_BEDROCK',
 ]);
 
+/**
+ * THE ONE CREDENTIAL VARIABLE SUBSCRIPTION MODE MAY CARRY INTO THE CHILD.
+ *
+ * `claude setup-token` mints a long-lived OAuth token for a Pro/Max subscription,
+ * and Claude Code and the Agent SDK read it from this variable. It is how the
+ * subscription reaches a machine with no stored `claude` login — a GitHub runner
+ * above all. Anthropic documents its precedence as BELOW `ANTHROPIC_AUTH_TOKEN`,
+ * `ANTHROPIC_API_KEY` and `apiKeyHelper` (and below cloud-provider credentials), so
+ * it authenticates the child only while every name in
+ * `ANTHROPIC_CREDENTIAL_ENV_NAMES` is absent — which the structural check below
+ * already requires.
+ *
+ * It is NEVER placed in an API-mode child: there it would be a second credential
+ * nobody chose, and the record would no longer say which one a request used.
+ */
+export const CLAUDE_SUBSCRIPTION_TOKEN_ENV = 'CLAUDE_CODE_OAUTH_TOKEN';
+
+/**
+ * AN EXPLICIT CODING AGENT EXECUTABLE, honoured by BOTH the login probe and the
+ * runner (as the SDK's `pathToClaudeCodeExecutable`), so the binary observed is the
+ * binary executed. Absent — the normal case — both use the executable the Agent SDK
+ * bundles.
+ */
+export const CODER_CLAUDE_EXECUTABLE_ENV = 'JULIUS_CODER_CLAUDE_EXECUTABLE';
+
+/**
+ * THE LOGIN CLASSES SUBSCRIPTION MODE ACCEPTS, and provenance names which one.
+ *   - `local_subscription`: the stored claude.ai login on this machine (`authMethod: "claude.ai"`).
+ *   - `subscription_oauth_token`: a `claude setup-token` token supplied as
+ *     `CLAUDE_CODE_OAUTH_TOKEN` (`authMethod: "oauth_token"`).
+ */
+export const SUBSCRIPTION_LOGIN_SOURCES = Object.freeze(['local_subscription', 'subscription_oauth_token'] as const);
+export type SubscriptionLoginSource = (typeof SUBSCRIPTION_LOGIN_SOURCES)[number];
+
 export type ClaudeAuthRefusal =
   | 'auth_mode_unknown'
   | 'api_key_missing'
+  | 'api_mode_would_carry_subscription_token'
   | 'subscription_would_use_api_key'
   | 'subscription_login_absent'
   | 'subscription_login_not_first_party';
@@ -88,7 +131,7 @@ export function resolveClaudeAuthMode(
 /** What a login probe can say without reading a credential. Shaped after `ClaudeAuthClassification`. */
 export interface ClaudeLoginObservation {
   readonly loggedIn: boolean;
-  /** `local_subscription` is the only class subscription mode accepts. */
+  /** Only a `SUBSCRIPTION_LOGIN_SOURCES` class is accepted by subscription mode. */
   readonly sourceClass: string;
   /** A coarse plan label only: 'max', 'pro', 'team', 'enterprise' or 'unknown'. Never billing. */
   readonly subscriptionLabel: string;
@@ -112,6 +155,11 @@ export interface ClaudeAuthProvenance {
   readonly authentication: 'CLAUDE_SUBSCRIPTION' | 'ANTHROPIC_API_KEY';
   /** The coarse plan label, or null in API mode where no plan is involved. */
   readonly plan: string | null;
+  /**
+   * WHICH SUBSCRIPTION CREDENTIAL the run authenticated with: the stored login or
+   * the setup-token OAuth token. Null in API mode. A class name, never a value.
+   */
+  readonly credentialSource: SubscriptionLoginSource | null;
   readonly apiKeyUsed: boolean;
   /**
    * WHETHER AN ANTHROPIC API COST CAN EXIST FOR THIS RUN.
@@ -143,11 +191,18 @@ export function decideClaudeAuth(input: ClaudeAuthDecisionInput): ClaudeAuthDeci
     if (!input.apiKeyProvided) {
       return refuse('api_key_missing', 'API mode was requested and no Anthropic API key was supplied for the Coding Agent.');
     }
+    // API mode is its own capability and stays exactly that: a subscription token
+    // beside the key would be a second credential in the child, and the record
+    // could no longer say which one a request used.
+    if (input.childEnvNames.includes(CLAUDE_SUBSCRIPTION_TOKEN_ENV)) {
+      return refuse('api_mode_would_carry_subscription_token',
+        `API mode was requested but the Coding Agent's environment would also carry ${CLAUDE_SUBSCRIPTION_TOKEN_ENV}. API mode takes the API key alone.`);
+    }
     return {
       ok: true,
       provenance: Object.freeze({
         provider: 'ANTHROPIC', execution: 'CLAUDE_AGENT_SDK',
-        authentication: 'ANTHROPIC_API_KEY', plan: null,
+        authentication: 'ANTHROPIC_API_KEY', plan: null, credentialSource: null,
         apiKeyUsed: true, apiCostApplicable: true,
       }),
     };
@@ -170,9 +225,15 @@ export function decideClaudeAuth(input: ClaudeAuthDecisionInput): ClaudeAuthDeci
     return refuse('subscription_login_absent',
       'Subscription mode was requested and no Claude Code subscription login was observed. A founder must complete the official `claude` login; nothing here may create, copy or persist a credential.');
   }
-  if (login.sourceClass !== 'local_subscription') {
+  if (!(SUBSCRIPTION_LOGIN_SOURCES as readonly string[]).includes(login.sourceClass)) {
     return refuse('subscription_login_not_first_party',
-      `Subscription mode was requested and the observed login classifies as "${login.sourceClass}" rather than a first-party subscription. Only the supported claude.ai subscription path is accepted.`);
+      `Subscription mode was requested and the observed login classifies as "${login.sourceClass}" rather than a first-party subscription. Only the supported claude.ai login or a setup-token subscription token is accepted.`);
+  }
+  // The token path is accepted only when the child would actually carry the token;
+  // an observation that claims one without the variable was not taken in this child.
+  if (login.sourceClass === 'subscription_oauth_token' && !input.childEnvNames.includes(CLAUDE_SUBSCRIPTION_TOKEN_ENV)) {
+    return refuse('subscription_login_absent',
+      `Subscription mode observed a subscription token, but the Coding Agent's environment would not carry ${CLAUDE_SUBSCRIPTION_TOKEN_ENV}. The observation must be taken in the child's own environment.`);
   }
 
   return {
@@ -181,6 +242,7 @@ export function decideClaudeAuth(input: ClaudeAuthDecisionInput): ClaudeAuthDeci
       provider: 'ANTHROPIC', execution: 'CLAUDE_AGENT_SDK',
       authentication: 'CLAUDE_SUBSCRIPTION',
       plan: login.subscriptionLabel,
+      credentialSource: login.sourceClass as SubscriptionLoginSource,
       apiKeyUsed: false,
       // No Anthropic API billing event can exist for this run, so there is no cost
       // to report — not a zero cost.
@@ -199,4 +261,71 @@ export function claudeAuthLine(provenance: ClaudeAuthProvenance): string {
     `api_key_used=${String(provenance.apiKeyUsed)}`,
     `api_cost_applicable=${String(provenance.apiCostApplicable)}`,
   ].join(' ');
+}
+
+/**
+ * Which subscription credential, on its own line so the `CLAUDE AUTH:` line keeps
+ * the exact shape the evidence allow-list and the local launcher already pin.
+ */
+export function claudeAuthSourceLine(provenance: ClaudeAuthProvenance): string {
+  return `claude auth source: ${provenance.credentialSource ?? 'anthropic_api_key'}`;
+}
+
+/**
+ * CLASSIFY THE OUTPUT OF `claude auth status --json`, TAKEN IN THE CHILD'S OWN ENVIRONMENT.
+ *
+ * PURE: it is handed the CLI's stdout and returns a class and a plan label. The raw
+ * text is never returned, stored or echoed; nothing but the closed fields below is
+ * read from it.
+ *
+ * MEASURED on 2026-09-29 with the CLI the Agent SDK bundles (2.1.220) and the
+ * workstation CLI (2.1.284), using ONLY FAKE placeholder values in an otherwise
+ * minimal environment — no real credential was used, created or read:
+ *   - token only:            `loggedIn: true, authMethod: "oauth_token", apiProvider: "firstParty"`,
+ *                            and NO `subscriptionType` field;
+ *   - token + API key:       2.1.220 kept `authMethod: "oauth_token"` but added
+ *                            `apiKeySource: "ANTHROPIC_API_KEY"`; 2.1.284 answered
+ *                            `authMethod: "api_key"` with the same `apiKeySource`;
+ *   - token + AUTH_TOKEN:    STILL `authMethod: "oauth_token"` with no `apiKeySource` —
+ *                            `auth status` does not see `ANTHROPIC_AUTH_TOKEN` at all;
+ *   - stored login, no token: `authMethod: "claude.ai"`, `subscriptionType: "max"`.
+ * The CLI did not validate the fake token (exit 0, offline), so `auth status` proves
+ * which PATH the child would take, not that the token is live. That is why the
+ * structural check on the composed environment stays the authority for "no API
+ * credential", and this classifier only says whether a subscription path exists.
+ *
+ * ASSUMPTION, LABELLED: a REAL setup-token token was not available to measure. The
+ * classifier assumes it reports `authMethod: "oauth_token"` like the placeholder did,
+ * and that `subscriptionType` may be absent (the plan label is then `unknown`, never
+ * guessed). If a real token reports `"claude.ai"` instead, it is still accepted, as a
+ * first-party subscription login.
+ */
+export function classifyClaudeAuthStatus(raw: string | null): ClaudeLoginObservation {
+  const absent: ClaudeLoginObservation = Object.freeze({ loggedIn: false, sourceClass: 'not_logged_in', subscriptionLabel: 'unknown' });
+  if (raw === null || raw.trim() === '') return absent;
+  let parsed: Record<string, unknown>;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return { ...absent, sourceClass: 'unknown' };
+    parsed = value as Record<string, unknown>;
+  } catch {
+    return { ...absent, sourceClass: 'unknown' };
+  }
+  const loggedIn = parsed.loggedIn === true;
+  const method = typeof parsed.authMethod === 'string' ? parsed.authMethod.toLowerCase() : '';
+  const provider = typeof parsed.apiProvider === 'string' ? parsed.apiProvider.toLowerCase() : '';
+  const keySource = typeof parsed.apiKeySource === 'string' ? parsed.apiKeySource.trim() : '';
+  const plan = typeof parsed.subscriptionType === 'string' ? parsed.subscriptionType.toLowerCase() : '';
+  const subscriptionLabel = ['max', 'pro', 'team', 'enterprise'].includes(plan) ? plan : 'unknown';
+
+  let sourceClass: string;
+  if (!loggedIn) sourceClass = 'not_logged_in';
+  // ANY API-key source outranks the login it sits beside, whatever `authMethod` says.
+  else if (keySource !== '' && keySource.toLowerCase() !== 'none') sourceClass = 'api_key';
+  else if (provider !== 'firstparty') sourceClass = provider.includes('bedrock') ? 'bedrock' : provider.includes('vertex') ? 'vertex' : 'third_party';
+  else if (method === 'oauth_token') sourceClass = 'subscription_oauth_token';
+  else if (method === 'claude.ai') sourceClass = 'local_subscription';
+  else if (method.includes('api')) sourceClass = 'api_key';
+  else sourceClass = 'unknown';
+  return Object.freeze({ loggedIn, sourceClass, subscriptionLabel });
 }
