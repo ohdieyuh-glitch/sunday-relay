@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""TR01 Tower Rise and MG01 Mushroom Grove -- the two forge districts the shipping map never received.
+"""TW01 Tower Rise and MG01 Mushroom Grove -- the two forge districts the shipping map never received.
 
-    python WorldDesign/Districts/forge_districts.py      (writes tr01_tower_rise.json, mg01_mushroom_grove.json)
+    python WorldDesign/Districts/forge_districts.py      (writes tw01_tower_rise.json, mg01_mushroom_grove.json)
+
+PASS ID: Tower Rise is TW01, not TR01. TR01 belongs to GoldenArrival/tr01_clock_plaza_steps.json, and apply_layer
+deletes a pass's existing actors, so a TR01 Tower Rise would have removed the clock-plaza steps (caught 2026-09-29
+by validate_layer_spec's pass-id collision check, before any apply).
 
 WHY (2026-09-28, world completion, CORE C4). The forge's layout names 14 districts (`_DISTRICT_SEEDS` in
 wonderland-blender-forge/wonderland/v2/layout_v2.py). Run the forge's own district metric over every authored
@@ -11,7 +15,7 @@ pass in the Unreal core and 12 of them are there. Two are not:
   MUSHROOM GROVE seed bearing 300, 140 m, palette grove / wood / grove. Within 40 m: tufts, kerbs, a glass screen
                  facade -- not one mushroom.
 This builds each from the forge's own recipe in the V2 kit the map already uses:
-  TR01  `_quarter_towers`: capped towers of falling height round a dominant one (tower_capped in IvoryStone,
+  TW01  `_quarter_towers`: capped towers of falling height round a dominant one (tower_capped in IvoryStone,
         roof_cone_steep in the rose / pink / lilac / blue / navy roofs, a gold finial spire, balcony rings on the
         landmark ones), a clock tower for the clockyard, court planting on a ring between them, and a garden wall
         round the cluster with an opening toward the city.
@@ -139,7 +143,7 @@ def polar(bearing, r_m):
 def tower_rise(bearing=120.0, r_m=130.0):
     cx, cy = polar(bearing, r_m)
     site = Site(cx, cy, 5500.0)
-    spec = Spec("TR01", "Wonderland/Authored/TR01_TowerRise", ["WL_DISTRICT", "WL_DISTRICT_TOWER_RISE"])
+    spec = Spec("TW01", "Wonderland/Authored/TW01_TowerRise", ["WL_DISTRICT", "WL_DISTRICT_TOWER_RISE"])
     rng = random.Random(1201)
     sp = 1.05
     # the forge's plan: dominant tower first, attendants round it (dx, dy, height, roof)
@@ -161,8 +165,8 @@ def tower_rise(bearing=120.0, r_m=130.0):
         spec.add("TowerSpire", "SM_finial_spire", "MI_V2_Gold", x, y, z + 1560.0 * h, yaw, 0.7 * h, cull=60000.0)
         if i in (0, 2, 5):
             spec.add("TowerBalcony", "SM_balcony_ring", "MI_V2_GoldAged", x, y, z + 585.0 * h, yaw, 0.65 * h)
-        site.occ.add("existing", x, y, 190.0 * h, 190.0 * h, 0.0, "TR01:tower")
-        site.occ.add("solid", x, y, 210.0 * h, 210.0 * h, 0.0, "TR01:tower")
+        site.occ.add("existing", x, y, 190.0 * h, 190.0 * h, 0.0, "TW01:tower")
+        site.occ.add("solid", x, y, 210.0 * h, 210.0 * h, 0.0, "TW01:tower")
         placed.append((x, y))
     # THE CLOCKYARD: the forge's palette names it -- a clock tower where the court opens toward the city
     tx, ty = cx - cx / math.hypot(cx, cy) * 1400.0, cy - cy / math.hypot(cx, cy) * 1400.0
@@ -174,7 +178,7 @@ def tower_rise(bearing=120.0, r_m=130.0):
         spec.add("ClockTower", "SM_tower_clock", "MI_V2_GoldAged", x, y, z, yaw, 1.15, collides=True, cull=60000.0)
         spec.add("ClockCap", "SM_roof_cone_steep", "MI_V2_RoofNavy", x, y, z + 1190.0 * 1.15, yaw, 1.05, cull=60000.0)
         spec.add("ClockSpire", "SM_finial_spire", "MI_V2_Gold", x, y, z + 1190.0 * 1.15 + 600.0 * 1.05, yaw, 0.8)
-        site.occ.add("existing", x, y, 240.0, 240.0, 0.0, "TR01:clock")
+        site.occ.add("existing", x, y, 240.0, 240.0, 0.0, "TW01:clock")
     else:
         spec.stats["clock_no_room"] += 1
     # the court between the towers, with its own planting
@@ -188,7 +192,7 @@ def tower_rise(bearing=120.0, r_m=130.0):
         mesh, mat = (("SM_topiary_cone_plain", "MI_V2_LeafDark"), ("SM_shrub_flowering", "MI_V2_LeafMid"),
                      ("SM_topiary_ball", "MI_V2_LeafMid"), ("SM_topiary_spiral", "MI_V2_LeafDark"))[i % 4]
         spec.add("Court", mesh, mat, x, y, site.ground(x, y), 40.0 * i, 0.9, cull=26000.0)
-        site.occ.add("existing", x, y, 130.0, 130.0, 0.0, "TR01:plant")
+        site.occ.add("existing", x, y, 130.0, 130.0, 0.0, "TW01:plant")
     # A NEIGHBOURHOOD, NOT TOWERS ON GRASS: a garden wall round the cluster, open toward the city
     wall_r = 3400.0
     toward_city = math.degrees(math.atan2(-cy, -cx))
@@ -280,12 +284,12 @@ def mushroom_grove(bearing=300.0, r_m=140.0):
 # RELOCATED WITH INTENT (2026-09-29, founder directive "prefer outward expansion over destroying good completed core
 # work"). Both forge seeds lie inside the fully planted core (TR01 found room for 3 of 7 towers there, MG01 for no
 # giant). Each keeps its forge bearing and moves out along it to the nearest large empty region the structure-only
-# emptiness audit reports (05:05 census): TR01 to the ICARUS march edge, MG01 to the TARTARUS outer heartland.
-SITES = {"TR01": (111.0, 478.0), "MG01": (297.0, 984.0)}
+# emptiness audit reports (05:05 census): TW01 to the ICARUS march edge, MG01 to the TARTARUS outer heartland.
+SITES = {"TW01": (111.0, 478.0), "MG01": (297.0, 984.0)}
 
 
 def main():
-    for build, fname, pid in ((tower_rise, "tr01_tower_rise.json", "TR01"),
+    for build, fname, pid in ((tower_rise, "tw01_tower_rise.json", "TW01"),
                               (mushroom_grove, "mg01_mushroom_grove.json", "MG01")):
         spec, placed, stats = build(*SITES[pid])
         (HERE / fname).write_text(json.dumps(spec, indent=1), encoding="utf-8")

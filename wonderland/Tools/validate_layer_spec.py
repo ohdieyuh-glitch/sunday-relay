@@ -156,6 +156,10 @@ def nested_collision(meshes_by_name):
             continue
         if not isinstance(spec, dict) or "batches" not in spec:
             continue
+        # delta RECORDS (bench_delta_record, kerb_delta_record, floor_reyaw_record) carry "batches" too, but theirs
+        # are old/new transforms with no id or mesh; the first one raised KeyError 'id' and the gate checked nothing
+        if not all(isinstance(b, dict) and "id" in b and "mesh" in b for b in spec["batches"]):
+            continue
         fams = {}
         for b in spec["batches"]:
             fams.setdefault(_family(b["id"]), []).append(b)
