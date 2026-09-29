@@ -1,0 +1,20 @@
+{
+ "name": "zzW51_bench_after",
+ "started": "2026-09-29 01:45:38",
+ "status": "done",
+ "shots": [
+  {
+   "camera": "bench_profile",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\bench_profile__bench_after.png",
+   "ok": true
+  },
+  {
+   "camera": "bench_profile_hn181",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\bench_profile_hn181__bench_after.png",
+   "ok": true
+  }
+ ],
+ "finished": "2026-09-29 01:45:47",
+ "seconds": 8.17,
+ "log": ""
+}

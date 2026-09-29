@@ -1,0 +1,28 @@
+{
+ "name": "zzW50_bench_delta_apply",
+ "started": "2026-09-29 01:44:08",
+ "status": "changed 40 instances in 6 batches (saved)",
+ "dry": false,
+ "map_dirty_before": [],
+ "batches_to_change": 6,
+ "record": "C:/dev/iwonder/wonderland-task3/wonderland/WorldDesign/bench_delta_record.json",
+ "batches": 6,
+ "instances": 40,
+ "by_pass": {
+  "HT356": 24,
+  "HN181": 16
+ },
+ "dirty": [
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/2/JR/OVOVN25EU8HBVIC8W7KZGC",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/5/2O/TUAYGPAM6GGK3LIEPFDKZV",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/8/E0/FLQ5IYN26KNSD906E2FAPF",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/B/L6/9P8X46FCXA4Y91KXN4WX2B",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/8/YH/18L9H6XLVHYOV9P3MSIML9",
+  "/Game/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/C/VD/UH8ANQJ7VPEW4A5UGUL2YZ"
+ ],
+ "saved": true,
+ "dirty_after_save": [],
+ "finished": "2026-09-29 01:44:11",
+ "seconds": 2.67,
+ "log": ""
+}

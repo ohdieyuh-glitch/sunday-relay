@@ -1,0 +1,19 @@
+{
+ "name": "zzW49_bench_delta_dry",
+ "started": "2026-09-29 01:43:11",
+ "status": "dry run: 40 instances in 6 batches would change",
+ "dry": true,
+ "map_dirty_before": [],
+ "batches_to_change": 6,
+ "record": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\WorldDesign\\bench_delta_DRY_record.json",
+ "batches": 6,
+ "instances": 40,
+ "by_pass": {
+  "HT356": 24,
+  "HN181": 16
+ },
+ "dirty": [],
+ "finished": "2026-09-29 01:43:13",
+ "seconds": 2.34,
+ "log": ""
+}
