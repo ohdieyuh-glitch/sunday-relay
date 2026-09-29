@@ -1,0 +1,270 @@
+{
+ "name": "zzW471_disc_residency_floor",
+ "started": "2026-09-29 16:09:03",
+ "status": "measured",
+ "tiles": 254,
+ "seconds_in_tiles": 1802.7,
+ "streaming_incomplete_tiles": 11,
+ "ism_owners_resident": [
+  12310,
+  12310
+ ],
+ "sma_resident": [
+  17270,
+  17270
+ ],
+ "missing_ism_owners": [],
+ "missing_sma": [],
+ "floor": {
+  "landed": 204,
+  "tiles": 254,
+  "holes": [],
+  "not_landed": [
+   {
+    "at": [
+     -1030000,
+     -30000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     -910000,
+     -190000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     -870000,
+     -210000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     -970000,
+     -470000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     -290000,
+     -210000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     -950000,
+     -850000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     -30000,
+     -30000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     -310000,
+     -390000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     -490000,
+     -850000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     -290000,
+     -830000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     -430000,
+     -1330000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     -110000,
+     -730000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     10000,
+     -1090000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     10000,
+     -150000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     90000,
+     -630000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     350000,
+     -1110000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     490000,
+     -1010000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     550000,
+     -1130000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     510000,
+     -670000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     650000,
+     -630000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     1010000,
+     -690000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     1550000,
+     -690000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     1230000,
+     -490000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     750000,
+     -230000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     1210000,
+     -170000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     150000,
+     10000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     1230000,
+     130000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     830000,
+     210000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     1130000,
+     510000
+    ],
+    "landed": false,
+    "feet": null
+   },
+   {
+    "at": [
+     950000,
+     570000
+    ],
+    "landed": false,
+    "feet": null
+   }
+  ],
+  "feet_min": -14.0,
+  "feet_max": 2860.0
+ },
+ "finished": "2026-09-29 16:39:20",
+ "seconds": 1817.58,
+ "log": ""
+}

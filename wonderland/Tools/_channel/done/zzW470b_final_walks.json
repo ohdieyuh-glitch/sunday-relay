@@ -1,0 +1,3879 @@
+{
+ "name": "zzW470b_final_walks",
+ "started": "2026-09-29 15:56:15",
+ "status": "measured (see regions)",
+ "day_minutes_found": 24.0,
+ "regions": [
+  {
+   "pass": "HI057",
+   "walk_points": 102,
+   "stands": [
+    {
+     "at": [
+      33813,
+      52266
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      32365,
+      57380
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      35213,
+      62684
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      38062,
+      67989
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      42462,
+      71093
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      45730,
+      76125
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      50675,
+      80068
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      54782,
+      84555
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      55953,
+      90949
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [
+    {
+     "centre": [
+      38714,
+      64918
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      34991,
+      67336
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      41133,
+      68642
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      37409,
+      71060
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      45294,
+      71377
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      41570,
+      73795
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      47712,
+      75100
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      43988,
+      77518
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    }
+   ],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 17,
+   "verdict": {
+    "stands_pass": 9,
+    "stands": 9,
+    "walk_blocks": 0,
+    "rooms_enterable": 8,
+    "rooms": 8,
+    "streaming_incomplete": 0,
+    "resident_batches": 165,
+    "resident_instances": 2302,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "HN181",
+   "walk_points": 109,
+   "stands": [
+    {
+     "at": [
+      -65242,
+      -1026
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -67646,
+      -6569
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -73645,
+      -6673
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -79644,
+      -6778
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -85643,
+      -6883
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -91633,
+      -7487
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -97650,
+      -6592
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -103632,
+      -7697
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -109630,
+      -7802
+     ],
+     "surface": 12.0,
+     "feet": 12.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [
+    {
+     "centre": [
+      -68964,
+      -4371
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -68887,
+      -8811
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -73404,
+      -4449
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -73326,
+      -8888
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -77963,
+      -4528
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -77885,
+      -8968
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -82402,
+      -4606
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -82325,
+      -9045
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    }
+   ],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 17,
+   "verdict": {
+    "stands_pass": 9,
+    "stands": 9,
+    "walk_blocks": 0,
+    "rooms_enterable": 8,
+    "rooms": 8,
+    "streaming_incomplete": 0,
+    "resident_batches": 172,
+    "resident_instances": 2341,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "HN238",
+   "walk_points": 129,
+   "stands": [
+    {
+     "at": [
+      -34474,
+      -54220
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -39509,
+      -57560
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -44067,
+      -58249
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -49790,
+      -61748
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -54507,
+      -61748
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -60231,
+      -65247
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -64259,
+      -69805
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -66590,
+      -75423
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -62297,
+      -79875
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -57473,
+      -83478
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -56413,
+      -91216
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [
+    {
+     "centre": [
+      -43183,
+      -52646
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -39418,
+      -54999
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -45536,
+      -56411
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -41771,
+      -58764
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -53889,
+      -56569
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -50124,
+      -58922
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -56242,
+      -60334
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -52476,
+      -62687
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -63003,
+      -76816
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -59238,
+      -79169
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -65356,
+      -80581
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      -61590,
+      -82934
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    }
+   ],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 23,
+   "verdict": {
+    "stands_pass": 11,
+    "stands": 11,
+    "walk_blocks": 0,
+    "rooms_enterable": 12,
+    "rooms": 12,
+    "streaming_incomplete": 0,
+    "resident_batches": 235,
+    "resident_instances": 2936,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "HT308",
+   "walk_points": 119,
+   "stands": [
+    {
+     "at": [
+      39078,
+      -49734
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      44779,
+      -49722
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      48473,
+      -54450
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      52167,
+      -59178
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      56255,
+      -63598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      64061,
+      -63844
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      70907,
+      -66110
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      74601,
+      -70838
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      74528,
+      -77240
+     ],
+     "surface": 12.0,
+     "feet": 12.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      70107,
+      -81328
+     ],
+     "surface": 12.6,
+     "feet": 12.6,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [
+    {
+     "centre": [
+      43202,
+      -51309
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      46701,
+      -48576
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      45936,
+      -54808
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      49434,
+      -52074
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      48743,
+      -58401
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      52242,
+      -55668
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      51476,
+      -61900
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      54975,
+      -59166
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    }
+   ],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 18,
+   "verdict": {
+    "stands_pass": 10,
+    "stands": 10,
+    "walk_blocks": 0,
+    "rooms_enterable": 8,
+    "rooms": 8,
+    "streaming_incomplete": 0,
+    "resident_batches": 190,
+    "resident_instances": 2303,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "HT356",
+   "walk_points": 124,
+   "stands": [
+    {
+     "at": [
+      64080,
+      -4668
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      67258,
+      -9401
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      73243,
+      -9820
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      77917,
+      -14658
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      80097,
+      -19321
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      86013,
+      -20737
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      91998,
+      -21156
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      97879,
+      -23071
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      102612,
+      -19893
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      103031,
+      -13908
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      104946,
+      -8027
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [
+    {
+     "centre": [
+      67382,
+      -11635
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      67692,
+      -7206
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      71812,
+      -11945
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      72121,
+      -7516
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      75733,
+      -21241
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      76042,
+      -16812
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      80162,
+      -21551
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      80472,
+      -17122
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      84641,
+      -22867
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      84951,
+      -18438
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      89070,
+      -23176
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      89380,
+      -18747
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    }
+   ],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 23,
+   "verdict": {
+    "stands_pass": 11,
+    "stands": 11,
+    "walk_blocks": 0,
+    "rooms_enterable": 12,
+    "rooms": 12,
+    "streaming_incomplete": 0,
+    "resident_batches": 239,
+    "resident_instances": 2920,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2I073",
+   "walk_points": 32,
+   "stands": [
+    {
+     "at": [
+      12367,
+      40818
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      10296,
+      47725
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      10616,
+      53902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 3,
+   "verdict": {
+    "stands_pass": 3,
+    "stands": 3,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 35,
+    "resident_instances": 486,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2I088",
+   "walk_points": 25,
+   "stands": [
+    {
+     "at": [
+      9498,
+      106283
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      9707,
+      112280
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 2,
+   "verdict": {
+    "stands_pass": 2,
+    "stands": 2,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 80,
+    "resident_instances": 662,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2I131",
+   "walk_points": 16,
+   "stands": [
+    {
+     "at": [
+      -71759,
+      82908
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -75696,
+      87436
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 2,
+   "verdict": {
+    "stands_pass": 2,
+    "stands": 2,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 54,
+    "resident_instances": 509,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2M297",
+   "walk_points": 53,
+   "stands": [
+    {
+     "at": [
+      59491,
+      -88312
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      54373,
+      -90385
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      50332,
+      -89092
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      47369,
+      -84431
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      42985,
+      -85120
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 5,
+   "verdict": {
+    "stands_pass": 5,
+    "stands": 5,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 12,
+    "resident_instances": 208,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2N164",
+   "walk_points": 9,
+   "stands": [
+    {
+     "at": [
+      -108557,
+      31195
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 1,
+   "verdict": {
+    "stands_pass": 1,
+    "stands": 1,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 55,
+    "resident_instances": 522,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2N170",
+   "walk_points": 16,
+   "stands": [
+    {
+     "at": [
+      -94786,
+      16726
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -100781,
+      17275
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 2,
+   "verdict": {
+    "stands_pass": 2,
+    "stands": 2,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 75,
+    "resident_instances": 789,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2N197",
+   "walk_points": 102,
+   "stands": [
+    {
+     "at": [
+      -63145,
+      -19372
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -68006,
+      -23995
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -73744,
+      -25749
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -78897,
+      -29416
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -84781,
+      -30692
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -90226,
+      -33403
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -95380,
+      -37069
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -101556,
+      -37389
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -108610,
+      -34840
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 9,
+   "verdict": {
+    "stands_pass": 9,
+    "stands": 9,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 116,
+    "resident_instances": 966,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2N220",
+   "walk_points": 55,
+   "stands": [
+    {
+     "at": [
+      -64942,
+      -54296
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -67289,
+      -60834
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -73814,
+      -62393
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -80981,
+      -63186
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -85577,
+      -67042
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 5,
+   "verdict": {
+    "stands_pass": 5,
+    "stands": 5,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 45,
+    "resident_instances": 384,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2T006",
+   "walk_points": 32,
+   "stands": [
+    {
+     "at": [
+      92737,
+      9769
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      95301,
+      4508
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      99254,
+      9951
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 3,
+   "verdict": {
+    "stands_pass": 3,
+    "stands": 3,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 47,
+    "resident_instances": 409,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2T007",
+   "walk_points": 87,
+   "stands": [
+    {
+     "at": [
+      63351,
+      7969
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      66834,
+      12426
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      72789,
+      13158
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      78744,
+      13889
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      84700,
+      14620
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      90228,
+      18825
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      94625,
+      15839
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      93806,
+      10197
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [
+    {
+     "centre": [
+      66886,
+      10196
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      66345,
+      14603
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      71293,
+      10737
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    },
+    {
+     "centre": [
+      70752,
+      15144
+     ],
+     "kind": "quarter_room",
+     "doors_open": 2,
+     "doors": 2,
+     "pass": true
+    }
+   ],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 12,
+   "verdict": {
+    "stands_pass": 8,
+    "stands": 8,
+    "walk_blocks": 0,
+    "rooms_enterable": 4,
+    "rooms": 4,
+    "streaming_incomplete": 0,
+    "resident_batches": 103,
+    "resident_instances": 1455,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2T300",
+   "walk_points": 12,
+   "stands": [
+    {
+     "at": [
+      25055,
+      -43328
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 1,
+   "verdict": {
+    "stands_pass": 1,
+    "stands": 1,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 30,
+    "resident_instances": 164,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2T338",
+   "walk_points": 63,
+   "stands": [
+    {
+     "at": [
+      71357,
+      -28800
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      77857,
+      -28730
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      82671,
+      -32832
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      88046,
+      -35543
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      92673,
+      -40109
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      98985,
+      -40502
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 6,
+   "verdict": {
+    "stands_pass": 6,
+    "stands": 6,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 66,
+    "resident_instances": 564,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S2T356",
+   "walk_points": 22,
+   "stands": [
+    {
+     "at": [
+      106455,
+      -6511
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      112440,
+      -6930
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 2,
+   "verdict": {
+    "stands_pass": 2,
+    "stands": 2,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 79,
+    "resident_instances": 827,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S3I063",
+   "walk_points": 4,
+   "stands": [
+    {
+     "at": [
+      52552,
+      102796
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 1,
+   "verdict": {
+    "stands_pass": 1,
+    "stands": 1,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 59,
+    "resident_instances": 311,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S3I080",
+   "walk_points": 31,
+   "stands": [
+    {
+     "at": [
+      12165,
+      70001
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      13207,
+      75910
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      14249,
+      81819
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 3,
+   "verdict": {
+    "stands_pass": 3,
+    "stands": 3,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 39,
+    "resident_instances": 400,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S3I098",
+   "walk_points": 22,
+   "stands": [
+    {
+     "at": [
+      -12309,
+      105837
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -13503,
+      111738
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 2,
+   "verdict": {
+    "stands_pass": 2,
+    "stands": 2,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 48,
+    "resident_instances": 294,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S3I099",
+   "walk_points": 33,
+   "stands": [
+    {
+     "at": [
+      -11680,
+      85355
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -12020,
+      91366
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -13845,
+      97169
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 3,
+   "verdict": {
+    "stands_pass": 3,
+    "stands": 3,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 35,
+    "resident_instances": 186,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S3N152",
+   "walk_points": 13,
+   "stands": [
+    {
+     "at": [
+      -49061,
+      26268
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 1,
+   "verdict": {
+    "stands_pass": 1,
+    "stands": 1,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 16,
+    "resident_instances": 262,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S3N202",
+   "walk_points": 80,
+   "stands": [
+    {
+     "at": [
+      -71312,
+      -28912
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -76875,
+      -31159
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -82251,
+      -33871
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -87627,
+      -36582
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -93003,
+      -39293
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -98753,
+      -41077
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -104504,
+      -42861
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 7,
+   "verdict": {
+    "stands_pass": 7,
+    "stands": 7,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 68,
+    "resident_instances": 561,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S3N217",
+   "walk_points": 50,
+   "stands": [
+    {
+     "at": [
+      -69692,
+      -52328
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -74484,
+      -55939
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -79576,
+      -59150
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -84669,
+      -62362
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -89160,
+      -66372
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 5,
+   "verdict": {
+    "stands_pass": 5,
+    "stands": 5,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 34,
+    "resident_instances": 298,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "S4T314",
+   "walk_points": 12,
+   "stands": [
+    {
+     "at": [
+      34727,
+      -36042
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 1,
+   "verdict": {
+    "stands_pass": 1,
+    "stands": 1,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 27,
+    "resident_instances": 164,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "WI030",
+   "walk_points": 152,
+   "stands": [
+    {
+     "at": [
+      120536,
+      69592
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      117102,
+      74784
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      113294,
+      79448
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      109485,
+      84111
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      105317,
+      88427
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      100430,
+      92048
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      95902,
+      96017
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      91734,
+      100333
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      87566,
+      104649
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      88062,
+      112773
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      84613,
+      117784
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      78647,
+      120364
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      74331,
+      116196
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 13,
+   "verdict": {
+    "stands_pass": 13,
+    "stands": 13,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 200,
+    "resident_instances": 1310,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "WI122",
+   "walk_points": 131,
+   "stands": [
+    {
+     "at": [
+      -68632,
+      109835
+     ],
+     "surface": 364.0,
+     "feet": 364.0,
+     "landed": true,
+     "ground": false,
+     "pass": false
+    },
+    {
+     "at": [
+      -74485,
+      108839
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -77574,
+      103481
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -82821,
+      100207
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -88068,
+      96932
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -92955,
+      93311
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -98202,
+      90037
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -102010,
+      85374
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -106178,
+      81058
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -109986,
+      76394
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -113435,
+      71384
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [
+    {
+     "at": [
+      -68632,
+      109835
+     ],
+     "by": "SKY05_SKY05_Tower_Base_Battered_TowerBlush"
+    }
+   ],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 11,
+   "verdict": {
+    "stands_pass": 10,
+    "stands": 11,
+    "walk_blocks": 1,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 168,
+    "resident_instances": 1234,
+    "dog_died": false,
+    "stands_not_ground": 1
+   }
+  },
+  {
+   "pass": "WN150",
+   "walk_points": 276,
+   "stands": [
+    {
+     "at": [
+      -116168,
+      67070
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -119673,
+      61098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -122673,
+      55098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -124673,
+      49098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -127173,
+      43098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -129173,
+      37098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -130673,
+      31098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -132173,
+      25098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -133673,
+      19098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -134673,
+      13098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -135673,
+      7098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -136673,
+      1098
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -137173,
+      -4902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -137173,
+      -10902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -137173,
+      -16902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -137173,
+      -22902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -136673,
+      -28902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -135673,
+      -34902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -134673,
+      -40902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -132673,
+      -46902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -130673,
+      -52902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -127673,
+      -58902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -124673,
+      -64902
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 23,
+   "verdict": {
+    "stands_pass": 23,
+    "stands": 23,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 368,
+    "resident_instances": 2703,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "WN210",
+   "walk_points": 272,
+   "stands": [
+    {
+     "at": [
+      -121445,
+      -70116
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -117597,
+      -75488
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -113401,
+      -80220
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -108955,
+      -84519
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -104258,
+      -88385
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -99562,
+      -92251
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -94866,
+      -96117
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -89920,
+      -99550
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -84724,
+      -102550
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -79528,
+      -105550
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -74332,
+      -108550
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -69135,
+      -111550
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -63939,
+      -114550
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -58243,
+      -116684
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -52797,
+      -119251
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -47351,
+      -121818
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -41655,
+      -123952
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -35708,
+      -125653
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -29762,
+      -127354
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -23816,
+      -129055
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -17620,
+      -130323
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -10924,
+      -130725
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      -3978,
+      -130694
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 23,
+   "verdict": {
+    "stands_pass": 23,
+    "stands": 23,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 348,
+    "resident_instances": 2682,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "WT270",
+   "walk_points": 272,
+   "stands": [
+    {
+     "at": [
+      0,
+      -130938
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      6723,
+      -130841
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      12919,
+      -129573
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      19616,
+      -129171
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      25812,
+      -127903
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      31508,
+      -125769
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      37204,
+      -123635
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      42900,
+      -121501
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      48596,
+      -119367
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      54542,
+      -117666
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      59739,
+      -114666
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      64935,
+      -111666
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      70381,
+      -109099
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      75827,
+      -106532
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      81023,
+      -103532
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      86219,
+      -100532
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      91416,
+      -97532
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      96362,
+      -94099
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      101058,
+      -90233
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      105754,
+      -86367
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      110200,
+      -82068
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      114646,
+      -77769
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      118592,
+      -72604
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 23,
+   "verdict": {
+    "stands_pass": 23,
+    "stands": 23,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 317,
+    "resident_instances": 2663,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  },
+  {
+   "pass": "WT330",
+   "walk_points": 280,
+   "stands": [
+    {
+     "at": [
+      120678,
+      -69673
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      124673,
+      -63598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      127673,
+      -57598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      130173,
+      -51598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      132173,
+      -45598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      133673,
+      -39598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      135173,
+      -33598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      136173,
+      -27598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      136673,
+      -21598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      137173,
+      -15598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      137173,
+      -9598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      137173,
+      -3598
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      134673,
+      2402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      135173,
+      8402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      135673,
+      14402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      135673,
+      20402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      135673,
+      26402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      134673,
+      32402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      133673,
+      38402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      132173,
+      44402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      130173,
+      50402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      127673,
+      56402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      124673,
+      62402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    },
+    {
+     "at": [
+      121173,
+      68402
+     ],
+     "surface": -14.0,
+     "feet": -14.0,
+     "landed": true,
+     "ground": true,
+     "pass": true
+    }
+   ],
+   "blocked": [],
+   "rooms": [],
+   "streaming_incomplete": 0,
+   "pawn_alive_checks": 24,
+   "verdict": {
+    "stands_pass": 24,
+    "stands": 24,
+    "walk_blocks": 0,
+    "rooms_enterable": 0,
+    "rooms": 0,
+    "streaming_incomplete": 0,
+    "resident_batches": 304,
+    "resident_instances": 2706,
+    "dog_died": false,
+    "stands_not_ground": 0
+   }
+  }
+ ],
+ "day_minutes_restored": 24.0,
+ "finished": "2026-09-29 16:08:35",
+ "seconds": 739.2,
+ "log": "HI057 {'stands_pass': 9, 'stands': 9, 'walk_blocks': 0, 'rooms_enterable': 8, 'rooms': 8, 'streaming_incomplete': 0, 'resident_batches': 165, 'resident_instances': 2302, 'dog_died': False, 'stands_not_ground': 0}\nHN181 {'stands_pass': 9, 'stands': 9, 'walk_blocks': 0, 'rooms_enterable': 8, 'rooms': 8, 'streaming_incomplete': 0, 'resident_batches': 172, 'resident_instances': 2341, 'dog_died': False, 'stands_not_ground': 0}\nHN238 {'stands_pass': 11, 'stands': 11, 'walk_blocks': 0, 'rooms_enterable': 12, 'rooms': 12, 'streaming_incomplete': 0, 'resident_batches': 235, 'resident_instances': 2936, 'dog_died': False, 'stands_not_ground': 0}\nHT308 {'stands_pass': 10, 'stands': 10, 'walk_blocks': 0, 'rooms_enterable': 8, 'rooms': 8, 'streaming_incomplete': 0, 'resident_batches': 190, 'resident_instances': 2303, 'dog_died': False, 'stands_not_ground': 0}\nHT356 {'stands_pass': 11, 'stands': 11, 'walk_blocks': 0, 'rooms_enterable': 12, 'rooms': 12, 'streaming_incomplete': 0, 'resident_batches': 239, 'resident_instances': 2920, 'dog_died': False, 'stands_not_ground': 0}\nS2I073 {'stands_pass': 3, 'stands': 3, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 35, 'resident_instances': 486, 'dog_died': False, 'stands_not_ground': 0}\nS2I088 {'stands_pass': 2, 'stands': 2, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 80, 'resident_instances': 662, 'dog_died': False, 'stands_not_ground': 0}\nS2I131 {'stands_pass': 2, 'stands': 2, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 54, 'resident_instances': 509, 'dog_died': False, 'stands_not_ground': 0}\nS2M297 {'stands_pass': 5, 'stands': 5, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 12, 'resident_instances': 208, 'dog_died': False, 'stands_not_ground': 0}\nS2N164 {'stands_pass': 1, 'stands': 1, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 55, 'resident_instances': 522, 'dog_died': False, 'stands_not_ground': 0}\nS2N170 {'stands_pass': 2, 'stands': 2, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 75, 'resident_instances': 789, 'dog_died': False, 'stands_not_ground': 0}\nS2N197 {'stands_pass': 9, 'stands': 9, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 116, 'resident_instances': 966, 'dog_died': False, 'stands_not_ground': 0}\nS2N220 {'stands_pass': 5, 'stands': 5, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 45, 'resident_instances': 384, 'dog_died': False, 'stands_not_ground': 0}\nS2T006 {'stands_pass': 3, 'stands': 3, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 47, 'resident_instances': 409, 'dog_died': False, 'stands_not_ground': 0}\nS2T007 {'stands_pass': 8, 'stands': 8, 'walk_blocks': 0, 'rooms_enterable': 4, 'rooms': 4, 'streaming_incomplete': 0, 'resident_batches': 103, 'resident_instances': 1455, 'dog_died': False, 'stands_not_ground': 0}\nS2T300 {'stands_pass': 1, 'stands': 1, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 30, 'resident_instances': 164, 'dog_died': False, 'stands_not_ground': 0}\nS2T338 {'stands_pass': 6, 'stands': 6, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 66, 'resident_instances': 564, 'dog_died': False, 'stands_not_ground': 0}\nS2T356 {'stands_pass': 2, 'stands': 2, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 79, 'resident_instances': 827, 'dog_died': False, 'stands_not_ground': 0}\nS3I063 {'stands_pass': 1, 'stands': 1, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 59, 'resident_instances': 311, 'dog_died': False, 'stands_not_ground': 0}\nS3I080 {'stands_pass': 3, 'stands': 3, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 39, 'resident_instances': 400, 'dog_died': False, 'stands_not_ground': 0}\nS3I098 {'stands_pass': 2, 'stands': 2, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 48, 'resident_instances': 294, 'dog_died': False, 'stands_not_ground': 0}\nS3I099 {'stands_pass': 3, 'stands': 3, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 35, 'resident_instances': 186, 'dog_died': False, 'stands_not_ground': 0}\nS3N152 {'stands_pass': 1, 'stands': 1, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 16, 'resident_instances': 262, 'dog_died': False, 'stands_not_ground': 0}\nS3N202 {'stands_pass': 7, 'stands': 7, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 68, 'resident_instances': 561, 'dog_died': False, 'stands_not_ground': 0}\nS3N217 {'stands_pass': 5, 'stands': 5, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 34, 'resident_instances': 298, 'dog_died': False, 'stands_not_ground': 0}\nS4T314 {'stands_pass': 1, 'stands': 1, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 27, 'resident_instances': 164, 'dog_died': False, 'stands_not_ground': 0}\nWI030 {'stands_pass': 13, 'stands': 13, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 200, 'resident_instances': 1310, 'dog_died': False, 'stands_not_ground': 0}\nWI122 {'stands_pass': 10, 'stands': 11, 'walk_blocks': 1, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 168, 'resident_instances': 1234, 'dog_died': False, 'stands_not_ground': 1}\nWN150 {'stands_pass': 23, 'stands': 23, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 368, 'resident_instances': 2703, 'dog_died': False, 'stands_not_ground': 0}\nWN210 {'stands_pass': 23, 'stands': 23, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 348, 'resident_instances': 2682, 'dog_died': False, 'stands_not_ground': 0}\nWT270 {'stands_pass': 23, 'stands': 23, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 317, 'resident_instances': 2663, 'dog_died': False, 'stands_not_ground': 0}\nWT330 {'stands_pass': 24, 'stands': 24, 'walk_blocks': 0, 'rooms_enterable': 0, 'rooms': 0, 'streaming_incomplete': 0, 'resident_batches': 304, 'resident_instances': 2706, 'dog_died': False, 'stands_not_ground': 0}\n"
+}
