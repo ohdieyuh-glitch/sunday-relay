@@ -88,6 +88,7 @@ class Ground:
         self.nv = int((2 * vmax) // CELL) + 1
         self.free = [[False] * self.nv for _ in range(self.nu)]
         self.lanes = set()
+        self.pref = None                 # optional cost multiplier per cell for spine() (the wild ring's radius)
         self.paved = [[False] * self.nv for _ in range(self.nu)]
         for i in range(self.nu):
             u = self.u(i)
@@ -199,6 +200,8 @@ class Ground:
                     step = math.hypot(di, dj) * (1.0 + 6.0 / (1.0 + self.clear[n[0]][n[1]] / CELL))
                 else:
                     continue
+                if self.pref is not None:
+                    step *= self.pref(n)
                 nd = d + step
                 if nd < dist.get(n, 1e18):
                     dist[n] = nd

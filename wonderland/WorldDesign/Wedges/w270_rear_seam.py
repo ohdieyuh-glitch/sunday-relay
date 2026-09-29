@@ -79,6 +79,9 @@ _R = math.radians(BEARING)
 DIR = (math.cos(_R), math.sin(_R))                              # (0, -1): out along the seam
 LEFT = (-math.sin(_R), math.cos(_R))                            # (+1, 0): +v is EAST, the Tartarus side
 SEAM_HALF_DEG = 25.0                                            # the wedge is 245..295
+#: the radial band load_census reads (cm). It was hard-coded to this seam's 440-1,250 m -- the same class of
+#: bug as the wedge: a borrower working beyond 1,250 m (the wild ring) would test clearance against nothing.
+CENSUS_R = (44000.0, 125000.0)
 
 U0 = 51140.0                                                    # one row past the core's edge: the first row
 ROWS = 82                                                       # at 504 m clipped the 488 m hedge
@@ -240,7 +243,7 @@ def load_census(occ, exclude=()):
                 continue
             rad = math.hypot(x, y)
             b = math.degrees(math.atan2(y, x)) % 360.0
-            if not (abs((b - BEARING + 180.0) % 360.0 - 180.0) <= half and 44000.0 <= rad <= 125000.0):
+            if not (abs((b - BEARING + 180.0) % 360.0 - 180.0) <= half and CENSUS_R[0] <= rad <= CENSUS_R[1]):
                 continue
             ex, ey, ez = float(r["ex"]), float(r["ey"]), float(r["ez"])
             if max(ex, ey) > 5000.0 and ez < 300.0:
