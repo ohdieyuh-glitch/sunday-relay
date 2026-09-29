@@ -27,6 +27,11 @@ L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "beta_walk")
 TILE_UU = 20000.0          # 200 m: a neighbourhood, and small enough that "empty" is something a player notices
+# THE PLAYABLE DISC ENDS AT THE EDGE RING. EDGE01 (window 4a, 2026-09-29) stops a walking Dog at 1,482-1,483 m and the
+# ground slab itself ends at 1,500 m on the axes, so a stand on a tile centred at 1,545 m is outside the world a player
+# can reach: it is not visited. (The 08:21 run's two W06 "unmeasured" stands were two such tiles.) Rows beyond it are
+# still counted by W01 / W02 / W05; only the stands are kept inside.
+PLAYABLE_UU = 148000.0
 # The world's own content class. Characters are instanced too (voxels), so W07 counts batches and static mesh
 # actors only, on both sides; without the class it cannot tell them apart, and says so rather than guess.
 BATCH = getattr(unreal, "WonderlandInstancedBatch", None)
@@ -376,8 +381,10 @@ def _walk():
     # that HAD actors, which quietly skipped the only question a beta player can actually be hurt by: whether
     # the frontier has a floor. A tile with nothing in it is not a defect -- every world ends somewhere -- but
     # a tile you fall through is, and the two are indistinguishable until somebody stands in one.
-    have = sorted([r for r in rows if r["mesh_actors"] > 0], key=lambda r: -r["mesh_actors"])
-    blank = sorted([r for r in rows if r["mesh_actors"] == 0], key=lambda r: r["radius_metres"])
+    have = sorted([r for r in rows if r["mesh_actors"] > 0 and r["radius_metres"] * 100.0 <= PLAYABLE_UU],
+                  key=lambda r: -r["mesh_actors"])
+    blank = sorted([r for r in rows if r["mesh_actors"] == 0 and r["radius_metres"] * 100.0 <= PLAYABLE_UU],
+                   key=lambda r: r["radius_metres"])
     third = len(have) // 3
     middle = len(have) // 2
     picks = []
