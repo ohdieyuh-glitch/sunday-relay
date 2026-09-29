@@ -127,6 +127,55 @@ describe('the settlement of a NUL-separated result', () => {
   });
 });
 
+describe('a settlement that loses a serialization race is replayed, a bounded number of times', () => {
+  const command = {
+    settlementId: `settlement:${INVOCATION}`, invocationId: INVOCATION, dispatchGeneration: 1, resultDigest: digest(RESULT), result: RESULT,
+    artifacts: [], evidence: [], taskOutcome: null, occurredAt: '2026-09-29T12:33:49.000Z',
+  };
+  /** The settlement's reads answered as PostgreSQL holds them; the run's stream upsert fails with `codes[n]` on attempt n. */
+  const racing = (codes: readonly (string | null)[]) => {
+    let attempt = -1;
+    const client = new BoundaryClient((sql) => {
+      if (sql.startsWith('SELECT settlement_id')) return { rows: [], rowCount: 0 };
+      if (sql.includes('SELECT i.*')) return { rows: [{ invocation_id: INVOCATION, dispatch_generation: 1, state: 'DISPATCHING', project_id: 'p', tenant_id: 't', run_id: 'run', task_id: 'task', worker_id: 'w', lease_generation: 1, budget_reservation_id: 'b', runtime_version: 'r', card_revision: 'c', mission_id: 'm', mission_contract_revision: 1, project_brain_revision: 0, task_state: 'ACTIVE', task_lease_generation: 1, task_worker_id: 'w', tool_id: 'shell.bash' }], rowCount: 1 };
+      if (sql.includes('julius_tool_execution_receipts WHERE')) return { rows: [{ result: JSON.parse(JSON.stringify({ ...RESULT, stdout: encodePgText(RESULT.stdout) })), result_digest: digest(RESULT) }], rowCount: 1 };
+      if (sql.includes('budget_reservations b JOIN')) return { rows: [{ state: 'RESERVED' }], rowCount: 1 };
+      if (sql.includes('RETURNING next_sequence')) return { rows: [{ sequence: '1' }], rowCount: 1 };
+      return undefined;
+    });
+    const answer = client.query.bind(client);
+    client.query = async (sql: string, params: readonly unknown[] = []) => {
+      if (sql.startsWith('BEGIN')) attempt += 1;
+      const code = codes[attempt];
+      if (sql.includes('RETURNING next_sequence') && code) throw Object.assign(new Error('could not serialize access due to concurrent update'), { code });
+      return answer(sql, params);
+    };
+    return client;
+  };
+  const begins = (client: BoundaryClient) => client.commands.filter((sql) => sql.startsWith('BEGIN')).length;
+
+  it.each(['40001', '40P01'])('a %s on the first attempt is replayed, and the replay settles', async (code) => {
+    const client = racing([code]);
+    await expect(new JuliusToolSettlementPostgresRepository(poolOf(client)).settle(command)).resolves.toMatchObject({ created: true });
+    expect(begins(client)).toBe(2);
+    expect(client.commands.filter((sql) => sql === 'ROLLBACK')).toHaveLength(1);
+    expect(client.commands.filter((sql) => sql === 'COMMIT')).toHaveLength(1);
+  });
+
+  it('three in a row surface as the database said, after exactly three attempts', async () => {
+    const client = racing(['40001', '40P01', '40001']);
+    await expect(new JuliusToolSettlementPostgresRepository(poolOf(client)).settle(command)).rejects.toMatchObject({ code: '40001' });
+    expect(begins(client)).toBe(3);
+    expect(client.commands).not.toContain('COMMIT');
+  });
+
+  it('a failure that is not a serialization failure is never replayed', async () => {
+    const client = racing(['23505']);
+    await expect(new JuliusToolSettlementPostgresRepository(poolOf(client)).settle(command)).rejects.toMatchObject({ code: '23505' });
+    expect(begins(client)).toBe(1);
+  });
+});
+
 describe('a claimed dispatch that will not settle is closed as what it was', () => {
   it('FAILED, with its recovery state, and its outbox row DEAD with the class; only from an open state and this generation', async () => {
     const client = new BoundaryClient();
