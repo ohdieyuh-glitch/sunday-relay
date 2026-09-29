@@ -107,6 +107,22 @@ export interface JuliusLifecycleDependencies {
   readonly ids?: JuliusIdFactory;
 }
 
+/**
+ * WHAT REQUESTING AN APPROVAL ACTUALLY USES — narrower than the lifecycle's
+ * dependencies, so the C.A.R.D. gate at dispatch (`prepareClaimedTask`), whose
+ * store is the runtime store and not a lifecycle store, calls the one
+ * production path instead of keeping a second copy of it. Every
+ * `JuliusLifecycleDependencies` is one of these.
+ */
+export interface JuliusApprovalRequestDependencies {
+  readonly store: Pick<JuliusApprovalStore, 'requestApproval'>
+    & Partial<Pick<JuliusApprovalStore, 'requestApprovalAndBlock'>>
+    & Pick<JuliusRunWriter, 'loadRun' | 'transition'>;
+  readonly clock: JuliusClock;
+  readonly events?: JuliusEventWriter;
+  readonly ids?: JuliusIdFactory;
+}
+
 type LifecycleEventType = Extract<JuliusOperationalEventType,
   'approval.requested' | 'approval.decided' | 'task.cancelled'
   | 'run.paused' | 'run.resumed' | 'run.cancelled'>;
@@ -117,7 +133,7 @@ const LIFECYCLE_EVENT: Readonly<Partial<Record<JuliusMissionState, LifecycleEven
 });
 
 async function emit(
-  deps: JuliusLifecycleDependencies,
+  deps: Pick<JuliusApprovalRequestDependencies, 'clock' | 'events' | 'ids'>,
   run: { runId: string; projectId: string },
   type: LifecycleEventType,
   facts: Record<string, string | number | boolean | null>,
@@ -167,7 +183,7 @@ export async function requestJuliusApproval(
     readonly safeRationale: string;
     readonly idempotencyKey: string;
   },
-  deps: JuliusLifecycleDependencies,
+  deps: JuliusApprovalRequestDependencies,
 ): Promise<JuliusApprovalRequestOutcome> {
   const now = deps.clock.now();
   const record: JuliusApprovalRecord = {
@@ -408,7 +424,7 @@ async function moveRun(
   run: JuliusRunRow,
   to: JuliusMissionState,
   detail: { reasonCode: string; safeSummary: string },
-  deps: JuliusLifecycleDependencies,
+  deps: Pick<JuliusApprovalRequestDependencies, 'store' | 'clock'>,
 ): Promise<JuliusMissionState> {
   const path = planRunStatePath(run.state, to);
   if (path.length === 0) return run.state;
