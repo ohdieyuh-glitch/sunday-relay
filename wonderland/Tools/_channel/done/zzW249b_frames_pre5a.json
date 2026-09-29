@@ -1,0 +1,130 @@
+{
+ "name": "zzW249b_frames_pre5a",
+ "started": "2026-09-29 11:57:20",
+ "status": "done",
+ "shots": [
+  {
+   "camera": "hn238_distant",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hn238_distant__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "hi057_distant",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\hi057_distant__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "ht308_distant",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\ht308_distant__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "wi030_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wi030_aerial__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "wi030_trail",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wi030_trail__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "wi122_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wi122_aerial__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "wi122_trail",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wi122_trail__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "wn150_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wn150_aerial__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "wn150_trail",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wn150_trail__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "wn210_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wn210_aerial__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "wn210_trail",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wn210_trail__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "wt270_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wt270_aerial__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "wt270_trail",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wt270_trail__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "wt330_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wt330_aerial__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "wt330_trail",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\wt330_trail__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "dubel_edge_064_eye",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\dubel_edge_064_eye__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "dubel_edge_064_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\dubel_edge_064_aerial__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "dubel_edge_076_eye",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\dubel_edge_076_eye__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "dubel_edge_076_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\dubel_edge_076_aerial__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "dubel_edge_097_eye",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\dubel_edge_097_eye__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "dubel_edge_097_aerial",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\dubel_edge_097_aerial__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "dubel_outer_090_eye",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\dubel_outer_090_eye__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "dubel_outer_070_eye",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\dubel_outer_070_eye__pre5a.png",
+   "ok": true
+  },
+  {
+   "camera": "dubel_outer_110_eye",
+   "path": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\passes\\dubel_outer_110_eye__pre5a.png",
+   "ok": true
+  }
+ ],
+ "finished": "2026-09-29 11:58:56",
+ "seconds": 96.19,
+ "log": ""
+}

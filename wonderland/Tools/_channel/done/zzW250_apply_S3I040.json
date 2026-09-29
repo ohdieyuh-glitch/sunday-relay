@@ -1,0 +1,16 @@
+{
+ "name": "zzW250_apply_S3I040",
+ "started": "2026-09-29 11:59:10",
+ "status": "done",
+ "waited_for_pie_seconds": 0.0,
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "S3I040",
+ "actors": 0,
+ "batches": 17,
+ "instances": 133,
+ "hovers": 0,
+ "finished": "2026-09-29 11:59:12",
+ "seconds": 1.62,
+ "log": "applied S3I040 0 actors 17 batches 133 instances\n"
+}
