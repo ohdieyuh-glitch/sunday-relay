@@ -26,6 +26,9 @@ L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "beta_walk")
 TILE_UU = 20000.0          # 200 m: a neighbourhood, and small enough that "empty" is something a player notices
+# The world's own content class. Characters are instanced too (voxels), so W07 counts batches and static mesh
+# actors only, on both sides; without the class it cannot tell them apart, and says so rather than guess.
+BATCH = getattr(unreal, "WonderlandInstancedBatch", None)
 
 
 def pct(values, p):
@@ -70,19 +73,60 @@ def _walk():
         emit(tid, "PASS" if ok else "FAIL", name, detail)
 
     yield (lambda: ues.get_game_world() is None, 1800)
-    L.set_background_throttle_suspended(True)
-    les.editor_request_begin_play()
-    yield (lambda: ues.get_game_world() is not None, 240)
-    yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 120)
-    yield 5.0
-    world = ues.get_game_world()
-    pawn = unreal.GameplayStatics.get_player_pawn(world, 0)
-    L.focus_game_viewport()
-    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 0")
-    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour 10.5")
-    yield 1.0
 
-    everything = unreal.GameplayStatics.get_all_actors_of_class(world, unreal.StaticMeshActor)
+    # ---- THE WORLD IS COUNTED IN THE EDITOR, WHERE IT IS AUTHORED -- NOT IN PLAY, AT THE SPAWN.
+    #
+    # THE ERROR THIS FIXES (2026-09-28). This walk used to count the world in the PLAY world the moment PIE
+    # began, with the Dog at the arrival -- which assumes everything is resident at the spawn. It never was.
+    # Every WonderlandInstancedBatch then reported its streaming bounds as a POINT at the origin (its instances
+    # live on an editor-only component until BeginPlay), so World Partition filed all 3,585 spatially loaded
+    # batches in the one cell at the origin: resident at the spawn, and gone 700 m out. The count at the spawn
+    # saw the whole world; every stand past ~700 m then stood on the V2 lawn (-14) where the editor has
+    # paving, halls and towers; and W03/W04 passed, because a lawn is a floor. zzV4 (11:56) is that run:
+    # [5,10] at 728 m authored 43 m of structure and traced -14 in play.
+    #
+    # Once the batches stream by their true bounds, the same count at the spawn would see only what is within
+    # the loading range of the arrival, and call the outer rings EMPTY -- a false fail instead of a false pass.
+    # Either way the count answered "what is loaded where the Dog started", which is not the question. What is
+    # AUTHORED is counted here, in the editor world; whether it is THERE IN PLAY is asked at each stand (W07).
+    ed_world = ues.get_editor_world()
+    everything = unreal.GameplayStatics.get_all_actors_of_class(ed_world, unreal.StaticMeshActor)
+    RESULT["census_world"] = "editor"
+
+    # AND THE COUNT IS ONLY AS GOOD AS WHAT THE EDITOR HAS LOADED. An actor whose region is not loaded in the
+    # editor is not in this count, and its tile would read EMPTY; so the World Partition descriptors are
+    # checked against the loaded actors, and a shortfall fails W08 rather than passing as open ground.
+    loaded_names = set()
+    for a in unreal.GameplayStatics.get_all_actors_of_class(ed_world, unreal.Actor):
+        try:
+            loaded_names.add(str(a.get_name()))
+        except Exception:                         # noqa: BLE001
+            pass
+    descs = None
+    try:
+        got = unreal.WorldPartitionBlueprintLibrary.get_actor_descs()
+        if isinstance(got, tuple):
+            got = next((g for g in got if hasattr(g, "__len__") and not isinstance(g, str)), None)
+        if got is not None and hasattr(got, "__len__") and not isinstance(got, (str, bool)):
+            descs = got
+    except Exception as exc:                      # noqa: BLE001
+        RESULT["descriptor_error"] = repr(exc)
+    unloaded = []
+    if descs is not None:
+        for d in descs:
+            try:
+                if str(d.get_editor_property("name")) not in loaded_names:
+                    unloaded.append(str(d.get_editor_property("label")))
+            except Exception:                     # noqa: BLE001
+                continue
+    RESULT["editor_descriptors"] = None if descs is None else len(descs)
+    RESULT["editor_unloaded"] = len(unloaded)
+    record("W08", "the authored world was all loaded in the editor when it was counted",
+           descs is not None and not unloaded,
+           descriptors=RESULT["editor_descriptors"], unloaded=len(unloaded), examples=unloaded[:12],
+           note="an actor whose editor region is not loaded is missing from the count, and its tile reads "
+                "EMPTY; load the regions (zc_wp_regions) and walk again" if descs is not None else
+                "the descriptor API gave nothing, so completeness could not be checked")
 
     # ---- AND THE INSTANCES, WHICH ARE MOST OF THE WORLD.
     #
@@ -98,8 +142,13 @@ def _walk():
     # and takes seconds, which is the right trade for an audit that runs once and decides whether the world is
     # finished.
     inst_pos = []
+    # THE WORLD'S OWN CONTENT, for W07: batch instances and static mesh actors. Not characters -- the voxel Dog
+    # and its companions are instanced too, travel with the Dog, and put 5,202 instances into EVERY tile it
+    # stands in; zzW11 counted them as world, and a stand with 152 of its 304 authored pieces passed as 5,354.
+    world_pos = [(float(a.get_actor_location().x), float(a.get_actor_location().y)) for a in everything]
     comps = 0
-    for a in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.Actor):
+    for a in unreal.GameplayStatics.get_all_actors_of_class(ed_world, unreal.Actor):
+        is_world = BATCH is not None and isinstance(a, BATCH)
         for comp in a.get_components_by_class(unreal.InstancedStaticMeshComponent):
             comps += 1
             try:
@@ -113,14 +162,65 @@ def _walk():
                     break
                 v = t.translation
                 inst_pos.append((float(v.x), float(v.y), float(v.z)))
+                if is_world:
+                    world_pos.append((float(v.x), float(v.y)))
     RESULT["instanced_components"] = comps
     RESULT["instances_total"] = len(inst_pos)
+    RESULT["world_content_total"] = len(world_pos)
 
     if not everything and not inst_pos:
         RESULT["status"] = "FAIL: the level has no static meshes at all"
-        les.editor_request_end_play()
-        yield (lambda: ues.get_game_world() is None, 300)
         return
+
+    L.set_background_throttle_suspended(True)
+    les.editor_request_begin_play()
+    yield (lambda: ues.get_game_world() is not None, 240)
+    yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 120)
+    yield 5.0
+    world = ues.get_game_world()
+    pawn = unreal.GameplayStatics.get_player_pawn(world, 0)
+    L.focus_game_viewport()
+    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 0")
+    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour 10.5")
+    yield 1.0
+
+    def resident_in_tile(cx, cy):
+        """What of the WORLD'S OWN CONTENT is really in the PLAY world inside a stand's tile: static mesh
+        actors and batch instances -- the population world_pos counted in the editor, over the same bounds.
+        Components are skipped by their bounds first, so only the ones overlapping the tile are read."""
+        if BATCH is None:
+            return None
+        lo_x, hi_x = cx - TILE_UU * 0.5, cx + TILE_UU * 0.5
+        lo_y, hi_y = cy - TILE_UU * 0.5, cy + TILE_UU * 0.5
+        n = 0
+        for a in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.StaticMeshActor):
+            try:
+                v = a.get_actor_location()
+            except Exception:                     # noqa: BLE001
+                continue
+            if lo_x <= v.x < hi_x and lo_y <= v.y < hi_y:
+                n += 1
+        for a in unreal.GameplayStatics.get_all_actors_of_class(world, BATCH):
+            try:
+                found = a.get_components_by_class(unreal.InstancedStaticMeshComponent)
+            except Exception:                     # noqa: BLE001
+                continue
+            for comp in found:
+                try:
+                    o, e = unreal.SystemLibrary.get_component_bounds(comp)[:2]
+                    if o.x + e.x < lo_x or o.x - e.x >= hi_x or o.y + e.y < lo_y or o.y - e.y >= hi_y:
+                        continue
+                    count = int(comp.get_instance_count())
+                except Exception:                 # noqa: BLE001
+                    continue
+                for i in range(count):
+                    try:
+                        v = comp.get_instance_transform(i, world_space=True).translation
+                    except Exception:             # noqa: BLE001
+                        break
+                    if lo_x <= v.x < hi_x and lo_y <= v.y < hi_y:
+                        n += 1
+        return n
 
     # ---- HOW BIG IS THE WORLD PEOPLE WALK IN? Ask what is placed for its radius, not for its extremes.
     pos = []
@@ -175,6 +275,11 @@ def _walk():
         cell = buckets.setdefault(key, {"n": 0, "z": []})
         cell["n"] += 1
         cell["z"].append(z)
+    # the world's own content per tile, over the whole tile (the play count at a stand sees the whole tile too)
+    world_buckets = {}
+    for x, y in world_pos:
+        key = (int((x + core) // TILE_UU), int((y + core) // TILE_UU))
+        world_buckets[key] = world_buckets.get(key, 0) + 1
 
     rows = []
     RESULT["samples"] = rows
@@ -191,7 +296,7 @@ def _walk():
             cell = buckets.get((ix, iy))
             n = cell["n"] if cell else 0
             row = {"tile": [ix, iy], "centre": [round(cx), round(cy)], "mesh_actors": n,
-                   "radius_metres": round(radius / 100.0)}
+                   "authored_world": world_buckets.get((ix, iy), 0), "radius_metres": round(radius / 100.0)}
             if cell:
                 row["ground_z"] = round(sum(cell["z"]) / len(cell["z"]))
             if n == 0:
@@ -340,6 +445,32 @@ def _walk():
                 mc.disable_movement()
             except Exception:                     # noqa: BLE001
                 pass
+        # THE STAND'S CELLS ARE STREAMED IN BEFORE ANYTHING IS READ. The trace below waits for "a floor", and
+        # the always-loaded V2 lawn is a floor everywhere: it arrives at once, so on its own the wait proved
+        # nothing about the plaza or hall that belongs over it. A frame first, so the streaming source has
+        # moved to the Dog; then a blocking flush; then a moment for the flushed cells to register.
+        yield 0.3
+        unreal.SystemLibrary.execute_console_command(world, "FlushLevelStreaming")
+        yield 0.7
+        # WHAT IS AUTHORED HERE, IS IT HERE IN PLAY? Counted while the Dog is held, over the same tile the
+        # editor census counted -- and counted AGAIN a second later until two readings agree. The flush alone
+        # is not a promise: zzW11 read [8,4] at 152 of 304 and [7,1] at 208 of 303 after a long jump, and
+        # zzW13, the same tiles with a longer settle, found every one of those actors there. A reading taken
+        # while cells are still arriving is a reading of the arrival, not of the world.
+        try:
+            prev_n, n_now = None, None
+            count_began = time.time()
+            while True:
+                n_now = resident_in_tile(r["centre"][0], r["centre"][1])
+                if n_now is None or (prev_n is not None and n_now == prev_n) or time.time() - count_began > 8.0:
+                    break
+                prev_n = n_now
+                yield 1.0
+            r["resident_in_play"] = n_now
+            r["resident_settled"] = n_now is not None and n_now == prev_n
+        except Exception as exc:                  # noqa: BLE001
+            r["resident_in_play"] = None
+            r["resident_error"] = repr(exc)
         # WALL CLOCK, NOT WORLD TIME. The first version timed this wait with GameplayStatics.get_time_seconds,
         # which does not advance while the world is paused -- so the escape hatch could never fire, the loop
         # span until the channel's own thirty-minute cap killed the job, and the proof reported nothing at all
@@ -444,10 +575,10 @@ def _walk():
         live = living()
         if live is None:
             visits.append({"tile": r["tile"], "radius_metres": r["radius_metres"],
-                           "mesh_actors": r["mesh_actors"], "landed_z": None,
+                           "mesh_actors": r["mesh_actors"], "authored_world": r["authored_world"], "landed_z": None,
                            "expected_near_z": round(gz), "fell_through": None,
                            "unmeasured": "the Dog did not survive the stand",
-                           "cell_streamed_in": r.get("cell_streamed_in"),
+                           "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"),
                            "was_empty": r["mesh_actors"] == 0})
             continue
         pawn = live
@@ -461,20 +592,20 @@ def _walk():
         surface = round(surface_z) if surface_z is not None else None
         if not landed and not fell:
             visits.append({"tile": r["tile"], "radius_metres": r["radius_metres"],
-                           "mesh_actors": r["mesh_actors"], "landed_z": None,
+                           "mesh_actors": r["mesh_actors"], "authored_world": r["authored_world"], "landed_z": None,
                            "expected_near_z": round(gz), "surface_z": surface, "fell_through": None,
                            "unmeasured": "the Dog had not landed 10 s after release",
                            "airborne_z": round(float(at.z)), "movement_mode": mode,
-                           "cell_streamed_in": r.get("cell_streamed_in"),
+                           "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"),
                            "was_empty": r["mesh_actors"] == 0})
             H.capture_viewport_jpeg(os.path.join(ROOT, "%02d_r%04dm_airborne.jpg" % (n + 1, r["radius_metres"])),
                                     1600, 90)
             continue
         visits.append({"tile": r["tile"], "radius_metres": r["radius_metres"],
-                       "mesh_actors": r["mesh_actors"], "landed_z": round(float(at.z)),
+                       "mesh_actors": r["mesh_actors"], "authored_world": r["authored_world"], "landed_z": round(float(at.z)),
                        "expected_near_z": round(gz), "surface_z": surface, "fell_through": bool(fell),
                        "landed": landed, "settle_s": settle_s,
-                       "cell_streamed_in": r.get("cell_streamed_in"),
+                       "cell_streamed_in": r.get("cell_streamed_in"), "resident_in_play": r.get("resident_in_play"), "resident_settled": r.get("resident_settled"),
                        "was_empty": r["mesh_actors"] == 0})
         H.capture_viewport_jpeg(os.path.join(ROOT, "%02d_r%04dm.jpg" % (n + 1, r["radius_metres"])), 1600, 90)
 
@@ -497,6 +628,20 @@ def _walk():
            RESULT["empty_tiles_with_no_floor"] == 0,
            empty_visited=len(empties), no_floor=RESULT["empty_tiles_with_no_floor"],
            where=[[v["tile"], v["radius_metres"]] for v in empties if v["fell_through"]])
+    # W07: A FLOOR IS NOT THE WORLD. W03/W04 ask whether the Dog stands on something, and the V2 lawn is
+    # something everywhere -- which is how a walk with every far stand on bare lawn passed both. This asks
+    # the other half: of what the editor has in the stand's tile, how much is in play there. 90% leaves room
+    # for editor-only helpers; a streaming fault shows as a stand holding a few per cent of its authored count.
+    judged = [v for v in visits if v["authored_world"] >= 15]
+    short = [v for v in judged
+             if v.get("resident_in_play") is None or not v.get("resident_settled")
+             or v["resident_in_play"] < 0.9 * v["authored_world"]]
+    RESULT["stands_short_in_play"] = len(short)
+    record("W07", "what is authored where the Dog stands is there in play", bool(judged) and not short,
+           judged=len(judged), short=len(short),
+           where=[[v["tile"], v["radius_metres"], v["authored_world"], v.get("resident_in_play")] for v in short],
+           note="tile, radius m, authored in the editor, resident in play; a count that never settled "
+                "(two readings a second apart that disagree for 8 s) is short, not passed")
 
     RESULT["status"] = "walked"
     les.editor_request_end_play()

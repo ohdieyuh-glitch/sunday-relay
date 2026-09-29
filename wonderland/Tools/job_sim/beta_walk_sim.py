@@ -8,14 +8,26 @@ deserves it. On 2026-09-28 it showed the committed walk passing a tile with no f
 fail), reading a plaza stand in the basement, reading slow-frame stands in mid-air, and leaking
 wl.Sky.DayMinutes 0 on every exit path -- and the fixed walk catching all four.
 
+THE EDITOR WORLD AND THE PLAY WORLD ARE DIFFERENT WORLDS here, as they are in the engine. The editor holds
+everything authored; play holds what World Partition has streamed in around the Dog. Later on 2026-09-28 the
+live walk was found to have counted the world IN PLAY AT THE SPAWN, while every instanced batch was filed in
+one cell at the origin: resident at the spawn, gone 700 m out, and every far stand on bare lawn -- a pass.
+`originpoint` is that world; `normal` is the world once batches stream by their true bounds, where the same
+count at the spawn would call the outer rings empty.
+
 Usage: python beta_walk_sim.py <job.py> <scenario>      (e.g. ../editor_jobs/zc_beta_walk.py normal)
 Scenarios:
-  normal   - every tile has a floor; frames at real speed
-  slow     - game time runs at 0.4x wall clock (slow frames), so a fixed 2 s wait reads a Dog in mid-air
-  stuck    - set_movement_mode throws, so the Dog is never released and hangs where it was held
-  boom     - get_player_pawn starts throwing part-way (the job's own guards swallow it: "did not survive")
-  crash    - a capture throws on the 4th stand and the exception escapes the job
-  hang     - PIE never ends, so the channel throws TimeoutError into the job's last wait
+  normal      - content streams by distance from the Dog (the fixed engine); every tile has a floor
+  originpoint - the 2026-09-28 fault: every BATCH is resident only near the origin cell; static mesh
+                actors still stream by their own bounds
+  unloaded    - three actors are in the World Partition descriptors but not loaded in the editor
+  lagcells    - FlushLevelStreaming returns before the cells arrive (they land 1.5 s after the teleport): a
+                count taken at a fixed moment reads the arrival; one taken when two readings agree reads the world
+  slow        - game time runs at 0.4x wall clock (slow frames), so a fixed 2 s wait reads a Dog in mid-air
+  stuck       - set_movement_mode throws, so the Dog is never released and hangs where it was held
+  boom        - get_player_pawn starts throwing part-way (the job's own guards swallow it: "did not survive")
+  crash       - a capture throws on the 4th stand and the exception escapes the job
+  hang        - PIE never ends, so the channel throws TimeoutError into the job's last wait
 The world always contains a plaza whose content mean sits far below its floor (a basement at -861 under a
 plaza at +12), a frontier quadrant beyond 1 km with no floor at all, and a frontier band on 99 m mountains
 whose empty neighbours borrow a tile height far above their real floor (the zzV4 false alarm at [13,11]). W02/W05 fail here by construction
@@ -30,6 +42,7 @@ import types
 
 JOB, SCEN = sys.argv[1], sys.argv[2]
 CAPSULE = 89.2
+RANGE = 60000.0          # play: content within 600 m of the Dog is resident (512 m range plus a cell's slack)
 
 
 class Clock:
@@ -81,6 +94,12 @@ class Streaming:
     @classmethod
     def moved(cls):
         cls.arrive_at = CLOCK.t + 1.5          # a cell takes 1.5 s of wall time to arrive after a teleport
+
+    @classmethod
+    def flush(cls):
+        if SCEN == "lagcells":
+            return                                     # the live zzW11 case: the flush did not finish the job
+        cls.arrive_at = min(cls.arrive_at, CLOCK.t)   # FlushLevelStreaming blocks until it has arrived
 
 
 class Movement:
@@ -174,9 +193,30 @@ def line_trace_single(world, a, b, *rest):
     return Hit(max(hits)) if hits else None
 
 
+class Tf:
+    def __init__(self, v):
+        self.translation = v
+
+
+class ISMComp:
+    """An instanced component: in the editor this stands for a batch's EditorPreview, in play for the runtime
+    Instances component the same batch fills in BeginPlay -- same instances, and only there if resident."""
+    def __init__(self, pts):
+        self.pts = pts
+        xs, ys, zs = [p.x for p in pts], [p.y for p in pts], [p.z for p in pts]
+        self.origin = Vector((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, (min(zs) + max(zs)) / 2)
+        self.extent = Vector((max(xs) - min(xs)) / 2 + 50, (max(ys) - min(ys)) / 2 + 50, (max(zs) - min(zs)) / 2 + 50)
+
+    def get_instance_count(self):
+        return len(self.pts)
+
+    def get_instance_transform(self, i, world_space=True):
+        return Tf(self.pts[i])
+
+
 class Actor:
-    def __init__(self, x, y, z, label):
-        self._l, self._label = Vector(x, y, z), label
+    def __init__(self, x, y, z, label, kind="SMA", comp=None):
+        self._l, self._label, self.kind, self.comp = Vector(x, y, z), label, kind, comp
 
     def get_actor_location(self):
         return Vector(self._l.x, self._l.y, self._l.z)
@@ -184,8 +224,46 @@ class Actor:
     def get_actor_label(self):
         return self._label
 
+    def get_name(self):
+        return "N_" + self._label
+
     def get_components_by_class(self, cls):
-        return []
+        return [self.comp] if (cls == "ISM" and self.comp is not None) else []
+
+
+class BatchActor(Actor):
+    """unreal.WonderlandInstancedBatch: the world's own instanced content."""
+
+
+class FollowComp(ISMComp):
+    """THE VOXEL DOG AND ITS COMPANIONS are instanced too, and in play they are wherever the Dog is: 5,000
+    instances in every tile it stands in. zzW11 counted them as world (5,202 per stand, live)."""
+    def __init__(self, n):
+        self.n = n
+
+    def _pts(self):
+        return [Vector(PAWN.loc.x + (k % 50) * 4.0 - 100.0, PAWN.loc.y + (k // 50) * 4.0 - 200.0, PAWN.loc.z)
+                for k in range(self.n)]
+
+    def get_instance_count(self):
+        return self.n
+
+    def get_instance_transform(self, i, world_space=True):
+        p = PAWN.loc
+        return Tf(Vector(p.x + (i % 50) * 4.0 - 100.0, p.y + (i // 50) * 4.0 - 200.0, p.z))
+
+    @property
+    def origin(self):
+        return Vector(PAWN.loc.x, PAWN.loc.y, PAWN.loc.z)
+
+    @property
+    def extent(self):
+        return Vector(300.0, 300.0, 200.0)
+
+
+class CharacterActor(Actor):
+    def get_actor_location(self):
+        return Vector(PAWN.loc.x, PAWN.loc.y, PAWN.loc.z) if STATE["pie"] else Vector(self._l.x, self._l.y, self._l.z)
 
 
 def make_actors():
@@ -204,9 +282,22 @@ def make_actors():
             # at [13,11], where a correct landing was flagged as a fall.
             z = 9900.0 if (x < 0 and y < 0 and r > 100000.0) else 0.0
             out.append(Actor(x, y, z, "A_%d_%d" % (i, j)))
+    # THE BATCHES, which are most of the world as they are in Wonderland: one per 100 m block, 30 instances in
+    # a 60 m square, following the same disc, quadrant and mountains as the actors
+    for i in range(-12, 13):
+        for j in range(-12, 13):
+            x, y = i * 10000.0 + 2500.0, j * 10000.0 + 2500.0
+            r = math.hypot(x, y)
+            if r > 115000.0 or (x > 0 and y > 0 and r > NOFLOOR_R):
+                continue
+            z = 9900.0 if (x < 0 and y < 0 and r > 100000.0) else 0.0
+            pts = [Vector(x - 3000.0 + (k % 6) * 1200.0, y - 3000.0 + (k // 6) * 1500.0, z) for k in range(30)]
+            out.append(BatchActor(x, y, z, "B_%d_%d" % (i, j), "BATCH", ISMComp(pts)))
     # the plaza's deep content: a basement, tanks and pipes that pull the tile mean far below the floor
     for k in range(40):
         out.append(Actor(BASEMENT_XY[0] - 2000.0 + k * 100, BASEMENT_XY[1], -1500.0, "Basement_%d" % k))
+    # the characters: in play they follow the Dog; in the editor the level-placed Dog stands at the spawn
+    out.append(CharacterActor(0.0, 0.0, 100.0, "RelayDog_Voxels", "CHAR", FollowComp(5000)))
     return out
 
 
@@ -215,8 +306,24 @@ CVARS = {"wl.Sky.DayMinutes": 24.0}
 STATE = {"pie": False, "stands": 0}
 
 
+def resident(a):
+    """Is this actor in the PLAY world right now?"""
+    if a.kind == "CHAR":
+        return True                            # the player's own characters are always there
+    if CLOCK.t < Streaming.arrive_at:
+        return False                           # the Dog's new cells have not arrived yet
+    p = PAWN.loc
+    if a.kind == "BATCH" and SCEN == "originpoint":
+        # THE FAULT: the batch reports its streaming bounds as a point at the origin, so it lives in the one
+        # origin cell and is resident only while the Dog is within range of that cell
+        return math.hypot(p.x, p.y) <= RANGE
+    return math.hypot(a._l.x - p.x, a._l.y - p.y) <= RANGE
+
+
 def execute_console_command(world, cmd):
     parts = cmd.split()
+    if parts and parts[0] == "FlushLevelStreaming":
+        Streaming.flush()
     if parts and parts[0] in CVARS and len(parts) > 1:
         CVARS[parts[0]] = float(parts[1])
 
@@ -238,7 +345,31 @@ class GS:
 
     @staticmethod
     def get_all_actors_of_class(world, cls):
-        return list(ACTORS) if cls == "StaticMeshActor" else list(ACTORS)
+        pool = ACTORS if world == "EDITOR_WORLD" else [a for a in ACTORS if resident(a)]
+        if cls == "StaticMeshActor":
+            return [a for a in pool if a.kind == "SMA"]
+        if cls is BatchActor:
+            return [a for a in pool if isinstance(a, BatchActor)]
+        return list(pool)
+
+
+class Desc:
+    def __init__(self, name, label):
+        self.p = {"name": name, "label": label}
+
+    def get_editor_property(self, k):
+        return self.p[k]
+
+
+def get_actor_descs():
+    got = [Desc(a.get_name(), a.get_actor_label()) for a in ACTORS]
+    if SCEN == "unloaded":
+        got += [Desc("N_Far_%d" % k, "Far_%d" % k) for k in range(3)]
+    return got
+
+
+def get_component_bounds(comp):
+    return (comp.origin, comp.extent, math.hypot(comp.extent.x, comp.extent.y))
 
 
 class LES:
@@ -268,12 +399,15 @@ class UES:
 unreal = types.SimpleNamespace(
     Vector=Vector, MovementMode=MOVE,
     StaticMeshActor="StaticMeshActor", Actor="Actor", InstancedStaticMeshComponent="ISM",
+    WonderlandInstancedBatch=BatchActor,
     LevelEditorSubsystem=LES, UnrealEditorSubsystem=UES,
     get_editor_subsystem=lambda cls: cls(),
     GameplayStatics=GS,
     SystemLibrary=types.SimpleNamespace(execute_console_command=execute_console_command,
                                         get_console_variable_float_value=get_console_variable_float_value,
-                                        line_trace_single=line_trace_single),
+                                        line_trace_single=line_trace_single,
+                                        get_component_bounds=get_component_bounds),
+    WorldPartitionBlueprintLibrary=types.SimpleNamespace(get_actor_descs=get_actor_descs),
     TraceTypeQuery=types.SimpleNamespace(TRACE_TYPE_QUERY1=1, TRACE_TYPE_QUERY2=2),
     DrawDebugTrace=types.SimpleNamespace(NONE=0),
     LinearColor=types.SimpleNamespace(RED=0, GREEN=1),
@@ -326,9 +460,12 @@ summary = {
     "scenario": SCEN, "job": os.path.basename(JOB), "status": RESULT.get("status"), "error": error,
     "day_minutes_found": RESULT.get("day_minutes_found"), "day_minutes_restored": RESULT.get("day_minutes_restored"),
     "cvar_after": CVARS["wl.Sky.DayMinutes"],
+    "census_world": RESULT.get("census_world", "play (at the spawn)"),
+    "placed_total": RESULT.get("placed_total"), "tiles_empty": RESULT.get("tiles_empty"),
+    "editor_unloaded": RESULT.get("editor_unloaded"),
     "tests": {t["id"]: t["pass"] for t in RESULT.get("tests", [])},
-    "stands": [{k: v.get(k) for k in ("tile", "radius_metres", "expected_near_z", "surface_z", "landed_z",
-                                       "fell_through", "landed", "unmeasured", "airborne_z")}
+    "stands": [{k: v.get(k) for k in ("tile", "radius_metres", "mesh_actors", "authored_world", "resident_in_play", "resident_settled", "surface_z",
+                                       "landed_z", "fell_through", "landed", "unmeasured", "airborne_z")}
                for v in RESULT.get("visits", [])],
 }
 print(json.dumps(summary, indent=1))

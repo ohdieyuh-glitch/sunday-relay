@@ -1,0 +1,63 @@
+{
+ "name": "zzW16_far_stand_frames",
+ "started": "2026-09-28 22:35:30",
+ "status": "captured",
+ "rows": [
+  {
+   "stand": "s06_r1419m_t7_14",
+   "at": [
+    1930.0,
+    141930.0
+   ],
+   "surface_z": -14,
+   "landed": true,
+   "landed_z": 75,
+   "batches_within_150m": 41,
+   "batches_resident_total": 1554,
+   "frame": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\far_stands_0928\\s06_r1419m_t7_14_after.jpg"
+  },
+  {
+   "stand": "s07_r1233m_t6_13",
+   "at": [
+    -18070.0,
+    121930.0
+   ],
+   "surface_z": -14,
+   "landed": true,
+   "landed_z": 75,
+   "batches_within_150m": 21,
+   "batches_resident_total": 493,
+   "frame": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\far_stands_0928\\s07_r1233m_t6_13_after.jpg"
+  },
+  {
+   "stand": "s08_r1239m_t8_13",
+   "at": [
+    21930.0,
+    121930.0
+   ],
+   "surface_z": -14,
+   "landed": true,
+   "landed_z": 75,
+   "batches_within_150m": 16,
+   "batches_resident_total": 505,
+   "frame": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\far_stands_0928\\s08_r1239m_t8_13_after.jpg"
+  },
+  {
+   "stand": "s09_r1140m_t4_2",
+   "at": [
+    -58070.0,
+    -98070.0
+   ],
+   "surface_z": -14,
+   "landed": true,
+   "landed_z": 75,
+   "batches_within_150m": 18,
+   "batches_resident_total": 381,
+   "frame": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\far_stands_0928\\s09_r1140m_t4_2_after.jpg"
+  }
+ ],
+ "day_minutes_restored": 24.0,
+ "finished": "2026-09-28 22:36:00",
+ "seconds": 30.21,
+ "log": "s06_r1419m_t7_14 {'stand': 's06_r1419m_t7_14', 'at': [1930.0, 141930.0], 'surface_z': -14, 'landed': True, 'landed_z': 75, 'batches_within_150m': 41, 'batches_resident_total': 1554, 'frame': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\far_stands_0928\\\\s06_r1419m_t7_14_after.jpg'}\ns07_r1233m_t6_13 {'stand': 's07_r1233m_t6_13', 'at': [-18070.0, 121930.0], 'surface_z': -14, 'landed': True, 'landed_z': 75, 'batches_within_150m': 21, 'batches_resident_total': 493, 'frame': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\far_stands_0928\\\\s07_r1233m_t6_13_after.jpg'}\ns08_r1239m_t8_13 {'stand': 's08_r1239m_t8_13', 'at': [21930.0, 121930.0], 'surface_z': -14, 'landed': True, 'landed_z': 75, 'batches_within_150m': 16, 'batches_resident_total': 505, 'frame': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\far_stands_0928\\\\s08_r1239m_t8_13_after.jpg'}\ns09_r1140m_t4_2 {'stand': 's09_r1140m_t4_2', 'at': [-58070.0, -98070.0], 'surface_z': -14, 'landed': True, 'landed_z': 75, 'batches_within_150m': 18, 'batches_resident_total': 381, 'frame': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\far_stands_0928\\\\s09_r1140m_t4_2_after.jpg'}\n"
+}

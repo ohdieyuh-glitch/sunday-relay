@@ -1,0 +1,46 @@
+{
+ "name": "zzW10b_batch_streaming",
+ "started": "2026-09-28 22:22:52",
+ "status": "measured",
+ "rows": [
+  {
+   "point": "core_south_500m",
+   "batches_loaded_total": 2340,
+   "batches_with_instances_within_150m": 433,
+   "floor_z_at_point": -14.0
+  },
+  {
+   "point": "TQ03_band_900m_330deg",
+   "batches_loaded_total": 1550,
+   "batches_with_instances_within_150m": 181,
+   "floor_z_at_point": -14.0
+  },
+  {
+   "point": "IC03_band_900m_90deg",
+   "batches_loaded_total": 1360,
+   "batches_with_instances_within_150m": 190,
+   "floor_z_at_point": -14.0
+  },
+  {
+   "point": "NC03_band_900m_210deg",
+   "batches_loaded_total": 807,
+   "batches_with_instances_within_150m": 178,
+   "floor_z_at_point": -14.0
+  },
+  {
+   "point": "W270_clock_800m",
+   "batches_loaded_total": 743,
+   "batches_with_instances_within_150m": 186,
+   "floor_z_at_point": 12.0
+  },
+  {
+   "point": "core_again_100m",
+   "batches_loaded_total": 883,
+   "batches_with_instances_within_150m": 341,
+   "floor_z_at_point": -2.6
+  }
+ ],
+ "finished": "2026-09-28 22:23:24",
+ "seconds": 32.51,
+ "log": "core_south_500m {'point': 'core_south_500m', 'batches_loaded_total': 2340, 'batches_with_instances_within_150m': 433, 'floor_z_at_point': -14.0}\nTQ03_band_900m_330deg {'point': 'TQ03_band_900m_330deg', 'batches_loaded_total': 1550, 'batches_with_instances_within_150m': 181, 'floor_z_at_point': -14.0}\nIC03_band_900m_90deg {'point': 'IC03_band_900m_90deg', 'batches_loaded_total': 1360, 'batches_with_instances_within_150m': 190, 'floor_z_at_point': -14.0}\nNC03_band_900m_210deg {'point': 'NC03_band_900m_210deg', 'batches_loaded_total': 807, 'batches_with_instances_within_150m': 178, 'floor_z_at_point': -14.0}\nW270_clock_800m {'point': 'W270_clock_800m', 'batches_loaded_total': 743, 'batches_with_instances_within_150m': 186, 'floor_z_at_point': 12.0}\ncore_again_100m {'point': 'core_again_100m', 'batches_loaded_total': 883, 'batches_with_instances_within_150m': 341, 'floor_z_at_point': -2.6}\n"
+}

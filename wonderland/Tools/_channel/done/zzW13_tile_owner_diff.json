@@ -1,0 +1,138 @@
+{
+ "name": "zzW13_tile_owner_diff",
+ "started": "2026-09-28 22:28:48",
+ "status": "compared",
+ "tiles": [
+  {
+   "tile": [
+    8,
+    4
+   ],
+   "editor_total": 304,
+   "play_total": 5506,
+   "play_only_total": 5202,
+   "missing": [],
+   "play_only": [
+    {
+     "owner": "WL_RelayDog_Costume",
+     "class": "WonderlandCompanionEmbodiment",
+     "play": 2835
+    },
+    {
+     "owner": "WL_Companion_ClaudeCodeFable5",
+     "class": "WonderlandCompanionEmbodiment",
+     "play": 1406
+    },
+    {
+     "owner": "WL_Companion_GPT6Astra",
+     "class": "WonderlandCompanionEmbodiment",
+     "play": 878
+    },
+    {
+     "owner": "Scale_CanonicalDog",
+     "class": "BP_RelayDog_C",
+     "play": 83
+    }
+   ]
+  },
+  {
+   "tile": [
+    7,
+    1
+   ],
+   "editor_total": 305,
+   "play_total": 5507,
+   "play_only_total": 5202,
+   "missing": [],
+   "play_only": [
+    {
+     "owner": "WL_RelayDog_Costume",
+     "class": "WonderlandCompanionEmbodiment",
+     "play": 2835
+    },
+    {
+     "owner": "WL_Companion_ClaudeCodeFable5",
+     "class": "WonderlandCompanionEmbodiment",
+     "play": 1406
+    },
+    {
+     "owner": "WL_Companion_GPT6Astra",
+     "class": "WonderlandCompanionEmbodiment",
+     "play": 878
+    },
+    {
+     "owner": "Scale_CanonicalDog",
+     "class": "BP_RelayDog_C",
+     "play": 83
+    }
+   ]
+  },
+  {
+   "tile": [
+    6,
+    12
+   ],
+   "editor_total": 327,
+   "play_total": 5529,
+   "play_only_total": 5202,
+   "missing": [],
+   "play_only": [
+    {
+     "owner": "WL_RelayDog_Costume",
+     "class": "WonderlandCompanionEmbodiment",
+     "play": 2835
+    },
+    {
+     "owner": "WL_Companion_ClaudeCodeFable5",
+     "class": "WonderlandCompanionEmbodiment",
+     "play": 1406
+    },
+    {
+     "owner": "WL_Companion_GPT6Astra",
+     "class": "WonderlandCompanionEmbodiment",
+     "play": 878
+    },
+    {
+     "owner": "Scale_CanonicalDog",
+     "class": "BP_RelayDog_C",
+     "play": 83
+    }
+   ]
+  },
+  {
+   "tile": [
+    6,
+    1
+   ],
+   "editor_total": 155,
+   "play_total": 5357,
+   "play_only_total": 5202,
+   "missing": [],
+   "play_only": [
+    {
+     "owner": "WL_RelayDog_Costume",
+     "class": "WonderlandCompanionEmbodiment",
+     "play": 2835
+    },
+    {
+     "owner": "WL_Companion_ClaudeCodeFable5",
+     "class": "WonderlandCompanionEmbodiment",
+     "play": 1406
+    },
+    {
+     "owner": "WL_Companion_GPT6Astra",
+     "class": "WonderlandCompanionEmbodiment",
+     "play": 878
+    },
+    {
+     "owner": "Scale_CanonicalDog",
+     "class": "BP_RelayDog_C",
+     "play": 83
+    }
+   ]
+  }
+ ],
+ "finished": "2026-09-28 22:29:11",
+ "seconds": 22.83,
+ "log": "tile (8, 4) editor 304 play 5506 missing owners 0\ntile (7, 1) editor 305 play 5507 missing owners 0\ntile (6, 12) editor 327 play 5529 missing owners 0\ntile (6, 1) editor 155 play 5357 missing owners 0\n"
+}
