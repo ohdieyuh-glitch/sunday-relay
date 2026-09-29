@@ -64,10 +64,29 @@ console, the Wardrobe or `/skin`.
 - Arden Infernal and Apollo are unregistered, not deleted (the Bee/Hagoromo precedent). Their builders and `.wlvox`
   files stay on disk.
 
-## Verification status
+## Verification status (2026-09-29, DLL 09:47 from commit 9045214a)
 
-Recorded in `WORLD_BETA_LEDGER.md` and the commit that lands the build:
-- rebuild of both targets;
-- `zc_skin_roster_0929`;
-- `zc_skin_parity_all` (canonical pose parity);
-- `zc_skin_sheet` (Wardrobe renders).
+**Build:** `WonderlandEditor Win64 Development` Succeeded (67 s) and `Wonderland Win64 Development` (game target)
+Succeeded (73 s); the game-target guard is green.
+
+| proof | result |
+|---|---|
+| `zzS04` zc_skin_roster_0929 | **PASS 4/4.** `wl.Skins.List` = relay_og, celestial_light, skeleton_flame_v1, skeleton_flame, jack_flame, baal (no retired id). Wearing arden_infernal / arden_infernal_v1 draws Jack Flame; apollo / apollo_v1 draws Baal. A remembered `arden_infernal` and `apollo` come up drawn as Jack Flame / Baal in a fresh session, with the file rewritten. Every skin draws a distinct figure over a living Dog. The player's own remembered skin was restored. |
+| `zzS07` zc_skin_parity_all | **PASS 6/6.** Every skin, Jack Flame and Baal included, wears the canonical Dog's pose field for field (0 mismatches) and performs the Mission Contract act. Relay OG is the reference body. |
+| `zzS08` zc_skin_sheet | **PASS.** 36/36 views exported, every figure in the founder's band, none pinned white. |
+
+**Visual evidence:**
+- `Tools/captures/zc/skin_sheet/JackFlame_reference_vs_engine.jpg`
+- `Tools/captures/zc/skin_sheet/Baal_reference_vs_engine.jpg`
+
+Each is the reference, then the in-engine front and 3/4, then flat SIDE and REAR renders of the geometry.
+
+**Caveat:** the wardrobe stage's orbit views all show the front, because the costume turns to face the camera after
+idling. The in-engine side and rear frames are therefore not side and rear views, and are not presented as such.
+
+**Colour pass after the first in-engine look:** the engine's real-fire surfaces lift a flame's colour toward white.
+- Jack's orange rendered yellow, and his heart a yellow slab.
+- Baal's blue rendered ice.
+Both were authored deeper, as a text regeneration with no rebuild.
+
+**Not yet judged:** resemblance to the sheets is the founder's call, from the pictures.
