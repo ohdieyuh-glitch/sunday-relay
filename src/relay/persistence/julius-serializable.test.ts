@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import type { JuliusOperationalEvent } from '../mission/julius';
 import { JuliusEventPostgresRepository } from './julius-event-postgres';
 import { JuliusPostgresRepository } from './julius-postgres';
+import { JuliusRepairPostgresRepository } from './julius-repair-postgres';
 import { JULIUS_SERIALIZABLE_ATTEMPTS, isJuliusSerializationFailure, juliusSerializable } from './julius-serializable';
+import { JuliusSubagentPostgresRepository } from './julius-subagent-postgres';
+import { JuliusToolPostgresRepository } from './julius-tool-postgres';
 
 /**
  * THE SERIALIZATION RETRY, WITHOUT A DATABASE.
@@ -115,5 +118,123 @@ describe('a serialization failure is retried, because PostgreSQL guarantees it r
     });
     expect(added).toBe(true);
     expect(fake.attempts()).toBe(2);
+  });
+});
+
+/**
+ * THE REMAINING SERIALIZABLE WRITERS, ON THE SAME POLICY.
+ *
+ * Each of these opened its own SERIALIZABLE transaction. Repair scheduling and
+ * sub-agent admission threw a 40001 straight into the pipeline. Tool requests
+ * carried a private loop that knew 40001 and not 40P01. A repair is the one
+ * write that attempt 2's catch-and-repair credit depends on, so it is the case
+ * that matters most.
+ */
+function scriptedPool(failures: readonly unknown[], respond: (sql: string) => { rows: unknown[]; rowCount: number } | undefined) {
+  let attempt = 0;
+  let releases = 0;
+  const log: string[] = [];
+  return {
+    log,
+    attempts: () => attempt,
+    releases: () => releases,
+    pool: {
+      async connect() {
+        attempt += 1;
+        const failure = failures[attempt - 1];
+        let failed = false;
+        return {
+          async query(sql: string) {
+            log.push(`${attempt}:${sql.split(/\s+/u).slice(0, 3).join(' ')}`);
+            // The scripted conflict lands on the attempt's first write, as PostgreSQL's would.
+            if (!failed && failure !== undefined && sql.startsWith('INSERT')) { failed = true; throw failure; }
+            return respond(sql) ?? { rows: [], rowCount: 1 };
+          },
+          release() { releases += 1; },
+        };
+      },
+      async query() { return { rows: [], rowCount: 0 }; },
+    } as never,
+  };
+}
+
+const TOOL_REQUEST = {
+  invocationId: 'inv', idempotencyKey: 'key', requestDigest: 'a'.repeat(64), tenantId: 'tenant', projectId: 'project', runId: 'run',
+  taskId: 'task', workerId: 'worker', leaseGeneration: 3, policyRevision: 'card', toolId: 'fs.write' as const, toolVersion: '1',
+  mutationClass: 'WORKSPACE' as const, requestedAt: '2026-08-30T00:00:00Z',
+};
+const toolTask = (leaseGeneration: string) => ({
+  lease_generation: leaseGeneration, state: 'ACTIVE', worker_id: 'worker', lease_owner: 'scheduler', lease_valid: true, card_revision: 'card', tenant_member: true,
+});
+
+describe('the remaining SERIALIZABLE writers retry on the shared policy', () => {
+  it('REPAIR SCHEDULING survives a 40001: the round is created once, on the second attempt', async () => {
+    const fake = scriptedPool([serialization()], (sql) => {
+      if (sql.startsWith('SELECT state')) return { rows: [{ state: 'REPAIRING' }], rowCount: 1 };
+      if (sql.includes('RETURNING next_sequence')) return { rows: [{ sequence: '7' }], rowCount: 1 };
+      return undefined;
+    });
+    const plan = {
+      repairId: 'repair-1', round: 1, findingIds: ['finding-1'], evidenceIds: ['evidence-1'], budgetReservationId: 'reservation-1',
+      task: { taskId: 'repair-task-1', role: 'CODING_AGENT', taskType: 'repair:build', ordinal: 3, requiredEvidenceTypes: ['TEST'] },
+    };
+    const outcome = await new JuliusRepairPostgresRepository(fake.pool).schedule({
+      commandId: 'cmd-repair-1', runId: 'run-1', projectId: 'prj-1', originalTaskId: 'task-1', plan: plan as never, occurredAt: '2099-01-01T00:00:00.000Z',
+    });
+    expect(outcome).toEqual({ created: true, repairId: 'repair-1' });
+    expect(fake.attempts(), 'one conflict, one retry').toBe(2);
+    expect(fake.releases()).toBe(2);
+    expect(fake.log.filter((line) => line.endsWith('ROLLBACK'))).toEqual(['1:ROLLBACK']);
+    expect(fake.log.at(-1)).toBe('2:COMMIT');
+  });
+
+  it('SUB-AGENT ADMISSION survives a 40P01 under its advisory lock, and admits once', async () => {
+    const fake = scriptedPool([{ code: '40P01' }], (sql) => {
+      if (sql.includes('parent_depth')) return { rows: [{ parent_depth: '0', active_children: '0', total_children: '0' }], rowCount: 1 };
+      if (sql.startsWith('SELECT 1 FROM relay_wonderland.julius_subagents')) return { rows: [], rowCount: 0 };
+      return undefined;
+    });
+    const outcome = await new JuliusSubagentPostgresRepository(fake.pool).recordSubagentAndTaskWithinLimits({
+      record: {
+        requestId: 'sub-1', runId: 'run-1', projectId: 'prj-1', parentTaskId: 'task-1', childTaskId: 'child-1', depth: 1,
+        capability: 'research', permissions: ['read'], budgetReservationId: 'reservation-1', state: 'REQUESTED',
+      } as never,
+      task: {
+        taskId: 'child-1', missionId: 'm', parentTaskId: 'task-1', dependencyIds: [], requiredEvidenceTypes: [],
+        taskType: 'research', role: 'PROMPT_ARCHITECT', ordinal: 4, state: 'RUNNABLE',
+      } as never,
+      maxActive: 2, maxTotal: 5, maxDepth: 2,
+    });
+    expect(outcome).toEqual({ recorded: true, duplicate: false, denialReason: null });
+    expect(fake.attempts()).toBe(2);
+    expect(fake.log.filter((line) => line.includes('pg_advisory_xact_lock')).length, 'the lock is taken again on the retry').toBe(2);
+    expect(fake.log.at(-1)).toBe('2:COMMIT');
+  });
+
+  it('TOOL REQUESTS now retry a 40P01 too, which the private loop did not', async () => {
+    const row = {
+      invocation_id: 'inv', idempotency_key: 'key', request_digest: 'a'.repeat(64), tenant_id: 'tenant', project_id: 'project', run_id: 'run',
+      task_id: 'task', worker_id: 'worker', lease_generation: '3', policy_revision: 'card', tool_id: 'fs.write', tool_version: '1',
+      mutation_class: 'WORKSPACE', state: 'REQUESTED', sandbox_id: null, budget_reservation_id: null, exit_code: null, safe_summary: null,
+      stdout_preview: '', stdout_artifact_id: null, stderr_preview: '', stderr_artifact_id: null, evidence_ids: [], artifact_ids: [],
+      duration_ms: null, requested_at: '2026-08-30T00:00:00Z', authorized_at: null, started_at: null, completed_at: null,
+    };
+    const fake = scriptedPool([{ code: '40P01' }], (sql) => {
+      if (sql.includes('SELECT t.lease_generation')) return { rows: [toolTask('3')], rowCount: 1 };
+      if (sql.includes('SELECT * FROM relay_wonderland.julius_tool_invocations')) return { rows: [], rowCount: 0 };
+      if (sql.includes('INSERT INTO relay_wonderland.julius_tool_invocations')) return { rows: [row], rowCount: 1 };
+      return undefined;
+    });
+    const outcome = await new JuliusToolPostgresRepository(fake.pool).request(TOOL_REQUEST);
+    expect(outcome.created).toBe(true);
+    expect(fake.attempts(), 'a deadlock victim is retried, not thrown').toBe(2);
+    expect(fake.log.at(-1)).toBe('2:COMMIT');
+  });
+
+  it('a stale lease is still a refusal: never retried, and rolled back', async () => {
+    const fake = scriptedPool([], (sql) => (sql.includes('SELECT t.lease_generation') ? { rows: [toolTask('4')], rowCount: 1 } : undefined));
+    await expect(new JuliusToolPostgresRepository(fake.pool).request(TOOL_REQUEST)).rejects.toThrow('tool_stale_authority');
+    expect(fake.attempts()).toBe(1);
+    expect(fake.log.at(-1)).toBe('1:ROLLBACK');
   });
 });
