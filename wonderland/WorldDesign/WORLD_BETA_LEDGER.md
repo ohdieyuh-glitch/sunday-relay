@@ -329,6 +329,46 @@ opens, which is exactly the kind of shared-resource decision this session does n
 moves from BLOCKING to **READY** rather than to PASS.
 
 
+## 2026-09-29 -- every stand measured, the benches face the tree, three heartlands wait on the founder
+
+**Live beta walk: 8/8 PASS (zzW52, the clear-column drop of a6f52536).**
+- W06: 0 unmeasured of 23 stands. zzW39's one gap, [8,7], landed on the plaza, with 15,354 authored and 15,354
+  resident in play, settled.
+- The clear-column drop moved one stand: 2 m at [7,6], onto a structure ~22 m up (surface 2,230 cm). That is a
+  measured stand on a surface, not at ground level -- recorded here, not hidden.
+- W07 judged 11, short 0. W04: 8 empty frontier tiles, all floored. W08: 23,219 descriptors, 0 unloaded.
+  Coverage 86.3%, core radius 1,458.8 m.
+
+**Garden-room benches face the tree (zzW50).**
+- SM_garden_bench's seat faces its local +X. ga02's yaw (the angle FROM the fountain) seated its benches with
+  their backs to the water, and the heartland rooms copied it. Core turned ga02's four (7a24efdb); the rooms'
+  generator fix (d54a40da) was applied in place.
+- 40 instances in 6 batches, yaw only, exactly 180 degrees each. Guards held: one actor per batch, and its
+  current transforms equal the applied specs.
+- Hash check against checkpoint 2026-09-29-pre-bench-delta: exactly those 6 packages and the stub header changed.
+- After-frames zzW51, from zzW48's before camera. From the applied data, all 20 rooms' benches face their centre.
+
+**HN238 / HI057 / HT308: ready, NOT applied.**
+- Core OK'd them after seeing the bench frames.
+- The census was re-exported from a fresh editor (zzW53: 201,220 rows, 0 unloaded). All three specs and their
+  walk sidecars regenerate byte-identical against it.
+- Before-frames are shot (zzW54: an aerial and a walk view each).
+- The apply itself was refused by the World session's permission gate as a shared-resource write. It waits for
+  the founder.
+
+**Emptiness, structure-only (the measure behind the founder's 57.5% -> 50.1%): 48.0% actual** on the 01:54
+census. Projected from specs, not built: 45.1% with the three held heartlands, 27.0% with the wild ring as well.
+
+**Wild ring R50: PLANNED (6c37d613), not applied.** Six nation woods round the 1,200-1,480 m ring outside Dubel:
+13,209 instances, 2,989 trees, 10 clearings with landmarks, 14 mushroom patches and 7.4 km of trail on Dubel's
+own path radius. Three bugs were found before any editor saw it, and all are fixed:
+- The trail ran along the world's edge.
+- The raster's wedge corners put 780 mushroom-patch instances up to 153 m past the ring, and left the ring's
+  inner flanks unplanted.
+- WI030's clearing had no landmark.
+Now 0 instances fall outside 1,200-1,480 m, and the offline sweep finds 0 trail blocks.
+
+
 ## 2026-09-28 -- the player survives being placed anywhere; dusk understood and held for the founder
 
 **Player placement: FIXED.** This was the one beta-critical world defect found on 2026-09-28. The Dog was
