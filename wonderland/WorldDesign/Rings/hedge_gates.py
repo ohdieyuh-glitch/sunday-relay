@@ -65,14 +65,14 @@ def refused_plates(fname, lo, hi):
             if "hedge_mass" in p["blocker"] and lo <= p["bearing"] <= hi]
 
 
-def load():
+def load(rmin=40000.0, rmax=150000.0):
     hedges, others = [], Occupancy()
     with gzip.open(CENSUS, "rt", encoding="utf-8") as f:
         for r in csv.DictReader(f):
             if r["kind"] == "OTHER":
                 continue
             x, y, z = float(r["x"]), float(r["y"]), float(r["z"])
-            if z < -50000.0 or z > 6000.0 or not (40000.0 <= math.hypot(x, y) <= 150000.0):
+            if z < -50000.0 or z > 6000.0 or not (rmin <= math.hypot(x, y) <= rmax):
                 continue
             ex, ey, ez = float(r["ex"]), float(r["ey"]), float(r["ez"])
             if max(ex, ey) > 5000.0 and ez < 300.0 or any(s in r["mesh"] for s in SOFT):
