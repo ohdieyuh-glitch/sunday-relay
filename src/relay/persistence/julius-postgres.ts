@@ -132,18 +132,18 @@ export async function closeUnsettledToolInvocationsWithin(client:JuliusSqlClient
 export class JuliusPostgresRepository {
   constructor(private readonly pool:Pool){}
   /**
-   * ONE RETRY ON A SERIALIZATION FAILURE, AND ONLY HERE.
+   * A LOST CREATE RACE IS REPLAYED, and it is safe to.
    *
    * The active-run check and the insert are one SERIALIZABLE transaction, so two
    * concurrent creates cannot both decide the mission is free — PostgreSQL
    * aborts the loser with 40001. Left to surface, that abort answers a client
    * that merely pressed a button twice with "the store refused", when the truth
-   * is "your run already exists". So the loser is retried exactly once, which is
-   * safe because this call is idempotent by construction: the same request finds
-   * its own idempotency row and returns the run it already made, and a DIFFERENT
-   * request now sees the committed run and is refused by name. Not generalised
-   * to every transaction: a blanket retry would re-run effects nobody proved
-   * idempotent.
+   * is "your run already exists". The replay is safe because this call is
+   * idempotent by construction: the same request finds its own idempotency row
+   * and returns the run it already made, and a DIFFERENT request now sees the
+   * committed run and is refused by name. (`transaction` itself retries on the
+   * shared `juliusSerializable` policy since #294; this outer replay predates it
+   * and is kept, because it is what the create's answer rests on.)
    */
   async createRun(input:CreateJuliusRun):Promise<JuliusRunRecord>{
     try{return await this.createRunOnce(input);}
