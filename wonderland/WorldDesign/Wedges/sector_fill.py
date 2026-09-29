@@ -269,6 +269,50 @@ def stepping(p, cells, g, rng):
     p.stats["stepping_stones"] += k
 
 
+def edge_point(occ, pid, x, y, reach=1500.0):
+    """The nearest point on any CENSUS paving rectangle (not this pass's own stones) within reach of (x, y)."""
+    best = None
+    seen = set()
+    for k in occ._keys(x, y, reach + 4000.0):
+        for rec in occ.layers["paved"].get(k, ()):
+            if id(rec) in seen or str(rec[5]).startswith(pid + ":"):
+                continue
+            seen.add(id(rec))
+            rx, ry, hx, hy, yaw = rec[:5]
+            c, s = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+            lx, ly = (x - rx) * c + (y - ry) * s, -(x - rx) * s + (y - ry) * c
+            qx, qy = max(-hx, min(hx, lx)), max(-hy, min(hy, ly))
+            d = math.hypot(lx - qx, ly - qy)
+            if d <= reach and (best is None or d < best[0]):
+                best = (d, rx + qx * c - qy * s, ry + qx * s + qy * c)
+    return best
+
+
+STOP_SHORT = 120.0             # cm short of the paving's edge: the rings' kerb stones stand on that edge line
+
+
+def finish_to_edge(p, occ, x, y, rng):
+    """THE JUNCTION: from the path's last stone, straight on to just outside the paving it was joining -- the
+    stones stop AT the road's edge (Core: existing floor is the junction), not on it and not metres short. Short
+    of the edge by STOP_SHORT because the ring roads are kerbed: a stone 60 cm out lands on the kerb line and the
+    occupancy refuses it (the first version counted those refusals as placed)."""
+    e = edge_point(occ, p.id, x, y)
+    if e is None or e[0] < STOP_SHORT + 150.0:
+        return
+    d, ex, ey = e
+    n = max(1, int((d - STOP_SHORT) // 450.0))
+    for q in range(1, n + 1):
+        t = (q * 450.0) / d if q < n else (d - STOP_SHORT) / d
+        wx, wy = x + (ex - x) * t, y + (ey - y) * t
+        u = wx * W.DIR[0] + wy * W.DIR[1]
+        v = wx * W.LEFT[0] + wy * W.LEFT[1]
+        if p.add_module(FLAGS[q % 3], u, v, W.GROUND_Z + 1.0, rng.uniform(-8.0, 8.0), scale=0.55,
+                        cull=W.CULL_NEAR, collide=False, margin=10.0, layer="paved", layers=("existing", "solid")):
+            p.stats["junction_stones"] += 1
+        else:
+            p.stats["junction_refused"] += 1
+
+
 def join(p, g, doors, rng):
     """Join a group to the paving from whichever of its doors has the shorter free path."""
     best = None
@@ -368,7 +412,7 @@ def fill(pid, R):
         garden_room(p, uc, vc, leaves, p.stats["room_single"], doors_v=doors_v)
         g.take(uc, vc, H + 300.0, H + 300.0)
         p.stats["room_single"] += 1
-        groups.append(("room", uc, vc))
+        groups.append(("room_v" if doors_v else "room", uc, vc))
 
     def link(u0, v0, u1, v1):
         """A short straight line of stepping stones (a room's door to the walk beside it)."""
@@ -475,6 +519,8 @@ def fill(pid, R):
                 cells = g.path_to_paving(g.u(c[0]), g.v(c[1]))
                 if cells:
                     stepping(p, cells, g, rng)
+                    lu, lv = g.u(cells[-1][0]), g.v(cells[-1][1])
+                    finish_to_edge(p, occ, *W.world(lu, lv), rng)
                     p.stats["joined"] += 1
                     continue
             p.stats["not_joined"] += 1
@@ -487,7 +533,7 @@ def fill(pid, R):
         groups.append(("drift", at[0], at[1]))
 
     free1 = sum(sum(1 for f in row if f) for row in g.free) * (CELL / 100.0) ** 2
-    return p, n_census, free0, free1, groups
+    return p, n_census, free0, free1, groups, [(g.u(i), g.v(j)) for (i, j) in (walk or [])]
 
 
 def main():
@@ -503,7 +549,29 @@ def main():
             raise SystemExit("REFUSED: the census already contains %s -- a fill must not regenerate itself from a "
                              "world that holds it" % pid)
         R = REGIONS[pid]
-        p, n_census, free0, free1, groups = fill(pid, R)
+        p, n_census, free0, free1, groups, walk_uv = fill(pid, R)
+        # THE SIDECAR the in-play proof walks: the walk as a world polyline (every 5 m cell), and every group
+        # with its centre and, for rooms, the door points (a quarter's rooms are listed one by one)
+        side = {"pass": pid, "bearing": R["bearing"], "walk": [[round(c, 1) for c in W.world(u, v)] for (u, v) in walk_uv],
+                "groups": []}
+        off = H + 600.0
+        for (kind, u, v) in groups:
+            if kind == "quarter":
+                for (su, sv) in ((-1, -1), (-1, 1), (1, -1), (1, 1)):
+                    ru, rv = u + su * off, v + sv * off
+                    side["groups"].append({"kind": "quarter_room", "centre": [round(c, 1) for c in W.world(ru, rv)],
+                                           "doors": [[round(c, 1) for c in W.world(ru + d * (H + 250.0), rv)]
+                                                     for d in (-1, 1)]})
+                side["groups"].append({"kind": "quarter", "centre": [round(c, 1) for c in W.world(u, v)],
+                                       "lane_ends": [[round(c, 1) for c in W.world(u + d * (off + H + 250.0), v)]
+                                                     for d in (-1, 1)]})
+            elif kind in ("room", "room_v"):
+                doors = [(u + d * (H + 250.0), v) for d in (-1, 1)] if kind == "room" else                         [(u, v + d * (H + 250.0)) for d in (-1, 1)]
+                side["groups"].append({"kind": "room", "centre": [round(c, 1) for c in W.world(u, v)],
+                                       "doors": [[round(c, 1) for c in W.world(a, b)] for (a, b) in doors]})
+            else:
+                side["groups"].append({"kind": kind, "centre": [round(c, 1) for c in W.world(u, v)]})
+        (HERE / ("%s_walk.json" % pid.lower())).write_text(json.dumps(side, indent=1), encoding="utf-8")
         spec = p.spec()
         nation = W.NB.NATIONS[R["nation_cfg"]]["nation"]
         out = "%s_%s_heartland.json" % (pid.lower(), nation.lower())
@@ -514,7 +582,7 @@ def main():
                                 total))
         print("   " + ", ".join("%s %d" % kv for kv in sorted(p.stats.items()) if kv[0] in
                                   ("quarter", "wood", "room_single", "garden_room", "grove", "trees", "meadow_drift",
-                                   "mushrooms", "stepping_stones", "joined", "not_joined", "walk_m", "no_walk")))
+                                   "mushrooms", "stepping_stones", "junction_stones", "junction_refused", "joined", "not_joined", "walk_m", "no_walk")))
         if p.skipped:
             print("   refused by the occupancy: " + ", ".join("%s %d" % kv for kv in p.skipped.most_common(8)))
         rows += [(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], pid) for r in p.new_rows]

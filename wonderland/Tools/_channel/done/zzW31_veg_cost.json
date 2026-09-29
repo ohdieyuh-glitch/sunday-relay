@@ -1,0 +1,164 @@
+{
+ "name": "zzW31_veg_cost",
+ "started": "2026-09-29 00:14:43",
+ "status": "read",
+ "meshes": [
+  {
+   "mesh": "SM_tree_slender_trunk",
+   "loaded": true,
+   "nanite": true,
+   "lods": 1,
+   "lod0_triangles": 904
+  },
+  {
+   "mesh": "SM_tree_mature_trunk",
+   "loaded": true,
+   "nanite": true,
+   "lods": 1,
+   "lod0_triangles": 1034
+  },
+  {
+   "mesh": "SM_canopy_medium",
+   "loaded": true,
+   "nanite": true,
+   "lods": 1,
+   "lod0_triangles": 3032
+  },
+  {
+   "mesh": "SM_canopy_large",
+   "loaded": true,
+   "nanite": true,
+   "lods": 1,
+   "lod0_triangles": 4840
+  },
+  {
+   "mesh": "SM_shrub_flowering",
+   "loaded": true,
+   "nanite": true,
+   "lods": 1,
+   "lod0_triangles": 3022
+  },
+  {
+   "mesh": "SM_hedge_block",
+   "loaded": true,
+   "nanite": true,
+   "lods": 1,
+   "lod0_triangles": 9248
+  },
+  {
+   "mesh": "SM_rose_bush",
+   "loaded": true,
+   "nanite": true,
+   "lods": 1,
+   "lod0_triangles": 3598
+  },
+  {
+   "mesh": "SM_topiary_ball",
+   "loaded": true,
+   "nanite": true,
+   "lods": 1,
+   "lod0_triangles": 5248
+  },
+  {
+   "mesh": "SM_topiary_spiral",
+   "loaded": true,
+   "nanite": true,
+   "lods": 1,
+   "lod0_triangles": 6006
+  },
+  {
+   "mesh": "SM_topiary_cone_plain",
+   "loaded": true,
+   "nanite": true,
+   "lods": 1,
+   "lod0_triangles": 5188
+  },
+  {
+   "mesh": "SM_waymarker_lamp",
+   "loaded": true,
+   "nanite": false,
+   "lods": 1,
+   "lod0_triangles": 112
+  },
+  {
+   "mesh": "WL_Mushroom_Tall_mush_cap",
+   "loaded": true,
+   "nanite": false,
+   "lods": 1,
+   "lod0_triangles": 960
+  },
+  {
+   "mesh": "WL_Mushroom_Tall_mush_gill",
+   "loaded": true,
+   "nanite": false,
+   "lods": 1,
+   "lod0_triangles": 624
+  },
+  {
+   "mesh": "WL_Mushroom_Tall_mush_spot",
+   "loaded": true,
+   "nanite": false,
+   "lods": 1,
+   "lod0_triangles": 640
+  },
+  {
+   "mesh": "WL_Mushroom_Tall_mush_stem",
+   "loaded": true,
+   "nanite": false,
+   "lods": 1,
+   "lod0_triangles": 476
+  },
+  {
+   "mesh": "WL_Mushroom_Toadstool_mush_cap",
+   "loaded": true,
+   "nanite": false,
+   "lods": 1,
+   "lod0_triangles": 960
+  },
+  {
+   "mesh": "WL_Mushroom_Toadstool_mush_gill",
+   "loaded": true,
+   "nanite": false,
+   "lods": 1,
+   "lod0_triangles": 720
+  },
+  {
+   "mesh": "WL_Mushroom_Toadstool_mush_spot",
+   "loaded": true,
+   "nanite": false,
+   "lods": 1,
+   "lod0_triangles": 1040
+  },
+  {
+   "mesh": "WL_Mushroom_Toadstool_mush_stem",
+   "loaded": true,
+   "nanite": false,
+   "lods": 1,
+   "lod0_triangles": 476
+  },
+  {
+   "mesh": "WL_Flower_Rose_Run_leaf",
+   "loaded": true,
+   "nanite": false,
+   "lods": 1,
+   "lod0_triangles": 560
+  },
+  {
+   "mesh": "WL_Flower_Rose_Run_petal",
+   "loaded": true,
+   "nanite": true,
+   "lods": 1,
+   "lod0_triangles": 2680
+  },
+  {
+   "mesh": "WL_Garden_Grass_Tuft_leaf",
+   "loaded": true,
+   "nanite": false,
+   "lods": 1,
+   "lod0_triangles": 191
+  }
+ ],
+ "finished": "2026-09-29 00:14:50",
+ "seconds": 7.33,
+ "log": ""
+}
