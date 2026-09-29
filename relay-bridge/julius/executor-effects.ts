@@ -40,6 +40,7 @@ import type { JuliusToolSettlementPostgresRepository } from '../../src/relay/per
 import { EXECUTOR_IDENTIFIER_MAX_LENGTH } from '../../src/relay/workspace/julius-tools/executor-schema';
 import { safeClaim } from './live-workers';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from './sandbox-limits';
+import { classifyExecutorRefusal, digestOf, shellDispatchClosure, shellEffectSettlement, type ExecutorRefusalClass, type ShellEffectStage } from './shell-settlement';
 
 /* ---------------------------------------------------------------- shapes */
 
@@ -74,13 +75,8 @@ export interface TaskClaimSource {
 /* --------------------------------------------------------------- digests */
 
 const sha = (value: string): string => createHash('sha256').update(value).digest('hex');
-/** Canonical JSON, identical to the sibling harness and the settlement repository. */
-const stable = (value: unknown): string => value === null || typeof value !== 'object'
-  ? JSON.stringify(value)
-  : Array.isArray(value)
-    ? `[${value.map(stable).join(',')}]`
-    : `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`).join(',')}}`;
-export const digestOf = (value: unknown): string => sha(stable(value));
+/** Canonical JSON digest, identical to the sibling harness and the settlement repository; one definition, in `./shell-settlement`. */
+export { digestOf };
 
 /* ------------------------------------------------- the executor identity */
 
@@ -160,49 +156,12 @@ export function executorTaskId(taskId: string): string {
 
 /* ------------------------------------------------ what the executor said */
 
-export interface ExecutorRefusalClass {
-  readonly refusal: JuliusExecutorRefusal;
-  /** The envelope or request field the executor named, snake-cased, or null. */
-  readonly field: string | null;
-}
-
-const snake = (name: string): string | null => {
-  const token = name.replace(/([a-z0-9])([A-Z])/gu, '$1_$2').replace(/[.-]/gu, '_').toLowerCase();
-  return /^[a-z][a-z0-9_]{0,63}$/u.test(token) ? token : null;
-};
-
-/**
- * WHAT A REFUSED TOOL EFFECT WAS, from the error the executor client raised.
- *
- * The client (`remote-executor-control-plane.ts`) turns every non-2xx answer
- * into an untyped `Error` — a 400 for an invalid request included, as
- * `EXECUTOR_UNAVAILABLE:<executor code>` — and the coordinator could only say
- * "Execution boundary failed." with no class. This names it. It reads codes and
- * field names only, never a value, and anything it does not recognise is
- * `executor_refused_unclassified`, never silence.
+/*
+ * `classifyExecutorRefusal` lives in `./shell-settlement`, a pure module, so the
+ * provider-free preflight closes a failed dispatch with the same classification
+ * the live port uses. Re-exported here, where its callers have always found it.
  */
-export function classifyExecutorRefusal(error: unknown): ExecutorRefusalClass {
-  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-  const fieldOf = (pattern: RegExp): string | null => {
-    const match = pattern.exec(message);
-    return match?.[1] === undefined ? null : snake(match[1]);
-  };
-  if (/^EXECUTOR_UNAVAILABLE:INVALID_REQUEST:execution_envelope_(?:invalid:executionIdentity|identity_mismatch)\b/u.test(message)) {
-    return { refusal: 'executor_identity_invalid', field: 'execution_identity' };
-  }
-  if (/^EXECUTOR_UNAVAILABLE:INVALID_REQUEST:/u.test(message)) {
-    return { refusal: 'executor_request_invalid', field: fieldOf(/:(?:execution_envelope_invalid|execution_request|execution_payload|executor_[a-z_]+?):([A-Za-z][A-Za-z0-9_.]{0,63})$/u) };
-  }
-  if (message === 'EXECUTOR_UNAVAILABLE' || /^EXECUTOR_UNAVAILABLE(?::|$)/u.test(message)) return { refusal: 'executor_unavailable', field: null };
-  if (message === 'executor_authorization_refused') return { refusal: 'executor_authorization_refused', field: null };
-  if (message.startsWith('executor_scope_not_held:') || message === 'execution_envelope_scope_refused') return { refusal: 'executor_scope_refused', field: null };
-  if (message === 'executor_identity_conflict') return { refusal: 'executor_identity_conflict', field: null };
-  if (message === 'STARTED_UNKNOWN_OUTCOME') return { refusal: 'executor_outcome_unknown', field: null };
-  if (message.startsWith('SECURITY_FAILURE:')) return { refusal: 'executor_security_failure', field: null };
-  if (message.startsWith('TERMINAL_FAILURE:')) return { refusal: 'executor_terminal_failure', field: null };
-  if (/^executor_response_(?:missing|too_large|malformed)$/u.test(message)) return { refusal: 'executor_response_invalid', field: null };
-  return { refusal: 'executor_refused_unclassified', field: null };
-}
+export { classifyExecutorRefusal, type ExecutorRefusalClass };
 
 const stepOf = (invocationKey: string): 'base' | 'diff' | 'test' | null => {
   const tail = invocationKey.slice(invocationKey.lastIndexOf(':') + 1);
@@ -304,13 +263,36 @@ export function createExecutorShellPort(config: {
         leaseGeneration: claim.leaseGeneration, policyRevision: config.policyRevision,
         createdAt: now(), expiresAt: new Date(Date.now() + input.timeoutMs + 600_000).toISOString(),
       };
+      /**
+       * NO DISPATCH IS LEFT OPEN. Paid run 36568129865's close-out was claimed
+       * (DISPATCHING), the executor answered 500, this port threw, and nothing
+       * ever wrote the invocation's end. Now every way out of a claimed
+       * dispatch that is not a settlement closes it first, as what it was:
+       * provably no effect, or an outcome Julius does not know. Closing is
+       * best effort and never replaces the refusal in hand; the run's terminal
+       * transition closes whatever this could not.
+       */
+      const closeUnsettled = async (stage: ShellEffectStage, refusal: JuliusExecutorRefusal | null, failureClass: string): Promise<void> => {
+        try {
+          await config.tools.failDispatch(shellDispatchClosure({
+            invocationId, invocationKey: input.invocationKey, dispatchGeneration: dispatch.dispatchGeneration,
+            stage, refusal, failureClass, completedAt: now(),
+          }));
+        } catch {
+          /* The refusal already in hand is the answer this effect gives. */
+        }
+      };
+
       let result: ToolInvocationResult;
+      let stage: ShellEffectStage = 'create';
       try {
         await config.client.createSandbox({ identity, policy, limits });
+        stage = 'prepare';
         await config.client.prepareWorkspace({
           sandboxId: invocationId, sourceRef: config.workspaceSourceRef,
           expectedLeaseGeneration: claim.leaseGeneration,
         });
+        stage = 'execute';
         result = await config.client.executeTool({
           sandboxId: invocationId, expectedLeaseGeneration: claim.leaseGeneration,
           dispatchGeneration: dispatch.dispatchGeneration, requestDigest,
@@ -320,8 +302,12 @@ export function createExecutorShellPort(config: {
       } catch (error) {
         // NAMED, NOT RETHROWN BARE. The step, the class and the field survive
         // into the durable failure; the executor's own text does not.
-        if (error instanceof JuliusDispatchError) throw error;
+        if (error instanceof JuliusDispatchError) {
+          await closeUnsettled(stage, null, 'executor_dispatch_error');
+          throw error;
+        }
         const { refusal, field } = classifyExecutorRefusal(error);
+        await closeUnsettled(stage, refusal, refusal);
         throw refused(refusal, input.invocationKey, field, `The independent executor refused the ${stepOf(input.invocationKey) ?? 'tool'} effect (${refusal}).`);
       } finally {
         await config.client.destroySandbox({
@@ -330,17 +316,24 @@ export function createExecutorShellPort(config: {
         }).catch(() => undefined);
       }
 
-      await config.settlement.settle({
-        settlementId: `settlement:${invocationId}`, invocationId,
-        dispatchGeneration: dispatch.dispatchGeneration,
-        resultDigest: digestOf(result), result, artifacts: [],
-        evidence: [{
-          evidenceId: `tool:${invocationId}`, type: 'COMMAND_EXECUTION',
-          integrityHash: sha(result.stdout + result.stderr),
-          facts: { safeSummary: safeClaim(`Executor ran a shell effect for ${input.taskId}: exit ${result.exitCode ?? 'unknown'}.`) },
-        }],
-        taskOutcome: null, occurredAt: now(),
-      } as Parameters<JuliusToolSettlementPostgresRepository['settle']>[0]);
+      /**
+       * THE RESULT IS SETTLED RAW. Its stdout may hold NULs (the attempt
+       * close-out prints NUL-separated sections by design); the settlement
+       * repository encodes what PostgreSQL cannot store, and the parser below
+       * this port still receives every byte. A settlement that fails leaves
+       * the effect done but unrecorded, so the dispatch is closed as unknown
+       * rather than left DISPATCHING, and the failure surfaces as before.
+       */
+      try {
+        await config.settlement.settle(shellEffectSettlement({
+          invocationId, dispatchGeneration: dispatch.dispatchGeneration, result,
+          safeSummary: safeClaim(`Executor ran a shell effect for ${input.taskId}: exit ${result.exitCode ?? 'unknown'}.`),
+          occurredAt: now(),
+        }));
+      } catch (error) {
+        await closeUnsettled('settle', null, 'tool_settlement_failed');
+        throw error;
+      }
 
       return {
         status: result.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'FAILED',
