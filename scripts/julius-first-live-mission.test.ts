@@ -786,7 +786,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'worker-diagnostics.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -915,13 +915,34 @@ describe('the evidence dump names only tables and columns the migrations create'
     // silently skips its nulls is a floor, and a floor without its count reads
     // as a total.
     expect(query, 'settlements that reported nothing are counted, never summed as zero')
-      .toContain("count(*) FILTER (WHERE e.payload->'facts'->>'usdMicros' IS NULL)");
+      .toContain("count(*) FILTER (WHERE c.usd IS NULL)");
     expect(query, 'and it is per role, because the founder\'s question was per role')
       .toContain("'role'");
     expect(query, 'settlements only — a reservation is not a spend')
       .toContain("e.event_type='julius.budget.settled'");
+    // AN UNSETTLED RESERVATION IS AN UNKNOWN COMPONENT, never $0 and never absent (#297): a hold
+    // whose settlement could not be written joins the rollup with no amount and no basis, so it
+    // lands in `unknown_components` and never in known spend, and its own column says how many.
+    expect(query, 'a reservation with no settlement row is counted').toContain("r.event_type='julius.budget.reserved' AND NOT EXISTS");
+    expect(query, 'matched to its own settlement by run and reservation').toContain("s.stream_id=r.stream_id AND s.payload->'facts'->>'reservationId'=r.payload->'facts'->>'reservationId'");
+    expect(query, 'and it carries no amount into the known spend').toContain("SELECT r.payload->'facts'->>'role',NULL,NULL,NULL,true");
+    expect(query, 'the unsettled count has its own column').toContain('AS unsettled_components');
+    // NEVER DEDUPLICATED: a second settlement of one reservation must stay visible (next case).
+    expect(query.includes('DISTINCT'), 'the rollup sums every settled row; deduplicating would hide the defect').toBe(false);
     // No credential, no prose, no payload dump: the same rule every other query here obeys.
     expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+  });
+
+  it('a reservation settled more than once is FLAGGED as an integrity error, never deduplicated', () => {
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const query = script.split('\n').find((line) => line.startsWith('dump "SELECT') && line.includes('settlement-integrity.tsv')) ?? '';
+    expect(query, 'the integrity dump must exist').not.toBe('');
+    expect(query, 'per run and reservation').toContain("GROUP BY 1,2,3 HAVING count(*) > 1");
+    expect(query, 'over settlement rows').toContain("e.event_type='julius.budget.settled'");
+    expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+    // AND IT IS SAID OUT LOUD, so a regression is visible in the job log without opening the bundle.
+    expect(script).toContain('JULIUS_SETTLEMENT_INTEGRITY duplicate_reservations=');
+    expect(script, 'an unavailable file is never read as zero duplicates').toContain("echo 'JULIUS_SETTLEMENT_INTEGRITY unavailable'");
   });
 
   /**
