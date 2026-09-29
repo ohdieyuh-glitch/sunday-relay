@@ -69,7 +69,7 @@ def load(rmin=40000.0, rmax=150000.0):
     hedges, others = [], Occupancy()
     with gzip.open(CENSUS, "rt", encoding="utf-8") as f:
         for r in csv.DictReader(f):
-            if r["kind"] == "OTHER":
+            if r["kind"] == "OTHER" or r["owner"] == "V2_MarbleWorld_Scaffold":   # the hidden reference box (VISUAL_AUTHORITY)
                 continue
             x, y, z = float(r["x"]), float(r["y"]), float(r["z"])
             if z < -50000.0 or z > 6000.0 or not (rmin <= math.hypot(x, y) <= rmax):
