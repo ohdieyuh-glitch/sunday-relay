@@ -29,8 +29,21 @@
  *   julius_sandboxes(project_id, run_id, task_id, (tenant,project,run,task,invocation) → invocations)   ← the executor writes this
  *   julius_tool_execution_receipts(→ invocations CASCADE, → sandboxes RESTRICT)                          ← and this
  *
+ * AND WHAT A SETTLEMENT NEEDS. Paid run 36568129865 failed where no preflight had
+ * ever gone: the executor stored a NUL-bearing close-out result, and nothing
+ * provider-free had ever SETTLED one. So the preflight settles every effect it
+ * runs, through the production settlement repository, and that repository needs
+ * the rest of the live shape (migrations 001, 003, 011, 015):
+ *
+ *   agents(agent_id → players) and card_versions(→ agents, → players)
+ *   execution_sessions(→ mission_contracts, projects, players, agents, card_versions)
+ *   budget_reservations(→ execution_sessions CASCADE), one per invocation   ← the settlement commits it
+ *   julius_evidence, julius_trajectory_events(→ julius_tasks, no cascade), events(→ projects),
+ *   outbox(→ events CASCADE), stream_sequences(keyed by run), julius_tool_settlements(→ budget_reservations)
+ *
  * Cleanup deletes in the reverse of that order, receipts before sandboxes because
- * of the RESTRICT, and reports what it deleted and what, if anything, remains.
+ * of the RESTRICT, settlements before the reservations they name, trajectory rows
+ * before the tasks they name, and reports what it deleted and what, if anything, remains.
  *
  * THE DISPATCH CLAIM. Recording the invocation is not enough: the executor's
  * `authorizeExecution` joins the invocation and admits it only DISPATCHING (or
@@ -60,6 +73,10 @@ export interface PreflightIdentity {
   readonly workerId: string;
   readonly leaseGeneration: number;
   readonly policyRevision: string;
+  /** The execution session the settlement's budget reservations belong to. */
+  readonly executionId: string;
+  readonly agentId: string;
+  readonly cardVersionId: string;
 }
 
 /**
@@ -110,18 +127,25 @@ export const preflightIdentityFor = (input: { tenantId: string; nonce: string; p
   workerId: 'julius-live-preflight',
   leaseGeneration: 1,
   policyRevision: input.policyRevision,
+  executionId: `execution:julius-preflight-${input.nonce}`,
+  agentId: `agent:julius-preflight-${input.nonce}`,
+  cardVersionId: `card-version:julius-preflight-${input.nonce}`,
 });
 
 /**
  * Ownership is the nonce, on EVERY identifier. A hand-built identity carrying an owned
  * project but a real run would otherwise attach a preflight task to that run at seed time
- * and reach its tasks at cleanup, so all four keys must be the nonce's.
+ * and reach its tasks at cleanup, so every key must be the nonce's: the four the executor
+ * sees, and the three the settlement's budget needs.
  */
 const assertOwned = (identity: PreflightIdentity): void => {
   const owned = identity.projectId === `${PREFLIGHT_PROJECT_PREFIX}${identity.nonce}`
     && identity.missionId === `mission:julius-preflight-${identity.nonce}`
     && identity.runId === `run:julius-preflight-${identity.nonce}`
     && identity.taskId === `task:julius-preflight-${identity.nonce}`
+    && identity.executionId === `execution:julius-preflight-${identity.nonce}`
+    && identity.agentId === `agent:julius-preflight-${identity.nonce}`
+    && identity.cardVersionId === `card-version:julius-preflight-${identity.nonce}`
     && /^[A-Za-z0-9-]{4,64}$/u.test(identity.nonce);
   if (!owned) throw new Error('preflight_identity_not_owned');
 };
@@ -150,6 +174,18 @@ export async function seedPreflightIdentity(pool: Pool, identity: PreflightIdent
       "INSERT INTO relay_wonderland.mission_contracts(mission_id,project_id,stage,canonical_hash,snapshot) VALUES($1,$2,'READY',$3,'{}'::jsonb) ON CONFLICT DO NOTHING",
       [identity.missionId, identity.projectId, `preflight:${identity.nonce}`],
     );
+    // The execution session a settlement commits its budget against, and the agent and card
+    // version it names: nonce-scoped like everything else, owned by the shared tenant row.
+    await client.query('INSERT INTO relay_wonderland.agents(agent_id,owner_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [identity.agentId, identity.tenantId]);
+    await client.query(
+      "INSERT INTO relay_wonderland.card_versions(card_version_id,agent_id,owner_id,version,snapshot) VALUES($1,$2,$3,1,'{}'::jsonb) ON CONFLICT DO NOTHING",
+      [identity.cardVersionId, identity.agentId, identity.tenantId],
+    );
+    await client.query(
+      `INSERT INTO relay_wonderland.execution_sessions(execution_id,mission_id,project_id,player_id,agent_id,card_version_id,state,workspace_isolation_ref,snapshot,checkpoint)
+       VALUES($1,$2,$3,$4,$5,$6,'RUNNING','preflight-sandbox','{}'::jsonb,'{}'::jsonb) ON CONFLICT DO NOTHING`,
+      [identity.executionId, identity.missionId, identity.projectId, identity.tenantId, identity.agentId, identity.cardVersionId],
+    );
     await client.query(
       "INSERT INTO relay_wonderland.julius_runs(run_id,mission_id,project_id,state,runtime_version,card_revision,mission_contract_revision,project_brain_revision) VALUES($1,$2,$3,'EXECUTING','preflight',$4,1,0) ON CONFLICT DO NOTHING",
       [identity.runId, identity.missionId, identity.projectId, identity.policyRevision],
@@ -174,14 +210,20 @@ export async function seedPreflightIdentity(pool: Pool, identity: PreflightIdent
  * AUTHORIZED — exactly as the live composition does before it asks the executor for a
  * sandbox, then claims its dispatch (see the header) and returns the dispatch
  * generation the executor must be handed. The digest recorded is the digest the
- * executor will be handed.
+ * executor will be handed. The budget reservation the settlement commits is made
+ * first, as the live shell port makes it.
  */
 export async function seedPreflightInvocation(
   pool: Pool,
   identity: PreflightIdentity,
-  input: { invocationId: string; requestDigest: string; requestedAt: string },
+  input: { invocationId: string; requestDigest: string; requestedAt: string; timeoutMs?: number },
 ): Promise<{ dispatchGeneration: number }> {
   assertOwned(identity);
+  await pool.query(
+    `INSERT INTO relay_wonderland.budget_reservations(reservation_id,execution_id,worker_id,operation_key,idempotency_key,state,tool_calls,runtime_ms,expires_at)
+     VALUES($1,$2,$3,'tool',$4,'RESERVED',1,$5,now()+interval '60 minutes') ON CONFLICT DO NOTHING`,
+    [`budget:${input.invocationId}`, identity.executionId, identity.workerId, input.invocationId, input.timeoutMs ?? 30_000],
+  );
   const tools = new JuliusToolPostgresRepository(pool);
   await tools.request({
     invocationId: input.invocationId, idempotencyKey: input.invocationId, requestDigest: input.requestDigest,
@@ -236,9 +278,19 @@ export async function cleanupPreflightIdentity(pool: Pool, identity: PreflightId
       ['julius_sandboxes', 'DELETE FROM relay_wonderland.julius_sandboxes WHERE project_id=$1', [identity.projectId]],
       ['julius_tool_outbox', 'DELETE FROM relay_wonderland.julius_tool_outbox WHERE project_id=$1', [identity.projectId]],
       ['julius_tool_invocations', 'DELETE FROM relay_wonderland.julius_tool_invocations WHERE project_id=$1', [identity.projectId]],
+      // What a settlement (and a terminal transition) writes beside the invocation.
+      ['julius_trajectory_events', 'DELETE FROM relay_wonderland.julius_trajectory_events WHERE run_id=$1 AND project_id=$2', [identity.runId, identity.projectId]],
+      ['julius_evidence', 'DELETE FROM relay_wonderland.julius_evidence e USING relay_wonderland.julius_runs r WHERE e.run_id=r.run_id AND r.run_id=$1 AND r.project_id=$2', [identity.runId, identity.projectId]],
+      ['outbox', 'DELETE FROM relay_wonderland.outbox WHERE project_id=$1', [identity.projectId]],
+      ['events', 'DELETE FROM relay_wonderland.events WHERE project_id=$1', [identity.projectId]],
+      ['stream_sequences', 'DELETE FROM relay_wonderland.stream_sequences WHERE stream_id=$1', [identity.runId]],
+      ['budget_reservations', 'DELETE FROM relay_wonderland.budget_reservations WHERE execution_id=$1', [identity.executionId]],
+      ['execution_sessions', 'DELETE FROM relay_wonderland.execution_sessions WHERE execution_id=$1 AND project_id=$2', [identity.executionId, identity.projectId]],
       ['julius_tasks', 'DELETE FROM relay_wonderland.julius_tasks t USING relay_wonderland.julius_runs r WHERE t.run_id=r.run_id AND r.run_id=$1 AND r.project_id=$2', [identity.runId, identity.projectId]],
       ['julius_runs', 'DELETE FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2', [identity.runId, identity.projectId]],
       ['mission_contracts', 'DELETE FROM relay_wonderland.mission_contracts WHERE mission_id=$1 AND project_id=$2', [identity.missionId, identity.projectId]],
+      ['card_versions', 'DELETE FROM relay_wonderland.card_versions WHERE card_version_id=$1 AND agent_id=$2', [identity.cardVersionId, identity.agentId]],
+      ['agents', 'DELETE FROM relay_wonderland.agents WHERE agent_id=$1', [identity.agentId]],
       ['project_members', 'DELETE FROM relay_wonderland.project_members WHERE project_id=$1', [identity.projectId]],
       ['projects', 'DELETE FROM relay_wonderland.projects WHERE project_id=$1', [identity.projectId]],
     ];
@@ -260,12 +312,21 @@ export async function cleanupPreflightIdentity(pool: Pool, identity: PreflightId
           + (SELECT count(*) FROM relay_wonderland.julius_sandboxes WHERE project_id=$1)
           + (SELECT count(*) FROM relay_wonderland.julius_tool_outbox WHERE project_id=$1)
           + (SELECT count(*) FROM relay_wonderland.julius_tool_invocations WHERE project_id=$1)
+          + (SELECT count(*) FROM relay_wonderland.julius_trajectory_events WHERE run_id=$2)
+          + (SELECT count(*) FROM relay_wonderland.julius_evidence WHERE run_id=$2)
+          + (SELECT count(*) FROM relay_wonderland.outbox WHERE project_id=$1)
+          + (SELECT count(*) FROM relay_wonderland.events WHERE project_id=$1)
+          + (SELECT count(*) FROM relay_wonderland.stream_sequences WHERE stream_id=$2)
+          + (SELECT count(*) FROM relay_wonderland.budget_reservations WHERE execution_id=$4)
+          + (SELECT count(*) FROM relay_wonderland.execution_sessions WHERE execution_id=$4)
           + (SELECT count(*) FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE r.run_id=$2 AND r.project_id=$1)
           + (SELECT count(*) FROM relay_wonderland.julius_runs WHERE run_id=$2 AND project_id=$1)
           + (SELECT count(*) FROM relay_wonderland.mission_contracts WHERE mission_id=$3 AND project_id=$1)
+          + (SELECT count(*) FROM relay_wonderland.card_versions WHERE card_version_id=$5)
+          + (SELECT count(*) FROM relay_wonderland.agents WHERE agent_id=$6)
           + (SELECT count(*) FROM relay_wonderland.project_members WHERE project_id=$1)
           + (SELECT count(*) FROM relay_wonderland.projects WHERE project_id=$1) AS total`,
-    [identity.projectId, identity.runId, identity.missionId],
+    [identity.projectId, identity.runId, identity.missionId, identity.executionId, identity.cardVersionId, identity.agentId],
   );
   return { deleted, remaining: Number(remaining.rows[0]?.total ?? 0) };
 }

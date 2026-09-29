@@ -1096,6 +1096,52 @@ describe('the preflight is a legitimate participant in the durable schema (dry r
   });
 });
 
+describe('paid run 36568129865 — the zero-dispatch preflight runs and settles the real attempt close-out', () => {
+  // The close-out's output is NUL-separated by design; the executor's receipt insert refused it with
+  // 22P05 and answered 500, and nothing provider-free had ever run it. The proof is the preflight
+  // itself, on the real executor and PostgreSQL (first-live-topology, host-visible, which fails on any
+  // executor refusal); these cases hold the preflight to taking that path at all.
+  const preflight = read('scripts/julius-live-preflight.ts');
+
+  it('takes the attempt start and close-out with the coding adapter\'s own commands, never a copy of them', () => {
+    expect(preflight).toContain("import { juliusAttemptCloseCommand, juliusAttemptStartCommand, parseJuliusAttemptClose, parseJuliusAttemptStart } from '../relay-bridge/julius/coder-workspace';");
+    expect(preflight).toContain('await runInSandbox(juliusAttemptStartCommand(null))');
+    expect(preflight).toContain('const closeCommand = juliusAttemptCloseCommand(attemptTrees);');
+    expect(preflight).toContain('const closeOut = await runInSandbox(closeCommand);');
+    expect(preflight, 'a failing close-out is settled too').toMatch(/await runInSandbox\(`\$\{closeCommand\}\\nexit 3`\)/u);
+    expect(preflight.indexOf('juliusAttemptStartCommand(null)'), 'the start is taken before the host writes the probe')
+      .toBeLessThan(preflight.indexOf('writeFileSync(probeFile, Buffer.concat('));
+  });
+
+  it('settles every effect exactly as the live shell port does, and closes a refused one as the port does', () => {
+    const port = read('relay-bridge/julius/executor-effects.ts');
+    expect(preflight).toContain("import { classifyExecutorRefusal, shellDispatchClosure, shellEffectSettlement, type ShellEffectStage } from '../relay-bridge/julius/shell-settlement';");
+    expect(preflight).toContain('await settlement.settle(shellEffectSettlement({');
+    expect(port, 'one builder for both, so the preflight settles what the mission settles').toContain('await config.settlement.settle(shellEffectSettlement({');
+    expect(preflight).toContain('tools.failDispatch(shellDispatchClosure({');
+    expect(port).toContain('await config.tools.failDispatch(shellDispatchClosure({');
+    expect(preflight, 'the settlement is the production repository').toContain('new JuliusToolSettlementPostgresRepository(pool)');
+  });
+
+  it('every property it proves can fail it: the marker, exact bytes, digests, nothing open, the control and the invariant', () => {
+    for (const refusal of [
+      'the output reached Julius without a NUL', 'the stored preview carries no encoding marker', 'the stored preview does not decode to the bytes Julius received',
+      'the receipt result carries no encoding marker', 'the receipt digest does not cover the decoded result', 'the settlement does not decode to the receipt',
+      'dispatched invocation(s) were left open', 'the storage control did not hold', 'a terminal run left a tool invocation open',
+      'no integrity event names the closed dispatch', 'a new invocation on the terminal run was answered',
+    ]) expect(preflight, `the preflight must be able to refuse: ${refusal}`).toContain(refusal);
+    // The invariant probe makes no executor request, so it cannot add a refusal to the topology job's diagnostics.
+    const start = preflight.indexOf('const proveTerminalInvariant');
+    const end = preflight.indexOf('const dockerBinary', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const probe = preflight.slice(start, end);
+    expect(probe).not.toContain('client.');
+    expect(probe).not.toContain('runInSandbox(');
+    expect(probe).toContain("to: 'FAILED'");
+  });
+});
+
 describe('the receipt transport — proven on real Docker, PR #214 (runs 33667743669, 33685880591)', () => {
   // The executor asks the host Docker daemon to bind-mount each sandbox's scoped receipt
   // directory, and the daemon resolves bind sources on the host. A receipt root inside the
@@ -1200,7 +1246,9 @@ describe('the receipt transport — proven on real Docker, PR #214 (runs 3366774
     for (const violation of ['receipt_mounts=', 'receipt_mount_is_not_the_sandbox_scope', 'whole_receipt_root_mounted', 'earlier_sandbox_scope_mounted', 'executor_private_mounted', 'receipt_subpath_mounted', 'unexpected_bind:']) {
       expect(preflight, `the daemon-side proof must refuse: ${violation}`).toContain(violation);
     }
-    expect(preflight, 'the proof is taken between prepare and execute').toMatch(/if \(afterPrepare\) await afterPrepare\(invocationId\);\s*\n\s*return await client\.executeTool/u);
+    // Immediately before execute: the only statement between the two is the stage marker the
+    // dispatch closure reads (a failed scope proof is a failure before any command ran).
+    expect(preflight, 'the proof is taken between prepare and execute').toMatch(/if \(afterPrepare\) await afterPrepare\(invocationId\);\s*\n\s*stage = 'execute';\s*\n\s*result = await client\.executeTool/u);
     expect(preflight).toContain("].join(' && '), proveReceiptScope);");
     // And from inside: uid 65532, the mount exists but cannot be listed, nothing under /executor-private.
     for (const check of ['[ "$(id -u)" = "65532" ]', 'test -d /julius-receipts-root', '! ls -A /julius-receipts-root >/dev/null 2>&1', 'test ! -e /executor-private', 'echo RECEIPT_WORKLOAD_REFUSED']) {
