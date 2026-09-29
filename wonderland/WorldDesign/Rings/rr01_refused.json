@@ -1,0 +1,191 @@
+[
+ {
+  "bearing": 27.93,
+  "r_m": 620,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Buttressed_TowerLavender:WL_Tower_Base",
+  "x": 54801.4,
+  "y": 29057.7,
+  "yaw": 234.33,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 28.34,
+  "r_m": 617,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Buttressed_TowerLavender:WL_Tower_Base",
+  "x": 54304.5,
+  "y": 29288.9,
+  "yaw": 250.8,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 28.7,
+  "r_m": 613,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Buttressed_TowerLavender:WL_Tower_Base",
+  "x": 53776.8,
+  "y": 29442.0,
+  "yaw": 255.83,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 29.03,
+  "r_m": 609,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Buttressed_TowerLavender:WL_Tower_Base",
+  "x": 53236.2,
+  "y": 29542.5,
+  "yaw": 258.57,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 29.38,
+  "r_m": 605,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Buttressed_TowerLavender:WL_Tower_Base",
+  "x": 52700.4,
+  "y": 29665.3,
+  "yaw": 254.52,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 46.46,
+  "r_m": 599,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafMid:SM_hedge_mass",
+  "x": 41267.5,
+  "y": 43420.3,
+  "yaw": 249.61,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 46.88,
+  "r_m": 596,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafMid:SM_hedge_mass",
+  "x": 40724.0,
+  "y": 43482.9,
+  "yaw": -89.66,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 47.23,
+  "r_m": 592,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": 40177.3,
+  "y": 43431.4,
+  "yaw": -82.49,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 47.54,
+  "r_m": 587,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": 39639.6,
+  "y": 43316.8,
+  "yaw": -74.97,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 47.83,
+  "r_m": 583,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": 39108.7,
+  "y": 43172.9,
+  "yaw": -74.54,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 48.12,
+  "r_m": 578,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafMid:SM_hedge_mass",
+  "x": 38579.1,
+  "y": 43024.5,
+  "yaw": -74.11,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 48.42,
+  "r_m": 573,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafMid:SM_hedge_mass",
+  "x": 38046.2,
+  "y": 42889.1,
+  "yaw": -76.88,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 48.77,
+  "r_m": 569,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafMid:SM_hedge_mass",
+  "x": 37505.2,
+  "y": 42791.9,
+  "yaw": -84.23,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 49.17,
+  "r_m": 565,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafMid:SM_hedge_mass",
+  "x": 36957.0,
+  "y": 42767.3,
+  "yaw": 267.88,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 88.35,
+  "r_m": 645,
+  "blocker": "existing:IC01_IC01_Gatehouse_Twin_stone:WL_Gatehouse_Twin",
+  "x": 1852.2,
+  "y": 64447.9,
+  "yaw": 232.98,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 88.75,
+  "r_m": 648,
+  "blocker": "existing:IC01_IC01_Gatehouse_Twin_stone:WL_Gatehouse_Twin",
+  "x": 1411.8,
+  "y": 64777.5,
+  "yaw": 233.31,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 91.01,
+  "r_m": 653,
+  "blocker": "existing:IC02_IC02_AvenueTree:SM_tree_slender_trunk",
+  "x": -1145.1,
+  "y": 65247.7,
+  "yaw": -63.7,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 91.44,
+  "r_m": 650,
+  "blocker": "existing:IC02_IC02_AvenueTree:SM_tree_slender_trunk",
+  "x": -1630.3,
+  "y": 64989.3,
+  "yaw": -59.85,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 209.4,
+  "r_m": 643,
+  "blocker": "existing:AV02_AV02_Object_LanternStandard_glass:WL_Object_LanternStand",
+  "x": -56022.8,
+  "y": -31573.0,
+  "yaw": 7.77,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 209.88,
+  "r_m": 644,
+  "blocker": "existing:AV02_AV02_Object_LanternStandard_glass:WL_Object_LanternStand",
+  "x": -55875.6,
+  "y": -32101.1,
+  "yaw": 20.84,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 329.55,
+  "r_m": 643,
+  "blocker": "existing:AV03_AV03_Object_LanternStandard_stone:WL_Object_LanternStand",
+  "x": 55472.0,
+  "y": -32613.0,
+  "yaw": 127.96,
+  "half_x": 720.0
+ }
+]

@@ -112,13 +112,26 @@ HLODs (canonical, heavy), or keep landmark batches always loaded. Nothing change
 | C1 | CORE | R02 core rim: re-apply GF03/04/05 | **DONE 2026-09-28**, corrected and tiled; see the note on the corner-cell bug below |
 | C2 | CORE | S01 ring circuit + S02 seam radials | the roads every fill hangs on; polylines to WORLD before their layouts |
 | C3 | CORE | nation marches for NOCTIS and TARTARUS | **not needed**: NC01 / TQ01 causeways + CP03 / CP04 + gate arches already are those marches (census, 2026-09-28) |
-| C4 | CORE | forge-canon reconciliation: the 24 quarters, radial roads and ring circuit of the core | forge `WORLD_LEDGER.md` 611-616, `layout_v2.py` |
+| C4 | CORE | forge-canon reconciliation: the 24 quarters, radial roads and ring circuit of the core | **first cut done 2026-09-28** (below): 12 of 14 forge districts have their passes; Tower Rise and Mushroom Grove have none |
 | C5 | CORE | traversal (walkable on the census), packaged build | |
 
 ## Map-writing protocol (agreed 2026-09-28)
 
 One writer at a time, announced and serialized through the channel; never CONCURRENT, never beside the other's
 PIE; `Tools/checkpoint_map.sh` before any save; every apply tagged `WL_PASS_<id>`; ask before each apply+save.
+
+**ONE SAVE PER EDITOR SESSION** (adopted 2026-09-28 23:20, both lanes). In one editor session the FIRST save
+writes only dirty packages (86 packages / 30 s for the floor re-yaw; 5,033 / 16 s for the batch bounds), and
+every later save rewrites all ~23,000 actor packages (23,158 / 111 s) and permanently adds ~15 GB private to the
+editor (9.6 -> 25.1 GB). Relaunch between writers: `quit_editor` job (refuses if dirty), count processes, relaunch
+`Tools/LaunchWonderlandEditor.ps1` detached via WMI `Win32_Process.Create`; ~2 min each way, 20 regions and every
+actor resident again. Several applies meant for one save go in ONE session: all but the last with SAVE=False,
+the last with SAVE=True and MAP_WAS_DIRTY_OK=True. Never PIE above ~42 GB system commit.
+
+**Generators that lay SM_terrace_platform**: the plate is 1,440 along its local X and 740 along Y. Copy the
+plate and kerb yaw from noctis_quarter.py / tartarus_quarter.py, then run the neighbour-spacing test on the
+spec (the neighbour ACROSS the road at 740 cm, not 1,440). nation_band.py lost that fix and striped the three
+nation bands and W270 with lawn (re-yawed in place 2026-09-28, dca810ca, WorldDesign/Wedges/floor_reyaw_record.json).
 
 ## Findings that change how this work is done (2026-09-28, evening)
 
@@ -162,3 +175,37 @@ Still broken (decisions, not roads through buildings):
 | RR02 | 140.4-148.3 | 1,045-1,075 m | SKY05 tower cluster | WORLD (R41 seam design) |
 | RR02 | 149.8-153.1 | ~1,055 m | V2 hedge masses | CORE (hedge gate) |
 | RR02 | 269.8-270.4 | ~1,078 m | W270 EXCHANGE pavilion | none: the plaza is the junction |
+
+## Forge district reconciliation (C4, first cut, 2026-09-28)
+
+The forge's `layout_v2.py` names 14 districts by seed bearing and radius (`_DISTRICT_SEEDS`) and assigns every
+site by the metric in `_district_of` (angle weighed by mean radius, plus the radial difference). The same metric,
+run over the centroid of every authored pass within 400 m of the shipping map's centre (census, 188,660 rows),
+says which districts the Unreal core actually carries:
+
+| forge district | seed | what stands there (pass, placements) | identity |
+|---|---|---|---|
+| Royal Gardens | 65 deg, 110 m | RG01 552, CL01 545, CL02 259, GA02/GA07/FL04 (the arrival itself) | present |
+| Clock Quarter | 5 deg, 135 m | CQ01 515, CQ02 313, EQ01 524, EQ02 289, DC01 315 | present |
+| **Tower Rise** | 120 deg, 130 m | nothing named for it; within 40 m of the seed: grass tufts 162, ground flowers, shrubs, a few kerbs and trees -- **no towers** | **missing** |
+| Lantern Hamlets | 152 deg, 155 m | LH01 543, LH02 301 | present |
+| Tea Terraces | 200 deg, 115 m | TC01-03 (Teapot Court) 1,279, DC02 270, OL01 144 | present |
+| Water Gardens | 248 deg, 120 m | WG01-03 1,201 | present |
+| **Mushroom Grove** | 300 deg, 140 m | CxCityS 262 only; within 40 m: grass tufts 586, kerbs, a glass screen facade -- **no mushrooms** | **missing** |
+| Gatekeeper Fields | 340 deg, 150 m | CK03 397 (Colossal Key), DC03 221 | partly (Colossal Key is its own identity) |
+| North Reach | 130 deg, 250 m | GF01 garden fill 2,549, skyline towers | generic fill |
+| East Reach | 25 deg, 260 m | FillNE 1,202, FillEMN 769 | generic fill |
+| The Long Woods | 210 deg, 250 m | GF02 2,377, SW 1,987, TG01 | generic fill |
+| South Meadows | 278 deg, 270 m | South 1,446, GT01, GC01 | present |
+| West Wood | 170 deg, 300 m | WW01-03 1,234 | present |
+| Far Orchards | 315 deg, 290 m | FO01 543, LF01, CK01/02 | present |
+
+**Tried, and held for the founder.** `Districts/forge_districts.py` builds TR01 Tower Rise (the forge's
+`_quarter_towers`: capped towers round a dominant one, a clock tower, court planting, a walled court open to the
+city) and MG01 Mushroom Grove (four-part giant mushrooms on stone rings, a landmark, medium and small ones round
+their feet), placing nothing through anything standing. Both seeds lie inside the accepted core, and the core is
+fully planted: TR01 found room for 3 of 7 towers and no clock tower, MG01 for none of its giants. Adding either
+means replacing core planting, and the founder's standing rule is to grow outward from the accepted city, never
+rebuild it (IC01's brief). **Founder decision:** (a) build them in the core, replacing some planting; or (b) give
+those identities to the outer world instead -- a tower quarter in the ICARUS march (Icarus's vertical silhouette)
+and a mushroom wood on a frontier (the forge's "mushroom woods" are one of the 24 quarter kinds).

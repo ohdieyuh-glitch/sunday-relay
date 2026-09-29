@@ -1,0 +1,659 @@
+[
+ {
+  "bearing": 22.6,
+  "r_m": 1005,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Arcaded_stone_dark_Stone:WL_Tower_Base",
+  "x": 92803.8,
+  "y": 38626.6,
+  "yaw": 175.87,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 22.87,
+  "r_m": 1008,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Arcaded_stone_dark_Stone:WL_Tower_Base",
+  "x": 92860.8,
+  "y": 39173.2,
+  "yaw": 171.75,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 23.13,
+  "r_m": 1011,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Arcaded_stone_dark_Stone:WL_Tower_Base",
+  "x": 92957.4,
+  "y": 39714.4,
+  "yaw": 168.02,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 23.38,
+  "r_m": 1014,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Arcaded_stone_dark_Stone:WL_Tower_Base",
+  "x": 93087.9,
+  "y": 40248.4,
+  "yaw": 164.65,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 23.62,
+  "r_m": 1018,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Arcaded_stone_dark_Stone:WL_Tower_Base",
+  "x": 93247.0,
+  "y": 40774.7,
+  "yaw": 161.63,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 23.85,
+  "r_m": 1021,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Arcaded_stone_dark_Stone:WL_Tower_Base",
+  "x": 93419.1,
+  "y": 41297.1,
+  "yaw": 161.99,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 24.08,
+  "r_m": 1025,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Arcaded_stone_dark_Stone:WL_Tower_Base",
+  "x": 93588.2,
+  "y": 41820.5,
+  "yaw": 162.35,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 24.31,
+  "r_m": 1029,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Arcaded_stone_dark_Stone:WL_Tower_Base",
+  "x": 93754.2,
+  "y": 42344.8,
+  "yaw": 162.71,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 24.54,
+  "r_m": 1032,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Arcaded_stone_dark_Stone:WL_Tower_Base",
+  "x": 93917.3,
+  "y": 42870.1,
+  "yaw": 163.07,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 24.76,
+  "r_m": 1036,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Arcaded_stone_dark_Stone:WL_Tower_Base",
+  "x": 94077.3,
+  "y": 43396.3,
+  "yaw": 163.43,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 24.99,
+  "r_m": 1040,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Buttressed_TowerCream:WL_Tower_Base_Bu",
+  "x": 94234.2,
+  "y": 43923.4,
+  "yaw": 163.43,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 25.22,
+  "r_m": 1043,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Buttressed_TowerCream:WL_Tower_Base_Bu",
+  "x": 94388.0,
+  "y": 44451.5,
+  "yaw": 163.79,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 25.44,
+  "r_m": 1047,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Buttressed_TowerCream:WL_Tower_Base_Bu",
+  "x": 94538.8,
+  "y": 44980.4,
+  "yaw": 164.15,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 25.67,
+  "r_m": 1051,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Buttressed_TowerCream:WL_Tower_Base_Bu",
+  "x": 94686.7,
+  "y": 45510.2,
+  "yaw": 164.5,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 26.8,
+  "r_m": 1068,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 95362.4,
+  "y": 48175.3,
+  "yaw": 167.87,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 27.03,
+  "r_m": 1072,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 95477.5,
+  "y": 48713.1,
+  "yaw": 168.23,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 27.26,
+  "r_m": 1075,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 95589.7,
+  "y": 49251.6,
+  "yaw": 168.58,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 27.49,
+  "r_m": 1079,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 95698.6,
+  "y": 49790.7,
+  "yaw": 168.58,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 27.71,
+  "r_m": 1082,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 95804.4,
+  "y": 50330.4,
+  "yaw": 168.94,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 27.94,
+  "r_m": 1086,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 95907.2,
+  "y": 50870.7,
+  "yaw": 169.29,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 28.17,
+  "r_m": 1089,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 96007.0,
+  "y": 51411.6,
+  "yaw": 169.64,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 28.4,
+  "r_m": 1092,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 96103.8,
+  "y": 51953.0,
+  "yaw": 169.99,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 28.62,
+  "r_m": 1096,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 96197.7,
+  "y": 52494.9,
+  "yaw": 170.35,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 28.84,
+  "r_m": 1099,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 96294.8,
+  "y": 53036.3,
+  "yaw": 169.07,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 29.06,
+  "r_m": 1103,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 96398.2,
+  "y": 53576.4,
+  "yaw": 169.42,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 29.28,
+  "r_m": 1106,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 96498.7,
+  "y": 54117.2,
+  "yaw": 169.78,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 29.5,
+  "r_m": 1110,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 96596.3,
+  "y": 54658.4,
+  "yaw": 169.78,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 29.72,
+  "r_m": 1113,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 96690.7,
+  "y": 55200.3,
+  "yaw": 170.13,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 29.94,
+  "r_m": 1117,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 96782.2,
+  "y": 55742.6,
+  "yaw": 170.48,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 30.16,
+  "r_m": 1120,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 96870.8,
+  "y": 56285.4,
+  "yaw": 170.83,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 30.38,
+  "r_m": 1124,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 96956.7,
+  "y": 56828.7,
+  "yaw": 171.18,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 30.59,
+  "r_m": 1127,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": 97039.7,
+  "y": 57372.4,
+  "yaw": 171.53,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 30.81,
+  "r_m": 1131,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerBlush:WL_Tower_Base_Terr",
+  "x": 97119.9,
+  "y": 57916.5,
+  "yaw": 171.88,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 31.03,
+  "r_m": 1134,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerBlush:WL_Tower_Base_Terr",
+  "x": 97196.0,
+  "y": 58461.2,
+  "yaw": 173.79,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 31.25,
+  "r_m": 1138,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerBlush:WL_Tower_Base_Terr",
+  "x": 97255.5,
+  "y": 59008.0,
+  "yaw": 173.79,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 31.48,
+  "r_m": 1141,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": 97281.1,
+  "y": 59557.3,
+  "yaw": 177.48,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 31.71,
+  "r_m": 1144,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": 97287.5,
+  "y": 60107.2,
+  "yaw": 179.6,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 31.95,
+  "r_m": 1146,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": 97274.4,
+  "y": 60657.0,
+  "yaw": 181.8,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 67.84,
+  "r_m": 1105,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": 41658.0,
+  "y": 102298.7,
+  "yaw": 234.92,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 68.12,
+  "r_m": 1106,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": 41213.2,
+  "y": 102622.1,
+  "yaw": 232.71,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 68.39,
+  "r_m": 1108,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": 40789.8,
+  "y": 102972.5,
+  "yaw": 228.22,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 68.66,
+  "r_m": 1109,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": 40378.7,
+  "y": 103337.9,
+  "yaw": 228.47,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 68.92,
+  "r_m": 1111,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": 39966.0,
+  "y": 103701.4,
+  "yaw": 228.72,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 69.19,
+  "r_m": 1113,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": 39541.3,
+  "y": 104050.7,
+  "yaw": 231.34,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 140.29,
+  "r_m": 1076,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -82769.7,
+  "y": 68749.7,
+  "yaw": -12.02,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 140.54,
+  "r_m": 1073,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -82876.0,
+  "y": 68210.3,
+  "yaw": -7.61,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 140.79,
+  "r_m": 1070,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -82941.1,
+  "y": 67664.4,
+  "yaw": -3.53,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 141.03,
+  "r_m": 1067,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -82969.2,
+  "y": 67115.3,
+  "yaw": 0.23,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 141.26,
+  "r_m": 1064,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -82965.7,
+  "y": 66565.3,
+  "yaw": 2.17,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 141.48,
+  "r_m": 1060,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -82944.9,
+  "y": 66015.7,
+  "yaw": 2.17,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 141.71,
+  "r_m": 1057,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -82935.8,
+  "y": 65465.8,
+  "yaw": 0.89,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 141.95,
+  "r_m": 1053,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -82938.7,
+  "y": 64915.8,
+  "yaw": -0.47,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 142.19,
+  "r_m": 1050,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -82954.5,
+  "y": 64366.1,
+  "yaw": -1.92,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 146.83,
+  "r_m": 1045,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -87494.0,
+  "y": 57189.7,
+  "yaw": -59.04,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 147.1,
+  "r_m": 1048,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -87968.9,
+  "y": 56912.5,
+  "yaw": -60.98,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 147.36,
+  "r_m": 1050,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -88453.3,
+  "y": 56652.1,
+  "yaw": -62.82,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 147.62,
+  "r_m": 1053,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -88937.7,
+  "y": 56391.8,
+  "yaw": -60.43,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 147.89,
+  "r_m": 1056,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -89410.0,
+  "y": 56110.2,
+  "yaw": -57.95,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 148.16,
+  "r_m": 1058,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -89860.7,
+  "y": 55795.8,
+  "yaw": -53.01,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 148.45,
+  "r_m": 1059,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Terraced_TowerLavender:WL_Tower_Base_T",
+  "x": -90266.6,
+  "y": 55426.4,
+  "yaw": -45.19,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 149.61,
+  "r_m": 1056,
+  "blocker": "existing:SKY05_SKY05_Tower_Base_Battered_stone_dark_Stone:WL_Tower_Bas",
+  "x": -91071.7,
+  "y": 53415.4,
+  "yaw": -9.24,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 149.88,
+  "r_m": 1054,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": -91147.5,
+  "y": 52870.8,
+  "yaw": -6.6,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 150.16,
+  "r_m": 1052,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": -91209.3,
+  "y": 52324.3,
+  "yaw": -6.35,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 151.62,
+  "r_m": 1048,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": -92220.6,
+  "y": 49829.2,
+  "yaw": -41.99,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 151.91,
+  "r_m": 1050,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": -92597.3,
+  "y": 49428.6,
+  "yaw": -44.32,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 152.19,
+  "r_m": 1051,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": -93002.3,
+  "y": 49057.0,
+  "yaw": -49.04,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 152.46,
+  "r_m": 1054,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": -93427.6,
+  "y": 48708.4,
+  "yaw": -51.15,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 152.74,
+  "r_m": 1056,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": -93854.4,
+  "y": 48361.5,
+  "yaw": -50.86,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 153.01,
+  "r_m": 1058,
+  "blocker": "existing:V2Batch_hedge_mass_MI_V2_LeafDark:SM_hedge_mass",
+  "x": -94279.3,
+  "y": 48012.2,
+  "yaw": -50.28,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 269.57,
+  "r_m": 1078,
+  "blocker": "existing:W270S_W270S_Palace_Pavilion_stone_dark_t-1_-6:WL_Palace_Pavil",
+  "x": -816.9,
+  "y": -107789.9,
+  "yaw": 89.63,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 269.86,
+  "r_m": 1078,
+  "blocker": "existing:W270S_W270S_Palace_Pavilion_stone_dark_t-1_-6:WL_Palace_Pavil",
+  "x": -266.9,
+  "y": -107792.6,
+  "yaw": 89.87,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 270.0,
+  "r_m": 1078,
+  "blocker": "existing:W270S_W270S_Palace_Pavilion_stone_dark_t-1_-6:WL_Palace_Pavil",
+  "x": 0.0,
+  "y": -107793.2,
+  "yaw": 90.13,
+  "half_x": 720.0
+ },
+ {
+  "bearing": 270.29,
+  "r_m": 1078,
+  "blocker": "existing:W270S_W270S_Palace_Pavilion_stone_dark_t-1_-6:WL_Palace_Pavil",
+  "x": 550.0,
+  "y": -107791.6,
+  "yaw": 90.37,
+  "half_x": 720.0
+ }
+]
