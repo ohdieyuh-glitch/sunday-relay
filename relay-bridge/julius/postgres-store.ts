@@ -13,7 +13,7 @@
  */
 
 import type { Pool } from 'pg';
-import type { JuliusRecoveryDriver, JuliusRuntimeStore, JuliusTimelineReader } from '../../src/relay/mission/julius';
+import type { JuliusApprovalStore, JuliusRecoveryDriver, JuliusRuntimeStore, JuliusTimelineReader } from '../../src/relay/mission/julius';
 import { JuliusPostgresRepository } from '../../src/relay/persistence/julius-postgres';
 import { JuliusRecoveryPostgresRepository } from '../../src/relay/persistence/julius-recovery-postgres';
 import { JuliusContextPostgresRepository } from '../../src/relay/persistence/julius-context-postgres';
@@ -24,6 +24,7 @@ import { JuliusTrajectoryPostgresRepository } from '../../src/relay/persistence/
 import { JuliusContractPostgresRepository } from '../../src/relay/persistence/julius-contract-postgres';
 import { JuliusTimelinePostgresRepository } from '../../src/relay/persistence/julius-timeline-postgres';
 import { JuliusClaimPostgresRepository } from '../../src/relay/persistence/julius-claim-postgres';
+import { JuliusLifecyclePostgresRepository } from '../../src/relay/persistence/julius-lifecycle-postgres';
 
 /**
  * THE TIMELINE READER IS IN THE RETURN TYPE, not left to a structural probe.
@@ -52,7 +53,7 @@ import { JuliusClaimPostgresRepository } from '../../src/relay/persistence/juliu
  */
 export function createJuliusPostgresRuntimeStore(
   pool: Pool,
-): JuliusRuntimeStore & JuliusRecoveryDriver & JuliusTimelineReader {
+): JuliusRuntimeStore & JuliusRecoveryDriver & JuliusTimelineReader & Pick<JuliusApprovalStore, 'pendingApprovals'> {
   const runs = new JuliusPostgresRepository(pool);
   const results = new JuliusRecoveryPostgresRepository(pool);
   const contexts = new JuliusContextPostgresRepository(pool);
@@ -63,6 +64,7 @@ export function createJuliusPostgresRuntimeStore(
   const contracts = new JuliusContractPostgresRepository(pool);
   const timeline = new JuliusTimelinePostgresRepository(pool);
   const claims = new JuliusClaimPostgresRepository(pool);
+  const lifecycle = new JuliusLifecyclePostgresRepository(pool);
   return {
     loadRun: runs.loadRun.bind(runs),
     transition: runs.transition.bind(runs),
@@ -99,5 +101,9 @@ export function createJuliusPostgresRuntimeStore(
     timeline: timeline.timeline.bind(timeline),
     claimsForRun: claims.claimsForRun.bind(claims),
     recordClaimStanding: claims.recordClaimStanding.bind(claims),
+    // Read by `advanceRun` so a run holding on a PENDING approval (written by
+    // the bridge's lifecycle repository, same table) is never walked out of
+    // BLOCKED by the task graph. Without it the live job could not see a gate.
+    pendingApprovals: lifecycle.pendingApprovals.bind(lifecycle),
   };
 }

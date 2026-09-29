@@ -32,6 +32,7 @@
  */
 
 import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
+import type { JuliusApprovalStore } from './julius-lifecycle-runtime';
 import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionOutcome, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
 import { safeReasonCode, type JuliusDispatchWorkspace, type JuliusProviderRouter } from './julius-router';
@@ -212,8 +213,14 @@ export interface JuliusPipelineDependencies {
    * raised only `lease_generation` and bypassed the recovery ceiling — so the
    * sweep is the one way back, and it must belong to the kernel rather than to
    * whichever driver happens to call `tick`.
+   *
+   * `pendingApprovals`, WHEN THE STORE SERVES IT, is how `advanceRun` knows a
+   * BLOCKED run is waiting on a person rather than on work: a run with a
+   * PENDING approval is not walked out of BLOCKED by the task graph. Both
+   * PostgreSQL and in-memory stores serve it; a store that does not cannot
+   * hold an approval at all.
    */
-  readonly store: JuliusRuntimeStore & JuliusRecoveryDriver;
+  readonly store: JuliusRuntimeStore & JuliusRecoveryDriver & Partial<Pick<JuliusApprovalStore, 'pendingApprovals'>>;
   readonly router: JuliusProviderRouter;
   readonly budget: JuliusBudgetPort;
   readonly clock: JuliusClock;

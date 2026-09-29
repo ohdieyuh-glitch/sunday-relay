@@ -941,10 +941,12 @@ export async function driveJuliusRunToTerminal(input: {
     ...account, ticksConsumed: consumed, ticksRemaining: Math.max(0, account.allowance - consumed), exhausted,
   });
   const terminal = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
-  const stallCause = async (state: string): Promise<string | null> => {
+  const stallCause = async (state: string, advanceReason?: string): Promise<string | null> => {
     // HELD, NOT STUCK. A paused run stops because an operator said so; the
     // cause names that, so the job's RESULT line cannot read as a defect.
     if (state === 'PAUSED') return 'run_paused_by_operator: the run is PAUSED and claims no new work until an operator resumes it';
+    // Likewise a run holding for an approval nobody has answered yet.
+    if (advanceReason === 'RUN_AWAITING_APPROVAL') return `run_awaiting_approval: the run is ${state} on a PENDING approval and claims no new work until an authorized approver decides it`;
     if (state !== 'VERIFYING') return null;
     const decisions = await input.store.decisionsForRun(input.runId, input.projectId);
     const nonAccept = decisions.filter((decision) => decision.action !== 'ACCEPT');
@@ -997,7 +999,7 @@ export async function driveJuliusRunToTerminal(input: {
        * one step from finishing.
        */
       if (advance === null || (!advance.changed && advance.resumedVerifications === 0)) {
-        return { state: lastState, ticks: tick, stalled: true, haltCause: await stallCause(lastState), tickAccount: accountAt(tick, false) };
+        return { state: lastState, ticks: tick, stalled: true, haltCause: await stallCause(lastState, advance?.reasonCode), tickAccount: accountAt(tick, false) };
       }
     }
   }
