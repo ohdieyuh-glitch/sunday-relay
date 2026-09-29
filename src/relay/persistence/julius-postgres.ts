@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { JULIUS_RUNTIME_VERSION, JULIUS_TERMINAL_MISSION_STATES, transitionMission, validateJuliusEvent, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusOperationalEvent, type JuliusTask, type JuliusVerificationDecision } from '../mission/julius';
 import { brainKindToStored } from './julius-brain-kinds';
 import { appendJuliusEventWithin } from './julius-event-postgres';
+import { juliusSerializable } from './julius-serializable';
 
 export interface JuliusRunRecord { readonly runId:string;readonly missionId:string;readonly projectId:string;readonly state:JuliusMissionState;readonly cardRevision:string;readonly missionContractRevision:number;readonly projectBrainRevision:number;readonly version:number; }
 export interface ClaimedJuliusTask { readonly taskId:string;readonly runId:string;readonly role:string;readonly taskType:string;readonly leaseGeneration:number;readonly attempt:number; }
@@ -317,5 +318,12 @@ export class JuliusPostgresRepository {
   private async event(client:JuliusSqlClient,input:JuliusRunStreamEvent){await appendJuliusRunStreamEventWithin(client,input);}
   private mapRun(row:Record<string,unknown>):JuliusRunRecord{return{runId:String(row.run_id),missionId:String(row.mission_id),projectId:String(row.project_id),state:String(row.state)as JuliusMissionState,cardRevision:String(row.card_revision),missionContractRevision:Number(row.mission_contract_revision),projectBrainRevision:Number(row.project_brain_revision),version:Number(row.version)};}
   private parseRun(value:unknown):JuliusRunRecord{return typeof value==='string'?JSON.parse(value)as JuliusRunRecord:value as JuliusRunRecord;}
-  private async transaction<T>(effect:(client:any)=>Promise<T>):Promise<T>{const client=await this.pool.connect();try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');const value=await effect(client);await client.query('COMMIT');return value;}catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}}
+  /**
+   * One SERIALIZABLE transaction; a serialization failure is retried, bounded,
+   * by `juliusSerializable`. The five bodies run here — createRunOnce,
+   * transition, addTask, appendEvidence, appendDecision — are SQL over inputs
+   * their callers fixed, and `transition`'s stale-version conflict is marked
+   * `retryable: false`, so it is thrown on the first attempt.
+   */
+  private async transaction<T>(effect:(client:any)=>Promise<T>):Promise<T>{return juliusSerializable(this.pool,effect);}
 }
