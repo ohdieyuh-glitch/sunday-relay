@@ -128,7 +128,7 @@ describe('a legitimate attempt longer than its lease keeps it', () => {
     expect(gate.aborted()).toBeNull();
   });
 
-  it('WITHOUT renewal the same attempt outlives its lease and is reclaimed under it — the defect', async () => {
+  it('WITHOUT renewal the same attempt outlives its lease and is reclaimed under it — the defect, which now ends the task', async () => {
     const { harness, time } = setup();
     const gate = holdFirstDispatch(harness);
     const a = loopAs(harness, time, 'worker-a', null);
@@ -137,7 +137,9 @@ describe('a legitimate attempt longer than its lease keeps it', () => {
     await time.advance(5_000);
     expect(Date.parse(harness.store.taskRow('task-1')!.leaseExpiresAt!)).toBeLessThan(time.nowMs());
     const swept = await harness.store.recoverExpired(time.clock.now(), 10, 'prj-1');
-    expect(swept.map((action) => action.action)).toEqual(['REQUEUE']);
+    // The attempt was HANDED, so the sweep may not buy it a second time
+    // (decision C): without renewal, a healthy long attempt costs the task.
+    expect(swept.map((action) => `${action.action}:${action.reasonCode}`)).toEqual(['FAIL_TASK:HANDED_OUTCOME_UNKNOWN']);
     gate.release();
     await ticking;
   });
@@ -183,8 +185,10 @@ describe('a stale worker cannot continue', () => {
     // Worker A stops running — its timers do not fire — and its lease lapses.
     await time.advance(5_000);
     const fresh = await b.tick(scope);
-    expect(fresh.outcomes.map((outcome) => outcome.kind)).toEqual(['COMPLETED']);
-    expect(harness.store.taskRow('task-1')!.state).toBe('SUCCEEDED');
+    // Its attempt was HANDED, so worker B's sweep ends the task rather than
+    // dispatching it a second time (decision C).
+    expect(fresh.outcomes).toEqual([]);
+    expect(harness.store.taskRow('task-1')!.state).toBe('FAILED');
     const evidenceBefore = (await harness.store.evidenceForRun('run-1', 'prj-1')).length;
     const resultsBefore = harness.store.results().length;
 
@@ -199,10 +203,10 @@ describe('a stale worker cannot continue', () => {
     const { harness, gate, report, staleGeneration, evidenceBefore, resultsBefore } = await reclaimUnderPausedWorker();
     expect(gate.aborted()).toBe('lease_lost');
     expect(report.outcomes).toEqual([{ kind: 'FAILED', taskId: 'task-1', code: 'CANCELLED', failureClass: 'lease_lost' }]);
-    // The task is the fresh worker's, finished; nothing of the stale one's became state.
+    // The sweep ended the task; nothing of the stale worker's became state.
     const row = harness.store.taskRow('task-1')!;
-    expect(row.state).toBe('SUCCEEDED');
-    expect(row.leaseGeneration).toBeGreaterThan(staleGeneration);
+    expect(row.state).toBe('FAILED');
+    expect(row.leaseGeneration, 'and nobody claimed it after the sweep').toBe(staleGeneration);
     expect((await harness.store.evidenceForRun('run-1', 'prj-1')).length).toBe(evidenceBefore);
     expect(harness.store.results().length).toBe(resultsBefore);
     const staleFailure = harness.store.events().filter((event) => event.type === 'task.failed');
@@ -217,7 +221,7 @@ describe('a stale worker cannot continue', () => {
     for (let index = 0; index < 20; index += 1) await Promise.resolve();
     expect((await harness.store.evidenceForRun('run-1', 'prj-1')).length).toBe(evidenceBefore);
     expect(harness.store.results().length).toBe(resultsBefore);
-    expect(harness.store.taskRow('task-1')!.state).toBe('SUCCEEDED');
+    expect(harness.store.taskRow('task-1')!.state).toBe('FAILED');
   });
 
   it('a worker stuck past its hold bound is stopped, and its lease is never renewed past the bound', async () => {
@@ -272,7 +276,7 @@ describe('the keeper belongs to the attempt, and the loop refuses a renewal that
 });
 
 describe('a requeue is recorded only when the store took it', () => {
-  it('a retryable failure from a worker whose lease was reclaimed is not a RETRY: the task belongs to another worker now', async () => {
+  it('a retryable failure from a worker whose lease was reclaimed is not a RETRY: the sweep has ended the task', async () => {
     const { harness, time } = setup();
     const gate = holdFirstDispatch(harness, {
       failWith: () => new JuliusDispatchError('RATE_LIMIT', true, 'The provider rate limited the stale session.', 'fixture_rate_limited'),
@@ -284,12 +288,12 @@ describe('a requeue is recorded only when the store took it', () => {
     await gate.started;
     await time.advance(5_000);
     const fresh = await b.tick(scope);
-    expect(fresh.outcomes.map((outcome) => outcome.kind)).toEqual(['COMPLETED']);
+    expect(fresh.outcomes, 'the attempt was handed, so the sweep ended the task and nobody ran it again').toEqual([]);
 
     gate.release();
     const report = await stale;
     expect(report.outcomes.map((outcome) => outcome.kind)).toEqual(['FAILED']);
-    expect(harness.store.taskRow('task-1')!.state).toBe('SUCCEEDED');
+    expect(harness.store.taskRow('task-1')!.state).toBe('FAILED');
     expect(harness.store.trajectory().filter((event) => event.kind === 'RETRY'), 'no RETRY row for a requeue the store refused').toHaveLength(0);
   });
 });
