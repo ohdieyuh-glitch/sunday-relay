@@ -53,13 +53,14 @@ def nation_cfg(b):
     return "TQ03", "T"
 
 
-def regions():
-    audit = json.load(open(AUDIT, encoding="utf-8"))
+def regions(audit_path=None, min_area=None, prefix="S2"):
+    audit = json.load(open(audit_path or AUDIT, encoding="utf-8"))
+    min_area = MIN_AREA if min_area is None else min_area
     out, skipped = [], []
     for reg in audit["regions_top"]:
         r0, r1 = reg["radius_span_m"]
         b = float(reg["bearing_deg"])
-        if reg["area_m2"] < MIN_AREA:
+        if reg["area_m2"] < min_area:
             continue
         if r0 * 100.0 >= R_MAX:
             skipped.append((reg["bearing_deg"], r0, r1, "wild ring band"))
@@ -74,7 +75,7 @@ def regions():
             skipped.append((reg["bearing_deg"], r0 / 100, r1 / 100, "near " + ",".join(near)))
             continue
         cfg, letter = nation_cfg(b)
-        pid = "S2%s%03d" % (letter, int(round(b)) % 360)
+        pid = "%s%s%03d" % (prefix, letter, int(round(b)) % 360)
         while any(o["pid"] == pid for o in out):
             pid = pid[:-3] + "%03d" % ((int(pid[-3:]) + 1) % 360)
         out.append({"pid": pid, "R": dict(nation_cfg=cfg, bearing=b, half=round(half, 1), r=(r0, r1)),
@@ -114,8 +115,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--plan", action="store_true")
     ap.add_argument("--only", default="")
+    ap.add_argument("--audit", default=None, help="emptiness json to fit wedges to (default: the post-window-1 audit)")
+    ap.add_argument("--min-ha", type=float, default=None)
+    ap.add_argument("--prefix", default="S2", help="pass-id prefix; S3 for the next round")
+    ap.add_argument("--census", default=None, help="plan against this census (e.g. a projected one) instead of the live export")
     a = ap.parse_args()
-    regs, skipped = regions()
+    if a.census:
+        W.CENSUS = a.census
+    regs, skipped = regions(a.audit, None if a.min_ha is None else a.min_ha * 1e4, a.prefix)
     if a.plan:
         for g in regs:
             print("%-7s %-18s bearing %5.1f ±%4.1f  r %4.0f-%4.0f m  %6.0f m2" % (
@@ -139,6 +146,7 @@ def main():
             occ.add("existing", x, y, hw, hd, 0.0, tag)
         return n
     W.load_census = load_with_keepouts
+    rows_out = []
     for g in regs:
         pid, R = g["pid"], g["R"]
         if want and pid not in want:
@@ -147,7 +155,7 @@ def main():
             raise SystemExit("REFUSED: the census already contains %s" % pid)
         p, n_census, free0, free1, groups, walk_uv = S.fill(pid, R)
         spec = p.spec()
-        spec["tags"] = spec["tags"] + ["WL_SECTOR_FILL2"]
+        spec["tags"] = spec["tags"] + ["WL_SECTOR_FILL" + a.prefix[1:]]
         # NO PATHS TO NOWHERE (founder directive P2). A walk that joins no paving at either end and has no garden
         # quarter on it is a stepping-stone line from lawn to lawn: a cul-de-sac. Its stones are dropped; the
         # groves and drifts stay. A walk joined at ONE end is a spur to its wood/grove and stays.
@@ -156,10 +164,11 @@ def main():
             spec["batches"] = [b for b in spec["batches"] if "Flagstone" not in b["mesh"]]
             walk_uv = []
             st["walk_dropped_as_cul_de_sac"] += 1
-        (HERE / ("%s_fill2.json" % pid.lower())).write_text(json.dumps(spec, indent=1), encoding="utf-8")
+        (HERE / ("%s_fill%s.json" % (pid.lower(), a.prefix[1:]))).write_text(json.dumps(spec, indent=1), encoding="utf-8")
         (HERE / ("%s_walk.json" % pid.lower())).write_text(json.dumps(sidecar(pid, R, groups, walk_uv), indent=1),
                                                            encoding="utf-8")
         planned.extend((r[1], r[2], r[4], r[5], "%s:planned" % pid) for r in p.new_rows)
+        rows_out.extend((r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], pid) for r in p.new_rows)
         total = sum(len(b["instances"]) for b in spec["batches"])
         st = p.stats
         print("%-7s free %.1f -> %.1f ha  batches %d  inst %d  quarter %d room %d grove %d drift %d wood %d walk_m %d "
@@ -167,6 +176,15 @@ def main():
                   pid, free0 / 1e4, free1 / 1e4, len(spec["batches"]), total, st["quarter"], st["room_single"],
                   st["grove"], st["meadow_drift"], st["wood"], st["walk_m"], st["joined"], st["not_joined"],
                   st["walk_blocked_offline"]))
+    write_rows(rows_out, a.prefix)
+
+
+def write_rows(rows_out, prefix):
+    """Census-format rows of what was planned, so emptiness.py can project the fill before it exists."""
+    with gzip.open(HERE / ("sector_fill%s_new_placements.csv.gz" % prefix[1:]), "wt", encoding="utf-8", newline="") as f:
+        f.write("kind,x,y,z,ex,ey,ez,yaw,mesh,owner\n")
+        for (k, x, y, z, ex, ey, ez, mesh, owner) in rows_out:
+            f.write("%s,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,0,%s,%s\n" % (k, x, y, z, ex, ey, ez, mesh, owner))
 
 
 def mg01_entry():
@@ -224,7 +242,9 @@ def mg01_entry():
 
 
 if __name__ == "__main__":
-    main()
-    if not sys.argv[1:] or "--only" not in " ".join(sys.argv[1:]):
-        if "--plan" not in sys.argv:
-            mg01_entry()
+    # MG01's entry (S2M297) is APPLIED (CORE's window 2A, fa018857) and was planned on the pre-2A census. Re-planning
+    # it now would read its own stones back and write a different spec over the applied one. Only on request.
+    if "--mg01-entry" in sys.argv:
+        mg01_entry()
+    else:
+        main()

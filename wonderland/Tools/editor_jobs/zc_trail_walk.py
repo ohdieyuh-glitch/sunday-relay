@@ -22,7 +22,8 @@ EVERY = globals().get("EVERY", 2)
 ARRIVE = 180.0
 STUCK = 6.0
 TICK = 0.05
-SPEED_GUESS = 400.0           # cm/s, only to size each route's time budget (x2.5 + 60 s)
+SPEED_GUESS = 100.0           # cm/s: a deliberately slow guess, so a slow editor never fails a route on time;
+                              # the STUCK test (no 20 cm gain in 6 game-seconds) is what fails a blocked one
 PAWN = unreal.TraceTypeQuery.TRACE_TYPE_QUERY2
 
 
@@ -142,7 +143,7 @@ def _walk_all(ues, les):
         yield 1.0
         # THE WALK
         length = sum(math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) for i in range(len(pts) - 1))
-        budget = length / SPEED_GUESS * 2.5 + 60.0
+        budget = length / SPEED_GUESS + 120.0
         wp, elapsed, walked, best_d, since_gain = 1, 0.0, 0.0, None, 0.0
         last = None
         low_z = None
@@ -198,7 +199,9 @@ def _walk_all(ues, les):
             except Exception as err:                                   # noqa: BLE001
                 row["error"] = "movement input failed: %s" % str(err)[:80]
                 break
-            yield TICK
+            # EVERY FRAME. Input is consumed once per movement tick; yielding 0.05 s dropped most frames' input and
+            # walked the Dog at ~1.2 m/s (zzW107, VOID: HT356 timed out at 89% with no stuck point).
+            yield None
         row["arrived"] = wp >= len(pts)
         wall = _t.time() - w_start
         row["wall_seconds"] = round(wall, 1)

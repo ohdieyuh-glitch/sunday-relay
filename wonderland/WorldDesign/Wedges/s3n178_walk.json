@@ -1,0 +1,21 @@
+{
+ "pass": "S3N178",
+ "bearing": 178.0,
+ "walk": [],
+ "groups": [
+  {
+   "kind": "drift",
+   "centre": [
+    -68459.6,
+    3784.4
+   ]
+  },
+  {
+   "kind": "drift",
+   "centre": [
+    -85071.7,
+    862.4
+   ]
+  }
+ ]
+}

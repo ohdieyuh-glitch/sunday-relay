@@ -1,0 +1,14 @@
+{
+ "pass": "S3I053",
+ "bearing": 53.0,
+ "walk": [],
+ "groups": [
+  {
+   "kind": "drift",
+   "centre": [
+    60431.9,
+    83869.5
+   ]
+  }
+ ]
+}

@@ -1,0 +1,759 @@
+{
+ "census": "census_proj_s2wx_s3.csv.gz",
+ "extra": [],
+ "empty_m2": 884550,
+ "by_class_m2": {
+  "UNINTENDED": 545650,
+  "GARDEN_LAWN": 295125,
+  "TRAVERSAL_VERGE": 22475,
+  "CORE_COMPOSITION": 10575,
+  "VISTA": 9075,
+  "CLEARING": 1650
+ },
+ "by_class_pct_of_empty": {
+  "UNINTENDED": 61.7,
+  "CLEARING": 0.2,
+  "GARDEN_LAWN": 33.4,
+  "TRAVERSAL_VERGE": 2.5,
+  "VISTA": 1.0,
+  "CORE_COMPOSITION": 1.2
+ },
+ "avenue_axes_deg": {
+  "AV01": 90.0,
+  "AV02": 209.8,
+  "AV03": 329.7
+ },
+ "regions": [
+  {
+   "class": "UNINTENDED",
+   "area_ha": 3.43,
+   "centre_uu": [
+    -16732,
+    44681
+   ],
+   "bearing_deg": 111,
+   "centre_radius_m": 477,
+   "zone": "core",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.05,
+    "verge": 0.14,
+    "enclosed_sides": 0
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 2.46,
+   "centre_uu": [
+    47683,
+    -105390
+   ],
+   "bearing_deg": 294,
+   "centre_radius_m": 1157,
+   "zone": "TARTARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.11,
+    "enclosed_sides": 1
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 2.35,
+   "centre_uu": [
+    45038,
+    -87453
+   ],
+   "bearing_deg": 297,
+   "centre_radius_m": 984,
+   "zone": "TARTARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.17,
+    "enclosed_sides": 0
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 1.74,
+   "centre_uu": [
+    -57027,
+    64783
+   ],
+   "bearing_deg": 131,
+   "centre_radius_m": 863,
+   "zone": "ICARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.13,
+    "enclosed_sides": 0
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 1.68,
+   "centre_uu": [
+    -19107,
+    68357
+   ],
+   "bearing_deg": 106,
+   "centre_radius_m": 710,
+   "zone": "ICARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.1,
+    "enclosed_sides": 0
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 1.16,
+   "centre_uu": [
+    53745,
+    110246
+   ],
+   "bearing_deg": 64,
+   "centre_radius_m": 1226,
+   "zone": "ICARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.04,
+    "enclosed_sides": 0
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 1.15,
+   "centre_uu": [
+    29140,
+    117989
+   ],
+   "bearing_deg": 76,
+   "centre_radius_m": 1215,
+   "zone": "ICARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.07,
+    "enclosed_sides": 2
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 1.14,
+   "centre_uu": [
+    -13240,
+    120011
+   ],
+   "bearing_deg": 96,
+   "centre_radius_m": 1207,
+   "zone": "ICARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.04,
+    "verge": 0.03,
+    "enclosed_sides": 2
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 1.01,
+   "centre_uu": [
+    63091,
+    130916
+   ],
+   "bearing_deg": 64,
+   "centre_radius_m": 1453,
+   "zone": "ICARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.0,
+    "enclosed_sides": 0
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.99,
+   "centre_uu": [
+    -44014,
+    114842
+   ],
+   "bearing_deg": 111,
+   "centre_radius_m": 1230,
+   "zone": "ICARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.0,
+    "enclosed_sides": 0
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.87,
+   "centre_uu": [
+    15132,
+    -66662
+   ],
+   "bearing_deg": 283,
+   "centre_radius_m": 684,
+   "zone": "TARTARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.12,
+    "enclosed_sides": 2
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.79,
+   "centre_uu": [
+    -47728,
+    -19687
+   ],
+   "bearing_deg": 202,
+   "centre_radius_m": 516,
+   "zone": "NOCTIS/march",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.17,
+    "verge": 0.3,
+    "enclosed_sides": 1
+   }
+  },
+  {
+   "class": "GARDEN_LAWN",
+   "area_ha": 0.79,
+   "centre_uu": [
+    67130,
+    -19234
+   ],
+   "bearing_deg": 344,
+   "centre_radius_m": 698,
+   "zone": "TARTARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.11,
+    "enclosed_sides": 3
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.76,
+   "centre_uu": [
+    36729,
+    -38198
+   ],
+   "bearing_deg": 314,
+   "centre_radius_m": 530,
+   "zone": "TARTARUS/march",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.26,
+    "enclosed_sides": 2
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.74,
+   "centre_uu": [
+    -107485,
+    43568
+   ],
+   "bearing_deg": 158,
+   "centre_radius_m": 1160,
+   "zone": "NOCTIS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.06,
+    "enclosed_sides": 2
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.74,
+   "centre_uu": [
+    52429,
+    57541
+   ],
+   "bearing_deg": 48,
+   "centre_radius_m": 778,
+   "zone": "ICARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.05,
+    "enclosed_sides": 2
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.73,
+   "centre_uu": [
+    12806,
+    -102532
+   ],
+   "bearing_deg": 277,
+   "centre_radius_m": 1033,
+   "zone": "TARTARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.09,
+    "enclosed_sides": 0
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.73,
+   "centre_uu": [
+    13150,
+    -50910
+   ],
+   "bearing_deg": 284,
+   "centre_radius_m": 526,
+   "zone": "TARTARUS/march",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.24,
+    "enclosed_sides": 1
+   }
+  },
+  {
+   "class": "GARDEN_LAWN",
+   "area_ha": 0.71,
+   "centre_uu": [
+    84348,
+    -28403
+   ],
+   "bearing_deg": 341,
+   "centre_radius_m": 890,
+   "zone": "TARTARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.0,
+    "enclosed_sides": 4
+   }
+  },
+  {
+   "class": "GARDEN_LAWN",
+   "area_ha": 0.69,
+   "centre_uu": [
+    -45623,
+    -68882
+   ],
+   "bearing_deg": 236,
+   "centre_radius_m": 826,
+   "zone": "NOCTIS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.0,
+    "enclosed_sides": 3
+   }
+  },
+  {
+   "class": "GARDEN_LAWN",
+   "area_ha": 0.69,
+   "centre_uu": [
+    101761,
+    -3725
+   ],
+   "bearing_deg": 358,
+   "centre_radius_m": 1018,
+   "zone": "TARTARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.07,
+    "enclosed_sides": 3
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.69,
+   "centre_uu": [
+    -52514,
+    -6170
+   ],
+   "bearing_deg": 187,
+   "centre_radius_m": 529,
+   "zone": "NOCTIS/march",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.11,
+    "enclosed_sides": 2
+   }
+  },
+  {
+   "class": "GARDEN_LAWN",
+   "area_ha": 0.68,
+   "centre_uu": [
+    -45583,
+    -107700
+   ],
+   "bearing_deg": 247,
+   "centre_radius_m": 1169,
+   "zone": "NOCTIS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.0,
+    "enclosed_sides": 4
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.66,
+   "centre_uu": [
+    68080,
+    49678
+   ],
+   "bearing_deg": 36,
+   "centre_radius_m": 843,
+   "zone": "ICARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.3,
+    "enclosed_sides": 0
+   }
+  },
+  {
+   "class": "GARDEN_LAWN",
+   "area_ha": 0.65,
+   "centre_uu": [
+    -65331,
+    -12442
+   ],
+   "bearing_deg": 191,
+   "centre_radius_m": 665,
+   "zone": "NOCTIS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.16,
+    "enclosed_sides": 3
+   }
+  },
+  {
+   "class": "GARDEN_LAWN",
+   "area_ha": 0.64,
+   "centre_uu": [
+    113928,
+    -16134
+   ],
+   "bearing_deg": 352,
+   "centre_radius_m": 1151,
+   "zone": "TARTARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.14,
+    "enclosed_sides": 4
+   }
+  },
+  {
+   "class": "GARDEN_LAWN",
+   "area_ha": 0.64,
+   "centre_uu": [
+    78585,
+    -1518
+   ],
+   "bearing_deg": 359,
+   "centre_radius_m": 786,
+   "zone": "TARTARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.0,
+    "enclosed_sides": 4
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.61,
+   "centre_uu": [
+    5487,
+    50594
+   ],
+   "bearing_deg": 84,
+   "centre_radius_m": 509,
+   "zone": "ICARUS/march",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.2,
+    "verge": 0.42,
+    "enclosed_sides": 2
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.59,
+   "centre_uu": [
+    88995,
+    -72805
+   ],
+   "bearing_deg": 321,
+   "centre_radius_m": 1150,
+   "zone": "TARTARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.36,
+    "enclosed_sides": 1
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.58,
+   "centre_uu": [
+    51585,
+    -19310
+   ],
+   "bearing_deg": 339,
+   "centre_radius_m": 551,
+   "zone": "TARTARUS/march",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.04,
+    "verge": 0.38,
+    "enclosed_sides": 1
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.58,
+   "centre_uu": [
+    -75642,
+    39412
+   ],
+   "bearing_deg": 152,
+   "centre_radius_m": 853,
+   "zone": "NOCTIS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.13,
+    "enclosed_sides": 0
+   }
+  },
+  {
+   "class": "GARDEN_LAWN",
+   "area_ha": 0.57,
+   "centre_uu": [
+    11129,
+    -82001
+   ],
+   "bearing_deg": 278,
+   "centre_radius_m": 828,
+   "zone": "TARTARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.0,
+    "enclosed_sides": 3
+   }
+  },
+  {
+   "class": "GARDEN_LAWN",
+   "area_ha": 0.57,
+   "centre_uu": [
+    -36135,
+    -81541
+   ],
+   "bearing_deg": 246,
+   "centre_radius_m": 892,
+   "zone": "NOCTIS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.0,
+    "enclosed_sides": 4
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.56,
+   "centre_uu": [
+    60367,
+    23726
+   ],
+   "bearing_deg": 21,
+   "centre_radius_m": 649,
+   "zone": "TARTARUS/march",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.28,
+    "enclosed_sides": 1
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.56,
+   "centre_uu": [
+    -33440,
+    87279
+   ],
+   "bearing_deg": 111,
+   "centre_radius_m": 935,
+   "zone": "ICARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.17,
+    "enclosed_sides": 0
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.56,
+   "centre_uu": [
+    32453,
+    99236
+   ],
+   "bearing_deg": 72,
+   "centre_radius_m": 1044,
+   "zone": "ICARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.07,
+    "enclosed_sides": 2
+   }
+  },
+  {
+   "class": "GARDEN_LAWN",
+   "area_ha": 0.55,
+   "centre_uu": [
+    -25470,
+    -114679
+   ],
+   "bearing_deg": 257,
+   "centre_radius_m": 1175,
+   "zone": "NOCTIS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.01,
+    "enclosed_sides": 4
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.53,
+   "centre_uu": [
+    -76202,
+    28407
+   ],
+   "bearing_deg": 160,
+   "centre_radius_m": 813,
+   "zone": "NOCTIS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.58,
+    "enclosed_sides": 1
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.53,
+   "centre_uu": [
+    67656,
+    37893
+   ],
+   "bearing_deg": 29,
+   "centre_radius_m": 775,
+   "zone": "TARTARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.24,
+    "enclosed_sides": 0
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.53,
+   "centre_uu": [
+    -17690,
+    93400
+   ],
+   "bearing_deg": 101,
+   "centre_radius_m": 951,
+   "zone": "ICARUS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.16,
+    "enclosed_sides": 0
+   }
+  },
+  {
+   "class": "GARDEN_LAWN",
+   "area_ha": 0.52,
+   "centre_uu": [
+    -103454,
+    -31425
+   ],
+   "bearing_deg": 197,
+   "centre_radius_m": 1081,
+   "zone": "NOCTIS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.25,
+    "enclosed_sides": 3
+   }
+  },
+  {
+   "class": "GARDEN_LAWN",
+   "area_ha": 0.5,
+   "centre_uu": [
+    -75549,
+    17850
+   ],
+   "bearing_deg": 167,
+   "centre_radius_m": 776,
+   "zone": "NOCTIS/heartland",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.0,
+    "enclosed_sides": 4
+   }
+  },
+  {
+   "class": "UNINTENDED",
+   "area_ha": 0.5,
+   "centre_uu": [
+    -42695,
+    38379
+   ],
+   "bearing_deg": 138,
+   "centre_radius_m": 574,
+   "zone": "ICARUS/march",
+   "evidence": {
+    "clearing": 0.0,
+    "vista": 0.0,
+    "verge": 0.0,
+    "enclosed_sides": 0
+   }
+  }
+ ]
+}

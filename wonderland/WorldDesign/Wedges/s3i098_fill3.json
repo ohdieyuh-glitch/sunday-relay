@@ -1,0 +1,3302 @@
+{
+ "pass": "S3I098",
+ "tags": [
+  "WL_SECTOR_FILL",
+  "WL_NATION_ICARUS",
+  "WL_DISTRICT_ICARUS_HEARTLAND",
+  "WL_SECTOR_FILL3"
+ ],
+ "folder": "Wonderland/Authored/S3I098_IcarusHeartland",
+ "actors": [],
+ "batches": [
+  {
+   "id": "S3I098_Mushroom_Button_mush_cap_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_cap.WL_Mushroom_Button_mush_cap",
+   "material": "MI_V2_MushCream",
+   "instances": [
+    [
+     -10416.1,
+     118531.3,
+     -14.0,
+     0.0,
+     277.5,
+     0.0,
+     1.008,
+     1.008,
+     1.008
+    ],
+    [
+     -11755.9,
+     118158.2,
+     -14.0,
+     0.0,
+     339.8,
+     0.0,
+     1.428,
+     1.428,
+     1.428
+    ],
+    [
+     -11291.8,
+     119155.7,
+     -14.0,
+     0.0,
+     88.0,
+     0.0,
+     1.624,
+     1.624,
+     1.624
+    ],
+    [
+     -10220.7,
+     119576.7,
+     -14.0,
+     0.0,
+     3.1,
+     0.0,
+     1.562,
+     1.562,
+     1.562
+    ],
+    [
+     -9503.9,
+     118693.9,
+     -14.0,
+     0.0,
+     125.9,
+     0.0,
+     1.664,
+     1.664,
+     1.664
+    ],
+    [
+     -13596.5,
+     119997.5,
+     -14.0,
+     0.0,
+     49.7,
+     0.0,
+     1.736,
+     1.736,
+     1.736
+    ],
+    [
+     -12764.2,
+     117391.4,
+     -14.0,
+     0.0,
+     300.2,
+     0.0,
+     1.031,
+     1.031,
+     1.031
+    ],
+    [
+     -14218.0,
+     119580.3,
+     -14.0,
+     0.0,
+     36.3,
+     0.0,
+     1.107,
+     1.107,
+     1.107
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Button_mush_gill_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_gill.WL_Mushroom_Button_mush_gill",
+   "material": "MI_V2_MushCream",
+   "instances": [
+    [
+     -10416.1,
+     118531.3,
+     -14.0,
+     0.0,
+     277.5,
+     0.0,
+     1.008,
+     1.008,
+     1.008
+    ],
+    [
+     -11755.9,
+     118158.2,
+     -14.0,
+     0.0,
+     339.8,
+     0.0,
+     1.428,
+     1.428,
+     1.428
+    ],
+    [
+     -11291.8,
+     119155.7,
+     -14.0,
+     0.0,
+     88.0,
+     0.0,
+     1.624,
+     1.624,
+     1.624
+    ],
+    [
+     -10220.7,
+     119576.7,
+     -14.0,
+     0.0,
+     3.1,
+     0.0,
+     1.562,
+     1.562,
+     1.562
+    ],
+    [
+     -9503.9,
+     118693.9,
+     -14.0,
+     0.0,
+     125.9,
+     0.0,
+     1.664,
+     1.664,
+     1.664
+    ],
+    [
+     -13596.5,
+     119997.5,
+     -14.0,
+     0.0,
+     49.7,
+     0.0,
+     1.736,
+     1.736,
+     1.736
+    ],
+    [
+     -12764.2,
+     117391.4,
+     -14.0,
+     0.0,
+     300.2,
+     0.0,
+     1.031,
+     1.031,
+     1.031
+    ],
+    [
+     -14218.0,
+     119580.3,
+     -14.0,
+     0.0,
+     36.3,
+     0.0,
+     1.107,
+     1.107,
+     1.107
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Button_mush_spot_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_spot.WL_Mushroom_Button_mush_spot",
+   "material": "MI_V2_PetalWhite",
+   "instances": [
+    [
+     -10416.1,
+     118531.3,
+     -14.0,
+     0.0,
+     277.5,
+     0.0,
+     1.008,
+     1.008,
+     1.008
+    ],
+    [
+     -11755.9,
+     118158.2,
+     -14.0,
+     0.0,
+     339.8,
+     0.0,
+     1.428,
+     1.428,
+     1.428
+    ],
+    [
+     -11291.8,
+     119155.7,
+     -14.0,
+     0.0,
+     88.0,
+     0.0,
+     1.624,
+     1.624,
+     1.624
+    ],
+    [
+     -10220.7,
+     119576.7,
+     -14.0,
+     0.0,
+     3.1,
+     0.0,
+     1.562,
+     1.562,
+     1.562
+    ],
+    [
+     -9503.9,
+     118693.9,
+     -14.0,
+     0.0,
+     125.9,
+     0.0,
+     1.664,
+     1.664,
+     1.664
+    ],
+    [
+     -13596.5,
+     119997.5,
+     -14.0,
+     0.0,
+     49.7,
+     0.0,
+     1.736,
+     1.736,
+     1.736
+    ],
+    [
+     -12764.2,
+     117391.4,
+     -14.0,
+     0.0,
+     300.2,
+     0.0,
+     1.031,
+     1.031,
+     1.031
+    ],
+    [
+     -14218.0,
+     119580.3,
+     -14.0,
+     0.0,
+     36.3,
+     0.0,
+     1.107,
+     1.107,
+     1.107
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Button_mush_stem_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_stem.WL_Mushroom_Button_mush_stem",
+   "material": "MI_V2_MushStem",
+   "instances": [
+    [
+     -10416.1,
+     118531.3,
+     -14.0,
+     0.0,
+     277.5,
+     0.0,
+     1.008,
+     1.008,
+     1.008
+    ],
+    [
+     -11755.9,
+     118158.2,
+     -14.0,
+     0.0,
+     339.8,
+     0.0,
+     1.428,
+     1.428,
+     1.428
+    ],
+    [
+     -11291.8,
+     119155.7,
+     -14.0,
+     0.0,
+     88.0,
+     0.0,
+     1.624,
+     1.624,
+     1.624
+    ],
+    [
+     -10220.7,
+     119576.7,
+     -14.0,
+     0.0,
+     3.1,
+     0.0,
+     1.562,
+     1.562,
+     1.562
+    ],
+    [
+     -9503.9,
+     118693.9,
+     -14.0,
+     0.0,
+     125.9,
+     0.0,
+     1.664,
+     1.664,
+     1.664
+    ],
+    [
+     -13596.5,
+     119997.5,
+     -14.0,
+     0.0,
+     49.7,
+     0.0,
+     1.736,
+     1.736,
+     1.736
+    ],
+    [
+     -12764.2,
+     117391.4,
+     -14.0,
+     0.0,
+     300.2,
+     0.0,
+     1.031,
+     1.031,
+     1.031
+    ],
+    [
+     -14218.0,
+     119580.3,
+     -14.0,
+     0.0,
+     36.3,
+     0.0,
+     1.107,
+     1.107,
+     1.107
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Tall_mush_cap_t-1_6",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_cap.WL_Mushroom_Tall_mush_cap",
+   "material": "MI_V2_MushCream",
+   "instances": [
+    [
+     -10359.3,
+     121001.9,
+     -14.0,
+     0.0,
+     96.6,
+     0.0,
+     2.864,
+     2.864,
+     2.864
+    ],
+    [
+     -12464.3,
+     121768.4,
+     -14.0,
+     0.0,
+     306.2,
+     0.0,
+     2.916,
+     2.916,
+     2.916
+    ],
+    [
+     -14018.1,
+     120886.4,
+     -14.0,
+     0.0,
+     191.6,
+     0.0,
+     1.364,
+     1.364,
+     1.364
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Tall_mush_gill_t-1_6",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_gill.WL_Mushroom_Tall_mush_gill",
+   "material": "MI_V2_MushCream",
+   "instances": [
+    [
+     -10359.3,
+     121001.9,
+     -14.0,
+     0.0,
+     96.6,
+     0.0,
+     2.864,
+     2.864,
+     2.864
+    ],
+    [
+     -12464.3,
+     121768.4,
+     -14.0,
+     0.0,
+     306.2,
+     0.0,
+     2.916,
+     2.916,
+     2.916
+    ],
+    [
+     -14018.1,
+     120886.4,
+     -14.0,
+     0.0,
+     191.6,
+     0.0,
+     1.364,
+     1.364,
+     1.364
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Tall_mush_spot_t-1_6",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_spot.WL_Mushroom_Tall_mush_spot",
+   "material": "MI_V2_PetalWhite",
+   "instances": [
+    [
+     -10359.3,
+     121001.9,
+     -14.0,
+     0.0,
+     96.6,
+     0.0,
+     2.864,
+     2.864,
+     2.864
+    ],
+    [
+     -12464.3,
+     121768.4,
+     -14.0,
+     0.0,
+     306.2,
+     0.0,
+     2.916,
+     2.916,
+     2.916
+    ],
+    [
+     -14018.1,
+     120886.4,
+     -14.0,
+     0.0,
+     191.6,
+     0.0,
+     1.364,
+     1.364,
+     1.364
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Tall_mush_stem_t-1_6",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_stem.WL_Mushroom_Tall_mush_stem",
+   "material": "MI_V2_MushStem",
+   "instances": [
+    [
+     -10359.3,
+     121001.9,
+     -14.0,
+     0.0,
+     96.6,
+     0.0,
+     2.864,
+     2.864,
+     2.864
+    ],
+    [
+     -12464.3,
+     121768.4,
+     -14.0,
+     0.0,
+     306.2,
+     0.0,
+     2.916,
+     2.916,
+     2.916
+    ],
+    [
+     -14018.1,
+     120886.4,
+     -14.0,
+     0.0,
+     191.6,
+     0.0,
+     1.364,
+     1.364,
+     1.364
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Tall_mush_cap_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_cap.WL_Mushroom_Tall_mush_cap",
+   "material": "MI_V2_MushCream",
+   "instances": [
+    [
+     -12985.3,
+     118797.9,
+     -14.0,
+     0.0,
+     19.4,
+     0.0,
+     2.954,
+     2.954,
+     2.954
+    ],
+    [
+     -9208.5,
+     119931.0,
+     -14.0,
+     0.0,
+     338.6,
+     0.0,
+     2.338,
+     2.338,
+     2.338
+    ],
+    [
+     -10409.2,
+     117143.6,
+     -14.0,
+     0.0,
+     186.6,
+     0.0,
+     2.311,
+     2.311,
+     2.311
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Tall_mush_gill_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_gill.WL_Mushroom_Tall_mush_gill",
+   "material": "MI_V2_MushCream",
+   "instances": [
+    [
+     -12985.3,
+     118797.9,
+     -14.0,
+     0.0,
+     19.4,
+     0.0,
+     2.954,
+     2.954,
+     2.954
+    ],
+    [
+     -9208.5,
+     119931.0,
+     -14.0,
+     0.0,
+     338.6,
+     0.0,
+     2.338,
+     2.338,
+     2.338
+    ],
+    [
+     -10409.2,
+     117143.6,
+     -14.0,
+     0.0,
+     186.6,
+     0.0,
+     2.311,
+     2.311,
+     2.311
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Tall_mush_spot_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_spot.WL_Mushroom_Tall_mush_spot",
+   "material": "MI_V2_PetalWhite",
+   "instances": [
+    [
+     -12985.3,
+     118797.9,
+     -14.0,
+     0.0,
+     19.4,
+     0.0,
+     2.954,
+     2.954,
+     2.954
+    ],
+    [
+     -9208.5,
+     119931.0,
+     -14.0,
+     0.0,
+     338.6,
+     0.0,
+     2.338,
+     2.338,
+     2.338
+    ],
+    [
+     -10409.2,
+     117143.6,
+     -14.0,
+     0.0,
+     186.6,
+     0.0,
+     2.311,
+     2.311,
+     2.311
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Tall_mush_stem_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_stem.WL_Mushroom_Tall_mush_stem",
+   "material": "MI_V2_MushStem",
+   "instances": [
+    [
+     -12985.3,
+     118797.9,
+     -14.0,
+     0.0,
+     19.4,
+     0.0,
+     2.954,
+     2.954,
+     2.954
+    ],
+    [
+     -9208.5,
+     119931.0,
+     -14.0,
+     0.0,
+     338.6,
+     0.0,
+     2.338,
+     2.338,
+     2.338
+    ],
+    [
+     -10409.2,
+     117143.6,
+     -14.0,
+     0.0,
+     186.6,
+     0.0,
+     2.311,
+     2.311,
+     2.311
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Button_mush_cap_t-1_6",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_cap.WL_Mushroom_Button_mush_cap",
+   "material": "MI_V2_PetalWhite",
+   "instances": [
+    [
+     -11565.4,
+     120627.7,
+     -14.0,
+     0.0,
+     6.2,
+     0.0,
+     1.452,
+     1.452,
+     1.452
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Button_mush_gill_t-1_6",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_gill.WL_Mushroom_Button_mush_gill",
+   "material": "MI_V2_MushCream",
+   "instances": [
+    [
+     -11565.4,
+     120627.7,
+     -14.0,
+     0.0,
+     6.2,
+     0.0,
+     1.452,
+     1.452,
+     1.452
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Button_mush_spot_t-1_6",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_spot.WL_Mushroom_Button_mush_spot",
+   "material": "MI_V2_PetalWhite",
+   "instances": [
+    [
+     -11565.4,
+     120627.7,
+     -14.0,
+     0.0,
+     6.2,
+     0.0,
+     1.452,
+     1.452,
+     1.452
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Button_mush_stem_t-1_6",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_stem.WL_Mushroom_Button_mush_stem",
+   "material": "MI_V2_MushStem",
+   "instances": [
+    [
+     -11565.4,
+     120627.7,
+     -14.0,
+     0.0,
+     6.2,
+     0.0,
+     1.452,
+     1.452,
+     1.452
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Toadstool_mush_cap_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_cap.WL_Mushroom_Toadstool_mush_cap",
+   "material": "MI_V2_PetalWhite",
+   "instances": [
+    [
+     -11611.9,
+     117131.1,
+     -14.0,
+     0.0,
+     118.8,
+     0.0,
+     1.509,
+     1.509,
+     1.509
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Toadstool_mush_gill_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_gill.WL_Mushroom_Toadstool_mush_gill",
+   "material": "MI_V2_MushCream",
+   "instances": [
+    [
+     -11611.9,
+     117131.1,
+     -14.0,
+     0.0,
+     118.8,
+     0.0,
+     1.509,
+     1.509,
+     1.509
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Toadstool_mush_spot_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_spot.WL_Mushroom_Toadstool_mush_spot",
+   "material": "MI_V2_PetalWhite",
+   "instances": [
+    [
+     -11611.9,
+     117131.1,
+     -14.0,
+     0.0,
+     118.8,
+     0.0,
+     1.509,
+     1.509,
+     1.509
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Mushroom_Toadstool_mush_stem_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_stem.WL_Mushroom_Toadstool_mush_stem",
+   "material": "MI_V2_MushStem",
+   "instances": [
+    [
+     -11611.9,
+     117131.1,
+     -14.0,
+     0.0,
+     118.8,
+     0.0,
+     1.509,
+     1.509,
+     1.509
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Trunk_slender_t-1_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     -14492.5,
+     117988.5,
+     -34.0,
+     0.0,
+     263.9,
+     0.0,
+     1.023,
+     1.023,
+     1.023
+    ],
+    [
+     -16488.5,
+     118704.8,
+     -34.0,
+     0.0,
+     99.1,
+     0.0,
+     0.899,
+     0.899,
+     0.899
+    ],
+    [
+     -16805.8,
+     119708.2,
+     -34.0,
+     0.0,
+     335.3,
+     0.0,
+     1.072,
+     1.072,
+     1.072
+    ],
+    [
+     -17437.1,
+     118702.8,
+     -34.0,
+     0.0,
+     3.4,
+     0.0,
+     0.941,
+     0.941,
+     0.941
+    ],
+    [
+     -16835.9,
+     118023.5,
+     -34.0,
+     0.0,
+     157.9,
+     0.0,
+     1.132,
+     1.132,
+     1.132
+    ],
+    [
+     -17661.1,
+     119634.8,
+     -34.0,
+     0.0,
+     350.2,
+     0.0,
+     1.159,
+     1.159,
+     1.159
+    ],
+    [
+     -18896.9,
+     119048.8,
+     -34.0,
+     0.0,
+     329.3,
+     0.0,
+     0.973,
+     0.973,
+     0.973
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Canopy_slender_LeafMid_t-1_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     -14492.5,
+     117988.5,
+     740.2,
+     0.0,
+     263.9,
+     0.0,
+     1.176,
+     1.176,
+     1.176
+    ],
+    [
+     -16805.8,
+     119708.2,
+     777.4,
+     0.0,
+     335.3,
+     0.0,
+     1.233,
+     1.233,
+     1.233
+    ],
+    [
+     -17437.1,
+     118702.8,
+     678.4,
+     0.0,
+     3.4,
+     0.0,
+     1.083,
+     1.083,
+     1.083
+    ],
+    [
+     -17661.1,
+     119634.8,
+     843.4,
+     0.0,
+     350.2,
+     0.0,
+     1.333,
+     1.333,
+     1.333
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Trunk_mature_t-2_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_mature_trunk.SM_tree_mature_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     -20896.5,
+     107050.0,
+     -34.0,
+     0.0,
+     333.8,
+     0.0,
+     1.198,
+     1.198,
+     1.198
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Canopy_mature_LeafDark_t-2_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     -20896.5,
+     107050.0,
+     1223.8,
+     0.0,
+     333.8,
+     0.0,
+     1.557,
+     1.557,
+     1.557
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Trunk_slender_t-2_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "instances": [
+    [
+     -20393.1,
+     108033.0,
+     -34.0,
+     0.0,
+     332.6,
+     0.0,
+     0.923,
+     0.923,
+     0.923
+    ],
+    [
+     -21890.1,
+     107654.5,
+     -34.0,
+     0.0,
+     127.4,
+     0.0,
+     0.981,
+     0.981,
+     0.981
+    ],
+    [
+     -20861.4,
+     108645.5,
+     -34.0,
+     0.0,
+     28.1,
+     0.0,
+     1.04,
+     1.04,
+     1.04
+    ],
+    [
+     -22113.9,
+     106739.7,
+     -34.0,
+     0.0,
+     221.7,
+     0.0,
+     1.071,
+     1.071,
+     1.071
+    ],
+    [
+     -21899.7,
+     108636.1,
+     -34.0,
+     0.0,
+     296.2,
+     0.0,
+     1.177,
+     1.177,
+     1.177
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Canopy_slender_LeafDark_t-2_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     -20393.1,
+     108033.0,
+     664.6,
+     0.0,
+     332.6,
+     0.0,
+     1.062,
+     1.062,
+     1.062
+    ],
+    [
+     -21890.1,
+     107654.5,
+     708.7,
+     0.0,
+     127.4,
+     0.0,
+     1.129,
+     1.129,
+     1.129
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Canopy_slender_LeafMid_t-2_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     -20861.4,
+     108645.5,
+     753.0,
+     0.0,
+     28.1,
+     0.0,
+     1.196,
+     1.196,
+     1.196
+    ],
+    [
+     -22113.9,
+     106739.7,
+     776.1,
+     0.0,
+     221.7,
+     0.0,
+     1.231,
+     1.231,
+     1.231
+    ],
+    [
+     -21899.7,
+     108636.1,
+     856.3,
+     0.0,
+     296.2,
+     0.0,
+     1.353,
+     1.353,
+     1.353
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Rose_t-2_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush.SM_rose_bush",
+   "material": "MI_V2_RosePink",
+   "instances": [
+    [
+     -21352.3,
+     109388.4,
+     -19.0,
+     0.0,
+     220.3,
+     0.0,
+     0.942,
+     0.942,
+     0.942
+    ],
+    [
+     -22773.2,
+     106587.9,
+     -19.0,
+     0.0,
+     8.6,
+     0.0,
+     0.905,
+     0.905,
+     0.905
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Rose_t-1_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush.SM_rose_bush",
+   "material": "MI_V2_RosePink",
+   "instances": [
+    [
+     -19593.4,
+     106900.5,
+     -19.0,
+     0.0,
+     75.6,
+     0.0,
+     0.982,
+     0.982,
+     0.982
+    ],
+    [
+     -18983.0,
+     117738.3,
+     -19.0,
+     0.0,
+     35.1,
+     0.0,
+     0.912,
+     0.912,
+     0.912
+    ],
+    [
+     -15920.3,
+     119726.2,
+     -19.0,
+     0.0,
+     335.9,
+     0.0,
+     1.08,
+     1.08,
+     1.08
+    ],
+    [
+     -16123.8,
+     118632.1,
+     -19.0,
+     0.0,
+     294.9,
+     0.0,
+     0.965,
+     0.965,
+     0.965
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Shrub_t-2_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Shrubs/SM_shrub_flowering.SM_shrub_flowering",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     -22530.2,
+     106366.7,
+     -19.0,
+     0.0,
+     239.5,
+     0.0,
+     1.063,
+     1.063,
+     1.063
+    ],
+    [
+     -21049.7,
+     109585.8,
+     -19.0,
+     0.0,
+     176.3,
+     0.0,
+     1.074,
+     1.074,
+     1.074
+    ],
+    [
+     -22798.0,
+     107164.5,
+     -19.0,
+     0.0,
+     294.8,
+     0.0,
+     0.962,
+     0.962,
+     0.962
+    ],
+    [
+     -20561.8,
+     106163.0,
+     -19.0,
+     0.0,
+     340.3,
+     0.0,
+     1.125,
+     1.125,
+     1.125
+    ],
+    [
+     -22270.2,
+     108951.6,
+     -19.0,
+     0.0,
+     163.5,
+     0.0,
+     1.234,
+     1.234,
+     1.234
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Canopy_slender_PetalWhite_t-1_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_PetalWhite",
+   "instances": [
+    [
+     -16488.5,
+     118704.8,
+     646.5,
+     0.0,
+     99.1,
+     0.0,
+     1.034,
+     1.034,
+     1.034
+    ],
+    [
+     -18896.9,
+     119048.8,
+     702.2,
+     0.0,
+     329.3,
+     0.0,
+     1.119,
+     1.119,
+     1.119
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Canopy_slender_LeafDark_t-1_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     -16835.9,
+     118023.5,
+     823.0,
+     0.0,
+     157.9,
+     0.0,
+     1.302,
+     1.302,
+     1.302
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "S3I098_Shrub_t-1_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Shrubs/SM_shrub_flowering.SM_shrub_flowering",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     -19271.0,
+     118893.8,
+     -19.0,
+     0.0,
+     274.8,
+     0.0,
+     1.047,
+     1.047,
+     1.047
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Rose_t-1_6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush.SM_rose_bush",
+   "material": "MI_V2_RosePink",
+   "instances": [
+    [
+     -18626.5,
+     120238.4,
+     -19.0,
+     0.0,
+     130.7,
+     0.0,
+     1.038,
+     1.038,
+     1.038
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Ground_Flagstone_A_moss_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_moss.WL_Ground_Flagstone_A_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     -14758.7,
+     105052.2,
+     -13.0,
+     0.0,
+     94.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14413.2,
+     109627.1,
+     -13.0,
+     0.0,
+     98.6,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14088.6,
+     111136.0,
+     -13.0,
+     0.0,
+     96.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14285.9,
+     112638.8,
+     -13.0,
+     0.0,
+     105.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14494.2,
+     114182.0,
+     -13.0,
+     0.0,
+     90.7,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -16239.3,
+     115446.7,
+     -13.0,
+     0.0,
+     104.6,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15088.2,
+     103934.6,
+     -13.0,
+     0.0,
+     98.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Ground_Flagstone_A_paving_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving.WL_Ground_Flagstone_A_paving",
+   "material": "MI_V2_GroundFlag_PlazaCream",
+   "instances": [
+    [
+     -14758.7,
+     105052.2,
+     -13.0,
+     0.0,
+     94.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14413.2,
+     109627.1,
+     -13.0,
+     0.0,
+     98.6,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14088.6,
+     111136.0,
+     -13.0,
+     0.0,
+     96.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14285.9,
+     112638.8,
+     -13.0,
+     0.0,
+     105.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14494.2,
+     114182.0,
+     -13.0,
+     0.0,
+     90.7,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -16239.3,
+     115446.7,
+     -13.0,
+     0.0,
+     104.6,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15088.2,
+     103934.6,
+     -13.0,
+     0.0,
+     98.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Ground_Flagstone_A_paving_shade_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_shade.WL_Ground_Flagstone_A_paving_shade",
+   "material": "MI_V2_GroundFlag_PlazaShade",
+   "instances": [
+    [
+     -14758.7,
+     105052.2,
+     -13.0,
+     0.0,
+     94.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14413.2,
+     109627.1,
+     -13.0,
+     0.0,
+     98.6,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14088.6,
+     111136.0,
+     -13.0,
+     0.0,
+     96.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14285.9,
+     112638.8,
+     -13.0,
+     0.0,
+     105.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14494.2,
+     114182.0,
+     -13.0,
+     0.0,
+     90.7,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -16239.3,
+     115446.7,
+     -13.0,
+     0.0,
+     104.6,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15088.2,
+     103934.6,
+     -13.0,
+     0.0,
+     98.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Ground_Flagstone_A_paving_warm_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_warm.WL_Ground_Flagstone_A_paving_warm",
+   "material": "MI_V2_GroundFlag_PlazaWarm",
+   "instances": [
+    [
+     -14758.7,
+     105052.2,
+     -13.0,
+     0.0,
+     94.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14413.2,
+     109627.1,
+     -13.0,
+     0.0,
+     98.6,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14088.6,
+     111136.0,
+     -13.0,
+     0.0,
+     96.4,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14285.9,
+     112638.8,
+     -13.0,
+     0.0,
+     105.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14494.2,
+     114182.0,
+     -13.0,
+     0.0,
+     90.7,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -16239.3,
+     115446.7,
+     -13.0,
+     0.0,
+     104.6,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15088.2,
+     103934.6,
+     -13.0,
+     0.0,
+     98.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Ground_Flagstone_B_moss_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_moss.WL_Ground_Flagstone_B_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     -14228.1,
+     108620.2,
+     -13.0,
+     0.0,
+     92.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14416.3,
+     110077.5,
+     -13.0,
+     0.0,
+     105.5,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14166.7,
+     111688.3,
+     -13.0,
+     0.0,
+     93.7,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14403.8,
+     113167.7,
+     -13.0,
+     0.0,
+     95.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15063.4,
+     114559.0,
+     -13.0,
+     0.0,
+     104.6,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15568.5,
+     103920.9,
+     -13.0,
+     0.0,
+     100.9,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Ground_Flagstone_B_paving_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving.WL_Ground_Flagstone_B_paving",
+   "material": "MI_V2_GroundFlag_PlazaCream",
+   "instances": [
+    [
+     -14228.1,
+     108620.2,
+     -13.0,
+     0.0,
+     92.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14416.3,
+     110077.5,
+     -13.0,
+     0.0,
+     105.5,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14166.7,
+     111688.3,
+     -13.0,
+     0.0,
+     93.7,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14403.8,
+     113167.7,
+     -13.0,
+     0.0,
+     95.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15063.4,
+     114559.0,
+     -13.0,
+     0.0,
+     104.6,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15568.5,
+     103920.9,
+     -13.0,
+     0.0,
+     100.9,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Ground_Flagstone_B_paving_shade_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_shade.WL_Ground_Flagstone_B_paving_shade",
+   "material": "MI_V2_GroundFlag_PlazaShade",
+   "instances": [
+    [
+     -14228.1,
+     108620.2,
+     -13.0,
+     0.0,
+     92.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14416.3,
+     110077.5,
+     -13.0,
+     0.0,
+     105.5,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14166.7,
+     111688.3,
+     -13.0,
+     0.0,
+     93.7,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14403.8,
+     113167.7,
+     -13.0,
+     0.0,
+     95.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15063.4,
+     114559.0,
+     -13.0,
+     0.0,
+     104.6,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15568.5,
+     103920.9,
+     -13.0,
+     0.0,
+     100.9,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Ground_Flagstone_B_paving_warm_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_warm.WL_Ground_Flagstone_B_paving_warm",
+   "material": "MI_V2_GroundFlag_PlazaWarm",
+   "instances": [
+    [
+     -14228.1,
+     108620.2,
+     -13.0,
+     0.0,
+     92.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14416.3,
+     110077.5,
+     -13.0,
+     0.0,
+     105.5,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14166.7,
+     111688.3,
+     -13.0,
+     0.0,
+     93.7,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14403.8,
+     113167.7,
+     -13.0,
+     0.0,
+     95.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15063.4,
+     114559.0,
+     -13.0,
+     0.0,
+     104.6,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15568.5,
+     103920.9,
+     -13.0,
+     0.0,
+     100.9,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Ground_Flagstone_C_moss_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_moss.WL_Ground_Flagstone_C_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     -14273.6,
+     109116.8,
+     -13.0,
+     0.0,
+     99.1,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14040.3,
+     110673.9,
+     -13.0,
+     0.0,
+     102.8,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14239.3,
+     112144.9,
+     -13.0,
+     0.0,
+     105.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14440.0,
+     113678.1,
+     -13.0,
+     0.0,
+     95.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15621.8,
+     114978.1,
+     -13.0,
+     0.0,
+     102.5,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15702.9,
+     104374.4,
+     -13.0,
+     0.0,
+     98.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Ground_Flagstone_C_paving_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving.WL_Ground_Flagstone_C_paving",
+   "material": "MI_V2_GroundFlag_PlazaCream",
+   "instances": [
+    [
+     -14273.6,
+     109116.8,
+     -13.0,
+     0.0,
+     99.1,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14040.3,
+     110673.9,
+     -13.0,
+     0.0,
+     102.8,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14239.3,
+     112144.9,
+     -13.0,
+     0.0,
+     105.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14440.0,
+     113678.1,
+     -13.0,
+     0.0,
+     95.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15621.8,
+     114978.1,
+     -13.0,
+     0.0,
+     102.5,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15702.9,
+     104374.4,
+     -13.0,
+     0.0,
+     98.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Ground_Flagstone_C_paving_shade_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_shade.WL_Ground_Flagstone_C_paving_shade",
+   "material": "MI_V2_GroundFlag_PlazaShade",
+   "instances": [
+    [
+     -14273.6,
+     109116.8,
+     -13.0,
+     0.0,
+     99.1,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14040.3,
+     110673.9,
+     -13.0,
+     0.0,
+     102.8,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14239.3,
+     112144.9,
+     -13.0,
+     0.0,
+     105.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14440.0,
+     113678.1,
+     -13.0,
+     0.0,
+     95.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15621.8,
+     114978.1,
+     -13.0,
+     0.0,
+     102.5,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15702.9,
+     104374.4,
+     -13.0,
+     0.0,
+     98.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Ground_Flagstone_C_paving_warm_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_warm.WL_Ground_Flagstone_C_paving_warm",
+   "material": "MI_V2_GroundFlag_PlazaWarm",
+   "instances": [
+    [
+     -14273.6,
+     109116.8,
+     -13.0,
+     0.0,
+     99.1,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14040.3,
+     110673.9,
+     -13.0,
+     0.0,
+     102.8,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14239.3,
+     112144.9,
+     -13.0,
+     0.0,
+     105.3,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -14440.0,
+     113678.1,
+     -13.0,
+     0.0,
+     95.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15621.8,
+     114978.1,
+     -13.0,
+     0.0,
+     102.5,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -15702.9,
+     104374.4,
+     -13.0,
+     0.0,
+     98.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Flower_Lavender_Run_leaf_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Lavender_Run_leaf.WL_Flower_Lavender_Run_leaf",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     -16240.4,
+     102161.0,
+     -12.0,
+     0.0,
+     295.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -16259.5,
+     102034.3,
+     -12.0,
+     0.0,
+     308.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -16291.7,
+     101826.1,
+     -12.0,
+     0.0,
+     321.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -16051.0,
+     101991.3,
+     -12.0,
+     0.0,
+     333.7,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15986.8,
+     101900.3,
+     -12.0,
+     0.0,
+     346.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15888.3,
+     101939.7,
+     -12.0,
+     0.0,
+     359.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15776.0,
+     101822.0,
+     -12.0,
+     0.0,
+     11.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15674.1,
+     101874.3,
+     -12.0,
+     0.0,
+     24.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15467.9,
+     101782.8,
+     -12.0,
+     0.0,
+     36.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15444.6,
+     101961.3,
+     -12.0,
+     0.0,
+     49.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15378.2,
+     102068.1,
+     -12.0,
+     0.0,
+     62.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15510.6,
+     102233.6,
+     -12.0,
+     0.0,
+     74.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18337.2,
+     111941.4,
+     -12.0,
+     0.0,
+     78.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18309.8,
+     112035.6,
+     -12.0,
+     0.0,
+     90.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18397.2,
+     112115.5,
+     -12.0,
+     0.0,
+     103.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18148.0,
+     112327.0,
+     -12.0,
+     0.0,
+     116.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18256.2,
+     112430.2,
+     -12.0,
+     0.0,
+     128.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18493.9,
+     112358.2,
+     -12.0,
+     0.0,
+     141.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18554.4,
+     112443.8,
+     -12.0,
+     0.0,
+     153.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18600.4,
+     112682.1,
+     -12.0,
+     0.0,
+     166.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18748.8,
+     112573.6,
+     -12.0,
+     0.0,
+     179.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Flower_Lavender_Run_petal_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Lavender_Run_petal.WL_Flower_Lavender_Run_petal",
+   "material": "MI_V2_PetalPink",
+   "instances": [
+    [
+     -16240.4,
+     102161.0,
+     -12.0,
+     0.0,
+     295.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -16259.5,
+     102034.3,
+     -12.0,
+     0.0,
+     308.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -16291.7,
+     101826.1,
+     -12.0,
+     0.0,
+     321.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -16051.0,
+     101991.3,
+     -12.0,
+     0.0,
+     333.7,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15986.8,
+     101900.3,
+     -12.0,
+     0.0,
+     346.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15888.3,
+     101939.7,
+     -12.0,
+     0.0,
+     359.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15776.0,
+     101822.0,
+     -12.0,
+     0.0,
+     11.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15674.1,
+     101874.3,
+     -12.0,
+     0.0,
+     24.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15467.9,
+     101782.8,
+     -12.0,
+     0.0,
+     36.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15444.6,
+     101961.3,
+     -12.0,
+     0.0,
+     49.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15378.2,
+     102068.1,
+     -12.0,
+     0.0,
+     62.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -15510.6,
+     102233.6,
+     -12.0,
+     0.0,
+     74.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18337.2,
+     111941.4,
+     -12.0,
+     0.0,
+     78.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18309.8,
+     112035.6,
+     -12.0,
+     0.0,
+     90.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18397.2,
+     112115.5,
+     -12.0,
+     0.0,
+     103.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18148.0,
+     112327.0,
+     -12.0,
+     0.0,
+     116.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18256.2,
+     112430.2,
+     -12.0,
+     0.0,
+     128.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18493.9,
+     112358.2,
+     -12.0,
+     0.0,
+     141.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18554.4,
+     112443.8,
+     -12.0,
+     0.0,
+     153.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18600.4,
+     112682.1,
+     -12.0,
+     0.0,
+     166.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18748.8,
+     112573.6,
+     -12.0,
+     0.0,
+     179.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Flower_Rose_Run_leaf_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Rose_Run_leaf.WL_Flower_Rose_Run_leaf",
+   "material": "MI_V2_LeafMid",
+   "instances": [
+    [
+     -19656.8,
+     114736.5,
+     -12.0,
+     0.0,
+     247.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19440.1,
+     114565.2,
+     -12.0,
+     0.0,
+     259.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19594.8,
+     114484.5,
+     -12.0,
+     0.0,
+     272.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19694.0,
+     114347.4,
+     -12.0,
+     0.0,
+     285.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19662.4,
+     114213.9,
+     -12.0,
+     0.0,
+     297.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19627.7,
+     114063.8,
+     -12.0,
+     0.0,
+     310.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19292.0,
+     114260.0,
+     -12.0,
+     0.0,
+     322.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19331.2,
+     114012.4,
+     -12.0,
+     0.0,
+     335.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19228.8,
+     113925.5,
+     -12.0,
+     0.0,
+     348.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19101.8,
+     114128.9,
+     -12.0,
+     0.0,
+     0.7,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19001.4,
+     114061.1,
+     -12.0,
+     0.0,
+     13.3,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18836.0,
+     113948.4,
+     -12.0,
+     0.0,
+     25.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18798.3,
+     114118.0,
+     -12.0,
+     0.0,
+     38.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18649.8,
+     114136.9,
+     -12.0,
+     0.0,
+     51.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "S3I098_Flower_Rose_Run_petal_t-1_5",
+   "mesh": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Rose_Run_petal.WL_Flower_Rose_Run_petal",
+   "material": "MI_V2_PetalPink",
+   "instances": [
+    [
+     -19656.8,
+     114736.5,
+     -12.0,
+     0.0,
+     247.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19440.1,
+     114565.2,
+     -12.0,
+     0.0,
+     259.8,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19594.8,
+     114484.5,
+     -12.0,
+     0.0,
+     272.4,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19694.0,
+     114347.4,
+     -12.0,
+     0.0,
+     285.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19662.4,
+     114213.9,
+     -12.0,
+     0.0,
+     297.6,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19627.7,
+     114063.8,
+     -12.0,
+     0.0,
+     310.2,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19292.0,
+     114260.0,
+     -12.0,
+     0.0,
+     322.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19331.2,
+     114012.4,
+     -12.0,
+     0.0,
+     335.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19228.8,
+     113925.5,
+     -12.0,
+     0.0,
+     348.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19101.8,
+     114128.9,
+     -12.0,
+     0.0,
+     0.7,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -19001.4,
+     114061.1,
+     -12.0,
+     0.0,
+     13.3,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18836.0,
+     113948.4,
+     -12.0,
+     0.0,
+     25.9,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18798.3,
+     114118.0,
+     -12.0,
+     0.0,
+     38.5,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -18649.8,
+     114136.9,
+     -12.0,
+     0.0,
+     51.1,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  }
+ ]
+}
