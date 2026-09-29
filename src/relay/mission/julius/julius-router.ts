@@ -87,6 +87,13 @@ export type JuliusHostedFailureReason=(typeof JULIUS_HOSTED_FAILURE_REASONS)[num
  * — mirrored from `claude-code-result-class.v1` so the domain's allowlist names
  * a closed set without importing a connector. A test holds the two equal.
  */
+/**
+ * WHY A CODING AGENT'S SERVED MODEL WAS OR WAS NOT ATTESTED, mirrored from the
+ * hosted adapter's `HOSTED_SERVED_MODEL_BASES` so the domain names a closed set
+ * without importing an adapter. `hosted-served-model.test.ts` holds the two
+ * equal.
+ */
+export const JULIUS_SERVED_MODEL_BASES=['attested','no_output_turns','mixed_turn_models','no_result','no_model_usage','result_disagrees'] as const;
 export const JULIUS_CODING_AGENT_RESULT_CLASSES=['SUCCESS','NO_RESULT','UNKNOWN_SUBTYPE','REPORTED_ERROR','ERROR_FLAG_UNREPORTED','TERMINAL_REASON_NOT_COMPLETED','BUDGET_STOP','MAX_TURNS','EXECUTION_ERROR','STRUCTURED_OUTPUT_RETRIES_EXHAUSTED'] as const;
 /**
  * THE CORROBORATING FACTS, NARROWED THE SAME WAY THE CLASS IS.
@@ -207,6 +214,33 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   transport:safeEnum(v.transport,['local','remote','openai','hosted'] as const),
   provider:safeToken(v.provider),
   servedModel:safeModel(v.servedModel),
+  /* --- WHAT SERVED, AND HOW ANYONE KNOWS. Coding Agent only; null for the other roles.
+   *
+   * Paid attempt 1 recorded the coder's `servedModel` from the runtime's `init`
+   * announcement, and the only turn it announced then produced zero tokens. So
+   * `servedModel` is now named only when the output-bearing turns and the
+   * result's `modelUsage` agree. The basis says why when they do not, and the
+   * three accounts travel beside the verdict so a reader sees the difference
+   * between them, not only the answer. --- */
+  servedModelBasis:safeEnum(v.servedModelBasis,JULIUS_SERVED_MODEL_BASES),
+  /** What `init` announced before any turn existed. A claim about configuration, never about serving. */
+  announcedModel:safeModel(v.announcedModel),
+  /** The model that produced the most output across the session's turns. */
+  turnModel:safeModel(v.turnModel),
+  /** How many distinct models the output-bearing turns named. More than one is `mixed_turn_models`. */
+  turnModelCount:safeCount(v.turnModelCount),
+  /** How many models the result's `modelUsage` named. Null when no result reported one. */
+  resultModelCount:safeCount(v.resultModelCount),
+  /** The first three `modelUsage` entries, largest producer first. The count above shows whether any was left out. */
+  resultModelFirst:safeModel(v.resultModelFirst),
+  resultModelFirstInputTokens:safeCount(v.resultModelFirstInputTokens),
+  resultModelFirstOutputTokens:safeCount(v.resultModelFirstOutputTokens),
+  resultModelSecond:safeModel(v.resultModelSecond),
+  resultModelSecondInputTokens:safeCount(v.resultModelSecondInputTokens),
+  resultModelSecondOutputTokens:safeCount(v.resultModelSecondOutputTokens),
+  resultModelThird:safeModel(v.resultModelThird),
+  resultModelThirdInputTokens:safeCount(v.resultModelThirdInputTokens),
+  resultModelThirdOutputTokens:safeCount(v.resultModelThirdOutputTokens),
   processExitCode:safeExitCode(v.processExitCode),
   timedOut:safeNullableBool(v.timedOut),
   outputBytesObserved:safeCount(v.outputBytesObserved),

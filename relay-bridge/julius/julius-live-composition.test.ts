@@ -140,6 +140,10 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
           inputTokens: 480, outputTokens: 190,
           cacheReadInputTokens: 0, cacheCreationInputTokens: 0,
         },
+        // What served, as a real stream attests it: the turns named one model,
+        // and the result's own `modelUsage` credited it with output.
+        turnModels: [{ model: 'claude-fable-5', turns: 3, outputTokens: 190 }],
+        resultModelUsage: [{ model: 'claude-fable-5', canonicalModel: null, inputTokens: 500, outputTokens: 200 }],
         resultSubtype: 'success', isError: false, terminalReason: null, finalText: `done (${SECRET_CANARY})`,
         thinkingBlocksOmitted: 0, unknownMessageCount: 0,
       },

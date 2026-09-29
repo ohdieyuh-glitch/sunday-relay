@@ -168,6 +168,8 @@ function providerFor(
         reportedTools: ['Read', 'Edit'], toolTargets: [], toolsUsed: [], toolInvocations: 1, permissionDenials: 0, numTurns: 1, durationMs: 1,
         usage: { inputTokens: 100, outputTokens: 0, totalCostUsd: 0.01, source: 'runtime_reported' },
         streamUsage: { messages: 1, abortedMessages: 1, inputTokens: 100, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+        // The one turn produced nothing, so no model served it; the result names the model with zero output.
+        turnModels: [], resultModelUsage: [{ model: 'claude-x', canonicalModel: null, inputTokens: 100, outputTokens: 0 }],
         resultSubtype: 'error_during_execution', isError: true, thinkingBlocksOmitted: 0, unknownMessageCount: 0,
         finalText: failing === 'RATE_LIMITED'
           ? 'API Error: 429 {"type":"rate_limit_error"}'
@@ -181,6 +183,9 @@ function providerFor(
         reportedTools: ['Read', 'Edit'], toolTargets: [], toolsUsed: ['Edit'], toolInvocations: 6, permissionDenials: 0, numTurns: 4, durationMs: 1,
         usage: { inputTokens: 900, outputTokens: 300, totalCostUsd: 0.05, source: 'runtime_reported' },
         streamUsage: { messages: 4, abortedMessages: 0, inputTokens: 880, outputTokens: 290, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+        // What served, as a real stream attests it: the turns named one model, and the result credited it.
+        turnModels: [{ model: 'claude-x', turns: 4, outputTokens: 290 }],
+        resultModelUsage: [{ model: 'claude-x', canonicalModel: null, inputTokens: 900, outputTokens: 300 }],
         resultSubtype: 'success', isError: false, terminalReason: null, finalText: textFor(current!), thinkingBlocksOmitted: 0, unknownMessageCount: 0,
       },
       envelope: compileHostedEnvelope({ workspacePath: input.workspacePath }), startedAt: 't', completedAt: 't',
