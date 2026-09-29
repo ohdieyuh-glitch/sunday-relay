@@ -321,6 +321,18 @@ working instrument. GA's rear-world and flank-garden legs need a navigator on th
 walks ARRIVED (gate -> nearest paving, 0 detours). GA rear-world / west / east flank legs still stop (castle hall,
 planter) after 4 detours each -- they need an in-play planner through the arches; OPEN.
 
+**GA flank gardens (CORE, 11:44-11:50, in-play).** BP_RelayDog_C measured in PIE: capsule r 35.9 / half-height 87.1,
+MaxStepHeight 30 cm, walkable 46 deg. West leg: the Dog entered the west flank garden on foot (80 m, 23/26 waypoints),
+stopping at a garden wall on the way north. East leg: the plaza's east edge is lined by forge-era RAISED PLANTER beds --
+SM_side_steps (0 -> +60) each facing a SM_retaining_wall (+60 -> +144), continuous from y -9 to +11 m -- decorative, not
+a route; the integration lane's east leg (plaza -> x 15 m at y 4 m) crosses them. Whether the east flank is reachable
+from the clock plaza's east arch (its likely designed entrance) is the next self-powered test. OPEN.
+**Visual review 11:48 (16 editor-world frames, `Tools/captures/zc/core_0929/`):** MG01, TW01/TW02, the GA west flank
+and the new GS01 steps read authored. Two findings routed to SECOND: Dubel's OUTER edge (58-122 deg) ends in a hard
+band -- the ground slab's edge -- with no forest wall (WX stops at Dubel's arc); and from ~1.3 km the outer world still
+reads as lawn with lone skyline towers (the fills are low: drifts, stones, single trees), so remaining windows favour
+grove massing. Two frames (SR150 road, gate GD) are bad camera poses, to retake -- not world findings.
+
 ## Assignments
 
 | # | to | region | notes |
