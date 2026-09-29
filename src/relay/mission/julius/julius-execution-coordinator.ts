@@ -633,7 +633,24 @@ export class JuliusExecutionCoordinator {
     const billed=reported??(typeof failure.diagnostics?.costUsdMicros==='number'?failure.diagnostics.costUsdMicros:null);
     // A provider that ANSWERED ran, whatever the diagnostics say about it.
     // A subscription-backed failure says so, rather than reading as a charge nobody read.
-    if(reservationId!==null)await this.bookkeeping(()=>this.ports.release({claim:request.claim,reservationId,reason:failure.code,usdMicros:billed,spendUnknown:billed===null&&(answered!==null||failure.diagnostics?.runtimeStarted===true),...settlementProvenance(answered,failure.diagnostics)}));
+    /**
+     * AFTER THE HANDOFF, NO AMOUNT IS UNKNOWN, NOT FREE.
+     *
+     * The rule used to be "unknown only if something says it ran". An error that
+     * said nothing therefore released its whole hold. A timeout normalised from a
+     * raw error carries no diagnostics at all, so a request the provider had
+     * received, and may have billed, settled as free: in the slot ledger, inside
+     * the paid run's own budget, before any report could read it. Now, once the
+     * work is handed, only an explicit `runtimeStarted: false` (a provider that
+     * refused the request unprocessed, or an adapter that knows it sent nothing)
+     * releases a hold that has no amount. Before the handoff nothing was sent,
+     * and a hold is released as before.
+     *
+     * A timed-out attempt therefore keeps its hold, and a retry after a timeout
+     * meets a tighter budget. That is the truthful direction.
+     */
+    const startedOrUnsaid=answered!==null||failure.diagnostics?.runtimeStarted===true||(handed&&failure.diagnostics?.runtimeStarted!==false);
+    if(reservationId!==null)await this.bookkeeping(()=>this.ports.release({claim:request.claim,reservationId,reason:failure.code,usdMicros:billed,spendUnknown:billed===null&&startedOrUnsaid,...settlementProvenance(answered,failure.diagnostics)}));
     /* The class travels with the code on BOTH endings. A retry that is later
      * abandoned and a failure taken at once must leave the same diagnosis
      * behind, or the durable record would explain only the failures that

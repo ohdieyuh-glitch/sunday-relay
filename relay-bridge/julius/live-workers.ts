@@ -1041,6 +1041,16 @@ export function createLiveArchitectAdapter(input: {
           validationPassed: null,
           attempts,
         });
+        /*
+         * NOT EVEN A 401, A 403 OR A 429 MAY SAY NOTHING RAN HERE, although each
+         * is the provider refusing THIS request unprocessed. The refusal ends the
+         * DISPATCH, and the dispatch may already have bought something: a
+         * correction call follows a billed answer that failed validation
+         * (`attempts`), and the SDK retries once on its own, so a 429 can follow
+         * a first try that timed out after the provider had worked on it. Neither
+         * is visible from the error. After the handoff, a failure that cannot say
+         * nothing ran keeps its hold as unknown spend (the coordinator's `end`).
+         */
         switch (outcome.failureClass) {
           case 'authentication_failed':
           case 'permission_denied':

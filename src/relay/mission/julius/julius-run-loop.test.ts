@@ -465,7 +465,9 @@ describe('the runtime fails closed', () => {
 
   it('releases the reservation when the provider fails', async () => {
     const harness = createJuliusHarness({
-      workers: [{ worker: CODER, script: [{ kind: 'fail', code: 'AUTH_CONFIGURATION' }] }],
+      // A credential refusal is a refusal of an unprocessed request, and says so:
+      // after the handoff, only that lets a failure with no amount release its hold.
+      workers: [{ worker: CODER, script: [{ kind: 'fail', code: 'AUTH_CONFIGURATION', runtimeStarted: false }] }],
     });
     seedRun(harness, { tasks: [task({ taskId: 'task-1' })] });
 

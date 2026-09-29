@@ -404,7 +404,9 @@ describe('a dispatch that never reached a provider gives its money back', () => 
     const failing = createJuliusHarness({
       workers: [
         { worker: ARCHITECT, script: [PLAN_OK] },
-        { worker: CODER, script: [{ kind: 'fail', code: 'PROVIDER_UNAVAILABLE' }, BUILD_OK] },
+        // A dispatch that NEVER REACHED a provider says so. After the handoff, a
+        // failure that says nothing is unknown spend and keeps its hold.
+        { worker: CODER, script: [{ kind: 'fail', code: 'PROVIDER_UNAVAILABLE', runtimeStarted: false }, BUILD_OK] },
         { worker: REVIEWER, script: [REVIEW_OK] },
       ],
       card: cardPolicy({
