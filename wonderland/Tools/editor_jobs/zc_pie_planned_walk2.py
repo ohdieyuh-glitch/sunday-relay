@@ -368,6 +368,7 @@ def _run(ues, les):
                 route.append(b)
             yield 0.0
         rec["route_points"] = len(route)
+        rec["route"] = [[round(p[0]), round(p[1])] + ([round(p[2])] if len(p) == 3 else []) for p in route]
         emit("PLAN", leg["id"], "%d/%d pairs planned" % (rec["planned_pairs"], len(pts) - 1), len(route))
         # THE WALK: ONE placement at the first plan point, then forced input along the plan
         if len(route[0]) == 3:

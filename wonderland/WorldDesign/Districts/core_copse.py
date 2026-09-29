@@ -83,6 +83,26 @@ def band_slabs(occ, b0, b1, r0, r1, tag):
         occ.add("solid", rm * math.cos(t), rm * math.sin(t), 0.5 * (r1 - r0), 1200.0, b10 / 10.0, tag)
 
 
+RADIAL_ROUTES = HERE / "radial_routes.json"   # CORE's proven core -> nation-end walks (planner v2.1, 2026-09-29)
+
+
+def route_slabs(occ, tag="keep:radial_route", half_w=1000.0):
+    """Keep the radial walks clear: a 20 m corridor on every leg of radial_routes.json. The ICARUS and TARTARUS walks
+    arrived SELF-POWERED with 0 stops before C7 existed; a copse on their lawn stretches (the causeway starts, the
+    GreatSpire promenade) would undo that proof."""
+    if not RADIAL_ROUTES.exists():
+        return
+    for leg in json.load(open(RADIAL_ROUTES, encoding="utf-8")):
+        pts = [tuple(q[:2]) for q in leg["points"]]
+        for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+            m = max(1, int(math.hypot(bx - ax, by - ay) // 2000.0) + 1)
+            for i in range(m):
+                sx, sy = ax + (bx - ax) * i / m, ay + (by - ay) * i / m
+                ex, ey = ax + (bx - ax) * (i + 1) / m, ay + (by - ay) * (i + 1) / m
+                occ.add("solid", 0.5 * (sx + ex), 0.5 * (sy + ey), 0.5 * math.hypot(ex - sx, ey - sy) + 0.5 * half_w, half_w,
+                        math.degrees(math.atan2(ey - sy, ex - sx)), tag)
+
+
 def applied_walks(census):
     """Every applied walk (its pass is in the census), densified to 1 m: sidecars sample every 5 m, and a trunk midway
     between two samples would slip a 60 cm Dog square."""
@@ -136,6 +156,7 @@ def main():
         W.load_census(occ)
         F2.keep_out_blocks(occ)
         F2.vista_blocks(occ, cps)
+        route_slabs(occ)
         band_slabs(occ, TW03[0], TW03[1], 55000.0, TW03[2], "keep:tw03_band")
         band_slabs(occ, DUBEL[0], DUBEL[1], DUBEL[2], 150000.0, "keep:s5_dubel_arc")
         leaves = S.LEAVES[nation][:3]
