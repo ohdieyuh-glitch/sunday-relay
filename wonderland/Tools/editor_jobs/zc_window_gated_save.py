@@ -1,4 +1,4 @@
-# SECOND's window save (was committed over zc_gated_save.py in dc29f7ec by mistake; CORE's job is zc_gated_save_core.py).
+# SECOND's window save (was committed over zc_gated_save.py in dc29f7ec by mistake; CORE restored its job there, 73416bb6).
 # Globals: CONFIG = a json {"expect": {pass: batch count}, "replaced_passes": [...], "replaced_record": path or null,
 #          "modified_record": path or null (packages an in-place edit job recorded, e.g. zc_cull_edit_in_place)}.
 CONFIG = globals().get("CONFIG")
@@ -27,7 +27,7 @@ DO_SAVE = globals().get("DO_SAVE", True)
 COMMIT_MAX_GB = globals().get("COMMIT_MAX_GB", 42.0)
 
 
-# THE MEMORY GATE (founder rules 2026-09-29), CORE's probe from zc_gated_save_core.py verbatim: editor private GB,
+# THE MEMORY GATE (founder rules 2026-09-29), CORE's probe from zc_gated_save.py (8bd5a7c8) verbatim: editor private GB,
 # system commit GB and the dirty count are recorded in this job's result, and the save refuses above COMMIT_MAX_GB.
 class _MEMSTAT(ctypes.Structure):
     _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong), ("ullTotalPhys", ctypes.c_ulonglong),
