@@ -1,0 +1,234 @@
+{
+ "reason": "founder decision 2026-09-29: designed gates in the V2 hedge ring (relocate first, trim by SINK_UU only where relocation cannot clear); window 2B",
+ "moves": [
+  {
+   "which": "GA ch_hedge_mass_MI_V2_LeafDark at (38542, 41388)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "old_approx": {
+    "x": 38542,
+    "y": 41388,
+    "z": -200,
+    "yaw": 101.0
+   },
+   "half_extent_m": [
+    16.9,
+    10.9
+   ],
+   "new": {
+    "x": 38359,
+    "y": 38995,
+    "z": -200,
+    "yaw": 101.0
+   },
+   "moved_m": 24.0,
+   "turned_deg": 0.0,
+   "action": "relocate"
+  },
+  {
+   "which": "GA ch_hedge_mass_MI_V2_LeafDark at (38449, 43356)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "old_approx": {
+    "x": 38449,
+    "y": 43356,
+    "z": -200,
+    "yaw": 91.0
+   },
+   "half_extent_m": [
+    17.7,
+    11.5
+   ],
+   "new": {
+    "x": 38113,
+    "y": 38969,
+    "z": -200,
+    "yaw": 91.0
+   },
+   "moved_m": 44.0,
+   "turned_deg": 0.0,
+   "action": "relocate"
+  },
+  {
+   "which": "GA tch_hedge_mass_MI_V2_LeafMid at (38125, 40432)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "old_approx": {
+    "x": 38125,
+    "y": 40432,
+    "z": -200,
+    "yaw": 92.0
+   },
+   "half_extent_m": [
+    18.2,
+    11.8
+   ],
+   "new": {
+    "x": 38011,
+    "y": 38936,
+    "z": -200,
+    "yaw": 92.0
+   },
+   "moved_m": 15.0,
+   "turned_deg": 0.0,
+   "action": "relocate"
+  },
+  {
+   "which": "GA tch_hedge_mass_MI_V2_LeafMid at (39484, 42312)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "old_approx": {
+    "x": 39484,
+    "y": 42312,
+    "z": -200,
+    "yaw": 100.0
+   },
+   "half_extent_m": [
+    18.0,
+    11.7
+   ],
+   "new": {
+    "x": 39240,
+    "y": 39121,
+    "z": -200,
+    "yaw": 100.0
+   },
+   "moved_m": 32.0,
+   "turned_deg": 0.0,
+   "action": "relocate"
+  },
+  {
+   "which": "GA tch_hedge_mass_MI_V2_LeafMid at (39814, 44255)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "old_approx": {
+    "x": 39814,
+    "y": 44255,
+    "z": -200,
+    "yaw": 96.0
+   },
+   "half_extent_m": [
+    16.1,
+    10.5
+   ],
+   "new": {
+    "x": 39501,
+    "y": 40167,
+    "z": -200,
+    "yaw": 96.0
+   },
+   "moved_m": 41.0,
+   "turned_deg": 0.0,
+   "action": "relocate"
+  },
+  {
+   "which": "GA ch_hedge_mass_MI_V2_LeafDark at (38326, 45327)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "old_approx": {
+    "x": 38326,
+    "y": 45327,
+    "z": -200,
+    "yaw": 92.0
+   },
+   "half_extent_m": [
+    23.2,
+    15.0
+   ],
+   "new": {
+    "x": 38326,
+    "y": 45327,
+    "z": -100200,
+    "yaw": 92.0
+   },
+   "turned_deg": 0.0,
+   "action": "trim (SINK_UU)"
+  },
+  {
+   "which": "GC ch_hedge_mass_MI_V2_LeafDark at (39589, 101265)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "old_approx": {
+    "x": 39589,
+    "y": 101265,
+    "z": -900,
+    "yaw": 91.0
+   },
+   "half_extent_m": [
+    27.1,
+    15.8
+   ],
+   "new": {
+    "x": 39209,
+    "y": 100800,
+    "z": -900,
+    "yaw": 140.7
+   },
+   "moved_m": 6.0,
+   "turned_deg": 49.7,
+   "action": "relocate"
+  },
+  {
+   "which": "GC tch_hedge_mass_MI_V2_LeafMid at (41730, 105887)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "old_approx": {
+    "x": 41730,
+    "y": 105887,
+    "z": -900,
+    "yaw": 100.0
+   },
+   "half_extent_m": [
+    30.5,
+    17.8
+   ],
+   "new": {
+    "x": 42046,
+    "y": 106274,
+    "z": -900,
+    "yaw": 140.7
+   },
+   "moved_m": 5.0,
+   "turned_deg": 40.7,
+   "action": "relocate"
+  },
+  {
+   "which": "GD ch_hedge_mass_MI_V2_LeafDark at (-96564, 51483)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "old_approx": {
+    "x": -96564,
+    "y": 51483,
+    "z": -900,
+    "yaw": 166.0
+   },
+   "half_extent_m": [
+    46.1,
+    26.9
+   ],
+   "new": {
+    "x": -96960,
+    "y": 51788,
+    "z": -900,
+    "yaw": 232.4
+   },
+   "moved_m": 5.0,
+   "turned_deg": 66.4,
+   "action": "relocate"
+  },
+  {
+   "which": "GD tch_hedge_mass_MI_V2_LeafMid at (-90778, 47482)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "old_approx": {
+    "x": -90778,
+    "y": 47482,
+    "z": -900,
+    "yaw": 168.0
+   },
+   "half_extent_m": [
+    28.3,
+    16.5
+   ],
+   "new": {
+    "x": -90382,
+    "y": 47177,
+    "z": -900,
+    "yaw": 232.4
+   },
+   "moved_m": 5.0,
+   "turned_deg": 64.4,
+   "action": "relocate"
+  }
+ ]
+}

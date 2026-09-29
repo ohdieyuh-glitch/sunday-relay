@@ -1,0 +1,1013 @@
+{
+ "pass": "HG2B",
+ "folder": "Wonderland/Authored/HG2B_HedgeGates",
+ "tags": [
+  "WL_AUTHORED",
+  "WL_PASS_HG2B",
+  "WL_HEDGE_GATE"
+ ],
+ "actors": [],
+ "batches": [
+  {
+   "id": "HG2B_Plate_t2_2_GroundFlag_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Architecture/Stairs/SM_terrace_platform.SM_terrace_platform",
+   "material": "MI_V2_GroundFlag_PlazaCream",
+   "instances": [
+    [
+     41267.5,
+     43420.3,
+     -128.0,
+     0.0,
+     249.61,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     40724.0,
+     43482.9,
+     -128.0,
+     0.0,
+     270.34,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     40177.3,
+     43431.4,
+     -128.0,
+     0.0,
+     277.51,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HG2B_Kerb_t2_2_MarblePale",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_MarblePale",
+   "instances": [
+    [
+     41524.7,
+     44112.2,
+     -14.0,
+     0.0,
+     159.61,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     41010.3,
+     42728.4,
+     -14.0,
+     0.0,
+     159.61,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     40719.6,
+     44221.0,
+     -14.0,
+     0.0,
+     180.34,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     40728.4,
+     42744.8,
+     -14.0,
+     0.0,
+     180.34,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     40080.8,
+     44163.2,
+     -14.0,
+     0.0,
+     187.51,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     40273.8,
+     42699.6,
+     -14.0,
+     0.0,
+     187.51,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2B_Plate_t1_2_GroundFlag_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Architecture/Stairs/SM_terrace_platform.SM_terrace_platform",
+   "material": "MI_V2_GroundFlag_PlazaCream",
+   "instances": [
+    [
+     39639.6,
+     43316.8,
+     -128.0,
+     0.0,
+     285.03,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     39108.7,
+     43172.9,
+     -128.0,
+     0.0,
+     285.46,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     38579.1,
+     43024.5,
+     -128.0,
+     0.0,
+     285.89,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     38046.2,
+     42889.1,
+     -128.0,
+     0.0,
+     283.12,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     37505.2,
+     42791.9,
+     -128.0,
+     0.0,
+     275.77,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     36957.0,
+     42767.3,
+     -128.0,
+     0.0,
+     267.88,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HG2B_Kerb_t1_2_MarblePale",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_MarblePale",
+   "instances": [
+    [
+     39448.2,
+     44029.6,
+     -14.0,
+     0.0,
+     195.03,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     39831.0,
+     42604.0,
+     -14.0,
+     0.0,
+     195.03,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     38911.9,
+     43884.3,
+     -14.0,
+     0.0,
+     195.46,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     39305.5,
+     42461.5,
+     -14.0,
+     0.0,
+     195.46,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     38377.0,
+     43734.4,
+     -14.0,
+     0.0,
+     195.89,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     38781.2,
+     42314.6,
+     -14.0,
+     0.0,
+     195.89,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     37878.7,
+     43607.9,
+     -14.0,
+     0.0,
+     193.12,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     38213.7,
+     42170.3,
+     -14.0,
+     0.0,
+     193.12,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     37431.0,
+     43526.3,
+     -14.0,
+     0.0,
+     185.77,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     37579.4,
+     42057.5,
+     -14.0,
+     0.0,
+     185.77,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     36984.3,
+     43504.9,
+     -14.0,
+     0.0,
+     177.88,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     36929.7,
+     42029.7,
+     -14.0,
+     0.0,
+     177.88,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2B_GatePier_t1_2_IvoryStone",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_pier.SM_gate_pier",
+   "material": "MI_V2_IvoryStone",
+   "instances": [
+    [
+     37826.0,
+     43833.8,
+     -14.0,
+     0.0,
+     283.12,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     38266.4,
+     41944.4,
+     -14.0,
+     0.0,
+     283.12,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HG2B_GateFinial_t1_2_Gold",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_ball.SM_gate_finial_ball",
+   "material": "MI_V2_Gold",
+   "instances": [
+    [
+     37826.0,
+     43833.8,
+     636.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     38266.4,
+     41944.4,
+     636.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HG2B_Plate_t2_5_GroundFlag_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Architecture/Stairs/SM_terrace_platform.SM_terrace_platform",
+   "material": "MI_V2_GroundFlag_PlazaCream",
+   "instances": [
+    [
+     41658.0,
+     102298.7,
+     -128.0,
+     0.0,
+     234.92,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     41213.2,
+     102622.1,
+     -128.0,
+     0.0,
+     232.71,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     40789.8,
+     102972.5,
+     -128.0,
+     0.0,
+     228.22,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     40378.7,
+     103337.9,
+     -128.0,
+     0.0,
+     228.47,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HG2B_Kerb_t2_5_MarblePale",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_MarblePale",
+   "instances": [
+    [
+     42082.2,
+     102902.7,
+     -14.0,
+     0.0,
+     144.92,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     41233.8,
+     101694.7,
+     -14.0,
+     0.0,
+     144.92,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     41660.4,
+     103209.3,
+     -14.0,
+     0.0,
+     142.71,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     40766.0,
+     102034.9,
+     -14.0,
+     0.0,
+     142.71,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     41281.6,
+     103522.9,
+     -14.0,
+     0.0,
+     138.22,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     40298.0,
+     102422.1,
+     -14.0,
+     0.0,
+     138.22,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     40868.1,
+     103890.4,
+     -14.0,
+     0.0,
+     138.47,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     40453.0,
+     104256.1,
+     -14.0,
+     0.0,
+     138.72,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     40002.4,
+     104627.1,
+     -14.0,
+     0.0,
+     141.34,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2B_Kerb_t1_5_MarblePale",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_MarblePale",
+   "instances": [
+    [
+     39889.3,
+     102785.4,
+     -14.0,
+     0.0,
+     138.47,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     39479.0,
+     103146.7,
+     -14.0,
+     0.0,
+     138.72,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     39080.2,
+     103474.3,
+     -14.0,
+     0.0,
+     141.34,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2B_Plate_t1_5_GroundFlag_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Architecture/Stairs/SM_terrace_platform.SM_terrace_platform",
+   "material": "MI_V2_GroundFlag_PlazaCream",
+   "instances": [
+    [
+     39966.0,
+     103701.4,
+     -128.0,
+     0.0,
+     228.72,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     39541.3,
+     104050.7,
+     -128.0,
+     0.0,
+     231.34,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HG2B_GatePier_t2_5_IvoryStone",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_pier.SM_gate_pier",
+   "material": "MI_V2_IvoryStone",
+   "instances": [
+    [
+     41436.1,
+     103695.8,
+     -14.0,
+     0.0,
+     228.22,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     40143.5,
+     102249.2,
+     -14.0,
+     0.0,
+     228.22,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HG2B_GateFinial_t2_5_Gold",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_ball.SM_gate_finial_ball",
+   "material": "MI_V2_Gold",
+   "instances": [
+    [
+     41436.1,
+     103695.8,
+     636.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     40143.5,
+     102249.2,
+     636.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HG2B_Plate_t-5_2_GroundFlag_PlazaGrey",
+   "mesh": "/Game/WonderlandV2/Architecture/Stairs/SM_terrace_platform.SM_terrace_platform",
+   "material": "MI_V2_GroundFlag_PlazaGrey",
+   "instances": [
+    [
+     -92220.6,
+     49829.2,
+     -128.0,
+     0.0,
+     318.01,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -92597.3,
+     49428.6,
+     -128.0,
+     0.0,
+     315.68,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -93002.3,
+     49057.0,
+     -128.0,
+     0.0,
+     310.96,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -93427.6,
+     48708.4,
+     -128.0,
+     0.0,
+     308.85,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -93854.4,
+     48361.5,
+     -128.0,
+     0.0,
+     309.14,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -94279.3,
+     48012.2,
+     -128.0,
+     0.0,
+     309.72,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HG2B_Kerb_t-5_2_NoctisCharcoal",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_NoctisCharcoal",
+   "instances": [
+    [
+     -92769.2,
+     50323.0,
+     -14.0,
+     0.0,
+     228.01,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     -91672.0,
+     49335.4,
+     -14.0,
+     0.0,
+     228.01,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     -93125.4,
+     49944.3,
+     -14.0,
+     0.0,
+     225.68,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     -92069.2,
+     48912.9,
+     -14.0,
+     0.0,
+     225.68,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     -93486.1,
+     49614.4,
+     -14.0,
+     0.0,
+     220.96,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     -92518.5,
+     48499.6,
+     -14.0,
+     0.0,
+     220.96,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     -93890.6,
+     49283.2,
+     -14.0,
+     0.0,
+     218.85,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     -92964.6,
+     48133.6,
+     -14.0,
+     0.0,
+     218.85,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     -94320.3,
+     48934.0,
+     -14.0,
+     0.0,
+     219.14,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     -93388.5,
+     47789.0,
+     -14.0,
+     0.0,
+     219.14,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     -94751.0,
+     48579.9,
+     -14.0,
+     0.0,
+     219.72,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ],
+    [
+     -93807.6,
+     47444.5,
+     -14.0,
+     0.0,
+     219.72,
+     0.0,
+     5.0833,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2B_GatePier_t-5_2_IvoryStone",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_pier.SM_gate_pier",
+   "material": "MI_V2_IvoryStone",
+   "instances": [
+    [
+     -94466.7,
+     49113.8,
+     -14.0,
+     0.0,
+     309.14,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -93242.1,
+     47609.2,
+     -14.0,
+     0.0,
+     309.14,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HG2B_GateFinial_t-5_2_Gold",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_ball.SM_gate_finial_ball",
+   "material": "MI_V2_Gold",
+   "instances": [
+    [
+     -94466.7,
+     49113.8,
+     636.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -93242.1,
+     47609.2,
+     636.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  }
+ ]
+}

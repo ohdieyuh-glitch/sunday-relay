@@ -1,0 +1,2146 @@
+{
+ "pass": "HG2A",
+ "folder": "Wonderland/Authored/HG2A_HedgeGates",
+ "tags": [
+  "WL_AUTHORED",
+  "WL_PASS_HG2A",
+  "WL_HEDGE_GATE"
+ ],
+ "actors": [],
+ "batches": [
+  {
+   "id": "HG2A_Ground_Flagstone_A_moss_t4_2_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_moss.WL_Ground_Flagstone_A_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     94823.8,
+     57797.8,
+     -13.0,
+     0.0,
+     197.32,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     94823.8,
+     58997.8,
+     -13.0,
+     0.0,
+     359.55,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     96323.8,
+     59897.8,
+     -13.0,
+     0.0,
+     242.58,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_paving_t4_2_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving.WL_Ground_Flagstone_A_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     94823.8,
+     57797.8,
+     -13.0,
+     0.0,
+     124.5,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     94823.8,
+     58997.8,
+     -13.0,
+     0.0,
+     118.55,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     96323.8,
+     59897.8,
+     -13.0,
+     0.0,
+     107.42,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_paving_shade_t4_2_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_shade.WL_Ground_Flagstone_A_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     94823.8,
+     57797.8,
+     -13.0,
+     0.0,
+     304.15,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     94823.8,
+     58997.8,
+     -13.0,
+     0.0,
+     218.8,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     96323.8,
+     59897.8,
+     -13.0,
+     0.0,
+     184.28,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_paving_warm_t4_2_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_warm.WL_Ground_Flagstone_A_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     94823.8,
+     57797.8,
+     -13.0,
+     0.0,
+     103.9,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     94823.8,
+     58997.8,
+     -13.0,
+     0.0,
+     151.06,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     96323.8,
+     59897.8,
+     -13.0,
+     0.0,
+     79.15,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_moss_t4_2_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_moss.WL_Ground_Flagstone_B_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     94423.8,
+     58197.8,
+     -13.0,
+     0.0,
+     183.72,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     95323.8,
+     59297.8,
+     -13.0,
+     0.0,
+     262.96,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_paving_t4_2_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving.WL_Ground_Flagstone_B_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     94423.8,
+     58197.8,
+     -13.0,
+     0.0,
+     123.77,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     95323.8,
+     59297.8,
+     -13.0,
+     0.0,
+     160.99,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_paving_shade_t4_2_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_shade.WL_Ground_Flagstone_B_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     94423.8,
+     58197.8,
+     -13.0,
+     0.0,
+     149.58,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     95323.8,
+     59297.8,
+     -13.0,
+     0.0,
+     61.36,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_paving_warm_t4_2_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_warm.WL_Ground_Flagstone_B_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     94423.8,
+     58197.8,
+     -13.0,
+     0.0,
+     350.59,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     95323.8,
+     59297.8,
+     -13.0,
+     0.0,
+     156.21,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_moss_t4_2_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_moss.WL_Ground_Flagstone_C_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     94423.8,
+     58697.8,
+     -13.0,
+     0.0,
+     37.34,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     95823.8,
+     59597.8,
+     -13.0,
+     0.0,
+     146.9,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_paving_t4_2_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving.WL_Ground_Flagstone_C_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     94423.8,
+     58697.8,
+     -13.0,
+     0.0,
+     160.09,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     95823.8,
+     59597.8,
+     -13.0,
+     0.0,
+     285.38,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_paving_shade_t4_2_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_shade.WL_Ground_Flagstone_C_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     94423.8,
+     58697.8,
+     -13.0,
+     0.0,
+     80.93,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     95823.8,
+     59597.8,
+     -13.0,
+     0.0,
+     202.54,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_paving_warm_t4_2_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_warm.WL_Ground_Flagstone_C_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     94423.8,
+     58697.8,
+     -13.0,
+     0.0,
+     125.84,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     95823.8,
+     59597.8,
+     -13.0,
+     0.0,
+     70.7,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_moss_t4_3_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_moss.WL_Ground_Flagstone_B_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     96723.8,
+     60297.8,
+     -13.0,
+     0.0,
+     147.87,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_paving_t4_3_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving.WL_Ground_Flagstone_B_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     96723.8,
+     60297.8,
+     -13.0,
+     0.0,
+     283.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_paving_shade_t4_3_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_shade.WL_Ground_Flagstone_B_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     96723.8,
+     60297.8,
+     -13.0,
+     0.0,
+     185.65,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_paving_warm_t4_3_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_warm.WL_Ground_Flagstone_B_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     96723.8,
+     60297.8,
+     -13.0,
+     0.0,
+     270.84,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_moss_t4_3_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_moss.WL_Ground_Flagstone_C_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     97123.8,
+     60697.8,
+     -13.0,
+     0.0,
+     272.43,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_paving_t4_3_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving.WL_Ground_Flagstone_C_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     97123.8,
+     60697.8,
+     -13.0,
+     0.0,
+     211.35,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_paving_shade_t4_3_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_shade.WL_Ground_Flagstone_C_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     97123.8,
+     60697.8,
+     -13.0,
+     0.0,
+     232.26,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_paving_warm_t4_3_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_warm.WL_Ground_Flagstone_C_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     97123.8,
+     60697.8,
+     -13.0,
+     0.0,
+     143.02,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_moss_t4_3_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_moss.WL_Ground_Flagstone_A_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     97523.8,
+     61097.8,
+     -13.0,
+     0.0,
+     222.46,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_paving_t4_3_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving.WL_Ground_Flagstone_A_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     97523.8,
+     61097.8,
+     -13.0,
+     0.0,
+     279.81,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_paving_shade_t4_3_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_shade.WL_Ground_Flagstone_A_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     97523.8,
+     61097.8,
+     -13.0,
+     0.0,
+     35.71,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_paving_warm_t4_3_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_warm.WL_Ground_Flagstone_A_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     97523.8,
+     61097.8,
+     -13.0,
+     0.0,
+     337.55,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_GatePier_t4_2_IvoryStone",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_pier.SM_gate_pier",
+   "material": "MI_V2_IvoryStone",
+   "instances": [
+    [
+     94501.9,
+     59330.6,
+     -14.0,
+     0.0,
+     123.69,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HG2A_GateFinial_t4_2_Gold",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_ball.SM_gate_finial_ball",
+   "material": "MI_V2_Gold",
+   "instances": [
+    [
+     94501.9,
+     59330.6,
+     636.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_moss_t-3_5_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_moss.WL_Ground_Flagstone_A_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     -56876.6,
+     117230.4,
+     -13.0,
+     0.0,
+     132.21,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -58076.6,
+     116030.4,
+     -13.0,
+     0.0,
+     314.96,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -59276.6,
+     114830.4,
+     -13.0,
+     0.0,
+     54.28,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_paving_t-3_5_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving.WL_Ground_Flagstone_A_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     -56876.6,
+     117230.4,
+     -13.0,
+     0.0,
+     50.08,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -58076.6,
+     116030.4,
+     -13.0,
+     0.0,
+     251.66,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -59276.6,
+     114830.4,
+     -13.0,
+     0.0,
+     329.74,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_paving_shade_t-3_5_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_shade.WL_Ground_Flagstone_A_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     -56876.6,
+     117230.4,
+     -13.0,
+     0.0,
+     54.0,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -58076.6,
+     116030.4,
+     -13.0,
+     0.0,
+     348.23,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -59276.6,
+     114830.4,
+     -13.0,
+     0.0,
+     345.5,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_paving_warm_t-3_5_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_warm.WL_Ground_Flagstone_A_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     -56876.6,
+     117230.4,
+     -13.0,
+     0.0,
+     122.64,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -58076.6,
+     116030.4,
+     -13.0,
+     0.0,
+     264.36,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -59276.6,
+     114830.4,
+     -13.0,
+     0.0,
+     313.08,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_moss_t-3_5_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_moss.WL_Ground_Flagstone_B_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     -57276.6,
+     116830.4,
+     -13.0,
+     0.0,
+     24.94,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -58476.6,
+     115630.4,
+     -13.0,
+     0.0,
+     347.62,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -59676.6,
+     114430.4,
+     -13.0,
+     0.0,
+     260.82,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_paving_t-3_5_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving.WL_Ground_Flagstone_B_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     -57276.6,
+     116830.4,
+     -13.0,
+     0.0,
+     143.23,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -58476.6,
+     115630.4,
+     -13.0,
+     0.0,
+     73.88,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -59676.6,
+     114430.4,
+     -13.0,
+     0.0,
+     273.52,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_paving_shade_t-3_5_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_shade.WL_Ground_Flagstone_B_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     -57276.6,
+     116830.4,
+     -13.0,
+     0.0,
+     149.43,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -58476.6,
+     115630.4,
+     -13.0,
+     0.0,
+     100.21,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -59676.6,
+     114430.4,
+     -13.0,
+     0.0,
+     110.83,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_paving_warm_t-3_5_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_warm.WL_Ground_Flagstone_B_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     -57276.6,
+     116830.4,
+     -13.0,
+     0.0,
+     235.92,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -58476.6,
+     115630.4,
+     -13.0,
+     0.0,
+     350.03,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -59676.6,
+     114430.4,
+     -13.0,
+     0.0,
+     2.66,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_moss_t-3_5_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_moss.WL_Ground_Flagstone_C_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     -57676.6,
+     116430.4,
+     -13.0,
+     0.0,
+     167.97,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -58876.6,
+     115230.4,
+     -13.0,
+     0.0,
+     7.88,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_paving_t-3_5_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving.WL_Ground_Flagstone_C_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     -57676.6,
+     116430.4,
+     -13.0,
+     0.0,
+     336.7,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -58876.6,
+     115230.4,
+     -13.0,
+     0.0,
+     332.55,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_paving_shade_t-3_5_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_shade.WL_Ground_Flagstone_C_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     -57676.6,
+     116430.4,
+     -13.0,
+     0.0,
+     237.37,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -58876.6,
+     115230.4,
+     -13.0,
+     0.0,
+     327.74,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_paving_warm_t-3_5_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_warm.WL_Ground_Flagstone_C_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     -57676.6,
+     116430.4,
+     -13.0,
+     0.0,
+     115.57,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -58876.6,
+     115230.4,
+     -13.0,
+     0.0,
+     48.92,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_moss_t-4_5_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_moss.WL_Ground_Flagstone_C_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     -60076.6,
+     114030.4,
+     -13.0,
+     0.0,
+     226.04,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -61476.6,
+     113630.4,
+     -13.0,
+     0.0,
+     40.59,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -62676.6,
+     112430.4,
+     -13.0,
+     0.0,
+     223.62,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -63976.6,
+     112430.4,
+     -13.0,
+     0.0,
+     156.55,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -65276.6,
+     113130.4,
+     -13.0,
+     0.0,
+     338.44,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -66676.6,
+     112430.4,
+     -13.0,
+     0.0,
+     19.06,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_paving_t-4_5_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving.WL_Ground_Flagstone_C_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     -60076.6,
+     114030.4,
+     -13.0,
+     0.0,
+     317.6,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -61476.6,
+     113630.4,
+     -13.0,
+     0.0,
+     59.57,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -62676.6,
+     112430.4,
+     -13.0,
+     0.0,
+     285.81,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -63976.6,
+     112430.4,
+     -13.0,
+     0.0,
+     136.19,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -65276.6,
+     113130.4,
+     -13.0,
+     0.0,
+     327.87,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -66676.6,
+     112430.4,
+     -13.0,
+     0.0,
+     197.55,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_paving_shade_t-4_5_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_shade.WL_Ground_Flagstone_C_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     -60076.6,
+     114030.4,
+     -13.0,
+     0.0,
+     341.62,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -61476.6,
+     113630.4,
+     -13.0,
+     0.0,
+     12.13,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -62676.6,
+     112430.4,
+     -13.0,
+     0.0,
+     206.28,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -63976.6,
+     112430.4,
+     -13.0,
+     0.0,
+     179.99,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -65276.6,
+     113130.4,
+     -13.0,
+     0.0,
+     159.46,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -66676.6,
+     112430.4,
+     -13.0,
+     0.0,
+     349.71,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_C_paving_warm_t-4_5_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_warm.WL_Ground_Flagstone_C_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     -60076.6,
+     114030.4,
+     -13.0,
+     0.0,
+     185.33,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -61476.6,
+     113630.4,
+     -13.0,
+     0.0,
+     282.07,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -62676.6,
+     112430.4,
+     -13.0,
+     0.0,
+     113.35,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -63976.6,
+     112430.4,
+     -13.0,
+     0.0,
+     322.19,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -65276.6,
+     113130.4,
+     -13.0,
+     0.0,
+     79.98,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -66676.6,
+     112430.4,
+     -13.0,
+     0.0,
+     166.93,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_moss_t-4_5_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_moss.WL_Ground_Flagstone_A_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     -60576.6,
+     114030.4,
+     -13.0,
+     0.0,
+     3.01,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -61876.6,
+     113230.4,
+     -13.0,
+     0.0,
+     311.63,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -63076.6,
+     112030.4,
+     -13.0,
+     0.0,
+     246.68,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -64376.6,
+     112830.4,
+     -13.0,
+     0.0,
+     236.94,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -65676.6,
+     112830.4,
+     -13.0,
+     0.0,
+     84.26,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_paving_t-4_5_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving.WL_Ground_Flagstone_A_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     -60576.6,
+     114030.4,
+     -13.0,
+     0.0,
+     62.77,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -61876.6,
+     113230.4,
+     -13.0,
+     0.0,
+     72.63,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -63076.6,
+     112030.4,
+     -13.0,
+     0.0,
+     282.21,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -64376.6,
+     112830.4,
+     -13.0,
+     0.0,
+     140.18,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -65676.6,
+     112830.4,
+     -13.0,
+     0.0,
+     331.66,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_paving_shade_t-4_5_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_shade.WL_Ground_Flagstone_A_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     -60576.6,
+     114030.4,
+     -13.0,
+     0.0,
+     161.68,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -61876.6,
+     113230.4,
+     -13.0,
+     0.0,
+     228.24,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -63076.6,
+     112030.4,
+     -13.0,
+     0.0,
+     19.97,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -64376.6,
+     112830.4,
+     -13.0,
+     0.0,
+     54.15,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -65676.6,
+     112830.4,
+     -13.0,
+     0.0,
+     62.51,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_A_paving_warm_t-4_5_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_warm.WL_Ground_Flagstone_A_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     -60576.6,
+     114030.4,
+     -13.0,
+     0.0,
+     83.02,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -61876.6,
+     113230.4,
+     -13.0,
+     0.0,
+     315.45,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -63076.6,
+     112030.4,
+     -13.0,
+     0.0,
+     115.95,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -64376.6,
+     112830.4,
+     -13.0,
+     0.0,
+     123.99,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -65676.6,
+     112830.4,
+     -13.0,
+     0.0,
+     233.38,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_moss_t-4_5_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_moss.WL_Ground_Flagstone_B_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     -60976.6,
+     113630.4,
+     -13.0,
+     0.0,
+     9.97,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -62276.6,
+     112830.4,
+     -13.0,
+     0.0,
+     87.7,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -63576.6,
+     112030.4,
+     -13.0,
+     0.0,
+     105.96,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -64776.6,
+     113230.4,
+     -13.0,
+     0.0,
+     169.51,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -66176.6,
+     112530.4,
+     -13.0,
+     0.0,
+     234.86,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_paving_t-4_5_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving.WL_Ground_Flagstone_B_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     -60976.6,
+     113630.4,
+     -13.0,
+     0.0,
+     69.37,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -62276.6,
+     112830.4,
+     -13.0,
+     0.0,
+     120.03,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -63576.6,
+     112030.4,
+     -13.0,
+     0.0,
+     319.1,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -64776.6,
+     113230.4,
+     -13.0,
+     0.0,
+     232.58,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -66176.6,
+     112530.4,
+     -13.0,
+     0.0,
+     60.2,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_paving_shade_t-4_5_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_shade.WL_Ground_Flagstone_B_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     -60976.6,
+     113630.4,
+     -13.0,
+     0.0,
+     179.95,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -62276.6,
+     112830.4,
+     -13.0,
+     0.0,
+     317.31,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -63576.6,
+     112030.4,
+     -13.0,
+     0.0,
+     103.72,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -64776.6,
+     113230.4,
+     -13.0,
+     0.0,
+     359.48,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -66176.6,
+     112530.4,
+     -13.0,
+     0.0,
+     11.29,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_Ground_Flagstone_B_paving_warm_t-4_5_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_warm.WL_Ground_Flagstone_B_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     -60976.6,
+     113630.4,
+     -13.0,
+     0.0,
+     45.67,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -62276.6,
+     112830.4,
+     -13.0,
+     0.0,
+     274.28,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -63576.6,
+     112030.4,
+     -13.0,
+     0.0,
+     242.53,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -64776.6,
+     113230.4,
+     -13.0,
+     0.0,
+     116.97,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ],
+    [
+     -66176.6,
+     112530.4,
+     -13.0,
+     0.0,
+     229.77,
+     0.0,
+     0.55,
+     0.55,
+     0.55
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 26000.0
+  },
+  {
+   "id": "HG2A_GatePier_t-3_5_IvoryStone",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_pier.SM_gate_pier",
+   "material": "MI_V2_IvoryStone",
+   "instances": [
+    [
+     -58959.4,
+     115713.2,
+     -14.0,
+     0.0,
+     315.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -58393.7,
+     115147.5,
+     -14.0,
+     0.0,
+     315.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "HG2A_GateFinial_t-3_5_Gold",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_ball.SM_gate_finial_ball",
+   "material": "MI_V2_Gold",
+   "instances": [
+    [
+     -58959.4,
+     115713.2,
+     636.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     -58393.7,
+     115147.5,
+     636.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  }
+ ]
+}

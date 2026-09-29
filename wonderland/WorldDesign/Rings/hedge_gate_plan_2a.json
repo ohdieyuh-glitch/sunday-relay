@@ -1,0 +1,73 @@
+{
+ "reason": "founder decision 2026-09-29: designed gates in the V2 hedge ring (relocate first, trim by SINK_UU only where relocation cannot clear); window 2A",
+ "moves": [
+  {
+   "which": "GB ch_hedge_mass_MI_V2_LeafDark at (93373, 60480)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "old_approx": {
+    "x": 93373,
+    "y": 60480,
+    "z": -900,
+    "yaw": 19.0
+   },
+   "half_extent_m": [
+    34.4,
+    20.1
+   ],
+   "new": {
+    "x": 92342,
+    "y": 61272,
+    "z": -900,
+    "yaw": 52.4
+   },
+   "moved_m": 13.0,
+   "turned_deg": 33.4,
+   "action": "relocate"
+  },
+  {
+   "which": "GB tch_hedge_mass_MI_V2_LeafMid at (89058, 59454)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "old_approx": {
+    "x": 89058,
+    "y": 59454,
+    "z": -900,
+    "yaw": 18.0
+   },
+   "half_extent_m": [
+    44.5,
+    26.0
+   ],
+   "new": {
+    "x": 88662,
+    "y": 59759,
+    "z": -900,
+    "yaw": 18.0
+   },
+   "moved_m": 5.0,
+   "turned_deg": 0.0,
+   "action": "relocate"
+  },
+  {
+   "which": "GE ch_hedge_mass_MI_V2_LeafDark at (-56479, 113211)",
+   "batch_owner": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "old_approx": {
+    "x": -56479,
+    "y": 113211,
+    "z": -900,
+    "yaw": 81.0
+   },
+   "half_extent_m": [
+    35.7,
+    20.8
+   ],
+   "new": {
+    "x": -56479,
+    "y": 113211,
+    "z": -100900,
+    "yaw": 81.0
+   },
+   "turned_deg": 0.0,
+   "action": "trim (SINK_UU)"
+  }
+ ]
+}
