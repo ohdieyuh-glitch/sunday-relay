@@ -150,6 +150,9 @@ editor (9.6 -> 25.1 GB). Relaunch between writers: `quit_editor` job (refuses if
 `Tools/LaunchWonderlandEditor.ps1` detached via WMI `Win32_Process.Create`; ~2 min each way, 20 regions and every
 actor resident again. Several applies meant for one save go in ONE session: all but the last with SAVE=False,
 the last with SAVE=True and MAP_WAS_DIRTY_OK=True. Never PIE above ~42 GB system commit.
+**Count saves yourself** (added 2026-09-29 after a second save slipped through on a peer's message): before any
+SAVE=True job, count `saved: True` results in `_channel/done` finished after the editor PID's StartTime
+(`Get-Process UnrealEditor`); never state or trust editor-wide save state from one lane's own jobs.
 
 **Generators that lay SM_terrace_platform**: the plate is 1,440 along its local X and 740 along Y. Copy the
 plate and kerb yaw from noctis_quarter.py / tartarus_quarter.py, then run the neighbour-spacing test on the
