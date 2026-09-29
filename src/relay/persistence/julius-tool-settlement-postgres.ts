@@ -8,6 +8,20 @@ const stable=(value:any):string=>value===null||typeof value!=='object'?JSON.stri
 const digest=(value:unknown)=>createHash('sha256').update(stable(value)).digest('hex');
 
 /**
+ * A SETTLEMENT THAT LOSES A SERIALIZATION RACE IS REPLAYED, A BOUNDED NUMBER OF TIMES.
+ *
+ * The settlement is SERIALIZABLE and, in a live mission, runs beside the run loop's own writes to the
+ * same run: every event append upserts the run's `stream_sequences` row, which the settlement's event
+ * upserts too. A 40001 (or a 40P01 deadlock) there is PostgreSQL asking for the transaction to be run
+ * again, and it used to end the coder's step instead, with the invocation left DISPATCHING exactly as
+ * the 22P05 of paid run 36568129865 left it. Three attempts, jittered; anything else, or a third
+ * failure, surfaces as before, and the shell port then closes the dispatch as an unknown outcome.
+ */
+const SERIALIZATION_FAILURES:ReadonlySet<string>=new Set(['40001','40P01']);
+export const JULIUS_SETTLEMENT_ATTEMPTS=3;
+const settlementRetryDelayMs=(attempt:number):number=>{const base=10*2**(attempt-1);return base+Math.floor(Math.random()*base);};
+
+/**
  * The sole DB authority for terminal tool truth. External artifact bytes must be finalized before this call.
  *
  * WHAT THE COMMAND CARRIES IS RAW, WHAT THE ROWS HOLD IS STORABLE. A shell result's stdout may hold
@@ -21,7 +35,24 @@ export class JuliusToolSettlementPostgresRepository implements JuliusToolSettlem
  constructor(private readonly pool:Pool,private readonly artifactStore?:ArtifactStorePort,private readonly fault?: (point:'AFTER_BUDGET'|'AFTER_EVIDENCE'|'AFTER_TASK'|'BEFORE_COMMIT'|'AFTER_COMMIT')=>void|Promise<void>){}
  async settle(command:JuliusToolSettlementCommand):Promise<JuliusToolSettlementResult>{
   if(command.result.invocationId!==command.invocationId||digest(command.result)!==command.resultDigest||command.taskOutcome?.state==='SUCCEEDED'&&command.result.status!=='SUCCEEDED'||command.taskOutcome?.state==='FAILED'&&command.result.status==='SUCCEEDED')throw new Error('tool_settlement_result_invalid');
-  if(command.artifacts.length&&!this.artifactStore)throw new Error('tool_settlement_artifact_store_required');for(const metadata of command.artifacts){const stored=await this.artifactStore!.get(metadata);if(!stored||stored.metadata.contentHash!==metadata.contentHash||stored.metadata.byteSize!==metadata.byteSize||stored.metadata.storageRef!==metadata.storageRef||stored.metadata.tenantId!==metadata.tenantId||stored.metadata.projectId!==metadata.projectId||stored.metadata.runId!==metadata.runId||stored.metadata.taskId!==metadata.taskId||stored.metadata.invocationId!==metadata.invocationId||stored.content.byteLength!==metadata.byteSize||createHash('sha256').update(stored.content).digest('hex')!==metadata.contentHash)throw new Error('tool_settlement_artifact_bytes_unavailable');}const commandDigest=digest(command),client=await this.pool.connect();
+  if(command.artifacts.length&&!this.artifactStore)throw new Error('tool_settlement_artifact_store_required');for(const metadata of command.artifacts){const stored=await this.artifactStore!.get(metadata);if(!stored||stored.metadata.contentHash!==metadata.contentHash||stored.metadata.byteSize!==metadata.byteSize||stored.metadata.storageRef!==metadata.storageRef||stored.metadata.tenantId!==metadata.tenantId||stored.metadata.projectId!==metadata.projectId||stored.metadata.runId!==metadata.runId||stored.metadata.taskId!==metadata.taskId||stored.metadata.invocationId!==metadata.invocationId||stored.content.byteLength!==metadata.byteSize||createHash('sha256').update(stored.content).digest('hex')!==metadata.contentHash)throw new Error('tool_settlement_artifact_bytes_unavailable');}const commandDigest=digest(command);
+  for(let attempt=1;;attempt+=1){
+   try{return await this.settleOnce(command,commandDigest);}
+   catch(error){
+    if(!SERIALIZATION_FAILURES.has(String((error as {code?:unknown}|null)?.code))||attempt>=JULIUS_SETTLEMENT_ATTEMPTS)throw error;
+    await new Promise(resolve=>setTimeout(resolve,settlementRetryDelayMs(attempt)));
+   }
+  }
+ }
+ /**
+  * ONE SERIALIZABLE ATTEMPT, AND WHY IT MAY BE REPLAYED. Everything that is not SQL happens before the
+  * first attempt, in `settle`: the command is validated and digested and the artifact bytes are checked
+  * there, once. What is left is SQL over the fixed command and over rows it reads itself, plus the
+  * test-only fault hooks. PostgreSQL rolls a 40001/40P01 attempt back entirely, and a replay that finds
+  * the settlement already committed answers `created:false` from the idempotency check at the top.
+  */
+ private async settleOnce(command:JuliusToolSettlementCommand,commandDigest:string):Promise<JuliusToolSettlementResult>{
+  const client=await this.pool.connect();
   try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
    const prior=await client.query('SELECT settlement_id,invocation_id,result_digest,command_digest FROM relay_wonderland.julius_tool_settlements WHERE settlement_id=$1 OR invocation_id=$2 FOR UPDATE',[command.settlementId,command.invocationId]);
    if(prior.rows[0]){if(prior.rows[0].settlement_id!==command.settlementId||prior.rows[0].invocation_id!==command.invocationId||prior.rows[0].result_digest!==command.resultDigest||prior.rows[0].command_digest!==commandDigest)throw new Error('tool_settlement_identity_conflict');await client.query('COMMIT');return{created:false,settlementId:command.settlementId,invocationId:command.invocationId,resultDigest:command.resultDigest};}

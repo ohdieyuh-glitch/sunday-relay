@@ -793,6 +793,46 @@ suite('paid run 36568129865 — the NUL-separated close-out settles on real Post
     expect(await openCount(identity)).toBe(0);
   });
 
+  /**
+   * A settlement whose attempts meet a REAL serialization conflict: once an attempt holds its snapshot,
+   * a concurrent transaction commits a change to the run's `stream_sequences` row, which the attempt's
+   * event then upserts. PostgreSQL refuses that attempt with 40001. `conflicts` says how many attempts.
+   */
+  const conflictedSettlement = (identity: PreflightIdentity, conflicts: number) => {
+    const seen = { attempts: 0 };
+    const settlement = new JuliusToolSettlementPostgresRepository(pool, undefined, async (point) => {
+      if (point !== 'AFTER_BUDGET') return;
+      seen.attempts += 1;
+      if (seen.attempts <= conflicts) await pool.query('UPDATE relay_wonderland.stream_sequences SET next_sequence=next_sequence+1 WHERE stream_id=$1', [identity.runId]);
+    });
+    return { settlement, seen };
+  };
+  const seedStream = (identity: PreflightIdentity) => pool.query('INSERT INTO relay_wonderland.stream_sequences(stream_id,next_sequence) VALUES($1,2) ON CONFLICT DO NOTHING', [identity.runId]);
+
+  it('SERIALIZATION: a settlement that meets a real concurrent commit on the run\'s event stream (40001) is replayed and settles', async () => {
+    const identity = await fixture();
+    await seedStream(identity);
+    const { settlement, seen } = conflictedSettlement(identity, 1);
+    const result = await portFor(identity, () => ({ stdout: CLOSE_OUT }), { settlement }).run(closeOutStep(identity));
+    expect(result).toMatchObject({ status: 'SUCCEEDED', stdout: CLOSE_OUT });
+    expect(seen.attempts, 'refused once, settled on the replay').toBe(2);
+    expect(await rowOf(closeOutId(identity))).toMatchObject({ state: 'SUCCEEDED', recovery_state: 'RECONCILED', outbox_state: 'DELIVERED' });
+    const settlements = await pool.query<{ n: string }>('SELECT count(*) AS n FROM relay_wonderland.julius_tool_settlements WHERE invocation_id=$1', [closeOutId(identity)]);
+    expect(settlements.rows[0]?.n, 'exactly one settlement, however many attempts').toBe('1');
+    expect(await openCount(identity)).toBe(0);
+  });
+
+  it('SERIALIZATION: three conflicts in a row surface as 40001, and the dispatch is closed as an unknown outcome, never DISPATCHING', async () => {
+    const identity = await fixture();
+    await seedStream(identity);
+    const { settlement, seen } = conflictedSettlement(identity, 3);
+    const failure = await failureOf(portFor(identity, () => ({ stdout: CLOSE_OUT }), { settlement }).run(closeOutStep(identity)));
+    expect(codeOf(failure)).toBe('40001');
+    expect(seen.attempts).toBe(3);
+    expect(await rowOf(closeOutId(identity))).toMatchObject({ state: 'FAILED', recovery_state: 'UNKNOWN_OUTCOME', outbox_state: 'DEAD', last_error: 'tool_settlement_failed' });
+    expect(await openCount(identity)).toBe(0);
+  });
+
   it('INVARIANT: a run made terminal through the store closes every open invocation as what it is, surfaces each by name, and touches nothing else', async () => {
     const mine = await fixture();
     const theirs = await fixture();
