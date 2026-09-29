@@ -297,12 +297,13 @@ matched), hash +291 / -0 / stub only. Projected: emptiness 21.8 -> 20.9 %, unint
 **Emptiness after window 3 (08:37 census): 21.8 % empty = 13.2 % UNINTENDED + 3.1 % meadow + 2.8 % traversal + 1.7 %
 rim + 1.1 % forest / clearings.**
 
-**Emptiness after window 4a (10:47 census, corrected audit): 19.0 % empty; UNINTENDED 12.0 %, traversal 1.7 %** (SECOND's
-audit: the first reading of 11.3 % / 2.6 % credited traversal to planned-but-unbuilt S3 walk sidecars; the class split,
-not the total, was wrong). **After window 4b: 16.2 % empty, UNINTENDED 10.5 %, meadow 3.3 %, traversal 1.5 %.** Audit fix 42e90c65: `emptiness.py` now skips hidden geometry --
+**Emptiness after window 4a (10:47 census, patched audit 12c2c67b): 19.0 % empty; UNINTENDED 11.8 %, vista 0.3 %, traversal
+1.7 %.** (The patched classifier counts only BUILT walks -- the first reading credited traversal to planned S3 sidecars --
+and gives each checkpoint its paving + 30 m of ceremonial ground.) **After window 4b: 16.2 % empty, UNINTENDED 10.2 %.
+Staged (4c + 5a + 5b): 12.1 % / 7.5 %.** Audit fix 42e90c65: `emptiness.py` now skips hidden geometry --
 the EDGE01 invisible edge ring (read as ~110 m discs it falsely "covered" the band inside the rim: 16.3 % before the
 fix) and the V2_MarbleWorld_Scaffold (no numerical effect: the core is 0.0 % empty to 200 m either way). Figures
-before window 4a are unaffected. Series: 45.1 % (morning) -> 26.3 % (window 1) -> 21.8 % (window 3) -> 19.0 % (4a).
+before window 4a are unaffected. Series: 45.1 % (morning) -> 26.3 % (window 1) -> 21.8 % (window 3) -> 19.0 % (4a) -> 16.2 % (4b).
 **GA-F01 (Golden Arrival axis, CORE, P1 on the arrival spine).** The self-powered axis walk stops reproducibly at
 (67, 6868): MQ04's first two palace-walk flagstones float at pivot z 19 (top +25) over the heart-garden lawn (-14), a
 38.9 cm rise the Relay Dog does not step (found with a Pawn-profile sweep IN PLAY; editor-world traces do not see
@@ -315,6 +316,10 @@ approach gate -> palace entrance, 32/32 waypoints, 169 m at 228 cm/s -- over the
 CORE-run).** The integration lane's navigator harness was retried with MOVE_WALKING set at spawn and still could not
 drive the Dog from the spawn point (peak speed 0); zc_trail_walk, which places the Dog off the spawn first, is the
 working instrument. GA's rear-world and flank-garden legs need a navigator on the census-dense core and are OPEN.
+
+**CORE self-powered proofs, 11:20-11:28 (zc_nav_walk, CORE-run):** SR150 seam way 428/432 m ARRIVED; all 8 TW03 hamlet
+walks ARRIVED (gate -> nearest paving, 0 detours). GA rear-world / west / east flank legs still stop (castle hall,
+planter) after 4 detours each -- they need an in-play planner through the arches; OPEN.
 
 ## Assignments
 
