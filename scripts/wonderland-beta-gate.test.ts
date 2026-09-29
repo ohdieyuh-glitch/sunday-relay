@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { evaluate, type BetaGateReport, type BetaVerdict } from './wonderland-beta-gate.mjs';
+import { participantIdForIdentity } from '../relay-bridge/github-auth-routes';
+import { drillDrivenFiles } from './julius-drill-closure.mjs';
+import { ACCOUNT_PARTICIPANT_ID, BUNDLE_MANIFEST, evaluate, type BetaGateReport, type BetaVerdict } from './wonderland-beta-gate.mjs';
 
 /**
  * THE GATE, HELD TO ITS OWN RULE.
@@ -12,101 +15,245 @@ import { evaluate, type BetaGateReport, type BetaVerdict } from './wonderland-be
  * What is worth testing here is not that sixteen rows appear. It is that the
  * gate CANNOT be talked into an optimistic answer: no repository state, however
  * complete, may produce a PASS for a capability that runs at mission time. Every
- * PASS has to be read out of a real run — and, since the gate now also answers
- * "what is Julius READY to do", every CAPABILITY PROVEN has to be read out of a
- * drill that RAN, whose attestation still matches the code in this tree.
+ * PASS has to be read out of a real run BOUND to this checkout — a manifest
+ * naming this commit, a paid mode and one run — and credited to a real
+ * provider; every CAPABILITY PROVEN has to be read out of a drill that RAN,
+ * whose attestation still matches every file that drill drives.
  *
- * The bundles below are written from the shapes the live workflow actually
- * uploads — `runs.tsv`, `tasks.tsv`, `failures.tsv`, `decisions.tsv`,
- * `findings.tsv`, `evidence.tsv`, `worker-diagnostics.tsv`, `receipt-ids.txt`
- * and `live-mission.evidence.txt` — and the failing one is paid run
- * 34037313976 verbatim.
+ * The bundles below are written in the shapes the live workflow's dump now
+ * writes — `run_id` on every run-scoped table, `bundle-manifest.txt`, the
+ * worker-diagnostics identity columns, receipt scopes that are the sha256 of
+ * the invocation ids — and the failing one is paid run 34037313976.
  */
+
+const REPO = join(__dirname, '..');
+/** The commit this checkout is at: a bundle is bound only to the tree that reads it. */
+const HEAD = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO, encoding: 'utf8' }).trim();
 
 const tsv = (header: readonly string[], rows: readonly (readonly string[])[]): string =>
   [header.join('\t'), ...rows.map((row) => row.join('\t')), `(${rows.length} row${rows.length === 1 ? '' : 's'})`].join('\n');
+/** A fixture row: named columns, and an absent (or undefined) key is an empty cell, as psql writes a NULL. */
+type Row = Readonly<Record<string, string | undefined>>;
+/** Rows as objects, so a fixture names the columns it means. */
+const table = (header: readonly string[], rows: readonly Row[]): string =>
+  tsv(header, rows.map((row) => header.map((column) => row[column] ?? '')));
+const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 
 const RUN = 'run:4bf13d0e833a042c74f57555';
+const MISSION = 'mission:julius-live-2';
 
-/** Paid run 34037313976, as its artifact recorded it. */
-function failingBundle(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'beta-gate-failed-'));
-  const bundle = join(dir, 'julius-live-evidence');
-  mkdirSync(bundle);
-  const write = (name: string, text: string) => writeFileSync(join(bundle, name), text);
+/* The columns the dump writes today, `run_id` included wherever the table carries one. */
+const RUNS = ['run_id', 'mission_id', 'state', 'card_revision', 'created_at', 'updated_at'];
+const TASKS = ['task_id', 'task_type', 'role', 'state', 'ordinal', 'parent_task_id', 'run_id'];
+const EVIDENCE = ['evidence_id', 'evidence_type', 'status', 'safe_summary', 'occurred_at', 'run_id', 'task_id', 'integrity_hash'];
+const DECISIONS = ['decision_id', 'task_id', 'action', 'reason_code', 'occurred_at', 'run_id', 'evidence_ids'];
+const FINDINGS = ['finding_id', 'blocking', 'status', 'claim', 'run_id', 'task_id', 'evidence_ids'];
+const INVOCATIONS = ['invocation_id', 'tool_id', 'state', 'requested_at', 'run_id', 'task_id', 'exit_code', 'recovery_state', 'completed_at'];
+const FAILURES = ['run_id', 'sequence', 'task_id', 'role', 'event_type', 'julius_code', 'failure_class', 'error_retryable', 'reason_code', 'recovery_action', 'occurred_at'];
+const DIAGNOSTICS = ['run_id', 'sequence', 'task_id', 'role', 'stage', 'transport', 'provider', 'served_model', 'requested_model', 'response_id', 'executor_refusal', 'permission_denials', 'outcome', 'event_type', 'served_model_basis'];
+const TRAJECTORY = ['event_kind', 'task_id', 'worker_id', 'provider_id', 'outcome', 'safe_facts', 'occurred_at', 'run_id'];
+const SCOPE = ['run_id', 'sequence', 'task_id', 'event_type', 'rule', 'attributed_to', 'scope_checked', 'scope_violations', 'own_scope_violations', 'occurred_at'];
+const BRAIN = ['entry_id', 'entry_kind', 'worker_id', 'task_id', 'revision', 'created_at', 'run_id'];
+const SESSIONS = ['execution_id', 'mission_id', 'project_id', 'player_id', 'agent_id', 'state'];
+const CONTRACTS = ['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at', 'run_id'];
+const CONTRACT_EVENTS = ['run_id', 'sequence', 'task_id', 'event_type', 'reason_code', 'contract_task_id', 'contract_id', 'contract_revision', 'binding_digest', 'recorded_revision', 'current_revision', 'review_revision', 'implementation_revision', 'role', 'occurred_at'];
+const BUDGET = ['run_id', 'sequence', 'task_id', 'event_type', 'role', 'reservation_id'];
+const INTEGRITY = ['run_id', 'reservation_id', 'role', 'settled_rows'];
 
-  write('runs.tsv', tsv(['run_id', 'mission_id', 'state', 'card_revision'], [[RUN, 'mission:julius-live-2', 'FAILED', 'card:julius-live:1']]));
-  write('tasks.tsv', tsv(['task_id', 'task_type', 'role', 'state', 'ordinal', 'parent_task_id'], [
-    [`${RUN}:plan`, 'plan', 'PROMPT_ARCHITECT', 'SUCCEEDED', '0', ''],
-    [`repair:${RUN}:plan:1:task`, 'repair:plan', 'CODING_AGENT', 'FAILED', '1', `${RUN}:plan`],
-    [`${RUN}:build`, 'build', 'CODING_AGENT', 'FAILED', '1', ''],
-    [`${RUN}:plan:review`, 'review:plan', 'INDEPENDENT_REVIEWER', 'SUCCEEDED', '1', `${RUN}:plan`],
-  ]));
-  write('failures.tsv', tsv(['task_id', 'role', 'event_type', 'julius_code', 'failure_class', 'error_retryable', 'reason_code', 'recovery_action', 'occurred_at'], [
-    [`${RUN}:build`, 'CODING_AGENT', 'julius.task.failed', 'WORKER_EXECUTION_FAILURE', 'coder_cost_exceeded', 'false', '', '', 't'],
-    [`${RUN}:plan:review`, 'INDEPENDENT_REVIEWER', 'julius.retry.scheduled', 'TIMEOUT', 'review_timeout', 'true', '', '', 't'],
-    [`repair:${RUN}:plan:1:task`, 'CODING_AGENT', 'julius.task.failed', 'PROVIDER_UNAVAILABLE', '', 'false', '', '', 't'],
-  ]));
-  write('decisions.tsv', tsv(['decision_id', 'task_id', 'action', 'reason_code'], [['decision:1', `${RUN}:plan`, 'REPAIR', 'BLOCKING_FINDINGS']]));
-  write('findings.tsv', tsv(['finding_id', 'blocking', 'status', 'claim'], [
-    ['finding:1', 't', 'OPEN', '[blocking] No edit occurred.'],
-  ]));
-  write('evidence.tsv', tsv(['evidence_id', 'evidence_type', 'status', 'safe_summary'], [
-    [`${RUN}:plan:1:0`, 'ARTIFACT', 'PASSED', 'Validated architect plan stored for this run.'],
-    // The reviewer answered — about an empty diff, which is the run's whole
-    // tragedy, but it answered and Julius could act on what it said.
-    [`${RUN}:plan:review:3:0`, 'REVIEW_FINDING', 'FAILED', '[blocking] No edit occurred.'],
-  ]));
-  write('worker-diagnostics.tsv', tsv(['task_id', 'role', 'stage', 'transport', 'permission_denials'], [
-    [`${RUN}:build`, 'CODING_AGENT', 'build', 'hosted', '0'],
-  ]));
-  write('receipt-ids.txt', ['a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64), 'd'.repeat(64)].join('\n'));
-  write('live-mission.evidence.txt', `# evidence\n\nRun ${RUN} accepted in state READY; driving the Julius run loop.\nRESULT: FAILED after 5 ticks\n`);
-  return dir;
+interface Task { readonly id: string; readonly type: string; readonly role: string; readonly state: string; readonly ordinal: number; readonly parent?: string }
+const taskRows = (tasks: readonly Task[], runId = RUN) => tasks.map((task) => ({
+  task_id: task.id, task_type: task.type, role: task.role, state: task.state, ordinal: String(task.ordinal), parent_task_id: task.parent ?? '', run_id: runId,
+}));
+
+/**
+ * WHAT A REAL PROVIDER LEAVES BEHIND — read off paid run 36568129865's own
+ * bundle: the architect answered over OpenAI with a `resp_…` id, the coder over
+ * the hosted Agent SDK with a session id and (since the served-model fix) an
+ * attested model, the reviewer through Hermes over xAI. Every live adapter id
+ * ends `-live`.
+ */
+const IDENTITY = {
+  PROMPT_ARCHITECT: { stage: 'plan', transport: 'openai', provider: 'openai', served_model: 'gpt-5.6-sol', requested_model: 'gpt-5.6-sol', response_id: 'resp_09a38b3a1d0b1afc016abbaf8d0bd087d0b5ab9228267b97d6', served_model_basis: '', adapter: 'openai-architect-live', worker: 'prompt-architect-openai' },
+  CODING_AGENT: { stage: 'build', transport: 'hosted', provider: 'anthropic', served_model: 'claude-fable-5', requested_model: 'claude-fable-5', response_id: '1885b47b-420e-4349-858a-f7c9b50ebc87', served_model_basis: 'attested', adapter: 'claude-agent-sdk-hosted-live', worker: 'coding-agent-claude-hosted' },
+  INDEPENDENT_REVIEWER: { stage: 'build', transport: 'local', provider: 'xai', served_model: 'grok-build-0.1', requested_model: 'grok-build-0.1', response_id: '', served_model_basis: '', adapter: 'hermes-local-live', worker: 'independent-reviewer-hermes' },
+} as const;
+type Role = keyof typeof IDENTITY;
+const isRole = (role: string): role is Role => role in IDENTITY;
+
+const diagnosticsFor = (tasks: readonly Task[], runId = RUN, over: (task: Task) => Row = () => ({})) => tasks
+  .filter((task) => isRole(task.role) && (task.state === 'SUCCEEDED' || task.state === 'FAILED'))
+  .map((task, index) => {
+    const id = IDENTITY[task.role as Role];
+    return {
+      run_id: runId, sequence: String(10 + index), task_id: task.id, role: task.role, stage: id.stage, transport: id.transport,
+      provider: id.provider, served_model: id.served_model, requested_model: id.requested_model, response_id: id.response_id,
+      permission_denials: task.role === 'CODING_AGENT' ? '0' : '', outcome: task.state === 'SUCCEEDED' ? 'succeeded' : 'failed',
+      event_type: task.state === 'SUCCEEDED' ? 'julius.worker.completed' : 'julius.task.failed', served_model_basis: id.served_model_basis,
+      ...over(task),
+    };
+  });
+const trajectoryFor = (tasks: readonly Task[], runId = RUN) => tasks.filter((task) => isRole(task.role)).flatMap((task) => {
+  const id = IDENTITY[task.role as Role];
+  return [
+    { event_kind: 'WORKER_SELECTED', task_id: task.id, worker_id: id.worker, outcome: 'SELECTED', safe_facts: JSON.stringify({ role: task.role, adapterId: id.adapter }), occurred_at: 't', run_id: runId },
+    { event_kind: 'PROVIDER_SELECTED', task_id: task.id, worker_id: id.worker, provider_id: id.provider, outcome: 'SELECTED', safe_facts: '{}', occurred_at: 't', run_id: runId },
+  ];
+});
+
+/** The provenance the dump writes first. Bound to THIS checkout, a paid mode and `RUN`, unless told otherwise. */
+const manifest = (over: Readonly<Record<string, string>> = {}): string => Object.entries({
+  manifest_version: '1', source: 'github-actions', commit: HEAD, tree: 'unknown', tracked_changes: '0',
+  mode: 'paid', mode_basis: 'dispatch_confirm_live', julius_run_id: RUN,
+  workflow_run_id: '36568129865', workflow_run_attempt: '1', event: 'workflow_dispatch', ...over,
+}).map(([key, value]) => `${key}=${value}\n`).join('');
+
+interface Bundle {
+  /** What `gh run download` produces: the parent of `julius-live-evidence`. */
+  readonly dir: string;
+  readonly write: (name: string, text: string) => void;
+  readonly drop: (name: string) => void;
+}
+function bundle(files: Readonly<Record<string, string>>): Bundle {
+  const dir = mkdtempSync(join(tmpdir(), 'beta-gate-'));
+  const root = join(dir, 'julius-live-evidence');
+  mkdirSync(root);
+  const write = (name: string, text: string) => writeFileSync(join(root, name), text);
+  for (const [name, text] of Object.entries(files)) write(name, text);
+  return { dir, write, drop: (name) => rmSync(join(root, name), { force: true }) };
 }
 
-/** The same run with the ceiling repaired: the coder's work is banked and the mission completes. */
-function completingBundle(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'beta-gate-completed-'));
-  const bundle = join(dir, 'julius-live-evidence');
-  mkdirSync(bundle);
-  const write = (name: string, text: string) => writeFileSync(join(bundle, name), text);
+/* ------------------------------------------- paid run 34037313976, as recorded */
 
-  write('runs.tsv', tsv(['run_id', 'mission_id', 'state', 'card_revision'], [[RUN, 'mission:julius-live-2', 'COMPLETED', 'card:julius-live:1']]));
-  write('tasks.tsv', tsv(['task_id', 'task_type', 'role', 'state', 'ordinal', 'parent_task_id'], [
-    [`${RUN}:plan`, 'plan', 'PROMPT_ARCHITECT', 'SUCCEEDED', '0', ''],
-    [`${RUN}:build`, 'build', 'CODING_AGENT', 'SUCCEEDED', '1', ''],
-    [`repair:${RUN}:build:1:task`, 'repair:build', 'CODING_AGENT', 'SUCCEEDED', '2', `${RUN}:build`],
-    [`${RUN}:build:review`, 'review:build', 'INDEPENDENT_REVIEWER', 'SUCCEEDED', '2', `${RUN}:build`],
-  ]));
-  write('failures.tsv', tsv(['task_id', 'role', 'event_type', 'julius_code', 'failure_class', 'error_retryable', 'reason_code', 'recovery_action', 'occurred_at'], [
-    [`${RUN}:build:review`, 'INDEPENDENT_REVIEWER', 'julius.retry.scheduled', 'TIMEOUT', 'review_timeout', 'true', '', '', 't'],
-  ]));
-  write('decisions.tsv', tsv(['decision_id', 'task_id', 'action', 'reason_code'], [['decision:1', `${RUN}:build`, 'ACCEPT', 'ALL_CRITERIA_MET']]));
-  write('findings.tsv', tsv(['finding_id', 'blocking', 'status', 'claim'], [['finding:1', 'f', 'RESOLVED', '[minor] naming']]));
-  write('evidence.tsv', tsv(['evidence_id', 'evidence_type', 'status', 'safe_summary'], [
-    [`${RUN}:plan:1:0`, 'ARTIFACT', 'PASSED', 'Validated architect plan stored for this run.'],
-    [`${RUN}:build:1:0`, 'TEST', 'PASSED', 'node --test run-summary.test.js: exit 0.'],
-    // An APPROVING review. The adapter writes one PASSED row on this path, and
-    // a probe that counted findings instead would have scored it a failure.
-    [`${RUN}:build:review:1:0`, 'REVIEW_FINDING', 'PASSED', 'Independent review approved the change.'],
-  ]));
-  write('worker-diagnostics.tsv', tsv(['task_id', 'role', 'stage', 'transport', 'permission_denials'], [
-    [`${RUN}:build`, 'CODING_AGENT', 'build', 'hosted', '0'],
-  ]));
-  write('receipt-ids.txt', ['a'.repeat(64), 'b'.repeat(64)].join('\n'));
-  write('live-mission.evidence.txt', `# evidence\n\nRun ${RUN} accepted in state READY; driving the Julius run loop.\nRESULT: COMPLETED after 9 ticks\n`);
-  return dir;
+const PLAN = `${RUN}:plan`;
+const PLAN_REVIEW = `${RUN}:plan:review`;
+const BUILD = `${RUN}:build`;
+const BUILD_REVIEW = `${RUN}:build:review`;
+const REPAIR = `repair:${RUN}:build:1:task`;
+const REPAIR_REVIEW = `${REPAIR}:review`;
+/** The entrypoint's own lines, as `julius-live-evidence.mjs` keeps them: the accepted run, its RESULT, and the run it names. */
+const accepted = (runId = RUN, result = 'FAILED after 5 ticks') =>
+  `# evidence\n\nRun ${runId} accepted in state READY; driving the Julius run loop.\nRESULT: ${result}\n  run: ${runId}\n`;
+/** An account as GitHub sign-in mints it (`participantIdForIdentity`): the only account this repository creates. */
+const ACCOUNT = 'ghu-583231';
+
+const FAILING_TASKS: readonly Task[] = [
+  { id: PLAN, type: 'plan', role: 'PROMPT_ARCHITECT', state: 'SUCCEEDED', ordinal: 0 },
+  { id: `repair:${RUN}:plan:1:task`, type: 'repair:plan', role: 'CODING_AGENT', state: 'FAILED', ordinal: 1, parent: PLAN },
+  { id: BUILD, type: 'build', role: 'CODING_AGENT', state: 'FAILED', ordinal: 1 },
+  { id: PLAN_REVIEW, type: 'review:plan', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED', ordinal: 1, parent: PLAN },
+];
+
+/** Paid run 34037313976, as its artifact recorded it — now in the shape the dump writes. */
+function failingBundle(): string {
+  return bundle({
+    [BUNDLE_MANIFEST]: manifest(),
+    'runs.tsv': table(RUNS, [{ run_id: RUN, mission_id: MISSION, state: 'FAILED', card_revision: 'card:julius-live:1' }]),
+    'tasks.tsv': table(TASKS, taskRows(FAILING_TASKS)),
+    'failures.tsv': table(FAILURES, [
+      { run_id: RUN, sequence: '20', task_id: BUILD, role: 'CODING_AGENT', event_type: 'julius.task.failed', julius_code: 'WORKER_EXECUTION_FAILURE', failure_class: 'coder_cost_exceeded', error_retryable: 'false' },
+      { run_id: RUN, sequence: '12', task_id: PLAN_REVIEW, role: 'INDEPENDENT_REVIEWER', event_type: 'julius.retry.scheduled', julius_code: 'TIMEOUT', failure_class: 'review_timeout', error_retryable: 'true' },
+      { run_id: RUN, sequence: '18', task_id: `repair:${RUN}:plan:1:task`, role: 'CODING_AGENT', event_type: 'julius.task.failed', julius_code: 'PROVIDER_UNAVAILABLE', error_retryable: 'false' },
+    ]),
+    'decisions.tsv': table(DECISIONS, [{ decision_id: 'decision:1', task_id: PLAN, action: 'REPAIR', reason_code: 'BLOCKING_FINDINGS', run_id: RUN }]),
+    'findings.tsv': table(FINDINGS, [{ finding_id: 'finding:1', blocking: 't', status: 'OPEN', claim: '[blocking] No edit occurred.', run_id: RUN, task_id: PLAN }]),
+    'evidence.tsv': table(EVIDENCE, [
+      { evidence_id: `${PLAN}:1:0`, evidence_type: 'ARTIFACT', status: 'PASSED', safe_summary: 'Validated architect plan stored for this run.', run_id: RUN, task_id: PLAN },
+      // The reviewer answered — about an empty diff, which is the run's whole
+      // tragedy, but it answered and Julius could act on what it said.
+      { evidence_id: `${PLAN_REVIEW}:3:0`, evidence_type: 'REVIEW_FINDING', status: 'FAILED', safe_summary: '[blocking] No edit occurred.', run_id: RUN, task_id: PLAN_REVIEW },
+    ]),
+    'worker-diagnostics.tsv': table(DIAGNOSTICS, diagnosticsFor(FAILING_TASKS)),
+    'trajectory.tsv': table(TRAJECTORY, trajectoryFor(FAILING_TASKS)),
+    'receipt-ids.txt': ['a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64), 'd'.repeat(64)].join('\n'),
+    'live-mission.evidence.txt': accepted(),
+  }).dir;
+}
+
+/* ------------------------------------ the same mission, completed through a repair */
+
+/**
+ * THE REPAIRED RUN. The coder's first build leaves the mission's own spec test
+ * red (it starts red by design), the reviewer REJECTS it, a repair round fixes
+ * it, the re-review ACCEPTS, and the run COMPLETES — every task on a real
+ * provider, every tool effect receipted and settled.
+ */
+const COMPLETING_TASKS: readonly Task[] = [
+  { id: PLAN, type: 'plan', role: 'PROMPT_ARCHITECT', state: 'SUCCEEDED', ordinal: 0 },
+  { id: PLAN_REVIEW, type: 'review:plan', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED', ordinal: 1, parent: PLAN },
+  { id: BUILD, type: 'build', role: 'CODING_AGENT', state: 'SUCCEEDED', ordinal: 1 },
+  { id: BUILD_REVIEW, type: 'review:build', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED', ordinal: 2, parent: BUILD },
+  { id: REPAIR, type: 'repair:build', role: 'CODING_AGENT', state: 'SUCCEEDED', ordinal: 3, parent: BUILD },
+  { id: REPAIR_REVIEW, type: 'review:repair:build', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED', ordinal: 4, parent: REPAIR },
+];
+const invocation = (id: string, task: string, state: string, exit: string) =>
+  ({ invocation_id: id, tool_id: 'shell.bash', state, requested_at: 't', run_id: RUN, task_id: task, exit_code: exit, recovery_state: 'NONE', completed_at: 't' });
+const COMPLETING_INVOCATIONS = [
+  invocation(`${BUILD}:base:g1`, BUILD, 'SUCCEEDED', '0'),
+  // THE SPEC TEST STARTS RED. Run, receipted, settled with its exit code: the
+  // repair loop's business, never a boundary breach.
+  invocation(`${BUILD}:test:g1`, BUILD, 'FAILED', '1'),
+  invocation(`${REPAIR}:base:g1`, REPAIR, 'SUCCEEDED', '0'),
+  invocation(`${REPAIR}:test:g1`, REPAIR, 'SUCCEEDED', '0'),
+];
+/** Receipt scopes are the sha256 of the invocation id the executor was handed; two more are a preflight's. */
+const receiptsFor = (invocations: readonly { readonly invocation_id: string }[]) =>
+  [...invocations.map((row) => sha256(row.invocation_id)), 'a'.repeat(64), 'b'.repeat(64)].join('\n');
+const toolEvidence = (row: { readonly invocation_id: string; readonly task_id: string; readonly state: string }) =>
+  ({ evidence_id: `tool:${row.invocation_id}`, evidence_type: 'COMMAND_EXECUTION', status: row.state === 'SUCCEEDED' ? 'PASSED' : 'FAILED', safe_summary: 'Executor ran a shell effect.', run_id: RUN, task_id: row.task_id });
+
+function completingFiles(): Record<string, string> {
+  return {
+    [BUNDLE_MANIFEST]: manifest(),
+    'runs.tsv': table(RUNS, [{ run_id: RUN, mission_id: MISSION, state: 'COMPLETED', card_revision: 'card:julius-live:1' }]),
+    'tasks.tsv': table(TASKS, taskRows(COMPLETING_TASKS)),
+    'failures.tsv': table(FAILURES, [
+      { run_id: RUN, sequence: '30', task_id: BUILD_REVIEW, role: 'INDEPENDENT_REVIEWER', event_type: 'julius.retry.scheduled', julius_code: 'TIMEOUT', failure_class: 'review_timeout', error_retryable: 'true' },
+    ]),
+    'decisions.tsv': table(DECISIONS, [
+      { decision_id: 'decision:1', task_id: PLAN, action: 'ACCEPT', reason_code: 'TASK_VERIFIED', run_id: RUN },
+      { decision_id: 'decision:2', task_id: BUILD, action: 'REPAIR', reason_code: 'BLOCKING_FINDINGS', run_id: RUN },
+      { decision_id: 'decision:3', task_id: REPAIR, action: 'ACCEPT', reason_code: 'TASK_VERIFIED', run_id: RUN },
+    ]),
+    'findings.tsv': table(FINDINGS, [{ finding_id: 'finding:1', blocking: 't', status: 'OPEN', claim: '[blocking] The change is untested.', run_id: RUN, task_id: BUILD }]),
+    'evidence.tsv': table(EVIDENCE, [
+      { evidence_id: `${PLAN}:1:0`, evidence_type: 'ARTIFACT', status: 'PASSED', safe_summary: 'Validated architect plan stored for this run.', run_id: RUN, task_id: PLAN },
+      { evidence_id: `${PLAN_REVIEW}:1:0`, evidence_type: 'REVIEW_FINDING', status: 'PASSED', safe_summary: 'Independent review approved the change.', run_id: RUN, task_id: PLAN_REVIEW },
+      { evidence_id: `${BUILD}:1:0`, evidence_type: 'TEST', status: 'FAILED', safe_summary: 'node --test: exit 1.', run_id: RUN, task_id: BUILD },
+      // A REJECTING review: one FAILED row per finding.
+      { evidence_id: `${BUILD_REVIEW}:1:0`, evidence_type: 'REVIEW_FINDING', status: 'FAILED', safe_summary: '[blocking] The change is untested.', run_id: RUN, task_id: BUILD_REVIEW },
+      { evidence_id: `${REPAIR}:1:0`, evidence_type: 'TEST', status: 'PASSED', safe_summary: 'node --test: exit 0.', run_id: RUN, task_id: REPAIR },
+      // An APPROVING review: one PASSED row, which a probe counting findings
+      // would have scored as a failure.
+      { evidence_id: `${REPAIR_REVIEW}:1:0`, evidence_type: 'REVIEW_FINDING', status: 'PASSED', safe_summary: 'Independent review approved the change.', run_id: RUN, task_id: REPAIR_REVIEW },
+      ...COMPLETING_INVOCATIONS.map(toolEvidence),
+    ]),
+    'tool-invocations.tsv': table(INVOCATIONS, COMPLETING_INVOCATIONS),
+    'receipt-ids.txt': receiptsFor(COMPLETING_INVOCATIONS),
+    'worker-diagnostics.tsv': table(DIAGNOSTICS, diagnosticsFor(COMPLETING_TASKS)),
+    'trajectory.tsv': table(TRAJECTORY, trajectoryFor(COMPLETING_TASKS)),
+    'scope.tsv': table(SCOPE, [BUILD, REPAIR].map((task, index) => ({
+      run_id: RUN, sequence: String(40 + index), task_id: task, event_type: 'julius.coder.implementation.recorded',
+      scope_checked: 'true', scope_violations: '0', own_scope_violations: '0', occurred_at: 't',
+    }))),
+    'live-mission.evidence.txt': accepted(RUN, 'COMPLETED after 9 ticks'),
+  };
+}
+function completingBundle(): string {
+  return bundle(completingFiles()).dir;
+}
+/** The completing run with some files replaced (`null` drops the file). */
+function completingWith(files: Readonly<Record<string, string | null>>): Bundle {
+  const made = bundle(completingFiles());
+  for (const [name, text] of Object.entries(files)) {
+    if (text === null) made.drop(name);
+    else made.write(name, text);
+  }
+  return made;
 }
 
 const verdictFor = (report: BetaGateReport, id: string): BetaVerdict =>
   report.results.find((row) => row.id === id)!.verdict;
-
-const CONTRACT_EVENT_COLUMNS = [
-  'task_id', 'event_type', 'reason_code', 'contract_task_id', 'contract_id', 'contract_revision', 'binding_digest',
-  'recorded_revision', 'current_revision', 'review_revision', 'implementation_revision', 'role', 'occurred_at',
-];
-const contractEvents = (rows: readonly (readonly string[])[]) => tsv(CONTRACT_EVENT_COLUMNS, rows);
+const rowFor = (report: BetaGateReport, id: string) => report.results.find((row) => row.id === id)!;
 
 describe('the Wonderland Beta Gate', () => {
   const VERDICTS: readonly BetaVerdict[] = ['PASS', 'CAPABILITY PROVEN', 'FAIL', 'NOT BUILT'];
@@ -130,18 +277,20 @@ describe('the Wonderland Beta Gate', () => {
   it('cannot pass a single runtime capability without real run evidence', () => {
     const report = evaluate(null);
     expect(report.evidence, 'no bundle was read').toBeNull();
+    expect(report.binding.bound).toBe(false);
     expect(report.results.filter((row) => row.verdict === 'PASS'), 'nothing may pass on repository state alone').toEqual([]);
   });
 
   it('reads paid run 34037313976 exactly as its artifact recorded it', () => {
     const report = evaluate(failingBundle());
+    expect(report.binding.bound, report.binding.reason ?? '').toBe(true);
     expect(verdictFor(report, 'JULIUS MISSION START')).toBe('PASS');
     expect(verdictFor(report, 'PROMPT ARCHITECT')).toBe('PASS');
     expect(verdictFor(report, 'INDEPENDENT REVIEWER'), 'the reviewer answered, whatever it was handed').toBe('PASS');
     expect(verdictFor(report, 'VERIFICATION')).toBe('PASS');
     expect(verdictFor(report, 'FAILURE RECOVERY'), 'the review timeout was retried and then succeeded').toBe('PASS');
     expect(verdictFor(report, 'CODING AGENT'), 'the build task FAILED on coder_cost_exceeded').toBe('FAIL');
-    expect(verdictFor(report, 'REPAIR LOOP')).toBe('FAIL');
+    expect(verdictFor(report, 'REPAIR LOOP'), 'its one repair was minted on the wrong role and FAILED').toBe('FAIL');
     expect(verdictFor(report, 'VERIFIED COMPLETION')).toBe('FAIL');
     /**
      * WONDER WEB OUTPUT IS NO LONGER A CONSTANT.
@@ -154,8 +303,7 @@ describe('the Wonderland Beta Gate', () => {
      * output is actually opened and dumped.
      */
     expect(verdictFor(report, 'WONDER WEB OUTPUT')).toBe('FAIL');
-    expect(report.results.find((row) => row.id === 'CODING AGENT')!.basis,
-      'and it says which class stopped it').toContain('coder_cost_exceeded');
+    expect(rowFor(report, 'CODING AGENT').basis, 'and it says which class stopped it').toContain('coder_cost_exceeded');
   });
 
   it('names the top three gaps in creation-path order, not in severity guesswork', () => {
@@ -171,8 +319,8 @@ describe('the Wonderland Beta Gate', () => {
 
   /**
    * THE REPAIRED RUN. Same mission, same three roles; the coder's result is
-   * banked instead of refused, so the diff reaches the reviewer and the run
-   * reaches COMPLETED. Three verdicts move, and nothing else has to.
+   * banked instead of refused, the reviewer sends it back once, and the repair
+   * is accepted. Three verdicts move, and nothing else has to.
    */
   it('turns the three creation-path gaps to PASS when the mission actually completes', () => {
     const report = evaluate(completingBundle());
@@ -190,30 +338,25 @@ describe('the Wonderland Beta Gate', () => {
    * and the middle one is the state this repository is actually in.
    */
   it('tells a seeded Project Brain from one a run wrote back to', () => {
-    const withBrain = (rows: readonly (readonly string[])[]): string => {
-      const dir = completingBundle();
-      writeFileSync(join(dir, 'julius-live-evidence', 'project-brain.tsv'),
-        tsv(['entry_id', 'entry_kind', 'worker_id', 'task_id', 'revision', 'created_at'], rows));
-      return dir;
-    };
+    const withBrain = (rows: readonly Row[]): string =>
+      completingWith({ 'project-brain.tsv': table(BRAIN, rows.map((row) => ({ run_id: RUN, ...row }))) }).dir;
     const seededOnly = evaluate(withBrain([
-      ['brain-1', 'CONSTRAINT', 'relay-bootstrap', '', '1', 't'],
-      ['brain-2', 'CONSTRAINT', 'relay-bootstrap', '', '2', 't'],
+      { entry_id: 'brain-1', entry_kind: 'CONSTRAINT', worker_id: 'relay-bootstrap', revision: '1', created_at: 't' },
+      { entry_id: 'brain-2', entry_kind: 'CONSTRAINT', worker_id: 'relay-bootstrap', revision: '2', created_at: 't' },
     ]));
     expect(verdictFor(seededOnly, 'PROJECT BRAIN PERSISTENCE'), 'a read-only seed is not persistence').toBe('FAIL');
-    expect(seededOnly.results.find((row) => row.id === 'PROJECT BRAIN PERSISTENCE')!.basis)
-      .toContain('the run wrote none back');
+    expect(rowFor(seededOnly, 'PROJECT BRAIN PERSISTENCE').basis).toContain('the run wrote none back');
 
     const writtenBack = evaluate(withBrain([
-      ['brain-1', 'CONSTRAINT', 'relay-bootstrap', '', '1', 't'],
-      ['brain-2', 'DECISION', 'coding-agent-claude-hosted', `${RUN}:build`, '2', 't'],
+      { entry_id: 'brain-1', entry_kind: 'CONSTRAINT', worker_id: 'relay-bootstrap', revision: '1', created_at: 't' },
+      { entry_id: 'brain-2', entry_kind: 'DECISION', worker_id: 'coding-agent-claude-hosted', task_id: BUILD, revision: '2', created_at: 't' },
     ]));
     expect(verdictFor(writtenBack, 'PROJECT BRAIN PERSISTENCE')).toBe('PASS');
-    expect(writtenBack.results.find((row) => row.id === 'PROJECT BRAIN PERSISTENCE')!.basis).toContain('DECISION');
+    expect(rowFor(writtenBack, 'PROJECT BRAIN PERSISTENCE').basis).toContain('DECISION');
 
     const empty = evaluate(withBrain([]));
     expect(verdictFor(empty, 'PROJECT BRAIN PERSISTENCE'), 'not even the seed persisted').toBe('FAIL');
-    expect(empty.results.find((row) => row.id === 'PROJECT BRAIN PERSISTENCE')!.basis).toContain('empty');
+    expect(rowFor(empty, 'PROJECT BRAIN PERSISTENCE').basis).toContain('empty');
   });
 
   /**
@@ -226,10 +369,7 @@ describe('the Wonderland Beta Gate', () => {
    * persisted" about a table it never managed to read. Opposite facts.
    */
   it('reads an unavailable dump as unknown, never as empty', () => {
-    const dir = completingBundle();
-    writeFileSync(join(dir, 'julius-live-evidence', 'project-brain.tsv'), 'unavailable\n');
-    const report = evaluate(dir);
-    const brain = report.results.find((row) => row.id === 'PROJECT BRAIN PERSISTENCE')!;
+    const brain = rowFor(evaluate(completingWith({ 'project-brain.tsv': 'unavailable\n' }).dir), 'PROJECT BRAIN PERSISTENCE');
     expect(brain.verdict, 'unreadable is still not a pass').toBe('FAIL');
     expect(brain.basis, 'but it must not claim the table was empty').toContain('no readable');
     expect(brain.basis).not.toContain('empty');
@@ -238,34 +378,39 @@ describe('the Wonderland Beta Gate', () => {
   /**
    * ACCOUNT / ONBOARDING IS A GATE, NOT A CONSTANT.
    *
-   * It shipped earlier today as a row that returned FAIL down every branch —
-   * no evidence shape could have passed it, which makes it a hard-coded verdict
-   * wearing a probe's clothes. The durable fact that decides it is
+   * It shipped as a row that returned FAIL down every branch — no evidence
+   * shape could have passed it, which makes it a hard-coded verdict wearing a
+   * probe's clothes. The durable fact that decides it is
    * `execution_sessions.player_id`: the operator identity both bounded missions
    * run under is not an account, and anything else is.
    */
   it('flips ACCOUNT / ONBOARDING on the account the mission actually ran for', () => {
-    const withSessions = (players: readonly string[]): string => {
-      const dir = completingBundle();
-      writeFileSync(join(dir, 'julius-live-evidence', 'sessions.tsv'),
-        tsv(['execution_id', 'mission_id', 'project_id', 'player_id', 'agent_id', 'state'],
-          players.map((player, index) => [`exec-${index}`, 'mission:julius-live-2', 'prj-julius-live-2', player, `agent:${player}`, 'RUNNING'])));
-      return dir;
-    };
-    expect(verdictFor(evaluate(withSessions(['tenant'])), 'ACCOUNT / ONBOARDING'),
-      'the operator identity is not an account').toBe('FAIL');
-    expect(verdictFor(evaluate(withSessions(['player:ada'])), 'ACCOUNT / ONBOARDING'),
-      'a real account is exactly what this row is about').toBe('PASS');
-    expect(verdictFor(evaluate(withSessions(['tenant', 'player:ada'])), 'ACCOUNT / ONBOARDING'),
-      'one real account among operator runs still counts').toBe('PASS');
-
-    const withoutDump = evaluate(completingBundle());
-    expect(withoutDump.results.find((row) => row.id === 'ACCOUNT / ONBOARDING')!.basis,
+    const withSessions = (players: readonly string[]): string => completingWith({
+      'sessions.tsv': table(SESSIONS, players.map((player, index) => ({
+        execution_id: `exec-${index}`, mission_id: MISSION, project_id: 'prj-julius-live-2', player_id: player, agent_id: `agent:${player}`, state: 'RUNNING',
+      }))),
+    }).dir;
+    expect(verdictFor(evaluate(withSessions(['tenant'])), 'ACCOUNT / ONBOARDING'), 'the operator identity is not an account').toBe('FAIL');
+    expect(verdictFor(evaluate(withSessions([ACCOUNT])), 'ACCOUNT / ONBOARDING'), 'a real account is exactly what this row is about').toBe('PASS');
+    expect(verdictFor(evaluate(withSessions(['tenant', ACCOUNT])), 'ACCOUNT / ONBOARDING'), 'one real account among operator runs still counts').toBe('PASS');
+    // X3 (falsification): the row was a two-name deny-list, so a contract naming
+    // its tenant anything but `tenant` or `operator` read as a person signing up.
+    for (const renamed of ['founder', 'player:ada', 'ghu-', 'ghu-12a']) {
+      expect(verdictFor(evaluate(withSessions([renamed])), 'ACCOUNT / ONBOARDING'), `${renamed} is an operator-named tenant, not an account`).toBe('FAIL');
+    }
+    expect(rowFor(evaluate(completingBundle()), 'ACCOUNT / ONBOARDING').basis,
       'and a bundle that cannot say must say it cannot, not fail for a reason it never checked')
       .toContain('no readable execution-session dump');
   });
 
-  it('still refuses to call that beta ready, because four capabilities remain unproven', () => {
+  it('an account is exactly the participant id GitHub sign-in mints — the gate and the account system agree', () => {
+    const minted = participantIdForIdentity({ id: 583231, login: 'ada', type: 'User' });
+    expect(minted, 'the fixtures use the shape the account system writes').toBe(ACCOUNT);
+    expect(ACCOUNT_PARTICIPANT_ID.test(minted)).toBe(true);
+    expect(ACCOUNT_PARTICIPANT_ID.test('tenant')).toBe(false);
+  });
+
+  it('still refuses to call that beta ready, because capabilities remain unproven', () => {
     const report = evaluate(completingBundle());
     expect(report.results.every((row) => row.verdict === 'PASS'), 'a completing mission is not a beta').toBe(false);
   });
@@ -273,170 +418,166 @@ describe('the Wonderland Beta Gate', () => {
   /**
    * NO PROBE IS A CONSTANT — the structural version of the ACCOUNT fix.
    *
-   * ACCOUNT / ONBOARDING shipped as a row that returned FAIL down every branch.
-   * Nothing caught it, because each individual test asserted the verdict that
-   * row happened to give. The general property is REACHABILITY: for every
-   * capability whose implementation exists, some evidence bundle must make it
-   * PASS. One bundle in which everything went right proves all of them at once,
-   * and would have failed the day ACCOUNT was written.
+   * For every capability whose implementation exists, some evidence bundle must
+   * make it PASS. One bound bundle in which everything went right — a real
+   * account, a crash that was recovered, a retry that succeeded, a rejection
+   * that was repaired, a contract the build ran under, every reservation
+   * settled once, every effect receipted — proves all of them at once, and
+   * would have failed the day ACCOUNT was written.
    *
-   * WONDER WEB OUTPUT is the exception and stays NOT BUILT, because no module
-   * exists to probe. That is the honest shape of "one capability is absent" —
-   * and if someone builds it, this test starts demanding a passing bundle for
-   * it too.
+   * WONDER WEB OUTPUT is the exception: its module exists and no bundle dumps
+   * what it opened yet. If someone dumps it, this test demands a pass for it.
    */
-  it('every capability that is built can be reached: one good run passes all fifteen', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'beta-gate-ideal-'));
-    const bundle = join(dir, 'julius-live-evidence');
-    mkdirSync(bundle);
-    const write = (name: string, text: string) => writeFileSync(join(bundle, name), text);
-
-    write('runs.tsv', tsv(['run_id', 'mission_id', 'state', 'card_revision'], [[RUN, 'mission:julius-live-2', 'COMPLETED', 'card:julius-live:1']]));
-    write('tasks.tsv', tsv(['task_id', 'task_type', 'role', 'state', 'ordinal', 'parent_task_id'], [
-      [`${RUN}:plan`, 'plan', 'PROMPT_ARCHITECT', 'SUCCEEDED', '0', ''],
-      [`${RUN}:build`, 'build', 'CODING_AGENT', 'SUCCEEDED', '1', ''],
-      [`repair:${RUN}:build:1:task`, 'repair:build', 'CODING_AGENT', 'SUCCEEDED', '2', `${RUN}:build`],
-      [`${RUN}:build:review`, 'review:build', 'INDEPENDENT_REVIEWER', 'SUCCEEDED', '3', `${RUN}:build`],
-    ]));
-    write('failures.tsv', tsv(['task_id', 'role', 'event_type', 'julius_code', 'failure_class', 'error_retryable', 'reason_code', 'recovery_action', 'occurred_at'], [
-      // A retryable failure that then succeeded — FAILURE RECOVERY.
-      [`${RUN}:build:review`, 'INDEPENDENT_REVIEWER', 'julius.retry.scheduled', 'TIMEOUT', 'review_timeout', 'true', '', '', 't'],
-      // A recovery sweep that requeued an expired lease — RESTART / RECOVERY.
-      [`${RUN}:build`, 'CODING_AGENT', 'julius.recovery.action', '', '', '', '', 'REQUEUED', 't'],
-    ]));
-    write('decisions.tsv', tsv(['decision_id', 'task_id', 'action', 'reason_code'], [['decision:1', `${RUN}:build`, 'ACCEPT', 'ALL_CRITERIA_MET']]));
-    write('findings.tsv', tsv(['finding_id', 'blocking', 'status', 'claim'], [['finding:1', 'f', 'RESOLVED', '[minor] naming']]));
-    write('evidence.tsv', tsv(['evidence_id', 'evidence_type', 'status', 'safe_summary'], [
-      [`${RUN}:plan:1:0`, 'ARTIFACT', 'PASSED', 'Validated architect plan stored for this run.'],
-      [`${RUN}:build:1:0`, 'TEST', 'PASSED', 'node --test run-summary.test.js: exit 0.'],
-      [`${RUN}:build:review:1:0`, 'REVIEW_FINDING', 'PASSED', 'Independent review approved the change.'],
-    ]));
-    write('tool-invocations.tsv', tsv(['invocation_id', 'tool_id', 'state', 'requested_at'], [[`${RUN}:build:base:g1`, 'shell.bash', 'SUCCEEDED', 't']]));
-    write('worker-diagnostics.tsv', tsv(['task_id', 'role', 'stage', 'transport', 'permission_denials'], [[`${RUN}:build`, 'CODING_AGENT', 'build', 'hosted', '0']]));
-    write('receipt-ids.txt', ['a'.repeat(64), 'b'.repeat(64)].join('\n'));
-    write('live-mission.evidence.txt', `Run ${RUN} accepted in state READY; driving the Julius run loop.\nRESULT: COMPLETED after 9 ticks\n`);
-    // A worker wrote back to the Project Brain, and a real account owns the run.
-    write('project-brain.tsv', tsv(['entry_id', 'entry_kind', 'worker_id', 'task_id', 'revision', 'created_at'], [
-      ['brain-1', 'CONSTRAINT', 'relay-bootstrap', '', '1', 't'],
-      ['brain-2', 'DECISION', 'coding-agent-claude-hosted', `${RUN}:build`, '2', 't'],
-    ]));
-    write('sessions.tsv', tsv(['execution_id', 'mission_id', 'project_id', 'player_id', 'agent_id', 'state'], [
-      ['exec-1', 'mission:julius-live-2', 'prj-julius-live-2', 'player:ada', 'agent:ada', 'RUNNING'],
-    ]));
-    // And the build ran under terms that were agreed before it started.
-    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
-      [`contract:${RUN}:build`, '1', `${RUN}:build`, 'SUPERSEDED', `sha256:${'a'.repeat(64)}`, 't1', 'reviewer:hermes', 't0'],
-      [`contract:${RUN}:build`, '2', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
-    ]));
-    // And the build and its review were CLAIMED under that lock — the same
-    // revision and digest — which the lock table alone cannot say.
-    write('contract-events.tsv', contractEvents([
-      [`${RUN}:build`, 'julius.contract.locked', '', `${RUN}:build`, `contract:${RUN}:build`, '2', `sha256:${'b'.repeat(64)}`, '', '', '', '', '', 't2'],
-      [`${RUN}:build`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '2', `sha256:${'b'.repeat(64)}`, '', '', '', '', 'CODING_AGENT', 't3'],
-      [`${RUN}:build:review`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '2', `sha256:${'b'.repeat(64)}`, '', '', '', '', 'INDEPENDENT_REVIEWER', 't4'],
-    ]));
-
-    // And every reservation was settled exactly once, which the dump says in its own file.
-    write('budget.tsv', tsv(['run_id', 'sequence', 'task_id', 'event_type', 'role', 'reservation_id'], [
-      [RUN, '9', `${RUN}:build`, 'julius.budget.settled', 'CODING_AGENT', 'reservation:build'],
-    ]));
-    write('settlement-integrity.tsv', tsv(['run_id', 'reservation_id', 'role', 'settled_rows'], []));
-    const report = evaluate(dir);
+  it('every capability that is built can be reached: one good run passes every one of them', () => {
+    const lock = `sha256:${'b'.repeat(64)}`;
+    const made = completingWith({
+      'failures.tsv': table(FAILURES, [
+        // A retryable failure that then succeeded — FAILURE RECOVERY.
+        { run_id: RUN, sequence: '30', task_id: BUILD_REVIEW, role: 'INDEPENDENT_REVIEWER', event_type: 'julius.retry.scheduled', julius_code: 'TIMEOUT', failure_class: 'review_timeout', error_retryable: 'true' },
+        // A recovery sweep that requeued an expired lease, and the task then SUCCEEDED — RESTART / RECOVERY.
+        { run_id: RUN, sequence: '25', task_id: BUILD, role: 'CODING_AGENT', event_type: 'julius.recovery.action', reason_code: 'LEASE_EXPIRED', recovery_action: 'REQUEUE' },
+      ]),
+      // A worker wrote back to the Project Brain, and a real account owns the run.
+      'project-brain.tsv': table(BRAIN, [
+        { entry_id: 'brain-1', entry_kind: 'CONSTRAINT', worker_id: 'relay-bootstrap', revision: '1', created_at: 't', run_id: RUN },
+        { entry_id: 'brain-2', entry_kind: 'DECISION', worker_id: 'coding-agent-claude-hosted', task_id: BUILD, revision: '2', created_at: 't', run_id: RUN },
+      ]),
+      'sessions.tsv': table(SESSIONS, [{ execution_id: 'exec-1', mission_id: MISSION, project_id: 'prj-julius-live-2', player_id: ACCOUNT, agent_id: `agent:${ACCOUNT}`, state: 'RUNNING' }]),
+      // And the build ran under terms that were agreed before it started.
+      'task-contracts.tsv': table(CONTRACTS, [
+        { contract_id: `contract:${BUILD}`, contract_revision: '1', task_id: BUILD, state: 'SUPERSEDED', binding_digest: `sha256:${'a'.repeat(64)}`, locked_at: 't1', locked_by_evaluator_id: 'reviewer:hermes', created_at: 't0', run_id: RUN },
+        { contract_id: `contract:${BUILD}`, contract_revision: '2', task_id: BUILD, state: 'LOCKED', binding_digest: lock, locked_at: 't2', locked_by_evaluator_id: 'reviewer:hermes', created_at: 't1', run_id: RUN },
+      ]),
+      // And the build and its review were CLAIMED under that lock.
+      'contract-events.tsv': table(CONTRACT_EVENTS, [
+        { run_id: RUN, sequence: '1', task_id: BUILD, event_type: 'julius.contract.locked', contract_task_id: BUILD, contract_id: `contract:${BUILD}`, contract_revision: '2', binding_digest: lock, occurred_at: 't2' },
+        { run_id: RUN, sequence: '2', task_id: BUILD, event_type: 'julius.task.claimed', contract_task_id: BUILD, contract_id: `contract:${BUILD}`, contract_revision: '2', binding_digest: lock, role: 'CODING_AGENT', occurred_at: 't3' },
+        { run_id: RUN, sequence: '3', task_id: BUILD_REVIEW, event_type: 'julius.task.claimed', contract_task_id: BUILD, contract_id: `contract:${BUILD}`, contract_revision: '2', binding_digest: lock, role: 'INDEPENDENT_REVIEWER', occurred_at: 't4' },
+      ]),
+      // And every reservation was settled exactly once.
+      'budget.tsv': table(BUDGET, [{ run_id: RUN, sequence: '9', task_id: BUILD, event_type: 'julius.budget.settled', role: 'CODING_AGENT', reservation_id: 'reservation:build' }]),
+      'settlement-integrity.tsv': table(INTEGRITY, []),
+    });
+    const report = evaluate(made.dir);
+    expect(report.binding.bound, report.binding.reason ?? '').toBe(true);
     const notPassing = report.results.filter((row) => row.verdict !== 'PASS');
     expect(notPassing.map((row) => `${row.id}: ${row.verdict} — ${row.basis}`),
       'every built capability must have SOME evidence that reaches PASS; a row that cannot is a constant, not a probe')
-      .toEqual([`WONDER WEB OUTPUT: FAIL — ${report.results.find((row) => row.id === 'WONDER WEB OUTPUT')!.basis}`]);
-    expect(report.gaps.map((row) => row.id), 'and the only gap left is the one nobody has built')
-      .toEqual(['WONDER WEB OUTPUT']);
+      .toEqual([`WONDER WEB OUTPUT: FAIL — ${rowFor(report, 'WONDER WEB OUTPUT').basis}`]);
+    expect(report.gaps.map((row) => row.id), 'and the only gap left is the one nobody dumps yet').toEqual(['WONDER WEB OUTPUT']);
   });
 
   /**
-   * LOCKED IS NOT RUN UNDER. The two bundles below carry a contract locked
-   * before the build and would have passed the row on the lock table alone;
-   * each is exactly the run the stale-handoff and reviewer-binding guards
-   * exist to refuse, and the gate must read them as the guards would.
+   * LOCKED IS NOT RUN UNDER. The bundles below carry a contract locked before
+   * the build and would have passed the row on the lock table alone; each is
+   * exactly the run the stale-handoff and reviewer-binding guards exist to
+   * refuse, and the gate must read them as the guards would.
    */
+  const locked = (revision: string, digest: string) => table(CONTRACTS, [
+    { contract_id: `contract:${BUILD}`, contract_revision: revision, task_id: BUILD, state: 'LOCKED', binding_digest: digest, locked_at: 't2', locked_by_evaluator_id: 'reviewer:hermes', created_at: 't1', run_id: RUN },
+  ]);
+  const claim = (task: string, revision: string, digest: string, role: string) =>
+    ({ run_id: RUN, task_id: task, event_type: 'julius.task.claimed', contract_task_id: BUILD, contract_id: `contract:${BUILD}`, contract_revision: revision, binding_digest: digest, role, occurred_at: 't3' });
+
   it('a build claimed under an older revision than the lock turns TASK CONTRACT LOCK to FAIL', () => {
-    const dir = completingBundle();
-    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
-    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
-      [`contract:${RUN}:build`, '2', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
-    ]));
-    write('contract-events.tsv', contractEvents([
-      [`${RUN}:build`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '1', `sha256:${'a'.repeat(64)}`, '', '', '', '', 'CODING_AGENT', 't3'],
-    ]));
-    const row = evaluate(dir).results.find((value) => value.id === 'TASK CONTRACT LOCK')!;
+    const made = completingWith({
+      'task-contracts.tsv': locked('2', `sha256:${'b'.repeat(64)}`),
+      'contract-events.tsv': table(CONTRACT_EVENTS, [claim(BUILD, '1', `sha256:${'a'.repeat(64)}`, 'CODING_AGENT')]),
+    });
+    const row = rowFor(evaluate(made.dir), 'TASK CONTRACT LOCK');
     expect(row.verdict).toBe('FAIL');
     expect(row.basis).toContain('claimed under revision 1 while revision 2 is the lock');
   });
 
   it('a binding refusal on the build turns TASK CONTRACT LOCK to FAIL even though the lock looks perfect', () => {
-    const dir = completingBundle();
-    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
-    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
-      [`contract:${RUN}:build`, '2', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
-    ]));
-    write('contract-events.tsv', contractEvents([
-      [`${RUN}:build`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '1', `sha256:${'a'.repeat(64)}`, '', '', '', '', 'CODING_AGENT', 't3'],
-      [`${RUN}:build`, 'julius.contract.refused', 'binding_stale', `${RUN}:build`, `contract:${RUN}:build`, '', '', '1', '2', '', '', 'CODING_AGENT', 't4'],
-    ]));
-    const row = evaluate(dir).results.find((value) => value.id === 'TASK CONTRACT LOCK')!;
+    const made = completingWith({
+      'task-contracts.tsv': locked('2', `sha256:${'b'.repeat(64)}`),
+      'contract-events.tsv': table(CONTRACT_EVENTS, [
+        claim(BUILD, '1', `sha256:${'a'.repeat(64)}`, 'CODING_AGENT'),
+        { run_id: RUN, task_id: BUILD, event_type: 'julius.contract.refused', reason_code: 'binding_stale', contract_task_id: BUILD, contract_id: `contract:${BUILD}`, recorded_revision: '1', current_revision: '2', role: 'CODING_AGENT', occurred_at: 't4' },
+      ]),
+    });
+    const row = rowFor(evaluate(made.dir), 'TASK CONTRACT LOCK');
     expect(row.verdict).toBe('FAIL');
     expect(row.basis).toContain('binding_stale');
   });
 
   it('a contract-events dump with NO claim row for the build turns TASK CONTRACT LOCK to FAIL — absence is not agreement', () => {
-    const dir = completingBundle();
-    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
-    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
-      [`contract:${RUN}:build`, '2', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
-    ]));
-    write('contract-events.tsv', contractEvents([
-      [`${RUN}:build`, 'julius.contract.locked', '', `${RUN}:build`, `contract:${RUN}:build`, '2', `sha256:${'b'.repeat(64)}`, '', '', '', '', '', 't2'],
-    ]));
-    const row = evaluate(dir).results.find((value) => value.id === 'TASK CONTRACT LOCK')!;
+    const made = completingWith({
+      'task-contracts.tsv': locked('2', `sha256:${'b'.repeat(64)}`),
+      'contract-events.tsv': table(CONTRACT_EVENTS, [
+        { run_id: RUN, task_id: BUILD, event_type: 'julius.contract.locked', contract_task_id: BUILD, contract_id: `contract:${BUILD}`, contract_revision: '2', binding_digest: `sha256:${'b'.repeat(64)}`, occurred_at: 't2' },
+      ]),
+    });
+    const row = rowFor(evaluate(made.dir), 'TASK CONTRACT LOCK');
     expect(row.verdict).toBe('FAIL');
     expect(row.basis).toContain('carries no recorded contract binding on its claim');
   });
 
   it('a review claimed under a different revision than the build turns TASK CONTRACT LOCK to FAIL, naming the review', () => {
-    const dir = completingBundle();
-    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
-    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
-      [`contract:${RUN}:build`, '2', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
-    ]));
-    write('contract-events.tsv', contractEvents([
-      [`${RUN}:build`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '2', `sha256:${'b'.repeat(64)}`, '', '', '', '', 'CODING_AGENT', 't3'],
-      [`${RUN}:build:review`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '3', `sha256:${'c'.repeat(64)}`, '', '', '', '', 'INDEPENDENT_REVIEWER', 't4'],
-    ]));
-    const row = evaluate(dir).results.find((value) => value.id === 'TASK CONTRACT LOCK')!;
+    const made = completingWith({
+      'task-contracts.tsv': locked('2', `sha256:${'b'.repeat(64)}`),
+      'contract-events.tsv': table(CONTRACT_EVENTS, [
+        claim(BUILD, '2', `sha256:${'b'.repeat(64)}`, 'CODING_AGENT'),
+        claim(BUILD_REVIEW, '3', `sha256:${'c'.repeat(64)}`, 'INDEPENDENT_REVIEWER'),
+      ]),
+    });
+    const row = rowFor(evaluate(made.dir), 'TASK CONTRACT LOCK');
     expect(row.verdict).toBe('FAIL');
-    expect(row.basis).toContain(`review ${RUN}:build:review was claimed under revision 3 while revision 2 is the lock`);
+    expect(row.basis).toContain(`review ${BUILD_REVIEW} was claimed under revision 3 while revision 2 is the lock`);
   });
 
   it('a build claimed under the right revision but a different digest turns TASK CONTRACT LOCK to FAIL — two records agreeing on a number is not agreement', () => {
-    const dir = completingBundle();
-    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
-    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
-      [`contract:${RUN}:build`, '2', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
-    ]));
-    write('contract-events.tsv', contractEvents([
-      [`${RUN}:build`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '2', `sha256:${'a'.repeat(64)}`, '', '', '', '', 'CODING_AGENT', 't3'],
-    ]));
-    const row = evaluate(dir).results.find((value) => value.id === 'TASK CONTRACT LOCK')!;
+    const made = completingWith({
+      'task-contracts.tsv': locked('2', `sha256:${'b'.repeat(64)}`),
+      'contract-events.tsv': table(CONTRACT_EVENTS, [claim(BUILD, '2', `sha256:${'a'.repeat(64)}`, 'CODING_AGENT')]),
+    });
+    const row = rowFor(evaluate(made.dir), 'TASK CONTRACT LOCK');
     expect(row.verdict).toBe('FAIL');
-    expect(row.basis).toContain(`build ${RUN}:build was claimed under a digest that is not the lock's`);
+    expect(row.basis).toContain(`build ${BUILD} was claimed under a digest that is not the lock's`);
   });
 
-  it('a bundle without the contract-events dump keeps the weaker proof and says so', () => {
-    const dir = completingBundle();
-    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
-    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
-      [`contract:${RUN}:build`, '1', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
-    ]));
-    const row = evaluate(dir).results.find((value) => value.id === 'TASK CONTRACT LOCK')!;
-    expect(row.verdict).toBe('PASS');
+  /**
+   * THIS CASE ASSERTED PASS until the lock-ordering check. Without the claim
+   * rows neither the binding the build ran under nor whether the lock came
+   * before it can be shown, and "a contract agreed after the fact" is the one
+   * thing this row exists to refuse — so the weaker proof is no proof.
+   */
+  it('a bundle without the contract-events dump cannot show the lock came first, and says so', () => {
+    const row = rowFor(evaluate(completingWith({ 'task-contracts.tsv': locked('1', `sha256:${'b'.repeat(64)}`) }).dir), 'TASK CONTRACT LOCK');
+    expect(row.mission).toBe('UNKNOWN');
+    expect(row.verdict).toBe('FAIL');
     expect(row.basis).toContain('not measurable');
+  });
+
+  /**
+   * X1 (falsification): THE LOCK MUST COME BEFORE THE WORK. A contract whose
+   * lock instant is later than the build's claim was agreed after the fact,
+   * whatever the claim's revision and digest say; and the ledger's order is
+   * held too where the lock event is dumped.
+   */
+  it('a contract locked after the build was claimed turns TASK CONTRACT LOCK to FAIL', () => {
+    const digest = `sha256:${'b'.repeat(64)}`;
+    const contract = table(CONTRACTS, [{ contract_id: `contract:${BUILD}`, contract_revision: '2', task_id: BUILD, state: 'LOCKED', binding_digest: digest, locked_at: '2026-09-29 12:40:00.000+00', locked_by_evaluator_id: 'independent-reviewer-hermes', created_at: '2026-09-29 12:32:02.711+00', run_id: RUN }]);
+    const byInstant = rowFor(evaluate(completingWith({
+      'task-contracts.tsv': contract,
+      'contract-events.tsv': table(CONTRACT_EVENTS, [
+        { ...claim(BUILD, '2', digest, 'CODING_AGENT'), sequence: '38', occurred_at: '2026-09-29 12:33:45.196+00' },
+        { ...claim(BUILD_REVIEW, '2', digest, 'INDEPENDENT_REVIEWER'), sequence: '52', occurred_at: '2026-09-29 12:41:00.000+00' },
+      ]),
+    }).dir), 'TASK CONTRACT LOCK');
+    expect(byInstant.verdict).toBe('FAIL');
+    expect(byInstant.basis).toContain('the terms were agreed after the work began');
+    const byLedger = rowFor(evaluate(completingWith({
+      'task-contracts.tsv': locked('2', digest),
+      'contract-events.tsv': table(CONTRACT_EVENTS, [
+        { ...claim(BUILD, '2', digest, 'CODING_AGENT'), sequence: '30' },
+        { run_id: RUN, sequence: '33', task_id: BUILD, event_type: 'julius.contract.locked', contract_task_id: BUILD, contract_id: `contract:${BUILD}`, contract_revision: '2', binding_digest: digest },
+        { ...claim(BUILD_REVIEW, '2', digest, 'INDEPENDENT_REVIEWER'), sequence: '40' },
+      ]),
+    }).dir), 'TASK CONTRACT LOCK');
+    expect(byLedger.verdict).toBe('FAIL');
+    expect(byLedger.basis).toContain('before the lock at 33');
   });
 
   /**
@@ -463,64 +604,79 @@ describe('the Wonderland Beta Gate', () => {
  *
  * The fixtures below FABRICATE drill attestations, which is exactly what they
  * must do: what is under test is the gate's reader, not Julius's readiness. The
- * digests are computed from the real files in this tree, because that binding —
- * a proof expiring the moment the code it drove changes — is the property that
- * keeps a capability proof from becoming folklore.
+ * digests are computed from the real files in this tree — EVERY file the named
+ * drill's build reaches, read by the same closure reader the gate uses —
+ * because that binding, a proof expiring the moment any code it drove changes,
+ * is the property that keeps a capability proof from becoming folklore.
  */
+const PROOF_COLUMNS = [
+  'capability', 'drill', 'outcome', 'steps', 'infrastructure',
+  'exercised_path', 'exercised_digest', 'transcript', 'recorded_at',
+];
+const digest = (path: string) => `sha256:${createHash('sha256').update(readFileSync(join(REPO, path))).digest('hex')}`;
+const transcriptFor = (steps: number, verdict = 'JULIUS RESTART RECOVERY VERIFIED') =>
+  [...Array.from({ length: steps }, (_, index) => `  [PASS] ${index + 1}. step ${index + 1}`), '', verdict, ''].join('\n');
+/** The files the gate itself says a row is built on — never a list retyped here. */
+const implementedBy = (id: string): readonly string[] => evaluate(null).results.find((row) => row.id === id)!.implementedBy;
+/** Every file a drill's build reaches, from the same reader the gate uses. */
+const drivenBy = (drill: string): readonly string[] => {
+  const found = drillDrivenFiles(REPO, drill);
+  return 'error' in found ? [] : found.files;
+};
+const DRILL_OF: Readonly<Record<string, string>> = {
+  'RESTART / RECOVERY': 'npm run julius:recovery-drill',
+  'FAILURE RECOVERY': 'npm run julius:failure-recovery-drill',
+  'REPAIR LOOP': 'npm run julius:repair-loop-drill',
+};
+
+interface ProofOptions {
+  readonly capability?: string;
+  readonly drill?: string;
+  readonly outcome?: string;
+  readonly steps?: number;
+  /** Extra files attested beside the drill's own closure (by default, the row's probe files). */
+  readonly paths?: readonly string[];
+  /** Files left out of the attestation. */
+  readonly omit?: readonly string[];
+  /** Attest only `paths`, not the drill's closure — the shape every ledger had before closures. */
+  readonly closure?: boolean;
+  /** Digests recorded instead of the file's real one, by path. */
+  readonly recorded?: Readonly<Record<string, string>>;
+  readonly transcript?: string | null;
+  readonly transcriptSteps?: number;
+  readonly transcriptVerdict?: string;
+}
+
+/** Writes an attestation into a directory (a bundle's `julius-live-evidence`, or any other) and returns it. */
+function attest(root: string, options: ProofOptions = {}): string {
+  const capability = options.capability ?? 'RESTART / RECOVERY';
+  const drill = options.drill ?? DRILL_OF[capability] ?? 'npm run julius:recovery-drill';
+  const probe = options.paths ?? implementedBy(capability);
+  const paths = [...new Set([...(options.closure === false ? [] : drivenBy(drill)), ...probe])]
+    .filter((path) => !(options.omit ?? []).includes(path));
+  const steps = options.steps ?? 10;
+  const transcriptName = options.transcript === undefined ? 'julius-recovery-drill.transcript.txt' : options.transcript;
+  // MERGED, as the drills merge: one ledger holds every drill that wrote into the directory.
+  const ledger = join(root, 'capability-proofs.tsv');
+  const kept = existsSync(ledger)
+    ? readFileSync(ledger, 'utf8').split('\n').slice(1).filter((line) => line !== '' && !/^\(\d+ rows?\)$/u.test(line)).map((line) => line.split('\t'))
+    : [];
+  writeFileSync(ledger, tsv(PROOF_COLUMNS, [...kept, ...paths.map((path) => [
+    capability, drill, options.outcome ?? 'VERIFIED', String(steps), 'real-postgres,two-processes',
+    path, options.recorded?.[path] ?? digest(path), transcriptName ?? '', '2026-09-08T00:00:00.000Z',
+  ])]));
+  if (transcriptName !== null) {
+    writeFileSync(join(root, transcriptName), transcriptFor(options.transcriptSteps ?? steps, options.transcriptVerdict));
+  }
+  return root;
+}
+/** Writes an attestation INTO a bundle and returns the bundle. */
+const withProof = (dir: string, options: ProofOptions = {}): string => {
+  attest(join(dir, 'julius-live-evidence'), options);
+  return dir;
+};
+
 describe('the Beta Gate’s capability axis', () => {
-  const PROOF_COLUMNS = [
-    'capability', 'drill', 'outcome', 'steps', 'infrastructure',
-    'exercised_path', 'exercised_digest', 'transcript', 'recorded_at',
-  ];
-  const REPO = join(__dirname, '..');
-  const digest = (path: string) => `sha256:${createHash('sha256').update(readFileSync(join(REPO, path))).digest('hex')}`;
-
-  const transcriptFor = (steps: number, verdict = 'JULIUS RESTART RECOVERY VERIFIED') =>
-    [...Array.from({ length: steps }, (_, index) => `  [PASS] ${index + 1}. step ${index + 1}`), '', verdict, ''].join('\n');
-
-  /** The files the gate itself says a row is built on — never a list retyped here. */
-  const implementedBy = (id: string): readonly string[] =>
-    evaluate(null).results.find((row) => row.id === id)!.implementedBy;
-
-  interface ProofOptions {
-    readonly capability?: string;
-    readonly drill?: string;
-    readonly outcome?: string;
-    readonly steps?: number;
-    readonly paths?: readonly string[];
-    readonly digests?: readonly string[];
-    readonly transcript?: string | null;
-    readonly transcriptSteps?: number;
-    readonly transcriptVerdict?: string;
-  }
-
-  /** Writes an attestation into a bundle and returns the bundle root. */
-  function withProof(dir: string, options: ProofOptions = {}): string {
-    const capability = options.capability ?? 'RESTART / RECOVERY';
-    const paths = options.paths ?? implementedBy(capability);
-    const steps = options.steps ?? 10;
-    const transcriptName = options.transcript === undefined ? 'julius-recovery-drill.transcript.txt' : options.transcript;
-    writeFileSync(join(dir, 'julius-live-evidence', 'capability-proofs.tsv'), tsv(PROOF_COLUMNS,
-      paths.map((path, index) => [
-        capability,
-        options.drill ?? 'npm run julius:recovery-drill',
-        options.outcome ?? 'VERIFIED',
-        String(steps),
-        'real-postgres,two-processes',
-        path,
-        options.digests?.[index] ?? digest(path),
-        transcriptName ?? '',
-        '2026-09-08T00:00:00.000Z',
-      ])));
-    if (transcriptName !== null) {
-      writeFileSync(join(dir, 'julius-live-evidence', transcriptName),
-        transcriptFor(options.transcriptSteps ?? steps, options.transcriptVerdict));
-    }
-    return dir;
-  }
-
-  const rowFor = (report: BetaGateReport, id: string) => report.results.find((row) => row.id === id)!;
-
   /**
    * THE FOUNDER'S SENTENCE, LITERALLY. A mission in which nothing was
    * interrupted must not be made to say it recovered, and must not be made to
@@ -538,50 +694,52 @@ describe('the Beta Gate’s capability axis', () => {
 
   /**
    * AND THE MEANINGS DO NOT COLLAPSE. A run that DID crash and recover is a
-   * different fact from one that never had to, and the gate keeps them apart:
-   * the first reads PASS/EXERCISED, the second CAPABILITY PROVEN/NOT EXERCISED.
-   * Reaching 16/16 by making those one value is the thing this test forbids.
+   * different fact from one that never had to. The recovery action is the
+   * production value (`REQUEUE`, not the `REQUEUED` this fixture once used,
+   * which no runtime writes), and the requeued task then SUCCEEDED.
    */
   it('still reports a mission that DID crash and recover as having done so', () => {
-    const dir = withProof(completingBundle());
-    writeFileSync(join(dir, 'julius-live-evidence', 'failures.tsv'),
-      tsv(['task_id', 'role', 'event_type', 'julius_code', 'failure_class', 'error_retryable', 'reason_code', 'recovery_action', 'occurred_at'], [
-        [`${RUN}:build`, 'CODING_AGENT', 'julius.recovery.action', '', '', '', 'LEASE_EXPIRED', 'REQUEUED', 't'],
-      ]));
-    const row = rowFor(evaluate(dir), 'RESTART / RECOVERY');
+    const made = completingWith({
+      'failures.tsv': table(FAILURES, [{ run_id: RUN, sequence: '25', task_id: BUILD, role: 'CODING_AGENT', event_type: 'julius.recovery.action', reason_code: 'LEASE_EXPIRED', recovery_action: 'REQUEUE' }]),
+    });
+    const row = rowFor(evaluate(withProof(made.dir)), 'RESTART / RECOVERY');
     expect(row.verdict).toBe('PASS');
     expect(row.mission).toBe('EXERCISED');
-    expect(row.basis).toContain('REQUEUED');
+    expect(row.basis).toContain('requeued and then SUCCEEDED');
     expect(row.basis, 'a run that recovered does not report itself as not having').not.toContain('NOT EXERCISED');
   });
 
   /**
    * THE LAUNDRY RULE. A capability this run exercised AND BROKE reads FAIL
-   * however good the drill is. "What did this run prove" has an answer, and the
-   * answer is bad; a drill about the path cannot overwrite it.
+   * however good the drill is. The retried task is one the run holds and that
+   * ended FAILED: a retry for a task the bundle does not hold is a bundle that
+   * cannot say, not a failure.
    */
   it('never lets a drill rescue a capability this run exercised and broke', () => {
-    const dir = completingBundle();
-    // Retries were scheduled and nothing recovered: FAILURE RECOVERY, exercised and broken.
-    writeFileSync(join(dir, 'julius-live-evidence', 'failures.tsv'),
-      tsv(['task_id', 'role', 'event_type', 'julius_code', 'failure_class', 'error_retryable', 'reason_code', 'recovery_action', 'occurred_at'], [
-        [`${RUN}:nowhere`, 'CODING_AGENT', 'julius.retry.scheduled', 'TIMEOUT', 'worker_timeout', 'true', '', '', 't'],
-      ]));
-    withProof(dir, { capability: 'FAILURE RECOVERY', drill: 'npm run julius:failure-drill' });
-    const row = rowFor(evaluate(dir), 'FAILURE RECOVERY');
+    // The build was retried once (the first `retry.scheduled` the run went on
+    // from), failed again, and the second retry was declined: exhausted.
+    const made = completingWith({
+      'tasks.tsv': table(TASKS, taskRows(COMPLETING_TASKS.map((task) => (task.id === BUILD ? { ...task, state: 'FAILED' } : task)))),
+      'failures.tsv': table(FAILURES, [
+        { run_id: RUN, sequence: '30', task_id: BUILD, role: 'CODING_AGENT', event_type: 'julius.retry.scheduled', julius_code: 'TIMEOUT', failure_class: 'worker_timeout', error_retryable: 'true' },
+        { run_id: RUN, sequence: '36', task_id: BUILD, role: 'CODING_AGENT', event_type: 'julius.retry.scheduled', julius_code: 'TIMEOUT', failure_class: 'worker_timeout', error_retryable: 'true' },
+        { run_id: RUN, sequence: '37', task_id: BUILD, role: 'CODING_AGENT', event_type: 'julius.task.failed', julius_code: 'TIMEOUT', failure_class: 'worker_timeout', error_retryable: 'true', reason_code: 'RETRY_ATTEMPTS_EXHAUSTED' },
+      ]),
+    });
+    const row = rowFor(evaluate(withProof(made.dir, { capability: 'FAILURE RECOVERY' })), 'FAILURE RECOVERY');
     expect(row.verdict, 'a drill proves the path, not this run').toBe('FAIL');
     expect(row.mission).toBe('FAILED');
+    expect(row.basis).toContain('was retried 1 time(s), and still ended FAILED (RETRY_ATTEMPTS_EXHAUSTED)');
     expect(row.capability, 'and the proof is still reported as sound — it simply does not apply').toBe('PROVEN');
   });
 
   /**
-   * AND NO DRILL WALKS THE MISSION'S OWN PATH FOR IT. The eight capabilities a
-   * run must physically walk between "a project exists" and "COMPLETED" admit
-   * no capability proof at all, so 16/16 cannot be reached by drilling.
+   * AND NO DRILL WALKS THE MISSION'S OWN PATH FOR IT. The nine capabilities a
+   * run must physically walk and account for admit no capability proof at all,
+   * so 16/16 cannot be reached by drilling.
    */
   it('refuses a drill attestation for a capability the mission itself must walk', () => {
-    const dir = withProof(failingBundle(), { capability: 'VERIFIED COMPLETION', drill: 'npm run lifecycle-drill' });
-    const row = rowFor(evaluate(dir), 'VERIFIED COMPLETION');
+    const row = rowFor(evaluate(withProof(failingBundle(), { capability: 'VERIFIED COMPLETION', drill: 'npm run lifecycle-drill' })), 'VERIFIED COMPLETION');
     expect(row.verdict, 'the run ended FAILED and no drill changes that').toBe('FAIL');
     expect(row.capability).toBe('NOT ADMISSIBLE');
     expect(row.capabilityBasis, 'and the gate says the evidence was seen and refused, rather than dropping it')
@@ -590,14 +748,9 @@ describe('the Beta Gate’s capability axis', () => {
   });
 
   it('lets no drill lift a mission-required row even where the mission is merely silent', () => {
-    const dir = completingBundle();
     // A bundle with no architect task at all: the mission is silent, not broken.
-    writeFileSync(join(dir, 'julius-live-evidence', 'tasks.tsv'),
-      tsv(['task_id', 'task_type', 'role', 'state', 'ordinal', 'parent_task_id'], [
-        [`${RUN}:build`, 'build', 'CODING_AGENT', 'SUCCEEDED', '1', ''],
-      ]));
-    withProof(dir, { capability: 'PROMPT ARCHITECT', drill: 'npm run architect-drill' });
-    const row = rowFor(evaluate(dir), 'PROMPT ARCHITECT');
+    const made = completingWith({ 'tasks.tsv': table(TASKS, taskRows(COMPLETING_TASKS.filter((task) => task.role !== 'PROMPT_ARCHITECT'))) });
+    const row = rowFor(evaluate(withProof(made.dir, { capability: 'PROMPT ARCHITECT', drill: 'npm run architect-drill' })), 'PROMPT ARCHITECT');
     expect(row.mission).toBe('NOT EXERCISED');
     expect(row.verdict).toBe('FAIL');
   });
@@ -605,17 +758,12 @@ describe('the Beta Gate’s capability axis', () => {
   /**
    * CURRENCY. A proof describes the code it drove. Edit that code and the proof
    * describes something that is no longer here — so it expires, loudly, naming
-   * the file that moved. This is what stops capability proofs accumulating as
-   * folklore about a tree that has since changed underneath them.
+   * the file that moved.
    */
   it('expires a drill attestation whose subject has changed since it ran', () => {
     const target = implementedBy('RESTART / RECOVERY');
     expect(target.length, 'the row must name more than one file for this to mean anything').toBeGreaterThan(1);
-    const dir = withProof(completingBundle(), {
-      // Every file but the last still hashes correctly; the last one moved.
-      digests: [...target.slice(0, -1).map(digest), `sha256:${'0'.repeat(64)}`],
-    });
-    const row = rowFor(evaluate(dir), 'RESTART / RECOVERY');
+    const row = rowFor(evaluate(withProof(completingBundle(), { recorded: { [target.at(-1)!]: `sha256:${'0'.repeat(64)}` } })), 'RESTART / RECOVERY');
     expect(row.verdict).toBe('FAIL');
     expect(row.capability).toBe('STALE');
     expect(row.basis).toContain(target.at(-1)!);
@@ -623,25 +771,46 @@ describe('the Beta Gate’s capability axis', () => {
   });
 
   /**
-   * COVERAGE. A drill that touched one of a row's three implementation files
-   * has not proven the row; a drill for something else entirely certainly has
-   * not. The gate names what went undriven rather than saying "no".
+   * THE WHOLE DRILL, NOT ITS LABEL. The recovery drill drives the run loop, the
+   * task pipeline, the repositories and the live composition on its way to the
+   * two files its row names. Leave any one of them out of the attestation and
+   * the proof cannot show that code is unchanged.
    */
-  it('refuses a drill that did not exercise every file the row is built on', () => {
+  it('refuses an attestation that leaves out a file its drill drives', () => {
     const target = implementedBy('RESTART / RECOVERY');
-    const row = rowFor(evaluate(withProof(completingBundle(), { paths: [target[0]!] })), 'RESTART / RECOVERY');
+    const row = rowFor(evaluate(withProof(completingBundle(), { omit: [target[1]!] })), 'RESTART / RECOVERY');
     expect(row.verdict).toBe('FAIL');
     expect(row.capability).toBe('UNPROVEN');
-    expect(row.capabilityBasis).toContain(`it did not exercise ${target.slice(1).join(', ')}`);
+    expect(row.capabilityBasis).toContain('of them are not attested');
+    expect(row.capabilityBasis).toContain(target[1]!);
+  });
+
+  /**
+   * COVERAGE. A drill for something else cannot be pointed at this row: it
+   * must have exercised every file the row is built on, and it must actually
+   * import each of them. The recovery drill does not import the Project Brain's
+   * memory module, so it can prove the brain neither by leaving the file out
+   * nor by naming it.
+   */
+  it('refuses a drill pointed at a row whose files it does not drive', () => {
+    const brain = implementedBy('PROJECT BRAIN PERSISTENCE');
+    const leftOut = rowFor(evaluate(withProof(completingBundle(), {
+      capability: 'PROJECT BRAIN PERSISTENCE', drill: 'npm run julius:recovery-drill', paths: [],
+    })), 'PROJECT BRAIN PERSISTENCE');
+    expect(leftOut.capability).toBe('UNPROVEN');
+    expect(leftOut.capabilityBasis).toContain('it did not exercise src/relay/shared/llmops/brain-memory.ts');
+    const named = rowFor(evaluate(withProof(completingBundle(), {
+      capability: 'PROJECT BRAIN PERSISTENCE', drill: 'npm run julius:recovery-drill', paths: brain,
+    })), 'PROJECT BRAIN PERSISTENCE');
+    expect(named.capability).toBe('UNPROVEN');
+    expect(named.capabilityBasis).toContain('the drill does not import src/relay/shared/llmops/brain-memory.ts');
   });
 
   it('expires an attestation naming a file that is no longer here, and says which', () => {
-    const target = implementedBy('RESTART / RECOVERY');
-    const dir = withProof(completingBundle(), {
-      paths: [...target, 'src/relay/mission/julius/julius-recovery-deleted.ts'],
-      digests: [...target.map(digest), `sha256:${'0'.repeat(64)}`],
-    });
-    const row = rowFor(evaluate(dir), 'RESTART / RECOVERY');
+    const gone = 'src/relay/mission/julius/julius-recovery-deleted.ts';
+    const row = rowFor(evaluate(withProof(completingBundle(), {
+      paths: [...implementedBy('RESTART / RECOVERY'), gone], recorded: { [gone]: `sha256:${'0'.repeat(64)}` },
+    })), 'RESTART / RECOVERY');
     expect(row.capability).toBe('STALE');
     expect(row.capabilityBasis).toContain('is no longer in this repository');
   });
@@ -665,7 +834,7 @@ describe('the Beta Gate’s capability axis', () => {
 
   it('refuses an attestation that names a path outside this repository', () => {
     const row = rowFor(evaluate(withProof(completingBundle(), {
-      paths: ['../../etc/passwd'], digests: [`sha256:${'0'.repeat(64)}`],
+      paths: ['../../etc/passwd'], recorded: { '../../etc/passwd': `sha256:${'0'.repeat(64)}` },
     })), 'RESTART / RECOVERY');
     expect(row.verdict).toBe('FAIL');
     expect(row.capabilityBasis).toContain('which is not a file in this repository');
@@ -682,6 +851,9 @@ describe('the Beta Gate’s capability axis', () => {
       [{ transcript: null }, 'is not in this bundle'],
       [{ transcriptSteps: 7 }, 'it declares 10 step(s) and its transcript shows 7'],
       [{ transcriptVerdict: 'mostly fine' }, 'does not end on a VERIFIED line'],
+      // The falsification's regex finding: capitals ending in VERIFIED, negated.
+      [{ transcriptVerdict: 'JULIUS RESTART RECOVERY NOT VERIFIED' }, 'does not end on a VERIFIED line'],
+      [{ transcriptVerdict: 'JULIUS RESTART RECOVERY DRILL FAILED VERIFIED' }, 'does not end on a VERIFIED line'],
     ];
     for (const [options, expected] of cases) {
       const row = rowFor(evaluate(withProof(completingBundle(), options)), 'RESTART / RECOVERY');
@@ -700,26 +872,26 @@ describe('the Beta Gate’s capability axis', () => {
   });
 
   /**
-   * AND IT DOES NOT OVERSTATE THE MISSION EITHER. "NOT EXERCISED THIS MISSION"
-   * is a claim about the run; a bundle that could not READ the table says so
-   * instead. Unknown is not zero here any more than it is anywhere else.
+   * A BUNDLE THAT CANNOT SAY IS NOT RESCUED — this case asserted the OPPOSITE
+   * until GATE_AUDIT.md P1-1: a `failures.tsv` the dump could not read, beside a
+   * current drill, read CAPABILITY PROVEN. "Nobody could look" is not "nothing
+   * happened": the run may have crashed and failed to recover, and a drill
+   * proving the path says nothing about what this run did. The capability axis
+   * still reads PROVEN, and the row says both things.
    */
-  it('says a bundle could not say, rather than claiming the mission did not do it', () => {
-    const dir = withProof(completingBundle());
-    writeFileSync(join(dir, 'julius-live-evidence', 'failures.tsv'), 'unavailable\n');
-    const row = rowFor(evaluate(dir), 'RESTART / RECOVERY');
-    expect(row.verdict).toBe('CAPABILITY PROVEN');
+  it('says a bundle could not say, and does not let a drill stand in for it', () => {
+    const made = completingWith({ 'failures.tsv': 'unavailable\n' });
+    const row = rowFor(evaluate(withProof(made.dir)), 'RESTART / RECOVERY');
+    expect(row.verdict).toBe('FAIL');
     expect(row.mission).toBe('UNKNOWN');
+    expect(row.capability, 'the drill is sound; it simply may not stand in').toBe('PROVEN');
     expect(row.basis).toContain('THIS MISSION CANNOT SAY WHETHER IT WAS EXERCISED');
+    expect(row.basis).toContain('never for one that cannot say');
     expect(row.basis, 'and it does not claim a run it could not read never recovered').not.toContain('NOT EXERCISED THIS MISSION');
   });
 
   it('reads an attestation supplied beside the bundle rather than inside it', () => {
-    const outside = mkdtempSync(join(tmpdir(), 'beta-gate-drills-'));
-    const staged = withProof(completingBundle());
-    for (const name of ['capability-proofs.tsv', 'julius-recovery-drill.transcript.txt']) {
-      writeFileSync(join(outside, name), readFileSync(join(staged, 'julius-live-evidence', name), 'utf8'));
-    }
+    const outside = attest(mkdtempSync(join(tmpdir(), 'beta-gate-drills-')));
     const bundleOnly = completingBundle();
     expect(rowFor(evaluate(bundleOnly), 'RESTART / RECOVERY').verdict, 'without it, nothing').toBe('FAIL');
     const report = evaluate(bundleOnly, { capabilityDir: outside });
@@ -729,8 +901,7 @@ describe('the Beta Gate’s capability axis', () => {
 
   /**
    * THE LOAD-BEARING PROPERTY, RESTATED FOR THE NEW AXIS. A drill's SOURCE
-   * sitting in this tree is not a drill that ran. Every file the recovery row
-   * names is present and the suite is green, and the row is still FAIL.
+   * sitting in this tree is not a drill that ran.
    */
   it('cannot capability-prove anything from repository state alone', () => {
     const report = evaluate(null);
@@ -741,35 +912,35 @@ describe('the Beta Gate’s capability axis', () => {
 
   /**
    * NO CAPABILITY PROOF IS A CONSTANT — the capability-axis twin of the
-   * reachability test above. For every row a drill is admissible on, SOME
-   * attestation must reach PROVEN; a row where none can is a FAIL someone typed.
+   * reachability test above. For every row a drill in this repository claims,
+   * a full attestation reaches PROVEN. The drill-admissible rows NO drill
+   * claims cannot be proven by one — a proof must name a drill this repository
+   * builds, and that drill must import the row's files — so they are named
+   * here: writing a drill for one of them is what moves it.
    */
-  it('every row a drill is admissible on can actually be proven by one', () => {
+  it('every row a drill in this repository claims can actually be proven by one', () => {
     const admissible = evaluate(null).results.filter((row) => !row.missionRequired && row.verdict !== 'NOT BUILT');
     expect(admissible.length, 'and there are several, or this test proves nothing').toBeGreaterThan(3);
     for (const row of admissible) {
-      const dir = completingBundle();
-      // Silence the mission axis, so what is measured is the capability axis alone.
-      for (const name of ['failures.tsv', 'tasks.tsv', 'project-brain.tsv', 'receipt-ids.txt', 'sessions.tsv']) {
-        writeFileSync(join(dir, 'julius-live-evidence', name), 'unavailable\n');
-      }
-      withProof(dir, { capability: row.id, drill: `npm run drill:${row.id}` });
-      expect(rowFor(evaluate(dir), row.id).verdict, `${row.id} must be reachable as CAPABILITY PROVEN`).toBe('CAPABILITY PROVEN');
+      const report = evaluate(withProof(completingBundle(), { capability: row.id }));
+      expect(rowFor(report, row.id).capability, `${row.id}: ${rowFor(report, row.id).capabilityBasis}`)
+        .toBe(row.id in DRILL_OF ? 'PROVEN' : 'UNPROVEN');
     }
+    expect(admissible.filter((row) => !(row.id in DRILL_OF)).map((row) => row.id), 'the admissible rows no drill claims yet')
+      .toEqual(['ACCOUNT / ONBOARDING', 'WONDER WEB OUTPUT', 'PROJECT BRAIN PERSISTENCE', 'PERMISSIONS / MISSION BOUNDARIES']);
   });
 
   /**
    * MUTATION: THE CURRENCY CHECK IS LOAD-BEARING. Drop it — accept any
    * attestation whose outcome cell reads VERIFIED — and a drill run against
-   * code that has since been rewritten still reports the capability proven,
-   * which is precisely the folklore this gate exists to refuse.
+   * code that has since been rewritten still reports the capability proven.
    */
   it('MUTATION: without the digest binding, a drill from a rewritten tree would still read PROVEN', () => {
-    const stale = withProof(completingBundle(), { digests: implementedBy('RESTART / RECOVERY').map(() => `sha256:${'0'.repeat(64)}`) });
+    const zeroed = Object.fromEntries(implementedBy('RESTART / RECOVERY').map((path) => [path, `sha256:${'0'.repeat(64)}`]));
+    const stale = withProof(completingBundle(), { recorded: zeroed });
     const row = rowFor(evaluate(stale), 'RESTART / RECOVERY');
     expect(row.capability, 'the real gate').toBe('STALE');
     expect(row.verdict).toBe('FAIL');
-    // The mutant: the same ledger read as a boolean on the `outcome` column.
     const ledger = readFileSync(join(stale, 'julius-live-evidence', 'capability-proofs.tsv'), 'utf8');
     expect(ledger, 'which every row still claims').toContain('VERIFIED');
   });
@@ -797,39 +968,33 @@ describe('the Beta Gate’s capability axis', () => {
    * An unreadable file is UNKNOWN and never a pass. A drill evaluation, which has
    * no mission bundle at all, leaves the drill rows exactly as they were.
    */
-  const INTEGRITY_COLUMNS = ['run_id', 'reservation_id', 'role', 'settled_rows'];
-  const BUDGET_COLUMNS = ['run_id', 'sequence', 'task_id', 'event_type', 'role', 'reservation_id'];
-  const settledOnce = (dir: string) => {
-    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
-    write('budget.tsv', tsv(BUDGET_COLUMNS, [
-      [RUN, '4', `${RUN}:build`, 'julius.budget.reserved', 'CODING_AGENT', 'reservation:build'],
-      [RUN, '9', `${RUN}:build`, 'julius.budget.settled', 'CODING_AGENT', 'reservation:build'],
-    ]));
-    write('settlement-integrity.tsv', tsv(INTEGRITY_COLUMNS, []));
-    return dir;
-  };
+  const settledOnce = (): Bundle => completingWith({
+    'budget.tsv': table(BUDGET, [
+      { run_id: RUN, sequence: '4', task_id: BUILD, event_type: 'julius.budget.reserved', role: 'CODING_AGENT', reservation_id: 'reservation:build' },
+      { run_id: RUN, sequence: '9', task_id: BUILD, event_type: 'julius.budget.settled', role: 'CODING_AGENT', reservation_id: 'reservation:build' },
+    ]),
+    'settlement-integrity.tsv': table(INTEGRITY, []),
+  });
 
   it('SETTLEMENT INTEGRITY passes when every reservation settled at most once, and names the count', () => {
-    const row = rowFor(evaluate(settledOnce(completingBundle())), 'SETTLEMENT INTEGRITY');
+    const row = rowFor(evaluate(settledOnce().dir), 'SETTLEMENT INTEGRITY');
     expect(row.verdict).toBe('PASS');
     expect(row.basis).toContain('1 settlement(s) across 1 reservation(s), none settled twice');
   });
 
   it('SETTLEMENT INTEGRITY FAILS on a reservation settled twice, and names it', () => {
-    const dir = settledOnce(completingBundle());
-    writeFileSync(join(dir, 'julius-live-evidence', 'settlement-integrity.tsv'),
-      tsv(INTEGRITY_COLUMNS, [[RUN, 'reservation:review', 'INDEPENDENT_REVIEWER', '2']]));
-    const row = rowFor(evaluate(dir), 'SETTLEMENT INTEGRITY');
+    const made = settledOnce();
+    made.write('settlement-integrity.tsv', table(INTEGRITY, [{ run_id: RUN, reservation_id: 'reservation:review', role: 'INDEPENDENT_REVIEWER', settled_rows: '2' }]));
+    const row = rowFor(evaluate(made.dir), 'SETTLEMENT INTEGRITY');
     expect(row.verdict).toBe('FAIL');
     expect(row.mission).toBe('FAILED');
     expect(row.basis).toContain('reservation:review (INDEPENDENT_REVIEWER) x2');
   });
 
   it('SETTLEMENT INTEGRITY is UNKNOWN, never a pass, when the dump could not be read or is absent', () => {
-    const unreadable = settledOnce(completingBundle());
-    writeFileSync(join(unreadable, 'julius-live-evidence', 'settlement-integrity.tsv'), 'unavailable\n');
-    const absent = completingBundle();
-    for (const dir of [unreadable, absent]) {
+    const unreadable = settledOnce();
+    unreadable.write('settlement-integrity.tsv', 'unavailable\n');
+    for (const dir of [unreadable.dir, completingBundle()]) {
       const row = rowFor(evaluate(dir), 'SETTLEMENT INTEGRITY');
       expect(row.mission, 'nobody looked is not the same as nothing found').toBe('UNKNOWN');
       expect(row.verdict).toBe('FAIL');
@@ -837,24 +1002,519 @@ describe('the Beta Gate’s capability axis', () => {
   });
 
   it('SETTLEMENT INTEGRITY with no settlement at all was not exercised, and a drill cannot stand in for it', () => {
-    const dir = completingBundle();
-    writeFileSync(join(dir, 'julius-live-evidence', 'budget.tsv'), tsv(BUDGET_COLUMNS, []));
-    writeFileSync(join(dir, 'julius-live-evidence', 'settlement-integrity.tsv'), tsv(INTEGRITY_COLUMNS, []));
-    const row = rowFor(evaluate(dir), 'SETTLEMENT INTEGRITY');
+    const made = completingWith({ 'budget.tsv': table(BUDGET, []), 'settlement-integrity.tsv': table(INTEGRITY, []) });
+    const row = rowFor(evaluate(made.dir), 'SETTLEMENT INTEGRITY');
     expect(row.mission).toBe('NOT EXERCISED');
     expect(row.capability).toBe('NOT ADMISSIBLE');
     expect(row.verdict).toBe('FAIL');
   });
 
-  it('a DRILL evaluation, exactly as julius-real-infra calls it, leaves the drill rows as they were', () => {
-    // No mission bundle at all: the workflow's own call, `evaluate(null, { capabilityDir })`.
+  /**
+   * THE CONTRACT julius-real-infra HOLDS THE GATE TO, pinned. After its drills
+   * run, the workflow calls `evaluate(null, { capabilityDir })` and requires the
+   * CAPABILITY axis of these three rows to read PROVEN. With no mission bundle
+   * the mission axis is UNKNOWN, so the VERDICT is FAIL (a drill does not stand
+   * in for a bundle that is not there) — which is why the workflow reads the
+   * axis, and this test pins both halves.
+   */
+  it('a DRILL evaluation, exactly as julius-real-infra calls it, leaves the drill rows PROVEN on the capability axis', () => {
     const outside = mkdtempSync(join(tmpdir(), 'beta-gate-drills-'));
-    const staged = withProof(completingBundle());
-    for (const name of ['capability-proofs.tsv', 'julius-recovery-drill.transcript.txt']) {
-      writeFileSync(join(outside, name), readFileSync(join(staged, 'julius-live-evidence', name), 'utf8'));
+    for (const capability of Object.keys(DRILL_OF)) {
+      attest(outside, { capability, transcript: `${capability.replace(/[^A-Z]/gu, '').toLowerCase()}.transcript.txt` });
     }
     const report = evaluate(null, { capabilityDir: outside });
-    expect(rowFor(report, 'RESTART / RECOVERY').capability, 'the drill still proves its row').toBe('PROVEN');
-    expect(rowFor(report, 'SETTLEMENT INTEGRITY').mission, 'and the new row reads the missing bundle as unknown, not as a failure').toBe('UNKNOWN');
+    for (const capability of Object.keys(DRILL_OF)) {
+      const row = rowFor(report, capability);
+      expect(row.capability, `${capability}: ${row.capabilityBasis}`).toBe('PROVEN');
+      expect(row.mission, 'there is no mission to have exercised it').toBe('UNKNOWN');
+      expect(row.verdict).toBe('FAIL');
+    }
+    expect(rowFor(report, 'SETTLEMENT INTEGRITY').mission, 'and a mission row reads the missing bundle as unknown, not as a failure').toBe('UNKNOWN');
+    const workflow = readFileSync(join(REPO, '.github', 'workflows', 'julius-real-infra.yml'), 'utf8');
+    expect(workflow, 'the workflow reads the capability axis, which is what stays PROVEN').toContain('row.capability !== "PROVEN"');
+    expect(workflow).toContain('evaluate(null, { capabilityDir: "/tmp/julius-capability-proofs" })');
+  });
+});
+
+/**
+ * GATE_AUDIT.md (2026-09-29), HELD. Each finding the audit reproduced against
+ * the stack, in the shape of its fixture, BOUND — a manifest naming this
+ * checkout, a paid mode and one run, `run_id` on every table — so that what is
+ * measured is the row's own reading and not the binding's. Every case here read
+ * PASS or CAPABILITY PROVEN before its fix.
+ */
+describe('the gate audit, finding by finding', () => {
+  /* ------------------------------------------------ P0-1 · provider identity */
+
+  const PROVIDER_ROWS = ['PROMPT ARCHITECT', 'CODING AGENT', 'INDEPENDENT REVIEWER', 'VERIFIED COMPLETION'];
+
+  it('P0-1 (F3): the repair drill\'s own database, dumped as a mission, reads NOT A REAL PROVIDER on every role row', () => {
+    const drill = 'run:repair-drill';
+    const tasks: readonly Task[] = [
+      { id: `${drill}:plan`, type: 'plan', role: 'PROMPT_ARCHITECT', state: 'SUCCEEDED', ordinal: 0 },
+      { id: `${drill}:build`, type: 'build', role: 'CODING_AGENT', state: 'SUCCEEDED', ordinal: 1 },
+      { id: `${drill}:plan:review`, type: 'review:plan', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED', ordinal: 1, parent: `${drill}:plan` },
+      { id: `${drill}:build:review`, type: 'review:build', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED', ordinal: 2, parent: `${drill}:build` },
+    ];
+    const made = completingWith({
+      [BUNDLE_MANIFEST]: manifest({ julius_run_id: drill }),
+      'runs.tsv': table(RUNS, [{ run_id: drill, mission_id: 'mission:repair-drill', state: 'COMPLETED' }]),
+      'tasks.tsv': table(TASKS, taskRows(tasks, drill)),
+      'evidence.tsv': table(EVIDENCE, [
+        { evidence_id: `${drill}:plan:1:0`, evidence_type: 'ARTIFACT', status: 'PASSED', run_id: drill, task_id: `${drill}:plan` },
+        { evidence_id: `${drill}:plan:review:1:0`, evidence_type: 'REVIEW_FINDING', status: 'PASSED', run_id: drill, task_id: `${drill}:plan:review` },
+        { evidence_id: `${drill}:build:review:1:0`, evidence_type: 'REVIEW_FINDING', status: 'PASSED', run_id: drill, task_id: `${drill}:build:review` },
+      ]),
+      'decisions.tsv': table(DECISIONS, [
+        { decision_id: 'd1', task_id: `${drill}:plan`, action: 'ACCEPT', reason_code: 'TASK_VERIFIED', run_id: drill },
+        { decision_id: 'd2', task_id: `${drill}:build`, action: 'ACCEPT', reason_code: 'TASK_VERIFIED', run_id: drill },
+      ]),
+      // Exactly what a drill leaves: scripted adapters, `providerId: 'drill'`, and no diagnostics.
+      'trajectory.tsv': table(TRAJECTORY, tasks.flatMap((task) => [
+        { event_kind: 'WORKER_SELECTED', task_id: task.id, worker_id: 'w', safe_facts: JSON.stringify({ role: task.role, adapterId: `${task.role === 'CODING_AGENT' ? 'coder' : task.role === 'PROMPT_ARCHITECT' ? 'architect' : 'reviewer'}-adapter` }), run_id: drill },
+        { event_kind: 'PROVIDER_SELECTED', task_id: task.id, worker_id: 'w', provider_id: 'drill', safe_facts: '{}', run_id: drill },
+      ])),
+      'worker-diagnostics.tsv': table(DIAGNOSTICS, []),
+      'failures.tsv': table(FAILURES, []),
+      'live-mission.evidence.txt': accepted(drill, 'COMPLETED after 6 ticks'),
+    });
+    const report = evaluate(made.dir);
+    expect(report.binding.bound, report.binding.reason ?? '').toBe(true);
+    for (const id of PROVIDER_ROWS) {
+      const row = rowFor(report, id);
+      expect(row.verdict, `${id}: ${row.basis}`).toBe('FAIL');
+      expect(row.mission).toBe('FAILED');
+      expect(row.basis).toContain('NOT A REAL PROVIDER');
+    }
+  });
+
+  it('P0-1: a bundle whose diagnostics name no provider credits no role, and says it cannot say', () => {
+    const report = evaluate(completingWith({ 'worker-diagnostics.tsv': table(DIAGNOSTICS, []), 'trajectory.tsv': table(TRAJECTORY, []) }).dir);
+    for (const id of [...PROVIDER_ROWS, 'REPAIR LOOP']) {
+      const row = rowFor(report, id);
+      expect(row.mission, `${id}: ${row.basis}`).toBe('UNKNOWN');
+      expect(row.verdict).toBe('FAIL');
+      expect(row.basis).toContain('no worker-diagnostics row names it');
+    }
+  });
+
+  it('P0-1: the repository\'s own fakes are refused by name — the fake architect, the fake Claude Code, a scripted adapter', () => {
+    const fake = (over: (task: Task) => Row) =>
+      evaluate(completingWith({ 'worker-diagnostics.tsv': table(DIAGNOSTICS, diagnosticsFor(COMPLETING_TASKS, RUN, over)) }).dir);
+    const architect = rowFor(fake((task) => (task.role === 'PROMPT_ARCHITECT' ? { served_model: 'fake-architect-model', response_id: 'resp_fake_success' } : {})), 'PROMPT ARCHITECT');
+    expect(architect.verdict).toBe('FAIL');
+    expect(architect.basis).toContain('NOT A REAL PROVIDER');
+    expect(architect.basis).toContain('fake-architect-model');
+    const coder = rowFor(fake((task) => (task.role === 'CODING_AGENT' ? { served_model: 'fake-model' } : {})), 'CODING AGENT');
+    expect(coder.basis).toContain('NOT A REAL PROVIDER');
+    const scripted = evaluate(completingWith({
+      'trajectory.tsv': table(TRAJECTORY, trajectoryFor(COMPLETING_TASKS).map((row) => (row.event_kind === 'WORKER_SELECTED' && row.task_id === PLAN_REVIEW
+        ? { ...row, safe_facts: JSON.stringify({ role: 'INDEPENDENT_REVIEWER', adapterId: 'reviewer-adapter' }) } : row))),
+    }).dir);
+    expect(rowFor(scripted, 'INDEPENDENT REVIEWER').basis).toContain('adapter reviewer-adapter, which is not a live adapter');
+    expect(rowFor(scripted, 'VERIFIED COMPLETION').verdict).toBe('FAIL');
+  });
+
+  it('P0-1: a coder whose served model the result did not attest, or an architect with no response id, is UNKNOWN', () => {
+    const unattested = evaluate(completingWith({
+      'worker-diagnostics.tsv': table(DIAGNOSTICS, diagnosticsFor(COMPLETING_TASKS, RUN, (task) => (task.role === 'CODING_AGENT' ? { served_model: '', served_model_basis: 'no_output_turns' } : {}))),
+    }).dir);
+    expect(rowFor(unattested, 'CODING AGENT').mission).toBe('UNKNOWN');
+    expect(rowFor(unattested, 'CODING AGENT').basis).toContain('served_model_basis no_output_turns');
+    expect(rowFor(unattested, 'VERIFIED COMPLETION').verdict).toBe('FAIL');
+    const silent = evaluate(completingWith({
+      'worker-diagnostics.tsv': table(DIAGNOSTICS, diagnosticsFor(COMPLETING_TASKS, RUN, (task) => (task.role === 'PROMPT_ARCHITECT' ? { response_id: '' } : {}))),
+    }).dir);
+    expect(rowFor(silent, 'PROMPT ARCHITECT').mission).toBe('UNKNOWN');
+    expect(rowFor(silent, 'PROMPT ARCHITECT').basis).toContain('no provider response id');
+  });
+
+  it('P0-1 control: a mission run on real providers, bound to this checkout, still reads PASS on every role row', () => {
+    const report = evaluate(completingBundle());
+    for (const id of [...PROVIDER_ROWS, 'REPAIR LOOP']) expect(verdictFor(report, id), rowFor(report, id).basis).toBe('PASS');
+    expect(rowFor(report, 'PROMPT ARCHITECT').basis).toContain('openai/gpt-5.6-sol over openai');
+  });
+
+  /* -------------------------------------------------------- P0-2 · binding */
+
+  const passes = (report: BetaGateReport) => report.results.filter((row) => row.verdict === 'PASS').map((row) => row.id);
+
+  it('P0-2: a bundle with no manifest proves nothing — and keeps its failures', () => {
+    const complete = evaluate(completingWith({ [BUNDLE_MANIFEST]: null }).dir);
+    expect(complete.binding.bound).toBe(false);
+    expect(passes(complete)).toEqual([]);
+    expect(rowFor(complete, 'PROJECT CREATION').basis).toContain(`UNBOUND — the bundle carries no ${BUNDLE_MANIFEST}`);
+    const broken = evaluate(bundle({ ...Object.fromEntries(Object.entries({})) }).dir);
+    expect(passes(broken)).toEqual([]);
+    const failing = failingBundle();
+    rmSync(join(failing, 'julius-live-evidence', BUNDLE_MANIFEST));
+    expect(rowFor(evaluate(failing), 'CODING AGENT').mission, 'an unbound bundle still says what broke').toBe('FAILED');
+  });
+
+  it('P0-2: a bundle produced at another commit, in preflight mode, or about a run it does not hold proves nothing', () => {
+    const cases: readonly [Readonly<Record<string, string>>, string][] = [
+      [{ commit: '1ea4a75a'.padEnd(40, '0') }, 'it was produced at 1ea4a75a0000 and is being read at'],
+      [{ mode: 'preflight', mode_basis: 'workflow_dispatch_not_confirmed_live' }, 'mode=preflight'],
+      [{ mode: 'unknown', mode_basis: 'undeclared' }, 'mode=unknown'],
+      [{ julius_run_id: 'none' }, 'names no Julius run'],
+      [{ julius_run_id: 'run:elsewhere' }, 'names run run:elsewhere, which runs.tsv does not hold'],
+    ];
+    for (const [over, reason] of cases) {
+      const report = evaluate(completingWith({ [BUNDLE_MANIFEST]: manifest(over) }).dir);
+      expect(report.binding.bound, reason).toBe(false);
+      expect(report.binding.reason).toContain(reason);
+      expect(passes(report), reason).toEqual([]);
+    }
+  });
+
+  it('P0-2: a bundle whose tables do not name their run, or whose entrypoint accepted another run, proves nothing', () => {
+    const legacy = evaluate(completingWith({ 'tasks.tsv': tsv(TASKS.slice(0, -1), taskRows(COMPLETING_TASKS).map((row) => TASKS.slice(0, -1).map((column) => row[column as keyof typeof row]))) }).dir);
+    expect(legacy.binding.reason).toContain('tasks.tsv carries no run_id column');
+    expect(passes(legacy)).toEqual([]);
+    const other = evaluate(completingWith({ 'live-mission.evidence.txt': accepted('run:someone-else', 'COMPLETED') }).dir);
+    expect(other.binding.reason).toContain('the entrypoint accepted run:someone-else');
+    expect(passes(other)).toEqual([]);
+  });
+
+  it('P0-2 (F9): a ledger that attests only the row\'s own files is not proof of a drill that drives a whole pipeline', () => {
+    const forged = attest(mkdtempSync(join(tmpdir(), 'beta-gate-forged-')), { closure: false });
+    const row = rowFor(evaluate(completingBundle(), { capabilityDir: forged }), 'RESTART / RECOVERY');
+    expect(row.capability).toBe('UNPROVEN');
+    expect(row.capabilityBasis).toContain('of them are not attested');
+    expect(row.verdict).toBe('FAIL');
+  });
+
+  it('P0-2: a proof goes STALE when ANY file its drill drives changes, not only the row\'s own', () => {
+    const probe = new Set(implementedBy('REPAIR LOOP'));
+    const pipeline = drivenBy('npm run julius:repair-loop-drill').find((path) => path.endsWith('julius-task-pipeline.ts'))!;
+    expect(probe.has(pipeline), 'the pipeline is not a file the row names').toBe(false);
+    const row = rowFor(evaluate(withProof(completingWith({ 'decisions.tsv': table(DECISIONS, []), 'tasks.tsv': table(TASKS, taskRows(COMPLETING_TASKS.filter((task) => !task.id.startsWith('repair:')))) }).dir, {
+      capability: 'REPAIR LOOP', recorded: { [pipeline]: `sha256:${'0'.repeat(64)}` },
+    })), 'REPAIR LOOP');
+    expect(row.capability).toBe('STALE');
+    expect(row.capabilityBasis).toContain(`${pipeline} has changed since the drill ran`);
+  });
+
+  it('P0-2: an attestation naming a drill this repository cannot build proves nothing', () => {
+    const row = rowFor(evaluate(withProof(completingBundle(), { drill: 'npm run julius:no-such-drill' })), 'RESTART / RECOVERY');
+    expect(row.capability).toBe('UNPROVEN');
+    expect(row.capabilityBasis).toContain('package.json has no script julius:no-such-drill');
+  });
+
+  /* --------------------------------------------- P0-3 · restart / recovery */
+
+  it('P0-3 (F1): the terminal sweep closing an unsettled invocation is an integrity FAILURE, never a recovery', () => {
+    const made = completingWith({
+      'failures.tsv': table(FAILURES, [{ run_id: RUN, sequence: '51', task_id: BUILD, role: 'CODING_AGENT', event_type: 'julius.recovery.action', julius_code: 'TOOL_INVOCATION_UNRESOLVED', failure_class: 'infrastructure_evidence_integrity', reason_code: 'RUN_TERMINAL_WITH_UNSETTLED_TOOL_INVOCATION', recovery_action: 'CLOSE_UNSETTLED_TOOL_INVOCATION' }]),
+    });
+    const row = rowFor(evaluate(withProof(made.dir)), 'RESTART / RECOVERY');
+    expect(row.verdict, 'and no drill rescues it').toBe('FAIL');
+    expect(row.mission).toBe('FAILED');
+    expect(row.basis).toContain('INTEGRITY FAILURE');
+    expect(row.basis).toContain('TOOL_INVOCATION_UNRESOLVED');
+  });
+
+  it('P0-3 (F1b): a sweep that FAILED the task it reclaimed did not recover it', () => {
+    for (const reason of ['RECOVERY_LIMIT_REACHED', 'RETRIES_EXHAUSTED']) {
+      const made = completingWith({
+        'failures.tsv': table(FAILURES, [{ run_id: RUN, sequence: '49', task_id: BUILD, role: 'CODING_AGENT', event_type: 'julius.recovery.action', reason_code: reason, recovery_action: 'FAIL_TASK' }]),
+      });
+      const row = rowFor(evaluate(withProof(made.dir)), 'RESTART / RECOVERY');
+      expect(row.mission, reason).toBe('FAILED');
+      expect(row.basis).toContain(`(${reason}): recovery gave up`);
+    }
+  });
+
+  it('P0-3: a REQUEUE counts only when the task then SUCCEEDED', () => {
+    const requeued = (state: string) => evaluate(completingWith({
+      'tasks.tsv': table(TASKS, taskRows(COMPLETING_TASKS.map((task) => (task.id === PLAN ? { ...task, state } : task)))),
+      'failures.tsv': table(FAILURES, [{ run_id: RUN, sequence: '5', task_id: PLAN, role: 'PROMPT_ARCHITECT', event_type: 'julius.recovery.action', reason_code: 'LEASE_EXPIRED', recovery_action: 'REQUEUE' }]),
+    }).dir);
+    expect(rowFor(requeued('SUCCEEDED'), 'RESTART / RECOVERY').verdict).toBe('PASS');
+    expect(rowFor(requeued('FAILED'), 'RESTART / RECOVERY').mission).toBe('FAILED');
+    expect(rowFor(requeued('RUNNABLE'), 'RESTART / RECOVERY').mission).toBe('UNKNOWN');
+  });
+
+  /* --------------------------------------------------- P0-4 · repair loop */
+
+  const noRepairTasks = COMPLETING_TASKS.filter((task) => !task.id.startsWith('repair:'));
+
+  it('P0-4 (F2): a rejected build whose repair was refused is a broken loop, and no drill rescues it', () => {
+    for (const refusal of ['REPAIR_UNROUTABLE', 'REPAIR_BUDGET_DENIED', 'repair_round_limit']) {
+      const made = completingWith({
+        'runs.tsv': table(RUNS, [{ run_id: RUN, mission_id: MISSION, state: 'FAILED' }]),
+        'tasks.tsv': table(TASKS, taskRows(noRepairTasks)),
+        'decisions.tsv': table(DECISIONS, [
+          { decision_id: 'd1', task_id: PLAN, action: 'ACCEPT', reason_code: 'TASK_VERIFIED', run_id: RUN },
+          { decision_id: 'd2', task_id: BUILD, action: 'REPAIR', reason_code: 'BLOCKING_FINDINGS', run_id: RUN },
+        ]),
+        'failures.tsv': table(FAILURES, [{ run_id: RUN, sequence: '60', task_id: BUILD, role: 'CODING_AGENT', event_type: 'julius.run.failed', reason_code: refusal }]),
+      });
+      const row = rowFor(evaluate(withProof(made.dir, { capability: 'REPAIR LOOP' })), 'REPAIR LOOP');
+      expect(row.verdict, refusal).toBe('FAIL');
+      expect(row.mission).toBe('FAILED');
+      expect(row.basis).toContain(`the repair was refused: ${refusal}`);
+      expect(row.capability, 'the drill is sound and does not apply').toBe('PROVEN');
+    }
+  });
+
+  it('P0-4: a REPAIR decision with no accepted repair behind it is FAILED, however the run got there', () => {
+    const rejectedAgain = evaluate(completingWith({
+      'decisions.tsv': table(DECISIONS, [
+        { decision_id: 'd1', task_id: PLAN, action: 'ACCEPT', reason_code: 'TASK_VERIFIED', run_id: RUN },
+        { decision_id: 'd2', task_id: BUILD, action: 'REPAIR', reason_code: 'BLOCKING_FINDINGS', run_id: RUN },
+        { decision_id: 'd3', task_id: REPAIR, action: 'REPAIR', reason_code: 'BLOCKING_FINDINGS', run_id: RUN },
+      ]),
+    }).dir);
+    expect(rowFor(rejectedAgain, 'REPAIR LOOP').mission, 'the re-review rejected the repair again (boundary hunt B20)').toBe('FAILED');
+    expect(rowFor(rejectedAgain, 'REPAIR LOOP').basis).toContain('not accepted');
+    const never = evaluate(completingWith({ 'tasks.tsv': table(TASKS, taskRows(noRepairTasks)) }).dir);
+    expect(rowFor(never, 'REPAIR LOOP').basis).toContain('was sent back for repair and no repair task exists');
+  });
+
+  it('P0-4 + P1-1 (F7): an unreadable task dump is UNKNOWN for the repair loop, and no drill rescues it', () => {
+    const row = rowFor(evaluate(withProof(completingWith({ 'tasks.tsv': 'unavailable\n' }).dir, { capability: 'REPAIR LOOP' })), 'REPAIR LOOP');
+    expect(row.mission).toBe('UNKNOWN');
+    expect(row.verdict).toBe('FAIL');
+    expect(row.basis).toContain('tasks.tsv is unreadable');
+  });
+
+  /* -------------------------------------- P0-5 + B2 · permissions and boundaries */
+
+  it('P0-5 (F4): a dry run reads no PASS, and a dump with zero invocations or none readable is UNKNOWN', () => {
+    const dry = evaluate(completingWith({
+      [BUNDLE_MANIFEST]: manifest({ mode: 'preflight', mode_basis: 'workflow_dispatch_not_confirmed_live', julius_run_id: 'none' }),
+      'runs.tsv': table(RUNS, []), 'tasks.tsv': table(TASKS, []), 'tool-invocations.tsv': table(INVOCATIONS, []),
+      'worker-diagnostics.tsv': table(DIAGNOSTICS, []), 'evidence.tsv': table(EVIDENCE, []), 'decisions.tsv': table(DECISIONS, []),
+      'receipt-ids.txt': ['a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64)].join('\n'),
+    }).dir);
+    expect(passes(dry)).toEqual([]);
+    expect(rowFor(dry, 'PERMISSIONS / MISSION BOUNDARIES').mission).toBe('UNKNOWN');
+    const zero = evaluate(completingWith({ 'tool-invocations.tsv': table(INVOCATIONS, []) }).dir);
+    expect(rowFor(zero, 'PERMISSIONS / MISSION BOUNDARIES').mission, 'paid mode, nothing ran: nothing was checked').toBe('UNKNOWN');
+    expect(rowFor(zero, 'PERMISSIONS / MISSION BOUNDARIES').basis).toContain('a bundle that checked nothing cannot pass');
+    const unreadable = evaluate(completingWith({ 'tool-invocations.tsv': 'unavailable\n' }).dir);
+    expect(rowFor(unreadable, 'PERMISSIONS / MISSION BOUNDARIES').mission, 'F4b').toBe('UNKNOWN');
+    const noDiagnostics = evaluate(completingWith({ 'worker-diagnostics.tsv': 'unavailable\n' }).dir);
+    expect(rowFor(noDiagnostics, 'PERMISSIONS / MISSION BOUNDARIES').basis).toContain('worker-diagnostics.tsv is unreadable');
+  });
+
+  it('B2: a repaired run whose first test FAILED, receipted and settled with its exit code, passes the boundary row', () => {
+    const row = rowFor(evaluate(completingBundle()), 'PERMISSIONS / MISSION BOUNDARIES');
+    expect(row.verdict, row.basis).toBe('PASS');
+    expect(row.basis).toContain('1 ended non-zero with an exit code recorded');
+    expect(row.basis, 'and the preflight\'s receipt scopes are not counted as this run\'s').toContain('2 other receipt scope(s)');
+  });
+
+  it('B2: a forbidden-path edit FAILS the boundary row, from the scope events or from Julius\'s own scope evidence', () => {
+    const scoped = evaluate(completingWith({
+      'scope.tsv': table(SCOPE, [{ run_id: RUN, sequence: '41', task_id: BUILD, event_type: 'julius.coder.scope.violated', rule: 'OUT_OF_SCOPE', attributed_to: 'ATTEMPT' }]),
+    }).dir);
+    expect(rowFor(scoped, 'PERMISSIONS / MISSION BOUNDARIES').mission).toBe('FAILED');
+    expect(rowFor(scoped, 'PERMISSIONS / MISSION BOUNDARIES').basis).toContain(`${BUILD} OUT_OF_SCOPE`);
+    const evidenced = evaluate(completingWith({
+      'evidence.tsv': `${completingFiles()['evidence.tsv'].split('\n').slice(0, -1).join('\n')}\n${[`${BUILD}:1:scope`, 'DIFF', 'FAILED', 'Julius scope check', 't', RUN, BUILD, ''].join('\t')}\n`,
+    }).dir);
+    expect(rowFor(evidenced, 'PERMISSIONS / MISSION BOUNDARIES').mission).toBe('FAILED');
+  });
+
+  it('B2: an invocation left open, closed unknown, denied, or settled without a receipt FAILS the boundary row', () => {
+    const cases: readonly [Readonly<Record<string, string>>, string][] = [
+      [{ state: 'DISPATCHING', exit_code: '', completed_at: '' }, 'left unsettled'],
+      [{ state: 'FAILED', exit_code: '', recovery_state: 'UNKNOWN_OUTCOME' }, 'closed with an UNKNOWN outcome'],
+      [{ state: 'DENIED', exit_code: '' }, 'DENIED by policy'],
+    ];
+    for (const [over, reason] of cases) {
+      const invocations = COMPLETING_INVOCATIONS.map((row) => (row.invocation_id === `${BUILD}:test:g1` ? { ...row, ...over } : row));
+      const row = rowFor(evaluate(completingWith({ 'tool-invocations.tsv': table(INVOCATIONS, invocations) }).dir), 'PERMISSIONS / MISSION BOUNDARIES');
+      expect(row.mission, reason).toBe('FAILED');
+      expect(row.basis).toContain(reason);
+    }
+    const unsigned = rowFor(evaluate(completingWith({ 'receipt-ids.txt': ['a'.repeat(64)].join('\n') }).dir), 'PERMISSIONS / MISSION BOUNDARIES');
+    expect(unsigned.mission).toBe('FAILED');
+    expect(unsigned.basis).toContain('no executor receipt scope of their own');
+    const denied = rowFor(evaluate(completingWith({
+      'worker-diagnostics.tsv': table(DIAGNOSTICS, diagnosticsFor(COMPLETING_TASKS, RUN, (task) => (task.id === BUILD ? { permission_denials: '2' } : {}))),
+    }).dir), 'PERMISSIONS / MISSION BOUNDARIES');
+    expect(denied.basis).toContain('reported a permission denial');
+  });
+
+  /* --------------------------------------------------- P1-2 · every instance */
+
+  it('P1-2 (F6): a successful plan review does not carry a FAILED build review', () => {
+    const tasks: readonly Task[] = [
+      ...COMPLETING_TASKS.filter((task) => task.id === PLAN || task.id === PLAN_REVIEW || task.id === BUILD),
+      { id: BUILD_REVIEW, type: 'review:build', role: 'INDEPENDENT_REVIEWER', state: 'FAILED', ordinal: 2, parent: BUILD },
+    ];
+    const made = completingWith({
+      'runs.tsv': table(RUNS, [{ run_id: RUN, mission_id: MISSION, state: 'FAILED' }]),
+      'tasks.tsv': table(TASKS, taskRows(tasks)),
+      'decisions.tsv': table(DECISIONS, [{ decision_id: 'd1', task_id: PLAN, action: 'ACCEPT', reason_code: 'TASK_VERIFIED', run_id: RUN }]),
+    });
+    const row = rowFor(evaluate(made.dir), 'INDEPENDENT REVIEWER');
+    expect(row.verdict).toBe('FAIL');
+    expect(row.basis).toContain(`${BUILD_REVIEW} FAILED`);
+  });
+
+  it('P1-2: a failed review that a LATER review of the same work repaired does not fail the row', () => {
+    const tasks = COMPLETING_TASKS.map((task) => (task.id === BUILD_REVIEW ? { ...task, state: 'FAILED' } : task));
+    const row = rowFor(evaluate(completingWith({ 'tasks.tsv': table(TASKS, taskRows(tasks)) }).dir), 'INDEPENDENT REVIEWER');
+    expect(row.verdict, row.basis).toBe('PASS');
+  });
+
+  it('P1-2: a plan with no artifact of its own, and reviewed work nobody decided, both FAIL', () => {
+    const artifactElsewhere = evaluate(completingWith({
+      'evidence.tsv': table(EVIDENCE, [
+        { evidence_id: `${BUILD}:9:0`, evidence_type: 'ARTIFACT', status: 'PASSED', run_id: RUN, task_id: BUILD },
+        ...[PLAN_REVIEW, BUILD_REVIEW, REPAIR_REVIEW].map((task) => ({ evidence_id: `${task}:1:0`, evidence_type: 'REVIEW_FINDING', status: 'PASSED', run_id: RUN, task_id: task })),
+        ...COMPLETING_INVOCATIONS.map(toolEvidence),
+      ]),
+    }).dir);
+    expect(rowFor(artifactElsewhere, 'PROMPT ARCHITECT').basis).toContain(`${PLAN} SUCCEEDED with no accepted plan artifact of its own`);
+    const undecided = evaluate(completingWith({
+      'decisions.tsv': table(DECISIONS, [
+        { decision_id: 'd1', task_id: PLAN, action: 'ACCEPT', reason_code: 'TASK_VERIFIED', run_id: RUN },
+        { decision_id: 'd2', task_id: BUILD, action: 'REPAIR', reason_code: 'BLOCKING_FINDINGS', run_id: RUN },
+      ]),
+    }).dir);
+    expect(rowFor(undecided, 'VERIFICATION').mission).toBe('FAILED');
+    expect(rowFor(undecided, 'VERIFICATION').basis).toContain(`${REPAIR} was reviewed successfully and verification recorded no decision`);
+  });
+
+  /* ------------------------------------------------------ P1-3 · run scoping */
+
+  it('P1-3 (F5): an older COMPLETED run in the same database does not decide this run\'s completion', () => {
+    const older = 'run:recovery-drill';
+    const made = bundle({
+      [BUNDLE_MANIFEST]: manifest(),
+      'runs.tsv': table(RUNS, [
+        { run_id: older, mission_id: 'mission:recovery-drill', state: 'COMPLETED', created_at: '2026-09-29 12:00:00+00' },
+        { run_id: RUN, mission_id: MISSION, state: 'FAILED', created_at: '2026-09-29 12:31:08+00' },
+      ]),
+      'tasks.tsv': table(TASKS, [...taskRows(FAILING_TASKS), ...taskRows(COMPLETING_TASKS.map((task) => ({ ...task, id: task.id.replace(RUN, older) })), older)]),
+      'failures.tsv': table(FAILURES, [{ run_id: older, sequence: '3', task_id: `${older}:plan`, event_type: 'julius.recovery.action', reason_code: 'LEASE_EXPIRED', recovery_action: 'REQUEUE' }]),
+      'live-mission.evidence.txt': accepted(),
+    });
+    const report = evaluate(made.dir);
+    expect(report.binding.runId).toBe(RUN);
+    expect(rowFor(report, 'VERIFIED COMPLETION').mission).toBe('FAILED');
+    expect(rowFor(report, 'VERIFIED COMPLETION').basis).toContain(`run ${RUN} ended FAILED`);
+    expect(rowFor(report, 'RESTART / RECOVERY').mission, 'the older run\'s requeue is not this run\'s recovery').toBe('NOT EXERCISED');
+    expect(rowFor(report, 'CODING AGENT').mission, 'nor are its succeeded builds this run\'s').toBe('FAILED');
+  });
+
+  /* ------------------------------------------- P1-1 (F8) · a retry that never was */
+
+  /**
+   * F8, AS THE FALSIFICATION CORRECTED IT. The audit wanted "retryable, never
+   * retried" to read FAILED. It is the run's POLICY: with automatic retry off
+   * the coordinator schedules nothing, and a SUPERVISED run declines the retry
+   * the coordinator scheduled (`SUPERVISED_STOP`) and waits for a person. Both
+   * are correct runs, so the row reads NOT EXERCISED — and says why, rather
+   * than the old "nothing failed retryably" — and only a retry that RAN and
+   * still failed is FAILED.
+   */
+  it('P1-1 (F8): a retryable failure the run\'s policy never retried is a policy stop, not a failed recovery', () => {
+    const failedBuild = (failures: readonly Row[]) => completingWith({
+      'runs.tsv': table(RUNS, [{ run_id: RUN, mission_id: MISSION, state: 'FAILED' }]),
+      'tasks.tsv': table(TASKS, taskRows(COMPLETING_TASKS.map((task) => (task.id === BUILD ? { ...task, state: 'FAILED' } : task)))),
+      'failures.tsv': table(FAILURES, failures),
+    }).dir;
+    const noAutomaticRetry = rowFor(evaluate(withProof(failedBuild([
+      { run_id: RUN, sequence: '46', task_id: BUILD, role: 'CODING_AGENT', event_type: 'julius.task.failed', julius_code: 'TIMEOUT', failure_class: 'worker_timeout', error_retryable: 'true' },
+    ]), { capability: 'FAILURE RECOVERY' })), 'FAILURE RECOVERY');
+    expect(noAutomaticRetry.mission).toBe('NOT EXERCISED');
+    expect(noAutomaticRetry.basis).toContain(`${BUILD} failed retryably (worker_timeout) and no retry ran`);
+    expect(noAutomaticRetry.basis).toContain('a policy stop, not a recovery that failed');
+    expect(noAutomaticRetry.verdict, 'a genuine NOT EXERCISED is what a drill may stand in for').toBe('CAPABILITY PROVEN');
+    const supervised = rowFor(evaluate(failedBuild([
+      { run_id: RUN, sequence: '45', task_id: BUILD, role: 'CODING_AGENT', event_type: 'julius.retry.scheduled', julius_code: 'TIMEOUT', failure_class: 'worker_timeout', error_retryable: 'true' },
+      { run_id: RUN, sequence: '46', task_id: BUILD, role: 'CODING_AGENT', event_type: 'julius.task.failed', julius_code: 'TIMEOUT', failure_class: 'worker_timeout', error_retryable: 'true', reason_code: 'SUPERVISED_STOP' },
+    ])), 'FAILURE RECOVERY');
+    expect(supervised.mission, 'a scheduled retry the policy declined never ran').toBe('NOT EXERCISED');
+    expect(supervised.basis).toContain('(SUPERVISED_STOP)');
+  });
+
+  /* ------------------------------------------ the falsification (FALSIFICATION.md) */
+
+  /**
+   * F10a: A FAILED MISSION PRINTED `BETA: READY`. Two runs in one database: an
+   * older, COMPLETED one, and the one the entrypoint accepted, whose own RESULT
+   * line says FAILED. The gate read `runs[0]` — the older — for every row. The
+   * run is now the accepted one (manifest, or the one accepted line), never an
+   * ordering, and VERIFIED COMPLETION requires that run's own RESULT to say
+   * COMPLETED.
+   */
+  it('F10a: a two-run bundle is read as the accepted run, whose RESULT is required and must agree', () => {
+    const older = 'run:0a0000000000000000000001';
+    const latest = 'run:f00000000000000000000002';
+    const made = bundle({
+      'runs.tsv': table(RUNS, [
+        { run_id: older, mission_id: 'mission:julius-live-6', state: 'COMPLETED', created_at: '2026-09-29 11:00:00+00' },
+        { run_id: latest, mission_id: 'mission:julius-live-6', state: 'FAILED', created_at: '2026-09-29 12:31:08+00' },
+      ]),
+      'tasks.tsv': table(TASKS, taskRows(COMPLETING_TASKS.map((task) => ({ ...task, id: task.id.replace(RUN, older), parent: task.parent?.replace(RUN, older) })), older)),
+      'live-mission.evidence.txt': 'Run run:f00000000000000000000002 accepted in state READY; driving the Julius run loop.\nRESULT: FAILED after 2 ticks\n',
+    });
+    const report = evaluate(made.dir);
+    expect(report.binding.runId, 'the accepted run, not the oldest').toBe(latest);
+    expect(rowFor(report, 'VERIFIED COMPLETION').mission).toBe('FAILED');
+    expect(rowFor(report, 'VERIFIED COMPLETION').basis).toContain(`run ${latest} ended FAILED`);
+    expect(report.results.filter((row) => row.verdict === 'PASS')).toEqual([]);
+    // And a bound run whose table says COMPLETED while its entrypoint said otherwise, or said nothing.
+    const disagrees = rowFor(evaluate(completingWith({ 'live-mission.evidence.txt': accepted(RUN, 'FAILED after 7 ticks') }).dir), 'VERIFIED COMPLETION');
+    expect(disagrees.mission).toBe('FAILED');
+    expect(disagrees.basis).toContain('RESULT: FAILED');
+    const stalled = rowFor(evaluate(completingWith({ 'live-mission.evidence.txt': accepted(RUN, 'COMPLETED (stalled before terminal state) after 32 ticks') }).dir), 'VERIFIED COMPLETION');
+    expect(stalled.mission).toBe('FAILED');
+    const silent = rowFor(evaluate(completingWith({ 'live-mission.evidence.txt': `Run ${RUN} accepted in state READY; driving the Julius run loop.\n` }).dir), 'VERIFIED COMPLETION');
+    expect(silent.mission).toBe('UNKNOWN');
+    expect(silent.basis).toContain("the entrypoint's RESULT line for it is absent");
+    const twoResults = rowFor(evaluate(completingWith({ 'live-mission.evidence.txt': `${accepted(RUN, 'COMPLETED after 9 ticks')}RESULT: COMPLETED after 3 ticks\n  run: run:another\n` }).dir), 'VERIFIED COMPLETION');
+    expect(twoResults.mission, 'a RESULT naming another run unbinds the bundle').toBe('UNKNOWN');
+    expect(twoResults.basis).toContain("the entrypoint's RESULT names run:another");
+  });
+
+  /**
+   * X2: A TYPED LEDGER ROW PROVED A CAPABILITY THAT HAS NO DRILL. ACCOUNT /
+   * ONBOARDING and WONDER WEB OUTPUT — the two rows that keep every genuine
+   * bundle NOT READY — read CAPABILITY PROVEN from a hand-typed row naming
+   * "no such drill". A proof must name a drill this repository builds whose
+   * closure imports the row's files, and no drill imports these.
+   */
+  it('X2: a hand-typed ledger cannot prove a row no drill exists for, bundle or no bundle', () => {
+    const typed = mkdtempSync(join(tmpdir(), 'beta-gate-typed-'));
+    const rows: string[][] = [];
+    for (const capability of ['ACCOUNT / ONBOARDING', 'WONDER WEB OUTPUT', 'PERMISSIONS / MISSION BOUNDARIES', 'PROJECT BRAIN PERSISTENCE']) {
+      for (const path of implementedBy(capability)) {
+        rows.push([capability, 'no such drill', 'VERIFIED', '1', 'typed by hand', path, digest(path), 'forged.transcript.txt', '2026-09-29T00:00:00.000Z']);
+      }
+    }
+    writeFileSync(join(typed, 'capability-proofs.tsv'), tsv(PROOF_COLUMNS, rows));
+    writeFileSync(join(typed, 'forged.transcript.txt'), '  [PASS] 1. typed by hand\n\nFORGED VERIFIED\n');
+    for (const dir of [null, completingBundle()]) {
+      const report = evaluate(dir, { capabilityDir: typed });
+      for (const capability of ['ACCOUNT / ONBOARDING', 'WONDER WEB OUTPUT', 'PERMISSIONS / MISSION BOUNDARIES', 'PROJECT BRAIN PERSISTENCE']) {
+        const row = rowFor(report, capability);
+        expect(row.capability, `${capability}: ${row.capabilityBasis}`).toBe('UNPROVEN');
+        expect(row.capabilityBasis).toContain('no such drill is not an `npm run <script>` command');
+        expect(row.verdict).not.toBe('CAPABILITY PROVEN');
+      }
+    }
+  });
+
+  /**
+   * F4c: EVERY DUMP UNAVAILABLE READ PASS on the boundary row — "0 tool
+   * invocation(s) all SUCCEEDED" beside a receipt list. Unavailable and zero
+   * rows never share an answer: unavailable is UNKNOWN.
+   */
+  it('F4c: a bundle whose every dump is unavailable passes nothing, the boundary row included', () => {
+    const files = completingFiles();
+    const gone = Object.fromEntries(Object.keys(files).filter((name) => name.endsWith('.tsv')).map((name) => [name, 'unavailable\n']));
+    const report = evaluate(completingWith(gone).dir);
+    expect(report.results.filter((row) => row.verdict === 'PASS').map((row) => row.id)).toEqual([]);
+    const boundary = rowFor(report, 'PERMISSIONS / MISSION BOUNDARIES');
+    expect(boundary.mission).toBe('UNKNOWN');
+    expect(boundary.basis).toContain('tool-invocations.tsv is unreadable');
   });
 });

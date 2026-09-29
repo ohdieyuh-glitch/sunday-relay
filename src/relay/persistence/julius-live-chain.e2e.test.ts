@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { juliusTestDatabaseUrl } from './julius-test-database';
 import { promisify } from 'node:util';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
@@ -214,20 +214,33 @@ suite('the Julius evidence chain: a real run, the shipping dump queries, the Bet
     // The two files the WORKFLOW writes beside the dump, so the gate sees the
     // shape a real bundle has. Their content is the run's own truth.
     writeFileSync(join(bundle, 'live-mission.evidence.txt'),
-      `Run ${RUN_ID} accepted in state READY; driving the Julius run loop.\nRESULT: ${outcome.state} after ${outcome.ticks} ticks\n`);
+      `Run ${RUN_ID} accepted in state READY; driving the Julius run loop.\nRESULT: ${outcome.state} after ${outcome.ticks} ticks\n  run: ${RUN_ID}\n`);
+    // And the manifest the dump writes first, bound to this checkout as a paid
+    // mission would be, so what the gate measures below is the rows themselves.
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    writeFileSync(join(bundle, 'bundle-manifest.txt'),
+      `manifest_version=1\nsource=local\ncommit=${head}\nmode=paid\nmode_basis=launcher_declared\njulius_run_id=${RUN_ID}\n`);
 
     /* ------------------------------------------------------------------ the gate reads it */
     const report = evaluate(bundleRoot);
     const verdicts = new Map(report.results.map((row) => [row.id, row]));
     const basis = (id: string) => `${id}: ${verdicts.get(id)?.verdict} — ${verdicts.get(id)?.basis}`;
+    expect(report.binding.bound, report.binding.reason ?? '').toBe(true);
 
-    // EVERY ROW THE RUNTIME CAN EARN, earned from database rows this run wrote.
-    for (const id of [
-      'PROJECT CREATION', 'JULIUS MISSION START', 'PROMPT ARCHITECT', 'CODING AGENT',
-      'TASK CONTRACT LOCK', 'INDEPENDENT REVIEWER', 'REPAIR LOOP', 'VERIFICATION',
-      'VERIFIED COMPLETION', 'PROJECT BRAIN PERSISTENCE',
-    ]) {
+    // EVERY ROW THE RUNTIME CAN EARN WITHOUT A PROVIDER, earned from database rows this run wrote.
+    for (const id of ['PROJECT CREATION', 'JULIUS MISSION START', 'TASK CONTRACT LOCK', 'VERIFICATION', 'PROJECT BRAIN PERSISTENCE']) {
       expect(verdicts.get(id)?.verdict, basis(id)).toBe('PASS');
+    }
+    /**
+     * AND NONE A PROVIDER MUST EARN. Every adapter here is scripted, which is
+     * exactly GATE_AUDIT.md P0-1: this same run used to read PASS for the
+     * architect, the coder, the reviewer, the repair and the completion. The
+     * trajectory names the scripted adapters the runtime dispatched to, and a
+     * live mission's adapters end `-live`.
+     */
+    for (const id of ['PROMPT ARCHITECT', 'CODING AGENT', 'INDEPENDENT REVIEWER', 'REPAIR LOOP', 'VERIFIED COMPLETION']) {
+      expect(verdicts.get(id)?.verdict, basis(id)).toBe('FAIL');
+      expect(verdicts.get(id)?.basis, basis(id)).toContain('NOT A REAL PROVIDER');
     }
 
     // AND THE CONTRACT ROW EARNED IT THE STRONG WAY: the claim rows in

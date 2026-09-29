@@ -5,13 +5,20 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { build } from 'esbuild';
 import { Pool } from 'pg';
 
-import { CAPABILITY_PROOF_COLUMNS, DrillRecord, writeAttestation } from './julius-drill-support';
+import {
+  CAPABILITY_PROOF_COLUMNS, DrillRecord, JULIUS_DRILL_DATABASE_NAME, drillDatabaseTarget, foreignJuliusRuns,
+  writeAttestation, writeDrillAttestation,
+} from './julius-drill-support';
+import { drillDrivenFiles, drillEntry, specifiersIn } from './julius-drill-closure.mjs';
 import * as recovery from './julius-recovery-drill';
 import * as failure from './julius-failure-recovery-drill';
 import * as repair from './julius-repair-loop-drill';
 import { CAPABILITY_PROOF_COLUMNS as GATE_COLUMNS, evaluate } from './wonderland-beta-gate.mjs';
+
+const REPO = join(__dirname, '..');
 
 /**
  * EVERY DRILL, HELD TO THE GATE'S DOCUMENT.
@@ -120,6 +127,190 @@ describe('the capability-proof ledger', () => {
     expect(() => write(dir, 'REPAIR LOOP', 'npm run c', 'c.txt'))
       .toThrow(/capability_proof_ledger_header_mismatch/u);
   });
+
+  it('a drill that cannot say what it drove files nothing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'julius-ledger-unknown-drill-'));
+    expect(() => writeDrillAttestation({
+      outDir: dir, repoRoot: REPO, record: record(3), verified: true, capability: 'REPAIR LOOP', drill: 'npm run julius:no-such-drill',
+      exercised: ['package.json'], infrastructure: 'real-postgres,no-provider-call', transcriptFile: 'x.txt',
+    })).toThrow(/drill_driven_files_unknown: package\.json has no script julius:no-such-drill/u);
+  });
+});
+
+/**
+ * WHAT A DRILL DROVE IS READ FROM THE TREE — and the reader is held to the
+ * bundler. GATE_AUDIT.md P0-2: the repair drill's attestation named one file,
+ * its row's own, while the pipeline, repositories and composition it drove
+ * through changed underneath it, and the gate kept calling it proven. A drill
+ * now attests every file its build reaches, the gate demands exactly that set
+ * back, and both read it with `julius-drill-closure.mjs`. That reader is a
+ * regular-expression scanner; this is what keeps it honest: for every drill,
+ * every repository file esbuild actually bundles must be in its closure.
+ */
+describe('the drill closure the gate binds a proof to', () => {
+  for (const drill of DRILLS) {
+    it(`covers every repository file esbuild bundles for the ${drill.name} drill`, async () => {
+      const entry = drillEntry(REPO, drill.module.DRILL_COMMAND);
+      expect('entry' in entry, JSON.stringify(entry)).toBe(true);
+      const driven = drillDrivenFiles(REPO, drill.module.DRILL_COMMAND);
+      if (!('files' in driven)) throw new Error(`the drill's closure is unknown: ${driven.error}`);
+      const bundled = await build({
+        entryPoints: [(entry as { entry: string }).entry], absWorkingDir: REPO, bundle: true, platform: 'node', format: 'cjs',
+        external: ['pg'], write: false, metafile: true, logLevel: 'silent',
+      });
+      const inputs = Object.keys(bundled.metafile.inputs).filter((path) => !path.includes('node_modules'));
+      expect(inputs.length, 'esbuild bundled the drill').toBeGreaterThan(50);
+      expect(inputs.filter((path) => !driven.files.includes(path)), 'every bundled repository file is attested').toEqual([]);
+      // And each file the drill's row is built on really is one it imports.
+      for (const path of drill.module.EXERCISED) expect(driven.files, `${drill.name} drives ${path}`).toContain(path);
+      // A dependency the bundle carries is pinned by the lockfile, which is attested too.
+      expect(driven.files).toContain('package-lock.json');
+    }, 90_000);
+  }
+
+  it('reads value imports and skips the ones the compiler erases', () => {
+    const found = specifiersIn([
+      "import { a } from './a';",
+      "import type { B } from './b';",
+      "export * from './c';",
+      "export type { D } from './d';",
+      'import {\n  e,\n  type F,\n} from "./e";',
+      "import './side-effect';",
+      "const g = await import('./g');",
+      "const h = require('./h');",
+      "// import { nope } from './comment';",
+      ' * import { nope } from \'./doc-comment\';',
+    ].join('\n'));
+    expect([...found].sort()).toEqual(['./a', './c', './e', './g', './h', './side-effect']);
+  });
+});
+
+/**
+ * GATE_AUDIT.md P1-4: A DRILL NEVER WRITES INTO A STORE.
+ *
+ * Every drill used to take whatever `DATABASE_URL` said, and on this project's
+ * workstation that is Julius's LIVE store (`…/julius`), inherited from the user
+ * profile; on a runner `…/julius` is the paid mission's own database. The drills
+ * write COMPLETED missions driven by scripted fakes, and the gate would then
+ * have read them as real ones. The target is now accepted only when its
+ * database is a drill's by name — which is what every caller already creates —
+ * or the throwaway `JULIUS_TEST_DATABASE_URL` names, and `…/julius` is refused
+ * before a connection exists.
+ */
+describe('the database a drill may write to', () => {
+  const LIVE = 'postgresql://drill@127.0.0.1:5432/julius';
+
+  /** The per-drill names a caller's loop creates: `julius_${drill//-/_}`, passed as `${DATABASE_URL%/*}/$db`. */
+  const namesCreatedBy = (relativePath: string): string[] => {
+    const source = readFileSync(join(REPO, relativePath), 'utf8');
+    const loop = /for drill in ([a-z -]+); do\s+db="julius_\$\{drill\/\/-\/_\}"/u.exec(source);
+    if (loop === null) throw new Error(`${relativePath} no longer creates its drill databases as julius_\${drill//-/_}`);
+    return loop[1]!.trim().split(/\s+/u).map((drill) => `julius_${drill.replace(/-/gu, '_')}`);
+  };
+
+  it('ACCEPTS the databases CI, the paid workflow and the local launcher create, with no workflow change', () => {
+    for (const caller of ['.github/workflows/julius-real-infra.yml', '.github/workflows/julius-first-live-mission.yml', 'scripts/julius-local-qualification.sh']) {
+      const names = namesCreatedBy(caller);
+      expect(names, caller).toEqual(['julius_recovery_drill', 'julius_failure_recovery_drill', 'julius_repair_loop_drill']);
+      for (const name of names) {
+        const target = drillDatabaseTarget({ databaseUrl: `${LIVE.slice(0, LIVE.lastIndexOf('/'))}/${name}` });
+        expect(target.ok, `${caller}: ${name} — ${target.ok ? '' : target.reason}`).toBe(true);
+      }
+    }
+    expect(drillDatabaseTarget({ databaseUrl: 'postgresql://drill@127.0.0.1:5432/juliusdrillkzf3m9x2' }).ok, 'the drill suites\' fresh databases').toBe(true);
+    expect(drillDatabaseTarget({ databaseUrl: 'postgres://drill@db:5433/julius_drill_scratch' }).ok).toBe(true);
+    // The repository's declared throwaway, exactly as a launcher names it.
+    const suites = 'postgresql://drill@127.0.0.1:5432/julius_suites';
+    expect(drillDatabaseTarget({ databaseUrl: suites, testDatabaseUrl: suites }).ok).toBe(true);
+  });
+
+  it('REFUSES the live store by name, whatever else is set, and anything it cannot show to be a throwaway', () => {
+    const refused: readonly [Parameters<typeof drillDatabaseTarget>[0], string][] = [
+      [{ databaseUrl: LIVE }, 'drill_database_is_julius_store'],
+      [{ databaseUrl: LIVE, testDatabaseUrl: LIVE }, 'drill_database_is_julius_store'],
+      [{ databaseUrl: 'postgresql://drill@10.0.0.9:6543/julius' }, 'drill_database_is_julius_store'],
+      [{ databaseUrl: 'postgresql://drill@127.0.0.1:5432/postgres' }, 'drill_database_not_throwaway'],
+      [{ databaseUrl: 'postgresql://drill@127.0.0.1:5432/julius_prod' }, 'drill_database_not_throwaway'],
+      [{ databaseUrl: 'postgresql://drill@127.0.0.1:5432/julius_suites', testDatabaseUrl: 'postgresql://drill@127.0.0.1:5433/julius_suites' }, 'drill_database_not_throwaway'],
+      [{ databaseUrl: 'host=127.0.0.1 dbname=julius_recovery_drill' }, 'drill_database_unverifiable'],
+      [{ databaseUrl: 'postgresql://drill@127.0.0.1:5432/' }, 'drill_database_unverifiable'],
+      [{ databaseUrl: '' }, 'drill_requires_database_url'],
+      [{}, 'drill_requires_database_url'],
+    ];
+    for (const [input, code] of refused) {
+      const target = drillDatabaseTarget(input);
+      expect(target.ok, JSON.stringify(input)).toBe(false);
+      expect(target.ok ? '' : target.code, JSON.stringify(input)).toBe(code);
+    }
+    expect(JULIUS_DRILL_DATABASE_NAME.test('julius')).toBe(false);
+  });
+
+  it('every drill entry refuses the live store before it connects (port 1 is never dialled)', async () => {
+    const live = 'postgresql://drill@127.0.0.1:1/julius';
+    const stderr = process.stderr.write.bind(process.stderr);
+    const said: string[] = [];
+    process.stderr.write = ((chunk: string) => { said.push(String(chunk)); return true; }) as typeof process.stderr.write;
+    try {
+      expect(await recovery.runRecoveryDrill({ argv: [], repoRoot: REPO, databaseUrl: live })).toBe(2);
+      expect(await failure.runFailureRecoveryDrill({ argv: [], repoRoot: REPO, databaseUrl: live })).toBe(2);
+      expect(await repair.runRepairLoopDrill({ argv: [], repoRoot: REPO, databaseUrl: live })).toBe(2);
+    } finally {
+      process.stderr.write = stderr;
+    }
+    expect(said.join(''), 'each names the refusal').toMatch(/julius_recovery_drill_refused_database: drill_database_is_julius_store/u);
+    expect(said.join('')).toMatch(/julius_failure_recovery_drill_refused_database: drill_database_is_julius_store/u);
+    expect(said.join('')).toMatch(/julius_repair_loop_drill_refused_database: drill_database_is_julius_store/u);
+  });
+
+  it('and refuses any database holding a run that is not its own, asked before the migration writes anything', async () => {
+    const scalarFrom = (answers: Readonly<Record<string, string | null>>) => async (sql: string) =>
+      (sql.includes('to_regclass') ? answers.migrated ?? null : answers.foreign ?? null);
+    expect(await foreignJuliusRuns(scalarFrom({ migrated: 'false' }), ['run:repair-drill']), 'a fresh database has no Julius schema at all').toBe(0);
+    expect(await foreignJuliusRuns(scalarFrom({ migrated: 'true', foreign: '0' }), ['run:repair-drill'])).toBe(0);
+    expect(await foreignJuliusRuns(scalarFrom({ migrated: 'true', foreign: '2' }), ['run:repair-drill'])).toBe(2);
+    expect(await foreignJuliusRuns(scalarFrom({ migrated: 'true', foreign: 'many' }), ['run:repair-drill']), 'an answer that is not a count is not zero')
+      .toBe(Number.POSITIVE_INFINITY);
+    // The orchestrator asks before its first write: the migration, or — for the
+    // recovery drill, whose migration runs in the crashing child — the spawn of it.
+    for (const drill of ['julius-recovery-drill.ts', 'julius-failure-recovery-drill.ts', 'julius-repair-loop-drill.ts']) {
+      const source = readFileSync(join(REPO, 'scripts', drill), 'utf8');
+      const body = source.slice(source.indexOf('async function orchestrate('));
+      const checked = body.indexOf('await foreignJuliusRuns(');
+      expect(checked, `${drill} asks`).toBeGreaterThan(0);
+      const writes = [body.indexOf('.migrate()'), body.indexOf("child('crash')")].filter((index) => index >= 0);
+      expect(writes.length, `${drill} writes somewhere`).toBeGreaterThan(0);
+      expect(checked, `${drill} asks before its first write`).toBeLessThan(Math.min(...writes));
+    }
+  });
+});
+
+/**
+ * THE CONTRACT julius-real-infra HOLDS THE DRILLS TO, with the REAL writer.
+ * After the drills run, the workflow calls `evaluate(null, { capabilityDir })`
+ * and requires the capability axis of the three rows to read PROVEN. This
+ * writes each drill's attestation exactly as the drill does — the same record
+ * shape, `writeDrillAttestation`, its own command, capability, transcript and
+ * probe files — and holds the gate to accepting all three.
+ */
+describe('the attestations the drills write are the ones the gate accepts', () => {
+  it('RESTART / RECOVERY, FAILURE RECOVERY and REPAIR LOOP read PROVEN on the capability axis', () => {
+    const out = mkdtempSync(join(tmpdir(), 'julius-real-infra-contract-'));
+    for (const drill of DRILLS) {
+      const record = new DrillRecord();
+      for (let index = 1; index <= 12; index += 1) record.step(`step ${index}`, true, 'observed');
+      writeDrillAttestation({
+        outDir: out, repoRoot: REPO, record, verified: record.seal(`JULIUS ${drill.name.toUpperCase().replace(/[^A-Z ]/gu, ' ')}`),
+        capability: drill.module.CAPABILITY, drill: drill.module.DRILL_COMMAND, exercised: drill.module.EXERCISED,
+        infrastructure: drill.module.INFRASTRUCTURE, transcriptFile: drill.module.TRANSCRIPT_FILE,
+      });
+    }
+    const report = evaluate(null, { capabilityDir: out });
+    for (const drill of DRILLS) {
+      const row = report.results.find((value) => value.id === drill.module.CAPABILITY)!;
+      expect(row.capability, `${drill.module.CAPABILITY}: ${row.capabilityBasis}`).toBe('PROVEN');
+      expect(row.capabilityBasis).toContain(`${drill.module.DRILL_COMMAND} drove every one of the`);
+    }
+  });
 });
 
 /**
@@ -158,9 +349,23 @@ suite('the failure-recovery and repair-loop drills, run for real', () => {
     expect(stdout, 'and the permanent one must not be').toContain('AUTH_CONFIGURATION/false');
     expect(stdout).not.toContain('[FAIL]');
 
+    // The capability axis is what the drill proves. With no mission bundle the
+    // mission axis is UNKNOWN, and a drill never stands in for UNKNOWN.
     const row = evaluate(null, { capabilityDir: out }).results.find((value) => value.id === failure.CAPABILITY)!;
     expect(row.capability, row.capabilityBasis).toBe('PROVEN');
-    expect(row.verdict).toBe('CAPABILITY PROVEN');
+    expect(row.verdict).toBe('FAIL');
+
+    /**
+     * A DATABASE HOLDING SOMEBODY ELSE'S RUN IS A STORE, WHATEVER IT IS CALLED.
+     * The repair drill, pointed at the database the failure drill just wrote,
+     * must refuse before it migrates or writes anything.
+     */
+    const foreign = mkdtempSync(join(tmpdir(), 'julius-repair-drill-foreign-'));
+    const refusedHere = await runProcess('npm', ['run', 'julius:repair-loop-drill', '--silent', '--', '--out', foreign],
+      { encoding: 'utf8', timeout: 300_000, env: { ...process.env, DATABASE_URL: url } })
+      .then(() => ({ code: 0 }), (error: { code?: number }) => ({ code: error.code ?? 1 }));
+    expect(refusedHere.code, 'a database with foreign runs is refused').toBe(8);
+    expect(readFileSync(join(foreign, 'julius-repair-loop-drill.transcript.txt'), 'utf8')).toContain('run(s) here are not run:repair-drill');
   }, 300_000);
 
   it('turns a rejecting review into a bounded repair that is re-reviewed, and the gate believes it', async () => {
@@ -176,7 +381,7 @@ suite('the failure-recovery and repair-loop drills, run for real', () => {
 
     const row = evaluate(null, { capabilityDir: out }).results.find((value) => value.id === repair.CAPABILITY)!;
     expect(row.capability, row.capabilityBasis).toBe('PROVEN');
-    expect(row.verdict).toBe('CAPABILITY PROVEN');
+    expect(row.verdict, 'no bundle: the mission axis is UNKNOWN, which no drill stands in for').toBe('FAIL');
 
     /**
      * AND THE FAILING DIRECTION. The drill passed, so one that had stopped
