@@ -23,6 +23,8 @@ Scenarios:
   unloaded    - three actors are in the World Partition descriptors but not loaded in the editor
   lagcells    - FlushLevelStreaming returns before the cells arrive (they land 1.5 s after the teleport): a
                 count taken at a fixed moment reads the arrival; one taken when two readings agree reads the world
+  waves       - as lagcells, but half the batches land 2.5 s after the rest: two readings a second apart agree on
+                the plateau between the waves (zzW14 read [8,4] at 272 twice; all 304 were there 2 s later)
   slow        - game time runs at 0.4x wall clock (slow frames), so a fixed 2 s wait reads a Dog in mid-air
   stuck       - set_movement_mode throws, so the Dog is never released and hangs where it was held
   boom        - get_player_pawn starts throwing part-way (the job's own guards swallow it: "did not survive")
@@ -97,7 +99,7 @@ class Streaming:
 
     @classmethod
     def flush(cls):
-        if SCEN == "lagcells":
+        if SCEN in ("lagcells", "waves"):
             return                                     # the live zzW11 case: the flush did not finish the job
         cls.arrive_at = min(cls.arrive_at, CLOCK.t)   # FlushLevelStreaming blocks until it has arrived
 
@@ -312,6 +314,8 @@ def resident(a):
         return True                            # the player's own characters are always there
     if CLOCK.t < Streaming.arrive_at:
         return False                           # the Dog's new cells have not arrived yet
+    if SCEN == "waves" and a.kind == "BATCH" and (int(a._l.x // 10000) + int(a._l.y // 10000)) % 2             and CLOCK.t < Streaming.arrive_at + 2.5:
+        return False                           # the second wave lands 2.5 s after the first (zzW14's [8,4])
     p = PAWN.loc
     if a.kind == "BATCH" and SCEN == "originpoint":
         # THE FAULT: the batch reports its streaming bounds as a point at the origin, so it lives in the one

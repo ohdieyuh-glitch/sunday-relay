@@ -457,17 +457,24 @@ def _walk():
         # is not a promise: zzW11 read [8,4] at 152 of 304 and [7,1] at 208 of 303 after a long jump, and
         # zzW13, the same tiles with a longer settle, found every one of those actors there. A reading taken
         # while cells are still arriving is a reading of the arrival, not of the world.
+        # AND "TWO READINGS AGREE" WAS NOT ENOUGH EITHER: zzW14 read [8,4] at 272 twice, a second apart, and
+        # zzW13 had found all 304 there after two seconds -- the tile's cells arrive in waves, with pauses between
+        # them longer than a second. So the count now waits on the SUBJECT: until everything the editor authored
+        # in this tile is resident, or ten seconds have passed. A tile that is really short still fails; it just
+        # fails after waiting, instead of a tile in mid-arrival failing at once.
         try:
             prev_n, n_now = None, None
             count_began = time.time()
+            target = r["authored_world"]
             while True:
                 n_now = resident_in_tile(r["centre"][0], r["centre"][1])
-                if n_now is None or (prev_n is not None and n_now == prev_n) or time.time() - count_began > 8.0:
+                if n_now is None or n_now >= target or time.time() - count_began > 10.0:
                     break
                 prev_n = n_now
                 yield 1.0
             r["resident_in_play"] = n_now
-            r["resident_settled"] = n_now is not None and n_now == prev_n
+            r["resident_waited_s"] = round(time.time() - count_began, 1)
+            r["resident_settled"] = n_now is not None and (n_now >= target or n_now == prev_n)
         except Exception as exc:                  # noqa: BLE001
             r["resident_in_play"] = None
             r["resident_error"] = repr(exc)

@@ -1,0 +1,27 @@
+{
+ "name": "zzW29_kerb_delta_dry",
+ "started": "2026-09-28 23:40:04",
+ "status": "dry run: 2032 instances in 72 batches would change",
+ "dry": true,
+ "map_dirty_before": [],
+ "batches_to_change": 72,
+ "record": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\WorldDesign\\kerb_delta_DRY_record.json",
+ "batches": 72,
+ "instances": 2032,
+ "by_pass": {
+  "W270S": 160,
+  "W270G": 168,
+  "NC03": 304,
+  "TQ03": 304,
+  "IC03": 304,
+  "NC01": 272,
+  "TQ01": 272,
+  "SF01": 96,
+  "SF02": 96,
+  "SF03": 56
+ },
+ "dirty": [],
+ "finished": "2026-09-28 23:40:06",
+ "seconds": 1.33,
+ "log": ""
+}
