@@ -42,6 +42,10 @@ AUDIT = HERE.parent.parent / "Tools" / "captures" / "zc" / "census" / "emptiness
 MIN_AREA = 15000.0              # m2: smaller pockets are lawn between groups, not unfinished ground
 R_MAX = 120000.0                # cm: the wild ring owns 1,200 m and beyond
 KEEP_OUT = [((-17075.0, 44745.0), 4000.0 + 2000.0, "TW01"), ((45084.0, -87535.0), 4200.0 + 2000.0, "MG01")]
+#: BEARING BANDS OTHER LANES OWN: (b0, b1, r_max_cm, owner). 2026-09-29: CORE's TW03 Icarus tower approaches take
+#: 100-135 degrees inside 1,200 m. A region centred in a band is skipped; one that only overlaps it is clipped so its
+#: wedge stops at the band's edge (S3I098 "clip its wedge to <= 100 degrees", CORE).
+KEEP_OUT_BANDS = [(100.0, 135.0, 120000.0, "TW03")]
 
 
 def nation_cfg(b):
@@ -74,8 +78,27 @@ def regions(audit_path=None, min_area=None, prefix="S2"):
         if near:
             skipped.append((reg["bearing_deg"], r0 / 100, r1 / 100, "near " + ",".join(near)))
             continue
+        clipped = None
+        for (b0, b1, rmax, owner) in KEEP_OUT_BANDS:
+            if r0 >= rmax:
+                continue
+            lo, hi = b - half, b + half
+            if b0 <= b <= b1:
+                clipped = "inside " + owner
+                break
+            if hi > b0 and lo < b0:          # overlaps the band's low edge: keep the part below it
+                lo2 = lo
+                b, half = (lo2 + b0) * 0.5, (b0 - lo2) * 0.5
+            elif lo < b1 and hi > b1:        # overlaps the band's high edge: keep the part above it
+                b, half = (b1 + hi) * 0.5, (hi - b1) * 0.5
+        if clipped:
+            skipped.append((reg["bearing_deg"], r0 / 100, r1 / 100, clipped))
+            continue
+        if half < 1.5:
+            skipped.append((reg["bearing_deg"], r0 / 100, r1 / 100, "clipped to nothing"))
+            continue
         cfg, letter = nation_cfg(b)
-        pid = "%s%s%03d" % (prefix, letter, int(round(b)) % 360)
+        pid = "%s%s%03d" % (prefix, letter, int(round(reg["bearing_deg"])) % 360)
         while any(o["pid"] == pid for o in out):
             pid = pid[:-3] + "%03d" % ((int(pid[-3:]) + 1) % 360)
         out.append({"pid": pid, "R": dict(nation_cfg=cfg, bearing=b, half=round(half, 1), r=(r0, r1)),
