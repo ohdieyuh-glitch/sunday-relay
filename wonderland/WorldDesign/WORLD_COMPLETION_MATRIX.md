@@ -297,6 +297,17 @@ matched), hash +291 / -0 / stub only. Projected: emptiness 21.8 -> 20.9 %, unint
 **Emptiness after window 3 (08:37 census): 21.8 % empty = 13.2 % UNINTENDED + 3.1 % meadow + 2.8 % traversal + 1.7 %
 rim + 1.1 % forest / clearings.**
 
+**Emptiness after window 4a (10:47 census, corrected audit): 19.0 % empty = 11.3 % UNINTENDED + 3.1 % meadow + 2.6 %
+traversal + 1.2 % rim + 0.8 % forest / clearings.** Audit fix 42e90c65: `emptiness.py` now skips hidden geometry --
+the EDGE01 invisible edge ring (read as ~110 m discs it falsely "covered" the band inside the rim: 16.3 % before the
+fix) and the V2_MarbleWorld_Scaffold (no numerical effect: the core is 0.0 % empty to 200 m either way). Figures
+before window 4a are unaffected. Series: 45.1 % (morning) -> 26.3 % (window 1) -> 21.8 % (window 3) -> 19.0 % (4a).
+**GA-F01 (Golden Arrival axis, CORE, P1 on the arrival spine).** The self-powered axis walk stops reproducibly at
+(67, 6868): MQ04's first two palace-walk flagstones float at pivot z 19 (top +25) over the heart-garden lawn (-14), a
+38.9 cm rise the Relay Dog does not step (found with a Pawn-profile sweep IN PLAY; editor-world traces do not see
+instanced-batch collision). Fix GS01 (one flight of SM_path_steps up onto the walkway's south edge) for window 2D;
+the floating slabs remain a visual flaw for founder review.
+
 ## Assignments
 
 | # | to | region | notes |
