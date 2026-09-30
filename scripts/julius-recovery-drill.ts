@@ -177,17 +177,30 @@ const crashingAdapter = (adapterId: string): JuliusProviderAdapter => ({
  * AT THE HANDOFF (phase 1): the process dies at the instant it would record
  * that the work is being handed, which is the last thing Julius writes before
  * the worker is called. Everything else the store does is the store's own.
+ *
+ * The handoff reaches the store by ONE OF TWO WRITES: the lease-fenced
+ * `appendHandoffEvent` ((a2) step 1), which the production store has, or
+ * `appendEvent` on a store without it. The process dies at either. Watching
+ * `appendEvent` alone stopped this crash from happening at all once the fence
+ * landed: process A ran its task to completion, and phase 1 failed.
  */
+const dieAtHandoff = (): never => {
+  process.stdout.write(`${JSON.stringify({ crashing: true, at: 'handoff' })}\n`);
+  process.exit(CRASH_EXIT);
+};
 const dyingAtHandoff = <S extends object>(store: S): S => new Proxy(store, {
   get(target, key) {
     const value: unknown = Reflect.get(target, key, target);
     if (typeof value !== 'function') return value;
+    if (key === 'appendHandoffEvent') {
+      return async (input: { readonly event: { readonly type: string } }) => {
+        if (input.event.type === 'worker.dispatched') dieAtHandoff();
+        return (value as (input: unknown) => Promise<unknown>).call(target, input);
+      };
+    }
     if (key !== 'appendEvent') return value.bind(target);
     return async (event: { readonly type: string }) => {
-      if (event.type === 'worker.dispatched') {
-        process.stdout.write(`${JSON.stringify({ crashing: true, at: 'handoff' })}\n`);
-        process.exit(CRASH_EXIT);
-      }
+      if (event.type === 'worker.dispatched') dieAtHandoff();
       return (value as (event: unknown) => Promise<unknown>).call(target, event);
     };
   },
