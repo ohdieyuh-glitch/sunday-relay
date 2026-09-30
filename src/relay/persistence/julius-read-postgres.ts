@@ -47,7 +47,7 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
 
   async tasksForRun(runId: string, projectId: string): Promise<readonly JuliusTask[]> {
     const result = await this.pool.query<Record<string, unknown>>(
-      `SELECT t.task_id,t.parent_task_id,t.role,t.task_type,t.state,t.ordinal,t.required_evidence_types,r.mission_id,
+      `SELECT t.task_id,t.parent_task_id,t.role,t.task_type,t.state,t.ordinal,t.required_evidence_types,t.lease_generation,r.mission_id,
               COALESCE((SELECT jsonb_agg(d.dependency_task_id) FROM relay_wonderland.julius_task_dependencies d WHERE d.task_id=t.task_id),'[]'::jsonb) AS dependency_ids
          FROM relay_wonderland.julius_tasks t
          JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id
@@ -64,6 +64,8 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
       role: String(row.role) as JuliusWorkerRole,
       ordinal: Number(row.ordinal),
       state: String(row.state) as JuliusTask['state'],
+      // The attempt a SUCCEEDED task's decision is about (defect A): its last claim's generation.
+      leaseGeneration: Number(row.lease_generation),
     }));
   }
 
