@@ -234,6 +234,7 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-file-authority.ts', 'TOOLS'],
   ['src/relay/mission/julius/julius-artifacts.ts', 'ARTIFACTS / EVIDENCE'],
   ['src/relay/mission/julius/julius-verification-runtime.ts', 'VERIFICATION'],
+  ['src/relay/mission/julius/julius-attempt-evidence.ts', 'VERIFICATION'],
   ['src/relay/mission/julius/julius-repair-runtime.ts', 'REPAIR'],
   ['src/relay/mission/julius/julius-repair-lineage.ts', 'REPAIR'],
   ['src/relay/mission/julius/julius-release-runtime.ts', 'TASK GRAPH / SCHEDULER'],
