@@ -421,6 +421,37 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     expect(both.output).not.toContain('FAKETESTNOTREAL');
   }, 180_000);
 
+  /**
+   * THE STEP'S LOG SAYS WHY, AND A FAILING SMOKE NEVER PRINTS A PASS (Codex review of #302, F1 and F3).
+   *
+   * The verdict is now told both exits, so a non-zero exit fails in the verdict AND in the step's
+   * own exit gate. A reply that another model produced output beside the requested one fails in the
+   * verdict alone: nothing in the step's shell can see models. Each case must leave the verdict's
+   * closed reason in the step's log, a FAIL verdict line, and no `result=PASS` line anywhere.
+   */
+  it('smoke: each failure names its reason in the step log, and no failing case ever prints result=PASS', () => {
+    const okFrom = (usage: Record<string, { outputTokens: number }>) =>
+      JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'OK', modelUsage: usage });
+    const opusOnly = okFrom({ 'claude-opus-5-5': { outputTokens: 1 } });
+    const cases = [
+      { label: 'the request exited 1', run: () => runSmoke(TOKEN_ONLY, opusOnly, {}, 1, 0), reason: 'CLI_EXIT_NONZERO' },
+      { label: 'auth status exited 1', run: () => runSmoke(TOKEN_ONLY, opusOnly, {}, 0, 1), reason: 'AUTH_EXIT_NONZERO' },
+      {
+        label: 'another model produced output beside the requested one',
+        run: () => runSmoke(TOKEN_ONLY, okFrom({ 'claude-opus-5-5': { outputTokens: 1 }, 'claude-sonnet-5': { outputTokens: 5 } })),
+        reason: 'SERVED_MODEL_MISMATCH',
+      },
+    ];
+    for (const { label, run, reason } of cases) {
+      const result = run();
+      expect(result.code, label).not.toBe(0);
+      expect(result.output, label).toContain(`subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=${reason} `);
+      expect(result.output, label).toContain('reply=OK result=FAIL');
+      expect(result.output, label).not.toMatch(/result=PASS/u);
+      expect(result.output, label).not.toContain('FAKETESTNOTREAL');
+    }
+  }, 240_000);
+
   it('smoke: an api_key status FAILS CLOSED and no request is sent; a wrong reply fails; a key in the step stops the CLI', () => {
     const apiKey = runSmoke('{"loggedIn":true,"authMethod":"api_key","apiProvider":"firstParty","apiKeySource":"ANTHROPIC_API_KEY"}', '{"result":"OK"}');
     expect(apiKey.code).not.toBe(0);
