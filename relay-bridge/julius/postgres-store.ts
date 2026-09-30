@@ -54,7 +54,8 @@ import { JuliusLifecyclePostgresRepository } from '../../src/relay/persistence/j
 export function createJuliusPostgresRuntimeStore(
   pool: Pool,
 ): JuliusRuntimeStore & JuliusRecoveryDriver & JuliusTimelineReader
-  & Required<Pick<JuliusApprovalStore, 'pendingApprovals' | 'deniedApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>> {
+  & Required<Pick<JuliusApprovalStore, 'pendingApprovals' | 'deniedApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>>
+  & Required<Pick<JuliusRuntimeStore, 'appendHandoffEvent'>> {
   const runs = new JuliusPostgresRepository(pool);
   const results = new JuliusRecoveryPostgresRepository(pool);
   const contexts = new JuliusContextPostgresRepository(pool);
@@ -83,6 +84,8 @@ export function createJuliusPostgresRuntimeStore(
     recoverExpired: results.recoverExpired.bind(results),
     persist: contexts.persist.bind(contexts),
     appendEvent: async (event) => (await events.append(event)).recorded,
+    // THE HANDOFF, FENCED BY THE LEASE ((a2)): `worker.dispatched` only while the attempt owns the task.
+    appendHandoffEvent: (input) => events.appendHandoff(input),
     appendTrajectory: (event) => trajectories.append(event),
     tasksForRun: reader.tasksForRun.bind(reader),
     evidenceForRun: reader.evidenceForRun.bind(reader),

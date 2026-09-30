@@ -406,6 +406,28 @@ class RuntimeLedger {
   }
 
   /**
+   * `eventOnce` for the one event the lease fences: the handoff ((a2)). The
+   * store writes `worker.dispatched` only while this attempt still owns the
+   * task, and says LEASE_LOST otherwise. A store without the fence is written
+   * through unfenced, as every store was before.
+   */
+  async handoffOnce(
+    key: string,
+    input: { taskId: string; workerId?: string | null; facts: Record<string, string | number | boolean | null> },
+    fence: { readonly owner: string; readonly leaseGeneration: number },
+  ): Promise<'RECORDED' | 'DUPLICATE' | 'LEASE_LOST'> {
+    let event = this.composedOnce.get(key);
+    if (event === undefined) {
+      event = this.compose('worker.dispatched', input);
+      this.composedOnce.set(key, event);
+    }
+    if (this.deps.store.appendHandoffEvent === undefined) {
+      return (await this.deps.store.appendEvent(event)) ? 'RECORDED' : 'DUPLICATE';
+    }
+    return this.deps.store.appendHandoffEvent({ event, owner: fence.owner, leaseGeneration: fence.leaseGeneration });
+  }
+
+  /**
    * THE SAME EVENT, BUILT BUT NOT WRITTEN.
    *
    * An event that explains a decision is written inside the decision's own
@@ -3349,6 +3371,16 @@ function executionPorts(
       // the same claimed task, as do the coordinator's other events.)
       // Keyed by the coordinator's own idempotency key, so a write it repeats is the same event.
       await ledger.eventOnce(idempotencyKey, type, { taskId, facts: { ...facts, runId: run.runId } });
+    },
+    // THE HANDOFF, FENCED BY THIS CLAIM'S LEASE ((a2)): the same facts as any
+    // coordinator event, written only while this owner holds this generation.
+    recordHandoff: async ({ taskId, payload, idempotencyKey, leaseGeneration }) => {
+      const facts: Record<string, string | number | boolean | null> = {};
+      for (const [key, value] of Object.entries(payload)) {
+        facts[key] = value === null || ['string', 'number', 'boolean'].includes(typeof value) ? value as string | number | boolean | null : String(value);
+      }
+      const answer = await ledger.handoffOnce(idempotencyKey, { taskId, facts: { ...facts, runId: run.runId } }, { owner: deps.owner, leaseGeneration });
+      return answer !== 'LEASE_LOST';
     },
   };
 }

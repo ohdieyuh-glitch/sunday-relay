@@ -48,4 +48,12 @@ export async function appendJuliusEventWithin(client:JuliusEventTransaction,even
  * Unretried, one 40001 against a concurrent writer threw out of the run loop's
  * tick and stranded every task it had claimed.
  */
-export class JuliusEventPostgresRepository{constructor(private readonly pool:Pool){}async append(event:JuliusOperationalEvent):Promise<{recorded:boolean;sequence:number}>{return juliusSerializable(this.pool,(client)=>appendJuliusEventWithin(client,event));}}
+export class JuliusEventPostgresRepository{constructor(private readonly pool:Pool){}async append(event:JuliusOperationalEvent):Promise<{recorded:boolean;sequence:number}>{return juliusSerializable(this.pool,(client)=>appendJuliusEventWithin(client,event));}
+/**
+ * THE HANDOFF, FENCED BY THE LEASE ((a2)). The task row is read FOR SHARE in the same
+ * serializable transaction as the insert. A recovery that already holds it (`FOR UPDATE OF t
+ * SKIP LOCKED`) makes this wait, then see the cleared lease and answer LEASE_LOST, and nothing
+ * is dispatched. A recovery that comes second skips this locked task and reads the committed
+ * handoff on its next sweep.
+ */
+async appendHandoff(input:{event:JuliusOperationalEvent;owner:string;leaseGeneration:number}):Promise<'RECORDED'|'DUPLICATE'|'LEASE_LOST'>{return juliusSerializable(this.pool,async(client)=>{const held=await client.query(`SELECT 1 FROM relay_wonderland.julius_tasks WHERE task_id=$1 AND run_id=$2 AND state='ACTIVE' AND lease_owner=$3 AND lease_generation=$4 FOR SHARE`,[input.event.taskId,input.event.runId,input.owner,input.leaseGeneration]);if(!held.rows[0])return'LEASE_LOST' as const;return(await appendJuliusEventWithin(client,input.event)).recorded?'RECORDED' as const:'DUPLICATE' as const;});}}

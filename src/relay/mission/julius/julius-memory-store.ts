@@ -721,6 +721,15 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       return recordEvent(event);
     },
 
+    /** The handoff, only while this attempt owns the task. The PostgreSQL store locks the row for it. */
+    async appendHandoffEvent(input) {
+      const task = input.event.taskId === null ? undefined : tasks.get(input.event.taskId);
+      if (task === undefined || task.state !== 'ACTIVE' || task.leaseOwner !== input.owner || task.leaseGeneration !== input.leaseGeneration) {
+        return 'LEASE_LOST';
+      }
+      return recordEvent(input.event) ? 'RECORDED' : 'DUPLICATE';
+    },
+
     /**
      * The safe timeline, from the ledger, scoped by BOTH run and project.
      *

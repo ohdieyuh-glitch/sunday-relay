@@ -195,6 +195,13 @@ export interface JuliusExecutionPorts {
    * claim; only the port refused to carry it.
    */
   recordEvent(input:{runId:string;projectId:string;taskId:string|null;type:JuliusExecutionEventType;idempotencyKey:string;payload:Record<string,unknown>}):Promise<void>;
+  /**
+   * THE HANDOFF, FENCED BY THE LEASE ((a2)). Writes `worker.dispatched` only
+   * while this attempt still owns the task, and answers false when it no longer
+   * does: a recovery took it first, and the provider must not be called.
+   * Optional; without it the handoff is written through `recordEvent`, unfenced.
+   */
+  recordHandoff?(input:{runId:string;projectId:string;taskId:string;idempotencyKey:string;payload:Record<string,unknown>;leaseGeneration:number}):Promise<boolean>;
 }
 export type JuliusExecutionEventType='worker.selected'|'budget.reserved'|'budget.denied'|'worker.dispatched'|'worker.completed'|'retry.scheduled'|'task.failed'|'evidence.refused';
 export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;readonly policy:JuliusCardPolicy;readonly role:JuliusWorkerRole;readonly taskType:string;readonly capability:string;readonly resources:JuliusResourceRequest;readonly operationId:string;readonly signal?:AbortSignal;/** Workers already tried for this task. Additive: omitted behaves exactly as before. */readonly excludedWorkerIds?:readonly string[];/** The execution ceiling Julius reserved for this dispatch, handed to the adapter. Additive. */readonly allocation?:JuliusDispatchAllocation;/** The locked task contract this dispatch runs under, as a review charge. Additive. */readonly contract?:JuliusContractReviewCharge;
@@ -481,7 +488,20 @@ export class JuliusExecutionCoordinator {
     let accepted:{readonly result:JuliusProviderResult;readonly duplicate:boolean;readonly evidence:readonly JuliusEvidence[]};
     try{
       if(request.signal?.aborted)throw new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.',cancellationReasonOf(request.signal));
-      await this.bookkeeping(()=>this.event(request,'worker.dispatched',{workerId:worker.workerId}));
+      /**
+       * THE HANDOFF IS WRITTEN ONLY WHILE THIS ATTEMPT OWNS THE TASK ((a2)). A
+       * recovery that took the task first refuses it here, before anything is
+       * sent: this attempt is over, and its hold is released as spending nothing.
+       */
+      const owned=await this.bookkeeping(()=>this.handoff(request,worker));
+      if(!owned)throw new JuliusDispatchError('CANCELLED',false,'This attempt no longer owns its task, so nothing was dispatched.','lease_lost',{runtimeStarted:false});
+      /**
+       * AND AN ABORT THAT LANDED WHILE THE HANDOFF WAS WRITTEN STOPS IT HERE (F4).
+       * `dispatchWithinDeadline` listens for aborts from the moment it is
+       * called, and never sees one that fired before: from here to its listener
+       * everything is synchronous, so this is the last moment one can land.
+       */
+      if(request.signal?.aborted)throw new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.',cancellationReasonOf(request.signal),{runtimeStarted:false});
       dispatchedAtMs=Date.now();
       handed=true;
       // THE WORKER'S OWN DECLARED NUMBER, never a literal here. A second
@@ -694,4 +714,10 @@ export class JuliusExecutionCoordinator {
    */
   /** `suffix` distinguishes several events of one type from one operation — one per refused evidence item. */
   private event(request:JuliusExecutionRequest,type:JuliusExecutionEventType,payload:Record<string,unknown>,suffix?:string){return this.ports.recordEvent({runId:request.claim.runId,projectId:request.claim.projectId,taskId:request.claim.taskId,type,idempotencyKey:`${request.operationId}:${type}${suffix===undefined?'':`:${suffix}`}`,payload:typeof request.attempt==='number'?{...payload,attempt:request.attempt}:payload});}
+  /** `worker.dispatched`, fenced where the ports can fence it: the same key and facts as `event` writes. */
+  private async handoff(request:JuliusExecutionRequest,worker:JuliusWorker):Promise<boolean>{
+    const payload=typeof request.attempt==='number'?{workerId:worker.workerId,attempt:request.attempt}:{workerId:worker.workerId};
+    if(this.ports.recordHandoff===undefined){await this.event(request,'worker.dispatched',{workerId:worker.workerId});return true;}
+    return this.ports.recordHandoff({runId:request.claim.runId,projectId:request.claim.projectId,taskId:request.claim.taskId,idempotencyKey:`${request.operationId}:worker.dispatched`,payload,leaseGeneration:request.claim.leaseGeneration});
+  }
 }
