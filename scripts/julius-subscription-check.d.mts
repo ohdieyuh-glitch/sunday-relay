@@ -29,6 +29,18 @@ export interface SubscriptionSmokeVerdict {
 
 export declare function smokeVerdict(raw: string): SubscriptionSmokeVerdict;
 
+/** Why a smoke reply was not a clean OK, in closed tokens only: nothing the CLI wrote is returned. */
+export interface SubscriptionSmokeFailure {
+  readonly reason: 'MODEL_NOT_ENTITLED_OR_NOT_FOUND' | 'AUTH' | 'USAGE_LIMIT' | 'RATE_LIMITED' | 'OVERLOADED'
+    | 'MAX_TURNS' | 'UNEXPECTED_REPLY' | 'UNREADABLE' | 'OTHER';
+  /** Three digits, or `none`. */
+  readonly http: string;
+  /** The CLI's result subtype when it is a plain token, or `none`. */
+  readonly subtype: string;
+}
+
+export declare function smokeFailureReason(raw: string): SubscriptionSmokeFailure;
+
 export interface SubscriptionCheckIo {
   readonly print?: (line: string) => void;
   readonly stdin?: () => string;

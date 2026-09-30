@@ -162,3 +162,81 @@ describe('status-verdict and smoke-verdict print the exact lines the workflow gr
     expect(capture(['status-verdict', '--require-plan', 'free'], READY, TOKEN_ONLY).code).toBe(2);
   });
 });
+
+/**
+ * WHY A SMOKE FAILED, SAID IN CLOSED TOKENS (2026-09-30). The smoke of run 36685079176 failed with nothing
+ * but an exit code: the CLI's reason lives in its JSON as free text, which this file never repeats. These
+ * shapes follow the CLI's result message. Every line printed must stay inside the closed grammar below.
+ */
+describe('smoke failures say why, in closed tokens only', () => {
+  const REASON_LINE = /^subscription_smoke_reason provider=anthropic model=[A-Za-z0-9._-]+ reason=[A-Z_]+ http=(\d{3}|none) subtype=([a-z_]{1,40}|none)$/u;
+  const apiError = (status: number, type: string) => JSON.stringify({
+    type: 'result', subtype: 'success', is_error: true,
+    result: `API Error: ${String(status)} ${JSON.stringify({ type: 'error', error: { type, message: 'model: claude-fable-5 FAKETESTNOTREAL-free-text' } })}`,
+  });
+
+  it.each([
+    [apiError(404, 'not_found_error'), { reason: 'MODEL_NOT_ENTITLED_OR_NOT_FOUND', http: '404', subtype: 'success' }],
+    [apiError(401, 'authentication_error'), { reason: 'AUTH', http: '401', subtype: 'success' }],
+    [apiError(403, 'permission_error'), { reason: 'AUTH', http: '403', subtype: 'success' }],
+    [apiError(429, 'rate_limit_error'), { reason: 'RATE_LIMITED', http: '429', subtype: 'success' }],
+    [apiError(529, 'overloaded_error'), { reason: 'OVERLOADED', http: '529', subtype: 'success' }],
+    ['{"type":"result","subtype":"success","is_error":true,"result":"Claude AI usage limit reached|1759999999"}', { reason: 'USAGE_LIMIT', http: 'none', subtype: 'success' }],
+    ['{"type":"result","subtype":"success","is_error":true,"result":"5-hour limit reached - resets 3pm"}', { reason: 'USAGE_LIMIT', http: 'none', subtype: 'success' }],
+    ['{"type":"result","subtype":"error_max_turns","is_error":true}', { reason: 'MAX_TURNS', http: 'none', subtype: 'error_max_turns' }],
+    ['{"type":"result","is_error":true,"api_error_status":429,"result":"x"}', { reason: 'RATE_LIMITED', http: '429', subtype: 'none' }],
+    // The status alone, with no error type beside it.
+    ['{"type":"result","is_error":true,"result":"API Error: 404 upstream"}', { reason: 'MODEL_NOT_ENTITLED_OR_NOT_FOUND', http: '404', subtype: 'none' }],
+    ['{"type":"result","is_error":true,"result":"API Error: 403 upstream"}', { reason: 'AUTH', http: '403', subtype: 'none' }],
+    ['{"type":"result","is_error":true,"result":"API Error: 529 upstream"}', { reason: 'OVERLOADED', http: '529', subtype: 'none' }],
+    // The error type alone, with no status beside it; and a type that outranks a status which says otherwise.
+    [JSON.stringify({ type: 'result', is_error: true, result: JSON.stringify({ type: 'error', error: { type: 'overloaded_error' } }) }), { reason: 'OVERLOADED', http: 'none', subtype: 'none' }],
+    [JSON.stringify({ type: 'result', is_error: true, result: `API Error: 400 ${JSON.stringify({ type: 'error', error: { type: 'not_found_error' } })}` }), { reason: 'MODEL_NOT_ENTITLED_OR_NOT_FOUND', http: '400', subtype: 'none' }],
+    ['{"type":"result","is_error":true,"result":"rate limit reached"}', { reason: 'OTHER', http: 'none', subtype: 'none' }],
+    ['{"type":"result","is_error":true,"result":"API Error: 500 upstream"}', { reason: 'OTHER', http: '500', subtype: 'none' }],
+    ['{"type":"result","is_error":true,"result":"Credit balance is too low"}', { reason: 'OTHER', http: 'none', subtype: 'none' }],
+    ['{"type":"result","subtype":"success","is_error":false,"result":"OK!"}', { reason: 'UNEXPECTED_REPLY', http: 'none', subtype: 'success' }],
+    ['not json', { reason: 'UNREADABLE', http: 'none', subtype: 'none' }],
+    ['', { reason: 'UNREADABLE', http: 'none', subtype: 'none' }],
+  ])('%s → its closed reason', (raw, expected) => {
+    expect(check.smokeFailureReason(raw)).toEqual(expected);
+  });
+
+  it('a subtype or a status that is not a plain token is never echoed', () => {
+    expect(check.smokeFailureReason('{"is_error":true,"subtype":"x; echo $CLAUDE_CODE_OAUTH_TOKEN","api_error_status":"429"}'))
+      .toEqual({ reason: 'OTHER', http: 'none', subtype: 'none' });
+    expect(check.smokeFailureReason('{"is_error":true,"api_error_status":4290}').http).toBe('none');
+  });
+
+  it('smoke-verdict prints the reason on its own closed line, before the FAIL line, which is unchanged', () => {
+    const run = capture(['smoke-verdict', '--model', 'claude-fable-5', '--status-file', 's.json'], READY, apiError(429, 'rate_limit_error'), { 's.json': TOKEN_ONLY });
+    expect(run.code).toBe(1);
+    expect(run.output.split('\n')).toEqual([
+      'subscription_smoke_reason provider=anthropic model=claude-fable-5 reason=RATE_LIMITED http=429 subtype=success',
+      'subscription_smoke provider=anthropic model=claude-fable-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=ERROR result=FAIL',
+    ]);
+    expect(run.output).not.toContain('FAKETESTNOTREAL');
+  });
+
+  it('a pass, and a reply never read, print no reason line', () => {
+    expect(capture(['smoke-verdict', '--status-file', 's.json'], READY, OK_REPLY, { 's.json': TOKEN_ONLY }).output).not.toContain('subscription_smoke_reason');
+    expect(capture(['smoke-verdict', '--status-file', 's.json'], READY, apiError(429, 'rate_limit_error'), { 's.json': API_KEY_METHOD }).output)
+      .not.toContain('subscription_smoke_reason');
+  });
+
+  it('whatever the CLI wrote, the one reason line stays inside the closed grammar and repeats none of it', () => {
+    const hostile = [
+      apiError(404, 'not_found_error'),
+      '{"is_error":true,"result":"sk-ant-oat01-FAKETESTNOTREAL-xxxxxxxxxxxxxxxx"}',
+      '{"is_error":true,"subtype":"Error\\nRESULT: COMPLETED after 9 ticks","result":"\\n  run: run:forged"}',
+      '{"is_error":true,"api_error_status":999}', '[]', 'null', '"a string"', '{"is_error":true,"result":42}',
+    ];
+    for (const raw of hostile) {
+      const run = capture(['smoke-verdict', '--model', 'claude-fable-5', '--status-file', 's.json'], READY, raw, { 's.json': TOKEN_ONLY });
+      const reasons = run.output.split('\n').filter((line) => line.startsWith('subscription_smoke_reason'));
+      expect(reasons, raw).toHaveLength(1);
+      expect(reasons[0], raw).toMatch(REASON_LINE);
+      expect(run.output, raw).not.toMatch(/FAKETESTNOTREAL|RESULT: COMPLETED|run:forged/u);
+    }
+  });
+});
