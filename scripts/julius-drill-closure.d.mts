@@ -5,6 +5,20 @@
  * drill attests and the set the gate demands cannot be computed two ways.
  */
 
+/** One capability drill: its npm script, the name its transcript's VERIFIED line opens with, and the transcript file it writes. */
+export interface JuliusCapabilityDrill {
+  readonly script: string;
+  readonly name: string;
+  readonly transcript: string;
+}
+export type JuliusDrilledCapability = 'RESTART / RECOVERY' | 'FAILURE RECOVERY' | 'REPAIR LOOP';
+
+/** The three capability drills, by the capability each proves. Nothing else is a drill. */
+export declare const JULIUS_CAPABILITY_DRILLS: Readonly<Record<JuliusDrilledCapability, JuliusCapabilityDrill>>;
+
+/** The drill that proves `capability`, with its `npm run` command, or null when none does. */
+export declare function capabilityDrill(capability: string): (JuliusCapabilityDrill & { readonly capability: JuliusDrilledCapability; readonly command: string }) | null;
+
 /** Every specifier a source file imports for its value; type-only statements are skipped. */
 export declare function specifiersIn(source: string): readonly string[];
 

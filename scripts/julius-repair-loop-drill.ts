@@ -44,12 +44,18 @@ import { assembleLiveJuliusRuntime, driveJuliusRunToTerminal } from '../relay-br
 import { scriptedAdapter, seededTaskContract, worker } from '../src/relay/mission/julius';
 import type { JuliusProviderAdapter, JuliusTask, ScriptedOutcome } from '../src/relay/mission/julius';
 import { DrillRecord, auditProviders, drillDatabaseTarget, foreignJuliusRuns, scalarReader, writeDrillAttestation } from './julius-drill-support';
+import { JULIUS_CAPABILITY_DRILLS } from './julius-drill-closure.mjs';
 
 export const CAPABILITY = 'REPAIR LOOP';
-/** The transcript's closing sentence; the gate requires an all-capitals VERIFIED line. */
-const DRILL_NAME = 'JULIUS REPAIR LOOP';
-export const TRANSCRIPT_FILE = 'julius-repair-loop-drill.transcript.txt';
-export const DRILL_COMMAND = 'npm run julius:repair-loop-drill';
+/**
+ * THIS DRILL'S ENTRY in the one table the Beta Gate holds every attestation to:
+ * the sentence its transcript closes on (`<name> VERIFIED`, which no other drill
+ * writes), the transcript file and the command. Read, never retyped.
+ */
+const DRILL = JULIUS_CAPABILITY_DRILLS[CAPABILITY];
+const DRILL_NAME = DRILL.name;
+export const TRANSCRIPT_FILE = DRILL.transcript;
+export const DRILL_COMMAND = `npm run ${DRILL.script}`;
 export const INFRASTRUCTURE = 'real-postgres,rejected-review,bounded-rounds,no-provider-call';
 export const EXERCISED = ['src/relay/mission/julius/julius-repair-runtime.ts'] as const;
 

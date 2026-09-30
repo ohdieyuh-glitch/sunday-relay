@@ -106,7 +106,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { drillDrivenFiles } from './julius-drill-closure.mjs';
+import { JULIUS_CAPABILITY_DRILLS, capabilityDrill, drillDrivenFiles } from './julius-drill-closure.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -310,6 +310,9 @@ const RUN_SCOPED_FILES = [
   'runs.tsv', 'tasks.tsv', 'evidence.tsv', 'decisions.tsv', 'findings.tsv', 'tool-invocations.tsv',
   'failures.tsv', 'budget.tsv', 'settlement-integrity.tsv', 'worker-diagnostics.tsv', 'project-brain.tsv',
   'task-contracts.tsv', 'contract-events.tsv', 'trajectory.tsv', 'scope.tsv',
+  // Read by WONDER WEB OUTPUT; nothing produces it yet, and a hand-added one
+  // with no run_id once fed that row (G2).
+  'wonder-web.tsv',
 ];
 
 const ACCEPTED_LINE = /^Run (\S+) accepted in state READY; driving the Julius run loop\.$/gmu;
@@ -463,17 +466,29 @@ function scoped(ev, binding) {
  * — read PASS for the architect, the coder, the reviewer and the completion.
  *
  * A role's task is credited only on a worker-diagnostics row for THAT task
- * naming a transport this runtime has, a provider, a served model (for the
- * coder, one the `served_model_basis` column attests where the bundle has it),
- * and — for the architect and the coder, whose providers answer with one — a
- * response id. The trajectory's own record of the dispatch must agree: the
- * adapter a live mission composes always ends `-live`, and a provider or model
- * carrying a stand-in token below is not a provider at all.
+ * naming a transport this runtime has, the provider the live composition gives
+ * that role, a served model (for the coder, one the `served_model_basis` column
+ * attests where the bundle has it), and — for the architect and the coder,
+ * whose providers answer with one — a response id; and on the trajectory's own
+ * record of the dispatch: the role's live worker and adapter, routed to that
+ * same provider.
+ *
+ * AN ALLOWLIST, READ FROM THE COMPOSITION THAT RUNS THE MISSION. This used to
+ * be a denylist of stand-in words, so `FakeOpenAI`, `MockProvider`, `test` and
+ * an adapter named `stubbed-live` all passed, and the adapter rule was skipped
+ * whenever the trajectory could not be read. The real identities are now read
+ * from this checkout — the one the bundle is bound to — rather than retyped:
+ * each role's worker, adapter and provider from `live-composition.ts`
+ * (`architectWorker`, `CODER_WORKER`, `reviewerWorker`); the reviewer's
+ * provider from the launchers that set `RELAY_HERMES_PROVIDER`, because the
+ * composition takes it from there; the transports from the runtime's own enum
+ * in `julius-router.ts`. Anything else is NOT A REAL PROVIDER, and a record
+ * that cannot be read is UNKNOWN. Stand-in words are still refused in the
+ * served model and the response id, which no allowlist can close.
  */
 export const NOT_A_PROVIDER_TOKENS = Object.freeze([
   'drill', 'fake', 'stub', 'mock', 'sim', 'simulated', 'scripted', 'fixture', 'dummy', 'placeholder', 'recorded', 'replay', 'noop',
 ]);
-const TRANSPORTS = new Set(['openai', 'hosted', 'local', 'remote']);
 const RESPONSE_ID_ROLES = new Set(['PROMPT_ARCHITECT', 'CODING_AGENT']);
 const standIn = (value) => typeof value === 'string' && value !== ''
   && value.toLowerCase().split(/[^a-z0-9]+/u).some((token) => NOT_A_PROVIDER_TOKENS.includes(token));
@@ -486,34 +501,131 @@ const adapterOf = (facts) => {
   }
 };
 
+/** A repository file's text, or null when this checkout does not hold it. */
+const repoText = (relativePath) => {
+  try {
+    return readFileSync(join(REPO, relativePath), 'utf8');
+  } catch {
+    return null;
+  }
+};
+
+export const EVIDENCE_DUMP = '.github/julius-live-evidence-dump.sh';
+/** Whether this checkout's evidence dump has a query that writes `name` (a `dump "SELECT …" <name>` line). */
+const dumpWrites = (name) => (repoText(EVIDENCE_DUMP) ?? '').split('\n')
+  .some((line) => line.startsWith('dump "') && line.trimEnd().endsWith(`" ${name}`));
+
+export const LIVE_COMPOSITION = 'relay-bridge/julius/live-composition.ts';
+export const LIVE_LAUNCHERS = Object.freeze(['.github/workflows/julius-first-live-mission.yml', 'scripts/julius-local-qualification.sh']);
+export const RUNTIME_TRANSPORTS = 'src/relay/mission/julius/julius-router.ts';
+
+let liveMemo;
+/**
+ * The live identity of each role, as the composition this checkout runs
+ * declares it: `{ roles: { ROLE: { workerId, adapterId, providers } }, transports }`,
+ * or `{ error }` when it cannot be read — and then no role is credited.
+ */
+export function liveIdentities() {
+  if (liveMemo === undefined) liveMemo = readLiveIdentities();
+  return liveMemo;
+}
+function readLiveIdentities() {
+  const composition = repoText(LIVE_COMPOSITION);
+  if (composition === null) return { error: `${LIVE_COMPOSITION} is not in this checkout, so no live identity can be read` };
+  const roles = {};
+  const declared = /workerId: '([a-z0-9-]+)', role: '(PROMPT_ARCHITECT|CODING_AGENT|INDEPENDENT_REVIEWER)',\s*adapterId: '([a-z0-9-]+)', providerId(?:: '([a-z0-9-]+)')?,/gu;
+  for (const match of composition.matchAll(declared)) {
+    if (match[2] in roles) return { error: `${LIVE_COMPOSITION} declares ${match[2]} twice, so which worker is live is unknown` };
+    roles[match[2]] = { workerId: match[1], adapterId: match[3], providers: match[4] === undefined ? null : [match[4]] };
+  }
+  const roleNames = ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'];
+  const absent = roleNames.filter((role) => !(role in roles));
+  if (absent.length > 0) return { error: `${LIVE_COMPOSITION} declares no live ${absent.join(', ')} worker this gate can read` };
+  // `reviewerWorker(providerId)`: the composition takes the reviewer's provider
+  // from RELAY_HERMES_PROVIDER, which the launchers set.
+  const launched = new Set();
+  for (const launcher of LIVE_LAUNCHERS) {
+    for (const match of (repoText(launcher) ?? '').matchAll(/^\s*(?:export\s+)?RELAY_HERMES_PROVIDER\s*[:=]\s*['"]?([a-z0-9-]+)['"]?\s*$/gmu)) launched.add(match[1]);
+  }
+  for (const role of roleNames) {
+    if (roles[role].providers !== null) continue;
+    if (launched.size === 0) return { error: `no live launcher sets RELAY_HERMES_PROVIDER, so the ${role}'s provider is unknown` };
+    roles[role].providers = [...launched].sort();
+  }
+  // The composition refuses a reviewer on the coder's own vendor; so does this reading.
+  const shared = roles.INDEPENDENT_REVIEWER.providers.filter((provider) => roles.CODING_AGENT.providers.includes(provider));
+  if (shared.length > 0) return { error: `the launchers give the reviewer the coder's own provider (${shared.join(', ')}), which the live composition refuses` };
+  const router = repoText(RUNTIME_TRANSPORTS);
+  const listed = router === null ? null : /transport:safeEnum\(v\.transport,\[([^\]]*)\]/u.exec(router);
+  const transports = listed === null ? [] : [...listed[1].matchAll(/'([a-z]+)'/gu)].map((match) => match[1]);
+  if (transports.length === 0) return { error: `${RUNTIME_TRANSPORTS} declares no transport this gate can read` };
+  return { roles, transports };
+}
+
 function identityOf(ev, task) {
-  const notReal = (detail) => ({ state: 'NOT REAL', detail: `${task.task_id}: ${detail}` });
-  const missing = (detail) => ({ state: 'UNKNOWN', detail: `${task.task_id}: ${detail}` });
-  for (const row of ev.rows('trajectory.tsv').filter((entry) => entry.task_id === task.task_id)) {
-    if (row.event_kind === 'PROVIDER_SELECTED' && standIn(row.provider_id)) return notReal(`the trajectory routed it to provider ${row.provider_id}`);
-    if (row.event_kind === 'WORKER_SELECTED') {
+  const label = (detail) => `${task.task_id}: ${detail}`;
+  const live = liveIdentities();
+  if ('error' in live) return { state: 'UNKNOWN', detail: label(`the live composition's identities cannot be read (${live.error})`) };
+  const expected = live.roles[task.role];
+  if (expected === undefined) return { state: 'UNKNOWN', detail: label(`${task.role || '(no role)'} is no role the live composition declares`) };
+  const notReal = [];
+  const missing = [];
+  const allowed = expected.providers.join(', ');
+
+  // THE TRAJECTORY: the runtime's own record of where it sent the dispatch.
+  if (ev.file('trajectory.tsv') === null) {
+    missing.push('trajectory.tsv is unreadable, so the worker and adapter it was dispatched to cannot be checked');
+  } else {
+    const trail = ev.rows('trajectory.tsv').filter((row) => row.task_id === task.task_id);
+    const routed = [...new Set(trail.map((row) => row.provider_id).filter((provider) => provider && !expected.providers.includes(provider)))];
+    if (routed.length > 0) notReal.push(`the trajectory routed it to ${routed.join(', ')}, and the live composition routes ${task.role} only to ${allowed}`);
+    const selected = trail.filter((row) => row.event_kind === 'WORKER_SELECTED');
+    if (selected.length === 0) missing.push('the trajectory records no worker selection for it, so the adapter that answered cannot be checked');
+    for (const row of selected) {
       const adapter = adapterOf(row.safe_facts);
-      if (adapter !== null && (standIn(adapter) || !adapter.endsWith('-live'))) return notReal(`it was dispatched to adapter ${adapter}, which is not a live adapter`);
+      if (adapter === null) missing.push('its worker selection names no readable adapter');
+      else if (adapter !== expected.adapterId) notReal.push(`it was dispatched to adapter ${adapter}, not the live ${expected.adapterId}`);
+      if (row.worker_id && row.worker_id !== expected.workerId) notReal.push(`it was dispatched to worker ${row.worker_id}, not the live ${expected.workerId}`);
     }
   }
-  if (ev.file('worker-diagnostics.tsv') === null) return missing('worker-diagnostics.tsv is unreadable, so which provider answered is unknown');
-  const diagnostics = ev.rows('worker-diagnostics.tsv').filter((row) => row.task_id === task.task_id);
-  if (diagnostics.length === 0) return missing('no worker-diagnostics row names it, so no provider identity was recorded');
-  const row = [...diagnostics].reverse().find((entry) => entry.outcome === 'succeeded' || entry.event_type === 'julius.worker.completed') ?? diagnostics.at(-1);
-  for (const column of ['transport', 'provider', 'served_model', 'requested_model', 'response_id']) {
-    if (standIn(row[column])) return notReal(`its ${column} is ${row[column]}`);
-  }
-  if (!row.transport) return missing('its diagnostics name no transport');
-  if (!TRANSPORTS.has(row.transport)) return notReal(`its transport ${row.transport} is none this runtime has`);
-  if (!row.provider) return missing('its diagnostics name no provider');
-  if (task.role === 'CODING_AGENT' && (ev.header('worker-diagnostics.tsv') ?? []).includes('served_model_basis')) {
-    if (row.served_model_basis !== 'attested' || !row.served_model) {
-      return missing(`its served model is not attested (served_model_basis ${row.served_model_basis || 'empty'})`);
+
+  // THE DIAGNOSTICS: who answered, over what, with which model — on EVERY
+  // attempt of the task, and completely on the one that succeeded.
+  let row = null;
+  if (ev.file('worker-diagnostics.tsv') === null) {
+    missing.push('worker-diagnostics.tsv is unreadable, so which provider answered is unknown');
+  } else {
+    const diagnostics = ev.rows('worker-diagnostics.tsv').filter((entry) => entry.task_id === task.task_id);
+    for (const entry of diagnostics) {
+      for (const column of ['served_model', 'requested_model', 'response_id']) {
+        if (standIn(entry[column])) notReal.push(`its ${column} is ${entry[column]}`);
+      }
+      if (entry.transport && !live.transports.includes(entry.transport)) notReal.push(`its transport ${entry.transport} is none the runtime has (${live.transports.join(', ')})`);
+      if (entry.provider && !expected.providers.includes(entry.provider)) notReal.push(`its provider ${entry.provider} is not the one the live composition gives ${task.role} (${allowed})`);
     }
-  } else if (!row.served_model) {
-    return missing('its diagnostics name no served model');
+    row = [...diagnostics].reverse().find((entry) => entry.outcome === 'succeeded' || entry.event_type === 'julius.worker.completed') ?? diagnostics.at(-1) ?? null;
+    if (row === null) {
+      missing.push('no worker-diagnostics row names it, so no provider identity was recorded');
+    } else {
+      if (!row.transport) missing.push('its diagnostics name no transport');
+      if (!row.provider) missing.push('its diagnostics name no provider');
+      if (task.role === 'CODING_AGENT') {
+        // The column the coder's served model is attested in. A dump without
+        // it cannot show the model was the one that served, and a bundle that
+        // dropped it is not given the benefit of the doubt.
+        if (!(ev.header('worker-diagnostics.tsv') ?? []).includes('served_model_basis')) {
+          missing.push('worker-diagnostics.tsv carries no served_model_basis column, so the coder\'s served model cannot be shown attested');
+        } else if (row.served_model_basis !== 'attested' || !row.served_model) {
+          missing.push(`its served model is not attested (served_model_basis ${row.served_model_basis || 'empty'})`);
+        }
+      } else if (!row.served_model) {
+        missing.push('its diagnostics name no served model');
+      }
+      if (RESPONSE_ID_ROLES.has(task.role) && !row.response_id) missing.push('its diagnostics carry no provider response id');
+    }
   }
-  if (RESPONSE_ID_ROLES.has(task.role) && !row.response_id) return missing('its diagnostics carry no provider response id');
+  if (notReal.length > 0) return { state: 'NOT REAL', detail: label([...new Set(notReal)].join('; ')) };
+  if (missing.length > 0) return { state: 'UNKNOWN', detail: label([...new Set(missing)].join('; ')) };
   return { state: 'REAL', detail: `${row.provider}/${row.served_model} over ${row.transport}` };
 }
 
@@ -538,7 +650,7 @@ function identities(ev, tasks) {
  * at the moment it ran, and the transcript it left behind. One row per file;
  * the gate groups by (capability, drill).
  *
- * Five things are checked, and a proof that misses any of them is inadmissible
+ * Six things are checked, and a proof that misses any of them is inadmissible
  * rather than merely quiet:
  *
  *   OUTCOME. The drill said VERIFIED. Anything else is a drill that did not
@@ -555,13 +667,18 @@ function identities(ev, tasks) {
  *   relative import from there. Attesting only the row's own files let a proof
  *   outlive the pipeline, repositories and composition it drove through.
  *
- *   COVERAGE. The attested set contains every file this row's own build probe
- *   names, and the drill really imports each of them. A drill for something
- *   else cannot be pointed at this capability.
+ *   ITS OWN DRILL. The attestation names the one drill `julius-drill-closure.mjs`
+ *   declares for this capability (JULIUS_CAPABILITY_DRILLS). The three drills
+ *   drive nearly the same pipeline, so coverage alone let one drill's proof be
+ *   relabelled as another's.
  *
- *   TRANSCRIPT. The drill's own output is present, carries exactly the declared
- *   number of `[PASS]` steps, carries no `[FAIL]`, and ends on a VERIFIED line.
- *   The gate reads the drill's words rather than a summary word about them.
+ *   COVERAGE. The attested set contains every file this row's own build probe
+ *   names, and the drill really imports each of them.
+ *
+ *   TRANSCRIPT. That drill's own transcript file is present, carries exactly
+ *   the declared number of `[PASS]` steps, carries no `[FAIL]`, and ends on the
+ *   sentence only that drill writes when it passes (`<name> VERIFIED`). The gate
+ *   reads the drill's words rather than a summary word about them.
  *
  * WHAT THIS STILL CANNOT CATCH, stated rather than implied: the digests are
  * recomputable from the tree, so a ledger typed by hand with every digest right
@@ -610,11 +727,25 @@ function capabilityProof(proofs, capability, probed) {
   if (CAPABILITY_PROOF_COLUMNS.some((column) => mine.every((row) => row[column] === undefined))) {
     return { state: 'UNPROVEN', basis: 'the attestation ledger is missing columns this gate reads' };
   }
+  /**
+   * ITS OWN DRILL, OR NONE. The three drills import almost the same code, so
+   * the recovery drill's attestation, relabelled FAILURE RECOVERY or REPAIR
+   * LOOP, covered those rows' files and "proved" them; and any npm script with
+   * a build (the relay bridge server) passed as a drill. A row is proven only
+   * by the one drill `julius-drill-closure.mjs` names for it, and only with that
+   * drill's own transcript closing on the sentence no other drill writes.
+   */
+  const own = capabilityDrill(capability.id);
+  if (own === null) {
+    return { state: 'UNPROVEN', basis: `no Julius capability drill exercises ${capability.id}, so no attestation can prove it (the drills prove ${Object.keys(JULIUS_CAPABILITY_DRILLS).join(', ')})` };
+  }
   const drills = [...new Set(mine.map((row) => row.drill))];
   const refusals = [];
   for (const drill of drills) {
     const claimed = mine.filter((row) => row.drill === drill);
     const refuse = (state, basis) => refusals.push({ state, basis: `${drill}: ${basis}` });
+
+    if (drill !== own.command) { refuse('UNPROVEN', `it is not ${capability.id}'s drill (${own.command}), so it proves nothing about this row`); continue; }
 
     const failed = claimed.find((row) => row.outcome !== 'VERIFIED');
     if (failed !== undefined) { refuse('UNPROVEN', `the drill recorded ${failed.outcome || '(no outcome)'}, not VERIFIED`); continue; }
@@ -656,6 +787,7 @@ function capabilityProof(proofs, capability, probed) {
     if (undriven.length > 0) { refuse('UNPROVEN', `the drill does not import ${undriven.join(', ')}, so it cannot have exercised ${undriven.length === 1 ? 'it' : 'them'}`); continue; }
 
     const transcriptName = claimed[0].transcript;
+    if (transcriptName !== own.transcript) { refuse('UNPROVEN', `it names the transcript ${transcriptName || '(none)'}, and ${own.command} writes ${own.transcript}`); continue; }
     const transcript = proofs.file(transcriptName);
     if (transcript === null) { refuse('UNPROVEN', `its transcript ${transcriptName || '(unnamed)'} is not in this bundle`); continue; }
     const passes = (transcript.match(/^\s*\[PASS\] /gmu) ?? []).length;
@@ -665,10 +797,16 @@ function capabilityProof(proofs, capability, probed) {
     if (failures > 0) { refuse('UNPROVEN', `its transcript records ${failures} failed step(s)`); continue; }
     if (passes !== declared) { refuse('UNPROVEN', `it declares ${declared} step(s) and its transcript shows ${passes}`); continue; }
     const verdictLine = transcript.split('\n').map((line) => line.trim()).filter((line) => line.length > 0).pop() ?? '';
-    // `NOT VERIFIED` is capitals ending in VERIFIED too; a verdict that negates
-    // itself, or says FAILED anywhere, is not a verified one.
-    if (!/^[A-Z][A-Z /-]* VERIFIED$/u.test(verdictLine) || /\b(?:NOT|FAILED|UNVERIFIED)\b/u.test(verdictLine)) {
-      refuse('UNPROVEN', 'its transcript does not end on a VERIFIED line'); continue;
+    /**
+     * THE DRILL'S OWN SENTENCE, EXACTLY. Any capitals ending in VERIFIED used to
+     * pass once NOT and FAILED were refused, and so did `… CANNOT BE VERIFIED`,
+     * `… NEVER VERIFIED` and `DRILL ABORTED BEFORE IT VERIFIED`. The drill seals
+     * its transcript with `<name> VERIFIED` and nothing else (`DrillRecord.seal`),
+     * so that line, whole, is the only verdict that reads verified — and it is
+     * also the marker no other drill's transcript carries.
+     */
+    if (verdictLine !== `${own.name} VERIFIED`) {
+      refuse('UNPROVEN', `its transcript does not end on ${own.name} VERIFIED, the line only ${own.command} writes when it passes`); continue;
     }
 
     return {
@@ -744,8 +882,10 @@ const noRun = (ev) => unknown(ev.allRows('runs.tsv').length === 0
  * naming its tenant `founder` read as a person who had signed up. The one way
  * this repository creates an account is GitHub sign-in, which mints the
  * participant id `ghu-<GitHub numeric id>` (`participantIdForIdentity`,
- * relay-bridge/github-auth-routes.ts; a test holds the two equal). Only that
- * shape is an account; everything else is the operator by another name.
+ * relay-bridge/github-auth-routes.ts; a test holds the two equal). Anything
+ * else is the operator by another name. And the shape alone is not an account
+ * either — the operator can type it too — so an account-shaped owner is only
+ * a CANDIDATE, UNKNOWN until an account record corroborates it.
  */
 export const ACCOUNT_PARTICIPANT_ID = /^ghu-\d+$/u;
 
@@ -798,10 +938,20 @@ const CAPABILITIES = [
       const sessions = ev.rows('sessions.tsv');
       if (sessions.length === 0) return notExercised(`no execution session was recorded for ${runLabel(ev)}'s mission, so no account owns it`);
       const owners = [...new Set(sessions.map((row) => row.player_id))];
-      const real = owners.filter((owner) => ACCOUNT_PARTICIPANT_ID.test(owner));
-      return real.length > 0
-        ? exercised(`a mission ran for a signed-up account (${real.join(', ')})`)
-        : notExercised(`every session is owned by an operator-named tenant (${owners.join(', ')}), none of them an account GitHub sign-in minted, so no real account has started a mission`);
+      const signedUp = owners.filter((owner) => ACCOUNT_PARTICIPANT_ID.test(owner));
+      if (signedUp.length === 0) {
+        return notExercised(`every session is owned by an operator-named tenant (${owners.join(', ')}), none of them an account GitHub sign-in minted, so no real account has started a mission`);
+      }
+      /**
+       * THE SHAPE IS NOT THE ACCOUNT (X3, still open after the allowlist). The
+       * session's `player_id` is the contract's `tenantId`, verbatim, so
+       * `ghu-583231` is a spelling the operator can type into a contract and
+       * this bundle cannot tell it from a sign-in. Only a record the account
+       * system itself wrote could, and the evidence dump carries none: GitHub
+       * sign-in mints a session, not a durable account row. Until an account
+       * source is dumped, an account-shaped owner is UNKNOWN, never a sign-up.
+       */
+      return unknown(`a session is owned by ${signedUp.join(', ')}, the shape GitHub sign-in mints, but player_id is the contract's tenantId, which the operator types, and this bundle carries no account record the sign-in itself wrote, so whether a real account started this mission is unknown`);
     },
   },
   {
@@ -1185,6 +1335,17 @@ const CAPABILITIES = [
       if (ev.run === null && ev.allRows('runs.tsv').length > 0) return noRun(ev);
       if (ev.run === null || ev.run.state !== 'COMPLETED') {
         return notExercised('no completed run, so there is no mission output for Wonder Web to open');
+      }
+      /**
+       * NO PRODUCER, NO PROOF. Nothing writes `wonder-web.tsv` yet, so the one
+       * in a bundle was put there by hand: G2's, with no `run_id`, beside a
+       * typed `ghu-` tenant and genuine drill ledgers, printed BETA: READY and
+       * exited 0. The file is run-scoped now (a readable one must name its
+       * run, or the bundle is unbound), and until this checkout's evidence dump
+       * has a query that writes it, the row is UNKNOWN whatever the file says.
+       */
+      if (!dumpWrites('wonder-web.tsv')) {
+        return unknown(`a completed run exists, and no query in this checkout's evidence dump (${EVIDENCE_DUMP}) writes wonder-web.tsv, so what Wonder Web opened is not on the record${ev.file('wonder-web.tsv') === null ? '' : ': the wonder-web.tsv in this bundle is no dump\'s output'}`);
       }
       if (ev.file('wonder-web.tsv') === null) {
         return unknown('a completed run exists, but this bundle carries no readable wonder-web dump');
