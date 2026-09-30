@@ -50,10 +50,12 @@
  * RUNNING) with the dispatch generation the request names — the claim the live
  * dispatcher makes through `claimDispatch`. PR #214's host-visible entry proved
  * it: with the invocation left AUTHORIZED the executor answered
- * `sandbox_execution_authority_lost`. The production `claimDispatch` claims up to
- * N pending invocations of ANY run, which a probe on a shared database must
- * never do, so the claim here is the same state change scoped to this one
- * invocation and this nonce's project, and nothing else can be touched by it.
+ * `sandbox_execution_authority_lost`. Unscoped, the production `claimDispatch`
+ * claims up to N pending invocations of ANY run, which a probe on a shared
+ * database must never do, so the claim here is its own statement: the same state
+ * change scoped to this one invocation and this nonce's project, and nothing else
+ * can be touched by it. It predates the scoped form defect B gave `claimDispatch`
+ * (one invocation, named with its project).
  *
  * Pure with respect to providers: this module reaches PostgreSQL and nothing else.
  */
@@ -239,7 +241,7 @@ export async function seedPreflightInvocation(
   if (!authorized) throw new Error('preflight_invocation_not_authorized');
   // The dispatch claim, for THIS invocation only: the outbox entry becomes CLAIMED and the
   // invocation DISPATCHING with its generation advanced — the state `claimDispatch` leaves
-  // behind, reached without the fleet-wide sweep `claimDispatch` performs.
+  // behind, reached without the fleet-wide sweep an unscoped `claimDispatch` performs.
   const claimedUntil = new Date(Date.parse(input.requestedAt) + 600_000).toISOString();
   const claimed = await pool.query<{ dispatch_generation: string }>(
     `WITH claimed AS (
