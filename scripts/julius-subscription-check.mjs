@@ -106,6 +106,53 @@ export function smokeVerdict(raw) {
   return { ok: false, reply: 'UNEXPECTED' };
 }
 
+/**
+ * WHY A SMOKE REPLY WAS NOT A CLEAN OK, IN CLOSED TOKENS ONLY.
+ *
+ * `smokeVerdict` says only THAT the reply failed. When the smoke of 2026-09-30 (run 36685079176)
+ * failed, nothing could say why: the CLI's JSON carries its reason as free text in `result`, which
+ * this file never repeats. Three things are read from it, each reduced to a closed vocabulary:
+ *   subtype  the CLI's result subtype (`success`, `error_max_turns`, …) when it is a plain token;
+ *   http     the JSON's `api_error_status`, or the status an `API Error: NNN` result names;
+ *   reason   MODEL_NOT_ENTITLED_OR_NOT_FOUND (404 / not_found_error), AUTH (401, 403 /
+ *            authentication_error, permission_error), USAGE_LIMIT (the subscription's own limit),
+ *            RATE_LIMITED (429 / rate_limit_error), OVERLOADED (529 / overloaded_error), MAX_TURNS
+ *            (subtype error_max_turns), UNEXPECTED_REPLY (no error, and not OK), UNREADABLE (no JSON),
+ *            or OTHER.
+ * The text is only MATCHED: three digits, a fixed set of error-type names and the usage-limit phrase.
+ * Nothing it says is ever returned.
+ */
+const ERROR_TYPE_REASON = Object.freeze({
+  not_found_error: 'MODEL_NOT_ENTITLED_OR_NOT_FOUND',
+  authentication_error: 'AUTH',
+  permission_error: 'AUTH',
+  rate_limit_error: 'RATE_LIMITED',
+  overloaded_error: 'OVERLOADED',
+});
+const STATUS_REASON = Object.freeze({
+  404: 'MODEL_NOT_ENTITLED_OR_NOT_FOUND', 401: 'AUTH', 403: 'AUTH', 429: 'RATE_LIMITED', 529: 'OVERLOADED',
+});
+export function smokeFailureReason(raw) {
+  let parsed = null;
+  try { parsed = JSON.parse(raw ?? ''); } catch { parsed = null; }
+  if (parsed === null || typeof parsed !== 'object') return { reason: 'UNREADABLE', http: 'none', subtype: 'none' };
+  const subtype = typeof parsed.subtype === 'string' && /^[a-z_]{1,40}$/u.test(parsed.subtype) ? parsed.subtype : 'none';
+  const text = typeof parsed.result === 'string' ? parsed.result : '';
+  // `text.match`, never RegExp#exec: the boundary scan refuses the exec call form in a file a paid run executes.
+  const named = text.match(/\bAPI Error: ([1-5]\d\d)\b/u);
+  const status = Number.isInteger(parsed.api_error_status) && parsed.api_error_status >= 100 && parsed.api_error_status <= 599
+    ? parsed.api_error_status : named === null ? null : Number(named[1]);
+  const http = status === null ? 'none' : String(status);
+  const errorType = text.match(/"type"\s*:\s*"(not_found_error|authentication_error|permission_error|rate_limit_error|overloaded_error)"/u);
+  const reason = subtype === 'error_max_turns' ? 'MAX_TURNS'
+    : errorType !== null ? ERROR_TYPE_REASON[errorType[1]]
+      : /usage limit reached|\b(?:5-hour|weekly|session|opus) limit reached\b/iu.test(text) ? 'USAGE_LIMIT'
+        : status !== null && STATUS_REASON[status] !== undefined ? STATUS_REASON[status]
+          : parsed.is_error === true ? 'OTHER'
+            : 'UNEXPECTED_REPLY';
+  return { reason, http, subtype };
+}
+
 const safeLabel = (value) => (typeof value === 'string' && /^[A-Za-z0-9._-]{1,64}$/u.test(value) ? value : 'unpinned');
 const readStdin = () => { try { return readFileSync(0, 'utf8'); } catch { return ''; } };
 const readFile = (path) => { try { return readFileSync(path, 'utf8'); } catch { return ''; } };
@@ -152,7 +199,14 @@ export function main(argv, env = process.env, io = {}) {
   const statusFile = flag('status-file');
   const status = statusVerdict(statusFile === null ? '' : read(statusFile), requirePlan);
   const method = status.ok ? status.method : 'none';
-  const answer = status.ok ? smokeVerdict(stdin()) : { ok: false, reply: 'NO_SUBSCRIPTION_STATUS' };
+  const reply = status.ok ? stdin() : '';
+  const answer = status.ok ? smokeVerdict(reply) : { ok: false, reply: 'NO_SUBSCRIPTION_STATUS' };
+  // WHY, when a reply was read and failed: its own closed line, so the PASS and FAIL lines the
+  // workflow greps stay exactly as they were.
+  if (status.ok && !answer.ok) {
+    const why = smokeFailureReason(reply);
+    print(`subscription_smoke_reason provider=anthropic model=${model} reason=${why.reason} http=${why.http} subtype=${why.subtype}`);
+  }
   print(`subscription_smoke provider=anthropic model=${model} auth=CLAUDE_SUBSCRIPTION method=${method} reply=${answer.reply} result=${answer.ok ? 'PASS' : 'FAIL'}`);
   return answer.ok ? 0 : 1;
 }
