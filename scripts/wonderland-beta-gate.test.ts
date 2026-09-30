@@ -1312,8 +1312,10 @@ describe('the gate audit, finding by finding', () => {
     }).dir);
     expect(rowFor(scoped, 'PERMISSIONS / MISSION BOUNDARIES').mission).toBe('FAILED');
     expect(rowFor(scoped, 'PERMISSIONS / MISSION BOUNDARIES').basis).toContain(`${BUILD} OUT_OF_SCOPE`);
+    // The dump's own shape, footer included: a table without `(N rows)` is one the dump never finished.
+    const evidenceLines = completingFiles()['evidence.tsv'].split('\n').slice(0, -1);
     const evidenced = evaluate(completingWith({
-      'evidence.tsv': `${completingFiles()['evidence.tsv'].split('\n').slice(0, -1).join('\n')}\n${[`${BUILD}:1:scope`, 'DIFF', 'FAILED', 'Julius scope check', 't', RUN, BUILD, ''].join('\t')}\n`,
+      'evidence.tsv': [...evidenceLines, [`${BUILD}:1:scope`, 'DIFF', 'FAILED', 'Julius scope check', 't', RUN, BUILD, ''].join('\t'), `(${evidenceLines.length} rows)`].join('\n'),
     }).dir);
     expect(rowFor(evidenced, 'PERMISSIONS / MISSION BOUNDARIES').mission).toBe('FAILED');
   });
@@ -1516,5 +1518,241 @@ describe('the gate audit, finding by finding', () => {
     const boundary = rowFor(report, 'PERMISSIONS / MISSION BOUNDARIES');
     expect(boundary.mission).toBe('UNKNOWN');
     expect(boundary.basis).toContain('tool-invocations.tsv is unreadable');
+  });
+});
+
+/**
+ * REVIEW_SECOND_JULIUS.md (2026-09-29), HELD. The second review's falsification
+ * built 154 fixtures against 1bbd18a7; these are its findings in the shape of
+ * those fixtures, BOUND to this checkout, and every case below read PASS (or
+ * CAPABILITY PROVEN) before its fix. The first three are the ones an HONEST
+ * paid run can trigger, which is why attempt 2 is read with them fixed.
+ */
+describe('the second review, finding by finding', () => {
+  const permissions = (dir: string) => rowFor(evaluate(dir), 'PERMISSIONS / MISSION BOUNDARIES');
+  /** What a dump killed after the redirect opened leaves behind: nothing, or the header and nothing after it. */
+  const cutShort = (header: readonly string[]) => `${header.join('\t')}\n`;
+  /** The three drills, each attested with its own transcript and its own closing line. */
+  const DRILL_TRANSCRIPTS: Readonly<Record<string, readonly [string, string]>> = {
+    'RESTART / RECOVERY': ['julius-recovery-drill.transcript.txt', 'JULIUS RESTART RECOVERY VERIFIED'],
+    'FAILURE RECOVERY': ['julius-failure-recovery-drill.transcript.txt', 'JULIUS FAILURE RECOVERY VERIFIED'],
+    'REPAIR LOOP': ['julius-repair-loop-drill.transcript.txt', 'JULIUS REPAIR LOOP VERIFIED'],
+  };
+  const withDrills = (dir: string): string => {
+    for (const [capability, [transcript, transcriptVerdict]] of Object.entries(DRILL_TRANSCRIPTS)) {
+      attest(join(dir, 'julius-live-evidence'), { capability, transcript, transcriptVerdict });
+    }
+    return dir;
+  };
+
+  /* ------------------------------------------------ P2-E · PERMISSIONS */
+
+  /**
+   * Q18. The terminal sweep turns an unsettled REQUESTED invocation CANCELLED
+   * and writes its CLOSE_UNSETTLED_TOOL_INVOCATION into `failures.tsv`. With
+   * that file readable the row FAILS; with it unreadable the row read PASS,
+   * because `failures.tsv` was the one input it read a failure from and never
+   * listed among the inputs it could not do without.
+   */
+  it('P2-E (Q18): with failures.tsv unreadable the sweep\'s UNKNOWN_OUTCOME closure is hidden, so the row is UNKNOWN, never PASS', () => {
+    const swept = [...COMPLETING_INVOCATIONS, { ...invocation(`${BUILD}:late:g1`, BUILD, 'CANCELLED', ''), completed_at: '' }];
+    const closure = {
+      run_id: RUN, sequence: '90', task_id: BUILD, event_type: 'julius.recovery.action', julius_code: 'TOOL_INVOCATION_UNRESOLVED',
+      failure_class: 'infrastructure_evidence_integrity', reason_code: 'RUN_TERMINAL_WITH_UNSETTLED_TOOL_INVOCATION', recovery_action: 'CLOSE_UNSETTLED_TOOL_INVOCATION',
+    };
+    const readable = permissions(completingWith({ 'tool-invocations.tsv': table(INVOCATIONS, swept), 'failures.tsv': table(FAILURES, [closure]) }).dir);
+    expect(readable.mission).toBe('FAILED');
+    expect(readable.basis).toContain('closed with an UNKNOWN outcome');
+    for (const hidden of ['unavailable\n', '', cutShort(FAILURES), null]) {
+      const row = permissions(completingWith({ 'tool-invocations.tsv': table(INVOCATIONS, swept), 'failures.tsv': hidden }).dir);
+      expect(row.mission, `failures.tsv as ${JSON.stringify(hidden)}`).toBe('UNKNOWN');
+      expect(row.basis).toContain('failures.tsv is unreadable');
+    }
+  });
+
+  it('P2-E (Q07): invocations that never executed, or in a state none can be in, are not a boundary that held', () => {
+    const cancelled = permissions(completingWith({
+      'tool-invocations.tsv': table(INVOCATIONS, [invocation(`${BUILD}:base:g1`, BUILD, 'CANCELLED', '')]),
+      'receipt-ids.txt': receiptsFor([]),
+    }).dir);
+    expect(cancelled.mission).toBe('UNKNOWN');
+    expect(cancelled.basis).toContain('none of the 1 tool invocation(s)');
+    expect(cancelled.basis).toContain('a bundle that checked nothing cannot pass');
+    const strange = permissions(completingWith({
+      'tool-invocations.tsv': table(INVOCATIONS, [...COMPLETING_INVOCATIONS, invocation(`${BUILD}:odd:g1`, BUILD, 'LOST', '0')]),
+    }).dir);
+    expect(strange.mission).toBe('UNKNOWN');
+    expect(strange.basis).toContain('no tool invocation can be in');
+  });
+
+  /**
+   * Q10d. "Unchecked" fired only on an explicit `scope_checked=false`, so a
+   * `scope.tsv` with a header and no row read PASS beside a coder that changed
+   * the workspace, and so did the path where Julius could not read the coder's
+   * implementation and wrote no implementation row at all.
+   */
+  it('P2-E (Q10d): a coder whose change set is not on record as captured and checked leaves the row UNKNOWN, never PASS', () => {
+    const implementation = (task: string, over: Row = {}): Row => ({
+      run_id: RUN, sequence: '40', task_id: task, event_type: 'julius.coder.implementation.recorded',
+      scope_checked: 'true', scope_violations: '0', own_scope_violations: '0', occurred_at: 't', ...over,
+    });
+    const headerOnly = permissions(completingWith({ 'scope.tsv': table(SCOPE, []) }).dir);
+    expect(headerOnly.mission).toBe('UNKNOWN');
+    expect(headerOnly.basis).toContain(`${BUILD} SUCCEEDED with no implementation record in scope.tsv`);
+    const refused = permissions(completingWith({
+      'scope.tsv': table(SCOPE, [implementation(BUILD), { run_id: RUN, sequence: '41', task_id: REPAIR, event_type: 'julius.coder.report.refused', occurred_at: 't' }]),
+    }).dir);
+    expect(refused.mission).toBe('UNKNOWN');
+    expect(refused.basis).toContain(`${REPAIR}'s implementation could not be read`);
+    for (const checked of ['', 'null', 'false']) {
+      const row = permissions(completingWith({ 'scope.tsv': table(SCOPE, [implementation(BUILD, { scope_checked: checked }), implementation(REPAIR)]) }).dir);
+      expect(row.mission, `scope_checked=${checked || '(empty)'}`).toBe('UNKNOWN');
+      expect(row.basis).toContain(`${BUILD}'s change set was not checked against a scope`);
+    }
+    const CAPTURED = [...SCOPE, 'workspace_captured', 'attempt_captured'];
+    const uncaptured = permissions(completingWith({
+      'scope.tsv': table(CAPTURED, [implementation(BUILD, { workspace_captured: 'false' }), implementation(REPAIR, { workspace_captured: 'true' })]),
+    }).dir);
+    expect(uncaptured.mission).toBe('UNKNOWN');
+    expect(uncaptured.basis).toContain(`${BUILD}'s workspace was not captured`);
+
+    // A coder task that FAILED having reported no implementation changed nothing
+    // Julius could have checked, and does not hold the row back; one whose
+    // attempt left a workspace nobody captured does.
+    const abandoned: Task = { id: `${RUN}:build:abandoned`, type: 'build', role: 'CODING_AGENT', state: 'FAILED', ordinal: 5 };
+    const tasks = [...COMPLETING_TASKS, abandoned];
+    const withAbandoned = (scope: readonly Row[]) => completingWith({
+      'tasks.tsv': table(TASKS, taskRows(tasks)), 'worker-diagnostics.tsv': table(DIAGNOSTICS, diagnosticsFor(tasks)),
+      'trajectory.tsv': table(TRAJECTORY, trajectoryFor(tasks)), 'scope.tsv': table(CAPTURED, scope),
+    }).dir;
+    const control = permissions(withAbandoned([implementation(BUILD), implementation(REPAIR)]));
+    expect(control.verdict, control.basis).toBe('PASS');
+    const lostAttempt = permissions(withAbandoned([implementation(BUILD), implementation(REPAIR),
+      { run_id: RUN, sequence: '50', task_id: abandoned.id, event_type: 'julius.coder.attempt.workspace', attempt_captured: 'false', occurred_at: 't' }]));
+    expect(lostAttempt.mission).toBe('UNKNOWN');
+    expect(lostAttempt.basis).toContain(`${abandoned.id}'s attempt left a workspace nobody captured`);
+    // And which coder tasks had to be checked is read from tasks.tsv, so without it the row cannot say.
+    const noTasks = permissions(completingWith({ 'tasks.tsv': 'unavailable\n' }).dir);
+    expect(noTasks.mission).toBe('UNKNOWN');
+    expect(noTasks.basis).toContain('tasks.tsv is unreadable');
+  });
+
+  /* ------------------------------------------------ P2-F · zero bytes */
+
+  /**
+   * Z1-Z3. `dump` opens the redirect before psql says anything, so a dump
+   * killed there leaves ZERO BYTES, which read as a table with no rows:
+   * SETTLEMENT INTEGRITY PASS on a zero-byte `settlement-integrity.tsv`, the
+   * three drill rows NOT EXERCISED (so the drills stood in) and PERMISSIONS
+   * PASS on a zero-byte `failures.tsv`. Zero bytes, whitespace, and a header
+   * the dump never finished with its `(N rows)` footer are all UNREADABLE.
+   */
+  it('P2-F (Z1): SETTLEMENT INTEGRITY reads a zero-byte or unfinished dump as UNKNOWN, and only the dump\'s own zero as none', () => {
+    const settledOnce = (integrity: string | null) => completingWith({
+      'budget.tsv': table(BUDGET, [
+        { run_id: RUN, sequence: '4', task_id: BUILD, event_type: 'julius.budget.reserved', role: 'CODING_AGENT', reservation_id: 'reservation:build' },
+        { run_id: RUN, sequence: '9', task_id: BUILD, event_type: 'julius.budget.settled', role: 'CODING_AGENT', reservation_id: 'reservation:build' },
+      ]),
+      'settlement-integrity.tsv': integrity,
+    }).dir;
+    const stated = rowFor(evaluate(settledOnce(table(INTEGRITY, []))), 'SETTLEMENT INTEGRITY');
+    expect(stated.verdict, 'header and `(0 rows)`: the dump looked and found none').toBe('PASS');
+    for (const broken of ['', ' \n\n', cutShort(INTEGRITY)]) {
+      const row = rowFor(evaluate(settledOnce(broken)), 'SETTLEMENT INTEGRITY');
+      expect(row.mission, `settlement-integrity.tsv as ${JSON.stringify(broken)}`).toBe('UNKNOWN');
+      expect(row.verdict).toBe('FAIL');
+      expect(row.basis).toContain('no readable settlement-integrity dump');
+    }
+  });
+
+  it('P2-F (Z2): a zero-byte or unfinished failures.tsv leaves the drill rows UNKNOWN, and no drill stands in', () => {
+    const stated = evaluate(withDrills(completingWith({ 'failures.tsv': table(FAILURES, []) }).dir));
+    expect(rowFor(stated, 'RESTART / RECOVERY').verdict, 'the dump\'s own zero: nothing failed, and the drill stands in').toBe('CAPABILITY PROVEN');
+    expect(rowFor(stated, 'FAILURE RECOVERY').verdict).toBe('CAPABILITY PROVEN');
+    for (const broken of ['', cutShort(FAILURES)]) {
+      const report = evaluate(withDrills(completingWith({ 'failures.tsv': broken }).dir));
+      for (const id of ['RESTART / RECOVERY', 'FAILURE RECOVERY', 'REPAIR LOOP', 'PERMISSIONS / MISSION BOUNDARIES']) {
+        const row = rowFor(report, id);
+        expect(row.mission, `${id} over failures.tsv as ${JSON.stringify(broken)}`).toBe('UNKNOWN');
+        expect(row.verdict).toBe('FAIL');
+      }
+    }
+  });
+
+  it('P2-F (Z3): a zero-byte or unfinished scope.tsv leaves PERMISSIONS UNKNOWN, and so does a receipt listing that says nothing', () => {
+    for (const broken of ['', cutShort(SCOPE)]) {
+      const row = permissions(completingWith({ 'scope.tsv': broken }).dir);
+      expect(row.mission, `scope.tsv as ${JSON.stringify(broken)}`).toBe('UNKNOWN');
+      expect(row.basis).toContain('scope.tsv is unreadable');
+    }
+    // `ls … > receipt-ids.txt || true` leaves zero bytes both when the executor
+    // holds no receipt and when the listing failed: which of the two is unknown,
+    // so neither is read as "every invocation unreceipted".
+    for (const silent of ['', '\n \n']) {
+      const row = permissions(completingWith({ 'receipt-ids.txt': silent }).dir);
+      expect(row.mission, `receipt-ids.txt as ${JSON.stringify(silent)}`).toBe('UNKNOWN');
+      expect(row.basis).toContain('receipt-ids.txt is unreadable');
+    }
+  });
+
+  /**
+   * THE RULE, EXPLICIT. A dumped table is read only when psql's own footer
+   * closes it and it holds at least the rows the footer states: a cell of free
+   * text can carry a newline, which only adds lines, while fewer rows than
+   * stated, a footer in the middle (two outputs run together) or rows after
+   * `(0 rows)` are a table nobody can vouch for.
+   */
+  it('P2-F: a table is complete only when psql\'s footer closes it and every row it states is there', () => {
+    const settledRow = [RUN, '9', BUILD, 'julius.budget.settled', 'CODING_AGENT', 'reservation:build'].join('\t');
+    const settlement = (budget: string) => rowFor(evaluate(completingWith({ 'budget.tsv': budget, 'settlement-integrity.tsv': table(INTEGRITY, []) }).dir), 'SETTLEMENT INTEGRITY');
+    const cases: readonly [string, string][] = [
+      [[BUDGET.join('\t'), settledRow, '(2 rows)'].join('\n'), 'fewer rows than the footer states'],
+      [[BUDGET.join('\t'), settledRow, '(1 row)', settledRow.replace('reservation:build', 'reservation:plan'), '(1 row)'].join('\n'), 'two outputs run together'],
+      [[BUDGET.join('\t'), settledRow, '(0 rows)'].join('\n'), 'a row the footer says is not there'],
+      [[BUDGET.join('\t'), '(0 rows)', settledRow].join('\n'), 'a row after the footer'],
+      [[BUDGET.join('\t'), settledRow].join('\n'), 'no footer at all'],
+    ];
+    for (const [budget, what] of cases) {
+      const row = settlement(budget);
+      expect(row.mission, what).toBe('UNKNOWN');
+      expect(row.basis, what).toContain('the budget dump is unreadable');
+    }
+    expect(settlement([BUDGET.join('\t'), settledRow, '(1 row)'].join('\n')).verdict, 'the whole table').toBe('PASS');
+    // A free-text cell that carries a newline adds a line and loses nothing the gate reads.
+    const evidenceLines = completingFiles()['evidence.tsv'].split('\n').slice(0, -1);
+    const multiline = evaluate(completingWith({
+      'evidence.tsv': [...evidenceLines, [`${BUILD}:1:note`, 'DIFF', 'PASSED', 'first line\nsecond line', 't', RUN, BUILD, ''].join('\t'), `(${evidenceLines.length} rows)`].join('\n'),
+    }).dir);
+    for (const id of ['PROMPT ARCHITECT', 'INDEPENDENT REVIEWER', 'PERMISSIONS / MISSION BOUNDARIES']) {
+      expect(rowFor(multiline, id).verdict, `${id}: ${rowFor(multiline, id).basis}`).toBe('PASS');
+    }
+  });
+
+  /* ------------------------------------------------ P3 · RESULT lines */
+
+  /**
+   * S6. A named `RESULT: COMPLETED` beside an unattributed `RESULT: FAILED`
+   * read VERIFIED COMPLETION PASS: the line that named no run was not counted.
+   * It could be this run's, so the bundle cannot say how this run ended.
+   */
+  it('P3 (S6): a RESULT line that names no run, or two for this run that disagree, leave VERIFIED COMPLETION UNKNOWN', () => {
+    const completion = (text: string) => rowFor(evaluate(completingWith({ 'live-mission.evidence.txt': text }).dir), 'VERIFIED COMPLETION');
+    const acceptedLine = `Run ${RUN} accepted in state READY; driving the Julius run loop.\n`;
+    const s6 = completion(`${accepted(RUN, 'COMPLETED after 9 ticks')}RESULT: FAILED after 2 ticks\n`);
+    expect(s6.mission).toBe('UNKNOWN');
+    expect(s6.basis).toContain('`RESULT: FAILED after 2 ticks` names no run');
+    const above = completion(`${acceptedLine}RESULT: FAILED after 2 ticks\nRESULT: COMPLETED after 9 ticks\n  run: ${RUN}\n`);
+    expect(above.mission, 'a run: line belongs to the RESULT right above it, not to one further up').toBe('UNKNOWN');
+    const unnamedTwin = completion(`${acceptedLine}RESULT: COMPLETED after 9 ticks\nRESULT: COMPLETED after 9 ticks\n  run: ${RUN}\n`);
+    expect(unnamedTwin.mission, 'the first names no run of its own, whatever it agrees with').toBe('UNKNOWN');
+    const disagree = completion(`${accepted(RUN, 'COMPLETED after 9 ticks')}RESULT: FAILED after 9 ticks\n  run: ${RUN}\n`);
+    expect(disagree.mission).toBe('UNKNOWN');
+    expect(disagree.basis).toContain('its RESULT lines disagree');
+    const blocked = completion(`${accepted(RUN, 'COMPLETED after 9 ticks')}RESULT: BLOCKED — nothing was submitted and no provider was contacted.\n`);
+    expect(blocked.mission, 'a RESULT line of another shape is still a RESULT line').toBe('UNKNOWN');
+    const alone = completion(`${acceptedLine}RESULT: COMPLETED after 9 ticks\n`);
+    expect(alone.mission, 'even alone, a RESULT that names no run is not shown to be this run\'s').toBe('UNKNOWN');
+    const twice = completion(`${accepted(RUN, 'COMPLETED after 9 ticks')}RESULT: COMPLETED after 9 ticks\n  run: ${RUN}\n`);
+    expect(twice.verdict, `the same answer twice is one answer: ${twice.basis}`).toBe('PASS');
   });
 });

@@ -1183,10 +1183,16 @@ describe('the evidence dump names only tables and columns the migrations create'
     expect(line('finding-status.tsv'), 'the status now is the last transition, else the recorded OPEN')
       .toContain("COALESCE((SELECT t.payload->'facts'->>'to' FROM relay_wonderland.events t WHERE t.event_type='julius.finding.transitioned' AND t.stream_id=f.run_id AND t.payload->'facts'->>'findingId'=f.finding_id ORDER BY t.sequence DESC LIMIT 1),f.status)");
     const scope = line('scope.tsv');
-    for (const type of ['julius.coder.scope.violated', 'julius.coder.implementation.recorded', 'julius.coder.attempt.workspace']) {
-      expect(scope, `the scope dump selects ${type}`).toContain(`'${type}'`);
+    const catalogue = read('src/relay/mission/julius/julius-events.ts');
+    // `coder.report.refused` is the path on which Julius could not read what the
+    // coder changed and writes no implementation row: without it in the dump,
+    // that silence reads as a checked change set.
+    for (const type of ['coder.scope.violated', 'coder.implementation.recorded', 'coder.attempt.workspace', 'coder.report.refused']) {
+      expect(scope, `the scope dump selects julius.${type}`).toContain(`'julius.${type}'`);
+      expect(catalogue, `${type} must be a real event type`).toContain(`'${type}'`);
     }
-    for (const key of ['rule', 'scopeChecked', 'scopeViolations', 'ownScopeViolations']) expect(scope).toContain(`'${key}'`);
+    // What the Beta Gate's PERMISSIONS row reads: the checked flag and both capture flags, beside the counts.
+    for (const key of ['rule', 'scopeChecked', 'scopeViolations', 'ownScopeViolations', 'workspaceCaptured', 'captured']) expect(scope).toContain(`'${key}'`);
     for (const text of ["'path'", "'paths'", "'own'", "'inherited'"]) {
       expect(scope.includes(text), `the scope dump must not export ${text}, which a coder's changes wrote`).toBe(false);
     }
