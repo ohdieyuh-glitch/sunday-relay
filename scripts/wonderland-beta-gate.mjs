@@ -313,6 +313,8 @@ const RUN_SCOPED_FILES = [
   // Read by WONDER WEB OUTPUT; nothing produces it yet, and a hand-added one
   // with no run_id once fed that row (G2).
   'wonder-web.tsv',
+  // Read by VERIFIED COMPLETION: what became of each finding (B1).
+  'finding-status.tsv', 'finding-lifecycle.tsv',
 ];
 
 const ACCEPTED_LINE = /^Run (\S+) accepted in state READY; driving the Julius run loop\.$/gmu;
@@ -414,6 +416,15 @@ function bindingOf(ev) {
   if (reading === null) return unbound('the commit of the checkout reading this bundle is unknown (git could not say), so nothing ties the bundle to it');
   if (manifest.commit !== reading) {
     return unbound(`it was produced at ${manifest.commit.slice(0, 12)} and is being read at ${reading.slice(0, 12)}, so its rows describe code this checkout does not hold`);
+  }
+  /**
+   * AND THAT COMMIT IS THE CODE THAT RAN only when the checkout that dumped it
+   * held no edit. The manifest counts tracked changes at dump time
+   * (`git status --porcelain --untracked-files=no`); a checkout with any — or
+   * one whose count could not be taken — ran code the commit does not name.
+   */
+  if (manifest.tracked_changes !== '0') {
+    return unbound(`the checkout that produced it recorded tracked_changes=${manifest.tracked_changes ?? '(absent)'}, so the commit it names is not shown to be the code that ran`);
   }
   if (manifest.mode !== 'paid') {
     return unbound(`it is mode=${manifest.mode ?? '(absent)'} (${manifest.mode_basis ?? 'no basis'}), and only a paid mission's rows can prove what a paid mission does`);
@@ -869,6 +880,43 @@ const why = (ev, taskId) => {
   return row === undefined ? '' : ` (${row.julius_code || 'no code'}/${row.failure_class || 'no class'})`;
 };
 const runLabel = (ev) => (ev.run === null ? 'the run' : `run ${ev.run.run_id}`);
+
+/**
+ * THE BLOCKING FINDINGS THE RECORD STILL SHOWS UNRESOLVED, by the runtime's own
+ * rule (`juliusFindingIsUnresolved`, julius-finding-lifecycle.ts): anything but
+ * RESOLVED — and SUPERSEDED only when the finding it names as its replacement
+ * is one the run recorded. `unknown` says why the bundle cannot tell, or is null.
+ */
+const BLOCKING = new Set(['t', 'true']);
+function outstandingFindings(ev) {
+  if (ev.file('finding-status.tsv') === null) {
+    if (ev.file('findings.tsv') === null) {
+      return { ids: [], unknown: 'neither finding-status.tsv nor findings.tsv is readable, so whether a blocking finding was left standing is unknown' };
+    }
+    const blocking = ev.rows('findings.tsv').filter((row) => BLOCKING.has(row.blocking));
+    return blocking.length === 0 ? { ids: [], unknown: null } : {
+      ids: [],
+      unknown: `${blocking.length} blocking finding(s) are recorded (${blocking.map((row) => row.finding_id).join(', ')}) and finding-status.tsv is unreadable, so whether each was resolved is unknown`,
+    };
+  }
+  const statuses = ev.rows('finding-status.tsv');
+  const recorded = new Set(statuses.map((row) => row.finding_id));
+  const lifecycle = ev.file('finding-lifecycle.tsv') === null ? null : ev.rows('finding-lifecycle.tsv');
+  const ids = [];
+  for (const row of statuses.filter((entry) => BLOCKING.has(entry.blocking))) {
+    if (row.effective_status === 'RESOLVED') continue;
+    if (row.effective_status === 'SUPERSEDED') {
+      if (lifecycle === null) {
+        return { ids: [], unknown: `${row.finding_id} reads SUPERSEDED and finding-lifecycle.tsv is unreadable, so whether the finding that replaced it exists is unknown` };
+      }
+      const replacement = lifecycle.filter((entry) => entry.finding_id === row.finding_id && entry.superseded_by_finding_id)
+        .map((entry) => entry.superseded_by_finding_id).pop();
+      if (replacement !== undefined && replacement !== row.finding_id && recorded.has(replacement)) continue;
+    }
+    ids.push(`${row.finding_id} ${row.effective_status || '(no status)'}`);
+  }
+  return { ids, unknown: null };
+}
 const noRun = (ev) => unknown(ev.allRows('runs.tsv').length === 0
   ? 'no run row in the evidence bundle'
   : `the bundle holds ${ev.allRows('runs.tsv').length} run(s) and names none of them as its own`);
@@ -901,10 +949,18 @@ const REPAIR_REFUSAL = /^(?:REPAIR_(?:UNROUTABLE|BUDGET_DENIED|ROUNDS_EXHAUSTED|
 
 /**
  * THE EXECUTOR REFUSALS THAT MEAN A WORKER REACHED PAST ITS AUTHORITY. The
- * others (unavailable, a malformed request, an unknown outcome) are
- * infrastructure, and an unknown outcome is judged by the invocation it left.
+ * infrastructure ones (unavailable, a malformed request, an unknown outcome)
+ * are not breaches, and an unknown outcome is judged by the invocation it left.
+ * Together they are the runtime's JULIUS_EXECUTOR_REFUSALS (julius-router.ts,
+ * held equal by a test) but one: `executor_refused_unclassified`, a refusal the
+ * classifier could not name, which may be either — so it is neither a pass nor
+ * a breach, but UNKNOWN, and so is any value the runtime does not define.
  */
 const BOUNDARY_REFUSALS = new Set(['executor_scope_refused', 'executor_authorization_refused', 'executor_security_failure', 'executor_invocation_unauthorized']);
+export const INFRASTRUCTURE_REFUSALS = Object.freeze([
+  'executor_unavailable', 'executor_request_invalid', 'executor_identity_invalid', 'executor_identity_conflict', 'executor_outcome_unknown',
+  'executor_terminal_failure', 'executor_response_invalid', 'executor_claim_missing', 'executor_dispatch_unclaimed',
+]);
 const OPEN_INVOCATION_STATES = new Set(['REQUESTED', 'AUTHORIZED', 'DISPATCHING', 'RUNNING']);
 const EXECUTED_INVOCATION_STATES = new Set(['SUCCEEDED', 'FAILED', 'TIMED_OUT']);
 /** Every state `julius_tool_invocations.state` may hold (migration 019): open, executed, DENIED and CANCELLED. */
@@ -1305,6 +1361,21 @@ const CAPABILITIES = [
       if (result.state !== 'COMPLETED' || result.stalled) {
         return failed(`the entrypoint reported RESULT: ${result.state}${result.stalled ? ' (stalled)' : ''} for ${runLabel(ev)}, while runs.tsv says COMPLETED`);
       }
+      /**
+       * NOT OVER A BLOCKING FINDING STILL STANDING (P2-H). The runtime holds a
+       * completion while any blocking finding is unresolved — OPEN, ADDRESSED
+       * (a repair acted and nobody independent said it worked), or SUPERSEDED
+       * by a finding the run never recorded (`juliusFindingIsUnresolved`) — and
+       * `finding-status.tsv` carries each finding's status as its lifecycle
+       * left it. The gate reads it rather than taking the completion's word.
+       * Without it, a bundle whose findings are all non-blocking still says
+       * enough; one with a blocking finding does not.
+       */
+      const outstanding = outstandingFindings(ev);
+      if (outstanding.unknown !== null) return unknown(`${runLabel(ev)} reads COMPLETED, but ${outstanding.unknown}`);
+      if (outstanding.ids.length > 0) {
+        return failed(`${runLabel(ev)} reached COMPLETED over ${outstanding.ids.length} blocking finding(s) the record still shows unresolved (${outstanding.ids.join(', ')})`);
+      }
       // COMPLETED BY REAL PROVIDERS, or it is not a verified completion: a run
       // a drill's scripted adapters drove to COMPLETED proves the pipeline, not
       // that Julius can deliver a mission.
@@ -1567,7 +1638,8 @@ const CAPABILITIES = [
       const receiptFile = ev.file('receipt-ids.txt');
       const receipts = new Set((receiptFile ?? '').split('\n').map((line) => line.trim()).filter((line) => /^[0-9a-f]{64}$/u.test(line)));
       const executed = invocations.filter((row) => EXECUTED_INVOCATION_STATES.has(row.state));
-      if (receiptFile !== null) {
+      // Only a listing that names receipts can show one missing; an empty one is judged below.
+      if (receipts.size > 0) {
         const unsigned = executed.filter((row) => !receipts.has(sha256Hex(row.invocation_id)));
         if (unsigned.length > 0) {
           return failed(`${unsigned.length} tool invocation(s) settled with no executor receipt scope of their own (${unsigned.map((row) => `${row.invocation_id} ${row.state}`).join(', ')}): Julius recorded an effect the independent executor holds no receipt for`);
@@ -1582,6 +1654,16 @@ const CAPABILITIES = [
        */
       const gap = unreadable(ev, 'worker-diagnostics.tsv', 'receipt-ids.txt', 'scope.tsv', 'evidence.tsv', 'failures.tsv', 'tasks.tsv');
       if (gap !== null) return cannotRead(gap, 'whether the boundary held');
+      // `ls … > receipt-ids.txt || true` leaves a listing that names nothing both
+      // when the executor holds no receipt and when the listing failed.
+      if (receipts.size === 0) {
+        return unknown('receipt-ids.txt names no receipt scope at all, and an executor holding none cannot be told from a listing that failed, so whether this run\'s effects were receipted is unknown');
+      }
+      const unclassified = ev.rows('worker-diagnostics.tsv').filter((row) => row.executor_refusal
+        && !BOUNDARY_REFUSALS.has(row.executor_refusal) && !INFRASTRUCTURE_REFUSALS.includes(row.executor_refusal));
+      if (unclassified.length > 0) {
+        return unknown(`the executor refused ${unclassified.length} effect(s) for a reason nobody classified (${[...new Set(unclassified.map((row) => `${row.task_id}: ${row.executor_refusal}`))].join(', ')}), so whether a worker reached past its authority is unknown`);
+      }
       /**
        * SOMETHING MUST HAVE RUN INSIDE THE BOUNDARY. Zero invocations, or only
        * invocations that never executed (CANCELLED before dispatch, the

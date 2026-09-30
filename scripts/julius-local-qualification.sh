@@ -681,6 +681,13 @@ cmd_evidence() {
   require_native_docker
   require_rig
   load_rig
+  # THE BUNDLE NAMES THE CODE THAT RAN, OR IT IS NOT WRITTEN. Its manifest records this checkout's
+  # `git rev-parse HEAD` and tracked changes at DUMP time, and the Beta Gate binds a bundle only to
+  # that commit with no tracked change. `run` refuses unless the rig was built from HEAD on a clean
+  # checkout, so the rig's commit is the run's: evidence taken after the checkout moved, or from an
+  # edited tree, would name code the mission never ran.
+  [ "$RIG_HEAD" = "$HEAD_SHA" ] || refuse "evidence_head_moved: the rig ran $RIG_HEAD and HEAD is now $HEAD_SHA; check $RIG_HEAD out again before taking evidence"
+  [ -z "$(git status --porcelain --untracked-files=no)" ] || refuse 'evidence_checkout_dirty: the checkout has tracked changes, so the manifest would name a commit that is not the code that ran'
   local out
   out="$STATE/evidence/$(date -u +%Y%m%dT%H%M%SZ)/julius-live-evidence"
   mkdir -p "$out"

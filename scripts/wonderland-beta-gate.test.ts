@@ -7,6 +7,7 @@ import { join } from 'node:path';
 
 import { participantIdForIdentity } from '../relay-bridge/github-auth-routes';
 import { CODER_WORKER, architectWorker, reviewerWorker } from '../relay-bridge/julius/live-composition';
+import { JULIUS_EXECUTOR_REFUSALS } from '../src/relay/mission/julius/julius-router';
 import { JULIUS_CAPABILITY_DRILLS, capabilityDrill, drillDrivenFiles, importClosure } from './julius-drill-closure.mjs';
 import { ACCOUNT_PARTICIPANT_ID, BUNDLE_MANIFEST, evaluate, type BetaGateReport, type BetaVerdict } from './wonderland-beta-gate.mjs';
 // The gate's newer exports, read through the namespace so this file still loads
@@ -57,6 +58,8 @@ const FAILURES = ['run_id', 'sequence', 'task_id', 'role', 'event_type', 'julius
 const DIAGNOSTICS = ['run_id', 'sequence', 'task_id', 'role', 'stage', 'transport', 'provider', 'served_model', 'requested_model', 'response_id', 'executor_refusal', 'permission_denials', 'outcome', 'event_type', 'served_model_basis'];
 const TRAJECTORY = ['event_kind', 'task_id', 'worker_id', 'provider_id', 'outcome', 'safe_facts', 'occurred_at', 'run_id'];
 const SCOPE = ['run_id', 'sequence', 'task_id', 'event_type', 'rule', 'attributed_to', 'scope_checked', 'scope_violations', 'own_scope_violations', 'occurred_at'];
+const FINDING_STATUS = ['run_id', 'finding_id', 'task_id', 'blocking', 'recorded_status', 'effective_status', 'transitions'];
+const FINDING_LIFECYCLE = ['run_id', 'sequence', 'task_id', 'event_type', 'finding_id', 'finding_move', 'to_status', 'superseded_by_finding_id'];
 const BRAIN = ['entry_id', 'entry_kind', 'worker_id', 'task_id', 'revision', 'created_at', 'run_id'];
 const SESSIONS = ['execution_id', 'mission_id', 'project_id', 'player_id', 'agent_id', 'state'];
 const CONTRACTS = ['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at', 'run_id'];
@@ -219,6 +222,8 @@ function completingFiles(): Record<string, string> {
       { decision_id: 'decision:3', task_id: REPAIR, action: 'ACCEPT', reason_code: 'TASK_VERIFIED', run_id: RUN },
     ]),
     'findings.tsv': table(FINDINGS, [{ finding_id: 'finding:1', blocking: 't', status: 'OPEN', claim: '[blocking] The change is untested.', run_id: RUN, task_id: BUILD }]),
+    // The row is written OPEN and never updated; its life is the ledger's: the repair ADDRESSED it, the re-review RESOLVED it.
+    'finding-status.tsv': table(FINDING_STATUS, [{ run_id: RUN, finding_id: 'finding:1', task_id: BUILD, blocking: 't', recorded_status: 'OPEN', effective_status: 'RESOLVED', transitions: '2' }]),
     'evidence.tsv': table(EVIDENCE, [
       { evidence_id: `${PLAN}:1:0`, evidence_type: 'ARTIFACT', status: 'PASSED', safe_summary: 'Validated architect plan stored for this run.', run_id: RUN, task_id: PLAN },
       { evidence_id: `${PLAN_REVIEW}:1:0`, evidence_type: 'REVIEW_FINDING', status: 'PASSED', safe_summary: 'Independent review approved the change.', run_id: RUN, task_id: PLAN_REVIEW },
@@ -1930,5 +1935,83 @@ describe('the second review, finding by finding', () => {
     for (const report of [unscoped, scoped]) {
       expect(report.summary.provenByMission + report.summary.provenByDrill, 'BETA: NOT READY').toBeLessThan(report.summary.total);
     }
+  });
+
+  /* ------------------------------------------------ P1-B · the commit is the code that ran */
+
+  /**
+   * B12. The manifest records the tracked changes of the checkout that dumped
+   * it and the gate ignored them: a bundle dumped from an edited tree bound to
+   * a commit that is not the code that ran. Anything but `0` is unbound now,
+   * `unknown` (git could not count) and a manifest without the field included.
+   */
+  it('P1-B (B12): a bundle dumped from a checkout with tracked changes is not bound to its commit', () => {
+    for (const tracked of ['7', 'unknown', '']) {
+      const made = completingWith({ [BUNDLE_MANIFEST]: manifest({ tracked_changes: tracked }) });
+      const report = evaluate(made.dir);
+      expect(report.binding.bound, `tracked_changes=${tracked}`).toBe(false);
+      expect(report.binding.reason).toContain(`recorded tracked_changes=${tracked || ''}`);
+      expect(report.results.filter((row) => row.verdict === 'PASS')).toEqual([]);
+    }
+    const absent = completingWith({});
+    absent.write(BUNDLE_MANIFEST, manifest().split('\n').filter((line) => !line.startsWith('tracked_changes=')).join('\n'));
+    expect(evaluate(absent.dir).binding.reason).toContain('tracked_changes=(absent)');
+    expect(evaluate(completingBundle()).binding.bound, 'tracked_changes=0 binds').toBe(true);
+  });
+
+  /* ------------------------------------------------ P2-H · findings, as their lifecycle left them */
+
+  /**
+   * V01. `finding-status.tsv` and `finding-lifecycle.tsv` were dumped and never
+   * read, so a COMPLETED run over a blocking finding still OPEN read VERIFIED
+   * COMPLETION PASS. The runtime's own rule (`juliusFindingIsUnresolved`)
+   * decides now: OPEN and ADDRESSED are unresolved, and SUPERSEDED is resolved
+   * only when the replacement it names is a finding the run recorded.
+   */
+  it('P2-H (V01): a COMPLETED run over a blocking finding its lifecycle left unresolved is not a verified completion', () => {
+    const completion = (files: Readonly<Record<string, string | null>>) => rowFor(evaluate(completingWith(files).dir), 'VERIFIED COMPLETION');
+    const status = (effective: string, blocking = 't', finding = 'finding:1') =>
+      ({ run_id: RUN, finding_id: finding, task_id: BUILD, blocking, recorded_status: 'OPEN', effective_status: effective, transitions: '1' });
+    for (const effective of ['OPEN', 'ADDRESSED']) {
+      const row = completion({ 'finding-status.tsv': table(FINDING_STATUS, [status(effective)]) });
+      expect(row.mission, effective).toBe('FAILED');
+      expect(row.basis).toContain(`blocking finding(s) the record still shows unresolved (finding:1 ${effective})`);
+    }
+    expect(completion({ 'finding-status.tsv': table(FINDING_STATUS, [status('OPEN', 'f')]) }).verdict, 'a finding that does not block holds nothing back').toBe('PASS');
+    // SUPERSEDED: resolved only by a replacement the run actually recorded.
+    const superseded = (replacement: string, lifecycle: boolean) => completion({
+      'finding-status.tsv': table(FINDING_STATUS, [status('SUPERSEDED'), status('RESOLVED', 't', 'finding:2')]),
+      'finding-lifecycle.tsv': lifecycle
+        ? table(FINDING_LIFECYCLE, [{ run_id: RUN, sequence: '70', task_id: BUILD_REVIEW, event_type: 'julius.finding.transitioned', finding_id: 'finding:1', finding_move: 'REVIEWER_SUPERSEDED', to_status: 'SUPERSEDED', superseded_by_finding_id: replacement }])
+        : 'unavailable\n',
+    });
+    expect(superseded('finding:2', true).verdict, 'replaced by a finding the run recorded').toBe('PASS');
+    expect(superseded('finding:9', true).mission, 'replaced by a finding nobody recorded').toBe('FAILED');
+    expect(superseded('finding:2', false).mission, 'and whether the replacement exists cannot be read').toBe('UNKNOWN');
+    // Without the status dump, only a run with no blocking finding at all can say.
+    expect(completion({ 'finding-status.tsv': null }).mission, 'a blocking finding with no status on record').toBe('UNKNOWN');
+    expect(completion({ 'finding-status.tsv': null, 'findings.tsv': table(FINDINGS, []) }).verdict).toBe('PASS');
+    // And the status dump is run-scoped: one that cannot say which run it is about unbinds the bundle (B22).
+    const unscoped = evaluate(completingWith({ 'finding-status.tsv': table(FINDING_STATUS.filter((column) => column !== 'run_id'), [status('RESOLVED')]) }).dir);
+    expect(unscoped.binding.reason).toContain('finding-status.tsv carries no run_id column');
+  });
+
+  /* ------------------------------------------------ P3 · the boundary row's last two */
+
+  it('P3: a receipt listing that names no scope, or a refusal nobody classified, leaves PERMISSIONS UNKNOWN', () => {
+    const noScope = permissions(completingWith({ 'receipt-ids.txt': 'total 0\n' }).dir);
+    expect(noScope.mission, 'a listing that names nothing is not "every effect unreceipted"').toBe('UNKNOWN');
+    expect(noScope.basis).toContain('receipt-ids.txt names no receipt scope at all');
+    const refusal = (value: string) => permissions(completingWith({
+      'worker-diagnostics.tsv': table(DIAGNOSTICS, diagnosticsFor(COMPLETING_TASKS, RUN, (task) => (task.id === BUILD ? { executor_refusal: value } : {}))),
+    }).dir);
+    const unclassified = refusal('executor_refused_unclassified');
+    expect(unclassified.mission, 'a refusal nobody classified may be a boundary refusal').toBe('UNKNOWN');
+    expect(unclassified.basis).toContain(`${BUILD}: executor_refused_unclassified`);
+    expect(refusal('executor_scope_refused').mission, 'a boundary refusal is a breach').toBe('FAILED');
+    expect(refusal('executor_unavailable').verdict, 'infrastructure is not a breach').toBe('PASS');
+    // The two lists and the unclassified one are exactly the runtime's refusals.
+    expect([...gateModule.INFRASTRUCTURE_REFUSALS, 'executor_scope_refused', 'executor_authorization_refused', 'executor_security_failure', 'executor_invocation_unauthorized', 'executor_refused_unclassified'].sort())
+      .toEqual([...JULIUS_EXECUTOR_REFUSALS].sort());
   });
 });
