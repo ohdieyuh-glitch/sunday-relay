@@ -31,8 +31,10 @@ import type {
  *     where it is, so a driver claims nothing and stops, naming the pause as the
  *     cause. Work already in flight finishes and its paid-for result is kept —
  *     the kernel's stated rule — but nothing new starts.
- *   - RESUME: PAUSED -> READY and nothing else. The run continues when the
- *     mission job (the process that holds the credentials) drives it again.
+ *   - RESUME: PAUSED -> READY, or PAUSED -> BLOCKED when an approval is still
+ *     pending, and nothing else. A READY run continues when the mission job (the
+ *     process that holds the credentials) drives it again; a BLOCKED one waits
+ *     for its approval first, whoever drives it.
  *   - CANCEL: the run ends CANCELLED with the operator's reason on the record,
  *     every unfinished task is cancelled, and a late result is refused
  *     (`result_after_cancellation`). Idempotent: cancelling a cancelled run
@@ -120,6 +122,25 @@ const API_REFUSAL_STATUS: Readonly<Record<string, number>> = {
 
 const TERMINAL = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
 
+/**
+ * WHAT THE OPERATOR IS TOLD HAPPENS NEXT, from the state the change left.
+ *
+ * A resume can land in BLOCKED: the run was paused while an approval was
+ * pending, and resuming does not grant it. Telling the operator that such a run
+ * "continues when the mission job drives it" was untrue, because no drive will
+ * start work until the approval is decided. So BLOCKED gets its own sentence.
+ */
+export function juliusLifecycleNextStep(state: string): string {
+  if (TERMINAL.has(state)) return `The run is ${state}; its state is final and nothing will be dispatched for it.`;
+  if (state === 'PAUSED') {
+    return 'The run is PAUSED: it claims no new work. Work already in flight finishes; nothing new starts until it is resumed.';
+  }
+  if (state === 'BLOCKED') {
+    return 'The run is BLOCKED: it is waiting on a pending approval, and nothing is dispatched for it until that approval is granted. A denial ends the run. This route dispatches nothing.';
+  }
+  return `The run is ${state}. It continues when the Julius mission job drives it; this route dispatches nothing.`;
+}
+
 export async function handleJuliusLifecycleRoute(
   request: JuliusLifecycleRouteRequest,
   ports: JuliusLifecycleRoutePorts,
@@ -198,10 +219,6 @@ export async function handleJuliusLifecycleRoute(
     // WHAT WAS NOT DONE, on the wire: this route records intent and drives
     // nothing, so a client must not draw a resumed run as running.
     dispatched: false,
-    next: TERMINAL.has(outcome.to)
-      ? `The run is ${outcome.to}; its state is final and nothing will be dispatched for it.`
-      : outcome.to === 'PAUSED'
-        ? 'The run is PAUSED: it claims no new work. Work already in flight finishes; nothing new starts until it is resumed.'
-        : `The run is ${outcome.to}. It continues when the Julius mission job drives it; this route dispatches nothing.`,
+    next: juliusLifecycleNextStep(outcome.to),
   });
 }

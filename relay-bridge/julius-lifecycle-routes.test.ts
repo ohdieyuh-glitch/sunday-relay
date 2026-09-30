@@ -41,6 +41,7 @@ import {
 import {
   handleJuliusLifecycleRoute,
   isJuliusLifecycleRoute,
+  juliusLifecycleNextStep,
   type JuliusLifecycleRoutePorts,
   type JuliusLifecycleRouteRequest,
 } from './julius-lifecycle-routes';
@@ -416,5 +417,33 @@ describe('the record survives a restart and is served by the read family', () =>
     const paused = timeline.entries.filter((entry) => entry.type === 'run.paused');
     expect(paused).toHaveLength(1);
     expect(paused[0]!.facts).toMatchObject({ actor: 'operator', reason: 'Awaiting the founder.', from: 'READY' });
+  });
+});
+
+/**
+ * WHAT THE OPERATOR IS TOLD, per state. A resume can land in BLOCKED (an
+ * approval still pending), and a BLOCKED run does not "continue when the
+ * mission job drives it": nothing is dispatched until the approval is decided.
+ */
+describe('the next-step sentence names what each state will actually do', () => {
+  it('BLOCKED waits on its approval; it is never told it continues when driven', () => {
+    const blocked = juliusLifecycleNextStep('BLOCKED');
+    expect(blocked).toContain('pending approval');
+    expect(blocked).toContain('A denial ends the run');
+    expect(blocked).not.toContain('continues when');
+  });
+
+  it('READY continues when driven; PAUSED claims nothing; terminal states are final', () => {
+    expect(juliusLifecycleNextStep('READY')).toContain('continues when the Julius mission job drives it');
+    expect(juliusLifecycleNextStep('PAUSED')).toContain('claims no new work');
+    for (const state of ['COMPLETED', 'FAILED', 'CANCELLED']) {
+      expect(juliusLifecycleNextStep(state)).toContain('its state is final');
+    }
+  });
+
+  it('every sentence says the route itself dispatched nothing, except where the state is final or paused', () => {
+    for (const state of ['READY', 'BLOCKED']) {
+      expect(juliusLifecycleNextStep(state)).toContain('dispatches nothing');
+    }
   });
 });
