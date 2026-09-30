@@ -94,7 +94,9 @@ describe('defect B: the live shell port claims its own invocation, and nothing e
  * without its project was an exact claim in ANY project, resting tenancy on the caller; a project
  * named without an invocation was defect B's sweep inside that project. No caller does either, and
  * now the store refuses both before any statement runs. `null` counts as unnamed, as it does in the
- * SQL (`invocationId ?? null`). The same refusal against a real PostgreSQL is in the DEFECT B case.
+ * SQL (`invocationId ?? null`). The empty string is a NAME, as it is in the SQL: it is compared, and
+ * matches no row, so it can only narrow a claim to nothing, never widen one. The same refusal, and
+ * the empty names matching nothing, against a real PostgreSQL are in the DEFECT B case.
  */
 describe('defect B: the PostgreSQL claim is scoped by both names or by neither', () => {
   const repositoryOver = () => {
@@ -106,7 +108,10 @@ describe('defect B: the PostgreSQL claim is scoped by both names or by neither',
   type Scope = { invocationId?: string | null; projectId?: string | null };
 
   it('an invocation named without its project, or a project without an invocation, is refused before any SQL', async () => {
-    const halves: Scope[] = [{ invocationId: 'inv:1' }, { projectId: PROJECT }, { invocationId: 'inv:1', projectId: null }, { invocationId: null, projectId: PROJECT }];
+    const halves: Scope[] = [
+      { invocationId: 'inv:1' }, { projectId: PROJECT }, { invocationId: 'inv:1', projectId: null }, { invocationId: null, projectId: PROJECT },
+      { invocationId: '' }, { projectId: '' },
+    ];
     for (const scope of halves) {
       const { repository, statements } = repositoryOver();
       await expect(repository.claimDispatch({ ...base, ...scope } as never), JSON.stringify(scope)).rejects.toThrow('tool_dispatch_claim_half_scoped');
@@ -115,7 +120,10 @@ describe('defect B: the PostgreSQL claim is scoped by both names or by neither',
   });
 
   it('both names, or neither (the fleet sweep), still reach the claim with the scope as given', async () => {
-    const wholes: Scope[] = [{ invocationId: 'inv:1', projectId: PROJECT }, {}, { invocationId: null, projectId: null }];
+    const wholes: Scope[] = [
+      { invocationId: 'inv:1', projectId: PROJECT }, {}, { invocationId: null, projectId: null },
+      { invocationId: '', projectId: PROJECT }, { invocationId: 'inv:1', projectId: '' }, { invocationId: '', projectId: '' },
+    ];
     for (const scope of wholes) {
       const { repository, statements } = repositoryOver();
       expect(await repository.claimDispatch({ ...base, ...scope } as never), JSON.stringify(scope)).toEqual([]);
