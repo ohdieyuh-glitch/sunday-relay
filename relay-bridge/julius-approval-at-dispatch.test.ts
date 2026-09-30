@@ -407,6 +407,8 @@ describe('B. the hold is enforced where work starts: the claim and the dispatch 
     // could see that, and nothing runs it before the founder's catch-all. The bound name says it offline.
     expect(store.pendingApprovals.name).toBe('bound pendingApprovals');
     expect(store.deniedApprovals.name).toBe('bound deniedApprovals');
+    // And the handoff the lease fences ((a2)): without it the old attempt could hand off after recovery took its task.
+    expect(typeof store.appendHandoffEvent).toBe('function');
   });
 
   it('PARITY: the PostgreSQL approval reads select the state their names promise', () => {
