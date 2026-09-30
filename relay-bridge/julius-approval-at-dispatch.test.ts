@@ -411,6 +411,9 @@ describe('B. the hold is enforced where work starts: the claim and the dispatch 
     expect(store.deniedApprovals.name).toBe('bound deniedApprovals');
     // And the handoff the lease fences ((a2)): without it the old attempt could hand off after recovery took its task.
     expect(typeof store.appendHandoffEvent).toBe('function');
+    // And the release decided against its reservation's settlements ((a2) step 3): without it a late free release lands
+    // after the sweep's close, and the gate fails a bundle in which no money moved.
+    expect(typeof store.appendSettlementEvent).toBe('function');
   });
 
   it('PARITY: the PostgreSQL approval reads select the state their names promise', () => {
