@@ -73,6 +73,10 @@ import { createExecutorShellPort } from './julius/executor-effects';
 import { createLiveArtifactExchange, juliusReviewerBillingPath } from './julius/live-workers';
 import { liveEvidenceLines } from './julius/live-evidence-lines';
 import {
+  liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveOneLine, liveResearchLines, liveTickAccountLine, liveTickBudgetLine,
+  liveWorkersBlockedLines,
+} from './julius/live-report-lines';
+import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
   driveJuliusRunToTerminal,
@@ -561,7 +565,8 @@ export async function observeResearchCommand(input: {
 /* ------------------------------------------------------------------ main */
 
 async function main(argv: readonly string[]): Promise<number> {
-  const out = (line: string): void => { process.stdout.write(`${line}\n`); };
+  // ONE PHYSICAL LINE PER LINE: text Julius did not write can carry a line break (`liveOneLine`).
+  const out = (line: string): void => { process.stdout.write(`${liveOneLine(line)}\n`); };
   const flag = (name: string): boolean => argv.includes(`--${name}`);
   const option = (name: string): string | null => {
     const index = argv.indexOf(`--${name}`);
@@ -576,7 +581,7 @@ async function main(argv: readonly string[]): Promise<number> {
     return observeResearchCommand({
       contractPath: option('contract'),
       out,
-      err: (line) => { process.stderr.write(`${line}\n`); },
+      err: (line) => { process.stderr.write(`${liveOneLine(line)}\n`); },
     });
   }
   if (argv[0] !== 'run' || option('contract') === null) {
@@ -675,7 +680,7 @@ async function main(argv: readonly string[]): Promise<number> {
   let coderProvenance: ClaudeAuthProvenance | null = null;
   let claudeAuthBlocked = false;
   if (!authMode.ok) {
-    out(`  CLAUDE AUTH: REFUSED — ${authMode.refusal}: ${authMode.because}`);
+    out(liveClaudeAuthRefusedLine(authMode));
     claudeAuthBlocked = true;
   } else {
     // THE CHILD'S OWN ENVIRONMENT, composed by the same function and from the same
@@ -848,7 +853,8 @@ async function main(argv: readonly string[]): Promise<number> {
       researchPolicyFor: researchPolicyOf,
     });
     if (!resolution.ok) {
-      for (const problem of resolution.problems) out(`BLOCKED ${problem.role}: ${problem.missing.join(', ')}`);
+      // Each role's problem, then the outcome: an artifact never says nothing (`liveWorkersBlockedLines`).
+      for (const line of liveWorkersBlockedLines(resolution.problems)) out(line);
       return 1;
     }
 
@@ -912,16 +918,12 @@ async function main(argv: readonly string[]): Promise<number> {
         researchProbes: observed.probes,
       }),
     });
-    if (researchClause === undefined) {
-      out('  research: NOT AUTHORISED (no contract clause) — every ask is refused research_not_authorized');
-    } else {
-      out(`  research: authorised for ${[...researchClause.roles].join(', ')} across ${researchClause.allowances.length} allowance(s); ${observed.probes.length} observed backend(s)`);
-      /* WHAT THE CLAUSE CAN ACTUALLY REACH, said before the money is spent
-         rather than discovered one refusal at a time in the evidence. */
-      for (const row of researchReachSummary(researchClause, observed.probes)) {
-        out(`    ${row.source}/${row.capability}: ${row.readiness}${row.readiness === 'ready' ? '' : ' — retrieval will be refused'}`);
-      }
-    }
+    /* WHAT THE CLAUSE CAN ACTUALLY REACH, said before the money is spent
+       rather than discovered one refusal at a time in the evidence. */
+    for (const line of liveResearchLines(researchClause === undefined ? null : {
+      roles: [...researchClause.roles], allowances: researchClause.allowances.length,
+      observedBackends: observed.probes.length, reach: researchReachSummary(researchClause, observed.probes),
+    })) out(line);
     /* THE ALLOWANCE, SAID BEFORE THE FIRST DISPATCH: counted from this run's
        seeded units and the verification policy it was assembled with, so the
        evidence shows what the mission was permitted before it shows what it
@@ -930,9 +932,9 @@ async function main(argv: readonly string[]): Promise<number> {
     const tickBudget = await liveTickBudgetFor({
       store: handoffs.store, runId: submitted.runId, projectId: contract.projectId, verification: runtime.verification,
     });
-    out(`  tick budget: planned=${tickBudget.plannedTicks} hard_max=${tickBudget.hardMaxTicks} ${tickBudget.reason} override=${tickOverride.override ?? 'none'} version=${tickBudget.version}`);
+    out(liveTickBudgetLine(tickBudget, tickOverride.override));
     out(`  wall clock deadline: ${wallClockDeadline(env)}`);
-    out(`  peer execution scope: ${liveExecutionScope(env)}`);
+    out(liveExecutionScopeLine(liveExecutionScope(env)));
     const outcome = await driveJuliusRunToTerminal({
       loop: runtime.loop, store: handoffs.store,
       runId: submitted.runId, projectId: contract.projectId,
@@ -946,10 +948,7 @@ async function main(argv: readonly string[]): Promise<number> {
     const decisions = await handoffs.store.decisionsForRun(submitted.runId, contract.projectId);
     out(`RESULT: ${outcome.state}${outcome.stalled ? ' (stalled before terminal state)' : ''} after ${outcome.ticks} ticks`);
     if (outcome.haltCause !== null) out(`  cause: ${outcome.haltCause}`);
-    if (outcome.tickAccount !== null) {
-      const ticks = outcome.tickAccount;
-      out(`  ticks: consumed=${ticks.ticksConsumed} allowance=${ticks.allowance} remaining=${ticks.ticksRemaining} beyond_main_path=${ticks.beyondMainPath} disagreement=${ticks.disagreementTicks} architecture=${ticks.architectureTicks} retries=${ticks.retries} exhausted=${ticks.exhausted ? 'yes' : 'no'}`);
-    }
+    if (outcome.tickAccount !== null) out(liveTickAccountLine(outcome.tickAccount));
     out(`  run: ${submitted.runId}`);
     for (const task of tasks) out(`  task ${task.taskId} [${task.role}/${task.taskType}] → ${task.state}`);
     // A row from an attempt the decision did not read is labelled, not hidden (`liveEvidenceLines`).
@@ -968,7 +967,7 @@ if (typeof require !== 'undefined' && require.main === module) {
   main(process.argv.slice(2)).then(
     (code) => { process.exitCode = code; },
     (error) => {
-      process.stdout.write(`JULIUS LIVE MISSION crashed: ${error instanceof Error ? error.message.slice(0, 300) : 'unknown error'}\n`);
+      process.stdout.write(`${liveOneLine(`JULIUS LIVE MISSION crashed: ${error instanceof Error ? error.message.slice(0, 300) : 'unknown error'}`)}\n`);
       process.exitCode = 1;
     },
   );
