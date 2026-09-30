@@ -109,6 +109,29 @@ export declare const NOT_A_PROVIDER_TOKENS: readonly string[];
 /** The participant id GitHub sign-in mints (`ghu-<id>`): the only account this repository creates. */
 export declare const ACCOUNT_PARTICIPANT_ID: RegExp;
 
+/** Where the live identities are read from: the composition, the launchers that set the reviewer's provider, the runtime's transport enum. */
+export declare const LIVE_COMPOSITION: string;
+export declare const LIVE_LAUNCHERS: readonly string[];
+export declare const RUNTIME_TRANSPORTS: string;
+
+/** The evidence dump whose queries decide which bundle files have a producer. */
+export declare const EVIDENCE_DUMP: string;
+
+/** One role's live identity: the worker and adapter the composition declares, and the providers it routes the role to. */
+export interface LiveRoleIdentity {
+  readonly workerId: string;
+  readonly adapterId: string;
+  readonly providers: readonly string[];
+}
+
+/**
+ * The allowlist a task's provider identity is held to, read from this checkout's
+ * live composition — or why it cannot be read, in which case no role is credited.
+ */
+export declare function liveIdentities():
+  | { readonly roles: Readonly<Record<'PROMPT_ARCHITECT' | 'CODING_AGENT' | 'INDEPENDENT_REVIEWER', LiveRoleIdentity>>; readonly transports: readonly string[] }
+  | { readonly error: string };
+
 export interface BetaGateOptions {
   /**
    * A directory holding `capability-proofs.tsv` and its transcripts, when they

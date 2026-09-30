@@ -11,10 +11,11 @@
  *
  * So the set a drill must attest is derived here, from repository state alone:
  *
- *   1. THE ENTRY. `npm run <script>` names a package.json script; that script
- *      must build its bundle with `<script>:build` and then run exactly the
- *      bundle that build writes. The build's esbuild entry is the drill's root.
- *      An attestation cannot choose its own root: it only names the command.
+ *   1. THE ENTRY. `npm run <script>` names a package.json script, and only the
+ *      three capability drills below are drills; that script must build its
+ *      bundle with `<script>:build` and then run exactly the bundle that build
+ *      writes. The build's esbuild entry is the drill's root. An attestation
+ *      cannot choose its own root: it only names the command.
  *   2. THE CLOSURE. Every relative `import` / `export … from` / `import()` /
  *      `require()` is followed from that root. Type-only imports are erased by
  *      the compiler and drive nothing, so they are not followed. A bare
@@ -86,6 +87,32 @@ const bareDependency = (specifier) => {
   return !BUILTINS.has(root);
 };
 
+/**
+ * THE CAPABILITY DRILLS, AND NOTHING ELSE IS ONE.
+ *
+ * `drillEntry` used to accept any `npm run <script>` with a `<script>:build`
+ * sibling, so the relay bridge SERVER (`relay:bridge`) was a "drill" whose
+ * closure covered the account files; and the three real drills share all but
+ * their own entry and module, so the recovery drill's attestation, relabelled,
+ * "proved" FAILURE RECOVERY and REPAIR LOOP as well. Each capability names its
+ * one drill here, with the two things only that drill writes: the transcript
+ * file it leaves and the sentence its transcript closes on (`DrillRecord.seal`
+ * writes `<name> VERIFIED`). The drills read their constants from this table
+ * and the Beta Gate holds every attestation to it, so neither can drift from
+ * the other.
+ */
+export const JULIUS_CAPABILITY_DRILLS = Object.freeze({
+  'RESTART / RECOVERY': Object.freeze({ script: 'julius:recovery-drill', name: 'JULIUS RESTART RECOVERY', transcript: 'julius-recovery-drill.transcript.txt' }),
+  'FAILURE RECOVERY': Object.freeze({ script: 'julius:failure-recovery-drill', name: 'JULIUS FAILURE RECOVERY', transcript: 'julius-failure-recovery-drill.transcript.txt' }),
+  'REPAIR LOOP': Object.freeze({ script: 'julius:repair-loop-drill', name: 'JULIUS REPAIR LOOP', transcript: 'julius-repair-loop-drill.transcript.txt' }),
+});
+
+/** The drill that proves `capability`, with its command, or null when none does. */
+export function capabilityDrill(capability) {
+  const drill = Object.hasOwn(JULIUS_CAPABILITY_DRILLS, capability) ? JULIUS_CAPABILITY_DRILLS[capability] : undefined;
+  return drill === undefined ? null : { ...drill, capability, command: `npm run ${drill.script}` };
+}
+
 const closures = new Map();
 
 /** The sorted, posix-relative set of repository files `entry` drives, `entry` included. */
@@ -121,6 +148,10 @@ export function importClosure(repoRoot, entry) {
 export function drillEntry(repoRoot, drillCommand) {
   const named = /^npm run ([A-Za-z0-9:._-]+)$/u.exec(typeof drillCommand === 'string' ? drillCommand : '');
   if (named === null) return { error: `${drillCommand || '(no command)'} is not an \`npm run <script>\` command` };
+  const drills = Object.values(JULIUS_CAPABILITY_DRILLS).map((drill) => drill.script);
+  if (!drills.includes(named[1])) {
+    return { error: `${named[1]} is not a Julius capability drill (${drills.join(', ')}), so it proves no capability` };
+  }
   let scripts;
   try {
     scripts = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')).scripts ?? {};
