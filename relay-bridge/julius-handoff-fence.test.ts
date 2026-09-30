@@ -186,10 +186,19 @@ describe('(a2) the memory fence reads the owner and the generation, atomically',
  *   (b) recovery runs SERIALIZABLE. One interleaving (recovery's snapshot before the fence commits,
  *       its row lock after) is resolved only by SSI; under READ COMMITTED it requeues a handed task.
  * So the source itself is held: each method is one `juliusSerializable` body, and every statement in
- * it runs on that transaction's client.
+ * it runs on that transaction's client. HARDENED after its review (the review of e8726aa4, finding 1):
+ * three edits kept the old pins' text and broke the property. A COMMIT/BEGIN pair inside the fence
+ * split it on one client (G5b); a SET TRANSACTION made the sweep READ COMMITTED inside its one body
+ * (G6b); dropping `AND lease_generation=$4` from the fence's WHERE (G9) removed the only thing that
+ * tells two claims apart, since production's owner is one constant name. So no body may issue a
+ * transaction statement of its own, and the fence's WHERE is pinned whole. The behaviour itself is
+ * proven by the real-PostgreSQL RECOVERY FIRST, FENCE FIRST and RE-CLAIMED cases, which the
+ * catch-all runs once M2 provisions a test database.
  */
 describe('(a2) the PostgreSQL fence and sweep are each one serializable transaction (source pins)', () => {
   const source = (...path: string[]) => readFileSync(join(__dirname, '..', ...path), 'utf8');
+  /** A transaction statement issued inside a body: it would split or weaken the one transaction the body is. */
+  const OWN_TRANSACTION = /client\.query\(\s*['"`]\s*(?:COMMIT|BEGIN|ROLLBACK|SAVEPOINT|RELEASE|SET\s+TRANSACTION|SET\s+SESSION|START\s+TRANSACTION|END)\b/iu;
 
   it('(a) the fence reads the task FOR SHARE and inserts the handoff inside one juliusSerializable body', () => {
     const text = source('src', 'relay', 'persistence', 'julius-event-postgres.ts');
@@ -197,8 +206,11 @@ describe('(a2) the PostgreSQL fence and sweep are each one serializable transact
     expect(body, 'appendHandoff is found').toBeDefined();
     expect(body!.match(/juliusSerializable\(/gu), 'exactly one transaction').toHaveLength(1);
     expect(body).toMatch(/juliusSerializable\(this\.pool,async\(client\)=>\{const held=await client\.query\(`SELECT 1 FROM relay_wonderland\.julius_tasks WHERE [^`]*FOR SHARE`/u);
+    expect(body, 'the whole WHERE: the state, the owner AND the generation (G9)')
+      .toContain("WHERE task_id=$1 AND run_id=$2 AND state='ACTIVE' AND lease_owner=$3 AND lease_generation=$4 FOR SHARE`,[input.event.taskId,input.event.runId,input.owner,input.leaseGeneration]");
     expect(body).toContain('appendJuliusEventWithin(client,input.event)');
     expect(body, 'no statement outside it').not.toMatch(/this\.pool\.(query|connect)/u);
+    expect(body, 'and no transaction statement of its own (G5b)').not.toMatch(OWN_TRANSACTION);
   });
 
   it('(b) recovery sweeps, and closes what it recovers, inside one juliusSerializable body', () => {
@@ -211,6 +223,10 @@ describe('(a2) the PostgreSQL fence and sweep are each one serializable transact
     expect(body).toContain('FOR UPDATE OF t SKIP LOCKED');
     expect(body).toContain('await closeRecoveredReservations(client, candidate, now)');
     expect(body, 'no statement outside it').not.toMatch(/this\.pool\.(query|connect)/u);
+    expect(body, 'and no transaction statement of its own (G6b)').not.toMatch(OWN_TRANSACTION);
+    const close = text.slice(text.indexOf('async function closeRecoveredReservations('));
+    expect(close.indexOf('async function closeRecoveredReservations('), 'the close is found').toBe(0);
+    expect(close, 'nor in the close it runs inside that transaction').not.toMatch(OWN_TRANSACTION);
   });
 
   it('(c) a late release is decided and written inside one juliusSerializable body, the run row locked first ((a2) step 3)', () => {
@@ -222,5 +238,14 @@ describe('(a2) the PostgreSQL fence and sweep are each one serializable transact
     expect(body).toContain('juliusLateSettlementDecision(');
     expect(body!.match(/appendJuliusEventWithin\(client,/gu)?.length, 'every write on the transaction').toBe(3);
     expect(body, 'no statement outside it').not.toMatch(/this\.pool\.(query|connect)/u);
+    expect(body, 'and no transaction statement of its own').not.toMatch(OWN_TRANSACTION);
+  });
+
+  it('CONTROL: the transaction-statement pattern sees each of the review’s own edits', () => {
+    for (const edit of ["await client.query('COMMIT');", "await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');",
+      "await client.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');", 'await client.query(`savepoint s1`);', 'await client.query("ROLLBACK")']) {
+      expect(edit, edit).toMatch(OWN_TRANSACTION);
+    }
+    expect("await client.query('SELECT 1 FROM relay_wonderland.julius_tasks WHERE state=$1 FOR SHARE')", 'an ordinary statement is not one').not.toMatch(OWN_TRANSACTION);
   });
 });

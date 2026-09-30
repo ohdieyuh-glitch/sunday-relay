@@ -343,6 +343,14 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
     `SELECT count(*) FROM relay_wonderland.events
       WHERE event_type='julius.budget.settled' AND stream_id=$1
         AND payload->'facts'->>'reason'=$2 AND payload->'facts'->>'released'=$3`, [runId, reason, String(released)]);
+  /**
+   * EVERY settlement row of a run, and how many of them carry no amount on an UNKNOWN basis. A close
+   * that said `usdMicros: 0` on a spend basis would read as a known $0, and a second row for the same
+   * reservation would be a duplicate the ledger reads only once: the step below refuses both.
+   */
+  const settledRowsOf = (runId: string) => scalar(
+    `SELECT count(*)||'/'||count(*) FILTER (WHERE payload->'facts'->>'usdMicros' IS NULL AND payload->'facts'->>'costBasis'='UNKNOWN')
+       FROM relay_wonderland.events WHERE event_type='julius.budget.settled' AND stream_id=$1`, [runId]);
   const firstSweep = (taskId: string) => scalar(
     `SELECT payload->'facts'->>'action'||'/'||COALESCE(payload->'facts'->>'reasonCode','-')
        FROM relay_wonderland.events
@@ -462,8 +470,12 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
   step('no result was recorded for it', results2 === '0', `${results2} result(s)`);
   const heldAfter = await unsettledFor(HANDED_RUN);
   const closedUnknown = await closedBySweep(HANDED_RUN, 'RECOVERED_HANDED_OUTCOME_UNKNOWN', false);
-  step('and the sweep CLOSED its reservation as an unknown outcome, charged at what it held: never released, never $0',
-    closedUnknown === '1' && heldAfter === '0', `${closedUnknown} closed unknown, ${heldAfter} still open`);
+  // ONE row in the whole run, with no amount on an UNKNOWN basis (the review of 2475bcc1, finding 4): a
+  // close carrying `usdMicros: 0` would read as a known $0, and a second row would be read only once.
+  const settledRows = await settledRowsOf(HANDED_RUN);
+  step('and the sweep CLOSED its reservation as an unknown outcome, charged at what it held: never released, never $0, the only settlement',
+    closedUnknown === '1' && heldAfter === '0' && settledRows === '1/1',
+    `${closedUnknown} closed unknown, ${heldAfter} still open, ${settledRows} settlement row(s)/with no amount`);
 
   const audit = await auditProviders(scalar, [RUN_ID, HANDED_RUN]);
   step('every dispatch went to the drill’s fake provider — and there WERE dispatches to check',

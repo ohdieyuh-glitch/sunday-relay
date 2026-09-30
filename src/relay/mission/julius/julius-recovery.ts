@@ -82,19 +82,27 @@ export interface JuliusRecoverySettlement {
  *     clearing its lease in this same step;
  *   - a `worker.dispatched` for it: closed as an UNKNOWN outcome, charged at what it held. It may
  *     have been paid for, and unknown is not free.
+ * A HANDOFF THAT NAMES ITS RESERVATION SPEAKS FOR THAT RESERVATION ONLY (the review of 2475bcc1,
+ * finding 2). One admission can hold several reservations: a reroute calls the coordinator again
+ * under the same claim and the same attempt, and each leg reserves. Matched by attempt alone, the
+ * first leg's handoff made a reroute's never-sent reservation read "handed". The coordinator now
+ * writes the reservation on the handoff; a handoff that names none (an older build's) falls back to
+ * the attempt rule.
  * WHEN THE ROWS CANNOT TELL, IT IS HELD. A reservation that names no attempt is released only when
- * the task was never handed at all; a handoff that names no attempt holds every reservation.
+ * the task was never handed at all; a handoff that names neither holds every reservation.
  *
  * Pure, so the memory store and PostgreSQL take the same decision by the same function.
- * `dispatchedAttempts` holds the attempt each of the task's `worker.dispatched` rows names, or null
- * for one that names none.
+ * `dispatched` holds, for each of the task's `worker.dispatched` rows, the attempt and the
+ * reservation it names, or null for each it does not.
  */
 export function planJuliusRecoverySettlements(
   open: readonly JuliusOpenReservation[],
-  dispatchedAttempts: readonly (number | null)[],
+  dispatched: readonly { readonly attempt: number | null; readonly reservationId: string | null }[],
 ): JuliusRecoverySettlement[] {
   return open.map((reservation) => {
-    const handed = dispatchedAttempts.some((attempt) => attempt === null || reservation.attempt === null || attempt === reservation.attempt);
+    const handed = dispatched.some((handoff) => (handoff.reservationId !== null
+      ? handoff.reservationId === reservation.reservationId
+      : handoff.attempt === null || reservation.attempt === null || handoff.attempt === reservation.attempt));
     return handed
       ? { reservationId: reservation.reservationId, released: false, reasonCode: 'RECOVERED_HANDED_OUTCOME_UNKNOWN' }
       : { reservationId: reservation.reservationId, released: true, reasonCode: 'RECOVERED_BEFORE_HANDOFF' };
@@ -213,32 +221,34 @@ export interface JuliusPriorSettlement {
  *   - a row that CARRIES COST (not released): always WRITE. Step 3's rule charges the larger.
  *   - a FREE release (released: true) on a reservation with no settlement yet: WRITE.
  *   - a FREE release after closes that were ALL released: SAME_MEANING, not written.
- *   - a FREE release after a close that says money MAY have gone (not released): CONTRADICTION. The
- *     release is written and a `budget.settlement.contradicted` event names both sides, so the gate
- *     reports a contradiction rather than a bare duplicate. The slot ledger keeps the hold charged: a
- *     release never outweighs such a close.
+ *   - a FREE release after a close that says money MAY have gone (not released): CONFLICT. Two
+ *     readings disagree, and neither is shown false: the sweep read a handoff (so money may have
+ *     gone), and the attempt says nothing was sent (a provider can refuse unprocessed after the
+ *     handoff). The release is written and a `budget.settlement.conflict` event names both sides, so
+ *     the gate reports a conflict rather than a bare duplicate. The slot ledger keeps the hold
+ *     charged: a release never outweighs such a close.
  * The store takes this decision under the run-row lock every append takes, so no two writers of one
  * reservation decide at once. Pure, so both stores take it by the same function.
  */
 export function juliusLateSettlementDecision(
   settlement: { readonly released: boolean },
   prior: readonly JuliusPriorSettlement[],
-): 'WRITE' | 'SAME_MEANING' | 'CONTRADICTION' {
+): 'WRITE' | 'SAME_MEANING' | 'CONFLICT' {
   if (!settlement.released || prior.length === 0) return 'WRITE';
-  return prior.every((row) => row.released) ? 'SAME_MEANING' : 'CONTRADICTION';
+  return prior.every((row) => row.released) ? 'SAME_MEANING' : 'CONFLICT';
 }
 
-/** The event that names a contradiction: one per release, and it names the close it disagrees with. */
-export function juliusSettlementContradictionEvent(input: {
+/** The event that names a conflict: one per release, and it names the close it disagrees with. */
+export function juliusSettlementConflictEvent(input: {
   readonly release: JuliusOperationalEvent;
   readonly prior: readonly JuliusPriorSettlement[];
 }): JuliusOperationalEvent {
   const close = input.prior.find((row) => !row.released) ?? input.prior[0];
   return {
-    eventId: `event:budget.settlement.contradicted:${input.release.eventId}`,
+    eventId: `event:budget.settlement.conflict:${input.release.eventId}`,
     runId: input.release.runId,
     projectId: input.release.projectId,
-    type: 'budget.settlement.contradicted',
+    type: 'budget.settlement.conflict',
     taskId: input.release.taskId,
     workerId: input.release.workerId,
     correlationId: input.release.correlationId,
