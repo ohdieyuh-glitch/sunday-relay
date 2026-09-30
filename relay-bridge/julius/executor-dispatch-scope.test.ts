@@ -15,6 +15,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { ToolInvocationResult } from '../../src/relay/mission/julius';
+import { JuliusToolPostgresRepository } from '../../src/relay/persistence/julius-tool-postgres';
 import { createExecutorShellPort } from './executor-effects';
 
 const RUN = 'run:0b0000000000000000000001', TASK = `${RUN}:build`, PROJECT = 'prj-julius-scope-1';
@@ -85,5 +86,41 @@ describe('defect B: the live shell port claims its own invocation, and nothing e
       .toEqual({ projectId: 'prj-another', state: 'AUTHORIZED', claimedBy: null });
     expect(store.rows.get('inv:same-project-other-run'), 'nor another invocation of the same project')
       .toEqual({ projectId: PROJECT, state: 'AUTHORIZED', claimedBy: null });
+  });
+});
+
+/**
+ * THE CLAIM IS SCOPED BY BOTH NAMES OR BY NEITHER (the review of cd0665df, P3). An invocation named
+ * without its project was an exact claim in ANY project, resting tenancy on the caller; a project
+ * named without an invocation was defect B's sweep inside that project. No caller does either, and
+ * now the store refuses both before any statement runs. `null` counts as unnamed, as it does in the
+ * SQL (`invocationId ?? null`). The same refusal against a real PostgreSQL is in the DEFECT B case.
+ */
+describe('defect B: the PostgreSQL claim is scoped by both names or by neither', () => {
+  const repositoryOver = () => {
+    const statements: unknown[][] = [];
+    const pool = { query: async (...args: unknown[]) => { statements.push(args); return { rows: [] }; } };
+    return { repository: new JuliusToolPostgresRepository(pool as never), statements };
+  };
+  const base = { claimedBy: 'julius-live', now: '2026-09-29T00:00:00.000Z', claimedUntil: '2026-09-29T00:02:00.000Z', limit: 1 };
+  type Scope = { invocationId?: string | null; projectId?: string | null };
+
+  it('an invocation named without its project, or a project without an invocation, is refused before any SQL', async () => {
+    const halves: Scope[] = [{ invocationId: 'inv:1' }, { projectId: PROJECT }, { invocationId: 'inv:1', projectId: null }, { invocationId: null, projectId: PROJECT }];
+    for (const scope of halves) {
+      const { repository, statements } = repositoryOver();
+      await expect(repository.claimDispatch({ ...base, ...scope } as never), JSON.stringify(scope)).rejects.toThrow('tool_dispatch_claim_half_scoped');
+      expect(statements, `${JSON.stringify(scope)} ran no statement`).toEqual([]);
+    }
+  });
+
+  it('both names, or neither (the fleet sweep), still reach the claim with the scope as given', async () => {
+    const wholes: Scope[] = [{ invocationId: 'inv:1', projectId: PROJECT }, {}, { invocationId: null, projectId: null }];
+    for (const scope of wholes) {
+      const { repository, statements } = repositoryOver();
+      expect(await repository.claimDispatch({ ...base, ...scope } as never), JSON.stringify(scope)).toEqual([]);
+      expect(statements, `${JSON.stringify(scope)} ran the claim`).toHaveLength(1);
+      expect((statements[0]![1] as unknown[]).slice(3)).toEqual([scope.invocationId ?? null, scope.projectId ?? null]);
+    }
   });
 });
