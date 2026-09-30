@@ -34,6 +34,7 @@
 import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import { requestJuliusApproval, type JuliusApprovalStore } from './julius-lifecycle-runtime';
 import { JULIUS_CLAIMABLE_RUN_STATES } from './julius-state-path';
+import { juliusCurrentAttemptEvidence } from './julius-attempt-evidence';
 import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionOutcome, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest, type JuliusUnrecordedBookkeeping } from './julius-execution-coordinator';
 import { safeReasonCode, type JuliusDispatchWorkspace, type JuliusProviderRouter } from './julius-router';
@@ -5290,13 +5291,23 @@ async function verifyExecutedTask(input: {
   duplicate: boolean;
 }): Promise<JuliusTaskOutcome> {
   const { deps, run, ledger, task } = input;
-  const [tasks, evidence, findings, criteria, decisions] = await Promise.all([
+  const [tasks, evidenceRows, findings, criteria, decisions] = await Promise.all([
     deps.store.tasksForRun(run.runId, run.projectId),
     deps.store.evidenceForRun(run.runId, run.projectId),
     effectiveFindingsOf(deps, run),
     deps.store.criteriaForRun(run.runId, run.projectId),
     deps.store.decisionsForRun(run.runId, run.projectId),
   ]);
+  /**
+   * THE ATTEMPT BEING JUDGED, NOT THE ONES BEFORE IT (defect A). Rows reach a
+   * task from outside the lease fence (the tool settlement while an attempt
+   * runs; the coordinator before acceptance), so an attempt that failed or
+   * lost its lease leaves rows behind, and reading them all sent the next
+   * attempt's clean work to a paid repair. Every task is reduced to its latest
+   * attempt's rows here, which is what the decision, the criteria and the
+   * review verdict below all read. A row that names no attempt is kept.
+   */
+  const evidence = juliusCurrentAttemptEvidence(evidenceRows);
   /**
    * WHETHER THE WORK WAS REVIEWED, read from the task rows — one rule, shared
    * with the liveness judgement in `canStillBeAccepted`, rather than a store
