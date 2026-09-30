@@ -1653,10 +1653,13 @@ export function createJuliusCodingAgentAdapter(input: {
         } catch (error) {
           const consumed = { runtimeStarted: true, ...sessionCostFacts(outcome.observation) };
           if (error instanceof JuliusDispatchError) {
-            // A retry of this task is a new paid session, so bookkeeping that
-            // failed after one never earns it, however transient the store.
-            const retryable = error.code === 'PERSISTENCE_FAILURE' ? false : error.retryable;
-            throw new JuliusDispatchError(error.code, retryable, error.safeMessage, error.failureClass, {
+            // A retry of this task is a new paid session, so NO failure after
+            // one earns it: not bookkeeping, however transient the store, and
+            // not a typed error that arrives saying it is retryable. The code
+            // keeps its meaning; the retry does not survive the session. (The
+            // shell port throws only non-retryable typed errors today, so this
+            // held by each error's own flag; review of d980f3b6, D11.)
+            throw new JuliusDispatchError(error.code, false, error.safeMessage, error.failureClass, {
               ...(error.diagnostics ?? {}), ...consumed,
             });
           }
