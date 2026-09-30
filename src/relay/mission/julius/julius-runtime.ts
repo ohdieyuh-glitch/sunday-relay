@@ -88,6 +88,14 @@ export interface JuliusTask {
   readonly dependencyIds: readonly string[]; readonly requiredEvidenceTypes: readonly JuliusEvidenceType[];
   readonly taskType: string; readonly role: JuliusWorkerRole; readonly ordinal: number;
   state: JuliusTaskState;
+  /**
+   * THE LEASE GENERATION OF THE TASK'S LAST CLAIM, as the stores read it. For a
+   * SUCCEEDED task that is the attempt that was ACCEPTED: no claim follows
+   * success. Every evidence row Julius writes names its attempt by the same
+   * number, so a decision reads that attempt's rows and no other (defect A).
+   * Absent where nothing read it (a task being planned, a store that cannot say).
+   */
+  readonly leaseGeneration?: number;
 }
 
 export class JuliusTaskGraph {

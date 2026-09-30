@@ -5361,8 +5361,13 @@ async function verifyExecutedTask(input: {
    * attempt's clean work to a paid repair. Every task is reduced to its latest
    * attempt's rows here, which is what the decision, the criteria and the
    * review verdict below all read. A row that names no attempt is kept.
+   *
+   * THE ATTEMPT IS THE ONE THE TASK ROW NAMES, not the latest one that wrote a
+   * row: a SUCCEEDED task's generation is the attempt that was accepted, so an
+   * accepted attempt that wrote nothing is judged on nothing (REQUIRED_EVIDENCE_
+   * MISSING) and never on the rows a lost lease left behind.
    */
-  const evidence = juliusCurrentAttemptEvidence(evidenceRows);
+  const evidence = juliusCurrentAttemptEvidence(evidenceRows, tasks);
   /**
    * WHETHER THE WORK WAS REVIEWED, read from the task rows — one rule, shared
    * with the liveness judgement in `canStillBeAccepted`, rather than a store
@@ -5601,6 +5606,8 @@ async function verifyExecutedTask(input: {
   const evaluated = evaluateJuliusVerification({
     task: subject,
     evidence,
+    // A finding may cite ANY attempt's row; only the decision reads the current one.
+    citableEvidence: evidenceRows,
     criteria,
     // The findings the reviewer just recorded are read back, because
     // `findings` was loaded before this task ran and a decision made without

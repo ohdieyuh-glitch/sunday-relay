@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { JuliusOperationalEvent } from '../src/relay/mission/julius';
 import { JuliusEventPostgresRepository } from '../src/relay/persistence/julius-event-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
+import { JuliusReadPostgresRepository } from '../src/relay/persistence/julius-read-postgres';
 import { JuliusRecoveryPostgresRepository } from '../src/relay/persistence/julius-recovery-postgres';
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
@@ -71,6 +72,15 @@ suite('(a2) the fenced handoff against a real PostgreSQL', () => {
   });
   const dispatchedCount = async (runId: string) => Number((await pool.query<{ n: string }>(
     `SELECT count(*) AS n FROM relay_wonderland.events WHERE stream_id=$1 AND event_type='julius.worker.dispatched'`, [runId])).rows[0]!.n);
+
+  it('DEFECT A CONFORMANCE: a SUCCEEDED task reads back the generation of the attempt that was accepted', async () => {
+    const claim = await claimed();
+    expect(await runs.finishTask({ taskId: claim.taskId, owner: claim.owner, leaseGeneration: claim.leaseGeneration, state: 'SUCCEEDED', now: new Date().toISOString() })).toBe(true);
+    const tasks = await new JuliusReadPostgresRepository(pool).tasksForRun(claim.runId, claim.projectId);
+    const task = tasks.find((row) => row.taskId === claim.taskId)!;
+    expect(task.state).toBe('SUCCEEDED');
+    expect(task.leaseGeneration, 'the store names the accepted attempt, so the heuristic is never reached').toBe(claim.leaseGeneration);
+  });
 
   it('a handoff under a held lease is RECORDED once, and its replay is a DUPLICATE', async () => {
     const claim = await claimed();
