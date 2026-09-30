@@ -212,4 +212,15 @@ describe('(a2) the PostgreSQL fence and sweep are each one serializable transact
     expect(body).toContain('await closeRecoveredReservations(client, candidate, now)');
     expect(body, 'no statement outside it').not.toMatch(/this\.pool\.(query|connect)/u);
   });
+
+  it('(c) a late release is decided and written inside one juliusSerializable body, the run row locked first ((a2) step 3)', () => {
+    const text = source('src', 'relay', 'persistence', 'julius-event-postgres.ts');
+    const body = text.split('\n').find((line) => line.includes('async appendSettlement('));
+    expect(body, 'appendSettlement is found').toBeDefined();
+    expect(body!.match(/juliusSerializable\(/gu), 'exactly one transaction').toHaveLength(1);
+    expect(body, 'the run row is the first thing it locks').toMatch(/juliusSerializable\(this\.pool,async\(client\)=>\{validateJuliusEvent\(event\);const owned=await client\.query\('SELECT 1 FROM relay_wonderland\.julius_runs WHERE [^']*FOR UPDATE'/u);
+    expect(body).toContain('juliusLateSettlementDecision(');
+    expect(body!.match(/appendJuliusEventWithin\(client,/gu)?.length, 'every write on the transaction').toBe(3);
+    expect(body, 'no statement outside it').not.toMatch(/this\.pool\.(query|connect)/u);
+  });
 });
