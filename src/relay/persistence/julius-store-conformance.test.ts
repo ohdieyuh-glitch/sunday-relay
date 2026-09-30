@@ -126,8 +126,10 @@ const claimStore: JuliusClaimStore = new JuliusClaimPostgresRepository(pool);
  * needs and the core event type does not carry, which is recorded as an
  * integration contract gap rather than being quietly dropped here.
  */
-const eventWriter: JuliusEventWriter = {
+const eventWriter: JuliusEventWriter & Required<Pick<JuliusEventWriter, 'appendHandoffEvent'>> = {
   appendEvent: async (event) => (await new JuliusEventPostgresRepository(pool).append(event)).recorded,
+  // The handoff, fenced by the lease ((a2)): the same repository, the one event it may refuse.
+  appendHandoffEvent: (input) => new JuliusEventPostgresRepository(pool).appendHandoff(input),
 };
 const trajectoryWriter: JuliusTrajectoryWriter = {
   appendTrajectory: (event) => new JuliusTrajectoryPostgresRepository(pool).append(event),
@@ -151,6 +153,7 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore
   acceptWorkerResult: resultWriter.acceptWorkerResult.bind(resultWriter),
   persist: contextWriter.persist.bind(contextWriter),
   appendEvent: eventWriter.appendEvent.bind(eventWriter),
+  appendHandoffEvent: eventWriter.appendHandoffEvent.bind(eventWriter),
   appendTrajectory: trajectoryWriter.appendTrajectory.bind(trajectoryWriter),
   tasksForRun: reader.tasksForRun.bind(reader),
   evidenceForRun: reader.evidenceForRun.bind(reader),

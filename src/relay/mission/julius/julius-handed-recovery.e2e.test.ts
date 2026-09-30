@@ -99,15 +99,16 @@ describe('recovery reads whether the lost attempt was handed', () => {
     let dispatches = 0;
     const inner = harness.adapters.get(CODER.adapterId)!;
     (harness.adapters as Map<string, JuliusProviderAdapter>).set(CODER.adapterId, { adapterId: CODER.adapterId, async dispatch(input) { dispatches += 1; return inner.dispatch(input); } });
-    // Worker A's write of `worker.dispatched` never returns: it dies before handing anything.
-    const store = harness.store as unknown as { appendEvent: (event: { type: string; facts: Record<string, unknown> }) => Promise<unknown> };
-    const append = store.appendEvent.bind(store);
+    // Worker A's write of `worker.dispatched` never returns: it dies before handing anything. The
+    // handoff is written through the lease-fenced port ((a2)), so that is the write that hangs.
+    const store = harness.store as unknown as { appendHandoffEvent: (input: { event: { type: string } }) => Promise<unknown> };
+    const handoff = store.appendHandoffEvent.bind(store);
     let hung = false;
     let reachedHandoff = (): void => undefined;
     const atHandoff = new Promise<void>((resolve) => { reachedHandoff = resolve; });
-    store.appendEvent = async (event) => {
-      if (!hung && event.type === 'worker.dispatched') { hung = true; reachedHandoff(); return new Promise(() => undefined); }
-      return append(event);
+    store.appendHandoffEvent = async (input) => {
+      if (!hung && input.event.type === 'worker.dispatched') { hung = true; reachedHandoff(); return new Promise(() => undefined); }
+      return handoff(input);
     };
 
     void loopAs(harness, time, 'worker-a').tick(scope);

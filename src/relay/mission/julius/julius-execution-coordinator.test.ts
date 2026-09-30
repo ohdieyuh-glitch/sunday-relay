@@ -345,3 +345,56 @@ describe('a failure after the handoff with no amount keeps its hold', () => {
     expect(await releaseOf(raw('ETIMEDOUT'), before)).toEqual([{ usdMicros: null, spendUnknown: false }]);
   });
 });
+
+/**
+ * (a2) THE HANDOFF IS FENCED BY THE LEASE, AND (F4) THE LAST ABORT CHECK SITS
+ * AFTER IT. A recovery that took the task before `worker.dispatched` was written
+ * makes the fenced write refuse, and nothing may be sent. An abort that landed
+ * while the handoff was being written must stop the dispatch before the
+ * provider is called: `dispatchWithinDeadline` never hears an abort that fired
+ * before its listener existed.
+ */
+describe('the handoff is fenced by the lease, and an abort during it still stops the dispatch', () => {
+  const counting = () => {
+    let calls = 0;
+    const adapter: JuliusProviderAdapter = { adapterId: 'adapter', async dispatch(input) { calls += 1; return success.dispatch(input); } };
+    return { adapter, calls: () => calls };
+  };
+
+  it('(a2) a handoff the lease refuses dispatches nothing, and the hold is released as spending nothing', async () => {
+    const worker = counting();
+    const releases: Array<{ usdMicros: number | null | undefined; spendUnknown: boolean | undefined }> = [];
+    const h = harness(worker.adapter, {
+      async recordHandoff() { return false; },
+      async release(input) { releases.push({ usdMicros: input.usdMicros, spendUnknown: input.spendUnknown }); },
+    });
+    const outcome = await h.coordinator.execute(request);
+    expect(worker.calls(), 'no provider call after a refused handoff').toBe(0);
+    expect(outcome).toMatchObject({ code: 'CANCELLED', failureClass: 'lease_lost' });
+    expect(releases).toEqual([{ usdMicros: null, spendUnknown: false }]);
+    expect(h.order).not.toContain('worker.dispatched');
+  });
+
+  it('F4 an abort that lands while the handoff is written stops the dispatch before the provider is called', async () => {
+    const worker = counting();
+    const controller = new AbortController();
+    const releases: Array<{ spendUnknown: boolean | undefined }> = [];
+    const h = harness(worker.adapter, {
+      async recordHandoff() { controller.abort('lease_lost'); return true; },
+      async release(input) { releases.push({ spendUnknown: input.spendUnknown }); },
+    });
+    const outcome = await h.coordinator.execute({ ...request, signal: controller.signal });
+    expect(worker.calls(), 'the abort was heard before the dispatch, not after it').toBe(0);
+    expect(outcome).toMatchObject({ code: 'CANCELLED' });
+    expect(releases, 'nothing was sent, so nothing is held').toEqual([{ spendUnknown: false }]);
+  });
+
+  it('a store with the fence, whose lease holds, dispatches exactly as before', async () => {
+    const worker = counting();
+    const fenced: string[] = [];
+    const h = harness(worker.adapter, { async recordHandoff(input) { fenced.push(input.idempotencyKey); return true; } });
+    expect(await h.coordinator.execute(request)).toMatchObject({ status: 'COMPLETED' });
+    expect(worker.calls()).toBe(1);
+    expect(fenced).toEqual(['operation:worker.dispatched']);
+  });
+});
