@@ -170,6 +170,34 @@ export const JULIUS_CONTENT_REFUSAL_CLASSES: readonly string[] = Object.freeze([
 export const juliusFailureIsContentRefusal = (failureClass: string | null | undefined): boolean =>
   typeof failureClass === 'string' && JULIUS_CONTENT_REFUSAL_CLASSES.includes(failureClass);
 
+/**
+ * THE FAILURES THAT END THE RUN, NOT ONLY THEIR TASK.
+ *
+ * Founder rule (2026-09-30): the coder is the requested model or nothing. No
+ * automatic downgrade, and a STOP rather than a substitute. The Claude Code
+ * provider ends a session FAILED under one of these classes when the session
+ * was answered by another model, or by one it cannot attest
+ * (`claude-code-coding-provider.ts`). Ending the TASK was not a stop:
+ *  - the run's own reason was the generic `TASK_FAILED`;
+ *  - a sibling that never depended on the failed task was still claimable,
+ *    and would have been sent to the same path.
+ * So a class recorded on a run's `task.failed` rows ends the RUN:
+ *  - FAILED, with the class as the run's reason (`advanceRun`);
+ *  - the dispatch boundary refuses the run's claims;
+ *  - the reroute loop does not try another worker.
+ *
+ * CLOSED. Only this list decides it. Anything else a task fails with ends the
+ * run the ordinary way.
+ */
+export const JULIUS_RUN_HALTING_FAILURE_CLASSES: readonly string[] = Object.freeze([
+  'coder_served_model_mismatch',
+  'coder_served_model_unattested',
+]);
+
+/** The class, when it is one that ends the run; otherwise null. */
+export const juliusRunHaltingFailureClass = (failureClass: unknown): string | null =>
+  typeof failureClass === 'string' && JULIUS_RUN_HALTING_FAILURE_CLASSES.includes(failureClass) ? failureClass : null;
+
 /* ------------------------------------------------------- the provider port */
 
 /**

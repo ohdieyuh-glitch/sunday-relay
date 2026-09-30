@@ -85,8 +85,12 @@ const recovery: JuliusRecoveryDriver = new JuliusRecoveryPostgresRepository(pool
 /** The context repository satisfies the context port directly. */
 const contextWriter: JuliusContextWriter = new JuliusContextPostgresRepository(pool);
 
-/** The reader satisfies the read port directly. */
-const reader: JuliusRuntimeReader = new JuliusReadPostgresRepository(pool);
+/**
+ * The reader satisfies the read port directly, including the OPTIONAL read of
+ * the run-ending failure classes: the production store requires it, so this does.
+ */
+const reader: JuliusRuntimeReader & Required<Pick<JuliusRuntimeReader, 'haltingFailureClasses'>>
+  = new JuliusReadPostgresRepository(pool);
 
 /** The sub-agent repository satisfies the sub-agent store port directly. */
 const subagents: JuliusSubagentStore = new JuliusSubagentPostgresRepository(pool);
@@ -157,6 +161,7 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore
   repairRoundsFor: reader.repairRoundsFor.bind(reader),
   activeTaskCount: reader.activeTaskCount.bind(reader),
   executedBindingFor: reader.executedBindingFor.bind(reader),
+  haltingFailureClasses: reader.haltingFailureClasses.bind(reader),
   recordFinding: findings.recordFinding.bind(findings),
   putTaskContract: taskContracts.putTaskContract.bind(taskContracts),
   challengeTaskContract: taskContracts.challengeTaskContract.bind(taskContracts),
