@@ -5084,7 +5084,13 @@ async function settleRebuttal(input: Parameters<typeof verifyExecutedTask>[0] & 
 }
 
 async function settleReReview(
-  input: Parameters<typeof verifyExecutedTask>[0] & { readonly tasks: readonly JuliusTask[]; readonly rebuttalTask: JuliusTask; readonly verdict: string | null },
+  input: Parameters<typeof verifyExecutedTask>[0] & {
+    readonly tasks: readonly JuliusTask[];
+    /** The attempt-reduced rows the verdict was read from (`juliusCurrentAttemptEvidence`), never the whole history. */
+    readonly evidence: readonly JuliusEvidence[];
+    readonly rebuttalTask: JuliusTask;
+    readonly verdict: string | null;
+  },
 ): Promise<JuliusTaskOutcome> {
   const { deps, run, ledger, task } = input;
   const reviewHead = juliusSegmentLineageRootOf(task, input.tasks).taskId;
@@ -5093,7 +5099,10 @@ async function settleReReview(
     disagreement = await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'RE_REVIEW', verdict: input.verdict }, workerId: input.workerId });
   }
   const peers = peerContextFor(deps, run, ledger);
-  const verdictEvidence = (await deps.store.evidenceForRun(run.runId, run.projectId)).find((item) => item.taskId === task.taskId && item.type === 'REVIEW_FINDING');
+  // THE ANSWER IS THE VERDICT THAT WAS APPLIED (defect A, A-6): the first verdict row of the attempt
+  // the decision read, as `settlePeerRequestsForDecision` names it. Read from every attempt, a row a
+  // lost lease left behind was named as the answer to a question it did not decide.
+  const verdictEvidence = input.evidence.find((item) => item.taskId === task.taskId && item.type === 'REVIEW_FINDING');
   await moveJuliusPeerRequest(peers, {
     kind: 'REVIEW_REQUEST', anchor: reviewHead, to: 'ANSWERED', from: ['OPEN'], responseRef: verdictEvidence?.evidenceId ?? task.taskId,
     causeRef: `${task.taskId}:verdict`, taskId: input.rebuttalTask.taskId, workerId: input.workerId, firstWrite: true,
@@ -5572,7 +5581,7 @@ async function verifyExecutedTask(input: {
 
   // THE ONE RE-REVIEW OF A MAINTAINED POSITION resolves its disagreement.
   if (reviewedTask !== null && reviewedTask.taskType === 'rebuttal' && reviewedTask.role === 'PROMPT_ARCHITECT') {
-    return settleReReview({ ...input, tasks, rebuttalTask: reviewedTask, verdict: applied?.verdict ?? null });
+    return settleReReview({ ...input, tasks, evidence, rebuttalTask: reviewedTask, verdict: applied?.verdict ?? null });
   }
 
   /**
