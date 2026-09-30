@@ -96,6 +96,24 @@ struct FWonderlandTravelDestination
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wonderland|Travel")
 	double ArrivalYawDeg = 0.0;
 
+	/**
+	 * WHERE A VISITOR STANDS, AS DATA: a point on the ground (world uu), faced along ArrivalYawDeg.
+	 *
+	 * FOUNDER, 2026-09-29: "I cannot teleport to the new places Claude Code created. This needs to be fixed as a
+	 * SYSTEM problem." An anchor is a PLACED ACTOR, and World Partition streams placed actors: past roughly the
+	 * 512 m streaming radius it is not in the world to be found, so a place built out there could never be offered
+	 * or reached -- and from out there, the core's own places vanished from the map in the same way. A row that
+	 * carries its arrival point needs no actor at all: it is offered and travelled to from anywhere, streaming is
+	 * waited on at that point, and the same capsule sweep lands the visitor on real ground. When set it wins over
+	 * any anchor with the same id, so a place relocated with intent cannot be pulled back to where it used to be.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wonderland|Travel")
+	FVector ArrivalLocation = FVector::ZeroVector;
+
+	/** True when ArrivalLocation is the arrival point (see above). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wonderland|Travel")
+	bool bHasArrivalLocation = false;
+
 	/** The map this place belongs to. Empty means any map. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wonderland|Travel")
 	FString MapPackage;
@@ -133,9 +151,24 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Transition", meta = (ClampMin = "0.05"))
 	float FadeInSeconds = 0.45f;
 
-	/** Longest the screen may stay black waiting for the destination before the travel is abandoned. */
+	/**
+	 * Longest the screen may stay black waiting for the destination before the travel is abandoned.
+	 *
+	 * 10 S WAS SHORTER THAN THE WORLD. Measured 2026-09-29 (zg_06): every destination more than a few hundred metres
+	 * from the Dog -- the Dubel Forest, the far heartlands, the nation quarters -- timed out still streaming and put the
+	 * visitor back where they started, so "teleport doesn't work to the new places" was true of every far one.
+	 */
 	UPROPERTY(Config, EditAnywhere, Category = "Transition", meta = (ClampMin = "1.0"))
-	float MaxBlackSeconds = 10.0f;
+	float MaxBlackSeconds = 25.0f;
+
+	/**
+	 * How far round the destination must be streamed IN before the visitor is placed, uu. The travel waited for the
+	 * whole 512 m grid loading range round a place nobody was near, when landing needs only the ground and what stands
+	 * on it; the rest streams in round the Dog after the fade exactly as it always does -- the world's own streaming
+	 * range is untouched. 0 or less restores the full grid range for the wait.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Transition")
+	float ArrivalStreamRadiusUU = 15000.0f;
 
 	/** Consecutive frames the ground trace must succeed before fading back in. */
 	UPROPERTY(Config, EditAnywhere, Category = "Transition", meta = (ClampMin = "1"))
@@ -189,9 +222,17 @@ public:
 	virtual bool GetStreamingSource(FWorldPartitionStreamingSource& OutSource) const override;
 	virtual const UObject* GetStreamingSourceOwner() const override { return this; }
 
-	/** Places the map may offer on THIS map: Developed or Available, with an anchor present. */
+	/** Places the map may offer on THIS map: Developed or Available, with an arrival point (registry or anchor). */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Travel")
 	TArray<FWonderlandTravelDestination> GetOfferedDestinations() const;
+
+	/**
+	 * THE ONE ANSWER TO "WHERE DOES THIS PLACE PUT A VISITOR": the row's own arrival point when it carries one,
+	 * otherwise its anchor if that is loaded. The map, the mini-map, the nearest-place test and the teleport all
+	 * ask this, so they can never disagree. False when the place has neither.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Travel")
+	bool ResolveArrival(FName DestinationId, FTransform& OutArrival) const;
 
 	/** Begin a travel. False (with a sentence) when it cannot start; nothing moves then. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Travel")

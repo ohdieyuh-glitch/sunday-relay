@@ -182,6 +182,14 @@ public:
 	FString DescribeFlames() const;
 
 	/**
+	 * Every figure material as it is painted RIGHT NOW: name, the channel its figure declared (if any), and the
+	 * Color on its body instance and on its flame twin. One "name|channel|r,g,b|r,g,b" entry per material, joined by
+	 * ";" -- what a proof reads to show a skin's secondary accents (Jack Flame's fire and tie) took the colour.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	FString DescribeMaterialColours() const;
+
+	/**
 	 * Whether the clock is allowed to touch this body's glow at all. False for the wardrobe's preview figure,
 	 * which stands on its own black stage under its own light: a preview that got dimmer after sunset would
 	 * be reporting the weather rather than the skin.
@@ -364,6 +372,28 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	TArray<FName> GetPartNames() const;
 
+	/**
+	 * WHERE THIS FIGURE'S SOLE IS, in world space, for the leg on the side SideSign names (+1 = +Y, -1 = -Y): the
+	 * knee joint's world transform walked down the shin length measured from the figure's own boxes. A worn
+	 * costume solves this point onto ARelayDogCharacter::GetCanonSoleWorld, and a proof holds the two together.
+	 * ZeroVector when the figure has no leg on that side.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	FVector GetSoleWorld(float SideSign) const;
+
+	/**
+	 * WHERE THIS FIGURE'S HAND IS, in world space, for the arm on the side SideSign names: the elbow joint's world
+	 * transform walked down the forearm length measured from the figure's own boxes. Through a Mission Contract act a
+	 * worn costume solves this point onto ARelayDogCharacter::GetCanonHandWorld -- the hand that holds the book, the
+	 * brush, the lens -- and a proof holds the two together. ZeroVector when the figure has no arm on that side.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	FVector GetHandWorld(float SideSign) const;
+
+	/** How this figure's limbs were classified at load, one line per limb joint (kind, side, lengths). */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	FString DescribeLimbs() const;
+
 	EWonderlandCompanionFormation GetFormation() const { return Formation; }
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
@@ -486,6 +516,31 @@ private:
 		float A = 0.0f;
 		float B = 0.0f;
 		FVector RestLocation = FVector::ZeroVector;
+		/**
+		 * WHICH LIMB JOINT THIS IS, decided ONCE at load from the figure's ABSOLUTE pivots and its hierarchy -- never
+		 * from RestLocation, which is relative to the parent and is zero sideways for every shin and forearm (the
+		 * founder's 2026-09-29 skin-locomotion regression). 0 none, 1 hip, 2 knee, 3 shoulder, 4 elbow.
+		 */
+		uint8 LimbKind = 0;
+		/** +1 when the joint hangs on the +Y side of the figure, -1 on -Y, 0 on the centreline. */
+		int8 LimbSide = 0;
+		/** A hip's knee joint, or a shoulder's elbow (index into PartPivots), so the limb's solve can write both. */
+		int32 LowerIndex = INDEX_NONE;
+		/** A knee's hip, or an elbow's shoulder -- the joint whose solve already wrote this one. */
+		int32 UpperIndex = INDEX_NONE;
+		/** Limb lengths in the part hierarchy's units. A leg: hip to knee, and knee to the ground plane. An arm:
+		 *  shoulder to elbow, and elbow to the hand tip (the lowest box the forearm carries). */
+		float ThighUU = 0.0f;
+		float ShinUU = 0.0f;
+		/**
+		 * TRUE WHEN A SPINE JOINT ABOVE THIS PART ALREADY CARRIES THE PERFORMANCE LIFT.
+		 *
+		 * A worn costume's root is written with the Dog's mission lift (72 uu to meditate, 150 to fly and verify), and
+		 * everything under it rises with it. A FLOAT part adds the lift itself so that a free-floating ornament keeps up
+		 * -- which, under the lifted root, lifted it TWICE: Celestial Light's aura hangs off `root`, and through every
+		 * PREPARATION and VERIFICATION it rose to twice the Dog's height above its body (founder correction, 2026-09-29).
+		 */
+		bool bLiftedByAncestor = false;
 	};
 
 	/** A glowing material's rest colour, so a pulse is computed from rest and never accumulates. */
@@ -543,6 +598,14 @@ private:
 	void ClearBody();
 	FVector DesiredLocation(const APawn* Pawn) const;
 	void Animate(float TimeSeconds);
+	/** The hip and knee rotations that put the sole of the leg at HipIndex on SoleWorld (a worn costume's legs). */
+	bool SolveLegToSole(int32 HipIndex, const FVector& SoleWorld, FRotator& OutHip, FRotator& OutKnee) const;
+	/**
+	 * The shoulder and elbow rotations that put the hand of the arm at ShoulderIndex where the canon's hand on the same
+	 * side is, bending its elbow toward the side the canon's elbow bends -- corrected as little as possible from the
+	 * canon's own joint rotations, which carry the act's twist (a Mission Contract act's hands on its props).
+	 */
+	bool SolveArmToHand(int32 ShoulderIndex, FQuat& OutShoulder, FQuat& OutElbow) const;
 
 	UPROPERTY(VisibleAnywhere, Category = "Wonderland|Companion")
 	TObjectPtr<USceneComponent> Root;

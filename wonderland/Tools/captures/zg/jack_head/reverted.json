@@ -1,0 +1,28 @@
+{
+ "name": "zg_14_jack_head_reverted",
+ "started": "2026-09-30 01:24:03",
+ "status": "captured",
+ "tag": "reverted",
+ "persisted_skin_at_start": "jack_flame",
+ "dog_yaw": 40.0,
+ "figure": "C:/dev/iwonder/wonderland-task3/wonderland/RelaySkins/JackFlame.wlvox",
+ "ground_z": -2.5,
+ "companions_hidden_for_views": 2,
+ "shots": [
+  "reverted_night_front.jpg",
+  "reverted_night_left.jpg",
+  "reverted_night_right.jpg",
+  "reverted_night_rear_three_quarter.jpg",
+  "reverted_night_front_three_quarter.jpg",
+  "reverted_night_wide_front.jpg",
+  "reverted_night_wide_rear.jpg",
+  "reverted_day_front.jpg",
+  "reverted_day_left.jpg",
+  "reverted_day_right.jpg",
+  "reverted_day_rear_three_quarter.jpg",
+  "reverted_day_front_three_quarter.jpg",
+  "reverted_day_wide_front.jpg",
+  "reverted_day_wide_rear.jpg"
+ ],
+ "restored_skin": "jack_flame"
+}

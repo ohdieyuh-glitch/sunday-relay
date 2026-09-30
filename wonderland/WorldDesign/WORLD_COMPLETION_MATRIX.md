@@ -8,6 +8,10 @@
 > Dog skin locomotion on the non-OG skins, Jack Flame's secondary colour not reaching the tie, and teleport to
 > the new world locations. The environmental baseline (world, package, traversal, landscaping) is frozen; see
 > the POST-COMPLETION GAMEPLAY REGRESSION section at the end of this file.
+>
+> 2026-09-30: all three are fixed and proven in play in the editor build (Mission Contract on all five skins x 2
+> deployments, Jack Flame secondary incl. save/reload, 33/33 teleport destinations). They reach players only once the
+> packaged build is rebuilt, so this line stays IN PROGRESS until the founder accepts the rebuilt package.
 
 **Owner of this file: CORE ("Wonderland core continued").** The WORLD session ("Second wonderland session") edits
 only the rows and specs marked WORLD. Founder directive 2026-09-28: *"COMPLETE WONDERLAND AS AN ENTIRE WORLD ...
@@ -637,7 +641,7 @@ rebuild it (IC01's brief). **Founder decision:** (a) build them in the core, rep
 those identities to the outer world instead -- a tower quarter in the ICARUS march (Icarus's vertical silhouette)
 and a mushroom wood on a frontier (the forge's "mushroom woods" are one of the 24 quarter kinds).
 
-## POST-COMPLETION GAMEPLAY REGRESSION (founder, 2026-09-29 evening) -- IN PROGRESS
+## POST-COMPLETION GAMEPLAY REGRESSION (founder, 2026-09-29 evening) -- G1 / G2 / G3 FIXED 2026-09-30 (packaged build to be rebuilt)
 
 Scope: gameplay and system repair only. The completed world is the baseline and is not modified: landscaping, C7,
 radial and ring roads, hedge gates, Golden Arrival geometry, quarter layouts, TW / MG architecture, the world
@@ -645,6 +649,37 @@ boundary, emptiness treatment, lighting and the World Partition layout all stay 
 
 | # | regression | status |
 |---|---|---|
-| G1 | Relay Dog skin locomotion broken on the non-OG skins (Celestial Light, Skeleton Flame, Jack Flame, Baal) | IN PROGRESS: diagnosis |
-| G2 | Jack Flame secondary colour must drive both the flames and the tie | IN PROGRESS: diagnosis |
-| G3 | Teleport to the new world locations (TW01 / TW02 / MG01 and other named places) | IN PROGRESS: diagnosis |
+| G1 | Mission Contract animation sequences wrong on the non-OG skins (founder correction: the MISSION CONTRACT sequences, not ordinary locomotion) | **FIXED, proven in play** (2026-09-30, zg_12 / zg_13 / zg_16) |
+| G2 | Jack Flame secondary colour must drive both the flames and the tie, and survive a reload | **FIXED, proven in play** (zg_21 change + zg_24 restore in a fresh session) |
+| G3 | Teleport to the new world locations (TW01 / TW02 / MG01 and other named places) | **FIXED, proven in play** (zg_22: 16/16 new, 17/17 existing) |
+
+**G1 -- one canonical Mission Contract animation system, skins as a visual layer.** Relay OG *is* the canon body, so
+every act (meditate, read, paint, fly-and-verify, inspect, repair) is solved on its own skeleton and its hands land on
+its own props. A skin is a separate costume body with other proportions (shoulders 24.5 uu lower, forearm 30.8 uu), fed
+a handed-down pose -- and that handoff was losing the act: joints were keyed by parent-relative offsets (all shins and
+forearms driven by the right knee, sides crossed), copied arm ANGLES held every costume hand ~25 uu under the book,
+brush and lens, the VERIFICATION fly lean (9 deg) never reached the costume, Celestial Light's aura took the mission
+lift twice, and the leg solve was switched off for whole acts while the canon walked its circle round the Contract.
+Fix (C++, no per-skin code): the Dog hands down its FINAL joints after ApplyMissionPose, by physical side, plus its
+hand, elbow and shoulder positions and its body as written; the costume solves each arm in 3D so its hand is where the
+canon hand is (the canon's elbow side and twist kept), blended by the act weight exactly as the canon blends; legs
+solve to the canon soles, blended by the canon's own leg-performance share; floating parts under the spine are not
+lifted twice. Proof (zg_12, all five skins x 2 consecutive deployments, measured against the canon body in the same
+frame): identical act sequence to Relay OG in every stage; costume hands within 0.06 uu (p95) of the canon hands in
+every act; props as close to the costume hands as to Relay OG's; body lift / lean / head within 0.05 uu / 0.05 deg;
+feet 0.7 uu while walking; aura steady (3.8 uu); COMPLETED settles to weight 0 and the next deployment starts clean.
+Locomotion regression (zg_16): 5/5. Frames: `Tools/captures/zg/mission_frames/`.
+
+**G2.** The fire (`flame`, `flamepale`) and the tie (`heart`) carry a `secondary` channel in the figure, recoloured by
+the chosen SECONDARY at the authored brightness (the pale core a 40% lighter shade); primary alone leaves them as
+designed. **And the save never reached disk:** UE5 only writes Game.ini sections listed in `[SectionsToSave]`, which
+listed none of Wonderland's, so every mascot colour choice lasted one session -- now listed in DefaultGame.ini. zg_21
+12/12, zg_24: a fresh editor session comes up with the saved azure on tie and fire, then resets to the designed red.
+A whole-head fire for Jack Flame was built and **reverted the same night on the founder's instruction**; the head is
+the accepted one (figure identical to the committed file except the three `secondary` channel tags).
+
+**G3.** The registry now carries each place's arrival point (38 rows, 33 offered; QA points are not offered), the travel
+waits only for the ground round the arrival (150 m streaming shape; the Dog's own 512 m range is untouched) with a 25 s
+limit, and two landmarks were moved 2.5 m off the planters they stood on (Grand Clock, Colossal Key -- registry only,
+no geometry). zg_22: every offered place arrives, lands within 40 cm of the registry height on paving/road/ground,
+streaming settles (max 22.5 s) and the Dog walks away. No map file changed in this phase (newest map file 09-29 15:13).

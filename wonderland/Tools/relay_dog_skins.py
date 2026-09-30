@@ -66,10 +66,14 @@ class Figure:
         self.part_names = set()
         self.boxes = []
 
-    def material(self, name, kind, rgb, strength=1.0):
+    def material(self, name, kind, rgb, strength=1.0, channel=None):
+        # CHANNEL (founder, 2026-09-29): an optional player-colour tag written after the strength -- "secondary"
+        # makes the surface follow the mascot SECONDARY at its authored brightness, "secondary_light" the same
+        # colour lifted toward white. The engine reads it in WonderlandCompanionFigure.cpp; older engines stop at
+        # the strength, so a tagged figure loads everywhere.
         if name in self.material_names:
             return
-        self.materials.append((name, kind, rgb, strength))
+        self.materials.append((name, kind, rgb, strength, channel))
         self.material_names.add(name)
 
     def part(self, name, parent, pivot, motion="none", a=None, b=None):
@@ -459,10 +463,11 @@ class Figure:
             "wlvox 1",
             "voxel %.4f" % self.voxel_uu,
         ]
-        for name, kind, rgb, strength in self.materials:
+        for name, kind, rgb, strength, channel in self.materials:
             if kind in ("glow", "add"):
                 strength *= GLOW_SCALE
-            lines.append("material %s %s %.4f %.4f %.4f %.3f" % (name, kind, rgb[0], rgb[1], rgb[2], strength))
+            lines.append("material %s %s %.4f %.4f %.4f %.3f%s" % (name, kind, rgb[0], rgb[1], rgb[2], strength,
+                                                               "" if not channel else " " + channel))
         for name, parent, pivot, motion, a, b in self.parts:
             extra = "" if a is None else (" %.3f" % a) + ("" if b is None else " %.3f" % b)
             lines.append("part %s %s %.3f %.3f %.3f %s%s" % (name, parent, pivot[0], pivot[1], pivot[2], motion, extra))
@@ -2483,9 +2488,12 @@ def jack_flame():
     # ORANGE, NOT YELLOW. The first in-engine sheet (zzS06) rendered the fire YELLOW and the heart a yellow slab: the
     # engine's real-fire surfaces lift a flame's colour toward white, so the colour has to be authored deeper and
     # more saturated than the orange the sheet shows, and the heart dimmer, so it stays red rather than blooming.
-    figure.material("flame", "glow", (1.00, 0.20, 0.02), 0.55)
-    figure.material("flamepale", "glow", (1.00, 0.44, 0.06), 0.85)
-    figure.material("heart", "glow", (0.95, 0.08, 0.02), 0.6)
+    # THE SECONDARY COLOUR DRIVES THE FIRE AND THE TIE (founder, 2026-09-29: "The SECONDARY COLOR customization must
+    # control BOTH the FLAMES and the RED TIE ... The red tie must therefore NOT remain permanently red"). The tie is
+    # the burning heart on the collar; the pale inner flame keeps its lighter core in whatever colour is chosen.
+    figure.material("flame", "glow", (1.00, 0.20, 0.02), 0.55, channel="secondary")
+    figure.material("flamepale", "glow", (1.00, 0.44, 0.06), 0.85, channel="secondary_light")
+    figure.material("heart", "glow", (0.95, 0.08, 0.02), 0.6, channel="secondary")
     base_dog(figure)
     d = DOG
     tile = d["tile"]
@@ -2502,6 +2510,8 @@ def jack_flame():
     # ================================================================== FLAMING HEAD
     # Rows of tongues across the crown, tallest at the back and the middle, the front row short so the face and the
     # visor are never behind fire ("Preserve the Relay Dog visor/eye identity underneath the costume treatment").
+    # THIS IS THE ACCEPTED HEAD, AND IT STAYS (founder, 2026-09-30): a whole-head burn was built and reverted the same
+    # night -- "The head-flame redesign request is CANCELLED ... restore the original head treatment". Keep this one part.
     figure.part("headfire", "head", (0.0, 0.0, head_top), "twinkle", 0.16)
     # THE EARS STAY READABLE INSIDE THE FIRE. Round 1 ran a row of tongues straight through the ear posts (x 0) and
     # the ears vanished into a band of orange; the sheet shows them standing white inside the blaze. So the tall

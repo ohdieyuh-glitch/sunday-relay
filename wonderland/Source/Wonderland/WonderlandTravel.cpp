@@ -122,14 +122,38 @@ TArray<FWonderlandTravelDestination> UWonderlandTravelSubsystem::GetOfferedDesti
 		{
 			continue;
 		}
-		// No anchor, no offer: a place nobody has stood a visitor in is not a destination yet.
-		if (FindAnchor(Row.Id) == nullptr)
+		// No arrival point, no offer: a place nobody has stood a visitor in is not a destination yet. The row's own
+		// arrival point counts, so a place past the streaming radius -- whose anchor is not loaded -- is still offered.
+		FTransform Arrival;
+		if (!ResolveArrival(Row.Id, Arrival))
 		{
 			continue;
 		}
 		Offered.Add(Row);
 	}
 	return Offered;
+}
+
+bool UWonderlandTravelSubsystem::ResolveArrival(FName DestinationId, FTransform& OutArrival) const
+{
+	const FWonderlandTravelDestination* Row = GetDefault<UWonderlandTravelSettings>()->FindDestination(DestinationId);
+	if (Row == nullptr)
+	{
+		return false;
+	}
+	// THE REGISTRY'S OWN POINT FIRST: it is there wherever the visitor is, and a place relocated with intent must not
+	// be pulled back to a stale anchor still standing where it used to be (Tower Rise, Mushroom Grove).
+	if (Row->bHasArrivalLocation)
+	{
+		OutArrival = FTransform(FRotator(0.0, Row->ArrivalYawDeg, 0.0), Row->ArrivalLocation);
+		return true;
+	}
+	if (const AWonderlandTravelAnchor* Anchor = FindAnchor(DestinationId))
+	{
+		OutArrival = Anchor->GetActorTransform();
+		return true;
+	}
+	return false;
 }
 
 FName UWonderlandTravelSubsystem::GetNearestOfferedDestination(double MaxDistanceUU) const
@@ -144,9 +168,10 @@ FName UWonderlandTravelSubsystem::GetNearestOfferedDestination(double MaxDistanc
 	double BestDistance = MaxDistanceUU;
 	for (const FWonderlandTravelDestination& Row : GetOfferedDestinations())
 	{
-		if (const AWonderlandTravelAnchor* Anchor = FindAnchor(Row.Id))
+		FTransform Arrival;
+		if (ResolveArrival(Row.Id, Arrival))
 		{
-			const double Distance = FVector::Dist2D(Anchor->GetActorLocation(), Pawn->GetActorLocation());
+			const double Distance = FVector::Dist2D(Arrival.GetLocation(), Pawn->GetActorLocation());
 			if (Distance <= BestDistance)
 			{
 				BestDistance = Distance;
@@ -176,8 +201,8 @@ bool UWonderlandTravelSubsystem::RequestTravel(FName DestinationId, FText& OutRe
 		OutRefusal = FText::Format(INVTEXT("{0} is not ready to visit yet."), Destination->DisplayName);
 		return false;
 	}
-	const AWonderlandTravelAnchor* Anchor = FindAnchor(DestinationId);
-	if (Anchor == nullptr)
+	FTransform Arrival;
+	if (!ResolveArrival(DestinationId, Arrival))
 	{
 		OutRefusal = FText::Format(INVTEXT("{0} has no arrival point placed in this world."), Destination->DisplayName);
 		return false;
@@ -192,7 +217,7 @@ bool UWonderlandTravelSubsystem::RequestTravel(FName DestinationId, FText& OutRe
 
 	Controller = PC;
 	TravelId = DestinationId;
-	AnchorTransform = Anchor->GetActorTransform();
+	AnchorTransform = Arrival;
 	OriginTransform = Pawn->GetActorTransform();
 	bPlaced = false;
 	bArrivedResult = false;
@@ -259,14 +284,20 @@ void UWonderlandTravelSubsystem::Tick(float DeltaTime)
 			if (FindSafeSpot(Pawn, AnchorTransform, Spot))
 			{
 				const FRotator Facing(0.0, AnchorTransform.Rotator().Yaw, 0.0);
-				Pawn->TeleportTo(Spot, Facing, false, false);
-				if (ACharacter* Character = Cast<ACharacter>(Pawn))
+				// A REFUSED MOVE IS NOT A PLACEMENT: TeleportTo returns false when the spot is taken, and counting
+				// that as placed would fade in on the old spot and report an arrival. Tried again next tick instead.
+				if (Pawn->TeleportTo(Spot, Facing, false, false))
 				{
-					Character->GetCharacterMovement()->StopMovementImmediately();
+					if (ACharacter* Character = Cast<ACharacter>(Pawn))
+					{
+						Character->GetCharacterMovement()->StopMovementImmediately();
+						// Standing, not sliding or flying: whatever mode the pawn left in, it arrives walking.
+						Character->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+					}
+					PC->SetControlRotation(FRotator(-6.0, Facing.Yaw, 0.0));
+					bPlaced = true;
+					GroundFrames = 0;
 				}
-				PC->SetControlRotation(FRotator(-6.0, Facing.Yaw, 0.0));
-				bPlaced = true;
-				GroundFrames = 0;
 			}
 		}
 		if (bPlaced)
@@ -447,6 +478,15 @@ bool UWonderlandTravelSubsystem::GetStreamingSource(FWorldPartitionStreamingSour
 	}
 	OutSource = FWorldPartitionStreamingSource(TEXT("WonderlandTravel"), AnchorTransform.GetLocation(), AnchorTransform.Rotator(),
 		EStreamingSourceTargetState::Activated, false, EStreamingSourcePriority::High, false);
+	// THE LANDING, NOT THE HORIZON: only the cells round the arrival are waited for (see ArrivalStreamRadiusUU).
+	const float Radius = GetDefault<UWonderlandTravelSettings>()->ArrivalStreamRadiusUU;
+	if (Radius > 0.0f)
+	{
+		FStreamingSourceShape Near;
+		Near.bUseGridLoadingRange = false;
+		Near.Radius = FMath::Max(Radius, 2000.0f);
+		OutSource.Shapes.Add(Near);
+	}
 	return true;
 }
 

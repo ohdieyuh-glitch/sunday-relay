@@ -1,0 +1,506 @@
+{
+ "name": "zg_13_mission_frames",
+ "started": "2026-09-30 01:19:36",
+ "status": "filmed",
+ "persisted_skin_at_start": "jack_flame",
+ "shots": [
+  {
+   "skin": "relay_og",
+   "stage": "PREPARATION",
+   "act": "PREPARATION",
+   "lift_uu": 66.3,
+   "frame": "relay_og_1_preparation_wide.jpg"
+  },
+  {
+   "skin": "relay_og",
+   "stage": "PREPARATION",
+   "act": "PREPARATION",
+   "frame": "relay_og_1_preparation_hands.jpg"
+  },
+  {
+   "skin": "relay_og",
+   "stage": "RESEARCH",
+   "act": "RESEARCH",
+   "lift_uu": 0.0,
+   "frame": "relay_og_2_research_wide.jpg"
+  },
+  {
+   "skin": "relay_og",
+   "stage": "RESEARCH",
+   "act": "RESEARCH",
+   "frame": "relay_og_2_research_hands.jpg"
+  },
+  {
+   "skin": "relay_og",
+   "stage": "IMPLEMENTATION",
+   "act": "IMPLEMENTATION",
+   "lift_uu": 0.0,
+   "frame": "relay_og_3_implementation_wide.jpg"
+  },
+  {
+   "skin": "relay_og",
+   "stage": "IMPLEMENTATION",
+   "act": "IMPLEMENTATION",
+   "frame": "relay_og_3_implementation_hands.jpg"
+  },
+  {
+   "skin": "relay_og",
+   "stage": "VERIFICATION",
+   "act": "VERIFICATION",
+   "lift_uu": 145.3,
+   "frame": "relay_og_4_verification_wide.jpg"
+  },
+  {
+   "skin": "relay_og",
+   "stage": "VERIFICATION",
+   "act": "VERIFICATION",
+   "frame": "relay_og_4_verification_hands.jpg"
+  },
+  {
+   "skin": "relay_og",
+   "stage": "REVIEW",
+   "act": "REVIEW",
+   "lift_uu": 0.0,
+   "frame": "relay_og_5_review_wide.jpg"
+  },
+  {
+   "skin": "relay_og",
+   "stage": "REVIEW",
+   "act": "REVIEW",
+   "frame": "relay_og_5_review_hands.jpg"
+  },
+  {
+   "skin": "relay_og",
+   "stage": "REPAIR",
+   "act": "REPAIR",
+   "lift_uu": 0.0,
+   "frame": "relay_og_6_repair_wide.jpg"
+  },
+  {
+   "skin": "relay_og",
+   "stage": "REPAIR",
+   "act": "REPAIR",
+   "frame": "relay_og_6_repair_hands.jpg"
+  },
+  {
+   "skin": "relay_og",
+   "stage": "COMPLETED",
+   "act": "NONE",
+   "lift_uu": 0.0,
+   "frame": "relay_og_7_completed_wide.jpg"
+  },
+  {
+   "skin": "relay_og",
+   "stage": "COMPLETED",
+   "act": "NONE",
+   "frame": "relay_og_7_completed_hands.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "PREPARATION",
+   "act": "PREPARATION",
+   "lift_uu": 77.9,
+   "frame": "celestial_light_1_preparation_wide.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "PREPARATION",
+   "act": "PREPARATION",
+   "frame": "celestial_light_1_preparation_hands.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "RESEARCH",
+   "act": "RESEARCH",
+   "lift_uu": 0.0,
+   "frame": "celestial_light_2_research_wide.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "RESEARCH",
+   "act": "RESEARCH",
+   "frame": "celestial_light_2_research_hands.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "IMPLEMENTATION",
+   "act": "IMPLEMENTATION",
+   "lift_uu": 0.0,
+   "frame": "celestial_light_3_implementation_wide.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "IMPLEMENTATION",
+   "act": "IMPLEMENTATION",
+   "frame": "celestial_light_3_implementation_hands.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "VERIFICATION",
+   "act": "VERIFICATION",
+   "lift_uu": 145.8,
+   "frame": "celestial_light_4_verification_wide.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "VERIFICATION",
+   "act": "VERIFICATION",
+   "frame": "celestial_light_4_verification_hands.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "REVIEW",
+   "act": "REVIEW",
+   "lift_uu": 0.0,
+   "frame": "celestial_light_5_review_wide.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "REVIEW",
+   "act": "REVIEW",
+   "frame": "celestial_light_5_review_hands.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "REPAIR",
+   "act": "REPAIR",
+   "lift_uu": 0.0,
+   "frame": "celestial_light_6_repair_wide.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "REPAIR",
+   "act": "REPAIR",
+   "frame": "celestial_light_6_repair_hands.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "COMPLETED",
+   "act": "NONE",
+   "lift_uu": 0.0,
+   "frame": "celestial_light_7_completed_wide.jpg"
+  },
+  {
+   "skin": "celestial_light",
+   "stage": "COMPLETED",
+   "act": "NONE",
+   "frame": "celestial_light_7_completed_hands.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "PREPARATION",
+   "act": "PREPARATION",
+   "lift_uu": 68.2,
+   "frame": "skeleton_flame_1_preparation_wide.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "PREPARATION",
+   "act": "PREPARATION",
+   "frame": "skeleton_flame_1_preparation_hands.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "RESEARCH",
+   "act": "RESEARCH",
+   "lift_uu": 0.0,
+   "frame": "skeleton_flame_2_research_wide.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "RESEARCH",
+   "act": "RESEARCH",
+   "frame": "skeleton_flame_2_research_hands.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "IMPLEMENTATION",
+   "act": "IMPLEMENTATION",
+   "lift_uu": 0.0,
+   "frame": "skeleton_flame_3_implementation_wide.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "IMPLEMENTATION",
+   "act": "IMPLEMENTATION",
+   "frame": "skeleton_flame_3_implementation_hands.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "VERIFICATION",
+   "act": "VERIFICATION",
+   "lift_uu": 150.6,
+   "frame": "skeleton_flame_4_verification_wide.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "VERIFICATION",
+   "act": "VERIFICATION",
+   "frame": "skeleton_flame_4_verification_hands.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "REVIEW",
+   "act": "REVIEW",
+   "lift_uu": 0.0,
+   "frame": "skeleton_flame_5_review_wide.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "REVIEW",
+   "act": "REVIEW",
+   "frame": "skeleton_flame_5_review_hands.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "REPAIR",
+   "act": "REPAIR",
+   "lift_uu": 0.0,
+   "frame": "skeleton_flame_6_repair_wide.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "REPAIR",
+   "act": "REPAIR",
+   "frame": "skeleton_flame_6_repair_hands.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "COMPLETED",
+   "act": "NONE",
+   "lift_uu": 0.0,
+   "frame": "skeleton_flame_7_completed_wide.jpg"
+  },
+  {
+   "skin": "skeleton_flame",
+   "stage": "COMPLETED",
+   "act": "NONE",
+   "frame": "skeleton_flame_7_completed_hands.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "PREPARATION",
+   "act": "PREPARATION",
+   "lift_uu": 72.3,
+   "frame": "jack_flame_1_preparation_wide.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "PREPARATION",
+   "act": "PREPARATION",
+   "frame": "jack_flame_1_preparation_hands.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "PREPARATION",
+   "act": "PREPARATION",
+   "frame": "jack_flame_1_preparation_head.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "RESEARCH",
+   "act": "RESEARCH",
+   "lift_uu": 0.0,
+   "frame": "jack_flame_2_research_wide.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "RESEARCH",
+   "act": "RESEARCH",
+   "frame": "jack_flame_2_research_hands.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "RESEARCH",
+   "act": "RESEARCH",
+   "frame": "jack_flame_2_research_head.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "IMPLEMENTATION",
+   "act": "IMPLEMENTATION",
+   "lift_uu": 0.0,
+   "frame": "jack_flame_3_implementation_wide.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "IMPLEMENTATION",
+   "act": "IMPLEMENTATION",
+   "frame": "jack_flame_3_implementation_hands.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "IMPLEMENTATION",
+   "act": "IMPLEMENTATION",
+   "frame": "jack_flame_3_implementation_head.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "VERIFICATION",
+   "act": "VERIFICATION",
+   "lift_uu": 145.0,
+   "frame": "jack_flame_4_verification_wide.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "VERIFICATION",
+   "act": "VERIFICATION",
+   "frame": "jack_flame_4_verification_hands.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "VERIFICATION",
+   "act": "VERIFICATION",
+   "frame": "jack_flame_4_verification_head.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "REVIEW",
+   "act": "REVIEW",
+   "lift_uu": 0.0,
+   "frame": "jack_flame_5_review_wide.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "REVIEW",
+   "act": "REVIEW",
+   "frame": "jack_flame_5_review_hands.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "REVIEW",
+   "act": "REVIEW",
+   "frame": "jack_flame_5_review_head.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "REPAIR",
+   "act": "REPAIR",
+   "lift_uu": 0.0,
+   "frame": "jack_flame_6_repair_wide.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "REPAIR",
+   "act": "REPAIR",
+   "frame": "jack_flame_6_repair_hands.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "REPAIR",
+   "act": "REPAIR",
+   "frame": "jack_flame_6_repair_head.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "COMPLETED",
+   "act": "NONE",
+   "lift_uu": 0.0,
+   "frame": "jack_flame_7_completed_wide.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "COMPLETED",
+   "act": "NONE",
+   "frame": "jack_flame_7_completed_hands.jpg"
+  },
+  {
+   "skin": "jack_flame",
+   "stage": "COMPLETED",
+   "act": "NONE",
+   "frame": "jack_flame_7_completed_head.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "PREPARATION",
+   "act": "PREPARATION",
+   "lift_uu": 78.0,
+   "frame": "baal_1_preparation_wide.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "PREPARATION",
+   "act": "PREPARATION",
+   "frame": "baal_1_preparation_hands.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "RESEARCH",
+   "act": "RESEARCH",
+   "lift_uu": 0.0,
+   "frame": "baal_2_research_wide.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "RESEARCH",
+   "act": "RESEARCH",
+   "frame": "baal_2_research_hands.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "IMPLEMENTATION",
+   "act": "IMPLEMENTATION",
+   "lift_uu": 0.0,
+   "frame": "baal_3_implementation_wide.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "IMPLEMENTATION",
+   "act": "IMPLEMENTATION",
+   "frame": "baal_3_implementation_hands.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "VERIFICATION",
+   "act": "VERIFICATION",
+   "lift_uu": 154.7,
+   "frame": "baal_4_verification_wide.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "VERIFICATION",
+   "act": "VERIFICATION",
+   "frame": "baal_4_verification_hands.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "REVIEW",
+   "act": "REVIEW",
+   "lift_uu": 0.0,
+   "frame": "baal_5_review_wide.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "REVIEW",
+   "act": "REVIEW",
+   "frame": "baal_5_review_hands.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "REPAIR",
+   "act": "REPAIR",
+   "lift_uu": 0.0,
+   "frame": "baal_6_repair_wide.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "REPAIR",
+   "act": "REPAIR",
+   "frame": "baal_6_repair_hands.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "COMPLETED",
+   "act": "NONE",
+   "lift_uu": 0.0,
+   "frame": "baal_7_completed_wide.jpg"
+  },
+  {
+   "skin": "baal",
+   "stage": "COMPLETED",
+   "act": "NONE",
+   "frame": "baal_7_completed_hands.jpg"
+  }
+ ],
+ "restored_skin": "jack_flame"
+}

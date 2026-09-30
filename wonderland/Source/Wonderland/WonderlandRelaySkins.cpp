@@ -32,6 +32,10 @@ namespace
 			{FName(TEXT("arden_infernal_v1")), FName(TEXT("jack_flame"))},
 			{FName(TEXT("apollo")), FName(TEXT("baal"))},
 			{FName(TEXT("apollo_v1")), FName(TEXT("baal"))},
+			// FOUNDER, 2026-09-29 evening: "Current canonical roster: 1. Relay OG 2. Celestial Light 3. Skeleton
+			// Flame 4. Jack Flame 5. Baal." Five, so the Skeleton Flame V1 twin leaves the player-facing roster and
+			// anyone wearing it keeps Skeleton Flame. SkeletonFlameV1.wlvox stays on disk.
+			{FName(TEXT("skeleton_flame_v1")), FName(TEXT("skeleton_flame"))},
 		};
 		const FName* Now = Retired.Find(Id);
 		return Now != nullptr ? *Now : Id;
@@ -92,10 +96,10 @@ void UWonderlandRelaySkinSubsystem::BuildRegistry()
 	// FOUNDER, 2026-09-27: "Call the previous one V1 and keep them in the Wonderland world and make the new
 	// ones called V2." skeleton_flame means the V2 (the redo is the default a player gets) and skeleton_flame_v1
 	// the previous figure.
-	Add(TEXT("skeleton_flame_v1"), TEXT("SKELETON FLAME V1"), TEXT("SPECTRAL"),
-		TEXT("The previous Skeleton Flame: a ribcage cut into the chest, tall ghostfire, jointed bone limbs."),
-		TEXT("SkeletonFlameV1.wlvox"), Rgb(0x6E, 0xD8, 0xFF), Rgb(0x73, 0xEA, 0xFF), false);
-	Add(TEXT("skeleton_flame"), TEXT("SKELETON FLAME V2"), TEXT("SPECTRAL"),
+	// THE V1 TWIN IS UNREGISTERED (founder's five-skin roster, 2026-09-29 evening); MigrateRetired carries its id to
+	// skeleton_flame, and the figure stays on disk so it can come back by restoring this one Add() call:
+	//   Add(TEXT("skeleton_flame_v1"), TEXT("SKELETON FLAME V1"), TEXT("SPECTRAL"), ..., TEXT("SkeletonFlameV1.wlvox"), ...)
+	Add(TEXT("skeleton_flame"), TEXT("SKELETON FLAME"), TEXT("SPECTRAL"),
 		TEXT("From the sheet: a broad figure in stepped bone plates, skulls at brow, temples and sternum, ghostfire at ears, elbows and spine, feet of pale blue light."),
 		TEXT("SkeletonFlameV2.wlvox"), Rgb(0x6E, 0xD8, 0xFF), Rgb(0x73, 0xEA, 0xFF), false);
 

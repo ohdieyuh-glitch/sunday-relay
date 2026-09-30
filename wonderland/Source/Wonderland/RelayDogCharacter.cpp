@@ -1965,6 +1965,52 @@ float ARelayDogCharacter::GetDressedHeightUu() const
 	return GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 2.0f;
 }
 
+FVector ARelayDogCharacter::GetCanonSoleWorld(float SideSign) const
+{
+	// THE ANIMATOR'S OWN LEG, walked forward from the hip joint: the thigh and shin lengths LegPose solved with
+	// (Animator.Configure in BindJoints), each segment hanging along its joint's -Z at rest -- "a POSITIVE pitch
+	// swings a hanging limb FORWARD". So this is the sole the canon animator planned, planted or swinging.
+	const float ThighUU = (0.8f - 0.5125f) * HeadWidthUU;
+	const float ShinUU = 0.5125f * HeadWidthUU;
+	for (const FRelayDogLeg* Leg : {&LegLeft, &LegRight})
+	{
+		if (Leg->Hip == nullptr || Leg->Shin == nullptr)
+		{
+			continue;
+		}
+		if ((Leg->Hip->GetRelativeLocation().Y >= 0.0) != (SideSign >= 0.0f))
+		{
+			continue;
+		}
+		const FVector Knee = Leg->Hip->GetComponentLocation()
+			+ Leg->Hip->GetComponentQuat().RotateVector(FVector(0.0, 0.0, -ThighUU));
+		return Knee + Leg->Shin->GetComponentQuat().RotateVector(FVector(0.0, 0.0, -ShinUU));
+	}
+	return GetActorLocation() - FVector(0.0, 0.0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+}
+
+FVector ARelayDogCharacter::GetCanonHandWorld(float SideSign) const
+{
+	// THE HAND TIP THE MISSION CHOREOGRAPHY SOLVES ONTO ITS PROPS: the far end of the forearm's meshes (MeasureChain's
+	// TipLocal), carried by the forearm joint as it stands now.
+	const FRelayDogArm* Arms[] = {&ArmLeft, &ArmRight};
+	const RelayDogLimbs::FChain* Chains[] = {&ArmChainLeft, &ArmChainRight};
+	for (int32 Index = 0; Index < 2; ++Index)
+	{
+		const FRelayDogArm& Arm = *Arms[Index];
+		if (Arm.Shoulder == nullptr || Arm.Forearm == nullptr)
+		{
+			continue;
+		}
+		if ((Arm.Shoulder->GetRelativeLocation().Y >= 0.0) != (SideSign >= 0.0f))
+		{
+			continue;
+		}
+		return Arm.Forearm->GetComponentTransform().TransformPosition(Chains[Index]->TipLocal);
+	}
+	return FVector::ZeroVector;
+}
+
 float ARelayDogCharacter::EyeScaleAt(float TimeSeconds) const
 {
 	const float Period = FMath::Max(BlinkPeriodSeconds, 0.25f);
@@ -2419,6 +2465,63 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	Dressed.AirborneWeight = Pose.AirborneWeight;
 	Dressed.Stillness = Still;
 	Dressed.bValid = true;
+	// ---- AND THE JOINTS THEMSELVES, AS WRITTEN, BY THE SIDE EACH HANGS ON (founder regression, 2026-09-29).
+	//
+	// Read back off the canon pivots AFTER ApplyMissionPose, so whatever the performance wrote is what the skin
+	// wears, and keyed by the physical side of the body rather than by the Left/Right names -- the canon's Left
+	// limbs hang at +Y and a costume must never have to guess that. See FWonderlandWornPose.
+	{
+		auto Rot = [](const USceneComponent* Joint) { return Joint != nullptr ? Joint->GetRelativeRotation() : FRotator::ZeroRotator; };
+		auto OnPlusY = [](const USceneComponent* Joint) { return Joint != nullptr && Joint->GetRelativeLocation().Y >= 0.0; };
+		for (const FRelayDogLeg* Leg : {&LegLeft, &LegRight})
+		{
+			const bool bPlus = OnPlusY(Leg->Hip);
+			(bPlus ? Dressed.HipPlusY : Dressed.HipMinusY) = Rot(Leg->Hip);
+			(bPlus ? Dressed.ShinPlusY : Dressed.ShinMinusY) = Rot(Leg->Shin);
+		}
+		for (const FRelayDogArm* Arm : {&ArmLeft, &ArmRight})
+		{
+			const bool bPlus = OnPlusY(Arm->Shoulder);
+			(bPlus ? Dressed.ShoulderPlusY : Dressed.ShoulderMinusY) = Rot(Arm->Shoulder);
+			(bPlus ? Dressed.ForearmPlusY : Dressed.ForearmMinusY) = Rot(Arm->Forearm);
+		}
+		Dressed.HeadRotation = Rot(HeadPivot);
+		Dressed.SolePlusY = GetCanonSoleWorld(1.0f);
+		Dressed.SoleMinusY = GetCanonSoleWorld(-1.0f);
+		// THE MISSION CONTRACT'S HANDS, where the props are held (see FWonderlandWornPose::HandPlusY).
+		Dressed.HandPlusY = GetCanonHandWorld(1.0f);
+		Dressed.HandMinusY = GetCanonHandWorld(-1.0f);
+		for (const FRelayDogArm* Arm : {&ArmLeft, &ArmRight})
+		{
+			if (Arm->Shoulder == nullptr || Arm->Forearm == nullptr)
+			{
+				continue;
+			}
+			const bool bPlus = OnPlusY(Arm->Shoulder);
+			(bPlus ? Dressed.ElbowPlusY : Dressed.ElbowMinusY) = Arm->Forearm->GetComponentLocation();
+			(bPlus ? Dressed.ShoulderAtPlusY : Dressed.ShoulderAtMinusY) = Arm->Shoulder->GetComponentLocation();
+		}
+		Dressed.MissionWeight = Overlay.Weight;
+		Dressed.bHasCanonJoints = LegLeft.Hip != nullptr && LegLeft.Shin != nullptr && LegRight.Hip != nullptr
+			&& LegRight.Shin != nullptr && ArmLeft.Shoulder != nullptr && ArmRight.Shoulder != nullptr && HeadPivot != nullptr;
+		// Meditating crosses the legs and flying trails them, out of the sagittal plane a planar solve can follow; the
+		// canon blends its legs into those poses by this share, and the costume copies the joints to the same degree.
+		Dressed.LegPerformWeight = FMath::Clamp(Overlay.Meditate + Overlay.Fly, 0.0f, 1.0f);
+		// THE BODY AS WRITTEN, not as recomposed. ApplyMissionPose writes the root over the stride's, and in VERIFICATION
+		// it leans the flying Dog 9 degrees into its beam (wl.Dog.Pose.FlyLean) -- a term the recomposed numbers above
+		// never carried, so every skin flew bolt upright beside a leaning Relay OG. Read back off BodyRoot, whatever the
+		// performance writes reaches the costume.
+		if (BodyRoot != nullptr)
+		{
+			const FVector Offset = BodyRoot->GetRelativeLocation() - BodyRestLocation;
+			const FRotator Written = BodyRoot->GetRelativeRotation();
+			Dressed.SwayUU = static_cast<float>(Offset.Y);
+			Dressed.BobUU = static_cast<float>(Offset.Z) - Dressed.LiftUU;
+			Dressed.BodyPitchDeg = Written.Pitch;
+			Dressed.BodyYawDeg = Written.Yaw;
+			Dressed.BodyRollDeg = Written.Roll;
+		}
+	}
 	// COMPOSED WHETHER OR NOT ANYTHING IS WEARING IT, so Relay OG's own numbers can be held against an
 	// alternate skin's over the identical performance. Relay OG is not a special case of the authority; it IS
 	// the authority, and this is what it is saying each frame.

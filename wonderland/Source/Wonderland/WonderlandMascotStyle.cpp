@@ -39,6 +39,24 @@ namespace WonderlandMascotStyle
 		return EWonderlandColorChannel::None;
 	}
 
+	FLinearColor AccentColour(const FLinearColor& Authored, const FLinearColor& Chosen, bool bLight)
+	{
+		// DEFAULT is White and means "the colours it was designed in".
+		if (Chosen.R >= 0.995f && Chosen.G >= 0.995f && Chosen.B >= 0.995f)
+		{
+			return Authored;
+		}
+		const float Peak = FMath::Max3(Authored.R, Authored.G, Authored.B);
+		FLinearColor Hue(FMath::Clamp(Chosen.R, 0.0f, 1.0f), FMath::Clamp(Chosen.G, 0.0f, 1.0f), FMath::Clamp(Chosen.B, 0.0f, 1.0f), 1.0f);
+		if (bLight)
+		{
+			// the pale core: the same hue, lifted 40% of the way toward white at the hue's own peak
+			const float Top = FMath::Max3(Hue.R, Hue.G, Hue.B);
+			Hue = FLinearColor(Hue.R + (Top - Hue.R) * 0.40f, Hue.G + (Top - Hue.G) * 0.40f, Hue.B + (Top - Hue.B) * 0.40f, 1.0f);
+		}
+		return FLinearColor(Hue.R * Peak, Hue.G * Peak, Hue.B * Peak, Authored.A);
+	}
+
 	const TArray<TPair<FName, FLinearColor>>& Palette()
 	{
 		// ONE SET, OFFERED IN BOTH PLACES. Chosen to read against Wonderland's ivory stone and against black:
@@ -155,6 +173,7 @@ namespace
 		}
 		(bPrimary ? Settings->Primary : Settings->Secondary) = Colour;
 		Settings->bChosen = true;
+		Settings->bSecondaryChosen |= !bPrimary;
 		// THROUGH THE SAME DOOR AS THE WARDROBE AND THE MENU. This used to save and repaint by itself, which
 		// made the console a third writer of a state the founder asked to have exactly one of.
 		WonderlandMascotStyle::SaveAndApply();
@@ -197,7 +216,7 @@ namespace
 
 	FAutoConsoleCommand GMascotSecondary(
 		TEXT("wl.Mascot.Secondary"),
-		TEXT("The Relay Dog's eyes: wl.Mascot.Secondary <r,g,b | #RRGGBB>. Saved."),
+		TEXT("The Relay Dog's eyes and a skin's secondary accents (Jack Flame's fire and tie): wl.Mascot.Secondary <r,g,b | #RRGGBB>. Saved."),
 		FConsoleCommandWithArgsDelegate::CreateStatic(&SetAndSave, false));
 
 	FAutoConsoleCommand GMascotReset(
@@ -210,6 +229,7 @@ namespace
 				Settings->Primary = FLinearColor::White;
 				Settings->Secondary = FLinearColor(1.00f, 0.78f, 0.16f, 1.0f);
 				Settings->bChosen = false;
+				Settings->bSecondaryChosen = false;
 			}
 			// THROUGH THE ONE DOOR. SaveAndApply repaints even when nothing is chosen, which is exactly what a
 			// reset needs: a paint that returned early on bChosen is what once left magenta on the Dog.

@@ -920,9 +920,12 @@ void UWonderlandUiSubsystem::RefreshMap()
 		{
 			FWonderlandMapStop Stop;
 			Stop.Row = Row;
-			if (const AWonderlandTravelAnchor* Anchor = Travel->FindAnchor(Row.Id))
+			// Where the place puts a visitor -- its own arrival point, or its anchor -- so a place past the streaming
+			// radius, whose anchor is not loaded, still sits where it is on the map.
+			FTransform Arrival;
+			if (Travel->ResolveArrival(Row.Id, Arrival))
 			{
-				Stop.AnchorXY = FVector2D(Anchor->GetActorLocation().X, Anchor->GetActorLocation().Y);
+				Stop.AnchorXY = FVector2D(Arrival.GetLocation().X, Arrival.GetLocation().Y);
 			}
 			Stops.Add(Stop);
 		}

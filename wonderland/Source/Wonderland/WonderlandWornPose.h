@@ -72,6 +72,72 @@ struct FWonderlandWornPose
 	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") float ShoulderRightDeg = 0.0f;
 	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") float ElbowRightDeg = 0.0f;
 
+	/**
+	 * THE CANON BODY'S FINAL JOINTS, BY THE SIDE OF THE BODY EACH ONE HANGS ON.
+	 *
+	 * FOUNDER, 2026-09-29 (post-completion regression): "The animation sequences for the OTHER Relay Dog mascot
+	 * skins are glitchy in simulation. The Relay Dog does not move correctly when these skins are active."
+	 *
+	 * THE DEFECT. The angles above are keyed Left/Right, and the costume guessed which of its joints was which
+	 * from each joint's rest offset RELATIVE TO ITS PARENT. A shin hangs straight under its thigh and a forearm
+	 * straight under its upper arm, so that offset is zero for all four: every one of them read "not left, not
+	 * an arm" and was driven by the RIGHT KNEE, with the opposite sign to the canon's shin. Reverse knees, a
+	 * left leg half a cycle out of step, forearms flapping in time with a knee. And the canon's Left limbs hang
+	 * at +Y while the costume called -Y left, so even the hips were crossed.
+	 *
+	 * So the costume is now handed the canon's joints AS WRITTEN -- after ApplyMissionPose, so an act reaches a
+	 * skin too -- keyed by PHYSICAL SIDE (+Y / -Y) rather than by a name either rig could spell differently, and
+	 * the world position the canon animator put each SOLE at. A costume whose legs are a different length
+	 * solves its own knee to put its foot on exactly that spot, so a planted foot stays planted on every skin.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FRotator HipPlusY = FRotator::ZeroRotator;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FRotator HipMinusY = FRotator::ZeroRotator;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FRotator ShinPlusY = FRotator::ZeroRotator;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FRotator ShinMinusY = FRotator::ZeroRotator;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FRotator ShoulderPlusY = FRotator::ZeroRotator;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FRotator ShoulderMinusY = FRotator::ZeroRotator;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FRotator ForearmPlusY = FRotator::ZeroRotator;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FRotator ForearmMinusY = FRotator::ZeroRotator;
+	/** The canon head's own rotation, as written (a mission act turns and bows it). */
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FRotator HeadRotation = FRotator::ZeroRotator;
+	/** Where the canon animator put each sole this frame, in WORLD space. */
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FVector SolePlusY = FVector::ZeroVector;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FVector SoleMinusY = FVector::ZeroVector;
+	/** True when the joints above were filled from a bound canon rig. */
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") bool bHasCanonJoints = false;
+	/**
+	 * How much of the legs is a PERFORMED pose rather than the walk: 0 walking, standing or jumping -- the costume then
+	 * solves its legs onto the soles -- rising to 1 as the legs cross to meditate (PREPARATION) or trail to fly
+	 * (VERIFICATION), poses that leave the sagittal plane a two-bone solve works in, where the canon joints are copied.
+	 * The canon itself blends its legs by exactly this share (ApplyMissionPose), so the costume blends the same way.
+	 *
+	 * IT WAS AN ON/OFF SWITCH ON THE WHOLE ACT, and that was a defect of its own: RESEARCH, IMPLEMENTATION and REVIEW
+	 * keep the canon's legs walking the Dog's circle round the Contract, and a costume that stopped solving for the
+	 * whole act walked that circle on copied angles meant for a different leg -- feet skating off the canon's.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") float LegPerformWeight = 0.0f;
+
+	/**
+	 * THE MISSION CONTRACT'S HANDS (founder correction, 2026-09-29: "The animation problem I am describing is
+	 * specifically the MISSION CONTRACT ANIMATION SEQUENCES").
+	 *
+	 * Every act of the Mission Contract is choreographed on the canon body: the book is opened in front of ITS chest,
+	 * the brush and the scraper hang from ITS right forearm, the lens is held on the line from ITS eye to the work.
+	 * The costumes' shoulders sit 24.5 uu lower than the canon's (measured on all four skins, zg_07), so a costume
+	 * that merely copied the canon's arm ANGLES held its hands a quarter of a metre under every prop. These are where
+	 * the canon's hand tips and elbows actually are, in world space, so a worn costume can solve its own arms to put
+	 * its hands on the props -- blended in by MissionWeight as the act comes in, and out again as it ends.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FVector HandPlusY = FVector::ZeroVector;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FVector HandMinusY = FVector::ZeroVector;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FVector ElbowPlusY = FVector::ZeroVector;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FVector ElbowMinusY = FVector::ZeroVector;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FVector ShoulderAtPlusY = FVector::ZeroVector;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") FVector ShoulderAtMinusY = FVector::ZeroVector;
+	/** How much of a Mission Contract act is on the body right now (the canon's overlay weight): 0 walking, 1 acting.
+	 *  The canon blends its own arms from the walk onto the act's goals by this share; the costume does the same. */
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") float MissionWeight = 0.0f;
+
 	/** False until a Dog has handed one down; the body then keeps its own idle, as a free companion should. */
 	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") bool bValid = false;
 };

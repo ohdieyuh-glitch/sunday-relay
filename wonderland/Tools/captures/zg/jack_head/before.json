@@ -1,0 +1,28 @@
+{
+ "name": "zg_09_jack_head_before2",
+ "started": "2026-09-30 00:47:28",
+ "status": "captured",
+ "tag": "before",
+ "persisted_skin_at_start": "jack_flame",
+ "dog_yaw": 40.0,
+ "figure": "C:/dev/iwonder/wonderland-task3/wonderland/RelaySkins/JackFlame.wlvox",
+ "ground_z": -2.5,
+ "companions_hidden_for_views": 2,
+ "shots": [
+  "before_night_front.jpg",
+  "before_night_left.jpg",
+  "before_night_right.jpg",
+  "before_night_rear_three_quarter.jpg",
+  "before_night_front_three_quarter.jpg",
+  "before_night_wide_front.jpg",
+  "before_night_wide_rear.jpg",
+  "before_day_front.jpg",
+  "before_day_left.jpg",
+  "before_day_right.jpg",
+  "before_day_rear_three_quarter.jpg",
+  "before_day_front_three_quarter.jpg",
+  "before_day_wide_front.jpg",
+  "before_day_wide_rear.jpg"
+ ],
+ "restored_skin": "jack_flame"
+}

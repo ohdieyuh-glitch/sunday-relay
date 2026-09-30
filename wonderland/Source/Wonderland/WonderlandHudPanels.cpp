@@ -460,16 +460,16 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				MakeColourRow(TEXT("MASCOT  PRIMARY"),
-					TEXT("The Relay Dog's shell, on every skin. Fire, halos, banners and the visor stay as authored."),
+					TEXT("The Relay Dog's shell, on every skin. Halos, banners and the visor stay as authored."),
 					[Style]() { return Style() != nullptr ? Style()->Primary : FLinearColor::White; },
 					[Style](FLinearColor C) { if (Style()) { Style()->Primary = C; Style()->bChosen = true; } })
 			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				MakeColourRow(TEXT("MASCOT  SECONDARY"),
-					TEXT("The Relay Dog's status eyes."),
+					TEXT("The Relay Dog's status eyes, and a skin's secondary accents -- Jack Flame's fire and tie."),
 					[Style]() { return Style() != nullptr ? Style()->Secondary : FLinearColor::White; },
-					[Style](FLinearColor C) { if (Style()) { Style()->Secondary = C; Style()->bChosen = true; } })
+					[Style](FLinearColor C) { if (Style()) { Style()->Secondary = C; Style()->bChosen = true; Style()->bSecondaryChosen = true; } })
 			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
@@ -558,6 +558,7 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 						S->Primary = FLinearColor::White;
 						S->Secondary = FLinearColor(1.00f, 0.78f, 0.16f, 1.0f);
 						S->bChosen = false;
+						S->bSecondaryChosen = false;
 						S->CompanionPrimary = FLinearColor::White;
 						S->CompanionSecondary = FLinearColor(0.42f, 0.80f, 1.00f, 1.0f);
 						S->bCompanionChosen = false;

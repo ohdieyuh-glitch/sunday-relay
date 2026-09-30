@@ -30,8 +30,12 @@ import os
 
 L = unreal.WonderlandUiTestLibrary
 ROSTER = ["relay_og", "celestial_light", "skeleton_flame", "jack_flame", "baal"]
-ALSO_ACTIVE = ["skeleton_flame_v1"]            # Skeleton Flame's V1 twin (2026-09-27), deliberately left in place
-RETIRED = {"arden_infernal": "jack_flame", "arden_infernal_v1": "jack_flame", "apollo": "baal", "apollo_v1": "baal"}
+# THE ROSTER IS EXACTLY FIVE (founder, 2026-09-29 evening, post-completion regression: "the canonical roster is Relay OG,
+# Celestial Light, Skeleton Flame, Jack Flame, Baal"). Skeleton Flame's V1 twin, left active on 09-27, was retired then
+# and migrates to Skeleton Flame like the other retired ids (WonderlandRelaySkins.cpp MigrateRetired).
+ALSO_ACTIVE = []
+RETIRED = {"arden_infernal": "jack_flame", "arden_infernal_v1": "jack_flame", "apollo": "baal", "apollo_v1": "baal",
+           "skeleton_flame_v1": "skeleton_flame"}
 FIGURE = {"relay_og": None, "celestial_light": "CelestialLight", "skeleton_flame": "SkeletonFlameV2",
           "skeleton_flame_v1": "SkeletonFlameV1", "jack_flame": "JackFlame", "baal": "Baal",
           "arden_infernal": "ArdenInfernalV2", "arden_infernal_v1": "ArdenInfernalV1", "apollo": "ApolloV2", "apollo_v1": "ApolloV1"}
@@ -122,8 +126,9 @@ def _run(les, ues):
     except Exception as exc:                                           # noqa: BLE001
         RESULT["log_error"] = repr(exc)
     record("R01", "the roster lists every roster skin and no retired one (wl.Skins.List, the registry's own listing)",
-           bool(ids) and all(r in ids for r in ROSTER) and not any(r in ids for r in RETIRED),
-           listed=ids, missing=[r for r in ROSTER if r not in ids], retired_listed=[r for r in RETIRED if r in ids])
+           bool(ids) and all(r in ids for r in ROSTER) and not any(r in ids for r in RETIRED) and all(i in ROSTER for i in ids),
+           listed=ids, missing=[r for r in ROSTER if r not in ids], retired_listed=[r for r in RETIRED if r in ids],
+           extra=[i for i in ids if i not in ROSTER])
 
     # ---- R05 first: every roster skin by its own id; its in-engine signature is what R02 and R04 compare against
     worn, sig = [], {}
@@ -158,7 +163,7 @@ def _run(les, ues):
 
     # ---- R04: a remembered retired skin, at start-up, in a fresh session each
     cases = []
-    for old, new in (("arden_infernal", "jack_flame"), ("apollo", "baal")):
+    for old, new in (("arden_infernal", "jack_flame"), ("apollo", "baal"), ("skeleton_flame_v1", "skeleton_flame")):
         os.makedirs(os.path.dirname(PERSIST), exist_ok=True)
         with open(PERSIST, "w", encoding="utf-8", newline="") as handle:
             handle.write(old)
@@ -166,7 +171,7 @@ def _run(les, ues):
         drawn = _signature(ues.get_game_world())
         after = open(PERSIST, encoding="utf-8").read().strip() if os.path.isfile(PERSIST) else None
         cases.append({"stored": old, "drawn": drawn, "file_after": after, "expected": new, "matches": drawn == sig.get(new)})
-    record("R04", "a remembered Arden Infernal / Apollo comes up drawn as Jack Flame / Baal, and the file is rewritten",
+    record("R04", "a remembered Arden Infernal / Apollo / Skeleton Flame V1 comes up drawn as Jack Flame / Baal / Skeleton Flame, and the file is rewritten",
            all(c["matches"] and c["file_after"] == c["expected"] for c in cases), cases=cases)
 
     RESULT["all_pass"] = all(t["pass"] for t in RESULT["tests"])

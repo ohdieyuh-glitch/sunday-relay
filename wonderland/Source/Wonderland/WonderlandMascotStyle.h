@@ -31,7 +31,8 @@ public:
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Mascot")
 	FLinearColor Primary = FLinearColor::White;
 
-	/** THE RELAY DOG'S EYES, and only the eyes. The founder's gold is what the canon Dog already wears. */
+	/** THE RELAY DOG'S EYES, and a skin's SECONDARY ACCENTS once chosen -- Jack Flame's fire and tie (founder,
+	 *  2026-09-29). The founder's gold is what the canon Dog's eyes already wear. */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Mascot")
 	FLinearColor Secondary = FLinearColor(1.00f, 0.78f, 0.16f, 1.0f);
 
@@ -64,6 +65,28 @@ public:
 	/** True once the founder has actually chosen, so an untouched install never tints anything. */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Mascot")
 	bool bChosen = false;
+
+	/**
+	 * TRUE ONCE THE SECONDARY ITSELF HAS BEEN PICKED (founder, 2026-09-29: "For JACK FLAME: The SECONDARY COLOR
+	 * customization must control BOTH the FLAMES and the RED TIE").
+	 *
+	 * A skin's secondary ACCENTS -- surfaces its figure tags `secondary` -- follow this colour. bChosen alone cannot
+	 * gate them: it goes true when only the PRIMARY is picked, and Secondary then still holds its default gold,
+	 * which would turn Jack Flame's fire and tie gold the moment a player tinted his shell. The eyes keep their
+	 * long-standing rule (bChosen); the accents wait for a real choice. See HasChosenSecondary.
+	 */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Mascot")
+	bool bSecondaryChosen = false;
+
+	/** Secondary's value before anyone chooses it (and after a reset). */
+	static FLinearColor DefaultSecondary() { return FLinearColor(1.00f, 0.78f, 0.16f, 1.0f); }
+
+	/** Whether the SECONDARY has been chosen: the flag, or -- for a colourway saved before the flag existed -- a
+	 *  Secondary that differs from its default while the colourway is chosen. */
+	bool HasChosenSecondary() const
+	{
+		return bChosen && (bSecondaryChosen || !Secondary.Equals(DefaultSecondary(), 0.002f));
+	}
 
 	/**
 	 * THE AI COMPANIONS' OWN COLOURWAY, kept separate from the mascot's (founder, 2026-09-25).
@@ -166,6 +189,12 @@ public:
  *   Body  -- bone and bonedeep. The main colourway, present in every skin, and the founder's PRIMARY.
  *   Eye   -- eye and pupil. The status eyes, and the founder's SECONDARY.
  *   None  -- everything else, including the visor and every authored effect, which is never touched.
+ *
+ * ONE EXCEPTION, DECLARED BY THE SKIN ITSELF (founder, 2026-09-29: "For JACK FLAME: the SECONDARY COLOR
+ * customization must control BOTH the FLAMES and the RED TIE"). A figure may tag a material `secondary` or
+ * `secondary_light` after its strength; those surfaces follow the chosen SECONDARY at their authored brightness
+ * (WonderlandMascotStyle::AccentColour). The tag lives in the skin's own figure file, so no skin is named here and
+ * no other skin's fire moves.
  */
 enum class EWonderlandColorChannel : uint8 { None, Body, Eye };
 
@@ -176,6 +205,16 @@ namespace WonderlandMascotStyle
 
 	/** Which channel a material of this name belongs to. See EWonderlandColorChannel. */
 	WONDERLAND_API EWonderlandColorChannel ChannelFor(const FString& MaterialName);
+
+	/**
+	 * A SECONDARY ACCENT'S COLOUR: the chosen Secondary's HUE at the authored surface's BRIGHTNESS.
+	 *
+	 * Multiplying cannot do it -- Jack Flame's red heart times an azure Secondary is merely a darker red -- so the
+	 * accent keeps its own peak intensity (every glow and night factor already applied to Authored) and takes the
+	 * chosen colour's direction through the colour cube. bLight lifts the hue toward white, so a flame's pale core
+	 * stays paler than its outer tongue. White, the DEFAULT swatch, means "as designed" and returns Authored.
+	 */
+	WONDERLAND_API FLinearColor AccentColour(const FLinearColor& Authored, const FLinearColor& Chosen, bool bLight);
 
 	/** The swatches offered in the Wardrobe and the Menu, so both offer exactly the same set. */
 	WONDERLAND_API const TArray<TPair<FName, FLinearColor>>& Palette();

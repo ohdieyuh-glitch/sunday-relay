@@ -498,6 +498,7 @@ bool UWonderlandUiTestLibrary::PickMascotColour(bool bPrimary, FLinearColor Colo
 	}
 	(bPrimary ? Style->Primary : Style->Secondary) = Colour;
 	Style->bChosen = true;
+	Style->bSecondaryChosen |= !bPrimary;
 	WonderlandMascotStyle::SaveAndApply();
 	return true;
 }
@@ -537,6 +538,7 @@ bool UWonderlandUiTestLibrary::ResetAllColours()
 	Style->Primary = FLinearColor::White;
 	Style->Secondary = FLinearColor(1.00f, 0.78f, 0.16f, 1.0f);
 	Style->bChosen = false;
+	Style->bSecondaryChosen = false;
 	Style->CompanionPrimary = FLinearColor::White;
 	Style->CompanionSecondary = FLinearColor(0.42f, 0.80f, 1.00f, 1.0f);
 	Style->bCompanionChosen = false;

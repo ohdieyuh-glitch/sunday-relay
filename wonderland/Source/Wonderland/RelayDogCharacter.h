@@ -418,6 +418,19 @@ public:
 	/** The costume standing on this Dog, or null while it wears its own body. For a proof to photograph. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
 	class AWonderlandCompanionEmbodiment* GetCostume() const { return Costume; }
+
+	/**
+	 * WHERE THE CANON ANIMATOR PUT A SOLE THIS FRAME, in world space, for the leg hanging on the side SideSign
+	 * names (+1 = +Y, -1 = -Y). The canon body keeps being posed under a costume, so this is valid whichever skin
+	 * is worn -- it is the point a worn costume's foot is solved onto, and the point a proof holds it against.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	FVector GetCanonSoleWorld(float SideSign) const;
+
+	/** Where the canon hand tip is this frame, world space, for the arm on the side SideSign names -- the point the
+	 *  Mission Contract choreography holds its props at, and the point a worn costume's hand is solved onto. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	FVector GetCanonHandWorld(float SideSign) const;
 	/** Drive the gameplay Dog's own eye panes to an emissive level; the day cycle calls this. See BuildEyeGlow. */
 	void SetEyeGlow(float Level);
 

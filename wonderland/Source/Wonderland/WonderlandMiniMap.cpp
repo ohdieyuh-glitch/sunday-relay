@@ -337,9 +337,10 @@ void UWonderlandMiniMapDriver::RefreshPlaces(UWorld* World)
 		Place.Name = Row.DisplayName.ToString();
 		Place.Region = Row.District;
 		Place.Kind = Row.Kind;
-		// Where the visitor would actually stand, as the world map draws it; the seed only when no anchor exists.
-		const AWonderlandTravelAnchor* Anchor = Travel->FindAnchor(Row.Id);
-		Place.XY = Anchor != nullptr ? FVector2D(Anchor->GetActorLocation().X, Anchor->GetActorLocation().Y) : Row.SeedXY;
+		// Where the visitor would actually stand, as the world map draws it; the seed only when there is no arrival point.
+		FTransform Arrival;
+		Place.XY = Travel->ResolveArrival(Row.Id, Arrival)
+			? FVector2D(Arrival.GetLocation().X, Arrival.GetLocation().Y) : Row.SeedXY;
 		Places.Add(MoveTemp(Place));
 	}
 }

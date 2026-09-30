@@ -132,6 +132,11 @@ bool FWonderlandCompanionFigure::Parse(const FString& Text, FWonderlandCompanion
 			{
 				return Fail(TEXT("material strength must be a number"));
 			}
+			// the optional colour channel after the strength (see FWonderlandCompanionMaterial::Channel)
+			if (Tokens.Num() > 7)
+			{
+				Material.Channel = FName(*Tokens[7].ToLower());
+			}
 			if (Figure.FindMaterial(Material.Name) != INDEX_NONE)
 			{
 				return Fail(TEXT("material declared twice"));

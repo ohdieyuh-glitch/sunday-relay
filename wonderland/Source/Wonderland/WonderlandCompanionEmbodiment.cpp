@@ -924,6 +924,94 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		Motions.Add(Motion);
 	}
 
+	// ---- THE LIMBS, CLASSIFIED ONCE, FROM WHERE THEY ACTUALLY ARE (founder regression, 2026-09-29).
+	//
+	// Animate used to tell a knee from an elbow, and left from right, by each joint's RestLocation -- which is
+	// relative to its PARENT, and so exactly zero sideways for every shin and forearm, because each hangs straight
+	// under the joint above it. All four read as "the right knee". Here the ABSOLUTE pivot decides the side and
+	// the hierarchy decides the kind: a knee-motion joint under a stride joint is a knee, under a wing it is an
+	// elbow. The leg lengths come from the figure's own pivots and boxes, so a costume taller or shorter in the
+	// leg than the canon Dog can solve its own knee onto the canon's foot rather than borrow an angle meant for
+	// a different leg.
+	for (int32 Index = 0; Index < Figure.Parts.Num() && Index < Motions.Num(); ++Index)
+	{
+		const FWonderlandCompanionPart& Def = Figure.Parts[Index];
+		FPartMotion& Limb = Motions[Index];
+		const int8 Side = Def.Pivot.Y * Unit > 1.0f ? 1 : (Def.Pivot.Y * Unit < -1.0f ? -1 : 0);
+		if (Def.Motion == EWonderlandCompanionMotion::Stride)
+		{
+			Limb.LimbKind = 1;
+			Limb.LimbSide = Side;
+		}
+		else if (Def.Motion == EWonderlandCompanionMotion::Wing && Side != 0)
+		{
+			Limb.LimbKind = 3;
+			Limb.LimbSide = Side;
+		}
+		else if (Def.Motion == EWonderlandCompanionMotion::Knee && Figure.Parts.IsValidIndex(Def.Parent))
+		{
+			const FWonderlandCompanionPart& Upper = Figure.Parts[Def.Parent];
+			const int8 UpperSide = Upper.Pivot.Y * Unit > 1.0f ? 1 : (Upper.Pivot.Y * Unit < -1.0f ? -1 : 0);
+			Limb.LimbSide = Side != 0 ? Side : UpperSide;
+			if (Upper.Motion == EWonderlandCompanionMotion::Stride)
+			{
+				Limb.LimbKind = 2;
+				// THE SOLE UNDER THIS KNEE IS ON THE FIGURE'S GROUND PLANE, z = 0 -- the costume stands on the capsule's
+				// sole, so that plane IS the ground. Not the lowest box: several skins' shoes sit a few uu below it, and
+				// measuring to them made a standing costume bend its knees 2-8 uu forward to lift its feet onto the
+				// canon's (zg_07, 2026-09-29). Measured this way a straight costume leg stays straight.
+				Limb.ShinUU = FMath::Max(static_cast<float>(Def.Pivot.Z) * Unit, 1.0f);
+				Limb.UpperIndex = Def.Parent;
+				FPartMotion& Hip = Motions[Def.Parent];
+				Hip.LowerIndex = Index;
+				Hip.ThighUU = FMath::Max(static_cast<float>((Def.Pivot - Upper.Pivot).Size()) * Unit, 1.0f);
+				Hip.ShinUU = Limb.ShinUU;
+			}
+			else if (Upper.Motion == EWonderlandCompanionMotion::Wing)
+			{
+				Limb.LimbKind = 4;
+				// THE HAND TIP UNDER THIS ELBOW: the lowest box face of the forearm and everything it carries, the same
+				// far end the canon measures for its own arms (MeasureChain's TipLocal). Fire is not the hand: a
+				// `twinkle` part's boxes only size the ribbons laid in their place, so they are left out.
+				float LowestZ = Def.Pivot.Z;
+				for (const FWonderlandCompanionBox& Box : Figure.Boxes)
+				{
+					if (Figure.Parts.IsValidIndex(Box.Part) && Figure.Parts[Box.Part].Motion == EWonderlandCompanionMotion::Twinkle)
+					{
+						continue;
+					}
+					int32 Holder = Box.Part;
+					bool bUnderElbow = false;
+					for (int32 Guard = 0; Holder != INDEX_NONE && Guard < 64; ++Guard)
+					{
+						if (Holder == Index) { bUnderElbow = true; break; }
+						Holder = Figure.Parts.IsValidIndex(Holder) ? Figure.Parts[Holder].Parent : INDEX_NONE;
+					}
+					if (bUnderElbow)
+					{
+						LowestZ = FMath::Min(LowestZ, static_cast<float>(Box.Centre.Z - Box.Size.Z * 0.5));
+					}
+				}
+				Limb.ShinUU = FMath::Max(static_cast<float>(Def.Pivot.Z - LowestZ) * Unit, 1.0f);
+				Limb.UpperIndex = Def.Parent;
+				FPartMotion& Shoulder = Motions[Def.Parent];
+				Shoulder.LowerIndex = Index;
+				Shoulder.ThighUU = FMath::Max(static_cast<float>((Def.Pivot - Upper.Pivot).Size()) * Unit, 1.0f);
+				Shoulder.ShinUU = Limb.ShinUU;
+			}
+		}
+		// A PART UNDER A SPINE JOINT RISES WITH IT, so it must not add the performance lift a second time.
+		for (int32 Holder = Def.Parent, Guard = 0; Holder != INDEX_NONE && Guard < 64 && Figure.Parts.IsValidIndex(Holder); ++Guard)
+		{
+			if (Figure.Parts[Holder].Motion == EWonderlandCompanionMotion::Spine)
+			{
+				Limb.bLiftedByAncestor = true;
+				break;
+			}
+			Holder = Figure.Parts[Holder].Parent;
+		}
+	}
+
 	// ONE INSTANCED COMPONENT PER PART AND MATERIAL, filled before it is registered, so a figure of a few
 	// thousand boxes costs a few dozen components and a single render-state build each.
 	TMap<int64, TArray<FTransform>> Groups;
@@ -1379,6 +1467,27 @@ FString AWonderlandCompanionEmbodiment::DescribeFlames() const
 	return Out;
 }
 
+FString AWonderlandCompanionEmbodiment::DescribeMaterialColours() const
+{
+	FString Out;
+	for (int32 Index = 0; Index < BuiltMaterials.Num(); ++Index)
+	{
+		FLinearColor Body = FLinearColor::Black;
+		FLinearColor Twin = FLinearColor::Black;
+		if (MaterialInstances.IsValidIndex(Index) && MaterialInstances[Index] != nullptr)
+		{
+			MaterialInstances[Index]->GetVectorParameterValue(FMaterialParameterInfo(TEXT("Color")), Body);
+		}
+		if (FlameMaterialInstances.IsValidIndex(Index) && FlameMaterialInstances[Index] != nullptr)
+		{
+			FlameMaterialInstances[Index]->GetVectorParameterValue(FMaterialParameterInfo(TEXT("Color")), Twin);
+		}
+		Out += FString::Printf(TEXT("%s|%s|%.4f,%.4f,%.4f|%.4f,%.4f,%.4f;"), *BuiltMaterials[Index].Name.ToString(),
+			*BuiltMaterials[Index].Channel.ToString(), Body.R, Body.G, Body.B, Twin.R, Twin.G, Twin.B);
+	}
+	return Out;
+}
+
 FString AWonderlandCompanionEmbodiment::DescribeFramingParts() const
 {
 	// WHICH PARTS THE FRAMING BOX IS ACTUALLY MADE OF, and where each one sits.
@@ -1748,6 +1857,21 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 			// must change COLOR, not flatten the materials."
 			Want *= bGlows ? Secondary : Primary;
 		}
+		else if (Def.Channel == TEXT("secondary") || Def.Channel == TEXT("secondary_light"))
+		{
+			// ---- A SKIN'S SECONDARY ACCENTS: surfaces the FIGURE tags `secondary` (founder, 2026-09-29: "For JACK
+			// FLAME: the SECONDARY COLOR customization must control BOTH the FLAMES and the RED TIE").
+			//
+			// Declared per material in the figure file, so which surfaces follow the Secondary is the skin's own data
+			// and no skin is named here. The flame twin comes through this same function (bFlameTwin), so the
+			// ribbons of fire and the boxes of the tie take the one colour together, and the saved rest colours
+			// below keep the glow animator from putting the authored red back next frame. Only a Secondary the
+			// player actually picked moves them: picking a primary alone leaves the fire as it was designed.
+			if (UWonderlandMascotStyleSettings::Get().HasChosenSecondary())
+			{
+				Want = WonderlandMascotStyle::AccentColour(Want, Secondary, Def.Channel == TEXT("secondary_light"));
+			}
+		}
 		else
 		{
 			switch (Channel)
@@ -2049,6 +2173,12 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 		// movement per frame and nobody can tell the difference.
 		if (Away > 4500.0f) { Every = 0.20f; }
 		else if (Away > 2200.0f) { Every = 0.08f; }
+	}
+	// A WORN COSTUME IS THE PLAYER'S OWN BODY and animates every frame: a skin that skipped frames whenever the
+	// renderer briefly lost sight of it would stutter against the canon Dog it is standing in for.
+	if (WornPose.bValid)
+	{
+		Every = 0.0f;
 	}
 	if (Every > 0.0f && (Now - LastAnimateSeconds) < Every)
 	{
@@ -2386,6 +2516,183 @@ namespace
 	}
 }
 
+bool AWonderlandCompanionEmbodiment::SolveLegToSole(int32 HipIndex, const FVector& SoleWorld, FRotator& OutHip, FRotator& OutKnee) const
+{
+	// A TWO-BONE SOLVE IN THE HIP'S OWN PARENT FRAME, where the hip rests at RestLocation and swings about Y.
+	//
+	// The same convention the canon writes its own legs in: a positive pitch swings a hanging limb forward, and the
+	// shin folds BACK (heel up) at a negative pitch. The thigh leads the hip-to-sole line by the angle the triangle
+	// needs, which puts the knee in front of that line -- a biped's knee -- and never hyperextends.
+	if (!PartPivots.IsValidIndex(HipIndex) || !Motions.IsValidIndex(HipIndex))
+	{
+		return false;
+	}
+	const FPartMotion& Part = Motions[HipIndex];
+	const USceneComponent* Hip = PartPivots[HipIndex];
+	const USceneComponent* Knee = PartPivots.IsValidIndex(Part.LowerIndex) ? PartPivots[Part.LowerIndex].Get() : nullptr;
+	const USceneComponent* Frame = Hip != nullptr ? Hip->GetAttachParent() : nullptr;
+	if (Hip == nullptr || Knee == nullptr || Frame == nullptr || Part.ThighUU <= 1.0f || Part.ShinUU <= 1.0f)
+	{
+		return false;
+	}
+	const FVector Target = Frame->GetComponentTransform().InverseTransformPosition(SoleWorld);
+	const FVector Reach = Target - Part.RestLocation;
+	const float Forward = static_cast<float>(Reach.X);
+	const float Down = static_cast<float>(-Reach.Z);
+	const float Thigh = Part.ThighUU;
+	const float Shin = Part.ShinUU;
+	const float Span = FMath::Clamp(FMath::Sqrt(Forward * Forward + Down * Down),
+		FMath::Abs(Thigh - Shin) + 0.01f, Thigh + Shin - 0.001f);
+	const float Bend = PI - FMath::Acos(FMath::Clamp((Thigh * Thigh + Shin * Shin - Span * Span) / (2.0f * Thigh * Shin), -1.0f, 1.0f));
+	const float Lead = FMath::Acos(FMath::Clamp((Thigh * Thigh + Span * Span - Shin * Shin) / (2.0f * Thigh * Span), -1.0f, 1.0f));
+	const float Toward = FMath::Atan2(Forward, Down);
+	OutHip = FRotator(FMath::RadiansToDegrees(Toward + Lead), 0.0f, 0.0f);
+	OutKnee = FRotator(-FMath::RadiansToDegrees(Bend), 0.0f, 0.0f);
+	return true;
+}
+
+bool AWonderlandCompanionEmbodiment::SolveArmToHand(int32 ShoulderIndex, FQuat& OutShoulder, FQuat& OutElbow) const
+{
+	// A TWO-BONE SOLVE IN THREE DIMENSIONS, IN THE SHOULDER'S OWN PARENT FRAME.
+	//
+	// The hand goes where the canon's hand on the same side is. The elbow goes to the side of the shoulder-to-hand line
+	// the canon's elbow is on -- measured off the CANON's own line, so a painting arm keeps its elbow down and out and
+	// a hand on the book keeps its elbow tucked -- and each joint's rotation is the canon's own, turned by the least
+	// that gets there, so the twist an act gives the arm (the wrist turned to the page, the glass's grip) is kept.
+	// A target out of this arm's reach straightens it toward the target rather than tearing it off the shoulder.
+	if (!PartPivots.IsValidIndex(ShoulderIndex) || !Motions.IsValidIndex(ShoulderIndex))
+	{
+		return false;
+	}
+	const FPartMotion& Part = Motions[ShoulderIndex];
+	if (Part.LimbKind != 3 || Part.LimbSide == 0 || !Motions.IsValidIndex(Part.LowerIndex) || !PartPivots.IsValidIndex(Part.LowerIndex)
+		|| Part.ThighUU <= 1.0f || Part.ShinUU <= 1.0f)
+	{
+		return false;
+	}
+	const USceneComponent* Shoulder = PartPivots[ShoulderIndex];
+	const USceneComponent* Frame = Shoulder != nullptr ? Shoulder->GetAttachParent() : nullptr;
+	if (Frame == nullptr)
+	{
+		return false;
+	}
+	const bool bPlus = Part.LimbSide > 0;
+	const FVector HandW = bPlus ? WornPose.HandPlusY : WornPose.HandMinusY;
+	const FVector CanonElbowW = bPlus ? WornPose.ElbowPlusY : WornPose.ElbowMinusY;
+	const FVector CanonShoulderW = bPlus ? WornPose.ShoulderAtPlusY : WornPose.ShoulderAtMinusY;
+	if (HandW.IsZero() || CanonShoulderW.IsZero() || CanonElbowW.IsZero())
+	{
+		return false;
+	}
+
+	const FTransform FrameXf = Frame->GetComponentTransform();
+	const FVector S = Part.RestLocation;
+	const FVector D = FrameXf.InverseTransformPosition(HandW) - S;
+	const double Dist = D.Size();
+	if (Dist < 0.5)
+	{
+		return false;
+	}
+	const FVector Dn = D / Dist;
+	const double Upper = Part.ThighUU;
+	const double Lower = Part.ShinUU;
+	const double Span = FMath::Clamp(Dist, FMath::Abs(Upper - Lower) + 0.01, Upper + Lower - 0.001);
+
+	const FQuat CopiedS = (bPlus ? WornPose.ShoulderPlusY : WornPose.ShoulderMinusY).Quaternion();
+	const FQuat CopiedE = (bPlus ? WornPose.ForearmPlusY : WornPose.ForearmMinusY).Quaternion();
+	const FVector UpperRest = Motions[Part.LowerIndex].RestLocation;
+	const FVector UpperRestN = UpperRest.IsNearlyZero() ? FVector(0.0, 0.0, -1.0) : UpperRest.GetSafeNormal();
+
+	// THE SIDE THE ELBOW BENDS TOWARD: the canon elbow's offset from the canon's own shoulder-to-hand line, brought into
+	// this frame and laid square to THIS arm's reach.
+	const FVector CanonReach = (HandW - CanonShoulderW).GetSafeNormal();
+	FVector PoleW = CanonElbowW - CanonShoulderW;
+	PoleW -= CanonReach * FVector::DotProduct(PoleW, CanonReach);
+	FVector Pole = FrameXf.InverseTransformVectorNoScale(PoleW);
+	Pole -= Dn * FVector::DotProduct(Pole, Dn);
+	if (Pole.SizeSquared() < 1e-4)
+	{
+		// A straight canon arm names no side: keep the one this arm has on the canon's own rotation, else bend down.
+		const FVector Copied = CopiedS.RotateVector(UpperRestN);
+		Pole = Copied - Dn * FVector::DotProduct(Copied, Dn);
+		if (Pole.SizeSquared() < 1e-4)
+		{
+			Pole = FVector(0.0, 0.0, -1.0) - Dn * Dn.Z;
+			if (Pole.SizeSquared() < 1e-4)
+			{
+				Pole = FVector(1.0, 0.0, 0.0) - Dn * Dn.X;
+			}
+		}
+	}
+	Pole.Normalize();
+
+	const double Lead = FMath::Acos(FMath::Clamp((Upper * Upper + Span * Span - Lower * Lower) / (2.0 * Upper * Span), -1.0, 1.0));
+	const FVector ElbowAt = S + (Dn * FMath::Cos(Lead) + Pole * FMath::Sin(Lead)) * Upper;
+	const FVector HandAt = S + Dn * Span;
+
+	// The shoulder: the canon's rotation turned by the least that points this upper arm at the solved elbow.
+	OutShoulder = FQuat::FindBetweenNormals(CopiedS.RotateVector(UpperRestN), (ElbowAt - S).GetSafeNormal()) * CopiedS;
+	OutShoulder.Normalize();
+	// The elbow, relative to the shoulder: the canon's forearm rotation turned by the least that reaches the hand.
+	const FVector ForearmWant = OutShoulder.Inverse().RotateVector((HandAt - ElbowAt).GetSafeNormal());
+	OutElbow = FQuat::FindBetweenNormals(CopiedE.RotateVector(FVector(0.0, 0.0, -1.0)), ForearmWant) * CopiedE;
+	OutElbow.Normalize();
+	return true;
+}
+
+FVector AWonderlandCompanionEmbodiment::GetHandWorld(float SideSign) const
+{
+	for (int32 Index = 0; Index < Motions.Num() && Index < PartPivots.Num(); ++Index)
+	{
+		const FPartMotion& Part = Motions[Index];
+		if (Part.LimbKind != 3 || Part.LimbSide == 0 || (Part.LimbSide > 0) != (SideSign >= 0.0f))
+		{
+			continue;
+		}
+		const USceneComponent* Elbow = PartPivots.IsValidIndex(Part.LowerIndex) ? PartPivots[Part.LowerIndex].Get() : nullptr;
+		if (Elbow != nullptr)
+		{
+			return Elbow->GetComponentTransform().TransformPosition(FVector(0.0, 0.0, -Part.ShinUU));
+		}
+	}
+	return FVector::ZeroVector;
+}
+
+FVector AWonderlandCompanionEmbodiment::GetSoleWorld(float SideSign) const
+{
+	for (int32 Index = 0; Index < Motions.Num() && Index < PartPivots.Num(); ++Index)
+	{
+		const FPartMotion& Part = Motions[Index];
+		if (Part.LimbKind != 1 || Part.LimbSide == 0 || (Part.LimbSide > 0) != (SideSign >= 0.0f))
+		{
+			continue;
+		}
+		const USceneComponent* Knee = PartPivots.IsValidIndex(Part.LowerIndex) ? PartPivots[Part.LowerIndex].Get() : nullptr;
+		if (Knee != nullptr)
+		{
+			return Knee->GetComponentTransform().TransformPosition(FVector(0.0, 0.0, -Part.ShinUU));
+		}
+	}
+	return FVector::ZeroVector;
+}
+
+FString AWonderlandCompanionEmbodiment::DescribeLimbs() const
+{
+	static const TCHAR* const Kinds[] = {TEXT("-"), TEXT("hip"), TEXT("knee"), TEXT("shoulder"), TEXT("elbow")};
+	FString Out;
+	for (int32 Index = 0; Index < Motions.Num() && Index < PartNames.Num(); ++Index)
+	{
+		const FPartMotion& Part = Motions[Index];
+		if (Part.LimbKind == 0 || Part.LimbKind > 4)
+		{
+			continue;
+		}
+		Out += FString::Printf(TEXT("%s=%s%s thigh %.1f shin %.1f; "), *PartNames[Index].ToString(), Kinds[Part.LimbKind],
+			Part.LimbSide > 0 ? TEXT("+Y") : (Part.LimbSide < 0 ? TEXT("-Y") : TEXT("0")), Part.ThighUU, Part.ShinUU);
+	}
+	return Out;
+}
+
 void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 {
 	const float Scale = FMath::Max(FigureScale, 0.05f);
@@ -2510,7 +2817,9 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			// THE PERFORMANCE LIFTS THE WHOLE BODY -- 72 uu to meditate, 150 to fly up and verify. A floating part
 			// keeps its own small bob on top of that; what it must not do is ignore the lift entirely, which is
 			// what a costume did through every preparation and verification the founder ever watched.
-			WriteJointLocation(Pivot, Part.RestLocation + FVector(0.0, 0.0, Idle + (WornPose.bValid ? WornPose.LiftUU : 0.0f)));
+			// NOR TAKE IT TWICE: a floating part hung under the lifted spine already rises with it (bLiftedByAncestor).
+			WriteJointLocation(Pivot, Part.RestLocation + FVector(0.0, 0.0,
+				Idle + ((WornPose.bValid && !Part.bLiftedByAncestor) ? WornPose.LiftUU : 0.0f)));
 			break;
 		}
 		case EWonderlandCompanionMotion::Head:
@@ -2519,7 +2828,9 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			{
 				// THE DOG'S HEAD. Bowed to the pages while it reads, level against its own lean while it walks,
 				// turned to the Contract where the performance turns it -- all of it decided by the one animator.
-				WriteJointRotation(Pivot, FRotator(WornPose.HeadPitchDeg, WornPose.HeadYawDeg, 0.0f));
+				// The canon head joint AS WRITTEN when the Dog hands it down, so a performance's bow reaches the skin.
+				WriteJointRotation(Pivot, WornPose.bHasCanonJoints
+					? WornPose.HeadRotation : FRotator(WornPose.HeadPitchDeg, WornPose.HeadYawDeg, 0.0f));
 				break;
 			}
 			const float Angle = 2.0f * PI * (ActivityTime / 5.3f + Phase);
@@ -2530,10 +2841,40 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		{
 			// AN ARM, WHEN A DOG IS DRIVING IT. The canon rig hangs the arms off this motion, so a driven body
 			// swings them from the Dog's own solved shoulder rather than flapping them as decoration.
-			if (WornPose.bValid && FMath::Abs(Part.RestLocation.Y) > 2.5f)
+			if (WornPose.bValid && Part.LimbKind == 3)
 			{
-				const bool bLeftArm = Part.RestLocation.Y < 0.0f;
-				const float Shoulder = bLeftArm ? WornPose.ShoulderLeftDeg : WornPose.ShoulderRightDeg;
+				// THE DOG'S OWN SHOULDER, from the arm hanging on the SAME SIDE of the body -- pitch and the outward
+				// roll the arms-back run sweeps them by. Keyed by physical side: the canon's Left arm hangs at +Y.
+				if (WornPose.bHasCanonJoints)
+				{
+					// AND THROUGH A MISSION CONTRACT ACT, THE DOG'S HANDS (founder correction, 2026-09-29).
+					//
+					// Every act is choreographed on the canon body: the book opened before ITS chest, the brush and
+					// scraper hung from ITS forearm, the lens held on ITS eye line, both hands aimed from ITS shoulders
+					// at the Contract. Copying the canon's arm ANGLES onto shoulders 24.5 uu lower held every skin's
+					// hands a quarter of a metre under the props -- the book floating over empty paws, the brush
+					// painting in the air above them. So as the act comes in, this arm is solved to put its hand where
+					// the canon's hand is, bending its elbow the way the canon's bends, starting from the canon's own
+					// rotations; the arm and its elbow are written together, here. Blended by the same share the canon
+					// blends its own arms onto the act's goals with, so the hand never jumps.
+					const bool bPlus = Part.LimbSide > 0;
+					const FRotator CopiedShoulder = bPlus ? WornPose.ShoulderPlusY : WornPose.ShoulderMinusY;
+					const FRotator CopiedForearm = bPlus ? WornPose.ForearmPlusY : WornPose.ForearmMinusY;
+					USceneComponent* Elbow = PartPivots.IsValidIndex(Part.LowerIndex) ? PartPivots[Part.LowerIndex].Get() : nullptr;
+					const float Acting = FMath::Clamp(WornPose.MissionWeight, 0.0f, 1.0f);
+					FQuat SolvedShoulder = FQuat::Identity;
+					FQuat SolvedElbow = FQuat::Identity;
+					if (Acting > 0.001f && Elbow != nullptr && SolveArmToHand(Index, SolvedShoulder, SolvedElbow))
+					{
+						WriteJoint(Pivot, Part.RestLocation, FQuat::Slerp(CopiedShoulder.Quaternion(), SolvedShoulder, Acting).Rotator());
+						WriteJointRotation(Elbow, FQuat::Slerp(CopiedForearm.Quaternion(), SolvedElbow, Acting).Rotator());
+						break;
+					}
+					WriteJoint(Pivot, Part.RestLocation, CopiedShoulder);
+					WriteJointRotation(Elbow, CopiedForearm);
+					break;
+				}
+				const float Shoulder = Part.LimbSide > 0 ? WornPose.ShoulderLeftDeg : WornPose.ShoulderRightDeg;
 				WriteJoint(Pivot, Part.RestLocation, FRotator(Shoulder, 0.0f, 0.0f));
 				break;
 			}
@@ -2594,10 +2935,39 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			const float Idle = FMath::Sin(2.0f * PI * (ActivityTime / 4.6f + Phase + Part.A)) * 2.2f;
 			if (WornPose.bValid)
 			{
-				// THE DOG'S OWN HIP ANGLE. Which leg this is comes from the side it rests on, exactly as the
-				// character measures its own SideSign -- the rigs are identical, so left is left.
-				const bool bLeftLeg = Part.RestLocation.Y < 0.0f;
-				const float Hip = bLeftLeg ? WornPose.HipLeftDeg : WornPose.HipRightDeg;
+				// THE DOG'S OWN LEG, ON THE SAME SIDE OF THE BODY (founder regression, 2026-09-29).
+				//
+				// Walking, standing and jumping, this leg is SOLVED so its sole lands exactly where the canon
+				// animator put the canon sole on that side: the canon's stride pins a planted foot in the world,
+				// and a costume leg of a different length (every skin's thigh and shin differ from the canon's
+				// 17.25 / 30.75) given the canon's ANGLES would put its foot somewhere else and skate. As the legs
+				// cross to meditate or trail to fly they leave the plane a two-bone solve works in, so the canon
+				// joints are blended in by the same share the canon blends its own legs into those poses with.
+				// The hip and its knee are written together, here.
+				const bool bPlus = Part.LimbSide > 0;
+				if (WornPose.bHasCanonJoints && Part.LimbSide != 0)
+				{
+					const FRotator CopiedHip = bPlus ? WornPose.HipPlusY : WornPose.HipMinusY;
+					const FRotator CopiedShin = bPlus ? WornPose.ShinPlusY : WornPose.ShinMinusY;
+					USceneComponent* Knee = PartPivots.IsValidIndex(Part.LowerIndex) ? PartPivots[Part.LowerIndex].Get() : nullptr;
+					const float Performed = FMath::Clamp(WornPose.LegPerformWeight, 0.0f, 1.0f);
+					FRotator SolvedHip = CopiedHip;
+					FRotator SolvedKnee = CopiedShin;
+					if (Performed < 0.999f && Knee != nullptr
+						&& SolveLegToSole(Index, bPlus ? WornPose.SolePlusY : WornPose.SoleMinusY, SolvedHip, SolvedKnee))
+					{
+						WriteJoint(Pivot, Part.RestLocation, Performed <= 0.001f ? SolvedHip
+							: FQuat::Slerp(SolvedHip.Quaternion(), CopiedHip.Quaternion(), Performed).Rotator());
+						WriteJointRotation(Knee, Performed <= 0.001f ? SolvedKnee
+							: FQuat::Slerp(SolvedKnee.Quaternion(), CopiedShin.Quaternion(), Performed).Rotator());
+						break;
+					}
+					WriteJoint(Pivot, Part.RestLocation, CopiedHip);
+					WriteJointRotation(Knee, CopiedShin);
+					break;
+				}
+				// A pose with no canon joints (an older caller): the Left/Right angles, Left being the +Y leg.
+				const float Hip = bPlus ? WornPose.HipLeftDeg : WornPose.HipRightDeg;
 				WriteJoint(Pivot, Part.RestLocation, FRotator(Hip, 0.0f, 0.0f));
 				break;
 			}
@@ -2621,12 +2991,28 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			const float Reach = FMath::Max(Part.B, 0.01f);
 			if (WornPose.bValid)
 			{
-				// A KNEE OR AN ELBOW: the shins rest under the hips, the forearms out at the shoulders, so the
-				// lateral distance tells them apart without the figure having to label them.
-				const bool bLeftSide = Part.RestLocation.Y < 0.0f;
-				const bool bArm = FMath::Abs(Part.RestLocation.Y) > 2.5f;
-				const float Solved = bArm ? (bLeftSide ? WornPose.ElbowLeftDeg : WornPose.ElbowRightDeg)
-										  : (bLeftSide ? WornPose.KneeLeftDeg : WornPose.KneeRightDeg);
+				// A KNEE OR AN ELBOW, AS CLASSIFIED AT LOAD from the figure's hierarchy and absolute pivots.
+				//
+				// THE DEFECT THAT WAS HERE (founder regression, 2026-09-29): this told them apart by RestLocation.Y,
+				// which is relative to the parent joint and therefore ZERO for every shin and forearm -- so all four
+				// read as "the right knee", and took the knee's angle with the opposite sign to the canon's shin.
+				const bool bPlus = Part.LimbSide > 0;
+				if (WornPose.bHasCanonJoints && Part.LimbKind != 0)
+				{
+					if (Motions.IsValidIndex(Part.UpperIndex) && Motions[Part.UpperIndex].LimbSide != 0
+						&& Motions[Part.UpperIndex].LowerIndex == Index)
+					{
+						break;   // the hip or shoulder above wrote this joint with its own, solved or copied as a pair
+					}
+					WriteJointRotation(Pivot, Part.LimbKind == 4
+						? (bPlus ? WornPose.ForearmPlusY : WornPose.ForearmMinusY)
+						: (bPlus ? WornPose.ShinPlusY : WornPose.ShinMinusY));
+					break;
+				}
+				// An older caller: Left is the +Y side, an elbow bends positive and a shin folds back (negative).
+				const float Solved = Part.LimbKind == 4
+					? (bPlus ? WornPose.ElbowLeftDeg : WornPose.ElbowRightDeg)
+					: -(bPlus ? WornPose.KneeLeftDeg : WornPose.KneeRightDeg);
 				WriteJointRotation(Pivot, FRotator(Solved, 0.0f, 0.0f));
 				break;
 			}
