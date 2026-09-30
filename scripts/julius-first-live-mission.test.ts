@@ -1526,6 +1526,21 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     for (const line of kept) expect(output, line).toContain(line);
     expect(output).not.toContain('whatever the worker said');
     expect(output).not.toContain('note=free text');
+
+    // ONE STRAY PER CLOSED TOKEN (JUJU's review of ef0c09c3, F9). Each is a REAL printer line with exactly
+    // one token changed, so an allowlist that widened that token (R10, R11), or kept the retired shape (R12),
+    // would keep it. A tail alone never tested the tokens.
+    const account0 = liveTickAccountLine(account());
+    const budget0 = liveTickBudgetLine(budget(true), undefined);
+    const strays = [
+      account0.replace('exhausted=no', 'exhausted=maybe'),
+      budget0.replace('version=julius-tick-budget.v1', 'version=julius-tick-budget.v2'),
+      // The retired shapes, from before `disagreement=` and `architecture=` were printed.
+      budget0.replace(/ disagreement=\S+ architecture=\S+/u, ''),
+      account0.replace(/ disagreement=\d+ architecture=\d+/u, ''),
+    ];
+    // A replace that matched nothing would leave a REAL line, which is kept, so this also proves each stray changed.
+    expect(buildEvidence(strays.join('\n'))).toContain(`# 0 line(s) kept; ${String(strays.length)} unrecognised`);
   });
 
   it('keeps the peer execution scope, the research lines and the refusals, exactly as the printers write them (P4)', () => {
@@ -1540,6 +1555,8 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
         roles: ['PROMPT_ARCHITECT', 'CODING_AGENT'], allowances: 2, observedBackends: 1,
         reach: LIVE_REACH_READINESS.map((readiness) => ({ source: 'web', capability: 'read_item', readiness })),
       }),
+      // A sealed clause that names no role (F4): it printed `authorised for  across …`, and the shape dropped it.
+      ...liveResearchLines({ roles: [], allowances: 1, observedBackends: 0, reach: [] }),
       liveClaudeAuthRefusedLine(refused),
       ...liveWorkersBlockedLines([
         { role: 'CODING_AGENT', missing: ['CLAUDE_CODE_OAUTH_TOKEN'] },
@@ -1556,7 +1573,12 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
       '  research: authorised for anyone who asks',
       '    web/read_item: ready, and here is what the page said',
       'BLOCKED CODING_AGENT: CLAUDE_CODE_OAUTH_TOKEN',
+      // One stray per closed token (F9): a real line with only that token changed. The roles are free text with
+      // the rest of the line intact (R09), and the refusal code is not a code (R08).
+      '  research: authorised for anyone across 1 allowance(s); 1 observed backend(s)',
+      liveClaudeAuthRefusedLine(refused).replace(/ — [a-z_]+: /u, ' — Not A Code: '),
     ];
+    expect(strays.at(-1), 'the refusal stray really changed the code').not.toBe(liveClaudeAuthRefusedLine(refused));
     expect(buildEvidence(strays.join('\n'))).toContain(`# 0 line(s) kept; ${String(strays.length)} unrecognised`);
   });
 
@@ -1607,6 +1629,20 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
       'out(liveTickBudgetLine(tickBudget, tickOverride.override));',
       'if (outcome.tickAccount !== null) out(liveTickAccountLine(outcome.tickAccount));',
     ]) expect(entry.split(statement).length - 1, statement).toBe(1);
+  });
+
+  /**
+   * THE RUN IS NAMED DIRECTLY UNDER ITS RESULT (JUJU's review of ef0c09c3, F10). The gate credits a RESULT only
+   * to a `  run:` line at most three lines below it. With the cause and the tick account first, `run:` sat in
+   * the last slot, and one more kept line would have left the RESULT unattributed. The two statements are pinned
+   * adjacent, so every detail line comes after the run and none can push it out of the window.
+   */
+  it('prints the run on the line directly under its RESULT, before any detail', () => {
+    const entry = read('relay-bridge/julius-live-mission.ts').replace(/\s+/gu, ' ');
+    // Normalised the way the source is, so the two spaces inside `  run:` compare equal.
+    const pair = "out(`RESULT: ${outcome.state}${outcome.stalled ? ' (stalled before terminal state)' : ''} after ${outcome.ticks} ticks`); out(`  run: ${submitted.runId}`);"
+      .replace(/\s+/gu, ' ');
+    expect(entry.split(pair).length - 1).toBe(1);
   });
 
   it('keeps the failure outcomes — the runs that most need evidence', () => {
