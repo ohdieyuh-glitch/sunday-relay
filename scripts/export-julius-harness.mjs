@@ -413,6 +413,9 @@ const FILE_RULES = [
   ['src/relay/mission/trace/', 'EVENTS / TRAJECTORIES'],
   // Bridge-side composition.
   ['relay-bridge/julius-live-mission.ts', 'MISSION CONTRACT / BOOTSTRAP'],
+  // What the entrypoint prints after RESULT: each evidence row, labelled when it belongs to an
+  // attempt the decision did not read. A printer of its own so the allowlist's test generates from it.
+  ['relay-bridge/julius/live-evidence-lines.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/mission-contract.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/bootstrap.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/mission-seed.ts', 'MISSION CONTRACT / BOOTSTRAP'],
