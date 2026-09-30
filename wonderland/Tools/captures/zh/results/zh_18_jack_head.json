@@ -1,0 +1,31 @@
+{
+ "name": "zh_18_jack_head",
+ "started": "2026-09-30 10:44:06",
+ "status": "captured",
+ "tag": "final_0930",
+ "persisted_skin_at_start": "jack_flame",
+ "dog_yaw": 40.0,
+ "figure": "C:/dev/iwonder/wonderland-task3/wonderland/RelaySkins/JackFlame.wlvox",
+ "ground_z": -2.5,
+ "companions_hidden_for_views": 2,
+ "shots": [
+  "final_0930_night_front.jpg",
+  "final_0930_night_left.jpg",
+  "final_0930_night_right.jpg",
+  "final_0930_night_rear_three_quarter.jpg",
+  "final_0930_night_front_three_quarter.jpg",
+  "final_0930_night_wide_front.jpg",
+  "final_0930_night_wide_rear.jpg",
+  "final_0930_day_front.jpg",
+  "final_0930_day_left.jpg",
+  "final_0930_day_right.jpg",
+  "final_0930_day_rear_three_quarter.jpg",
+  "final_0930_day_front_three_quarter.jpg",
+  "final_0930_day_wide_front.jpg",
+  "final_0930_day_wide_rear.jpg"
+ ],
+ "restored_skin": "jack_flame",
+ "finished": "2026-09-30 10:44:55",
+ "seconds": 49.34,
+ "log": ""
+}

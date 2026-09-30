@@ -12,6 +12,13 @@
 > 2026-09-30: all three are fixed and proven in play in the editor build (Mission Contract on all five skins x 2
 > deployments, Jack Flame secondary incl. save/reload, 33/33 teleport destinations). They reach players only once the
 > packaged build is rebuilt, so this line stays IN PROGRESS until the founder accepts the rebuilt package.
+>
+> 2026-09-30 (later, founder priority update): the list grew to G1-G5 (the map declutter G5, the Jack Flame suit
+> G2b, the far-origin teleport the founder hit G3b, and the Jack Flame head kept at the accepted plume G4). All five
+> pass in the editor on DLL 11:05:45, and the REBUILT PACKAGE (`_wonderland_package_regression_0930`) passes its own
+> in-game QA 11/11. Second Wonderland's independent falsification is running; the gate stays IN PROGRESS until it
+> reports and the founder accepts. **The gates are reported separately** (founder rule): environmental 25/25, gameplay
+> regression per the table below, Julius on its own ledger (accepted main 7c584df2, 82.00%).
 
 **Owner of this file: CORE ("Wonderland core continued").** The WORLD session ("Second wonderland session") edits
 only the rows and specs marked WORLD. Founder directive 2026-09-28: *"COMPLETE WONDERLAND AS AN ENTIRE WORLD ...
@@ -641,7 +648,7 @@ rebuild it (IC01's brief). **Founder decision:** (a) build them in the core, rep
 those identities to the outer world instead -- a tower quarter in the ICARUS march (Icarus's vertical silhouette)
 and a mushroom wood on a frontier (the forge's "mushroom woods" are one of the 24 quarter kinds).
 
-## POST-COMPLETION GAMEPLAY REGRESSION (founder, 2026-09-29 evening) -- G1 / G2 / G3 FIXED 2026-09-30 (packaged build to be rebuilt)
+## POST-COMPLETION GAMEPLAY REGRESSION (founder, 2026-09-29 evening + 2026-09-30) -- G1-G5 FIXED, PACKAGE REBUILT AND QA'D; independent falsification pending
 
 Scope: gameplay and system repair only. The completed world is the baseline and is not modified: landscaping, C7,
 radial and ring roads, hedge gates, Golden Arrival geometry, quarter layouts, TW / MG architecture, the world
@@ -652,6 +659,11 @@ boundary, emptiness treatment, lighting and the World Partition layout all stay 
 | G1 | Mission Contract animation sequences wrong on the non-OG skins (founder correction: the MISSION CONTRACT sequences, not ordinary locomotion) | **FIXED, proven in play** (2026-09-30, zg_12 / zg_13 / zg_16) |
 | G2 | Jack Flame secondary colour must drive both the flames and the tie, and survive a reload | **FIXED, proven in play** (zg_21 change + zg_24 restore in a fresh session) |
 | G3 | Teleport to the new world locations (TW01 / TW02 / MG01 and other named places) | **FIXED, proven in play** (zg_22: 16/16 new, 17/17 existing) |
+| G1b | Mission Contract: repeat deployments AND mid-act resets on every skin (founder, 2026-09-30) | **PROVEN** (zh_14: 5 skins x 3 deployments; zh_19c: contract reset + fixture stop, 8/8 clean) |
+| G2b | Jack Flame SECONDARY must also drive the SUIT (founder, 2026-09-30) | **FIXED, proven in play and in the package** (zh_22 10/10, zh_26 reload 3/3, package Q01) |
+| G3b | Teleport from the rim into the dense centre (the founder's own failure, 2026-09-30 16:04 UTC) | **FIXED, proven** (squeezed repro fails the old build; zh_23 10/10 incl. real 26-34 s streams; zh_24 33/33; package Q02-Q09) |
+| G4 | Jack Flame head: keep the accepted crown plume (whole-head fire CANCELLED) | **KEPT** (figure byte-identical to the accepted geometry; Second verified offline; zh_18 frames) |
+| G5 | World map tangled at the centre (founder, 2026-09-30) | **FIXED, proven** (zh_21 11/11 incl. 1920x1200; package Q04 0 overlaps at x1 / x4 / x8) |
 
 **G1 -- one canonical Mission Contract animation system, skins as a visual layer.** Relay OG *is* the canon body, so
 every act (meditate, read, paint, fly-and-verify, inspect, repair) is solved on its own skeleton and its hands land on
@@ -683,3 +695,49 @@ waits only for the ground round the arrival (150 m streaming shape; the Dog's ow
 limit, and two landmarks were moved 2.5 m off the planters they stood on (Grand Clock, Colossal Key -- registry only,
 no geometry). zg_22: every offered place arrives, lands within 40 cm of the registry height on paving/road/ground,
 streaming settles (max 22.5 s) and the Dog walks away. No map file changed in this phase (newest map file 09-29 15:13).
+
+**2026-09-30 additions (G1b / G2b / G3b / G4 / G5).**
+
+**G5 -- the map, not the world.** The offered places span 2.5 km and fifteen of them stand within 150 m of the gate, so
+at the map's one scale the Golden Arrival was a knot of thirty pixels with fifteen names printed into it (before:
+`Tools/captures/zh/map_before/`). Nothing in the world moved. `SWonderlandMapCanvas` now zooms and pans (wheel about the
+cursor, drag, + / - / FIT, keyboard + - Home); markers are drawn exactly where their arrival points project and never
+move; markers closer than 28 px fold into the most important of them (a group ring, "+N" on its label, the folded places
+as small dots where they really are; a click on a group opens it); labels are placed most-important first (selected /
+hovered, arrival, quarters, landmarks, districts) at the first of 24 candidates clear of every label, halo, leader line
+and the compass / controls / scale bar, and a leader line may cross no other line; the YOU tag is placed by the same
+rule. zh_21 on DLL 11:05:45: M01 no label overlap, M02 no label over a halo (YOU included), M03 markers within 0.001 px of
+the projected arrival points, M04 nothing lost, M05 the named share rises with zoom, M06 the Arrival and the three nation
+quarters named at FIT, M05b every place named at x8, M07 TW01 / TW02 / MG01 selected on the map and reached, M08 the same
+at 1920x1200 at the game's DPI scale (the founder's screen), M09 no halo clash, M10 no crossing leader lines -- 11/11.
+Second Wonderland's offline audit of the first cut found the halo, crossing and YOU defects this version fixes.
+
+**G2b -- the suit.** The `suit` material carries `secondary_deep`: a third of the chosen colour
+(`WonderlandMascotStyle::DeepAccentColour`), so the suit is plainly the chosen colour while the pinstripes stay >= 2.6x
+its luminance for every palette swatch; the NIGHTMARE COLLAR and the knot the tie sits on moved to their own black
+(`nightmare`), so the tie still reads. Figure change: one channel tag, one material, 189 collar boxes renamed; geometry
+identical, head untouched. zh_22 10/10 (5 colours: suit, tie and fire one hue; collar and stripes as designed; a primary
+alone leaves the suit; walks with feet on the canon), zh_26 3/3 (a fresh session restores azure on suit, tie and fire),
+package Q01. The eyes also follow SECONDARY -- founder canon since 2026-09-24, unchanged.
+
+**G3b -- the founder's own failure.** 16:04:57 UTC: a Mission Contract deployed at Tartarus Heartland East travelled to
+castle_approach and gave up at 25.8 s ("Could not land safely"): World Partition was still bringing the castle's cells
+in, and zg_22 had never made a rim-to-centre trip. A fresh editor did it in 4 s; squeezing MaxBlackSeconds reproduced the
+founder's sentence on the old build. Fix (`WonderlandTravel`): MaxBlackSeconds is now the limit for a travel that has
+STOPPED progressing (cells pending or loading keep it waiting, StallSeconds 5, hard cap MaxTravelSeconds 60); a late
+stream gets LandingGraceSeconds (3) to land -- the squeeze found the old code placing the pawn and abandoning it the
+next tick; a caption shows over the black ("TRAVELLING TO ..."); every travel logs why it ended
+(GetLastTravelDiagnostics). zh_23 (limit squeezed to 2 s): 10/10 arrived, including real streams of 26.8, 28.4 and 34.4 s
+that the old 25 s limit would have abandoned; zh_13 8/8 rim-to-centre + 2/2 Mission Contract deploys from the rim; zh_24
+all 33 destinations.
+
+**G1b.** zh_14 (5 skins x 3 deployments) all identical to Relay OG, every deployment settling to weight 0. Mid-act
+resets (contract reset and fixture stop): zh_19c 8/8 clean -- no costume part outside its own idle range from 3 s, hands
+and soles on the canon as at idle. (zh_19b's 7/15 was the instrument: one snapshot against 12-25 deg of idle sway.)
+
+**PACKAGE.** `C:/dev/iwonder/_wonderland_package_regression_0930`, BuildCookRun SUCCESSFUL (293 s, 1,783 packages, 0
+errors). `wl.Qa.PackageCheck` (WonderlandQaCommands.cpp, not in Shipping) walks the checks inside the packaged game;
+`Tools/boot_test_package_qa.ps1`: 11/11 PASS -- Jack Flame azure; rim -> castle_approach; the map at x1 / x4 / x8 with 0
+label overlaps; TW01 / TW02 / MG01 from the map; a Mission Contract from the Tartarus rim reaching its site. The window
+ran at 1280x800 (the engine shrank the requested 1920x1200 to the work area) -- the same 16:10 layout in slate units.
+Frames: `Tools/captures/zh/package_0930/`.

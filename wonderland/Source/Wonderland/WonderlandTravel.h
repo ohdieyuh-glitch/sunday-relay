@@ -162,6 +162,32 @@ public:
 	float MaxBlackSeconds = 25.0f;
 
 	/**
+	 * 25 S WAS STILL SHORTER THAN THE CENTRE, SEEN FROM THE RIM. Founder, 2026-09-30 (editor log 16:04:57 UTC): a
+	 * Mission Contract deployed at Tartarus Heartland East travelled to castle_approach, World Partition went Critical at
+	 * +10 s and was still bringing the castle's cells in when the 25 s ran out, and the travel gave up -- "Could not land
+	 * safely at castle_approach". zg_22 never made that trip (it reached castle_approach from 75 m away).
+	 *
+	 * So MaxBlackSeconds is now the limit for a travel that has STOPPED making progress: while the world is still
+	 * streaming cells in (StallSeconds), it keeps waiting, up to this hard cap. A spot that is fully streamed and still
+	 * not standable is abandoned at MaxBlackSeconds exactly as before.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Transition", meta = (ClampMin = "1.0"))
+	float MaxTravelSeconds = 60.0f;
+
+	/** How long streaming may show no pending cell and no newly loaded cell before a slow travel counts as stalled. */
+	UPROPERTY(Config, EditAnywhere, Category = "Transition", meta = (ClampMin = "0.5"))
+	float StallSeconds = 5.0f;
+
+	/**
+	 * ONCE THE DESTINATION HAS STREAMED, the landing still needs a spot and GroundFramesRequired frames of ground. A stream
+	 * that finished after MaxBlackSeconds was abandoned on the very next tick -- placed, then put back before its ground
+	 * frames could count (zh_12, 2026-09-30: "abandoned after 4.7 s: no ground under the landing | streamed at 4.3 s").
+	 * A late stream now gets this long to land before a failed landing is called one.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Transition", meta = (ClampMin = "0.5"))
+	float LandingGraceSeconds = 3.0f;
+
+	/**
 	 * How far round the destination must be streamed IN before the visitor is placed, uu. The travel waited for the
 	 * whole 512 m grid loading range round a place nobody was near, when landing needs only the ground and what stands
 	 * on it; the rest streams in round the Dog after the fade exactly as it always does -- the world's own streaming
@@ -253,6 +279,14 @@ public:
 	FString GetLastTravelReport() const { return LastReport; }
 
 	/**
+	 * WHY THE LAST TRAVEL ENDED AS IT DID, for proofs and the log: seconds taken, when streaming finished, how many
+	 * cells were still pending, and -- on a failure -- which condition refused (still streaming, no standable spot, the
+	 * move refused, no ground). "Could not land safely" alone could not tell a slow stream from a blocked arrival.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Travel")
+	FString GetLastTravelDiagnostics() const { return LastDiagnostics; }
+
+	/**
 	 * The landing rule a teleport uses, asked of one spot: where the local pawn's capsule
 	 * could stand if it arrived at Location (a point on the ground). The same sweep and
 	 * the same rejections as a real travel, so an anchor placed by this answer is an
@@ -279,8 +313,23 @@ private:
 	void BeginFadeIn(bool bArrived, const FString& Report);
 	void SetStreamingRegistered(bool bRegister);
 	void RestoreInput();
+	/** World Partition cells (streaming levels) loaded, and those still changing state. */
+	void CountCells(int32& OutLoaded, int32& OutPending) const;
+	/** The line over the black screen: where the visitor is going, and -- on a long wait -- that it is still loading. */
+	void ShowCaption(const FText& Destination);
+	void HideCaption();
 
 	EPhase Phase = EPhase::Idle;
+	float TravelSeconds = 0.0f;
+	float StreamedAtSeconds = -1.0f;
+	float LastProgressSeconds = 0.0f;
+	int32 LastLoadedCells = -1;
+	int32 LastPendingCells = 0;
+	int32 SafeSpotMisses = 0;
+	int32 MoveRefusals = 0;
+	FString LastDiagnostics;
+	TSharedPtr<class SWidget> CaptionLayer;
+	TSharedPtr<class STextBlock> CaptionDetail;
 	FName TravelId;
 	FName LastArrived;
 	FString LastReport;

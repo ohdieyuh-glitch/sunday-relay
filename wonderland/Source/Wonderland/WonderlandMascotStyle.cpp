@@ -57,6 +57,21 @@ namespace WonderlandMascotStyle
 		return FLinearColor(Hue.R * Peak, Hue.G * Peak, Hue.B * Peak, Authored.A);
 	}
 
+	FLinearColor DeepAccentColour(const FLinearColor& Authored, const FLinearColor& Chosen)
+	{
+		if (Chosen.R >= 0.995f && Chosen.G >= 0.995f && Chosen.B >= 0.995f)
+		{
+			return Authored;
+		}
+		// A THIRD OF THE CHOSEN COLOUR. The suit's own detail is the pinstripe at 0.78, so even the brightest swatch in the
+		// palette (BONE, luminance 0.87 -> 0.29) leaves the stripes 2.6 times the cloth; the tie and the fire are emissive
+		// and read against any lit cloth. A quarter (the first cut) read as near-black navy in daylight -- right for a
+		// suit, too shy for "visibly recolor". A dark swatch still gives a dark suit: OBSIDIAN lands back near the design.
+		constexpr float ClothShare = 0.33f;
+		return FLinearColor(FMath::Clamp(Chosen.R, 0.0f, 1.0f) * ClothShare, FMath::Clamp(Chosen.G, 0.0f, 1.0f) * ClothShare,
+			FMath::Clamp(Chosen.B, 0.0f, 1.0f) * ClothShare, Authored.A);
+	}
+
 	const TArray<TPair<FName, FLinearColor>>& Palette()
 	{
 		// ONE SET, OFFERED IN BOTH PLACES. Chosen to read against Wonderland's ivory stone and against black:
@@ -216,7 +231,7 @@ namespace
 
 	FAutoConsoleCommand GMascotSecondary(
 		TEXT("wl.Mascot.Secondary"),
-		TEXT("The Relay Dog's eyes and a skin's secondary accents (Jack Flame's fire and tie): wl.Mascot.Secondary <r,g,b | #RRGGBB>. Saved."),
+		TEXT("The Relay Dog's eyes and a skin's secondary accents (Jack Flame's fire, tie and suit): wl.Mascot.Secondary <r,g,b | #RRGGBB>. Saved."),
 		FConsoleCommandWithArgsDelegate::CreateStatic(&SetAndSave, false));
 
 	FAutoConsoleCommand GMascotReset(

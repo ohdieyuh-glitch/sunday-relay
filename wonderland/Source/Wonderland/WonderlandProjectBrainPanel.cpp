@@ -1352,7 +1352,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeColourStrip()
 	//
 	// So: two rows of chips under the preview, no headings beyond the two words, no sliders, no picker dialog.
 	// PRIMARY is the shell every skin shares; SECONDARY is the status eyes and a skin's secondary accents -- the
-	// surfaces its figure tags `secondary`, which on Jack Flame are the fire and the tie (founder, 2026-09-29).
+	// surfaces its figure tags `secondary`, which on Jack Flame are the fire, the tie and the suit (founder, 2026-09-29 / 09-30).
 	// Everything else authored -- halos, banners, the black visor, another skin's fire -- is never reached from here.
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
@@ -1365,7 +1365,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeColourStrip()
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
 		[
 			SNew(STextBlock)
-			.Text(INVTEXT("PRIMARY paints the shell, SECONDARY the status eyes and the skin's secondary accents (Jack Flame's fire and tie). Halos and the visor are left as designed."))
+			.Text(INVTEXT("PRIMARY paints the shell, SECONDARY the status eyes and the skin's secondary accents (Jack Flame's fire, tie and suit). Halos and the visor are left as designed."))
 			.Font(Font("Regular", 7, 180)).ColorAndOpacity(Mist(0.75f))
 			.AutoWrapText(true)
 		];

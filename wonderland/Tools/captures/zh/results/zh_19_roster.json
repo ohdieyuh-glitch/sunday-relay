@@ -1,0 +1,216 @@
+{
+ "name": "zh_19_roster",
+ "started": "2026-09-30 10:44:56",
+ "status": "proved",
+ "tests": [
+  {
+   "id": "R01",
+   "name": "the roster lists every roster skin and no retired one (wl.Skins.List, the registry's own listing)",
+   "pass": true,
+   "detail": {
+    "listed": [
+     "relay_og",
+     "celestial_light",
+     "skeleton_flame",
+     "jack_flame",
+     "baal"
+    ],
+    "missing": [],
+    "retired_listed": [],
+    "extra": []
+   }
+  },
+  {
+   "id": "R05",
+   "name": "every roster skin draws its own, distinct figure over a living Dog (Relay OG = the canon body, no costume)",
+   "pass": true,
+   "detail": {
+    "worn": [
+     {
+      "skin": "relay_og",
+      "accepted": true,
+      "drawn": {
+       "boxes": null,
+       "height_uu": null
+      },
+      "dog_alive": true
+     },
+     {
+      "skin": "celestial_light",
+      "accepted": true,
+      "drawn": {
+       "boxes": 1632,
+       "height_uu": 198.9
+      },
+      "dog_alive": true
+     },
+     {
+      "skin": "skeleton_flame",
+      "accepted": true,
+      "drawn": {
+       "boxes": 1481,
+       "height_uu": 226.4
+      },
+      "dog_alive": true
+     },
+     {
+      "skin": "jack_flame",
+      "accepted": true,
+      "drawn": {
+       "boxes": 1565,
+       "height_uu": 207.9
+      },
+      "dog_alive": true
+     },
+     {
+      "skin": "baal",
+      "accepted": true,
+      "drawn": {
+       "boxes": 1863,
+       "height_uu": 202.9
+      },
+      "dog_alive": true
+     }
+    ],
+    "distinct": true
+   }
+  },
+  {
+   "id": "R02",
+   "name": "wearing a retired id (Wardrobe call) draws its successor's figure",
+   "pass": true,
+   "detail": {
+    "cases": [
+     {
+      "asked": "arden_infernal",
+      "accepted": true,
+      "drawn": {
+       "boxes": 1565,
+       "height_uu": 207.9
+      },
+      "expected": "jack_flame",
+      "matches": true
+     },
+     {
+      "asked": "arden_infernal_v1",
+      "accepted": true,
+      "drawn": {
+       "boxes": 1565,
+       "height_uu": 207.9
+      },
+      "expected": "jack_flame",
+      "matches": true
+     },
+     {
+      "asked": "apollo",
+      "accepted": true,
+      "drawn": {
+       "boxes": 1863,
+       "height_uu": 202.9
+      },
+      "expected": "baal",
+      "matches": true
+     },
+     {
+      "asked": "apollo_v1",
+      "accepted": true,
+      "drawn": {
+       "boxes": 1863,
+       "height_uu": 202.9
+      },
+      "expected": "baal",
+      "matches": true
+     },
+     {
+      "asked": "skeleton_flame_v1",
+      "accepted": true,
+      "drawn": {
+       "boxes": 1481,
+       "height_uu": 226.4
+      },
+      "expected": "skeleton_flame",
+      "matches": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "R04",
+   "name": "a remembered Arden Infernal / Apollo / Skeleton Flame V1 comes up drawn as Jack Flame / Baal / Skeleton Flame, and the file is rewritten",
+   "pass": true,
+   "detail": {
+    "cases": [
+     {
+      "stored": "arden_infernal",
+      "drawn": {
+       "boxes": 1565,
+       "height_uu": 207.9
+      },
+      "file_after": "jack_flame",
+      "expected": "jack_flame",
+      "matches": true
+     },
+     {
+      "stored": "apollo",
+      "drawn": {
+       "boxes": 1863,
+       "height_uu": 202.9
+      },
+      "file_after": "baal",
+      "expected": "baal",
+      "matches": true
+     },
+     {
+      "stored": "skeleton_flame_v1",
+      "drawn": {
+       "boxes": 1481,
+       "height_uu": 226.4
+      },
+      "file_after": "skeleton_flame",
+      "expected": "skeleton_flame",
+      "matches": true
+     }
+    ]
+   }
+  }
+ ],
+ "remembered_before": "jack_flame",
+ "figure_file_boxes": {
+  "celestial_light": 1632,
+  "skeleton_flame": 2029,
+  "skeleton_flame_v1": 2188,
+  "jack_flame": 1825,
+  "baal": 2185,
+  "arden_infernal": 3053,
+  "arden_infernal_v1": 2294,
+  "apollo": 3180,
+  "apollo_v1": 3270
+ },
+ "signatures": {
+  "relay_og": {
+   "boxes": null,
+   "height_uu": null
+  },
+  "celestial_light": {
+   "boxes": 1632,
+   "height_uu": 198.9
+  },
+  "skeleton_flame": {
+   "boxes": 1481,
+   "height_uu": 226.4
+  },
+  "jack_flame": {
+   "boxes": 1565,
+   "height_uu": 207.9
+  },
+  "baal": {
+   "boxes": 1863,
+   "height_uu": 202.9
+  }
+ },
+ "all_pass": true,
+ "remembered_restored": "jack_flame",
+ "finished": "2026-09-30 10:47:02",
+ "seconds": 126.81,
+ "log": "R01 PASS the roster lists every roster skin and no retired one (wl.Skins.List, the registry's own listing) {'listed': ['relay_og', 'celestial_light', 'skeleton_flame', 'jack_flame', 'baal'], 'missing': [], 'retired_listed': [], 'extra': []}\nR05 PASS every roster skin draws its own, distinct figure over a living Dog (Relay OG = the canon body, no costume) {'worn': [{'skin': 'relay_og', 'accepted': True, 'drawn': {'boxes': None, 'height_uu': None}, 'dog_alive': True}, {'skin': 'celestial_light', 'accepted': True, 'drawn': {'boxes': 1632, 'height_uu': 198.9}, 'dog_alive': True}, {'skin': 'skeleton_flame', 'accepted': True, 'drawn': {'boxes': 1481, 'height_uu': 226.4}, 'dog_alive': True}, {'skin': 'jack_flame', 'accepted': True, 'drawn': {'boxes': 1565, 'height_uu': 207.9}, 'dog_alive': True}, {'skin': 'baal', 'accepted': True, 'drawn': {'boxes': 1863, 'height_uu': 202.9}, 'dog_alive': True}], 'distinct': True}\nR02 PASS wearing a retired id (Wardrobe call) draws its successor's figure {'cases': [{'asked': 'arden_infernal', 'accepted': True, 'drawn': {'boxes': 1565, 'height_uu': 207.9}, 'expected': 'jack_flame', 'matches': True}, {'asked': 'arden_infernal_v1', 'accepted': True, 'drawn': {'boxes': 1565, 'height_uu': 207.9}, 'expected': 'jack_flame', 'matches': True}, {'asked': 'apollo', 'accepted': True, 'drawn': {'boxes': 1863, 'height_uu': 202.9}, 'expected': 'baal', 'matches': True}, {'asked': 'apollo_v1', 'accepted': True, 'drawn': {'boxes': 1863, 'height_uu': 202.9}, 'expected': 'baal', 'matches': True}, {'asked': 'skeleton_flame_v1', 'accepted': True, 'drawn': {'boxes': 1481, 'height_uu': 226.4}, 'expected': 'skeleton_flame', 'matches': True}]}\nR04 PASS a remembered Arden Infernal / Apollo / Skeleton Flame V1 comes up drawn as Jack Flame / Baal / Skeleton Flame, and the file is rewritten {'cases': [{'stored': 'arden_infernal', 'drawn': {'boxes': 1565, 'height_uu': 207.9}, 'file_after': 'jack_flame', 'expected': 'jack_flame', 'matches': True}, {'stored': 'apollo', 'drawn': {'boxes': 1863, 'height_uu': 202.9}, 'file_after': 'baal', 'expected': 'baal', 'matches': True}, {'stored': 'skeleton_flame_v1', 'drawn': {'boxes': 1481, 'height_uu': 226.4}, 'file_after': 'skeleton_flame', 'expected': 'skeleton_flame', 'matches': True}]}\n"
+}

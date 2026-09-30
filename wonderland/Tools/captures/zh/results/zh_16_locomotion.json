@@ -1,0 +1,1068 @@
+{
+ "name": "zh_16_locomotion",
+ "started": "2026-09-30 10:40:34",
+ "status": "measured",
+ "persisted_skin_at_start": "jack_flame",
+ "skins": [
+  {
+   "skin": "relay_og",
+   "phases": {
+    "idle": {
+     "start": [
+      0,
+      44000
+     ],
+     "end": [
+      0,
+      44000
+     ],
+     "moved_m": 0.0
+    },
+    "forward": {
+     "start": [
+      0,
+      44000
+     ],
+     "end": [
+      0,
+      44665
+     ],
+     "moved_m": 6.65,
+     "along_m": 6.65
+    },
+    "backward": {
+     "start": [
+      0,
+      44665
+     ],
+     "end": [
+      0,
+      44008
+     ],
+     "moved_m": 6.57,
+     "along_m": 6.57
+    },
+    "strafe_left": {
+     "start": [
+      0,
+      44008
+     ],
+     "end": [
+      -455,
+      43989
+     ],
+     "moved_m": 4.55,
+     "along_m": 4.55
+    },
+    "strafe_right": {
+     "start": [
+      -455,
+      43989
+     ],
+     "end": [
+      -38,
+      43989
+     ],
+     "moved_m": 4.17,
+     "along_m": 4.17
+    },
+    "rotate": {
+     "start": [
+      -38,
+      43989
+     ],
+     "end": [
+      -458,
+      44023
+     ],
+     "moved_m": 4.21
+    },
+    "sustained": {
+     "start": [
+      -458,
+      44023
+     ],
+     "end": [
+      -461,
+      45828
+     ],
+     "moved_m": 18.05,
+     "along_m": 18.05
+    },
+    "stop": {
+     "start": [
+      -461,
+      45828
+     ],
+     "end": [
+      -461,
+      45831
+     ],
+     "moved_m": 0.03
+    },
+    "resume": {
+     "start": [
+      -461,
+      45831
+     ],
+     "end": [
+      -461,
+      46277
+     ],
+     "moved_m": 4.46,
+     "along_m": 4.46
+    }
+   },
+   "checks": {
+    "forward_travel": {
+     "pass": true,
+     "along_m": 6.65,
+     "nominal_m": 6.9
+    },
+    "backward_travel": {
+     "pass": true,
+     "along_m": 6.57
+    },
+    "strafe_left_travel": {
+     "pass": true,
+     "along_m": 4.55
+    },
+    "strafe_right_travel": {
+     "pass": true,
+     "along_m": 4.17
+    },
+    "rotate_travel": {
+     "pass": true,
+     "moved_m": 4.21
+    },
+    "sustained_travel": {
+     "pass": true,
+     "along_m": 18.05,
+     "nominal_m": 18.4
+    },
+    "stop": {
+     "pass": true,
+     "speed_end": 0.0
+    },
+    "resume_travel": {
+     "pass": true,
+     "along_m": 4.46
+    },
+    "capsule_upright": {
+     "pass": true,
+     "max_tilt": 0.0
+    },
+    "always_on_foot": {
+     "pass": true,
+     "falling_samples": 0
+    },
+    "canon_hips_swing": {
+     "pass": true,
+     "range_deg": 97.9
+    }
+   },
+   "worn": "relay_og",
+   "costume": null,
+   "max_walk_speed": 230.0,
+   "pass": true,
+   "samples": 571
+  },
+  {
+   "skin": "celestial_light",
+   "phases": {
+    "idle": {
+     "start": [
+      0,
+      44000
+     ],
+     "end": [
+      0,
+      44000
+     ],
+     "moved_m": 0.0
+    },
+    "forward": {
+     "start": [
+      0,
+      44000
+     ],
+     "end": [
+      0,
+      44672
+     ],
+     "moved_m": 6.72,
+     "along_m": 6.72
+    },
+    "backward": {
+     "start": [
+      0,
+      44672
+     ],
+     "end": [
+      0,
+      44017
+     ],
+     "moved_m": 6.55,
+     "along_m": 6.55
+    },
+    "strafe_left": {
+     "start": [
+      0,
+      44017
+     ],
+     "end": [
+      -461,
+      43998
+     ],
+     "moved_m": 4.62,
+     "along_m": 4.61
+    },
+    "strafe_right": {
+     "start": [
+      -461,
+      43998
+     ],
+     "end": [
+      -49,
+      43998
+     ],
+     "moved_m": 4.12,
+     "along_m": 4.12
+    },
+    "rotate": {
+     "start": [
+      -49,
+      43998
+     ],
+     "end": [
+      -466,
+      44017
+     ],
+     "moved_m": 4.17
+    },
+    "sustained": {
+     "start": [
+      -466,
+      44017
+     ],
+     "end": [
+      -467,
+      45825
+     ],
+     "moved_m": 18.08,
+     "along_m": 18.08
+    },
+    "stop": {
+     "start": [
+      -467,
+      45825
+     ],
+     "end": [
+      -467,
+      45828
+     ],
+     "moved_m": 0.03
+    },
+    "resume": {
+     "start": [
+      -467,
+      45828
+     ],
+     "end": [
+      -467,
+      46272
+     ],
+     "moved_m": 4.44,
+     "along_m": 4.44
+    },
+    "switch_walk": {
+     "start": [
+      -467,
+      46272
+     ],
+     "switched_at": 1.04,
+     "end": [
+      -467,
+      46972
+     ],
+     "moved_m": 7.0,
+     "along_m": 7.0
+    }
+   },
+   "checks": {
+    "forward_travel": {
+     "pass": true,
+     "along_m": 6.72,
+     "nominal_m": 6.9
+    },
+    "backward_travel": {
+     "pass": true,
+     "along_m": 6.55
+    },
+    "strafe_left_travel": {
+     "pass": true,
+     "along_m": 4.61
+    },
+    "strafe_right_travel": {
+     "pass": true,
+     "along_m": 4.12
+    },
+    "rotate_travel": {
+     "pass": true,
+     "moved_m": 4.17
+    },
+    "sustained_travel": {
+     "pass": true,
+     "along_m": 18.08,
+     "nominal_m": 18.4
+    },
+    "stop": {
+     "pass": true,
+     "speed_end": 0.0
+    },
+    "resume_travel": {
+     "pass": true,
+     "along_m": 4.44
+    },
+    "capsule_upright": {
+     "pass": true,
+     "max_tilt": 0.0
+    },
+    "always_on_foot": {
+     "pass": true,
+     "falling_samples": 0
+    },
+    "canon_hips_swing": {
+     "pass": true,
+     "range_deg": 97.7
+    },
+    "feet_track_canon": {
+     "pass": true,
+     "p95_uu": 0.66,
+     "max_uu": 0.71,
+     "n": 1100
+    },
+    "knees_never_hyperextend": {
+     "pass": true,
+     "max_knee_pitch": -0.75,
+     "max_knee_fold_deg": 98.0,
+     "canon_max_knee_fold_deg": 89.9
+    },
+    "hip_phase_+Y": {
+     "pass": true,
+     "correlation_with_canon_same_side": 0.986,
+     "range_deg": 88.8
+    },
+    "hip_phase_-Y": {
+     "pass": true,
+     "correlation_with_canon_same_side": 0.986,
+     "range_deg": 88.7
+    },
+    "arms_swing": {
+     "pass": true,
+     "range_deg": 54.0
+    },
+    "legs_settle_when_stopped": {
+     "pass": true,
+     "max_hip_deg": 2.21
+    },
+    "costume_on_capsule": {
+     "pass": true,
+     "max_offset_uu": 0.0
+    },
+    "no_transform_explosion": {
+     "pass": true
+    },
+    "skin_switch_while_walking": {
+     "pass": true,
+     "worn_after": "skeleton_flame",
+     "p95_uu_after": 0.66,
+     "along_m": 7.0
+    }
+   },
+   "worn": "celestial_light",
+   "costume": {
+    "boxes": 1632,
+    "figure": "CelestialLight.wlvox",
+    "limbs": "arm_l=shoulder-Y thigh 25.5 shin 30.8; arm_l_fore=elbow-Y thigh 0.0 shin 30.8; arm_r=shoulder+Y thigh 25.5 shin 30.8; arm_r_fore=elbow+Y thigh 0.0 shin 30.8; leg_l=hip-Y thigh 23.1 shin 23.1; leg_l_shin=knee-Y thigh 0.0 shin 23.1; leg_r=hip+Y thigh 23.1 shin 23.1; leg_r_shin=knee+Y thigh 0.0 shin 23.1; "
+   },
+   "max_walk_speed": 230.0,
+   "pass": true,
+   "samples": 625
+  },
+  {
+   "skin": "skeleton_flame",
+   "phases": {
+    "idle": {
+     "start": [
+      0,
+      44000
+     ],
+     "end": [
+      0,
+      44000
+     ],
+     "moved_m": 0.0
+    },
+    "forward": {
+     "start": [
+      0,
+      44000
+     ],
+     "end": [
+      0,
+      44675
+     ],
+     "moved_m": 6.75,
+     "along_m": 6.75
+    },
+    "backward": {
+     "start": [
+      0,
+      44675
+     ],
+     "end": [
+      0,
+      44017
+     ],
+     "moved_m": 6.57,
+     "along_m": 6.57
+    },
+    "strafe_left": {
+     "start": [
+      0,
+      44017
+     ],
+     "end": [
+      -456,
+      43994
+     ],
+     "moved_m": 4.57,
+     "along_m": 4.56
+    },
+    "strafe_right": {
+     "start": [
+      -456,
+      43994
+     ],
+     "end": [
+      -32,
+      43994
+     ],
+     "moved_m": 4.25,
+     "along_m": 4.25
+    },
+    "rotate": {
+     "start": [
+      -32,
+      43994
+     ],
+     "end": [
+      -450,
+      44023
+     ],
+     "moved_m": 4.19
+    },
+    "sustained": {
+     "start": [
+      -450,
+      44023
+     ],
+     "end": [
+      -453,
+      45829
+     ],
+     "moved_m": 18.06,
+     "along_m": 18.06
+    },
+    "stop": {
+     "start": [
+      -453,
+      45829
+     ],
+     "end": [
+      -453,
+      45832
+     ],
+     "moved_m": 0.03
+    },
+    "resume": {
+     "start": [
+      -453,
+      45832
+     ],
+     "end": [
+      -453,
+      46269
+     ],
+     "moved_m": 4.37,
+     "along_m": 4.37
+    },
+    "switch_walk": {
+     "start": [
+      -453,
+      46269
+     ],
+     "switched_at": 1.03,
+     "end": [
+      -453,
+      46968
+     ],
+     "moved_m": 6.98,
+     "along_m": 6.98
+    }
+   },
+   "checks": {
+    "forward_travel": {
+     "pass": true,
+     "along_m": 6.75,
+     "nominal_m": 6.9
+    },
+    "backward_travel": {
+     "pass": true,
+     "along_m": 6.57
+    },
+    "strafe_left_travel": {
+     "pass": true,
+     "along_m": 4.56
+    },
+    "strafe_right_travel": {
+     "pass": true,
+     "along_m": 4.25
+    },
+    "rotate_travel": {
+     "pass": true,
+     "moved_m": 4.19
+    },
+    "sustained_travel": {
+     "pass": true,
+     "along_m": 18.06,
+     "nominal_m": 18.4
+    },
+    "stop": {
+     "pass": true,
+     "speed_end": 0.0
+    },
+    "resume_travel": {
+     "pass": true,
+     "along_m": 4.37
+    },
+    "capsule_upright": {
+     "pass": true,
+     "max_tilt": 0.0
+    },
+    "always_on_foot": {
+     "pass": true,
+     "falling_samples": 0
+    },
+    "canon_hips_swing": {
+     "pass": true,
+     "range_deg": 97.3
+    },
+    "feet_track_canon": {
+     "pass": true,
+     "p95_uu": 0.66,
+     "max_uu": 0.71,
+     "n": 1082
+    },
+    "knees_never_hyperextend": {
+     "pass": true,
+     "max_knee_pitch": -0.75,
+     "max_knee_fold_deg": 98.1,
+     "canon_max_knee_fold_deg": 90.0
+    },
+    "hip_phase_+Y": {
+     "pass": true,
+     "correlation_with_canon_same_side": 0.986,
+     "range_deg": 88.7
+    },
+    "hip_phase_-Y": {
+     "pass": true,
+     "correlation_with_canon_same_side": 0.985,
+     "range_deg": 88.6
+    },
+    "arms_swing": {
+     "pass": true,
+     "range_deg": 54.0
+    },
+    "legs_settle_when_stopped": {
+     "pass": true,
+     "max_hip_deg": 2.73
+    },
+    "costume_on_capsule": {
+     "pass": true,
+     "max_offset_uu": 0.0
+    },
+    "no_transform_explosion": {
+     "pass": true
+    },
+    "skin_switch_while_walking": {
+     "pass": true,
+     "worn_after": "jack_flame",
+     "p95_uu_after": 0.66,
+     "along_m": 6.98
+    }
+   },
+   "worn": "skeleton_flame",
+   "costume": {
+    "boxes": 1481,
+    "figure": "SkeletonFlameV2.wlvox",
+    "limbs": "arm_l=shoulder-Y thigh 25.5 shin 30.8; arm_l_fore=elbow-Y thigh 0.0 shin 30.8; arm_r=shoulder+Y thigh 25.5 shin 30.8; arm_r_fore=elbow+Y thigh 0.0 shin 30.8; leg_l=hip-Y thigh 23.1 shin 23.1; leg_l_shin=knee-Y thigh 0.0 shin 23.1; leg_r=hip+Y thigh 23.1 shin 23.1; leg_r_shin=knee+Y thigh 0.0 shin 23.1; "
+   },
+   "max_walk_speed": 230.0,
+   "pass": true,
+   "samples": 616
+  },
+  {
+   "skin": "jack_flame",
+   "phases": {
+    "idle": {
+     "start": [
+      0,
+      44000
+     ],
+     "end": [
+      0,
+      44000
+     ],
+     "moved_m": 0.0
+    },
+    "forward": {
+     "start": [
+      0,
+      44000
+     ],
+     "end": [
+      0,
+      44668
+     ],
+     "moved_m": 6.68,
+     "along_m": 6.68
+    },
+    "backward": {
+     "start": [
+      0,
+      44668
+     ],
+     "end": [
+      0,
+      44013
+     ],
+     "moved_m": 6.55,
+     "along_m": 6.55
+    },
+    "strafe_left": {
+     "start": [
+      0,
+      44013
+     ],
+     "end": [
+      -453,
+      43993
+     ],
+     "moved_m": 4.54,
+     "along_m": 4.53
+    },
+    "strafe_right": {
+     "start": [
+      -453,
+      43993
+     ],
+     "end": [
+      -33,
+      43993
+     ],
+     "moved_m": 4.2,
+     "along_m": 4.2
+    },
+    "rotate": {
+     "start": [
+      -33,
+      43993
+     ],
+     "end": [
+      -451,
+      44021
+     ],
+     "moved_m": 4.19
+    },
+    "sustained": {
+     "start": [
+      -451,
+      44021
+     ],
+     "end": [
+      -453,
+      45824
+     ],
+     "moved_m": 18.04,
+     "along_m": 18.04
+    },
+    "stop": {
+     "start": [
+      -453,
+      45824
+     ],
+     "end": [
+      -453,
+      45827
+     ],
+     "moved_m": 0.03
+    },
+    "resume": {
+     "start": [
+      -453,
+      45827
+     ],
+     "end": [
+      -453,
+      46272
+     ],
+     "moved_m": 4.44,
+     "along_m": 4.44
+    },
+    "switch_walk": {
+     "start": [
+      -453,
+      46272
+     ],
+     "switched_at": 1.02,
+     "end": [
+      -453,
+      46965
+     ],
+     "moved_m": 6.93,
+     "along_m": 6.93
+    }
+   },
+   "checks": {
+    "forward_travel": {
+     "pass": true,
+     "along_m": 6.68,
+     "nominal_m": 6.9
+    },
+    "backward_travel": {
+     "pass": true,
+     "along_m": 6.55
+    },
+    "strafe_left_travel": {
+     "pass": true,
+     "along_m": 4.53
+    },
+    "strafe_right_travel": {
+     "pass": true,
+     "along_m": 4.2
+    },
+    "rotate_travel": {
+     "pass": true,
+     "moved_m": 4.19
+    },
+    "sustained_travel": {
+     "pass": true,
+     "along_m": 18.04,
+     "nominal_m": 18.4
+    },
+    "stop": {
+     "pass": true,
+     "speed_end": 0.0
+    },
+    "resume_travel": {
+     "pass": true,
+     "along_m": 4.44
+    },
+    "capsule_upright": {
+     "pass": true,
+     "max_tilt": 0.0
+    },
+    "always_on_foot": {
+     "pass": true,
+     "falling_samples": 0
+    },
+    "canon_hips_swing": {
+     "pass": true,
+     "range_deg": 97.4
+    },
+    "feet_track_canon": {
+     "pass": true,
+     "p95_uu": 0.66,
+     "max_uu": 0.71,
+     "n": 1132
+    },
+    "knees_never_hyperextend": {
+     "pass": true,
+     "max_knee_pitch": -0.75,
+     "max_knee_fold_deg": 98.1,
+     "canon_max_knee_fold_deg": 89.8
+    },
+    "hip_phase_+Y": {
+     "pass": true,
+     "correlation_with_canon_same_side": 0.986,
+     "range_deg": 88.7
+    },
+    "hip_phase_-Y": {
+     "pass": true,
+     "correlation_with_canon_same_side": 0.985,
+     "range_deg": 88.9
+    },
+    "arms_swing": {
+     "pass": true,
+     "range_deg": 54.0
+    },
+    "legs_settle_when_stopped": {
+     "pass": true,
+     "max_hip_deg": 2.42
+    },
+    "costume_on_capsule": {
+     "pass": true,
+     "max_offset_uu": 0.0
+    },
+    "no_transform_explosion": {
+     "pass": true
+    },
+    "skin_switch_while_walking": {
+     "pass": true,
+     "worn_after": "baal",
+     "p95_uu_after": 0.66,
+     "along_m": 6.93
+    }
+   },
+   "worn": "jack_flame",
+   "costume": {
+    "boxes": 1565,
+    "figure": "JackFlame.wlvox",
+    "limbs": "arm_l=shoulder-Y thigh 25.5 shin 30.8; arm_l_fore=elbow-Y thigh 0.0 shin 30.8; arm_r=shoulder+Y thigh 25.5 shin 30.8; arm_r_fore=elbow+Y thigh 0.0 shin 30.8; leg_l=hip-Y thigh 23.1 shin 23.1; leg_l_shin=knee-Y thigh 0.0 shin 23.1; leg_r=hip+Y thigh 23.1 shin 23.1; leg_r_shin=knee+Y thigh 0.0 shin 23.1; "
+   },
+   "max_walk_speed": 230.0,
+   "pass": true,
+   "samples": 640
+  },
+  {
+   "skin": "baal",
+   "phases": {
+    "idle": {
+     "start": [
+      0,
+      44000
+     ],
+     "end": [
+      0,
+      44000
+     ],
+     "moved_m": 0.0
+    },
+    "forward": {
+     "start": [
+      0,
+      44000
+     ],
+     "end": [
+      0,
+      44667
+     ],
+     "moved_m": 6.67,
+     "along_m": 6.67
+    },
+    "backward": {
+     "start": [
+      0,
+      44667
+     ],
+     "end": [
+      0,
+      44016
+     ],
+     "moved_m": 6.5,
+     "along_m": 6.5
+    },
+    "strafe_left": {
+     "start": [
+      0,
+      44016
+     ],
+     "end": [
+      -460,
+      43997
+     ],
+     "moved_m": 4.61,
+     "along_m": 4.6
+    },
+    "strafe_right": {
+     "start": [
+      -460,
+      43997
+     ],
+     "end": [
+      -39,
+      43997
+     ],
+     "moved_m": 4.21,
+     "along_m": 4.21
+    },
+    "rotate": {
+     "start": [
+      -39,
+      43997
+     ],
+     "end": [
+      -458,
+      44021
+     ],
+     "moved_m": 4.2
+    },
+    "sustained": {
+     "start": [
+      -458,
+      44021
+     ],
+     "end": [
+      -460,
+      45832
+     ],
+     "moved_m": 18.11,
+     "along_m": 18.11
+    },
+    "stop": {
+     "start": [
+      -460,
+      45832
+     ],
+     "end": [
+      -460,
+      45835
+     ],
+     "moved_m": 0.03
+    },
+    "resume": {
+     "start": [
+      -460,
+      45835
+     ],
+     "end": [
+      -460,
+      46276
+     ],
+     "moved_m": 4.42,
+     "along_m": 4.42
+    },
+    "switch_walk": {
+     "start": [
+      -460,
+      46276
+     ],
+     "switched_at": 1.04,
+     "end": [
+      -460,
+      46966
+     ],
+     "moved_m": 6.9,
+     "along_m": 6.9
+    }
+   },
+   "checks": {
+    "forward_travel": {
+     "pass": true,
+     "along_m": 6.67,
+     "nominal_m": 6.9
+    },
+    "backward_travel": {
+     "pass": true,
+     "along_m": 6.5
+    },
+    "strafe_left_travel": {
+     "pass": true,
+     "along_m": 4.6
+    },
+    "strafe_right_travel": {
+     "pass": true,
+     "along_m": 4.21
+    },
+    "rotate_travel": {
+     "pass": true,
+     "moved_m": 4.2
+    },
+    "sustained_travel": {
+     "pass": true,
+     "along_m": 18.11,
+     "nominal_m": 18.4
+    },
+    "stop": {
+     "pass": true,
+     "speed_end": 0.0
+    },
+    "resume_travel": {
+     "pass": true,
+     "along_m": 4.42
+    },
+    "capsule_upright": {
+     "pass": true,
+     "max_tilt": 0.0
+    },
+    "always_on_foot": {
+     "pass": true,
+     "falling_samples": 0
+    },
+    "canon_hips_swing": {
+     "pass": true,
+     "range_deg": 97.1
+    },
+    "feet_track_canon": {
+     "pass": true,
+     "p95_uu": 0.66,
+     "max_uu": 0.71,
+     "n": 1122
+    },
+    "knees_never_hyperextend": {
+     "pass": true,
+     "max_knee_pitch": -0.75,
+     "max_knee_fold_deg": 98.1,
+     "canon_max_knee_fold_deg": 90.0
+    },
+    "hip_phase_+Y": {
+     "pass": true,
+     "correlation_with_canon_same_side": 0.985,
+     "range_deg": 88.5
+    },
+    "hip_phase_-Y": {
+     "pass": true,
+     "correlation_with_canon_same_side": 0.984,
+     "range_deg": 88.7
+    },
+    "arms_swing": {
+     "pass": true,
+     "range_deg": 54.0
+    },
+    "legs_settle_when_stopped": {
+     "pass": true,
+     "max_hip_deg": 1.73
+    },
+    "costume_on_capsule": {
+     "pass": true,
+     "max_offset_uu": 0.0
+    },
+    "no_transform_explosion": {
+     "pass": true
+    },
+    "skin_switch_while_walking": {
+     "pass": true,
+     "worn_after": "relay_og",
+     "p95_uu_after": null,
+     "along_m": 6.9
+    }
+   },
+   "worn": "baal",
+   "costume": {
+    "boxes": 1863,
+    "figure": "Baal.wlvox",
+    "limbs": "arm_l=shoulder-Y thigh 25.5 shin 30.8; arm_l_fore=elbow-Y thigh 0.0 shin 30.8; arm_r=shoulder+Y thigh 25.5 shin 30.8; arm_r_fore=elbow+Y thigh 0.0 shin 30.8; leg_l=hip-Y thigh 23.1 shin 23.1; leg_l_shin=knee-Y thigh 0.0 shin 23.1; leg_r=hip+Y thigh 23.1 shin 23.1; leg_r_shin=knee+Y thigh 0.0 shin 23.1; "
+   },
+   "max_walk_speed": 230.0,
+   "pass": true,
+   "samples": 634
+  }
+ ],
+ "restored_skin": "jack_flame",
+ "all_pass": true,
+ "finished": "2026-09-30 10:44:06",
+ "seconds": 211.68,
+ "log": "PHASE relay_og idle 0.0 None\nPHASE relay_og forward 6.65 6.65\nPHASE relay_og backward 6.57 6.57\nPHASE relay_og strafe_left 4.55 4.55\nPHASE relay_og strafe_right 4.17 4.17\nPHASE relay_og rotate 4.21 None\nPHASE relay_og sustained 18.05 18.05\nPHASE relay_og stop 0.03 None\nPHASE relay_og resume 4.46 4.46\nSKIN relay_og PASS []\nPHASE celestial_light idle 0.0 None\nPHASE celestial_light forward 6.72 6.72\nPHASE celestial_light backward 6.55 6.55\nPHASE celestial_light strafe_left 4.62 4.61\nPHASE celestial_light strafe_right 4.12 4.12\nPHASE celestial_light rotate 4.17 None\nPHASE celestial_light sustained 18.08 18.08\nPHASE celestial_light stop 0.03 None\nPHASE celestial_light resume 4.44 4.44\nPHASE celestial_light switch_walk 7.0 7.0\nSKIN celestial_light PASS []\nPHASE skeleton_flame idle 0.0 None\nPHASE skeleton_flame forward 6.75 6.75\nPHASE skeleton_flame backward 6.57 6.57\nPHASE skeleton_flame strafe_left 4.57 4.56\nPHASE skeleton_flame strafe_right 4.25 4.25\nPHASE skeleton_flame rotate 4.19 None\nPHASE skeleton_flame sustained 18.06 18.06\nPHASE skeleton_flame stop 0.03 None\nPHASE skeleton_flame resume 4.37 4.37\nPHASE skeleton_flame switch_walk 6.98 6.98\nSKIN skeleton_flame PASS []\nPHASE jack_flame idle 0.0 None\nPHASE jack_flame forward 6.68 6.68\nPHASE jack_flame backward 6.55 6.55\nPHASE jack_flame strafe_left 4.54 4.53\nPHASE jack_flame strafe_right 4.2 4.2\nPHASE jack_flame rotate 4.19 None\nPHASE jack_flame sustained 18.04 18.04\nPHASE jack_flame stop 0.03 None\nPHASE jack_flame resume 4.44 4.44\nPHASE jack_flame switch_walk 6.93 6.93\nSKIN jack_flame PASS []\nPHASE baal idle 0.0 None\nPHASE baal forward 6.67 6.67\nPHASE baal backward 6.5 6.5\nPHASE baal strafe_left 4.61 4.6\nPHASE baal strafe_right 4.21 4.21\nPHASE baal rotate 4.2 None\nPHASE baal sustained 18.11 18.11\nPHASE baal stop 0.03 None\nPHASE baal resume 4.42 4.42\nPHASE baal switch_walk 6.9 6.9\nSKIN baal PASS []\n"
+}

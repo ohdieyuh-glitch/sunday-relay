@@ -467,7 +467,7 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				MakeColourRow(TEXT("MASCOT  SECONDARY"),
-					TEXT("The Relay Dog's status eyes, and a skin's secondary accents -- Jack Flame's fire and tie."),
+					TEXT("The Relay Dog's status eyes, and a skin's secondary accents -- Jack Flame's fire, tie and suit."),
 					[Style]() { return Style() != nullptr ? Style()->Secondary : FLinearColor::White; },
 					[Style](FLinearColor C) { if (Style()) { Style()->Secondary = C; Style()->bChosen = true; Style()->bSecondaryChosen = true; } })
 			]

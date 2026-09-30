@@ -11,6 +11,13 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "WorldPartition/WorldPartitionSubsystem.h"
+#include "Engine/GameViewportClient.h"
+#include "Engine/LevelStreaming.h"
+#include "Engine/LocalPlayer.h"
+#include "Widgets/SBoxPanel.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Text/STextBlock.h"
+#include "WonderlandUiStyle.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandTravel, Log, All);
 
@@ -66,6 +73,7 @@ void UWonderlandTravelSubsystem::Deinitialize()
 {
 	SetStreamingRegistered(false);
 	RestoreInput();
+	HideCaption();
 	Super::Deinitialize();
 }
 
@@ -223,6 +231,14 @@ bool UWonderlandTravelSubsystem::RequestTravel(FName DestinationId, FText& OutRe
 	bArrivedResult = false;
 	GroundFrames = 0;
 	PhaseSeconds = 0.0f;
+	TravelSeconds = 0.0f;
+	StreamedAtSeconds = -1.0f;
+	LastProgressSeconds = 0.0f;
+	LastLoadedCells = -1;
+	LastPendingCells = 0;
+	SafeSpotMisses = 0;
+	MoveRefusals = 0;
+	LastDiagnostics.Reset();
 	Phase = EPhase::FadingOut;
 
 	if (PC->PlayerCameraManager != nullptr)
@@ -236,6 +252,7 @@ bool UWonderlandTravelSubsystem::RequestTravel(FName DestinationId, FText& OutRe
 		bInputIgnored = true;
 	}
 	LastReport = FString::Printf(TEXT("Travelling to %s."), *Destination->DisplayName.ToString());
+	ShowCaption(Destination->DisplayName);
 	UE_LOG(LogWonderlandTravel, Log, TEXT("WLTRAVEL start '%s' from (%.0f, %.0f, %.0f)"),
 		*DestinationId.ToString(), OriginTransform.GetLocation().X, OriginTransform.GetLocation().Y, OriginTransform.GetLocation().Z);
 	return true;
@@ -246,6 +263,7 @@ void UWonderlandTravelSubsystem::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	const UWonderlandTravelSettings* Settings = GetDefault<UWonderlandTravelSettings>();
 	PhaseSeconds += DeltaTime;
+	TravelSeconds += DeltaTime;
 
 	APlayerController* PC = Controller.Get();
 	APawn* Pawn = PC != nullptr ? PC->GetPawn() : nullptr;
@@ -253,6 +271,7 @@ void UWonderlandTravelSubsystem::Tick(float DeltaTime)
 	{
 		SetStreamingRegistered(false);
 		RestoreInput();
+		HideCaption();
 		Phase = EPhase::Idle;
 		LastReport = TEXT("Travel stopped: the player left before arriving.");
 		OnTravelFinished.Broadcast(TravelId, false);
@@ -277,16 +296,46 @@ void UWonderlandTravelSubsystem::Tick(float DeltaTime)
 		const UWorldPartitionSubsystem* Streaming = World != nullptr ? World->GetSubsystem<UWorldPartitionSubsystem>() : nullptr;
 		// A classic map has everything loaded; a World Partition map must finish streaming the destination first.
 		const bool bStreamed = !bStreamingRegistered || (Streaming != nullptr && Streaming->IsStreamingCompleted(this));
+		if (bStreamed && StreamedAtSeconds < 0.0f)
+		{
+			StreamedAtSeconds = PhaseSeconds;
+		}
+
+		// PROGRESS, SO A SLOW STREAM IS NOT MISTAKEN FOR A FAILED ONE. A cell still changing state, or one more cell
+		// loaded than last tick, is the world visibly arriving; only a stream that has shown neither for StallSeconds is
+		// stalled. (World Partition's own "Good" is not "arrived": the founder's failure came 5.6 s after it.)
+		int32 LoadedCells = 0;
+		int32 PendingCells = 0;
+		CountCells(LoadedCells, PendingCells);
+		if (!bStreamed && (PendingCells > 0 || LoadedCells != LastLoadedCells))
+		{
+			LastProgressSeconds = PhaseSeconds;
+		}
+		LastLoadedCells = LoadedCells;
+		LastPendingCells = PendingCells;
+		if (CaptionDetail.IsValid() && PhaseSeconds >= 3.0f)
+		{
+			CaptionDetail->SetText(FText::FromString(bStreamed ? FString(TEXT("Finding solid ground..."))
+				: FString::Printf(TEXT("Loading the district...  %d s"), FMath::FloorToInt(TravelSeconds))));
+		}
 
 		if (bStreamed && !bPlaced)
 		{
 			FVector Spot;
-			if (FindSafeSpot(Pawn, AnchorTransform, Spot))
+			if (!FindSafeSpot(Pawn, AnchorTransform, Spot))
+			{
+				++SafeSpotMisses;
+			}
+			else
 			{
 				const FRotator Facing(0.0, AnchorTransform.Rotator().Yaw, 0.0);
 				// A REFUSED MOVE IS NOT A PLACEMENT: TeleportTo returns false when the spot is taken, and counting
 				// that as placed would fade in on the old spot and report an arrival. Tried again next tick instead.
-				if (Pawn->TeleportTo(Spot, Facing, false, false))
+				if (!Pawn->TeleportTo(Spot, Facing, false, false))
+				{
+					++MoveRefusals;
+				}
+				else
 				{
 					if (ACharacter* Character = Cast<ACharacter>(Pawn))
 					{
@@ -306,13 +355,40 @@ void UWonderlandTravelSubsystem::Tick(float DeltaTime)
 			if (GroundFrames >= Settings->GroundFramesRequired)
 			{
 				const FWonderlandTravelDestination* Destination = Settings->FindDestination(TravelId);
+				LastDiagnostics = FString::Printf(TEXT("arrived after %.1f s | streamed at %.1f s | cells loaded %d pending %d | spot misses %d | refusals %d"),
+					TravelSeconds, StreamedAtSeconds, LoadedCells, PendingCells, SafeSpotMisses, MoveRefusals);
 				BeginFadeIn(true, FString::Printf(TEXT("Arrived at %s."),
 					Destination != nullptr ? *Destination->DisplayName.ToString() : *TravelId.ToString()));
 				break;
 			}
 		}
-		if (PhaseSeconds >= Settings->MaxBlackSeconds)
+		// GIVE UP ONLY ON A TRAVEL THAT HAS STOPPED MOVING: streamed, given LandingGraceSeconds to land, and still not
+		// standing at MaxBlackSeconds; or not streamed and stalled past it; or -- whatever else -- at the hard cap.
+		const bool bStalled = PhaseSeconds - LastProgressSeconds >= Settings->StallSeconds;
+		const bool bLandingOver = bStreamed && PhaseSeconds - StreamedAtSeconds >= Settings->LandingGraceSeconds;
+		if ((PhaseSeconds >= Settings->MaxBlackSeconds && (bLandingOver || (!bStreamed && bStalled))) || PhaseSeconds >= Settings->MaxTravelSeconds)
 		{
+			FString Why;
+			if (!bStreamed)
+			{
+				Why = FString::Printf(TEXT("the destination was still streaming (%d cells pending, %d loaded, %s)"),
+					PendingCells, LoadedCells, bStalled ? TEXT("stalled") : TEXT("hard cap"));
+			}
+			else if (!bPlaced && MoveRefusals > 0)
+			{
+				Why = TEXT("every standable spot refused the move");
+			}
+			else if (!bPlaced)
+			{
+				Why = TEXT("no standable spot at the arrival point");
+			}
+			else
+			{
+				Why = TEXT("no ground under the landing");
+			}
+			LastDiagnostics = FString::Printf(TEXT("abandoned after %.1f s: %s | streamed at %.1f s | spot misses %d | refusals %d"),
+				TravelSeconds, *Why, StreamedAtSeconds, SafeSpotMisses, MoveRefusals);
+			UE_LOG(LogWonderlandTravel, Warning, TEXT("WLTRAVEL abandon '%s': %s"), *TravelId.ToString(), *LastDiagnostics);
 			// Never leave a visitor somewhere that did not prove safe: put them back.
 			if (bPlaced)
 			{
@@ -328,9 +404,9 @@ void UWonderlandTravelSubsystem::Tick(float DeltaTime)
 		{
 			RestoreInput();
 			Phase = EPhase::Idle;
-			UE_LOG(LogWonderlandTravel, Log, TEXT("WLTRAVEL done '%s' arrived=%d at (%.0f, %.0f, %.0f): %s"),
+			UE_LOG(LogWonderlandTravel, Log, TEXT("WLTRAVEL done '%s' arrived=%d at (%.0f, %.0f, %.0f): %s [%s]"),
 				*TravelId.ToString(), bArrivedResult ? 1 : 0,
-				Pawn->GetActorLocation().X, Pawn->GetActorLocation().Y, Pawn->GetActorLocation().Z, *LastReport);
+				Pawn->GetActorLocation().X, Pawn->GetActorLocation().Y, Pawn->GetActorLocation().Z, *LastReport, *LastDiagnostics);
 			OnTravelFinished.Broadcast(TravelId, bArrivedResult);
 		}
 		break;
@@ -428,6 +504,7 @@ bool UWonderlandTravelSubsystem::GroundUnder(APawn* Pawn) const
 void UWonderlandTravelSubsystem::BeginFadeIn(bool bArrived, const FString& Report)
 {
 	SetStreamingRegistered(false);
+	HideCaption();
 	bArrivedResult = bArrived;
 	LastReport = Report;
 	if (bArrived)
@@ -502,4 +579,73 @@ void UWonderlandTravelSubsystem::RestoreInput()
 		PC->SetIgnoreLookInput(false);
 	}
 	bInputIgnored = false;
+}
+
+void UWonderlandTravelSubsystem::CountCells(int32& OutLoaded, int32& OutPending) const
+{
+	OutLoaded = 0;
+	OutPending = 0;
+	const UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+	for (const ULevelStreaming* Level : World->GetStreamingLevels())
+	{
+		if (Level == nullptr)
+		{
+			continue;
+		}
+		OutLoaded += Level->IsLevelLoaded() ? 1 : 0;
+		OutPending += Level->IsStreamingStatePending() ? 1 : 0;
+	}
+}
+
+void UWonderlandTravelSubsystem::ShowCaption(const FText& Destination)
+{
+	HideCaption();
+	const APlayerController* PC = Controller.Get();
+	ULocalPlayer* Player = PC != nullptr ? PC->GetLocalPlayer() : nullptr;
+	if (Player == nullptr || Player->ViewportClient == nullptr)
+	{
+		return;
+	}
+	// ONE LINE OVER THE BLACK, LOW AND CENTRED. A travel into the centre from the rim can take tens of seconds in the
+	// editor, and a silent black screen that long reads as a hang; this says where the visitor is going and, after a
+	// few seconds, that the district is still arriving. It is gone the moment the fade back in begins.
+	CaptionLayer =
+		SNew(SVerticalBox)
+		.Visibility(EVisibility::HitTestInvisible)
+		+ SVerticalBox::Slot().FillHeight(0.78f)
+		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+		[
+			SNew(STextBlock)
+			.Text(FText::Format(INVTEXT("TRAVELLING TO {0}"), FText::FromString(Destination.ToString().ToUpper())))
+			.Font(WonderlandUi::Sans(15, true, 260))
+			.ColorAndOpacity(WonderlandUi::Gold(0.92f))
+		]
+		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
+		[
+			SAssignNew(CaptionDetail, STextBlock)
+			.Font(WonderlandUi::Mono(10))
+			.ColorAndOpacity(WonderlandUi::Dim())
+		]
+		+ SVerticalBox::Slot().FillHeight(0.22f);
+	// Above the world and the HUD furniture, below every panel (the map closes before a travel begins anyway).
+	Player->ViewportClient->AddViewportWidgetForPlayer(Player, CaptionLayer.ToSharedRef(), 30);
+}
+
+void UWonderlandTravelSubsystem::HideCaption()
+{
+	if (CaptionLayer.IsValid())
+	{
+		const APlayerController* PC = Controller.Get();
+		ULocalPlayer* Player = PC != nullptr ? PC->GetLocalPlayer() : nullptr;
+		if (Player != nullptr && Player->ViewportClient != nullptr)
+		{
+			Player->ViewportClient->RemoveViewportWidgetForPlayer(Player, CaptionLayer.ToSharedRef());
+		}
+	}
+	CaptionLayer.Reset();
+	CaptionDetail.Reset();
 }

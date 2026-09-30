@@ -1,0 +1,59 @@
+{
+ "name": "zh_01_map_before",
+ "started": "2026-09-30 09:51:06",
+ "status": "measured",
+ "mode": "before",
+ "dll_mtime": 1790785531.9352026,
+ "viewport_size": "<Struct 'Vector2D' (0x000001FD1D4DF2E0) {x: 1928.000000, y: 952.000000}>",
+ "viewport_scale": 0.881244421005249,
+ "build_has_layout_api": false,
+ "tests": [],
+ "offered": [
+  "arrival",
+  "castle_approach",
+  "royal_gardens",
+  "clock_quarter",
+  "tower_rise",
+  "lantern_hamlets",
+  "tea_terraces",
+  "water_gardens",
+  "mushroom_grove",
+  "gatekeeper_fields",
+  "east_reach",
+  "south_meadows",
+  "west_wood",
+  "far_orchards",
+  "east_quarter",
+  "grand_clock",
+  "teapot_court",
+  "colossal_key",
+  "the_cloister",
+  "tower_lane",
+  "icarus_tower_hamlets",
+  "icarus_gate",
+  "noctis_gate",
+  "tartarus_gate",
+  "icarus_quarter",
+  "noctis_quarter",
+  "tartarus_quarter",
+  "icarus_heartland",
+  "tartarus_heartland_east",
+  "tartarus_heartland_southeast",
+  "noctis_heartland_west",
+  "noctis_heartland_southwest",
+  "dubel_forest"
+ ],
+ "frames": [
+  {
+   "from": "arrival",
+   "capture": "(1928, 952)"
+  },
+  {
+   "from": "tartarus_heartland_east",
+   "capture": "(1928, 952)"
+  }
+ ],
+ "finished": "2026-09-30 09:52:04",
+ "seconds": 58.62,
+ "log": ""
+}

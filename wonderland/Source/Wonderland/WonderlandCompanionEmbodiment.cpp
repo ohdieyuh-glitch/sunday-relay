@@ -1857,7 +1857,7 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 			// must change COLOR, not flatten the materials."
 			Want *= bGlows ? Secondary : Primary;
 		}
-		else if (Def.Channel == TEXT("secondary") || Def.Channel == TEXT("secondary_light"))
+		else if (Def.Channel == TEXT("secondary") || Def.Channel == TEXT("secondary_light") || Def.Channel == TEXT("secondary_deep"))
 		{
 			// ---- A SKIN'S SECONDARY ACCENTS: surfaces the FIGURE tags `secondary` (founder, 2026-09-29: "For JACK
 			// FLAME: the SECONDARY COLOR customization must control BOTH the FLAMES and the RED TIE").
@@ -1869,7 +1869,11 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 			// player actually picked moves them: picking a primary alone leaves the fire as it was designed.
 			if (UWonderlandMascotStyleSettings::Get().HasChosenSecondary())
 			{
-				Want = WonderlandMascotStyle::AccentColour(Want, Secondary, Def.Channel == TEXT("secondary_light"));
+				// AND THE SUIT (founder, 2026-09-30: "flames, tie, suit"): a `secondary_deep` cloth takes a deep shade of
+				// the colour rather than the authored near-black brightness, which would leave it visibly unchanged.
+				Want = Def.Channel == TEXT("secondary_deep")
+					? WonderlandMascotStyle::DeepAccentColour(Want, Secondary)
+					: WonderlandMascotStyle::AccentColour(Want, Secondary, Def.Channel == TEXT("secondary_light"));
 			}
 		}
 		else

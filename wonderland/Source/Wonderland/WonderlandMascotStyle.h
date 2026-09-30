@@ -31,7 +31,7 @@ public:
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Mascot")
 	FLinearColor Primary = FLinearColor::White;
 
-	/** THE RELAY DOG'S EYES, and a skin's SECONDARY ACCENTS once chosen -- Jack Flame's fire and tie (founder,
+	/** THE RELAY DOG'S EYES, and a skin's SECONDARY ACCENTS once chosen -- Jack Flame's fire, tie and suit (founder,
 	 *  2026-09-29). The founder's gold is what the canon Dog's eyes already wear. */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Mascot")
 	FLinearColor Secondary = FLinearColor(1.00f, 0.78f, 0.16f, 1.0f);
@@ -215,6 +215,18 @@ namespace WonderlandMascotStyle
 	 * stays paler than its outer tongue. White, the DEFAULT swatch, means "as designed" and returns Authored.
 	 */
 	WONDERLAND_API FLinearColor AccentColour(const FLinearColor& Authored, const FLinearColor& Chosen, bool bLight);
+
+	/**
+	 * A SECONDARY-COLOURED CLOTH: the chosen Secondary as a DEEP SHADE, for a lit surface a figure tags
+	 * `secondary_deep` -- Jack Flame's suit (founder, 2026-09-30: "The Jack Flame secondary color must now control
+	 * ALL THREE: flames, tie, suit ... while preserving material detail/readability").
+	 *
+	 * Not AccentColour: that keeps the authored brightness, and the suit is authored near-black (0.034), so any hue at
+	 * that level is still black and the suit would not visibly change. A cloth takes the chosen colour at a fixed
+	 * share instead -- dark enough that the pinstripes, the glowing tie and the fire still read on it by value, light
+	 * enough that the hue is plainly the chosen one. White, the DEFAULT swatch, returns Authored.
+	 */
+	WONDERLAND_API FLinearColor DeepAccentColour(const FLinearColor& Authored, const FLinearColor& Chosen);
 
 	/** The swatches offered in the Wardrobe and the Menu, so both offer exactly the same set. */
 	WONDERLAND_API const TArray<TPair<FName, FLinearColor>>& Palette();

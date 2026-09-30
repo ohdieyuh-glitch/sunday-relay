@@ -1,0 +1,172 @@
+{
+ "name": "zh_19c_reset_diag",
+ "started": "2026-09-30 10:53:41",
+ "status": "measured",
+ "dll_mtime": 1790788019.0796654,
+ "results": [
+  {
+   "label": "contract reset",
+   "stuck_parts": {},
+   "off_canon": {},
+   "idle_gap_max": {
+    "hand+1": 17.26,
+    "sole+1": 0.71,
+    "hand-1": 17.26,
+    "sole-1": 0.71
+   },
+   "late_gap_max": {
+    "hand+1": 17.26,
+    "sole+1": 0.7,
+    "hand-1": 17.25,
+    "sole-1": 0.71
+   },
+   "idle_swing_deg": 25.4,
+   "ok": true,
+   "skin": "celestial_light"
+  },
+  {
+   "label": "fixture stop",
+   "stuck_parts": {},
+   "off_canon": {},
+   "idle_gap_max": {
+    "hand+1": 17.26,
+    "sole+1": 0.71,
+    "hand-1": 17.26,
+    "sole-1": 0.71
+   },
+   "late_gap_max": {
+    "hand+1": 17.21,
+    "sole+1": 0.66,
+    "hand-1": 17.27,
+    "sole-1": 0.71
+   },
+   "idle_swing_deg": 25.4,
+   "ok": true,
+   "skin": "celestial_light"
+  },
+  {
+   "label": "contract reset",
+   "stuck_parts": {},
+   "off_canon": {},
+   "idle_gap_max": {
+    "hand+1": 17.26,
+    "sole+1": 0.7,
+    "hand-1": 17.26,
+    "sole-1": 0.71
+   },
+   "late_gap_max": {
+    "hand+1": 17.25,
+    "sole+1": 0.71,
+    "hand-1": 17.26,
+    "sole-1": 0.66
+   },
+   "idle_swing_deg": 17.44,
+   "ok": true,
+   "skin": "skeleton_flame"
+  },
+  {
+   "label": "fixture stop",
+   "stuck_parts": {},
+   "off_canon": {},
+   "idle_gap_max": {
+    "hand+1": 17.26,
+    "sole+1": 0.7,
+    "hand-1": 17.26,
+    "sole-1": 0.71
+   },
+   "late_gap_max": {
+    "hand+1": 17.27,
+    "sole+1": 0.71,
+    "hand-1": 17.23,
+    "sole-1": 0.66
+   },
+   "idle_swing_deg": 17.44,
+   "ok": true,
+   "skin": "skeleton_flame"
+  },
+  {
+   "label": "contract reset",
+   "stuck_parts": {},
+   "off_canon": {},
+   "idle_gap_max": {
+    "hand+1": 17.26,
+    "sole+1": 0.71,
+    "hand-1": 17.26,
+    "sole-1": 0.71
+   },
+   "late_gap_max": {
+    "hand+1": 17.26,
+    "sole+1": 0.66,
+    "hand-1": 17.25,
+    "sole-1": 0.71
+   },
+   "idle_swing_deg": 19.6,
+   "ok": true,
+   "skin": "jack_flame"
+  },
+  {
+   "label": "fixture stop",
+   "stuck_parts": {},
+   "off_canon": {},
+   "idle_gap_max": {
+    "hand+1": 17.26,
+    "sole+1": 0.71,
+    "hand-1": 17.26,
+    "sole-1": 0.71
+   },
+   "late_gap_max": {
+    "hand+1": 17.23,
+    "sole+1": 0.7,
+    "hand-1": 17.27,
+    "sole-1": 0.71
+   },
+   "idle_swing_deg": 19.6,
+   "ok": true,
+   "skin": "jack_flame"
+  },
+  {
+   "label": "contract reset",
+   "stuck_parts": {},
+   "off_canon": {},
+   "idle_gap_max": {
+    "hand+1": 17.26,
+    "sole+1": 0.7,
+    "hand-1": 17.26,
+    "sole-1": 0.71
+   },
+   "late_gap_max": {
+    "hand+1": 17.25,
+    "sole+1": 0.71,
+    "hand-1": 17.26,
+    "sole-1": 0.66
+   },
+   "idle_swing_deg": 12.39,
+   "ok": true,
+   "skin": "baal"
+  },
+  {
+   "label": "fixture stop",
+   "stuck_parts": {},
+   "off_canon": {},
+   "idle_gap_max": {
+    "hand+1": 17.26,
+    "sole+1": 0.7,
+    "hand-1": 17.26,
+    "sole-1": 0.71
+   },
+   "late_gap_max": {
+    "hand+1": 17.27,
+    "sole+1": 0.71,
+    "hand-1": 17.23,
+    "sole-1": 0.7
+   },
+   "idle_swing_deg": 12.39,
+   "ok": true,
+   "skin": "baal"
+  }
+ ],
+ "all_ok": true,
+ "finished": "2026-09-30 10:57:15",
+ "seconds": 213.77,
+ "log": "celestial_light RESET OK {} {} idle swing 25.4\ncelestial_light STOP OK {} {} idle swing 25.4\nskeleton_flame RESET OK {} {} idle swing 17.44\nskeleton_flame STOP OK {} {} idle swing 17.44\njack_flame RESET OK {} {} idle swing 19.6\njack_flame STOP OK {} {} idle swing 19.6\nbaal RESET OK {} {} idle swing 12.39\nbaal STOP OK {} {} idle swing 12.39\n"
+}

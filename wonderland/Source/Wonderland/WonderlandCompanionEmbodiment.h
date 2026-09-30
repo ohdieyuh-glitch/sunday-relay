@@ -184,7 +184,7 @@ public:
 	/**
 	 * Every figure material as it is painted RIGHT NOW: name, the channel its figure declared (if any), and the
 	 * Color on its body instance and on its flame twin. One "name|channel|r,g,b|r,g,b" entry per material, joined by
-	 * ";" -- what a proof reads to show a skin's secondary accents (Jack Flame's fire and tie) took the colour.
+	 * ";" -- what a proof reads to show a skin's secondary accents (Jack Flame's fire, tie and suit) took the colour.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	FString DescribeMaterialColours() const;

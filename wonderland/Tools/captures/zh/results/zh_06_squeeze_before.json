@@ -1,0 +1,139 @@
+{
+ "name": "zh_06_squeeze_before",
+ "started": "2026-09-30 10:02:16",
+ "status": "measured",
+ "max_black_seconds_original": 25.0,
+ "squeezed_to": 4.0,
+ "build_has_diagnostics": false,
+ "dll_mtime": 1790785531.9352026,
+ "trips": [
+  {
+   "to": "noctis_heartland_southwest",
+   "via_map": false,
+   "from": [
+    -330,
+    -650,
+    109
+   ],
+   "registry_arrival": [
+    -34474,
+    -54220,
+    -14
+   ],
+   "distance_m": 635,
+   "started": "",
+   "seconds": 4.25,
+   "report": "Arrived at Noctis Heartland South-West.",
+   "arrived": true,
+   "landed": [
+    -34474,
+    -54220,
+    75
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "to_rim"
+  },
+  {
+   "to": "royal_gardens",
+   "via_map": true,
+   "from": [
+    -34474,
+    -54220,
+    75
+   ],
+   "registry_arrival": [
+    3676,
+    11242,
+    19
+   ],
+   "distance_m": 758,
+   "selected": "royal_gardens",
+   "started": true,
+   "seconds": 3.75,
+   "report": "Arrived at Royal Gardens.",
+   "arrived": true,
+   "landed": [
+    3676,
+    11242,
+    109
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "rim_to_centre",
+   "pair": [
+    "noctis_heartland_southwest",
+    "royal_gardens"
+   ],
+   "rep": 0
+  },
+  {
+   "to": "tartarus_heartland_east",
+   "via_map": false,
+   "from": [
+    3676,
+    11242,
+    109
+   ],
+   "registry_arrival": [
+    64080,
+    -4668,
+    -14
+   ],
+   "distance_m": 625,
+   "started": "",
+   "seconds": 2.5,
+   "report": "Arrived at Tartarus Heartland East.",
+   "arrived": true,
+   "landed": [
+    64080,
+    -4668,
+    75
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "to_rim"
+  },
+  {
+   "to": "castle_approach",
+   "via_map": true,
+   "from": [
+    64080,
+    -4668,
+    75
+   ],
+   "registry_arrival": [
+    0,
+    6000,
+    -14
+   ],
+   "distance_m": 650,
+   "selected": "castle_approach",
+   "started": true,
+   "seconds": 4.25,
+   "report": "Could not land safely at castle_approach; returned to where you were.",
+   "arrived": false,
+   "landed": [
+    64080,
+    -4668,
+    75
+   ],
+   "from_point_m": 649.62,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "rim_to_centre",
+   "pair": [
+    "tartarus_heartland_east",
+    "castle_approach"
+   ],
+   "rep": 0
+  }
+ ],
+ "rim_to_centre_arrived": 1,
+ "rim_to_centre_total": 2,
+ "deploy_pass": 0,
+ "deploy_total": 0,
+ "max_black_seconds_restored": 25.0,
+ "finished": "2026-09-30 10:03:13",
+ "seconds": 56.71,
+ "log": "TRIP noctis_heartland_southwest ARRIVED 4.25 Arrived at Noctis Heartland South-West. \nTRIP royal_gardens ARRIVED 3.75 Arrived at Royal Gardens. \nTRIP tartarus_heartland_east ARRIVED 2.5 Arrived at Tartarus Heartland East. \nTRIP castle_approach FAILED 4.25 Could not land safely at castle_approach; returned to where you were. \n"
+}

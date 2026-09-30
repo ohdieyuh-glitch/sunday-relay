@@ -1,0 +1,1355 @@
+{
+ "name": "zh_22_jack_suit_change_v2",
+ "started": "2026-09-30 11:13:07",
+ "status": "measured",
+ "mode": "change",
+ "dll_mtime": 1790791545.2024937,
+ "tests": [
+  {
+   "id": "S00",
+   "name": "Jack Flame is worn with its figure's channels declared (suit tagged on the fixed build)",
+   "pass": true,
+   "detail": {
+    "channels": {
+     "bone": "None",
+     "bonedeep": "None",
+     "visor": "None",
+     "eye": "None",
+     "eyehalo": "None",
+     "suit": "secondary_deep",
+     "stripe": "None",
+     "flame": "secondary",
+     "flamepale": "secondary_light",
+     "heart": "secondary",
+     "nightmare": "None"
+    }
+   }
+  },
+  {
+   "id": "S01",
+   "name": "DEFAULT secondary: the suit is its designed near-black, the tie red, the collar black",
+   "pass": true,
+   "detail": {
+    "suit": [
+     0.034,
+     0.032,
+     0.04
+    ],
+    "tie": [
+     1.0,
+     0.084,
+     0.021
+    ],
+    "collar": [
+     0.034,
+     0.032,
+     0.04
+    ]
+   }
+  },
+  {
+   "id": "S02",
+   "name": "the SUIT takes each chosen secondary's hue (5 distinct colours)",
+   "pass": true,
+   "detail": {
+    "per": {
+     "azure": [
+      [
+       0.26,
+       0.56,
+       1.0
+      ],
+      [
+       0.26,
+       0.56,
+       1.0
+      ]
+     ],
+     "jade": [
+      [
+       0.233,
+       1.0,
+       0.698
+      ],
+      [
+       0.233,
+       1.0,
+       0.698
+      ]
+     ],
+     "crimson": [
+      [
+       1.0,
+       0.171,
+       0.22
+      ],
+      [
+       1.0,
+       0.171,
+       0.22
+      ]
+     ],
+     "gold": [
+      [
+       1.0,
+       0.78,
+       0.26
+      ],
+      [
+       1.0,
+       0.78,
+       0.26
+      ]
+     ],
+     "violet": [
+      [
+       0.583,
+       0.354,
+       1.0
+      ],
+      [
+       0.583,
+       0.354,
+       1.0
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "S03",
+   "name": "the TIE and the FLAMES take the same hue as the suit, every colour",
+   "pass": true,
+   "detail": {
+    "per": {
+     "azure": [
+      [
+       0.26,
+       0.56,
+       1.0
+      ],
+      [
+       0.26,
+       0.56,
+       1.0
+      ]
+     ],
+     "jade": [
+      [
+       0.233,
+       1.0,
+       0.698
+      ],
+      [
+       0.233,
+       1.0,
+       0.698
+      ]
+     ],
+     "crimson": [
+      [
+       1.0,
+       0.171,
+       0.22
+      ],
+      [
+       1.0,
+       0.171,
+       0.22
+      ]
+     ],
+     "gold": [
+      [
+       1.0,
+       0.78,
+       0.26
+      ],
+      [
+       1.0,
+       0.78,
+       0.26
+      ]
+     ],
+     "violet": [
+      [
+       0.583,
+       0.354,
+       1.0
+      ],
+      [
+       0.583,
+       0.354,
+       1.0
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "S04",
+   "name": "readability: the suit stays a deep cloth -- the pinstripes >= 2.5x its luminance and the tie emissive far above it",
+   "pass": true,
+   "detail": {
+    "ratios": {
+     "azure": 4.37,
+     "jade": 3.29,
+     "crimson": 8.03,
+     "gold": 2.92,
+     "violet": 5.35
+    }
+   }
+  },
+  {
+   "id": "S05",
+   "name": "the NIGHTMARE COLLAR and the pinstripes keep their designed colours under every secondary",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "S06",
+   "name": "the suit is visibly different from the designed black (every swatch at least 3x brighter)",
+   "pass": true,
+   "detail": {
+    "peaks": {
+     "azure": 0.33,
+     "jade": 0.284,
+     "crimson": 0.271,
+     "gold": 0.33,
+     "violet": 0.317
+    },
+    "designed": 0.04
+   }
+  },
+  {
+   "id": "S07",
+   "name": "a PRIMARY alone does not move the suit",
+   "pass": true,
+   "detail": {
+    "before": [
+     0.0858,
+     0.1848,
+     0.33
+    ],
+    "after": [
+     0.0858,
+     0.1848,
+     0.33
+    ]
+   }
+  },
+  {
+   "id": "S08",
+   "name": "normal movement with the coloured suit: walks forward, feet track the canon",
+   "pass": true,
+   "detail": {
+    "along_m": 6.68,
+    "feet_p95_uu": 0.66
+   }
+  },
+  {
+   "id": "S09",
+   "name": "the azure secondary is on disk for the reload (Game.ini, SectionsToSave)",
+   "pass": true,
+   "detail": {
+    "lines": [
+     "Secondary=(R=0.260000,G=0.560000,B=1.000000,A=1.000000)",
+     "bSecondaryChosen=True",
+     "CompanionSecondary=(R=0.420000,G=0.800000,B=1.000000,A=1.000000)"
+    ]
+   }
+  }
+ ],
+ "founder_snapshot": {
+  "primary": [
+   0.8980000019073486,
+   0.8709999918937683,
+   0.800000011920929
+  ],
+  "secondary": [
+   0.8199999928474426,
+   0.14000000059604645,
+   0.18000000715255737
+  ],
+  "worn": "jack_flame"
+ },
+ "at_start": {
+  "primary": [
+   0.8980000019073486,
+   0.8709999918937683,
+   0.800000011920929
+  ],
+  "secondary": [
+   0.25999999046325684,
+   0.5600000023841858,
+   1.0
+  ],
+  "worn": "jack_flame"
+ },
+ "readings": {
+  "default": {
+   "bone": {
+    "channel": "None",
+    "body": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "twin": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "bonedeep": {
+    "channel": "None",
+    "body": [
+     0.6196,
+     0.5749,
+     0.4736
+    ],
+    "twin": [
+     0.6196,
+     0.5749,
+     0.4736
+    ]
+   },
+   "visor": {
+    "channel": "None",
+    "body": [
+     0.045,
+     0.042,
+     0.05
+    ],
+    "twin": [
+     0.045,
+     0.042,
+     0.05
+    ]
+   },
+   "eye": {
+    "channel": "None",
+    "body": [
+     25.1143,
+     16.5754,
+     2.5114
+    ],
+    "twin": [
+     25.1143,
+     16.5754,
+     2.5114
+    ]
+   },
+   "eyehalo": {
+    "channel": "None",
+    "body": [
+     18835.7148,
+     12431.5713,
+     1883.5715
+    ],
+    "twin": [
+     7.032,
+     4.6411,
+     0.7032
+    ]
+   },
+   "suit": {
+    "channel": "secondary_deep",
+    "body": [
+     0.034,
+     0.032,
+     0.04
+    ],
+    "twin": [
+     0.034,
+     0.032,
+     0.04
+    ]
+   },
+   "stripe": {
+    "channel": "None",
+    "body": [
+     0.78,
+     0.76,
+     0.72
+    ],
+    "twin": [
+     0.78,
+     0.76,
+     0.72
+    ]
+   },
+   "flame": {
+    "channel": "secondary",
+    "body": [
+     8.633,
+     1.7266,
+     0.1727
+    ],
+    "twin": [
+     10.3596,
+     2.0719,
+     0.2072
+    ]
+   },
+   "flamepale": {
+    "channel": "secondary_light",
+    "body": [
+     13.342,
+     5.8705,
+     0.8005
+    ],
+    "twin": [
+     16.0104,
+     7.0446,
+     0.9606
+    ]
+   },
+   "heart": {
+    "channel": "secondary",
+    "body": [
+     8.947,
+     0.7534,
+     0.1884
+    ],
+    "twin": [
+     10.7364,
+     0.9041,
+     0.226
+    ]
+   },
+   "nightmare": {
+    "channel": "None",
+    "body": [
+     0.034,
+     0.032,
+     0.04
+    ],
+    "twin": [
+     0.034,
+     0.032,
+     0.04
+    ]
+   }
+  },
+  "azure": {
+   "bone": {
+    "channel": "None",
+    "body": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "twin": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "bonedeep": {
+    "channel": "None",
+    "body": [
+     0.6196,
+     0.5749,
+     0.4736
+    ],
+    "twin": [
+     0.6196,
+     0.5749,
+     0.4736
+    ]
+   },
+   "visor": {
+    "channel": "None",
+    "body": [
+     0.045,
+     0.042,
+     0.05
+    ],
+    "twin": [
+     0.045,
+     0.042,
+     0.05
+    ]
+   },
+   "eye": {
+    "channel": "None",
+    "body": [
+     6.4172,
+     9.1223,
+     2.4682
+    ],
+    "twin": [
+     6.4172,
+     9.1223,
+     2.4682
+    ]
+   },
+   "eyehalo": {
+    "channel": "None",
+    "body": [
+     4812.9062,
+     6841.7314,
+     1851.1179
+    ],
+    "twin": [
+     1.7968,
+     2.5542,
+     0.6911
+    ]
+   },
+   "suit": {
+    "channel": "secondary_deep",
+    "body": [
+     0.0858,
+     0.1848,
+     0.33
+    ],
+    "twin": [
+     0.0858,
+     0.1848,
+     0.33
+    ]
+   },
+   "stripe": {
+    "channel": "None",
+    "body": [
+     0.78,
+     0.76,
+     0.72
+    ],
+    "twin": [
+     0.78,
+     0.76,
+     0.72
+    ]
+   },
+   "flame": {
+    "channel": "secondary",
+    "body": [
+     2.2059,
+     4.7512,
+     8.4843
+    ],
+    "twin": [
+     2.6471,
+     5.7014,
+     10.1811
+    ]
+   },
+   "flamepale": {
+    "channel": "secondary_light",
+    "body": [
+     7.2903,
+     9.6505,
+     13.1121
+    ],
+    "twin": [
+     8.7484,
+     11.5806,
+     15.7345
+    ]
+   },
+   "heart": {
+    "channel": "secondary",
+    "body": [
+     2.2861,
+     4.924,
+     8.7928
+    ],
+    "twin": [
+     2.7434,
+     5.9088,
+     10.5514
+    ]
+   },
+   "nightmare": {
+    "channel": "None",
+    "body": [
+     0.034,
+     0.032,
+     0.04
+    ],
+    "twin": [
+     0.034,
+     0.032,
+     0.04
+    ]
+   }
+  },
+  "jade": {
+   "bone": {
+    "channel": "None",
+    "body": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "twin": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "bonedeep": {
+    "channel": "None",
+    "body": [
+     0.6196,
+     0.5749,
+     0.4736
+    ],
+    "twin": [
+     0.6196,
+     0.5749,
+     0.4736
+    ]
+   },
+   "visor": {
+    "channel": "None",
+    "body": [
+     0.045,
+     0.042,
+     0.05
+    ],
+    "twin": [
+     0.045,
+     0.042,
+     0.05
+    ]
+   },
+   "eye": {
+    "channel": "None",
+    "body": [
+     4.4039,
+     12.4982,
+     1.3212
+    ],
+    "twin": [
+     4.4039,
+     12.4982,
+     1.3212
+    ]
+   },
+   "eyehalo": {
+    "channel": "None",
+    "body": [
+     3302.8945,
+     9373.6143,
+     990.8683
+    ],
+    "twin": [
+     1.2331,
+     3.4995,
+     0.3699
+    ]
+   },
+   "suit": {
+    "channel": "secondary_deep",
+    "body": [
+     0.066,
+     0.2838,
+     0.198
+    ],
+    "twin": [
+     0.066,
+     0.2838,
+     0.198
+    ]
+   },
+   "stripe": {
+    "channel": "None",
+    "body": [
+     0.78,
+     0.76,
+     0.72
+    ],
+    "twin": [
+     0.78,
+     0.76,
+     0.72
+    ]
+   },
+   "flame": {
+    "channel": "secondary",
+    "body": [
+     1.5138,
+     6.5095,
+     4.5415
+    ],
+    "twin": [
+     1.8166,
+     7.8113,
+     5.4498
+    ]
+   },
+   "flamepale": {
+    "channel": "secondary_light",
+    "body": [
+     5.4278,
+     10.0601,
+     8.2352
+    ],
+    "twin": [
+     6.5133,
+     12.0721,
+     9.8823
+    ]
+   },
+   "heart": {
+    "channel": "secondary",
+    "body": [
+     1.5689,
+     6.7462,
+     4.7066
+    ],
+    "twin": [
+     1.8826,
+     8.0954,
+     5.6479
+    ]
+   },
+   "nightmare": {
+    "channel": "None",
+    "body": [
+     0.034,
+     0.032,
+     0.04
+    ],
+    "twin": [
+     0.034,
+     0.032,
+     0.04
+    ]
+   }
+  },
+  "crimson": {
+   "bone": {
+    "channel": "None",
+    "body": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "twin": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "bonedeep": {
+    "channel": "None",
+    "body": [
+     0.6196,
+     0.5749,
+     0.4736
+    ],
+    "twin": [
+     0.6196,
+     0.5749,
+     0.4736
+    ]
+   },
+   "visor": {
+    "channel": "None",
+    "body": [
+     0.045,
+     0.042,
+     0.05
+    ],
+    "twin": [
+     0.045,
+     0.042,
+     0.05
+    ]
+   },
+   "eye": {
+    "channel": "None",
+    "body": [
+     21.6275,
+     2.4371,
+     0.4748
+    ],
+    "twin": [
+     21.6275,
+     2.4371,
+     0.4748
+    ]
+   },
+   "eyehalo": {
+    "channel": "None",
+    "body": [
+     16220.6533,
+     1827.7908,
+     356.0632
+    ],
+    "twin": [
+     6.0557,
+     0.6824,
+     0.1329
+    ]
+   },
+   "suit": {
+    "channel": "secondary_deep",
+    "body": [
+     0.2706,
+     0.0462,
+     0.0594
+    ],
+    "twin": [
+     0.2706,
+     0.0462,
+     0.0594
+    ]
+   },
+   "stripe": {
+    "channel": "None",
+    "body": [
+     0.78,
+     0.76,
+     0.72
+    ],
+    "twin": [
+     0.78,
+     0.76,
+     0.72
+    ]
+   },
+   "flame": {
+    "channel": "secondary",
+    "body": [
+     7.4345,
+     1.2693,
+     1.632
+    ],
+    "twin": [
+     8.9214,
+     1.5232,
+     1.9583
+    ]
+   },
+   "flamepale": {
+    "channel": "secondary_light",
+    "body": [
+     11.4896,
+     5.7728,
+     6.1091
+    ],
+    "twin": [
+     13.7876,
+     6.9274,
+     7.3309
+    ]
+   },
+   "heart": {
+    "channel": "secondary",
+    "body": [
+     7.7048,
+     1.3155,
+     1.6913
+    ],
+    "twin": [
+     9.2458,
+     1.5785,
+     2.0296
+    ]
+   },
+   "nightmare": {
+    "channel": "None",
+    "body": [
+     0.034,
+     0.032,
+     0.04
+    ],
+    "twin": [
+     0.034,
+     0.032,
+     0.04
+    ]
+   }
+  },
+  "gold": {
+   "bone": {
+    "channel": "None",
+    "body": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "twin": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "bonedeep": {
+    "channel": "None",
+    "body": [
+     0.6196,
+     0.5749,
+     0.4736
+    ],
+    "twin": [
+     0.6196,
+     0.5749,
+     0.4736
+    ]
+   },
+   "visor": {
+    "channel": "None",
+    "body": [
+     0.045,
+     0.042,
+     0.05
+    ],
+    "twin": [
+     0.045,
+     0.042,
+     0.05
+    ]
+   },
+   "eye": {
+    "channel": "None",
+    "body": [
+     22.7828,
+     11.7286,
+     0.5924
+    ],
+    "twin": [
+     22.7828,
+     11.7286,
+     0.5924
+    ]
+   },
+   "eyehalo": {
+    "channel": "None",
+    "body": [
+     17087.0762,
+     8796.4268,
+     444.264
+    ],
+    "twin": [
+     6.3792,
+     3.284,
+     0.1659
+    ]
+   },
+   "suit": {
+    "channel": "secondary_deep",
+    "body": [
+     0.33,
+     0.2574,
+     0.0858
+    ],
+    "twin": [
+     0.33,
+     0.2574,
+     0.0858
+    ]
+   },
+   "stripe": {
+    "channel": "None",
+    "body": [
+     0.78,
+     0.76,
+     0.72
+    ],
+    "twin": [
+     0.78,
+     0.76,
+     0.72
+    ]
+   },
+   "flame": {
+    "channel": "secondary",
+    "body": [
+     7.8316,
+     6.1086,
+     2.0362
+    ],
+    "twin": [
+     9.3979,
+     7.3304,
+     2.4435
+    ]
+   },
+   "flamepale": {
+    "channel": "secondary_light",
+    "body": [
+     12.1033,
+     10.5057,
+     6.7295
+    ],
+    "twin": [
+     14.524,
+     12.6068,
+     8.0754
+    ]
+   },
+   "heart": {
+    "channel": "secondary",
+    "body": [
+     8.1164,
+     6.3308,
+     2.1103
+    ],
+    "twin": [
+     9.7396,
+     7.5969,
+     2.5323
+    ]
+   },
+   "nightmare": {
+    "channel": "None",
+    "body": [
+     0.034,
+     0.032,
+     0.04
+    ],
+    "twin": [
+     0.034,
+     0.032,
+     0.04
+    ]
+   }
+  },
+  "violet": {
+   "bone": {
+    "channel": "None",
+    "body": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "twin": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "bonedeep": {
+    "channel": "None",
+    "body": [
+     0.6196,
+     0.5749,
+     0.4736
+    ],
+    "twin": [
+     0.6196,
+     0.5749,
+     0.4736
+    ]
+   },
+   "visor": {
+    "channel": "None",
+    "body": [
+     0.045,
+     0.042,
+     0.05
+    ],
+    "twin": [
+     0.045,
+     0.042,
+     0.05
+    ]
+   },
+   "eye": {
+    "channel": "None",
+    "body": [
+     12.8957,
+     5.1675,
+     2.2107
+    ],
+    "twin": [
+     12.8957,
+     5.1675,
+     2.2107
+    ]
+   },
+   "eyehalo": {
+    "channel": "None",
+    "body": [
+     9671.7783,
+     3875.6199,
+     1658.0192
+    ],
+    "twin": [
+     3.6108,
+     1.4469,
+     0.619
+    ]
+   },
+   "suit": {
+    "channel": "secondary_deep",
+    "body": [
+     0.1848,
+     0.1122,
+     0.3168
+    ],
+    "twin": [
+     0.1848,
+     0.1122,
+     0.3168
+    ]
+   },
+   "stripe": {
+    "channel": "None",
+    "body": [
+     0.78,
+     0.76,
+     0.72
+    ],
+    "twin": [
+     0.78,
+     0.76,
+     0.72
+    ]
+   },
+   "flame": {
+    "channel": "secondary",
+    "body": [
+     4.4329,
+     2.6914,
+     7.5993
+    ],
+    "twin": [
+     5.3195,
+     3.2297,
+     9.1191
+    ]
+   },
+   "flamepale": {
+    "channel": "secondary_light",
+    "body": [
+     8.8082,
+     7.1934,
+     11.7443
+    ],
+    "twin": [
+     10.5699,
+     8.6321,
+     14.0932
+    ]
+   },
+   "heart": {
+    "channel": "secondary",
+    "body": [
+     4.5941,
+     2.7893,
+     7.8756
+    ],
+    "twin": [
+     5.5129,
+     3.3471,
+     9.4507
+    ]
+   },
+   "nightmare": {
+    "channel": "None",
+    "body": [
+     0.034,
+     0.032,
+     0.04
+    ],
+    "twin": [
+     0.034,
+     0.032,
+     0.04
+    ]
+   }
+  }
+ },
+ "swatches": {
+  "azure": {
+   "want": [
+    0.26,
+    0.56,
+    1.0
+   ],
+   "suit": [
+    0.26,
+    0.56,
+    1.0
+   ],
+   "suit_rgb": [
+    0.0858,
+    0.1848,
+    0.33
+   ],
+   "tie": [
+    0.26,
+    0.56,
+    1.0
+   ],
+   "flame": [
+    0.26,
+    0.56,
+    1.0
+   ],
+   "stripe_rgb": [
+    0.78,
+    0.76,
+    0.72
+   ],
+   "collar_rgb": [
+    0.034,
+    0.032,
+    0.04
+   ]
+  },
+  "jade": {
+   "want": [
+    0.233,
+    1.0,
+    0.698
+   ],
+   "suit": [
+    0.233,
+    1.0,
+    0.698
+   ],
+   "suit_rgb": [
+    0.066,
+    0.2838,
+    0.198
+   ],
+   "tie": [
+    0.233,
+    1.0,
+    0.698
+   ],
+   "flame": [
+    0.233,
+    1.0,
+    0.698
+   ],
+   "stripe_rgb": [
+    0.78,
+    0.76,
+    0.72
+   ],
+   "collar_rgb": [
+    0.034,
+    0.032,
+    0.04
+   ]
+  },
+  "crimson": {
+   "want": [
+    1.0,
+    0.171,
+    0.22
+   ],
+   "suit": [
+    1.0,
+    0.171,
+    0.22
+   ],
+   "suit_rgb": [
+    0.2706,
+    0.0462,
+    0.0594
+   ],
+   "tie": [
+    1.0,
+    0.171,
+    0.22
+   ],
+   "flame": [
+    1.0,
+    0.171,
+    0.22
+   ],
+   "stripe_rgb": [
+    0.78,
+    0.76,
+    0.72
+   ],
+   "collar_rgb": [
+    0.034,
+    0.032,
+    0.04
+   ]
+  },
+  "gold": {
+   "want": [
+    1.0,
+    0.78,
+    0.26
+   ],
+   "suit": [
+    1.0,
+    0.78,
+    0.26
+   ],
+   "suit_rgb": [
+    0.33,
+    0.2574,
+    0.0858
+   ],
+   "tie": [
+    1.0,
+    0.78,
+    0.26
+   ],
+   "flame": [
+    1.0,
+    0.78,
+    0.26
+   ],
+   "stripe_rgb": [
+    0.78,
+    0.76,
+    0.72
+   ],
+   "collar_rgb": [
+    0.034,
+    0.032,
+    0.04
+   ]
+  },
+  "violet": {
+   "want": [
+    0.583,
+    0.354,
+    1.0
+   ],
+   "suit": [
+    0.583,
+    0.354,
+    1.0
+   ],
+   "suit_rgb": [
+    0.1848,
+    0.1122,
+    0.3168
+   ],
+   "tie": [
+    0.583,
+    0.354,
+    1.0
+   ],
+   "flame": [
+    0.583,
+    0.354,
+    1.0
+   ],
+   "stripe_rgb": [
+    0.78,
+    0.76,
+    0.72
+   ],
+   "collar_rgb": [
+    0.034,
+    0.032,
+    0.04
+   ]
+  }
+ },
+ "preview_rect": [
+  "<Struct 'Vector2D' (0x000001241B8AD160) {x: 0.594833, y: 0.471294}>",
+  "<Struct 'Vector2D' (0x000001241B8AF320) {x: 0.213557, y: 0.483131}>"
+ ],
+ "all_pass": true,
+ "finished": "2026-09-30 11:14:24",
+ "seconds": 76.68,
+ "log": "S00 PASS Jack Flame is worn with its figure's channels declared (suit tagged on the fixed build)\nS01 PASS DEFAULT secondary: the suit is its designed near-black, the tie red, the collar black\nS02 PASS the SUIT takes each chosen secondary's hue (5 distinct colours)\nS03 PASS the TIE and the FLAMES take the same hue as the suit, every colour\nS04 PASS readability: the suit stays a deep cloth -- the pinstripes >= 2.5x its luminance and the tie emissive far above it\nS05 PASS the NIGHTMARE COLLAR and the pinstripes keep their designed colours under every secondary\nS06 PASS the suit is visibly different from the designed black (every swatch at least 3x brighter)\nS07 PASS a PRIMARY alone does not move the suit\nS08 PASS normal movement with the coloured suit: walks forward, feet track the canon\nS09 PASS the azure secondary is on disk for the reload (Game.ini, SectionsToSave)\n"
+}

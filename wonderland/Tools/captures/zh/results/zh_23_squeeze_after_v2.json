@@ -1,0 +1,329 @@
+{
+ "name": "zh_23_squeeze_after_v2",
+ "started": "2026-09-30 11:14:25",
+ "status": "measured",
+ "max_black_seconds_original": 25.0,
+ "squeezed_to": 2.0,
+ "build_has_diagnostics": true,
+ "dll_mtime": 1790791545.2024937,
+ "trips": [
+  {
+   "to": "noctis_heartland_southwest",
+   "via_map": false,
+   "from": [
+    -330,
+    -650,
+    109
+   ],
+   "registry_arrival": [
+    -34474,
+    -54220,
+    -14
+   ],
+   "distance_m": 635,
+   "started": "",
+   "seconds": 23.5,
+   "report": "Arrived at Noctis Heartland South-West.",
+   "arrived": true,
+   "diagnostics": "arrived after 26.8 s | streamed at 26.3 s | cells loaded 68 pending 42 | spot misses 0 | refusals 0",
+   "landed": [
+    -34474,
+    -54220,
+    75
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "to_rim"
+  },
+  {
+   "to": "royal_gardens",
+   "via_map": true,
+   "from": [
+    -34474,
+    -54220,
+    75
+   ],
+   "registry_arrival": [
+    3676,
+    11242,
+    19
+   ],
+   "distance_m": 758,
+   "selected": "royal_gardens",
+   "started": true,
+   "seconds": 8.75,
+   "report": "Arrived at Royal Gardens.",
+   "arrived": true,
+   "diagnostics": "arrived after 9.9 s | streamed at 9.3 s | cells loaded 63 pending 34 | spot misses 0 | refusals 0",
+   "landed": [
+    3676,
+    11242,
+    109
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "rim_to_centre",
+   "pair": [
+    "noctis_heartland_southwest",
+    "royal_gardens"
+   ],
+   "rep": 0
+  },
+  {
+   "to": "tartarus_heartland_east",
+   "via_map": false,
+   "from": [
+    3676,
+    11242,
+    109
+   ],
+   "registry_arrival": [
+    64080,
+    -4668,
+    -14
+   ],
+   "distance_m": 625,
+   "started": "",
+   "seconds": 14.0,
+   "report": "Arrived at Tartarus Heartland East.",
+   "arrived": true,
+   "diagnostics": "arrived after 15.6 s | streamed at 15.1 s | cells loaded 54 pending 30 | spot misses 0 | refusals 0",
+   "landed": [
+    64080,
+    -4668,
+    75
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "to_rim"
+  },
+  {
+   "to": "castle_approach",
+   "via_map": true,
+   "from": [
+    64080,
+    -4668,
+    75
+   ],
+   "registry_arrival": [
+    0,
+    6000,
+    -14
+   ],
+   "distance_m": 650,
+   "selected": "castle_approach",
+   "started": true,
+   "seconds": 25.5,
+   "report": "Arrived at Castle Approach.",
+   "arrived": true,
+   "diagnostics": "arrived after 28.4 s | streamed at 27.9 s | cells loaded 59 pending 30 | spot misses 0 | refusals 0",
+   "landed": [
+    0,
+    6000,
+    89
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "rim_to_centre",
+   "pair": [
+    "tartarus_heartland_east",
+    "castle_approach"
+   ],
+   "rep": 0
+  },
+  {
+   "to": "icarus_heartland",
+   "via_map": false,
+   "from": [
+    0,
+    6000,
+    89
+   ],
+   "registry_arrival": [
+    33813,
+    52266,
+    -14
+   ],
+   "distance_m": 573,
+   "started": "",
+   "seconds": 13.75,
+   "report": "Arrived at Icarus Heartland.",
+   "arrived": true,
+   "diagnostics": "arrived after 15.0 s | streamed at 14.5 s | cells loaded 62 pending 31 | spot misses 0 | refusals 0",
+   "landed": [
+    33813,
+    52266,
+    75
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "to_rim"
+  },
+  {
+   "to": "teapot_court",
+   "via_map": true,
+   "from": [
+    33813,
+    52266,
+    75
+   ],
+   "registry_arrival": [
+    -11081,
+    -7144,
+    -14
+   ],
+   "distance_m": 745,
+   "selected": "teapot_court",
+   "started": true,
+   "seconds": 17.75,
+   "report": "Arrived at Teapot Court.",
+   "arrived": true,
+   "diagnostics": "arrived after 19.2 s | streamed at 18.7 s | cells loaded 63 pending 34 | spot misses 0 | refusals 0",
+   "landed": [
+    -11081,
+    -7144,
+    89
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "rim_to_centre",
+   "pair": [
+    "icarus_heartland",
+    "teapot_court"
+   ],
+   "rep": 0
+  },
+  {
+   "to": "dubel_forest",
+   "via_map": false,
+   "from": [
+    -11081,
+    -7144,
+    89
+   ],
+   "registry_arrival": [
+    0,
+    124800,
+    -14
+   ],
+   "distance_m": 1324,
+   "started": "",
+   "seconds": 21.25,
+   "report": "Arrived at Dubel Forest.",
+   "arrived": true,
+   "diagnostics": "arrived after 24.1 s | streamed at 23.6 s | cells loaded 61 pending 39 | spot misses 0 | refusals 0",
+   "landed": [
+    0,
+    124800,
+    75
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "to_rim"
+  },
+  {
+   "to": "grand_clock",
+   "via_map": true,
+   "from": [
+    0,
+    124800,
+    75
+   ],
+   "registry_arrival": [
+    10853,
+    -928,
+    19
+   ],
+   "distance_m": 1262,
+   "selected": "grand_clock",
+   "started": true,
+   "seconds": 30.75,
+   "report": "Arrived at The Grand Clock.",
+   "arrived": true,
+   "diagnostics": "arrived after 34.4 s | streamed at 33.9 s | cells loaded 66 pending 37 | spot misses 0 | refusals 0",
+   "landed": [
+    10853,
+    -928,
+    108
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "rim_to_centre",
+   "pair": [
+    "dubel_forest",
+    "grand_clock"
+   ],
+   "rep": 0
+  },
+  {
+   "to": "noctis_heartland_west",
+   "via_map": false,
+   "from": [
+    10853,
+    -928,
+    108
+   ],
+   "registry_arrival": [
+    -65242,
+    -1026,
+    -14
+   ],
+   "distance_m": 761,
+   "started": "",
+   "seconds": 13.75,
+   "report": "Arrived at Noctis Heartland West.",
+   "arrived": true,
+   "diagnostics": "arrived after 15.8 s | streamed at 15.2 s | cells loaded 65 pending 46 | spot misses 0 | refusals 0",
+   "landed": [
+    -65242,
+    -1026,
+    75
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "to_rim"
+  },
+  {
+   "to": "castle_approach",
+   "via_map": true,
+   "from": [
+    -65242,
+    -1026,
+    75
+   ],
+   "registry_arrival": [
+    0,
+    6000,
+    -14
+   ],
+   "distance_m": 656,
+   "selected": "castle_approach",
+   "started": true,
+   "seconds": 7.5,
+   "report": "Arrived at Castle Approach.",
+   "arrived": true,
+   "diagnostics": "arrived after 8.2 s | streamed at 7.7 s | cells loaded 70 pending 39 | spot misses 0 | refusals 0",
+   "landed": [
+    0,
+    6000,
+    89
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "rim_to_centre",
+   "pair": [
+    "noctis_heartland_west",
+    "castle_approach"
+   ],
+   "rep": 0
+  }
+ ],
+ "rim_to_centre_arrived": 5,
+ "rim_to_centre_total": 5,
+ "deploy_pass": 0,
+ "deploy_total": 0,
+ "max_black_seconds_restored": 25.0,
+ "finished": "2026-09-30 11:21:07",
+ "seconds": 402.13,
+ "log": "TRIP noctis_heartland_southwest ARRIVED 23.5 Arrived at Noctis Heartland South-West. arrived after 26.8 s | streamed at 26.3 s | cells loaded 68 pending 42 | spot misses 0 | refusals 0\nTRIP royal_gardens ARRIVED 8.75 Arrived at Royal Gardens. arrived after 9.9 s | streamed at 9.3 s | cells loaded 63 pending 34 | spot misses 0 | refusals 0\nTRIP tartarus_heartland_east ARRIVED 14.0 Arrived at Tartarus Heartland East. arrived after 15.6 s | streamed at 15.1 s | cells loaded 54 pending 30 | spot misses 0 | refusals 0\nTRIP castle_approach ARRIVED 25.5 Arrived at Castle Approach. arrived after 28.4 s | streamed at 27.9 s | cells loaded 59 pending 30 | spot misses 0 | refusals 0\nTRIP icarus_heartland ARRIVED 13.75 Arrived at Icarus Heartland. arrived after 15.0 s | streamed at 14.5 s | cells loaded 62 pending 31 | spot misses 0 | refusals 0\nTRIP teapot_court ARRIVED 17.75 Arrived at Teapot Court. arrived after 19.2 s | streamed at 18.7 s | cells loaded 63 pending 34 | spot misses 0 | refusals 0\nTRIP dubel_forest ARRIVED 21.25 Arrived at Dubel Forest. arrived after 24.1 s | streamed at 23.6 s | cells loaded 61 pending 39 | spot misses 0 | refusals 0\nTRIP grand_clock ARRIVED 30.75 Arrived at The Grand Clock. arrived after 34.4 s | streamed at 33.9 s | cells loaded 66 pending 37 | spot misses 0 | refusals 0\nTRIP noctis_heartland_west ARRIVED 13.75 Arrived at Noctis Heartland West. arrived after 15.8 s | streamed at 15.2 s | cells loaded 65 pending 46 | spot misses 0 | refusals 0\nTRIP castle_approach ARRIVED 7.5 Arrived at Castle Approach. arrived after 8.2 s | streamed at 7.7 s | cells loaded 70 pending 39 | spot misses 0 | refusals 0\n"
+}

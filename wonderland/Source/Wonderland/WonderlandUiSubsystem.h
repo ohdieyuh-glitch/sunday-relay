@@ -128,6 +128,35 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
 	bool TeleportToSelected();
 
+	/**
+	 * THE MAP'S ZOOM, FOR PROOFS (founder, 2026-09-30: "capture evidence at multiple zoom levels"). 1 is the whole world;
+	 * the map must be open. CenterMapOn centres a place at zoom 8 at least. DescribeMapLayout is the plan's own last
+	 * painted layout as JSON -- marker, label rectangle, group and leader line per place -- so a test reads what was
+	 * drawn rather than re-deriving it.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	void SetMapZoom(float Zoom);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	float GetMapZoom() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	void FitMap();
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool CenterMapOn(FName DestinationId);
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	FString DescribeMapLayout() const;
+
+	/**
+	 * THE MAP AT THE FOUNDER'S OWN SCREEN, whatever the PIE viewport is: a fresh world map with the live stops, drawn
+	 * offscreen at Width x Height pixels at the game's own DPI scale for that size (UUserInterfaceSettings), at Zoom,
+	 * and saved as a PNG. Returns the layout JSON with "dpi" and "pixels" added, or an error sentence.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	FString RenderMapOffscreen(const FString& FilePath, int32 Width, int32 Height, float Zoom);
+
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
 	void ToggleProjectBrain();
 

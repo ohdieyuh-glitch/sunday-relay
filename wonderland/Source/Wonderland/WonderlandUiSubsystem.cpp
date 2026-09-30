@@ -49,6 +49,10 @@
 #include "WonderlandBrainSculpture.h"
 #include "WonderlandProjectBrain.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Engine/UserInterfaceSettings.h"
+#include "HAL/FileManager.h"
+#include "Slate/WidgetRenderer.h"
+#include "TextureResource.h"
 #include "WonderlandProjectBrainPanel.h"
 #include "WonderlandRelaySkins.h"
 #include "EngineUtils.h"
@@ -900,6 +904,43 @@ void UWonderlandUiSubsystem::ApplyOverlayInput(bool bOverlayOpen, TSharedPtr<SWi
 	}
 }
 
+namespace
+{
+	/** The places the map offers, where each puts a visitor, the one being stood at, and the player: shared by the live
+	 *  map and its offscreen render, so the two can never show different worlds. */
+	void GatherMapStops(UWorld* World, const APlayerController* Controller, TArray<FWonderlandMapStop>& OutStops, FName& OutCurrent,
+		FVector2D& OutPlayerXY, bool& bOutHasPlayer, FString& OutNotice)
+	{
+		UWonderlandTravelSubsystem* Travel = World != nullptr ? World->GetSubsystem<UWonderlandTravelSubsystem>() : nullptr;
+		if (Travel != nullptr)
+		{
+			for (const FWonderlandTravelDestination& Row : Travel->GetOfferedDestinations())
+			{
+				FWonderlandMapStop Stop;
+				Stop.Row = Row;
+				// Where the place puts a visitor -- its own arrival point, or its anchor -- so a place past the streaming
+				// radius, whose anchor is not loaded, still sits where it is on the map.
+				FTransform Arrival;
+				if (Travel->ResolveArrival(Row.Id, Arrival))
+				{
+					Stop.AnchorXY = FVector2D(Arrival.GetLocation().X, Arrival.GetLocation().Y);
+				}
+				OutStops.Add(Stop);
+			}
+			OutCurrent = Travel->GetNearestOfferedDestination(3000.0);
+			OutNotice = Travel->GetLastTravelReport();
+		}
+		if (Controller != nullptr)
+		{
+			if (const APawn* Pawn = Controller->GetPawn())
+			{
+				OutPlayerXY = FVector2D(Pawn->GetActorLocation().X, Pawn->GetActorLocation().Y);
+				bOutHasPlayer = true;
+			}
+		}
+	}
+}
+
 void UWonderlandUiSubsystem::RefreshMap()
 {
 	if (!WorldMap.IsValid())
@@ -911,35 +952,7 @@ void UWonderlandUiSubsystem::RefreshMap()
 	FString Notice;
 	FVector2D PlayerXY = FVector2D::ZeroVector;
 	bool bHasPlayer = false;
-
-	UWorld* World = PlayerWorld();
-	UWonderlandTravelSubsystem* Travel = World != nullptr ? World->GetSubsystem<UWonderlandTravelSubsystem>() : nullptr;
-	if (Travel != nullptr)
-	{
-		for (const FWonderlandTravelDestination& Row : Travel->GetOfferedDestinations())
-		{
-			FWonderlandMapStop Stop;
-			Stop.Row = Row;
-			// Where the place puts a visitor -- its own arrival point, or its anchor -- so a place past the streaming
-			// radius, whose anchor is not loaded, still sits where it is on the map.
-			FTransform Arrival;
-			if (Travel->ResolveArrival(Row.Id, Arrival))
-			{
-				Stop.AnchorXY = FVector2D(Arrival.GetLocation().X, Arrival.GetLocation().Y);
-			}
-			Stops.Add(Stop);
-		}
-		Current = Travel->GetNearestOfferedDestination(3000.0);
-		Notice = Travel->GetLastTravelReport();
-	}
-	if (const APlayerController* Controller = BoundController.Get())
-	{
-		if (const APawn* Pawn = Controller->GetPawn())
-		{
-			PlayerXY = FVector2D(Pawn->GetActorLocation().X, Pawn->GetActorLocation().Y);
-			bHasPlayer = true;
-		}
-	}
+	GatherMapStops(PlayerWorld(), BoundController.Get(), Stops, Current, PlayerXY, bHasPlayer, Notice);
 	if (!PendingMapNotice.IsEmpty())
 	{
 		Notice = PendingMapNotice;
@@ -4222,6 +4235,110 @@ void UWonderlandUiSubsystem::SelectMapDestination(FName DestinationId)
 	{
 		WorldMap->SelectById(DestinationId);
 	}
+}
+
+void UWonderlandUiSubsystem::SetMapZoom(float Zoom)
+{
+	if (WorldMap.IsValid())
+	{
+		WorldMap->SetMapZoom(Zoom);
+	}
+}
+
+float UWonderlandUiSubsystem::GetMapZoom() const
+{
+	return WorldMap.IsValid() ? WorldMap->GetMapZoom() : 1.0f;
+}
+
+void UWonderlandUiSubsystem::FitMap()
+{
+	if (WorldMap.IsValid())
+	{
+		WorldMap->FitMap();
+	}
+}
+
+bool UWonderlandUiSubsystem::CenterMapOn(FName DestinationId)
+{
+	return WorldMap.IsValid() && WorldMap->CentreMapOn(DestinationId);
+}
+
+FString UWonderlandUiSubsystem::DescribeMapLayout() const
+{
+	return WorldMap.IsValid() ? WorldMap->DescribeMapLayout() : FString();
+}
+
+FString UWonderlandUiSubsystem::RenderMapOffscreen(const FString& FilePath, int32 Width, int32 Height, float Zoom)
+{
+	if (Width < 64 || Height < 64 || FilePath.IsEmpty() || !FSlateApplication::IsInitialized())
+	{
+		return TEXT("error: a size of at least 64 x 64, a path and a running Slate are needed");
+	}
+	TArray<FWonderlandMapStop> Stops;
+	FName Current = NAME_None;
+	FString Notice;
+	FVector2D PlayerXY = FVector2D::ZeroVector;
+	bool bHasPlayer = false;
+	GatherMapStops(PlayerWorld(), BoundController.Get(), Stops, Current, PlayerXY, bHasPlayer, Notice);
+
+	// THE SAME WIDGET, THE SAME STOPS, THE SAME TERRITORY STRIP -- only the host differs: a render target the size of
+	// the founder's screen, at the DPI scale the game itself would use for it.
+	const float Dpi = GetDefault<UUserInterfaceSettings>()->GetDPIScaleBasedOnSize(FIntPoint(Width, Height));
+	TSharedRef<SWonderlandWorldMap> Map = SNew(SWonderlandWorldMap);
+	Map->Refresh(Stops, Current, PlayerXY, bHasPlayer, Notice);
+	if (UWonderlandTerritorySubsystem* Territories = TerritoriesFor(this))
+	{
+		TArray<FWonderlandMapTerritory> Rows;
+		for (const FWonderlandTerritory& Row : Territories->GetTerritories())
+		{
+			FWonderlandMapTerritory Entry;
+			Entry.Row = Row;
+			Entry.bDiscovered = Territories->IsDiscovered(Row.Id);
+			Entry.bHere = Territories->GetCurrentTerritory() == Row.Id;
+			Entry.BearingDeg = Territories->BearingTo(Row.Id);
+			Entry.DistanceM = Territories->DistanceToMetres(Row.Id);
+			Entry.Way = Territories->DescribeWayTo(Row.Id);
+			Rows.Add(Entry);
+		}
+		Map->RefreshTerritories(Rows);
+	}
+	Map->SetMapZoom(Zoom);
+
+	UTextureRenderTarget2D* Target = FWidgetRenderer::CreateTargetFor(FVector2D(Width, Height), TF_Bilinear, true);
+	if (Target == nullptr)
+	{
+		return TEXT("error: no render target");
+	}
+	FWidgetRenderer Renderer(true, true);
+	// TWICE: the first pass measures and lays the text out, the second draws the settled layout.
+	Renderer.DrawWidget(Target, Map, Dpi, FVector2D(Width, Height), 0.0f);
+	Renderer.DrawWidget(Target, Map, Dpi, FVector2D(Width, Height), 0.016f);
+	// ReadPixels flushes the render thread itself before it reads, so both draws have landed.
+	TArray<FColor> Pixels;
+	FTextureRenderTargetResource* Resource = Target->GameThread_GetRenderTargetResource();
+	// THE TARGET ALREADY HOLDS GAMMA-SPACE VALUES (the renderer draws in gamma space into a non-sRGB target), so the read
+	// must not convert linear to gamma a second time -- the first offscreen frames came out washed grey-blue from exactly that.
+	FReadSurfaceDataFlags ReadFlags(RCM_UNorm, CubeFace_MAX);
+	ReadFlags.SetLinearToGamma(false);
+	if (Resource == nullptr || !Resource->ReadPixels(Pixels, ReadFlags) || Pixels.Num() != Width * Height)
+	{
+		return TEXT("error: the render target could not be read back");
+	}
+	for (FColor& Pixel : Pixels)
+	{
+		Pixel.A = 255;
+	}
+	IFileManager::Get().MakeDirectory(*FPaths::GetPath(FilePath), true);
+	if (!FImageUtils::SaveImageByExtension(*FilePath, FImageView(Pixels.GetData(), Width, Height)))
+	{
+		return TEXT("error: the PNG could not be written");
+	}
+	const FString Layout = Map->DescribeMapLayout();
+	if (!Layout.StartsWith(TEXT("{")))
+	{
+		return TEXT("error: the map drew no layout");
+	}
+	return FString::Printf(TEXT("{\"dpi_curve\":%.4f,\"pixels\":[%d,%d],"), Dpi, Width, Height) + Layout.Mid(1);
 }
 
 bool UWonderlandUiSubsystem::TeleportToSelected()

@@ -45,6 +45,90 @@ namespace
 
 /* ---------------------------------------------------------------- canvas */
 
+namespace
+{
+	// The zoom controls sit in the canvas's bottom-left corner and the scale bar in its bottom-right; the compass is
+	// top-right. Labels keep out of all three.
+	constexpr float CanvasMargin = 14.0f;
+	constexpr float ControlSize = 26.0f;
+	constexpr float ControlGap = 6.0f;
+	// Two markers closer than this (centre to centre, px) fold into one group. Wider than two HALOS, so no two drawn
+	// markers' glows touch. 17 px (the first cut) left eight of the Golden Arrival's markers within 40 px of the gate at
+	// FIT, halo on halo: exactly the knot the founder photographed, only unlabelled.
+	constexpr float GroupPx = 28.0f;
+	// Label candidates: eight directions, three distances. Ring 0 sits against the marker's halo; rings 1 and 2 stand off
+	// on a leader line.
+	constexpr float RingStep = 24.0f;
+
+	float MarkerRadius(int32 Tier, bool bHot)
+	{
+		if (bHot)
+		{
+			return 7.5f;
+		}
+		return Tier == 0 ? 6.5f : (Tier == 1 ? 6.0f : 5.5f);
+	}
+
+	/** The soft glow round a marker: what the eye reads as the marker's footprint, so it is what labels keep clear of. */
+	float HaloRadius(float Radius)
+	{
+		return Radius * 1.9f;
+	}
+
+	/** Two segments properly cross (touching at an end does not count: a line may start where another ends). */
+	bool SegmentsCross(const FVector2f& A, const FVector2f& B, const FVector2f& C, const FVector2f& D)
+	{
+		auto Cross = [](const FVector2f& O, const FVector2f& P, const FVector2f& Q)
+		{
+			return (P.X - O.X) * (Q.Y - O.Y) - (P.Y - O.Y) * (Q.X - O.X);
+		};
+		const float D1 = Cross(C, D, A);
+		const float D2 = Cross(C, D, B);
+		const float D3 = Cross(A, B, C);
+		const float D4 = Cross(A, B, D);
+		return ((D1 > 0.0f && D2 < 0.0f) || (D1 < 0.0f && D2 > 0.0f)) && ((D3 > 0.0f && D4 < 0.0f) || (D3 < 0.0f && D4 > 0.0f));
+	}
+
+	bool SegmentHitsCircle(const FVector2f& A, const FVector2f& B, const FVector2f& C, float R)
+	{
+		const FVector2f AB = B - A;
+		const float Len2 = AB.SizeSquared();
+		const float T = Len2 > KINDA_SMALL_NUMBER ? FMath::Clamp(FVector2f::DotProduct(C - A, AB) / Len2, 0.0f, 1.0f) : 0.0f;
+		return FVector2f::DistSquared(A + AB * T, C) < R * R;
+	}
+
+	bool SegmentHitsRect(const FVector2f& A, const FVector2f& B, const FSlateRect& Rect)
+	{
+		// sampled: the segments are a few dozen pixels, so nine interior samples cannot step over a label
+		for (int32 Step = 1; Step <= 9; ++Step)
+		{
+			const FVector2f P = A + (B - A) * (Step / 10.0f);
+			if (P.X > Rect.Left && P.X < Rect.Right && P.Y > Rect.Top && P.Y < Rect.Bottom)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool RectHitsCircle(const FSlateRect& Rect, const FVector2f& C, float R)
+	{
+		const float NX = FMath::Clamp(C.X, Rect.Left, Rect.Right);
+		const float NY = FMath::Clamp(C.Y, Rect.Top, Rect.Bottom);
+		return FMath::Square(NX - C.X) + FMath::Square(NY - C.Y) < R * R;
+	}
+
+	bool RectsOverlap(const FSlateRect& A, const FSlateRect& B, float Pad)
+	{
+		return A.Left < B.Right + Pad && B.Left < A.Right + Pad && A.Top < B.Bottom + Pad && B.Top < A.Bottom + Pad;
+	}
+
+	FString JsonNumber(double Value)
+	{
+		return FString::Printf(TEXT("%.3f"), Value);
+	}
+}
+
 void SWonderlandMapCanvas::Construct(const FArguments& InArgs)
 {
 	OnPick = InArgs._OnPick;
@@ -62,13 +146,27 @@ void SWonderlandMapCanvas::SetStops(const TArray<FWonderlandMapStop>& InStops, c
 	Current = InCurrent;
 	Hovered = INDEX_NONE;
 	RecomputeBounds();
-	Invalidate(EInvalidateWidgetReason::Paint);
+	// THE MAP OPENS ON THE WHOLE WORLD, as it always has; zoom and pan last while it stays open.
+	FitView();
 }
 
 void SWonderlandMapCanvas::SetSelected(int32 Index)
 {
 	Selected = Index;
 	Invalidate(EInvalidateWidgetReason::Paint);
+}
+
+int32 SWonderlandMapCanvas::TierOf(const FWonderlandTravelDestination& Row)
+{
+	// THE ORDER A NAME IS GIVEN SPACE IN: where every visit begins, then the nation quarters and the core's quarter,
+	// then the landmarks, then the districts. The selected and hovered place outrank all of them (see BuildLayout).
+	switch (Row.Kind)
+	{
+	case EWonderlandTravelKind::Arrival:  return 0;
+	case EWonderlandTravelKind::Quarter:  return 1;
+	case EWonderlandTravelKind::Landmark: return 2;
+	default:                              return 3;
+	}
 }
 
 void SWonderlandMapCanvas::RecomputeBounds()
@@ -94,34 +192,374 @@ void SWonderlandMapCanvas::RecomputeBounds()
 	BoundsMax = Centre + Extent;
 }
 
-FVector2f SWonderlandMapCanvas::ToLocal(const FVector2D& WorldXY, const FVector2f& Size) const
+void SWonderlandMapCanvas::ClampView()
 {
-	// North-up as the arrival sees it: the castle (+Y) is up, and screen-right is -X,
-	// which is what is on your right when you stand at the gate.
+	Zoom = FMath::Clamp(Zoom, 1.0f, MaxZoom);
+	if (Zoom <= 1.0001f)
+	{
+		ViewCentre = (BoundsMin + BoundsMax) * 0.5;
+		return;
+	}
+	ViewCentre.X = FMath::Clamp(ViewCentre.X, BoundsMin.X, BoundsMax.X);
+	ViewCentre.Y = FMath::Clamp(ViewCentre.Y, BoundsMin.Y, BoundsMax.Y);
+}
+
+void SWonderlandMapCanvas::SetZoom(float InZoom)
+{
+	Zoom = InZoom;
+	ClampView();
+	Hovered = INDEX_NONE;
+	Invalidate(EInvalidateWidgetReason::Paint);
+}
+
+void SWonderlandMapCanvas::FitView()
+{
+	SetZoom(1.0f);
+}
+
+void SWonderlandMapCanvas::CentreOn(int32 Index, float MinZoom)
+{
+	if (!Stops.IsValidIndex(Index))
+	{
+		return;
+	}
+	Zoom = FMath::Max(Zoom, MinZoom);
+	ViewCentre = Stops[Index].AnchorXY;
+	ClampView();
+	Invalidate(EInvalidateWidgetReason::Paint);
+}
+
+void SWonderlandMapCanvas::EnsureVisible(int32 Index)
+{
+	if (!Stops.IsValidIndex(Index) || LayoutSize.X <= 1.0f || Zoom <= 1.0001f)
+	{
+		return;
+	}
+	const FVector2f P = ToLocal(Stops[Index].AnchorXY, LayoutSize);
+	const float Inset = 48.0f;
+	if (P.X < Inset || P.Y < Inset || P.X > LayoutSize.X - Inset || P.Y > LayoutSize.Y - Inset)
+	{
+		ViewCentre = Stops[Index].AnchorXY;
+		ClampView();
+		Invalidate(EInvalidateWidgetReason::Paint);
+	}
+}
+
+double SWonderlandMapCanvas::PixelsPerUnit(const FVector2f& Size) const
+{
 	const double Pad = 40.0;
 	const double SpanX = FMath::Max(BoundsMax.X - BoundsMin.X, 1.0);
 	const double SpanY = FMath::Max(BoundsMax.Y - BoundsMin.Y, 1.0);
-	const double Scale = FMath::Min((Size.X - 2.0 * Pad) / SpanX, (Size.Y - 2.0 * Pad) / SpanY);
-	const double OffX = (Size.X - SpanX * Scale) * 0.5;
-	const double OffY = (Size.Y - SpanY * Scale) * 0.5;
-	return FVector2f(static_cast<float>(OffX + (BoundsMax.X - WorldXY.X) * Scale),
-		static_cast<float>(OffY + (BoundsMax.Y - WorldXY.Y) * Scale));
+	const double Fit = FMath::Max(FMath::Min((Size.X - 2.0 * Pad) / SpanX, (Size.Y - 2.0 * Pad) / SpanY), 1e-6);
+	return Fit * Zoom;
 }
 
-int32 SWonderlandMapCanvas::StopAt(const FGeometry& Geometry, const FVector2D& ScreenPosition) const
+FVector2f SWonderlandMapCanvas::ToLocal(const FVector2D& WorldXY, const FVector2f& Size) const
 {
-	const FVector2D LocalMouse = Geometry.AbsoluteToLocal(ScreenPosition);
-	const FVector2f Size(static_cast<float>(Geometry.GetLocalSize().X), static_cast<float>(Geometry.GetLocalSize().Y));
-	int32 Best = INDEX_NONE;
-	double BestDistance = 20.0;
+	// North-up as the arrival sees it: the castle (+Y) is up, and screen-right is -X, which is what is on your right
+	// when you stand at the gate. At zoom 1 this is exactly the old whole-world plan; zoom scales it about ViewCentre.
+	const double Scale = PixelsPerUnit(Size);
+	return FVector2f(static_cast<float>(Size.X * 0.5 + (ViewCentre.X - WorldXY.X) * Scale),
+		static_cast<float>(Size.Y * 0.5 + (ViewCentre.Y - WorldXY.Y) * Scale));
+}
+
+void SWonderlandMapCanvas::ZoomAbout(float NewZoom, const FVector2f& LocalPoint, const FVector2f& Size)
+{
+	// the world point under the cursor stays under the cursor
+	const double Before = PixelsPerUnit(Size);
+	const FVector2D Under(ViewCentre.X - (LocalPoint.X - Size.X * 0.5) / Before, ViewCentre.Y - (LocalPoint.Y - Size.Y * 0.5) / Before);
+	Zoom = FMath::Clamp(NewZoom, 1.0f, MaxZoom);
+	const double After = PixelsPerUnit(Size);
+	ViewCentre = FVector2D(Under.X + (LocalPoint.X - Size.X * 0.5) / After, Under.Y + (LocalPoint.Y - Size.Y * 0.5) / After);
+	ClampView();
+	Hovered = INDEX_NONE;
+	Invalidate(EInvalidateWidgetReason::Paint);
+}
+
+FSlateRect SWonderlandMapCanvas::ControlRect(int32 Which) const
+{
+	const float Bottom = LayoutSize.Y - CanvasMargin - 4.0f;
+	float Left = CanvasMargin + 4.0f;
+	for (int32 Index = 0; Index < Which; ++Index)
+	{
+		Left += (Index == 2 ? 44.0f : ControlSize) + ControlGap;
+	}
+	const float Width = Which == 2 ? 44.0f : ControlSize;
+	return FSlateRect(Left, Bottom - ControlSize, Left + Width, Bottom);
+}
+
+int32 SWonderlandMapCanvas::ControlAtLocal(const FVector2f& Local) const
+{
+	for (int32 Which = 0; Which < 3; ++Which)
+	{
+		const FSlateRect Rect = ControlRect(Which);
+		if (Local.X >= Rect.Left && Local.X <= Rect.Right && Local.Y >= Rect.Top && Local.Y <= Rect.Bottom)
+		{
+			return Which;
+		}
+	}
+	return INDEX_NONE;
+}
+
+void SWonderlandMapCanvas::BuildLayout(const FVector2f& Size) const
+{
+	LayoutSize = Size;
+	Layout.Reset();
+	Layout.SetNum(Stops.Num());
+	// THE SELECTED AND HOVERED PLACES ALWAYS STAND ALONE. The place being stood at does not need to: the YOU marker says
+	// where the player is, and forcing it too let it sit halo-on-halo beside a selected neighbour.
+	auto IsForced = [this](int32 Index) { return Index == Selected || Index == Hovered; };
+
+	// ---- 1. EVERY MARKER WHERE ITS ARRIVAL POINT PROJECTS. Nothing below moves one.
+	TArray<int32> Order;
 	for (int32 Index = 0; Index < Stops.Num(); ++Index)
 	{
-		const FVector2f P = ToLocal(Stops[Index].AnchorXY, Size);
-		const double Distance = FVector2D::Distance(LocalMouse, FVector2D(P.X, P.Y));
-		if (Distance < BestDistance)
+		FPlaced& Placed = Layout[Index];
+		Placed.Index = Index;
+		Placed.Tier = TierOf(Stops[Index].Row);
+		Placed.Marker = ToLocal(Stops[Index].AnchorXY, Size);
+		Placed.Radius = MarkerRadius(Placed.Tier, Index == Selected || Index == Hovered);
+		Placed.Halo = HaloRadius(Placed.Radius);
+		Placed.bOnScreen = Placed.Marker.X >= 2.0f && Placed.Marker.Y >= 2.0f && Placed.Marker.X <= Size.X - 2.0f && Placed.Marker.Y <= Size.Y - 2.0f;
+		if (Placed.bOnScreen)
+		{
+			Order.Add(Index);
+		}
+	}
+	const FVector2f Middle = Size * 0.5f;
+	Order.Sort([this, &IsForced, &Middle](int32 A, int32 B)
+	{
+		const bool FA = IsForced(A);
+		const bool FB = IsForced(B);
+		if (FA != FB) { return FA; }
+		if (Layout[A].Tier != Layout[B].Tier) { return Layout[A].Tier < Layout[B].Tier; }
+		const float DA = FVector2f::DistSquared(Layout[A].Marker, Middle);
+		const float DB = FVector2f::DistSquared(Layout[B].Marker, Middle);
+		if (!FMath::IsNearlyEqual(DA, DB)) { return DA < DB; }
+		return A < B;
+	});
+
+	// ---- 2. GROUPS: a marker within GroupPx of one already standing folds into it (the nearest), unless it is the
+	// selected, hovered or current place, which always stands on its own.
+	TArray<int32> Leaders;
+	for (const int32 Index : Order)
+	{
+		int32 Best = INDEX_NONE;
+		float BestDistance = GroupPx;
+		if (!IsForced(Index))
+		{
+			for (const int32 Leader : Leaders)
+			{
+				const float Distance = FVector2f::Distance(Layout[Index].Marker, Layout[Leader].Marker);
+				if (Distance < BestDistance)
+				{
+					BestDistance = Distance;
+					Best = Leader;
+				}
+			}
+		}
+		if (Best != INDEX_NONE)
+		{
+			Layout[Index].Leader = Best;
+			++Layout[Best].Members;
+		}
+		else
+		{
+			Layout[Index].bDrawn = true;
+			Leaders.Add(Index);
+		}
+	}
+
+	// ---- 3. LABELS, most important first, at the first candidate that collides with nothing already placed: no other
+	// label, no marker's halo, no leader line, and -- for a label set off on a line -- a line that crosses no halo, no
+	// label and no other line.
+	TArray<FSlateRect> Taken;
+	TArray<TPair<FVector2f, FVector2f>> Lines;
+	struct FDisc { FVector2f Centre; float Radius; int32 Owner; };
+	TArray<FDisc> Discs;
+	for (const int32 Leader : Leaders)
+	{
+		// the halo, or the selected ring where that is wider, plus a breath
+		const float Ring = Leader == Selected ? Layout[Leader].Radius + (Layout[Leader].Members > 0 ? 9.0f : 6.0f) : 0.0f;
+		Discs.Add({ Layout[Leader].Marker, FMath::Max(Layout[Leader].Halo, Ring) + 2.0f, Leader });
+	}
+	constexpr int32 YouOwner = -2;
+	bYouShown = false;
+	bYouLabel = false;
+	if (bHasPlayer)
+	{
+		YouAt = ToLocal(PlayerXY, Size);
+		bYouShown = YouAt.X >= 0.0f && YouAt.Y >= 0.0f && YouAt.X <= Size.X && YouAt.Y <= Size.Y;
+		if (bYouShown)
+		{
+			Discs.Add({ YouAt, 11.0f, YouOwner });
+		}
+	}
+	const TArray<FSlateRect> KeepOut = {
+		FSlateRect(Size.X - 64.0f, 0.0f, Size.X, 72.0f),                                          // compass
+		FSlateRect(0.0f, Size.Y - CanvasMargin - ControlSize - 12.0f, 190.0f, Size.Y),            // zoom controls
+		FSlateRect(Size.X - 190.0f, Size.Y - CanvasMargin - 30.0f, Size.X, Size.Y),                // scale bar
+	};
+	static const FVector2f Directions[8] = {
+		FVector2f(1.0f, 0.0f), FVector2f(-1.0f, 0.0f), FVector2f(0.7071f, -0.7071f), FVector2f(0.7071f, 0.7071f),
+		FVector2f(-0.7071f, -0.7071f), FVector2f(-0.7071f, 0.7071f), FVector2f(0.0f, -1.0f), FVector2f(0.0f, 1.0f),
+	};
+
+	// ONE PLACEMENT RULE for every label on the plan, the YOU tag included.
+	auto TryPlace = [&](const FVector2f& Marker, float Footprint, const TArray<int32>& Owners, const FVector2f& Box,
+		FSlateRect& OutRect, bool& bOutLine, FVector2f& OutFrom, FVector2f& OutTo) -> bool
+	{
+		for (int32 Ring = 0; Ring < 3; ++Ring)
+		{
+			for (int32 Octant = 0; Octant < 8; ++Octant)
+			{
+				const FVector2f D = Directions[Octant];
+				const FVector2f A = Marker + D * (Footprint + 3.0f + Ring * RingStep);
+				// the box's corner or edge nearest the marker sits on A, so the box extends AWAY from the marker
+				const float Left = D.X > 0.1f ? A.X : (D.X < -0.1f ? A.X - Box.X : A.X - Box.X * 0.5f);
+				const float Top = D.Y > 0.1f ? A.Y : (D.Y < -0.1f ? A.Y - Box.Y : A.Y - Box.Y * 0.5f);
+				const FSlateRect Rect(Left, Top, Left + Box.X, Top + Box.Y);
+				if (Rect.Left < CanvasMargin || Rect.Top < CanvasMargin || Rect.Right > Size.X - CanvasMargin || Rect.Bottom > Size.Y - CanvasMargin)
+				{
+					continue;
+				}
+				bool bClear = true;
+				for (int32 K = 0; bClear && K < KeepOut.Num(); ++K)
+				{
+					bClear = !RectsOverlap(Rect, KeepOut[K], 0.0f);
+				}
+				for (int32 T = 0; bClear && T < Taken.Num(); ++T)
+				{
+					bClear = !RectsOverlap(Rect, Taken[T], 3.0f);
+				}
+				for (int32 C = 0; bClear && C < Discs.Num(); ++C)
+				{
+					bClear = Owners.Contains(Discs[C].Owner) || !RectHitsCircle(Rect, Discs[C].Centre, Discs[C].Radius);
+				}
+				for (int32 L = 0; bClear && L < Lines.Num(); ++L)
+				{
+					bClear = !SegmentHitsRect(Lines[L].Key, Lines[L].Value, Rect);
+				}
+				const FVector2f From = Marker + D * Footprint;
+				if (bClear && Ring > 0)
+				{
+					for (int32 C = 0; bClear && C < Discs.Num(); ++C)
+					{
+						bClear = Owners.Contains(Discs[C].Owner) || !SegmentHitsCircle(From, A, Discs[C].Centre, Discs[C].Radius);
+					}
+					for (int32 T = 0; bClear && T < Taken.Num(); ++T)
+					{
+						bClear = !SegmentHitsRect(From, A, Taken[T]);
+					}
+					for (int32 L = 0; bClear && L < Lines.Num(); ++L)
+					{
+						bClear = !SegmentsCross(From, A, Lines[L].Key, Lines[L].Value);
+					}
+				}
+				if (!bClear)
+				{
+					continue;
+				}
+				OutRect = Rect;
+				bOutLine = Ring > 0;
+				OutFrom = From;
+				OutTo = A;
+				Taken.Add(Rect);
+				if (Ring > 0)
+				{
+					Lines.Add(TPair<FVector2f, FVector2f>(From, A));
+				}
+				return true;
+			}
+		}
+		return false;
+	};
+
+	// YOU FIRST: where the player is matters more than any single name, and it must never be printed over a marker.
+	if (bYouShown)
+	{
+		const FVector2f YouText = MeasureText(TEXT("YOU"), WonderlandUi::Sans(9, true, 120));
+		bool bLine = false;
+		FVector2f From, To;
+		// STANDING ON A PLACE -- the usual case, after any teleport -- the YOU marker sits inside that marker's halo, and a
+		// tag that kept clear of it from inside could never be placed. So the two are one footprint for the YOU tag.
+		TArray<int32> YouOwners = { YouOwner };
+		float YouFootprint = 11.0f;
+		for (const FDisc& Disc : Discs)
+		{
+			const float Distance = FVector2f::Distance(Disc.Centre, YouAt);
+			if (Disc.Owner >= 0 && Distance < Disc.Radius)
+			{
+				YouOwners.Add(Disc.Owner);
+				YouFootprint = FMath::Max(YouFootprint, Distance + Disc.Radius);
+			}
+		}
+		bYouLabel = TryPlace(YouAt, YouFootprint, YouOwners, FVector2f(YouText.X + 8.0f, YouText.Y + 2.0f), YouLabel, bLine, From, To);
+		bYouLine = bLine;
+		YouLineFrom = From;
+		YouLineTo = To;
+	}
+	for (const int32 Index : Order)
+	{
+		FPlaced& Placed = Layout[Index];
+		if (!Placed.bDrawn)
+		{
+			continue;
+		}
+		const bool bHot = Index == Selected || Index == Hovered;
+		const FSlateFontInfo Font = bHot ? WonderlandUi::Sans(12, true, 40)
+			: (Placed.Tier <= 1 ? WonderlandUi::Sans(11, true, 30) : WonderlandUi::Sans(10, false, 20));
+		FString Text = Stops[Index].Row.DisplayName.ToString();
+		if (Placed.Members > 0)
+		{
+			Text += FString::Printf(TEXT("  +%d"), Placed.Members);
+		}
+		const FVector2f Measured = MeasureText(Text, Font);
+		const FVector2f Box(Measured.X + 10.0f, Measured.Y + 4.0f);
+		float Footprint = Discs.FindByPredicate([Index](const FDisc& Disc) { return Disc.Owner == Index; })->Radius;
+		TArray<int32> Owners = { Index };
+		// and the place the player stands on takes the YOU marker into its own footprint, the same way round
+		if (bYouShown && FVector2f::Distance(YouAt, Placed.Marker) < Footprint)
+		{
+			Owners.Add(YouOwner);
+			Footprint = FMath::Max(Footprint, FVector2f::Distance(YouAt, Placed.Marker) + 11.0f);
+		}
+		Placed.bLabel = TryPlace(Placed.Marker, Footprint, Owners, Box, Placed.Label, Placed.bLeaderLine, Placed.LineFrom, Placed.LineTo);
+		if (!Placed.bLabel && IsForced(Index))
+		{
+			// THE SELECTED OR HOVERED PLACE IS ALWAYS NAMED -- beside its marker, to the side with the most room.
+			const float Left = Placed.Marker.X < Size.X * 0.5f ? Placed.Marker.X + Footprint + 3.0f : Placed.Marker.X - Footprint - 3.0f - Box.X;
+			Placed.bLabel = true;
+			Placed.bLeaderLine = false;
+			Placed.Label = FSlateRect(Left, Placed.Marker.Y - Box.Y * 0.5f, Left + Box.X, Placed.Marker.Y + Box.Y * 0.5f);
+			Taken.Add(Placed.Label);
+		}
+	}
+}
+
+int32 SWonderlandMapCanvas::StopAtLocal(const FVector2f& Local) const
+{
+	for (const FPlaced& Placed : Layout)
+	{
+		if (Placed.bDrawn && Placed.bLabel && Local.X >= Placed.Label.Left - 2.0f && Local.X <= Placed.Label.Right + 2.0f
+			&& Local.Y >= Placed.Label.Top - 2.0f && Local.Y <= Placed.Label.Bottom + 2.0f)
+		{
+			return Placed.Index;
+		}
+	}
+	int32 Best = INDEX_NONE;
+	float BestDistance = TNumericLimits<float>::Max();
+	for (const FPlaced& Placed : Layout)
+	{
+		if (!Placed.bDrawn)
+		{
+			continue;
+		}
+		const float Distance = FVector2f::Distance(Local, Placed.Marker);
+		if (Distance <= FMath::Max(12.0f, Placed.Radius + 6.0f) && Distance < BestDistance)
 		{
 			BestDistance = Distance;
-			Best = Index;
+			Best = Placed.Index;
 		}
 	}
 	return Best;
@@ -134,6 +572,9 @@ int32 SWonderlandMapCanvas::OnPaint(const FPaintArgs& Args, const FGeometry& All
 	const double Now = FSlateApplication::Get().GetCurrentTime();
 	int32 Layer = LayerId;
 	TArray<FVector2f> Points;
+	LayoutAbsolute = FVector2f(static_cast<float>(AllottedGeometry.GetAbsolutePosition().X), static_cast<float>(AllottedGeometry.GetAbsolutePosition().Y));
+	LayoutScale = AllottedGeometry.GetAccumulatedLayoutTransform().GetScale();
+	BuildLayout(Size);
 
 	auto Disc = [&](const FVector2f& Centre, float Diameter, const FLinearColor& Color, int32 AtLayer)
 	{
@@ -146,6 +587,11 @@ int32 SWonderlandMapCanvas::OnPaint(const FPaintArgs& Args, const FGeometry& All
 		const FVector2f Measured = MeasureText(String, Font);
 		FSlateDrawElement::MakeText(OutDrawElements, AtLayer,
 			AllottedGeometry.ToPaintGeometry(Measured, FSlateLayoutTransform(At)), String, Font, ESlateDrawEffect::None, Color);
+	};
+	auto Line = [&](const FVector2f& A, const FVector2f& B, const FLinearColor& Color, float Thickness, int32 AtLayer)
+	{
+		TArray<FVector2f> Segment = { A, B };
+		FSlateDrawElement::MakeLines(OutDrawElements, AtLayer, AllottedGeometry.ToPaintGeometry(), Segment, ESlateDrawEffect::None, Color, true, Thickness);
 	};
 
 	// MakeBox does not apply a brush's own tint -- SImage and SBorder multiply it in before
@@ -160,10 +606,8 @@ int32 SWonderlandMapCanvas::OnPaint(const FPaintArgs& Args, const FGeometry& All
 	{
 		const float X = Size.X * Index / 10.0f;
 		const float Y = Size.Y * Index / 10.0f;
-		TArray<FVector2f> Vertical = { FVector2f(X, 16.0f), FVector2f(X, Size.Y - 16.0f) };
-		TArray<FVector2f> Horizontal = { FVector2f(16.0f, Y), FVector2f(Size.X - 16.0f, Y) };
-		FSlateDrawElement::MakeLines(OutDrawElements, Layer, AllottedGeometry.ToPaintGeometry(), Vertical, ESlateDrawEffect::None, WonderlandUi::Gold(0.045f), true, 1.0f);
-		FSlateDrawElement::MakeLines(OutDrawElements, Layer, AllottedGeometry.ToPaintGeometry(), Horizontal, ESlateDrawEffect::None, WonderlandUi::Gold(0.045f), true, 1.0f);
+		Line(FVector2f(X, 16.0f), FVector2f(X, Size.Y - 16.0f), WonderlandUi::Gold(0.045f), 1.0f, Layer);
+		Line(FVector2f(16.0f, Y), FVector2f(Size.X - 16.0f, Y), WonderlandUi::Gold(0.045f), 1.0f, Layer);
 	}
 	auto Corner = [&](const FVector2f& P, const FVector2f& AlongX, const FVector2f& AlongY)
 	{
@@ -175,71 +619,182 @@ int32 SWonderlandMapCanvas::OnPaint(const FPaintArgs& Args, const FGeometry& All
 	Corner(FVector2f(14.0f, Size.Y - 14.0f), FVector2f(1.0f, 0.0f), FVector2f(0.0f, -1.0f));
 	Corner(FVector2f(Size.X - 14.0f, Size.Y - 14.0f), FVector2f(-1.0f, 0.0f), FVector2f(0.0f, -1.0f));
 	Text(TEXT("N"), FVector2f(Size.X - 42.0f, 22.0f), WonderlandUi::Sans(11, true), WonderlandUi::Gold(0.9f), Layer);
-	TArray<FVector2f> NorthTick = { FVector2f(Size.X - 37.5f, 42.0f), FVector2f(Size.X - 37.5f, 60.0f) };
-	FSlateDrawElement::MakeLines(OutDrawElements, Layer, AllottedGeometry.ToPaintGeometry(), NorthTick, ESlateDrawEffect::None, WonderlandUi::Gold(0.7f), true, 1.5f);
+	Line(FVector2f(Size.X - 37.5f, 42.0f), FVector2f(Size.X - 37.5f, 60.0f), WonderlandUi::Gold(0.7f), 1.5f, Layer);
 	++Layer;
 
 	// Soft rings around the arrival: where every visit begins.
-	for (const FWonderlandMapStop& Stop : Stops)
+	for (const FPlaced& Placed : Layout)
 	{
-		if (Stop.Row.Kind == EWonderlandTravelKind::Arrival)
+		if (Placed.bOnScreen && Stops[Placed.Index].Row.Kind == EWonderlandTravelKind::Arrival)
 		{
-			const FVector2f P = ToLocal(Stop.AnchorXY, Size);
 			for (int32 Ring = 1; Ring <= 3; ++Ring)
 			{
-				AddRing(Points, P, 34.0f * Ring);
+				AddRing(Points, Placed.Marker, 34.0f * Ring);
 				FSlateDrawElement::MakeLines(OutDrawElements, Layer, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WonderlandUi::Gold(0.10f / Ring), true, 1.0f);
 			}
 		}
 	}
 	++Layer;
 
-	const int32 MarkerLayer = Layer;
-	const int32 LabelLayer = Layer + 3;
-	for (int32 Index = 0; Index < Stops.Num(); ++Index)
+	// ---- THE FOLDED PLACES, as small dots where they really are, and the leader lines -- under every marker.
+	const int32 DotLayer = Layer;
+	const int32 MarkerLayer = Layer + 1;
+	const int32 LabelLayer = Layer + 5;
+	for (const FPlaced& Placed : Layout)
 	{
-		const FWonderlandMapStop& Stop = Stops[Index];
-		const FVector2f P = ToLocal(Stop.AnchorXY, Size);
-		const bool bHot = Index == Hovered || Index == Selected;
-		const FLinearColor Core = KindColor(Stop.Row.Kind);
+		if (Placed.bOnScreen && !Placed.bDrawn)
+		{
+			Disc(Placed.Marker, 5.0f, KindColor(Stops[Placed.Index].Row.Kind).CopyWithNewOpacity(0.62f), DotLayer);
+		}
+		if (Placed.bLabel && Placed.bLeaderLine)
+		{
+			Line(Placed.LineFrom, Placed.LineTo, WonderlandUi::Gold(0.42f), 1.0f, DotLayer);
+		}
+	}
 
-		Disc(P, bHot ? 38.0f : 26.0f, Core.CopyWithNewOpacity(bHot ? 0.24f : 0.13f), MarkerLayer);
-		Disc(P, bHot ? 15.0f : 11.0f, Core, MarkerLayer + 1);
-		Disc(P, bHot ? 6.0f : 4.5f, WonderlandUi::Srgb(10, 12, 20), MarkerLayer + 2);
+	for (const FPlaced& Placed : Layout)
+	{
+		if (!Placed.bDrawn)
+		{
+			continue;
+		}
+		const int32 Index = Placed.Index;
+		const FVector2f P = Placed.Marker;
+		const bool bHot = Index == Hovered || Index == Selected;
+		const FLinearColor Core = KindColor(Stops[Index].Row.Kind);
+		const float D = Placed.Radius * 2.0f;
+		Disc(P, Placed.Halo * 2.0f, Core.CopyWithNewOpacity(bHot ? 0.24f : 0.13f), MarkerLayer);
+		Disc(P, D, Core, MarkerLayer + 1);
+		Disc(P, D * 0.4f, WonderlandUi::Srgb(10, 12, 20), MarkerLayer + 2);
+		if (Placed.Members > 0)
+		{
+			// A GROUP: one ring round the marker that stands for it (its label carries the count).
+			AddRing(Points, P, Placed.Radius + 4.5f, 28);
+			FSlateDrawElement::MakeLines(OutDrawElements, MarkerLayer + 2, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Core.CopyWithNewOpacity(0.75f), true, 1.5f);
+		}
 		if (Index == Selected)
 		{
-			AddRing(Points, P, 21.0f);
-			FSlateDrawElement::MakeLines(OutDrawElements, MarkerLayer + 2, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WonderlandUi::Gold(), true, 2.0f);
+			AddRing(Points, P, Placed.Radius + (Placed.Members > 0 ? 9.0f : 6.0f));
+			FSlateDrawElement::MakeLines(OutDrawElements, MarkerLayer + 3, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WonderlandUi::Gold(), true, 2.0f);
 		}
 		if (Index == Current)
 		{
 			const float Pulse = 0.5f + 0.5f * FMath::Sin(static_cast<float>(Now) * 3.0f);
-			AddRing(Points, P, 16.0f + 7.0f * Pulse);
-			FSlateDrawElement::MakeLines(OutDrawElements, MarkerLayer + 2, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WonderlandUi::Sky(0.9f - 0.5f * Pulse), true, 1.5f);
+			AddRing(Points, P, Placed.Radius + 3.0f + 7.0f * Pulse);
+			FSlateDrawElement::MakeLines(OutDrawElements, MarkerLayer + 3, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WonderlandUi::Sky(0.9f - 0.5f * Pulse), true, 1.5f);
 		}
-		const FString Label = Stop.Row.DisplayName.ToString();
-		Text(Label, P + FVector2f(bHot ? 20.0f : 15.0f, -10.0f),
-			bHot ? WonderlandUi::Sans(12, true, 40) : WonderlandUi::Sans(10, false, 20),
-			bHot ? WonderlandUi::Gold() : WonderlandUi::Cream(0.84f), LabelLayer);
+		if (!Placed.bLabel)
+		{
+			continue;
+		}
+		// THE LABEL, on a dark plate so it reads over the grid and the rings.
+		const FSlateFontInfo Font = bHot ? WonderlandUi::Sans(12, true, 40)
+			: (Placed.Tier <= 1 ? WonderlandUi::Sans(11, true, 30) : WonderlandUi::Sans(10, false, 20));
+		const FSlateRect& Rect = Placed.Label;
+		FSlateDrawElement::MakeBox(OutDrawElements, LabelLayer,
+			AllottedGeometry.ToPaintGeometry(FVector2f(Rect.Right - Rect.Left, Rect.Bottom - Rect.Top), FSlateLayoutTransform(FVector2f(Rect.Left, Rect.Top))),
+			&Plate, ESlateDrawEffect::None, Plate.TintColor.GetSpecifiedColor());
+		const FString Name = Stops[Index].Row.DisplayName.ToString();
+		const FLinearColor NameColour = bHot ? WonderlandUi::Gold() : (Placed.Tier <= 1 ? WonderlandUi::Cream(0.96f) : WonderlandUi::Cream(0.84f));
+		Text(Name, FVector2f(Rect.Left + 5.0f, Rect.Top + 2.0f), Font, NameColour, LabelLayer + 1);
+		if (Placed.Members > 0)
+		{
+			const FVector2f NameSize = MeasureText(Name, Font);
+			Text(FString::Printf(TEXT("  +%d"), Placed.Members), FVector2f(Rect.Left + 5.0f + NameSize.X, Rect.Top + 2.0f), Font, WonderlandUi::Gold(0.85f), LabelLayer + 1);
+		}
 	}
 
-	if (bHasPlayer)
+	if (bYouShown)
 	{
-		const FVector2f P = ToLocal(PlayerXY, Size);
 		const float Pulse = 0.5f + 0.5f * FMath::Sin(static_cast<float>(Now) * 4.0f);
-		Disc(P, 22.0f + 10.0f * Pulse, WonderlandUi::Sky(0.22f * (1.0f - Pulse) + 0.05f), LabelLayer + 1);
-		Disc(P, 9.0f, WonderlandUi::Sky(), LabelLayer + 2);
-		Text(TEXT("YOU"), P + FVector2f(10.0f, 4.0f), WonderlandUi::Sans(9, true, 120), WonderlandUi::Sky(), LabelLayer + 2);
+		Disc(YouAt, 22.0f + 10.0f * Pulse, WonderlandUi::Sky(0.22f * (1.0f - Pulse) + 0.05f), LabelLayer + 2);
+		Disc(YouAt, 9.0f, WonderlandUi::Sky(), LabelLayer + 3);
+		if (bYouLabel)
+		{
+			// placed like every other label (BuildLayout), so it is never printed over a marker
+			if (bYouLine)
+			{
+				Line(YouLineFrom, YouLineTo, WonderlandUi::Sky(0.55f), 1.0f, LabelLayer + 2);
+			}
+			FSlateDrawElement::MakeBox(OutDrawElements, LabelLayer + 2,
+				AllottedGeometry.ToPaintGeometry(FVector2f(YouLabel.Right - YouLabel.Left, YouLabel.Bottom - YouLabel.Top), FSlateLayoutTransform(FVector2f(YouLabel.Left, YouLabel.Top))),
+				&Plate, ESlateDrawEffect::None, Plate.TintColor.GetSpecifiedColor());
+			Text(TEXT("YOU"), FVector2f(YouLabel.Left + 4.0f, YouLabel.Top + 1.0f), WonderlandUi::Sans(9, true, 120), WonderlandUi::Sky(), LabelLayer + 3);
+		}
 	}
-	return LabelLayer + 3;
+
+	// ---- THE ZOOM CONTROLS (bottom-left) and THE SCALE BAR (bottom-right): the map is read at more than one scale now,
+	// so it says which one it is at.
+	static const TCHAR* ControlText[3] = { TEXT("+"), TEXT("–"), TEXT("FIT") };
+	for (int32 Which = 0; Which < 3; ++Which)
+	{
+		const FSlateRect Rect = ControlRect(Which);
+		const bool bLit = Which == HoveredControl;
+		FSlateDrawElement::MakeBox(OutDrawElements, LabelLayer + 2,
+			AllottedGeometry.ToPaintGeometry(FVector2f(Rect.Right - Rect.Left, Rect.Bottom - Rect.Top), FSlateLayoutTransform(FVector2f(Rect.Left, Rect.Top))),
+			&ControlBrush, ESlateDrawEffect::None, bLit ? WonderlandUi::Srgb(64, 48, 18, 0.95f) : ControlBrush.TintColor.GetSpecifiedColor());
+		const FSlateFontInfo Font = Which == 2 ? WonderlandUi::Sans(9, true, 120) : WonderlandUi::Sans(13, true);
+		const FVector2f Measured = MeasureText(ControlText[Which], Font);
+		Text(ControlText[Which], FVector2f((Rect.Left + Rect.Right - Measured.X) * 0.5f, (Rect.Top + Rect.Bottom - Measured.Y) * 0.5f),
+			Font, WonderlandUi::Gold(bLit ? 1.0f : 0.85f), LabelLayer + 3);
+	}
+	{
+		const FSlateRect Fit = ControlRect(2);
+		Text(FString::Printf(TEXT("×%.1f"), Zoom), FVector2f(Fit.Right + 10.0f, Fit.Top + 6.0f), WonderlandUi::Mono(9), WonderlandUi::Dim(), LabelLayer + 3);
+	}
+	{
+		const double PixelsPerMetre = PixelsPerUnit(Size) * 100.0;
+		static const int32 Steps[] = { 10, 20, 50, 100, 200, 500, 1000, 2000 };
+		int32 Metres = Steps[0];
+		for (const int32 Step : Steps)
+		{
+			if (Step * PixelsPerMetre <= 150.0)
+			{
+				Metres = Step;
+			}
+		}
+		const float Length = static_cast<float>(Metres * PixelsPerMetre);
+		const float Right = Size.X - CanvasMargin - 8.0f;
+		const float Y = Size.Y - CanvasMargin - 10.0f;
+		Line(FVector2f(Right - Length, Y), FVector2f(Right, Y), WonderlandUi::Gold(0.75f), 1.5f, LabelLayer + 2);
+		Line(FVector2f(Right - Length, Y - 4.0f), FVector2f(Right - Length, Y + 1.0f), WonderlandUi::Gold(0.75f), 1.5f, LabelLayer + 2);
+		Line(FVector2f(Right, Y - 4.0f), FVector2f(Right, Y + 1.0f), WonderlandUi::Gold(0.75f), 1.5f, LabelLayer + 2);
+		const FString Caption = Metres >= 1000 ? FString::Printf(TEXT("%d km"), Metres / 1000) : FString::Printf(TEXT("%d m"), Metres);
+		const FVector2f Measured = MeasureText(Caption, WonderlandUi::Mono(9));
+		Text(Caption, FVector2f(Right - Length * 0.5f - Measured.X * 0.5f, Y - 6.0f - Measured.Y), WonderlandUi::Mono(9), WonderlandUi::Dim(), LabelLayer + 2);
+	}
+	return LabelLayer + 4;
 }
 
 FReply SWonderlandMapCanvas::OnMouseMove(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
-	const int32 Hit = StopAt(MyGeometry, MouseEvent.GetScreenSpacePosition());
-	if (Hit != Hovered)
+	const FVector2D Raw = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
+	const FVector2f Local(static_cast<float>(Raw.X), static_cast<float>(Raw.Y));
+	if (bPressed && HasMouseCapture())
+	{
+		if (!bDragged && FVector2f::Distance(Local, PressLocal) > 4.0f)
+		{
+			bDragged = true;
+		}
+		if (bDragged && Zoom > 1.0001f)
+		{
+			// PAN: the plan follows the pointer
+			const FVector2f Delta = Local - LastDragLocal;
+			const double Scale = PixelsPerUnit(LayoutSize.X > 1.0f ? LayoutSize
+				: FVector2f(static_cast<float>(MyGeometry.GetLocalSize().X), static_cast<float>(MyGeometry.GetLocalSize().Y)));
+			ViewCentre += FVector2D(Delta.X / Scale, Delta.Y / Scale);
+			ClampView();
+			Invalidate(EInvalidateWidgetReason::Paint);
+		}
+		LastDragLocal = Local;
+		return FReply::Handled();
+	}
+	const int32 Control = ControlAtLocal(Local);
+	const int32 Hit = Control == INDEX_NONE ? StopAtLocal(Local) : INDEX_NONE;
+	if (Hit != Hovered || Control != HoveredControl)
 	{
 		Hovered = Hit;
+		HoveredControl = Control;
 		Invalidate(EInvalidateWidgetReason::Paint);
 	}
 	return FReply::Unhandled();
@@ -247,30 +802,137 @@ FReply SWonderlandMapCanvas::OnMouseMove(const FGeometry& MyGeometry, const FPoi
 
 FReply SWonderlandMapCanvas::OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
-	if (MouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	if (MouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
 	{
-		const int32 Hit = StopAt(MyGeometry, MouseEvent.GetScreenSpacePosition());
-		if (Hit != INDEX_NONE)
-		{
-			OnPick.ExecuteIfBound(Hit);
-			return FReply::Handled();
-		}
+		return FReply::Unhandled();
 	}
-	return FReply::Unhandled();
+	const FVector2D Raw = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
+	bPressed = true;
+	bDragged = false;
+	PressLocal = FVector2f(static_cast<float>(Raw.X), static_cast<float>(Raw.Y));
+	LastDragLocal = PressLocal;
+	return FReply::Handled().CaptureMouse(SharedThis(this));
+}
+
+FReply SWonderlandMapCanvas::OnMouseButtonUp(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
+{
+	if (MouseEvent.GetEffectingButton() != EKeys::LeftMouseButton || !bPressed)
+	{
+		return FReply::Unhandled();
+	}
+	bPressed = false;
+	FReply Reply = FReply::Handled().ReleaseMouseCapture();
+	if (bDragged)
+	{
+		bDragged = false;
+		return Reply;
+	}
+	const FVector2D Raw = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
+	const FVector2f Local(static_cast<float>(Raw.X), static_cast<float>(Raw.Y));
+	const FVector2f Size(static_cast<float>(MyGeometry.GetLocalSize().X), static_cast<float>(MyGeometry.GetLocalSize().Y));
+	const int32 Control = ControlAtLocal(Local);
+	if (Control == 0 || Control == 1)
+	{
+		ZoomAbout(Control == 0 ? Zoom * 1.6f : Zoom / 1.6f, Size * 0.5f, Size);
+		return Reply;
+	}
+	if (Control == 2)
+	{
+		FitView();
+		return Reply;
+	}
+	const int32 Hit = StopAtLocal(Local);
+	if (Hit == INDEX_NONE)
+	{
+		return Reply;
+	}
+	OnPick.ExecuteIfBound(Hit);
+	// A GROUP OPENS UP WHEN IT IS CLICKED: the place it is named for is selected, and the view closes in on the group
+	// until its members stand apart.
+	if (Layout.IsValidIndex(Hit) && Layout[Hit].Members > 0 && Zoom < MaxZoom)
+	{
+		FVector2D Sum = Stops[Hit].AnchorXY;
+		int32 Count = 1;
+		for (const FPlaced& Placed : Layout)
+		{
+			if (Placed.Leader == Hit)
+			{
+				Sum += Stops[Placed.Index].AnchorXY;
+				++Count;
+			}
+		}
+		Zoom = FMath::Min(Zoom * 2.5f, MaxZoom);
+		ViewCentre = Sum / Count;
+		ClampView();
+		Invalidate(EInvalidateWidgetReason::Paint);
+	}
+	return Reply;
+}
+
+FReply SWonderlandMapCanvas::OnMouseWheel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
+{
+	const FVector2D Raw = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
+	const FVector2f Size(static_cast<float>(MyGeometry.GetLocalSize().X), static_cast<float>(MyGeometry.GetLocalSize().Y));
+	ZoomAbout(Zoom * FMath::Pow(1.3f, MouseEvent.GetWheelDelta()), FVector2f(static_cast<float>(Raw.X), static_cast<float>(Raw.Y)), Size);
+	return FReply::Handled();
 }
 
 void SWonderlandMapCanvas::OnMouseLeave(const FPointerEvent& MouseEvent)
 {
-	if (Hovered != INDEX_NONE)
+	if (Hovered != INDEX_NONE || HoveredControl != INDEX_NONE)
 	{
 		Hovered = INDEX_NONE;
+		HoveredControl = INDEX_NONE;
 		Invalidate(EInvalidateWidgetReason::Paint);
 	}
 }
 
 FCursorReply SWonderlandMapCanvas::OnCursorQuery(const FGeometry& MyGeometry, const FPointerEvent& CursorEvent) const
 {
-	return Hovered != INDEX_NONE ? FCursorReply::Cursor(EMouseCursor::Hand) : FCursorReply::Unhandled();
+	if (bDragged)
+	{
+		return FCursorReply::Cursor(EMouseCursor::GrabHandClosed);
+	}
+	if (Hovered != INDEX_NONE || HoveredControl != INDEX_NONE)
+	{
+		return FCursorReply::Cursor(EMouseCursor::Hand);
+	}
+	return Zoom > 1.0001f ? FCursorReply::Cursor(EMouseCursor::GrabHand) : FCursorReply::Unhandled();
+}
+
+FString SWonderlandMapCanvas::DescribeLayout() const
+{
+	TArray<FString> Rows;
+	for (const FPlaced& Placed : Layout)
+	{
+		if (!Stops.IsValidIndex(Placed.Index))
+		{
+			continue;
+		}
+		const FString Label = Placed.bLabel
+			? FString::Printf(TEXT("[%s,%s,%s,%s]"), *JsonNumber(Placed.Label.Left), *JsonNumber(Placed.Label.Top),
+				*JsonNumber(Placed.Label.Right - Placed.Label.Left), *JsonNumber(Placed.Label.Bottom - Placed.Label.Top))
+			: FString(TEXT("null"));
+		Rows.Add(FString::Printf(
+			TEXT("{\"id\":\"%s\",\"tier\":%d,\"marker\":[%s,%s],\"radius\":%s,\"halo\":%s,\"on_screen\":%s,\"drawn\":%s,\"in_cluster\":%s,\"leader\":\"%s\",\"members\":%d,\"label\":%s,\"line\":%s}"),
+			*Stops[Placed.Index].Row.Id.ToString(), Placed.Tier, *JsonNumber(Placed.Marker.X), *JsonNumber(Placed.Marker.Y), *JsonNumber(Placed.Radius),
+			*JsonNumber(Placed.Halo),
+			Placed.bOnScreen ? TEXT("true") : TEXT("false"), Placed.bDrawn ? TEXT("true") : TEXT("false"),
+			Placed.Leader != INDEX_NONE ? TEXT("true") : TEXT("false"),
+			Placed.Leader != INDEX_NONE && Stops.IsValidIndex(Placed.Leader) ? *Stops[Placed.Leader].Row.Id.ToString() : TEXT(""),
+			Placed.Members, *Label,
+			Placed.bLabel && Placed.bLeaderLine
+				? *FString::Printf(TEXT("[%s,%s,%s,%s]"), *JsonNumber(Placed.LineFrom.X), *JsonNumber(Placed.LineFrom.Y), *JsonNumber(Placed.LineTo.X), *JsonNumber(Placed.LineTo.Y))
+				: TEXT("null")));
+	}
+	const FString You = !bYouShown ? FString(TEXT("null")) : FString::Printf(TEXT("{\"marker\":[%s,%s],\"label\":%s}"),
+		*JsonNumber(YouAt.X), *JsonNumber(YouAt.Y),
+		bYouLabel ? *FString::Printf(TEXT("[%s,%s,%s,%s]"), *JsonNumber(YouLabel.Left), *JsonNumber(YouLabel.Top),
+			*JsonNumber(YouLabel.Right - YouLabel.Left), *JsonNumber(YouLabel.Bottom - YouLabel.Top)) : TEXT("null"));
+	return FString::Printf(TEXT("{\"size\":[%s,%s],\"centre\":[%s,%s],\"scale\":%s,\"zoom\":%s,\"abs\":[%s,%s],\"dpi\":%s,\"you\":%s,\"stops\":[%s]}"),
+		*JsonNumber(LayoutSize.X), *JsonNumber(LayoutSize.Y), *JsonNumber(ViewCentre.X), *JsonNumber(ViewCentre.Y),
+		*FString::Printf(TEXT("%.8f"), PixelsPerUnit(LayoutSize)), *JsonNumber(Zoom),
+		*JsonNumber(LayoutAbsolute.X), *JsonNumber(LayoutAbsolute.Y), *JsonNumber(LayoutScale), *You, *FString::Join(Rows, TEXT(",")));
 }
 
 /* ------------------------------------------------------------------ map */
@@ -396,7 +1058,7 @@ void SWonderlandWorldMap::Construct(const FArguments& InArgs)
 						+ SHorizontalBox::Slot().FillWidth(1.0f)
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 						[
-							SNew(STextBlock).Text(INVTEXT("M or Esc to close   \u00B7   click a place, then Teleport")).Font(WonderlandUi::Mono(10)).ColorAndOpacity(WonderlandUi::Dim())
+							SNew(STextBlock).Text(INVTEXT("M or Esc to close   \u00B7   scroll or + / \u2013 to zoom, drag to pan   \u00B7   click a place, then Teleport")).Font(WonderlandUi::Mono(10)).ColorAndOpacity(WonderlandUi::Dim())
 						]
 					]
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 14.0f)
@@ -490,6 +1152,8 @@ void SWonderlandWorldMap::Select(int32 Index)
 	if (Canvas.IsValid())
 	{
 		Canvas->SetSelected(SelectedIndex);
+		// a place chosen from the keyboard while the map is zoomed is brought onto the canvas
+		Canvas->EnsureVisible(SelectedIndex);
 	}
 	if (!NameText.IsValid())
 	{
@@ -527,6 +1191,45 @@ void SWonderlandWorldMap::Select(int32 Index)
 FName SWonderlandWorldMap::GetSelectedId() const
 {
 	return Stops.IsValidIndex(SelectedIndex) ? Stops[SelectedIndex].Row.Id : NAME_None;
+}
+
+void SWonderlandWorldMap::SetMapZoom(float Zoom)
+{
+	if (Canvas.IsValid())
+	{
+		Canvas->SetZoom(Zoom);
+	}
+}
+
+float SWonderlandWorldMap::GetMapZoom() const
+{
+	return Canvas.IsValid() ? Canvas->GetZoom() : 1.0f;
+}
+
+void SWonderlandWorldMap::FitMap()
+{
+	if (Canvas.IsValid())
+	{
+		Canvas->FitView();
+	}
+}
+
+bool SWonderlandWorldMap::CentreMapOn(FName Id)
+{
+	for (int32 Index = 0; Index < Stops.Num(); ++Index)
+	{
+		if (Stops[Index].Row.Id == Id && Canvas.IsValid())
+		{
+			Canvas->CentreOn(Index, 8.0f);
+			return true;
+		}
+	}
+	return false;
+}
+
+FString SWonderlandWorldMap::DescribeMapLayout() const
+{
+	return Canvas.IsValid() ? Canvas->DescribeLayout() : FString();
 }
 
 void SWonderlandWorldMap::SelectById(FName Id)
@@ -567,6 +1270,22 @@ FReply SWonderlandWorldMap::OnKeyDown(const FGeometry& MyGeometry, const FKeyEve
 	if (Key == EKeys::Enter)
 	{
 		return HandleTeleportClicked();
+	}
+	// THE PLAN'S ZOOM FROM THE KEYBOARD: + and - (either row), Home for the whole world.
+	if (Canvas.IsValid() && (Key == EKeys::Add || Key == EKeys::Equals))
+	{
+		Canvas->SetZoom(Canvas->GetZoom() * 1.6f);
+		return FReply::Handled();
+	}
+	if (Canvas.IsValid() && (Key == EKeys::Subtract || Key == EKeys::Hyphen))
+	{
+		Canvas->SetZoom(Canvas->GetZoom() / 1.6f);
+		return FReply::Handled();
+	}
+	if (Canvas.IsValid() && Key == EKeys::Home)
+	{
+		Canvas->FitView();
+		return FReply::Handled();
 	}
 	if (Stops.Num() > 0 && (Key == EKeys::Right || Key == EKeys::Down || Key == EKeys::Tab))
 	{

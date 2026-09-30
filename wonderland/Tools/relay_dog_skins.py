@@ -69,7 +69,8 @@ class Figure:
     def material(self, name, kind, rgb, strength=1.0, channel=None):
         # CHANNEL (founder, 2026-09-29): an optional player-colour tag written after the strength -- "secondary"
         # makes the surface follow the mascot SECONDARY at its authored brightness, "secondary_light" the same
-        # colour lifted toward white. The engine reads it in WonderlandCompanionFigure.cpp; older engines stop at
+        # colour lifted toward white, "secondary_deep" a deep shade of it for a lit cloth (Jack Flame's suit, 2026-09-30).
+        # The engine reads it in WonderlandCompanionFigure.cpp; older engines stop at
         # the strength, so a tagged figure loads everywhere.
         if name in self.material_names:
             return
@@ -2483,7 +2484,12 @@ def jack_flame():
       SINGLE LINE TAIL   the simple white tail, with a flame at its end.
     """
     figure = start("RELAY DOG SKIN -- JACK FLAME", 7301, JACK_EYES, 7.5)
-    figure.material("suit", "lit", (0.034, 0.032, 0.040), 1.0)
+    # AND THE SUIT FOLLOWS THE SECONDARY TOO (founder, 2026-09-30: "The Jack Flame secondary color must now control ALL
+    # THREE: flames, tie, suit ... while preserving material detail/readability"). `secondary_deep` gives the cloth a deep
+    # shade of the chosen colour (WonderlandMascotStyle::DeepAccentColour): at the authored near-black brightness any hue
+    # would still read black. The pinstripes stay white on it, and the NIGHTMARE COLLAR -- a separate item on the sheet --
+    # keeps its own black ("nightmare"), so the tie still sits on a black knot whatever colour the suit is.
+    figure.material("suit", "lit", (0.034, 0.032, 0.040), 1.0, channel="secondary_deep")
     figure.material("stripe", "lit", (0.780, 0.760, 0.720), 1.0)
     # ORANGE, NOT YELLOW. The first in-engine sheet (zzS06) rendered the fire YELLOW and the heart a yellow slab: the
     # engine's real-fire surfaces lift a flame's colour toward white, so the colour has to be authored deeper and
@@ -2494,6 +2500,7 @@ def jack_flame():
     figure.material("flame", "glow", (1.00, 0.20, 0.02), 0.55, channel="secondary")
     figure.material("flamepale", "glow", (1.00, 0.44, 0.06), 0.85, channel="secondary_light")
     figure.material("heart", "glow", (0.95, 0.08, 0.02), 0.6, channel="secondary")
+    figure.material("nightmare", "lit", (0.034, 0.032, 0.040), 1.0)
     base_dog(figure)
     d = DOG
     tile = d["tile"]
@@ -2551,7 +2558,7 @@ def jack_flame():
                 r = 1.0 + f * length
                 tall = 1.70 * (1.0 - f) ** 0.8 + 0.30
                 p = (0.9 - 0.6 * f - (i % 2) * 0.4, side * r * math.cos(a), collar_z + r * math.sin(a))
-                figure.box("collar", "suit", p, (0.9, 0.62, tall))
+                figure.box("collar", "nightmare", p, (0.9, 0.62, tall))
                 # the white edge along the top of each blade: the sheet's collar is black lined in white
                 if s % 2 == 0 and f < 0.92:
                     figure.box("collar", "stripe", (p[0] + 0.12, p[1], p[2] + tall * 0.5), (0.7, 0.58, 0.12))
@@ -2559,9 +2566,9 @@ def jack_flame():
     # collar's jewel and not as something hanging from the chin (round 1), and BELOW the head's underside (z 15.7):
     # the head overhangs to x 4.1 and would otherwise swallow it.
     heart = (td * 0.5 + 1.15, 0.0, torso_top - 1.9)
-    figure.box("collar", "suit", (heart[0] - 0.45, 0.0, heart[2] + 0.2), (0.9, 3.4, 2.8))
+    figure.box("collar", "nightmare", (heart[0] - 0.45, 0.0, heart[2] + 0.2), (0.9, 3.4, 2.8))
     for dy in (-1.0, 1.0):
-        figure.box("collar", "suit", (heart[0] - 0.35, dy * 1.9, heart[2] + 0.25), (0.8, 1.2, 2.2))
+        figure.box("collar", "nightmare", (heart[0] - 0.35, dy * 1.9, heart[2] + 0.25), (0.8, 1.2, 2.2))
     # a heart in five blocks: two lobes, a broad middle, and the point
     for (dy, dz, sy, sz) in ((-0.52, 0.55, 0.95, 0.85), (0.52, 0.55, 0.95, 0.85), (0.0, 0.05, 1.9, 0.95), (0.0, -0.62, 1.15, 0.6), (0.0, -1.05, 0.5, 0.45)):
         figure.box("collar", "heart", (heart[0] + 0.1, dy, heart[2] + dz), (0.5, sy, sz))

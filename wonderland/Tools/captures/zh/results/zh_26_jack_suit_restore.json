@@ -1,0 +1,248 @@
+{
+ "name": "zh_26_jack_suit_restore",
+ "started": "2026-09-30 11:41:49",
+ "status": "measured",
+ "mode": "restore",
+ "dll_mtime": 1790791545.2024937,
+ "tests": [
+  {
+   "id": "S00",
+   "name": "Jack Flame is worn with its figure's channels declared (suit tagged on the fixed build)",
+   "pass": true,
+   "detail": {
+    "channels": {
+     "bone": "None",
+     "bonedeep": "None",
+     "visor": "None",
+     "eye": "None",
+     "eyehalo": "None",
+     "suit": "secondary_deep",
+     "stripe": "None",
+     "flame": "secondary",
+     "flamepale": "secondary_light",
+     "heart": "secondary",
+     "nightmare": "None"
+    }
+   }
+  },
+  {
+   "id": "R01",
+   "name": "a fresh session restores the saved SECONDARY onto the suit, the tie and the fire (azure from disk)",
+   "pass": true,
+   "detail": {
+    "suit": [
+     0.26,
+     0.56,
+     1.0
+    ],
+    "tie": [
+     0.26,
+     0.56,
+     1.0
+    ],
+    "flame": [
+     0.26,
+     0.56,
+     1.0
+    ],
+    "secondary": "<Struct 'LinearColor' (0x0000022E1729A220) {r: 0.260000, g: 0.560000, b: 1.000000, a: 1.000000}>"
+   }
+  },
+  {
+   "id": "Z01",
+   "name": "the founder's own colours and skin are back exactly as they were",
+   "pass": true,
+   "detail": {}
+  }
+ ],
+ "founder_snapshot": {
+  "primary": [
+   0.8980000019073486,
+   0.8709999918937683,
+   0.800000011920929
+  ],
+  "secondary": [
+   0.8199999928474426,
+   0.14000000059604645,
+   0.18000000715255737
+  ],
+  "worn": "jack_flame"
+ },
+ "at_start": {
+  "primary": [
+   0.8980000019073486,
+   0.8709999918937683,
+   0.800000011920929
+  ],
+  "secondary": [
+   0.25999999046325684,
+   0.5600000023841858,
+   1.0
+  ],
+  "worn": "jack_flame"
+ },
+ "readings": {
+  "restored": {
+   "bone": {
+    "channel": "None",
+    "body": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "twin": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "bonedeep": {
+    "channel": "None",
+    "body": [
+     0.6196,
+     0.5749,
+     0.4736
+    ],
+    "twin": [
+     0.6196,
+     0.5749,
+     0.4736
+    ]
+   },
+   "visor": {
+    "channel": "None",
+    "body": [
+     0.045,
+     0.042,
+     0.05
+    ],
+    "twin": [
+     0.045,
+     0.042,
+     0.05
+    ]
+   },
+   "eye": {
+    "channel": "None",
+    "body": [
+     5.6256,
+     7.997,
+     2.1637
+    ],
+    "twin": [
+     5.6256,
+     7.997,
+     2.1637
+    ]
+   },
+   "eyehalo": {
+    "channel": "None",
+    "body": [
+     4219.1743,
+     5997.7192,
+     1622.7595
+    ],
+    "twin": [
+     1.5752,
+     2.2391,
+     0.6058
+    ]
+   },
+   "suit": {
+    "channel": "secondary_deep",
+    "body": [
+     0.0858,
+     0.1848,
+     0.33
+    ],
+    "twin": [
+     0.0858,
+     0.1848,
+     0.33
+    ]
+   },
+   "stripe": {
+    "channel": "None",
+    "body": [
+     0.78,
+     0.76,
+     0.72
+    ],
+    "twin": [
+     0.78,
+     0.76,
+     0.72
+    ]
+   },
+   "flame": {
+    "channel": "secondary",
+    "body": [
+     1.9338,
+     4.1651,
+     7.4376
+    ],
+    "twin": [
+     2.3205,
+     4.9981,
+     8.9252
+    ]
+   },
+   "flamepale": {
+    "channel": "secondary_light",
+    "body": [
+     6.391,
+     8.46,
+     11.4945
+    ],
+    "twin": [
+     7.6692,
+     10.152,
+     13.7935
+    ]
+   },
+   "heart": {
+    "channel": "secondary",
+    "body": [
+     2.0041,
+     4.3165,
+     7.7081
+    ],
+    "twin": [
+     2.4049,
+     5.1798,
+     9.2497
+    ]
+   },
+   "nightmare": {
+    "channel": "None",
+    "body": [
+     0.034,
+     0.032,
+     0.04
+    ],
+    "twin": [
+     0.034,
+     0.032,
+     0.04
+    ]
+   }
+  }
+ },
+ "restored_to": {
+  "primary": [
+   0.8980000019073486,
+   0.8709999918937683,
+   0.800000011920929
+  ],
+  "secondary": [
+   0.8199999928474426,
+   0.14000000059604645,
+   0.18000000715255737
+  ],
+  "worn": "jack_flame"
+ },
+ "all_pass": true,
+ "finished": "2026-09-30 11:42:33",
+ "seconds": 43.88,
+ "log": "S00 PASS Jack Flame is worn with its figure's channels declared (suit tagged on the fixed build)\nR01 PASS a fresh session restores the saved SECONDARY onto the suit, the tie and the fire (azure from disk)\nZ01 PASS the founder's own colours and skin are back exactly as they were\n"
+}

@@ -1,0 +1,329 @@
+{
+ "name": "zh_21_map_after_v2",
+ "started": "2026-09-30 11:10:41",
+ "status": "measured",
+ "mode": "after",
+ "dll_mtime": 1790791545.2024937,
+ "viewport_size": "<Struct 'Vector2D' (0x000001241B8AF0E0) {x: 1928.000000, y: 952.000000}>",
+ "viewport_scale": 0.881244421005249,
+ "build_has_layout_api": true,
+ "tests": [
+  {
+   "id": "M01",
+   "name": "no two drawn labels overlap, at zoom 1, 2, 4 and 8",
+   "pass": true,
+   "detail": {
+    "overlaps": {}
+   }
+  },
+  {
+   "id": "M02",
+   "name": "no label (the YOU tag included) covers another drawn marker's HALO",
+   "pass": true,
+   "detail": {
+    "covers": {}
+   }
+  },
+  {
+   "id": "M09",
+   "name": "no two drawn markers' halos overlap, at any zoom",
+   "pass": true,
+   "detail": {
+    "clashes": {}
+   }
+  },
+  {
+   "id": "M10",
+   "name": "no two leader lines cross, at any zoom",
+   "pass": true,
+   "detail": {
+    "crossings": {},
+    "lines": {
+     "1.0": 2,
+     "2.0": 0,
+     "4.0": 0,
+     "8.0": 0
+    }
+   }
+  },
+  {
+   "id": "M03",
+   "name": "every marker is its registry arrival point projected north-up (worst error < 0.5 px)",
+   "pass": true,
+   "detail": {
+    "worst_px": 0.001
+   }
+  },
+  {
+   "id": "M04",
+   "name": "every offered place is on the map at FIT, and every place on the canvas is drawn or counted in a group at every zoom",
+   "pass": true,
+   "detail": {
+    "missing": {}
+   }
+  },
+  {
+   "id": "M05",
+   "name": "zooming in reveals more names: the share of places on the canvas that are named rises with zoom",
+   "pass": true,
+   "detail": {
+    "share": {
+     "1.0": 0.636,
+     "2.0": 0.759,
+     "4.0": 1.0,
+     "8.0": 1.0
+    },
+    "named": {
+     "1.0": 21,
+     "2.0": 22,
+     "4.0": 17,
+     "8.0": 5
+    }
+   }
+  },
+  {
+   "id": "M06",
+   "name": "the important places are named at fit (Arrival Gate, the three nation quarters)",
+   "pass": true,
+   "detail": {
+    "fit_named": [
+     "arrival",
+     "colossal_key",
+     "dubel_forest",
+     "east_quarter",
+     "icarus_gate",
+     "icarus_heartland",
+     "icarus_quarter",
+     "icarus_tower_hamlets",
+     "lantern_hamlets",
+     "mushroom_grove",
+     "noctis_gate",
+     "noctis_heartland_southwest",
+     "noctis_heartland_west",
+     "noctis_quarter",
+     "south_meadows",
+     "tartarus_gate",
+     "tartarus_heartland_east",
+     "tartarus_heartland_southeast",
+     "tartarus_quarter",
+     "teapot_court",
+     "tower_rise"
+    ]
+   }
+  },
+  {
+   "id": "M05b",
+   "name": "centred on it at zoom 8, every one of the offered places shows its own name",
+   "pass": true,
+   "detail": {
+    "unnamed": []
+   }
+  },
+  {
+   "id": "M07",
+   "name": "the map is still the teleport: TW01 Tower Rise, TW02 Tower Lane, MG01 Mushroom Grove selected on the map and reached",
+   "pass": true,
+   "detail": {
+    "trips": {
+     "tower_rise": {
+      "selected": "tower_rise",
+      "started": true,
+      "seconds": 7.75,
+      "report": "Arrived at Tower Rise.",
+      "arrived": true
+     },
+     "tower_lane": {
+      "selected": "tower_lane",
+      "started": true,
+      "seconds": 1.0,
+      "report": "Arrived at Tower Lane.",
+      "arrived": true
+     },
+     "mushroom_grove": {
+      "selected": "mushroom_grove",
+      "started": true,
+      "seconds": 12.0,
+      "report": "Arrived at Mushroom Grove.",
+      "arrived": true
+     }
+    }
+   }
+  },
+  {
+   "id": "M08",
+   "name": "at 1920x1200 and the game's DPI scale: no label overlap, no label over a halo, no halo clash, no crossing lines",
+   "pass": true,
+   "detail": {
+    "scale": {
+     "1.0": 1.111,
+     "2.0": 1.111,
+     "4.0": 1.111,
+     "8.0": 1.111
+    },
+    "checked": {
+     "1.0": {
+      "stops": 33,
+      "labels": 21
+     },
+     "2.0": {
+      "stops": 33,
+      "labels": 23
+     },
+     "4.0": {
+      "stops": 33,
+      "labels": 17
+     },
+     "8.0": {
+      "stops": 33,
+      "labels": 4
+     }
+    },
+    "bad": {}
+   }
+  }
+ ],
+ "offered": [
+  "arrival",
+  "castle_approach",
+  "royal_gardens",
+  "clock_quarter",
+  "tower_rise",
+  "lantern_hamlets",
+  "tea_terraces",
+  "water_gardens",
+  "mushroom_grove",
+  "gatekeeper_fields",
+  "east_reach",
+  "south_meadows",
+  "west_wood",
+  "far_orchards",
+  "east_quarter",
+  "grand_clock",
+  "teapot_court",
+  "colossal_key",
+  "the_cloister",
+  "tower_lane",
+  "icarus_tower_hamlets",
+  "icarus_gate",
+  "noctis_gate",
+  "tartarus_gate",
+  "icarus_quarter",
+  "noctis_quarter",
+  "tartarus_quarter",
+  "icarus_heartland",
+  "tartarus_heartland_east",
+  "tartarus_heartland_southeast",
+  "noctis_heartland_west",
+  "noctis_heartland_southwest",
+  "dubel_forest"
+ ],
+ "offscreen": {
+  "1.0": {
+   "dpi_curve": 1.1111,
+   "pixels": [
+    1920,
+    1200
+   ],
+   "size": [
+    947.434,
+    726.5
+   ],
+   "centre": [
+    -581.0,
+    19840.0
+   ],
+   "scale": 0.00270153,
+   "zoom": 1.0,
+   "abs": [
+    163.289,
+    280.556
+   ],
+   "dpi": 1.111,
+   "you": {
+    "marker": [
+     356.022,
+     646.803
+    ],
+    "label": [
+     375.272,
+     638.803,
+     32.0,
+     16.0
+    ]
+   }
+  },
+  "2.0": {
+   "dpi_curve": 1.1111,
+   "pixels": [
+    1920,
+    1200
+   ],
+   "size": [
+    947.434,
+    726.5
+   ],
+   "centre": [
+    -581.0,
+    19840.0
+   ],
+   "scale": 0.00540306,
+   "zoom": 2.0,
+   "abs": [
+    163.289,
+    280.556
+   ],
+   "dpi": 1.111,
+   "you": null
+  },
+  "4.0": {
+   "dpi_curve": 1.1111,
+   "pixels": [
+    1920,
+    1200
+   ],
+   "size": [
+    947.434,
+    726.5
+   ],
+   "centre": [
+    -581.0,
+    19840.0
+   ],
+   "scale": 0.01080612,
+   "zoom": 4.0,
+   "abs": [
+    163.289,
+    280.556
+   ],
+   "dpi": 1.111,
+   "you": null
+  },
+  "8.0": {
+   "dpi_curve": 1.1111,
+   "pixels": [
+    1920,
+    1200
+   ],
+   "size": [
+    947.434,
+    726.5
+   ],
+   "centre": [
+    -581.0,
+    19840.0
+   ],
+   "scale": 0.02161224,
+   "zoom": 8.0,
+   "abs": [
+    163.289,
+    280.556
+   ],
+   "dpi": 1.111,
+   "you": null
+  }
+ },
+ "all_pass": true,
+ "finished": "2026-09-30 11:13:07",
+ "seconds": 145.62,
+ "log": "M01 PASS no two drawn labels overlap, at zoom 1, 2, 4 and 8\nM02 PASS no label (the YOU tag included) covers another drawn marker's HALO\nM09 PASS no two drawn markers' halos overlap, at any zoom\nM10 PASS no two leader lines cross, at any zoom\nM03 PASS every marker is its registry arrival point projected north-up (worst error < 0.5 px)\nM04 PASS every offered place is on the map at FIT, and every place on the canvas is drawn or counted in a group at every zoom\nM05 PASS zooming in reveals more names: the share of places on the canvas that are named rises with zoom\nM06 PASS the important places are named at fit (Arrival Gate, the three nation quarters)\nM05b PASS centred on it at zoom 8, every one of the offered places shows its own name\nM07 PASS the map is still the teleport: TW01 Tower Rise, TW02 Tower Lane, MG01 Mushroom Grove selected on the map and reached\nM08 PASS at 1920x1200 and the game's DPI scale: no label overlap, no label over a halo, no halo clash, no crossing lines\n"
+}

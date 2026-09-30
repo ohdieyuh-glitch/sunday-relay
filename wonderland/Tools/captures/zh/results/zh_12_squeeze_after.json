@@ -1,0 +1,205 @@
+{
+ "name": "zh_12_squeeze_after",
+ "started": "2026-09-30 10:15:23",
+ "status": "measured",
+ "max_black_seconds_original": 25.0,
+ "squeezed_to": 2.0,
+ "build_has_diagnostics": true,
+ "dll_mtime": 1790788019.0796654,
+ "trips": [
+  {
+   "to": "noctis_heartland_southwest",
+   "via_map": false,
+   "from": [
+    -330,
+    -650,
+    109
+   ],
+   "registry_arrival": [
+    -34474,
+    -54220,
+    -14
+   ],
+   "distance_m": 635,
+   "started": "",
+   "seconds": 4.5,
+   "report": "Could not land safely at noctis_heartland_southwest; returned to where you were.",
+   "arrived": false,
+   "diagnostics": "abandoned after 4.7 s: no ground under the landing | streamed at 4.3 s | spot misses 0 | refusals 0",
+   "landed": [
+    -330,
+    -650,
+    109
+   ],
+   "from_point_m": 635.26,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "to_rim"
+  },
+  {
+   "to": "royal_gardens",
+   "via_map": true,
+   "from": [
+    -330,
+    -650,
+    109
+   ],
+   "registry_arrival": [
+    3676,
+    11242,
+    19
+   ],
+   "distance_m": 125,
+   "selected": "royal_gardens",
+   "started": true,
+   "seconds": 0.75,
+   "report": "Arrived at Royal Gardens.",
+   "arrived": true,
+   "diagnostics": "arrived after 0.5 s | streamed at 0.0 s | cells loaded 52 pending 12 | spot misses 0 | refusals 0",
+   "landed": [
+    3676,
+    11242,
+    109
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "rim_to_centre",
+   "pair": [
+    "noctis_heartland_southwest",
+    "royal_gardens"
+   ],
+   "rep": 0
+  },
+  {
+   "to": "tartarus_heartland_east",
+   "via_map": false,
+   "from": [
+    3676,
+    11242,
+    109
+   ],
+   "registry_arrival": [
+    64080,
+    -4668,
+    -14
+   ],
+   "distance_m": 625,
+   "started": "",
+   "seconds": 2.5,
+   "report": "Could not land safely at tartarus_heartland_east; returned to where you were.",
+   "arrived": false,
+   "diagnostics": "abandoned after 2.5 s: no ground under the landing | streamed at 2.2 s | spot misses 0 | refusals 0",
+   "landed": [
+    3676,
+    11242,
+    109
+   ],
+   "from_point_m": 624.64,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "to_rim"
+  },
+  {
+   "to": "castle_approach",
+   "via_map": true,
+   "from": [
+    3676,
+    11242,
+    109
+   ],
+   "registry_arrival": [
+    0,
+    6000,
+    -14
+   ],
+   "distance_m": 64,
+   "selected": "castle_approach",
+   "started": true,
+   "seconds": 0.75,
+   "report": "Arrived at Castle Approach.",
+   "arrived": true,
+   "diagnostics": "arrived after 0.5 s | streamed at 0.0 s | cells loaded 49 pending 4 | spot misses 0 | refusals 0",
+   "landed": [
+    0,
+    6000,
+    89
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "rim_to_centre",
+   "pair": [
+    "tartarus_heartland_east",
+    "castle_approach"
+   ],
+   "rep": 0
+  },
+  {
+   "to": "icarus_heartland",
+   "via_map": false,
+   "from": [
+    0,
+    6000,
+    89
+   ],
+   "registry_arrival": [
+    33813,
+    52266,
+    -14
+   ],
+   "distance_m": 573,
+   "started": "",
+   "seconds": 2.5,
+   "report": "Arrived at Icarus Heartland.",
+   "arrived": true,
+   "diagnostics": "arrived after 2.4 s | streamed at 1.9 s | cells loaded 65 pending 36 | spot misses 0 | refusals 0",
+   "landed": [
+    33813,
+    52266,
+    75
+   ],
+   "from_point_m": 0.0,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "to_rim"
+  },
+  {
+   "to": "teapot_court",
+   "via_map": true,
+   "from": [
+    33813,
+    52266,
+    75
+   ],
+   "registry_arrival": [
+    -11081,
+    -7144,
+    -14
+   ],
+   "distance_m": 745,
+   "selected": "teapot_court",
+   "started": true,
+   "seconds": 10.75,
+   "report": "Could not land safely at teapot_court; returned to where you were.",
+   "arrived": false,
+   "diagnostics": "abandoned after 11.3 s: no ground under the landing | streamed at 11.0 s | spot misses 0 | refusals 0",
+   "landed": [
+    33813,
+    52266,
+    75
+   ],
+   "from_point_m": 744.65,
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "leg": "rim_to_centre",
+   "pair": [
+    "icarus_heartland",
+    "teapot_court"
+   ],
+   "rep": 0
+  }
+ ],
+ "rim_to_centre_arrived": 2,
+ "rim_to_centre_total": 3,
+ "deploy_pass": 0,
+ "deploy_total": 0,
+ "max_black_seconds_restored": 25.0,
+ "finished": "2026-09-30 10:16:28",
+ "seconds": 64.98,
+ "log": "TRIP noctis_heartland_southwest FAILED 4.5 Could not land safely at noctis_heartland_southwest; returned to where you were. abandoned after 4.7 s: no ground under the landing | streamed at 4.3 s | spot misses 0 | refusals 0\nTRIP royal_gardens ARRIVED 0.75 Arrived at Royal Gardens. arrived after 0.5 s | streamed at 0.0 s | cells loaded 52 pending 12 | spot misses 0 | refusals 0\nTRIP tartarus_heartland_east FAILED 2.5 Could not land safely at tartarus_heartland_east; returned to where you were. abandoned after 2.5 s: no ground under the landing | streamed at 2.2 s | spot misses 0 | refusals 0\nTRIP castle_approach ARRIVED 0.75 Arrived at Castle Approach. arrived after 0.5 s | streamed at 0.0 s | cells loaded 49 pending 4 | spot misses 0 | refusals 0\nTRIP icarus_heartland ARRIVED 2.5 Arrived at Icarus Heartland. arrived after 2.4 s | streamed at 1.9 s | cells loaded 65 pending 36 | spot misses 0 | refusals 0\nTRIP teapot_court FAILED 10.75 Could not land safely at teapot_court; returned to where you were. abandoned after 11.3 s: no ground under the landing | streamed at 11.0 s | spot misses 0 | refusals 0\n"
+}

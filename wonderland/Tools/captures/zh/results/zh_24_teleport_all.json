@@ -1,0 +1,1509 @@
+{
+ "name": "zh_24_teleport_all",
+ "started": "2026-09-30 11:21:07",
+ "status": "measured",
+ "offered": [
+  "arrival",
+  "castle_approach",
+  "royal_gardens",
+  "clock_quarter",
+  "tower_rise",
+  "lantern_hamlets",
+  "tea_terraces",
+  "water_gardens",
+  "mushroom_grove",
+  "gatekeeper_fields",
+  "east_reach",
+  "south_meadows",
+  "west_wood",
+  "far_orchards",
+  "east_quarter",
+  "grand_clock",
+  "teapot_court",
+  "colossal_key",
+  "the_cloister",
+  "tower_lane",
+  "icarus_tower_hamlets",
+  "icarus_gate",
+  "noctis_gate",
+  "tartarus_gate",
+  "icarus_quarter",
+  "noctis_quarter",
+  "tartarus_quarter",
+  "icarus_heartland",
+  "tartarus_heartland_east",
+  "tartarus_heartland_southeast",
+  "noctis_heartland_west",
+  "noctis_heartland_southwest",
+  "dubel_forest"
+ ],
+ "offered_count": 33,
+ "new_ids_missing_from_offer": [],
+ "stops": [
+  {
+   "id": "arrival",
+   "new": false,
+   "registry_arrival": [
+    0,
+    -1460,
+    13
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at The Arrival Gate.",
+   "seconds": 0.5,
+   "same_dog": true,
+   "landed": [
+    0,
+    -1460,
+    107
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 0.5,
+   "floor": [
+    18.0,
+    "MQ02_MQ02_Flagstone_B_paving_PlazaCream"
+   ],
+   "feet_z": 20.2,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.56,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "castle_approach",
+   "new": false,
+   "registry_arrival": [
+    0,
+    6000,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Castle Approach.",
+   "seconds": 0.5,
+   "same_dog": true,
+   "landed": [
+    0,
+    6000,
+    89
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 6.0,
+   "floor": [
+    -0.5,
+    "GA02_PlazaSlabs_slab6_PlazaCream"
+   ],
+   "feet_z": 1.7,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.6,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "royal_gardens",
+   "new": false,
+   "registry_arrival": [
+    3676,
+    11242,
+    19
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Royal Gardens.",
+   "seconds": 0.5,
+   "same_dog": true,
+   "landed": [
+    3676,
+    11242,
+    109
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 2.0,
+   "floor": [
+    19.3,
+    "RG01_CourtSlabs"
+   ],
+   "feet_z": 21.5,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.51,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "clock_quarter",
+   "new": false,
+   "registry_arrival": [
+    13162,
+    1870,
+    12
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Clock Quarter.",
+   "seconds": 0.5,
+   "same_dog": true,
+   "landed": [
+    13162,
+    1870,
+    102
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 3.5,
+   "floor": [
+    12.9,
+    "CQ01_CourtEdge"
+   ],
+   "feet_z": 15.0,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.57,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "tower_rise",
+   "new": true,
+   "registry_arrival": [
+    -16416,
+    42209,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Tower Rise.",
+   "seconds": 4.25,
+   "same_dog": true,
+   "landed": [
+    -16416,
+    42209,
+    75
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 17.0,
+   "floor": [
+    -14.0,
+    "V2_GroundSlab"
+   ],
+   "feet_z": -11.8,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.5,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "lantern_hamlets",
+   "new": false,
+   "registry_arrival": [
+    -14986,
+    7450,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Lantern Hamlets.",
+   "seconds": 17.25,
+   "same_dog": true,
+   "landed": [
+    -14986,
+    7450,
+    89
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 27.0,
+   "floor": [
+    -0.2,
+    "LH01_CourtSlabs"
+   ],
+   "feet_z": 2.0,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.57,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "tea_terraces",
+   "new": false,
+   "registry_arrival": [
+    -11796,
+    -2943,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Tea Terraces.",
+   "seconds": 0.5,
+   "same_dog": true,
+   "landed": [
+    -11796,
+    -2943,
+    99
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 30.0,
+   "floor": [
+    -2.5,
+    "V2Batch_garden_lawn_MI_V2_Lawn"
+   ],
+   "feet_z": 12.1,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.53,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "water_gardens",
+   "new": false,
+   "registry_arrival": [
+    -3439,
+    -10967,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Water Gardens.",
+   "seconds": 0.5,
+   "same_dog": true,
+   "landed": [
+    -3439,
+    -10967,
+    89
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 4.5,
+   "floor": [
+    -0.2,
+    "WG01_CourtSlabs"
+   ],
+   "feet_z": 2.0,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.59,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "mushroom_grove",
+   "new": true,
+   "registry_arrival": [
+    42985,
+    -85120,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Mushroom Grove.",
+   "seconds": 5.25,
+   "same_dog": true,
+   "landed": [
+    42985,
+    -85120,
+    75
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 25.0,
+   "floor": [
+    -14.0,
+    "V2_GroundSlab"
+   ],
+   "feet_z": -11.8,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.57,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "gatekeeper_fields",
+   "new": false,
+   "registry_arrival": [
+    13402,
+    -5217,
+    19
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Gatekeeper Fields.",
+   "seconds": 13.25,
+   "same_dog": true,
+   "landed": [
+    13402,
+    -5217,
+    108
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 24.5,
+   "floor": [
+    19.0,
+    "V2Batch_terrace_platform_MI_V2_PlazaGrey"
+   ],
+   "feet_z": 21.1,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.64,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "east_reach",
+   "new": false,
+   "registry_arrival": [
+    23559,
+    11422,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at East Reach.",
+   "seconds": 9.25,
+   "same_dog": true,
+   "landed": [
+    23559,
+    11422,
+    89
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 9.5,
+   "floor": [
+    -2.5,
+    "V2Batch_garden_lawn_MI_V2_Meadow"
+   ],
+   "feet_z": 1.9,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.58,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "south_meadows",
+   "new": false,
+   "registry_arrival": [
+    -65,
+    -25350,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at South Meadows.",
+   "seconds": 14.5,
+   "same_dog": true,
+   "landed": [
+    -65,
+    -25350,
+    89
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 20.0,
+   "floor": [
+    -0.2,
+    "SM01_CourtSlabs"
+   ],
+   "feet_z": 2.0,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.6,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "west_wood",
+   "new": false,
+   "registry_arrival": [
+    -31207,
+    4521,
+    12
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at West Wood.",
+   "seconds": 13.25,
+   "same_dog": true,
+   "landed": [
+    -31207,
+    4521,
+    102
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 19.0,
+   "floor": [
+    12.3,
+    "WW01_CourtSlabs"
+   ],
+   "feet_z": 14.5,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.58,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "far_orchards",
+   "new": false,
+   "registry_arrival": [
+    20506,
+    -21506,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Far Orchards.",
+   "seconds": 25.5,
+   "same_dog": true,
+   "landed": [
+    20506,
+    -21506,
+    89
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 19.5,
+   "floor": [
+    -0.2,
+    "FO01_CourtSlabs"
+   ],
+   "feet_z": 2.0,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.66,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "east_quarter",
+   "new": false,
+   "registry_arrival": [
+    19400,
+    2000,
+    12
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at The East Quarter.",
+   "seconds": 8.5,
+   "same_dog": true,
+   "landed": [
+    19400,
+    2000,
+    102
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 12.5,
+   "floor": [
+    12.3,
+    "EQ01_CourtSlabs"
+   ],
+   "feet_z": 14.5,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.58,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "grand_clock",
+   "new": false,
+   "registry_arrival": [
+    10853,
+    -928,
+    19
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at The Grand Clock.",
+   "seconds": 0.75,
+   "same_dog": true,
+   "landed": [
+    10853,
+    -928,
+    108
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 6.0,
+   "floor": [
+    19.0,
+    "V2Batch_terrace_platform_MI_V2_PlazaWarm"
+   ],
+   "feet_z": 21.1,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 2.32,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    },
+    {
+     "rel_deg": 90.0,
+     "moved_m": 5.56,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "teapot_court",
+   "new": false,
+   "registry_arrival": [
+    -11081,
+    -7144,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Teapot Court.",
+   "seconds": 12.75,
+   "same_dog": true,
+   "landed": [
+    -11081,
+    -7144,
+    89
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 14.5,
+   "floor": [
+    -0.2,
+    "TC01_CourtSlabs"
+   ],
+   "feet_z": 2.0,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.55,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "colossal_key",
+   "new": false,
+   "registry_arrival": [
+    20519,
+    -14070,
+    12
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at The Colossal Key.",
+   "seconds": 13.5,
+   "same_dog": true,
+   "landed": [
+    20519,
+    -14070,
+    102
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 10.0,
+   "floor": [
+    12.0,
+    "FillSE2_StC0_002"
+   ],
+   "feet_z": 14.4,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.59,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "the_cloister",
+   "new": false,
+   "registry_arrival": [
+    8716,
+    13141,
+    19
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at The Cloister.",
+   "seconds": 12.25,
+   "same_dog": true,
+   "landed": [
+    8716,
+    13141,
+    109
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 10.0,
+   "floor": [
+    19.3,
+    "CL01_CourtSlabs"
+   ],
+   "feet_z": 21.5,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.66,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "tower_lane",
+   "new": true,
+   "registry_arrival": [
+    -22124,
+    59822,
+    13
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Tower Lane.",
+   "seconds": 4.75,
+   "same_dog": true,
+   "landed": [
+    -22124,
+    59822,
+    102
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 22.5,
+   "floor": [
+    12.6,
+    "RR01_RR01_Plate_t-2_2_GroundFlag_PlazaCream"
+   ],
+   "feet_z": 14.7,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.63,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "icarus_tower_hamlets",
+   "new": true,
+   "registry_arrival": [
+    -18306,
+    60314,
+    12
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Icarus Tower Hamlets.",
+   "seconds": 0.75,
+   "same_dog": true,
+   "landed": [
+    -18306,
+    60314,
+    101
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 0.0,
+   "floor": [
+    12.0,
+    "RR01_RR01_Plate_t-1_3_GroundFlag_PlazaCream"
+   ],
+   "feet_z": 14.1,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.6,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "icarus_gate",
+   "new": true,
+   "registry_arrival": [
+    0,
+    52400,
+    12
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Icarus Gate.",
+   "seconds": 1.0,
+   "same_dog": true,
+   "landed": [
+    0,
+    52400,
+    101
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 1.0,
+   "floor": [
+    12.0,
+    "IC01_IC01_Causeway"
+   ],
+   "feet_z": 14.1,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.66,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "noctis_gate",
+   "new": true,
+   "registry_arrival": [
+    -47141,
+    -24155,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Noctis Gate.",
+   "seconds": 16.75,
+   "same_dog": true,
+   "landed": [
+    -47141,
+    -24155,
+    75
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 12.5,
+   "floor": [
+    -14.0,
+    "V2_GroundSlab"
+   ],
+   "feet_z": -11.8,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.61,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "tartarus_gate",
+   "new": true,
+   "registry_arrival": [
+    43677,
+    -28056,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Tartarus Gate.",
+   "seconds": 11.25,
+   "same_dog": true,
+   "landed": [
+    43677,
+    -28056,
+    75
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 15.0,
+   "floor": [
+    -14.0,
+    "V2_GroundSlab"
+   ],
+   "feet_z": -11.8,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.52,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "icarus_quarter",
+   "new": true,
+   "registry_arrival": [
+    -2402,
+    71850,
+    12
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Icarus Quarter.",
+   "seconds": 4.25,
+   "same_dog": true,
+   "landed": [
+    -2402,
+    71850,
+    101
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 7.5,
+   "floor": [
+    12.0,
+    "IC02_IC02_CourtBand"
+   ],
+   "feet_z": 14.2,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.62,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "noctis_quarter",
+   "new": true,
+   "registry_arrival": [
+    -62313,
+    -34916,
+    12
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Noctis Quarter.",
+   "seconds": 5.5,
+   "same_dog": true,
+   "landed": [
+    -62313,
+    -34916,
+    101
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 13.5,
+   "floor": [
+    12.0,
+    "NC01_NC01_Avenue"
+   ],
+   "feet_z": 14.1,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.59,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "tartarus_quarter",
+   "new": true,
+   "registry_arrival": [
+    62177,
+    -36171,
+    12
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Tartarus Quarter.",
+   "seconds": 7.25,
+   "same_dog": true,
+   "landed": [
+    62177,
+    -36171,
+    101
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 4.5,
+   "floor": [
+    12.0,
+    "TQ01_TQ01_Road"
+   ],
+   "feet_z": 14.1,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.57,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "icarus_heartland",
+   "new": true,
+   "registry_arrival": [
+    33813,
+    52266,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Icarus Heartland.",
+   "seconds": 5.75,
+   "same_dog": true,
+   "landed": [
+    33813,
+    52266,
+    75
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 16.0,
+   "floor": [
+    -14.0,
+    "V2_GroundSlab"
+   ],
+   "feet_z": -11.8,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.63,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "tartarus_heartland_east",
+   "new": true,
+   "registry_arrival": [
+    64080,
+    -4668,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Tartarus Heartland East.",
+   "seconds": 4.75,
+   "same_dog": true,
+   "landed": [
+    64080,
+    -4668,
+    75
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 13.5,
+   "floor": [
+    -14.0,
+    "V2_GroundSlab"
+   ],
+   "feet_z": -11.8,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.6,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "tartarus_heartland_southeast",
+   "new": true,
+   "registry_arrival": [
+    39078,
+    -49734,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Tartarus Heartland South-East.",
+   "seconds": 10.25,
+   "same_dog": true,
+   "landed": [
+    39078,
+    -49734,
+    75
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 13.5,
+   "floor": [
+    -14.0,
+    "V2_GroundSlab"
+   ],
+   "feet_z": -11.8,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.57,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "noctis_heartland_west",
+   "new": true,
+   "registry_arrival": [
+    -65242,
+    -1026,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Noctis Heartland West.",
+   "seconds": 4.5,
+   "same_dog": true,
+   "landed": [
+    -65242,
+    -1026,
+    75
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 8.0,
+   "floor": [
+    -14.0,
+    "V2_GroundSlab"
+   ],
+   "feet_z": -11.8,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.56,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "noctis_heartland_southwest",
+   "new": true,
+   "registry_arrival": [
+    -34474,
+    -54220,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Noctis Heartland South-West.",
+   "seconds": 10.5,
+   "same_dog": true,
+   "landed": [
+    -34474,
+    -54220,
+    75
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 18.5,
+   "floor": [
+    -14.0,
+    "V2_GroundSlab"
+   ],
+   "feet_z": -11.8,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.61,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  },
+  {
+   "id": "dubel_forest",
+   "new": true,
+   "registry_arrival": [
+    0,
+    124800,
+    -14
+   ],
+   "request": "",
+   "arrived": true,
+   "report": "Arrived at Dubel Forest.",
+   "seconds": 4.75,
+   "same_dog": true,
+   "landed": [
+    0,
+    124800,
+    75
+   ],
+   "mode": "<MovementMode.MOVE_WALKING: 1>",
+   "streaming_complete": true,
+   "streaming_settle_s": 12.0,
+   "floor": [
+    -14.0,
+    "V2_GroundSlab"
+   ],
+   "feet_z": -11.8,
+   "from_point_m": 0.0,
+   "walk_away": [
+    {
+     "rel_deg": 0.0,
+     "moved_m": 5.55,
+     "mode": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ],
+   "checks": {
+    "arrived": true,
+    "survived": true,
+    "streamed": true,
+    "ground": true,
+    "on_the_point": true,
+    "walks_away": true
+   },
+   "pass": true
+  }
+ ],
+ "new_pass": 16,
+ "new_total": 16,
+ "existing_pass": 17,
+ "existing_total": 17,
+ "all_pass": true,
+ "finished": "2026-09-30 11:36:09",
+ "seconds": 901.28,
+ "log": "STOP arrival PASS [] Arrived at The Arrival Gate.\nSTOP castle_approach PASS [] Arrived at Castle Approach.\nSTOP royal_gardens PASS [] Arrived at Royal Gardens.\nSTOP clock_quarter PASS [] Arrived at Clock Quarter.\nSTOP tower_rise PASS [] Arrived at Tower Rise.\nSTOP lantern_hamlets PASS [] Arrived at Lantern Hamlets.\nSTOP tea_terraces PASS [] Arrived at Tea Terraces.\nSTOP water_gardens PASS [] Arrived at Water Gardens.\nSTOP mushroom_grove PASS [] Arrived at Mushroom Grove.\nSTOP gatekeeper_fields PASS [] Arrived at Gatekeeper Fields.\nSTOP east_reach PASS [] Arrived at East Reach.\nSTOP south_meadows PASS [] Arrived at South Meadows.\nSTOP west_wood PASS [] Arrived at West Wood.\nSTOP far_orchards PASS [] Arrived at Far Orchards.\nSTOP east_quarter PASS [] Arrived at The East Quarter.\nSTOP grand_clock PASS [] Arrived at The Grand Clock.\nSTOP teapot_court PASS [] Arrived at Teapot Court.\nSTOP colossal_key PASS [] Arrived at The Colossal Key.\nSTOP the_cloister PASS [] Arrived at The Cloister.\nSTOP tower_lane PASS [] Arrived at Tower Lane.\nSTOP icarus_tower_hamlets PASS [] Arrived at Icarus Tower Hamlets.\nSTOP icarus_gate PASS [] Arrived at Icarus Gate.\nSTOP noctis_gate PASS [] Arrived at Noctis Gate.\nSTOP tartarus_gate PASS [] Arrived at Tartarus Gate.\nSTOP icarus_quarter PASS [] Arrived at Icarus Quarter.\nSTOP noctis_quarter PASS [] Arrived at Noctis Quarter.\nSTOP tartarus_quarter PASS [] Arrived at Tartarus Quarter.\nSTOP icarus_heartland PASS [] Arrived at Icarus Heartland.\nSTOP tartarus_heartland_east PASS [] Arrived at Tartarus Heartland East.\nSTOP tartarus_heartland_southeast PASS [] Arrived at Tartarus Heartland South-East.\nSTOP noctis_heartland_west PASS [] Arrived at Noctis Heartland West.\nSTOP noctis_heartland_southwest PASS [] Arrived at Noctis Heartland South-West.\nSTOP dubel_forest PASS [] Arrived at Dubel Forest.\n"
+}

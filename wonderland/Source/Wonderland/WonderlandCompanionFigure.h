@@ -97,7 +97,8 @@ struct FWonderlandCompanionMaterial
 	/**
 	 * OPTIONAL: which player colour this surface follows, declared by the figure after the strength --
 	 * `material heart glow 0.95 0.08 0.02 9.000 secondary`. "secondary" takes the mascot SECONDARY colour at the
-	 * authored brightness; "secondary_light" the same colour lifted toward white (a flame's pale core). Empty
+	 * authored brightness; "secondary_light" the same colour lifted toward white (a flame's pale core);
+	 * "secondary_deep" a deep shade of it for a lit cloth (Jack Flame's suit, WonderlandMascotStyle::DeepAccentColour). Empty
 	 * means the material is routed by its name, as every material was before (WonderlandMascotStyle::ChannelFor).
 	 * Older engines stop reading the line at the strength, so a tagged figure still loads everywhere.
 	 */

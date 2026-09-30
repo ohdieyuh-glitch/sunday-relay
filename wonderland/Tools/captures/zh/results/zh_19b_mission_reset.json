@@ -1,0 +1,515 @@
+{
+ "name": "zh_19b_mission_reset",
+ "started": "2026-09-30 10:47:03",
+ "status": "measured",
+ "dll_mtime": 1790788019.0796654,
+ "persisted_skin_at_start": "jack_flame",
+ "tests": [
+  {
+   "id": "R1_relay_og",
+   "name": "relay_og: a contract reset mid-act returns the Dog to rest",
+   "pass": true,
+   "detail": {
+    "mid": {
+     "weight": 1.0,
+     "lift": 0.0,
+     "act": "IMPLEMENTATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    },
+    "turn": 0.0
+   }
+  },
+  {
+   "id": "R2_relay_og",
+   "name": "relay_og: redeployed after the reset, performs Relay OG's acts and settles",
+   "pass": true,
+   "detail": {
+    "acts": {
+     "PREPARATION": "PREPARATION",
+     "VERIFICATION": "VERIFICATION"
+    },
+    "reference": {
+     "PREPARATION": "PREPARATION",
+     "VERIFICATION": "VERIFICATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    }
+   }
+  },
+  {
+   "id": "R3_relay_og",
+   "name": "relay_og: the fixture stopped mid-act returns the Dog to rest",
+   "pass": true,
+   "detail": {
+    "mid": {
+     "weight": 0.751,
+     "lift": 43.99,
+     "act": "PREPARATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    },
+    "turn": 0.0
+   }
+  },
+  {
+   "id": "R1_celestial_light",
+   "name": "celestial_light: a contract reset mid-act returns the Dog to rest",
+   "pass": false,
+   "detail": {
+    "mid": {
+     "weight": 1.0,
+     "lift": 0.0,
+     "act": "IMPLEMENTATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    },
+    "turn": 11.75
+   }
+  },
+  {
+   "id": "R2_celestial_light",
+   "name": "celestial_light: redeployed after the reset, performs Relay OG's acts and settles",
+   "pass": true,
+   "detail": {
+    "acts": {
+     "PREPARATION": "PREPARATION",
+     "VERIFICATION": "VERIFICATION"
+    },
+    "reference": {
+     "PREPARATION": "PREPARATION",
+     "VERIFICATION": "VERIFICATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    }
+   }
+  },
+  {
+   "id": "R3_celestial_light",
+   "name": "celestial_light: the fixture stopped mid-act returns the Dog to rest",
+   "pass": false,
+   "detail": {
+    "mid": {
+     "weight": 0.595,
+     "lift": 23.75,
+     "act": "PREPARATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    },
+    "turn": 11.32
+   }
+  },
+  {
+   "id": "R1_skeleton_flame",
+   "name": "skeleton_flame: a contract reset mid-act returns the Dog to rest",
+   "pass": false,
+   "detail": {
+    "mid": {
+     "weight": 1.0,
+     "lift": 0.0,
+     "act": "IMPLEMENTATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    },
+    "turn": 9.18
+   }
+  },
+  {
+   "id": "R2_skeleton_flame",
+   "name": "skeleton_flame: redeployed after the reset, performs Relay OG's acts and settles",
+   "pass": true,
+   "detail": {
+    "acts": {
+     "PREPARATION": "PREPARATION",
+     "VERIFICATION": "VERIFICATION"
+    },
+    "reference": {
+     "PREPARATION": "PREPARATION",
+     "VERIFICATION": "VERIFICATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    }
+   }
+  },
+  {
+   "id": "R3_skeleton_flame",
+   "name": "skeleton_flame: the fixture stopped mid-act returns the Dog to rest",
+   "pass": false,
+   "detail": {
+    "mid": {
+     "weight": 0.715,
+     "lift": 39.02,
+     "act": "PREPARATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    },
+    "turn": 4.51
+   }
+  },
+  {
+   "id": "R1_jack_flame",
+   "name": "jack_flame: a contract reset mid-act returns the Dog to rest",
+   "pass": false,
+   "detail": {
+    "mid": {
+     "weight": 1.0,
+     "lift": 0.0,
+     "act": "IMPLEMENTATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    },
+    "turn": 7.54
+   }
+  },
+  {
+   "id": "R2_jack_flame",
+   "name": "jack_flame: redeployed after the reset, performs Relay OG's acts and settles",
+   "pass": true,
+   "detail": {
+    "acts": {
+     "PREPARATION": "PREPARATION",
+     "VERIFICATION": "VERIFICATION"
+    },
+    "reference": {
+     "PREPARATION": "PREPARATION",
+     "VERIFICATION": "VERIFICATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    }
+   }
+  },
+  {
+   "id": "R3_jack_flame",
+   "name": "jack_flame: the fixture stopped mid-act returns the Dog to rest",
+   "pass": false,
+   "detail": {
+    "mid": {
+     "weight": 0.65,
+     "lift": 32.52,
+     "act": "PREPARATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    },
+    "turn": 5.93
+   }
+  },
+  {
+   "id": "R1_baal",
+   "name": "baal: a contract reset mid-act returns the Dog to rest",
+   "pass": false,
+   "detail": {
+    "mid": {
+     "weight": 1.0,
+     "lift": 0.0,
+     "act": "IMPLEMENTATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    },
+    "turn": 6.85
+   }
+  },
+  {
+   "id": "R2_baal",
+   "name": "baal: redeployed after the reset, performs Relay OG's acts and settles",
+   "pass": true,
+   "detail": {
+    "acts": {
+     "PREPARATION": "PREPARATION",
+     "VERIFICATION": "VERIFICATION"
+    },
+    "reference": {
+     "PREPARATION": "PREPARATION",
+     "VERIFICATION": "VERIFICATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    }
+   }
+  },
+  {
+   "id": "R3_baal",
+   "name": "baal: the fixture stopped mid-act returns the Dog to rest",
+   "pass": false,
+   "detail": {
+    "mid": {
+     "weight": 0.7,
+     "lift": 32.5,
+     "act": "PREPARATION"
+    },
+    "after": {
+     "weight": 0.0,
+     "lift": 0.0,
+     "act": "NONE"
+    },
+    "turn": 6.99
+   }
+  }
+ ],
+ "rows": [
+  {
+   "skin": "relay_og",
+   "worn": "relay_og",
+   "mid_act": {
+    "weight": 1.0,
+    "lift": 0.0,
+    "act": "IMPLEMENTATION"
+   },
+   "after_reset": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "after_reset_turn_deg": 0.0,
+   "redeploy": {
+    "PREPARATION": {
+     "weight": 1.0,
+     "lift": 67.35,
+     "act": "PREPARATION"
+    },
+    "VERIFICATION": {
+     "weight": 1.0,
+     "lift": 153.54,
+     "act": "VERIFICATION"
+    }
+   },
+   "after_completed": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "fixture_mid": {
+    "weight": 0.751,
+    "lift": 43.99,
+    "act": "PREPARATION"
+   },
+   "fixture_seconds_to_act": 12.0,
+   "fixture_after_stop": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "fixture_turn_deg": 0.0
+  },
+  {
+   "skin": "celestial_light",
+   "worn": "celestial_light",
+   "mid_act": {
+    "weight": 1.0,
+    "lift": 0.0,
+    "act": "IMPLEMENTATION"
+   },
+   "after_reset": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "after_reset_turn_deg": 11.75,
+   "redeploy": {
+    "PREPARATION": {
+     "weight": 1.0,
+     "lift": 77.17,
+     "act": "PREPARATION"
+    },
+    "VERIFICATION": {
+     "weight": 1.0,
+     "lift": 151.92,
+     "act": "VERIFICATION"
+    }
+   },
+   "after_completed": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "fixture_mid": {
+    "weight": 0.595,
+    "lift": 23.75,
+    "act": "PREPARATION"
+   },
+   "fixture_seconds_to_act": 12.0,
+   "fixture_after_stop": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "fixture_turn_deg": 11.32
+  },
+  {
+   "skin": "skeleton_flame",
+   "worn": "skeleton_flame",
+   "mid_act": {
+    "weight": 1.0,
+    "lift": 0.0,
+    "act": "IMPLEMENTATION"
+   },
+   "after_reset": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "after_reset_turn_deg": 9.18,
+   "redeploy": {
+    "PREPARATION": {
+     "weight": 1.0,
+     "lift": 66.09,
+     "act": "PREPARATION"
+    },
+    "VERIFICATION": {
+     "weight": 1.0,
+     "lift": 148.82,
+     "act": "VERIFICATION"
+    }
+   },
+   "after_completed": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "fixture_mid": {
+    "weight": 0.715,
+    "lift": 39.02,
+    "act": "PREPARATION"
+   },
+   "fixture_seconds_to_act": 12.0,
+   "fixture_after_stop": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "fixture_turn_deg": 4.51
+  },
+  {
+   "skin": "jack_flame",
+   "worn": "jack_flame",
+   "mid_act": {
+    "weight": 1.0,
+    "lift": 0.0,
+    "act": "IMPLEMENTATION"
+   },
+   "after_reset": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "after_reset_turn_deg": 7.54,
+   "redeploy": {
+    "PREPARATION": {
+     "weight": 1.0,
+     "lift": 72.31,
+     "act": "PREPARATION"
+    },
+    "VERIFICATION": {
+     "weight": 1.0,
+     "lift": 147.07,
+     "act": "VERIFICATION"
+    }
+   },
+   "after_completed": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "fixture_mid": {
+    "weight": 0.65,
+    "lift": 32.52,
+    "act": "PREPARATION"
+   },
+   "fixture_seconds_to_act": 12.0,
+   "fixture_after_stop": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "fixture_turn_deg": 5.93
+  },
+  {
+   "skin": "baal",
+   "worn": "baal",
+   "mid_act": {
+    "weight": 1.0,
+    "lift": 0.0,
+    "act": "IMPLEMENTATION"
+   },
+   "after_reset": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "after_reset_turn_deg": 6.85,
+   "redeploy": {
+    "PREPARATION": {
+     "weight": 1.0,
+     "lift": 73.56,
+     "act": "PREPARATION"
+    },
+    "VERIFICATION": {
+     "weight": 1.0,
+     "lift": 149.59,
+     "act": "VERIFICATION"
+    }
+   },
+   "after_completed": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "fixture_mid": {
+    "weight": 0.7,
+    "lift": 32.5,
+    "act": "PREPARATION"
+   },
+   "fixture_seconds_to_act": 12.0,
+   "fixture_after_stop": {
+    "weight": 0.0,
+    "lift": 0.0,
+    "act": "NONE"
+   },
+   "fixture_turn_deg": 6.99
+  }
+ ],
+ "all_pass": false,
+ "finished": "2026-09-30 10:51:08",
+ "seconds": 245.65,
+ "log": "R1_relay_og PASS relay_og: a contract reset mid-act returns the Dog to rest\nR2_relay_og PASS relay_og: redeployed after the reset, performs Relay OG's acts and settles\nR3_relay_og PASS relay_og: the fixture stopped mid-act returns the Dog to rest\nR1_celestial_light FAIL celestial_light: a contract reset mid-act returns the Dog to rest\nR2_celestial_light PASS celestial_light: redeployed after the reset, performs Relay OG's acts and settles\nR3_celestial_light FAIL celestial_light: the fixture stopped mid-act returns the Dog to rest\nR1_skeleton_flame FAIL skeleton_flame: a contract reset mid-act returns the Dog to rest\nR2_skeleton_flame PASS skeleton_flame: redeployed after the reset, performs Relay OG's acts and settles\nR3_skeleton_flame FAIL skeleton_flame: the fixture stopped mid-act returns the Dog to rest\nR1_jack_flame FAIL jack_flame: a contract reset mid-act returns the Dog to rest\nR2_jack_flame PASS jack_flame: redeployed after the reset, performs Relay OG's acts and settles\nR3_jack_flame FAIL jack_flame: the fixture stopped mid-act returns the Dog to rest\nR1_baal FAIL baal: a contract reset mid-act returns the Dog to rest\nR2_baal PASS baal: redeployed after the reset, performs Relay OG's acts and settles\nR3_baal FAIL baal: the fixture stopped mid-act returns the Dog to rest\n"
+}

@@ -1,0 +1,36 @@
+﻿[2026.09.30-18.52.56:695][  0]LogWonderlandQa: Display: WLQA armed (world WL_V2_GoldenArrival_WP2)
+[2026.09.30-18.53.08:736][273]LogWonderlandQa: Display: WLQA BEGIN package check, frames in C:/dev/iwonder/_wonderland_package_regression_0930/Windows/Wonderland/Saved/Screenshots/WLQA
+[2026.09.30-18.53.14:133][413]LogWonderlandQa: Display: WLQA frame C:/dev/iwonder/_wonderland_package_regression_0930/Windows/Wonderland/Saved/Screenshots/WLQA/01_jack_flame_azure.png saved 1280x800
+[2026.09.30-18.53.14:133][414]LogWonderlandQa: Display: WLQA Q01 PASS | Jack Flame worn with an AZURE secondary (frame 01: fire, tie and suit)
+[2026.09.30-18.53.14:141][414]LogWonderlandTravel: WLTRAVEL start 'tartarus_heartland_east' from (-330, -650, 109)
+[2026.09.30-18.53.16:535][456]LogWonderlandTravel: WLTRAVEL done 'tartarus_heartland_east' arrived=1 at (64080, -4668, 75): Arrived at Tartarus Heartland East. [arrived after 1.9 s | streamed at 1.4 s | cells loaded 73 pending 48 | spot misses 0 | refusals 0]
+[2026.09.30-18.53.16:600][457]LogWonderlandQa: Display: WLQA Q02 PASS | to tartarus_heartland_east in 2.5 s: Arrived at Tartarus Heartland East. [arrived after 1.9 s | streamed at 1.4 s | cells loaded 73 pending 48 | spot misses 0 | refusals 0]
+[2026.09.30-18.53.19:638][538]LogWonderlandTravel: WLTRAVEL start 'castle_approach' from (64080, -4668, 75)
+[2026.09.30-18.53.22:934][657]LogWonderlandTravel: WLTRAVEL done 'castle_approach' arrived=1 at (0, 6000, 89): Arrived at Castle Approach. [arrived after 2.8 s | streamed at 2.4 s | cells loaded 75 pending 38 | spot misses 0 | refusals 0]
+[2026.09.30-18.53.22:950][657]LogWonderlandQa: Display: WLQA Q03 PASS | to castle_approach in 6.3 s: Arrived at Castle Approach. [arrived after 2.8 s | streamed at 2.4 s | cells loaded 75 pending 38 | spot misses 0 | refusals 0]
+[2026.09.30-18.53.25:355][722]LogWonderlandQa: Display: WLQA frame C:/dev/iwonder/_wonderland_package_regression_0930/Windows/Wonderland/Saved/Screenshots/WLQA/02_map_zoom_1.png saved 1280x800
+[2026.09.30-18.53.25:355][723]LogWonderlandQa: Display: WLQA Q04.1 PASS | map zoom 1.0: 22 of 33 places on the canvas named, 0 label overlaps, 0 labels over markers
+[2026.09.30-18.53.26:953][774]LogWonderlandQa: Display: WLQA frame C:/dev/iwonder/_wonderland_package_regression_0930/Windows/Wonderland/Saved/Screenshots/WLQA/02_map_zoom_4.png saved 1280x800
+[2026.09.30-18.53.26:953][774]LogWonderlandQa: Display: WLQA Q04.2 PASS | map zoom 4.0: 17 of 17 places on the canvas named, 0 label overlaps, 0 labels over markers
+[2026.09.30-18.53.28:344][812]LogWonderlandQa: Display: WLQA frame C:/dev/iwonder/_wonderland_package_regression_0930/Windows/Wonderland/Saved/Screenshots/WLQA/02_map_zoom_8.png saved 1280x800
+[2026.09.30-18.53.28:344][813]LogWonderlandQa: Display: WLQA Q04.3 PASS | map zoom 8.0: 13 of 13 places on the canvas named, 0 label overlaps, 0 labels over markers
+[2026.09.30-18.53.30:047][874]LogWonderlandTravel: WLTRAVEL start 'tower_rise' from (0, 6000, 89)
+[2026.09.30-18.53.31:515][918]LogWonderlandTravel: WLTRAVEL done 'tower_rise' arrived=1 at (-16416, 42209, 75): Arrived at Tower Rise. [arrived after 1.0 s | streamed at 0.6 s | cells loaded 66 pending 32 | spot misses 0 | refusals 0]
+[2026.09.30-18.53.31:613][921]LogWonderlandQa: Display: WLQA Q05 PASS | to tower_rise in 3.3 s: Arrived at Tower Rise. [arrived after 1.0 s | streamed at 0.6 s | cells loaded 66 pending 32 | spot misses 0 | refusals 0]
+[2026.09.30-18.53.31:866][921]LogWonderlandQa: Display: WLQA frame C:/dev/iwonder/_wonderland_package_regression_0930/Windows/Wonderland/Saved/Screenshots/WLQA/03_arrived_tower_rise.png saved 1280x800
+[2026.09.30-18.53.33:487][974]LogWonderlandTravel: WLTRAVEL start 'tower_lane' from (-16416, 42209, 75)
+[2026.09.30-18.53.34:407][999]LogWonderlandTravel: WLTRAVEL done 'tower_lane' arrived=1 at (-22124, 59822, 102): Arrived at Tower Lane. [arrived after 0.5 s | streamed at 0.0 s | cells loaded 74 pending 41 | spot misses 0 | refusals 0]
+[2026.09.30-18.53.34:435][999]LogWonderlandQa: Display: WLQA Q06 PASS | to tower_lane in 2.6 s: Arrived at Tower Lane. [arrived after 0.5 s | streamed at 0.0 s | cells loaded 74 pending 41 | spot misses 0 | refusals 0]
+[2026.09.30-18.53.34:696][999]LogWonderlandQa: Display: WLQA frame C:/dev/iwonder/_wonderland_package_regression_0930/Windows/Wonderland/Saved/Screenshots/WLQA/03_arrived_tower_lane.png saved 1280x800
+[2026.09.30-18.53.36:358][ 63]LogWonderlandTravel: WLTRAVEL start 'mushroom_grove' from (-22124, 59822, 102)
+[2026.09.30-18.53.37:659][109]LogWonderlandTravel: WLTRAVEL done 'mushroom_grove' arrived=1 at (42985, -85120, 75): Arrived at Mushroom Grove. [arrived after 0.9 s | streamed at 0.4 s | cells loaded 81 pending 55 | spot misses 0 | refusals 0]
+[2026.09.30-18.53.37:757][111]LogWonderlandQa: Display: WLQA Q07 PASS | to mushroom_grove in 3.1 s: Arrived at Mushroom Grove. [arrived after 0.9 s | streamed at 0.4 s | cells loaded 81 pending 55 | spot misses 0 | refusals 0]
+[2026.09.30-18.53.38:138][111]LogWonderlandQa: Display: WLQA frame C:/dev/iwonder/_wonderland_package_regression_0930/Windows/Wonderland/Saved/Screenshots/WLQA/03_arrived_mushroom_grove.png saved 1280x800
+[2026.09.30-18.53.38:150][112]LogWonderlandTravel: WLTRAVEL start 'tartarus_heartland_east' from (42985, -85120, 75)
+[2026.09.30-18.53.39:494][155]LogWonderlandTravel: WLTRAVEL done 'tartarus_heartland_east' arrived=1 at (64080, -4668, 75): Arrived at Tartarus Heartland East. [arrived after 0.9 s | streamed at 0.5 s | cells loaded 88 pending 64 | spot misses 0 | refusals 0]
+[2026.09.30-18.53.39:524][155]LogWonderlandQa: Display: WLQA Q08 PASS | to tartarus_heartland_east in 1.4 s: Arrived at Tartarus Heartland East. [arrived after 0.9 s | streamed at 0.5 s | cells loaded 88 pending 64 | spot misses 0 | refusals 0]
+[2026.09.30-18.53.42:622][243]LogWonderlandTravel: WLTRAVEL start 'castle_approach' from (64080, -4668, 75)
+[2026.09.30-18.53.47:121][398]LogWonderlandTravel: WLTRAVEL done 'castle_approach' arrived=1 at (0, 6000, 89): Arrived at Castle Approach. [arrived after 4.0 s | streamed at 3.6 s | cells loaded 67 pending 33 | spot misses 0 | refusals 0]
+[2026.09.30-18.53.47:185][400]LogWonderlandQa: Display: WLQA Q09 PASS | Mission Contract from the Tartarus rim travelled to its site: Arrived at Castle Approach. [arrived after 4.0 s | streamed at 3.6 s | cells loaded 67 pending 33 | spot misses 0 | refusals 0]
+[2026.09.30-18.54.27:595][753]LogWonderlandQa: Display: WLQA frame C:/dev/iwonder/_wonderland_package_regression_0930/Windows/Wonderland/Saved/Screenshots/WLQA/04_mission_contract_jack_azure.png saved 1280x800
+[2026.09.30-18.54.30:666][847]LogWonderlandQa: Display: WLQA END pass=11 fail=0
