@@ -33,15 +33,21 @@
  *   run loop's own sweep — `JuliusRecoveryPostgresRepository.recoverExpired`,
  *   deciding through `planJuliusRecovery` — reclaims the expired lease, bumps
  *   the generation, requeues the task and records `julius.recovery.action`.
- *   The run then finishes.
+ *   In the same transaction it RELEASES the reservation process A made and
+ *   never settled ((a2) step 2: nothing was handed, so nothing was spent), so
+ *   the run does not go on paying for a dead attempt's hold. The run then
+ *   finishes with no reservation left open.
  *
  *   PHASE 2, NEVER PAID TWICE. The same, on a second run, except process A dies
  *   INSIDE the worker's dispatch: the work WAS handed, and a real provider
  *   would have been paid for an answer nobody recorded. The sweep must not buy
  *   it again. It ends the task HANDED_OUTCOME_UNKNOWN (the live lane's decision
- *   C), the run fails truthfully, the worker was dispatched exactly once, and
- *   the reservation is left unsettled, so the evidence reads that spend as
- *   unknown and never as $0.
+ *   C), the run fails truthfully, and the worker was dispatched exactly once.
+ *   The sweep CLOSES the reservation as an unknown outcome
+ *   (`RECOVERED_HANDED_OUTCOME_UNKNOWN`, not released), so the evidence reads
+ *   that spend as unknown, charged at what it held, and never as $0. Before
+ *   (a2) step 2 it was left open for ever, which read the same way and never
+ *   ended.
  *
  * WHAT IS NOT PRODUCTION, stated rather than implied: the three C.A.R.D. role
  * adapters are fakes, exactly as the Relay recovery drill's are. This drill
@@ -332,6 +338,11 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
         AND NOT EXISTS (SELECT 1 FROM relay_wonderland.events s
                          WHERE s.event_type='julius.budget.settled' AND s.stream_id=r.stream_id
                            AND s.payload->'facts'->>'reservationId'=r.payload->'facts'->>'reservationId')`, [runId]);
+  /** Reservations the recovery sweep closed ((a2) step 2), by the reason it gave and whether it released them. */
+  const closedBySweep = (runId: string, reason: string, released: boolean) => scalar(
+    `SELECT count(*) FROM relay_wonderland.events
+      WHERE event_type='julius.budget.settled' AND stream_id=$1
+        AND payload->'facts'->>'reason'=$2 AND payload->'facts'->>'released'=$3`, [runId, reason, String(released)]);
   const firstSweep = (taskId: string) => scalar(
     `SELECT payload->'facts'->>'action'||'/'||COALESCE(payload->'facts'->>'reasonCode','-')
        FROM relay_wonderland.events
@@ -408,6 +419,11 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
   step('and it ran exactly ONCE after recovery', planResults === '1', `${planResults} result(s)`);
   const handedAfter = await handoffsFor(PLAN);
   step('and it was handed to a worker exactly once in all: process B’s', handedAfter === '1', `${handedAfter} handoff(s)`);
+  const releasedBySweep = await closedBySweep(RUN_ID, 'RECOVERED_BEFORE_HANDOFF', true);
+  step('the dead attempt’s reservation was RELEASED by the sweep: nothing was handed, so nothing was spent',
+    releasedBySweep === '1', `${releasedBySweep} released reservation(s)`);
+  const openAfter = await unsettledFor(RUN_ID);
+  step('and the run ends with no reservation left open', openAfter === '0', `${openAfter} unsettled reservation(s)`);
 
   /* ------------------------------------- phase 2: never paid twice */
   emit('');
@@ -445,7 +461,9 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
   const results2 = await resultsFor(HANDED_PLAN);
   step('no result was recorded for it', results2 === '0', `${results2} result(s)`);
   const heldAfter = await unsettledFor(HANDED_RUN);
-  step('and its reservation is still unsettled, so the spend reads as unknown, never as $0', heldAfter === '1', `${heldAfter} unsettled reservation(s)`);
+  const closedUnknown = await closedBySweep(HANDED_RUN, 'RECOVERED_HANDED_OUTCOME_UNKNOWN', false);
+  step('and the sweep CLOSED its reservation as an unknown outcome, charged at what it held: never released, never $0',
+    closedUnknown === '1' && heldAfter === '0', `${closedUnknown} closed unknown, ${heldAfter} still open`);
 
   const audit = await auditProviders(scalar, [RUN_ID, HANDED_RUN]);
   step('every dispatch went to the drill’s fake provider — and there WERE dispatches to check',
