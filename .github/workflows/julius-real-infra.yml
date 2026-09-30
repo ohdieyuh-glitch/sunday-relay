@@ -274,6 +274,21 @@ jobs:
           esac
           rm -f "$diagnostics"
 
+      - name: A throwaway database the real-PostgreSQL suites are allowed to write
+        # THE SUITES READ ONLY JULIUS_TEST_DATABASE_URL (#288), so that a developer's inherited
+        # DATABASE_URL can never reach a test. Nothing in this workflow set it, so from 09-28
+        # every suite below ran as `todo` and its step still passed: run 36587881843 executed 0
+        # of 28 real-PostgreSQL cases, and 1 of 18 in the preflight identity regression. ONE
+        # database for all of them: every suite carries random identities, so they can share it,
+        # and none of them reaches the job's own `julius` database.
+        if: ${{ !cancelled() }}
+        env:
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: |
+          set -euo pipefail
+          : "${DATABASE_URL:?the executor launch step exports it; without it PostgreSQL never came up}"
+          docker exec -e PGPASSWORD julius-postgres createdb -U "$PGUSER" julius_suites
+          echo "JULIUS_TEST_DATABASE_URL=${DATABASE_URL%/*}/julius_suites" >> "$GITHUB_ENV"
       - name: Preflight identity regression against real PostgreSQL (dry run 33635375764)
         # The executor's foreign keys, exercised through the executor's own repository: the
         # preflight's fixture is accepted, removing the invocation seed brings 23503 back,
@@ -325,6 +340,30 @@ jobs:
         env:
           JULIUS_REAL_POSTGRES: '1'
         run: npx vitest run src/relay/persistence/julius-decision-history.real-postgres.test.ts
+      - name: Every real-PostgreSQL suite in the tree runs, and not one of its cases is todo
+        # THE STEPS ABOVE NAME FIVE SUITES; THE TREE HOLDS MORE, and a suite nobody wired never
+        # ran here at all (the lifecycle channel's, the Wonderland seam's, the claim standing's,
+        # the criteria scope's, the C.A.R.D. approval gate's). This runs every file whose path
+        # says `real-postgres`, so a new suite is covered the day it lands, and it FAILS when a
+        # single case reports todo or skipped: a suite that did not run is not a suite that
+        # passed, which is exactly what the five steps above could not tell apart.
+        if: ${{ !cancelled() }}
+        env:
+          JULIUS_REAL_POSTGRES: '1'
+        run: |
+          set -euo pipefail
+          : "${JULIUS_TEST_DATABASE_URL:?the throwaway-database step exports it}"
+          npx vitest run real-postgres --reporter=default --reporter=json --outputFile=/tmp/julius-real-postgres.json
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync("/tmp/julius-real-postgres.json", "utf8"));
+            const files = report.testResults.map((file) => file.name.replace(`${process.cwd()}/`, ""));
+            const idle = report.numTodoTests + report.numPendingTests;
+            console.log(`real-PostgreSQL suites: ${files.length} files, ${report.numPassedTests} passed, ${report.numFailedTests} failed, ${idle} todo/skipped`);
+            for (const file of files) console.log(`  ${file}`);
+            if (files.length === 0) { console.error("real_postgres_no_suites: no file matched"); process.exit(1); }
+            if (idle > 0) { console.error(`real_postgres_not_run: ${idle} case(s) did not run`); process.exit(1); }
+          '
       - name: Every evidence query holds against the migrated schema
         # Runs whether or not the preflight passed: the preflight applies the migrations
         # before its executor round trip, so the schema is present at today's failure too.

@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
+
+import { ANTHROPIC_CREDENTIAL_ENV_NAMES } from '../relay-bridge/hosted-coding-agent/hosted-auth';
+import { sdkExecutableCandidates } from '../relay-bridge/hosted-coding-agent/hosted-login-probe';
 
 /**
  * ONE SPENDING PATH, ONE SLOT, NO WAY AROUND EITHER.
@@ -177,25 +181,70 @@ describe('provider readiness fails before spending, and never exposes a key', ()
         expect(line, 'a key may only be interpolated into the printf that feeds --config').toMatch(/^\s*printf 'header = /u);
       }
       if (/\bcurl\b/u.test(line)) expect(line, 'curl never receives a key as an argument').not.toMatch(/API_KEY/u);
+      // The Coding Agent's subscription token: presence-checked once, and otherwise
+      // named only as the one allow-listed variable `env -i` hands the CLI — an
+      // ENVIRONMENT entry for the child, never an argument to it, never printed.
+      if (/CLAUDE_CODE_OAUTH_TOKEN/u.test(line)) {
+        expect(line, 'the token is only presence-checked or handed to the CLI under env -i').toMatch(
+          /^\s*(\[ -n "\$OPENAI_API_KEY" \] && \[ -n "\$CLAUDE_CODE_OAUTH_TOKEN" \] && \[ -n "\$XAI_API_KEY" \] \|\| \{|env -i -C "\$sub\/work" PATH="\$PATH" HOME="\$sub\/home" CI=1 NO_COLOR=1 TERM=dumb CLAUDE_CODE_OAUTH_TOKEN="\$CLAUDE_CODE_OAUTH_TOKEN" \\)$/u,
+        );
+      }
       if (/\becho\b/u.test(line)) expect(line, 'nothing echoes a key').not.toMatch(/API_KEY/u);
     }
     expect(body).toContain('--config -');
     expect(body).toContain('provider_balance=UNKNOWN');
   });
 
-  /** Run the step for real, with a fake `curl` that answers one status per provider. */
-  const runReadiness = (statuses: { openai: string; anthropic: string; xai: string }, env: Record<string, string> = {}) => {
+  /**
+   * Run the step for real: a fake `curl` answers one status per API-billed provider,
+   * and the Coding Agent's subscription is checked by the step's own literal `env -i`
+   * command and the REAL check script, with a FAKE token. The step names the ubuntu
+   * x64 CLI; here that path is a shim that records its argv, cwd and environment
+   * NAMES and then runs the Agent SDK's REAL bundled CLI for this host — which
+   * classifies a placeholder token offline as `oauth_token` (measured 2026-09-29),
+   * so nothing is contacted. The step runs from a temporary copy of the workspace:
+   * the check script (which imports only node builtins) and the shim.
+   */
+  const hostCli = (() => {
+    const require = createRequire(join(ROOT, 'package.json'));
+    for (const candidate of sdkExecutableCandidates()) {
+      try { return require.resolve(candidate); } catch { /* not installed for this platform */ }
+    }
+    throw new Error('the Agent SDK bundled CLI is not installed for this platform');
+  })();
+  const CLI_ALLOWED_ENV = ['PATH', 'HOME', 'CI', 'NO_COLOR', 'TERM', 'CLAUDE_CODE_OAUTH_TOKEN'];
+  /**
+   * What the shim's own shell adds to its environment when it starts; none of it is
+   * inherited through `env -i`. On Windows the MSYS runtime also sets its own three
+   * (measured 2026-09-29) — none of them a credential.
+   */
+  const SHELL_OWN_ENV = ['PWD', 'OLDPWD', 'SHLVL', '_', ...(process.platform === 'win32' ? ['MSYSTEM', 'SYSTEMROOT', 'WINDIR'] : [])];
+  const runReadiness = (statuses: { openai: string; xai: string }, env: Record<string, string> = {}) => {
     const dir = mkdtempSync(join(tmpdir(), 'julius-readiness-'));
+    mkdirSync(join(dir, 'scripts'));
+    copyFileSync(join(ROOT, 'scripts', 'julius-subscription-check.mjs'), join(dir, 'scripts', 'julius-subscription-check.mjs'));
+    const shimDir = join(dir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk-linux-x64');
+    mkdirSync(shimDir, { recursive: true });
+    const record = dir.replace(/\\/gu, '/');
+    writeFileSync(join(shimDir, 'claude'), [
+      '#!/usr/bin/env bash',
+      `for arg in "$@"; do case "$arg" in *FAKETESTNOTREAL*) echo LEAK >> '${record}/leak';; esac; done`,
+      `printf '%s\\n' "$*" >> '${record}/cli-argv'`,
+      `pwd >> '${record}/cli-cwd'`,
+      `compgen -e >> '${record}/cli-env'`,
+      `exec '${hostCli.replace(/\\/gu, '/')}' "$@"`,
+    ].join('\n'));
+    chmodSync(join(shimDir, 'claude'), 0o755);
     const fakeCurl = join(dir, 'curl');
     writeFileSync(fakeCurl, [
       '#!/usr/bin/env bash',
       'config=$(cat)',
-      // Record whether any key ever arrived as an argument — it must not.
+      // Record whether any key or token ever arrived as an argument — it must not.
       'for arg in "$@"; do case "$arg" in *FAKETESTNOTREAL*) echo LEAK >> "$FAKE_DIR/leak";; esac; done',
       'url="${@: -1}"',
       'case "$url" in',
       `  *api.openai.com*) printf '%s' "${statuses.openai}";;`,
-      `  *api.anthropic.com*) printf '%s' "${statuses.anthropic}";;`,
+      '  *api.anthropic.com*) echo ANTHROPIC_API_CALLED >> "$FAKE_DIR/leak"; printf 200;;',
       `  *api.x.ai*) printf '%s' "${statuses.xai}";;`,
       '  *) printf 000;;',
       'esac',
@@ -204,6 +253,9 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     const fakeSleep = join(dir, 'sleep');
     writeFileSync(fakeSleep, '#!/usr/bin/env bash\nexit 0\n');
     chmodSync(fakeSleep, 0o755);
+    // Every route that outranks the subscription is BLANK here, whatever the shell
+    // running the test holds, exactly as the workflow step never passes one.
+    const blankRoutes = Object.fromEntries(ANTHROPIC_CREDENTIAL_ENV_NAMES.map((name) => [name, '']));
     let code = 0;
     let output = '';
     try {
@@ -211,9 +263,11 @@ describe('provider readiness fails before spending, and never exposes a key', ()
         cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
         env: {
           ...process.env,
+          ...blankRoutes,
           PATH: `${dir}${delimiter}${process.env.PATH ?? ''}`,
           FAKE_DIR: dir,
-          OPENAI_API_KEY: 'FAKETESTNOTREAL-openai', ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic', XAI_API_KEY: 'FAKETESTNOTREAL-xai',
+          GITHUB_WORKSPACE: dir,
+          OPENAI_API_KEY: 'FAKETESTNOTREAL-openai', CLAUDE_CODE_OAUTH_TOKEN: 'FAKETESTNOTREAL-oauth', XAI_API_KEY: 'FAKETESTNOTREAL-xai',
           OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-5.6-sol', RELAY_HOSTED_CODING_MODEL: 'claude-fable-5',
           RELAY_HERMES_PROVIDER: 'xai', RELAY_HERMES_MODEL: 'grok-build-0.1',
           ...env,
@@ -223,31 +277,127 @@ describe('provider readiness fails before spending, and never exposes a key', ()
       code = (error as { status?: number }).status ?? 1;
       output = String((error as { stdout?: string }).stdout ?? '');
     }
-    let leak = '';
-    try { leak = readFileSync(join(dir, 'leak'), 'utf8'); } catch { /* none */ }
-    return { code, output, leak };
+    const recorded = (name: string): string => { try { return readFileSync(join(dir, name), 'utf8'); } catch { return ''; } };
+    return {
+      code, output,
+      leak: recorded('leak'),
+      cliArgv: recorded('cli-argv').trim(),
+      cliCwd: recorded('cli-cwd').trim(),
+      cliEnv: recorded('cli-env').split('\n').map((name) => name.trim()).filter(Boolean),
+    };
   };
 
-  it('all three ready: exit 0, three AUTHENTICATED lines, balance UNKNOWN, no key in argv or output', () => {
-    const run = runReadiness({ openai: '200', anthropic: '200', xai: '200' });
+  it('all three ready: two API providers AUTHENTICATED, the Coding Agent on its SUBSCRIPTION, no key or token in argv or output', () => {
+    const run = runReadiness({ openai: '200', xai: '200' });
     expect(run.code).toBe(0);
-    expect(run.output.match(/result=AUTHENTICATED_MODEL_AVAILABLE/gu)?.length).toBe(3);
+    expect(run.output.match(/result=AUTHENTICATED_MODEL_AVAILABLE/gu)?.length).toBe(2);
+    expect(run.output).toContain('provider_readiness provider=anthropic model=claude-fable-5 http=none auth=CLAUDE_SUBSCRIPTION method=oauth_token plan=absent result=SUBSCRIPTION_LOGIN_PRESENT');
     expect(run.output).toContain('provider_balance=UNKNOWN');
-    expect(run.leak).toBe('');
+    expect(run.leak, 'no argv leak, and the Anthropic API is never called').toBe('');
     expect(run.output).not.toContain('FAKETESTNOTREAL');
-  }, 30_000);
-
-  it('a refused credential, a missing model or an unreachable provider fails the job', () => {
-    expect(runReadiness({ openai: '401', anthropic: '200', xai: '200' }).code).not.toBe(0);
-    expect(runReadiness({ openai: '200', anthropic: '404', xai: '200' }).code).not.toBe(0);
-    expect(runReadiness({ openai: '200', anthropic: '200', xai: '503' }).code).not.toBe(0);
-    const unauth = runReadiness({ openai: '200', anthropic: '403', xai: '200' });
-    expect(unauth.output).toContain('provider=anthropic model=claude-fable-5 http=403 result=UNAUTHENTICATED');
+    // The CLI ran exactly once, zero-generation, from the empty work directory,
+    // and nothing outside the allow-list reached it: no ANTHROPIC_*, no provider key.
+    expect(run.cliArgv).toBe('auth status --json');
+    expect(run.cliCwd.replace(/\\/gu, '/')).toMatch(/\/work$/u);
+    expect(run.cliEnv.filter((name) => !SHELL_OWN_ENV.includes(name)).sort()).toEqual([...CLI_ALLOWED_ENV].sort());
   }, 60_000);
 
-  it('a missing key fails before any request is made', () => {
-    const run = runReadiness({ openai: '200', anthropic: '200', xai: '200' }, { XAI_API_KEY: '' });
+  it('an Anthropic route set in the step never reaches the CLI: refused before it runs', () => {
+    for (const name of ANTHROPIC_CREDENTIAL_ENV_NAMES) {
+      const run = runReadiness({ openai: '200', xai: '200' }, { [name]: 'FAKETESTNOTREAL-route' });
+      expect(run.code, name).not.toBe(0);
+      expect(run.output, name).toContain(`reason=OUTRANKED_BY_${name} result=SUBSCRIPTION_NOT_READY`);
+      expect(run.cliArgv, `${name}: the CLI must not run at all`).toBe('');
+      expect(run.output).not.toContain('FAKETESTNOTREAL');
+    }
+  }, 240_000);
+
+  /**
+   * The optional smoke step, driven for real over a FAKE CLI that answers fixed
+   * JSON — the real one would spend subscription usage. Proves the step's own
+   * shell: the request is sent only after a subscription status, and only an
+   * exact OK passes.
+   */
+  const runSmoke = (statusJson: string, replyJson: string, env: Record<string, string> = {}) => {
+    const smoke = step(job('first-live-mission'), "'Subscription smoke: one tiny request on the Coding Agent''s subscription'");
+    const dir = mkdtempSync(join(tmpdir(), 'julius-smoke-'));
+    mkdirSync(join(dir, 'scripts'));
+    copyFileSync(join(ROOT, 'scripts', 'julius-subscription-check.mjs'), join(dir, 'scripts', 'julius-subscription-check.mjs'));
+    const shimDir = join(dir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk-linux-x64');
+    mkdirSync(shimDir, { recursive: true });
+    writeFileSync(join(dir, 'status.json'), statusJson);
+    writeFileSync(join(dir, 'reply.json'), replyJson);
+    const record = dir.replace(/\\/gu, '/');
+    writeFileSync(join(shimDir, 'claude'), [
+      '#!/usr/bin/env bash',
+      `printf '%s\\n' "$*" >> '${record}/cli-argv'`,
+      `case "$1" in auth) cat '${record}/status.json';; -p) cat '${record}/reply.json';; esac`,
+    ].join('\n'));
+    chmodSync(join(shimDir, 'claude'), 0o755);
+    const blankRoutes = Object.fromEntries(ANTHROPIC_CREDENTIAL_ENV_NAMES.map((name) => [name, '']));
+    let code = 0;
+    let output = '';
+    try {
+      output = execFileSync('bash', ['-c', script(smoke)], {
+        cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, ...blankRoutes, CLAUDE_CODE_OAUTH_TOKEN: 'FAKETESTNOTREAL-oauth', RELAY_HOSTED_CODING_MODEL: 'claude-fable-5', ...env },
+      });
+    } catch (error) {
+      code = (error as { status?: number }).status ?? 1;
+      output = String((error as { stdout?: string }).stdout ?? '');
+    }
+    let argv = '';
+    try { argv = readFileSync(join(dir, 'cli-argv'), 'utf8'); } catch { /* the CLI never ran */ }
+    return { code, output, calls: argv.split('\n').filter(Boolean) };
+  };
+  const TOKEN_ONLY = '{"loggedIn":true,"authMethod":"oauth_token","apiProvider":"firstParty"}';
+
+  it('smoke: a subscription status and an exact OK pass, after exactly one literal request', () => {
+    const run = runSmoke(TOKEN_ONLY, '{"type":"result","is_error":false,"result":"OK"}');
+    expect(run.code).toBe(0);
+    expect(run.output).toContain('subscription_smoke provider=anthropic model=claude-fable-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=PASS');
+    expect(run.calls).toEqual([
+      'auth status --json',
+      '-p Reply with exactly OK --max-turns 1 --output-format json --model claude-fable-5 --setting-sources user --strict-mcp-config --no-session-persistence',
+    ]);
+    expect(run.output).not.toContain('FAKETESTNOTREAL');
+  }, 60_000);
+
+  it('smoke: an api_key status FAILS CLOSED and no request is sent; a wrong reply fails; a key in the step stops the CLI', () => {
+    const apiKey = runSmoke('{"loggedIn":true,"authMethod":"api_key","apiProvider":"firstParty","apiKeySource":"ANTHROPIC_API_KEY"}', '{"result":"OK"}');
+    expect(apiKey.code).not.toBe(0);
+    expect(apiKey.output).toContain('reason=API_KEY_IN_PLAY result=SUBSCRIPTION_NOT_READY');
+    expect(apiKey.calls).toEqual(['auth status --json']);
+    const wrong = runSmoke(TOKEN_ONLY, '{"type":"result","is_error":true,"result":"Credit balance is too low"}');
+    expect(wrong.code).not.toBe(0);
+    expect(wrong.output).toContain('reply=ERROR result=FAIL');
+    expect(wrong.output).not.toContain('Credit balance');
+    const outranked = runSmoke(TOKEN_ONLY, '{"result":"OK"}', { ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic' });
+    expect(outranked.code).not.toBe(0);
+    expect(outranked.output).toContain('reason=OUTRANKED_BY_ANTHROPIC_API_KEY result=SUBSCRIPTION_NOT_READY');
+    expect(outranked.calls).toEqual([]);
+    expect(outranked.output).not.toContain('FAKETESTNOTREAL');
+  }, 120_000);
+
+  it('a refused credential or an unreachable API provider fails the job', () => {
+    expect(runReadiness({ openai: '401', xai: '200' }).code).not.toBe(0);
+    expect(runReadiness({ openai: '404', xai: '200' }).code).not.toBe(0);
+    expect(runReadiness({ openai: '200', xai: '503' }).code).not.toBe(0);
+  }, 120_000);
+
+  it('an Anthropic API key beside the token fails the job: the subscription would be outranked', () => {
+    const run = runReadiness({ openai: '200', xai: '200' }, { ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic' });
     expect(run.code).not.toBe(0);
-    expect(run.output).not.toContain('provider_readiness');
-  }, 30_000);
+    expect(run.output).toContain('reason=OUTRANKED_BY_ANTHROPIC_API_KEY result=SUBSCRIPTION_NOT_READY');
+    expect(run.output).not.toContain('FAKETESTNOTREAL');
+  }, 60_000);
+
+  it('a missing key or token fails before any request is made', () => {
+    const blanks: Record<string, string>[] = [{ XAI_API_KEY: '' }, { CLAUDE_CODE_OAUTH_TOKEN: '' }];
+    for (const blank of blanks) {
+      const run = runReadiness({ openai: '200', xai: '200' }, blank);
+      expect(run.code, JSON.stringify(blank)).not.toBe(0);
+      expect(run.output).not.toContain('provider_readiness');
+    }
+  }, 60_000);
 });
