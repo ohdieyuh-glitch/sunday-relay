@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **207 production files** across 20/20 subsystems (2 roots, 178 traced, 9 not composed by the live root, 18 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **208 production files** across 20/20 subsystems (2 roots, 179 traced, 9 not composed by the live root, 18 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -296,6 +296,7 @@ Acceptance criteria, reviewer findings, `verifyTask` and `evaluateJuliusVerifica
 
 | production source | role | reached from |
 | --- | --- | --- |
+| `src/relay/mission/julius/julius-attempt-evidence.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-verification-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 
 ### 14 REPAIR
