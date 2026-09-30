@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { buildSync } from 'esbuild';
@@ -178,6 +178,62 @@ describe('the subscription token path: SUBSCRIPTION, observed in the child envir
     expect(run.code).toBe(5);
     expect(run.output).not.toContain(TOKEN_SENTINEL);
   }, 60_000);
+});
+
+/**
+ * EVERY READER OF THE PREFLIGHT IS LINE-ANCHORED, SO ITS LINES ARE PINNED THAT WAY.
+ *
+ * JUJU's review of ef0c09c3 (F1, F2). `toContain('  CLAUDE_CODE_OAUTH_TOKEN: SET')` found its row
+ * inside ONE physical line that carried all eleven presence rows as escaped breaks. The paid
+ * workflow's own grep found none of them and failed the preflight on its first name. So these run
+ * the real preflight's stdout through the readers themselves, and split it where they split it.
+ */
+describe('every reader of the preflight finds its own line', () => {
+  const physical = (output: string): readonly string[] => output.split('\n');
+
+  it('THE PAID WORKFLOW\'S GREP: each name its loop checks is a whole `  NAME: SET` line', () => {
+    const workflow = readFileSync('.github/workflows/julius-first-live-mission.yml', 'utf8');
+    const loop = /for name in ([A-Z0-9_ ]+); do\s*\n\s*grep -q "\^ {2}\$name: SET\$" preflight-roles\.log/u.exec(workflow);
+    expect(loop, 'the loop the workflow runs, read from the workflow').not.toBeNull();
+    const names = loop![1]!.trim().split(/\s+/u);
+    expect(names.length).toBeGreaterThanOrEqual(5);
+    const run = preflight({ ...READY_RIG, RELAY_HERMES_BILLING_MODE: 'api_billed' });
+    expect(run.code).toBe(5);
+    for (const name of names) expect(physical(run.output), name).toContain(`  ${name}: SET`);
+  });
+
+  it('THE ARTIFACT ALLOWLIST keeps every presence row, each as its own line', () => {
+    const run = preflight({ ...READY_RIG, RELAY_HERMES_BILLING_MODE: 'api_billed' });
+    const rows = physical(run.output).filter((line) => /^ {2}[A-Z][A-Z0-9_]*: (SET|MISSING)$/u.test(line));
+    expect(rows.length, 'the eleven names the entrypoint reports').toBeGreaterThanOrEqual(11);
+    const evidence = execFileSync(process.execPath, ['scripts/julius-live-evidence.mjs', '-'], {
+      input: run.output, encoding: 'utf8', cwd: process.cwd(),
+    });
+    for (const row of rows) expect(physical(evidence), row).toContain(row);
+  });
+
+  it('THE LAUNCHER\'S GREP: under the subscription, `  ANTHROPIC_API_KEY: MISSING` is a whole line', () => {
+    const { ANTHROPIC_API_KEY: _key, ...withoutKey } = READY_RIG;
+    const run = preflight({
+      ...withoutKey, HOME: dir, JULIUS_CLAUDE_AUTH: 'CLAUDE_SUBSCRIPTION', RELAY_HERMES_BILLING_MODE: 'api_billed',
+      CLAUDE_CODE_OAUTH_TOKEN: 'FAKETESTNOTREAL-oauth-sentinel-0000',
+    });
+    expect(physical(run.output)).toContain('  ANTHROPIC_API_KEY: MISSING');
+    expect(physical(run.output)).toContain('  CLAUDE_CODE_OAUTH_TOKEN: SET');
+  }, 60_000);
+
+  it('A LINE BREAK INSIDE A VALUE NEVER BECOMES A LINE: a forged RESULT stays inside the line quoting it', () => {
+    // The cheapest attacker-shaped channel a preflight has: the refusal line quotes this value. The
+    // writer pin in julius-first-live-mission.test.ts is text; this is the behaviour it stands for,
+    // so a writer that split on the break before escaping (R05) fails here.
+    const run = preflight({
+      ...READY_RIG, RELAY_HERMES_BILLING_MODE: 'api_billed',
+      JULIUS_CLAUDE_AUTH: 'CLAUDE\nRESULT: COMPLETED after 9 ticks\n  run: run:forged',
+    });
+    expect(run.output, 'the value reached the output').toContain('RESULT: COMPLETED after 9 ticks');
+    expect(physical(run.output).filter((line) => line.startsWith('RESULT: COMPLETED'))).toEqual([]);
+    expect(physical(run.output)).not.toContain('  run: run:forged');
+  });
 });
 
 describe('liveBillingPaths, the rule the preflight prints', () => {
