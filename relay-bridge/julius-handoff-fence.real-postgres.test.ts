@@ -220,6 +220,25 @@ suite('(a2) the fenced handoff against a real PostgreSQL', () => {
     expect(action).toMatchObject({ action: 'REQUEUE', settlements: [{ reservationId, released: true, reasonCode: 'RECOVERED_BEFORE_HANDOFF' }] });
   });
 
+  it('(a2) STEP 2: a handoff that NAMES its reservation speaks for that one only, though a reroute’s shares its attempt', async () => {
+    const claim = await claimed();
+    const first = `reservation:leg-one-${nonce()}`;
+    const second = `reservation:leg-two-${nonce()}`;
+    await events.append(reserved(claim, first, 1));
+    await events.append(reserved(claim, second, 1));
+    // The first leg was handed; the reroute reserved under the same attempt and died before its own handoff.
+    expect(await events.appendHandoff({
+      event: { ...handoff(claim), facts: { workerId: 'architect-openai', attempt: 1, reservationId: first, runId: claim.runId } },
+      owner: claim.owner, leaseGeneration: claim.leaseGeneration,
+    })).toBe('RECORDED');
+    await lapse(claim.taskId);
+    const [action] = (await recovery.recoverExpired(new Date().toISOString(), 10, claim.projectId)).filter((row) => row.taskId === claim.taskId);
+    expect(action!.settlements).toEqual([
+      { reservationId: first, released: false, reasonCode: 'RECOVERED_HANDED_OUTCOME_UNKNOWN' },
+      { reservationId: second, released: true, reasonCode: 'RECOVERED_BEFORE_HANDOFF' },
+    ]);
+  });
+
   it('(a2) STEP 2 LOCK ORDER: a settlement committed while the sweep writes its own close is never doubled by the sweep', async () => {
     const claim = await claimed();
     const reservationId = `reservation:race-${nonce()}`;
@@ -258,8 +277,8 @@ suite('(a2) the fenced handoff against a real PostgreSQL', () => {
     taskId: claim.taskId, workerId: null, correlationId: claim.runId, causationId: null, occurredAt: new Date().toISOString(),
     facts: { reservationId, role: 'ARCHITECT', usdMicros: null, reason: 'CANCELLED', released: true, costBasis: 'UNKNOWN', estimatedUsdMicros: null, ...facts },
   });
-  const contradictionsFor = async (runId: string) => (await pool.query<{ payload: { facts: Record<string, unknown> } }>(
-    `SELECT payload FROM relay_wonderland.events WHERE stream_id=$1 AND event_type='julius.budget.settlement.contradicted' ORDER BY sequence`, [runId])).rows;
+  const conflictsFor = async (runId: string) => (await pool.query<{ payload: { facts: Record<string, unknown> } }>(
+    `SELECT payload FROM relay_wonderland.events WHERE stream_id=$1 AND event_type='julius.budget.settlement.conflict' ORDER BY sequence`, [runId])).rows;
   /** A reservation of a claimed attempt that the sweep has closed, handed or not. */
   const closedBySweep = async (handed: boolean) => {
     const claim = await claimed();
@@ -278,22 +297,22 @@ suite('(a2) the fenced handoff against a real PostgreSQL', () => {
     expect(await events.appendSettlement(late)).toBe('SAME_MEANING');
     expect(await events.appendSettlement(late)).toBe('SAME_MEANING');
     expect((await settledRows(claim.runId, reservationId)).map((row) => row.payload.facts.reason)).toEqual(['RECOVERED_BEFORE_HANDOFF']);
-    expect(await contradictionsFor(claim.runId)).toEqual([]);
+    expect(await conflictsFor(claim.runId)).toEqual([]);
   });
 
-  it('(a2) STEP 3: a free release after an UNKNOWN close is written and the contradiction named; a costed one is written plainly', async () => {
+  it('(a2) STEP 3: a free release after an UNKNOWN close is written and the conflict named; a costed one is written plainly', async () => {
     const free = await closedBySweep(true);
     const late = releaseOf(free.claim, free.reservationId, {});
-    expect(await events.appendSettlement(late)).toBe('CONTRADICTED');
+    expect(await events.appendSettlement(late)).toBe('CONFLICT');
     expect(await events.appendSettlement(late), 'its replay is the same row').toBe('DUPLICATE');
     expect((await settledRows(free.claim.runId, free.reservationId)).map((row) => row.payload.facts.reason)).toEqual(['RECOVERED_HANDED_OUTCOME_UNKNOWN', 'CANCELLED']);
-    expect((await contradictionsFor(free.claim.runId)).map((row) => row.payload.facts)).toEqual([expect.objectContaining({
+    expect((await conflictsFor(free.claim.runId)).map((row) => row.payload.facts)).toEqual([expect.objectContaining({
       reservationId: free.reservationId, closedAs: 'RECOVERED_HANDED_OUTCOME_UNKNOWN', releasedAs: 'CANCELLED',
     })]);
 
     const costed = await closedBySweep(true);
     expect(await events.appendSettlement(releaseOf(costed.claim, costed.reservationId, { released: false, usdMicros: 450_000, costBasis: 'PROVIDER_REPORTED', reason: 'TIMEOUT' }))).toBe('RECORDED');
-    expect(await contradictionsFor(costed.claim.runId), 'money reported is never a contradiction').toEqual([]);
+    expect(await conflictsFor(costed.claim.runId), 'money reported is never a conflict').toEqual([]);
   });
 
   it('(a2) STEP 3 LOCK ORDER: a free release that meets the sweep’s close still being written WAITS for it, then says the same and writes nothing', async () => {

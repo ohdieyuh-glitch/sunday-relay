@@ -112,15 +112,18 @@ async function closeRecoveredReservations(
      ORDER BY sequence`,
     [task.runId, task.taskId]);
   if (reserved.rows.length === 0) return [];
-  const dispatched = await client.query<{ attempt: unknown }>(
-    `SELECT e.payload->'facts'->'attempt' AS attempt FROM relay_wonderland.events e WHERE e.stream_id=$1 AND e.event_type='julius.worker.dispatched' AND e.payload->>'taskId'=$2`,
+  const dispatched = await client.query<{ attempt: unknown; reservation_id: string | null }>(
+    `SELECT e.payload->'facts'->'attempt' AS attempt,NULLIF(e.payload->'facts'->>'reservationId','') AS reservation_id FROM relay_wonderland.events e WHERE e.stream_id=$1 AND e.event_type='julius.worker.dispatched' AND e.payload->>'taskId'=$2`,
     [task.runId, task.taskId]);
   const open: JuliusOpenReservation[] = reserved.rows.map((row) => ({
     reservationId: row.reservation_id,
     role: row.role,
     attempt: typeof row.attempt === 'number' ? row.attempt : null,
   }));
-  const settlements = planJuliusRecoverySettlements(open, dispatched.rows.map((row) => (typeof row.attempt === 'number' ? row.attempt : null)));
+  const settlements = planJuliusRecoverySettlements(open, dispatched.rows.map((row) => ({
+    attempt: typeof row.attempt === 'number' ? row.attempt : null,
+    reservationId: row.reservation_id,
+  })));
   for (const [index, settlement] of settlements.entries()) {
     await appendJuliusEventWithin(client, juliusRecoverySettlementEvent({ ...task, reservation: open[index]!, settlement, occurredAt: now }));
   }
