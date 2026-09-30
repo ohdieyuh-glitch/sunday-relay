@@ -117,6 +117,9 @@ export declare const RUNTIME_TRANSPORTS: string;
 /** The evidence dump whose queries decide which bundle files have a producer. */
 export declare const EVIDENCE_DUMP: string;
 
+/** The executor refusals that are infrastructure, not a worker reaching past its authority. */
+export declare const INFRASTRUCTURE_REFUSALS: readonly string[];
+
 /** One role's live identity: the worker and adapter the composition declares, and the providers it routes the role to. */
 export interface LiveRoleIdentity {
   readonly workerId: string;

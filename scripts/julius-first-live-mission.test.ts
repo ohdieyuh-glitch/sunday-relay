@@ -1065,6 +1065,16 @@ describe('the evidence dump names only tables and columns the migrations create'
     // The local launcher declares its mode for the one paid path it has.
     const launcher = read('scripts/julius-local-qualification.sh');
     expect(launcher).toContain('JULIUS_EVIDENCE_MODE="$evidence_mode" PGPASSWORD="$DB_PASSWORD_VALUE" ./.github/julius-live-evidence-dump.sh "$out"');
+    // THE COMMIT IS THE CHECKOUT THAT RAN THE DUMP: `git rev-parse HEAD`, taken
+    // there and then (on a pull_request, GitHub's merge commit), which is what
+    // the gate compares with exact equality — so the writer side is pinned too.
+    expect(script).toContain('  commit=$(git rev-parse HEAD 2>/dev/null || echo unknown)');
+    expect(script).toContain("for a `pull_request` event, GitHub's merge commit, never the PR head");
+    expect(script, 'and the tracked changes it was dumped with').toContain("status=$(git status --porcelain --untracked-files=no 2>/dev/null)");
+    // The launcher refuses to dump from any checkout but the clean one its rig ran (P1-B).
+    const evidence = launcher.slice(launcher.indexOf('cmd_evidence() {'), launcher.indexOf('./.github/julius-live-evidence-dump.sh "$out"'));
+    expect(evidence).toContain('[ "$RIG_HEAD" = "$HEAD_SHA" ] || refuse "evidence_head_moved:');
+    expect(evidence).toContain("[ -z \"$(git status --porcelain --untracked-files=no)\" ] || refuse 'evidence_checkout_dirty:");
   });
 
   it('every run-scoped table names its run, so a database holding two runs cannot mix them (GATE_AUDIT.md P1-3)', () => {

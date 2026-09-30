@@ -35,6 +35,12 @@ dump() {
 # secret. Every value is reduced to a token alphabet, and every command is guarded: this script
 # runs under `set -e`, and a manifest that could abort the dump would cost the evidence it names.
 #
+# COMMIT is `git rev-parse HEAD` of the checkout that ran this dump, taken now: on a runner the
+# job's own checkout (for a `pull_request` event, GitHub's merge commit, never the PR head), off a
+# runner the launcher's checkout, which refuses to dump from any commit but the one its rig ran.
+# The Beta Gate binds a bundle only when it is read at exactly that commit, and only when
+# `tracked_changes` is 0.
+#
 # MODE. On a runner the dispatch input decides it: a `workflow_dispatch` whose `confirm_live` is
 # exactly `RUN LIVE MISSION` is the one paid path the mission workflow has. Anything else — a
 # preflight, a pull-request regression, an unreadable event — is not paid. Off a runner the
