@@ -28,6 +28,8 @@ import { createHash } from 'node:crypto';
 import type { JuliusContractReviewCharge } from '../../src/relay/mission/julius/julius-task-contract';
 import {
   JuliusDispatchError,
+  juliusStoreErrorClass,
+  juliusStoreErrorIsTransient,
   reviewChargeFor,
   reviewStageOf,
   reviewSubjectTaskId,
@@ -1514,12 +1516,30 @@ export function createJuliusCodingAgentAdapter(input: {
        */
       const restoreRequest = dispatch.workspace === undefined ? null
         : { toTree: dispatch.workspace.restoreToTree, expectedTree: dispatch.workspace.expectedTree };
-      const before = await input.shell.run({
-        ...shellScope,
-        invocationKey: `${dispatch.taskId}:base`,
-        command: juliusAttemptStartCommand(restoreRequest),
-        timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.base,
-      });
+      /**
+       * BEFORE THE SESSION, JULIUS'S OWN STORE FAILING IS JULIUS'S, AND NOTHING
+       * RAN. The start snapshot writes PostgreSQL through the shell port, and a
+       * raw store error from it used to reach the kernel unnamed: a socket
+       * errno read as a provider timeout. No session has been launched here,
+       * so the failure says so, and a transient one may be retried for free.
+       * An executor refusal keeps its own meaning, unchanged.
+       */
+      const before = await (async () => {
+        try {
+          return await input.shell.run({
+            ...shellScope,
+            invocationKey: `${dispatch.taskId}:base`,
+            command: juliusAttemptStartCommand(restoreRequest),
+            timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.base,
+          });
+        } catch (error) {
+          const storeErrorClass = error instanceof JuliusDispatchError ? null : juliusStoreErrorClass(error);
+          if (storeErrorClass === null) throw error;
+          throw new JuliusDispatchError('PERSISTENCE_FAILURE', juliusStoreErrorIsTransient(storeErrorClass),
+            'Julius could not record the attempt start in its own store; no coding session was launched.',
+            'persist_before_session', { runtimeStarted: false, storeErrorClass });
+        }
+      })();
       const attemptStart = before.status === 'SUCCEEDED'
         ? parseJuliusAttemptStart(before.stdout, restoreRequest)
         : { headRevision: null, baseTree: null, startTree: null, restore: restoreRequest === null ? null : { outcome: 'REFUSED_EXECUTOR' as const, toTree: restoreRequest.toTree, expectedTree: restoreRequest.expectedTree, observedTree: null, removed: 0, restored: 0 } };
@@ -1620,16 +1640,34 @@ export function createJuliusCodingAgentAdapter(input: {
        * so the reservation was released at $0 for a session the runtime had
        * billed. The provider's cost rides on any failure from here on.
        */
+      //
+      // AND EVERY FAILURE AFTER THE SESSION CARRIES IT, while a store failure is
+      // Julius's own and is never retried (independent review F8, F9, F10). A
+      // raw error used to leave here unwrapped: an ETIMEDOUT from Julius's own
+      // write became a provider TIMEOUT and was retried, buying a SECOND paid
+      // session; a code-less driver string became the worker's failure; and
+      // either way the session's cost facts were dropped.
       const afterSession = async <T,>(step: () => Promise<T>): Promise<T> => {
         try {
           return await step();
         } catch (error) {
-          if (!(error instanceof JuliusDispatchError)) throw error;
-          throw new JuliusDispatchError(error.code, error.retryable, error.safeMessage, error.failureClass, {
-            ...(error.diagnostics ?? {}),
-            runtimeStarted: true,
-            ...sessionCostFacts(outcome.observation),
-          });
+          const consumed = { runtimeStarted: true, ...sessionCostFacts(outcome.observation) };
+          if (error instanceof JuliusDispatchError) {
+            // A retry of this task is a new paid session, so bookkeeping that
+            // failed after one never earns it, however transient the store.
+            const retryable = error.code === 'PERSISTENCE_FAILURE' ? false : error.retryable;
+            throw new JuliusDispatchError(error.code, retryable, error.safeMessage, error.failureClass, {
+              ...(error.diagnostics ?? {}), ...consumed,
+            });
+          }
+          const storeErrorClass = juliusStoreErrorClass(error);
+          if (storeErrorClass !== null) {
+            throw new JuliusDispatchError('PERSISTENCE_FAILURE', false,
+              'Julius could not record a step after the coding session in its own store.', 'persist_after_session',
+              { ...consumed, storeErrorClass });
+          }
+          throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'A step after the coding session failed.',
+            'after_session_failure', consumed);
         }
       };
 
