@@ -128,6 +128,29 @@ suite('(a2) the fenced handoff against a real PostgreSQL', () => {
     expect(await dispatchedCount(claim.runId)).toBe(0);
   });
 
+  /**
+   * THE GENERATION ALONE (JUJU's review of 2c19ffc1, P3 1). Production runs ONE owner name, so when a task is
+   * claimed again the owner matches and only the lease generation tells the old attempt from the new one. The
+   * case above changes the owner too, so a fence that stopped reading the generation still passed it. This one
+   * keeps the owner and changes only the generation.
+   */
+  it('RE-CLAIMED BY THE SAME OWNER: the generation alone refuses the old attempt’s handoff, and the new attempt’s is recorded', async () => {
+    const claim = await claimed();
+    const now = new Date().toISOString();
+    await pool.query(
+      `UPDATE relay_wonderland.julius_tasks SET state='RUNNABLE',lease_owner=NULL,lease_expires_at=NULL,next_attempt_at=$2,version=version+1 WHERE task_id=$1`, [claim.taskId, now]);
+    const [again] = await runs.claimRunnable({ owner: claim.owner, now, leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(), limit: 1, projectId: claim.projectId });
+    expect(again, 'the SAME owner holds it again, under a newer generation').toMatchObject({ taskId: claim.taskId, leaseGeneration: claim.leaseGeneration + 1 });
+    expect(await events.appendHandoff({ event: handoff(claim), owner: claim.owner, leaseGeneration: claim.leaseGeneration }),
+      'the owner matches; only the generation says this attempt is gone').toBe('LEASE_LOST');
+    expect(await dispatchedCount(claim.runId)).toBe(0);
+    // CONTROL: the new attempt, same owner, its own generation, is recorded.
+    expect(await runs.admitTask({ taskId: claim.taskId, owner: claim.owner, leaseGeneration: again!.leaseGeneration, now })).toBe(2);
+    const current = { ...handoff(claim), facts: { workerId: 'architect-openai', attempt: 2, runId: claim.runId } };
+    expect(await events.appendHandoff({ event: current, owner: claim.owner, leaseGeneration: again!.leaseGeneration })).toBe('RECORDED');
+    expect(await dispatchedCount(claim.runId)).toBe(1);
+  });
+
   it('FENCE FIRST: a recovery that meets a handoff still being written skips the task, and then reads it handed', async () => {
     const claim = await claimed();
     await pool.query(`UPDATE relay_wonderland.julius_tasks SET lease_expires_at=now()-interval '1 minute' WHERE task_id=$1`, [claim.taskId]);
