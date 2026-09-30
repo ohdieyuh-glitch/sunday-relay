@@ -62,7 +62,8 @@ const ALLOWED = [
   /^  peer execution scope: (gh-\d{1,20}\.\d{1,4}|local)$/u,
   // The research a contract granted and what it can reach (`liveResearchLines`): closed tokens.
   /^  research: NOT AUTHORISED \(no contract clause\) — every ask is refused research_not_authorized$/u,
-  /^  research: authorised for [A-Z_]+(, [A-Z_]+)* across \d+ allowance\(s\); \d+ observed backend\(s\)$/u,
+  // `(none)`: a sealed clause that names no role grants nobody anything, and says so (F4).
+  /^  research: authorised for ([A-Z_]+(, [A-Z_]+)*|\(none\)) across \d+ allowance\(s\); \d+ observed backend\(s\)$/u,
   /^    [a-z_]+\/[a-z_]+: [a-z_]+( — retrieval will be refused)?$/u,
   /^Run [\w:.-]+ accepted in state [A-Z_]+; driving the Julius run loop\.$/u,
   /^  run: [\w:.-]+$/u,
