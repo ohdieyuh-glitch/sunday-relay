@@ -660,3 +660,87 @@ describe('F. admission is the last governance check before money (F3)', () => {
     expect(watched.dispatches(), 'admission added no hold to a run nobody held').toBe(plain.dispatches());
   });
 });
+
+/* =============================== G. the P3s the review of ab5ac9f8 left */
+
+describe('G. what the independent review of the governance fixes left (P3, written RED first)', () => {
+  const lifecycle = (memory: Memory) => ({ store: memory as never, clock });
+  const hold = { runId: RUN, projectId: PROJECT, actor: 'ghu-founder', reason: 'Hold.' };
+  const go = { runId: RUN, projectId: PROJECT, actor: 'ghu-founder', reason: 'Go.' };
+
+  it('P3-2 A RESUME THAT RACED ANOTHER RESUME AND A GRANT does not walk a READY run into BLOCKED', async () => {
+    const s = stage({ approvals: ['DISPATCH_WORKER'] });
+    expect((await s.drive()).state).toBe('BLOCKED');
+    const [gate] = await s.memory.pendingApprovals(RUN, PROJECT);
+    expect(await pauseJuliusRun(hold, lifecycle(s.memory))).toMatchObject({ applied: true, to: 'PAUSED' });
+    // The second resume reads "still waiting"; before it writes, the first resume lands and the gate is granted.
+    let raced = false;
+    const racing = {
+      ...s.memory,
+      async pendingApprovals(runId: string, projectId: string) {
+        const waiting = await s.memory.pendingApprovals(runId, projectId);
+        if (!raced) {
+          raced = true;
+          expect(await resumeJuliusRun(go, lifecycle(s.memory))).toMatchObject({ applied: true, to: 'BLOCKED' });
+          expect(await s.decide(gate!.approvalId, 'APPROVED')).toMatchObject({ decided: true, runState: 'READY' });
+        }
+        return waiting;
+      },
+    };
+    const late = await resumeJuliusRun(go, { store: racing as never, clock });
+    expect(late, 'the run is no longer PAUSED, so there is nothing for this resume to do').toMatchObject({ applied: false, reasonCode: 'RUN_NOT_PAUSED' });
+    expect(await stateOf(s.memory), 'the granted run stays READY, never BLOCKED on nothing').toBe('READY');
+  });
+
+  // P3-4: four guarantees the commit claims and no test held. From the reviewer's probes P1-P3.
+  const gate = (approvalId: string) => ({
+    approvalId, runId: RUN, projectId: PROJECT, taskId: `${RUN}:plan-1`, operation: 'DISPATCH_WORKER' as const,
+    policyRevision: CARD, reasonCode: 'CARD_APPROVAL_REQUIRED', safeRationale: 'Gate.', state: 'PENDING' as const,
+    requestedAt: clock.now(), decidedAt: null, decidedBy: null, decisionReason: null, idempotencyKey: approvalId,
+  });
+  const denyAtTheStore = (memory: Memory, approvalId: string) => memory.decideApproval({
+    runId: RUN, approvalId, projectId: PROJECT, state: 'DENIED', decidedBy: 'ghu-founder', decisionReason: 'No.', decidedAt: clock.now(),
+  });
+
+  it('P3-4 (F1 RACE) a pause landing between the approval write of a grant and its move is not undone by the grant', async () => {
+    const s = stage({ approvals: ['DISPATCH_WORKER'] });
+    expect((await s.drive()).state).toBe('BLOCKED');
+    const [pending] = await s.memory.pendingApprovals(RUN, PROJECT);
+    let fired = false;
+    const racing = {
+      ...s.memory,
+      async decideApproval(input: Parameters<Memory['decideApproval']>[0]) {
+        const written = await s.memory.decideApproval(input);
+        if (!fired) { fired = true; await pauseJuliusRun(hold, lifecycle(s.memory)); }
+        return written;
+      },
+    };
+    expect(await decideJuliusApproval({
+      runId: RUN, projectId: PROJECT, approvalId: pending!.approvalId, decision: 'APPROVED', approverId: 'ghu-founder', reason: 'Reviewed.',
+    }, { store: racing as never, clock, approvers: anyone })).toMatchObject({ decided: true, state: 'APPROVED' });
+    expect(await stateOf(s.memory), 'the pause that landed mid-grant survives it').toBe('PAUSED');
+    await s.drive(8);
+    expect(s.dispatches()).toBe(0);
+  });
+
+  it('P3-4 (F2 ORDER) a paused run holding a denial whose FAILED move lost ENDS; it does not report "paused by operator"', async () => {
+    const s = stage();
+    await s.memory.requestApproval(gate('apr-order'));
+    expect(await pauseJuliusRun(hold, lifecycle(s.memory))).toMatchObject({ applied: true, to: 'PAUSED' });
+    await denyAtTheStore(s.memory, 'apr-order');
+    expect(await s.drive(4)).toMatchObject({ state: 'FAILED', stalled: false });
+    expect(s.dispatches()).toBe(0);
+  });
+
+  it('P3-4 (F2 RECORD) the enacted denial is recorded like any ending: one run.failed (APPROVAL_DENIED) and one COMPLETION fact', async () => {
+    const s = stage();
+    await s.memory.requestApproval(gate('apr-record'));
+    await denyAtTheStore(s.memory, 'apr-record');
+    expect((await s.drive(4)).state).toBe('FAILED');
+    const failed = () => s.memory.events().filter((event) => event.type === 'run.failed');
+    expect(failed().map((event) => event.facts.reasonCode)).toEqual(['APPROVAL_DENIED']);
+    expect(s.memory.trajectory().filter((row) => row.kind === 'COMPLETION').map((row) => row.outcome)).toEqual(['FAILED']);
+    await s.drive(2);
+    expect(failed(), 'an ended run writes no second ending').toHaveLength(1);
+  });
+});
