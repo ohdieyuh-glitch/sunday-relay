@@ -382,8 +382,12 @@ describe('P27b — the same result delivered twice is read once', () => {
     // The process delivers the same attempt again — a redelivery after a crash, a retried handler.
     await runClaimedTask(admitted, harness.deps, preflight).catch(() => undefined);
 
-    const completed = factsOf(harness, 'worker.completed').filter((facts) => facts.duplicate === true);
-    expect(completed.length, 'the replay really was read as a duplicate').toBeGreaterThan(0);
+    // THE REPLAY STOPS AT THE HANDOFF ((a2)). It used to reach the provider a second time and have its
+    // answer read as a duplicate; the lease-fenced handoff now refuses it, because the attempt it
+    // redelivers no longer owns an ACTIVE task. One provider call, one handoff, and still one record.
+    const coder = harness.adapters.get('coder-adapter') as unknown as { dispatches: readonly { taskId: string }[] };
+    expect(coder.dispatches.filter((dispatch) => dispatch.taskId === 'build-1'), 'the replay called no provider').toHaveLength(1);
+    expect(harness.store.events().filter((event) => event.type === 'worker.dispatched' && event.taskId === 'build-1'), 'and handed nothing').toHaveLength(1);
     expect(rowsOf(harness, 'coder.implementation.recorded').filter((row) => row.taskId === 'build-1')).toHaveLength(1);
     expect(rowsOf(harness, 'architecture.observed').filter((row) => row.taskId === 'build-1')).toHaveLength(1);
   });

@@ -309,6 +309,21 @@ export interface JuliusEventWriter {
    * `julius-event-append-conformance.ts` now runs one set of cases against both.
    */
   appendEvent(event: JuliusOperationalEvent): Promise<boolean>;
+  /**
+   * THE HANDOFF, FENCED BY THE LEASE ((a2)).
+   *
+   * `worker.dispatched` is the fact that makes an attempt "handed": everything
+   * after it may have been paid for, and recovery never dispatches it again. So
+   * it is written only while the attempt still OWNS the task (ACTIVE, this
+   * owner, this lease generation), with the task row locked for the write. A
+   * recovery that took the task first makes this answer LEASE_LOST, and the
+   * caller must not call the provider. A recovery that comes second skips the
+   * locked task and reads it as handed on its next sweep. Optional: a store
+   * without it is written through unfenced, as before.
+   */
+  appendHandoffEvent?(input: {
+    event: JuliusOperationalEvent; owner: string; leaseGeneration: number;
+  }): Promise<'RECORDED' | 'DUPLICATE' | 'LEASE_LOST'>;
 }
 
 export interface JuliusTrajectoryWriter {
