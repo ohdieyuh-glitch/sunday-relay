@@ -61,6 +61,13 @@ const result = (over: Record<string, unknown>) => ({
   type: 'result', subtype: 'success', is_error: false, result: 'Implemented the slug.', num_turns: 3, duration_ms: 1_200,
   total_cost_usd: 0.02, usage: { input_tokens: 500, output_tokens: 60 }, permission_denials: [], session_id: 'sess-1', ...over,
 });
+/**
+ * A TURN OF THE SESSION, and the result's own account of it, both naming the requested model: the
+ * attestation a real session always carries, and the one the served-model guard reads (founder rule,
+ * 2026-09-30: no automatic downgrade). A success fixture without it is now an unattested session.
+ */
+const turn = { type: 'assistant', parent_tool_use_id: null, session_id: 'sess-1', message: { model: 'claude-x', content: [{ type: 'text', text: 'Implemented.' }], usage: { input_tokens: 500, output_tokens: 60 } } };
+const attested = { modelUsage: { 'claude-x': { inputTokens: 500, outputTokens: 60 } } };
 
 interface SdkSeen { abortSignals: AbortSignal[]; calls: number }
 
@@ -143,7 +150,7 @@ describe('1 — a result is a success only when every field of it says so', () =
   }
 
   it('a success, is_error:false and terminal reason completed is the one that succeeds, and says so', async () => {
-    const { queryFn } = fakeSdk([init, result({ terminal_reason: 'completed' })]);
+    const { queryFn } = fakeSdk([init, turn, result({ terminal_reason: 'completed', ...attested })]);
     const { adapter, shell } = adapterOver(claude(queryFn));
     const done = await adapter.dispatch(DISPATCH);
     expect(done.status).toBe('SUCCEEDED');
@@ -155,7 +162,7 @@ describe('1 — a result is a success only when every field of it says so', () =
   });
 
   it('a success from an older runtime that sends no terminal reason still succeeds', async () => {
-    const { queryFn } = fakeSdk([init, result({})]);
+    const { queryFn } = fakeSdk([init, turn, result({ ...attested })]);
     const { adapter } = adapterOver(claude(queryFn));
     const done = await adapter.dispatch(DISPATCH);
     expect(done.status).toBe('SUCCEEDED');

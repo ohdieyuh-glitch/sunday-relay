@@ -323,10 +323,15 @@ describe('the completed outcome carries the attested model, the same answer as i
     expect(outcome.observation.diagnostics).toMatchObject({ servedModel: 'claude-fable-5', servedModelBasis: 'attested' });
   });
 
-  it('announced but not attested: the observation names nobody, and never the announcement', async () => {
+  /**
+   * STILL NAMES NOBODY, AND IS NOW A STOP (founder rule, 2026-09-30: no automatic downgrade). Before the
+   * guard, an unattested session completed with no model named. It now fails as SERVED_MODEL_UNATTESTED,
+   * never retried, and its record still names nobody as served and never the announcement.
+   */
+  it('announced but not attested: the dispatch stops, and its record names nobody, never the announcement', async () => {
     const outcome = await providerOver([init('claude-fable-5'), turn('claude-sonnet-5', 900), result()]).execute(request);
-    if (outcome.kind !== 'completed') throw new Error('expected a completed outcome');
-    expect(outcome.observation.providerModel).toBeNull();
-    expect(outcome.observation.diagnostics).toMatchObject({ servedModel: null, servedModelBasis: 'result_disagrees', announcedModel: 'claude-fable-5' });
+    if (outcome.kind !== 'failed') throw new Error('expected the unattested session to fail');
+    expect(outcome).toMatchObject({ failure: 'SERVED_MODEL_UNATTESTED', providerFailureClass: 'coder_served_model_unattested', runtimeStarted: true });
+    expect(outcome.diagnostics).toMatchObject({ servedModel: null, servedModelBasis: 'result_disagrees', announcedModel: 'claude-fable-5' });
   });
 });

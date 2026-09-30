@@ -80,6 +80,19 @@ export const JULIUS_CODING_AGENT_FAILURES = [
    * "I will not do this".
    */
   'CONTENT_REFUSED',
+  /**
+   * THE MODEL THAT ANSWERED IS NOT THE ONE REQUESTED (founder rule, 2026-09-30:
+   * no automatic downgrade, and a STOP rather than a substitute). The session
+   * finished, but the runtime's own attestation names another model. Retrying
+   * asks the same path again, and only a person can change what it serves.
+   */
+  'SERVED_MODEL_MISMATCH',
+  /**
+   * THE SESSION FINISHED WITHOUT ATTESTING WHICH MODEL ANSWERED. Under the same
+   * rule a model that cannot be shown to be the requested one is not accepted
+   * as it: mixed turn models are exactly what a mid-session switch looks like.
+   */
+  'SERVED_MODEL_UNATTESTED',
   /** It failed and said nothing a classifier recognises. Unknown is not transient. */
   'UNCLASSIFIED',
 ] as const;
@@ -118,6 +131,11 @@ const DISPOSITIONS: Readonly<Record<JuliusCodingAgentFailure, JuliusCodingAgentF
   CONTINUATION_UNAVAILABLE: { code: 'WORKER_EXECUTION_FAILURE', retryable: false, operatorAction: true },
   COST_CEILING_REACHED: { code: 'WORKER_EXECUTION_FAILURE', retryable: false, operatorAction: false },
   ENVELOPE_NOT_HONOURED: { code: 'WORKER_EXECUTION_FAILURE', retryable: false, operatorAction: false },
+  // NEVER retryable, and a person acts: the answer came from a model the mission
+  // did not ask for (or cannot be shown to be the one it asked for), and asking
+  // again cannot change what the path serves.
+  SERVED_MODEL_MISMATCH: { code: 'WORKER_EXECUTION_FAILURE', retryable: false, operatorAction: true },
+  SERVED_MODEL_UNATTESTED: { code: 'WORKER_EXECUTION_FAILURE', retryable: false, operatorAction: true },
   UNCLASSIFIED: { code: 'WORKER_EXECUTION_FAILURE', retryable: false, operatorAction: false },
 });
 
