@@ -21,10 +21,12 @@
  *                   first-party subscription path (`oauth_token` or `claude.ai`)
  *                   with no API-key source. Repeats env-check first.
  *   smoke-verdict   `claude -p "Reply with exactly OK" --output-format json` on stdin,
- *                   with `--status-file` naming the status JSON of the same run.
+ *                   with `--status-file` naming the status JSON of the same run, and
+ *                   `--auth-exit` / `--cli-exit` the exit codes of that `auth status`
+ *                   and that `claude -p`, as the workflow recorded them.
  *                   PASS only for a clean exact "OK" beside a subscription status,
  *                   answered by the REQUESTED model (or its dated build), as the
- *                   result's own `modelUsage` attests.
+ *                   result's own `modelUsage` attests, with BOTH exits reported and 0.
  *
  * FAIL CLOSED. There is no fallback: an API-key method, an API-key source, a third
  * party, an unreadable answer or a missing token is SUBSCRIPTION_NOT_READY / FAIL,
@@ -202,12 +204,22 @@ export function smokeServedModel(raw, requested) {
   return { served, match };
 }
 
+/**
+ * AN EXIT CODE THE WORKFLOW REPORTS, OR NULL (Codex on #302, F3). The CLI's JSON is not the CLI's
+ * verdict on itself: an OK-looking reply followed by a non-zero exit is not a clean answer, and a
+ * non-zero `auth status` makes the status file it wrote untrustworthy. The workflow records both
+ * exits; the verdict must SEE them, so they arrive as `--auth-exit` and `--cli-exit`. Only a plain
+ * 0-255 integer counts; anything else is unreported, and an unreported exit is a FAIL.
+ */
+const exitCode = (value) => (typeof value === 'string' && /^(0|[1-9]\d{0,2})$/u.test(value) && Number(value) <= 255 ? Number(value) : null);
+
 const safeLabel = (value) => (typeof value === 'string' && /^[A-Za-z0-9._-]{1,64}$/u.test(value) ? value : 'unpinned');
 const readStdin = () => { try { return readFileSync(0, 'utf8'); } catch { return ''; } };
 const readFile = (path) => { try { return readFileSync(path, 'utf8'); } catch { return ''; } };
 
 const USAGE = 'usage: julius-subscription-check.mjs env-check|status-verdict|smoke-verdict'
-  + ' [--for status|smoke] [--model <id>] [--require-plan max|pro|team|enterprise] [--status-file <path>] (CLI JSON on stdin)';
+  + ' [--for status|smoke] [--model <id>] [--require-plan max|pro|team|enterprise] [--status-file <path>]'
+  + ' [--auth-exit <0-255> --cli-exit <0-255>] (CLI JSON on stdin)';
 
 /**
  * @param argv  the arguments after the script
@@ -253,16 +265,30 @@ export function main(argv, env = process.env, io = {}) {
   // A PASS NEEDS THE REQUESTED MODEL TO HAVE ANSWERED: an exact OK from another model, or from no
   // model the result can name, fails closed. The served line is printed for every reply read, so a
   // pass shows which build answered too.
+  // A PASS ALSO NEEDS BOTH EXITS REPORTED AND 0 (F3): the auth status's and the CLI's own.
+  const authExit = exitCode(flag('auth-exit'));
+  const cliExit = exitCode(flag('cli-exit'));
   let pass = answer.ok;
   if (status.ok) {
     const served = smokeServedModel(reply, model);
     print(`subscription_smoke_served provider=anthropic requested=${model} served=${served.served} match=${served.match}`);
-    if (answer.ok && served.match !== 'EXACT' && served.match !== 'DATED_BUILD') pass = false;
+    const servedOk = served.match === 'EXACT' || served.match === 'DATED_BUILD';
+    pass = answer.ok && servedOk && authExit === 0 && cliExit === 0;
     // WHY, when a reply was read and failed: its own closed line, so the PASS and FAIL lines the
-    // workflow greps stay exactly as they were.
+    // workflow greps stay exactly as they were. ONE reason, the first that holds:
+    //   EXIT_UNREPORTED    an exit is missing or not a 0-255 integer: nothing else can be trusted;
+    //   AUTH_EXIT_NONZERO  the status the reply was read beside came from a failed `auth status`;
+    //   the reply's own    a reply that is not a clean OK keeps its reason (an error reply exits
+    //                      non-zero by design, and its MODEL_NOT_ENTITLED or USAGE_LIMIT must show);
+    //   CLI_EXIT_NONZERO   an OK-looking reply the CLI itself exited non-zero on;
+    //   SERVED_MODEL_…     an OK the requested model did not answer (UNATTESTED when none did).
     if (!pass) {
       const why = smokeFailureReason(reply);
-      const reason = answer.ok ? (served.match === 'NONE' ? 'SERVED_MODEL_UNATTESTED' : 'SERVED_MODEL_MISMATCH') : why.reason;
+      const reason = authExit === null || cliExit === null ? 'EXIT_UNREPORTED'
+        : authExit !== 0 ? 'AUTH_EXIT_NONZERO'
+          : !answer.ok ? why.reason
+            : cliExit !== 0 ? 'CLI_EXIT_NONZERO'
+              : served.match === 'NONE' ? 'SERVED_MODEL_UNATTESTED' : 'SERVED_MODEL_MISMATCH';
       print(`subscription_smoke_reason provider=anthropic model=${model} reason=${reason} http=${why.http} subtype=${why.subtype}`);
     }
   }

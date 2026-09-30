@@ -30,6 +30,11 @@ const apiError = (status: number, type: string) => JSON.stringify({
   result: `API Error: ${String(status)} ${JSON.stringify({ type: 'error', error: { type, message: 'model: claude-fable-5 FAKETESTNOTREAL-free-text' } })}`,
 });
 
+/** The exits the workflow reports beside a clean CLI (F3): `auth status` and `claude -p` both exited 0. */
+const CLEAN_EXITS = ['--auth-exit', '0', '--cli-exit', '0'];
+/** The exits beside an error reply: the real CLI exits 1 on one. */
+const ERROR_EXITS = ['--auth-exit', '0', '--cli-exit', '1'];
+
 const capture = (argv: string[], env: Record<string, string | undefined>, stdin = '', files: Record<string, string> = {}) => {
   const lines: string[] = [];
   const code = check.main(argv, env, {
@@ -140,7 +145,7 @@ describe('status-verdict and smoke-verdict print the exact lines the workflow gr
   });
 
   it('the smoke passes on an exact OK, answered by the requested model, beside a subscription status of the same run', () => {
-    const run = capture(['smoke-verdict', '--model', 'claude-opus-5-5', '--status-file', 's.json'], READY, OK_ATTESTED, { 's.json': TOKEN_ONLY });
+    const run = capture(['smoke-verdict', '--model', 'claude-opus-5-5', '--status-file', 's.json', ...CLEAN_EXITS], READY, OK_ATTESTED, { 's.json': TOKEN_ONLY });
     expect(run.code).toBe(0);
     expect(run.output.split('\n')).toEqual([
       'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=claude-opus-5-5 match=EXACT',
@@ -214,7 +219,7 @@ describe('smoke failures say why, in closed tokens only', () => {
   });
 
   it('smoke-verdict prints the reason on its own closed line, before the FAIL line, which is unchanged', () => {
-    const run = capture(['smoke-verdict', '--model', 'claude-fable-5', '--status-file', 's.json'], READY, apiError(429, 'rate_limit_error'), { 's.json': TOKEN_ONLY });
+    const run = capture(['smoke-verdict', '--model', 'claude-fable-5', '--status-file', 's.json', ...ERROR_EXITS], READY, apiError(429, 'rate_limit_error'), { 's.json': TOKEN_ONLY });
     expect(run.code).toBe(1);
     expect(run.output.split('\n')).toEqual([
       'subscription_smoke_served provider=anthropic requested=claude-fable-5 served=none match=NONE',
@@ -225,7 +230,7 @@ describe('smoke failures say why, in closed tokens only', () => {
   });
 
   it('a pass, and a reply never read, print no reason line', () => {
-    expect(capture(['smoke-verdict', '--model', 'claude-opus-5-5', '--status-file', 's.json'], READY, OK_ATTESTED, { 's.json': TOKEN_ONLY }).output).not.toContain('subscription_smoke_reason');
+    expect(capture(['smoke-verdict', '--model', 'claude-opus-5-5', '--status-file', 's.json', ...CLEAN_EXITS], READY, OK_ATTESTED, { 's.json': TOKEN_ONLY }).output).not.toContain('subscription_smoke_reason');
     expect(capture(['smoke-verdict', '--status-file', 's.json'], READY, apiError(429, 'rate_limit_error'), { 's.json': API_KEY_METHOD }).output)
       .not.toContain('subscription_smoke_reason');
   });
@@ -238,7 +243,7 @@ describe('smoke failures say why, in closed tokens only', () => {
       '{"is_error":true,"api_error_status":999}', '[]', 'null', '"a string"', '{"is_error":true,"result":42}',
     ];
     for (const raw of hostile) {
-      const run = capture(['smoke-verdict', '--model', 'claude-fable-5', '--status-file', 's.json'], READY, raw, { 's.json': TOKEN_ONLY });
+      const run = capture(['smoke-verdict', '--model', 'claude-fable-5', '--status-file', 's.json', ...ERROR_EXITS], READY, raw, { 's.json': TOKEN_ONLY });
       const reasons = run.output.split('\n').filter((line) => line.startsWith('subscription_smoke_reason'));
       expect(reasons, raw).toHaveLength(1);
       expect(reasons[0], raw).toMatch(REASON_LINE);
@@ -252,15 +257,16 @@ describe('smoke failures say why, in closed tokens only', () => {
  * rather than substitute). Read as the runtime reads it (`hostedServedModel`): a producer is an entry with
  * output, and it credits the requested model by its key or `canonicalModel`, exactly or as a dated build.
  * SERVED_GREP and REASON_GREP are the EXACT `grep -E` patterns the founder workflow's evidence allowlist
- * carries, so this output and that allowlist cannot drift apart.
+ * carries, so this output and that allowlist cannot drift apart. The three exit reasons join the allowlist
+ * with the founder's workflow patch that passes the exits (F3); this verdict must not land before it.
  */
 describe('the smoke names the model that answered, and fails closed on any other', () => {
   const SERVED_GREP = new RegExp('^subscription_smoke_served provider=anthropic requested=[A-Za-z0-9._-]{1,64} served=(none|[A-Za-z0-9._-]{1,64}(,[A-Za-z0-9._-]{1,64}){0,7}) match=(EXACT|DATED_BUILD|MISMATCH|NONE)$', 'u');
-  const REASON_GREP = new RegExp('^subscription_smoke_reason provider=anthropic model=[A-Za-z0-9._-]{1,64} reason=(MODEL_NOT_ENTITLED_OR_NOT_FOUND|AUTH|USAGE_LIMIT|RATE_LIMITED|OVERLOADED|MAX_TURNS|UNEXPECTED_REPLY|UNREADABLE|SERVED_MODEL_MISMATCH|SERVED_MODEL_UNATTESTED|OTHER) http=([1-5][0-9]{2}|none) subtype=([a-z_]{1,40}|none)$', 'u');
+  const REASON_GREP = new RegExp('^subscription_smoke_reason provider=anthropic model=[A-Za-z0-9._-]{1,64} reason=(MODEL_NOT_ENTITLED_OR_NOT_FOUND|AUTH|USAGE_LIMIT|RATE_LIMITED|OVERLOADED|MAX_TURNS|UNEXPECTED_REPLY|UNREADABLE|SERVED_MODEL_MISMATCH|SERVED_MODEL_UNATTESTED|EXIT_UNREPORTED|AUTH_EXIT_NONZERO|CLI_EXIT_NONZERO|OTHER) http=([1-5][0-9]{2}|none) subtype=([a-z_]{1,40}|none)$', 'u');
   const REQUESTED = 'claude-opus-5-5';
   const usage = (entries: Record<string, Record<string, unknown>>) =>
     JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'OK', modelUsage: entries });
-  const smoke = (raw: string) => capture(['smoke-verdict', '--model', REQUESTED, '--status-file', 's.json'], READY, raw, { 's.json': TOKEN_ONLY });
+  const smoke = (raw: string) => capture(['smoke-verdict', '--model', REQUESTED, '--status-file', 's.json', ...CLEAN_EXITS], READY, raw, { 's.json': TOKEN_ONLY });
 
   it.each([
     [usage({ 'claude-opus-5-5': { outputTokens: 1 } }), { served: 'claude-opus-5-5', match: 'EXACT' }],
@@ -331,5 +337,103 @@ describe('the smoke names the model that answered, and fails closed on any other
       for (const line of lines.filter((entry) => entry.startsWith('subscription_smoke_served'))) expect(line, raw).toMatch(SERVED_GREP);
       for (const line of lines.filter((entry) => entry.startsWith('subscription_smoke_reason'))) expect(line, raw).toMatch(REASON_GREP);
     }
+  });
+});
+
+/**
+ * THE EXITS ARE PART OF THE ANSWER (Codex on #302, F3). The workflow records `subscription_smoke_auth_exit`
+ * and `subscription_smoke_cli_exit`, but a verdict that read only the CLI's JSON passed an OK-looking reply
+ * the CLI itself exited 1 on. Now the verdict is TOLD both exits and passes only when both are 0; a missing
+ * or malformed exit is a FAIL of its own. One reason is printed, the first that holds: EXIT_UNREPORTED,
+ * AUTH_EXIT_NONZERO, the reply's own reason, CLI_EXIT_NONZERO, then the served model's.
+ */
+describe('the smoke passes only when both exits were reported and 0', () => {
+  const OK_OPUS = '{"type":"result","subtype":"success","is_error":false,"result":"OK","modelUsage":{"claude-opus-5-5":{"inputTokens":3,"outputTokens":1}}}';
+  const OK_SONNET = '{"type":"result","subtype":"success","is_error":false,"result":"OK","modelUsage":{"claude-sonnet-5":{"inputTokens":3,"outputTokens":1}}}';
+  const verdict = (exits: string[], raw = OK_OPUS) =>
+    capture(['smoke-verdict', '--model', 'claude-opus-5-5', '--status-file', 's.json', ...exits], READY, raw, { 's.json': TOKEN_ONLY });
+  const reasonOf = (output: string) => (output.split('\n').find((line) => line.startsWith('subscription_smoke_reason')) ?? '').match(/reason=([A-Z_]+)/u)?.[1] ?? null;
+
+  it('control: both exits 0 and the requested model\'s OK is a PASS with no reason line', () => {
+    const run = verdict(CLEAN_EXITS);
+    expect(run.code).toBe(0);
+    expect(run.output).toContain('reply=OK result=PASS');
+    expect(reasonOf(run.output)).toBeNull();
+  });
+
+  it('an OK-looking reply the CLI exited 1 on FAILS: CLI_EXIT_NONZERO, and the verdict line still reads reply=OK', () => {
+    const run = verdict(['--auth-exit', '0', '--cli-exit', '1']);
+    expect(run.code).toBe(1);
+    expect(run.output.split('\n')).toEqual([
+      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=claude-opus-5-5 match=EXACT',
+      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=CLI_EXIT_NONZERO http=none subtype=success',
+      'subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=FAIL',
+    ]);
+  });
+
+  it('a subscription status from an `auth status` that exited 1 FAILS: AUTH_EXIT_NONZERO', () => {
+    const run = verdict(['--auth-exit', '1', '--cli-exit', '0']);
+    expect(run.code).toBe(1);
+    expect(reasonOf(run.output)).toBe('AUTH_EXIT_NONZERO');
+    expect(run.output).toContain('reply=OK result=FAIL');
+  });
+
+  it.each([
+    [[]],
+    [['--cli-exit', '0']],
+    [['--auth-exit', '0']],
+    [['--auth-exit', '0', '--cli-exit']],
+    [['--auth-exit', '', '--cli-exit', '0']],
+    [['--auth-exit', '0', '--cli-exit', '-1']],
+    [['--auth-exit', '0', '--cli-exit', '256']],
+    [['--auth-exit', '0', '--cli-exit', '00']],
+    [['--auth-exit', '0', '--cli-exit', '0.0']],
+    [['--auth-exit', '0', '--cli-exit', '0x0']],
+    [['--auth-exit', '0', '--cli-exit', ' 0']],
+    [['--auth-exit', '0', '--cli-exit', '0 ']],
+    [['--auth-exit', 'zero', '--cli-exit', '0']],
+  ])('an exit missing or not a plain 0-255 integer FAILS: EXIT_UNREPORTED (%j)', (exits) => {
+    const run = verdict(exits);
+    expect(run.code).toBe(1);
+    expect(reasonOf(run.output)).toBe('EXIT_UNREPORTED');
+    expect(run.output).toContain('reply=OK result=FAIL');
+  });
+
+  it('every exit from 0 to 255 is read as itself; only 0 passes', () => {
+    for (const code of [1, 2, 9, 42, 127, 200, 255]) {
+      expect(reasonOf(verdict(['--auth-exit', '0', '--cli-exit', String(code)]).output), String(code)).toBe('CLI_EXIT_NONZERO');
+      expect(reasonOf(verdict(['--auth-exit', String(code), '--cli-exit', '0']).output), String(code)).toBe('AUTH_EXIT_NONZERO');
+    }
+  });
+
+  it('an error reply the CLI exited 1 on keeps its own reason (the real CLI exits non-zero on every error reply)', () => {
+    const run = verdict(ERROR_EXITS, apiError(404, 'not_found_error'));
+    expect(run.code).toBe(1);
+    expect(reasonOf(run.output)).toBe('MODEL_NOT_ENTITLED_OR_NOT_FOUND');
+    expect(run.output).toContain('reply=ERROR result=FAIL');
+  });
+
+  it('one reason, in a fixed order: unreported, then auth, then the reply\'s own, then the CLI\'s exit, then the served model', () => {
+    expect(reasonOf(verdict(['--auth-exit', '1'], apiError(429, 'rate_limit_error')).output)).toBe('EXIT_UNREPORTED');
+    expect(reasonOf(verdict(['--auth-exit', '1', '--cli-exit', '1'], apiError(429, 'rate_limit_error')).output)).toBe('AUTH_EXIT_NONZERO');
+    expect(reasonOf(verdict(['--auth-exit', '0', '--cli-exit', '1'], apiError(429, 'rate_limit_error')).output)).toBe('RATE_LIMITED');
+    expect(reasonOf(verdict(['--auth-exit', '0', '--cli-exit', '1'], OK_SONNET).output)).toBe('CLI_EXIT_NONZERO');
+    expect(reasonOf(verdict(CLEAN_EXITS, OK_SONNET).output)).toBe('SERVED_MODEL_MISMATCH');
+    for (const run of [verdict(['--auth-exit', '1']), verdict(['--auth-exit', '1', '--cli-exit', '1'], OK_SONNET)]) {
+      expect(run.output.split('\n').filter((line) => line.startsWith('subscription_smoke_reason'))).toHaveLength(1);
+    }
+  });
+
+  it('without a subscription status the reply is never read, whatever the exits say', () => {
+    const run = capture(['smoke-verdict', '--model', 'claude-opus-5-5', '--status-file', 's.json', ...CLEAN_EXITS], READY, OK_OPUS, { 's.json': API_KEY_METHOD });
+    expect(run.code).toBe(1);
+    expect(run.output).toBe('subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=none reply=NO_SUBSCRIPTION_STATUS result=FAIL');
+  });
+
+  it('an exit value is never echoed: only closed tokens reach the log', () => {
+    const run = verdict(['--auth-exit', '0', '--cli-exit', '1; echo FAKETESTNOTREAL']);
+    expect(reasonOf(run.output)).toBe('EXIT_UNREPORTED');
+    expect(run.output).not.toContain('FAKETESTNOTREAL');
+    expect(run.output).not.toContain('echo');
   });
 });
