@@ -349,8 +349,20 @@ export function researchReachSummary(
 
 const EXECUTOR_ENV = ['JULIUS_EXECUTOR_ENDPOINT', 'JULIUS_SCOPED_CREDENTIALS', 'EXECUTOR_KEY_ID', 'JULIUS_PUBLIC_KEY_PATH', 'JULIUS_CALLER_ID'] as const;
 
-function presence(env: Record<string, string | undefined>, names: readonly string[]): string {
-  return names.map((name) => `  ${name}: ${env[name] ? 'SET' : 'MISSING'}`).join('\n');
+/**
+ * ONE ROW PER NAME, AND EACH ROW IS ITS OWN LINE.
+ *
+ * Returned as rows, never joined. `out` escapes every line break
+ * (`liveOneLine`), so one call holding eleven rows printed ONE physical line.
+ * Every reader of these rows is line-anchored:
+ *  - the paid workflow's preflight grep (`^  NAME: SET$`);
+ *  - the local launcher's;
+ *  - the artifact allowlist.
+ * They all found nothing, so the preflight step failed closed on the first
+ * name (JUJU's review of ef0c09c3, F1).
+ */
+function presence(env: Record<string, string | undefined>, names: readonly string[]): readonly string[] {
+  return names.map((name) => `  ${name}: ${env[name] ? 'SET' : 'MISSING'}`);
 }
 
 /* --------------------------------------------------- research observation */
@@ -642,7 +654,7 @@ async function main(argv: readonly string[]): Promise<number> {
   out('JULIUS LIVE MISSION — preflight');
   out(`  mission: ${contract.missionId} (project ${contract.projectId})`);
   out(`  requested models: architect=${preflight.requested.architectModel ?? 'MISSING'} coder=${preflight.requested.codingModel ?? 'MISSING'} reviewer=${preflight.requested.reviewerProvider ?? 'MISSING'}/${preflight.requested.reviewerModel ?? 'MISSING'}`);
-  out(presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', CLAUDE_SUBSCRIPTION_TOKEN_ENV, 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV]));
+  for (const row of presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', CLAUDE_SUBSCRIPTION_TOKEN_ENV, 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV])) out(row);
   out('  note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.');
 
   /**

@@ -1586,6 +1586,27 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     const writes = [...entry.matchAll(/process\.std(?:out|err)\.write\(([^\n]*)/gu)].map((match) => match[1]!);
     expect(writes, 'the three writers: out, err and the crash handler').toHaveLength(3);
     for (const write of writes) expect(write, write).toMatch(/^`\$\{liveOneLine\(/u);
+    // Text, and it stands for a behaviour: julius-live-billing-preflight.test.ts runs the real preflight with a
+    // line break inside a value and finds no line of its own, which a split-before-escape writer (R05) fails.
+  });
+
+  /**
+   * THE CALL SITES HAND THE PRINTERS WHAT WAS REVIEWED (JUJU's review of ef0c09c3, F3). The printers are
+   * unit-tested, but these statements run only after `--confirm-live`, where no offline test reaches. So each
+   * is pinned whole, whitespace aside. Each of the review's surviving mutants changes one:
+   *  - R15: backends counted from the allowances;
+   *  - R16: the research roles reversed;
+   *  - R17: the operator's --max-ticks override never printed;
+   *  - R18: the refusal's RESULT line dropped at the call site, so an artifact says nothing again.
+   */
+  it('hands every printer the values it was reviewed with, at its call site', () => {
+    const entry = read('relay-bridge/julius-live-mission.ts').replace(/\s+/gu, ' ');
+    for (const statement of [
+      'for (const line of liveWorkersBlockedLines(resolution.problems)) out(line); return 1; }',
+      'for (const line of liveResearchLines(researchClause === undefined ? null : { roles: [...researchClause.roles], allowances: researchClause.allowances.length, observedBackends: observed.probes.length, reach: researchReachSummary(researchClause, observed.probes), })) out(line);',
+      'out(liveTickBudgetLine(tickBudget, tickOverride.override));',
+      'if (outcome.tickAccount !== null) out(liveTickAccountLine(outcome.tickAccount));',
+    ]) expect(entry.split(statement).length - 1, statement).toBe(1);
   });
 
   it('keeps the failure outcomes — the runs that most need evidence', () => {
