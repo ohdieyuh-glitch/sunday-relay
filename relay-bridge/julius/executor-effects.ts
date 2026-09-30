@@ -248,9 +248,14 @@ export function createExecutorShellPort(config: {
       if (!authorized) {
         throw refused('executor_invocation_unauthorized', input.invocationKey, null, `Tool invocation ${invocationId} could not be authorized.`);
       }
+      // THIS INVOCATION, IN THIS PROJECT, AND NOTHING ELSE (defect B). An unscoped claim swept up to
+      // sixteen AUTHORIZED invocations of any run and kept this one: every other one it took sat
+      // DISPATCHING under a caller that would never execute it, and its own port, finding nothing to
+      // claim, failed as `executor_dispatch_unclaimed`.
       const claimed = await config.tools.claimDispatch({
         claimedBy: config.callerId, now: now(),
-        claimedUntil: new Date(Date.now() + input.timeoutMs + 120_000).toISOString(), limit: 16,
+        claimedUntil: new Date(Date.now() + input.timeoutMs + 120_000).toISOString(), limit: 1,
+        invocationId, projectId: input.projectId,
       });
       const dispatch = claimed.find((entry) => entry.invocation.invocationId === invocationId);
       if (dispatch === undefined) {
