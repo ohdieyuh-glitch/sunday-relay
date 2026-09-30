@@ -7,6 +7,8 @@
  * could have been paid for. The handoff is now written only while the attempt owns the task.
  */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   createJuliusMemoryStore,
@@ -114,5 +116,100 @@ describe('(a2) a recovery that took the task before its handoff stops the old at
     const settled = events.filter((event) => event.type === 'budget.settled');
     expect(settled.map((event) => event.facts.released), 'its hold was released as spending nothing').toEqual([true]);
     expect((await s.drive()).state, 'the recovered task runs on a fresh claim, once').toBe('COMPLETED');
+  });
+});
+
+/**
+ * THE MEMORY FENCE READS THE LEASE, NOT ONLY THE STATE (the review of fd588ed4, finding 6).
+ *
+ * The case above takes the task out of ACTIVE, so a fence that checked the state alone passed it,
+ * and one that ignored the generation passed it too. Production's owner is ONE constant name for
+ * every process (`julius-live-mission`), so the generation is the only thing that tells two claims
+ * of the same task apart. And the check and the write are one synchronous step: a sweep called on
+ * the very next line already sees the handoff.
+ */
+describe('(a2) the memory fence reads the owner and the generation, atomically', () => {
+  const OWNER = 'julius-live-mission';
+  const handoffEvent = (id: string) => ({
+    eventId: `event:worker.dispatched:${id}`, runId: RUN, projectId: PROJECT, type: 'worker.dispatched' as const,
+    taskId: PLAN, workerId: 'architect-openai', correlationId: RUN, causationId: null,
+    occurredAt: '2026-09-29T12:00:00.000Z', facts: { workerId: 'architect-openai', attempt: 1, runId: RUN },
+  });
+  const claimedBy = async (memory: Memory, owner: string, leaseMs = 60_000) => {
+    const now = new Date().toISOString();
+    const [claim] = await memory.claimRunnable({ owner, now, leaseExpiresAt: new Date(Date.now() + leaseMs).toISOString(), limit: 1, projectId: PROJECT });
+    expect(claim?.taskId).toBe(PLAN);
+    return claim!;
+  };
+  const handoffs = (memory: Memory) => memory.events().filter((event) => event.type === 'worker.dispatched');
+
+  it('RE-CLAIMED under the SAME owner name: the old generation’s handoff is refused and writes nothing; the new one’s is recorded', async () => {
+    const memory = createJuliusMemoryStore();
+    seed(memory);
+    const first = await claimedBy(memory, OWNER);
+    const now = new Date().toISOString();
+    expect(await memory.finishTask({ taskId: PLAN, owner: OWNER, leaseGeneration: first.leaseGeneration, state: 'FAILED', now, nextAttemptAt: now })).toBe(true);
+    const again = await claimedBy(memory, OWNER);
+    expect(again.leaseGeneration, 'ACTIVE again, under a newer generation').toBe(first.leaseGeneration + 1);
+
+    expect(await memory.appendHandoffEvent!({ event: handoffEvent('old'), owner: OWNER, leaseGeneration: first.leaseGeneration })).toBe('LEASE_LOST');
+    expect(handoffs(memory), 'the old generation wrote nothing').toEqual([]);
+    expect(await memory.appendHandoffEvent!({ event: handoffEvent('new'), owner: OWNER, leaseGeneration: again.leaseGeneration })).toBe('RECORDED');
+  });
+
+  it('ANOTHER owner naming the right generation is refused', async () => {
+    const memory = createJuliusMemoryStore();
+    seed(memory);
+    const claim = await claimedBy(memory, 'owner-a');
+    expect(await memory.appendHandoffEvent!({ event: handoffEvent('b'), owner: 'owner-b', leaseGeneration: claim.leaseGeneration })).toBe('LEASE_LOST');
+    expect(handoffs(memory)).toEqual([]);
+  });
+
+  it('the check and the write are one step: a sweep on the very next line reads the task handed, never requeues it', async () => {
+    const memory = createJuliusMemoryStore();
+    seed(memory);
+    const claim = await claimedBy(memory, OWNER, -1_000); // a lease already lapsed, not yet swept
+    // Admitted, as every handoff is: the attempt the handoff names (1) is the one the task is on.
+    expect(await memory.admitTask({ taskId: PLAN, owner: OWNER, leaseGeneration: claim.leaseGeneration, now: new Date().toISOString() })).toBe(1);
+    const fenced = memory.appendHandoffEvent!({ event: handoffEvent('racing'), owner: OWNER, leaseGeneration: claim.leaseGeneration });
+    const actions = await memory.recoverExpired(new Date(Date.now() + 1_000).toISOString(), 10, PROJECT);
+    expect(await fenced).toBe('RECORDED');
+    expect(actions.map((action) => action.reasonCode), 'handed when the sweep looked, so never bought twice').toEqual(['HANDED_OUTCOME_UNKNOWN']);
+  });
+});
+
+/**
+ * WHAT THE POSTGRESQL FENCE RESTS ON, PINNED OFFLINE (the review of fd588ed4, finding 5). No
+ * real-PostgreSQL case can see either property fail:
+ *   (a) the FOR SHARE read and the insert share ONE serializable transaction. Split them, and a
+ *       recovery can requeue between the check's commit and the insert, and the task is bought twice;
+ *   (b) recovery runs SERIALIZABLE. One interleaving (recovery's snapshot before the fence commits,
+ *       its row lock after) is resolved only by SSI; under READ COMMITTED it requeues a handed task.
+ * So the source itself is held: each method is one `juliusSerializable` body, and every statement in
+ * it runs on that transaction's client.
+ */
+describe('(a2) the PostgreSQL fence and sweep are each one serializable transaction (source pins)', () => {
+  const source = (...path: string[]) => readFileSync(join(__dirname, '..', ...path), 'utf8');
+
+  it('(a) the fence reads the task FOR SHARE and inserts the handoff inside one juliusSerializable body', () => {
+    const text = source('src', 'relay', 'persistence', 'julius-event-postgres.ts');
+    const body = text.split('\n').find((line) => line.includes('async appendHandoff('));
+    expect(body, 'appendHandoff is found').toBeDefined();
+    expect(body!.match(/juliusSerializable\(/gu), 'exactly one transaction').toHaveLength(1);
+    expect(body).toMatch(/juliusSerializable\(this\.pool,async\(client\)=>\{const held=await client\.query\(`SELECT 1 FROM relay_wonderland\.julius_tasks WHERE [^`]*FOR SHARE`/u);
+    expect(body).toContain('appendJuliusEventWithin(client,input.event)');
+    expect(body, 'no statement outside it').not.toMatch(/this\.pool\.(query|connect)/u);
+  });
+
+  it('(b) recovery sweeps, and closes what it recovers, inside one juliusSerializable body', () => {
+    const text = source('src', 'relay', 'persistence', 'julius-recovery-postgres.ts');
+    const start = text.indexOf('async recoverExpired(');
+    expect(start, 'recoverExpired is found').toBeGreaterThanOrEqual(0);
+    const body = text.slice(start, text.indexOf('\n  }\n', start));
+    expect(body).toMatch(/\n    return juliusSerializable\(this\.pool, async \(client\) => \{/u);
+    expect(body.match(/juliusSerializable\(/gu), 'exactly one transaction').toHaveLength(1);
+    expect(body).toContain('FOR UPDATE OF t SKIP LOCKED');
+    expect(body).toContain('await closeRecoveredReservations(client, candidate, now)');
+    expect(body, 'no statement outside it').not.toMatch(/this\.pool\.(query|connect)/u);
   });
 });
