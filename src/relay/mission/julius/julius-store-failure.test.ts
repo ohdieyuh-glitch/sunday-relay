@@ -35,6 +35,8 @@ describe('juliusStoreErrorClass names the store failure from the driver\'s code'
     'Client has encountered a connection error and is not queryable',
     'Client was closed and is not queryable', 'Connection terminated unexpectedly', 'Connection terminated',
     'Query read timeout', 'timeout expired', 'timeout exceeded when trying to connect',
+    // pg-pool's own, raised when `connectionTimeoutMillis` expires (independent review F11).
+    'Connection terminated due to connection timeout',
   ])(
     'pg\'s fixed driver string "%s" is a lost connection', (message) => {
       expect(juliusStoreErrorClass(new Error(message))).toBe('connection');
