@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { createJuliusMemoryStore } from './julius-memory-store';
 import { JuliusRuntimeApi, type JuliusMissionResultView } from './julius-runtime-api';
 import {
   cardPolicy, createJuliusHarness, seedTaskContractInto, task, verificationPolicy, worker,
@@ -223,5 +224,57 @@ describe('the result a user asks for', () => {
     const unscoped = await api.inspectResult({ ...IDENTITY, scopes: [] }, 'run-1');
     expect(unscoped.ok).toBe(false);
     if (!unscoped.ok) expect(unscoped.reason).toBe('scope_missing');
+  });
+});
+
+/**
+ * THE RESULT AGREES WITH THE DECISION (defect A's A-6, the operator-facing half). The decision reads
+ * only the attempt the task row names (eaddbf74). This view read every attempt's rows, so a PASSED row
+ * a lost lease left behind could show an operator a criterion as SATISFIED, and list a deliverable,
+ * that the decision never credited: a record that disagrees with the decision. It now reads the same
+ * attempt the decision does. `inspectEvidence` stays the raw history, and says it is.
+ */
+describe('the result reads the attempt the decision read', () => {
+  const now = '2026-09-29T12:00:00.000Z';
+  const later = '2026-09-29T13:00:00.000Z';
+  /** A build accepted on its SECOND lease; `rows` are written under the generations they name. */
+  const acceptedOnSecondLease = async (rows: (first: number, second: number) => Array<{ generation: number; status: 'PASSED' | 'FAILED' }>) => {
+    const store = createJuliusMemoryStore();
+    store.seedRun(RUN);
+    store.seedTask('run-1', task({ taskId: 'build-1', role: 'CODING_AGENT', taskType: 'build', requiredEvidenceTypes: ['TEST'], state: 'RUNNABLE' }));
+    store.seedCriteria('run-1', [{ criterionId: 'AC-1', description: 'The suite passes.', requiredEvidenceTypes: ['TEST'] as never }]);
+    const [first] = await store.claimRunnable({ owner: 'lost', now, leaseExpiresAt: later, limit: 1, projectId: 'prj-1' });
+    expect(await store.finishTask({ taskId: 'build-1', owner: 'lost', leaseGeneration: first!.leaseGeneration, state: 'FAILED', now, nextAttemptAt: now })).toBe(true);
+    const [second] = await store.claimRunnable({ owner: 'accepted', now, leaseExpiresAt: later, limit: 1, projectId: 'prj-1' });
+    for (const [index, row] of rows(first!.leaseGeneration, second!.leaseGeneration).entries()) {
+      expect(await store.appendEvidence({
+        runId: 'run-1', projectId: 'prj-1', idempotencyKey: `k${String(index)}`,
+        evidence: {
+          evidenceId: `build-1:${String(row.generation)}:${String(index)}`, missionId: 'msn-1', taskId: 'build-1', workerId: 'coder',
+          type: 'TEST', status: row.status, safeSummary: `TEST ${row.status} under lease ${String(row.generation)}`, artifactRef: null, integrityHash: null, occurredAt: now,
+        },
+      })).toBe(true);
+    }
+    expect(await store.finishTask({ taskId: 'build-1', owner: 'accepted', leaseGeneration: second!.leaseGeneration, state: 'SUCCEEDED', now })).toBe(true);
+    const api = new JuliusRuntimeApi({ store: store as never, timeline: store as never, approvers: { mayApprove: async () => false }, clock: { now: () => now } as never });
+    const result = await api.inspectResult(IDENTITY, 'run-1');
+    if (!result.ok) throw new Error(result.reason);
+    return result.value;
+  };
+
+  it('RED FIRST: a PASSED row a lost lease left behind satisfies no criterion and is no deliverable', async () => {
+    const view = await acceptedOnSecondLease((first) => [{ generation: first, status: 'PASSED' }]);
+    expect(view.criteria[0], 'the decision never credited that row').toMatchObject({ satisfied: false, evidenceIds: [] });
+    expect(view.deliverables).toEqual([]);
+  });
+  it('CONTROL: the accepted attempt’s own PASSED row satisfies it, and is the deliverable', async () => {
+    const view = await acceptedOnSecondLease((first, second) => [{ generation: first, status: 'FAILED' }, { generation: second, status: 'PASSED' }]);
+    expect(view.criteria[0]).toMatchObject({ satisfied: true, evidenceIds: ['build-1:2:1'] });
+    expect(view.deliverables.map((item) => item.evidenceId)).toEqual(['build-1:2:1']);
+  });
+  it('the accepted attempt’s own FAILED row satisfies nothing either: the attempt is reduced, then the status is read', async () => {
+    const view = await acceptedOnSecondLease((_first, second) => [{ generation: second, status: 'FAILED' }]);
+    expect(view.criteria[0]).toMatchObject({ satisfied: false, evidenceIds: [] });
+    expect(view.deliverables).toEqual([]);
   });
 });
