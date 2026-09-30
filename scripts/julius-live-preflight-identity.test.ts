@@ -12,6 +12,7 @@ import { WONDERLAND_MIGRATIONS } from '../src/relay/persistence/wonderland-postg
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
 import { JuliusToolRecoveryPostgresRepository } from '../src/relay/persistence/julius-tool-recovery-postgres';
 import { JuliusToolSettlementPostgresRepository } from '../src/relay/persistence/julius-tool-settlement-postgres';
+import { JULIUS_SERIALIZABLE_ATTEMPTS } from '../src/relay/persistence/julius-serializable';
 import { JULIUS_ENCODED_TEXT_MARKER, decodePgJson, decodePgText } from '../src/relay/persistence/julius-storage-encoding';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/sandbox-limits';
 import { juliusAttemptCloseCommand, parseJuliusAttemptClose } from '../relay-bridge/julius/coder-workspace';
@@ -823,13 +824,21 @@ suite('paid run 36568129865 — the NUL-separated close-out settles on real Post
     expect(await openCount(identity)).toBe(0);
   });
 
-  it('SERIALIZATION: three conflicts in a row surface as 40001, and the dispatch is closed as an unknown outcome, never DISPATCHING', async () => {
+  /**
+   * THE BOUND IS THE SHARED POLICY'S, NOT A LOCAL THREE. The settlement carried its own three-attempt
+   * loop when this case was written; it now runs on `juliusSerializable`, whose bound is
+   * JULIUS_SERIALIZABLE_ATTEMPTS. Three conflicts are therefore absorbed on the fourth attempt, which
+   * is the intended behaviour, and only a conflict on EVERY attempt may surface. The case never ran
+   * before the real-PostgreSQL CI step existed (Windows refuses the directory fsync this suite needs),
+   * so the stale three went unnoticed until its first execution on Linux.
+   */
+  it('SERIALIZATION: a conflict on every attempt surfaces as 40001, and the dispatch is closed as an unknown outcome, never DISPATCHING', async () => {
     const identity = await fixture();
     await seedStream(identity);
-    const { settlement, seen } = conflictedSettlement(identity, 3);
+    const { settlement, seen } = conflictedSettlement(identity, JULIUS_SERIALIZABLE_ATTEMPTS);
     const failure = await failureOf(portFor(identity, () => ({ stdout: CLOSE_OUT }), { settlement }).run(closeOutStep(identity)));
     expect(codeOf(failure)).toBe('40001');
-    expect(seen.attempts).toBe(3);
+    expect(seen.attempts, 'every attempt the shared policy allows was made, and each met a conflict').toBe(JULIUS_SERIALIZABLE_ATTEMPTS);
     expect(await rowOf(closeOutId(identity))).toMatchObject({ state: 'FAILED', recovery_state: 'UNKNOWN_OUTCOME', outbox_state: 'DEAD', last_error: 'tool_settlement_failed' });
     expect(await openCount(identity)).toBe(0);
   });
