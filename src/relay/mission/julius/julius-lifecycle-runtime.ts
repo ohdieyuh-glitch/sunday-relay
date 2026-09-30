@@ -338,6 +338,14 @@ export async function resumeJuliusRun(
   // a PENDING approval, it went to READY: a state that says it continues when
   // driven, when it is still waiting on an approver. The claim and `advanceRun`
   // held it anyway, but the row and the route's reply said something untrue.
+  //
+  // A KNOWN RESIDUAL (the review of fb42b29f, finding 4, its probe P12). This
+  // read comes BEFORE `lifecycle()`'s own reload. A grant that lands between
+  // them does not move a PAUSED run (F1), so the reload still finds it PAUSED
+  // and the resume walks it to BLOCKED with nothing pending. Nothing is
+  // dispatched and no money moves: the row and the route's reply are wrong for
+  // one advance, and the next idle advance walks the run on. The fix, when this
+  // area is next touched: read the approvals after the reload.
   const waiting = (await deps.store.pendingApprovals(input.runId, input.projectId)).length > 0;
   return lifecycle(input, waiting ? 'BLOCKED' : 'READY', 'OPERATOR_RESUMED', deps, false, 'run.resumed', 'PAUSED');
 }
