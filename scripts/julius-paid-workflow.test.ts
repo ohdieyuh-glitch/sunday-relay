@@ -23,6 +23,15 @@ const ROOT = resolve(__dirname, '..');
 const WORKFLOW_PATH = resolve(ROOT, '.github/workflows/julius-first-live-mission.yml');
 const workflow = readFileSync(WORKFLOW_PATH, 'utf8');
 
+/**
+ * The shell GitHub runs every `run:` step of both jobs in: their
+ * `defaults.run.shell: bash` means `bash --noprofile --norc -eo pipefail {0}`.
+ * Driving a step under anything laxer hides every early exit: a plain `bash -c`
+ * never aborts on a failing command, and a step that `-e` ended early is exactly
+ * what cost the smoke of run 36685079176 its verdict.
+ */
+const GITHUB_BASH = ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c'];
+
 /** The text of one top-level job, from its key to the next job key. */
 const job = (name: string): string => {
   const start = workflow.indexOf(`\n  ${name}:\n`);
@@ -219,7 +228,12 @@ describe('provider readiness fails before spending, and never exposes a key', ()
    * (measured 2026-09-29) — none of them a credential.
    */
   const SHELL_OWN_ENV = ['PWD', 'OLDPWD', 'SHLVL', '_', ...(process.platform === 'win32' ? ['MSYSTEM', 'SYSTEMROOT', 'WINDIR'] : [])];
-  const runReadiness = (statuses: { openai: string; xai: string }, env: Record<string, string> = {}) => {
+  /**
+   * `loggedOut` swaps the real CLI for one that reports no login and exits 1, as a
+   * CLI with no usable subscription does: the step must still reach its verdict,
+   * probe the reviewer and fail on its count, not end early under `bash -e`.
+   */
+  const runReadiness = (statuses: { openai: string; xai: string }, env: Record<string, string> = {}, loggedOut = false) => {
     const dir = mkdtempSync(join(tmpdir(), 'julius-readiness-'));
     mkdirSync(join(dir, 'scripts'));
     copyFileSync(join(ROOT, 'scripts', 'julius-subscription-check.mjs'), join(dir, 'scripts', 'julius-subscription-check.mjs'));
@@ -232,7 +246,9 @@ describe('provider readiness fails before spending, and never exposes a key', ()
       `printf '%s\\n' "$*" >> '${record}/cli-argv'`,
       `pwd >> '${record}/cli-cwd'`,
       `compgen -e >> '${record}/cli-env'`,
-      `exec '${hostCli.replace(/\\/gu, '/')}' "$@"`,
+      loggedOut
+        ? `printf '%s\\n' '{"loggedIn":false,"authMethod":"none","apiProvider":"firstParty"}'; exit 1`
+        : `exec '${hostCli.replace(/\\/gu, '/')}' "$@"`,
     ].join('\n'));
     chmodSync(join(shimDir, 'claude'), 0o755);
     const fakeCurl = join(dir, 'curl');
@@ -259,7 +275,7 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     let code = 0;
     let output = '';
     try {
-      output = execFileSync('bash', ['-c', script(readiness)], {
+      output = execFileSync('bash', [...GITHUB_BASH, script(readiness)], {
         cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
         env: {
           ...process.env,
@@ -268,7 +284,7 @@ describe('provider readiness fails before spending, and never exposes a key', ()
           FAKE_DIR: dir,
           GITHUB_WORKSPACE: dir,
           OPENAI_API_KEY: 'FAKETESTNOTREAL-openai', CLAUDE_CODE_OAUTH_TOKEN: 'FAKETESTNOTREAL-oauth', XAI_API_KEY: 'FAKETESTNOTREAL-xai',
-          OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-5.6-sol', RELAY_HOSTED_CODING_MODEL: 'claude-fable-5',
+          OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-5.6-sol', RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5',
           RELAY_HERMES_PROVIDER: 'xai', RELAY_HERMES_MODEL: 'grok-build-0.1',
           ...env,
         },
@@ -291,7 +307,7 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     const run = runReadiness({ openai: '200', xai: '200' });
     expect(run.code).toBe(0);
     expect(run.output.match(/result=AUTHENTICATED_MODEL_AVAILABLE/gu)?.length).toBe(2);
-    expect(run.output).toContain('provider_readiness provider=anthropic model=claude-fable-5 http=none auth=CLAUDE_SUBSCRIPTION method=oauth_token plan=absent result=SUBSCRIPTION_LOGIN_PRESENT');
+    expect(run.output).toContain('provider_readiness provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION method=oauth_token plan=absent result=SUBSCRIPTION_LOGIN_PRESENT');
     expect(run.output).toContain('provider_balance=UNKNOWN');
     expect(run.leak, 'no argv leak, and the Anthropic API is never called').toBe('');
     expect(run.output).not.toContain('FAKETESTNOTREAL');
@@ -300,6 +316,16 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     expect(run.cliArgv).toBe('auth status --json');
     expect(run.cliCwd.replace(/\\/gu, '/')).toMatch(/\/work$/u);
     expect(run.cliEnv.filter((name) => !SHELL_OWN_ENV.includes(name)).sort()).toEqual([...CLI_ALLOWED_ENV].sort());
+  }, 60_000);
+
+  it('a CLI that exits non-zero still leaves its verdict, the reviewer is still probed, and the count fails the job', () => {
+    const run = runReadiness({ openai: '200', xai: '200' }, {}, true);
+    expect(run.code).not.toBe(0);
+    expect(run.cliArgv).toBe('auth status --json');
+    expect(run.output).toContain('provider_readiness provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION reason=NOT_LOGGED_IN result=SUBSCRIPTION_NOT_READY');
+    expect(run.output).toContain('provider_readiness provider=xai model=grok-build-0.1 http=200 result=AUTHENTICATED_MODEL_AVAILABLE');
+    expect(run.output).toContain('provider_balance=UNKNOWN');
+    expect(run.output).not.toContain('FAKETESTNOTREAL');
   }, 60_000);
 
   it('an Anthropic route set in the step never reaches the CLI: refused before it runs', () => {
@@ -317,8 +343,13 @@ describe('provider readiness fails before spending, and never exposes a key', ()
    * JSON — the real one would spend subscription usage. Proves the step's own
    * shell: the request is sent only after a subscription status, and only an
    * exact OK passes.
+   *
+   * `cliExit` is what the fake CLI returns after printing the reply. The real CLI
+   * exits NON-ZERO on an error reply, and under GitHub's `bash -e` that used to end
+   * the step before smoke-verdict ever read the reply (run 36685079176). A shim that
+   * always exited 0, run under a shell without `-e`, is why no case here caught it.
    */
-  const runSmoke = (statusJson: string, replyJson: string, env: Record<string, string> = {}) => {
+  const runSmoke = (statusJson: string, replyJson: string, env: Record<string, string> = {}, cliExit = 0) => {
     const smoke = step(job('first-live-mission'), "'Subscription smoke: one tiny request on the Coding Agent''s subscription'");
     const dir = mkdtempSync(join(tmpdir(), 'julius-smoke-'));
     mkdirSync(join(dir, 'scripts'));
@@ -331,16 +362,16 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     writeFileSync(join(shimDir, 'claude'), [
       '#!/usr/bin/env bash',
       `printf '%s\\n' "$*" >> '${record}/cli-argv'`,
-      `case "$1" in auth) cat '${record}/status.json';; -p) cat '${record}/reply.json';; esac`,
+      `case "$1" in auth) cat '${record}/status.json';; -p) cat '${record}/reply.json'; exit ${cliExit};; esac`,
     ].join('\n'));
     chmodSync(join(shimDir, 'claude'), 0o755);
     const blankRoutes = Object.fromEntries(ANTHROPIC_CREDENTIAL_ENV_NAMES.map((name) => [name, '']));
     let code = 0;
     let output = '';
     try {
-      output = execFileSync('bash', ['-c', script(smoke)], {
+      output = execFileSync('bash', [...GITHUB_BASH, script(smoke)], {
         cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, ...blankRoutes, CLAUDE_CODE_OAUTH_TOKEN: 'FAKETESTNOTREAL-oauth', RELAY_HOSTED_CODING_MODEL: 'claude-fable-5', ...env },
+        env: { ...process.env, ...blankRoutes, CLAUDE_CODE_OAUTH_TOKEN: 'FAKETESTNOTREAL-oauth', RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5', ...env },
       });
     } catch (error) {
       code = (error as { status?: number }).status ?? 1;
@@ -353,12 +384,16 @@ describe('provider readiness fails before spending, and never exposes a key', ()
   const TOKEN_ONLY = '{"loggedIn":true,"authMethod":"oauth_token","apiProvider":"firstParty"}';
 
   it('smoke: a subscription status and an exact OK pass, after exactly one literal request', () => {
-    const run = runSmoke(TOKEN_ONLY, '{"type":"result","is_error":false,"result":"OK"}');
+    // modelUsage attests the requested model; a PASS will require it once the served-model
+    // check lands, and today's verdict ignores it, so this fixture holds either way.
+    const run = runSmoke(TOKEN_ONLY, '{"type":"result","subtype":"success","is_error":false,"result":"OK","modelUsage":{"claude-opus-5-5":{"inputTokens":3,"outputTokens":1}}}');
     expect(run.code).toBe(0);
-    expect(run.output).toContain('subscription_smoke provider=anthropic model=claude-fable-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=PASS');
+    expect(run.output).toContain('subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=PASS');
+    expect(run.output).toContain('subscription_smoke_auth_exit=0');
+    expect(run.output).toContain('subscription_smoke_cli_exit=0');
     expect(run.calls).toEqual([
       'auth status --json',
-      '-p Reply with exactly OK --max-turns 1 --output-format json --model claude-fable-5 --setting-sources user --strict-mcp-config --no-session-persistence',
+      '-p Reply with exactly OK --max-turns 1 --output-format json --model claude-opus-5-5 --setting-sources user --strict-mcp-config --no-session-persistence',
     ]);
     expect(run.output).not.toContain('FAKETESTNOTREAL');
   }, 60_000);
@@ -368,10 +403,18 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     expect(apiKey.code).not.toBe(0);
     expect(apiKey.output).toContain('reason=API_KEY_IN_PLAY result=SUBSCRIPTION_NOT_READY');
     expect(apiKey.calls).toEqual(['auth status --json']);
-    const wrong = runSmoke(TOKEN_ONLY, '{"type":"result","is_error":true,"result":"Credit balance is too low"}');
+    // The real CLI exits 1 on an error reply. Under GitHub's `bash -e` the step must
+    // still reach its verdict and say so, then fail closed.
+    const wrong = runSmoke(TOKEN_ONLY, '{"type":"result","is_error":true,"result":"Credit balance is too low"}', {}, 1);
     expect(wrong.code).not.toBe(0);
+    expect(wrong.output).toContain('subscription_smoke_cli_exit=1');
     expect(wrong.output).toContain('reply=ERROR result=FAIL');
     expect(wrong.output).not.toContain('Credit balance');
+    // A CLI that dies printing nothing is judged UNREADABLE, not skipped.
+    const silent = runSmoke(TOKEN_ONLY, '', {}, 1);
+    expect(silent.code).not.toBe(0);
+    expect(silent.output).toContain('subscription_smoke_cli_exit=1');
+    expect(silent.output).toContain('reply=UNREADABLE result=FAIL');
     const outranked = runSmoke(TOKEN_ONLY, '{"result":"OK"}', { ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic' });
     expect(outranked.code).not.toBe(0);
     expect(outranked.output).toContain('reason=OUTRANKED_BY_ANTHROPIC_API_KEY result=SUBSCRIPTION_NOT_READY');
