@@ -412,8 +412,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Relay Dog")
 	FWonderlandWornPose GetCanonicalWornPose() const { return LastWornPose; }
 
+	/** How many times this Dog's circle round the Contract has stalled on something and detoured (see OrbitDetourStage). */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Relay Dog")
+	int32 GetOrbitDetourCount() const { return OrbitDetours; }
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
 	FName GetWornSkinId() const { return WornSkinId; }
+
+	/**
+	 * RELAY OG'S BODY HEIGHT, uu: the bottom of the canon body to the top of its head, measured once, at rest, in BeginPlay.
+	 * THE one size every mascot skin is built to, in the world and in the Wardrobe (founder, 2026-09-30, a HARD rule: "ALL mascot skins must be the same overall height as the canonical Relay OG mascot skin").
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	float GetCanonBodyHeightUu() const { return CanonBodyHeightUU; }
 
 	/** The costume standing on this Dog, or null while it wears its own body. For a proof to photograph. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
@@ -581,6 +592,17 @@ private:
 	FVector2D HeadLookSolved = FVector2D::ZeroVector;
 	/** +1 when the working (brush, lens) arm hangs on the Dog's right. */
 	float WorkingHandSide = 1.0f;
+	/** Relay OG's measured body height, uu (see GetCanonBodyHeightUu); 0 until BeginPlay has measured it. */
+	float CanonBodyHeightUU = 0.0f;
+	void MeasureCanonBodyHeight();
+	/**
+	 * THE CIRCLE'S DETOUR. 0 the ordinary circle; 1 a tighter one; 2 a wider one; 3 the other way round. A circle that has
+	 * made no headway for OrbitStallLimit seconds moves to the next; one that has walked freely for a while comes back to 0.
+	 */
+	int32 OrbitDetourStage = 0;
+	float OrbitStallSeconds = 0.0f;
+	float OrbitFreeSeconds = 0.0f;
+	int32 OrbitDetours = 0;
 	float LastEyesShut = 0.0f;
 	FString LastPoseNote;
 	/** The book's grips last placed, world space, for proof jobs: centre, supporting grip, turning goal. */

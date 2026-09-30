@@ -735,7 +735,19 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 	// Hashed from the name, so the two companions never hover, flap or blink in step.
 	Phase = static_cast<float>(GetTypeHash(DisplayName) % 10007u) / 10007.0f;
 
+	// ---- ONE SIZE FOR EVERY MASCOT BODY (founder, 2026-09-30, a HARD rule: "ALL mascot skins must be the same overall height as the canonical Relay OG mascot skin").
+	//
+	// Measured 2026-09-30: every alternate skin's body stood 155 uu -- the generator's 1.55 m -- while the Relay OG the world
+	// shows is the Dog's own body at 175, so every skin was 11-12% smaller than the mascot it dresses (and its shoulders
+	// 24.5 uu lower, which is where the Mission Contract hands fell short). A figure that carries its canonical body's
+	// extent is now scaled here so that body stands TargetBodyHeightUU tall; its costume, horns and fire come with it.
+	if (TargetBodyHeightUU > 1.0f && Figure.HasBody())
+	{
+		FigureScale = TargetBodyHeightUU / ((Figure.BodyHighest - Figure.BodyLowest) * Figure.VoxelUU);
+	}
 	const float Unit = Figure.VoxelUU * FMath::Max(FigureScale, 0.05f);
+	BodyHeightUU = Figure.HasBody() ? (Figure.BodyHighest - Figure.BodyLowest) * Unit : 0.0f;
+	BodyLowestUU = Figure.HasBody() ? Figure.BodyLowest * Unit : 0.0f;
 	// MEASURED, NOT ASSUMED: how tall this figure really is, from the boxes it is about to build.
 	{
 		float Lowest = TNumericLimits<float>::Max();
@@ -2660,6 +2672,28 @@ FVector AWonderlandCompanionEmbodiment::GetHandWorld(float SideSign) const
 		}
 	}
 	return FVector::ZeroVector;
+}
+
+bool AWonderlandCompanionEmbodiment::GetArmReach(float SideSign, FVector& OutShoulderWorld, float& OutLengthUU) const
+{
+	for (int32 Index = 0; Index < Motions.Num() && Index < PartPivots.Num(); ++Index)
+	{
+		const FPartMotion& Part = Motions[Index];
+		if (Part.LimbKind != 3 || Part.LimbSide == 0 || (Part.LimbSide > 0) != (SideSign >= 0.0f)
+			|| Part.ThighUU <= 1.0f || Part.ShinUU <= 1.0f)
+		{
+			continue;
+		}
+		const USceneComponent* Shoulder = PartPivots[Index].Get();
+		if (Shoulder == nullptr)
+		{
+			continue;
+		}
+		OutShoulderWorld = Shoulder->GetComponentLocation();
+		OutLengthUU = Part.ThighUU + Part.ShinUU;
+		return true;
+	}
+	return false;
 }
 
 FVector AWonderlandCompanionEmbodiment::GetSoleWorld(float SideSign) const

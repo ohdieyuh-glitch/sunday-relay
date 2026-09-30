@@ -1,0 +1,368 @@
+{
+ "name": "zh_31_scenario_hands_before",
+ "started": "2026-09-30 14:07:20",
+ "status": "measured",
+ "dll_mtime": 1790791545.2024937,
+ "tests": [
+  {
+   "id": "H1_jack_flame",
+   "name": "jack_flame: costume hands on the canon hands in every act at full weight (p95 <= 1.5 uu)",
+   "pass": false,
+   "detail": {
+    "bad": {
+     "IMPLEMENTATION": 10.29,
+     "REPAIR": 11.08
+    },
+    "acts": {
+     "PREPARATION": 0.02,
+     "RESEARCH": 0.02,
+     "IMPLEMENTATION": 10.29,
+     "REVIEW": 0.0,
+     "REPAIR": 11.08,
+     "VERIFICATION": 0.03
+    }
+   }
+  },
+  {
+   "id": "P1_jack_flame",
+   "name": "jack_flame: every held prop sits in the costume's paw as it does in the canon hand (p95 extra <= 2 uu)",
+   "pass": true,
+   "detail": {
+    "bad": {},
+    "props": {
+     "RESEARCH": [
+      [
+       "MissionBookPages_0",
+       "MissionBookTurningPage_0",
+       "MissionBook_0",
+       "MissionEnergy_0"
+      ],
+      0.0,
+      25.34
+     ],
+     "IMPLEMENTATION": [
+      [
+       "MissionBookPages_0",
+       "MissionBook_0",
+       "MissionBrushTip_0",
+       "MissionBrush_0"
+      ],
+      0.0,
+      32.52
+     ],
+     "REVIEW": [
+      [
+       "MissionBrushTip_0",
+       "MissionBrush_0",
+       "MissionLensGlass_0",
+       "MissionLensGlint_0",
+       "MissionLensHandle_0",
+       "MissionLensRim_0"
+      ],
+      0.0,
+      0.0
+     ],
+     "REPAIR": [
+      [
+       "MissionBrushTip_0",
+       "MissionBrush_0",
+       "MissionLensGlass_0",
+       "MissionLensGlint_0",
+       "MissionLensHandle_0",
+       "MissionLensRim_0",
+       "MissionScraperBlade_0",
+       "MissionScraper_0"
+      ],
+      0.02,
+      0.01
+     ],
+     "VERIFICATION": [
+      [
+       "MissionLensGlass_0",
+       "MissionLensGlint_0",
+       "MissionLensHandle_0",
+       "MissionLensRim_0"
+      ],
+      0.0,
+      0.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "H2_jack_flame",
+   "name": "jack_flame: every act Relay OG reached was reached at full weight (H1 is not vacuous)",
+   "pass": true,
+   "detail": {
+    "missing": [],
+    "reached": [
+     "IMPLEMENTATION",
+     "PREPARATION",
+     "REPAIR",
+     "RESEARCH",
+     "REVIEW",
+     "VERIFICATION"
+    ]
+   }
+  }
+ ],
+ "runs": [
+  {
+   "skin": "relay_og",
+   "acts": {
+    "PREPARATION": {
+     "samples": 73,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.0,
+     "props": [],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": null,
+     "canon_hands_local_median": [
+      17.2,
+      19.56,
+      36.43,
+      17.2,
+      -19.56,
+      36.43
+     ]
+    },
+    "RESEARCH": {
+     "samples": 256,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.0,
+     "props": [],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": null,
+     "canon_hands_local_median": [
+      11.27,
+      16.68,
+      -2.99,
+      19.46,
+      -22.13,
+      -14.43
+     ]
+    },
+    "IMPLEMENTATION": {
+     "samples": 205,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.0,
+     "props": [],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": null,
+     "canon_hands_local_median": [
+      -6.7,
+      22.89,
+      -45.12,
+      0.92,
+      -71.64,
+      24.11
+     ]
+    },
+    "REVIEW": {
+     "samples": 128,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.0,
+     "props": [],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": null,
+     "canon_hands_local_median": [
+      -5.34,
+      23.1,
+      -41.03,
+      12.27,
+      -25.76,
+      -0.65
+     ]
+    },
+    "REPAIR": {
+     "samples": 83,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.0,
+     "props": [],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": null,
+     "canon_hands_local_median": [
+      -0.29,
+      21.9,
+      -40.89,
+      53.95,
+      -11.98,
+      27.76
+     ]
+    },
+    "VERIFICATION": {
+     "samples": 151,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.0,
+     "props": [],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": null,
+     "canon_hands_local_median": [
+      40.91,
+      15.61,
+      148.49,
+      40.91,
+      -15.61,
+      148.48
+     ]
+    }
+   }
+  },
+  {
+   "skin": "jack_flame",
+   "acts": {
+    "PREPARATION": {
+     "samples": 74,
+     "gap_p95": 0.02,
+     "gap_median": 0.01,
+     "gap_max": 0.11,
+     "props": [],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": null,
+     "canon_hands_local_median": [
+      17.2,
+      19.54,
+      37.07,
+      17.2,
+      -19.54,
+      37.07
+     ]
+    },
+    "RESEARCH": {
+     "samples": 259,
+     "gap_p95": 0.02,
+     "gap_median": 0.0,
+     "gap_max": 0.02,
+     "props": [
+      "MissionBookPages_0",
+      "MissionBookTurningPage_0",
+      "MissionBook_0",
+      "MissionEnergy_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 25.34,
+     "canon_hands_local_median": [
+      11.19,
+      16.41,
+      -2.86,
+      19.49,
+      -22.26,
+      -14.46
+     ]
+    },
+    "IMPLEMENTATION": {
+     "samples": 211,
+     "gap_p95": 10.29,
+     "gap_median": 0.0,
+     "gap_max": 11.25,
+     "props": [
+      "MissionBookPages_0",
+      "MissionBook_0",
+      "MissionBrushTip_0",
+      "MissionBrush_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 32.52,
+     "canon_hands_local_median": [
+      -6.74,
+      22.83,
+      -44.98,
+      0.41,
+      -71.45,
+      23.23
+     ]
+    },
+    "REVIEW": {
+     "samples": 138,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 3.13,
+     "props": [
+      "MissionBrushTip_0",
+      "MissionBrush_0",
+      "MissionLensGlass_0",
+      "MissionLensGlint_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      -6.32,
+      23.39,
+      -41.39,
+      11.63,
+      -27.03,
+      0.1
+     ]
+    },
+    "REPAIR": {
+     "samples": 83,
+     "gap_p95": 11.08,
+     "gap_median": 0.02,
+     "gap_max": 15.51,
+     "props": [
+      "MissionBrushTip_0",
+      "MissionBrush_0",
+      "MissionLensGlass_0",
+      "MissionLensGlint_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0",
+      "MissionScraperBlade_0",
+      "MissionScraper_0"
+     ],
+     "prop_extra_p95": 0.02,
+     "prop_to_paw_median": 0.01,
+     "canon_hands_local_median": [
+      0.29,
+      21.79,
+      -41.37,
+      53.67,
+      -11.12,
+      29.9
+     ]
+    },
+    "VERIFICATION": {
+     "samples": 155,
+     "gap_p95": 0.03,
+     "gap_median": 0.0,
+     "gap_max": 0.04,
+     "props": [
+      "MissionLensGlass_0",
+      "MissionLensGlint_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      40.51,
+      15.63,
+      147.46,
+      40.51,
+      -15.63,
+      147.52
+     ]
+    }
+   }
+  }
+ ],
+ "reference_acts": [
+  "IMPLEMENTATION",
+  "PREPARATION",
+  "REPAIR",
+  "RESEARCH",
+  "REVIEW",
+  "VERIFICATION"
+ ],
+ "all_pass": false,
+ "finished": "2026-09-30 14:11:44",
+ "seconds": 263.73,
+ "log": "H1_jack_flame FAIL jack_flame: costume hands on the canon hands in every act at full weight (p95 <= 1.5 uu) {'bad': {'IMPLEMENTATION': 10.29, 'REPAIR': 11.08}, 'acts': {'PREPARATION': 0.02, 'RESEARCH': 0.02, 'IMPLEMENTATION': 10.29, 'REVIEW': 0.0, 'REPAIR': 11.08, 'VERIFICATION': 0.03}}\nP1_jack_flame PASS jack_flame: every held prop sits in the costume's paw as it does in the canon hand (p95 extra <= 2 uu) {'bad': {}, 'props': {'RESEARCH': [['MissionBookPages_0', 'MissionBookTurningPage_0', 'MissionBook_0', 'MissionEnergy_0'], 0.0, 25.34], 'IMPLEMENTATION': [['MissionBookPages_0', 'MissionBook_0', 'MissionBrushTip_0', 'MissionBrush_0'], 0.0, 32.52], 'REVIEW': [['MissionBrushTip_0', 'MissionBrush_0', 'MissionLensGlass_0', 'MissionLensGlint_0', 'MissionLensHandle_0', 'MissionLensRim_0'], 0.0, 0.0], 'REPAIR': [['MissionBrushTip_0', 'MissionBrush_0', 'MissionLensGlass_0', 'MissionLensGlint_0', 'MissionLensHandle_0', 'MissionLensRim_0', 'MissionScraperBlade_0', 'MissionScraper_0'], 0.02, 0.01], 'VERIFICATION': [['MissionLensGlass_0', 'MissionLensGlint_0', 'MissionLensHandle_0', 'MissionLensRim_0'], 0.0, 0.0]}}\nH2_jack_flame PASS jack_flame: every act Relay OG reached was reached at full weight (H1 is not vacuous) {'missing': [], 'reached': ['IMPLEMENTATION', 'PREPARATION', 'REPAIR', 'RESEARCH', 'REVIEW', 'VERIFICATION']}\n"
+}

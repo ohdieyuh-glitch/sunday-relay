@@ -1,0 +1,293 @@
+{
+ "name": "zh_34_orbit_block_before2",
+ "started": "2026-09-30 14:29:27",
+ "status": "measured",
+ "dll_mtime": 1790791545.2024937,
+ "tests": [
+  {
+   "id": "B0",
+   "name": "the instrument drove at least one circle to the obstacle (else B1 proves nothing)",
+   "pass": true,
+   "detail": {
+    "closest": {
+     "[0.0, 6000.0, 90.0]": 449,
+     "[305.0, 6345.0, 90.0]": 16,
+     "[429.0, 6265.0, 90.0]": 25,
+     "[225.0, 6469.0, 90.0]": 27,
+     "[205.0, 6585.0, 90.0]": 15
+    }
+   }
+  },
+  {
+   "id": "B1",
+   "name": "no RESEARCH / IMPLEMENTATION stall (a 10 s window with < 60 uu headway) from any start",
+   "pass": false,
+   "detail": {
+    "stalled_runs": [
+     [
+      225.0,
+      6469.0,
+      90.0
+     ],
+     [
+      205.0,
+      6585.0,
+      90.0
+     ]
+    ]
+   }
+  },
+  {
+   "id": "B2",
+   "name": "every run circles at least 40% of the free run's path in each circling act",
+   "pass": false,
+   "detail": {
+    "short": [
+     [
+      [
+       225.0,
+       6469.0,
+       90.0
+      ],
+      "IMPLEMENTATION",
+      0,
+      2608
+     ],
+     [
+      [
+       225.0,
+       6469.0,
+       90.0
+      ],
+      "REVIEW",
+      0,
+      656
+     ],
+     [
+      [
+       205.0,
+       6585.0,
+       90.0
+      ],
+      "IMPLEMENTATION",
+      0,
+      2608
+     ],
+     [
+      [
+       205.0,
+       6585.0,
+       90.0
+      ],
+      "REVIEW",
+      0,
+      656
+     ]
+    ]
+   }
+  }
+ ],
+ "build_has_detours": false,
+ "runs": [
+  {
+   "start": [
+    0.0,
+    6000.0,
+    90.0
+   ],
+   "acts": {
+    "RESEARCH": {
+     "path_uu": 3854,
+     "samples": 251,
+     "stall_windows": 0,
+     "first_stall": null
+    },
+    "IMPLEMENTATION": {
+     "path_uu": 2608,
+     "samples": 208,
+     "stall_windows": 0,
+     "first_stall": null
+    },
+    "REVIEW": {
+     "path_uu": 656,
+     "samples": 128,
+     "stall_windows": 0,
+     "first_stall": null
+    }
+   },
+   "closest_to_obstacle_uu": 449,
+   "detours": null,
+   "first_stall": null
+  },
+  {
+   "start": [
+    305.0,
+    6345.0,
+    90.0
+   ],
+   "acts": {
+    "RESEARCH": {
+     "path_uu": 3761,
+     "samples": 248,
+     "stall_windows": 0,
+     "first_stall": null
+    },
+    "IMPLEMENTATION": {
+     "path_uu": 2489,
+     "samples": 205,
+     "stall_windows": 0,
+     "first_stall": null
+    },
+    "REVIEW": {
+     "path_uu": 634,
+     "samples": 123,
+     "stall_windows": 0,
+     "first_stall": null
+    }
+   },
+   "closest_to_obstacle_uu": 16,
+   "detours": null,
+   "first_stall": null
+  },
+  {
+   "start": [
+    429.0,
+    6265.0,
+    90.0
+   ],
+   "acts": {
+    "RESEARCH": {
+     "path_uu": 3853,
+     "samples": 249,
+     "stall_windows": 0,
+     "first_stall": null
+    },
+    "IMPLEMENTATION": {
+     "path_uu": 2598,
+     "samples": 204,
+     "stall_windows": 0,
+     "first_stall": null
+    },
+    "REVIEW": {
+     "path_uu": 656,
+     "samples": 127,
+     "stall_windows": 0,
+     "first_stall": null
+    }
+   },
+   "closest_to_obstacle_uu": 25,
+   "detours": null,
+   "first_stall": null
+  },
+  {
+   "start": [
+    225.0,
+    6469.0,
+    90.0
+   ],
+   "acts": {
+    "RESEARCH": {
+     "path_uu": 1652,
+     "samples": 249,
+     "stall_windows": 58,
+     "first_stall": [
+      29.5,
+      523,
+      6954
+     ]
+    },
+    "IMPLEMENTATION": {
+     "path_uu": 0,
+     "samples": 205,
+     "stall_windows": 123,
+     "first_stall": [
+      46.5,
+      535,
+      6903
+     ]
+    },
+    "REVIEW": {
+     "path_uu": 0,
+     "samples": 123,
+     "stall_windows": 0,
+     "first_stall": null
+    }
+   },
+   "closest_to_obstacle_uu": 27,
+   "detours": null,
+   "first_stall": [
+    29.5,
+    523,
+    6954
+   ]
+  },
+  {
+   "start": [
+    205.0,
+    6585.0,
+    90.0
+   ],
+   "acts": {
+    "RESEARCH": {
+     "path_uu": 1711,
+     "samples": 250,
+     "stall_windows": 54,
+     "first_stall": [
+      29.6,
+      514,
+      6953
+     ]
+    },
+    "IMPLEMENTATION": {
+     "path_uu": 0,
+     "samples": 204,
+     "stall_windows": 123,
+     "first_stall": [
+      46.5,
+      535,
+      6903
+     ]
+    },
+    "REVIEW": {
+     "path_uu": 0,
+     "samples": 123,
+     "stall_windows": 0,
+     "first_stall": null
+    }
+   },
+   "closest_to_obstacle_uu": 15,
+   "detours": null,
+   "first_stall": [
+    29.6,
+    514,
+    6953
+   ]
+  }
+ ],
+ "runs_reaching_obstacle": [
+  [
+   305.0,
+   6345.0,
+   90.0
+  ],
+  [
+   429.0,
+   6265.0,
+   90.0
+  ],
+  [
+   225.0,
+   6469.0,
+   90.0
+  ],
+  [
+   205.0,
+   6585.0,
+   90.0
+  ]
+ ],
+ "all_pass": false,
+ "finished": "2026-09-30 14:39:57",
+ "seconds": 629.66,
+ "log": "RUN [0.0, 6000.0] {'RESEARCH': (3854, 0), 'IMPLEMENTATION': (2608, 0), 'REVIEW': (656, 0)} detours None closest 449\nRUN [305.0, 6345.0] {'RESEARCH': (3761, 0), 'IMPLEMENTATION': (2489, 0), 'REVIEW': (634, 0)} detours None closest 16\nRUN [429.0, 6265.0] {'RESEARCH': (3853, 0), 'IMPLEMENTATION': (2598, 0), 'REVIEW': (656, 0)} detours None closest 25\nRUN [225.0, 6469.0] {'RESEARCH': (1652, 58), 'IMPLEMENTATION': (0, 123), 'REVIEW': (0, 0)} detours None closest 27\nRUN [205.0, 6585.0] {'RESEARCH': (1711, 54), 'IMPLEMENTATION': (0, 123), 'REVIEW': (0, 0)} detours None closest 15\nB0 PASS the instrument drove at least one circle to the obstacle (else B1 proves nothing) {'closest': {'[0.0, 6000.0, 90.0]': 449, '[305.0, 6345.0, 90.0]': 16, '[429.0, 6265.0, 90.0]': 25, '[225.0, 6469.0, 90.0]': 27, '[205.0, 6585.0, 90.0]': 15}}\nB1 FAIL no RESEARCH / IMPLEMENTATION stall (a 10 s window with < 60 uu headway) from any start {'stalled_runs': [[225.0, 6469.0, 90.0], [205.0, 6585.0, 90.0]]}\nB2 FAIL every run circles at least 40% of the free run's path in each circling act {'short': [[[225.0, 6469.0, 90.0], 'IMPLEMENTATION', 0, 2608], [[225.0, 6469.0, 90.0], 'REVIEW', 0, 656], [[205.0, 6585.0, 90.0], 'IMPLEMENTATION', 0, 2608], [[205.0, 6585.0, 90.0], 'REVIEW', 0, 656]]}\n"
+}

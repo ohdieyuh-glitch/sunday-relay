@@ -131,6 +131,14 @@ struct WONDERLAND_API FWonderlandCompanionFigure
 {
 	/** Unreal units per grid unit. */
 	float VoxelUU = 2.5f;
+	/**
+	 * THE CANONICAL BODY'S VERTICAL EXTENT, grid units: the `body <lowest> <highest>` record the generator writes from its
+	 * base Relay Dog -- the dog under the costume, never its horns, crown or fire. Every mascot skin is sized so this body
+	 * stands exactly Relay OG's height (founder, 2026-09-30, a HARD rule: "ALL mascot skins must be the same overall height as the canonical Relay OG mascot skin"). A figure without the record is not normalized.
+	 */
+	float BodyLowest = 0.0f;
+	float BodyHighest = 0.0f;
+	bool HasBody() const { return BodyHighest - BodyLowest > 0.1f; }
 	TArray<FWonderlandCompanionMaterial> Materials;
 	TArray<FWonderlandCompanionPart> Parts;
 	TArray<FWonderlandCompanionBox> Boxes;

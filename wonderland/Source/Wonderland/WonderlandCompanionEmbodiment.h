@@ -390,6 +390,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	FVector GetHandWorld(float SideSign) const;
 
+	/**
+	 * WHERE THIS COSTUME'S ARM ON ONE SIDE HANGS AND HOW FAR IT REACHES (shoulder pivot, upper + lower length, world uu).
+	 * The Dog keeps a Mission Contract act's hand goals inside what the worn body can reach, so a prop held by the canon
+	 * hand stays in the costume's paw (founder regression G1, 2026-09-30). False when the costume has no arm on that side.
+	 */
+	bool GetArmReach(float SideSign, FVector& OutShoulderWorld, float& OutLengthUU) const;
+
 	/** How this figure's limbs were classified at load, one line per limb joint (kind, side, lengths). */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	FString DescribeLimbs() const;
@@ -443,6 +450,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	float GetFigureLowestUu() const { return FigureLowestUU; }
 
+	/** The canonical body as built: its height, and its lowest point in local uu. 0 for a figure with no `body` record. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	float GetBodyHeightUu() const { return BodyHeightUU; }
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	float GetBodyLowestUu() const { return BodyLowestUU; }
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	int32 GetPartCount() const { return PartPivots.Num(); }
 
@@ -483,6 +496,14 @@ public:
 	/** Uniform scale on top of the figure's own voxel size. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")
 	float FigureScale = 1.0f;
+
+	/**
+	 * THE BODY HEIGHT THIS FIGURE IS SIZED TO, uu; 0 keeps its own. When set, LoadFigure derives FigureScale so the figure's
+	 * canonical body (its `body` record) stands exactly this tall -- Relay OG's measured height, for every mascot skin, in
+	 * the world and in the Wardrobe (founder, 2026-09-30, a HARD rule: "ALL mascot skins must be the same overall height as the canonical Relay OG mascot skin"). Horns, crowns and fire scale with the body and may reach past it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")
+	float TargetBodyHeightUU = 0.0f;
 
 	/** Turn to face the camera once the pawn has stood still this long. Negative never does. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")
@@ -868,6 +889,8 @@ private:
 	float FigureHeightUU = 0.0f;
 	float FigureWidthUU = 0.0f;
 	float FigureLowestUU = 0.0f;
+	float BodyHeightUU = 0.0f;
+	float BodyLowestUU = 0.0f;
 	float Phase = 0.0f;
 	float IdleSeconds = 0.0f;
 	bool bHasSnapped = false;

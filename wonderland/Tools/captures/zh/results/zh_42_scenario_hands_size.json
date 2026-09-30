@@ -1,0 +1,1015 @@
+{
+ "name": "zh_42_scenario_hands_size",
+ "started": "2026-09-30 15:32:09",
+ "status": "measured",
+ "dll_mtime": 1790807055.2933288,
+ "tests": [
+  {
+   "id": "H1_celestial_light",
+   "name": "celestial_light: costume hands on the canon hands in every act at full weight (p95 <= 1.5 uu)",
+   "pass": true,
+   "detail": {
+    "bad": {},
+    "acts": {
+     "PREPARATION": 0.01,
+     "RESEARCH": 0.04,
+     "IMPLEMENTATION": 0.0,
+     "REVIEW": 0.0,
+     "REPAIR": 0.04,
+     "VERIFICATION": 0.03
+    }
+   }
+  },
+  {
+   "id": "H2_celestial_light",
+   "name": "celestial_light: every act Relay OG reached was reached at full weight (H1 is not vacuous)",
+   "pass": true,
+   "detail": {
+    "missing": [],
+    "reached": [
+     "IMPLEMENTATION",
+     "PREPARATION",
+     "REPAIR",
+     "RESEARCH",
+     "REVIEW",
+     "VERIFICATION"
+    ]
+   }
+  },
+  {
+   "id": "H1_skeleton_flame",
+   "name": "skeleton_flame: costume hands on the canon hands in every act at full weight (p95 <= 1.5 uu)",
+   "pass": true,
+   "detail": {
+    "bad": {},
+    "acts": {
+     "PREPARATION": 0.02,
+     "RESEARCH": 0.02,
+     "IMPLEMENTATION": 0.0,
+     "REVIEW": 0.0,
+     "REPAIR": 0.03,
+     "VERIFICATION": 0.04
+    }
+   }
+  },
+  {
+   "id": "H2_skeleton_flame",
+   "name": "skeleton_flame: every act Relay OG reached was reached at full weight (H1 is not vacuous)",
+   "pass": true,
+   "detail": {
+    "missing": [],
+    "reached": [
+     "IMPLEMENTATION",
+     "PREPARATION",
+     "REPAIR",
+     "RESEARCH",
+     "REVIEW",
+     "VERIFICATION"
+    ]
+   }
+  },
+  {
+   "id": "H1_jack_flame",
+   "name": "jack_flame: costume hands on the canon hands in every act at full weight (p95 <= 1.5 uu)",
+   "pass": true,
+   "detail": {
+    "bad": {},
+    "acts": {
+     "PREPARATION": 0.01,
+     "RESEARCH": 0.01,
+     "IMPLEMENTATION": 0.0,
+     "REVIEW": 0.0,
+     "REPAIR": 0.04,
+     "VERIFICATION": 0.04
+    }
+   }
+  },
+  {
+   "id": "H2_jack_flame",
+   "name": "jack_flame: every act Relay OG reached was reached at full weight (H1 is not vacuous)",
+   "pass": true,
+   "detail": {
+    "missing": [],
+    "reached": [
+     "IMPLEMENTATION",
+     "PREPARATION",
+     "REPAIR",
+     "RESEARCH",
+     "REVIEW",
+     "VERIFICATION"
+    ]
+   }
+  },
+  {
+   "id": "H1_baal",
+   "name": "baal: costume hands on the canon hands in every act at full weight (p95 <= 1.5 uu)",
+   "pass": true,
+   "detail": {
+    "bad": {},
+    "acts": {
+     "PREPARATION": 0.01,
+     "RESEARCH": 0.02,
+     "IMPLEMENTATION": 0.0,
+     "REVIEW": 0.0,
+     "REPAIR": 0.03,
+     "VERIFICATION": 0.03
+    }
+   }
+  },
+  {
+   "id": "H2_baal",
+   "name": "baal: every act Relay OG reached was reached at full weight (H1 is not vacuous)",
+   "pass": true,
+   "detail": {
+    "missing": [],
+    "reached": [
+     "IMPLEMENTATION",
+     "PREPARATION",
+     "REPAIR",
+     "RESEARCH",
+     "REVIEW",
+     "VERIFICATION"
+    ]
+   }
+  }
+ ],
+ "runs": [
+  {
+   "skin": "relay_og",
+   "acts": {
+    "PREPARATION": {
+     "samples": 72,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.0,
+     "props": [],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": null,
+     "canon_hands_local_median": [
+      17.2,
+      19.56,
+      37.31,
+      17.2,
+      -19.56,
+      37.31
+     ]
+    },
+    "RESEARCH": {
+     "samples": 257,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.0,
+     "props": [],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": null,
+     "canon_hands_local_median": [
+      11.28,
+      17.52,
+      -2.95,
+      19.43,
+      -22.11,
+      -14.51
+     ]
+    },
+    "IMPLEMENTATION": {
+     "samples": 204,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.0,
+     "props": [],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": null,
+     "canon_hands_local_median": [
+      -6.66,
+      22.8,
+      -44.98,
+      0.82,
+      -71.61,
+      24.82
+     ]
+    },
+    "REVIEW": {
+     "samples": 128,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.0,
+     "props": [],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": null,
+     "canon_hands_local_median": [
+      -4.48,
+      23.02,
+      -41.21,
+      12.24,
+      -25.34,
+      -0.67
+     ]
+    },
+    "REPAIR": {
+     "samples": 81,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.0,
+     "props": [],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": null,
+     "canon_hands_local_median": [
+      -0.02,
+      21.9,
+      -41.07,
+      53.95,
+      -11.2,
+      27.71
+     ]
+    },
+    "VERIFICATION": {
+     "samples": 148,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.0,
+     "props": [],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": null,
+     "canon_hands_local_median": [
+      41.03,
+      15.6,
+      148.71,
+      41.03,
+      -15.61,
+      148.71
+     ]
+    }
+   }
+  },
+  {
+   "skin": "celestial_light",
+   "acts": {
+    "PREPARATION": {
+     "samples": 70,
+     "gap_p95": 0.01,
+     "gap_median": 0.01,
+     "gap_max": 0.05,
+     "props": [
+      "MissionEnergy_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      17.2,
+      19.54,
+      37.14,
+      17.2,
+      -19.54,
+      37.14
+     ]
+    },
+    "RESEARCH": {
+     "samples": 250,
+     "gap_p95": 0.04,
+     "gap_median": 0.0,
+     "gap_max": 0.04,
+     "props": [
+      "MissionBookPages_0",
+      "MissionBookTurningPage_0",
+      "MissionBook_0",
+      "MissionEnergy_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      11.27,
+      16.77,
+      -2.99,
+      19.53,
+      -22.18,
+      -14.42
+     ]
+    },
+    "IMPLEMENTATION": {
+     "samples": 206,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.02,
+     "props": [
+      "MissionBookPages_0",
+      "MissionBook_0",
+      "MissionBrush_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      -6.46,
+      22.77,
+      -44.95,
+      0.59,
+      -71.31,
+      23.66
+     ]
+    },
+    "REVIEW": {
+     "samples": 127,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.03,
+     "props": [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      -6.46,
+      23.4,
+      -41.2,
+      11.72,
+      -27.05,
+      0.15
+     ]
+    },
+    "REPAIR": {
+     "samples": 82,
+     "gap_p95": 0.04,
+     "gap_median": 0.0,
+     "gap_max": 0.07,
+     "props": [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0",
+      "MissionScraper_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      -0.01,
+      21.92,
+      -40.92,
+      53.29,
+      -10.7,
+      29.25
+     ]
+    },
+    "VERIFICATION": {
+     "samples": 146,
+     "gap_p95": 0.03,
+     "gap_median": 0.01,
+     "gap_max": 0.05,
+     "props": [
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 1.38,
+     "canon_hands_local_median": [
+      40.51,
+      15.63,
+      147.18,
+      40.52,
+      -15.64,
+      147.34
+     ]
+    }
+   }
+  },
+  {
+   "skin": "skeleton_flame",
+   "acts": {
+    "PREPARATION": {
+     "samples": 75,
+     "gap_p95": 0.02,
+     "gap_median": 0.02,
+     "gap_max": 0.31,
+     "props": [
+      "MissionEnergy_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      17.2,
+      19.55,
+      37.15,
+      17.2,
+      -19.54,
+      37.15
+     ]
+    },
+    "RESEARCH": {
+     "samples": 254,
+     "gap_p95": 0.02,
+     "gap_median": 0.0,
+     "gap_max": 0.02,
+     "props": [
+      "MissionBookPages_0",
+      "MissionBookTurningPage_0",
+      "MissionBook_0",
+      "MissionEnergy_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      11.19,
+      18.42,
+      -2.96,
+      19.59,
+      -22.14,
+      -14.39
+     ]
+    },
+    "IMPLEMENTATION": {
+     "samples": 210,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.03,
+     "props": [
+      "MissionBookPages_0",
+      "MissionBookTurningPage_0",
+      "MissionBook_0",
+      "MissionBrush_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      -6.72,
+      23.04,
+      -44.76,
+      0.83,
+      -71.36,
+      23.9
+     ]
+    },
+    "REVIEW": {
+     "samples": 124,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.04,
+     "props": [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      -5.95,
+      23.26,
+      -41.19,
+      11.86,
+      -26.61,
+      -0.03
+     ]
+    },
+    "REPAIR": {
+     "samples": 81,
+     "gap_p95": 0.03,
+     "gap_median": 0.0,
+     "gap_max": 0.06,
+     "props": [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0",
+      "MissionScraper_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      -0.16,
+      23.34,
+      -41.12,
+      54.02,
+      -10.56,
+      29.39
+     ]
+    },
+    "VERIFICATION": {
+     "samples": 147,
+     "gap_p95": 0.04,
+     "gap_median": 0.01,
+     "gap_max": 0.06,
+     "props": [
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 1.29,
+     "canon_hands_local_median": [
+      40.31,
+      15.64,
+      146.91,
+      40.3,
+      -15.64,
+      146.92
+     ]
+    }
+   }
+  },
+  {
+   "skin": "jack_flame",
+   "acts": {
+    "PREPARATION": {
+     "samples": 70,
+     "gap_p95": 0.01,
+     "gap_median": 0.01,
+     "gap_max": 0.06,
+     "props": [
+      "MissionEnergy_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      17.2,
+      19.54,
+      37.21,
+      17.2,
+      -19.55,
+      37.21
+     ]
+    },
+    "RESEARCH": {
+     "samples": 251,
+     "gap_p95": 0.01,
+     "gap_median": 0.0,
+     "gap_max": 0.07,
+     "props": [
+      "MissionBookPages_0",
+      "MissionBookTurningPage_0",
+      "MissionBook_0",
+      "MissionEnergy_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      11.36,
+      16.94,
+      -2.88,
+      19.46,
+      -22.2,
+      -14.4
+     ]
+    },
+    "IMPLEMENTATION": {
+     "samples": 212,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.02,
+     "props": [
+      "MissionBookPages_0",
+      "MissionBook_0",
+      "MissionBrush_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      -6.72,
+      23.13,
+      -44.96,
+      0.72,
+      -71.07,
+      26.11
+     ]
+    },
+    "REVIEW": {
+     "samples": 123,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.02,
+     "props": [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      -3.73,
+      22.72,
+      -41.32,
+      12.98,
+      -27.39,
+      0.41
+     ]
+    },
+    "REPAIR": {
+     "samples": 83,
+     "gap_p95": 0.04,
+     "gap_median": 0.0,
+     "gap_max": 0.07,
+     "props": [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0",
+      "MissionScraper_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      -0.29,
+      23.36,
+      -41.1,
+      50.75,
+      -10.61,
+      29.33
+     ]
+    },
+    "VERIFICATION": {
+     "samples": 155,
+     "gap_p95": 0.04,
+     "gap_median": 0.01,
+     "gap_max": 0.06,
+     "props": [
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 1.45,
+     "canon_hands_local_median": [
+      41.13,
+      15.6,
+      149.36,
+      41.13,
+      -15.6,
+      149.35
+     ]
+    }
+   }
+  },
+  {
+   "skin": "baal",
+   "acts": {
+    "PREPARATION": {
+     "samples": 72,
+     "gap_p95": 0.01,
+     "gap_median": 0.01,
+     "gap_max": 0.3,
+     "props": [
+      "MissionEnergy_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      17.2,
+      19.54,
+      37.25,
+      17.2,
+      -19.54,
+      37.25
+     ]
+    },
+    "RESEARCH": {
+     "samples": 254,
+     "gap_p95": 0.02,
+     "gap_median": 0.0,
+     "gap_max": 0.02,
+     "props": [
+      "MissionBookPages_0",
+      "MissionBookTurningPage_0",
+      "MissionBook_0",
+      "MissionEnergy_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      11.21,
+      18.41,
+      -2.79,
+      19.52,
+      -22.11,
+      -14.49
+     ]
+    },
+    "IMPLEMENTATION": {
+     "samples": 211,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.03,
+     "props": [
+      "MissionBookPages_0",
+      "MissionBookTurningPage_0",
+      "MissionBook_0",
+      "MissionBrush_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      -6.73,
+      22.81,
+      -44.84,
+      0.64,
+      -71.76,
+      24.6
+     ]
+    },
+    "REVIEW": {
+     "samples": 129,
+     "gap_p95": 0.0,
+     "gap_median": 0.0,
+     "gap_max": 0.03,
+     "props": [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      -6.25,
+      23.27,
+      -40.94,
+      11.65,
+      -25.84,
+      -0.73
+     ]
+    },
+    "REPAIR": {
+     "samples": 86,
+     "gap_p95": 0.03,
+     "gap_median": 0.0,
+     "gap_max": 0.06,
+     "props": [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0",
+      "MissionScraper_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 0.0,
+     "canon_hands_local_median": [
+      0.35,
+      22.41,
+      -41.12,
+      50.42,
+      -11.68,
+      27.28
+     ]
+    },
+    "VERIFICATION": {
+     "samples": 152,
+     "gap_p95": 0.03,
+     "gap_median": 0.01,
+     "gap_max": 0.05,
+     "props": [
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     "prop_extra_p95": 0.0,
+     "prop_to_paw_median": 1.35,
+     "canon_hands_local_median": [
+      40.51,
+      15.63,
+      147.22,
+      40.51,
+      -15.64,
+      147.49
+     ]
+    }
+   }
+  }
+ ],
+ "p1_information": {
+  "celestial_light": {
+   "bad": {},
+   "props": {
+    "PREPARATION": [
+     [
+      "MissionEnergy_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "RESEARCH": [
+     [
+      "MissionBookPages_0",
+      "MissionBookTurningPage_0",
+      "MissionBook_0",
+      "MissionEnergy_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "IMPLEMENTATION": [
+     [
+      "MissionBookPages_0",
+      "MissionBook_0",
+      "MissionBrush_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "REVIEW": [
+     [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "REPAIR": [
+     [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0",
+      "MissionScraper_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "VERIFICATION": [
+     [
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     0.0,
+     1.38
+    ]
+   }
+  },
+  "skeleton_flame": {
+   "bad": {},
+   "props": {
+    "PREPARATION": [
+     [
+      "MissionEnergy_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "RESEARCH": [
+     [
+      "MissionBookPages_0",
+      "MissionBookTurningPage_0",
+      "MissionBook_0",
+      "MissionEnergy_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "IMPLEMENTATION": [
+     [
+      "MissionBookPages_0",
+      "MissionBookTurningPage_0",
+      "MissionBook_0",
+      "MissionBrush_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "REVIEW": [
+     [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "REPAIR": [
+     [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0",
+      "MissionScraper_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "VERIFICATION": [
+     [
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     0.0,
+     1.29
+    ]
+   }
+  },
+  "jack_flame": {
+   "bad": {},
+   "props": {
+    "PREPARATION": [
+     [
+      "MissionEnergy_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "RESEARCH": [
+     [
+      "MissionBookPages_0",
+      "MissionBookTurningPage_0",
+      "MissionBook_0",
+      "MissionEnergy_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "IMPLEMENTATION": [
+     [
+      "MissionBookPages_0",
+      "MissionBook_0",
+      "MissionBrush_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "REVIEW": [
+     [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "REPAIR": [
+     [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0",
+      "MissionScraper_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "VERIFICATION": [
+     [
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     0.0,
+     1.45
+    ]
+   }
+  },
+  "baal": {
+   "bad": {},
+   "props": {
+    "PREPARATION": [
+     [
+      "MissionEnergy_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "RESEARCH": [
+     [
+      "MissionBookPages_0",
+      "MissionBookTurningPage_0",
+      "MissionBook_0",
+      "MissionEnergy_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "IMPLEMENTATION": [
+     [
+      "MissionBookPages_0",
+      "MissionBookTurningPage_0",
+      "MissionBook_0",
+      "MissionBrush_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "REVIEW": [
+     [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "REPAIR": [
+     [
+      "MissionBrush_0",
+      "MissionLensHandle_0",
+      "MissionLensRim_0",
+      "MissionScraper_0"
+     ],
+     0.0,
+     0.0
+    ],
+    "VERIFICATION": [
+     [
+      "MissionLensHandle_0",
+      "MissionLensRim_0"
+     ],
+     0.0,
+     1.35
+    ]
+   }
+  }
+ },
+ "reference_acts": [
+  "IMPLEMENTATION",
+  "PREPARATION",
+  "REPAIR",
+  "RESEARCH",
+  "REVIEW",
+  "VERIFICATION"
+ ],
+ "all_pass": true,
+ "finished": "2026-09-30 15:42:43",
+ "seconds": 634.22,
+ "log": "H1_celestial_light PASS celestial_light: costume hands on the canon hands in every act at full weight (p95 <= 1.5 uu) {'bad': {}, 'acts': {'PREPARATION': 0.01, 'RESEARCH': 0.04, 'IMPLEMENTATION': 0.0, 'REVIEW': 0.0, 'REPAIR': 0.04, 'VERIFICATION': 0.03}}\nH2_celestial_light PASS celestial_light: every act Relay OG reached was reached at full weight (H1 is not vacuous) {'missing': [], 'reached': ['IMPLEMENTATION', 'PREPARATION', 'REPAIR', 'RESEARCH', 'REVIEW', 'VERIFICATION']}\nH1_skeleton_flame PASS skeleton_flame: costume hands on the canon hands in every act at full weight (p95 <= 1.5 uu) {'bad': {}, 'acts': {'PREPARATION': 0.02, 'RESEARCH': 0.02, 'IMPLEMENTATION': 0.0, 'REVIEW': 0.0, 'REPAIR': 0.03, 'VERIFICATION': 0.04}}\nH2_skeleton_flame PASS skeleton_flame: every act Relay OG reached was reached at full weight (H1 is not vacuous) {'missing': [], 'reached': ['IMPLEMENTATION', 'PREPARATION', 'REPAIR', 'RESEARCH', 'REVIEW', 'VERIFICATION']}\nH1_jack_flame PASS jack_flame: costume hands on the canon hands in every act at full weight (p95 <= 1.5 uu) {'bad': {}, 'acts': {'PREPARATION': 0.01, 'RESEARCH': 0.01, 'IMPLEMENTATION': 0.0, 'REVIEW': 0.0, 'REPAIR': 0.04, 'VERIFICATION': 0.04}}\nH2_jack_flame PASS jack_flame: every act Relay OG reached was reached at full weight (H1 is not vacuous) {'missing': [], 'reached': ['IMPLEMENTATION', 'PREPARATION', 'REPAIR', 'RESEARCH', 'REVIEW', 'VERIFICATION']}\nH1_baal PASS baal: costume hands on the canon hands in every act at full weight (p95 <= 1.5 uu) {'bad': {}, 'acts': {'PREPARATION': 0.01, 'RESEARCH': 0.02, 'IMPLEMENTATION': 0.0, 'REVIEW': 0.0, 'REPAIR': 0.03, 'VERIFICATION': 0.03}}\nH2_baal PASS baal: every act Relay OG reached was reached at full weight (H1 is not vacuous) {'missing': [], 'reached': ['IMPLEMENTATION', 'PREPARATION', 'REPAIR', 'RESEARCH', 'REVIEW', 'VERIFICATION']}\n"
+}

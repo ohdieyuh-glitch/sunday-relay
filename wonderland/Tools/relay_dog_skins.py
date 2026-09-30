@@ -464,6 +464,11 @@ class Figure:
             "wlvox 1",
             "voxel %.4f" % self.voxel_uu,
         ]
+        # THE CANONICAL BODY'S EXTENT (founder, 2026-09-30, HARD: every skin's body is Relay OG's height). The engine scales
+        # the figure so THIS stands at the canon Dog's measured height; horns, crowns and fire come along and reach past.
+        extent = getattr(self, "dog_extent", None)
+        if extent:
+            lines.append("body %.3f %.3f" % (extent[0], extent[1]))
         for name, kind, rgb, strength, channel in self.materials:
             if kind in ("glow", "add"):
                 strength *= GLOW_SCALE

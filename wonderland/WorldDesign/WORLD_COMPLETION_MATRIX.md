@@ -664,6 +664,9 @@ boundary, emptiness treatment, lighting and the World Partition layout all stay 
 | G3b | Teleport from the rim into the dense centre (the founder's own failure, 2026-09-30 16:04 UTC) | **FIXED, proven** (squeezed repro fails the old build; zh_23 10/10 incl. real 26-34 s streams; zh_24 33/33; package Q02-Q09) |
 | G4 | Jack Flame head: keep the accepted crown plume (whole-head fire CANCELLED) | **KEPT** (figure byte-identical to the accepted geometry; Second verified offline; zh_18 frames) |
 | G5 | World map tangled at the centre (founder, 2026-09-30) | **FIXED, proven** (zh_21 11/11 incl. 1920x1200; package Q04 0 overlaps at x1 / x4 / x8) |
+| G1c | Scenario path: skins' paws off the brush / scraper in IMPLEMENTATION and REPAIR (Second Wonderland, zs_04) | **FIXED, proven** (old build 10.2 / 11.1 uu; fixed 0.00-0.04 uu on all 4 skins, zh_37 / zh_42) |
+| G1d | Scenario path: the circle round the Contract jammed on the plaza (Second Wonderland, zs_04; any skin) | **FIXED, proven** (old build 0 uu walked in IMPLEMENTATION / REVIEW from 2 starts; fixed 0 stalls, zh_36) |
+| G7 | HARD RULE (founder, 2026-09-30): every skin's body is Relay OG's height; capsule, camera, collision, switching unchanged | **FIXED, proven** (all 4 skins were 155 vs OG 174-176; now 174.15 = OG; zh_45 S1-S7 7/7) |
 
 **G1 -- one canonical Mission Contract animation system, skins as a visual layer.** Relay OG *is* the canon body, so
 every act (meditate, read, paint, fly-and-verify, inspect, repair) is solved on its own skeleton and its hands land on
@@ -741,3 +744,25 @@ errors). `wl.Qa.PackageCheck` (WonderlandQaCommands.cpp, not in Shipping) walks 
 label overlaps; TW01 / TW02 / MG01 from the map; a Mission Contract from the Tartarus rim reaching its site. The window
 ran at 1280x800 (the engine shrank the requested 1920x1200 to the work area) -- the same 16:10 layout in slate units.
 Frames: `Tools/captures/zh/package_0930/`.
+
+**G1c / G1d / G7 (later on 2026-09-30).** Second Wonderland's falsification of G1 on the founder's own mission path
+(`wl.Mission.Scenario`) found two faults the scheduler-path proof could not see:
+- **G1c:** the act goals sit at 82-94% of the CANON arm toward a Contract staged 3.4 m out, so a skin's arm ran out of
+  reach and the canon-held brush / scraper floated 8-22 uu off its paw. Fix: while a costume is worn, each act's hand
+  goal is kept inside both reaches (`AWonderlandCompanionEmbodiment::GetArmReach`, projection in RelayDogCharacter).
+- **G1d:** the circle round the Contract is a forced walk that can jam on the plaza (an urn near (505, 6925)); the Dog
+  then spent whole acts pinned out of shot. Fix: a stalled circle detours -- tighter, wider, then the other way --
+  and returns to the circle after free walking (`GetOrbitDetourCount`, log `WLDOG orbit stalled`).
+
+Both were reproduced on the old build by our own instruments (zh_31 / zh_34) before the fix was proven (zh_36 / zh_37).
+
+**G7 (the founder's hard height rule).** Measured (zh_39): pawn, capsule (87.07), camera (135 above the Dog), scale,
+soles and switching were already identical; the costume BODIES were not -- 155 uu (the generator's 1.55 m) against the
+in-world Relay OG's 174-176. One sizing system now: every figure carries its base Dog's extent (`body` record); the Dog
+measures Relay OG at rest in BeginPlay (`GetCanonBodyHeightUu`, 174.15 uu) and every worn costume and every Wardrobe
+figure is scaled so that body stands exactly that tall (scale 1.1235); the Wardrobe frames every skin on that one body
+height. zh_45 on DLL 15:24:15: S1 soles on OG's plane, S2 body 174.15 on all 4 skins (drawn tops within 0.3 uu of OG's
+head top), S3 capsule / camera / scale identical, S4 0 uu on every switch, S5 no costume collision, S6 Mission Contract
+start / end Z and lift identical, S7 Wardrobe framing identical (distance 285, body 174.2) -- 7/7. The Mission Contract
+hands hold at the new size (zh_42 0.00-0.04 uu) and locomotion passes (zh_44). The package QA gains Q10 (each skin's body
+against Relay OG, and the switch).

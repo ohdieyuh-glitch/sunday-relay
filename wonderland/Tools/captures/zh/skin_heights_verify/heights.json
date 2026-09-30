@@ -1,0 +1,858 @@
+[
+ {
+  "skin": "relay_og",
+  "worn": "relay_og",
+  "dog_z": 101.23,
+  "capsule_half": 87.07,
+  "capsule_radius": 35.9,
+  "actor_scale": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "camera_z_over_dog": 135.0,
+  "ground_z": 14.15,
+  "canon_body_height_uu": 174.15,
+  "canon": {
+   "head_top_z": 189.86,
+   "body_top_z": 282.42,
+   "body_bottom_z": 14.07,
+   "sole_z": 14.11,
+   "head_meshes": 13,
+   "body_meshes": 25
+  },
+  "switch_dz": 0.0
+ },
+ {
+  "skin": "celestial_light",
+  "worn": "celestial_light",
+  "dog_z": 101.23,
+  "capsule_half": 87.07,
+  "capsule_radius": 35.9,
+  "actor_scale": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "camera_z_over_dog": 135.0,
+  "ground_z": 14.15,
+  "canon_body_height_uu": 174.15,
+  "canon": {
+   "head_top_z": 190.09,
+   "body_top_z": 282.42,
+   "body_bottom_z": 14.0,
+   "sole_z": 14.07,
+   "head_meshes": 13,
+   "body_meshes": 25
+  },
+  "costume_body": {
+   "height_uu": 174.15,
+   "lowest_uu": -0.29,
+   "top_z": 188.01,
+   "figure_scale": 1.1235,
+   "colliding_components": []
+  },
+  "costume": {
+   "actor_z": 14.15,
+   "actor_scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "figure_height_uu": 223.47,
+   "figure_lowest_uu": -2.99,
+   "framing_min_z": 10.94,
+   "framing_max_z": 190.24,
+   "sole_z": 14.07,
+   "parts": {
+    "HierarchicalInstancedStaticMeshComponent_0": [
+     113.74,
+     190.24
+    ],
+    "HierarchicalInstancedStaticMeshComponent_1": [
+     127.12,
+     145.66
+    ],
+    "HierarchicalInstancedStaticMeshComponent_2": [
+     131.96,
+     140.14
+    ],
+    "HierarchicalInstancedStaticMeshComponent_3": [
+     126.46,
+     145.48
+    ],
+    "HierarchicalInstancedStaticMeshComponent_4": [
+     65.95,
+     116.16
+    ],
+    "HierarchicalInstancedStaticMeshComponent_5": [
+     79.76,
+     108.53
+    ],
+    "HierarchicalInstancedStaticMeshComponent_6": [
+     51.1,
+     77.38
+    ],
+    "HierarchicalInstancedStaticMeshComponent_7": [
+     44.56,
+     52.78
+    ],
+    "HierarchicalInstancedStaticMeshComponent_8": [
+     80.14,
+     108.92
+    ],
+    "HierarchicalInstancedStaticMeshComponent_9": [
+     51.49,
+     77.76
+    ],
+    "HierarchicalInstancedStaticMeshComponent_10": [
+     44.94,
+     53.16
+    ],
+    "HierarchicalInstancedStaticMeshComponent_11": [
+     38.1,
+     66.88
+    ],
+    "HierarchicalInstancedStaticMeshComponent_12": [
+     13.9,
+     41.19
+    ],
+    "HierarchicalInstancedStaticMeshComponent_13": [
+     13.61,
+     15.72
+    ],
+    "HierarchicalInstancedStaticMeshComponent_14": [
+     38.18,
+     67.11
+    ],
+    "HierarchicalInstancedStaticMeshComponent_15": [
+     13.89,
+     41.43
+    ],
+    "HierarchicalInstancedStaticMeshComponent_16": [
+     13.59,
+     15.95
+    ],
+    "HierarchicalInstancedStaticMeshComponent_17": [
+     109.72,
+     183.67
+    ],
+    "HierarchicalInstancedStaticMeshComponent_18": [
+     62.2,
+     127.33
+    ],
+    "HierarchicalInstancedStaticMeshComponent_19": [
+     64.08,
+     130.7
+    ],
+    "HierarchicalInstancedStaticMeshComponent_20": [
+     64.38,
+     131.0
+    ],
+    "HierarchicalInstancedStaticMeshComponent_21": [
+     38.43,
+     67.59
+    ],
+    "HierarchicalInstancedStaticMeshComponent_22": [
+     10.94,
+     42.15
+    ],
+    "HierarchicalInstancedStaticMeshComponent_23": [
+     38.5,
+     67.83
+    ],
+    "HierarchicalInstancedStaticMeshComponent_24": [
+     10.98,
+     42.41
+    ],
+    "HierarchicalInstancedStaticMeshComponent_25": [
+     61.86,
+     136.09
+    ],
+    "HierarchicalInstancedStaticMeshComponent_26": [
+     11.18,
+     44.19
+    ],
+    "HierarchicalInstancedStaticMeshComponent_27": [
+     11.18,
+     44.44
+    ],
+    "HierarchicalInstancedStaticMeshComponent_28": [
+     118.85,
+     142.38
+    ],
+    "HierarchicalInstancedStaticMeshComponent_29": [
+     134.79,
+     180.59
+    ],
+    "HierarchicalInstancedStaticMeshComponent_30": [
+     81.34,
+     236.65
+    ],
+    "HierarchicalInstancedStaticMeshComponent_31": [
+     87.84,
+     230.15
+    ],
+    "HierarchicalInstancedStaticMeshComponent_32": [
+     59.69,
+     120.12
+    ],
+    "HierarchicalInstancedStaticMeshComponent_33": [
+     69.42,
+     110.5
+    ],
+    "HierarchicalInstancedStaticMeshComponent_34": [
+     57.02,
+     120.64
+    ],
+    "HierarchicalInstancedStaticMeshComponent_35": [
+     27.04,
+     172.9
+    ]
+   }
+  },
+  "switch_dz": 0.0
+ },
+ {
+  "skin": "skeleton_flame",
+  "worn": "skeleton_flame",
+  "dog_z": 101.23,
+  "capsule_half": 87.07,
+  "capsule_radius": 35.9,
+  "actor_scale": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "camera_z_over_dog": 135.0,
+  "ground_z": 14.15,
+  "canon_body_height_uu": 174.15,
+  "canon": {
+   "head_top_z": 188.8,
+   "body_top_z": 282.42,
+   "body_bottom_z": 14.03,
+   "sole_z": 14.09,
+   "head_meshes": 13,
+   "body_meshes": 25
+  },
+  "costume_body": {
+   "height_uu": 174.15,
+   "lowest_uu": -0.29,
+   "top_z": 188.01,
+   "figure_scale": 1.1235,
+   "colliding_components": []
+  },
+  "costume": {
+   "actor_z": 14.15,
+   "actor_scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "figure_height_uu": 254.38,
+   "figure_lowest_uu": -1.78,
+   "framing_min_z": 13.24,
+   "framing_max_z": 188.68,
+   "sole_z": 14.08,
+   "parts": {
+    "HierarchicalInstancedStaticMeshComponent_65": [
+     93.11,
+     97.14
+    ],
+    "HierarchicalInstancedStaticMeshComponent_64": [
+     106.15,
+     117.87
+    ],
+    "HierarchicalInstancedStaticMeshComponent_63": [
+     69.07,
+     75.06
+    ],
+    "HierarchicalInstancedStaticMeshComponent_62": [
+     56.3,
+     78.76
+    ],
+    "HierarchicalInstancedStaticMeshComponent_61": [
+     66.22,
+     68.78
+    ],
+    "HierarchicalInstancedStaticMeshComponent_60": [
+     92.76,
+     96.78
+    ],
+    "HierarchicalInstancedStaticMeshComponent_59": [
+     105.77,
+     117.49
+    ],
+    "HierarchicalInstancedStaticMeshComponent_58": [
+     68.54,
+     110.6
+    ],
+    "HierarchicalInstancedStaticMeshComponent_57": [
+     58.89,
+     77.14
+    ],
+    "HierarchicalInstancedStaticMeshComponent_56": [
+     71.95,
+     86.62
+    ],
+    "HierarchicalInstancedStaticMeshComponent_55": [
+     110.11,
+     118.72
+    ],
+    "HierarchicalInstancedStaticMeshComponent_54": [
+     49.23,
+     127.01
+    ],
+    "HierarchicalInstancedStaticMeshComponent_53": [
+     136.36,
+     171.25
+    ],
+    "HierarchicalInstancedStaticMeshComponent_52": [
+     13.76,
+     15.86
+    ],
+    "HierarchicalInstancedStaticMeshComponent_51": [
+     14.04,
+     41.37
+    ],
+    "HierarchicalInstancedStaticMeshComponent_50": [
+     38.21,
+     67.07
+    ],
+    "HierarchicalInstancedStaticMeshComponent_49": [
+     13.52,
+     15.77
+    ],
+    "HierarchicalInstancedStaticMeshComponent_48": [
+     13.79,
+     41.3
+    ],
+    "HierarchicalInstancedStaticMeshComponent_47": [
+     37.99,
+     67.01
+    ],
+    "HierarchicalInstancedStaticMeshComponent_46": [
+     44.93,
+     53.14
+    ],
+    "HierarchicalInstancedStaticMeshComponent_45": [
+     51.44,
+     81.86
+    ],
+    "HierarchicalInstancedStaticMeshComponent_44": [
+     80.1,
+     126.33
+    ],
+    "HierarchicalInstancedStaticMeshComponent_43": [
+     44.57,
+     52.79
+    ],
+    "HierarchicalInstancedStaticMeshComponent_42": [
+     51.07,
+     81.48
+    ],
+    "HierarchicalInstancedStaticMeshComponent_41": [
+     79.73,
+     125.96
+    ],
+    "HierarchicalInstancedStaticMeshComponent_40": [
+     47.29,
+     128.94
+    ],
+    "HierarchicalInstancedStaticMeshComponent_39": [
+     128.45,
+     147.39
+    ],
+    "HierarchicalInstancedStaticMeshComponent_38": [
+     133.94,
+     141.93
+    ],
+    "HierarchicalInstancedStaticMeshComponent_37": [
+     129.03,
+     146.96
+    ],
+    "HierarchicalInstancedStaticMeshComponent_36": [
+     115.19,
+     188.68
+    ],
+    "HierarchicalInstancedStaticMeshComponent_66": [
+     66.6,
+     69.16
+    ],
+    "HierarchicalInstancedStaticMeshComponent_67": [
+     56.62,
+     79.09
+    ],
+    "HierarchicalInstancedStaticMeshComponent_68": [
+     69.41,
+     75.4
+    ],
+    "HierarchicalInstancedStaticMeshComponent_69": [
+     52.41,
+     54.66
+    ],
+    "HierarchicalInstancedStaticMeshComponent_70": [
+     40.49,
+     44.78
+    ],
+    "HierarchicalInstancedStaticMeshComponent_71": [
+     19.57,
+     35.57
+    ],
+    "HierarchicalInstancedStaticMeshComponent_72": [
+     13.78,
+     22.04
+    ],
+    "HierarchicalInstancedStaticMeshComponent_73": [
+     13.24,
+     15.85
+    ],
+    "HierarchicalInstancedStaticMeshComponent_74": [
+     52.62,
+     54.74
+    ],
+    "HierarchicalInstancedStaticMeshComponent_75": [
+     40.7,
+     44.85
+    ],
+    "HierarchicalInstancedStaticMeshComponent_76": [
+     19.78,
+     35.64
+    ],
+    "HierarchicalInstancedStaticMeshComponent_77": [
+     14.04,
+     22.13
+    ],
+    "HierarchicalInstancedStaticMeshComponent_78": [
+     13.5,
+     15.92
+    ]
+   }
+  },
+  "switch_dz": 0.0
+ },
+ {
+  "skin": "jack_flame",
+  "worn": "jack_flame",
+  "dog_z": 101.23,
+  "capsule_half": 87.07,
+  "capsule_radius": 35.9,
+  "actor_scale": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "camera_z_over_dog": 135.0,
+  "ground_z": 14.15,
+  "canon_body_height_uu": 174.15,
+  "canon": {
+   "head_top_z": 188.59,
+   "body_top_z": 282.42,
+   "body_bottom_z": 14.03,
+   "sole_z": 14.09,
+   "head_meshes": 13,
+   "body_meshes": 25
+  },
+  "costume_body": {
+   "height_uu": 174.15,
+   "lowest_uu": -0.29,
+   "top_z": 188.01,
+   "figure_scale": 1.1235,
+   "colliding_components": []
+  },
+  "costume": {
+   "actor_z": 14.15,
+   "actor_scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "figure_height_uu": 233.6,
+   "figure_lowest_uu": -0.49,
+   "framing_min_z": 13.64,
+   "framing_max_z": 188.32,
+   "sole_z": 14.09,
+   "parts": {
+    "HierarchicalInstancedStaticMeshComponent_92": [
+     13.73,
+     15.87
+    ],
+    "HierarchicalInstancedStaticMeshComponent_93": [
+     38.12,
+     66.89
+    ],
+    "HierarchicalInstancedStaticMeshComponent_94": [
+     13.93,
+     41.19
+    ],
+    "HierarchicalInstancedStaticMeshComponent_95": [
+     13.64,
+     15.72
+    ],
+    "HierarchicalInstancedStaticMeshComponent_96": [
+     87.62,
+     146.56
+    ],
+    "HierarchicalInstancedStaticMeshComponent_97": [
+     93.15,
+     143.31
+    ],
+    "HierarchicalInstancedStaticMeshComponent_98": [
+     95.39,
+     110.08
+    ],
+    "HierarchicalInstancedStaticMeshComponent_99": [
+     61.99,
+     117.46
+    ],
+    "HierarchicalInstancedStaticMeshComponent_100": [
+     62.05,
+     116.91
+    ],
+    "HierarchicalInstancedStaticMeshComponent_101": [
+     79.47,
+     109.52
+    ],
+    "HierarchicalInstancedStaticMeshComponent_102": [
+     79.76,
+     109.23
+    ],
+    "HierarchicalInstancedStaticMeshComponent_103": [
+     55.8,
+     78.37
+    ],
+    "HierarchicalInstancedStaticMeshComponent_104": [
+     56.02,
+     78.15
+    ],
+    "HierarchicalInstancedStaticMeshComponent_105": [
+     79.15,
+     109.21
+    ],
+    "HierarchicalInstancedStaticMeshComponent_106": [
+     79.44,
+     108.91
+    ],
+    "HierarchicalInstancedStaticMeshComponent_107": [
+     55.48,
+     78.05
+    ],
+    "HierarchicalInstancedStaticMeshComponent_108": [
+     55.7,
+     77.83
+    ],
+    "HierarchicalInstancedStaticMeshComponent_109": [
+     37.95,
+     67.32
+    ],
+    "HierarchicalInstancedStaticMeshComponent_110": [
+     38.23,
+     67.03
+    ],
+    "HierarchicalInstancedStaticMeshComponent_111": [
+     22.38,
+     41.35
+    ],
+    "HierarchicalInstancedStaticMeshComponent_112": [
+     22.56,
+     41.17
+    ],
+    "HierarchicalInstancedStaticMeshComponent_113": [
+     37.85,
+     67.17
+    ],
+    "HierarchicalInstancedStaticMeshComponent_114": [
+     38.13,
+     66.88
+    ],
+    "HierarchicalInstancedStaticMeshComponent_115": [
+     22.27,
+     41.2
+    ],
+    "HierarchicalInstancedStaticMeshComponent_116": [
+     22.45,
+     41.02
+    ],
+    "HierarchicalInstancedStaticMeshComponent_117": [
+     70.68,
+     101.19
+    ],
+    "HierarchicalInstancedStaticMeshComponent_91": [
+     14.02,
+     41.34
+    ],
+    "HierarchicalInstancedStaticMeshComponent_90": [
+     38.23,
+     67.03
+    ],
+    "HierarchicalInstancedStaticMeshComponent_89": [
+     44.59,
+     52.81
+    ],
+    "HierarchicalInstancedStaticMeshComponent_88": [
+     51.14,
+     77.41
+    ],
+    "HierarchicalInstancedStaticMeshComponent_87": [
+     79.79,
+     108.56
+    ],
+    "HierarchicalInstancedStaticMeshComponent_86": [
+     44.91,
+     53.13
+    ],
+    "HierarchicalInstancedStaticMeshComponent_85": [
+     51.46,
+     77.73
+    ],
+    "HierarchicalInstancedStaticMeshComponent_84": [
+     80.11,
+     108.88
+    ],
+    "HierarchicalInstancedStaticMeshComponent_83": [
+     65.97,
+     116.14
+    ],
+    "HierarchicalInstancedStaticMeshComponent_82": [
+     128.78,
+     147.67
+    ],
+    "HierarchicalInstancedStaticMeshComponent_81": [
+     134.26,
+     142.2
+    ],
+    "HierarchicalInstancedStaticMeshComponent_80": [
+     121.0,
+     147.16
+    ],
+    "HierarchicalInstancedStaticMeshComponent_79": [
+     115.73,
+     188.32
+    ]
+   }
+  },
+  "switch_dz": 0.0
+ },
+ {
+  "skin": "baal",
+  "worn": "baal",
+  "dog_z": 101.23,
+  "capsule_half": 87.07,
+  "capsule_radius": 35.9,
+  "actor_scale": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "camera_z_over_dog": 135.0,
+  "ground_z": 14.15,
+  "canon_body_height_uu": 174.15,
+  "canon": {
+   "head_top_z": 188.73,
+   "body_top_z": 282.42,
+   "body_bottom_z": 14.0,
+   "sole_z": 14.07,
+   "head_meshes": 13,
+   "body_meshes": 25
+  },
+  "costume_body": {
+   "height_uu": 174.15,
+   "lowest_uu": -0.29,
+   "top_z": 188.01,
+   "figure_scale": 1.1235,
+   "colliding_components": []
+  },
+  "costume": {
+   "actor_z": 14.15,
+   "actor_scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "figure_height_uu": 227.92,
+   "figure_lowest_uu": -0.29,
+   "framing_min_z": 13.57,
+   "framing_max_z": 188.48,
+   "sole_z": 14.07,
+   "parts": {
+    "HierarchicalInstancedStaticMeshComponent_140": [
+     63.74,
+     124.18
+    ],
+    "HierarchicalInstancedStaticMeshComponent_139": [
+     164.22,
+     242.58
+    ],
+    "HierarchicalInstancedStaticMeshComponent_138": [
+     129.94,
+     147.35
+    ],
+    "HierarchicalInstancedStaticMeshComponent_137": [
+     134.66,
+     142.64
+    ],
+    "HierarchicalInstancedStaticMeshComponent_136": [
+     94.01,
+     132.69
+    ],
+    "HierarchicalInstancedStaticMeshComponent_135": [
+     94.32,
+     171.11
+    ],
+    "HierarchicalInstancedStaticMeshComponent_134": [
+     13.57,
+     15.73
+    ],
+    "HierarchicalInstancedStaticMeshComponent_133": [
+     13.86,
+     41.24
+    ],
+    "HierarchicalInstancedStaticMeshComponent_132": [
+     37.76,
+     67.21
+    ],
+    "HierarchicalInstancedStaticMeshComponent_131": [
+     13.76,
+     15.89
+    ],
+    "HierarchicalInstancedStaticMeshComponent_130": [
+     14.06,
+     41.41
+    ],
+    "HierarchicalInstancedStaticMeshComponent_129": [
+     37.94,
+     67.37
+    ],
+    "HierarchicalInstancedStaticMeshComponent_128": [
+     44.52,
+     52.77
+    ],
+    "HierarchicalInstancedStaticMeshComponent_127": [
+     51.05,
+     78.04
+    ],
+    "HierarchicalInstancedStaticMeshComponent_126": [
+     79.05,
+     109.2
+    ],
+    "HierarchicalInstancedStaticMeshComponent_125": [
+     44.95,
+     53.19
+    ],
+    "HierarchicalInstancedStaticMeshComponent_124": [
+     51.47,
+     78.47
+    ],
+    "HierarchicalInstancedStaticMeshComponent_123": [
+     79.48,
+     109.62
+    ],
+    "HierarchicalInstancedStaticMeshComponent_122": [
+     62.94,
+     124.18
+    ],
+    "HierarchicalInstancedStaticMeshComponent_121": [
+     129.13,
+     148.1
+    ],
+    "HierarchicalInstancedStaticMeshComponent_120": [
+     134.62,
+     142.61
+    ],
+    "HierarchicalInstancedStaticMeshComponent_119": [
+     129.61,
+     147.53
+    ],
+    "HierarchicalInstancedStaticMeshComponent_118": [
+     115.56,
+     188.48
+    ],
+    "HierarchicalInstancedStaticMeshComponent_154": [
+     22.37,
+     41.41
+    ],
+    "HierarchicalInstancedStaticMeshComponent_155": [
+     37.76,
+     67.21
+    ],
+    "HierarchicalInstancedStaticMeshComponent_156": [
+     37.76,
+     67.21
+    ],
+    "HierarchicalInstancedStaticMeshComponent_157": [
+     22.18,
+     41.25
+    ],
+    "HierarchicalInstancedStaticMeshComponent_141": [
+     63.74,
+     124.18
+    ],
+    "HierarchicalInstancedStaticMeshComponent_142": [
+     82.67,
+     115.66
+    ],
+    "HierarchicalInstancedStaticMeshComponent_143": [
+     79.48,
+     109.62
+    ],
+    "HierarchicalInstancedStaticMeshComponent_144": [
+     79.48,
+     109.62
+    ],
+    "HierarchicalInstancedStaticMeshComponent_145": [
+     55.81,
+     78.47
+    ],
+    "HierarchicalInstancedStaticMeshComponent_146": [
+     55.81,
+     78.47
+    ],
+    "HierarchicalInstancedStaticMeshComponent_147": [
+     85.03,
+     109.2
+    ],
+    "HierarchicalInstancedStaticMeshComponent_148": [
+     79.05,
+     109.2
+    ],
+    "HierarchicalInstancedStaticMeshComponent_149": [
+     55.38,
+     78.04
+    ],
+    "HierarchicalInstancedStaticMeshComponent_150": [
+     55.38,
+     78.0
+    ],
+    "HierarchicalInstancedStaticMeshComponent_151": [
+     37.94,
+     67.37
+    ],
+    "HierarchicalInstancedStaticMeshComponent_152": [
+     37.94,
+     61.55
+    ],
+    "HierarchicalInstancedStaticMeshComponent_153": [
+     22.37,
+     41.41
+    ],
+    "HierarchicalInstancedStaticMeshComponent_158": [
+     28.41,
+     41.25
+    ],
+    "HierarchicalInstancedStaticMeshComponent_159": [
+     21.3,
+     73.99
+    ],
+    "HierarchicalInstancedStaticMeshComponent_160": [
+     21.25,
+     73.94
+    ],
+    "HierarchicalInstancedStaticMeshComponent_161": [
+     70.5,
+     101.18
+    ]
+   }
+  },
+  "switch_dz": 0.0
+ }
+]

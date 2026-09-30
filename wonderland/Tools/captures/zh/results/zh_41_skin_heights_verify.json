@@ -1,0 +1,1134 @@
+{
+ "name": "zh_41_skin_heights_verify",
+ "started": "2026-09-30 15:29:36",
+ "status": "measured",
+ "mode": "verify",
+ "dll_mtime": 1790807055.2933288,
+ "tests": [
+  {
+   "id": "S1",
+   "name": "feet on Relay OG's ground plane: every costume's soles within 1 uu of the canon soles",
+   "pass": true,
+   "detail": {
+    "soles": {
+     "celestial_light": [
+      14.1,
+      14.1
+     ],
+     "skeleton_flame": [
+      14.06,
+      14.06
+     ],
+     "jack_flame": [
+      14.12,
+      14.12
+     ],
+     "baal": [
+      14.05,
+      14.06
+     ]
+    }
+   }
+  },
+  {
+   "id": "S2",
+   "name": "body height = Relay OG's measured height (within 0.5 uu), and the drawn body top level with OG's head top (within 3 uu, same frame)",
+   "pass": true,
+   "detail": {
+    "relay_og": 174.15,
+    "bodies": {
+     "celestial_light": 174.15,
+     "skeleton_flame": 174.15,
+     "jack_flame": 174.15,
+     "baal": 174.15
+    },
+    "tops": {
+     "celestial_light": [
+      190.15,
+      189.99
+     ],
+     "skeleton_flame": [
+      188.43,
+      188.61
+     ],
+     "jack_flame": [
+      188.25,
+      188.51
+     ],
+     "baal": [
+      188.33,
+      188.61
+     ]
+    },
+    "scales": {
+     "celestial_light": 1.1235,
+     "skeleton_flame": 1.1235,
+     "jack_flame": 1.1235,
+     "baal": 1.1235
+    }
+   }
+  },
+  {
+   "id": "S3",
+   "name": "no camera, capsule or scale shift: identical under every skin",
+   "pass": true,
+   "detail": {
+    "per": {
+     "relay_og": [
+      87.07,
+      35.9,
+      135.0
+     ],
+     "celestial_light": [
+      87.07,
+      35.9,
+      135.0
+     ],
+     "skeleton_flame": [
+      87.07,
+      35.9,
+      135.0
+     ],
+     "jack_flame": [
+      87.07,
+      35.9,
+      135.0
+     ],
+     "baal": [
+      87.07,
+      35.9,
+      135.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "S4",
+   "name": "switching skins never moves the player vertically (every switch 0 uu)",
+   "pass": true,
+   "detail": {
+    "dz": {
+     "relay_og": 0.0,
+     "celestial_light": 0.0,
+     "skeleton_flame": 0.0,
+     "jack_flame": 0.0,
+     "baal": 0.0
+    }
+   }
+  },
+  {
+   "id": "S5",
+   "name": "no costume collides, so movement and collision height are Relay OG's capsule alone",
+   "pass": true,
+   "detail": {
+    "colliding": {
+     "celestial_light": [],
+     "skeleton_flame": [],
+     "jack_flame": [],
+     "baal": []
+    }
+   }
+  },
+  {
+   "id": "S6",
+   "name": "the Mission Contract starts and ends at the same height and lifts the same under every skin",
+   "pass": false,
+   "detail": {
+    "heights": {
+     "relay_og": {
+      "start_z": 101.22,
+      "end_z": 101.22,
+      "lift": {
+       "PREPARATION": 74.6,
+       "VERIFICATION": 154.0
+      }
+     },
+     "celestial_light": {
+      "start_z": 101.22,
+      "end_z": 101.22,
+      "lift": {
+       "PREPARATION": 71.2,
+       "VERIFICATION": 154.9
+      }
+     },
+     "skeleton_flame": {
+      "start_z": 101.22,
+      "end_z": 101.22,
+      "lift": {
+       "PREPARATION": 67.9,
+       "VERIFICATION": 155.0
+      }
+     },
+     "jack_flame": {
+      "start_z": 101.22,
+      "end_z": 101.22,
+      "lift": {
+       "PREPARATION": 66.1,
+       "VERIFICATION": 154.4
+      }
+     },
+     "baal": {
+      "start_z": 101.22,
+      "end_z": 101.22,
+      "lift": {
+       "PREPARATION": 66.6,
+       "VERIFICATION": 153.7
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "S7",
+   "name": "the Wardrobe frames every skin identically, on Relay OG's body height",
+   "pass": true,
+   "detail": {
+    "distance": {
+     "relay_og": "285",
+     "celestial_light": "285",
+     "skeleton_flame": "285",
+     "jack_flame": "285",
+     "baal": "285"
+    },
+    "bodyTall": {
+     "relay_og": "174.2",
+     "celestial_light": "174.2",
+     "skeleton_flame": "174.2",
+     "jack_flame": "174.2",
+     "baal": "174.2"
+    }
+   }
+  }
+ ],
+ "rows": [
+  {
+   "skin": "relay_og",
+   "worn": "relay_og",
+   "dog_z": 101.22,
+   "capsule_half": 87.07,
+   "capsule_radius": 35.9,
+   "actor_scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "camera_z_over_dog": 135.0,
+   "ground_z": 14.15,
+   "canon_body_height_uu": 174.15,
+   "canon": {
+    "head_top_z": 189.78,
+    "body_top_z": 282.42,
+    "body_bottom_z": 14.01,
+    "sole_z": 14.08,
+    "head_meshes": 13,
+    "body_meshes": 25
+   },
+   "switch_dz": 0.0
+  },
+  {
+   "skin": "celestial_light",
+   "worn": "celestial_light",
+   "dog_z": 101.22,
+   "capsule_half": 87.07,
+   "capsule_radius": 35.9,
+   "actor_scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "camera_z_over_dog": 135.0,
+   "ground_z": 14.15,
+   "canon_body_height_uu": 174.15,
+   "canon": {
+    "head_top_z": 189.99,
+    "body_top_z": 282.42,
+    "body_bottom_z": 14.06,
+    "sole_z": 14.1,
+    "head_meshes": 13,
+    "body_meshes": 25
+   },
+   "costume_body": {
+    "height_uu": 174.15,
+    "lowest_uu": -0.29,
+    "top_z": 188.01,
+    "figure_scale": 1.1235,
+    "colliding_components": []
+   },
+   "costume": {
+    "actor_z": 14.15,
+    "actor_scale": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "figure_height_uu": 223.47,
+    "figure_lowest_uu": -2.99,
+    "framing_min_z": 11.0,
+    "framing_max_z": 190.15,
+    "sole_z": 14.1,
+    "parts": {
+     "HierarchicalInstancedStaticMeshComponent_0": [
+      113.84,
+      190.15
+     ],
+     "HierarchicalInstancedStaticMeshComponent_1": [
+      127.19,
+      145.62
+     ],
+     "HierarchicalInstancedStaticMeshComponent_2": [
+      132.01,
+      140.13
+     ],
+     "HierarchicalInstancedStaticMeshComponent_3": [
+      126.52,
+      145.46
+     ],
+     "HierarchicalInstancedStaticMeshComponent_4": [
+      65.99,
+      116.12
+     ],
+     "HierarchicalInstancedStaticMeshComponent_5": [
+      79.77,
+      108.67
+     ],
+     "HierarchicalInstancedStaticMeshComponent_6": [
+      51.13,
+      77.51
+     ],
+     "HierarchicalInstancedStaticMeshComponent_7": [
+      44.57,
+      52.92
+     ],
+     "HierarchicalInstancedStaticMeshComponent_8": [
+      80.01,
+      108.91
+     ],
+     "HierarchicalInstancedStaticMeshComponent_9": [
+      51.37,
+      77.75
+     ],
+     "HierarchicalInstancedStaticMeshComponent_10": [
+      44.81,
+      53.16
+     ],
+     "HierarchicalInstancedStaticMeshComponent_11": [
+      38.15,
+      66.89
+     ],
+     "HierarchicalInstancedStaticMeshComponent_12": [
+      13.96,
+      41.19
+     ],
+     "HierarchicalInstancedStaticMeshComponent_13": [
+      13.67,
+      15.72
+     ],
+     "HierarchicalInstancedStaticMeshComponent_14": [
+      38.22,
+      67.01
+     ],
+     "HierarchicalInstancedStaticMeshComponent_15": [
+      14.0,
+      41.31
+     ],
+     "HierarchicalInstancedStaticMeshComponent_16": [
+      13.71,
+      15.84
+     ],
+     "HierarchicalInstancedStaticMeshComponent_17": [
+      109.83,
+      183.57
+     ],
+     "HierarchicalInstancedStaticMeshComponent_18": [
+      62.31,
+      127.22
+     ],
+     "HierarchicalInstancedStaticMeshComponent_19": [
+      64.06,
+      130.83
+     ],
+     "HierarchicalInstancedStaticMeshComponent_20": [
+      64.26,
+      131.03
+     ],
+     "HierarchicalInstancedStaticMeshComponent_21": [
+      38.49,
+      67.59
+     ],
+     "HierarchicalInstancedStaticMeshComponent_22": [
+      11.0,
+      42.15
+     ],
+     "HierarchicalInstancedStaticMeshComponent_23": [
+      38.55,
+      67.72
+     ],
+     "HierarchicalInstancedStaticMeshComponent_24": [
+      11.06,
+      42.28
+     ],
+     "HierarchicalInstancedStaticMeshComponent_25": [
+      61.97,
+      135.99
+     ],
+     "HierarchicalInstancedStaticMeshComponent_26": [
+      11.23,
+      44.19
+     ],
+     "HierarchicalInstancedStaticMeshComponent_27": [
+      11.28,
+      44.31
+     ],
+     "HierarchicalInstancedStaticMeshComponent_28": [
+      118.88,
+      142.35
+     ],
+     "HierarchicalInstancedStaticMeshComponent_29": [
+      134.87,
+      180.55
+     ],
+     "HierarchicalInstancedStaticMeshComponent_30": [
+      81.53,
+      236.44
+     ],
+     "HierarchicalInstancedStaticMeshComponent_31": [
+      88.02,
+      229.95
+     ],
+     "HierarchicalInstancedStaticMeshComponent_32": [
+      59.86,
+      119.97
+     ],
+     "HierarchicalInstancedStaticMeshComponent_33": [
+      69.58,
+      110.41
+     ],
+     "HierarchicalInstancedStaticMeshComponent_34": [
+      57.2,
+      120.49
+     ],
+     "HierarchicalInstancedStaticMeshComponent_35": [
+      26.94,
+      172.43
+     ]
+    }
+   },
+   "switch_dz": 0.0
+  },
+  {
+   "skin": "skeleton_flame",
+   "worn": "skeleton_flame",
+   "dog_z": 101.22,
+   "capsule_half": 87.07,
+   "capsule_radius": 35.9,
+   "actor_scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "camera_z_over_dog": 135.0,
+   "ground_z": 14.15,
+   "canon_body_height_uu": 174.15,
+   "canon": {
+    "head_top_z": 188.61,
+    "body_top_z": 282.42,
+    "body_bottom_z": 13.98,
+    "sole_z": 14.06,
+    "head_meshes": 13,
+    "body_meshes": 25
+   },
+   "costume_body": {
+    "height_uu": 174.15,
+    "lowest_uu": -0.29,
+    "top_z": 188.01,
+    "figure_scale": 1.1235,
+    "colliding_components": []
+   },
+   "costume": {
+    "actor_z": 14.15,
+    "actor_scale": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "figure_height_uu": 254.38,
+    "figure_lowest_uu": -1.78,
+    "framing_min_z": 13.31,
+    "framing_max_z": 188.43,
+    "sole_z": 14.06,
+    "parts": {
+     "HierarchicalInstancedStaticMeshComponent_65": [
+      93.06,
+      97.3
+     ],
+     "HierarchicalInstancedStaticMeshComponent_64": [
+      106.04,
+      118.05
+     ],
+     "HierarchicalInstancedStaticMeshComponent_63": [
+      68.94,
+      75.15
+     ],
+     "HierarchicalInstancedStaticMeshComponent_62": [
+      56.37,
+      78.88
+     ],
+     "HierarchicalInstancedStaticMeshComponent_61": [
+      66.05,
+      68.89
+     ],
+     "HierarchicalInstancedStaticMeshComponent_60": [
+      92.6,
+      96.84
+     ],
+     "HierarchicalInstancedStaticMeshComponent_59": [
+      105.59,
+      117.59
+     ],
+     "HierarchicalInstancedStaticMeshComponent_58": [
+      68.46,
+      110.68
+     ],
+     "HierarchicalInstancedStaticMeshComponent_57": [
+      58.87,
+      77.15
+     ],
+     "HierarchicalInstancedStaticMeshComponent_56": [
+      71.91,
+      86.65
+     ],
+     "HierarchicalInstancedStaticMeshComponent_55": [
+      110.08,
+      118.75
+     ],
+     "HierarchicalInstancedStaticMeshComponent_54": [
+      49.15,
+      127.09
+     ],
+     "HierarchicalInstancedStaticMeshComponent_53": [
+      136.82,
+      171.45
+     ],
+     "HierarchicalInstancedStaticMeshComponent_52": [
+      13.77,
+      15.9
+     ],
+     "HierarchicalInstancedStaticMeshComponent_51": [
+      14.03,
+      41.41
+     ],
+     "HierarchicalInstancedStaticMeshComponent_50": [
+      38.2,
+      67.12
+     ],
+     "HierarchicalInstancedStaticMeshComponent_49": [
+      13.58,
+      15.72
+     ],
+     "HierarchicalInstancedStaticMeshComponent_48": [
+      13.85,
+      41.23
+     ],
+     "HierarchicalInstancedStaticMeshComponent_47": [
+      38.02,
+      66.94
+     ],
+     "HierarchicalInstancedStaticMeshComponent_46": [
+      44.89,
+      53.29
+     ],
+     "HierarchicalInstancedStaticMeshComponent_45": [
+      51.32,
+      82.05
+     ],
+     "HierarchicalInstancedStaticMeshComponent_44": [
+      79.98,
+      126.53
+     ],
+     "HierarchicalInstancedStaticMeshComponent_43": [
+      44.43,
+      52.84
+     ],
+     "HierarchicalInstancedStaticMeshComponent_42": [
+      50.89,
+      81.61
+     ],
+     "HierarchicalInstancedStaticMeshComponent_41": [
+      79.53,
+      126.07
+     ],
+     "HierarchicalInstancedStaticMeshComponent_40": [
+      47.21,
+      129.02
+     ],
+     "HierarchicalInstancedStaticMeshComponent_39": [
+      128.8,
+      147.78
+     ],
+     "HierarchicalInstancedStaticMeshComponent_38": [
+      134.3,
+      142.28
+     ],
+     "HierarchicalInstancedStaticMeshComponent_37": [
+      129.36,
+      147.24
+     ],
+     "HierarchicalInstancedStaticMeshComponent_36": [
+      115.59,
+      188.43
+     ],
+     "HierarchicalInstancedStaticMeshComponent_66": [
+      66.49,
+      69.33
+     ],
+     "HierarchicalInstancedStaticMeshComponent_67": [
+      56.5,
+      79.02
+     ],
+     "HierarchicalInstancedStaticMeshComponent_68": [
+      69.32,
+      75.53
+     ],
+     "HierarchicalInstancedStaticMeshComponent_69": [
+      52.44,
+      54.6
+     ],
+     "HierarchicalInstancedStaticMeshComponent_70": [
+      40.51,
+      44.71
+     ],
+     "HierarchicalInstancedStaticMeshComponent_71": [
+      19.6,
+      35.5
+     ],
+     "HierarchicalInstancedStaticMeshComponent_72": [
+      13.85,
+      21.99
+     ],
+     "HierarchicalInstancedStaticMeshComponent_73": [
+      13.31,
+      15.79
+     ],
+     "HierarchicalInstancedStaticMeshComponent_74": [
+      52.62,
+      54.78
+     ],
+     "HierarchicalInstancedStaticMeshComponent_75": [
+      40.7,
+      44.9
+     ],
+     "HierarchicalInstancedStaticMeshComponent_76": [
+      19.78,
+      35.69
+     ],
+     "HierarchicalInstancedStaticMeshComponent_77": [
+      14.04,
+      22.17
+     ],
+     "HierarchicalInstancedStaticMeshComponent_78": [
+      13.49,
+      15.97
+     ]
+    }
+   },
+   "switch_dz": 0.0
+  },
+  {
+   "skin": "jack_flame",
+   "worn": "jack_flame",
+   "dog_z": 101.22,
+   "capsule_half": 87.07,
+   "capsule_radius": 35.9,
+   "actor_scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "camera_z_over_dog": 135.0,
+   "ground_z": 14.15,
+   "canon_body_height_uu": 174.15,
+   "canon": {
+    "head_top_z": 188.51,
+    "body_top_z": 282.42,
+    "body_bottom_z": 14.1,
+    "sole_z": 14.12,
+    "head_meshes": 13,
+    "body_meshes": 25
+   },
+   "costume_body": {
+    "height_uu": 174.15,
+    "lowest_uu": -0.29,
+    "top_z": 188.01,
+    "figure_scale": 1.1235,
+    "colliding_components": []
+   },
+   "costume": {
+    "actor_z": 14.15,
+    "actor_scale": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "figure_height_uu": 233.6,
+    "figure_lowest_uu": -0.49,
+    "framing_min_z": 13.71,
+    "framing_max_z": 188.25,
+    "sole_z": 14.12,
+    "parts": {
+     "HierarchicalInstancedStaticMeshComponent_92": [
+      13.76,
+      15.78
+     ],
+     "HierarchicalInstancedStaticMeshComponent_93": [
+      38.19,
+      66.89
+     ],
+     "HierarchicalInstancedStaticMeshComponent_94": [
+      14.0,
+      41.19
+     ],
+     "HierarchicalInstancedStaticMeshComponent_95": [
+      13.71,
+      15.72
+     ],
+     "HierarchicalInstancedStaticMeshComponent_96": [
+      87.84,
+      146.35
+     ],
+     "HierarchicalInstancedStaticMeshComponent_97": [
+      93.36,
+      143.11
+     ],
+     "HierarchicalInstancedStaticMeshComponent_98": [
+      95.42,
+      110.06
+     ],
+     "HierarchicalInstancedStaticMeshComponent_99": [
+      62.06,
+      117.39
+     ],
+     "HierarchicalInstancedStaticMeshComponent_100": [
+      62.12,
+      116.84
+     ],
+     "HierarchicalInstancedStaticMeshComponent_101": [
+      79.32,
+      109.5
+     ],
+     "HierarchicalInstancedStaticMeshComponent_102": [
+      79.61,
+      109.21
+     ],
+     "HierarchicalInstancedStaticMeshComponent_103": [
+      55.65,
+      78.35
+     ],
+     "HierarchicalInstancedStaticMeshComponent_104": [
+      55.87,
+      78.13
+     ],
+     "HierarchicalInstancedStaticMeshComponent_105": [
+      79.18,
+      109.36
+     ],
+     "HierarchicalInstancedStaticMeshComponent_106": [
+      79.47,
+      109.07
+     ],
+     "HierarchicalInstancedStaticMeshComponent_107": [
+      55.51,
+      78.21
+     ],
+     "HierarchicalInstancedStaticMeshComponent_108": [
+      55.73,
+      77.99
+     ],
+     "HierarchicalInstancedStaticMeshComponent_109": [
+      37.97,
+      67.22
+     ],
+     "HierarchicalInstancedStaticMeshComponent_110": [
+      38.26,
+      66.94
+     ],
+     "HierarchicalInstancedStaticMeshComponent_111": [
+      22.4,
+      41.26
+     ],
+     "HierarchicalInstancedStaticMeshComponent_112": [
+      22.58,
+      41.08
+     ],
+     "HierarchicalInstancedStaticMeshComponent_113": [
+      37.92,
+      67.17
+     ],
+     "HierarchicalInstancedStaticMeshComponent_114": [
+      38.2,
+      66.88
+     ],
+     "HierarchicalInstancedStaticMeshComponent_115": [
+      22.34,
+      41.21
+     ],
+     "HierarchicalInstancedStaticMeshComponent_116": [
+      22.53,
+      41.02
+     ],
+     "HierarchicalInstancedStaticMeshComponent_117": [
+      70.79,
+      101.4
+     ],
+     "HierarchicalInstancedStaticMeshComponent_91": [
+      14.05,
+      41.25
+     ],
+     "HierarchicalInstancedStaticMeshComponent_90": [
+      38.25,
+      66.95
+     ],
+     "HierarchicalInstancedStaticMeshComponent_89": [
+      44.63,
+      52.96
+     ],
+     "HierarchicalInstancedStaticMeshComponent_88": [
+      51.19,
+      77.55
+     ],
+     "HierarchicalInstancedStaticMeshComponent_87": [
+      79.84,
+      108.71
+     ],
+     "HierarchicalInstancedStaticMeshComponent_86": [
+      44.77,
+      53.1
+     ],
+     "HierarchicalInstancedStaticMeshComponent_85": [
+      51.33,
+      77.69
+     ],
+     "HierarchicalInstancedStaticMeshComponent_84": [
+      79.98,
+      108.85
+     ],
+     "HierarchicalInstancedStaticMeshComponent_83": [
+      66.02,
+      116.09
+     ],
+     "HierarchicalInstancedStaticMeshComponent_82": [
+      128.8,
+      147.59
+     ],
+     "HierarchicalInstancedStaticMeshComponent_81": [
+      134.27,
+      142.13
+     ],
+     "HierarchicalInstancedStaticMeshComponent_80": [
+      121.04,
+      147.06
+     ],
+     "HierarchicalInstancedStaticMeshComponent_79": [
+      115.81,
+      188.25
+     ]
+    }
+   },
+   "switch_dz": 0.0
+  },
+  {
+   "skin": "baal",
+   "worn": "baal",
+   "dog_z": 101.22,
+   "capsule_half": 87.07,
+   "capsule_radius": 35.9,
+   "actor_scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "camera_z_over_dog": 135.0,
+   "ground_z": 14.15,
+   "canon_body_height_uu": 174.15,
+   "canon": {
+    "head_top_z": 188.61,
+    "body_top_z": 282.42,
+    "body_bottom_z": 13.97,
+    "sole_z": 14.06,
+    "head_meshes": 13,
+    "body_meshes": 25
+   },
+   "costume_body": {
+    "height_uu": 174.15,
+    "lowest_uu": -0.29,
+    "top_z": 188.01,
+    "figure_scale": 1.1235,
+    "colliding_components": []
+   },
+   "costume": {
+    "actor_z": 14.15,
+    "actor_scale": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "figure_height_uu": 227.92,
+    "figure_lowest_uu": -0.29,
+    "framing_min_z": 13.57,
+    "framing_max_z": 188.33,
+    "sole_z": 14.05,
+    "parts": {
+     "HierarchicalInstancedStaticMeshComponent_140": [
+      63.69,
+      124.23
+     ],
+     "HierarchicalInstancedStaticMeshComponent_139": [
+      164.15,
+      242.4
+     ],
+     "HierarchicalInstancedStaticMeshComponent_138": [
+      129.69,
+      147.13
+     ],
+     "HierarchicalInstancedStaticMeshComponent_137": [
+      134.41,
+      142.41
+     ],
+     "HierarchicalInstancedStaticMeshComponent_136": [
+      93.77,
+      132.38
+     ],
+     "HierarchicalInstancedStaticMeshComponent_135": [
+      94.1,
+      170.83
+     ],
+     "HierarchicalInstancedStaticMeshComponent_134": [
+      13.57,
+      15.72
+     ],
+     "HierarchicalInstancedStaticMeshComponent_133": [
+      13.86,
+      41.22
+     ],
+     "HierarchicalInstancedStaticMeshComponent_132": [
+      37.75,
+      67.2
+     ],
+     "HierarchicalInstancedStaticMeshComponent_131": [
+      13.77,
+      15.92
+     ],
+     "HierarchicalInstancedStaticMeshComponent_130": [
+      14.06,
+      41.43
+     ],
+     "HierarchicalInstancedStaticMeshComponent_129": [
+      37.93,
+      67.4
+     ],
+     "HierarchicalInstancedStaticMeshComponent_128": [
+      44.42,
+      52.82
+     ],
+     "HierarchicalInstancedStaticMeshComponent_127": [
+      50.92,
+      78.11
+     ],
+     "HierarchicalInstancedStaticMeshComponent_126": [
+      78.92,
+      109.27
+     ],
+     "HierarchicalInstancedStaticMeshComponent_125": [
+      44.9,
+      53.31
+     ],
+     "HierarchicalInstancedStaticMeshComponent_124": [
+      51.41,
+      78.6
+     ],
+     "HierarchicalInstancedStaticMeshComponent_123": [
+      79.41,
+      109.76
+     ],
+     "HierarchicalInstancedStaticMeshComponent_122": [
+      62.89,
+      124.23
+     ],
+     "HierarchicalInstancedStaticMeshComponent_121": [
+      128.91,
+      147.9
+     ],
+     "HierarchicalInstancedStaticMeshComponent_120": [
+      134.41,
+      142.4
+     ],
+     "HierarchicalInstancedStaticMeshComponent_119": [
+      129.44,
+      147.34
+     ],
+     "HierarchicalInstancedStaticMeshComponent_118": [
+      115.72,
+      188.33
+     ],
+     "HierarchicalInstancedStaticMeshComponent_154": [
+      22.37,
+      41.43
+     ],
+     "HierarchicalInstancedStaticMeshComponent_155": [
+      37.75,
+      67.2
+     ],
+     "HierarchicalInstancedStaticMeshComponent_156": [
+      37.75,
+      67.2
+     ],
+     "HierarchicalInstancedStaticMeshComponent_157": [
+      22.17,
+      41.24
+     ],
+     "HierarchicalInstancedStaticMeshComponent_141": [
+      63.69,
+      124.23
+     ],
+     "HierarchicalInstancedStaticMeshComponent_142": [
+      82.64,
+      115.69
+     ],
+     "HierarchicalInstancedStaticMeshComponent_143": [
+      79.41,
+      109.76
+     ],
+     "HierarchicalInstancedStaticMeshComponent_144": [
+      79.41,
+      109.76
+     ],
+     "HierarchicalInstancedStaticMeshComponent_145": [
+      55.74,
+      78.6
+     ],
+     "HierarchicalInstancedStaticMeshComponent_146": [
+      55.74,
+      78.6
+     ],
+     "HierarchicalInstancedStaticMeshComponent_147": [
+      84.9,
+      109.27
+     ],
+     "HierarchicalInstancedStaticMeshComponent_148": [
+      78.92,
+      109.27
+     ],
+     "HierarchicalInstancedStaticMeshComponent_149": [
+      55.25,
+      78.11
+     ],
+     "HierarchicalInstancedStaticMeshComponent_150": [
+      55.25,
+      78.06
+     ],
+     "HierarchicalInstancedStaticMeshComponent_151": [
+      37.93,
+      67.4
+     ],
+     "HierarchicalInstancedStaticMeshComponent_152": [
+      37.93,
+      61.58
+     ],
+     "HierarchicalInstancedStaticMeshComponent_153": [
+      22.37,
+      41.43
+     ],
+     "HierarchicalInstancedStaticMeshComponent_158": [
+      28.4,
+      41.24
+     ],
+     "HierarchicalInstancedStaticMeshComponent_159": [
+      21.4,
+      73.89
+     ],
+     "HierarchicalInstancedStaticMeshComponent_160": [
+      21.35,
+      73.84
+     ],
+     "HierarchicalInstancedStaticMeshComponent_161": [
+      70.32,
+      101.16
+     ]
+    }
+   },
+   "switch_dz": 0.0
+  }
+ ],
+ "mission_heights": {
+  "relay_og": {
+   "start_z": 101.22,
+   "end_z": 101.22,
+   "lift": {
+    "PREPARATION": 74.6,
+    "VERIFICATION": 154.0
+   }
+  },
+  "celestial_light": {
+   "start_z": 101.22,
+   "end_z": 101.22,
+   "lift": {
+    "PREPARATION": 71.2,
+    "VERIFICATION": 154.9
+   }
+  },
+  "skeleton_flame": {
+   "start_z": 101.22,
+   "end_z": 101.22,
+   "lift": {
+    "PREPARATION": 67.9,
+    "VERIFICATION": 155.0
+   }
+  },
+  "jack_flame": {
+   "start_z": 101.22,
+   "end_z": 101.22,
+   "lift": {
+    "PREPARATION": 66.1,
+    "VERIFICATION": 154.4
+   }
+  },
+  "baal": {
+   "start_z": 101.22,
+   "end_z": 101.22,
+   "lift": {
+    "PREPARATION": 66.6,
+    "VERIFICATION": 153.7
+   }
+  }
+ },
+ "wardrobe_framing": {
+  "relay_og": {
+   "bodyTall": "174.2",
+   "distance": "285",
+   "body_height_uu": 174.15
+  },
+  "celestial_light": {
+   "bodyTall": "174.2",
+   "distance": "285",
+   "body_height_uu": 174.15
+  },
+  "skeleton_flame": {
+   "bodyTall": "174.2",
+   "distance": "285",
+   "body_height_uu": 174.15
+  },
+  "jack_flame": {
+   "bodyTall": "174.2",
+   "distance": "285",
+   "body_height_uu": 174.15
+  },
+  "baal": {
+   "bodyTall": "174.2",
+   "distance": "285",
+   "body_height_uu": 174.15
+  }
+ },
+ "all_pass": false,
+ "finished": "2026-09-30 15:32:09",
+ "seconds": 152.58,
+ "log": "S1 PASS feet on Relay OG's ground plane: every costume's soles within 1 uu of the canon soles {'soles': {'celestial_light': [14.1, 14.1], 'skeleton_flame': [14.06, 14.06], 'jack_flame': [14.12, 14.12], 'baal': [14.05, 14.06]}}\nS2 PASS body height = Relay OG's measured height (within 0.5 uu), and the drawn body top level with OG's head top (within 3 uu, same frame) {'relay_og': 174.15, 'bodies': {'celestial_light': 174.15, 'skeleton_flame': 174.15, 'jack_flame': 174.15, 'baal': 174.15}, 'tops': {'celestial_light': [190.15, 189.99], 'skeleton_flame': [188.43, 188.61], 'jack_flame': [188.25, 188.51], 'baal': [188.33, 188.61]}, 'scales': {'celestial_light': 1.1235, 'skeleton_flame': 1.1235, 'jack_flame': 1.1235, 'baal': 1.1235}}\nS3 PASS no camera, capsule or scale shift: identical under every skin {'per': {'relay_og': [87.07, 35.9, 135.0], 'celestial_light': [87.07, 35.9, 135.0], 'skeleton_flame': [87.07, 35.9, 135.0], 'jack_flame': [87.07, 35.9, 135.0], 'baal': [87.07, 35.9, 135.0]}}\nS4 PASS switching skins never moves the player vertically (every switch 0 uu) {'dz': {'relay_og': 0.0, 'celestial_light': 0.0, 'skeleton_flame': 0.0, 'jack_flame': 0.0, 'baal': 0.0}}\nS5 PASS no costume collides, so movement and collision height are Relay OG's capsule alone {'colliding': {'celestial_light': [], 'skeleton_flame': [], 'jack_flame': [], 'baal': []}}\nS6 FAIL the Mission Contract starts and ends at the same height and lifts the same under every skin {'heights': {'relay_og': {'start_z': 101.22, 'end_z': 101.22, 'lift': {'PREPARATION': 74.6, 'VERIFICATION': 154.0}}, 'celestial_light': {'start_z': 101.22, 'end_z': 101.22, 'lift': {'PREPARATION': 71.2, 'VERIFICATION': 154.9}}, 'skeleton_flame': {'start_z': 101.22, 'end_z': 101.22, 'lift': {'PREPARATION': 67.9, 'VERIFICATION': 155.0}}, 'jack_flame': {'start_z': 101.22, 'end_z': 101.22, 'lift': {'PREPARATION': 66.1, 'VERIFICATION': 154.4}}, 'baal': {'start_z': 101.22, 'end_z': 101.22, 'lift': {'PREPARATION': 66.6, 'VERIFICATION': 153.7}}}}\nS7 PASS the Wardrobe frames every skin identically, on Relay OG's body height {'distance': {'relay_og': '285', 'celestial_light': '285', 'skeleton_flame': '285', 'jack_flame': '285', 'baal': '285'}, 'bodyTall': {'relay_og': '174.2', 'celestial_light': '174.2', 'skeleton_flame': '174.2', 'jack_flame': '174.2', 'baal': '174.2'}}\n"
+}

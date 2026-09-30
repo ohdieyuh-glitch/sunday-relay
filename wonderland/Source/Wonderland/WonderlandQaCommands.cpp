@@ -25,6 +25,8 @@
 #include "WonderlandTravel.h"
 #include "WonderlandUiSubsystem.h"
 #include "WonderlandUiTestLibrary.h"
+#include "RelayDogCharacter.h"
+#include "WonderlandCompanionEmbodiment.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandQa, Log, All);
 
@@ -36,6 +38,7 @@ namespace
 		int32 Step = 0;
 		int32 Sub = 0;
 		double StepStart = 0.0;
+		double ZBefore = 0.0;
 		bool bTravelBegun = false;
 		int32 Pass = 0;
 		int32 Fail = 0;
@@ -354,7 +357,43 @@ namespace
 			}
 			break;
 		}
-		case 10: // put the colours back and leave
+		case 10: // EVERY SKIN AT RELAY OG'S HEIGHT, and no jump on a switch (founder, 2026-09-30, a HARD rule)
+		{
+			static const TCHAR* Roster[5] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal") };
+			const APlayerController* PC = World->GetFirstPlayerController();
+			ARelayDogCharacter* Dog = PC != nullptr ? Cast<ARelayDogCharacter>(PC->GetPawn()) : nullptr;
+			const int32 Which = Run.Sub / 2;
+			if (Dog == nullptr || Which >= 5)
+			{
+				if (Dog == nullptr)
+				{
+					Check(Run, TEXT("Q10"), false, TEXT("no Relay Dog to measure"));
+				}
+				NextStep(Run);
+				break;
+			}
+			if (Run.Sub % 2 == 0)
+			{
+				Run.ZBefore = Dog->GetActorLocation().Z;
+				GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), Roster[Which]));
+				Run.StepStart = Now();
+				++Run.Sub;
+			}
+			else if (In >= 2.0)
+			{
+				const float Canon = Dog->GetCanonBodyHeightUu();
+				const AWonderlandCompanionEmbodiment* Worn = Dog->GetCostume();
+				const float Body = Worn != nullptr ? Worn->GetBodyHeightUu() : Canon;
+				const double Dz = Dog->GetActorLocation().Z - Run.ZBefore;
+				Check(Run, *FString::Printf(TEXT("Q10.%d"), Which + 1),
+					Canon > 120.0f && FMath::Abs(Body - Canon) <= 0.5f && FMath::Abs(Dz) <= 0.5,
+					FString::Printf(TEXT("%s: body %.2f uu against Relay OG %.2f uu, the switch moved the Dog %.2f uu"),
+						Roster[Which], Body, Canon, Dz));
+				++Run.Sub;
+			}
+			break;
+		}
+		case 11: // put the colours back and leave
 			if (Run.Sub == 0)
 			{
 				GEngine->Exec(World, TEXT("wl.Mascot.Reset"));
@@ -377,7 +416,8 @@ namespace
 	FAutoConsoleCommandWithWorldAndArgs GQaPackageCheck(
 		TEXT("wl.Qa.PackageCheck"),
 		TEXT("Run the post-completion gameplay regression in this (packaged) build: Jack Flame's colours, rim -> centre travel, ")
-		TEXT("the world map at three zooms, TW01 / TW02 / MG01 from the map, a Mission Contract from the Tartarus rim. ")
+		TEXT("the world map at three zooms, TW01 / TW02 / MG01 from the map, a Mission Contract from the Tartarus rim, ")
+		TEXT("and every skin's body at Relay OG's height with no jump on a switch. ")
 		TEXT("Logs WLQA lines, saves frames to Saved/Screenshots/WLQA, resets the colours and quits."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{

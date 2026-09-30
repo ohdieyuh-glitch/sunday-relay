@@ -1471,6 +1471,8 @@ void ARelayDogCharacter::BeginPlay()
 	SpawnLocation = GetActorLocation();
 	SpawnYaw = GetActorRotation().Yaw;
 	bJointsBound = BindJoints();
+	// RELAY OG'S HEIGHT FIRST, before any skin is put on and before the first animated frame.
+	MeasureCanonBodyHeight();
 
 	// THE DOG LISTENS TO THE WARDROBE. Until now only a stage mannequin did, and the founder clicked skins and
 	// watched a Dog that never changed. The registry is the one authority on what is worn; the Dog obeys it.
@@ -1561,6 +1563,8 @@ void ARelayDogCharacter::WearSkin(FName SkinId)
 		Costume->SetActorRelativeLocation(FVector(0.0, 0.0, -GetCapsuleComponent()->GetScaledCapsuleHalfHeight()));
 		Costume->SetActorRelativeRotation(FRotator::ZeroRotator);
 	}
+	// EVERY SKIN AT RELAY OG'S HEIGHT (founder, 2026-09-30, a HARD rule: "ALL mascot skins must be the same overall height as the canonical Relay OG mascot skin"): the costume's canonical body is scaled to the canon body's.
+	Costume->TargetBodyHeightUU = CanonBodyHeightUU > 1.0f ? CanonBodyHeightUU : 0.0f;
 	if (!Costume->LoadFigure(FigurePath))
 	{
 		// LOUD, AND HONEST: a skin whose figure will not load leaves the Dog as it was rather than half-dressed.
@@ -1570,7 +1574,46 @@ void ARelayDogCharacter::WearSkin(FName SkinId)
 	}
 	ShowCanonBody(false);
 	WornSkinId = SkinId;
-	UE_LOG(LogTemp, Display, TEXT("WLDOG wears %s (%d boxes)"), *SkinId.ToString(), Costume->GetBoxCount());
+	UE_LOG(LogTemp, Display, TEXT("WLDOG wears %s (%d boxes): body %.1f uu, Relay OG %.1f uu, scale %.4f"), *SkinId.ToString(),
+		Costume->GetBoxCount(), Costume->GetBodyHeightUu(), CanonBodyHeightUU, Costume->FigureScale);
+	if (Costume->GetBodyHeightUu() <= 1.0f)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLDOG skin %s carries no `body` record, so it is NOT sized to Relay OG -- regenerate its figure"),
+			*SkinId.ToString());
+	}
+}
+
+void ARelayDogCharacter::MeasureCanonBodyHeight()
+{
+	// RELAY OG IS THE HEIGHT REFERENCE, MEASURED FROM ITSELF, AT REST: the top of every mesh under the head pivot over the
+	// bottom of every body mesh, props and the mission's own pieces left out. Taken in BeginPlay, before the first animated
+	// frame, so no breath, bob or stride is in it. Measured 2026-09-30 (zh_39): 174.4-176.2 uu across idle frames.
+	TInlineComponentArray<UStaticMeshComponent*> Meshes;
+	GetComponents<UStaticMeshComponent>(Meshes);
+	double Top = -1.0e9;
+	double Bottom = 1.0e9;
+	for (const UStaticMeshComponent* Part : Meshes)
+	{
+		if (Part == nullptr || Part->ComponentHasTag(TEXT("WL_Prop")) || Part->GetName().StartsWith(TEXT("Mission")))
+		{
+			continue;
+		}
+		const FBox Box = Part->CalcBounds(Part->GetComponentTransform()).GetBox();
+		Bottom = FMath::Min(Bottom, Box.Min.Z);
+		for (const USceneComponent* Up = Part; Up != nullptr; Up = Up->GetAttachParent())
+		{
+			if (Up == HeadPivot)
+			{
+				Top = FMath::Max(Top, Box.Max.Z);
+				break;
+			}
+		}
+	}
+	const double Measured = Top - Bottom;
+	const bool bSane = Measured > 120.0 && Measured < 260.0;
+	CanonBodyHeightUU = bSane ? static_cast<float>(Measured) : 175.0f;
+	UE_LOG(LogTemp, Display, TEXT("WLDOG Relay OG body height %.2f uu%s"), CanonBodyHeightUU,
+		bSane ? TEXT(" (measured at rest)") : TEXT(" (MEASUREMENT OUT OF RANGE -- using the 2026-09-30 reference 175)"));
 }
 
 /**
@@ -2252,6 +2295,18 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 			GetActorRotation().Yaw,
 			Flat.IsNearlyZero() ? GetActorRotation().Yaw : FMath::RadiansToDegrees(FMath::Atan2(Flat.Y, Flat.X)));
 	}
+	// ---- THE CIRCLE GETS ROUND WHAT IT RUNS INTO (founder regression G1, 2026-09-30; Second Wonderland's zs_04).
+	//
+	// The circle about the Contract is a forced walk on a bearing, tangent at 340 uu. The staging probe clears the Dog's own
+	// start, but the circle sweeps ~9 m of plaza round a Contract 3.4 m out, and in 5 of 17 deployments at castle_approach
+	// it ran into the same urn and pinned the Dog there -- turning on the spot, out of the Contract camera's shot -- for all
+	// of RESEARCH, IMPLEMENTATION and REVIEW, whatever skin it wore. So a circle that makes no headway detours: tighter
+	// first, then wider, and only then the other way round; after a stretch of free walking it goes back to the circle.
+	{
+		static const float DetourRadius[4] = { 340.0f, 230.0f, 460.0f, 340.0f };
+		MissionIn.OrbitRadiusUU = DetourRadius[FMath::Clamp(OrbitDetourStage, 0, 3)];
+		MissionIn.OrbitDirection = OrbitDetourStage == 3 ? -1.0f : 1.0f;
+	}
 	const RelayDogMission::FStageOverlay Overlay = Mission.Update(MissionIn);
 
 	// FACING. Only a stationary act done at the work -- hovering to verify, standing at a fault to repair -- turns the
@@ -2290,6 +2345,41 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		// input was silently dropped: for the whole of the first filmed mission the Dog read, painted and
 		// inspected standing on one spot. The player still wins: the orbit is only asked for while nobody steers.
 		AddMovementInput(Walk, 1.0f, true);
+
+		// HEADWAY: asked to walk and barely moving means something is in the way. The speed read is last frame's, which is
+		// the walk this input continues.
+		const UCharacterMovementComponent* Move = GetCharacterMovement();
+		const float Asked = Move != nullptr ? Move->MaxWalkSpeed : 132.0f;
+		const float Speed = static_cast<float>(GetVelocity().Size2D());
+		if (Speed < 0.3f * Asked)
+		{
+			OrbitStallSeconds += DeltaSeconds;
+			OrbitFreeSeconds = 0.0f;
+		}
+		else
+		{
+			OrbitStallSeconds = FMath::Max(0.0f, OrbitStallSeconds - DeltaSeconds);
+			OrbitFreeSeconds += DeltaSeconds;
+		}
+		if (OrbitStallSeconds >= 0.7f)
+		{
+			OrbitDetourStage = (OrbitDetourStage + 1) % 4;
+			OrbitStallSeconds = 0.0f;
+			++OrbitDetours;
+			UE_LOG(LogTemp, Log, TEXT("WLDOG orbit stalled at (%.0f, %.0f): detour %d (%s)"), GetActorLocation().X, GetActorLocation().Y,
+				OrbitDetourStage, OrbitDetourStage == 1 ? TEXT("tighter") : OrbitDetourStage == 2 ? TEXT("wider")
+				: OrbitDetourStage == 3 ? TEXT("the other way") : TEXT("back to the circle"));
+		}
+		else if (OrbitDetourStage != 0 && OrbitFreeSeconds >= 6.0f)
+		{
+			OrbitDetourStage = 0;
+		}
+	}
+	else
+	{
+		OrbitDetourStage = 0;
+		OrbitStallSeconds = 0.0f;
+		OrbitFreeSeconds = 0.0f;
 	}
 
 	// ---------------------------------------------------------------- driving
@@ -3759,6 +3849,49 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 			Arm.Shoulder->SetRelativeRotation(RelayDogLimbs::RootRotation(Chain, Want, Twist));
 			Arm.Forearm->SetRelativeRotation(RelayDogLimbs::MidRotation(Chain, Want));
 		};
+		// ---- AND ONLY WHERE THE WORN BODY CAN REACH (founder regression G1, 2026-09-30; Second Wonderland's zs_04).
+		//
+		// Every act is choreographed on the canon: the brush at 82% of the CANON arm toward the Contract, the scraper at
+		// 88% toward its crown, both hands at 94% in VERIFICATION. A skin's shoulders hang 24.5 uu lower on arms of its own
+		// length, so where the staged Contract drew the canon hand up and out, the costume's arm ran out of reach 8-22 uu
+		// short of it -- and the brush and scraper, which hang from the canon's forearm, floated off the costume's paw.
+		// The scheduler path never showed it (its Contract sat within reach: 0.05 uu); the Scenario path did, on all four
+		// alternate skins. So while a costume is worn, each act's goal is brought inside BOTH reaches -- the worn arm's
+		// and the canon's own -- by alternate projection onto the two spheres. The canon stays the one animator, its goal
+		// is simply one the body the player sees can also reach; Relay OG, and every goal already in reach, is untouched.
+		if (const AWonderlandCompanionEmbodiment* Worn = Costume)
+		{
+			auto IntoSphere = [](const FVector& P, const FVector& Centre, double Radius)
+			{
+				const FVector D = P - Centre;
+				const double Length = D.Size();
+				return (Length > Radius && Length > KINDA_SMALL_NUMBER) ? Centre + D * (Radius / Length) : P;
+			};
+			auto KeepReachable = [&](const FRelayDogArm& Arm, const FVector& CanonShoulder, float CanonReach, FVector& WeightedGoal)
+			{
+				if (Sum <= KINDA_SMALL_NUMBER || Arm.Shoulder == nullptr)
+				{
+					return;
+				}
+				// the costume arm on the SAME PHYSICAL SIDE (the canon's Left arm hangs at +Y; see FWonderlandWornPose)
+				const float SideSign = Arm.Shoulder->GetRelativeLocation().Y >= 0.0 ? 1.0f : -1.0f;
+				FVector WornShoulder;
+				float WornReach = 0.0f;
+				if (!Worn->GetArmReach(SideSign, WornShoulder, WornReach))
+				{
+					return;
+				}
+				FVector Goal = WeightedGoal / Sum;
+				for (int32 Pass = 0; Pass < 4; ++Pass)
+				{
+					Goal = IntoSphere(Goal, WornShoulder, WornReach * 0.97);
+					Goal = IntoSphere(Goal, CanonShoulder, CanonReach * 0.99);
+				}
+				WeightedGoal = Goal * Sum;
+			};
+			KeepReachable(ArmRight, ShoulderW, ReachW, GoalW);
+			KeepReachable(ArmLeft, ShoulderF, ReachF, GoalF);
+		}
 		WriteArm(ArmRight, ArmChainRight, Pose.ArmRight, GoalW, MissWorking);
 		WriteArm(ArmLeft, ArmChainLeft, Pose.ArmLeft, GoalF, MissFree);
 

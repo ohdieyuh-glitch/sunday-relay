@@ -1,0 +1,1237 @@
+{
+ "name": "zh_43_mission_contract_size",
+ "started": "2026-09-30 15:42:44",
+ "status": "measured",
+ "persisted_skin_at_start": "relay_og",
+ "tests": [
+  {
+   "id": "MC_relay_og",
+   "name": "relay_og performs the whole Mission Contract like Relay OG, 1 deployments",
+   "pass": true,
+   "detail": {
+    "fails": []
+   }
+  },
+  {
+   "id": "MC_celestial_light",
+   "name": "celestial_light performs the whole Mission Contract like Relay OG, 1 deployments",
+   "pass": true,
+   "detail": {
+    "fails": []
+   }
+  },
+  {
+   "id": "MC_skeleton_flame",
+   "name": "skeleton_flame performs the whole Mission Contract like Relay OG, 1 deployments",
+   "pass": true,
+   "detail": {
+    "fails": []
+   }
+  },
+  {
+   "id": "MC_jack_flame",
+   "name": "jack_flame performs the whole Mission Contract like Relay OG, 1 deployments",
+   "pass": true,
+   "detail": {
+    "fails": []
+   }
+  },
+  {
+   "id": "MC_baal",
+   "name": "baal performs the whole Mission Contract like Relay OG, 1 deployments",
+   "pass": true,
+   "detail": {
+    "fails": []
+   }
+  }
+ ],
+ "runs": [
+  {
+   "skin": "relay_og",
+   "worn": true,
+   "worn_id": "relay_og",
+   "arms": {},
+   "figure_height_uu": 0.0,
+   "deployments": [
+    {
+     "deployment": 1,
+     "contracts": 1,
+     "stages": [
+      {
+       "stage": "PREPARATION",
+       "task_state": "<WonderlandTaskState.PREPARATION: 2>",
+       "act": "PREPARATION",
+       "act_sequence": [
+        "PREPARATION"
+       ],
+       "weight_min": 0.993,
+       "lift_max_uu": 78.0,
+       "canon_body_pitch_max": 0.0
+      },
+      {
+       "stage": "RESEARCH",
+       "task_state": "<WonderlandTaskState.RESEARCH: 3>",
+       "act": "RESEARCH",
+       "act_sequence": [
+        "RESEARCH"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.9,
+       "canon_body_pitch_max": 0.0
+      },
+      {
+       "stage": "IMPLEMENTATION",
+       "task_state": "<WonderlandTaskState.IMPLEMENTATION: 4>",
+       "act": "IMPLEMENTATION",
+       "act_sequence": [
+        "IMPLEMENTATION"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0
+      },
+      {
+       "stage": "VERIFICATION",
+       "task_state": "<WonderlandTaskState.VERIFICATION: 5>",
+       "act": "VERIFICATION",
+       "act_sequence": [
+        "VERIFICATION"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 155.0,
+       "canon_body_pitch_max": 9.0
+      },
+      {
+       "stage": "REVIEW",
+       "task_state": "<WonderlandTaskState.REVIEW: 6>",
+       "act": "REVIEW",
+       "act_sequence": [
+        "REVIEW"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0
+      },
+      {
+       "stage": "REPAIR",
+       "task_state": "<WonderlandTaskState.REPAIR: 7>",
+       "act": "REPAIR",
+       "act_sequence": [
+        "REPAIR"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0
+      },
+      {
+       "stage": "COMPLETED",
+       "task_state": "<WonderlandTaskState.COMPLETED: 8>",
+       "act": "NONE",
+       "act_sequence": [
+        "NONE"
+       ],
+       "weight_min": 0.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0
+      }
+     ],
+     "weight_before": 0.0,
+     "act_before": "NONE",
+     "weight_after": 0.0,
+     "lift_after": 0.0,
+     "act_after": "NONE",
+     "movement_mode_after": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ]
+  },
+  {
+   "skin": "celestial_light",
+   "worn": true,
+   "worn_id": "celestial_light",
+   "arms": {
+    "-1": [
+     "arm_l",
+     28.7,
+     34.6
+    ],
+    "1": [
+     "arm_r",
+     28.7,
+     34.6
+    ]
+   },
+   "figure_height_uu": 223.5,
+   "deployments": [
+    {
+     "deployment": 1,
+     "contracts": 1,
+     "stages": [
+      {
+       "stage": "PREPARATION",
+       "task_state": "<WonderlandTaskState.PREPARATION: 2>",
+       "act": "PREPARATION",
+       "act_sequence": [
+        "PREPARATION"
+       ],
+       "weight_min": 0.992,
+       "lift_max_uu": 78.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.04,
+       "hand_samples_p": 27,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.03,
+       "hand_samples_m": 27,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": null,
+       "props_seen": [],
+       "body_dz_err_p95": 0.041,
+       "body_rot_err_p95": 0.0,
+       "head_rot_err_p95": 0.004,
+       "sole_err_p95": null,
+       "sole_samples": 0,
+       "aura_err_max": 3.13,
+       "farthest_joint_uu": 140.6
+      },
+      {
+       "stage": "RESEARCH",
+       "task_state": "<WonderlandTaskState.RESEARCH: 3>",
+       "act": "RESEARCH",
+       "act_sequence": [
+        "RESEARCH"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.6,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.0,
+       "hand_samples_p": 26,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.04,
+       "hand_samples_m": 26,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.03,
+       "props_seen": [
+        "MissionBookPages_0",
+        "MissionBookTurningPage_0",
+        "MissionBook_0"
+       ],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.035,
+       "head_rot_err_p95": 0.031,
+       "sole_err_p95": 0.53,
+       "sole_samples": 50,
+       "aura_err_max": 3.06,
+       "farthest_joint_uu": 87.1
+      },
+      {
+       "stage": "IMPLEMENTATION",
+       "task_state": "<WonderlandTaskState.IMPLEMENTATION: 4>",
+       "act": "IMPLEMENTATION",
+       "act_sequence": [
+        "IMPLEMENTATION"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.06,
+       "hand_samples_p": 27,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.06,
+       "hand_samples_m": 27,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.01,
+       "props_seen": [
+        "MissionBrushTip_0",
+        "MissionBrush_0"
+       ],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.036,
+       "head_rot_err_p95": 0.043,
+       "sole_err_p95": 0.52,
+       "sole_samples": 54,
+       "aura_err_max": 3.14,
+       "farthest_joint_uu": 87.1
+      },
+      {
+       "stage": "VERIFICATION",
+       "task_state": "<WonderlandTaskState.VERIFICATION: 5>",
+       "act": "VERIFICATION",
+       "act_sequence": [
+        "VERIFICATION"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 155.0,
+       "canon_body_pitch_max": 9.0,
+       "hand_err_p95_p": 0.06,
+       "hand_samples_p": 27,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.06,
+       "hand_samples_m": 27,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": null,
+       "props_seen": [],
+       "body_dz_err_p95": 0.023,
+       "body_rot_err_p95": 0.0,
+       "head_rot_err_p95": 0.038,
+       "sole_err_p95": null,
+       "sole_samples": 0,
+       "aura_err_max": 4.03,
+       "farthest_joint_uu": 210.9
+      },
+      {
+       "stage": "REVIEW",
+       "task_state": "<WonderlandTaskState.REVIEW: 6>",
+       "act": "REVIEW",
+       "act_sequence": [
+        "REVIEW"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.04,
+       "hand_samples_p": 27,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.04,
+       "hand_samples_m": 27,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.04,
+       "props_seen": [
+        "MissionLensGlass_0",
+        "MissionLensGlint_0",
+        "MissionLensHandle_0",
+        "MissionLensRim_0"
+       ],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.032,
+       "head_rot_err_p95": 0.0,
+       "sole_err_p95": 0.52,
+       "sole_samples": 54,
+       "aura_err_max": 3.12,
+       "farthest_joint_uu": 87.1
+      },
+      {
+       "stage": "REPAIR",
+       "task_state": "<WonderlandTaskState.REPAIR: 7>",
+       "act": "REPAIR",
+       "act_sequence": [
+        "REPAIR"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.06,
+       "hand_samples_p": 56,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.06,
+       "hand_samples_m": 56,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.05,
+       "props_seen": [
+        "MissionBrushTip_0",
+        "MissionBrush_0",
+        "MissionLensGlass_0",
+        "MissionLensGlint_0",
+        "MissionLensHandle_0",
+        "MissionLensRim_0",
+        "MissionScraperBlade_0",
+        "MissionScraper_0"
+       ],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.037,
+       "head_rot_err_p95": 0.031,
+       "sole_err_p95": 0.53,
+       "sole_samples": 112,
+       "aura_err_max": 3.13,
+       "farthest_joint_uu": 87.1
+      },
+      {
+       "stage": "COMPLETED",
+       "task_state": "<WonderlandTaskState.COMPLETED: 8>",
+       "act": "NONE",
+       "act_sequence": [
+        "NONE"
+       ],
+       "weight_min": 0.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": null,
+       "hand_samples_p": 0,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": null,
+       "hand_samples_m": 0,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": null,
+       "props_seen": [],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.036,
+       "head_rot_err_p95": 0.037,
+       "sole_err_p95": 0.53,
+       "sole_samples": 66,
+       "aura_err_max": 3.12,
+       "farthest_joint_uu": 87.1
+      }
+     ],
+     "weight_before": 0.0,
+     "act_before": "NONE",
+     "weight_after": 0.0,
+     "lift_after": 0.0,
+     "act_after": "NONE",
+     "movement_mode_after": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ]
+  },
+  {
+   "skin": "skeleton_flame",
+   "worn": true,
+   "worn_id": "skeleton_flame",
+   "arms": {
+    "-1": [
+     "arm_l",
+     28.7,
+     34.6
+    ],
+    "1": [
+     "arm_r",
+     28.7,
+     34.6
+    ]
+   },
+   "figure_height_uu": 254.4,
+   "deployments": [
+    {
+     "deployment": 1,
+     "contracts": 1,
+     "stages": [
+      {
+       "stage": "PREPARATION",
+       "task_state": "<WonderlandTaskState.PREPARATION: 2>",
+       "act": "PREPARATION",
+       "act_sequence": [
+        "PREPARATION"
+       ],
+       "weight_min": 0.992,
+       "lift_max_uu": 78.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.01,
+       "hand_samples_p": 26,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.01,
+       "hand_samples_m": 26,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": null,
+       "props_seen": [],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.0,
+       "head_rot_err_p95": 0.017,
+       "sole_err_p95": null,
+       "sole_samples": 0,
+       "aura_err_max": null,
+       "farthest_joint_uu": 163.1
+      },
+      {
+       "stage": "RESEARCH",
+       "task_state": "<WonderlandTaskState.RESEARCH: 3>",
+       "act": "RESEARCH",
+       "act_sequence": [
+        "RESEARCH"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.5,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.01,
+       "hand_samples_p": 26,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.04,
+       "hand_samples_m": 26,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.02,
+       "props_seen": [
+        "MissionBookPages_0",
+        "MissionBookTurningPage_0",
+        "MissionBook_0"
+       ],
+       "body_dz_err_p95": 0.011,
+       "body_rot_err_p95": 0.037,
+       "head_rot_err_p95": 0.008,
+       "sole_err_p95": 0.53,
+       "sole_samples": 50,
+       "aura_err_max": null,
+       "farthest_joint_uu": 87.1
+      },
+      {
+       "stage": "IMPLEMENTATION",
+       "task_state": "<WonderlandTaskState.IMPLEMENTATION: 4>",
+       "act": "IMPLEMENTATION",
+       "act_sequence": [
+        "IMPLEMENTATION"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.07,
+       "hand_samples_p": 27,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.07,
+       "hand_samples_m": 27,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.01,
+       "props_seen": [
+        "MissionBrushTip_0",
+        "MissionBrush_0"
+       ],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.034,
+       "head_rot_err_p95": 0.046,
+       "sole_err_p95": 0.53,
+       "sole_samples": 54,
+       "aura_err_max": null,
+       "farthest_joint_uu": 88.2
+      },
+      {
+       "stage": "VERIFICATION",
+       "task_state": "<WonderlandTaskState.VERIFICATION: 5>",
+       "act": "VERIFICATION",
+       "act_sequence": [
+        "VERIFICATION"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 155.0,
+       "canon_body_pitch_max": 9.0,
+       "hand_err_p95_p": 0.06,
+       "hand_samples_p": 26,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.05,
+       "hand_samples_m": 26,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": null,
+       "props_seen": [],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.0,
+       "head_rot_err_p95": 0.046,
+       "sole_err_p95": null,
+       "sole_samples": 0,
+       "aura_err_max": null,
+       "farthest_joint_uu": 242.4
+      },
+      {
+       "stage": "REVIEW",
+       "task_state": "<WonderlandTaskState.REVIEW: 6>",
+       "act": "REVIEW",
+       "act_sequence": [
+        "REVIEW"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.04,
+       "hand_samples_p": 26,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.03,
+       "hand_samples_m": 26,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.03,
+       "props_seen": [
+        "MissionLensGlass_0",
+        "MissionLensGlint_0",
+        "MissionLensHandle_0",
+        "MissionLensRim_0"
+       ],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.035,
+       "head_rot_err_p95": 0.035,
+       "sole_err_p95": 0.52,
+       "sole_samples": 52,
+       "aura_err_max": null,
+       "farthest_joint_uu": 88.1
+      },
+      {
+       "stage": "REPAIR",
+       "task_state": "<WonderlandTaskState.REPAIR: 7>",
+       "act": "REPAIR",
+       "act_sequence": [
+        "REPAIR"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.05,
+       "hand_samples_p": 56,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.06,
+       "hand_samples_m": 56,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.05,
+       "props_seen": [
+        "MissionBrushTip_0",
+        "MissionBrush_0",
+        "MissionLensGlass_0",
+        "MissionLensGlint_0",
+        "MissionLensHandle_0",
+        "MissionLensRim_0",
+        "MissionScraperBlade_0",
+        "MissionScraper_0"
+       ],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.034,
+       "head_rot_err_p95": 0.042,
+       "sole_err_p95": 0.53,
+       "sole_samples": 112,
+       "aura_err_max": null,
+       "farthest_joint_uu": 88.3
+      },
+      {
+       "stage": "COMPLETED",
+       "task_state": "<WonderlandTaskState.COMPLETED: 8>",
+       "act": "NONE",
+       "act_sequence": [
+        "NONE"
+       ],
+       "weight_min": 0.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": null,
+       "hand_samples_p": 0,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": null,
+       "hand_samples_m": 0,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": null,
+       "props_seen": [],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.036,
+       "head_rot_err_p95": 0.043,
+       "sole_err_p95": 0.53,
+       "sole_samples": 64,
+       "aura_err_max": null,
+       "farthest_joint_uu": 88.0
+      }
+     ],
+     "weight_before": 0.0,
+     "act_before": "NONE",
+     "weight_after": 0.0,
+     "lift_after": 0.0,
+     "act_after": "NONE",
+     "movement_mode_after": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ]
+  },
+  {
+   "skin": "jack_flame",
+   "worn": true,
+   "worn_id": "jack_flame",
+   "arms": {
+    "-1": [
+     "arm_l",
+     28.7,
+     34.6
+    ],
+    "1": [
+     "arm_r",
+     28.7,
+     34.6
+    ]
+   },
+   "figure_height_uu": 233.6,
+   "deployments": [
+    {
+     "deployment": 1,
+     "contracts": 1,
+     "stages": [
+      {
+       "stage": "PREPARATION",
+       "task_state": "<WonderlandTaskState.PREPARATION: 2>",
+       "act": "PREPARATION",
+       "act_sequence": [
+        "PREPARATION"
+       ],
+       "weight_min": 0.994,
+       "lift_max_uu": 77.4,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.01,
+       "hand_samples_p": 23,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.01,
+       "hand_samples_m": 23,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": null,
+       "props_seen": [],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.0,
+       "head_rot_err_p95": 0.0,
+       "sole_err_p95": null,
+       "sole_samples": 0,
+       "aura_err_max": null,
+       "farthest_joint_uu": 143.3
+      },
+      {
+       "stage": "RESEARCH",
+       "task_state": "<WonderlandTaskState.RESEARCH: 3>",
+       "act": "RESEARCH",
+       "act_sequence": [
+        "RESEARCH"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.6,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.0,
+       "hand_samples_p": 22,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.03,
+       "hand_samples_m": 22,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.02,
+       "props_seen": [
+        "MissionBookPages_0",
+        "MissionBookTurningPage_0",
+        "MissionBook_0"
+       ],
+       "body_dz_err_p95": 0.026,
+       "body_rot_err_p95": 0.036,
+       "head_rot_err_p95": 0.019,
+       "sole_err_p95": 0.52,
+       "sole_samples": 42,
+       "aura_err_max": null,
+       "farthest_joint_uu": 87.1
+      },
+      {
+       "stage": "IMPLEMENTATION",
+       "task_state": "<WonderlandTaskState.IMPLEMENTATION: 4>",
+       "act": "IMPLEMENTATION",
+       "act_sequence": [
+        "IMPLEMENTATION"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.07,
+       "hand_samples_p": 23,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.07,
+       "hand_samples_m": 23,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.01,
+       "props_seen": [
+        "MissionBrushTip_0",
+        "MissionBrush_0"
+       ],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.03,
+       "head_rot_err_p95": 0.046,
+       "sole_err_p95": 0.52,
+       "sole_samples": 46,
+       "aura_err_max": null,
+       "farthest_joint_uu": 87.1
+      },
+      {
+       "stage": "VERIFICATION",
+       "task_state": "<WonderlandTaskState.VERIFICATION: 5>",
+       "act": "VERIFICATION",
+       "act_sequence": [
+        "VERIFICATION"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 155.0,
+       "canon_body_pitch_max": 9.0,
+       "hand_err_p95_p": 0.05,
+       "hand_samples_p": 22,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.05,
+       "hand_samples_m": 22,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": null,
+       "props_seen": [],
+       "body_dz_err_p95": 0.037,
+       "body_rot_err_p95": 0.0,
+       "head_rot_err_p95": 0.035,
+       "sole_err_p95": null,
+       "sole_samples": 0,
+       "aura_err_max": null,
+       "farthest_joint_uu": 223.1
+      },
+      {
+       "stage": "REVIEW",
+       "task_state": "<WonderlandTaskState.REVIEW: 6>",
+       "act": "REVIEW",
+       "act_sequence": [
+        "REVIEW"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.03,
+       "hand_samples_p": 22,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.02,
+       "hand_samples_m": 22,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.02,
+       "props_seen": [
+        "MissionLensGlass_0",
+        "MissionLensGlint_0",
+        "MissionLensHandle_0",
+        "MissionLensRim_0"
+       ],
+       "body_dz_err_p95": 0.018,
+       "body_rot_err_p95": 0.035,
+       "head_rot_err_p95": 0.032,
+       "sole_err_p95": 0.53,
+       "sole_samples": 44,
+       "aura_err_max": null,
+       "farthest_joint_uu": 87.1
+      },
+      {
+       "stage": "REPAIR",
+       "task_state": "<WonderlandTaskState.REPAIR: 7>",
+       "act": "REPAIR",
+       "act_sequence": [
+        "REPAIR"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.06,
+       "hand_samples_p": 52,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.05,
+       "hand_samples_m": 52,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.05,
+       "props_seen": [
+        "MissionBrushTip_0",
+        "MissionBrush_0",
+        "MissionLensGlass_0",
+        "MissionLensGlint_0",
+        "MissionLensHandle_0",
+        "MissionLensRim_0",
+        "MissionScraperBlade_0",
+        "MissionScraper_0"
+       ],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.035,
+       "head_rot_err_p95": 0.046,
+       "sole_err_p95": 0.53,
+       "sole_samples": 104,
+       "aura_err_max": null,
+       "farthest_joint_uu": 87.1
+      },
+      {
+       "stage": "COMPLETED",
+       "task_state": "<WonderlandTaskState.COMPLETED: 8>",
+       "act": "NONE",
+       "act_sequence": [
+        "NONE"
+       ],
+       "weight_min": 0.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": null,
+       "hand_samples_p": 0,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": null,
+       "hand_samples_m": 0,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": null,
+       "props_seen": [],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.037,
+       "head_rot_err_p95": 0.045,
+       "sole_err_p95": 0.53,
+       "sole_samples": 56,
+       "aura_err_max": null,
+       "farthest_joint_uu": 87.1
+      }
+     ],
+     "weight_before": 0.0,
+     "act_before": "NONE",
+     "weight_after": 0.0,
+     "lift_after": 0.0,
+     "act_after": "NONE",
+     "movement_mode_after": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ]
+  },
+  {
+   "skin": "baal",
+   "worn": true,
+   "worn_id": "baal",
+   "arms": {
+    "-1": [
+     "arm_l",
+     28.7,
+     34.6
+    ],
+    "1": [
+     "arm_r",
+     28.7,
+     34.6
+    ]
+   },
+   "figure_height_uu": 227.9,
+   "deployments": [
+    {
+     "deployment": 1,
+     "contracts": 1,
+     "stages": [
+      {
+       "stage": "PREPARATION",
+       "task_state": "<WonderlandTaskState.PREPARATION: 2>",
+       "act": "PREPARATION",
+       "act_sequence": [
+        "PREPARATION"
+       ],
+       "weight_min": 0.994,
+       "lift_max_uu": 78.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.03,
+       "hand_samples_p": 26,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.04,
+       "hand_samples_m": 26,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": null,
+       "props_seen": [],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.0,
+       "head_rot_err_p95": 0.002,
+       "sole_err_p95": null,
+       "sole_samples": 0,
+       "aura_err_max": null,
+       "farthest_joint_uu": 154.9
+      },
+      {
+       "stage": "RESEARCH",
+       "task_state": "<WonderlandTaskState.RESEARCH: 3>",
+       "act": "RESEARCH",
+       "act_sequence": [
+        "RESEARCH"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.4,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.01,
+       "hand_samples_p": 26,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.04,
+       "hand_samples_m": 26,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.01,
+       "props_seen": [
+        "MissionBookPages_0",
+        "MissionBookTurningPage_0",
+        "MissionBook_0"
+       ],
+       "body_dz_err_p95": 0.005,
+       "body_rot_err_p95": 0.036,
+       "head_rot_err_p95": 0.003,
+       "sole_err_p95": 0.53,
+       "sole_samples": 50,
+       "aura_err_max": null,
+       "farthest_joint_uu": 87.1
+      },
+      {
+       "stage": "IMPLEMENTATION",
+       "task_state": "<WonderlandTaskState.IMPLEMENTATION: 4>",
+       "act": "IMPLEMENTATION",
+       "act_sequence": [
+        "IMPLEMENTATION"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.06,
+       "hand_samples_p": 27,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.06,
+       "hand_samples_m": 27,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.01,
+       "props_seen": [
+        "MissionBrushTip_0",
+        "MissionBrush_0"
+       ],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.034,
+       "head_rot_err_p95": 0.047,
+       "sole_err_p95": 0.53,
+       "sole_samples": 54,
+       "aura_err_max": null,
+       "farthest_joint_uu": 87.1
+      },
+      {
+       "stage": "VERIFICATION",
+       "task_state": "<WonderlandTaskState.VERIFICATION: 5>",
+       "act": "VERIFICATION",
+       "act_sequence": [
+        "VERIFICATION"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 155.0,
+       "canon_body_pitch_max": 9.0,
+       "hand_err_p95_p": 0.06,
+       "hand_samples_p": 26,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.06,
+       "hand_samples_m": 26,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": null,
+       "props_seen": [],
+       "body_dz_err_p95": 0.05,
+       "body_rot_err_p95": 0.0,
+       "head_rot_err_p95": 0.047,
+       "sole_err_p95": null,
+       "sole_samples": 0,
+       "aura_err_max": null,
+       "farthest_joint_uu": 223.0
+      },
+      {
+       "stage": "REVIEW",
+       "task_state": "<WonderlandTaskState.REVIEW: 6>",
+       "act": "REVIEW",
+       "act_sequence": [
+        "REVIEW"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.04,
+       "hand_samples_p": 26,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.03,
+       "hand_samples_m": 26,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.03,
+       "props_seen": [
+        "MissionLensGlass_0",
+        "MissionLensGlint_0",
+        "MissionLensHandle_0",
+        "MissionLensRim_0"
+       ],
+       "body_dz_err_p95": 0.002,
+       "body_rot_err_p95": 0.037,
+       "head_rot_err_p95": 0.023,
+       "sole_err_p95": 0.53,
+       "sole_samples": 52,
+       "aura_err_max": null,
+       "farthest_joint_uu": 87.1
+      },
+      {
+       "stage": "REPAIR",
+       "task_state": "<WonderlandTaskState.REPAIR: 7>",
+       "act": "REPAIR",
+       "act_sequence": [
+        "REPAIR"
+       ],
+       "weight_min": 1.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": 0.05,
+       "hand_samples_p": 56,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": 0.06,
+       "hand_samples_m": 56,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": 0.05,
+       "props_seen": [
+        "MissionBrushTip_0",
+        "MissionBrush_0",
+        "MissionLensGlass_0",
+        "MissionLensGlint_0",
+        "MissionLensHandle_0",
+        "MissionLensRim_0",
+        "MissionScraperBlade_0",
+        "MissionScraper_0"
+       ],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.034,
+       "head_rot_err_p95": 0.038,
+       "sole_err_p95": 0.52,
+       "sole_samples": 112,
+       "aura_err_max": null,
+       "farthest_joint_uu": 87.1
+      },
+      {
+       "stage": "COMPLETED",
+       "task_state": "<WonderlandTaskState.COMPLETED: 8>",
+       "act": "NONE",
+       "act_sequence": [
+        "NONE"
+       ],
+       "weight_min": 0.0,
+       "lift_max_uu": 0.0,
+       "canon_body_pitch_max": 0.0,
+       "hand_err_p95_p": null,
+       "hand_samples_p": 0,
+       "reach_short_max_p": null,
+       "reach_limited_samples_p": 0,
+       "aim_err_p95_p": null,
+       "hand_err_p95_m": null,
+       "hand_samples_m": 0,
+       "reach_short_max_m": null,
+       "reach_limited_samples_m": 0,
+       "aim_err_p95_m": null,
+       "prop_gap_vs_canon_p95": null,
+       "props_seen": [],
+       "body_dz_err_p95": 0.0,
+       "body_rot_err_p95": 0.037,
+       "head_rot_err_p95": 0.043,
+       "sole_err_p95": 0.53,
+       "sole_samples": 64,
+       "aura_err_max": null,
+       "farthest_joint_uu": 87.1
+      }
+     ],
+     "weight_before": 0.0,
+     "act_before": "NONE",
+     "weight_after": 0.0,
+     "lift_after": 0.0,
+     "act_after": "NONE",
+     "movement_mode_after": "<MovementMode.MOVE_WALKING: 1>"
+    }
+   ]
+  }
+ ],
+ "reference_acts": {
+  "1": [
+   "PREPARATION",
+   "RESEARCH",
+   "IMPLEMENTATION",
+   "VERIFICATION",
+   "REVIEW",
+   "REPAIR",
+   "NONE"
+  ]
+ },
+ "verdicts": {
+  "relay_og": {
+   "pass": true,
+   "fails": []
+  },
+  "celestial_light": {
+   "pass": true,
+   "fails": []
+  },
+  "skeleton_flame": {
+   "pass": true,
+   "fails": []
+  },
+  "jack_flame": {
+   "pass": true,
+   "fails": []
+  },
+  "baal": {
+   "pass": true,
+   "fails": []
+  }
+ },
+ "restored_skin": "relay_og",
+ "finished": "2026-09-30 15:48:03",
+ "seconds": 319.7,
+ "log": "MC_relay_og PASS relay_og performs the whole Mission Contract like Relay OG, 1 deployments {'fails': []}\nMC_celestial_light PASS celestial_light performs the whole Mission Contract like Relay OG, 1 deployments {'fails': []}\nMC_skeleton_flame PASS skeleton_flame performs the whole Mission Contract like Relay OG, 1 deployments {'fails': []}\nMC_jack_flame PASS jack_flame performs the whole Mission Contract like Relay OG, 1 deployments {'fails': []}\nMC_baal PASS baal performs the whole Mission Contract like Relay OG, 1 deployments {'fails': []}\n"
+}

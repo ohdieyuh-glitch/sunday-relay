@@ -1,4 +1,6 @@
 #include "WonderlandSkinStage.h"
+#include "GameFramework/PlayerController.h"
+#include "RelayDogCharacter.h"
 #include "HAL/IConsoleManager.h"
 
 /**
@@ -696,7 +698,20 @@ void AWonderlandSkinStage::AimCamera()
 	float MeasuredWide = -1.0f;
 	float MiddleZ = GetActorLocation().Z + Fallback * 0.5f;
 	bool bOnBody = false;
-	if (Body != nullptr)
+	// ---- AND FRAMED ON RELAY OG'S BODY, THE SAME FOR EVERY SKIN (founder, 2026-09-30, a HARD rule: "ALL mascot skins must be the same overall height as the canonical Relay OG mascot skin" -- "Use Relay OG as the canonical
+	// reference for ... wardrobe preview framing"). Every skin now stands the same canonical body height, so the camera is
+	// solved on that height alone: the same distance, the same focus, for all five. Per-skin bounds used to vote on the
+	// distance, which is how a skin with more on its head was photographed smaller. Horns and fire may leave the frame.
+	if (Body != nullptr && Body->GetBodyHeightUu() > 1.0f)
+	{
+		MeasuredTall = Body->GetBodyHeightUu();
+		MeasuredWide = MeasuredTall * 0.45f;
+		Tall = MeasuredTall;
+		Wide = MeasuredWide;
+		MiddleZ = GetActorLocation().Z + Body->GetBodyLowestUu() + Tall * 0.5f;
+		bOnBody = true;
+	}
+	else if (Body != nullptr)
 	{
 		const FBox Drawn = Body->GetFramingBodyBounds();
 		if (Drawn.IsValid && Drawn.GetExtent().Z > 1.0)
@@ -797,6 +812,17 @@ bool AWonderlandSkinStage::ShowSkin(FName SkinId)
 	{
 		LastError = FString::Printf(TEXT("no figure for skin '%s'"), *SkinId.ToString());
 		return false;
+	}
+	// THE WARDROBE SHOWS EVERY SKIN AT RELAY OG'S HEIGHT (founder, 2026-09-30, a HARD rule: "ALL mascot skins must be the same overall height as the canonical Relay OG mascot skin"), the height the player's own Dog measured
+	// from its canon body -- so the preview and the world agree, and no skin looks bigger or smaller than another.
+	{
+		float Reference = 175.0f;
+		const APlayerController* PC = GetWorld() != nullptr ? GetWorld()->GetFirstPlayerController() : nullptr;
+		if (const ARelayDogCharacter* Dog = PC != nullptr ? Cast<ARelayDogCharacter>(PC->GetPawn()) : nullptr)
+		{
+			Reference = Dog->GetCanonBodyHeightUu() > 1.0f ? Dog->GetCanonBodyHeightUu() : Reference;
+		}
+		Body->TargetBodyHeightUU = Reference;
 	}
 	if (!Body->LoadFigure(Figure))
 	{

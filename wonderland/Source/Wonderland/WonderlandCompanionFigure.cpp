@@ -117,6 +117,17 @@ bool FWonderlandCompanionFigure::Parse(const FString& Text, FWonderlandCompanion
 			}
 			Figure.VoxelUU = Voxel;
 		}
+		else if (Keyword == TEXT("body"))
+		{
+			float Low = 0.0f;
+			float High = 0.0f;
+			if (!ReadFloat(Tokens, 1, Low) || !ReadFloat(Tokens, 2, High) || High <= Low)
+			{
+				return Fail(TEXT("expected `body <lowest> <highest>` in grid units, lowest below highest"));
+			}
+			Figure.BodyLowest = Low;
+			Figure.BodyHighest = High;
+		}
 		else if (Keyword == TEXT("material"))
 		{
 			FWonderlandCompanionMaterial Material;

@@ -227,8 +227,9 @@ namespace RelayDogMission
 			// Tangent to the circle about the contract, with a gentle pull toward its radius. The side is the act's: the
 			// reader keeps the Contract on its left, the painter and the inspector on the side of the working hand, where
 			// the brush and the lens can reach it.
-			const float Side = Now.OrbitSide != 0 ? static_cast<float>(Now.OrbitSide) : -In.WorkingHandSide;
-			const float Want = 340.0f;
+			const float Side = (Now.OrbitSide != 0 ? static_cast<float>(Now.OrbitSide) : -In.WorkingHandSide)
+				* (In.OrbitDirection < 0.0f ? -1.0f : 1.0f);
+			const float Want = In.OrbitRadiusUU > 1.0f ? In.OrbitRadiusUU : 340.0f;
 			const float Err = FMath::Clamp((In.ContractDistanceUU - Want) / Want, -1.0f, 1.0f);
 			Out.OrbitBearingDeg = In.ContractYawDeg + Side * (90.0f - Err * 52.0f);
 			Out.OrbitPace = Now.OrbitPace;

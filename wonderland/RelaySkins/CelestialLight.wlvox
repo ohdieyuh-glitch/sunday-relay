@@ -2,6 +2,7 @@
 # A RELAY DOG SKIN. The dog underneath is identical in every one: same head, same visor, same status eyes.
 wlvox 1
 voxel 5.7763
+body -0.044 26.790
 material bone rim 0.9300 0.9600 1.0000 1.000
 material bonedeep lit 0.7200 0.8200 1.0000 1.000
 material visor lit 0.0450 0.0420 0.0500 1.000

@@ -109,6 +109,13 @@ namespace RelayDogMission
 		float WorkingHandSide = 1.0f;
 		/** True while a player is steering: a performance never fights input. */
 		bool bPlayerDriving = false;
+		/**
+		 * THE CIRCLE ABOUT THE CONTRACT: its radius, uu, and +1 / -1 for the way round. Normally 340 and +1. The character
+		 * changes them only to get round something the circle ran into (a urn, a pillar) -- see ARelayDogCharacter's orbit
+		 * detour (founder regression G1, 2026-09-30).
+		 */
+		float OrbitRadiusUU = 340.0f;
+		float OrbitDirection = 1.0f;
 	};
 
 	/**
