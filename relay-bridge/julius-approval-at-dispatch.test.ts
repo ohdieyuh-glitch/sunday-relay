@@ -841,19 +841,27 @@ describe('H. F3 at admission: every held state, the hold that lifts, and no live
     expect(s.memory.taskRow(`${RUN}:plan-1`)!.attempt).toBe(0);
   });
 
-  it('P2b THE CANCEL WINDOW when the sweep lands after the lease renewal: nothing dispatched, no attempt spent', async () => {
+  /**
+   * Before F3 (9eb374ca) this interleaving admitted the task, started the lease keeper, and the task
+   * sweep landed only after a renewal: {dispatches:1, attempt:1, state:'CANCELLED'}. With F3 the
+   * renewal NEVER COMES: admission holds first, and the hold itself ends the task. So the deferred
+   * sweep is never released here, and the test says so rather than implying it ran (the review of
+   * c9b79dbc, P3-7).
+   */
+  it('P2b THE CANCEL WINDOW, the sweep held back until a lease renewal that, fixed, never comes: nothing dispatched, no attempt spent', async () => {
     const window = cancelSweepingLater();
+    let renewals = 0;
     const s = stage({ wrap: (store, memory) => {
       const around = aroundAdmission((m) => window.cancel(m))(store, memory);
       return {
         ...around,
-        async heartbeat(input) { const renewed = await store.heartbeat(input); await window.release(); return renewed; },
+        async heartbeat(input) { renewals += 1; const renewed = await store.heartbeat(input); await window.release(); return renewed; },
       } as Store;
     } });
     await s.tick();
     const row = s.memory.taskRow(`${RUN}:plan-1`)!;
-    expect({ dispatches: s.dispatches(), attempt: row.attempt, state: row.state })
-      .toEqual({ dispatches: 0, attempt: 0, state: 'CANCELLED' });
+    expect({ dispatches: s.dispatches(), attempt: row.attempt, state: row.state, renewals })
+      .toEqual({ dispatches: 0, attempt: 0, state: 'CANCELLED', renewals: 0 });
   });
 
   it('P3 (R3) TERMINAL: the run moved to FAILED by another writer before admission: the task ends, nothing dispatched', async () => {
