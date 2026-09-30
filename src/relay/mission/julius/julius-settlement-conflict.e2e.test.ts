@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { juliusLateSettlementDecision, juliusSettlementContradictionEvent } from './julius-recovery';
+import { juliusLateSettlementDecision, juliusSettlementConflictEvent } from './julius-recovery';
 import { JuliusDispatchError, type JuliusProviderAdapter } from './julius-router';
 import { JuliusRunLoop } from './julius-run-loop';
 import { projectJuliusSlotLedger, type JuliusBudgetRow } from './julius-slot-ledger';
@@ -15,7 +15,7 @@ import { createFakeTime, createJuliusHarness, seedRun, task, worker, type FakeTi
  * release (released:true, no amount) does now, decided by the store under the run-row lock:
  *   - after a RELEASED close it says the same thing, and it is NOT written;
  *   - after an UNKNOWN close (the sweep saw a handoff; the attempt says nothing was sent) it is a
- *     CONTRADICTION. Never hidden: the release is written, and a `budget.settlement.contradicted`
+ *     CONFLICT between two readings, neither shown false. Never hidden: the release is written, and a `budget.settlement.conflict`
  *     event names both sides, so the gate reports it for what it is;
  *   - a release that carries COST is always written (step 3's rule charges the larger).
  */
@@ -28,8 +28,8 @@ const loopAs = (harness: JuliusHarness, time: FakeTime, owner: string) =>
   new JuliusRunLoop({ ...harness.deps, clock: time.clock, owner }, harness.policies, { claimLimit: 4, leaseMs: LEASE_MS });
 const settledFor = (harness: JuliusHarness, reservationId: string) => harness.store.events()
   .filter((event) => event.type === 'budget.settled' && event.facts.reservationId === reservationId);
-const contradictions = (harness: JuliusHarness) => harness.store.events()
-  .filter((event) => (event.type as string) === 'budget.settlement.contradicted');
+const conflicts = (harness: JuliusHarness) => harness.store.events()
+  .filter((event) => (event.type as string) === 'budget.settlement.conflict');
 const ledgerOf = (harness: JuliusHarness) => projectJuliusSlotLedger({
   runId: 'run-1', policy: null, policyVersion: 'test', ceilingUsdMicros: 10_000_000,
   rows: harness.store.events()
@@ -45,19 +45,19 @@ describe('juliusLateSettlementDecision, the rule both stores take', () => {
       expect(juliusLateSettlementDecision({ released: false }, prior), JSON.stringify(prior)).toBe('WRITE');
     }
   });
-  it('a free release: written first, the same after released closes, a contradiction beside any close that may have spent', () => {
+  it('a free release: written first, the same after released closes, a conflict beside any close that may have spent', () => {
     expect(juliusLateSettlementDecision({ released: true }, [])).toBe('WRITE');
     expect(juliusLateSettlementDecision({ released: true }, [close(true), close(true)])).toBe('SAME_MEANING');
-    expect(juliusLateSettlementDecision({ released: true }, [close(false)])).toBe('CONTRADICTION');
-    expect(juliusLateSettlementDecision({ released: true }, [close(true), close(false)]), 'one unknown close is enough').toBe('CONTRADICTION');
+    expect(juliusLateSettlementDecision({ released: true }, [close(false)])).toBe('CONFLICT');
+    expect(juliusLateSettlementDecision({ released: true }, [close(true), close(false)]), 'one unknown close is enough').toBe('CONFLICT');
   });
-  it('the contradiction names the close it disagrees with, never a released one beside it', () => {
+  it('the conflict names the close it disagrees with, never a released one beside it', () => {
     const release = {
       eventId: 'event:budget.settled:late', runId: 'run-1', projectId: 'prj-1', type: 'budget.settled' as const, taskId: 'task-1', workerId: null,
       correlationId: 'run-1', causationId: null, occurredAt: '2026-09-29T12:00:00.000Z', facts: { reservationId: 'r1', reason: 'CANCELLED', released: true },
     };
-    expect(juliusSettlementContradictionEvent({ release, prior: [close(true), close(false)] })).toMatchObject({
-      eventId: 'event:budget.settlement.contradicted:event:budget.settled:late', type: 'budget.settlement.contradicted', causationId: 'event:budget.settled:late',
+    expect(juliusSettlementConflictEvent({ release, prior: [close(true), close(false)] })).toMatchObject({
+      eventId: 'event:budget.settlement.conflict:event:budget.settled:late', type: 'budget.settlement.conflict', causationId: 'event:budget.settled:late',
       facts: { reservationId: 'r1', closedAs: 'RECOVERED_HANDED_OUTCOME_UNKNOWN', closedBy: 'e:RECOVERED_HANDED_OUTCOME_UNKNOWN', releasedAs: 'CANCELLED', runId: 'run-1' },
     });
   });
@@ -97,11 +97,11 @@ describe('(a2) step 3: a late free release after the sweep’s close', () => {
     resume.open(); // A's fence now answers LEASE_LOST, and A releases its own hold
     await a;
     expect(settledFor(harness, reservationId).map((event) => event.facts.reason), 'one closing row: the second said nothing new').toEqual(['RECOVERED_BEFORE_HANDOFF']);
-    expect(contradictions(harness)).toEqual([]);
+    expect(conflicts(harness)).toEqual([]);
     expect(ledgerOf(harness).bySlot.CODING_AGENT!.releasedUsdMicros).toBe(Number(reserved!.facts.usdMicros));
   });
 
-  it('RED FIRST: after an UNKNOWN close it is a CONTRADICTION, written and named, never hidden, and the hold stays charged', async () => {
+  it('RED FIRST: after an UNKNOWN close it is a CONFLICT, written and named, never hidden, and the hold stays charged', async () => {
     const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [{ kind: 'succeed' }] }] });
     seedRun(harness, { tasks: [task({ taskId: 'task-1' })] });
     const time = createFakeTime('2026-09-29T12:00:00.000Z');
@@ -131,7 +131,7 @@ describe('(a2) step 3: a late free release after the sweep’s close', () => {
     await a.catch(() => undefined);
     expect(settledFor(harness, reservationId).map((event) => `${String(event.facts.reason)}|${String(event.facts.released)}`), 'both rows stand')
       .toEqual(['RECOVERED_HANDED_OUTCOME_UNKNOWN|false', 'AUTH_CONFIGURATION|true']);
-    expect(contradictions(harness).map((event) => event.facts), 'and the disagreement is named').toEqual([expect.objectContaining({
+    expect(conflicts(harness).map((event) => event.facts), 'and the disagreement is named').toEqual([expect.objectContaining({
       reservationId, closedAs: 'RECOVERED_HANDED_OUTCOME_UNKNOWN', releasedAs: 'AUTH_CONFIGURATION',
     })]);
     expect(ledgerOf(harness).bySlot.CODING_AGENT, 'the hold stays charged: a release never outweighs an unknown close')

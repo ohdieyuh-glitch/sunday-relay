@@ -432,12 +432,12 @@ class RuntimeLedger {
    * it against the settlements its reservation already carries: a free release
    * after closes that were all released says nothing and is not written; one
    * after a close that says money may have gone is written with a named
-   * contradiction. A store without the port writes it, as every store did.
+   * conflict. A store without the port writes it, as every store did.
    */
   async settleOnce(
     key: string,
     input: { taskId: string | null; workerId?: string | null; facts: Record<string, string | number | boolean | null> },
-  ): Promise<'RECORDED' | 'DUPLICATE' | 'SAME_MEANING' | 'CONTRADICTED'> {
+  ): Promise<'RECORDED' | 'DUPLICATE' | 'SAME_MEANING' | 'CONFLICT'> {
     let event = this.composedOnce.get(key);
     if (event === undefined) {
       event = this.compose('budget.settled', input);
@@ -3363,7 +3363,7 @@ function executionPorts(
        * may have closed this reservation already, while this attempt was alive
        * with a lapsed lease. The store decides against that close: a free
        * release after a released close is not written; one after an unknown
-       * close is written and the contradiction named (`settleOnce`).
+       * close is written and the conflict named (`settleOnce`).
        */
       await ledger.settleOnce(`release:${reservationId}:budget.settled`, {
         taskId: claim.taskId,
