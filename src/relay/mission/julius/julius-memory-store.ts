@@ -43,8 +43,9 @@
 import type { JuliusMemoryClaim } from './julius-memory-trust';
 import { juliusClaimStandingKey } from './julius-claim-ledger';
 import {
-  MAX_TASK_RECOVERIES, juliusRecoverySettlementEvent, planJuliusRecovery, planJuliusRecoverySettlements,
-  type JuliusOpenReservation, type JuliusRecoveryAction, type JuliusRecoverySettlement,
+  MAX_TASK_RECOVERIES, juliusLateSettlementDecision, juliusRecoverySettlementEvent, juliusSettlementContradictionEvent,
+  planJuliusRecovery, planJuliusRecoverySettlements,
+  type JuliusOpenReservation, type JuliusPriorSettlement, type JuliusRecoveryAction, type JuliusRecoverySettlement,
 } from './julius-recovery';
 import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
 import { JULIUS_CLAIMABLE_RUN_STATES } from './julius-state-path';
@@ -763,6 +764,23 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         return 'LEASE_LOST';
       }
       return recordEvent(input.event) ? 'RECORDED' : 'DUPLICATE';
+    },
+
+    /** A release decided against its reservation's settlements, in one synchronous step ((a2) step 3). */
+    async appendSettlementEvent(event) {
+      const reservationId = event.facts.reservationId;
+      if (identities.has(event.eventId)) return recordEvent(event) ? 'RECORDED' : 'DUPLICATE';
+      const prior: JuliusPriorSettlement[] = typeof reservationId !== 'string' ? [] : eventLog
+        .filter((row) => row.type === 'budget.settled' && row.runId === event.runId && row.facts.reservationId === reservationId)
+        .map((row) => ({ eventId: row.eventId, released: row.facts.released === true, reason: typeof row.facts.reason === 'string' ? row.facts.reason : null }));
+      const decision = juliusLateSettlementDecision({ released: event.facts.released === true }, prior);
+      if (decision === 'SAME_MEANING') return 'SAME_MEANING';
+      recordEvent(event);
+      if (decision === 'CONTRADICTION') {
+        recordEvent(juliusSettlementContradictionEvent({ release: event, prior }));
+        return 'CONTRADICTED';
+      }
+      return 'RECORDED';
     },
 
     /**

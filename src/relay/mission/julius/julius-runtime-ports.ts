@@ -324,6 +324,18 @@ export interface JuliusEventWriter {
   appendHandoffEvent?(input: {
     event: JuliusOperationalEvent; owner: string; leaseGeneration: number;
   }): Promise<'RECORDED' | 'DUPLICATE' | 'LEASE_LOST'>;
+  /**
+   * A RELEASE, WRITTEN ONLY WHEN IT SAYS SOMETHING ((a2) step 3).
+   *
+   * A `budget.settled` row from the coordinator's own release, decided against
+   * the settlements its reservation already carries, under the run-row lock
+   * (`juliusLateSettlementDecision`): a row carrying cost is always written; a
+   * FREE release after closes that were all released is SAME_MEANING and not
+   * written; a FREE release after a close that says money may have gone is
+   * written with a `budget.settlement.contradicted` event (CONTRADICTED).
+   * Optional: a store without it writes every release, as before.
+   */
+  appendSettlementEvent?(event: JuliusOperationalEvent): Promise<'RECORDED' | 'DUPLICATE' | 'SAME_MEANING' | 'CONTRADICTED'>;
 }
 
 export interface JuliusTrajectoryWriter {

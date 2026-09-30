@@ -428,6 +428,28 @@ class RuntimeLedger {
   }
 
   /**
+   * `eventOnce` for a release's `budget.settled` ((a2) step 3). The store decides
+   * it against the settlements its reservation already carries: a free release
+   * after closes that were all released says nothing and is not written; one
+   * after a close that says money may have gone is written with a named
+   * contradiction. A store without the port writes it, as every store did.
+   */
+  async settleOnce(
+    key: string,
+    input: { taskId: string | null; workerId?: string | null; facts: Record<string, string | number | boolean | null> },
+  ): Promise<'RECORDED' | 'DUPLICATE' | 'SAME_MEANING' | 'CONTRADICTED'> {
+    let event = this.composedOnce.get(key);
+    if (event === undefined) {
+      event = this.compose('budget.settled', input);
+      this.composedOnce.set(key, event);
+    }
+    if (this.deps.store.appendSettlementEvent === undefined) {
+      return (await this.deps.store.appendEvent(event)) ? 'RECORDED' : 'DUPLICATE';
+    }
+    return this.deps.store.appendSettlementEvent(event);
+  }
+
+  /**
    * THE SAME EVENT, BUILT BUT NOT WRITTEN.
    *
    * An event that explains a decision is written inside the decision's own
@@ -3313,8 +3335,14 @@ function executionPorts(
        * absent amount frees capacity. That is safe precisely because it is
        * reached only when the boundary reported NO spend and did NOT report
        * unknown spend — nothing was sent, so there is nothing to hold.
+       *
+       * AND A LATE ONE SAYS SOMETHING OR IS NOT WRITTEN ((a2) step 3). Recovery
+       * may have closed this reservation already, while this attempt was alive
+       * with a lapsed lease. The store decides against that close: a free
+       * release after a released close is not written; one after an unknown
+       * close is written and the contradiction named (`settleOnce`).
        */
-      await ledger.eventOnce(`release:${reservationId}:budget.settled`, 'budget.settled', {
+      await ledger.settleOnce(`release:${reservationId}:budget.settled`, {
         taskId: claim.taskId,
         facts: {
           reservationId, usdMicros: typeof usdMicros === 'number' ? usdMicros : null, reason,

@@ -193,3 +193,63 @@ export function planJuliusRecovery(candidate: JuliusRecoveryCandidate): JuliusRe
 export function resumableJuliusState(state: JuliusMissionState): boolean {
   return ['EXECUTING', 'WAITING', 'REVIEWING', 'REPAIRING', 'VERIFYING'].includes(state);
 }
+
+/* ------------------------------------ (a2) step 3: a late FREE release after a close */
+
+/** One settlement a reservation already carries, as the store reads it before a new one is written. */
+export interface JuliusPriorSettlement {
+  readonly eventId: string;
+  readonly released: boolean;
+  readonly reason: string | null;
+}
+
+/**
+ * WHAT A NEW SETTLEMENT ROW DOES TO A RESERVATION THAT ALREADY HAS ONE (agreed with JUJU, 2026-09-29).
+ *
+ * The sweep closes what a lost attempt left open ((a2) step 2), and an attempt whose lease lapsed while
+ * it was still ALIVE can then release its own hold late. That second row landed whatever it said, and
+ * the settlement-integrity gate failed a bundle in which no money had moved. Suppress only what
+ * carries no information, and never hide a disagreement:
+ *   - a row that CARRIES COST (not released): always WRITE. Step 3's rule charges the larger.
+ *   - a FREE release (released: true) on a reservation with no settlement yet: WRITE.
+ *   - a FREE release after closes that were ALL released: SAME_MEANING, not written.
+ *   - a FREE release after a close that says money MAY have gone (not released): CONTRADICTION. The
+ *     release is written and a `budget.settlement.contradicted` event names both sides, so the gate
+ *     reports a contradiction rather than a bare duplicate. The slot ledger keeps the hold charged: a
+ *     release never outweighs such a close.
+ * The store takes this decision under the run-row lock every append takes, so no two writers of one
+ * reservation decide at once. Pure, so both stores take it by the same function.
+ */
+export function juliusLateSettlementDecision(
+  settlement: { readonly released: boolean },
+  prior: readonly JuliusPriorSettlement[],
+): 'WRITE' | 'SAME_MEANING' | 'CONTRADICTION' {
+  if (!settlement.released || prior.length === 0) return 'WRITE';
+  return prior.every((row) => row.released) ? 'SAME_MEANING' : 'CONTRADICTION';
+}
+
+/** The event that names a contradiction: one per release, and it names the close it disagrees with. */
+export function juliusSettlementContradictionEvent(input: {
+  readonly release: JuliusOperationalEvent;
+  readonly prior: readonly JuliusPriorSettlement[];
+}): JuliusOperationalEvent {
+  const close = input.prior.find((row) => !row.released) ?? input.prior[0];
+  return {
+    eventId: `event:budget.settlement.contradicted:${input.release.eventId}`,
+    runId: input.release.runId,
+    projectId: input.release.projectId,
+    type: 'budget.settlement.contradicted',
+    taskId: input.release.taskId,
+    workerId: input.release.workerId,
+    correlationId: input.release.correlationId,
+    causationId: input.release.eventId,
+    occurredAt: input.release.occurredAt,
+    facts: {
+      reservationId: typeof input.release.facts.reservationId === 'string' ? input.release.facts.reservationId : null,
+      closedAs: close?.reason ?? null,
+      closedBy: close?.eventId ?? null,
+      releasedAs: typeof input.release.facts.reason === 'string' ? input.release.facts.reason : null,
+      runId: input.release.runId,
+    },
+  };
+}
