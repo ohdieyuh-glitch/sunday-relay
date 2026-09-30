@@ -481,6 +481,10 @@ What the graph does not claim:
 
 ## DEFINITION OF WORLD COMPLETE -- tracking (CORE, 2026-09-29 12:00; founder's 25 conditions)
 
+**FINAL STATE, 2026-09-29 17:05 (CORE):** all 25 conditions are MET. Most are MET (builder-run): proven by CORE and
+SECOND, not by an independent QA session, which the founder must decide on. The residuals are listed on row 25. The
+final package boots Golden Arrival and streams (row 24).
+
 Status words: MET / MET (builder-run) / IN PROGRESS / OPEN / FOUNDER. "Builder-run" = proven by CORE or SECOND, not an
 independent QA session (JUJU and the integration lane were reassigned to Julius ~09:00).
 
@@ -505,12 +509,12 @@ independent QA session (JUJU and the integration lane were reassigned to Julius 
 | 17 | no major cul-de-sac / trapped landmark | MET (builder-run) | GA axis ledge fixed (GS01); GA rear world reached (west); GreatSpire precinct and Gatekeeper Fields walked round; landmarks 65/66 + 1 at its rim; S2N246's dead walk removed; no trapped landmark found |
 | 18 | distant views composed | MET within the streaming limits (builder-run) | massing (S6, C7) + tree cull 600 m: every loaded tree within 512 m now draws; wild ring reads as forest, Noctis heartland as parkland, Dubel's outer edge closed (SECOND's sheets). Beyond 512 m nothing streams (512 m and no-HLOD are fixed constraints), so a 1.3 km oblique cannot show the outer woods -- a documented limit, not a composition gap |
 | 19 | World Partition streams correctly | MET (builder-run) | every window's residency 100 % in play; SECOND's whole-disc zzW471: 12,310/12,310 batch owners + 17,270/17,270 StaticMeshActors resident at some tile, 0 floor holes (50 not-landed drops = 46 sky-cloud tiles, 2 outside the disc, 1 GA core, 1 unidentified; 11 streaming timeouts unattributed: instrument gap) |
-| 20 | Golden Arrival in the packaged build | MET earlier (S03 09-29 00:11) | re-run on the final world |
+| 20 | Golden Arrival in the packaged build | MET (builder-run) | final package (17:03) boots WL_V2_GoldenArrival_WP2 to the Golden Arrival garden, HUD 'WONDERLAND / GOLDEN ARRIVAL' (boot_test/packaged_boot_57684.png) |
 | 21 | broad founder-facing visual evidence across regions | MET (builder-run) | 26 final CORE frames (captures/zc/final_0929/core: before/after-comparable poses + C7 / radial-route views) + SECOND's massing and C7 audit-map before/after sheets; frames sent to the founder through the day |
 | 22 | final emptiness audit | MET | emptiness_classes on the post-2F census (15:24): 5.3 % empty, 1.3 % unintended (539 regions), top regions recorded; SECOND's 350-620 m audit-map before/after for C7 |
 | 23 | final beta walk against real streaming | MET (builder-run) | final beta walk zc2F_64 against real streaming: 8/8 gates PASS (W01-W08), 15/15 stands measured and on ground, 15/15 authored-vs-resident, coverage 99.5 % (208 tiles: 201 built / 6 sparse / 1 empty clearing) |
-| 24 | final packaged build boots and streams the completed world | OPEN | BuildCookRun + boot_test_package after freeze |
-| 25 | no unexplained incomplete P0/P1 region | IN PROGRESS | this table + queue at freeze |
+| 24 | final packaged build boots and streams the completed world | MET (builder-run) | BuildCookRun of the completed world: BUILD SUCCESSFUL, 180 s, 1,790 packages cooked, 0 errors, archive C:/dev/iwonder/_wonderland_package_final_0929 (1.3 GB); boot test: World Partition runtime hash 'Streaming Status Idle, Performance Good', 52 cells Loaded Visible, 0 loading, 0 failed to load |
+| 25 | no unexplained incomplete P0/P1 region | MET (builder-run), residuals listed | every region resolved (queue Q1-Q13); open residuals, none P0/P1: 1.3 % unintended in pockets <= 0.41 ha (TW03 band / core rim); WI122's trail dressing crosses a SKY05 base at Dubel 122° (walkable way round proven); GA08 arrival lamps held by the lighting rule; GA's floating MQ04 slabs (visual, stepped by GS01); 11 unattributed streaming timeouts in SECOND's disc instrument; independent QA = founder decision |
 
 ## Assignments
 
