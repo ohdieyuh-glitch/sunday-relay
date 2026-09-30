@@ -701,6 +701,8 @@ export function projectJuliusSlotViews(
 
   const text = (value: unknown): string | null =>
     (typeof value === 'string' && value.trim() !== '' ? value : null);
+  /** Settlements that name their reservation, gathered so each reservation counts once, on its first row's slot. */
+  const byReservation = new Map<string, { readonly account: ReturnType<typeof slot>; knownUsdMicros: number | null; unpriced: boolean }>();
   const roleOf = (entry: JuliusTimelineEntry): JuliusDefaultRole | null => {
     const stated = text(entry.facts.role);
     if (stated !== null && (JULIUS_DEFAULT_ROLES as readonly string[]).includes(stated)) {
@@ -753,6 +755,25 @@ export function projectJuliusSlotViews(
          * for every reader; a row with no basis is read as it always was.
          */
         const component = juliusCostComponent({ taskId: entry.taskId ?? '', basis: entry.facts.costBasis, usdMicros: entry.facts.usdMicros });
+        /**
+         * ONE RESERVATION, ONE COMPONENT ((a2) step 3). A reservation can carry
+         * two rows honestly (the sweep's close, then a late settlement), and two
+         * figures for one dispatch were SUMMED here. A row that names its
+         * reservation is gathered and counted once, below: its largest figure is
+         * the floor, and anything unpriced is one component. A row that names no
+         * reservation counts as it always did.
+         */
+        const reservationId = text(entry.facts.reservationId);
+        if (reservationId !== null) {
+          const gathered = byReservation.get(reservationId) ?? { account, knownUsdMicros: null, unpriced: false };
+          if (component.knownUsdMicros !== null) {
+            gathered.knownUsdMicros = Math.max(gathered.knownUsdMicros ?? component.knownUsdMicros, component.knownUsdMicros);
+          } else {
+            gathered.unpriced = true;
+          }
+          byReservation.set(reservationId, gathered);
+          break;
+        }
         // AN UNKNOWN SETTLEMENT IS NOT A FREE ONE. It is counted as a component
         // nobody priced, which is what turns the sum into a floor.
         if (component.knownUsdMicros !== null) {
@@ -765,6 +786,10 @@ export function projectJuliusSlotViews(
       default:
         break;
     }
+  }
+  for (const gathered of byReservation.values()) {
+    if (gathered.knownUsdMicros !== null) gathered.account.knownUsdMicros += gathered.knownUsdMicros;
+    if (gathered.unpriced) gathered.account.unknownCostComponents += 1;
   }
 
   return JULIUS_DEFAULT_ROLES.map((role): JuliusSlotView => {

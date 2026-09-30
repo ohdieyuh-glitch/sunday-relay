@@ -286,4 +286,34 @@ describe('the slot projection itself', () => {
     expect(reviewer.servedModel).toBe('grok-build-0.1');
     expect(reviewer.providerId).toBe('xai');
   });
+
+  /**
+   * ONE RESERVATION, ONE COMPONENT ((a2) step 3). The view is a FLOOR of known API spend and a flag for
+   * what nobody priced, and it counted every `budget.settled` row. A reservation can carry two rows
+   * honestly now (the sweep's close, then a late settlement), and two figures for one dispatch were
+   * SUMMED. Per reservation: the larger figure is the floor, and anything unpriced is one component.
+   */
+  describe('a reservation settled twice is one component', () => {
+    const at = '2026-09-10T02:00:00.000Z';
+    const coderOf = (...settlements: Array<Record<string, string | number | boolean | null>>) => projectJuliusSlotViews([
+      { eventId: 'e1', sequence: 1, type: 'worker.dispatched', taskId: 'b', workerId: 'coder', occurredAt: at, facts: { role: 'CODING_AGENT' } },
+      ...settlements.map((facts, index) => ({ eventId: `s${index}`, sequence: index + 2, type: 'budget.settled', taskId: 'b', workerId: null, occurredAt: at, facts })),
+    ]).find((slot) => slot.role === 'CODING_AGENT')!;
+    const known = (usdMicros: number) => ({ reservationId: 'r1', usdMicros, costBasis: 'PROVIDER_REPORTED', released: false });
+    const unknown = { reservationId: 'r1', usdMicros: null, costBasis: 'UNKNOWN', released: false };
+
+    it('RED FIRST: two figures for one reservation: the larger is the floor, never the sum', () => {
+      expect(coderOf(known(100_000), known(400_000))).toMatchObject({ knownUsdMicros: 400_000, unknownCostComponents: 0, costComplete: true });
+    });
+    it('RED FIRST: two unpriced rows for one reservation are ONE unpriced component', () => {
+      expect(coderOf(unknown, unknown)).toMatchObject({ knownUsdMicros: 0, unknownCostComponents: 1, costComplete: false });
+    });
+    it('a figure beside an unpriced close: the figure is the floor, and the slot is still incomplete', () => {
+      expect(coderOf(unknown, known(450_000))).toMatchObject({ knownUsdMicros: 450_000, unknownCostComponents: 1, costComplete: false });
+    });
+    it('CONTROL: two reservations are two components; a row naming no reservation counts as it always did', () => {
+      expect(coderOf(known(100_000), { ...known(400_000), reservationId: 'r2' })).toMatchObject({ knownUsdMicros: 500_000 });
+      expect(coderOf({ usdMicros: 7 }, { usdMicros: 9 })).toMatchObject({ knownUsdMicros: 16 });
+    });
+  });
 });
