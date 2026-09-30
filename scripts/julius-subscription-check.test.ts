@@ -90,6 +90,10 @@ describe('status verdicts over the measured shapes', () => {
     expect(check.smokeVerdict('{"type":"result","is_error":true,"result":"Credit balance is too low"}')).toEqual({ ok: false, reply: 'ERROR' });
     expect(check.smokeVerdict('not json').reply).toBe('UNREADABLE');
     expect(check.smokeVerdict('').reply).toBe('UNREADABLE');
+    // Clean means `is_error: false` said by the result itself (the founder's criterion, literally).
+    for (const flag of ['', '"is_error":"false",', '"is_error":null,', '"is_error":0,', '"is_error":[],']) {
+      expect(check.smokeVerdict(`{"type":"result",${flag}"result":"OK"}`), flag).toEqual({ ok: false, reply: 'UNEXPECTED' });
+    }
   });
 });
 
@@ -254,8 +258,9 @@ describe('smoke failures say why, in closed tokens only', () => {
 
 /**
  * THE MODEL THAT ANSWERED THE SMOKE (founder, 2026-09-30: claude-opus-5-5; no automatic downgrade; STOP
- * rather than substitute). Read as the runtime reads it (`hostedServedModel`): a producer is an entry with
- * output, and it credits the requested model by its key or `canonicalModel`, exactly or as a dated build.
+ * rather than substitute). A producer is an entry with output. EVERY producer must credit the requested
+ * model by its own KEY, exactly or as a dated build, and by its `canonicalModel` too when it carries one
+ * (Codex on #302, F1): the smoke's JSON has no turns, so a second producer is a substitute, never a helper.
  * SERVED_GREP and REASON_GREP are the EXACT `grep -E` patterns the founder workflow's evidence allowlist
  * carries, so this output and that allowlist cannot drift apart. The three exit reasons join the allowlist
  * with the founder's workflow patch that passes the exits (F3); this verdict must not land before it.
@@ -271,9 +276,23 @@ describe('the smoke names the model that answered, and fails closed on any other
   it.each([
     [usage({ 'claude-opus-5-5': { outputTokens: 1 } }), { served: 'claude-opus-5-5', match: 'EXACT' }],
     [usage({ 'claude-opus-5-5-20260915': { outputTokens: 1 } }), { served: 'claude-opus-5-5-20260915', match: 'DATED_BUILD' }],
-    [usage({ opus: { outputTokens: 1, canonicalModel: 'claude-opus-5-5' } }), { served: 'opus', match: 'EXACT' }],
-    [usage({ opus: { outputTokens: 1, canonicalModel: 'claude-opus-5-5-20260915' } }), { served: 'opus', match: 'DATED_BUILD' }],
-    [usage({ 'claude-opus-5-5': { outputTokens: 2 }, 'claude-haiku-4-5-20251001': { outputTokens: 30 } }), { served: 'claude-haiku-4-5-20251001,claude-opus-5-5', match: 'EXACT' }],
+    // The KEY credits; a canonicalModel it carries must credit too. An alias key credits nothing.
+    [usage({ 'claude-opus-5-5': { outputTokens: 1, canonicalModel: 'claude-opus-5-5' } }), { served: 'claude-opus-5-5', match: 'EXACT' }],
+    [usage({ 'claude-opus-5-5': { outputTokens: 1, canonicalModel: 'claude-opus-5-5-20260915' } }), { served: 'claude-opus-5-5', match: 'EXACT' }],
+    [usage({ 'claude-opus-5-5-20260915': { outputTokens: 1, canonicalModel: 'claude-opus-5-5' } }), { served: 'claude-opus-5-5-20260915', match: 'DATED_BUILD' }],
+    [usage({ 'claude-opus-5-5': { outputTokens: 1, canonicalModel: 'claude-sonnet-5' } }), { served: 'claude-opus-5-5', match: 'MISMATCH' }],
+    [usage({ 'claude-sonnet-5': { outputTokens: 1, canonicalModel: 'claude-opus-5-5' } }), { served: 'claude-sonnet-5', match: 'MISMATCH' }],
+    [usage({ opus: { outputTokens: 1, canonicalModel: 'claude-opus-5-5' } }), { served: 'opus', match: 'MISMATCH' }],
+    [usage({ opus: { outputTokens: 1, canonicalModel: 'claude-opus-5-5-20260915' } }), { served: 'opus', match: 'MISMATCH' }],
+    // EVERY producer: a second model with output, whichever produced more, is a MISMATCH that names both.
+    [usage({ 'claude-opus-5-5': { outputTokens: 2 }, 'claude-haiku-4-5-20251001': { outputTokens: 30 } }), { served: 'claude-haiku-4-5-20251001,claude-opus-5-5', match: 'MISMATCH' }],
+    [usage({ 'claude-opus-5-5': { outputTokens: 5 }, 'claude-haiku-4-5-20251001': { outputTokens: 1 } }), { served: 'claude-opus-5-5,claude-haiku-4-5-20251001', match: 'MISMATCH' }],
+    [usage({ 'claude-opus-5-5': { outputTokens: 1 }, 'claude-sonnet-5': { outputTokens: 5 } }), { served: 'claude-sonnet-5,claude-opus-5-5', match: 'MISMATCH' }],
+    [usage({ 'claude-opus-5-5': { outputTokens: 1 }, 'claude-opus-5-5[1m]': { outputTokens: 1 } }), { served: 'claude-opus-5-5,claude-opus-5-5_1m_', match: 'MISMATCH' }],
+    // Every producer crediting it passes; one that is a dated build makes the match DATED_BUILD.
+    [usage({ 'claude-opus-5-5': { outputTokens: 1 }, 'claude-opus-5-5-20260915': { outputTokens: 1 } }), { served: 'claude-opus-5-5,claude-opus-5-5-20260915', match: 'DATED_BUILD' }],
+    // An entry that produced nothing is not a producer, whatever it is.
+    [usage({ 'claude-opus-5-5': { outputTokens: 1 }, 'claude-sonnet-5': { outputTokens: 0 } }), { served: 'claude-opus-5-5', match: 'EXACT' }],
     [usage({ 'claude-sonnet-5': { outputTokens: 5 } }), { served: 'claude-sonnet-5', match: 'MISMATCH' }],
     // Nothing looser than exact or <requested>-YYYYMMDD.
     [usage({ 'claude-opus-5-5-2026': { outputTokens: 1 } }), { served: 'claude-opus-5-5-2026', match: 'MISMATCH' }],
@@ -319,12 +338,35 @@ describe('the smoke names the model that answered, and fails closed on any other
     expect(run.output).toContain('reply=OK result=FAIL');
   });
 
-  it('a dated build passes, and a helper model beside the requested one passes', () => {
-    for (const raw of [usage({ 'claude-opus-5-5-20260915': { outputTokens: 1 } }), usage({ 'claude-opus-5-5': { outputTokens: 2 }, 'claude-haiku-4-5-20251001': { outputTokens: 30 } })]) {
+  it('a dated build passes', () => {
+    const run = smoke(usage({ 'claude-opus-5-5-20260915': { outputTokens: 1 } }));
+    expect(run.code).toBe(0);
+    expect(run.output).toContain('result=PASS');
+    expect(run.output).not.toContain('subscription_smoke_reason');
+  });
+
+  it('ANY second model with output beside the requested one FAILS: SERVED_MODEL_MISMATCH, and the served line names both (F1)', () => {
+    for (const [raw, served] of [
+      [usage({ 'claude-opus-5-5': { outputTokens: 2 }, 'claude-haiku-4-5-20251001': { outputTokens: 30 } }), 'claude-haiku-4-5-20251001,claude-opus-5-5'],
+      [usage({ 'claude-opus-5-5': { outputTokens: 1 }, 'claude-sonnet-5': { outputTokens: 5 } }), 'claude-sonnet-5,claude-opus-5-5'],
+      [usage({ 'claude-opus-5-5': { outputTokens: 5 }, 'claude-sonnet-5': { outputTokens: 1 } }), 'claude-opus-5-5,claude-sonnet-5'],
+    ]) {
       const run = smoke(raw);
-      expect(run.code, raw).toBe(0);
-      expect(run.output, raw).toContain('result=PASS');
-      expect(run.output, raw).not.toContain('subscription_smoke_reason');
+      expect(run.code, raw).toBe(1);
+      expect(run.output.split('\n'), raw).toEqual([
+        `subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=${served} match=MISMATCH`,
+        'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=SERVED_MODEL_MISMATCH http=none subtype=success',
+        'subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=FAIL',
+      ]);
+    }
+  });
+
+  it('an OK the result does not call is_error: false is not clean: UNEXPECTED, reason UNEXPECTED_REPLY', () => {
+    for (const flag of ['', '"is_error":"false",']) {
+      const run = smoke(`{"type":"result","subtype":"success",${flag}"result":"OK","modelUsage":{"claude-opus-5-5":{"outputTokens":1}}}`);
+      expect(run.code, flag).toBe(1);
+      expect(run.output, flag).toContain('reason=UNEXPECTED_REPLY');
+      expect(run.output, flag).toContain('reply=UNEXPECTED result=FAIL');
     }
   });
 

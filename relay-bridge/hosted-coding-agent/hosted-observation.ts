@@ -501,10 +501,12 @@ export function hostedServedModel(o: HostedObservation): {
  * WHETHER THE ATTESTED MODEL IS THE ONE REQUESTED (founder rule, 2026-09-30: no
  * automatic downgrade, and a STOP rather than a substitute).
  *
- * The same reading the subscription smoke applies to its `modelUsage`
- * (`smokeServedModel`, scripts/julius-subscription-check.mjs). The attested turn
- * model, or the crediting entry's key or `canonicalModel`, must be the requested
- * model EXACTLY, or its DATED BUILD (`<requested>-YYYYMMDD`). Nothing looser.
+ * The attested turn model, or the crediting entry's key or `canonicalModel`, must
+ * be the requested model EXACTLY, or its DATED BUILD (`<requested>-YYYYMMDD`).
+ * Nothing looser. The subscription smoke's reading (`smokeServedModel`,
+ * scripts/julius-subscription-check.mjs) is STRICTER: its JSON has no turns to
+ * attribute output with, so every entry that produced output must be the
+ * requested model by its own key.
  * Anything short of an attestation is UNATTESTED, never a match: mixed turn
  * models are exactly what a mid-session switch looks like.
  */

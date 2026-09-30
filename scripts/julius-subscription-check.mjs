@@ -24,9 +24,10 @@
  *                   with `--status-file` naming the status JSON of the same run, and
  *                   `--auth-exit` / `--cli-exit` the exit codes of that `auth status`
  *                   and that `claude -p`, as the workflow recorded them.
- *                   PASS only for a clean exact "OK" beside a subscription status,
- *                   answered by the REQUESTED model (or its dated build), as the
- *                   result's own `modelUsage` attests, with BOTH exits reported and 0.
+ *                   PASS only for a clean exact "OK" (`is_error: false`) beside a
+ *                   subscription status, answered by the REQUESTED model (or its dated
+ *                   build) and by NO other model, as the result's own `modelUsage`
+ *                   attests, with BOTH exits reported and 0.
  *
  * FAIL CLOSED. There is no fallback: an API-key method, an API-key source, a third
  * party, an unreadable answer or a missing token is SUBSCRIPTION_NOT_READY / FAIL,
@@ -99,14 +100,18 @@ export function statusVerdict(raw, requirePlan = null) {
   return { ok: reason === null, method, provider, plan, keySource, reason };
 }
 
-/** `claude -p --output-format json` stdout → PASS only for a clean, exact "OK". */
+/**
+ * `claude -p --output-format json` stdout → PASS only for a clean, exact "OK". Clean means the
+ * result says `is_error: false` itself (the founder's criterion, literally): an absent or
+ * non-boolean flag is not a clean answer, so it is UNEXPECTED, never OK.
+ */
 export function smokeVerdict(raw) {
   let parsed = null;
   try { parsed = JSON.parse(raw ?? ''); } catch { parsed = null; }
   if (parsed === null || typeof parsed !== 'object') return { ok: false, reply: 'UNREADABLE' };
   if (parsed.is_error === true) return { ok: false, reply: 'ERROR' };
   const text = typeof parsed.result === 'string' ? parsed.result.trim() : null;
-  if (text === 'OK') return { ok: true, reply: 'OK' };
+  if (text === 'OK' && parsed.is_error === false) return { ok: true, reply: 'OK' };
   return { ok: false, reply: 'UNEXPECTED' };
 }
 
@@ -162,15 +167,22 @@ export function smokeFailureReason(raw) {
  * no automatic downgrade, and a STOP rather than a substitute).
  *
  * The CLI's `--output-format json` result carries no turns, only `modelUsage`: the runtime's own
- * account of which models it called and what each produced. The reading is the runtime's
- * (`hostedServedModel`, relay-bridge/hosted-coding-agent/hosted-observation.ts):
+ * account of which models it called and what each produced. So EVERY producer must be the
+ * requested model (Codex on #302, F1):
  *   - an entry PRODUCED when its `outputTokens` is a positive number;
- *   - it credits the requested model when its key, or the SDK's `canonicalModel` for it, is the
- *     requested model EXACTLY, or that model's DATED BUILD (`<requested>-YYYYMMDD`). Nothing looser;
- *   - a helper model beside a crediting producer does not unseat it (the runtime spends a little on
- *     housekeeping), but every producer is listed, largest first, so that spending stays visible.
- * `match` is EXACT, DATED_BUILD, MISMATCH (producers, none of them the requested model) or NONE (no
- * producer: nothing is attested). `served` is the producers' keys, at most eight, or `none`.
+ *   - a producer credits the requested model only when its own KEY is the requested model EXACTLY,
+ *     or that model's DATED BUILD (`<requested>-YYYYMMDD`), and the SDK's `canonicalModel` for it,
+ *     when the entry carries one, is one of those too. Nothing looser: an alias key credits nothing;
+ *   - ONE producer that does not credit it makes the whole answer a MISMATCH. Beside the requested
+ *     model it is a substitute or a fallback, and without turns nothing here could tell it from a
+ *     helper. The workflow pins the CLI's small-fast model to the requested one, so a genuine
+ *     housekeeping call credits it too, and this holds by construction.
+ * This is STRICTER than the runtime's reading of a coder session (`hostedServedModel`,
+ * relay-bridge/hosted-coding-agent/hosted-observation.ts), which has turns to attribute output with.
+ * `match` is EXACT (every producer's key is the exact id), DATED_BUILD (every producer credits it,
+ * one or more by its dated build), MISMATCH (a producer that does not credit it) or NONE (no
+ * producer: nothing is attested). `served` is the producers' keys, largest first, at most eight,
+ * or `none`, so a MISMATCH names what answered.
  *
  * A KEY IS SHOWN, NEVER RAW. Each character outside the line's own alphabet becomes `_`, and the
  * label is cut to 64. So `claude-opus-5-5[1m]` reads `claude-opus-5-5_1m_`: the smoke still STOPS on
@@ -191,14 +203,21 @@ export function smokeServedModel(raw, requested) {
       const output = typeof value.outputTokens === 'number' && Number.isFinite(value.outputTokens) ? value.outputTokens : 0;
       if (output <= 0) continue;
       const canonical = typeof value.canonicalModel === 'string' && value.canonicalModel.trim() !== '' ? value.canonicalModel : null;
-      producers.push({ key, names: canonical === null ? [key] : [key, canonical], output });
+      producers.push({ key, canonical, output });
     }
   }
   producers.sort((a, b) => b.output - a.output || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  const exact = producers.some((producer) => producer.names.includes(requested));
-  const dated = producers.some((producer) => producer.names.some((name) =>
-    name.startsWith(`${requested}-`) && DATE_SUFFIX.test(name.slice(requested.length + 1))));
-  const match = producers.length === 0 ? 'NONE' : exact ? 'EXACT' : dated ? 'DATED_BUILD' : 'MISMATCH';
+  // One name's credit: the requested id EXACTLY, its DATED BUILD, or nothing.
+  const creditOf = (name) => (typeof requested !== 'string' || requested === '' ? null
+    : name === requested ? 'EXACT'
+      : name.startsWith(`${requested}-`) && DATE_SUFFIX.test(name.slice(requested.length + 1)) ? 'DATED_BUILD'
+        : null);
+  // A producer's credit is its KEY's, and only when a canonicalModel it carries credits too.
+  const credits = producers.map((producer) =>
+    (producer.canonical !== null && creditOf(producer.canonical) === null ? null : creditOf(producer.key)));
+  const match = producers.length === 0 ? 'NONE'
+    : credits.includes(null) ? 'MISMATCH'
+      : credits.every((credit) => credit === 'EXACT') ? 'EXACT' : 'DATED_BUILD';
   const served = producers.length === 0 ? 'none'
     : producers.slice(0, 8).map((producer) => servedLabel(producer.key)).join(',');
   return { served, match };
@@ -262,9 +281,10 @@ export function main(argv, env = process.env, io = {}) {
   const method = status.ok ? status.method : 'none';
   const reply = status.ok ? stdin() : '';
   const answer = status.ok ? smokeVerdict(reply) : { ok: false, reply: 'NO_SUBSCRIPTION_STATUS' };
-  // A PASS NEEDS THE REQUESTED MODEL TO HAVE ANSWERED: an exact OK from another model, or from no
-  // model the result can name, fails closed. The served line is printed for every reply read, so a
-  // pass shows which build answered too.
+  // A PASS NEEDS THE REQUESTED MODEL, AND ONLY IT, TO HAVE ANSWERED: an exact OK from another model,
+  // from the requested one beside another that produced output, or from no model the result can
+  // name, fails closed. The served line is printed for every reply read, so a pass shows which build
+  // answered too.
   // A PASS ALSO NEEDS BOTH EXITS REPORTED AND 0 (F3): the auth status's and the CLI's own.
   const authExit = exitCode(flag('auth-exit'));
   const cliExit = exitCode(flag('cli-exit'));
