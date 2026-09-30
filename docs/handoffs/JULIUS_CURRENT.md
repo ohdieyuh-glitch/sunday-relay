@@ -3736,12 +3736,13 @@ So the slots are genuinely provider-independent.
 **What the brief asks for and does not exist: the measurement.** Every fuzzy
 module is supposed to carry a baseline, a version, a candidate set, evaluation
 criteria and a measured marginal value. There is no such harness. Models are
-pinned (`gpt-5.6-sol`, `claude-fable-5`, `xai/grok-build-0.1`) and the run
-records `requestedModel` versus `servedModel`, which is honest observation — but
-nothing compares a candidate against a baseline, so "this module earns its place"
-is not currently a measurable claim. `docs/JULIUS_BETA_READINESS.md` already
-records the beta eval pack as `ABSENT`; this is the same gap seen from the module
-side.
+pinned (`gpt-5.6-sol`, `claude-opus-5-5` since the founder's decision of
+2026-09-30, `xai/grok-build-0.1`) and the run records `requestedModel` versus
+`servedModel` (for the coder, a mismatch now stops the dispatch), which is
+honest observation — but nothing compares a candidate against a baseline, so
+"this module earns its place" is not currently a measurable claim.
+`docs/JULIUS_BETA_READINESS.md` already records the beta eval pack as `ABSENT`;
+this is the same gap seen from the module side.
 
 `scripts/julius-provider-independent-evals.ts` is the nearest existing harness
 and worth copying the shape of: it reports **PASS / FAIL / BLOCKED**, with
