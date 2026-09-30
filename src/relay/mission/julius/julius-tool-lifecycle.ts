@@ -23,7 +23,10 @@ export interface JuliusToolInvocationStore {
  /**
   * Claims AUTHORIZED invocations for dispatch. Unscoped, it is a fleet dispatcher's sweep: any run,
   * any project. A caller dispatching ONE invocation names it (and its project), and nothing else is
-  * touched: a swept invocation belongs to a caller that will never execute it (defect B).
+  * touched: a swept invocation belongs to a caller that will never execute it (defect B). Both or
+  * neither: naming only one is refused (`tool_dispatch_claim_half_scoped`). An invocation named
+  * without its project would rest tenancy on the caller, and a project named without an
+  * invocation is defect B's sweep inside that project.
   */
  claimDispatch(input:{claimedBy:string;now:string;claimedUntil:string;limit:number;invocationId?:string;projectId?:string}):Promise<readonly JuliusToolDispatchClaim[]>;
  markRunning(input:{invocationId:string;claimedBy:string;dispatchGeneration:number;sandboxId:string;startedAt:string}):Promise<boolean>;
