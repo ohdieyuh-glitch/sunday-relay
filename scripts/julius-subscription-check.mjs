@@ -22,7 +22,9 @@
  *                   with no API-key source. Repeats env-check first.
  *   smoke-verdict   `claude -p "Reply with exactly OK" --output-format json` on stdin,
  *                   with `--status-file` naming the status JSON of the same run.
- *                   PASS only for a clean exact "OK" beside a subscription status.
+ *                   PASS only for a clean exact "OK" beside a subscription status,
+ *                   answered by the REQUESTED model (or its dated build), as the
+ *                   result's own `modelUsage` attests.
  *
  * FAIL CLOSED. There is no fallback: an API-key method, an API-key source, a third
  * party, an unreadable answer or a missing token is SUBSCRIPTION_NOT_READY / FAIL,
@@ -153,6 +155,48 @@ export function smokeFailureReason(raw) {
   return { reason, http, subtype };
 }
 
+/**
+ * WHICH MODEL ANSWERED THE SMOKE, AND WHETHER IT IS THE ONE ASKED FOR (founder rule, 2026-09-30:
+ * no automatic downgrade, and a STOP rather than a substitute).
+ *
+ * The CLI's `--output-format json` result carries no turns, only `modelUsage`: the runtime's own
+ * account of which models it called and what each produced. The reading is the runtime's
+ * (`hostedServedModel`, relay-bridge/hosted-coding-agent/hosted-observation.ts):
+ *   - an entry PRODUCED when its `outputTokens` is a positive number;
+ *   - it credits the requested model when its key, or the SDK's `canonicalModel` for it, is the
+ *     requested model EXACTLY, or that model's DATED BUILD (`<requested>-YYYYMMDD`). Nothing looser;
+ *   - a helper model beside a crediting producer does not unseat it (the runtime spends a little on
+ *     housekeeping), but every producer is listed, largest first, so that spending stays visible.
+ * `match` is EXACT, DATED_BUILD, MISMATCH (producers, none of them the requested model) or NONE (no
+ * producer: nothing is attested). `served` is the producers' keys, each a plain label or `unsafe`, at
+ * most eight, or `none`.
+ */
+const SERVED_KEY = /^[A-Za-z0-9._-]{1,64}$/u;
+const DATE_SUFFIX = /^\d{8}$/u;
+export function smokeServedModel(raw, requested) {
+  let parsed = null;
+  try { parsed = JSON.parse(raw ?? ''); } catch { parsed = null; }
+  const usage = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed.modelUsage : null;
+  const producers = [];
+  if (usage !== null && typeof usage === 'object' && !Array.isArray(usage)) {
+    for (const [key, value] of Object.entries(usage)) {
+      if (key.trim() === '' || value === null || typeof value !== 'object' || Array.isArray(value)) continue;
+      const output = typeof value.outputTokens === 'number' && Number.isFinite(value.outputTokens) ? value.outputTokens : 0;
+      if (output <= 0) continue;
+      const canonical = typeof value.canonicalModel === 'string' && value.canonicalModel.trim() !== '' ? value.canonicalModel : null;
+      producers.push({ key, names: canonical === null ? [key] : [key, canonical], output });
+    }
+  }
+  producers.sort((a, b) => b.output - a.output || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  const exact = producers.some((producer) => producer.names.includes(requested));
+  const dated = producers.some((producer) => producer.names.some((name) =>
+    name.startsWith(`${requested}-`) && DATE_SUFFIX.test(name.slice(requested.length + 1))));
+  const match = producers.length === 0 ? 'NONE' : exact ? 'EXACT' : dated ? 'DATED_BUILD' : 'MISMATCH';
+  const served = producers.length === 0 ? 'none'
+    : producers.slice(0, 8).map((producer) => (SERVED_KEY.test(producer.key) ? producer.key : 'unsafe')).join(',');
+  return { served, match };
+}
+
 const safeLabel = (value) => (typeof value === 'string' && /^[A-Za-z0-9._-]{1,64}$/u.test(value) ? value : 'unpinned');
 const readStdin = () => { try { return readFileSync(0, 'utf8'); } catch { return ''; } };
 const readFile = (path) => { try { return readFileSync(path, 'utf8'); } catch { return ''; } };
@@ -201,14 +245,24 @@ export function main(argv, env = process.env, io = {}) {
   const method = status.ok ? status.method : 'none';
   const reply = status.ok ? stdin() : '';
   const answer = status.ok ? smokeVerdict(reply) : { ok: false, reply: 'NO_SUBSCRIPTION_STATUS' };
-  // WHY, when a reply was read and failed: its own closed line, so the PASS and FAIL lines the
-  // workflow greps stay exactly as they were.
-  if (status.ok && !answer.ok) {
-    const why = smokeFailureReason(reply);
-    print(`subscription_smoke_reason provider=anthropic model=${model} reason=${why.reason} http=${why.http} subtype=${why.subtype}`);
+  // A PASS NEEDS THE REQUESTED MODEL TO HAVE ANSWERED: an exact OK from another model, or from no
+  // model the result can name, fails closed. The served line is printed for every reply read, so a
+  // pass shows which build answered too.
+  let pass = answer.ok;
+  if (status.ok) {
+    const served = smokeServedModel(reply, model);
+    print(`subscription_smoke_served provider=anthropic requested=${model} served=${served.served} match=${served.match}`);
+    if (answer.ok && served.match !== 'EXACT' && served.match !== 'DATED_BUILD') pass = false;
+    // WHY, when a reply was read and failed: its own closed line, so the PASS and FAIL lines the
+    // workflow greps stay exactly as they were.
+    if (!pass) {
+      const why = smokeFailureReason(reply);
+      const reason = answer.ok ? (served.match === 'NONE' ? 'SERVED_MODEL_UNATTESTED' : 'SERVED_MODEL_MISMATCH') : why.reason;
+      print(`subscription_smoke_reason provider=anthropic model=${model} reason=${reason} http=${why.http} subtype=${why.subtype}`);
+    }
   }
-  print(`subscription_smoke provider=anthropic model=${model} auth=CLAUDE_SUBSCRIPTION method=${method} reply=${answer.reply} result=${answer.ok ? 'PASS' : 'FAIL'}`);
-  return answer.ok ? 0 : 1;
+  print(`subscription_smoke provider=anthropic model=${model} auth=CLAUDE_SUBSCRIPTION method=${method} reply=${answer.reply} result=${pass ? 'PASS' : 'FAIL'}`);
+  return pass ? 0 : 1;
 }
 
 if (process.argv[1] !== undefined && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {

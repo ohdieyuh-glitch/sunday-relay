@@ -23,6 +23,12 @@ const READY = { [TOKEN_ENV_NAME]: TOKEN };
 const TOKEN_ONLY = '{"loggedIn":true,"authMethod":"oauth_token","apiProvider":"firstParty"}';
 const API_KEY_METHOD = '{"loggedIn":true,"authMethod":"api_key","apiProvider":"firstParty","apiKeySource":"ANTHROPIC_API_KEY"}';
 const OK_REPLY = '{"type":"result","is_error":false,"result":"OK"}';
+/** An OK the requested model answered, as the CLI's own `modelUsage` attests it (founder, 2026-09-30: claude-opus-5-5). */
+const OK_ATTESTED = '{"type":"result","subtype":"success","is_error":false,"result":"OK","modelUsage":{"claude-opus-5-5":{"inputTokens":3,"outputTokens":1}}}';
+const apiError = (status: number, type: string) => JSON.stringify({
+  type: 'result', subtype: 'success', is_error: true,
+  result: `API Error: ${String(status)} ${JSON.stringify({ type: 'error', error: { type, message: 'model: claude-fable-5 FAKETESTNOTREAL-free-text' } })}`,
+});
 
 const capture = (argv: string[], env: Record<string, string | undefined>, stdin = '', files: Record<string, string> = {}) => {
   const lines: string[] = [];
@@ -133,11 +139,14 @@ describe('status-verdict and smoke-verdict print the exact lines the workflow gr
     expect(run.output).toContain('reason=STATUS_UNREADABLE result=SUBSCRIPTION_NOT_READY');
   });
 
-  it('the smoke passes on an exact OK beside a subscription status of the same run', () => {
-    const run = capture(['smoke-verdict', '--model', 'claude-fable-5', '--status-file', 's.json'], READY, OK_REPLY, { 's.json': TOKEN_ONLY });
+  it('the smoke passes on an exact OK, answered by the requested model, beside a subscription status of the same run', () => {
+    const run = capture(['smoke-verdict', '--model', 'claude-opus-5-5', '--status-file', 's.json'], READY, OK_ATTESTED, { 's.json': TOKEN_ONLY });
     expect(run.code).toBe(0);
-    expect(run.output).toBe('subscription_smoke provider=anthropic model=claude-fable-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=PASS');
-    expect(run.output).toMatch(SMOKE_PASS);
+    expect(run.output.split('\n')).toEqual([
+      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=claude-opus-5-5 match=EXACT',
+      'subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=PASS',
+    ]);
+    expect(run.output.split('\n').at(-1)).toMatch(SMOKE_PASS);
   });
 
   it('an OK beside an api_key status FAILS CLOSED: the reply is not even read', () => {
@@ -170,10 +179,6 @@ describe('status-verdict and smoke-verdict print the exact lines the workflow gr
  */
 describe('smoke failures say why, in closed tokens only', () => {
   const REASON_LINE = /^subscription_smoke_reason provider=anthropic model=[A-Za-z0-9._-]+ reason=[A-Z_]+ http=(\d{3}|none) subtype=([a-z_]{1,40}|none)$/u;
-  const apiError = (status: number, type: string) => JSON.stringify({
-    type: 'result', subtype: 'success', is_error: true,
-    result: `API Error: ${String(status)} ${JSON.stringify({ type: 'error', error: { type, message: 'model: claude-fable-5 FAKETESTNOTREAL-free-text' } })}`,
-  });
 
   it.each([
     [apiError(404, 'not_found_error'), { reason: 'MODEL_NOT_ENTITLED_OR_NOT_FOUND', http: '404', subtype: 'success' }],
@@ -212,6 +217,7 @@ describe('smoke failures say why, in closed tokens only', () => {
     const run = capture(['smoke-verdict', '--model', 'claude-fable-5', '--status-file', 's.json'], READY, apiError(429, 'rate_limit_error'), { 's.json': TOKEN_ONLY });
     expect(run.code).toBe(1);
     expect(run.output.split('\n')).toEqual([
+      'subscription_smoke_served provider=anthropic requested=claude-fable-5 served=none match=NONE',
       'subscription_smoke_reason provider=anthropic model=claude-fable-5 reason=RATE_LIMITED http=429 subtype=success',
       'subscription_smoke provider=anthropic model=claude-fable-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=ERROR result=FAIL',
     ]);
@@ -219,7 +225,7 @@ describe('smoke failures say why, in closed tokens only', () => {
   });
 
   it('a pass, and a reply never read, print no reason line', () => {
-    expect(capture(['smoke-verdict', '--status-file', 's.json'], READY, OK_REPLY, { 's.json': TOKEN_ONLY }).output).not.toContain('subscription_smoke_reason');
+    expect(capture(['smoke-verdict', '--model', 'claude-opus-5-5', '--status-file', 's.json'], READY, OK_ATTESTED, { 's.json': TOKEN_ONLY }).output).not.toContain('subscription_smoke_reason');
     expect(capture(['smoke-verdict', '--status-file', 's.json'], READY, apiError(429, 'rate_limit_error'), { 's.json': API_KEY_METHOD }).output)
       .not.toContain('subscription_smoke_reason');
   });
@@ -237,6 +243,88 @@ describe('smoke failures say why, in closed tokens only', () => {
       expect(reasons, raw).toHaveLength(1);
       expect(reasons[0], raw).toMatch(REASON_LINE);
       expect(run.output, raw).not.toMatch(/FAKETESTNOTREAL|RESULT: COMPLETED|run:forged/u);
+    }
+  });
+});
+
+/**
+ * THE MODEL THAT ANSWERED THE SMOKE (founder, 2026-09-30: claude-opus-5-5; no automatic downgrade; STOP
+ * rather than substitute). Read as the runtime reads it (`hostedServedModel`): a producer is an entry with
+ * output, and it credits the requested model by its key or `canonicalModel`, exactly or as a dated build.
+ * SERVED_GREP and REASON_GREP are the EXACT `grep -E` patterns the founder workflow's evidence allowlist
+ * carries, so this output and that allowlist cannot drift apart.
+ */
+describe('the smoke names the model that answered, and fails closed on any other', () => {
+  const SERVED_GREP = new RegExp('^subscription_smoke_served provider=anthropic requested=[A-Za-z0-9._-]{1,64} served=(none|[A-Za-z0-9._-]{1,64}(,[A-Za-z0-9._-]{1,64}){0,7}) match=(EXACT|DATED_BUILD|MISMATCH|NONE)$', 'u');
+  const REASON_GREP = new RegExp('^subscription_smoke_reason provider=anthropic model=[A-Za-z0-9._-]{1,64} reason=(MODEL_NOT_ENTITLED_OR_NOT_FOUND|AUTH|USAGE_LIMIT|RATE_LIMITED|OVERLOADED|MAX_TURNS|UNEXPECTED_REPLY|UNREADABLE|SERVED_MODEL_MISMATCH|SERVED_MODEL_UNATTESTED|OTHER) http=([1-5][0-9]{2}|none) subtype=([a-z_]{1,40}|none)$', 'u');
+  const REQUESTED = 'claude-opus-5-5';
+  const usage = (entries: Record<string, Record<string, unknown>>) =>
+    JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'OK', modelUsage: entries });
+  const smoke = (raw: string) => capture(['smoke-verdict', '--model', REQUESTED, '--status-file', 's.json'], READY, raw, { 's.json': TOKEN_ONLY });
+
+  it.each([
+    [usage({ 'claude-opus-5-5': { outputTokens: 1 } }), { served: 'claude-opus-5-5', match: 'EXACT' }],
+    [usage({ 'claude-opus-5-5-20260915': { outputTokens: 1 } }), { served: 'claude-opus-5-5-20260915', match: 'DATED_BUILD' }],
+    [usage({ opus: { outputTokens: 1, canonicalModel: 'claude-opus-5-5' } }), { served: 'opus', match: 'EXACT' }],
+    [usage({ opus: { outputTokens: 1, canonicalModel: 'claude-opus-5-5-20260915' } }), { served: 'opus', match: 'DATED_BUILD' }],
+    [usage({ 'claude-opus-5-5': { outputTokens: 2 }, 'claude-haiku-4-5-20251001': { outputTokens: 30 } }), { served: 'claude-haiku-4-5-20251001,claude-opus-5-5', match: 'EXACT' }],
+    [usage({ 'claude-sonnet-5': { outputTokens: 5 } }), { served: 'claude-sonnet-5', match: 'MISMATCH' }],
+    // Nothing looser than exact or <requested>-YYYYMMDD.
+    [usage({ 'claude-opus-5-5-2026': { outputTokens: 1 } }), { served: 'claude-opus-5-5-2026', match: 'MISMATCH' }],
+    [usage({ 'claude-opus-5-5-20260915-beta': { outputTokens: 1 } }), { served: 'claude-opus-5-5-20260915-beta', match: 'MISMATCH' }],
+    [usage({ 'claude-opus-5-50': { outputTokens: 1 } }), { served: 'claude-opus-5-50', match: 'MISMATCH' }],
+    [usage({ 'xclaude-opus-5-5': { outputTokens: 1 } }), { served: 'xclaude-opus-5-5', match: 'MISMATCH' }],
+    // A model that produced nothing is not a producer; nothing produced is NONE.
+    [usage({ 'claude-opus-5-5': { outputTokens: 0 }, 'claude-sonnet-5': { outputTokens: 4 } }), { served: 'claude-sonnet-5', match: 'MISMATCH' }],
+    [usage({ 'claude-opus-5-5': { outputTokens: 0 } }), { served: 'none', match: 'NONE' }],
+    [OK_REPLY, { served: 'none', match: 'NONE' }],
+    ['{"type":"result","is_error":false,"result":"OK","modelUsage":[]}', { served: 'none', match: 'NONE' }],
+    ['not json', { served: 'none', match: 'NONE' }],
+  ])('%s', (raw, expected) => {
+    expect(check.smokeServedModel(raw, REQUESTED)).toEqual(expected);
+  });
+
+  it('an unsafe key is never echoed, and at most eight producers are listed', () => {
+    expect(check.smokeServedModel(usage({ 'claude opus; echo $CLAUDE_CODE_OAUTH_TOKEN': { outputTokens: 1 } }), REQUESTED)).toEqual({ served: 'unsafe', match: 'MISMATCH' });
+    const many = Object.fromEntries(Array.from({ length: 10 }, (_, index) => [`model-${String(index)}`, { outputTokens: 10 - index }]));
+    expect(check.smokeServedModel(usage(many), REQUESTED).served.split(',')).toHaveLength(8);
+  });
+
+  it('an exact OK from ANOTHER model fails closed: SERVED_MODEL_MISMATCH, and the verdict reads reply=OK result=FAIL', () => {
+    const run = smoke(usage({ 'claude-sonnet-5': { outputTokens: 1 } }));
+    expect(run.code).toBe(1);
+    expect(run.output.split('\n')).toEqual([
+      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=claude-sonnet-5 match=MISMATCH',
+      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=SERVED_MODEL_MISMATCH http=none subtype=success',
+      'subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=FAIL',
+    ]);
+  });
+
+  it('an exact OK that no model is credited with fails closed: SERVED_MODEL_UNATTESTED', () => {
+    const run = smoke(OK_REPLY);
+    expect(run.code).toBe(1);
+    expect(run.output).toContain('match=NONE');
+    expect(run.output).toContain('reason=SERVED_MODEL_UNATTESTED');
+    expect(run.output).toContain('reply=OK result=FAIL');
+  });
+
+  it('a dated build passes, and a helper model beside the requested one passes', () => {
+    for (const raw of [usage({ 'claude-opus-5-5-20260915': { outputTokens: 1 } }), usage({ 'claude-opus-5-5': { outputTokens: 2 }, 'claude-haiku-4-5-20251001': { outputTokens: 30 } })]) {
+      const run = smoke(raw);
+      expect(run.code, raw).toBe(0);
+      expect(run.output, raw).toContain('result=PASS');
+      expect(run.output, raw).not.toContain('subscription_smoke_reason');
+    }
+  });
+
+  it('every served and reason line matches the founder allowlist grep exactly, whatever the CLI wrote', () => {
+    const replies = [OK_ATTESTED, usage({ 'claude-sonnet-5': { outputTokens: 1 } }), OK_REPLY, apiError(529, 'overloaded_error'), 'garbage',
+      '{"is_error":true,"modelUsage":{"x y":{"outputTokens":1}}}'];
+    for (const raw of replies) {
+      const lines = smoke(raw).output.split('\n');
+      expect(lines.filter((line) => line.startsWith('subscription_smoke_served')), raw).toHaveLength(1);
+      for (const line of lines.filter((entry) => entry.startsWith('subscription_smoke_served'))) expect(line, raw).toMatch(SERVED_GREP);
+      for (const line of lines.filter((entry) => entry.startsWith('subscription_smoke_reason'))) expect(line, raw).toMatch(REASON_GREP);
     }
   });
 });

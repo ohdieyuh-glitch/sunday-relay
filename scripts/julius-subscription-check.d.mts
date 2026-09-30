@@ -41,6 +41,15 @@ export interface SubscriptionSmokeFailure {
 
 export declare function smokeFailureReason(raw: string): SubscriptionSmokeFailure;
 
+/** Which model answered the smoke, by the runtime's own crediting rule, and whether it is the one requested. */
+export interface SubscriptionSmokeServed {
+  /** The producers' `modelUsage` keys, largest first, each a plain label or `unsafe`, at most eight; or `none`. */
+  readonly served: string;
+  readonly match: 'EXACT' | 'DATED_BUILD' | 'MISMATCH' | 'NONE';
+}
+
+export declare function smokeServedModel(raw: string, requested: string): SubscriptionSmokeServed;
+
 export interface SubscriptionCheckIo {
   readonly print?: (line: string) => void;
   readonly stdin?: () => string;
