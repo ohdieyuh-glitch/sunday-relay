@@ -332,10 +332,11 @@ export interface JuliusEventWriter {
    * (`juliusLateSettlementDecision`): a row carrying cost is always written; a
    * FREE release after closes that were all released is SAME_MEANING and not
    * written; a FREE release after a close that says money may have gone is
-   * written with a `budget.settlement.contradicted` event (CONTRADICTED).
+   * written with a `budget.settlement.conflict` event (CONFLICT): two readings
+   * that disagree, neither shown false, both kept.
    * Optional: a store without it writes every release, as before.
    */
-  appendSettlementEvent?(event: JuliusOperationalEvent): Promise<'RECORDED' | 'DUPLICATE' | 'SAME_MEANING' | 'CONTRADICTED'>;
+  appendSettlementEvent?(event: JuliusOperationalEvent): Promise<'RECORDED' | 'DUPLICATE' | 'SAME_MEANING' | 'CONFLICT'>;
 }
 
 export interface JuliusTrajectoryWriter {

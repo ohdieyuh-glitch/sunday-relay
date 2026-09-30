@@ -177,7 +177,7 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
  /* budget */
  'budget.reserved','budget.settled','budget.denied',
  /* A late FREE release met a close that says money may have gone ((a2) step 3): both stand, and this names them. */
- 'budget.settlement.contradicted',
+ 'budget.settlement.conflict',
  /* human gates and autonomy */
  'approval.requested','approval.decided',
  /* recovery */

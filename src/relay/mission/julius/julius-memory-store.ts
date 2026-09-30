@@ -43,7 +43,7 @@
 import type { JuliusMemoryClaim } from './julius-memory-trust';
 import { juliusClaimStandingKey } from './julius-claim-ledger';
 import {
-  MAX_TASK_RECOVERIES, juliusLateSettlementDecision, juliusRecoverySettlementEvent, juliusSettlementContradictionEvent,
+  MAX_TASK_RECOVERIES, juliusLateSettlementDecision, juliusRecoverySettlementEvent, juliusSettlementConflictEvent,
   planJuliusRecovery, planJuliusRecoverySettlements,
   type JuliusOpenReservation, type JuliusPriorSettlement, type JuliusRecoveryAction, type JuliusRecoverySettlement,
 } from './julius-recovery';
@@ -243,7 +243,10 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     }
     const dispatched = eventLog
       .filter((event) => event.type === 'worker.dispatched' && event.runId === runId && event.taskId === taskId)
-      .map((event) => (typeof event.facts.attempt === 'number' ? event.facts.attempt : null));
+      .map((event) => ({
+        attempt: typeof event.facts.attempt === 'number' ? event.facts.attempt : null,
+        reservationId: typeof event.facts.reservationId === 'string' && event.facts.reservationId.length > 0 ? event.facts.reservationId : null,
+      }));
     const settlements = planJuliusRecoverySettlements(open, dispatched);
     settlements.forEach((settlement, index) => {
       recordEvent(juliusRecoverySettlementEvent({ runId, projectId, taskId, reservation: open[index]!, settlement, occurredAt: now }));
@@ -776,9 +779,9 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       const decision = juliusLateSettlementDecision({ released: event.facts.released === true }, prior);
       if (decision === 'SAME_MEANING') return 'SAME_MEANING';
       recordEvent(event);
-      if (decision === 'CONTRADICTION') {
-        recordEvent(juliusSettlementContradictionEvent({ release: event, prior }));
-        return 'CONTRADICTED';
+      if (decision === 'CONFLICT') {
+        recordEvent(juliusSettlementConflictEvent({ release: event, prior }));
+        return 'CONFLICT';
       }
       return 'RECORDED';
     },

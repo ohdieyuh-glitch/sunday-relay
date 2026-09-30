@@ -493,7 +493,7 @@ export class JuliusExecutionCoordinator {
        * recovery that took the task first refuses it here, before anything is
        * sent: this attempt is over, and its hold is released as spending nothing.
        */
-      const owned=await this.bookkeeping(()=>this.handoff(request,worker));
+      const owned=await this.bookkeeping(()=>this.handoff(request,worker,reservationId));
       if(!owned)throw new JuliusDispatchError('CANCELLED',false,'This attempt no longer owns its task, so nothing was dispatched.','lease_lost',{runtimeStarted:false});
       /**
        * AND AN ABORT THAT LANDED WHILE THE HANDOFF WAS WRITTEN STOPS IT HERE (F4).
@@ -714,10 +714,15 @@ export class JuliusExecutionCoordinator {
    */
   /** `suffix` distinguishes several events of one type from one operation — one per refused evidence item. */
   private event(request:JuliusExecutionRequest,type:JuliusExecutionEventType,payload:Record<string,unknown>,suffix?:string){return this.ports.recordEvent({runId:request.claim.runId,projectId:request.claim.projectId,taskId:request.claim.taskId,type,idempotencyKey:`${request.operationId}:${type}${suffix===undefined?'':`:${suffix}`}`,payload:typeof request.attempt==='number'?{...payload,attempt:request.attempt}:payload});}
-  /** `worker.dispatched`, fenced where the ports can fence it: the same key and facts as `event` writes. */
-  private async handoff(request:JuliusExecutionRequest,worker:JuliusWorker):Promise<boolean>{
-    const payload=typeof request.attempt==='number'?{workerId:worker.workerId,attempt:request.attempt}:{workerId:worker.workerId};
-    if(this.ports.recordHandoff===undefined){await this.event(request,'worker.dispatched',{workerId:worker.workerId});return true;}
+  /**
+   * `worker.dispatched`, fenced where the ports can fence it: the same key and facts as `event` writes.
+   * IT NAMES ITS RESERVATION ((a2) step 2). One admission can hold several reservations (a reroute calls
+   * the coordinator again under the same attempt), so recovery reads "was THIS reservation handed?" from
+   * the handoff that names it, never from the attempt alone.
+   */
+  private async handoff(request:JuliusExecutionRequest,worker:JuliusWorker,reservationId:string):Promise<boolean>{
+    const payload=typeof request.attempt==='number'?{workerId:worker.workerId,attempt:request.attempt,reservationId}:{workerId:worker.workerId,reservationId};
+    if(this.ports.recordHandoff===undefined){await this.event(request,'worker.dispatched',{workerId:worker.workerId,reservationId});return true;}
     return this.ports.recordHandoff({runId:request.claim.runId,projectId:request.claim.projectId,taskId:request.claim.taskId,idempotencyKey:`${request.operationId}:worker.dispatched`,payload,leaseGeneration:request.claim.leaseGeneration});
   }
 }
