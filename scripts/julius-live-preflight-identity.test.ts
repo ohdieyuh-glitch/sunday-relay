@@ -267,7 +267,10 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
       .rejects.toThrow('tool_dispatch_claim_half_scoped');
     await expect(tools.claimDispatch({ claimedBy: 'julius-live', now, claimedUntil, limit: 16, projectId: mine.projectId }), 'a project named without an invocation')
       .rejects.toThrow('tool_dispatch_claim_half_scoped');
-    expect(await stateOf(theirsId), 'the half-scoped claims took nothing').toEqual({ state: 'AUTHORIZED', dispatch_generation: '0' });
+    // An empty name is a name: compared, it matches no row, so it narrows a claim to nothing.
+    expect(await tools.claimDispatch({ claimedBy: 'julius-live', now, claimedUntil, limit: 16, invocationId: '', projectId: mine.projectId }), 'an empty invocation id').toEqual([]);
+    expect(await tools.claimDispatch({ claimedBy: 'julius-live', now, claimedUntil, limit: 16, invocationId: theirsId, projectId: '' }), 'an empty project').toEqual([]);
+    expect(await stateOf(theirsId), 'the half-scoped and empty claims took nothing').toEqual({ state: 'AUTHORIZED', dispatch_generation: '0' });
     expect(await stateOf(siblingId)).toEqual({ state: 'AUTHORIZED', dispatch_generation: '0' });
     const theirClaim = await tools.claimDispatch({ claimedBy: 'julius-live-other', now, claimedUntil, limit: 16, invocationId: theirsId, projectId: theirs.projectId });
     expect(theirClaim.map((entry) => entry.invocation.invocationId), 'named with its own project, the same invocation is claimed').toEqual([theirsId]);
