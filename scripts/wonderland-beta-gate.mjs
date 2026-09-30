@@ -172,12 +172,12 @@ function loadEvidence(dir) {
     if (nested.length !== 1) return { ...empty, source: `no julius-live-evidence bundle under ${root}` };
     root = nested[0];
   }
-  return { present: true, source: root, root, ...readers(root) };
+  return { present: true, source: root, root, ...readers(root, { dumped: true }) };
 }
 
 /**
- * `null` MEANS THE BUNDLE DOES NOT SAY, and one of the two ways it can not say
- * is by saying so.
+ * `null` MEANS THE BUNDLE DOES NOT SAY, and there are three ways a file can
+ * not say while looking as though it does.
  *
  * `julius-live-evidence-dump.sh` writes the literal `unavailable` into a file
  * whose query it could not run — that is how free dry runs #1 and #2 shipped
@@ -187,30 +187,90 @@ function loadEvidence(dir) {
  * was EMPTY. An empty Project Brain and an unreadable one are opposite facts,
  * and reporting the first for the second is exactly the substitution this
  * product exists to refuse.
+ *
+ * ZERO BYTES IS NOT EMPTY. `dump` redirects psql into the file before psql has
+ * said anything, so a dump killed at that moment (a cancelled job, a full disk,
+ * a runner torn down) leaves a file of zero bytes, and so does a listing whose
+ * command failed behind `|| true`. It used to read as a table with no rows: a
+ * zero-byte `settlement-integrity.tsv` read SETTLEMENT INTEGRITY PASS, a
+ * zero-byte `failures.tsv` read the three drill rows NOT EXERCISED (so a drill
+ * stood in) and PERMISSIONS PASS. A file that holds nothing — zero bytes, or
+ * only whitespace — is UNREADABLE, never empty.
+ *
+ * AND A TABLE IS EMPTY ONLY WHEN THE DUMP SAYS SO. psql ends every result it
+ * finishes writing with its own footer, `(N rows)`, and writes it last, so the
+ * footer is the dump's statement that the table is complete and how many rows
+ * it holds. The rule, for every table the dump writes (`dumped`):
+ *
+ *   header, rows, `(N rows)`   read, when it holds at least N rows. A cell of
+ *                              free text can carry a newline, which only ever
+ *                              adds lines; fewer rows than the dump said it
+ *                              wrote is a table cut short.
+ *   header, `(0 rows)`         the dump's own ZERO, read as the fact it is.
+ *                              What a zero means is then each row's question,
+ *                              and no row passes on a zero it needs rows from:
+ *                              no settlement listed twice is SETTLEMENT
+ *                              INTEGRITY's healthy answer, while zero tool
+ *                              invocations is PERMISSIONS UNKNOWN, zero runs is
+ *                              no run, zero tasks is a run created with none.
+ *   anything else              UNREADABLE: no footer (the dump never finished
+ *                              the file — a header with nothing after it is
+ *                              exactly what a killed dump leaves), a footer
+ *                              that is not the last line, or rows after
+ *                              `(0 rows)`.
+ *
+ * A drill's attestation ledger is not a dump; it is read with the zero-byte
+ * rule and without the footer rule.
  */
-function readers(root) {
-  const file = (name) => {
+const FOOTER = /^\((\d+) rows?\)$/u;
+function readers(root, { dumped = false } = {}) {
+  const raw = (name) => {
     if (root === null || !/^[A-Za-z0-9._-]+$/u.test(name)) return null;
     const path = join(root, name);
-    if (!existsSync(path)) return null;
+    if (!existsSync(path) || !statSync(path).isFile()) return null;
     const text = readFileSync(path, 'utf8');
-    return text.trim() === 'unavailable' ? null : text;
+    const trimmed = text.trim();
+    return trimmed === '' || trimmed === 'unavailable' ? null : text;
   };
-  /** Header and rows. The trailing `(n rows)` line psql writes is not a row. */
+  const parsed = new Map();
+  /** Header and rows, or null when the table is not readable by the rule above. */
   const table = (name) => {
-    const text = file(name);
+    if (parsed.has(name)) return parsed.get(name);
+    const text = raw(name);
+    let result = null;
+    if (text !== null) {
+      const lines = text.split('\n').map((line) => line.replace(/\r$/u, '')).filter((line) => line.length > 0);
+      let body = null;
+      if (!dumped) {
+        body = lines.filter((line) => !FOOTER.test(line));
+      } else {
+        const footer = FOOTER.exec(lines.at(-1) ?? '');
+        const before = lines.slice(0, -1);
+        if (footer !== null && !before.some((line) => FOOTER.test(line)) && before.length > 0) {
+          const stated = Number(footer[1]);
+          const held = before.length - 1;
+          if (stated === 0 ? held === 0 : held >= stated) body = before;
+        }
+      }
+      if (body !== null && body.length > 0) {
+        const header = body[0].split('\t');
+        result = {
+          header,
+          rows: body.slice(1).map((line) => {
+            const cells = line.split('\t');
+            return Object.fromEntries(header.map((key, index) => [key, cells[index] ?? '']));
+          }),
+        };
+      }
+    }
+    parsed.set(name, result);
+    return result;
+  };
+  /** The text of a readable file; a dumped TABLE that is not readable by the rule above is not readable as text either. */
+  const file = (name) => {
+    const text = raw(name);
     if (text === null) return null;
-    const lines = text.split('\n').map((line) => line.replace(/\r$/u, ''))
-      .filter((line) => line.length > 0 && !/^\(\d+ rows?\)$/.test(line));
-    if (lines.length === 0) return { header: [], rows: [] };
-    const header = lines[0].split('\t');
-    return {
-      header,
-      rows: lines.slice(1).map((line) => {
-        const cells = line.split('\t');
-        return Object.fromEntries(header.map((key, index) => [key, cells[index] ?? '']));
-      }),
-    };
+    return dumped && name.endsWith('.tsv') && table(name) === null ? null : text;
   };
   const rows = (name) => table(name)?.rows ?? [];
   /** The column names a readable table was dumped with, or null when it is not readable. */
@@ -260,10 +320,16 @@ const acceptedRuns = (ev) => {
 
 /**
  * THE ENTRYPOINT'S OWN WORD ON HOW A RUN ENDED: `RESULT: <state>[ (stalled …)]
- * after N ticks`, followed by `  run: <id>` (relay-bridge/julius-live-mission.ts).
- * A bundle from before the `run:` line, holding one RESULT and one accepted
- * run, attributes it to that run. Anything else is no answer — never the
- * first of several.
+ * after N ticks`, followed by `  run: <id>` (relay-bridge/julius-live-mission.ts
+ * prints the `run:` line two lines below, after at most `cause:` and `ticks:`).
+ *
+ * ONE ANSWER OR NONE. A named `RESULT: COMPLETED` beside an unattributed
+ * `RESULT: FAILED` used to read VERIFIED COMPLETION PASS: the unattributed line
+ * was simply not counted. A line that says `RESULT:` and names no run could be
+ * about this run, so a bundle carrying one cannot say how this run ended — and
+ * neither can one carrying two answers for it that disagree. Both are
+ * AMBIGUOUS, read as no answer (`null`), never as the one that flatters. A
+ * `run:` line belongs to the nearest RESULT above it, never to one further up.
  */
 const RESULT_LINE = /^RESULT: ([A-Z_]+)( \(stalled before terminal state\))?( after \d+ ticks)?$/u;
 function resultsOf(ev) {
@@ -272,20 +338,30 @@ function resultsOf(ev) {
   const lines = text.split('\n').map((line) => line.replace(/\r$/u, ''));
   const found = [];
   lines.forEach((line, index) => {
+    if (!line.startsWith('RESULT:')) return;
     const match = RESULT_LINE.exec(line);
-    if (match === null) return;
-    const run = lines.slice(index + 1, index + 4).map((next) => /^\s+run: (\S+)$/u.exec(next)?.[1]).find((value) => value !== undefined) ?? null;
-    found.push({ state: match[1], stalled: match[2] !== undefined, run });
+    let run = null;
+    for (const next of lines.slice(index + 1, index + 4)) {
+      if (next.startsWith('RESULT:')) break;
+      const named = /^\s+run: (\S+)$/u.exec(next);
+      if (named !== null) { run = named[1]; break; }
+    }
+    // A RESULT line of another shape (`RESULT: BLOCKED — …`) is still a RESULT
+    // line: it has no terminal state to read, and it is never attributed.
+    found.push(match === null
+      ? { state: null, stalled: false, run: null, line }
+      : { state: match[1], stalled: match[2] !== undefined, run, line });
   });
   return found;
 }
+/** This run's one RESULT, or null when there is none or the bundle's RESULT lines are ambiguous about it. */
 function resultFor(ev, runId) {
   const results = resultsOf(ev);
+  if (results.some((result) => result.run === null)) return null;
   const named = results.filter((result) => result.run === runId);
-  if (named.length === 1) return named[0];
-  const accepted = acceptedRuns(ev);
-  if (named.length === 0 && results.length === 1 && results[0].run === null && accepted.length === 1 && accepted[0] === runId) return results[0];
-  return null;
+  if (named.length === 0) return null;
+  const agreed = named.every((result) => result.state === named[0].state && result.stalled === named[0].stalled);
+  return agreed ? named[0] : null;
 }
 
 function readManifest(ev) {
@@ -345,9 +421,12 @@ function bindingOf(ev) {
   if (stray.length > 0) return unbound(`the entrypoint accepted ${stray.join(', ')} while the manifest names ${run.run_id}`);
   const elsewhere = resultsOf(ev).filter((result) => result.run !== null && result.run !== run.run_id);
   if (elsewhere.length > 0) return unbound(`the entrypoint's RESULT names ${elsewhere.map((result) => result.run).join(', ')} while the manifest names ${run.run_id}`);
+  // A table the bundle cannot read (absent, `unavailable`, zero bytes, cut
+  // short) has no rows to mis-scope, and every row that needs it reads UNKNOWN
+  // on its own; a READABLE one must name its run.
   const unscoped = RUN_SCOPED_FILES.filter((name) => {
     const header = ev.header(name);
-    return header !== null && header.length > 0 && !header.includes('run_id');
+    return header !== null && !header.includes('run_id');
   });
   if (unscoped.length > 0) {
     return unbound(`${unscoped.join(', ')} ${unscoped.length === 1 ? 'carries' : 'carry'} no run_id column, so ${unscoped.length === 1 ? 'its' : 'their'} rows cannot be tied to run ${run.run_id}`);
@@ -627,7 +706,7 @@ const WORK_ROLES = new Set(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REV
 
 /** The first of `names` this bundle cannot read, or null when every one is readable. */
 const unreadable = (ev, ...names) => names.find((name) => ev.file(name) === null) ?? null;
-const cannotRead = (name, what) => unknown(`${name} is unreadable (absent, or the dump wrote \`unavailable\`), so ${what} is unknown`);
+const cannotRead = (name, what) => unknown(`${name} is unreadable (absent, empty, cut short, or the dump wrote \`unavailable\`), so ${what} is unknown`);
 const count = (value) => (/^\d+$/u.test(value ?? '') ? Number(value) : null);
 /** An instant the dump or the runtime wrote (`2026-09-29 12:33:45.141+00`, ISO), as milliseconds, or null. */
 const instant = (value) => {
@@ -688,6 +767,8 @@ const REPAIR_REFUSAL = /^(?:REPAIR_(?:UNROUTABLE|BUDGET_DENIED|ROUNDS_EXHAUSTED|
 const BOUNDARY_REFUSALS = new Set(['executor_scope_refused', 'executor_authorization_refused', 'executor_security_failure', 'executor_invocation_unauthorized']);
 const OPEN_INVOCATION_STATES = new Set(['REQUESTED', 'AUTHORIZED', 'DISPATCHING', 'RUNNING']);
 const EXECUTED_INVOCATION_STATES = new Set(['SUCCEEDED', 'FAILED', 'TIMED_OUT']);
+/** Every state `julius_tool_invocations.state` may hold (migration 019): open, executed, DENIED and CANCELLED. */
+const KNOWN_INVOCATION_STATES = new Set([...OPEN_INVOCATION_STATES, ...EXECUTED_INVOCATION_STATES, 'DENIED', 'CANCELLED']);
 
 /**
  * `path: true` marks a capability on the creation path a mission must walk to
@@ -1064,7 +1145,12 @@ const CAPABILITIES = [
        */
       const result = resultFor(ev, ev.run.run_id);
       if (result === null) {
-        return unknown(`${runLabel(ev)} reads COMPLETED in runs.tsv, but the entrypoint's RESULT line for it is absent, unreadable or ambiguous, so the job's own account of how it ended is missing`);
+        const lines = resultsOf(ev);
+        const why = lines.length === 0 ? 'absent or unreadable'
+          : lines.some((line) => line.run === null) ? `ambiguous: ${lines.filter((line) => line.run === null).map((line) => `\`${line.line}\``).join(', ')} names no run, so it could be this run's`
+            : lines.some((line) => line.run === ev.run.run_id) ? `ambiguous: its RESULT lines disagree (${lines.filter((line) => line.run === ev.run.run_id).map((line) => `\`${line.line}\``).join(', ')})`
+              : 'absent (no RESULT line names it)';
+        return unknown(`${runLabel(ev)} reads COMPLETED in runs.tsv, but the entrypoint's RESULT line for it is ${why}, so the job's own account of how it ended is missing`);
       }
       if (result.state !== 'COMPLETED' || result.stalled) {
         return failed(`the entrypoint reported RESULT: ${result.state}${result.stalled ? ' (stalled)' : ''} for ${runLabel(ev)}, while runs.tsv says COMPLETED`);
@@ -1326,15 +1412,63 @@ const CAPABILITIES = [
           return failed(`${unsigned.length} tool invocation(s) settled with no executor receipt scope of their own (${unsigned.map((row) => `${row.invocation_id} ${row.state}`).join(', ')}): Julius recorded an effect the independent executor holds no receipt for`);
         }
       }
-      // THEN WHAT THE BUNDLE CANNOT SAY, which is never a pass.
-      const gap = unreadable(ev, 'worker-diagnostics.tsv', 'receipt-ids.txt', 'scope.tsv', 'evidence.tsv');
+      /**
+       * THEN WHAT THE BUNDLE CANNOT SAY, which is never a pass. Every input a
+       * FAILURE above is read from is on this list: an unreadable
+       * `failures.tsv` hid the terminal sweep's UNKNOWN_OUTCOME closure and
+       * read PASS where the readable one reads FAIL. `tasks.tsv` says which
+       * coder tasks must have had their change sets checked.
+       */
+      const gap = unreadable(ev, 'worker-diagnostics.tsv', 'receipt-ids.txt', 'scope.tsv', 'evidence.tsv', 'failures.tsv', 'tasks.tsv');
       if (gap !== null) return cannotRead(gap, 'whether the boundary held');
-      if (invocations.length === 0) {
-        return unknown(`no tool invocation of ${runLabel(ev)} is recorded, so no effect was shown to run inside the boundary — a bundle that checked nothing cannot pass`);
+      /**
+       * SOMETHING MUST HAVE RUN INSIDE THE BOUNDARY. Zero invocations, or only
+       * invocations that never executed (CANCELLED before dispatch, the
+       * sweep's closures), used to read "0 tool invocation(s) … ran under an
+       * executor receipt scope": a pass on nothing. And a state the migration
+       * does not define is not one this row can vouch for.
+       */
+      const strange = invocations.filter((row) => !KNOWN_INVOCATION_STATES.has(row.state));
+      if (strange.length > 0) {
+        return unknown(`${strange.map((row) => `${row.invocation_id} ${row.state || '(no state)'}`).join(', ')} ${strange.length === 1 ? 'is in a state' : 'are in states'} no tool invocation can be in, so what ${strange.length === 1 ? 'it' : 'they'} did is unknown`);
       }
-      const unchecked = scope.filter((row) => row.event_type === 'julius.coder.implementation.recorded' && row.scope_checked === 'false');
-      if (unchecked.length > 0) {
-        return unknown(`${[...new Set(unchecked.map((row) => row.task_id))].join(', ')} changed the workspace and ${unchecked.length === 1 ? 'its change set was' : 'their change sets were'} never checked against a scope, so a forbidden edit could not have been seen`);
+      if (executed.length === 0) {
+        return unknown(invocations.length === 0
+          ? `no tool invocation of ${runLabel(ev)} is recorded, so no effect was shown to run inside the boundary — a bundle that checked nothing cannot pass`
+          : `none of the ${invocations.length} tool invocation(s) of ${runLabel(ev)} executed (${[...new Set(invocations.map((row) => row.state))].join(', ')}), so no effect was shown to run inside the boundary — a bundle that checked nothing cannot pass`);
+      }
+      /**
+       * EVERY CHANGE SET THE CODER LEFT WAS CHECKED AGAINST A SCOPE — shown, not
+       * assumed. "Unchecked" used to fire only on an explicit
+       * `scope_checked=false`, so a `scope.tsv` holding no row at all read PASS
+       * beside a coder that changed the workspace, and so did the path where
+       * Julius could not read the coder's implementation
+       * (`coder.report.refused`), which writes no implementation row. Now a
+       * coder task that SUCCEEDED must carry an implementation row whose change
+       * set was captured and checked; a coder task whose implementation could
+       * not be read, or whose attempt's workspace could not be captured, is
+       * unknown. A FAILED coder task that reported no implementation at all
+       * changed nothing Julius could have checked.
+       */
+      const coders = ev.rows('tasks.tsv').filter((row) => row.role === 'CODING_AGENT' && (row.state === 'SUCCEEDED' || row.state === 'FAILED'));
+      const uncheckable = [];
+      for (const coder of coders) {
+        const mine = scope.filter((row) => row.task_id === coder.task_id);
+        const implementations = mine.filter((row) => row.event_type === 'julius.coder.implementation.recorded');
+        if (mine.some((row) => row.event_type === 'julius.coder.report.refused') && implementations.length === 0) {
+          uncheckable.push(`${coder.task_id}'s implementation could not be read (coder.report.refused), so what it changed was never checked`);
+        } else if (coder.state === 'SUCCEEDED' && implementations.length === 0) {
+          uncheckable.push(`${coder.task_id} SUCCEEDED with no implementation record in scope.tsv, so its change set was never shown checked against a scope`);
+        } else if (implementations.some((row) => row.scope_checked !== 'true')) {
+          uncheckable.push(`${coder.task_id}'s change set was not checked against a scope (scope_checked ${implementations.map((row) => row.scope_checked || 'empty').join(', ')})`);
+        } else if (implementations.some((row) => row.workspace_captured === 'false')) {
+          uncheckable.push(`${coder.task_id}'s workspace was not captured, so its change set is unknown rather than clean`);
+        } else if (mine.some((row) => row.event_type === 'julius.coder.attempt.workspace' && row.attempt_captured === 'false') && implementations.length === 0) {
+          uncheckable.push(`${coder.task_id}'s attempt left a workspace nobody captured, so what it changed is unknown`);
+        }
+      }
+      if (uncheckable.length > 0) {
+        return unknown(`${uncheckable.join('; ')}: a forbidden edit could not have been seen`);
       }
       const unfinished = executed.filter((row) => row.state !== 'SUCCEEDED');
       if (unfinished.length > 0 && !(ev.header('tool-invocations.tsv') ?? []).includes('exit_code')) {
@@ -1366,8 +1500,11 @@ const CAPABILITIES = [
      * `settlement-integrity.tsv`. Any row there FAILS this capability, and names
      * the reservation.
      *
-     * An unreadable file (absent, or the dump's `unavailable`) is UNKNOWN, never
-     * a pass: "no duplicate was found" and "nobody looked" are opposite facts.
+     * An unreadable file (absent, the dump's `unavailable`, zero bytes, or a
+     * header the dump never finished with its `(N rows)` footer) is UNKNOWN,
+     * never a pass: "no duplicate was found" and "nobody looked" are opposite
+     * facts. A header and `(0 rows)` is the dump saying it looked and found
+     * none, and is the healthy answer.
      * A drill cannot stand in for it (`missionRequired`), because the question is
      * what THIS run's ledger says. The drill ledger's own rows are untouched: this
      * is a row of its own, and a drill evaluation reads it as UNKNOWN, like every
@@ -1377,7 +1514,7 @@ const CAPABILITIES = [
     files: ['src/relay/mission/julius/julius-execution-coordinator.ts', 'src/relay/mission/julius/julius-task-pipeline.ts', 'src/relay/mission/julius/julius-cost-accounting.ts'],
     prove: (ev) => {
       if (ev.file('settlement-integrity.tsv') === null) {
-        return unknown('this bundle carries no readable settlement-integrity dump (absent, or the dump wrote `unavailable`), so whether any reservation was settled twice is unknown');
+        return unknown('this bundle carries no readable settlement-integrity dump (absent, empty, cut short, or the dump wrote `unavailable`), so whether any reservation was settled twice is unknown');
       }
       const duplicates = ev.rows('settlement-integrity.tsv');
       if (duplicates.length > 0) {
