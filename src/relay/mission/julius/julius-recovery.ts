@@ -23,6 +23,18 @@ export interface JuliusRecoveryCandidate {
    * accepted (an accepted result would have ended the lease). Such an attempt
    * may have been PAID FOR, and its answer never reached the record. Additive:
    * omitted behaves exactly as before.
+   *
+   * KEYED BY ATTEMPT, NOT BY LEASE GENERATION, and that has one conservative
+   * consequence (the review of fd588ed4, finding 2, its probe R3). `attempt` is
+   * raised only by admission, so between a re-claim and its admission the row
+   * still names the PREVIOUS attempt. A task whose handed attempt failed
+   * retryably, was re-claimed, and was lost before admission therefore reads as
+   * handed, and it is FAILED as HANDED_OUTCOME_UNKNOWN instead of requeued: a
+   * spurious mission failure, never a double spend. Keying by the generation
+   * (it would have to ride on the handoff's facts) would requeue it; that waits
+   * until something needs it. The reservations recovery closes are NOT exposed
+   * to this: a reservation is written only after admission, so the attempt it
+   * names is its own.
    */
   readonly handed?: boolean;
 }
