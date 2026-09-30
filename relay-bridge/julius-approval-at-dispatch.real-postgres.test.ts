@@ -36,9 +36,10 @@ import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
  *     store's `deniedApprovals`: FAILED as APPROVAL_DENIED, announced, and
  *     nothing dispatched;
  *   - admission is the last check before money (F3): a run paused after its
- *     task was claimed spends no attempt, and an admission that meets a pause
- *     still being written WAITS for it (the run row is read FOR SHARE) and then
- *     refuses;
+ *     task was claimed spends no attempt, nor does one already CANCELLED,
+ *     FAILED, COMPLETED or BLOCKED while its task is still ACTIVE (the cancel
+ *     window), and an admission that meets a pause still being written WAITS
+ *     for it (the run row is read FOR SHARE) and then refuses;
  *   - one tick of a gated run writes the PENDING approval and moves the run to
  *     BLOCKED in one transaction, as RECORDED transitions (READY -> EXECUTING
  *     -> BLOCKED, `APPROVAL_REQUIRED`, with their events), hands the task back
@@ -241,6 +242,24 @@ suite('the C.A.R.D. gate at dispatch and the claim hold over a real PostgreSQL',
     expect(await admission, 'the pause committed first, and the admission saw it').toEqual({ held: true, runState: 'PAUSED', pendingApprovals: 0, deniedApprovals: 0 });
     const spent = await pool.query<{ attempt: number }>('SELECT attempt FROM relay_wonderland.julius_tasks WHERE task_id=$1', [task!.taskId]);
     expect(spent.rows[0]!.attempt).toBe(0);
+  });
+
+  it('ADMISSION (F3): a run already over, or BLOCKED, while its task is still ACTIVE refuses the admission (the cancel window)', async () => {
+    // `cancelJuliusRun` moves the RUN first and sweeps its tasks after, so a claimant can reach
+    // admission with its task still ACTIVE under a run that is already CANCELLED. Every state the
+    // claim would not offer is held here, not only PAUSED: the review's mutant R3 held only PAUSED
+    // and every other case in this suite passed it.
+    for (const state of ['CANCELLED', 'FAILED', 'COMPLETED', 'BLOCKED'] as const) {
+      const run = await created();
+      const owner = `admission-proof-${nonce()}`;
+      const [task] = await claimAs(owner, run.projectId);
+      expect(task?.taskId).toBe(run.planTaskId);
+      await pool.query('UPDATE relay_wonderland.julius_runs SET state=$2 WHERE run_id=$1', [run.runId, state]);
+      const answer = await runs.admitTask({ taskId: task!.taskId, owner, leaseGeneration: task!.leaseGeneration, now: new Date().toISOString() });
+      expect(answer, `a ${state} run refuses the admission`).toEqual({ held: true, runState: state, pendingApprovals: 0, deniedApprovals: 0 });
+      const spent = await pool.query<{ attempt: number; state: string }>('SELECT attempt, state FROM relay_wonderland.julius_tasks WHERE task_id=$1', [task!.taskId]);
+      expect(spent.rows[0], `${state}: nothing spent, and the task is still ACTIVE under its lease`).toEqual({ attempt: 0, state: 'ACTIVE' });
+    }
   });
 
   it('THE GATE: one tick writes the PENDING approval and a RECORDED move to BLOCKED; a grant dispatches exactly the gated work', async () => {

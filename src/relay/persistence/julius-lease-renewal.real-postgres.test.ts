@@ -56,7 +56,8 @@ suite('Julius lease renewal on real PostgreSQL', () => {
     });
     const claim = claimed.find((entry) => entry.taskId === taskId);
     expect(claim, `${owner} claims ${taskId}`).toBeDefined();
-    expect(await repo.admitTask({ taskId, owner, leaseGeneration: claim!.leaseGeneration, now: time.clock.now() })).not.toBeNull();
+    // An attempt number: a held admission (an object) would not be one.
+    expect(await repo.admitTask({ taskId, owner, leaseGeneration: claim!.leaseGeneration, now: time.clock.now() })).toBeTypeOf('number');
     return claim!;
   };
 

@@ -854,8 +854,13 @@ Three counters now, each meaning one thing:
 | `attempt` | `admitTask` only, once the scheduler has decided to run the task | `MAX_TASK_ATTEMPTS` — the provider/execution retry budget |
 | `recoveries` | the recovery sweep, when it requeues an expired lease | `MAX_TASK_RECOVERIES` — crash churn reclaimed by the sweep |
 
-`admitTask` is one atomic statement conditioned on the caller's own lease, and
-it runs immediately before provider-capable work begins. That is what makes the
+`admitTask` is one serializable transaction conditioned on the caller's own
+lease, and it runs immediately before provider-capable work begins. It reads the
+run under a share lock, with its approvals, and has three answers: the attempt
+it spent; "held", when the run is no longer claimable or holds a PENDING or
+DENIED approval, which spends nothing (the run loop then hands the task back by
+the dispatch boundary's rule); or `null`, when the lease moved. That is what
+makes the
 crash semantics honest in both directions: a crash after it has spent an
 attempt, because a worker may genuinely have been dispatched; a crash before it
 has spent none, because nothing could have been. A caller whose lease moved
