@@ -21,6 +21,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Pool } from 'pg';
 
+import { drillDrivenFiles } from './julius-drill-closure.mjs';
+
 /**
  * THE COLUMNS THE BETA GATE READS, restated here rather than imported from it.
  *
@@ -131,6 +133,13 @@ export function writeAttestation(input: {
   readonly capability: string;
   readonly drill: string;
   readonly exercised: readonly string[];
+  /**
+   * Every OTHER file the drill drove, beyond the row's own probe files. One
+   * row each, so the gate can name the file that moved when the proof goes
+   * stale. {@link writeDrillAttestation} derives it; only a test of the ledger
+   * format itself passes it by hand.
+   */
+  readonly driven?: readonly string[];
   readonly infrastructure: string;
   readonly transcriptFile: string;
   readonly record: DrillRecord;
@@ -139,7 +148,8 @@ export function writeAttestation(input: {
   mkdirSync(input.outDir, { recursive: true });
   writeFileSync(join(input.outDir, input.transcriptFile), `${input.record.lines.join('\n')}\n`);
   const recordedAt = new Date().toISOString();
-  const rows = input.exercised.map((path) => [
+  const attested = [...new Set([...input.exercised, ...(input.driven ?? [])])].sort();
+  const rows = attested.map((path) => [
     input.capability,
     input.drill,
     input.verified ? 'VERIFIED' : 'FAILED',
@@ -177,4 +187,112 @@ export function writeAttestation(input: {
   }
   const all = [...kept, ...rows];
   writeFileSync(ledger, `${[header, ...all, `(${all.length} rows)`].join('\n')}\n`);
+}
+
+/**
+ * THE ATTESTATION A DRILL FILES: its row's probe files AND every file it drove.
+ *
+ * The probe files alone let a drill stay "proven" while the pipeline, the
+ * repositories and the composition it drove through were rewritten underneath
+ * it. The driven set is read from the tree by the same reader the Beta Gate
+ * uses (`julius-drill-closure.mjs`), from the drill's own npm command, so the
+ * gate can demand exactly this set back. A drill that cannot say what it drove
+ * files nothing and fails: an attestation that covers less than it claims is
+ * worse than none.
+ */
+export function writeDrillAttestation(input: Omit<Parameters<typeof writeAttestation>[0], 'driven'>): void {
+  const driven = drillDrivenFiles(input.repoRoot, input.drill);
+  if ('error' in driven) throw new Error(`drill_driven_files_unknown: ${driven.error}`);
+  writeAttestation({ ...input, driven: driven.files });
+}
+
+/**
+ * A DRILL WRITES ONLY INTO A DATABASE THAT IS A THROWAWAY BY NAME.
+ *
+ * Every drill bootstraps missions whose three providers are scripted fakes and
+ * drives them to COMPLETED. On this project's workstation `DATABASE_URL` is
+ * inherited from the user profile and names Julius's LIVE store
+ * (`…/julius`), and on a runner `…/julius` is the paid mission's own database —
+ * so a drill that took whatever `DATABASE_URL` said would plant completed
+ * fake-provider missions exactly where a real mission's evidence is read from.
+ *
+ * So the target is accepted only when its database is NAMED as a drill's:
+ *
+ *   julius_<drill>_drill   what CI, the paid workflow and the local launcher
+ *                          create per drill (`julius_${drill//-/_}`) and pass
+ *                          as `${DATABASE_URL%/*}/$db` — accepted without any
+ *                          workflow change;
+ *   juliusdrill… / julius_drill_…
+ *                          the fresh databases the drill test suites create;
+ *
+ * or when it is exactly the database `JULIUS_TEST_DATABASE_URL` names, which is
+ * this repository's declared throwaway. `julius` itself is refused by name
+ * whatever else is set. The name is necessary, not sufficient: before anything
+ * is written the drill also refuses a database holding any run but its own
+ * ({@link foreignJuliusRuns}).
+ */
+export const JULIUS_STORE_DATABASE = 'julius';
+export const JULIUS_DRILL_DATABASE_NAME = /^(?:julius_[a-z0-9_]+_drill|julius_?drill[a-z0-9_]*)$/u;
+
+export type DrillDatabaseTarget =
+  | { readonly ok: true; readonly url: string; readonly database: string; readonly basis: string }
+  | { readonly ok: false; readonly code: string; readonly reason: string };
+
+const postgresDatabase = (value: string): { readonly host: string; readonly port: string; readonly database: string } | null => {
+  let url: URL;
+  try { url = new URL(value); } catch { return null; }
+  if (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:') return null;
+  let database: string;
+  try { database = decodeURIComponent(url.pathname.replace(/^\//u, '')); } catch { return null; }
+  if (database === '' || database.includes('/')) return null;
+  return { host: url.hostname.toLowerCase(), port: url.port === '' ? '5432' : url.port, database };
+};
+
+export function drillDatabaseTarget(input: {
+  readonly databaseUrl?: string | undefined;
+  readonly testDatabaseUrl?: string | undefined;
+}): DrillDatabaseTarget {
+  const url = (input.databaseUrl ?? '').trim();
+  if (url === '') {
+    return { ok: false, code: 'drill_requires_database_url', reason: 'set DATABASE_URL to a throwaway PostgreSQL database this drill may write' };
+  }
+  const target = postgresDatabase(url);
+  if (target === null) {
+    return { ok: false, code: 'drill_database_unverifiable', reason: 'DATABASE_URL is not a postgres:// URL naming a database, so it cannot be shown to be a throwaway' };
+  }
+  if (target.database === JULIUS_STORE_DATABASE) {
+    return {
+      ok: false, code: 'drill_database_is_julius_store',
+      reason: `"${JULIUS_STORE_DATABASE}" is Julius's own store — the live one on a workstation, the paid mission's on a runner — and a drill must never plant its fake-provider missions there`,
+    };
+  }
+  if (JULIUS_DRILL_DATABASE_NAME.test(target.database)) {
+    return { ok: true, url, database: target.database, basis: 'a drill database by name' };
+  }
+  const declared = postgresDatabase((input.testDatabaseUrl ?? '').trim());
+  if (declared !== null && declared.host === target.host && declared.port === target.port && declared.database === target.database) {
+    return { ok: true, url, database: target.database, basis: 'the throwaway JULIUS_TEST_DATABASE_URL names' };
+  }
+  return {
+    ok: false, code: 'drill_database_not_throwaway',
+    reason: `"${target.database}" is not a drill database: create julius_<drill>_drill (or juliusdrill…) for it, or point DATABASE_URL at the database JULIUS_TEST_DATABASE_URL names`,
+  };
+}
+
+/**
+ * HOW MANY RUNS IN THIS DATABASE ARE NOT THE DRILL'S OWN, read before the
+ * drill migrates or writes anything. A fresh database has no Julius schema at
+ * all, which is zero. Any other answer means the database is somebody's store,
+ * whatever it is called, and the drill refuses it.
+ */
+export async function foreignJuliusRuns(
+  scalar: (sql: string, params?: readonly unknown[]) => Promise<string | null>,
+  ownRunIds: readonly string[],
+): Promise<number> {
+  const migrated = await scalar(`SELECT to_regclass('relay_wonderland.julius_runs') IS NOT NULL`);
+  if (migrated !== 'true') return 0;
+  const count = await scalar(
+    `SELECT count(*) FROM relay_wonderland.julius_runs WHERE NOT (run_id = ANY($1::text[]))`, [[...ownRunIds]]);
+  // An answer that is not a count is not a zero: the database is refused.
+  return count !== null && /^\d+$/u.test(count) ? Number(count) : Number.POSITIVE_INFINITY;
 }

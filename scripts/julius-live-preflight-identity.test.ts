@@ -1,15 +1,24 @@
 import { readFileSync } from 'node:fs';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
 import { JuliusRecoveryPostgresRepository } from '../src/relay/persistence/julius-recovery-postgres';
-import { MAX_TASK_RECOVERIES } from '../src/relay/mission/julius';
+import { JuliusDispatchError, MAX_TASK_RECOVERIES } from '../src/relay/mission/julius';
 import { WONDERLAND_MIGRATIONS } from '../src/relay/persistence/wonderland-postgres';
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
 import { JuliusToolRecoveryPostgresRepository } from '../src/relay/persistence/julius-tool-recovery-postgres';
+import { JuliusToolSettlementPostgresRepository } from '../src/relay/persistence/julius-tool-settlement-postgres';
+import { JULIUS_SERIALIZABLE_ATTEMPTS } from '../src/relay/persistence/julius-serializable';
+import { JULIUS_ENCODED_TEXT_MARKER, decodePgJson, decodePgText } from '../src/relay/persistence/julius-storage-encoding';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/sandbox-limits';
+import { juliusAttemptCloseCommand, parseJuliusAttemptClose } from '../relay-bridge/julius/coder-workspace';
+import { createExecutorShellPort, executorInvocationId, type ShellEffectResult } from '../relay-bridge/julius/executor-effects';
+import { digestOf } from '../relay-bridge/julius/shell-settlement';
+import { durableExecutorStandIn, refusedAt, type StandInOutcome } from './julius-executor-standin';
 import {
   PREFLIGHT_PROJECT_PREFIX,
   cleanupPreflightIdentity,
@@ -559,10 +568,350 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
       { ...owned, runId: 'run:some-real-mission' },
       { ...owned, taskId: 'task:some-real-task' },
       { ...owned, missionId: 'mission:some-real-mission' },
+      // The three the settlement's budget needs are the nonce's too, or cleanup would reach a real session.
+      { ...owned, executionId: 'execution:julius-live:mission:julius-live-6' },
+      { ...owned, agentId: 'agent:tenant' },
+      { ...owned, cardVersionId: 'card-v' },
     ]) {
       await expect(cleanupPreflightIdentity(pool, foreign)).rejects.toThrow('preflight_identity_not_owned');
       await expect(seedPreflightIdentity(pool, foreign)).rejects.toThrow('preflight_identity_not_owned');
     }
+  });
+});
+
+/**
+ * PAID RUN 36568129865 (Mission 6, run:efb6e20f0d11885bc5085a68): THE CLOSE-OUT, ON A REAL POSTGRESQL.
+ *
+ * RUNS IN CI ONLY AFTER THE FOUNDER'S REAL-POSTGRES WORKFLOW PATCH (JULIUS_TEST_DATABASE_URL) LANDS.
+ * Since #288 every gated suite reads that variable alone and julius-real-infra.yml sets only
+ * JULIUS_REAL_POSTGRES=1, so this suite, like every other gated one there, reports `todo` in CI today
+ * (run 36594464267: this file 1 passed, 17 todo). These cases are NOT current CI proof. The proof that
+ * runs on every PR now is the provider-free preflight (`npm run relay:julius:preflight`, the
+ * first-live-topology host-visible entry): the real close-out through the real executor and store.
+ *
+ * What these hold that the preflight cannot reach without an executor that fails on purpose (the
+ * topology job refuses any executor refusal): a close-out whose executor fails AFTER its effect, a
+ * refused create, the terminal-state invariant across every open state, and the mutations that put the
+ * pre-fix behaviour back and watch it fail. The executor is `durableExecutorStandIn`: its durable path
+ * (save, bind, authorize, consume, record) with the REAL receipt store and the REAL repositories, minus
+ * the container; the shell port, the settlement and the run repository are production code.
+ */
+suite('paid run 36568129865 — the NUL-separated close-out settles on real PostgreSQL, and a finished run leaves nothing open', () => {
+  let pool: Pool;
+  let receiptRoot: string;
+  const fixtures: PreflightIdentity[] = [];
+  const TREES = { baseTree: 'a'.repeat(40), startTree: 'b'.repeat(40) };
+  const END = 'c'.repeat(40);
+  const SECTION = '\u0000JULIUS-SECTION-9f2a\u0000';
+  /** What the real close-out prints when an attempt modified README.md: five NUL-separated sections. */
+  const CLOSE_OUT = [`END ${END}\n`, ' M README.md\u0000', 'M\u0000README.md\u0000', '', 'M\u0000README.md\u0000'].join(SECTION);
+  const OPEN_STATES = "('REQUESTED','AUTHORIZED','DISPATCHING','RUNNING')";
+  /** THE INVARIANT, as a query: a terminal run of this project holding an invocation that is not terminal. */
+  const OPEN_IN_TERMINAL_RUNS = `SELECT i.invocation_id, i.state FROM relay_wonderland.julius_tool_invocations i
+    JOIN relay_wonderland.julius_runs r ON r.run_id=i.run_id AND r.project_id=i.project_id
+    WHERE r.project_id=$1 AND r.state IN('FAILED','COMPLETED','CANCELLED') AND i.state IN ${OPEN_STATES}`;
+
+  const fixture = async (): Promise<PreflightIdentity> => {
+    const identity = preflightIdentityFor({ tenantId: TENANT, nonce: preflightNonce(), policyRevision: POLICY });
+    fixtures.push(identity);
+    await seedPreflightIdentity(pool, identity);
+    return identity;
+  };
+  /** The live shell port over the real repositories, dispatching to the stand-in executor. */
+  const portFor = (identity: PreflightIdentity, outcome: (invocationId: string) => StandInOutcome, options: {
+    settlement?: { settle: JuliusToolSettlementPostgresRepository['settle'] };
+    recordReceipt?: JuliusToolRecoveryPostgresRepository['recordReceipt'];
+  } = {}) => createExecutorShellPort({
+    pool, tools: new JuliusToolPostgresRepository(pool),
+    settlement: (options.settlement ?? new JuliusToolSettlementPostgresRepository(pool)) as JuliusToolSettlementPostgresRepository,
+    client: durableExecutorStandIn({ pool, receiptRoot, outcome, recordReceipt: options.recordReceipt }),
+    claims: { claimFor: () => ({ leaseGeneration: identity.leaseGeneration }) },
+    tenantId: identity.tenantId, callerId: 'julius-live', policyRevision: identity.policyRevision,
+    executionId: identity.executionId, workspaceSourceRef: '/tmp/julius-workspace/tenant/ws',
+  });
+  /** The close-out step exactly as the coding adapter issues it. */
+  const closeOutStep = (identity: PreflightIdentity) => ({
+    runId: identity.runId, projectId: identity.projectId, taskId: identity.taskId, workerId: identity.workerId,
+    invocationKey: `${identity.taskId}:status`, command: juliusAttemptCloseCommand(TREES), timeoutMs: 30_000,
+  });
+  const closeOutId = (identity: PreflightIdentity): string => executorInvocationId(`${identity.taskId}:status`, identity.leaseGeneration);
+  const rowOf = async (invocationId: string) => (await pool.query<{
+    state: string; exit_code: number | null; recovery_state: string; stdout_preview: string; safe_summary: string | null; outbox_state: string; last_error: string | null;
+  }>(`SELECT i.state, i.exit_code, i.recovery_state, i.stdout_preview, i.safe_summary, o.state AS outbox_state, o.last_error
+      FROM relay_wonderland.julius_tool_invocations i JOIN relay_wonderland.julius_tool_outbox o USING(invocation_id) WHERE i.invocation_id=$1`, [invocationId])).rows[0];
+  const openCount = async (identity: PreflightIdentity): Promise<number> => Number((await pool.query<{ n: string }>(
+    `SELECT count(*) AS n FROM relay_wonderland.julius_tool_invocations WHERE project_id=$1 AND state IN ${OPEN_STATES}`, [identity.projectId])).rows[0]?.n);
+  const codeOf = (error: unknown): string => String((error as { code?: unknown } | null)?.code ?? (error instanceof Error ? error.message : error));
+  const failureOf = async (attempt: Promise<unknown>): Promise<unknown> => attempt.then(() => { throw new Error('expected the effect to fail'); }, (error: unknown) => error);
+
+  /**
+   * THE REPOSITORIES AS THEY WERE BEFORE THE FIX: the same modules, loaded fresh with `nul-escaped-v1`
+   * taken back out. `encode: false` restores the raw writes; `decode: false` restores the digest that
+   * was taken over whatever the column returned.
+   */
+  const preFix = async (strip: { readonly encode: boolean; readonly decode: boolean }) => {
+    const path = '../src/relay/persistence/julius-storage-encoding';
+    vi.resetModules();
+    vi.doMock(path, async (importOriginal) => {
+      const original = await importOriginal<typeof import('../src/relay/persistence/julius-storage-encoding')>();
+      return {
+        ...original,
+        ...(strip.encode ? { encodePgText: (text: string) => text, encodePgJson: (value: unknown) => value, pgJson: (value: unknown) => JSON.stringify(value) } : {}),
+        ...(strip.decode ? { decodePgText: (text: string) => text, decodePgJson: (value: unknown) => value } : {}),
+      };
+    });
+    try {
+      const recovery = await import('../src/relay/persistence/julius-tool-recovery-postgres');
+      const settlement = await import('../src/relay/persistence/julius-tool-settlement-postgres');
+      return { recovery: new recovery.JuliusToolRecoveryPostgresRepository(pool), settlement: new settlement.JuliusToolSettlementPostgresRepository(pool) };
+    } finally {
+      vi.doUnmock(path);
+      vi.resetModules();
+    }
+  };
+
+  beforeAll(async () => {
+    pool = new Pool({ connectionString: databaseUrl! });
+    await migrateIfNeeded(pool);
+    receiptRoot = await mkdtemp(join(tmpdir(), 'julius-standin-receipts-'));
+  });
+  afterAll(async () => {
+    for (const identity of fixtures) await cleanupPreflightIdentity(pool, identity).catch(() => undefined);
+    await pool.end().catch(() => undefined);
+  });
+
+  it('(1)(2)(3)(4)(5)(7)(8) the close-out reaches PostgreSQL with its NULs, settles SUCCEEDED, is stored marked and exact, and Julius still parses every byte', async () => {
+    const identity = await fixture();
+    const result = await portFor(identity, () => ({ stdout: CLOSE_OUT, exitCode: 0 })).run(closeOutStep(identity));
+    // What Julius receives is raw: the parser reads it exactly as the coding adapter does.
+    expect(result).toMatchObject({ status: 'SUCCEEDED', exitCode: 0 });
+    expect(result.stdout).toBe(CLOSE_OUT);
+    const parsed = parseJuliusAttemptClose(result.stdout, true);
+    expect(parsed.endTree).toBe(END);
+    expect(parsed.own?.map((change) => change.path)).toEqual(['README.md']);
+
+    const invocationId = closeOutId(identity);
+    const row = await rowOf(invocationId);
+    expect(row).toMatchObject({ state: 'SUCCEEDED', exit_code: 0, recovery_state: 'RECONCILED', outbox_state: 'DELIVERED' });
+    // Explicit and reversible: the stored preview says it was encoded, and decodes to what Julius parsed.
+    expect(row!.stdout_preview.startsWith(JULIUS_ENCODED_TEXT_MARKER)).toBe(true);
+    expect(decodePgText(row!.stdout_preview)).toBe(CLOSE_OUT);
+    expect(parseJuliusAttemptClose(decodePgText(row!.stdout_preview), true)).toEqual(parsed);
+    const firstLine = await pool.query<{ line: string }>("SELECT split_part(stdout_preview, E'\\n', 1) AS line FROM relay_wonderland.julius_tool_invocations WHERE invocation_id=$1", [invocationId]);
+    expect(firstLine.rows[0]?.line, 'inspectable in SQL: the first line names the encoding').toBe('julius-encoding:nul-escaped-v1');
+
+    // The executor's receipt (the write that died with 22P05) and the settlement: marked, exact, digests over the decoded value.
+    const receipt = (await pool.query<{ state: string; result: { stdout: string }; result_digest: string }>(
+      'SELECT state, result, result_digest FROM relay_wonderland.julius_tool_execution_receipts WHERE invocation_id=$1', [invocationId])).rows[0]!;
+    expect(receipt.state).toBe('COMPLETED_WITH_RESULT');
+    expect(receipt.result.stdout.startsWith(JULIUS_ENCODED_TEXT_MARKER)).toBe(true);
+    expect(decodePgJson<ShellEffectResult>(receipt.result).stdout).toBe(CLOSE_OUT);
+    expect(digestOf(decodePgJson(receipt.result))).toBe(receipt.result_digest);
+    const settled = (await pool.query<{ result: unknown; result_digest: string }>(
+      'SELECT result, result_digest FROM relay_wonderland.julius_tool_settlements WHERE invocation_id=$1', [invocationId])).rows[0]!;
+    expect(settled.result_digest).toBe(receipt.result_digest);
+    expect(digestOf(decodePgJson(settled.result))).toBe(settled.result_digest);
+    const evidence = await pool.query<{ status: string }>('SELECT status FROM relay_wonderland.julius_evidence WHERE evidence_id=$1', [`tool:${invocationId}`]);
+    expect(evidence.rows[0]?.status).toBe('PASSED');
+    const budget = await pool.query<{ state: string }>('SELECT state FROM relay_wonderland.budget_reservations WHERE reservation_id=$1', [`budget:${invocationId}`]);
+    expect(budget.rows[0]?.state).toBe('COMMITTED');
+    expect(await openCount(identity), 'nothing is left DISPATCHING').toBe(0);
+  });
+
+  it('(6) a failing close-out settles truthfully: FAILED with its exit code, its output stored and decoded the same way', async () => {
+    const identity = await fixture();
+    const result = await portFor(identity, () => ({ stdout: CLOSE_OUT, stderr: 'fatal: \u0000 in stderr too\n', exitCode: 3 })).run(closeOutStep(identity));
+    expect(result).toMatchObject({ status: 'FAILED', exitCode: 3 });
+    expect(result.stdout).toBe(CLOSE_OUT);
+    const invocationId = closeOutId(identity);
+    const row = await rowOf(invocationId);
+    expect(row).toMatchObject({ state: 'FAILED', exit_code: 3, recovery_state: 'RECONCILED', outbox_state: 'DELIVERED' });
+    expect(decodePgText(row!.stdout_preview)).toBe(CLOSE_OUT);
+    const stderr = await pool.query<{ stderr_preview: string }>('SELECT stderr_preview FROM relay_wonderland.julius_tool_invocations WHERE invocation_id=$1', [invocationId]);
+    expect(decodePgText(stderr.rows[0]!.stderr_preview)).toBe('fatal: \u0000 in stderr too\n');
+    const receipt = await pool.query<{ state: string }>('SELECT state FROM relay_wonderland.julius_tool_execution_receipts WHERE invocation_id=$1', [invocationId]);
+    expect(receipt.rows[0]?.state).toBe('FAILED_WITH_RESULT');
+    const evidence = await pool.query<{ status: string }>('SELECT status FROM relay_wonderland.julius_evidence WHERE evidence_id=$1', [`tool:${invocationId}`]);
+    expect(evidence.rows[0]?.status).toBe('FAILED');
+    expect(await openCount(identity)).toBe(0);
+  });
+
+  it('(6)(8) an executor that fails AFTER the effect — paid run 36568129865\'s 500 — leaves the dispatch closed as an unknown outcome, never DISPATCHING', async () => {
+    const identity = await fixture();
+    const failure = await failureOf(portFor(identity, () => ({ stdout: CLOSE_OUT, failAfterReceipt: true })).run(closeOutStep(identity)));
+    expect(failure).toBeInstanceOf(JuliusDispatchError);
+    expect((failure as JuliusDispatchError).failureClass).toBe('executor_unavailable');
+    const invocationId = closeOutId(identity);
+    const row = await rowOf(invocationId);
+    expect(row).toMatchObject({ state: 'FAILED', recovery_state: 'UNKNOWN_OUTCOME', outbox_state: 'DEAD', last_error: 'executor_unavailable' });
+    expect(row!.safe_summary).toContain('unknown to Julius');
+    // The effect's own record survives, decodable: the unknown outcome is inspectable, not lost.
+    const receipt = (await pool.query<{ result: unknown }>('SELECT result FROM relay_wonderland.julius_tool_execution_receipts WHERE invocation_id=$1', [invocationId])).rows[0];
+    expect(decodePgJson<ShellEffectResult>(receipt?.result).stdout).toBe(CLOSE_OUT);
+    expect(await openCount(identity)).toBe(0);
+  });
+
+  it('(8) a refused create is closed as no effect: FAILED, recovery NONE, no receipt, never DISPATCHING', async () => {
+    const identity = await fixture();
+    const failure = await failureOf(portFor(identity, () => refusedAt('create')).run(closeOutStep(identity)));
+    expect(failure).toBeInstanceOf(JuliusDispatchError);
+    const invocationId = closeOutId(identity);
+    expect(await rowOf(invocationId)).toMatchObject({ state: 'FAILED', recovery_state: 'NONE', outbox_state: 'DEAD', last_error: 'executor_unavailable' });
+    expect((await rowOf(invocationId))!.safe_summary).toContain('the executor ran nothing');
+    const receipts = await pool.query<{ n: string }>('SELECT count(*) AS n FROM relay_wonderland.julius_tool_execution_receipts WHERE invocation_id=$1', [invocationId]);
+    expect(receipts.rows[0]?.n).toBe('0');
+    expect(await openCount(identity)).toBe(0);
+  });
+
+  it('(9) MUTATION: with the encoding taken out, the executor\'s receipt write is refused with 22P05 — exactly paid run 36568129865 — and the dispatch is still closed, not left DISPATCHING', async () => {
+    const identity = await fixture();
+    const { recovery } = await preFix({ encode: true, decode: false });
+    expect(recovery, 'the mutant is a fresh module, not the fixed one').not.toBeInstanceOf(JuliusToolRecoveryPostgresRepository);
+    const refused: string[] = [];
+    const port = portFor(identity, () => ({ stdout: CLOSE_OUT }), {
+      recordReceipt: async (receipt) => { try { return await recovery.recordReceipt(receipt); } catch (error) { refused.push(codeOf(error)); throw error; } },
+    });
+    expect(await failureOf(port.run(closeOutStep(identity)))).toBeInstanceOf(JuliusDispatchError);
+    expect(refused).toEqual(['22P05']);
+    expect(await rowOf(closeOutId(identity))).toMatchObject({ state: 'FAILED', recovery_state: 'UNKNOWN_OUTCOME', outbox_state: 'DEAD' });
+    expect(await openCount(identity)).toBe(0);
+  });
+
+  it('(9) MUTATION: with the encoding taken out of the settlement, its preview write is refused with 22021; the dispatch is closed as unknown', async () => {
+    const identity = await fixture();
+    const { settlement } = await preFix({ encode: true, decode: false });
+    const failure = await failureOf(portFor(identity, () => ({ stdout: CLOSE_OUT }), { settlement }).run(closeOutStep(identity)));
+    expect(codeOf(failure)).toBe('22021');
+    expect(await rowOf(closeOutId(identity))).toMatchObject({ state: 'FAILED', recovery_state: 'UNKNOWN_OUTCOME', outbox_state: 'DEAD', last_error: 'tool_settlement_failed' });
+    expect(await openCount(identity)).toBe(0);
+  });
+
+  it('(9) MUTATION: a settlement that digests the STORED receipt instead of the decoded one refuses the honest result as a conflict', async () => {
+    const identity = await fixture();
+    const { settlement } = await preFix({ encode: false, decode: true });
+    const failure = await failureOf(portFor(identity, () => ({ stdout: CLOSE_OUT }), { settlement }).run(closeOutStep(identity)));
+    expect(codeOf(failure)).toBe('tool_settlement_receipt_conflict');
+    expect(await openCount(identity)).toBe(0);
+  });
+
+  /**
+   * A settlement whose attempts meet a REAL serialization conflict: once an attempt holds its snapshot,
+   * a concurrent transaction commits a change to the run's `stream_sequences` row, which the attempt's
+   * event then upserts. PostgreSQL refuses that attempt with 40001. `conflicts` says how many attempts.
+   */
+  const conflictedSettlement = (identity: PreflightIdentity, conflicts: number) => {
+    const seen = { attempts: 0 };
+    const settlement = new JuliusToolSettlementPostgresRepository(pool, undefined, async (point) => {
+      if (point === 'AFTER_BUDGET') {
+        seen.attempts += 1;
+        if (seen.attempts <= conflicts) await pool.query('UPDATE relay_wonderland.stream_sequences SET next_sequence=next_sequence+1 WHERE stream_id=$1', [identity.runId]);
+      }
+    });
+    return { settlement, seen };
+  };
+  const seedStream = (identity: PreflightIdentity) => pool.query('INSERT INTO relay_wonderland.stream_sequences(stream_id,next_sequence) VALUES($1,2) ON CONFLICT DO NOTHING', [identity.runId]);
+
+  it('SERIALIZATION: a settlement that meets a real concurrent commit on the run\'s event stream (40001) is replayed and settles', async () => {
+    const identity = await fixture();
+    await seedStream(identity);
+    const { settlement, seen } = conflictedSettlement(identity, 1);
+    const result = await portFor(identity, () => ({ stdout: CLOSE_OUT }), { settlement }).run(closeOutStep(identity));
+    expect(result).toMatchObject({ status: 'SUCCEEDED', stdout: CLOSE_OUT });
+    expect(seen.attempts, 'refused once, settled on the replay').toBe(2);
+    expect(await rowOf(closeOutId(identity))).toMatchObject({ state: 'SUCCEEDED', recovery_state: 'RECONCILED', outbox_state: 'DELIVERED' });
+    const settlements = await pool.query<{ n: string }>('SELECT count(*) AS n FROM relay_wonderland.julius_tool_settlements WHERE invocation_id=$1', [closeOutId(identity)]);
+    expect(settlements.rows[0]?.n, 'exactly one settlement, however many attempts').toBe('1');
+    expect(await openCount(identity)).toBe(0);
+  });
+
+  /**
+   * THE BOUND IS THE SHARED POLICY'S, NOT A LOCAL THREE. The settlement carried its own three-attempt
+   * loop when this case was written; it now runs on `juliusSerializable`, whose bound is
+   * JULIUS_SERIALIZABLE_ATTEMPTS. Three conflicts are therefore absorbed on the fourth attempt, which
+   * is the intended behaviour, and only a conflict on EVERY attempt may surface. The case never ran
+   * before the real-PostgreSQL CI step existed (Windows refuses the directory fsync this suite needs),
+   * so the stale three went unnoticed until its first execution on Linux.
+   */
+  it('SERIALIZATION: a conflict on every attempt surfaces as 40001, and the dispatch is closed as an unknown outcome, never DISPATCHING', async () => {
+    const identity = await fixture();
+    await seedStream(identity);
+    const { settlement, seen } = conflictedSettlement(identity, JULIUS_SERIALIZABLE_ATTEMPTS);
+    const failure = await failureOf(portFor(identity, () => ({ stdout: CLOSE_OUT }), { settlement }).run(closeOutStep(identity)));
+    expect(codeOf(failure)).toBe('40001');
+    expect(seen.attempts, 'every attempt the shared policy allows was made, and each met a conflict').toBe(JULIUS_SERIALIZABLE_ATTEMPTS);
+    expect(await rowOf(closeOutId(identity))).toMatchObject({ state: 'FAILED', recovery_state: 'UNKNOWN_OUTCOME', outbox_state: 'DEAD', last_error: 'tool_settlement_failed' });
+    expect(await openCount(identity)).toBe(0);
+  });
+
+  it('INVARIANT: a run made terminal through the store closes every open invocation as what it is, surfaces each by name, and touches nothing else', async () => {
+    const mine = await fixture();
+    const theirs = await fixture();
+    // Settled first: the live port's dispatch claim is fleet-wide, so the open ones are made after it.
+    await portFor(mine, () => ({ stdout: CLOSE_OUT })).run(closeOutStep(mine));
+    const settledId = closeOutId(mine);
+    const dispatchedId = `preflight:${mine.nonce}:dispatched`, authorizedId = `preflight:${mine.nonce}:authorized`, foreignId = `preflight:${theirs.nonce}:dispatched`;
+    await seedPreflightInvocation(pool, mine, { invocationId: dispatchedId, requestDigest: 'a'.repeat(64), requestedAt: new Date().toISOString() });
+    await seedPreflightInvocation(pool, theirs, { invocationId: foreignId, requestDigest: 'a'.repeat(64), requestedAt: new Date().toISOString() });
+    const tools = new JuliusToolPostgresRepository(pool);
+    await tools.request({
+      invocationId: authorizedId, idempotencyKey: authorizedId, requestDigest: 'a'.repeat(64), tenantId: mine.tenantId, projectId: mine.projectId,
+      runId: mine.runId, taskId: mine.taskId, workerId: mine.workerId, leaseGeneration: mine.leaseGeneration, policyRevision: mine.policyRevision,
+      toolId: 'shell.bash', toolVersion: '1', mutationClass: 'WORKSPACE', requestedAt: new Date().toISOString(),
+    });
+    expect(await tools.authorize({ invocationId: authorizedId, tenantId: mine.tenantId, projectId: mine.projectId, requestDigest: 'a'.repeat(64), policyRevision: mine.policyRevision, budgetReservationId: `budget:${authorizedId}`, authorizedAt: new Date().toISOString() })).toBe(true);
+
+    const runs = new JuliusPostgresRepository(pool);
+    const run = (await runs.loadRun(mine.runId, mine.projectId))!;
+    const ended = await runs.transition({ commandId: `invariant:${mine.nonce}`, runId: mine.runId, projectId: mine.projectId, expectedVersion: run.version, to: 'FAILED', reasonCode: 'TASK_FAILED', safeSummary: 'The coder failed with its close-out still dispatched.', evidenceIds: [], occurredAt: new Date().toISOString() });
+    expect(ended.state).toBe('FAILED');
+
+    expect(await rowOf(dispatchedId)).toMatchObject({ state: 'FAILED', recovery_state: 'UNKNOWN_OUTCOME', outbox_state: 'DEAD', last_error: 'run_terminal_unsettled' });
+    expect(await rowOf(authorizedId)).toMatchObject({ state: 'CANCELLED', recovery_state: 'NONE', outbox_state: 'DEAD' });
+    expect(await rowOf(settledId), 'a settled invocation keeps its truth').toMatchObject({ state: 'SUCCEEDED', recovery_state: 'RECONCILED', outbox_state: 'DELIVERED' });
+    expect(await rowOf(foreignId), 'another run is untouched').toMatchObject({ state: 'DISPATCHING', outbox_state: 'CLAIMED' });
+    expect((await pool.query(OPEN_IN_TERMINAL_RUNS, [mine.projectId])).rows).toEqual([]);
+
+    const surfaced = await pool.query<{ event_id: string; code: string; failure_class: string; prior: string; closed: string; recovery: string }>(
+      `SELECT event_id, payload->'facts'->>'code' AS code, payload->'facts'->>'failureClass' AS failure_class, payload->'facts'->>'priorState' AS prior,
+              payload->'facts'->>'closedAs' AS closed, payload->'facts'->>'recoveryState' AS recovery
+       FROM relay_wonderland.events WHERE project_id=$1 AND event_type='julius.recovery.action' ORDER BY event_id`, [mine.projectId]);
+    expect(surfaced.rows).toEqual([
+      { event_id: `julius:tool-invocation-closed:${authorizedId}`, code: 'TOOL_INVOCATION_UNRESOLVED', failure_class: 'infrastructure_evidence_integrity', prior: 'AUTHORIZED', closed: 'CANCELLED', recovery: 'NONE' },
+      { event_id: `julius:tool-invocation-closed:${dispatchedId}`, code: 'TOOL_INVOCATION_UNRESOLVED', failure_class: 'infrastructure_evidence_integrity', prior: 'DISPATCHING', closed: 'FAILED', recovery: 'UNKNOWN_OUTCOME' },
+    ]);
+
+    // Nothing new opens on the finished run, and a late settlement of the closed dispatch is refused.
+    await expect(tools.request({
+      invocationId: `${dispatchedId}:late`, idempotencyKey: `${dispatchedId}:late`, requestDigest: 'a'.repeat(64), tenantId: mine.tenantId, projectId: mine.projectId,
+      runId: mine.runId, taskId: mine.taskId, workerId: mine.workerId, leaseGeneration: mine.leaseGeneration, policyRevision: mine.policyRevision,
+      toolId: 'shell.bash', toolVersion: '1', mutationClass: 'WORKSPACE', requestedAt: new Date().toISOString(),
+    })).rejects.toThrow('tool_run_terminal');
+    const lateResult = { invocationId: dispatchedId, status: 'SUCCEEDED' as const, exitCode: 0, safeSummary: 'late', stdout: CLOSE_OUT, stderr: '', stdoutRef: null, stderrRef: null, artifacts: [], evidence: [], durationMs: 1, resourceUsage: { toolCalls: 1, runtimeMs: 1, outputBytes: 1 }, policyDecisionRef: POLICY, mutations: [] };
+    await expect(new JuliusToolSettlementPostgresRepository(pool).settle({
+      settlementId: `settlement:${dispatchedId}`, invocationId: dispatchedId, dispatchGeneration: 1, resultDigest: digestOf(lateResult), result: lateResult,
+      artifacts: [], evidence: [], taskOutcome: null, occurredAt: new Date().toISOString(),
+    })).rejects.toThrow('tool_settlement_authority_lost');
+  });
+
+  it('INVARIANT: a transition that is not terminal closes nothing', async () => {
+    const identity = await fixture();
+    const invocationId = `preflight:${identity.nonce}:dispatched`;
+    await seedPreflightInvocation(pool, identity, { invocationId, requestDigest: 'a'.repeat(64), requestedAt: new Date().toISOString() });
+    const runs = new JuliusPostgresRepository(pool);
+    const run = (await runs.loadRun(identity.runId, identity.projectId))!;
+    await runs.transition({ commandId: `waiting:${identity.nonce}`, runId: identity.runId, projectId: identity.projectId, expectedVersion: run.version, to: 'WAITING', reasonCode: 'TASKS_BLOCKED', safeSummary: 'Waiting.', evidenceIds: [], occurredAt: new Date().toISOString() });
+    expect(await rowOf(invocationId)).toMatchObject({ state: 'DISPATCHING', outbox_state: 'CLAIMED' });
+    const events = await pool.query<{ n: string }>("SELECT count(*) AS n FROM relay_wonderland.events WHERE project_id=$1 AND event_type='julius.recovery.action'", [identity.projectId]);
+    expect(events.rows[0]?.n).toBe('0');
+  });
+
+  it('INVARIANT MUTATION: a run made terminal behind the store\'s back — the pre-fix transition, with no sweep — keeps its dispatch open, and the invariant check catches it', async () => {
+    const identity = await fixture();
+    const invocationId = `preflight:${identity.nonce}:dispatched`;
+    await seedPreflightInvocation(pool, identity, { invocationId, requestDigest: 'a'.repeat(64), requestedAt: new Date().toISOString() });
+    // Exactly paid run 36568129865's end state: the run FAILED, its close-out still DISPATCHING.
+    await pool.query("UPDATE relay_wonderland.julius_runs SET state='FAILED',version=version+1 WHERE run_id=$1 AND project_id=$2", [identity.runId, identity.projectId]);
+    expect((await pool.query(OPEN_IN_TERMINAL_RUNS, [identity.projectId])).rows).toEqual([{ invocation_id: invocationId, state: 'DISPATCHING' }]);
   });
 });
 

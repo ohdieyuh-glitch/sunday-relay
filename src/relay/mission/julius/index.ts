@@ -9,6 +9,7 @@ export * from './julius-router';
 export * from './julius-bounded-runtime';
 export * from './julius-recovery';
 export * from './julius-execution-coordinator';
+export * from './julius-store-failure';
 export * from './julius-verification-runtime';
 export * from './julius-context-snapshot';
 export * from './julius-repair-runtime';

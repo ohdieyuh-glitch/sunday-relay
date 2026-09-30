@@ -92,7 +92,8 @@ const reader: JuliusRuntimeReader = new JuliusReadPostgresRepository(pool);
 const subagents: JuliusSubagentStore = new JuliusSubagentPostgresRepository(pool);
 
 /** One repository satisfies both lifecycle ports: approvals and run lifecycle. */
-const lifecycle: JuliusApprovalStore & JuliusLifecycleStore = new JuliusLifecyclePostgresRepository(pool);
+const lifecycle: JuliusApprovalStore & Required<Pick<JuliusApprovalStore, 'deniedApprovals'>> & JuliusLifecycleStore
+  = new JuliusLifecyclePostgresRepository(pool);
 
 /** The timeline reader satisfies the API's read port directly. */
 const timeline: JuliusTimelineReader = new JuliusTimelinePostgresRepository(pool);
@@ -171,6 +172,7 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore
   requestApproval: lifecycle.requestApproval.bind(lifecycle),
   loadApproval: lifecycle.loadApproval.bind(lifecycle),
   pendingApprovals: lifecycle.pendingApprovals.bind(lifecycle),
+  deniedApprovals: lifecycle.deniedApprovals.bind(lifecycle),
   decideApproval: lifecycle.decideApproval.bind(lifecycle),
   cancelRunTasks: lifecycle.cancelRunTasks.bind(lifecycle),
   recordLifecycle: lifecycle.recordLifecycle.bind(lifecycle),
@@ -273,7 +275,7 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
   });
 
   it('satisfies the approval and lifecycle stores with no adapter', () => {
-    for (const method of ['requestApproval', 'loadApproval', 'pendingApprovals',
+    for (const method of ['requestApproval', 'loadApproval', 'pendingApprovals', 'deniedApprovals',
       'decideApproval', 'cancelRunTasks', 'recordLifecycle']) {
       expect(typeof (lifecycle as unknown as Record<string, unknown>)[method], method).toBe('function');
     }

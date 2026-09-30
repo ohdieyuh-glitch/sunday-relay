@@ -140,6 +140,10 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
           inputTokens: 480, outputTokens: 190,
           cacheReadInputTokens: 0, cacheCreationInputTokens: 0,
         },
+        // What served, as a real stream attests it: the turns named one model,
+        // and the result's own `modelUsage` credited it with output.
+        turnModels: [{ model: 'claude-fable-5', turns: 3, outputTokens: 190 }],
+        resultModelUsage: [{ model: 'claude-fable-5', canonicalModel: null, inputTokens: 500, outputTokens: 200 }],
         resultSubtype: 'success', isError: false, terminalReason: null, finalText: `done (${SECRET_CANARY})`,
         thinkingBlocksOmitted: 0, unknownMessageCount: 0,
       },
@@ -1971,6 +1975,41 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
     expect(facts.code, 'the normalized Julius code').toBe(code);
     expect(facts.failureClass, 'and the connector class that the code alone cannot express').toBe(failureClass);
     expect(typeof facts.errorRetryable, 'whether the ERROR was retryable is recorded, so a reader need not re-derive it').toBe('boolean');
+  });
+
+  /**
+   * AND NO CLASS SETTLES ITS HOLD AS FREE. The architect reports no amount, so
+   * after the handoff every failure keeps its hold as unknown spend. That
+   * includes a 401, a 403 and a 429: each refuses the LAST request unprocessed,
+   * but the dispatch may have bought something before it (a correction call
+   * after a billed answer, or the SDK's own retry after a first try that timed
+   * out), and neither is visible from the error.
+   */
+  const architectHolds = (memory: { events: () => readonly { type: string; facts: Record<string, unknown> }[] }) =>
+    memory.events().filter((event) => event.type === 'budget.settled' && event.facts.role === 'PROMPT_ARCHITECT');
+  it.each(CLASSES)('keeps the %s hold as unknown spend, never free', async (failureClass) => {
+    const { memory } = await failedRun(failureClass);
+    const settled = architectHolds(memory);
+    expect(settled.length, 'every architect hold is closed by a row').toBeGreaterThan(0);
+    for (const row of settled) expect(row.facts.released, `${failureClass}: an architect failure is never released as free`).toBe(false);
+  });
+
+  it('a 429 on the CORRECTION call, after a billed answer that failed validation, keeps the dispatch\'s hold', async () => {
+    let calls = 0;
+    const billedThenRefused = async (): Promise<GptRunOutcome> => {
+      calls += 1;
+      if (calls === 1) {
+        // Answered and billed: the provider's own usage, and nothing parseable in it.
+        return { ok: true, actualModel: 'gpt-drill', responseId: 'resp-billed', status: 'completed', outputText: 'not a plan',
+          usage: { inputTokens: 1_200, cachedInputTokens: 0, outputTokens: 300, reasoningTokens: 0, totalTokens: 1_500 } };
+      }
+      return { ok: false, failureClass: 'rate_limited', message: 'safe provider message' };
+    };
+    const driven = await driveLiveMission(['approved'], undefined, billedThenRefused);
+    expect(calls, 'the correction really followed the billed answer').toBeGreaterThanOrEqual(2);
+    const settled = architectHolds(driven.memory);
+    expect(settled.length).toBeGreaterThan(0);
+    for (const row of settled) expect(row.facts.released, 'the first call was paid for, whatever the last one was').toBe(false);
   });
 
   /**

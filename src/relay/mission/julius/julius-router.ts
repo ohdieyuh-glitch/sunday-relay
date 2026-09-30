@@ -1,8 +1,9 @@
 import { JULIUS_CODING_AGENT_FAILURES } from './julius-coding-agent';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
 import { JULIUS_BILLING_PATHS, JULIUS_COST_BASES } from './julius-cost-accounting';
+import { JULIUS_STORE_ERROR_CLASSES, isJuliusPostgresError, juliusStoreErrorClass } from './julius-store-failure';
 import type{JuliusWorker,JuliusWorkerRegistry,JuliusWorkerRole}from'./julius-runtime';import{workerAllowedByCard,type JuliusCardPolicy}from'./julius-policy';
-export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PROVIDER_UNAVAILABLE','INVALID_REQUEST','WORKER_EXECUTION_FAILURE','POLICY_DENIED','BUDGET_DENIED','CANCELLED']as const;export type JuliusErrorCode=typeof JULIUS_ERROR_CODES[number];
+export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PROVIDER_UNAVAILABLE','INVALID_REQUEST','WORKER_EXECUTION_FAILURE','POLICY_DENIED','BUDGET_DENIED','CANCELLED','PERSISTENCE_FAILURE']as const;export type JuliusErrorCode=typeof JULIUS_ERROR_CODES[number];
 /**
  * THE CONNECTOR'S OWN CLASSIFICATION, NARROWED TO A MACHINE TOKEN.
  *
@@ -87,6 +88,13 @@ export type JuliusHostedFailureReason=(typeof JULIUS_HOSTED_FAILURE_REASONS)[num
  * — mirrored from `claude-code-result-class.v1` so the domain's allowlist names
  * a closed set without importing a connector. A test holds the two equal.
  */
+/**
+ * WHY A CODING AGENT'S SERVED MODEL WAS OR WAS NOT ATTESTED, mirrored from the
+ * hosted adapter's `HOSTED_SERVED_MODEL_BASES` so the domain names a closed set
+ * without importing an adapter. `hosted-served-model.test.ts` holds the two
+ * equal.
+ */
+export const JULIUS_SERVED_MODEL_BASES=['attested','no_output_turns','mixed_turn_models','no_result','no_model_usage','result_disagrees'] as const;
 export const JULIUS_CODING_AGENT_RESULT_CLASSES=['SUCCESS','NO_RESULT','UNKNOWN_SUBTYPE','REPORTED_ERROR','ERROR_FLAG_UNREPORTED','TERMINAL_REASON_NOT_COMPLETED','BUDGET_STOP','MAX_TURNS','EXECUTION_ERROR','STRUCTURED_OUTPUT_RETRIES_EXHAUSTED'] as const;
 /**
  * THE CORROBORATING FACTS, NARROWED THE SAME WAY THE CLASS IS.
@@ -207,6 +215,40 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   transport:safeEnum(v.transport,['local','remote','openai','hosted'] as const),
   provider:safeToken(v.provider),
   servedModel:safeModel(v.servedModel),
+  /* --- WHAT SERVED, AND HOW ANYONE KNOWS. Coding Agent only; null for the other roles.
+   *
+   * Paid attempt 1 recorded the coder's `servedModel` from the runtime's `init`
+   * announcement, and the only turn it announced then produced zero tokens. So
+   * `servedModel` is now named only when the output-bearing turns and the
+   * result's `modelUsage` agree. The basis says why when they do not, and the
+   * three accounts travel beside the verdict so a reader sees the difference
+   * between them, not only the answer. --- */
+  servedModelBasis:safeEnum(v.servedModelBasis,JULIUS_SERVED_MODEL_BASES),
+  /**
+   * The `modelUsage` entry that credited the served model: its key, and the
+   * SDK's `canonicalModel` for it. This is the runtime's own resolution of an
+   * alias, and the only mapping a requested-versus-served comparison may use.
+   */
+  servedModelUsageKey:safeModel(v.servedModelUsageKey),
+  servedModelUsageCanonical:safeModel(v.servedModelUsageCanonical),
+  /** What `init` announced before any turn existed. A claim about configuration, never about serving. */
+  announcedModel:safeModel(v.announcedModel),
+  /** The model that produced the most output across the session's turns. */
+  turnModel:safeModel(v.turnModel),
+  /** How many distinct models the output-bearing turns named. More than one is `mixed_turn_models`. */
+  turnModelCount:safeCount(v.turnModelCount),
+  /** How many models the result's `modelUsage` named. Null when no result reported one. */
+  resultModelCount:safeCount(v.resultModelCount),
+  /** The first three `modelUsage` entries, largest producer first. The count above shows whether any was left out. */
+  resultModelFirst:safeModel(v.resultModelFirst),
+  resultModelFirstInputTokens:safeCount(v.resultModelFirstInputTokens),
+  resultModelFirstOutputTokens:safeCount(v.resultModelFirstOutputTokens),
+  resultModelSecond:safeModel(v.resultModelSecond),
+  resultModelSecondInputTokens:safeCount(v.resultModelSecondInputTokens),
+  resultModelSecondOutputTokens:safeCount(v.resultModelSecondOutputTokens),
+  resultModelThird:safeModel(v.resultModelThird),
+  resultModelThirdInputTokens:safeCount(v.resultModelThirdInputTokens),
+  resultModelThirdOutputTokens:safeCount(v.resultModelThirdOutputTokens),
   processExitCode:safeExitCode(v.processExitCode),
   timedOut:safeNullableBool(v.timedOut),
   outputBytesObserved:safeCount(v.outputBytesObserved),
@@ -219,6 +261,12 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   verdictValid:safeNullableBool(v.verdictValid),
   summaryPresent:safeNullableBool(v.summaryPresent),
   failureShape:safeToken(v.failureShape),
+  /**
+   * WHAT KIND OF STORE FAILURE ended a `PERSISTENCE_FAILURE`, from the driver's own
+   * code and never its message. Null on every attempt that was not Julius's own
+   * write failing, and null too when the thrown error was not a store error at all.
+   */
+  storeErrorClass:safeEnum(v.storeErrorClass,JULIUS_STORE_ERROR_CLASSES),
   providerHttpStatus:safeHttpStatus(v.providerHttpStatus),
   serviceHttpStatus:safeHttpStatus(v.serviceHttpStatus),
   /* --- What the reviewer's PROCESS did. Null for a transport that ran none.
@@ -737,4 +785,19 @@ export class JuliusProviderRouter{constructor(private readonly workers:JuliusWor
  }
  async dispatch(worker:JuliusWorker,input:JuliusDispatchInput){const adapter=this.adapters.get(worker.adapterId);if(!adapter)throw new JuliusDispatchError('PROVIDER_UNAVAILABLE',false,'Worker adapter is unavailable.');try{return await adapter.dispatch(input);}catch(error){throw normalizeProviderError(error);}}
 }
-export function normalizeProviderError(error:unknown):JuliusDispatchError{if(error instanceof JuliusDispatchError)return error;const code=error!==null&&typeof error==='object'&&'code'in error?String((error as{code:unknown}).code).toUpperCase():'';if(code==='429'||code==='RATE_LIMIT')return new JuliusDispatchError('RATE_LIMIT',true,'Provider rate limit reached.');if(code==='ETIMEDOUT'||code==='TIMEOUT'||error instanceof DOMException&&error.name==='TimeoutError')return new JuliusDispatchError('TIMEOUT',true,'Provider timed out.');if(['401','403','AUTH','CONFIGURATION'].includes(code))return new JuliusDispatchError('AUTH_CONFIGURATION',false,'Provider authentication or configuration failed.');if(code==='ABORT_ERR')return new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.');return new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Worker execution failed.');}
+/**
+ * A POSTGRESQL ERROR OUT OF AN ADAPTER is Julius's own store, from a write the
+ * adapter made for Julius, such as the executor's tool settlement. It is never the
+ * worker's failure. It may follow a paid call, so it is not retried; the ending
+ * keeps the hold. The check is the driver's shape (a SQLSTATE and a severity),
+ * so no provider code is ever read as one.
+ *
+ * A 429, A 401 AND A 403 ARE REFUSALS OF AN UNPROCESSED REQUEST, so they say so
+ * (`runtimeStarted: false`), and after a handoff that is the one thing that
+ * lets a failure with no amount release its hold. Everything else normalised
+ * here, a timeout above all, says nothing about what ran, and after a handoff
+ * its hold is kept as unknown spend. The string aliases (`RATE_LIMIT`, `AUTH`,
+ * `CONFIGURATION`) are not HTTP refusals, and they attest nothing.
+ */
+const REFUSED_UNPROCESSED={runtimeStarted:false} as const;
+export function normalizeProviderError(error:unknown):JuliusDispatchError{if(error instanceof JuliusDispatchError)return error;if(isJuliusPostgresError(error))return new JuliusDispatchError('PERSISTENCE_FAILURE',false,'Julius could not record its own bookkeeping during the dispatch.','persist_during_dispatch',{runtimeStarted:true,storeErrorClass:juliusStoreErrorClass(error)});const code=error!==null&&typeof error==='object'&&'code'in error?String((error as{code:unknown}).code).toUpperCase():'';if(code==='429'||code==='RATE_LIMIT')return new JuliusDispatchError('RATE_LIMIT',true,'Provider rate limit reached.',undefined,code==='429'?REFUSED_UNPROCESSED:undefined);if(code==='ETIMEDOUT'||code==='TIMEOUT'||error instanceof DOMException&&error.name==='TimeoutError')return new JuliusDispatchError('TIMEOUT',true,'Provider timed out.');if(['401','403','AUTH','CONFIGURATION'].includes(code))return new JuliusDispatchError('AUTH_CONFIGURATION',false,'Provider authentication or configuration failed.',undefined,code==='401'||code==='403'?REFUSED_UNPROCESSED:undefined);if(code==='ABORT_ERR')return new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.');return new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Worker execution failed.');}

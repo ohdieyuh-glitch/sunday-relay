@@ -32,9 +32,11 @@
  *   run must end FAILED. A drill that only proved run A would call a runtime
  *   that retries everything a success.
  *
- *   DATABASE_URL=… node dist-relay-bridge/julius-failure-recovery-drill.cjs [--out <dir>]
+ *   DATABASE_URL=…/julius_failure_recovery_drill node dist-relay-bridge/julius-failure-recovery-drill.cjs [--out <dir>]
  *
- * Exit 0 when every step passes, 8 when any does not, 2 with no database.
+ * Exit 0 when every step passes, 8 when any does not (a database holding any
+ * run but its own included), 2 without a THROWAWAY database: `…/julius` and any
+ * name that is not a drill's is refused before connecting.
  */
 
 import { readFileSync } from 'node:fs';
@@ -49,13 +51,19 @@ import { createPostgresMissionSeedStore } from '../relay-bridge/julius/mission-s
 import { assembleLiveJuliusRuntime, driveJuliusRunToTerminal } from '../relay-bridge/julius/live-composition';
 import { scriptedAdapter, seededTaskContract, worker } from '../src/relay/mission/julius';
 import type { JuliusTask, ScriptedOutcome } from '../src/relay/mission/julius';
-import { DrillRecord, auditProviders, scalarReader, writeAttestation } from './julius-drill-support';
+import { DrillRecord, auditProviders, drillDatabaseTarget, foreignJuliusRuns, scalarReader, writeDrillAttestation } from './julius-drill-support';
+import { JULIUS_CAPABILITY_DRILLS } from './julius-drill-closure.mjs';
 
 export const CAPABILITY = 'FAILURE RECOVERY';
-/** The transcript's closing sentence; the gate requires an all-capitals VERIFIED line. */
-const DRILL_NAME = 'JULIUS FAILURE RECOVERY';
-export const TRANSCRIPT_FILE = 'julius-failure-recovery-drill.transcript.txt';
-export const DRILL_COMMAND = 'npm run julius:failure-recovery-drill';
+/**
+ * THIS DRILL'S ENTRY in the one table the Beta Gate holds every attestation to:
+ * the sentence its transcript closes on (`<name> VERIFIED`, which no other drill
+ * writes), the transcript file and the command. Read, never retyped.
+ */
+const DRILL = JULIUS_CAPABILITY_DRILLS[CAPABILITY];
+const DRILL_NAME = DRILL.name;
+export const TRANSCRIPT_FILE = DRILL.transcript;
+export const DRILL_COMMAND = `npm run ${DRILL.script}`;
 export const INFRASTRUCTURE = 'real-postgres,transient-and-permanent-failures,no-provider-call';
 export const EXERCISED = [
   'src/relay/mission/julius/julius-execution-coordinator.ts',
@@ -158,7 +166,7 @@ async function driveRun(pool: Pool, runId: string, architectScript: readonly Scr
 async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promise<number> {
   const record = new DrillRecord();
   const scalar = scalarReader(pool);
-  const file = (verified: boolean) => writeAttestation({
+  const file = (verified: boolean) => writeDrillAttestation({
     outDir, repoRoot, record, verified,
     capability: CAPABILITY, drill: DRILL_COMMAND, exercised: EXERCISED,
     infrastructure: INFRASTRUCTURE, transcriptFile: TRANSCRIPT_FILE,
@@ -167,13 +175,21 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
   record.say(`${DRILL_NAME} DRILL (one real PostgreSQL, a transient failure and a permanent one, no provider call)`);
   record.say('');
 
-  await new TransactionalWonderlandDatabase(pool).migrate();
   /**
-   * A CLEAN DATABASE, OR NOTHING. Run twice against the same one and the second
-   * run reads the first's retry rows and reports PASS about evidence it did not
-   * produce. A drill whose transcript can describe a step it did not exercise
-   * is not testimony.
+   * A CLEAN DATABASE, OR NOTHING — and asked BEFORE the migration, which is a
+   * write. A database holding anybody else's run is somebody's store whatever
+   * it is called. Run twice against the same one and the second run reads the
+   * first's retry rows and reports PASS about evidence it did not produce. A
+   * drill whose transcript can describe a step it did not exercise is not
+   * testimony.
    */
+  const foreign = await foreignJuliusRuns(scalar, [TRANSIENT, PERMANENT]);
+  if (foreign > 0) {
+    record.step('the drill was given a throwaway database, holding no Julius run but its own', false,
+      `${foreign} run(s) here are not this drill's; a drill writes only where nothing else lives`);
+    file(record.seal(DRILL_NAME));
+    return 8;
+  }
   const prior = await scalar(
     `SELECT count(*) FROM relay_wonderland.julius_runs WHERE run_id IN ($1,$2)`, [TRANSIENT, PERMANENT]).catch(() => '0');
   if (prior !== '0' && prior !== null) {
@@ -182,6 +198,7 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
     file(record.seal(DRILL_NAME));
     return 8;
   }
+  await new TransactionalWonderlandDatabase(pool).migrate();
 
   /* ------------------------------------- RUN A: transient, and it must recover */
   record.say('RUN A — the architect times out once, and the runtime is expected to try again');
@@ -252,16 +269,20 @@ export async function runFailureRecoveryDrill(input: {
   readonly argv: readonly string[];
   readonly repoRoot: string;
   readonly databaseUrl: string | undefined;
+  /** The repository's declared throwaway, which a drill may also be pointed at. */
+  readonly testDatabaseUrl?: string | undefined;
 }): Promise<number> {
-  if (input.databaseUrl === undefined || input.databaseUrl.trim() === '') {
-    process.stderr.write('julius_failure_recovery_drill_requires_database_url: set DATABASE_URL to a PostgreSQL this drill may destroy\n');
+  // REFUSED BEFORE ANY CONNECTION (see `drillDatabaseTarget`).
+  const target = drillDatabaseTarget({ databaseUrl: input.databaseUrl, testDatabaseUrl: input.testDatabaseUrl });
+  if (!target.ok) {
+    process.stderr.write(`julius_failure_recovery_drill_refused_database: ${target.code}: ${target.reason}\n`);
     return 2;
   }
   const outIndex = input.argv.indexOf('--out');
   const outDir = outIndex >= 0 && input.argv[outIndex + 1] !== undefined
     ? resolve(input.argv[outIndex + 1]!)
     : join(input.repoRoot, 'julius-capability-proofs');
-  const pool = new Pool({ connectionString: input.databaseUrl });
+  const pool = new Pool({ connectionString: target.url });
   try {
     const code = await orchestrate(pool, outDir, input.repoRoot);
     process.stdout.write(readFileSync(join(outDir, TRANSCRIPT_FILE), 'utf8'));

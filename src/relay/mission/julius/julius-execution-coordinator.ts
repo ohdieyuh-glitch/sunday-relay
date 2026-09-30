@@ -4,6 +4,7 @@ import type { JuliusEvidence, JuliusTask, JuliusWorker, JuliusWorkerRole } from 
 import type { JuliusContractReviewCharge } from './julius-task-contract';
 import { isJuliusContentDigest, juliusDurableArtifactRef } from './julius-artifact-reference';
 import { juliusEvidenceAuthority, juliusMintedEvidenceId } from './julius-worker-authority';
+import { juliusStoreErrorClass, juliusStoreErrorIsTransient, type JuliusStoreErrorClass } from './julius-store-failure';
 
 /** The cost a provider reported on its own result, or null when it reported none. */
 const reportedUsdMicros=(result:JuliusProviderResult|null):number|null=>{
@@ -277,7 +278,7 @@ function measurementOf(worker:{readonly providerId:string},result:{readonly usag
  };
 }
 
-export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean;/** What this attempt measured. Absent only where no provider answered. */readonly measured?:JuliusAttemptMeasurement;/** What the worker proposed for its own task contract, unsanitised. Julius decides. */readonly contractProposal?:unknown;/** A coder's request for architect guidance, unsanitised. */readonly guidanceRequest?:unknown;/** An architect's guidance packet, unsanitised. */readonly guidance?:unknown;/** What a continuation segment resumes from, unsanitised. Julius rebuilds it. */readonly segmentResume?:unknown;/** What a worker of any slot needs Julius to go and look at, unsanitised. */readonly researchAsks?:unknown;/** A reviewer's canonical verdict, unsanitised. Julius decides what it means. */readonly reviewVerdict?:unknown;/** An architect's rebuttal to a disagreement, unsanitised. */readonly rebuttal?:unknown;/** An architect's structured architecture state, unsanitised. Advisory, never the contract. */readonly architecture?:unknown;/** An architect's final architecture consistency assessment, unsanitised. */readonly consistency?:unknown;/** A Coding Agent's workspace change set and report, unsanitised. */readonly implementation?:unknown;/** A Coding Agent's observations about the design, unsanitised. */readonly architectureObservations?:unknown}|{
+export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean;/** What this attempt measured. Absent only where no provider answered. */readonly measured?:JuliusAttemptMeasurement;/** What the worker proposed for its own task contract, unsanitised. Julius decides. */readonly contractProposal?:unknown;/** A coder's request for architect guidance, unsanitised. */readonly guidanceRequest?:unknown;/** An architect's guidance packet, unsanitised. */readonly guidance?:unknown;/** What a continuation segment resumes from, unsanitised. Julius rebuilds it. */readonly segmentResume?:unknown;/** What a worker of any slot needs Julius to go and look at, unsanitised. */readonly researchAsks?:unknown;/** A reviewer's canonical verdict, unsanitised. Julius decides what it means. */readonly reviewVerdict?:unknown;/** An architect's rebuttal to a disagreement, unsanitised. */readonly rebuttal?:unknown;/** An architect's structured architecture state, unsanitised. Advisory, never the contract. */readonly architecture?:unknown;/** An architect's final architecture consistency assessment, unsanitised. */readonly consistency?:unknown;/** A Coding Agent's workspace change set and report, unsanitised. */readonly implementation?:unknown;/** A Coding Agent's observations about the design, unsanitised. */readonly architectureObservations?:unknown;/** Writes Julius owed after the store accepted the result, and could not make. Absent when there were none. */readonly unrecorded?:readonly JuliusUnrecordedBookkeeping[]}|{
  readonly status:'RETRY'|'FAILED'|'DENIED';
  readonly code:string;
  readonly failureClass?:string|null;
@@ -344,9 +345,66 @@ const normalizedEvidence=(claim:JuliusExecutionClaim,worker:JuliusWorker,result:
   return{kept,refused};
 };
 
+/**
+ * JULIUS'S OWN BOOKKEEPING IS RETRIED, A BOUNDED NUMBER OF TIMES.
+ *
+ * Three attempts, pausing 250 ms and then 1 s between them. Serialization
+ * failures are already retried inside each store call (`juliusSerializable`),
+ * so this layer is for what that one cannot absorb: a connection lost between
+ * statements, a pool that could not hand one out, a lock that timed out.
+ */
+export const JULIUS_BOOKKEEPING_ATTEMPTS=3;
+const JULIUS_BOOKKEEPING_PAUSES_MS:readonly number[]=Object.freeze([250,1000]);
+/** Where Julius's own write failed, relative to handing the work to a provider. */
+export type JuliusPersistencePhase='persist_before_dispatch'|'persist_during_dispatch'|'persist_after_answer';
+/** A write Julius owed after the store accepted the result and could not make. Reported on the outcome, never thrown. */
+export interface JuliusUnrecordedBookkeeping{readonly step:'settlement'|'completed_event';readonly storeErrorClass:JuliusStoreErrorClass|null}
+/**
+ * THE ENDING ITSELF COULD NOT BE WRITTEN.
+ *
+ * When even the release and the ending event fail after retrying, there is
+ * nothing durable left to say it with. So the failure leaves as a typed
+ * error: Julius's, from this phase, with or without the work handed. The raw
+ * driver error used to leave instead, which read the same as a crash
+ * anywhere else. `handed` is what a caller must honour: work that was handed
+ * may have been paid for, and must not be dispatched again blind.
+ */
+export class JuliusPersistenceUnavailable extends Error{
+ constructor(readonly phase:JuliusPersistencePhase,readonly handed:boolean,readonly storeErrorClass:JuliusStoreErrorClass|null){super('julius_persistence_unavailable');this.name='JuliusPersistenceUnavailable';}
+}
+/**
+ * JULIUS'S OWN WRITE FAILED. It is never the worker's failure.
+ *
+ * Retryable only before the work was handed, when nothing can have been
+ * spent and a retry repeats nothing but bookkeeping, and only when the store
+ * error is one that repetition can cure: an integrity error before the
+ * dispatch fails the same way on every attempt, so it fails once. After the
+ * handoff a retry would dispatch the worker again and pay twice, so the
+ * attempt fails truthfully instead, and what the answer cost is charged by
+ * the ending.
+ */
+const persistenceFailure=(phase:JuliusPersistencePhase,retryable:boolean,error:unknown,handed:boolean):JuliusDispatchError=>
+ new JuliusDispatchError('PERSISTENCE_FAILURE',retryable,'Julius could not record its own bookkeeping.',phase,{runtimeStarted:handed,storeErrorClass:juliusStoreErrorClass(error)});
+/**
+ * THE STORE'S TWO REFUSALS OF A RESULT say what happened to the lease, not to
+ * the worker.
+ *
+ * `stale_worker_result` means the lease moved on: recovery reclaimed the task,
+ * or a newer generation holds it. `result_after_cancellation` means the run or
+ * the task was cancelled. Both are cancellations of this attempt, and both
+ * answers were paid for, so the ending charges them. Anything else a result
+ * write throws is Julius's own bookkeeping failing.
+ */
+const acceptanceRefusal=(error:unknown):JuliusDispatchError|null=>{
+ const message=error instanceof Error?error.message:null;
+ if(message==='stale_worker_result')return new JuliusDispatchError('CANCELLED',false,'The lease moved on before the result could be accepted.','lease_superseded',{runtimeStarted:true});
+ if(message==='result_after_cancellation')return new JuliusDispatchError('CANCELLED',false,'The run or task was cancelled before the result could be accepted.','result_after_cancellation',{runtimeStarted:true});
+ return null;
+};
+
 /** One claimed task execution. Julius—not the adapter—owns policy, budget, evidence, result acceptance, and retry semantics. */
 export class JuliusExecutionCoordinator {
-  constructor(private readonly router:JuliusProviderRouter,private readonly ports:JuliusExecutionPorts){}
+  constructor(private readonly router:JuliusProviderRouter,private readonly ports:JuliusExecutionPorts,private readonly pause:(ms:number)=>Promise<void>=(ms)=>new Promise((resolve)=>setTimeout(resolve,ms))){}
   /**
    * UNKNOWN IS NULL, NOT THE STRING "undefined".
    *
@@ -371,19 +429,34 @@ export class JuliusExecutionCoordinator {
    */
   async execute(request:JuliusExecutionRequest):Promise<JuliusExecutionOutcome>{
     let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Worker selection failed.');await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure)};}
-    await this.event(request,'worker.selected',{workerId:worker.workerId,providerId:worker.providerId});
-    const reservation=await this.ports.reserve({claim:request.claim,worker,request:request.resources,idempotencyKey:`${request.operationId}:budget`});
-    if(reservation.state==='DENIED'){await this.event(request,'budget.denied',{reason:reservation.denialReason});return{status:'DENIED',code:'BUDGET_DENIED'};}
     /**
-     * THE ROLE AND THE AMOUNT TRAVEL WITH THE RESERVATION ID.
+     * P0: JULIUS'S OWN WRITES BEFORE ANYTHING IS HANDED.
      *
-     * Without them the row says only that money moved, and the per-slot ledger
-     * — which is PROJECTED from these rows rather than stored — cannot say
-     * whose it was. Attribution guessed from the task id would be a second
-     * source of truth about money, which is the arrangement the cost-accounting
-     * module exists to end.
+     * These four used to sit outside every guard. A store error in any of them
+     * rejected `execute` itself, the tick threw, and every task that tick had
+     * claimed waited out its lease. Nothing has been spent here, so a failure
+     * is Julius's, retryable, and releases whatever hold it took.
      */
-    await this.event(request,'budget.reserved',{reservationId:reservation.reservationId,role:request.role,usdMicros:request.resources.usdMicros});
+    let reservation:JuliusResourceReservation|null=null;
+    try{
+      await this.bookkeeping(()=>this.event(request,'worker.selected',{workerId:worker.workerId,providerId:worker.providerId}));
+      const reserved=await this.bookkeeping(()=>this.ports.reserve({claim:request.claim,worker,request:request.resources,idempotencyKey:`${request.operationId}:budget`}));
+      reservation=reserved;
+      if(reserved.state==='DENIED'){await this.bookkeeping(()=>this.event(request,'budget.denied',{reason:reserved.denialReason}));return{status:'DENIED',code:'BUDGET_DENIED'};}
+      /**
+       * THE ROLE AND THE AMOUNT TRAVEL WITH THE RESERVATION ID.
+       *
+       * Without them the row says only that money moved, and the per-slot ledger
+       * — which is PROJECTED from these rows rather than stored — cannot say
+       * whose it was. Attribution guessed from the task id would be a second
+       * source of truth about money, which is the arrangement the cost-accounting
+       * module exists to end.
+       */
+      await this.bookkeeping(()=>this.event(request,'budget.reserved',{reservationId:reserved.reservationId,role:request.role,usdMicros:request.resources.usdMicros}));
+    }catch(error){
+      return this.end(request,persistenceFailure('persist_before_dispatch',juliusStoreErrorIsTransient(juliusStoreErrorClass(error)),error,false),reservation?.state==='RESERVED'?reservation.reservationId:null,null,false);
+    }
+    const reservationId=reservation.reservationId;
     /**
      * WHAT THE PROVIDER REPORTED, HELD WHERE THE CATCH CAN SEE IT.
      *
@@ -399,10 +472,18 @@ export class JuliusExecutionCoordinator {
     /** Set when the dispatch is handed to the router, so a deadline cut can say
      *  how long the worker actually ran beside the limit it declared. */
     let dispatchedAtMs=Date.now();
+    /**
+     * WHETHER THE WORK HAS BEEN HANDED. Set on the line before the dispatch, so
+     * every failure before it is Julius's bookkeeping with nothing spent, and
+     * every failure after it may have been paid for.
+     */
+    let handed=false;
+    let accepted:{readonly result:JuliusProviderResult;readonly duplicate:boolean;readonly evidence:readonly JuliusEvidence[]};
     try{
       if(request.signal?.aborted)throw new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.',cancellationReasonOf(request.signal));
-      await this.event(request,'worker.dispatched',{workerId:worker.workerId});
+      await this.bookkeeping(()=>this.event(request,'worker.dispatched',{workerId:worker.workerId}));
       dispatchedAtMs=Date.now();
+      handed=true;
       // THE WORKER'S OWN DECLARED NUMBER, never a literal here. A second
       // opinion about how long a worker may take is how declared and operative
       // deadlines came to differ by 160 s once already.
@@ -431,7 +512,7 @@ export class JuliusExecutionCoordinator {
       const screened=normalizedEvidence(request.claim,worker,result,request.role);
       const evidence=screened.kept;
       for(const refused of screened.refused){
-       await this.event(request,'evidence.refused',{workerId:worker.workerId,role:request.role,taskType:request.taskType,...refused},String(refused.index));
+       await this.bookkeeping(()=>this.event(request,'evidence.refused',{workerId:worker.workerId,role:request.role,taskType:request.taskType,...refused},String(refused.index)));
       }
       /**
        * A WORKER THAT SAYS IT FAILED HAS FAILED THIS ATTEMPT.
@@ -446,19 +527,24 @@ export class JuliusExecutionCoordinator {
       if(result.status!=='SUCCEEDED'){
        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'The worker reported that its attempt failed.','worker_reported_failure',{runtimeStarted:true});
       }
-      await this.ports.persistEvidence({claim:request.claim,worker,evidence});
-      const receipt=await this.ports.acceptResult({claim:request.claim,worker,result,idempotencyKey:`${request.operationId}:result`,evidence});
-      await this.ports.commit({claim:request.claim,reservationId:reservation.reservationId,result});
-      await this.event(request,'worker.completed',{workerId:worker.workerId,duplicate:receipt.duplicate,evidenceCount:evidence.length,...successDiagnostics(request,result)});
-      return{status:'COMPLETED',workerId:worker.workerId,duplicate:receipt.duplicate,measured:measurementOf(worker,result),...(result.contractProposal===undefined?{}:{contractProposal:result.contractProposal}),...(result.guidanceRequest===undefined?{}:{guidanceRequest:result.guidanceRequest}),...(result.guidance===undefined?{}:{guidance:result.guidance}),
-      ...(result.segmentResume===undefined?{}:{segmentResume:result.segmentResume}),
-      ...(result.researchAsks===undefined?{}:{researchAsks:result.researchAsks}),
-      ...(result.reviewVerdict===undefined?{}:{reviewVerdict:result.reviewVerdict}),
-      ...(result.rebuttal===undefined?{}:{rebuttal:result.rebuttal}),
-      ...(result.architecture===undefined?{}:{architecture:result.architecture}),
-      ...(result.consistency===undefined?{}:{consistency:result.consistency}),
-      ...(result.implementation===undefined?{}:{implementation:result.implementation}),
-      ...(result.architectureObservations===undefined?{}:{architectureObservations:result.architectureObservations})};
+      /**
+       * P2: A PAID ANSWER, RECORDED — RETRYING THE BOOKKEEPING, NEVER THE DISPATCH.
+       *
+       * Both writes are idempotent already: evidence by its position under this
+       * task and lease, the result by `${operationId}:result`. So a transient
+       * store error repeats the WRITE. Retrying the task instead would dispatch
+       * the worker again and pay for the same answer twice.
+       */
+      await this.bookkeeping(()=>this.ports.persistEvidence({claim:request.claim,worker,evidence}));
+      const receipt=await this.bookkeepingCounted(()=>this.ports.acceptResult({claim:request.claim,worker,result,idempotencyKey:`${request.operationId}:result`,evidence}));
+      /**
+       * A RETRIED ACCEPT THAT ANSWERS `duplicate` FOUND ITS OWN WRITE. A
+       * connection lost during COMMIT leaves the first attempt landed and
+       * unacknowledged. The key is this operation's, and the lease fences any
+       * other holder, so the row can only be this dispatch's. Calling it a
+       * replay would make the pipeline skip what a first result owes.
+       */
+      accepted={result,duplicate:receipt.retried?false:receipt.value.duplicate,evidence};
     }catch(error){
      /**
       * A DEADLINE CUT IS RETRYABLE, AND ITS HOLD IS NOT FREED.
@@ -478,19 +564,125 @@ export class JuliusExecutionCoordinator {
       : error instanceof JuliusDispatchCancelled
        ? new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.',error.reasonCode,{runtimeStarted:true,elapsedMs:Date.now()-dispatchedAtMs})
        : error;
-     const failure=boundary instanceof JuliusDispatchError?boundary:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');const reported=reportedUsdMicros(answered);
-     const billed=reported??(typeof failure.diagnostics?.costUsdMicros==='number'?failure.diagnostics.costUsdMicros:null);
-     // A provider that ANSWERED ran, whatever the diagnostics say about it.
-     // A subscription-backed failure says so, rather than reading as a charge nobody read.
-     await this.ports.release({claim:request.claim,reservationId:reservation.reservationId,reason:failure.code,usdMicros:billed,spendUnknown:billed===null&&(answered!==null||failure.diagnostics?.runtimeStarted===true),...settlementProvenance(answered,failure.diagnostics)});
-     /* The class travels with the code on BOTH endings. A retry that is later
-      * abandoned and a failure taken at once must leave the same diagnosis
-      * behind, or the durable record would explain only the failures that
-      * happened to be non-retryable. */
-     /* WHAT THE FAILED ATTEMPT CHANGED travels on both endings too: a retry is
-      * exactly where an unrecorded change set becomes the next attempt's. */
-     const carriedImplementation=failure.implementation===undefined?{}:{implementation:failure.implementation};
-     if(failure.retryable&&request.policy.automaticRetry){await this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'RETRY',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};}await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'FAILED',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};}
+     /**
+      * WHOSE FAILURE THIS IS: the WORKER'S only when the worker's boundary threw it.
+      *
+      * Before the handoff, anything that throws is Julius's own write, and
+      * nothing has been spent. Out of the dispatch, a store error (it carries a
+      * SQLSTATE or a socket errno) escaped the adapter's own writes. It is
+      * Julius's, but it may have been paid for, so it is not retried. Anything
+      * else out of the dispatch is the boundary failing, as it always was.
+      * After the answer, the only throwers are Julius's writes and the store's
+      * two refusals, which name what happened to the lease rather than the
+      * worker.
+      */
+     const failure=boundary instanceof JuliusDispatchError?boundary
+      : !handed?persistenceFailure('persist_before_dispatch',juliusStoreErrorIsTransient(juliusStoreErrorClass(boundary)),boundary,false)
+       : answered===null
+        ? (juliusStoreErrorClass(boundary)===null?new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.'):persistenceFailure('persist_during_dispatch',false,boundary,true))
+        : acceptanceRefusal(boundary)??persistenceFailure('persist_after_answer',false,boundary,true);
+     return this.end(request,failure,reservationId,answered,handed);
+    }
+    // P3 runs OUTSIDE the catch. Once the store owns the task, nothing below can turn this into a failure.
+    return this.afterAccept(request,worker,reservationId,accepted);
+  }
+  /**
+   * P3: THE STORE HAS THE RESULT, SO THE DISPATCH COMPLETED.
+   *
+   * `acceptResult` committed the task in its own transaction. A settlement or
+   * event write that fails after it used to be caught as a failure of the
+   * attempt. Its `task.failed` then contradicted the store, and the pipeline
+   * skipped everything a completed dispatch owes: the trajectory, contract
+   * proposals, guidance, verdicts and repairs. Its `release`, after a commit that
+   * had already written `budget.settled`, wrote a second one, and
+   * `cost-accounting.tsv` sums them.
+   *
+   * So each write is retried as bookkeeping. One that still fails is REPORTED on
+   * the outcome, never thrown, and NEVER released: the reservation stays held,
+   * which keeps the money counted and leaves the missing settlement row visible
+   * as missing.
+   */
+  private async afterAccept(request:JuliusExecutionRequest,worker:JuliusWorker,reservationId:string,accepted:{readonly result:JuliusProviderResult;readonly duplicate:boolean;readonly evidence:readonly JuliusEvidence[]}):Promise<JuliusExecutionOutcome>{
+    const {result,duplicate,evidence}=accepted;
+    const unrecorded:JuliusUnrecordedBookkeeping[]=[];
+    try{await this.bookkeeping(()=>this.ports.commit({claim:request.claim,reservationId,result}));}
+    catch(error){unrecorded.push({step:'settlement',storeErrorClass:juliusStoreErrorClass(error)});}
+    try{await this.bookkeeping(()=>this.event(request,'worker.completed',{workerId:worker.workerId,duplicate,evidenceCount:evidence.length,...successDiagnostics(request,result)}));}
+    catch(error){unrecorded.push({step:'completed_event',storeErrorClass:juliusStoreErrorClass(error)});}
+    return{status:'COMPLETED',workerId:worker.workerId,duplicate,measured:measurementOf(worker,result),...(unrecorded.length===0?{}:{unrecorded}),...(result.contractProposal===undefined?{}:{contractProposal:result.contractProposal}),...(result.guidanceRequest===undefined?{}:{guidanceRequest:result.guidanceRequest}),...(result.guidance===undefined?{}:{guidance:result.guidance}),
+    ...(result.segmentResume===undefined?{}:{segmentResume:result.segmentResume}),
+    ...(result.researchAsks===undefined?{}:{researchAsks:result.researchAsks}),
+    ...(result.reviewVerdict===undefined?{}:{reviewVerdict:result.reviewVerdict}),
+    ...(result.rebuttal===undefined?{}:{rebuttal:result.rebuttal}),
+    ...(result.architecture===undefined?{}:{architecture:result.architecture}),
+    ...(result.consistency===undefined?{}:{consistency:result.consistency}),
+    ...(result.implementation===undefined?{}:{implementation:result.implementation}),
+    ...(result.architectureObservations===undefined?{}:{architectureObservations:result.architectureObservations})};
+  }
+  /**
+   * THE ENDING OF AN ATTEMPT THAT DID NOT COMPLETE: settle the hold, write the
+   * ending, answer. Its own writes are bookkeeping too. If they cannot be
+   * written even after retrying, it throws `JuliusPersistenceUnavailable`,
+   * naming the phase and whether the work had been handed. The caller then
+   * knows a Julius store failure from a worker's, and a handed task is one it
+   * must not dispatch again blind.
+   */
+  private async end(request:JuliusExecutionRequest,failure:JuliusDispatchError,reservationId:string|null,answered:JuliusProviderResult|null,handed:boolean):Promise<JuliusExecutionOutcome>{
+   try{
+    const reported=reportedUsdMicros(answered);
+    const billed=reported??(typeof failure.diagnostics?.costUsdMicros==='number'?failure.diagnostics.costUsdMicros:null);
+    // A provider that ANSWERED ran, whatever the diagnostics say about it.
+    // A subscription-backed failure says so, rather than reading as a charge nobody read.
+    /**
+     * AFTER THE HANDOFF, NO AMOUNT IS UNKNOWN, NOT FREE.
+     *
+     * The rule used to be "unknown only if something says it ran". An error that
+     * said nothing therefore released its whole hold. A timeout normalised from a
+     * raw error carries no diagnostics at all, so a request the provider had
+     * received, and may have billed, settled as free: in the slot ledger, inside
+     * the paid run's own budget, before any report could read it. Now, once the
+     * work is handed, only an explicit `runtimeStarted: false` (a provider that
+     * refused the request unprocessed, or an adapter that knows it sent nothing)
+     * releases a hold that has no amount. Before the handoff nothing was sent,
+     * and a hold is released as before.
+     *
+     * A timed-out attempt therefore keeps its hold, and a retry after a timeout
+     * meets a tighter budget. That is the truthful direction.
+     */
+    const startedOrUnsaid=answered!==null||failure.diagnostics?.runtimeStarted===true||(handed&&failure.diagnostics?.runtimeStarted!==false);
+    if(reservationId!==null)await this.bookkeeping(()=>this.ports.release({claim:request.claim,reservationId,reason:failure.code,usdMicros:billed,spendUnknown:billed===null&&startedOrUnsaid,...settlementProvenance(answered,failure.diagnostics)}));
+    /* The class travels with the code on BOTH endings. A retry that is later
+     * abandoned and a failure taken at once must leave the same diagnosis
+     * behind, or the durable record would explain only the failures that
+     * happened to be non-retryable. */
+    /* WHAT THE FAILED ATTEMPT CHANGED travels on both endings too: a retry is
+     * exactly where an unrecorded change set becomes the next attempt's. */
+    const carriedImplementation=failure.implementation===undefined?{}:{implementation:failure.implementation};
+    if(failure.retryable&&request.policy.automaticRetry){await this.bookkeeping(()=>this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)}));return{status:'RETRY',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};}
+    await this.bookkeeping(()=>this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)}));
+    return{status:'FAILED',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};
+   }catch(error){
+    throw new JuliusPersistenceUnavailable(!handed?'persist_before_dispatch':answered===null?'persist_during_dispatch':'persist_after_answer',handed,juliusStoreErrorClass(error));
+   }
+  }
+  /**
+   * A WRITE OF JULIUS'S OWN, REPEATED WHILE REPEATING CAN HELP.
+   *
+   * Only a transient store failure is repeated (`juliusStoreErrorIsTransient`),
+   * at most {@link JULIUS_BOOKKEEPING_ATTEMPTS} times. Everything else is thrown
+   * at once: an integrity error fails the same way every time, and a refusal is
+   * an answer. Every step handed to this is idempotent (see each call site),
+   * and a dispatch is never one of them.
+   */
+  private async bookkeeping<T>(step:()=>Promise<T>):Promise<T>{return(await this.bookkeepingCounted(step)).value;}
+  private async bookkeepingCounted<T>(step:()=>Promise<T>):Promise<{readonly value:T;readonly retried:boolean}>{
+    for(let attempt=1;;attempt+=1){
+      try{return{value:await step(),retried:attempt>1};}
+      catch(error){
+        if(attempt>=JULIUS_BOOKKEEPING_ATTEMPTS||!juliusStoreErrorIsTransient(juliusStoreErrorClass(error)))throw error;
+        await this.pause(JULIUS_BOOKKEEPING_PAUSES_MS[attempt-1]??JULIUS_BOOKKEEPING_PAUSES_MS[JULIUS_BOOKKEEPING_PAUSES_MS.length-1]!);
+      }
+    }
   }
   /**
    * ON EVERY EVENT, not only the failures. `retry.scheduled` and `task.failed`

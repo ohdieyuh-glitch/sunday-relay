@@ -18,6 +18,8 @@
  * Prints one JSON object to stdout and nothing else, so a shell can read it.
  */
 
+import { pathToFileURL } from 'node:url';
+
 export const REVIEWER_DEADLINE_POLICY_VERSION = 'julius-reviewer-deadline.v2';
 
 export const RECORDED_REVIEWER_OBSERVATIONS = [
@@ -115,8 +117,16 @@ export function resolveReviewerDeadline({
  * at run time to pick a value out of JSON: `relay-repository-boundary.mjs`
  * refuses a deployment-capable path that runs an entry it cannot read, and it
  * is right to. The shell calls this file, by path, with a field name.
+ *
+ * THE ENTRY TEST IS A URL COMPARISON, SO BOTH SIDES ARE URLS. It was
+ * `file://${process.argv[1]}`, which equals `import.meta.url` only on a POSIX
+ * path: on Windows `file://C:\dev\...` never equals `file:///C:/dev/...`, the
+ * file printed NOTHING, and `reviewer-deadline.test.ts` failed with
+ * "Unexpected end of JSON input" on every Windows run. `pathToFileURL` is the
+ * form `julius-paid-run-archive.mjs` already uses, and on Linux it yields the
+ * same string as before.
  */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const deadline = resolveReviewerDeadline();
   const field = process.argv[2];
   if (field === undefined) {

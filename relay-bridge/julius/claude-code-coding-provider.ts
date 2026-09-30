@@ -15,7 +15,7 @@ import type { ClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
 import { classifyClaudeCodeResult } from '../../src/relay/connectors/claude-code/result-classification';
 import { classifyHostedFailure } from '../hosted-coding-agent/hosted-failure-reason';
 import { DEFAULT_HOSTED_LIMITS, hostedLimitsForAllocation, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
-import type { HostedObservation } from '../hosted-coding-agent/hosted-observation';
+import { dominantTurnModel, hostedServedModel, type HostedObservation } from '../hosted-coding-agent/hosted-observation';
 import {
   loadHostedQuery,
   runHostedCodingAgent,
@@ -126,6 +126,9 @@ export const hostedCoderDiagnostics = (input: {
 }): Record<string, unknown> => {
   const observed = input.observed;
   const cost = hostedCoderCost(input.authMode, observed);
+  const served = observed === null ? null : hostedServedModel(observed);
+  /** The `modelUsage` entry at `index`, largest producer first. Null past the end, and when no result reported any. */
+  const usageEntry = (index: number) => observed?.resultModelUsage?.[index] ?? null;
   /**
    * WHETHER THE WORKER ASKED, ON BOTH ENDINGS. A dispatch with no observed final
    * message never gave the worker a place to ask, so every field below is
@@ -155,7 +158,45 @@ export const hostedCoderDiagnostics = (input: {
     transport: 'hosted',
     provider: 'anthropic',
     requestedModel: input.requestedModel,
-    servedModel: observed?.actualModel ?? null,
+    /**
+     * WHAT SERVED, when the turns and the result's own `modelUsage` agree on one
+     * model. Never `init`'s announcement: attempt 1 recorded the announced model
+     * as served, and its only turn produced zero tokens. See `hostedServedModel`.
+     */
+    servedModel: served?.servedModel ?? null,
+    /** Why `servedModel` is what it is, from a closed set. Null only when nothing was observed. */
+    servedModelBasis: served?.basis ?? null,
+    /**
+     * THE RUNTIME'S OWN NAME FOR WHAT SERVED: the key and `canonicalModel` of the
+     * `modelUsage` entry that credited the served model. Comparing the served model
+     * with the requested one may use this mapping and nothing else, and never a
+     * string prefix. Null whenever nothing is attested.
+     */
+    servedModelUsageKey: served?.credit?.model ?? null,
+    servedModelUsageCanonical: served?.credit?.canonicalModel ?? null,
+    /**
+     * The THREE ACCOUNTS, SIDE BY SIDE, so a reader sees the distinction and not
+     * only the verdict. What `init` announced before any turn existed:
+     */
+    announcedModel: observed?.actualModel ?? null,
+    /** What the output-bearing turns named. The one that produced most, and how many distinct models there were. */
+    turnModel: observed === null ? null : dominantTurnModel(observed),
+    turnModelCount: observed === null ? null : observed.turnModels.length,
+    /**
+     * And the runtime's final accounting: how many models `modelUsage` named,
+     * then each of the first three, largest producer first. The count shows
+     * whether any entry was left out.
+     */
+    resultModelCount: observed?.resultModelUsage === null || observed === null ? null : observed.resultModelUsage.length,
+    resultModelFirst: usageEntry(0)?.model ?? null,
+    resultModelFirstInputTokens: usageEntry(0)?.inputTokens ?? null,
+    resultModelFirstOutputTokens: usageEntry(0)?.outputTokens ?? null,
+    resultModelSecond: usageEntry(1)?.model ?? null,
+    resultModelSecondInputTokens: usageEntry(1)?.inputTokens ?? null,
+    resultModelSecondOutputTokens: usageEntry(1)?.outputTokens ?? null,
+    resultModelThird: usageEntry(2)?.model ?? null,
+    resultModelThirdInputTokens: usageEntry(2)?.inputTokens ?? null,
+    resultModelThirdOutputTokens: usageEntry(2)?.outputTokens ?? null,
     responseId: observed?.sessionId ?? null,
     numTurns: observed?.numTurns ?? null,
     // INVOCATIONS, not distinct names: `toolsUsed` deduplicates.
@@ -431,7 +472,8 @@ export function createClaudeCodeCodingAgentProvider(input: {
         kind: 'completed',
         finalText: outcome.observation.finalText,
         observation: {
-          providerModel: outcome.observation.actualModel ?? null,
+          // THE ATTESTED MODEL, the same answer the diagnostics give. Null when the turns and the result did not agree.
+          providerModel: hostedServedModel(outcome.observation).servedModel,
           turns: outcome.observation.numTurns ?? null,
           toolInvocations: outcome.observation.toolInvocations ?? null,
           inputTokens: usage.inputTokens ?? null,

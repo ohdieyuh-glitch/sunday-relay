@@ -853,7 +853,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'worker-diagnostics.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -982,13 +982,34 @@ describe('the evidence dump names only tables and columns the migrations create'
     // silently skips its nulls is a floor, and a floor without its count reads
     // as a total.
     expect(query, 'settlements that reported nothing are counted, never summed as zero')
-      .toContain("count(*) FILTER (WHERE e.payload->'facts'->>'usdMicros' IS NULL)");
+      .toContain("count(*) FILTER (WHERE c.usd IS NULL)");
     expect(query, 'and it is per role, because the founder\'s question was per role')
       .toContain("'role'");
     expect(query, 'settlements only — a reservation is not a spend')
       .toContain("e.event_type='julius.budget.settled'");
+    // AN UNSETTLED RESERVATION IS AN UNKNOWN COMPONENT, never $0 and never absent (#297): a hold
+    // whose settlement could not be written joins the rollup with no amount and no basis, so it
+    // lands in `unknown_components` and never in known spend, and its own column says how many.
+    expect(query, 'a reservation with no settlement row is counted').toContain("r.event_type='julius.budget.reserved' AND NOT EXISTS");
+    expect(query, 'matched to its own settlement by run and reservation').toContain("s.stream_id=r.stream_id AND s.payload->'facts'->>'reservationId'=r.payload->'facts'->>'reservationId'");
+    expect(query, 'and it carries no amount into the known spend').toContain("SELECT r.payload->'facts'->>'role',NULL,NULL,NULL,true");
+    expect(query, 'the unsettled count has its own column').toContain('AS unsettled_components');
+    // NEVER DEDUPLICATED: a second settlement of one reservation must stay visible (next case).
+    expect(query.includes('DISTINCT'), 'the rollup sums every settled row; deduplicating would hide the defect').toBe(false);
     // No credential, no prose, no payload dump: the same rule every other query here obeys.
     expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+  });
+
+  it('a reservation settled more than once is FLAGGED as an integrity error, never deduplicated', () => {
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const query = script.split('\n').find((line) => line.startsWith('dump "SELECT') && line.includes('settlement-integrity.tsv')) ?? '';
+    expect(query, 'the integrity dump must exist').not.toBe('');
+    expect(query, 'per run and reservation').toContain("GROUP BY 1,2,3 HAVING count(*) > 1");
+    expect(query, 'over settlement rows').toContain("e.event_type='julius.budget.settled'");
+    expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+    // AND IT IS SAID OUT LOUD, so a regression is visible in the job log without opening the bundle.
+    expect(script).toContain('JULIUS_SETTLEMENT_INTEGRITY duplicate_reservations=');
+    expect(script, 'an unavailable file is never read as zero duplicates').toContain("echo 'JULIUS_SETTLEMENT_INTEGRITY unavailable'");
   });
 
   /**
@@ -1085,6 +1106,110 @@ describe('the evidence dump names only tables and columns the migrations create'
     expect(dumps.find((dump) => dump.file === 'evidence.tsv')?.columns).toContain('evidence_type');
     expect(dumps.find((dump) => dump.file === 'findings.tsv')?.table).toBe('julius_reviewer_findings');
   });
+
+  /**
+   * WHICH CODE, WHICH MODE, WHICH RUN (GATE_AUDIT.md P0-2). A bundle carried
+   * none of them, so the Beta Gate scored a main bundle against a stack tree and
+   * a free dry run's receipts as a paid mission's. The manifest is written
+   * FIRST, from machine tokens only, and nothing in it can abort the dump that
+   * runs under `set -e`.
+   */
+  it('names the commit, the mode and the one Julius run in a manifest written before any query', () => {
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const called = script.indexOf("write_manifest || echo 'JULIUS_EVIDENCE_MANIFEST unavailable'");
+    expect(called, 'the manifest is written, and a failure to write it cannot stop the dump').toBeGreaterThan(0);
+    expect(called, 'before the first table').toBeLessThan(script.indexOf('dump "SELECT'));
+    for (const key of ['manifest_version=1', 'commit=', 'tree=', 'mode=', 'mode_basis=', 'julius_run_id=', 'workflow_run_id=', 'workflow_run_attempt=', 'workflow_ref=', 'event=']) {
+      expect(script, `the manifest records ${key}`).toContain(`echo "${key}`.replace('echo "manifest_version=1', "echo 'manifest_version=1"));
+    }
+    expect(script, 'the file the gate reads').toContain('"$out/bundle-manifest.txt"');
+    // PAID ONLY ON THE ONE PAID PATH: a workflow_dispatch whose typed confirmation is exact.
+    expect(script).toContain('[ "${GITHUB_EVENT_NAME:-}" = workflow_dispatch ]');
+    expect(script).toContain(`grep -Eq '"confirm_live"[[:space:]]*:[[:space:]]*"RUN LIVE MISSION"' "$GITHUB_EVENT_PATH"`);
+    expect(script, 'off a runner the launcher must say it; undeclared is never paid').toContain('*) mode=unknown; mode_basis=undeclared ;;');
+    // THE RUN is the entrypoint's own accepted line, never a row order.
+    expect(script).toContain("s/^Run \\([^ ]*\\) accepted in state READY; driving the Julius run loop\\.$/\\1/p");
+    // The local launcher declares its mode for the one paid path it has.
+    const launcher = read('scripts/julius-local-qualification.sh');
+    expect(launcher).toContain('JULIUS_EVIDENCE_MODE="$evidence_mode" PGPASSWORD="$DB_PASSWORD_VALUE" ./.github/julius-live-evidence-dump.sh "$out"');
+    // THE COMMIT IS THE CHECKOUT THAT RAN THE DUMP: `git rev-parse HEAD`, taken
+    // there and then (on a pull_request, GitHub's merge commit), which is what
+    // the gate compares with exact equality — so the writer side is pinned too.
+    expect(script).toContain('  commit=$(git rev-parse HEAD 2>/dev/null || echo unknown)');
+    expect(script).toContain("for a `pull_request` event, GitHub's merge commit, never the PR head");
+    expect(script, 'and the tracked changes it was dumped with').toContain("status=$(git status --porcelain --untracked-files=no 2>/dev/null)");
+    // The launcher refuses to dump from any checkout but the clean one its rig ran (P1-B).
+    const evidence = launcher.slice(launcher.indexOf('cmd_evidence() {'), launcher.indexOf('./.github/julius-live-evidence-dump.sh "$out"'));
+    expect(evidence).toContain('[ "$RIG_HEAD" = "$HEAD_SHA" ] || refuse "evidence_head_moved:');
+    expect(evidence).toContain("[ -z \"$(git status --porcelain --untracked-files=no)\" ] || refuse 'evidence_checkout_dirty:");
+  });
+
+  it('every run-scoped table names its run, so a database holding two runs cannot mix them (GATE_AUDIT.md P1-3)', () => {
+    const simple = queries();
+    for (const dump of simple.filter((entry) => entry.file !== 'sessions.tsv')) {
+      expect(dump.columns, `${dump.file} carries run_id`).toContain('run_id');
+    }
+    const script = read('.github/julius-live-evidence-dump.sh');
+    for (const file of ['failures.tsv', 'budget.tsv', 'settlement-integrity.tsv', 'worker-diagnostics.tsv', 'contract-events.tsv', 'effort.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'finding-lifecycle.tsv']) {
+      const query = script.split('\n').find((line) => line.startsWith('dump "SELECT') && line.endsWith(` ${file}`)) ?? '';
+      expect(query, `${file} exports its stream as run_id`).toContain('e.stream_id AS run_id');
+    }
+    const cost = script.split('\n').find((line) => line.startsWith('dump "SELECT') && line.endsWith(' cost-accounting.tsv')) ?? '';
+    expect(cost, 'the rollup is per run as well as per role').toContain('GROUP BY 1,2 ORDER BY 1,2');
+    expect(cost).toContain('SELECT c.run_id,');
+    const status = script.split('\n').find((line) => line.startsWith('dump "SELECT') && line.endsWith(' finding-status.tsv')) ?? '';
+    expect(status).toContain('SELECT f.run_id,');
+  });
+
+  /**
+   * WHAT A VERDICT RESTED ON (boundary hunt B1, B2, B5). A resolved finding read
+   * OPEN in every export because its life is only `finding.transitioned`
+   * events; the approval could not be tied to the evidence it cited; and the
+   * boundary row could see neither a failing test's exit code nor a scope
+   * violation. Tokens and identifiers only: no reviewer claim, no warnings or
+   * resolutions prose, no path a coder wrote.
+   */
+  it('exports the finding lifecycle, the verdict tokens, the evidence ties and the boundary facts, and no prose', () => {
+    const tables = schema();
+    const dumps = queries();
+    const columns = (file: string) => dumps.find((dump) => dump.file === file)?.columns ?? [];
+    expect(columns('evidence.tsv')).toEqual(expect.arrayContaining(['task_id', 'integrity_hash']));
+    expect(columns('decisions.tsv')).toContain('evidence_ids');
+    expect(columns('findings.tsv')).toEqual(expect.arrayContaining(['task_id', 'evidence_ids']));
+    expect(columns('tool-invocations.tsv')).toEqual(expect.arrayContaining(['task_id', 'exit_code', 'recovery_state', 'completed_at']));
+    expect(tables.get('julius_tool_invocations')?.has('recovery_state'), 'recovery_state is a migrated column').toBe(true);
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const line = (file: string) => script.split('\n').find((entry) => entry.startsWith('dump "SELECT') && entry.endsWith(` ${file}`)) ?? '';
+    const lifecycle = line('finding-lifecycle.tsv');
+    for (const type of ['julius.finding.recorded', 'julius.finding.transitioned', 'julius.review.verdict.declared', 'julius.review.verdict.refused', 'julius.review.verdict.applied']) {
+      expect(lifecycle, `the lifecycle dump selects ${type}`).toContain(`'${type}'`);
+    }
+    for (const key of ['findingId', 'move', 'to', 'reviewTaskId', 'repairTaskId', 'verdict', 'declared', 'derived', 'route', 'category']) {
+      expect(lifecycle, `the lifecycle dump exports ${key}`).toContain(`'${key}'`);
+    }
+    for (const prose of ["'claim'", "'warnings'", "'resolutions'", "'explanation'"]) {
+      expect(lifecycle.includes(prose), `the lifecycle dump must not export ${prose}`).toBe(false);
+    }
+    expect(line('finding-status.tsv'), 'the status now is the last transition, else the recorded OPEN')
+      .toContain("COALESCE((SELECT t.payload->'facts'->>'to' FROM relay_wonderland.events t WHERE t.event_type='julius.finding.transitioned' AND t.stream_id=f.run_id AND t.payload->'facts'->>'findingId'=f.finding_id ORDER BY t.sequence DESC LIMIT 1),f.status)");
+    const scope = line('scope.tsv');
+    const catalogue = read('src/relay/mission/julius/julius-events.ts');
+    // `coder.report.refused` is the path on which Julius could not read what the
+    // coder changed and writes no implementation row: without it in the dump,
+    // that silence reads as a checked change set.
+    for (const type of ['coder.scope.violated', 'coder.implementation.recorded', 'coder.attempt.workspace', 'coder.report.refused']) {
+      expect(scope, `the scope dump selects julius.${type}`).toContain(`'julius.${type}'`);
+      expect(catalogue, `${type} must be a real event type`).toContain(`'${type}'`);
+    }
+    // What the Beta Gate's PERMISSIONS row reads: the checked flag and both capture flags, beside the counts.
+    for (const key of ['rule', 'scopeChecked', 'scopeViolations', 'ownScopeViolations', 'workspaceCaptured', 'captured']) expect(scope).toContain(`'${key}'`);
+    for (const text of ["'path'", "'paths'", "'own'", "'inherited'"]) {
+      expect(scope.includes(text), `the scope dump must not export ${text}, which a coder's changes wrote`).toBe(false);
+    }
+    for (const query of [lifecycle, line('finding-status.tsv'), scope]) {
+      expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+    }
+  });
 });
 
 describe('the preflight is a legitimate participant in the durable schema (dry run 33635375764)', () => {
@@ -1160,6 +1285,55 @@ describe('the preflight is a legitimate participant in the durable schema (dry r
     const regression = read('.github/workflows/julius-real-infra.yml');
     expect(regression).toContain('npx vitest run scripts/julius-live-preflight-identity.test.ts');
     expect(regression).toMatch(/JULIUS_REAL_POSTGRES:\s*'1'/u);
+  });
+});
+
+describe('paid run 36568129865 — the zero-dispatch preflight runs and settles the real attempt close-out', () => {
+  // The close-out's output is NUL-separated by design; the executor's receipt insert refused it with
+  // 22P05 and answered 500, and nothing provider-free had ever run it. The proof is the preflight
+  // itself, on the real executor and PostgreSQL (first-live-topology, host-visible, which fails on any
+  // executor refusal); these cases hold the preflight to taking that path at all.
+  const preflight = read('scripts/julius-live-preflight.ts');
+
+  it('takes the attempt start and close-out with the coding adapter\'s own commands, never a copy of them', () => {
+    expect(preflight).toContain("import { juliusAttemptCloseCommand, juliusAttemptStartCommand, parseJuliusAttemptClose, parseJuliusAttemptStart } from '../relay-bridge/julius/coder-workspace';");
+    expect(preflight).toContain('await runInSandbox(juliusAttemptStartCommand(null))');
+    expect(preflight).toContain('const closeCommand = juliusAttemptCloseCommand(attemptTrees);');
+    expect(preflight).toContain('const closeOut = await runInSandbox(closeCommand);');
+    expect(preflight, 'a failing close-out is settled too, through a forced serialization conflict').toMatch(/await runInSandbox\(`\$\{closeCommand\}\\nexit 3`, undefined, conflicted\)/u);
+    expect(preflight, 'the conflict is a concurrent commit to the row the settlement\'s event upserts').toContain("await pool.query('UPDATE relay_wonderland.stream_sequences SET next_sequence=next_sequence+1 WHERE stream_id=$1', [identity.runId]);");
+    expect(preflight.indexOf('juliusAttemptStartCommand(null)'), 'the start is taken before the host writes the probe')
+      .toBeLessThan(preflight.indexOf('writeFileSync(probeFile, Buffer.concat('));
+  });
+
+  it('settles every effect exactly as the live shell port does, and closes a refused one as the port does', () => {
+    const port = read('relay-bridge/julius/executor-effects.ts');
+    expect(preflight).toContain("import { classifyExecutorRefusal, shellDispatchClosure, shellEffectSettlement, type ShellEffectStage } from '../relay-bridge/julius/shell-settlement';");
+    expect(preflight).toContain('await via.settle(shellEffectSettlement({');
+    expect(preflight, 'and `via` is the production repository unless a step names another').toMatch(/via: \{ readonly settle: JuliusToolSettlementPostgresRepository\['settle'\] \} = settlement,/u);
+    expect(port, 'one builder for both, so the preflight settles what the mission settles').toContain('await config.settlement.settle(shellEffectSettlement({');
+    expect(preflight).toContain('tools.failDispatch(shellDispatchClosure({');
+    expect(port).toContain('await config.tools.failDispatch(shellDispatchClosure({');
+    expect(preflight, 'the settlement is the production repository').toContain('new JuliusToolSettlementPostgresRepository(pool)');
+  });
+
+  it('every property it proves can fail it: the marker, exact bytes, digests, nothing open, the control and the invariant', () => {
+    for (const refusal of [
+      'the output reached Julius without a NUL', 'the stored preview carries no encoding marker', 'the stored preview does not decode to the bytes Julius received',
+      'the receipt result carries no encoding marker', 'the receipt digest does not cover the decoded result', 'the settlement does not decode to the receipt',
+      'dispatched invocation(s) were left open', 'the storage control did not hold', 'a terminal run left a tool invocation open',
+      'the forced serialization conflict was not met and replayed exactly once',
+      'no integrity event names the closed dispatch', 'a new invocation on the terminal run was answered',
+    ]) expect(preflight, `the preflight must be able to refuse: ${refusal}`).toContain(refusal);
+    // The invariant probe makes no executor request, so it cannot add a refusal to the topology job's diagnostics.
+    const start = preflight.indexOf('const proveTerminalInvariant');
+    const end = preflight.indexOf('const dockerBinary', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const probe = preflight.slice(start, end);
+    expect(probe).not.toContain('client.');
+    expect(probe).not.toContain('runInSandbox(');
+    expect(probe).toContain("to: 'FAILED'");
   });
 });
 
@@ -1267,7 +1441,9 @@ describe('the receipt transport — proven on real Docker, PR #214 (runs 3366774
     for (const violation of ['receipt_mounts=', 'receipt_mount_is_not_the_sandbox_scope', 'whole_receipt_root_mounted', 'earlier_sandbox_scope_mounted', 'executor_private_mounted', 'receipt_subpath_mounted', 'unexpected_bind:']) {
       expect(preflight, `the daemon-side proof must refuse: ${violation}`).toContain(violation);
     }
-    expect(preflight, 'the proof is taken between prepare and execute').toMatch(/if \(afterPrepare\) await afterPrepare\(invocationId\);\s*\n\s*return await client\.executeTool/u);
+    // Immediately before execute: the only statement between the two is the stage marker the
+    // dispatch closure reads (a failed scope proof is a failure before any command ran).
+    expect(preflight, 'the proof is taken between prepare and execute').toMatch(/if \(afterPrepare\) await afterPrepare\(invocationId\);\s*\n\s*stage = 'execute';\s*\n\s*result = await client\.executeTool/u);
     expect(preflight).toContain("].join(' && '), proveReceiptScope);");
     // And from inside: uid 65532, the mount exists but cannot be listed, nothing under /executor-private.
     for (const check of ['[ "$(id -u)" = "65532" ]', 'test -d /julius-receipts-root', '! ls -A /julius-receipts-root >/dev/null 2>&1', 'test ! -e /executor-private', 'echo RECEIPT_WORKLOAD_REFUSED']) {
@@ -2557,8 +2733,8 @@ describe('the event dumps are ordered by the ledger position, not by the wall cl
 
   it('covers every chronological event dump, so a new one cannot arrive unordered', () => {
     expect(eventDumps().map(named).sort())
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'effort.tsv', 'failures.tsv',
-        'participation.tsv', 'research.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'effort.tsv', 'failures.tsv', 'finding-lifecycle.tsv',
+        'participation.tsv', 'research.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
   });
 
   it('carries the position the ledger allocated, and the stream it is a position within', () => {
@@ -2646,10 +2822,14 @@ describe('the event dumps are ordered by the ledger position, not by the wall cl
 describe('every fact the peer telemetry writes reaches the exported bundle', () => {
   const pipeline = () => read('src/relay/mission/julius/julius-task-pipeline.ts');
 
-  /** The `facts: { … }` object of one `ledger.event(<type>, …)` call, brace-matched. */
+  /**
+   * The `facts: { … }` object of one `ledger.event(<type>, …)` call, brace-matched.
+   * A `ledger.eventOnce(<key>, <type>, …)` call is the same emission, composed once so a
+   * repeated write is the same event (the settlement rows), and is read the same way.
+   */
   const factKeys = (source: string, type: string, nth = 0): readonly string[] => {
-    let from = -1;
-    for (let seen = 0; seen <= nth; seen += 1) from = source.indexOf(`event('${type}'`, from + 1);
+    const emission = new RegExp(`\\bevent(?:Once)?\\((?:\`[^\`]*\`,\\s*)?'${type.replace(/\./gu, '\\.')}'`, 'gu');
+    const from = [...source.matchAll(emission)][nth]?.index ?? -1;
     expect(from, `${type} must be emitted by the pipeline`).toBeGreaterThan(-1);
     const open = source.indexOf('facts: {', from);
     expect(open, `${type} must carry a facts object`).toBeGreaterThan(-1);

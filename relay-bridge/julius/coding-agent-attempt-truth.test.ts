@@ -147,7 +147,10 @@ describe('1 — a result is a success only when every field of it says so', () =
     const { adapter, shell } = adapterOver(claude(queryFn));
     const done = await adapter.dispatch(DISPATCH);
     expect(done.status).toBe('SUCCEEDED');
-    expect(done.diagnostics).toMatchObject({ resultClass: 'SUCCESS', terminalReason: 'completed', implementationPresent: true });
+    // `runtimeStarted` is what the evidence dump exports as worker-diagnostics.tsv's
+    // `runtime_started`. On a failure the adapter overrides it; on a success nothing
+    // does, so this is the only line that holds it to the truth.
+    expect(done.diagnostics).toMatchObject({ resultClass: 'SUCCESS', terminalReason: 'completed', implementationPresent: true, runtimeStarted: true });
     expect(steps(shell)).toEqual(['base', 'status', 'diff', 'test']);
   });
 

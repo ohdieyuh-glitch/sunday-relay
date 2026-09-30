@@ -14,6 +14,12 @@
  *   identity nothing checked — the exact defect already fixed once for the
  *   Prompt Architect and once for the local Coding Agent.
  *
+ *   AND `init` IS AN ANNOUNCEMENT, NOT A SERVING. It arrives before any turn
+ *   exists. Paid attempt 1's init named `claude-fable-5`, and its only turn then
+ *   produced zero tokens: the record said a model served when none had. What
+ *   served is attested separately, by {@link hostedServedModel}, from the
+ *   turns that produced output and the result's own `modelUsage`.
+ *
  *   A SUCCESSFUL RESULT MESSAGE IS NOT A VERDICT. `result.subtype === 'success'`
  *   means the agent finished its turn, not that the work is correct or that it
  *   stayed inside its envelope. Relay's own inspection and tests decide that,
@@ -80,6 +86,39 @@ export const NO_HOSTED_STREAM_USAGE: HostedStreamUsage = Object.freeze({
   cacheReadInputTokens: null, cacheCreationInputTokens: null,
 });
 
+/**
+ * ONE MODEL'S SHARE OF THE SESSION'S TURNS THAT PRODUCED SOMETHING.
+ *
+ * Every assistant message carries the API's own `model` field: the model that
+ * generated THAT turn, which is not necessarily the model `init` announced
+ * before any turn existed. Counted only for the session's own turns
+ * (`parent_tool_use_id` null), only when the turn reported output tokens, and
+ * never for a message carrying the runtime's `error`. An API failure surfaces
+ * as an assistant message with zero usage and a placeholder model, and a turn
+ * that produced nothing served nothing.
+ */
+export interface HostedTurnModel {
+  readonly model: string;
+  readonly turns: number;
+  readonly outputTokens: number;
+}
+
+/**
+ * ONE ENTRY OF THE RESULT'S `modelUsage`, keyed as the runtime keyed it.
+ *
+ * This is the runtime's own account of which models it called and what each
+ * produced. `canonicalModel` is the SDK's resolution of an alias or a
+ * provider-specific key ("may differ from the raw model string this entry is
+ * keyed by", sdk.d.ts 0.3.220), so a key the runtime wrote as an alias can
+ * still be matched to the turn that named the model in full.
+ */
+export interface HostedResultModelUsage {
+  readonly model: string;
+  readonly canonicalModel: string | null;
+  readonly inputTokens: number | null;
+  readonly outputTokens: number | null;
+}
+
 export interface HostedObservation {
   /** True once the runtime's own init message was seen. */
   readonly initSeen: boolean;
@@ -93,7 +132,11 @@ export interface HostedObservation {
    * not a fact about the runtime, and stating the second was the defect.
    */
   readonly sessionId: string | null;
-  /** The model the RUNTIME named. Never the requested one. */
+  /**
+   * The model the RUNTIME named in `init`. Never the requested one, and never
+   * proof of serving: it was announced before any turn existed. What served is
+   * {@link hostedServedModel}'s answer.
+   */
   readonly actualModel: string | null;
   /** The Claude Code version the hosted runtime reported. */
   readonly runtimeVersion: string | null;
@@ -126,6 +169,14 @@ export interface HostedObservation {
    * needed it.
    */
   readonly streamUsage: HostedStreamUsage;
+  /** The session's output-bearing turns, per model, in the order each model was first seen. */
+  readonly turnModels: readonly HostedTurnModel[];
+  /**
+   * The result's `modelUsage`, ordered by output tokens and then by key. Null
+   * when no result reported one. An empty list is a result that reported no
+   * model at all, which is a different claim.
+   */
+  readonly resultModelUsage: readonly HostedResultModelUsage[] | null;
   readonly resultSubtype: string | null;
   /** `is_error` as the runtime sent it. Absent is null, never false. */
   readonly isError: boolean | null;
@@ -146,6 +197,7 @@ const EMPTY: HostedObservation = {
   reportedCwd: null, reportedTools: [], toolTargets: [], toolsUsed: [], toolInvocations: 0,
   permissionDenials: 0, numTurns: null, durationMs: null, usage: UNKNOWN_HOSTED_USAGE,
   streamUsage: NO_HOSTED_STREAM_USAGE,
+  turnModels: [], resultModelUsage: null,
   resultSubtype: null, isError: null, terminalReason: null, finalText: null,
   thinkingBlocksOmitted: 0, unknownMessageCount: 0,
 };
@@ -196,6 +248,60 @@ const foldStreamUsage = (
   };
 };
 
+/** A token count: a non-negative integer, or null. A fraction or a negative is not a count. */
+const tokenCount = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null;
+
+/**
+ * Fold ONE assistant turn's own `model` into the per-model tally, when the turn
+ * produced output. See {@link HostedTurnModel} for which turns count.
+ */
+const foldTurnModel = (
+  state: HostedObservation,
+  message: Record<string, unknown>,
+  inner: Record<string, unknown> | undefined,
+): HostedObservation => {
+  // A subagent's turn is not the session's, and an error delivered as a message is not a turn.
+  if (message.parent_tool_use_id !== null && message.parent_tool_use_id !== undefined) return state;
+  if (message.error !== null && message.error !== undefined) return state;
+  const model = inner?.model;
+  const usage = inner?.usage as Record<string, unknown> | undefined;
+  const output = tokenCount(usage?.output_tokens);
+  if (typeof model !== 'string' || model.trim() === '' || output === null || output === 0) return state;
+  const index = state.turnModels.findIndex((entry) => entry.model === model);
+  return {
+    ...state,
+    turnModels: index === -1
+      ? [...state.turnModels, { model, turns: 1, outputTokens: output }]
+      : state.turnModels.map((entry, at) => at === index
+        ? { model, turns: entry.turns + 1, outputTokens: entry.outputTokens + output }
+        : entry),
+  };
+};
+
+/**
+ * The result's `modelUsage`, read one entry at a time. Null when the result
+ * carried none, and an entry that is not an object is skipped rather than
+ * allowed to throw mid-run.
+ */
+const readModelUsage = (raw: unknown): readonly HostedResultModelUsage[] | null => {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const entries: HostedResultModelUsage[] = [];
+  for (const [model, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (model.trim() === '' || value === null || typeof value !== 'object' || Array.isArray(value)) continue;
+    const entry = value as Record<string, unknown>;
+    entries.push({
+      model,
+      canonicalModel: typeof entry.canonicalModel === 'string' && entry.canonicalModel.trim() !== ''
+        ? entry.canonicalModel : null,
+      inputTokens: tokenCount(entry.inputTokens),
+      outputTokens: tokenCount(entry.outputTokens),
+    });
+  }
+  // The largest producer first, so a bounded export keeps the entries that matter.
+  return entries.sort((a, b) => (b.outputTokens ?? -1) - (a.outputTokens ?? -1) || (a.model < b.model ? -1 : a.model > b.model ? 1 : 0));
+};
+
 /**
  * Fold one SDK message into the running observation. Written as a reducer over
  * `unknown` rather than against the SDK's types on purpose: a hosted runtime
@@ -241,7 +347,7 @@ export function foldHostedMessage(
      * and carries no usage of its own; counting one would double what the
      * assistant turn beside it already reported.
      */
-    let next = m.type === 'assistant' ? foldStreamUsage(state, m, inner) : state;
+    let next = m.type === 'assistant' ? foldTurnModel(foldStreamUsage(state, m, inner), m, inner) : state;
     if (!Array.isArray(content)) return next;
     for (const raw of content) {
       if (raw === null || typeof raw !== 'object') continue;
@@ -308,6 +414,7 @@ export function foldHostedMessage(
       finalText: typeof m.result === 'string' ? m.result : null,
       numTurns: num(m.num_turns),
       durationMs: num(m.duration_ms),
+      resultModelUsage: readModelUsage(m.modelUsage),
       permissionDenials: Array.isArray(m.permission_denials) ? m.permission_denials.length : 0,
       usage: inputTokens === null && outputTokens === null && cost === null
         // Unreported usage stays Unknown. It never becomes zero.
@@ -326,6 +433,79 @@ export function emptyObservation(): HostedObservation {
 /** Fold a whole stream. Convenience for tests and for the runner alike. */
 export function observeHostedMessages(messages: readonly unknown[]): HostedObservation {
   return messages.reduce<HostedObservation>(foldHostedMessage, EMPTY);
+}
+
+/**
+ * WHY A SERVED MODEL WAS OR WAS NOT ATTESTED, as a closed set.
+ *
+ * The domain keeps its own copy (`JULIUS_SERVED_MODEL_BASES`) because it may
+ * not import an adapter; `hosted-served-model.test.ts` fails if the two
+ * disagree.
+ */
+export const HOSTED_SERVED_MODEL_BASES = [
+  /** One model produced every output-bearing turn, and the result's `modelUsage` names it with output. */
+  'attested',
+  /** No turn of the session produced output under a named model. Attempt 1's shape. */
+  'no_output_turns',
+  /** Output-bearing turns named more than one model, so no single model served the dispatch. */
+  'mixed_turn_models',
+  /** The stream ended without a result, so the runtime never gave its own account. */
+  'no_result',
+  /** A result arrived without `modelUsage`. */
+  'no_model_usage',
+  /** The result's `modelUsage` does not name the turns' model with output. The two accounts disagree. */
+  'result_disagrees',
+] as const;
+export type HostedServedModelBasis = (typeof HOSTED_SERVED_MODEL_BASES)[number];
+
+/**
+ * THE MODEL THAT SERVED THE DISPATCH, WHEN TWO INDEPENDENT ACCOUNTS AGREE.
+ *
+ * The turns say which model generated each piece of output. The result's
+ * `modelUsage` is the runtime's own final accounting. A served model is named
+ * only when every output-bearing turn names ONE model and the result credits
+ * that model with output. Anything less is null, with the reason beside it.
+ * `init`'s announcement is never consulted: it is what attempt 1 recorded as
+ * served when nothing had served.
+ *
+ * Other models in `modelUsage` do not unseat the answer. A runtime may spend a
+ * little on a helper model for its own housekeeping, and every entry is
+ * reported beside the verdict so that spending is visible, not hidden.
+ */
+export function hostedServedModel(o: HostedObservation): {
+  readonly servedModel: string | null;
+  readonly basis: HostedServedModelBasis;
+  /**
+   * THE `modelUsage` ENTRY THAT CREDITED THE SERVED MODEL, when one did: its key
+   * and the SDK's `canonicalModel` for it. A reader comparing the served model
+   * with the REQUESTED one needs this entry's mapping and no other, because it
+   * is the runtime's own resolution of the name it was asked for. Null
+   * whenever nothing is attested.
+   */
+  readonly credit: HostedResultModelUsage | null;
+} {
+  if (o.turnModels.length === 0) return { servedModel: null, basis: 'no_output_turns', credit: null };
+  if (o.turnModels.length > 1) return { servedModel: null, basis: 'mixed_turn_models', credit: null };
+  if (o.resultSubtype === null) return { servedModel: null, basis: 'no_result', credit: null };
+  if (o.resultModelUsage === null) return { servedModel: null, basis: 'no_model_usage', credit: null };
+  const turn = o.turnModels[0].model;
+  // The entries are ordered largest producer first, so the first to credit the turns' model is the one that did most.
+  const credit = o.resultModelUsage.find((entry) =>
+    (entry.model === turn || entry.canonicalModel === turn) && entry.outputTokens !== null && entry.outputTokens > 0) ?? null;
+  return credit === null
+    ? { servedModel: null, basis: 'result_disagrees', credit: null }
+    : { servedModel: turn, basis: 'attested', credit };
+}
+
+/**
+ * The model that produced the most output across the session's turns, or null
+ * when no turn produced any. Ties go to the model seen first. This is evidence
+ * for a reader, never a verdict. {@link hostedServedModel} is the verdict.
+ */
+export function dominantTurnModel(o: HostedObservation): string | null {
+  let best: HostedTurnModel | null = null;
+  for (const entry of o.turnModels) if (best === null || entry.outputTokens > best.outputTokens) best = entry;
+  return best?.model ?? null;
 }
 
 /**

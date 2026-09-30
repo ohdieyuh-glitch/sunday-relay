@@ -59,12 +59,33 @@ export interface BetaGateSummary {
   readonly notBuilt: number;
 }
 
+/**
+ * WHETHER THE BUNDLE IS TIED TO THIS CHECKOUT. Bound only when its
+ * `bundle-manifest.txt` names the commit being read, `mode=paid`, and one run
+ * `runs.tsv` holds, and every table the gate reads carries `run_id`. An unbound
+ * bundle keeps its failures; nothing it did can PASS, and no drill stands in.
+ */
+export interface BetaGateBinding {
+  readonly bound: boolean;
+  /** Why the bundle is unbound, or null when it is bound. */
+  readonly reason: string | null;
+  /** The one Julius run every table was scoped to, or null when none was named. */
+  readonly runId: string | null;
+  readonly runState: string | null;
+  /** The commit the manifest says produced the bundle, and the one reading it. */
+  readonly commit: string | null;
+  readonly readingCommit: string | null;
+  readonly mode: string | null;
+  readonly workflowRunId: string | null;
+}
+
 export interface BetaGateReport {
   /** The evidence bundle actually read, or null when none was supplied or found. */
   readonly evidence: string | null;
   readonly evidenceNote: string | null;
   /** Where an admissible-looking drill ledger was read from, or null. */
   readonly capabilitySource: string | null;
+  readonly binding: BetaGateBinding;
   readonly results: readonly BetaCapabilityResult[];
   /** At most three, creation-path capabilities first, in declared order. */
   readonly gaps: readonly BetaCapabilityResult[];
@@ -79,6 +100,41 @@ export interface BetaGateReport {
  */
 export declare const CAPABILITY_PROOF_COLUMNS: readonly string[];
 
+/** The provenance file the evidence dump writes first, which binds a bundle to a commit, a mode and a run. */
+export declare const BUNDLE_MANIFEST: string;
+
+/** Tokens that name a stand-in rather than a provider — every drill, fake and stub in this repository uses one. */
+export declare const NOT_A_PROVIDER_TOKENS: readonly string[];
+
+/** The participant id GitHub sign-in mints (`ghu-<id>`): the only account this repository creates. */
+export declare const ACCOUNT_PARTICIPANT_ID: RegExp;
+
+/** Where the live identities are read from: the composition, the launchers that set the reviewer's provider, the runtime's transport enum. */
+export declare const LIVE_COMPOSITION: string;
+export declare const LIVE_LAUNCHERS: readonly string[];
+export declare const RUNTIME_TRANSPORTS: string;
+
+/** The evidence dump whose queries decide which bundle files have a producer. */
+export declare const EVIDENCE_DUMP: string;
+
+/** The executor refusals that are infrastructure, not a worker reaching past its authority. */
+export declare const INFRASTRUCTURE_REFUSALS: readonly string[];
+
+/** One role's live identity: the worker and adapter the composition declares, and the providers it routes the role to. */
+export interface LiveRoleIdentity {
+  readonly workerId: string;
+  readonly adapterId: string;
+  readonly providers: readonly string[];
+}
+
+/**
+ * The allowlist a task's provider identity is held to, read from this checkout's
+ * live composition — or why it cannot be read, in which case no role is credited.
+ */
+export declare function liveIdentities():
+  | { readonly roles: Readonly<Record<'PROMPT_ARCHITECT' | 'CODING_AGENT' | 'INDEPENDENT_REVIEWER', LiveRoleIdentity>>; readonly transports: readonly string[] }
+  | { readonly error: string };
+
 export interface BetaGateOptions {
   /**
    * A directory holding `capability-proofs.tsv` and its transcripts, when they
@@ -91,7 +147,10 @@ export interface BetaGateOptions {
  * Evaluate every capability against the repository, one live mission evidence
  * bundle and any recorded drill attestations. Passing `null` is the no-evidence
  * case, in which no runtime capability can reach PASS — and no drill ledger
- * alone can lift one past FAIL either, because a capability proof is admissible
- * only where the mission is silent, never where it failed.
+ * alone can lift one past FAIL either, because a capability proof stands in
+ * only where a bound mission's readable rows show the behaviour genuinely did
+ * not happen: never where it failed, and never where the bundle cannot say.
+ * The capability AXIS still reads PROVEN for a current drill, which is what
+ * `julius-real-infra` checks after its drills run.
  */
 export declare function evaluate(evidenceDir: string | null, options?: BetaGateOptions): BetaGateReport;

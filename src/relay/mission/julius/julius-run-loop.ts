@@ -455,12 +455,17 @@ export class JuliusRunLoop {
       };
       const preflight = await prepareClaimedTask(request, this.deps, scope);
       if (preflight.kind === 'REFUSED') {
-        // No execution happened, so no attempt is spent. Three of the five
-        // gates also END the task; the two that do not — a run outside this
-        // scope, which must write nothing at all, and a task that has vanished
-        // from its run — leave the lease to expire and the sweep to reclaim it.
-        // Neither is reachable from a real claim: the claim query is scoped by
-        // project, and a claimed task is in `tasksForRun` by construction.
+        // No execution happened, so no attempt is spent. An unresolvable role,
+        // a C.A.R.D. denial and an unlocked contract END the task. A
+        // governance hold does not: a C.A.R.D. approval gate records a PENDING
+        // approval and holds the run BLOCKED, and a run found held at the
+        // dispatch boundary (paused, blocked, awaiting an approval) keeps its
+        // task — both hand it back RUNNABLE for the claim after the hold lifts.
+        // The two that write nothing — a run outside this scope, and a task
+        // that has vanished from its run — leave the lease to expire and the
+        // sweep to reclaim it. Neither is reachable from a real claim: the
+        // claim query is scoped by project, and a claimed task is in
+        // `tasksForRun` by construction.
         refusedBeforeAdmission += 1;
         outcomes.push(preflight.outcome);
         continue;
@@ -746,6 +751,24 @@ export class JuliusRunLoop {
     ]);
 
     /**
+     * A RECORDED DENIAL ENDS THE RUN, WHATEVER ELSE HOLDS IT.
+     *
+     * `decideJuliusApproval` writes DENIED and then moves the run to FAILED, and
+     * that move can lose a version race: a concurrent advance walks BLOCKED ->
+     * READY between the two, and the FAILED move is not retried. The claim
+     * refuses a run holding a DENIED approval, so nothing ran. But the run then
+     * sat READY for ever: the denial was invisible, and the drive "stalled" with
+     * no cause. So the denial is enacted here, before the pause and the pending
+     * holds (a denied run is not waiting on anyone) and before the verification
+     * sweep (which dispatches a reviewer).
+     */
+    const deniedApprovals = this.deps.store.deniedApprovals;
+    if (!JULIUS_TERMINAL_MISSION_STATES.includes(run.state) && deniedApprovals !== undefined
+      && (await deniedApprovals.call(this.deps.store, runId, projectId)).length > 0) {
+      return this.#applyTarget(run, { state: 'FAILED', reasonCode: 'APPROVAL_DENIED' }, tasks, decisions, 0);
+    }
+
+    /**
      * A VERIFICATION THAT NEVER RAN IS RESUMED BEFORE THE STATE IS COMPUTED.
      *
      * A process that dies between `acceptWorkerResult` and the decision leaves
@@ -780,6 +803,46 @@ export class JuliusRunLoop {
      */
     if (JULIUS_TERMINAL_MISSION_STATES.includes(run.state)) {
       return { runId, from: run.state, to: run.state, changed: false, reasonCode: 'RUN_TERMINAL', resumedVerifications: 0 };
+    }
+
+    /**
+     * A PAUSED RUN IS HELD BY SOMEBODY, AND ADVANCING IT IS NOT THIS LOOP'S CALL.
+     *
+     * The claim query already refuses a PAUSED run, which is why a pause looked
+     * honoured. It was not: the live driver calls `advanceRun` exactly when a
+     * tick claimed nothing, the target computed from the tasks is READY
+     * (`TASKS_RUNNABLE`), and `PAUSED -> READY` is a legal transition — so the
+     * very next idle tick UN-PAUSED the run under the reason `TASKS_RUNNABLE`
+     * and the tick after it dispatched. A pause held for one tick. Found by the
+     * operator lifecycle channel's route proof, driving the live driver.
+     *
+     * AND BEFORE THE VERIFICATION SWEEP, because a resumed verification
+     * dispatches the reviewer, and pause means "start nothing further". Only
+     * `resumeJuliusRun` — somebody's decision, recorded — takes a run out of
+     * PAUSED; cancel still reaches it because cancel does not go through here.
+     */
+    if (run.state === 'PAUSED') {
+      return { runId, from: run.state, to: run.state, changed: false, reasonCode: 'RUN_PAUSED', resumedVerifications: 0 };
+    }
+
+    /**
+     * A PENDING APPROVAL IS SOMEBODY'S DECISION TOO, AND THIS LOOP DOES NOT
+     * WALK AROUND IT.
+     *
+     * The sibling of the PAUSED hold, with the same shape: `requestJuliusApproval`
+     * moves the run to BLOCKED, the claim query refuses a BLOCKED run, and so
+     * the gate looked honoured. It was not: an idle tick called `advanceRun`,
+     * the target from the TASKS was READY (`TASKS_RUNNABLE`), BLOCKED -> READY
+     * is legal, and the next tick dispatched — the whole mission ran to
+     * COMPLETED with the approval still PENDING. Only `decideJuliusApproval`
+     * takes a run out of an approval hold (READY when every gate is granted,
+     * FAILED on a denial); cancel still reaches it because cancel does not go
+     * through here. Checked in any non-terminal state, before the verification
+     * sweep, because a resumed verification dispatches the reviewer.
+     */
+    const pendingApprovals = this.deps.store.pendingApprovals;
+    if (pendingApprovals !== undefined && (await pendingApprovals.call(this.deps.store, runId, projectId)).length > 0) {
+      return { runId, from: run.state, to: run.state, changed: false, reasonCode: 'RUN_AWAITING_APPROVAL', resumedVerifications: 0 };
     }
 
     const resumed = await this.#resumeVerifications(run, tasks, decisions, projectId);
@@ -859,6 +922,22 @@ export class JuliusRunLoop {
         roles: new Set(tasks.map((item) => item.role)).size,
       },
     });
+    return this.#applyTarget(run, target, tasks, decisions, resumed);
+  }
+
+  /**
+   * Move a run to `target` along a legal path, recording the completion fact and
+   * the terminal event. One place, used by the task graph's target and by a
+   * recorded denial, so a denial ends a run exactly the way anything else does.
+   */
+  async #applyTarget(
+    run: JuliusRunRow,
+    target: { state: JuliusMissionState; reasonCode: string },
+    tasks: readonly JuliusTask[],
+    decisions: readonly JuliusRecordedDecision[],
+    resumed: number,
+  ): Promise<JuliusRunAdvance> {
+    const { runId, projectId } = run;
     const path = planRunStatePath(run.state, target.state);
     if (path.length === 0) {
       return { runId, from: run.state, to: run.state, changed: false, reasonCode: target.reasonCode, resumedVerifications: resumed };

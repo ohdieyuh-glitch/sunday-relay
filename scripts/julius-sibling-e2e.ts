@@ -8,6 +8,9 @@
  *   interrupt-start  a dangerous effect starts and its sandbox is destroyed under it.                        (cases A and C)
  *   interrupt-verify the interrupted identity answers STARTED_UNKNOWN_OUTCOME and is never replayed blind.   (cases A and C)
  *   replay           after an executor restart the terminal material replays verbatim with no second effect. (case D)
+ *   complete         completion authority settles a task outcome exactly once; then the TOOL-FAILURE PATH:
+ *                    a command that fails inside the sandbox is a signed FAILED result, settled exactly once,
+ *                    evidenced FAILED, its spend committed, and its task left for the pipeline to decide.
  */
 import { access, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
@@ -16,7 +19,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { JuliusToolSettlementPostgresRepository } from '../src/relay/persistence/julius-tool-settlement-postgres';
 import { canonicalRequestDigest } from '../src/relay/workspace/julius-tools/execution-envelope';
-import { LIMITS, FULL_POLICY, LEASE, PROJECT, RUN, TASK, TENANT, WORKER, POLICY, COMPLETION_RUN, COMPLETION_TASK, digestOf, endpoint, divergentEnvelope, envelopeFor, openJuliusClient, required, seedBase, seedInvocation, sha, type SandboxLimits, type SeededInvocation } from './julius-sibling-support';
+import { LIMITS, FULL_POLICY, LEASE, PROJECT, RUN, TASK, TENANT, WORKER, POLICY, COMPLETION_RUN, COMPLETION_TASK, FAILURE_RUN, FAILURE_TASK, digestOf, endpoint, divergentEnvelope, envelopeFor, openJuliusClient, required, seedBase, seedInvocation, sha, type SandboxLimits, type SeededInvocation } from './julius-sibling-support';
 
 const run=promisify(execFile);
 const refused=async(what:string,attempt:()=>Promise<unknown>)=>{try{await attempt();}catch(error){if(error instanceof Error&&error.message.startsWith('isolation_'))throw error;return;}throw new Error(`isolation_${what}_succeeded`);};
@@ -61,15 +64,16 @@ const settlementCommand=(input:{settlementId:string;seed:SeededInvocation;result
 const SETTLEMENT_COUNTS=`SELECT
  (SELECT count(*) FROM relay_wonderland.julius_tool_settlements WHERE invocation_id=$1) settlements,
  (SELECT count(*) FROM relay_wonderland.julius_evidence WHERE evidence_id=$2) evidence,
- (SELECT count(*) FROM relay_wonderland.julius_tool_invocations WHERE invocation_id=$1 AND state='SUCCEEDED') succeeded,
+ (SELECT count(*) FROM relay_wonderland.julius_tool_invocations WHERE invocation_id=$1 AND state=$9) terminal,
  (SELECT count(*) FROM relay_wonderland.budget_reservations WHERE reservation_id=$3 AND state='COMMITTED') committed,
  (SELECT count(*) FROM relay_wonderland.julius_trajectory_events WHERE trajectory_event_id=$4) trajectory,
  (SELECT count(*) FROM relay_wonderland.events WHERE event_id=$5) events,
  (SELECT count(*) FROM relay_wonderland.outbox WHERE outbox_id=$6) outbox,
  (SELECT count(*) FROM relay_wonderland.julius_tool_outbox WHERE invocation_id=$1 AND state='DELIVERED') delivered,
  (SELECT count(*) FROM relay_wonderland.julius_tasks WHERE task_id=$7 AND state=$8) task`;
-const settlementTruth=async(pool:import('pg').Pool,input:{invocationId:string;evidenceId:string;settlementId:string;taskId:string;taskState:string})=>{
-  const counts=await pool.query(SETTLEMENT_COUNTS,[input.invocationId,input.evidenceId,`budget-${input.invocationId}`,`trajectory:tool-settlement:${input.settlementId}`,`julius:tool-settlement:${input.settlementId}`,`outbox:julius:tool-settlement:${input.settlementId}`,input.taskId,input.taskState]);
+/** `invocationState` is the tool's own terminal state: SUCCEEDED unless the case is the tool-failure path. */
+const settlementTruth=async(pool:import('pg').Pool,input:{invocationId:string;evidenceId:string;settlementId:string;taskId:string;taskState:string;invocationState?:'SUCCEEDED'|'FAILED'})=>{
+  const counts=await pool.query(SETTLEMENT_COUNTS,[input.invocationId,input.evidenceId,`budget-${input.invocationId}`,`trajectory:tool-settlement:${input.settlementId}`,`julius:tool-settlement:${input.settlementId}`,`outbox:julius:tool-settlement:${input.settlementId}`,input.taskId,input.taskState,input.invocationState??'SUCCEEDED']);
   const truth=counts.rows[0] as Record<string,string>;
   const wrong=Object.entries(truth).filter(([,value])=>value!=='1');
   if(wrong.length)throw new Error(`settlement_not_exactly_once:${JSON.stringify(truth)}`);
@@ -161,7 +165,40 @@ async function main():Promise<void>{
     if(released.rows[0].c!=='1')throw new Error('completion_did_not_release_the_task_lease');
     if(await lines('completion-effect.log')!==1)throw new Error('completion_effect_not_exactly_one');
     await client.destroySandbox({sandboxId:seed.identity.sandboxId,expectedLeaseGeneration:LEASE,reason:'sibling-ci-cleanup'});
-    await pool.end();process.stdout.write(`SIBLING_COMPLETION_GREEN ${JSON.stringify(truth)}\n`);return;
+    process.stdout.write(`SIBLING_COMPLETION_GREEN ${JSON.stringify(truth)}\n`);
+
+    /*
+     * THE TOOL-FAILURE PATH, through the same sandbox, the same signed receipts and the same settlement.
+     *
+     * Every case above succeeds, so a tool that FAILS had never been driven end to end: the executor's
+     * signed FAILED terminal, Julius settling it, and what the durable record then says. A failure is
+     * an answer, not an exception, and each of these is a claim that answer must keep:
+     *   - the executor signs FAILED with the workload's own exit code;
+     *   - Julius settles it exactly once, and a second settlement creates nothing;
+     *   - the invocation is FAILED and its evidence says FAILED, so it can never count toward a criterion;
+     *   - the reservation is COMMITTED, never released: a failed command still ran, and spend is spend;
+     *   - the task stays ACTIVE. A failed tool does not end its task; what happens next is the pipeline's call;
+     *   - the attempt ran exactly once, so nothing retried it blind.
+     * Its own run and task, so the completion case above cannot be stranded by it or strand it.
+     */
+    await seedBase(pool,{runId:FAILURE_RUN,taskId:FAILURE_TASK});
+    const failing=await seedInvocation(pool,tools,{invocationId:'sibling-tool-failure',command:"printf 'attempted\\n' >> tool-failure-attempts.log; printf 'refusing\\n' >&2; exit 3",runId:FAILURE_RUN,taskId:FAILURE_TASK});
+    await client.createSandbox({identity:failing.identity,limits:LIMITS,policy:FULL_POLICY});
+    await client.prepareWorkspace({sandboxId:failing.identity.sandboxId,sourceRef:workspace,expectedLeaseGeneration:LEASE});
+    const failed=await client.executeTool(failing.execution);
+    if(failed.status!=='FAILED'||failed.exitCode!==3)throw new Error(`tool_failure_not_signed_as_failed:${failed.status}:${String(failed.exitCode)}`);
+    const failure=settlementCommand({settlementId:'sibling-tool-failure-settlement',seed:failing,result:failed,evidenceId:'tool-failure-evidence',taskOutcome:null});
+    if(!(await settlement.settle(failure)).created)throw new Error('tool_failure_settlement_missing');
+    if((await settlement.settle(failure)).created)throw new Error('tool_failure_settlement_not_exactly_once');
+    const failureTruth=await settlementTruth(pool,{invocationId:failing.invocationId,evidenceId:'tool-failure-evidence',settlementId:'sibling-tool-failure-settlement',taskId:FAILURE_TASK,taskState:'ACTIVE',invocationState:'FAILED'});
+    const evidence=await pool.query(`SELECT status FROM relay_wonderland.julius_evidence WHERE evidence_id=$1`,['tool-failure-evidence']);
+    if(evidence.rows[0]?.status!=='FAILED')throw new Error(`tool_failure_evidence_not_failed:${String(evidence.rows[0]?.status)}`);
+    const recorded=await pool.query(`SELECT exit_code FROM relay_wonderland.julius_tool_invocations WHERE invocation_id=$1`,[failing.invocationId]);
+    if(Number(recorded.rows[0]?.exit_code)!==3)throw new Error(`tool_failure_exit_code_not_recorded:${String(recorded.rows[0]?.exit_code)}`);
+    if(await lines('tool-failure-attempts.log')!==1)throw new Error('tool_failure_attempt_not_exactly_one');
+    await client.destroySandbox({sandboxId:failing.identity.sandboxId,expectedLeaseGeneration:LEASE,reason:'sibling-ci-cleanup'});
+    // The counts keep their own keys; the status and the exit code are named apart, so no count is overwritten.
+    await pool.end();process.stdout.write(`SIBLING_TOOL_FAILURE_GREEN ${JSON.stringify({...failureTruth,evidenceStatus:'FAILED',exitCode:failed.exitCode})}\n`);return;
   }
 
   const proof=JSON.parse(await readFile(proofPath(),'utf8')) as {invocationId:string;dispatchGeneration:number;original:Awaited<ReturnType<typeof client.executeTool>>};

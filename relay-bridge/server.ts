@@ -42,6 +42,7 @@ import { handleRepositoryRoute, isRepositoryRoute, type RepositoryCaller } from 
 import { handlePspRoute, isPspRoute } from './psp-routes';
 import { createJuliusStatePorts, handleJuliusStateRoute, isJuliusStateRoute } from './julius-state-routes';
 import { composeJuliusMissionBootstrap, handleJuliusMissionRoute, isJuliusMissionRoute, type JuliusMissionRoutePorts } from './julius-mission-routes';
+import { handleJuliusLifecycleRoute, isJuliusLifecycleRoute } from './julius-lifecycle-routes';
 import { JULIUS_RUNTIME_DATABASE_ENV_NAMES, juliusRuntimeDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { Pool } from 'pg';
 import { handleShipRoute, isShipRoute } from './ship-route';
@@ -794,6 +795,29 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
           }, juliusMissionPorts());
           if (missionResult !== null) {
             send(res, missionResult.status, missionResult.body, cors);
+            return;
+          }
+        }
+
+        /**
+         * PAUSE / RESUME / CANCEL A JULIUS RUN. Operator-only, and BEFORE the
+         * read family below, which claims every `/julius/` path and would answer
+         * this POST with 405. Composed over the SAME api object the reads use —
+         * one store, one authority. It records operator intent and dispatches
+         * nothing; the run loop honours it. See `julius-lifecycle-routes.ts`.
+         */
+        if (isJuliusLifecycleRoute(path.replace('/relay-api', ''))) {
+          const lifecycleAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const lifecycleResult = await handleJuliusLifecycleRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            operator: bearerMatches(lifecycleAuthz, process.env.RELAY_BRIDGE_API_TOKEN),
+            projectId: headerValue(req.headers['x-relay-project']),
+            tenantId: headerValue(req.headers['x-relay-tenant']),
+            body: method === 'POST' ? await readRawBody(req) : undefined,
+          }, juliusStatePorts());
+          if (lifecycleResult !== null) {
+            send(res, lifecycleResult.status, lifecycleResult.body, cors);
             return;
           }
         }

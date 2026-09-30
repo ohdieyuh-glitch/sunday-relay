@@ -44,6 +44,7 @@ import type { JuliusMemoryClaim } from './julius-memory-trust';
 import { juliusClaimStandingKey } from './julius-claim-ledger';
 import { MAX_TASK_RECOVERIES, planJuliusRecovery, type JuliusRecoveryAction } from './julius-recovery';
 import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
+import { JULIUS_CLAIMABLE_RUN_STATES } from './julius-state-path';
 import { JuliusEventIdConflict, canonicalJuliusEventIdentity, type JuliusOperationalEvent } from './julius-events';
 import type { JuliusTrajectoryEvent } from './julius-trajectory';
 import type { JuliusContextSnapshot } from './julius-context-snapshot';
@@ -189,8 +190,7 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       return dependency !== undefined && (dependency.state === 'SUCCEEDED' || dependency.state === 'SKIPPED');
     });
 
-  const CLAIMABLE_RUN_STATES: readonly JuliusMissionState[] =
-    ['READY', 'EXECUTING', 'WAITING', 'REVIEWING', 'REPAIRING', 'VERIFYING'];
+  const CLAIMABLE_RUN_STATES: readonly JuliusMissionState[] = JULIUS_CLAIMABLE_RUN_STATES;
 
   /**
    * ONE APPEND, WHOEVER ASKS.
@@ -339,6 +339,17 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
           if (run === undefined) return false;
           if (input.projectId !== undefined && run.projectId !== input.projectId) return false;
           if (!CLAIMABLE_RUN_STATES.includes(run.state)) return false;
+          // A PENDING APPROVAL HOLDS THE RUN AT THE CLAIM, not only in the run
+          // loop and not only through the run's state. The state filter above
+          // refuses a BLOCKED run, and that was the whole hold — so any path
+          // that left a gated run in a claimable state (a request whose BLOCKED
+          // move lost a race, a store without the atomic request, another
+          // writer's transition) dispatched past an unanswered approval. A
+          // DENIED approval refuses the run too: a denial fails the run, and
+          // if that move lost a race the denial must still stop the work. The
+          // PostgreSQL claim carries the same rule.
+          if ([...approvals.values()].some((row) => row.runId === task.runId
+            && (row.state === 'PENDING' || row.state === 'DENIED'))) return false;
           if (task.nextAttemptAt > input.now) return false;
           // AN EXPIRED LEASE IS RECOVERY'S, NOT THE CLAIM'S.
           //
@@ -858,6 +869,12 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     async pendingApprovals(runId, projectId) {
       return [...approvals.values()]
         .filter((row) => row.runId === runId && row.projectId === projectId && row.state === 'PENDING')
+        .map((row) => ({ ...row }));
+    },
+
+    async deniedApprovals(runId, projectId) {
+      return [...approvals.values()]
+        .filter((row) => row.runId === runId && row.projectId === projectId && row.state === 'DENIED')
         .map((row) => ({ ...row }));
     },
 

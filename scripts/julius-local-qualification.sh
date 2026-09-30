@@ -681,6 +681,13 @@ cmd_evidence() {
   require_native_docker
   require_rig
   load_rig
+  # THE BUNDLE NAMES THE CODE THAT RAN, OR IT IS NOT WRITTEN. Its manifest records this checkout's
+  # `git rev-parse HEAD` and tracked changes at DUMP time, and the Beta Gate binds a bundle only to
+  # that commit with no tracked change. `run` refuses unless the rig was built from HEAD on a clean
+  # checkout, so the rig's commit is the run's: evidence taken after the checkout moved, or from an
+  # edited tree, would name code the mission never ran.
+  [ "$RIG_HEAD" = "$HEAD_SHA" ] || refuse "evidence_head_moved: the rig ran $RIG_HEAD and HEAD is now $HEAD_SHA; check $RIG_HEAD out again before taking evidence"
+  [ -z "$(git status --porcelain --untracked-files=no)" ] || refuse 'evidence_checkout_dirty: the checkout has tracked changes, so the manifest would name a commit that is not the code that ran'
   local out
   out="$STATE/evidence/$(date -u +%Y%m%dT%H%M%SZ)/julius-live-evidence"
   mkdir -p "$out"
@@ -697,7 +704,12 @@ cmd_evidence() {
   if [ -f "$LOGS/preflight-roles.log" ]; then node scripts/julius-live-evidence.mjs "$LOGS/preflight-roles.log" > "$out/preflight-roles.evidence.txt" || true; fi
   if [ -f "$LOGS/live-mission.log" ]; then node scripts/julius-live-evidence.mjs "$LOGS/live-mission.log" > "$out/live-mission.evidence.txt" || true; fi
   grep -E '^(research_observation source=[a-z]+ capability=[a-z_]+ host=[a-z0-9*.-]+ backend=[a-z_]+ result=(observed|unreachable|throttled|unauthenticated|unconfigured)|research_observation_summary observed=[0-9]+ of=[0-9]+|JULIUS_RESEARCH_OBSERVED_BACKENDS=[a-z_]+:[a-z_]+(,[a-z_]+:[a-z_]+)*|research_not_granted: the contract has no research clause, so there is nothing to observe\.|research_unobservable: no backend was observed serving any of the [0-9]+ research probe\(s\) the contract grants; refusing to dispatch a mission whose research would all be refused\.)$' "$LOGS/research-observation.log" > "$out/research-observation.txt" 2>/dev/null || true
-  PGPASSWORD="$DB_PASSWORD_VALUE" ./.github/julius-live-evidence-dump.sh "$out"
+  # THE BUNDLE SAYS WHAT IT IS. Off a runner the dump cannot read a dispatch input, so this
+  # launcher declares the mode for its manifest: `paid` only when this rig ran the confirmed
+  # mission (`run` is the one path that writes live-mission.log), `preflight` otherwise.
+  local evidence_mode=preflight
+  if [ -f "$LOGS/live-mission.log" ]; then evidence_mode=paid; fi
+  JULIUS_EVIDENCE_MODE="$evidence_mode" PGPASSWORD="$DB_PASSWORD_VALUE" ./.github/julius-live-evidence-dump.sh "$out"
   git -c safe.directory="$JULIUS_WORKSPACE" -C "$JULIUS_WORKSPACE" --no-pager diff > "$out/workspace.diff" 2>/dev/null || true
   git -c safe.directory="$JULIUS_WORKSPACE" -C "$JULIUS_WORKSPACE" status --porcelain=v1 > "$out/workspace-status.txt" 2>/dev/null || true
   docker exec julius-executor sh -c 'ls -1 "$EXECUTOR_RECEIPT_ROOT" 2>/dev/null | head -n 200' > "$out/receipt-ids.txt" 2>/dev/null || true

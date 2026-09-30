@@ -68,6 +68,13 @@ export interface JuliusApprovalStore {
   requestApprovalAndBlock?(input:{record:JuliusApprovalRecord;expectedRunVersion:number}):Promise<{created:boolean;record:JuliusApprovalRecord;runState:JuliusMissionState}>;
   loadApproval(runId: string, approvalId: string, projectId: string): Promise<JuliusApprovalRecord | null>;
   pendingApprovals(runId: string, projectId: string): Promise<readonly JuliusApprovalRecord[]>;
+  /**
+   * The run's DENIED approvals. A denial ENDS the run, and the claim already
+   * refuses a run holding one. These let the dispatch boundary and `advanceRun`
+   * say so too, including when the denial's own move to FAILED lost a race and
+   * never happened. Optional, so a store that cannot say reads as holding none.
+   */
+  deniedApprovals?(runId: string, projectId: string): Promise<readonly JuliusApprovalRecord[]>;
   /** Decides only a PENDING approval. A decided one stays decided. */
   decideApproval(input: {
     runId: string; approvalId: string; projectId: string;
@@ -107,6 +114,22 @@ export interface JuliusLifecycleDependencies {
   readonly ids?: JuliusIdFactory;
 }
 
+/**
+ * WHAT REQUESTING AN APPROVAL ACTUALLY USES — narrower than the lifecycle's
+ * dependencies, so the C.A.R.D. gate at dispatch (`prepareClaimedTask`), whose
+ * store is the runtime store and not a lifecycle store, calls the one
+ * production path instead of keeping a second copy of it. Every
+ * `JuliusLifecycleDependencies` is one of these.
+ */
+export interface JuliusApprovalRequestDependencies {
+  readonly store: Pick<JuliusApprovalStore, 'requestApproval'>
+    & Partial<Pick<JuliusApprovalStore, 'requestApprovalAndBlock'>>
+    & Pick<JuliusRunWriter, 'loadRun' | 'transition'>;
+  readonly clock: JuliusClock;
+  readonly events?: JuliusEventWriter;
+  readonly ids?: JuliusIdFactory;
+}
+
 type LifecycleEventType = Extract<JuliusOperationalEventType,
   'approval.requested' | 'approval.decided' | 'task.cancelled'
   | 'run.paused' | 'run.resumed' | 'run.cancelled'>;
@@ -117,7 +140,7 @@ const LIFECYCLE_EVENT: Readonly<Partial<Record<JuliusMissionState, LifecycleEven
 });
 
 async function emit(
-  deps: JuliusLifecycleDependencies,
+  deps: Pick<JuliusApprovalRequestDependencies, 'clock' | 'events' | 'ids'>,
   run: { runId: string; projectId: string },
   type: LifecycleEventType,
   facts: Record<string, string | number | boolean | null>,
@@ -167,7 +190,7 @@ export async function requestJuliusApproval(
     readonly safeRationale: string;
     readonly idempotencyKey: string;
   },
-  deps: JuliusLifecycleDependencies,
+  deps: JuliusApprovalRequestDependencies,
 ): Promise<JuliusApprovalRequestOutcome> {
   const now = deps.clock.now();
   const record: JuliusApprovalRecord = {
@@ -266,6 +289,15 @@ export async function decideJuliusApproval(
     return { decided: true, state: 'DENIED', runState: to, duplicate: false };
   }
 
+  // A GRANT DOES NOT UN-PAUSE A RUN. Paused while it waited on this approval,
+  // it went PAUSED -> READY here (the transition is legal) with no resume and
+  // the pauser still named, and the next drive dispatched. The grant stands on
+  // the record; only `resumeJuliusRun` takes a run out of PAUSED, and a resume
+  // with nothing left pending goes on to READY.
+  if (run.state === 'PAUSED') {
+    return { decided: true, state: 'APPROVED', runState: run.state, duplicate: false };
+  }
+
   // APPROVED — but only back to work when nothing ELSE is still waiting. A run
   // with two gates open must not resume because one of them was answered.
   const stillPending = await deps.store.pendingApprovals(input.runId, input.projectId);
@@ -302,7 +334,12 @@ export async function resumeJuliusRun(
       safeMessage: `This run is ${run.state}, not PAUSED, so there is nothing to resume.`,
     };
   }
-  return lifecycle(input, 'READY', 'OPERATOR_RESUMED', deps, false);
+  // A RUN STILL WAITING ON A PERSON RESUMES TO WAITING. Paused while BLOCKED on
+  // a PENDING approval, it went to READY: a state that says it continues when
+  // driven, when it is still waiting on an approver. The claim and `advanceRun`
+  // held it anyway, but the row and the route's reply said something untrue.
+  const waiting = (await deps.store.pendingApprovals(input.runId, input.projectId)).length > 0;
+  return lifecycle(input, waiting ? 'BLOCKED' : 'READY', 'OPERATOR_RESUMED', deps, false, 'run.resumed');
 }
 
 /**
@@ -325,6 +362,9 @@ async function lifecycle(
   reasonCode: string,
   deps: JuliusLifecycleDependencies,
   cancelTasks: boolean,
+  // What the change IS, which is not always the state it lands in: a resume
+  // that lands in BLOCKED (still waiting on an approval) is still a resume.
+  announcement: LifecycleEventType | undefined = LIFECYCLE_EVENT[to],
 ): Promise<JuliusLifecycleOutcome> {
   const run = await deps.store.loadRun(input.runId, input.projectId);
   if (run === null) return { applied: false, reasonCode: 'RUN_NOT_FOUND', safeMessage: 'No such run in this project.' };
@@ -364,7 +404,6 @@ async function lifecycle(
   const cancelled = cancelTasks
     ? await deps.store.cancelRunTasks(input.runId, input.projectId, deps.clock.now())
     : 0;
-  const announcement = LIFECYCLE_EVENT[to];
   if (announcement !== undefined) {
     await emit(deps, run, announcement, {
       actor: input.actor, reason: input.reason.slice(0, 200), from: run.state,
@@ -408,7 +447,7 @@ async function moveRun(
   run: JuliusRunRow,
   to: JuliusMissionState,
   detail: { reasonCode: string; safeSummary: string },
-  deps: JuliusLifecycleDependencies,
+  deps: Pick<JuliusApprovalRequestDependencies, 'store' | 'clock'>,
 ): Promise<JuliusMissionState> {
   const path = planRunStatePath(run.state, to);
   if (path.length === 0) return run.state;
