@@ -71,6 +71,7 @@ import { createPostgresMissionSeedStore } from './julius/mission-seed';
 import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 import { createExecutorShellPort } from './julius/executor-effects';
 import { createLiveArtifactExchange, juliusReviewerBillingPath } from './julius/live-workers';
+import { liveEvidenceLines } from './julius/live-evidence-lines';
 import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
@@ -949,7 +950,8 @@ async function main(argv: readonly string[]): Promise<number> {
     }
     out(`  run: ${submitted.runId}`);
     for (const task of tasks) out(`  task ${task.taskId} [${task.role}/${task.taskType}] → ${task.state}`);
-    for (const item of evidence) out(`  evidence ${item.evidenceId} [${item.type}/${item.status}] ${item.safeSummary}`);
+    // A row from an attempt the decision did not read is labelled, not hidden (`liveEvidenceLines`).
+    for (const line of liveEvidenceLines(evidence, tasks)) out(line);
     for (const finding of findings) out(`  finding ${finding.findingId} blocking=${finding.blocking} status=${finding.status} — ${finding.claim}`);
     out(`  verification decisions: ${decisions.map((decision) => decision.action).join(', ') || 'none'}`);
     return outcome.state === 'COMPLETED' ? 0 : 1;
