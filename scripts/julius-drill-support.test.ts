@@ -12,7 +12,7 @@ import {
   CAPABILITY_PROOF_COLUMNS, DrillRecord, JULIUS_DRILL_DATABASE_NAME, drillDatabaseTarget, foreignJuliusRuns,
   writeAttestation, writeDrillAttestation,
 } from './julius-drill-support';
-import { drillDrivenFiles, drillEntry, specifiersIn } from './julius-drill-closure.mjs';
+import { JULIUS_CAPABILITY_DRILLS, drillDrivenFiles, drillEntry, specifiersIn } from './julius-drill-closure.mjs';
 import * as recovery from './julius-recovery-drill';
 import * as failure from './julius-failure-recovery-drill';
 import * as repair from './julius-repair-loop-drill';
@@ -76,6 +76,28 @@ describe('every Julius capability drill', () => {
     expect(new Set(DRILLS.map((drill) => drill.module.CAPABILITY)).size).toBe(DRILLS.length);
     expect(new Set(DRILLS.map((drill) => drill.module.TRANSCRIPT_FILE)).size).toBe(DRILLS.length);
   });
+
+  /**
+   * ONLY THESE THREE ARE DRILLS (REVIEW_SECOND_JULIUS.md P1-C). `drillEntry`
+   * took any `npm run <script>` with a `<script>:build`, so the relay bridge
+   * SERVER was a "drill" whose closure covered whole rows. Each capability names
+   * its one drill in JULIUS_CAPABILITY_DRILLS, which every drill reads its
+   * command, transcript and closing sentence from and the gate holds every
+   * attestation to.
+   */
+  it('only the three capability drills are drills: the bridge server is not one, whatever its build', () => {
+    expect(scripts['relay:bridge:build'], 'the server has a build, which is all it used to take').toBeDefined();
+    const server = drillEntry(REPO, 'npm run relay:bridge');
+    expect('error' in server ? server.error : 'accepted').toContain('relay:bridge is not a Julius capability drill');
+    expect(Object.keys(JULIUS_CAPABILITY_DRILLS).sort()).toEqual(DRILLS.map((drill) => drill.module.CAPABILITY).sort());
+    for (const drill of DRILLS) {
+      const declared = JULIUS_CAPABILITY_DRILLS[drill.module.CAPABILITY];
+      expect(`npm run ${declared.script}`, drill.name).toBe(drill.module.DRILL_COMMAND);
+      expect(declared.transcript, drill.name).toBe(drill.module.TRANSCRIPT_FILE);
+      expect(declared.name, 'the sentence the drill seals its transcript with').toBe(`JULIUS ${drill.name.toUpperCase().replace(/[^A-Z ]/gu, ' ')}`);
+      expect('entry' in drillEntry(REPO, drill.module.DRILL_COMMAND), `${drill.module.DRILL_COMMAND} is a drill`).toBe(true);
+    }
+  });
 });
 
 /**
@@ -133,7 +155,7 @@ describe('the capability-proof ledger', () => {
     expect(() => writeDrillAttestation({
       outDir: dir, repoRoot: REPO, record: record(3), verified: true, capability: 'REPAIR LOOP', drill: 'npm run julius:no-such-drill',
       exercised: ['package.json'], infrastructure: 'real-postgres,no-provider-call', transcriptFile: 'x.txt',
-    })).toThrow(/drill_driven_files_unknown: package\.json has no script julius:no-such-drill/u);
+    })).toThrow(/drill_driven_files_unknown: julius:no-such-drill is not a Julius capability drill/u);
   });
 });
 

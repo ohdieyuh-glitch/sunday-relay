@@ -72,6 +72,7 @@ import { createPostgresMissionSeedStore } from '../relay-bridge/julius/mission-s
 import { assembleLiveJuliusRuntime, driveJuliusRunToTerminal } from '../relay-bridge/julius/live-composition';
 import { scriptedAdapter, seededTaskContract, worker } from '../src/relay/mission/julius';
 import { DrillRecord, auditProviders, drillDatabaseTarget, foreignJuliusRuns, scalarReader, writeDrillAttestation } from './julius-drill-support';
+import { JULIUS_CAPABILITY_DRILLS } from './julius-drill-closure.mjs';
 import type { JuliusProviderAdapter, JuliusTask } from '../src/relay/mission/julius';
 
 
@@ -100,8 +101,13 @@ const LEASE_MS = 2_000;
  * not a label it trusts.
  */
 export const CAPABILITY = 'RESTART / RECOVERY';
-/** The transcript's closing sentence; the gate requires an all-capitals VERIFIED line. */
-const DRILL_NAME = 'JULIUS RESTART RECOVERY';
+/**
+ * THIS DRILL'S ENTRY in the one table the Beta Gate holds every attestation to:
+ * the sentence its transcript closes on (`<name> VERIFIED`, which no other drill
+ * writes), the transcript file and the command. Read, never retyped.
+ */
+const DRILL = JULIUS_CAPABILITY_DRILLS[CAPABILITY];
+const DRILL_NAME = DRILL.name;
 export const EXERCISED = [
   'src/relay/mission/julius/julius-recovery.ts',
   'src/relay/persistence/julius-recovery-postgres.ts',
@@ -332,8 +338,8 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
 
 /* ------------------------------------------------------------ attestation */
 
-export const TRANSCRIPT_FILE = 'julius-recovery-drill.transcript.txt';
-export const DRILL_COMMAND = 'npm run julius:recovery-drill';
+export const TRANSCRIPT_FILE = DRILL.transcript;
+export const DRILL_COMMAND = `npm run ${DRILL.script}`;
 export const INFRASTRUCTURE = 'real-postgres,two-processes,real-lease-expiry,no-provider-call';
 
 const fileAttestation = (outDir: string, repoRoot: string, record: DrillRecord, verified: boolean): void =>

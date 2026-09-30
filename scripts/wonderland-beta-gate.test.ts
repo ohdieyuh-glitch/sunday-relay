@@ -6,8 +6,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { participantIdForIdentity } from '../relay-bridge/github-auth-routes';
-import { drillDrivenFiles } from './julius-drill-closure.mjs';
+import { CODER_WORKER, architectWorker, reviewerWorker } from '../relay-bridge/julius/live-composition';
+import { JULIUS_CAPABILITY_DRILLS, capabilityDrill, drillDrivenFiles, importClosure } from './julius-drill-closure.mjs';
 import { ACCOUNT_PARTICIPANT_ID, BUNDLE_MANIFEST, evaluate, type BetaGateReport, type BetaVerdict } from './wonderland-beta-gate.mjs';
+// The gate's newer exports, read through the namespace so this file still loads
+// (and its cases go red one by one) against a gate that predates them.
+import * as gateModule from './wonderland-beta-gate.mjs';
 
 /**
  * THE GATE, HELD TO ITS OWN RULE.
@@ -390,13 +394,21 @@ describe('the Wonderland Beta Gate', () => {
         execution_id: `exec-${index}`, mission_id: MISSION, project_id: 'prj-julius-live-2', player_id: player, agent_id: `agent:${player}`, state: 'RUNNING',
       }))),
     }).dir;
-    expect(verdictFor(evaluate(withSessions(['tenant'])), 'ACCOUNT / ONBOARDING'), 'the operator identity is not an account').toBe('FAIL');
-    expect(verdictFor(evaluate(withSessions([ACCOUNT])), 'ACCOUNT / ONBOARDING'), 'a real account is exactly what this row is about').toBe('PASS');
-    expect(verdictFor(evaluate(withSessions(['tenant', ACCOUNT])), 'ACCOUNT / ONBOARDING'), 'one real account among operator runs still counts').toBe('PASS');
+    const account = (players: readonly string[]) => rowFor(evaluate(withSessions(players)), 'ACCOUNT / ONBOARDING');
+    expect(account(['tenant']).mission, 'the operator identity is not an account').toBe('NOT EXERCISED');
     // X3 (falsification): the row was a two-name deny-list, so a contract naming
     // its tenant anything but `tenant` or `operator` read as a person signing up.
     for (const renamed of ['founder', 'player:ada', 'ghu-', 'ghu-12a']) {
-      expect(verdictFor(evaluate(withSessions([renamed])), 'ACCOUNT / ONBOARDING'), `${renamed} is an operator-named tenant, not an account`).toBe('FAIL');
+      expect(account([renamed]).mission, `${renamed} is an operator-named tenant, not an account`).toBe('NOT EXERCISED');
+    }
+    // X3, second review: and the account SHAPE is typable too — player_id is the
+    // contract's tenantId verbatim — so without a record the sign-in itself
+    // wrote, an account-shaped owner is UNKNOWN, never a sign-up.
+    for (const players of [[ACCOUNT], ['tenant', ACCOUNT]]) {
+      const row = account(players);
+      expect(row.mission, players.join(', ')).toBe('UNKNOWN');
+      expect(row.verdict).toBe('FAIL');
+      expect(row.basis).toContain('player_id is the contract\'s tenantId, which the operator types');
     }
     expect(rowFor(evaluate(completingBundle()), 'ACCOUNT / ONBOARDING').basis,
       'and a bundle that cannot say must say it cannot, not fail for a reason it never checked')
@@ -461,10 +473,19 @@ describe('the Wonderland Beta Gate', () => {
     const report = evaluate(made.dir);
     expect(report.binding.bound, report.binding.reason ?? '').toBe(true);
     const notPassing = report.results.filter((row) => row.verdict !== 'PASS');
-    expect(notPassing.map((row) => `${row.id}: ${row.verdict} — ${row.basis}`),
-      'every built capability must have SOME evidence that reaches PASS; a row that cannot is a constant, not a probe')
-      .toEqual([`WONDER WEB OUTPUT: FAIL — ${rowFor(report, 'WONDER WEB OUTPUT').basis}`]);
-    expect(report.gaps.map((row) => row.id), 'and the only gap left is the one nobody dumps yet').toEqual(['WONDER WEB OUTPUT']);
+    /**
+     * TWO ROWS WAIT FOR A PRODUCER, AND SAY SO. ACCOUNT / ONBOARDING needs a
+     * record the account system itself wrote (the session's owner is typed by
+     * the operator), and WONDER WEB OUTPUT needs a dump query that writes what
+     * Wonder Web opened. Neither exists in the dump; each row names what it is
+     * waiting for rather than passing on what anyone can type.
+     */
+    expect(notPassing.map((row) => `${row.id}: ${row.verdict} ${row.mission}`),
+      'every other built capability must have SOME evidence that reaches PASS; a row that cannot is a constant, not a probe')
+      .toEqual(['ACCOUNT / ONBOARDING: FAIL UNKNOWN', 'WONDER WEB OUTPUT: FAIL UNKNOWN']);
+    expect(rowFor(report, 'ACCOUNT / ONBOARDING').basis).toContain('no account record the sign-in itself wrote');
+    expect(rowFor(report, 'WONDER WEB OUTPUT').basis).toContain('writes wonder-web.tsv');
+    expect(report.gaps.map((row) => row.id), 'and the only gaps left are the two nobody dumps yet').toEqual(['ACCOUNT / ONBOARDING', 'WONDER WEB OUTPUT']);
   });
 
   /**
@@ -623,11 +644,10 @@ const drivenBy = (drill: string): readonly string[] => {
   const found = drillDrivenFiles(REPO, drill);
   return 'error' in found ? [] : found.files;
 };
-const DRILL_OF: Readonly<Record<string, string>> = {
-  'RESTART / RECOVERY': 'npm run julius:recovery-drill',
-  'FAILURE RECOVERY': 'npm run julius:failure-recovery-drill',
-  'REPAIR LOOP': 'npm run julius:repair-loop-drill',
-};
+/** Each drilled capability's one drill command, from the table the drills and the gate both read. */
+const DRILL_OF: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.keys(JULIUS_CAPABILITY_DRILLS).map((capability) => [capability, capabilityDrill(capability)!.command]),
+);
 
 interface ProofOptions {
   readonly capability?: string;
@@ -650,12 +670,14 @@ interface ProofOptions {
 /** Writes an attestation into a directory (a bundle's `julius-live-evidence`, or any other) and returns it. */
 function attest(root: string, options: ProofOptions = {}): string {
   const capability = options.capability ?? 'RESTART / RECOVERY';
-  const drill = options.drill ?? DRILL_OF[capability] ?? 'npm run julius:recovery-drill';
+  // By default, what the capability's own drill writes: its command, its transcript file, its closing sentence.
+  const own = capabilityDrill(capability) ?? capabilityDrill('RESTART / RECOVERY')!;
+  const drill = options.drill ?? own.command;
   const probe = options.paths ?? implementedBy(capability);
   const paths = [...new Set([...(options.closure === false ? [] : drivenBy(drill)), ...probe])]
     .filter((path) => !(options.omit ?? []).includes(path));
   const steps = options.steps ?? 10;
-  const transcriptName = options.transcript === undefined ? 'julius-recovery-drill.transcript.txt' : options.transcript;
+  const transcriptName = options.transcript === undefined ? own.transcript : options.transcript;
   // MERGED, as the drills merge: one ledger holds every drill that wrote into the directory.
   const ledger = join(root, 'capability-proofs.tsv');
   const kept = existsSync(ledger)
@@ -666,7 +688,7 @@ function attest(root: string, options: ProofOptions = {}): string {
     path, options.recorded?.[path] ?? digest(path), transcriptName ?? '', '2026-09-08T00:00:00.000Z',
   ])]));
   if (transcriptName !== null) {
-    writeFileSync(join(root, transcriptName), transcriptFor(options.transcriptSteps ?? steps, options.transcriptVerdict));
+    writeFileSync(join(root, transcriptName), transcriptFor(options.transcriptSteps ?? steps, options.transcriptVerdict ?? `${own.name} VERIFIED`));
   }
   return root;
 }
@@ -786,24 +808,23 @@ describe('the Beta Gate’s capability axis', () => {
   });
 
   /**
-   * COVERAGE. A drill for something else cannot be pointed at this row: it
-   * must have exercised every file the row is built on, and it must actually
-   * import each of them. The recovery drill does not import the Project Brain's
-   * memory module, so it can prove the brain neither by leaving the file out
-   * nor by naming it.
+   * COVERAGE, AND BEFORE IT, IDENTITY. A drill for something else cannot be
+   * pointed at this row. It used to be refused for not covering the row's
+   * files — the recovery drill does not import the Project Brain's memory
+   * module — but coverage alone let the three drills, which import nearly the
+   * same pipeline, prove one another's rows. A row with no drill of its own
+   * (PROJECT BRAIN PERSISTENCE has none) is now refused before any file is
+   * read, whether the attestation leaves the row's files out or names them.
    */
   it('refuses a drill pointed at a row whose files it does not drive', () => {
     const brain = implementedBy('PROJECT BRAIN PERSISTENCE');
-    const leftOut = rowFor(evaluate(withProof(completingBundle(), {
-      capability: 'PROJECT BRAIN PERSISTENCE', drill: 'npm run julius:recovery-drill', paths: [],
-    })), 'PROJECT BRAIN PERSISTENCE');
-    expect(leftOut.capability).toBe('UNPROVEN');
-    expect(leftOut.capabilityBasis).toContain('it did not exercise src/relay/shared/llmops/brain-memory.ts');
-    const named = rowFor(evaluate(withProof(completingBundle(), {
-      capability: 'PROJECT BRAIN PERSISTENCE', drill: 'npm run julius:recovery-drill', paths: brain,
-    })), 'PROJECT BRAIN PERSISTENCE');
-    expect(named.capability).toBe('UNPROVEN');
-    expect(named.capabilityBasis).toContain('the drill does not import src/relay/shared/llmops/brain-memory.ts');
+    for (const paths of [[], brain]) {
+      const row = rowFor(evaluate(withProof(completingBundle(), {
+        capability: 'PROJECT BRAIN PERSISTENCE', drill: 'npm run julius:recovery-drill', paths,
+      })), 'PROJECT BRAIN PERSISTENCE');
+      expect(row.capability).toBe('UNPROVEN');
+      expect(row.capabilityBasis).toContain('no Julius capability drill exercises PROJECT BRAIN PERSISTENCE');
+    }
   });
 
   it('expires an attestation naming a file that is no longer here, and says which', () => {
@@ -848,18 +869,28 @@ describe('the Beta Gate’s capability axis', () => {
   it('holds the drill to its own transcript', () => {
     const cases: readonly [ProofOptions, string][] = [
       [{ outcome: 'FAILED' }, 'the drill recorded FAILED, not VERIFIED'],
-      [{ transcript: null }, 'is not in this bundle'],
+      [{ transcript: null }, 'it names the transcript (none), and npm run julius:recovery-drill writes julius-recovery-drill.transcript.txt'],
       [{ transcriptSteps: 7 }, 'it declares 10 step(s) and its transcript shows 7'],
-      [{ transcriptVerdict: 'mostly fine' }, 'does not end on a VERIFIED line'],
-      // The falsification's regex finding: capitals ending in VERIFIED, negated.
-      [{ transcriptVerdict: 'JULIUS RESTART RECOVERY NOT VERIFIED' }, 'does not end on a VERIFIED line'],
-      [{ transcriptVerdict: 'JULIUS RESTART RECOVERY DRILL FAILED VERIFIED' }, 'does not end on a VERIFIED line'],
+      [{ transcriptVerdict: 'mostly fine' }, 'does not end on JULIUS RESTART RECOVERY VERIFIED'],
+      // The falsifications' regex findings: capitals ending in VERIFIED, negated
+      // (round 1), and the negations a word list did not name (round 2). The
+      // drill's own sentence, whole, is the only verdict that reads verified —
+      // and another drill's sentence is not this drill's.
+      ...[
+        'JULIUS RESTART RECOVERY NOT VERIFIED', 'JULIUS RESTART RECOVERY DRILL FAILED VERIFIED',
+        'JULIUS RESTART RECOVERY CANNOT BE VERIFIED', 'JULIUS RESTART RECOVERY NEVER VERIFIED', 'DRILL ABORTED BEFORE IT VERIFIED',
+        'DRILL FAILURE VERIFIED', 'JULIUS RESTART RECOVERY UN VERIFIED', 'JULIUS FAILURE RECOVERY VERIFIED',
+      ].map((transcriptVerdict): [ProofOptions, string] => [{ transcriptVerdict }, 'does not end on JULIUS RESTART RECOVERY VERIFIED']),
     ];
     for (const [options, expected] of cases) {
       const row = rowFor(evaluate(withProof(completingBundle(), options)), 'RESTART / RECOVERY');
       expect(row.verdict, expected).toBe('FAIL');
       expect(row.capabilityBasis).toContain(expected);
     }
+    // Named rightly and missing is not the same failure as named wrongly.
+    const missing = withProof(completingBundle());
+    rmSync(join(missing, 'julius-live-evidence', 'julius-recovery-drill.transcript.txt'));
+    expect(rowFor(evaluate(missing), 'RESTART / RECOVERY').capabilityBasis).toContain('its transcript julius-recovery-drill.transcript.txt is not in this bundle');
   });
 
   it('refuses a transcript carrying a failed step, whatever the ledger says', () => {
@@ -1019,9 +1050,8 @@ describe('the Beta Gate’s capability axis', () => {
    */
   it('a DRILL evaluation, exactly as julius-real-infra calls it, leaves the drill rows PROVEN on the capability axis', () => {
     const outside = mkdtempSync(join(tmpdir(), 'beta-gate-drills-'));
-    for (const capability of Object.keys(DRILL_OF)) {
-      attest(outside, { capability, transcript: `${capability.replace(/[^A-Z]/gu, '').toLowerCase()}.transcript.txt` });
-    }
+    // Each drill with its own transcript file and closing sentence, as the three drills write them.
+    for (const capability of Object.keys(DRILL_OF)) attest(outside, { capability });
     const report = evaluate(null, { capabilityDir: outside });
     for (const capability of Object.keys(DRILL_OF)) {
       const row = rowFor(report, capability);
@@ -1111,7 +1141,7 @@ describe('the gate audit, finding by finding', () => {
       'trajectory.tsv': table(TRAJECTORY, trajectoryFor(COMPLETING_TASKS).map((row) => (row.event_kind === 'WORKER_SELECTED' && row.task_id === PLAN_REVIEW
         ? { ...row, safe_facts: JSON.stringify({ role: 'INDEPENDENT_REVIEWER', adapterId: 'reviewer-adapter' }) } : row))),
     }).dir);
-    expect(rowFor(scripted, 'INDEPENDENT REVIEWER').basis).toContain('adapter reviewer-adapter, which is not a live adapter');
+    expect(rowFor(scripted, 'INDEPENDENT REVIEWER').basis).toContain('adapter reviewer-adapter, not the live hermes-local-live');
     expect(rowFor(scripted, 'VERIFIED COMPLETION').verdict).toBe('FAIL');
   });
 
@@ -1196,9 +1226,11 @@ describe('the gate audit, finding by finding', () => {
   });
 
   it('P0-2: an attestation naming a drill this repository cannot build proves nothing', () => {
+    // Refused as not the row's own drill before its build is even looked for;
+    // `drillEntry` refuses it on its own too (julius-drill-support.test.ts).
     const row = rowFor(evaluate(withProof(completingBundle(), { drill: 'npm run julius:no-such-drill' })), 'RESTART / RECOVERY');
     expect(row.capability).toBe('UNPROVEN');
-    expect(row.capabilityBasis).toContain('package.json has no script julius:no-such-drill');
+    expect(row.capabilityBasis).toContain('npm run julius:no-such-drill: it is not RESTART / RECOVERY\'s drill');
   });
 
   /* --------------------------------------------- P0-3 · restart / recovery */
@@ -1499,7 +1531,7 @@ describe('the gate audit, finding by finding', () => {
       for (const capability of ['ACCOUNT / ONBOARDING', 'WONDER WEB OUTPUT', 'PERMISSIONS / MISSION BOUNDARIES', 'PROJECT BRAIN PERSISTENCE']) {
         const row = rowFor(report, capability);
         expect(row.capability, `${capability}: ${row.capabilityBasis}`).toBe('UNPROVEN');
-        expect(row.capabilityBasis).toContain('no such drill is not an `npm run <script>` command');
+        expect(row.capabilityBasis).toContain(`no Julius capability drill exercises ${capability}`);
         expect(row.verdict).not.toBe('CAPABILITY PROVEN');
       }
     }
@@ -1532,16 +1564,9 @@ describe('the second review, finding by finding', () => {
   const permissions = (dir: string) => rowFor(evaluate(dir), 'PERMISSIONS / MISSION BOUNDARIES');
   /** What a dump killed after the redirect opened leaves behind: nothing, or the header and nothing after it. */
   const cutShort = (header: readonly string[]) => `${header.join('\t')}\n`;
-  /** The three drills, each attested with its own transcript and its own closing line. */
-  const DRILL_TRANSCRIPTS: Readonly<Record<string, readonly [string, string]>> = {
-    'RESTART / RECOVERY': ['julius-recovery-drill.transcript.txt', 'JULIUS RESTART RECOVERY VERIFIED'],
-    'FAILURE RECOVERY': ['julius-failure-recovery-drill.transcript.txt', 'JULIUS FAILURE RECOVERY VERIFIED'],
-    'REPAIR LOOP': ['julius-repair-loop-drill.transcript.txt', 'JULIUS REPAIR LOOP VERIFIED'],
-  };
+  /** The three drills, each attested as it attests itself: its own command, transcript file and closing sentence. */
   const withDrills = (dir: string): string => {
-    for (const [capability, [transcript, transcriptVerdict]] of Object.entries(DRILL_TRANSCRIPTS)) {
-      attest(join(dir, 'julius-live-evidence'), { capability, transcript, transcriptVerdict });
-    }
+    for (const capability of Object.keys(DRILL_OF)) attest(join(dir, 'julius-live-evidence'), { capability });
     return dir;
   };
 
@@ -1754,5 +1779,156 @@ describe('the second review, finding by finding', () => {
     expect(alone.mission, 'even alone, a RESULT that names no run is not shown to be this run\'s').toBe('UNKNOWN');
     const twice = completion(`${accepted(RUN, 'COMPLETED after 9 ticks')}RESULT: COMPLETED after 9 ticks\n  run: ${RUN}\n`);
     expect(twice.verdict, `the same answer twice is one answer: ${twice.basis}`).toBe('PASS');
+  });
+
+  /* ------------------------------------------------ P1-D · an allowlist, not a denylist */
+
+  /**
+   * P01, P02, P10. P0-1 was a denylist of stand-in words: FakeOpenAI,
+   * MockProvider, `test` and an adapter named `stubbed-live` passed, and the
+   * adapter rule was skipped whenever the trajectory could not be read. Only
+   * the live composition's own worker, adapter and provider for the role are
+   * real now, on every attempt of the task; what cannot be checked is UNKNOWN.
+   */
+  it('P1-D (P01, P02, P10): only the live composition\'s own worker, adapter and provider are real, on every attempt', () => {
+    const architect = (diagnostics: readonly Row[] | null, trajectory: (row: Row) => Row = (row) => row) => rowFor(evaluate(completingWith({
+      'worker-diagnostics.tsv': table(DIAGNOSTICS, diagnostics ?? diagnosticsFor(COMPLETING_TASKS)),
+      'trajectory.tsv': table(TRAJECTORY, trajectoryFor(COMPLETING_TASKS).map((row) => (row.task_id === PLAN ? trajectory(row) : row))),
+    }).dir), 'PROMPT ARCHITECT');
+    const answeredBy = (over: Row) => diagnosticsFor(COMPLETING_TASKS, RUN, (task) => (task.id === PLAN ? over : {}));
+    // What answered, in the diagnostics: a provider the composition does not give the role, however it is spelled.
+    for (const provider of ['FakeOpenAI', 'MockProvider', 'test', 'DrillProvider', 'sandbox', 'OpenAI']) {
+      const row = architect(answeredBy({ provider }));
+      expect(row.mission, provider).toBe('FAILED');
+      expect(row.basis).toContain(`its provider ${provider} is not the one the live composition gives PROMPT_ARCHITECT (openai)`);
+    }
+    expect(architect(answeredBy({ transport: 'sandbox' })).basis).toContain('its transport sandbox is none the runtime has');
+    // Where the runtime sent it, in the trajectory: the provider, the adapter and the worker.
+    const routed = architect(null, (row) => (row.event_kind === 'PROVIDER_SELECTED' ? { ...row, provider_id: 'MockProvider' } : row));
+    expect(routed.mission).toBe('FAILED');
+    expect(routed.basis).toContain('the trajectory routed it to MockProvider, and the live composition routes PROMPT_ARCHITECT only to openai');
+    for (const adapter of ['stubbed-live', 'test-live', 'FakeArchitect-live', 'openai-architect-Live']) {
+      const row = architect(null, (entry) => (entry.event_kind === 'WORKER_SELECTED' ? { ...entry, safe_facts: JSON.stringify({ role: 'PROMPT_ARCHITECT', adapterId: adapter }) } : entry));
+      expect(row.mission, adapter).toBe('FAILED');
+      expect(row.basis).toContain(`adapter ${adapter}, not the live openai-architect-live`);
+    }
+    expect(architect(null, (row) => ({ ...row, worker_id: 'prompt-architect-fake' })).basis)
+      .toContain('worker prompt-architect-fake, not the live prompt-architect-openai');
+    // An earlier attempt answered by a stand-in taints the task, even when the last attempt was real.
+    const earlier: Row = { run_id: RUN, sequence: '5', task_id: PLAN, role: 'PROMPT_ARCHITECT', stage: 'plan', transport: 'local', provider: 'drill', served_model: 'gpt-5.6-sol', outcome: 'failed', event_type: 'julius.task.failed' };
+    const tainted = architect([earlier, ...diagnosticsFor(COMPLETING_TASKS)]);
+    expect(tainted.mission).toBe('FAILED');
+    expect(tainted.basis).toContain('its provider drill is not the one the live composition gives PROMPT_ARCHITECT');
+
+    // WHAT CANNOT BE CHECKED IS UNKNOWN, NEVER A PASS.
+    const unread = evaluate(completingWith({ 'trajectory.tsv': 'unavailable\n' }).dir);
+    for (const id of ['PROMPT ARCHITECT', 'CODING AGENT', 'INDEPENDENT REVIEWER', 'VERIFIED COMPLETION']) {
+      expect(rowFor(unread, id).mission, id).toBe('UNKNOWN');
+      expect(rowFor(unread, id).basis).toContain('trajectory.tsv is unreadable');
+    }
+    const unselected = architect(null, (row) => (row.event_kind === 'WORKER_SELECTED' ? { ...row, event_kind: 'CONTEXT_COMPILED' } : row));
+    expect(unselected.mission).toBe('UNKNOWN');
+    expect(unselected.basis).toContain('the trajectory records no worker selection for it');
+    const unparsed = architect(null, (row) => (row.event_kind === 'WORKER_SELECTED' ? { ...row, safe_facts: '{"role":"PROMPT_ARCHITECT","adapterId":' } : row));
+    expect(unparsed.mission).toBe('UNKNOWN');
+    expect(unparsed.basis).toContain('its worker selection names no readable adapter');
+    const noBasis = rowFor(evaluate(completingWith({
+      'worker-diagnostics.tsv': table(DIAGNOSTICS.filter((column) => column !== 'served_model_basis'), diagnosticsFor(COMPLETING_TASKS)),
+    }).dir), 'CODING AGENT');
+    expect(noBasis.mission, 'a dump without the attestation column cannot attest the coder\'s model').toBe('UNKNOWN');
+    expect(noBasis.basis).toContain('carries no served_model_basis column');
+    // CONTROL: the identities paid run 36568129865 actually recorded still pass.
+    for (const id of ['PROMPT ARCHITECT', 'CODING AGENT', 'INDEPENDENT REVIEWER', 'VERIFIED COMPLETION']) {
+      expect(verdictFor(evaluate(completingBundle()), id), id).toBe('PASS');
+    }
+  });
+
+  it('P1-D: the allowlist is the live composition\'s own constants, read from this checkout, never retyped', () => {
+    const live = gateModule.liveIdentities();
+    if ('error' in live) throw new Error(live.error);
+    for (const [role, worker] of [['PROMPT_ARCHITECT', architectWorker({})], ['CODING_AGENT', CODER_WORKER]] as const) {
+      expect(live.roles[role].workerId, role).toBe(worker.workerId);
+      expect(live.roles[role].adapterId, role).toBe(worker.adapterId);
+      expect(live.roles[role].providers, role).toEqual([worker.providerId]);
+    }
+    // `reviewerWorker(providerId)`: the composition takes the reviewer's provider
+    // from RELAY_HERMES_PROVIDER, which both launchers set to xai.
+    const reviewer = reviewerWorker('xai');
+    expect(live.roles.INDEPENDENT_REVIEWER.workerId).toBe(reviewer.workerId);
+    expect(live.roles.INDEPENDENT_REVIEWER.adapterId).toBe(reviewer.adapterId);
+    expect(live.roles.INDEPENDENT_REVIEWER.providers).toEqual(['xai']);
+    for (const launcher of gateModule.LIVE_LAUNCHERS) {
+      expect(readFileSync(join(REPO, launcher), 'utf8'), `${launcher} sets the reviewer's provider`).toMatch(/RELAY_HERMES_PROVIDER\s*[:=]\s*xai\s*$/mu);
+    }
+    expect([...live.transports].sort(), 'the runtime\'s own transport enum (julius-router.ts)').toEqual(['hosted', 'local', 'openai', 'remote']);
+  });
+
+  /* ------------------------------------------------ P1-C · each row, its own drill */
+
+  /**
+   * X2-recovery-drill-claims-failrec-and-repair, X2-relay-bridge-server-as-drill.
+   * The three drills drive nearly the same pipeline, so the recovery drill's
+   * genuine attestation, relabelled, "proved" FAILURE RECOVERY and REPAIR LOOP;
+   * and `drillEntry` took any npm script with a build, the relay bridge server
+   * included. A row is proven only by its own drill, with that drill's own
+   * transcript file closing on the sentence only that drill writes.
+   */
+  it('P1-C (X2): a drill proves only its own capability — never a relabelled one, never a server run as a "drill"', () => {
+    const relabelled = mkdtempSync(join(tmpdir(), 'beta-gate-relabelled-'));
+    for (const capability of Object.keys(DRILL_OF)) {
+      attest(relabelled, { capability, drill: DRILL_OF['RESTART / RECOVERY'], transcript: 'julius-recovery-drill.transcript.txt', transcriptVerdict: 'JULIUS RESTART RECOVERY VERIFIED' });
+    }
+    const report = evaluate(null, { capabilityDir: relabelled });
+    expect(rowFor(report, 'RESTART / RECOVERY').capability, 'its own row it still proves').toBe('PROVEN');
+    for (const capability of ['FAILURE RECOVERY', 'REPAIR LOOP']) {
+      const row = rowFor(report, capability);
+      expect(row.capability, `${capability}: ${row.capabilityBasis}`).toBe('UNPROVEN');
+      expect(row.capabilityBasis).toContain(`it is not ${capability}'s drill (${DRILL_OF[capability]})`);
+    }
+    // The bridge SERVER, attested over everything its own build reaches — which
+    // includes the recovery files, so coverage alone once let it "prove" the row.
+    const scripts = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')).scripts as Record<string, string>;
+    const serverEntry = /\besbuild\s+(\S+\.[cm]?tsx?)\s/u.exec(`${scripts['relay:bridge:build']} `)?.[1] ?? '';
+    expect(importClosure(REPO, serverEntry), 'the server build reaches the recovery files').toEqual(expect.arrayContaining([...implementedBy('RESTART / RECOVERY')]));
+    const server = mkdtempSync(join(tmpdir(), 'beta-gate-server-'));
+    attest(server, { capability: 'RESTART / RECOVERY', drill: 'npm run relay:bridge', closure: false, paths: importClosure(REPO, serverEntry) });
+    const served = rowFor(evaluate(null, { capabilityDir: server }), 'RESTART / RECOVERY');
+    expect(served.capability).toBe('UNPROVEN');
+    expect(served.capabilityBasis).toContain('npm run relay:bridge: it is not RESTART / RECOVERY\'s drill');
+    const renamed = rowFor(evaluate(withProof(completingBundle(), { transcript: 'recovery.transcript.txt' })), 'RESTART / RECOVERY');
+    expect(renamed.capability).toBe('UNPROVEN');
+    expect(renamed.capabilityBasis).toContain('npm run julius:recovery-drill writes julius-recovery-drill.transcript.txt');
+    // CONTROL: each drill's own attestation still proves its own row.
+    const genuine = mkdtempSync(join(tmpdir(), 'beta-gate-genuine-'));
+    for (const capability of Object.keys(DRILL_OF)) attest(genuine, { capability });
+    const proven = evaluate(null, { capabilityDir: genuine });
+    for (const capability of Object.keys(DRILL_OF)) expect(rowFor(proven, capability).capability, capability).toBe('PROVEN');
+  });
+
+  /* ------------------------------------------------ P2-G · wonder-web.tsv */
+
+  /**
+   * G2. A typed `ghu-1` tenant, a hand-added `wonder-web.tsv` with no `run_id`
+   * (it was not in RUN_SCOPED_FILES) and genuine drill ledgers printed BETA:
+   * READY and exited 0. Nothing produces that file: it is run-scoped now, and
+   * WONDER WEB OUTPUT is UNKNOWN until a dump query writes it.
+   */
+  it('P2-G (G2): a hand-added wonder-web.tsv is no dump\'s output — it unbinds without run_id and proves nothing with it', () => {
+    const g2 = (wonderWeb: string) => evaluate(withDrills(completingWith({
+      'sessions.tsv': table(SESSIONS, [{ execution_id: 'exec-1', mission_id: MISSION, project_id: 'prj-julius-live-2', player_id: 'ghu-1', agent_id: 'agent:ghu-1', state: 'RUNNING' }]),
+      'wonder-web.tsv': wonderWeb,
+    }).dir));
+    const unscoped = g2('output_id\topened_at\nsome-other-runs-output\t2026-01-01\n(1 row)\n');
+    expect(unscoped.binding.bound).toBe(false);
+    expect(unscoped.binding.reason).toContain('wonder-web.tsv carries no run_id column');
+    const scoped = g2(table(['run_id', 'output_id', 'opened_at'], [{ run_id: RUN, output_id: 'output:1', opened_at: 't' }]));
+    expect(scoped.binding.bound, scoped.binding.reason ?? '').toBe(true);
+    const row = rowFor(scoped, 'WONDER WEB OUTPUT');
+    expect(row.mission).toBe('UNKNOWN');
+    expect(row.basis).toContain('the wonder-web.tsv in this bundle is no dump\'s output');
+    expect(rowFor(scoped, 'ACCOUNT / ONBOARDING').mission, 'and the typed ghu- tenant is no sign-up (P1-A)').toBe('UNKNOWN');
+    for (const report of [unscoped, scoped]) {
+      expect(report.summary.provenByMission + report.summary.provenByDrill, 'BETA: NOT READY').toBeLessThan(report.summary.total);
+    }
   });
 });
