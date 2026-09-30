@@ -1,5 +1,14 @@
 # Wonderland world completion matrix
 
+> **STATUS (founder, 2026-09-29 evening)**
+>
+> **ENVIRONMENTAL WORLD COMPLETION: COMPLETE**
+>
+> **POST-COMPLETION GAMEPLAY REGRESSION: IN PROGRESS** -- three founder-observed player-facing regressions: Relay
+> Dog skin locomotion on the non-OG skins, Jack Flame's secondary colour not reaching the tie, and teleport to
+> the new world locations. The environmental baseline (world, package, traversal, landscaping) is frozen; see
+> the POST-COMPLETION GAMEPLAY REGRESSION section at the end of this file.
+
 **Owner of this file: CORE ("Wonderland core continued").** The WORLD session ("Second wonderland session") edits
 only the rows and specs marked WORLD. Founder directive 2026-09-28: *"COMPLETE WONDERLAND AS AN ENTIRE WORLD ...
 Use WORLD-SCALE auditing ... Do not use a single vague percentage to hide unfinished regions."*
@@ -481,7 +490,7 @@ What the graph does not claim:
 
 ## DEFINITION OF WORLD COMPLETE -- tracking (CORE, 2026-09-29 12:00; founder's 25 conditions)
 
-**FINAL STATE, 2026-09-29 17:05 (CORE):** all 25 conditions are MET. Most are MET (builder-run): proven by CORE and
+**ENVIRONMENTAL FINAL STATE, 2026-09-29 17:05 (CORE):** all 25 environmental conditions are MET. Most are MET (builder-run): proven by CORE and
 SECOND, not by an independent QA session, which the founder must decide on. The residuals are listed on row 25. The
 final package boots Golden Arrival and streams (row 24).
 
@@ -627,3 +636,15 @@ means replacing core planting, and the founder's standing rule is to grow outwar
 rebuild it (IC01's brief). **Founder decision:** (a) build them in the core, replacing some planting; or (b) give
 those identities to the outer world instead -- a tower quarter in the ICARUS march (Icarus's vertical silhouette)
 and a mushroom wood on a frontier (the forge's "mushroom woods" are one of the 24 quarter kinds).
+
+## POST-COMPLETION GAMEPLAY REGRESSION (founder, 2026-09-29 evening) -- IN PROGRESS
+
+Scope: gameplay and system repair only. The completed world is the baseline and is not modified: landscaping, C7,
+radial and ring roads, hedge gates, Golden Arrival geometry, quarter layouts, TW / MG architecture, the world
+boundary, emptiness treatment, lighting and the World Partition layout all stay as they are.
+
+| # | regression | status |
+|---|---|---|
+| G1 | Relay Dog skin locomotion broken on the non-OG skins (Celestial Light, Skeleton Flame, Jack Flame, Baal) | IN PROGRESS: diagnosis |
+| G2 | Jack Flame secondary colour must drive both the flames and the tie | IN PROGRESS: diagnosis |
+| G3 | Teleport to the new world locations (TW01 / TW02 / MG01 and other named places) | IN PROGRESS: diagnosis |
