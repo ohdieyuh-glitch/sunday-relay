@@ -20,7 +20,12 @@ export interface JuliusToolInvocationStore {
  request(input:Omit<JuliusDurableToolInvocation,'state'|'sandboxId'|'budgetReservationId'|'exitCode'|'safeSummary'|'stdoutPreview'|'stdoutArtifactId'|'stderrPreview'|'stderrArtifactId'|'evidenceIds'|'artifactIds'|'durationMs'|'authorizedAt'|'startedAt'|'completedAt'>):Promise<{created:boolean;invocation:JuliusDurableToolInvocation}>;
  authorize(input:{invocationId:string;tenantId:string;projectId:string;requestDigest:string;policyRevision:string;budgetReservationId:string;authorizedAt:string}):Promise<boolean>;
  deny(input:{invocationId:string;tenantId:string;projectId:string;requestDigest:string;safeSummary:string;completedAt:string}):Promise<boolean>;
- claimDispatch(input:{claimedBy:string;now:string;claimedUntil:string;limit:number}):Promise<readonly JuliusToolDispatchClaim[]>;
+ /**
+  * Claims AUTHORIZED invocations for dispatch. Unscoped, it is a fleet dispatcher's sweep: any run,
+  * any project. A caller dispatching ONE invocation names it (and its project), and nothing else is
+  * touched: a swept invocation belongs to a caller that will never execute it (defect B).
+  */
+ claimDispatch(input:{claimedBy:string;now:string;claimedUntil:string;limit:number;invocationId?:string;projectId?:string}):Promise<readonly JuliusToolDispatchClaim[]>;
  markRunning(input:{invocationId:string;claimedBy:string;dispatchGeneration:number;sandboxId:string;startedAt:string}):Promise<boolean>;
  complete(input:{invocationId:string;claimedBy:string;dispatchGeneration:number;result:ToolInvocationResult;artifacts:readonly JuliusToolArtifact[];evidence:readonly JuliusToolEvidence[];completedAt:string}):Promise<boolean>;
  load(input:{invocationId:string;tenantId:string;projectId:string}):Promise<JuliusDurableToolInvocation|null>;
