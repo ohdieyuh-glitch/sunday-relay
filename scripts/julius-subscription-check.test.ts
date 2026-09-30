@@ -284,8 +284,13 @@ describe('the smoke names the model that answered, and fails closed on any other
     expect(check.smokeServedModel(raw, REQUESTED)).toEqual(expected);
   });
 
-  it('an unsafe key is never echoed, and at most eight producers are listed', () => {
-    expect(check.smokeServedModel(usage({ 'claude opus; echo $CLAUDE_CODE_OAUTH_TOKEN': { outputTokens: 1 } }), REQUESTED)).toEqual({ served: 'unsafe', match: 'MISMATCH' });
+  it('a key is never echoed raw: outside the alphabet each character is `_`, cut to 64; at most eight producers are listed', () => {
+    // A suffixed name is still not the requested model, so it is still a STOP. Now the stop says what answered.
+    expect(check.smokeServedModel(usage({ 'claude-opus-5-5[1m]': { outputTokens: 1 } }), REQUESTED)).toEqual({ served: 'claude-opus-5-5_1m_', match: 'MISMATCH' });
+    expect(check.smokeServedModel(usage({ 'claude opus; echo $X`id`\n': { outputTokens: 1 } }), REQUESTED)).toEqual({ served: 'claude_opus__echo__X_id__', match: 'MISMATCH' });
+    expect(check.smokeServedModel(usage({ ['m'.repeat(70)]: { outputTokens: 1 } }), REQUESTED).served).toBe('m'.repeat(64));
+    // The line printed for it is still inside the allowlist's grammar.
+    expect(smoke(usage({ 'claude-opus-5-5[1m]': { outputTokens: 1 } })).output.split('\n')[0]).toMatch(SERVED_GREP);
     const many = Object.fromEntries(Array.from({ length: 10 }, (_, index) => [`model-${String(index)}`, { outputTokens: 10 - index }]));
     expect(check.smokeServedModel(usage(many), REQUESTED).served.split(',')).toHaveLength(8);
   });

@@ -43,7 +43,7 @@ export declare function smokeFailureReason(raw: string): SubscriptionSmokeFailur
 
 /** Which model answered the smoke, by the runtime's own crediting rule, and whether it is the one requested. */
 export interface SubscriptionSmokeServed {
-  /** The producers' `modelUsage` keys, largest first, each a plain label or `unsafe`, at most eight; or `none`. */
+  /** The producers' `modelUsage` keys, largest first, at most eight, each shown in [A-Za-z0-9._-] (any other character as `_`, cut to 64); or `none`. */
   readonly served: string;
   readonly match: 'EXACT' | 'DATED_BUILD' | 'MISMATCH' | 'NONE';
 }

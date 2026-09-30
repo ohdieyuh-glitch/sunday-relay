@@ -168,10 +168,15 @@ export function smokeFailureReason(raw) {
  *   - a helper model beside a crediting producer does not unseat it (the runtime spends a little on
  *     housekeeping), but every producer is listed, largest first, so that spending stays visible.
  * `match` is EXACT, DATED_BUILD, MISMATCH (producers, none of them the requested model) or NONE (no
- * producer: nothing is attested). `served` is the producers' keys, each a plain label or `unsafe`, at
- * most eight, or `none`.
+ * producer: nothing is attested). `served` is the producers' keys, at most eight, or `none`.
+ *
+ * A KEY IS SHOWN, NEVER RAW. Each character outside the line's own alphabet becomes `_`, and the
+ * label is cut to 64. So `claude-opus-5-5[1m]` reads `claude-opus-5-5_1m_`: the smoke still STOPS on
+ * it (the match is computed on the raw names, and the display cannot change a verdict), and the stop
+ * says why. It used to read `unsafe`, and a stop that cannot say what answered costs a founder
+ * cycle to explain.
  */
-const SERVED_KEY = /^[A-Za-z0-9._-]{1,64}$/u;
+const servedLabel = (key) => key.replace(/[^A-Za-z0-9._-]/gu, '_').slice(0, 64);
 const DATE_SUFFIX = /^\d{8}$/u;
 export function smokeServedModel(raw, requested) {
   let parsed = null;
@@ -193,7 +198,7 @@ export function smokeServedModel(raw, requested) {
     name.startsWith(`${requested}-`) && DATE_SUFFIX.test(name.slice(requested.length + 1))));
   const match = producers.length === 0 ? 'NONE' : exact ? 'EXACT' : dated ? 'DATED_BUILD' : 'MISMATCH';
   const served = producers.length === 0 ? 'none'
-    : producers.slice(0, 8).map((producer) => (SERVED_KEY.test(producer.key) ? producer.key : 'unsafe')).join(',');
+    : producers.slice(0, 8).map((producer) => servedLabel(producer.key)).join(',');
   return { served, match };
 }
 
