@@ -37,11 +37,13 @@ import {
   juliusDispatchApprovalId,
   juliusPacketTextIn,
   pauseJuliusRun,
+  planRunStatePath,
   requestJuliusApproval,
   resumeJuliusRun,
   scriptedAdapter,
   seedJuliusTaskContract,
   type JuliusApproverAuthority,
+  type JuliusMissionState,
   type JuliusPolicyOperation,
   type JuliusRecoveryDriver,
   type JuliusRuntimeStore,
@@ -744,5 +746,143 @@ describe('G. what the independent review of the governance fixes left (P3, writt
     expect(s.memory.trajectory().filter((row) => row.kind === 'COMPLETION').map((row) => row.outcome)).toEqual(['FAILED']);
     await s.drive(2);
     expect(failed(), 'an ended run writes no second ending').toHaveLength(1);
+  });
+});
+
+/* ====================== H. F3's protections its review found untested (review of 5b55a44c) */
+
+/**
+ * The independent review of F3 (f3_admission/REVIEW_5b55a44c_cd0665df.md) found three of its
+ * protections held in code but by no test: admission was exercised only for PAUSED (mutant R3,
+ * "holds only PAUSED", survived), and the hold-lifted hand-back could leave the task ACTIVE (R8) or
+ * end it FAILED (R9) unnoticed. The reviewer's probes P1-P5, now tests.
+ *
+ * A CORRECTION TO F3's MESSAGE (5b55a44c). It said "a cancel was already safe: it moves the task
+ * out of ACTIVE". That is FALSE. `cancelJuliusRun` moves the RUN first and sweeps its tasks after;
+ * in that gap the task is still ACTIVE, and before F3 a provider call was bought for a cancelled
+ * run. F3's admission closes it (P2, P2b), along with the FAILED- and BLOCKED-run windows (P3, P4)
+ * the message never claimed. The message is rewritten at the post-attempt-2 rebase.
+ */
+describe('H. F3 at admission: every held state, the hold that lifts, and no livelock (review of 5b55a44c)', () => {
+  const who = { runId: RUN, projectId: PROJECT, actor: 'ghu-reviewer', reason: 'Probe.' };
+  const lifecycle = (memory: Memory) => ({ store: memory as never, clock });
+  /** Moves the run the legal way (every step recorded), as another writer on the same rows would. */
+  const moveTo = async (memory: Memory, to: JuliusMissionState): Promise<void> => {
+    let run = (await memory.loadRun(RUN, PROJECT))!;
+    for (const step of planRunStatePath(run.state, to)) {
+      run = await memory.transition({
+        commandId: `probe:${run.version}:${step}`, runId: RUN, projectId: PROJECT, expectedVersion: run.version,
+        to: step, reasonCode: 'PROBE', safeSummary: 'probe', evidenceIds: [], occurredAt: clock.now(),
+      });
+    }
+    expect(run.state).toBe(to);
+  };
+  /** `before` runs ahead of the first admission, `after` right behind it. */
+  const aroundAdmission = (
+    before: (memory: Memory) => Promise<unknown>,
+    after: (memory: Memory) => Promise<unknown> = async () => undefined,
+    counter?: { calls: number },
+  ) => (store: Store, memory: Memory): Store => {
+    let fired = false;
+    return {
+      ...store,
+      async admitTask(input) {
+        if (counter) counter.calls += 1;
+        if (fired) return store.admitTask(input);
+        fired = true;
+        await before(memory);
+        const answer = await store.admitTask(input);
+        await after(memory);
+        return answer;
+      },
+    } as Store;
+  };
+  /** A cancel whose task sweep is held back until `release()`: the gap between the run's move and the sweep. */
+  const cancelSweepingLater = () => {
+    let deferred: (() => Promise<number>) | null = null;
+    return {
+      cancel: (memory: Memory) => cancelJuliusRun(who, {
+        store: new Proxy(memory, {
+          get(target, property, receiver) {
+            if (property === 'cancelRunTasks') {
+              return async (runId: string, projectId: string, now: string) => { deferred = () => target.cancelRunTasks(runId, projectId, now); return 0; };
+            }
+            return Reflect.get(target, property, receiver);
+          },
+        }) as never,
+        clock,
+      }),
+      release: async () => { if (deferred !== null) { const sweep = deferred; deferred = null; await sweep(); } },
+    };
+  };
+
+  it('P1 (R8, R9) A HOLD THAT LIFTS between the held admission and the fresh read: handed back unspent, then completes', async () => {
+    const s = stage({ wrap: aroundAdmission(
+      (memory) => pauseJuliusRun(who, lifecycle(memory)),
+      (memory) => resumeJuliusRun(who, lifecycle(memory)),
+    ) });
+    const report = await s.tick();
+    expect(s.dispatches(), 'nothing dispatched on the held admission').toBe(0);
+    expect(report.outcomes[0]).toMatchObject({ kind: 'HELD', reasonCode: 'RUN_HELD_AT_ADMISSION' });
+    const row = s.memory.taskRow(`${RUN}:plan-1`)!;
+    expect(row.state, 'handed back RUNNABLE, not left ACTIVE, not ended').toBe('RUNNABLE');
+    expect(row.attempt, 'no attempt spent').toBe(0);
+    expect(row.recoveries, 'and no recovery charged').toBe(0);
+    expect((await s.drive()).state).toBe('COMPLETED');
+  });
+
+  it('P2 (R3) THE CANCEL WINDOW: the run CANCELLED before admission, its tasks swept after it: nothing dispatched', async () => {
+    const window = cancelSweepingLater();
+    const s = stage({ wrap: aroundAdmission((memory) => window.cancel(memory), () => window.release()) });
+    const report = await s.tick();
+    expect(s.dispatches(), 'a run already CANCELLED bought no provider call').toBe(0);
+    expect(report.outcomes[0]).toMatchObject({ kind: 'HELD', reasonCode: 'RUN_CANCELLED' });
+    expect(s.memory.taskRow(`${RUN}:plan-1`)!.state).toBe('CANCELLED');
+    expect(s.memory.taskRow(`${RUN}:plan-1`)!.attempt).toBe(0);
+  });
+
+  it('P2b THE CANCEL WINDOW when the sweep lands after the lease renewal: nothing dispatched, no attempt spent', async () => {
+    const window = cancelSweepingLater();
+    const s = stage({ wrap: (store, memory) => {
+      const around = aroundAdmission((m) => window.cancel(m))(store, memory);
+      return {
+        ...around,
+        async heartbeat(input) { const renewed = await store.heartbeat(input); await window.release(); return renewed; },
+      } as Store;
+    } });
+    await s.tick();
+    const row = s.memory.taskRow(`${RUN}:plan-1`)!;
+    expect({ dispatches: s.dispatches(), attempt: row.attempt, state: row.state })
+      .toEqual({ dispatches: 0, attempt: 0, state: 'CANCELLED' });
+  });
+
+  it('P3 (R3) TERMINAL: the run moved to FAILED by another writer before admission: the task ends, nothing dispatched', async () => {
+    const s = stage({ wrap: aroundAdmission((memory) => moveTo(memory, 'FAILED')) });
+    const report = await s.tick();
+    expect(s.dispatches()).toBe(0);
+    expect(report.outcomes[0]).toMatchObject({ kind: 'HELD', reasonCode: 'RUN_FAILED' });
+    expect(s.memory.taskRow(`${RUN}:plan-1`)!.state).toBe('FAILED');
+    expect(s.memory.taskRow(`${RUN}:plan-1`)!.attempt).toBe(0);
+  });
+
+  it('P4 (R3) BLOCKED with no approval row at admission: handed back unspent', async () => {
+    const s = stage({ wrap: aroundAdmission((memory) => moveTo(memory, 'BLOCKED')) });
+    const report = await s.tick();
+    expect(s.dispatches()).toBe(0);
+    expect(report.outcomes[0]).toMatchObject({ kind: 'HELD', reasonCode: 'RUN_BLOCKED' });
+    const row = s.memory.taskRow(`${RUN}:plan-1`)!;
+    expect(row.state).toBe('RUNNABLE');
+    expect(row.attempt).toBe(0);
+  });
+
+  it('P5 NO LIVELOCK: a pause that never lifts is admitted-and-held ONCE; later ticks claim nothing', async () => {
+    const counter = { calls: 0 };
+    const s = stage({ wrap: aroundAdmission((memory) => pauseJuliusRun(who, lifecycle(memory)), undefined, counter) });
+    await s.tick();
+    for (let tick = 0; tick < 8; tick += 1) {
+      expect((await s.tick()).claimed, `tick ${tick + 2} claims nothing from a PAUSED run`).toBe(0);
+    }
+    expect(counter.calls, 'one admission attempt in nine ticks').toBe(1);
+    expect(s.dispatches()).toBe(0);
   });
 });

@@ -224,11 +224,18 @@ export class JuliusPostgresRepository {
    * dispatch boundary read the run and its approvals seconds earlier; a pause,
    * an approval gate or a denial committed since then was never seen, and the
    * provider was called anyway. The run row is read FOR SHARE in the same
-   * serializable transaction as the write, so a concurrent pause or approval
-   * block (both move the run row) either commits first, and this admission
+   * serializable transaction as the write, so a writer that locks the run row
+   * (a pause, resume or cancel through `transition`, or the atomic approval
+   * gate `requestApprovalAndBlock`) either commits first, and this admission
    * sees it and spends nothing, or waits for this admission, which is then work
    * already in flight when the operator acted. Whoever commits first wins, and
    * the approvals are the claim's own rule: PENDING or DENIED holds the run.
+   * Two approval writers do NOT lock the run row. `decideApproval` only turns a
+   * PENDING approval, already a hold, into another state, so it cannot create a
+   * hold this read misses. The plain `requestApproval` can: a PENDING row it
+   * commits after this snapshot serializes as "admission first". It is only the
+   * fallback for a store without the atomic gate, and the production
+   * composition always wires the atomic one.
    */
   async admitTask(input:{taskId:string;owner:string;leaseGeneration:number;now:string}):Promise<number|null|JuliusAdmissionHeld>{return this.transaction(async client=>{const run:{rows:Array<{run_id:string;state:JuliusMissionState}>}=await client.query(`SELECT r.run_id,r.state FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.task_id=$1 AND t.state='ACTIVE' AND t.lease_owner=$2 AND t.lease_generation=$3 FOR SHARE OF r`,[input.taskId,input.owner,input.leaseGeneration]);const row=run.rows[0];if(row===undefined)return null;const approvals:{rows:Array<{pending:number;denied:number}>}=await client.query(`SELECT count(*) FILTER (WHERE state='PENDING')::int AS pending,count(*) FILTER (WHERE state='DENIED')::int AS denied FROM relay_wonderland.julius_approvals WHERE run_id=$1 AND state IN('PENDING','DENIED')`,[row.run_id]);const pendingApprovals=Number(approvals.rows[0]?.pending??0),deniedApprovals=Number(approvals.rows[0]?.denied??0);if(!JULIUS_CLAIMABLE_RUN_STATES.includes(row.state)||pendingApprovals>0||deniedApprovals>0)return{held:true as const,runState:row.state,pendingApprovals,deniedApprovals};const result:{rows:Array<{attempt:string}>}=await client.query(`UPDATE relay_wonderland.julius_tasks SET attempt=attempt+1,version=version+1,updated_at=$4 WHERE task_id=$1 AND state='ACTIVE' AND lease_owner=$2 AND lease_generation=$3 RETURNING attempt`,[input.taskId,input.owner,input.leaseGeneration,input.now]);return result.rows[0]===undefined?null:Number(result.rows[0].attempt);});}
   async heartbeat(input:{taskId:string;owner:string;leaseGeneration:number;now:string;leaseExpiresAt:string}):Promise<boolean>{const result=await this.pool.query(`UPDATE relay_wonderland.julius_tasks SET last_heartbeat=$4,lease_expires_at=$5,updated_at=$4 WHERE task_id=$1 AND state='ACTIVE' AND lease_owner=$2 AND lease_generation=$3`,[input.taskId,input.owner,input.leaseGeneration,input.now,input.leaseExpiresAt]);return result.rowCount===1;}
