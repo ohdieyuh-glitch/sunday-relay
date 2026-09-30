@@ -223,6 +223,7 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
    * DEFECT B, AGAINST THE PRODUCTION CLAIM. The live shell port used to sweep up to sixteen AUTHORIZED
    * invocations of ANY run and keep its own, leaving every other one DISPATCHING under a caller that
    * would never execute it. Scoped to one invocation in one project, the same SQL takes that one only.
+   * Both names or neither: a claim naming only one of them is refused.
    */
   it('DEFECT B: the production dispatch claim, scoped, takes only its own invocation and leaves another project’s pending', async () => {
     const mine = fixture();
@@ -260,8 +261,15 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
 
     const misScoped = await tools.claimDispatch({ claimedBy: 'julius-live', now, claimedUntil, limit: 16, invocationId: theirsId, projectId: mine.projectId });
     expect(misScoped, 'an invocation named under the wrong project is never claimed').toEqual([]);
+    // Both names or neither (the review of cd0665df, P3): a half-scoped claim is refused before it touches a row.
+    await expect(tools.claimDispatch({ claimedBy: 'julius-live', now, claimedUntil, limit: 16, invocationId: theirsId }), 'an invocation named without its project')
+      .rejects.toThrow('tool_dispatch_claim_half_scoped');
+    await expect(tools.claimDispatch({ claimedBy: 'julius-live', now, claimedUntil, limit: 16, projectId: mine.projectId }), 'a project named without an invocation')
+      .rejects.toThrow('tool_dispatch_claim_half_scoped');
+    expect(await stateOf(theirsId), 'the half-scoped claims took nothing').toEqual({ state: 'AUTHORIZED', dispatch_generation: '0' });
+    expect(await stateOf(siblingId)).toEqual({ state: 'AUTHORIZED', dispatch_generation: '0' });
     const theirClaim = await tools.claimDispatch({ claimedBy: 'julius-live-other', now, claimedUntil, limit: 16, invocationId: theirsId, projectId: theirs.projectId });
-    expect(theirClaim.map((entry) => entry.invocation.invocationId), 'and its own port then claims it').toEqual([theirsId]);
+    expect(theirClaim.map((entry) => entry.invocation.invocationId), 'named with its own project, the same invocation is claimed').toEqual([theirsId]);
   });
 
   it('MUTATION: without the invocation seed, the executor’s insert fails with 23503 exactly as dry run #2 did', async () => {

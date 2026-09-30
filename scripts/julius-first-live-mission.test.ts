@@ -1066,7 +1066,7 @@ describe('the preflight is a legitimate participant in the durable schema (dry r
     expect(preflight, 'a hard-coded generation cannot match a claimed one').not.toMatch(/dispatchGeneration:\s*\d/u);
     expect(fixture).toMatch(/SET state='DISPATCHING',dispatch_generation=i\.dispatch_generation\+1/u);
     expect(fixture, 'the claim is scoped to this invocation and this project, never the fleet').toMatch(/WHERE o\.invocation_id=\$1 AND o\.project_id=\$4 AND o\.state='PENDING'/u);
-    expect(fixture, 'the production claimDispatch sweeps every pending invocation and must not be used by a probe').not.toContain('claimDispatch(');
+    expect(fixture, 'a probe never calls the production claimDispatch: unscoped it sweeps every pending invocation, and the probe keeps its own scoped statement').not.toContain('claimDispatch(');
     // MIGRATION IS PER-VERSION, AND NO SENTINEL MAY COME BACK.
     //
     // This used to require the probe `column_name='sandbox_policy'` — the
