@@ -341,7 +341,7 @@ Every authoritative transition has exactly one event type; the trajectory is the
 | production source | role | reached from |
 | --- | --- | --- |
 | `src/relay/mission/julius/julius-artifact-reference.ts` | traced | `src/relay/mission/julius/julius-execution-coordinator.ts` |
-| `src/relay/mission/julius/julius-events.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-events.ts` | traced | `src/relay/mission/julius/julius-recovery.ts` |
 | `src/relay/mission/julius/julius-metrics.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-slot-report.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-trajectory.ts` | traced | `src/relay/mission/julius/index.ts` |

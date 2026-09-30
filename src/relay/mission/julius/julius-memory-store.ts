@@ -42,7 +42,10 @@
 
 import type { JuliusMemoryClaim } from './julius-memory-trust';
 import { juliusClaimStandingKey } from './julius-claim-ledger';
-import { MAX_TASK_RECOVERIES, planJuliusRecovery, type JuliusRecoveryAction } from './julius-recovery';
+import {
+  MAX_TASK_RECOVERIES, juliusRecoverySettlementEvent, planJuliusRecovery, planJuliusRecoverySettlements,
+  type JuliusOpenReservation, type JuliusRecoveryAction, type JuliusRecoverySettlement,
+} from './julius-recovery';
 import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
 import { JULIUS_CLAIMABLE_RUN_STATES } from './julius-state-path';
 import { JuliusEventIdConflict, canonicalJuliusEventIdentity, type JuliusOperationalEvent } from './julius-events';
@@ -216,6 +219,37 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     return true;
   };
 
+  /**
+   * (a2) STEP 2, THE MEMORY HALF: every reservation a recovered task left open, closed by the
+   * shared rule (`planJuliusRecoverySettlements`) and written by the shared row. Synchronous, so it
+   * lands in the same step as the lease change, as the PostgreSQL sweep's single transaction does.
+   */
+  const closeRecoveredReservations = (runId: string, projectId: string, taskId: string, now: string): JuliusRecoverySettlement[] => {
+    const settled = new Set(eventLog
+      .filter((event) => event.type === 'budget.settled' && event.runId === runId)
+      .map((event) => event.facts.reservationId));
+    const open: JuliusOpenReservation[] = [];
+    for (const event of eventLog) {
+      if (event.type !== 'budget.reserved' || event.runId !== runId || event.taskId !== taskId) continue;
+      const reservationId = event.facts.reservationId;
+      if (typeof reservationId !== 'string' || reservationId.length === 0 || settled.has(reservationId)) continue;
+      if (open.some((row) => row.reservationId === reservationId)) continue;
+      open.push({
+        reservationId,
+        role: typeof event.facts.role === 'string' ? event.facts.role : null,
+        attempt: typeof event.facts.attempt === 'number' ? event.facts.attempt : null,
+      });
+    }
+    const dispatched = eventLog
+      .filter((event) => event.type === 'worker.dispatched' && event.runId === runId && event.taskId === taskId)
+      .map((event) => (typeof event.facts.attempt === 'number' ? event.facts.attempt : null));
+    const settlements = planJuliusRecoverySettlements(open, dispatched);
+    settlements.forEach((settlement, index) => {
+      recordEvent(juliusRecoverySettlementEvent({ runId, projectId, taskId, reservation: open[index]!, settlement, occurredAt: now }));
+    });
+    return settlements;
+  };
+
   return {
     /* ------------------------------------------------------------ seeding */
     seedRun(run) { runs.set(run.runId, { ...run }); },
@@ -278,7 +312,8 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         // and would make the number mean two things.
         if (requeue) task.recoveries += 1;
         task.version += 1;
-        actions.push(action);
+        const settlements = closeRecoveredReservations(task.runId, run.projectId, task.taskId, now);
+        actions.push(settlements.length > 0 ? { ...action, settlements } : action);
       }
       return actions;
     },

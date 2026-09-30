@@ -788,7 +788,15 @@ export class JuliusRunLoop {
         // nobody can follow.
         correlationId: action.taskId ?? run.runId, causationId: null,
         occurredAt: this.deps.clock.now(),
-        facts: { action: action.action, reasonCode: action.reasonCode, owner: this.deps.owner },
+        facts: {
+          action: action.action, reasonCode: action.reasonCode, owner: this.deps.owner,
+          // (a2) step 2: the store closed what the lost attempt left open, in the same step as the
+          // lease change. This only reports it; the closing rows are the store's own.
+          ...(action.settlements !== undefined && action.settlements.length > 0 ? {
+            reservationsReleased: action.settlements.filter((settlement) => settlement.released).length,
+            reservationsHeldUnknown: action.settlements.filter((settlement) => !settlement.released).length,
+          } : {}),
+        },
       };
       validateJuliusEvent(event);
       await this.deps.store.appendEvent(event);
