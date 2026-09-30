@@ -4,7 +4,7 @@ import { juliusRecoverySettlementEvent, planJuliusRecoverySettlements } from './
 import type { JuliusProviderAdapter } from './julius-router';
 import { JuliusRunLoop } from './julius-run-loop';
 import { projectJuliusSlotLedger, type JuliusBudgetRow } from './julius-slot-ledger';
-import { createFakeTime, createJuliusHarness, seedRun, task, worker, type FakeTime, type JuliusHarness } from './julius-runtime-fixtures';
+import { cardPolicy, createFakeTime, createJuliusHarness, seedRun, task, worker, type FakeTime, type JuliusHarness } from './julius-runtime-fixtures';
 
 /**
  * (a2) STEP 2: RECOVERY CLOSES WHAT THE LOST ATTEMPT LEFT OPEN.
@@ -44,19 +44,28 @@ describe('planJuliusRecoverySettlements: each reservation is judged by its own a
   const open = (reservationId: string, attempt: number | null) => ({ reservationId, role: 'CODING_AGENT', attempt });
   const released = (reservationId: string) => ({ reservationId, released: true, reasonCode: 'RECOVERED_BEFORE_HANDOFF' });
   const held = (reservationId: string) => ({ reservationId, released: false, reasonCode: 'RECOVERED_HANDED_OUTCOME_UNKNOWN' });
+  /** A handoff from an older build: it names its attempt (or nothing), never its reservation. */
+  const legacy = (attempt: number | null) => ({ attempt, reservationId: null });
+  /** A handoff as the coordinator writes it now: its attempt AND its reservation. */
+  const named = (reservationId: string, attempt = 1) => ({ attempt, reservationId });
 
   it('no handoff at all: every reservation is released', () => {
     expect(planJuliusRecoverySettlements([open('r1', 1), open('legacy', null)], [])).toEqual([released('r1'), released('legacy')]);
   });
-  it('a handoff of the same attempt holds it; a handoff of another attempt does not', () => {
-    expect(planJuliusRecoverySettlements([open('r1', 1), open('r2', 2)], [2])).toEqual([released('r1'), held('r2')]);
+  it('a legacy handoff of the same attempt holds it; a handoff of another attempt does not', () => {
+    expect(planJuliusRecoverySettlements([open('r1', 1), open('r2', 2)], [legacy(2)])).toEqual([released('r1'), held('r2')]);
   });
   it('when the rows cannot tell, it is held', () => {
-    expect(planJuliusRecoverySettlements([open('legacy', null)], [1]), 'a reservation naming no attempt, after any handoff').toEqual([held('legacy')]);
-    expect(planJuliusRecoverySettlements([open('r1', 1), open('r2', 2)], [null]), 'a handoff naming no attempt').toEqual([held('r1'), held('r2')]);
+    expect(planJuliusRecoverySettlements([open('legacy', null)], [legacy(1)]), 'a reservation naming no attempt, after any handoff').toEqual([held('legacy')]);
+    expect(planJuliusRecoverySettlements([open('r1', 1), open('r2', 2)], [legacy(null)]), 'a handoff naming neither').toEqual([held('r1'), held('r2')]);
+  });
+  it('a handoff that NAMES its reservation speaks for that one only, whatever attempt the others share (a reroute)', () => {
+    expect(planJuliusRecoverySettlements([open('r1', 1), open('r2', 1)], [named('r1')])).toEqual([held('r1'), released('r2')]);
+    expect(planJuliusRecoverySettlements([open('r2', 1)], [named('r1')]), 'the first leg’s handoff, its own reservation already settled').toEqual([released('r2')]);
+    expect(planJuliusRecoverySettlements([open('legacy', null)], [named('r1')]), 'even a reservation that names no attempt').toEqual([released('legacy')]);
   });
   it('nothing open, nothing closed', () => {
-    expect(planJuliusRecoverySettlements([], [1, 2])).toEqual([]);
+    expect(planJuliusRecoverySettlements([], [legacy(1), named('r2', 2)])).toEqual([]);
   });
   it('the closing row: one id per reservation, no amount, basis UNKNOWN, and the reservation\'s own role', () => {
     const event = juliusRecoverySettlementEvent({
@@ -316,5 +325,49 @@ describe('(a2) step 2 through the run loop', () => {
     expect(ledger.openReservations).toEqual({});
     expect(ledger.bySlot.CODING_AGENT).toMatchObject({ releasedUsdMicros: 0, settledUnknownUsdMicros: Number(reserved!.facts.usdMicros) });
     expect(harness.budget.reservations().some((row) => row.state === 'RESERVED'), 'the in-process hold is untouched: unknown, never $0').toBe(true);
+  });
+
+  /**
+   * ONE ADMISSION, TWO RESERVATIONS (the review of 2475bcc1, finding 2, its probe R1). A reroute calls
+   * the coordinator again under the same claim and the same attempt, and each leg reserves. Matched by
+   * attempt alone, the first leg's handoff made the reroute's reservation read "handed" although its
+   * worker was never called. The handoff now names its own reservation, and a handoff that names one
+   * speaks for that reservation only.
+   */
+  it('RED FIRST: a reroute’s reservation that was never handed is released, though its first leg handed the same attempt', async () => {
+    const OTHER = worker({ workerId: 'coder-b', role: 'CODING_AGENT', capabilities: ['implement'], taskTypes: ['build'], providerId: 'provider-b', adapterId: 'coder-b-adapter', timeoutMs: 30_000 });
+    const harness = createJuliusHarness({
+      workers: [
+        // Handed, then refused unprocessed: nothing spent, and the coordinator released that leg itself.
+        { worker: CODER, script: [{ kind: 'fail', code: 'PROVIDER_UNAVAILABLE', runtimeStarted: false }] },
+        { worker: OTHER, script: [{ kind: 'succeed' }] },
+      ],
+      card: cardPolicy({ allowedProviders: [CODER.providerId, OTHER.providerId], autonomy: 'AUTONOMOUS' }),
+    });
+    seedRun(harness, { tasks: [task({ taskId: 'task-1' })] });
+    const time = createFakeTime('2026-09-29T12:00:00.000Z');
+    const store = harness.store as unknown as { appendHandoffEvent: (input: { event: { type: string } }) => Promise<unknown> };
+    const fence = store.appendHandoffEvent.bind(store);
+    let handoffs = 0;
+    let reachedSecond = (): void => undefined;
+    const atSecond = new Promise<void>((resolve) => { reachedSecond = resolve; });
+    store.appendHandoffEvent = async (input) => {
+      handoffs += 1;
+      // The REROUTE's handoff never returns: the process dies after reserving and before handing.
+      if (handoffs === 2) { reachedSecond(); return new Promise(() => undefined); }
+      return fence(input);
+    };
+    void loopAs(harness, time, 'worker-a').tick(scope);
+    await atSecond;
+    await time.advance(LEASE_MS * 3);
+    const actions = await harness.store.recoverExpired(time.clock.now(), 10, scope.projectId);
+
+    const reserved = harness.store.events().filter((event) => event.type === 'budget.reserved');
+    expect(reserved.map((event) => event.facts.attempt), 'both legs reserved under the same attempt').toEqual([1, 1]);
+    const second = String(reserved[1]!.facts.reservationId);
+    expect(harness.adapters.get(OTHER.adapterId)!.dispatches, 'the reroute worker was never called').toHaveLength(0);
+    expect(actions[0]!.settlements, 'released: its own dispatch was never handed').toEqual([
+      { reservationId: second, released: true, reasonCode: 'RECOVERED_BEFORE_HANDOFF' },
+    ]);
   });
 });
