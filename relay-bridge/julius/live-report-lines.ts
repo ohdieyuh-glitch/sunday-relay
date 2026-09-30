@@ -66,8 +66,12 @@ export function liveResearchLines(
   } | null,
 ): string[] {
   if (research === null) return ['  research: NOT AUTHORISED (no contract clause) — every ask is refused research_not_authorized'];
+  // A sealed clause may name no role: the seal validates each role it is given and requires none. Such a
+  // clause grants nobody anything, and says so as the closed token `(none)`. An empty join printed
+  // `authorised for  across …`, which the allowlist's shape dropped (JUJU's review of ef0c09c3, F4).
+  const roles = research.roles.length === 0 ? '(none)' : research.roles.join(', ');
   return [
-    `  research: authorised for ${research.roles.join(', ')} across ${research.allowances} allowance(s); ${research.observedBackends} observed backend(s)`,
+    `  research: authorised for ${roles} across ${research.allowances} allowance(s); ${research.observedBackends} observed backend(s)`,
     ...research.reach.map((row) => `    ${row.source}/${row.capability}: ${row.readiness}${row.readiness === 'ready' ? '' : ' — retrieval will be refused'}`),
   ];
 }

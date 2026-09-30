@@ -958,10 +958,17 @@ async function main(argv: readonly string[]): Promise<number> {
     const evidence = await handoffs.store.evidenceForRun(submitted.runId, contract.projectId);
     const findings = await handoffs.store.findingsForRun(submitted.runId, contract.projectId);
     const decisions = await handoffs.store.decisionsForRun(submitted.runId, contract.projectId);
+    /*
+     * THE RUN IS NAMED DIRECTLY UNDER ITS RESULT, then the details (JUJU's review of ef0c09c3, F10).
+     * The gate credits a RESULT only to a `  run:` line at most three lines below it. With the cause
+     * and the tick account in between, `run:` sat in the last slot, and one more kept line would have
+     * left the RESULT unattributed, which the gate reads as no answer. Directly under the RESULT, no
+     * detail line can push it out of the window.
+     */
     out(`RESULT: ${outcome.state}${outcome.stalled ? ' (stalled before terminal state)' : ''} after ${outcome.ticks} ticks`);
+    out(`  run: ${submitted.runId}`);
     if (outcome.haltCause !== null) out(`  cause: ${outcome.haltCause}`);
     if (outcome.tickAccount !== null) out(liveTickAccountLine(outcome.tickAccount));
-    out(`  run: ${submitted.runId}`);
     for (const task of tasks) out(`  task ${task.taskId} [${task.role}/${task.taskType}] → ${task.state}`);
     // A row from an attempt the decision did not read is labelled, not hidden (`liveEvidenceLines`).
     for (const line of liveEvidenceLines(evidence, tasks)) out(line);
