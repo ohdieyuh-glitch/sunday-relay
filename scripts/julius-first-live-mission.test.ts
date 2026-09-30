@@ -193,13 +193,17 @@ describe('the paid stage is gated, and the unpaid stage cannot pay', () => {
 
   it('pins all three roles to the models the founder named', () => {
     expect(workflow).toMatch(/OPENAI_PROMPT_ARCHITECT_MODEL:\s*gpt-5\.6-sol/u);
-    expect(workflow).toMatch(/RELAY_HOSTED_CODING_MODEL:\s*claude-fable-5/u);
+    expect(workflow).toMatch(/RELAY_HOSTED_CODING_MODEL:\s*claude-opus-5-5$/mu);
+    // The founder named Claude Opus 5.5 for the smoke AND the paid run (2026-09-30):
+    // no other model may be pinned, and none may sit anywhere as a fallback.
+    expect(workflow.match(/RELAY_HOSTED_CODING_MODEL:/gu)?.length, 'one coder pin').toBe(1);
+    expect(workflow, 'no Fable model, pinned or as a fallback').not.toMatch(/\bfable\b/iu);
     expect(workflow).toMatch(/RELAY_HERMES_PROVIDER:\s*xai/u);
     expect(workflow).toMatch(/RELAY_HERMES_MODEL:\s*grok-build-0\.1/u);
     // Exit 5 (asserted above) is what proves the roles resolved; these pin
     // WHICH models were configured. The served model is observed during the run.
     expect(workflow).toContain('architect=gpt-5.6-sol');
-    expect(workflow).toContain('coder=claude-fable-5');
+    expect(workflow).toContain('coder=claude-opus-5-5');
     expect(workflow).toContain('reviewer=xai/grok-build-0.1');
   });
 
@@ -285,6 +289,52 @@ describe('no credential is committed, and none can leave the runner', () => {
     expect(step).toContain(`${SUBSCRIPTION_CLI} -p 'Reply with exactly OK' --max-turns 1 --output-format json --model "$RELAY_HOSTED_CODING_MODEL" --setting-sources user --strict-mcp-config --no-session-persistence > "$sub/smoke.json" 2>/dev/null`);
     expect(step).not.toMatch(/API_KEY/u);
     expect(step).not.toContain('--confirm-live');
+  });
+
+  it('the smoke always reaches its verdict and records both exit codes (run 36685079176)', () => {
+    const start = workflow.indexOf("- name: 'Subscription smoke:");
+    const rest = workflow.slice(start);
+    const lines = rest.slice(0, rest.indexOf('\n      - ', 1)).split('\n').map((line) => line.trim());
+    // Errexit is off before the first CLI call, so a non-zero exit cannot end the step early.
+    const errexitOff = lines.indexOf('set +e');
+    const firstCall = lines.findIndex((line) => line.startsWith(`${SUBSCRIPTION_CLI} `));
+    expect(errexitOff, 'set +e').toBeGreaterThan(lines.indexOf('set -uo pipefail'));
+    expect(errexitOff, 'before the first CLI call').toBeLessThan(firstCall);
+    expect(lines.slice(errexitOff), 'and it is not switched back on').not.toContain('set -e');
+    // Each exit is read on the line straight after its call, before anything else can set `$?`.
+    const after = (needle: string): string => lines[lines.findIndex((line) => line.startsWith(SUBSCRIPTION_CLI) && line.includes(needle)) + 1];
+    expect(after(' auth status --json ')).toBe('echo "subscription_smoke_auth_exit=$?" | tee -a subscription-smoke.log');
+    expect(after(" -p 'Reply with exactly OK' ")).toBe('echo "subscription_smoke_cli_exit=$?" | tee -a subscription-smoke.log');
+    // Still fail-closed: the step succeeds only on the one PASS line.
+    expect(rest).toContain("grep -qE '^subscription_smoke provider=anthropic .* auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\\.ai) reply=OK result=PASS$' subscription-smoke.log");
+  });
+
+  it('the smoke evidence keeps every closed line the smoke prints, and nothing with a tail', () => {
+    const collect = stepScript('Collect the redacted validation evidence');
+    const grep = /grep -E '(\^\(subscription_smoke_auth [^']+)' subscription-smoke\.log/u.exec(collect);
+    expect(grep, 'the smoke evidence is kept by one anchored grep').not.toBeNull();
+    const kept = new RegExp(grep?.[1] ?? '$^', 'u');
+    for (const line of [
+      'subscription_smoke_auth provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION method=oauth_token plan=absent result=SUBSCRIPTION_LOGIN_PRESENT',
+      'subscription_smoke_auth provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION reason=NOT_LOGGED_IN result=SUBSCRIPTION_NOT_READY',
+      'subscription_smoke_auth_exit=0',
+      'subscription_smoke_cli_exit=1',
+      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=claude-opus-5-5 match=EXACT',
+      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=claude-opus-5-5-20260901,unsafe match=DATED_BUILD',
+      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=none match=NONE',
+      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=MODEL_NOT_ENTITLED_OR_NOT_FOUND http=404 subtype=success',
+      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=SERVED_MODEL_MISMATCH http=none subtype=none',
+      'subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=PASS',
+      'subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=ERROR result=FAIL',
+    ]) expect(kept.test(line), `withheld: ${line}`).toBe(true);
+    for (const line of [
+      'subscription_smoke_cli_exit=1 sk-ant-oat01-FAKETESTNOTREAL',
+      'subscription_smoke_cli_exit=1000',
+      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=claude-opus-5-5 match=EXACT trailing',
+      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=Bearer abc match=EXACT',
+      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=Credit balance is too low http=400 subtype=none',
+      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=OTHER http=999 subtype=none',
+    ]) expect(kept.test(line), `kept a lookalike: ${line}`).toBe(false);
   });
 
   it('contains no credential-shaped literal', () => {
@@ -818,6 +868,12 @@ describe('the evidence dump names only tables and columns the migrations create'
     const collect = stepScript('Collect the redacted validation evidence');
     expect(collect).toContain('./.github/julius-live-evidence-dump.sh julius-live-evidence');
     expect(workflow, 'an inline query would drift away from the validated script again').not.toContain('dump "SELECT');
+    // Skipped, and said so, only when the job never generated its database identity
+    // (run 36685079176); from the identity step on, the dump always runs.
+    expect(collect).toMatch(/\nif \[ -n "\$\{PGPASSWORD:-\}" \]; then\n {2}\.\/\.github\/julius-live-evidence-dump\.sh julius-live-evidence\nelse\n {2}echo 'dump_skipped: [a-z ,]+' > julius-live-evidence\/dump-skipped\.txt\nfi\n/u);
+    const collectStep = workflow.slice(workflow.indexOf('- name: Collect the redacted validation evidence'));
+    expect(collectStep.slice(0, collectStep.indexOf('run: |')), 'the dump reads the identity step’s password')
+      .toContain('PGPASSWORD: ${{ steps.identity.outputs.database_password }}');
   });
 
   /**

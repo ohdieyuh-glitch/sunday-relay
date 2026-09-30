@@ -263,7 +263,12 @@ jobs:
       # resolves anything other than these.
       RELAY_PROMPT_ARCHITECT_MODE: live
       OPENAI_PROMPT_ARCHITECT_MODEL: gpt-5.6-sol
-      RELAY_HOSTED_CODING_MODEL: claude-fable-5
+      # THE CODING AGENT IS CLAUDE OPUS 5.5 (founder decision, 2026-09-30), on the
+      # founder's Claude Max subscription. The smoke and the paid run use this one pin,
+      # so the model a smoke qualifies is the model the paid run uses. No other model
+      # is acceptable, and none is a fallback: the smoke's verdict and the coder's
+      # dispatch must refuse any other SERVED model, and a paid run needs both.
+      RELAY_HOSTED_CODING_MODEL: claude-opus-5-5
       RELAY_HERMES_PROVIDER: xai
       RELAY_HERMES_MODEL: grok-build-0.1
       # HOW THE REVIEWER IS PAID FOR, declared by the operator who knows: the Hermes step
@@ -662,6 +667,13 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -uo pipefail
+          # THE STEP ALWAYS REACHES ITS VERDICT. GitHub runs this under `bash -e`, which
+          # `set -uo pipefail` does not clear, so a CLI that exited non-zero (as it does
+          # on an error reply) aborted the step before smoke-verdict read its JSON; with
+          # stderr discarded, run 36685079176 failed and left no reason behind. Errexit
+          # is off for this step only. Every outcome below is still decided explicitly,
+          # and the step still fails closed: only a PASS verdict line lets it succeed.
+          set +e
           sub=$(mktemp -d)
           mkdir "$sub/home" "$sub/work"
           : > subscription-smoke.log
@@ -669,16 +681,18 @@ jobs:
           if node scripts/julius-subscription-check.mjs env-check --for smoke --model "$RELAY_HOSTED_CODING_MODEL" | tee -a subscription-smoke.log; then
             env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
               "$PWD/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude" auth status --json > "$sub/status.json" 2>/dev/null
+            echo "subscription_smoke_auth_exit=$?" | tee -a subscription-smoke.log
             if node scripts/julius-subscription-check.mjs status-verdict --for smoke --model "$RELAY_HOSTED_CODING_MODEL" < "$sub/status.json" | tee -a subscription-smoke.log; then
               env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
                 "$PWD/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude" -p 'Reply with exactly OK' --max-turns 1 --output-format json --model "$RELAY_HOSTED_CODING_MODEL" --setting-sources user --strict-mcp-config --no-session-persistence > "$sub/smoke.json" 2>/dev/null
+              echo "subscription_smoke_cli_exit=$?" | tee -a subscription-smoke.log
               node scripts/julius-subscription-check.mjs smoke-verdict --model "$RELAY_HOSTED_CODING_MODEL" --status-file "$sub/status.json" < "$sub/smoke.json" | tee -a subscription-smoke.log
               status=${PIPESTATUS[0]}
             fi
           fi
           rm -rf "$sub"
           grep -qE '^subscription_smoke provider=anthropic .* auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\.ai) reply=OK result=PASS$' subscription-smoke.log \
-            || { echo 'subscription_smoke_failed: the subscription token did not answer OK; nothing else was attempted' >&2; exit 1; }
+            || { echo 'subscription_smoke_failed: no PASS on the pinned model; the log above says why; nothing else was attempted' >&2; exit 1; }
           exit "$status"
 
       - name: Build the executor, the preflight probe and the live entrypoint
@@ -893,10 +907,16 @@ jobs:
           sub=$(mktemp -d)
           mkdir "$sub/home" "$sub/work"
           if node scripts/julius-subscription-check.mjs env-check --model "$RELAY_HOSTED_CODING_MODEL" | tee -a provider-readiness.log; then
+            # Errexit is off for these two, as it is for the roles preflight: under this
+            # step's `bash -e`, a non-zero `auth status` or a not-ready verdict would end
+            # the step before the reviewer is probed and before the count below. The
+            # count is the gate, and it still fails closed.
+            set +e
             env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
               "$PWD/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude" auth status --json > "$sub/status.json" 2>/dev/null
             node scripts/julius-subscription-check.mjs status-verdict --model "$RELAY_HOSTED_CODING_MODEL" < "$sub/status.json" \
               | tee -a provider-readiness.log
+            set -e
           fi
           rm -rf "$sub"
           if [ "$RELAY_HERMES_PROVIDER" = 'xai' ]; then
@@ -949,7 +969,7 @@ jobs:
           # provider actually serves is a different fact, observed during the run
           # and recorded as `actualModel` / `servedModel`; nothing here can know it.
           grep -q 'architect=gpt-5.6-sol' preflight-roles.log || { echo 'architect_model_unexpected' >&2; exit 1; }
-          grep -q 'coder=claude-fable-5' preflight-roles.log || { echo 'coding_model_unexpected' >&2; exit 1; }
+          grep -q 'coder=claude-opus-5-5' preflight-roles.log || { echo 'coding_model_unexpected' >&2; exit 1; }
           grep -q 'reviewer=xai/grok-build-0.1' preflight-roles.log || { echo 'reviewer_model_unexpected' >&2; exit 1; }
           # THE LIVE LEDGER IS BOUND, OR THE PAID RUN DOES NOT START. Without it every
           # dispatch is allocated a flat estimate (paid run 34739303313: a $0.30
@@ -1147,7 +1167,7 @@ jobs:
             > julius-live-evidence/provider-readiness.txt 2>/dev/null || true
           # The optional subscription smoke, when it ran: closed tokens only.
           if [ -f subscription-smoke.log ]; then
-            grep -E '^(subscription_smoke_auth provider=anthropic model=[A-Za-z0-9._-]+ http=none auth=CLAUDE_SUBSCRIPTION (method=(oauth_token|claude\.ai) plan=(max|pro|team|enterprise|absent)|reason=[A-Z_+]+) result=(SUBSCRIPTION_LOGIN_PRESENT|SUBSCRIPTION_NOT_READY)|subscription_smoke provider=anthropic model=[A-Za-z0-9._-]+ auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\.ai|none) reply=(OK|UNEXPECTED|ERROR|UNREADABLE|NO_SUBSCRIPTION_STATUS) result=(PASS|FAIL))$' subscription-smoke.log \
+            grep -E '^(subscription_smoke_auth provider=anthropic model=[A-Za-z0-9._-]+ http=none auth=CLAUDE_SUBSCRIPTION (method=(oauth_token|claude\.ai) plan=(max|pro|team|enterprise|absent)|reason=[A-Z_+]+) result=(SUBSCRIPTION_LOGIN_PRESENT|SUBSCRIPTION_NOT_READY)|subscription_smoke provider=anthropic model=[A-Za-z0-9._-]+ auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\.ai|none) reply=(OK|UNEXPECTED|ERROR|UNREADABLE|NO_SUBSCRIPTION_STATUS) result=(PASS|FAIL)|subscription_smoke_(auth|cli)_exit=[0-9]{1,3}|subscription_smoke_served provider=anthropic requested=[A-Za-z0-9._-]{1,64} served=(none|[A-Za-z0-9._-]{1,64}(,[A-Za-z0-9._-]{1,64}){0,7}) match=(EXACT|DATED_BUILD|MISMATCH|NONE)|subscription_smoke_reason provider=anthropic model=[A-Za-z0-9._-]{1,64} reason=(MODEL_NOT_ENTITLED_OR_NOT_FOUND|AUTH|USAGE_LIMIT|RATE_LIMITED|OVERLOADED|MAX_TURNS|UNEXPECTED_REPLY|UNREADABLE|SERVED_MODEL_MISMATCH|SERVED_MODEL_UNATTESTED|OTHER) http=([1-5][0-9]{2}|none) subtype=([a-z_]{1,40}|none))$' subscription-smoke.log \
               > julius-live-evidence/subscription-smoke.txt 2>/dev/null || true
           fi
 
@@ -1155,7 +1175,16 @@ jobs:
           # runs against a freshly migrated database — dry runs #1 and #2 uploaded
           # `unavailable` for two tables because the inline queries named a
           # column and a table the migrations never created.
-          ./.github/julius-live-evidence-dump.sh julius-live-evidence
+          # A job that ended before the identity step (a refused smoke, an early gate)
+          # never generated a database password, so no database was started and there
+          # is nothing to dump. It says so, instead of failing this always-run step on
+          # the dump's own PGPASSWORD guard and reading as a second failure (run
+          # 36685079176). Once the identity exists, the dump runs as before.
+          if [ -n "${PGPASSWORD:-}" ]; then
+            ./.github/julius-live-evidence-dump.sh julius-live-evidence
+          else
+            echo 'dump_skipped: no database identity was generated in this job, so no database was started' > julius-live-evidence/dump-skipped.txt
+          fi
 
           # The mission's own diff is the point of the exercise; it contains
           # only what a live coding agent wrote into a throwaway repository.

@@ -82,7 +82,7 @@ export MISSION_DIR=.github/julius-missions/julius-live-mission-6
 export CONTRACT=.github/julius-missions/julius-live-mission-6/contract.json
 export RELAY_PROMPT_ARCHITECT_MODE=live
 export OPENAI_PROMPT_ARCHITECT_MODEL=gpt-5.6-sol
-export RELAY_HOSTED_CODING_MODEL=claude-fable-5
+export RELAY_HOSTED_CODING_MODEL=claude-opus-5-5
 export RELAY_HERMES_PROVIDER=xai
 export RELAY_HERMES_MODEL=grok-build-0.1
 # HOW THE REVIEWER IS PAID FOR: the workflow's own declaration, which the founder made where the
