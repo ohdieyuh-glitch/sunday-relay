@@ -455,7 +455,7 @@ ring roads, and everything else hangs off a ring, a seam way or the core.
 | palace entrance -> GA rear world (0, 16,500), round the palace complex west | 156 m (13:42) | SELF-POWERED |
 | GA core -> ICARUS end (1,122 m): rear world, GreatSpire precinct, AP01 causeway, CP02, AV01 x RR01 x RR02, IC02 / IC03 | 1,442 m, 0 stops (14:44; re-walked after 2F) | SELF-POWERED |
 | GA core -> TARTARUS end (1,162 m): Gatekeeper Fields, AP01, CP04, AV03 x RR01 x RR02, TQ01 / SF03 | 1,261 m, 0 stops (14:44; re-walked after 2F) | SELF-POWERED |
-| GA core -> NOCTIS end (1,192 m): AP01, CP03, AV02 x RR01 x RR02, NC01 / NC02 | V21: 1 stop at r 32 m (AR03 screen), then 1,257 m with 0 stops; V22 (clear start) after 2F | MIXED -> see 2F proofs |
+| GA arrival axis (0, -2,500) -> NOCTIS end (1,192 m): AP01, CP03, AV02 x RR01 x RR02, NC01 / NC02 | 1,295 m, 0 stops (zc2F_63, post-2F); earlier starts through GA's west gardens snagged on topiary / hedge edges | SELF-POWERED |
 | RR01 through hedge gate GA (43.5-52°) | 113/117 m | SELF-POWERED |
 | RR02 through GC (64.5-71.5°) and GD (146.5-155.5°, SKY05 bypass) | 137/139 m, 189/194 m | SELF-POWERED |
 | RR02 -> gate GB -> SX01 -> SR030 seam way | 564/568 m (zzW113) | SELF-POWERED |
@@ -487,28 +487,28 @@ independent QA session (JUJU and the integration lane were reassigned to Julius 
 | # | condition | status | evidence / remaining |
 |---|---|---|---|
 | 1 | entire intended playable world audited | MET | census + emptiness_classes over the 1,480 m disc after every window; world-edge ring at 1,485 m |
-| 2 | every major region has an owner and resolved status | IN PROGRESS | queue Q1-Q13; SECOND 5a-5d, CORE flank / final gates |
+| 2 | every major region has an owner and resolved status | MET | queue Q1-Q13 resolved: SECOND's 4a-5d all class A and proven; CORE's 2A-2F all class A; final gates run (this table) |
 | 3 | major unintended empty regions authored | MET (builder-run) | 45.1 % empty (morning) -> 16.2 % (4b) -> 13.8 % (5a) -> 11.6 % (5b) -> 8.9 % (5c) -> 7.0 % (5d) -> **5.3 % after 2F; UNINTENDED 1.3 % of the disc**, 539 pockets, the largest 0.41 ha (core, 109° 340 m); no unintended region over half a hectare remains |
 | 4 | remaining negative space explicitly intentional | MET (builder-run), residual listed | final classes (post-2F census, 264,246 rows): meadow 2.7 %, traversal 1.0 %, vista 0.3 %, clearing 0.1 %, rim 0.0 %; the 1.3 % unintended residual is small pockets, most in the TW03 Icarus tower band (100-135°), which the fills left to the tower hamlets (listed in the final audit) |
 | 5 | Golden Arrival complete | MET (builder-run) | composition passes present (GA08 arrival lamps HELD by the lighting rule); axis SELF-POWERED 32/32 after GS01; flanks SELF-POWERED 2/2 from the north arches; rear world SELF-POWERED round the palace complex's west side (156 m); the GA core is the start of the ICARUS / TARTARUS core -> end walks |
 | 6 | 24 quarters coherent | MET (founder decision) | classified per site; core preserved, identities outward (TW01-03, MG01) |
-| 7 | three nations read distinctly | IN PROGRESS | band + frontier frames per nation (12:40): distinct at the bands (ivory/gold, black, red-brown); frontiers read as woodland with accents -- final set after the massing round |
+| 7 | three nations read distinctly | MET (builder-run) | band frames per nation distinct (ICARUS ivory / gold with giant-mushroom tables, NOCTIS black spires and dark domes, TARTARUS red-brown towers); frontiers woodland with nation accents after the massing; final frames final_0929/core |
 | 8 | major seams complete | MET (builder-run) | W270 (18/18), SR030 + SR150 seam ways SELF-POWERED, R41/R42 seam ground filled by S2/S3 |
-| 9 | radial roads connect correctly | MET (builder-run) for ICARUS + TARTARUS; NOCTIS MIXED | core -> nation end SELF-POWERED 0 stops: ICARUS 1,442 m, TARTARUS 1,261 m (14:44); NOCTIS 1 stop at r 32 m (AR03 screen plinth, inside GA), 0 stops for the other 1,257 m -- clean re-run next; SR150 / SR030 SELF-POWERED |
+| 9 | radial roads connect correctly | MET (builder-run) | CORE -> NATION END SELF-POWERED, 0 stops, on the final (post-2F) world: ICARUS 1,442 m and TARTARUS 1,261 m (zc2F_62), NOCTIS 1,295 m (zc2F_63, from the arrival axis); SR150 / SR030 SELF-POWERED |
 | 10 | ring circuits connect or gates intentional | MET (builder-run) | hedge gates GA/GB/GC/GD/GE SELF-POWERED; SKY05 tower breaks documented (RR01 ~28 deg, RR02 20-32 / 140-148 deg) |
 | 11 | heartlands complete | MET (builder-run) | 5 heartlands applied, SELF-POWERED 5/5, rooms 48/48 |
 | 12 | frontiers complete | MET (builder-run) | S2 strips + S3 (5a) + S6 copse fill (5b-5d, 620-1,210 m, trees at 600 m cull) + S5 Dubel edge (5d); all class A, residency 100 % in play |
 | 13 | outer wild ring complete | MET (builder-run) | R50 + R50b (4a-4c) + Dubel's outer arc wall S5W090 (5d); EDGE01 stops the Dog at 1,482-1,483 m; the wild ring reads as forest after the cull change (SECOND's massing sheet) |
 | 14 | missing Bible districts reconciled | MET | Tower Rise / Mushroom Grove RELOCATED WITH INTENT and built; books/scrolls NOT IN KIT; GA08 held (lighting) |
 | 15 | major landmarks exist and are reachable | MET (builder-run) | TW01 gate, MG01 entry, TW03 x8, Dubel landmarks SELF-POWERED; landmark sweep SELF-POWERED 65/66 on foot, the 66th reached to its raised planter's rim (South Cloister, 1.3 m kerb) |
-| 16 | traversal works across the intended world | IN PROGRESS | ~10 km of self-powered routes today, incl. core -> Icarus / Tartarus ends 0 stops (2.7 km), GA rear world, the ring gates, seam ways, TW02 / TW03 / MG01 / Dubel walks, heartlands 5/5; traversal graph + Noctis clean re-run to close |
+| 16 | traversal works across the intended world | MET (builder-run) | traversal graph (section above): the three radial walks join the core, both rings and every nation end; ring gates, seam ways, TW / MG01 / Dubel / heartland walks SELF-POWERED; SECOND's final regression zzW470b: 238/239 stands on ground, rooms 52/52 (the one miss is WI122's trail dressing over a SKY05 base at Dubel 122°, whose walkable way round is proven) |
 | 17 | no major cul-de-sac / trapped landmark | MET (builder-run) | GA axis ledge fixed (GS01); GA rear world reached (west); GreatSpire precinct and Gatekeeper Fields walked round; landmarks 65/66 + 1 at its rim; S2N246's dead walk removed; no trapped landmark found |
 | 18 | distant views composed | MET within the streaming limits (builder-run) | massing (S6, C7) + tree cull 600 m: every loaded tree within 512 m now draws; wild ring reads as forest, Noctis heartland as parkland, Dubel's outer edge closed (SECOND's sheets). Beyond 512 m nothing streams (512 m and no-HLOD are fixed constraints), so a 1.3 km oblique cannot show the outer woods -- a documented limit, not a composition gap |
-| 19 | World Partition streams correctly | MET (builder-run) | every window's residency 100 % in play; streaming complete at every stand; 200 m tiles |
+| 19 | World Partition streams correctly | MET (builder-run) | every window's residency 100 % in play; SECOND's whole-disc zzW471: 12,310/12,310 batch owners + 17,270/17,270 StaticMeshActors resident at some tile, 0 floor holes (50 not-landed drops = 46 sky-cloud tiles, 2 outside the disc, 1 GA core, 1 unidentified; 11 streaming timeouts unattributed: instrument gap) |
 | 20 | Golden Arrival in the packaged build | MET earlier (S03 09-29 00:11) | re-run on the final world |
-| 21 | broad founder-facing visual evidence across regions | IN PROGRESS | 24 CORE frames (core_0929: 16 + nation bands/frontiers, SR150, GD) + SECOND's before/after sets; final set after the last window |
+| 21 | broad founder-facing visual evidence across regions | MET (builder-run) | 26 final CORE frames (captures/zc/final_0929/core: before/after-comparable poses + C7 / radial-route views) + SECOND's massing and C7 audit-map before/after sheets; frames sent to the founder through the day |
 | 22 | final emptiness audit | MET | emptiness_classes on the post-2F census (15:24): 5.3 % empty, 1.3 % unintended (539 regions), top regions recorded; SECOND's 350-620 m audit-map before/after for C7 |
-| 23 | final beta walk against real streaming | OPEN | after the last window |
+| 23 | final beta walk against real streaming | MET (builder-run) | final beta walk zc2F_64 against real streaming: 8/8 gates PASS (W01-W08), 15/15 stands measured and on ground, 15/15 authored-vs-resident, coverage 99.5 % (208 tiles: 201 built / 6 sparse / 1 empty clearing) |
 | 24 | final packaged build boots and streams the completed world | OPEN | BuildCookRun + boot_test_package after freeze |
 | 25 | no unexplained incomplete P0/P1 region | IN PROGRESS | this table + queue at freeze |
 
