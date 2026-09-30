@@ -175,6 +175,64 @@ describe('P11 — a maintained Architect position is independently re-reviewed',
   });
 });
 
+/**
+ * THE RE-REVIEW IS ANSWERED BY THE ATTEMPT THAT WAS ACCEPTED (defect A's A-6). The verdict applied is
+ * the accepted attempt's: the decision reads each task's rows reduced to the attempt its task row names.
+ * The REVIEW_REQUEST's answer was the FIRST verdict row of the re-review across every attempt, so a row a
+ * lost lease left behind was named as the answer to a question it did not decide.
+ */
+describe('A-6 — the re-review is answered by the attempt that was accepted', () => {
+  /** Runs to the waiting re-review; an earlier process claims it, persists a FAILED verdict under that attempt, and loses the lease. */
+  const aLostLeaseLeftAVerdict = async (harness: JuliusHarness): Promise<{ readonly lostGeneration: number; readonly stale: string }> => {
+    for (let index = 0; index < 60 && harness.store.taskRow(RE_REVIEW)?.state !== 'RUNNABLE'; index += 1) {
+      if (!(await step(harness))) break;
+    }
+    expect(harness.store.taskRow(RE_REVIEW)?.state, 'the re-review waits to be claimed').toBe('RUNNABLE');
+    const now = harness.clock.now();
+    const [lost] = await harness.store.claimRunnable({ owner: 'an-earlier-process', now, leaseExpiresAt: harness.clock.now(), limit: 1, projectId: 'prj-1' });
+    expect(lost?.taskId).toBe(RE_REVIEW);
+    const stale = `${RE_REVIEW}:${String(lost!.leaseGeneration)}:0`;
+    expect(await harness.store.appendEvidence({
+      runId: 'run-1', projectId: 'prj-1', idempotencyKey: `${RE_REVIEW}:${String(lost!.leaseGeneration)}:${stale}`,
+      evidence: {
+        evidenceId: stale, missionId: 'msn-1', taskId: RE_REVIEW, workerId: 'reviewer', type: 'REVIEW_FINDING', status: 'FAILED',
+        safeSummary: 'The symlink escapes (an attempt whose lease was lost).', artifactRef: null, integrityHash: null, occurredAt: now,
+      },
+    })).toBe(true);
+    expect(await harness.store.finishTask({ taskId: RE_REVIEW, owner: 'an-earlier-process', leaseGeneration: lost!.leaseGeneration, state: 'FAILED', now, nextAttemptAt: now })).toBe(true);
+    return { lostGeneration: lost!.leaseGeneration, stale };
+  };
+
+  it('RED FIRST: a verdict row a lost lease left behind is not named as the answer, and decides nothing', async () => {
+    const harness = build({ architect: [PLAN, MAINTAIN], reviewer: [PASS, MATERIAL, PASS, PASS] });
+    const { lostGeneration } = await aLostLeaseLeftAVerdict(harness);
+    await drain(harness);
+
+    const accepted = harness.store.taskRow(RE_REVIEW)!;
+    expect(accepted.leaseGeneration, 'the re-review was accepted on a later lease').toBeGreaterThan(lostGeneration);
+    const own = `${RE_REVIEW}:${String(accepted.leaseGeneration)}:0`;
+    expect((await harness.store.evidenceForRun('run-1', 'prj-1')).some((item) => item.evidenceId === own && item.type === 'REVIEW_FINDING')).toBe(true);
+    const reReview = requests(harness).find((request) => request.carrierTaskId === RE_REVIEW)!;
+    expect(reReview.responseRef, 'answered by the verdict that was applied').toBe(own);
+    // The decision already read the accepted attempt: the stale FAILED verdict changed nothing but the answer.
+    expect(disagreements(harness)[0]).toMatchObject({ resolution: 'ARCHITECT_UPHELD', resolutionBasis: 'RE_REVIEW_CONTINUED' });
+    expect(decisionsOn(harness, 'build-1')).toEqual(['ACCEPT:TASK_VERIFIED']);
+    expect(await stateOf(harness)).toBe('COMPLETED');
+  });
+
+  it('DA1 shape: an accepted re-review that wrote no verdict row is answered by the task, never by the lost lease’s row', async () => {
+    const silent: Step = { kind: 'succeed', evidence: [], reviewVerdict: { verdict: 'CONTINUE', claim: 'The symlink resolves inside the workspace.' } };
+    const harness = build({ architect: [PLAN, MAINTAIN], reviewer: [PASS, MATERIAL, silent, PASS] });
+    const { stale } = await aLostLeaseLeftAVerdict(harness);
+    await drain(harness);
+
+    expect((await harness.store.evidenceForRun('run-1', 'prj-1')).filter((item) => item.taskId === RE_REVIEW).map((item) => item.evidenceId),
+      'the only verdict row is the lost lease’s').toEqual([stale]);
+    const reReview = requests(harness).find((request) => request.carrierTaskId === RE_REVIEW)!;
+    expect(reReview.responseRef, 'the latest attempt WITH a row is the lost one: only the task row names the accepted attempt').toBe(RE_REVIEW);
+  });
+});
+
 describe('P10 — the rebuttal is bounded', () => {
   it.each([
     ['challenges again', verdict({ verdict: 'CHALLENGE', category: 'contract_drift', target: 'plan', claim: 'The symlink is itself outside the paths.' }), 'RE_REVIEW_MAINTAINED'],
