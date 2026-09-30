@@ -1,3 +1,4 @@
+import type { JuliusOperationalEvent } from './julius-events';
 import type { JuliusMissionState } from './julius-runtime';
 
 export interface JuliusRecoveryCandidate {
@@ -32,6 +33,102 @@ export interface JuliusRecoveryAction {
   readonly runId: string;
   readonly taskId: string | null;
   readonly expectedLeaseGeneration: number | null;
+  /**
+   * The reservations this recovery closed for the task, in the order they were opened ((a2) step
+   * 2). Written by the store in the same atomic step as the lease change. Present only when there
+   * was one to close: omitted means none was open.
+   */
+  readonly settlements?: readonly JuliusRecoverySettlement[];
+}
+
+/* ------------------------------------------------ (a2) step 2: closing what the attempt left open */
+
+/** One reservation a recovered task left open: a `budget.reserved` row with no `budget.settled`. */
+export interface JuliusOpenReservation {
+  readonly reservationId: string;
+  /** The slot the reservation was made for, copied onto the closing row so the two stay one reservation to every reader. */
+  readonly role: string | null;
+  /** The admission the reservation was made under, when its row names one. */
+  readonly attempt: number | null;
+}
+
+export interface JuliusRecoverySettlement {
+  readonly reservationId: string;
+  readonly released: boolean;
+  readonly reasonCode: 'RECOVERED_BEFORE_HANDOFF' | 'RECOVERED_HANDED_OUTCOME_UNKNOWN';
+}
+
+/**
+ * HOW RECOVERY CLOSES A RESERVATION ITS LOST ATTEMPT LEFT OPEN ((a2) step 2).
+ *
+ * The coordinator writes `budget.reserved`, then `worker.dispatched`, then `budget.settled`. A
+ * process that died in between left the reservation open for ever, and the slot ledger, which is
+ * projected from those rows, kept charging a dead attempt's hold as outstanding. Each reservation of
+ * a recovered task is judged by its OWN attempt:
+ *   - no `worker.dispatched` for that attempt: RELEASED. Nothing was sent, and the lease-fenced
+ *     handoff (step 1) means nothing can be sent under that attempt any more, because recovery is
+ *     clearing its lease in this same step;
+ *   - a `worker.dispatched` for it: closed as an UNKNOWN outcome, charged at what it held. It may
+ *     have been paid for, and unknown is not free.
+ * WHEN THE ROWS CANNOT TELL, IT IS HELD. A reservation that names no attempt is released only when
+ * the task was never handed at all; a handoff that names no attempt holds every reservation.
+ *
+ * Pure, so the memory store and PostgreSQL take the same decision by the same function.
+ * `dispatchedAttempts` holds the attempt each of the task's `worker.dispatched` rows names, or null
+ * for one that names none.
+ */
+export function planJuliusRecoverySettlements(
+  open: readonly JuliusOpenReservation[],
+  dispatchedAttempts: readonly (number | null)[],
+): JuliusRecoverySettlement[] {
+  return open.map((reservation) => {
+    const handed = dispatchedAttempts.some((attempt) => attempt === null || reservation.attempt === null || attempt === reservation.attempt);
+    return handed
+      ? { reservationId: reservation.reservationId, released: false, reasonCode: 'RECOVERED_HANDED_OUTCOME_UNKNOWN' }
+      : { reservationId: reservation.reservationId, released: true, reasonCode: 'RECOVERED_BEFORE_HANDOFF' };
+  });
+}
+
+/**
+ * THE CLOSING ROW, identical in both stores and shaped as the coordinator's own release: no
+ * amount, basis UNKNOWN, `released` the discriminator the slot ledger reads, and the reservation's
+ * own role, so a reader grouping by reservation and role sees the two rows as one reservation.
+ *
+ * ONE ID PER RESERVATION. A recovery that is retried whole rewrites the same event; nothing else
+ * writes this id. A LATE coordinator settlement of the same reservation (an attempt whose lease
+ * lapsed while it was still alive) keeps its own minted id and lands as a second row. The slot
+ * ledger keeps the first; the settlement-integrity check reports the pair.
+ */
+export function juliusRecoverySettlementEvent(input: {
+  readonly runId: string;
+  readonly projectId: string;
+  readonly taskId: string;
+  readonly reservation: JuliusOpenReservation;
+  readonly settlement: JuliusRecoverySettlement;
+  readonly occurredAt: string;
+}): JuliusOperationalEvent {
+  return {
+    eventId: `event:budget.settled:recovered:${input.reservation.reservationId}`,
+    runId: input.runId,
+    projectId: input.projectId,
+    type: 'budget.settled',
+    taskId: input.taskId,
+    workerId: null,
+    correlationId: input.taskId,
+    causationId: null,
+    occurredAt: input.occurredAt,
+    facts: {
+      reservationId: input.reservation.reservationId,
+      usdMicros: null,
+      reason: input.settlement.reasonCode,
+      role: input.reservation.role,
+      released: input.settlement.released,
+      costBasis: 'UNKNOWN',
+      estimatedUsdMicros: null,
+      attempt: input.reservation.attempt,
+      runId: input.runId,
+    },
+  };
 }
 
 /**

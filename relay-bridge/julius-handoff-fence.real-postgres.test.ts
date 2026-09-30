@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { JuliusOperationalEvent } from '../src/relay/mission/julius';
-import { JuliusEventPostgresRepository } from '../src/relay/persistence/julius-event-postgres';
+import { JuliusEventPostgresRepository, appendJuliusEventWithin } from '../src/relay/persistence/julius-event-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
 import { JuliusReadPostgresRepository } from '../src/relay/persistence/julius-read-postgres';
 import { JuliusRecoveryPostgresRepository } from '../src/relay/persistence/julius-recovery-postgres';
@@ -20,6 +20,10 @@ import { composeJuliusMissionBootstrap, handleJuliusMissionRoute } from './juliu
  *   - a fence that holds the row first makes recovery SKIP the task (it reads it handed next sweep);
  *   - a recovery that holds the row first makes the fence WAIT, then see the cleared lease and
  *     answer LEASE_LOST, with nothing written and nothing dispatched.
+ * And (a2) step 2: the sweep closes every reservation the recovered task left open, in its own
+ * transaction, judged by the reservation's own attempt (released if never handed, held as unknown
+ * if handed). A settlement committed while the sweep writes its close makes the sweep retry, and
+ * the retry writes no second close.
  * Gated on JULIUS_TEST_DATABASE_URL like every real-postgres suite, and `todo` without it.
  */
 
@@ -144,5 +148,106 @@ suite('(a2) the fenced handoff against a real PostgreSQL', () => {
     expect(await events.appendHandoff({ event: handoff(claim), owner: claim.owner, leaseGeneration: claim.leaseGeneration })).toBe('RECORDED');
     const next = await recovery.recoverExpired(new Date().toISOString(), 10, claim.projectId);
     expect(next.filter((action) => action.taskId === claim.taskId).map((action) => action.reasonCode)).toEqual(['HANDED_OUTCOME_UNKNOWN']);
+  });
+
+  /* ---- (a2) step 2: the sweep closes what the lost attempt left open, in its own transaction ---- */
+
+  const HOLD = 300_000;
+  const reserved = (claim: { runId: string; projectId: string; taskId: string }, reservationId: string, attempt: number): JuliusOperationalEvent => ({
+    eventId: `event:budget.reserved:${nonce()}`, runId: claim.runId, projectId: claim.projectId, type: 'budget.reserved',
+    taskId: claim.taskId, workerId: null, correlationId: claim.runId, causationId: null, occurredAt: new Date().toISOString(),
+    facts: { reservationId, role: 'ARCHITECT', usdMicros: HOLD, attempt, runId: claim.runId },
+  });
+  const settledRows = async (runId: string, reservationId: string) => (await pool.query<{ event_id: string; payload: { facts: Record<string, unknown> } }>(
+    `SELECT event_id,payload FROM relay_wonderland.events WHERE stream_id=$1 AND event_type='julius.budget.settled' AND payload->'facts'->>'reservationId'=$2 ORDER BY sequence`,
+    [runId, reservationId])).rows;
+  const lapse = (taskId: string) => pool.query(`UPDATE relay_wonderland.julius_tasks SET lease_expires_at=now()-interval '1 minute' WHERE task_id=$1`, [taskId]);
+
+  it('(a2) STEP 2: NOT HANDED, the sweep releases the dead attempt’s reservation; HANDED, it closes it as unknown and charged', async () => {
+    const quiet = await claimed();
+    const quietId = `reservation:quiet-${nonce()}`;
+    await events.append(reserved(quiet, quietId, 1));
+    await lapse(quiet.taskId);
+    const [released] = (await recovery.recoverExpired(new Date().toISOString(), 10, quiet.projectId)).filter((action) => action.taskId === quiet.taskId);
+    expect(released).toMatchObject({ action: 'REQUEUE', settlements: [{ reservationId: quietId, released: true, reasonCode: 'RECOVERED_BEFORE_HANDOFF' }] });
+    const [quietRow] = await settledRows(quiet.runId, quietId);
+    expect(quietRow!.event_id).toBe(`event:budget.settled:recovered:${quietId}`);
+    expect(quietRow!.payload.facts).toMatchObject({ released: true, reason: 'RECOVERED_BEFORE_HANDOFF', costBasis: 'UNKNOWN', usdMicros: null, role: 'ARCHITECT', attempt: 1 });
+
+    const paid = await claimed();
+    const paidId = `reservation:paid-${nonce()}`;
+    await events.append(reserved(paid, paidId, 1));
+    expect(await events.appendHandoff({ event: handoff(paid), owner: paid.owner, leaseGeneration: paid.leaseGeneration })).toBe('RECORDED');
+    await lapse(paid.taskId);
+    const [held] = (await recovery.recoverExpired(new Date().toISOString(), 10, paid.projectId)).filter((action) => action.taskId === paid.taskId);
+    expect(held).toMatchObject({ action: 'FAIL_TASK', reasonCode: 'HANDED_OUTCOME_UNKNOWN', settlements: [{ reservationId: paidId, released: false, reasonCode: 'RECOVERED_HANDED_OUTCOME_UNKNOWN' }] });
+    expect((await settledRows(paid.runId, paidId)).map((row) => row.payload.facts)).toEqual([expect.objectContaining({ released: false, reason: 'RECOVERED_HANDED_OUTCOME_UNKNOWN', usdMicros: null })]);
+  });
+
+  it('(a2) STEP 2: each reservation is judged by its OWN attempt, and a second sweep writes nothing more', async () => {
+    const claim = await claimed();
+    const r1 = `reservation:first-${nonce()}`;
+    await events.append(reserved(claim, r1, 1));
+    // Handed back without a settlement: the orphan an older build left behind.
+    expect(await runs.finishTask({ taskId: claim.taskId, owner: claim.owner, leaseGeneration: claim.leaseGeneration, state: 'FAILED', now: new Date().toISOString(), nextAttemptAt: new Date(Date.now() - 1_000).toISOString() })).toBe(true);
+    const owner = `fence-second-${nonce()}`;
+    const [again] = await runs.claimRunnable({ owner, now: new Date().toISOString(), leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(), limit: 1, projectId: claim.projectId });
+    expect(again?.taskId, 'the same task, claimed again').toBe(claim.taskId);
+    expect(await runs.admitTask({ taskId: again!.taskId, owner, leaseGeneration: again!.leaseGeneration, now: new Date().toISOString() })).toBe(2);
+    const r2 = `reservation:second-${nonce()}`;
+    await events.append(reserved(claim, r2, 2));
+    const second = { ...claim, owner, leaseGeneration: again!.leaseGeneration };
+    expect(await events.appendHandoff({ event: { ...handoff(second), facts: { workerId: 'architect-openai', attempt: 2, runId: claim.runId } }, owner, leaseGeneration: second.leaseGeneration })).toBe('RECORDED');
+    await lapse(claim.taskId);
+
+    const [action] = (await recovery.recoverExpired(new Date().toISOString(), 10, claim.projectId)).filter((row) => row.taskId === claim.taskId);
+    expect(action!.settlements).toEqual([
+      { reservationId: r1, released: true, reasonCode: 'RECOVERED_BEFORE_HANDOFF' },
+      { reservationId: r2, released: false, reasonCode: 'RECOVERED_HANDED_OUTCOME_UNKNOWN' },
+    ]);
+    expect(await recovery.recoverExpired(new Date().toISOString(), 10, claim.projectId), 'nothing is ACTIVE any more').toEqual([]);
+    expect((await settledRows(claim.runId, r1)).length + (await settledRows(claim.runId, r2)).length, 'one closing row each').toBe(2);
+  });
+
+  it('(a2) STEP 2: another task’s handoff in the same run, at the same attempt number, does not make this one handed', async () => {
+    const claim = await claimed();
+    const reservationId = `reservation:alone-${nonce()}`;
+    await events.append(reserved(claim, reservationId, 1));
+    // A sibling task of the same run was handed its attempt 1. This task never was.
+    await events.append({ ...handoff({ ...claim, taskId: `${claim.taskId}:sibling` }), facts: { workerId: 'architect-openai', attempt: 1, runId: claim.runId } });
+    await lapse(claim.taskId);
+    const [action] = (await recovery.recoverExpired(new Date().toISOString(), 10, claim.projectId)).filter((row) => row.taskId === claim.taskId);
+    expect(action).toMatchObject({ action: 'REQUEUE', settlements: [{ reservationId, released: true, reasonCode: 'RECOVERED_BEFORE_HANDOFF' }] });
+  });
+
+  it('(a2) STEP 2 LOCK ORDER: a settlement committed while the sweep writes its own close is never doubled by the sweep', async () => {
+    const claim = await claimed();
+    const reservationId = `reservation:race-${nonce()}`;
+    await events.append(reserved(claim, reservationId, 1));
+    await lapse(claim.taskId);
+    const coordinator = await pool.connect();
+    let sweep: Promise<Awaited<ReturnType<typeof recovery.recoverExpired>>> | null = null;
+    try {
+      // The coordinator's own release, still being written: the run row locked, the stream moved.
+      await coordinator.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+      await appendJuliusEventWithin(coordinator, {
+        eventId: `event:budget.settled:${nonce()}`, runId: claim.runId, projectId: claim.projectId, type: 'budget.settled',
+        taskId: claim.taskId, workerId: null, correlationId: claim.runId, causationId: null, occurredAt: new Date().toISOString(),
+        facts: { reservationId, usdMicros: null, reason: 'CANCELLED', role: 'ARCHITECT', released: true, costBasis: 'UNKNOWN', estimatedUsdMicros: null },
+      });
+      sweep = recovery.recoverExpired(new Date().toISOString(), 10, claim.projectId);
+      const early = await Promise.race([sweep.then(() => 'answered'), new Promise((resolve) => setTimeout(() => resolve('waiting'), 500))]);
+      expect(early, 'the sweep waits on the run row the release is writing').toBe('waiting');
+      await coordinator.query('COMMIT');
+    } catch (error) {
+      await coordinator.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      coordinator.release();
+    }
+    const [action] = (await sweep!).filter((row) => row.taskId === claim.taskId);
+    expect(action, 'the task is still recovered').toMatchObject({ action: 'REQUEUE', reasonCode: 'LEASE_EXPIRED' });
+    expect(action!.settlements, 'the retried sweep read the release and closed nothing').toBeUndefined();
+    expect((await settledRows(claim.runId, reservationId)).map((row) => row.payload.facts.reason), 'exactly one closing row, the coordinator’s').toEqual(['CANCELLED']);
   });
 });
