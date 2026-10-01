@@ -20,7 +20,10 @@ Visibility is `OWNER`, `PARTICIPANTS`, or `PUBLIC`. `PARTICIPANTS` is battle mem
 | `POST` | `/relay-api/wonderland/challenges/:id/accept` | challenged player accepts and atomically creates locked contract/battle/events |
 | `POST` | `/relay-api/wonderland/battles/:id/swarm` | activate the bounded real execution-port swarm |
 | `GET` | `/relay-api/wonderland/battles/:id/result` | participant-only evidence-backed result |
-| `GET` | `/relay-api/wonderland/projects/:id/brain` | member-only Project Brain read model |
+| `GET` | `/relay-api/wonderland/projects/:id/brain` | member-only Project Brain read model — answered by the ONE durable Project Brain (`relay-project-brain.v1`), never the in-memory battle state; see [PROJECT_BRAIN.md](PROJECT_BRAIN.md) |
+| `GET` | `/relay-api/wonderland/brain?projectId=…` · `/brain/events` | the existing panel's surfaces from the durable Project Brain, and its live feed |
+| `POST` | `/relay-api/wonderland/brain/proposals` · `/reviews` · `/mutations` | the panel's Propose and Accept/Decline, saved with provenance, idempotent, version-checked |
+| `POST` | `/relay-api/wonderland/native/pair` · `/session` · `/revoke` | pair a desktop client for one project from the signed-in website |
 
 Every mutating request carries a globally unique `commandId`. Retrying the same command returns its first result and does not duplicate a Mission, battle, worker set, reward, or Avatar progression.
 
