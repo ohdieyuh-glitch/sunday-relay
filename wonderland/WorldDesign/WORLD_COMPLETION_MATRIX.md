@@ -4,8 +4,15 @@
 >
 > **ENVIRONMENTAL WORLD COMPLETION: COMPLETE**
 >
-> **POST-COMPLETION GAMEPLAY REGRESSION: VERIFIED (2026-09-30 19:27) -- awaiting the founder's acceptance of the
-> rebuilt package.** It began IN PROGRESS with three founder-observed player-facing regressions: Relay
+> **POST-COMPLETION GAMEPLAY REGRESSION: ENGINEERING VERIFIED -- 18/18** (2026-09-30 19:27; founder accepted the
+> report).
+>
+> **TOTAL ENGINEERING VERIFICATION: 43/43 checkpoints** (environmental 25/25 + gameplay 18/18).
+>
+> The rebuilt package is **NOT yet founder-accepted**: final package acceptance, and any landing or push of 4b69df20,
+> is a founder decision. The state is LOCKED. No gate is re-run without a new reviewed change.
+>
+> The gameplay regression began IN PROGRESS with three founder-observed player-facing regressions: Relay
 > Dog skin locomotion on the non-OG skins, Jack Flame's secondary colour not reaching the tie, and teleport to
 > the new world locations. The environmental baseline (world, package, traversal, landscaping) is frozen; see
 > the POST-COMPLETION GAMEPLAY REGRESSION section at the end of this file.
@@ -24,8 +31,8 @@
 > 2026-09-30 (evening): G1-G7 are FIXED (fdaa8ffe) and INDEPENDENTLY FALSIFIED by Second Wonderland on the final DLL,
 > and the package REBUILT from them passes its own in-game QA 27/27 across two boots. That QA reads Jack Flame's colours
 > off his materials, runs a Mission Contract on all five skins act by act, checks every body against Relay OG's
-> 174.15 uu, and finds the chosen skin and colour back after a restart. One founder DECISION is open: the costume
-> heads' proportions. Body height is exact; the face block sits 5.5 uu lower and is ~19% wider than Relay OG's.
+> 174.15 uu, and finds the chosen skin and colour back after a restart. The founder decided the costume heads'
+> proportions: KEEP AS DESIGNED (see the end of this file).
 
 **Owner of this file: CORE ("Wonderland core continued").** The WORLD session ("Second wonderland session") edits
 only the rows and specs marked WORLD. Founder directive 2026-09-28: *"COMPLETE WONDERLAND AS AN ENTIRE WORLD ...
@@ -655,7 +662,7 @@ rebuild it (IC01's brief). **Founder decision:** (a) build them in the core, rep
 those identities to the outer world instead -- a tower quarter in the ICARUS march (Icarus's vertical silhouette)
 and a mushroom wood on a frontier (the forge's "mushroom woods" are one of the 24 quarter kinds).
 
-## POST-COMPLETION GAMEPLAY REGRESSION (founder, 2026-09-29 evening + 2026-09-30) -- G1-G7 FIXED, INDEPENDENTLY FALSIFIED, PACKAGE REBUILT AND QA'D 27/27
+## POST-COMPLETION GAMEPLAY REGRESSION (founder, 2026-09-29 evening + 2026-09-30) -- ENGINEERING VERIFIED 18/18: G1-G7 FIXED, INDEPENDENTLY FALSIFIED, PACKAGE REBUILT AND QA'D 27/27 (package acceptance: founder)
 
 Scope: gameplay and system repair only. The completed world is the baseline and is not modified: landscaping, C7,
 radial and ring roads, hedge gates, Golden Arrival geometry, quarter layouts, TW / MG architecture, the world
@@ -817,13 +824,26 @@ The window ran at 1280x800: the engine shrank 1920x1200 to the work area. Frames
 None of the three was a fault in the game; each was re-judged from the recorded data. CORE checked the swap and the enum
 cases independently.
 
-**FOUNDER DECISION OPEN -- costume head proportions.** At Relay OG's body height:
+**Costume head proportions -- FOUNDER DECISION, 2026-09-30: KEEP THE COSTUME HEADS AS DESIGNED.** What was measured,
+at Relay OG's body height:
 - Every costume's feet and ear tops match OG's within 1 px (0.35 uu).
 - The costume FACE BLOCK starts 5.5 uu lower than OG's and is about 19% wider: 153-169 px against 129 px in Second's
   fire-off side frames.
 
 The cause is the skin generator's base Dog, which has longer ears and a bigger head than the canon. It predates the
 height rule, and no single uniform scale can match both the ear tops and the face top. Matching the face blocks means
-reshaping every costume head, Jack Flame's locked head included, so it waits for the founder.
+reshaping every costume head, Jack Flame's locked head included.
+
+The founder's ruling: the canonical requirement is the same body / root / collision / standing height as Relay OG,
+and the same gameplay, animation and interaction alignment. It is NOT a requirement that every costume match head
+width, face-block proportions, horns, crown, masks or accessories.
+- Jack Flame's accepted head is preserved.
+- Baal's mask and horns are preserved.
+- Every other costume's own head silhouette is preserved.
+- Accessories and VFX may extend beyond the canonical body envelope. They may never change root, body or collision
+  height.
+
+Head proportions are reopened only if the founder explicitly asks for a visual redesign. The G7 height rule (every
+skin's body exactly Relay OG's height, a 0.00 uu switch) stays mandatory for every future Relay Dog skin.
 Evidence: `Tools/captures/zh/skin_heights_verify/head_blocks_vs_relay_og.png` (green: the shared ear top; yellow:
 OG's face-block top; magenta: the costumes'), `head_profile.json`.
