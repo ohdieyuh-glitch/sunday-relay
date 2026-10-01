@@ -76,6 +76,8 @@ import {
 import type { MissionOwnershipScope } from './mission';
 import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
 import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
+import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
+import { composeProjectBrainPorts } from './project-brain/compose';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -248,6 +250,24 @@ export function createBridgeServer(
   const browserSessions = createBrowserSessionStore();
   const wonderland = wonderlandBackend ?? WonderlandBackend.empty();
   /**
+   * THE PROJECT BRAIN, on the same Julius pool as every other Julius family, so
+   * what Wonderland reads and writes is what the mission job reads. Lazy, so a
+   * bridge with no database opens nothing and the doors answer 503 by name.
+   */
+  let projectBrainPortsCache: ProjectBrainRoutePorts | null = null;
+  const projectBrainPorts = (): ProjectBrainRoutePorts => {
+    if (projectBrainPortsCache !== null) return projectBrainPortsCache;
+    const pool = juliusPool();
+    projectBrainPortsCache = composeProjectBrainPorts({
+      pool,
+      connectionString: juliusRuntimeDatabaseUrl(),
+      missingConfig: pool === null ? [...JULIUS_RUNTIME_DATABASE_ENV_NAMES] : [],
+      sessions: browserSessions,
+      log: (line) => console.warn(`[relay-bridge] ${line}`),
+    });
+    return projectBrainPortsCache;
+  };
+  /**
    * SIGN IN WITH GITHUB. The CSRF state store lives in memory beside the
    * sessions — a restart forgets an in-flight sign-in, which is fail-closed. The
    * GitHub App config, the registered callback URL, and the origin a minted
@@ -307,6 +327,10 @@ const juliusPool = (): Pool | null => {
   if (juliusPoolCache !== undefined) return juliusPoolCache;
   const url = juliusRuntimeDatabaseUrl();
   juliusPoolCache = url === null ? null : new Pool({ connectionString: url });
+  // An IDLE client whose connection dies (a database restart) is reported on the
+  // pool. Unheard, that is an uncaught exception that takes the bridge down; heard,
+  // the pool discards the client and the next request reconnects.
+  juliusPoolCache?.on('error', (error) => console.warn(`[relay-bridge] julius pool: idle connection lost (${error.message})`));
   return juliusPoolCache;
 };
 
@@ -579,6 +603,31 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             send(res, githubAuthResult.status, githubAuthResult.body, cors);
             return;
           }
+        }
+
+        /**
+         * THE PROJECT BRAIN — Julius's own, for the operator and for Wonderland.
+         * BEFORE the Wonderland family, which claims every `/wonderland/` path:
+         * `/wonderland/brain` and the old `/wonderland/projects/:id/brain` read
+         * the one durable Project Brain, never the in-memory battle backend.
+         */
+        if (isProjectBrainRoute(path.replace('/relay-api', ''))) {
+          const brainAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const brainResult = await handleProjectBrainRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            url: (req.url ?? '/').replace('/relay-api', ''),
+            authorization: brainAuthz,
+            origin,
+            operator: bearerMatches(brainAuthz, process.env.RELAY_BRIDGE_API_TOKEN),
+            tenantId: headerValue(req.headers['x-relay-tenant']),
+            companionId: headerValue(req.headers['x-relay-companion']),
+            lastEventId: headerValue(req.headers['last-event-id']),
+            rawBody: method === 'POST' ? await readRawBody(req) : undefined,
+            now: Date.now(),
+          }, projectBrainPorts(), { request: req, response: res, headers: cors });
+          if (brainResult !== null && brainResult !== 'streaming') send(res, brainResult.status, brainResult.body, cors);
+          return;
         }
 
         if (isWonderlandRoute(path.replace('/relay-api', ''))) {
