@@ -14,7 +14,12 @@ param([Parameter(Mandatory = $true)][string]$Exe,
       [string]$SourceSkins = '')
 $PkgDir = Split-Path (Split-Path $Exe -Parent) -Parent
 New-Item -ItemType Directory -Force $Out | Out-Null
-$Saved = Join-Path (Split-Path $Exe -Parent) 'Wonderland\Saved'
+# AN INSTALLED BUILD (the beta release ships Engine/Build/InstalledProjectBuild.txt) keeps its saves and logs in
+# %LOCALAPPDATA%\Wonderland\Saved; a plain staged build keeps them beside the exe.
+$Root = Split-Path $Exe -Parent
+$Installed = Test-Path (Join-Path $Root 'Engine\Build\InstalledProjectBuild.txt')
+$Saved = if ($Installed) { Join-Path $env:LOCALAPPDATA 'Wonderland\Saved' } else { Join-Path $Root 'Wonderland\Saved' }
+"saved folder: $Saved (installed build: $Installed)"
 # THE FIGURES THE PACKAGE WEARS ARE THE ONES IN THE TREE: the skins are staged loose (NonUFS), so a stale copy would
 # bring back an old head or a body without its `body` record. Compared byte for byte, before anything boots.
 if ($SourceSkins) {

@@ -1,4 +1,5 @@
 #include "WonderlandWorldMap.h"
+#include "WonderlandBeta.h"
 
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"
@@ -1422,7 +1423,7 @@ void SWonderlandWorldMap::ShowTerritory(FName Id)
 	[
 		SNew(STextBlock)
 		.Text(FText::FromString(Row.bSpecialisationIsCanon && !Row.Specialisation.IsEmpty()
-			? Row.Specialisation : FString(TEXT("NEEDS FOUNDER DEFINITION"))))
+			? Row.Specialisation : FString(WonderlandBeta::IsDeveloperSession() ? TEXT("NEEDS FOUNDER DEFINITION") : TEXT("NOT YET CHARTED"))))
 		.Font(WonderlandUi::Mono(9))
 		.ColorAndOpacity(Row.bSpecialisationIsCanon ? WonderlandUi::Sage() : WonderlandUi::Gold())
 		.AutoWrapText(true)
@@ -1459,7 +1460,10 @@ void SWonderlandWorldMap::ShowTerritory(FName Id)
 	{
 		TerritoryDetail->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 		[
-			SNew(STextBlock).Text(INVTEXT("AVAILABLE ACTIVITIES"))
+			// AVAILABLE ONLY WHERE IT IS (private beta, B22). Golden Arrival's list is what a player can do there today; a
+			// nation's list is its canon purpose, and none of the nations is built yet -- "Multiplayer testing" under
+			// AVAILABLE ACTIVITIES was a promise the beta cannot keep.
+			SNew(STextBlock).Text(Row.Id == FName(TEXT("golden_arrival")) ? INVTEXT("AVAILABLE HERE") : INVTEXT("PLANNED FOR THIS NATION · NOT IN THIS BETA"))
 			.Font(WonderlandUi::Mono(8)).ColorAndOpacity(WonderlandUi::Dim())
 		];
 		TerritoryDetail->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
@@ -1489,7 +1493,7 @@ FString SWonderlandWorldMap::DescribeTerritoryPanel() const
 	TArray<FString> Parts;
 	Parts.Add(Row.DisplayName);
 	Parts.Add(Row.bSpecialisationIsCanon && !Row.Specialisation.IsEmpty()
-		? Row.Specialisation : FString(TEXT("NEEDS FOUNDER DEFINITION")));
+		? Row.Specialisation : FString(WonderlandBeta::IsDeveloperSession() ? TEXT("NEEDS FOUNDER DEFINITION") : TEXT("NOT YET CHARTED")));
 	Parts.Add(Found->bDiscovered ? TEXT("DISCOVERED") : TEXT("UNDISCOVERED"));
 	Parts.Add(Row.Purpose);
 	Parts.Add(FString::Join(Row.Landmarks, TEXT(",")));

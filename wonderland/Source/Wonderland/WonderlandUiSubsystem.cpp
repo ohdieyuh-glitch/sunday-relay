@@ -46,6 +46,7 @@
 #include "WonderlandMiniMap.h"
 #include "WonderlandMissionSubsystem.h"
 #include "WonderlandNavBar.h"
+#include "WonderlandBeta.h"
 #include "WonderlandBrainSculpture.h"
 #include "WonderlandProjectBrain.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -226,9 +227,12 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 	UiInput = NewObject<UInputComponent>(Controller, TEXT("WonderlandUiInput"));
 	UiInput->Priority = 100;
 	UiInput->BindKey(FInputChord(EKeys::T, false, true, false, false), IE_Pressed, this, &UWonderlandUiSubsystem::ToggleLiveTerminal);
-	// CTRL+W IS WONDERLAND'S, not a browser's close-tab. It spawns a Wonder Web; the workspace's own input layer catches
-	// it as well, so a page that has keyboard focus cannot swallow it (WonderlandWonderWebScreen.cpp).
-	UiInput->BindKey(FInputChord(EKeys::W, false, true, false, false), IE_Pressed, this, &UWonderlandUiSubsystem::HandleSpawnWonderWebShortcut);
+	// CTRL+W IS NO LONGER BOUND IN THE WORLD (private beta, B10). Ctrl is the Dog's WALK key, and the engine fires a
+	// chord whenever its modifier is held, so walking and pressing W opened a Wonder Web and swung the camera away --
+	// Second Wonderland reproduced it in the clean-user baseline. Wonder Web opens from the Project Brain (B), and
+	// inside the workspace Ctrl+W still spawns another window (WonderlandWonderWebScreen.cpp), where nobody is walking.
+	// ESCAPE IN THE WORLD OPENS THE MENU (B05): a player who does not know Tab must still find Settings and Quit.
+	UiInput->BindKey(EKeys::Escape, IE_Pressed, this, &UWonderlandUiSubsystem::HandleWorldEscape);
 	UiInput->BindKey(EKeys::M, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleWorldMap);
 	UiInput->BindKey(EKeys::B, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleProjectBrain);
 	// THE BOTTOM STRIP'S KEYS, the letters its tiles show. INVENTORY's old I is deliberately not bound to anything.
@@ -319,6 +323,53 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI attached to %s (usage HUD %s%s, %d companion terminals, mini-map and shortcuts mounted; Ctrl+T J B C Tab, M map, hold Alt to point)"),
 		*Controller->GetName(), UsageHud != nullptr ? TEXT("on screen") : TEXT("FAILED"), bPreview ? TEXT(", DEVELOPMENT PREVIEW reading") : TEXT(""),
 		CompanionTerminals.Num());
+
+	// THE PRIVATE BETA. A player's session loses the console and the engine's debug keys; every log and screenshot
+	// names its build; and the first launch on a machine opens the welcome, which says what works and what this beta
+	// does not include. A developer's session (the editor, -wldev) keeps its tools and skips the welcome.
+	WonderlandBeta::LockDownPlayer(Controller);
+	WonderlandBeta::StampWindowTitle();
+	UE_LOG(LogWonderlandUi, Display, TEXT("WLBUILD %s | %s session | local AI services %s"), *WonderlandBeta::BuildLabel(),
+		WonderlandBeta::IsDeveloperSession() ? TEXT("developer") : TEXT("player"),
+		WonderlandBeta::UseLocalAiServices() ? TEXT("contacted") : TEXT("off (not part of this beta)"));
+	if (!WonderlandBeta::IsDeveloperSession() && !WonderlandBeta::HasSeenWelcome())
+	{
+		OpenOverlay(EOverlay::Welcome);
+	}
+}
+
+void UWonderlandUiSubsystem::HandleWorldEscape()
+{
+	// Panels with keyboard focus handle Escape themselves (each closes); this hears it only when the world has focus.
+	if (Open == EOverlay::None)
+	{
+		OpenOverlay(EOverlay::Menu);
+	}
+	else
+	{
+		CloseOverlay();
+	}
+}
+
+void UWonderlandUiSubsystem::ShowWelcome()
+{
+	OpenOverlay(EOverlay::Welcome);
+}
+
+bool UWonderlandUiSubsystem::DismissWelcome()
+{
+	WonderlandBeta::MarkWelcomeSeen();
+	if (Open != EOverlay::Welcome)
+	{
+		return false;
+	}
+	CloseOverlay();
+	return true;
+}
+
+bool UWonderlandUiSubsystem::IsWelcomeOpen() const
+{
+	return Open == EOverlay::Welcome;
 }
 
 void UWonderlandUiSubsystem::MountCompanionTerminals()
@@ -757,14 +808,29 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		Focus = WalletPanel;
 		ZOrder = 58;
 	}
+	else if (Which == EOverlay::Welcome)
+	{
+		if (!WelcomePanel.IsValid())
+		{
+			SAssignNew(WelcomePanel, SWonderlandWelcomePanel)
+				.BuildLabel(WonderlandBeta::BuildLabel())
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->DismissWelcome(); } });
+		}
+		Panel = WelcomePanel;
+		Focus = WelcomePanel;
+		ZOrder = 62;
+	}
 	else if (Which == EOverlay::Menu)
 	{
 		if (!MenuPanel.IsValid())
 		{
 			SAssignNew(MenuPanel, SWonderlandMenuPanel)
+				.BuildLabel(WonderlandBeta::BuildLabel())
 				.OnRequestWallet_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Wallet); } })
 				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
 				.OnRequestMap_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Map); } })
+				.OnRequestWelcome_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Welcome); } })
+				.OnRequestQuit_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->QuitWonderland(); } })
 				.OnRequestNavigate_Lambda([WeakThis](EWonderlandNavTarget Target) { if (WeakThis.IsValid()) { WeakThis->HandleNavigate(Target); } });
 		}
 		Panel = MenuPanel;
@@ -1007,20 +1073,28 @@ void UWonderlandUiSubsystem::HandleSidekicksChanged()
 	for (int32 Index = 0; Index < CompanionTerminals.Num(); ++Index)
 	{
 		const TSharedPtr<SWonderlandCompanionTerminal>& Panel = CompanionTerminals[Index];
-		const FWonderlandSidekick* Sidekick = Runtime->ByIndex(Index);
-		if (!Panel.IsValid() || Sidekick == nullptr)
+		if (!Panel.IsValid())
 		{
 			continue;
 		}
-		if (Runtime->GetLink() != EWonderlandSidekickLink::Online)
+		// OFFLINE IS SAID EVEN WHEN NO COMPANION WAS EVER READ (private beta). This branch used to sit behind "no sidekick
+		// row, skip", and with no runtime there are never any rows -- so a tester's terminals said WAITING forever. The
+		// beta's reason is kept short: the terminal draws one line, and long lines overran it in the clean-user baseline.
+		if (Runtime->GetLink() == EWonderlandSidekickLink::Offline)
 		{
-			// NO RUNTIME IS NOT A MOOD: the terminal says the companion has nothing behind it, and how to change that.
+			// NO RUNTIME IS NOT A MOOD: the terminal says the companion has nothing behind it, and why.
 			Panel->SetStatus(TEXT("OFFLINE"));
 			if (CompanionShownNote[Index] != TEXT("offline"))
 			{
 				CompanionShownNote[Index] = TEXT("offline");
-				Panel->AddLine(FString(), Runtime->GetLinkProblem(), true);
+				Panel->AddLine(FString(), Runtime->GetLinkProblem() == WonderlandBeta::AiUnavailableSentence()
+					? FString(TEXT("Not connected in this beta build.")) : Runtime->GetLinkProblem(), true);
 			}
+			continue;
+		}
+		const FWonderlandSidekick* Sidekick = Runtime->ByIndex(Index);
+		if (Sidekick == nullptr || Runtime->GetLink() != EWonderlandSidekickLink::Online)
+		{
 			continue;
 		}
 		// THE EIGHT TRUTH STATES, as the founder named them, with the underscore turned into a space to read as words.
@@ -2435,7 +2509,7 @@ FString UWonderlandUiSubsystem::AnnouncedSpecialisation() const
 	{
 		// THE CANON, OR THE FACT THAT THERE IS NONE. Never a guess. See FWonderlandTerritory::Specialisation.
 		return Row.bSpecialisationIsCanon && !Row.Specialisation.IsEmpty()
-			? Row.Specialisation : FString(TEXT("NEEDS FOUNDER DEFINITION"));
+			? Row.Specialisation : FString(WonderlandBeta::IsDeveloperSession() ? TEXT("NEEDS FOUNDER DEFINITION") : TEXT("NOT YET CHARTED"));
 	}
 	return FString();
 }
@@ -3836,6 +3910,22 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		Argument.Split(TEXT(" "), &Verb, &Which);
 		if (Verb.IsEmpty()) { Verb = Argument; }
 		const TArray<FWonderlandMissionTask>& Rows = Set->GetTasks();
+		if (Verb.Equals(TEXT("delete"), ESearchCase::IgnoreCase))
+		{
+			// THE PLAYER'S OWN, NEVER-SENT CONTRACTS CAN BE DELETED (private beta, B04). Without this the record only
+			// grows, and a contract Julius never saw is the player's note, not a mission anyone else holds.
+			const int32 Index = FCString::Atoi(*Which) - 1;
+			if (!Rows.IsValidIndex(Index))
+			{
+				Terminal->AddJuliusRow(TEXT("You"), Line, FString::Printf(TEXT("No task %s. /tasks lists them."), *Which));
+				return true;
+			}
+			const bool bDeleted = Set->DeleteLocalContract(Rows[Index].LocalId);
+			Terminal->AddJuliusRow(TEXT("You"), Line, bDeleted
+				? FString::Printf(TEXT("Task %d deleted from this PC."), Index + 1)
+				: FString(TEXT("Not deleted: that contract is part of a Julius run, so it is kept.")));
+			return true;
+		}
 		if (Verb.Equals(TEXT("open"), ESearchCase::IgnoreCase) || Verb.Equals(TEXT("close"), ESearchCase::IgnoreCase))
 		{
 			const int32 Index = FCString::Atoi(*Which) - 1;
@@ -3864,8 +3954,8 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 					Task.bInWorkspace ? TEXT("OPEN") : TEXT("closed")),
 				Task.Objective.IsEmpty() ? TEXT("(empty draft)") : Task.Objective.Left(72));
 		}
-		Terminal->AddJuliusRow(TEXT("Tasks"), TEXT("/tasks open N   /tasks close N"),
-			TEXT("Closing a tab keeps the contract. Only an explicit cancel would end a mission, and there is none yet."));
+		Terminal->AddJuliusRow(TEXT("Tasks"), TEXT("/tasks open N   /tasks close N   /tasks delete N"),
+			TEXT("Closing a tab keeps the contract; delete removes one you wrote from this PC."));
 		return true;
 	}
 
@@ -3900,7 +3990,14 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 			Terminal->AddJuliusRow(TEXT("You"), Line, FString::Join(Names, TEXT("  ")));
 			return true;
 		}
-		const FName Wanted(*Argument.ToLower().Replace(TEXT(" "), TEXT("_")));
+		const FString WantedText = Argument.ToLower().Replace(TEXT(" "), TEXT("_"));
+		// A SKIN ID IS SHORT. A pasted page of text would trip FName's 1024-character check, fatal in this build.
+		if (!WonderlandBeta::IsSafeId(WantedText))
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line.Left(80), TEXT("That is not a skin name. Try /skin list."));
+			return true;
+		}
+		const FName Wanted(*WantedText);
 		if (!Registry->EquipSkin(Wanted))
 		{
 			Terminal->AddJuliusRow(TEXT("You"), Line,
@@ -3926,6 +4023,14 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		// are the newer ones. A family whose Blueprint will not load is REPORTED MISSING rather than quietly
 		// replaced by the .wlvox figure of the same name, because those are different asset families and saying
 		// otherwise would show the founder one thing while naming another.
+		//
+		// A DEVELOPER'S COMMAND ONLY (private beta, B08): it stands up about 95,000 emissive boxes, which a tester's
+		// laptop should never be asked to draw because a slash happened to be typed.
+		if (!WonderlandBeta::IsDeveloperSession())
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line, TEXT("/pa is a development showcase and is not part of this beta build. Try /help."));
+			return true;
+		}
 		return ShowProjectAvatars(Argument);
 	}
 
@@ -3964,7 +4069,9 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 	if (Command == TEXT("/help") || Command == TEXT("/commands"))
 	{
 		Terminal->AddJuliusRow(TEXT("You"), Line,
-			TEXT("/cubs [n|off] — summon the Relay Dog's sub-agent cub ghosts, in a mission or out of one."));
+			TEXT("Press + above for a new task tab and type its objective to save it as a Mission Contract. "
+				"/tasks — list your contracts (open N, close N, delete N). /skin NAME — wear a skin (/skin list). "
+				"/cubs [n|off] — summon the Relay Dog's sub-agent cub ghosts."));
 		return true;
 	}
 
@@ -3973,6 +4080,12 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 	Terminal->AddJuliusRow(TEXT("You"), Line,
 		FString::Printf(TEXT("%s is not a Wonderland command. Try /help."), *Command));
 	return true;
+}
+
+void UWonderlandUiSubsystem::SubmitTerminalLine(const FString& Text)
+{
+	EnsureLiveTerminal();
+	HandleTerminalSubmit(Text);
 }
 
 void UWonderlandUiSubsystem::HandleTerminalSubmit(const FString& Text)
@@ -3985,6 +4098,33 @@ void UWonderlandUiSubsystem::HandleTerminalSubmit(const FString& Text)
 	{
 		return;
 	}
+	// A DRAFT TAB IS SELECTED: THE LINE IS ITS OBJECTIVE, AND IT BECOMES A MISSION CONTRACT HERE (private beta, B01, P0).
+	//
+	// The tab has always said "Type an objective to make it a Mission Contract", and nothing on screen did: the only
+	// caller of SubmitDraft lived in a control that stopped being mounted when ADD TASK moved into the terminal
+	// (318a2d62), so a contract could be made only from the console -- and the old proof (zc_task_persistence.py)
+	// pressed + through the UI and then submitted from Python, which is why nobody saw it. The contract is real, saved
+	// on this PC, and QUEUED: no Julius reaches this beta, and the row says so rather than letting it look sent.
+	if (UWonderlandMissionTaskSubsystem* Set = Tasks())
+	{
+		const FWonderlandMissionTask* Draft = Set->GetSelectedTask();
+		if (Draft != nullptr && !WonderlandTaskIsContract(Draft->State))
+		{
+			const FGuid DraftId = Draft->LocalId;
+			if (Set->SubmitDraft(DraftId, Text))
+			{
+				Terminal->AddJuliusRow(TEXT("You"), Text,
+					TEXT("Saved as a Mission Contract, QUEUED on this PC. Julius is not part of this beta build, so nothing will run it yet. "
+						"Close the tab with X and it stays saved: /tasks lists your contracts, /tasks open N brings one back."));
+				UE_LOG(LogWonderlandUi, Display, TEXT("WLUI terminal objective submitted: draft became a QUEUED Mission Contract (%d characters)"), Text.Len());
+				return;
+			}
+			Terminal->AddJuliusRow(TEXT("You"), Text, Set->IsAtContractLimit()
+				? FString::Printf(TEXT("Not saved: you already keep %d Mission Contracts, the most this beta stores. /tasks delete N removes one."), Set->GetContractLimit())
+				: FString(TEXT("Not saved: a Mission Contract needs an objective -- type what the task is, then press Enter.")));
+			return;
+		}
+	}
 	// Recorded as the visitor's own line and marked unsent. The world can FOLLOW a Julius run but has no way to
 	// send Julius anything, and a terminal that answered anyway would be inventing Julius. While a real run is
 	// followed the reason says that, rather than claiming there is no connection at all.
@@ -3992,7 +4132,7 @@ void UWonderlandUiSubsystem::HandleTerminalSubmit(const FString& Text)
 	const bool bFollowing = Mission != nullptr && Mission->IsFollowingRealRun();
 	Terminal->AddJuliusRow(TEXT("You"), Text, bFollowing
 		? FString::Printf(TEXT("Not sent: this world follows run %s read-only and cannot send commands to Julius yet."), *Mission->GetFollowedRunId())
-		: FString(TEXT("Not sent: Julius 3.3 is not connected to this world yet.")));
+		: FString(TEXT("Not sent: Julius is not part of this beta build. To write a task, press + above, then type its objective here.")));
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI terminal line recorded, not sent (%s): %d characters"),
 		bFollowing ? TEXT("following read-only") : TEXT("no Julius link"), Text.Len());
 }
@@ -4370,6 +4510,7 @@ const TCHAR* UWonderlandUiSubsystem::OverlayName(EOverlay Which)
 	case EOverlay::Menu:     return TEXT("menu");
 	case EOverlay::Wallet:   return TEXT("wallet");
 	case EOverlay::WonderWeb: return TEXT("wonder web");
+	case EOverlay::Welcome:  return TEXT("welcome");
 	default: break;
 	}
 	return TEXT("nothing");
@@ -4387,9 +4528,24 @@ TSharedPtr<SWidget> UWonderlandUiSubsystem::OverlayWidget(EOverlay Which) const
 	case EOverlay::Menu:     return MenuPanel;
 	case EOverlay::Wallet:   return WalletPanel;
 	case EOverlay::WonderWeb: return WonderWebLayer;
+	case EOverlay::Welcome:  return WelcomePanel;
 	default: break;
 	}
 	return nullptr;
+}
+
+void UWonderlandUiSubsystem::QuitWonderland()
+{
+	// A GRACEFUL EXIT, the same one the window's X takes: the engine flushes the player's config (settings, colours)
+	// on the way out. Every other save in Wonderland is already on disk -- contracts, skin, territories are written
+	// the moment they change -- so there is nothing to ask the player to save first.
+	UE_LOG(LogWonderlandUi, Display, TEXT("WLUI quit chosen from the menu"));
+	if (APlayerController* Controller = BoundController.Get())
+	{
+		Controller->ConsoleCommand(TEXT("quit"));
+		return;
+	}
+	FPlatformMisc::RequestExit(false, TEXT("WonderlandMenuQuit"));
 }
 
 void UWonderlandUiSubsystem::ToggleOverlay(EOverlay Which)

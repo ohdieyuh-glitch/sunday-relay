@@ -1,4 +1,5 @@
 #include "WonderlandRelaySkins.h"
+#include "WonderlandBeta.h"
 
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -229,11 +230,20 @@ FString UWonderlandRelaySkinSubsystem::PersistPath()
 void UWonderlandRelaySkinSubsystem::LoadPersisted()
 {
 	FString Text;
+	WonderlandBeta::RecoverInterruptedSave(PersistPath());
 	if (!FFileHelper::LoadFileToString(Text, *PersistPath()))
 	{
 		return;
 	}
-	const FName Stored(*Text.TrimStartAndEnd());
+	// A SKIN ID IS SHORT (private beta, B24). A hand-edited or corrupted file of 1,024+ characters would trip FName's
+	// length check -- fatal in this build -- on EVERY launch until someone found and deleted the file. It is ignored.
+	const FString Trimmed = Text.TrimStartAndEnd();
+	if (!WonderlandBeta::IsSafeId(Trimmed))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLSKIN the remembered skin file holds no valid skin id (%d characters); wearing Relay OG"), Trimmed.Len());
+		return;
+	}
+	const FName Stored(*Trimmed);
 	// A RETIRED SKIN IS CARRIED TO ITS SUCCESSOR, and the file is rewritten so the migration happens once: a player
 	// who wore Arden Infernal wakes up in Jack Flame, one who wore Apollo in Baal (founder, 2026-09-29).
 	const FName Remembered = MigrateRetired(Stored);
@@ -253,7 +263,8 @@ void UWonderlandRelaySkinSubsystem::LoadPersisted()
 
 void UWonderlandRelaySkinSubsystem::SavePersisted() const
 {
-	FFileHelper::SaveStringToFile(Equipped.SkinId.ToString(), *PersistPath());
+	// A WHOLE FILE OR NOTHING: an interrupted write keeps the previous skin rather than an empty or partial id.
+	WonderlandBeta::SaveTextAtomically(PersistPath(), Equipped.SkinId.ToString());
 }
 
 // ---------------------------------------------------------------------------------------------------------------

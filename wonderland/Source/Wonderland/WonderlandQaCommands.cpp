@@ -35,6 +35,16 @@
 #include "WonderlandMascotStyle.h"
 #include "WonderlandMissionSubsystem.h"
 #include "WonderlandMissionTasks.h"
+#include "GameFramework/InputSettings.h"
+#include "GameFramework/PlayerInput.h"
+#include "HAL/FileManager.h"
+#include "Materials/MaterialInterface.h"
+#include "Misc/App.h"
+#include "UObject/UObjectArray.h"
+#include "WonderlandBeta.h"
+#include "WonderlandJuliusConnect.h"
+#include "WonderlandPracticalLights.h"
+#include "WonderlandSidekicks.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandQa, Log, All);
 
@@ -57,6 +67,10 @@ namespace
 		int32 Sub = 0;
 		double StepStart = 0.0;
 		double ZBefore = 0.0;
+		// the private beta: was the welcome already dismissed on this machine when the run began, and how many of the
+		// creation loop's steps through the terminal missed
+		bool bWelcomeSeenAtBoot = false;
+		int32 CreationMisses = 0;
 		bool bTravelBegun = false;
 		int32 Pass = 0;
 		int32 Fail = 0;
@@ -456,6 +470,43 @@ namespace
 				*SkinId, Points, Stalls, *FirstStall, Detours));
 	}
 
+	/**
+	 * THE PRIVATE BETA'S PLAYER SESSION, MEASURED IN THE PACKAGE. Q00.2: no console keys and no engine debug keys in a
+	 * player's session. Q00.3: the local AI services are not contacted and both clients say why in the beta's own
+	 * sentence. Q00.4: the content the package used to drop is there -- the engine unlit material the mission orb, the
+	 * Dog's beam and props and the wardrobe backdrop load by path (B13), and the approved night's practical lights (B14).
+	 */
+	void CheckBetaSession(FQaRun& Run, UWorld* World)
+	{
+		const APlayerController* Controller = World->GetFirstPlayerController();
+		const UInputSettings* Input = GetDefault<UInputSettings>();
+		const int32 ConsoleKeys = Input != nullptr ? Input->ConsoleKeys.Num() : -1;
+		const int32 DebugKeys = (Controller != nullptr && Controller->PlayerInput != nullptr) ? Controller->PlayerInput->DebugExecBindings.Num() : -1;
+		QaCheck(Run, TEXT("Q00.2"), !WonderlandBeta::IsDeveloperSession() && ConsoleKeys == 0 && DebugKeys == 0,
+			FString::Printf(TEXT("player session %s; console keys %d, engine debug key bindings %d (both must be 0); build '%s'"),
+				WonderlandBeta::IsDeveloperSession() ? TEXT("NO (developer)") : TEXT("yes"), ConsoleKeys, DebugKeys, *WonderlandBeta::BuildLabel()));
+
+		UGameInstance* Instance = World->GetGameInstance();
+		const UWonderlandSidekickSubsystem* Sidekicks = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSidekickSubsystem>() : nullptr;
+		const UWonderlandJuliusConnectSubsystem* Connect = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusConnectSubsystem>() : nullptr;
+		const FString Sentence = WonderlandBeta::AiUnavailableSentence();
+		const bool bSidekicksOff = Sidekicks != nullptr && Sidekicks->GetLink() == EWonderlandSidekickLink::Offline && Sidekicks->GetLinkProblem() == Sentence;
+		const bool bConnectOff = Connect != nullptr && Connect->GetLink() == EJuliusConnectLink::Offline && Connect->GetLinkProblem() == Sentence;
+		QaCheck(Run, TEXT("Q00.3"), !WonderlandBeta::UseLocalAiServices() && bSidekicksOff && bConnectOff,
+			FString::Printf(TEXT("local AI services %s; companions link '%s'; Julius Connect '%s'"),
+				WonderlandBeta::UseLocalAiServices() ? TEXT("CONTACTED") : TEXT("off"),
+				Sidekicks != nullptr ? *Sidekicks->GetLinkProblem() : TEXT("(none)"),
+				Connect != nullptr ? *Connect->GetLinkProblem() : TEXT("(none)")));
+
+		const UMaterialInterface* Unlit = LoadObject<UMaterialInterface>(nullptr,
+			TEXT("/Engine/EngineDebugMaterials/LevelColorationUnlitMaterial.LevelColorationUnlitMaterial"));
+		const UWonderlandPracticalLightsSubsystem* Lamps = World->GetSubsystem<UWonderlandPracticalLightsSubsystem>();
+		const int32 Defined = Lamps != nullptr ? Lamps->GetDefinedCount() : -1;
+		QaCheck(Run, TEXT("Q00.4"), Unlit != nullptr && Defined > 1000,
+			FString::Printf(TEXT("engine unlit material %s (mission orb, Dog beam and props, wardrobe backdrop); practical lights defined %d (want > 1000)"),
+				Unlit != nullptr ? TEXT("loaded") : TEXT("MISSING"), Defined));
+	}
+
 	bool PersistTick(FQaRun& Run, UWorld* World)
 	{
 		const double In = QaNow() - Run.StepStart;
@@ -472,11 +523,46 @@ namespace
 				FString::Printf(TEXT("after a restart: skin %s (want jack_flame); saved secondary %s chosen %s (want %s); painted: %s"),
 					*Worn.ToString(), Settings != nullptr ? *QaRgb(Settings->Secondary) : TEXT("?"),
 					Settings != nullptr && Settings->bSecondaryChosen ? TEXT("yes") : TEXT("no"), *QaRgb(PersistColour), *Paint));
+			// THE CONTRACTS THE FIRST BOOT WROTE THROUGH THE TERMINAL: all eight back, none reopened (B04 used to keep six)
+			UWonderlandMissionTaskSubsystem* Set = UWonderlandUiTestLibrary::GetMissionTasks(World);
+			int32 Open = 0;
+			if (Set != nullptr)
+			{
+				for (const FWonderlandMissionTask& Task : Set->GetTasks())
+				{
+					Open += Task.bInWorkspace ? 1 : 0;
+				}
+			}
+			QaCheck(Run, TEXT("Q14"), Set != nullptr && Set->NumContracts() == 8 && Open == 0,
+				FString::Printf(TEXT("after a restart: %d Mission Contracts restored (want all 8 -- more than the six tabs), %d reopened (want 0)"),
+					Set != nullptr ? Set->NumContracts() : -1, Open));
+			const UWonderlandUiSubsystem* U = QaUi(World);
+			QaCheck(Run, TEXT("Q16"), U != nullptr && !U->IsWelcomeOpen() && WonderlandBeta::HasSeenWelcome(),
+				FString::Printf(TEXT("the welcome is not shown again after a restart (open %s, remembered %s)"),
+					U != nullptr && U->IsWelcomeOpen() ? TEXT("YES") : TEXT("no"), WonderlandBeta::HasSeenWelcome() ? TEXT("yes") : TEXT("NO")));
+			QaNextStep(Run);
+		}
+		else if (Run.Step == 1)
+		{
+			// DELETE THEM THROUGH THE TERMINAL, as a player would: /tasks delete 1, eight times
+			UWonderlandUiSubsystem* U = QaUi(World);
+			UWonderlandMissionTaskSubsystem* Set = UWonderlandUiTestLibrary::GetMissionTasks(World);
+			if (U != nullptr)
+			{
+				for (int32 Index = 0; Index < 8; ++Index)
+				{
+					U->SubmitTerminalLine(TEXT("/tasks delete 1"));
+				}
+			}
+			const bool bFileGone = !IFileManager::Get().FileExists(*UWonderlandMissionTaskSubsystem::SlotPath());
+			QaCheck(Run, TEXT("Q15"), Set != nullptr && Set->NumContracts() == 0 && bFileGone,
+				FString::Printf(TEXT("/tasks delete through the terminal: %d contracts left (want 0), save file %s"),
+					Set != nullptr ? Set->NumContracts() : -1, bFileGone ? TEXT("removed") : TEXT("STILL THERE")));
 			GEngine->Exec(World, TEXT("wl.Mascot.Reset"));
 			GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), *Run.RestoreSkin));
 			QaNextStep(Run);
 		}
-		else if (Run.Step == 1 && In >= 3.0)
+		else if (Run.Step == 2 && In >= 3.0)
 		{
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLQA restored skin %s and the designed colours"), *Run.RestoreSkin);
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLQA END pass=%d fail=%d"), Run.Pass, Run.Fail);
@@ -518,6 +604,17 @@ namespace
 				const ARelayDogCharacter* D = QaDog(World);
 				UE_LOG(LogWonderlandQa, Display, TEXT("WLQA BOOT skin %s"), D != nullptr ? *D->GetWornSkinId().ToString() : TEXT("relay_og"));
 				UE_LOG(LogWonderlandQa, Display, TEXT("WLQA BEGIN package check, frames in %s"), *Run.Dir);
+				// THE FIRST LAUNCH ON A MACHINE SHOWS THE WELCOME; ANY LATER ONE DOES NOT (private beta, B19)
+				const bool bWelcomeOpen = U != nullptr && U->IsWelcomeOpen();
+				QaFrame(Run, TEXT("00_first_launch"));
+				QaCheck(Run, TEXT("Q00.1"), bWelcomeOpen == !Run.bWelcomeSeenAtBoot,
+					FString::Printf(TEXT("welcome %s; dismissed on this machine before %s"),
+						bWelcomeOpen ? TEXT("shown") : TEXT("not shown"), Run.bWelcomeSeenAtBoot ? TEXT("yes") : TEXT("no")));
+				if (U != nullptr)
+				{
+					U->DismissWelcome();
+				}
+				CheckBetaSession(Run, World);
 				QaNextStep(Run);
 			}
 			break;
@@ -779,7 +876,47 @@ namespace
 			}
 			break;
 		}
-		case 12: // leave a colour and a skin chosen for the second boot to find (wl.Qa.PackagePersist), and quit
+		case 12: // THE CREATION LOOP THROUGH THE TERMINAL (private beta, B01 / B04): +, type the objective, Enter -- eight times
+		{
+			UWonderlandMissionTaskSubsystem* Set = UWonderlandUiTestLibrary::GetMissionTasks(World);
+			if (U == nullptr || Set == nullptr)
+			{
+				QaCheck(Run, TEXT("Q13"), false, TEXT("no UI or task set"));
+				QaNextStep(Run);
+				break;
+			}
+			if (Run.Sub == 0)
+			{
+				Set->ClearAllTasksForDevelopment();
+				Run.CreationMisses = 0;
+				Run.Sub = 1;
+			}
+			else if (Run.Sub >= 1 && Run.Sub <= 8)
+			{
+				// + makes a gray draft and selects it; the line typed is its objective; the tab's X then closes it, so the
+				// six open tabs never stop the next +. Eight is more than the six the old restore kept.
+				const bool bPlus = U->PressAddTask();
+				U->SubmitTerminalLine(FString::Printf(TEXT("QA contract %d: prove the beta's creation loop"), Run.Sub));
+				const FWonderlandMissionTask* Made = Set->GetSelectedTask();
+				const bool bQueued = Made != nullptr && Made->State == EWonderlandTaskState::Queued && Made->Source == EWonderlandTaskSource::Local;
+				if (Made != nullptr)
+				{
+					Set->CloseFromWorkspace(Made->LocalId);
+				}
+				Run.CreationMisses += (bPlus && bQueued) ? 0 : 1;
+				++Run.Sub;
+			}
+			else
+			{
+				const bool bFile = IFileManager::Get().FileExists(*UWonderlandMissionTaskSubsystem::SlotPath());
+				QaCheck(Run, TEXT("Q13"), Set->NumContracts() == 8 && bFile && Run.CreationMisses == 0,
+					FString::Printf(TEXT("+ then a typed objective, 8 times: %d QUEUED local Mission Contracts (want 8), %d misses, saved to %s: %s"),
+						Set->NumContracts(), Run.CreationMisses, *UWonderlandMissionTaskSubsystem::SlotPath(), bFile ? TEXT("yes") : TEXT("NO")));
+				QaNextStep(Run);
+			}
+			break;
+		}
+		case 13: // leave a colour and a skin chosen for the second boot to find (wl.Qa.PackagePersist), and quit
 			if (Run.Sub == 0)
 			{
 				GEngine->Exec(World, TEXT("wl.Skins.Wear jack_flame"));
@@ -817,6 +954,9 @@ namespace
 		GQaRun->World = World;
 		GQaRun->StepStart = QaNow();
 		GQaRun->bPersist = bPersist;
+		GQaRun->bWelcomeSeenAtBoot = WonderlandBeta::HasSeenWelcome();
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF startup %.1f s from engine start to the QA armed in a loaded world"),
+			FPlatformTime::Seconds() - GStartTime);
 		GQaRun->RestoreSkin = RestoreSkin;
 		GQaRun->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLQA"));
 		GQaRun->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaTick), 0.1f);
@@ -842,6 +982,394 @@ namespace
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			ArmQa(World, true, Args.Num() > 0 ? Args[0] : FString(TEXT("relay_og")));
+		}));
+
+	/* ================================================================ wl.Qa.Perf and wl.Qa.Soak (private beta, R10 / R11 / R14)
+	 *
+	 * FOUNDER, 2026-09-30: "Measure the package, not just the editor" -- startup, average FPS, 1% low, hitches, memory,
+	 * streaming hitches, traversal, teleport, Mission Contract, map, wardrobe, creation -- and "explicitly test Wonderland
+	 * for long-session memory growth ... Do not let local background watchers themselves distort the memory test."
+	 * Both run INSIDE the packaged game, drive it through the player's own systems and log WLPERF / WLSOAK lines; the
+	 * boot script samples the process's working set, private bytes and dedicated GPU memory from outside, every five
+	 * seconds, with one lightweight counter read and nothing else running.
+	 */
+	struct FQaPerfRun
+	{
+		TWeakObjectPtr<UWorld> World;
+		bool bSoak = false;
+		int32 Step = 0;
+		int32 Sub = 0;
+		double StepStart = 0.0;
+		double SubStart = 0.0;
+		double Began = 0.0;
+		double SoakSeconds = 0.0;
+		double NextSampleAt = 0.0;
+		int32 Cycle = 0;
+		int32 Hop = 0;
+		FString Phase;
+		bool bWalking = false;
+		float Yaw = 0.0f;
+		double WalkBegan = 0.0;
+		TArray<float> Frames;
+		TArray<FVector> Trend;          // minutes, used MB, UObjects
+		int32 SoakHitches = 0;
+		float SoakWorst = 0.0f;
+		FName BootSkin;
+		FTSTicker::FDelegateHandle FrameHandle;
+		FTSTicker::FDelegateHandle StepHandle;
+	};
+
+	TSharedPtr<FQaPerfRun> GQaPerf;
+
+	double QaUsedMb()
+	{
+		return static_cast<double>(FPlatformMemory::GetStats().UsedPhysical) / (1024.0 * 1024.0);
+	}
+
+	double QaPeakMb()
+	{
+		return static_cast<double>(FPlatformMemory::GetStats().PeakUsedPhysical) / (1024.0 * 1024.0);
+	}
+
+	int32 QaObjects()
+	{
+		return GUObjectArray.GetObjectArrayNumMinusAvailable();
+	}
+
+	/** avg FPS, p50 / p95 / p99 frame time, the 1% low (FPS over the slowest 1% of frames), hitches and the worst frame */
+	FString QaFrameStats(const TArray<float>& Frames)
+	{
+		if (Frames.Num() == 0)
+		{
+			return TEXT("frames 0");
+		}
+		TArray<float> Sorted = Frames;
+		Sorted.Sort();
+		double Sum = 0.0;
+		int32 Over50 = 0;
+		int32 Over100 = 0;
+		for (const float Frame : Frames)
+		{
+			Sum += Frame;
+			if (Frame > 0.050f) { ++Over50; }
+			if (Frame > 0.100f) { ++Over100; }
+		}
+		const int32 Count = Sorted.Num();
+		auto At = [&Sorted, Count](double Share) { return static_cast<double>(Sorted[FMath::Clamp(FMath::FloorToInt(Count * Share), 0, Count - 1)]); };
+		const int32 Slowest = FMath::Max(1, Count / 100);
+		double SlowSum = 0.0;
+		for (int32 Index = Count - Slowest; Index < Count; ++Index)
+		{
+			SlowSum += Sorted[Index];
+		}
+		return FString::Printf(TEXT("frames %d avg_fps %.1f p50_ms %.1f p95_ms %.1f p99_ms %.1f low1_fps %.1f over50ms %d over100ms %d max_ms %.0f"),
+			Count, Count / FMath::Max(Sum, 1e-6), At(0.50) * 1000.0, At(0.95) * 1000.0, At(0.99) * 1000.0,
+			Slowest / FMath::Max(SlowSum, 1e-6), Over50, Over100, static_cast<double>(Sorted.Last()) * 1000.0);
+	}
+
+	void QaPerfPhase(FQaPerfRun& P, const TCHAR* Name)
+	{
+		if (!P.Phase.IsEmpty())
+		{
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF %s %s | used_mb %.0f peak_mb %.0f uobjects %d"),
+				*P.Phase, *QaFrameStats(P.Frames), QaUsedMb(), QaPeakMb(), QaObjects());
+		}
+		P.Phase = Name != nullptr ? FString(Name) : FString();
+		P.Frames.Reset();
+	}
+
+	bool QaPerfFrame(float)
+	{
+		if (!GQaPerf.IsValid())
+		{
+			return false;
+		}
+		FQaPerfRun& P = *GQaPerf;
+		const float Delta = static_cast<float>(FApp::GetDeltaTime());
+		P.Frames.Add(Delta);
+		if (P.bSoak)
+		{
+			if (Delta > 0.100f) { ++P.SoakHitches; }
+			P.SoakWorst = FMath::Max(P.SoakWorst, Delta);
+		}
+		// TRAVERSAL: walk every frame, turning 60 degrees every five seconds so no wall holds the walk still
+		if (P.bWalking)
+		{
+			UWorld* World = P.World.Get();
+			APlayerController* Controller = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+			APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+			if (Controller != nullptr && Pawn != nullptr)
+			{
+				const float Want = FMath::FloorToFloat(static_cast<float>((QaNow() - P.WalkBegan) / 5.0)) * 60.0f;
+				if (!FMath::IsNearlyEqual(Want, P.Yaw))
+				{
+					P.Yaw = Want;
+					Controller->SetControlRotation(FRotator(-8.0f, P.Yaw, 0.0f));
+				}
+				Pawn->AddMovementInput(FRotator(0.0f, P.Yaw, 0.0f).Vector(), 1.0f);
+			}
+		}
+		return true;
+	}
+
+	void QaPerfFinish(FQaPerfRun& P, UWorld* World)
+	{
+		QaPerfPhase(P, nullptr);
+		if (P.bSoak)
+		{
+			// THE TREND FROM A WARM START: the first five minutes fill caches, streaming and shader pipelines, so the
+			// growth that matters is from the first sample at five minutes or later to the last.
+			int32 From = 0;
+			while (From < P.Trend.Num() - 1 && P.Trend[From].X < 5.0f)
+			{
+				++From;
+			}
+			const FVector First = P.Trend.IsValidIndex(From) ? P.Trend[From] : FVector::ZeroVector;
+			const FVector Last = P.Trend.Num() > 0 ? P.Trend.Last() : FVector::ZeroVector;
+			const double Hours = FMath::Max((Last.X - First.X) / 60.0, 1e-3);
+			const double MbPerHour = (Last.Y - First.Y) / Hours;
+			const double ObjectGrowth = First.Z > 0.0 ? (Last.Z - First.Z) / First.Z : 0.0;
+			const bool bLong = Last.X - First.X >= 10.0;
+			const bool bPass = bLong && MbPerHour <= 300.0 && ObjectGrowth <= 0.10;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSOAK END %s | %.1f min, %d cycles, used %.0f -> %.0f MB (%.0f MB/hour from minute %.1f), peak %.0f MB, uobjects %.0f -> %.0f (%+.1f%%), hitches over 100 ms %d, worst frame %.0f ms, crashes 0 (the run finished)"),
+				bPass ? TEXT("PASS") : TEXT("FAIL"), (QaNow() - P.Began) / 60.0, P.Cycle, First.Y, Last.Y, MbPerHour, First.X,
+				QaPeakMb(), First.Z, Last.Z, ObjectGrowth * 100.0, P.SoakHitches, P.SoakWorst * 1000.0);
+		}
+		// leave the player as they were: their skin, no QA contracts, no mission
+		GEngine->Exec(World, TEXT("wl.Mission.Stop"));
+		if (UWonderlandMissionTaskSubsystem* Set = UWonderlandUiTestLibrary::GetMissionTasks(World))
+		{
+			Set->ClearAllTasksForDevelopment();
+		}
+		if (!P.BootSkin.IsNone())
+		{
+			GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), *P.BootSkin.ToString()));
+		}
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF END"));
+		if (P.FrameHandle.IsValid())
+		{
+			FTSTicker::GetCoreTicker().RemoveTicker(P.FrameHandle);
+		}
+		GQaPerf.Reset();
+		GEngine->Exec(World, TEXT("quit"));
+	}
+
+	/** One travel: request on the first call, true once it has ended (arrived or abandoned), logging the time. */
+	bool QaPerfTravel(FQaPerfRun& P, UWorld* World, FName Id)
+	{
+		UWonderlandTravelSubsystem* T = QaTravel(World);
+		if (T == nullptr)
+		{
+			return true;
+		}
+		if (P.Sub == 0)
+		{
+			FText Refusal;
+			if (!T->RequestTravel(Id, Refusal))
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF travel %s refused: %s"), *Id.ToString(), *Refusal.ToString());
+				return true;
+			}
+			P.Sub = 1;
+			P.SubStart = QaNow();
+			return false;
+		}
+		if (T->IsTravelling() && QaNow() - P.SubStart < 100.0)
+		{
+			return false;
+		}
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF travel %s %.1f s: %s"), *Id.ToString(), QaNow() - P.SubStart, *T->GetLastTravelReport());
+		P.Sub = 0;
+		return true;
+	}
+
+	bool QaPerfTick(float)
+	{
+		if (!GQaPerf.IsValid())
+		{
+			return false;
+		}
+		FQaPerfRun& P = *GQaPerf;
+		UWorld* World = P.World.Get();
+		if (World == nullptr)
+		{
+			GQaPerf.Reset();
+			return false;
+		}
+		UWonderlandUiSubsystem* U = QaUi(World);
+		const double In = QaNow() - P.StepStart;
+		auto Next = [&P]() { ++P.Step; P.Sub = 0; P.StepStart = QaNow(); };
+		static const FName Hops[6] = { TEXT("castle_approach"), TEXT("tower_rise"), TEXT("mushroom_grove"),
+			TEXT("tartarus_heartland_east"), TEXT("tower_lane"), TEXT("noctis_heartland_west") };
+		static const TCHAR* const Skins[5] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal") };
+
+		if (P.Step == 0)
+		{
+			if (In >= 12.0)
+			{
+				if (U != nullptr) { U->DismissWelcome(); }
+				const ARelayDogCharacter* D = QaDog(World);
+				P.BootSkin = D != nullptr ? D->GetWornSkinId() : NAME_None;
+				P.Began = QaNow();
+				P.NextSampleAt = P.Began + 60.0;
+				P.Trend.Add(FVector(0.0f, static_cast<float>(QaUsedMb()), static_cast<float>(QaObjects())));
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF BEGIN %s | used_mb %.0f uobjects %d | %s"), P.bSoak ? TEXT("soak") : TEXT("perf"),
+					QaUsedMb(), QaObjects(), *WonderlandBeta::BuildLabel());
+				QaPerfPhase(P, TEXT("idle"));
+				Next();
+			}
+			return true;
+		}
+
+		if (P.bSoak)
+		{
+			// ONE SAMPLE A MINUTE: memory, objects and the frame stats since the last sample
+			if (QaNow() >= P.NextSampleAt)
+			{
+				const float Minutes = static_cast<float>((QaNow() - P.Began) / 60.0);
+				P.Trend.Add(FVector(Minutes, static_cast<float>(QaUsedMb()), static_cast<float>(QaObjects())));
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSOAK t_min %.1f cycle %d used_mb %.0f peak_mb %.0f uobjects %d | %s"),
+					Minutes, P.Cycle, QaUsedMb(), QaPeakMb(), QaObjects(), *QaFrameStats(P.Frames));
+				P.Frames.Reset();
+				P.NextSampleAt += 60.0;
+			}
+			if (QaNow() - P.Began >= P.SoakSeconds && P.Sub == 0)
+			{
+				QaPerfFinish(P, World);
+				return false;
+			}
+			// THE CYCLE: travel, a skin, the map, the wardrobe, a Mission Contract every third cycle, and a contract
+			// written and deleted through the terminal -- every repeated thing the founder listed.
+			switch (P.Step)
+			{
+			case 1:
+				if (QaPerfTravel(P, World, Hops[P.Cycle % 6])) { Next(); }
+				break;
+			case 2:
+				if (P.Sub == 0) { GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), Skins[P.Cycle % 5])); P.Sub = 1; }
+				else if (In >= 2.0) { Next(); }
+				break;
+			case 3:
+				if (P.Sub == 0 && U != nullptr) { if (!U->IsWorldMapOpen()) { U->ToggleWorldMap(); } P.Sub = 1; }
+				else if (In >= 1.5) { if (U != nullptr && U->IsWorldMapOpen()) { U->ToggleWorldMap(); } Next(); }
+				break;
+			case 4:
+				if (P.Sub == 0 && U != nullptr) { U->ToggleProjectBrain(); U->SetBrainSkinsOpen(true); P.Sub = 1; }
+				else if (In >= 2.5) { if (U != nullptr) { U->SetBrainSkinsOpen(false); U->ToggleProjectBrain(); } Next(); }
+				break;
+			case 5:
+				if (P.Cycle % 3 != 0) { Next(); break; }
+				if (P.Sub == 0) { GEngine->Exec(World, TEXT("wl.Mission.Scenario B 5")); P.Sub = 1; }
+				else if (In >= 40.0) { GEngine->Exec(World, TEXT("wl.Mission.Stop")); Next(); }
+				break;
+			case 6:
+				if (U != nullptr)
+				{
+					U->PressAddTask();
+					U->SubmitTerminalLine(FString::Printf(TEXT("soak note %d"), P.Cycle));
+					U->SubmitTerminalLine(TEXT("/tasks delete 1"));
+				}
+				++P.Cycle;
+				P.Step = 1;
+				P.Sub = 0;
+				P.StepStart = QaNow();
+				break;
+			default:
+				P.Step = 1;
+				break;
+			}
+			return true;
+		}
+
+		// PERF: one phase per thing the founder listed, each long enough for stable numbers
+		switch (P.Step)
+		{
+		case 1: // idle where the player spawns
+			if (In >= 20.0) { QaPerfPhase(P, TEXT("travel_warm")); Next(); }
+			break;
+		case 2: // to Castle Approach, the dense centre, before walking there
+			if (QaPerfTravel(P, World, TEXT("castle_approach"))) { QaPerfPhase(P, TEXT("walk")); P.bWalking = true; P.WalkBegan = QaNow(); P.Yaw = 0.0f; Next(); }
+			break;
+		case 3: // traversal: thirty seconds of walking through the centre
+			if (In >= 30.0) { P.bWalking = false; QaPerfPhase(P, TEXT("teleport")); P.Hop = 1; Next(); }
+			break;
+		case 4: // teleport: five hops across the world
+			if (QaPerfTravel(P, World, Hops[P.Hop]))
+			{
+				if (++P.Hop >= 6) { QaPerfPhase(P, TEXT("map")); Next(); }
+			}
+			break;
+		case 5: // the map, opened and closed eight times
+			if (U != nullptr && In >= 1.0 * (P.Sub + 1))
+			{
+				U->ToggleWorldMap();
+				if (++P.Sub >= 16) { if (U->IsWorldMapOpen()) { U->ToggleWorldMap(); } QaPerfPhase(P, TEXT("wardrobe")); Next(); }
+			}
+			break;
+		case 6: // the wardrobe: open it and wear all five skins
+			if (P.Sub == 0 && U != nullptr) { U->ToggleProjectBrain(); U->SetBrainSkinsOpen(true); P.Sub = 1; P.SubStart = QaNow(); }
+			else if (P.Sub >= 1 && P.Sub <= 5 && QaNow() - P.SubStart >= 2.0)
+			{
+				GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), Skins[P.Sub - 1]));
+				++P.Sub;
+				P.SubStart = QaNow();
+			}
+			else if (P.Sub == 6 && QaNow() - P.SubStart >= 2.0)
+			{
+				if (U != nullptr) { U->SetBrainSkinsOpen(false); U->ToggleProjectBrain(); }
+				QaPerfPhase(P, TEXT("contract"));
+				Next();
+			}
+			break;
+		case 7: // a Mission Contract, one minute of it
+			if (P.Sub == 0) { GEngine->Exec(World, TEXT("wl.Mission.Scenario B 5")); P.Sub = 1; }
+			else if (In >= 60.0) { GEngine->Exec(World, TEXT("wl.Mission.Stop")); QaPerfPhase(P, TEXT("creation")); Next(); }
+			break;
+		case 8: // creation through the terminal: three contracts written, then deleted
+			if (U != nullptr && P.Sub < 3) { U->PressAddTask(); U->SubmitTerminalLine(FString::Printf(TEXT("perf note %d"), P.Sub)); ++P.Sub; }
+			else if (U != nullptr && P.Sub < 6) { U->SubmitTerminalLine(TEXT("/tasks delete 1")); ++P.Sub; }
+			else if (In >= 4.0) { QaPerfFinish(P, World); return false; }
+			break;
+		default:
+			break;
+		}
+		return true;
+	}
+
+	void ArmQaPerf(UWorld* World, bool bSoak, double Minutes)
+	{
+		if (GQaPerf.IsValid() || GQaRun.IsValid())
+		{
+			UE_LOG(LogWonderlandQa, Warning, TEXT("WLPERF a QA run is already going"));
+			return;
+		}
+		GQaPerf = MakeShared<FQaPerfRun>();
+		GQaPerf->World = World;
+		GQaPerf->bSoak = bSoak;
+		GQaPerf->SoakSeconds = FMath::Clamp(Minutes, 1.0, 600.0) * 60.0;
+		GQaPerf->StepStart = QaNow();
+		GQaPerf->FrameHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaPerfFrame), 0.0f);
+		GQaPerf->StepHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaPerfTick), 0.1f);
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF armed (%s%s); startup %.1f s from engine start to a loaded world"),
+			bSoak ? TEXT("soak ") : TEXT("perf"), bSoak ? *FString::Printf(TEXT("%.0f min"), Minutes) : TEXT(""), FPlatformTime::Seconds() - GStartTime);
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaPerfCommand(
+		TEXT("wl.Qa.Perf"),
+		TEXT("Measure this (packaged) build: idle, a walk through the centre, five teleports, the map, the wardrobe, a Mission ")
+		TEXT("Contract and creation through the terminal. Logs WLPERF lines (FPS, 1% low, hitches, memory, UObjects) and quits."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			ArmQaPerf(World, false, 0.0);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GQaSoakCommand(
+		TEXT("wl.Qa.Soak"),
+		TEXT("Soak this (packaged) build for N minutes (default 30): travel, skins, map, wardrobe, Mission Contracts and terminal ")
+		TEXT("contracts on repeat, with a WLSOAK memory / UObject / frame sample every minute and a growth verdict. Quits at the end."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			ArmQaPerf(World, true, Args.Num() > 0 ? FCString::Atod(*Args[0]) : 30.0);
 		}));
 }
 

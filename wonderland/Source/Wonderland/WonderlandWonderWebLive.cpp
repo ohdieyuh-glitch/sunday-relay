@@ -1,4 +1,5 @@
 #include "WonderlandWonderWebLive.h"
+#include "WonderlandBeta.h"
 
 #include "Engine/Texture2D.h"
 #include "GenericPlatform/GenericPlatformHttp.h"
@@ -304,6 +305,17 @@ void UWonderlandWonderWebLiveSubsystem::SendBack(const FString& TabId)
 
 void UWonderlandWonderWebLiveSubsystem::SendIntent(const FString& TabId, const FString& Body, const TCHAR* What)
 {
+	// NOT PART OF THIS BETA (private beta): live pages are opened by Julius through the local runtime, which a player's
+	// session never contacts. The page says so instead of "no answer ... start it".
+	if (!WonderlandBeta::UseLocalAiServices())
+	{
+		if (FWonderWebLivePage* Page = Pages.Find(TabId))
+		{
+			Page->Problem = TEXT("Live pages are opened by Julius, which is not part of this beta build.");
+			Page->bLoading = false;
+		}
+		return;
+	}
 	const FString Describe = What != nullptr ? FString(What) : FString(TEXT("type"));
 	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetURL(BaseUrl() + TEXT("/intent"));
@@ -381,6 +393,11 @@ void UWonderlandWonderWebLiveSubsystem::RequestFrame(const FString& TabId)
 	FWonderWebLivePage* Asked = Pages.Find(TabId);
 	if (Asked == nullptr)
 	{
+		return;
+	}
+	if (!WonderlandBeta::UseLocalAiServices())
+	{
+		Asked->Problem = TEXT("Live pages are opened by Julius, which is not part of this beta build.");
 		return;
 	}
 	Asked->bFrameInFlight = true;

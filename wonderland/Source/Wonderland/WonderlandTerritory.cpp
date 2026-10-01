@@ -1,4 +1,5 @@
 #include "WonderlandTerritory.h"
+#include "WonderlandBeta.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
@@ -261,6 +262,7 @@ void UWonderlandTerritorySubsystem::LoadDiscoveries()
 {
 	Discovered.Reset();
 	FString Text;
+	WonderlandBeta::RecoverInterruptedSave(DiscoveryPath());
 	if (!FFileHelper::LoadFileToString(Text, *DiscoveryPath()))
 	{
 		return;
@@ -270,9 +272,15 @@ void UWonderlandTerritorySubsystem::LoadDiscoveries()
 	for (const FString& Line : Lines)
 	{
 		const FString Clean = Line.TrimStartAndEnd();
-		if (!Clean.IsEmpty())
+		// A TERRITORY ID IS SHORT (private beta, B24): a corrupted line of 1,024+ characters would crash every boot
+		// through FName's length check, so a line that is not an id is skipped, not converted.
+		if (WonderlandBeta::IsSafeId(Clean))
 		{
 			Discovered.Add(FName(*Clean));
+		}
+		else if (!Clean.IsEmpty())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("WLTERRITORY skipped an unreadable line in the discoveries file (%d characters)"), Clean.Len());
 		}
 	}
 }
@@ -285,7 +293,7 @@ void UWonderlandTerritorySubsystem::SaveDiscoveries() const
 		Lines.Add(Id.ToString());
 	}
 	Lines.Sort();
-	FFileHelper::SaveStringToFile(FString::Join(Lines, TEXT("\n")), *DiscoveryPath());
+	WonderlandBeta::SaveTextAtomically(DiscoveryPath(), FString::Join(Lines, TEXT("\n")));
 }
 
 float UWonderlandTerritorySubsystem::GroundAt(const FVector2D& XY, float& OutFound) const

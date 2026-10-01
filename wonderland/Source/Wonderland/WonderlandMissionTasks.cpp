@@ -5,7 +5,10 @@
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "HAL/FileManager.h"
 #include "Misc/App.h"
+#include "Misc/Paths.h"
+#include "WonderlandBeta.h"
 
 namespace
 {
@@ -283,14 +286,76 @@ bool UWonderlandMissionTaskSubsystem::SaveContracts() const
 		// contracts over a set of no contracts, which is harmless but leaves a file claiming a state nobody has.
 		return ForgetSavedContracts();
 	}
-	const bool bWrote = UGameplayStatics::SaveGameToSlot(Save, SaveSlotName(), 0);
+	// A WHOLE FILE OR NOTHING (private beta, B24). SaveGameToSlot truncates the slot and writes it in place, so a
+	// process killed mid-write -- this laptop's low-memory reaper -- left a truncated file that restored PART of the
+	// set. The bytes are serialised here and moved over the slot in one step; the generic save system reads them back
+	// from the same path (Saved/SaveGames/<slot>.sav).
+	TArray<uint8> Bytes;
+	bool bWrote = UGameplayStatics::SaveGameToMemory(Save, Bytes)
+		&& WonderlandBeta::SaveBytesAtomically(SlotPath(), Bytes);
+	if (!bWrote)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK could NOT save %d contract(s) to %s; they are kept in this session only"),
+			Save->Contracts.Num(), *SlotPath());
+	}
 	UE_LOG(LogTemp, Verbose, TEXT("WLTASK saved %d contract(s): %s"),
 		Save->Contracts.Num(), bWrote ? TEXT("ok") : TEXT("FAILED"));
 	return bWrote;
 }
 
+FString UWonderlandMissionTaskSubsystem::SlotPath()
+{
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("SaveGames"), FString(SaveSlotName()) + TEXT(".sav"));
+}
+
+int32 UWonderlandMissionTaskSubsystem::NumContracts() const
+{
+	int32 Count = 0;
+	for (const FWonderlandMissionTask& Task : Tasks)
+	{
+		Count += WonderlandTaskIsContract(Task.State) ? 1 : 0;
+	}
+	return Count;
+}
+
+bool UWonderlandMissionTaskSubsystem::DeleteLocalContract(FGuid LocalId)
+{
+	const FWonderlandMissionTask* Task = Find(LocalId);
+	if (Task == nullptr)
+	{
+		return false;
+	}
+	if (!WonderlandTaskIsContract(Task->State))
+	{
+		return DismissDraft(LocalId);
+	}
+	if (Task->RunId.bKnown)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused to delete '%s': it belongs to Julius run %s"),
+			*Task->Objective.Left(40), *Task->RunId.Value);
+		return false;
+	}
+	const FString Objective = Task->Objective.Left(40);
+	const bool bWasSelected = Selected == LocalId;
+	Tasks.RemoveAll([LocalId](const FWonderlandMissionTask& Row) { return Row.LocalId == LocalId; });
+	if (bWasSelected)
+	{
+		Selected.Invalidate();
+		for (int32 Index = Tasks.Num() - 1; Index >= 0; --Index)
+		{
+			if (Tasks[Index].bInWorkspace) { Selected = Tasks[Index].LocalId; break; }
+		}
+	}
+	UE_LOG(LogTemp, Display, TEXT("WLTASK deleted the player's contract '%s' (never part of a Julius run)"), *Objective);
+	SaveContracts();
+	OnTasksChanged.Broadcast();
+	return true;
+}
+
 int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 {
+	// A save interrupted between "old file gone" and "new file in place" leaves the complete newer save beside it.
+	WonderlandBeta::RecoverInterruptedSave(SlotPath());
 	if (!HasSavedContracts())
 	{
 		return 0;
@@ -299,10 +364,14 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 		UGameplayStatics::LoadGameFromSlot(SaveSlotName(), 0));
 	if (Save == nullptr || Save->Version != 1)
 	{
-		// REFUSED, NOT GUESSED AT. A file of a shape this build does not know is left alone rather than read as
-		// though it were this one; a misread contract is worse than a forgotten one.
-		UE_LOG(LogTemp, Warning, TEXT("WLTASK saved contracts are version %d, not 1; leaving them alone"),
-			Save != nullptr ? Save->Version : -1);
+		// REFUSED, NOT GUESSED AT. A file of a shape this build does not know is not read as though it were this one;
+		// a misread contract is worse than a forgotten one. AND IT IS SET ASIDE, NOT OVERWRITTEN: the first save of this
+		// session would otherwise replace it (private beta, B24), so it is moved beside itself first.
+		const FString Aside = SlotPath().Replace(TEXT(".sav"), *FString::Printf(TEXT(".refused-%s.sav"),
+			*FDateTime::UtcNow().ToString(TEXT("%Y%m%d-%H%M%S"))));
+		const bool bMoved = IFileManager::Get().Move(*Aside, *SlotPath(), /*bReplace*/ true);
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK saved contracts are version %d, not 1 (or unreadable); set aside as %s: %s"),
+			Save != nullptr ? Save->Version : -1, *Aside, bMoved ? TEXT("ok") : TEXT("FAILED"));
 		return 0;
 	}
 	const FString When = FDateTime::UtcNow().ToIso8601();
@@ -314,12 +383,10 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 			// Belt and braces: a draft should never have been written, and is not read back if one ever is.
 			continue;
 		}
-		if (Tasks.Num() >= GetTaskCapacity())
-		{
-			UE_LOG(LogTemp, Warning, TEXT("WLTASK capacity %d reached while restoring; %d contract(s) left on disk"),
-				GetTaskCapacity(), Save->Contracts.Num() - Restored);
-			break;
-		}
+		// EVERY SAVED CONTRACT COMES BACK (private beta, B04). This loop used to stop at the OPEN-tab capacity (6), and
+		// the next save rewrote the file with only those six: every newer contract was silently lost at the first
+		// select, close or submit after a restart. Restored contracts come back CLOSED (below), so they never count
+		// against the open tabs, and the record's own limit is applied where contracts are created, not here.
 		FWonderlandMissionTask Task = Saved;
 		// A NEW HANDLE FOR A NEW SESSION. The local id means nothing outside the machine it was minted on, and
 		// ApplySchedulerState deliberately does not use it; the CONTRACT id is what came back unchanged.
@@ -425,6 +492,11 @@ bool UWonderlandMissionTaskSubsystem::SubmitDraft(FGuid LocalId, const FString& 
 	{
 		// A RED ORB STANDING FOR NOTHING is the one outcome the gray/red rule exists to prevent.
 		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused: a Mission Contract needs an objective"));
+		return false;
+	}
+	if (IsAtContractLimit())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused: %d Mission Contracts kept, the most this PC stores"), NumContracts());
 		return false;
 	}
 	Task->Objective = Trimmed;

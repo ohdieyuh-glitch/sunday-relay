@@ -1,4 +1,5 @@
 #include "WonderlandJuliusConnect.h"
+#include "WonderlandBeta.h"
 
 #include "Dom/JsonObject.h"
 #include "CoreGlobals.h"
@@ -538,7 +539,11 @@ void UWonderlandJuliusConnectSubsystem::Deinitialize()
 
 FString UWonderlandJuliusConnectSubsystem::StartCommand()
 {
-	return TEXT("cd C:\\dev\\iwonder\\julius-connect && npm run julius-connect:dev");
+	// A DEVELOPER'S INSTRUCTION, SHOWN TO DEVELOPERS ONLY (private beta, B09). It names a folder on the founder's disk and
+	// an npm script; a tester can do nothing with either, and the clean-user baseline found it printed for every one.
+	return WonderlandBeta::IsDeveloperSession()
+		? FString(TEXT("cd C:\\dev\\iwonder\\julius-connect && npm run julius-connect:dev"))
+		: FString();
 }
 
 FString UWonderlandJuliusConnectSubsystem::BaseUrl() const
@@ -555,6 +560,12 @@ FString UWonderlandJuliusConnectSubsystem::BaseUrl() const
 
 bool UWonderlandJuliusConnectSubsystem::Tick(float DeltaSeconds)
 {
+	// NOT PART OF THIS BETA: a player's session never contacts the local service (see WonderlandBeta.h).
+	if (!WonderlandBeta::UseLocalAiServices())
+	{
+		SetLink(EJuliusConnectLink::Offline, WonderlandBeta::AiUnavailableSentence());
+		return true;
+	}
 	const double Now = FPlatformTime::Seconds();
 	if (!bPollInFlight && Now >= NextPollAt)
 	{
@@ -599,6 +610,11 @@ void UWonderlandJuliusConnectSubsystem::Poll()
 
 void UWonderlandJuliusConnectSubsystem::Post(const TSharedRef<FJsonObject>& Intent, const FString& Describe)
 {
+	if (!WonderlandBeta::UseLocalAiServices())
+	{
+		Say(FString::Printf(TEXT("%s: not sent. %s"), *Describe, WonderlandBeta::AiUnavailableSentence()), false, true);
+		return;
+	}
 	FString Body;
 	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
 	FJsonSerializer::Serialize(Intent, Writer);
@@ -705,6 +721,11 @@ void UWonderlandJuliusConnectSubsystem::Announce(const FString& Text, bool bProb
 {
 	// SEEN EVEN WITH NO WINDOW OPEN: a refusal, or an offline service, must not be a line in a panel nobody has open.
 	UE_LOG(LogJuliusConnect, Display, TEXT("%s"), *Text);
+	// ENGINE DEBUG TEXT IS A DEVELOPER'S TOOL (private beta): a player's session keeps it in the log, off the screen.
+	if (!WonderlandBeta::IsDeveloperSession())
+	{
+		return;
+	}
 	GAreScreenMessagesEnabled = true;
 	if (GEngine != nullptr)
 	{
@@ -903,7 +924,9 @@ void UWonderlandJuliusConnectSubsystem::SubmitTerminal(const FString& InLine)
 	{
 		if (Link != EJuliusConnectLink::Online)
 		{
-			Say(FString::Printf(TEXT("OFFLINE. %s Start it: %s"), *Problem, *StartCommand()), false, true);
+			Say(WonderlandBeta::IsDeveloperSession()
+				? FString::Printf(TEXT("OFFLINE. %s Start it: %s"), *Problem, *StartCommand())
+				: FString::Printf(TEXT("OFFLINE. %s"), *Problem), false, true);
 			return;
 		}
 		for (const FJuliusConnectService& Service : Surface.Services)

@@ -478,6 +478,28 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
 	bool CanAddTask() const { return GetWorkspaceCount() < GetTaskCapacity(); }
 
+	/**
+	 * THE MOST MISSION CONTRACTS ONE PC KEEPS (private beta, B04). The OPEN tabs are capped by GetTaskCapacity; the
+	 * record is capped here. Restoring at startup used to stop at the tab capacity (6) and the next save then rewrote
+	 * the file with only those six, so every newer contract was silently lost. Now every saved contract is restored,
+	 * and a draft refuses to become a contract once the record is full -- with a reason on screen -- instead.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	int32 GetContractLimit() const { return 48; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	int32 NumContracts() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	bool IsAtContractLimit() const { return NumContracts() >= GetContractLimit(); }
+
+	/**
+	 * DELETE A CONTRACT THE PLAYER WROTE AND NO JULIUS RUN EVER HELD (no RunId). That is the player's own note and
+	 * theirs to remove; a contract that belongs to a real run is refused, because it is not this PC's alone.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
+	bool DeleteLocalContract(FGuid LocalId);
+
 	const FWonderlandMissionTask* Find(FGuid LocalId) const;
 
 	/** Which task the world is currently showing. */
@@ -664,6 +686,9 @@ public:
 	int32 ClearAllTasksForDevelopment();
 
 	static const TCHAR* SaveSlotName();
+
+	/** Where the generic save system keeps the slot: Saved/SaveGames/<slot>.sav. Written atomically by SaveContracts. */
+	static FString SlotPath();
 
 	FOnWonderlandTasksChanged OnTasksChanged;
 

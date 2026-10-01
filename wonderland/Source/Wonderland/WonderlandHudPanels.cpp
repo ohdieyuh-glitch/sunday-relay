@@ -15,6 +15,11 @@
 #include "WonderlandUiStyle.h"
 #include "WonderlandMascotStyle.h"
 #include "WonderlandCursor.h"
+#include "WonderlandBeta.h"
+#include "Engine/Engine.h"
+#include "GameFramework/GameUserSettings.h"
+#include "HAL/IConsoleManager.h"
+#include "Misc/ConfigCacheIni.h"
 
 // Named, not anonymous: the module is one unity translation unit (see WonderlandCompanionHud.cpp).
 namespace WonderlandHudPanelLook
@@ -201,8 +206,11 @@ void SWonderlandMissionsPanel::Construct(const FArguments& InArgs)
 			SNew(STextBlock)
 			.Text_Lambda([Weak]()
 			{
-				static const FString Waiting = TEXT("A Mission Contract appears only while a task runs through "
-					"Julius, a Jhinn or an LLM Companion, and this panel follows it from red to violet.");
+				// TRUE IN THIS BUILD (private beta): no AI service runs, so a contract the player writes stays QUEUED, and the
+				// one way to see a contract play out is the simulation below, which says it is one.
+				static const FString Waiting = TEXT("No AI service runs in this beta, so a Mission Contract you write stays QUEUED. "
+					"Watch a SIMULATED mission to see how one unfolds: your Relay Dog performs each act at Castle Approach while "
+					"this panel follows it from red to violet.");
 				if (!Weak.IsValid() || !Weak->IsFollowingRealRun())
 				{
 					return FText::FromString(Waiting);
@@ -226,6 +234,31 @@ void SWonderlandMissionsPanel::Construct(const FArguments& InArgs)
 					Said.IsEmpty() ? TEXT("no state yet") : *Said));
 			})
 			.Font(WonderlandUi::Sans(11)).ColorAndOpacity(WonderlandUi::Dim()).AutoWrapText(true)
+		]
+		// A SIMULATED MISSION ON DEMAND (private beta, B18). The founder's mission showcase -- every act the Relay Dog
+		// performs for a Mission Contract -- could be started only from the console, so a tester never saw it. This plays
+		// the canonical simulation (Scenario D) through the same path the console uses, and the strip and this panel
+		// keep saying SIMULATED for every second of it. Hidden while a real Julius run is followed.
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f).HAlign(HAlign_Left)
+		[
+			SNew(SButton).ButtonStyle(&ButtonStyle).IsFocusable(false)
+			.Visibility_Lambda([Weak]() { return (Weak.IsValid() && !Weak->IsFollowingRealRun()) ? EVisibility::Visible : EVisibility::Collapsed; })
+			.OnClicked_Lambda([this, Weak]()
+			{
+				if (UWonderlandMissionSubsystem* Subsystem = Weak.Get())
+				{
+					const bool bStarted = Subsystem->PlayScenario(FName(TEXT("D")), 10.0f);
+					UE_LOG(LogTemp, Display, TEXT("WLMISSION simulated mission from the Missions panel: %s"), bStarted ? TEXT("started") : TEXT("REFUSED"));
+					if (bStarted)
+					{
+						OnRequestClose.ExecuteIfBound();
+					}
+				}
+				return FReply::Handled();
+			})
+			[
+				SNew(STextBlock).Text(FText::FromString(TEXT("WATCH A SIMULATED MISSION  ·  NO AI RUNS"))).Font(WonderlandUi::Sans(9, true, 120)).ColorAndOpacity(WonderlandUi::Cream())
+			]
 		];
 
 	ChildSlot
@@ -655,28 +688,26 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeCursorRow()
 TSharedRef<SWidget> SWonderlandMenuPanel::MakeTabBar()
 {
 	TSharedRef<SHorizontalBox> Bar = SNew(SHorizontalBox);
-	static const TCHAR* const Titles[] = { TEXT("MENU"), TEXT("COLORS") };
-	for (int32 Index = 0; Index < 2; ++Index)
+	static const TCHAR* const Titles[] = { TEXT("MENU"), TEXT("SETTINGS"), TEXT("COLORS") };
+	for (int32 Index = 0; Index < 3; ++Index)
 	{
 		const FString Title = Titles[Index];
 		TabTitles.Add(Title);
-		const bool bIsColours = Index == 1;
 		Bar->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
 		[
 			SNew(SButton).ButtonStyle(&TabStyle).IsFocusable(false)
-			.OnClicked_Lambda([this, bIsColours]()
+			.OnClicked_Lambda([this, Index]()
 			{
-				bColorsOpen = bIsColours;
-				if (Pages.IsValid()) { Pages->SetActiveWidgetIndex(bColorsOpen ? 1 : 0); }
+				OpenPage = Index;
+				if (Pages.IsValid()) { Pages->SetActiveWidgetIndex(OpenPage); }
 				return FReply::Handled();
 			})
 			[
 				SNew(STextBlock).Text(FText::FromString(Title))
 				.Font(WonderlandUi::Sans(10, true, 200))
-				.ColorAndOpacity_Lambda([this, bIsColours]()
+				.ColorAndOpacity_Lambda([this, Index]()
 				{
-					return FSlateColor(bColorsOpen == bIsColours
-						? WonderlandUi::MenuGold() : WonderlandUi::Ivory(0.55f));
+					return FSlateColor(OpenPage == Index ? WonderlandUi::MenuGold() : WonderlandUi::Ivory(0.55f));
 				})
 			]
 		];
@@ -684,19 +715,223 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeTabBar()
 	return Bar;
 }
 
+FString SWonderlandMenuPanel::GetOpenTab() const
+{
+	return OpenPage == 1 ? FString(TEXT("SETTINGS")) : (OpenPage == 2 ? FString(TEXT("COLORS")) : FString(TEXT("MENU")));
+}
+
 bool SWonderlandMenuPanel::ShowTab(const FString& Title)
 {
-	if (!Title.Equals(TEXT("MENU"), ESearchCase::IgnoreCase)
-		&& !Title.Equals(TEXT("COLORS"), ESearchCase::IgnoreCase))
+	int32 Page = INDEX_NONE;
+	if (Title.Equals(TEXT("MENU"), ESearchCase::IgnoreCase)) { Page = 0; }
+	else if (Title.Equals(TEXT("SETTINGS"), ESearchCase::IgnoreCase)) { Page = 1; }
+	else if (Title.Equals(TEXT("COLORS"), ESearchCase::IgnoreCase)) { Page = 2; }
+	if (Page == INDEX_NONE)
 	{
 		return false;
 	}
-	bColorsOpen = Title.Equals(TEXT("COLORS"), ESearchCase::IgnoreCase);
+	OpenPage = Page;
 	if (Pages.IsValid())
 	{
-		Pages->SetActiveWidgetIndex(bColorsOpen ? 1 : 0);
+		Pages->SetActiveWidgetIndex(OpenPage);
 	}
 	return true;
+}
+
+/* ------------------------------------------------------------------ THE SETTINGS PAGE (private beta, B06).
+ *
+ * The engine's own GameUserSettings, so each choice persists in the player's GameUserSettings.ini exactly as every UE
+ * game's does, and nothing here invents a settings store. Ray tracing is the one exception: the renderer decides it at
+ * start-up, so it is written to the player's Engine.ini ([SectionsToSave] in DefaultEngine.ini lists the section) and
+ * Lumen stops tracing hardware rays at once.
+ */
+namespace WonderlandMenuSettings
+{
+	UGameUserSettings* User()
+	{
+		return GEngine != nullptr ? GEngine->GetGameUserSettings() : nullptr;
+	}
+
+	bool HardwareRayTracingWanted()
+	{
+		bool bOn = true;
+		if (GConfig != nullptr)
+		{
+			GConfig->GetBool(TEXT("/Script/Engine.RendererSettings"), TEXT("r.RayTracing"), bOn, GEngineIni);
+		}
+		return bOn;
+	}
+
+	void SetHardwareRayTracing(bool bOn)
+	{
+		if (IConsoleVariable* Lumen = IConsoleManager::Get().FindConsoleVariable(TEXT("r.Lumen.HardwareRayTracing")))
+		{
+			Lumen->Set(bOn ? 1 : 0, ECVF_SetByCode);
+		}
+		if (GConfig != nullptr)
+		{
+			GConfig->SetBool(TEXT("/Script/Engine.RendererSettings"), TEXT("r.RayTracing"), bOn, GEngineIni);
+			GConfig->SetBool(TEXT("/Script/Engine.RendererSettings"), TEXT("r.Lumen.HardwareRayTracing"), bOn, GEngineIni);
+			GConfig->Flush(false, GEngineIni);
+		}
+		UE_LOG(LogTemp, Display, TEXT("WLSETTINGS hardware ray tracing %s (fully applied on the next launch)"), bOn ? TEXT("ON") : TEXT("OFF"));
+	}
+
+	void Commit(UGameUserSettings* Settings)
+	{
+		Settings->ApplySettings(false);
+		Settings->SaveSettings();
+	}
+}
+
+TSharedRef<SWidget> SWonderlandMenuPanel::MakeChoiceRow(const TCHAR* Label, const TCHAR* Note, const TArray<FString>& Choices,
+	TFunction<int32()> Current, TFunction<void(int32)> Choose)
+{
+	TSharedRef<SHorizontalBox> Buttons = SNew(SHorizontalBox);
+	for (int32 Index = 0; Index < Choices.Num(); ++Index)
+	{
+		Buttons->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 6.0f, 0.0f)
+		[
+			SNew(SButton).ButtonStyle(&TabStyle).IsFocusable(false)
+			.OnClicked_Lambda([Choose, Index]() { if (Choose) { Choose(Index); } return FReply::Handled(); })
+			[
+				SNew(STextBlock).Text(FText::FromString(Choices[Index]))
+				.Font(WonderlandUi::Sans(9, true, 140))
+				.ColorAndOpacity_Lambda([Current, Index]()
+				{
+					return FSlateColor((Current && Current() == Index) ? WonderlandUi::MenuGold() : WonderlandUi::Ivory(0.55f));
+				})
+			]
+		];
+	}
+	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			[
+				SNew(SBox).WidthOverride(190.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Label)).Font(WonderlandUi::Sans(10, true, 160)).ColorAndOpacity(WonderlandUi::MenuGold(0.90f))
+				]
+			]
+			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[Buttons]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(190.0f, 3.0f, 0.0f, 0.0f)
+		[
+			SNew(STextBlock).Text(FText::FromString(Note)).Font(WonderlandUi::Sans(8)).ColorAndOpacity(WonderlandUi::Dim()).AutoWrapText(true)
+		];
+}
+
+TSharedRef<SWidget> SWonderlandMenuPanel::MakeSettingsPage()
+{
+	using namespace WonderlandMenuSettings;
+	TSharedRef<SVerticalBox> Page = SNew(SVerticalBox);
+
+	Page->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)
+	[
+		MakeChoiceRow(TEXT("QUALITY"), TEXT("Lower it if the world stutters or your PC runs short of memory. EPIC is the look Wonderland was made at."),
+			{ TEXT("LOW"), TEXT("MEDIUM"), TEXT("HIGH"), TEXT("EPIC") },
+			[]() { const UGameUserSettings* Settings = User(); return Settings != nullptr ? Settings->GetOverallScalabilityLevel() : -1; },
+			[](int32 Level)
+			{
+				if (UGameUserSettings* Settings = User())
+				{
+					Settings->SetOverallScalabilityLevel(Level);
+					Commit(Settings);
+					UE_LOG(LogTemp, Display, TEXT("WLSETTINGS quality preset %d"), Level);
+				}
+			})
+	];
+
+	Page->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)
+	[
+		MakeChoiceRow(TEXT("WINDOW"), TEXT("BORDERLESS fills the screen and lets you switch apps quickly."),
+			{ TEXT("FULLSCREEN"), TEXT("BORDERLESS"), TEXT("WINDOWED") },
+			[]()
+			{
+				const UGameUserSettings* Settings = User();
+				if (Settings == nullptr) { return -1; }
+				switch (Settings->GetFullscreenMode())
+				{
+				case EWindowMode::Fullscreen:         return 0;
+				case EWindowMode::WindowedFullscreen: return 1;
+				default:                              return 2;
+				}
+			},
+			[](int32 Choice)
+			{
+				if (UGameUserSettings* Settings = User())
+				{
+					static const EWindowMode::Type Modes[] = { EWindowMode::Fullscreen, EWindowMode::WindowedFullscreen, EWindowMode::Windowed };
+					Settings->SetFullscreenMode(Modes[FMath::Clamp(Choice, 0, 2)]);
+					Commit(Settings);
+					UE_LOG(LogTemp, Display, TEXT("WLSETTINGS window mode %d"), Choice);
+				}
+			})
+	];
+
+	Page->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)
+	[
+		MakeChoiceRow(TEXT("RESOLUTION SCALE"), TEXT("Renders fewer pixels and sharpens them back up: the quickest way to a smoother frame rate."),
+			{ TEXT("50%"), TEXT("67%"), TEXT("85%"), TEXT("100%") },
+			[]()
+			{
+				const UGameUserSettings* Settings = User();
+				if (Settings == nullptr) { return -1; }
+				float Normalized = 0.0f, Value = 100.0f, Min = 0.0f, Max = 100.0f;
+				Settings->GetResolutionScaleInformationEx(Normalized, Value, Min, Max);
+				static const float Steps[] = { 50.0f, 67.0f, 85.0f, 100.0f };
+				int32 Best = 3;
+				for (int32 Index = 0; Index < 4; ++Index)
+				{
+					if (FMath::Abs(Steps[Index] - Value) < FMath::Abs(Steps[Best] - Value)) { Best = Index; }
+				}
+				return Best;
+			},
+			[](int32 Choice)
+			{
+				if (UGameUserSettings* Settings = User())
+				{
+					static const float Steps[] = { 50.0f, 67.0f, 85.0f, 100.0f };
+					Settings->SetResolutionScaleValueEx(Steps[FMath::Clamp(Choice, 0, 3)]);
+					Commit(Settings);
+					UE_LOG(LogTemp, Display, TEXT("WLSETTINGS resolution scale %.0f%%"), Steps[FMath::Clamp(Choice, 0, 3)]);
+				}
+			})
+	];
+
+	Page->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)
+	[
+		MakeChoiceRow(TEXT("FRAME RATE LIMIT"), TEXT("A cap keeps a laptop cooler and quieter."),
+			{ TEXT("30"), TEXT("60"), TEXT("120"), TEXT("NONE") },
+			[]()
+			{
+				const UGameUserSettings* Settings = User();
+				if (Settings == nullptr) { return -1; }
+				const float Limit = Settings->GetFrameRateLimit();
+				return Limit <= 0.0f ? 3 : (Limit <= 30.5f ? 0 : (Limit <= 60.5f ? 1 : 2));
+			},
+			[](int32 Choice)
+			{
+				if (UGameUserSettings* Settings = User())
+				{
+					static const float Limits[] = { 30.0f, 60.0f, 120.0f, 0.0f };
+					Settings->SetFrameRateLimit(Limits[FMath::Clamp(Choice, 0, 3)]);
+					Commit(Settings);
+					UE_LOG(LogTemp, Display, TEXT("WLSETTINGS frame rate limit %.0f"), Limits[FMath::Clamp(Choice, 0, 3)]);
+				}
+			})
+	];
+
+	Page->AddSlot().AutoHeight()
+	[
+		MakeChoiceRow(TEXT("HARDWARE RAY TRACING"), TEXT("OFF saves graphics memory on smaller GPUs. Lumen switches at once; the rest applies the next time you start Wonderland."),
+			{ TEXT("ON"), TEXT("OFF") },
+			[]() { return HardwareRayTracingWanted() ? 0 : 1; },
+			[](int32 Choice) { SetHardwareRayTracing(Choice == 0); })
+	];
+	return Page;
 }
 
 void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
@@ -705,7 +940,10 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 	OnRequestClose = InArgs._OnRequestClose;
 	OnRequestMap = InArgs._OnRequestMap;
 	OnRequestWallet = InArgs._OnRequestWallet;
+	OnRequestWelcome = InArgs._OnRequestWelcome;
+	OnRequestQuit = InArgs._OnRequestQuit;
 	OnRequestNavigate = InArgs._OnRequestNavigate;
+	BuildLabel = InArgs._BuildLabel;
 	ScrimBrush.DrawAs = ESlateBrushDrawType::Image;
 	ScrimBrush.TintColor = FSlateColor(WonderlandUi::MapScrim());
 	RowStyle = FButtonStyle().SetNormal(RowNormal).SetHovered(RowHovered).SetPressed(RowPressed)
@@ -713,20 +951,36 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 
 	struct FRow { EWonderlandBrainGlyph Glyph; const TCHAR* Title; const TCHAR* Key; TFunction<void()> Go; };
 	TArray<FRow> Rows;
-	Rows.Add({EWonderlandBrainGlyph::Arrows, TEXT("RESUME"), TEXT("TAB"), [this]() { OnRequestClose.ExecuteIfBound(); }});
+	Rows.Add({EWonderlandBrainGlyph::Arrows, TEXT("RESUME"), TEXT("ESC"), [this]() { OnRequestClose.ExecuteIfBound(); }});
 	Rows.Add({EWonderlandBrainGlyph::Target, TEXT("WORLD MAP"), TEXT("M"), [this]() { OnRequestMap.ExecuteIfBound(); }});
 	Rows.Add({EWonderlandBrainGlyph::Agent, TEXT("AGENT TERMINALS"), TEXT("CTRL T"), [this]() { OnRequestNavigate.ExecuteIfBound(EWonderlandNavTarget::Agent); }});
 	Rows.Add({EWonderlandBrainGlyph::Missions, TEXT("MISSIONS"), TEXT("J"), [this]() { OnRequestNavigate.ExecuteIfBound(EWonderlandNavTarget::Missions); }});
 	Rows.Add({EWonderlandBrainGlyph::Brain, TEXT("PROJECT BRAIN"), TEXT("B"), [this]() { OnRequestNavigate.ExecuteIfBound(EWonderlandNavTarget::Brain); }});
 	Rows.Add({EWonderlandBrainGlyph::Commands, TEXT("COMMAND PRESETS"), TEXT("C"), [this]() { OnRequestNavigate.ExecuteIfBound(EWonderlandNavTarget::Commands); }});
 	Rows.Add({EWonderlandBrainGlyph::Wallet, TEXT("WONDER WEB WALLET"), TEXT("SANDBOX"), [this]() { OnRequestWallet.ExecuteIfBound(); }});
+	Rows.Add({EWonderlandBrainGlyph::Menu, TEXT("HOW TO PLAY"), TEXT("WELCOME"), [this]() { OnRequestWelcome.ExecuteIfBound(); }});
+	// QUIT ASKS ONCE (private beta, B05). The Menu had no way out at all, and the game opens fullscreen with the mouse
+	// captured: a tester who did not know Alt+F4 was stuck. One click arms it, a second within four seconds leaves.
+	Rows.Add({EWonderlandBrainGlyph::Arrows, TEXT("QUIT WONDERLAND"), TEXT("CLICK TWICE"), [this]()
+	{
+		const double Now = FPlatformTime::Seconds();
+		if (QuitArmedAt > 0.0 && Now - QuitArmedAt <= 4.0)
+		{
+			OnRequestQuit.ExecuteIfBound();
+			return;
+		}
+		QuitArmedAt = Now;
+	}});
 
 	TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
 	for (const FRow& Row : Rows)
 	{
 		RowTitles.Add(Row.Title);
 		const TFunction<void()> Go = Row.Go;
-		List->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+		const bool bQuit = FCString::Strcmp(Row.Title, TEXT("QUIT WONDERLAND")) == 0;
+		const FString Title = Row.Title;
+		const FString Key = Row.Key;
+		List->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
 		[
 			SNew(SButton).ButtonStyle(&RowStyle).IsFocusable(false)
 			.OnClicked_Lambda([Go]() { if (Go) { Go(); } return FReply::Handled(); })
@@ -734,15 +988,21 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 14.0f, 0.0f)
 				[
-					SNew(SWonderlandBrainIcon).Glyph(Row.Glyph).Size(22.0f).Color(WonderlandUi::Ivory(0.90f)).Thickness(1.5f)
+					SNew(SWonderlandBrainIcon).Glyph(Row.Glyph).Size(20.0f).Color(WonderlandUi::Ivory(0.90f)).Thickness(1.5f)
 				]
 				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 				[
-					SNew(STextBlock).Text(FText::FromString(Row.Title)).Font(WonderlandUi::Sans(13, true, 140)).ColorAndOpacity(WonderlandUi::Ivory())
+					SNew(STextBlock)
+					.Text_Lambda([this, bQuit, Title]()
+					{
+						const bool bArmed = bQuit && QuitArmedAt > 0.0 && FPlatformTime::Seconds() - QuitArmedAt <= 4.0;
+						return FText::FromString(bArmed ? FString(TEXT("CLICK AGAIN TO QUIT")) : Title);
+					})
+					.Font(WonderlandUi::Sans(12, true, 140)).ColorAndOpacity(WonderlandUi::Ivory())
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
-					SNew(STextBlock).Text(FText::FromString(Row.Key)).Font(WonderlandUi::Sans(9, true, 120)).ColorAndOpacity(WonderlandUi::MenuGold(0.80f))
+					SNew(STextBlock).Text(FText::FromString(Key)).Font(WonderlandUi::Sans(9, true, 120)).ColorAndOpacity(WonderlandUi::MenuGold(0.80f))
 				]
 			]
 		];
@@ -756,6 +1016,9 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 		{TEXT("CTRL"), TEXT("Walk")},
 		{TEXT("SPACE"), TEXT("Jump")},
 		{TEXT("MOUSE"), TEXT("Look")},
+		{TEXT("M"), TEXT("World map: choose a place, then Teleport")},
+		{TEXT("B"), TEXT("Project Brain and the wardrobe")},
+		{TEXT("ESC / TAB"), TEXT("This menu: settings, colours, quit")},
 		{TEXT("HOLD ALT"), TEXT("Show the cursor to click the shortcuts")},
 	};
 	TSharedRef<SVerticalBox> ControlList = SNew(SVerticalBox);
@@ -773,7 +1036,7 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.0f)
 			[
-				SNew(STextBlock).Text(FText::FromString(Control.Does)).Font(WonderlandUi::Sans(10)).ColorAndOpacity(WonderlandUi::Cream(0.85f))
+				SNew(STextBlock).Text(FText::FromString(Control.Does)).Font(WonderlandUi::Sans(10)).ColorAndOpacity(WonderlandUi::Cream(0.85f)).AutoWrapText(true)
 			]
 		];
 	}
@@ -784,14 +1047,14 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 		+ SOverlay::Slot()[SNew(SBorder).BorderImage(&ScrimBrush)]
 		+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(40.0f)
 		[
-			SNew(SBox).WidthOverride(760.0f)
+			SNew(SBox).WidthOverride(800.0f)
 			[
 				SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(28.0f, 22.0f))
 				[
 					SNew(SVerticalBox)
 					+ SVerticalBox::Slot().AutoHeight()
 					[
-						Header(EWonderlandBrainGlyph::Menu, TEXT("MENU"), TEXT("Every panel in reach, and the controls."), SNullWidget::NullWidget)
+						Header(EWonderlandBrainGlyph::Menu, TEXT("MENU"), TEXT("Every panel in reach, the controls, your settings."), SNullWidget::NullWidget)
 					]
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 12.0f)
 					[
@@ -801,8 +1064,8 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 					[
 						SNew(SBox).HeightOverride(1.0f)[SNew(SBorder).BorderImage(&RuleBrush)]
 					]
-					// TWO PAGES, ONE PANEL. Both are built now and swapped by the tab bar, so the Colors page is
-					// not rebuilt every time it is opened and neither page loses its place.
+					// THREE PAGES, ONE PANEL. All are built now and swapped by the tab bar, so no page is rebuilt every time
+					// it is opened and none loses its place.
 					+ SVerticalBox::Slot().AutoHeight()
 					[
 						SNew(SBox).MinDesiredHeight(292.0f)
@@ -811,8 +1074,8 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 							+ SWidgetSwitcher::Slot()
 							[
 								SNew(SHorizontalBox)
-								+ SHorizontalBox::Slot().FillWidth(0.58f).Padding(0.0f, 0.0f, 24.0f, 0.0f)[List]
-								+ SHorizontalBox::Slot().FillWidth(0.42f)
+								+ SHorizontalBox::Slot().FillWidth(0.56f).Padding(0.0f, 0.0f, 24.0f, 0.0f)[List]
+								+ SHorizontalBox::Slot().FillWidth(0.44f)
 								[
 									SNew(SVerticalBox)
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 10.0f)
@@ -824,9 +1087,18 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 							]
 							+ SWidgetSwitcher::Slot()
 							[
+								MakeSettingsPage()
+							]
+							+ SWidgetSwitcher::Slot()
+							[
 								MakeColoursPage()
 							]
 						]
+					]
+					// THE BUILD, so a report can name it (private beta, B07).
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(BuildLabel)).Font(WonderlandUi::Sans(8, false, 80)).ColorAndOpacity(WonderlandUi::Dim())
 					]
 				]
 			]
@@ -868,4 +1140,116 @@ FReply SWonderlandMenuPanel::OnKeyDown(const FGeometry& MyGeometry, const FKeyEv
 		return FReply::Handled();
 	}
 	return SCompoundWidget::OnKeyDown(MyGeometry, InKeyEvent);
+}
+
+// ---------------------------------------------------------------------------------------------------------------- welcome
+
+SWonderlandWelcomePanel::SWonderlandWelcomePanel()
+	: PanelBrush(WonderlandUi::MapFill(), 14.0f, WonderlandUi::MenuGold(0.50f), 1.2f)
+	, RuleBrush(WonderlandUi::MenuGold(0.22f), 0.0f, FLinearColor::Transparent, 0.0f)
+{
+}
+
+void SWonderlandWelcomePanel::Construct(const FArguments& InArgs)
+{
+	using namespace WonderlandHudPanelLook;
+	OnRequestClose = InArgs._OnRequestClose;
+	ScrimBrush.DrawAs = ESlateBrushDrawType::Image;
+	ScrimBrush.TintColor = FSlateColor(WonderlandUi::MapScrim());
+
+	struct FLine { const TCHAR* Keys; const TCHAR* Does; };
+	static const FLine Around[] = {
+		{TEXT("W A S D  ·  MOUSE"), TEXT("Move and look. SHIFT runs, CTRL walks, SPACE jumps.")},
+		{TEXT("M"), TEXT("The world map. Pick a place, then TELEPORT to go there.")},
+		{TEXT("B"), TEXT("The Project Brain. SWITCH SKIN opens the wardrobe for your Relay Dog.")},
+		{TEXT("J  ·  CTRL T"), TEXT("Missions, and the agent terminals where you write tasks.")},
+		{TEXT("ESC  ·  TAB"), TEXT("The menu: settings, colours, how to play, and quit.")},
+	};
+	TSharedRef<SVerticalBox> Lines = SNew(SVerticalBox);
+	for (const FLine& Line : Around)
+	{
+		Lines->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 7.0f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SBox).WidthOverride(150.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Line.Keys)).Font(WonderlandUi::Sans(10, true, 120)).ColorAndOpacity(WonderlandUi::MenuGold(0.90f))
+				]
+			]
+			+ SHorizontalBox::Slot().FillWidth(1.0f)
+			[
+				SNew(STextBlock).Text(FText::FromString(Line.Does)).Font(WonderlandUi::Sans(11)).ColorAndOpacity(WonderlandUi::Cream(0.92f)).AutoWrapText(true)
+			]
+		];
+	}
+
+	ChildSlot
+	[
+		SNew(SOverlay)
+		+ SOverlay::Slot()[SNew(SBorder).BorderImage(&ScrimBrush)]
+		+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(40.0f)
+		[
+			SNew(SBox).WidthOverride(720.0f)
+			[
+				SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 24.0f))
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						Header(EWonderlandBrainGlyph::Target, TEXT("WELCOME TO WONDERLAND"), TEXT("A private beta. Here is what you can do."), SNullWidget::NullWidget)
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 14.0f)
+					[
+						SNew(SBox).HeightOverride(1.0f)[SNew(SBorder).BorderImage(&RuleBrush)]
+					]
+					+ SVerticalBox::Slot().AutoHeight()[Lines]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 6.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("IN THIS BETA"))).Font(WonderlandUi::Sans(10, true, 200)).ColorAndOpacity(WonderlandUi::MenuGold())
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock)
+						.Text(FText::FromString(TEXT(
+							"Julius and the AI companions are not connected in this build, and nothing here calls an AI service. "
+							"Tasks you write in the agent terminal (press +, then type the objective) are saved as QUEUED Mission "
+							"Contracts on this PC, and the Missions panel can play a SIMULATED mission so you can see how one unfolds. "
+							"Wonderland is single-player for now. Your skin, colours, settings and tasks are saved on this PC.")))
+						.Font(WonderlandUi::Sans(10)).ColorAndOpacity(WonderlandUi::Cream(0.80f)).AutoWrapText(true)
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 18.0f, 0.0f, 0.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Text(FText::FromString(InArgs._BuildLabel)).Font(WonderlandUi::Sans(8, false, 80)).ColorAndOpacity(WonderlandUi::Dim())
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("PRESS ENTER OR CLICK TO START"))).Font(WonderlandUi::Sans(11, true, 160)).ColorAndOpacity(WonderlandUi::MenuGold())
+						]
+					]
+				]
+			]
+		]
+	];
+}
+
+FReply SWonderlandWelcomePanel::OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent)
+{
+	const FKey Key = InKeyEvent.GetKey();
+	if (Key == EKeys::Enter || Key == EKeys::Escape || Key == EKeys::SpaceBar)
+	{
+		OnRequestClose.ExecuteIfBound();
+		return FReply::Handled();
+	}
+	return FReply::Handled();
+}
+
+FReply SWonderlandWelcomePanel::OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
+{
+	OnRequestClose.ExecuteIfBound();
+	return FReply::Handled();
 }

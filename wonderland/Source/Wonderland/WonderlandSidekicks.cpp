@@ -1,4 +1,5 @@
 #include "WonderlandSidekicks.h"
+#include "WonderlandBeta.h"
 
 #include "CoreGlobals.h"
 #include "Dom/JsonObject.h"
@@ -283,8 +284,50 @@ void UWonderlandSidekickSubsystem::SetLink(EWonderlandSidekickLink NewLink, cons
 	Changed();
 }
 
+namespace WonderlandSidekickSecrets
+{
+	/**
+	 * A PROVIDER KEY, NOT A WORD. The service holds no secrets, so a body carrying one is refused unread -- but the old
+	 * test was Text.Contains("sk-"), which ignores case and matched "task-", "risk-" and "ask-": any companion answer
+	 * containing one of those locked the link OFFLINE on every poll (private beta, B15). A key is "sk-" at the start of
+	 * a token followed by a long run of key characters.
+	 */
+	bool LooksLikeKey(const FString& Text)
+	{
+		int32 From = 0;
+		while (true)
+		{
+			const int32 At = Text.Find(TEXT("sk-"), ESearchCase::CaseSensitive, ESearchDir::FromStart, From);
+			if (At == INDEX_NONE)
+			{
+				return false;
+			}
+			const bool bTokenStart = At == 0 || !(FChar::IsAlnum(Text[At - 1]) || Text[At - 1] == TEXT('_'));
+			int32 Run = 0;
+			for (int32 Index = At + 3; Index < Text.Len()
+				&& (FChar::IsAlnum(Text[Index]) || Text[Index] == TEXT('-') || Text[Index] == TEXT('_')); ++Index)
+			{
+				++Run;
+			}
+			if (bTokenStart && Run >= 20)
+			{
+				return true;
+			}
+			From = At + 3;
+		}
+	}
+}
+
 bool UWonderlandSidekickSubsystem::Tick(float DeltaSeconds)
 {
+	// NOT PART OF THIS BETA (private beta): a player's session never contacts the companions' local runtime. An outside
+	// tester has none, and the founder's own machine must answer like theirs -- the clean-user baseline on this laptop
+	// read the founder's development service and drew its provider advice across the world.
+	if (!WonderlandBeta::UseLocalAiServices())
+	{
+		SetLink(EWonderlandSidekickLink::Offline, WonderlandBeta::AiUnavailableSentence());
+		return true;
+	}
 	const double Now = FPlatformTime::Seconds();
 	if (!bPollInFlight && Now >= NextPollAt)
 	{
@@ -322,7 +365,7 @@ void UWonderlandSidekickSubsystem::Poll()
 void UWonderlandSidekickSubsystem::Accept(const FString& Text)
 {
 	// NOTHING THAT LOOKS LIKE A SECRET IS EVEN PARSED. The service holds none; a body carrying one is a wrong body.
-	if (Text.Contains(TEXT("sk-")) || Text.Contains(TEXT("BEGIN PRIVATE KEY")) || Text.Contains(TEXT("credentialRef")))
+	if (WonderlandSidekickSecrets::LooksLikeKey(Text) || Text.Contains(TEXT("BEGIN PRIVATE KEY")) || Text.Contains(TEXT("credentialRef")))
 	{
 		SetLink(EWonderlandSidekickLink::Offline, TEXT("The sidekick service sent something that looked like credential material. It was refused and not read."));
 		return;

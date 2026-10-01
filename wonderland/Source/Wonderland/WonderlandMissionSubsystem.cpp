@@ -1,5 +1,6 @@
 #include "WonderlandMissionSubsystem.h"
 #include "WonderlandMissionTasks.h"
+#include "WonderlandBeta.h"
 
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
@@ -527,6 +528,16 @@ void UWonderlandMissionSubsystem::MountStrip()
 						return FText::GetEmpty();
 					}
 					UWonderlandMissionSubsystem* Mission = WeakThis.Get();
+					// AT REST, IN A PLAYER'S SESSION, IT SAYS SO (private beta, B21). With no contract, no fixture and no
+					// real run there is no beat to label, and the telemetry line below read as a simulation in progress
+					// to the clean-user tester. The moment a mission or a simulation starts, the full line returns with
+					// its label -- the founder's rule that the label travels with a drawn beat is kept -- and a
+					// developer's session keeps the readout at all times.
+					if (!WonderlandBeta::IsDeveloperSession() && !Mission->IsOrbInWorld() && !Mission->IsFixtureRunning()
+						&& !Mission->IsFollowingRealRun())
+					{
+						return FText::FromString(TEXT("NO MISSION RUNNING   ·   MISSIONS (J) CAN PLAY A SIMULATED ONE"));
+					}
 					// MISSION, EVENT, JULIUS STATE, CHAKRA, STATUS -- the five the founder asked for, on one
 					// line, and the last of them is never omitted.
 					const FString Where = Mission->IsFixtureRunning()

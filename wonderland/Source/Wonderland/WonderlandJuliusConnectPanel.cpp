@@ -1,4 +1,5 @@
 #include "WonderlandJuliusConnectPanel.h"
+#include "WonderlandBeta.h"
 
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Framework/Application/SlateApplication.h"
@@ -454,11 +455,15 @@ TSharedRef<SWidget> SWonderlandJuliusConnectPanel::MakeOffline()
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 18.0f, 0.0f, 0.0f)
 		[
 			SNew(STextBlock).Font(Sans(18)).ColorAndOpacity(Line(0.7f))
-			.Text(INVTEXT("No connection state is shown without the service: nothing here is remembered or invented. Start it with"))
+			// A PLAYER IS TOLD THE TRUTH ABOUT THIS BUILD, NOT HOW TO START A DEVELOPER'S SERVICE (private beta, B09).
+			.Text(WonderlandBeta::IsDeveloperSession()
+				? INVTEXT("No connection state is shown without the service: nothing here is remembered or invented. Start it with")
+				: INVTEXT("Connections are made by Julius, and Julius is not part of this beta build. Nothing here is remembered or invented."))
 		]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 10.0f, 0.0f, 0.0f)
 		[
 			SNew(SBorder).BorderImage(&NoticeBrush).Padding(FMargin(18.0f, 8.0f))
+			.Visibility(WonderlandBeta::IsDeveloperSession() ? EVisibility::Visible : EVisibility::Collapsed)
 			[
 				SNew(STextBlock).Font(Mono(19)).ColorAndOpacity(Line()).Text(FText::FromString(UWonderlandJuliusConnectSubsystem::StartCommand()))
 			]

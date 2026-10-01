@@ -53,13 +53,13 @@ CANONICAL = [
     ("west_wood", "West Wood", "District", -29544.2, 5209.4, -10.0, "A district of Wonderland, 300 m from the gate.", ""),
     ("far_orchards", "Far Orchards", "District", 20506.1, -20506.1, 135.0, "A district of Wonderland, 290 m from the gate.", ""),
     ("east_quarter", "The East Quarter", "Quarter", 18000.0, 2000.0, -173.7, "The newest streets in Wonderland, raised over what was open ground.", ""),
-    ("great_spire", "The Great Spire", "Landmark", 0.0, 23400.0, 90.0, "Framed by the camera Wonderland placed to look at it.", ""),
-    ("grand_clock", "The Grand Clock", "Landmark", 10603.0, -927.7, -5.0, "Framed by the camera Wonderland placed to look at it.", ""),
-    ("teapot_court", "Teapot Court", "Landmark", -11830.9, -7143.9, -156.0, "Framed by the camera Wonderland placed to look at it.", ""),
-    ("colossal_key", "The Colossal Key", "Landmark", 20342.2, -14247.3, 69.0, "Framed by the camera Wonderland placed to look at it.", ""),
-    ("floating_stair", "The Floating Stair", "Landmark", -3347.4, 14277.2, 99.0, "Framed by the camera Wonderland placed to look at it.", ""),
-    ("lantern_lane", "Lantern Lane", "Landmark", -16640.7, 10666.8, -98.0, "Framed by the camera Wonderland placed to look at it.", ""),
-    ("the_cloister", "The Cloister", "Landmark", 10516.1, 13141.2, 57.3, "Framed by the camera Wonderland placed to look at it.", ""),
+    ("great_spire", "The Great Spire", "Landmark", 0.0, 23400.0, 90.0, "The Great Spire of Golden Arrival.", ""),
+    ("grand_clock", "The Grand Clock", "Landmark", 10603.0, -927.7, -5.0, "The Grand Clock of Golden Arrival.", ""),
+    ("teapot_court", "Teapot Court", "Landmark", -11830.9, -7143.9, -156.0, "An arrival court facing the giant teapot, framed by a rose arch.", ""),
+    ("colossal_key", "The Colossal Key", "Landmark", 20342.2, -14247.3, 69.0, "A balustraded terrace beside the colossal key, framed by a rose arch.", ""),
+    ("floating_stair", "The Floating Stair", "Landmark", -3347.4, 14277.2, 99.0, "The Floating Stair.", ""),
+    ("lantern_lane", "Lantern Lane", "Landmark", -16640.7, 10666.8, -98.0, "Lantern Lane.", ""),
+    ("the_cloister", "The Cloister", "Landmark", 10516.1, 13141.2, 57.3, "A terrace walk along the cloister, framed by a rose arch.", ""),
 ]
 
 
