@@ -100,8 +100,58 @@ namespace WonderlandUi
 		return Out;
 	}
 
+	/**
+	 * THE SAME TINT, MIXED WHERE THE EYE SEES IT -- the Julius Live Terminal's plates use this one.
+	 *
+	 * "A few hundredths above black" is true in LINEAR terms and false on screen: the sRGB curve is steepest
+	 * at the bottom, so TintPlate's 0.055 of gold on Srgb(9, 11, 15) lands at sRGB ~(68, 51, 24) -- a dark
+	 * BROWN -- and at the plate's 58% alpha the world shows through it. That is the washed-out brown/gray the
+	 * founder reported on 2026-10-01 ("black must actually look black").
+	 *
+	 * Here the weight is a fraction of the accent's peak in DISPLAY values: 0.045 of Wonderland gold lifts a
+	 * black plate by ~(11, 9, 3) of 255 -- a warm black that still reads as black. TintPlate itself is left as
+	 * it is for the Companion surfaces, which were not part of the request.
+	 */
+	inline FLinearColor TintPlateDisplay(const FLinearColor& Plate, const FLinearColor& Accent, float Weight)
+	{
+		const FColor PlateS = Plate.ToFColor(true);
+		const FColor AccentS = Accent.ToFColor(true);
+		const float Peak = static_cast<float>(FMath::Max3(AccentS.R, AccentS.G, AccentS.B));
+		if (Peak <= 0.0f)
+		{
+			return Plate;
+		}
+		const float Scale = 255.0f * Weight / Peak;
+		const auto Mix = [Scale](uint8 Base, uint8 Channel)
+		{
+			return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(static_cast<float>(Base) + static_cast<float>(Channel) * Scale), 0, 255));
+		};
+		FLinearColor Out = FLinearColor(FColor(Mix(PlateS.R, AccentS.R), Mix(PlateS.G, AccentS.G), Mix(PlateS.B, AccentS.B)));
+		Out.A = Plate.A;
+		return Out;
+	}
+
 	inline FLinearColor WindowFill()             { return Srgb(9, 11, 15, 0.58f); }
 	inline FLinearColor SectionFill()            { return Srgb(11, 13, 18, 0.72f); }
+
+	/**
+	 * THE JULIUS LIVE TERMINAL'S DEPTHS, darkest first (founder, 2026-10-01):
+	 *
+	 *   body + header       deepest black, nearly opaque: it anchors the interface
+	 *   JULIUS 3.3 output   the darkest panel, so the bright output reads hardest
+	 *   agent sections      dark glass a shade above the body: Architect / Coder / Reviewer stay distinct
+	 *   command rows        lighter, more translucent glass
+	 *   input               near-opaque black
+	 *
+	 * None is fully opaque: the world stays visible, subdued, behind every layer -- ~14% through the body and
+	 * ~6-8% through the panels that sit on it. Composited over a bright gold-glass world the body reads at
+	 * sRGB ~(38, 32, 20); the old plate (linear tint, 58%) read at ~(115, 88, 48).
+	 */
+	inline FLinearColor JuliusBodyFill()         { return Srgb(4, 5, 7, 0.86f); }
+	inline FLinearColor JuliusOutputFill()       { return Srgb(2, 3, 4, 0.55f); }
+	inline FLinearColor JuliusSectionFill()      { return Srgb(20, 21, 26, 0.48f); }
+	inline FLinearColor JuliusRowFill()          { return Srgb(28, 29, 34, 0.40f); }
+	inline FLinearColor JuliusInputFill()        { return Srgb(3, 4, 6, 0.88f); }
 
 	// The sub-agent column in the founder's frame is set in a warm coral, the
 	// counterpart of the loop column's gold.

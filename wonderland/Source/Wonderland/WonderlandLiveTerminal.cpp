@@ -79,14 +79,19 @@ int32 SWonderlandHexBadge::OnPaint(const FPaintArgs& Args, const FGeometry& Allo
 
 /* ------------------------------------------------------------- terminal */
 
+// THE PLATES ARE TINTED IN DISPLAY SPACE (TintPlateDisplay): the linear-space TintPlate lifted these near-black
+// fills to a visible brown, which at their old 58% alpha read as washed-out brown/gray over the world. The
+// borders, headings and lettering are unchanged; only the plates' fill and alpha moved.
 SWonderlandLiveTerminal::SWonderlandLiveTerminal()
-	: WindowBrush(WonderlandUi::TintPlate(WonderlandUi::WindowFill(), WonderlandUi::JuliusAccent(), 0.055f),
+	: WindowBrush(WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusBodyFill(), WonderlandUi::JuliusAccent(), 0.045f),
 		10.0f, WonderlandUi::JuliusGold(0.40f), 1.0f)
-	, SectionBrush(WonderlandUi::TintPlate(WonderlandUi::SectionFill(), WonderlandUi::JuliusAccent(), 0.045f),
+	, SectionBrush(WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusSectionFill(), WonderlandUi::JuliusAccent(), 0.040f),
 		7.0f, WonderlandUi::JuliusGold(0.40f), 1.0f)
-	, InputBrush(WonderlandUi::TintPlate(WonderlandUi::Srgb(5, 6, 9, 0.72f), WonderlandUi::JuliusAccent(), 0.040f),
+	, OutputBrush(WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusOutputFill(), WonderlandUi::JuliusAccent(), 0.030f),
+		7.0f, WonderlandUi::JuliusGold(0.40f), 1.0f)
+	, InputBrush(WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusInputFill(), WonderlandUi::JuliusAccent(), 0.035f),
 		6.0f, WonderlandUi::JuliusGold(0.40f), 1.0f)
-	, SlotBrush(WonderlandUi::TintPlate(WonderlandUi::Srgb(8, 9, 12, 0.58f), WonderlandUi::JuliusAccent(), 0.040f),
+	, SlotBrush(WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusRowFill(), WonderlandUi::JuliusAccent(), 0.035f),
 		6.0f, WonderlandUi::JuliusGold(0.18f), 1.0f)
 	, BrushAccent(WonderlandUi::JuliusAccent())
 {
@@ -94,20 +99,23 @@ SWonderlandLiveTerminal::SWonderlandLiveTerminal()
 
 void SWonderlandLiveTerminal::RebuildChrome()
 {
-	// THE SAME FOUR BRUSHES THE CONSTRUCTOR BUILDS, from whatever the Julius accent is now. Kept in one place
+	// THE SAME FIVE BRUSHES THE CONSTRUCTOR BUILDS, from whatever the Julius accent is now. Kept in one place
 	// because a constructor and a theme-follower that build the same surface from two copies of the same
 	// expression drift, and the drift shows up as a panel that changes colour only after a restart.
 	WindowBrush = FSlateRoundedBoxBrush(
-		WonderlandUi::TintPlate(WonderlandUi::WindowFill(), WonderlandUi::JuliusAccent(), 0.055f),
+		WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusBodyFill(), WonderlandUi::JuliusAccent(), 0.045f),
 		10.0f, WonderlandUi::JuliusGold(0.40f), 1.0f);
 	SectionBrush = FSlateRoundedBoxBrush(
-		WonderlandUi::TintPlate(WonderlandUi::SectionFill(), WonderlandUi::JuliusAccent(), 0.045f),
+		WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusSectionFill(), WonderlandUi::JuliusAccent(), 0.040f),
+		7.0f, WonderlandUi::JuliusGold(0.40f), 1.0f);
+	OutputBrush = FSlateRoundedBoxBrush(
+		WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusOutputFill(), WonderlandUi::JuliusAccent(), 0.030f),
 		7.0f, WonderlandUi::JuliusGold(0.40f), 1.0f);
 	InputBrush = FSlateRoundedBoxBrush(
-		WonderlandUi::TintPlate(WonderlandUi::Srgb(5, 6, 9, 0.72f), WonderlandUi::JuliusAccent(), 0.040f),
+		WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusInputFill(), WonderlandUi::JuliusAccent(), 0.035f),
 		6.0f, WonderlandUi::JuliusGold(0.40f), 1.0f);
 	SlotBrush = FSlateRoundedBoxBrush(
-		WonderlandUi::TintPlate(WonderlandUi::Srgb(8, 9, 12, 0.58f), WonderlandUi::JuliusAccent(), 0.040f),
+		WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusRowFill(), WonderlandUi::JuliusAccent(), 0.035f),
 		6.0f, WonderlandUi::JuliusGold(0.18f), 1.0f);
 }
 
@@ -441,8 +449,9 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeSection(const FString& Title, c
 {
 	RestingStates.Add(Title, State);
 	const auto StateNow = [this, Title]() { return GetSectionState(Title); };
+	// JULIUS 3.3 is the terminal's own output: it sits on the darkest plate, the three peers on dark glass.
 	return SNew(SBorder)
-		.BorderImage(&SectionBrush)
+		.BorderImage(Title == TEXT("JULIUS 3.3") ? &OutputBrush : &SectionBrush)
 		.Padding(FMargin(9.0f, 5.0f))
 		[
 			SNew(SVerticalBox)

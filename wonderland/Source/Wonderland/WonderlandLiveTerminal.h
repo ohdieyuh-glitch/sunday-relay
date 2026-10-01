@@ -253,6 +253,8 @@ private:
 
 	FSlateRoundedBoxBrush WindowBrush;
 	FSlateRoundedBoxBrush SectionBrush;
+	/** The JULIUS 3.3 section's plate: the darkest, so the terminal's own output has the most contrast. */
+	FSlateRoundedBoxBrush OutputBrush;
 	FSlateRoundedBoxBrush InputBrush;
 	FSlateRoundedBoxBrush SlotBrush;
 	FEditableTextBoxStyle InputStyle;
