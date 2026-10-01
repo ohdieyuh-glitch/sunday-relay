@@ -223,9 +223,13 @@ async function pageFeed(input: {
   store: ProjectBrainPostgresStore; wakeups: ProjectBrainWakeups | null; projectId: string; cursor: ProjectBrainCursor;
   runId: string | null; waitMs: number;
 }): Promise<ProjectBrainRouteResult> {
+  // A LONG POLL ANSWERS WITH EVENTS OR AT ITS DEADLINE -- never on a wake-up that brought nothing. A wake is only
+  // "re-read now": the listener coming up wakes every follower, and so does another run's write, so a page that
+  // returned on the first wake would hand its client an empty answer a moment before the change it was waiting for.
+  const deadline = Date.now() + input.waitMs;
   let page = await input.store.eventsAfter({ projectId: input.projectId, cursor: input.cursor, runId: input.runId });
-  if (page.events.length === 0 && input.waitMs > 0) {
-    await waitForProjectBrainWake(input.wakeups, input.projectId, input.waitMs);
+  while (page.events.length === 0 && Date.now() < deadline) {
+    await waitForProjectBrainWake(input.wakeups, input.projectId, deadline - Date.now());
     page = await input.store.eventsAfter({ projectId: input.projectId, cursor: page.cursor, runId: input.runId });
   }
   return ok({
