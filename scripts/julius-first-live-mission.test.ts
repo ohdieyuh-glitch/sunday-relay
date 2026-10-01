@@ -6,7 +6,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { liveBillingPaths, parseLiveMissionContract } from '../relay-bridge/julius-live-mission';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/executor-effects';
-import { HOSTED_ALLOWED_TOOLS, HOSTED_DISALLOWED_TOOLS } from '../relay-bridge/hosted-coding-agent/hosted-envelope';
+import {
+  HOSTED_ALLOWED_TOOLS, HOSTED_CHILD_MODEL_PIN_KEYS, HOSTED_DISALLOWED_TOOLS, hostedChildEnv,
+} from '../relay-bridge/hosted-coding-agent/hosted-envelope';
 import { claudeAuthLine, claudeAuthSourceLine, type ClaudeAuthProvenance } from '../relay-bridge/hosted-coding-agent/hosted-auth';
 import { sdkExecutableCandidates } from '../relay-bridge/hosted-coding-agent/hosted-login-probe';
 import { PREFLIGHT_LIMITS, PREFLIGHT_POLICY } from './julius-live-preflight';
@@ -207,6 +209,26 @@ describe('the paid stage is gated, and the unpaid stage cannot pay', () => {
     expect(workflow).toContain('reviewer=xai/grok-build-0.1');
   });
 
+  /**
+   * THE CODER'S RUNTIME IS PINNED EXACTLY (smoke 36848579269, 2026-10-01).
+   *
+   * Agent SDK 0.3.220 bundled Claude Code 2.1.220, which does not know claude-opus-5-5: it
+   * canonicalised it as claude-opus-5, sent a `fallback-credit` beta that no newer CLI sends, and the
+   * API answered the smoke's one request with HTTP 400. 2.1.286 is the CLI the founder's token-only
+   * qualification passed on. A version range would let an install drift off it again.
+   */
+  it('runs the coder on exactly Agent SDK 0.3.286 (Claude Code 2.1.286), never a version range', () => {
+    const sdk = '@anthropic-ai/claude-agent-sdk';
+    const pkg = JSON.parse(read('package.json')) as { dependencies?: Record<string, string> };
+    expect(pkg.dependencies?.[sdk], 'an exact version, never a range').toBe('0.3.286');
+    const lock = JSON.parse(read('package-lock.json')) as { packages: Record<string, { version?: string; dependencies?: Record<string, string> }> };
+    expect(lock.packages['']?.dependencies?.[sdk], 'the lockfile records the same exact spec').toBe('0.3.286');
+    for (const name of [sdk, `${sdk}-linux-x64`]) expect(lock.packages[`node_modules/${name}`]?.version, name).toBe('0.3.286');
+    const installed = JSON.parse(readFileSync(resolve(ROOT, 'node_modules', sdk, 'package.json'), 'utf8')) as { version?: string; claudeCodeVersion?: string };
+    expect(installed.version, 'the SDK actually installed').toBe('0.3.286');
+    expect(installed.claudeCodeVersion, 'the Claude Code CLI it bundles').toBe('2.1.286');
+  });
+
   it('configures no fallback provider and no scripted adapter', () => {
     // The composition has no import through which a scripted adapter could
     // arrive; this guards the other end — a deployment variable that would
@@ -276,6 +298,24 @@ describe('no credential is committed, and none can leave the runner', () => {
       expect(line, 'stdout to a file the check script judges; stderr discarded').toMatch(/ > "\$sub\/(status|smoke)\.json" 2>\/dev\/null$/u);
     }
     expect(workflow, 'the file a paid run executes starts no process').not.toMatch(/julius-subscription-check\.mjs" /u);
+  });
+
+  /**
+   * THE SMOKE QUALIFIES THE CODING AGENT'S OWN ENVIRONMENT. The coder's child pins the
+   * same two housekeeping slots to its requested model (`hostedChildEnv`), so a smoke in
+   * which only that model produced output vouches for the environment the paid run uses.
+   *
+   * The one name the smoke does not set is CLAUDE_CODE_NO_MODEL_FALLBACK=1, which the
+   * coder always sets. A served request is unchanged by it (measured spend-free,
+   * 2026-10-01). A fallback only follows a refused request, and a refused request fails
+   * the smoke either way. The founder chose the coder-side fix for PR #305.
+   */
+  it('the smoke pins exactly the housekeeping slots the Coding Agent pins, to the same model', () => {
+    const pinned = [...ENV_ALLOW_LIST.matchAll(/ (ANTHROPIC_[A-Z_]+)="\$RELAY_HOSTED_CODING_MODEL"/gu)].map((match) => match[1]).sort();
+    expect(pinned).toEqual([...HOSTED_CHILD_MODEL_PIN_KEYS].sort());
+    const coder = hostedChildEnv({ apiKey: '', mode: 'CLAUDE_SUBSCRIPTION', model: 'claude-opus-5-5' });
+    for (const name of HOSTED_CHILD_MODEL_PIN_KEYS) expect(coder[name], name).toBe('claude-opus-5-5');
+    expect(coder.CLAUDE_CODE_NO_MODEL_FALLBACK, 'the coder itself can never fall back').toBe('1');
   });
 
   it('the subscription smoke runs on its own exact phrase AND before every paid run, and sends one literal request', () => {

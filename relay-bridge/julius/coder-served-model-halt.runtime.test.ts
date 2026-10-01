@@ -273,16 +273,27 @@ describe.each([
 /* ------------------------------------------------ no downgrade, by construction */
 
 describe('no session can be launched with a model to fall back to', () => {
-  it('the SDK is asked for the requested model, with no fallbackModel, no model in the child env, and no settings file', async () => {
+  it('the SDK is asked for the requested model, with no fallbackModel, no OTHER model in the child env, and no settings file', async () => {
     // Detection above STOPS a substitute after it answered. This is the half that keeps the runtime
-    // from choosing one: a `fallbackModel` option, an ANTHROPIC_MODEL-style variable or a settings
-    // file could each name another model before any turn is taken.
+    // from choosing one. Any of these could name another model before a turn is taken:
+    //   - a `fallbackModel` option;
+    //   - an ANTHROPIC_MODEL-style variable;
+    //   - a settings file;
+    //   - since Claude Code 2.1.286, the CLI itself, which re-sends a refused turn to an older model.
+    // So the child's only model-bearing names are:
+    //   - the two housekeeping slots, pinned to the REQUESTED model;
+    //   - the switch that forbids the CLI's own fallback.
     const run = await runMission({ sessions: [EXACT] });
     expect(run.sessionOptions).toHaveLength(1);
     const options = run.sessionOptions[0]!;
     expect(options.model).toBe(REQUESTED);
     expect('fallbackModel' in options, 'no fallback model is ever named').toBe(false);
-    expect(Object.keys(options.env as Record<string, string>).filter((key) => /MODEL/iu.test(key))).toEqual([]);
+    const env = options.env as Record<string, string>;
+    expect(Object.keys(env).filter((key) => /MODEL/iu.test(key)).sort(), 'no other model-bearing variable')
+      .toEqual(['ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL', 'CLAUDE_CODE_NO_MODEL_FALLBACK']);
+    expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'a housekeeping slot names the requested model, never another').toBe(REQUESTED);
+    expect(env.ANTHROPIC_SMALL_FAST_MODEL, 'a housekeeping slot names the requested model, never another').toBe(REQUESTED);
+    expect(env.CLAUDE_CODE_NO_MODEL_FALLBACK, 'and the runtime may not choose a substitute itself').toBe('1');
     expect(options.settingSources, 'no settings file may name one either').toEqual([]);
   });
 });
