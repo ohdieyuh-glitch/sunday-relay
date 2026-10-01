@@ -95,7 +95,7 @@ import {
 } from './julius-architecture-drift';
 import { juliusResultChannelPermitted } from './julius-worker-authority';
 import {
-  JULIUS_WORKSPACE_LIMITS, juliusFailureIsContentRefusal, juliusScopeViolations,
+  JULIUS_WORKSPACE_LIMITS, juliusFailureIsContentRefusal, juliusRunHaltingFailureClass, juliusScopeViolations,
   readJuliusCodingAgentImplementation, sanitizeJuliusCodingAgentReport,
   type JuliusCodingAgentImplementation,
 } from './julius-coding-agent';
@@ -671,6 +671,13 @@ const APPROVAL_REQUEST_RETRY_MS = 5_000;
  *    The claim refuses such a run, so only a denial landing after the claim
  *    reaches here, and a denial ends the run (`advanceRun`, APPROVAL_DENIED).
  *    This boundary used to check PENDING only, so that work was dispatched.
+ *  - A run-ending failure class recorded on the run
+ *    (`JULIUS_RUN_HALTING_FAILURE_CLASSES`: a coder answered by a model it did
+ *    not ask for), on a run that has not reached FAILED yet: the task ends
+ *    FAILED and is never dispatched. `advanceRun` fails the run only after the
+ *    tick, and the claim query does not read this class. So a sibling claimed
+ *    in the same tick, or while that move lost a race, is stopped here, before
+ *    it can be sent to the same mis-serving path.
  * Work already admitted is not reached from here: pause does not kill work in
  * flight (`julius-lifecycle-runtime.ts`).
  */
@@ -688,12 +695,17 @@ async function holdAtDispatchBoundary(
     ? [] : await deps.store.pendingApprovals(run.runId, run.projectId);
   const denied = deps.store.deniedApprovals === undefined
     ? [] : await deps.store.deniedApprovals(run.runId, run.projectId);
-  if (JULIUS_CLAIMABLE_RUN_STATES.includes(run.state) && pending.length === 0 && denied.length === 0) return null;
+  const halting = deps.store.haltingFailureClasses === undefined
+    ? [] : (await deps.store.haltingFailureClasses(run.runId, run.projectId))
+      .map(juliusRunHaltingFailureClass).filter((value): value is string => value !== null);
+  if (JULIUS_CLAIMABLE_RUN_STATES.includes(run.state)
+    && pending.length === 0 && denied.length === 0 && halting.length === 0) return null;
 
   const terminal = run.state === 'CANCELLED' || run.state === 'FAILED' || run.state === 'COMPLETED';
-  const refused = !terminal && denied.length > 0;
-  const reasonCode = refused ? 'RUN_APPROVAL_DENIED'
-    : pending.length > 0 && !terminal ? 'RUN_AWAITING_APPROVAL' : `RUN_${run.state}`;
+  const refused = !terminal && (denied.length > 0 || halting.length > 0);
+  const reasonCode = !terminal && denied.length > 0 ? 'RUN_APPROVAL_DENIED'
+    : !terminal && halting.length > 0 ? `RUN_${halting[0]!.toUpperCase()}`
+      : pending.length > 0 && !terminal ? 'RUN_AWAITING_APPROVAL' : `RUN_${run.state}`;
   const now = deps.clock.now();
   await deps.store.finishTask({
     taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration,
@@ -705,6 +717,7 @@ async function holdAtDispatchBoundary(
     facts: {
       reasonCode, runState: run.state, pendingApprovals: pending.length, deniedApprovals: denied.length,
       handedBack: !terminal && !refused,
+      ...(halting.length === 0 ? {} : { haltingFailureClass: halting[0]! }),
     },
   });
   return { kind: 'REFUSED', outcome: { kind: 'HELD', taskId: claim.taskId, reasonCode, runState: run.state } };
@@ -1549,6 +1562,16 @@ export async function runClaimedTask(
   let lastProviderId = deps.router.providerOf(outcome.status === 'COMPLETED' ? outcome.workerId : null);
 
   while (outcome.status !== 'COMPLETED' && outcome.status !== 'DENIED') {
+    /**
+     * A MODEL THAT WAS NOT ASKED FOR IS NOT ROUTED AROUND.
+     *
+     * Rerouting would do one of two things. Another worker on the same
+     * subscription asks the same path again, and is answered by the same model.
+     * Another provider is the substitute the founder ruled out (2026-09-30: no
+     * automatic downgrade). So the task ends here, and the run ends with it
+     * (`advanceRun`).
+     */
+    if (juliusRunHaltingFailureClass(outcome.failureClass) !== null) break;
     const selected = deps.router.eligibleWorkerIds({
       role, taskType: claim.taskType, capability: request.capability,
       policy: request.policy, excludedWorkerIds: tried,

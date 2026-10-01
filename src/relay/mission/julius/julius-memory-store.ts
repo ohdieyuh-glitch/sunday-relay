@@ -46,6 +46,7 @@ import { MAX_TASK_RECOVERIES, planJuliusRecovery, type JuliusRecoveryAction } fr
 import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
 import { JULIUS_CLAIMABLE_RUN_STATES } from './julius-state-path';
 import { JuliusEventIdConflict, canonicalJuliusEventIdentity, type JuliusOperationalEvent } from './julius-events';
+import { juliusRunHaltingFailureClass } from './julius-coding-agent';
 import type { JuliusTrajectoryEvent } from './julius-trajectory';
 import type { JuliusContextSnapshot } from './julius-context-snapshot';
 import { juliusTaskContractBindingDigest, type JuliusTaskContract } from './julius-task-contract';
@@ -100,6 +101,8 @@ interface ResultRow {
 export interface JuliusMemoryStore
   extends JuliusRuntimeStore, JuliusSubagentStore,
   JuliusApprovalStore, JuliusLifecycleStore, JuliusTimelineReader {
+  /** Served here, as on PostgreSQL: a run-ending class is enacted in both. */
+  haltingFailureClasses(runId: string, projectId: string): Promise<readonly string[]>;
   /* ---- seeding, for tests and offline runs ---- */
   seedRun(run: JuliusRunRow): void;
   seedTask(runId: string, task: JuliusTask): void;
@@ -937,6 +940,20 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         && typeof facts.contractRevision === 'number' && typeof facts.bindingDigest === 'string'
         ? { contractId: facts.contractId, taskId: facts.contractTaskId, contractRevision: facts.contractRevision, bindingDigest: facts.bindingDigest }
         : null;
+    },
+
+    async haltingFailureClasses(runId, projectId) {
+      if (!inProject(runId, projectId)) return [];
+      // In append order, which is this model's sequence: first recorded first.
+      // The row's own project too, as the PostgreSQL join binds it: this model
+      // does not refuse an event whose project is not its run's.
+      const found: string[] = [];
+      for (const event of eventLog) {
+        if (event.runId !== runId || event.projectId !== projectId || event.type !== 'task.failed') continue;
+        const halting = juliusRunHaltingFailureClass(event.facts.failureClass);
+        if (halting !== null && !found.includes(halting)) found.push(halting);
+      }
+      return found;
     },
   };
 }

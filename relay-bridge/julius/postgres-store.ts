@@ -13,7 +13,7 @@
  */
 
 import type { Pool } from 'pg';
-import type { JuliusApprovalStore, JuliusRecoveryDriver, JuliusRuntimeStore, JuliusTimelineReader } from '../../src/relay/mission/julius';
+import type { JuliusApprovalStore, JuliusRecoveryDriver, JuliusRuntimeReader, JuliusRuntimeStore, JuliusTimelineReader } from '../../src/relay/mission/julius';
 import { JuliusPostgresRepository } from '../../src/relay/persistence/julius-postgres';
 import { JuliusRecoveryPostgresRepository } from '../../src/relay/persistence/julius-recovery-postgres';
 import { JuliusContextPostgresRepository } from '../../src/relay/persistence/julius-context-postgres';
@@ -54,6 +54,7 @@ import { JuliusLifecyclePostgresRepository } from '../../src/relay/persistence/j
 export function createJuliusPostgresRuntimeStore(
   pool: Pool,
 ): JuliusRuntimeStore & JuliusRecoveryDriver & JuliusTimelineReader
+  & Required<Pick<JuliusRuntimeReader, 'haltingFailureClasses'>>
   & Required<Pick<JuliusApprovalStore, 'pendingApprovals' | 'deniedApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>> {
   const runs = new JuliusPostgresRepository(pool);
   const results = new JuliusRecoveryPostgresRepository(pool);
@@ -93,6 +94,11 @@ export function createJuliusPostgresRuntimeStore(
     repairRoundsFor: reader.repairRoundsFor.bind(reader),
     activeTaskCount: reader.activeTaskCount.bind(reader),
     executedBindingFor: reader.executedBindingFor.bind(reader),
+    // A coder answered by a model it did not ask for ENDS THE RUN (`advanceRun`),
+    // and the dispatch boundary refuses the run's claims. Both read the class
+    // back off `task.failed` through this. Unbound, the run would fail as
+    // TASK_FAILED and a sibling would still be dispatched.
+    haltingFailureClasses: reader.haltingFailureClasses.bind(reader),
     recordFinding: findings.recordFinding.bind(findings),
     putTaskContract: contracts.putTaskContract.bind(contracts),
     challengeTaskContract: contracts.challengeTaskContract.bind(contracts),

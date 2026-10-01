@@ -1001,7 +1001,11 @@ describe('Q8 — a live Coding Agent can ask, and the ask reaches the mission', 
     settingSources: [], includePartialMessages: false as const,
   });
 
-  /** A hosted session that did the work and ended with exactly this message. */
+  /**
+   * A hosted session that did the work and ended with exactly this message. It ATTESTS the requested model the
+   * way a real session does, by its output turns and the result's `modelUsage`: the served-model guard (founder
+   * rule, 2026-09-30: no automatic downgrade) stops a session that does not.
+   */
   const session = (finalText: string | null): HostedRunOutcome => ({
     kind: 'completed',
     observation: {
@@ -1009,6 +1013,8 @@ describe('Q8 — a live Coding Agent can ask, and the ask reaches the mission', 
       initSeen: true, actualModel: 'claude-fable-5', sessionId: 'sess-q8',
       numTurns: 4, resultSubtype: 'success', isError: false, terminalReason: null, finalText,
       usage: { inputTokens: 100, outputTokens: 50, totalCostUsd: 0.25, source: 'runtime_reported' },
+      turnModels: [{ model: 'claude-fable-5', turns: 4, outputTokens: 50 }],
+      resultModelUsage: [{ model: 'claude-fable-5', canonicalModel: null, inputTokens: 100, outputTokens: 50 }],
     },
     envelope: HOSTED_ENVELOPE,
     startedAt: '2026-09-12T00:00:00.000Z',

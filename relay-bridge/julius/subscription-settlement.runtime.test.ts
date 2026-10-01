@@ -67,7 +67,13 @@ const result = (over: Record<string, unknown>) => ({
   type: 'result', subtype: 'success', is_error: false, result: 'Implemented the slug.', num_turns: 3, duration_ms: 1_200,
   total_cost_usd: PRICED_USD, usage: { input_tokens: 500, output_tokens: 60 }, permission_denials: [], session_id: 'sess-1', ...over,
 });
-const SUCCESS = [init, result({})];
+/**
+ * A TURN OF THE SESSION and the result's own account of it, both naming the requested model: the
+ * attestation a real session carries, and the one the served-model guard reads (founder rule,
+ * 2026-09-30: no automatic downgrade). Without it a success is an unattested session, and fails.
+ */
+const turn = { type: 'assistant', parent_tool_use_id: null, session_id: 'sess-1', message: { model: 'claude-x', content: [{ type: 'text', text: 'Implemented.' }], usage: { input_tokens: 500, output_tokens: 60 } } };
+const SUCCESS = [init, turn, result({ modelUsage: { 'claude-x': { inputTokens: 500, outputTokens: 60 } } })];
 const MAX_TURNS = [init, result({ subtype: 'error_max_turns', is_error: true, total_cost_usd: FAILED_PRICED_USD })];
 /** A session whose runtime never starts: the SDK throws before any message, as a failed spawn does. */
 const NEVER_STARTED = Object.freeze({ neverStarted: true as const });

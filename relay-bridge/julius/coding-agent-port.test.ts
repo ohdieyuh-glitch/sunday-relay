@@ -213,7 +213,8 @@ describe('C3 — a failure is classified by the provider and disposed of by the 
     const transient = JULIUS_CODING_AGENT_FAILURES.filter((failure) => juliusCodingAgentFailureDisposition(failure).retryable);
     const operator = JULIUS_CODING_AGENT_FAILURES.filter((failure) => juliusCodingAgentFailureDisposition(failure).operatorAction);
     expect(transient).toEqual(['PROVIDER_UNAVAILABLE', 'RATE_LIMITED', 'TIMEOUT', 'INTERRUPTED', 'PROCESS_EXIT']);
-    expect(operator).toEqual(['CREDIT_UNAVAILABLE', 'AUTHENTICATION', 'LAUNCH_FAILED', 'CONTINUATION_UNAVAILABLE']);
+    // The served-model pair is the founder's STOP (2026-09-30): only a person can change what the path serves.
+    expect(operator).toEqual(['CREDIT_UNAVAILABLE', 'AUTHENTICATION', 'LAUNCH_FAILED', 'CONTINUATION_UNAVAILABLE', 'SERVED_MODEL_MISMATCH', 'SERVED_MODEL_UNATTESTED']);
     // Nothing transient needs an operator, and unknown is never transient.
     expect(transient.filter((failure) => operator.includes(failure))).toEqual([]);
     expect(juliusCodingAgentFailureDisposition('UNCLASSIFIED').retryable).toBe(false);

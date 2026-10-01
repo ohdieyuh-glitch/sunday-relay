@@ -42,6 +42,7 @@ import {
   type JuliusPipelineDependencies, type JuliusTaskOutcome,
 } from './julius-task-pipeline';
 import { continuationConcurrency } from './julius-continuation';
+import { juliusRunHaltingFailureClass } from './julius-coding-agent';
 import type { JuliusClaimedTask, JuliusRecoveryDriver, JuliusRunRow } from './julius-runtime-ports';
 import { validateJuliusEvent } from './julius-events';
 import { JULIUS_RUNTIME_VERSION } from './julius-runtime';
@@ -766,6 +767,31 @@ export class JuliusRunLoop {
     if (!JULIUS_TERMINAL_MISSION_STATES.includes(run.state) && deniedApprovals !== undefined
       && (await deniedApprovals.call(this.deps.store, runId, projectId)).length > 0) {
       return this.#applyTarget(run, { state: 'FAILED', reasonCode: 'APPROVAL_DENIED' }, tasks, decisions, 0);
+    }
+
+    /**
+     * A CODER ANSWERED BY A MODEL IT DID NOT ASK FOR ENDS THE RUN, NOT ONLY ITS
+     * TASK (`JULIUS_RUN_HALTING_FAILURE_CLASSES`; founder rule, 2026-09-30).
+     *
+     * The failed task alone was not a stop:
+     *  - the task graph read FAILED as the generic `TASK_FAILED`;
+     *  - while any sibling was RUNNABLE the target was READY, so the next claim
+     *    sent that sibling to the same mis-serving path.
+     * So the recorded class is enacted here, the way a denial is:
+     *  - read off the `task.failed` rows that already exist, never written as a
+     *    decision no verifier made;
+     *  - before the pause and pending holds and before the verification sweep;
+     *  - FAILED, with the class as the run's own reason, which `run.failed`
+     *    then carries;
+     *  - one winner under the same version race as the denial.
+     * The dispatch boundary refuses the run's claims meanwhile, so a sibling
+     * claimed before this lands is ended, never dispatched.
+     */
+    const haltingFailureClasses = this.deps.store.haltingFailureClasses;
+    if (!JULIUS_TERMINAL_MISSION_STATES.includes(run.state) && haltingFailureClasses !== undefined) {
+      const [halting] = (await haltingFailureClasses.call(this.deps.store, runId, projectId))
+        .map(juliusRunHaltingFailureClass).filter((value): value is string => value !== null);
+      if (halting !== undefined) return this.#applyTarget(run, { state: 'FAILED', reasonCode: halting }, tasks, decisions, 0);
     }
 
     /**

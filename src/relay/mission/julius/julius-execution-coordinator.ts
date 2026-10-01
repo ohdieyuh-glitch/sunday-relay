@@ -5,6 +5,7 @@ import type { JuliusContractReviewCharge } from './julius-task-contract';
 import { isJuliusContentDigest, juliusDurableArtifactRef } from './julius-artifact-reference';
 import { juliusEvidenceAuthority, juliusMintedEvidenceId } from './julius-worker-authority';
 import { juliusStoreErrorClass, juliusStoreErrorIsTransient, type JuliusStoreErrorClass } from './julius-store-failure';
+import { juliusRunHaltingFailureClass } from './julius-coding-agent';
 
 /** The cost a provider reported on its own result, or null when it reported none. */
 const reportedUsdMicros=(result:JuliusProviderResult|null):number|null=>{
@@ -155,6 +156,19 @@ async function dispatchWithinDeadline<T>(
 const carriedDiagnostics=(failure:JuliusDispatchError):{diagnostics?:Record<string,string|number|boolean|null>}=>{
  const flat=flattenDiagnostics(failure.diagnostics);
  return Object.keys(flat).length===0?{}:{diagnostics:flat};
+};
+/**
+ * A RUN-ENDING CLASS IS ALSO THE ROW'S REASON.
+ *
+ * `/result` answers "why did this fail" from the last `task.failed` row, as
+ * `reasonCode ?? code`. For a coder answered by a model it did not ask for,
+ * the code alone (WORKER_EXECUTION_FAILURE) names nothing a person can act on.
+ * The run's own `run.failed` carries the same class (`advanceRun`). Only the
+ * closed list gets a reason here, so every other row keeps its shape.
+ */
+const haltingReason=(failureClass:string|null):{reasonCode?:string}=>{
+ const halting=juliusRunHaltingFailureClass(failureClass);
+ return halting===null?{}:{reasonCode:halting};
 };
 export interface JuliusExecutionClaim { readonly runId:string;readonly projectId:string;readonly taskId:string;readonly leaseOwner:string;readonly leaseGeneration:number;readonly task:JuliusTask;readonly capability:string;readonly contextId:string; }
 export interface JuliusResourceRequest { readonly usdMicros:number;readonly inputTokens:number;readonly outputTokens:number;readonly toolCalls:number;readonly runtimeMs:number; }
@@ -659,7 +673,7 @@ export class JuliusExecutionCoordinator {
      * exactly where an unrecorded change set becomes the next attempt's. */
     const carriedImplementation=failure.implementation===undefined?{}:{implementation:failure.implementation};
     if(failure.retryable&&request.policy.automaticRetry){await this.bookkeeping(()=>this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)}));return{status:'RETRY',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};}
-    await this.bookkeeping(()=>this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)}));
+    await this.bookkeeping(()=>this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...haltingReason(failure.failureClass),...flattenDiagnostics(failure.diagnostics)}));
     return{status:'FAILED',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};
    }catch(error){
     throw new JuliusPersistenceUnavailable(!handed?'persist_before_dispatch':answered===null?'persist_during_dispatch':'persist_after_answer',handed,juliusStoreErrorClass(error));

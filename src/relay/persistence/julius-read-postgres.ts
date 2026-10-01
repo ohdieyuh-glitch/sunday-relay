@@ -5,6 +5,7 @@ import type {
   JuliusRecordedDecision, JuliusRuntimeReader, JuliusTask, JuliusTaskContractBinding,
   JuliusVerificationDecision, JuliusWorkerRole,
 } from '../mission/julius';
+import { JULIUS_RUN_HALTING_FAILURE_CLASSES, juliusRunHaltingFailureClass } from '../mission/julius/julius-coding-agent';
 import { brainKindFromStored } from './julius-brain-kinds';
 
 /**
@@ -220,6 +221,26 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
       && typeof facts.contractRevision === 'number' && typeof facts.bindingDigest === 'string'
       ? { contractId: facts.contractId, taskId: facts.contractTaskId, contractRevision: facts.contractRevision, bindingDigest: facts.bindingDigest }
       : null;
+  }
+
+  /**
+   * THE RUN-ENDING CLASSES ON THE RUN'S `task.failed` ROWS, each once, first
+   * recorded first. The closed list is passed in rather than spelled in the
+   * SQL, so the query and the domain cannot disagree about what ends a run. The
+   * answer is narrowed through the same guard on the way out.
+   */
+  async haltingFailureClasses(runId: string, projectId: string): Promise<readonly string[]> {
+    const result = await this.pool.query<{ failure_class: unknown }>(
+      `SELECT e.payload->'facts'->>'failureClass' AS failure_class FROM relay_wonderland.events e
+         JOIN relay_wonderland.julius_runs r ON r.run_id=e.stream_id AND r.project_id=e.project_id
+        WHERE e.stream_id=$1 AND r.project_id=$2 AND e.event_type='julius.task.failed'
+          AND e.payload->'facts'->>'failureClass'=ANY($3::text[])
+        GROUP BY 1 ORDER BY MIN(e.sequence) LIMIT $4`,
+      [runId, projectId, [...JULIUS_RUN_HALTING_FAILURE_CLASSES], JULIUS_READ_LIMIT],
+    );
+    return result.rows
+      .map((row) => juliusRunHaltingFailureClass(row.failure_class))
+      .filter((value): value is string => value !== null);
   }
 }
 

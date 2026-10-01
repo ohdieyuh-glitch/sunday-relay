@@ -15,7 +15,7 @@ import type { ClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
 import { classifyClaudeCodeResult } from '../../src/relay/connectors/claude-code/result-classification';
 import { classifyHostedFailure } from '../hosted-coding-agent/hosted-failure-reason';
 import { DEFAULT_HOSTED_LIMITS, hostedLimitsForAllocation, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
-import { dominantTurnModel, hostedServedModel, type HostedObservation } from '../hosted-coding-agent/hosted-observation';
+import { dominantTurnModel, hostedServedModel, hostedServedModelVerdict, type HostedObservation } from '../hosted-coding-agent/hosted-observation';
 import {
   loadHostedQuery,
   runHostedCodingAgent,
@@ -460,6 +460,32 @@ export function createClaudeCodeCodingAgentProvider(input: {
         };
       }
 
+      /**
+       * THE MODEL THAT ANSWERED IS THE ONE ASKED FOR, OR THE DISPATCH STOPS
+       * (founder rule, 2026-09-30: no automatic downgrade; a STOP rather than a
+       * substitute). A finished session whose attested model is another, or
+       * whose model cannot be attested at all, is a failure the domain never
+       * retries and a person has to answer. Nothing it produced becomes a
+       * result. The session did run, so it is charged what it cost.
+       */
+      const verdict = hostedServedModelVerdict(hostedServedModel(outcome.observation), input.requestedModel);
+      if (verdict !== 'MATCH') {
+        const mismatch = verdict === 'MISMATCH';
+        return {
+          kind: 'failed',
+          failure: mismatch ? 'SERVED_MODEL_MISMATCH' : 'SERVED_MODEL_UNATTESTED',
+          runtimeStarted: true,
+          costUsdMicros: hostedCoderCost(input.authMode, outcome.observation).costUsdMicros,
+          safeMessage: mismatch
+            ? 'The hosted Coding Agent was answered by a model other than the one requested; the dispatch stops rather than accept a substitute.'
+            : 'The hosted Coding Agent finished without attesting which model answered; the dispatch stops rather than assume it.',
+          providerFailureClass: mismatch ? 'coder_served_model_mismatch' : 'coder_served_model_unattested',
+          diagnostics: hostedCoderDiagnostics({
+            taskType: request.identity.taskType, requestedModel: input.requestedModel,
+            observed: outcome.observation, limits, ...(input.authMode === undefined ? {} : { authMode: input.authMode }), outcome: 'failed', failureReason: null,
+          }),
+        };
+      }
       const diagnostics = hostedCoderDiagnostics({
         taskType: request.identity.taskType, requestedModel: input.requestedModel,
         observed: outcome.observation, limits, ...(input.authMode === undefined ? {} : { authMode: input.authMode }), outcome: 'succeeded',

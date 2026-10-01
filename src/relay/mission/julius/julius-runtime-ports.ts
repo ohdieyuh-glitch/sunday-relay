@@ -396,6 +396,17 @@ export interface JuliusRuntimeReader {
    * is a fact about the record and not an absence of one.
    */
   executedBindingFor(taskId: string, projectId: string): Promise<JuliusTaskContractBinding | null>;
+  /**
+   * THE CLASSES ON THIS RUN'S `task.failed` ROWS THAT END THE RUN
+   * (`JULIUS_RUN_HALTING_FAILURE_CLASSES`), each once, first recorded first.
+   *
+   * Read back off the durable record, like the binding above, and not written
+   * anywhere new: the coordinator already records the class when a task fails.
+   * `advanceRun` enacts it (FAILED, with the class as the run's reason), and the
+   * dispatch boundary refuses the run's claims. Optional, so a store that cannot
+   * say reads as holding none. The PostgreSQL store's own type requires it.
+   */
+  haltingFailureClasses?(runId: string, projectId: string): Promise<readonly string[]>;
 }
 
 /**
