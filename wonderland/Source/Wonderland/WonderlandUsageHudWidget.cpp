@@ -228,6 +228,13 @@ void UWonderlandUsageHudWidget::RebuildBands()
 	ProvenanceLine = ProvenanceText(Hud, Authority);
 	ReasonLine = Authority.Reason.bKnown ? Authority.Reason.Value
 		: (Hud.CompoundAgent.UnavailableReason.bKnown ? Hud.CompoundAgent.UnavailableReason.Value : FString());
+	// A PLAYER'S HUD SAYS IT ONCE (Second Wonderland, RC5 film): the beta caption above already reads NOT CONNECTED IN THIS
+	// BETA, and this second line sat under the LLM Companion terminal's frame, half covered -- as it did under RC4's
+	// terminal. One line of words fewer; nothing on the HUD moves.
+	if (bPreviewReading && !WonderlandBeta::IsDeveloperSession())
+	{
+		ReasonLine.Reset();
+	}
 
 	// The building itself is in the geometry module, where the usage harness can
 	// run it. What is left here is plumbing.

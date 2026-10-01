@@ -24,17 +24,17 @@ Each row has a weight; the weights total 100. A row earns:
 partly unverified scores 0, not a blend. **Readiness = sum of weight x credit.** Second's independent sign-off on the RC
 is built into every 1.0, so nothing above 75% is possible before the final RC.
 
-## Ledger (as of RC3: CORE's evidence; Second's RC3 pass in progress)
+## Ledger (as of RC4: CORE's evidence and Second's review; RC5 in progress)
 
-| # | Requirement | Weight | Credit | Evidence (RC3 = 0.1.0-rc3, 90c8d0fa) | Weakest part / open blockers |
+| # | Requirement | Weight | Credit | Evidence (RC3 = 0.1.0-rc3, 90c8d0fa; RC4 = 0.1.0-rc4, 3aa43e1f) | Weakest part / open blockers |
 |---|---|---|---|---|---|
-| R1 | Environmental world complete (locked, 25/25) | 8 | 0.75 | WORLD_COMPLETION_MATRIX.md; RC3 QA Q02-Q08 travel/map/teleports PASS | **B45 candidate**: 13 world materials fall back to the engine's default material in the package (if it is visible it is a P1 and R1 drops to 0) |
+| R1 | Environmental world complete (locked, 25/25) | 8 | 0.75 | WORLD_COMPLETION_MATRIX.md; RC3 and RC4 QA Q02-Q08 travel/map/teleports PASS; RC4: 0 "missing usage flag Nanite" in all three boots (RC3 had 8) | B45 fixed in RC4 (founder D4) |
 | R2 | Gameplay regression G1-G7 (locked, 18/18) | 8 | 0.75 | RC3 QA Q09-Q11 PASS | -- |
 | R3 | First launch: clean start, spawn, Relay Dog init, clear path in, no developer knowledge | 8 | 0.75 | RC3 Q00.1 welcome, Q00.2 lock-down; prerequisites + closure (0 unresolved); Esc -> menu -> QUIT used for real in the RC3 soak ("WLUI quit chosen from the menu", clean exit) | -- |
 | R4 | Core creation loop, truthful about Julius | 12 | 0.5 | RC3 Q13 eight contracts through + and the terminal, Q14 restored, Q15 deleted, Q17 the simulated mission plays and says SIMULATED, Q20 limit 48 | the WATCH A SIMULATED MISSION button itself is only statically verified (Q17 makes the same call) |
 | R5 | Session stability: launch / quit / relaunch, focus loss, window changes (single-player) | 3 | 0 | RC3: four clean boots and quits; the menu QUIT works | focus loss not yet verified; RC3's two window modes (B40 fix) not yet verified in a package |
 | R6 | Private/project space and project avatar flow, as implemented | 3 | 0.75 | nothing to test (D2); RC3 Q18 `/pa` changes nothing in a player session; welcome says single-player | -- |
-| R7 | Wonder Web and every beta-facing screen: no dead buttons or placeholders, no debug exposure, back/close/Esc, sane errors | 8 | 0 | RC3 Q00.2/Q00.3; frames | **B11 open (founder D3)**; **B44 open on RC3** (Flame Color, fixed in RC4 source) |
+| R7 | Wonder Web and every beta-facing screen: no dead buttons or placeholders, no debug exposure, back/close/Esc, sane errors | 8 | 0 | RC3 Q00.2/Q00.3; RC4 Q00.5 (D3: role names, sample browsers developer-only), Q01-Q01f (B44 Flame Color) | **B49 open on RC4** (the founder's companion-terminal requirement, 2026-10-01; fixed in RC5 source, accepted on video) |
 | R8 | Save / persistence across quit, relaunch, interruption | 8 | 0.75 | RC3 Q12/Q14/Q16/Q15 across a restart; Q21.1-Q21.5 a third boot on corrupted files: no crash, bad files set aside, next save sealed | -- |
 | R9 | Error / recovery: services absent, timeouts, failed travel / load, bad input, corrupt files | 7 | 0.5 | RC3 Q00.3 services absent, Q19 bad terminal input, Q21 corrupt files | failed travel / load verified in the editor only (travel timeout squeeze proof) |
 | R10 | Performance on the founder's laptop, measured in the package | 7 | 0.75 | RC3 perf in the game's own window (borderless 1536x960, EPIC, HW RT): 30-52 fps averages, no frame > 100 ms (table below); Second's RC2 matrix: every SETTINGS choice applies | -- |
@@ -45,9 +45,35 @@ is built into every 1.0, so nothing above 75% is possible before the final RC.
 | R15 | Clean-user test on the RC (no saves, no console, no developer knowledge) | 6 | 0 | Second's RC3 clean-user pass waits for an idle laptop | -- |
 | | **Total** | **100** | | | |
 
-**WONDERLAND BETA READINESS: 50.0%** (RC3, 2026-10-01). R1 6 + R2 6 + R3 6 + R4 6 + R6 2.25 + R8 6 + R9 3.5 + R10 5.25 +
-R12 5.25 + R13 3.75. RC3 is not the final RC: the founder's Flame Color (B44) needs RC4, and every row is re-earned
-there. If B45 proves visible, R1 is 0 and RC3 reads 44.0%.
+**WONDERLAND BETA READINESS: 50.0%** (RC4, 2026-10-01). R1 6 + R2 6 + R3 6 + R4 6 + R6 2.25 + R8 6 + R9 3.5 + R10 5.25 +
+R12 5.25 + R13 3.75. RC4 closed B44, B45 and D3, but it is not the final RC: the founder's companion-terminal requirement
+(B49, P1) arrived the same day and needs RC5, so R7 stays 0 and every row is re-earned on RC5.
+
+### RC4 package evidence (CORE + Second)
+
+- Build: 0.1.0-rc4, source 3aa43e1f (label "Private Beta 0.1.0-rc4 | build 4debbacb"), zip sha256
+  DB4491C6558C749FCD3F913782E2819F7D0D8AC5CB02B5CB33306FB5065ADF32, 667,392,685 bytes, 81 files.
+- QA rerun on an idle laptop (`qa_rc4b.log`): 53 PASS, 1 FAIL over three boots. The FAIL is Q00.6, the window title
+  (P3, B52). Q05 passed, so run1's earlier Q05 failure was a person at the keyboard. Every Flame Color check (Q01-Q01f),
+  Q00.5 (D3), Q12 and Q21.1-Q21.7 passed. "missing usage flag Nanite": 0 in all three boots.
+- Second's static review of RC4: the zip matches the manifest, the folder matches the zip 81/81, the scan is clean,
+  the retired figures are gone, and B44 and D3 are correct.
+- Second's RC4 clean-user pass, part 1: the MOTW exe raises "The publisher could not be verified" (README gap, B51).
+  The first launch takes 25.8 s to WLBUILD and 34.4 s to LoadMap, cold. The welcome is correct at the borderless
+  default, D3 shows on the HUD, there are 0 listening endpoints after settle, and the exit is clean.
+  The interactive steps were paused when the founder returned.
+- Second's RC4 seed matrix: R01 PASS (an RC3-sealed contracts file restores in RC4). It was stopped at R02 by a
+  low-memory reaper and not resumed, because RC5 is certain.
+
+### RC5 in progress (CORE)
+
+- B49: one reusable companion console (SWonderlandCompanionConsole), fed by the sidekick runtime and the simulated
+  mission. Commit 78fced42 (local), plus a font-measure fix pending.
+- On a scratch package (RC4 content plus the new exe), QA Q24 passed (both consoles settle after a stop). Q22/Q23
+  failed on a QA timing error, since fixed: they sampled before the companions had joined the mission at its site.
+- Film3: the status row cycles the mark through six shapes and back in 2.0 s, the verb is pale while it grows and red
+  while it shrinks, the timer ticks once a second, the counter rises in place, and the transcript rises stage by stage.
+  Acceptance is Second's video procedure on the real RC5.
 
 ### RC3 package evidence (CORE)
 
@@ -112,7 +138,7 @@ survives a small private beta with a documented limitation. P3 is polish. Only P
 | B08 | P1 | debug exposure | Console, debug keys, `/pa` reachable | player lock-down; `/pa` developer-only | fixed; RC2 Q00.2; RC3 Q18 |
 | B09 | P1 | truthfulness | Developer instructions and founder paths shown to players | beta text; dev hint behind -wldev | fixed; RC2 Q00.3 + static |
 | B10 | P1 | input | Ctrl+W hijacked walking | binding removed | fixed; static |
-| B11 | P1 | brand | "GPT 6 Astra" / "Claude Code Fable 5" on the HUD from boot (terminal titles, usage rows, the simulated mission's terminals, Project Brain samples) AND the Wonder Web sample pages styled as Instagram and Google (plus a store named after the retired "Arden"), reachable by players as B -> WONDER WEB -> Ctrl+W (Second, RC3; the ledger had wrongly called them unreachable) | founder decision D3 | **open (founder)** |
+| B11 | P1 | brand | "GPT 6 Astra" / "Claude Code Fable 5" on the HUD from boot (terminal titles, usage rows, the simulated mission's terminals, Project Brain samples) AND the Wonder Web sample pages styled as Instagram and Google (plus a store named after the retired "Arden"), reachable by players as B -> WONDER WEB -> Ctrl+W (Second, RC3; the ledger had wrongly called them unreachable) | founder decision D3: role names for testers; sample browsers developer-only | fixed in RC4; Q00.5 |
 | B12 | P1 | persistence | Saves inside the package folder | InstalledProjectBuild.txt -> %LOCALAPPDATA% | fixed; RC1 created %LOCALAPPDATA%\Wonderland\Saved; Second's clean-user on RC2 |
 | B13 | P1 | package content | Engine unlit material not cooked | always-cook | fixed; RC2 Q00.4 |
 | B14 | P1 | package content | practical_lights.json not staged | NonUFS stage | fixed; RC2 Q00.4 (1,464 lamps) |
@@ -127,7 +153,7 @@ survives a small private beta with a documented limitation. P3 is polish. Only P
 | B23 | P2 | truthfulness | Sample sub-agents (foreign terminal file) and sample Project Brain notes | Project Brain labels them sample data | open (documented) |
 | B24 | P2 | robustness | Non-atomic saves; 1,024+ char ids crashed boots | atomic saves; IsSafeId | fixed; RC3 hostile boot Q21 |
 | B25 | P2 | UI | A colour click rebuilds the HUD and clears the terminal transcript | -- | open |
-| B26 | P3 | stability | Companion terminal can stick on STREAMING (foreign file) | unreachable in player sessions (companions offline) | open |
+| B26 | P3 | stability | Companion terminal can stick on STREAMING (foreign file) | the old terminal is no longer mounted (RC5): the console's stream ends with the runtime's turn | superseded in RC5 source |
 | B27 | P2 | persistence | Saved and worn skin can diverge if a figure fails to load | -- | open |
 | B28 | P2 | package hygiene | PDB, founder sheets, old sources shipped | release script excludes them | fixed; RC2 zip listing |
 | B29 | P2 | creation | Proposals labelled NOT SYNCED though never saved | "NOT SAVED" + README (RC3) | fixed in RC3 source |
@@ -145,11 +171,16 @@ survives a small private beta with a documented limitation. P3 is polish. Only P
 | B41 | P2 | truthfulness | The HUD shows "Julius 100% / Claude Code Fable 5 100% / GPT 6 Astra 100%" beside a welcome that says nothing is connected (Second) | player sessions show a dash and "NOT CONNECTED IN THIS BETA · NO USAGE MEASURED"; layout untouched (RC3) | fixed in RC3 source |
 | B42 | P3 | privacy / logs | Thousands of "FORENSIC" and per-batch warnings in a player's log (Second) | developer sessions only; a material mismatch still logs for everyone (RC3) | fixed in RC3 source |
 | B44 | P1 | founder requirement | Flame Color (founder, 2026-10-01): a separate FLAME row, independent of primary and secondary, on Jack Flame (head, paw, foot, tail flames), Skeleton Flame (spectral flames; skull, body, eyes untouched) and Baal (blue flame layer); hidden on Relay OG and Celestial Light. RC3's Jack fire still followed SECONDARY | figures tag their fire `flame`/`flame_light`; one global FLAME colour in its own file (no new config name); rows in Menu > COLORS and the Wardrobe; QA Q01-Q01f, Q12 and Q21.6-Q21.7. Cubs keep their own colours (EWonderlandBodyRole::SubAgent) | fixed in RC4 source |
-| B45 | P1? | world in the package | 13 world material instances log "missing usage flag Nanite! Default Material will be used in game" (LeafMid, Water, the Tartarus and Icarus metals, GlassTeal, the Noctis set): their masters M_V2_Foliage / M_V2_Surface / M_V2_SurfaceHD were never saved with bUsedWithNanite, which the editor sets in memory every launch and a cooked build cannot | set the flag on the three masters and resave them: an editor (commandlet) write to the shared Content tree, so the founder's call | **classification pending Second's package frames** |
+| B45 | P1? | world in the package | 13 world material instances log "missing usage flag Nanite! Default Material will be used in game" (LeafMid, Water, the Tartarus and Icarus metals, GlassTeal, the Noctis set): their masters M_V2_Foliage / M_V2_Surface / M_V2_SurfaceHD were never saved with bUsedWithNanite, which the editor sets in memory every launch and a cooked build cannot | set the flag on the three masters and resave them: an editor (commandlet) write to the shared Content tree, so the founder's call | fixed in RC4 (founder D4): 0 warnings in all three RC4 boots |
 | B46 | P3 | performance | SM_WL_VoxelCube is not cooked, so the package's figures use the engine's non-Nanite cube (the editor uses the Nanite one) | not cooked for RC4 on purpose: M_WL_EyeHalo and M_WL_Fire also lack the Nanite flag, so cooking the cube could turn parts of every skin default-grey | documented |
 | B47 | P3 | logs | Territory markers log "NO GROUND FOUND, standing at z=0" at BeginPlay, before their cells stream | -- | open |
 | B48 | P3 | package hygiene | The stage shipped retired figures (Apollo*, ArdenInfernal*, Bee, Hagoromo, SkeletonFlame, SkeletonFlameV1 and the Apollo/Arden cubs) | release script excludes them (RC4); sources kept | fixed in RC4 source |
 | B43 | P2 | performance | An integrated-GPU laptop at the default EPIC quality may run short of memory (the iGPU probe was stopped by memory pressure) | README: integrated graphics -> QUALITY LOW first (RC3); no automatic default (untestable here) | documented |
+| B49 | P1 | founder requirement | Companion terminals must match the Claude Code terminal experience (founder, 2026-10-01, reference IMG_2179.mov). Requirements: live rising output; an in-place status row with an animated emblem, a warm red-to-gold pulse, a live timer and truthful telemetry; follow-bottom scrolling with a new-output marker; prompt and footer; lifecycle lines; real state mapping; one reusable component; accepted on VIDEO | SWonderlandCompanionConsole + WonderlandCompanionWork; runtime and mission feeds; QA Q22-Q24; wl.Qa.ConsoleFilm (78fced42) | open on RC4; fixed in RC5 source; acceptance = Second's video procedure on RC5 |
+| B50 | P2 | truthfulness | Stopping a simulated mission (Missions panel, tests) never told the terminals: the companions stayed "working" with a live timer | StopFixture narrates the end (78fced42); Q24 | fixed in RC5 source |
+| B51 | P3 | distribution | README named only SmartScreen's dialog; a MOTW exe raises "The publisher could not be verified", and Smart App Control blocks unsigned apps outright (Second, RC4) | README lines (78fced42) | fixed in RC5 source |
+| B52 | P3 | distribution | The window title lost the build label: the engine writes its own title after the stamp (Q00.6, RC4) | the label is kept by a 1 s ticker (78fced42) | fixed in RC5 source |
+| B53 | P2 | dependency | A companion doing a REAL task needs a provider the founder connects. On this laptop OpenAI has no key and Claude Code is installed but not allowed. The runtime's development providers answer SIMULATED | the console labels the runtime's mode; the REAL-provider video waits for the founder | founder decision |
 
 ## Founder decisions
 

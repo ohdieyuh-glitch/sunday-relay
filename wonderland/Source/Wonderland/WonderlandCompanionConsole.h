@@ -286,6 +286,8 @@ public:
 	void ScrollRows(float Rows);
 	/** Back to the newest line, as the "new output" marker does when clicked. */
 	void FollowLive();
+	/** Esc exactly as the input receives it -- through the real key handler -- for the filmed acceptance run. */
+	void PressEscapeForQa() { HandleInputKeyDown(FGeometry(), FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0)); }
 
 	/** The accent the frame is drawn in as of its last theme follow (P1 item 9's proof). */
 	FLinearColor GetPaintedAccent() const { return BrushAccent; }
@@ -357,7 +359,8 @@ private:
 	FReply HandleInputKeyDown(const FGeometry& Geometry, const FKeyEvent& KeyEvent);
 	void Submit();
 	EActiveTimerReturnType FollowTheme(double InCurrentTime, float InDeltaTime);
-	void MeasureFont() const;
+	/** Measures the cell at the scale the console is drawn at; no scale reuses the last one. */
+	void MeasureFont(float Scale = -1.0f) const;
 
 	FString Title;
 	FLinearColor Accent = FLinearColor::White;

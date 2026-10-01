@@ -1631,6 +1631,7 @@ namespace
 		double Start = 0.0;
 		int32 Step = 0;
 		int32 Asked = 0;
+		int32 EscPressedFor = INDEX_NONE;
 		FTSTicker::FDelegateHandle Handle;
 	};
 	TSharedPtr<FQaFilm> GQaFilm;
@@ -1657,12 +1658,21 @@ namespace
 			return true;
 		}
 		// THE RUNTIME'S ASKS, spaced so the clip holds several whole turns -- ask, think, stream, done -- in both consoles
-		static const TCHAR* const Asks[] = {
-			TEXT("What does the Mission Contract at Castle Approach ask for?"),
-			TEXT("List the files in your scope, then check them."),
-			TEXT("Summarise what Jhinn just reported, in two sentences."),
-			TEXT("Run the scoped check again and report what changed."),
-			TEXT("Which part of that should Julius verify first?"),
+		// Each: when (seconds into the work), which console, what is asked, and how long into the turn Esc is pressed (0: never).
+		struct FFilmAsk
+		{
+			double At;
+			int32 Console;
+			const TCHAR* Ask;
+			double EscAfter;
+		};
+		static const FFilmAsk Asks[] = {
+			{1.0, 0, TEXT("What does the Mission Contract at Castle Approach ask for?"), 0.0},
+			{9.0, 1, TEXT("List the files in your scope, then check them."), 0.0},
+			{13.0, 0, TEXT("Summarise what Jhinn just reported, in two sentences."), 1.8},
+			{20.0, 0, TEXT("Which part of that should Julius verify first?"), 0.0},
+			{28.0, 1, TEXT("Run the scoped check again and report what changed."), 0.0},
+			{32.0, 0, TEXT("Thank you. Anything else before the review?"), 0.0},
 		};
 		switch (Film.Step)
 		{
@@ -1685,8 +1695,12 @@ namespace
 			{
 				if (Film.Mode == TEXT("runtime"))
 				{
-					U->SubmitCompanionLineForQa(0, Asks[0]);
-					Film.Asked = 1;
+					// THE RUNTIME'S OWN SLOW DEVELOPMENT MODEL ("slow enough to watch thinking and cancellation") -- chosen the
+					// way the console command chooses it; a new model is a new session, which the console announces. Put back
+					// when the film ends.
+					GEngine->Exec(World, TEXT("wl.Sidekicks.Model llm fixture-chat-slow"));
+					// the keyboard in the LLM Companion's console, as a visitor typing there would leave it
+					U->FocusCompanionTerminal(0);
 				}
 				else if (Missions != nullptr)
 				{
@@ -1697,10 +1711,33 @@ namespace
 			}
 			break;
 		case 2:
-			if (Film.Mode == TEXT("runtime") && Film.Asked < static_cast<int32>(UE_ARRAY_COUNT(Asks)) && In >= 3.0 + Film.Asked * 7.0)
+			if (Film.Mode == TEXT("runtime"))
 			{
-				U->SubmitCompanionLineForQa(Film.Asked % 2, Asks[Film.Asked]);
-				++Film.Asked;
+				const double Work = In - 3.0;
+				if (Film.Asked < static_cast<int32>(UE_ARRAY_COUNT(Asks)) && Work >= Asks[Film.Asked].At)
+				{
+					U->SubmitCompanionLineForQa(Asks[Film.Asked].Console, Asks[Film.Asked].Ask);
+					UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM asked console %d at %.1f s"), Asks[Film.Asked].Console, Work);
+					++Film.Asked;
+				}
+				// ESC, ONLY WHILE THE CONSOLE OFFERS IT -- through its real key handler, so what is filmed is the control working
+				const int32 Last = Film.Asked - 1;
+				if (Last >= 0 && Asks[Last].EscAfter > 0.0 && Film.EscPressedFor != Last && Work >= Asks[Last].At + Asks[Last].EscAfter)
+				{
+					Film.EscPressedFor = Last;
+					SWonderlandCompanionConsole* Console = U->GetCompanionConsoleForQa(Asks[Last].Console);
+					if (Console != nullptr && Console->IsInterruptHintShown())
+					{
+						UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM Esc pressed in console %d at %.1f s (footer '%s')"), Asks[Last].Console, Work,
+							*Console->GetFooterText());
+						Console->PressEscapeForQa();
+					}
+					else
+					{
+						UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM Esc NOT pressed: console %d offered no 'esc to interrupt' (footer '%s')"),
+							Asks[Last].Console, Console != nullptr ? *Console->GetFooterText() : TEXT("-"));
+					}
+				}
 			}
 			if (In >= Film.Seconds)
 			{
@@ -1708,6 +1745,11 @@ namespace
 				if (Missions != nullptr && Missions->IsFixtureRunning())
 				{
 					Missions->StopFixture();
+				}
+				if (Film.Mode == TEXT("runtime"))
+				{
+					// the runtime as the film found it
+					GEngine->Exec(World, TEXT("wl.Sidekicks.Model llm fixture-chat"));
 				}
 				Film.Step = 3;
 			}

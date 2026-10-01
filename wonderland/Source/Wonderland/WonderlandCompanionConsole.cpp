@@ -1081,18 +1081,30 @@ FReply SWonderlandCompanionConsole::HandlePress(const FGeometry& Geometry, const
 
 /* -------------------------------------------------------------------------------------------------------- paint */
 
-void SWonderlandCompanionConsole::MeasureFont() const
+void SWonderlandCompanionConsole::MeasureFont(float Scale) const
 {
-	if (CellW > 0.0f || !FSlateApplication::IsInitialized() || FSlateApplication::Get().GetRenderer() == nullptr)
+	if (Scale <= 0.0f)
+	{
+		Scale = MeasuredForScale > 0.0f ? MeasuredForScale : 1.0f;
+	}
+	Scale = FMath::Clamp(Scale, 0.25f, 8.0f);
+	if ((CellW > 0.0f && FMath::IsNearlyEqual(MeasuredForScale, Scale, 0.0005f))
+		|| !FSlateApplication::IsInitialized() || FSlateApplication::Get().GetRenderer() == nullptr)
 	{
 		return;
 	}
+	// MEASURED AT THE SCALE IT IS DRAWN AT. The font is rasterised at a whole pixel size -- 9 pt at the 1920x1200 scale is
+	// drawn at 14 px, not 13.3 -- so a measure taken at scale 1 ran 5% narrow and every long row ran four characters past
+	// the frame (film3). Measured here, the cell is the one actually drawn.
 	const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
-	const FVector2D Ten = Measure->Measure(FString(TEXT("0000000000")), Font, 1.0f);
-	CellW = FMath::Max(1.0f, static_cast<float>(Ten.X) / 10.0f);
-	LineH = FMath::Max(8.0f, static_cast<float>(Measure->GetMaxCharacterHeight(Font, 1.0f)));
+	const FVector2D Ten = Measure->Measure(FString(TEXT("0000000000")), Font, Scale);
+	CellW = FMath::Max(1.0f, static_cast<float>(Ten.X) / 10.0f / Scale);
+	LineH = FMath::Max(8.0f, static_cast<float>(Measure->GetMaxCharacterHeight(Font, Scale)) / Scale);
+	MeasuredForScale = Scale;
 	const float Dot = FMath::RoundToFloat(LineH * 0.36f);
 	DotBrush = FSlateRoundedBoxBrush(FLinearColor::White, Dot * 0.5f);
+	// a new cell width rewraps everything once
+	RowCols = 0;
 }
 
 void SWonderlandCompanionConsole::PaintText(const FGeometry& Geometry, FSlateWindowElementList& Out, int32 Layer, const FString& Text,
@@ -1354,7 +1366,7 @@ void SWonderlandCompanionConsole::PaintRow(const FGeometry& Geometry, FSlateWind
 int32 SWonderlandCompanionConsole::PaintMain(const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& Out, int32 LayerId) const
 {
 	using namespace WonderlandConsoleDetail;
-	MeasureFont();
+	MeasureFont(Geometry.Scale);
 	if (CellW <= 0.0f)
 	{
 		return LayerId;
@@ -1366,7 +1378,8 @@ int32 SWonderlandCompanionConsole::PaintMain(const FGeometry& Geometry, const FS
 	int32 Layer = LayerId + 1;
 
 	// ---- the width decides the rows: a resize rewraps everything once
-	const int32 Cols = FMath::Max(12, FMath::FloorToInt(W / CellW));
+	// one cell kept clear at the right, as a terminal keeps its last column for the cursor
+	const int32 Cols = FMath::Max(12, FMath::FloorToInt(W / CellW) - 1);
 	if (Cols != RowCols)
 	{
 		RowCols = Cols;
@@ -1520,7 +1533,7 @@ int32 SWonderlandCompanionConsole::PaintMain(const FGeometry& Geometry, const FS
 
 int32 SWonderlandCompanionConsole::PaintFooter(const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& Out, int32 LayerId) const
 {
-	MeasureFont();
+	MeasureFont(Geometry.Scale);
 	if (CellW <= 0.0f)
 	{
 		return LayerId;
