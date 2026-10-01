@@ -299,16 +299,22 @@ const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/u;
  * CREDENTIALS AND HIDDEN REASONING ARE REFUSED, NOT REDACTED. The same shapes the
  * persistence redactor knows, plus the common token families, kept local so the
  * domain does not depend on a persistence module.
+ *
+ * A KEY'S PREFIX STARTS A TOKEN. Without the left boundary `sk-[…]{8,}` matched inside
+ * `julius-task-contract.ts` and `julius-task-pipeline.ts`, so a person naming Julius's own files
+ * was refused as if they had pasted a key. Found by the Python evidence layer on its first real
+ * paid bundle (run 36915013287); `python/julius_brain_intel/safety.py` mirrors these shapes and
+ * `scripts/julius-brain-intel-python.test.ts` runs one corpus through both.
  */
 const SECRET_SHAPES: readonly RegExp[] = [
-  /sk-[A-Za-z0-9_-]{8,}/u,
-  /sk-ant-[A-Za-z0-9_-]{8,}/u,
-  /AKIA[0-9A-Z]{12,}/u,
+  /(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{8,}/u,
+  /(?<![A-Za-z0-9])sk-ant-[A-Za-z0-9_-]{8,}/u,
+  /(?<![A-Za-z0-9])AKIA[0-9A-Z]{12,}/u,
   /-----BEGIN [A-Z ]*PRIVATE KEY/u,
-  /gh[pousr]_[A-Za-z0-9]{20,}/u,
-  /github_pat_[A-Za-z0-9_]{20,}/u,
-  /xox[baprs]-[A-Za-z0-9-]{10,}/u,
-  /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/u,
+  /(?<![A-Za-z0-9])gh[pousr]_[A-Za-z0-9]{20,}/u,
+  /(?<![A-Za-z0-9])github_pat_[A-Za-z0-9_]{20,}/u,
+  /(?<![A-Za-z0-9])xox[baprs]-[A-Za-z0-9-]{10,}/u,
+  /(?<![A-Za-z0-9])eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/u,
   /\b(?:password|passwd|api[-_ ]?key|secret[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret)\s*[:=]\s*\S{6,}/iu,
   /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\/[^\s:@/]+:[^\s@/]+@/iu,
 ];

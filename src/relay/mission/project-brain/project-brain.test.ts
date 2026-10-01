@@ -72,6 +72,18 @@ describe('a Project Brain mutation is parsed against a closed shape', () => {
     expect(projectBrainForbiddenMaterial('Labels sit below their bars.')).toBeNull();
   });
 
+  it("does not take Julius's own file names for keys: a key shape starts at a word boundary", () => {
+    // Before the boundary, `sk-` matched inside "task-contract", so a person naming Julius's files was refused.
+    for (const innocent of ['src/relay/mission/julius/julius-task-contract.ts', 'julius-task-pipeline.ts', 'a desk-organiser-v2 note', 'mykeysk-ant-api03-FAKETESTNOTREAL']) {
+      expect(projectBrainForbiddenMaterial(innocent), innocent).toBeNull();
+    }
+    expect(parseProjectBrainMutation({ operation: 'CREATE', idempotencyKey: 'key-00000001', domain: 'USER_FACT', title: 'Touch julius-task-contract.ts only.' }))
+      .toMatchObject({ ok: true });
+    for (const secret of ['see sk-FAKETESTNOTREAL', '(sk-ant-api03-FAKETESTNOTREAL)', 'AKIAFAKETESTNOTREAL', 'xoxb-FAKETESTNOTREAL']) {
+      expect(projectBrainForbiddenMaterial(secret), secret).toBe('credential');
+    }
+  });
+
   it('refuses control characters, oversize text and an empty title', () => {
     expect(parseProjectBrainMutation({ operation: 'CREATE', idempotencyKey: 'key-00000001', domain: 'USER_FACT', title: 'a\u0000b' })).toMatchObject({ code: 'field_invalid' });
     expect(parseProjectBrainMutation({ operation: 'CREATE', idempotencyKey: 'key-00000001', domain: 'USER_FACT', title: 'x'.repeat(201) })).toMatchObject({ code: 'field_too_long' });
