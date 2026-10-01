@@ -1,0 +1,37 @@
+{
+ "relay_og": {
+  "ear_top": 287,
+  "head_block_top": 328,
+  "head_block_bottom": 419,
+  "head_block_width_median": 129,
+  "sole": 790
+ },
+ "celestial_light": {
+  "ear_top": 287,
+  "head_block_top": 333,
+  "head_block_bottom": 482,
+  "head_block_width_median": 184,
+  "sole": 790
+ },
+ "skeleton_flame": {
+  "ear_top": 287,
+  "head_block_top": 321,
+  "head_block_bottom": 331,
+  "head_block_width_median": 123,
+  "sole": 792
+ },
+ "jack_flame": {
+  "ear_top": 287,
+  "head_block_top": 344,
+  "head_block_bottom": 406,
+  "head_block_width_median": 153,
+  "sole": 790
+ },
+ "baal": {
+  "ear_top": 287,
+  "head_block_top": 344,
+  "head_block_bottom": 418,
+  "head_block_width_median": 169,
+  "sole": 791
+ }
+}

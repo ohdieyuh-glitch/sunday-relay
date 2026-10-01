@@ -1,0 +1,15 @@
+﻿SKINFILE Apollo.wlvox same
+SKINFILE ApolloV1.wlvox same
+SKINFILE ApolloV2.wlvox same
+SKINFILE ArdenInfernal.wlvox same
+SKINFILE ArdenInfernalV1.wlvox same
+SKINFILE ArdenInfernalV2.wlvox same
+SKINFILE Baal.wlvox same
+SKINFILE Bee.wlvox same
+SKINFILE CelestialLight.wlvox same
+SKINFILE Hagoromo.wlvox same
+SKINFILE JackFlame.wlvox same
+SKINFILE RelayOg.wlvox same
+SKINFILE SkeletonFlame.wlvox same
+SKINFILE SkeletonFlameV1.wlvox same
+SKINFILE SkeletonFlameV2.wlvox same

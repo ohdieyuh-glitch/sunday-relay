@@ -4,7 +4,8 @@
 >
 > **ENVIRONMENTAL WORLD COMPLETION: COMPLETE**
 >
-> **POST-COMPLETION GAMEPLAY REGRESSION: IN PROGRESS** -- three founder-observed player-facing regressions: Relay
+> **POST-COMPLETION GAMEPLAY REGRESSION: VERIFIED (2026-09-30 19:27) -- awaiting the founder's acceptance of the
+> rebuilt package.** It began IN PROGRESS with three founder-observed player-facing regressions: Relay
 > Dog skin locomotion on the non-OG skins, Jack Flame's secondary colour not reaching the tie, and teleport to
 > the new world locations. The environmental baseline (world, package, traversal, landscaping) is frozen; see
 > the POST-COMPLETION GAMEPLAY REGRESSION section at the end of this file.
@@ -19,6 +20,12 @@
 > in-game QA 11/11. Second Wonderland's independent falsification is running; the gate stays IN PROGRESS until it
 > reports and the founder accepts. **The gates are reported separately** (founder rule): environmental 25/25, gameplay
 > regression per the table below, Julius on its own ledger (accepted main 7c584df2, 82.00%).
+>
+> 2026-09-30 (evening): G1-G7 are FIXED (fdaa8ffe) and INDEPENDENTLY FALSIFIED by Second Wonderland on the final DLL,
+> and the package REBUILT from them passes its own in-game QA 27/27 across two boots. That QA reads Jack Flame's colours
+> off his materials, runs a Mission Contract on all five skins act by act, checks every body against Relay OG's
+> 174.15 uu, and finds the chosen skin and colour back after a restart. One founder DECISION is open: the costume
+> heads' proportions. Body height is exact; the face block sits 5.5 uu lower and is ~19% wider than Relay OG's.
 
 **Owner of this file: CORE ("Wonderland core continued").** The WORLD session ("Second wonderland session") edits
 only the rows and specs marked WORLD. Founder directive 2026-09-28: *"COMPLETE WONDERLAND AS AN ENTIRE WORLD ...
@@ -648,7 +655,7 @@ rebuild it (IC01's brief). **Founder decision:** (a) build them in the core, rep
 those identities to the outer world instead -- a tower quarter in the ICARUS march (Icarus's vertical silhouette)
 and a mushroom wood on a frontier (the forge's "mushroom woods" are one of the 24 quarter kinds).
 
-## POST-COMPLETION GAMEPLAY REGRESSION (founder, 2026-09-29 evening + 2026-09-30) -- G1-G5 FIXED, PACKAGE REBUILT AND QA'D; independent falsification pending
+## POST-COMPLETION GAMEPLAY REGRESSION (founder, 2026-09-29 evening + 2026-09-30) -- G1-G7 FIXED, INDEPENDENTLY FALSIFIED, PACKAGE REBUILT AND QA'D 27/27
 
 Scope: gameplay and system repair only. The completed world is the baseline and is not modified: landscaping, C7,
 radial and ring roads, hedge gates, Golden Arrival geometry, quarter layouts, TW / MG architecture, the world
@@ -766,3 +773,57 @@ head top), S3 capsule / camera / scale identical, S4 0 uu on every switch, S5 no
 start / end Z and lift identical, S7 Wardrobe framing identical (distance 285, body 174.2) -- 7/7. The Mission Contract
 hands hold at the new size (zh_42 0.00-0.04 uu) and locomotion passes (zh_44). The package QA gains Q10 (each skin's body
 against Relay OG, and the switch).
+
+**FINAL STATE, 2026-09-30 19:27 -- each gate three ways.** Columns:
+- editor: CORE's proofs in PIE;
+- independent: Second Wonderland, on DLL 15:56:38 / fdaa8ffe, with its own jobs and its own reading of the frames;
+- package: the REBUILT package's in-game QA (`wl.Qa.PackageCheck` + `wl.Qa.PackagePersist`).
+
+| gate | editor | independent | package |
+|---|---|---|---|
+| G1 Mission Contract on every skin (incl. G1b / G1c / G1d) | zh_14, zh_19c, zh_36, zh_37, zh_42 | **PASS**: zs_09 15/15 deployments, 5/5 old jam starts, 15/15 mid-act resets; zs_08 hand gap <= 0.05 uu | **PASS**: Q09 + Q11.1-4; all 6 acts on all 5 skins; hand p95 <= 0.04 uu; 0 stall windows |
+| G2 Jack Flame secondary on fire, tie and suit, with save / reload | zh_22 10/10, zh_26 3/3 | **PASS** on DLL 11:05:45 (the colour path is unchanged in fdaa8ffe) | **PASS**: Q01 read off his materials; Q12 after a restart |
+| G3 Teleport, incl. TW01 / TW02 / MG01 and rim -> centre | zh_23 10/10, zh_24 33/33 | **PASS**: zs_10 104 map trips, 0 fails; squeeze 10/10; the founder's sequence 2/2; deploy 3/3 | **PASS**: Q02, Q03, Q05-Q08, Q09 (arrivals in 1.1-6.4 s) |
+| G4 Jack Flame head: the accepted crown plume | zh_18 | **PASS**: zs_11 at the new scale | **PASS**: the staged JackFlame.wlvox is byte-identical to the tree (15/15 skin files) |
+| G5 World map declutter | zh_21 11/11 | **PASS** on DLL 11:05:45 (map code unchanged) | **PASS**: Q04.1-3; 0 overlaps and 0 labels over markers at x1 / x4 / x8 |
+| G7 Every skin's body at Relay OG's height | zh_45 7/7 | **PASS**: zs_07 / zs_07b; feet and ear tops within 1 px; switch dZ 0; capsule / camera identical | **PASS**: Q10.1-5; 174.15 uu on all 5; switch 0.00 uu |
+
+**PACKAGE v2.** `C:/dev/iwonder/_wonderland_package_regression_0930`, rebuilt 19:13 from fdaa8ffe + the QA v2 below.
+BuildCookRun SUCCESSFUL in 215 s: 1,783 packages, 0 errors.
+
+The package QA used to assume what it should measure. It now reads:
+- Jack Flame's suit, tie and fire hues off his own materials (`DescribeMaterialColours`), with the suit kept a deep
+  cloth and the collar black;
+- a Mission Contract on every skin, judged per act on the worn hands against the canon's (p95 <= 1.5 uu), on every act
+  Relay OG performs, and on the Dog's headway round the circle (no 10 s window under 60 uu);
+- each skin's body against Relay OG and the switch's vertical jump;
+- across a SECOND boot, the skin and the colour the first boot chose.
+
+`Tools/boot_test_package_qa.ps1` also hashes the loose-staged RelaySkins against the tree.
+
+Results:
+- run 1: 26/26, 706 s;
+- run 2: Q12 1/1;
+- **27/27 PASS, 0 FAIL, 0 fatal or assert lines** in either log.
+
+The window ran at 1280x800: the engine shrank 1920x1200 to the work area. Frames and verdict lines:
+`Tools/captures/zh/package_0930b/`.
+
+**Second Wonderland's falsification** found, and itself recomputed, three instrument faults:
+- a swap run counting canon motion from before the swap;
+- enum strings parsed as "MOVE_WALKING: 1>" and "DEVELOPED: 2>";
+- a 70%-width head rule.
+
+None of the three was a fault in the game; each was re-judged from the recorded data. CORE checked the swap and the enum
+cases independently.
+
+**FOUNDER DECISION OPEN -- costume head proportions.** At Relay OG's body height:
+- Every costume's feet and ear tops match OG's within 1 px (0.35 uu).
+- The costume FACE BLOCK starts 5.5 uu lower than OG's and is about 19% wider: 153-169 px against 129 px in Second's
+  fire-off side frames.
+
+The cause is the skin generator's base Dog, which has longer ears and a bigger head than the canon. It predates the
+height rule, and no single uniform scale can match both the ear tops and the face top. Matching the face blocks means
+reshaping every costume head, Jack Flame's locked head included, so it waits for the founder.
+Evidence: `Tools/captures/zh/skin_heights_verify/head_blocks_vs_relay_og.png` (green: the shared ear top; yellow:
+OG's face-block top; magenta: the costumes'), `head_profile.json`.

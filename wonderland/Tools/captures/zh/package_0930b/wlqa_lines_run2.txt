@@ -1,0 +1,5 @@
+﻿[2026.10.01-02.26.37:686][  0]LogWonderlandQa: Display: WLQA armed for the restart check (world WL_V2_GoldenArrival_WP2)
+[2026.10.01-02.26.49:983][403]LogWonderlandQa: Display: WLQA frame C:/dev/iwonder/_wonderland_package_regression_0930/Windows/Wonderland/Saved/Screenshots/WLQA/06_after_restart_jack_rose.png saved 1280x800
+[2026.10.01-02.26.49:983][403]LogWonderlandQa: Display: WLQA Q12 PASS | after a restart: skin jack_flame (want jack_flame); saved secondary 1.000,0.250,0.550 chosen yes (want 1.000,0.250,0.550); painted: want 1.000,0.250,0.550: suit 0.330,0.083,0.182, tie 9.139,2.285,5.027, fire 10.582,2.645,5.820 (hues match); pinstripes 5.4x the suit's luminance (>= 2.5); collar 0.034,0.032,0.040 (kept black: yes)
+[2026.10.01-02.26.53:063][527]LogWonderlandQa: Display: WLQA restored skin jack_flame and the designed colours
+[2026.10.01-02.26.53:063][528]LogWonderlandQa: Display: WLQA END pass=1 fail=0
