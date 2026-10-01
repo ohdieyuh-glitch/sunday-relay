@@ -2229,10 +2229,11 @@ namespace
 				F.At = QaNow();
 				break;
 			}
-			// every figure but the Dog's own costume out of the shot (a cub set is rebuilt for each skin, so this runs per shot)
+			// every figure but the Dog's own costume out of the shot (a cub set is rebuilt for each skin, so this runs per shot) --
+			// and never the wardrobe stage's own figure, which the stage owns: hidden, the wardrobe's preview rendered black
 			for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
 			{
-				if (*It != D->GetCostume() && !It->IsHidden())
+				if (*It != D->GetCostume() && !It->IsHidden() && Cast<AWonderlandSkinStage>(It->GetOwner()) == nullptr)
 				{
 					It->SetActorHiddenInGame(true);
 					F.Hidden.Add(*It);
@@ -2285,6 +2286,15 @@ namespace
 			if (In >= 0.5)
 			{
 				PC->SetViewTargetWithBlend(D, 0.0f);
+				// every figure the shots hid comes back first: the wardrobe is seen as a player sees it
+				for (const TWeakObjectPtr<AActor>& Figure : F.Hidden)
+				{
+					if (AActor* A = Figure.Get())
+					{
+						A->SetActorHiddenInGame(false);
+					}
+				}
+				F.Hidden.Reset();
 				if (UWonderlandUiSubsystem* U = QaUi(World))
 				{
 					U->ToggleProjectBrain();
