@@ -14,6 +14,7 @@
 //
 // Not in Shipping: a development instrument, like every other wl.* switch.
 #include "CoreMinimal.h"
+#include "Misc/CoreDelegates.h"
 #include "WonderlandCompanionConsole.h"
 
 #if !UE_BUILD_SHIPPING
@@ -1768,6 +1769,34 @@ namespace
 		}
 		return true;
 	}
+
+	/* ================================================================ wl.Qa.HangOnExit (RC6)
+	 *
+	 * THE EXIT WATCHDOG, PROVED RATHER THAN TRUSTED. RC5's soak ended with the engine's teardown deadlocked and the process
+	 * alive ten minutes later (WonderlandBeta::ArmExitWatchdog). That hang cannot be summoned on demand, so this makes one:
+	 * fifteen seconds after the world is up it quits, and its exit then sleeps for 60 s. The watchdog must end the process
+	 * about 20 s into the exit; the boot script measures when the process went.
+	 */
+	FAutoConsoleCommand GQaHangOnExit(
+		TEXT("wl.Qa.HangOnExit"),
+		TEXT("Test of the exit watchdog: quits 15 s from now with an exit that hangs 60 s on purpose. The process must end ~20 s into the exit."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			FCoreDelegates::OnExit.AddLambda([]()
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLQA HangOnExit: the exit now hangs for 60 s on purpose"));
+				GLog->Flush();
+				FPlatformProcess::Sleep(60.0f);
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLQA HangOnExit: the hang ended by itself -- the watchdog did NOT end the process"));
+			});
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([](float)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLQA HangOnExit: quitting now"));
+				FPlatformMisc::RequestExit(false);
+				return false;
+			}), 15.0f);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLQA HangOnExit armed: quitting in 15 s with an exit that hangs"));
+		}));
 
 	FAutoConsoleCommandWithWorldAndArgs GQaConsoleFilm(
 		TEXT("wl.Qa.ConsoleFilm"),

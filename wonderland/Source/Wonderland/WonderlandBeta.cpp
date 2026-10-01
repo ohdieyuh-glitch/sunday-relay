@@ -16,6 +16,7 @@
 #include "HAL/PlatformProcess.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CommandLine.h"
+#include "Misc/CoreDelegates.h"
 #include "Misc/Crc.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
@@ -135,6 +136,44 @@ namespace WonderlandBeta
 				return true;
 			}), 1.0f);
 		}
+	}
+
+	/**
+	 * THE QUIT ALWAYS ENDS (RC5 soak, 2026-10-01). After a 60-minute session the engine's own teardown deadlocked: the task
+	 * graph's destructor joined a worker that was blocked on a mutex. The window had gone, but the process stayed alive,
+	 * holding 1.1 GB of memory and the GPU's, until the soak killed it ten minutes later. The minidump and the symbolised
+	 * stacks are kept beside the soak. No Wonderland code runs background tasks; the wait was the engine's.
+	 *
+	 * The graceful exit still runs first and runs whole when it can. Everything a visitor makes is saved when it is made
+	 * (sealed saves, settings on apply), and a normal exit is over in about five seconds. If the teardown is still running
+	 * 20 s after the exit began, this ends the process with code 0.
+	 *
+	 * A plain OS thread, not an engine one, because the engine's threads are what is being torn down.
+	 */
+	void ArmExitWatchdog()
+	{
+#if PLATFORM_WINDOWS
+		static bool bArmed = false;
+		if (bArmed || GIsEditor)
+		{
+			return;
+		}
+		bArmed = true;
+		FCoreDelegates::OnEnginePreExit.AddLambda([]()
+		{
+			HANDLE Watchdog = ::CreateThread(nullptr, 64 * 1024, [](LPVOID) -> DWORD
+			{
+				::Sleep(20000);
+				::TerminateProcess(::GetCurrentProcess(), 0);
+				return 0;
+			}, nullptr, 0, nullptr);
+			if (Watchdog != nullptr)
+			{
+				::CloseHandle(Watchdog);
+			}
+			UE_LOG(LogTemp, Display, TEXT("WLBETA exit watchdog armed: a teardown still running in 20 s is ended"));
+		});
+#endif
 	}
 
 	void MigrateWindowMode()

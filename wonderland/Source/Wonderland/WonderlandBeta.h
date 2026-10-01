@@ -56,6 +56,12 @@ namespace WonderlandBeta
 	WONDERLAND_API void StampWindowTitle();
 
 	/**
+	 * THE QUIT ALWAYS ENDS. Armed once per run (not in the editor): when the engine begins its exit, a plain OS thread
+	 * waits 20 s and ends the process if the teardown has not. See the definition for why.
+	 */
+	WONDERLAND_API void ArmExitWatchdog();
+
+	/**
 	 * A saved EXCLUSIVE fullscreen comes back as borderless. Exclusive mode asks the display for the game's resolution,
 	 * which on a DPI-scaled laptop is a mode the panel does not have: it came up as a 640x480 popup (Second Wonderland,
 	 * RC2). Settings no longer offers it; this carries a profile that chose it forward.

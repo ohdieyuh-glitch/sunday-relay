@@ -330,6 +330,7 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 	// does not include. A developer's session (the editor, -wldev) keeps its tools and skips the welcome.
 	WonderlandBeta::LockDownPlayer(Controller);
 	WonderlandBeta::StampWindowTitle();
+	WonderlandBeta::ArmExitWatchdog();
 	WonderlandBeta::MigrateWindowMode();
 	UE_LOG(LogWonderlandUi, Display, TEXT("WLBUILD %s | %s session | local AI services %s"), *WonderlandBeta::BuildLabel(),
 		WonderlandBeta::IsDeveloperSession() ? TEXT("developer") : TEXT("player"),
@@ -417,12 +418,21 @@ void UWonderlandUiSubsystem::MountCompanionTerminals()
 		Console->SetIdleText(TEXT("Waiting for a mission"), false);
 	}
 	CompanionTerminals = {Llm, Agent};
+	// FRESH CONSOLES HAVE BEEN TOLD NOTHING. A colour change remounts them (RefreshChrome), and every "already shown" key
+	// kept from the last pair would stop this pair from hearing it -- in the offline beta the runtime may never change
+	// again, so a remounted console said WAITING instead of OFFLINE until it did (B56).
 	CompanionLiveTurn.Init(FString(), 2);
 	CompanionShownSession.Init(FString(), 2);
 	CompanionLinkWasDown.Init(false, 2);
 	CompanionLinkSeenUp.Init(false, 2);
 	CompanionMissionTask.Init(false, 2);
 	CompanionPendingAsk.Init(FString(), 2);
+	CompanionPendingTurns.Init(0, 2);
+	CompanionShownAnswerText.Init(FString(), 2);
+	CompanionShownAsk.Init(FString(), 2);
+	CompanionShownAnswer.Init(FString(), 2);
+	CompanionShownNote.Init(FString(), 2);
+	CompanionShownProvider.Init(FString(), 2);
 
 	// THE THREE CONSOLES ARE ONE INSTRUMENT. Ctrl+T raises the Julius terminal and these two with it, and takes
 	// all three away together (founder, 2026-09-15). Mounted once; shown with the terminal.
@@ -442,6 +452,10 @@ void UWonderlandUiSubsystem::MountCompanionTerminals()
 		];
 	// Above the HUD's layer, below the terminal (50), the map (60) and the Project Brain (58).
 	LocalPlayer->ViewportClient->AddViewportWidgetForPlayer(LocalPlayer, CompanionLayer.ToSharedRef(), 20);
+
+	// WHAT THE RUNTIME SAYS NOW, at once, rather than at its next change: OFFLINE in the beta, the session and the provider
+	// in a developer's. A simulated mission in progress rejoins at its next event.
+	HandleSidekicksChanged();
 
 	// ---- AND WONDERLAND'S OWN POINTER, if the founder has asked for one.
 	//
