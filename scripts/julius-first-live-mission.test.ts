@@ -207,6 +207,26 @@ describe('the paid stage is gated, and the unpaid stage cannot pay', () => {
     expect(workflow).toContain('reviewer=xai/grok-build-0.1');
   });
 
+  /**
+   * THE CODER'S RUNTIME IS PINNED EXACTLY (smoke 36848579269, 2026-10-01).
+   *
+   * Agent SDK 0.3.220 bundled Claude Code 2.1.220, which does not know claude-opus-5-5: it
+   * canonicalised it as claude-opus-5, sent a `fallback-credit` beta that no newer CLI sends, and the
+   * API answered the smoke's one request with HTTP 400. 2.1.286 is the CLI the founder's token-only
+   * qualification passed on. A version range would let an install drift off it again.
+   */
+  it('runs the coder on exactly Agent SDK 0.3.286 (Claude Code 2.1.286), never a version range', () => {
+    const sdk = '@anthropic-ai/claude-agent-sdk';
+    const pkg = JSON.parse(read('package.json')) as { dependencies?: Record<string, string> };
+    expect(pkg.dependencies?.[sdk], 'an exact version, never a range').toBe('0.3.286');
+    const lock = JSON.parse(read('package-lock.json')) as { packages: Record<string, { version?: string; dependencies?: Record<string, string> }> };
+    expect(lock.packages['']?.dependencies?.[sdk], 'the lockfile records the same exact spec').toBe('0.3.286');
+    for (const name of [sdk, `${sdk}-linux-x64`]) expect(lock.packages[`node_modules/${name}`]?.version, name).toBe('0.3.286');
+    const installed = JSON.parse(readFileSync(resolve(ROOT, 'node_modules', sdk, 'package.json'), 'utf8')) as { version?: string; claudeCodeVersion?: string };
+    expect(installed.version, 'the SDK actually installed').toBe('0.3.286');
+    expect(installed.claudeCodeVersion, 'the Claude Code CLI it bundles').toBe('2.1.286');
+  });
+
   it('configures no fallback provider and no scripted adapter', () => {
     // The composition has no import through which a scripted adapter could
     // arrive; this guards the other end — a deployment variable that would
