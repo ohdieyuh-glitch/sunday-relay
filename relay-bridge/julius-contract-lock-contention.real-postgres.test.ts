@@ -85,13 +85,14 @@ const CANDIDATE = /FROM relay_wonderland\.julius_task_contracts\s+WHERE contract
 type Storm = { armed: number; forced: number };
 
 async function waitUntilBlocked(pool: Pool, pid: number): Promise<void> {
-  for (let poll = 0; poll < 1_000; poll += 1) {
+  let blocked = false;
+  for (let poll = 0; poll < 1_000 && !blocked; poll += 1) {
     const row = await pool.query<{ wait_event_type: string | null }>(
       'SELECT wait_event_type FROM pg_stat_activity WHERE pid = $1', [pid]);
-    if (row.rows[0]?.wait_event_type === 'Lock') return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    blocked = row.rows[0]?.wait_event_type === 'Lock';
+    if (!blocked) await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error(`instrument: backend ${String(pid)} never waited on the contract row`);
+  if (!blocked) throw new Error(`instrument: backend ${String(pid)} never waited on the contract row`);
 }
 
 /** The candidate read, made to lose a real race to a committed update of the same row. */
