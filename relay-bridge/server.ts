@@ -77,7 +77,9 @@ import type { MissionOwnershipScope } from './mission';
 import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
 import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
-import { composeProjectBrainPorts } from './project-brain/compose';
+import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
+import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
+import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -263,6 +265,7 @@ export function createBridgeServer(
       connectionString: juliusRuntimeDatabaseUrl(),
       missingConfig: pool === null ? [...JULIUS_RUNTIME_DATABASE_ENV_NAMES] : [],
       sessions: browserSessions,
+      verifyNativeSession: nativeSessionVerifier(browserSessions),
       log: (line) => console.warn(`[relay-bridge] ${line}`),
     });
     return projectBrainPortsCache;
@@ -603,6 +606,31 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             send(res, githubAuthResult.status, githubAuthResult.body, cors);
             return;
           }
+        }
+
+        /**
+         * NATIVE CLIENT PAIRING, in front of every other `/wonderland/` route
+         * because `isWonderlandRoute` claims the whole prefix. A signed-in player
+         * pairs their own Wonderland desktop client for one project they belong
+         * to; see wonderland-native-pairing-routes.ts. Membership is read from
+         * the same Julius pool the Project Brain uses; no database, no pairing.
+         */
+        if (isNativePairingRoute(path.replace('/relay-api', ''))) {
+          const pairingPool = juliusPool();
+          const nativeResult = await handleNativePairingRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+            origin,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            now: Date.now(),
+            operatorToken: process.env.RELAY_BRIDGE_API_TOKEN,
+          }, {
+            store: browserSessions,
+            membership: pairingPool === null ? null : new WonderlandMembershipPostgres(pairingPool),
+          });
+          if (nativeResult !== null) send(res, nativeResult.status, nativeResult.body, cors);
+          return;
         }
 
         /**
