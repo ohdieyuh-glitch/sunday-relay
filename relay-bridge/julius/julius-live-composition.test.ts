@@ -785,6 +785,40 @@ describe('a full mission drive with Julius in control', () => {
   });
 
   /**
+   * PER-ROLE LATENCY, ON BOTH ROWS THE RECORD IS READ FROM.
+   *
+   * Paid run 36915013287 (Mission 6 attempt 2) completed with tokens on every
+   * provider dispatch and a NULL duration on all four trajectory rows, and its
+   * Coding Agent's dispatch row carried no `elapsed_ms` at all. The coordinator
+   * fills the trajectory's `durationMs` from `usage.runtimeMs`, and only the
+   * runtime fixtures ever reported it; the live adapters put their time, where
+   * they had one, in the dispatch row's `elapsedMs` alone. Every live adapter
+   * now reports the wall time it measured around its own provider call, and the
+   * SAME reading lands on both rows, so the evals and the bundle cannot disagree.
+   * With the adapters' `runtimeMs` removed this goes red on all four rows.
+   */
+  it('every provider dispatch on the live path records its wall time, identically on the trajectory and the dispatch row', async () => {
+    const { memory, outcome } = await driveLiveMission(['approved']);
+    expect(outcome.state).toBe('COMPLETED');
+    const completed = memory.events().filter((event) => event.type === 'worker.completed');
+    const providerRows = memory.trajectory().filter((row) => row.kind === 'DISPATCH' && row.outcome === 'COMPLETED');
+    // One of each per provider dispatch — the plan, its review, the build and its review — and no row without the other.
+    expect(completed.length).toBeGreaterThanOrEqual(4);
+    expect(providerRows.map((row) => row.taskId).sort()).toEqual(completed.map((event) => event.taskId).sort());
+    const roles = new Set<unknown>();
+    for (const event of completed) {
+      const facts = event.facts as Record<string, unknown>;
+      const elapsed = facts.diag_elapsedMs;
+      expect(typeof elapsed === 'number' && Number.isSafeInteger(elapsed) && elapsed >= 0, `${event.taskId}: the dispatch row says how long the provider took`).toBe(true);
+      const row = providerRows.find((candidate) => candidate.taskId === event.taskId);
+      expect(row?.durationMs, `${event.taskId}: the trajectory row carries the same reading`).toBe(elapsed);
+      roles.add(row?.workerId);
+    }
+    // The gap in the paid bundle was per role, so the proof covers every role that dispatched.
+    expect(roles.size).toBeGreaterThanOrEqual(3);
+  });
+
+  /**
    * CASE K — NO TASK REACHES ITS FIRST PROVIDER DISPATCH WITH AN INFLATED
    * ATTEMPT NUMBER.
    *
