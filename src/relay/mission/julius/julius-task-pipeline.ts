@@ -348,6 +348,12 @@ export type JuliusTaskOutcome =
    */
   | { readonly kind: 'HELD'; readonly taskId: string; readonly reasonCode: string; readonly requestId: string }
   /**
+   * NO DECISION YET, BECAUSE THE TERMS COULD NOT BE LOCKED THIS TIME. The
+   * store's bounded retry was spent on serialization failures; the work is not
+   * released onto an unlocked contract, and the resume sweep decides again.
+   */
+  | { readonly kind: 'HELD'; readonly taskId: string; readonly reasonCode: 'CONTRACT_LOCK_CONTENDED'; readonly contractTaskId: string }
+  /**
    * NOT REVIEWED, AND NOT GOING TO BE BY THIS REVIEW. The reviewer paused for
    * research and the research failed, so no verdict exists. Julius neither
    * accepts the work nor repairs it on a review that never concluded.
@@ -3507,6 +3513,24 @@ async function readVerdictLedger(deps: JuliusPipelineDependencies, run: JuliusRu
   return rows;
 }
 
+/** Whether this run already recorded `disposition` for one revision of one contract. Unreadable reads as no. */
+async function contractDispositionRecorded(
+  deps: JuliusPipelineDependencies, run: JuliusRunRow, contractId: string, contractRevision: number, disposition: string,
+): Promise<boolean> {
+  if (deps.timeline === undefined) return false;
+  let sinceSequence = 0;
+  for (;;) {
+    const page = await deps.timeline.timeline({ runId: run.runId, projectId: run.projectId, sinceSequence, limit: 500 });
+    for (const entry of page.entries) {
+      sinceSequence = Math.max(sinceSequence, entry.sequence);
+      if (entry.type === 'contract.disposition' && entry.facts.contractId === contractId
+        && Number(entry.facts.contractRevision) === contractRevision && entry.facts.disposition === disposition) return true;
+    }
+    if (!page.hasMore || page.entries.length === 0) break;
+  }
+  return false;
+}
+
 /**
  * APPLY ONE CONCLUDED REVIEW'S VERDICT TO THE WORK IT REVIEWED.
  *
@@ -5794,12 +5818,22 @@ async function verifyExecutedTask(input: {
         reasonCode: decision.reasonCode,
         evidenceIds: findingIds,
       });
-      await ledger.event(disposition.outcome === 'RECORDED' ? 'contract.disposition' : 'contract.refused', {
-        taskId: subject.taskId, workerId: input.workerId,
-        facts: disposition.outcome === 'RECORDED'
-          ? juliusContractDispositionFacts(disposition.record)
-          : { reasonCode: disposition.reasonCode, contractTaskId },
-      });
+      /*
+       * ONCE PER REVISION. A decision held on a contended lock (below) is made
+       * again by the resume sweep, and the revision is still a DRAFT then — so
+       * without this the same answer was written twice, and the slot report,
+       * which counts dispositions by verdict, counted it twice.
+       */
+      const answered = disposition.outcome === 'RECORDED'
+        && await contractDispositionRecorded(deps, run, contract.contractId, contract.contractRevision, disposition.record.disposition);
+      if (!answered) {
+        await ledger.event(disposition.outcome === 'RECORDED' ? 'contract.disposition' : 'contract.refused', {
+          taskId: subject.taskId, workerId: input.workerId,
+          facts: disposition.outcome === 'RECORDED'
+            ? juliusContractDispositionFacts(disposition.record)
+            : { reasonCode: disposition.reasonCode, contractTaskId },
+        });
+      }
 
       // An accept argues with nothing, so there is no state to transition.
       if (!challenging) continue;
@@ -5861,6 +5895,28 @@ async function verifyExecutedTask(input: {
           ? { contractTaskId, contractId: contract.contractId, contractRevision: contract.contractRevision, bindingDigest: proposed.contract.bindingDigest! }
           : { contractTaskId, reasonCode: locked.reasonCode, lockedRevision: locked.lockedRevision },
       });
+      /**
+       * A CONTENDED LOCK HOLDS THE DECISION; IT DOES NOT RELEASE THE WORK.
+       *
+       * Every other refusal is a standing fact about the terms — challenged,
+       * superseded, a newer revision held, a digest that does not match — and
+       * the dispatch gate refuses the released work on it, loudly, as designed.
+       * `lock_contended` is not a fact about the terms: the store's own bounded
+       * retry was spent on serialization failures and nothing it could see
+       * stands in the way. Releasing on it handed the build to a gate that
+       * then FAILED it with `contract_not_locked`, and the mission with it, for
+       * a conflict a second look would have cleared (real-infra run
+       * 36855148392 attempt 1: two run loops, six missions, one FAILED).
+       *
+       * So nothing is decided and nothing released. This is the "lock, crash"
+       * case the order above already makes safe: the task stays SUCCEEDED and
+       * undecided, the resume sweep verifies it again on the next
+       * `advanceRun`, any contract this loop did lock is answered as already
+       * locked, and the one that contended is tried again.
+       */
+      if (!locked.locked && locked.reasonCode === 'lock_contended') {
+        return { kind: 'HELD', taskId: task.taskId, reasonCode: 'CONTRACT_LOCK_CONTENDED', contractTaskId };
+      }
     }
   }
 
