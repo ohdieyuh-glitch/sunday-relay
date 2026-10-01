@@ -12,7 +12,9 @@ param([Parameter(Mandatory = $true)][string]$Exe,
       [int]$SampleSeconds = 5,
       [string]$UserDir = '',
       # the game's OWN first-launch window (no -windowed / -ResX / -ResY): what a tester actually gets
-      [switch]$DefaultWindow)
+      [switch]$DefaultWindow,
+      # a window of the caller's choosing, e.g. a small corner window for an hour-long soak on a laptop someone is using
+      [string]$WindowArgs = '')
 $Root = Split-Path $Exe -Parent
 $PkgDir = Split-Path $Root -Parent
 New-Item -ItemType Directory -Force $Out | Out-Null
@@ -30,7 +32,7 @@ $csv = Join-Path $Out "process_$Mode.csv"
 'seconds,working_set_mb,private_mb,gpu_dedicated_mb,machine_free_mb' | Set-Content -Encoding utf8 $csv
 
 $t0 = Get-Date
-$window = if ($DefaultWindow) { '' } else { '-windowed -ResX=1920 -ResY=1200 ' }
+$window = if ($WindowArgs) { $WindowArgs.Trim() + ' ' } elseif ($DefaultWindow) { '' } else { '-windowed -ResX=1920 -ResY=1200 ' }
 $argList = $window + '-nosound -log -userdir="' + $UserDir + '" -ExecCmds="' + $cmd + '"'
 $p = Start-Process -FilePath $Exe -ArgumentList $argList -PassThru
 "[$Mode] launched $($p.Id) at $(Get-Date -Format HH:mm:ss): $cmd (saved folder $Saved)"
