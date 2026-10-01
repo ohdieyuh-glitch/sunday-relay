@@ -2122,6 +2122,9 @@ namespace
 		int32 Pass = 0;
 		int32 Fail = 0;
 		FString Dir;
+		// THE COMPANIONS AND CUBS STAND ASIDE FOR THE CAMERA: they escort the Dog at arm's length, and the first run's side
+		// views photographed the LLM Companion's robe instead of the Dog's face. Hidden for the shots, shown again at the end.
+		TArray<TWeakObjectPtr<AActor>> Hidden;
 	};
 	TSharedPtr<FQaFaces> GQaFaces;
 
@@ -2202,6 +2205,15 @@ namespace
 				F.At = QaNow();
 				break;
 			}
+			// every figure but the Dog's own costume out of the shot (a cub set is rebuilt for each skin, so this runs per shot)
+			for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+			{
+				if (*It != D->GetCostume() && !It->IsHidden())
+				{
+					It->SetActorHiddenInGame(true);
+					F.Hidden.Add(*It);
+				}
+			}
 			const FQaFaceShot& S = FaceShots[F.Shot];
 			const FVector Feet = D->GetActorLocation() - FVector(0.0, 0.0, D->GetSimpleCollisionHalfHeight());
 			const FVector Eyes = Feet + FVector(0.0, 0.0, D->GetCanonBodyHeightUu() * FaceEyeHeight);
@@ -2252,6 +2264,14 @@ namespace
 				{
 					Cam->Destroy();
 				}
+				for (const TWeakObjectPtr<AActor>& Figure : F.Hidden)
+				{
+					if (AActor* A = Figure.Get())
+					{
+						A->SetActorHiddenInGame(false);
+					}
+				}
+				F.Hidden.Reset();
 				GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
 				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES END pass=%d fail=%d"), F.Pass, F.Fail);
 				F.Phase = 10;
