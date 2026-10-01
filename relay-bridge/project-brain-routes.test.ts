@@ -84,7 +84,7 @@ describe('the operator door', () => {
     const store = fakeStore({ mutate: async () => { mutated += 1; return { ok: true, durable: true, replayed: false, result: {} }; } });
     const result = await handleProjectBrainRoute(OPERATOR_REQUEST({
       method: 'POST', path: '/project-brain/projects/prj-1/mutations',
-      rawBody: JSON.stringify({ operation: 'CREATE', idempotencyKey: 'key-12345678', domain: 'USER_FACT', title: 'key', body: 'sk-ant-api03-AAAAAAAAAAAAAAAAAAAA' }),
+      rawBody: JSON.stringify({ operation: 'CREATE', idempotencyKey: 'key-12345678', domain: 'USER_FACT', title: 'key', body: 'sk-ant-api03-FAKETESTNOTREAL' }),
     }), ports(store), io);
     expect(result).toMatchObject({ status: 422, body: { error: { kind: 'credential_in_content', durable: false } } });
     expect(mutated).toBe(0);
