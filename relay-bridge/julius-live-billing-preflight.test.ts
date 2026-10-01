@@ -197,10 +197,17 @@ describe('every reader of the preflight finds its own line', () => {
     expect(loop, 'the loop the workflow runs, read from the workflow').not.toBeNull();
     const names = loop![1]!.trim().split(/\s+/u);
     expect(names.length).toBeGreaterThanOrEqual(5);
-    const run = preflight({ ...READY_RIG, RELAY_HERMES_BILLING_MODE: 'api_billed' });
+    // THE TOPOLOGY THE PAID WORKFLOW RUNS: its Coding Agent is the Claude subscription,
+    // so its loop asks for CLAUDE_CODE_OAUTH_TOKEN and not ANTHROPIC_API_KEY. A preflight
+    // driven in API mode would answer a loop this workflow no longer runs.
+    const { ANTHROPIC_API_KEY: _key, ...withoutKey } = READY_RIG;
+    const run = preflight({
+      ...withoutKey, HOME: dir, JULIUS_CLAUDE_AUTH: 'CLAUDE_SUBSCRIPTION', RELAY_HERMES_BILLING_MODE: 'api_billed',
+      CLAUDE_CODE_OAUTH_TOKEN: 'FAKETESTNOTREAL-oauth-sentinel-0000',
+    });
     expect(run.code).toBe(5);
     for (const name of names) expect(physical(run.output), name).toContain(`  ${name}: SET`);
-  });
+  }, 60_000);
 
   it('THE ARTIFACT ALLOWLIST keeps every presence row, each as its own line', () => {
     const run = preflight({ ...READY_RIG, RELAY_HERMES_BILLING_MODE: 'api_billed' });
