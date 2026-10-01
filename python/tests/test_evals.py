@@ -98,6 +98,7 @@ class MarginalValueTests(unittest.TestCase):
     def test_clear_value(self):
         r = marginal_value("fuzzy-ranker", "mission.ticks", "lower", [4, 4, 5, 4, 4], [7, 8, 7, 9, 8])
         self.assertEqual(r["verdict"], "VALUE")
+        self.assertIn("awards no beta-readiness credit", r["authority"])
 
     def test_no_detectable_value_when_the_arms_overlap(self):
         r = marginal_value("fuzzy-ranker", "mission.ticks", "lower", [5, 7, 4, 8, 6], [6, 5, 8, 4, 7])

@@ -24,6 +24,31 @@ class CliTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             _print({"note": "my chain-of-thought was"})
 
+    def test_no_report_can_award_readiness(self):
+        # Every report kind carries the disclaimer, and none carries a field a reader could take for a score.
+        from julius_brain_intel import NOT_READINESS_AUTHORITY
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as handle:
+            json.dump(document([item("pbr:a", "requirements")]), handle)
+        try:
+            reports = [json.loads(cli(*args).stdout) for args in (
+                ("analyze-bundle", A2), ("quality", A2), ("compare", A1, A2), ("memory", handle.name))]
+        finally:
+            os.unlink(handle.name)
+
+        def keys(value):
+            if isinstance(value, dict):
+                for key, inner in value.items():
+                    yield key
+                    yield from keys(inner)
+            elif isinstance(value, list):
+                for inner in value:
+                    yield from keys(inner)
+
+        for report in reports:
+            self.assertEqual(report["authority"], NOT_READINESS_AUTHORITY, report.get("schemaVersion"))
+            awarding = [k for k in keys(report) if any(w in k.lower() for w in ("readiness", "credit", "percent", "score"))]
+            self.assertEqual(awarding, [], report.get("schemaVersion"))
+
     def test_analyze_bundle(self):
         result = cli("analyze-bundle", A2)
         self.assertEqual(result.returncode, 0, result.stderr)
