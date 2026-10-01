@@ -1557,7 +1557,10 @@ int32 SWonderlandCompanionConsole::PaintFooter(const FGeometry& Geometry, const 
 			FVector2D(Mx, Mid - LineH * 0.20f)};
 		FSlateDrawElement::MakeLines(Out, Layer, Geometry.ToPaintGeometry(), Tri, ESlateDrawEffect::None, Accent, true, 1.5f);
 	}
-	PaintText(Geometry, Out, Layer, Footer.Left(FMath::Max(0, RowCols - 3)), CellW * 2.4f, Y, Dim);
+	// as many cells as are left after the marks; a footer that still does not fit ends in an ellipsis rather than mid-word
+	const int32 Room = FMath::Max(0, FMath::FloorToInt(W / CellW) - 3);
+	const FString Shown = Footer.Len() <= Room ? Footer : Footer.Left(FMath::Max(0, Room - 1)) + TEXT("…");
+	PaintText(Geometry, Out, Layer, Shown, CellW * 2.4f, Y, Dim);
 	return Layer;
 }
 
