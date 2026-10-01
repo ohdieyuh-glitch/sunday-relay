@@ -24,6 +24,10 @@ import argparse
 import math
 import os
 import random
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import skin_eye_check  # noqa: E402  -- the eyes-inside-the-face rules main() enforces on every skin it writes
 
 # THE NUMBER THAT WAS PINNING EVERY PREMIUM SKIN TO WHITE.
 #
@@ -546,7 +550,108 @@ DOG = dict(
 )
 
 
-def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
+# ============================================================================ the face: the eyes INSIDE the black square
+#
+# FOUNDER CORRECTION, 2026-10-01: "the two glowing eyes are currently positioned/protruding OUTSIDE the black
+# square/face area ... The mascot's eyes are supposed to be visually CONTAINED INSIDE the black square face/visor
+# area ... The eye surfaces should sit within/inset into the front facial plane rather than looking attached outside
+# it." Relay OG's canon head is the reference: two panes inside a dark plate, and nothing breaks the head's front.
+#
+# WHAT HAD GONE WRONG, measured on the shipped RC6 figures (and independently by Second Wonderland):
+#   - the visor was never cut in, whatever its comment said: a slab at x 3.00..4.50 against a head front at 4.10,
+#     so every costume carried a black BOX 0.40 proud of the face rather than a black window in it;
+#   - each eye pane stood 0.15 proud of that box (front 4.65);
+#   - the 2026-09-27 halo pane stood proud of the box as well (front 4.70) and was 2.88 tall on a 2.70 visor, so its
+#     glow ran over the black's top and bottom edges. Bright, wide and proud, each eye read as a lit block bolted onto
+#     the face -- the founder's Jack Flame photographs, side-on and head-on.
+# The 2026-09-23 figures, before the halo, show what the founder remembers: two small panes with black all round them.
+# This restores that, and finally cuts the visor INTO the head so nothing stands proud of the face from any side.
+#
+# ONE PLACE LAYS THE EYES (status_eyes), so no skin can drift back on its own, and main() refuses to write a skin
+# whose eyes fail skin_eye_check.py -- the same rules the package QA runs on the figure it actually loaded (Q25).
+FACE = dict(
+    recess=0.45,        # the visor plate's face sits this far BEHIND the head's front plane: a window, not a sticker
+    plate=0.60,         # the plate's own thickness
+    eye_inset=0.10,     # each eye pane's face stays this far behind the surface round its housing
+    eye_depth=0.40,     # and the pane runs this deep, back into the plate
+    halo_scale=1.6,     # a halo pane is at most 1.6x its eye (it was 2.4x) ...
+    halo_margin=0.25,   # ... and keeps this much black between itself and its housing's edge
+    halo_depth=0.20,
+    halo_behind=0.10,   # its face this far behind the eye's: the core stays the front-most light
+    margin=0.12,        # the least black between an eye and its housing's edge (skin_eye_check.MARGIN)
+)
+
+
+def status_eyes(figure, part, plane_x, housing, centres, eye="eye", size=None):
+    """THE RELAY DOG'S STATUS EYES, laid INSIDE their housing. Every mascot skin's eyes come through here.
+
+    plane_x  -- the front plane of the surface AROUND the housing: the head's face, or a mask's.
+    housing  -- (y0, y1, z0, z1): the dark opening the eyes sit in -- the visor window, a skull's socket.
+    centres  -- [(y, z), ...] for each eye.
+
+    Each pane's face is FACE["eye_inset"] behind plane_x, so from the side nothing breaks the face's plane; each pane
+    keeps FACE["margin"] of black to every edge of its housing, or the build stops; and the halo -- the soft rim that
+    makes a pane read as a light (founder, 2026-09-27) -- stays INSIDE the housing, behind its eye, and never reaches
+    inward past the eye toward the other one.
+    """
+    f = FACE
+    exw, exh = size or DOG["eye"]
+    hy0, hy1, hz0, hz1 = housing
+    front = plane_x - f["eye_inset"]
+    for cy, cz in centres:
+        assert hy0 + f["margin"] <= cy - exw * 0.5 and cy + exw * 0.5 <= hy1 - f["margin"], (figure.name, "eye outside its housing across", cy, housing)
+        assert hz0 + f["margin"] <= cz - exh * 0.5 and cz + exh * 0.5 <= hz1 - f["margin"], (figure.name, "eye outside its housing up/down", cz, housing)
+        figure.box(part, eye, (front - f["eye_depth"] * 0.5, cy, cz), (f["eye_depth"], exw, exh))
+        if "eyehalo" not in figure.material_names:
+            continue
+        side = 1.0 if cy >= 0.0 else -1.0
+        inner = abs(cy) - exw * 0.5                                   # never inward past the eye: the glows do not merge
+        reach = (hy1 if side > 0.0 else -hy0) - f["halo_margin"]      # the housing's outer edge on this eye's side
+        outer = min(abs(cy) + exw * f["halo_scale"] * 0.5, reach)
+        half_h = min(exh * f["halo_scale"] * 0.5, cz - hz0 - f["halo_margin"], hz1 - cz - f["halo_margin"])
+        assert outer > inner and half_h >= exh * 0.5, (figure.name, "no room for the halo inside the housing", housing)
+        halo_front = front - f["halo_behind"]
+        figure.box(part, "eyehalo", (halo_front - f["halo_depth"] * 0.5, side * (inner + outer) * 0.5, cz),
+                   (f["halo_depth"], outer - inner, half_h * 2.0))
+
+
+def head_with_window(figure, part, material, centre, size, tile, window):
+    """The head as slab() builds it -- a shell of voxel tiles -- with a WINDOW cut through its front face.
+
+    The front-face tiles the window crosses are left out, and what each of them covered OUTSIDE the window is put back
+    at the same depth, piece by piece along the tile grid: the coat runs right up to the window's edge with the seams
+    where they always were, and the window is exactly the visor's size. Behind it the shell is hollow, so the visor
+    plate laid in it is the only thing seen there.
+    """
+    cx, cy, cz = centre
+    sx, sy, sz = size
+    nx = max(1, int(round(sx / tile)))
+    ny = max(1, int(round(sy / tile)))
+    nz = max(1, int(round(sz / tile)))
+    wy0, wy1, wz0, wz1 = window
+    for ix in range(nx):
+        for iy in range(ny):
+            for iz in range(nz):
+                if 0 < ix < nx - 1 and 0 < iy < ny - 1 and 0 < iz < nz - 1:
+                    continue
+                px = cx - sx * 0.5 + sx * (ix + 0.5) / nx
+                py = cy - sy * 0.5 + sy * (iy + 0.5) / ny
+                pz = cz - sz * 0.5 + sz * (iz + 0.5) / nz
+                ty0, ty1 = cy - sy * 0.5 + sy * iy / ny, cy - sy * 0.5 + sy * (iy + 1) / ny
+                tz0, tz1 = cz - sz * 0.5 + sz * iz / nz, cz - sz * 0.5 + sz * (iz + 1) / nz
+                if ix == nx - 1 and ty0 < wy1 and ty1 > wy0 and tz0 < wz1 and tz1 > wz0:
+                    # the tile minus the window: left and right of it full height, and above and below it between
+                    ly1, ry0 = max(ty0, min(ty1, wy0)), max(ty0, min(ty1, wy1))
+                    my0, my1 = max(ty0, wy0), min(ty1, wy1)
+                    bz1, tz_ = max(tz0, min(tz1, wz0)), max(tz0, min(tz1, wz1))
+                    for (a0, a1, b0, b1) in ((ty0, ly1, tz0, tz1), (ry0, ty1, tz0, tz1), (my0, my1, tz0, bz1), (my0, my1, tz_, tz1)):
+                        if a1 - a0 > 1e-6 and b1 - b0 > 1e-6:
+                            figure.box(part, material, (px, (a0 + a1) * 0.5, (b0 + b1) * 0.5), (sx / nx, a1 - a0, b1 - b0))
+                    continue
+                figure.box(part, material, (px, py, pz), (sx / nx, sy / ny, sz / nz))
+
+
+def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None, face="inset"):
     """THE RELAY DOG ITSELF. Every skin calls this first and dresses what it returns.
 
     Built to the reference plates: a big cubic head with two small tapered ear spurs, a dark visor band inset across
@@ -560,7 +665,17 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
     figure.part("body", "root", (0.0, 0.0, d["torso_z"]), "none")
     figure.part("head", "body", (0.0, 0.0, d["head_z"]), "head")
 
-    figure.slab("head", coat, (0.0, 0.0, d["head_z"]), (hd, hw, hh), tile=tile)
+    # THE FACE (see FACE above). "inset", every skin's: the visor is a window cut into the head with the eyes inside it.
+    # "legacy" is the figure exactly as it was before the founder's eye correction, kept for RELAY OG's preview figure
+    # alone -- the founder: "RELAY OG IS ALREADY CORRECT. DO NOT CHANGE RELAY OG." (the Dog in play is the canon body).
+    assert face in ("inset", "legacy"), face
+    vw, vh = d["visor"]
+    visor_z = d["head_z"] - hh * 0.07
+    window = (-vw * 0.5, vw * 0.5, visor_z - vh * 0.5, visor_z + vh * 0.5)
+    if face == "legacy":
+        figure.slab("head", coat, (0.0, 0.0, d["head_z"]), (hd, hw, hh), tile=tile)
+    else:
+        head_with_window(figure, "head", coat, (0.0, 0.0, d["head_z"]), (hd, hw, hh), tile, window)
 
     # THE EARS: a wider base and a narrower tip, leaning very slightly outward, set at the head's top corners.
     ed, ew, eh = d["ear"]
@@ -572,12 +687,28 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
 
     # THE VISOR, CUT INTO THE FACE. On the sheets it sits in the head rather than on it, so it is recessed a little and
     # the coat is carried round it -- a black plate glued to the front reads as a sticker.
-    vw, vh = d["visor"]
     # SET LOW ON THE FACE. The founder compared the two heads crop to crop: the canonical Dog carries more brow
     # above the visor than mine did, so the band sits BELOW the head's midline rather than on it. A visor riding
     # high reads as a different expression entirely -- more alert, less calm -- which is why this is worth the
     # fraction of a head it moves.
-    visor_z = d["head_z"] - hh * 0.07
+    if face == "inset":
+        # NOW ACTUALLY CUT IN (2026-10-01): the plate's face FACE["recess"] behind the head's front plane, filling the
+        # window head_with_window left, and the eyes inside it through the one function that lays them.
+        figure.slab("head", "visor", (hd * 0.5 - FACE["recess"] - FACE["plate"] * 0.5, 0.0, visor_z),
+                    (FACE["plate"], vw, vh), tile=tile * 0.62)
+        status_eyes(figure, "head", hd * 0.5, window, [(-d["eye_gap"], visor_z), (d["eye_gap"], visor_z)], eye=eye)
+    else:
+        legacy_visor_and_eyes(figure, eye, tile, hd, visor_z)
+    _base_dog_body(figure, coat, coat_deep, tile)
+    figure.mark_dog_extent()
+    return figure
+
+
+def legacy_visor_and_eyes(figure, eye, tile, hd, visor_z):
+    """THE FACE AS IT WAS until 2026-10-01: a visor slab 0.40 proud of the head, eye panes 0.15 proud of that, and a
+    halo pane proud of both. Kept, byte for byte, for RELAY OG's preview figure only (see base_dog)."""
+    d = DOG
+    vw, vh = d["visor"]
     figure.slab("head", "visor", (hd * 0.5 - 0.35, 0.0, visor_z), (1.5, vw, vh), tile=tile * 0.62)
 
     # THE STATUS EYES. The brightest thing on the dog, and the one part of the face a skin may recolour.
@@ -616,6 +747,10 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
                        (hd * 0.5 + 0.45, side * (halo_in + halo_out) * 0.5, visor_z),
                        (0.30, halo_out - halo_in, exh * 2.4))
 
+
+def _base_dog_body(figure, coat, coat_deep, tile):
+    """Everything under the head, identical in every skin and in both faces."""
+    d = DOG
     # The body and the two legs. Short, plain, and under the dress in every skin but the bare one.
     td, tw, th = d["torso"]
     figure.slab("body", coat, (0.0, 0.0, d["torso_z"]), (td, tw, th), tile=tile)
@@ -652,8 +787,6 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
                     (ld * 1.42, lw * 1.10, lh * 0.11), tile=tile)
         figure.slab(shin, coat_deep, (ld * 0.30, side * d["leg_gap"], hip_z - lh + lh * 0.012),
                     (ld * 1.46, lw * 1.14, lh * 0.035), tile=tile)
-    figure.mark_dog_extent()
-    return figure
 
 
 def quadruped_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
@@ -750,7 +883,9 @@ def relay_og():
     nothing" shows the founder an animal he does not own.
     """
     figure = start("RELAY DOG -- OG", 7001, (1.00, 0.72, 0.16), 7.0)
-    base_dog(figure)
+    # THE LEGACY FACE, ON PURPOSE (founder, 2026-10-01: "RELAY OG IS ALREADY CORRECT. DO NOT CHANGE RELAY OG."): the Dog
+    # in play is the canon body, never this file, so this preview figure is left exactly as it was.
+    base_dog(figure, face="legacy")
     return figure
 
 
@@ -2731,16 +2866,15 @@ def baal():
     for s in (-1.0, 1.0):
         figure.box("mask", "bone", (face + 1.0, s * d["eye_gap"], visor_z + 1.25), (0.5, 2.3, 0.5))
         figure.box("mask", "armordeep", (face + 0.85, s * d["eye_gap"], visor_z - 1.05), (0.4, 1.9, 0.2))
-        # THE STATUS EYES, CARRIED TO THE SOCKET MOUTH. The panes base_dog set in the visor stay exactly where they
-        # are; these are the same material ("eye": the runtime drives them as the status eyes), the same size and
-        # at the same height and spacing, brought forward so the skull does not bury them. Plus the halo pane,
-        # outboard of each eye and never across the centreline, as base_dog lays its own.
-        figure.box("mask", "eye", (face + 0.95, s * d["eye_gap"], visor_z), (0.3, d["eye"][0], d["eye"][1]))
-        halo_in = d["eye_gap"] - d["eye"][0] * 0.5
-        halo_out = d["eye_gap"] + d["eye"][0] * 2.4 * 0.5
-        # BEHIND the pane's face (5.20) and just proud of the mask's (5.00), so the rim spills onto the bone round the
-        # socket and never over the core -- the same arrangement base_dog uses against the visor.
-        figure.box("mask", "eyehalo", (face + 0.84, s * (halo_in + halo_out) * 0.5, visor_z), (0.2, halo_out - halo_in, d["eye"][1] * 2.2))
+        # THE STATUS EYES, IN THE SOCKETS. The panes base_dog set in the visor stay where they are; these are the same
+        # material ("eye": the runtime drives them as the status eyes), the same size, height and spacing, brought
+        # forward so the skull does not bury them -- but no further than INSIDE the socket (founder correction,
+        # 2026-10-01). They used to stand at the socket MOUTH, face 1.10 against the skull's 0.90 -- 0.20 proud of the
+        # bone, with a halo over the bone round it -- the "eyes floating in front of the square" the founder saw. Laid
+        # now by status_eyes like every skin's eyes: behind the skull's face, black all round, the halo in the socket.
+        sy = s * d["eye_gap"]
+        status_eyes(figure, "mask", face + 0.9, (sy - socket_half, sy + socket_half, visor_z - socket_half, visor_z + socket_half),
+                    [(sy, visor_z)])
     # THE SNOUT: long, narrowing and angled down and forward over the chest, as a deer's skull is.
     for k in range(9):
         z = visor_z - 1.5 - k * 0.62
@@ -3147,6 +3281,14 @@ def main():
         path = os.path.join(args.out, "%s.wlvox" % name)
         boxes, parts, materials = figure.write(path)
         print("%-22s %5d boxes  %2d parts  %2d materials  voxel %.2f uu" % (os.path.basename(path), boxes, parts, materials, figure.voxel_uu))
+        # THE EYES ARE ENFORCED, NOT TRUSTED (founder correction, 2026-10-01): a skin whose status eyes stand proud of
+        # its face, sit outside their black housing, or spill halo light over the coat is not written. Relay OG's
+        # preview figure keeps its legacy face on the founder's instruction and is the one exception.
+        if name != "RelayOg":
+            eyes_ok, report = skin_eye_check.check(path)
+            if not eyes_ok:
+                os.remove(path)
+                raise SystemExit("%s: the eyes are not inside the face (skin_eye_check.py):\n  %s" % (name, "\n  ".join(report)))
 
     # THE CUBS. A cub is about a third of the Dog's height on the plate, which is what "cub proportions" means here.
     cubs = os.path.join(os.path.dirname(args.out), "RelayCubs")

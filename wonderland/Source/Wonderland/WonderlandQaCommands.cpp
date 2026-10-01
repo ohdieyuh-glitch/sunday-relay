@@ -55,6 +55,8 @@
 #include "WonderlandTerritory.h"
 #include "EngineUtils.h"
 #include "Misc/FileHelper.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandQa, Log, All);
 
@@ -160,6 +162,281 @@ namespace
 		const FString Path = Run.Dir / (Name + TEXT(".png"));
 		const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
 		UE_LOG(LogWonderlandQa, Display, TEXT("WLQA frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), Width, Height);
+	}
+
+	/* ================================================================ Q25: THE EYES INSIDE THE FACE
+	 *
+	 * FOUNDER CORRECTION, 2026-10-01: "the two glowing eyes are currently positioned/protruding OUTSIDE the black square/
+	 * face area ... Add a QA/regression check where practical so future skin generation cannot move the eyes back outside
+	 * the facial housing ... face bounds, eye bounds, eye forward depth ... Do not use a test so loose that the current
+	 * incorrect protruding version would pass." The rules of wonderland/Tools/skin_eye_check.py (which the generator also
+	 * enforces), applied here to the figure file the worn costume ACTUALLY loaded in this build. Every RC6 figure fails
+	 * them (visor box 0.40 proud of the head, eyes 0.15 proud of that, halos 2.88 tall on a 2.70 visor):
+	 *   E1 black seen beyond every edge of each visible eye, judged on the face -- dress worn proud of it set aside;
+	 *   E2 no eye's face further forward than the face that rims its housing;
+	 *   E3 visible halo light only over the black housing or an eye, behind the eyes' faces, never between them;
+	 *   E4 the visible eyes in mirrored pairs.
+	 * Figure space, grid units: X forward, Y across, Z up.
+	 */
+	struct FQaFaceBox
+	{
+		int32 Index = 0;
+		FName Mat;
+		bool bDark = false;
+		bool bEye = false;
+		double Y0 = 0.0, Y1 = 0.0, Z0 = 0.0, Z1 = 0.0, Front = 0.0;
+	};
+
+	struct FQaFace
+	{
+		TArray<FQaFaceBox> Surfaces;
+		TArray<FQaFaceBox> Halos;
+
+		/** The surface a camera in front sees at (Y, Z): the front-most one, edges inclusive (surfaces that meet leave no
+		 *  gap), considering only those no further forward than Limit -- the face without the dress worn over it. */
+		const FQaFaceBox* FrontAt(double Y, double Z, double Limit = TNumericLimits<double>::Max()) const
+		{
+			const FQaFaceBox* Best = nullptr;
+			for (const FQaFaceBox& S : Surfaces)
+			{
+				if (S.Front <= Limit && Y >= S.Y0 - 1e-4 && Y <= S.Y1 + 1e-4 && Z >= S.Z0 - 1e-4 && Z <= S.Z1 + 1e-4
+					&& (Best == nullptr || S.Front > Best->Front))
+				{
+					Best = &S;
+				}
+			}
+			return Best;
+		}
+	};
+
+	bool QaEyesInsideFace(const FWonderlandCompanionFigure& Figure, FString& OutDetail)
+	{
+		constexpr double Margin = 0.12, Tolerance = 0.02, HaloMargin = 0.10, DarkLuma = 0.10, Step = 0.05, Scan = 6.0;
+		FQaFace Face;
+		for (int32 I = 0; I < Figure.Boxes.Num(); ++I)
+		{
+			const FWonderlandCompanionBox& B = Figure.Boxes[I];
+			if (!B.Rotation.IsNearlyZero(1e-3) || !Figure.Parts.IsValidIndex(B.Part) || !Figure.Materials.IsValidIndex(B.Material)
+				|| Figure.Parts[B.Part].Motion == EWonderlandCompanionMotion::Twinkle)
+			{
+				continue;   // fire is drawn as fire, not as its boxes; rotated boxes are never on a face
+			}
+			const FWonderlandCompanionMaterial& M = Figure.Materials[B.Material];
+			FQaFaceBox S;
+			S.Index = I;
+			S.Mat = M.Name;
+			S.Y0 = B.Centre.Y - B.Size.Y * 0.5;
+			S.Y1 = B.Centre.Y + B.Size.Y * 0.5;
+			S.Z0 = B.Centre.Z - B.Size.Z * 0.5;
+			S.Z1 = B.Centre.Z + B.Size.Z * 0.5;
+			S.Front = B.Centre.X + B.Size.X * 0.5;
+			if (M.Kind == EWonderlandCompanionMaterialKind::Additive)
+			{
+				if (M.Name.ToString().Contains(TEXT("halo")))
+				{
+					Face.Halos.Add(S);
+				}
+				continue;   // additive light is never a surface
+			}
+			const double Luma = 0.2126 * M.Color.R + 0.7152 * M.Color.G + 0.0722 * M.Color.B;
+			S.bDark = M.Kind != EWonderlandCompanionMaterialKind::Glow && Luma < DarkLuma;
+			S.bEye = M.Name == FName(TEXT("eye"));
+			Face.Surfaces.Add(S);
+		}
+		TArray<FQaFaceBox> Visible;
+		for (const FQaFaceBox& E : Face.Surfaces)
+		{
+			if (!E.bEye)
+			{
+				continue;
+			}
+			const FQaFaceBox* Top = Face.FrontAt((E.Y0 + E.Y1) * 0.5, (E.Z0 + E.Z1) * 0.5);
+			if (Top != nullptr && Top->Index != E.Index && Top->Front > E.Front + 1e-6)
+			{
+				continue;   // hidden behind something (Baal's own visor eyes, behind its skull)
+			}
+			Visible.Add(E);
+		}
+		if (Visible.Num() < 2)
+		{
+			OutDetail = FString::Printf(TEXT("no visible pair of status eyes (%d visible)"), Visible.Num());
+			return false;
+		}
+		TArray<FString> Faults;
+		double WorstBehind = TNumericLimits<double>::Max();
+		double LeastBlack = TNumericLimits<double>::Max();
+		double InnerEdge = TNumericLimits<double>::Max();
+		for (const FQaFaceBox& E : Visible)
+		{
+			InnerEdge = FMath::Min(InnerEdge, FMath::Min(FMath::Abs(E.Y0), FMath::Abs(E.Y1)));
+		}
+		for (const FQaFaceBox& E : Visible)
+		{
+			const double CY = (E.Y0 + E.Y1) * 0.5, CZ = (E.Z0 + E.Z1) * 0.5;
+			// out from each edge across the housing until the black ends: (distance, rim) per direction
+			auto ScanOut = [&](double Limit, double OutDist[4], const FQaFaceBox* OutRim[4])
+			{
+				const double DY[4] = {1.0, -1.0, 0.0, 0.0}, DZ[4] = {0.0, 0.0, 1.0, -1.0};
+				const double Start[4] = {E.Y1, E.Y0, E.Z1, E.Z0};
+				for (int32 K = 0; K < 4; ++K)
+				{
+					OutRim[K] = nullptr;
+					double D = Step;
+					for (; D <= Scan; D += Step)
+					{
+						const double Y = DY[K] != 0.0 ? Start[K] + DY[K] * D : CY;
+						const double Z = DZ[K] != 0.0 ? Start[K] + DZ[K] * D : CZ;
+						const FQaFaceBox* S = Face.FrontAt(Y, Z, Limit);
+						if (S == nullptr || (!S->bDark && !S->bEye))
+						{
+							OutRim[K] = S;
+							break;
+						}
+					}
+					OutDist[K] = D;
+				}
+			};
+			double Dist[4];
+			const FQaFaceBox* Rim[4];
+			ScanOut(TNumericLimits<double>::Max(), Dist, Rim);
+			double Plane = TNumericLimits<double>::Max();
+			int32 Rims = 0;
+			for (int32 K = 0; K < 4; ++K)
+			{
+				if (Rim[K] != nullptr)
+				{
+					Plane = FMath::Min(Plane, Rim[K]->Front);
+					++Rims;
+				}
+			}
+			if (Rims < 4)
+			{
+				Faults.Add(FString::Printf(TEXT("E2 eye at y %+.2f: no face round its housing in %d direction(s)"), CY, 4 - Rims));
+				continue;
+			}
+			const double Limit = Plane + Tolerance;
+			// E2: not proud of the face that rims the housing
+			if (E.Front > Limit)
+			{
+				Faults.Add(FString::Printf(TEXT("E2 eye at y %+.2f: its face at x %.2f stands %.2f PROUD of the face round it (x %.2f)"), CY, E.Front, E.Front - Plane, Plane));
+			}
+			WorstBehind = FMath::Min(WorstBehind, Plane - E.Front);
+			ScanOut(Limit, Dist, Rim);
+			for (int32 K = 0; K < 4; ++K)
+			{
+				LeastBlack = FMath::Min(LeastBlack, Dist[K] - Step);
+			}
+			// E1: black beyond every edge, on the face
+			for (int32 K = 0; K <= 8; ++K)
+			{
+				const double T = K / 8.0;
+				const double Ys = E.Y0 - Margin + (E.Y1 - E.Y0 + 2.0 * Margin) * T;
+				const double Zs = E.Z0 - Margin + (E.Z1 - E.Z0 + 2.0 * Margin) * T;
+				const FVector2D Ring[4] = {FVector2D(Ys, E.Z0 - Margin), FVector2D(Ys, E.Z1 + Margin), FVector2D(E.Y0 - Margin, Zs), FVector2D(E.Y1 + Margin, Zs)};
+				for (const FVector2D& P : Ring)
+				{
+					const FQaFaceBox* S = Face.FrontAt(P.X, P.Y, Limit);
+					if (S == nullptr || !S->bDark)
+					{
+						Faults.AddUnique(FString::Printf(TEXT("E1 eye at y %+.2f: not black %.2f beyond its edge (%s at %.2f, %.2f)"),
+							CY, Margin, S != nullptr ? *S->Mat.ToString() : TEXT("nothing"), P.X, P.Y));
+					}
+				}
+			}
+			// E4: a mirrored partner
+			const bool bMate = Visible.ContainsByPredicate([&](const FQaFaceBox& F)
+			{
+				return FMath::Abs((F.Y0 + F.Y1) * 0.5 + CY) < 0.02 && FMath::Abs(F.Z0 - E.Z0) < 0.02 && FMath::Abs((F.Y1 - F.Y0) - (E.Y1 - E.Y0)) < 0.02;
+			});
+			if (!bMate)
+			{
+				Faults.Add(FString::Printf(TEXT("E4 eye at y %+.2f has no mirrored partner"), CY));
+			}
+		}
+		// E3: visible halo light only over the black housing or an eye, behind the eyes' faces, not between the eyes
+		double EyeFront = -TNumericLimits<double>::Max();
+		for (const FQaFaceBox& E : Visible)
+		{
+			EyeFront = FMath::Max(EyeFront, E.Front);
+		}
+		int32 HaloPoints = 0;
+		for (const FQaFaceBox& H : Face.Halos)
+		{
+			const int32 NY = FMath::Max(2, static_cast<int32>((H.Y1 - H.Y0) / 0.1));
+			const int32 NZ = FMath::Max(2, static_cast<int32>((H.Z1 - H.Z0) / 0.1));
+			int32 Bad = 0, Between = 0, Seen = 0;
+			for (int32 IY = 0; IY <= NY; ++IY)
+			{
+				for (int32 IZ = 0; IZ <= NZ; ++IZ)
+				{
+					const double Y = H.Y0 + 0.01 + (H.Y1 - H.Y0 - 0.02) * IY / NY;
+					const double Z = H.Z0 + 0.01 + (H.Z1 - H.Z0 - 0.02) * IZ / NZ;
+					const FQaFaceBox* S = Face.FrontAt(Y, Z);
+					if (S != nullptr && S->Front > H.Front + 1e-6)
+					{
+						continue;   // hidden behind a surface
+					}
+					++Seen;
+					++HaloPoints;
+					const double Off[5][2] = {{0, 0}, {HaloMargin, 0}, {-HaloMargin, 0}, {0, HaloMargin}, {0, -HaloMargin}};
+					for (const auto& O : Off)
+					{
+						const FQaFaceBox* T = Face.FrontAt(Y + O[0], Z + O[1]);
+						if (T == nullptr || !(T->bDark || T->bEye || T->Front > H.Front + 1e-6))
+						{
+							++Bad;
+							break;
+						}
+					}
+					if (FMath::Abs(Y) < InnerEdge - 0.01)
+					{
+						++Between;
+					}
+				}
+			}
+			const double HY = (H.Y0 + H.Y1) * 0.5;
+			if (Bad > 0)
+			{
+				Faults.Add(FString::Printf(TEXT("E3 halo at y %+.2f: %d visible point(s) light something that is not the black housing"), HY, Bad));
+			}
+			if (H.Front > EyeFront + 1e-6 && Seen > 0)
+			{
+				Faults.Add(FString::Printf(TEXT("E3 halo at y %+.2f stands in front of the eyes' faces (x %.2f > %.2f)"), HY, H.Front, EyeFront));
+			}
+			if (Between > 0)
+			{
+				Faults.Add(FString::Printf(TEXT("E3 halo at y %+.2f reaches inward past the eyes at %d point(s)"), HY, Between));
+			}
+		}
+		if (Faults.Num() > 0)
+		{
+			OutDetail = FString::Join(Faults, TEXT("; "));
+			return false;
+		}
+		OutDetail = FString::Printf(TEXT("%d visible eyes, each face %.2f+ behind the face round its housing, black %.2f+ beyond every edge (black %.2f+ across its housing), %d halo pane(s) lighting only the black housing (%d visible points)"),
+			Visible.Num(), WorstBehind, Margin, LeastBlack, Face.Halos.Num(), HaloPoints);
+		return true;
+	}
+
+	/** Q25 on the costume a Dog wears now: parse the figure file it loaded and judge its eyes. */
+	bool QaWornEyesInsideFace(const AWonderlandCompanionEmbodiment* Worn, FString& OutDetail)
+	{
+		if (Worn == nullptr)
+		{
+			OutDetail = TEXT("no costume to read");
+			return false;
+		}
+		FString Text, Error;
+		FWonderlandCompanionFigure Figure;
+		const FString Path = Worn->GetFigurePath();
+		if (!FFileHelper::LoadFileToString(Text, *Path) || !FWonderlandCompanionFigure::Parse(Text, Figure, Error))
+		{
+			OutDetail = FString::Printf(TEXT("could not read the worn figure '%s' (%s)"), *Path, *Error);
+			return false;
+		}
+		const bool bOk = QaEyesInsideFace(Figure, OutDetail);
+		OutDetail = FPaths::GetCleanFilename(Path) + TEXT(": ") + OutDetail;
+		return bOk;
 	}
 
 	/** A costume's materials as painted right now (DescribeMaterialColours): the body's Color and its flame twin's. */
@@ -1220,6 +1497,14 @@ namespace
 					Canon > 120.0f && FMath::Abs(Body - Canon) <= 0.5f && FMath::Abs(Dz) <= 0.5,
 					FString::Printf(TEXT("%s: body %.2f uu against Relay OG %.2f uu, the switch moved the Dog %.2f uu"),
 						Roster[Which], Body, Canon, Dz));
+				// Q25 (founder correction, 2026-10-01): the costume's eyes INSIDE its face, judged on the figure it loaded.
+				// Relay OG wears no costume: its canon body is the reference the founder named, and it is not judged here.
+				if (Which > 0)
+				{
+					FString EyeDetail;
+					const bool bEyes = QaWornEyesInsideFace(Worn, EyeDetail);
+					QaCheck(Run, *FString::Printf(TEXT("Q25.%d"), Which + 1), bEyes, FString::Printf(TEXT("%s: %s"), Roster[Which], *EyeDetail));
+				}
 				++Run.Sub;
 			}
 			break;
@@ -1796,6 +2081,213 @@ namespace
 				return false;
 			}), 15.0f);
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLQA HangOnExit armed: quitting in 15 s with an exit that hangs"));
+		}));
+
+	/* ================================================================ wl.Qa.SkinFaces (founder, 2026-10-01)
+	 *
+	 * THE EYE CORRECTION, PHOTOGRAPHED IN THE GAME. The founder: "Do not accept this from source inspection alone. After
+	 * the fix: equip all five skins one by one in Wonderland. For each skin capture a FRONT-FACING close view where the
+	 * face is clearly visible ... Check them at: close distance, normal gameplay distance." For each skin in the roster's
+	 * order this wears it, waits for the costume, logs Q25's verdict on the figure it loaded, stands a camera in front of
+	 * the Dog's face and saves four frames to Saved/Screenshots/WLFACES -- close front, close three-quarter, close side (is
+	 * anything proud of the face?), and front from a normal play distance -- then puts Relay OG back and quits. It moves no
+	 * input of its own; the Dog stands where it spawned.
+	 */
+	struct FQaFaceShot
+	{
+		const TCHAR* Name;
+		double Yaw;        // degrees round the Dog from straight in front of its face
+		double Distance;   // uu from the eyes
+		double Rise;       // uu the camera stands above the eyes
+		float Fov;
+	};
+	const FQaFaceShot FaceShots[] = {
+		{TEXT("close_front"), 0.0, 150.0, 4.0, 40.0f},
+		{TEXT("close_34"), 40.0, 150.0, 4.0, 40.0f},
+		{TEXT("close_side"), 86.0, 150.0, 4.0, 40.0f},
+		{TEXT("play_front"), 0.0, 480.0, 90.0, 70.0f},
+	};
+	const TCHAR* const FaceRoster[5] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal") };
+	// The eyes stand at 0.715 of the canonical body's height: visor_z 19.14 in the generator's body record -0.044..26.79.
+	constexpr double FaceEyeHeight = 0.715;
+
+	struct FQaFaces
+	{
+		TWeakObjectPtr<UWorld> World;
+		TWeakObjectPtr<ACameraActor> Camera;
+		int32 Skin = 0;
+		int32 Shot = 0;
+		int32 Phase = 0;
+		double At = 0.0;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		FString Dir;
+	};
+	TSharedPtr<FQaFaces> GQaFaces;
+
+	bool QaFacesTick(float)
+	{
+		if (!GQaFaces.IsValid())
+		{
+			return false;
+		}
+		FQaFaces& F = *GQaFaces;
+		UWorld* World = F.World.Get();
+		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		ARelayDogCharacter* D = QaDog(World);
+		const double In = QaNow() - F.At;
+		if (World == nullptr || PC == nullptr || D == nullptr)
+		{
+			if (In > 120.0)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES quit: no world or Relay Dog"));
+				FPlatformMisc::RequestExit(false);
+				return false;
+			}
+			return true;
+		}
+		switch (F.Phase)
+		{
+		case 0:
+			// the world settles first, as the QA lets it; the first-launch welcome is put away so it covers no face
+			if (In >= 8.0)
+			{
+				if (UWonderlandUiSubsystem* U = QaUi(World))
+				{
+					U->DismissWelcome();
+					U->CloseOverlay();
+				}
+				F.Phase = 1;
+				F.At = QaNow();
+			}
+			break;
+		case 1:
+			if (F.Skin >= 5)
+			{
+				F.Phase = 9;
+				F.At = QaNow();
+				break;
+			}
+			GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), FaceRoster[F.Skin]));
+			F.Shot = 0;
+			F.Phase = 2;
+			F.At = QaNow();
+			break;
+		case 2:
+			// the costume built and settled; then Q25 on the figure it loaded
+			if (In >= 3.0)
+			{
+				if (F.Skin > 0)
+				{
+					FString Detail;
+					const bool bOk = QaWornEyesInsideFace(D->GetCostume(), Detail);
+					(bOk ? F.Pass : F.Fail)++;
+					UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES Q25.%d %s | %s: %s"), F.Skin + 1, bOk ? TEXT("PASS") : TEXT("FAIL"), FaceRoster[F.Skin], *Detail);
+				}
+				else
+				{
+					UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES relay_og: the canon body, no costume -- the founder's reference, not judged (worn %s)"),
+						*D->GetWornSkinId().ToString());
+				}
+				F.Phase = 3;
+				F.At = QaNow();
+			}
+			break;
+		case 3:
+		{
+			if (F.Shot >= static_cast<int32>(UE_ARRAY_COUNT(FaceShots)))
+			{
+				++F.Skin;
+				F.Phase = 1;
+				F.At = QaNow();
+				break;
+			}
+			const FQaFaceShot& S = FaceShots[F.Shot];
+			const FVector Feet = D->GetActorLocation() - FVector(0.0, 0.0, D->GetSimpleCollisionHalfHeight());
+			const FVector Eyes = Feet + FVector(0.0, 0.0, D->GetCanonBodyHeightUu() * FaceEyeHeight);
+			const FVector Toward = D->GetActorForwardVector().GetSafeNormal2D().RotateAngleAxis(S.Yaw, FVector::UpVector);
+			const FVector Where = Eyes + Toward * S.Distance + FVector(0.0, 0.0, S.Rise);
+			ACameraActor* Cam = F.Camera.Get();
+			if (Cam == nullptr)
+			{
+				FActorSpawnParameters Params;
+				Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+				Cam = World->SpawnActor<ACameraActor>(Where, FRotator::ZeroRotator, Params);
+				F.Camera = Cam;
+			}
+			if (Cam != nullptr)
+			{
+				Cam->SetActorLocationAndRotation(Where, (Eyes - Where).Rotation());
+				Cam->GetCameraComponent()->SetFieldOfView(S.Fov);
+				Cam->GetCameraComponent()->SetConstraintAspectRatio(false);
+				PC->SetViewTargetWithBlend(Cam, 0.0f);
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES camera %s %s: %.0f uu from the eyes, %.0f deg round, fov %.0f (eyes at %s)"),
+				FaceRoster[F.Skin], S.Name, S.Distance, S.Yaw, S.Fov, *Eyes.ToCompactString());
+			F.Phase = 4;
+			F.At = QaNow();
+			break;
+		}
+		case 4:
+			// the image settles after the cut (temporal AA converges), then it is saved
+			if (In >= 1.2)
+			{
+				const FQaFaceShot& S = FaceShots[F.Shot];
+				int32 W = 0;
+				int32 H = 0;
+				const FString Path = F.Dir / FString::Printf(TEXT("%d_%s_%s.png"), F.Skin + 1, FaceRoster[F.Skin], S.Name);
+				const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, W, H);
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), W, H);
+				++F.Shot;
+				F.Phase = 3;
+				F.At = QaNow();
+			}
+			break;
+		case 9:
+			// Relay OG back, the Dog's own camera back, and quit
+			if (In >= 0.5)
+			{
+				PC->SetViewTargetWithBlend(D, 0.0f);
+				if (ACameraActor* Cam = F.Camera.Get())
+				{
+					Cam->Destroy();
+				}
+				GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES END pass=%d fail=%d"), F.Pass, F.Fail);
+				F.Phase = 10;
+				F.At = QaNow();
+			}
+			break;
+		case 10:
+			if (In >= 1.0)
+			{
+				GQaFaces.Reset();
+				FPlatformMisc::RequestExit(false);
+				return false;
+			}
+			break;
+		default:
+			break;
+		}
+		return true;
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaSkinFaces(
+		TEXT("wl.Qa.SkinFaces"),
+		TEXT("Photograph every Relay Dog skin's face in this build -- close front, close three-quarter, close side and front from a ")
+		TEXT("play distance -- with Q25's eyes-inside-the-face verdict on each costume, into Saved/Screenshots/WLFACES; then quit."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaFaces.IsValid())
+			{
+				return;
+			}
+			GQaFaces = MakeShared<FQaFaces>();
+			GQaFaces->World = World;
+			GQaFaces->At = QaNow();
+			GQaFaces->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLFACES"));
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaFacesTick), 0.1f);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES armed: five skins, %d frames each"), static_cast<int32>(UE_ARRAY_COUNT(FaceShots)));
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs GQaConsoleFilm(
