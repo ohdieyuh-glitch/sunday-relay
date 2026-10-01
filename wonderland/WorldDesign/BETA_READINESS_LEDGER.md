@@ -24,30 +24,67 @@ Each row has a weight; the weights total 100. A row earns:
 partly unverified scores 0, not a blend. **Readiness = sum of weight x credit.** Second's independent sign-off on the RC
 is built into every 1.0, so nothing above 75% is possible before the final RC.
 
-## Ledger (as of RC4: CORE's evidence and Second's review; RC5 in progress)
+## Ledger (as of RC5: CORE's evidence; Second's RC5 sign-off pending)
 
-| # | Requirement | Weight | Credit | Evidence (RC3 = 0.1.0-rc3, 90c8d0fa; RC4 = 0.1.0-rc4, 3aa43e1f) | Weakest part / open blockers |
+| # | Requirement | Weight | Credit | Evidence (RC3 = 0.1.0-rc3, 90c8d0fa; RC4 = 0.1.0-rc4, 3aa43e1f; RC5 = 0.1.0-rc5, 05e983d8) | Weakest part / open blockers |
 |---|---|---|---|---|---|
-| R1 | Environmental world complete (locked, 25/25) | 8 | 0.75 | WORLD_COMPLETION_MATRIX.md; RC3 and RC4 QA Q02-Q08 travel/map/teleports PASS; RC4: 0 "missing usage flag Nanite" in all three boots (RC3 had 8) | B45 fixed in RC4 (founder D4) |
-| R2 | Gameplay regression G1-G7 (locked, 18/18) | 8 | 0.75 | RC3 QA Q09-Q11 PASS | -- |
-| R3 | First launch: clean start, spawn, Relay Dog init, clear path in, no developer knowledge | 8 | 0.75 | RC3 Q00.1 welcome, Q00.2 lock-down; prerequisites + closure (0 unresolved); Esc -> menu -> QUIT used for real in the RC3 soak ("WLUI quit chosen from the menu", clean exit) | -- |
+| R1 | Environmental world complete (locked, 25/25) | 8 | 0.75 | WORLD_COMPLETION_MATRIX.md; RC3, RC4 and RC5 QA Q02-Q08 travel/map/teleports PASS; RC4/RC5: 0 "missing usage flag Nanite" (RC3 had 8) | -- |
+| R2 | Gameplay regression G1-G7 (locked, 18/18) | 8 | 0.75 | RC3 and RC5 QA Q09-Q11 PASS | -- |
+| R3 | First launch: clean start, spawn, Relay Dog init, clear path in, no developer knowledge | 8 | 0.75 | RC5 Q00.1 welcome, Q00.2 lock-down, Q00.6 the window names the build; prerequisites + closure; Esc -> menu -> QUIT (RC3 soak); Second's RC4 clean-user first launch | B55 (P3): a freshly unzipped package hitches on its first run |
 | R4 | Core creation loop, truthful about Julius | 12 | 0.5 | RC3 Q13 eight contracts through + and the terminal, Q14 restored, Q15 deleted, Q17 the simulated mission plays and says SIMULATED, Q20 limit 48 | the WATCH A SIMULATED MISSION button itself is only statically verified (Q17 makes the same call) |
 | R5 | Session stability: launch / quit / relaunch, focus loss, window changes (single-player) | 3 | 0 | RC3: four clean boots and quits; the menu QUIT works | focus loss not yet verified; RC3's two window modes (B40 fix) not yet verified in a package |
 | R6 | Private/project space and project avatar flow, as implemented | 3 | 0.75 | nothing to test (D2); RC3 Q18 `/pa` changes nothing in a player session; welcome says single-player | -- |
-| R7 | Wonder Web and every beta-facing screen: no dead buttons or placeholders, no debug exposure, back/close/Esc, sane errors | 8 | 0 | RC3 Q00.2/Q00.3; RC4 Q00.5 (D3: role names, sample browsers developer-only), Q01-Q01f (B44 Flame Color) | **B49 open on RC4** (the founder's companion-terminal requirement, 2026-10-01; fixed in RC5 source, accepted on video) |
-| R8 | Save / persistence across quit, relaunch, interruption | 8 | 0.75 | RC3 Q12/Q14/Q16/Q15 across a restart; Q21.1-Q21.5 a third boot on corrupted files: no crash, bad files set aside, next save sealed | -- |
+| R7 | Wonder Web and every beta-facing screen: no dead buttons or placeholders, no debug exposure, back/close/Esc, sane errors | 8 | 0.75 | RC5 Q00.2/Q00.3/Q00.5 (D3), Q01-Q01f (B44 Flame Color), Q22-Q24 (B49 companion consoles) and CORE's RC5 films beside the founder's reference | B49 needs Second's own video acceptance on RC5; B54 (P2, Julius lane): SIM TOKENS in the Julius terminal |
+| R8 | Save / persistence across quit, relaunch, interruption | 8 | 0.75 | RC5 Q12/Q14/Q16/Q15 across a restart; Q21.1-Q21.7 a third boot on corrupted files: no crash, bad files set aside, next save sealed | -- |
 | R9 | Error / recovery: services absent, timeouts, failed travel / load, bad input, corrupt files | 7 | 0.5 | RC3 Q00.3 services absent, Q19 bad terminal input, Q21 corrupt files | failed travel / load verified in the editor only (travel timeout squeeze proof) |
-| R10 | Performance on the founder's laptop, measured in the package | 7 | 0.75 | RC3 perf in the game's own window (borderless 1536x960, EPIC, HW RT): 30-52 fps averages, no frame > 100 ms (table below); Second's RC2 matrix: every SETTINGS choice applies | -- |
+| R10 | Performance on the founder's laptop, measured in the package | 7 | 0.75 | RC5 perf twice in the game's own window (borderless 1536x960, EPIC, HW RT), back to back with RC4 (table below): RC5 = RC4; RC3 table below; Second's RC2 matrix: every SETTINGS choice applies | B55 (P3): first run of a fresh package |
 | R11 | Memory pressure: long-session growth, repeated skins / teleports / contracts / map / relaunch | 6 | 0 | RC3 soak stopped at 18.7 min by someone at the laptop (menu QUIT): private +340 MB/h over 14 warm minutes, inside ~700 MB place-to-place swings -- INCONCLUSIVE | a full 60-minute soak |
-| R12 | Package / distribution: clean artifact, prerequisites, no machine paths, size, README, version visible | 7 | 0.75 | RC3 zip: 97 files, 0.62 GB, sha256 530A2AFB...1D87; closure 0 unresolved; no Saved/PDB/sources/Vulkan layers; clean label "build 90c8d0fa" | P2: B33 unsigned, B36 notices; P3: B38, B48 |
-| R13 | Security / privacy baseline | 5 | 0.75 | RC3: no listening socket in a player session (QNET, and a manual sample 35 s into the perf run); scan: no names, e-mails or secrets; AI off (Q00.3) | -- |
+| R12 | Package / distribution: clean artifact, prerequisites, no machine paths, size, README, version visible | 7 | 0.75 | RC5 zip: 81 files, 0.62 GB, sha256 0CFF42F5...E8459; app-local CRT + vc_redist staged; no Saved/PDB/sources/Vulkan layers/retired figures; clean label "build 05e983d8"; README with the publisher dialog and Smart App Control | P2: B33 unsigned, B36 notices; P3: B38 |
+| R13 | Security / privacy baseline | 5 | 0.75 | RC5: no listening socket in a player session (QNET, two boots); scan: no names, e-mails or secrets (known P3 strings only); AI off (Q00.3) | -- |
 | R14 | Crash / soak on the package | 4 | 0 | 0 crashes across 3 QA boots, perf and 18.7 soak minutes | a full 60-minute soak |
 | R15 | Clean-user test on the RC (no saves, no console, no developer knowledge) | 6 | 0 | Second's RC3 clean-user pass waits for an idle laptop | -- |
 | | **Total** | **100** | | | |
 
-**WONDERLAND BETA READINESS: 50.0%** (RC4, 2026-10-01). R1 6 + R2 6 + R3 6 + R4 6 + R6 2.25 + R8 6 + R9 3.5 + R10 5.25 +
-R12 5.25 + R13 3.75. RC4 closed B44, B45 and D3, but it is not the final RC: the founder's companion-terminal requirement
-(B49, P1) arrived the same day and needs RC5, so R7 stays 0 and every row is re-earned on RC5.
+**WONDERLAND BETA READINESS: 56.0%** (RC5, CORE's evidence, 2026-10-01). R1 6 + R2 6 + R3 6 + R4 6 + R6 2.25 + R7 6 +
+R8 6 + R9 3.5 + R10 5.25 + R12 5.25 + R13 3.75. No P0 or P1 is open on RC5. Nothing above 75% is possible until Second
+signs RC5. R5, R11, R14 and R15 still need their evidence: focus loss and window modes, the 60-minute soak (running),
+and the clean-user pass. R4 and R9 need their weakest parts in the package: the WATCH button clicked, and a failed
+travel/load.
+
+### RC5 package evidence (CORE)
+
+- Build: 0.1.0-rc5, commit 05e983d8, label "Private Beta 0.1.0-rc5 | build 05e983d8 | 2026-10-01", zip sha256
+  0CFF42F5485E8AC125F1A0E7D13CB5C1C1131ACA208A79B6D71B7935207E8459, 667,445,474 bytes, 81 files. BuildCookRun 271 s.
+- QA (`qa_rc5.log`): 58 PASS, 0 FAIL over three boots, no interference, QNET clean.
+  - Q00.6: the window title carries the label.
+  - Q22, the companion consoles during the simulated mission: 6 of 6 mark shapes in both, timer 0 -> 5 s over 5.0 s,
+    lines 1 -> 7, verb red and pale, no status row in the history, the counter in lines, no Esc offered, SIMULATED in
+    the mode and inset.
+  - Q23: a scrolled-back view held 5 s with 5 new rows marked, then back to live.
+  - Q24: both consoles settle after a stop.
+- Films (`film_rc5_mission/`, `film_rc5_runtime/`; side-by-sides with the founder's reference in
+  `console_acceptance_rc5/`). In the runtime film (developer session, the runtime's fixture-chat-slow):
+  - session started; the prompt echoed; "Thinking… (0s · ↓ 0 chars)";
+  - the answer streams in rising, "Responding… · ↓ 62 → 214 chars", then "Answered in 4s · 271 chars · SIMULATED";
+  - "esc to interrupt" in the footer with the keyboard in the console; Esc through the real handler gives
+    "✗ Interrupted · Cancelled part way through the answer." and "Stopped (1s)".
+- Perf, the game's own window (borderless 1536x960, EPIC, HW RT), avg fps / worst frame:
+
+  | phase | RC5 run 1 (fresh files) | RC5 run 2 | RC4 (same hour) |
+  |---|---|---|---|
+  | idle | 34.1 / 51 ms | 32.9 / 61 ms | 33.6 / 66 ms |
+  | walk 30 s | 36.2 / 54 ms | 33.9 / 57 ms | 34.6 / 52 ms |
+  | teleport x5 | 16.6 / 361 ms | 27.8 / 110 ms | 29.0 / 110 ms |
+  | map x8 | 23.7 / 147 ms | 40.4 / 71 ms | 40.8 / 43 ms |
+  | wardrobe x5 | 34.1 / 116 ms | 33.8 / 83 ms | 34.5 / 81 ms |
+  | contract 60 s | 32.5 / 84 ms | 31.5 / 105 ms | 31.3 / 80 ms |
+  | creation | 32.1 / 45 ms | 31.8 / 42 ms | 32.1 / 48 ms |
+
+  RC5 = RC4: the consoles cost nothing measurable. The first run of a freshly unzipped package streams two to three times
+  slower (B55). Teleports have been about 15% slower than RC3 since RC4's founder-approved Nanite material fix (D4).
+  Memory is flat: peak working set ~2.47 GB, private ~6.6 GB, VRAM ~4.23 GB.
+- Scan: the known P3 strings only (source paths and the developer service hint in the exe, OpenSSL text, a random "ghp_"
+  byte run in .ucas data).
 
 ### RC4 package evidence (CORE + Second)
 
@@ -64,16 +101,6 @@ R12 5.25 + R13 3.75. RC4 closed B44, B45 and D3, but it is not the final RC: the
   The interactive steps were paused when the founder returned.
 - Second's RC4 seed matrix: R01 PASS (an RC3-sealed contracts file restores in RC4). It was stopped at R02 by a
   low-memory reaper and not resumed, because RC5 is certain.
-
-### RC5 in progress (CORE)
-
-- B49: one reusable companion console (SWonderlandCompanionConsole), fed by the sidekick runtime and the simulated
-  mission. Commit 78fced42 (local), plus a font-measure fix pending.
-- On a scratch package (RC4 content plus the new exe), QA Q24 passed (both consoles settle after a stop). Q22/Q23
-  failed on a QA timing error, since fixed: they sampled before the companions had joined the mission at its site.
-- Film3: the status row cycles the mark through six shapes and back in 2.0 s, the verb is pale while it grows and red
-  while it shrinks, the timer ticks once a second, the counter rises in place, and the transcript rises stage by stage.
-  Acceptance is Second's video procedure on the real RC5.
 
 ### RC3 package evidence (CORE)
 
@@ -176,10 +203,12 @@ survives a small private beta with a documented limitation. P3 is polish. Only P
 | B47 | P3 | logs | Territory markers log "NO GROUND FOUND, standing at z=0" at BeginPlay, before their cells stream | -- | open |
 | B48 | P3 | package hygiene | The stage shipped retired figures (Apollo*, ArdenInfernal*, Bee, Hagoromo, SkeletonFlame, SkeletonFlameV1 and the Apollo/Arden cubs) | release script excludes them (RC4); sources kept | fixed in RC4 source |
 | B43 | P2 | performance | An integrated-GPU laptop at the default EPIC quality may run short of memory (the iGPU probe was stopped by memory pressure) | README: integrated graphics -> QUALITY LOW first (RC3); no automatic default (untestable here) | documented |
-| B49 | P1 | founder requirement | Companion terminals must match the Claude Code terminal experience (founder, 2026-10-01, reference IMG_2179.mov). Requirements: live rising output; an in-place status row with an animated emblem, a warm red-to-gold pulse, a live timer and truthful telemetry; follow-bottom scrolling with a new-output marker; prompt and footer; lifecycle lines; real state mapping; one reusable component; accepted on VIDEO | SWonderlandCompanionConsole + WonderlandCompanionWork; runtime and mission feeds; QA Q22-Q24; wl.Qa.ConsoleFilm (78fced42) | open on RC4; fixed in RC5 source; acceptance = Second's video procedure on RC5 |
-| B50 | P2 | truthfulness | Stopping a simulated mission (Missions panel, tests) never told the terminals: the companions stayed "working" with a live timer | StopFixture narrates the end (78fced42); Q24 | fixed in RC5 source |
-| B51 | P3 | distribution | README named only SmartScreen's dialog; a MOTW exe raises "The publisher could not be verified", and Smart App Control blocks unsigned apps outright (Second, RC4) | README lines (78fced42) | fixed in RC5 source |
-| B52 | P3 | distribution | The window title lost the build label: the engine writes its own title after the stamp (Q00.6, RC4) | the label is kept by a 1 s ticker (78fced42) | fixed in RC5 source |
+| B49 | P1 | founder requirement | Companion terminals must match the Claude Code terminal experience (founder, 2026-10-01, reference IMG_2179.mov). Requirements: live rising output; an in-place status row with an animated emblem, a warm red-to-gold pulse, a live timer and truthful telemetry; follow-bottom scrolling with a new-output marker; prompt and footer; lifecycle lines; real state mapping; one reusable component; accepted on VIDEO | SWonderlandCompanionConsole + WonderlandCompanionWork; runtime and mission feeds; QA Q22-Q24; wl.Qa.ConsoleFilm (78fced42, 27b3f2d8, 05e983d8) | fixed in RC5: QA Q22-Q24 PASS and CORE's films; Second's video acceptance pending |
+| B50 | P2 | truthfulness | Stopping a simulated mission (Missions panel, tests) never told the terminals: the companions stayed "working" with a live timer | StopFixture narrates the end (78fced42) | fixed in RC5; Q24 |
+| B51 | P3 | distribution | README named only SmartScreen's dialog; a MOTW exe raises "The publisher could not be verified", and Smart App Control blocks unsigned apps outright (Second, RC4) | README lines (78fced42) | fixed in RC5 |
+| B52 | P3 | distribution | The window title lost the build label: the engine writes its own title after the stamp (Q00.6, RC4) | the label is kept by a 1 s ticker (78fced42) | fixed in RC5; Q00.6 |
+| B54 | P2 | truthfulness | The Julius Live Terminal shows "SIM TOKENS 312" during a simulated mission: an estimate (characters / 4), labelled SIM and explained in a tooltip, but a usage-looking number nothing produced (Second, RC5 film) | WonderlandLiveTerminal.cpp is the Julius lane's file, which CORE does not edit | open (founder / Julius lane) |
+| B55 | P3 | performance | The first run of a freshly unzipped package hitches while streaming: teleports worst 361 ms and map 147 ms on RC5's first run, against 110 ms and 71 ms on its second (new files scanned, caches cold) | -- | documented |
 | B53 | P2 | dependency | A companion doing a REAL task needs a provider the founder connects. On this laptop OpenAI has no key and Claude Code is installed but not allowed. The runtime's development providers answer SIMULATED | the console labels the runtime's mode; the REAL-provider video waits for the founder | founder decision |
 
 ## Founder decisions
@@ -190,12 +219,22 @@ survives a small private beta with a documented limitation. P3 is polish. Only P
 - **D2, multiplayer and private/project spaces: settled by the founder's direction** ("to the extent included in the
   beta", "as implemented; do not invent future systems"). None exists in the code; the beta is single-player, R5 covers
   single-player session stability and R6 verifies that nothing promises what is not there.
-- **D3, third-party names for outside testers: OPEN, the founder's call (B11, P1).** Testers see "GPT 6 Astra" and
-  "Claude Code Fable 5" on the HUD from the first frame (terminal titles, usage rows, the simulated mission's terminals,
-  two Project Brain sample lines), next to "not connected in this beta", AND can open Wonder Web sample pages styled as
-  Instagram and Google (B -> WONDER WEB -> Ctrl+W). Options for the names: keep them for an invite-only beta; show the
-  role names (LLM COMPANION, JHINN) in player builds only, canon names untouched in development; or rename in canon.
-  Options for the sample pages: neutral pages with no third-party marks; browser windows for developers (-wldev)
-  only; or keep. CORE does not change companion canon or the founder's samples unilaterally.
-- **D4, the world materials' Nanite flag (B45): the founder's call if it is visible**, because the fix is an editor
-  write to three master materials in the shared Content tree.
+- **D3, third-party names for outside testers: DECIDED 2026-10-01** -- "Role names for testers" (player builds show
+  LLM COMPANION and JHINN; canon names stay in development) and sample browser windows "Developer-only". Shipped in RC4
+  (Q00.5).
+- **D4, the world materials' Nanite flag (B45): DECIDED 2026-10-01** -- "Approve the resave". Done by a headless editor
+  run; shipped in RC4 (0 warnings).
+- **D5, a REAL provider behind a companion (B53): OPEN, the founder's call.** The founder's acceptance asks for "a
+  companion actively performing a real task". On this laptop the runtime's real providers are not connected (OpenAI:
+  no key; Claude Code: installed, not allowed to run), so the runtime film uses its development provider and says
+  SIMULATED. Connecting a provider is a credential or spending decision CORE does not make.
+- **D6, the Julius lane's Project Brain adapter: OPEN, the founder's call.** Second Julius offered
+  `local/wonderland-project-brain-client @ 0da34542` (Wonderland's Project Brain panel reading and writing a Julius
+  backend once paired). It is unbuilt and untested in Unreal and would change the beta's scope (the README calls the
+  Project Brain entries samples). Options: a later beta RC, or a scratch build only.
+- **D7, SIM TOKENS in the Julius Live Terminal (B54): OPEN, the founder's or the Julius lane's call.** Keep, change to a
+  truthful unit (lines printed, as the companion consoles count), or drop. CORE does not edit that file.
+- **D8, the mission strip's line for players: confirm.** "MISSION · EVENT · STATE · CHAKRA · STATUS" is shown in
+  player sessions with event ids (e.g. `mission.contract.locked (applied)`, `full_lifecycle 2/22`). The source says the
+  founder asked for these five; Second flags them as developer telemetry (P3). Kept until the founder says otherwise.
+
