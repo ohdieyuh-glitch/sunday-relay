@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 
 import {
   juliusTaskContractBindingDigest,
@@ -6,6 +6,7 @@ import {
   type JuliusTaskContractLockResult,
   type JuliusTaskContractStore,
 } from '../mission/julius';
+import { juliusSerializable } from './julius-serializable';
 
 /**
  * POSTGRESQL AUTHORITY FOR THE TASK/SPRINT CONTRACT.
@@ -110,87 +111,41 @@ export class JuliusContractPostgresRepository implements JuliusTaskContractStore
     projectId: string; contractId: string; contractRevision: number;
     bindingDigest: string; lockedAt: string; evaluatorId: string;
   }): Promise<JuliusTaskContractLockResult> {
-    const client = await this.pool.connect();
+    /**
+     * A SERIALIZATION FAILURE IS RETRIED HERE, NOT ANSWERED.
+     *
+     * It used to be answered — once, as `lock_contended` — and nothing above
+     * this method retries a lock: the accepting decision was recorded anyway,
+     * its build was released onto a contract still in DRAFT, and the dispatch
+     * gate then failed that build closed with `contract_not_locked`. Real-infra
+     * run 36855148392 attempt 1 (PR #305, 2026-10-01) lost one mission of six
+     * that way, with two run loops on one database: SSI reports read/write
+     * dependencies between transactions on DIFFERENT missions' contracts when
+     * their rows share a page, so the conflict needs no second lock of the same
+     * contract at all. A 40001 or 40P01 rolled everything back, so the body is
+     * simply run again against what is there now — which is either the lock
+     * this call was asked for, or a standing refusal it can now see.
+     */
     try {
-      await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
-      // FOR UPDATE on the candidate, so two ticks serialise here rather than at
-      // the unique index. The index is still the authority — this only makes
-      // the common case a wait instead of a retry.
-      const candidate = await client.query<Record<string, unknown>>(
-        `SELECT * FROM relay_wonderland.julius_task_contracts
-          WHERE contract_id=$1 AND contract_revision=$2 AND project_id=$3 FOR UPDATE`,
-        [input.contractId, input.contractRevision, input.projectId],
-      );
-      if (candidate.rows[0] === undefined) {
-        await client.query('ROLLBACK');
-        return { locked: false, reasonCode: 'contract_revision_not_found', lockedRevision: null };
-      }
-      const contract = mapRow(candidate.rows[0]);
-
-      const held = await client.query<{ contract_revision: number }>(
-        `SELECT contract_revision FROM relay_wonderland.julius_task_contracts
-          WHERE contract_id=$1 AND state='LOCKED' FOR UPDATE`,
-        [input.contractId],
-      );
-      const lockedRevision = held.rows[0] === undefined ? null : Number(held.rows[0].contract_revision);
-      const standing = refusalFor(lockedRevision, input.contractRevision);
-      if (standing !== null) {
-        await client.query('ROLLBACK');
-        return standing;
-      }
-      if (contract.state === 'SUPERSEDED') {
-        await client.query('ROLLBACK');
-        return { locked: false, reasonCode: 'contract_superseded', lockedRevision: null };
-      }
-      // The caller computed the digest from the terms it accepted; this proves
-      // those are the terms actually stored. Without it a caller could lock one
-      // document to another document's digest and every later comparison would
-      // agree about the wrong thing.
-      if (juliusTaskContractBindingDigest(contract) !== input.bindingDigest) {
-        await client.query('ROLLBACK');
-        return { locked: false, reasonCode: 'binding_digest_mismatch', lockedRevision: null };
-      }
-
-      const superseded = await client.query<{ contract_revision: number }>(
-        `UPDATE relay_wonderland.julius_task_contracts SET state='SUPERSEDED'
-          WHERE contract_id=$1 AND state='LOCKED' AND contract_revision<$2
-          RETURNING contract_revision`,
-        [input.contractId, input.contractRevision],
-      );
-      const locked = await client.query<Record<string, unknown>>(
-        `UPDATE relay_wonderland.julius_task_contracts
-            SET state='LOCKED',binding_digest=$4,locked_at=$5,locked_by_evaluator_id=$6
-          WHERE contract_id=$1 AND contract_revision=$2 AND project_id=$3
-          RETURNING *`,
-        [input.contractId, input.contractRevision, input.projectId, input.bindingDigest, input.lockedAt, input.evaluatorId],
-      );
-      await client.query('COMMIT');
-      return {
-        locked: true,
-        contract: mapRow(locked.rows[0]!),
-        supersededRevision: superseded.rows[0] === undefined ? null : Number(superseded.rows[0].contract_revision),
-      };
+      return await juliusSerializable(this.pool, (client) => this.lockWithin(client, input));
     } catch (error) {
-      await client.query('ROLLBACK').catch(() => undefined);
       /**
        * LOSING THE RACE IS AN OUTCOME, NOT A FAULT — and PostgreSQL reports it
        * two different ways, both of which mean the same thing here:
        *
        *   23505  the partial unique index refused a second LOCKED row;
-       *   40001  two SERIALIZABLE transactions took `FOR UPDATE` on the same
-       *          row and one was aborted. The in-memory model cannot produce
-       *          this at all, which is why it took a real database to find it:
-       *          two concurrent locks of one revision made this method THROW
-       *          rather than answer.
+       *   40001  two SERIALIZABLE transactions conflicted and one was aborted,
+       *          on every one of the bounded attempts above (40P01 likewise).
        *
        * The answer is then re-read rather than asserted. Announcing "another
        * revision is locked" without looking would be a claim about a race whose
        * outcome this transaction never saw — and if the other transaction
        * failed for its own reasons, nothing is locked and the honest answer is
-       * `lock_contended` with an unknown revision, which a caller may retry.
+       * `lock_contended`: transient, retryable, and NOT a reason to release
+       * work onto an unlocked contract (the pipeline holds its decision on it).
        */
       const code = (error as { code?: unknown }).code;
-      if (code === '23505' || code === '40001') {
+      if (code === '23505' || code === '40001' || code === '40P01') {
         const held = await this.pool
           .query<{ contract_revision: number }>(
             `SELECT contract_revision FROM relay_wonderland.julius_task_contracts WHERE contract_id=$1 AND state='LOCKED'`,
@@ -203,9 +158,67 @@ export class JuliusContractPostgresRepository implements JuliusTaskContractStore
           ?? { locked: false, reasonCode: 'lock_contended', lockedRevision };
       }
       throw error;
-    } finally {
-      client.release();
     }
+  }
+
+  /**
+   * One attempt at the lock, inside the caller's SERIALIZABLE transaction. A
+   * refusal returns without writing anything, so committing it changes nothing.
+   */
+  private async lockWithin(client: PoolClient, input: {
+    projectId: string; contractId: string; contractRevision: number;
+    bindingDigest: string; lockedAt: string; evaluatorId: string;
+  }): Promise<JuliusTaskContractLockResult> {
+    // FOR UPDATE on the candidate, so two ticks serialise here rather than at
+    // the unique index. The index is still the authority — this only makes
+    // the common case a wait instead of a retry.
+    const candidate = await client.query<Record<string, unknown>>(
+      `SELECT * FROM relay_wonderland.julius_task_contracts
+        WHERE contract_id=$1 AND contract_revision=$2 AND project_id=$3 FOR UPDATE`,
+      [input.contractId, input.contractRevision, input.projectId],
+    );
+    if (candidate.rows[0] === undefined) {
+      return { locked: false, reasonCode: 'contract_revision_not_found', lockedRevision: null };
+    }
+    const contract = mapRow(candidate.rows[0]);
+
+    const held = await client.query<{ contract_revision: number }>(
+      `SELECT contract_revision FROM relay_wonderland.julius_task_contracts
+        WHERE contract_id=$1 AND state='LOCKED' FOR UPDATE`,
+      [input.contractId],
+    );
+    const lockedRevision = held.rows[0] === undefined ? null : Number(held.rows[0].contract_revision);
+    const standing = refusalFor(lockedRevision, input.contractRevision);
+    if (standing !== null) return standing;
+    if (contract.state === 'SUPERSEDED') {
+      return { locked: false, reasonCode: 'contract_superseded', lockedRevision: null };
+    }
+    // The caller computed the digest from the terms it accepted; this proves
+    // those are the terms actually stored. Without it a caller could lock one
+    // document to another document's digest and every later comparison would
+    // agree about the wrong thing.
+    if (juliusTaskContractBindingDigest(contract) !== input.bindingDigest) {
+      return { locked: false, reasonCode: 'binding_digest_mismatch', lockedRevision: null };
+    }
+
+    const superseded = await client.query<{ contract_revision: number }>(
+      `UPDATE relay_wonderland.julius_task_contracts SET state='SUPERSEDED'
+        WHERE contract_id=$1 AND state='LOCKED' AND contract_revision<$2
+        RETURNING contract_revision`,
+      [input.contractId, input.contractRevision],
+    );
+    const locked = await client.query<Record<string, unknown>>(
+      `UPDATE relay_wonderland.julius_task_contracts
+          SET state='LOCKED',binding_digest=$4,locked_at=$5,locked_by_evaluator_id=$6
+        WHERE contract_id=$1 AND contract_revision=$2 AND project_id=$3
+        RETURNING *`,
+      [input.contractId, input.contractRevision, input.projectId, input.bindingDigest, input.lockedAt, input.evaluatorId],
+    );
+    return {
+      locked: true,
+      contract: mapRow(locked.rows[0]!),
+      supersededRevision: superseded.rows[0] === undefined ? null : Number(superseded.rows[0].contract_revision),
+    };
   }
 
   async loadTaskContract(input: { projectId: string; taskId: string }): Promise<JuliusTaskContract | null> {
