@@ -262,7 +262,9 @@ describe('no credential is committed, and none can leave the runner', () => {
    * Every invocation is the same `env -i` allow-list, from an empty directory.
    */
   const SUBSCRIPTION_CLI = `"$PWD/node_modules/${sdkExecutableCandidates('linux', 'x64')[0]}"`;
-  const ENV_ALLOW_LIST = 'env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \\';
+  // The two small-model slots are pinned to the Coding Agent's own model, so no other model can
+  // produce output in a subscription CLI call and the smoke may require that every producer is it.
+  const ENV_ALLOW_LIST = 'env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb ANTHROPIC_DEFAULT_HAIKU_MODEL="$RELAY_HOSTED_CODING_MODEL" ANTHROPIC_SMALL_FAST_MODEL="$RELAY_HOSTED_CODING_MODEL" CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \\';
 
   it('every subscription CLI call is the SDK\'s bundled linux-x64 CLI under the exact env -i allow-list', () => {
     const lines = workflow.split('\n');
@@ -276,15 +278,17 @@ describe('no credential is committed, and none can leave the runner', () => {
     expect(workflow, 'the file a paid run executes starts no process').not.toMatch(/julius-subscription-check\.mjs" /u);
   });
 
-  it('the subscription smoke is optional, gated on its own exact phrase, and sends one literal request', () => {
+  it('the subscription smoke runs on its own exact phrase AND before every paid run, and sends one literal request', () => {
     const start = workflow.indexOf("- name: 'Subscription smoke:");
     expect(start).toBeGreaterThan(-1);
     const rest = workflow.slice(start);
     const step = rest.slice(0, rest.indexOf('\n      - ', 1));
-    expect(step).toMatch(/if: success\(\) && inputs\.subscription_smoke == 'RUN SUBSCRIPTION SMOKE'/u);
+    expect(step).toContain('\n        id: subscription_smoke\n');
+    expect(step).toContain("\n        if: success() && (inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE' || inputs.confirm_live == 'RUN LIVE MISSION')\n");
+    expect(step, 'a failed smoke must fail the job, or a paid step could still see success()').not.toMatch(/continue-on-error/u);
     expect(step).toContain('node scripts/julius-subscription-check.mjs env-check --for smoke');
     expect(step).toContain('node scripts/julius-subscription-check.mjs status-verdict --for smoke');
-    expect(step).toContain('node scripts/julius-subscription-check.mjs smoke-verdict --model "$RELAY_HOSTED_CODING_MODEL" --status-file "$sub/status.json" < "$sub/smoke.json"');
+    expect(step).toContain('node scripts/julius-subscription-check.mjs smoke-verdict --model "$RELAY_HOSTED_CODING_MODEL" --status-file "$sub/status.json" --auth-exit "$auth_exit" --cli-exit "$cli_exit" < "$sub/smoke.json"');
     expect(step.match(/claude" -p /gu)?.length, 'exactly one request').toBe(1);
     expect(step).toContain(`${SUBSCRIPTION_CLI} -p 'Reply with exactly OK' --max-turns 1 --output-format json --model "$RELAY_HOSTED_CODING_MODEL" --setting-sources user --strict-mcp-config --no-session-persistence > "$sub/smoke.json" 2>/dev/null`);
     expect(step).not.toMatch(/API_KEY/u);
@@ -301,12 +305,72 @@ describe('no credential is committed, and none can leave the runner', () => {
     expect(errexitOff, 'set +e').toBeGreaterThan(lines.indexOf('set -uo pipefail'));
     expect(errexitOff, 'before the first CLI call').toBeLessThan(firstCall);
     expect(lines.slice(errexitOff), 'and it is not switched back on').not.toContain('set -e');
-    // Each exit is read on the line straight after its call, before anything else can set `$?`.
-    const after = (needle: string): string => lines[lines.findIndex((line) => line.startsWith(SUBSCRIPTION_CLI) && line.includes(needle)) + 1];
-    expect(after(' auth status --json ')).toBe('echo "subscription_smoke_auth_exit=$?" | tee -a subscription-smoke.log');
-    expect(after(" -p 'Reply with exactly OK' ")).toBe('echo "subscription_smoke_cli_exit=$?" | tee -a subscription-smoke.log');
-    // Still fail-closed: the step succeeds only on the one PASS line.
+    // Each exit is kept on the line straight after its call, before anything else can set `$?`,
+    // and recorded from that variable.
+    const at = (needle: string): number => lines.findIndex((line) => line.startsWith(SUBSCRIPTION_CLI) && line.includes(needle));
+    expect(lines[at(' auth status --json ') + 1]).toBe('auth_exit=$?');
+    expect(lines[at(' auth status --json ') + 2]).toBe('echo "subscription_smoke_auth_exit=$auth_exit" | tee -a subscription-smoke.log');
+    expect(lines[at(" -p 'Reply with exactly OK' ") + 1]).toBe('cli_exit=$?');
+    expect(lines[at(" -p 'Reply with exactly OK' ") + 2]).toBe('echo "subscription_smoke_cli_exit=$cli_exit" | tee -a subscription-smoke.log');
+    // Both start as a non-zero word, so a step that never ran a call cannot read as exit 0.
+    expect(lines).toContain('auth_exit=none');
+    expect(lines).toContain('cli_exit=none');
+    expect(lines.indexOf('auth_exit=none'), 'set before the first call').toBeLessThan(firstCall);
+    // Still fail-closed: the step succeeds only on the one PASS line, AND only when both exits were 0
+    // (Codex review of #302: JSON that reads OK from a CLI that then exited non-zero must FAIL).
     expect(rest).toContain("grep -qE '^subscription_smoke provider=anthropic .* auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\\.ai) reply=OK result=PASS$' subscription-smoke.log");
+    const exitGate = lines.indexOf('[ "$auth_exit" = 0 ] && [ "$cli_exit" = 0 ] \\');
+    expect(exitGate, 'the exit gate').toBeGreaterThan(-1);
+    expect(lines[exitGate + 1]).toMatch(/^\|\| \{ echo "subscription_smoke_failed: [^"]+" >&2; exit 1; \}$/u);
+    expect(lines.indexOf('exit "$status"'), 'the exit gate is passed before the step can succeed').toBeGreaterThan(exitGate);
+  });
+
+  /**
+   * A PAID RUN QUALIFIES ITS CODER BEFORE ANYTHING CAN SPEND (Codex review of #302, P1).
+   *
+   * Readiness proves a login, not that the pinned model is served. Without this, a paid run
+   * could pay the Prompt Architect and the plan review before the coder learned its model was
+   * unavailable or substituted. The smoke runs on `confirm_live` too, BEFORE the attempt marker,
+   * and every step on the paid path names the smoke's success by id, so a skipped or failed
+   * smoke can never be read as a pass.
+   */
+  it('no paid step runs unless the subscription smoke PASSED in the same job', () => {
+    const smoke = workflow.indexOf("- name: 'Subscription smoke:");
+    const attempt = workflow.indexOf("- name: 'Record that a paid mission was attempted (before any provider can be reached)'");
+    const live = workflow.indexOf("- name: 'LIVE: run the first real Julius mission'");
+    expect(attempt, 'the attempt marker step').toBeGreaterThan(-1);
+    expect(smoke, 'the smoke step').toBeGreaterThan(-1);
+    expect(smoke, 'the smoke runs before the attempt is recorded').toBeLessThan(attempt);
+    expect(smoke, 'and before the entrypoint that can spend').toBeLessThan(live);
+    const uploads = workflow.split('- uses: actions/upload-artifact');
+    const attemptUpload = uploads.find((block) => block.includes('name: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted')) ?? '';
+    const conditionOf = (text: string): string => /\n\s*if: (.+)/u.exec(text)?.[1] ?? '';
+    for (const [label, condition] of [
+      ['the attempt marker', conditionOf(workflow.slice(attempt, attempt + 300))],
+      ['the attempt marker upload', conditionOf(attemptUpload)],
+      ['LIVE', conditionOf(workflow.slice(live, live + 300))],
+    ] as const) {
+      expect(condition, `${label} requires the smoke's success by id`).toContain("steps.subscription_smoke.outcome == 'success'");
+      expect(condition, `${label} stays on the fail-closed paid path`).toMatch(/^success\(\) && inputs\.confirm_live == 'RUN LIVE MISSION' && /u);
+    }
+    // COMPLETED means LIVE succeeded (Second julius's review of A2): LIVE can be skipped while
+    // success() holds, and a skipped LIVE must never be recorded as a completed paid mission.
+    expect(workflow.slice(live, live + 200)).toContain('\n        id: live_mission\n');
+    const completed = workflow.indexOf('- name: Record that a paid mission completed');
+    const completedUpload = uploads.find((block) => block.includes('name: ${{ steps.inputs_gate.outputs.marker_namespace }}-completed')) ?? '';
+    expect(completed, 'the completion marker step').toBeGreaterThan(live);
+    for (const [label, condition] of [
+      ['the completion marker', conditionOf(workflow.slice(completed, completed + 300))],
+      ['the completion marker upload', conditionOf(completedUpload)],
+    ] as const) {
+      expect(condition, `${label} requires LIVE's success by id`).toBe("success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.live_mission.outcome == 'success'");
+    }
+    // The zero-dispatch preflight stays zero-contact: without either phrase the smoke does not run.
+    const smokeIf = conditionOf(workflow.slice(smoke, smoke + 400));
+    expect(smokeIf).not.toContain('always()');
+    expect(smokeIf.match(/inputs\.[a-z_]+ == '[A-Z ]+'/gu)).toEqual([
+      "inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE'", "inputs.confirm_live == 'RUN LIVE MISSION'",
+    ]);
   });
 
   it('the smoke evidence keeps every closed line the smoke prints, and nothing with a tail', () => {
@@ -324,6 +388,9 @@ describe('no credential is committed, and none can leave the runner', () => {
       'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=none match=NONE',
       'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=MODEL_NOT_ENTITLED_OR_NOT_FOUND http=404 subtype=success',
       'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=SERVED_MODEL_MISMATCH http=none subtype=none',
+      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=CLI_EXIT_NONZERO http=none subtype=success',
+      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=AUTH_EXIT_NONZERO http=none subtype=none',
+      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=EXIT_UNREPORTED http=none subtype=none',
       'subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=PASS',
       'subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=ERROR result=FAIL',
     ]) expect(kept.test(line), `withheld: ${line}`).toBe(true);
