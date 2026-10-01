@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **202 production files** across 20/20 subsystems (2 roots, 174 traced, 9 not composed by the live root, 17 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **207 production files** across 20/20 subsystems (2 roots, 178 traced, 9 not composed by the live root, 18 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -50,10 +50,12 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
 | live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 24 | 5 |
 | live composition (relay-bridge/julius/) | other | 5 | 3 |
-| live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 16 | 2 |
+| live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 17 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 2 | 0 |
 | other | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 2 | 2 |
-| persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 23 | 14 |
+| persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 24 | 15 |
+| persistence (src/relay/persistence/) | Project Brain (src/relay/mission/project-brain/) | 3 | 0 |
+| Project Brain (src/relay/mission/project-brain/) | kernel (src/relay/mission/julius/) | 1 | 1 |
 | Relay↔Julius port (src/relay/integration/julius/) | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | 2 | 1 |
 | Relay↔Julius port (src/relay/integration/julius/) | kernel (src/relay/mission/julius/) | 1 | 1 |
 | Relay↔Julius port (src/relay/integration/julius/) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
@@ -62,7 +64,8 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 - **live composition (relay-bridge/julius/)** depends on: bridge provider stacks (hosted Claude, Hermes, redaction); connectors (gpt-architect, prompt-architect contracts); executor + tool substrate (src/relay/workspace/julius-tools/); kernel (src/relay/mission/julius/); other; persistence (src/relay/persistence/); Relay↔Julius port (src/relay/integration/julius/).
 - **bridge provider stacks (hosted Claude, Hermes, redaction)** depends on: connectors (gpt-architect, prompt-architect contracts); kernel (src/relay/mission/julius/); live composition (relay-bridge/julius/); other; persistence (src/relay/persistence/); Relay↔Julius port (src/relay/integration/julius/).
 - **kernel (src/relay/mission/julius/)** depends on: other.
-- **persistence (src/relay/persistence/)** depends on: kernel (src/relay/mission/julius/).
+- **Project Brain (src/relay/mission/project-brain/)** depends on: kernel (src/relay/mission/julius/).
+- **persistence (src/relay/persistence/)** depends on: kernel (src/relay/mission/julius/); Project Brain (src/relay/mission/project-brain/).
 - **Relay↔Julius port (src/relay/integration/julius/)** depends on: C.A.R.D. record (src/relay/integration/compound-agent/, entitlement); kernel (src/relay/mission/julius/); Relay vocabulary (mission/contracts.ts, protocol/enums.ts).
 - **C.A.R.D. record (src/relay/integration/compound-agent/, entitlement)** depends on: kernel (src/relay/mission/julius/); Relay vocabulary (mission/contracts.ts, protocol/enums.ts).
 - **executor + tool substrate (src/relay/workspace/julius-tools/)** depends on: kernel (src/relay/mission/julius/); persistence (src/relay/persistence/).
@@ -106,6 +109,9 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | `src/relay/mission/julius/julius-runtime-ports.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-state-path.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/project-brain/project-brain-document.ts` | traced | `src/relay/persistence/project-brain-postgres.ts` |
+| `src/relay/mission/project-brain/project-brain-views.ts` | traced | `src/relay/persistence/project-brain-postgres.ts` |
+| `src/relay/mission/project-brain/project-brain.ts` | traced | `src/relay/persistence/project-brain-postgres.ts` |
 | `src/relay/shared/llmops/brain-memory.ts` | traced | `src/relay/mission/evidence/evidence-brain-link.ts` |
 | `src/relay/shared/llmops/llmops-contracts.ts` | traced | `src/relay/shared/llmops/brain-memory.ts` |
 | `src/relay/shared/llmops/spend-citation.ts` | traced | `src/relay/shared/llmops/llmops-contracts.ts` |
@@ -375,6 +381,7 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/julius-tool-settlement-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-trajectory-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/julius-verification-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
+| `src/relay/persistence/project-brain-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/redaction.ts` | traced | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-migrations/011_julius_runtime.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-migrations/012_julius_recovery.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
@@ -392,6 +399,7 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/wonderland-migrations/025_julius_context_integrity.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-migrations/026_julius_claim_standings.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-migrations/028_julius_criteria_per_run.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
+| `src/relay/persistence/wonderland-migrations/029_julius_project_brain.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 
 ### 19 LIVE PROVIDER COMPOSITION
