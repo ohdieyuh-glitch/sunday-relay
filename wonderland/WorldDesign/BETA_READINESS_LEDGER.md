@@ -24,7 +24,7 @@ Each row has a weight; the weights total 100. A row earns:
 partly unverified scores 0, not a blend. **Readiness = sum of weight x credit.** Second's independent sign-off on the RC
 is built into every 1.0, so nothing above 75% is possible before the final RC.
 
-## Ledger (as of RC2, CORE's own evidence; Second's RC2 pass in progress)
+## Ledger (as of RC2: CORE's evidence and Second's boot matrix, 36/36; Second's adversarial and clean-user passes wait for RC3)
 
 | # | Requirement | Weight | Credit | Evidence (RC2 = 0.1.0-rc2, 24ea3e11) | Weakest part / open blockers |
 |---|---|---|---|---|---|
@@ -32,12 +32,12 @@ is built into every 1.0, so nothing above 75% is possible before the final RC.
 | R2 | Gameplay regression G1-G7 (locked, 18/18) | 8 | 0.75 | RC2 QA Q09-Q11 (Jack's contract from the rim, heights, four skins' contracts) PASS | -- |
 | R3 | First launch: clean start, spawn, Relay Dog init, clear path in, no developer knowledge | 8 | 0.5 | RC2 Q00.1 welcome on a fresh profile (frame 00_first_launch), Q00.2 no console/debug keys/Gameplay Debugger; prerequisites staged + app-local CRT + static import closure (0 unresolved) | B05 (Esc / QUIT) verified statically only |
 | R4 | Core creation loop, truthful about Julius | 12 | 0.5 | RC2 Q13 eight contracts through + and the terminal; Q14 all restored; Q15 deleted through the terminal; Q00.3 AI offline with the beta sentence | B18 simulated-mission control static on RC2 (RC3 Q17); contract limit static (RC3 Q20) |
-| R5 | Session stability: launch / quit / relaunch, focus loss, window changes (single-player) | 3 | 0 | RC2: three clean boots and quits (QA x2, perf) | focus loss and window-mode changes not yet verified (Second's matrix) |
+| R5 | Session stability: launch / quit / relaunch, focus loss, window changes (single-player) | 3 | 0 | RC2: three clean boots and quits (QA x2, perf); Second's matrix: 36 cold boots, clean closes in 2.2-3.2 s, windowed and fullscreen cells | focus loss not yet verified; exclusive fullscreen broken (B40) |
 | R6 | Private/project space and project avatar flow, as implemented | 3 | 0.5 | nothing to test: no networking, sessions or private spaces exist (D2); welcome says single-player (RC2 frame); world map says PLANNED ... NOT IN THIS BETA; `/pa` refused for players (static) | `/pa` refusal static on RC2 (RC3 Q18) |
 | R7 | Wonder Web and every beta-facing screen: no dead buttons or placeholders, no debug exposure, back/close/Esc, sane errors | 8 | 0 | RC2 Q00.2/Q00.3; frames | **B11 open (founder D3)** |
-| R8 | Save / persistence across quit, relaunch, interruption | 8 | 0.5 | RC2 Q12/Q14/Q16/Q15 across a restart; atomic saves (static) | interruption/corruption static on RC2 (RC3 hostile boot Q21); B34 |
-| R9 | Error / recovery: services absent, timeouts, failed travel / load, bad input, corrupt files | 7 | 0.5 | RC2 Q00.3 (services absent); bad-input guards and corrupt-file handling static | bad input (RC3 Q19) and corrupt files (RC3 Q21) static on RC2; B34 |
-| R10 | Performance on the founder's laptop, measured in the package | 7 | 0.5 | RC2 wl.Qa.Perf (below) | default first-launch window not measured (B39); Settings (B06) static |
+| R8 | Save / persistence across quit, relaunch, interruption | 8 | 0 | RC2 Q12/Q14/Q16/Q15 across a restart; Second's matrix: settings, colours and skin persist across boots | **B34 (P1) open on RC2**: the presets save is not atomic and a corrupt one crashes every boot; fixed in RC3 source |
+| R9 | Error / recovery: services absent, timeouts, failed travel / load, bad input, corrupt files | 7 | 0 | RC2 Q00.3 (services absent); bad-input guards static | **B34 (P1) confirmed on RC2**: a corrupt command-presets save crashed the boot (`before_rc2_presets/`); fixed in RC3 source (RC3 Q19 / Q21) |
+| R10 | Performance on the founder's laptop, measured in the package | 7 | 0.5 | RC2 wl.Qa.Perf (below); Second's matrix: every SETTINGS choice persists and applies (LOW: 3.5-3.7 GB private, 1.5-1.6 GB GPU; EPIC: 6.3-6.6 / 4.0-4.2) | default first-launch window not measured (B39) |
 | R11 | Memory pressure: long-session growth, repeated skins / teleports / contracts / map / relaunch | 6 | 0 | RC2 perf: peaks 2,590 MB WS / 6,688 MB private / 4,206 MB VRAM over 3 min | soak not run |
 | R12 | Package / distribution: clean artifact, prerequisites, no machine paths, size, README, version visible | 7 | 0.75 | RC2 zip: 176 entries, no Saved/ PDB _reference _previous _old .gitignore manifests; vc_redist + app-local CRT, closure 0 unresolved; 0.64 GB zip; README; label on welcome/menu/title | P2: B33 unsigned; P3: B31, B38 |
 | R13 | Security / privacy baseline | 5 | 0 | RC2 scan: no user/computer name, e-mail, secret or founder log anywhere (ASCII + UTF-16, every file); AI clients off in player sessions (Q00.3) | **B32 open on RC2 (P1: TCP 1985 listener)**, fixed in RC3 |
@@ -45,9 +45,10 @@ is built into every 1.0, so nothing above 75% is possible before the final RC.
 | R15 | Clean-user test on the RC (no saves, no console, no developer knowledge) | 6 | 0 | Second's RC2 clean-user test in progress | -- |
 | | **Total** | **100** | | | |
 
-**WONDERLAND BETA READINESS: 39.75%** (RC2, 2026-10-01). R1 6 + R2 6 + R3 4 + R4 6 + R6 1.5 + R8 4 + R9 3.5 + R10 3.5 +
-R12 5.25. The earlier informal "about 52%" counted rows whose parts were only partly verified; the weakest-part rule
-above does not, and Second's 1985 finding holds R13 at 0 on RC2.
+**WONDERLAND BETA READINESS: 32.25%** (RC2, 2026-10-01). R1 6 + R2 6 + R3 4 + R4 6 + R6 1.5 + R10 3.5 + R12 5.25. The
+earlier informal "about 52%" counted rows whose parts were only partly verified; the weakest-part rule above does not.
+Second's 1985 finding (B32) holds R13 at 0 on RC2, and the confirmed corrupt-save crash (B34) holds R8 and R9 at 0.
+RC2 is not the final RC: every row is re-earned on RC3.
 
 ### RC2 package evidence (CORE)
 
@@ -111,12 +112,16 @@ survives a small private beta with a documented limitation. P3 is polish. Only P
 | B31 | P3 | distribution | RC2 label "+local-changes" was a false positive (untracked Content, edited captures) | dirty check over tracked build folders (5d95aa40) | fixed for RC3 |
 | B32 | P1 | security | TCP 1985 on every interface in a player session: the engine's unauthenticated trace control (SendTo streams the trace, log included, to any host) -- Second, RC2 | close it one frame after the engine opens it (TraceLog's Writer_ShutdownControl; player sessions only); QA samples listeners per boot (QNET) | **open on RC2; fixed in RC3 source** |
 | B33 | P2 | distribution | Executables unsigned: SmartScreen on a downloaded zip | README "More info -> Run anyway" (RC3); signing needs a certificate (founder / external account) | documented |
-| B34 | P2 | robustness | A corrupt contracts or command-presets .sav could crash every boot: the engine's loader reads a class name and property names straight from the bytes (FName > 1,023 chars is fatal) | sealed saves (tag + length + CRC-32), set aside when the seal fails; presets now atomic too (RC3) | fixed in RC3 source; Second testing RC2 "before" |
+| B34 | P1 | robustness | A corrupt contracts or command-presets .sav crashes EVERY boot: the engine's loader reads a class name and property names straight from the bytes. CONFIRMED on RC2: "FName's 1023 max length exceeded. Got 3000 characters" at frame 0 (`_wonderland_beta_release/before_rc2_presets/`). RC2's presets save was also non-atomic | sealed saves (tag + length + CRC-32), set aside when the seal fails; presets atomic too (RC3) | **open on RC2; fixed in RC3 source** |
 | B35 | P3 | privacy | Logs hold the Windows user/computer name and user paths; deleting a contract logged its text | README tells testers (RC3); objective length only (RC3) | fixed in RC3 source |
 | B36 | P2 | legal | NOTICES.txt credits FreeType only; the zip ships onnxruntime, libvorbis/libogg, tbb, MsQuic, WinPixEventRuntime, NVIDIA Aftermath, DirectML, D3D12 Agility SDK | founder / legal; Vulkan debug layers, GPU dump viewer and the ARM64 installer stripped (RC3) | open (founder/legal) |
 | B37 | P3 | performance | One 194 ms frame when the wardrobe swaps a skin | -- | open |
 | B38 | P3 | distribution | The exe holds source paths from assertion macros (C:\dev\iwonder\...) and the developer-only service hint text, never shown to players | -- | open |
 | B39 | P2 | measurement | Perf ran in a 1280x800 window (the QA's window arguments), not the game's own first-launch window | perf script -DefaultWindow (RC3) | open until measured |
+| B40 | P2 | settings | Exclusive FULLSCREEN came up as a 640x480 popup at 0,0: it asks the panel for 1536x960, a mode it does not have (Second's matrix) | SETTINGS offers BORDERLESS and WINDOWED only; a saved exclusive mode migrates to borderless at start (RC3) | fixed in RC3 source |
+| B41 | P2 | truthfulness | The HUD shows "Julius 100% / Claude Code Fable 5 100% / GPT 6 Astra 100%" beside a welcome that says nothing is connected (Second) | player sessions show a dash and "NOT CONNECTED IN THIS BETA · NO USAGE MEASURED"; layout untouched (RC3) | fixed in RC3 source |
+| B42 | P3 | privacy / logs | Thousands of "FORENSIC" and per-batch warnings in a player's log (Second) | developer sessions only; a material mismatch still logs for everyone (RC3) | fixed in RC3 source |
+| B43 | P2 | performance | An integrated-GPU laptop at the default EPIC quality may run short of memory (the iGPU probe was stopped by memory pressure) | README: integrated graphics -> QUALITY LOW first (RC3); no automatic default (untestable here) | documented |
 
 ## Founder decisions
 
