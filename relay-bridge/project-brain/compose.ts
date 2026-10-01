@@ -8,6 +8,20 @@ import type { PbSlotRow } from '../../src/relay/mission/project-brain/project-br
 import { ProjectBrainPostgresStore } from '../../src/relay/persistence/project-brain-postgres';
 
 /**
+ * A NATIVE DESKTOP SESSION, AS THE PROJECT BRAIN DOOR ASKS IT: the player it was
+ * paired for and the one project it is bound to, or nothing. Founder directive
+ * 2026-10-01 widens the native scope from the Julius world stream to that
+ * project's Project Brain, because the panel the desktop client already draws
+ * reads it and writes proposals and reviews to it; nothing else is widened.
+ */
+export function nativeSessionVerifier(sessions: BrowserSessionStore): NativeWonderlandSessionVerifier {
+  return ({ token, now }) => {
+    const verified = sessions.verifyNativeSession({ token, now });
+    return verified.ok ? { playerId: verified.participantId, projectId: verified.projectId, sessionId: verified.sessionId } : null;
+  };
+}
+
+/**
  * THE PROJECT BRAIN'S PRODUCTION COMPOSITION, on the bridge's ONE Julius pool.
  *
  * The store reads and writes the same database Julius's mission job writes; the

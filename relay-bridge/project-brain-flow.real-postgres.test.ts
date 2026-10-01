@@ -203,6 +203,26 @@ suite('Julius ↔ Project Brain ↔ Wonderland, end to end over a real PostgreSQ
     expect(legacy.json.data.schemaVersion).toBe('relay-project-brain.v1');
   });
 
+  it('C (desktop): the Wonderland desktop client, paired from the website, reads and writes the same Brain', async () => {
+    // The website pairs the desktop client for this project (membership checked in PostgreSQL)...
+    const paired = await call(bridge.base, 'POST', '/relay-api/wonderland/native/pair', { ...player, body: { projectId } });
+    expect(paired.status, JSON.stringify(paired.json)).toBe(200);
+    // ...and the desktop client, which sends no Origin, redeems the code once.
+    const redeemed = await call(bridge.base, 'POST', '/relay-api/wonderland/native/session', { body: { code: paired.json.data.code } });
+    expect(redeemed.status).toBe(200);
+    const desktop = { auth: `Relay-Session ${redeemed.json.data.token}` };
+    const view = await call(bridge.base, 'GET', `/relay-api/wonderland/brain?projectId=${projectId}`, desktop);
+    expect(view.status).toBe(200);
+    expect(view.json.data.surfaces).toHaveLength(29);
+    const note = await call(bridge.base, 'POST', '/relay-api/wonderland/brain/proposals', {
+      ...desktop, body: { projectId, surfaceId: 'scratchpads', idempotencyKey: `desk-${nonce()}`, text: 'Noted from the desktop client.' },
+    });
+    expect(note.status, JSON.stringify(note.json)).toBe(201);
+    expect(note.json.data.author).toEqual({ kind: 'WONDERLAND_PLAYER', id: tenant });
+    // Bound to its project: another project is not there for it, whatever the membership says.
+    expect((await call(bridge.base, 'GET', '/relay-api/wonderland/brain?projectId=prj-elsewhere', desktop)).status).toBe(404);
+  });
+
   it('F: a Wonderland proposal and a standing instruction are durable the moment they are acknowledged', async () => {
     const proposal = await wonderland('POST', '/wonderland/brain/proposals', {
       projectId, surfaceId: 'requirements', runId, idempotencyKey: `wl-${nonce()}`, text: 'The comparison must include a table of load times in milliseconds.',
@@ -216,7 +236,8 @@ suite('Julius ↔ Project Brain ↔ Wonderland, end to end over a real PostgreSQ
     });
     expect(instruction.status).toBe(201);
     instructionRecord = instruction.json.data.recordRef;
-    const rows = await pool.query('SELECT record_id, status, author_kind, deliverer_kind FROM relay_wonderland.project_brain_records WHERE project_id=$1 ORDER BY created_at', [projectId]);
+    const rows = await pool.query(`SELECT record_id, status, author_kind, deliverer_kind FROM relay_wonderland.project_brain_records
+      WHERE project_id=$1 AND domain IN ('REQUIREMENT','INSTRUCTION') ORDER BY created_at`, [projectId]);
     expect(rows.rows).toEqual([
       { record_id: requirementProposal, status: 'PROPOSED', author_kind: 'WONDERLAND_PLAYER', deliverer_kind: 'WONDERLAND_CLIENT' },
       { record_id: instructionRecord, status: 'ACTIVE', author_kind: 'WONDERLAND_PLAYER', deliverer_kind: 'WONDERLAND_CLIENT' },
@@ -438,8 +459,10 @@ suite('Julius ↔ Project Brain ↔ Wonderland, end to end over a real PostgreSQ
     expect(leaked.rows[0].n).toBe(0);
     expect((await wonderland('POST', `/wonderland/brain/mutations?projectId=${projectId}`, { operation: 'CREATE', idempotencyKey: `o-${nonce()}`, domain: 'USER_FACT', title: 'x', author: { kind: 'FOUNDER', id: 'me' } })).json.error?.kind).toBe('unknown_field');
     expect((await call(bridge.base, 'GET', `/relay-api/wonderland/brain?projectId=${projectId}`)).status).toBe(401);
-    const native = await call(bridge.base, 'GET', `/relay-api/wonderland/brain?projectId=${projectId}`, { auth: player.auth });
-    expect(native.json.error?.kind).toBe('native_session_unavailable');
+    // A website session copied into an originless (desktop) request is not a desktop session.
+    const copied = await call(bridge.base, 'GET', `/relay-api/wonderland/brain?projectId=${projectId}`, { auth: player.auth });
+    expect(copied.status).toBe(401);
+    expect(copied.json.error?.kind).toBe('sign_in_required');
     expect((await call(bridge.base, 'GET', `/relay-api/project-brain/projects/${projectId}`, { auth: `Bearer ${OPERATOR}` })).status).toBe(400);
     expect((await call(bridge.base, 'GET', `/relay-api/project-brain/projects/${projectId}`, { headers: { 'x-relay-tenant': tenant } })).status).toBe(401);
 
