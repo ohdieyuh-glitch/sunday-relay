@@ -15,85 +15,119 @@ Each row has a weight; the weights total 100. A row earns:
 
 | credit | when |
 |---|---|
-| 0 | any P0/P1 in the row is open, or nothing is verified |
-| 0.5 | verified only in the editor or by static audit |
-| 0.75 | verified on a packaged build that is not the final RC |
-| 1.0 | verified on the FINAL RC by CORE **and** independently by Second Wonderland on that same RC |
+| 0 | any P0/P1 in the row is open, or any part of the row is not yet verified anywhere |
+| 0.5 | every part verified, the weakest only in the editor or by static audit |
+| 0.75 | every part verified on a packaged build that is not the final RC |
+| 1.0 | every part verified on the FINAL RC by CORE **and** independently by Second Wonderland on that same RC |
 
-**Readiness = sum of weight x credit.** Second's independent sign-off on the RC is therefore built into every 1.0.
+**A row takes the level of its WEAKEST part** (clarified 2026-10-01): a row whose parts are partly package-verified and
+partly unverified scores 0, not a blend. **Readiness = sum of weight x credit.** Second's independent sign-off on the RC
+is built into every 1.0, so nothing above 75% is possible before the final RC.
 
-## Ledger
+## Ledger (as of RC2, CORE's own evidence; Second's RC2 pass in progress)
 
-| # | Requirement | Weight | Credit | Evidence | Open blockers | Build tested |
-|---|---|---|---|---|---|---|
-| R1 | Environmental world complete (locked, 25/25) | 8 | 0.75 | WORLD_COMPLETION_MATRIX.md; packaged boots | -- (re-confirm on the RC: content unchanged + boot) | package 4b69df20 |
-| R2 | Gameplay regression G1-G7 (locked, 18/18) | 8 | 0.75 | package QA v2 27/27; Second zs_07-zs_11 | -- (re-run package QA on the RC) | package 4b69df20 |
-| R3 | First-launch experience: clean start, spawn, Relay Dog init, clear path in, no developer knowledge | 8 | 0 | audits 2026-09-30 | B02, B05, B19, B08 | -- |
-| R4 | Core creation loop, truthful about Julius | 12 | 0 | audit 2026-09-30 | B01, B03, B04, B18 | -- |
-| R5 | Session stability: launch / quit / relaunch, focus loss, window changes (single-player scope, see D2) | 3 | 0 | -- | B05 | -- |
-| R6 | Private/project space and project avatar flow, as implemented (see D2: not implemented) | 3 | 0 | audit: no private/project space exists; Project Avatars only via `/pa` | D2 | -- |
-| R7 | Wonder Web and every beta-facing screen: no dead buttons or placeholders, no debug exposure, back/close/Esc, sane errors | 8 | 0 | audits 2026-09-30 | B08, B09, B10, B11, B22 | -- |
-| R8 | Save / persistence across quit, relaunch, interruption | 8 | 0 | audit 2026-09-30 | B04, B12, B24 | -- |
-| R9 | Error / recovery: services absent, timeouts, failed travel / load, bad input, corrupt files | 7 | 0 | audit 2026-09-30 | B09, B15, B24 | -- |
-| R10 | Performance on the founder's laptop, measured in the package | 7 | 0 | Second's baseline: boot ~21 s; 2.5 GB WS / 6.4 GB private / 4.05 GB VRAM at 60 s | B06 | -- |
-| R11 | Memory pressure: long-session growth, repeated skins / teleports / contracts / map / relaunch | 6 | 0 | -- | (unmeasured) | -- |
-| R12 | Package / distribution: clean artifact, prerequisites, no machine paths, size, README, version visible | 7 | 0 | Second's audit 2026-09-30 | B02, B07, B12, B16, B31 | -- |
-| R13 | Security / privacy baseline | 5 | 0 | Second: no secrets in loose files, paks or binary; AI clients loopback-only | B16 (founder logs and identity shipped) | package 4b69df20 |
-| R14 | Crash / soak on the package | 4 | 0 | -- | (not run) | -- |
-| R15 | Clean-user test on the RC (no saves, no console, no developer knowledge) | 6 | 0 | Second's baseline in progress | (RC needed) | -- |
-| | **Total** | **100** | | | | |
+| # | Requirement | Weight | Credit | Evidence (RC2 = 0.1.0-rc2, 24ea3e11) | Weakest part / open blockers |
+|---|---|---|---|---|---|
+| R1 | Environmental world complete (locked, 25/25) | 8 | 0.75 | WORLD_COMPLETION_MATRIX.md; RC2 QA Q02-Q08 travel/map/teleports PASS; perf travel 0.9-1.2 s | -- |
+| R2 | Gameplay regression G1-G7 (locked, 18/18) | 8 | 0.75 | RC2 QA Q09-Q11 (Jack's contract from the rim, heights, four skins' contracts) PASS | -- |
+| R3 | First launch: clean start, spawn, Relay Dog init, clear path in, no developer knowledge | 8 | 0.5 | RC2 Q00.1 welcome on a fresh profile (frame 00_first_launch), Q00.2 no console/debug keys/Gameplay Debugger; prerequisites staged + app-local CRT + static import closure (0 unresolved) | B05 (Esc / QUIT) verified statically only |
+| R4 | Core creation loop, truthful about Julius | 12 | 0.5 | RC2 Q13 eight contracts through + and the terminal; Q14 all restored; Q15 deleted through the terminal; Q00.3 AI offline with the beta sentence | B18 simulated-mission control static on RC2 (RC3 Q17); contract limit static (RC3 Q20) |
+| R5 | Session stability: launch / quit / relaunch, focus loss, window changes (single-player) | 3 | 0 | RC2: three clean boots and quits (QA x2, perf) | focus loss and window-mode changes not yet verified (Second's matrix) |
+| R6 | Private/project space and project avatar flow, as implemented | 3 | 0.5 | nothing to test: no networking, sessions or private spaces exist (D2); welcome says single-player (RC2 frame); world map says PLANNED ... NOT IN THIS BETA; `/pa` refused for players (static) | `/pa` refusal static on RC2 (RC3 Q18) |
+| R7 | Wonder Web and every beta-facing screen: no dead buttons or placeholders, no debug exposure, back/close/Esc, sane errors | 8 | 0 | RC2 Q00.2/Q00.3; frames | **B11 open (founder D3)** |
+| R8 | Save / persistence across quit, relaunch, interruption | 8 | 0.5 | RC2 Q12/Q14/Q16/Q15 across a restart; atomic saves (static) | interruption/corruption static on RC2 (RC3 hostile boot Q21); B34 |
+| R9 | Error / recovery: services absent, timeouts, failed travel / load, bad input, corrupt files | 7 | 0.5 | RC2 Q00.3 (services absent); bad-input guards and corrupt-file handling static | bad input (RC3 Q19) and corrupt files (RC3 Q21) static on RC2; B34 |
+| R10 | Performance on the founder's laptop, measured in the package | 7 | 0.5 | RC2 wl.Qa.Perf (below) | default first-launch window not measured (B39); Settings (B06) static |
+| R11 | Memory pressure: long-session growth, repeated skins / teleports / contracts / map / relaunch | 6 | 0 | RC2 perf: peaks 2,590 MB WS / 6,688 MB private / 4,206 MB VRAM over 3 min | soak not run |
+| R12 | Package / distribution: clean artifact, prerequisites, no machine paths, size, README, version visible | 7 | 0.75 | RC2 zip: 176 entries, no Saved/ PDB _reference _previous _old .gitignore manifests; vc_redist + app-local CRT, closure 0 unresolved; 0.64 GB zip; README; label on welcome/menu/title | P2: B33 unsigned; P3: B31, B38 |
+| R13 | Security / privacy baseline | 5 | 0 | RC2 scan: no user/computer name, e-mail, secret or founder log anywhere (ASCII + UTF-16, every file); AI clients off in player sessions (Q00.3) | **B32 open on RC2 (P1: TCP 1985 listener)**, fixed in RC3 |
+| R14 | Crash / soak on the package | 4 | 0 | -- | not run |
+| R15 | Clean-user test on the RC (no saves, no console, no developer knowledge) | 6 | 0 | Second's RC2 clean-user test in progress | -- |
+| | **Total** | **100** | | | |
 
-**WONDERLAND BETA READINESS: 12%** (2026-09-30 evening; R1 6 + R2 6). The 43/43 engineering verification is real
-and counted, but every other row has open P0/P1 blockers or is unmeasured.
+**WONDERLAND BETA READINESS: 39.75%** (RC2, 2026-10-01). R1 6 + R2 6 + R3 4 + R4 6 + R6 1.5 + R8 4 + R9 3.5 + R10 3.5 +
+R12 5.25. The earlier informal "about 52%" counted rows whose parts were only partly verified; the weakest-part rule
+above does not, and Second's 1985 finding holds R13 at 0 on RC2.
+
+### RC2 package evidence (CORE)
+
+- Build: 0.1.0-rc2, commit 24ea3e11 (local), zip sha256 5B1B87E20403AFF3190C6A9F91C4E8EF6D09AF9D28219F5DDC769ABE8DC73668,
+  689,867,086 bytes. Release folder `_wonderland_beta_release/Wonderland_PrivateBeta_0.1.0-rc2`.
+- QA: `qa_rc2.log` -- 35/35 PASS across two boots, exit 0, isolated -userdir.
+- Perf (`perf_rc2/`): founder laptop (Core 7 240H, RTX 5060 Laptop 8 GB, 16 GB RAM, on AC), EPIC, hardware ray tracing
+  on, 1920x1200 windowed requested = 1280x800 on the non-DPI-aware 1536x960 desktop. Startup 5.8 s engine start to world.
+
+  | phase | avg fps | p95 ms | 1% low fps | frames > 50 ms | max ms |
+  |---|---|---|---|---|---|
+  | idle | 44.4 | 24.9 | 33.4 | 0 | 44 |
+  | travel (warm) | 43.9 | 29.2 | 21.0 | 0 | 48 |
+  | walk 30 s | 52.0 | 22.5 | 37.7 | 0 | 28 |
+  | teleport x5 | 48.0 | 32.8 | 18.5 | 1 | 64 |
+  | map x8 | 55.7 | 21.8 | 25.5 | 0 | 48 |
+  | wardrobe x5 | 78.7 | 17.3 | 17.6 | 2 | 194 |
+  | contract 60 s | 51.0 | 23.8 | 27.7 | 3 | 67 |
+  | creation | 46.1 | 24.6 | 34.9 | 0 | 29 |
+
+- Distribution: `rc2_import_closure.txt` (every DLL any shipped binary imports is shipped, an OS API set or an OS DLL;
+  0 unresolved), `rc2_zip_listing.txt`, `rc2_pii_scan.txt`.
 
 ## Blockers
 
 P0 prevents the beta launch or risks user data/security. P1 breaks a core flow or makes the beta unreliable. P2
 survives a small private beta with a documented limitation. P3 is polish. Only P0 and P1 block 100%.
 
-| id | P | area | problem | where | fix | status |
-|---|---|---|---|---|---|---|
-| B01 | P0 | creation | No UI turns a draft task into a Mission Contract; only `wl.Tasks.Submit` (console) does. Old tests submitted from Python. | WonderlandUiSubsystem.cpp:2557-2692 (dead MountTaskAddControl), :3978-3998; WonderlandLiveTerminal.cpp:324 | wire the terminal input to SubmitDraft when a draft tab is selected; truthful queued state | open |
-| B02 | P0 | distribution | VC++ runtime prerequisites not packaged (`-prereqs` missing): a clean PC may not launch | package.log line 1 | `-prereqs` in the RC build; verify UEPrereqSetup_x64.exe staged | open |
-| B03 | P1 | creation | Nothing runs and no result returns without Julius; Julius pairing is console-only, no bridge address ships | WonderlandJuliusStream.cpp:1167-1215; DefaultGame.ini (no BridgeUrl) | truthful "Julius is not available in this beta" states; result path stays Julius-gated (D1) | open |
-| B04 | P1 | persistence | Contracts after the 6th are silently lost on restart (restore stops at 6; next save rewrites the subset) | WonderlandMissionTasks.cpp:317-322, 267-286 | restore all; bound creation; add delete/cancel | open |
-| B05 | P1 | first launch / session | No in-game Quit; Esc does nothing in the world; fullscreen with captured mouse | WonderlandHudPanels.cpp:714-722 | QUIT row with confirmation; Esc opens the menu | open |
-| B06 | P1 | performance | No settings: quality, resolution, window mode; HW ray tracing + Lumen forced, so weak GPUs / 16 GB laptops cannot lower load | DefaultEngine.ini:36-44 | Settings tab: quality preset, window mode, resolution, ray tracing on/off; persisted | open |
-| B07 | P1 | distribution | No build identity anywhere (no ProjectVersion, default window title) | DefaultGame.ini:3-7 | stamp version + commit at package time; window title, Menu, log line | open |
-| B08 | P1 | debug exposure | Console (\`), engine debug view keys (F1/F2/F5/;), state-wiping `wl.*` commands, `/pa` (95k boxes) reachable by testers | DefaultInput.ini; BaseInput.ini:16,39-54; WonderlandUiSubsystem.cpp:3916 | clear console and debug keys; gate `/pa`; keep QA via -ExecCmds | open |
-| B09 | P1 | truthfulness | Players are shown developer instructions with a founder path: `cd C:\dev\iwonder\julius-connect && npm run julius-connect:dev` | WonderlandJuliusConnect.cpp:541,617-618; WonderlandJuliusConnectPanel.cpp:454-465; WonderlandSidekicks.cpp:311-312; WonderlandWonderWebLive.cpp:402 | plain "not available in this beta build" text; dev hint behind a dev flag | open |
-| B10 | P1 | input | Ctrl is Walk, and Ctrl+W (priority 100) opens a Wonder Web window: walking + W hijacks the camera | WonderlandUiSubsystem.cpp:227-231; RelayDogCharacter.cpp:1314 | move the chord off Ctrl+W; confirm at runtime | open |
-| B11 | P1 | brand | Third-party brand names on the HUD from boot ("GPT 6 Astra", "Claude Code Fable 5") and Wonder Web sample pages styled as Instagram / Google | DefaultGame.ini:124,130; UiArt/WonderWeb/wonder-web-browse.json | founder decision D3 | open (founder) |
-| B12 | P1 | persistence / distribution | Saves live inside the package folder: every new beta drop resets the player; a read-only install loses saves silently | Paths.cpp:183-191 (engine) | ship `Engine/Build/InstalledProjectBuild.txt` so saves and logs go to %LOCALAPPDATA%\Wonderland | open |
-| B13 | P1 | package content | `/Engine/EngineDebugMaterials/LevelColorationUnlitMaterial` is not cooked: mission orb colours, the Dog's beam and props, the wardrobe backdrop fall back to the default material in the package | WonderlandMissionOrb.cpp:18 and 4 more; package log | always-cook that engine directory (or a project copy) | open |
-| B14 | P1 | package content | `WorldDesign/Look/practical_lights.json` is not staged: the package's night has no street lamps (the founder-locked approved night) | WonderlandPracticalLights.cpp:62; DefaultGame.ini:51-58 | stage `../WorldDesign/Look` as NonUFS | open |
-| B15 | P1 | error / recovery | Companion chat locks OFFLINE when any reply contains "sk-" ("task-", "risk-", "ask-"): the secret filter is a case-insensitive Contains | WonderlandSidekicks.cpp:325; WonderlandJuliusConnect.cpp:352 | match real key shapes only | open |
-| B16 | P1 | privacy / clean user | The QA'd package folder ships `Saved/`: founder logs (user "Kaisi", computer, C:/dev paths), screenshots, configs, jack_flame and found territories | `_wonderland_package_regression_0930/Windows/Wonderland/Saved` | release script builds the artifact from a fresh stage without Saved/ | open |
-| B17 | P2 | first launch | The respawn net spawns AWonderlandDogPawn (no mesh, no movement): an invisible frozen camera | WonderlandHubGameMode.cpp:12,52; WonderlandDogPawn.cpp:35-77 | DefaultPawnClass = the Relay Dog | open |
-| B18 | P1 | creation | The mission showcase (the Dog's Mission Contract acts) starts only from the console | WonderlandMissionSubsystem.cpp:167-185 | a labelled "watch a simulated mission" control (D1) | open |
-| B19 | P1 | first launch | No welcome or how-to-play: a stranger cannot tell what works (walk, M map teleport, B wardrobe, Tab menu) | audit; WonderlandUiSubsystem.cpp:4864-4911 only a territory banner | first-launch welcome card, reopenable from the Menu | open |
-| B20 | P2 | first launch | Windows Firewall prompt at ~20 s: Unreal Insights trace control (port 1985, bound 0.0.0.0, compiled into the installed engine) + UdpMessaging | Second's baseline; TraceLog Control.cpp | disable UdpMessaging transport; README explains the prompt (Cancel is safe) | open |
-| B21 | P2 | truthfulness | Idle HUD strip claims "SIMULATED JULIUS EXECUTION ... MISSION none ... no fixture" when nothing runs | WonderlandMissionSubsystem.cpp:541-556 | truthful idle text, layout kept | open |
-| B22 | P2 | placeholders | "NEEDS FOUNDER DEFINITION"; "AVAILABLE ACTIVITIES" lists unbuilt things ("Multiplayer testing"); "Framed by the camera Wonderland placed to look at it." | WonderlandWorldMap.cpp:1424,1462; DefaultGame.ini:81-87,182-184 | truthful copy | open |
-| B23 | P2 | truthfulness | Hard-coded sub-agents "Scout-01 / Forge-02 / ..." in the terminal; Project Brain sample = internal founder notes | WonderlandLiveTerminal.cpp:532; WonderlandProjectBrain.cpp:122-185 | label as samples / neutral sample text | open |
-| B24 | P2 | robustness | No save is atomic; a truncated .sav restores partial state; a 1,024+ char skin id or territory line crashes every boot (FName checkf) | WonderlandRelaySkins.cpp:236,256; WonderlandTerritory.cpp:275,288; WonderlandMissionTasks.cpp | temp + move writes; length caps; check write results | open |
-| B25 | P2 | UI | Every colour click rebuilds the HUD and wipes the Julius and companion transcripts | WonderlandMascotStyle.cpp:258-277; WonderlandUiSubsystem.cpp:4762-4792 | refresh in place | open |
-| B26 | P2 | stability | Companion terminal can stick on STREAMING (ClearLines leaves Reveal) | WonderlandCompanionTerminal.cpp:543-549 | reset Reveal | open |
-| B27 | P2 | persistence | Saved skin and worn skin can diverge if a figure fails to load | WonderlandRelaySkins.cpp:166-169 | save after a successful wear | open |
-| B28 | P2 | package hygiene | 380 MB PDB, `RelaySkins/_reference` (founder sheets), `_previous` (old generator source), `ProjectAvatars/_old`, .gitignore shipped | Manifest_NonUFSFiles_Win64.txt | release script excludes them | open |
-| B29 | P2 | creation | Pixel Canvas and Project Brain proposals are lost on restart, labelled "NOT SYNCED" rather than "not saved" | WonderlandWonderWeb.h:193-206; WonderlandProjectBrainPanel.cpp:1114 | persist, or say "not saved" | open |
-| B30 | P2 | input | No gamepad bindings despite the "gamepad first-class" comment; no rebinding | RelayDogCharacter.cpp:1255-1365 | document keyboard + mouse for the beta | open |
+| id | P | area | problem | fix | status |
+|---|---|---|---|---|---|
+| B01 | P0 | creation | No UI turned a draft into a Mission Contract | terminal submit -> SubmitDraft (458f5448) | fixed; RC2 Q13 |
+| B02 | P0 | distribution | VC++ runtime not packaged | -prereqs + app-local CRT (458f5448, 24ea3e11) | fixed; RC2 staged + closure |
+| B03 | P1 | creation | No truthful state without Julius | beta sentence everywhere AI would run | fixed; RC2 Q00.3 |
+| B04 | P1 | persistence | Contracts after the 6th lost on restart | restore all; limit 48; /tasks delete | fixed; RC2 Q14/Q15; RC3 Q20 (limit) |
+| B05 | P1 | first launch / session | No in-game Quit; Esc did nothing | Esc opens the menu; QUIT with confirmation | fixed; static (Second to verify) |
+| B06 | P1 | performance | No settings | SETTINGS page: quality, window, resolution scale, frame cap, HW RT | fixed; static (Second's matrix) |
+| B07 | P1 | distribution | No build identity | BuildInfo label: title, menu, welcome, README, log | fixed; RC2 |
+| B08 | P1 | debug exposure | Console, debug keys, `/pa` reachable | player lock-down; `/pa` developer-only | fixed; RC2 Q00.2; RC3 Q18 |
+| B09 | P1 | truthfulness | Developer instructions and founder paths shown to players | beta text; dev hint behind -wldev | fixed; RC2 Q00.3 + static |
+| B10 | P1 | input | Ctrl+W hijacked walking | binding removed | fixed; static |
+| B11 | P1 | brand | "GPT 6 Astra" / "Claude Code Fable 5" on the HUD from boot (terminal titles, usage bars, Project Brain samples). The Instagram/Google-styled Wonder Web pages are no longer reachable by players (their only entries were Ctrl+W and Julius browsing) | founder decision D3 | **open (founder)** |
+| B12 | P1 | persistence | Saves inside the package folder | InstalledProjectBuild.txt -> %LOCALAPPDATA% | fixed; RC1 created %LOCALAPPDATA%\Wonderland\Saved; Second's clean-user on RC2 |
+| B13 | P1 | package content | Engine unlit material not cooked | always-cook | fixed; RC2 Q00.4 |
+| B14 | P1 | package content | practical_lights.json not staged | NonUFS stage | fixed; RC2 Q00.4 (1,464 lamps) |
+| B15 | P1 | error / recovery | Companion chat locked on any "sk-" | real key shapes only | fixed; static |
+| B16 | P1 | privacy | Package shipped Saved/ with founder logs | fresh stage without Saved/ | fixed; RC2 zip listing + scan |
+| B17 | P2 | first launch | Respawn net spawns an invisible pawn | README: Esc -> QUIT, start again (RC3) | documented |
+| B18 | P1 | creation | Mission showcase console-only | WATCH A SIMULATED MISSION in Missions (J) | fixed; static on RC2; RC3 Q17 |
+| B19 | P1 | first launch | No welcome / how-to-play | welcome card, reopenable | fixed; RC2 Q00.1 |
+| B20 | P2 | first launch | Windows Firewall prompt (engine trace control listen) | README: please click Cancel (RC3); the port itself is B32 | documented |
+| B21 | P2 | truthfulness | Idle strip claimed a simulated execution | truthful idle text | fixed; RC2 frames |
+| B22 | P2 | placeholders | "NEEDS FOUNDER DEFINITION", unbuilt activities | truthful copy | fixed; static |
+| B23 | P2 | truthfulness | Sample sub-agents (foreign terminal file) and sample Project Brain notes | Project Brain labels them sample data | open (documented) |
+| B24 | P2 | robustness | Non-atomic saves; 1,024+ char ids crashed boots | atomic saves; IsSafeId | fixed; RC3 hostile boot Q21 |
+| B25 | P2 | UI | A colour click rebuilds the HUD and clears the terminal transcript | -- | open |
+| B26 | P3 | stability | Companion terminal can stick on STREAMING (foreign file) | unreachable in player sessions (companions offline) | open |
+| B27 | P2 | persistence | Saved and worn skin can diverge if a figure fails to load | -- | open |
+| B28 | P2 | package hygiene | PDB, founder sheets, old sources shipped | release script excludes them | fixed; RC2 zip listing |
+| B29 | P2 | creation | Proposals labelled NOT SYNCED though never saved | "NOT SAVED" + README (RC3) | fixed in RC3 source |
+| B30 | P2 | input | No gamepad | README: keyboard and mouse (RC3) | documented |
+| B31 | P3 | distribution | RC2 label "+local-changes" was a false positive (untracked Content, edited captures) | dirty check over tracked build folders (5d95aa40) | fixed for RC3 |
+| B32 | P1 | security | TCP 1985 on every interface in a player session: the engine's unauthenticated trace control (SendTo streams the trace, log included, to any host) -- Second, RC2 | close it one frame after the engine opens it (TraceLog's Writer_ShutdownControl; player sessions only); QA samples listeners per boot (QNET) | **open on RC2; fixed in RC3 source** |
+| B33 | P2 | distribution | Executables unsigned: SmartScreen on a downloaded zip | README "More info -> Run anyway" (RC3); signing needs a certificate (founder / external account) | documented |
+| B34 | P2 | robustness | A corrupt contracts or command-presets .sav could crash every boot: the engine's loader reads a class name and property names straight from the bytes (FName > 1,023 chars is fatal) | sealed saves (tag + length + CRC-32), set aside when the seal fails; presets now atomic too (RC3) | fixed in RC3 source; Second testing RC2 "before" |
+| B35 | P3 | privacy | Logs hold the Windows user/computer name and user paths; deleting a contract logged its text | README tells testers (RC3); objective length only (RC3) | fixed in RC3 source |
+| B36 | P2 | legal | NOTICES.txt credits FreeType only; the zip ships onnxruntime, libvorbis/libogg, tbb, MsQuic, WinPixEventRuntime, NVIDIA Aftermath, DirectML, D3D12 Agility SDK | founder / legal; Vulkan debug layers, GPU dump viewer and the ARM64 installer stripped (RC3) | open (founder/legal) |
+| B37 | P3 | performance | One 194 ms frame when the wardrobe swaps a skin | -- | open |
+| B38 | P3 | distribution | The exe holds source paths from assertion macros (C:\dev\iwonder\...) and the developer-only service hint text, never shown to players | -- | open |
+| B39 | P2 | measurement | Perf ran in a 1280x800 window (the QA's window arguments), not the game's own first-launch window | perf script -DefaultWindow (RC3) | open until measured |
 
-## Founder decisions (genuine product calls; work continues around them)
+## Founder decisions
 
-- **D1, creation loop without production Julius.** Wonderland can offer a truthful LOCAL loop: create a contract,
-  see it queued and persisted, reopen and delete it, watch a clearly-SIMULATED mission showcase, use the
-  Wonder Web canvas. Every Julius-dependent step ("run it", "receive an AI result") says plainly that Julius is not
-  available in this beta. A real AI result needs Julius production qualification plus a hosted bridge (JUJU's lane).
-  CORE proceeds with the truthful local loop; the founder can require real Julius results for 100%.
-- **D2, multiplayer and private/project spaces.** No networking, replication, sessions, private servers or server
-  avatars exist in the code. The beta is single-player; R5 covers single-player session stability, and R6 records that
-  no private/project space exists to test.
-- **D3, third-party brand names for outside testers.** "GPT 6 Astra" and "Claude Code Fable 5" on the HUD, and Wonder
-  Web sample pages styled as Instagram and Google. Rename or neutralize for the beta? This touches companion canon,
-  so CORE does not change it unilaterally.
+- **D1, creation loop without production Julius: settled by the founder's direction** ("Do not fake unavailable Julius
+  production functionality"). The beta offers a truthful LOCAL loop: create a contract, see it queued and persisted,
+  delete it, watch a clearly SIMULATED mission, use the Wonder Web sample canvas. Real AI results stay Julius's lane.
+- **D2, multiplayer and private/project spaces: settled by the founder's direction** ("to the extent included in the
+  beta", "as implemented; do not invent future systems"). None exists in the code; the beta is single-player, R5 covers
+  single-player session stability and R6 verifies that nothing promises what is not there.
+- **D3, third-party names for outside testers: OPEN, the founder's call (B11, P1).** Testers see "GPT 6 Astra" and
+  "Claude Code Fable 5" on the HUD from the first frame (terminal titles, usage bars, two Project Brain sample lines),
+  next to OFFLINE / "not connected in this beta build". Options: keep them for an invite-only beta; or show the role
+  names (LLM COMPANION, JHINN) in player builds only, leaving the canon names untouched in development; or rename in
+  canon. A config/text change either way; CORE does not change companion canon unilaterally.
