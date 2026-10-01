@@ -57,6 +57,7 @@
 #include "Misc/FileHelper.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "WonderlandSkinStage.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandQa, Log, All);
 
@@ -418,7 +419,22 @@ namespace
 		return true;
 	}
 
-	/** Q25 on the costume a Dog wears now: parse the figure file it loaded and judge its eyes. */
+	/** Q25 on a figure file as the game would load it: parse it and judge its eyes. */
+	bool QaFigureFileEyesInsideFace(const FString& Path, FString& OutDetail)
+	{
+		FString Text, Error;
+		FWonderlandCompanionFigure Figure;
+		if (Path.IsEmpty() || !FFileHelper::LoadFileToString(Text, *Path) || !FWonderlandCompanionFigure::Parse(Text, Figure, Error))
+		{
+			OutDetail = FString::Printf(TEXT("could not read the figure '%s' (%s)"), *Path, *Error);
+			return false;
+		}
+		const bool bOk = QaEyesInsideFace(Figure, OutDetail);
+		OutDetail = FPaths::GetCleanFilename(Path) + TEXT(": ") + OutDetail;
+		return bOk;
+	}
+
+	/** Q25 on the costume a Dog wears now: the figure file it loaded. */
 	bool QaWornEyesInsideFace(const AWonderlandCompanionEmbodiment* Worn, FString& OutDetail)
 	{
 		if (Worn == nullptr)
@@ -426,17 +442,22 @@ namespace
 			OutDetail = TEXT("no costume to read");
 			return false;
 		}
-		FString Text, Error;
-		FWonderlandCompanionFigure Figure;
-		const FString Path = Worn->GetFigurePath();
-		if (!FFileHelper::LoadFileToString(Text, *Path) || !FWonderlandCompanionFigure::Parse(Text, Figure, Error))
+		return QaFigureFileEyesInsideFace(Worn->GetFigurePath(), OutDetail);
+	}
+
+	/** Q25.1: Relay OG wears no costume in play -- the canon body -- but its WARDROBE figure is the file the skin registry
+	 *  resolves for relay_og, and it is held to the same rules (founder, 2026-10-01: "Change the relay og wardrobe preview
+	 *  to the correct visuals"). */
+	bool QaRelayOgPreviewEyesInsideFace(UWorld* World, FString& OutDetail)
+	{
+		const UGameInstance* Instance = World != nullptr ? World->GetGameInstance() : nullptr;
+		const UWonderlandRelaySkinSubsystem* Skins = Instance != nullptr ? Instance->GetSubsystem<UWonderlandRelaySkinSubsystem>() : nullptr;
+		if (Skins == nullptr)
 		{
-			OutDetail = FString::Printf(TEXT("could not read the worn figure '%s' (%s)"), *Path, *Error);
+			OutDetail = TEXT("no skin registry");
 			return false;
 		}
-		const bool bOk = QaEyesInsideFace(Figure, OutDetail);
-		OutDetail = FPaths::GetCleanFilename(Path) + TEXT(": ") + OutDetail;
-		return bOk;
+		return QaFigureFileEyesInsideFace(Skins->FigurePathFor(FName(TEXT("relay_og"))), OutDetail);
 	}
 
 	/** A costume's materials as painted right now (DescribeMaterialColours): the body's Color and its flame twin's. */
@@ -1498,13 +1519,11 @@ namespace
 					FString::Printf(TEXT("%s: body %.2f uu against Relay OG %.2f uu, the switch moved the Dog %.2f uu"),
 						Roster[Which], Body, Canon, Dz));
 				// Q25 (founder correction, 2026-10-01): the costume's eyes INSIDE its face, judged on the figure it loaded.
-				// Relay OG wears no costume: its canon body is the reference the founder named, and it is not judged here.
-				if (Which > 0)
-				{
-					FString EyeDetail;
-					const bool bEyes = QaWornEyesInsideFace(Worn, EyeDetail);
-					QaCheck(Run, *FString::Printf(TEXT("Q25.%d"), Which + 1), bEyes, FString::Printf(TEXT("%s: %s"), Roster[Which], *EyeDetail));
-				}
+				// Relay OG wears no costume in play (its canon body is the founder's reference); Q25.1 judges its WARDROBE figure.
+				FString EyeDetail;
+				const bool bEyes = Which > 0 ? QaWornEyesInsideFace(Worn, EyeDetail) : QaRelayOgPreviewEyesInsideFace(World, EyeDetail);
+				QaCheck(Run, *FString::Printf(TEXT("Q25.%d"), Which + 1), bEyes, FString::Printf(TEXT("%s%s: %s"), Roster[Which],
+					Which > 0 ? TEXT("") : TEXT(" wardrobe figure"), *EyeDetail));
 				++Run.Sub;
 			}
 			break;
@@ -2118,6 +2137,7 @@ namespace
 		int32 Skin = 0;
 		int32 Shot = 0;
 		int32 Phase = 0;
+		int32 WSkin = 0;   // the wardrobe pass's skin
 		double At = 0.0;
 		int32 Pass = 0;
 		int32 Fail = 0;
@@ -2167,7 +2187,7 @@ namespace
 		case 1:
 			if (F.Skin >= 5)
 			{
-				F.Phase = 9;
+				F.Phase = 20;   // then the wardrobe's own preview of each skin
 				F.At = QaNow();
 				break;
 			}
@@ -2189,8 +2209,12 @@ namespace
 				}
 				else
 				{
-					UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES relay_og: the canon body, no costume -- the founder's reference, not judged (worn %s)"),
-						*D->GetWornSkinId().ToString());
+					// in play Relay OG is the canon body (no costume); its wardrobe figure is judged instead (Q25.1)
+					FString Detail;
+					const bool bOk = QaRelayOgPreviewEyesInsideFace(World, Detail);
+					(bOk ? F.Pass : F.Fail)++;
+					UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES Q25.1 %s | relay_og wardrobe figure (worn in play: %s, the canon body): %s"),
+						bOk ? TEXT("PASS") : TEXT("FAIL"), *D->GetWornSkinId().ToString(), *Detail);
 				}
 				F.Phase = 3;
 				F.At = QaNow();
@@ -2252,6 +2276,57 @@ namespace
 				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), W, H);
 				++F.Shot;
 				F.Phase = 3;
+				F.At = QaNow();
+			}
+			break;
+		case 20:
+			// THE WARDROBE'S PREVIEW (founder, 2026-10-01: "Change the relay og wardrobe preview to the correct visuals"):
+			// the Dog's own camera back, then the Project Brain's wardrobe opened the way the perf run opens it
+			if (In >= 0.5)
+			{
+				PC->SetViewTargetWithBlend(D, 0.0f);
+				if (UWonderlandUiSubsystem* U = QaUi(World))
+				{
+					U->ToggleProjectBrain();
+					U->SetBrainSkinsOpen(true);
+				}
+				F.WSkin = 0;
+				F.Phase = 21;
+				F.At = QaNow();
+			}
+			break;
+		case 21:
+			if (In >= 1.0)
+			{
+				if (F.WSkin >= 5)
+				{
+					if (UWonderlandUiSubsystem* U = QaUi(World))
+					{
+						U->SetBrainSkinsOpen(false);
+						U->ToggleProjectBrain();
+					}
+					F.Phase = 9;
+					F.At = QaNow();
+					break;
+				}
+				GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), FaceRoster[F.WSkin]));
+				F.Phase = 22;
+				F.At = QaNow();
+			}
+			break;
+		case 22:
+			// the stage shows the skin and the figure settles facing its camera, then the whole screen is saved
+			if (In >= 4.0)
+			{
+				const AWonderlandSkinStage* Stage = AWonderlandSkinStage::Get(World);
+				int32 W = 0;
+				int32 H = 0;
+				const FString Path = F.Dir / FString::Printf(TEXT("%d_%s_wardrobe.png"), F.WSkin + 1, FaceRoster[F.WSkin]);
+				const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, W, H);
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES wardrobe %s: the stage shows %s | frame %s %s %dx%d"), FaceRoster[F.WSkin],
+					Stage != nullptr ? *Stage->GetShownSkinId().ToString() : TEXT("(no stage)"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), W, H);
+				++F.WSkin;
+				F.Phase = 21;
 				F.At = QaNow();
 			}
 			break;

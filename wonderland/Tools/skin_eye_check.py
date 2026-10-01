@@ -22,7 +22,7 @@
 # Mirrors the package QA's Q25 (WonderlandQaCommands.cpp), which applies the same rules to the figure file the game
 # actually loaded. relay_dog_skins.py runs this on every skin it writes and refuses to write one that fails.
 #
-#   python wonderland/Tools/skin_eye_check.py [--skins DIR] [Name ...]      (default: the five-skin roster)
+#   python wonderland/Tools/skin_eye_check.py [--skins DIR] [Name ...]      (default: the five-skin roster, Relay OG's wardrobe figure included)
 import argparse
 import os
 import sys
@@ -33,10 +33,9 @@ HALO_MARGIN = 0.10 # visible halo light keeps this far inside the black as well
 DARK = 0.10        # an opaque, non-emissive surface below this luminance reads as the black housing
 STEP = 0.05
 SCAN = 6.0
-SHIPPED = ["CelestialLight", "SkeletonFlameV2", "JackFlame", "Baal"]
-# RELAY OG: the Dog in play is the canon body, not a figure; its preview figure keeps the legacy face on the
-# founder's instruction ("DO NOT CHANGE RELAY OG"), so it is reported, never checked.
-REFERENCE = "RelayOg"
+SHIPPED = ["RelayOg", "CelestialLight", "SkeletonFlameV2", "JackFlame", "Baal"]
+# RELAY OG: the Dog in play is the canon body; RelayOg.wlvox is its WARDROBE PREVIEW, and it is held to the same rules
+# (founder, 2026-10-01: "Change the relay og wardrobe preview to the correct visuals").
 
 
 def load(path):
@@ -234,7 +233,6 @@ def main():
     args = ap.parse_args()
     names = args.names or SHIPPED
     failed = 0
-    print("%-16s reference: the Dog in play is the canon body; its preview figure is not checked (founder: DO NOT CHANGE RELAY OG)" % REFERENCE)
     for name in names:
         path = os.path.join(args.skins, name + ".wlvox")
         if not os.path.isfile(path):

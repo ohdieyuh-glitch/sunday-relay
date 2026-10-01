@@ -651,7 +651,7 @@ def head_with_window(figure, part, material, centre, size, tile, window):
                 figure.box(part, material, (px, py, pz), (sx / nx, sy / ny, sz / nz))
 
 
-def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None, face="inset"):
+def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
     """THE RELAY DOG ITSELF. Every skin calls this first and dresses what it returns.
 
     Built to the reference plates: a big cubic head with two small tapered ear spurs, a dark visor band inset across
@@ -665,17 +665,12 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None, fa
     figure.part("body", "root", (0.0, 0.0, d["torso_z"]), "none")
     figure.part("head", "body", (0.0, 0.0, d["head_z"]), "head")
 
-    # THE FACE (see FACE above). "inset", every skin's: the visor is a window cut into the head with the eyes inside it.
-    # "legacy" is the figure exactly as it was before the founder's eye correction, kept for RELAY OG's preview figure
-    # alone -- the founder: "RELAY OG IS ALREADY CORRECT. DO NOT CHANGE RELAY OG." (the Dog in play is the canon body).
-    assert face in ("inset", "legacy"), face
+    # THE FACE (see FACE above): the visor is a window cut into the head, with the eyes inside it. Every figure, Relay OG's
+    # wardrobe preview included (founder, 2026-10-01: "Change the relay og wardrobe preview to the correct visuals").
     vw, vh = d["visor"]
     visor_z = d["head_z"] - hh * 0.07
     window = (-vw * 0.5, vw * 0.5, visor_z - vh * 0.5, visor_z + vh * 0.5)
-    if face == "legacy":
-        figure.slab("head", coat, (0.0, 0.0, d["head_z"]), (hd, hw, hh), tile=tile)
-    else:
-        head_with_window(figure, "head", coat, (0.0, 0.0, d["head_z"]), (hd, hw, hh), tile, window)
+    head_with_window(figure, "head", coat, (0.0, 0.0, d["head_z"]), (hd, hw, hh), tile, window)
 
     # THE EARS: a wider base and a narrower tip, leaning very slightly outward, set at the head's top corners.
     ed, ew, eh = d["ear"]
@@ -691,61 +686,14 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None, fa
     # above the visor than mine did, so the band sits BELOW the head's midline rather than on it. A visor riding
     # high reads as a different expression entirely -- more alert, less calm -- which is why this is worth the
     # fraction of a head it moves.
-    if face == "inset":
-        # NOW ACTUALLY CUT IN (2026-10-01): the plate's face FACE["recess"] behind the head's front plane, filling the
-        # window head_with_window left, and the eyes inside it through the one function that lays them.
-        figure.slab("head", "visor", (hd * 0.5 - FACE["recess"] - FACE["plate"] * 0.5, 0.0, visor_z),
-                    (FACE["plate"], vw, vh), tile=tile * 0.62)
-        status_eyes(figure, "head", hd * 0.5, window, [(-d["eye_gap"], visor_z), (d["eye_gap"], visor_z)], eye=eye)
-    else:
-        legacy_visor_and_eyes(figure, eye, tile, hd, visor_z)
+    # NOW ACTUALLY CUT IN (2026-10-01): the plate's face FACE["recess"] behind the head's front plane, filling the window
+    # head_with_window left, and the eyes inside it through the one function that lays them.
+    figure.slab("head", "visor", (hd * 0.5 - FACE["recess"] - FACE["plate"] * 0.5, 0.0, visor_z),
+                (FACE["plate"], vw, vh), tile=tile * 0.62)
+    status_eyes(figure, "head", hd * 0.5, window, [(-d["eye_gap"], visor_z), (d["eye_gap"], visor_z)], eye=eye)
     _base_dog_body(figure, coat, coat_deep, tile)
     figure.mark_dog_extent()
     return figure
-
-
-def legacy_visor_and_eyes(figure, eye, tile, hd, visor_z):
-    """THE FACE AS IT WAS until 2026-10-01: a visor slab 0.40 proud of the head, eye panes 0.15 proud of that, and a
-    halo pane proud of both. Kept, byte for byte, for RELAY OG's preview figure only (see base_dog)."""
-    d = DOG
-    vw, vh = d["visor"]
-    figure.slab("head", "visor", (hd * 0.5 - 0.35, 0.0, visor_z), (1.5, vw, vh), tile=tile * 0.62)
-
-    # THE STATUS EYES. The brightest thing on the dog, and the one part of the face a skin may recolour.
-    exw, exh = d["eye"]
-    for side in (-1.0, 1.0):
-        figure.box("head", eye, (hd * 0.5 + 0.30, side * d["eye_gap"], visor_z), (0.5, exw, exh))
-        # the halo pane: behind the core, wider than it, additive, in the eye's colour. See start().
-        if "eyehalo" in figure.material_names:
-            # PROUD OF THE VISOR. At hd/2 + 0.16 the pane spanned x 4.11..4.41 and the visor slab's face is at
-            # 4.5, so the halo sat inside the visor and no rim ever showed on a costume (round-3 sheet). At
-            # +0.45 its face is at 4.60 -- clear of the visor, just behind the eye pane's own face at 4.65.
-            # 2.4x THE EYE, for M_WL_EyeHalo: full over the eye's own footprint (Inner 0.45 of the pane), fading
-            # to nothing at the pane's edge -- so the spill is the eye's own width again on every side.
-            # ---- AND IT SPILLS OUTWARD AND UPWARD, NEVER INWARD PAST THE EYE.
-            #
-            # FOUNDER, RELAY OG EYE SPACING, applied to the costumes as the same note's last paragraph asks:
-            # "Bloom from one eye must not visually merge with bloom from the other." Centred on its eye at
-            # 2.4x the eye's width, this pane spanned -0.39 to +2.49 about the visor centre -- it crossed the
-            # centreline by a third of an eye's width, and the two halos overlapped through the middle by 0.78.
-            # Same defect as the gameplay Dog's halo rings, one asset over, and the same arithmetic finds it:
-            # 2.4 x 1.2 is wider than 2 x 1.05.
-            #
-            # THE EYE SPACING ITSELF IS NOT THE FAULT HERE AND MUST NOT BE TOUCHED. eye_gap is 1.05 because the
-            # canonical photo puts the centres 23 per cent of the head's width apart, and the comment on the
-            # DOG dict records that setting them wider was once "the loudest error" -- wide-set eyes read as a
-            # different character however correct the body is. The founder's note says not to redesign skins
-            # whose spacing is already right, and this spacing is right against their own reference.
-            #
-            # So the pane is SHIFTED OUTWARD and NARROWED instead of being centred and wide: it runs from the
-            # eye's own inner edge to the full 2.4x reach on the outside. A box cannot be asymmetric about its
-            # centre, so its centre moves to the middle of that span. The glow keeps its outward and vertical
-            # spill -- which is where a halo is read -- and stops dead at the eye's inner edge.
-            halo_in = d["eye_gap"] - exw * 0.5
-            halo_out = d["eye_gap"] + exw * 2.4 * 0.5
-            figure.box("head", "eyehalo",
-                       (hd * 0.5 + 0.45, side * (halo_in + halo_out) * 0.5, visor_z),
-                       (0.30, halo_out - halo_in, exh * 2.4))
 
 
 def _base_dog_body(figure, coat, coat_deep, tile):
@@ -883,9 +831,9 @@ def relay_og():
     nothing" shows the founder an animal he does not own.
     """
     figure = start("RELAY DOG -- OG", 7001, (1.00, 0.72, 0.16), 7.0)
-    # THE LEGACY FACE, ON PURPOSE (founder, 2026-10-01: "RELAY OG IS ALREADY CORRECT. DO NOT CHANGE RELAY OG."): the Dog
-    # in play is the canon body, never this file, so this preview figure is left exactly as it was.
-    base_dog(figure, face="legacy")
+    # THE WARDROBE'S RELAY OG WEARS THE CORRECT FACE TOO (founder, 2026-10-01: "Change the relay og wardrobe preview to
+    # the correct visuals"): the eyes inside the black visor, as on the canon body the Dog wears in play.
+    base_dog(figure)
     return figure
 
 
@@ -3281,14 +3229,13 @@ def main():
         path = os.path.join(args.out, "%s.wlvox" % name)
         boxes, parts, materials = figure.write(path)
         print("%-22s %5d boxes  %2d parts  %2d materials  voxel %.2f uu" % (os.path.basename(path), boxes, parts, materials, figure.voxel_uu))
-        # THE EYES ARE ENFORCED, NOT TRUSTED (founder correction, 2026-10-01): a skin whose status eyes stand proud of
-        # its face, sit outside their black housing, or spill halo light over the coat is not written. Relay OG's
-        # preview figure keeps its legacy face on the founder's instruction and is the one exception.
-        if name != "RelayOg":
-            eyes_ok, report = skin_eye_check.check(path)
-            if not eyes_ok:
-                os.remove(path)
-                raise SystemExit("%s: the eyes are not inside the face (skin_eye_check.py):\n  %s" % (name, "\n  ".join(report)))
+        # THE EYES ARE ENFORCED, NOT TRUSTED (founder correction, 2026-10-01): a figure whose status eyes stand proud of
+        # its face, sit outside their black housing, or spill halo light over the coat is not written -- every skin,
+        # Relay OG's wardrobe preview included.
+        eyes_ok, report = skin_eye_check.check(path)
+        if not eyes_ok:
+            os.remove(path)
+            raise SystemExit("%s: the eyes are not inside the face (skin_eye_check.py):\n  %s" % (name, "\n  ".join(report)))
 
     # THE CUBS. A cub is about a third of the Dog's height on the plate, which is what "cub proportions" means here.
     cubs = os.path.join(os.path.dirname(args.out), "RelayCubs")
