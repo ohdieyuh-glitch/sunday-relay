@@ -137,7 +137,9 @@ INSTALL AND RUN
 1. Unzip the whole folder to a folder of its own that is not synced by OneDrive, for example C:\Games\Wonderland.
 2. Double-click Wonderland.exe. The first start can take a minute.
 3. The beta's files are not code-signed yet, so Windows may show "Windows protected your PC". Click "More info",
-   then "Run anyway".
+   then "Run anyway". If Windows says "The publisher could not be verified" instead, click Run.
+   If Smart App Control is turned on, Windows blocks unsigned programs and offers no way to run them. Wonderland
+   cannot start on that PC until the beta is signed; please tell us rather than turning Smart App Control off.
 4. Windows may ask whether to allow Wonderland on public and private networks. Please click Cancel: Wonderland does
    not use the network. The request comes from a diagnostics feature of the game engine, which this build switches
    off right after it starts.
@@ -164,6 +166,9 @@ GOOD TO KNOW
 - The Pixel Canvas in Wonder Web and the Project Brain's entries are samples. What you paint, and the changes you
   propose in the Project Brain, are kept until you quit, not saved.
 - The WONDER WEB WALLET is a sandbox: its `$500.00 is not real money and nothing can be bought with it.
+- The two companion terminals beside the agent terminal (Ctrl+T) are not connected in this beta. While you watch a
+  simulated mission (J > WATCH A SIMULATED MISSION) they show the companions' part in it, marked SIMULATED: no AI
+  is contacted and nothing is changed on your PC.
 - If your Relay Dog ever disappears, press Esc, choose QUIT WONDERLAND, and start the game again.
 
 YOUR SAVES AND LOG

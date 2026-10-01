@@ -30,7 +30,8 @@
 #include "WonderlandCommandPresets.h"
 #include "WonderlandCommandStation.h"
 #include "WonderlandCompanionSubsystem.h"
-#include "WonderlandCompanionTerminal.h"
+#include "WonderlandCompanionConsole.h"
+#include "WonderlandCompanionWork.h"
 #include "WonderlandHudPanels.h"
 #include "WonderlandJuliusConnect.h"
 #include "WonderlandJuliusStream.h"
@@ -384,23 +385,44 @@ void UWonderlandUiSubsystem::MountCompanionTerminals()
 	const UWonderlandCompanionPreviewSettings* Settings = GetDefault<UWonderlandCompanionPreviewSettings>();
 	const TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
 
-	// Each panel's accent is the colour its embodiment glows in: starlight for the LLM Companion, and the
+	// Each console's accent is the colour its embodiment glows in: starlight for the LLM Companion, and the
 	// imported-agent cyan-blue for the Jhinn -- the canon colour that says it came from outside Wonderland.
-	TSharedPtr<SWonderlandCompanionTerminal> Llm;
-	TSharedPtr<SWonderlandCompanionTerminal> Agent;
-	SAssignNew(Llm, SWonderlandCompanionTerminal)
+	//
+	// ONE COMPONENT FOR BOTH (founder, 2026-10-01: "DIFFERENT COMPANIONS, SAME TERMINAL LANGUAGE"). The name, the colour
+	// and the feed differ; how the terminal behaves does not. Same slots as before: the layout is the founder's.
+	TSharedPtr<SWonderlandCompanionConsole> Llm;
+	TSharedPtr<SWonderlandCompanionConsole> Agent;
+	SAssignNew(Llm, SWonderlandCompanionConsole)
 		.Title(Settings->LlmCompanionName)
-		.Intro(TEXT("The LLM companion built\nfor Wonderland."))
 		.Accent(WonderlandUi::Srgb(0xF4, 0xF7, 0xFF))
+		.Emblem(EWonderlandConsoleEmblem::IWonderMark)
 		.OnSubmit_Lambda([WeakThis](const FString& Text) { if (WeakThis.IsValid()) { WeakThis->HandleCompanionSubmit(0, Text); } })
+		.OnInterrupt_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->HandleCompanionInterrupt(0); } })
 		.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
-	SAssignNew(Agent, SWonderlandCompanionTerminal)
+	SAssignNew(Agent, SWonderlandCompanionConsole)
 		.Title(Settings->AgentName)
-		.Intro(TEXT("The AI coding agent built\nfor Wonderland."))
 		.Accent(WonderlandUi::Srgb(0x5C, 0xDB, 0xFF))
+		.Emblem(EWonderlandConsoleEmblem::IWonderMark)
 		.OnSubmit_Lambda([WeakThis](const FString& Text) { if (WeakThis.IsValid()) { WeakThis->HandleCompanionSubmit(1, Text); } })
+		.OnInterrupt_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->HandleCompanionInterrupt(1); } })
 		.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
+	// THE OPENING LINES, as the older panels' intros said them, and the companions' own authorities as their modes
+	Llm->Print(EWonderlandConsoleLine::Note, TEXT("The LLM companion built for Wonderland."));
+	Agent->Print(EWonderlandConsoleLine::Note, TEXT("The AI coding agent built for Wonderland."));
+	Llm->SetMode(TEXT("conversation mode"));
+	Agent->SetMode(TEXT("scoped-work mode"));
+	for (const TSharedPtr<SWonderlandCompanionConsole>& Console : {Llm, Agent})
+	{
+		Console->SetStatus(TEXT("WAITING"));
+		Console->SetIdleText(TEXT("Waiting for a mission"), false);
+	}
 	CompanionTerminals = {Llm, Agent};
+	CompanionLiveTurn.Init(FString(), 2);
+	CompanionShownSession.Init(FString(), 2);
+	CompanionLinkWasDown.Init(false, 2);
+	CompanionLinkSeenUp.Init(false, 2);
+	CompanionMissionTask.Init(false, 2);
+	CompanionPendingAsk.Init(FString(), 2);
 
 	// THE THREE CONSOLES ARE ONE INSTRUMENT. Ctrl+T raises the Julius terminal and these two with it, and takes
 	// all three away together (founder, 2026-09-15). Mounted once; shown with the terminal.
@@ -445,25 +467,53 @@ void UWonderlandUiSubsystem::HandleCompanionSubmit(int32 Index, const FString& T
 	{
 		return;
 	}
-	const TSharedPtr<SWonderlandCompanionTerminal>& Panel = CompanionTerminals[Index];
+	const TSharedPtr<SWonderlandCompanionConsole>& Panel = CompanionTerminals[Index];
 	UWonderlandSidekickSubsystem* Runtime = Sidekicks();
 	const FWonderlandSidekick* Sidekick = Runtime != nullptr ? Runtime->ByIndex(Index) : nullptr;
-	// THE COMPANION IS REALLY ASKED, when there is really something behind it. The line appears when the runtime reports
-	// the turn, so what is on screen is what was actually asked of a provider rather than a hopeful echo.
+	CompanionPendingAsk.SetNum(CompanionTerminals.Num());
+	// THE COMPANION IS REALLY ASKED, when there is really something behind it. The ask is echoed at once and the row starts
+	// thinking, as a terminal does on Enter; what the runtime then reports -- its stream, its answer or its failure -- is
+	// what follows. The runtime's own report of this same ask is not echoed a second time.
 	if (Runtime != nullptr && Sidekick != nullptr && Runtime->GetLink() == EWonderlandSidekickLink::Online && Sidekick->State == TEXT("CONNECTED"))
 	{
+		Panel->Print(EWonderlandConsoleLine::Prompt, Text, FString(), 0.0f);
+		Panel->BeginTask(EWonderlandConsoleActivity::Thinking, TEXT("Thinking"));
+		Panel->SetCounter(0, TEXT("chars"));
+		CompanionPendingAsk[Index] = Text;
+		CompanionPendingTurns.SetNum(CompanionTerminals.Num());
+		CompanionPendingTurns[Index] = Sidekick->Turns;
 		Runtime->Ask(Sidekick->SidekickId, Text);
 		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI companion terminal %d asked its runtime: %d characters"), Index, Text.Len());
 		return;
 	}
 	// Otherwise it is recorded as the visitor's own line and marked unsent -- with the reason, which is now a real one:
 	// no runtime, or a companion that has no provider behind it yet.
-	Panel->AddLine(TEXT("You"), Text, false);
+	Panel->Print(EWonderlandConsoleLine::Prompt, Text, FString(), 0.0f);
 	const FString Why = Runtime == nullptr || Runtime->GetLink() != EWonderlandSidekickLink::Online
 		? FString::Printf(TEXT("Not sent: the companions' runtime is not running, so %s has nothing behind it."), *Panel->GetTitle())
 		: FString::Printf(TEXT("Not sent: %s is %s. Connect a provider first."), *Panel->GetTitle(), *Sidekick->State.Replace(TEXT("_"), TEXT(" ")).ToLower());
-	Panel->AddLine(FString(), Why, true);
+	Panel->Print(EWonderlandConsoleLine::Output, Why, FString(), 0.0f);
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI companion terminal %d line recorded, not sent: %d characters"), Index, Text.Len());
+}
+
+void UWonderlandUiSubsystem::HandleCompanionInterrupt(int32 Index)
+{
+	if (!CompanionTerminals.IsValidIndex(Index) || !CompanionTerminals[Index].IsValid())
+	{
+		return;
+	}
+	UWonderlandSidekickSubsystem* Runtime = Sidekicks();
+	const FWonderlandSidekick* Sidekick = Runtime != nullptr ? Runtime->ByIndex(Index) : nullptr;
+	// THE RUNTIME'S OWN CANCEL, which aborts the provider call; the console says it is stopping, and the runtime's report of
+	// the cancelled turn is what ends it -- the console never declares a stop that has not happened.
+	if (Runtime != nullptr && Sidekick != nullptr && Runtime->GetLink() == EWonderlandSidekickLink::Online
+		&& (Sidekick->bHasLiveTurn || (CompanionPendingAsk.IsValidIndex(Index) && !CompanionPendingAsk[Index].IsEmpty())))
+	{
+		Runtime->Cancel(Sidekick->SidekickId);
+		CompanionTerminals[Index]->SetActivity(EWonderlandConsoleActivity::Working, TEXT("Interrupting"));
+		CompanionTerminals[Index]->SetInterruptible(false);
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI companion terminal %d asked its runtime to cancel the turn in flight"), Index);
+	}
 }
 
 FString UWonderlandUiSubsystem::GetCompanionTerminalTitle(int32 Index) const
@@ -1069,9 +1119,17 @@ UWonderlandSidekickSubsystem* UWonderlandUiSubsystem::Sidekicks() const
 }
 
 /**
- * THE COMPANION TERMINALS FOLLOW THE RUNTIME. State at the right of the title, the provider and model under it, and a
- * line when a turn actually ends -- the answer, marked SIMULATED while a fixture is behind it, or the plain reason it
- * failed. Nothing is added while a turn is in flight: the state says THINKING, which is what is true.
+ * THE COMPANION CONSOLES FOLLOW THE RUNTIME, as a terminal follows the process behind it.
+ *
+ * - The link: OFFLINE with its reason when nothing is behind the companions; "Connection restored" only after the link
+ *   was actually seen down.
+ * - The session: a lifecycle line when the runtime's session is first seen ("continued" when it already had turns) or
+ *   changes ("started").
+ * - A turn: the ask, then THINKING, then the answer streaming in as the runtime reports it, with the characters
+ *   received as the counter -- the runtime reports no tokens, so none are shown. Esc stops it through the runtime.
+ * - The end of a turn: a Done line marked SIMULATED while a fixture answered, or the failure in red.
+ *
+ * Nothing here composes an answer, a token count or a step the runtime did not report.
  */
 void UWonderlandUiSubsystem::HandleSidekicksChanged()
 {
@@ -1080,29 +1138,61 @@ void UWonderlandUiSubsystem::HandleSidekicksChanged()
 	{
 		return;
 	}
-	CompanionShownAsk.SetNum(CompanionTerminals.Num());
-	CompanionShownAnswer.SetNum(CompanionTerminals.Num());
-	CompanionShownNote.SetNum(CompanionTerminals.Num());
-	CompanionShownProvider.SetNum(CompanionTerminals.Num());
-	for (int32 Index = 0; Index < CompanionTerminals.Num(); ++Index)
+	const int32 Count = CompanionTerminals.Num();
+	CompanionShownAsk.SetNum(Count);
+	CompanionShownAnswer.SetNum(Count);
+	CompanionShownNote.SetNum(Count);
+	CompanionShownProvider.SetNum(Count);
+	CompanionLiveTurn.SetNum(Count);
+	CompanionShownSession.SetNum(Count);
+	CompanionLinkWasDown.SetNum(Count);
+	CompanionLinkSeenUp.SetNum(Count);
+	CompanionMissionTask.SetNum(Count);
+	CompanionPendingAsk.SetNum(Count);
+	CompanionPendingTurns.SetNum(Count);
+	CompanionShownAnswerText.SetNum(Count);
+	for (int32 Index = 0; Index < Count; ++Index)
 	{
-		const TSharedPtr<SWonderlandCompanionTerminal>& Panel = CompanionTerminals[Index];
+		const TSharedPtr<SWonderlandCompanionConsole>& Panel = CompanionTerminals[Index];
 		if (!Panel.IsValid())
 		{
 			continue;
 		}
+		const FString Authority = Index == 1 ? FString(TEXT("scoped-work mode")) : FString(TEXT("conversation mode"));
 		// OFFLINE IS SAID EVEN WHEN NO COMPANION WAS EVER READ (private beta). This branch used to sit behind "no sidekick
 		// row, skip", and with no runtime there are never any rows -- so a tester's terminals said WAITING forever. The
-		// beta's reason is kept short: the terminal draws one line, and long lines overran it in the clean-user baseline.
+		// beta's reason is kept short: it is one line in a small panel.
 		if (Runtime->GetLink() == EWonderlandSidekickLink::Offline)
 		{
-			// NO RUNTIME IS NOT A MOOD: the terminal says the companion has nothing behind it, and why.
-			Panel->SetStatus(TEXT("OFFLINE"));
+			const bool bBeta = Runtime->GetLinkProblem() == WonderlandBeta::AiUnavailableSentence();
+			const FString Why = bBeta ? FString(TEXT("Not connected in this beta build.")) : Runtime->GetLinkProblem();
+			// A SIMULATED MISSION KEEPS ITS OWN STATE: the runtime being absent is not news to a console showing a fixture
+			if (!CompanionMissionTask[Index])
+			{
+				Panel->SetStatus(TEXT("OFFLINE"));
+				Panel->SetMode(Authority + TEXT(" \u00B7 offline"));
+				Panel->SetSessionLabel(Panel->GetTitle() + TEXT(" \u00B7 offline"));
+			}
+			Panel->SetIdleText(bBeta ? FString(TEXT("Offline \u00B7 not connected in this beta"))
+				: FString(TEXT("Offline \u00B7 the companions' runtime is not running")), true);
+			Panel->SetInputHint(TEXT("not connected \u00B7 what you type stays here, unsent"));
+			// A TURN THAT WAS LIVE WHEN THE LINK WENT is over, and says why
+			if (!CompanionLiveTurn[Index].IsEmpty() || !CompanionPendingAsk[Index].IsEmpty())
+			{
+				CompanionLiveTurn[Index].Reset();
+				CompanionPendingAsk[Index].Reset();
+				Panel->SetInterruptible(false);
+				Panel->FailTask(FString::Printf(TEXT("Connection lost: %s"), *Why));
+			}
+			if (CompanionLinkSeenUp[Index] && !CompanionLinkWasDown[Index])
+			{
+				Panel->Print(EWonderlandConsoleLine::Rule, TEXT("Connection lost"));
+			}
+			CompanionLinkWasDown[Index] = true;
 			if (CompanionShownNote[Index] != TEXT("offline"))
 			{
 				CompanionShownNote[Index] = TEXT("offline");
-				Panel->AddLine(FString(), Runtime->GetLinkProblem() == WonderlandBeta::AiUnavailableSentence()
-					? FString(TEXT("Not connected in this beta build.")) : Runtime->GetLinkProblem(), true);
+				Panel->Print(EWonderlandConsoleLine::Note, Why);
 			}
 			continue;
 		}
@@ -1111,32 +1201,56 @@ void UWonderlandUiSubsystem::HandleSidekicksChanged()
 		{
 			continue;
 		}
+
+		// ---- THE LINK: "restored" is only true of a link that was seen up, then down, and is up again
+		if (CompanionLinkWasDown[Index] && CompanionLinkSeenUp[Index])
+		{
+			Panel->Print(EWonderlandConsoleLine::Rule, TEXT("Connection restored"));
+		}
+		CompanionLinkWasDown[Index] = false;
+		CompanionLinkSeenUp[Index] = true;
+
+		// ---- THE SESSION, as the runtime numbers it
+		if (!Sidekick->SessionId.IsEmpty() && CompanionShownSession[Index] != Sidekick->SessionId)
+		{
+			const bool bContinued = CompanionShownSession[Index].IsEmpty() && Sidekick->Turns > 0;
+			CompanionShownSession[Index] = Sidekick->SessionId;
+			Panel->Print(EWonderlandConsoleLine::Rule, bContinued
+				? FString::Printf(TEXT("%s session continued \u00B7 %s \u00B7 %d turns"), *Panel->GetTitle(), *Sidekick->SessionId, Sidekick->Turns)
+				: FString::Printf(TEXT("%s session started \u00B7 %s"), *Panel->GetTitle(), *Sidekick->SessionId));
+			if (!CompanionMissionTask[Index])
+			{
+				Panel->SetSessionLabel(FString::Printf(TEXT("%s session %s"), *Panel->GetTitle(), bContinued ? TEXT("continued") : TEXT("started")));
+			}
+		}
+
 		// THE EIGHT TRUTH STATES, as the founder named them, with the underscore turned into a space to read as words.
-		// SHORT, deliberately: the state shares the title row with a name that can be long, and the state is the half that
-		// must stay readable. Which provider and model is behind it goes on its own line, where there is room for both.
-		Panel->SetStatus(Sidekick->State.Replace(TEXT("_"), TEXT(" ")));
+		if (!CompanionMissionTask[Index])
+		{
+			Panel->SetStatus(Sidekick->State.Replace(TEXT("_"), TEXT(" ")));
+			Panel->SetMode(FString::Printf(TEXT("%s \u00B7 %s"), *Authority, *Sidekick->Mode.ToLower()));
+		}
+		const bool bCanAsk = Sidekick->State == TEXT("CONNECTED");
+		Panel->SetIdleText(bCanAsk ? FString::Printf(TEXT("Ready \u00B7 %s \u00B7 %s"), *Sidekick->ProviderName, *Sidekick->ModelId)
+			: Sidekick->State.Replace(TEXT("_"), TEXT(" ")).ToLower().Replace(TEXT("auth required"), TEXT("needs authorisation")), !bCanAsk);
+		Panel->SetInputHint(bCanAsk ? FString::Printf(TEXT("ask %s"), *Panel->GetTitle())
+			: FString::Printf(TEXT("%s is %s \u00B7 what you type stays here, unsent"), *Panel->GetTitle(), *Sidekick->State.Replace(TEXT("_"), TEXT(" ")).ToLower()));
 
 		// One line about what is behind this companion, added only when it actually changes -- including when it changes
 		// into a failure. Repeating AUTH REQUIRED three times tells the reader nothing the first line did not.
-		const FString Note = Sidekick->Failure.IsEmpty()
-			? FString::Printf(TEXT("%s · %s · %s — %s"), *Sidekick->ProviderName, *Sidekick->ModelId, *Sidekick->Mode, *Sidekick->Note)
-			: FString::Printf(TEXT("%s: %s"), *Sidekick->Failure.Replace(TEXT("_"), TEXT(" ")), *Sidekick->Note);
-		if (CompanionShownNote[Index] != Note)
+		// Keyed on the provider, model, mode and failure -- not on the note, which changes after every answer and would
+		// repeat "Answered" under each one.
+		const FString NoteKey = FString::Printf(TEXT("%s|%s|%s|%s"), *Sidekick->ProviderName, *Sidekick->ModelId, *Sidekick->Mode, *Sidekick->Failure);
+		if (CompanionShownNote[Index] != NoteKey && !Sidekick->bHasLiveTurn && CompanionPendingAsk[Index].IsEmpty())
 		{
-			CompanionShownNote[Index] = Note;
-			Panel->AddLine(FString(), Note, true);
+			CompanionShownNote[Index] = NoteKey;
+			Panel->Print(EWonderlandConsoleLine::Note, Sidekick->Failure.IsEmpty()
+				? FString::Printf(TEXT("%s \u00B7 %s \u00B7 %s \u2014 %s"), *Sidekick->ProviderName, *Sidekick->ModelId, *Sidekick->Mode, *Sidekick->Note)
+				: FString::Printf(TEXT("%s: %s"), *Sidekick->Failure.Replace(TEXT("_"), TEXT(" ")), *Sidekick->Note));
 		}
 
-		// WHAT IT WOULD TAKE TO MAKE THIS COMPANION REAL, said once, and only while it is answering from a fixture.
-		//
-		// The runtime already knows. It probes each real provider and reports exactly what is missing: an OpenAI
-		// key that has never been connected, or a Claude Code that IS installed on this machine and has simply not
-		// been allowed to spend anything yet. NONE OF THAT REACHED THE FOUNDER -- GetProviders() was read nowhere
-		// outside the sidekick client's own proof string, so from inside Wonderland the companions said SIMULATED
-		// and gave no way to find out why, or that a real provider was sitting there waiting for one decision.
-		//
-		// THE WORDS ARE THE RUNTIME'S OWN. This composes no advice, invents no next step, and grants no permission:
-		// consent to spend is the founder's and is kept in the service, not here.
+		// WHAT IT WOULD TAKE TO MAKE THIS COMPANION REAL, said once, and only while it is answering from a fixture. The
+		// words are the runtime's own: this composes no advice and grants no permission.
 		if (Sidekick->Mode == TEXT("SIMULATED"))
 		{
 			FString Waiting;
@@ -1144,7 +1258,7 @@ void UWonderlandUiSubsystem::HandleSidekicksChanged()
 			{
 				if (Provider.Backs == Sidekick->Kind && !Provider.bReady)
 				{
-					Waiting = FString::Printf(TEXT("%s is not connected yet — %s"), *Provider.DisplayName, *Provider.Detail);
+					Waiting = FString::Printf(TEXT("%s is not connected yet \u2014 %s"), *Provider.DisplayName, *Provider.Detail);
 					break;
 				}
 			}
@@ -1153,30 +1267,97 @@ void UWonderlandUiSubsystem::HandleSidekicksChanged()
 				CompanionShownProvider[Index] = Waiting;
 				if (!Waiting.IsEmpty())
 				{
-					Panel->AddLine(FString(), Waiting, true);
+					Panel->Print(EWonderlandConsoleLine::Note, Waiting);
 				}
 			}
 		}
 
-		// A turn that has started: show what was asked, once, whoever asked it (a terminal or a console command).
-		if (Sidekick->bHasLiveTurn && CompanionShownAsk[Index] != Sidekick->LiveTurnId)
+		// ---- A TURN IN FLIGHT: the ask once, then the runtime's own stream, counted in the characters it has sent
+		if (Sidekick->bHasLiveTurn)
 		{
-			CompanionShownAsk[Index] = Sidekick->LiveTurnId;
-			if (!Sidekick->LiveAsk.IsEmpty())
+			if (CompanionLiveTurn[Index] != Sidekick->LiveTurnId)
 			{
-				Panel->AddLine(TEXT("You"), Sidekick->LiveAsk, false);
+				CompanionLiveTurn[Index] = Sidekick->LiveTurnId;
+				CompanionShownAsk[Index] = Sidekick->LiveTurnId;
+				const bool bEchoed = !CompanionPendingAsk[Index].IsEmpty() && CompanionPendingAsk[Index] == Sidekick->LiveAsk;
+				CompanionPendingAsk[Index].Reset();
+				if (!bEchoed)
+				{
+					// asked from elsewhere (a console command): shown here as it was asked
+					if (!Sidekick->LiveAsk.IsEmpty())
+					{
+						Panel->Print(EWonderlandConsoleLine::Prompt, Sidekick->LiveAsk, FString(), 0.0f);
+					}
+					Panel->BeginTask(EWonderlandConsoleActivity::Thinking, TEXT("Thinking"));
+				}
 			}
+			Panel->SetInterruptible(true);
+			const bool bStreaming = Sidekick->LiveState == TEXT("STREAMING") || !Sidekick->LiveAnswer.IsEmpty();
+			if (Panel->GetActivity() != EWonderlandConsoleActivity::Working || bStreaming)
+			{
+				Panel->SetActivity(bStreaming ? EWonderlandConsoleActivity::Working : EWonderlandConsoleActivity::Thinking,
+					bStreaming ? (Index == 1 ? TEXT("Working") : TEXT("Responding")) : TEXT("Thinking"));
+			}
+			if (bStreaming)
+			{
+				Panel->StreamText(Sidekick->LiveAnswer);
+			}
+			Panel->SetCounter(Sidekick->LiveAnswer.Len(), TEXT("chars"));
+			continue;
 		}
 
-		// A turn that has ended: the answer as it really came back, marked when it is a fixture's.
-		const FString AnswerKey = FString::Printf(TEXT("%s|%d"), *Sidekick->SessionId, Sidekick->Turns);
-		if (!Sidekick->bHasLiveTurn && !Sidekick->LastAnswer.IsEmpty() && CompanionShownAnswer[Index] != AnswerKey)
+		// ---- THE TURN ENDED. The runtime counts a turn the moment it is asked, keeps only DONE turns' answers as the last
+		// answer, clears the failure on every move, and ends a cancel with no failure at all -- but it NOTES each ending
+		// (the runtime's own wording, julius-connect relay-bridge/sidekicks: if that wording changes, this degrades to the
+		// neutral "Turn ended" line below, never to a claim it cannot make):
+		// "Answered" for a finished turn, the cancel's own words for a stopped one. So the note decides first, a new answer
+		// second, and a turn neither explains is reported as ended, not as anything it cannot be shown to be (Second
+		// Wonderland's review: the same answer twice must never read as an interruption).
+		const bool bAwaiting = !CompanionPendingAsk[Index].IsEmpty();
+		if (bAwaiting && Sidekick->Turns <= CompanionPendingTurns[Index])
 		{
-			CompanionShownAnswer[Index] = AnswerKey;
-			const FString Marked = Sidekick->Mode == TEXT("REAL")
-				? Sidekick->LastAnswer
-				: FString::Printf(TEXT("%s  [SIMULATED]"), *Sidekick->LastAnswer);
-			Panel->AddLine(Panel->GetTitle(), Marked, false);
+			// asked, and this view predates the runtime taking the ask: nothing to conclude from it
+			continue;
+		}
+		if (!CompanionLiveTurn[Index].IsEmpty() || bAwaiting)
+		{
+			CompanionLiveTurn[Index].Reset();
+			CompanionPendingAsk[Index].Reset();
+			Panel->SetInterruptible(false);
+			const bool bNewAnswer = !Sidekick->LastAnswer.IsEmpty() && Sidekick->LastAnswer != CompanionShownAnswerText[Index];
+			const bool bAnsweredNote = Sidekick->Note.StartsWith(TEXT("Answered"));
+			const bool bStoppedNote = Sidekick->Note.Contains(TEXT("Cancel")) || Sidekick->Note.Contains(TEXT("Stopped"));
+			if (!Sidekick->Failure.IsEmpty())
+			{
+				Panel->FailTask(FString::Printf(TEXT("%s: %s"), *Sidekick->Failure.Replace(TEXT("_"), TEXT(" ")), *Sidekick->Note));
+			}
+			else if (bAnsweredNote || (bNewAnswer && !bStoppedNote))
+			{
+				CompanionShownAnswerText[Index] = Sidekick->LastAnswer;
+				Panel->StreamText(Sidekick->LastAnswer);
+				Panel->EndStream();
+				Panel->SetCounter(Sidekick->LastAnswer.Len(), TEXT("chars"));
+				Panel->FinishTask(Sidekick->Mode == TEXT("REAL") ? TEXT("Answered in {time} \u00B7 {count}")
+					: TEXT("Answered in {time} \u00B7 {count} \u00B7 SIMULATED"));
+			}
+			else if (bStoppedNote)
+			{
+				Panel->FailTask(FString::Printf(TEXT("Interrupted \u00B7 %s"), *Sidekick->Note));
+			}
+			else
+			{
+				Panel->FinishTask(FString::Printf(TEXT("Turn ended after {time} \u00B7 %s"), *Sidekick->Note));
+			}
+			continue;
+		}
+
+		// ---- AN ANSWER THIS CONSOLE NEVER SAW IN FLIGHT (it came and went between polls, or before the console was up):
+		// shown whole, and marked as what it is
+		if (!Sidekick->LastAnswer.IsEmpty() && Sidekick->LastAnswer != CompanionShownAnswerText[Index])
+		{
+			CompanionShownAnswerText[Index] = Sidekick->LastAnswer;
+			Panel->Print(EWonderlandConsoleLine::Say, Sidekick->Mode == TEXT("REAL")
+				? Sidekick->LastAnswer : FString::Printf(TEXT("%s  [SIMULATED]"), *Sidekick->LastAnswer));
 		}
 	}
 }
@@ -3077,7 +3258,7 @@ TArray<FBox2D> UWonderlandUiSubsystem::WonderWebHudKeepOut() const
 	}
 	if (AreCompanionTerminalsOnScreen())
 	{
-		for (const TSharedPtr<SWonderlandCompanionTerminal>& Companion : CompanionTerminals)
+		for (const TSharedPtr<SWonderlandCompanionConsole>& Companion : CompanionTerminals)
 		{
 			if (Companion.IsValid())
 			{
@@ -5486,33 +5667,66 @@ void UWonderlandUiSubsystem::NarrateMissionEvent(FName EventType, EWonderlandMis
 	}
 	NarrateRoles(EventType, ChakraLabel, bNewMission, bLlmJoined, bJhinnJoined);
 
-	// ---- the companions: only a joined one takes part, and it speaks when the stage changes
+	// ---- the companions: only a joined one takes part, and its console shows its work as the stage changes.
+	//
+	// A SIMULATION, AND SAID TO BE ONE on every surface a screenshot of one console would show: the session inset, the
+	// mode in the footer, the tip line under the status row and the Done line. The work itself is the fixture in
+	// WonderlandCompanionWork.h; its counter is the lines it printed, never tokens.
+	CompanionMissionTask.SetNum(CompanionTerminals.Num());
 	for (int32 Index = 0; Index < CompanionTerminals.Num(); ++Index)
 	{
-		const TSharedPtr<SWonderlandCompanionTerminal>& Panel = CompanionTerminals[Index];
+		const TSharedPtr<SWonderlandCompanionConsole>& Panel = CompanionTerminals[Index];
 		if (!Panel.IsValid())
 		{
 			continue;
 		}
 		const bool bAgent = Index == 1;
 		const bool bJoined = bAgent ? bJhinnJoined : bLlmJoined;
+		const EWonderlandCompanionKind Kind = bAgent ? EWonderlandCompanionKind::JhinnAgent : EWonderlandCompanionKind::LlmCompanion;
 		if (bNewMission)
 		{
 			Panel->ClearLines();
+			CompanionMissionTask[Index] = false;
 		}
 		if (bEnded || !bJoined)
 		{
 			// Not joined, or the mission is over: it waits, and what it contributed stays in its log.
+			if (CompanionMissionTask[Index])
+			{
+				CompanionMissionTask[Index] = false;
+				Panel->FinishTask(TEXT("Mission closed \u00B7 took part for {time} \u00B7 {count} \u00B7 simulated"));
+			}
 			Panel->SetStatus(TEXT("WAITING"));
 			continue;
 		}
 		Panel->SetStatus(Beat == EWonderlandMissionBeat::CompleteVerified ? TEXT("JOINED \u00B7 DONE") : TEXT("ACTIVE \u00B7 JOINED"));
-		if (bBeatChanged || bNewMission)
+		const bool bJustJoined = !CompanionMissionTask[Index];
+		if (bJustJoined)
 		{
-			const FWonderlandCompanionNarration Line = WonderlandCompanionNarrationForBeat(Beat,
-				bAgent ? EWonderlandCompanionKind::JhinnAgent : EWonderlandCompanionKind::LlmCompanion);
-			Panel->AddLine(Line.Activity, Line.Line, false);
+			CompanionMissionTask[Index] = true;
+			Panel->Print(EWonderlandConsoleLine::Rule, TEXT("Simulated mission joined \u00B7 development preview"));
+			Panel->SetSessionLabel(TEXT("simulated mission \u00B7 development preview"));
+			Panel->SetMode(bAgent ? TEXT("scoped-work mode \u00B7 simulated") : TEXT("conversation mode \u00B7 simulated"));
+			Panel->SetSubline(TEXT("Simulated /join \u00B7 no provider is contacted"));
+			const FWonderlandCompanionNarration First = WonderlandCompanionNarrationForBeat(Beat, Kind);
+			Panel->BeginTask(WonderlandCompanionWork::ActivityFor(First.Activity), WonderlandCompanionWork::VerbFor(First.Activity));
+			Panel->CountPrintedLines();
+		}
+		if (bBeatChanged || bNewMission || bJustJoined)
+		{
+			const FWonderlandCompanionNarration Line = WonderlandCompanionNarrationForBeat(Beat, Kind);
 			Panel->NoteNarration(Line.Activity, WonderlandBeatId(Beat));
+			if (Beat == EWonderlandMissionBeat::Error)
+			{
+				Panel->FailTask(Line.Line);
+				continue;
+			}
+			Panel->SetActivity(WonderlandCompanionWork::ActivityFor(Line.Activity), WonderlandCompanionWork::VerbFor(Line.Activity));
+			Panel->PrintAll(WonderlandCompanionWork::ForBeat(Beat, Kind));
+			if (Beat == EWonderlandMissionBeat::CompleteVerified)
+			{
+				Panel->FinishTask(TEXT("Returned to Julius \u00B7 took part for {time} \u00B7 {count} \u00B7 simulated"));
+			}
 		}
 	}
 }
@@ -5867,5 +6081,10 @@ FString UWonderlandUiSubsystem::GetCompanionTerminalActivity(int32 Index) const
 FName UWonderlandUiSubsystem::GetCompanionTerminalNarratedBeat(int32 Index) const
 {
 	return CompanionTerminals.IsValidIndex(Index) && CompanionTerminals[Index].IsValid() ? CompanionTerminals[Index]->GetNarratedBeat() : NAME_None;
+}
+
+SWonderlandCompanionConsole* UWonderlandUiSubsystem::GetCompanionConsoleForQa(int32 Index) const
+{
+	return CompanionTerminals.IsValidIndex(Index) ? CompanionTerminals[Index].Get() : nullptr;
 }
 

@@ -107,14 +107,33 @@ namespace WonderlandBeta
 
 	void StampWindowTitle()
 	{
-		if (GEngine == nullptr || GEngine->GameViewport == nullptr)
+		// KEPT, NOT SET ONCE (QA Q00.6, RC4): the engine writes its own title after ours -- the RC4 window read
+		// "Wonderland (64-bit Development PCD3D_SM6)" -- so a tester's taskbar and Alt+Tab never said which build it was.
+		// Every second the label is put back if anything has replaced it: one string compare a second. Not in the editor,
+		// whose window is not ours to retitle.
+		auto Apply = []()
 		{
-			return;
-		}
-		const TSharedPtr<SWindow> Window = GEngine->GameViewport->GetWindow();
-		if (Window.IsValid())
+			if (GEngine == nullptr || GEngine->GameViewport == nullptr)
+			{
+				return;
+			}
+			const TSharedPtr<SWindow> Window = GEngine->GameViewport->GetWindow();
+			const FString Want = FString::Printf(TEXT("Wonderland — %s"), *BuildLabel());
+			if (Window.IsValid() && !Window->GetTitle().ToString().Equals(Want, ESearchCase::CaseSensitive))
+			{
+				Window->SetTitle(FText::FromString(Want));
+			}
+		};
+		Apply();
+		static bool bKeeping = false;
+		if (!bKeeping && !GIsEditor)
 		{
-			Window->SetTitle(FText::FromString(FString::Printf(TEXT("Wonderland — %s"), *BuildLabel())));
+			bKeeping = true;
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Apply](float)
+			{
+				Apply();
+				return true;
+			}), 1.0f);
 		}
 	}
 

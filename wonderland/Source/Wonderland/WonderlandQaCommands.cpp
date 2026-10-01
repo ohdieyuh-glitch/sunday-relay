@@ -14,6 +14,7 @@
 //
 // Not in Shipping: a development instrument, like every other wl.* switch.
 #include "CoreMinimal.h"
+#include "WonderlandCompanionConsole.h"
 
 #if !UE_BUILD_SHIPPING
 
@@ -91,6 +92,17 @@ namespace
 		bool bHostile = false;
 		// the simulated mission the Missions panel plays (Q17)
 		bool bScenarioStarted = false;
+		// THE COMPANION CONSOLES while it plays (Q22-Q24; founder, 2026-10-01): what was sampled
+		int32 ConsoleLines = 0;
+		int32 ConsoleElapsed = 0;
+		double ConsoleAt = 0.0;
+		int32 ConsoleStages[2] = {0, 0};
+		bool bVerbRed = false;
+		bool bVerbPale = false;
+		bool bStatusInHistory = false;
+		bool bConsoleFrame = false;
+		bool bScrolledAway = false;
+		bool bTerminalOpened = false;
 		// the FLAME row hidden on the two skins without fire (Q01e)
 		bool bOgHidden = false;
 		bool bClHidden = false;
@@ -1308,11 +1320,19 @@ namespace
 				QaNextStep(Run);
 				break;
 			}
+			SWonderlandCompanionConsole* Llm = U->GetCompanionConsoleForQa(0);
+			SWonderlandCompanionConsole* Agent = U->GetCompanionConsoleForQa(1);
 			if (Run.Sub == 0)
 			{
 				// Q17 (B18): the call the Missions panel's WATCH A SIMULATED MISSION button makes -- Scenario D, ten
 				// seconds an event -- and every surface keeps saying SIMULATED while it plays
 				Run.bScenarioStarted = Missions->PlayScenario(FName(TEXT("D")), 10.0f);
+				// THE TERMINALS UP (Ctrl+T), so the companion consoles are drawn while the mission plays and their frames show them
+				Run.bTerminalOpened = !U->IsLiveTerminalOpen();
+				if (Run.bTerminalOpened)
+				{
+					U->ToggleLiveTerminal();
+				}
 				Run.Sub = 1;
 			}
 			else if (Run.Sub == 1 && In >= 4.0)
@@ -1325,10 +1345,130 @@ namespace
 				QaCheck(Run, TEXT("Q17"), Run.bScenarioStarted && bRunning && bSaysSimulated && Missions->IsDevelopmentPreview(),
 					FString::Printf(TEXT("the Missions panel's simulated mission: started %s, playing %s, badge '%s', banner '%s'"),
 						Run.bScenarioStarted ? TEXT("yes") : TEXT("NO"), bRunning ? TEXT("yes") : TEXT("NO"), *Badge, *Banner.Left(120)));
-				Missions->StopFixture();
-				Run.Sub = 2;
+				Run.Sub = 7;
 			}
-			else if (Run.Sub == 2 && In >= 6.0)
+			else if (Run.Sub == 7)
+			{
+				// THE COMPANIONS JOIN WHEN THE MISSION IS AT ITS SITE, after the trip there -- 3 s in one run, 12 s in another
+				// (the first QA on the console sampled before they had joined). Sampling starts when both are working.
+				if ((Llm != nullptr && Agent != nullptr && Llm->IsPulsing() && Agent->IsPulsing()) || In >= 45.0)
+				{
+					Run.ConsoleLines = Llm != nullptr ? Llm->GetLineCount() : 0;
+					Run.ConsoleElapsed = Llm != nullptr ? Llm->GetElapsedSeconds() : 0;
+					Run.ConsoleAt = In;
+					Run.Sub = 2;
+				}
+			}
+			else if (Run.Sub == 2)
+			{
+				// SAMPLED EVERY TICK FOR FIVE SECONDS: the mark's shapes, the verb's colour, and whether the status row ever
+				// leaked into the history (it must update in place)
+				SWonderlandCompanionConsole* Both[2] = {Llm, Agent};
+				for (int32 Which = 0; Which < 2; ++Which)
+				{
+					if (Both[Which] != nullptr && Both[Which]->GetEmblemStage() >= 0)
+					{
+						Run.ConsoleStages[Which] |= 1 << Both[Which]->GetEmblemStage();
+					}
+				}
+				if (Llm != nullptr)
+				{
+					const FColor Verb = Llm->GetVerbColour().ToFColor(true);
+					Run.bVerbRed |= Verb.G < Verb.R * 0.62f;
+					Run.bVerbPale |= Verb.G > Verb.R * 0.85f && Verb.B > Verb.R * 0.70f;
+					for (int32 Line = 0; Line < Llm->GetLineCount(); ++Line)
+					{
+						const FString Text = Llm->GetLineText(Line);
+						Run.bStatusInHistory |= Text.Contains(TEXT("\u2026 (")) && Text.Contains(TEXT("\u2193"));
+					}
+				}
+				if (In >= Run.ConsoleAt + 2.5 && !Run.bConsoleFrame)
+				{
+					Run.bConsoleFrame = true;
+					QaFrame(Run, TEXT("07b_companion_consoles"));
+				}
+				if (In >= Run.ConsoleAt + 5.0)
+				{
+					auto Shapes = [](int32 Bits) { int32 N = 0; for (int32 B = 0; B < 6; ++B) { N += (Bits >> B) & 1; } return N; };
+					const int32 Lines = Llm != nullptr ? Llm->GetLineCount() : 0;
+					const int32 Elapsed = Llm != nullptr ? Llm->GetElapsedSeconds() : 0;
+					const double Span = In - Run.ConsoleAt;
+					const FString Row = Llm != nullptr ? Llm->GetStatusRowText() : FString();
+					const FString Footer = Llm != nullptr ? Llm->GetFooterText() : FString();
+					const FString Session = Llm != nullptr ? Llm->GetSessionLabel() : FString();
+					// Q22: the reference terminal's behaviour, measured in the package -- the mark cycles (four shapes or more
+					// in both consoles), the timer moves with the clock, output arrived, the verb passed through red and pale,
+					// the counter is lines (no tokens: nothing produced any), Esc is not offered (the simulation cannot be
+					// stopped from here), and the mode and the session inset say SIMULATED
+					const bool bTimer = FMath::Abs((Elapsed - Run.ConsoleElapsed) - Span) <= 1.5;
+					const bool bTruthful = Row.Contains(TEXT(" lines)")) && !Row.Contains(TEXT("token")) && Llm != nullptr && !Llm->IsInterruptHintShown()
+						&& Footer.Contains(TEXT("simulated")) && Session.Contains(TEXT("simulated"));
+					QaCheck(Run, TEXT("Q22"), Llm != nullptr && Agent != nullptr && Llm->IsPulsing() && Agent->IsPulsing()
+						&& Shapes(Run.ConsoleStages[0]) >= 4 && Shapes(Run.ConsoleStages[1]) >= 4 && bTimer && Lines > Run.ConsoleLines
+						&& Run.bVerbRed && Run.bVerbPale && !Run.bStatusInHistory && bTruthful,
+						FString::Printf(TEXT("companion consoles while the simulated mission plays: pulsing %s/%s, mark shapes %d and %d (want 4+), ")
+							TEXT("timer %ds -> %ds over %.1fs, lines %d -> %d, verb red %s pale %s, status in history %s, row '%s', footer '%s', session '%s'"),
+							Llm != nullptr && Llm->IsPulsing() ? TEXT("yes") : TEXT("NO"), Agent != nullptr && Agent->IsPulsing() ? TEXT("yes") : TEXT("NO"),
+							Shapes(Run.ConsoleStages[0]), Shapes(Run.ConsoleStages[1]), Run.ConsoleElapsed, Elapsed, Span, Run.ConsoleLines, Lines,
+							Run.bVerbRed ? TEXT("yes") : TEXT("NO"), Run.bVerbPale ? TEXT("yes") : TEXT("NO"), Run.bStatusInHistory ? TEXT("YES") : TEXT("no"),
+							*Row, *Footer, *Session));
+					// then READ BACK: four rows up, as a wheel notch and a bit -- and output keeps arriving while the visitor reads.
+					// The QA prints it itself: between two stages of the mission the companion can be quiet for ten seconds, and
+					// what is measured here is the console, not the script's timing.
+					if (Llm != nullptr)
+					{
+						Llm->ScrollRows(-4.0f);
+						Run.bScrolledAway = !Llm->IsFollowing();
+						for (int32 Extra = 1; Extra <= 3; ++Extra)
+						{
+							Llm->Print(EWonderlandConsoleLine::Note, FString::Printf(TEXT("QA: output %d arriving while the view is scrolled back"), Extra), FString(), 0.3f);
+						}
+					}
+					Run.ConsoleAt = In;
+					Run.Sub = 3;
+				}
+			}
+			else if (Run.Sub == 3 && In >= Run.ConsoleAt + 5.0)
+			{
+				// Q23: the view stays where the visitor left it while output keeps arriving, says how much arrived, and a click
+				// on that marker (FollowLive) brings it back to the live end
+				const bool bHeld = Llm != nullptr && !Llm->IsFollowing();
+				const int32 Unseen = Llm != nullptr ? Llm->GetUnseenRows() : 0;
+				QaFrame(Run, TEXT("07c_companion_scrolled_back"));
+				if (Llm != nullptr)
+				{
+					Llm->FollowLive();
+				}
+				QaCheck(Run, TEXT("Q23"), Run.bScrolledAway && bHeld && Unseen > 0 && Llm != nullptr && Llm->IsFollowing(),
+					FString::Printf(TEXT("scrolled back 4 rows: left the live end %s, still there 5 s later %s, %d new rows marked, back to live %s"),
+						Run.bScrolledAway ? TEXT("yes") : TEXT("NO"), bHeld ? TEXT("yes") : TEXT("NO"), Unseen,
+						Llm != nullptr && Llm->IsFollowing() ? TEXT("yes") : TEXT("NO")));
+				Missions->StopFixture();
+				Run.ConsoleAt = In;
+				Run.Sub = 4;
+			}
+			else if (Run.Sub == 4 && In >= Run.ConsoleAt + 4.0)
+			{
+				// Q24: STOPPED, IT SETTLES -- no task in flight, the mark at rest, and a last line that says what it was. The
+				// founder: "Do not create a perpetual fake 'working' animation while nothing is happening."
+				auto Settled = [](const SWonderlandCompanionConsole* C)
+				{
+					return C != nullptr && !C->IsPulsing() && C->GetEmblemStage() < 0 && C->GetQueuedCount() == 0
+						&& C->GetLineText(C->GetLineCount() - 1).Contains(TEXT("simulated"));
+				};
+				QaFrame(Run, TEXT("07d_companion_settled"));
+				QaCheck(Run, TEXT("Q24"), Settled(Llm) && Settled(Agent),
+					FString::Printf(TEXT("after the stop: LLM settled %s ('%s'), Jhinn settled %s ('%s')"),
+						Settled(Llm) ? TEXT("yes") : TEXT("NO"), Llm != nullptr ? *Llm->GetLineText(Llm->GetLineCount() - 1).Left(90) : TEXT("-"),
+						Settled(Agent) ? TEXT("yes") : TEXT("NO"), Agent != nullptr ? *Agent->GetLineText(Agent->GetLineCount() - 1).Left(90) : TEXT("-")));
+				if (Run.bTerminalOpened && U->IsLiveTerminalOpen())
+				{
+					U->ToggleLiveTerminal();
+				}
+				Run.ConsoleAt = In;
+				Run.Sub = 5;
+			}
+			else if (Run.Sub == 5 && In >= Run.ConsoleAt + 1.0)
 			{
 				// Q18 (B08): /pa is the founder's showcase of ~95,000 boxes; in a player's session it changes nothing
 				int32 Before = 0;
@@ -1359,9 +1499,9 @@ namespace
 				QaCheck(Run, TEXT("Q19"), Set->NumContracts() == ContractsBefore && WornAfter == WornBefore,
 					FString::Printf(TEXT("bad terminal input (/tasks delete 3abc / 99 / -1, a 2,000-character and a path-like /skin, a 5,000-character line): contracts %d -> %d, skin %s -> %s (want no change)"),
 						ContractsBefore, Set->NumContracts(), *WornBefore.ToString(), *WornAfter.ToString()));
-				Run.Sub = 3;
+				Run.Sub = 6;
 			}
-			else if (Run.Sub == 3)
+			else if (Run.Sub == 6)
 			{
 				// Q20 (B04): the record keeps GetContractLimit() contracts, refuses the next one and says so, and the
 				// extra ones delete back down to the eight Q13 wrote, for the restart check
@@ -1471,6 +1611,139 @@ namespace
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			ArmQa(World, false, FString(), true);
+		}));
+
+	/* ================================================================ wl.Qa.ConsoleFilm (founder, 2026-10-01)
+	 *
+	 * THE COMPANION TERMINALS ARE ACCEPTED ON VIDEO: "record a 30-45 second video of a companion actively performing a real
+	 * task ... Do not call it PASS from static screenshots." This sets the scene for the recorder and gets out of the way: it
+	 * lets the world settle, raises the terminals, starts the work, logs WLFILM lines the recorder keys on, lets the consoles
+	 * settle on camera when the work is over, and quits. It moves no input of its own.
+	 *   `wl.Qa.ConsoleFilm mission 70` -- the Missions panel's simulated mission (Scenario D, both companions joined)
+	 *   `wl.Qa.ConsoleFilm runtime 70` -- a developer session's sidekick runtime (-wldev -wllocalai): each companion asked in
+	 *                                    turn, through the same call Enter in its console makes
+	 */
+	struct FQaFilm
+	{
+		TWeakObjectPtr<UWorld> World;
+		FString Mode;
+		double Seconds = 70.0;
+		double Start = 0.0;
+		int32 Step = 0;
+		int32 Asked = 0;
+		FTSTicker::FDelegateHandle Handle;
+	};
+	TSharedPtr<FQaFilm> GQaFilm;
+
+	bool QaFilmTick(float)
+	{
+		if (!GQaFilm.IsValid())
+		{
+			return false;
+		}
+		FQaFilm& Film = *GQaFilm;
+		UWorld* World = Film.World.Get();
+		UWonderlandUiSubsystem* U = QaUi(World);
+		UWonderlandMissionSubsystem* Missions = UWonderlandUiTestLibrary::GetMission(World);
+		const double In = QaNow() - Film.Start;
+		if (World == nullptr || U == nullptr)
+		{
+			if (In > 120.0)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM quit: no world or UI"));
+				FPlatformMisc::RequestExit(false);
+				return false;
+			}
+			return true;
+		}
+		// THE RUNTIME'S ASKS, spaced so the clip holds several whole turns -- ask, think, stream, done -- in both consoles
+		static const TCHAR* const Asks[] = {
+			TEXT("What does the Mission Contract at Castle Approach ask for?"),
+			TEXT("List the files in your scope, then check them."),
+			TEXT("Summarise what Jhinn just reported, in two sentences."),
+			TEXT("Run the scoped check again and report what changed."),
+			TEXT("Which part of that should Julius verify first?"),
+		};
+		switch (Film.Step)
+		{
+		case 0:
+			// the world and the HUD settle first, as the QA lets them
+			if (In >= 10.0 && QaDog(World) != nullptr)
+			{
+				if (!U->IsLiveTerminalOpen())
+				{
+					U->ToggleLiveTerminal();
+				}
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM begin %s"), *Film.Mode);
+				Film.Start = QaNow();
+				Film.Step = 1;
+			}
+			break;
+		case 1:
+			// the work begins three seconds in, so the clip opens on both consoles at rest
+			if (In >= 3.0)
+			{
+				if (Film.Mode == TEXT("runtime"))
+				{
+					U->SubmitCompanionLineForQa(0, Asks[0]);
+					Film.Asked = 1;
+				}
+				else if (Missions != nullptr)
+				{
+					Missions->PlayScenario(FName(TEXT("D")), 10.0f);
+				}
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM work started at %.1f s"), In);
+				Film.Step = 2;
+			}
+			break;
+		case 2:
+			if (Film.Mode == TEXT("runtime") && Film.Asked < static_cast<int32>(UE_ARRAY_COUNT(Asks)) && In >= 3.0 + Film.Asked * 7.0)
+			{
+				U->SubmitCompanionLineForQa(Film.Asked % 2, Asks[Film.Asked]);
+				++Film.Asked;
+			}
+			if (In >= Film.Seconds)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM work stopped at %.1f s"), In);
+				if (Missions != nullptr && Missions->IsFixtureRunning())
+				{
+					Missions->StopFixture();
+				}
+				Film.Step = 3;
+			}
+			break;
+		case 3:
+			// the consoles settle on camera before the game goes
+			if (In >= Film.Seconds + 8.0)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM quit"));
+				FPlatformMisc::RequestExit(false);
+				return false;
+			}
+			break;
+		default:
+			break;
+		}
+		return true;
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaConsoleFilm(
+		TEXT("wl.Qa.ConsoleFilm"),
+		TEXT("Set the scene for the companion-terminal video and quit after it: `wl.Qa.ConsoleFilm mission 70` (the simulated ")
+		TEXT("mission) or `wl.Qa.ConsoleFilm runtime 70` (a developer session's sidekick runtime, -wldev -wllocalai). Logs WLFILM lines."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaFilm.IsValid())
+			{
+				return;
+			}
+			GQaFilm = MakeShared<FQaFilm>();
+			GQaFilm->World = World;
+			GQaFilm->Mode = Args.Num() > 0 ? Args[0].ToLower() : FString(TEXT("mission"));
+			GQaFilm->Seconds = Args.Num() > 1 ? FMath::Clamp(FCString::Atod(*Args[1]), 20.0, 600.0) : 70.0;
+			GQaFilm->Start = QaNow();
+			GQaFilm->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaFilmTick), 0.1f);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM armed: %s, %.0f s of work"), *GQaFilm->Mode, GQaFilm->Seconds);
 		}));
 
 	/* ================================================================ wl.Qa.Perf and wl.Qa.Soak (private beta, R10 / R11 / R14)

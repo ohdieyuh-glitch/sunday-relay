@@ -41,7 +41,7 @@
 
 class APlayerController;
 class SWidget;
-class SWonderlandCompanionTerminal;
+class SWonderlandCompanionConsole;
 class SWonderlandLiveTerminal;
 class SWonderlandProjectBrainPanel;
 class UTexture2D;
@@ -750,6 +750,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FName GetCompanionTerminalNarratedBeat(int32 Index) const;
 
+	/** The companion console itself, for the package QA that reads its timer, emblem and scrolling. Plain C++: no new reflection. */
+	SWonderlandCompanionConsole* GetCompanionConsoleForQa(int32 Index) const;
+	/** A line sent from a companion console exactly as Enter sends one, for the filmed acceptance run (wl.Qa.ConsoleFilm). */
+	void SubmitCompanionLineForQa(int32 Index, const FString& Text) { HandleCompanionSubmit(Index, Text); }
+
 	// ---------------------------------------------------------------- Julius's components at work (founder, 2026-09-16)
 	// The Julius Live Terminal is never changed. While a simulated mission runs, Julius and its three components work in
 	// the terminal's own four sections at the same time, each from the same event the Relay Dog performs.
@@ -827,6 +832,8 @@ private:
 	void MountCompanionTerminals();
 	void UnmountCompanionTerminals();
 	void HandleCompanionSubmit(int32 Index, const FString& Text);
+	/** Esc in a companion console while its runtime turn can be stopped: the runtime's own cancel, and nothing else. */
+	void HandleCompanionInterrupt(int32 Index);
 	UWonderlandProjectBrainSubsystem* Brain() const;
 	UWorld* PlayerWorld() const;
 	UWonderlandCommandPresetSubsystem* Presets() const;
@@ -989,7 +996,7 @@ private:
 	 */
 	bool RouteClickToWidget(const TSharedPtr<SWidget>& Target, const FString& What);
 
-	TArray<TSharedPtr<SWonderlandCompanionTerminal>> CompanionTerminals;
+	TArray<TSharedPtr<SWonderlandCompanionConsole>> CompanionTerminals;
 	TSharedPtr<SWidget> CompanionLayer;
 
 	TWeakObjectPtr<APlayerController> BoundController;
@@ -1038,6 +1045,22 @@ private:
 	 * this machine and wants one line of consent. The text is the runtime's own; nothing here composes advice.
 	 */
 	TArray<FString> CompanionShownProvider;
+	/**
+	 * WHAT EACH COMPANION CONSOLE HAS ALREADY BEEN TOLD, so a poll that changes nothing prints nothing: the runtime turn it
+	 * is showing live, the runtime session it announced, whether the link was seen down (a "Connection restored" is only
+	 * true after that), and whether a simulated mission's task is running in it.
+	 */
+	TArray<FString> CompanionLiveTurn;
+	TArray<FString> CompanionShownSession;
+	TArray<bool> CompanionLinkWasDown;
+	TArray<bool> CompanionLinkSeenUp;
+	TArray<bool> CompanionMissionTask;
+	/** A line the visitor sent from a console, echoed at once; the runtime's own report of the same ask is then not echoed twice. */
+	TArray<FString> CompanionPendingAsk;
+	/** The runtime's turn count when that line was sent: a view that has not counted past it predates the ask. */
+	TArray<int32> CompanionPendingTurns;
+	/** The last answer each console printed as an answer, so a turn's end is read as answered only when there is a new one. */
+	TArray<FString> CompanionShownAnswerText;
 	FString LastPromptRequestId;
 	/** The browsing task a window has already been opened for, so Julius opens one window per task and not one per tick. */
 	FString LastBrowsingTaskId;

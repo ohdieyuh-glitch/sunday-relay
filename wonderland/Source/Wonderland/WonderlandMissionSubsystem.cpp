@@ -1354,6 +1354,7 @@ bool UWonderlandMissionSubsystem::StartFixture(FName FixtureId, float SecondsPer
 
 void UWonderlandMissionSubsystem::StopFixture()
 {
+	const bool bWasPlaying = Playing != nullptr;
 	if (PlayTicker.IsValid())
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(PlayTicker);
@@ -1363,6 +1364,14 @@ void UWonderlandMissionSubsystem::StopFixture()
 	PlayIndex = 0;
 	PlayClock = 0.0f;
 	FinishHold = 0.0f;
+	// A STOPPED SIMULATION ENDS THE COMPANIONS' PART IN IT (founder, 2026-10-01: "Do not create a perpetual fake 'working'
+	// animation while nothing is happening"). The natural end already tells the terminals, after it has gone back to Idle;
+	// a stop from the Missions panel or a test did not, and the companion consoles kept a live timer on a mission that was
+	// no longer playing.
+	if (bWasPlaying && Beat != EWonderlandMissionBeat::Idle)
+	{
+		TellTheTerminals(NAME_None, true, false);
+	}
 }
 
 FName UWonderlandMissionSubsystem::GetFixtureId() const
