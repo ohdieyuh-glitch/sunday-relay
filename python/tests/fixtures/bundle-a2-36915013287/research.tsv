@@ -1,0 +1,2 @@
+run_id	sequence	task_id	event_type	role	request_key	attempt_key	ask_count	attempt_guard	outcome	counted	evidence_id	injection_signals	segment	reason_code	reach_refusal	requested_source	requested_capability	requested_host	bytes	bytes_recorded	ask_ordinal	resource_path	mechanism	content_digest	readable_chars	delivered_from	delivered_chars	delivery_cut	delivery_anchor	handoff_task_id	handoff_entry_id	stage	occurred_at
+(0 rows)

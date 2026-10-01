@@ -1,0 +1,4 @@
+run_id	sequence	task_id	role	task_type	input_tokens	output_tokens	reasoning_tokens	tool_calls	research_calls	active_ms	provider_calls	brain_retrievals	guidance_consumed	evidence_inspected	allocated_usd_micros	settled_usd_micros	settlement_basis	evidence_generated	repair_rounds	guidance_generated	reviewer_verdicts	effort_version	occurred_at
+run:efb6e20f0d11885bc5085a68	14	run:efb6e20f0d11885bc5085a68:plan	PROMPT_ARCHITECT	plan	2518	3966		0				17	0	0	1750000		UNKNOWN	1	0	0	0	julius-slot-effort.v1	2026-09-29 12:32:02.698+00
+run:efb6e20f0d11885bc5085a68	28	run:efb6e20f0d11885bc5085a68:plan:review	INDEPENDENT_REVIEWER	review:plan	6607	7821		0				17	0	1	1750000		UNKNOWN	1	0	0	1	julius-slot-effort.v1	2026-09-29 12:33:45.084+00
+(2 rows)

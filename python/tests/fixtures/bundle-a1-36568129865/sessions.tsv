@@ -1,0 +1,3 @@
+execution_id	mission_id	project_id	player_id	agent_id	state
+execution:julius-live:mission:julius-live-6	mission:julius-live-6	prj-julius-live-6	tenant	agent:tenant	RUNNING
+(1 row)

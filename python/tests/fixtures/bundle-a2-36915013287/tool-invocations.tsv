@@ -1,0 +1,6 @@
+invocation_id	tool_id	state	requested_at	run_id	task_id	exit_code	recovery_state	completed_at
+run:efb6e20f0d11885bc5085a68:build:base:g1	shell.bash	SUCCEEDED	2026-10-01 19:40:11.656+00	run:efb6e20f0d11885bc5085a68	run:efb6e20f0d11885bc5085a68:build	0	RECONCILED	2026-10-01 19:40:12.310727+00
+run:efb6e20f0d11885bc5085a68:build:status:g1	shell.bash	SUCCEEDED	2026-10-01 19:40:32.981+00	run:efb6e20f0d11885bc5085a68	run:efb6e20f0d11885bc5085a68:build	0	RECONCILED	2026-10-01 19:40:33.652283+00
+run:efb6e20f0d11885bc5085a68:build:diff:g1	shell.bash	SUCCEEDED	2026-10-01 19:40:33.656+00	run:efb6e20f0d11885bc5085a68	run:efb6e20f0d11885bc5085a68:build	0	RECONCILED	2026-10-01 19:40:34.362031+00
+run:efb6e20f0d11885bc5085a68:build:test:g1	shell.bash	SUCCEEDED	2026-10-01 19:40:34.366+00	run:efb6e20f0d11885bc5085a68	run:efb6e20f0d11885bc5085a68:build	0	RECONCILED	2026-10-01 19:40:35.395457+00
+(4 rows)

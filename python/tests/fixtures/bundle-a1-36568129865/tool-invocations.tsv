@@ -1,0 +1,4 @@
+invocation_id	tool_id	state	requested_at
+run:efb6e20f0d11885bc5085a68:build:base:g1	shell.bash	SUCCEEDED	2026-09-29 12:33:45.236+00
+run:efb6e20f0d11885bc5085a68:build:status:g1	shell.bash	DISPATCHING	2026-09-29 12:33:48.813+00
+(2 rows)

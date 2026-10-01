@@ -1,0 +1,6 @@
+run_id	sequence	task_id	event_type	reason_code	disposition	evaluator_id	evidence_count	evidence_ids	contract_task_id	contract_id	contract_revision	binding_digest	recorded_revision	current_revision	review_revision	implementation_revision	role	occurred_at
+run:efb6e20f0d11885bc5085a68	16	run:efb6e20f0d11885bc5085a68:plan	julius.contract.proposed						run:efb6e20f0d11885bc5085a68:build	contract:run:efb6e20f0d11885bc5085a68:build	2							2026-09-29 12:32:02.712+00
+run:efb6e20f0d11885bc5085a68	32	run:efb6e20f0d11885bc5085a68:plan	julius.contract.disposition	TASK_VERIFIED	NO_CHALLENGE	independent-reviewer-hermes	0		run:efb6e20f0d11885bc5085a68:build	contract:run:efb6e20f0d11885bc5085a68:build	2							2026-09-29 12:33:45.137+00
+run:efb6e20f0d11885bc5085a68	33	run:efb6e20f0d11885bc5085a68:build	julius.contract.locked						run:efb6e20f0d11885bc5085a68:build	contract:run:efb6e20f0d11885bc5085a68:build	2	sha256:432119abd7a87d441b48bdc057b7093b8cc131740cbaaa39fa3d58e72a88b6ba						2026-09-29 12:33:45.145+00
+run:efb6e20f0d11885bc5085a68	38	run:efb6e20f0d11885bc5085a68:build	julius.task.claimed						run:efb6e20f0d11885bc5085a68:build	contract:run:efb6e20f0d11885bc5085a68:build	2	sha256:432119abd7a87d441b48bdc057b7093b8cc131740cbaaa39fa3d58e72a88b6ba					CODING_AGENT	2026-09-29 12:33:45.196+00
+(4 rows)

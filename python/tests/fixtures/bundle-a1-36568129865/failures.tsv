@@ -1,0 +1,4 @@
+run_id	sequence	task_id	role	event_type	julius_code	failure_class	error_retryable	reason_code	recovery_action	occurred_at
+run:efb6e20f0d11885bc5085a68	46	run:efb6e20f0d11885bc5085a68:build	CODING_AGENT	julius.task.failed	PROVIDER_UNAVAILABLE	coder_provider_error_after_init	false			2026-09-29 12:33:49.521+00
+run:efb6e20f0d11885bc5085a68	50			julius.run.failed				TASK_FAILED		2026-09-29 12:33:49.546+00
+(2 rows)

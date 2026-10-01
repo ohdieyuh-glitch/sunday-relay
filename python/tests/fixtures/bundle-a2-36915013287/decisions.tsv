@@ -1,0 +1,4 @@
+decision_id	task_id	action	reason_code	occurred_at	run_id	evidence_ids
+decision:59ac6042-be04-4ab8-9489-7f1a483b24f8	run:efb6e20f0d11885bc5085a68:plan	ACCEPT	TASK_VERIFIED	2026-10-01 19:40:11.571+00	run:efb6e20f0d11885bc5085a68	["run:efb6e20f0d11885bc5085a68:plan:1:0"]
+decision:020d8ccd-d96a-43ce-8a42-9774d0a568ed	run:efb6e20f0d11885bc5085a68:build	ACCEPT	TASK_VERIFIED	2026-10-01 19:41:17.451+00	run:efb6e20f0d11885bc5085a68	["tool:run:efb6e20f0d11885bc5085a68:build:base:g1", "tool:run:efb6e20f0d11885bc5085a68:build:status:g1", "tool:run:efb6e20f0d11885bc5085a68:build:diff:g1", "tool:run:efb6e20f0d11885bc5085a68:build:test:g1", "run:efb6e20f0d11885bc5085a68:build:1:0", "run:efb6e20f0d11885bc5085a68:build:1:1"]
+(2 rows)

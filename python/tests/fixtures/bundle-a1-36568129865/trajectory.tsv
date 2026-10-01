@@ -1,0 +1,18 @@
+event_kind	task_id	worker_id	provider_id	outcome	usd_micros	duration_ms	input_tokens	output_tokens	safe_facts	occurred_at
+WORKER_SELECTED	run:efb6e20f0d11885bc5085a68:plan	prompt-architect-openai		SELECTED					{"role": "PROMPT_ARCHITECT", "adapterId": "openai-architect-live"}	2026-09-29 12:31:08.28+00
+PROVIDER_SELECTED	run:efb6e20f0d11885bc5085a68:plan	prompt-architect-openai	openai	SELECTED					{}	2026-09-29 12:31:08.282+00
+CONTEXT_COMPILED	run:efb6e20f0d11885bc5085a68:plan	prompt-architect-openai							{"truncated": false, "contentHash": "sha256:d07e1dbf828785aa26a08610224d53643dc1b2bd1e708266b710c4c6acee40dc", "characterCount": 5737, "redactionCount": 0, "researchAnswerIncluded": null}	2026-09-29 12:31:08.328+00
+DISPATCH	run:efb6e20f0d11885bc5085a68:plan	prompt-architect-openai	openai	COMPLETED			2518	3966	{"duplicate": false, "bindingDigest": null, "contractTaskId": null, "contractRevision": null}	2026-09-29 12:32:02.706+00
+TASK_TOPOLOGY				READY					{"edges": 2, "roles": 3, "tasks": 3}	2026-09-29 12:32:02.762+00
+WORKER_SELECTED	run:efb6e20f0d11885bc5085a68:plan:review	independent-reviewer-hermes		SELECTED					{"role": "INDEPENDENT_REVIEWER", "adapterId": "hermes-local-live"}	2026-09-29 12:32:02.776+00
+PROVIDER_SELECTED	run:efb6e20f0d11885bc5085a68:plan:review	independent-reviewer-hermes	xai	SELECTED					{}	2026-09-29 12:32:02.777+00
+CONTEXT_COMPILED	run:efb6e20f0d11885bc5085a68:plan:review	independent-reviewer-hermes							{"truncated": false, "contentHash": "sha256:5084464b5e4205fc1a88e00c3a930a793c7cc06c1a6e12bf5a138c6c5dc5342d", "characterCount": 5737, "redactionCount": 0, "researchAnswerIncluded": null}	2026-09-29 12:32:02.788+00
+DISPATCH	run:efb6e20f0d11885bc5085a68:plan:review	independent-reviewer-hermes	xai	COMPLETED			6607	7821	{"duplicate": false, "bindingDigest": null, "contractTaskId": null, "contractRevision": null}	2026-09-29 12:33:45.091+00
+VERIFICATION	run:efb6e20f0d11885bc5085a68:plan	independent-reviewer-hermes		ACCEPT					{"reasonCode": "TASK_VERIFIED", "criteriaMissing": 0}	2026-09-29 12:33:45.157+00
+WORKER_SELECTED	run:efb6e20f0d11885bc5085a68:build	coding-agent-claude-hosted		SELECTED					{"role": "CODING_AGENT", "adapterId": "claude-agent-sdk-hosted-live"}	2026-09-29 12:33:45.199+00
+PROVIDER_SELECTED	run:efb6e20f0d11885bc5085a68:build	coding-agent-claude-hosted	anthropic	SELECTED					{}	2026-09-29 12:33:45.2+00
+CONTEXT_COMPILED	run:efb6e20f0d11885bc5085a68:build	coding-agent-claude-hosted							{"truncated": false, "contentHash": "sha256:fdfc847c16e64fd9aae227179ded476dff5618a1fe4ba1785c9a8442ddc50825", "characterCount": 5737, "redactionCount": 0, "researchAnswerIncluded": null}	2026-09-29 12:33:45.214+00
+DISPATCH	run:efb6e20f0d11885bc5085a68:build	coding-agent-claude-hosted		SUCCEEDED	0	53	0	0	{"toolId": "shell.bash", "invocationId": "run:efb6e20f0d11885bc5085a68:build:base:g1", "artifactCount": 0, "evidenceCount": 1}	2026-09-29 12:33:45.946+00
+DISPATCH	run:efb6e20f0d11885bc5085a68:build		anthropic	PROVIDER_UNAVAILABLE	0		0	0	{"failureClass": "coder_provider_error_after_init", "bindingDigest": "sha256:432119abd7a87d441b48bdc057b7093b8cc131740cbaaa39fa3d58e72a88b6ba", "contractTaskId": "run:efb6e20f0d11885bc5085a68:build", "contractRevision": 2}	2026-09-29 12:33:49.53+00
+COMPLETION				FAILED					{"tasks": 3, "decisions": 1, "reasonCode": "TASK_FAILED"}	2026-09-29 12:33:49.545+00
+(16 rows)

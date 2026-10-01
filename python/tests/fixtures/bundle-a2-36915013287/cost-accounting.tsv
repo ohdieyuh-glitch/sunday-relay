@@ -1,0 +1,5 @@
+run_id	role	components	known_usd_micros	estimated_usd_micros	unknown_components	estimated_components	unsettled_components
+run:efb6e20f0d11885bc5085a68	CODING_AGENT	1	0	0	1	0	0
+run:efb6e20f0d11885bc5085a68	INDEPENDENT_REVIEWER	2	0	0	2	0	0
+run:efb6e20f0d11885bc5085a68	PROMPT_ARCHITECT	1	0	0	1	0	0
+(3 rows)

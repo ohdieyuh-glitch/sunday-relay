@@ -1,0 +1,21 @@
+# Julius live mission — evidence (allowlisted lines only)
+# 18 line(s) kept; 4 unrecognised and 0 secret-shaped line(s) withheld.
+
+JULIUS LIVE MISSION — preflight
+  mission: mission:julius-live-6 (project prj-julius-live-6)
+  requested models: architect=gpt-5.6-sol coder=claude-opus-5-5 reviewer=xai/grok-build-0.1
+  OPENAI_API_KEY: SET
+  ANTHROPIC_API_KEY: MISSING
+  CLAUDE_CODE_OAUTH_TOKEN: SET
+  XAI_API_KEY: MISSING
+  JULIUS_DATABASE_URL: MISSING
+  DATABASE_URL: SET
+  JULIUS_EXECUTOR_ENDPOINT: SET
+  JULIUS_SCOPED_CREDENTIALS: SET
+  EXECUTOR_KEY_ID: SET
+  JULIUS_PUBLIC_KEY_PATH: SET
+  JULIUS_CALLER_ID: SET
+  CLAUDE AUTH: SUBSCRIPTION provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=unknown api_key_used=false api_cost_applicable=false
+  claude auth source: subscription_oauth_token
+  billing paths: architect=API_BILLED coder=SUBSCRIPTION reviewer=API_BILLED
+  live_ledger: BOUND

@@ -1,0 +1,21 @@
+entry_id	entry_kind	worker_id	task_id	revision	created_at	run_id
+run:efb6e20f0d11885bc5085a68:objective	CONSTRAINT	relay-bootstrap		1	2026-10-01 19:38:08.88043+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:requirement:0	ACCEPTANCE_UPDATE	relay-bootstrap		2	2026-10-01 19:38:08.881553+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:requirement:1	ACCEPTANCE_UPDATE	relay-bootstrap		3	2026-10-01 19:38:08.882171+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:requirement:2	ACCEPTANCE_UPDATE	relay-bootstrap		4	2026-10-01 19:38:08.882773+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:requirement:3	ACCEPTANCE_UPDATE	relay-bootstrap		5	2026-10-01 19:38:08.883403+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:requirement:4	ACCEPTANCE_UPDATE	relay-bootstrap		6	2026-10-01 19:38:08.883985+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:requirement:5	ACCEPTANCE_UPDATE	relay-bootstrap		7	2026-10-01 19:38:08.884602+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:requirement:6	ACCEPTANCE_UPDATE	relay-bootstrap		8	2026-10-01 19:38:08.885142+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:requirement:7	ACCEPTANCE_UPDATE	relay-bootstrap		9	2026-10-01 19:38:08.885696+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:requirement:8	ACCEPTANCE_UPDATE	relay-bootstrap		10	2026-10-01 19:38:08.886281+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:constraint:0	CONSTRAINT	relay-bootstrap		11	2026-10-01 19:38:08.886889+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:constraint:1	CONSTRAINT	relay-bootstrap		12	2026-10-01 19:38:08.88748+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:constraint:2	CONSTRAINT	relay-bootstrap		13	2026-10-01 19:38:08.888052+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:constraint:3	CONSTRAINT	relay-bootstrap		14	2026-10-01 19:38:08.888621+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:constraint:4	CONSTRAINT	relay-bootstrap		15	2026-10-01 19:38:08.889201+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:constraint:5	CONSTRAINT	relay-bootstrap		16	2026-10-01 19:38:08.889815+00	run:efb6e20f0d11885bc5085a68
+run:efb6e20f0d11885bc5085a68:criteria	ACCEPTANCE_UPDATE	relay-bootstrap		17	2026-10-01 19:38:08.890394+00	run:efb6e20f0d11885bc5085a68
+brain:decision:run:efb6e20f0d11885bc5085a68:plan:ACCEPT:TASK_VERIFIED	DECISION	independent-reviewer-hermes	run:efb6e20f0d11885bc5085a68:plan	18	2026-10-01 19:40:11.596+00	run:efb6e20f0d11885bc5085a68
+brain:decision:run:efb6e20f0d11885bc5085a68:build:ACCEPT:TASK_VERIFIED	DECISION	independent-reviewer-hermes	run:efb6e20f0d11885bc5085a68:build	19	2026-10-01 19:41:17.474+00	run:efb6e20f0d11885bc5085a68
+(19 rows)
