@@ -2395,6 +2395,288 @@ namespace
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES armed: five skins, %d frames each"), static_cast<int32>(UE_ARRAY_COUNT(FaceShots)));
 		}));
 
+	/* ================================================================ wl.Qa.Wardrobe (founder, 2026-10-01)
+	 *
+	 * "WONDERLAND WARDROBE -- MASCOT SKIN PRESENTATION FIX": every skin (1) much closer in the Wardrobe's viewer, whole and
+	 * centred, and (2) idling as Relay OG does -- body planted, head glancing about -- with Relay OG as the control. Measured
+	 * in the package, through the player's own path (the Project Brain, SWITCH SKIN, a skin chosen), on what the preview
+	 * actually shows: the occupancy is read off the rendered pixels, the idle off the figure's own joints over six seconds,
+	 * and the player's in-world Relay OG head is sampled beside it as the reference. Frames to Saved/Screenshots/WLWARDROBE.
+	 */
+	const TCHAR* const WardrobeRoster[5] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal") };
+
+	struct FQaWardrobe
+	{
+		TWeakObjectPtr<UWorld> World;
+		int32 Phase = 0;
+		int32 Skin = 0;
+		double At = 0.0;
+		double NextSample = 0.0;
+		bool bMidShot = false;
+		FString Dir;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		// one skin's idle, sampled
+		int32 Samples = 0;
+		FVector OffsetMin = FVector(1e9), OffsetMax = FVector(-1e9);
+		float HeadYawMin = 1e9f, HeadYawMax = -1e9f, HeadPitchMin = 1e9f, HeadPitchMax = -1e9f;
+		float RootTiltMax = 0.0f;
+		float ArmMin = 1e9f, ArmMax = -1e9f;
+		float CanonYawMin = 1e9f, CanonYawMax = -1e9f;
+		float BodyTall = 0.0f;
+		float DistanceBefore = -1.0f;
+	};
+	TSharedPtr<FQaWardrobe> GQaWardrobe;
+
+	/** A number named in a "key=value key=value" note, or Fallback. */
+	float QaNoteValue(const FString& Note, const TCHAR* Key, float Fallback = -1.0f)
+	{
+		const FString Find = FString(Key) + TEXT("=");
+		const int32 At = Note.Find(Find, ESearchCase::CaseSensitive);
+		return At == INDEX_NONE ? Fallback : FCString::Atof(*Note.Mid(At + Find.Len(), 16));
+	}
+
+	void QaWardrobeVerdict(FQaWardrobe& F, const TCHAR* Id, bool bOk, const FString& Detail)
+	{
+		(bOk ? F.Pass : F.Fail)++;
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLWARDROBE %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+	}
+
+	bool QaWardrobeTick(float)
+	{
+		if (!GQaWardrobe.IsValid())
+		{
+			return false;
+		}
+		FQaWardrobe& F = *GQaWardrobe;
+		UWorld* World = F.World.Get();
+		ARelayDogCharacter* D = QaDog(World);
+		UWonderlandUiSubsystem* U = QaUi(World);
+		AWonderlandSkinStage* Stage = World != nullptr ? AWonderlandSkinStage::Get(World) : nullptr;
+		AWonderlandCompanionEmbodiment* Body = Stage != nullptr ? Stage->GetBody() : nullptr;
+		const double In = QaNow() - F.At;
+		if (World == nullptr || D == nullptr || U == nullptr)
+		{
+			if (In > 120.0)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLWARDROBE quit: no world, Relay Dog or UI"));
+				FPlatformMisc::RequestExit(false);
+				return false;
+			}
+			return true;
+		}
+		auto Shot = [&F](const FString& Name)
+		{
+			int32 W = 0;
+			int32 H = 0;
+			const FString Path = F.Dir / Name;
+			const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, W, H);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLWARDROBE frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), W, H);
+		};
+		switch (F.Phase)
+		{
+		case 0:
+			// the world settles, the welcome is put away, then the Project Brain and its wardrobe, the way a player opens them
+			if (In >= 8.0)
+			{
+				U->DismissWelcome();
+				U->CloseOverlay();
+				U->ToggleProjectBrain();
+				U->SetBrainSkinsOpen(true);
+				F.Phase = 1;
+				F.At = QaNow();
+			}
+			break;
+		case 1:
+			if (In >= 1.5)
+			{
+				if (F.Skin >= 5)
+				{
+					F.Phase = 30;
+					F.At = QaNow();
+					break;
+				}
+				// a card chosen: the panel's OnChooseSkin equips through the registry, which is what this does
+				GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), WardrobeRoster[F.Skin]));
+				F.Phase = 2;
+				F.At = QaNow();
+			}
+			break;
+		case 2:
+			// THE SWITCH ITSELF: a tenth of a second after the new dress, the figure is already wearing the canonical pose
+			if (In >= 0.15)
+			{
+				const bool bWorn = Body != nullptr && Body->GetWornPose().bValid && Body->IsGaitDrivenExternally();
+				QaWardrobeVerdict(F, *FString::Printf(TEXT("W%d.1"), F.Skin + 1), bWorn,
+					FString::Printf(TEXT("%s: %.2f s after the switch the figure wears the canonical pose (%s)"), WardrobeRoster[F.Skin], In,
+						Body == nullptr ? TEXT("no stage figure") : (bWorn ? TEXT("driven by Relay OG's animator") : TEXT("its own companion idle"))));
+				F.Phase = 3;
+				F.At = QaNow();
+			}
+			break;
+		case 3:
+			// settled: the framing, from the solve and from the pixels; then six seconds of idle
+			if (In >= 4.0)
+			{
+				Shot(FString::Printf(TEXT("%d_%s_wardrobe_a.png"), F.Skin + 1, WardrobeRoster[F.Skin]));
+				const FString Note = Stage != nullptr ? Stage->DescribeFraming() : FString(TEXT("no stage"));
+				const FString Occ = Stage != nullptr ? Stage->MeasureOccupancy() : FString(TEXT("no stage"));
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLWARDROBE framing %s | shows %s | solve: %s | pixels: %s"), WardrobeRoster[F.Skin],
+					Stage != nullptr ? *Stage->GetShownSkinId().ToString() : TEXT("-"), *Note, *Occ);
+				const float HeightPct = QaNoteValue(Occ, TEXT("heightPct"));
+				const float CentreY = QaNoteValue(Occ, TEXT("centreYPct"));
+				const float Bottom = CentreY + HeightPct * 0.5f;
+				const float Top = CentreY - HeightPct * 0.5f;
+				const bool bFire = QaNoteValue(Note, TEXT("fireTop"), 0.0f) > 0.0f;
+				const bool bShows = Stage != nullptr && Stage->GetShownSkinId() == FName(WardrobeRoster[F.Skin]);
+				// CLOSE, AND WHOLE: the lit figure fills at least 70% of the preview's height (the RC7 wardrobe: about a third);
+				// its lowest lit pixel stops short of the bottom edge (the feet are in the frame); and for a skin with no fire its
+				// highest lit pixel stops short of the top (no head, ear, antler, halo or hat cut off). Fire tips may touch the top.
+				const bool bWhole = Bottom <= 99.0f && (bFire || Top >= 0.5f);
+				QaWardrobeVerdict(F, *FString::Printf(TEXT("W%d.2"), F.Skin + 1), bShows && HeightPct >= 70.0f && bWhole,
+					FString::Printf(TEXT("%s: figure %.1f%% of the preview height, highest lit row %.1f%%, lowest %.1f%%, centre %.1f%% (want >= 70%%; feet clear of the bottom; %s)"),
+						WardrobeRoster[F.Skin], HeightPct, Top, Bottom, CentreY,
+						bFire ? TEXT("fire tips may touch the top") : TEXT("nothing touching the top")));
+				F.Samples = 0;
+				F.OffsetMin = FVector(1e9);
+				F.OffsetMax = FVector(-1e9);
+				F.HeadYawMin = F.HeadPitchMin = F.ArmMin = F.CanonYawMin = 1e9f;
+				F.HeadYawMax = F.HeadPitchMax = F.ArmMax = F.CanonYawMax = -1e9f;
+				F.RootTiltMax = 0.0f;
+				F.BodyTall = Body != nullptr ? Body->GetBodyHeightUu() * static_cast<float>(Body->GetActorScale3D().Z) : 0.0f;
+				F.bMidShot = false;
+				F.NextSample = 0.0;
+				F.Phase = 4;
+				F.At = QaNow();
+			}
+			break;
+		case 4:
+			if (Body != nullptr && Stage != nullptr && In >= F.NextSample && In < 6.0)
+			{
+				F.NextSample += 0.1;
+				// the body's place relative to the stage, in the stage's own frame (it is re-placed in the world as the UI frames it)
+				const FVector Offset = Stage->GetActorTransform().InverseTransformPosition(Body->GetActorLocation()) * Stage->GetActorScale3D();
+				F.OffsetMin = F.OffsetMin.ComponentMin(Offset);
+				F.OffsetMax = F.OffsetMax.ComponentMax(Offset);
+				const FRotator Head = Body->GetPartRotation(FName(TEXT("head")));
+				const FRotator Root = Body->GetPartRotation(FName(TEXT("root")));
+				const FRotator ArmL = Body->GetPartRotation(FName(TEXT("arm_l")));
+				const FRotator ArmR = Body->GetPartRotation(FName(TEXT("arm_r")));
+				F.HeadYawMin = FMath::Min(F.HeadYawMin, static_cast<float>(Head.Yaw));
+				F.HeadYawMax = FMath::Max(F.HeadYawMax, static_cast<float>(Head.Yaw));
+				F.HeadPitchMin = FMath::Min(F.HeadPitchMin, static_cast<float>(Head.Pitch));
+				F.HeadPitchMax = FMath::Max(F.HeadPitchMax, static_cast<float>(Head.Pitch));
+				F.RootTiltMax = FMath::Max(F.RootTiltMax, static_cast<float>(FMath::Max(FMath::Abs(Root.Pitch), FMath::Abs(Root.Roll))));
+				for (const FRotator& Arm : {ArmL, ArmR})
+				{
+					const float Swing = static_cast<float>(FMath::Max3(FMath::Abs(Arm.Pitch), FMath::Abs(Arm.Yaw), FMath::Abs(Arm.Roll)));
+					F.ArmMin = FMath::Min(F.ArmMin, Swing);
+					F.ArmMax = FMath::Max(F.ArmMax, Swing);
+				}
+				const float Canon = D->GetCanonicalWornPose().HeadYawDeg;
+				F.CanonYawMin = FMath::Min(F.CanonYawMin, Canon);
+				F.CanonYawMax = FMath::Max(F.CanonYawMax, Canon);
+				++F.Samples;
+			}
+			if (!F.bMidShot && In >= 3.0)
+			{
+				F.bMidShot = true;
+				Shot(FString::Printf(TEXT("%d_%s_wardrobe_b.png"), F.Skin + 1, WardrobeRoster[F.Skin]));
+			}
+			if (In >= 6.0)
+			{
+				const FVector Drift = F.OffsetMax - F.OffsetMin;
+				const float DriftMax = static_cast<float>(Drift.GetMax());
+				const float DriftShare = F.BodyTall > 1.0f ? DriftMax / F.BodyTall : 1.0f;
+				const float HeadRange = F.HeadYawMax - F.HeadYawMin;
+				const float HeadReach = FMath::Max(FMath::Abs(F.HeadYawMax), FMath::Abs(F.HeadYawMin));
+				const float ArmRange = F.ArmMax - F.ArmMin;
+				// PLANTED: the body stays where it stands (under 1% of its own height of travel) and does not rock or flap
+				QaWardrobeVerdict(F, *FString::Printf(TEXT("W%d.3"), F.Skin + 1),
+					F.Samples >= 40 && DriftShare <= 0.01f && F.RootTiltMax <= 2.5f && ArmRange <= 5.0f,
+					FString::Printf(TEXT("%s body over %d samples: travel %.2f uu (%.2f%% of its %.1f uu height; want <= 1%%), root tilt max %.2f deg (<= 2.5), arm swing range %.2f deg (<= 5)"),
+						WardrobeRoster[F.Skin], F.Samples, DriftMax, 100.0f * DriftShare, F.BodyTall, F.RootTiltMax, ArmRange));
+				// THE HEAD LOOKS ABOUT, inside the canon's cone -- the same class of motion as the in-world Relay OG beside it
+				QaWardrobeVerdict(F, *FString::Printf(TEXT("W%d.4"), F.Skin + 1),
+					F.Samples >= 40 && HeadRange >= 2.0f && HeadReach <= 16.0f,
+					FString::Printf(TEXT("%s head yaw %.1f..%.1f deg (range %.1f; want >= 2 and |yaw| <= 16), pitch %.1f..%.1f | in-world Relay OG head yaw over the same window %.1f..%.1f"),
+						WardrobeRoster[F.Skin], F.HeadYawMin, F.HeadYawMax, HeadRange, F.HeadPitchMin, F.HeadPitchMax, F.CanonYawMin, F.CanonYawMax));
+				++F.Skin;
+				F.Phase = 1;
+				F.At = QaNow();
+			}
+			break;
+		case 30:
+			// 360 STILL WORKS, AND DOES NOT RESIZE THE SHOT: the button's own toggle, three seconds of turning, then stop
+			F.DistanceBefore = Stage != nullptr ? QaNoteValue(Stage->DescribeFraming(), TEXT("distance")) : -1.0f;
+			U->ToggleWardrobeInspect();
+			F.Phase = 31;
+			F.At = QaNow();
+			break;
+		case 31:
+			if (In >= 3.0)
+			{
+				const float Yaw = Stage != nullptr ? Stage->GetInspectYaw() : 0.0f;
+				const float DistanceTurning = Stage != nullptr ? QaNoteValue(Stage->DescribeFraming(), TEXT("distance")) : -1.0f;
+				Shot(TEXT("6_360_turning.png"));
+				const bool bTurned = U->IsWardrobeInspecting() && Yaw >= 30.0f;
+				const bool bSameShot = F.DistanceBefore > 0.0f && FMath::Abs(DistanceTurning - F.DistanceBefore) <= 0.02f * F.DistanceBefore;
+				QaWardrobeVerdict(F, TEXT("W6.1"), bTurned && bSameShot,
+					FString::Printf(TEXT("360 on: the figure turned %.0f deg in 3 s; camera distance %.1f before, %.1f turning (want the same within 2%%)"),
+						Yaw, F.DistanceBefore, DistanceTurning));
+				U->ToggleWardrobeInspect();
+				F.Phase = 32;
+				F.At = QaNow();
+			}
+			break;
+		case 32:
+			if (In >= 3.0)
+			{
+				const float Yaw = Stage != nullptr ? FMath::Abs(FMath::UnwindDegrees(Stage->GetInspectYaw())) : 999.0f;
+				Shot(TEXT("7_360_stopped.png"));
+				QaWardrobeVerdict(F, TEXT("W6.2"), !U->IsWardrobeInspecting() && Yaw <= 2.0f,
+					FString::Printf(TEXT("360 off: back to the front, %.1f deg from it after 3 s (want <= 2)"), Yaw));
+				U->SetBrainSkinsOpen(false);
+				U->ToggleProjectBrain();
+				GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLWARDROBE END pass=%d fail=%d"), F.Pass, F.Fail);
+				F.Phase = 33;
+				F.At = QaNow();
+			}
+			break;
+		case 33:
+			if (In >= 1.0)
+			{
+				GQaWardrobe.Reset();
+				FPlatformMisc::RequestExit(false);
+				return false;
+			}
+			break;
+		default:
+			break;
+		}
+		return true;
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaWardrobeCommand(
+		TEXT("wl.Qa.Wardrobe"),
+		TEXT("Prove the Wardrobe's presentation in this build: open it the player's way, wear each of the five skins, and log how much of ")
+		TEXT("the preview each fills (from its pixels), whether its body stays planted and its head looks about as Relay OG's does, and ")
+		TEXT("that 360 turns without resizing the shot. Frames to Saved/Screenshots/WLWARDROBE; then quit."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaWardrobe.IsValid())
+			{
+				return;
+			}
+			GQaWardrobe = MakeShared<FQaWardrobe>();
+			GQaWardrobe->World = World;
+			GQaWardrobe->At = QaNow();
+			GQaWardrobe->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLWARDROBE"));
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaWardrobeTick), 0.05f);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLWARDROBE armed: five skins, framing from the pixels, six seconds of idle each, then 360"));
+		}));
+
 	FAutoConsoleCommandWithWorldAndArgs GQaConsoleFilm(
 		TEXT("wl.Qa.ConsoleFilm"),
 		TEXT("Set the scene for the companion-terminal video and quit after it: `wl.Qa.ConsoleFilm mission 70` (the simulated ")
