@@ -24,31 +24,54 @@ Each row has a weight; the weights total 100. A row earns:
 partly unverified scores 0, not a blend. **Readiness = sum of weight x credit.** Second's independent sign-off on the RC
 is built into every 1.0, so nothing above 75% is possible before the final RC.
 
-## Ledger (as of RC2: CORE's evidence and Second's boot matrix, 36/36; Second's adversarial and clean-user passes wait for RC3)
+## Ledger (as of RC3: CORE's evidence; Second's RC3 pass in progress)
 
-| # | Requirement | Weight | Credit | Evidence (RC2 = 0.1.0-rc2, 24ea3e11) | Weakest part / open blockers |
+| # | Requirement | Weight | Credit | Evidence (RC3 = 0.1.0-rc3, 90c8d0fa) | Weakest part / open blockers |
 |---|---|---|---|---|---|
-| R1 | Environmental world complete (locked, 25/25) | 8 | 0.75 | WORLD_COMPLETION_MATRIX.md; RC2 QA Q02-Q08 travel/map/teleports PASS; perf travel 0.9-1.2 s | -- |
-| R2 | Gameplay regression G1-G7 (locked, 18/18) | 8 | 0.75 | RC2 QA Q09-Q11 (Jack's contract from the rim, heights, four skins' contracts) PASS | -- |
-| R3 | First launch: clean start, spawn, Relay Dog init, clear path in, no developer knowledge | 8 | 0.5 | RC2 Q00.1 welcome on a fresh profile (frame 00_first_launch), Q00.2 no console/debug keys/Gameplay Debugger; prerequisites staged + app-local CRT + static import closure (0 unresolved) | B05 (Esc / QUIT) verified statically only |
-| R4 | Core creation loop, truthful about Julius | 12 | 0.5 | RC2 Q13 eight contracts through + and the terminal; Q14 all restored; Q15 deleted through the terminal; Q00.3 AI offline with the beta sentence | B18 simulated-mission control static on RC2 (RC3 Q17); contract limit static (RC3 Q20) |
-| R5 | Session stability: launch / quit / relaunch, focus loss, window changes (single-player) | 3 | 0 | RC2: three clean boots and quits (QA x2, perf); Second's matrix: 36 cold boots, clean closes in 2.2-3.2 s, windowed and fullscreen cells | focus loss not yet verified; exclusive fullscreen broken (B40) |
-| R6 | Private/project space and project avatar flow, as implemented | 3 | 0.5 | nothing to test: no networking, sessions or private spaces exist (D2); welcome says single-player (RC2 frame); world map says PLANNED ... NOT IN THIS BETA; `/pa` refused for players (static) | `/pa` refusal static on RC2 (RC3 Q18) |
-| R7 | Wonder Web and every beta-facing screen: no dead buttons or placeholders, no debug exposure, back/close/Esc, sane errors | 8 | 0 | RC2 Q00.2/Q00.3; frames | **B11 open (founder D3)** |
-| R8 | Save / persistence across quit, relaunch, interruption | 8 | 0 | RC2 Q12/Q14/Q16/Q15 across a restart; Second's matrix: settings, colours and skin persist across boots | **B34 (P1) open on RC2**: the presets save is not atomic and a corrupt one crashes every boot; fixed in RC3 source |
-| R9 | Error / recovery: services absent, timeouts, failed travel / load, bad input, corrupt files | 7 | 0 | RC2 Q00.3 (services absent); bad-input guards static | **B34 (P1) confirmed on RC2**: a corrupt command-presets save crashed the boot (`before_rc2_presets/`); fixed in RC3 source (RC3 Q19 / Q21) |
-| R10 | Performance on the founder's laptop, measured in the package | 7 | 0.5 | RC2 wl.Qa.Perf (below); Second's matrix: every SETTINGS choice persists and applies (LOW: 3.5-3.7 GB private, 1.5-1.6 GB GPU; EPIC: 6.3-6.6 / 4.0-4.2) | default first-launch window not measured (B39) |
-| R11 | Memory pressure: long-session growth, repeated skins / teleports / contracts / map / relaunch | 6 | 0 | RC2 perf: peaks 2,590 MB WS / 6,688 MB private / 4,206 MB VRAM over 3 min | soak not run |
-| R12 | Package / distribution: clean artifact, prerequisites, no machine paths, size, README, version visible | 7 | 0.75 | RC2 zip: 176 entries, no Saved/ PDB _reference _previous _old .gitignore manifests; vc_redist + app-local CRT, closure 0 unresolved; 0.64 GB zip; README; label on welcome/menu/title | P2: B33 unsigned; P3: B31, B38 |
-| R13 | Security / privacy baseline | 5 | 0 | RC2 scan: no user/computer name, e-mail, secret or founder log anywhere (ASCII + UTF-16, every file); AI clients off in player sessions (Q00.3) | **B32 open on RC2 (P1: TCP 1985 listener)**, fixed in RC3 |
-| R14 | Crash / soak on the package | 4 | 0 | -- | not run |
-| R15 | Clean-user test on the RC (no saves, no console, no developer knowledge) | 6 | 0 | Second's RC2 clean-user test in progress | -- |
+| R1 | Environmental world complete (locked, 25/25) | 8 | 0.75 | WORLD_COMPLETION_MATRIX.md; RC3 QA Q02-Q08 travel/map/teleports PASS | **B45 candidate**: 13 world materials fall back to the engine's default material in the package (if it is visible it is a P1 and R1 drops to 0) |
+| R2 | Gameplay regression G1-G7 (locked, 18/18) | 8 | 0.75 | RC3 QA Q09-Q11 PASS | -- |
+| R3 | First launch: clean start, spawn, Relay Dog init, clear path in, no developer knowledge | 8 | 0.75 | RC3 Q00.1 welcome, Q00.2 lock-down; prerequisites + closure (0 unresolved); Esc -> menu -> QUIT used for real in the RC3 soak ("WLUI quit chosen from the menu", clean exit) | -- |
+| R4 | Core creation loop, truthful about Julius | 12 | 0.5 | RC3 Q13 eight contracts through + and the terminal, Q14 restored, Q15 deleted, Q17 the simulated mission plays and says SIMULATED, Q20 limit 48 | the WATCH A SIMULATED MISSION button itself is only statically verified (Q17 makes the same call) |
+| R5 | Session stability: launch / quit / relaunch, focus loss, window changes (single-player) | 3 | 0 | RC3: four clean boots and quits; the menu QUIT works | focus loss not yet verified; RC3's two window modes (B40 fix) not yet verified in a package |
+| R6 | Private/project space and project avatar flow, as implemented | 3 | 0.75 | nothing to test (D2); RC3 Q18 `/pa` changes nothing in a player session; welcome says single-player | -- |
+| R7 | Wonder Web and every beta-facing screen: no dead buttons or placeholders, no debug exposure, back/close/Esc, sane errors | 8 | 0 | RC3 Q00.2/Q00.3; frames | **B11 open (founder D3)**; **B44 open on RC3** (Flame Color, fixed in RC4 source) |
+| R8 | Save / persistence across quit, relaunch, interruption | 8 | 0.75 | RC3 Q12/Q14/Q16/Q15 across a restart; Q21.1-Q21.5 a third boot on corrupted files: no crash, bad files set aside, next save sealed | -- |
+| R9 | Error / recovery: services absent, timeouts, failed travel / load, bad input, corrupt files | 7 | 0.5 | RC3 Q00.3 services absent, Q19 bad terminal input, Q21 corrupt files | failed travel / load verified in the editor only (travel timeout squeeze proof) |
+| R10 | Performance on the founder's laptop, measured in the package | 7 | 0.75 | RC3 perf in the game's own window (borderless 1536x960, EPIC, HW RT): 30-52 fps averages, no frame > 100 ms (table below); Second's RC2 matrix: every SETTINGS choice applies | -- |
+| R11 | Memory pressure: long-session growth, repeated skins / teleports / contracts / map / relaunch | 6 | 0 | RC3 soak stopped at 18.7 min by someone at the laptop (menu QUIT): private +340 MB/h over 14 warm minutes, inside ~700 MB place-to-place swings -- INCONCLUSIVE | a full 60-minute soak |
+| R12 | Package / distribution: clean artifact, prerequisites, no machine paths, size, README, version visible | 7 | 0.75 | RC3 zip: 97 files, 0.62 GB, sha256 530A2AFB...1D87; closure 0 unresolved; no Saved/PDB/sources/Vulkan layers; clean label "build 90c8d0fa" | P2: B33 unsigned, B36 notices; P3: B38, B48 |
+| R13 | Security / privacy baseline | 5 | 0.75 | RC3: no listening socket in a player session (QNET, and a manual sample 35 s into the perf run); scan: no names, e-mails or secrets; AI off (Q00.3) | -- |
+| R14 | Crash / soak on the package | 4 | 0 | 0 crashes across 3 QA boots, perf and 18.7 soak minutes | a full 60-minute soak |
+| R15 | Clean-user test on the RC (no saves, no console, no developer knowledge) | 6 | 0 | Second's RC3 clean-user pass waits for an idle laptop | -- |
 | | **Total** | **100** | | | |
 
-**WONDERLAND BETA READINESS: 32.25%** (RC2, 2026-10-01). R1 6 + R2 6 + R3 4 + R4 6 + R6 1.5 + R10 3.5 + R12 5.25. The
-earlier informal "about 52%" counted rows whose parts were only partly verified; the weakest-part rule above does not.
-Second's 1985 finding (B32) holds R13 at 0 on RC2, and the confirmed corrupt-save crash (B34) holds R8 and R9 at 0.
-RC2 is not the final RC: every row is re-earned on RC3.
+**WONDERLAND BETA READINESS: 50.0%** (RC3, 2026-10-01). R1 6 + R2 6 + R3 6 + R4 6 + R6 2.25 + R8 6 + R9 3.5 + R10 5.25 +
+R12 5.25 + R13 3.75. RC3 is not the final RC: the founder's Flame Color (B44) needs RC4, and every row is re-earned
+there. If B45 proves visible, R1 is 0 and RC3 reads 44.0%.
+
+### RC3 package evidence (CORE)
+
+- Build: 0.1.0-rc3, commit 90c8d0fa, zip sha256 530A2AFBBB3134B8460DC556EDC8358131C28E21E3BB6319EA433756201A1D87,
+  667,756,722 bytes, 97 files. Boots with no Niagara assert; the trace control port is closed ("WLBETA trace control
+  port closed ... 777 ticks").
+- QA (`qa_rc3.log`): 45 PASS, 0 FAIL across three boots -- 35 in the first (incl. Q17-Q20), 4 across the restart,
+  5 on corrupted files (Q21.1-Q21.5) -- plus QNET: no listening socket.
+- Perf (`perf_rc3_default/`), the game's own first-launch window (borderless 1536x960), EPIC, HW RT on:
+
+  | phase | avg fps | p95 ms | 1% low fps | frames > 50 ms | max ms |
+  |---|---|---|---|---|---|
+  | idle | 34.5 | 33.1 | 26.2 | 0 | 45 |
+  | travel (warm) | 33.3 | 36.9 | 27.0 | 0 | 37 |
+  | walk 30 s | 37.5 | 31.6 | 28.1 | 0 | 38 |
+  | teleport x5 | 33.8 | 46.6 | 13.6 | 8 | 86 |
+  | map x8 | 38.2 | 34.6 | 17.7 | 6 | 63 |
+  | wardrobe x5 | 51.7 | 26.1 | 20.6 | 3 | 58 |
+  | contract 60 s | 33.4 | 34.9 | 22.5 | 7 | 55 |
+  | creation | 30.0 | 38.2 | 25.2 | 0 | 40 |
+
+  Peaks 2,584 MB working set / 6,703 MB private / 4,250 MB VRAM; machine free fell to 1,392 MB.
+- Soak (`soak_rc3/`): quit from the menu at 18.7 min by a person at the laptop. Warm window 5-19 min: private
+  6,389-7,087 MB (+340 MB/h), GPU 4,197-4,498 MB (+178 MB/h), working set trimmed (-1,643 MB/h). Inconclusive.
 
 ### RC2 package evidence (CORE)
 
@@ -89,7 +112,7 @@ survives a small private beta with a documented limitation. P3 is polish. Only P
 | B08 | P1 | debug exposure | Console, debug keys, `/pa` reachable | player lock-down; `/pa` developer-only | fixed; RC2 Q00.2; RC3 Q18 |
 | B09 | P1 | truthfulness | Developer instructions and founder paths shown to players | beta text; dev hint behind -wldev | fixed; RC2 Q00.3 + static |
 | B10 | P1 | input | Ctrl+W hijacked walking | binding removed | fixed; static |
-| B11 | P1 | brand | "GPT 6 Astra" / "Claude Code Fable 5" on the HUD from boot (terminal titles, usage bars, Project Brain samples). The Instagram/Google-styled Wonder Web pages are no longer reachable by players (their only entries were Ctrl+W and Julius browsing) | founder decision D3 | **open (founder)** |
+| B11 | P1 | brand | "GPT 6 Astra" / "Claude Code Fable 5" on the HUD from boot (terminal titles, usage rows, the simulated mission's terminals, Project Brain samples) AND the Wonder Web sample pages styled as Instagram and Google (plus a store named after the retired "Arden"), reachable by players as B -> WONDER WEB -> Ctrl+W (Second, RC3; the ledger had wrongly called them unreachable) | founder decision D3 | **open (founder)** |
 | B12 | P1 | persistence | Saves inside the package folder | InstalledProjectBuild.txt -> %LOCALAPPDATA% | fixed; RC1 created %LOCALAPPDATA%\Wonderland\Saved; Second's clean-user on RC2 |
 | B13 | P1 | package content | Engine unlit material not cooked | always-cook | fixed; RC2 Q00.4 |
 | B14 | P1 | package content | practical_lights.json not staged | NonUFS stage | fixed; RC2 Q00.4 (1,464 lamps) |
@@ -121,6 +144,11 @@ survives a small private beta with a documented limitation. P3 is polish. Only P
 | B40 | P2 | settings | Exclusive FULLSCREEN came up as a 640x480 popup at 0,0: it asks the panel for 1536x960, a mode it does not have (Second's matrix) | SETTINGS offers BORDERLESS and WINDOWED only; a saved exclusive mode migrates to borderless at start (RC3) | fixed in RC3 source |
 | B41 | P2 | truthfulness | The HUD shows "Julius 100% / Claude Code Fable 5 100% / GPT 6 Astra 100%" beside a welcome that says nothing is connected (Second) | player sessions show a dash and "NOT CONNECTED IN THIS BETA · NO USAGE MEASURED"; layout untouched (RC3) | fixed in RC3 source |
 | B42 | P3 | privacy / logs | Thousands of "FORENSIC" and per-batch warnings in a player's log (Second) | developer sessions only; a material mismatch still logs for everyone (RC3) | fixed in RC3 source |
+| B44 | P1 | founder requirement | Flame Color (founder, 2026-10-01): a separate FLAME row, independent of primary and secondary, on Jack Flame (head, paw, foot, tail flames), Skeleton Flame (spectral flames; skull, body, eyes untouched) and Baal (blue flame layer); hidden on Relay OG and Celestial Light. RC3's Jack fire still followed SECONDARY | figures tag their fire `flame`/`flame_light`; one global FLAME colour in its own file (no new config name); rows in Menu > COLORS and the Wardrobe; QA Q01-Q01f, Q12 and Q21.6-Q21.7. Cubs keep their own colours (EWonderlandBodyRole::SubAgent) | fixed in RC4 source |
+| B45 | P1? | world in the package | 13 world material instances log "missing usage flag Nanite! Default Material will be used in game" (LeafMid, Water, the Tartarus and Icarus metals, GlassTeal, the Noctis set): their masters M_V2_Foliage / M_V2_Surface / M_V2_SurfaceHD were never saved with bUsedWithNanite, which the editor sets in memory every launch and a cooked build cannot | set the flag on the three masters and resave them: an editor (commandlet) write to the shared Content tree, so the founder's call | **classification pending Second's package frames** |
+| B46 | P3 | performance | SM_WL_VoxelCube is not cooked, so the package's figures use the engine's non-Nanite cube (the editor uses the Nanite one) | not cooked for RC4 on purpose: M_WL_EyeHalo and M_WL_Fire also lack the Nanite flag, so cooking the cube could turn parts of every skin default-grey | documented |
+| B47 | P3 | logs | Territory markers log "NO GROUND FOUND, standing at z=0" at BeginPlay, before their cells stream | -- | open |
+| B48 | P3 | package hygiene | The stage shipped retired figures (Apollo*, ArdenInfernal*, Bee, Hagoromo, SkeletonFlame, SkeletonFlameV1 and the Apollo/Arden cubs) | release script excludes them (RC4); sources kept | fixed in RC4 source |
 | B43 | P2 | performance | An integrated-GPU laptop at the default EPIC quality may run short of memory (the iGPU probe was stopped by memory pressure) | README: integrated graphics -> QUALITY LOW first (RC3); no automatic default (untestable here) | documented |
 
 ## Founder decisions
@@ -132,7 +160,11 @@ survives a small private beta with a documented limitation. P3 is polish. Only P
   beta", "as implemented; do not invent future systems"). None exists in the code; the beta is single-player, R5 covers
   single-player session stability and R6 verifies that nothing promises what is not there.
 - **D3, third-party names for outside testers: OPEN, the founder's call (B11, P1).** Testers see "GPT 6 Astra" and
-  "Claude Code Fable 5" on the HUD from the first frame (terminal titles, usage bars, two Project Brain sample lines),
-  next to OFFLINE / "not connected in this beta build". Options: keep them for an invite-only beta; or show the role
-  names (LLM COMPANION, JHINN) in player builds only, leaving the canon names untouched in development; or rename in
-  canon. A config/text change either way; CORE does not change companion canon unilaterally.
+  "Claude Code Fable 5" on the HUD from the first frame (terminal titles, usage rows, the simulated mission's terminals,
+  two Project Brain sample lines), next to "not connected in this beta", AND can open Wonder Web sample pages styled as
+  Instagram and Google (B -> WONDER WEB -> Ctrl+W). Options for the names: keep them for an invite-only beta; show the
+  role names (LLM COMPANION, JHINN) in player builds only, canon names untouched in development; or rename in canon.
+  Options for the sample pages: neutral pages with no third-party marks; browser windows for developers (-wldev)
+  only; or keep. CORE does not change companion canon or the founder's samples unilaterally.
+- **D4, the world materials' Nanite flag (B45): the founder's call if it is visible**, because the fix is an editor
+  write to three master materials in the shared Content tree.
