@@ -12,7 +12,7 @@ import {
   projectBrainCapabilitiesFor,
   projectBrainEventTypeForJulius,
   projectBrainForbiddenMaterial,
-  projectBrainRequestHash,
+  projectBrainRequestIdentity,
   type ProjectBrainMutationCommand,
   type ProjectBrainProvenance,
   type ProjectBrainRecordState,
@@ -183,12 +183,12 @@ describe('who may change the Project Brain is decided by the membership row, not
 });
 
 describe('idempotency identity, event names and the feed cursor', () => {
-  it('the same command from the same author hashes alike; anything different does not', () => {
-    const a = projectBrainRequestHash('prj-1', PLAYER, create());
-    expect(projectBrainRequestHash('prj-1', PLAYER, create())).toBe(a);
-    expect(projectBrainRequestHash('prj-2', PLAYER, create())).not.toBe(a);
-    expect(projectBrainRequestHash('prj-1', PLAYER, create({ title: 'Different.' }))).not.toBe(a);
-    expect(projectBrainRequestHash('prj-1', { ...PLAYER, author: { kind: 'WONDERLAND_PLAYER', id: 'player-2' } }, create())).not.toBe(a);
+  it('the same command from the same author has one identity; anything different does not', () => {
+    const a = projectBrainRequestIdentity('prj-1', PLAYER, create());
+    expect(projectBrainRequestIdentity('prj-1', PLAYER, create())).toBe(a);
+    expect(projectBrainRequestIdentity('prj-2', PLAYER, create())).not.toBe(a);
+    expect(projectBrainRequestIdentity('prj-1', PLAYER, create({ title: 'Different.' }))).not.toBe(a);
+    expect(projectBrainRequestIdentity('prj-1', { ...PLAYER, author: { kind: 'WONDERLAND_PLAYER', id: 'player-2' } }, create())).not.toBe(a);
   });
 
   it("names Julius's own ledger events in the Project Brain's words, and never drops one", () => {

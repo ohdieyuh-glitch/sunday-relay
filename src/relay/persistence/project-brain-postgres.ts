@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 
 import type { JuliusBrainEntry } from '../mission/julius/julius-runtime';
@@ -10,12 +10,12 @@ import {
   authorizeProjectBrainMutation,
   encodeProjectBrainCursor,
   parseProjectBrainRef,
-  projectBrainContentHash,
+  projectBrainContentIdentity,
   projectBrainEventTypeForJulius,
   projectBrainMutationEventType,
   projectBrainRef,
   projectBrainRefusal,
-  projectBrainRequestHash,
+  projectBrainRequestIdentity,
   projectBrainStreamId,
   type ProjectBrainActor,
   type ProjectBrainCapability,
@@ -115,6 +115,7 @@ export interface ProjectBrainReadLimits {
 }
 export const PROJECT_BRAIN_READ_LIMITS: ProjectBrainReadLimits = { missions: 50, entries: 1000, rows: 500, events: 200, records: 1000 };
 
+const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 type Row = Record<string, unknown>;
 const str = (value: unknown): string => (value === null || value === undefined ? '' : String(value));
 const strOrNull = (value: unknown): string | null => (value === null || value === undefined ? null : String(value));
@@ -607,7 +608,7 @@ export class ProjectBrainPostgresStore {
       const project = await client.query('SELECT 1 FROM relay_wonderland.projects WHERE project_id=$1', [projectId]);
       if (project.rowCount === 0) return abort(refuse(projectBrainRefusal(404, 'project_not_found', 'No such project.')));
 
-      const requestHash = projectBrainRequestHash(projectId, provenance, command);
+      const requestHash = sha256(projectBrainRequestIdentity(projectId, provenance, command));
       const prior = await client.query<{ request_hash: string; result: unknown }>(
         'SELECT request_hash,result FROM relay_wonderland.project_brain_mutations WHERE project_id=$1 AND idempotency_key=$2',
         [projectId, command.idempotencyKey]);
@@ -707,7 +708,7 @@ export class ProjectBrainPostgresStore {
 
       if (recordId !== null && version !== null && status !== null) {
         const domain = command.operation === 'CREATE' ? command.domain : stored!.domain;
-        const contentHash = projectBrainContentHash({ domain, title, body, subjectRef, status });
+        const contentHash = sha256(projectBrainContentIdentity({ domain, title, body, subjectRef, status }));
         if (command.operation === 'CREATE') {
           await client.query(
             `INSERT INTO relay_wonderland.project_brain_records(record_id,project_id,run_id,scope,domain,status,title,body,subject_ref,version,content_hash,
