@@ -1106,12 +1106,13 @@ void SWonderlandProjectBrainPanel::RebuildInspector()
 		InspectorBody->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 7.0f)[Row];
 	}
 
-	// What the owner did here: proposals, never changes.
+	// What the owner did here: proposals, never changes. NOT SAVED, because they are not (private beta, B29): they live
+	// in this session only and are gone after a restart -- "not synced" read as though a copy were kept somewhere.
 	if (Found->Proposals.Num() + Found->Reviews.Num() > 0)
 	{
 		InspectorBody->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 6.0f)
 		[
-			SNew(STextBlock).Text(INVTEXT("PROPOSED  ·  NOT SYNCED")).Font(Font("Bold", 8, 240)).ColorAndOpacity(WonderlandUi::Srgb(0xFF, 0xD2, 0x73))
+			SNew(STextBlock).Text(INVTEXT("PROPOSED  ·  NOT SAVED")).Font(Font("Bold", 8, 240)).ColorAndOpacity(WonderlandUi::Srgb(0xFF, 0xD2, 0x73))
 		];
 		TArray<FString> Pending = Found->Proposals;
 		Pending.Append(Found->Reviews);

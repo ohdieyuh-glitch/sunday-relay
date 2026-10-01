@@ -1,5 +1,6 @@
-# Boot the PACKAGED Wonderland and run the gameplay and private-beta regression inside it (wl.Qa.PackageCheck), then boot
-# it AGAIN to see what the first run saved come back (wl.Qa.PackagePersist).
+# Boot the PACKAGED Wonderland and run the gameplay and private-beta regression inside it (wl.Qa.PackageCheck), boot it
+# AGAIN to see what the first run saved come back (wl.Qa.PackagePersist), then a THIRD time on save files this script
+# corrupts on purpose (wl.Qa.PackageHostile).
 #
 # The game runs the checks itself (WonderlandQaCommands.cpp), writes a WLQA line per check and a frame per stage, and
 # quits; this script waits for each boot, then collects the lines and frames. 1920x1200 windowed: the founder's own
@@ -9,6 +10,9 @@
 # colours and changes skins -- can never touch a real player's %LOCALAPPDATA%\Wonderland (Second Wonderland's review).
 # A CRASH IS A FAILURE: RC1 crashed on both boots and the old summary read "0 PASS, 0 FAIL". Now any assertion, fatal
 # error or missing "WLQA END" fails the run, and the script exits 1.
+# NO NETWORK LISTENER: a player's session must hold no listening socket once it has settled. The engine's trace control
+# port (TCP 1985, every interface) opens on the first frame and the game closes it on the next (WonderlandBeta.cpp);
+# every boot is sampled about 28 s in (the world is up by ~17 s), and any listener the game still holds is a failure.
 param([Parameter(Mandatory = $true)][string]$Exe,
       [Parameter(Mandatory = $true)][string]$Out,
       [int]$TimeoutSeconds = 2400,
@@ -35,6 +39,23 @@ if ($SourceSkins) {
   $report
 }
 $script:Problems = @()
+$script:NetLines = @()
+
+function Test-Listeners([string]$Tag) {
+  # UNREAL INSIGHTS OPEN ON THIS PC makes the engine connect to it and start a trace worker thread, and the game then
+  # rightly leaves the trace port alone (a tester never runs Insights): the reading would say nothing about the build.
+  if (Get-Process UnrealInsights* -ErrorAction SilentlyContinue) { $script:NetLines += "QNET $Tag SKIPPED: Unreal Insights is open on this PC"; return }
+  # the real game process, not the bootstrap: the one under <package>\Wonderland\Binaries
+  $game = Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PkgDir*\Binaries\*" }
+  if (-not $game) { $script:NetLines += "QNET $Tag SKIPPED: the game process was not found"; return }
+  foreach ($g in $game) {
+    $tcp = @(Get-NetTCPConnection -OwningProcess $g.Id -State Listen -ErrorAction SilentlyContinue)
+    $udp = @(Get-NetUDPEndpoint -OwningProcess $g.Id -ErrorAction SilentlyContinue)
+    $desc = (($tcp | ForEach-Object { "tcp $($_.LocalAddress):$($_.LocalPort)" }) + ($udp | ForEach-Object { "udp $($_.LocalAddress):$($_.LocalPort)" })) -join ', '
+    if ($tcp.Count -eq 0 -and $udp.Count -eq 0) { $script:NetLines += "QNET $Tag PASS | pid $($g.Id): no listening socket" }
+    else { $script:NetLines += "QNET $Tag FAIL | pid $($g.Id) listens: $desc"; $script:Problems += "$Tag LISTENER" }
+  }
+}
 
 function Invoke-Boot([string]$ExecCmds, [int]$Limit, [string]$Tag) {
   $t0 = Get-Date
@@ -43,19 +64,22 @@ function Invoke-Boot([string]$ExecCmds, [int]$Limit, [string]$Tag) {
   "[$Tag] launched bootstrap pid $($p.Id) at $(Get-Date -Format HH:mm:ss): $ExecCmds"
   # the bootstrap exe hands off to the real game process under the package folder; wait for every one of them to end
   Start-Sleep -Seconds 20
+  $sampled = $false
   $deadline = (Get-Date).AddSeconds($Limit)
   while ((Get-Date) -lt $deadline) {
     $alive = Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PkgDir*" }
     if (-not $alive) { break }
+    if (-not $sampled -and ((Get-Date) - $t0).TotalSeconds -ge 28) { Test-Listeners $Tag; $sampled = $true }
     Start-Sleep -Seconds 5
   }
+  if (-not $sampled) { $script:NetLines += "QNET $Tag SKIPPED: the game ended before 28 s" }
   $left = Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PkgDir*" }
   if ($left) { "[$Tag] TIMEOUT after $Limit s: stopping $($left.Id -join ',')"; $left | Stop-Process -Force; $script:Problems += "$Tag TIMEOUT" }
   "[$Tag] game ended after $([int]((Get-Date) - $t0).TotalSeconds) s"
   $log = Get-ChildItem $UserDir -Recurse -Filter 'Wonderland.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if ($log) {
     Copy-Item $log.FullName (Join-Path $Out "Wonderland_$Tag.log") -Force
-    $lines = Select-String -Path $log.FullName -Pattern 'WLQA|WLBUILD|WLTRAVEL|WLDOG orbit stalled|LogWorldPartition: Display: .*Streaming|Fatal error|Assertion failed|Critical error|Unhandled Exception' | ForEach-Object { $_.Line }
+    $lines = Select-String -Path $log.FullName -Pattern 'WLQA|WLBUILD|WLBETA|WLSAVE|WLTASK the saved|WLCOMMANDS the saved|WLSKIN the remembered|WLTERRITORY skipped|WLTRAVEL|WLDOG orbit stalled|LogWorldPartition: Display: .*Streaming|Fatal error|Assertion failed|Critical error|Unhandled Exception' | ForEach-Object { $_.Line }
     $lines | Set-Content -Encoding utf8 (Join-Path $Out "wlqa_lines_$Tag.txt")
     $crash = $lines | Where-Object { $_ -match 'Fatal error|Assertion failed|Critical error|Unhandled Exception' } | Select-Object -First 1
     if ($crash) { "[$Tag] CRASH: $crash"; $script:Problems += "$Tag CRASH" }
@@ -63,7 +87,12 @@ function Invoke-Boot([string]$ExecCmds, [int]$Limit, [string]$Tag) {
   } else { "[$Tag] NO LOG under $UserDir"; $script:Problems += "$Tag NO LOG" }
 }
 
+$SaveGames = Join-Path $UserDir 'Saved\SaveGames'
+$Contracts = Join-Path $SaveGames 'WonderlandMissionContracts.sav'
+
 Invoke-Boot 'wl.Qa.PackageCheck' $TimeoutSeconds 'run1'
+# the first boot's sealed contracts, kept for the third boot to receive cut short
+if (Test-Path $Contracts) { Copy-Item $Contracts (Join-Path $Out 'run1_contracts.sav') -Force }
 # the second boot puts back the skin the package booted in, after checking the one the first boot chose
 $run1 = Join-Path $Out 'wlqa_lines_run1.txt'
 $bootSkin = 'relay_og'
@@ -73,21 +102,49 @@ if (Test-Path $run1) {
 }
 Invoke-Boot "wl.Qa.PackagePersist $bootSkin" 300 'run2'
 
+# THE THIRD BOOT'S FILES, CORRUPTED ON PURPOSE (private beta, R8 / R9). Each is a shape a disk error, a sync tool or a
+# hand edit can leave, and each crashed or misled the RC2 loaders:
+New-Item -ItemType Directory -Force $SaveGames | Out-Null
+New-Item -ItemType Directory -Force (Join-Path $UserDir 'Saved\Wonderland') | Out-Null
+$sealed = Join-Path $Out 'run1_contracts.sav'
+if (Test-Path $sealed) {
+  # 1. the first boot's sealed contracts, cut to 60% (a write that stopped), and a stale temporary beside them
+  $bytes = [System.IO.File]::ReadAllBytes($sealed)
+  [System.IO.File]::WriteAllBytes($Contracts, [byte[]]$bytes[0..([int]($bytes.Length * 0.6))])
+} else { $script:Problems += 'run1 left no contracts file to corrupt' }
+$rng = New-Object System.Random 1985
+$junk = New-Object byte[] 4096; $rng.NextBytes($junk)
+[System.IO.File]::WriteAllBytes("$Contracts.tmp", $junk)
+# 2. a command-presets file whose "class name" is 3,000 characters: no GVAS tag, so the engine's loader reads the name
+#    from byte 0 -- an int32 length, then the characters -- and made an FName of it (fatal past 1,023)
+$presets = New-Object System.Collections.Generic.List[byte]
+$presets.AddRange([BitConverter]::GetBytes([int32]3001))
+$presets.AddRange([byte[]](,65 * 3000)); $presets.Add(0)
+$tail = New-Object byte[] 1024; $rng.NextBytes($tail); $presets.AddRange($tail)
+[System.IO.File]::WriteAllBytes((Join-Path $SaveGames 'WonderlandCommandPresets.sav'), $presets.ToArray())
+# 3. a remembered skin id of 2,000 characters, and 4. a discoveries file with one good id and one 2,000-character line
+[System.IO.File]::WriteAllText((Join-Path $UserDir 'Saved\Wonderland\RelaySkin.txt'), ('x' * 2000))
+[System.IO.File]::WriteAllText((Join-Path $UserDir 'Saved\Wonderland\TerritoriesFound.txt'), "noctis`n" + ('z' * 2000) + "`n")
+"hostile files planted: contracts cut to 60% + .tmp, presets with a 3,000-character class name, a 2,000-character skin id, a 2,000-character territory line"
+Invoke-Boot 'wl.Qa.PackageHostile' 300 'run3'
+
 $all = @()
-foreach ($tag in 'run1', 'run2') {
+foreach ($tag in 'run1', 'run2', 'run3') {
   $f = Join-Path $Out "wlqa_lines_$tag.txt"
   if (Test-Path $f) { $all += Get-Content $f | Where-Object { $_ -match 'WLQA' } }
 }
 $all | Set-Content -Encoding utf8 (Join-Path $Out 'wlqa_lines.txt')
-$all | Where-Object { $_ -match 'WLQA (Q\S+ (PASS|FAIL)|END|BOOT|PERSIST|restored|ABORT)' }
-$pass = @($all | Where-Object { $_ -match 'WLQA Q\S+ PASS' }).Count
-$fail = @($all | Where-Object { $_ -match 'WLQA Q\S+ FAIL' }).Count
+$all | Where-Object { $_ -match 'WLQA (Q\S+ (PASS|FAIL)|END|BOOT|PERSIST|restored|ABORT|BEGIN hostile)' }
+$script:NetLines
+$script:NetLines | Set-Content -Encoding utf8 (Join-Path $Out 'qnet_lines.txt')
+$pass = @($all | Where-Object { $_ -match 'WLQA Q\S+ PASS' }).Count + @($script:NetLines | Where-Object { $_ -match 'QNET \S+ PASS' }).Count
+$fail = @($all | Where-Object { $_ -match 'WLQA Q\S+ FAIL' }).Count + @($script:NetLines | Where-Object { $_ -match 'QNET \S+ FAIL' }).Count
 $shots = Get-ChildItem $UserDir -Recurse -Directory -Filter 'WLQA' -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($shots) { Copy-Item (Join-Path $shots.FullName '*') $Out -Force; Get-ChildItem $Out -Filter *.png | ForEach-Object { "frame $($_.Name) $([int]($_.Length/1KB)) KB" } }
 if ($fail -gt 0) { $script:Problems += "$fail FAIL" }
 if ($pass -eq 0) { $script:Problems += 'NO CHECKS RAN' }
 if ($script:Problems.Count -gt 0) {
-  "TOTAL: $pass PASS, $fail FAIL (both boots) -- QA FAILED: $($script:Problems -join '; ')"
+  "TOTAL: $pass PASS, $fail FAIL (three boots) -- QA FAILED: $($script:Problems -join '; ')"
   exit 1
 }
-"TOTAL: $pass PASS, $fail FAIL (both boots) -- QA PASSED"
+"TOTAL: $pass PASS, $fail FAIL (three boots) -- QA PASSED"

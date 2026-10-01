@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstance.h"
+#include "WonderlandBeta.h"
 
 AWonderlandInstancedBatch::AWonderlandInstancedBatch()
 {
@@ -173,11 +174,18 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 		Instances->SetMaterial(0, MaterialAsset);
 		const UMaterialInterface* Bound = Instances->GetMaterial(0);
 		const bool bAgrees = (Bound == MaterialAsset);
-		UE_LOG(LogTemp, Warning,
-			   TEXT("WONDERLAND BATCH '%s': asked '%s', renders '%s'%s, %d pieces."),
-			   *BatchName.ToString(), *MaterialAsset->GetName(),
-			   Bound ? *Bound->GetName() : TEXT("NONE"),
-			   bAgrees ? TEXT("") : TEXT("  <-- MISMATCH"), Declared);
+		// A DEVELOPER'S INSTRUMENT, NOT A PLAYER'S LOG (private beta, Second Wonderland's RC2 review): a tester attaches
+		// this log to a bug report, and the per-batch and FORENSIC lines below were thousands of warnings in it. A
+		// mismatch is still logged for everyone.
+		const bool bDeveloper = WonderlandBeta::IsDeveloperSession();
+		if (bDeveloper || !bAgrees)
+		{
+			UE_LOG(LogTemp, Warning,
+				   TEXT("WONDERLAND BATCH '%s': asked '%s', renders '%s'%s, %d pieces."),
+				   *BatchName.ToString(), *MaterialAsset->GetName(),
+				   Bound ? *Bound->GetName() : TEXT("NONE"),
+				   bAgrees ? TEXT("") : TEXT("  <-- MISMATCH"), Declared);
+		}
 
 		// ---- FORENSIC TRACE, FROM THE COMPONENT THAT ACTUALLY RENDERS ----
 		//
@@ -202,7 +210,7 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 							 || BN.Contains(TEXT("foliage"))
 							 || BN.Contains(TEXT("gold"))
 							 || BN.Contains(TEXT("stone"));
-		if (bTraceThis)
+		if (bTraceThis && bDeveloper)
 		{
 			const int32 NumSlots = Instances->GetNumMaterials();
 			const UStaticMesh* SM = Instances->GetStaticMesh();

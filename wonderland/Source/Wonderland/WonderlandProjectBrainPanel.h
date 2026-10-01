@@ -13,7 +13,7 @@
 //
 // IT SAYS WHAT IT IS. Everything drawn comes from UWonderlandProjectBrainSubsystem's presentation model; in the
 // development preview that is sample data and the panel says so at the top. Additions and review decisions are
-// proposals, recorded in this session and marked NOT SYNCED.
+// proposals, recorded in this session only and marked NOT SAVED.
 #pragma once
 
 #include "CoreMinimal.h"

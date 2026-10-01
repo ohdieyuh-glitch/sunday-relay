@@ -87,6 +87,15 @@ if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE" }
 $look = Join-Path $dst 'Wonderland\WorldDesign\Look'
 if (Test-Path $look) { Get-ChildItem $look -File | Where-Object { $_.Name -ne 'practical_lights.json' } | Remove-Item -Force }
+# AND THE ENGINE'S DEVELOPER TOOLS a DirectX 12 game never loads (Second Wonderland's RC2 audit): the Vulkan debugging
+# layers (api_dump, validation, gfxreconstruct ...; about 40 MB, loaded only by a Vulkan debug session), the GPU dump
+# viewer, and the ARM64 runtime installer beside an x64 build.
+$vkLayers = Join-Path $dst 'Engine\Binaries\ThirdParty\Vulkan\Win64'
+if (Test-Path $vkLayers) { Get-ChildItem $vkLayers -File | Where-Object { $_.Name -like 'VkLayer_*' } | Remove-Item -Force }
+$gpuDump = Join-Path $dst 'Engine\Extras\GPUDumpViewer'
+if (Test-Path $gpuDump) { Remove-Item -Recurse -Force $gpuDump }
+$arm64 = Join-Path $dst 'Engine\Extras\Redist\en-us\vc_redist.arm64.exe'
+if (Test-Path $arm64) { Remove-Item -Force $arm64 }
 
 # 4. an installed build: saves and logs go to %LOCALAPPDATA%\Wonderland\Saved
 New-Item -ItemType Directory -Force (Join-Path $dst 'Engine\Build') | Out-Null
@@ -110,16 +119,20 @@ WHAT THIS BETA DOES NOT INCLUDE
 
 REQUIREMENTS
 - Windows 10 or 11, 64-bit
-- A DirectX 12 graphics card; 8 GB of video memory recommended
-- 16 GB of RAM recommended
+- 16 GB of RAM. Wonderland itself uses about 7 GB at EPIC quality.
+- A DirectX 12 graphics card with at least 6 GB of video memory (8 GB recommended); Wonderland uses about 4 GB at EPIC.
 - About 2 GB of free disk space
+- Keyboard and mouse. Gamepads are not supported in this beta.
 
 INSTALL AND RUN
-1. Unzip the whole folder somewhere you can write to, for example your Desktop or Documents.
+1. Unzip the whole folder to a folder of its own that is not synced by OneDrive, for example C:\Games\Wonderland.
 2. Double-click Wonderland.exe. The first start can take a minute.
-3. Windows may ask whether to allow Wonderland on public and private networks. The beta does not need the network;
-   you can click Cancel. (The engine opens a developer diagnostics port that this build cannot switch off.)
-4. If Windows reports a missing VCRUNTIME140.dll or MSVCP140.dll, run Engine\Extras\Redist\en-us\vc_redist.x64.exe
+3. The beta's files are not code-signed yet, so Windows may show "Windows protected your PC". Click "More info",
+   then "Run anyway".
+4. Windows may ask whether to allow Wonderland on public and private networks. Please click Cancel: Wonderland does
+   not use the network. The request comes from a diagnostics feature of the game engine, which this build switches
+   off right after it starts.
+5. If Windows reports a missing VCRUNTIME140.dll or MSVCP140.dll, run Engine\Extras\Redist\en-us\vc_redist.x64.exe
    once from this folder, then start Wonderland again.
 
 CONTROLS
@@ -132,6 +145,14 @@ Esc / Tab  the menu: settings, colours, how to play, quit.
 SETTINGS
 Menu > SETTINGS: quality, window mode, resolution scale, frame-rate limit and hardware ray tracing.
 If the world stutters, or your PC runs short of memory, lower QUALITY or RESOLUTION SCALE.
+A laptop without a separate graphics card (integrated graphics only): choose QUALITY LOW before you explore. LOW
+roughly halves the memory Wonderland uses.
+
+GOOD TO KNOW
+- Your skin, colours, settings, discovered places and Mission Contracts are saved on this PC.
+- The Pixel Canvas in Wonder Web and the Project Brain's entries are samples. What you paint, and the changes you
+  propose in the Project Brain, are kept until you quit, not saved.
+- If your Relay Dog ever disappears, press Esc, choose QUIT WONDERLAND, and start the game again.
 
 YOUR SAVES AND LOG
 %LOCALAPPDATA%\Wonderland\Saved      (paste it into the File Explorer address bar)
@@ -139,7 +160,10 @@ Logs\Wonderland.log there is the log of your last session.
 
 REPORTING A PROBLEM
 Say what you did and what happened, copy the build line from the bottom of the menu, and attach
-%LOCALAPPDATA%\Wonderland\Saved\Logs\Wonderland.log.
+%LOCALAPPDATA%\Wonderland\Saved\Logs\Wonderland.log. If the game crashed, also attach the newest folder in
+%LOCALAPPDATA%\Wonderland\Saved\Crashes.
+The log names your Windows user name and computer name, and shows folder paths that contain your user name. Open it
+in Notepad first if you would rather replace those before you send it.
 
 UNINSTALL
 Delete this folder and %LOCALAPPDATA%\Wonderland.
@@ -169,7 +193,7 @@ $manifest = @(
   "zip_bytes    $((Get-Item $zip).Length) ($([math]::Round((Get-Item $zip).Length / 1GB, 2)) GB)",
   "zip_sha256   $hash",
   "prereqs      vc_redist.x64.exe staged; VC++ runtime app-local beside Wonderland\Binaries\Win64\Wonderland.exe",
-  "excluded     Saved/, *.pdb, RelaySkins/_reference, RelaySkins/_previous, ProjectAvatars/_old, .gitignore, Manifest_*.txt, WorldDesign/Look records but practical_lights.json",
+  "excluded     Saved/, *.pdb, RelaySkins/_reference, RelaySkins/_previous, ProjectAvatars/_old, .gitignore, Manifest_*.txt, WorldDesign/Look records but practical_lights.json, Vulkan VkLayer_* debug layers, Engine/Extras/GPUDumpViewer, vc_redist.arm64.exe",
   "installed    Engine/Build/InstalledProjectBuild.txt (saves and logs in %LOCALAPPDATA%\Wonderland\Saved)"
 )
 $manifest | Set-Content -Encoding utf8 (Join-Path $ReleaseRoot "RELEASE_MANIFEST_$Version.txt")

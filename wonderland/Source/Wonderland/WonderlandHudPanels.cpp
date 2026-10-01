@@ -846,27 +846,24 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeSettingsPage()
 
 	Page->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)
 	[
+		// TWO MODES, NOT THREE (private beta, Second Wonderland's RC2 matrix): exclusive FULLSCREEN asked the display for
+		// the game's own resolution, 1536x960 on this DPI-scaled laptop, a mode the panel does not have, and came up as a
+		// 640x480 popup in the corner. BORDERLESS covers the screen without changing the display at all.
 		MakeChoiceRow(TEXT("WINDOW"), TEXT("BORDERLESS fills the screen and lets you switch apps quickly."),
-			{ TEXT("FULLSCREEN"), TEXT("BORDERLESS"), TEXT("WINDOWED") },
+			{ TEXT("BORDERLESS"), TEXT("WINDOWED") },
 			[]()
 			{
 				const UGameUserSettings* Settings = User();
 				if (Settings == nullptr) { return -1; }
-				switch (Settings->GetFullscreenMode())
-				{
-				case EWindowMode::Fullscreen:         return 0;
-				case EWindowMode::WindowedFullscreen: return 1;
-				default:                              return 2;
-				}
+				return Settings->GetFullscreenMode() == EWindowMode::Windowed ? 1 : 0;
 			},
 			[](int32 Choice)
 			{
 				if (UGameUserSettings* Settings = User())
 				{
-					static const EWindowMode::Type Modes[] = { EWindowMode::Fullscreen, EWindowMode::WindowedFullscreen, EWindowMode::Windowed };
-					Settings->SetFullscreenMode(Modes[FMath::Clamp(Choice, 0, 2)]);
+					Settings->SetFullscreenMode(Choice == 1 ? EWindowMode::Windowed : EWindowMode::WindowedFullscreen);
 					Commit(Settings);
-					UE_LOG(LogTemp, Display, TEXT("WLSETTINGS window mode %d"), Choice);
+					UE_LOG(LogTemp, Display, TEXT("WLSETTINGS window mode %s"), Choice == 1 ? TEXT("WINDOWED") : TEXT("BORDERLESS"));
 				}
 			})
 	];

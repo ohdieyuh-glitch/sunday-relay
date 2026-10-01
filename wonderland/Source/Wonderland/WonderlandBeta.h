@@ -25,6 +25,8 @@
 #include "CoreMinimal.h"
 
 class APlayerController;
+class UClass;
+class USaveGame;
 
 namespace WonderlandBeta
 {
@@ -40,7 +42,11 @@ namespace WonderlandBeta
 	 */
 	WONDERLAND_API const FString& BuildLabel();
 
-	/** Switches set once per game instance, before the first world exists: no Gameplay Debugger in a player's session. */
+	/**
+	 * Switches set once per game instance, before the first world exists: no Gameplay Debugger in a player's session, and
+	 * no network listener -- the engine's trace control port (TCP 1985 on every interface, unauthenticated) is closed
+	 * one frame after the engine opens it.
+	 */
 	WONDERLAND_API void ApplyPlayerSessionSwitches();
 
 	/** Takes the console's activation keys and the engine's debug key bindings away from a player's session. */
@@ -48,6 +54,13 @@ namespace WonderlandBeta
 
 	/** "Wonderland — <build label>" on the game window, so every screenshot and bug report names its build. */
 	WONDERLAND_API void StampWindowTitle();
+
+	/**
+	 * A saved EXCLUSIVE fullscreen comes back as borderless. Exclusive mode asks the display for the game's resolution,
+	 * which on a DPI-scaled laptop is a mode the panel does not have: it came up as a 640x480 popup (Second Wonderland,
+	 * RC2). Settings no longer offers it; this carries a profile that chose it forward.
+	 */
+	WONDERLAND_API void MigrateWindowMode();
 
 	/**
 	 * A WHOLE FILE OR NOTHING: written to a temporary beside it, then swapped over it in one atomic step (MoveFileExW,
@@ -59,6 +72,27 @@ namespace WonderlandBeta
 
 	/** Discards a temporary left by a write that never completed (it may be half a file); the real save is untouched. */
 	WONDERLAND_API void RecoverInterruptedSave(const FString& Path);
+
+	/**
+	 * A SAVE GAME, SEALED. The engine's loader (UGameplayStatics::LoadGameFromMemory) reads a class path and then the
+	 * object's properties straight out of the bytes, with no bounds check before it makes names of them: a corrupted file
+	 * -- a disk error, a sync tool, a hand edit -- can ask for a name thousands of characters long, which is fatal in this
+	 * build, on EVERY launch until someone finds and deletes the file. So what this build writes carries a seal after the
+	 * bytes (a tag, their length and their CRC-32), and a file whose seal does not hold is never handed to the loader.
+	 * Written atomically, like every save here.
+	 */
+	WONDERLAND_API bool SaveSealedGame(USaveGame* Save, const FString& Path);
+
+	/**
+	 * The save at Path, when its seal holds and it is an Expected. A file written before saves were sealed is read only
+	 * in a DEVELOPER'S session, and only if its header names Expected; the next save seals it. A player's build refuses
+	 * every unsealed file. Anything refused is nullptr with OutWhy saying why -- and a missing file is nullptr with OutWhy
+	 * empty.
+	 */
+	WONDERLAND_API USaveGame* LoadSealedGame(const FString& Path, UClass* Expected, FString& OutWhy);
+
+	/** Moves a refused save beside itself as <name>.refused-<UTC><ext>, so the next save cannot overwrite it; the new path, or empty. */
+	WONDERLAND_API FString SetAsideRefusedSave(const FString& Path);
 
 	/**
 	 * A short identifier safe to turn into an FName: 1-64 characters of letters, digits, '_', '-' and '.'. A longer or

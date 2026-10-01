@@ -42,10 +42,14 @@
 #include "Misc/App.h"
 #include "UObject/UObjectArray.h"
 #include "WonderlandBeta.h"
+#include "WonderlandCommandPresets.h"
 #include "WonderlandJuliusConnect.h"
 #include "WonderlandPracticalLights.h"
+#include "WonderlandRelaySkins.h"
 #include "WonderlandSidekicks.h"
+#include "WonderlandTerritory.h"
 #include "EngineUtils.h"
+#include "Misc/FileHelper.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandQa, Log, All);
 
@@ -80,6 +84,10 @@ namespace
 		// the second boot: check what the first one saved, then put the boot skin back
 		bool bPersist = false;
 		FString RestoreSkin;
+		// the third boot: start on files the QA script corrupted on purpose (wl.Qa.PackageHostile)
+		bool bHostile = false;
+		// the simulated mission the Missions panel plays (Q17)
+		bool bScenarioStarted = false;
 		// a Mission Contract being sampled
 		TMap<FString, FQaActSamples> Acts;
 		bool bContractSeen = false;
@@ -583,6 +591,85 @@ namespace
 		return true;
 	}
 
+	/**
+	 * THE THIRD BOOT, ON FILES CORRUPTED ON PURPOSE (private beta, R8 / R9). boot_test_package_qa.ps1 plants, before it:
+	 * the first boot's sealed contracts file cut short, with a stale .tmp beside it; a command-presets file whose "class
+	 * name" is 3,000 characters long (the old loader made an FName of it -- fatal, on every start); a 2,000-character skin
+	 * id; and a discoveries file holding one good id and one 2,000-character line. The game must start, set the bad files
+	 * aside or skip the bad lines, keep the good one, and seal the next save it writes.
+	 */
+	bool HostileTick(FQaRun& Run, UWorld* World)
+	{
+		const double In = QaNow() - Run.StepStart;
+		if (Run.Step == 0 && In >= 12.0)
+		{
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLQA BEGIN hostile saves"));
+			IFileManager& Files = IFileManager::Get();
+			const FString ContractsPath = UWonderlandMissionTaskSubsystem::SlotPath();
+			const FString SaveDir = FPaths::GetPath(ContractsPath);
+			TArray<FString> RefusedContracts;
+			Files.FindFiles(RefusedContracts, *(SaveDir / TEXT("WonderlandMissionContracts.refused-*.sav")), /*Files*/ true, /*Directories*/ false);
+			TArray<FString> RefusedPresets;
+			Files.FindFiles(RefusedPresets, *(SaveDir / TEXT("WonderlandCommandPresets.refused-*.sav")), /*Files*/ true, /*Directories*/ false);
+			const UWonderlandMissionTaskSubsystem* Set = UWonderlandUiTestLibrary::GetMissionTasks(World);
+			const bool bTmpGone = !Files.FileExists(*(ContractsPath + TEXT(".tmp")));
+			const bool bCutGone = !Files.FileExists(*ContractsPath);
+			QaCheck(Run, TEXT("Q21.1"), Set != nullptr && Set->NumContracts() == 0 && RefusedContracts.Num() == 1 && bCutGone && bTmpGone,
+				FString::Printf(TEXT("a cut-short contracts file: %d restored (want 0), %d set aside (want 1), original %s, stale .tmp %s"),
+					Set != nullptr ? Set->NumContracts() : -1, RefusedContracts.Num(), bCutGone ? TEXT("moved") : TEXT("STILL THERE"),
+					bTmpGone ? TEXT("discarded") : TEXT("STILL THERE")));
+
+			UGameInstance* Instance = World->GetGameInstance();
+			const UWonderlandCommandPresetSubsystem* Presets = Instance != nullptr ? Instance->GetSubsystem<UWonderlandCommandPresetSubsystem>() : nullptr;
+			const FString FirstLayout = Presets != nullptr && Presets->GetLayoutCount() > 0 ? Presets->GetLayoutName(0) : FString(TEXT("?"));
+			QaCheck(Run, TEXT("Q21.2"), Presets != nullptr && RefusedPresets.Num() == 1 && Presets->GetLayoutCount() == 1 && FirstLayout == TEXT("DEFAULT"),
+				FString::Printf(TEXT("a presets file with a 3,000-character class name: %d set aside (want 1); %d layout(s), the first '%s' (want DEFAULT)"),
+					RefusedPresets.Num(), Presets != nullptr ? Presets->GetLayoutCount() : -1, *FirstLayout));
+
+			const UWonderlandRelaySkinSubsystem* Skins = Instance != nullptr ? Instance->GetSubsystem<UWonderlandRelaySkinSubsystem>() : nullptr;
+			const ARelayDogCharacter* D = QaDog(World);
+			const FName Equipped = Skins != nullptr ? Skins->GetEquippedSkinId() : NAME_None;
+			const FName Worn = D != nullptr ? D->GetWornSkinId() : NAME_None;
+			QaCheck(Run, TEXT("Q21.3"), Equipped == FName(TEXT("relay_og")) && Worn == FName(TEXT("relay_og")),
+				FString::Printf(TEXT("a 2,000-character remembered skin id: equipped %s, worn %s (want relay_og)"), *Equipped.ToString(), *Worn.ToString()));
+
+			const UWonderlandTerritorySubsystem* Territory = World->GetSubsystem<UWonderlandTerritorySubsystem>();
+			const bool bGoodKept = Territory != nullptr && Territory->IsDiscovered(FName(TEXT("noctis")));
+			QaCheck(Run, TEXT("Q21.4"), bGoodKept,
+				FString::Printf(TEXT("a discoveries file with a 2,000-character line: the good line (noctis) %s; %d discovered"),
+					bGoodKept ? TEXT("kept") : TEXT("LOST"), Territory != nullptr ? Territory->GetDiscoveredCount() : -1));
+			QaNextStep(Run);
+		}
+		else if (Run.Step == 1)
+		{
+			// AND THE NEXT SAVE IS SEALED: a contract through the terminal, read back as bytes, then deleted again
+			UWonderlandUiSubsystem* U = QaUi(World);
+			UWonderlandMissionTaskSubsystem* Set = UWonderlandUiTestLibrary::GetMissionTasks(World);
+			bool bSealed = false;
+			int32 Made = -1;
+			if (U != nullptr && Set != nullptr)
+			{
+				U->PressAddTaskForQa();
+				U->SubmitTerminalLine(TEXT("QA contract after a refused file: is it saved sealed?"));
+				Made = Set->NumContracts();
+				TArray<uint8> Bytes;
+				if (FFileHelper::LoadFileToArray(Bytes, *UWonderlandMissionTaskSubsystem::SlotPath()) && Bytes.Num() > 16)
+				{
+					bSealed = FMemory::Memcmp(Bytes.GetData() + Bytes.Num() - 16, "WLSEAL01", 8) == 0;
+				}
+				U->SubmitTerminalLine(TEXT("/tasks delete 1"));
+			}
+			QaCheck(Run, TEXT("Q21.5"), Made == 1 && bSealed && Set != nullptr && Set->NumContracts() == 0,
+				FString::Printf(TEXT("after the refusal a new contract is written (%d) and saved sealed: %s; deleted again, %d left"),
+					Made, bSealed ? TEXT("yes") : TEXT("NO"), Set != nullptr ? Set->NumContracts() : -1));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLQA END pass=%d fail=%d"), Run.Pass, Run.Fail);
+			GQaRun.Reset();
+			GEngine->Exec(World, TEXT("quit"));
+			return false;
+		}
+		return true;
+	}
+
 	bool QaTick(float)
 	{
 		if (!GQaRun.IsValid())
@@ -600,6 +687,10 @@ namespace
 		if (Run.bPersist)
 		{
 			return PersistTick(Run, World);
+		}
+		if (Run.bHostile)
+		{
+			return HostileTick(Run, World);
 		}
 		UWonderlandUiSubsystem* U = QaUi(World);
 		const double In = QaNow() - Run.StepStart;
@@ -926,7 +1017,103 @@ namespace
 			}
 			break;
 		}
-		case 13: // leave a colour and a skin chosen for the second boot to find (wl.Qa.PackagePersist), and quit
+		case 13: // THE BETA'S OTHER PLAYER PATHS (private beta, RC3): the simulated mission, /pa, bad input, the contract limit
+		{
+			UWonderlandMissionTaskSubsystem* Set = UWonderlandUiTestLibrary::GetMissionTasks(World);
+			UWonderlandMissionSubsystem* Missions = UWonderlandUiTestLibrary::GetMission(World);
+			if (U == nullptr || Set == nullptr || Missions == nullptr)
+			{
+				QaCheck(Run, TEXT("Q17"), false, TEXT("no UI, task set or mission subsystem"));
+				QaNextStep(Run);
+				break;
+			}
+			if (Run.Sub == 0)
+			{
+				// Q17 (B18): the call the Missions panel's WATCH A SIMULATED MISSION button makes -- Scenario D, ten
+				// seconds an event -- and every surface keeps saying SIMULATED while it plays
+				Run.bScenarioStarted = Missions->PlayScenario(FName(TEXT("D")), 10.0f);
+				Run.Sub = 1;
+			}
+			else if (Run.Sub == 1 && In >= 4.0)
+			{
+				const FString Badge = Missions->GetProvenanceBadge();
+				const FString Banner = Missions->GetProvenanceBanner();
+				const bool bRunning = Missions->IsFixtureRunning();
+				const bool bSaysSimulated = Badge.Contains(TEXT("SIMULATED")) || Banner.Contains(TEXT("SIMULATED"));
+				QaFrame(Run, TEXT("07_simulated_mission"));
+				QaCheck(Run, TEXT("Q17"), Run.bScenarioStarted && bRunning && bSaysSimulated && Missions->IsDevelopmentPreview(),
+					FString::Printf(TEXT("the Missions panel's simulated mission: started %s, playing %s, badge '%s', banner '%s'"),
+						Run.bScenarioStarted ? TEXT("yes") : TEXT("NO"), bRunning ? TEXT("yes") : TEXT("NO"), *Badge, *Banner.Left(120)));
+				Missions->StopFixture();
+				Run.Sub = 2;
+			}
+			else if (Run.Sub == 2 && In >= 6.0)
+			{
+				// Q18 (B08): /pa is the founder's showcase of ~95,000 boxes; in a player's session it changes nothing
+				int32 Before = 0;
+				for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+				{
+					++Before;
+				}
+				U->SubmitTerminalLine(TEXT("/pa"));
+				int32 After = 0;
+				for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+				{
+					++After;
+				}
+				QaCheck(Run, TEXT("Q18"), !WonderlandBeta::IsDeveloperSession() && After == Before,
+					FString::Printf(TEXT("/pa in a player's session: %d figures before, %d after (want no change)"), Before, After));
+
+				// Q19 (R9): bad input through the terminal changes nothing and crashes nothing
+				const int32 ContractsBefore = Set->NumContracts();
+				const ARelayDogCharacter* D = QaDog(World);
+				const FName WornBefore = D != nullptr ? D->GetWornSkinId() : NAME_None;
+				U->SubmitTerminalLine(TEXT("/tasks delete 3abc"));
+				U->SubmitTerminalLine(TEXT("/tasks delete 99"));
+				U->SubmitTerminalLine(TEXT("/tasks delete -1"));
+				U->SubmitTerminalLine(TEXT("/skin ") + FString::ChrN(2000, TEXT('x')));
+				U->SubmitTerminalLine(TEXT("/skin ../../Saved/elsewhere"));
+				U->SubmitTerminalLine(FString::ChrN(5000, TEXT('y')));
+				const FName WornAfter = D != nullptr ? D->GetWornSkinId() : NAME_None;
+				QaCheck(Run, TEXT("Q19"), Set->NumContracts() == ContractsBefore && WornAfter == WornBefore,
+					FString::Printf(TEXT("bad terminal input (/tasks delete 3abc / 99 / -1, a 2,000-character and a path-like /skin, a 5,000-character line): contracts %d -> %d, skin %s -> %s (want no change)"),
+						ContractsBefore, Set->NumContracts(), *WornBefore.ToString(), *WornAfter.ToString()));
+				Run.Sub = 3;
+			}
+			else if (Run.Sub == 3)
+			{
+				// Q20 (B04): the record keeps GetContractLimit() contracts, refuses the next one and says so, and the
+				// extra ones delete back down to the eight Q13 wrote, for the restart check
+				const int32 Limit = Set->GetContractLimit();
+				for (int32 Guard = 0; Guard < 100 && Set->NumContracts() < Limit; ++Guard)
+				{
+					U->PressAddTaskForQa();
+					U->SubmitTerminalLine(FString::Printf(TEXT("QA limit contract %d"), Set->NumContracts() + 1));
+					if (const FWonderlandMissionTask* Made = Set->GetSelectedTask())
+					{
+						Set->CloseFromWorkspace(Made->LocalId);
+					}
+				}
+				const int32 AtLimit = Set->NumContracts();
+				U->PressAddTaskForQa();
+				U->SubmitTerminalLine(TEXT("QA contract over the limit"));
+				const int32 Over = Set->NumContracts();
+				if (const FWonderlandMissionTask* Left = Set->GetSelectedTask())
+				{
+					Set->CloseFromWorkspace(Left->LocalId);
+				}
+				for (int32 Guard = 0; Guard < 100 && Set->NumContracts() > 8; ++Guard)
+				{
+					U->SubmitTerminalLine(TEXT("/tasks delete 9"));
+				}
+				QaCheck(Run, TEXT("Q20"), AtLimit == Limit && Over == Limit && Set->NumContracts() == 8 && !Set->DidLastSaveFail(),
+					FString::Printf(TEXT("the contract limit: %d kept (want %d), the next refused (%d after it), deleted back to %d (want 8), last save %s"),
+						AtLimit, Limit, Over, Set->NumContracts(), Set->DidLastSaveFail() ? TEXT("FAILED") : TEXT("ok")));
+				QaNextStep(Run);
+			}
+			break;
+		}
+		case 14: // leave a colour and a skin chosen for the second boot to find (wl.Qa.PackagePersist), and quit
 			if (Run.Sub == 0)
 			{
 				GEngine->Exec(World, TEXT("wl.Skins.Wear jack_flame"));
@@ -953,7 +1140,7 @@ namespace
 		return true;
 	}
 
-	void ArmQa(UWorld* World, bool bPersist, const FString& RestoreSkin)
+	void ArmQa(UWorld* World, bool bPersist, const FString& RestoreSkin, bool bHostile = false)
 	{
 		if (GQaRun.IsValid())
 		{
@@ -964,6 +1151,7 @@ namespace
 		GQaRun->World = World;
 		GQaRun->StepStart = QaNow();
 		GQaRun->bPersist = bPersist;
+		GQaRun->bHostile = bHostile;
 		GQaRun->bWelcomeSeenAtBoot = WonderlandBeta::HasSeenWelcome();
 		UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF startup %.1f s from engine start to the QA armed in a loaded world"),
 			FPlatformTime::Seconds() - GStartTime);
@@ -992,6 +1180,15 @@ namespace
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			ArmQa(World, true, Args.Num() > 0 ? Args[0] : FString(TEXT("relay_og")));
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GQaPackageHostile(
+		TEXT("wl.Qa.PackageHostile"),
+		TEXT("The third boot, on save files boot_test_package_qa.ps1 corrupted on purpose: does the game start, set the bad ")
+		TEXT("files aside, skip the bad lines, keep the good one, and seal the next save it writes? Then quit."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			ArmQa(World, false, FString(), true);
 		}));
 
 	/* ================================================================ wl.Qa.Perf and wl.Qa.Soak (private beta, R10 / R11 / R14)

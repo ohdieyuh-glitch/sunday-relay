@@ -10,7 +10,9 @@ param([Parameter(Mandatory = $true)][string]$Exe,
       [ValidateSet('perf', 'soak')][string]$Mode = 'perf',
       [int]$Minutes = 30,
       [int]$SampleSeconds = 5,
-      [string]$UserDir = '')
+      [string]$UserDir = '',
+      # the game's OWN first-launch window (no -windowed / -ResX / -ResY): what a tester actually gets
+      [switch]$DefaultWindow)
 $Root = Split-Path $Exe -Parent
 $PkgDir = Split-Path $Root -Parent
 New-Item -ItemType Directory -Force $Out | Out-Null
@@ -28,7 +30,8 @@ $csv = Join-Path $Out "process_$Mode.csv"
 'seconds,working_set_mb,private_mb,gpu_dedicated_mb,machine_free_mb' | Set-Content -Encoding utf8 $csv
 
 $t0 = Get-Date
-$argList = '-windowed -ResX=1920 -ResY=1200 -nosound -log -userdir="' + $UserDir + '" -ExecCmds="' + $cmd + '"'
+$window = if ($DefaultWindow) { '' } else { '-windowed -ResX=1920 -ResY=1200 ' }
+$argList = $window + '-nosound -log -userdir="' + $UserDir + '" -ExecCmds="' + $cmd + '"'
 $p = Start-Process -FilePath $Exe -ArgumentList $argList -PassThru
 "[$Mode] launched $($p.Id) at $(Get-Date -Format HH:mm:ss): $cmd (saved folder $Saved)"
 Start-Sleep -Seconds 10

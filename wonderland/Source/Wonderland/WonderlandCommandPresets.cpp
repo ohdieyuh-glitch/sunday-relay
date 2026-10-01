@@ -1,6 +1,8 @@
 #include "WonderlandCommandPresets.h"
 
 #include "Kismet/GameplayStatics.h"
+#include "Misc/Paths.h"
+#include "WonderlandBeta.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandCommands, Log, All);
 
@@ -9,6 +11,12 @@ namespace WonderlandCommandPresetDetail
 {
 	const TCHAR* const SaveSlot = TEXT("WonderlandCommandPresets");
 	const int32 SaveUser = 0;
+
+	/** The generic save system's own path for the slot, written and read here as a sealed file (WonderlandBeta). */
+	FString SlotPath()
+	{
+		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("SaveGames"), FString(SaveSlot) + TEXT(".sav"));
+	}
 }
 
 const FWonderlandCommandDefinition* UWonderlandCommandSettings::FindCommand(FName Id) const
@@ -238,14 +246,22 @@ void UWonderlandCommandPresetSubsystem::Load()
 {
 	Layouts.Reset();
 	ActiveLayout = 0;
-	if (UGameplayStatics::DoesSaveGameExist(WonderlandCommandPresetDetail::SaveSlot, WonderlandCommandPresetDetail::SaveUser))
+	// A SEALED FILE OR THE DEFAULT LAYOUT (private beta). The engine's loader trusts the bytes it reads, so a corrupted
+	// layouts file could crash every start; one whose seal does not hold is set aside and the default layout is used.
+	const FString Path = WonderlandCommandPresetDetail::SlotPath();
+	WonderlandBeta::RecoverInterruptedSave(Path);
+	FString Why;
+	if (const UWonderlandCommandPresetSave* Save = Cast<UWonderlandCommandPresetSave>(
+		WonderlandBeta::LoadSealedGame(Path, UWonderlandCommandPresetSave::StaticClass(), Why)))
 	{
-		if (const UWonderlandCommandPresetSave* Save = Cast<UWonderlandCommandPresetSave>(
-			UGameplayStatics::LoadGameFromSlot(WonderlandCommandPresetDetail::SaveSlot, WonderlandCommandPresetDetail::SaveUser)))
-		{
-			Layouts = Save->Layouts;
-			ActiveLayout = Save->ActiveLayout;
-		}
+		Layouts = Save->Layouts;
+		ActiveLayout = Save->ActiveLayout;
+	}
+	else if (!Why.IsEmpty())
+	{
+		const FString Aside = WonderlandBeta::SetAsideRefusedSave(Path);
+		UE_LOG(LogWonderlandCommands, Warning, TEXT("WLCOMMANDS the saved layouts could not be used (%s); set aside as %s; using the default layout"),
+			*Why, Aside.IsEmpty() ? TEXT("(the move FAILED)") : *Aside);
 	}
 	for (FWonderlandCommandLayout& Layout : Layouts)
 	{
@@ -272,7 +288,8 @@ void UWonderlandCommandPresetSubsystem::Changed()
 	{
 		Save->Layouts = Layouts;
 		Save->ActiveLayout = ActiveLayout;
-		if (!UGameplayStatics::SaveGameToSlot(Save, WonderlandCommandPresetDetail::SaveSlot, WonderlandCommandPresetDetail::SaveUser))
+		// Whole and sealed, like every save the beta writes: SaveGameToSlot truncated the file in place.
+		if (!WonderlandBeta::SaveSealedGame(Save, WonderlandCommandPresetDetail::SlotPath()))
 		{
 			UE_LOG(LogWonderlandCommands, Warning, TEXT("WLCOMMANDS layout not saved; it holds for this session only"));
 		}

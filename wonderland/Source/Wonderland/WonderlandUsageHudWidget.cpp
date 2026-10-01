@@ -14,6 +14,7 @@
 #include "WonderlandUsagePreview.h"
 #include "WonderlandCompanionSubsystem.h"
 #include "WonderlandUsageSubsystem.h"
+#include "WonderlandBeta.h"
 
 namespace
 {
@@ -95,7 +96,9 @@ namespace
 	{
 		if (IsPreview(Authority))
 		{
-			return TEXT("DEVELOPMENT PREVIEW · NOT JULIUS USAGE");
+			// In a player's session the preview's caption says plainly that nothing is connected (Second Wonderland, RC2).
+			return WonderlandBeta::IsDeveloperSession() ? TEXT("DEVELOPMENT PREVIEW · NOT JULIUS USAGE")
+				: TEXT("NOT CONNECTED IN THIS BETA · NO USAGE MEASURED");
 		}
 		switch (Authority.Reading)
 		{
@@ -271,6 +274,20 @@ void UWonderlandUsageHudWidget::RebuildBands()
 			const FWonderlandSwooshSample Tip = CompanionSampler->Sample(Plan.RemainderFraction);
 			CompanionTip = FVector2D(Tip.X, Tip.Y);
 			bCompanionTipVisible = true;
+		}
+	}
+
+	// THE PREVIEW'S FIGURES ARE NOT SHOWN TO A PLAYER (private beta, Second Wonderland's RC2 review): a stranger reads
+	// "100%" as a measurement. The arcs keep the composition the founder locked; the figure beside each name is a dash,
+	// because nothing in this build measures anything.
+	if (bPreviewReading && !WonderlandBeta::IsDeveloperSession())
+	{
+		for (FString* Percent : { &CompoundPercent, &SinglePercent, &CompanionPercent })
+		{
+			if (!Percent->IsEmpty())
+			{
+				*Percent = TEXT("—");
+			}
 		}
 	}
 }

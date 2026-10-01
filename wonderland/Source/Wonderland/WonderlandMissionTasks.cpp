@@ -288,11 +288,10 @@ bool UWonderlandMissionTaskSubsystem::SaveContracts() const
 	}
 	// A WHOLE FILE OR NOTHING (private beta, B24). SaveGameToSlot truncates the slot and writes it in place, so a
 	// process killed mid-write -- this laptop's low-memory reaper -- left a truncated file that restored PART of the
-	// set. The bytes are serialised here and moved over the slot in one step; the generic save system reads them back
-	// from the same path (Saved/SaveGames/<slot>.sav).
-	TArray<uint8> Bytes;
-	bool bWrote = UGameplayStatics::SaveGameToMemory(Save, Bytes)
-		&& WonderlandBeta::SaveBytesAtomically(SlotPath(), Bytes);
+	// set. The bytes are serialised here and moved over the slot in one step, at the generic save system's own path
+	// (Saved/SaveGames/<slot>.sav). AND SEALED: a file corrupted afterwards is set aside at the next start instead of
+	// crashing it (WonderlandBeta::SaveSealedGame).
+	const bool bWrote = WonderlandBeta::SaveSealedGame(Save, SlotPath());
 	bLastSaveFailed = !bWrote;
 	if (!bWrote)
 	{
@@ -336,7 +335,9 @@ bool UWonderlandMissionTaskSubsystem::DeleteLocalContract(FGuid LocalId)
 			*Task->Objective.Left(40), *Task->RunId.Value);
 		return false;
 	}
-	const FString Objective = Task->Objective.Left(40);
+	// THE LENGTH, NOT THE TEXT: a tester attaches this log to a bug report, and what they wrote is theirs (Second
+	// Wonderland's review; the submit path logs only the length too).
+	const int32 ObjectiveLength = Task->Objective.Len();
 	const bool bWasSelected = Selected == LocalId;
 	Tasks.RemoveAll([LocalId](const FWonderlandMissionTask& Row) { return Row.LocalId == LocalId; });
 	if (bWasSelected)
@@ -347,7 +348,7 @@ bool UWonderlandMissionTaskSubsystem::DeleteLocalContract(FGuid LocalId)
 			if (Tasks[Index].bInWorkspace) { Selected = Tasks[Index].LocalId; break; }
 		}
 	}
-	UE_LOG(LogTemp, Display, TEXT("WLTASK deleted the player's contract '%s' (never part of a Julius run)"), *Objective);
+	UE_LOG(LogTemp, Display, TEXT("WLTASK deleted one of the player's contracts (%d-character objective; never part of a Julius run)"), ObjectiveLength);
 	SaveContracts();
 	OnTasksChanged.Broadcast();
 	return true;
@@ -355,26 +356,29 @@ bool UWonderlandMissionTaskSubsystem::DeleteLocalContract(FGuid LocalId)
 
 int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 {
-	// A save interrupted between "old file gone" and "new file in place" leaves the complete newer save beside it.
+	// A temporary beside the save is a write that never finished (the swap is atomic): it is discarded, never adopted.
 	WonderlandBeta::RecoverInterruptedSave(SlotPath());
 	if (!HasSavedContracts())
 	{
 		return 0;
 	}
+	// ONLY SEALED BYTES reach the engine's loader, which trusts what it reads (WonderlandBeta::LoadSealedGame).
+	FString Why;
 	UWonderlandMissionTaskSave* Save = Cast<UWonderlandMissionTaskSave>(
-		UGameplayStatics::LoadGameFromSlot(SaveSlotName(), 0));
-	if (Save == nullptr || Save->Version != 1)
+		WonderlandBeta::LoadSealedGame(SlotPath(), UWonderlandMissionTaskSave::StaticClass(), Why));
+	if (Save != nullptr && Save->Version != 1)
+	{
+		Why = FString::Printf(TEXT("it is version %d, not 1"), Save->Version);
+		Save = nullptr;
+	}
+	if (Save == nullptr)
 	{
 		// REFUSED, NOT GUESSED AT. A file of a shape this build does not know is not read as though it were this one;
 		// a misread contract is worse than a forgotten one. AND IT IS SET ASIDE, NOT OVERWRITTEN: the first save of this
 		// session would otherwise replace it (private beta, B24), so it is moved beside itself first.
-		// THE FILE NAME ONLY, not the whole path: a case-insensitive replace of ".sav" would also rewrite a folder that
-		// happens to contain those letters.
-		const FString Aside = FPaths::Combine(FPaths::GetPath(SlotPath()), FString::Printf(TEXT("%s.refused-%s.sav"),
-			SaveSlotName(), *FDateTime::UtcNow().ToString(TEXT("%Y%m%d-%H%M%S"))));
-		const bool bMoved = IFileManager::Get().Move(*Aside, *SlotPath(), /*bReplace*/ true);
-		UE_LOG(LogTemp, Warning, TEXT("WLTASK saved contracts are version %d, not 1 (or unreadable); set aside as %s: %s"),
-			Save != nullptr ? Save->Version : -1, *Aside, bMoved ? TEXT("ok") : TEXT("FAILED"));
+		const FString Aside = WonderlandBeta::SetAsideRefusedSave(SlotPath());
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK the saved contracts could not be used (%s); set aside as %s"),
+			Why.IsEmpty() ? TEXT("unreadable") : *Why, Aside.IsEmpty() ? TEXT("(the move FAILED)") : *Aside);
 		return 0;
 	}
 	const FString When = FDateTime::UtcNow().ToIso8601();

@@ -329,6 +329,7 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 	// does not include. A developer's session (the editor, -wldev) keeps its tools and skips the welcome.
 	WonderlandBeta::LockDownPlayer(Controller);
 	WonderlandBeta::StampWindowTitle();
+	WonderlandBeta::MigrateWindowMode();
 	UE_LOG(LogWonderlandUi, Display, TEXT("WLBUILD %s | %s session | local AI services %s"), *WonderlandBeta::BuildLabel(),
 		WonderlandBeta::IsDeveloperSession() ? TEXT("developer") : TEXT("player"),
 		WonderlandBeta::UseLocalAiServices() ? TEXT("contacted") : TEXT("off (not part of this beta)"));

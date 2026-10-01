@@ -22,7 +22,8 @@
 //            evaluations, trace, governance. Shown, never offered for editing.
 //
 // EDITS ARE PROPOSALS. Nothing typed here changes Project Brain; a line added in the world is recorded in this
-// session as PROPOSED and NOT SYNCED, and says so, until a Project Brain authority exists to receive it.
+// session as PROPOSED and NOT SAVED (it is gone after a restart), and says so, until a Project Brain authority exists
+// to receive it.
 //
 // PLAIN TYPES ON PURPOSE: none of this crosses to Relay, so none of it belongs in the C++ <-> TypeScript
 // parity table.
