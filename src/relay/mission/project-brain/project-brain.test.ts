@@ -55,11 +55,11 @@ describe('a Project Brain mutation is parsed against a closed shape', () => {
 
   it('refuses credentials and hidden reasoning instead of quietly redacting them', () => {
     const secrets = [
-      'my key is sk-ant-api03-AAAAAAAAAAAAAAAA',
-      'token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123',
+      'my key is sk-ant-api03-FAKETESTNOTREAL',
+      'token ghp_FAKETESTNOTREALFAKETESTNOTREAL',
       'password: hunter2hunter2',
-      'postgres://julius:s3cretpass@127.0.0.1:5432/julius',
-      '-----BEGIN RSA PRIVATE KEY-----',
+      'postgres://u:FAKETESTNOTREAL@h/julius',
+      '-----BEGIN FAKETESTNOTREAL PRIVATE KEY-----',
       'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijk',
     ];
     for (const secret of secrets) {
