@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 /**
  * THE PROJECT BRAIN, AS ONE TYPED VOCABULARY.
  *
@@ -565,19 +563,21 @@ const canonical = (value: unknown): string => {
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(',')}}`;
 };
 
-export const projectBrainSha256 = (value: unknown): string =>
-  createHash('sha256').update(canonical(value)).digest('hex');
+/** Key-sorted JSON: the same value always reads as the same string. Hashing it is the store's business. */
+export const projectBrainCanonicalJson = (value: unknown): string => canonical(value);
 
 /**
  * THE REQUEST'S IDENTITY FOR IDEMPOTENCY: the command, who sent it and where. A
- * replay of the same key with the same request is answered from the log; the
- * same key with a different request is a conflict, never a second write.
+ * replay of the same key with the same identity is answered from the log; the
+ * same key with a different identity is a conflict, never a second write. The
+ * store keeps a SHA-256 of this string, never the string.
  */
-export const projectBrainRequestHash = (projectId: string, provenance: ProjectBrainProvenance, command: ProjectBrainMutationCommand): string =>
-  projectBrainSha256({ projectId, provenance, command });
+export const projectBrainRequestIdentity = (projectId: string, provenance: ProjectBrainProvenance, command: ProjectBrainMutationCommand): string =>
+  canonical({ projectId, provenance, command });
 
-export const projectBrainContentHash = (input: { domain: string; title: string; body: string; subjectRef: string | null; status: string }): string =>
-  projectBrainSha256(input);
+/** What a record version says, canonically: the content its hash is taken over. */
+export const projectBrainContentIdentity = (input: { domain: string; title: string; body: string; subjectRef: string | null; status: string }): string =>
+  canonical(input);
 
 /* ----------------------------------------------------------------- events */
 
@@ -639,9 +639,20 @@ export type ProjectBrainCursor = Readonly<Record<string, number>>;
 const STREAM_ID = /^[\x21-\x7e]{1,200}$/u;
 export const PROJECT_BRAIN_CURSOR_MAX_STREAMS = 2000;
 
+/**
+ * BASE64URL OVER ASCII, with the platform's own btoa/atob -- no Node in the domain. A cursor is JSON of stream ids
+ * (printable ASCII, validated on decode) and integers, so Latin-1 is all it ever needs.
+ */
+const toBase64Url = (ascii: string): string => btoa(ascii).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '');
+const fromBase64Url = (encoded: string): string => {
+  if (!/^[A-Za-z0-9_-]*$/u.test(encoded)) throw new Error('cursor_not_base64url');
+  const padded = encoded.replace(/-/gu, '+').replace(/_/gu, '/') + '='.repeat((4 - (encoded.length % 4)) % 4);
+  return atob(padded);
+};
+
 export function encodeProjectBrainCursor(cursor: ProjectBrainCursor): string {
   const ordered = Object.fromEntries(Object.entries(cursor).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
-  return `pbc1.${Buffer.from(JSON.stringify(ordered), 'utf8').toString('base64url')}`;
+  return `pbc1.${toBase64Url(JSON.stringify(ordered))}`;
 }
 
 export function decodeProjectBrainCursor(value: unknown): ProjectBrainCursor | null {
@@ -649,7 +660,7 @@ export function decodeProjectBrainCursor(value: unknown): ProjectBrainCursor | n
   if (typeof value !== 'string' || !value.startsWith('pbc1.') || value.length > 200_000) return null;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(Buffer.from(value.slice(5), 'base64url').toString('utf8'));
+    parsed = JSON.parse(fromBase64Url(value.slice(5)));
   } catch {
     return null;
   }
