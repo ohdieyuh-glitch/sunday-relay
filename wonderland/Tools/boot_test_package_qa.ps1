@@ -48,12 +48,13 @@ $script:Interfered = @()
 Add-Type -TypeDefinition @'
 using System; using System.Runtime.InteropServices;
 public static class WonderlandQaGuard {
-  [StructLayout(LayoutKind.Sequential)] struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
-  [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO p);
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
-  public static uint LastInputTick() { var l = new LASTINPUTINFO(); l.cbSize = (uint)Marshal.SizeOf(l); GetLastInputInfo(ref l); return l.dwTime; }
+  [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
   public static uint ForegroundPid() { uint pid; GetWindowThreadProcessId(GetForegroundWindow(), out pid); return pid; }
+  // A KEY OR A MOUSE BUTTON HELD DOWN RIGHT NOW. Not GetLastInputInfo: the game's own cursor capture (re-centring the
+  // hidden cursor whenever an overlay opens or closes) moves that clock too, so RC4's rerun counted the engine as a person.
+  public static bool AnyKeyOrButtonDown() { for (int vk = 1; vk < 255; ++vk) { if ((GetAsyncKeyState(vk) & 0x8000) != 0) return true; } return false; }
 }
 '@
 
@@ -79,30 +80,30 @@ function Invoke-Boot([string]$ExecCmds, [int]$Limit, [string]$Tag) {
   $p = Start-Process -FilePath $Exe -ArgumentList $argList -PassThru
   "[$Tag] launched bootstrap pid $($p.Id) at $(Get-Date -Format HH:mm:ss): $ExecCmds"
   # the bootstrap exe hands off to the real game process under the package folder; wait for every one of them to end.
-  # Every half second: was there input, and was the game the foreground window when it came? (the guard above)
-  $lastTick = [WonderlandQaGuard]::LastInputTick()
+  # Every 50 ms: is a key or a mouse button down while the game is the foreground window? (the guard above)
+  $wasDown = $false
   $sampled = $false
   $hits = 0
   $deadline = (Get-Date).AddSeconds($Limit)
   $nextAlive = (Get-Date).AddSeconds(20)
   while ((Get-Date) -lt $deadline) {
-    $tick = [WonderlandQaGuard]::LastInputTick()
-    if ($tick -ne $lastTick) {
-      $lastTick = $tick
+    $down = [WonderlandQaGuard]::AnyKeyOrButtonDown()
+    if ($down -and -not $wasDown) {
       $fg = [WonderlandQaGuard]::ForegroundPid()
       $gamePids = @(Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PkgDir*" } | ForEach-Object { $_.Id })
       if ($gamePids -contains $fg) {
         $hits++
-        if ($hits -le 5) { "[$Tag] HUMAN INPUT into the game window at t=$([int]((Get-Date) - $t0).TotalSeconds) s" }
+        if ($hits -le 5) { "[$Tag] HUMAN INPUT into the game window at t=$([int]((Get-Date) - $t0).TotalSeconds) s (a key or a mouse button)" }
       }
     }
+    $wasDown = $down
     if ((Get-Date) -ge $nextAlive) {
       $alive = Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PkgDir*" }
       if (-not $alive) { break }
       if (-not $sampled -and ((Get-Date) - $t0).TotalSeconds -ge 28) { Test-Listeners $Tag; $sampled = $true }
       $nextAlive = (Get-Date).AddSeconds(5)
     }
-    Start-Sleep -Milliseconds 500
+    Start-Sleep -Milliseconds 50
   }
   if ($hits -gt 0) { $script:Interfered += "$Tag ($hits input events into the game window)" }
   if (-not $sampled) { $script:NetLines += "QNET $Tag SKIPPED: the game ended before 28 s" }
