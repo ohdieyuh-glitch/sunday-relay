@@ -1,4 +1,5 @@
 #include "RelayDogCharacter.h"
+#include "RelayDogPresentation.h"
 
 #include "Components/PointLightComponent.h"
 #include "WonderlandDayCycle.h"
@@ -671,7 +672,8 @@ bool ARelayDogCharacter::BindJoints()
 	const float LegLengthUU = 0.8f * HeadWidthUU;
 	const float ThighUU = (0.8f - 0.5125f) * HeadWidthUU;
 	const float ShinUU = 0.5125f * HeadWidthUU;
-	Animator.Configure(LegLengthUU, ThighUU, ShinUU, HeadWidthUU);
+	// THROUGH THE SHARED SET-UP, so the Wardrobe's animator is configured exactly as this one (RelayDogPresentation).
+	RelayDogPresentation::ConfigureCanonAnimator(Animator, HeadWidthUU);
 
 	UE_LOG(LogTemp, Log,
 	       TEXT("WLDOG BOUND: 11 joints on %s (head width %.1f uu, leg %.1f = thigh %.1f + shin %.1f, ")
@@ -2528,33 +2530,10 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	// doing it too, on the Dog's clock, with the Dog's easing and the Dog's transitions. Relay OG remains the
 	// one animation authority; the costume owns no state machine of its own and never decides an act.
 	const float Still = FMath::Clamp((Overlay.Meditate + Overlay.Fly) / FMath::Max(Overlay.Weight, 0.001f), 0.0f, 1.0f) * Overlay.Weight;
-	FWonderlandWornPose Dressed;
-	Dressed.StridePhase = Pose.StridePhase;
-	Dressed.GaitWeight = Pose.GaitWeight;
-	Dressed.SpeedUU = Pose.SpeedUU;
-	Dressed.SwayUU = Pose.SwayUU * (1.0f - Still);
-	Dressed.BobUU = (Pose.BobUU - Pose.PelvisDropUU) * (1.0f - Still);
-	Dressed.LiftUU = Overlay.LiftUU;
-	Dressed.BodyPitchDeg = Pose.LeanDeg + Pose.Body.PitchDeg;
-	Dressed.BodyYawDeg = Pose.BodyYawDeg * (1.0f - Still);
-	Dressed.BodyRollDeg = (Pose.Body.RollDeg + Pose.TurnRollDeg) * (1.0f - Still);
-	// The head keeps its own level against the body's lean, exactly as HeadPivot is written above.
-	Dressed.HeadPitchDeg = Pose.HeadPitchDeg - Pose.LeanDeg;
-	Dressed.HeadYawDeg = Pose.HeadYawDeg;
-	Dressed.TailPitchDeg = Pose.TailPitchDeg;
-	Dressed.TailYawDeg = Pose.TailYawDeg;
-	// THE SOLVED JOINTS, so a skin bends where the Dog bends rather than re-deriving a swing of its own.
-	Dressed.HipLeftDeg = Pose.LegLeft.HipDeg;
-	Dressed.KneeLeftDeg = Pose.LegLeft.KneeDeg;
-	Dressed.HipRightDeg = Pose.LegRight.HipDeg;
-	Dressed.KneeRightDeg = Pose.LegRight.KneeDeg;
-	Dressed.ShoulderLeftDeg = Pose.ArmLeft.ShoulderDeg;
-	Dressed.ElbowLeftDeg = Pose.ArmLeft.ElbowDeg;
-	Dressed.ShoulderRightDeg = Pose.ArmRight.ShoulderDeg;
-	Dressed.ElbowRightDeg = Pose.ArmRight.ElbowDeg;
-	Dressed.AirborneWeight = Pose.AirborneWeight;
-	Dressed.Stillness = Still;
-	Dressed.bValid = true;
+	// THE ANGLES, COMPOSED WHERE THE WARDROBE CAN COMPOSE THEM TOO (RelayDogPresentation::ComposeWornPose): the same
+	// fields from the same numbers as before, so the hand-down is unchanged and the Wardrobe's mannequin, which runs its own
+	// instance of this animator standing still, wears an idle composed by the identical code.
+	FWonderlandWornPose Dressed = RelayDogPresentation::ComposeWornPose(Pose, Still, Overlay.LiftUU);
 	// ---- AND THE JOINTS THEMSELVES, AS WRITTEN, BY THE SIDE EACH HANGS ON (founder regression, 2026-09-29).
 	//
 	// Read back off the canon pivots AFTER ApplyMissionPose, so whatever the performance wrote is what the skin

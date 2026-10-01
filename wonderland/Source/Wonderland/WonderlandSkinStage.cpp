@@ -1,6 +1,7 @@
 #include "WonderlandSkinStage.h"
 #include "GameFramework/PlayerController.h"
 #include "RelayDogCharacter.h"
+#include "RelayDogPresentation.h"
 #include "HAL/IConsoleManager.h"
 
 /**
@@ -691,25 +692,71 @@ void AWonderlandSkinStage::AimCamera()
 	// smaller the more ornamented the skin is, and makes an animated flame move the camera every frame. The
 	// founder's instruction was explicit -- framing must derive from the physical body, not the total actor
 	// bounds -- so this reads GetFramingBodyBounds, which is the lit and rim meshes only and is stateless.
-	const float Fallback = Body != nullptr ? FMath::Max(Body->GetFigureHeightUu(), 60.0f) : 160.0f;
+	// ---- AT THE SIZE IT IS SHOWN AT, WHICH WAS THE "TINY MASCOT" OF 2026-10-01.
+	//
+	// FOUNDER, with the Wardrobe on screen: "The current selected mascot skin is much too small and far away." Measured
+	// off the RC7 wardrobe frames, the body filled about a third of the window and sat below its middle -- against a solve
+	// whose own note predicted 80%. The two were solving different figures. GetBodyHeightUu is the body in its OWN units
+	// (174 uu, Relay OG's height), but the UI stands this mannequin in the world at PreviewScale (FrameRelayDogInWardrobe:
+	// the stage AND the body are scaled by distance/fit), so the figure in front of the lens is that fraction of 174. The
+	// camera was placed to make a 174 uu Dog fill 80% of the frame and photographed a Dog a fraction of that size -- 80%
+	// times the scale -- aimed at a middle as far above the real one as the shrink took the body down. Since 09-30
+	// (fdaa8ffe: every skin framed on Relay OG's body height) the body record has been read without that scale.
+	//
+	// So every length the solve reads off the body is multiplied by the scale the body is actually standing at. The
+	// figure's own envelope (the fallback before a body exists) gets the same treatment.
+	const float ShownScale = Body != nullptr ? FMath::Max(FMath::Abs(static_cast<float>(Body->GetActorScale3D().Z)), 0.001f) : 1.0f;
+	const FVector BodyAt = Body != nullptr ? Body->GetActorLocation() : GetActorLocation();
+	const float Fallback = Body != nullptr ? FMath::Max(Body->GetFigureHeightUu() * ShownScale, 6.0f) : 160.0f;
 	float Tall = Fallback;
 	float Wide = Fallback * 0.5f;
 	float MeasuredTall = -1.0f;
 	float MeasuredWide = -1.0f;
-	float MiddleZ = GetActorLocation().Z + Fallback * 0.5f;
+	float MiddleZ = BodyAt.Z + Fallback * 0.5f;
 	bool bOnBody = false;
+	// The span the whole silhouette has to fit inside, world Z: the body's own unless a latched costume reaches past it.
+	float SpanLowZ = MiddleZ - Tall * 0.5f;
+	float SpanHighZ = MiddleZ + Tall * 0.5f;
 	// ---- AND FRAMED ON RELAY OG'S BODY, THE SAME FOR EVERY SKIN (founder, 2026-09-30, a HARD rule: "ALL mascot skins must be the same overall height as the canonical Relay OG mascot skin" -- "Use Relay OG as the canonical
 	// reference for ... wardrobe preview framing"). Every skin now stands the same canonical body height, so the camera is
 	// solved on that height alone: the same distance, the same focus, for all five. Per-skin bounds used to vote on the
 	// distance, which is how a skin with more on its head was photographed smaller. Horns and fire may leave the frame.
 	if (Body != nullptr && Body->GetBodyHeightUu() > 1.0f)
 	{
-		MeasuredTall = Body->GetBodyHeightUu();
+		MeasuredTall = Body->GetBodyHeightUu() * ShownScale;
 		MeasuredWide = MeasuredTall * 0.45f;
 		Tall = MeasuredTall;
 		Wide = MeasuredWide;
-		MiddleZ = GetActorLocation().Z + Body->GetBodyLowestUu() + Tall * 0.5f;
+		const float SoleZ = static_cast<float>(BodyAt.Z) + Body->GetBodyLowestUu() * ShownScale;
+		MiddleZ = SoleZ + Tall * 0.5f;
 		bOnBody = true;
+		SpanLowZ = SoleZ;
+		SpanHighZ = SoleZ + Tall;
+
+		// ---- AND NOTHING THE COSTUME WEARS IS CROPPED (founder, 2026-10-01: "do not crop the head, ears, body or feet";
+		// "head/ears/antlers/hats not cropped"; "For unusually tall skins such as Baal, backing off enough to preserve the
+		// complete meaningful silhouette is correct"). The body sets the size, the same for every skin; a skin whose
+		// meaningful silhouette reaches past the body -- Baal's antlers, Celestial Light's halo, a hat -- widens the span the
+		// frame has to hold, so the camera stands back just far enough and centres on the whole figure. Fire, banners and
+		// auras are effects and never vote (GetSilhouetteBounds). Latched per skin, a few frames after it is built.
+		if (!bSilhouetteLatched && ++FramesSinceShow >= 4)
+		{
+			const FBox Whole = Body->GetSilhouetteBounds();
+			if (Whole.IsValid && Whole.GetExtent().Z > 1.0)
+			{
+				SilhouetteLowUu = static_cast<float>(Whole.Min.Z - BodyAt.Z) / ShownScale;
+				SilhouetteHighUu = static_cast<float>(Whole.Max.Z - BodyAt.Z) / ShownScale;
+				const FBox Fire = Body->GetFlameBounds();
+				bHasFlame = Fire.IsValid && Fire.GetExtent().Z > 0.1;
+				FlameHighUu = bHasFlame ? static_cast<float>(Fire.Max.Z - BodyAt.Z) / ShownScale : 0.0f;
+				bSilhouetteLatched = true;
+			}
+		}
+		if (bSilhouetteLatched)
+		{
+			SpanLowZ = FMath::Min(SpanLowZ, static_cast<float>(BodyAt.Z) + SilhouetteLowUu * ShownScale);
+			SpanHighZ = FMath::Max(SpanHighZ, static_cast<float>(BodyAt.Z) + SilhouetteHighUu * ShownScale);
+		}
 	}
 	else if (Body != nullptr)
 	{
@@ -723,9 +770,11 @@ void AWonderlandSkinStage::AimCamera()
 			// different sizes. A clamp that cannot be seen is indistinguishable from a measurement.
 			MeasuredTall = static_cast<float>(Half.Z) * 2.0f;
 			MeasuredWide = FMath::Max(static_cast<float>(Half.X), static_cast<float>(Half.Y)) * 2.0f;
-			Tall = FMath::Max(MeasuredTall, 30.0f);
-			Wide = FMath::Max(MeasuredWide, 15.0f);
+			Tall = FMath::Max(MeasuredTall, 3.0f);
+			Wide = FMath::Max(MeasuredWide, 1.5f);
 			MiddleZ = static_cast<float>(Drawn.GetCenter().Z);
+			SpanLowZ = static_cast<float>(Drawn.Min.Z);
+			SpanHighZ = static_cast<float>(Drawn.Max.Z);
 			bOnBody = true;
 		}
 	}
@@ -753,8 +802,38 @@ void AWonderlandSkinStage::AimCamera()
 	// and wanted: the founder's instruction is that framing derives from the body and the VFX are excluded
 	// from it, which necessarily means the VFX sometimes leave the picture.
 	const float WidthAllowance = 1.25f;
-	const float Distance = FMath::Clamp(
-		FMath::Min(FMath::Max(FitTall, FitWide), FitTall * WidthAllowance), 40.0f, 6000.0f);
+	// THE WHOLE SILHOUETTE INSIDE THE FRAME, with a margin: the body fills Fill of the height, and a costume reaching past the
+	// body may take the frame out to SilhouetteFill but no further. For a skin with nothing above its head the body binds and
+	// this changes nothing; for antlers or a hat the camera stands back exactly enough.
+	// 0.86 of the capture, which is about 80% of the wardrobe window once the caption under the image is counted: the top of
+	// the founder's 70-80% band for a skin whose silhouette is bigger than its body.
+	const float SilhouetteFill = FMath::Clamp(FMath::Max(Fill + 0.06f, 0.86f), Fill, 0.96f);
+	const float Span = FMath::Max(SpanHighZ - SpanLowZ, Tall);
+	const float FitSilhouette = Span / (2.0f * SilhouetteFill * FMath::Max(TanV, KINDA_SMALL_NUMBER));
+	// NO FLOOR IN WORLD UNITS. The old 40 uu minimum assumed a full-size figure; at the wardrobe's scale the correct distance
+	// can be shorter than that, and a floor that binds is a figure photographed smaller than the solve says. Near-clip safe.
+	const float FitBody = FMath::Min(FMath::Max(FitTall, FitWide), FitTall * WidthAllowance);
+	const float Distance = FMath::Clamp(FMath::Max(FitBody, FitSilhouette), 12.0f, 6000.0f);
+	// Centred on what has to fit: the body's middle, or the middle of a silhouette that reaches past it.
+	if (FitSilhouette > FitBody)
+	{
+		MiddleZ = (SpanLowZ + SpanHighZ) * 0.5f;
+	}
+	// ---- FIRE KEEPS ITS TIPS IF THERE IS ROOM, AND NEVER PUSHES THE CAMERA BACK (founder: "fire/glow/trails should not
+	// incorrectly force the camera backward"). The distance above is final. If the fire's top would leave the frame, the
+	// aim rises -- the figure drops in the frame -- by no more than the room under the feet allows, keeping a margin under
+	// them. Jack Flame's head fire fits that way; Skeleton Flame's ear fire is trimmed at its tips rather than shrinking the
+	// Dog. Latched like the silhouette, so a flickering flame never moves the shot.
+	float FireLift = 0.0f;
+	if (bSilhouetteLatched && bHasFlame)
+	{
+		const float HalfV = Distance * TanV;
+		const float FireTopZ = static_cast<float>(BodyAt.Z) + FlameHighUu * ShownScale;
+		const float FrameTopZ = MiddleZ + HalfV * 0.98f;
+		const float RoomUnderFeet = (SpanLowZ - (MiddleZ - HalfV)) - 2.0f * HalfV * 0.05f;
+		FireLift = FMath::Clamp(FireTopZ - FrameTopZ, 0.0f, FMath::Max(RoomUnderFeet, 0.0f));
+		MiddleZ += FireLift;
+	}
 
 	// A THREE-QUARTER EYE, placed at exactly Distance along its own ray rather than at Distance on X with a
 	// side offset added -- the old form made the true distance longer than the solve, which is its own small
@@ -771,7 +850,7 @@ void AWonderlandSkinStage::AimCamera()
 		FVector(FMath::Cos(EyeYaw), FMath::Sin(EyeYaw), 0.0f));
 	// Aimed at the body's own middle, so the figure is centred on what is being framed rather than on a
 	// fraction of a declared height that no longer describes it.
-	const FVector Focus(GetActorLocation().X, GetActorLocation().Y, MiddleZ);
+	const FVector Focus(BodyAt.X, BodyAt.Y, MiddleZ);
 	const FVector Eye = Focus + Ray * Distance;
 	Capture->SetWorldLocation(Eye);
 	Capture->SetWorldRotation((Focus - Eye).Rotation());
@@ -779,17 +858,20 @@ void AWonderlandSkinStage::AimCamera()
 	// EVERYTHING THE SOLVE USED, so the prediction can be put beside the occupancy measured off the exported
 	// pixels. The actor SCALE is in here because it is the one term that silently makes the declared envelope
 	// and the measured body box disagree: a figure staged at half size is half as tall in world units while
-	// still declaring its full height, and without the scale printed the two numbers look like a bug.
-	const FVector ShownScale = Body != nullptr ? Body->GetActorScale3D() : FVector::OneVector;
+	// still declaring its full height, and without the scale printed the two numbers look like a bug. It is now
+	// also IN the solve (see the top of this function); the note prints both so a mismatch can be seen.
 	const float GlowInForce = Body != nullptr ? Body->GetGlowScale() : -1.0f;
+	const float VisibleTall = FMath::Max(2.0f * Distance * TanV, KINDA_SMALL_NUMBER);
 	FramingNote = FString::Printf(
 		TEXT("onBody=%d bodyTall=%.1f bodyWide=%.1f rawTall=%.1f rawWide=%.1f envelope=%.0f scale=%.3f ")
-		TEXT("fill=%.2f glow=%.4f fitTall=%.0f fitWide=%.0f distance=%.0f fov=%.1f target=%dx%d ")
-		TEXT("predictedHeightPct=%.1f"),
-		bOnBody ? 1 : 0, Tall, Wide, MeasuredTall, MeasuredWide, Fallback, ShownScale.Z,
-		Fill, GlowInForce, FitTall, FitWide, Distance,
-		Capture->FOVAngle, TargetWidth, TargetHeight,
-		100.0f * Tall / FMath::Max(2.0f * Distance * TanV, KINDA_SMALL_NUMBER));
+		TEXT("fill=%.2f glow=%.4f fitTall=%.0f fitWide=%.0f fitSilhouette=%.0f silhouette=%s fireTop=%.1f fireLift=%.2f ")
+		TEXT("distance=%.1f fov=%.1f target=%dx%d predictedHeightPct=%.1f predictedSilhouettePct=%.1f"),
+		bOnBody ? 1 : 0, Tall, Wide, MeasuredTall, MeasuredWide, Fallback, ShownScale,
+		Fill, GlowInForce, FitTall, FitWide, FitSilhouette,
+		bSilhouetteLatched ? *FString::Printf(TEXT("%.1f..%.1f"), SilhouetteLowUu, SilhouetteHighUu) : TEXT("unlatched"),
+		bHasFlame ? FlameHighUu : 0.0f, FireLift,
+		Distance, Capture->FOVAngle, TargetWidth, TargetHeight,
+		100.0f * Tall / VisibleTall, 100.0f * FMath::Max(SpanHighZ - SpanLowZ, Tall) / VisibleTall);
 }
 
 bool AWonderlandSkinStage::ShowSkin(FName SkinId)
@@ -837,6 +919,13 @@ bool AWonderlandSkinStage::ShowSkin(FName SkinId)
 	// A FRESH FIGURE COMES UP AT ITS AUTHORED FIRE, so a skin clicked while the wardrobe is open has to be
 	// told again -- otherwise the second skin the founder tries is the blown-out one.
 	Body->SetGlowScale(bInWorldPreview ? GWonderlandPreviewGlow : 1.0f);
+	// A NEW COSTUME IS MEASURED AFRESH. The silhouette latch belongs to the skin that was on.
+	bSilhouetteLatched = false;
+	FramesSinceShow = 0;
+	// AND IT STANDS IN RELAY OG'S IDLE FROM ITS FIRST FRAME. The animator is not restarted: the change of dress happens on a
+	// Dog that never stopped moving, so the head carries on from wherever it was looking (founder: "switching skins should
+	// feel like changing what MY Relay Dog is wearing, not spawning an unrelated character").
+	WearCanonicalIdle(0.0f);
 	AimCamera();
 	return true;
 }
@@ -942,6 +1031,7 @@ void AWonderlandSkinStage::Tick(float DeltaSeconds)
 	}
 
 	StepLookAround(DeltaSeconds);
+	WearCanonicalIdle(DeltaSeconds);
 
 	SinceCapture += DeltaSeconds;
 	if (SinceCapture >= CaptureInterval && Capture != nullptr && RenderTarget != nullptr)
@@ -1006,9 +1096,9 @@ void AWonderlandSkinStage::StepLookAround(float DeltaSeconds)
 			Yaw -= 360.0f;
 		}
 		YawTarget = Yaw;
-		const double SpinNow = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0;
+		// PLANTED WHILE IT TURNS, too: the turntable turns the figure and nothing else (see the bob note below).
 		Body->SetActorLocationAndRotation(
-			GetActorLocation() + FVector(0.0, 0.0, static_cast<float>(FMath::Sin(SpinNow * 1.15) * 1.6)),
+			GetActorLocation(),
 			FRotator(0.0f, static_cast<float>(GetActorRotation().Yaw) + Yaw, 0.0f));
 		return;
 	}
@@ -1031,9 +1121,11 @@ void AWonderlandSkinStage::StepLookAround(float DeltaSeconds)
 	}
 	YawTarget = 0.0f;
 
-	const double Now = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0;
-	// A shallow bob the figure's own float does not cover. Small on purpose: this is weight, not a performance.
-	const float Bob = static_cast<float>(FMath::Sin(Now * 1.15) * 1.6);
+	// ---- NO BOB OF THE STAGE'S OWN (founder, 2026-10-01: "BODY: standing still; planted ... no exaggerated swaying").
+	//
+	// A 1.6 uu sine on the whole figure used to stand here, "a shallow bob the figure's own float does not cover". The
+	// figure now wears Relay OG's idle (WearCanonicalIdle), whose rule for this body is settling, never a breathing bob
+	// (RelayDogStride::IdlePose), so a second bob on top of it would be the stage contradicting the animator it borrows.
 	// ---- "FRONT" IS THE STAGE'S FRONT, NOT THE WORLD'S.
 	//
 	// THE BUG THIS FIXES, and the founder would have seen it before any proof did: the wardrobe was showing
@@ -1053,8 +1145,35 @@ void AWonderlandSkinStage::StepLookAround(float DeltaSeconds)
 	// Worth saying: zc_wardrobe_pixels passed 12/12 through all of this, because "the corners are black and
 	// the middle is brighter" is true of a Dog's back as well as its face.
 	Body->SetActorLocationAndRotation(
-		GetActorLocation() + FVector(0.0, 0.0, Bob),
+		GetActorLocation(),
 		FRotator(0.0f, static_cast<float>(GetActorRotation().Yaw) + Yaw, 0.0f));
+}
+
+void AWonderlandSkinStage::WearCanonicalIdle(float DeltaSeconds)
+{
+	if (Body == nullptr)
+	{
+		return;
+	}
+	if (!bCanonIdleConfigured)
+	{
+		// THE CANON BODY'S OWN PROPORTIONS, asked of the player's Dog when there is one -- the same Dog whose animator this
+		// copies -- and the canon's built width otherwise.
+		float HeadWidth = RelayDogPresentation::CanonHeadWidthUU;
+		const APlayerController* PC = GetWorld() != nullptr ? GetWorld()->GetFirstPlayerController() : nullptr;
+		if (const ARelayDogCharacter* Dog = PC != nullptr ? Cast<ARelayDogCharacter>(PC->GetPawn()) : nullptr)
+		{
+			HeadWidth = Dog->HeadWidthUU > 1.0f ? Dog->HeadWidthUU : HeadWidth;
+		}
+		RelayDogPresentation::ConfigureCanonAnimator(CanonIdle, HeadWidth);
+		bCanonIdleConfigured = true;
+	}
+	// STANDING STILL, FACING ITS OWN FRONT. The heading is the figure's own frame, held constant, so the stage re-facing the
+	// player's camera never reads to the animator as a turn (a turn would roll the body into it).
+	const RelayDogStride::FDogPose& Pose = DeltaSeconds > 0.0f
+		? CanonIdle.Update(RelayDogPresentation::StandingStill(FMath::Min(DeltaSeconds, 0.1f), 0.0f))
+		: CanonIdle.Pose();
+	Body->WearCanonicalPose(RelayDogPresentation::ComposeWornPose(Pose, 0.0f, 0.0f));
 }
 
 AWonderlandSkinStage* AWonderlandSkinStage::Get(UWorld* World)

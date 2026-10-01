@@ -238,6 +238,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	FBox GetFramingBodyBounds() const;
 
+	/**
+	 * THE FIGURE'S WHOLE MEANINGFUL SILHOUETTE: every built part that is the figure rather than an effect on it -- the
+	 * shared skeleton AND whatever a skin hangs on it that holds still, Baal's antlers, Celestial Light's halo, a mask, a
+	 * collar, a hat -- whatever its material. Left out: fire (twinkle parts, which are drawn as flame ribbons and are not
+	 * part meshes at all), and anything that moves on its own clock as an effect (trail: a banner, a skirt; float: an aura;
+	 * orbit). Same frame as GetFramingBodyBounds (world units at the actor, its yaw taken out, scale kept).
+	 *
+	 * Founder, 2026-10-01 (Wardrobe): "head/ears/antlers/hats not cropped" and "fire/glow/trails should not incorrectly
+	 * force the camera backward". GetFramingBodyBounds is the shared skeleton by NAME, so an antler was never in it.
+	 */
+	FBox GetSilhouetteBounds() const;
+
+	/** Where the flame ribbons are drawn this frame, same frame as above; invalid for a figure with no fire. */
+	FBox GetFlameBounds() const;
+
 	/** Which parts the framing box is made of, and where each sits. See the implementation. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	FString DescribeFramingParts() const;

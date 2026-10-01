@@ -1599,6 +1599,45 @@ FBox AWonderlandCompanionEmbodiment::GetFramingBodyBounds() const
 	return Local.ShiftBy(Origin);
 }
 
+FBox AWonderlandCompanionEmbodiment::GetSilhouetteBounds() const
+{
+	// The same yaw-only frame as GetFramingBodyBounds, over a wider set of meshes: everything built for a part that is the
+	// figure, judged by how the part MOVES rather than what it is called or what it is made of. See the declaration.
+	const FTransform Actor = GetActorTransform();
+	const FTransform UnYaw(FRotator(0.0f, -Actor.Rotator().Yaw, 0.0f).Quaternion());
+	const FVector Origin = Actor.GetLocation();
+	FBox Local(ForceInit);
+	for (int32 Index = 0; Index < PartMeshes.Num(); ++Index)
+	{
+		const UInstancedStaticMeshComponent* Mesh = PartMeshes[Index].Get();
+		if (Mesh == nullptr || Mesh->GetInstanceCount() <= 0 || !PartMeshNames.IsValidIndex(Index))
+		{
+			continue;
+		}
+		const int32 Part = PartNames.IndexOfByKey(PartMeshNames[Index]);
+		const EWonderlandCompanionMotion Motion = Motions.IsValidIndex(Part) ? Motions[Part].Motion : EWonderlandCompanionMotion::None;
+		if (Motion == EWonderlandCompanionMotion::Twinkle || Motion == EWonderlandCompanionMotion::Trail
+			|| Motion == EWonderlandCompanionMotion::Float || Motion == EWonderlandCompanionMotion::Orbit)
+		{
+			continue;
+		}
+		Local += Mesh->Bounds.GetBox().ShiftBy(-Origin).TransformBy(UnYaw);
+	}
+	return Local.IsValid ? Local.ShiftBy(Origin) : Local;
+}
+
+FBox AWonderlandCompanionEmbodiment::GetFlameBounds() const
+{
+	if (FlameSurface == nullptr || !FlameSurface->IsVisible() || FlameSources.Num() == 0)
+	{
+		return FBox(ForceInit);
+	}
+	const FTransform Actor = GetActorTransform();
+	const FTransform UnYaw(FRotator(0.0f, -Actor.Rotator().Yaw, 0.0f).Quaternion());
+	const FVector Origin = Actor.GetLocation();
+	return FlameSurface->Bounds.GetBox().ShiftBy(-Origin).TransformBy(UnYaw).ShiftBy(Origin);
+}
+
 void AWonderlandCompanionEmbodiment::SetShowcaseLit(bool bShowcase)
 {
 	// Channel 1 alone for a showcase; channel 0 alone for a body that lives in the world. Applied to every

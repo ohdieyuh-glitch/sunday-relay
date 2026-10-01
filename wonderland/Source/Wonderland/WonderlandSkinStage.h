@@ -23,6 +23,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "RelayDogStride.h"
 #include "WonderlandSkinStage.generated.h"
 
 class AWonderlandCompanionEmbodiment;
@@ -186,6 +187,36 @@ private:
 	void EnsureBody();
 	void AimCamera();
 	void StepLookAround(float DeltaSeconds);
+
+	/**
+	 * RELAY OG'S IDLE, WORN BY WHATEVER SKIN IS ON (founder, 2026-10-01: "ALL MASCOT SKINS MUST USE RELAY OG'S IDLE BEHAVIOR").
+	 *
+	 * The mannequin has no Dog behind it, so until this it fell back on the free-standing companion idle -- a hover with two
+	 * degrees of roll, arms beating as wings, its own head sine -- in every skin, Relay OG's figure included. This runs the
+	 * canonical animator (RelayDogStride::FDogAnimator, set up by RelayDogPresentation exactly as the Dog sets up its own)
+	 * standing still, and dresses the body in its pose through the same WearCanonicalPose a worn skin takes in the world:
+	 * the body planted, the head glancing about the canon's comfortable cone and coming back to centre.
+	 */
+	void WearCanonicalIdle(float DeltaSeconds);
+
+	/** The canonical animator, standing still. Its own instance, so the preview idles whatever the player's Dog is doing. */
+	RelayDogStride::FDogAnimator CanonIdle;
+	bool bCanonIdleConfigured = false;
+
+	/**
+	 * THE COSTUME'S OWN SILHOUETTE, latched once per skin. The body frames the shot; this only stops a hat, a pair of antlers
+	 * or a collar that reaches past the body being cropped. Measured a few frames after the figure is built (a half-built
+	 * figure measures small) and then held, so an idling head or a swinging banner never moves the camera. Body-local uu
+	 * above the actor's origin, scale divided out.
+	 */
+	bool bSilhouetteLatched = false;
+	int32 FramesSinceShow = 0;
+	float SilhouetteLowUu = 0.0f;
+	float SilhouetteHighUu = 0.0f;
+	/** The top of the skin's fire, latched with the silhouette. Fire never moves the camera back; it may only use the
+	 *  room left under the feet to keep its tips in the frame. 0 / false for a skin without fire. */
+	bool bHasFlame = false;
+	float FlameHighUu = 0.0f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<USceneComponent> StageRoot;
