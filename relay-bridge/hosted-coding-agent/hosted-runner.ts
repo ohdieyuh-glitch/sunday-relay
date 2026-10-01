@@ -201,6 +201,8 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
           // Passed through, never read. `hostedChildEnv` places it ONLY under
           // CLAUDE_SUBSCRIPTION; in API mode it is dropped.
           oauthToken: process.env[CLAUDE_SUBSCRIPTION_TOKEN_ENV],
+          // The requested model pins the child's housekeeping slots to itself.
+          model: envelope.model,
         }),
         // The binary the preflight observed, when the operator named one.
         ...(process.env[CODER_CLAUDE_EXECUTABLE_ENV]

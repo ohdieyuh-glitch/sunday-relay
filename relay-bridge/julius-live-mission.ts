@@ -678,12 +678,14 @@ async function main(argv: readonly string[]): Promise<number> {
     claudeAuthBlocked = true;
   } else {
     // THE CHILD'S OWN ENVIRONMENT, composed by the same function and from the same
-    // sources the runner uses (PATH, HOME, the token), so the names decided over
-    // and the environment observed are the ones the Coding Agent will get.
+    // sources the runner uses (PATH, HOME, the token, the requested model), so the
+    // names decided over and the environment observed are the ones the Coding Agent
+    // will get.
     const subscriptionChild = authMode.mode === 'CLAUDE_SUBSCRIPTION'
       ? hostedChildEnv({
         apiKey: '', path: env.PATH, home: env.HOME, mode: 'CLAUDE_SUBSCRIPTION',
         oauthToken: env[CLAUDE_SUBSCRIPTION_TOKEN_ENV],
+        model: preflight.requested.codingModel,
       })
       : null;
     const observed = subscriptionChild === null

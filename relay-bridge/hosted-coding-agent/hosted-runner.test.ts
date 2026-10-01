@@ -64,6 +64,18 @@ describe('the options actually handed to the runtime', () => {
     expect(JSON.stringify(withoutEnv)).not.toContain('sk-ant');
   });
 
+  it('forbids any fallback model and pins the housekeeping slots to the requested model', async () => {
+    const env = (await run([init(), result()])).options.env as Record<string, string>;
+    expect(env.CLAUDE_CODE_NO_MODEL_FALLBACK).toBe('1');
+    expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe('claude-sonnet-5');
+    expect(env.ANTHROPIC_SMALL_FAST_MODEL).toBe('claude-sonnet-5');
+    // With no model requested nothing is pinned or invented, and the CLI still may not fall back.
+    const none = (await run([init(), result()], { requestedModel: null })).options.env as Record<string, string>;
+    expect(none.CLAUDE_CODE_NO_MODEL_FALLBACK).toBe('1');
+    expect(none.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBeUndefined();
+    expect(none.ANTHROPIC_SMALL_FAST_MODEL).toBeUndefined();
+  });
+
   it('sends a requested model, and sends none when none was requested', async () => {
     expect((await run([init(), result()])).options.model).toBe('claude-sonnet-5');
     const none = await run([init(), result()], { requestedModel: null });

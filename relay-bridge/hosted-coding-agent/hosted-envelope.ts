@@ -109,7 +109,25 @@ export function hostedLimitsForAllocation(usdMicros: number, base: HostedLimits 
  *
  * `PATH` and `HOME` are included because the SDK spawns its own executable;
  * the provider credential is included because the run cannot happen without
- * it. Nothing else is.
+ * it. Beyond the terminal markers, the only other names are the model rules below.
+ *
+ * NO FALLBACK MODEL, NO AUTOMATIC DOWNGRADE (founder rule, 2026-09-30), enforced
+ * by the CLI itself rather than only detected afterwards:
+ *   - `CLAUDE_CODE_NO_MODEL_FALLBACK=1`, always. Claude Code 2.1.286 (Agent SDK
+ *     0.3.286) added a model-ACCESS fallback that 2.1.220 lacked: a first-party CLI
+ *     answered 403/404 for the requested model re-sends the turn to an older model
+ *     of the same family, with no fallback configured. The served-model guard would
+ *     still stop that dispatch, but only after the substitute had generated.
+ *     MEASURED spend-free on 2026-10-01 against a fake API with a fallback
+ *     configured: without the variable, 2.1.286 sent `claude-opus-5-5`, then
+ *     `claude-opus-5`, and exited 0 on the substitute's answer; with it, the request
+ *     went to `claude-opus-5-5` only and the CLI exited 1. A request that is served
+ *     is unchanged by it.
+ *   - With a requested `model`, `ANTHROPIC_DEFAULT_HAIKU_MODEL` and
+ *     `ANTHROPIC_SMALL_FAST_MODEL` name that same model, so no housekeeping call can
+ *     reach another one. These are the two slots the workflow's subscription smoke
+ *     pins, so the smoke qualifies the environment the Coding Agent runs in. They
+ *     select a model and carry no credential (`ANTHROPIC_CREDENTIAL_ENV_NAMES`).
  */
 export function hostedChildEnv(input: {
   apiKey: string;
@@ -141,6 +159,11 @@ export function hostedChildEnv(input: {
    * The value is passed through and never read, compared or logged.
    */
   oauthToken?: string;
+  /**
+   * The model the run requested, or null when none was. It pins the housekeeping
+   * slots (above) and is never rewritten.
+   */
+  model?: string | null;
 }): Record<string, string> {
   const env: Record<string, string> = {
     PATH: input.path ?? '',
@@ -150,15 +173,31 @@ export function hostedChildEnv(input: {
     CI: '1',
     NO_COLOR: '1',
     TERM: 'dumb',
+    // No fallback model and no automatic downgrade; see above.
+    CLAUDE_CODE_NO_MODEL_FALLBACK: '1',
   };
+  if (typeof input.model === 'string' && input.model !== '') {
+    for (const name of HOSTED_CHILD_MODEL_PIN_KEYS) env[name] = input.model;
+  }
   if ((input.mode ?? 'ANTHROPIC_API') === 'ANTHROPIC_API') env.ANTHROPIC_API_KEY = input.apiKey;
   else if (typeof input.oauthToken === 'string' && input.oauthToken !== '') env[CLAUDE_SUBSCRIPTION_TOKEN_ENV] = input.oauthToken;
   return env;
 }
 
-/** The keys `hostedChildEnv` may ever produce in API mode — asserted by the boundary test. */
+/**
+ * The keys `hostedChildEnv` ALWAYS produces in API mode, asserted by the boundary
+ * test. The model pins are added on top when a model is requested.
+ */
 export const HOSTED_CHILD_ENV_KEYS: readonly string[] = Object.freeze([
-  'ANTHROPIC_API_KEY', 'PATH', 'HOME', 'CI', 'NO_COLOR', 'TERM',
+  'ANTHROPIC_API_KEY', 'PATH', 'HOME', 'CI', 'NO_COLOR', 'TERM', 'CLAUDE_CODE_NO_MODEL_FALLBACK',
+]);
+
+/**
+ * The housekeeping-model slots the child pins to the requested model whenever one
+ * was requested. These are the same two the workflow's subscription smoke pins.
+ */
+export const HOSTED_CHILD_MODEL_PIN_KEYS: readonly string[] = Object.freeze([
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL',
 ]);
 
 /**

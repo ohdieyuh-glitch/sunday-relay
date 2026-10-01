@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_HOSTED_LIMITS, HOSTED_ALLOWED_TOOLS, HOSTED_CHILD_ENV_KEYS,
+  DEFAULT_HOSTED_LIMITS, HOSTED_ALLOWED_TOOLS, HOSTED_CHILD_ENV_KEYS, HOSTED_CHILD_MODEL_PIN_KEYS,
   HOSTED_DISALLOWED_TOOLS, compileHostedEnvelope, hostedChildEnv,
   verifyGrantedEnvelope, withinCostCeiling,
 } from './hosted-envelope';
+import { ANTHROPIC_CREDENTIAL_ENV_NAMES } from './hosted-auth';
 import {
   HOSTED_ADAPTER_ID, LOCAL_ADAPTER_ID, probeHostedReadiness,
   runtimePackageFor, sanitizeHostedStatus, surfaceForAdapter,
@@ -100,6 +101,36 @@ describe('the credential boundary', () => {
     const serialized = JSON.stringify(compileHostedEnvelope({ workspacePath: WS }));
     expect(serialized).not.toContain('sk-ant');
     expect(serialized.toLowerCase()).not.toContain('api_key');
+  });
+});
+
+/**
+ * NO FALLBACK MODEL, NO AUTOMATIC DOWNGRADE. Claude Code 2.1.286 can re-send a refused
+ * turn to an older model on its own; the child forbids it in every mode. The
+ * housekeeping slots name the requested model, and only when one was requested.
+ */
+describe('the child may not leave the requested model', () => {
+  for (const mode of ['ANTHROPIC_API', 'CLAUDE_SUBSCRIPTION'] as const) {
+    it(`${mode}: no fallback, and both housekeeping slots name the requested model`, () => {
+      const env = hostedChildEnv({ apiKey: 'k', mode, model: 'claude-opus-5-5' });
+      expect(env.CLAUDE_CODE_NO_MODEL_FALLBACK).toBe('1');
+      for (const name of HOSTED_CHILD_MODEL_PIN_KEYS) expect(env[name], name).toBe('claude-opus-5-5');
+    });
+  }
+
+  it('pins nothing when no model was requested, and still forbids a fallback', () => {
+    for (const model of [undefined, null, '']) {
+      const env = hostedChildEnv({ apiKey: 'k', mode: 'CLAUDE_SUBSCRIPTION', model });
+      expect(env.CLAUDE_CODE_NO_MODEL_FALLBACK, String(model)).toBe('1');
+      for (const name of HOSTED_CHILD_MODEL_PIN_KEYS) expect(env[name], `${name} for ${String(model)}`).toBeUndefined();
+    }
+  });
+
+  it('pins exactly the two housekeeping slots, and neither is a credential', () => {
+    expect([...HOSTED_CHILD_MODEL_PIN_KEYS].sort()).toEqual(['ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL']);
+    for (const name of HOSTED_CHILD_MODEL_PIN_KEYS) expect(ANTHROPIC_CREDENTIAL_ENV_NAMES, name).not.toContain(name);
+    const env = hostedChildEnv({ apiKey: 'k', mode: 'CLAUDE_SUBSCRIPTION', model: 'claude-opus-5-5' });
+    expect(Object.keys(env).filter((name) => ANTHROPIC_CREDENTIAL_ENV_NAMES.includes(name))).toEqual([]);
   });
 });
 

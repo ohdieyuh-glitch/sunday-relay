@@ -71,6 +71,11 @@ const sha256 = (value: string): string => createHash('sha256').update(value).dig
  */
 const COMPOSED_NAMES = [
   'PATH', 'HOME', 'CI', 'NO_COLOR', 'TERM',
+  // No fallback model, and the two housekeeping slots pinned to the requested model
+  // (`hostedChildEnv`). Named here literally rather than imported, so a name the
+  // module adds later is a finding and not silently allowed. Their VALUES are
+  // asserted below.
+  'CLAUDE_CODE_NO_MODEL_FALLBACK', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL',
   ...(process.platform === 'win32'
     ? ['HOMEDRIVE', 'HOMEPATH', 'LOGONSERVER', 'SYSTEMDRIVE', 'SYSTEMROOT', 'TEMP', 'USERDOMAIN', 'USERNAME', 'USERPROFILE', 'WINDIR']
     : []),
@@ -91,12 +96,29 @@ const FAKE_CHILD = [
   '  names: Object.keys(process.env).sort(),',
   "  anthropicKeySha256: key === undefined ? null : createHash('sha256').update(key).digest('hex'),",
   "  oauthTokenSha256: process.env.CLAUDE_CODE_OAUTH_TOKEN === undefined ? null : createHash('sha256').update(process.env.CLAUDE_CODE_OAUTH_TOKEN).digest('hex'),",
+  // Model names and a switch, never credentials: recorded as values so they can be compared.
+  '  modelPins: {',
+  '    ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? null,',
+  '    ANTHROPIC_SMALL_FAST_MODEL: process.env.ANTHROPIC_SMALL_FAST_MODEL ?? null,',
+  '  },',
+  '  noModelFallback: process.env.CLAUDE_CODE_NO_MODEL_FALLBACK ?? null,',
   '}));',
   'process.exit(1);',
   '',
 ].join('\n');
 
-interface ChildRecord { readonly names: readonly string[]; readonly anthropicKeySha256: string | null; readonly oauthTokenSha256: string | null }
+interface ChildRecord {
+  readonly names: readonly string[];
+  readonly anthropicKeySha256: string | null;
+  readonly oauthTokenSha256: string | null;
+  readonly modelPins: { readonly ANTHROPIC_DEFAULT_HAIKU_MODEL: string | null; readonly ANTHROPIC_SMALL_FAST_MODEL: string | null };
+  readonly noModelFallback: string | null;
+}
+
+/** The requested model pins both housekeeping slots, and nothing may fall back from it. */
+const PINNED_TO_REQUESTED = Object.freeze({
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: BASE.RELAY_HOSTED_CODING_MODEL, ANTHROPIC_SMALL_FAST_MODEL: BASE.RELAY_HOSTED_CODING_MODEL,
+});
 
 const CHARGE = Object.freeze({
   stage: 'build' as const,
@@ -207,7 +229,14 @@ describe('CLAUDE_SUBSCRIPTION: the actual child process carries no Anthropic cre
     for (const credential of ANTHROPIC_CREDENTIAL_ENV_NAMES) {
       expect(names, `${credential} would take the child off the subscription path`).not.toContain(credential);
     }
-    expect(names.filter((name) => name.startsWith('ANTHROPIC_')), 'no Anthropic variable of any kind').toEqual([]);
+    // The ONLY Anthropic-prefixed names are the two housekeeping-model slots. Each one
+    // names the requested model, so it selects a model and carries no credential (every
+    // credential name is refused just above).
+    expect(names.filter((name) => name.startsWith('ANTHROPIC_')).sort(), 'no Anthropic variable but the two model pins')
+      .toEqual(['ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL']);
+    expect(seen.child!.modelPins, 'every housekeeping call names the requested model').toEqual(PINNED_TO_REQUESTED);
+    // NO FALLBACK MODEL, NO AUTOMATIC DOWNGRADE, in the child itself.
+    expect(seen.child!.noModelFallback, 'the CLI may not substitute another model').toBe('1');
     expect(seen.child!.anthropicKeySha256).toBeNull();
     // EXACTLY the composed allow-list, plus the SDK's own markers — nothing from the parent.
     expect(names.filter((name) => !COMPOSED_NAMES.includes(name) && !SDK_MARKER.test(name)), 'no inherited variable').toEqual([]);
@@ -253,6 +282,8 @@ describe('CLAUDE_SUBSCRIPTION with a setup-token token: the child carries the to
     for (const credential of ANTHROPIC_CREDENTIAL_ENV_NAMES) expect(names, credential).not.toContain(credential);
     expect(seen.child!.anthropicKeySha256).toBeNull();
     expect(names.filter((name) => !COMPOSED_NAMES.includes(name) && !SDK_MARKER.test(name)), 'no inherited variable').toEqual([]);
+    expect(seen.child!.modelPins).toEqual(PINNED_TO_REQUESTED);
+    expect(seen.child!.noModelFallback).toBe('1');
     const diagnostics = seen.failure!.diagnostics!;
     expect(diagnostics.billingPath).toBe('SUBSCRIPTION');
     expect(diagnostics.costBasis).toBe('NOT_APPLICABLE');
@@ -287,6 +318,9 @@ describe('ANTHROPIC_API: the key reaches the child only when API mode is chosen'
       expect(seen.child!.anthropicKeySha256, 'and not one the parent happened to hold').not.toBe(sha256(PARENT_KEY));
       expect(seen.child!.names.filter((name) => !COMPOSED_NAMES.includes(name) && !SDK_MARKER.test(name) && name !== 'ANTHROPIC_API_KEY'))
         .toEqual([]);
+      // The no-fallback rule is not a subscription rule: it holds in API mode too.
+      expect(seen.child!.modelPins).toEqual(PINNED_TO_REQUESTED);
+      expect(seen.child!.noModelFallback).toBe('1');
       expect(seen.failure!.diagnostics!.billingPath).toBe('API_BILLED');
     });
   }
