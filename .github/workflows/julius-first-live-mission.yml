@@ -67,7 +67,7 @@ on:
         required: false
         default: ''
       subscription_smoke:
-        description: 'Type "RUN SUBSCRIPTION SMOKE" to send ONE tiny `claude -p` request on the Coding Agent''s Claude subscription token (a trivial amount of subscription usage, never API credit). Separate from confirm_live; leave empty otherwise.'
+        description: 'Type "RUN SUBSCRIPTION SMOKE" to send ONE tiny `claude -p` request on the Coding Agent''s Claude subscription token (a trivial amount of subscription usage, never API credit). A paid run (confirm_live) always runs this smoke first and spends nothing unless it passes, so type this only for a smoke on its own; leave empty otherwise.'
         required: false
         default: ''
       dispatch_key:
@@ -645,7 +645,15 @@ jobs:
       - name: Install
         run: npm ci
 
-      # THE FOUNDER-REQUESTED SUBSCRIPTION SMOKE — OPTIONAL, AND NEVER API CREDIT.
+      # THE SUBSCRIPTION SMOKE — ON ITS OWN WHEN ASKED, BEFORE EVERY PAID RUN, AND NEVER API CREDIT.
+      #
+      # A PAID RUN QUALIFIES ITS CODER FIRST (Codex review of #302, P1). The readiness
+      # check below proves a LOGIN, not that the pinned model is served: a paid run
+      # that skipped this step could pay the Prompt Architect and the plan review
+      # before learning the coder's model was unavailable or substituted. So
+      # `confirm_live` runs this step too, and the attempt marker, its upload and the
+      # LIVE step each require its `success` by id. The zero-dispatch preflight (no
+      # `confirm_live`, no `subscription_smoke`) still sends nothing.
       #
       # The Coding Agent authenticates with the founder's Claude Max subscription
       # through a `claude setup-token` token (CLAUDE_CODE_OAUTH_TOKEN). The free
@@ -655,14 +663,19 @@ jobs:
       # exactly OK", one turn, in an empty temporary directory (no project
       # settings, no CLAUDE.md), with the Agent SDK's own bundled CLI for this
       # runner (ubuntu x64) run as a LITERAL command under `env -i`: its
-      # environment is built from nothing but PATH, a fresh HOME, CI/NO_COLOR/TERM
-      # and the token, so no Anthropic API variable can reach it. No Anthropic API
+      # environment is built from nothing but PATH, a fresh HOME, CI/NO_COLOR/TERM,
+      # the token and the CLI's two small-model slots pinned to the Coding Agent's
+      # own model, so no Anthropic API variable can reach it and no other model can
+      # answer: a housekeeping call the CLI makes lands on the pinned model too, and
+      # the smoke's served-model check may then require that EVERY model that
+      # produced output is the one asked for. No Anthropic API
       # key exists in this step either, and `env-check` refuses outright if any
       # variable that outranks the token is present. The CLI's output goes to
       # files the check script judges; stderr is discarded; only closed tokens
       # are printed. There is no fallback: anything but a subscription is FAIL.
       - name: 'Subscription smoke: one tiny request on the Coding Agent''s subscription'
-        if: success() && inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE'
+        id: subscription_smoke
+        if: success() && (inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE' || inputs.confirm_live == 'RUN LIVE MISSION')
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
@@ -673,26 +686,35 @@ jobs:
           # stderr discarded, run 36685079176 failed and left no reason behind. Errexit
           # is off for this step only. Every outcome below is still decided explicitly,
           # and the step still fails closed: only a PASS verdict line lets it succeed.
+          # BOTH EXITS DECIDE TOO (Codex review of #302, P2): each is kept in a variable on
+          # the line straight after its call, handed to smoke-verdict, and required to be
+          # 0 below, so JSON that reads OK from a CLI that then exited non-zero is a FAIL.
           set +e
           sub=$(mktemp -d)
           mkdir "$sub/home" "$sub/work"
           : > subscription-smoke.log
           status=1
+          auth_exit=none
+          cli_exit=none
           if node scripts/julius-subscription-check.mjs env-check --for smoke --model "$RELAY_HOSTED_CODING_MODEL" | tee -a subscription-smoke.log; then
-            env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
+            env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb ANTHROPIC_DEFAULT_HAIKU_MODEL="$RELAY_HOSTED_CODING_MODEL" ANTHROPIC_SMALL_FAST_MODEL="$RELAY_HOSTED_CODING_MODEL" CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
               "$PWD/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude" auth status --json > "$sub/status.json" 2>/dev/null
-            echo "subscription_smoke_auth_exit=$?" | tee -a subscription-smoke.log
+            auth_exit=$?
+            echo "subscription_smoke_auth_exit=$auth_exit" | tee -a subscription-smoke.log
             if node scripts/julius-subscription-check.mjs status-verdict --for smoke --model "$RELAY_HOSTED_CODING_MODEL" < "$sub/status.json" | tee -a subscription-smoke.log; then
-              env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
+              env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb ANTHROPIC_DEFAULT_HAIKU_MODEL="$RELAY_HOSTED_CODING_MODEL" ANTHROPIC_SMALL_FAST_MODEL="$RELAY_HOSTED_CODING_MODEL" CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
                 "$PWD/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude" -p 'Reply with exactly OK' --max-turns 1 --output-format json --model "$RELAY_HOSTED_CODING_MODEL" --setting-sources user --strict-mcp-config --no-session-persistence > "$sub/smoke.json" 2>/dev/null
-              echo "subscription_smoke_cli_exit=$?" | tee -a subscription-smoke.log
-              node scripts/julius-subscription-check.mjs smoke-verdict --model "$RELAY_HOSTED_CODING_MODEL" --status-file "$sub/status.json" < "$sub/smoke.json" | tee -a subscription-smoke.log
+              cli_exit=$?
+              echo "subscription_smoke_cli_exit=$cli_exit" | tee -a subscription-smoke.log
+              node scripts/julius-subscription-check.mjs smoke-verdict --model "$RELAY_HOSTED_CODING_MODEL" --status-file "$sub/status.json" --auth-exit "$auth_exit" --cli-exit "$cli_exit" < "$sub/smoke.json" | tee -a subscription-smoke.log
               status=${PIPESTATUS[0]}
             fi
           fi
           rm -rf "$sub"
           grep -qE '^subscription_smoke provider=anthropic .* auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\.ai) reply=OK result=PASS$' subscription-smoke.log \
             || { echo 'subscription_smoke_failed: no PASS on the pinned model; the log above says why; nothing else was attempted' >&2; exit 1; }
+          [ "$auth_exit" = 0 ] && [ "$cli_exit" = 0 ] \
+            || { echo "subscription_smoke_failed: a PASS needs both CLI exits to be 0 (auth status: $auth_exit, request: $cli_exit)" >&2; exit 1; }
           exit "$status"
 
       - name: Build the executor, the preflight probe and the live entrypoint
@@ -912,7 +934,7 @@ jobs:
             # the step before the reviewer is probed and before the count below. The
             # count is the gate, and it still fails closed.
             set +e
-            env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
+            env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb ANTHROPIC_DEFAULT_HAIKU_MODEL="$RELAY_HOSTED_CODING_MODEL" ANTHROPIC_SMALL_FAST_MODEL="$RELAY_HOSTED_CODING_MODEL" CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
               "$PWD/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude" auth status --json > "$sub/status.json" 2>/dev/null
             node scripts/julius-subscription-check.mjs status-verdict --model "$RELAY_HOSTED_CODING_MODEL" < "$sub/status.json" \
               | tee -a provider-readiness.log
@@ -1001,9 +1023,12 @@ jobs:
       # ----------------------------------------------------------------- LIVE
 
       # THE LAST FREE STEP. Everything above proved the rig without spending
-      # anything; the entrypoint below can contact a provider on its first
-      # tick. The attempt is recorded HERE, in between, so a run that dies
-      # mid-mission still leaves the durable fact that a paid run was entered.
+      # anything billable (a paid run's subscription smoke is one tiny request on
+      # the coder's subscription, never API credit); the entrypoint below can
+      # contact a provider on its first tick. The attempt is recorded HERE, in
+      # between, so a run that dies mid-mission still leaves the durable fact that
+      # a paid run was entered. No paid step runs unless that smoke PASSED in this
+      # job: each names `steps.subscription_smoke.outcome == 'success'`.
       #
       # ORDERING IS THE SEMANTIC. The marker means "authorized and about to
       # start", not "a provider was billed" — a claim this job could never
@@ -1012,7 +1037,7 @@ jobs:
       # behind for the next dispatch to find.
       - name: 'Record that a paid mission was attempted (before any provider can be reached)'
         id: attempt_marker
-        if: success() && inputs.confirm_live == 'RUN LIVE MISSION'
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.subscription_smoke.outcome == 'success'
         env:
           MARKER_DIR: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted
         run: |
@@ -1035,7 +1060,7 @@ jobs:
           } > "$MARKER_DIR/marker.txt"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: success() && inputs.confirm_live == 'RUN LIVE MISSION'
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.subscription_smoke.outcome == 'success'
         with:
           name: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted
           path: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted
@@ -1056,7 +1081,8 @@ jobs:
       # an `always()` or `!cancelled()` added to a paid step would read as an
       # obvious mistake instead of a subtle one — and the contract test pins it.
       - name: 'LIVE: run the first real Julius mission'
-        if: success() && inputs.confirm_live == 'RUN LIVE MISSION'
+        id: live_mission
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.subscription_smoke.outcome == 'success'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           # The Coding Agent on the founder's Claude subscription. No Anthropic API
@@ -1088,8 +1114,12 @@ jobs:
 
       # ------------------------------------------------------------- EVIDENCE
 
+      # COMPLETED MEANS LIVE SUCCEEDED, named by id. LIVE can now be SKIPPED while
+      # success() still holds (its own condition also needs the smoke's success), and a
+      # skipped LIVE must never leave a durable "a paid mission completed" behind: the
+      # inputs gate counts that marker.
       - name: Record that a paid mission completed
-        if: success() && inputs.confirm_live == 'RUN LIVE MISSION'
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.live_mission.outcome == 'success'
         env:
           MARKER_DIR: ${{ steps.inputs_gate.outputs.marker_namespace }}-completed
         run: |
@@ -1105,7 +1135,7 @@ jobs:
           } > "$MARKER_DIR/marker.txt"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: success() && inputs.confirm_live == 'RUN LIVE MISSION'
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.live_mission.outcome == 'success'
         with:
           name: ${{ steps.inputs_gate.outputs.marker_namespace }}-completed
           path: ${{ steps.inputs_gate.outputs.marker_namespace }}-completed
@@ -1165,9 +1195,9 @@ jobs:
           # The Coding Agent's subscription line has closed fields of its own.
           grep -E '^(provider_readiness provider=[a-z]+ model=[A-Za-z0-9._:/-]+ http=([0-9]{3}|none) result=(AUTHENTICATED_MODEL_AVAILABLE|UNAUTHENTICATED|MODEL_NOT_FOUND|UNREACHABLE|UNEXPECTED_STATUS|UNCHECKED)|provider_readiness provider=anthropic model=[A-Za-z0-9._-]+ http=none auth=CLAUDE_SUBSCRIPTION (method=(oauth_token|claude\.ai) plan=(max|pro|team|enterprise|absent)|reason=[A-Z_+]+) result=(SUBSCRIPTION_LOGIN_PRESENT|SUBSCRIPTION_NOT_READY)|provider_balance=UNKNOWN .*)$' provider-readiness.log \
             > julius-live-evidence/provider-readiness.txt 2>/dev/null || true
-          # The optional subscription smoke, when it ran: closed tokens only.
+          # The subscription smoke (on its own, or before a paid run), when it ran: closed tokens only.
           if [ -f subscription-smoke.log ]; then
-            grep -E '^(subscription_smoke_auth provider=anthropic model=[A-Za-z0-9._-]+ http=none auth=CLAUDE_SUBSCRIPTION (method=(oauth_token|claude\.ai) plan=(max|pro|team|enterprise|absent)|reason=[A-Z_+]+) result=(SUBSCRIPTION_LOGIN_PRESENT|SUBSCRIPTION_NOT_READY)|subscription_smoke provider=anthropic model=[A-Za-z0-9._-]+ auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\.ai|none) reply=(OK|UNEXPECTED|ERROR|UNREADABLE|NO_SUBSCRIPTION_STATUS) result=(PASS|FAIL)|subscription_smoke_(auth|cli)_exit=[0-9]{1,3}|subscription_smoke_served provider=anthropic requested=[A-Za-z0-9._-]{1,64} served=(none|[A-Za-z0-9._-]{1,64}(,[A-Za-z0-9._-]{1,64}){0,7}) match=(EXACT|DATED_BUILD|MISMATCH|NONE)|subscription_smoke_reason provider=anthropic model=[A-Za-z0-9._-]{1,64} reason=(MODEL_NOT_ENTITLED_OR_NOT_FOUND|AUTH|USAGE_LIMIT|RATE_LIMITED|OVERLOADED|MAX_TURNS|UNEXPECTED_REPLY|UNREADABLE|SERVED_MODEL_MISMATCH|SERVED_MODEL_UNATTESTED|OTHER) http=([1-5][0-9]{2}|none) subtype=([a-z_]{1,40}|none))$' subscription-smoke.log \
+            grep -E '^(subscription_smoke_auth provider=anthropic model=[A-Za-z0-9._-]+ http=none auth=CLAUDE_SUBSCRIPTION (method=(oauth_token|claude\.ai) plan=(max|pro|team|enterprise|absent)|reason=[A-Z_+]+) result=(SUBSCRIPTION_LOGIN_PRESENT|SUBSCRIPTION_NOT_READY)|subscription_smoke provider=anthropic model=[A-Za-z0-9._-]+ auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\.ai|none) reply=(OK|UNEXPECTED|ERROR|UNREADABLE|NO_SUBSCRIPTION_STATUS) result=(PASS|FAIL)|subscription_smoke_(auth|cli)_exit=[0-9]{1,3}|subscription_smoke_served provider=anthropic requested=[A-Za-z0-9._-]{1,64} served=(none|[A-Za-z0-9._-]{1,64}(,[A-Za-z0-9._-]{1,64}){0,7}) match=(EXACT|DATED_BUILD|MISMATCH|NONE)|subscription_smoke_reason provider=anthropic model=[A-Za-z0-9._-]{1,64} reason=(MODEL_NOT_ENTITLED_OR_NOT_FOUND|AUTH|USAGE_LIMIT|RATE_LIMITED|OVERLOADED|MAX_TURNS|UNEXPECTED_REPLY|UNREADABLE|SERVED_MODEL_MISMATCH|SERVED_MODEL_UNATTESTED|EXIT_UNREPORTED|AUTH_EXIT_NONZERO|CLI_EXIT_NONZERO|OTHER) http=([1-5][0-9]{2}|none) subtype=([a-z_]{1,40}|none))$' subscription-smoke.log \
               > julius-live-evidence/subscription-smoke.txt 2>/dev/null || true
           fi
 

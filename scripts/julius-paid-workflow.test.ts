@@ -195,7 +195,7 @@ describe('provider readiness fails before spending, and never exposes a key', ()
       // ENVIRONMENT entry for the child, never an argument to it, never printed.
       if (/CLAUDE_CODE_OAUTH_TOKEN/u.test(line)) {
         expect(line, 'the token is only presence-checked or handed to the CLI under env -i').toMatch(
-          /^\s*(\[ -n "\$OPENAI_API_KEY" \] && \[ -n "\$CLAUDE_CODE_OAUTH_TOKEN" \] && \[ -n "\$XAI_API_KEY" \] \|\| \{|env -i -C "\$sub\/work" PATH="\$PATH" HOME="\$sub\/home" CI=1 NO_COLOR=1 TERM=dumb CLAUDE_CODE_OAUTH_TOKEN="\$CLAUDE_CODE_OAUTH_TOKEN" \\)$/u,
+          /^\s*(\[ -n "\$OPENAI_API_KEY" \] && \[ -n "\$CLAUDE_CODE_OAUTH_TOKEN" \] && \[ -n "\$XAI_API_KEY" \] \|\| \{|env -i -C "\$sub\/work" PATH="\$PATH" HOME="\$sub\/home" CI=1 NO_COLOR=1 TERM=dumb ANTHROPIC_DEFAULT_HAIKU_MODEL="\$RELAY_HOSTED_CODING_MODEL" ANTHROPIC_SMALL_FAST_MODEL="\$RELAY_HOSTED_CODING_MODEL" CLAUDE_CODE_OAUTH_TOKEN="\$CLAUDE_CODE_OAUTH_TOKEN" \\)$/u,
         );
       }
       if (/\becho\b/u.test(line)) expect(line, 'nothing echoes a key').not.toMatch(/API_KEY/u);
@@ -221,7 +221,9 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     }
     throw new Error('the Agent SDK bundled CLI is not installed for this platform');
   })();
-  const CLI_ALLOWED_ENV = ['PATH', 'HOME', 'CI', 'NO_COLOR', 'TERM', 'CLAUDE_CODE_OAUTH_TOKEN'];
+  // The two small-model slots are pinned to the Coding Agent's own model (never a credential), so
+  // a housekeeping call cannot put another model in the smoke's modelUsage.
+  const CLI_ALLOWED_ENV = ['PATH', 'HOME', 'CI', 'NO_COLOR', 'TERM', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL', 'CLAUDE_CODE_OAUTH_TOKEN'];
   /**
    * What the shim's own shell adds to its environment when it starts; none of it is
    * inherited through `env -i`. On Windows the MSYS runtime also sets its own three
@@ -349,7 +351,7 @@ describe('provider readiness fails before spending, and never exposes a key', ()
    * the step before smoke-verdict ever read the reply (run 36685079176). A shim that
    * always exited 0, run under a shell without `-e`, is why no case here caught it.
    */
-  const runSmoke = (statusJson: string, replyJson: string, env: Record<string, string> = {}, cliExit = 0) => {
+  const runSmoke = (statusJson: string, replyJson: string, env: Record<string, string> = {}, cliExit = 0, authExit = 0) => {
     const smoke = step(job('first-live-mission'), "'Subscription smoke: one tiny request on the Coding Agent''s subscription'");
     const dir = mkdtempSync(join(tmpdir(), 'julius-smoke-'));
     mkdirSync(join(dir, 'scripts'));
@@ -362,7 +364,7 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     writeFileSync(join(shimDir, 'claude'), [
       '#!/usr/bin/env bash',
       `printf '%s\\n' "$*" >> '${record}/cli-argv'`,
-      `case "$1" in auth) cat '${record}/status.json';; -p) cat '${record}/reply.json'; exit ${cliExit};; esac`,
+      `case "$1" in auth) cat '${record}/status.json'; exit ${authExit};; -p) cat '${record}/reply.json'; exit ${cliExit};; esac`,
     ].join('\n'));
     chmodSync(join(shimDir, 'claude'), 0o755);
     const blankRoutes = Object.fromEntries(ANTHROPIC_CREDENTIAL_ENV_NAMES.map((name) => [name, '']));
@@ -397,6 +399,27 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     ]);
     expect(run.output).not.toContain('FAKETESTNOTREAL');
   }, 60_000);
+
+  /**
+   * JSON THAT READS OK IS NOT A PASS WHEN THE CLI EXITED NON-ZERO (Codex review of #302, P2).
+   *
+   * Both exits used to be recorded and never judged: the step passed on the verdict's PASS
+   * line alone, so a CLI that printed a clean OK and then exited 1 qualified the model. The
+   * step now requires both exits to be 0 as well as the PASS line, whatever the verdict says.
+   */
+  it('smoke: an OK reply from a CLI that then exits non-zero FAILS, for the request and for auth status', () => {
+    const OK_OPUS = '{"type":"result","subtype":"success","is_error":false,"result":"OK","modelUsage":{"claude-opus-5-5":{"inputTokens":3,"outputTokens":1}}}';
+    const request = runSmoke(TOKEN_ONLY, OK_OPUS, {}, 1);
+    expect(request.code, 'an OK reply and a request exit of 1').not.toBe(0);
+    expect(request.output).toContain('subscription_smoke_cli_exit=1');
+    expect(request.calls, 'the one request was sent and judged').toHaveLength(2);
+    const auth = runSmoke(TOKEN_ONLY, OK_OPUS, {}, 0, 1);
+    expect(auth.code, 'an OK reply after an auth status exit of 1').not.toBe(0);
+    expect(auth.output).toContain('subscription_smoke_auth_exit=1');
+    const both = runSmoke(TOKEN_ONLY, OK_OPUS, {}, 0, 0);
+    expect(both.code, 'the control: both exits 0 and the same reply').toBe(0);
+    expect(both.output).not.toContain('FAKETESTNOTREAL');
+  }, 180_000);
 
   it('smoke: an api_key status FAILS CLOSED and no request is sent; a wrong reply fails; a key in the step stops the CLI', () => {
     const apiKey = runSmoke('{"loggedIn":true,"authMethod":"api_key","apiProvider":"firstParty","apiKeySource":"ANTHROPIC_API_KEY"}', '{"result":"OK"}');
