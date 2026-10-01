@@ -117,6 +117,9 @@ function Invoke-Boot([string]$ExecCmds, [int]$Limit, [string]$Tag) {
     $crash = $lines | Where-Object { $_ -match 'Fatal error|Assertion failed|Critical error|Unhandled Exception' } | Select-Object -First 1
     if ($crash) { "[$Tag] CRASH: $crash"; $script:Problems += "$Tag CRASH" }
     if (-not ($lines | Where-Object { $_ -match 'WLQA END' })) { "[$Tag] INCOMPLETE: no WLQA END"; $script:Problems += "$Tag INCOMPLETE" }
+    # A MINIMIZED GAME CAPTURES NOTHING (0x0): someone put the window away mid-run -- RC4's first QA lost eight frames so
+    $blind = @($lines | Where-Object { $_ -match 'WLQA frame .* FAILED 0x0' }).Count
+    if ($blind -gt 0) { "[$Tag] $blind frame(s) captured nothing: the game window was minimized"; $script:Interfered += "$Tag ($blind frames captured nothing: window minimized)" }
   } else { "[$Tag] NO LOG under $UserDir"; $script:Problems += "$Tag NO LOG" }
 }
 
