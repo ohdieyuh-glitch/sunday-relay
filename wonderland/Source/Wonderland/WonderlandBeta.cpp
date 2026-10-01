@@ -7,13 +7,23 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerInput.h"
 #include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
+#include "HAL/PlatformProcess.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Widgets/SWindow.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogWonderlandBeta, Log, All);
+#if PLATFORM_WINDOWS
+#include "Windows/WindowsHWrapper.h"
+#endif
+
+// NO LOG CATEGORY OF ITS OWN, ON PURPOSE. A log category is an FName made during static initialisation, before the
+// engine registers Niagara's types -- and Niagara keys its type registry on a hash of FName ENTRY IDS
+// (FNiagaraTypeDefinition::GeneratePathNameHash, NiagaraModule.cpp), a weak combine under which some layouts collide:
+// RC1 crashed on every boot ("NewType: NiagaraPosition, OldType: NiagaraInt32", NiagaraTypeRegistry.cpp:338) because
+// new names shifted the layout. See the memory note "Niagara FName-hash crash"; boot-verify every release build.
 
 namespace WonderlandBeta
 {
@@ -85,18 +95,50 @@ namespace WonderlandBeta
 		}
 	}
 
+	void ApplyPlayerSessionSwitches()
+	{
+		if (IsDeveloperSession())
+		{
+			return;
+		}
+		// THE GAMEPLAY DEBUGGER ('): a Development build compiles it in and binds the apostrophe for every player, and it
+		// draws the engine's AI and actor debug overlays across the world (Second Wonderland's review). Its manager is made
+		// as each world initialises (GameplayDebuggerModule.cpp), so switching auto-creation off here -- from a game-instance
+		// subsystem, before the map's world exists -- means a player's session never gets one.
+		if (IConsoleVariable* AutoCreate = IConsoleManager::Get().FindConsoleVariable(TEXT("GameplayDebugger.AutoCreateGameplayDebuggerManager")))
+		{
+			AutoCreate->Set(0, ECVF_SetByCode);
+		}
+	}
+
 	namespace
 	{
+		/**
+		 * ONE ATOMIC STEP, AND THE NEW FILE IS NEVER THROWN AWAY. IFileManager::Move(Replace) deletes the destination first
+		 * and then moves, so a move that failed -- anti-virus or an indexer holding the fresh temporary -- left NEITHER file,
+		 * and the first version of this then deleted the temporary as well (Second Wonderland's review of 458f5448).
+		 * MoveFileExW(MOVEFILE_REPLACE_EXISTING) swaps the file in one operation; when it fails, the previous save is
+		 * untouched.
+		 */
 		bool Adopt(const FString& Path, const FString& Temp)
 		{
-			IFileManager& Files = IFileManager::Get();
-			if (!Files.Move(*Path, *Temp, /*bReplace*/ true, /*bEvenIfReadOnly*/ true))
+			const FString FullPath = FPaths::ConvertRelativePathToFull(Path);
+			const FString FullTemp = FPaths::ConvertRelativePathToFull(Temp);
+#if PLATFORM_WINDOWS
+			for (int32 Attempt = 0; Attempt < 5; ++Attempt)
 			{
-				Files.Delete(*Temp);
-				UE_LOG(LogWonderlandBeta, Warning, TEXT("WLSAVE could not move %s over %s; the previous file is kept"), *Temp, *Path);
-				return false;
+				if (::MoveFileExW(*FullTemp, *FullPath, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+				{
+					return true;
+				}
+				FPlatformProcess::Sleep(0.05f);
 			}
-			return true;
+			UE_LOG(LogTemp, Warning, TEXT("WLSAVE could not replace %s (Windows error %u); the previous save is kept unchanged"),
+				*FullPath, static_cast<uint32>(::GetLastError()));
+			return false;
+#else
+			return IFileManager::Get().Move(*FullPath, *FullTemp, /*bReplace*/ true, /*bEvenIfReadOnly*/ true);
+#endif
 		}
 	}
 
@@ -106,7 +148,7 @@ namespace WonderlandBeta
 		IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), /*Tree*/ true);
 		if (!FFileHelper::SaveStringToFile(Text, *Temp))
 		{
-			UE_LOG(LogWonderlandBeta, Warning, TEXT("WLSAVE could not write %s (is the folder writable?)"), *Temp);
+			UE_LOG(LogTemp, Warning, TEXT("WLSAVE could not write %s (is the folder writable?)"), *Temp);
 			return false;
 		}
 		return Adopt(Path, Temp);
@@ -118,7 +160,7 @@ namespace WonderlandBeta
 		IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), /*Tree*/ true);
 		if (!FFileHelper::SaveArrayToFile(Bytes, *Temp))
 		{
-			UE_LOG(LogWonderlandBeta, Warning, TEXT("WLSAVE could not write %s (is the folder writable?)"), *Temp);
+			UE_LOG(LogTemp, Warning, TEXT("WLSAVE could not write %s (is the folder writable?)"), *Temp);
 			return false;
 		}
 		return Adopt(Path, Temp);
@@ -126,15 +168,15 @@ namespace WonderlandBeta
 
 	void RecoverInterruptedSave(const FString& Path)
 	{
+		// WITH AN ATOMIC REPLACE THERE IS NO MOMENT WHEN THE SAVE IS MISSING, so a temporary left beside it comes from a
+		// write that never completed -- possibly half a file. It is discarded, never adopted: adopting any non-empty
+		// temporary could bring back a stale or half-written set (Second Wonderland's review).
 		IFileManager& Files = IFileManager::Get();
 		const FString Temp = Path + TEXT(".tmp");
-		if (!Files.FileExists(*Path) && Files.FileExists(*Temp) && Files.FileSize(*Temp) > 0)
+		if (Files.FileExists(*Temp))
 		{
-			// The move was interrupted after the old file went and before the new one arrived: the temporary is the
-			// complete newer save, so it is the one to keep.
-			const bool bAdopted = Files.Move(*Path, *Temp, /*bReplace*/ true, /*bEvenIfReadOnly*/ true);
-			UE_LOG(LogWonderlandBeta, Display, TEXT("WLSAVE %s was interrupted mid-save; the complete temporary was %s"),
-				*Path, bAdopted ? TEXT("adopted") : TEXT("NOT adopted"));
+			const bool bGone = Files.Delete(*Temp, /*RequireExists*/ false, /*EvenReadOnly*/ true, /*Quiet*/ true);
+			UE_LOG(LogTemp, Display, TEXT("WLSAVE discarded an unfinished temporary beside %s: %s"), *Path, bGone ? TEXT("ok") : TEXT("FAILED"));
 		}
 	}
 

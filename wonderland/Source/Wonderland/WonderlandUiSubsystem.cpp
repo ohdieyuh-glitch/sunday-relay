@@ -814,7 +814,20 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		{
 			SAssignNew(WelcomePanel, SWonderlandWelcomePanel)
 				.BuildLabel(WonderlandBeta::BuildLabel())
-				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->DismissWelcome(); } });
+				.OnRequestClose_Lambda([WeakThis]()
+				{
+					if (UWonderlandUiSubsystem* Self = WeakThis.Get())
+					{
+						const bool bBackToMenu = Self->bWelcomeFromMenu;
+						Self->bWelcomeFromMenu = false;
+						Self->DismissWelcome();
+						if (bBackToMenu)
+						{
+							// HOW TO PLAY was opened from the Menu, so closing it goes back there, not out to the world.
+							Self->OpenOverlay(EOverlay::Menu);
+						}
+					}
+				});
 		}
 		Panel = WelcomePanel;
 		Focus = WelcomePanel;
@@ -829,7 +842,7 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 				.OnRequestWallet_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Wallet); } })
 				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
 				.OnRequestMap_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Map); } })
-				.OnRequestWelcome_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Welcome); } })
+				.OnRequestWelcome_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->bWelcomeFromMenu = true; WeakThis->OpenOverlay(EOverlay::Welcome); } })
 				.OnRequestQuit_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->QuitWonderland(); } })
 				.OnRequestNavigate_Lambda([WeakThis](EWonderlandNavTarget Target) { if (WeakThis.IsValid()) { WeakThis->HandleNavigate(Target); } });
 		}
@@ -3914,16 +3927,20 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		{
 			// THE PLAYER'S OWN, NEVER-SENT CONTRACTS CAN BE DELETED (private beta, B04). Without this the record only
 			// grows, and a contract Julius never saw is the player's note, not a mission anyone else holds.
-			const int32 Index = FCString::Atoi(*Which) - 1;
+			// A NUMBER AND NOTHING ELSE: "3abc" is not task 3 (Atoi would have said it was).
+			const FString Number = Which.TrimStartAndEnd();
+			const int32 Index = (!Number.IsEmpty() && Number.IsNumeric() && !Number.Contains(TEXT("."))) ? FCString::Atoi(*Number) - 1 : INDEX_NONE;
 			if (!Rows.IsValidIndex(Index))
 			{
 				Terminal->AddJuliusRow(TEXT("You"), Line, FString::Printf(TEXT("No task %s. /tasks lists them."), *Which));
 				return true;
 			}
 			const bool bDeleted = Set->DeleteLocalContract(Rows[Index].LocalId);
-			Terminal->AddJuliusRow(TEXT("You"), Line, bDeleted
-				? FString::Printf(TEXT("Task %d deleted from this PC."), Index + 1)
-				: FString(TEXT("Not deleted: that contract is part of a Julius run, so it is kept.")));
+			Terminal->AddJuliusRow(TEXT("You"), Line, !bDeleted
+				? FString(TEXT("Not deleted: that contract is part of a Julius run, so it is kept."))
+				: (Set->DidLastSaveFail()
+					? FString::Printf(TEXT("Task %d deleted for this session, but the change could NOT be saved to this PC."), Index + 1)
+					: FString::Printf(TEXT("Task %d deleted from this PC."), Index + 1)));
 			return true;
 		}
 		if (Verb.Equals(TEXT("open"), ESearchCase::IgnoreCase) || Verb.Equals(TEXT("close"), ESearchCase::IgnoreCase))
@@ -4113,9 +4130,11 @@ void UWonderlandUiSubsystem::HandleTerminalSubmit(const FString& Text)
 			const FGuid DraftId = Draft->LocalId;
 			if (Set->SubmitDraft(DraftId, Text))
 			{
-				Terminal->AddJuliusRow(TEXT("You"), Text,
-					TEXT("Saved as a Mission Contract, QUEUED on this PC. Julius is not part of this beta build, so nothing will run it yet. "
-						"Close the tab with X and it stays saved: /tasks lists your contracts, /tasks open N brings one back."));
+				Terminal->AddJuliusRow(TEXT("You"), Text, Set->DidLastSaveFail()
+					? FString(TEXT("A Mission Contract, QUEUED -- but it could NOT be saved to this PC (is the Wonderland folder writable, "
+						"or the disk full?). It lasts this session only. Julius is not part of this beta build, so nothing will run it yet."))
+					: FString(TEXT("Saved as a Mission Contract, QUEUED on this PC. Julius is not part of this beta build, so nothing will run it yet. "
+						"Close the tab with X and it stays saved: /tasks lists your contracts, /tasks open N brings one back.")));
 				UE_LOG(LogWonderlandUi, Display, TEXT("WLUI terminal objective submitted: draft became a QUEUED Mission Contract (%d characters)"), Text.Len());
 				return;
 			}

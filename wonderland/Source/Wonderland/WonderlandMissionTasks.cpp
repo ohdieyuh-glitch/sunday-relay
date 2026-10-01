@@ -293,6 +293,7 @@ bool UWonderlandMissionTaskSubsystem::SaveContracts() const
 	TArray<uint8> Bytes;
 	bool bWrote = UGameplayStatics::SaveGameToMemory(Save, Bytes)
 		&& WonderlandBeta::SaveBytesAtomically(SlotPath(), Bytes);
+	bLastSaveFailed = !bWrote;
 	if (!bWrote)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("WLTASK could NOT save %d contract(s) to %s; they are kept in this session only"),
@@ -367,8 +368,10 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 		// REFUSED, NOT GUESSED AT. A file of a shape this build does not know is not read as though it were this one;
 		// a misread contract is worse than a forgotten one. AND IT IS SET ASIDE, NOT OVERWRITTEN: the first save of this
 		// session would otherwise replace it (private beta, B24), so it is moved beside itself first.
-		const FString Aside = SlotPath().Replace(TEXT(".sav"), *FString::Printf(TEXT(".refused-%s.sav"),
-			*FDateTime::UtcNow().ToString(TEXT("%Y%m%d-%H%M%S"))));
+		// THE FILE NAME ONLY, not the whole path: a case-insensitive replace of ".sav" would also rewrite a folder that
+		// happens to contain those letters.
+		const FString Aside = FPaths::Combine(FPaths::GetPath(SlotPath()), FString::Printf(TEXT("%s.refused-%s.sav"),
+			SaveSlotName(), *FDateTime::UtcNow().ToString(TEXT("%Y%m%d-%H%M%S"))));
 		const bool bMoved = IFileManager::Get().Move(*Aside, *SlotPath(), /*bReplace*/ true);
 		UE_LOG(LogTemp, Warning, TEXT("WLTASK saved contracts are version %d, not 1 (or unreadable); set aside as %s: %s"),
 			Save != nullptr ? Save->Version : -1, *Aside, bMoved ? TEXT("ok") : TEXT("FAILED"));
@@ -424,6 +427,8 @@ bool UWonderlandMissionTaskSubsystem::ForgetSavedContracts()
 		return true;
 	}
 	const bool bGone = UGameplayStatics::DeleteGameInSlot(SaveSlotName(), 0);
+	// AND ANY UNFINISHED TEMPORARY BESIDE IT, so a forgotten set cannot come back from it (Second Wonderland's review).
+	WonderlandBeta::RecoverInterruptedSave(SlotPath());
 	UE_LOG(LogTemp, Display, TEXT("WLTASK saved contracts forgotten: %s"), bGone ? TEXT("ok") : TEXT("FAILED"));
 	return bGone;
 }

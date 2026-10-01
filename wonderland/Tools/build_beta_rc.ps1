@@ -6,19 +6,24 @@
 #
 #   1. stamps BuildInfo/BuildInfo.txt ("Private Beta <version> | build <sha> | <date>"); the game shows it on the window
 #      title, at the foot of the Menu and in its log (WonderlandBeta::BuildLabel);
-#   2. BuildCookRun, Development (the in-package QA runs on the very artifact testers get), WITH -prereqs so the
-#      Visual C++ runtime installer ships (B02);
+#   2. BuildCookRun, Development (the in-package QA runs on the very artifact testers get) into a CLEAN archive folder,
+#      WITH -prereqs (vc_redist installers) AND the Visual C++ runtime deployed app-local beside the game exe, so a PC
+#      without the runtime still starts the game (B02);
 #   3. copies the staged build to the release folder WITHOUT Saved/ (QA logs name this machine and its user, B16),
 #      *.pdb (symbols stay with us, B28), RelaySkins/_reference and _previous (founder sheets and old generator source),
-#      ProjectAvatars/_old and .gitignore files;
+#      ProjectAvatars/_old, .gitignore files, the staging manifests (they name excluded files), and every
+#      WorldDesign/Look record except practical_lights.json (the others carry founder commentary);
 #   4. adds Engine/Build/InstalledProjectBuild.txt, which makes FApp::IsInstalled() true, so saves and logs live in
 #      %LOCALAPPDATA%\Wonderland\Saved: they survive the next beta drop and work from a read-only folder (B12);
-#   5. writes README_BETA.txt, zips the folder, and records the file count, sizes and SHA-256.
+#   5. writes README_BETA.txt, zips the folder, records the file count, sizes and SHA-256 -- and FAILS if the
+#      prerequisites are not in the artifact.
 #
-# Run it with the editor closed: .\build_beta_rc.ps1 -Version 0.1.0-rc1
+# Every log line is UTF-8 (Windows PowerShell 5.1 writes UTF-16 by default, which grep cannot read).
+# Run it with the editor closed: .\build_beta_rc.ps1 -Version 0.1.0-rc2
 param([Parameter(Mandatory = $true)][string]$Version,
       [string]$ArchiveDir = 'C:\dev\iwonder\_wonderland_beta_archive',
       [string]$ReleaseRoot = 'C:\dev\iwonder\_wonderland_beta_release',
+      [string]$AppLocalRoot = 'C:\dev\iwonder\_wonderland_applocal',
       [switch]$SkipBuild)
 $ErrorActionPreference = 'Stop'
 $ProjectDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -27,29 +32,47 @@ $UAT = 'C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat'
 if (Get-Process UnrealEditor*, Wonderland* -ErrorAction SilentlyContinue) { throw 'Close the editor and any running Wonderland first.' }
 New-Item -ItemType Directory -Force $ReleaseRoot | Out-Null
 $Log = Join-Path $ReleaseRoot "build_$Version.log"
+function Say([string]$Text) { $Text; $Text | Out-File -Append -Encoding utf8 $Log }
+'' | Out-File -Encoding utf8 $Log
 
 # 1. the build's name
-$sha = (& git -C $ProjectDir rev-parse --short=8 HEAD).Trim()
-$dirty = (& git -C $ProjectDir status --porcelain -- Source Config) -join ''
-$suffix = if ($dirty) { '+local-changes' } else { '' }
-$label = "Private Beta $Version | build $sha$suffix | $(Get-Date -Format 'yyyy-MM-dd')"
 $infoDir = Join-Path $ProjectDir 'BuildInfo'
-New-Item -ItemType Directory -Force $infoDir | Out-Null
 $infoFile = Join-Path $infoDir 'BuildInfo.txt'
-[IO.File]::WriteAllText($infoFile, $label, (New-Object Text.UTF8Encoding $false))
-"BUILD LABEL $label" | Tee-Object -FilePath $Log
+if ($SkipBuild) {
+  # an old archive keeps the label it was built with: never stamp HEAD onto something HEAD did not build
+  $label = (Get-Content -Raw (Join-Path $ArchiveDir 'Windows\Wonderland\BuildInfo\BuildInfo.txt')).Trim()
+} else {
+  $sha = (& git -C $ProjectDir rev-parse --short=8 HEAD).Trim()
+  $dirty = (& git -C $ProjectDir status --porcelain -- Source Config Content RelaySkins UiArt Companions ProjectAvatars RelayCubs WorldDesign/Look) -join ''
+  $suffix = if ($dirty) { '+local-changes' } else { '' }
+  $label = "Private Beta $Version | build $sha$suffix | $(Get-Date -Format 'yyyy-MM-dd')"
+  New-Item -ItemType Directory -Force $infoDir | Out-Null
+  [IO.File]::WriteAllText($infoFile, $label, (New-Object Text.UTF8Encoding $false))
+}
+Say "BUILD LABEL $label"
 
 try {
-  # 2. build, cook, stage, pak, archive -- with the prerequisites installer
   if (-not $SkipBuild) {
+    # 2a. the Visual C++ runtime, app-local: UAT stages every file under <root>\Win64\x64\<folder>\ beside the game exe
+    $crt = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio\2022\*\VC\Redist\MSVC\*\x64\Microsoft.VC143.CRT' -Directory -ErrorAction SilentlyContinue |
+      Sort-Object { [version]($_.Parent.Parent.Name) } -Descending | Select-Object -First 1
+    if (-not $crt) { throw 'No Visual Studio 2022 VC143 CRT redistributable folder found for the app-local runtime.' }
+    $crtDest = Join-Path $AppLocalRoot 'Win64\x64\Microsoft.VC143.CRT'
+    if (Test-Path $AppLocalRoot) { Remove-Item -Recurse -Force $AppLocalRoot }
+    New-Item -ItemType Directory -Force $crtDest | Out-Null
+    Copy-Item (Join-Path $crt.FullName '*.dll') $crtDest
+    Say "APPLOCAL CRT from $($crt.FullName)"
+
+    # 2b. a clean archive: UAT -archive never removes files a previous build left
+    if (Test-Path $ArchiveDir) { Remove-Item -Recurse -Force $ArchiveDir }
     $t0 = Get-Date
-    & $UAT BuildCookRun "-project=$Project" -noP4 -platform=Win64 -clientconfig=Development -cook -build -stage -pak -archive "-archivedirectory=$ArchiveDir" -prereqs -utf8output -nocompileeditor *>> $Log
+    & $UAT BuildCookRun "-project=$Project" -noP4 -platform=Win64 -clientconfig=Development -cook -build -stage -pak -archive "-archivedirectory=$ArchiveDir" -prereqs "-applocaldirectory=$AppLocalRoot" -utf8output -nocompileeditor 2>&1 | Out-File -Append -Encoding utf8 $Log
     if ($LASTEXITCODE -ne 0) { throw "BuildCookRun failed with exit code $LASTEXITCODE (see $Log)" }
-    "BuildCookRun OK in $([int]((Get-Date) - $t0).TotalSeconds) s" | Tee-Object -FilePath $Log -Append
+    Say "BuildCookRun OK in $([int]((Get-Date) - $t0).TotalSeconds) s"
   }
 } finally {
   # the tree stays clean: the label lives in the package, not in the source
-  Remove-Item $infoFile -ErrorAction SilentlyContinue
+  if (-not $SkipBuild) { Remove-Item $infoFile -ErrorAction SilentlyContinue }
 }
 
 # 3. the release folder: the staged build minus everything a tester must not receive
@@ -58,8 +81,10 @@ if (-not (Test-Path (Join-Path $src 'Wonderland.exe'))) { throw "No staged build
 $name = "Wonderland_PrivateBeta_$Version"
 $dst = Join-Path $ReleaseRoot $name
 if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
-& robocopy $src $dst /E /XD Saved _reference _previous _old /XF *.pdb .gitignore /NFL /NDL /NJH /NJS /NP | Out-Null
+& robocopy $src $dst /E /XD Saved _reference _previous _old /XF *.pdb .gitignore Manifest_*.txt /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE" }
+$look = Join-Path $dst 'Wonderland\WorldDesign\Look'
+if (Test-Path $look) { Get-ChildItem $look -File | Where-Object { $_.Name -ne 'practical_lights.json' } | Remove-Item -Force }
 
 # 4. an installed build: saves and logs go to %LOCALAPPDATA%\Wonderland\Saved
 New-Item -ItemType Directory -Force (Join-Path $dst 'Engine\Build') | Out-Null
@@ -89,10 +114,11 @@ REQUIREMENTS
 
 INSTALL AND RUN
 1. Unzip the whole folder somewhere you can write to, for example your Desktop or Documents.
-2. Double-click Wonderland.exe.
-3. The first start may install the Microsoft Visual C++ runtime, and can take a minute.
-4. Windows may ask whether to allow Wonderland on public and private networks. The beta does not need the network;
+2. Double-click Wonderland.exe. The first start can take a minute.
+3. Windows may ask whether to allow Wonderland on public and private networks. The beta does not need the network;
    you can click Cancel. (The engine opens a developer diagnostics port that this build cannot switch off.)
+4. If Windows reports a missing VCRUNTIME140.dll or MSVCP140.dll, run Engine\Extras\Redist\en-us\vc_redist.x64.exe
+   once from this folder, then start Wonderland again.
 
 CONTROLS
 W A S D move, mouse look, Shift run, Ctrl walk, Space jump.
@@ -118,7 +144,12 @@ Delete this folder and %LOCALAPPDATA%\Wonderland.
 "@
 [IO.File]::WriteAllText((Join-Path $dst 'README_BETA.txt'), $readme.Replace("`n", "`r`n"), (New-Object Text.UTF8Encoding $false))
 
-# 6. the zip, and the facts about it
+# 6. the prerequisites MUST be in the artifact
+$redist = Test-Path (Join-Path $dst 'Engine\Extras\Redist\en-us\vc_redist.x64.exe')
+$appLocal = Test-Path (Join-Path $dst 'Wonderland\Binaries\Win64\vcruntime140.dll')
+if (-not ($redist -and $appLocal)) { throw "Prerequisites missing from the release: vc_redist.x64.exe $redist, app-local vcruntime140.dll $appLocal" }
+
+# 7. the zip, and the facts about it
 $zip = Join-Path $ReleaseRoot "$name.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }
 & tar -a -c -f $zip -C $ReleaseRoot $name
@@ -135,9 +166,9 @@ $manifest = @(
   "zip          $zip",
   "zip_bytes    $((Get-Item $zip).Length) ($([math]::Round((Get-Item $zip).Length / 1GB, 2)) GB)",
   "zip_sha256   $hash",
-  "prereqs      $(if (Test-Path (Join-Path $dst 'Engine\Extras\Redist\en-us\UEPrereqSetup_x64.exe')) { 'UEPrereqSetup_x64.exe staged' } else { 'MISSING' })",
-  "excluded     Saved/, *.pdb, RelaySkins/_reference, RelaySkins/_previous, ProjectAvatars/_old, .gitignore",
+  "prereqs      vc_redist.x64.exe staged; VC++ runtime app-local beside Wonderland\Binaries\Win64\Wonderland.exe",
+  "excluded     Saved/, *.pdb, RelaySkins/_reference, RelaySkins/_previous, ProjectAvatars/_old, .gitignore, Manifest_*.txt, WorldDesign/Look records but practical_lights.json",
   "installed    Engine/Build/InstalledProjectBuild.txt (saves and logs in %LOCALAPPDATA%\Wonderland\Saved)"
 )
 $manifest | Set-Content -Encoding utf8 (Join-Path $ReleaseRoot "RELEASE_MANIFEST_$Version.txt")
-$manifest | Tee-Object -FilePath $Log -Append
+$manifest | ForEach-Object { Say $_ }

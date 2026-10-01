@@ -1,25 +1,26 @@
-# Boot the PACKAGED Wonderland and run the post-completion gameplay regression inside it (wl.Qa.PackageCheck), then boot
+# Boot the PACKAGED Wonderland and run the gameplay and private-beta regression inside it (wl.Qa.PackageCheck), then boot
 # it AGAIN to see what the first run saved come back (wl.Qa.PackagePersist).
 #
-# boot_test_package.ps1 proves the package boots and streams; this proves the fixes are IN it: Jack Flame's secondary on
-# fire, tie and suit (read off his materials), rim -> centre travel, the world map's layout at three zooms, TW01 / TW02 /
-# MG01 from the map, a Mission Contract on every skin judged act by act (hands on the canon's, every act reached, the
-# circle never jammed), every skin's body at Relay OG's height, and -- across a restart -- the chosen skin and colour.
 # The game runs the checks itself (WonderlandQaCommands.cpp), writes a WLQA line per check and a frame per stage, and
 # quits; this script waits for each boot, then collects the lines and frames. 1920x1200 windowed: the founder's own
 # screen, so the UI lays out at the DPI scale it uses there.
+#
+# ISOLATED: every boot runs with -userdir=<Out>\userdir, a fresh profile, so the QA -- which clears contracts, resets
+# colours and changes skins -- can never touch a real player's %LOCALAPPDATA%\Wonderland (Second Wonderland's review).
+# A CRASH IS A FAILURE: RC1 crashed on both boots and the old summary read "0 PASS, 0 FAIL". Now any assertion, fatal
+# error or missing "WLQA END" fails the run, and the script exits 1.
 param([Parameter(Mandatory = $true)][string]$Exe,
       [Parameter(Mandatory = $true)][string]$Out,
       [int]$TimeoutSeconds = 2400,
-      [string]$SourceSkins = '')
+      [string]$SourceSkins = '',
+      [string]$UserDir = '')
 $PkgDir = Split-Path (Split-Path $Exe -Parent) -Parent
 New-Item -ItemType Directory -Force $Out | Out-Null
-# AN INSTALLED BUILD (the beta release ships Engine/Build/InstalledProjectBuild.txt) keeps its saves and logs in
-# %LOCALAPPDATA%\Wonderland\Saved; a plain staged build keeps them beside the exe.
-$Root = Split-Path $Exe -Parent
-$Installed = Test-Path (Join-Path $Root 'Engine\Build\InstalledProjectBuild.txt')
-$Saved = if ($Installed) { Join-Path $env:LOCALAPPDATA 'Wonderland\Saved' } else { Join-Path $Root 'Wonderland\Saved' }
-"saved folder: $Saved (installed build: $Installed)"
+if (-not $UserDir) { $UserDir = Join-Path $Out 'userdir' }
+if (Test-Path $UserDir) { Remove-Item -Recurse -Force $UserDir }
+New-Item -ItemType Directory -Force $UserDir | Out-Null
+$UserDir = (Resolve-Path $UserDir).Path
+"isolated profile: $UserDir"
 # THE FIGURES THE PACKAGE WEARS ARE THE ONES IN THE TREE: the skins are staged loose (NonUFS), so a stale copy would
 # bring back an old head or a body without its `body` record. Compared byte for byte, before anything boots.
 if ($SourceSkins) {
@@ -33,13 +34,11 @@ if ($SourceSkins) {
   $report | Set-Content -Encoding utf8 (Join-Path $Out 'skinfiles.txt')
   $report
 }
-$Log = Join-Path $Saved 'Logs\Wonderland.log'
-$Shots = Join-Path $Saved 'Screenshots\WLQA'
-if (Test-Path $Shots) { Remove-Item -Recurse -Force $Shots }
+$script:Problems = @()
 
 function Invoke-Boot([string]$ExecCmds, [int]$Limit, [string]$Tag) {
   $t0 = Get-Date
-  $argList = '-windowed -ResX=1920 -ResY=1200 -nosound -log -ExecCmds="' + $ExecCmds + '"'
+  $argList = '-windowed -ResX=1920 -ResY=1200 -nosound -log -userdir="' + $UserDir + '" -ExecCmds="' + $ExecCmds + '"'
   $p = Start-Process -FilePath $Exe -ArgumentList $argList -PassThru
   "[$Tag] launched bootstrap pid $($p.Id) at $(Get-Date -Format HH:mm:ss): $ExecCmds"
   # the bootstrap exe hands off to the real game process under the package folder; wait for every one of them to end
@@ -51,13 +50,17 @@ function Invoke-Boot([string]$ExecCmds, [int]$Limit, [string]$Tag) {
     Start-Sleep -Seconds 5
   }
   $left = Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PkgDir*" }
-  if ($left) { "[$Tag] TIMEOUT after $Limit s: stopping $($left.Id -join ',')"; $left | Stop-Process -Force }
+  if ($left) { "[$Tag] TIMEOUT after $Limit s: stopping $($left.Id -join ',')"; $left | Stop-Process -Force; $script:Problems += "$Tag TIMEOUT" }
   "[$Tag] game ended after $([int]((Get-Date) - $t0).TotalSeconds) s"
-  if (Test-Path $Log) {
-    Copy-Item $Log (Join-Path $Out "Wonderland_$Tag.log") -Force
-    $lines = Select-String -Path $Log -Pattern 'WLQA|WLTRAVEL|WLDOG orbit stalled|LogWorldPartition: Display: .*Streaming|Fatal|Assertion failed' | ForEach-Object { $_.Line }
+  $log = Get-ChildItem $UserDir -Recurse -Filter 'Wonderland.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if ($log) {
+    Copy-Item $log.FullName (Join-Path $Out "Wonderland_$Tag.log") -Force
+    $lines = Select-String -Path $log.FullName -Pattern 'WLQA|WLBUILD|WLTRAVEL|WLDOG orbit stalled|LogWorldPartition: Display: .*Streaming|Fatal error|Assertion failed|Critical error|Unhandled Exception' | ForEach-Object { $_.Line }
     $lines | Set-Content -Encoding utf8 (Join-Path $Out "wlqa_lines_$Tag.txt")
-  } else { "[$Tag] NO LOG at $Log" }
+    $crash = $lines | Where-Object { $_ -match 'Fatal error|Assertion failed|Critical error|Unhandled Exception' } | Select-Object -First 1
+    if ($crash) { "[$Tag] CRASH: $crash"; $script:Problems += "$Tag CRASH" }
+    if (-not ($lines | Where-Object { $_ -match 'WLQA END' })) { "[$Tag] INCOMPLETE: no WLQA END"; $script:Problems += "$Tag INCOMPLETE" }
+  } else { "[$Tag] NO LOG under $UserDir"; $script:Problems += "$Tag NO LOG" }
 }
 
 Invoke-Boot 'wl.Qa.PackageCheck' $TimeoutSeconds 'run1'
@@ -79,5 +82,12 @@ $all | Set-Content -Encoding utf8 (Join-Path $Out 'wlqa_lines.txt')
 $all | Where-Object { $_ -match 'WLQA (Q\S+ (PASS|FAIL)|END|BOOT|PERSIST|restored|ABORT)' }
 $pass = @($all | Where-Object { $_ -match 'WLQA Q\S+ PASS' }).Count
 $fail = @($all | Where-Object { $_ -match 'WLQA Q\S+ FAIL' }).Count
-"TOTAL: $pass PASS, $fail FAIL (both boots)"
-if (Test-Path $Shots) { Copy-Item (Join-Path $Shots '*') $Out -Force; Get-ChildItem $Out -Filter *.png | ForEach-Object { "frame $($_.Name) $([int]($_.Length/1KB)) KB" } }
+$shots = Get-ChildItem $UserDir -Recurse -Directory -Filter 'WLQA' -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($shots) { Copy-Item (Join-Path $shots.FullName '*') $Out -Force; Get-ChildItem $Out -Filter *.png | ForEach-Object { "frame $($_.Name) $([int]($_.Length/1KB)) KB" } }
+if ($fail -gt 0) { $script:Problems += "$fail FAIL" }
+if ($pass -eq 0) { $script:Problems += 'NO CHECKS RAN' }
+if ($script:Problems.Count -gt 0) {
+  "TOTAL: $pass PASS, $fail FAIL (both boots) -- QA FAILED: $($script:Problems -join '; ')"
+  exit 1
+}
+"TOTAL: $pass PASS, $fail FAIL (both boots) -- QA PASSED"

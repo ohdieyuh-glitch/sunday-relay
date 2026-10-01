@@ -9,12 +9,18 @@ param([Parameter(Mandatory = $true)][string]$Exe,
       [Parameter(Mandatory = $true)][string]$Out,
       [ValidateSet('perf', 'soak')][string]$Mode = 'perf',
       [int]$Minutes = 30,
-      [int]$SampleSeconds = 5)
+      [int]$SampleSeconds = 5,
+      [string]$UserDir = '')
 $Root = Split-Path $Exe -Parent
 $PkgDir = Split-Path $Root -Parent
 New-Item -ItemType Directory -Force $Out | Out-Null
-$Installed = Test-Path (Join-Path $Root 'Engine\Build\InstalledProjectBuild.txt')
-$Saved = if ($Installed) { Join-Path $env:LOCALAPPDATA 'Wonderland\Saved' } else { Join-Path $Root 'Wonderland\Saved' }
+# ISOLATED: a fresh profile under the output folder, never a real player's %LOCALAPPDATA%\Wonderland (the soak changes skins
+# and writes contracts).
+if (-not $UserDir) { $UserDir = Join-Path $Out "userdir_$Mode" }
+if (Test-Path $UserDir) { Remove-Item -Recurse -Force $UserDir }
+New-Item -ItemType Directory -Force $UserDir | Out-Null
+$UserDir = (Resolve-Path $UserDir).Path
+$Saved = Join-Path $UserDir 'Saved'
 $Log = Join-Path $Saved 'Logs\Wonderland.log'
 $cmd = if ($Mode -eq 'perf') { 'wl.Qa.Perf' } else { "wl.Qa.Soak $Minutes" }
 $limit = if ($Mode -eq 'perf') { 900 } else { $Minutes * 60 + 600 }
@@ -22,7 +28,7 @@ $csv = Join-Path $Out "process_$Mode.csv"
 'seconds,working_set_mb,private_mb,gpu_dedicated_mb,machine_free_mb' | Set-Content -Encoding utf8 $csv
 
 $t0 = Get-Date
-$argList = '-windowed -ResX=1920 -ResY=1200 -nosound -log -ExecCmds="' + $cmd + '"'
+$argList = '-windowed -ResX=1920 -ResY=1200 -nosound -log -userdir="' + $UserDir + '" -ExecCmds="' + $cmd + '"'
 $p = Start-Process -FilePath $Exe -ArgumentList $argList -PassThru
 "[$Mode] launched $($p.Id) at $(Get-Date -Format HH:mm:ss): $cmd (saved folder $Saved)"
 Start-Sleep -Seconds 10
@@ -43,6 +49,8 @@ while ((Get-Date) -lt $deadline) {
 $left = Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PkgDir*" }
 if ($left) { "[$Mode] TIMEOUT after $limit s: stopping $($left.Id -join ',')"; $left | Stop-Process -Force }
 "[$Mode] game ended after $([int]((Get-Date) - $t0).TotalSeconds) s"
+$found = Get-ChildItem $UserDir -Recurse -Filter 'Wonderland.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($found) { $Log = $found.FullName }
 if (Test-Path $Log) {
   Copy-Item $Log (Join-Path $Out "Wonderland_$Mode.log") -Force
   $lines = Select-String -Path $Log -Pattern 'WLPERF|WLSOAK|WLBUILD|Fatal error|Assertion failed|Unhandled Exception' | ForEach-Object { $_.Line }

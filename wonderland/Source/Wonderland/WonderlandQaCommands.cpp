@@ -45,6 +45,7 @@
 #include "WonderlandJuliusConnect.h"
 #include "WonderlandPracticalLights.h"
 #include "WonderlandSidekicks.h"
+#include "EngineUtils.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandQa, Log, All);
 
@@ -482,9 +483,18 @@ namespace
 		const UInputSettings* Input = GetDefault<UInputSettings>();
 		const int32 ConsoleKeys = Input != nullptr ? Input->ConsoleKeys.Num() : -1;
 		const int32 DebugKeys = (Controller != nullptr && Controller->PlayerInput != nullptr) ? Controller->PlayerInput->DebugExecBindings.Num() : -1;
-		QaCheck(Run, TEXT("Q00.2"), !WonderlandBeta::IsDeveloperSession() && ConsoleKeys == 0 && DebugKeys == 0,
-			FString::Printf(TEXT("player session %s; console keys %d, engine debug key bindings %d (both must be 0); build '%s'"),
-				WonderlandBeta::IsDeveloperSession() ? TEXT("NO (developer)") : TEXT("yes"), ConsoleKeys, DebugKeys, *WonderlandBeta::BuildLabel()));
+		// THE GAMEPLAY DEBUGGER: auto-creation off, and no manager actor in the world (the apostrophe has nothing to open)
+		const IConsoleVariable* AutoCreate = IConsoleManager::Get().FindConsoleVariable(TEXT("GameplayDebugger.AutoCreateGameplayDebuggerManager"));
+		int32 DebuggerManagers = 0;
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			DebuggerManagers += It->GetClass()->GetName().Contains(TEXT("GameplayDebuggerPlayerManager")) ? 1 : 0;
+		}
+		const bool bDebuggerOff = (AutoCreate == nullptr || !AutoCreate->GetBool()) && DebuggerManagers == 0;
+		QaCheck(Run, TEXT("Q00.2"), !WonderlandBeta::IsDeveloperSession() && ConsoleKeys == 0 && DebugKeys == 0 && bDebuggerOff,
+			FString::Printf(TEXT("player session %s; console keys %d, engine debug key bindings %d (both must be 0); gameplay debugger %s (%d managers); build '%s'"),
+				WonderlandBeta::IsDeveloperSession() ? TEXT("NO (developer)") : TEXT("yes"), ConsoleKeys, DebugKeys,
+				bDebuggerOff ? TEXT("off") : TEXT("ON"), DebuggerManagers, *WonderlandBeta::BuildLabel()));
 
 		UGameInstance* Instance = World->GetGameInstance();
 		const UWonderlandSidekickSubsystem* Sidekicks = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSidekickSubsystem>() : nullptr;
@@ -895,7 +905,7 @@ namespace
 			{
 				// + makes a gray draft and selects it; the line typed is its objective; the tab's X then closes it, so the
 				// six open tabs never stop the next +. Eight is more than the six the old restore kept.
-				const bool bPlus = U->PressAddTask();
+				const bool bPlus = U->PressAddTaskForQa();
 				U->SubmitTerminalLine(FString::Printf(TEXT("QA contract %d: prove the beta's creation loop"), Run.Sub));
 				const FWonderlandMissionTask* Made = Set->GetSelectedTask();
 				const bool bQueued = Made != nullptr && Made->State == EWonderlandTaskState::Queued && Made->Source == EWonderlandTaskSource::Local;
@@ -1265,7 +1275,7 @@ namespace
 			case 6:
 				if (U != nullptr)
 				{
-					U->PressAddTask();
+					U->PressAddTaskForQa();
 					U->SubmitTerminalLine(FString::Printf(TEXT("soak note %d"), P.Cycle));
 					U->SubmitTerminalLine(TEXT("/tasks delete 1"));
 				}
@@ -1326,7 +1336,7 @@ namespace
 			else if (In >= 60.0) { GEngine->Exec(World, TEXT("wl.Mission.Stop")); QaPerfPhase(P, TEXT("creation")); Next(); }
 			break;
 		case 8: // creation through the terminal: three contracts written, then deleted
-			if (U != nullptr && P.Sub < 3) { U->PressAddTask(); U->SubmitTerminalLine(FString::Printf(TEXT("perf note %d"), P.Sub)); ++P.Sub; }
+			if (U != nullptr && P.Sub < 3) { U->PressAddTaskForQa(); U->SubmitTerminalLine(FString::Printf(TEXT("perf note %d"), P.Sub)); ++P.Sub; }
 			else if (U != nullptr && P.Sub < 6) { U->SubmitTerminalLine(TEXT("/tasks delete 1")); ++P.Sub; }
 			else if (In >= 4.0) { QaPerfFinish(P, World); return false; }
 			break;

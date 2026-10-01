@@ -393,30 +393,29 @@ public:
 	bool IsMenuOpen() const;
 
 	/** The private beta's first-launch welcome (also "How to play" in the Menu). */
-	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	// Plain C++, NOT a UFUNCTION: see the note on reflected names in WonderlandBeta.h.
 	void ShowWelcome();
 
 	/** Dismiss the welcome and remember it on this machine. False when it was not open (it is remembered either way). */
-	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	// Plain C++, NOT a UFUNCTION: see the note on reflected names in WonderlandBeta.h.
 	bool DismissWelcome();
 
-	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	// Plain C++, NOT a UFUNCTION: see the note on reflected names in WonderlandBeta.h.
 	bool IsWelcomeOpen() const;
 
 	/** The Menu's QUIT: a graceful exit, exactly the window's X. */
-	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	// Plain C++, NOT a UFUNCTION: see the note on reflected names in WonderlandBeta.h.
 	void QuitWonderland();
 
-	/** Press +. Returns false at capacity. Exposed so a proof can press it the way a person does. */
-	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
-	bool PressAddTask();
+	/** Press + for the in-package QA: the same call as the + button. Plain C++ (see WonderlandBeta.h on reflected names). */
+	bool PressAddTaskForQa() { return PressAddTask(); }
 
 	/**
 	 * TYPE A LINE INTO THE JULIUS TERMINAL AND PRESS ENTER, exactly as a person does: the input box calls the same
 	 * handler. Exposed so the in-package QA proves the creation loop THROUGH the UI -- the old proof pressed + through
 	 * the UI and then submitted from Python, which is how the missing submit path (private beta, B01) stayed hidden.
 	 */
-	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
+	// Plain C++, NOT a UFUNCTION: see the note on reflected names in WonderlandBeta.h.
 	void SubmitTerminalLine(const FString& Text);
 
 	/** Go where a shortcut goes, by id ("agent", "missions", "brain", "commands", "menu"). False for an unknown id. */
@@ -873,6 +872,9 @@ private:
 	/** The Mission Contract task set: what the + adds to and what the orb stack follows. */
 	class UWonderlandMissionTaskSubsystem* Tasks() const;
 
+	/** Press +. Returns false at capacity. Exposed so a proof can press it the way a person does. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
+	bool PressAddTask();
 
 	/** Whether the + control is on screen. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
@@ -1005,6 +1007,8 @@ private:
 	TSharedPtr<SWonderlandMissionsPanel> MissionsPanel;
 	TSharedPtr<SWonderlandMenuPanel> MenuPanel;
 	TSharedPtr<class SWonderlandWelcomePanel> WelcomePanel;
+	/** The welcome was opened from the Menu's HOW TO PLAY, so closing it returns to the Menu. */
+	bool bWelcomeFromMenu = false;
 	/** The discovery banner's plate: dark, with a gold hairline, never hit-testable. Made when the HUD mounts. */
 	TSharedPtr<FSlateRoundedBoxBrush> TerritoryBannerBrush;
 	/** The windows, kept once made like the other panels, so a half-typed command is still there on reopen. */

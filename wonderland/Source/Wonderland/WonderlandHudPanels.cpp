@@ -1147,7 +1147,11 @@ FReply SWonderlandMenuPanel::OnKeyDown(const FGeometry& MyGeometry, const FKeyEv
 SWonderlandWelcomePanel::SWonderlandWelcomePanel()
 	: PanelBrush(WonderlandUi::MapFill(), 14.0f, WonderlandUi::MenuGold(0.50f), 1.2f)
 	, RuleBrush(WonderlandUi::MenuGold(0.22f), 0.0f, FLinearColor::Transparent, 0.0f)
+	, StartNormal(WonderlandUi::Srgb(46, 38, 16, 0.95f), 8.0f, WonderlandUi::MenuGold(0.85f), 1.2f)
+	, StartHovered(WonderlandUi::Srgb(64, 52, 20, 1.0f), 8.0f, WonderlandUi::MenuGold(1.0f), 1.6f)
 {
+	StartStyle = FButtonStyle().SetNormal(StartNormal).SetHovered(StartHovered).SetPressed(StartHovered)
+		.SetNormalPadding(FMargin(16.0f, 7.0f)).SetPressedPadding(FMargin(16.0f, 8.0f, 16.0f, 6.0f));
 }
 
 void SWonderlandWelcomePanel::Construct(const FArguments& InArgs)
@@ -1228,7 +1232,13 @@ void SWonderlandWelcomePanel::Construct(const FArguments& InArgs)
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 						[
-							SNew(STextBlock).Text(FText::FromString(TEXT("PRESS ENTER OR CLICK TO START"))).Font(WonderlandUi::Sans(11, true, 160)).ColorAndOpacity(WonderlandUi::MenuGold())
+							// A BUTTON, NOT THE WHOLE PANEL: the first click on a fresh window is often just the click that gives
+							// it focus, and that click used to dismiss the welcome before anyone had read it.
+							SNew(SButton).ButtonStyle(&StartStyle).IsFocusable(false)
+							.OnClicked_Lambda([this]() { OnRequestClose.ExecuteIfBound(); return FReply::Handled(); })
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("START  ·  ENTER"))).Font(WonderlandUi::Sans(11, true, 160)).ColorAndOpacity(WonderlandUi::MenuGold())
+							]
 						]
 					]
 				]
@@ -1250,6 +1260,6 @@ FReply SWonderlandWelcomePanel::OnKeyDown(const FGeometry& MyGeometry, const FKe
 
 FReply SWonderlandWelcomePanel::OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
-	OnRequestClose.ExecuteIfBound();
+	// Swallowed, so a click elsewhere on the welcome neither dismisses it nor reaches the world behind it.
 	return FReply::Handled();
 }

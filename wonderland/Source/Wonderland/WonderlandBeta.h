@@ -15,6 +15,11 @@
 //  - developer instructions (npm commands, paths on the founder's disk) are shown to developers only.
 //
 // Every wl.* command stays reachable to QA through -ExecCmds, which needs no console.
+//
+// AND A WARNING THAT COST A RELEASE CANDIDATE: NO NEW STATIC-TIME FNAMES HERE (no log category of its own, no namespace-
+// scope FName). Niagara keys its type registry on a hash of FName entry ids (FNiagaraTypeDefinition::GeneratePathNameHash),
+// a weak combine under which some name-table layouts collide, and every name made before Niagara starts moves the layout.
+// RC1 crashed on every boot for exactly that reason. Boot-verify every build.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -35,6 +40,9 @@ namespace WonderlandBeta
 	 */
 	WONDERLAND_API const FString& BuildLabel();
 
+	/** Switches set once per game instance, before the first world exists: no Gameplay Debugger in a player's session. */
+	WONDERLAND_API void ApplyPlayerSessionSwitches();
+
 	/** Takes the console's activation keys and the engine's debug key bindings away from a player's session. */
 	WONDERLAND_API void LockDownPlayer(APlayerController* Controller);
 
@@ -42,14 +50,14 @@ namespace WonderlandBeta
 	WONDERLAND_API void StampWindowTitle();
 
 	/**
-	 * A WHOLE FILE OR NOTHING: written to a temporary beside it, then moved over it. A save this laptop's low-memory
-	 * reaper kills halfway leaves the previous file (or the complete temporary, which LoadTextWithRecovery adopts),
-	 * never a truncated one.
+	 * A WHOLE FILE OR NOTHING: written to a temporary beside it, then swapped over it in one atomic step (MoveFileExW,
+	 * REPLACE_EXISTING). A save this laptop's low-memory reaper kills halfway, or one an anti-virus scan blocks, leaves
+	 * the previous file exactly as it was -- never a truncated one, and never no file at all.
 	 */
 	WONDERLAND_API bool SaveTextAtomically(const FString& Path, const FString& Text);
 	WONDERLAND_API bool SaveBytesAtomically(const FString& Path, const TArray<uint8>& Bytes);
 
-	/** If Path is missing but a complete temporary from an interrupted save is beside it, adopt that temporary. */
+	/** Discards a temporary left by a write that never completed (it may be half a file); the real save is untouched. */
 	WONDERLAND_API void RecoverInterruptedSave(const FString& Path);
 
 	/**

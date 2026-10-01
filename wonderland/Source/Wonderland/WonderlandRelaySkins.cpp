@@ -51,6 +51,9 @@ FName UWonderlandRelaySkinSubsystem::MigrateLegacySkinId(FName SkinId) const
 void UWonderlandRelaySkinSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
+	// THE PRIVATE BETA'S SWITCHES, set here because a game-instance subsystem initialises before the map's world exists
+	// (the Gameplay Debugger is created as each world initialises). See WonderlandBeta.h.
+	WonderlandBeta::ApplyPlayerSessionSwitches();
 	BuildRegistry();
 	Equipped.SkinId = TEXT("relay_og");
 	LoadPersisted();
@@ -306,6 +309,11 @@ namespace
 			if (Skins == nullptr || Args.Num() < 1)
 			{
 				UE_LOG(LogTemp, Warning, TEXT("WLSKIN usage: wl.Skins.Wear <skin id>"));
+				return;
+			}
+			if (!WonderlandBeta::IsSafeId(Args[0]))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("WLSKIN wear refused: not a skin id (%d characters)"), Args[0].Len());
 				return;
 			}
 			const FName Wanted(*Args[0]);

@@ -171,4 +171,7 @@ private:
 	FSlateBrush ScrimBrush;
 	FSlateRoundedBoxBrush PanelBrush;
 	FSlateRoundedBoxBrush RuleBrush;
+	FSlateRoundedBoxBrush StartNormal;
+	FSlateRoundedBoxBrush StartHovered;
+	FButtonStyle StartStyle;
 };
