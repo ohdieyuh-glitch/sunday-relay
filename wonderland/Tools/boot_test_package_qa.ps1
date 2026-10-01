@@ -40,6 +40,22 @@ if ($SourceSkins) {
 }
 $script:Problems = @()
 $script:NetLines = @()
+$script:Interfered = @()
+
+# A PERSON AT THE KEYBOARD IS NOT A DEFECT. This laptop is the founder's and is often in use while the QA runs: RC4's first
+# run lost Q05 to a keystroke into the game window (the map closed with no code path asking). The QA injects no input of
+# its own, so any input while the GAME is the foreground window is a person's, and that boot's checks are void, not failed.
+Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public static class WonderlandQaGuard {
+  [StructLayout(LayoutKind.Sequential)] struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+  [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO p);
+  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  public static uint LastInputTick() { var l = new LASTINPUTINFO(); l.cbSize = (uint)Marshal.SizeOf(l); GetLastInputInfo(ref l); return l.dwTime; }
+  public static uint ForegroundPid() { uint pid; GetWindowThreadProcessId(GetForegroundWindow(), out pid); return pid; }
+}
+'@
 
 function Test-Listeners([string]$Tag) {
   # UNREAL INSIGHTS OPEN ON THIS PC makes the engine connect to it and start a trace worker thread, and the game then
@@ -62,16 +78,33 @@ function Invoke-Boot([string]$ExecCmds, [int]$Limit, [string]$Tag) {
   $argList = '-windowed -ResX=1920 -ResY=1200 -nosound -log -userdir="' + $UserDir + '" -ExecCmds="' + $ExecCmds + '"'
   $p = Start-Process -FilePath $Exe -ArgumentList $argList -PassThru
   "[$Tag] launched bootstrap pid $($p.Id) at $(Get-Date -Format HH:mm:ss): $ExecCmds"
-  # the bootstrap exe hands off to the real game process under the package folder; wait for every one of them to end
-  Start-Sleep -Seconds 20
+  # the bootstrap exe hands off to the real game process under the package folder; wait for every one of them to end.
+  # Every half second: was there input, and was the game the foreground window when it came? (the guard above)
+  $lastTick = [WonderlandQaGuard]::LastInputTick()
   $sampled = $false
+  $hits = 0
   $deadline = (Get-Date).AddSeconds($Limit)
+  $nextAlive = (Get-Date).AddSeconds(20)
   while ((Get-Date) -lt $deadline) {
-    $alive = Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PkgDir*" }
-    if (-not $alive) { break }
-    if (-not $sampled -and ((Get-Date) - $t0).TotalSeconds -ge 28) { Test-Listeners $Tag; $sampled = $true }
-    Start-Sleep -Seconds 5
+    $tick = [WonderlandQaGuard]::LastInputTick()
+    if ($tick -ne $lastTick) {
+      $lastTick = $tick
+      $fg = [WonderlandQaGuard]::ForegroundPid()
+      $gamePids = @(Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PkgDir*" } | ForEach-Object { $_.Id })
+      if ($gamePids -contains $fg) {
+        $hits++
+        if ($hits -le 5) { "[$Tag] HUMAN INPUT into the game window at t=$([int]((Get-Date) - $t0).TotalSeconds) s" }
+      }
+    }
+    if ((Get-Date) -ge $nextAlive) {
+      $alive = Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PkgDir*" }
+      if (-not $alive) { break }
+      if (-not $sampled -and ((Get-Date) - $t0).TotalSeconds -ge 28) { Test-Listeners $Tag; $sampled = $true }
+      $nextAlive = (Get-Date).AddSeconds(5)
+    }
+    Start-Sleep -Milliseconds 500
   }
+  if ($hits -gt 0) { $script:Interfered += "$Tag ($hits input events into the game window)" }
   if (-not $sampled) { $script:NetLines += "QNET $Tag SKIPPED: the game ended before 28 s" }
   $left = Get-Process Wonderland* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PkgDir*" }
   if ($left) { "[$Tag] TIMEOUT after $Limit s: stopping $($left.Id -join ',')"; $left | Stop-Process -Force; $script:Problems += "$Tag TIMEOUT" }
@@ -145,6 +178,11 @@ $shots = Get-ChildItem $UserDir -Recurse -Directory -Filter 'WLQA' -ErrorAction 
 if ($shots) { Copy-Item (Join-Path $shots.FullName '*') $Out -Force; Get-ChildItem $Out -Filter *.png | ForEach-Object { "frame $($_.Name) $([int]($_.Length/1KB)) KB" } }
 if ($fail -gt 0) { $script:Problems += "$fail FAIL" }
 if ($pass -eq 0) { $script:Problems += 'NO CHECKS RAN' }
+if ($script:Interfered.Count -gt 0) {
+  # VOID, NOT FAILED: a person typed or clicked into the game while it was being measured
+  "TOTAL: $pass PASS, $fail FAIL (three boots) -- QA INTERFERED (void; rerun on an idle PC): $($script:Interfered -join '; ')$(if ($script:Problems.Count) { ' | also: ' + ($script:Problems -join '; ') })"
+  exit 2
+}
 if ($script:Problems.Count -gt 0) {
   "TOTAL: $pass PASS, $fail FAIL (three boots) -- QA FAILED: $($script:Problems -join '; ')"
   exit 1
