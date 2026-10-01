@@ -401,6 +401,10 @@ const FILE_RULES = [
   // Reached through the evidence-to-Brain link: the shapes a durable memory
   // takes, which is the Project Brain's own vocabulary.
   ['src/relay/shared/llmops/', 'DURABLE STATE / PROJECT BRAIN'],
+  // The one Project Brain's vocabulary, its document and its three readers (Julius's
+  // context, Wonderland's panel, a companion's mission scope). Reached from the live
+  // store, whose `brainEntriesForRun` reads what people stated to the project.
+  ['src/relay/mission/project-brain/', 'DURABLE STATE / PROJECT BRAIN'],
   // Money types reached through the same link. The budget's arithmetic, as
   // `julius-cost-accounting.ts` above is.
   ['src/relay/mission/economics/', 'LEASES / BUDGETS / PERMISSIONS'],
@@ -466,6 +470,7 @@ const GROUPS = [
   ['relay-bridge/julius/', 'live composition (relay-bridge/julius/)'],
   ['relay-bridge/', 'bridge provider stacks (hosted Claude, Hermes, redaction)'],
   ['src/relay/mission/julius/', 'kernel (src/relay/mission/julius/)'],
+  ['src/relay/mission/project-brain/', 'Project Brain (src/relay/mission/project-brain/)'],
   ['src/relay/persistence/', 'persistence (src/relay/persistence/)'],
   ['src/relay/integration/julius/', 'Relay↔Julius port (src/relay/integration/julius/)'],
   ['src/relay/integration/compound-agent/', 'C.A.R.D. record (src/relay/integration/compound-agent/, entitlement)'],
