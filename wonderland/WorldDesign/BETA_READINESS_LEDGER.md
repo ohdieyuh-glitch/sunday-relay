@@ -36,20 +36,25 @@ is built into every 1.0, so nothing above 75% is possible before the final RC.
 | R6 | Private/project space and project avatar flow, as implemented | 3 | 0.75 | nothing to test (D2); RC3 Q18 `/pa` changes nothing in a player session; welcome says single-player | -- |
 | R7 | Wonder Web and every beta-facing screen: no dead buttons or placeholders, no debug exposure, back/close/Esc, sane errors | 8 | 0.75 | RC5 Q00.2/Q00.3/Q00.5 (D3), Q01-Q01f (B44 Flame Color), Q22-Q24 (B49 companion consoles) and CORE's RC5 films beside the founder's reference | B49 needs Second's own video acceptance on RC5; B54 (P2, Julius lane): SIM TOKENS in the Julius terminal |
 | R8 | Save / persistence across quit, relaunch, interruption | 8 | 0.75 | RC5 Q12/Q14/Q16/Q15 across a restart; Q21.1-Q21.7 a third boot on corrupted files: no crash, bad files set aside, next save sealed | -- |
-| R9 | Error / recovery: services absent, timeouts, failed travel / load, bad input, corrupt files | 7 | 0.5 | RC3 Q00.3 services absent, Q19 bad terminal input, Q21 corrupt files | failed travel / load verified in the editor only (travel timeout squeeze proof) |
+| R9 | Error / recovery: services absent, timeouts, failed travel / load, bad input, corrupt files | 7 | 0.75 | RC5 Q00.3 services absent, Q19 bad terminal input, Q21.1-Q21.7 corrupt files; RC5 failed travel in the package (`failed_travel_rc5/`): the travel limits squeezed at launch with the engine's `set`, then three of seven teleports were abandoned ("no ground under the landing", "still streaming … hard cap"). Each said "Could not land safely at X; returned to where you were.", put the visitor back, and later teleports and the exit ran normally | -- |
 | R10 | Performance on the founder's laptop, measured in the package | 7 | 0.75 | RC5 perf twice in the game's own window (borderless 1536x960, EPIC, HW RT), back to back with RC4 (table below): RC5 = RC4; RC3 table below; Second's RC2 matrix: every SETTINGS choice applies | B55 (P3): first run of a fresh package |
-| R11 | Memory pressure: long-session growth, repeated skins / teleports / contracts / map / relaunch | 6 | 0 | RC3 soak stopped at 18.7 min by someone at the laptop (menu QUIT): private +340 MB/h over 14 warm minutes, inside ~700 MB place-to-place swings -- INCONCLUSIVE | a full 60-minute soak |
+| R11 | Memory pressure: long-session growth, repeated skins / teleports / contracts / map / relaunch | 6 | 0.75 | RC5 60-minute soak (`soak_rc5/`), 165 cycles of skins, teleports, contracts, map and creation: private memory flat (10-minute medians 6,406-6,480 MB, minima 6,148-6,217 MB from minute 10), VRAM flat (4,026-4,075 MB), uobjects not growing; Second's independent read of the CSV agrees; relaunch across the QA's three boots | -- |
 | R12 | Package / distribution: clean artifact, prerequisites, no machine paths, size, README, version visible | 7 | 0.75 | RC5 zip: 81 files, 0.62 GB, sha256 0CFF42F5...E8459; app-local CRT + vc_redist staged; no Saved/PDB/sources/Vulkan layers/retired figures; clean label "build 05e983d8"; README with the publisher dialog and Smart App Control | P2: B33 unsigned, B36 notices; P3: B38 |
 | R13 | Security / privacy baseline | 5 | 0.75 | RC5: no listening socket in a player session (QNET, two boots); scan: no names, e-mails or secrets (known P3 strings only); AI off (Q00.3) | -- |
-| R14 | Crash / soak on the package | 4 | 0 | 0 crashes across 3 QA boots, perf and 18.7 soak minutes | a full 60-minute soak |
+| R14 | Crash / soak on the package | 4 | 0 | RC5: 0 crashes in the 60-minute soak, three QA boots, perf and films | **B57 (P1) open on RC5**: the soak's exit never finished (fixed in RC6 source; RC6's soak must show it) |
 | R15 | Clean-user test on the RC (no saves, no console, no developer knowledge) | 6 | 0 | Second's RC3 clean-user pass waits for an idle laptop | -- |
 | | **Total** | **100** | | | |
 
-**WONDERLAND BETA READINESS: 56.0%** (RC5, CORE's evidence, 2026-10-01). R1 6 + R2 6 + R3 6 + R4 6 + R6 2.25 + R7 6 +
-R8 6 + R9 3.5 + R10 5.25 + R12 5.25 + R13 3.75. No P0 or P1 is open on RC5. Nothing above 75% is possible until Second
-signs RC5. R5, R11, R14 and R15 still need their evidence: focus loss and window modes, the 60-minute soak (running),
-and the clean-user pass. R4 and R9 need their weakest parts in the package: the WATCH button clicked, and a failed
-travel/load.
+**WONDERLAND BETA READINESS: 62.25%** (RC5 package evidence, CORE + Second's reads, 2026-10-01). R1 6 + R2 6 + R3 6 +
+R4 6 + R6 2.25 + R7 6 + R8 6 + R9 5.25 + R10 5.25 + R11 4.5 + R12 5.25 + R13 3.75.
+- RC5's soak found a P1: the exit hangs after a long session (B57). RC6 (144d2e21) carries the fix, so the final RC is
+  now RC6, and every row is re-earned there.
+- Nothing above 75% is possible until Second signs it.
+- Still to evidence:
+  - R5: focus loss and window modes;
+  - R14: RC6's soak exit;
+  - R15: the clean-user pass;
+  - R4: the WATCH button clicked in the package.
 
 ### RC5 package evidence (CORE)
 
@@ -208,6 +213,9 @@ survives a small private beta with a documented limitation. P3 is polish. Only P
 | B51 | P3 | distribution | README named only SmartScreen's dialog; a MOTW exe raises "The publisher could not be verified", and Smart App Control blocks unsigned apps outright (Second, RC4) | README lines (78fced42) | fixed in RC5 |
 | B52 | P3 | distribution | The window title lost the build label: the engine writes its own title after the stamp (Q00.6, RC4) | the label is kept by a 1 s ticker (78fced42) | fixed in RC5; Q00.6 |
 | B54 | P2 | truthfulness | The Julius Live Terminal shows "SIM TOKENS 312" during a simulated mission: an estimate (characters / 4), labelled SIM and explained in a tooltip, but a usage-looking number nothing produced (Second, RC5 film) | WonderlandLiveTerminal.cpp is the Julius lane's file, which CORE does not edit | open (founder / Julius lane) |
+| B57 | P1 | session / soak | RC5's 60-minute soak passed (WLSOAK END PASS, 165 cycles, 0 crashes, memory flat), but its exit never finished. The log stops at ~FD3D12DynamicRHI; the process stayed alive, windowless and idle (WS 497 MB, private 1,104 MB, VRAM 415 MB) until the soak script killed it 10 minutes later. Minidump + stacks symbolised against the matching PDB (`soak_rc5/hang/`): the main thread is in ~FTaskGraphCompatibilityImplementation joining a worker (FThread::Join) blocked on a mutex. No Wonderland code runs background tasks: it is the engine's teardown. Short sessions exit cleanly | WonderlandBeta::ArmExitWatchdog (144d2e21): on OnEnginePreExit a plain OS thread ends a teardown still running after 20 s (exit code 0); the graceful exit runs first and everything is saved when made. Proved by wl.Qa.HangOnExit: a 60 s exit hang ended ~21 s in | open on RC5; fixed in RC6 source; RC6 soak pending |
+| B58 | P3 | diagnostics | A fired exit watchdog looks like a clean exit (code 0, no marker); only the missing "Log file closed" line shows it (Second) | a raw-Win32 Saved/Logs/ExitWatchdog.txt marker before TerminateProcess, in any RC7 | open |
+| B59 | P3 | measurement | The soak's "worst frame" (2,171 ms on RC5) counts the startup frame read when wl.Qa.Soak arms; the worst frame in play was 151 ms | count from WLPERF BEGIN and name the cycle step, in any RC7 | documented |
 | B55 | P3 | performance | The first run of a freshly unzipped package hitches while streaming: teleports worst 361 ms and map 147 ms on RC5's first run, against 110 ms and 71 ms on its second (new files scanned, caches cold) | -- | documented |
 | B53 | P2 | dependency | A companion doing a REAL task needs a provider the founder connects. On this laptop OpenAI has no key and Claude Code is installed but not allowed. The runtime's development providers answer SIMULATED | the console labels the runtime's mode; the REAL-provider video waits for the founder | founder decision |
 
