@@ -452,7 +452,7 @@ suite('Julius ↔ Project Brain ↔ Wonderland, end to end over a real PostgreSQ
   });
 
   it('O: errors are truthful -- nothing is reported durable that is not, and nothing empty is reported for a database that is not there', async () => {
-    const secret = await wonderland('POST', '/wonderland/brain/proposals', { projectId, surfaceId: 'user_facts', idempotencyKey: `o-${nonce()}`, text: 'my token is ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123' });
+    const secret = await wonderland('POST', '/wonderland/brain/proposals', { projectId, surfaceId: 'user_facts', idempotencyKey: `o-${nonce()}`, text: 'my token is ghp_FAKETESTNOTREALFAKETESTNOTREAL' });
     expect(secret.status).toBe(422);
     expect(secret.json.error).toMatchObject({ kind: 'credential_in_content', durable: false });
     const leaked = await pool.query(`SELECT count(*)::int AS n FROM relay_wonderland.project_brain_records WHERE body LIKE '%ghp_%' OR title LIKE '%ghp_%'`);
