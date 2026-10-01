@@ -1,7 +1,7 @@
 # Project Brain — one durable Brain for Julius and Wonderland
 
-**Status (2026-10-01):** backend built and proven on branch `relay/julius-project-brain-backend`
-(real PostgreSQL 16.15; a real bridge process; restart; isolation). The Unreal panel adapter is written on
+**Status (2026-10-01):** backend built and proven (real PostgreSQL 16.15; a real bridge process; restart; isolation),
+stacked on main `88b8b1d0` + PR #306 (the contended contract-lock fix the multi-mission suite needs). The Unreal panel adapter is written on
 `local/wonderland-project-brain-client` and is **not yet built or boot-tested** — that is the Wonderland lane's
 build (one heavy job at a time, and every UE 5.8 build is boot-verified because a new early FName can crash a
 packaged boot).
@@ -78,8 +78,14 @@ own rows are already safe summaries.
   labelled `[a proposal, not a term of the contract]`. Each version is its own entry (`pbr:<uuid>@v<n>`), so the
   durable context snapshot records exactly which version a worker read.
 * **Cross-mission carry:** project-scoped statements reach every mission of the project; mission-scoped ones only
-  their run. Julius's existing carry of VERIFIED/APPROVED claims is unchanged. Scope is enforced by the SQL and again
-  in the projection, before any ranking (mutation M10 vs control M11).
+  their run. Scope is enforced by the SQL and again in the projection, before any ranking (mutation M10 vs control
+  M11). Julius's own carry is unchanged: at bootstrap, `verifiedProjectKnowledge` copies the VERIFIED/APPROVED claims
+  of the project's OTHER runs (newest first, capped at `JULIUS_CARRIED_KNOWLEDGE_LIMIT`) into the new run as
+  `carried:<sourceRun>:<entry>` entries that keep their asserter, evidence and standing; both production bootstraps
+  (bridge route and live job) bind it. Deterministic scope only — project, never this run, trust — and relevance is
+  left to the context integrity layer. Not carried today (P2): a prior mission's UNRESOLVED findings and a summary of
+  the project's mission history; adding them changes the context of every later mission in a project, including a
+  paid one, so it lands only with its own qualification.
 * **Mission contract:** the document projects each mission's contract policy (execution mode, review requirement,
   completion rule, limits, requested permissions, scope, roles) into `governance`, beside approvals, task-contract
   locks, lifecycle control and the per-role served-model topology from `JuliusRuntimeApi.inspectSlots`.
@@ -183,4 +189,6 @@ bridge's words; unpaired, the labelled development preview is unchanged. Console
   COMMIT then safe retry, restart) and 11 end-to-end cases A–O through a real bridge server.
 * Mutation: 15/15 mutants killed (+1 defence-in-depth control survives as designed).
 * Real processes: `npm run project-brain:proof` with `PROJECT_BRAIN_PROOF_DATABASE_URL` (throwaway) and
-  `PROJECT_BRAIN_PROOF_OUT` — 11/11 steps, evidence in `_qa_handoff/julius_project_brain/`.
+  `PROJECT_BRAIN_PROOF_OUT` — 11/11 steps, evidence in `_qa_handoff/julius_project_brain/` (re-run 11/11 on the
+  `88b8b1d0` + #306 stack: `proof-stack306-20261001-105904`).
+* With the stack: every `*.real-postgres` suite 16 files / 92 cases, 0 todo; the two-loop six-mission suite 8/8.
