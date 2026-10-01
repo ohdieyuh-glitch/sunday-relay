@@ -96,6 +96,15 @@ $gpuDump = Join-Path $dst 'Engine\Extras\GPUDumpViewer'
 if (Test-Path $gpuDump) { Remove-Item -Recurse -Force $gpuDump }
 $arm64 = Join-Path $dst 'Engine\Extras\Redist\en-us\vc_redist.arm64.exe'
 if (Test-Path $arm64) { Remove-Item -Force $arm64 }
+# AND THE RETIRED FIGURES (Second Wonderland's RC3 audit). The wardrobe offers the canonical five and nothing loads these,
+# but a tester browsing the folder would meet designs the founder retired. The source files stay in the tree.
+$retired = @('Apollo', 'ApolloV1', 'ApolloV2', 'ArdenInfernal', 'ArdenInfernalV1', 'ArdenInfernalV2', 'Bee', 'Hagoromo', 'SkeletonFlame', 'SkeletonFlameV1')
+foreach ($stem in $retired) {
+  $figure = Join-Path $dst "Wonderland\RelaySkins\$stem.wlvox"
+  if (Test-Path $figure) { Remove-Item -Force $figure }
+}
+$cubDir = Join-Path $dst 'Wonderland\RelayCubs'
+if (Test-Path $cubDir) { Get-ChildItem $cubDir -File | Where-Object { $_.Name -like 'CubGhost_Apollo_*' -or $_.Name -like 'CubGhost_ArdenInfernal_*' } | Remove-Item -Force }
 
 # 4. an installed build: saves and logs go to %LOCALAPPDATA%\Wonderland\Saved
 New-Item -ItemType Directory -Force (Join-Path $dst 'Engine\Build') | Out-Null
@@ -150,8 +159,11 @@ roughly halves the memory Wonderland uses.
 
 GOOD TO KNOW
 - Your skin, colours, settings, discovered places and Mission Contracts are saved on this PC.
+- Jack Flame, Skeleton Flame and Baal have a FLAME colour of their own, in Menu > COLORS and in the Wardrobe; DEFAULT is
+  the fire as designed.
 - The Pixel Canvas in Wonder Web and the Project Brain's entries are samples. What you paint, and the changes you
   propose in the Project Brain, are kept until you quit, not saved.
+- The WONDER WEB WALLET is a sandbox: its `$500.00 is not real money and nothing can be bought with it.
 - If your Relay Dog ever disappears, press Esc, choose QUIT WONDERLAND, and start the game again.
 
 YOUR SAVES AND LOG
@@ -193,7 +205,7 @@ $manifest = @(
   "zip_bytes    $((Get-Item $zip).Length) ($([math]::Round((Get-Item $zip).Length / 1GB, 2)) GB)",
   "zip_sha256   $hash",
   "prereqs      vc_redist.x64.exe staged; VC++ runtime app-local beside Wonderland\Binaries\Win64\Wonderland.exe",
-  "excluded     Saved/, *.pdb, RelaySkins/_reference, RelaySkins/_previous, ProjectAvatars/_old, .gitignore, Manifest_*.txt, WorldDesign/Look records but practical_lights.json, Vulkan VkLayer_* debug layers, Engine/Extras/GPUDumpViewer, vc_redist.arm64.exe",
+  "excluded     Saved/, *.pdb, RelaySkins/_reference, RelaySkins/_previous, ProjectAvatars/_old, .gitignore, Manifest_*.txt, WorldDesign/Look records but practical_lights.json, Vulkan VkLayer_* debug layers, Engine/Extras/GPUDumpViewer, vc_redist.arm64.exe, retired figures (Apollo*, ArdenInfernal*, Bee, Hagoromo, SkeletonFlame, SkeletonFlameV1 and their cubs)",
   "installed    Engine/Build/InstalledProjectBuild.txt (saves and logs in %LOCALAPPDATA%\Wonderland\Saved)"
 )
 $manifest | Set-Content -Encoding utf8 (Join-Path $ReleaseRoot "RELEASE_MANIFEST_$Version.txt")

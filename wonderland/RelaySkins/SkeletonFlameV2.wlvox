@@ -8,8 +8,8 @@ material bonedeep lit 0.6900 0.6600 0.5920 1.000
 material visor lit 0.0450 0.0420 0.0500 1.000
 material eye glow 0.3600 0.9500 1.0000 120.000
 material eyehalo add 0.3600 0.9500 1.0000 42.000
-material ghost glow 0.2200 0.7000 1.0000 10.500
-material ghostpale glow 0.7200 0.9400 1.0000 18.000
+material ghost glow 0.2200 0.7000 1.0000 10.500 flame
+material ghostpale glow 0.7200 0.9400 1.0000 18.000 flame_light
 material void lit 0.0300 0.0400 0.0600 1.000
 material ash lit 0.6400 0.6100 0.5400 1.000
 material voidglow glow 0.0500 0.0650 0.1050 24.000

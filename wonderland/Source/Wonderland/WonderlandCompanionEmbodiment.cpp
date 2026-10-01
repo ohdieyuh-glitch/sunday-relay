@@ -1500,6 +1500,18 @@ FString AWonderlandCompanionEmbodiment::DescribeMaterialColours() const
 	return Out;
 }
 
+bool AWonderlandCompanionEmbodiment::DeclaresFlame() const
+{
+	for (const FWonderlandCompanionMaterial& Material : BuiltMaterials)
+	{
+		if (WonderlandMascotStyle::IsFlameChannel(Material.Channel))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 FString AWonderlandCompanionEmbodiment::DescribeFramingParts() const
 {
 	// WHICH PARTS THE FRAMING BOX IS ACTUALLY MADE OF, and where each one sits.
@@ -1897,6 +1909,20 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 			case EWonderlandColorChannel::None: default:                     break;
 			}
 		}
+	}
+
+	// ---- A FLAME SKIN'S FIRE FOLLOWS THE FLAME COLOUR (founder, 2026-10-01: "Flame Color ... This must be independent
+	// from normal body/secondary color").
+	//
+	// OUTSIDE THE COLOURWAY ABOVE ON PURPOSE: a player who has picked no primary or secondary can still recolour the fire,
+	// and picking either of those never moves it. Declared by the figure (`flame` / `flame_light`), so no skin is named
+	// here, and only the Dog's own costume and the Wardrobe's mannequin of it wear it -- a companion and a Sub-Agent Cub
+	// keep their own fire. The flame twin comes through this same function, so both instances of the fire take it.
+	if (BodyRole == EWonderlandBodyRole::Mascot && WonderlandMascotStyle::IsFlameChannel(Def.Channel)
+		&& WonderlandMascotStyle::HasChosenFlame())
+	{
+		static const FName FlameLight(TEXT("flame_light"));
+		Want = WonderlandMascotStyle::AccentColour(Want, WonderlandMascotStyle::FlameColour(), Def.Channel == FlameLight);
 	}
 
 	switch (Def.Kind)

@@ -1,5 +1,8 @@
 #include "WonderlandProjectBrain.h"
 
+#include "WonderlandBeta.h"
+#include "WonderlandCompanionSubsystem.h"
+
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandProjectBrain, Log, All);
 
 const TCHAR* WonderlandBrainText::AccessWord(EWonderlandBrainAccess Access)
@@ -28,6 +31,9 @@ const TCHAR* WonderlandBrainText::GroupWord(EWonderlandBrainGroup Group)
 void UWonderlandProjectBrainSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
+	// THE PLAYER'S SESSION FIRST: game-instance subsystems start in no promised order, and the samples below name the
+	// companions, which a tester's build calls by their roles (WonderlandBeta). The switches are idempotent.
+	WonderlandBeta::ApplyPlayerSessionSwitches();
 	// NOTHING IS CONNECTED YET, so the only honest source is the labelled development preview. When a Project
 	// Brain authority reaches Wonderland it replaces this model through the brain scope -- counts and revisions --
 	// and the sample lines go with it.
@@ -99,6 +105,14 @@ void UWonderlandProjectBrainSubsystem::BuildDevelopmentPreview()
 
 	using G = EWonderlandBrainGroup;
 	using A = EWonderlandBrainAccess;
+	// THE COMPANIONS BY THE NAMES THIS BUILD GIVES THEM (founder, 2026-10-01, D3): the canon names in a developer's
+	// session, the role names in a tester's -- read from the one settings object every other surface reads.
+	const UWonderlandCompanionPreviewSettings* Names = GetDefault<UWonderlandCompanionPreviewSettings>();
+	const FString LlmName = Names != nullptr ? Names->LlmCompanionName : FString(TEXT("LLM COMPANION"));
+	const FString AgentName = Names != nullptr ? Names->AgentName : FString(TEXT("JHINN"));
+	const FString SharedLlm = FString::Printf(TEXT("%s: nothing shared, not joined."), *LlmName);
+	const FString SharedAgent = FString::Printf(TEXT("%s: nothing shared, not joined."), *AgentName);
+	const FString AurumDecision = FString::Printf(TEXT("%s wears the Aurum skin."), *LlmName);
 	const auto Add = [this](const TCHAR* Id, const TCHAR* Title, G Group, A Access, const TCHAR* Purpose, std::initializer_list<const TCHAR*> Lines)
 	{
 		FWonderlandBrainSurface Surface;
@@ -164,7 +178,7 @@ void UWonderlandProjectBrainSubsystem::BuildDevelopmentPreview()
 	Add(TEXT("independent_reviewer"), TEXT("Independent Reviewer"), G::Components, A::System, TEXT("Challenges and verifies. A role, not a provider."),
 		{TEXT("Status: waiting.")});
 	Add(TEXT("shared_context"), TEXT("Shared Context"), G::Components, A::Yours, TEXT("What companions may see once they join a mission."),
-		{TEXT("GPT 6 Astra: nothing shared, not joined."), TEXT("Claude Code Fable 5: nothing shared, not joined.")});
+		{*SharedLlm, *SharedAgent});
 
 	// 04 MISSION CONTEXT -- the brain scope's own vocabulary.
 	Add(TEXT("objective"), TEXT("Objective"), G::Mission, A::System, TEXT("What the Mission Contract locked in."),
@@ -174,7 +188,7 @@ void UWonderlandProjectBrainSubsystem::BuildDevelopmentPreview()
 	Add(TEXT("constraints"), TEXT("Constraints"), G::Mission, A::Yours, TEXT("What the work must not do."),
 		{TEXT("Unreal is never the source of mission truth."), TEXT("Do not skip a failed visual gate.")});
 	Add(TEXT("decisions"), TEXT("Decisions"), G::Mission, A::System, TEXT("Accepted decisions. Immutable once accepted."),
-		{TEXT("GPT 6 Astra wears the Aurum skin.")});
+		{*AurumDecision});
 	Add(TEXT("evidence"), TEXT("Evidence"), G::Mission, A::System, TEXT("What was observed, as references."),
 		{TEXT("zc_companion_proof: 8 of 8 checks.")});
 	Add(TEXT("evaluations"), TEXT("Evaluations"), G::Mission, A::System, TEXT("Judgements made against the evidence."),

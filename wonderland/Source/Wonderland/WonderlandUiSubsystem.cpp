@@ -2863,6 +2863,18 @@ void UWonderlandUiSubsystem::HandleSpawnWonderWebShortcut()
 
 bool UWonderlandUiSubsystem::SpawnWonderWebWindow()
 {
+	// A TESTER'S CTRL+W SAYS WHY NOTHING OPENS (founder, 2026-10-01, D3: the sample browser is "Developer-only"). Every
+	// window it would spawn is a browser, browsing is a Julius surface, and Julius is not part of this beta.
+	if (!WonderlandBeta::IsDeveloperSession())
+	{
+		if (WonderWebLayer.IsValid())
+		{
+			WonderWebLayer->ShowNotice(TEXT("WONDER WEB"), TEXT("BROWSING IS NOT IN THIS BETA"),
+				TEXT("Julius opens web pages, and Julius is not part of this beta build. The Pixel Canvas is yours to use."), 5.0f);
+		}
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI ctrl+w: browser windows are not part of this beta build"));
+		return false;
+	}
 	const int32 Limit = GetWonderWebWindowLimit();
 	const FName Id = NextWonderWebWindowId();
 	if (Id == NAME_None)
@@ -2890,6 +2902,14 @@ bool UWonderlandUiSubsystem::SpawnWonderWebWindow()
 
 bool UWonderlandUiSubsystem::OpenWonderWebWindow(FName Id)
 {
+	// THE SAMPLE BROWSER IS A DEVELOPER'S (founder, 2026-10-01, D3). Its pages are styled as other companies' sites and
+	// browsing is Julius's, so a tester's build opens no browser window by any route; the Pixel Canvas and the
+	// Connections window are unaffected.
+	if (IsBrowserWindow(Id) && !WonderlandBeta::IsDeveloperSession())
+	{
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web: %s refused -- browser windows are not part of this beta build"), *Id.ToString());
+		return false;
+	}
 	FWonderWebWindow* Window = EnsureWonderWebWindow(Id);
 	if (Window == nullptr)
 	{

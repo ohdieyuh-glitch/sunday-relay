@@ -12,8 +12,8 @@ material armor lit 0.0750 0.0850 0.1200 1.000
 material armordeep lit 0.0300 0.0340 0.0500 1.000
 material antler rim 0.8000 0.6600 0.4200 1.000
 material gold rim 0.9050 0.7200 0.2900 1.000
-material spirit glow 0.0600 0.2800 1.0000 9.000
-material spiritpale glow 0.3000 0.6000 1.0000 13.500
+material spirit glow 0.0600 0.2800 1.0000 9.000 flame
+material spiritpale glow 0.3000 0.6000 1.0000 13.500 flame_light
 part root - 0.000 0.000 0.000 spine 0.850 0.000
 part body root 0.000 0.000 11.850 none
 part head body 0.000 0.000 19.700 head

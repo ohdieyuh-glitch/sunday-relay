@@ -125,7 +125,9 @@ $tail = New-Object byte[] 1024; $rng.NextBytes($tail); $presets.AddRange($tail)
 # 3. a remembered skin id of 2,000 characters, and 4. a discoveries file with one good id and one 2,000-character line
 [System.IO.File]::WriteAllText((Join-Path $UserDir 'Saved\Wonderland\RelaySkin.txt'), ('x' * 2000))
 [System.IO.File]::WriteAllText((Join-Path $UserDir 'Saved\Wonderland\TerritoriesFound.txt'), "noctis`n" + ('z' * 2000) + "`n")
-"hostile files planted: contracts cut to 60% + .tmp, presets with a 3,000-character class name, a 2,000-character skin id, a 2,000-character territory line"
+# 5. a FLAME colour file of 2,000 characters (founder, 2026-10-01: Flame Color): the designed fire, and the next pick rewrites it
+[System.IO.File]::WriteAllText((Join-Path $UserDir 'Saved\Wonderland\FlameColour.txt'), ('x' * 2000))
+"hostile files planted: contracts cut to 60% + .tmp, presets with a 3,000-character class name, a 2,000-character skin id, a 2,000-character territory line, a 2,000-character flame colour"
 Invoke-Boot 'wl.Qa.PackageHostile' 300 'run3'
 
 $all = @()

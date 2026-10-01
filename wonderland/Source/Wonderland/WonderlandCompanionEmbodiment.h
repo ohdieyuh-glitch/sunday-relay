@@ -189,6 +189,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	FString DescribeMaterialColours() const;
 
+	// Plain C++, NOT a UFUNCTION: a new reflected name shifts the FName table Niagara hashes (WonderlandBeta.h).
+	/** Whether this figure has fire that follows the mascot's FLAME colour (materials tagged `flame` / `flame_light`). */
+	bool DeclaresFlame() const;
+
 	/**
 	 * Whether the clock is allowed to touch this body's glow at all. False for the wardrobe's preview figure,
 	 * which stands on its own black stage under its own light: a preview that got dimmer after sunset would

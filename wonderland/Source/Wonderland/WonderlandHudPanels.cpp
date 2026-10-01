@@ -500,9 +500,23 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				MakeColourRow(TEXT("MASCOT  SECONDARY"),
-					TEXT("The Relay Dog's status eyes, and a skin's secondary accents -- Jack Flame's fire, tie and suit."),
+					TEXT("The Relay Dog's status eyes, and a skin's secondary accents -- Jack Flame's tie and suit."),
 					[Style]() { return Style() != nullptr ? Style()->Secondary : FLinearColor::White; },
 					[Style](FLinearColor C) { if (Style()) { Style()->Secondary = C; Style()->bChosen = true; Style()->bSecondaryChosen = true; } })
+			]
+			// ---- THE FLAME, ITS OWN ROW (founder, 2026-10-01: "When a flame-bearing mascot is equipped, the Color menu
+			// should expose a separate: Flame Color"). Shown only while a skin with fire is worn -- Jack Flame, Skeleton
+			// Flame, Baal -- and collapsed again for Relay OG and Celestial Light, live, without reopening the page.
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SBox)
+				.Visibility_Lambda([]() { return WonderlandMascotStyle::WornSkinHasFlame() ? EVisibility::Visible : EVisibility::Collapsed; })
+				[
+					MakeColourRow(TEXT("MASCOT  FLAME"),
+						TEXT("The worn skin's fire, on its own. DEFAULT is the fire as designed; the shell, eyes, skull and suit never move with it."),
+						[]() { return WonderlandMascotStyle::FlameColour(); },
+						[](FLinearColor C) { WonderlandMascotStyle::SetFlameColour(C); })
+				]
 			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
@@ -603,6 +617,8 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 						S->CursorShape = TEXT("system");
 						S->CursorSize = 22.0f;
 					}
+					// AND THE FIRE, back to each skin's designed flames
+					WonderlandMascotStyle::SetFlameColour(FLinearColor::White);
 					WonderlandCursor::Forget();
 					WonderlandMascotStyle::SaveAndApply();
 					return FReply::Handled();

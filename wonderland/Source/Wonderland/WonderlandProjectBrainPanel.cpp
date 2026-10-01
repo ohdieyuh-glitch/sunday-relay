@@ -1282,16 +1282,19 @@ void SWonderlandProjectBrainPanel::SetSkinsOpen(bool bOpen)
 	}
 }
 
-TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSwatchRow(bool bPrimary)
+TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSwatchRow(int32 Which)
 {
 	using namespace WonderlandBrainLook;
+	// 0 PRIMARY, 1 SECONDARY, 2 FLAME (founder, 2026-10-01: the flame skins' fire, on its own row)
+	const bool bPrimary = Which == 0;
+	const bool bFlame = Which == 2;
 	TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
 	Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
 	[
 		SNew(SBox).WidthOverride(74.0f)
 		[
 			SNew(STextBlock)
-			.Text(bPrimary ? INVTEXT("PRIMARY") : INVTEXT("SECONDARY"))
+			.Text(bFlame ? INVTEXT("FLAME") : (bPrimary ? INVTEXT("PRIMARY") : INVTEXT("SECONDARY")))
 			.Font(Font("Bold", 8, 200)).ColorAndOpacity(Mist(0.95f))
 		]
 	];
@@ -1304,8 +1307,15 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSwatchRow(bool bPrimary)
 			SNew(SButton)
 			.ButtonStyle(&SwatchStyle)
 			.ToolTipText(FText::FromName(Label))
-			.OnClicked_Lambda([bPrimary, Colour]()
+			.OnClicked_Lambda([bPrimary, bFlame, Colour]()
 			{
+				// THE FLAME IS ITS OWN STATE, read and written by the Menu's FLAME row too (WonderlandMascotStyle).
+				if (bFlame)
+				{
+					WonderlandMascotStyle::SetFlameColour(Colour);
+					WonderlandMascotStyle::SaveAndApply();
+					return FReply::Handled();
+				}
 				// ONE CANONICAL STATE, WRITTEN FROM BOTH PLACES. The founder's rule: "Wardrobe color controls
 				// and Menu mascot-color controls must read/write the SAME canonical customization state." This
 				// is that state, and SaveAndApply is the only path from it to a repainted world -- so the
@@ -1329,8 +1339,13 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSwatchRow(bool bPrimary)
 					+ SOverlay::Slot()
 					[
 						SNew(SImage).Image(&SwatchRingBrush)
-						.Visibility_Lambda([bPrimary, Colour]()
+						.Visibility_Lambda([bPrimary, bFlame, Colour]()
 						{
+							if (bFlame)
+							{
+								return WonderlandMascotStyle::FlameColour().Equals(Colour, 0.01f)
+									? EVisibility::HitTestInvisible : EVisibility::Hidden;
+							}
 							const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
 							const FLinearColor Now = bPrimary ? Style.Primary : Style.Secondary;
 							return Style.bChosen && Now.Equals(Colour, 0.01f)
@@ -1351,22 +1366,30 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeColourStrip()
 	// visually inspecting the skin ... Integrate the color controls cleanly without turning Wardrobe into a
 	// crowded settings panel. The preview should remain the visual focus."
 	//
-	// So: two rows of chips under the preview, no headings beyond the two words, no sliders, no picker dialog.
+	// So: rows of chips under the preview, no headings beyond the row words, no sliders, no picker dialog.
 	// PRIMARY is the shell every skin shares; SECONDARY is the status eyes and a skin's secondary accents -- the
-	// surfaces its figure tags `secondary`, which on Jack Flame are the fire, the tie and the suit (founder, 2026-09-29 / 09-30).
-	// Everything else authored -- halos, banners, the black visor, another skin's fire -- is never reached from here.
+	// surfaces its figure tags `secondary`, which on Jack Flame are the tie and the suit; FLAME, shown only on a skin
+	// with fire, is that fire on its own (founder, 2026-10-01). Halos, banners and the black visor are never reached.
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
 		[
 			SNew(STextBlock).Text(INVTEXT("COLOURWAY"))
 			.Font(Font("Bold", 8, 260)).ColorAndOpacity(Violet(0.95f))
 		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)[MakeSwatchRow(true)]
-		+ SVerticalBox::Slot().AutoHeight()[MakeSwatchRow(false)]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)[MakeSwatchRow(0)]
+		+ SVerticalBox::Slot().AutoHeight()[MakeSwatchRow(1)]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+		[
+			SNew(SBox)
+			.Visibility_Lambda([]() { return WonderlandMascotStyle::WornSkinHasFlame() ? EVisibility::Visible : EVisibility::Collapsed; })
+			[
+				MakeSwatchRow(2)
+			]
+		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
 		[
 			SNew(STextBlock)
-			.Text(INVTEXT("PRIMARY paints the shell, SECONDARY the status eyes and the skin's secondary accents (Jack Flame's fire, tie and suit). Halos and the visor are left as designed."))
+			.Text(INVTEXT("PRIMARY paints the shell, SECONDARY the status eyes and the skin's secondary accents (Jack Flame's tie and suit), FLAME the skin's fire. Halos and the visor are left as designed."))
 			.Font(Font("Regular", 7, 180)).ColorAndOpacity(Mist(0.75f))
 			.AutoWrapText(true)
 		];

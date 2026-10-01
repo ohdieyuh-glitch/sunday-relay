@@ -193,9 +193,10 @@ private:
 	FSimpleDelegate OnToggleInspect;
 	TAttribute<bool> IsInspecting;
 
-	/** The PRIMARY / SECONDARY swatch strip that lives under the preview. See MakeColourStrip. */
+	/** The PRIMARY / SECONDARY / FLAME swatch strip that lives under the preview. See MakeColourStrip. */
 	TSharedRef<SWidget> MakeColourStrip();
-	TSharedRef<SWidget> MakeSwatchRow(bool bPrimary);
+	/** 0 PRIMARY, 1 SECONDARY, 2 FLAME. */
+	TSharedRef<SWidget> MakeSwatchRow(int32 Which);
 	FSlateBrush ClearBrush;
 	FButtonStyle SelectableStyle;
 	FButtonStyle ActionStyle;

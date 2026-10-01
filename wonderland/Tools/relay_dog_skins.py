@@ -1756,8 +1756,12 @@ def apollo():
 def skeleton_flame():
     """SKELETON FLAME V2 -- BONES IGNITE. SIGNAL NEVER DIES. Written from the sheet."""
     figure = start("RELAY DOG SKIN -- SKELETON FLAME V2", 7204, SKELETON_SOUL, 8.0)
-    figure.material("ghost", "glow", (0.22, 0.70, 1.00), 0.7)
-    figure.material("ghostpale", "glow", (0.72, 0.94, 1.00), 1.2)
+    # THE SPECTRAL FIRE FOLLOWS THE FLAME COLOUR (founder, 2026-10-01: "Skeleton Flame: Flame Color controls supernatural
+    # flames; skull/body are not recolored by it; skull stays black/non-emissive; eyes remain glow treatment"). ghost and
+    # its pale core are the fire -- the ear, paw, foot, hip and back flames and their spectral trims. The skull (bone and
+    # void), the soul glows (soulpulse, soulveilpulse, voidglow) and the chest skull's eyes (soulgaze) carry no tag.
+    figure.material("ghost", "glow", (0.22, 0.70, 1.00), 0.7, channel="flame")
+    figure.material("ghostpale", "glow", (0.72, 0.94, 1.00), 1.2, channel="flame_light")
     figure.material("void", "lit", (0.030, 0.040, 0.060), 1.0)
     figure.material("ash", "lit", (0.640, 0.610, 0.540), 1.0)
     # FOUNDER, SKELETON FLAME: "The OTHER BLACK SECTIONS OF THE BODY are supposed to participate in the
@@ -2499,11 +2503,13 @@ def jack_flame():
     # ORANGE, NOT YELLOW. The first in-engine sheet (zzS06) rendered the fire YELLOW and the heart a yellow slab: the
     # engine's real-fire surfaces lift a flame's colour toward white, so the colour has to be authored deeper and
     # more saturated than the orange the sheet shows, and the heart dimmer, so it stays red rather than blooming.
-    # THE SECONDARY COLOUR DRIVES THE FIRE AND THE TIE (founder, 2026-09-29: "The SECONDARY COLOR customization must
-    # control BOTH the FLAMES and the RED TIE ... The red tie must therefore NOT remain permanently red"). The tie is
-    # the burning heart on the collar; the pale inner flame keeps its lighter core in whatever colour is chosen.
-    figure.material("flame", "glow", (1.00, 0.20, 0.02), 0.55, channel="secondary")
-    figure.material("flamepale", "glow", (1.00, 0.44, 0.06), 0.85, channel="secondary_light")
+    # THE TIE FOLLOWS THE SECONDARY, THE FIRE THE FLAME COLOUR (founder, 2026-10-01: "Jack Flame: Secondary Color controls
+    # suit/tie customization; Flame Color controls head flames, hand flames, foot flames, tail-tip flame; preserve
+    # accepted head treatment"). It replaces 2026-09-29's "the SECONDARY COLOR customization must control BOTH the FLAMES
+    # and the RED TIE": the tie -- the burning heart on the collar -- stays `secondary`, and the fire moves to its own
+    # row. The pale inner flame keeps its lighter core in whatever colour is chosen.
+    figure.material("flame", "glow", (1.00, 0.20, 0.02), 0.55, channel="flame")
+    figure.material("flamepale", "glow", (1.00, 0.44, 0.06), 0.85, channel="flame_light")
     figure.material("heart", "glow", (0.95, 0.08, 0.02), 0.6, channel="secondary")
     figure.material("nightmare", "lit", (0.034, 0.032, 0.040), 1.0)
     base_dog(figure)
@@ -2666,8 +2672,10 @@ def baal():
     figure.material("gold", "rim", (0.905, 0.720, 0.290), 1.0)
     # DEEP BLUE, NOT ICE. The first in-engine sheet (zzS06) rendered the fire pale ice-blue: the real-fire surfaces
     # lift toward white, so the sheet's saturated blue is authored deeper and less bright than it looks.
-    figure.material("spirit", "glow", (0.06, 0.28, 1.00), 0.6)
-    figure.material("spiritpale", "glow", (0.30, 0.60, 1.00), 0.9)
+    # AND IT FOLLOWS THE FLAME COLOUR (founder, 2026-10-01: "Baal: Flame Color controls supernatural blue-flame layer
+    # independently of armor/body colors"). The armour, antlers, gold and bone carry no tag.
+    figure.material("spirit", "glow", (0.06, 0.28, 1.00), 0.6, channel="flame")
+    figure.material("spiritpale", "glow", (0.30, 0.60, 1.00), 0.9, channel="flame_light")
     base_dog(figure)
     d = DOG
     tile = d["tile"]

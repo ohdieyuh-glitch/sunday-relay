@@ -584,7 +584,11 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 			  &SingleFigure, &SinglePercent, &WonderlandSinglePalette()});
 	if (bShowCompanionMeter)
 	{
-		Rows.Add({CompanionLabel, Named != nullptr ? Named->LlmCompanionName : FString(),
+		// A NAME THAT IS ITS OWN LABEL IS SAID ONCE. A tester's build names the companion by its role (founder, 2026-10-01,
+		// D3: "LLM COMPANION"), which would otherwise read "LLM COMPANION  LLM COMPANION".
+		const FString CompanionName = Named != nullptr && !Named->LlmCompanionName.Equals(CompanionLabel, ESearchCase::IgnoreCase)
+			? Named->LlmCompanionName : FString();
+		Rows.Add({CompanionLabel, CompanionName,
 				  &CompanionFigure, &CompanionPercent, &WonderlandCompanionHud::LlmCompanionPalette()});
 	}
 	// RECORDED AS IT IS DRAWN. NativePaint is const because Slate paints are, so the write is cast -- kept to

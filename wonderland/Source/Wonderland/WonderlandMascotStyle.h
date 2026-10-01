@@ -232,6 +232,30 @@ namespace WonderlandMascotStyle
 	WONDERLAND_API const TArray<TPair<FName, FLinearColor>>& Palette();
 
 	/**
+	 * THE FLAME COLOUR (founder, 2026-10-01: "When a flame-bearing mascot is equipped, the Color menu should expose a
+	 * separate: Flame Color. This must be independent from normal body/secondary color").
+	 *
+	 * ONE colour for every flame skin, as the primary and the secondary are one colour for every skin. WHITE -- the
+	 * DEFAULT swatch -- means each skin's own designed fire: Jack Flame's orange, Baal's blue, Skeleton Flame's cyan. A
+	 * figure opts its fire in by tagging those materials `flame`, or `flame_light` for a pale core, so no skin is named
+	 * in code; the skull, the eyes, the body and Jack Flame's tie and suit carry no such tag and never move with it.
+	 *
+	 * KEPT IN ITS OWN SMALL FILE (Saved/Wonderland/FlameColour.txt), not a new config property: a new reflected or
+	 * config name shifts the FName table Niagara hashes, which crashed RC1 at boot (WonderlandBeta.h). Written whole or
+	 * not at all; a file that does not hold three numbers in 0..1 means the designed fire.
+	 */
+	WONDERLAND_API FLinearColor FlameColour();
+	WONDERLAND_API bool HasChosenFlame();
+	/** Store it (White = as designed) and save it. The caller repaints, through SaveAndApply, like every other row. */
+	WONDERLAND_API void SetFlameColour(const FLinearColor& Colour);
+	/** What the saved file is read with: three numbers in 0..1 separated by spaces, or false. For the QA's hostile inputs. */
+	WONDERLAND_API bool ParseFlameColour(const FString& Text, FLinearColor& Out);
+	/** Whether a figure's material channel is fire that follows the FLAME colour: `flame` or `flame_light`. */
+	WONDERLAND_API bool IsFlameChannel(FName Channel);
+	/** Whether the skin the player's Relay Dog wears has any such fire. The FLAME rows show only then. */
+	WONDERLAND_API bool WornSkinHasFlame();
+
+	/**
 	 * SAVE, AND MAKE IT TRUE EVERYWHERE, NOW.
 	 *
 	 * The founder's rule for these controls is that the Wardrobe and the Menu are one system: "Changing the

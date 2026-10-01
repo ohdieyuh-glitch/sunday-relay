@@ -9,6 +9,11 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/ConfigCacheIni.h"
 #include "HAL/IConsoleManager.h"
+#include "GameFramework/PlayerController.h"
+#include "HAL/FileManager.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "WonderlandBeta.h"
 
 namespace WonderlandMascotStyle
 {
@@ -113,6 +118,137 @@ namespace WonderlandMascotStyle
 		{
 			Instance->SetVectorParameterValue(Name, Colour);
 		}
+	}
+}
+
+namespace
+{
+	// THE FLAME COLOUR'S ONE COPY (see WonderlandMascotStyle::FlameColour). White is the designed fire.
+	FLinearColor GFlameColour = FLinearColor::White;
+	bool GFlameColourLoaded = false;
+
+	FString FlameColourPath()
+	{
+		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Wonderland"), TEXT("FlameColour.txt"));
+	}
+
+	/** THREE NUMBERS IN 0..1, or nothing. A hand edit, a corrupted file or a NaN is not a colour; it is the designed fire. */
+	bool ReadFlameColourText(const FString& Text, FLinearColor& Out)
+	{
+		if (Text.Len() > 64)
+		{
+			return false;
+		}
+		TArray<FString> Parts;
+		Text.TrimStartAndEnd().ParseIntoArrayWS(Parts);
+		if (Parts.Num() != 3)
+		{
+			return false;
+		}
+		float Values[3] = { 0.0f, 0.0f, 0.0f };
+		for (int32 Index = 0; Index < 3; ++Index)
+		{
+			// IsNumeric takes digits, one point and a sign -- no exponent, no "nan", no "inf"
+			if (!Parts[Index].IsNumeric())
+			{
+				return false;
+			}
+			Values[Index] = FCString::Atof(*Parts[Index]);
+			if (!FMath::IsFinite(Values[Index]) || Values[Index] < 0.0f || Values[Index] > 1.0f)
+			{
+				return false;
+			}
+		}
+		Out = FLinearColor(Values[0], Values[1], Values[2], 1.0f);
+		return true;
+	}
+
+	void LoadFlameColour()
+	{
+		if (GFlameColourLoaded)
+		{
+			return;
+		}
+		GFlameColourLoaded = true;
+		const FString Path = FlameColourPath();
+		WonderlandBeta::RecoverInterruptedSave(Path);
+		IFileManager& Files = IFileManager::Get();
+		if (!Files.FileExists(*Path))
+		{
+			return;
+		}
+		// A SIZE CAP BEFORE THE READ: the file holds three short numbers, so anything past a few hundred bytes is not one.
+		FString Text;
+		FLinearColor Colour = FLinearColor::White;
+		const int64 Size = Files.FileSize(*Path);
+		if (Size > 0 && Size <= 256 && FFileHelper::LoadFileToString(Text, *Path) && ReadFlameColourText(Text, Colour))
+		{
+			GFlameColour = Colour;
+			return;
+		}
+		UE_LOG(LogTemp, Warning, TEXT("WLMASCOT the saved flame colour could not be read (%lld bytes); the fire is as designed until one is picked"), Size);
+	}
+}
+
+namespace WonderlandMascotStyle
+{
+	FLinearColor FlameColour()
+	{
+		LoadFlameColour();
+		return GFlameColour;
+	}
+
+	bool ParseFlameColour(const FString& Text, FLinearColor& Out)
+	{
+		return ReadFlameColourText(Text, Out);
+	}
+
+	bool HasChosenFlame()
+	{
+		const FLinearColor Colour = FlameColour();
+		return !(Colour.R >= 0.995f && Colour.G >= 0.995f && Colour.B >= 0.995f);
+	}
+
+	void SetFlameColour(const FLinearColor& Colour)
+	{
+		LoadFlameColour();
+		GFlameColour = FLinearColor(FMath::Clamp(Colour.R, 0.0f, 1.0f), FMath::Clamp(Colour.G, 0.0f, 1.0f), FMath::Clamp(Colour.B, 0.0f, 1.0f), 1.0f);
+		// SAVED THE MOMENT IT IS PICKED, whole or not at all, like every other choice the player makes here.
+		WonderlandBeta::SaveTextAtomically(FlameColourPath(),
+			FString::Printf(TEXT("%.4f %.4f %.4f"), GFlameColour.R, GFlameColour.G, GFlameColour.B));
+	}
+
+	bool IsFlameChannel(FName Channel)
+	{
+		// made on the first call, at run time: never a name created during static initialisation (WonderlandBeta.h)
+		static const FName Flame(TEXT("flame"));
+		static const FName FlameLight(TEXT("flame_light"));
+		return Channel == Flame || Channel == FlameLight;
+	}
+
+	bool WornSkinHasFlame()
+	{
+		if (GEngine == nullptr)
+		{
+			return false;
+		}
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			const UWorld* World = Context.World();
+			if (World == nullptr || !World->IsGameWorld())
+			{
+				continue;
+			}
+			// THE PLAYER'S OWN DOG. Relay OG wears no costume (WearSkin destroys it), so its answer is no.
+			const APlayerController* Controller = World->GetFirstPlayerController();
+			const ARelayDogCharacter* Dog = Controller != nullptr ? Cast<ARelayDogCharacter>(Controller->GetPawn()) : nullptr;
+			if (Dog != nullptr)
+			{
+				const AWonderlandCompanionEmbodiment* Costume = Dog->GetCostume();
+				return Costume != nullptr && Costume->DeclaresFlame();
+			}
+		}
+		return false;
 	}
 }
 
@@ -231,8 +367,25 @@ namespace
 
 	FAutoConsoleCommand GMascotSecondary(
 		TEXT("wl.Mascot.Secondary"),
-		TEXT("The Relay Dog's eyes and a skin's secondary accents (Jack Flame's fire, tie and suit): wl.Mascot.Secondary <r,g,b | #RRGGBB>. Saved."),
+		TEXT("The Relay Dog's eyes and a skin's secondary accents (Jack Flame's tie and suit): wl.Mascot.Secondary <r,g,b | #RRGGBB>. Saved."),
 		FConsoleCommandWithArgsDelegate::CreateStatic(&SetAndSave, false));
+
+	FAutoConsoleCommand GMascotFlame(
+		TEXT("wl.Mascot.Flame"),
+		TEXT("A flame skin's fire, on its own -- Jack Flame, Skeleton Flame, Baal: wl.Mascot.Flame <r,g,b | #RRGGBB | default>. Saved."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			FLinearColor Colour = FLinearColor::White;
+			const FString Text = FString::Join(Args, TEXT(""));
+			if (Text.IsEmpty() || (!Text.Equals(TEXT("default"), ESearchCase::IgnoreCase) && !ReadColour(Text, Colour)))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("WLMASCOT usage: wl.Mascot.Flame <r,g,b | #RRGGBB | default>"));
+				return;
+			}
+			WonderlandMascotStyle::SetFlameColour(Colour);
+			WonderlandMascotStyle::SaveAndApply();
+			UE_LOG(LogTemp, Display, TEXT("WLMASCOT FLAME = %s (saved and applied)"), *WonderlandMascotStyle::FlameColour().ToString());
+		}));
 
 	FAutoConsoleCommand GMascotReset(
 		TEXT("wl.Mascot.Reset"),
@@ -246,6 +399,8 @@ namespace
 				Settings->bChosen = false;
 				Settings->bSecondaryChosen = false;
 			}
+			// AND THE FIRE: the designed flames are part of "the colours its skins were designed in".
+			WonderlandMascotStyle::SetFlameColour(FLinearColor::White);
 			// THROUGH THE ONE DOOR. SaveAndApply repaints even when nothing is chosen, which is exactly what a
 			// reset needs: a paint that returned early on bChosen is what once left magenta on the Dog.
 			WonderlandMascotStyle::SaveAndApply();

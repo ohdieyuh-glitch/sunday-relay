@@ -21,7 +21,9 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "ProfilingDebugging/TraceAuxiliary.h"
+#include "UObject/UObjectGlobals.h"
 #include "Widgets/SWindow.h"
+#include "WonderlandCompanionSubsystem.h"
 
 #if PLATFORM_WINDOWS
 #include "Windows/WindowsHWrapper.h"
@@ -147,6 +149,16 @@ namespace WonderlandBeta
 			AutoCreate->Set(0, ECVF_SetByCode);
 		}
 
+		// THE COMPANIONS BY THEIR ROLES (founder, 2026-10-01, D3: "Role names for testers"). A tester's build says LLM
+		// COMPANION and JHINN where the development canon names the products; the canon names stay in the config and in
+		// every developer session. Set on the one settings object every surface reads -- the terminals, the usage rows,
+		// the figures, the Project Brain's samples -- before the first world exists, and never saved.
+		if (UWonderlandCompanionPreviewSettings* Names = GetMutableDefault<UWonderlandCompanionPreviewSettings>())
+		{
+			Names->LlmCompanionName = TEXT("LLM COMPANION");
+			Names->AgentName = TEXT("JHINN");
+		}
+
 #if WONDERLAND_CLOSE_TRACE_CONTROL
 		// NO NETWORK LISTENER IN A PLAYER'S SESSION. A packaged game runs the trace without a worker thread: it updates
 		// from FCoreDelegates::OnEndFrame (FTraceAuxiliary's FrameBasedUpdate), so the control port opens on the game
@@ -170,6 +182,23 @@ namespace WonderlandBeta
 		if (!bArmed && !bTraceAskedFor)
 		{
 			bArmed = true;
+			// AND AROUND THE STARTUP MAP'S LOAD, which blocks the ticker for seconds: the port opened at the end of the first
+			// frame was still listening until the load finished (Second Wonderland, RC3). Closing it as the load starts and as
+			// it ends shrinks that to the first frame again. Same game thread as the trace's own update, so no race.
+			FCoreUObjectDelegates::PreLoadMap.AddLambda([](const FString&)
+			{
+				if (!FTraceAuxiliary::IsConnected())
+				{
+					UE::Trace::Private::Writer_ShutdownControl();
+				}
+			});
+			FCoreUObjectDelegates::PostLoadMapWithWorld.AddLambda([](UWorld*)
+			{
+				if (!FTraceAuxiliary::IsConnected())
+				{
+					UE::Trace::Private::Writer_ShutdownControl();
+				}
+			});
 			TSharedRef<double> FirstTick = MakeShared<double>(-1.0);
 			TSharedRef<int32> Ticks = MakeShared<int32>(0);
 			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([FirstTick, Ticks](float)

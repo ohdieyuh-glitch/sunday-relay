@@ -20,7 +20,9 @@
 #include "Containers/Ticker.h"
 #include "Dom/JsonObject.h"
 #include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
+#include "Widgets/SWindow.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
@@ -43,6 +45,7 @@
 #include "UObject/UObjectArray.h"
 #include "WonderlandBeta.h"
 #include "WonderlandCommandPresets.h"
+#include "WonderlandCompanionSubsystem.h"
 #include "WonderlandJuliusConnect.h"
 #include "WonderlandPracticalLights.h"
 #include "WonderlandRelaySkins.h"
@@ -88,6 +91,9 @@ namespace
 		bool bHostile = false;
 		// the simulated mission the Missions panel plays (Q17)
 		bool bScenarioStarted = false;
+		// the FLAME row hidden on the two skins without fire (Q01e)
+		bool bOgHidden = false;
+		bool bClHidden = false;
 		// a Mission Contract being sampled
 		TMap<FString, FQaActSamples> Acts;
 		bool bContractSeen = false;
@@ -102,6 +108,8 @@ namespace
 	const TCHAR* const ContractActs[6] = { TEXT("PREPARATION"), TEXT("RESEARCH"), TEXT("IMPLEMENTATION"), TEXT("REVIEW"), TEXT("REPAIR"), TEXT("VERIFICATION") };
 	// the colour the first boot leaves chosen for the second to find
 	const FLinearColor PersistColour(1.0f, 0.25f, 0.55f, 1.0f);
+	// and the FLAME it leaves chosen with it (founder, 2026-10-01): VIOLET, so it can be told from the rose secondary
+	const FLinearColor PersistFlame(0.56f, 0.34f, 0.96f, 1.0f);
 
 	double QaNow()
 	{
@@ -146,6 +154,7 @@ namespace
 	{
 		FLinearColor Body = FLinearColor::Black;
 		FLinearColor Twin = FLinearColor::Black;
+		FString Channel;   // what the figure declared: secondary, flame, flame_light ... or empty
 	};
 
 	TMap<FString, FQaPaint> QaPainted(const AWonderlandCompanionEmbodiment* Costume)
@@ -170,6 +179,7 @@ namespace
 			if (Bits.Num() == 4)
 			{
 				FQaPaint Paint;
+				Paint.Channel = Bits[1];
 				Paint.Body = Read(Bits[2]);
 				Paint.Twin = Read(Bits[3]);
 				Out.Add(Bits[0], Paint);
@@ -177,6 +187,9 @@ namespace
 		}
 		return Out;
 	}
+
+	/** A flame skin's paint with FLAME at DEFAULT, taken before a FLAME is chosen (Q01b-Q01d). */
+	TMap<FString, FQaPaint> GQaFlameBefore;
 
 	/** Same hue: each channel over the brightest, within 0.03 (the editor proof's standard, zh_22). */
 	bool QaSameHue(const FLinearColor& Got, const FLinearColor& Want)
@@ -199,27 +212,116 @@ namespace
 		return FString::Printf(TEXT("%.3f,%.3f,%.3f"), C.R, C.G, C.B);
 	}
 
-	/** Jack Flame's fire, tie and suit all in the chosen secondary's hue, with the suit still a deep, readable cloth. */
-	bool JackWearsSecondary(const AWonderlandCompanionEmbodiment* Costume, const FLinearColor& Want, FString& OutDetail)
+	/** A hue lifted 40% of the way toward white at its own peak: what AccentColour does for a pale core (`_light`). */
+	FLinearColor QaLifted(const FLinearColor& C)
+	{
+		const float Top = FMath::Max3(C.R, C.G, C.B);
+		return FLinearColor(C.R + (Top - C.R) * 0.40f, C.G + (Top - C.G) * 0.40f, C.B + (Top - C.B) * 0.40f, 1.0f);
+	}
+
+	bool QaIsWhite(const FLinearColor& C)
+	{
+		return C.R >= 0.995f && C.G >= 0.995f && C.B >= 0.995f;
+	}
+
+	/** A material painted in a hue on its body AND on its flame twin, when it has one -- both instances of the fire are drawn. */
+	bool QaPaintedIn(const FQaPaint& Paint, const FLinearColor& Want)
+	{
+		const bool bTwin = FMath::Max3(Paint.Twin.R, Paint.Twin.G, Paint.Twin.B) > 1e-6f;
+		return QaSameHue(Paint.Body, Want) && (!bTwin || QaSameHue(Paint.Twin, Want));
+	}
+
+	/** The same hue as before on both instances; a glow's heartbeat moves its brightness, never its hue. Black stays black. */
+	bool QaHueKept(const FQaPaint& Was, const FQaPaint& Now)
+	{
+		auto Same = [](const FLinearColor& A, const FLinearColor& B)
+		{
+			const bool bDarkA = FMath::Max3(A.R, A.G, A.B) < 1e-4f;
+			const bool bDarkB = FMath::Max3(B.R, B.G, B.B) < 1e-4f;
+			return (bDarkA && bDarkB) || (!bDarkA && !bDarkB && QaSameHue(A, B));
+		};
+		return Same(Was.Body, Now.Body) && Same(Was.Twin, Now.Twin);
+	}
+
+	/**
+	 * JACK FLAME'S COLOURS (founder, 2026-10-01: "Secondary Color controls suit/tie customization; Flame Color controls
+	 * head flames, hand flames, foot flames, tail-tip flame"). The tie and the suit in the SECONDARY's hue; the fire and its
+	 * pale core -- on the body AND the flame twin -- in the FLAME's hue, or the designed orange when FLAME is White; the
+	 * suit still a deep, readable cloth and the collar still black.
+	 */
+	bool JackWears(const AWonderlandCompanionEmbodiment* Costume, const FLinearColor& WantSecondary, const FLinearColor& WantFlame, FString& OutDetail)
 	{
 		const TMap<FString, FQaPaint> P = QaPainted(Costume);
 		const FQaPaint* Suit = P.Find(TEXT("suit"));
 		const FQaPaint* Tie = P.Find(TEXT("heart"));
 		const FQaPaint* Fire = P.Find(TEXT("flame"));
+		const FQaPaint* Core = P.Find(TEXT("flamepale"));
 		const FQaPaint* Stripe = P.Find(TEXT("stripe"));
 		const FQaPaint* Collar = P.Find(TEXT("nightmare"));
-		if (Suit == nullptr || Tie == nullptr || Fire == nullptr || Stripe == nullptr || Collar == nullptr)
+		if (Suit == nullptr || Tie == nullptr || Fire == nullptr || Core == nullptr || Stripe == nullptr || Collar == nullptr)
 		{
 			OutDetail = FString::Printf(TEXT("Jack Flame's materials not all found (%d read)"), P.Num());
 			return false;
 		}
-		const bool bHues = QaSameHue(Suit->Body, Want) && QaSameHue(Tie->Body, Want) && QaSameHue(Fire->Twin, Want);
+		// the designed fire is the figure's own orange (relay_dog_skins.py): flame 1.00,0.20,0.02, its pale core 1.00,0.44,0.06
+		const bool bDesigned = QaIsWhite(WantFlame);
+		const FLinearColor FireHue = bDesigned ? FLinearColor(1.00f, 0.20f, 0.02f) : WantFlame;
+		const FLinearColor CoreHue = bDesigned ? FLinearColor(1.00f, 0.44f, 0.06f) : QaLifted(WantFlame);
+		const bool bClothes = QaSameHue(Suit->Body, WantSecondary) && QaSameHue(Tie->Body, WantSecondary);
+		const bool bFire = QaPaintedIn(*Fire, FireHue) && QaPaintedIn(*Core, CoreHue);
 		const bool bReadable = QaLuminance(Stripe->Body) >= 2.5f * QaLuminance(Suit->Body) && FMath::Max3(Suit->Body.R, Suit->Body.G, Suit->Body.B) <= 0.34f;
 		const bool bCollar = FMath::Max3(Collar->Body.R, Collar->Body.G, Collar->Body.B) <= 0.06f;
-		OutDetail = FString::Printf(TEXT("want %s: suit %s, tie %s, fire %s (hues %s); pinstripes %.1fx the suit's luminance (>= 2.5); collar %s (kept black: %s)"),
-			*QaRgb(Want), *QaRgb(Suit->Body), *QaRgb(Tie->Body), *QaRgb(Fire->Twin), bHues ? TEXT("match") : TEXT("DIFFER"),
-			QaLuminance(Stripe->Body) / FMath::Max(QaLuminance(Suit->Body), 1e-4f), *QaRgb(Collar->Body), bCollar ? TEXT("yes") : TEXT("NO"));
-		return bHues && bReadable && bCollar;
+		OutDetail = FString::Printf(TEXT("secondary %s: suit %s, tie %s (%s); flame %s: fire %s twin %s, core %s twin %s (%s); pinstripes %.1fx the suit's luminance (>= 2.5); collar %s (kept black: %s)"),
+			*QaRgb(WantSecondary), *QaRgb(Suit->Body), *QaRgb(Tie->Body), bClothes ? TEXT("match") : TEXT("DIFFER"),
+			bDesigned ? TEXT("as designed") : *QaRgb(WantFlame), *QaRgb(Fire->Body), *QaRgb(Fire->Twin), *QaRgb(Core->Body), *QaRgb(Core->Twin),
+			bFire ? TEXT("match") : TEXT("DIFFER"), QaLuminance(Stripe->Body) / FMath::Max(QaLuminance(Suit->Body), 1e-4f),
+			*QaRgb(Collar->Body), bCollar ? TEXT("yes") : TEXT("NO"));
+		return bClothes && bFire && bReadable && bCollar;
+	}
+
+	/**
+	 * A FLAME SKIN'S FIRE AND NOTHING ELSE (founder, 2026-10-01: "independent from normal body/secondary color";
+	 * Skeleton Flame's "skull/body are not recolored by it ... eyes remain glow treatment"). Between Before (taken with
+	 * FLAME at DEFAULT) and now (a chosen FLAME): every material the figure tags `flame` / `flame_light` is in the chosen
+	 * hue, lifted for the pale core, on its body and its twin; every other material keeps exactly the hue it had.
+	 */
+	bool QaFlameOnly(const AWonderlandCompanionEmbodiment* Costume, const TMap<FString, FQaPaint>& Before, const FLinearColor& Want, FString& OutDetail)
+	{
+		const TMap<FString, FQaPaint> After = QaPainted(Costume);
+		int32 Fires = 0;
+		int32 FiresOk = 0;
+		int32 Others = 0;
+		int32 Moved = 0;
+		FString Missed;
+		FString MovedNames;
+		for (const TPair<FString, FQaPaint>& Entry : After)
+		{
+			if (Entry.Value.Channel == TEXT("flame") || Entry.Value.Channel == TEXT("flame_light"))
+			{
+				++Fires;
+				const FLinearColor Hue = Entry.Value.Channel == TEXT("flame_light") ? QaLifted(Want) : Want;
+				if (QaPaintedIn(Entry.Value, Hue))
+				{
+					++FiresOk;
+				}
+				else
+				{
+					Missed += Entry.Key + TEXT(" ");
+				}
+				continue;
+			}
+			++Others;
+			const FQaPaint* Was = Before.Find(Entry.Key);
+			if (Was == nullptr || !QaHueKept(*Was, Entry.Value))
+			{
+				++Moved;
+				MovedNames += Entry.Key + TEXT(" ");
+			}
+		}
+		OutDetail = FString::Printf(TEXT("FLAME %s: %d fire material(s), %d in its hue on body and twin%s%s; %d other material(s), %d moved%s%s"),
+			*QaRgb(Want), Fires, FiresOk, Missed.IsEmpty() ? TEXT("") : TEXT(" -- missed: "), *Missed, Others, Moved,
+			MovedNames.IsEmpty() ? TEXT("") : TEXT(" -- moved: "), *MovedNames);
+		return Fires > 0 && FiresOk == Fires && Moved == 0 && After.Num() == Before.Num();
 	}
 
 	/** Label rectangles that overlap one another, and labels that cover another drawn marker, in the map's own layout. */
@@ -523,6 +625,27 @@ namespace
 		QaCheck(Run, TEXT("Q00.4"), Unlit != nullptr && Defined > 1000,
 			FString::Printf(TEXT("engine unlit material %s (mission orb, Dog beam and props, wardrobe backdrop); practical lights defined %d (want > 1000)"),
 				Unlit != nullptr ? TEXT("loaded") : TEXT("MISSING"), Defined));
+
+		// Q00.5 (founder, 2026-10-01, D3): a tester's build names the companions by their roles, and opens no sample browser
+		// window by either route -- the window itself or the workspace's Ctrl+W
+		const UWonderlandCompanionPreviewSettings* Names = GetDefault<UWonderlandCompanionPreviewSettings>();
+		const bool bRoleNames = Names != nullptr && Names->LlmCompanionName == TEXT("LLM COMPANION") && Names->AgentName == TEXT("JHINN");
+		UWonderlandUiSubsystem* Ui = QaUi(World);
+		const bool bWindowRefused = Ui != nullptr && !Ui->OpenWonderWebWindow(FName(TEXT("browser")));
+		const bool bSpawnRefused = Ui != nullptr && !Ui->SpawnWonderWebWindow();
+		QaCheck(Run, TEXT("Q00.5"), bRoleNames && bWindowRefused && bSpawnRefused,
+			FString::Printf(TEXT("companions named '%s' and '%s' (want LLM COMPANION / JHINN); sample browser window refused %s, Ctrl+W refused %s"),
+				Names != nullptr ? *Names->LlmCompanionName : TEXT("?"), Names != nullptr ? *Names->AgentName : TEXT("?"),
+				bWindowRefused ? TEXT("yes") : TEXT("NO"), bSpawnRefused ? TEXT("yes") : TEXT("NO")));
+
+		// Q00.6 (Second Wonderland, RC3): the game window says which build it is -- the taskbar and Alt+Tab show this title
+		FString Title;
+		if (GEngine != nullptr && GEngine->GameViewport != nullptr && GEngine->GameViewport->GetWindow().IsValid())
+		{
+			Title = GEngine->GameViewport->GetWindow()->GetTitle().ToString();
+		}
+		QaCheck(Run, TEXT("Q00.6"), Title.Contains(WonderlandBeta::BuildLabel()),
+			FString::Printf(TEXT("window title '%s' (want it to carry '%s')"), *Title, *WonderlandBeta::BuildLabel()));
 	}
 
 	bool PersistTick(FQaRun& Run, UWorld* World)
@@ -534,13 +657,16 @@ namespace
 			const ARelayDogCharacter* D = QaDog(World);
 			const FName Worn = D != nullptr ? D->GetWornSkinId() : NAME_None;
 			FString Paint;
-			const bool bPainted = D != nullptr && JackWearsSecondary(D->GetCostume(), PersistColour, Paint);
+			const bool bPainted = D != nullptr && JackWears(D->GetCostume(), PersistColour, PersistFlame, Paint);
 			const bool bSaved = Settings != nullptr && Settings->Secondary.Equals(PersistColour, 0.002f) && Settings->bSecondaryChosen;
+			// AND THE FLAME, from its own file (founder, 2026-10-01): chosen in the first boot, back in this one
+			const bool bFlameSaved = WonderlandMascotStyle::FlameColour().Equals(PersistFlame, 0.002f);
 			QaFrame(Run, TEXT("06_after_restart_jack_rose"));
-			QaCheck(Run, TEXT("Q12"), Worn == FName(TEXT("jack_flame")) && bSaved && bPainted,
-				FString::Printf(TEXT("after a restart: skin %s (want jack_flame); saved secondary %s chosen %s (want %s); painted: %s"),
+			QaCheck(Run, TEXT("Q12"), Worn == FName(TEXT("jack_flame")) && bSaved && bFlameSaved && bPainted,
+				FString::Printf(TEXT("after a restart: skin %s (want jack_flame); saved secondary %s chosen %s (want %s); saved flame %s (want %s); painted: %s"),
 					*Worn.ToString(), Settings != nullptr ? *QaRgb(Settings->Secondary) : TEXT("?"),
-					Settings != nullptr && Settings->bSecondaryChosen ? TEXT("yes") : TEXT("no"), *QaRgb(PersistColour), *Paint));
+					Settings != nullptr && Settings->bSecondaryChosen ? TEXT("yes") : TEXT("no"), *QaRgb(PersistColour),
+					*QaRgb(WonderlandMascotStyle::FlameColour()), *QaRgb(PersistFlame), *Paint));
 			// THE CONTRACTS THE FIRST BOOT WROTE THROUGH THE TERMINAL: all eight back, none reopened (B04 used to keep six)
 			UWonderlandMissionTaskSubsystem* Set = UWonderlandUiTestLibrary::GetMissionTasks(World);
 			int32 Open = 0;
@@ -638,6 +764,45 @@ namespace
 			QaCheck(Run, TEXT("Q21.4"), bGoodKept,
 				FString::Printf(TEXT("a discoveries file with a 2,000-character line: the good line (noctis) %s; %d discovered"),
 					bGoodKept ? TEXT("kept") : TEXT("LOST"), Territory != nullptr ? Territory->GetDiscoveredCount() : -1));
+
+			// Q21.6: a FLAME file of 2,000 characters means the designed fire, and the next pick rewrites it whole
+			const bool bDesignedAtBoot = !WonderlandMascotStyle::HasChosenFlame();
+			GEngine->Exec(World, TEXT("wl.Mascot.Flame 0.30,0.90,1.00"));
+			FString Rewritten;
+			FLinearColor ReadBack = FLinearColor::Black;
+			const FString FlamePath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Wonderland"), TEXT("FlameColour.txt"));
+			const bool bRewritten = FFileHelper::LoadFileToString(Rewritten, *FlamePath) && WonderlandMascotStyle::ParseFlameColour(Rewritten, ReadBack)
+				&& ReadBack.Equals(FLinearColor(0.30f, 0.90f, 1.00f, 1.0f), 0.002f);
+			GEngine->Exec(World, TEXT("wl.Mascot.Flame default"));
+			QaCheck(Run, TEXT("Q21.6"), bDesignedAtBoot && bRewritten,
+				FString::Printf(TEXT("a 2,000-character flame file: the fire %s at start; the next pick rewrote it whole: %s ('%s')"),
+					bDesignedAtBoot ? TEXT("as designed") : TEXT("RECOLOURED"), bRewritten ? TEXT("yes") : TEXT("NO"), *Rewritten.Left(40)));
+
+			// Q21.7: the reader refuses every hostile shape and takes a real colour
+			const TCHAR* const Hostile[] = { TEXT("nan nan nan"), TEXT("-5 2 9e9"), TEXT(""), TEXT("0.5 0.5"), TEXT("1.5 0 0"),
+				TEXT("0.2 0.2 0.2 0.2"), TEXT("inf 0 0"), TEXT("0x10 0 0") };
+			int32 Refused = 0;
+			FString Taken;
+			for (const TCHAR* Text : Hostile)
+			{
+				FLinearColor Ignored;
+				if (!WonderlandMascotStyle::ParseFlameColour(Text, Ignored))
+				{
+					++Refused;
+				}
+				else
+				{
+					Taken += FString::Printf(TEXT("'%s' "), Text);
+				}
+			}
+			FLinearColor Good;
+			const bool bGood = WonderlandMascotStyle::ParseFlameColour(TEXT(" 0.2 0.86 0.6 "), Good) && Good.Equals(FLinearColor(0.2f, 0.86f, 0.6f, 1.0f), 0.002f);
+			FLinearColor Long;
+			const bool bLongRefused = !WonderlandMascotStyle::ParseFlameColour(FString::ChrN(2000, TEXT('x')), Long);
+			QaCheck(Run, TEXT("Q21.7"), Refused == (int32)UE_ARRAY_COUNT(Hostile) && bGood && bLongRefused,
+				FString::Printf(TEXT("the flame file reader: %d of %d hostile texts refused%s%s; 2,000 characters refused %s; a real colour read: %s"),
+					Refused, (int32)UE_ARRAY_COUNT(Hostile), Taken.IsEmpty() ? TEXT("") : TEXT(" -- TAKEN: "), *Taken,
+					bLongRefused ? TEXT("yes") : TEXT("NO"), bGood ? TEXT("yes") : TEXT("NO")));
 			QaNextStep(Run);
 		}
 		else if (Run.Step == 1)
@@ -719,9 +884,19 @@ namespace
 				QaNextStep(Run);
 			}
 			break;
-		case 1: // Jack Flame, secondary AZURE, through the wardrobe's own colour path: read back off the costume
+		case 1: // THE SECONDARY AND THE FLAME, through the same console doors the Wardrobe and the Menu write through, read back
+		        // off the costume -- both instances of the fire -- and photographed (founder, 2026-10-01: a separate Flame Color)
+		{
+			const ARelayDogCharacter* D = QaDog(World);
+			const AWonderlandCompanionEmbodiment* Costume = D != nullptr ? D->GetCostume() : nullptr;
+			const UWonderlandMascotStyleSettings* Settings = GetDefault<UWonderlandMascotStyleSettings>();
+			const FLinearColor Azure(0.26f, 0.56f, 1.0f, 1.0f);
+			const FLinearColor Jade(0.20f, 0.86f, 0.60f, 1.0f);
+			const FLinearColor Gold(1.00f, 0.78f, 0.26f, 1.0f);
+			const FLinearColor Crimson(0.82f, 0.14f, 0.18f, 1.0f);
 			if (Run.Sub == 0)
 			{
+				GEngine->Exec(World, TEXT("wl.Mascot.Flame default"));
 				GEngine->Exec(World, TEXT("wl.Skins.Wear jack_flame"));
 				Run.Sub = 1;
 			}
@@ -732,16 +907,122 @@ namespace
 			}
 			else if (Run.Sub == 2 && In >= 5.0)
 			{
-				const ARelayDogCharacter* D = QaDog(World);
-				const UWonderlandMascotStyleSettings* Settings = GetDefault<UWonderlandMascotStyleSettings>();
+				// Q01: an AZURE secondary moves Jack Flame's tie and suit -- and NOT the fire, which stays the designed orange
 				FString Detail;
 				const bool bOk = D != nullptr && Settings != nullptr && D->GetWornSkinId() == FName(TEXT("jack_flame"))
-					&& JackWearsSecondary(D->GetCostume(), Settings->Secondary, Detail);
+					&& JackWears(Costume, Settings->Secondary, FLinearColor::White, Detail);
 				QaFrame(Run, TEXT("01_jack_flame_azure"));
-				QaCheck(Run, TEXT("Q01"), bOk, FString::Printf(TEXT("Jack Flame with an AZURE secondary: %s"), *Detail));
+				QaCheck(Run, TEXT("Q01"), bOk, FString::Printf(TEXT("Jack Flame with an AZURE secondary and the designed fire: %s"), *Detail));
+				GQaFlameBefore = QaPainted(Costume);
+				GEngine->Exec(World, TEXT("wl.Mascot.Flame 0.20,0.86,0.60"));
+				Run.Sub = 3;
+			}
+			else if (Run.Sub == 3 && In >= 7.0)
+			{
+				// Q01b: a JADE flame moves the head, paw, foot and tail fire on the body and the twin, and nothing else
+				FString Clothes;
+				FString Only;
+				const bool bClothes = Settings != nullptr && JackWears(Costume, Settings->Secondary, Jade, Clothes);
+				const bool bOnly = QaFlameOnly(Costume, GQaFlameBefore, Jade, Only);
+				const bool bRow = WonderlandMascotStyle::WornSkinHasFlame();
+				QaFrame(Run, TEXT("01b_jack_jade_flame_azure_suit"));
+				QaCheck(Run, TEXT("Q01b"), bClothes && bOnly && bRow,
+					FString::Printf(TEXT("Jack Flame, a JADE flame over an AZURE secondary: %s | %s | FLAME row %s"), *Clothes, *Only, bRow ? TEXT("shown") : TEXT("HIDDEN")));
+				// THE COLORS PAGE WITH ITS FLAME ROW, at this window's size: the page grows in place (the founder's layout rule)
+				if (U != nullptr)
+				{
+					if (!U->IsMenuOpen())
+					{
+						U->ToggleMenu();
+					}
+					U->ShowMenuTab(TEXT("COLORS"));
+				}
+				Run.Sub = 4;
+			}
+			else if (Run.Sub == 4 && In >= 8.5)
+			{
+				QaFrame(Run, TEXT("01h_colors_page_flame_row"));
+				if (U != nullptr && U->IsMenuOpen())
+				{
+					U->ToggleMenu();
+				}
+				GEngine->Exec(World, TEXT("wl.Mascot.Flame default"));
+				GEngine->Exec(World, TEXT("wl.Skins.Wear skeleton_flame"));
+				Run.Sub = 5;
+			}
+			else if (Run.Sub == 5 && In >= 11.5)
+			{
+				GQaFlameBefore = QaPainted(Costume);
+				GEngine->Exec(World, TEXT("wl.Mascot.Flame 1.0,0.78,0.26"));
+				Run.Sub = 6;
+			}
+			else if (Run.Sub == 6 && In >= 13.5)
+			{
+				// Q01c: Skeleton Flame's spectral fire in GOLD; the grey skull, the soul glows and the eyes keep their hue
+				FString Only;
+				const bool bOk = D != nullptr && D->GetWornSkinId() == FName(TEXT("skeleton_flame"))
+					&& QaFlameOnly(Costume, GQaFlameBefore, Gold, Only) && WonderlandMascotStyle::WornSkinHasFlame();
+				QaFrame(Run, TEXT("01c_skeleton_gold_flame"));
+				QaCheck(Run, TEXT("Q01c"), bOk, FString::Printf(TEXT("Skeleton Flame, a GOLD flame: %s"), *Only));
+				GEngine->Exec(World, TEXT("wl.Mascot.Flame default"));
+				GEngine->Exec(World, TEXT("wl.Skins.Wear baal"));
+				Run.Sub = 7;
+			}
+			else if (Run.Sub == 7 && In >= 16.5)
+			{
+				GQaFlameBefore = QaPainted(Costume);
+				GEngine->Exec(World, TEXT("wl.Mascot.Flame 0.82,0.14,0.18"));
+				Run.Sub = 8;
+			}
+			else if (Run.Sub == 8 && In >= 18.5)
+			{
+				// Q01d: Baal's blue flame layer in CRIMSON; the armour, antlers, gold and bone keep their hue
+				FString Only;
+				const bool bOk = D != nullptr && D->GetWornSkinId() == FName(TEXT("baal"))
+					&& QaFlameOnly(Costume, GQaFlameBefore, Crimson, Only) && WonderlandMascotStyle::WornSkinHasFlame();
+				QaFrame(Run, TEXT("01d_baal_crimson_flame"));
+				QaCheck(Run, TEXT("Q01d"), bOk, FString::Printf(TEXT("Baal, a CRIMSON flame: %s"), *Only));
+				// the crimson stays chosen: the next steps visit the skins without fire and come back to one
+				GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+				Run.Sub = 9;
+			}
+			else if (Run.Sub == 9 && In >= 21.0)
+			{
+				Run.bOgHidden = D != nullptr && D->GetWornSkinId() == FName(TEXT("relay_og")) && !WonderlandMascotStyle::WornSkinHasFlame();
+				GEngine->Exec(World, TEXT("wl.Skins.Wear celestial_light"));
+				Run.Sub = 10;
+			}
+			else if (Run.Sub == 10 && In >= 23.5)
+			{
+				Run.bClHidden = D != nullptr && D->GetWornSkinId() == FName(TEXT("celestial_light")) && !WonderlandMascotStyle::WornSkinHasFlame();
+				GEngine->Exec(World, TEXT("wl.Skins.Wear jack_flame"));
+				Run.Sub = 11;
+			}
+			else if (Run.Sub == 11 && In >= 26.5)
+			{
+				// Q01e: the FLAME row is gone on Relay OG and Celestial Light and back on Jack Flame, whose fire comes back in the
+				// CHOSEN crimson, not the designed orange; the azure tie and suit come back with it
+				FString Detail;
+				const bool bBack = D != nullptr && Settings != nullptr && D->GetWornSkinId() == FName(TEXT("jack_flame"))
+					&& JackWears(Costume, Settings->Secondary, Crimson, Detail) && WonderlandMascotStyle::WornSkinHasFlame();
+				QaCheck(Run, TEXT("Q01e"), Run.bOgHidden && Run.bClHidden && bBack,
+					FString::Printf(TEXT("FLAME row hidden on Relay OG %s, on Celestial Light %s; back on Jack Flame in the chosen flame: %s"),
+						Run.bOgHidden ? TEXT("yes") : TEXT("NO"), Run.bClHidden ? TEXT("yes") : TEXT("NO"), *Detail));
+				GEngine->Exec(World, TEXT("wl.Mascot.Flame default"));
+				Run.Sub = 12;
+			}
+			else if (Run.Sub == 12 && In >= 28.5)
+			{
+				// Q01f: DEFAULT puts the designed orange back on the body and the twin, and the secondary is untouched
+				FString Detail;
+				const bool bOk = Settings != nullptr && !WonderlandMascotStyle::HasChosenFlame()
+					&& JackWears(Costume, Settings->Secondary, FLinearColor::White, Detail) && QaSameHue(Settings->Secondary, Azure);
+				QaFrame(Run, TEXT("01f_jack_designed_fire"));
+				QaCheck(Run, TEXT("Q01f"), bOk, FString::Printf(TEXT("FLAME back to DEFAULT: %s"), *Detail));
 				QaNextStep(Run);
 			}
 			break;
+		}
 		case 2: // to the Tartarus rim
 			if (TravelStep(Run, World, TEXT("tartarus_heartland_east"), TEXT("Q02")))
 			{
@@ -1118,16 +1399,17 @@ namespace
 			{
 				GEngine->Exec(World, TEXT("wl.Skins.Wear jack_flame"));
 				GEngine->Exec(World, *FString::Printf(TEXT("wl.Mascot.Secondary %.2f,%.2f,%.2f"), PersistColour.R, PersistColour.G, PersistColour.B));
+				GEngine->Exec(World, *FString::Printf(TEXT("wl.Mascot.Flame %.2f,%.2f,%.2f"), PersistFlame.R, PersistFlame.G, PersistFlame.B));
 				Run.Sub = 1;
 			}
 			else if (In >= 3.0)
 			{
 				const ARelayDogCharacter* D = QaDog(World);
 				FString Paint;
-				const bool bPainted = D != nullptr && JackWearsSecondary(D->GetCostume(), PersistColour, Paint);
+				const bool bPainted = D != nullptr && JackWears(D->GetCostume(), PersistColour, PersistFlame, Paint);
 				QaFrame(Run, TEXT("06_before_restart_jack_rose"));
-				UE_LOG(LogWonderlandQa, Display, TEXT("WLQA PERSIST set jack_flame secondary %s (painted before the restart: %s; %s)"),
-					*QaRgb(PersistColour), bPainted ? TEXT("yes") : TEXT("NO"), *Paint);
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLQA PERSIST set jack_flame secondary %s flame %s (painted before the restart: %s; %s)"),
+					*QaRgb(PersistColour), *QaRgb(PersistFlame), bPainted ? TEXT("yes") : TEXT("NO"), *Paint);
 				UE_LOG(LogWonderlandQa, Display, TEXT("WLQA END pass=%d fail=%d"), Run.Pass, Run.Fail);
 				GQaRun.Reset();
 				GEngine->Exec(World, TEXT("quit"));
