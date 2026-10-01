@@ -43,7 +43,9 @@ if ($SkipBuild) {
   $label = (Get-Content -Raw (Join-Path $ArchiveDir 'Windows\Wonderland\BuildInfo\BuildInfo.txt')).Trim()
 } else {
   $sha = (& git -C $ProjectDir rev-parse --short=8 HEAD).Trim()
-  $dirty = (& git -C $ProjectDir status --porcelain -- Source Config Content RelaySkins UiArt Companions ProjectAvatars RelayCubs WorldDesign/Look) -join ''
+  # TRACKED FILES ONLY: Content is the junction to the shared world tree and always reads as untracked here, which made
+  # RC2's label say +local-changes for nothing. The world itself is fingerprinted by its map checkpoints, not by git.
+  $dirty = (& git -C $ProjectDir status --porcelain --untracked-files=no -- Source Config RelaySkins UiArt Companions ProjectAvatars RelayCubs WorldDesign/Look) -join ''
   $suffix = if ($dirty) { '+local-changes' } else { '' }
   $label = "Private Beta $Version | build $sha$suffix | $(Get-Date -Format 'yyyy-MM-dd')"
   New-Item -ItemType Directory -Force $infoDir | Out-Null
