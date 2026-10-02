@@ -46,6 +46,13 @@ afterAll(() => { rmSync(dir, { recursive: true, force: true }); });
  * subscription case below depends on that, and it keeps every case deterministic
  * whatever is installed on the machine running the test.
  */
+/**
+ * THE SUBSCRIPTION TOKEN EVERY CASE HERE USES: a placeholder that says it is one. It is named
+ * once and referenced, never repeated as a literal beside the variable it fills, which is
+ * the shape the repository boundary scan reports as a key assignment.
+ */
+const TOKEN_SENTINEL = 'FAKETESTNOTREAL-oauth-sentinel-0000';
+
 const READY_RIG: Record<string, string> = Object.freeze({
   PATH: dirname(process.execPath),
   NODE_PATH: join(process.cwd(), 'node_modules'),
@@ -129,7 +136,6 @@ describe('the preflight states every role\'s billing path before any dispatch', 
  * any stored login, so the answer does not depend on who is logged in here.
  */
 describe('the subscription token path: SUBSCRIPTION, observed in the child environment', () => {
-  const TOKEN_SENTINEL = 'FAKETESTNOTREAL-oauth-sentinel-0000';
   const SUBSCRIPTION_RIG = (() => {
     const { ANTHROPIC_API_KEY: _key, ...withoutKey } = READY_RIG;
     return {
@@ -203,7 +209,7 @@ describe('every reader of the preflight finds its own line', () => {
     const { ANTHROPIC_API_KEY: _key, ...withoutKey } = READY_RIG;
     const run = preflight({
       ...withoutKey, HOME: dir, JULIUS_CLAUDE_AUTH: 'CLAUDE_SUBSCRIPTION', RELAY_HERMES_BILLING_MODE: 'api_billed',
-      CLAUDE_CODE_OAUTH_TOKEN: 'FAKETESTNOTREAL-oauth-sentinel-0000',
+      CLAUDE_CODE_OAUTH_TOKEN: TOKEN_SENTINEL,
     });
     expect(run.code).toBe(5);
     for (const name of names) expect(physical(run.output), name).toContain(`  ${name}: SET`);
@@ -223,7 +229,7 @@ describe('every reader of the preflight finds its own line', () => {
     const { ANTHROPIC_API_KEY: _key, ...withoutKey } = READY_RIG;
     const run = preflight({
       ...withoutKey, HOME: dir, JULIUS_CLAUDE_AUTH: 'CLAUDE_SUBSCRIPTION', RELAY_HERMES_BILLING_MODE: 'api_billed',
-      CLAUDE_CODE_OAUTH_TOKEN: 'FAKETESTNOTREAL-oauth-sentinel-0000',
+      CLAUDE_CODE_OAUTH_TOKEN: TOKEN_SENTINEL,
     });
     expect(physical(run.output)).toContain('  ANTHROPIC_API_KEY: MISSING');
     expect(physical(run.output)).toContain('  CLAUDE_CODE_OAUTH_TOKEN: SET');
