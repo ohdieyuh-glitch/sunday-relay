@@ -85,6 +85,14 @@ export const SOCIAL_OPERATIONS: readonly SocialOperation[] = Object.freeze([
   { id: 'party_invites.decline', method: 'POST', pattern: p('/party-invites/:id/decline'), template: '/party-invites/:id/decline', writes: true },
   { id: 'showcase.read', method: 'GET', pattern: p('/profiles/:id/showcase'), template: '/profiles/:id/showcase', writes: false },
   { id: 'events.stream', method: 'GET', pattern: p('/events'), template: '/events', writes: false },
+  // MULTIPLAYER PHASE 1 (founder, 2026-10-02): the shared presence layer. Join a world context (a public shard, a
+  // private server, a friend's -- by their server-join rule --, an invitation, the party leader's), report one's own
+  // representation, read who else is there, invite a friend in. Only ever the session's own player.
+  { id: 'world.read', method: 'GET', pattern: p('/world'), template: '/world', writes: false },
+  { id: 'world.join', method: 'POST', pattern: p('/world/join'), template: '/world/join', writes: true },
+  { id: 'world.leave', method: 'POST', pattern: p('/world/leave'), template: '/world/leave', writes: true },
+  { id: 'world.state', method: 'POST', pattern: p('/world/state'), template: '/world/state', writes: true },
+  { id: 'world.invite', method: 'POST', pattern: p('/world/invites'), template: '/world/invites', writes: true },
 ]);
 
 /** What the authorisation needs of a verified session; the same fields grants.ts already holds, plus the capability list. */

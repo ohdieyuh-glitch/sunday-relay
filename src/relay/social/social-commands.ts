@@ -66,12 +66,26 @@ import {
 import { deriveActivity, resolvePresenceFor, resolveProfileFor, type WonderlandActivitySignals } from './social-presence';
 import { buildSocialView } from './social-preview';
 import { friendIdsOf, partyOf, type SocialState } from './social-state';
+import {
+  WORLD_MOTIONS,
+  contextOf,
+  emptyWorldState,
+  inviteToWorld,
+  joinWorld,
+  leaveWorld,
+  reportAvatar,
+  worldViewFor,
+  type WorldJoinTarget,
+  type WorldMotion,
+  type WorldState,
+} from './world-presence';
 
-/** What one operation did. `audience` is empty for a read. */
+/** What one operation did. `audience` is empty for a read. `world` is the shared presence layer's next state, if it moved. */
 export interface SocialCommandOutcome {
   readonly state: SocialState;
   readonly data: unknown;
   readonly audience: readonly SocialUserId[];
+  readonly world?: WorldState;
 }
 
 /** The operation's inputs: the path's ids in order (e.g. a request id, a party id then a member id) and the JSON body. */
@@ -246,8 +260,14 @@ export function applySocialOperation(
   actorId: SocialUserId,
   input: SocialCommandInput,
   nowIso: string,
+  world: WorldState = emptyWorldState(),
 ): RelayResult<SocialCommandOutcome> {
   const { ids, body } = input;
+  const nowMs = Date.parse(nowIso);
+  const worldFail = (r: { code: string; message: string }): RelayResult<never> => ({
+    ok: false,
+    error: relayError(r.code === 'permission-denied' ? 'permission-denied' : r.code === 'not-found' ? 'not-found' : r.code === 'full' ? 'illegal-transition' : 'validation-failed', r.message),
+  });
   const id0 = ids[0] ?? '';
   const id1 = ids[1] ?? '';
   switch (op) {
@@ -460,6 +480,70 @@ export function applySocialOperation(
       const invite = state.partyInvites.find((i) => i.inviteId === id0);
       const members = invite ? (state.parties[invite.partyId]?.members.map((m) => m.userId) ?? []) : [];
       return changed(acceptPartyInvite(state, actorId, id0, nowIso), null, [actorId, ...members]);
+    }
+    /* ---- MULTIPLAYER PHASE 1: the shared presence layer (world-presence.ts) */
+    case 'world.read':
+      return { ok: true, value: { state, world, data: worldViewFor(world, state, actorId, nowMs), audience: [] } };
+    case 'world.join': {
+      const kind = oneOf(body, 'target', ['PUBLIC', 'PRIVATE', 'FRIEND', 'INVITE', 'PARTY'] as const);
+      if (!kind.ok) return invalid(kind.message);
+      const text = (field: string) => (typeof body[field] === 'string' ? (body[field] as string) : '');
+      const target: WorldJoinTarget =
+        kind.value === 'PUBLIC' ? { kind: 'PUBLIC', place: text('place') || 'golden_arrival', placeName: text('placeName') || 'Golden Arrival' }
+        : kind.value === 'PRIVATE' ? { kind: 'PRIVATE', name: text('name') }
+        : kind.value === 'FRIEND' ? { kind: 'FRIEND', userId: text('userId') }
+        : kind.value === 'INVITE' ? { kind: 'INVITE', inviteId: text('inviteId') }
+        : { kind: 'PARTY' };
+      const joined = joinWorld(world, state, actorId, target, nowMs);
+      if (!joined.ok) return worldFail(joined);
+      // WHERE THEY ARE becomes their presence location, through the one presence authority -- so friends see it as their
+      // privacy allows, and a friend's server-join rule has a place to admit them to.
+      const ctx = joined.value.context;
+      const located = updateOwnPresence(
+        state,
+        actorId,
+        { connected: true, location: { serverId: ctx.contextId, serverKind: ctx.kind, serverName: ctx.serverName, placeLabel: null, nationId: null } },
+        nowIso,
+      );
+      if (!located.ok) return located;
+      return {
+        ok: true,
+        value: {
+          state: located.value,
+          world: joined.value.world,
+          data: worldViewFor(joined.value.world, located.value, actorId, nowMs),
+          audience: [actorId, ...friendIdsOf(state, actorId), ...ctx.memberIds],
+        },
+      };
+    }
+    case 'world.leave': {
+      const before = contextOf(world, actorId);
+      const left = leaveWorld(world, actorId);
+      const located = updateOwnPresence(state, actorId, { location: null }, nowIso);
+      if (!located.ok) return located;
+      return { ok: true, value: { state: located.value, world: left, data: null, audience: [actorId, ...friendIdsOf(state, actorId), ...(before?.memberIds ?? [])] } };
+    }
+    case 'world.state': {
+      const motion = oneOf(body, 'motion', WORLD_MOTIONS);
+      const skin = str(body, 'skinId', 40);
+      for (const c of [motion, skin]) if (!c.ok) return invalid(c.message);
+      const num = (field: string) => (typeof body[field] === 'number' ? (body[field] as number) : Number.NaN);
+      const reported = reportAvatar(
+        world,
+        actorId,
+        { x: num('x'), y: num('y'), z: num('z'), yaw: num('yaw'), speed: num('speed'), motion: (motion as { value: WorldMotion }).value, skinId: (skin as { value: string }).value },
+        nowMs,
+      );
+      if (!reported.ok) return worldFail(reported);
+      // ONE CALL A TICK: the report answers with the view, so a client reporting ~5 a second needs nothing else to see the others.
+      return { ok: true, value: { state, world: reported.value, data: worldViewFor(reported.value, state, actorId, nowMs), audience: [] } };
+    }
+    case 'world.invite': {
+      const to = str(body, 'toUserId', MAX_LABEL);
+      if (!to.ok) return invalid(to.message);
+      const invited = inviteToWorld(world, state, actorId, to.value as string, nowMs);
+      if (!invited.ok) return worldFail(invited);
+      return { ok: true, value: { state, world: invited.value.world, data: { inviteId: invited.value.inviteId }, audience: [to.value as string] } };
     }
     case 'party_invites.decline': {
       const invite = state.partyInvites.find((i) => i.inviteId === id0);

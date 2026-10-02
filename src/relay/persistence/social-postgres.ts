@@ -23,6 +23,7 @@ import {
 import { applySocialOperation, type SocialCommandInput } from '../social/social-commands';
 import { emptySocialState, type SocialState, type SocialUserRecord } from '../social/social-state';
 import { newSocialUser, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
+import { emptyWorldState, type WorldState } from '../social/world-presence';
 
 /**
  * WONDERLAND SOCIAL, DURABLE: the social store over PostgreSQL (030_wonderland_social.sql).
@@ -412,6 +413,8 @@ export interface SocialPostgresOptions {
 /** Read every social row back and serve the store. THROWS when the database cannot be reached (the route answers 503). */
 export async function openSocialPostgresStore(pool: Pool, options: SocialPostgresOptions = {}): Promise<SocialStore> {
   let state = await loadState(pool);
+  // THE SHARED PRESENCE LAYER is real-time and in memory only: a restart empties it, and clients rejoin.
+  let world: WorldState = emptyWorldState();
   const retentionMs = Math.max(60_000, options.eventRetentionMs ?? 7 * 24 * 3600 * 1000);
   let lastPruneAt = 0;
   let tail: Promise<unknown> = Promise.resolve();
@@ -446,10 +449,14 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
     apply: (op: SocialOperationId, actorId: SocialUserId, input: SocialCommandInput, nowIso: string) =>
       serial(async (): Promise<RelayResult<unknown>> => {
         if (state.users[actorId] === undefined) return { ok: false, error: relayError('not-found', 'no social record for this player') };
-        const outcome = applySocialOperation(state, op, actorId, input, nowIso);
+        const outcome = applySocialOperation(state, op, actorId, input, nowIso, world);
         if (!outcome.ok) return outcome;
         const next = outcome.value.state;
-        if (next !== state) {
+        if (next === state && outcome.value.world !== undefined && outcome.value.audience.length === 0) {
+          world = outcome.value.world;   // a position report or a read: nothing durable moved
+          return { ok: true, value: outcome.value.data };
+        }
+        if (next !== state || outcome.value.audience.length > 0) {
           // SAVED ONLY AFTER THE DURABLE WRITE: the new state is adopted only when its rows (and its event) committed.
           try {
             await transact(async (c) => {
@@ -462,6 +469,7 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
             return { ok: false, error: relayError('stale-ledger-version', 'the change could not be saved; nothing was changed', { retryable: true }) };
           }
           state = next;
+          if (outcome.value.world !== undefined) world = outcome.value.world;
         }
         return { ok: true, value: outcome.value.data };
       }),

@@ -75,7 +75,12 @@ export type SocialOperationId =
   | 'party_invites.accept'
   | 'party_invites.decline'
   | 'showcase.read'
-  | 'events.stream';
+  | 'events.stream'
+  | 'world.read'
+  | 'world.join'
+  | 'world.leave'
+  | 'world.state'
+  | 'world.invite';
 
 /* --------------------------------------------------------------- presence */
 

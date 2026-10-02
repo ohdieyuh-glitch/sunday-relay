@@ -26,6 +26,7 @@ import {
 } from './social-contracts';
 import { applySocialOperation, type SocialCommandInput } from './social-commands';
 import { emptySocialState, type SocialState, type SocialUserRecord } from './social-state';
+import { emptyWorldState, type WorldState } from './world-presence';
 
 /** What a change says to the people it concerns: which operation, and when. Nothing of its content. */
 export interface SocialEvent {
@@ -110,6 +111,8 @@ export interface InMemorySocialStoreOptions {
 export function createInMemorySocialStore(initial: SocialState = emptySocialState(), options: InMemorySocialStoreOptions = {}): SocialStore {
   const maxEvents = Math.max(1, options.maxEvents ?? 10_000);
   let state = initial;
+  // THE SHARED PRESENCE LAYER: real-time, in memory only (world-presence.ts).
+  let world: WorldState = emptyWorldState();
   let seq = 0;
   const log: StoredEvent[] = [];
   // ONE AT A TIME: every command waits for the one before it, so no two read the same state and both write.
@@ -129,9 +132,10 @@ export function createInMemorySocialStore(initial: SocialState = emptySocialStat
     apply: (op, actorId, input, nowIso) =>
       serial((): RelayResult<unknown> => {
         if (state.users[actorId] === undefined) return { ok: false, error: relayError('not-found', 'no social record for this player') };
-        const outcome = applySocialOperation(state, op, actorId, input, nowIso);
+        const outcome = applySocialOperation(state, op, actorId, input, nowIso, world);
         if (!outcome.ok) return outcome;
-        if (outcome.value.state !== state) {
+        if (outcome.value.world !== undefined) world = outcome.value.world;
+        if (outcome.value.state !== state || (outcome.value.audience.length > 0 && op.startsWith('world.'))) {
           state = outcome.value.state;
           if (outcome.value.audience.length > 0) {
             seq += 1;
