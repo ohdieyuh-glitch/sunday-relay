@@ -26,7 +26,7 @@ is built into every 1.0, so nothing above 75% is possible before the final RC.
 
 ## Ledger (as of RC8: RC5 and RC8 package evidence, all at most 0.75; the final RC is RC9, to be verified by CORE and Second)
 
-| # | Requirement | Weight | Credit | Evidence (RC3 = 0.1.0-rc3, 90c8d0fa; RC4 = 0.1.0-rc4, 3aa43e1f; RC5 = 0.1.0-rc5, 05e983d8; RC8 = 0.1.0-rc8, ecaa3407) | Weakest part / open blockers |
+| # | Requirement | Weight | Credit | Evidence (RC3 = 0.1.0-rc3, 90c8d0fa; RC4 = 0.1.0-rc4, 3aa43e1f; RC5 = 0.1.0-rc5, 05e983d8; RC8 = 0.1.0-rc8, ecaa3407; RC9 = 0.1.0-rc9, 3806f26a, the FINAL RC: CORE's chain below) | Weakest part / open blockers |
 |---|---|---|---|---|---|
 | R1 | Environmental world complete (locked, 25/25) | 8 | 0.75 | WORLD_COMPLETION_MATRIX.md; RC3, RC4 and RC5 QA Q02-Q08 travel/map/teleports PASS; RC4/RC5: 0 "missing usage flag Nanite" (RC3 had 8) | -- |
 | R2 | Gameplay regression G1-G7 (locked, 18/18) | 8 | 0.75 | RC3 and RC5 QA Q09-Q11 PASS | -- |
@@ -63,6 +63,44 @@ R4 9 + R5 2.25 + R6 2.25 + R7 6 + R8 6 + R9 5.25 + R10 5.25 + R11 4.5 + R12 5.25
   - 67.50% -> 72.00% on 2026-10-01 19:28 (R15 0 -> 0.75: CORE's clean-user first launch of a fresh RC8 extraction).
 - With every row at 0.75 except R14 (0), CORE alone is at its ceiling of 72.00%. Everything above it comes from the final
   RC: CORE's RC9 chain plus Second's independent RC9 pass (each row to 1.0), and RC9's soak (R14, R11).
+
+### RC9 package evidence (CORE) -- the FINAL RC
+
+- Build: 0.1.0-rc9, commit 3806f26a1ab0429c5611a9bc74d8e728cd68f1f3 = merge(2f3fd31d task3, 16b59f22 the pure-black
+  panels; parent ecaa3407). The tree adf9661e was audited path by path (C's three files from C, every other path from
+  task3; both patch directions byte-identical). Label "Private Beta 0.1.0-rc9 | build 3806f26a | 2026-10-01"; zip sha256
+  28336FAA17FFE1B0F923BBBBC9A971B60025439C5DB0FCF3A7A4498E52229ABE, 667,470,050 bytes, 81 files.
+- Static (`static_0.1.0-rc9_core.txt`): zip == manifest; 81/81 zip entries == the staged folder; against RC8: 0 added,
+  0 removed, 3 changed (exe, BuildInfo, README version); paks byte-identical; scan hits identical to RC8's.
+- QA (`qa_rc9_core.log`): **63 PASS, 0 FAIL over three boots, QA PASSED** (run1 50, run2 4, run3 7; QNET run1 and run2
+  PASS), labels OK, 0 crash lines, graceful exits, no founder input.
+- Exit watchdog (`hang_exit_rc9_core/`): armed 0.91 s after PreExit, ended the induced hang 20.6 s later; the save
+  survived; 1985 open t+12.15 -> closed by t+15.67 s.
+- Clean user (`cleanuser_rc9_core/`): run1 = the package's very first launch on a never-run path. Windows' firewall
+  prompt took the foreground; no input was sent to it; a person answered it (Allow) and the run went on after 15 s of
+  quiet: the label in the title, the welcome, player session, AI off, START, the world, QNET PASS. It was then VOID on
+  mouse input. Run2b, a fresh empty profile: the whole path to QUIT, 9/9, graceful, QNET PASS.
+- Session (`drive_rc9_b_core/`, 15/15): window modes x3, input after, focus loss, minimize/restore, menu QUIT, graceful,
+  QNET PASS. `drive_rc9_a3_core/`: relaunched WINDOWED with no welcome; the WATCH click's mission ran to "fixture
+  'full_lifecycle' finished … applied=22". The plan's single Esc then closed the mission's Julius terminal (a plan
+  artifact; the menu QUIT is proven in run b and the clean-user run).
+- Wardrobe (`wardrobe_rc9_core/`): wl.Qa.Wardrobe 22/0, the same figures as RC8 (84.4 / 85.8 / 97.6 / 98.1 / 89.9%).
+- Julius Live Terminal, RC8 vs RC9 back to back (`film_rc8_before_rc9_core/`, `film_rc9_terminal_core/`, measured in
+  `terminal_rc8_vs_rc9_core/`). Median sRGB of the panels' empty interiors:
+  - RC9: all four panels the same black at every moment: (22,18,12) at 25 s and 35 s, (14,13,6) at 45 s, the worst
+    channel difference between a peer and JULIUS 3.3 being 1;
+  - RC8: peers up to 12 levels lighter.
+  The header and the JULIUS 3.3 panel are unchanged.
+- Companion consoles after a colour change (B56, `film_rc9_b56_core/`): the chrome was rebuilt and the secondary saved;
+  both consoles match the plain RC9 film at 25, 35 and 45 s (mean |diff| <= 1.2 grey levels, 0% of pixels off by more
+  than 48). The four panels are still within 1 level of each other.
+- Failed travel (`failed_travel_rc9_core/`, squeeze 0.7 s): 2 forced failures, both returned with the exact message; a
+  later travel arrived; graceful, code 0.
+- Perf, back to back (`perf_rc9_core/`, `perf_rc8_before_rc9_core/`), RC9 vs RC8 avg fps / worst frame: idle 35.5/53 vs
+  32.2/63; walk 34.7/55 vs 33.4/55; teleport 31.3/101 vs 26.7/119; map 44.6/38 vs 38.9/47; wardrobe 37.7/66 vs 34.0/95;
+  contract 33.0/80 vs 30.4/102; creation 33.7/39 vs 30.2/44. No regression. 0 crashes; memory flat (peak private
+  6.56 GB, VRAM 4.29 GB).
+- Firewall: RC9's never-run path raised the prompt once; a person answered Allow. CORE changes no rule.
 
 ### RC8 package evidence (CORE)
 
