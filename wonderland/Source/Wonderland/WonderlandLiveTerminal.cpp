@@ -5,11 +5,14 @@
 #include "Misc/DateTime.h"
 #include "Rendering/DrawElements.h"
 #include "Rendering/SlateRenderer.h"
+#include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
+#include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SConstraintCanvas.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SBoxPanel.h"
+#include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
 #include "WonderlandJuliusWorkLog.h"
 #include "WonderlandUiStyle.h"
@@ -403,15 +406,39 @@ void SWonderlandLiveTerminal::RebuildTaskTabs()
 			// glyph on a near-black plate: present, working -- pressing it through the same path made a second
 			// tab -- and completely unreadable, which is why the founder reported it as ABSENT. "Does not even
 			// have the + button at the top" was a report about legibility, and the fix is legibility.
-			SNew(SBorder)
-			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
-			.BorderBackgroundColor(FSlateColor(FLinearColor(0.30f, 0.24f, 0.07f, 0.95f)))
-			.Padding(FMargin(13.0f, 4.0f))
+			//
+			// A DRAWN +, NOT A GLYPH (founder, 2026-10-02: "The '+' is NOT rendering fully"). The 18pt glyph wanted ~36 units of
+			// height (its line height plus 4+4 padding) inside a strip held to 24 (MakeTaskTabs' HeightOverride), so the lower
+			// half of the + fell outside and was clipped. Two bars in a fixed square cannot be clipped by any font's line height,
+			// baseline or DPI: each is centred on both axes inside the same gold square the strip already drew (40 x 24 units,
+			// what the glyph button rendered at), in the same gold, at the glyph's own stroke (3) and span (14).
+			SNew(SBox)
+			.WidthOverride(40.0f)
+			.HeightOverride(24.0f)
 			[
-				SNew(STextBlock)
-				.Text(INVTEXT("+"))
-				.Font(WonderlandUi::Sans(18, true))
-				.ColorAndOpacity(WonderlandUi::JuliusGold())
+				SNew(SBorder)
+				.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+				.BorderBackgroundColor(FSlateColor(FLinearColor(0.30f, 0.24f, 0.07f, 0.95f)))
+				.Padding(FMargin(0.0f))
+				.HAlign(HAlign_Center)
+				.VAlign(VAlign_Center)
+				[
+					SNew(SOverlay)
+					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
+					[
+						SNew(SBox).WidthOverride(14.0f).HeightOverride(3.0f)
+						[
+							SNew(SImage).Image(FCoreStyle::Get().GetBrush("WhiteBrush")).ColorAndOpacity(WonderlandUi::JuliusGold())
+						]
+					]
+					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
+					[
+						SNew(SBox).WidthOverride(3.0f).HeightOverride(14.0f)
+						[
+							SNew(SImage).Image(FCoreStyle::Get().GetBrush("WhiteBrush")).ColorAndOpacity(WonderlandUi::JuliusGold())
+						]
+					]
+				]
 			]
 		]
 	];
