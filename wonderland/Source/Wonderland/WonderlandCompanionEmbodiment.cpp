@@ -2808,7 +2808,10 @@ void AWonderlandCompanionEmbodiment::RebuildShadows(float TimeSeconds)
 				const FVector Over = FVector::CrossProduct(Tangent, Across).GetSafeNormal();
 				const float Twist = StripPhase + 2.2f * Along + 0.8f * Dir * TimeSeconds + (Blade == 1 ? 0.5f * PI : 0.0f);
 				const FVector Side = Across * FMath::Cos(Twist) + Over * FMath::Sin(Twist);
-				const float Profile = FMath::Pow(FMath::Sin(PI * FMath::Clamp((Along - RootCut) / FMath::Max(1.0f - RootCut, 1e-3f), 0.0f, 1.0f)), 0.6f);
+				// NEVER A NEGATIVE BASE. Sin(PI) in float is -8.7e-8, and Pow of a negative number is NaN: one NaN at every tip
+				// gave the whole surface NaN bounds, and the renderer culled every strip (the first runtime passes: 988
+				// vertices, "visible", nothing on screen; the log's "NaNs found on Bounds for Primitive ShadowSurface").
+				const float Profile = FMath::Pow(FMath::Max(0.0f, FMath::Sin(PI * FMath::Clamp((Along - RootCut) / FMath::Max(1.0f - RootCut, 1e-3f), 0.0f, 1.0f))), 0.6f);
 				const float Swell = 0.75f + 0.25f * FMath::Sin(2.0f * PI * (1.7f * Along - TimeSeconds / 1.3f) + StripPhase);
 				const float Half = BaseHalfWidth * WidthEnvelope * Profile * Swell;
 				Pile.Verts.Add(Spine[K] - Side * Half);
@@ -2891,15 +2894,31 @@ FString AWonderlandCompanionEmbodiment::DescribeShadows() const
 	{
 		Widest = FMath::Max(Widest, FMath::Clamp(0.075f * T.Reach, 4.0f, 12.0f));
 	}
-	return FString::Printf(TEXT("tendrils %d (rise %d, orbit %d, sweep %d) | detail %d | vertices %d | sections %d | visible %s | material %s | tips out to %.0f uu, up to %.0f uu, strips up to %.0f uu wide"),
+	// WHERE THE SURFACE ACTUALLY IS (first runtime passes: 988 vertices, nothing on screen): its world place and bounds,
+	// what it hangs from, and the actor's own place -- a surface drawn somewhere else reads as "visible" here and as
+	// nothing on camera.
+	FString Where = TEXT("no surface");
+	if (Surface != nullptr)
+	{
+		const USceneComponent* Parent = Surface->GetAttachParent();
+		Where = FString::Printf(TEXT("surface at %s (actor at %s), parent %s, registered %s, world bounds centre %s extent %s, section0 material %s"),
+			*Surface->GetComponentLocation().ToCompactString(), *GetActorLocation().ToCompactString(),
+			Parent != nullptr ? *Parent->GetName() : TEXT("NONE"), Surface->IsRegistered() ? TEXT("yes") : TEXT("NO"),
+			*Surface->Bounds.Origin.ToCompactString(), *Surface->Bounds.BoxExtent.ToCompactString(),
+			Surface->GetMaterial(0) != nullptr ? *Surface->GetMaterial(0)->GetName() : TEXT("NONE"));
+	}
+	return FString::Printf(TEXT("tendrils %d (rise %d, orbit %d, sweep %d) | detail %d | vertices %d | sections %d | visible %s | material %s | tips out to %.0f uu, up to %.0f uu, strips up to %.0f uu wide | %s"),
 		ShadowTendrils.Num(), Styles[0], Styles[1], Styles[2], ShadowDetail, ShadowVertexCount,
-		Surface != nullptr ? Surface->GetNumSections() : 0, (Surface != nullptr && Surface->IsVisible()) ? TEXT("yes") : TEXT("no"), *Material, Out, Up, Widest * 2.0f);
+		Surface != nullptr ? Surface->GetNumSections() : 0, (Surface != nullptr && Surface->IsVisible()) ? TEXT("yes") : TEXT("no"), *Material, Out, Up, Widest * 2.0f, *Where);
 }
 
 bool AWonderlandCompanionEmbodiment::HasLiveShadows() const
 {
+	// LIVE MEANS DRAWABLE: the renderer culls a primitive whose bounds are NaN or empty, so a surface with sections and
+	// vertices but no finite bounds is not live (it passed every check once and drew nothing).
 	const UProceduralMeshComponent* Surface = ShadowSurface.Get();
-	return Surface != nullptr && Surface->GetNumSections() > 0 && Surface->IsVisible() && ShadowVertexCount > 0;
+	return Surface != nullptr && Surface->GetNumSections() > 0 && Surface->IsVisible() && ShadowVertexCount > 0
+		&& !Surface->Bounds.ContainsNaN() && Surface->Bounds.SphereRadius > 1.0;
 }
 
 void AWonderlandCompanionEmbodiment::SetRuntimeActivity(FName Activity)

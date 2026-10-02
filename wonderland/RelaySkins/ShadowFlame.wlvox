@@ -8,7 +8,7 @@ material bonedeep lit 0.0090 0.0100 0.0220 1.000
 material visor lit 0.0450 0.0420 0.0500 1.000
 material eye glow 1.0000 0.8400 0.1200 112.500
 material eyehalo add 1.0000 0.8400 0.1200 39.375
-material shadow rim 0.0100 0.0140 0.0460 3.000
+material shadow lit 0.0100 0.0140 0.0460 1.000
 material voidedge glow 0.1000 0.2600 0.9500 4.500
 part root - 0.000 0.000 0.000 spine 0.850 0.000
 part body root 0.000 0.000 11.850 none

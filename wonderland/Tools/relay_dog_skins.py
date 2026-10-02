@@ -3230,7 +3230,10 @@ def shadow_flame():
     figure.material("visor", "lit", VISOR, 1.0)
     figure.material("eye", "glow", SHADOW_EYES, 7.5)
     figure.material("eyehalo", "add", SHADOW_EYES, 7.5 * 0.35)
-    figure.material("shadow", "rim", SHADOW_STRIP, 3.0)
+    # LIT: the engine's lit parent draws on any mesh; the Rim parent is the V1 master built for the INSTANCED voxel figures
+    # and is unproven on the strips' procedural surface. (The first runtime passes drew nothing for another reason -- NaN
+    # bounds, see RebuildShadows -- so this is caution, not a finding against Rim.)
+    figure.material("shadow", "lit", SHADOW_STRIP, 1.0)
     figure.material("voidedge", "glow", SHADOW_EDGE, 0.30)
     base_dog(figure)          # marks the Dog's extent: nothing added below can change its height
     d = DOG
