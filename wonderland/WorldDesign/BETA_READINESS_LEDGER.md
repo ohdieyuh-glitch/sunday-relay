@@ -136,9 +136,25 @@ R12 3.9375 + R13 2.8125 + R14 0 + R15 3.375 + R16 0 = 54.00.
   height; the other five as on RC9; 360 back to the front.
 - Firewall: RC10's new path holds Allow/Public inbound rules after its first launch (answered by a person; CORE changes
   no rule).
-- Still to run on RC10 (paused under the machine-coexistence order, behind Second's social compile and JUJU's eval
-  slot): clean-user, session stability, the WATCH run (Esc x2 fixed), terminal + B56 films with the four-panel
-  measurement, failed travel, perf.
+- Clean user (`cleanuser_rc10_core_b/`, 9/9): a fresh empty profile; the title carries the label; the welcome; player
+  session, AI off; START; the world; QNET PASS; menu -> HOW TO PLAY -> back -> QUIT -> "Log file closed".
+  (`cleanuser_rc10_core/` and `drive_rc10_b_core/` are VOID: Windows' Quick settings panel held the foreground.)
+- Session (`drive_rc10_b_core_b/`, 15/15): window modes x3 (style checked), input after, focus lost 8 s and regained,
+  minimize/restore, QNET PASS, menu QUIT, graceful.
+- WATCH by real input (`drive_rc10_a3_core/`, 11/11): relaunched WINDOWED with no welcome; the click -> scenario D -> the
+  mission to "fixture 'full_lifecycle' finished"; Esc closes the mission's terminal, Esc opens the menu, QUIT,
+  graceful (the RC8/RC9 single-Esc plan artifact is gone).
+- Terminal (`film_rc10_terminal_core/`, `film_rc10_b56_core/`, `terminal_rc10_core/`): clean films. The four panels
+  within 1 level of the JULIUS 3.3 black at 25, 35 and 45 s, the same after the colour-change remount. The companion
+  consoles after the remount match the plain film (mean |diff| <= 1.1 grey levels, 0% of pixels off by more than 48).
+- Failed travel (`failed_travel_rc10_core/`): 5 forced failures, each recovered with the exact message; a later travel
+  arrived; graceful, code 0.
+- Perf back to back with RC9 (`perf_rc10_core/`, `perf_rc9_before_rc10_core/`), avg fps RC10 / RC9: idle 29.0/26.1,
+  walk 31.2/25.1, teleport 26.3/21.6, map 33.4/29.4, wardrobe 26.7/24.0, contract 24.6/24.8, creation 24.2/25.7. Frames
+  over 100 ms: 13 vs 23 (the worst, 250 ms, in RC10's contract phase; RC9 had 11 over 100 ms there too). 0 crashes;
+  memory flat (peak private 6.66 GB, VRAM 4.32 GB). No regression. The perf route still wears the original five skins;
+  Shadow Flame's own cost is measured in Second's RC10 pass.
+- **CORE RC10 CHAIN DONE 2026-10-02 07:56**, handed to Second (its social slot first, then its independent RC10 pass).
 
 ### RC9 package evidence (CORE) -- final RC until 2026-10-02 05:02
 
