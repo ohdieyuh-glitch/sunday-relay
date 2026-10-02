@@ -47,8 +47,6 @@ import { hostedChildEnv, hostedChildEnvKeys } from './hosted-coding-agent/hosted
 // on PATH in this process's environment, which a GitHub runner does not have.
 import { observeCoderLogin, resolveCoderClaudeExecutable } from './hosted-coding-agent/hosted-login-probe';
 import { readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
 import { JULIUS_RUNTIME_DATABASE_ENV_NAMES, juliusRuntimeDatabaseUrl } from '../src/relay/persistence/julius-test-database';
@@ -73,7 +71,7 @@ import { createPostgresMissionSeedStore } from './julius/mission-seed';
 import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 import { createExecutorShellPort } from './julius/executor-effects';
 import { createDurableArtifactExchange, juliusReviewerBillingPath, type JuliusArtifactExchange } from './julius/live-workers';
-import { createJuliusDurableArtifacts } from './julius/durable-artifacts';
+import { createJuliusDurableArtifacts, juliusWorkArtifactRoot } from './julius/durable-artifacts';
 import { LocalJuliusArtifactStore } from '../src/relay/workspace/julius-tools/local-artifact-store';
 import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/julius-work-artifact-postgres';
 import { liveEvidenceLines } from './julius/live-evidence-lines';
@@ -899,9 +897,9 @@ async function main(argv: readonly string[]): Promise<number> {
     const liveArtifacts = createDurableArtifactExchange({
       projectId: contract.projectId,
       artifacts: createJuliusDurableArtifacts({
-        content: new LocalJuliusArtifactStore(
-          env.JULIUS_WORK_ARTIFACT_ROOT ?? join(tmpdir(), 'julius-work-artifacts', contract.missionId),
-        ),
+        // An empty value is the default, and a relative one is refused here,
+        // before anything is dispatched (`juliusWorkArtifactRoot`).
+        content: new LocalJuliusArtifactStore(juliusWorkArtifactRoot(env.JULIUS_WORK_ARTIFACT_ROOT, contract.missionId)),
         records: new JuliusWorkArtifactPostgresRepository(pool),
         tenancy: { tenantId: contract.tenantId },
       }),
