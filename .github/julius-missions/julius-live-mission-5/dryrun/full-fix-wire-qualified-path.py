@@ -1,6 +1,6 @@
 """DRY-RUN ONLY (Mission 5, restored 09-10 start state). The MINIMAL full fix:
 the integrity layer is wired into compileJuliusContext ONLY for callers that
-supply claims; the no-claims path stays byte-identical to 09-10 (REQ 12), so
+supply claims; the no-claims path stays byte-identical to 09-10 (REQ 13 BACKWARD COMPATIBILITY), so
 its `break` and its inline redaction are untouched. The qualified path and its
 types are taken from #288 (c833e268). Never landed: it proves satisfiability.
 Every anchor is asserted, so a drifted base kills it."""

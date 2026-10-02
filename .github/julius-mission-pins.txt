@@ -22,4 +22,4 @@ julius-live-mission-6 .github/julius-mission-slice/loader.mjs b811ab9107dbe59b25
 # contract and every seeded byte; nothing is sliced from main.
 julius-live-mission-2 .github/julius-missions/julius-live-mission-2 eb14c23a310d54566c63f17cae293a680472a6d1
 julius-live-mission-3 .github/julius-missions/julius-live-mission-3 42fb10ca04e556b71017d267215ddcacb62d54c2
-julius-live-mission-5 .github/julius-missions/julius-live-mission-5 2cf35d10978d80df87ee24e293bae0ee122a0ab3
+julius-live-mission-5 .github/julius-missions/julius-live-mission-5 c3381ce915673c85b04b6011f8a69a8f25fdc88f

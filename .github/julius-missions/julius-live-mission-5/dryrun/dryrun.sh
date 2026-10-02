@@ -7,10 +7,10 @@
 #      `context_integrity_not_implemented`, never a module that cannot load?
 #   2. what does a HALF fix earn, with the integrity module implemented and NOTHING wired
 #      into compileJuliusContext or createJuliusContextSnapshot? The answer is recorded,
-#      not wished: the declared test PASSES it. REQ 11 (integration) is enforced by the
+#      not wished: the declared test PASSES it. REQ 12 INTEGRATION is enforced by the
 #      Independent Reviewer, as the 09-10 plan review did, and by the scorers. Never by the test.
 #   3. is it SATISFIABLE? A correct change must pass, with the no-claims path left byte for
-#      byte as it was (REQ 12).
+#      byte as it was (REQ 13 BACKWARD COMPATIBILITY). "REQ n" counts the contract's requirements from 1.
 #
 # The donors for 2 and 3 are #288's own code (c833e268), read from git history, so this
 # needs a checkout holding that commit. Nothing built here reaches the repository, and
@@ -73,7 +73,7 @@ echo "=========== 2. HALF FIX: the module implemented (#288's), NOTHING wired. R
 fresh "$base/half" || exit 3
 donor julius-context-integrity.ts "$base/half"
 run "$base/half" "module implemented, runtime and snapshot untouched" pass || ok=1
-echo "   => REQ 11 (integration) is NOT enforced by the declared test. The reviewer and the scorers must check it."
+echo "   => REQ 12 INTEGRATION is NOT enforced by the declared test. The reviewer and the scorers must check it."
 
 echo "=========== 3. FULL FIX: module + qualified path wired + snapshot records the decision"
 fresh "$base/full" || exit 3
@@ -82,12 +82,12 @@ donor julius-context-snapshot.ts "$base/full"
 git -C "$REPO" show "$DONOR:$P/julius-runtime.ts" > "$base/donor-runtime.ts" || exit 3
 ( cd "$base/full" && python "$WIRE" "$P/julius-runtime.ts" "$base/donor-runtime.ts" ) || { echo "PATCH FAILED TO APPLY: the scenario would be meaningless"; exit 3; }
 kept=$(grep -c "if (used + sanitized.length > input.maxCharacters) break;" "$base/full/$P/julius-runtime.ts")
-[ "$kept" -eq 1 ] || { echo "   *** the no-claims path was changed (REQ 12)"; ok=1; }
+[ "$kept" -eq 1 ] || { echo "   *** the no-claims path was changed (REQ 13 BACKWARD COMPATIBILITY)"; ok=1; }
 run "$base/full" "wired, no-claims path byte-identical to 09-10" pass || ok=1
 
 echo "MISSION TREE UNTOUCHED: $(cd "$REPO" && git status --porcelain -- "$M" | wc -l) modification(s) in git."
 if [ "$ok" -eq 0 ]; then
-  echo "ALL AS RECORDED: the restored start is RED for the right reason and SATISFIABLE; REQ 11 is reviewer-enforced."
+  echo "ALL AS RECORDED: the restored start is RED for the right reason and SATISFIABLE; REQ 12 INTEGRATION is reviewer-enforced."
 else
   echo "AT LEAST ONE SCENARIO WRONG: fix the restoration before any spend. Logs under $base"
 fi
