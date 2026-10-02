@@ -24,14 +24,14 @@ Each row has a weight; the weights total 100. A row earns:
 partly unverified scores 0, not a blend. **Readiness = sum of weight x credit.** Second's independent sign-off on the RC
 is built into every 1.0, so nothing above 75% is possible before the final RC.
 
-## Ledger (as of RC5: CORE's evidence; Second's RC5 sign-off pending)
+## Ledger (as of RC8: RC5 package evidence plus CORE's RC8 evidence; Second's independent RC8 pass pending)
 
-| # | Requirement | Weight | Credit | Evidence (RC3 = 0.1.0-rc3, 90c8d0fa; RC4 = 0.1.0-rc4, 3aa43e1f; RC5 = 0.1.0-rc5, 05e983d8) | Weakest part / open blockers |
+| # | Requirement | Weight | Credit | Evidence (RC3 = 0.1.0-rc3, 90c8d0fa; RC4 = 0.1.0-rc4, 3aa43e1f; RC5 = 0.1.0-rc5, 05e983d8; RC8 = 0.1.0-rc8, ecaa3407) | Weakest part / open blockers |
 |---|---|---|---|---|---|
 | R1 | Environmental world complete (locked, 25/25) | 8 | 0.75 | WORLD_COMPLETION_MATRIX.md; RC3, RC4 and RC5 QA Q02-Q08 travel/map/teleports PASS; RC4/RC5: 0 "missing usage flag Nanite" (RC3 had 8) | -- |
 | R2 | Gameplay regression G1-G7 (locked, 18/18) | 8 | 0.75 | RC3 and RC5 QA Q09-Q11 PASS | -- |
 | R3 | First launch: clean start, spawn, Relay Dog init, clear path in, no developer knowledge | 8 | 0.75 | RC5 Q00.1 welcome, Q00.2 lock-down, Q00.6 the window names the build; prerequisites + closure; Esc -> menu -> QUIT (RC3 soak); Second's RC4 clean-user first launch | B55 (P3): a freshly unzipped package hitches on its first run |
-| R4 | Core creation loop, truthful about Julius | 12 | 0.5 | RC3 Q13 eight contracts through + and the terminal, Q14 restored, Q15 deleted, Q17 the simulated mission plays and says SIMULATED, Q20 limit 48 | the WATCH A SIMULATED MISSION button itself is only statically verified (Q17 makes the same call) |
+| R4 | Core creation loop, truthful about Julius | 12 | 0.75 | RC3 Q13 eight contracts through + and the terminal, Q14 restored, Q15 deleted, Q17 the simulated mission plays and says SIMULATED, Q20 limit 48; RC8 Q13/Q14/Q15/Q17/Q20 PASS; **RC8: the WATCH A SIMULATED MISSION button itself clicked in the package by real OS input** (`drive_rc8_a_core/`, `drive_rc8_a2_core/`): "WLMISSION simulated mission from the Missions panel: started", the panel closes, scenario D plays SIMULATED on camera (full_lifecycle 11/22 reached) | for 1.0: Second's own click on RC8. CORE's click runs to the mission's end were twice voided by founder input after the mission had started (Q17 plays the same mission to its end) |
 | R5 | Session stability: launch / quit / relaunch, focus loss, window changes (single-player) | 3 | 0 | RC3: four clean boots and quits; the menu QUIT works | focus loss not yet verified; RC3's two window modes (B40 fix) not yet verified in a package |
 | R6 | Private/project space and project avatar flow, as implemented | 3 | 0.75 | nothing to test (D2); RC3 Q18 `/pa` changes nothing in a player session; welcome says single-player | -- |
 | R7 | Wonder Web and every beta-facing screen: no dead buttons or placeholders, no debug exposure, back/close/Esc, sane errors | 8 | 0.75 | RC5 Q00.2/Q00.3/Q00.5 (D3), Q01-Q01f (B44 Flame Color), Q22-Q24 (B49 companion consoles) and CORE's RC5 films beside the founder's reference | B49 needs Second's own video acceptance on RC5; B54 (P2, Julius lane): SIM TOKENS in the Julius terminal |
@@ -45,16 +45,44 @@ is built into every 1.0, so nothing above 75% is possible before the final RC.
 | R15 | Clean-user test on the RC (no saves, no console, no developer knowledge) | 6 | 0 | Second's RC3 clean-user pass waits for an idle laptop | -- |
 | | **Total** | **100** | | | |
 
-**WONDERLAND BETA READINESS: 62.25%** (RC5 package evidence, CORE + Second's reads, 2026-10-01). R1 6 + R2 6 + R3 6 +
-R4 6 + R6 2.25 + R7 6 + R8 6 + R9 5.25 + R10 5.25 + R11 4.5 + R12 5.25 + R13 3.75.
-- RC5's soak found a P1: the exit hangs after a long session (B57). RC6 (144d2e21) carries the fix, so the final RC is
-  now RC6, and every row is re-earned there.
+**WONDERLAND BETA READINESS: 65.25%** (RC5 package evidence + CORE's RC8 evidence, 2026-10-01). R1 6 + R2 6 + R3 6 +
+R4 9 + R6 2.25 + R7 6 + R8 6 + R9 5.25 + R10 5.25 + R11 4.5 + R12 5.25 + R13 3.75.
+- RC5's soak found a P1: the exit hangs after a long session (B57). RC6 (144d2e21) carried the fix. RC7 (4930697c, locked)
+  added the founder's mascot-eye correction. **The final RC is now RC8 (ecaa3407)** = RC7 + the wardrobe framing and
+  canonical idle (31e22f5a) + the Julius terminal's black-glass contrast (1f1bae75), founder-authorized 2026-10-01. Every
+  1.0 is earned on RC8 by CORE and Second.
 - Nothing above 75% is possible until Second signs it.
 - Still to evidence:
   - R5: focus loss and window modes;
-  - R14: RC6's soak exit;
-  - R15: the clean-user pass;
-  - R4: the WATCH button clicked in the package.
+  - R14: RC8's soak exit;
+  - R15: the clean-user pass.
+- History: 62.25% -> 65.25% on 2026-10-01 18:55 (R4 0.5 -> 0.75: the WATCH button clicked in the RC8 package).
+
+### RC8 package evidence (CORE)
+
+- Build: 0.1.0-rc8, commit ecaa34077dc573216eb1eca5ac542b0430703b6e (merge of 1f1bae75 + 31e22f5a on 4930697c; the tree
+  audited path by path: every blob is A's, B's or 4930697c's), label "Private Beta 0.1.0-rc8 | build ecaa3407 |
+  2026-10-01", zip sha256 4462DE1B43E7384D7D9D1521533365D1353B29FCD641EFFF7704F6739CB61ED8, 667,471,176 bytes, 81
+  files. Game target 9 actions (at most 2 at a time) 368 s; BuildCookRun 387 s.
+- Static (`static_0.1.0-rc8_core.txt`): zip == manifest (sha256 and size); every zip entry decompressed equals the staged
+  folder (81/81); against RC7: 0 added, 0 removed, 3 changed (Wonderland.exe; BuildInfo.txt and README_BETA.txt, the
+  version and label only); paks byte-identical to RC7. Scan: the binaries' hits equal RC7's needle for needle (the same 51
+  source-path strings); every other hit file is byte-identical to RC7.
+- QA (`qa_rc8_core.log`): 61 of 61 in-game checks PASS over three boots (run1 50, run2 4, run3 7, incl. Q09/Q10 Relay OG
+  against every skin, Q25 eyes inside the face), graceful exits, 0 crash lines, no founder input. **QNET run1 FAIL**:
+  tcp 0.0.0.0:1985. Cause, from the logs: RC8's first-ever launch spent 16 s before its log opened (RC7 1 s; RC8 runs 2-3
+  0 s: B55, a fresh package's first run), so the trace port's usual ~2 s opening (log "Control listening on port 1985")
+  fell at +29.96 s, on QNET's reading at ~30 s. The port's timeline in both builds, by one instrument (Stage 2, sampled
+  every ~150 ms): RC7 open t+10.14 -> closed by t+13.47 s; RC8 open t+10.45 -> closed by t+12.19 s, no listener after. QNET on
+  two later RC8 boots: PASS (t+41.4 s, t+38.5 s). QNET run2/run3 SKIPPED (those boots end before 28 s).
+- Exit watchdog (`hang_exit_rc8_core/`): armed 0.57 s after PreExit; the induced 60 s teardown hang ended 21.0 s later,
+  kernel exit code 0; the save made before the quit survived.
+- WATCH A SIMULATED MISSION by real OS input (`drive_rc8_a_core/`, `drive_rc8_a2_core/`; core_drive.ps1: SendInput only
+  while the game is the foreground window and the window under the cursor; low-level hooks void a run on any real input):
+  the click logs "WLMISSION simulated mission from the Missions panel: started", the panel closes, the Dog travels to
+  Castle Approach, both companions join SIMULATED, the contract manifests, the strip reads DEVELOPMENT PREVIEW ·
+  SIMULATED JULIUS EXECUTION through full_lifecycle 11/22 on camera. Both runs were later VOID (real mouse input at 18:34
+  and 18:41) and stopped at once.
 
 ### RC5 package evidence (CORE)
 
