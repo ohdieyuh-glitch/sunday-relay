@@ -42,22 +42,24 @@ is built into every 1.0, so nothing above 75% is possible before the final RC.
 | R12 | Package / distribution: clean artifact, prerequisites, no machine paths, size, README, version visible | 7 | 0.75 | RC5 zip: 81 files, 0.62 GB, sha256 0CFF42F5...E8459; app-local CRT + vc_redist staged; no Saved/PDB/sources/Vulkan layers/retired figures; clean label "build 05e983d8"; README with the publisher dialog and Smart App Control | P2: B33 unsigned, B36 notices; P3: B38 |
 | R13 | Security / privacy baseline | 5 | 0.75 | RC5: no listening socket in a player session (QNET, two boots); scan: no names, e-mails or secrets (known P3 strings only); AI off (Q00.3) | -- |
 | R14 | Crash / soak on the package | 4 | 0 | RC5: 0 crashes in the 60-minute soak, three QA boots, perf and films | **B57 (P1) open on RC5**: the soak's exit never finished (fixed in RC6 source; RC6's soak must show it) |
-| R15 | Clean-user test on the RC (no saves, no console, no developer knowledge) | 6 | 0 | Second's RC3 clean-user pass waits for an idle laptop | -- |
+| R15 | Clean-user test on the RC (no saves, no console, no developer knowledge) | 6 | 0.75 | **RC8, CORE** (`cleanuser_rc8_core/`): the zip extracted fresh into a new folder (81 files, nothing written into it afterwards), an empty profile, the root Wonderland.exe with no game arguments (the harness adds -nosound and the empty -userdir), entered only through the screen by real OS input: the window title carries the label; the welcome opens (player session, AI off); START; the world; Esc -> menu -> HOW TO PLAY -> Esc back -> QUIT WONDERLAND -> "Log file closed" (run2, 9/9). Run1, the path's very first launch, was taken over by Windows' firewall prompt for the engine's diagnostics port (README step 4 says: click Cancel); a person answered it Allow at ~19:21; CORE never touches that prompt or the rules | for 1.0: Second's own clean-user pass on RC8. The profile is an empty -userdir, not a new Windows account |
 | | **Total** | **100** | | | |
 
-**WONDERLAND BETA READINESS: 67.50%** (RC5 package evidence + CORE's RC8 evidence, 2026-10-01). R1 6 + R2 6 + R3 6 +
-R4 9 + R5 2.25 + R6 2.25 + R7 6 + R8 6 + R9 5.25 + R10 5.25 + R11 4.5 + R12 5.25 + R13 3.75.
+**WONDERLAND BETA READINESS: 72.00%** (RC5 package evidence + CORE's RC8 evidence, 2026-10-01). R1 6 + R2 6 + R3 6 +
+R4 9 + R5 2.25 + R6 2.25 + R7 6 + R8 6 + R9 5.25 + R10 5.25 + R11 4.5 + R12 5.25 + R13 3.75 + R15 4.5.
 - RC5's soak found a P1: the exit hangs after a long session (B57). RC6 (144d2e21) carried the fix. RC7 (4930697c, locked)
   added the founder's mascot-eye correction. **The final RC is now RC8 (ecaa3407)** = RC7 + the wardrobe framing and
   canonical idle (31e22f5a) + the Julius terminal's black-glass contrast (1f1bae75), founder-authorized 2026-10-01. Every
   1.0 is earned on RC8 by CORE and Second.
 - Nothing above 75% is possible until Second signs it.
 - Still to evidence:
-  - R14: RC8's soak exit;
-  - R15: the clean-user pass.
+  - R14: RC8's soak exit (after Second's sign-off).
 - History:
   - 62.25% -> 65.25% on 2026-10-01 18:55 (R4 0.5 -> 0.75: the WATCH button clicked in the RC8 package);
-  - 65.25% -> 67.50% on 2026-10-01 19:14 (R5 0 -> 0.75: window modes, focus loss, minimize, quit and relaunch on RC8).
+  - 65.25% -> 67.50% on 2026-10-01 19:14 (R5 0 -> 0.75: window modes, focus loss, minimize, quit and relaunch on RC8);
+  - 67.50% -> 72.00% on 2026-10-01 19:28 (R15 0 -> 0.75: CORE's clean-user first launch of a fresh RC8 extraction).
+- With every row at 0.75 except R14 (0), CORE alone is at its ceiling of 72.00%: everything above it is Second's
+  independent RC8 pass (each row to 1.0) and the final soak (R14, R11).
 
 ### RC8 package evidence (CORE)
 
