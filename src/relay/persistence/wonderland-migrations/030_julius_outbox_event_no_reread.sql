@@ -18,7 +18,10 @@ BEGIN;
 --      refuses anything else (a new writer, a backfill, manual SQL);
 --   3. an event's id never changes, and an outbox row's event id never changes (the foreign key covered updates);
 --   4. deleting an event still deletes its outbox row: the ON DELETE CASCADE it had, by a trigger that WRITES on a
---      delete and never reads on an insert.
+--      delete and never reads on an insert;
+--   5. a TRUNCATE of events is refused. The foreign key refused it while outbox rows referenced it, and row triggers
+--      never see a TRUNCATE, so without this it would orphan every outbox row silently. The ledger is append-only and
+--      nothing truncates it.
 -- What the registry is, and is not: it guards against ACCIDENTAL orphans (a writer that forgot its event, a backfill,
 -- a typo), not against hostile SQL. A session that can run `SET relay_wonderland.events_written = ...` can pre-seed
 -- it, exactly as anyone with DDL rights could drop the foreign key or these triggers. Ids are delimited by chr(31) on
@@ -80,6 +83,15 @@ END;
 $$;
 CREATE TRIGGER outbox_follows_event_delete AFTER DELETE ON relay_wonderland.events
   FOR EACH ROW EXECUTE FUNCTION relay_wonderland.outbox_follows_event_delete();
+
+CREATE FUNCTION relay_wonderland.events_truncate_refused() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'events_truncate_refused: the event ledger is append-only, and a TRUNCATE would orphan its outbox rows'
+    USING ERRCODE = 'feature_not_supported';
+END;
+$$;
+CREATE TRIGGER events_truncate_refused BEFORE TRUNCATE ON relay_wonderland.events
+  FOR EACH STATEMENT EXECUTE FUNCTION relay_wonderland.events_truncate_refused();
 
 INSERT INTO relay_wonderland.schema_migrations(version) VALUES('030_julius_outbox_event_no_reread');
 COMMIT;

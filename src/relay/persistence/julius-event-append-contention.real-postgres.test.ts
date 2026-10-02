@@ -395,6 +395,33 @@ suite('Julius event appends under SERIALIZABLE, in both plan states (row 13 (i),
     expect(empty?.message).toContain('outbox_event_id_malformed');
   });
 
+  it('030: the registry matches an id EXACTLY: a prefix or a suffix of a written id gives no right to an outbox row', async () => {
+    const written = `exact-${nonce}-abc-1`;
+    const stream = `run:exact-${nonce}`;
+    const prefix = await refusalOf([insertEvent(written, stream, 1), insertOutbox(`exact-${nonce}-abc`)]);
+    expect(prefix?.message, 'a prefix of the written id').toContain('outbox_event_not_written');
+    const suffix = await refusalOf([insertEvent(written, stream, 1), insertOutbox(`${nonce}-abc-1`)]);
+    expect(suffix?.message, 'a suffix of the written id').toContain('outbox_event_not_written');
+    const exact = await refusalOf([insertEvent(written, stream, 1), insertOutbox(written)]);
+    expect(exact, 'CONTROL: the id itself is accepted').toBeNull();
+  });
+
+  it('030: ONE statement writing two events gives each its own outbox row (the registry’s separator)', async () => {
+    const [first, second] = [`two-${nonce}-1`, `two-${nonce}-2`];
+    const both = await refusalOf([
+      ["INSERT INTO relay_wonderland.events(event_id,stream_id,project_id,sequence,event_type,visibility,payload,occurred_at) VALUES($1,$3,$4,1,'julius.worker.dispatched','PROJECT','{}'::jsonb,now()),($2,$3,$4,2,'julius.worker.dispatched','PROJECT','{}'::jsonb,now())", [first, second, `run:two-${nonce}`, project]],
+      insertOutbox(first),
+      insertOutbox(second),
+    ]);
+    expect(both, 'both outbox rows accepted').toBeNull();
+  });
+
+  it('030: a TRUNCATE of events is refused, as the foreign key refused it (row triggers never see a TRUNCATE)', async () => {
+    const refused = await refusalOf([['TRUNCATE relay_wonderland.events', []]]);
+    expect(refused?.message).toContain('events_truncate_refused');
+    expect(await count('SELECT count(*)::int AS n FROM relay_wonderland.events', []), 'CONTROL: the ledger is intact').toBeGreaterThan(0);
+  });
+
   it('030: an event’s id, and an outbox row’s event id, never change (the foreign key covered updates)', async () => {
     const run = await newRun('g3');
     const value = event(run);
