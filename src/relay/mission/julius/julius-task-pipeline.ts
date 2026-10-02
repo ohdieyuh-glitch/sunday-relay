@@ -35,6 +35,9 @@ import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import { requestJuliusApproval, type JuliusApprovalStore } from './julius-lifecycle-runtime';
 import { JULIUS_CLAIMABLE_RUN_STATES } from './julius-state-path';
 import { juliusCurrentAttemptEvidence } from './julius-attempt-evidence';
+import {
+  assertJuliusAcceptCitesReview, juliusAcceptReviewGate, juliusDecisionUnderReviewGate, type JuliusAcceptReviewGate,
+} from './julius-accept-review-gate';
 import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionOutcome, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest, type JuliusUnrecordedBookkeeping } from './julius-execution-coordinator';
 import { safeReasonCode, type JuliusDispatchReads, type JuliusDispatchWorkspace, type JuliusProviderRouter, type JuliusWorkAttemptRef } from './julius-router';
@@ -3600,8 +3603,31 @@ export async function resumeUnverifiedTasks(input: {
     && juliusYieldContinuationOf(task, tasks) === null);
   if (stranded.length === 0) return [];
 
+  /**
+   * A WORK WHOSE CONCLUDED REVIEW IS ALSO STRANDED IS DECIDED BY THAT REVIEW.
+   *
+   * Both are undecided when the process dies after the reviewer's result was
+   * accepted and before its verification ran, and this sweep offers tasks in
+   * task order: the work first. Verified as itself, the work met a review that
+   * had CONCLUDED but whose verdict was never applied, so the finding a
+   * rejecting review raises did not exist yet. Reproduced on main 11c1c890: the
+   * plan was ACCEPTED over the review that rejected it, the build's contract
+   * locked and the build released, and only then did the review's own
+   * verification write REPAIR. A second run loop's sweep reaches the same
+   * window without a crash, while the first is still inside the review.
+   *
+   * So the review is verified and the work is not. The review's verification
+   * applies the verdict and decides the work it reviewed, which is the decision
+   * that should have been written.
+   */
+  const decidedByStrandedReview = new Set(stranded
+    .filter((task) => task.role === 'INDEPENDENT_REVIEWER')
+    .map((task) => juliusReviewedWorkOf(task, tasks)?.taskId ?? null)
+    .filter((taskId): taskId is string => taskId !== null));
+
   const outcomes: JuliusTaskOutcome[] = [];
   for (const task of stranded) {
+    if (decidedByStrandedReview.has(task.taskId)) continue;
     const correlationId = `resume:${task.taskId}`;
     const ledger = new RuntimeLedger(deps, run, correlationId);
     const request: JuliusPipelineRequest = {
@@ -4903,6 +4929,36 @@ async function disagreementsOf(deps: JuliusPipelineDependencies, run: JuliusRunR
 }
 
 /**
+ * THE REVIEW AN ACCEPT OF `subject` WOULD CITE, from the verdict ledger: every
+ * `review.verdict.applied` row, and the material disagreements Julius resolved
+ * for the architect (`julius-accept-review-gate.ts`).
+ */
+async function acceptReviewGateFor(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly subject: JuliusTask;
+  readonly policy: JuliusVerificationPolicy;
+  readonly evidence: readonly JuliusEvidence[];
+}): Promise<JuliusAcceptReviewGate> {
+  if (!input.policy.reviewerRequired || input.subject.role === 'INDEPENDENT_REVIEWER') return { outcome: 'NOT_REQUIRED' };
+  const rows = await readVerdictLedger(input.deps, input.run);
+  return juliusAcceptReviewGate({
+    subject: input.subject,
+    reviewerRequired: input.policy.reviewerRequired,
+    applied: rows.filter((row) => row.type === 'review.verdict.applied').map((row) => ({
+      reviewTaskId: String(row.facts.reviewTaskId),
+      reviewedTaskId: String(row.facts.reviewedTaskId),
+      verdict: typeof row.facts.verdict === 'string' ? row.facts.verdict : null,
+      route: String(row.facts.route),
+    })),
+    upheld: foldJuliusDisagreements(rows)
+      .filter((item) => item.material && item.status === 'RESOLVED' && item.resolution === 'ARCHITECT_UPHELD' && item.reReviewTaskId !== null)
+      .map((item) => ({ subjectTaskId: item.subjectTaskId, reReviewTaskId: item.reReviewTaskId! })),
+    evidence: input.evidence,
+  });
+}
+
+/**
  * MOVE A DISAGREEMENT ONE LEGAL STEP, OR WRITE NOTHING.
  *
  * The step is checked against the record's current state before it is written,
@@ -5908,7 +5964,20 @@ async function verifyExecutedTask(input: {
   }
 
   /* ------------------------------------------------------- a decision */
-  const { decision } = action;
+  /**
+   * AN ACCEPT CITES THE REVIEW THAT LET IT HAPPEN, or it is not an ACCEPT.
+   *
+   * Where the policy requires review, the accepting decision carries the PASSED
+   * `REVIEW_FINDING` ids of the review whose verdict Julius applied, and a review
+   * that cannot gate it turns it into a HALT naming why
+   * (`julius-accept-review-gate.ts`). It is settled here, before anything acts on
+   * the decision: a refused ACCEPT locks no contract and releases no task.
+   */
+  const reviewGate: JuliusAcceptReviewGate = action.decision.action === 'ACCEPT'
+    ? await acceptReviewGateFor({ deps, run, subject, policy: input.request.verification, evidence })
+    : { outcome: 'NOT_REQUIRED' };
+  const decision = juliusDecisionUnderReviewGate(action.decision, reviewGate, subject.taskId);
+  assertJuliusAcceptCitesReview(decision, reviewGate, subject.taskId);
   /**
    * WHAT THIS DECISION RELEASES, decided before it is written and written
    * with it. `evaluateJuliusRelease` names the BLOCKED tasks whose every
@@ -6160,7 +6229,7 @@ async function verifyExecutedTask(input: {
         facts: {
           action: decision.action, reasonCode: decision.reasonCode,
           criteriaSatisfied: action.criteriaSatisfied.length, criteriaMissing: action.criteriaMissing.length,
-          missionCompletable: action.missionCompletable,
+          missionCompletable: decision.action === 'ACCEPT' && action.missionCompletable,
           released: release.releasable.length,
           reviewVerdict: applied?.verdict ?? null,
           reviewRoute: applied?.route ?? null,
