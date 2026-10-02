@@ -138,18 +138,19 @@ namespace WonderlandUi
 	 * THE JULIUS LIVE TERMINAL'S DEPTHS, darkest first (founder, 2026-10-01):
 	 *
 	 *   body + header       deepest black, nearly opaque: it anchors the interface
-	 *   JULIUS 3.3 output   the darkest panel, so the bright output reads hardest
-	 *   agent sections      dark glass a shade above the body: Architect / Coder / Reviewer stay distinct
+	 *   the four panels     PROMPT ARCHITECT, CODING AGENT, JULIUS 3.3, INDEPENDENT REVIEWER: one black, the
+	 *                       JULIUS 3.3 plate on all four -- the gold borders and headings keep them distinct
 	 *   command rows        lighter, more translucent glass
 	 *   input               near-opaque black
 	 *
 	 * None is fully opaque: the world stays visible, subdued, behind every layer -- ~14% through the body and
-	 * ~6-8% through the panels that sit on it. Composited over a bright gold-glass world the body reads at
-	 * sRGB ~(38, 32, 20); the old plate (linear tint, 58%) read at ~(115, 88, 48).
+	 * ~6% through the panels that sit on it. Composited over a bright gold-glass world the body reads at
+	 * sRGB ~(38, 32, 20); the old plate (linear tint, 58%) read at ~(115, 88, 48). The three agent panels once
+	 * had their own GRAY glass, Srgb(20, 21, 26) at 48%, which lifted the body instead of deepening it; the
+	 * founder asked for them to match Julius exactly (2026-10-01), so that plate is gone.
 	 */
 	inline FLinearColor JuliusBodyFill()         { return Srgb(4, 5, 7, 0.86f); }
-	inline FLinearColor JuliusOutputFill()       { return Srgb(2, 3, 4, 0.55f); }
-	inline FLinearColor JuliusSectionFill()      { return Srgb(20, 21, 26, 0.48f); }
+	inline FLinearColor JuliusPanelFill()        { return Srgb(2, 3, 4, 0.55f); }
 	inline FLinearColor JuliusRowFill()          { return Srgb(28, 29, 34, 0.40f); }
 	inline FLinearColor JuliusInputFill()        { return Srgb(3, 4, 6, 0.88f); }
 
