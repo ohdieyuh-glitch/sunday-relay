@@ -30,10 +30,7 @@ import {
 } from './coding-agent-fixtures';
 import {
   createJuliusCodingAgentAdapter,
-  createLiveArtifactExchange,
-  diffRef,
-  planRef,
-  testOutputRef,
+  createInMemoryArtifactExchange,
 } from './live-workers';
 
 /**
@@ -90,8 +87,8 @@ function snapshot(): JuliusContextSnapshot {
 const PLAN = JSON.stringify({ objectiveSummary: 'Normalize the label.', steps: ['edit slug.ts'] });
 
 function adapterWith(provider: Parameters<typeof createJuliusCodingAgentAdapter>[0]['provider'], shell = createFakeExecutorShell({})) {
-  const artifacts = createLiveArtifactExchange();
-  artifacts.put(planRef('run-live'), PLAN);
+  const artifacts = createInMemoryArtifactExchange();
+  artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, PLAN);
   return {
     shell,
     adapter: createJuliusCodingAgentAdapter({
@@ -101,12 +98,12 @@ function adapterWith(provider: Parameters<typeof createJuliusCodingAgentAdapter>
   };
 }
 
-const DISPATCH = { taskId: 'build-1', contextId: 'ctx-1', taskType: 'build', contract: CHARGE, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
+const DISPATCH = { taskId: 'build-1', contextId: 'ctx-1', taskType: 'build', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contract: CHARGE, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
 
 /** The same adapter, keeping the exchange so a test can read the bodies back. */
 function adapterKeepingArtifacts(provider: Parameters<typeof createJuliusCodingAgentAdapter>[0]['provider'], shell = createFakeExecutorShell({})) {
-  const artifacts = createLiveArtifactExchange();
-  artifacts.put(planRef('run-live'), PLAN);
+  const artifacts = createInMemoryArtifactExchange();
+  artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, PLAN);
   return {
     artifacts,
     adapter: createJuliusCodingAgentAdapter({
@@ -431,17 +428,59 @@ describe('C6 — what the executor saw is what the record says', () => {
     expect((result.evidence as { status: string }[])[0]!.status).toBe('INCONCLUSIVE');
   });
 
-  it('a diff that could not be captured leaves no stale diff behind for the reviewer', async () => {
+  it('refuses to store anything when the dispatch does not say which attempt it is', async () => {
+    /**
+     * A BODY UNDER A GUESSED GENERATION IS THE SILENT OVERWRITE #285 REMOVED.
+     *
+     * The coordinator populates `attempt` from the claim it already holds, so
+     * absence means the dispatch path itself is broken. Defaulting to 0 would
+     * collide every round of a repair onto one row and look like it worked —
+     * which is exactly what a mutation of this guard did: it passed the entire
+     * suite, because nothing asserted the refusal. This is that assertion.
+     */
+    const { adapter, artifacts } = adapterKeepingArtifacts(createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] }));
+    const { attempt: _dropped, ...withoutAttempt } = DISPATCH;
+
+    const error = await refusalOf(adapter.dispatch(withoutAttempt));
+    expect(error, 'the dispatch must be refused, not completed').not.toBeNull();
+    expect(error?.failureClass).toBe('dispatch_attempt_absent');
+
+    for (const generation of [0, 1, 2]) {
+      expect(
+        await artifacts.get({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: generation }),
+        `nothing was stored under generation ${String(generation)}`,
+      ).toBeNull();
+    }
+  });
+
+  it('a diff that could not be captured leaves no stale diff behind for the reviewer, and does not destroy the round that explains the repair', async () => {
     const provider = createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] });
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), PLAN);
-    artifacts.put('diff:run-live', 'THE PREVIOUS ROUND\'S DIFF');
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, PLAN);
+    // ROUND ONE really happened and its diff is why a repair was asked for.
+    artifacts.seed({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1, role: 'CODING_AGENT' }, 'THE PREVIOUS ROUND\'S DIFF');
+
     const adapter = createJuliusCodingAgentAdapter({
       worker: WORKER, contexts: { snapshotFor: () => snapshot() }, artifacts, projectId: 'prj-live',
       workspacePath: '/workspace/mission', testCommand: 'npm test', shell: createFakeExecutorShell({ diffFails: true }), provider,
     });
-    await adapter.dispatch(DISPATCH);
-    expect(artifacts.get('diff:run-live'), 'absent, so the review refuses instead of judging old work').toBeNull();
+    // ROUND TWO runs and its capture fails.
+    await adapter.dispatch({ ...DISPATCH, attempt: { leaseGeneration: 2 } });
+
+    expect(
+      await artifacts.get({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 2 }),
+      'this round captured nothing, so the review refuses instead of judging old work',
+    ).toBeNull();
+    /**
+     * AND THE ROUND BEFORE IT IS STILL THERE. This is the half the per-run map
+     * could not give: it bought "no stale diff" by ERASING round one, which is
+     * the evidence explaining why round two exists. Attempt-scoped keys mean
+     * absence and history are no longer a trade.
+     */
+    expect(
+      await artifacts.get({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1 }),
+      'the round that explains the repair survives the repair',
+    ).toBe('THE PREVIOUS ROUND\'S DIFF');
   });
 
   it('the coder\'s report is handed to Julius exactly as written — Julius, not the adapter, refuses what it must', async () => {
@@ -482,15 +521,15 @@ describe('what the coder records about the bodies it produced', () => {
    * and no hash at all. TEST evidence carried neither: an exit code, and a
    * sentence about output nobody could identify.
    */
-  it('names the diff and the test output by their whole sha256, and claims no durable reference', async () => {
+  it('names the diff and the test output by their whole sha256, and by a reference that RESOLVES', async () => {
     const { adapter, artifacts } = adapterKeepingArtifacts(createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] }));
     const result = await adapter.dispatch(DISPATCH) as JuliusProviderResult;
     const evidence = result.evidence as Array<Record<string, unknown>>;
     const diff = evidence.find((item) => item.type === 'DIFF')!;
     const test = evidence.find((item) => item.type === 'TEST')!;
 
-    const diffBody = artifacts.get(diffRef('run-live'));
-    const testBody = artifacts.get(testOutputRef('run-live'));
+    const diffBody = await artifacts.get({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1 });
+    const testBody = await artifacts.get({ kind: 'TEST_OUTPUT', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1 });
     expect(testBody, 'the test output body was captured').not.toBeNull();
 
     const sha = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -500,8 +539,22 @@ describe('what the coder records about the bodies it produced', () => {
     expect(test.integrityHash, 'and the test output, which carried nothing before').toBe(sha(testBody!));
     expect(String(test.integrityHash)).toMatch(/^[0-9a-f]{64}$/u);
 
-    expect(diff.artifactRef, 'no durable store holds these yet, so nothing is claimed').toBeNull();
-    expect(test.artifactRef).toBeNull();
+    /**
+     * THIS ASSERTION USED TO SAY THE OPPOSITE, and it was right to.
+     *
+     * `artifactRef` was null because the only name a body had was a key into a
+     * map that died with the process — "no durable store holds these yet, so
+     * nothing is claimed". The bodies are durable and attempt-scoped now, so a
+     * row that still claimed nothing would be withholding a reference that
+     * works. What the reference must NOT be is a run-keyed string like
+     * `diff:run-live`, which is what the old exchange would have offered and
+     * what the next repair round would have overwritten.
+     */
+    expect(test.artifactRef, 'the reference names the ATTEMPT, so a later round cannot take it over')
+      .toBe(`artifact:julius-work-artifact.v1:run-live:build-1:g1:TEST_OUTPUT`);
+    expect(diff.artifactRef === null || String(diff.artifactRef).endsWith(':g1:DIFF'),
+      'and the diff either has its own attempt-scoped reference or none at all').toBe(true);
+    expect(String(test.artifactRef), 'never a per-run key').not.toBe('diff:run-live');
     expect(JSON.stringify(evidence), 'and no digest is left as theatre in a sentence').not.toContain('sha256:');
   });
 });

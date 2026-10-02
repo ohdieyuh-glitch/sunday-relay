@@ -14,7 +14,7 @@ import { JuliusReadPostgresRepository } from '../../src/relay/persistence/julius
 import { runHostedCodingAgent, type HostedQueryFn } from '../hosted-coding-agent/hosted-runner';
 import { createClaudeCodeCodingAgentProvider } from './claude-code-coding-provider';
 import { createFakeExecutorShell } from './coding-agent-fixtures';
-import { createJuliusCodingAgentAdapter, createLiveArtifactExchange, planRef } from './live-workers';
+import { createJuliusCodingAgentAdapter, createInMemoryArtifactExchange } from './live-workers';
 import { createJuliusPostgresRuntimeStore } from './postgres-store';
 
 /**
@@ -171,8 +171,8 @@ async function runMission(input: {
     { entryId: 'brain-1', kind: 'OBJECTIVE', text: 'Normalize the slug.', taskIds: [], allowedRoles: ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'], sensitivity: 'INTERNAL' },
   ]);
 
-  const artifacts = createLiveArtifactExchange();
-  artifacts.put(planRef('run-1'), JSON.stringify({ objectiveSummary: 'Normalize the slug.', steps: ['edit src/slug.ts'] }));
+  const artifacts = createInMemoryArtifactExchange();
+  artifacts.seed({ kind: 'PLAN', runId: 'run-1', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify({ objectiveSummary: 'Normalize the slug.', steps: ['edit src/slug.ts'] }));
   const sdk = fakeSdk(input.sessions);
   const live = createJuliusCodingAgentAdapter({
     worker: CODER,

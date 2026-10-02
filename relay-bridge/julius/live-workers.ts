@@ -32,9 +32,9 @@ import {
   juliusStoreErrorIsTransient,
   reviewChargeFor,
   reviewStageOf,
-  reviewSubjectTaskId,
   type JuliusContextSnapshot,
   type JuliusDispatchAllocation,
+  type JuliusDispatchInput,
   type JuliusProviderAdapter,
   type JuliusProviderResult,
   type JuliusResearchPolicy,
@@ -103,39 +103,36 @@ export interface CompiledContextSource {
 }
 
 /**
- * Bounded text artifacts produced by one Julius-dispatched task and read by a
- * later one (the architect's plan, the coder's diff and base revision). Keys
- * are runId-scoped; values are capped so a runaway payload cannot grow the
- * process without bound.
+ * THE BODIES A LIVE MISSION EXCHANGES, now durable and attempt-exact.
+ *
+ * This was a `Map<string,string>` keyed per RUN, with `plan:<runId>` and
+ * `diff:<runId>` as its keys and a `clear()` to stop one round's failed
+ * capture from being answered with the round before it. Both the map and the
+ * ref helpers are gone: the keys were the defect, because a key that names a
+ * RUN cannot say which ATTEMPT wrote the body under it.
+ *
+ * See `artifact-exchange.ts` for why every read here names an exact attempt
+ * and why there is no `latest` on this port.
  */
-export interface LiveArtifactExchange {
-  put(ref: string, text: string): void;
-  get(ref: string): string | null;
-  /**
-   * Forget a ref. A coder dispatch clears the run's diff and test output before
-   * it runs, so a capture that fails leaves NOTHING for the reviewer rather
-   * than the previous round's diff beside this round's test.
-   */
-  clear?(ref: string): void;
+import type { JuliusArtifactExchange } from './artifact-exchange';
+export type { JuliusArtifactExchange, JuliusArtifactAttempt, JuliusArtifactWrite, InMemoryArtifactExchange } from './artifact-exchange';
+export { ARTIFACT_TEXT_CAP, createDurableArtifactExchange, createInMemoryArtifactExchange } from './artifact-exchange';
+
+/**
+ * THE ATTEMPT THIS DISPATCH IS, or a refusal.
+ *
+ * An adapter that cannot name its own attempt must not write: a body stored
+ * under a guessed generation is exactly the silent overwrite #285's schema
+ * exists to prevent, and guessing `0` would collide every round of a repair
+ * onto one row. The coordinator populates `attempt` from the claim it already
+ * holds, so absence means the dispatch path itself is broken.
+ */
+function attemptOf(dispatch: JuliusDispatchInput): number {
+  if (dispatch.attempt === undefined) {
+    throw new JuliusDispatchError('INVALID_REQUEST', false, 'The dispatch does not say which attempt it is; a body cannot be stored without one.', 'dispatch_attempt_absent');
+  }
+  return dispatch.attempt.leaseGeneration;
 }
-
-export const ARTIFACT_TEXT_CAP = 256 * 1024;
-
-export function createLiveArtifactExchange(): LiveArtifactExchange {
-  const values = new Map<string, string>();
-  return {
-    put(ref, text) { values.set(ref, text.slice(0, ARTIFACT_TEXT_CAP)); },
-    get(ref) { return values.get(ref) ?? null; },
-    clear(ref) { values.delete(ref); },
-  };
-}
-
-export const planRef = (runId: string): string => `plan:${runId}`;
-/** Per SUBJECT TASK, not per run: one mission can hold several guidance packets. */
-export const guidanceRef = (taskId: string): string => `guidance:${taskId}`;
-export const diffRef = (runId: string): string => `diff:${runId}`;
-export const baseRevisionRef = (runId: string): string => `base:${runId}`;
-export const testOutputRef = (runId: string): string => `test-output:${runId}`;
 
 /* -------------------------------------------------------------- helpers */
 
@@ -670,6 +667,38 @@ const providerFacts = (
 });
 
 /**
+ * A PAID ANSWER IS STILL PAID FOR IF STORING IT FAILS: the Prompt Architect's
+ * twin of the Coding Agent's `afterSession`.
+ *
+ * Since PR 12 an answer's body is a DURABLE write (the filesystem and
+ * PostgreSQL) made after the provider answered. Whatever goes wrong there, the
+ * call was already bought, so every failure from here carries the call's facts,
+ * says the runtime started, and is never retried: a retry is a second paid call.
+ * Left raw, an ETIMEDOUT from Julius's own store reads as a retryable provider
+ * TIMEOUT (`normalizeProviderError`) and buys the same answer twice (PR286
+ * review P2-1). The three cases map exactly as `afterSession` maps them:
+ *   - a typed error keeps its code and loses its retry;
+ *   - a store error is Julius's own PERSISTENCE_FAILURE;
+ *   - anything else still carries what the call consumed.
+ */
+const storedAfterCallFailure = (error: unknown, facts: Readonly<Record<string, unknown>>): JuliusDispatchError => {
+  const consumed = { ...facts, runtimeStarted: true };
+  if (error instanceof JuliusDispatchError) {
+    return new JuliusDispatchError(error.code, false, error.safeMessage, error.failureClass, {
+      ...(error.diagnostics ?? {}), ...consumed,
+    });
+  }
+  const storeErrorClass = juliusStoreErrorClass(error);
+  if (storeErrorClass !== null) {
+    return new JuliusDispatchError('PERSISTENCE_FAILURE', false,
+      'Julius could not store the answer it paid for in its own store.', 'persist_after_call',
+      { ...consumed, storeErrorClass });
+  }
+  return new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false,
+    'A step after the paid call failed.', 'after_call_failure', consumed);
+};
+
+/**
  * HOW THE PROMPT ARCHITECT IS PAID FOR: its OpenAI API key, by construction.
  *
  * `createLiveArchitectAdapter` refuses to exist without an `apiKey`, and the Chat
@@ -906,7 +935,7 @@ function contractProposalFromPlan(plan: unknown): Record<string, unknown> | unde
 export function createLiveArchitectAdapter(input: {
   readonly worker: JuliusWorker;
   readonly contexts: CompiledContextSource;
-  readonly artifacts: LiveArtifactExchange;
+  readonly artifacts: JuliusArtifactExchange;
   readonly config: GptArchitectConfig;
   readonly apiKey: string;
   /** The mission's sealed research policy, the same source the mediator decides with. */
@@ -955,7 +984,14 @@ export function createLiveArchitectAdapter(input: {
        * completion gate would let every run through unasked.
        */
       const consulting = dispatch.taskType === 'architecture';
-      const priorPlan = revising || guiding || rebutting || consulting ? input.artifacts.get(planRef(snapshot.runId)) : null;
+      /* THE PLAN THIS MISSION IS WORKING FROM, as the attempt that produced
+         it. `reads.plan` is stated by the kernel that minted this task; an
+         architect asked to revise a plan nobody named has nothing to revise,
+         which the refusal below already says. */
+      const planAttempt = dispatch.reads?.plan;
+      const priorPlan = (revising || guiding || rebutting || consulting) && planAttempt !== undefined
+        ? await input.artifacts.get({ kind: 'PLAN', runId: snapshot.runId, taskId: planAttempt.taskId, leaseGeneration: planAttempt.leaseGeneration })
+        : null;
       if (revising && priorPlan === null) {
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'The prior architect plan is not available to this process; a plan revision without it is refused.', 'prior_plan_unavailable');
       }
@@ -1250,8 +1286,17 @@ export function createLiveArchitectAdapter(input: {
               outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
             }));
         }
-        input.artifacts.put(guidanceRef(dispatch.taskId), outcome.outputText);
+        // The provider's wall time ends here, BEFORE Julius stores the body: the
+        // durable write is Julius's own I/O, not the provider's latency.
         const completedAtMs = Date.now();
+        const guidanceRef = await input.artifacts.put({ kind: 'GUIDANCE', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'PROMPT_ARCHITECT' }, outcome.outputText)
+          .catch((error: unknown) => {
+            throw storedAfterCallFailure(error, planDiagnostics({
+              ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens, completedAtMs),
+              requestedModel: input.config.model, jsonParseable: true, validationPassed: true,
+              attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
+            }));
+          });
         return {
           workerId: input.worker.workerId,
           providerId: input.worker.providerId,
@@ -1276,7 +1321,9 @@ export function createLiveArchitectAdapter(input: {
             status: 'PASSED',
             safeSummary: `Validated guidance packet held for this task (${outcome.outputText.length} chars).`,
             integrityHash: sha256(outcome.outputText),
-            artifactRef: null,
+            // A REFERENCE THAT RESOLVES. #285 built the home; this is the
+            // first row that can point at it.
+            artifactRef: guidanceRef,
             occurredAt: nowIso(),
           }],
           diagnostics: planDiagnostics({
@@ -1318,8 +1365,16 @@ export function createLiveArchitectAdapter(input: {
             outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
           }));
       }
-      input.artifacts.put(planRef(snapshot.runId), outcome.outputText);
+      // The provider's wall time ends BEFORE the durable write (see the guidance path).
       const completedAtMs = Date.now();
+      const planArtifactRef = await input.artifacts.put({ kind: 'PLAN', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'PROMPT_ARCHITECT' }, outcome.outputText)
+        .catch((error: unknown) => {
+          throw storedAfterCallFailure(error, planDiagnostics({
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens, completedAtMs),
+            requestedModel: input.config.model, jsonParseable: true, validationPassed: true,
+            attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
+          }));
+        });
       return {
         workerId: input.worker.workerId,
         providerId: input.worker.providerId,
@@ -1357,13 +1412,15 @@ export function createLiveArchitectAdapter(input: {
            * the sentence above while `integrity_hash` stayed NULL — a digest no
            * reader could compare and no body could ever be checked against.
            *
-           * `artifactRef` is null because the plan lives in this process's
+           * `artifactRef` WAS null because the plan lived in this process's
            * artifact exchange, and a key into a Map that dies with the process
-           * is not a reference a durable row may make. Null says "unknown";
-           * `plan:<runId>` said "look here" to a reader who would find nothing.
+           * is not a reference a durable row may make — `plan:<runId>` said
+           * "look here" to a reader who would find nothing. The body is
+           * durable and attempt-scoped now, so the row carries the reference
+           * that resolves to the exact bytes this digest is of.
            */
           integrityHash: sha256(outcome.outputText),
-          artifactRef: null,
+          artifactRef: planArtifactRef,
           occurredAt: nowIso(),
         }],
         /**
@@ -1486,7 +1543,7 @@ function sessionCostFacts(session: SessionCost): Record<string, unknown> {
 export function createJuliusCodingAgentAdapter(input: {
   readonly worker: JuliusWorker;
   readonly contexts: CompiledContextSource;
-  readonly artifacts: LiveArtifactExchange;
+  readonly artifacts: JuliusArtifactExchange;
   readonly projectId: string;
   readonly workspacePath: string;
   /** The deterministic verification command the mission declares. */
@@ -1501,11 +1558,16 @@ export function createJuliusCodingAgentAdapter(input: {
     adapterId: input.worker.adapterId,
     async dispatch(dispatch): Promise<JuliusProviderResult> {
       const snapshot = requireSnapshot(input.contexts, dispatch.contextId);
-      const plan = input.artifacts.get(planRef(snapshot.runId));
+      /* THE PLAN THIS ATTEMPT IMPLEMENTS, by the attempt that wrote it. The
+         body is durable now, so a resumed run finds it; what a resumed run
+         must NOT do is implement against a plan nobody named. */
+      const planAttempt = dispatch.reads?.plan;
+      const plan = planAttempt === undefined
+        ? null
+        : await input.artifacts.get({ kind: 'PLAN', runId: snapshot.runId, taskId: planAttempt.taskId, leaseGeneration: planAttempt.leaseGeneration });
       if (plan === null) {
-        // The artifact exchange is same-process: after a restart the plan is
-        // gone even though the plan TASK succeeded durably. Implementing without
-        // it would silently downgrade what the mission paid the architect for.
+        // Implementing without it would silently downgrade what the mission
+        // paid the architect for.
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'The architect plan artifact is not available to this process; a resumed run cannot implement without it.');
       }
 
@@ -1571,12 +1633,30 @@ export function createJuliusCodingAgentAdapter(input: {
         ? parseJuliusAttemptStart(before.stdout, restoreRequest)
         : { headRevision: null, baseTree: null, startTree: null, restore: restoreRequest === null ? null : { outcome: 'REFUSED_EXECUTOR' as const, toTree: restoreRequest.toTree, expectedTree: restoreRequest.expectedTree, observedTree: null, removed: 0, restored: 0 } };
       if (attemptStart.headRevision !== null) {
-        input.artifacts.put(baseRevisionRef(snapshot.runId), attemptStart.headRevision);
+        // STILL BEFORE THE SESSION, so a store failure writing the base is
+        // Julius's own and costs nothing: it says no session was launched,
+        // mapped exactly as the attempt start's own store failure above (a
+        // transient one may be retried for free; anything that is not the
+        // store's is passed up as itself, never relabelled).
+        await input.artifacts.put({ kind: 'BASE_REVISION', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'CODING_AGENT' }, attemptStart.headRevision)
+          .catch((error: unknown) => {
+            const storeErrorClass = error instanceof JuliusDispatchError ? null : juliusStoreErrorClass(error);
+            if (storeErrorClass === null) throw error;
+            throw new JuliusDispatchError('PERSISTENCE_FAILURE', juliusStoreErrorIsTransient(storeErrorClass),
+              'Julius could not store the attempt base in its own store; no coding session was launched.',
+              'persist_before_session', { runtimeStarted: false, storeErrorClass });
+          });
       }
-      // A STALE DIFF IS WORSE THAN NONE. The refs are per run; clear this
-      // round's before it runs, so a later capture failure is visible as absent.
-      input.artifacts.clear?.(diffRef(snapshot.runId));
-      input.artifacts.clear?.(testOutputRef(snapshot.runId));
+      /* A STALE DIFF IS STILL WORSE THAN NONE, and the two `clear()` calls
+         that used to stand here are gone because they are no longer what
+         earns it. They existed because the refs were per RUN: this round had
+         to erase the last round's body or a failed capture would be answered
+         with it. Every write below now names THIS attempt and every read
+         names the attempt it is about, so a capture that fails simply writes
+         nothing and the reviewer's read of this attempt resolves to null —
+         absent, refused, visible. Erasure is not merely unnecessary here, it
+         is forbidden: the store is append-only precisely so the round that
+         explains why a repair was needed survives the repair. */
 
       const request = buildJuliusCodingAgentRequest({
         snapshot, taskId: dispatch.taskId, taskType: dispatch.taskType ?? 'build', contextId: dispatch.contextId,
@@ -1736,7 +1816,13 @@ export function createJuliusCodingAgentAdapter(input: {
         command: 'git --no-pager diff || exit 3; git --no-pager diff --stat; git ls-files --others --exclude-standard | while IFS= read -r file; do git --no-pager diff --no-index -- /dev/null "$file"; done; exit 0',
         timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.diff,
       }));
-      if (diff.status === 'SUCCEEDED') input.artifacts.put(diffRef(snapshot.runId), diff.stdout);
+      // THE BODY IS WRITTEN AFTER THE SESSION, SO IT IS INSIDE `afterSession`:
+      // the durable write can fail (filesystem, PostgreSQL), and a raw error from
+      // Julius's own store must neither release the session as free nor read as a
+      // retryable provider failure that buys a second session (PR286 review P2-1).
+      const diffArtifactRef = diff.status === 'SUCCEEDED'
+        ? await afterSession(() => input.artifacts.put({ kind: 'DIFF', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'CODING_AGENT' }, diff.stdout))
+        : null;
       stopIfCancelled('test', outcome.observation);
       /**
        * NO CHECK DECLARED, NO CHECK RUN, NO TEST ROW. A mission whose contract
@@ -1760,7 +1846,7 @@ export function createJuliusCodingAgentAdapter(input: {
       const testOutputText = test === null
         ? 'No deterministic check was declared by the mission contract; none was run.'
         : `exit=${test.exitCode ?? 'unknown'}\n${test.stdout}\n${test.stderr}`;
-      input.artifacts.put(testOutputRef(snapshot.runId), testOutputText);
+      const testArtifactRef = await afterSession(() => input.artifacts.put({ kind: 'TEST_OUTPUT', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'CODING_AGENT' }, testOutputText));
 
       /**
        * WHAT THE WORKER ASKED FOR, HANDED ON EXACTLY AS IT WROTE IT. Julius
@@ -1817,13 +1903,15 @@ export function createJuliusCodingAgentAdapter(input: {
              * sha256 of a body nobody produced, which is exactly the
              * plausible-looking stand-in this column must never hold.
              *
-             * `artifactRef` is null for the reason it is null everywhere on
-             * this path: `diff:<runId>` is a key into this process's exchange,
-             * not a reference that survives it — and, being keyed per RUN, it
-             * is overwritten by the next repair round anyway.
+             * `artifactRef` WAS null for the reason it was null everywhere on
+             * this path: `diff:<runId>` was a key into this process's exchange,
+             * not a reference that survives it — and, being keyed per RUN, the
+             * next repair round overwrote it anyway. It is attempt-scoped and
+             * durable now, so THIS round's diff keeps its own name, and the
+             * reference travels with the digest rather than beside nothing.
              */
             integrityHash: diff.status === 'SUCCEEDED' && workspace.captured ? sha256(diff.stdout) : null,
-            artifactRef: null,
+            artifactRef: workspace.captured ? diffArtifactRef : null,
             occurredAt: nowIso(),
           },
           ...(test === null ? [] : [{
@@ -1833,7 +1921,7 @@ export function createJuliusCodingAgentAdapter(input: {
             // The test output had no digest and no reference at all: the record
             // named an exit code and described output nobody could identify.
             integrityHash: sha256(testOutputText),
-            artifactRef: null,
+            artifactRef: testArtifactRef,
             occurredAt: nowIso(),
           }]),
         ],
@@ -1870,7 +1958,7 @@ export function createJuliusCodingAgentAdapter(input: {
 export function createLiveHostedCodingAdapter(input: {
   readonly worker: JuliusWorker;
   readonly contexts: CompiledContextSource;
-  readonly artifacts: LiveArtifactExchange;
+  readonly artifacts: JuliusArtifactExchange;
   readonly projectId: string;
   readonly apiKey: string;
   readonly requestedModel: string;
@@ -1924,7 +2012,7 @@ export function createLiveHostedCodingAdapter(input: {
 export function createLiveHermesReviewerAdapter(input: {
   readonly worker: JuliusWorker;
   readonly contexts: CompiledContextSource;
-  readonly artifacts: LiveArtifactExchange;
+  readonly artifacts: JuliusArtifactExchange;
   readonly config: HermesConfig;
   readonly testCommand: string;
   /** The mission's sealed research policy, the same source the mediator decides with. */
@@ -1981,19 +2069,51 @@ export function createLiveHermesReviewerAdapter(input: {
        * list rather than restating it means a stage that gains a requirement
        * gains the check with it.
        */
-      const subjectTaskId = reviewSubjectTaskId(dispatch.taskId ?? '');
-      const artifactFor = (requirement: JuliusReviewRequirement): string | null => {
-        if (requirement === 'plan') return input.artifacts.get(planRef(snapshot.runId));
-        if (requirement === 'diff') return input.artifacts.get(diffRef(snapshot.runId));
-        return subjectTaskId === null ? null : input.artifacts.get(guidanceRef(subjectTaskId));
+      /**
+       * A REVIEW IS ABOUT ONE ATTEMPT'S BYTES, AND IT IS TOLD WHICH.
+       *
+       * `reads.subject` is the attempt under review, stated by the kernel
+       * that minted this review from the claim it was verifying. The two
+       * alternatives are both silent-wrong-answer machines:
+       *
+       *   `reviewSubjectTaskId(dispatch.taskId)` recovers the subject by
+       *   slicing `:review` off a string. It names a TASK and can never name
+       *   an attempt, and it turns a task-id rename into a review of nothing
+       *   that still reports a verdict.
+       *
+       *   "the latest DIFF" hands back the previous round whenever this
+       *   round's capture failed, so the reviewer judges attempt one and the
+       *   record says it judged attempt two.
+       *
+       * With the attempt named, a body this attempt never wrote resolves to
+       * null and the refusals below fire. That is the same fail-closed
+       * behaviour `clear()` used to buy on the write side, earned here
+       * instead, where an append-only store can keep every round.
+       */
+      const subject = dispatch.reads?.subject;
+      const planAttempt = dispatch.reads?.plan;
+      const artifactFor = async (requirement: JuliusReviewRequirement): Promise<string | null> => {
+        if (requirement === 'plan') {
+          return planAttempt === undefined ? null : input.artifacts.get({ kind: 'PLAN', runId: snapshot.runId, taskId: planAttempt.taskId, leaseGeneration: planAttempt.leaseGeneration });
+        }
+        if (subject === undefined) return null;
+        return input.artifacts.get({
+          kind: requirement === 'diff' ? 'DIFF' : 'GUIDANCE',
+          runId: snapshot.runId,
+          taskId: subject.taskId,
+          leaseGeneration: subject.leaseGeneration,
+        });
       };
+      /** A body the SUBJECT attempt produced, or null. Never another attempt's. */
+      const subjectArtifact = async (kind: 'DIFF' | 'TEST_OUTPUT' | 'BASE_REVISION'): Promise<string | null> =>
+        subject === undefined ? null : input.artifacts.get({ kind, runId: snapshot.runId, taskId: subject.taskId, leaseGeneration: subject.leaseGeneration });
       const REQUIREMENT_REFUSAL: Readonly<Record<JuliusReviewRequirement, { readonly message: string; readonly shape: string }>> = {
         plan: {
-          // The artifact exchange is same-process. After a restart the plan is
-          // gone even though its task succeeded durably, and a review dispatched
-          // without it would be a review of NOTHING whose approval could
-          // complete the mission. Refuse instead: a resumed run fails visibly
-          // rather than completing falsely. (Independent review finding F1.)
+          // A RESTART NO LONGER LOSES THIS — the body is durable and a resumed
+          // run reads it back. What this still refuses is the case that
+          // matters now: a review that was told no plan attempt, or told one
+          // that wrote nothing. Approving there would be approving NOTHING and
+          // could complete the mission on it. (Independent review finding F1.)
           message: 'The architect plan artifact is not available to this process; an independent review of nothing is refused.',
           shape: 'reviewer_plan_absent',
         },
@@ -2001,7 +2121,9 @@ export function createLiveHermesReviewerAdapter(input: {
           // AN EMPTY DIFF IS NO DIFF. The exchange stores whatever `git diff`
           // printed, so a coder that edited nothing leaves an empty string —
           // which is not an implementation, and a review of it is the plan
-          // review's mistake in the other direction.
+          // review's mistake in the other direction. An attempt whose capture
+          // FAILED leaves no row at all and lands here too, which is the
+          // stale-diff hole closing: absent, never the round before it.
           message: 'No workspace diff artifact is available to this process; an implementation review of nothing is refused.',
           shape: 'reviewer_implementation_absent',
         },
@@ -2011,27 +2133,23 @@ export function createLiveHermesReviewerAdapter(input: {
         },
       };
       for (const requirement of charge.requires) {
-        const artifact = artifactFor(requirement);
+        const artifact = await artifactFor(requirement);
         if (artifact === null || artifact.trim() === '') {
           const refusal = REQUIREMENT_REFUSAL[requirement];
           throw new JuliusDispatchError('INVALID_REQUEST', false, refusal.message, refusal.shape);
         }
       }
-      const planArtifact = input.artifacts.get(planRef(snapshot.runId));
-      const guidanceArtifact = charge.subject === 'GUIDANCE' ? artifactFor('guidance') : null;
-      const diffArtifact = charge.subject === 'IMPLEMENTATION' ? input.artifacts.get(diffRef(snapshot.runId)) : null;
+      const planArtifact = await artifactFor('plan');
+      const guidanceArtifact = charge.subject === 'GUIDANCE' ? await artifactFor('guidance') : null;
+      const diffArtifact = charge.subject === 'IMPLEMENTATION' ? await subjectArtifact('DIFF') : null;
+      /* THE SAME TWO REFUSALS, RE-ASSERTED ON THE BODIES ACTUALLY BUILT INTO
+         THE PACKET. `charge.requires` above checks what the STAGE declares it
+         needs; these check what this packet is about to carry, and the two are
+         only the same while the stage table and the packet agree. Keeping both
+         is what made the guidance gap visible rather than silent. */
       if (planArtifact === null) {
-        // The artifact exchange is same-process. After a restart the plan is
-        // gone even though its task succeeded durably, and a review dispatched
-        // without it would be a review of NOTHING whose approval could
-        // complete the mission. Refuse instead: a resumed run fails visibly
-        // rather than completing falsely. (Independent review finding F1.)
         throw new JuliusDispatchError('INVALID_REQUEST', false, 'The architect plan artifact is not available to this process; an independent review of nothing is refused.', 'reviewer_plan_absent');
       }
-      // AN EMPTY DIFF IS NO DIFF. The exchange stores whatever `git diff`
-      // printed, so a coder that edited nothing leaves an empty string — which
-      // is not an implementation, and a review of it is the plan review's
-      // mistake in the other direction.
       if (charge.subject === 'IMPLEMENTATION' && (diffArtifact === null || diffArtifact.trim() === '')) {
         throw new JuliusDispatchError('INVALID_REQUEST', false, 'No workspace diff artifact is available to this process; an implementation review of nothing is refused.', 'reviewer_implementation_absent');
       }
@@ -2077,13 +2195,13 @@ export function createLiveHermesReviewerAdapter(input: {
         ...(guidanceArtifact === null ? {} : { guidanceJson: guidanceArtifact }),
         acceptanceCriteria: [...snapshot.acceptanceCriterionIds],
         priorFindings,
-        baseRevision: input.artifacts.get(baseRevisionRef(snapshot.runId)) ?? 'unknown',
+        baseRevision: await subjectArtifact('BASE_REVISION') ?? 'unknown',
         artifactDigest: sha256(charge.subject === 'IMPLEMENTATION' ? unifiedDiff : planArtifact),
         changedFiles: [...new Set([...unifiedDiff.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((match) => match[1]))],
         unifiedDiff,
         changedFileContents: '',
         testCommand: input.testCommand,
-        testOutput: charge.subject === 'IMPLEMENTATION' ? (input.artifacts.get(testOutputRef(snapshot.runId)) ?? '') : '',
+        testOutput: charge.subject === 'IMPLEMENTATION' ? (await subjectArtifact('TEST_OUTPUT') ?? '') : '',
         relayEvidence: [...snapshot.evidenceIds],
       };
       /**

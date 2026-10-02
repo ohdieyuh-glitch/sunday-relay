@@ -26,7 +26,7 @@ import {
   reviewerOperativeTimeoutMs,
   reviewerReaskWithinDeadline,
 } from '../reviewer-deadline';
-import { createLiveArtifactExchange, createLiveHermesReviewerAdapter, planRef } from './live-workers';
+import { createInMemoryArtifactExchange, createLiveHermesReviewerAdapter } from './live-workers';
 
 const LIVE_ENV: Record<string, string> = {
   RELAY_HERMES_PROVIDER: 'xai',
@@ -102,8 +102,8 @@ interface Rig {
 }
 
 function rig(outcomes: readonly HermesOutcome[], options: { readonly onSleep?: () => void; readonly transientReaskLimit?: number } = {}): Rig {
-  const artifacts = createLiveArtifactExchange();
-  artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+  const artifacts = createInMemoryArtifactExchange();
+  artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
   const calls: Rig['calls'] = [];
   const sleeps: number[] = [];
   let call = 0;
@@ -125,7 +125,7 @@ function rig(outcomes: readonly HermesOutcome[], options: { readonly onSleep?: (
   return {
     calls, sleeps,
     dispatch: (signal) => adapter.dispatch({
-      taskId: 'plan-1:review', contextId: 'ctx-1', taskType: 'review:plan',
+      taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-1', taskType: 'review:plan',
       allocation: { usdMicros: 300_000, basis: 'ESTIMATE', policyVersion: 'julius-allocation.v1' },
       ...(signal === undefined ? {} : { signal }),
     }),
@@ -265,8 +265,8 @@ describe('the live reviewer adapter re-asks a transient status once, inside the 
   });
 
   it('an exhausted mission buys no re-ask, the same way it buys no correction', async () => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     let calls = 0;
     const adapter = createLiveHermesReviewerAdapter({
       worker, contexts: { snapshotFor: () => snapshot('plan-1:review') }, artifacts,
@@ -275,7 +275,7 @@ describe('the live reviewer adapter re-asks a transient status once, inside the 
       sleep: async () => {},
     });
     const failure = await failureOf(adapter.dispatch({
-      taskId: 'plan-1:review', contextId: 'ctx-1', taskType: 'review:plan',
+      taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-1', taskType: 'review:plan',
       allocation: { usdMicros: 0, basis: 'EXHAUSTED', policyVersion: 'julius-allocation.v1' },
     }));
     expect(calls).toBe(1);

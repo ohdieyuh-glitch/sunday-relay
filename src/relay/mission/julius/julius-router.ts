@@ -754,7 +754,33 @@ export interface JuliusDispatchWorkspace{readonly restoreToTree:string;readonly 
  * explained why the repair existed.
  */
 export interface JuliusDispatchAttempt{readonly leaseGeneration:number;}
-export interface JuliusDispatchInput{readonly taskId:string;readonly contextId:string;readonly taskType?:string;readonly allocation?:JuliusDispatchAllocation;readonly contract?:JuliusContractReviewCharge;readonly signal?:AbortSignal;readonly workspace?:JuliusDispatchWorkspace;readonly attempt?:JuliusDispatchAttempt;}
+/**
+ * WHICH ATTEMPT'S BODIES THIS DISPATCH MAY READ.
+ *
+ * A worker that reads another task's body — a coder reading the plan, a
+ * reviewer reading the diff it judges — has to name the ATTEMPT, not just the
+ * task, and it cannot know one on its own. Two ways of guessing were tried
+ * and both are defects rather than shortcuts:
+ *
+ *   deriving the subject from the reviewer's own task id by string surgery,
+ *   which turns a rename into a silent review of the wrong thing; and
+ *
+ *   asking the store for the LATEST body of that kind, which hands back the
+ *   previous round whenever this round's capture failed — a review of attempt
+ *   one recorded as a review of attempt two.
+ *
+ * So the kernel that MINTED the task states it, the coordinator carries it,
+ * and the adapter reads exactly what it was given. Absent means this dispatch
+ * reads nobody else's work; it never means "find something suitable".
+ */
+export interface JuliusWorkAttemptRef{readonly taskId:string;readonly leaseGeneration:number;}
+export interface JuliusDispatchReads{
+ /** The attempt this dispatch is ABOUT — a review's subject. */
+ readonly subject?:JuliusWorkAttemptRef;
+ /** The attempt that produced the plan in force for this mission. */
+ readonly plan?:JuliusWorkAttemptRef;
+}
+export interface JuliusDispatchInput{readonly taskId:string;readonly contextId:string;readonly taskType?:string;readonly allocation?:JuliusDispatchAllocation;readonly contract?:JuliusContractReviewCharge;readonly signal?:AbortSignal;readonly workspace?:JuliusDispatchWorkspace;readonly attempt?:JuliusDispatchAttempt;readonly reads?:JuliusDispatchReads;}
 export interface JuliusProviderAdapter{readonly adapterId:string;dispatch(input:JuliusDispatchInput):Promise<JuliusProviderResult>;}
 export interface JuliusProviderHealth{readonly providerId:string;readonly state:'CLOSED'|'OPEN'|'HALF_OPEN';readonly consecutiveFailures:number;readonly openedAt:string|null;readonly active:number;readonly concurrencyLimit:number;}
 export class JuliusProviderHealthRegistry{private readonly values=new Map<string,JuliusProviderHealth>();set(value:JuliusProviderHealth){this.values.set(value.providerId,structuredClone(value));}available(providerId:string){const value=this.values.get(providerId);return value===undefined||(value.state!=='OPEN'&&value.active<value.concurrencyLimit);}get(providerId:string){const value=this.values.get(providerId);return value?structuredClone(value):null;}}

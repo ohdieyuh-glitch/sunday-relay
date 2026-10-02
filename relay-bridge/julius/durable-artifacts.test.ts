@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { createJuliusDurableArtifacts } from './durable-artifacts';
+import { createJuliusDurableArtifacts, juliusWorkArtifactRoot } from './durable-artifacts';
 import { LocalJuliusArtifactStore } from '../../src/relay/workspace/julius-tools/local-artifact-store';
 import { createJuliusWorkArtifactMemoryStore, JuliusWorkArtifactConflict, juliusWorkArtifactRef } from '../../src/relay/mission/julius';
 
@@ -194,5 +194,32 @@ describe('what the store refuses', () => {
     await lying.recordWorkArtifact({ ...record!, contentHash: 'f'.repeat(64) });
     const reader = createJuliusDurableArtifacts({ content: durable.content, records: lying, tenancy: { tenantId: 'tenant-1' } });
     await expect(reader.get(scope())).rejects.toThrow(/julius_work_artifact_integrity_failure/u);
+  });
+});
+
+/**
+ * WHERE THE BODIES LIVE (the PR286 review's P2-4). An unset GitHub variable
+ * expands to the EMPTY string, and `??` took it as a root: bodies went relative to
+ * the working directory, where a restart from another directory finds nothing.
+ */
+describe('where a mission\'s bodies live on this host', () => {
+  const fallback = join(tmpdir(), 'julius-work-artifacts', 'mission-1');
+
+  it('an unset, empty or blank root is the per-mission temp directory, never the working directory', () => {
+    expect(juliusWorkArtifactRoot(undefined, 'mission-1')).toBe(fallback);
+    expect(juliusWorkArtifactRoot('', 'mission-1'), 'what an unset GitHub variable expands to').toBe(fallback);
+    expect(juliusWorkArtifactRoot('   ', 'mission-1')).toBe(fallback);
+  });
+
+  it('an absolute root is used exactly as the operator gave it', () => {
+    const mounted = join(tmpdir(), 'mounted-durable-storage');
+    expect(juliusWorkArtifactRoot(mounted, 'mission-1')).toBe(mounted);
+  });
+
+  it('a relative root is refused before anything is written, and the refusal does not echo it', () => {
+    for (const relative of ['artifacts', './artifacts', '../elsewhere']) {
+      expect(() => juliusWorkArtifactRoot(relative, 'mission-1')).toThrow(/^julius_work_artifact_root_not_absolute:/u);
+      expect(() => juliusWorkArtifactRoot(relative, 'mission-1')).not.toThrow(new RegExp(relative.replace(/[.]/gu, '\\.'), 'u'));
+    }
   });
 });

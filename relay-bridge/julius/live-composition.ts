@@ -152,7 +152,7 @@ import {
   createLiveHermesReviewerAdapter,
   createLiveHostedCodingAdapter,
   type CompiledContextSource,
-  type LiveArtifactExchange,
+  type JuliusArtifactExchange,
   type ResearchPolicySource,
 } from './live-workers';
 import type { ShellEffectPort, TaskClaimSource } from './executor-effects';
@@ -326,7 +326,7 @@ export function resolveLiveWorkers(options: {
   readonly workspacePath: string;
   readonly testCommand: string;
   readonly contexts: CompiledContextSource;
-  readonly artifacts: LiveArtifactExchange;
+  readonly artifacts: JuliusArtifactExchange;
   /** Absent shell = no executor = no coding agent. Never a local fallback. */
   readonly shell: ShellEffectPort | null;
   /**

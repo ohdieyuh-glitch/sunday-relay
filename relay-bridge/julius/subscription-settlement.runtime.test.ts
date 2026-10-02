@@ -14,7 +14,7 @@ import type { ClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
 import { runHostedCodingAgent, type HostedQueryFn } from '../hosted-coding-agent/hosted-runner';
 import { createClaudeCodeCodingAgentProvider } from './claude-code-coding-provider';
 import { createFakeExecutorShell } from './coding-agent-fixtures';
-import { createJuliusCodingAgentAdapter, createLiveArtifactExchange, planRef, type LiveArtifactExchange } from './live-workers';
+import { createJuliusCodingAgentAdapter, createInMemoryArtifactExchange, type InMemoryArtifactExchange } from './live-workers';
 
 /**
  * A SUBSCRIPTION-BACKED CODER DISPATCH, FROM THE PROVIDER TO THE LEDGER.
@@ -127,11 +127,14 @@ const snapshot = (): JuliusContextSnapshot => ({
     blocks: [{ kind: 'OBJECTIVE', text: 'OBJECTIVE: normalize the mission label.' }], truncated: false,
   },
 });
-const DISPATCH = { taskId: 'build-1', contextId: 'ctx-1', taskType: 'build', contract: CHARGE, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
+const DISPATCH = { taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-1', taskType: 'build', contract: CHARGE, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
 
-const adapterOver = (mode: ClaudeAuthMode | undefined, sessions: readonly Session[], shell =createFakeExecutorShell({ diff: DIFF_TEXT, status: [' M src/slug.ts'], testExitCode: 0 })) => {
-  const artifacts = createLiveArtifactExchange();
-  artifacts.put(planRef('run-live'), JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
+const adapterOver = (
+  mode: ClaudeAuthMode | undefined, sessions: readonly Session[],
+  shell = createFakeExecutorShell({ diff: DIFF_TEXT, status: [' M src/slug.ts'], testExitCode: 0 }),
+  artifacts: InMemoryArtifactExchange = createInMemoryArtifactExchange(),
+) => {
+  artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
   const sdk = fakeSdk(sessions);
   const adapter = createJuliusCodingAgentAdapter({
     worker: ADAPTER_WORKER, contexts: { snapshotFor: () => snapshot() }, artifacts, projectId: 'prj-live',
@@ -282,6 +285,54 @@ describe('the adapter reports a subscription dispatch as no bill, at every endin
     expect(settled, 'not relabelled as Julius\'s own store failure').toBeInstanceOf(TypeError);
     expect(sdk.calls.count, 'no session was launched').toBe(0);
   });
+
+  /**
+   * PR 12: THE BODIES ARE JULIUS'S OWN WRITES, AND THE SESSION IS STILL PAID FOR
+   * (the PR286 review's P2-1). The diff, test-output and base bodies became
+   * durable writes (the filesystem and PostgreSQL). A store that refuses one
+   * after the session must be read exactly as the executor's own store was
+   * above, never as a provider failure that buys a second session. Before the
+   * session it costs nothing, and says so.
+   */
+  const failingOn = (kind: string, refusal: () => Error): InMemoryArtifactExchange => {
+    const inner = createInMemoryArtifactExchange();
+    return { ...inner, put: (attempt, text) => (attempt.kind === kind ? Promise.reject(refusal()) : inner.put(attempt, text)) };
+  };
+  const ETIMEDOUT = () => Object.assign(new Error('read ETIMEDOUT'), { code: 'ETIMEDOUT' });
+  const goodShell = () => createFakeExecutorShell({ diff: DIFF_TEXT, status: [' M src/slug.ts'], testExitCode: 0 });
+
+  it('PR 12: a socket ETIMEDOUT storing the DIFF body after the session is Julius\'s, not retried, and keeps the session\'s cost', async () => {
+    const { adapter, sdk } = adapterOver('CLAUDE_SUBSCRIPTION', [SUCCESS], goodShell(), failingOn('DIFF', ETIMEDOUT));
+    const refusal = await refusalOf(adapter.dispatch(DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'PERSISTENCE_FAILURE', retryable: false });
+    expect(refusal.diagnostics).toMatchObject({ ...sessionFacts, storeErrorClass: 'connection' });
+    expect(sdk.calls.count, 'one paid session, never a second').toBe(1);
+  });
+
+  it('PR 12: a socket ETIMEDOUT storing the TEST output after the session is Julius\'s, not retried, and keeps the session\'s cost', async () => {
+    const { adapter, sdk } = adapterOver('CLAUDE_SUBSCRIPTION', [SUCCESS], goodShell(), failingOn('TEST_OUTPUT', ETIMEDOUT));
+    const refusal = await refusalOf(adapter.dispatch(DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'PERSISTENCE_FAILURE', retryable: false });
+    expect(refusal.diagnostics).toMatchObject({ ...sessionFacts, storeErrorClass: 'connection' });
+    expect(sdk.calls.count, 'one paid session, never a second').toBe(1);
+  });
+
+  it('PR 12: BEFORE the session, a transient store error storing the BASE says nothing ran, and may be retried for free', async () => {
+    const { adapter, sdk } = adapterOver('CLAUDE_SUBSCRIPTION', [SUCCESS], goodShell(),
+      failingOn('BASE_REVISION', () => Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })));
+    const refusal = await refusalOf(adapter.dispatch(DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'PERSISTENCE_FAILURE', retryable: true });
+    expect(refusal.diagnostics).toMatchObject({ runtimeStarted: false, storeErrorClass: 'connection' });
+    expect(sdk.calls.count, 'no session was launched').toBe(0);
+  });
+
+  it('PR 12: BEFORE the session, a raw error storing the BASE that is not the store\'s is passed up as itself', async () => {
+    const { adapter, sdk } = adapterOver('CLAUDE_SUBSCRIPTION', [SUCCESS], goodShell(),
+      failingOn('BASE_REVISION', () => new TypeError('Cannot read properties of undefined')));
+    const settled = await adapter.dispatch(DISPATCH as never).then(() => null, (error: unknown) => error);
+    expect(settled, 'not relabelled as Julius\'s own store failure').toBeInstanceOf(TypeError);
+    expect(sdk.calls.count, 'no session was launched').toBe(0);
+  });
 });
 
 /* =================================================== the kernel's ledger */
@@ -349,8 +400,8 @@ async function runMission(mode: ClaudeAuthMode | undefined, sessions: readonly S
     { entryId: 'brain-1', kind: 'OBJECTIVE', text: 'Normalize the slug.', taskIds: [], allowedRoles: ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'], sensitivity: 'INTERNAL' },
   ]);
 
-  const artifacts: LiveArtifactExchange = createLiveArtifactExchange();
-  artifacts.put(planRef('run-1'), JSON.stringify({ objectiveSummary: 'Normalize the slug.', steps: ['edit src/slug.ts'] }));
+  const artifacts: InMemoryArtifactExchange = createInMemoryArtifactExchange();
+  artifacts.seed({ kind: 'PLAN', runId: 'run-1', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify({ objectiveSummary: 'Normalize the slug.', steps: ['edit src/slug.ts'] }));
   const sdk = fakeSdk(sessions);
   const live = createJuliusCodingAgentAdapter({
     worker: CODER,

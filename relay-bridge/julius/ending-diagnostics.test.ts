@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { createLiveArtifactExchange, createLiveArchitectAdapter } from './live-workers';
+import { createInMemoryArtifactExchange, createLiveArchitectAdapter } from './live-workers';
 import { architectWorker } from './live-composition';
 import { JULIUS_CONTEXT_COMPILER_VERSION } from '../../src/relay/mission/julius';
 import type { JuliusContextSnapshot } from '../../src/relay/mission/julius';
@@ -113,7 +113,7 @@ function planSnapshot(taskId: string): JuliusContextSnapshot {
 
 /** Provider-free: the connector is replaced by a scripted outcome. Nothing is
     contacted and nothing is spent; these assert the RECORD, never a real run. */
-const architect = (outcome: GptRunOutcome, artifacts = createLiveArtifactExchange()) =>
+const architect = (outcome: GptRunOutcome, artifacts = createInMemoryArtifactExchange()) =>
   createLiveArchitectAdapter({
     worker: architectWorker({}),
     contexts: { snapshotFor: () => planSnapshot('plan-1:task') },
@@ -137,14 +137,14 @@ const PROVIDER_FACTS = [
 
 const dispatched = async (outcome: GptRunOutcome): Promise<Record<string, unknown>> => {
   const result = await architect(outcome).dispatch({
-    taskId: 'plan-1:task', contextId: 'ctx-diag-1', taskType: 'plan',
+    taskId: 'plan-1:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-diag-1', taskType: 'plan',
   });
   return (result.diagnostics ?? {}) as Record<string, unknown>;
 };
 
 const refused = async (outcome: GptRunOutcome): Promise<Record<string, unknown>> => {
   try {
-    await architect(outcome).dispatch({ taskId: 'plan-1:task', contextId: 'ctx-diag-1', taskType: 'plan' });
+    await architect(outcome).dispatch({ taskId: 'plan-1:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-diag-1', taskType: 'plan' });
   } catch (error) {
     return ((error as { diagnostics?: unknown }).diagnostics ?? {}) as Record<string, unknown>;
   }
@@ -238,8 +238,10 @@ describe('B · 7–8 · no site can report a subset', () => {
     const calls = callBodies(source(), 'planDiagnostics({');
     // Ten since the architect gained a rebuttal branch and an architecture
     // consultation: each one's refusal and success report through the same one
-    // constructor.
-    expect(calls.length, 'the call sites must still be findable').toBe(10);
+    // constructor. Twelve since PR 12: a PLAN or GUIDANCE body Julius cannot
+    // store after the paid call fails through the same constructor too
+    // (`storedAfterCallFailure`), and the loop below holds both to it.
+    expect(calls.length, 'the call sites must still be findable').toBe(12);
     for (const body of calls) {
       expect(body, `a planDiagnostics call omits providerFacts: ${body.slice(0, 80)}`)
         .toContain('...providerFacts(');
@@ -303,7 +305,7 @@ describe('D · 13 · the architect says how it is paid for, on every ending', ()
     // amount stays unknown — Chat Completions never states a price — and the
     // ledger can now say "API-billed, amount not reported" instead of UNKNOWN.
     const result = await architect(succeeded(JSON.stringify(VALID_PLAN))).dispatch({
-      taskId: 'plan-1:task', contextId: 'ctx-diag-1', taskType: 'plan',
+      taskId: 'plan-1:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-diag-1', taskType: 'plan',
     });
     expect(result.usage).toMatchObject({ costBasis: 'UNKNOWN', billingPath: 'API_BILLED' });
     expect((result.usage as Record<string, unknown>).usdMicros, 'the path is known; the amount is not').toBeUndefined();

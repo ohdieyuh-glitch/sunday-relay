@@ -278,3 +278,59 @@ describe('the result reads the attempt the decision read', () => {
     expect(view.deliverables).toEqual([]);
   });
 });
+
+/**
+ * PR 12: A REFERENCE IS NOT A BODY THIS READER CAN HAND OUT (the PR286 review's
+ * P2-2). PR 12 made every live deliverable's reference durable, while the body
+ * stays with the mission job's own store. A reader with no body path (the
+ * bridge, today) must say `retained: false` for a deliverable whose reference
+ * is present, or every one of them claims a body nobody here can fetch.
+ */
+describe('retained means THIS reader can fetch the body', () => {
+  const now = '2026-10-01T12:00:00.000Z';
+  const later = '2026-10-01T13:00:00.000Z';
+  const viewWith = async (bodiesResolvable: boolean | undefined) => {
+    const store = createJuliusMemoryStore();
+    store.seedRun(RUN);
+    store.seedTask('run-1', task({ taskId: 'build-1', role: 'CODING_AGENT', taskType: 'build', requiredEvidenceTypes: ['TEST'], state: 'RUNNABLE' }));
+    store.seedCriteria('run-1', [{ criterionId: 'AC-1', description: 'The suite passes.', requiredEvidenceTypes: ['TEST'] as never }]);
+    const [claim] = await store.claimRunnable({ owner: 'coder', now, leaseExpiresAt: later, limit: 1, projectId: 'prj-1' });
+    const rows = [
+      { type: 'TEST' as const, artifactRef: 'julius-work-artifact:prj-1:run-1:build-1:1:TEST_OUTPUT', integrityHash: `sha256:${'1'.repeat(64)}` },
+      { type: 'DIFF' as const, artifactRef: null, integrityHash: null },
+    ];
+    for (const [index, row] of rows.entries()) {
+      expect(await store.appendEvidence({
+        runId: 'run-1', projectId: 'prj-1', idempotencyKey: `body-${String(index)}`,
+        evidence: {
+          evidenceId: `build-1:${String(claim!.leaseGeneration)}:${String(index)}`, missionId: 'msn-1', taskId: 'build-1', workerId: 'coder',
+          type: row.type, status: 'PASSED', safeSummary: `${row.type} recorded`, artifactRef: row.artifactRef, integrityHash: row.integrityHash, occurredAt: now,
+        },
+      })).toBe(true);
+    }
+    expect(await store.finishTask({ taskId: 'build-1', owner: 'coder', leaseGeneration: claim!.leaseGeneration, state: 'SUCCEEDED', now })).toBe(true);
+    const api = new JuliusRuntimeApi({
+      store: store as never, timeline: store as never, approvers: { mayApprove: async () => false }, clock: { now: () => now } as never,
+      ...(bodiesResolvable === undefined ? {} : { bodiesResolvable }),
+    });
+    const result = await api.inspectResult(IDENTITY, 'run-1');
+    if (!result.ok) throw new Error(result.reason);
+    return result.value;
+  };
+  const retainedBy = (view: JuliusMissionResultView) =>
+    Object.fromEntries(view.deliverables.map((item) => [item.type, { referenced: item.artifactRef !== null, retained: item.retained }]));
+
+  it('a reader with no body path retains nothing, however durable the reference: the bridge today', async () => {
+    expect(retainedBy(await viewWith(undefined))).toEqual({
+      TEST: { referenced: true, retained: false },
+      DIFF: { referenced: false, retained: false },
+    });
+  });
+
+  it('a reader that can fetch bodies retains exactly the referenced ones, and never one without a reference', async () => {
+    expect(retainedBy(await viewWith(true))).toEqual({
+      TEST: { referenced: true, retained: true },
+      DIFF: { referenced: false, retained: false },
+    });
+  });
+});

@@ -36,6 +36,7 @@ import type {
   JuliusMissionState,
   JuliusRecordedDecision,
   JuliusTask,
+  JuliusTaskRecord,
   JuliusVerificationDecision,
   JuliusWorkerRole,
 } from './julius-runtime';
@@ -410,7 +411,7 @@ export interface JuliusBudgetPort {
  * be invoked after execution, and it is a read port rather than a new table.
  */
 export interface JuliusRuntimeReader {
-  tasksForRun(runId: string, projectId: string): Promise<readonly JuliusTask[]>;
+  tasksForRun(runId: string, projectId: string): Promise<readonly JuliusTaskRecord[]>;
   evidenceForRun(runId: string, projectId: string): Promise<readonly JuliusEvidence[]>;
   findingsForRun(runId: string, projectId: string): Promise<readonly JuliusReviewerFinding[]>;
   criteriaForRun(runId: string, projectId: string): Promise<readonly JuliusAcceptanceCriterion[]>;

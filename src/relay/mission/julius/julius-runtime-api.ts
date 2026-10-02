@@ -169,7 +169,13 @@ export interface JuliusMissionResultView {
     readonly safeSummary: string;
     readonly artifactRef: string | null;
     readonly integrityHash: string | null;
-    /** False when no body was retained: a reference nobody can resolve is not one. */
+    /**
+     * True only when THIS reader can fetch the body: a reference nobody here can
+     * resolve is not one. PR 12 made live references durable, but each body lives
+     * with the mission job's own store, so a composition with no body read path
+     * (the bridge, today) says false even where the reference is present
+     * (`JuliusRuntimeApiDependencies.bodiesResolvable`).
+     */
     readonly retained: boolean;
     readonly occurredAt: string;
   }[];
@@ -295,6 +301,15 @@ export interface JuliusRuntimeApiDependencies {
    */
   readonly events?: JuliusEventWriter;
   readonly ids?: JuliusIdFactory;
+  /**
+   * WHETHER THIS COMPOSITION CAN HAND A BODY OUT BY ITS REFERENCE. Absent means
+   * no, and that is the honest default: the bridge composes this API over
+   * PostgreSQL alone, with no content store and no body endpoint, while the
+   * bodies sit with the mission job's store on another host. Set it only where
+   * a body read path exists, or the result view claims bodies nobody here can
+   * fetch (the PR286 review's P2-2).
+   */
+  readonly bodiesResolvable?: boolean;
 }
 
 /** The most timeline entries one page will carry. */
@@ -465,7 +480,7 @@ export class JuliusRuntimeApi {
         .map((item) => ({
           evidenceId: item.evidenceId, taskId: item.taskId, type: item.type,
           safeSummary: item.safeSummary, artifactRef: item.artifactRef, integrityHash: item.integrityHash,
-          retained: item.artifactRef !== null,
+          retained: item.artifactRef !== null && this.deps.bodiesResolvable === true,
           occurredAt: item.occurredAt,
         })),
       outstandingFindings: findings

@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { isAbsolute, join } from 'node:path';
 
 import {
   JuliusWorkArtifactConflict,
@@ -33,6 +35,28 @@ import {
  * only the attempt scope the worker path needs and the row that lets a later
  * process find one.
  */
+
+/**
+ * WHERE A MISSION'S BODIES LIVE ON THIS HOST (the PR286 review's P2-4).
+ *
+ * The operator's `JULIUS_WORK_ARTIFACT_ROOT` when it names a directory,
+ * otherwise a per-mission directory under the system temp root.
+ *
+ * An EMPTY value is not a root. It is what an unset `${{ vars.X }}` expands to,
+ * and a store rooted at `''` would write bodies relative to whatever the
+ * working directory happens to be, where a restart from another directory
+ * never finds them. A RELATIVE value is refused for the same reason, before
+ * anything is written, rather than resolved against a directory nobody chose.
+ * The value itself is never printed.
+ */
+export function juliusWorkArtifactRoot(configured: string | undefined, missionId: string): string {
+  const value = (configured ?? '').trim();
+  if (value === '') return join(tmpdir(), 'julius-work-artifacts', missionId);
+  if (!isAbsolute(value)) {
+    throw new Error('julius_work_artifact_root_not_absolute: JULIUS_WORK_ARTIFACT_ROOT must name an absolute directory');
+  }
+  return value;
+}
 
 /** The bytes as this exchange stores them. Text, because every body it holds is text. */
 const CONTENT_TYPE = 'text/plain; charset=utf-8';

@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **210 production files** across 20/20 subsystems (2 roots, 181 traced, 9 not composed by the live root, 18 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **213 production files** across 20/20 subsystems (2 roots, 185 traced, 8 not composed by the live root, 18 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -36,11 +36,11 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | connectors (gpt-architect, prompt-architect contracts) | other | 2 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | bridge provider stacks (hosted Claude, Hermes, redaction) | 5 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | connectors (gpt-architect, prompt-architect contracts) | 1 | 0 |
-| entrypoint (relay-bridge/julius-live-mission.ts) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 1 |
+| entrypoint (relay-bridge/julius-live-mission.ts) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 1 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | kernel (src/relay/mission/julius/) | 1 | 0 |
-| entrypoint (relay-bridge/julius-live-mission.ts) | live composition (relay-bridge/julius/) | 10 | 0 |
+| entrypoint (relay-bridge/julius-live-mission.ts) | live composition (relay-bridge/julius/) | 11 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | other | 1 | 0 |
-| entrypoint (relay-bridge/julius-live-mission.ts) | persistence (src/relay/persistence/) | 6 | 0 |
+| entrypoint (relay-bridge/julius-live-mission.ts) | persistence (src/relay/persistence/) | 7 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 1 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | kernel (src/relay/mission/julius/) | 10 | 8 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | persistence (src/relay/persistence/) | 1 | 0 |
@@ -48,12 +48,12 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 20 | 5 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 10 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 27 | 7 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 29 | 7 |
 | live composition (relay-bridge/julius/) | other | 6 | 4 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 17 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 2 | 0 |
 | other | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 2 | 2 |
-| persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 24 | 15 |
+| persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 25 | 15 |
 | persistence (src/relay/persistence/) | Project Brain (src/relay/mission/project-brain/) | 3 | 0 |
 | Project Brain (src/relay/mission/project-brain/) | kernel (src/relay/mission/julius/) | 1 | 1 |
 | Relay↔Julius port (src/relay/integration/julius/) | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | 2 | 1 |
@@ -268,6 +268,8 @@ Artifact metadata, scope and the staged→finalized store port with its durable 
 
 | production source | role | reached from |
 | --- | --- | --- |
+| `relay-bridge/julius/artifact-exchange.ts` | traced | `relay-bridge/julius/live-workers.ts` |
+| `relay-bridge/julius/durable-artifacts.ts` | traced | `relay-bridge/julius/artifact-exchange.ts` |
 | `src/relay/connectors/live-reach/live-fetch.ts` | traced | `relay-bridge/live-reach-service.ts` |
 | `src/relay/mcp/domain/mcp-capabilities.ts` | traced | `src/relay/mcp/domain/mcp-invocation.ts` |
 | `src/relay/mcp/domain/mcp-failure.ts` | traced | `src/relay/mcp/domain/mcp-invocation.ts` |
@@ -287,10 +289,11 @@ Artifact metadata, scope and the staged→finalized store port with its durable 
 | `src/relay/mission/live-reach/live-reach-metering.ts` | traced | `src/relay/mission/live-reach/index.ts` |
 | `src/relay/mission/live-reach/live-reach-permissions.ts` | traced | `src/relay/mission/live-reach/index.ts` |
 | `src/relay/mission/live-reach/live-reach-registry.ts` | traced | `src/relay/mission/live-reach/index.ts` |
+| `src/relay/persistence/julius-work-artifact-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/protocol/enums.ts` | traced | `src/relay/mission/entitlement.ts` |
 | `src/relay/protocol/errors.ts` | traced | `src/relay/protocol/ids.ts` |
 | `src/relay/protocol/ids.ts` | traced | `src/relay/mcp/domain/mcp-invocation.ts` |
-| `src/relay/workspace/julius-tools/local-artifact-store.ts` | not composed by the live root | — |
+| `src/relay/workspace/julius-tools/local-artifact-store.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 
 ### 13 VERIFICATION
 
@@ -440,8 +443,6 @@ C.A.R.D. roles resolved to live adapters — fail closed, naming every missing v
 - **test harness** — `src/relay/mission/julius/julius-fault-injection.ts`: wraps a store so a named method throws on its Nth call — the chaos instrument the recovery scenarios use; no production caller. Reached only via `src/relay/mission/julius/index.ts`.
 - **fake** — `src/relay/connectors/gpt-architect/fake-architect.ts`: the deterministic offline fake of the GPT architect, exported by the connector barrel for the suite and Demo Simulation; the live worker binds runGptArchitect only. Reached only via `src/relay/connectors/gpt-architect/index.ts`, `src/relay/connectors/gpt-architect/index.ts`.
 - **legacy local execution** — `src/relay/persistence/julius-event-append-conformance.ts`: the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root.
-- **legacy local execution** — `relay-bridge/julius/durable-artifacts.ts`: composes the content-addressed artifact store with the work-artifact record so a body survives the process that made it; not yet reached by the live composition, which still holds bodies in its own exchange — the wiring is the next boundary.
-- **legacy local execution** — `src/relay/persistence/julius-work-artifact-postgres.ts`: the PostgreSQL record of which body belongs to which attempt; reached once the live composition stops holding bodies in memory.
 - **legacy local execution** — `src/relay/persistence/julius-criteria-scope-conformance.ts`: the criteria-scope contract cases themselves: a criterion belongs to a RUN, not to the database. Written once and run by BOTH the in-memory store, which was always right, and real PostgreSQL, where a global primary key on criterion_id silently gave every rerun no criteria at all. Test support, imported by no root.
 - **legacy local execution** — `src/relay/persistence/julius-decision-write-conformance.ts`: the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root.
 - **legacy local execution** — `src/relay/mission/julius/julius-learning-loop.ts`: the Learning Loop’s measurement and promotion gate: it projects a mission’s outcome from the durable trajectory, compares a matched pair and answers whether an artifact may become trusted memory. It is an EVALUATION surface, read after a mission rather than during one, so no dispatch path reaches it — and it deliberately writes nothing: the promotion it authorises is performed by promoteJuliusMemoryClaim, which IS on the kernel path.
@@ -476,7 +477,6 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `relay-bridge/julius-mission-routes.ts` | the bridge’s operator-only POST /julius/missions: the contract library’s own parser (julius/mission-contract.ts, shared with the job rather than imported from the job’s entry file, whose require.main guard is true inside the server bundle), the same compileBootstrapRequest and the same createLiveJuliusBootstrapPort the mission job uses, over the same PostgreSQL repositories — so a mission created here and one read from disk are one mission with one execution identity. Bootstrap only: it composes no provider, spends nothing and ticks nothing; the run lands durable in READY for the state routes to watch and the job to drive. Reached from the HTTP server, which is not a mission root |
 | `relay-bridge/julius-state-routes.ts` | the bridge’s READ-ONLY mount of JuliusRuntimeApi for Wonderland — /julius/runs/<id>/<run|slots|tasks|evidence|verification|timeline>, operator-only, composed over the SAME createJuliusPostgresRuntimeStore the mission job writes through so there is one state authority. Reached from the HTTP server, which is a Relay surface and not a mission root, and never from a mission; it computes nothing about a run, every answer is the API’s own. Also the first composition root for the subagent and lifecycle repositories |
 | `relay-bridge/julius-lifecycle-routes.ts` | the bridge’s operator-only POST /julius/runs/<id>/lifecycle {action: pause|resume|cancel, reason}: maps the action to JuliusRuntimeApi.pause/resume/cancel on the SAME api object the read routes serve (composeJuliusStateApi, over the same PostgreSQL store) and the kernel’s answer to a status. It records operator intent and drives nothing: no provider, no tick, no spend; the run loop in the mission job honours the recorded state. Reached from the HTTP server, which is not a mission root |
-| `src/relay/workspace/julius-tools/local-artifact-store.ts` | the durable staged→finalized artifact store (StagedArtifactStorePort); the live root uses an in-process artifact exchange, recorded as debt in docs/JULIUS_BETA_READINESS.md |
 
 ## External packages observed
 
