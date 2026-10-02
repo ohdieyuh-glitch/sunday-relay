@@ -240,4 +240,52 @@ describe('RESUME — a review that concluded but whose verification never ran', 
     expect(harness.store.taskRow('build-1')!.state, 'and the build is not released on it').toBe('BLOCKED');
     expect(harness.store.events().some((event) => event.type === 'contract.locked'), 'nor its terms agreed').toBe(false);
   });
+
+  /**
+   * THE SAME WINDOW WITHOUT A CRASH (Second Julius's Q2). Loop A is inside the
+   * review's verification, held at its first `recordFinding`. Loop B advances the
+   * run, and its sweep finds the work and the review both undecided. Nothing
+   * locks a review against a second verification; two verifications converge
+   * because every write they share is keyed. The decision is keyed on
+   * `<work>:<action>:<reason>`, findings on their ids, and the repair is
+   * scheduled only by the write that recorded the decision. So the end state is
+   * one decision, one repair round, and no ACCEPT over the rejection.
+   */
+  it('two loops: B advances the run while A is inside the review, and the plan is still repaired, once', async () => {
+    const harness = build({ reviewer: [REJECT, PASS, PASS, PASS] });
+    await harness.loop.tick(scope);
+    expect(harness.store.taskRow('plan-1:review')?.state).toBe('RUNNABLE');
+
+    let reached!: () => void;
+    let release!: () => void;
+    const atPause = new Promise<void>((resolve) => { reached = resolve; });
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    let findingCalls = 0;
+    const holding = new Proxy(harness.store, {
+      get(target, property, receiver) {
+        const value = Reflect.get(target, property, receiver);
+        if (property !== 'recordFinding' || typeof value !== 'function') return value;
+        return async (...args: unknown[]) => {
+          findingCalls += 1;
+          if (findingCalls === 1) { reached(); await released; }
+          return (value as (...inner: unknown[]) => unknown).apply(target, args);
+        };
+      },
+    });
+    const loopA = new JuliusRunLoop({ ...harness.deps, store: holding, owner: 'loop-a' }, harness.policies, { claimLimit: 5, leaseMs: 60_000 });
+    const tickA = loopA.tick(scope);
+    await atPause;
+    expect(harness.store.taskRow('plan-1:review')!.state, 'A accepted the rejecting review and is inside its verification').toBe('SUCCEEDED');
+
+    await harness.loop.advanceRun('run-1', 'prj-1'); // loop B
+    release();
+    await tickA;
+
+    expect((await decisionsOf(harness, 'plan-1')).map((row) => `${row.action}:${row.reasonCode}`), 'one decision, and it repairs')
+      .toEqual(['REPAIR:BLOCKING_FINDINGS']);
+    expect((await harness.store.tasksForRun('run-1', 'prj-1')).filter((row) => row.taskId.startsWith('repair:plan-1:')).map((row) => row.taskId), 'one repair round')
+      .toEqual(['repair:plan-1:1:task']);
+    expect(harness.store.taskRow('build-1')!.state, 'the build is not released').toBe('BLOCKED');
+    expect(harness.store.events().some((event) => event.type === 'contract.locked'), 'nor its terms agreed').toBe(false);
+  });
 });

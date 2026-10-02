@@ -73,10 +73,15 @@ export class JuliusAcceptReviewRefused extends Error {
 const PASSING_VERDICTS: ReadonlySet<string> = new Set(['CONTINUE', 'WARNING']);
 const PROCEEDING_ROUTES: ReadonlySet<string> = new Set(['PROCEED', 'RETAIN']);
 
-/** Whether an applied verdict lets the work it judged be accepted. */
-function letsTheWorkProceed(row: JuliusAppliedReviewRow): boolean {
+/**
+ * Whether an applied verdict lets the work it judged be accepted. A re-review
+ * gates only the held work Julius resolved for, so it passes only when it was
+ * reached through that ARCHITECT_UPHELD resolution, never as a subject's own
+ * applied row.
+ */
+function letsTheWorkProceed(row: JuliusAppliedReviewRow, throughResolution: boolean): boolean {
   if (row.route === 'RECORD') return row.verdict === 'CHALLENGE';
-  if (row.route === 'RE_REVIEW') return row.verdict !== null && PASSING_VERDICTS.has(row.verdict);
+  if (row.route === 'RE_REVIEW') return throughResolution && row.verdict !== null && PASSING_VERDICTS.has(row.verdict);
   return PROCEEDING_ROUTES.has(row.route) && row.verdict !== null && PASSING_VERDICTS.has(row.verdict);
 }
 
@@ -102,16 +107,20 @@ export function juliusAcceptReviewGate(input: {
   if (own === undefined) return { outcome: 'REFUSED', reasonCode: 'REVIEW_NOT_APPLIED', reviewTaskId: null, evidenceIds: [] };
 
   let gating = own;
+  let throughResolution = false;
   if (own.route === 'HOLD') {
     const reReviews = new Set(input.upheld.filter((item) => item.subjectTaskId === input.subject.taskId).map((item) => item.reReviewTaskId));
     const reReview = input.applied.filter((row) => row.route === 'RE_REVIEW' && reReviews.has(lineageHeadOf(row.reviewTaskId))).at(-1);
-    if (reReview !== undefined) gating = reReview;
+    if (reReview !== undefined) {
+      gating = reReview;
+      throughResolution = true;
+    }
   }
 
   const rows = input.evidence.filter((item) => item.taskId === gating.reviewTaskId && item.type === 'REVIEW_FINDING');
   const refused = (reasonCode: JuliusAcceptReviewRefusal): JuliusAcceptReviewGate =>
     ({ outcome: 'REFUSED', reasonCode, reviewTaskId: gating.reviewTaskId, evidenceIds: rows.map((item) => item.evidenceId) });
-  if (!letsTheWorkProceed(gating) || rows.some((item) => item.status === 'FAILED')) return refused('REVIEW_NOT_PASSING');
+  if (!letsTheWorkProceed(gating, throughResolution) || rows.some((item) => item.status === 'FAILED')) return refused('REVIEW_NOT_PASSING');
   const passed = rows.filter((item) => item.status === 'PASSED').map((item) => item.evidenceId);
   if (passed.length === 0) return refused('REVIEW_EVIDENCE_MISSING');
   return { outcome: 'CITED', reviewTaskId: gating.reviewTaskId, evidenceIds: passed };
