@@ -64,6 +64,9 @@ class UWonderlandWonderWebSubsystem;
 class UWonderlandJuliusConnectSubsystem;
 class UWonderlandWonderWebBrowseSubsystem;
 class SWonderlandWalletPanel;
+class SWonderlandSocialProfilePanel;
+class SWonderlandSocialHubPanel;
+struct FWonderlandSocialProfileView;
 class UInputComponent;
 class UWonderlandCommandPresetSubsystem;
 class UWonderlandMiniMapDriver;
@@ -91,6 +94,32 @@ public:
 	/** Close whichever panel is open and give the world its input back. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
 	void CloseOverlay();
+
+	/**
+	 * A PLAYER'S PROFILE ON SCREEN (Wonderland Social): the view the social authority made for this viewer, drawn by
+	 * SWonderlandSocialProfilePanel with the profile stage showing their Relay Dog. Not a UFUNCTION: the view is a plain
+	 * struct, and a new reflected name is a new early FName. False when there is no player to show it to.
+	 */
+	bool OpenPlayerProfile(const struct FWonderlandSocialProfileView& View, const FString& SourceLine);
+	/** QA: what the open profile shows ("agent=… | dog=… | rank=… | action: …"); empty when no profile is open. */
+	FString DescribeOpenProfile() const;
+
+	/**
+	 * THE SOCIAL HUB ON SCREEN (Wonderland Social): Friends, Requests, Recent Players, drawn from the one social service's
+	 * snapshot. TabName is "friends", "requests" or "recent" (anything else opens Friends). Without a social service it
+	 * says Social is not connected and lists nobody. Not a UFUNCTION (no new reflected names). False with no player.
+	 */
+	bool OpenSocialHub(const FString& TabName);
+	/** QA: what the open hub shows (SWonderlandSocialHubPanel::Describe); empty when the hub is not open. */
+	FString DescribeOpenSocialHub() const;
+	/** A social action asked of the service, its answer shown on the open hub or profile: exactly what their buttons call. */
+	void RequestSocialAction(const FString& OperationId, const FString& SubjectId) { HandleSocialAction(OperationId, SubjectId); }
+	/** What Esc and CLOSE do on a profile: back to the hub if it was opened from there, else closed. */
+	void BackFromProfile();
+	/** SEND in the hub's Messages: the body to the social service, its answer on the hub. The body is never logged. */
+	void SendSocialMessage(const FString& ConversationId, const FString& Body);
+	/** The hub's voice buttons: the one voice service's commands, its new state redrawn, a refusal shown. */
+	void HandleVoiceCommand(const FString& Command, const FString& SubjectUserId);
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	bool IsLiveTerminalOpen() const;
@@ -800,7 +829,16 @@ public:
 	int32 GetJuliusRoleTypedCharacters(int32 Role) const;
 
 private:
-	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu, Wallet, WonderWeb, Welcome };
+	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu, Wallet, WonderWeb, Welcome, Profile, Social };
+
+	/** Wonderland Social: a profile panel's action, asked of the social service, its answer shown on the panel. */
+	void HandleSocialAction(const FString& OperationId, const FString& SubjectId);
+	/** Wonderland Social: a mutual friend's chip clicked on a profile -- their profile, if this viewer may see it. */
+	void OpenSocialProfileById(const FString& UserId);
+	/** Wonderland Social: listen to the social subsystem once (live view changes, a server's answers). */
+	void BindSocialEvents();
+	void HandleSocialChanged();
+	void HandleSocialAnswered(const FString& OperationId, const FString& SubjectId, const struct FWonderlandSocialActionResult& Answer);
 
 	/** Escape heard by the world (no panel holding focus): opens the Menu, or closes whatever is open. */
 	void HandleWorldEscape();
@@ -1071,6 +1109,18 @@ private:
 	TSharedPtr<SWonderlandNavBar> NavBar;
 	TSharedPtr<SWonderlandWalletChip> WalletChip;
 	TSharedPtr<SWonderlandWalletPanel> WalletPanel;
+	/** Wonderland Social: the profile on screen, and what the next one opens with (set by OpenPlayerProfile). */
+	TSharedPtr<SWonderlandSocialProfilePanel> ProfilePanel;
+	TSharedPtr<FSlateBrush> ProfileDogBrush;
+	TSharedPtr<FWonderlandSocialProfileView> PendingProfile;
+	TMap<FString, FString> PendingProfileNames;
+	FString PendingProfileSource;
+	bool bPendingProfilePreview = true;
+	/** Wonderland Social: the hub on screen, the tab it opens on, and whether the open profile was opened from it (Esc returns there). */
+	TSharedPtr<SWonderlandSocialHubPanel> SocialHubPanel;
+	FString PendingHubTab;
+	bool bProfileFromHub = false;
+	bool bSocialBound = false;
 	/** The wallet above the mini-map: the top-right column as one piece, so its size is known when it is placed. */
 	TSharedPtr<SWidget> TopRightColumn;
 

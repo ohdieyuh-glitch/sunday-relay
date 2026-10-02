@@ -478,6 +478,12 @@ void AWonderlandSkinStage::BeginPlay()
 
 	// WEAR WHAT THE PLAYER IS WEARING. The stage is a view onto the equipped skin, not a second opinion about it, so
 	// it follows the registry and never holds a choice of its own.
+	// A PROFILE STAGE IS THE EXCEPTION: it shows ANOTHER player's Relay Dog, so it wears whatever the profile asks for and
+	// never follows this player's wardrobe (Wonderland Social; SpawnProfileStage).
+	if (bProfileStage)
+	{
+		return;
+	}
 	if (const UGameInstance* GameInstance = GetGameInstance())
 	{
 		if (UWonderlandRelaySkinSubsystem* Skins = GameInstance->GetSubsystem<UWonderlandRelaySkinSubsystem>())
@@ -1184,7 +1190,11 @@ AWonderlandSkinStage* AWonderlandSkinStage::Get(UWorld* World)
 	}
 	for (TActorIterator<AWonderlandSkinStage> It(World); It; ++It)
 	{
-		return *It;
+		// the WARDROBE's stage: a profile stage shows somebody else's Dog and is never handed out as the wardrobe
+		if (!It->bProfileStage)
+		{
+			return *It;
+		}
 	}
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -1196,5 +1206,31 @@ AWonderlandSkinStage* AWonderlandSkinStage::Get(UWorld* World)
 		Stage->SetActorLabel(TEXT("WL_SkinStage"), false);
 	}
 #endif
+	return Stage;
+}
+
+AWonderlandSkinStage* AWonderlandSkinStage::GetProfileStage(UWorld* World)
+{
+	if (World == nullptr)
+	{
+		return nullptr;
+	}
+	for (TActorIterator<AWonderlandSkinStage> It(World); It; ++It)
+	{
+		if (It->bProfileStage)
+		{
+			return *It;
+		}
+	}
+	// SPAWNED DEFERRED, so the flag is set before BeginPlay decides whether to follow the player's wardrobe. Placed well
+	// apart from the wardrobe's stage, so neither capture ever sees the other's figure.
+	const FTransform Where(StageOrigin() + FVector(6000.0, 0.0, 0.0));
+	AWonderlandSkinStage* Stage = World->SpawnActorDeferred<AWonderlandSkinStage>(AWonderlandSkinStage::StaticClass(), Where,
+		nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (Stage != nullptr)
+	{
+		Stage->bProfileStage = true;
+		Stage->FinishSpawning(Where);
+	}
 	return Stage;
 }

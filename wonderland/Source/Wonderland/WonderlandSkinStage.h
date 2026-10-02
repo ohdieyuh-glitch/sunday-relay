@@ -49,6 +49,14 @@ public:
 	 */
 	static AWonderlandSkinStage* Get(UWorld* World);
 
+	/**
+	 * THE PROFILE STAGE (Wonderland Social): a second stage that shows ANOTHER player's Relay Dog in their skin, idling as
+	 * the wardrobe's does, for the profile screen's left column. It never follows this player's wardrobe and Get() never
+	 * returns it. Made on first use; null only without a world.
+	 */
+	static AWonderlandSkinStage* GetProfileStage(UWorld* World);
+	bool IsProfileStage() const { return bProfileStage; }
+
 	/** Dress the Dog. Loads the skin's figure into the standing body; returns false and keeps the old dress on failure. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Skins")
 	bool ShowSkin(FName SkinId);
@@ -184,6 +192,9 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
+	/** Not reflected on purpose (no new early FName): set by GetProfileStage before BeginPlay. */
+	bool bProfileStage = false;
+
 	void EnsureBody();
 	void AimCamera();
 	void StepLookAround(float DeltaSeconds);

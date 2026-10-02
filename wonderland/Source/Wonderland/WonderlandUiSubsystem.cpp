@@ -75,6 +75,9 @@
 #include "WonderlandUsageHudWidget.h"
 #include "WonderlandUsagePreview.h"
 #include "WonderlandWallet.h"
+#include "WonderlandSocialHubPanel.h"
+#include "WonderlandSocialProfilePanel.h"
+#include "WonderlandSocialSubsystem.h"
 #include "WonderlandMissionBeat.h"
 #include "WonderlandMissionNarration.h"
 #include "WonderlandWorldMap.h"
@@ -914,6 +917,81 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		Panel = MenuPanel;
 		Focus = MenuPanel;
 		ZOrder = 58;
+	}
+	else if (Which == EOverlay::Profile)
+	{
+		// A PLAYER'S PROFILE (Wonderland Social), built fresh for whoever was asked for. The LEFT column's Relay Dog is the
+		// profile stage's live figure in THEIR skin; a stage that cannot be made leaves the card showing the skin's name.
+		AWonderlandSkinStage* Stage = AWonderlandSkinStage::GetProfileStage(GetWorld());
+		const FSlateBrush* DogBrush = nullptr;
+		if (Stage != nullptr && Stage->GetRenderTarget() != nullptr && PendingProfile.IsValid())
+		{
+			Stage->ShowSkin(FName(*PendingProfile->Profile.RelayDog.SkinId));
+			if (!ProfileDogBrush.IsValid())
+			{
+				ProfileDogBrush = MakeShared<FSlateBrush>();
+			}
+			ProfileDogBrush->SetResourceObject(Stage->GetRenderTarget());
+			ProfileDogBrush->ImageSize = FVector2D(640.0, 800.0);
+			ProfileDogBrush->DrawAs = ESlateBrushDrawType::Image;
+			DogBrush = ProfileDogBrush.Get();
+		}
+		const TWeakObjectPtr<AWonderlandSkinStage> WeakStage(Stage);
+		SAssignNew(ProfilePanel, SWonderlandSocialProfilePanel)
+			.View(PendingProfile.IsValid() ? *PendingProfile : FWonderlandSocialProfileView())
+			.NamesById(PendingProfileNames)
+			.SourceLine(PendingProfileSource)
+			.bDevelopmentPreview(bPendingProfilePreview)
+			.DogBrush(DogBrush)
+			.DogSkinName([this]() -> FString
+			{
+				// THE REGISTRY NAMES THE SKIN, so a skin added after the profile was written (Shadow Flame) is named, not mistaken for Relay OG.
+				const UWonderlandRelaySkinSubsystem* Registry = RelaySkins();
+				const FWonderlandRelaySkin* Skin = Registry != nullptr && PendingProfile.IsValid() ? Registry->Find(FName(*PendingProfile->Profile.RelayDog.SkinId)) : nullptr;
+				return Skin != nullptr ? Skin->DisplayName : FString();
+			}())
+			.OnDogPainted_Lambda([WeakStage]() { if (WeakStage.IsValid()) { WeakStage->MarkWanted(); } })
+			.OnAction_Lambda([WeakThis](const FString& Operation, const FString& Subject) { if (WeakThis.IsValid()) { WeakThis->HandleSocialAction(Operation, Subject); } })
+			.OnOpenProfile_Lambda([WeakThis](const FString& UserId) { if (WeakThis.IsValid()) { WeakThis->OpenSocialProfileById(UserId); } })
+			// OPENED FROM THE HUB, Esc goes back to the hub (as Esc from the wardrobe goes back to the Brain).
+			.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->BackFromProfile(); } });
+		Panel = ProfilePanel;
+		Focus = ProfilePanel;
+		ZOrder = 59;
+	}
+	else if (Which == EOverlay::Social)
+	{
+		// THE SOCIAL HUB, built fresh from the social service's snapshot each time it opens: what it lists is what the
+		// authority last said, never a copy kept from an earlier visit. No service: it says Social is not connected.
+		const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+		const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+		const FWonderlandSocialSnapshot* Snapshot = Social != nullptr ? Social->GetSnapshot() : nullptr;
+		SWonderlandSocialHubPanel::ETab Tab = SWonderlandSocialHubPanel::ETab::Friends;
+		SWonderlandSocialHubPanel::ParseTab(PendingHubTab, Tab);
+		if (!PendingHubTab.IsEmpty() || !SocialHubPanel.IsValid())
+		{
+			PendingHubTab.Reset();
+		}
+		else
+		{
+			Tab = SocialHubPanel->GetTab();   // back from a profile: the tab the player left
+		}
+		SAssignNew(SocialHubPanel, SWonderlandSocialHubPanel)
+			.Snapshot(Snapshot != nullptr ? *Snapshot : FWonderlandSocialSnapshot())
+			.bConnected(Snapshot != nullptr)
+			.SourceLine(Social != nullptr ? Social->GetSourceLine() : FString())
+			.bDevelopmentPreview(Social == nullptr || Social->GetService() == nullptr || Social->GetService()->IsDevelopmentPreview())
+			.InitialTab(Tab)
+			.OnAction_Lambda([WeakThis](const FString& Operation, const FString& Subject) { if (WeakThis.IsValid()) { WeakThis->HandleSocialAction(Operation, Subject); } })
+			.OnOpenProfile_Lambda([WeakThis](const FString& UserId) { if (WeakThis.IsValid()) { WeakThis->OpenSocialProfileById(UserId); } })
+			.OnSend_Lambda([WeakThis](const FString& ConversationId, const FString& Body) { if (WeakThis.IsValid()) { WeakThis->SendSocialMessage(ConversationId, Body); } })
+			.Voice(Social != nullptr && Social->GetVoice() != nullptr ? Social->GetVoice()->GetState() : FWonderlandVoiceState())
+			.VoiceLabel(Social != nullptr && Social->GetVoice() != nullptr ? Social->GetVoice()->GetPreviewLabel() : FString())
+			.OnVoice_Lambda([WeakThis](const FString& Command, const FString& Subject) { if (WeakThis.IsValid()) { WeakThis->HandleVoiceCommand(Command, Subject); } })
+			.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
+		Panel = SocialHubPanel;
+		Focus = SocialHubPanel;
+		ZOrder = 59;
 	}
 	else
 	{
@@ -4733,6 +4811,215 @@ bool UWonderlandUiSubsystem::TeleportToSelected()
 
 /* ------------------------------------------------------------------ overlays by name */
 
+bool UWonderlandUiSubsystem::OpenPlayerProfile(const FWonderlandSocialProfileView& View, const FString& SourceLine)
+{
+	if (!BoundController.IsValid())
+	{
+		return false;
+	}
+	BindSocialEvents();
+	// FROM THE HUB (or from a profile that was): Esc on the profile returns to the hub. From anywhere else it closes.
+	if (Open == EOverlay::Social)
+	{
+		bProfileFromHub = true;
+	}
+	else if (Open != EOverlay::Profile)
+	{
+		bProfileFromHub = false;
+	}
+	PendingProfile = MakeShared<FWonderlandSocialProfileView>(View);
+	PendingProfileSource = SourceLine;
+	PendingProfileNames.Reset();
+	bPendingProfilePreview = true;
+	// THE NAMES AND WHETHER THIS IS A PREVIEW come from the one social service, never from the panel's own guess.
+	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+	if (const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr)
+	{
+		if (const FWonderlandSocialSnapshot* Snapshot = Social->GetSnapshot())
+		{
+			PendingProfileNames = Snapshot->NamesById;
+		}
+		bPendingProfilePreview = Social->GetService() == nullptr || Social->GetService()->IsDevelopmentPreview();
+	}
+	OpenOverlay(EOverlay::Profile);
+	return Open == EOverlay::Profile;
+}
+
+FString UWonderlandUiSubsystem::DescribeOpenProfile() const
+{
+	if (Open != EOverlay::Profile || !ProfilePanel.IsValid())
+	{
+		return FString();
+	}
+	return FString::Printf(TEXT("user=%s | %s | action: %s"), *ProfilePanel->GetView().Profile.UserId, *ProfilePanel->DescribeIdentityColumn(),
+		*ProfilePanel->GetLastActionLine());
+}
+
+void UWonderlandUiSubsystem::HandleSocialAction(const FString& OperationId, const FString& SubjectId)
+{
+	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+	UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+	IWonderlandSocialService* Service = Social != nullptr ? Social->GetService() : nullptr;
+	const FWonderlandSocialActionResult Result = Service != nullptr ? Service->Request(OperationId, SubjectId)
+		: FWonderlandSocialActionResult{false, TEXT("Social is not available in this build")};
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL action %s on %s: %s%s"), *OperationId, *SubjectId, Result.bOk ? TEXT("ok") : TEXT("refused"),
+		Result.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Result.Reason));
+	// THE ANSWER GOES TO THE SURFACE THAT ASKED: the open one. A server's answer comes later (HandleSocialAnswered).
+	const FString Line = Result.bPending ? FString(TEXT("Sending…")) : Result.bOk ? FString(TEXT("Done")) : Result.Reason;
+	if (Open == EOverlay::Social && SocialHubPanel.IsValid())
+	{
+		SocialHubPanel->ShowActionResult(Line);
+	}
+	else if (ProfilePanel.IsValid())
+	{
+		ProfilePanel->ShowActionResult(Line);
+	}
+}
+
+void UWonderlandUiSubsystem::BackFromProfile()
+{
+	if (Open == EOverlay::Profile && bProfileFromHub)
+	{
+		OpenOverlay(EOverlay::Social);
+		return;
+	}
+	CloseOverlay();
+}
+
+void UWonderlandUiSubsystem::SendSocialMessage(const FString& ConversationId, const FString& Body)
+{
+	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+	UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+	IWonderlandSocialService* Service = Social != nullptr ? Social->GetService() : nullptr;
+	const FWonderlandSocialActionResult Result = Service != nullptr ? Service->SendMessage(ConversationId, Body)
+		: FWonderlandSocialActionResult{false, TEXT("Social is not available in this build")};
+	// THE BODY IS NOT LOGGED: what a person writes to another is theirs, not the log's. Its length is enough to debug.
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL message to %s (%d chars): %s%s"), *ConversationId, Body.Len(), Result.bOk ? TEXT("sent") : TEXT("refused"),
+		Result.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Result.Reason));
+	if (SocialHubPanel.IsValid())
+	{
+		SocialHubPanel->ShowActionResult(Result.bPending ? FString(TEXT("Sending…")) : Result.bOk ? FString(TEXT("Sent")) : Result.Reason);
+	}
+}
+
+void UWonderlandUiSubsystem::BindSocialEvents()
+{
+	if (bSocialBound)
+	{
+		return;
+	}
+	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+	if (UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr)
+	{
+		Social->OnSocialChanged().AddUObject(this, &UWonderlandUiSubsystem::HandleSocialChanged);
+		Social->OnSocialAnswered().AddUObject(this, &UWonderlandUiSubsystem::HandleSocialAnswered);
+		bSocialBound = true;
+	}
+}
+
+void UWonderlandUiSubsystem::HandleSocialChanged()
+{
+	// A LIVE VIEW CHANGED (a friend came online, a message arrived): the open hub redraws on the tab the player is on.
+	if (Open != EOverlay::Social || !SocialHubPanel.IsValid())
+	{
+		return;
+	}
+	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+	const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+	const FWonderlandSocialSnapshot* Snapshot = Social != nullptr ? Social->GetSnapshot() : nullptr;
+	SocialHubPanel->SetSnapshot(Snapshot != nullptr ? *Snapshot : FWonderlandSocialSnapshot(), Snapshot != nullptr,
+		Social != nullptr ? Social->GetSourceLine() : FString(), Social == nullptr || Social->GetService() == nullptr || Social->GetService()->IsDevelopmentPreview());
+}
+
+void UWonderlandUiSubsystem::HandleSocialAnswered(const FString& OperationId, const FString& SubjectId, const FWonderlandSocialActionResult& Answer)
+{
+	const FString Line = Answer.bOk ? FString(TEXT("Done")) : Answer.Reason;
+	if (Open == EOverlay::Social && SocialHubPanel.IsValid())
+	{
+		SocialHubPanel->ShowActionResult(Line);
+	}
+	else if (Open == EOverlay::Profile && ProfilePanel.IsValid())
+	{
+		ProfilePanel->ShowActionResult(Line);
+	}
+}
+
+void UWonderlandUiSubsystem::HandleVoiceCommand(const FString& Command, const FString& SubjectUserId)
+{
+	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+	UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+	IWonderlandVoiceService* Voice = Social != nullptr ? Social->GetVoice() : nullptr;
+	FWonderlandVoiceCommandResult Result{false, TEXT("Voice is not available in this build")};
+	if (Voice != nullptr)
+	{
+		if (Command == TEXT("preview.step") && Social->GetVoicePreview() != nullptr)
+		{
+			Social->GetVoicePreview()->Step();
+			Result = FWonderlandVoiceCommandResult{true, FString()};
+		}
+		else if (Command == TEXT("connect"))
+		{
+			TArray<FString> Members;
+			if (const FWonderlandSocialSnapshot* Snapshot = Social->GetSnapshot())
+			{
+				for (const FWonderlandSocialPartyMember& M : Snapshot->Party.Members)
+				{
+					Members.Add(M.UserId);
+				}
+			}
+			Result = Voice->Connect(SubjectUserId, Members);
+		}
+		else if (Command == TEXT("disconnect")) { Result = Voice->Disconnect(); }
+		else if (Command == TEXT("mic.mute") || Command == TEXT("mic.unmute")) { Result = Voice->SetMicMuted(Command == TEXT("mic.mute")); }
+		else if (Command == TEXT("local.mute") || Command == TEXT("local.unmute")) { Result = Voice->SetLocallyMuted(SubjectUserId, Command == TEXT("local.mute")); }
+		else { Result = FWonderlandVoiceCommandResult{false, FString::Printf(TEXT("unknown voice command %s"), *Command)}; }
+	}
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL voice %s %s: %s%s"), *Command, *SubjectUserId, Result.bOk ? TEXT("ok") : TEXT("refused"),
+		Result.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Result.Reason));
+	if (SocialHubPanel.IsValid())
+	{
+		if (Voice != nullptr)
+		{
+			SocialHubPanel->SetVoice(Voice->GetState(), Voice->GetPreviewLabel());
+		}
+		if (!Result.bOk || Command != TEXT("preview.step"))
+		{
+			SocialHubPanel->ShowActionResult(Result.bOk ? FString(TEXT("Done")) : Result.Reason);
+		}
+	}
+}
+
+bool UWonderlandUiSubsystem::OpenSocialHub(const FString& TabName)
+{
+	if (!BoundController.IsValid())
+	{
+		return false;
+	}
+	BindSocialEvents();
+	PendingHubTab = TabName.IsEmpty() ? FString(TEXT("friends")) : TabName;
+	bProfileFromHub = false;
+	OpenOverlay(EOverlay::Social);
+	return Open == EOverlay::Social;
+}
+
+FString UWonderlandUiSubsystem::DescribeOpenSocialHub() const
+{
+	if (Open != EOverlay::Social || !SocialHubPanel.IsValid())
+	{
+		return FString();
+	}
+	return SocialHubPanel->Describe();
+}
+
+void UWonderlandUiSubsystem::OpenSocialProfileById(const FString& UserId)
+{
+	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+	if (UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr)
+	{
+		Social->OpenProfile(UserId);
+	}
+}
+
 const TCHAR* UWonderlandUiSubsystem::OverlayName(EOverlay Which)
 {
 	switch (Which)
@@ -4746,6 +5033,8 @@ const TCHAR* UWonderlandUiSubsystem::OverlayName(EOverlay Which)
 	case EOverlay::Wallet:   return TEXT("wallet");
 	case EOverlay::WonderWeb: return TEXT("wonder web");
 	case EOverlay::Welcome:  return TEXT("welcome");
+	case EOverlay::Profile:  return TEXT("player profile");
+	case EOverlay::Social:   return TEXT("social hub");
 	default: break;
 	}
 	return TEXT("nothing");
@@ -4764,6 +5053,8 @@ TSharedPtr<SWidget> UWonderlandUiSubsystem::OverlayWidget(EOverlay Which) const
 	case EOverlay::Wallet:   return WalletPanel;
 	case EOverlay::WonderWeb: return WonderWebLayer;
 	case EOverlay::Welcome:  return WelcomePanel;
+	case EOverlay::Profile:  return ProfilePanel;
+	case EOverlay::Social:   return SocialHubPanel;
 	default: break;
 	}
 	return nullptr;
