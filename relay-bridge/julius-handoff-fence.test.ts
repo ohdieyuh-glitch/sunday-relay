@@ -264,12 +264,15 @@ describe('(a2) the PostgreSQL fence and sweep are each one serializable transact
     expect(transactionStatements(appendBody()), 'opened once; released on each of its two exits; rolled back only for a taken id').toEqual(APPEND_SAVEPOINT);
   });
 
-  it('CONTROL: the savepoint pin refuses a stray COMMIT, a bare ROLLBACK and another savepoint name in the append', () => {
+  it('CONTROL: the savepoint pin refuses every other transaction statement in the append — BEGIN, COMMIT, a bare ROLLBACK, SET TRANSACTION, another savepoint or release', () => {
     const body = appendBody();
     const edits = [
       body.replace("await client.query('SAVEPOINT julius_event_append');", "await client.query('COMMIT');await client.query('SAVEPOINT julius_event_append');"),
+      body.replace("await client.query('SAVEPOINT julius_event_append');", "await client.query('BEGIN');await client.query('SAVEPOINT julius_event_append');"),
+      body.replace("await client.query('SAVEPOINT julius_event_append');", "await client.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');await client.query('SAVEPOINT julius_event_append');"),
       body.replace("await client.query('ROLLBACK TO SAVEPOINT julius_event_append');", "await client.query('ROLLBACK');"),
       body.replace("await client.query('SAVEPOINT julius_event_append');", "await client.query('SAVEPOINT another_savepoint');"),
+      body.replace("await client.query('RELEASE SAVEPOINT julius_event_append');\n  return{recorded:true,sequence};", "await client.query('RELEASE SAVEPOINT another_savepoint');\n  return{recorded:true,sequence};"),
     ];
     for (const edited of edits) {
       expect(edited, 'the edit applied to the real body').not.toBe(body);

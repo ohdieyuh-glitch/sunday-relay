@@ -39,10 +39,20 @@ export interface JuliusEventTransaction{query:(sql:string,values?:readonly unkno
  * constraint's, `ON CONFLICT(event_id) DO NOTHING` says whether this append is
  * new, and only a taken id is read — a row that exists. The counter step sits in
  * a savepoint that a replay rolls back, so a replay allocates nothing and the
- * stream stays gapless. The run is locked first, for a replay too (an id is only
- * ever re-sent for the run that owns it), and the counter is unchanged, so the
- * conflict `appendSettlement` relies on — a close that moved the counter after
- * this snapshot — still fails the transaction with 40001.
+ * stream stays gapless. The counter is unchanged, so the conflict
+ * `appendSettlement` relies on — a close that moved the counter after this
+ * snapshot — still fails the transaction with 40001.
+ *
+ * WHAT A REPLAY NOW MEETS, stated because it changed. The run is locked and the
+ * counter stepped BEFORE the id is known to be taken (the step is then rolled
+ * back), where a replay used to return before touching either. So:
+ *   - a replay sent under a project that does not own the run is REFUSED
+ *     (`julius_run_not_found`), where it used to return the stored event; an id
+ *     is only ever re-sent for the run that owns it, so this refuses nothing
+ *     legitimate, and it fails closed;
+ *   - a replay can now meet a serialization failure on that stream's counter
+ *     (a concurrent append moved it), which `juliusSerializable` retries like any
+ *     other; the retry reads the stored event and answers the replay.
  */
 export async function appendJuliusEventWithin(client:JuliusEventTransaction,event:JuliusOperationalEvent):Promise<{recorded:boolean;sequence:number}>{
  validateJuliusEvent(event);
