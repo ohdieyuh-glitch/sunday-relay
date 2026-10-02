@@ -380,6 +380,25 @@ describe('the eval layer measures provider attempts, not every DISPATCH row', ()
     expect(learning.knownInputTokens).toBe(10);
   });
 
+  it('a refusal outcome that NAMES a provider is an attempt: it may have been paid for', () => {
+    // The only shape where the provider alone decides it: no context and no
+    // measure, exactly what a pre-provider refusal looks like. Read as a
+    // refusal, a call that may have been paid would vanish from every attempt
+    // count and from the unknown costs (the SQL twin requires provider_id IS
+    // NULL for a refusal, so the two sides would also disagree).
+    const named = trajectory({
+      kind: 'DISPATCH', outcome: 'APPROVAL_DENIED', providerId: 'openai', contextId: null,
+      durationMs: null, usdMicros: null, inputTokens: null, outputTokens: null, idempotencyKey: 'named-refusal',
+    });
+    expect(juliusDispatchRowClass(named)).toBe('PROVIDER');
+    expect(isJuliusProviderAttempt(named)).toBe(true);
+    const events = [provider('p1', 1_000), named];
+    const counters = projectJuliusMetrics(events, V).counters;
+    expect(counters.julius_tasks_dispatched).toBe(2);
+    expect(counters.julius_dispatch_refusals).toBe(0);
+    expect(summariseJuliusEvals(events, V).unknownCostComponents, 'it reported no cost, so its cost is unknown').toBe(1);
+  });
+
   it('an attempt that reported no cost is still unknown: the fix narrows the components, never forgives one', () => {
     const summary = summariseJuliusEvals([provider('p1', 1_000, null), tool('t1', 40)], V);
     expect(summary.unknownCostComponents).toBe(1);
