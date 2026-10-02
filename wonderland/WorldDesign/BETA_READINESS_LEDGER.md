@@ -56,9 +56,9 @@ multiple real Wonderland clients, by CORE and independently by Second.
 | R16 | **Multiplayer / social foundation -- WONDERLAND MULTIPLAYER PHASE 1, end to end** (founder, 2026-10-02: "WONDERLAND IS MULTIPLAYER BEFORE LAUNCH"; architecture decided: a SHARED PRESENCE LAYER, each world executing locally, authenticated players in the same Wonderland/server context existing together through synchronized state via the social backend; no authoritative dedicated-server simulation claimed; dedicated servers later only for experiences needing authority (competitive GVE, PvP, shared physics, economy)). The loop: sign in -> friends (requests, accept/decline/cancel, remove, block, mute, report, recent players) -> presence (online, in Wonderland, creating, working with Julius, private server, GVE, mission, party, away, busy, offline) -> another user's profile (LEFT: primary Compound AI Agent + primary Relay Dog, prominent; skins via the canonical registry) -> direct messages with unread state and history -> create/join a party, invite, leader controls -> join the same Wonderland/server context and SEE each other in-world (player and Relay Dog representations, movement/presence) -> join/leave updates -> privacy/block/mute/report enforced (no leaks) -> state survives reconnect/restart. Unreal: Social Hub, Friends, Friend Requests, Recent Players, Messages, Parties, Party Voice (mute, self-mute, speaking, connect/reconnect, provider abstraction; NO faked connected voice: a real provider before 1.0), User Profiles. Backend: in sunday-relay MAIN (routes, least-privilege desktop social capability with session identity = actor, snapshot.read as an aggregation of existing authorized reads only, PostgreSQL persistence surviving a backend restart, migration 030 after main's 028/029, privacy-safe events polled first, push-compatible). **Acceptance: TWO ACTUAL Wonderland clients with different authenticated identities** (request, accept, presence update, message, party create/invite/join, the same context with both representations visible, block/privacy, restart/reconnect); synthetic users are never evidence | 25 | 0 | `local/wonderland-social` (Second, ACTIVE, HIGH PRIORITY, rebased onto RC10 7f8e08d8): client hub (Friends / Requests / Recent / Messages / Party + voice panel), voice abstraction (UNAVAILABLE by default), live HTTP client with an event poll, developer-only synthetic preview people; server commands + an atomic in-memory store with an event log + gated routes, 45/45 TS tests incl. two-player flows, mutation-checked; a loopback DEVELOPMENT social server for two-client tests. Nothing wired or deployed. **2026-10-02, 17d1c084 compiled and run in a package for the first time** (Second, `_qa_handoff/social/`): boot OK; wl.Qa.Social 17/17; a player session shows no preview people, a NOT CONNECTED hub, voice UNAVAILABLE (3/3); **first two-real-client run** on the loopback DEVELOPMENT social server (kai 5/5, nova 6/6: a friend request crossed, friends both ways, each sees the other ONLINE, a message and reply crossed, the same two-person party in both). Not the gate: the sessions are minted, not authenticated; no PostgreSQL persistence, no main-line routes, no same-world presence, no block or restart in that run, no voice provider | the whole loop, end to end. **LAUNCH GATE: no private/public alpha or beta launch until R16 = 1.0** |
 | | **Total** | **100** | | | |
 
-**WONDERLAND BETA READINESS: 54.00%** (16 rows; **the FINAL RC becomes RC11** = RC10 7f8e08d8 + Second's NEW TASK
-TERMINAL "+" fix 4414cbfa, the founder's photo task. CORE folded it in on 2026-10-02 ~08:30, before Second's RC10 pass
-began; the build is queued behind Second's two-client slot. RC10 (built 05:02, zip 5F2E08C8…733B) and RC9 are non-final
+**WONDERLAND BETA READINESS: 54.00%** (16 rows; **the FINAL RC is RC11** c2269e0f = RC10 7f8e08d8 + Second's NEW TASK
+TERMINAL "+" fix 4414cbfa (the founder's photo task), built 2026-10-02 08:57, zip 3C5A260A…5822. CORE folded it in at
+~08:30, before Second's RC10 pass began. RC10 (built 05:02, zip 5F2E08C8…733B) and RC9 are non-final
 packages now, so their CORE + Second evidence stands at 0.75 until re-earned on RC11; R14 0 waits for RC11's soak;
 **R16 0: the multiplayer launch loop is not built**).
 **NOT LAUNCHABLE: the R16 launch gate is shut.** WONDERLAND VERIFIED 80% MILESTONE was reached at 80.50% on the 15-row
@@ -123,6 +123,35 @@ R12 3.9375 + R13 2.8125 + R14 0 + R15 3.375 + R16 0 = 54.00.
   - CORE's chain plus Second's independent pass on it, each row to 1.0 (R1-R15 at 1.0 = 75 points);
   - its 60-minute soak (R14, R11);
   - R16, the multiplayer launch gate (25 points), only with the real two-client loop.
+
+### RC11 package evidence (CORE) -- the FINAL RC since 2026-10-02 08:57
+
+- Build: 0.1.0-rc11, commit c2269e0fe414253f764eef6dc8cca29a740098cc = merge(d50c1c08 task3, 4414cbfa the "+" fix; on
+  RC10 7f8e08d8). Tree 53e6cdaf, audited:
+  - head -> merge touches only WonderlandLiveTerminal.cpp; fix -> merge only this ledger;
+  - both patch directions are byte-identical to the originals;
+  - 7,187 paths, 0 mismatches.
+- Identity:
+  - label "Private Beta 0.1.0-rc11 | build c2269e0f | 2026-10-02" (no +local-changes);
+  - exe sha256 46084A86142AADFCC7D3A78FDF47E6B02D828151A9633C6C8AAA1BAA9380ABCF;
+  - zip sha256 3C5A260AA557037FD60B69A93C61F311107271984B5775DAA8A3FE15B14A5822, 667,503,245 bytes, 82 files.
+- Built 08:50-08:57 (7.7 min; free RAM fell to 0.68 GB in the cook). The editor module was rebuilt at 08:57:50, so the
+  founder's editor carries the fix.
+- Static (`static_0.1.0-rc11_core.txt`): zip == manifest == folder 82/82. Against RC10 only the exe, README_BETA.txt (the
+  version) and BuildInfo.txt changed. The PII scan is line for line RC10's (15 lines, 0 differences).
+- QA (`qa_rc11_core/`): **64 PASS, 0 FAIL over three boots, QA PASSED**.
+  - Q10.6: shadow_flame 174.15 uu = Relay OG. Q25.6: its eyes inside the face.
+  - QNET run1 PASS (`qnet_lines.txt`: no listening socket); runs 2 and 3 end before 28 s, as on RC10.
+  - Labels OK, 0 crash and 0 Nanite lines, graceful exits.
+  - The guard saw 1 press elsewhere (09:00:45, at the first launch) and none into the game.
+- Firewall: RC11's new path holds two Inbound Allow (Public) rules after its first launch, answered by a person; CORE
+  changes no rule.
+- CORE's "+" instrument (`plus_rc11_core/plus_measure.py`) was validated before any RC11 frame existed:
+  - it FAILs all 8 before-state frames (CORE's RC10 and RC9 films, Second's "before");
+  - it PASSes all 4 after-state frames (Second's, incl. 125% Windows scaling);
+  - it agrees with Second's instrument within 1-2 px.
+- Still to run on RC11: watchdog; Shadow Flame + restart; wardrobe; clean user; session; WATCH; the terminal films with
+  the "+" measured and the four panels; failed travel; perf against RC10.
 
 ### RC10 package evidence (CORE) -- final RC 2026-10-02 05:02 to ~08:30, superseded by RC11 before Second's pass
 
