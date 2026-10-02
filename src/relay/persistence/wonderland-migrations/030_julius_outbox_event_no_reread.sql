@@ -27,6 +27,35 @@ BEGIN;
 -- it, exactly as anyone with DDL rights could drop the foreign key or these triggers. Ids are delimited by chr(31) on
 -- both sides, and an outbox row whose event id is empty or contains chr(31) is refused, so no id can match across two
 -- registered ones.
+-- FOUNDER GATES (2026-10-02): drop ONLY this constraint, and STOP if the database is not what 030 was written for.
+-- Before anything changes, inside this transaction: the constraint must be exactly the foreign key being replaced
+-- (outbox.event_id -> events.event_id, ON DELETE CASCADE), and NO outbox row may already name a missing event. Either
+-- refusal raises, so the whole migration rolls back and nothing is dropped. The counts are reported as a NOTICE for the
+-- deploy record (docs/julius-migrations/030/RUNBOOK.md).
+DO $$
+DECLARE
+  orphans bigint;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+     WHERE c.conname = 'outbox_event_id_fkey' AND c.contype = 'f'
+       AND c.conrelid = 'relay_wonderland.outbox'::regclass AND c.confrelid = 'relay_wonderland.events'::regclass
+       AND c.confdeltype = 'c' AND c.confupdtype = 'a' AND c.confmatchtype = 's'
+       AND c.conkey = ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.outbox'::regclass AND attname = 'event_id')]::int2[]
+       AND c.confkey = ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.events'::regclass AND attname = 'event_id')]::int2[]
+  ) THEN
+    RAISE EXCEPTION 'migration_030_refused: outbox_event_id_fkey is not the foreign key 030 was written to replace (outbox.event_id -> events.event_id ON DELETE CASCADE)';
+  END IF;
+  SELECT count(*) INTO orphans FROM relay_wonderland.outbox o
+   WHERE NOT EXISTS (SELECT 1 FROM relay_wonderland.events e WHERE e.event_id = o.event_id);
+  IF orphans > 0 THEN
+    RAISE EXCEPTION 'migration_030_refused: % outbox row(s) already name a missing event; integrity is violated before the migration', orphans;
+  END IF;
+  RAISE NOTICE 'migration_030_precheck: outbox_event_id_fkey verified; orphan outbox rows 0; events %; outbox %',
+    (SELECT count(*) FROM relay_wonderland.events), (SELECT count(*) FROM relay_wonderland.outbox);
+END
+$$;
+
 ALTER TABLE relay_wonderland.outbox DROP CONSTRAINT outbox_event_id_fkey;
 
 CREATE FUNCTION relay_wonderland.events_written_remember() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -92,6 +121,19 @@ END;
 $$;
 CREATE TRIGGER events_truncate_refused BEFORE TRUNCATE ON relay_wonderland.events
   FOR EACH STATEMENT EXECUTE FUNCTION relay_wonderland.events_truncate_refused();
+
+-- POST-CHECK, still inside the transaction: the constraint is gone, nothing else was dropped with it (the other foreign
+-- keys of outbox and events are counted before and after by the deploy scripts), and still no orphan exists.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'outbox_event_id_fkey' AND conrelid = 'relay_wonderland.outbox'::regclass) THEN
+    RAISE EXCEPTION 'migration_030_postcheck: outbox_event_id_fkey still exists';
+  END IF;
+  IF EXISTS (SELECT 1 FROM relay_wonderland.outbox o WHERE NOT EXISTS (SELECT 1 FROM relay_wonderland.events e WHERE e.event_id = o.event_id)) THEN
+    RAISE EXCEPTION 'migration_030_postcheck: an outbox row names a missing event';
+  END IF;
+END
+$$;
 
 INSERT INTO relay_wonderland.schema_migrations(version) VALUES('030_julius_outbox_event_no_reread');
 COMMIT;

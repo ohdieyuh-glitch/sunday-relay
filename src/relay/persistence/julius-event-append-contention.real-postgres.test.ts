@@ -320,6 +320,17 @@ suite('Julius event appends under SERIALIZABLE, in both plan states (row 13 (i),
     expect(await sequencesOf(run)).toEqual([written.sequence, written.sequence + 1]);
   });
 
+  it('A REPLAY UNDER A PROJECT THAT DOES NOT OWN THE RUN is refused (julius_run_not_found) and writes nothing (the stated replay delta)', async () => {
+    const run = await newRun('owner');
+    const value = event(run);
+    await repository.append(value);
+    await pool.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1)', [`${project}-other`]);
+    await expect(repository.append({ ...value, projectId: `${project}-other` }), 'the run is not the other project’s').rejects.toThrow('julius_run_not_found');
+    expect(await count('SELECT count(*)::int AS n FROM relay_wonderland.outbox WHERE event_id=$1', [value.eventId]), 'still the one outbox row').toBe(1);
+    expect(await count('SELECT count(*)::int AS n FROM relay_wonderland.outbox WHERE project_id=$1', [`${project}-other`]), 'and none for the other project').toBe(0);
+    expect(await sequencesOf(run), 'and no sequence allocated').toEqual([1]);
+  });
+
   it('A CONFLICTING REPLAY ALLOCATES NOTHING: refused, and the stream stays gapless', async () => {
     const run = await newRun('conflict');
     const first = event(run);
