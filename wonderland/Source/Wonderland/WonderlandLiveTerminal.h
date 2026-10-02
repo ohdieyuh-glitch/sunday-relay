@@ -252,9 +252,8 @@ private:
 	TSharedRef<SWidget> MakeWorkLog(const FString& Section, const FString& Resting);
 
 	FSlateRoundedBoxBrush WindowBrush;
-	FSlateRoundedBoxBrush SectionBrush;
-	/** The JULIUS 3.3 section's plate: the darkest, so the terminal's own output has the most contrast. */
-	FSlateRoundedBoxBrush OutputBrush;
+	/** The plate of all four panels (Architect, Coder, JULIUS 3.3, Reviewer): one black, the darkest in the terminal. */
+	FSlateRoundedBoxBrush PanelBrush;
 	FSlateRoundedBoxBrush InputBrush;
 	FSlateRoundedBoxBrush SlotBrush;
 	FEditableTextBoxStyle InputStyle;

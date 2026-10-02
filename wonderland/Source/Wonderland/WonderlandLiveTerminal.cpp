@@ -85,9 +85,7 @@ int32 SWonderlandHexBadge::OnPaint(const FPaintArgs& Args, const FGeometry& Allo
 SWonderlandLiveTerminal::SWonderlandLiveTerminal()
 	: WindowBrush(WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusBodyFill(), WonderlandUi::JuliusAccent(), 0.045f),
 		10.0f, WonderlandUi::JuliusGold(0.40f), 1.0f)
-	, SectionBrush(WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusSectionFill(), WonderlandUi::JuliusAccent(), 0.040f),
-		7.0f, WonderlandUi::JuliusGold(0.40f), 1.0f)
-	, OutputBrush(WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusOutputFill(), WonderlandUi::JuliusAccent(), 0.030f),
+	, PanelBrush(WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusPanelFill(), WonderlandUi::JuliusAccent(), 0.030f),
 		7.0f, WonderlandUi::JuliusGold(0.40f), 1.0f)
 	, InputBrush(WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusInputFill(), WonderlandUi::JuliusAccent(), 0.035f),
 		6.0f, WonderlandUi::JuliusGold(0.40f), 1.0f)
@@ -99,17 +97,14 @@ SWonderlandLiveTerminal::SWonderlandLiveTerminal()
 
 void SWonderlandLiveTerminal::RebuildChrome()
 {
-	// THE SAME FIVE BRUSHES THE CONSTRUCTOR BUILDS, from whatever the Julius accent is now. Kept in one place
+	// THE SAME FOUR BRUSHES THE CONSTRUCTOR BUILDS, from whatever the Julius accent is now. Kept in one place
 	// because a constructor and a theme-follower that build the same surface from two copies of the same
 	// expression drift, and the drift shows up as a panel that changes colour only after a restart.
 	WindowBrush = FSlateRoundedBoxBrush(
 		WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusBodyFill(), WonderlandUi::JuliusAccent(), 0.045f),
 		10.0f, WonderlandUi::JuliusGold(0.40f), 1.0f);
-	SectionBrush = FSlateRoundedBoxBrush(
-		WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusSectionFill(), WonderlandUi::JuliusAccent(), 0.040f),
-		7.0f, WonderlandUi::JuliusGold(0.40f), 1.0f);
-	OutputBrush = FSlateRoundedBoxBrush(
-		WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusOutputFill(), WonderlandUi::JuliusAccent(), 0.030f),
+	PanelBrush = FSlateRoundedBoxBrush(
+		WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusPanelFill(), WonderlandUi::JuliusAccent(), 0.030f),
 		7.0f, WonderlandUi::JuliusGold(0.40f), 1.0f);
 	InputBrush = FSlateRoundedBoxBrush(
 		WonderlandUi::TintPlateDisplay(WonderlandUi::JuliusInputFill(), WonderlandUi::JuliusAccent(), 0.035f),
@@ -449,9 +444,11 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeSection(const FString& Title, c
 {
 	RestingStates.Add(Title, State);
 	const auto StateNow = [this, Title]() { return GetSectionState(Title); };
-	// JULIUS 3.3 is the terminal's own output: it sits on the darkest plate, the three peers on dark glass.
+	// ONE BLACK FOR ALL FOUR PANELS (founder, 2026-10-01): PROMPT ARCHITECT, CODING AGENT and INDEPENDENT REVIEWER
+	// wear the JULIUS 3.3 plate itself. Their old plate was a GRAY, Srgb(20, 21, 26) at 48%, laid over the near-black
+	// body -- so it lifted the body toward gray instead of deepening it, and read as fog beside Julius.
 	return SNew(SBorder)
-		.BorderImage(Title == TEXT("JULIUS 3.3") ? &OutputBrush : &SectionBrush)
+		.BorderImage(&PanelBrush)
 		.Padding(FMargin(9.0f, 5.0f))
 		[
 			SNew(SVerticalBox)
