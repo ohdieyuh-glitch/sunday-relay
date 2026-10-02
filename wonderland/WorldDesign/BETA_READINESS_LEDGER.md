@@ -31,8 +31,8 @@ is built into every 1.0, so nothing above 75% is possible before the final RC.
 | R1 | Environmental world complete (locked, 25/25) | 8 | 0.75 | WORLD_COMPLETION_MATRIX.md; RC3, RC4 and RC5 QA Q02-Q08 travel/map/teleports PASS; RC4/RC5: 0 "missing usage flag Nanite" (RC3 had 8) | -- |
 | R2 | Gameplay regression G1-G7 (locked, 18/18) | 8 | 0.75 | RC3 and RC5 QA Q09-Q11 PASS | -- |
 | R3 | First launch: clean start, spawn, Relay Dog init, clear path in, no developer knowledge | 8 | 0.75 | RC5 Q00.1 welcome, Q00.2 lock-down, Q00.6 the window names the build; prerequisites + closure; Esc -> menu -> QUIT (RC3 soak); Second's RC4 clean-user first launch | B55 (P3): a freshly unzipped package hitches on its first run |
-| R4 | Core creation loop, truthful about Julius | 12 | 0.75 | RC3 Q13 eight contracts through + and the terminal, Q14 restored, Q15 deleted, Q17 the simulated mission plays and says SIMULATED, Q20 limit 48; RC8 Q13/Q14/Q15/Q17/Q20 PASS; **RC8: the WATCH A SIMULATED MISSION button itself clicked in the package by real OS input** (`drive_rc8_a_core/`, `drive_rc8_a2_core/`): "WLMISSION simulated mission from the Missions panel: started", the panel closes, scenario D plays SIMULATED on camera (full_lifecycle 11/22 reached) | for 1.0: Second's own click on RC8. CORE's click runs to the mission's end were twice voided by founder input after the mission had started (Q17 plays the same mission to its end) |
-| R5 | Session stability: launch / quit / relaunch, focus loss, window changes (single-player) | 3 | 0 | RC3: four clean boots and quits; the menu QUIT works | focus loss not yet verified; RC3's two window modes (B40 fix) not yet verified in a package |
+| R4 | Core creation loop, truthful about Julius | 12 | 0.75 | RC3 Q13 eight contracts through + and the terminal, Q14 restored, Q15 deleted, Q17 the simulated mission plays and says SIMULATED, Q20 limit 48; RC8 Q13/Q14/Q15/Q17/Q20 PASS; **RC8: the WATCH A SIMULATED MISSION button itself clicked in the package by real OS input** (`drive_rc8_a_core/`, `drive_rc8_a2_core/`): "WLMISSION simulated mission from the Missions panel: started", the panel closes, scenario D plays SIMULATED on camera; `drive_rc8_a3_core/`: relaunched, clicked, and watched to its end ("WLMISSION fixture 'full_lifecycle' finished … beat=complete_verified … applied=22 … simulated=4") | for 1.0: Second's own click on RC8 |
+| R5 | Session stability: launch / quit / relaunch, focus loss, window changes (single-player) | 3 | 0.75 | RC3: four clean boots and quits; the menu QUIT works; **RC8 by real OS input** (`drive_rc8_b_core/`, 15/15, no founder input): SETTINGS WINDOWED -> BORDERLESS -> WINDOWED through the buttons, each proved by "WLSETTINGS window mode …" and the window's own style (caption 1940x1249 / popup 1920x1200); after them Esc closes the menu, J opens Missions, Esc closes it; focus lost 8 s to another window and back, then input; minimized 5 s and restored, then input; Esc -> menu -> QUIT WONDERLAND (two clicks) -> "Log file closed". `drive_rc8_a3_core/` relaunched on that profile: no welcome (it was seen), still WINDOWED (the choice survived the restart) | for 1.0: Second's independent run on RC8. B60 (P3): WINDOWED at the desktop resolution |
 | R6 | Private/project space and project avatar flow, as implemented | 3 | 0.75 | nothing to test (D2); RC3 Q18 `/pa` changes nothing in a player session; welcome says single-player | -- |
 | R7 | Wonder Web and every beta-facing screen: no dead buttons or placeholders, no debug exposure, back/close/Esc, sane errors | 8 | 0.75 | RC5 Q00.2/Q00.3/Q00.5 (D3), Q01-Q01f (B44 Flame Color), Q22-Q24 (B49 companion consoles) and CORE's RC5 films beside the founder's reference | B49 needs Second's own video acceptance on RC5; B54 (P2, Julius lane): SIM TOKENS in the Julius terminal |
 | R8 | Save / persistence across quit, relaunch, interruption | 8 | 0.75 | RC5 Q12/Q14/Q16/Q15 across a restart; Q21.1-Q21.7 a third boot on corrupted files: no crash, bad files set aside, next save sealed | -- |
@@ -45,18 +45,19 @@ is built into every 1.0, so nothing above 75% is possible before the final RC.
 | R15 | Clean-user test on the RC (no saves, no console, no developer knowledge) | 6 | 0 | Second's RC3 clean-user pass waits for an idle laptop | -- |
 | | **Total** | **100** | | | |
 
-**WONDERLAND BETA READINESS: 65.25%** (RC5 package evidence + CORE's RC8 evidence, 2026-10-01). R1 6 + R2 6 + R3 6 +
-R4 9 + R6 2.25 + R7 6 + R8 6 + R9 5.25 + R10 5.25 + R11 4.5 + R12 5.25 + R13 3.75.
+**WONDERLAND BETA READINESS: 67.50%** (RC5 package evidence + CORE's RC8 evidence, 2026-10-01). R1 6 + R2 6 + R3 6 +
+R4 9 + R5 2.25 + R6 2.25 + R7 6 + R8 6 + R9 5.25 + R10 5.25 + R11 4.5 + R12 5.25 + R13 3.75.
 - RC5's soak found a P1: the exit hangs after a long session (B57). RC6 (144d2e21) carried the fix. RC7 (4930697c, locked)
   added the founder's mascot-eye correction. **The final RC is now RC8 (ecaa3407)** = RC7 + the wardrobe framing and
   canonical idle (31e22f5a) + the Julius terminal's black-glass contrast (1f1bae75), founder-authorized 2026-10-01. Every
   1.0 is earned on RC8 by CORE and Second.
 - Nothing above 75% is possible until Second signs it.
 - Still to evidence:
-  - R5: focus loss and window modes;
   - R14: RC8's soak exit;
   - R15: the clean-user pass.
-- History: 62.25% -> 65.25% on 2026-10-01 18:55 (R4 0.5 -> 0.75: the WATCH button clicked in the RC8 package).
+- History:
+  - 62.25% -> 65.25% on 2026-10-01 18:55 (R4 0.5 -> 0.75: the WATCH button clicked in the RC8 package);
+  - 65.25% -> 67.50% on 2026-10-01 19:14 (R5 0 -> 0.75: window modes, focus loss, minimize, quit and relaunch on RC8).
 
 ### RC8 package evidence (CORE)
 
@@ -82,7 +83,10 @@ R4 9 + R6 2.25 + R7 6 + R8 6 + R9 5.25 + R10 5.25 + R11 4.5 + R12 5.25 + R13 3.7
   the click logs "WLMISSION simulated mission from the Missions panel: started", the panel closes, the Dog travels to
   Castle Approach, both companions join SIMULATED, the contract manifests, the strip reads DEVELOPMENT PREVIEW ·
   SIMULATED JULIUS EXECUTION through full_lifecycle 11/22 on camera. Both runs were later VOID (real mouse input at 18:34
-  and 18:41) and stopped at once.
+  and 18:41) and stopped at once. `drive_rc8_a3_core/` (founder hands-off): relaunch, click, the mission to "fixture
+  'full_lifecycle' finished" (applied=22); the mission opens the Julius terminal, so the first Esc after it closes the
+  terminal (its own "Esc to close"), not the menu.
+- Session stability (`drive_rc8_b_core/`, 15/15): see R5. QNET PASS on five RC8 boots after the first (t+37.7 to 43.1 s).
 
 ### RC5 package evidence (CORE)
 
@@ -244,6 +248,8 @@ survives a small private beta with a documented limitation. P3 is polish. Only P
 | B57 | P1 | session / soak | RC5's 60-minute soak passed (WLSOAK END PASS, 165 cycles, 0 crashes, memory flat), but its exit never finished. The log stops at ~FD3D12DynamicRHI; the process stayed alive, windowless and idle (WS 497 MB, private 1,104 MB, VRAM 415 MB) until the soak script killed it 10 minutes later. Minidump + stacks symbolised against the matching PDB (`soak_rc5/hang/`): the main thread is in ~FTaskGraphCompatibilityImplementation joining a worker (FThread::Join) blocked on a mutex. No Wonderland code runs background tasks: it is the engine's teardown. Short sessions exit cleanly | WonderlandBeta::ArmExitWatchdog (144d2e21): on OnEnginePreExit a plain OS thread ends a teardown still running after 20 s (exit code 0); the graceful exit runs first and everything is saved when made. Proved by wl.Qa.HangOnExit: a 60 s exit hang ended ~21 s in | open on RC5; fixed in RC6 source; RC6 soak pending |
 | B58 | P3 | diagnostics | A fired exit watchdog looks like a clean exit (code 0, no marker); only the missing "Log file closed" line shows it (Second) | a raw-Win32 Saved/Logs/ExitWatchdog.txt marker before TerminateProcess, in any RC7 | open |
 | B59 | P3 | measurement | The soak's "worst frame" (2,171 ms on RC5) counts the startup frame read when wl.Qa.Soak arms; the worst frame in play was 151 ms | count from WLPERF BEGIN and name the cycle step, in any RC7 | documented |
+| B60 | P3 | window | SETTINGS -> WINDOWED at the desktop resolution (1920x1200 here) keeps a 1920x1200 client: the window (-10,-39 1940x1249 on RC8) has its title bar above the screen, so it cannot be dragged, and its bottom ~48 px under the taskbar. The switch, input, focus, minimize and quit all work (`drive_rc8_b_core/`) | a windowed size that fits the work area (e.g. 80% of it), centred | documented |
+| B61 | P3 | measurement | QNET reads every boot once at ~30 s after launch; RC8's first-ever launch spent 16 s before its log opened (B55), so the trace port's normal ~2 s opening fell on the reading (run1 FAIL; five later boots PASS) | time the reading from the game's own "Control listening on port 1985" + 5 s (or sample until the closing window ends), so a slow first start cannot place it inside the opening | documented |
 | B55 | P3 | performance | The first run of a freshly unzipped package hitches while streaming: teleports worst 361 ms and map 147 ms on RC5's first run, against 110 ms and 71 ms on its second (new files scanned, caches cold) | -- | documented |
 | B53 | P2 | dependency | A companion doing a REAL task needs a provider the founder connects. On this laptop OpenAI has no key and Claude Code is installed but not allowed. The runtime's development providers answer SIMULATED | the console labels the runtime's mode; the REAL-provider video waits for the founder | founder decision |
 
