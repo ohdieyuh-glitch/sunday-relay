@@ -147,7 +147,8 @@ export async function handleSocialRoute(request: SocialRouteRequest, deps: Socia
     return ok(await deps.store.eventsFor(actor.actorId, Number.isFinite(after) && after > 0 ? after : 0, Number.isFinite(limit) && limit > 0 ? limit : 100));
   }
   const result = await deps.store.apply(op.id as SocialOperationId, actor.actorId, { ids: idsOf(op.template, pathname), body, query }, nowIso);
-  if (!result.ok) return err(statusFor(result.error.code), result.error.code, result.error.message);
+  // A RETRYABLE FAILURE IS AN OUTAGE, NOT A REFUSAL: a durable write that did not commit changed nothing and says 503.
+  if (!result.ok) return err(result.error.retryable === true ? 503 : statusFor(result.error.code), result.error.code, result.error.message);
   return ok(result.value);
 }
 

@@ -5,13 +5,19 @@ BEGIN;
 -- src/relay/social/*.ts and are pure; this is where their records persist, so
 -- relationships, messages and parties outlive any one Unreal process.
 --
--- A PROPOSAL, NOT YET IN THE CHAIN. It sits beside the social module rather
--- than in wonderland-migrations/ because that directory is the packaged chain
--- (julius-migration-chain.test.ts): a file there is applied to every fresh
--- database. It joins the chain only after the Project Brain lane's 028/029
--- have landed, with its number confirmed then, and only with the founder's OK.
--- Written to the chain's own rules so that move is a rename: one transaction,
--- and it stamps schema_migrations with its own version.
+-- FOUNDER DECISION (2026-10-02): the social backend lands in MAIN, and this
+-- migration follows main's chain: ...026, 028_julius_criteria_per_run,
+-- 029_julius_project_brain, then 030. It sits beside the social module until
+-- its registration in wonderland-postgres.ts is agreed with the Julius lane
+-- (julius-migration-chain.test.ts holds every file in wonderland-migrations/ to
+-- that list); the move is then a rename. Written to the chain's own rules: one
+-- transaction, and it stamps schema_migrations with its own version.
+--
+-- WHAT A RESTART MUST GIVE BACK (founder): profiles, privacy, relationships,
+-- requests, blocks, mutes, reports, conversations, messages, read positions,
+-- parties, membership, invites, the presence a player CHOSE (status, activity,
+-- place, last seen -- never "connected", which is true only while a client is
+-- talking), the id sequence, and the change events clients poll.
 --
 -- WHAT IS NEVER HERE: credentials, tokens, prompts, Project Brain content,
 -- mission contracts, wallet figures (social-contracts.ts NEVER_SOCIAL_CONCERNS).
@@ -158,16 +164,59 @@ CREATE TABLE relay_wonderland.social_party_invites(
 );
 CREATE UNIQUE INDEX social_party_invites_one_pending ON relay_wonderland.social_party_invites(party_id,to_user) WHERE status='PENDING';
 
--- The owner's chosen public showcase: which agents and companions a profile shows, in the owner's order. References only;
--- the public card is assembled from the agent's own public fields (allowlist), never from its configuration.
-CREATE TABLE relay_wonderland.social_profile_showcase(
-  player_id text NOT NULL REFERENCES relay_wonderland.players ON DELETE CASCADE,
-  slot text NOT NULL CHECK(slot IN('PRIMARY_AGENT','AGENT','ACTIVE_COMPANION','COMPANION')),
-  ref_id text NOT NULL,
-  position smallint NOT NULL DEFAULT 0 CHECK(position >= 0),
-  PRIMARY KEY(player_id,slot,ref_id)
+-- THE PUBLIC PROFILE: who the player is to others, and the public cards the
+-- profile shows. The cards are the domain's PUBLIC types (social-contracts.ts:
+-- an agent's name, system, emblem, ratings; a companion's name and colours) --
+-- an allowlist by construction, never an agent's configuration.
+CREATE TABLE relay_wonderland.social_profiles(
+  player_id text PRIMARY KEY REFERENCES relay_wonderland.players ON DELETE CASCADE,
+  display_name text NOT NULL CHECK(char_length(display_name) BETWEEN 1 AND 40),
+  handle text NOT NULL CHECK(char_length(handle) BETWEEN 1 AND 40),
+  avatar_ref text NOT NULL CHECK(char_length(avatar_ref) <= 120),
+  nation_id text CHECK(nation_id IS NULL OR nation_id IN('ICARUS','NOCTIS','TARTARUS')),
+  clan_name text CHECK(clan_name IS NULL OR char_length(clan_name) <= 40),
+  relay_dog jsonb NOT NULL,
+  primary_agent jsonb,
+  active_companion jsonb,
+  showcase_agents jsonb NOT NULL DEFAULT '[]'::jsonb,
+  showcase_companions jsonb NOT NULL DEFAULT '[]'::jsonb,
+  stats jsonb NOT NULL DEFAULT '[]'::jsonb,
+  member_since timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX social_profile_showcase_one_primary ON relay_wonderland.social_profile_showcase(player_id,slot) WHERE slot IN('PRIMARY_AGENT','ACTIVE_COMPANION');
+CREATE UNIQUE INDEX social_profiles_handle ON relay_wonderland.social_profiles(lower(handle));
+
+-- THE PRESENCE A PLAYER CHOSE AND LAST REPORTED. "Connected" is not stored: it is
+-- true only while a client is talking, so after a restart everyone reads OFFLINE
+-- until their client reports again -- with their chosen status and last-seen kept.
+CREATE TABLE relay_wonderland.social_presence(
+  player_id text PRIMARY KEY REFERENCES relay_wonderland.players ON DELETE CASCADE,
+  availability text NOT NULL CHECK(availability IN('AVAILABLE','AWAY','BUSY','APPEAR_OFFLINE')),
+  activity text NOT NULL,
+  activity_detail text CHECK(activity_detail IS NULL OR char_length(activity_detail) <= 80),
+  location jsonb,
+  last_seen_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL
+);
+
+-- THE ID SEQUENCE: ids are minted from one serial, so it must outlive the process.
+CREATE TABLE relay_wonderland.social_meta(
+  name text PRIMARY KEY,
+  value bigint NOT NULL CHECK(value >= 1)
+);
+INSERT INTO relay_wonderland.social_meta(name, value) VALUES('next_serial', 1);
+
+-- THE CHANGE EVENTS CLIENTS POLL. An event names the operation and when, and
+-- WHO it concerns -- never its content. A block, mute or report concerns only
+-- its actor. Kept for a bounded time; a client further behind is told to reset.
+CREATE TABLE relay_wonderland.social_events(
+  seq bigserial PRIMARY KEY,
+  op text NOT NULL CHECK(char_length(op) <= 40),
+  at timestamptz NOT NULL,
+  audience text[] NOT NULL CHECK(cardinality(audience) BETWEEN 1 AND 256)
+);
+CREATE INDEX social_events_audience ON relay_wonderland.social_events USING gin(audience);
+CREATE INDEX social_events_at ON relay_wonderland.social_events(at);
 
 INSERT INTO relay_wonderland.schema_migrations(version) VALUES('030_wonderland_social');
 COMMIT;
