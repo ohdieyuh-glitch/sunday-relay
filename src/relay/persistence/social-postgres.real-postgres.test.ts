@@ -64,8 +64,21 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
     store = await openSocialPostgresStore(pool);
   }, 60_000);
 
+  // THE CATCH-ALL SHARES ONE DATABASE (real-infra runs every real-postgres file in parallel on it): everything this suite
+  // made is removed, in foreign-key order. Parties first (leader_id does not cascade), then the conversations its players
+  // are in, its events, and its players -- whose deletion cascades every other social_* row that names them.
   afterAll(async () => {
-    await pool?.end();
+    if (pool === undefined) return;
+    const ids = [KAI, NOVA, VEGA];
+    await pool.query(`DELETE FROM relay_wonderland.social_parties WHERE leader_id = ANY($1::text[])`, [ids]);
+    await pool.query(
+      `DELETE FROM relay_wonderland.social_conversations WHERE conversation_id IN
+         (SELECT conversation_id FROM relay_wonderland.social_conversation_members WHERE player_id = ANY($1::text[]))`,
+      [ids],
+    );
+    await pool.query(`DELETE FROM relay_wonderland.social_events WHERE audience && $1::text[]`, [ids]);
+    await pool.query(`DELETE FROM relay_wonderland.players WHERE player_id = ANY($1::text[])`, [ids]);
+    await pool.end();
   });
 
   it('the loop, written through, comes back whole after a restart', async () => {
