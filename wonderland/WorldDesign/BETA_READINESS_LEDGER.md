@@ -88,7 +88,43 @@ R4 9 + R5 2.25 + R6 2.25 + R7 6 + R8 6 + R9 5.25 + R10 5.25 + R11 4.5 + R12 5.25
   and 18:41) and stopped at once. `drive_rc8_a3_core/` (founder hands-off): relaunch, click, the mission to "fixture
   'full_lifecycle' finished" (applied=22); the mission opens the Julius terminal, so the first Esc after it closes the
   terminal (its own "Esc to close"), not the menu.
-- Session stability (`drive_rc8_b_core/`, 15/15): see R5. QNET PASS on five RC8 boots after the first (t+37.7 to 43.1 s).
+- Session stability (`drive_rc8_b_core/`, 15/15): see R5. QNET PASS on six RC8 boots after the first (t+35.7 to 43.1 s).
+- Clean-user first launch (`cleanuser_rc8_core/`): see R15.
+- Wardrobe, the authoritative run on the integrated build (`wardrobe_rc8_core/`): wl.Qa.Wardrobe END pass=22 fail=0, label
+  OK, graceful. Preview height Relay OG 84.5%, Celestial Light 85.9%, Skeleton Flame 97.6%, Jack Flame 98.1% (fire tips
+  at the top, founder-approved), Baal 89.8%. Every body planted (travel 0.00 uu, tilt <= 0.55 deg, arms <= 0.90 deg),
+  head yaw ranges 11.4-21.0 deg beside the in-world Relay OG, canonical pose 0.18-0.21 s after each switch, 360 at a
+  constant distance and back to the front. Relay OG in the world: QA Q09/Q10 PASS on RC8.
+- Julius Live Terminal, RC7 vs RC8 (`film_rc7_terminal_core/`, `film_rc8_terminal_core/`, measured frames in
+  `terminal_rc7_vs_rc8_core/`): the same mission moment and camera, the world outside the terminal unchanged (L78 both).
+  The plates went from brown to near-black: header (109,82,49) L85 -> (35,28,19) L29; Julius section (75,58,33) L60 ->
+  (22,18,12) L19; architect/coding/reviewer sections L55-60 -> L28-30 (-49 to -69% luma). The world still shows through,
+  attenuated: the header's texture spread went from 10.5 to 3.4.
+- Companion consoles after a colour change (B56, `film_rc8_b56_core/`): "WLUI chrome rebuilt for a colour change" and the
+  new secondary saved before the consoles rose. Through the simulated mission both consoles show the same state and lines
+  as the plain RC8 film at the same moments (ACTIVE · JOINED, simulated, no provider called). Clean film.
+- Failed travel (`failed_travel_rc8_core/`, squeeze 0.7 s): 5 of 7 travels failed on purpose (streaming hard cap x3, no
+  ground x2). Each returned the visitor to the start and said "Could not land safely at X; returned to where you were.";
+  a later travel arrived, the route finished, graceful exit code 0.
+- Perf, the game's own window, interleaved RC8 / RC7 / RC8 (`perf_rc8_core/`, `perf_rc7_backtoback_core/`,
+  `perf_rc8_b_core/`), avg fps / worst frame:
+
+  | phase | RC8 a (19:58) | RC7 (20:05) | RC8 b (20:10) |
+  |---|---|---|---|
+  | idle | 29.1 / 491 ms | 31.1 / 72 ms | 29.9 / 63 ms |
+  | walk | 32.7 / 55 ms | 33.9 / 66 ms | 28.7 / 82 ms |
+  | teleport | 27.6 / 129 ms | 28.3 / 116 ms | 22.9 / 124 ms |
+  | map | 39.2 / 46 ms | 40.8 / 58 ms | 30.8 / 60 ms |
+  | wardrobe | 33.1 / 88 ms | 34.1 / 86 ms | 26.2 / 111 ms |
+  | contract | 29.5 / 91 ms | 31.3 / 87 ms | 26.2 / 124 ms |
+  | creation | 28.8 / 61 ms | 30.7 / 48 ms | 25.5 / 60 ms |
+
+  RC8 a sits 2-6% under RC7 (RC5's own two runs differed by up to 6%); RC8 b drifted lower everywhere after three heavy
+  runs back to back; the 491 ms frame (the first frames of idle, beside two first-use PSO misses that RC5, RC7 and RC8
+  log identically) did not recur. No regression attributable to RC8. Memory flat: peak working set ~2.43 GB, private
+  ~6.55 GB, VRAM ~4.28 GB; 0 crashes; every travel arrived.
+- Firewall: the never-run clean-user path raised Windows' prompt (README step 4: Cancel). A person answered it Allow at
+  ~19:21; both RC8 paths now hold Allow/Public inbound rules. CORE changes no firewall rule.
 
 ### RC5 package evidence (CORE)
 
