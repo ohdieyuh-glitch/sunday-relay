@@ -235,7 +235,7 @@ describe('the terminal-state invariant at the run\'s terminal transition', () =>
     if (sql.startsWith('SELECT 1 FROM relay_wonderland.julius_runs')) return { rows: [{ '?column?': 1 }], rowCount: 1 };
     return undefined;
   });
-  /** The parameters of the event INSERT that carries this id; the existence check before it carries the id too. */
+  /** The parameters of the event INSERT that carries this id; the read of a taken id (only after a conflict) carries the id too. */
   const eventInsert = (client: BoundaryClient, eventId: string): unknown[] | undefined =>
     client.params.find((params, index) => params[0] === eventId && client.commands[index]!.startsWith('INSERT INTO relay_wonderland.events'));
   const transition = (client: BoundaryClient, to: 'FAILED' | 'WAITING') => new JuliusPostgresRepository(poolOf(client)).transition({

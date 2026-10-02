@@ -26,18 +26,45 @@ export interface JuliusEventTransaction{query:(sql:string,values?:readonly unkno
  * same typed conflict, the same run-ownership check, the same sequence
  * allocation, the same outbox row. It takes no BEGIN and no COMMIT, so these
  * events land exactly when the work they describe does.
+ *
+ * NO READ OF AN ID THAT DOES NOT EXIST YET (row 13 (i), the 09-30 two-loop
+ * failure). The duplicate check used to be a SELECT by `event_id` before the
+ * write. For a new event that read finds nothing, and under SERIALIZABLE a read
+ * that finds nothing locks the index PAGE it searched, not a key. Another run's
+ * append that inserted into the same page and committed first then made this
+ * one the pivot of a read/write cycle, cancelled at its own INSERT (40001, "read/
+ * write dependencies") although the two appends share no row. Event ids share a
+ * type prefix, so they share pages, and two run loops met that cycle until the
+ * retries ran out. Now the write comes first: the id's uniqueness is the
+ * constraint's, `ON CONFLICT(event_id) DO NOTHING` says whether this append is
+ * new, and only a taken id is read — a row that exists. The counter step sits in
+ * a savepoint that a replay rolls back, so a replay allocates nothing and the
+ * stream stays gapless. The run is locked first, for a replay too (an id is only
+ * ever re-sent for the run that owns it), and the counter is unchanged, so the
+ * conflict `appendSettlement` relies on — a close that moved the counter after
+ * this snapshot — still fails the transaction with 40001.
  */
 export async function appendJuliusEventWithin(client:JuliusEventTransaction,event:JuliusOperationalEvent):Promise<{recorded:boolean;sequence:number}>{
  validateJuliusEvent(event);
- const existing=await client.query('SELECT sequence,payload FROM relay_wonderland.events WHERE event_id=$1 FOR UPDATE',[event.eventId]);
- if(existing.rows[0]){const payload=typeof existing.rows[0].payload==='string'?JSON.parse(existing.rows[0].payload):existing.rows[0].payload;if(!sameStoredJuliusEvent(payload,event))throw new JuliusEventIdConflict(event.eventId);return{recorded:false,sequence:Number(existing.rows[0].sequence)};}
  const owned=await client.query('SELECT 1 FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2 FOR UPDATE',[event.runId,event.projectId]);
  if(!owned.rows[0])throw new Error('julius_run_not_found');
+ await client.query('SAVEPOINT julius_event_append');
  const allocated=await client.query('INSERT INTO relay_wonderland.stream_sequences(stream_id,next_sequence) VALUES($1,2) ON CONFLICT(stream_id) DO UPDATE SET next_sequence=relay_wonderland.stream_sequences.next_sequence+1 RETURNING next_sequence-1 AS sequence',[event.runId]);
  const sequence=Number(allocated.rows[0].sequence);
- await client.query(`INSERT INTO relay_wonderland.events(event_id,stream_id,project_id,sequence,event_type,visibility,payload,occurred_at) VALUES($1,$2,$3,$4,$5,'PROJECT',$6::jsonb,$7)`,[event.eventId,event.runId,event.projectId,sequence,`julius.${event.type}`,json(juliusEventPayload(event)),event.occurredAt]);
- await client.query('INSERT INTO relay_wonderland.outbox(outbox_id,event_id,project_id) VALUES($1,$2,$3)',[`outbox:${event.eventId}`,event.eventId,event.projectId]);
- return{recorded:true,sequence};
+ const inserted=await client.query(`INSERT INTO relay_wonderland.events(event_id,stream_id,project_id,sequence,event_type,visibility,payload,occurred_at) VALUES($1,$2,$3,$4,$5,'PROJECT',$6::jsonb,$7) ON CONFLICT(event_id) DO NOTHING RETURNING event_id`,[event.eventId,event.runId,event.projectId,sequence,`julius.${event.type}`,json(juliusEventPayload(event)),event.occurredAt]);
+ if(inserted.rowCount===1){
+  await client.query('INSERT INTO relay_wonderland.outbox(outbox_id,event_id,project_id) VALUES($1,$2,$3)',[`outbox:${event.eventId}`,event.eventId,event.projectId]);
+  await client.query('RELEASE SAVEPOINT julius_event_append');
+  return{recorded:true,sequence};
+ }
+ // The id is taken. Undo this append's counter step, then judge the row that holds the id: it exists, so reading it locks that row and nothing wider.
+ await client.query('ROLLBACK TO SAVEPOINT julius_event_append');
+ await client.query('RELEASE SAVEPOINT julius_event_append');
+ const existing=await client.query('SELECT sequence,payload FROM relay_wonderland.events WHERE event_id=$1 FOR UPDATE',[event.eventId]);
+ if(!existing.rows[0])throw new Error('julius_event_id_unreadable');
+ const payload=typeof existing.rows[0].payload==='string'?JSON.parse(existing.rows[0].payload):existing.rows[0].payload;
+ if(!sameStoredJuliusEvent(payload,event))throw new JuliusEventIdConflict(event.eventId);
+ return{recorded:false,sequence:Number(existing.rows[0].sequence)};
 }
 /**
  * Safe authoritative source only. Presentation and terminal wording are downstream concerns.
