@@ -227,7 +227,9 @@ suite('two Julius event appends under SERIALIZABLE (row 13 (i), the 09-30 failur
     expect(raced.failedAt, 'the other run’s stream and counter are not this one’s, so it is the id that stops it').toMatch(INSERT_EVENTS);
     expect(await count('SELECT count(*)::int AS n FROM relay_wonderland.events WHERE event_id=$1', [id])).toBe(1);
     await expect(repository.append(event(runA, id)), 'the id belongs to another run’s event').rejects.toBeInstanceOf(JuliusEventIdConflict);
-    expect(await sequencesOf(runA), 'and run A allocated nothing for it').toEqual([]);
+    // "Allocated nothing" is read on the counter itself, not on the events (which would be empty either way).
+    expect(await count('SELECT count(*)::int AS n FROM relay_wonderland.stream_sequences WHERE stream_id=$1', [runA]), 'run A allocated nothing for it: no counter row').toBe(0);
+    expect((await repository.append(event(runA))).sequence, 'and run A’s first event takes sequence 1').toBe(1);
   });
 
   it('A REPLAY ALLOCATES NOTHING AND WRITES NO OUTBOX ROW: the next event takes the next sequence', async () => {
