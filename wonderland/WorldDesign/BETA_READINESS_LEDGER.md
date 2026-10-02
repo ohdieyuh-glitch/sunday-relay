@@ -150,8 +150,40 @@ R12 3.9375 + R13 2.8125 + R14 0 + R15 3.375 + R16 0 = 54.00.
   - it FAILs all 8 before-state frames (CORE's RC10 and RC9 films, Second's "before");
   - it PASSes all 4 after-state frames (Second's, incl. 125% Windows scaling);
   - it agrees with Second's instrument within 1-2 px.
-- Still to run on RC11: watchdog; Shadow Flame + restart; wardrobe; clean user; session; WATCH; the terminal films with
-  the "+" measured and the four panels; failed travel; perf against RC10.
+- Exit watchdog (`hang_exit_rc11_core/`): PASS. Armed 0.40 s after PreExit; the induced hang ended 20.26 s later, code
+  0, the save intact; port 1985 open at t+7.34, closed by t+8.20 s.
+- Shadow Flame (`shadowflame_rc11_core/`, `shadowflame_rc11_restart_core/`): END pass=15 fail=0.
+  - S2: 174.15 uu, 11/11 parts. S5: 13 tendrils. S6: moving in 100% of steps. S7: cos 0.05.
+  - S10: they trail 84.2 uu while walking and come back within 6.3 uu.
+  - S14.restart PASS.
+- Wardrobe (`wardrobe_rc11_core/`): END pass=26 fail=0; shadow_flame fills 90.0% of the preview height.
+- Terminal and the "+" (`film_rc11_terminal_core/`, `film_rc11_b56_core/`, `terminal_rc11_core/`,
+  `plus_rc11_core/rc11_measurement.txt`): both films clean.
+  - CORE's "+" instrument: all 6 RC11 frames PASS a-g. The "+" is 16-17 px each way with four arms of 6.5-8.5 px,
+    centred within 1 px, margins >= 4 px; the square is 44x26-28 against RC10's 43x27.
+  - RC10's frame, measured in the same run, FAILs: 14x8 px, a lower arm of 1 px, dy +5.5.
+  - Image: `terminal_rc11_core/PLUS_RC10_vs_RC11_core.png`.
+  - The four panels are within 1 level of the JULIUS 3.3 black at 25, 35 and 45 s, the same after the colour remount.
+  - The remount leaves the companion consoles unchanged (mean |diff| <= 1.1, 0% of pixels off by more than 48).
+- Failed travel (R9): the perf route no longer exercises the recovery fully.
+  - Today's warm machine lands every teleport in 0.9-1.3 s, so the squeeze fails only the perf route's LAST travel (the
+    Mission Contract's far jump to castle_approach), and "a later travel arrived" cannot be read.
+  - Three RC11 runs (squeezes 0.7, 0.7, 0.5: `failed_travel_rc11_core`, `_b`, `_s050`) and an RC10 control at 0.7
+    (`failed_travel_rc10ctl_after_rc11_core`, 09:42) all read 6 arrived, 1 failed (the last). RC10 itself had PASSED at
+    07:41 with 5 failures, so the instrument's operating point moved with the machine, not the build.
+  - The same 0.7 squeeze on the wl.Qa.Soak route (`failed_travel_rc11_core_soakroute/`, core_stage3_travel_soak.ps1):
+    **PASS**. 17 travels, 6 failed (every far jump to castle_approach); each returned to its start position with the
+    exact message; later travels arrived; the route finished; graceful exit.
+- Perf back to back with RC10 (`perf_rc11_core/`, `perf_rc10_before_rc11_core/`): no regression.
+  - Avg fps RC11 / RC10: idle 41.7/34.5, walk 44.3/37.4, teleport 41.2/38.7, map 46.8/41.9, wardrobe 54.6/55.6,
+    contract 40.9/36.1, creation 36.1/31.4.
+  - 0 frames over 100 ms in either; 0 crashes; memory flat (peak private 6.71 GB, VRAM 4.30 GB).
+  - Both runs are faster than this morning's pair: the same machine-state shift as the travel control.
+- OWED by CORE on RC11: clean user, session stability and WATCH by real input.
+  - `cleanuser_rc11_core/` VOIDED before any input: the taskbar (Shell_TrayWnd) held the foreground.
+  - The harness can raise the game above normal windows but not above a shell surface (ForegroundLockTimeout is infinite
+    on this laptop). The drives run when a normal window holds the foreground.
+- **CORE RC11 CHAIN DONE 2026-10-02 10:10, except the three drives**; handed to Second for its independent RC11 pass.
 
 ### RC10 package evidence (CORE) -- final RC 2026-10-02 05:02 to ~08:30, superseded by RC11 before Second's pass
 
