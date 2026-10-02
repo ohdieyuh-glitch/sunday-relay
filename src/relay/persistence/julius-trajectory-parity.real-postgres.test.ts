@@ -22,6 +22,12 @@ import { summariseJuliusEvals, type JuliusTask, type JuliusTrajectoryEvent } fro
  * three-valued logic (no outcome; a non-string toolId). Then it asks both.
  * Every field must agree.
  *
+ * The second session's eval review added three things:
+ * - requeued attempts, priced and unpriced, and a requeued refusal (F1);
+ * - one refusal outcome per guard of the SQL refusal clause that can change the
+ *   summary, so that a clause which lost its guard disagrees by name (F3);
+ * - REPAIR and RECOVERY rows, whose counts were zero on both sides.
+ *
  * Runs wherever JULIUS_TEST_DATABASE_URL names a THROWAWAY database (never
  * DATABASE_URL), and is `todo` elsewhere.
  */
@@ -76,6 +82,22 @@ suite('the SQL eval summary agrees with the pure one on real PostgreSQL', () => 
     row('subagent', { kind: 'SUBAGENT', outcome: 'AUTHORIZED', usdMicros: 7_000 }, 15),
     row('fallback', { kind: 'FALLBACK', outcome: 'REROUTED' }, 16),
     row('completion', { kind: 'COMPLETION', outcome: 'VERIFIED' }, 17),
+    // A requeued attempt that reported no cost (F1): the shape the pipeline writes for a
+    // retryable TIMEOUT under automaticRetry. It is an attempt, its cost is unknown, and its
+    // minutes are in the average. A requeued refusal is still a refusal.
+    row('retry-unpriced', { kind: 'RETRY', outcome: 'TIMEOUT', providerId: 'openai', contextId: ctx(2), durationMs: 90_000 }, 18),
+    row('retry-refusal', { kind: 'RETRY', outcome: 'GOVERNANCE_HELD' }, 19),
+    // A refusal outcome that breaks exactly ONE guard of a pre-provider refusal is an attempt
+    // with no cost, so a SQL clause that lost that guard would call it a refusal and disagree
+    // (F3). The context guard is w7b's. A priced refusal outcome cannot change this summary
+    // (its cost is known and it carries no time), so the usd guard is pinned as text instead.
+    row('held-with-provider', { kind: 'DISPATCH', outcome: 'GOVERNANCE_HELD', providerId: 'anthropic' }, 20),
+    row('denied-with-duration', { kind: 'DISPATCH', outcome: 'APPROVAL_DENIED', durationMs: 15_000 }, 21),
+    row('stale-with-input', { kind: 'DISPATCH', outcome: 'CONTRACT_STALE', inputTokens: 10 }, 22),
+    row('unlocked-with-output', { kind: 'DISPATCH', outcome: 'CONTRACT_NOT_LOCKED', outputTokens: 5 }, 23),
+    // Counted on both sides, and zero on both until these rows.
+    row('repair', { kind: 'REPAIR', outcome: 'REPAIR_REQUESTED' }, 24),
+    row('recovery', { kind: 'RECOVERY', outcome: 'REQUEUED' }, 25),
   ];
 
   beforeAll(async () => {
@@ -122,11 +144,18 @@ suite('the SQL eval summary agrees with the pure one on real PostgreSQL', () => 
     const sql = await trajectory.summarize({ projectId: project, runtimeVersion, from: at(0), to: at(59) });
     const pure = summariseJuliusEvals(EVENTS, runtimeVersion);
     expect(sql).toEqual(pure);
-    // AND WHAT THEY AGREE ON IS THE CORRECTED READING, not a shared mistake:
-    // three provider attempts plus the bare and numeric-toolId rows are the
-    // attempts; of those, four named no cost.
-    expect(pure.unknownCostComponents).toBe(4);
+    // AND WHAT THEY AGREE ON IS THE CORRECTED READING, not a shared mistake.
+    // The attempts are:
+    // - w8, w7a, w7b;
+    // - the bare and numeric-toolId rows;
+    // - both requeued TIMEOUTs;
+    // - the four refusal outcomes that each break one guard.
+    // Of those, nine named no cost. Read DISPATCH-only, it would be 8 and
+    // 56,250 ms.
+    expect(pure.unknownCostComponents).toBe(9);
     expect(pure.knownUsdMicros, 'the retry and the subagent spend are in the sum').toBe(257_000);
-    expect(pure.averageDurationMs, 'provider attempts only: no tool step\'s 41 ms').toBe((60_000 + 120_000 + 30_000) / 3);
+    expect(pure.averageDurationMs, 'provider attempts only, the requeued one included: no tool step\'s 41 ms')
+      .toBe((60_000 + 120_000 + 30_000 + 90_000 + 15_000) / 5);
+    expect(pure).toMatchObject({ retries: 3, fallbacks: 1, repairs: 1, recoveries: 1, verifiedCompletions: 1 });
   });
 });

@@ -6,4 +6,12 @@ describe('trajectory persistence and Julius Evals',()=>{it('tenant-scopes and id
  * that contributed nothing. Three of Live Run 3's four components would have
  * been invisible here.
  */
-it('reports the dispatches that contributed no cost, so the SQL total is never read as complete',async()=>{const pool=new Stub();const summary=await new JuliusTrajectoryPostgresRepository(pool as unknown as Pool).summarize({projectId:'project',runtimeVersion:'v1',from:'a',to:'b'});expect(summary.unknownCostComponents).toBe(3);expect(summary.costComplete).toBe(false);expect(pool.commands[0]).toContain(`FILTER(WHERE ${JULIUS_PROVIDER_ATTEMPT_SQL} AND usd_micros IS NULL)`);expect(pool.commands[0],'the average is over provider attempts only').toContain(`avg(duration_ms) FILTER(WHERE ${JULIUS_PROVIDER_ATTEMPT_SQL})`);});});
+it('reports the dispatches that contributed no cost, so the SQL total is never read as complete',async()=>{const pool=new Stub();const summary=await new JuliusTrajectoryPostgresRepository(pool as unknown as Pool).summarize({projectId:'project',runtimeVersion:'v1',from:'a',to:'b'});expect(summary.unknownCostComponents).toBe(3);expect(summary.costComplete).toBe(false);expect(pool.commands[0]).toContain(`FILTER(WHERE ${JULIUS_PROVIDER_ATTEMPT_SQL} AND usd_micros IS NULL)`);expect(pool.commands[0],'the average is over provider attempts only').toContain(`avg(duration_ms) FILTER(WHERE ${JULIUS_PROVIDER_ATTEMPT_SQL})`);});
+/**
+ * THE PREDICATE ITSELF, AS LITERAL TEXT. Importing the constant and finding it in the query proves
+ * only that the query uses it (F3 of the second session's eval review). A provider attempt is a
+ * DISPATCH or RETRY row that is not a tool step and not a measureless pre-provider refusal, with
+ * every guard of the refusal named. Whether the clauses DISCRIMINATE is the real-PostgreSQL parity
+ * case's to prove.
+ */
+it('names both attempt kinds and every guard of a pre-provider refusal, as text',()=>{expect(JULIUS_PROVIDER_ATTEMPT_SQL.startsWith("event_kind IN ('DISPATCH','RETRY') AND NOT COALESCE(")).toBe(true);for(const guard of['provider_id IS NULL','context_id IS NULL','duration_ms IS NULL','usd_micros IS NULL','input_tokens IS NULL','output_tokens IS NULL'])expect(JULIUS_PROVIDER_ATTEMPT_SQL,guard).toContain(guard);});});

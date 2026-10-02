@@ -42,11 +42,23 @@ readonly averageDurationMs:number|null;readonly retries:number;readonly fallback
  *                 have been paid for, so every reader treats it as a provider attempt.
  * An eval that mixes them is measuring the wrong thing: tool steps of a few
  * milliseconds averaged with provider calls of a minute read a mission that ran
- * MORE tool steps as faster.
+ * MORE tool steps as faster. A RETRY row is classified the same way: the pipeline
+ * writes it with the same fields when it requeues an attempt (`JULIUS_ATTEMPT_KINDS`).
  */
 export const JULIUS_PRE_PROVIDER_REFUSALS=['GOVERNANCE_HELD','APPROVAL_DENIED','POLICY_DENIED','CONTRACT_NOT_LOCKED','REVIEW_CONTRACT_MISMATCH','CONTRACT_STALE']as const;
 export type JuliusDispatchRowClass='PROVIDER'|'TOOL'|'REFUSAL'|'UNATTRIBUTED';
 export function juliusDispatchRowClass(event:JuliusTrajectoryEvent):JuliusDispatchRowClass{const toolId=event.safeFacts.toolId;if(typeof toolId==='string'&&toolId!=='')return'TOOL';if(event.providerId!==null)return'PROVIDER';if(event.outcome!==null&&(JULIUS_PRE_PROVIDER_REFUSALS as readonly string[]).includes(event.outcome)&&event.contextId===null&&event.durationMs===null&&event.usdMicros===null&&event.inputTokens===null&&event.outputTokens===null)return'REFUSAL';return'UNATTRIBUTED';}
-/** A dispatch row that may have reached a provider: everything but a tool step or a pre-provider refusal. */
-export const isJuliusProviderAttempt=(event:JuliusTrajectoryEvent):boolean=>{if(event.kind!=='DISPATCH')return false;const rowClass=juliusDispatchRowClass(event);return rowClass==='PROVIDER'||rowClass==='UNATTRIBUTED';};
+/**
+ * THE ROWS THAT RECORD AN ATTEMPT. Each claim of a task writes exactly one: DISPATCH when the
+ * attempt ended the claim, RETRY when the run requeued it (`julius-task-pipeline`: one writer,
+ * the same measurement). A requeued attempt can have been paid for exactly as a final one can,
+ * so it is classified by the same rules: a requeued tool step or pre-provider refusal is still
+ * not an attempt. Reading DISPATCH rows only made an unpriced requeued TIMEOUT invisible:
+ * `costComplete` read true and the average lost its minutes, so a run that retried read cheaper
+ * and faster. A count of DISPATCHES (dispatched, reroutes, the Learning Loop's `dispatches`) still
+ * counts DISPATCH rows: a requeue is counted as a retry, never as a reroute.
+ */
+export const JULIUS_ATTEMPT_KINDS=['DISPATCH','RETRY']as const;
+/** A row that records an attempt which may have reached a provider: everything but a tool step or a pre-provider refusal. */
+export const isJuliusProviderAttempt=(event:JuliusTrajectoryEvent):boolean=>{if(!(JULIUS_ATTEMPT_KINDS as readonly string[]).includes(event.kind))return false;const rowClass=juliusDispatchRowClass(event);return rowClass==='PROVIDER'||rowClass==='UNATTRIBUTED';};
 export function validateTrajectoryEvent(value:JuliusTrajectoryEvent):void{if(!value.runtimeVersion.trim()||!value.policyVersion.trim()||!value.cardRevision.trim()||!value.idempotencyKey.trim())throw new Error('trajectory_versions_required');for(const field of['missionContractRevision','projectBrainRevision','durationMs','usdMicros','inputTokens','outputTokens']as const){const number=value[field];if(number!==null&&(!Number.isSafeInteger(number)||number<0))throw new Error(`invalid_trajectory_${field}`);}const serialized=JSON.stringify(value.safeFacts);if(/(?:api[_-]?key|token|secret)\s*[=:]/i.test(serialized))throw new Error('trajectory_secret_rejected');if(serialized.length>8192)throw new Error('trajectory_facts_too_large');}

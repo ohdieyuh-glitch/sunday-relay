@@ -5,7 +5,7 @@ import {
   summariseJuliusEvals, summariseSamples,
 } from './julius-metrics';
 import { JULIUS_TRAJECTORY_KINDS, isJuliusProviderAttempt, juliusDispatchRowClass, type JuliusTrajectoryEvent } from './julius-trajectory';
-import { juliusLearningMetrics } from './julius-learning-loop';
+import { compareJuliusLearningPair, decideJuliusLearningPromotion, juliusLearningMetrics } from './julius-learning-loop';
 import { createJuliusHarness, seedRun, task, worker } from './julius-runtime-fixtures';
 
 /**
@@ -198,18 +198,32 @@ describe('the eval summary', () => {
   });
 
   /**
-   * Only a DISPATCH can cost money. A RETRY or a COMPLETION row carries no cost
-   * by construction, so counting its absent cost as unmeasured would make every
-   * window incomplete forever and the flag would stop meaning anything.
+   * The ATTEMPTS are the cost components. That means the DISPATCH row that ended
+   * a claim, and the RETRY row of a claim the run requeued, which the pipeline
+   * writes with that attempt's own measurement ("A FAILED ATTEMPT THAT BILLED IS
+   * STILL SPEND", #288). A COMPLETION row carries no cost by construction, so
+   * counting its absent cost as unmeasured would make every window incomplete
+   * forever and the flag would stop meaning anything.
+   *
+   * This case used to say a RETRY row carried no cost either. That stopped being
+   * true at #288, and the second session's eval review found it (F1): an
+   * unpriced requeued TIMEOUT read as complete.
    */
-  it('counts only dispatches as cost components', () => {
+  it('counts the attempts as cost components, a requeued one too, and never a COMPLETION', () => {
     const summary = summariseJuliusEvals([
       trajectory({ kind: 'DISPATCH', usdMicros: 1_000, idempotencyKey: '1' }),
       trajectory({ kind: 'RETRY', usdMicros: null, idempotencyKey: '2' }),
       trajectory({ kind: 'COMPLETION', outcome: 'VERIFIED', usdMicros: null, idempotencyKey: '3' }),
     ], 'julius-runtime.v1');
-    expect(summary.unknownCostComponents).toBe(0);
-    expect(summary.costComplete, 'the only dispatch reported its cost').toBe(true);
+    expect(summary.unknownCostComponents, 'the requeued attempt reported no cost').toBe(1);
+    expect(summary.costComplete).toBe(false);
+    const priced = summariseJuliusEvals([
+      trajectory({ kind: 'DISPATCH', usdMicros: 1_000, idempotencyKey: '1' }),
+      trajectory({ kind: 'RETRY', usdMicros: 2_000, idempotencyKey: '2' }),
+      trajectory({ kind: 'COMPLETION', outcome: 'VERIFIED', usdMicros: null, idempotencyKey: '3' }),
+    ], 'julius-runtime.v1');
+    expect(priced.unknownCostComponents, 'a COMPLETION row is never a component').toBe(0);
+    expect(priced.costComplete, 'every attempt reported its cost').toBe(true);
   });
 
   it('reports the version it summarised, so two are never confused', () => {
@@ -327,7 +341,10 @@ describe('what a DISPATCH row is', () => {
     expect(juliusDispatchRowClass(trajectory({ kind: 'DISPATCH', safeFacts: { toolId: 7 }, idempotencyKey: 'n' }))).toBe('UNATTRIBUTED');
     expect(juliusDispatchRowClass(trajectory({ kind: 'DISPATCH', safeFacts: { toolId: '' }, idempotencyKey: 'e' }))).toBe('UNATTRIBUTED');
     expect(juliusDispatchRowClass(trajectory({ kind: 'DISPATCH', outcome: 'APPROVAL_DENIED', durationMs: 5, idempotencyKey: 'm' }))).toBe('UNATTRIBUTED');
-    expect(isJuliusProviderAttempt(trajectory({ kind: 'RETRY', providerId: 'openai', idempotencyKey: 'r' })), 'not a DISPATCH row').toBe(false);
+    // A REQUEUED ATTEMPT IS AN ATTEMPT (F1): one writer, the same fields, kind RETRY.
+    // Any other kind that names a provider is not an attempt row.
+    expect(isJuliusProviderAttempt(trajectory({ kind: 'RETRY', providerId: 'openai', idempotencyKey: 'r' })), 'a requeued attempt').toBe(true);
+    expect(isJuliusProviderAttempt(trajectory({ kind: 'FALLBACK', providerId: 'openai', idempotencyKey: 'f' })), 'not an attempt row').toBe(false);
   });
 });
 
@@ -412,5 +429,198 @@ describe('the eval layer measures provider attempts, not every DISPATCH row', ()
       trajectory({ kind: 'SUBAGENT', outcome: 'AUTHORIZED', usdMicros: 7_000, idempotencyKey: 'sub' }),
     ];
     expect(summariseJuliusEvals(events, V).knownUsdMicros).toBe(1_000 + 250_000 + 7_000);
+  });
+});
+
+/**
+ * A REQUEUED ATTEMPT IS A PROVIDER ATTEMPT, FOR EVERY MEASURE (F1 of the second
+ * session's eval review). With `automaticRetry`, a retryable failure is written
+ * as a RETRY row, by the same writer and with the same measurement as the
+ * DISPATCH row that ends a claim. Reading DISPATCH rows only, a requeued TIMEOUT
+ * that reported no cost left `costComplete` true, and its minutes left the
+ * average, so a run that retried read cheaper AND faster.
+ */
+describe('a requeued attempt is a provider attempt, for every measure', () => {
+  const V = 'julius-runtime.v1';
+  const completed = trajectory({
+    kind: 'DISPATCH', outcome: 'COMPLETED', providerId: 'provider-a', contextId: 'ctx-1',
+    durationMs: 60_000, usdMicros: 1_000, inputTokens: 10, outputTokens: 5, idempotencyKey: 'final',
+  });
+  // As the pipeline writes a retryable TIMEOUT it requeues: the boundary named
+  // its provider and how long it ran, and reported no cost and no usage.
+  const requeued = trajectory({
+    kind: 'RETRY', outcome: 'TIMEOUT', providerId: 'provider-a', contextId: 'ctx-1',
+    durationMs: 600_000, idempotencyKey: 'requeued',
+  });
+
+  it('an unpriced requeued attempt is an unknown cost, so the known sum is a floor', () => {
+    const summary = summariseJuliusEvals([completed, requeued], V);
+    expect(summary.unknownCostComponents).toBe(1);
+    expect(summary.costComplete).toBe(false);
+    expect(summary.knownUsdMicros, 'what was reported, and no more').toBe(1_000);
+  });
+
+  it('a requeued attempt\'s time is in the average: a run that retried does not read faster', () => {
+    expect(summariseJuliusEvals([completed, requeued], V).averageDurationMs).toBe((60_000 + 600_000) / 2);
+    expect(projectJuliusMetrics([completed, requeued], V).histograms.julius_task_duration_ms).toMatchObject({ count: 2, max: 600_000 });
+  });
+
+  it('a requeue is a retry: never a dispatch outcome and never a reroute', () => {
+    const counters = projectJuliusMetrics([completed, requeued], V).counters;
+    expect(counters.julius_task_retries).toBe(1);
+    expect(counters.julius_tasks_dispatched).toBe(1);
+    expect(counters.julius_reroutes).toBe(0);
+  });
+
+  it('a requeued refusal is still a refusal: both kinds are classified by one rule', () => {
+    const refused = trajectory({ kind: 'RETRY', outcome: 'GOVERNANCE_HELD', idempotencyKey: 'requeued-refusal' });
+    expect(juliusDispatchRowClass(refused)).toBe('REFUSAL');
+    expect(isJuliusProviderAttempt(refused)).toBe(false);
+    const summary = summariseJuliusEvals([completed, refused], V);
+    expect(summary.unknownCostComponents).toBe(0);
+    expect(summary.costComplete).toBe(true);
+    expect(summary.averageDurationMs).toBe(60_000);
+    // `julius_dispatch_refusals` counts DISPATCH rows; a requeue, even a refused one, is a retry.
+    const counters = projectJuliusMetrics([completed, refused], V).counters;
+    expect(counters.julius_dispatch_refusals).toBe(0);
+    expect(counters.julius_task_retries).toBe(1);
+  });
+
+  it('the Learning Loop counts a requeued attempt\'s usage, and its absence as unknown', () => {
+    const reported = trajectory({
+      kind: 'RETRY', outcome: 'TIMEOUT', providerId: 'provider-a', contextId: 'ctx-1',
+      durationMs: 600_000, inputTokens: 40, outputTokens: 0, idempotencyKey: 'requeued-usage',
+    });
+    const withUsage = juliusLearningMetrics([completed, reported], V);
+    expect(withUsage.knownInputTokens).toBe(10 + 40);
+    expect(withUsage.knownOutputTokens).toBe(5);
+    expect(withUsage.unknownUsageComponents).toBe(0);
+    expect(withUsage.dispatches, 'a requeue is a retry, not a dispatch').toBe(1);
+    expect(withUsage.retries).toBe(1);
+    const silent = juliusLearningMetrics([completed, requeued], V);
+    expect(silent.unknownUsageComponents, 'it reported no usage, so its usage is unknown').toBe(1);
+    expect(silent.costComplete).toBe(false);
+  });
+
+  it('a priced requeued attempt is counted exactly once: in the known sum, never as unknown', () => {
+    const priced = trajectory({
+      kind: 'RETRY', outcome: 'TIMEOUT', providerId: 'provider-a', contextId: 'ctx-1',
+      durationMs: 600_000, usdMicros: 2_000, idempotencyKey: 'requeued-priced',
+    });
+    const summary = summariseJuliusEvals([completed, priced], V);
+    expect(summary.knownUsdMicros).toBe(1_000 + 2_000);
+    expect(summary.unknownCostComponents).toBe(0);
+    expect(summary.costComplete).toBe(true);
+    expect(projectJuliusMetrics([completed, priced], V).histograms.julius_task_cost_usd_micros)
+      .toMatchObject({ count: 2, sum: 3_000 });
+  });
+
+  it('a run with no retry reads exactly as it did', () => {
+    const summary = summariseJuliusEvals([completed], V);
+    expect(summary).toMatchObject({
+      knownUsdMicros: 1_000, unknownCostComponents: 0, costComplete: true, averageDurationMs: 60_000, retries: 0,
+    });
+    const counters = projectJuliusMetrics([completed], V).counters;
+    expect(counters).toMatchObject({ julius_tasks_dispatched: 1, julius_task_retries: 0, julius_reroutes: 0 });
+    expect(juliusLearningMetrics([completed], V)).toMatchObject({
+      dispatches: 1, knownInputTokens: 10, knownOutputTokens: 5, unknownUsageComponents: 0,
+    });
+  });
+
+  /**
+   * DELIBERATELY CONSERVATIVE. A retryable failure BEFORE the handoff (the
+   * coordinator's `runtimeStarted: false`) is requeued too, and its row has a
+   * context, no provider and no measure. The trajectory row does not carry
+   * `runtimeStarted`, so "known to be free" cannot be read from it. It therefore
+   * stays an unknown cost, like BUDGET_DENIED: a pair it touches reads
+   * UNMEASURABLE, never cheaper. Reading it as free would need the writer to
+   * record `runtimeStarted` on the row, in TypeScript and SQL alike.
+   */
+  it('a requeued attempt that names nothing is still an attempt: its row cannot say it never started', () => {
+    const unstarted = trajectory({ kind: 'RETRY', outcome: 'PERSISTENCE_FAILURE', contextId: 'ctx-1', idempotencyKey: 'requeued-unstarted' });
+    expect(juliusDispatchRowClass(unstarted)).toBe('UNATTRIBUTED');
+    expect(isJuliusProviderAttempt(unstarted)).toBe(true);
+    const summary = summariseJuliusEvals([completed, unstarted], V);
+    expect(summary.unknownCostComponents).toBe(1);
+    expect(summary.costComplete).toBe(false);
+  });
+
+  it('a tool step is never a provider attempt, whichever kind it is written under', () => {
+    const tool = trajectory({
+      kind: 'RETRY', outcome: 'FAILED', policyVersion: 'tool-settlement.v1', durationMs: 41,
+      usdMicros: 0, inputTokens: 0, outputTokens: 0, safeFacts: { toolId: 'shell.exec' }, idempotencyKey: 'requeued-tool',
+    });
+    expect(juliusDispatchRowClass(tool)).toBe('TOOL');
+    expect(isJuliusProviderAttempt(tool)).toBe(false);
+    const summary = summariseJuliusEvals([completed, tool], V);
+    expect(summary.averageDurationMs, 'no tool step\'s 41 ms').toBe(60_000);
+    expect(summary.unknownCostComponents).toBe(0);
+  });
+
+  /**
+   * THE INVARIANT THE FOUNDER SET (2026-10-02): known cost and the PRESENCE of
+   * unknown cost stay distinguishable, and a run whose retry cost is unknown can
+   * never produce a clean "cost improved". Here the candidate's KNOWN cost is a
+   * fifth of the control's, but one of its attempts reported nothing, so its
+   * total is a floor: the comparison says UNMEASURABLE and the gate refuses.
+   * The control below is the same pair with that retry priced, which DOES
+   * promote, so the refusal is the incompleteness and nothing else.
+   */
+  it('the Learning Loop will not call a cost improved when an attempt behind it reported no cost', () => {
+    const pairing = { objectiveDigest: 'objective-1', roles: ['CODING_AGENT'], runtimeVersion: V };
+    const control = [trajectory({
+      kind: 'DISPATCH', outcome: 'COMPLETED', providerId: 'provider-a', contextId: 'ctx-1',
+      durationMs: 60_000, usdMicros: 5_000, inputTokens: 10, outputTokens: 5, idempotencyKey: 'control',
+    })];
+    const policy = { dimensions: ['knownUsdMicros'] as const, minimumRelativeImprovement: 0.1, minimumImprovedDimensions: 1 };
+    const compare = (candidate: readonly JuliusTrajectoryEvent[]) => compareJuliusLearningPair({
+      without: { events: control, pairing }, with: { events: candidate, pairing }, dimensions: policy.dimensions,
+    });
+
+    const incomplete = compare([completed, requeued]);
+    expect(incomplete.outcome).toBe('COMPARED');
+    if (incomplete.outcome !== 'COMPARED') throw new Error('unreachable');
+    expect(incomplete.with.knownUsdMicros, 'the known portion is still reported').toBe(1_000);
+    expect(incomplete.with.costComplete, 'and so is its incompleteness').toBe(false);
+    expect(incomplete.deltas[0]).toMatchObject({ dimension: 'knownUsdMicros', without: 5_000, with: null, verdict: 'UNMEASURABLE' });
+    expect(decideJuliusLearningPromotion(incomplete, policy)).toMatchObject({ outcome: 'REFUSE', reasonCode: 'learning_no_measurable_value' });
+
+    // Priced AND with its usage reported: the gate also treats a cost as a floor
+    // while any attempt's usage is unknown (`bounded`), so only this is complete.
+    const pricedRetry = trajectory({
+      kind: 'RETRY', outcome: 'TIMEOUT', providerId: 'provider-a', contextId: 'ctx-1',
+      durationMs: 600_000, usdMicros: 2_000, inputTokens: 5, outputTokens: 1, idempotencyKey: 'requeued-priced',
+    });
+    const complete = compare([completed, pricedRetry]);
+    if (complete.outcome !== 'COMPARED') throw new Error('unreachable');
+    expect(complete.deltas[0]).toMatchObject({ dimension: 'knownUsdMicros', without: 5_000, with: 3_000, verdict: 'IMPROVED' });
+    expect(decideJuliusLearningPromotion(complete, policy).outcome, 'the control: a complete cost that IS lower promotes').toBe('PROMOTE');
+  });
+
+  it('nor a token count improved, when an attempt behind it reported no usage', () => {
+    const pairing = { objectiveDigest: 'objective-1', roles: ['CODING_AGENT'], runtimeVersion: V };
+    const control = [trajectory({
+      kind: 'DISPATCH', outcome: 'COMPLETED', providerId: 'provider-a', contextId: 'ctx-1',
+      durationMs: 60_000, usdMicros: 5_000, inputTokens: 100, outputTokens: 50, idempotencyKey: 'control',
+    })];
+    const policy = { dimensions: ['knownInputTokens'] as const, minimumRelativeImprovement: 0.1, minimumImprovedDimensions: 1 };
+    const compare = (candidate: readonly JuliusTrajectoryEvent[]) => compareJuliusLearningPair({
+      without: { events: control, pairing }, with: { events: candidate, pairing }, dimensions: policy.dimensions,
+    });
+
+    const incomplete = compare([completed, requeued]);
+    if (incomplete.outcome !== 'COMPARED') throw new Error('unreachable');
+    expect(incomplete.with.unknownUsageComponents).toBe(1);
+    expect(incomplete.deltas[0]).toMatchObject({ dimension: 'knownInputTokens', without: 100, with: null, verdict: 'UNMEASURABLE' });
+    expect(decideJuliusLearningPromotion(incomplete, policy)).toMatchObject({ outcome: 'REFUSE', reasonCode: 'learning_no_measurable_value' });
+
+    const reported = trajectory({
+      kind: 'RETRY', outcome: 'TIMEOUT', providerId: 'provider-a', contextId: 'ctx-1',
+      durationMs: 600_000, usdMicros: 2_000, inputTokens: 5, outputTokens: 1, idempotencyKey: 'requeued-reported',
+    });
+    const complete = compare([completed, reported]);
+    if (complete.outcome !== 'COMPARED') throw new Error('unreachable');
+    expect(complete.deltas[0]).toMatchObject({ dimension: 'knownInputTokens', without: 100, with: 10 + 5, verdict: 'IMPROVED' });
+    expect(decideJuliusLearningPromotion(complete, policy).outcome, 'the control: complete usage that IS lower promotes').toBe('PROMOTE');
   });
 });

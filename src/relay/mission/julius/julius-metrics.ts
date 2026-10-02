@@ -133,16 +133,20 @@ export function projectJuliusMetrics(
   const scoped = events.filter((event) => event.runtimeVersion === runtimeVersion);
   const counters = zeroCounters();
   const of = (kind: JuliusTrajectoryEvent['kind']) => scoped.filter((event) => event.kind === kind);
-  // THE DISPATCH ROWS THAT MAY HAVE REACHED A PROVIDER. A tool step and a
-  // pre-provider refusal share the kind and are neither (`juliusDispatchRowClass`).
+  // EVERY ATTEMPT THAT MAY HAVE REACHED A PROVIDER: the DISPATCH row that ended
+  // a claim and the RETRY row of a claim the run requeued. A tool step and a
+  // pre-provider refusal are neither (`juliusDispatchRowClass`). The durations
+  // and costs below are the attempts'. The counts of DISPATCHES are not: a
+  // requeue is `julius_task_retries`, never a dispatch outcome or a reroute.
   const attempts = scoped.filter(isJuliusProviderAttempt);
+  const dispatches = attempts.filter((event) => event.kind === 'DISPATCH');
   const toolSteps = of('DISPATCH').filter((event) => juliusDispatchRowClass(event) === 'TOOL');
 
   counters.julius_runs_started = new Set(of('TASK_TOPOLOGY').map((event) => event.runId)).size;
   counters.julius_runs_completed = new Set(of('COMPLETION').filter((event) => event.outcome === 'VERIFIED').map((event) => event.runId)).size;
   counters.julius_runs_failed = new Set(of('COMPLETION').filter((event) => event.outcome === 'FAILED').map((event) => event.runId)).size;
   counters.julius_runs_cancelled = new Set(of('COMPLETION').filter((event) => event.outcome === 'CANCELLED').map((event) => event.runId)).size;
-  counters.julius_tasks_dispatched = attempts.length;
+  counters.julius_tasks_dispatched = dispatches.length;
   counters.julius_tool_steps = toolSteps.length;
   counters.julius_dispatch_refusals = of('DISPATCH').filter((event) => juliusDispatchRowClass(event) === 'REFUSAL').length;
   counters.julius_task_retries = of('RETRY').length;
@@ -152,8 +156,9 @@ export function projectJuliusMetrics(
   // complete, plus each FALLBACK (a reroute that crossed providers). A reroute
   // that stayed inside one provider and then completed writes no row of its own
   // (one DISPATCH row per claim), so it is not here: this is a floor. A tool
-  // step and a refusal are not attempts at all and never count.
-  counters.julius_reroutes = attempts.filter((event) => event.outcome !== 'COMPLETED').length + of('FALLBACK').length;
+  // step and a refusal are not attempts at all and never count, and a requeued
+  // attempt is a retry, not a reroute.
+  counters.julius_reroutes = dispatches.filter((event) => event.outcome !== 'COMPLETED').length + of('FALLBACK').length;
   counters.julius_subagents_spawned = of('SUBAGENT').filter((event) => event.outcome === 'AUTHORIZED').length;
   counters.julius_findings_recorded = of('FINDING').length;
   counters.julius_recoveries = of('RECOVERY').length;
@@ -210,12 +215,15 @@ export function summariseJuliusEvals(
   const runs = new Set(scoped.map((event) => event.runId)).size;
   const verified = metrics.counters.julius_runs_completed;
   /**
-   * THE PROVIDER ATTEMPTS ARE THE COMPONENTS. A dispatch that may have reached
+   * THE PROVIDER ATTEMPTS ARE THE COMPONENTS. An attempt that may have reached
    * a provider can cost money, so a missing cost on one is an unmeasured
-   * component. A missing cost on a RETRY or a COMPLETION row is a field that
-   * kind does not carry here, and a pre-provider REFUSAL called nobody. Counting
-   * either as unknown would make every window that met a refusal incomplete
-   * forever. A tool step reports its literal zero, and is not a call either.
+   * component. That holds for the DISPATCH row that ended a claim and for the
+   * RETRY row of one the run requeued alike: a requeued TIMEOUT that reported
+   * no cost is as unknown as a final one. A missing cost on a COMPLETION row is
+   * a field that kind does not carry, and a pre-provider REFUSAL called nobody.
+   * Counting either as unknown would make every window that met a refusal
+   * incomplete forever. A tool step reports its literal zero, and is not a call
+   * either.
    */
   const attempts = scoped.filter(isJuliusProviderAttempt);
   const priced = (value: number | null): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
