@@ -3165,7 +3165,7 @@ namespace
 				Shot(TEXT("6_360_turning.png"));
 				const bool bTurned = U->IsWardrobeInspecting() && Yaw >= 30.0f;
 				const bool bSameShot = F.DistanceBefore > 0.0f && FMath::Abs(DistanceTurning - F.DistanceBefore) <= 0.02f * F.DistanceBefore;
-				QaWardrobeVerdict(F, TEXT("W6.1"), bTurned && bSameShot,
+				QaWardrobeVerdict(F, *FString::Printf(TEXT("W%d.1"), static_cast<int32>(UE_ARRAY_COUNT(WardrobeRoster)) + 1), bTurned && bSameShot,
 					FString::Printf(TEXT("360 on: the figure turned %.0f deg in 3 s; camera distance %.1f before, %.1f turning (want the same within 2%%)"),
 						Yaw, F.DistanceBefore, DistanceTurning));
 				U->ToggleWardrobeInspect();
@@ -3178,7 +3178,7 @@ namespace
 			{
 				const float Yaw = Stage != nullptr ? FMath::Abs(FMath::UnwindDegrees(Stage->GetInspectYaw())) : 999.0f;
 				Shot(TEXT("7_360_stopped.png"));
-				QaWardrobeVerdict(F, TEXT("W6.2"), !U->IsWardrobeInspecting() && Yaw <= 2.0f,
+				QaWardrobeVerdict(F, *FString::Printf(TEXT("W%d.2"), static_cast<int32>(UE_ARRAY_COUNT(WardrobeRoster)) + 1), !U->IsWardrobeInspecting() && Yaw <= 2.0f,
 					FString::Printf(TEXT("360 off: back to the front, %.1f deg from it after 3 s (want <= 2)"), Yaw));
 				U->SetBrainSkinsOpen(false);
 				U->ToggleProjectBrain();
