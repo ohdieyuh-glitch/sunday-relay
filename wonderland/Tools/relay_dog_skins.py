@@ -3201,7 +3201,7 @@ SHADOW_COAT_DEEP = (0.009, 0.010, 0.022)
 #: THE STRIPS: black. Blue may appear only as the faintest rim (founder: "Their visual identity must remain BLACK SHADOW
 #: ENERGY"), so the strip material is a rim material whose colour is one step above black -- with just enough navy that its
 #: grazing edge separates a black strip from a dark wall or the wardrobe's night-blue stage (the first runtime pass: invisible there).
-SHADOW_STRIP = (0.010, 0.014, 0.046)
+SHADOW_STRIP = (0.010, 0.012, 0.030)
 #: The few emissive accents the founder allows ("controlled dark-blue highlights; emissive accents where appropriate").
 SHADOW_EDGE = (0.10, 0.26, 0.95)
 
@@ -3230,10 +3230,11 @@ def shadow_flame():
     figure.material("visor", "lit", VISOR, 1.0)
     figure.material("eye", "glow", SHADOW_EYES, 7.5)
     figure.material("eyehalo", "add", SHADOW_EYES, 7.5 * 0.35)
-    # LIT: the engine's lit parent draws on any mesh; the Rim parent is the V1 master built for the INSTANCED voxel figures
-    # and is unproven on the strips' procedural surface. (The first runtime passes drew nothing for another reason -- NaN
-    # bounds, see RebuildShadows -- so this is caution, not a finding against Rim.)
-    figure.material("shadow", "lit", SHADOW_STRIP, 1.0)
+    # RIM, like the coat: a black core whose grazing edge catches a faint navy. Measured 2026-10-02: drawn LIT, the strips
+    # read in the world but VANISHED in the wardrobe (black on the stage's black) -- the founder's "faint energy edges"
+    # are what lets a black strip exist against black. At (0.010, 0.014, 0.046) x 3.0 the wardrobe's showcase light turned
+    # whole ribbons royal blue ("very subtle rim illumination" only), so the edge is greyer and dimmer.
+    figure.material("shadow", "rim", SHADOW_STRIP, 2.4)
     figure.material("voidedge", "glow", SHADOW_EDGE, 0.30)
     base_dog(figure)          # marks the Dog's extent: nothing added below can change its height
     d = DOG

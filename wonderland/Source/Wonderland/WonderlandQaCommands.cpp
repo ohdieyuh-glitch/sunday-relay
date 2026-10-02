@@ -1176,7 +1176,7 @@ namespace
 		UWonderlandUiSubsystem* U = QaUi(World);
 		const double In = QaNow() - Run.StepStart;
 		static const FName MapTargets[3] = { TEXT("tower_rise"), TEXT("tower_lane"), TEXT("mushroom_grove") };
-		static const TCHAR* const Roster[5] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal") };
+		static const TCHAR* const Roster[] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal"), TEXT("shadow_flame") };
 		static const TCHAR* const OtherSkins[4] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("baal") };
 		switch (Run.Step)
 		{
@@ -1497,7 +1497,7 @@ namespace
 		{
 			ARelayDogCharacter* D = QaDog(World);
 			const int32 Which = Run.Sub / 2;
-			if (D == nullptr || Which >= 5)
+			if (D == nullptr || Which >= static_cast<int32>(UE_ARRAY_COUNT(Roster)))
 			{
 				if (D == nullptr)
 				{
@@ -2131,7 +2131,7 @@ namespace
 		{TEXT("close_side"), 86.0, 150.0, 4.0, 40.0f},
 		{TEXT("play_front"), 0.0, 480.0, 90.0, 70.0f},
 	};
-	const TCHAR* const FaceRoster[5] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal") };
+	const TCHAR* const FaceRoster[] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal"), TEXT("shadow_flame") };
 	// The eyes stand at 0.715 of the canonical body's height: visor_z 19.14 in the generator's body record -0.044..26.79.
 	constexpr double FaceEyeHeight = 0.715;
 
@@ -2190,7 +2190,7 @@ namespace
 			}
 			break;
 		case 1:
-			if (F.Skin >= 5)
+			if (F.Skin >= static_cast<int32>(UE_ARRAY_COUNT(FaceRoster)))
 			{
 				F.Phase = 20;   // then the wardrobe's own preview of each skin
 				F.At = QaNow();
@@ -2313,7 +2313,7 @@ namespace
 		case 21:
 			if (In >= 1.0)
 			{
-				if (F.WSkin >= 5)
+				if (F.WSkin >= static_cast<int32>(UE_ARRAY_COUNT(FaceRoster)))
 				{
 					if (UWonderlandUiSubsystem* U = QaUi(World))
 					{
@@ -2397,7 +2397,7 @@ namespace
 			GQaFaces->At = QaNow();
 			GQaFaces->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLFACES"));
 			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaFacesTick), 0.1f);
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES armed: five skins, %d frames each"), static_cast<int32>(UE_ARRAY_COUNT(FaceShots)));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES armed: %d skins, %d frames each"), static_cast<int32>(UE_ARRAY_COUNT(FaceRoster)), static_cast<int32>(UE_ARRAY_COUNT(FaceShots)));
 		}));
 
 	/* ================================================================ wl.Qa.ShadowFlame (founder, 2026-10-01)
@@ -2943,7 +2943,7 @@ namespace
 	 * actually shows: the occupancy is read off the rendered pixels, the idle off the figure's own joints over six seconds,
 	 * and the player's in-world Relay OG head is sampled beside it as the reference. Frames to Saved/Screenshots/WLWARDROBE.
 	 */
-	const TCHAR* const WardrobeRoster[5] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal") };
+	const TCHAR* const WardrobeRoster[] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal"), TEXT("shadow_flame") };
 
 	struct FQaWardrobe
 	{
@@ -3030,7 +3030,7 @@ namespace
 		case 1:
 			if (In >= 1.5)
 			{
-				if (F.Skin >= 5)
+				if (F.Skin >= static_cast<int32>(UE_ARRAY_COUNT(WardrobeRoster)))
 				{
 					F.Phase = 30;
 					F.At = QaNow();
@@ -3200,7 +3200,7 @@ namespace
 
 	FAutoConsoleCommandWithWorldAndArgs GQaWardrobeCommand(
 		TEXT("wl.Qa.Wardrobe"),
-		TEXT("Prove the Wardrobe's presentation in this build: open it the player's way, wear each of the five skins, and log how much of ")
+		TEXT("Prove the Wardrobe's presentation in this build: open it the player's way, wear each of the six skins, and log how much of ")
 		TEXT("the preview each fills (from its pixels), whether its body stays planted and its head looks about as Relay OG's does, and ")
 		TEXT("that 360 turns without resizing the shot. Frames to Saved/Screenshots/WLWARDROBE; then quit."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
@@ -3214,7 +3214,7 @@ namespace
 			GQaWardrobe->At = QaNow();
 			GQaWardrobe->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLWARDROBE"));
 			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaWardrobeTick), 0.05f);
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLWARDROBE armed: five skins, framing from the pixels, six seconds of idle each, then 360"));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLWARDROBE armed: %d skins, framing from the pixels, six seconds of idle each, then 360"), static_cast<int32>(UE_ARRAY_COUNT(WardrobeRoster)));
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs GQaConsoleFilm(
