@@ -18,7 +18,7 @@ import { WONDERLAND_MIGRATIONS, WONDERLAND_MIGRATION_030 } from './wonderland-po
  *        already names a missing event;
  *   E    afterwards no orphan exists and no row was lost;
  *   B    the committed DOWN script (docs/julius-migrations/030/down.sql) restores the identical constraint set,
- *        removes every 030 trigger and deletes the stamp.
+ *        removes every 030 trigger and function, and deletes the stamp.
  * Each case is its OWN database, migrated to 029 from the real migration list and seeded with events and their outbox
  * rows, then created and dropped here. Runs wherever JULIUS_TEST_DATABASE_URL names a THROWAWAY server (never
  * DATABASE_URL); `todo` elsewhere.
@@ -59,7 +59,10 @@ suite('migration 030 under the founder gates (row 13 (i))', () => {
   )).rows.map((row: { c: string }) => row.c);
   const triggers = async (pool: Pool): Promise<string[]> => (await pool.query(
     "SELECT tgname FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN ('relay_wonderland.events'::regclass,'relay_wonderland.outbox'::regclass) ORDER BY 1",
-  )).rows.map((row: { tgname: string }) => row.tgname);
+  )).rows.map((row: { tgname: string }) => row.tgname).sort(); // sorted here: ORDER BY follows the database's collation
+  const functions = async (pool: Pool): Promise<string[]> => (await pool.query(
+    "SELECT proname || '(' || pg_get_function_identity_arguments(oid) || ')' AS f FROM pg_proc WHERE pronamespace = 'relay_wonderland'::regnamespace ORDER BY 1",
+  )).rows.map((row: { f: string }) => row.f).sort();
   const state = async (pool: Pool) => (await pool.query(`SELECT
       (SELECT count(*)::int FROM relay_wonderland.events) AS events,
       (SELECT count(*)::int FROM relay_wonderland.outbox) AS outbox,
@@ -111,13 +114,17 @@ suite('migration 030 under the founder gates (row 13 (i))', () => {
     expect([(await state(different)).stamped, (await state(missing)).stamped]).toEqual([0, 0]);
   }, 180_000);
 
-  it('B: the committed DOWN script restores the identical constraint set, removes every 030 trigger, and deletes the stamp', async () => {
+  it('B: the committed DOWN script restores the identical constraint set, removes every 030 trigger AND function, and deletes the stamp', async () => {
     const pool = await at029('down');
-    const [before, triggersBefore] = [await constraints(pool), await triggers(pool)];
+    const [before, triggersBefore, functionsBefore] = [await constraints(pool), await triggers(pool), await functions(pool)];
     expect(await refusalOf030(pool)).toBeNull();
+    expect((await functions(pool)).filter((name) => !functionsBefore.includes(name)), '030 adds exactly its five functions').toEqual([
+      'event_id_immutable()', 'events_truncate_refused()', 'events_written_remember()', 'outbox_follows_event_delete()', 'outbox_requires_event_written()',
+    ]);
     await pool.query(DOWN);
     expect(await constraints(pool), 'identical to before 030').toEqual(before);
     expect(await triggers(pool), 'only what was there before 030').toEqual(triggersBefore);
+    expect(await functions(pool), 'and no 030 function remains').toEqual(functionsBefore);
     expect((await state(pool)).stamped).toBe(0);
   }, 120_000);
 });

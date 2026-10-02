@@ -19,9 +19,27 @@ The guarantee the key gave is kept by triggers that read no relation:
 
 **If any step below fails, STOP THE DEPLOY.**
 
+## ORDER: steps 0–2 happen BEFORE the PR is landed
+
+Landing changes nothing in the local container by itself. But every entry point of a checkout that CONTAINS 030 (this branch, its PR, the landed main) migrates the database its environment names, and every workstation shell inherits the LIVE `DATABASE_URL`. These all call `migrate()` when they start:
+- `relay-bridge/julius-live-mission.ts`;
+- `scripts/julius-live-preflight-identity.ts`;
+- `scripts/julius-recovery-drill.ts`;
+- `scripts/julius-failure-recovery-drill.ts`;
+- `scripts/julius-repair-loop-drill.ts`;
+- `scripts/julius-sibling-support.ts`;
+- `scripts/project-brain-proof-main.ts`.
+
+So the first local run of any of them, from such a checkout, would apply 030 to the live store BEFORE a backup and a recorded pre-check existed. 030's own guard would still keep integrity, but the founder's order would be broken. Therefore:
+1. **Until step 3 is recorded, from ANY checkout that contains 030:** run none of those entry points against the live store. Any local run sets BOTH `JULIUS_DATABASE_URL` and `DATABASE_URL` to a throwaway database (or unsets them). The test suites already read only `JULIUS_TEST_DATABASE_URL`.
+2. **Before landing:** step 0 (quiesce), step 1 (verified backup, sha256 recorded), step 2 (pre-check recorded). The founder's landing block refuses unless the backup's `.sha256` file and the pre-check record exist at the paths it is given.
+3. **The writers stay stopped from step 0 until step 6.** If they must run again before step 3 (for example, the landing slips), redo steps 1 and 2 before step 3, so the counts the post-check compares are the ones the migration met.
+4. **Step 3** applies 030 explicitly (the `psql` path below), and its record is kept. Only then may the bridge, the mission job or the scripts run against the live store again.
+
 ## The live store
 
-- **What it is:** the Docker container `julius-postgres`, published on `127.0.0.1:5432`, database `julius`, role `julius`. Every workstation shell's inherited `DATABASE_URL` points here.
+- **What it is:** the Docker container `julius-postgres` on the workstation, published on `127.0.0.1:5432`, database `julius`, role `julius`. Every workstation shell's inherited `DATABASE_URL` points here.
+- **What it is not:** the paid mission job's database. That job runs on a fresh GitHub-hosted `ubuntu-24.04` runner, where `.github/julius-live-executor.sh` starts its own container, also named `julius-postgres`, with no volume. It is created empty for each run, so 030 applies there to an empty store and needs no runbook. This workstation container is the only persistent Julius store.
 - **Confirm before anything else:** `docker ps --filter name=julius-postgres`, then `docker exec julius-postgres psql -U julius -d julius -c "SELECT current_database(), current_user, version();"`.
 - **Never point a test at this database.**
   - Tests read `JULIUS_TEST_DATABASE_URL` only.
@@ -49,10 +67,11 @@ STOP unless:
 - `migration_029_applied = t`;
 - `migration_030_applied = f`.
 
-**3. Apply 030.** Either path will do. The first starts the deployed bridge or mission job, which runs `TransactionalWonderlandDatabase.migrate()`. The second applies it explicitly:
+**3. Apply 030, explicitly (after landing, before any entry point of the new main touches the live store):**
 ```
-docker exec -i julius-postgres psql -U julius -d julius -v ON_ERROR_STOP=1 < src/relay/persistence/wonderland-migrations/030_julius_outbox_event_no_reread.sql
+docker exec -i julius-postgres psql -U julius -d julius -v ON_ERROR_STOP=1 < src/relay/persistence/wonderland-migrations/030_julius_outbox_event_no_reread.sql > apply-030-<UTC>.txt 2>&1; echo "exit $?" >> apply-030-<UTC>.txt
 ```
+- `exit 0` is required. Any other exit means 030 refused or failed and rolled back: rollback (a).
 - The migration checks itself inside its one transaction.
   - It raises `migration_030_refused` (and drops NOTHING) unless the key is exactly the one described above and no orphan exists.
   - It raises `migration_030_postcheck` if, after the drop, the key remains or an orphan appears.
