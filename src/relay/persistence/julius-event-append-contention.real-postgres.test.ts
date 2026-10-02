@@ -389,10 +389,18 @@ suite('Julius event appends under SERIALIZABLE, in both plan states (row 13 (i),
 
   it('030: an outbox event id that is empty or contains the registry delimiter is refused, so no id matches across two registered ones', async () => {
     const [x, y] = [`${PREFIX}x-${nonce}`, `${PREFIX}y-${nonce}`];
-    const across = await refusalOf([insertEvent(x, `run:x-${nonce}`, 1), insertEvent(y, `run:y-${nonce}`, 1), insertOutbox(`${x}\u001f${y}`)]);
-    expect(across?.message, 'a crafted id spanning two written ids').toContain('outbox_event_id_malformed');
-    const empty = await refusalOf([insertOutbox('')]);
-    expect(empty?.message).toContain('outbox_event_id_malformed');
+    // x and y in ONE statement: the registry then holds ␟x␟y␟, which CONTAINS ␟(x␟y)␟. So without the malformed
+    // check the crafted id would be ACCEPTED; the refusal is behaviour, not a message.
+    const across = await refusalOf([
+      ["INSERT INTO relay_wonderland.events(event_id,stream_id,project_id,sequence,event_type,visibility,payload,occurred_at) VALUES($1,$3,$4,1,'julius.worker.dispatched','PROJECT','{}'::jsonb,now()),($2,$3,$4,2,'julius.worker.dispatched','PROJECT','{}'::jsonb,now())", [x, y, `run:xy-${nonce}`, project]],
+      insertOutbox(`${x}\u001f${y}`),
+    ]);
+    expect([across?.code, across?.message.includes('outbox_event_id_malformed')], 'a crafted id spanning two written ids').toEqual(['23503', true]);
+    // Two SEPARATE statements: the registry then holds ␟x2␟␟y2␟, which contains ␟␟. So without the malformed check
+    // an empty id would match it.
+    const [x2, y2] = [`${PREFIX}x2-${nonce}`, `${PREFIX}y2-${nonce}`];
+    const empty = await refusalOf([insertEvent(x2, `run:x2-${nonce}`, 1), insertEvent(y2, `run:y2-${nonce}`, 1), insertOutbox('')]);
+    expect([empty?.code, empty?.message.includes('outbox_event_id_malformed')]).toEqual(['23503', true]);
   });
 
   it('030: the registry matches an id EXACTLY: a prefix or a suffix of a written id gives no right to an outbox row', async () => {
