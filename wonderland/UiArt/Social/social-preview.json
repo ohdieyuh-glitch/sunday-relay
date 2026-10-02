@@ -1,0 +1,1273 @@
+{
+  "schema": "relay-wonderland-social-preview.v1",
+  "developmentPreview": true,
+  "note": "DEVELOPMENT PREVIEW -- synthetic people from src/relay/social/social-fixtures.ts, resolved by the real presence authority. Not connected to anybody.",
+  "viewerId": "usr_kai",
+  "generatedAtIso": "2026-10-01T20:00:00.000Z",
+  "self": {
+    "profile": {
+      "userId": "usr_kai",
+      "displayName": "Kai",
+      "handle": "@kai",
+      "avatarRef": "generated:usr_kai",
+      "nationId": "TARTARUS",
+      "clanName": null,
+      "progression": {
+        "source": "PENDING",
+        "rank": null,
+        "level": null
+      },
+      "primaryAgent": {
+        "agentId": "agt_usr_kai_julius",
+        "ownerId": "usr_kai",
+        "kind": "JULIUS",
+        "displayName": "Julius",
+        "systemLabel": "Julius 3.3 · Compound AI Agent",
+        "emblemId": "julius-rings",
+        "ratings": []
+      },
+      "relayDog": {
+        "skinId": "jack_flame",
+        "primary": null,
+        "secondary": "#2A6BFF",
+        "flame": null,
+        "appearanceTier": null
+      },
+      "activeCompanion": {
+        "companionId": "cmp_usr_kai_llm",
+        "ownerId": "usr_kai",
+        "kind": "LLM_COMPANION",
+        "displayName": "LLM Companion",
+        "primary": null,
+        "secondary": null
+      },
+      "showcaseAgents": [
+        {
+          "agentId": "agt_kai_forge",
+          "ownerId": "usr_kai",
+          "kind": "IMPORTED",
+          "displayName": "Forge",
+          "systemLabel": "Imported agentic system",
+          "emblemId": "imported-generic",
+          "ratings": [
+            {
+              "mode": "GOAL",
+              "rating": 1612,
+              "deviation": 140,
+              "battleCount": 4,
+              "provisional": true
+            }
+          ]
+        }
+      ],
+      "showcaseCompanions": [
+        {
+          "companionId": "cmp_kai_jhinn",
+          "ownerId": "usr_kai",
+          "kind": "JHINN_AGENT",
+          "displayName": "Jhinn",
+          "primary": null,
+          "secondary": "#5CDBFF"
+        }
+      ],
+      "stats": [],
+      "memberSinceIso": "2026-09-01T00:00:00.000Z"
+    },
+    "presence": {
+      "userId": "usr_kai",
+      "onlineState": "ONLINE",
+      "headline": "WORKING WITH JULIUS",
+      "activityLabel": "Working with Julius",
+      "location": {
+        "serverId": "srv_golden_arrival",
+        "serverKind": "PUBLIC_WORLD",
+        "serverName": "Golden Arrival",
+        "placeLabel": "Tower Lane",
+        "nationId": null
+      },
+      "partyId": null,
+      "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
+      "can": {
+        "viewProfile": true,
+        "message": false,
+        "inviteToParty": false,
+        "joinParty": false,
+        "inviteToServer": false,
+        "joinServer": false,
+        "sendFriendRequest": false,
+        "removeFriend": false,
+        "mute": false,
+        "block": false,
+        "report": false
+      },
+      "restrictedReason": null
+    },
+    "relationship": "SELF",
+    "mutualFriendIds": [],
+    "partyStatus": {
+      "inParty": false,
+      "memberCount": null,
+      "joinable": false
+    }
+  },
+  "friends": [
+    {
+      "userId": "usr_nova",
+      "displayName": "Nova",
+      "handle": "@nova",
+      "avatarRef": "generated:usr_nova",
+      "presence": {
+        "userId": "usr_nova",
+        "onlineState": "ONLINE",
+        "headline": "CREATING",
+        "activityLabel": "Creating software · Weather dashboard",
+        "location": {
+          "serverId": "srv_golden_arrival",
+          "serverKind": "PUBLIC_WORLD",
+          "serverName": "Golden Arrival",
+          "placeLabel": "Tower Lane",
+          "nationId": null
+        },
+        "partyId": null,
+        "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
+        "can": {
+          "viewProfile": true,
+          "message": true,
+          "inviteToParty": false,
+          "joinParty": false,
+          "inviteToServer": true,
+          "joinServer": true,
+          "sendFriendRequest": false,
+          "removeFriend": true,
+          "mute": true,
+          "block": true,
+          "report": true
+        },
+        "restrictedReason": null
+      }
+    },
+    {
+      "userId": "usr_orion",
+      "displayName": "Orion",
+      "handle": "@orion",
+      "avatarRef": "generated:usr_orion",
+      "presence": {
+        "userId": "usr_orion",
+        "onlineState": "ONLINE",
+        "headline": "IN GVE",
+        "activityLabel": "In GVE · Tower Lane arena",
+        "location": {
+          "serverId": "srv_gve_7",
+          "serverKind": "GVE_ARENA",
+          "serverName": "GVE Arena 7",
+          "placeLabel": null,
+          "nationId": null
+        },
+        "partyId": "pty_11",
+        "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
+        "can": {
+          "viewProfile": true,
+          "message": true,
+          "inviteToParty": false,
+          "joinParty": true,
+          "inviteToServer": true,
+          "joinServer": true,
+          "sendFriendRequest": false,
+          "removeFriend": true,
+          "mute": true,
+          "block": true,
+          "report": true
+        },
+        "restrictedReason": null
+      }
+    },
+    {
+      "userId": "usr_rhea",
+      "displayName": "Rhea",
+      "handle": "@rhea",
+      "avatarRef": "generated:usr_rhea",
+      "presence": {
+        "userId": "usr_rhea",
+        "onlineState": "ONLINE",
+        "headline": "ONLINE",
+        "activityLabel": null,
+        "location": null,
+        "partyId": null,
+        "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
+        "can": {
+          "viewProfile": true,
+          "message": true,
+          "inviteToParty": false,
+          "joinParty": false,
+          "inviteToServer": true,
+          "joinServer": false,
+          "sendFriendRequest": false,
+          "removeFriend": true,
+          "mute": true,
+          "block": true,
+          "report": true
+        },
+        "restrictedReason": "PRIVATE"
+      }
+    },
+    {
+      "userId": "usr_lyra",
+      "displayName": "Lyra",
+      "handle": "@lyra",
+      "avatarRef": "generated:usr_lyra",
+      "presence": {
+        "userId": "usr_lyra",
+        "onlineState": "BUSY",
+        "headline": "BUSY",
+        "activityLabel": "Creating content",
+        "location": {
+          "serverId": "srv_golden_arrival",
+          "serverKind": "PUBLIC_WORLD",
+          "serverName": "Golden Arrival",
+          "placeLabel": "Tower Lane",
+          "nationId": null
+        },
+        "partyId": "pty_11",
+        "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
+        "can": {
+          "viewProfile": true,
+          "message": true,
+          "inviteToParty": false,
+          "joinParty": true,
+          "inviteToServer": true,
+          "joinServer": true,
+          "sendFriendRequest": false,
+          "removeFriend": true,
+          "mute": true,
+          "block": true,
+          "report": true
+        },
+        "restrictedReason": null
+      }
+    },
+    {
+      "userId": "usr_juno",
+      "displayName": "Juno",
+      "handle": "@juno",
+      "avatarRef": "generated:usr_juno",
+      "presence": {
+        "userId": "usr_juno",
+        "onlineState": "OFFLINE",
+        "headline": "OFFLINE",
+        "activityLabel": null,
+        "location": null,
+        "partyId": null,
+        "lastSeenAtIso": "2026-10-01T17:00:00.000Z",
+        "can": {
+          "viewProfile": true,
+          "message": true,
+          "inviteToParty": false,
+          "joinParty": false,
+          "inviteToServer": false,
+          "joinServer": false,
+          "sendFriendRequest": false,
+          "removeFriend": true,
+          "mute": true,
+          "block": true,
+          "report": true
+        },
+        "restrictedReason": "OFFLINE"
+      }
+    },
+    {
+      "userId": "usr_sol",
+      "displayName": "Sol",
+      "handle": "@sol",
+      "avatarRef": "generated:usr_sol",
+      "presence": {
+        "userId": "usr_sol",
+        "onlineState": "OFFLINE",
+        "headline": "OFFLINE",
+        "activityLabel": null,
+        "location": null,
+        "partyId": null,
+        "lastSeenAtIso": null,
+        "can": {
+          "viewProfile": true,
+          "message": true,
+          "inviteToParty": false,
+          "joinParty": false,
+          "inviteToServer": false,
+          "joinServer": false,
+          "sendFriendRequest": false,
+          "removeFriend": true,
+          "mute": true,
+          "block": true,
+          "report": true
+        },
+        "restrictedReason": "OFFLINE"
+      }
+    }
+  ],
+  "requests": {
+    "incoming": [
+      {
+        "requestId": "freq_10",
+        "from": {
+          "userId": "usr_vega",
+          "displayName": "Vega",
+          "handle": "@vega",
+          "avatarRef": "generated:usr_vega",
+          "presence": {
+            "userId": "usr_vega",
+            "onlineState": "ONLINE",
+            "headline": "ONLINE",
+            "activityLabel": null,
+            "location": null,
+            "partyId": null,
+            "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
+            "can": {
+              "viewProfile": true,
+              "message": false,
+              "inviteToParty": false,
+              "joinParty": false,
+              "inviteToServer": false,
+              "joinServer": false,
+              "sendFriendRequest": false,
+              "removeFriend": false,
+              "mute": true,
+              "block": true,
+              "report": true
+            },
+            "restrictedReason": "FRIENDS_ONLY"
+          }
+        }
+      }
+    ],
+    "outgoing": []
+  },
+  "recentPlayers": [],
+  "conversations": [
+    {
+      "conversationId": "dm_usr_kai__usr_nova",
+      "kind": "DIRECT",
+      "title": "Nova",
+      "otherUserId": "usr_nova",
+      "lastMessagePreview": "Running in Golden Arrival.",
+      "lastMessageAtIso": "2026-10-01T19:51:00.000Z",
+      "unread": 2
+    }
+  ],
+  "messages": {
+    "dm_usr_kai__usr_nova": [
+      {
+        "messageId": "msg_15",
+        "conversationId": "dm_usr_kai__usr_nova",
+        "sequence": 1,
+        "senderId": "usr_kai",
+        "kind": "TEXT",
+        "body": "Want to see the weather dashboard run?",
+        "ref": null,
+        "sentAtIso": "2026-10-01T19:45:00.000Z"
+      },
+      {
+        "messageId": "msg_16",
+        "conversationId": "dm_usr_kai__usr_nova",
+        "sequence": 2,
+        "senderId": "usr_nova",
+        "kind": "TEXT",
+        "body": "Yes! Pushing the build now.",
+        "ref": null,
+        "sentAtIso": "2026-10-01T19:50:00.000Z"
+      },
+      {
+        "messageId": "msg_17",
+        "conversationId": "dm_usr_kai__usr_nova",
+        "sequence": 3,
+        "senderId": "usr_nova",
+        "kind": "TEXT",
+        "body": "Running in Golden Arrival.",
+        "ref": null,
+        "sentAtIso": "2026-10-01T19:51:00.000Z"
+      }
+    ]
+  },
+  "party": null,
+  "visibleParties": [
+    {
+      "partyId": "pty_11",
+      "name": "Arena Run",
+      "leaderId": "usr_orion",
+      "members": [
+        {
+          "userId": "usr_orion",
+          "role": "LEADER",
+          "selfMuted": false
+        },
+        {
+          "userId": "usr_lyra",
+          "role": "MEMBER",
+          "selfMuted": false
+        }
+      ],
+      "privacy": "OPEN_TO_FRIENDS",
+      "invitePermission": "LEADER_ONLY",
+      "viewerIsMember": false,
+      "viewerIsLeader": false,
+      "viewerMayInvite": false
+    }
+  ],
+  "partyInvites": [
+    {
+      "inviteId": "pinv_14",
+      "partyId": "pty_13",
+      "fromUserId": "usr_rhea",
+      "toUserId": "usr_kai",
+      "status": "PENDING",
+      "createdAtIso": "2026-10-01T19:55:00.000Z",
+      "expiresAtIso": "2026-10-01T20:25:00.000Z",
+      "partyName": "Lab Crew",
+      "from": {
+        "userId": "usr_rhea",
+        "displayName": "Rhea",
+        "handle": "@rhea",
+        "avatarRef": "generated:usr_rhea",
+        "presence": {
+          "userId": "usr_rhea",
+          "onlineState": "ONLINE",
+          "headline": "ONLINE",
+          "activityLabel": null,
+          "location": null,
+          "partyId": null,
+          "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
+          "can": {
+            "viewProfile": true,
+            "message": true,
+            "inviteToParty": false,
+            "joinParty": false,
+            "inviteToServer": true,
+            "joinServer": false,
+            "sendFriendRequest": false,
+            "removeFriend": true,
+            "mute": true,
+            "block": true,
+            "report": true
+          },
+          "restrictedReason": "PRIVATE"
+        }
+      }
+    }
+  ],
+  "profiles": {
+    "usr_juno": {
+      "profile": {
+        "userId": "usr_juno",
+        "displayName": "Juno",
+        "handle": "@juno",
+        "avatarRef": "generated:usr_juno",
+        "nationId": null,
+        "clanName": null,
+        "progression": {
+          "source": "PENDING",
+          "rank": null,
+          "level": null
+        },
+        "primaryAgent": {
+          "agentId": "agt_usr_juno_julius",
+          "ownerId": "usr_juno",
+          "kind": "JULIUS",
+          "displayName": "Julius",
+          "systemLabel": "Julius 3.3 · Compound AI Agent",
+          "emblemId": "julius-rings",
+          "ratings": []
+        },
+        "relayDog": {
+          "skinId": "relay_og",
+          "primary": null,
+          "secondary": null,
+          "flame": null,
+          "appearanceTier": null
+        },
+        "activeCompanion": {
+          "companionId": "cmp_usr_juno_llm",
+          "ownerId": "usr_juno",
+          "kind": "LLM_COMPANION",
+          "displayName": "LLM Companion",
+          "primary": null,
+          "secondary": null
+        },
+        "showcaseAgents": [],
+        "showcaseCompanions": [],
+        "stats": [],
+        "memberSinceIso": "2026-09-01T00:00:00.000Z"
+      },
+      "presence": {
+        "userId": "usr_juno",
+        "onlineState": "OFFLINE",
+        "headline": "OFFLINE",
+        "activityLabel": null,
+        "location": null,
+        "partyId": null,
+        "lastSeenAtIso": "2026-10-01T17:00:00.000Z",
+        "can": {
+          "viewProfile": true,
+          "message": true,
+          "inviteToParty": false,
+          "joinParty": false,
+          "inviteToServer": false,
+          "joinServer": false,
+          "sendFriendRequest": false,
+          "removeFriend": true,
+          "mute": true,
+          "block": true,
+          "report": true
+        },
+        "restrictedReason": "OFFLINE"
+      },
+      "relationship": "FRIEND",
+      "mutualFriendIds": [],
+      "partyStatus": {
+        "inParty": false,
+        "memberCount": null,
+        "joinable": false
+      }
+    },
+    "usr_kai": {
+      "profile": {
+        "userId": "usr_kai",
+        "displayName": "Kai",
+        "handle": "@kai",
+        "avatarRef": "generated:usr_kai",
+        "nationId": "TARTARUS",
+        "clanName": null,
+        "progression": {
+          "source": "PENDING",
+          "rank": null,
+          "level": null
+        },
+        "primaryAgent": {
+          "agentId": "agt_usr_kai_julius",
+          "ownerId": "usr_kai",
+          "kind": "JULIUS",
+          "displayName": "Julius",
+          "systemLabel": "Julius 3.3 · Compound AI Agent",
+          "emblemId": "julius-rings",
+          "ratings": []
+        },
+        "relayDog": {
+          "skinId": "jack_flame",
+          "primary": null,
+          "secondary": "#2A6BFF",
+          "flame": null,
+          "appearanceTier": null
+        },
+        "activeCompanion": {
+          "companionId": "cmp_usr_kai_llm",
+          "ownerId": "usr_kai",
+          "kind": "LLM_COMPANION",
+          "displayName": "LLM Companion",
+          "primary": null,
+          "secondary": null
+        },
+        "showcaseAgents": [
+          {
+            "agentId": "agt_kai_forge",
+            "ownerId": "usr_kai",
+            "kind": "IMPORTED",
+            "displayName": "Forge",
+            "systemLabel": "Imported agentic system",
+            "emblemId": "imported-generic",
+            "ratings": [
+              {
+                "mode": "GOAL",
+                "rating": 1612,
+                "deviation": 140,
+                "battleCount": 4,
+                "provisional": true
+              }
+            ]
+          }
+        ],
+        "showcaseCompanions": [
+          {
+            "companionId": "cmp_kai_jhinn",
+            "ownerId": "usr_kai",
+            "kind": "JHINN_AGENT",
+            "displayName": "Jhinn",
+            "primary": null,
+            "secondary": "#5CDBFF"
+          }
+        ],
+        "stats": [],
+        "memberSinceIso": "2026-09-01T00:00:00.000Z"
+      },
+      "presence": {
+        "userId": "usr_kai",
+        "onlineState": "ONLINE",
+        "headline": "WORKING WITH JULIUS",
+        "activityLabel": "Working with Julius",
+        "location": {
+          "serverId": "srv_golden_arrival",
+          "serverKind": "PUBLIC_WORLD",
+          "serverName": "Golden Arrival",
+          "placeLabel": "Tower Lane",
+          "nationId": null
+        },
+        "partyId": null,
+        "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
+        "can": {
+          "viewProfile": true,
+          "message": false,
+          "inviteToParty": false,
+          "joinParty": false,
+          "inviteToServer": false,
+          "joinServer": false,
+          "sendFriendRequest": false,
+          "removeFriend": false,
+          "mute": false,
+          "block": false,
+          "report": false
+        },
+        "restrictedReason": null
+      },
+      "relationship": "SELF",
+      "mutualFriendIds": [],
+      "partyStatus": {
+        "inParty": false,
+        "memberCount": null,
+        "joinable": false
+      }
+    },
+    "usr_lyra": {
+      "profile": {
+        "userId": "usr_lyra",
+        "displayName": "Lyra",
+        "handle": "@lyra",
+        "avatarRef": "generated:usr_lyra",
+        "nationId": null,
+        "clanName": null,
+        "progression": {
+          "source": "PENDING",
+          "rank": null,
+          "level": null
+        },
+        "primaryAgent": {
+          "agentId": "agt_usr_lyra_julius",
+          "ownerId": "usr_lyra",
+          "kind": "JULIUS",
+          "displayName": "Julius",
+          "systemLabel": "Julius 3.3 · Compound AI Agent",
+          "emblemId": "julius-rings",
+          "ratings": []
+        },
+        "relayDog": {
+          "skinId": "relay_og",
+          "primary": null,
+          "secondary": null,
+          "flame": null,
+          "appearanceTier": null
+        },
+        "activeCompanion": {
+          "companionId": "cmp_usr_lyra_llm",
+          "ownerId": "usr_lyra",
+          "kind": "LLM_COMPANION",
+          "displayName": "LLM Companion",
+          "primary": null,
+          "secondary": null
+        },
+        "showcaseAgents": [],
+        "showcaseCompanions": [],
+        "stats": [],
+        "memberSinceIso": "2026-09-01T00:00:00.000Z"
+      },
+      "presence": {
+        "userId": "usr_lyra",
+        "onlineState": "BUSY",
+        "headline": "BUSY",
+        "activityLabel": "Creating content",
+        "location": {
+          "serverId": "srv_golden_arrival",
+          "serverKind": "PUBLIC_WORLD",
+          "serverName": "Golden Arrival",
+          "placeLabel": "Tower Lane",
+          "nationId": null
+        },
+        "partyId": "pty_11",
+        "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
+        "can": {
+          "viewProfile": true,
+          "message": true,
+          "inviteToParty": false,
+          "joinParty": true,
+          "inviteToServer": true,
+          "joinServer": true,
+          "sendFriendRequest": false,
+          "removeFriend": true,
+          "mute": true,
+          "block": true,
+          "report": true
+        },
+        "restrictedReason": null
+      },
+      "relationship": "FRIEND",
+      "mutualFriendIds": [
+        "usr_orion"
+      ],
+      "partyStatus": {
+        "inParty": true,
+        "memberCount": 2,
+        "joinable": true
+      }
+    },
+    "usr_nova": {
+      "profile": {
+        "userId": "usr_nova",
+        "displayName": "Nova",
+        "handle": "@nova",
+        "avatarRef": "generated:usr_nova",
+        "nationId": null,
+        "clanName": null,
+        "progression": {
+          "source": "PENDING",
+          "rank": null,
+          "level": null
+        },
+        "primaryAgent": {
+          "agentId": "agt_usr_nova_julius",
+          "ownerId": "usr_nova",
+          "kind": "JULIUS",
+          "displayName": "Julius",
+          "systemLabel": "Julius 3.3 · Compound AI Agent",
+          "emblemId": "julius-rings",
+          "ratings": []
+        },
+        "relayDog": {
+          "skinId": "celestial_light",
+          "primary": null,
+          "secondary": null,
+          "flame": null,
+          "appearanceTier": "heart"
+        },
+        "activeCompanion": {
+          "companionId": "cmp_usr_nova_llm",
+          "ownerId": "usr_nova",
+          "kind": "LLM_COMPANION",
+          "displayName": "LLM Companion",
+          "primary": null,
+          "secondary": null
+        },
+        "showcaseAgents": [],
+        "showcaseCompanions": [],
+        "stats": [],
+        "memberSinceIso": "2026-09-01T00:00:00.000Z"
+      },
+      "presence": {
+        "userId": "usr_nova",
+        "onlineState": "ONLINE",
+        "headline": "CREATING",
+        "activityLabel": "Creating software · Weather dashboard",
+        "location": {
+          "serverId": "srv_golden_arrival",
+          "serverKind": "PUBLIC_WORLD",
+          "serverName": "Golden Arrival",
+          "placeLabel": "Tower Lane",
+          "nationId": null
+        },
+        "partyId": null,
+        "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
+        "can": {
+          "viewProfile": true,
+          "message": true,
+          "inviteToParty": false,
+          "joinParty": false,
+          "inviteToServer": true,
+          "joinServer": true,
+          "sendFriendRequest": false,
+          "removeFriend": true,
+          "mute": true,
+          "block": true,
+          "report": true
+        },
+        "restrictedReason": null
+      },
+      "relationship": "FRIEND",
+      "mutualFriendIds": [
+        "usr_rhea"
+      ],
+      "partyStatus": {
+        "inParty": false,
+        "memberCount": null,
+        "joinable": false
+      }
+    },
+    "usr_orion": {
+      "profile": {
+        "userId": "usr_orion",
+        "displayName": "Orion",
+        "handle": "@orion",
+        "avatarRef": "generated:usr_orion",
+        "nationId": null,
+        "clanName": null,
+        "progression": {
+          "source": "PENDING",
+          "rank": null,
+          "level": null
+        },
+        "primaryAgent": {
+          "agentId": "agt_usr_orion_julius",
+          "ownerId": "usr_orion",
+          "kind": "JULIUS",
+          "displayName": "Julius",
+          "systemLabel": "Julius 3.3 · Compound AI Agent",
+          "emblemId": "julius-rings",
+          "ratings": []
+        },
+        "relayDog": {
+          "skinId": "skeleton_flame",
+          "primary": null,
+          "secondary": null,
+          "flame": null,
+          "appearanceTier": null
+        },
+        "activeCompanion": {
+          "companionId": "cmp_usr_orion_llm",
+          "ownerId": "usr_orion",
+          "kind": "LLM_COMPANION",
+          "displayName": "LLM Companion",
+          "primary": null,
+          "secondary": null
+        },
+        "showcaseAgents": [],
+        "showcaseCompanions": [],
+        "stats": [],
+        "memberSinceIso": "2026-09-01T00:00:00.000Z"
+      },
+      "presence": {
+        "userId": "usr_orion",
+        "onlineState": "ONLINE",
+        "headline": "IN GVE",
+        "activityLabel": "In GVE · Tower Lane arena",
+        "location": {
+          "serverId": "srv_gve_7",
+          "serverKind": "GVE_ARENA",
+          "serverName": "GVE Arena 7",
+          "placeLabel": null,
+          "nationId": null
+        },
+        "partyId": "pty_11",
+        "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
+        "can": {
+          "viewProfile": true,
+          "message": true,
+          "inviteToParty": false,
+          "joinParty": true,
+          "inviteToServer": true,
+          "joinServer": true,
+          "sendFriendRequest": false,
+          "removeFriend": true,
+          "mute": true,
+          "block": true,
+          "report": true
+        },
+        "restrictedReason": null
+      },
+      "relationship": "FRIEND",
+      "mutualFriendIds": [
+        "usr_lyra"
+      ],
+      "partyStatus": {
+        "inParty": true,
+        "memberCount": 2,
+        "joinable": true
+      }
+    },
+    "usr_rhea": {
+      "profile": {
+        "userId": "usr_rhea",
+        "displayName": "Rhea",
+        "handle": "@rhea",
+        "avatarRef": "generated:usr_rhea",
+        "nationId": null,
+        "clanName": null,
+        "progression": {
+          "source": "PENDING",
+          "rank": null,
+          "level": null
+        },
+        "primaryAgent": {
+          "agentId": "agt_usr_rhea_julius",
+          "ownerId": "usr_rhea",
+          "kind": "JULIUS",
+          "displayName": "Julius",
+          "systemLabel": "Julius 3.3 · Compound AI Agent",
+          "emblemId": "julius-rings",
+          "ratings": []
+        },
+        "relayDog": {
+          "skinId": "baal",
+          "primary": null,
+          "secondary": null,
+          "flame": "#7FD4FF",
+          "appearanceTier": null
+        },
+        "activeCompanion": {
+          "companionId": "cmp_usr_rhea_llm",
+          "ownerId": "usr_rhea",
+          "kind": "LLM_COMPANION",
+          "displayName": "LLM Companion",
+          "primary": null,
+          "secondary": null
+        },
+        "showcaseAgents": [],
+        "showcaseCompanions": [],
+        "stats": [],
+        "memberSinceIso": "2026-09-01T00:00:00.000Z"
+      },
+      "presence": {
+        "userId": "usr_rhea",
+        "onlineState": "ONLINE",
+        "headline": "ONLINE",
+        "activityLabel": null,
+        "location": null,
+        "partyId": null,
+        "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
+        "can": {
+          "viewProfile": true,
+          "message": true,
+          "inviteToParty": false,
+          "joinParty": false,
+          "inviteToServer": true,
+          "joinServer": false,
+          "sendFriendRequest": false,
+          "removeFriend": true,
+          "mute": true,
+          "block": true,
+          "report": true
+        },
+        "restrictedReason": "PRIVATE"
+      },
+      "relationship": "FRIEND",
+      "mutualFriendIds": [
+        "usr_nova"
+      ],
+      "partyStatus": {
+        "inParty": false,
+        "memberCount": null,
+        "joinable": false
+      }
+    },
+    "usr_sol": {
+      "profile": {
+        "userId": "usr_sol",
+        "displayName": "Sol",
+        "handle": "@sol",
+        "avatarRef": "generated:usr_sol",
+        "nationId": null,
+        "clanName": null,
+        "progression": {
+          "source": "PENDING",
+          "rank": null,
+          "level": null
+        },
+        "primaryAgent": {
+          "agentId": "agt_usr_sol_julius",
+          "ownerId": "usr_sol",
+          "kind": "JULIUS",
+          "displayName": "Julius",
+          "systemLabel": "Julius 3.3 · Compound AI Agent",
+          "emblemId": "julius-rings",
+          "ratings": []
+        },
+        "relayDog": {
+          "skinId": "relay_og",
+          "primary": null,
+          "secondary": null,
+          "flame": null,
+          "appearanceTier": null
+        },
+        "activeCompanion": {
+          "companionId": "cmp_usr_sol_llm",
+          "ownerId": "usr_sol",
+          "kind": "LLM_COMPANION",
+          "displayName": "LLM Companion",
+          "primary": null,
+          "secondary": null
+        },
+        "showcaseAgents": [],
+        "showcaseCompanions": [],
+        "stats": [],
+        "memberSinceIso": "2026-09-01T00:00:00.000Z"
+      },
+      "presence": {
+        "userId": "usr_sol",
+        "onlineState": "OFFLINE",
+        "headline": "OFFLINE",
+        "activityLabel": null,
+        "location": null,
+        "partyId": null,
+        "lastSeenAtIso": null,
+        "can": {
+          "viewProfile": true,
+          "message": true,
+          "inviteToParty": false,
+          "joinParty": false,
+          "inviteToServer": false,
+          "joinServer": false,
+          "sendFriendRequest": false,
+          "removeFriend": true,
+          "mute": true,
+          "block": true,
+          "report": true
+        },
+        "restrictedReason": "OFFLINE"
+      },
+      "relationship": "FRIEND",
+      "mutualFriendIds": [],
+      "partyStatus": {
+        "inParty": false,
+        "memberCount": null,
+        "joinable": false
+      }
+    },
+    "usr_vega": {
+      "profile": {
+        "userId": "usr_vega",
+        "displayName": "Vega",
+        "handle": "@vega",
+        "avatarRef": "generated:usr_vega",
+        "nationId": null,
+        "clanName": null,
+        "progression": {
+          "source": "PENDING",
+          "rank": null,
+          "level": null
+        },
+        "primaryAgent": {
+          "agentId": "agt_usr_vega_julius",
+          "ownerId": "usr_vega",
+          "kind": "JULIUS",
+          "displayName": "Julius",
+          "systemLabel": "Julius 3.3 · Compound AI Agent",
+          "emblemId": "julius-rings",
+          "ratings": []
+        },
+        "relayDog": {
+          "skinId": "relay_og",
+          "primary": null,
+          "secondary": null,
+          "flame": null,
+          "appearanceTier": null
+        },
+        "activeCompanion": {
+          "companionId": "cmp_usr_vega_llm",
+          "ownerId": "usr_vega",
+          "kind": "LLM_COMPANION",
+          "displayName": "LLM Companion",
+          "primary": null,
+          "secondary": null
+        },
+        "showcaseAgents": [],
+        "showcaseCompanions": [],
+        "stats": [],
+        "memberSinceIso": "2026-09-01T00:00:00.000Z"
+      },
+      "presence": {
+        "userId": "usr_vega",
+        "onlineState": "ONLINE",
+        "headline": "ONLINE",
+        "activityLabel": null,
+        "location": null,
+        "partyId": null,
+        "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
+        "can": {
+          "viewProfile": true,
+          "message": false,
+          "inviteToParty": false,
+          "joinParty": false,
+          "inviteToServer": false,
+          "joinServer": false,
+          "sendFriendRequest": false,
+          "removeFriend": false,
+          "mute": true,
+          "block": true,
+          "report": true
+        },
+        "restrictedReason": "FRIENDS_ONLY"
+      },
+      "relationship": "REQUEST_RECEIVED",
+      "mutualFriendIds": [],
+      "partyStatus": {
+        "inParty": false,
+        "memberCount": null,
+        "joinable": false
+      }
+    }
+  },
+  "voiceStates": [
+    {
+      "label": "no provider configured",
+      "state": {
+        "partyId": null,
+        "connection": "UNAVAILABLE",
+        "providerId": null,
+        "participants": [],
+        "detail": "VOICE TRANSPORT PENDING"
+      }
+    },
+    {
+      "label": "connecting",
+      "state": {
+        "partyId": "pty_preview",
+        "connection": "CONNECTING",
+        "providerId": "local-harness",
+        "detail": null,
+        "participants": [
+          {
+            "userId": "usr_kai",
+            "connected": false,
+            "micMuted": false,
+            "speaking": false,
+            "mutedLocally": false
+          },
+          {
+            "userId": "usr_nova",
+            "connected": false,
+            "micMuted": false,
+            "speaking": false,
+            "mutedLocally": false
+          },
+          {
+            "userId": "usr_orion",
+            "connected": false,
+            "micMuted": false,
+            "speaking": false,
+            "mutedLocally": false
+          }
+        ]
+      }
+    },
+    {
+      "label": "connected, Nova speaking",
+      "state": {
+        "partyId": "pty_preview",
+        "connection": "CONNECTED",
+        "providerId": "local-harness",
+        "detail": null,
+        "participants": [
+          {
+            "userId": "usr_kai",
+            "connected": true,
+            "micMuted": false,
+            "speaking": false,
+            "mutedLocally": false
+          },
+          {
+            "userId": "usr_nova",
+            "connected": true,
+            "micMuted": false,
+            "speaking": true,
+            "mutedLocally": false
+          },
+          {
+            "userId": "usr_orion",
+            "connected": true,
+            "micMuted": false,
+            "speaking": false,
+            "mutedLocally": false
+          }
+        ]
+      }
+    },
+    {
+      "label": "self muted, Orion muted locally",
+      "state": {
+        "partyId": "pty_preview",
+        "connection": "CONNECTED",
+        "providerId": "local-harness",
+        "detail": null,
+        "participants": [
+          {
+            "userId": "usr_kai",
+            "connected": true,
+            "micMuted": true,
+            "speaking": false,
+            "mutedLocally": false
+          },
+          {
+            "userId": "usr_nova",
+            "connected": true,
+            "micMuted": false,
+            "speaking": true,
+            "mutedLocally": false
+          },
+          {
+            "userId": "usr_orion",
+            "connected": true,
+            "micMuted": false,
+            "speaking": false,
+            "mutedLocally": true
+          }
+        ]
+      }
+    },
+    {
+      "label": "reconnecting",
+      "state": {
+        "partyId": "pty_preview",
+        "connection": "RECONNECTING",
+        "providerId": "local-harness",
+        "detail": "network changed",
+        "participants": [
+          {
+            "userId": "usr_kai",
+            "connected": false,
+            "micMuted": true,
+            "speaking": false,
+            "mutedLocally": false
+          },
+          {
+            "userId": "usr_nova",
+            "connected": false,
+            "micMuted": false,
+            "speaking": false,
+            "mutedLocally": false
+          },
+          {
+            "userId": "usr_orion",
+            "connected": false,
+            "micMuted": false,
+            "speaking": false,
+            "mutedLocally": true
+          }
+        ]
+      }
+    },
+    {
+      "label": "failed",
+      "state": {
+        "partyId": "pty_preview",
+        "connection": "FAILED",
+        "providerId": "local-harness",
+        "detail": "provider refused",
+        "participants": [
+          {
+            "userId": "usr_kai",
+            "connected": false,
+            "micMuted": true,
+            "speaking": false,
+            "mutedLocally": false
+          },
+          {
+            "userId": "usr_nova",
+            "connected": false,
+            "micMuted": false,
+            "speaking": false,
+            "mutedLocally": false
+          },
+          {
+            "userId": "usr_orion",
+            "connected": false,
+            "micMuted": false,
+            "speaking": false,
+            "mutedLocally": true
+          }
+        ]
+      }
+    }
+  ]
+}

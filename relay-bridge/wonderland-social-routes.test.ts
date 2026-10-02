@@ -1,0 +1,175 @@
+import { describe, expect, it } from 'vitest';
+import { createInMemorySocialStore, type SocialStore } from '../src/relay/social/social-store';
+import { handleSocialRoute, type SocialRouteDeps, type SocialSessionFacts } from './wonderland-social-routes';
+import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
+
+/*
+ * TWO REAL PLAYERS THROUGH THE REAL ROUTES. Kai and Nova each hold a native session with the `social` capability; Mira's
+ * session lacks it. Every call goes through handleSocialRoute -- the gates, the actor binding, the store's atomic apply and
+ * its events -- exactly as the bridge would run it; only the session store and the account lookup are stand-ins.
+ */
+
+const T0 = Date.parse('2026-10-02T12:00:00.000Z');
+
+const SESSIONS: Record<string, SocialSessionFacts> = {
+  'tok-kai': { sessionId: 's1', participantId: 'usr_kai', capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+  'tok-nova': { sessionId: 's2', participantId: 'usr_nova', capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+  'tok-mira': { sessionId: 's3', participantId: 'usr_mira', capabilities: [] },
+  'tok-vega': { sessionId: 's4', participantId: 'usr_vega', capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+};
+
+function world(store: SocialStore = createInMemorySocialStore()) {
+  let clock = T0;
+  const deps: SocialRouteDeps = {
+    verifySession: (token) => SESSIONS[token] ?? null,
+    identify: async (participantId) => ({ userId: participantId, displayName: participantId.replace('usr_', '').replace(/^./, (c) => c.toUpperCase()), handle: `@${participantId.replace('usr_', '')}` }),
+    store,
+  };
+  const call = async (token: string | null, method: string, path: string, body: unknown = null, origin?: string) => {
+    clock += 1000;
+    const result = await handleSocialRoute(
+      { method, path, authorization: token === null ? undefined : `Relay-Session ${token}`, origin, body, now: clock },
+      deps,
+    );
+    if (result === null) throw new Error(`not a social route: ${path}`);
+    return result as { status: number; body: { data?: any; error?: { kind: string; message: string } } };
+  };
+  const as = (token: string) => ({
+    get: (path: string) => call(token, 'GET', `/wonderland/social${path}`),
+    post: (path: string, body: unknown = {}) => call(token, 'POST', `/wonderland/social${path}`, body),
+  });
+  return { call, kai: as('tok-kai'), nova: as('tok-nova'), mira: as('tok-mira'), vega: as('tok-vega') };
+}
+
+describe('the social routes: who may call', () => {
+  it('refuses no session, a browser origin, a session without the capability, and anything not in the table', async () => {
+    const w = world();
+    expect((await w.call(null, 'GET', '/wonderland/social/snapshot')).status).toBe(401);
+    expect((await w.call('tok-nope', 'GET', '/wonderland/social/snapshot')).status).toBe(401);
+    expect((await w.call('tok-kai', 'GET', '/wonderland/social/snapshot', null, 'https://evil.example')).status).toBe(403);
+    expect((await w.mira.get('/snapshot')).body.error?.kind).toBe('not_permitted');
+    expect((await w.kai.get('/admin/users')).body.error?.kind).toBe('not_permitted');
+    expect((await w.kai.get('/profiles/../../x')).body.error?.kind).toBe('not_permitted');
+    expect((await w.kai.post('/requests', { toUserId: 'usr_nova', fromUserId: 'usr_nova' })).body.error?.kind).toBe('actor_mismatch');
+  });
+
+  it('is 503 without a store, after the gates', async () => {
+    const deps: SocialRouteDeps = { verifySession: (t) => SESSIONS[t] ?? null, identify: async () => null, store: null };
+    const result = await handleSocialRoute({ method: 'GET', path: '/wonderland/social/snapshot', authorization: 'Relay-Session tok-kai', origin: undefined, body: null, now: T0 }, deps);
+    expect(result?.status).toBe(503);
+  });
+});
+
+describe('the social routes: two players, the launch loop', () => {
+  it('a new player gets a record on first contact: Relay OG, rank and level PENDING, no friends', async () => {
+    const w = world();
+    const snap = (await w.kai.get('/snapshot')).body.data;
+    expect(snap.developmentPreview).toBe(false);
+    expect(snap.schema).toBe('relay-wonderland-social-view.v1');
+    expect(snap.viewerId).toBe('usr_kai');
+    expect(snap.self.profile.relayDog.skinId).toBe('relay_og');
+    expect(snap.self.profile.progression).toEqual({ source: 'PENDING', rank: null, level: null });
+    expect(snap.friends).toEqual([]);
+    expect(snap.voiceStates).toEqual([]);
+  });
+
+  it('friend request -> the other is told -> accept -> both see each other, with presence', async () => {
+    const w = world();
+    await w.kai.get('/snapshot');
+    await w.nova.get('/snapshot');
+    const latestNova = (await w.nova.get('/events')).body.data.latest;
+    expect((await w.kai.post('/requests', { toUserId: 'usr_nova' })).status).toBe(200);
+    const told = (await w.nova.get(`/events?after=${latestNova}`)).body.data;
+    expect(told.events.map((e: any) => e.op)).toEqual(['requests.send']);
+    const incoming = (await w.nova.get('/snapshot')).body.data.requests.incoming;
+    expect(incoming.map((r: any) => r.from.userId)).toEqual(['usr_kai']);
+    expect((await w.nova.post(`/requests/${incoming[0].requestId}/accept`)).status).toBe(200);
+    expect((await w.kai.get('/snapshot')).body.data.friends.map((f: any) => f.userId)).toEqual(['usr_nova']);
+    expect((await w.nova.get('/snapshot')).body.data.friends.map((f: any) => f.userId)).toEqual(['usr_kai']);
+
+    // presence: Kai reports a GvE battle; Nova, a friend, sees it on her next read
+    await w.kai.post('/presence', { connected: true, availability: 'AVAILABLE', signals: { inGveBattle: true } });
+    const kaiSeenByNova = (await w.nova.get('/snapshot')).body.data.friends[0].presence;
+    expect(kaiSeenByNova.onlineState).toBe('ONLINE');
+    expect(kaiSeenByNova.headline).toBe('IN GVE');
+  });
+
+  it('messages: open, send, the other is told, reads it, unread clears', async () => {
+    const w = await friends();
+    const opened = (await w.kai.post('/conversations', { otherUserId: 'usr_nova' })).body.data;
+    expect(typeof opened.conversationId).toBe('string');
+    const before = (await w.nova.get('/events')).body.data.latest;
+    expect((await w.kai.post(`/conversations/${opened.conversationId}/messages`, { body: 'Running in Golden Arrival.' })).status).toBe(200);
+    expect((await w.nova.get(`/events?after=${before}`)).body.data.events.map((e: any) => e.op)).toEqual(['messages.send']);
+    const inbox = (await w.nova.get('/snapshot')).body.data.conversations;
+    expect(inbox[0].unread).toBe(1);
+    const history = (await w.nova.get(`/conversations/${opened.conversationId}/messages`)).body.data;
+    expect(history.map((m: any) => m.body)).toEqual(['Running in Golden Arrival.']);
+    await w.nova.post(`/conversations/${opened.conversationId}/read`, {});
+    expect((await w.nova.get('/snapshot')).body.data.conversations[0].unread).toBe(0);
+    // a session without the capability is stopped at the gate; a capable stranger by the conversation's own membership
+    expect((await w.mira.get(`/conversations/${opened.conversationId}/messages`)).status).toBe(403);
+    await w.vega.get('/snapshot');
+    const stranger = await w.vega.get(`/conversations/${opened.conversationId}/messages`);
+    expect(stranger.status).toBe(404);
+    expect(JSON.stringify(stranger.body)).not.toContain('Golden Arrival');
+  });
+
+  it('party: create, invite, the invitee is told, accepts, both are in it; leave', async () => {
+    const w = await friends();
+    const partyId = (await w.kai.post('/parties', { name: 'Lab Crew' })).body.data.partyId;
+    const before = (await w.nova.get('/events')).body.data.latest;
+    expect((await w.kai.post(`/parties/${partyId}/invites`, { toUserId: 'usr_nova' })).status).toBe(200);
+    expect((await w.nova.get(`/events?after=${before}`)).body.data.events.map((e: any) => e.op)).toEqual(['parties.invite']);
+    const invite = (await w.nova.get('/snapshot')).body.data.partyInvites[0];
+    expect(invite.partyName).toBe('Lab Crew');
+    expect((await w.nova.post(`/party-invites/${invite.inviteId}/accept`)).status).toBe(200);
+    const kaiParty = (await w.kai.get('/snapshot')).body.data.party;
+    expect(kaiParty.members.map((m: any) => m.userId).sort()).toEqual(['usr_kai', 'usr_nova']);
+    expect(kaiParty.viewerIsLeader).toBe(true);
+    expect((await w.nova.post(`/parties/${partyId}/leave`)).status).toBe(200);
+    expect((await w.kai.get('/snapshot')).body.data.party.members.map((m: any) => m.userId)).toEqual(['usr_kai']);
+  });
+
+  it('block: the blocked player is never told, can no longer message, and the blocker vanishes from their view', async () => {
+    const w = await friends();
+    const conversationId = (await w.kai.post('/conversations', { otherUserId: 'usr_nova' })).body.data.conversationId;
+    const kaiBefore = (await w.kai.get('/events')).body.data.latest;
+    expect((await w.nova.post('/blocks', { targetId: 'usr_kai' })).status).toBe(200);
+    expect((await w.kai.get(`/events?after=${kaiBefore}`)).body.data.events).toEqual([]);
+    expect((await w.kai.post(`/conversations/${conversationId}/messages`, { body: 'hello?' })).status).not.toBe(200);
+    const kaiView = (await w.kai.get('/snapshot')).body.data;
+    expect(kaiView.friends).toEqual([]);
+    expect(kaiView.profiles.usr_nova).toBeUndefined();
+    // and Nova still sees her own block's effect: Kai is no friend of hers either
+    expect((await w.nova.get('/snapshot')).body.data.friends).toEqual([]);
+  });
+
+  it('mute and report are told to nobody but the actor', async () => {
+    const w = await friends();
+    const novaBefore = (await w.nova.get('/events')).body.data.latest;
+    expect((await w.kai.post('/mutes', { targetId: 'usr_nova', voice: true, messages: false })).status).toBe(200);
+    expect((await w.kai.post('/reports', { reportedId: 'usr_nova', reason: 'SPAM', note: 'test' })).status).toBe(200);
+    expect((await w.nova.get(`/events?after=${novaBefore}`)).body.data.events).toEqual([]);
+  });
+
+  it('a client too far behind the event log is told to refresh', async () => {
+    const w = world(createInMemorySocialStore(undefined, { maxEvents: 2 }));
+    await w.kai.get('/snapshot');
+    await w.nova.get('/snapshot');
+    await w.kai.post('/requests', { toUserId: 'usr_nova' });
+    for (let i = 0; i < 3; i += 1) await w.kai.post('/presence', { connected: true, activityDetail: `step ${i}` });
+    expect((await w.nova.get('/events?after=1')).body.data.reset).toBe(true);
+  });
+});
+
+/** Kai and Nova, friends. */
+async function friends() {
+  const w = world();
+  await w.kai.get('/snapshot');
+  await w.nova.get('/snapshot');
+  await w.kai.post('/requests', { toUserId: 'usr_nova' });
+  const requestId = (await w.nova.get('/snapshot')).body.data.requests.incoming[0].requestId;
+  await w.nova.post(`/requests/${requestId}/accept`);
+  return w;
+}
