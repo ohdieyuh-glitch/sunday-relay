@@ -179,11 +179,21 @@ R12 3.9375 + R13 2.8125 + R14 0 + R15 3.375 + R16 0 = 54.00.
     contract 40.9/36.1, creation 36.1/31.4.
   - 0 frames over 100 ms in either; 0 crashes; memory flat (peak private 6.71 GB, VRAM 4.30 GB).
   - Both runs are faster than this morning's pair: the same machine-state shift as the travel control.
-- OWED by CORE on RC11: clean user, session stability and WATCH by real input.
-  - `cleanuser_rc11_core/` VOIDED before any input: the taskbar (Shell_TrayWnd) held the foreground.
-  - The harness can raise the game above normal windows but not above a shell surface (ForegroundLockTimeout is infinite
-    on this laptop). The drives run when a normal window holds the foreground.
-- **CORE RC11 CHAIN DONE 2026-10-02 10:10, except the three drives**; handed to Second for its independent RC11 pass.
+- Real input, run 11:30-11:37 under the founder's D10 conditions (`core_drives_rc11.ps1`): before each drive, the founder
+  away (gate), an ORDINARY window in front (Edge), no other Wonderland game. Every drive's hooks saw 0 real input.
+  - Clean user (`cleanuser_rc11_core_b/`), 9/9: a fresh empty profile; the title carries the RC11 label; the welcome;
+    START; the world; QNET PASS; the menu -> HOW TO PLAY -> back -> QUIT; "Log file closed".
+  - Session (`drive_rc11_b_core/`), 15/15: window modes x3 with the style checked, input after each; focus lost 8 s and
+    regained; minimize/restore; QNET PASS; menu QUIT; graceful.
+  - WATCH by real input (`drive_rc11_a3_core/`), 11/11: relaunched WINDOWED with no welcome; the click -> scenario D ->
+    "fixture 'full_lifecycle' finished"; Esc closes the mission's terminal, Esc opens the menu, QUIT; graceful.
+  - The earlier `cleanuser_rc11_core/` VOIDED before any input because the taskbar (Shell_TrayWnd) held the foreground.
+    The harness cannot raise the game above a shell surface, and ForegroundLockTimeout is infinite on this laptop.
+- **CORE RC11 CHAIN COMPLETE 2026-10-02 11:37** (all but the drives were done at 10:10). Second's independent RC11 pass
+  was running beside it at 11:28: P0 static, P5 PackageCheck 52/52 + Persist 4/4, P5b Shadow Flame 15/15 + S14.restart,
+  Wardrobe 26/26, P11 hostile 7/7, P7 failed travel on the soak route (7 abandons, each recovered; 10 arrivals after an
+  abandon), and the P6 boot matrix 17/17 with clean exits. Still to come from Second: P9, P8, its terminal capture, and
+  its real-input pieces.
 
 ### RC10 package evidence (CORE) -- final RC 2026-10-02 05:02 to ~08:30, superseded by RC11 before Second's pass
 
