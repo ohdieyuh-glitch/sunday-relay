@@ -1,11 +1,12 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { JuliusPostgresRepository } from './julius-postgres';
 import { juliusTestDatabaseUrl } from './julius-test-database';
 import { JuliusTrajectoryPostgresRepository } from './julius-trajectory-postgres';
 import { TransactionalWonderlandDatabase } from './wonderland-postgres';
-import { summariseJuliusEvals, type JuliusTrajectoryEvent } from '../mission/julius';
+import { summariseJuliusEvals, type JuliusTask, type JuliusTrajectoryEvent } from '../mission/julius';
 
 /**
  * THE SQL SUMMARY AND THE PURE ONE, ON THE SAME ROWS.
@@ -35,6 +36,11 @@ suite('the SQL eval summary agrees with the pure one on real PostgreSQL', () => 
   const mission = `mission-parity-${nonce}`;
   const run = `run:parity-${nonce}`;
   const runtimeVersion = `julius-runtime.parity-${nonce}`;
+  const taskId = `build:parity-${nonce}`;
+  // A context a row names must EXIST: `context_id` is a foreign key to the
+  // compiled context snapshots, so every context the rows cite is written
+  // first, scoped to this run so a shared database cannot collide.
+  const ctx = (n: number): string => `ctx-${String(n)}-${nonce}`;
   let pool: Pool;
 
   const at = (minute: number) => `2099-01-01T00:${String(minute).padStart(2, '0')}:00.000Z`;
@@ -47,9 +53,9 @@ suite('the SQL eval summary agrees with the pure one on real PostgreSQL', () => 
   const EVENTS: readonly JuliusTrajectoryEvent[] = [
     row('topology', { kind: 'TASK_TOPOLOGY', outcome: 'PLANNED' }, 1),
     // Provider attempts: two named, one unattributed (a failure whose provider went unrecorded).
-    row('w8', { kind: 'DISPATCH', outcome: 'COMPLETED', providerId: 'anthropic', contextId: 'ctx-1', durationMs: 60_000, usdMicros: 0, inputTokens: 100, outputTokens: 50 }, 2),
-    row('w7a', { kind: 'DISPATCH', outcome: 'TIMEOUT', providerId: 'openai', contextId: 'ctx-2', durationMs: 120_000 }, 3),
-    row('w7b', { kind: 'DISPATCH', outcome: 'POLICY_DENIED', contextId: 'ctx-3' }, 4),
+    row('w8', { kind: 'DISPATCH', outcome: 'COMPLETED', providerId: 'anthropic', contextId: ctx(1), durationMs: 60_000, usdMicros: 0, inputTokens: 100, outputTokens: 50 }, 2),
+    row('w7a', { kind: 'DISPATCH', outcome: 'TIMEOUT', providerId: 'openai', contextId: ctx(2), durationMs: 120_000 }, 3),
+    row('w7b', { kind: 'DISPATCH', outcome: 'POLICY_DENIED', contextId: ctx(3) }, 4),
     // A tool step, shaped as `julius-tool-settlement-postgres` writes one.
     row('w9', {
       kind: 'DISPATCH', outcome: 'SUCCEEDED', policyVersion: 'tool-settlement.v1', durationMs: 41, usdMicros: 0, inputTokens: 0, outputTokens: 0,
@@ -66,7 +72,7 @@ suite('the SQL eval summary agrees with the pure one on real PostgreSQL', () => 
     row('bare', { kind: 'DISPATCH' }, 12),
     row('numeric-tool', { kind: 'DISPATCH', durationMs: 30_000, safeFacts: { toolId: 7 } }, 13),
     // The kinds that carry an amount without being a DISPATCH.
-    row('retry', { kind: 'RETRY', outcome: 'TIMEOUT', providerId: 'openai', contextId: 'ctx-2', usdMicros: 250_000 }, 14),
+    row('retry', { kind: 'RETRY', outcome: 'TIMEOUT', providerId: 'openai', contextId: ctx(2), usdMicros: 250_000 }, 14),
     row('subagent', { kind: 'SUBAGENT', outcome: 'AUTHORIZED', usdMicros: 7_000 }, 15),
     row('fallback', { kind: 'FALLBACK', outcome: 'REROUTED' }, 16),
     row('completion', { kind: 'COMPLETION', outcome: 'VERIFIED' }, 17),
@@ -84,11 +90,24 @@ suite('the SQL eval summary agrees with the pure one on real PostgreSQL', () => 
       "INSERT INTO relay_wonderland.julius_runs(run_id,mission_id,project_id,state,runtime_version,card_revision,mission_contract_revision,project_brain_revision) VALUES($1,$2,$3,'EXECUTING',$4,'card-r1',1,0)",
       [run, mission, project, runtimeVersion],
     );
+    const task: JuliusTask = {
+      taskId, missionId: mission, parentTaskId: null, dependencyIds: [], requiredEvidenceTypes: ['TEST'],
+      taskType: 'build', role: 'CODING_AGENT', ordinal: 1, state: 'RUNNABLE',
+    };
+    await new JuliusPostgresRepository(pool).addTask({ commandId: `parity:${taskId}`, runId: run, projectId: project, task });
+    for (const n of [1, 2, 3]) {
+      await pool.query(
+        "INSERT INTO relay_wonderland.julius_context_snapshots(context_id,run_id,task_id,worker_id,compiler_version,mission_contract_revision,card_revision,project_brain_revision,source_entry_ids,content_hash,character_count,truncated) VALUES($1,$2,$3,'worker-parity','parity.v1',1,'card-r1',0,'[]'::jsonb,$4,0,false)",
+        [ctx(n), run, taskId, createHash('sha256').update(ctx(n), 'utf8').digest('hex')],
+      );
+    }
   });
 
   afterAll(async () => {
     const statements = pool === undefined ? [] : [
       'DELETE FROM relay_wonderland.julius_trajectory_events WHERE project_id=$1',
+      'DELETE FROM relay_wonderland.julius_context_snapshots c USING relay_wonderland.julius_runs r WHERE c.run_id=r.run_id AND r.project_id=$1',
+      'DELETE FROM relay_wonderland.julius_tasks t USING relay_wonderland.julius_runs r WHERE t.run_id=r.run_id AND r.project_id=$1',
       'DELETE FROM relay_wonderland.julius_runs WHERE project_id=$1',
       'DELETE FROM relay_wonderland.mission_contracts WHERE project_id=$1',
       'DELETE FROM relay_wonderland.projects WHERE project_id=$1',
