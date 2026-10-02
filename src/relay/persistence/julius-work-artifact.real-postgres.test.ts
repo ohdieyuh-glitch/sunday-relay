@@ -211,4 +211,30 @@ suite('the work-artifact record on real PostgreSQL', () => {
       rmSync(scratch, { recursive: true, force: true });
     }
   }, 120_000);
+
+  it('the latest attempt is the higher lease generation, whichever was written first', async () => {
+    // latestWorkArtifact decides which attempt's body a later read is handed
+    // (durable-artifacts latest()). Insertion order must not be what decides it,
+    // so the lower generation is written first for one task and last for
+    // another; 9 and 10 also tell a numeric order from a text one ('9' > '10').
+    for (const [suffix, ordinal, order] of [['up', 2, [9, 10]], ['down', 3, [10, 9]]] as const) {
+      const latestTask = `${taskId}:latest-${suffix}`;
+      const task: JuliusTask = {
+        taskId: latestTask, missionId: mission, parentTaskId: null, dependencyIds: [], requiredEvidenceTypes: ['TEST'],
+        taskType: 'build', role: 'CODING_AGENT', ordinal, state: 'RUNNABLE',
+      };
+      await new JuliusPostgresRepository(pool).addTask({ commandId: `wa:${latestTask}`, runId: run, projectId: project, task });
+      const written = new Map<number, JuliusWorkArtifactRecord>();
+      for (const generation of order) {
+        const at = scope({ taskId: latestTask, leaseGeneration: generation });
+        const record = { ...recordFor(at, `diff, generation ${String(generation)} (${suffix})`), storageRef: `store:${nonce}:${latestTask}:${String(generation)}` };
+        expect(await records.recordWorkArtifact(record)).toEqual({ recorded: true });
+        written.set(generation, record);
+      }
+      expect(
+        await records.latestWorkArtifact({ projectId: project, runId: run, taskId: latestTask, kind: 'DIFF' }),
+        `written ${order.join(' then ')}`,
+      ).toEqual(written.get(10));
+    }
+  });
 });
