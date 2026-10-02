@@ -86,6 +86,12 @@ describe('V2-1 (unit) — a material challenge Julius resolved for the architect
       .toEqual({ outcome: 'CITED', reviewTaskId: segment, evidenceIds: [`${segment}:1:0`] });
   });
 
+  it('a re-review never gates as a subject’s own applied row, only through the resolution (Second’s Q1)', () => {
+    const rebuttal = { taskId: 'rebuttal:build-1:review:task', role: 'PROMPT_ARCHITECT' } as const;
+    expect(gate({ subject: rebuttal, applied: [reReview()], upheld, evidence }))
+      .toMatchObject({ outcome: 'REFUSED', reasonCode: 'REVIEW_NOT_PASSING', reviewTaskId: RE_REVIEW });
+  });
+
   it('refuses while unresolved, when another subject was upheld, and when the re-review did not pass', () => {
     expect(gate({ applied: [HOLD, reReview()], upheld: [], evidence }).outcome).toBe('REFUSED');
     expect(gate({ applied: [HOLD, reReview()], upheld: [{ subjectTaskId: 'plan-1', reReviewTaskId: RE_REVIEW }], evidence }).outcome).toBe('REFUSED');
