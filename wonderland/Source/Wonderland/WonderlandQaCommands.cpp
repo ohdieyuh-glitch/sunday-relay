@@ -3068,15 +3068,19 @@ namespace
 				const float Bottom = CentreY + HeightPct * 0.5f;
 				const float Top = CentreY - HeightPct * 0.5f;
 				const bool bFire = QaNoteValue(Note, TEXT("fireTop"), 0.0f) > 0.0f;
+				// SHADOW TENDRILS ARE TREATED AS FIRE IS: the founder's rule is that the wardrobe shows the whole Dog "without
+				// shrinking for tendrils", so a riser may leave the top of the frame as a flame tip may (measured 2026-10-02: the
+				// head and ears whole at ~13% from the top, the lit row at the edge a strip behind the head).
+				const bool bShadowTips = Body != nullptr && Body->HasLiveShadows();
 				const bool bShows = Stage != nullptr && Stage->GetShownSkinId() == FName(WardrobeRoster[F.Skin]);
 				// CLOSE, AND WHOLE: the lit figure fills at least 70% of the preview's height (the RC7 wardrobe: about a third);
 				// its lowest lit pixel stops short of the bottom edge (the feet are in the frame); and for a skin with no fire its
 				// highest lit pixel stops short of the top (no head, ear, antler, halo or hat cut off). Fire tips may touch the top.
-				const bool bWhole = Bottom <= 99.0f && (bFire || Top >= 0.5f);
+				const bool bWhole = Bottom <= 99.0f && (bFire || bShadowTips || Top >= 0.5f);
 				QaWardrobeVerdict(F, *FString::Printf(TEXT("W%d.2"), F.Skin + 1), bShows && HeightPct >= 70.0f && bWhole,
 					FString::Printf(TEXT("%s: figure %.1f%% of the preview height, highest lit row %.1f%%, lowest %.1f%%, centre %.1f%% (want >= 70%%; feet clear of the bottom; %s)"),
 						WardrobeRoster[F.Skin], HeightPct, Top, Bottom, CentreY,
-						bFire ? TEXT("fire tips may touch the top") : TEXT("nothing touching the top")));
+						bFire ? TEXT("fire tips may touch the top") : bShadowTips ? TEXT("shadow tips may touch the top") : TEXT("nothing touching the top")));
 				F.Samples = 0;
 				F.OffsetMin = FVector(1e9);
 				F.OffsetMax = FVector(-1e9);
