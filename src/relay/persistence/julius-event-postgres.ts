@@ -57,7 +57,7 @@ export async function appendJuliusEventWithin(client:JuliusEventTransaction,even
   await client.query('RELEASE SAVEPOINT julius_event_append');
   return{recorded:true,sequence};
  }
- // The id is taken. Undo this append's counter step, then judge the row that holds the id: it exists, so reading it locks that row and nothing wider.
+ // The id is taken. Undo this append's counter step, then judge the row that holds the id. This read comes only after the append was decided (a replay or a conflict), never before a new event is written.
  await client.query('ROLLBACK TO SAVEPOINT julius_event_append');
  await client.query('RELEASE SAVEPOINT julius_event_append');
  const existing=await client.query('SELECT sequence,payload FROM relay_wonderland.events WHERE event_id=$1 FOR UPDATE',[event.eventId]);

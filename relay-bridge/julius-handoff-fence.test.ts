@@ -241,6 +241,42 @@ describe('(a2) the PostgreSQL fence and sweep are each one serializable transact
     expect(body, 'and no transaction statement of its own').not.toMatch(OWN_TRANSACTION);
   });
 
+  /**
+   * THE APPEND BOTH BODIES CALL (row 13 (i)). `appendJuliusEventWithin` runs inside the fence's and the
+   * settlement's one transaction, so a statement it issues is issued inside them. It now owns ONE named
+   * savepoint, around its counter step, so that a replay allocates nothing: a savepoint nests inside the
+   * transaction and cannot split or weaken it. That is the only exception, pinned whole: anything else —
+   * a COMMIT, a bare ROLLBACK, a second savepoint name — is the G5b split again, one call deeper.
+   */
+  const transactionStatements = (body: string): string[] =>
+    [...body.matchAll(/client\.query\(\s*(['"`])\s*((?:COMMIT|BEGIN|ROLLBACK|SAVEPOINT|RELEASE|SET\s+TRANSACTION|SET\s+SESSION|START\s+TRANSACTION|END)\b[^'"`]*)\1/giu)]
+      .map((match) => match[2]!);
+  const APPEND_SAVEPOINT = ['SAVEPOINT julius_event_append', 'RELEASE SAVEPOINT julius_event_append',
+    'ROLLBACK TO SAVEPOINT julius_event_append', 'RELEASE SAVEPOINT julius_event_append'];
+  const appendBody = () => {
+    const text = source('src', 'relay', 'persistence', 'julius-event-postgres.ts');
+    const start = text.indexOf('export async function appendJuliusEventWithin(');
+    expect(start, 'appendJuliusEventWithin is found').toBeGreaterThanOrEqual(0);
+    return text.slice(start, text.indexOf('\n}\n', start));
+  };
+
+  it('(d) the append the fence and the settlement run inside them issues no transaction statement but its one named savepoint', () => {
+    expect(transactionStatements(appendBody()), 'opened once; released on each of its two exits; rolled back only for a taken id').toEqual(APPEND_SAVEPOINT);
+  });
+
+  it('CONTROL: the savepoint pin refuses a stray COMMIT, a bare ROLLBACK and another savepoint name in the append', () => {
+    const body = appendBody();
+    const edits = [
+      body.replace("await client.query('SAVEPOINT julius_event_append');", "await client.query('COMMIT');await client.query('SAVEPOINT julius_event_append');"),
+      body.replace("await client.query('ROLLBACK TO SAVEPOINT julius_event_append');", "await client.query('ROLLBACK');"),
+      body.replace("await client.query('SAVEPOINT julius_event_append');", "await client.query('SAVEPOINT another_savepoint');"),
+    ];
+    for (const edited of edits) {
+      expect(edited, 'the edit applied to the real body').not.toBe(body);
+      expect(transactionStatements(edited)).not.toEqual(APPEND_SAVEPOINT);
+    }
+  });
+
   it('CONTROL: the transaction-statement pattern sees each of the review’s own edits', () => {
     for (const edit of ["await client.query('COMMIT');", "await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');",
       "await client.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');", 'await client.query(`savepoint s1`);', 'await client.query("ROLLBACK")']) {
