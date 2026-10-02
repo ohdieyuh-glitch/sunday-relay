@@ -121,7 +121,24 @@ R12 3.9375 + R13 2.8125 + R14 0 + R15 3.375 + R16 0 = 54.00.
   rebuilt too (05:03:39), so the founder's editor matches RC10.
 - Static (`static_0.1.0-rc10_core.txt`): zip == manifest == folder (82/82); against RC9: + RelaySkins/ShadowFlame.wlvox,
   ~ exe, ~ BuildInfo and README (version); the binaries' scan hits identical to RC9's; no new file with hits.
-- (CORE's RC10 chain continues here.)
+- QA (`qa_rc10_core.log`): **64 PASS, 0 FAIL over three boots, QA PASSED**. Run1 50 -> 52 with the six-skin rosters:
+  Q10.6 shadow_flame body 174.15 uu = Relay OG, Q25.6 its eyes inside the face. Run2 4, run3 7. QNET run1 PASS. Labels
+  OK, 0 crash lines, graceful exits; the guard saw 1 press in another window and none into the game.
+- Exit watchdog (`hang_exit_rc10_core/`): armed 0.59 s after PreExit, the induced hang ended 20.3 s later, code 0, the
+  save intact; 1985 open t+5.46 -> closed by t+6.99 s.
+- Shadow Flame on the final RC (`shadowflame_rc10_core/`, `shadowflame_rc10_restart_core/`): wl.Qa.ShadowFlame END
+  pass=15 fail=0:
+  - S2: body 174.15 uu, 11/11 canonical biped parts. S3: no clothing. S4: yellow eyes inside the face.
+  - S5-S8: 13 visible tendrils, moving in 100% of steps, independent (cos 0.04), smooth (p95 8.7 uu/0.1 s).
+  - S10: they trail 83.7 uu while walking and settle back. S11/S15: clean switches. S13: the wardrobe draws them.
+  - S14: persisted; the restart boot "S14.restart PASS" (strips live after a relaunch).
+- Wardrobe, six skins (`wardrobe_rc10_core/`): wl.Qa.Wardrobe END pass=26 fail=0. shadow_flame 90.0% of the preview
+  height; the other five as on RC9; 360 back to the front.
+- Firewall: RC10's new path holds Allow/Public inbound rules after its first launch (answered by a person; CORE changes
+  no rule).
+- Still to run on RC10 (paused under the machine-coexistence order, behind Second's social compile and JUJU's eval
+  slot): clean-user, session stability, the WATCH run (Esc x2 fixed), terminal + B56 films with the four-panel
+  measurement, failed travel, perf.
 
 ### RC9 package evidence (CORE) -- final RC until 2026-10-02 05:02
 
