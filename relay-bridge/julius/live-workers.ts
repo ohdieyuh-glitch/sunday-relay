@@ -667,6 +667,38 @@ const providerFacts = (
 });
 
 /**
+ * A PAID ANSWER IS STILL PAID FOR IF STORING IT FAILS: the Prompt Architect's
+ * twin of the Coding Agent's `afterSession`.
+ *
+ * Since PR 12 an answer's body is a DURABLE write (the filesystem and
+ * PostgreSQL) made after the provider answered. Whatever goes wrong there, the
+ * call was already bought, so every failure from here carries the call's facts,
+ * says the runtime started, and is never retried: a retry is a second paid call.
+ * Left raw, an ETIMEDOUT from Julius's own store reads as a retryable provider
+ * TIMEOUT (`normalizeProviderError`) and buys the same answer twice (PR286
+ * review P2-1). The three cases map exactly as `afterSession` maps them:
+ *   - a typed error keeps its code and loses its retry;
+ *   - a store error is Julius's own PERSISTENCE_FAILURE;
+ *   - anything else still carries what the call consumed.
+ */
+const storedAfterCallFailure = (error: unknown, facts: Readonly<Record<string, unknown>>): JuliusDispatchError => {
+  const consumed = { ...facts, runtimeStarted: true };
+  if (error instanceof JuliusDispatchError) {
+    return new JuliusDispatchError(error.code, false, error.safeMessage, error.failureClass, {
+      ...(error.diagnostics ?? {}), ...consumed,
+    });
+  }
+  const storeErrorClass = juliusStoreErrorClass(error);
+  if (storeErrorClass !== null) {
+    return new JuliusDispatchError('PERSISTENCE_FAILURE', false,
+      'Julius could not store the answer it paid for in its own store.', 'persist_after_call',
+      { ...consumed, storeErrorClass });
+  }
+  return new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false,
+    'A step after the paid call failed.', 'after_call_failure', consumed);
+};
+
+/**
  * HOW THE PROMPT ARCHITECT IS PAID FOR: its OpenAI API key, by construction.
  *
  * `createLiveArchitectAdapter` refuses to exist without an `apiKey`, and the Chat
@@ -1257,7 +1289,14 @@ export function createLiveArchitectAdapter(input: {
         // The provider's wall time ends here, BEFORE Julius stores the body: the
         // durable write is Julius's own I/O, not the provider's latency.
         const completedAtMs = Date.now();
-        const guidanceRef = await input.artifacts.put({ kind: 'GUIDANCE', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'PROMPT_ARCHITECT' }, outcome.outputText);
+        const guidanceRef = await input.artifacts.put({ kind: 'GUIDANCE', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'PROMPT_ARCHITECT' }, outcome.outputText)
+          .catch((error: unknown) => {
+            throw storedAfterCallFailure(error, planDiagnostics({
+              ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens, completedAtMs),
+              requestedModel: input.config.model, jsonParseable: true, validationPassed: true,
+              attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
+            }));
+          });
         return {
           workerId: input.worker.workerId,
           providerId: input.worker.providerId,
@@ -1328,7 +1367,14 @@ export function createLiveArchitectAdapter(input: {
       }
       // The provider's wall time ends BEFORE the durable write (see the guidance path).
       const completedAtMs = Date.now();
-      const planArtifactRef = await input.artifacts.put({ kind: 'PLAN', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'PROMPT_ARCHITECT' }, outcome.outputText);
+      const planArtifactRef = await input.artifacts.put({ kind: 'PLAN', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'PROMPT_ARCHITECT' }, outcome.outputText)
+        .catch((error: unknown) => {
+          throw storedAfterCallFailure(error, planDiagnostics({
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens, completedAtMs),
+            requestedModel: input.config.model, jsonParseable: true, validationPassed: true,
+            attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
+          }));
+        });
       return {
         workerId: input.worker.workerId,
         providerId: input.worker.providerId,
@@ -1587,7 +1633,19 @@ export function createJuliusCodingAgentAdapter(input: {
         ? parseJuliusAttemptStart(before.stdout, restoreRequest)
         : { headRevision: null, baseTree: null, startTree: null, restore: restoreRequest === null ? null : { outcome: 'REFUSED_EXECUTOR' as const, toTree: restoreRequest.toTree, expectedTree: restoreRequest.expectedTree, observedTree: null, removed: 0, restored: 0 } };
       if (attemptStart.headRevision !== null) {
-        await input.artifacts.put({ kind: 'BASE_REVISION', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'CODING_AGENT' }, attemptStart.headRevision);
+        // STILL BEFORE THE SESSION, so a store failure writing the base is
+        // Julius's own and costs nothing: it says no session was launched,
+        // mapped exactly as the attempt start's own store failure above (a
+        // transient one may be retried for free; anything that is not the
+        // store's is passed up as itself, never relabelled).
+        await input.artifacts.put({ kind: 'BASE_REVISION', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'CODING_AGENT' }, attemptStart.headRevision)
+          .catch((error: unknown) => {
+            const storeErrorClass = error instanceof JuliusDispatchError ? null : juliusStoreErrorClass(error);
+            if (storeErrorClass === null) throw error;
+            throw new JuliusDispatchError('PERSISTENCE_FAILURE', juliusStoreErrorIsTransient(storeErrorClass),
+              'Julius could not store the attempt base in its own store; no coding session was launched.',
+              'persist_before_session', { runtimeStarted: false, storeErrorClass });
+          });
       }
       /* A STALE DIFF IS STILL WORSE THAN NONE, and the two `clear()` calls
          that used to stand here are gone because they are no longer what
@@ -1758,8 +1816,12 @@ export function createJuliusCodingAgentAdapter(input: {
         command: 'git --no-pager diff || exit 3; git --no-pager diff --stat; git ls-files --others --exclude-standard | while IFS= read -r file; do git --no-pager diff --no-index -- /dev/null "$file"; done; exit 0',
         timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.diff,
       }));
+      // THE BODY IS WRITTEN AFTER THE SESSION, SO IT IS INSIDE `afterSession`:
+      // the durable write can fail (filesystem, PostgreSQL), and a raw error from
+      // Julius's own store must neither release the session as free nor read as a
+      // retryable provider failure that buys a second session (PR286 review P2-1).
       const diffArtifactRef = diff.status === 'SUCCEEDED'
-        ? await input.artifacts.put({ kind: 'DIFF', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'CODING_AGENT' }, diff.stdout)
+        ? await afterSession(() => input.artifacts.put({ kind: 'DIFF', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'CODING_AGENT' }, diff.stdout))
         : null;
       stopIfCancelled('test', outcome.observation);
       /**
@@ -1784,7 +1846,7 @@ export function createJuliusCodingAgentAdapter(input: {
       const testOutputText = test === null
         ? 'No deterministic check was declared by the mission contract; none was run.'
         : `exit=${test.exitCode ?? 'unknown'}\n${test.stdout}\n${test.stderr}`;
-      const testArtifactRef = await input.artifacts.put({ kind: 'TEST_OUTPUT', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'CODING_AGENT' }, testOutputText);
+      const testArtifactRef = await afterSession(() => input.artifacts.put({ kind: 'TEST_OUTPUT', runId: snapshot.runId, taskId: dispatch.taskId, leaseGeneration: attemptOf(dispatch), role: 'CODING_AGENT' }, testOutputText));
 
       /**
        * WHAT THE WORKER ASKED FOR, HANDED ON EXACTLY AS IT WROTE IT. Julius

@@ -4453,3 +4453,104 @@ describe('the live reviewer adapter treats a transient upstream status as retrya
     expect(safeReviewDiagnostics(failure.diagnostics)?.providerHttpStatus).toBe(503);
   }, 30_000);
 });
+
+/**
+ * A PROMPT ARCHITECT ANSWER JULIUS CANNOT STORE (PR 12; the PR286 review's P2-1).
+ *
+ * Since PR 12 the answer becomes a durable body AFTER the provider answered, so
+ * the write can fail where the in-memory map never could. That failure is
+ * Julius's own and the call was already bought: it carries the call's facts,
+ * says the runtime started, and is never retried, because a retry buys the same
+ * answer twice. Each case holds one write site, PLAN or GUIDANCE.
+ */
+describe('a Prompt Architect answer Julius cannot store is its own failure, paid for, never retried', () => {
+  const failingOn = (kind: string, refusal: () => Error): ReturnType<typeof createInMemoryArtifactExchange> => {
+    const inner = createInMemoryArtifactExchange();
+    inner.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
+    return { ...inner, put: (attempt, text) => (attempt.kind === kind ? Promise.reject(refusal()) : inner.put(attempt, text)) };
+  };
+  const architect = (artifacts: ReturnType<typeof createInMemoryArtifactExchange>, output: unknown, calls: { count: number }) =>
+    createLiveArchitectAdapter({
+      worker: architectWorker({}),
+      contexts: { snapshotFor: () => reviewSnapshot('plan-1') },
+      artifacts,
+      config: { liveMode: true, model: 'gpt-5.6-sol', maxOutputTokens: 4_000 } as never,
+      apiKey: 'FAKETESTNOTREAL-openai',
+      run: (async () => {
+        calls.count += 1;
+        return {
+          ok: true, actualModel: 'gpt-5.6-sol', responseId: 'resp_store_1', status: 'completed',
+          outputText: JSON.stringify(output),
+          usage: { inputTokens: 100, cachedInputTokens: 0, outputTokens: 50, reasoningTokens: 0, totalTokens: 150 },
+        };
+      }) as never,
+    });
+  const refused = async (promise: Promise<unknown>): Promise<JuliusDispatchError> => {
+    const settled = await promise.then(() => null, (error: unknown) => error);
+    expect(settled, 'the dispatch must fail').toBeInstanceOf(JuliusDispatchError);
+    return settled as JuliusDispatchError;
+  };
+  const PLAN_DISPATCH = { taskId: 'plan-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'plan' };
+  /** The locked terms a guidance dispatch is refused without (as in the research-asks cases above). */
+  const GUIDANCE_CHARGE = Object.freeze({
+    stage: 'build' as const,
+    binding: { contractId: 'contract:run-live:build-1', taskId: 'build-1', contractRevision: 1, bindingDigest: `sha256:${'a'.repeat(64)}` },
+    objective: 'Normalize the mission label.',
+    responsibilityBoundary: 'Only the one module.',
+    inScope: ['src/slug.ts'], outOfScope: [], permittedPaths: ['src/slug.ts'],
+    prohibitedActions: [], blockingCriteria: ['AC-1'], contractReviewCriteria: ['AC-1 holds'],
+    requiredEvidence: ['TEST'] as const, requiredChecks: ['npm test'], failureConditions: [],
+    stoppingCondition: 'The suite is green.',
+  });
+  const GUIDANCE = {
+    subObjective: 'Do the thing.', relevantRequirements: ['R'], relevantConstraints: ['C'],
+    repositoryFindings: ['F'], runtimeFindings: ['F'], references: [],
+    recommendedActions: ['A'], additionalProhibitions: [], affectedCriterionIds: [], unresolvedQuestions: [],
+    researchAsks: [],
+  };
+  const ETIMEDOUT = () => Object.assign(new Error('read ETIMEDOUT'), { code: 'ETIMEDOUT' });
+
+  it('the control: with a store that holds, the plan is answered once and stored', async () => {
+    const calls = { count: 0 };
+    const result = await architect(failingOn('NOTHING', ETIMEDOUT), { ...VALID_PLAN, researchAsks: [] }, calls).dispatch(PLAN_DISPATCH as never);
+    expect(result.status).toBe('SUCCEEDED');
+    expect(calls.count).toBe(1);
+  });
+
+  it('a socket ETIMEDOUT storing the PLAN is Julius\'s, never a retryable provider TIMEOUT, and keeps the call\'s facts', async () => {
+    const calls = { count: 0 };
+    const refusal = await refused(architect(failingOn('PLAN', ETIMEDOUT), { ...VALID_PLAN, researchAsks: [] }, calls).dispatch(PLAN_DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'PERSISTENCE_FAILURE', retryable: false });
+    expect(refusal.diagnostics).toMatchObject({ runtimeStarted: true, storeErrorClass: 'connection', inputTokens: 100, outputTokens: 50 });
+    expect(calls.count, 'one paid call, never a second').toBe(1);
+  });
+
+  it('a code-less store string storing the GUIDANCE is Julius\'s and is not retried', async () => {
+    const calls = { count: 0 };
+    const refusal = await refused(architect(failingOn('GUIDANCE', () => new Error('Connection terminated unexpectedly')), GUIDANCE, calls).dispatch({
+      taskId: 'guidance:build-1:1:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } },
+      contextId: 'ctx-resume-1', taskType: 'guidance', contract: GUIDANCE_CHARGE,
+    } as never));
+    expect(refusal).toMatchObject({ code: 'PERSISTENCE_FAILURE', retryable: false });
+    expect(refusal.diagnostics).toMatchObject({ runtimeStarted: true, storeErrorClass: 'connection' });
+    expect(calls.count, 'one paid call, never a second').toBe(1);
+  });
+
+  it('any other raw error storing the PLAN still carries what the call consumed, and is not retried', async () => {
+    const calls = { count: 0 };
+    const refusal = await refused(architect(failingOn('PLAN', () => new TypeError('Cannot read properties of undefined')), { ...VALID_PLAN, researchAsks: [] }, calls)
+      .dispatch(PLAN_DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', retryable: false });
+    expect(refusal.diagnostics).toMatchObject({ runtimeStarted: true, inputTokens: 100, outputTokens: 50 });
+    expect(calls.count).toBe(1);
+  });
+
+  it('a typed error that arrives retryable while storing the PLAN keeps its code and loses the retry', async () => {
+    const calls = { count: 0 };
+    const refusal = await refused(architect(failingOn('PLAN', () => new JuliusDispatchError('TIMEOUT', true, 'The store timed out.', 'store_timeout')),
+      { ...VALID_PLAN, researchAsks: [] }, calls).dispatch(PLAN_DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'TIMEOUT', retryable: false });
+    expect(refusal.diagnostics).toMatchObject({ runtimeStarted: true });
+    expect(calls.count).toBe(1);
+  });
+});
