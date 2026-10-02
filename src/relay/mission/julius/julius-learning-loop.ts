@@ -1,5 +1,5 @@
 import { projectJuliusMetrics, summariseJuliusEvals } from './julius-metrics';
-import type { JuliusTrajectoryEvent } from './julius-trajectory';
+import { isJuliusProviderAttempt, type JuliusTrajectoryEvent } from './julius-trajectory';
 
 /**
  * THE JULIUS LEARNING LOOP — AND THE ONLY THING IT IS ALLOWED TO CLAIM.
@@ -165,8 +165,13 @@ export function juliusLearningMetrics(
 ): JuliusLearningMetrics {
   const summary = summariseJuliusEvals(events, runtimeVersion);
   const metrics = projectJuliusMetrics(events, runtimeVersion);
+  // THE PROVIDER ATTEMPTS, not every DISPATCH row. A tool step's tokens are a
+  // literal zero and a pre-provider refusal called nobody: counting a refusal's
+  // absent usage as unknown would make the token dimensions unmeasurable for
+  // any mission that met one, and counting tool steps as dispatches would let a
+  // candidate look leaner by running fewer of them (`juliusDispatchRowClass`).
   const dispatches = events.filter((event) =>
-    event.runtimeVersion === runtimeVersion && event.kind === 'DISPATCH');
+    event.runtimeVersion === runtimeVersion && isJuliusProviderAttempt(event));
   const sum = (pick: (event: JuliusTrajectoryEvent) => number | null): number | null => {
     const known = dispatches.map(pick).filter((value): value is number => typeof value === 'number');
     // NO SAMPLES IS NOT ZERO. A sum over nothing does not exist.

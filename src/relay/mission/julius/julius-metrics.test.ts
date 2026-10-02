@@ -4,7 +4,8 @@ import {
   JULIUS_COUNTERS, JULIUS_HISTOGRAMS, projectJuliusMetrics, runtimeVersionsIn,
   summariseJuliusEvals, summariseSamples,
 } from './julius-metrics';
-import { JULIUS_TRAJECTORY_KINDS, type JuliusTrajectoryEvent } from './julius-trajectory';
+import { JULIUS_TRAJECTORY_KINDS, isJuliusProviderAttempt, juliusDispatchRowClass, type JuliusTrajectoryEvent } from './julius-trajectory';
+import { juliusLearningMetrics } from './julius-learning-loop';
 import { createJuliusHarness, seedRun, task, worker } from './julius-runtime-fixtures';
 
 /**
@@ -273,5 +274,124 @@ describe('the numbers come from a real run', () => {
         expect(value === null || ['string', 'number', 'boolean'].includes(typeof value)).toBe(true);
       }
     }
+  });
+});
+
+/* ------------------------------------------------- what a DISPATCH row is */
+
+/**
+ * NINE WRITERS SHARE THE KIND (the 2026-10-01 census, registered as the Learning
+ * Loop's precondition in the readiness ledger). These are their row shapes as
+ * written, and what each one is.
+ */
+describe('what a DISPATCH row is', () => {
+  const ROWS = {
+    held: trajectory({ kind: 'DISPATCH', outcome: 'GOVERNANCE_HELD', safeFacts: { reasonCode: 'run_paused' }, idempotencyKey: 'w1' }),
+    approvalDenied: trajectory({ kind: 'DISPATCH', outcome: 'APPROVAL_DENIED', idempotencyKey: 'w2' }),
+    policyDenied: trajectory({ kind: 'DISPATCH', outcome: 'POLICY_DENIED', idempotencyKey: 'w3' }),
+    notLocked: trajectory({ kind: 'DISPATCH', outcome: 'CONTRACT_NOT_LOCKED', safeFacts: { reasonCode: 'contract_unlocked' }, idempotencyKey: 'w4' }),
+    mismatch: trajectory({ kind: 'DISPATCH', outcome: 'REVIEW_CONTRACT_MISMATCH', idempotencyKey: 'w5' }),
+    stale: trajectory({ kind: 'DISPATCH', outcome: 'CONTRACT_STALE', idempotencyKey: 'w6' }),
+    failedNamed: trajectory({ kind: 'DISPATCH', outcome: 'TIMEOUT', providerId: 'openai', contextId: 'ctx-1', durationMs: 120_000, idempotencyKey: 'w7a' }),
+    failedUnnamed: trajectory({ kind: 'DISPATCH', outcome: 'POLICY_DENIED', contextId: 'ctx-1', idempotencyKey: 'w7b' }),
+    completed: trajectory({
+      kind: 'DISPATCH', outcome: 'COMPLETED', providerId: 'anthropic', contextId: 'ctx-1',
+      durationMs: 60_000, inputTokens: 100, outputTokens: 50, idempotencyKey: 'w8',
+    }),
+    toolStep: trajectory({
+      kind: 'DISPATCH', outcome: 'SUCCEEDED', policyVersion: 'tool-settlement.v1', durationMs: 41,
+      usdMicros: 0, inputTokens: 0, outputTokens: 0,
+      safeFacts: { toolId: 'shell.exec', invocationId: 'inv-1', evidenceCount: 1, artifactCount: 0 }, idempotencyKey: 'w9',
+    }),
+  };
+
+  it('classifies each writer\'s row as what it is', () => {
+    for (const refusal of [ROWS.held, ROWS.approvalDenied, ROWS.policyDenied, ROWS.notLocked, ROWS.mismatch, ROWS.stale]) {
+      expect(juliusDispatchRowClass(refusal), refusal.outcome!).toBe('REFUSAL');
+    }
+    expect(juliusDispatchRowClass(ROWS.failedNamed)).toBe('PROVIDER');
+    expect(juliusDispatchRowClass(ROWS.completed)).toBe('PROVIDER');
+    expect(juliusDispatchRowClass(ROWS.toolStep)).toBe('TOOL');
+    // A refusal outcome AFTER a context was compiled (the coordinator's own
+    // POLICY_DENIED) is not proven pre-provider, so it is never read as free.
+    expect(juliusDispatchRowClass(ROWS.failedUnnamed)).toBe('UNATTRIBUTED');
+  });
+
+  it('a row that names nothing is UNATTRIBUTED, and counts as an attempt: it may have been paid for', () => {
+    const bare = trajectory({ kind: 'DISPATCH', idempotencyKey: 'bare' });
+    expect(juliusDispatchRowClass(bare)).toBe('UNATTRIBUTED');
+    expect(isJuliusProviderAttempt(bare)).toBe(true);
+  });
+
+  it('only a non-empty STRING toolId makes a tool step, and only a measureless refusal is a refusal', () => {
+    expect(juliusDispatchRowClass(trajectory({ kind: 'DISPATCH', safeFacts: { toolId: 7 }, idempotencyKey: 'n' }))).toBe('UNATTRIBUTED');
+    expect(juliusDispatchRowClass(trajectory({ kind: 'DISPATCH', safeFacts: { toolId: '' }, idempotencyKey: 'e' }))).toBe('UNATTRIBUTED');
+    expect(juliusDispatchRowClass(trajectory({ kind: 'DISPATCH', outcome: 'APPROVAL_DENIED', durationMs: 5, idempotencyKey: 'm' }))).toBe('UNATTRIBUTED');
+    expect(isJuliusProviderAttempt(trajectory({ kind: 'RETRY', providerId: 'openai', idempotencyKey: 'r' })), 'not a DISPATCH row').toBe(false);
+  });
+});
+
+/**
+ * THE EVAL LAYER MEASURES PROVIDER ATTEMPTS. Each case is one of the census's
+ * defects, built so that the formula it replaces would fail it.
+ */
+describe('the eval layer measures provider attempts, not every DISPATCH row', () => {
+  const V = 'julius-runtime.v1';
+  const provider = (key: string, durationMs: number, usdMicros: number | null = 1_000) => trajectory({
+    kind: 'DISPATCH', outcome: 'COMPLETED', providerId: 'provider-a', contextId: 'ctx-1',
+    durationMs, usdMicros, inputTokens: 10, outputTokens: 5, idempotencyKey: key,
+  });
+  const tool = (key: string, durationMs: number) => trajectory({
+    kind: 'DISPATCH', outcome: 'SUCCEEDED', policyVersion: 'tool-settlement.v1', durationMs,
+    usdMicros: 0, inputTokens: 0, outputTokens: 0, safeFacts: { toolId: 'shell.exec' }, idempotencyKey: key,
+  });
+  const refusal = (key: string) => trajectory({ kind: 'DISPATCH', outcome: 'APPROVAL_DENIED', idempotencyKey: key });
+
+  it('(b) a mission that ran MORE tool steps does not read as faster', () => {
+    const fewer = [provider('p1', 60_000), tool('t1', 40)];
+    const more = [provider('p1', 60_000), tool('t1', 40), tool('t2', 33), tool('t3', 362), tool('t4', 43)];
+    expect(summariseJuliusEvals(fewer, V).averageDurationMs).toBe(60_000);
+    expect(summariseJuliusEvals(more, V).averageDurationMs, 'tool time is not provider time').toBe(60_000);
+    const histograms = projectJuliusMetrics(more, V).histograms;
+    expect(histograms.julius_task_duration_ms).toMatchObject({ count: 1, max: 60_000 });
+    expect(histograms.julius_tool_step_duration_ms).toMatchObject({ count: 4, min: 33, max: 362 });
+  });
+
+  it('(c) a tool step or a refusal is never a reroute: paid run 36915013287\'s shape reads 0', () => {
+    const a2 = [
+      provider('p1', 50_543, null), provider('p2', 1_000, null), provider('p3', 71_810, null), provider('p4', 41_844, null),
+      tool('t1', 41), tool('t2', 43), tool('t3', 33), tool('t4', 362), refusal('r1'),
+    ];
+    const counters = projectJuliusMetrics(a2, V).counters;
+    expect(counters.julius_reroutes).toBe(0);
+    expect(counters.julius_tasks_dispatched).toBe(4);
+    expect(counters.julius_tool_steps).toBe(4);
+    expect(counters.julius_dispatch_refusals).toBe(1);
+  });
+
+  it('(a\') a refusal called nobody: its absent cost and usage are never unknown', () => {
+    const events = [provider('p1', 1_000), refusal('r1')];
+    const summary = summariseJuliusEvals(events, V);
+    expect(summary.unknownCostComponents).toBe(0);
+    expect(summary.costComplete).toBe(true);
+    const learning = juliusLearningMetrics(events, V);
+    expect(learning.dispatches).toBe(1);
+    expect(learning.unknownUsageComponents, 'the token dimensions stay measurable').toBe(0);
+    expect(learning.knownInputTokens).toBe(10);
+  });
+
+  it('an attempt that reported no cost is still unknown: the fix narrows the components, never forgives one', () => {
+    const summary = summariseJuliusEvals([provider('p1', 1_000, null), tool('t1', 40)], V);
+    expect(summary.unknownCostComponents).toBe(1);
+    expect(summary.costComplete).toBe(false);
+  });
+
+  it('(e) the known sum is over every row that names an amount, as the SQL twin sums it', () => {
+    const events = [
+      provider('p1', 1_000),
+      trajectory({ kind: 'RETRY', outcome: 'TIMEOUT', providerId: 'provider-a', contextId: 'ctx-1', usdMicros: 250_000, idempotencyKey: 'retry' }),
+      trajectory({ kind: 'SUBAGENT', outcome: 'AUTHORIZED', usdMicros: 7_000, idempotencyKey: 'sub' }),
+    ];
+    expect(summariseJuliusEvals(events, V).knownUsdMicros).toBe(1_000 + 250_000 + 7_000);
   });
 });
