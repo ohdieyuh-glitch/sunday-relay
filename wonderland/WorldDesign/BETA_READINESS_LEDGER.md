@@ -24,7 +24,7 @@ Each row has a weight; the weights total 100. A row earns:
 partly unverified scores 0, not a blend. **Readiness = sum of weight x credit.** Second's independent sign-off on the RC
 is built into every 1.0, so nothing above 75% is possible before the final RC.
 
-## Ledger (as of RC8: RC5 package evidence plus CORE's RC8 evidence; Second's independent RC8 pass pending)
+## Ledger (as of RC8: RC5 and RC8 package evidence, all at most 0.75; the final RC is RC9, to be verified by CORE and Second)
 
 | # | Requirement | Weight | Credit | Evidence (RC3 = 0.1.0-rc3, 90c8d0fa; RC4 = 0.1.0-rc4, 3aa43e1f; RC5 = 0.1.0-rc5, 05e983d8; RC8 = 0.1.0-rc8, ecaa3407) | Weakest part / open blockers |
 |---|---|---|---|---|---|
@@ -48,9 +48,12 @@ is built into every 1.0, so nothing above 75% is possible before the final RC.
 **WONDERLAND BETA READINESS: 72.00%** (RC5 package evidence + CORE's RC8 evidence, 2026-10-01). R1 6 + R2 6 + R3 6 +
 R4 9 + R5 2.25 + R6 2.25 + R7 6 + R8 6 + R9 5.25 + R10 5.25 + R11 4.5 + R12 5.25 + R13 3.75 + R15 4.5.
 - RC5's soak found a P1: the exit hangs after a long session (B57). RC6 (144d2e21) carried the fix. RC7 (4930697c, locked)
-  added the founder's mascot-eye correction. **The final RC is now RC8 (ecaa3407)** = RC7 + the wardrobe framing and
-  canonical idle (31e22f5a) + the Julius terminal's black-glass contrast (1f1bae75), founder-authorized 2026-10-01. Every
-  1.0 is earned on RC8 by CORE and Second.
+  added the founder's mascot-eye correction. RC8 (ecaa3407) = RC7 + the wardrobe framing and canonical idle (31e22f5a) +
+  the Julius terminal's black-glass contrast (1f1bae75).
+- **FOUNDER DECISION 2026-10-01 ~20:45: the final RC is RC9** = RC8 + the pure-black Prompt Architect / Coding Agent /
+  Independent Reviewer panels, matching Julius 3.3 (Second Wonderland's fix, integrated once render-verified). RC8 is no
+  longer the shipping candidate. Its evidence stands at 0.75 (a package that is not the final RC). Every 1.0 is
+  re-earned on RC9 by CORE and Second; nothing carries forward as final-RC credit.
 - Nothing above 75% is possible until Second signs it.
 - Still to evidence:
   - R14: RC8's soak exit (after Second's sign-off).
@@ -58,8 +61,8 @@ R4 9 + R5 2.25 + R6 2.25 + R7 6 + R8 6 + R9 5.25 + R10 5.25 + R11 4.5 + R12 5.25
   - 62.25% -> 65.25% on 2026-10-01 18:55 (R4 0.5 -> 0.75: the WATCH button clicked in the RC8 package);
   - 65.25% -> 67.50% on 2026-10-01 19:14 (R5 0 -> 0.75: window modes, focus loss, minimize, quit and relaunch on RC8);
   - 67.50% -> 72.00% on 2026-10-01 19:28 (R15 0 -> 0.75: CORE's clean-user first launch of a fresh RC8 extraction).
-- With every row at 0.75 except R14 (0), CORE alone is at its ceiling of 72.00%: everything above it is Second's
-  independent RC8 pass (each row to 1.0) and the final soak (R14, R11).
+- With every row at 0.75 except R14 (0), CORE alone is at its ceiling of 72.00%. Everything above it comes from the final
+  RC: CORE's RC9 chain plus Second's independent RC9 pass (each row to 1.0), and RC9's soak (R14, R11).
 
 ### RC8 package evidence (CORE)
 
