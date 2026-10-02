@@ -199,11 +199,13 @@ public:
 	/** Raised after the equipped skin actually changed. Not raised when an equip was refused or was a no-op. */
 	FOnWonderlandSkinChanged OnSkinChanged;
 
+	/** Where the equipped skin is remembered (Saved/Wonderland/RelaySkin.txt). Public so QA reads the very path the save uses. */
+	static FString PersistPath();
+
 private:
 	void BuildRegistry();
 	void LoadPersisted();
 	void SavePersisted() const;
-	static FString PersistPath();
 
 	TArray<FWonderlandRelaySkin> Skins;
 	FWonderlandEquippedSkin Equipped;

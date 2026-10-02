@@ -3190,6 +3190,90 @@ def cub_ghost(eyes="flat", skin="relay_og"):
 
 CUB_EYES = ("flat", "arc", "slant")
 
+# ============================================================================ SHADOW FLAME (founder, 2026-10-01)
+#
+#: THE EYES: strong glowing yellow, the one warm thing on the figure (sheet: two yellow squares in a black head).
+SHADOW_EYES = (1.00, 0.84, 0.12)
+#: THE COAT: near-black with a deep navy undertone. It is a RIM material, so its own colour, taken brighter by the strength,
+#: is what catches at the silhouette's grazing edge -- a restrained midnight-blue edge on a black body, never a blue body.
+SHADOW_COAT = (0.016, 0.019, 0.042)
+SHADOW_COAT_DEEP = (0.009, 0.010, 0.022)
+#: THE STRIPS: black. Blue may appear only as the faintest rim (founder: "Their visual identity must remain BLACK SHADOW
+#: ENERGY"), so the strip material is a rim material whose colour is one step above black -- with just enough navy that its
+#: grazing edge separates a black strip from a dark wall or the wardrobe's night-blue stage (the first runtime pass: invisible there).
+SHADOW_STRIP = (0.010, 0.012, 0.030)
+#: The few emissive accents the founder allows ("controlled dark-blue highlights; emissive accents where appropriate").
+SHADOW_EDGE = (0.10, 0.26, 0.95)
+
+
+def shadow_flame():
+    """SHADOW FLAME RELAY DOG -- living darkness around the canonical standing Relay Dog. Founder, 2026-10-01.
+
+    From the founder's sheet (RelaySkins/_reference/shadow_flame_sheet.png) and his three motion references:
+      BODY       the canonical standing Relay Dog, unclothed: near-black with a deep navy undertone, kept readable by a
+                 midnight-blue rim at the silhouette's edge and a few restrained blue accents (ear edges, soles).
+      EYES       strong glowing yellow, inside the black visor like every skin's (status_eyes).
+      TAIL       the simple canonical tail, in the coat.
+      STRIPS     the defining feature: BLACK shadow tendrils moving autonomously round the Dog -- rising off the
+                 shoulders and back, curling round the torso, passing behind the head, sweeping by the legs, trailing.
+                 They are NOT boxes. Each part tagged `shadow` only says where tendrils grow (its boxes' bounds), how
+                 many (a) and how long relative to the Dog (b); AWonderlandCompanionEmbodiment::RebuildShadows lays them
+                 every frame as tapered black ribbons, each with its own speed, curl, height, radius, phase and
+                 lifetime, trailing behind the Dog's recent path when it moves.
+
+    No coat, robe or clothing: the founder's order is explicit ("no clothing").
+    """
+    figure = Figure("RELAY DOG SKIN -- SHADOW FLAME", 7501)
+    # start()'s materials, with the coat's rim strength raised: at strength 1 a near-black rim is invisible.
+    figure.material("bone", "rim", SHADOW_COAT, 3.2)
+    figure.material("bonedeep", "lit", SHADOW_COAT_DEEP, 1.0)
+    figure.material("visor", "lit", VISOR, 1.0)
+    figure.material("eye", "glow", SHADOW_EYES, 7.5)
+    figure.material("eyehalo", "add", SHADOW_EYES, 7.5 * 0.35)
+    # RIM, like the coat: a black core whose grazing edge catches a faint navy. Measured 2026-10-02: drawn LIT, the strips
+    # read in the world but VANISHED in the wardrobe (black on the stage's black) -- the founder's "faint energy edges"
+    # are what lets a black strip exist against black. At (0.010, 0.014, 0.046) x 3.0 the wardrobe's showcase light turned
+    # whole ribbons royal blue ("very subtle rim illumination" only), so the edge is greyer and dimmer.
+    figure.material("shadow", "rim", SHADOW_STRIP, 2.4)
+    figure.material("voidedge", "glow", SHADOW_EDGE, 0.30)
+    base_dog(figure)          # marks the Dog's extent: nothing added below can change its height
+    d = DOG
+    tile = d["tile"]
+    hd, hw, hh = d["head"]
+    td, tw, th = d["torso"]
+    simple_tail(figure, "bone", tile)
+
+    # ---- THE FEW BLUE ACCENTS: the ears' outer edges and the soles, so the silhouette separates from a dark world.
+    # EDGES, NOT PANELS: two thin vertical lines on each ear's outer corners. (A first cut laid a plate over the ear's
+    # outer face; seen from the side the whole ear turned blue, which is a blue ear rather than a lit edge.)
+    ed, ew, eh = d["ear"]
+    for side in (-1.0, 1.0):
+        y = side * (hw * 0.5 - ew * 0.9) + side * (ew * 0.5 - 0.04)
+        for fx in (-1.0, 1.0):
+            figure.box("head", "voidedge", (fx * (ed * 0.5 - 0.04), y, d["head_z"] + hh * 0.5 + eh * 0.50), (0.12, 0.12, eh * 0.92))
+    ld, lw, lh = d["leg"]
+    hip_z = d["torso_z"] - th * 0.5
+    for side, name in ((-1.0, "leg_l"), (1.0, "leg_r")):
+        figure.box("%s_shin" % name, "voidedge", (ld * 0.30, side * d["leg_gap"], hip_z - lh - 0.02),
+                   (ld * 1.40, lw * 1.08, 0.10))
+
+    # ---- THE SHADOW ANCHORS. Each box only bounds where its tendrils are born; none is ever drawn.
+    #      part             parent  pivot (the region's centre)                              count  reach (Dog units)
+    # REACH IS HOW FAR OUTSIDE THE DOG THEY GO. The first runtime pass reached 8-15 units and the strips never left the
+    # silhouette -- black on black, hidden behind the head -- so they now reach well past it: up over the head, round
+    # beyond the arms, out past the legs.
+    back_z = d["torso_z"] + th * 0.30
+    figure.part("shadow_back", "body", (-td * 0.5, 0.0, back_z), "shadow", 4, 26.0)
+    figure.box("shadow_back", "shadow", (-td * 0.5, 0.0, back_z), (1.0, tw + 3.0, th * 0.45))
+    figure.part("shadow_torso", "body", (0.0, 0.0, d["torso_z"]), "shadow", 4, 16.0)
+    figure.box("shadow_torso", "shadow", (0.0, 0.0, d["torso_z"]), (td, tw, th * 0.6))
+    figure.part("shadow_hips", "body", (-td * 0.3, 0.0, hip_z + 0.6), "shadow", 3, 14.0)
+    figure.box("shadow_hips", "shadow", (-td * 0.3, 0.0, hip_z + 0.6), (td * 0.8, tw + 1.0, 1.2))
+    figure.part("shadow_head", "head", (-hd * 0.35, 0.0, d["head_z"] + hh * 0.30), "shadow", 2, 18.0)
+    figure.box("shadow_head", "shadow", (-hd * 0.35, 0.0, d["head_z"] + hh * 0.30), (hd * 0.4, hw * 0.8, hh * 0.3))
+    return figure
+
+
 SKINS = [
     ("RelayOg", relay_og),
     ("ArdenInfernalV1", arden_infernal_v1),
@@ -3204,6 +3288,8 @@ SKINS = [
     # 2026-09-29: the two replacements. One version each -- they are new skins, not redos, so there is no V1/V2 pair.
     ("JackFlame", jack_flame),
     ("Baal", baal),
+    # 2026-10-01: Shadow Flame, an addition to the lineup (its black strips are drawn by the engine, see shadow_flame).
+    ("ShadowFlame", shadow_flame),
 ]
 
 

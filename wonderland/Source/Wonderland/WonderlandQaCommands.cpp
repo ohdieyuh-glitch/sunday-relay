@@ -218,9 +218,10 @@ namespace
 		{
 			const FWonderlandCompanionBox& B = Figure.Boxes[I];
 			if (!B.Rotation.IsNearlyZero(1e-3) || !Figure.Parts.IsValidIndex(B.Part) || !Figure.Materials.IsValidIndex(B.Material)
-				|| Figure.Parts[B.Part].Motion == EWonderlandCompanionMotion::Twinkle)
+				|| Figure.Parts[B.Part].Motion == EWonderlandCompanionMotion::Twinkle
+				|| Figure.Parts[B.Part].Motion == EWonderlandCompanionMotion::Shadow)
 			{
-				continue;   // fire is drawn as fire, not as its boxes; rotated boxes are never on a face
+				continue;   // fire and shadow strips are drawn live, not as their boxes; rotated boxes are never on a face
 			}
 			const FWonderlandCompanionMaterial& M = Figure.Materials[B.Material];
 			FQaFaceBox S;
@@ -240,7 +241,11 @@ namespace
 				continue;   // additive light is never a surface
 			}
 			const double Luma = 0.2126 * M.Color.R + 0.7152 * M.Color.G + 0.0722 * M.Color.B;
-			S.bDark = M.Kind != EWonderlandCompanionMaterialKind::Glow && Luma < DarkLuma;
+			// THE COAT IS THE FACE, WHATEVER ITS COLOUR (Shadow Flame, 2026-10-01; mirrors skin_eye_check.py COAT): base_dog
+			// builds the head shell round the visor window from `bone`/`bonedeep`, so they are never the black housing. Every
+			// other skin's coat is light and was never dark; a near-black coat made the whole head read as housing.
+			const bool bCoat = M.Name == FName(TEXT("bone")) || M.Name == FName(TEXT("bonedeep"));
+			S.bDark = !bCoat && M.Kind != EWonderlandCompanionMaterialKind::Glow && Luma < DarkLuma;
 			S.bEye = M.Name == FName(TEXT("eye"));
 			Face.Surfaces.Add(S);
 		}
@@ -1171,7 +1176,7 @@ namespace
 		UWonderlandUiSubsystem* U = QaUi(World);
 		const double In = QaNow() - Run.StepStart;
 		static const FName MapTargets[3] = { TEXT("tower_rise"), TEXT("tower_lane"), TEXT("mushroom_grove") };
-		static const TCHAR* const Roster[5] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal") };
+		static const TCHAR* const Roster[] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal"), TEXT("shadow_flame") };
 		static const TCHAR* const OtherSkins[4] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("baal") };
 		switch (Run.Step)
 		{
@@ -1492,7 +1497,7 @@ namespace
 		{
 			ARelayDogCharacter* D = QaDog(World);
 			const int32 Which = Run.Sub / 2;
-			if (D == nullptr || Which >= 5)
+			if (D == nullptr || Which >= static_cast<int32>(UE_ARRAY_COUNT(Roster)))
 			{
 				if (D == nullptr)
 				{
@@ -2126,7 +2131,7 @@ namespace
 		{TEXT("close_side"), 86.0, 150.0, 4.0, 40.0f},
 		{TEXT("play_front"), 0.0, 480.0, 90.0, 70.0f},
 	};
-	const TCHAR* const FaceRoster[5] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal") };
+	const TCHAR* const FaceRoster[] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal"), TEXT("shadow_flame") };
 	// The eyes stand at 0.715 of the canonical body's height: visor_z 19.14 in the generator's body record -0.044..26.79.
 	constexpr double FaceEyeHeight = 0.715;
 
@@ -2185,7 +2190,7 @@ namespace
 			}
 			break;
 		case 1:
-			if (F.Skin >= 5)
+			if (F.Skin >= static_cast<int32>(UE_ARRAY_COUNT(FaceRoster)))
 			{
 				F.Phase = 20;   // then the wardrobe's own preview of each skin
 				F.At = QaNow();
@@ -2308,7 +2313,7 @@ namespace
 		case 21:
 			if (In >= 1.0)
 			{
-				if (F.WSkin >= 5)
+				if (F.WSkin >= static_cast<int32>(UE_ARRAY_COUNT(FaceRoster)))
 				{
 					if (UWonderlandUiSubsystem* U = QaUi(World))
 					{
@@ -2392,7 +2397,542 @@ namespace
 			GQaFaces->At = QaNow();
 			GQaFaces->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLFACES"));
 			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaFacesTick), 0.1f);
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES armed: five skins, %d frames each"), static_cast<int32>(UE_ARRAY_COUNT(FaceShots)));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES armed: %d skins, %d frames each"), static_cast<int32>(UE_ARRAY_COUNT(FaceRoster)), static_cast<int32>(UE_ARRAY_COUNT(FaceShots)));
+		}));
+
+	/* ================================================================ wl.Qa.ShadowFlame (founder, 2026-10-01)
+	 *
+	 * "BUILD THE SHADOW FLAME RELAY DOG SKIN" -- the founder's fifteen runtime checks, measured in the client on what the
+	 * worn costume actually does, plus the front / three-quarter / wardrobe frames and a 25 s hold for the motion film:
+	 *   S1 the skin is worn                 S2 the canonical upright body at Relay OG's height
+	 *   S3 no clothing (canonical parts, the tail and the shadow anchors only)   S4 yellow eyes inside the face (Q25)
+	 *   S5 the strips exist                 S6 they animate continuously        S7 they move independently
+	 *   S8 smoothly (no visible jumps)      S9 idle is stable and the strips stay attached
+	 *   S10 walking stretches them behind and stopping curls them back, never tearing loose
+	 *   S11 switching away removes every strip   S12 switching back restores them   S13 the wardrobe preview has them
+	 *   S14 the choice is saved             S15 no strip leaks onto another skin
+	 * `wl.Qa.ShadowFlame restart` is the second boot of S14: the skin and its strips came back. Frames to
+	 * Saved/Screenshots/WLSHADOW. Leaves Shadow Flame worn, for the restart boot, and quits.
+	 */
+	struct FQaShadow
+	{
+		TWeakObjectPtr<UWorld> World;
+		TWeakObjectPtr<ACameraActor> Camera;
+		TArray<TWeakObjectPtr<AActor>> Hidden;
+		int32 Phase = 0;
+		double At = 0.0;
+		double NextSample = 0.0;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		bool bRestart = false;
+		FString Dir;
+		int32 Tendrils = 0;
+		// samples: actor-space tips, their weights, and the Dog's location, at 10 Hz
+		TArray<TArray<FVector>> Tips;
+		TArray<TArray<float>> Weights;
+		TArray<FVector> DogAt;
+		FVector IdleMean = FVector::ZeroVector;
+		FVector WalkMean = FVector::ZeroVector;
+		FVector WalkStart = FVector::ZeroVector;
+	};
+	TSharedPtr<FQaShadow> GQaShadow;
+
+	void QaShadowCheck(FQaShadow& S, const TCHAR* Id, bool bOk, const FString& Detail)
+	{
+		(bOk ? S.Pass : S.Fail)++;
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLSHADOW %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+	}
+
+	/** Every figure in the world drawing live shadow strips, except the one given; with the wardrobe stage's figure counted. */
+	int32 QaShadowLeaks(UWorld* World, const AWonderlandCompanionEmbodiment* Allowed, FString& OutWho)
+	{
+		int32 Leaks = 0;
+		for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+		{
+			if (*It != Allowed && It->HasLiveShadows())
+			{
+				++Leaks;
+				OutWho += FString::Printf(TEXT("%s%s"), OutWho.IsEmpty() ? TEXT("") : TEXT(", "), *It->GetName());
+			}
+		}
+		return Leaks;
+	}
+
+	/** The mean tip (weighted by visibility) of one sample, actor space. */
+	FVector QaShadowMeanTip(const TArray<FVector>& Tips, const TArray<float>& Weights)
+	{
+		FVector Sum = FVector::ZeroVector;
+		double W = 0.0;
+		for (int32 I = 0; I < Tips.Num() && I < Weights.Num(); ++I)
+		{
+			Sum += Tips[I] * Weights[I];
+			W += Weights[I];
+		}
+		return W > 1e-3 ? Sum / W : FVector::ZeroVector;
+	}
+
+	void QaShadowSample(FQaShadow& S, const AWonderlandCompanionEmbodiment* Costume, const ARelayDogCharacter* D)
+	{
+		S.Tips.Add(Costume != nullptr ? Costume->GetShadowTips() : TArray<FVector>());
+		S.Weights.Add(Costume != nullptr ? Costume->GetShadowTipWeights() : TArray<float>());
+		S.DogAt.Add(D->GetActorLocation());
+	}
+
+	/** Places the QA camera round the Dog: Yaw degrees from its front, Distance from the body's middle. */
+	void QaShadowCamera(FQaShadow& S, UWorld* World, APlayerController* PC, ARelayDogCharacter* D, double Yaw, double Distance)
+	{
+		const FVector Feet = D->GetActorLocation() - FVector(0.0, 0.0, D->GetSimpleCollisionHalfHeight());
+		const FVector Middle = Feet + FVector(0.0, 0.0, D->GetCanonBodyHeightUu() * 0.62);
+		const FVector Toward = D->GetActorForwardVector().GetSafeNormal2D().RotateAngleAxis(Yaw, FVector::UpVector);
+		const FVector Where = Middle + Toward * Distance + FVector(0.0, 0.0, 40.0);
+		ACameraActor* Cam = S.Camera.Get();
+		if (Cam == nullptr)
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Cam = World->SpawnActor<ACameraActor>(Where, FRotator::ZeroRotator, Params);
+			S.Camera = Cam;
+		}
+		if (Cam != nullptr)
+		{
+			Cam->SetActorLocationAndRotation(Where, (Middle - Where).Rotation());
+			Cam->GetCameraComponent()->SetFieldOfView(48.0f);
+			Cam->GetCameraComponent()->SetConstraintAspectRatio(false);
+			PC->SetViewTargetWithBlend(Cam, 0.0f);
+		}
+	}
+
+	void QaShadowShot(FQaShadow& S, const TCHAR* Name)
+	{
+		int32 W = 0;
+		int32 H = 0;
+		const FString Path = S.Dir / FString::Printf(TEXT("%s.png"), Name);
+		const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, W, H);
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLSHADOW frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), W, H);
+	}
+
+	bool QaShadowTick(float)
+	{
+		if (!GQaShadow.IsValid())
+		{
+			return false;
+		}
+		FQaShadow& S = *GQaShadow;
+		UWorld* World = S.World.Get();
+		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		ARelayDogCharacter* D = QaDog(World);
+		const double Now = QaNow();
+		const double In = Now - S.At;
+		if (World == nullptr || PC == nullptr || D == nullptr)
+		{
+			if (In > 120.0)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSHADOW quit: no world or Relay Dog"));
+				FPlatformMisc::RequestExit(false);
+				return false;
+			}
+			return true;
+		}
+		const FName Shadow(TEXT("shadow_flame"));
+		const AWonderlandCompanionEmbodiment* Costume = D->GetCostume();
+		const float BodyH = FMath::Max(D->GetCanonBodyHeightUu(), 1.0f);
+		const auto Next = [&S](int32 Phase) { S.Phase = Phase; S.At = QaNow(); S.NextSample = QaNow(); };
+		switch (S.Phase)
+		{
+		case 0:
+			// the world settles first, as every QA lets it; the welcome is put away so it covers nothing
+			if (In >= 8.0)
+			{
+				if (UWonderlandUiSubsystem* U = QaUi(World))
+				{
+					U->DismissWelcome();
+					U->CloseOverlay();
+				}
+				if (S.bRestart)
+				{
+					Next(50);
+					break;
+				}
+				GEngine->Exec(World, TEXT("wl.Skins.Wear shadow_flame"));
+				Next(1);
+			}
+			break;
+		case 1:
+			if (In >= 3.0)
+			{
+				// S1-S5: worn, upright canonical body, no clothing, the eyes, the strips
+				QaShadowCheck(S, TEXT("S1"), D->GetWornSkinId() == Shadow && Costume != nullptr,
+					FString::Printf(TEXT("worn '%s', costume %s"), *D->GetWornSkinId().ToString(), Costume != nullptr ? TEXT("built") : TEXT("MISSING")));
+				const float Body = Costume != nullptr ? Costume->GetBodyHeightUu() : 0.0f;
+				const TArray<FName> Parts = Costume != nullptr ? Costume->GetPartNames() : TArray<FName>();
+				static const TCHAR* const Canon[] = { TEXT("root"), TEXT("body"), TEXT("head"), TEXT("arm_l"), TEXT("arm_l_fore"), TEXT("arm_r"),
+					TEXT("arm_r_fore"), TEXT("leg_l"), TEXT("leg_l_shin"), TEXT("leg_r"), TEXT("leg_r_shin") };
+				int32 CanonFound = 0;
+				FString Extra;
+				for (const FName& P : Parts)
+				{
+					const FString N = P.ToString().ToLower();
+					bool bCanon = false;
+					for (const TCHAR* C : Canon)
+					{
+						bCanon |= N == C;
+					}
+					CanonFound += bCanon ? 1 : 0;
+					if (!bCanon && N != TEXT("tail") && !N.StartsWith(TEXT("shadow_")))
+					{
+						Extra += FString::Printf(TEXT("%s%s"), Extra.IsEmpty() ? TEXT("") : TEXT(", "), *N);
+					}
+				}
+				QaShadowCheck(S, TEXT("S2"), Costume != nullptr && FMath::Abs(Body - BodyH) <= 0.5f && CanonFound == static_cast<int32>(UE_ARRAY_COUNT(Canon)),
+					FString::Printf(TEXT("body %.2f uu against Relay OG %.2f uu; the standing biped's %d of %d canonical parts (no quadruped legs)"),
+						Body, BodyH, CanonFound, static_cast<int32>(UE_ARRAY_COUNT(Canon))));
+				QaShadowCheck(S, TEXT("S3"), Costume != nullptr && Extra.IsEmpty(),
+					Extra.IsEmpty() ? FString::Printf(TEXT("%d parts: the canonical body, the tail and shadow anchors only -- no clothing"), Parts.Num())
+						: FString::Printf(TEXT("parts beyond the body, tail and shadow anchors: %s"), *Extra));
+				FString Eyes;
+				const bool bEyes = QaWornEyesInsideFace(Costume, Eyes);
+				const UGameInstance* Instance = World->GetGameInstance();
+				const UWonderlandRelaySkinSubsystem* Skins = Instance != nullptr ? Instance->GetSubsystem<UWonderlandRelaySkinSubsystem>() : nullptr;
+				const FWonderlandRelaySkin* Def = Skins != nullptr ? Skins->Find(Shadow) : nullptr;
+				const bool bYellow = Def != nullptr && Def->EyeColour.R > 0.9f && Def->EyeColour.G > 0.6f && Def->EyeColour.B < 0.35f;
+				QaShadowCheck(S, TEXT("S4"), bEyes && bYellow, FString::Printf(TEXT("eye colour %s (yellow %s); %s"),
+					Def != nullptr ? *Def->EyeColour.ToString() : TEXT("(no skin)"), bYellow ? TEXT("yes") : TEXT("NO"), *Eyes));
+				S.Tendrils = Costume != nullptr ? Costume->GetShadowTips().Num() : 0;
+				QaShadowCheck(S, TEXT("S5"), Costume != nullptr && Costume->HasLiveShadows() && S.Tendrils >= 10,
+					FString::Printf(TEXT("%d tendrils | %s"), S.Tendrils, Costume != nullptr ? *Costume->DescribeShadows() : TEXT("-")));
+				Next(2);
+			}
+			break;
+		case 2:
+			// IDLE: eight seconds of the strips at 10 Hz, the Dog standing
+			if (Now >= S.NextSample)
+			{
+				QaShadowSample(S, Costume, D);
+				S.NextSample += 0.1;
+			}
+			if (In >= 8.0)
+			{
+				// S6 continuous, S7 independent, S8 smooth, S9 stable and attached
+				const int32 N = S.Tendrils;
+				int32 Eligible = 0, Moving = 0, Jumps = 0, Detached = 0;
+				TArray<double> Steps;
+				double CosSum = 0.0;
+				int32 CosN = 0;
+				int32 Clockwise = 0, Counter = 0;
+				TArray<int32> SeenEligible;
+				SeenEligible.SetNumZeroed(N);
+				for (int32 T = 1; T < S.Tips.Num(); ++T)
+				{
+					const TArray<FVector>& A = S.Tips[T - 1];
+					const TArray<FVector>& B = S.Tips[T];
+					if (A.Num() != N || B.Num() != N || S.Weights[T - 1].Num() != N || S.Weights[T].Num() != N)
+					{
+						continue;
+					}
+					TArray<FVector> V;
+					TArray<bool> Ok;
+					V.SetNum(N);
+					Ok.SetNum(N);
+					for (int32 I = 0; I < N; ++I)
+					{
+						Ok[I] = S.Weights[T - 1][I] > 0.15f && S.Weights[T][I] > 0.15f;
+						V[I] = B[I] - A[I];
+						if (!Ok[I])
+						{
+							continue;
+						}
+						++Eligible;
+						++SeenEligible[I];
+						const double Step = V[I].Size();
+						Steps.Add(Step);
+						Moving += Step > 0.2 ? 1 : 0;
+						Jumps += Step > 60.0 ? 1 : 0;
+						const double Reach = FVector2D(B[I].X, B[I].Y).Size();
+						Detached += (Reach > 2.0 * BodyH || B[I].Z > 2.2 * BodyH || B[I].Z < -0.5 * BodyH) ? 1 : 0;
+						const double Spin = A[I].X * V[I].Y - A[I].Y * V[I].X;
+						(Spin >= 0.0 ? Counter : Clockwise)++;
+					}
+					for (int32 I = 0; I < N; ++I)
+					{
+						for (int32 J = I + 1; J < N; ++J)
+						{
+							if (Ok[I] && Ok[J] && V[I].SizeSquared() > 1e-4 && V[J].SizeSquared() > 1e-4)
+							{
+								CosSum += FVector::DotProduct(V[I].GetSafeNormal(), V[J].GetSafeNormal());
+								++CosN;
+							}
+						}
+					}
+				}
+				Steps.Sort();
+				const double P95 = Steps.Num() > 0 ? Steps[FMath::Min(Steps.Num() - 1, static_cast<int32>(Steps.Num() * 0.95))] : 0.0;
+				const double MeanCos = CosN > 0 ? CosSum / CosN : 1.0;
+				int32 SeenWell = 0;
+				for (const int32 Seen : SeenEligible)
+				{
+					SeenWell += Seen >= (S.Tips.Num() / 4) ? 1 : 0;
+				}
+				const double Frac = Eligible > 0 ? static_cast<double>(Moving) / Eligible : 0.0;
+				QaShadowCheck(S, TEXT("S6"), N >= 10 && Frac >= 0.9 && SeenWell >= N * 3 / 4,
+					FString::Printf(TEXT("%d samples over 8 s: visible tips moved in %.0f%% of 0.1 s steps (want >= 90%%); %d of %d tendrils visible for a quarter of the time or more"),
+						S.Tips.Num(), Frac * 100.0, SeenWell, N));
+				QaShadowCheck(S, TEXT("S7"), MeanCos < 0.5 && Clockwise > 0 && Counter > 0,
+					FString::Printf(TEXT("mean cosine between two tendrils' motions %.2f (want < 0.50: not moving together); turning one way %d steps, the other %d"),
+						MeanCos, Counter, Clockwise));
+				QaShadowCheck(S, TEXT("S8"), Jumps == 0 && P95 <= 30.0,
+					FString::Printf(TEXT("visible tip step p95 %.1f uu per 0.1 s (want <= 30), jumps over 60 uu: %d"), P95, Jumps));
+				const double DogDrift = S.DogAt.Num() > 1 ? FVector::Dist(S.DogAt[0], S.DogAt.Last()) : 0.0;
+				QaShadowCheck(S, TEXT("S9"), DogDrift <= 3.0 && Detached == 0,
+					FString::Printf(TEXT("the Dog drifted %.1f uu standing (want <= 3); tips beyond the aura (2.0 x body out, 2.2 x up, 0.5 x down): %d"), DogDrift, Detached));
+				// the idle mean, for S10
+				FVector Sum = FVector::ZeroVector;
+				for (int32 T = 0; T < S.Tips.Num(); ++T)
+				{
+					Sum += QaShadowMeanTip(S.Tips[T], S.Weights[T]);
+				}
+				S.IdleMean = S.Tips.Num() > 0 ? Sum / S.Tips.Num() : FVector::ZeroVector;
+				S.Tips.Reset();
+				S.Weights.Reset();
+				S.DogAt.Reset();
+				S.WalkStart = D->GetActorLocation();
+				Next(3);
+			}
+			break;
+		case 3:
+			// WALKING: three seconds straight ahead by the Dog's own movement input, sampled at 10 Hz
+			D->AddMovementInput(D->GetActorForwardVector(), 1.0f);
+			if (Now >= S.NextSample)
+			{
+				QaShadowSample(S, Costume, D);
+				S.NextSample += 0.1;
+			}
+			if (In >= 3.0)
+			{
+				FVector Sum = FVector::ZeroVector;
+				int32 Count = 0;
+				for (int32 T = S.Tips.Num() / 2; T < S.Tips.Num(); ++T)
+				{
+					Sum += QaShadowMeanTip(S.Tips[T], S.Weights[T]);
+					++Count;
+				}
+				S.WalkMean = Count > 0 ? Sum / Count : S.IdleMean;
+				Next(4);
+			}
+			break;
+		case 4:
+			// STOPPED: three seconds more, for the curl back
+			if (Now >= S.NextSample)
+			{
+				QaShadowSample(S, Costume, D);
+				S.NextSample += 0.1;
+			}
+			if (In >= 3.0)
+			{
+				const double Walked = FVector::Dist2D(S.WalkStart, D->GetActorLocation());
+				int32 Detached = 0;
+				for (int32 T = 0; T < S.Tips.Num(); ++T)
+				{
+					for (int32 I = 0; I < S.Tips[T].Num() && I < S.Weights[T].Num(); ++I)
+					{
+						const FVector& P = S.Tips[T][I];
+						Detached += (S.Weights[T][I] > 0.15f && (FVector2D(P.X, P.Y).Size() > 2.4 * BodyH || P.Z > 2.4 * BodyH || P.Z < -0.6 * BodyH)) ? 1 : 0;
+					}
+				}
+				// the LAST SECOND stopped, averaged: the tips orbit, so one sample is noise, not a position
+				FVector EndSum = FVector::ZeroVector;
+				int32 EndN = 0;
+				for (int32 T = FMath::Max(0, S.Tips.Num() - 10); T < S.Tips.Num(); ++T)
+				{
+					EndSum += QaShadowMeanTip(S.Tips[T], S.Weights[T]);
+					++EndN;
+				}
+				const FVector End = EndN > 0 ? EndSum / EndN : S.IdleMean;
+				// actor space: +X is the way the Dog faces, so a trail behind is a mean tip moved toward -X while walking
+				const double Behind = S.IdleMean.X - S.WalkMean.X;
+				const double Back = FMath::Abs(End.X - S.IdleMean.X);
+				const double BackLimit = FMath::Max(Behind * 0.75, 8.0);
+				QaShadowCheck(S, TEXT("S10"), Walked >= 80.0 && Detached == 0 && Behind > 2.0 && Back < BackLimit,
+					FString::Printf(TEXT("walked %.0f uu; the strips' mean tip moved %.1f uu BEHIND while walking (want > 2), and came back to within %.1f uu of idle after stopping (want < %.1f); tips torn loose: %d"),
+						Walked, Behind, Back, BackLimit, Detached));
+				S.Tips.Reset();
+				S.Weights.Reset();
+				S.DogAt.Reset();
+				GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+				Next(5);
+			}
+			break;
+		case 5:
+			if (In >= 2.5)
+			{
+				FString Who;
+				const int32 Leaks = QaShadowLeaks(World, nullptr, Who);
+				QaShadowCheck(S, TEXT("S11"), Leaks == 0 && D->GetWornSkinId() == FName(TEXT("relay_og")),
+					FString::Printf(TEXT("switched to '%s': figures still drawing shadow strips: %d%s"), *D->GetWornSkinId().ToString(), Leaks,
+						Who.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *Who)));
+				GEngine->Exec(World, TEXT("wl.Skins.Wear jack_flame"));
+				Next(6);
+			}
+			break;
+		case 6:
+			if (In >= 3.0)
+			{
+				FString Who;
+				const int32 Leaks = QaShadowLeaks(World, nullptr, Who);
+				QaShadowCheck(S, TEXT("S15"), Leaks == 0 && Costume != nullptr && !Costume->HasLiveShadows() && Costume->DescribeShadows().IsEmpty(),
+					FString::Printf(TEXT("wearing '%s': its costume has no shadow tendrils (%s); figures drawing strips anywhere: %d%s"),
+						*D->GetWornSkinId().ToString(), Costume != nullptr && Costume->DescribeShadows().IsEmpty() ? TEXT("none") : TEXT("SOME"), Leaks,
+						Who.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *Who)));
+				GEngine->Exec(World, TEXT("wl.Skins.Wear shadow_flame"));
+				Next(7);
+			}
+			break;
+		case 7:
+			if (In >= 3.0)
+			{
+				const int32 Back = Costume != nullptr ? Costume->GetShadowTips().Num() : 0;
+				QaShadowCheck(S, TEXT("S12"), Costume != nullptr && Costume->HasLiveShadows() && Back == S.Tendrils,
+					FString::Printf(TEXT("switched back: %d tendrils (was %d) | %s"), Back, S.Tendrils, Costume != nullptr ? *Costume->DescribeShadows() : TEXT("-")));
+				// the frames: every other figure out of the shot (never the wardrobe stage's own)
+				for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+				{
+					if (*It != Costume && !It->IsHidden() && Cast<AWonderlandSkinStage>(It->GetOwner()) == nullptr)
+					{
+						It->SetActorHiddenInGame(true);
+						S.Hidden.Add(*It);
+					}
+				}
+				QaShadowCamera(S, World, PC, D, 0.0, 720.0);
+				Next(8);
+			}
+			break;
+		case 8:
+			if (In >= 1.5)
+			{
+				QaShadowShot(S, TEXT("1_front"));
+				QaShadowCamera(S, World, PC, D, 40.0, 720.0);
+				Next(9);
+			}
+			break;
+		case 9:
+			if (In >= 1.5)
+			{
+				QaShadowShot(S, TEXT("2_three_quarter"));
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSHADOW film begin: 25 s held at three-quarter, the Dog idle"));
+				Next(10);
+			}
+			break;
+		case 10:
+			// THE FILM HOLD: the founder asks for 20-30 s of the strips moving on their own; a recorder films this window
+			if (In >= 25.0)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSHADOW film end"));
+				QaShadowShot(S, TEXT("3_three_quarter_after_25s"));
+				PC->SetViewTargetWithBlend(D, 0.0f);
+				for (const TWeakObjectPtr<AActor>& Figure : S.Hidden)
+				{
+					if (AActor* A = Figure.Get())
+					{
+						A->SetActorHiddenInGame(false);
+					}
+				}
+				S.Hidden.Reset();
+				if (UWonderlandUiSubsystem* U = QaUi(World))
+				{
+					U->ToggleProjectBrain();
+					U->SetBrainSkinsOpen(true);
+				}
+				GEngine->Exec(World, TEXT("wl.Skins.Wear shadow_flame"));
+				Next(11);
+			}
+			break;
+		case 11:
+			if (In >= 4.0)
+			{
+				const AWonderlandSkinStage* Stage = AWonderlandSkinStage::Get(World);
+				bool bStageShadows = false;
+				for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+				{
+					bStageShadows |= Cast<AWonderlandSkinStage>(It->GetOwner()) != nullptr && It->HasLiveShadows();
+				}
+				QaShadowCheck(S, TEXT("S13"), Stage != nullptr && Stage->GetShownSkinId() == Shadow && bStageShadows,
+					FString::Printf(TEXT("the wardrobe shows '%s'; its figure draws shadow strips: %s"),
+						Stage != nullptr ? *Stage->GetShownSkinId().ToString() : TEXT("(no stage)"), bStageShadows ? TEXT("yes") : TEXT("NO")));
+				QaShadowShot(S, TEXT("4_wardrobe"));
+				Next(12);
+			}
+			break;
+		case 12:
+			if (In >= 6.0)
+			{
+				QaShadowShot(S, TEXT("5_wardrobe_6s_later"));
+				if (UWonderlandUiSubsystem* U = QaUi(World))
+				{
+					U->SetBrainSkinsOpen(false);
+					U->ToggleProjectBrain();
+				}
+				FString Saved;
+				FFileHelper::LoadFileToString(Saved, *UWonderlandRelaySkinSubsystem::PersistPath());
+				QaShadowCheck(S, TEXT("S14"), Saved.TrimStartAndEnd() == TEXT("shadow_flame"),
+					FString::Printf(TEXT("the remembered skin on disk: '%s' (%s); the restart half is `wl.Qa.ShadowFlame restart`"),
+						*Saved.TrimStartAndEnd(), *UWonderlandRelaySkinSubsystem::PersistPath()));
+				Next(13);
+			}
+			break;
+		case 50:
+			// THE RESTART BOOT: the skin and its strips came back on their own
+			if (In >= 3.0)
+			{
+				QaShadowCheck(S, TEXT("S14.restart"), D->GetWornSkinId() == Shadow && Costume != nullptr && Costume->HasLiveShadows(),
+					FString::Printf(TEXT("after a restart the Dog wears '%s', strips %s | %s"), *D->GetWornSkinId().ToString(),
+						Costume != nullptr && Costume->HasLiveShadows() ? TEXT("live") : TEXT("ABSENT"), Costume != nullptr ? *Costume->DescribeShadows() : TEXT("-")));
+				Next(13);
+			}
+			break;
+		case 13:
+			if (In >= 1.0)
+			{
+				if (ACameraActor* Cam = S.Camera.Get())
+				{
+					Cam->Destroy();
+				}
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSHADOW END pass=%d fail=%d"), S.Pass, S.Fail);
+				Next(14);
+			}
+			break;
+		case 14:
+			if (In >= 1.0)
+			{
+				GQaShadow.Reset();
+				FPlatformMisc::RequestExit(false);
+				return false;
+			}
+			break;
+		default:
+			break;
+		}
+		return true;
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaShadowFlame(
+		TEXT("wl.Qa.ShadowFlame"),
+		TEXT("The Shadow Flame skin's runtime checks (S1-S15): worn, upright canonical body, no clothing, yellow eyes, strips that ")
+		TEXT("animate continuously, independently and smoothly, idle and walking, switching away and back, the wardrobe, the saved choice; ")
+		TEXT("front / three-quarter / wardrobe frames and a 25 s film hold, into Saved/Screenshots/WLSHADOW; then quit. ")
+		TEXT("`wl.Qa.ShadowFlame restart` checks the skin came back after a restart."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaShadow.IsValid())
+			{
+				return;
+			}
+			GQaShadow = MakeShared<FQaShadow>();
+			GQaShadow->World = World;
+			GQaShadow->At = QaNow();
+			GQaShadow->bRestart = Args.Num() > 0 && Args[0].Equals(TEXT("restart"), ESearchCase::IgnoreCase);
+			GQaShadow->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLSHADOW"));
+			// every frame, not every tenth of a second: the walk is the Dog's own movement input, consumed per frame
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaShadowTick), 0.0f);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSHADOW armed (%s)"), GQaShadow->bRestart ? TEXT("restart check") : TEXT("S1-S15 and the frames"));
 		}));
 
 	/* ================================================================ wl.Qa.Wardrobe (founder, 2026-10-01)
@@ -2403,7 +2943,7 @@ namespace
 	 * actually shows: the occupancy is read off the rendered pixels, the idle off the figure's own joints over six seconds,
 	 * and the player's in-world Relay OG head is sampled beside it as the reference. Frames to Saved/Screenshots/WLWARDROBE.
 	 */
-	const TCHAR* const WardrobeRoster[5] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal") };
+	const TCHAR* const WardrobeRoster[] = { TEXT("relay_og"), TEXT("celestial_light"), TEXT("skeleton_flame"), TEXT("jack_flame"), TEXT("baal"), TEXT("shadow_flame") };
 
 	struct FQaWardrobe
 	{
@@ -2490,7 +3030,7 @@ namespace
 		case 1:
 			if (In >= 1.5)
 			{
-				if (F.Skin >= 5)
+				if (F.Skin >= static_cast<int32>(UE_ARRAY_COUNT(WardrobeRoster)))
 				{
 					F.Phase = 30;
 					F.At = QaNow();
@@ -2528,15 +3068,19 @@ namespace
 				const float Bottom = CentreY + HeightPct * 0.5f;
 				const float Top = CentreY - HeightPct * 0.5f;
 				const bool bFire = QaNoteValue(Note, TEXT("fireTop"), 0.0f) > 0.0f;
+				// SHADOW TENDRILS ARE TREATED AS FIRE IS: the founder's rule is that the wardrobe shows the whole Dog "without
+				// shrinking for tendrils", so a riser may leave the top of the frame as a flame tip may (measured 2026-10-02: the
+				// head and ears whole at ~13% from the top, the lit row at the edge a strip behind the head).
+				const bool bShadowTips = Body != nullptr && Body->HasLiveShadows();
 				const bool bShows = Stage != nullptr && Stage->GetShownSkinId() == FName(WardrobeRoster[F.Skin]);
 				// CLOSE, AND WHOLE: the lit figure fills at least 70% of the preview's height (the RC7 wardrobe: about a third);
 				// its lowest lit pixel stops short of the bottom edge (the feet are in the frame); and for a skin with no fire its
 				// highest lit pixel stops short of the top (no head, ear, antler, halo or hat cut off). Fire tips may touch the top.
-				const bool bWhole = Bottom <= 99.0f && (bFire || Top >= 0.5f);
+				const bool bWhole = Bottom <= 99.0f && (bFire || bShadowTips || Top >= 0.5f);
 				QaWardrobeVerdict(F, *FString::Printf(TEXT("W%d.2"), F.Skin + 1), bShows && HeightPct >= 70.0f && bWhole,
 					FString::Printf(TEXT("%s: figure %.1f%% of the preview height, highest lit row %.1f%%, lowest %.1f%%, centre %.1f%% (want >= 70%%; feet clear of the bottom; %s)"),
 						WardrobeRoster[F.Skin], HeightPct, Top, Bottom, CentreY,
-						bFire ? TEXT("fire tips may touch the top") : TEXT("nothing touching the top")));
+						bFire ? TEXT("fire tips may touch the top") : bShadowTips ? TEXT("shadow tips may touch the top") : TEXT("nothing touching the top")));
 				F.Samples = 0;
 				F.OffsetMin = FVector(1e9);
 				F.OffsetMax = FVector(-1e9);
@@ -2621,7 +3165,7 @@ namespace
 				Shot(TEXT("6_360_turning.png"));
 				const bool bTurned = U->IsWardrobeInspecting() && Yaw >= 30.0f;
 				const bool bSameShot = F.DistanceBefore > 0.0f && FMath::Abs(DistanceTurning - F.DistanceBefore) <= 0.02f * F.DistanceBefore;
-				QaWardrobeVerdict(F, TEXT("W6.1"), bTurned && bSameShot,
+				QaWardrobeVerdict(F, *FString::Printf(TEXT("W%d.1"), static_cast<int32>(UE_ARRAY_COUNT(WardrobeRoster)) + 1), bTurned && bSameShot,
 					FString::Printf(TEXT("360 on: the figure turned %.0f deg in 3 s; camera distance %.1f before, %.1f turning (want the same within 2%%)"),
 						Yaw, F.DistanceBefore, DistanceTurning));
 				U->ToggleWardrobeInspect();
@@ -2634,7 +3178,7 @@ namespace
 			{
 				const float Yaw = Stage != nullptr ? FMath::Abs(FMath::UnwindDegrees(Stage->GetInspectYaw())) : 999.0f;
 				Shot(TEXT("7_360_stopped.png"));
-				QaWardrobeVerdict(F, TEXT("W6.2"), !U->IsWardrobeInspecting() && Yaw <= 2.0f,
+				QaWardrobeVerdict(F, *FString::Printf(TEXT("W%d.2"), static_cast<int32>(UE_ARRAY_COUNT(WardrobeRoster)) + 1), !U->IsWardrobeInspecting() && Yaw <= 2.0f,
 					FString::Printf(TEXT("360 off: back to the front, %.1f deg from it after 3 s (want <= 2)"), Yaw));
 				U->SetBrainSkinsOpen(false);
 				U->ToggleProjectBrain();
@@ -2660,7 +3204,7 @@ namespace
 
 	FAutoConsoleCommandWithWorldAndArgs GQaWardrobeCommand(
 		TEXT("wl.Qa.Wardrobe"),
-		TEXT("Prove the Wardrobe's presentation in this build: open it the player's way, wear each of the five skins, and log how much of ")
+		TEXT("Prove the Wardrobe's presentation in this build: open it the player's way, wear each of the six skins, and log how much of ")
 		TEXT("the preview each fills (from its pixels), whether its body stays planted and its head looks about as Relay OG's does, and ")
 		TEXT("that 360 turns without resizing the shot. Frames to Saved/Screenshots/WLWARDROBE; then quit."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
@@ -2674,7 +3218,7 @@ namespace
 			GQaWardrobe->At = QaNow();
 			GQaWardrobe->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLWARDROBE"));
 			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaWardrobeTick), 0.05f);
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLWARDROBE armed: five skins, framing from the pixels, six seconds of idle each, then 360"));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLWARDROBE armed: %d skins, framing from the pixels, six seconds of idle each, then 360"), static_cast<int32>(UE_ARRAY_COUNT(WardrobeRoster)));
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs GQaConsoleFilm(

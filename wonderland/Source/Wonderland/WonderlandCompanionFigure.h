@@ -85,7 +85,16 @@ enum class EWonderlandCompanionMotion : uint8
 	 * Unlike Tail, its amplitude rises with the body's speed and it sweeps backward as the body moves, so a tail
 	 * trails behind a running creature and settles when it stops.
 	 */
-	Trail
+	Trail,
+	/**
+	 * LIVING SHADOW (Shadow Flame, founder 2026-10-01). Never drawn as boxes: the part's boxes only bound where its black
+	 * tendrils are born, and AWonderlandCompanionEmbodiment::RebuildShadows lays the tendrils every frame.
+	 * A = how many tendrils grow here; B = how long they reach, in figure units.
+	 *
+	 * A plain enum value, deliberately: this enum is not reflected, so adding to it adds no early FName (the UE 5.8
+	 * Niagara name-table crash a new reflected name once caused at boot).
+	 */
+	Shadow
 };
 
 struct FWonderlandCompanionMaterial

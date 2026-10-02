@@ -33,7 +33,8 @@ HALO_MARGIN = 0.10 # visible halo light keeps this far inside the black as well
 DARK = 0.10        # an opaque, non-emissive surface below this luminance reads as the black housing
 STEP = 0.05
 SCAN = 6.0
-SHIPPED = ["RelayOg", "CelestialLight", "SkeletonFlameV2", "JackFlame", "Baal"]
+SHIPPED = ["RelayOg", "CelestialLight", "SkeletonFlameV2", "JackFlame", "Baal", "ShadowFlame"]
+COAT = ("bone", "bonedeep")   # base_dog's coat: the head shell round the visor window is built from these
 # RELAY OG: the Dog in play is the canon body; RelayOg.wlvox is its WARDROBE PREVIEW, and it is held to the same rules
 # (founder, 2026-10-01: "Change the relay og wardrobe preview to the correct visuals").
 
@@ -67,8 +68,8 @@ class Face:
         self.halos = []
         for i, b in enumerate(boxes):
             kind, rgb = materials.get(b["mat"], ("lit", (1.0, 1.0, 1.0)))
-            if b["rotated"] or motions.get(b["part"]) == "twinkle":
-                continue                     # fire is drawn as fire, not as its boxes; rotated boxes are never on a face
+            if b["rotated"] or motions.get(b["part"]) in ("twinkle", "shadow"):
+                continue                     # fire and shadow strips are drawn by the engine, not as their boxes; rotated boxes are never on a face
             (cx, cy, cz), (sx, sy, sz) = b["c"], b["s"]
             rect = (cy - sy * 0.5, cy + sy * 0.5, cz - sz * 0.5, cz + sz * 0.5)
             entry = dict(i=i, mat=b["mat"], kind=kind, rgb=rgb, rect=rect, front=cx + sx * 0.5, back=cx - sx * 0.5)
@@ -96,6 +97,11 @@ class Face:
 
     def dark(self, s):
         if s is None or s["kind"] in ("glow", "add"):
+            return False
+        # THE COAT IS THE FACE, WHATEVER ITS COLOUR (Shadow Flame, 2026-10-01). base_dog builds the head shell -- the face
+        # round the visor window -- from the coat materials, so the coat can never be the black housing. Every other skin's
+        # coat is light and was never dark; a near-black coat made the whole head read as housing and E2 found no face.
+        if s["mat"] in COAT:
             return False
         r, g, b = s["rgb"]
         return 0.2126 * r + 0.7152 * g + 0.0722 * b < DARK

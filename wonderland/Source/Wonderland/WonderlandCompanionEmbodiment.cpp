@@ -649,6 +649,19 @@ void AWonderlandCompanionEmbodiment::ClearBody()
 	{
 		FlameSurface->ClearAllMeshSections();
 	}
+	// AND THE SHADOW GOES WITH THE BODY THAT CAST IT, for the same reason: a skin switched away from Shadow Flame must take
+	// every tendril with it (founder: "Confirm switching skins removes the shadow effects completely").
+	ShadowSources.Reset();
+	ShadowTendrils.Reset();
+	ShadowTips.Reset();
+	ShadowTipWeights.Reset();
+	ShadowPath.Reset();
+	ShadowDetail = -1;
+	ShadowVertexCount = 0;
+	if (UProceduralMeshComponent* Shadow = ShadowSurface.Get())
+	{
+		Shadow->ClearAllMeshSections();
+	}
 	GlowMaterials.Reset();
 	bHasHeartbeat = false;
 	BoxCount = 0;
@@ -988,7 +1001,8 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				float LowestZ = Def.Pivot.Z;
 				for (const FWonderlandCompanionBox& Box : Figure.Boxes)
 				{
-					if (Figure.Parts.IsValidIndex(Box.Part) && Figure.Parts[Box.Part].Motion == EWonderlandCompanionMotion::Twinkle)
+					if (Figure.Parts.IsValidIndex(Box.Part) && (Figure.Parts[Box.Part].Motion == EWonderlandCompanionMotion::Twinkle
+						|| Figure.Parts[Box.Part].Motion == EWonderlandCompanionMotion::Shadow))
 					{
 						continue;
 					}
@@ -1036,12 +1050,27 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 	FlameSources.Reset();
 	TMap<int32, FBox> FlameBounds;
 	TMap<int32, TArray<int32>> FlameMaterials;
+	// THE SHADOW PARTS ARE MEASURED AND SKIPPED THE SAME WAY: their boxes only say where tendrils are born.
+	ShadowSources.Reset();
+	ShadowTendrils.Reset();
+	TMap<int32, FBox> ShadowBounds;
+	TMap<int32, int32> ShadowMaterial;
 	for (const FWonderlandCompanionBox& Box : Figure.Boxes)
 	{
 		const bool bFlame = Figure.Parts.IsValidIndex(Box.Part)
 			&& Figure.Parts[Box.Part].Motion == EWonderlandCompanionMotion::Twinkle;
+		const bool bShadow = Figure.Parts.IsValidIndex(Box.Part)
+			&& Figure.Parts[Box.Part].Motion == EWonderlandCompanionMotion::Shadow;
 		const FVector Local = (Box.Centre - Figure.Parts[Box.Part].Pivot) * Unit;
 		const FVector Scale = Box.Size * (Unit / 100.0f);
+		if (bShadow)
+		{
+			const FVector Half = Box.Size * Unit * 0.5;
+			FBox& Bounds = ShadowBounds.FindOrAdd(Box.Part, FBox(ForceInit));
+			Bounds += FBox(Local - Half, Local + Half);
+			ShadowMaterial.FindOrAdd(Box.Part, Box.Material);
+			continue;
+		}
 		if (bFlame)
 		{
 			const FVector Half = Box.Size * Unit * 0.5;
@@ -1081,6 +1110,58 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		FlameSurface->SetCastShadow(false);
 		FlameSurface->SetupAttachment(RootComponent);
 		FlameSurface->RegisterComponent();
+	}
+
+	// THE SHADOW TENDRILS: `a` of them for each `shadow` part, every one with constants of its own (RebuildShadows).
+	for (const TPair<int32, FBox>& Found : ShadowBounds)
+	{
+		const FWonderlandCompanionPart& Def = Figure.Parts[Found.Key];
+		FShadowSource Source;
+		Source.PartIndex = Found.Key;
+		Source.Material = ShadowMaterial.FindRef(Found.Key);
+		Source.Centre = Found.Value.GetCenter();
+		Source.HalfSize = Found.Value.GetExtent();
+		const int32 SourceIndex = ShadowSources.Add(Source);
+		// THE STYLE FOLLOWS WHERE THE FIGURE PUT THE PART: off the back and the head they rise past the head, round the
+		// torso they orbit, from the hips they sweep low by the legs and trail.
+		const FString Name = Def.Name.ToString().ToLower();
+		const int32 Style = (Name.Contains(TEXT("back")) || Name.Contains(TEXT("head"))) ? 0
+			: (Name.Contains(TEXT("hip")) || Name.Contains(TEXT("leg")) || Name.Contains(TEXT("tail"))) ? 2 : 1;
+		const int32 Count = FMath::Clamp(FMath::RoundToInt(Def.A), 1, 8);
+		const float Reach = FMath::Clamp(Def.B, 1.0f, 60.0f) * Unit;
+		FRandomStream Stream(Found.Key * 7919 + 13);
+		for (int32 K = 0; K < Count; ++K)
+		{
+			FShadowTendril Tendril;
+			Tendril.Source = SourceIndex;
+			Tendril.Style = Style;
+			Tendril.Anchor = Source.Centre + FVector(Stream.FRandRange(-1.0f, 1.0f) * Source.HalfSize.X,
+				Stream.FRandRange(-1.0f, 1.0f) * Source.HalfSize.Y, Stream.FRandRange(-1.0f, 1.0f) * Source.HalfSize.Z);
+			Tendril.Reach = Reach * Stream.FRandRange(0.75f, 1.2f);
+			Tendril.Seed = Stream.FRandRange(0.0f, 1000.0f);
+			ShadowTendrils.Add(Tendril);
+		}
+	}
+	// A BUDGET, NOT A STYLE: however many a figure asks for, a whole Dog gets at most 24.
+	if (ShadowTendrils.Num() > 24)
+	{
+		ShadowTendrils.SetNum(24);
+	}
+	if (ShadowTendrils.Num() > 0 && !ShadowSurface.IsValid())
+	{
+		UProceduralMeshComponent* Shadow = NewObject<UProceduralMeshComponent>(this,
+			MakeUniqueObjectName(this, UProceduralMeshComponent::StaticClass(), TEXT("ShadowSurface")));
+		Shadow->SetMobility(EComponentMobility::Movable);
+		Shadow->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Shadow->SetGenerateOverlapEvents(false);
+		Shadow->SetCanEverAffectNavigation(false);
+		// Shadow energy is not a solid: it darkens by being black, and casts nothing.
+		Shadow->SetCastShadow(false);
+		Shadow->SetupAttachment(RootComponent);
+		Shadow->RegisterComponent();
+		// THE ACTOR HOLDS IT (InstanceComponents is reflected), so the weak handle above never dangles while we live.
+		AddInstanceComponent(Shadow);
+		ShadowSurface = Shadow;
 	}
 
 	for (TPair<int64, TArray<FTransform>>& Group : Groups)
@@ -2532,6 +2613,314 @@ void AWonderlandCompanionEmbodiment::RebuildFlames(float TimeSeconds)
 	}
 }
 
+// Named, not anonymous: the module builds as one unity translation unit.
+namespace WonderlandShadowMath
+{
+	/** A stable 0..1 number from a seed: every tendril's constants come from its own seed, so no two agree. */
+	inline float Hash01(float X)
+	{
+		return FMath::Frac(FMath::Sin(X * 12.9898f) * 43758.5453f);
+	}
+}
+
+void AWonderlandCompanionEmbodiment::RebuildShadows(float TimeSeconds)
+{
+	UProceduralMeshComponent* Surface = ShadowSurface.Get();
+	if (Surface == nullptr || ShadowTendrils.Num() == 0)
+	{
+		return;
+	}
+	using WonderlandShadowMath::Hash01;
+
+	// ---- WHERE THE FIGURE HAS BEEN. A tendril point some way along the strip is laid where the Dog stood that long ago,
+	// so a moving Dog streams its shadows behind it and a Dog that stops sees them curl back in as the path catches up.
+	const FVector Here = GetActorLocation();
+	if (ShadowPath.Num() == 0 || TimeSeconds - ShadowPath.Last().W > 1.0f / 90.0f)
+	{
+		ShadowPath.Add(FVector4(Here.X, Here.Y, Here.Z, TimeSeconds));
+	}
+	while (ShadowPath.Num() > 2 && TimeSeconds - ShadowPath[0].W > 1.6f)
+	{
+		ShadowPath.RemoveAt(0, 1, EAllowShrinking::No);
+	}
+	const auto PathAt = [this, &Here](float T) -> FVector
+	{
+		if (ShadowPath.Num() == 0 || T >= ShadowPath.Last().W)
+		{
+			return Here;
+		}
+		for (int32 I = ShadowPath.Num() - 1; I > 0; --I)
+		{
+			const FVector4& A = ShadowPath[I - 1];
+			const FVector4& B = ShadowPath[I];
+			if (T >= A.W)
+			{
+				const float Alpha = (B.W - A.W) > KINDA_SMALL_NUMBER ? (T - A.W) / (B.W - A.W) : 1.0f;
+				return FMath::Lerp(FVector(A), FVector(B), Alpha);
+			}
+		}
+		return FVector(ShadowPath[0]);
+	};
+
+	// ---- HOW MUCH TO DRAW. A showcase (the wardrobe, a profile) always gets everything; in the world, detail falls with
+	// the camera's distance, and far away only the rising tendrils stay -- the dark aura's silhouette, not its detail.
+	int32 Detail = 0;
+	if (!bShowcaseLit)
+	{
+		if (const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0))
+		{
+			const float Away = static_cast<float>(FVector::Dist(Camera->GetCameraLocation(), Here));
+			Detail = Away > 5200.0f ? 2 : Away > 2400.0f ? 1 : 0;
+		}
+	}
+	const int32 Rungs = Detail == 0 ? 18 : Detail == 1 ? 10 : 6;
+
+	struct FPile
+	{
+		TArray<FVector> Verts;
+		TArray<int32> Tris;
+		TArray<FVector2D> UVs;
+		TArray<FVector> Normals;
+	};
+	TMap<int32, FPile> Piles;
+	TArray<FVector> Tips;
+	TArray<float> Weights;
+	const FTransform Actor = GetActorTransform();
+	TArray<FVector> Spine;
+	Spine.SetNumUninitialized(Rungs + 1);
+
+	for (const FShadowTendril& T : ShadowTendrils)
+	{
+		if (!ShadowSources.IsValidIndex(T.Source))
+		{
+			continue;
+		}
+		const FShadowSource& Source = ShadowSources[T.Source];
+		if (Detail == 2 && T.Style != 0)
+		{
+			continue;
+		}
+		if (!PartPivots.IsValidIndex(Source.PartIndex) || PartPivots[Source.PartIndex] == nullptr
+			|| !MaterialInstances.IsValidIndex(Source.Material))
+		{
+			continue;
+		}
+		// BORN ON ITS JOINT, wherever the animation has put that joint this frame -- as the flames are.
+		const FTransform PartToActor = PartPivots[Source.PartIndex]->GetComponentTransform().GetRelativeTransform(Actor);
+		const FVector Anchor = PartToActor.TransformPosition(T.Anchor);
+		const float AnchorRadius = FMath::Max(static_cast<float>(FVector2D(Anchor.X, Anchor.Y).Size()), 4.0f);
+		const float AnchorTurn = FMath::Atan2(static_cast<float>(Anchor.Y), static_cast<float>(Anchor.X));
+
+		// ---- ITS OWN CONSTANTS: direction, speed and how that speed swells and ebbs, lifetime, curl, phase.
+		const float S = T.Seed;
+		const float Dir = Hash01(S + 1.1f) < 0.5f ? -1.0f : 1.0f;
+		const float Omega = FMath::Lerp(0.30f, 0.85f, Hash01(S + 2.3f)) * Dir;
+		const float SwellAmp = FMath::Lerp(0.25f, 0.55f, Hash01(S + 3.7f));
+		const float SwellPeriod = FMath::Lerp(4.5f, 9.0f, Hash01(S + 4.1f));
+		const float Life = FMath::Lerp(6.5f, 11.0f, Hash01(S + 5.3f));
+		const float LifeOffset = Hash01(S + 6.7f) * Life;
+		const float CurlFreq = FMath::Lerp(0.9f, 2.2f, Hash01(S + 7.9f));
+		const float CurlPeriod = FMath::Lerp(1.6f, 3.4f, Hash01(S + 8.2f));
+		const float StripPhase = Hash01(S + 9.4f) * 2.0f * PI;
+		const float Climb = FMath::Lerp(-0.25f, 0.45f, Hash01(S + 10.6f));
+
+		// ---- ITS LIFETIME: it grows out, lives, then lets go at the root and dissolves upward. Its width is zero at both
+		// ends of the cycle, so the next lifetime -- a slightly different strip -- arrives without a pop.
+		const float Cycle = (TimeSeconds + LifeOffset) / Life;
+		const float CycleIndex = FMath::FloorToFloat(Cycle);
+		const float U = Cycle - CycleIndex;
+		const float Variant = Hash01(S + CycleIndex * 3.17f);
+		const float Grow = FMath::SmoothStep(0.0f, 0.22f, U);
+		const float Fade = FMath::SmoothStep(0.78f, 1.0f, U);
+		const float Len = T.Reach * (0.35f + 0.65f * Grow) * FMath::Lerp(0.85f, 1.15f, Variant);
+		const float RootCut = 0.85f * Fade;
+		const float WidthEnvelope = Grow * (1.0f - Fade);
+
+		// ---- ITS ORBIT, swelling and ebbing: the integral of Omega * (1 + SwellAmp * sin), so it speeds up and slows down
+		// smoothly rather than spinning at one rate.
+		const float Turn = AnchorTurn + Omega * TimeSeconds
+			+ Omega * SwellAmp * SwellPeriod / (2.0f * PI) * (1.0f - FMath::Cos(2.0f * PI * TimeSeconds / SwellPeriod));
+
+		for (int32 K = 0; K <= Rungs; ++K)
+		{
+			const float Along = RootCut + (1.0f - RootCut) * static_cast<float>(K) / Rungs;
+			const float Curl = 0.11f * Len * FMath::Sin(2.0f * PI * (CurlFreq * Along - TimeSeconds / CurlPeriod) + StripPhase);
+			float Radius = AnchorRadius;
+			float Angle = AnchorTurn;
+			float Height = static_cast<float>(Anchor.Z);
+			if (T.Style == 0)
+			{
+				// RISING: up off the shoulders and back, drifting round a little, leaning well OUT as it climbs -- the first runtime
+				// pass kept it inside the head's width, where the head hid it.
+				Radius = AnchorRadius + 0.42f * Len * FMath::Pow(Along, 0.8f) + Curl * Along;
+				Angle = AnchorTurn + 0.38f * FMath::Sin(2.0f * PI * (0.45f * Along - TimeSeconds / (SwellPeriod * 0.7f)) + StripPhase)
+					+ Dir * FMath::Lerp(0.4f, 0.9f, Variant) * Along;
+				Height += 0.92f * Len * Along + 0.06f * Len * FMath::Sin(2.0f * PI * (0.8f * Along - TimeSeconds / CurlPeriod) + StripPhase);
+			}
+			else if (T.Style == 1)
+			{
+				// ORBITING: round the torso BEYOND the arms (the first pass orbited at the arms' own radius: black on black), curling
+				// as it goes, some spiralling up and some down.
+				Radius = FMath::Max(AnchorRadius * 2.4f, 0.55f * Len) + Curl;
+				Angle = Turn + Dir * FMath::Lerp(1.6f, 2.6f, Variant) * Along;
+				Height += Climb * Len * Along + 0.10f * Len * FMath::Sin(2.0f * PI * (0.7f * Along - TimeSeconds / CurlPeriod) + StripPhase);
+			}
+			else
+			{
+				// SWEEPING: low past the legs, dipping, then lifting at the end -- the ones that trail furthest.
+				Radius = FMath::Lerp(AnchorRadius, FMath::Max(AnchorRadius * 2.4f, 0.60f * Len), FMath::SmoothStep(0.0f, 0.45f, Along)) + Curl;
+				Angle = AnchorTurn + 0.6f * (Turn - AnchorTurn) + Dir * 1.5f * Along;
+				Height += -0.30f * Len * FMath::Sin(PI * FMath::Min(Along * 1.2f, 1.0f)) + 0.15f * Len * Along;
+			}
+			FVector Point(Radius * FMath::Cos(Angle), Radius * FMath::Sin(Angle), Height);
+			// ATTACHED AT THE ROOT: the first stretch eases out of the anchor itself, so a strip never floats free of the Dog.
+			Point = FMath::Lerp(Anchor, Point, FMath::SmoothStep(0.0f, 0.25f, Along));
+			// THE TRAIL: further along the strip is where the Dog was further back. Capped, so a teleport or a fast run can
+			// stretch a strip but never tear it loose.
+			const float Lag = Along * (T.Style == 2 ? 0.55f : 0.38f);
+			FVector Behind = PathAt(TimeSeconds - Lag) - Here;
+			Behind = Behind.GetClampedToMaxSize(0.7f * Len);
+			Point += Actor.InverseTransformVector(Behind) * FMath::SmoothStep(0.05f, 1.0f, Along);
+			Spine[K] = Point;
+		}
+		Tips.Add(Spine[Rungs]);
+		Weights.Add(WidthEnvelope);
+
+		// ---- THE RIBBON: two crossed tapered blades through the spine, twisting slowly, widest mid-strip, with a swell of
+		// width running along it so it reads as smoke rather than as a flat card.
+		FPile& Pile = Piles.FindOrAdd(Source.Material);
+		// WIDE ENOUGH TO READ AS A STRIP: the first runtime pass (half-width 2.5-7 uu) drew threads the eye lost against the body.
+		const float BaseHalfWidth = FMath::Clamp(0.075f * T.Reach, 4.0f, 12.0f);
+		for (int32 Blade = 0; Blade < 2; ++Blade)
+		{
+			const int32 First = Pile.Verts.Num();
+			for (int32 K = 0; K <= Rungs; ++K)
+			{
+				const float Along = RootCut + (1.0f - RootCut) * static_cast<float>(K) / Rungs;
+				const FVector Ahead = Spine[FMath::Min(K + 1, Rungs)] - Spine[FMath::Max(K - 1, 0)];
+				const FVector Tangent = Ahead.GetSafeNormal(KINDA_SMALL_NUMBER, FVector::UpVector);
+				FVector Across = FVector::CrossProduct(Tangent, FVector::UpVector);
+				if (Across.SizeSquared() < 1e-4f)
+				{
+					Across = FVector::CrossProduct(Tangent, FVector::ForwardVector);
+				}
+				Across.Normalize();
+				const FVector Over = FVector::CrossProduct(Tangent, Across).GetSafeNormal();
+				const float Twist = StripPhase + 2.2f * Along + 0.8f * Dir * TimeSeconds + (Blade == 1 ? 0.5f * PI : 0.0f);
+				const FVector Side = Across * FMath::Cos(Twist) + Over * FMath::Sin(Twist);
+				// NEVER A NEGATIVE BASE. Sin(PI) in float is -8.7e-8, and Pow of a negative number is NaN: one NaN at every tip
+				// gave the whole surface NaN bounds, and the renderer culled every strip (the first runtime passes: 988
+				// vertices, "visible", nothing on screen; the log's "NaNs found on Bounds for Primitive ShadowSurface").
+				const float Profile = FMath::Pow(FMath::Max(0.0f, FMath::Sin(PI * FMath::Clamp((Along - RootCut) / FMath::Max(1.0f - RootCut, 1e-3f), 0.0f, 1.0f))), 0.6f);
+				const float Swell = 0.75f + 0.25f * FMath::Sin(2.0f * PI * (1.7f * Along - TimeSeconds / 1.3f) + StripPhase);
+				const float Half = BaseHalfWidth * WidthEnvelope * Profile * Swell;
+				Pile.Verts.Add(Spine[K] - Side * Half);
+				Pile.Verts.Add(Spine[K] + Side * Half);
+				Pile.UVs.Add(FVector2D(0.0f, Along));
+				Pile.UVs.Add(FVector2D(1.0f, Along));
+				const FVector Normal = FVector::CrossProduct(Tangent, Side).GetSafeNormal(KINDA_SMALL_NUMBER, Over);
+				Pile.Normals.Add(Normal);
+				Pile.Normals.Add(Normal);
+			}
+			for (int32 K = 0; K < Rungs; ++K)
+			{
+				const int32 A = First + K * 2;
+				Pile.Tris.Add(A); Pile.Tris.Add(A + 1); Pile.Tris.Add(A + 2);
+				Pile.Tris.Add(A + 1); Pile.Tris.Add(A + 3); Pile.Tris.Add(A + 2);
+				// both faces: a strip seen from behind must not vanish
+				Pile.Tris.Add(A + 2); Pile.Tris.Add(A + 1); Pile.Tris.Add(A);
+				Pile.Tris.Add(A + 2); Pile.Tris.Add(A + 3); Pile.Tris.Add(A + 1);
+			}
+		}
+	}
+
+	// ---- INTO THE MESH. The topology only changes with the detail level, so most frames only move vertices.
+	const bool bRebuild = Detail != ShadowDetail || Surface->GetNumSections() != Piles.Num();
+	if (bRebuild)
+	{
+		Surface->ClearAllMeshSections();
+	}
+	int32 Slot = 0;
+	int32 Vertices = 0;
+	for (TPair<int32, FPile>& Pair : Piles)
+	{
+		FPile& Pile = Pair.Value;
+		Vertices += Pile.Verts.Num();
+		if (bRebuild)
+		{
+			Surface->CreateMeshSection(Slot, Pile.Verts, Pile.Tris, Pile.Normals, Pile.UVs, TArray<FColor>(), TArray<FProcMeshTangent>(), false);
+			// painted after the section exists (a material set before it is silently dropped -- see RebuildFlames)
+			Surface->SetMaterial(Slot, MaterialInstances[Pair.Key]);
+		}
+		else
+		{
+			Surface->UpdateMeshSection(Slot, Pile.Verts, Pile.Normals, Pile.UVs, TArray<FColor>(), TArray<FProcMeshTangent>());
+		}
+		++Slot;
+	}
+	ShadowDetail = Detail;
+	ShadowVertexCount = Vertices;
+	ShadowTips = MoveTemp(Tips);
+	ShadowTipWeights = MoveTemp(Weights);
+}
+
+FString AWonderlandCompanionEmbodiment::DescribeShadows() const
+{
+	if (ShadowTendrils.Num() == 0)
+	{
+		return FString();
+	}
+	int32 Styles[3] = {0, 0, 0};
+	for (const FShadowTendril& T : ShadowTendrils)
+	{
+		++Styles[FMath::Clamp(T.Style, 0, 2)];
+	}
+	const UProceduralMeshComponent* Surface = ShadowSurface.Get();
+	FString Material = TEXT("none");
+	if (ShadowSources.Num() > 0 && MaterialInstances.IsValidIndex(ShadowSources[0].Material) && MaterialInstances[ShadowSources[0].Material] != nullptr)
+	{
+		Material = MaterialInstances[ShadowSources[0].Material]->GetName();
+	}
+	// HOW FAR OUT AND UP THE STRIPS REACH, in actor space: the number that says whether they leave the silhouette at all.
+	float Out = 0.0f;
+	float Up = 0.0f;
+	for (const FVector& Tip : ShadowTips)
+	{
+		Out = FMath::Max(Out, static_cast<float>(FVector2D(Tip.X, Tip.Y).Size()));
+		Up = FMath::Max(Up, static_cast<float>(Tip.Z));
+	}
+	float Widest = 0.0f;
+	for (const FShadowTendril& T : ShadowTendrils)
+	{
+		Widest = FMath::Max(Widest, FMath::Clamp(0.075f * T.Reach, 4.0f, 12.0f));
+	}
+	// WHERE THE SURFACE ACTUALLY IS (first runtime passes: 988 vertices, nothing on screen): its world place and bounds,
+	// what it hangs from, and the actor's own place -- a surface drawn somewhere else reads as "visible" here and as
+	// nothing on camera.
+	FString Where = TEXT("no surface");
+	if (Surface != nullptr)
+	{
+		const USceneComponent* Parent = Surface->GetAttachParent();
+		Where = FString::Printf(TEXT("surface at %s (actor at %s), parent %s, registered %s, world bounds centre %s extent %s, section0 material %s"),
+			*Surface->GetComponentLocation().ToCompactString(), *GetActorLocation().ToCompactString(),
+			Parent != nullptr ? *Parent->GetName() : TEXT("NONE"), Surface->IsRegistered() ? TEXT("yes") : TEXT("NO"),
+			*Surface->Bounds.Origin.ToCompactString(), *Surface->Bounds.BoxExtent.ToCompactString(),
+			Surface->GetMaterial(0) != nullptr ? *Surface->GetMaterial(0)->GetName() : TEXT("NONE"));
+	}
+	return FString::Printf(TEXT("tendrils %d (rise %d, orbit %d, sweep %d) | detail %d | vertices %d | sections %d | visible %s | material %s | tips out to %.0f uu, up to %.0f uu, strips up to %.0f uu wide | %s"),
+		ShadowTendrils.Num(), Styles[0], Styles[1], Styles[2], ShadowDetail, ShadowVertexCount,
+		Surface != nullptr ? Surface->GetNumSections() : 0, (Surface != nullptr && Surface->IsVisible()) ? TEXT("yes") : TEXT("no"), *Material, Out, Up, Widest * 2.0f, *Where);
+}
+
+bool AWonderlandCompanionEmbodiment::HasLiveShadows() const
+{
+	// LIVE MEANS DRAWABLE: the renderer culls a primitive whose bounds are NaN or empty, so a surface with sections and
+	// vertices but no finite bounds is not live (it passed every check once and drew nothing).
+	const UProceduralMeshComponent* Surface = ShadowSurface.Get();
+	return Surface != nullptr && Surface->GetNumSections() > 0 && Surface->IsVisible() && ShadowVertexCount > 0
+		&& !Surface->Bounds.ContainsNaN() && Surface->Bounds.SphereRadius > 1.0;
+}
+
 void AWonderlandCompanionEmbodiment::SetRuntimeActivity(FName Activity)
 {
 	if (Activity.IsNone() || Activity == RuntimeActivity)
@@ -2803,6 +3192,8 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 	// THE FIRE IS LAID DOWN FIRST, on the joints as they stood last frame -- a few hundred triangles for a
 	// whole figure, and only for the skins that actually carry flame parts.
 	RebuildFlames(TimeSeconds);
+	// AND THE SHADOW, the same way and only for a skin that carries it (Shadow Flame).
+	RebuildShadows(TimeSeconds);
 
 	// WHAT THE RUNTIME SAYS THIS COMPANION IS DOING, eased in. The phase is advanced by the rate rather than the clock
 	// being scaled, so a change of activity never makes the body jump: it simply moves at a different pace from here.
