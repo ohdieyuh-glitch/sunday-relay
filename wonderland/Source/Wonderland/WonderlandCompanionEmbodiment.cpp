@@ -2721,7 +2721,7 @@ void AWonderlandCompanionEmbodiment::RebuildShadows(float TimeSeconds)
 		const float LifeOffset = Hash01(S + 6.7f) * Life;
 		const float CurlFreq = FMath::Lerp(0.9f, 2.2f, Hash01(S + 7.9f));
 		const float CurlPeriod = FMath::Lerp(1.6f, 3.4f, Hash01(S + 8.2f));
-		const float Phase = Hash01(S + 9.4f) * 2.0f * PI;
+		const float StripPhase = Hash01(S + 9.4f) * 2.0f * PI;
 		const float Climb = FMath::Lerp(-0.25f, 0.45f, Hash01(S + 10.6f));
 
 		// ---- ITS LIFETIME: it grows out, lives, then lets go at the root and dissolves upward. Its width is zero at both
@@ -2733,7 +2733,7 @@ void AWonderlandCompanionEmbodiment::RebuildShadows(float TimeSeconds)
 		const float Grow = FMath::SmoothStep(0.0f, 0.22f, U);
 		const float Fade = FMath::SmoothStep(0.78f, 1.0f, U);
 		const float Len = T.Reach * (0.35f + 0.65f * Grow) * FMath::Lerp(0.85f, 1.15f, Variant);
-		const float Root = 0.85f * Fade;
+		const float RootCut = 0.85f * Fade;
 		const float WidthEnvelope = Grow * (1.0f - Fade);
 
 		// ---- ITS ORBIT, swelling and ebbing: the integral of Omega * (1 + SwellAmp * sin), so it speeds up and slows down
@@ -2743,8 +2743,8 @@ void AWonderlandCompanionEmbodiment::RebuildShadows(float TimeSeconds)
 
 		for (int32 K = 0; K <= Rungs; ++K)
 		{
-			const float Along = Root + (1.0f - Root) * static_cast<float>(K) / Rungs;
-			const float Curl = 0.11f * Len * FMath::Sin(2.0f * PI * (CurlFreq * Along - TimeSeconds / CurlPeriod) + Phase);
+			const float Along = RootCut + (1.0f - RootCut) * static_cast<float>(K) / Rungs;
+			const float Curl = 0.11f * Len * FMath::Sin(2.0f * PI * (CurlFreq * Along - TimeSeconds / CurlPeriod) + StripPhase);
 			float Radius = AnchorRadius;
 			float Angle = AnchorTurn;
 			float Height = static_cast<float>(Anchor.Z);
@@ -2752,16 +2752,16 @@ void AWonderlandCompanionEmbodiment::RebuildShadows(float TimeSeconds)
 			{
 				// RISING: up off the shoulders and back, drifting round a little, leaning out as it climbs.
 				Radius = AnchorRadius + 0.24f * Len * Along + Curl * Along;
-				Angle = AnchorTurn + 0.38f * FMath::Sin(2.0f * PI * (0.45f * Along - TimeSeconds / (SwellPeriod * 0.7f)) + Phase)
+				Angle = AnchorTurn + 0.38f * FMath::Sin(2.0f * PI * (0.45f * Along - TimeSeconds / (SwellPeriod * 0.7f)) + StripPhase)
 					+ Dir * FMath::Lerp(0.4f, 0.9f, Variant) * Along;
-				Height += 0.92f * Len * Along + 0.06f * Len * FMath::Sin(2.0f * PI * (0.8f * Along - TimeSeconds / CurlPeriod) + Phase);
+				Height += 0.92f * Len * Along + 0.06f * Len * FMath::Sin(2.0f * PI * (0.8f * Along - TimeSeconds / CurlPeriod) + StripPhase);
 			}
 			else if (T.Style == 1)
 			{
 				// ORBITING: round the torso, curling as it goes, some spiralling up and some down.
 				Radius = FMath::Max(AnchorRadius * 1.6f, 0.38f * Len) + Curl;
 				Angle = Turn + Dir * FMath::Lerp(1.6f, 2.6f, Variant) * Along;
-				Height += Climb * Len * Along + 0.10f * Len * FMath::Sin(2.0f * PI * (0.7f * Along - TimeSeconds / CurlPeriod) + Phase);
+				Height += Climb * Len * Along + 0.10f * Len * FMath::Sin(2.0f * PI * (0.7f * Along - TimeSeconds / CurlPeriod) + StripPhase);
 			}
 			else
 			{
@@ -2793,7 +2793,7 @@ void AWonderlandCompanionEmbodiment::RebuildShadows(float TimeSeconds)
 			const int32 First = Pile.Verts.Num();
 			for (int32 K = 0; K <= Rungs; ++K)
 			{
-				const float Along = Root + (1.0f - Root) * static_cast<float>(K) / Rungs;
+				const float Along = RootCut + (1.0f - RootCut) * static_cast<float>(K) / Rungs;
 				const FVector Ahead = Spine[FMath::Min(K + 1, Rungs)] - Spine[FMath::Max(K - 1, 0)];
 				const FVector Tangent = Ahead.GetSafeNormal(KINDA_SMALL_NUMBER, FVector::UpVector);
 				FVector Across = FVector::CrossProduct(Tangent, FVector::UpVector);
@@ -2803,10 +2803,10 @@ void AWonderlandCompanionEmbodiment::RebuildShadows(float TimeSeconds)
 				}
 				Across.Normalize();
 				const FVector Over = FVector::CrossProduct(Tangent, Across).GetSafeNormal();
-				const float Twist = Phase + 2.2f * Along + 0.8f * Dir * TimeSeconds + (Blade == 1 ? 0.5f * PI : 0.0f);
+				const float Twist = StripPhase + 2.2f * Along + 0.8f * Dir * TimeSeconds + (Blade == 1 ? 0.5f * PI : 0.0f);
 				const FVector Side = Across * FMath::Cos(Twist) + Over * FMath::Sin(Twist);
-				const float Profile = FMath::Pow(FMath::Sin(PI * FMath::Clamp((Along - Root) / FMath::Max(1.0f - Root, 1e-3f), 0.0f, 1.0f)), 0.6f);
-				const float Swell = 0.75f + 0.25f * FMath::Sin(2.0f * PI * (1.7f * Along - TimeSeconds / 1.3f) + Phase);
+				const float Profile = FMath::Pow(FMath::Sin(PI * FMath::Clamp((Along - RootCut) / FMath::Max(1.0f - RootCut, 1e-3f), 0.0f, 1.0f)), 0.6f);
+				const float Swell = 0.75f + 0.25f * FMath::Sin(2.0f * PI * (1.7f * Along - TimeSeconds / 1.3f) + StripPhase);
 				const float Half = BaseHalfWidth * WidthEnvelope * Profile * Swell;
 				Pile.Verts.Add(Spine[K] - Side * Half);
 				Pile.Verts.Add(Spine[K] + Side * Half);
