@@ -29,7 +29,7 @@
  * PURE. No clock, no I/O: it takes the events it is given and returns numbers.
  */
 
-import type { JuliusTrajectoryEvent, JuliusEvalSummary } from './julius-trajectory';
+import { isJuliusProviderAttempt, juliusDispatchRowClass, type JuliusTrajectoryEvent, type JuliusEvalSummary } from './julius-trajectory';
 
 /* ------------------------------------------------------------- histograms */
 
@@ -92,6 +92,10 @@ export const JULIUS_COUNTERS = [
   'julius_subagents_spawned',
   'julius_findings_recorded',
   'julius_recoveries',
+  // DISPATCH rows that are not provider attempts, counted apart so they can
+  // never be read as one (`juliusDispatchRowClass`).
+  'julius_tool_steps',
+  'julius_dispatch_refusals',
 ] as const;
 export type JuliusCounter = (typeof JULIUS_COUNTERS)[number];
 
@@ -99,6 +103,7 @@ export const JULIUS_HISTOGRAMS = [
   'julius_task_duration_ms',
   'julius_task_cost_usd_micros',
   'julius_context_characters',
+  'julius_tool_step_duration_ms',
 ] as const;
 export type JuliusHistogramName = (typeof JULIUS_HISTOGRAMS)[number];
 
@@ -128,19 +133,32 @@ export function projectJuliusMetrics(
   const scoped = events.filter((event) => event.runtimeVersion === runtimeVersion);
   const counters = zeroCounters();
   const of = (kind: JuliusTrajectoryEvent['kind']) => scoped.filter((event) => event.kind === kind);
+  // EVERY ATTEMPT THAT MAY HAVE REACHED A PROVIDER: the DISPATCH row that ended
+  // a claim and the RETRY row of a claim the run requeued. A tool step and a
+  // pre-provider refusal are neither (`juliusDispatchRowClass`). The durations
+  // and costs below are the attempts'. The counts of DISPATCHES are not: a
+  // requeue is `julius_task_retries`, never a dispatch outcome or a reroute.
+  const attempts = scoped.filter(isJuliusProviderAttempt);
+  const dispatches = attempts.filter((event) => event.kind === 'DISPATCH');
+  const toolSteps = of('DISPATCH').filter((event) => juliusDispatchRowClass(event) === 'TOOL');
 
   counters.julius_runs_started = new Set(of('TASK_TOPOLOGY').map((event) => event.runId)).size;
   counters.julius_runs_completed = new Set(of('COMPLETION').filter((event) => event.outcome === 'VERIFIED').map((event) => event.runId)).size;
   counters.julius_runs_failed = new Set(of('COMPLETION').filter((event) => event.outcome === 'FAILED').map((event) => event.runId)).size;
   counters.julius_runs_cancelled = new Set(of('COMPLETION').filter((event) => event.outcome === 'CANCELLED').map((event) => event.runId)).size;
-  counters.julius_tasks_dispatched = of('DISPATCH').length;
+  counters.julius_tasks_dispatched = dispatches.length;
+  counters.julius_tool_steps = toolSteps.length;
+  counters.julius_dispatch_refusals = of('DISPATCH').filter((event) => juliusDispatchRowClass(event) === 'REFUSAL').length;
   counters.julius_task_retries = of('RETRY').length;
   counters.julius_repairs = of('REPAIR').length;
   counters.julius_fallbacks = of('FALLBACK').length;
-  // A reroute that stayed inside one provider produces no FALLBACK, so the
-  // two are counted apart: `julius_reroutes` is every re-dispatch and
-  // `julius_fallbacks` is the subset that crossed providers.
-  counters.julius_reroutes = of('DISPATCH').filter((event) => event.outcome !== 'COMPLETED').length + of('FALLBACK').length;
+  // WHAT THE TRAJECTORY CAN SEE OF A REROUTE: a provider attempt that did not
+  // complete, plus each FALLBACK (a reroute that crossed providers). A reroute
+  // that stayed inside one provider and then completed writes no row of its own
+  // (one DISPATCH row per claim), so it is not here: this is a floor. A tool
+  // step and a refusal are not attempts at all and never count, and a requeued
+  // attempt is a retry, not a reroute.
+  counters.julius_reroutes = dispatches.filter((event) => event.outcome !== 'COMPLETED').length + of('FALLBACK').length;
   counters.julius_subagents_spawned = of('SUBAGENT').filter((event) => event.outcome === 'AUTHORIZED').length;
   counters.julius_findings_recorded = of('FINDING').length;
   counters.julius_recoveries = of('RECOVERY').length;
@@ -149,8 +167,11 @@ export function projectJuliusMetrics(
     runtimeVersion,
     counters,
     histograms: {
-      julius_task_duration_ms: summariseSamples(of('DISPATCH').map((event) => event.durationMs)),
-      julius_task_cost_usd_micros: summariseSamples(of('DISPATCH').map((event) => event.usdMicros)),
+      // A provider call takes tens of seconds and a tool step milliseconds; one
+      // distribution over both describes neither, so each has its own.
+      julius_task_duration_ms: summariseSamples(attempts.map((event) => event.durationMs)),
+      julius_task_cost_usd_micros: summariseSamples(attempts.map((event) => event.usdMicros)),
+      julius_tool_step_duration_ms: summariseSamples(toolSteps.map((event) => event.durationMs)),
       julius_context_characters: summariseSamples(
         of('CONTEXT_COMPILED').map((event) => {
           const value = event.safeFacts.characterCount;
@@ -194,20 +215,29 @@ export function summariseJuliusEvals(
   const runs = new Set(scoped.map((event) => event.runId)).size;
   const verified = metrics.counters.julius_runs_completed;
   /**
-   * THE DISPATCHES ARE THE COMPONENTS. Only a DISPATCH can cost money, so a
-   * missing cost on one is an unmeasured component; a missing cost on a RETRY
-   * or a COMPLETION row is simply a field that kind never carries, and counting
-   * those as unknown would make every window incomplete forever.
+   * THE PROVIDER ATTEMPTS ARE THE COMPONENTS. An attempt that may have reached
+   * a provider can cost money, so a missing cost on one is an unmeasured
+   * component. That holds for the DISPATCH row that ended a claim and for the
+   * RETRY row of one the run requeued alike: a requeued TIMEOUT that reported
+   * no cost is as unknown as a final one. A missing cost on a COMPLETION row is
+   * a field that kind does not carry, and a pre-provider REFUSAL called nobody.
+   * Counting either as unknown would make every window that met a refusal
+   * incomplete forever. A tool step reports its literal zero, and is not a call
+   * either.
    */
-  const dispatches = scoped.filter((event) => event.kind === 'DISPATCH');
-  const cost = dispatches
-    .map((event) => event.usdMicros)
-    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0);
-  const knownUsdMicros = cost.reduce((total, value) => total + value, 0);
-  // NOT DROPPED. A dispatch that reported nothing is the difference between a
+  const attempts = scoped.filter(isJuliusProviderAttempt);
+  const priced = (value: number | null): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  // THE SUM IS OVER EVERY ROW THAT NAMES AN AMOUNT, exactly as the SQL twin
+  // sums `usd_micros` over every kind: a RETRY carries the spend of the attempt
+  // it requeued, and a SUBAGENT its own. Summing DISPATCH rows only dropped both.
+  const knownUsdMicros = scoped.map((event) => event.usdMicros).filter(priced).reduce((total, value) => total + value, 0);
+  // NOT DROPPED. An attempt that reported nothing is the difference between a
   // total and a floor, and it is counted rather than filtered away.
-  const unknownCostComponents = dispatches.length - cost.length;
-  const durations = summariseSamples(scoped.map((event) => event.durationMs));
+  const unknownCostComponents = attempts.filter((event) => !priced(event.usdMicros)).length;
+  // HOW LONG A PROVIDER ATTEMPT TOOK, and nothing else: a tool step's
+  // milliseconds averaged in would make a mission that ran MORE of them read
+  // as faster. Tool time has its own histogram.
+  const durations = summariseSamples(attempts.map((event) => event.durationMs));
 
   return {
     runtimeVersion,

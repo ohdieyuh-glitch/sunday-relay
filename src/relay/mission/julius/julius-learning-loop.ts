@@ -1,5 +1,5 @@
 import { projectJuliusMetrics, summariseJuliusEvals } from './julius-metrics';
-import type { JuliusTrajectoryEvent } from './julius-trajectory';
+import { isJuliusProviderAttempt, type JuliusTrajectoryEvent } from './julius-trajectory';
 
 /**
  * THE JULIUS LEARNING LOOP — AND THE ONLY THING IT IS ALLOWED TO CLAIM.
@@ -74,10 +74,10 @@ export interface JuliusLearningMetrics {
   readonly knownUsdMicros: number;
   readonly costComplete: boolean;
   readonly averageDurationMs: number | null;
-  /** Provider-reported tokens, summed over the dispatches that reported any. */
+  /** Provider-reported tokens, summed over the provider attempts (requeued ones included) that reported any. */
   readonly knownInputTokens: number | null;
   readonly knownOutputTokens: number | null;
-  /** Dispatches that reported no usage at all. The reason a token sum is a floor. */
+  /** Provider attempts, requeued ones included, that reported no usage at all. The reason a token sum is a floor. */
   readonly unknownUsageComponents: number;
 }
 
@@ -165,14 +165,23 @@ export function juliusLearningMetrics(
 ): JuliusLearningMetrics {
   const summary = summariseJuliusEvals(events, runtimeVersion);
   const metrics = projectJuliusMetrics(events, runtimeVersion);
-  const dispatches = events.filter((event) =>
-    event.runtimeVersion === runtimeVersion && event.kind === 'DISPATCH');
+  // THE PROVIDER ATTEMPTS, not every DISPATCH row. A tool step's tokens are a
+  // literal zero and a pre-provider refusal called nobody: counting a refusal's
+  // absent usage as unknown would make the token dimensions unmeasurable for
+  // any mission that met one, and counting tool steps as dispatches would let a
+  // candidate look leaner by running fewer of them (`juliusDispatchRowClass`).
+  // The usage is every attempt's, a requeued one's too: leaving a retried
+  // attempt's tokens out would let a candidate that retried more read leaner.
+  // The `dispatches` dimension counts DISPATCH rows; a requeue is a retry.
+  const attempts = events.filter((event) =>
+    event.runtimeVersion === runtimeVersion && isJuliusProviderAttempt(event));
+  const dispatches = attempts.filter((event) => event.kind === 'DISPATCH');
   const sum = (pick: (event: JuliusTrajectoryEvent) => number | null): number | null => {
-    const known = dispatches.map(pick).filter((value): value is number => typeof value === 'number');
+    const known = attempts.map(pick).filter((value): value is number => typeof value === 'number');
     // NO SAMPLES IS NOT ZERO. A sum over nothing does not exist.
     return known.length === 0 ? null : known.reduce((total, value) => total + value, 0);
   };
-  const reportedUsage = dispatches.filter((event) =>
+  const reportedUsage = attempts.filter((event) =>
     event.inputTokens !== null || event.outputTokens !== null);
   return {
     runtimeVersion,
@@ -189,7 +198,7 @@ export function juliusLearningMetrics(
     averageDurationMs: summary.averageDurationMs,
     knownInputTokens: sum((event) => event.inputTokens),
     knownOutputTokens: sum((event) => event.outputTokens),
-    unknownUsageComponents: dispatches.length - reportedUsage.length,
+    unknownUsageComponents: attempts.length - reportedUsage.length,
   };
 }
 
