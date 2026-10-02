@@ -1,6 +1,10 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { appendJuliusEventWithin } from './julius-event-postgres';
 import { juliusSerializable } from './julius-serializable';
-import { MAX_TASK_RECOVERIES, planJuliusRecovery, type JuliusMissionState, type JuliusRecoveryAction, type JuliusRecoveryCandidate } from '../mission/julius';
+import {
+  MAX_TASK_RECOVERIES, juliusRecoverySettlementEvent, planJuliusRecovery, planJuliusRecoverySettlements,
+  type JuliusMissionState, type JuliusOpenReservation, type JuliusRecoveryAction, type JuliusRecoveryCandidate, type JuliusRecoverySettlement,
+} from '../mission/julius';
 
 export interface JuliusWorkerResultInput {
   readonly resultId: string; readonly idempotencyKey: string; readonly runId: string; readonly projectId: string;
@@ -55,11 +59,15 @@ export class JuliusRecoveryPostgresRepository {
     // failure is retried (`juliusSerializable`) — the kernel sweeps before every
     // tick, so an unretried 40001 here threw the tick itself.
     return juliusSerializable(this.pool, async (client) => {
-      const rows = await client.query<Record<string, unknown>>(`SELECT t.task_id,t.run_id,t.attempt,t.recoveries,t.lease_generation,2 AS max_retries,r.project_id,r.state AS run_state FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.state='ACTIVE' AND t.lease_expires_at<=$1 AND ($3::text IS NULL OR r.project_id=$3) ORDER BY t.lease_expires_at,t.created_at FOR UPDATE OF t SKIP LOCKED LIMIT $2`, [now,limit,projectId??null]);
+      // HANDED: the coordinator writes `worker.dispatched` for the claimed attempt
+      // before it hands the work to a provider, so the event is the durable
+      // answer to "may this attempt have been paid for?". A handed attempt is
+      // never requeued (`planJuliusRecovery`).
+      const rows = await client.query<Record<string, unknown>>(`SELECT t.task_id,t.run_id,t.attempt,t.recoveries,t.lease_generation,2 AS max_retries,r.project_id,r.state AS run_state,EXISTS(SELECT 1 FROM relay_wonderland.events e WHERE e.stream_id=t.run_id AND e.event_type='julius.worker.dispatched' AND e.payload->>'taskId'=t.task_id AND e.payload->'facts'->>'attempt'=t.attempt::text) AS handed FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.state='ACTIVE' AND t.lease_expires_at<=$1 AND ($3::text IS NULL OR r.project_id=$3) ORDER BY t.lease_expires_at,t.created_at FOR UPDATE OF t SKIP LOCKED LIMIT $2`, [now,limit,projectId??null]);
       const actions: JuliusRecoveryAction[] = [];
       for (const row of rows.rows) {
-        const candidate: JuliusRecoveryCandidate = { runId:String(row.run_id),projectId:String(row.project_id),runState:String(row.run_state) as JuliusMissionState,taskId:String(row.task_id),attempt:Number(row.attempt),maxRetries:Number(row.max_retries),leaseGeneration:Number(row.lease_generation),recoveries:Number(row.recoveries),maxRecoveries:MAX_TASK_RECOVERIES };
-        const action = planJuliusRecovery(candidate); actions.push(action);
+        const candidate: JuliusRecoveryCandidate = { runId:String(row.run_id),projectId:String(row.project_id),runState:String(row.run_state) as JuliusMissionState,taskId:String(row.task_id),attempt:Number(row.attempt),maxRetries:Number(row.max_retries),leaseGeneration:Number(row.lease_generation),recoveries:Number(row.recoveries),maxRecoveries:MAX_TASK_RECOVERIES,handed:row.handed===true };
+        const action = planJuliusRecovery(candidate);
         const state = action.action === 'REQUEUE' ? 'RUNNABLE' : action.action === 'CANCEL_TASK' ? 'CANCELLED' : 'FAILED';
         // COUNTED ON THE WAY OUT, in the same statement that hands the task
         // back, so a crash between the two cannot leave a requeue uncounted
@@ -67,8 +75,57 @@ export class JuliusRecoveryPostgresRepository {
         // number bounds how many more turns recovery may give, and a task with
         // no turns left is not being given one.
         await client.query(`UPDATE relay_wonderland.julius_tasks SET state=$3,lease_owner=NULL,lease_expires_at=NULL,next_attempt_at=$2,recoveries=recoveries+$5,version=version+1,updated_at=$2 WHERE task_id=$1 AND state='ACTIVE' AND lease_generation=$4`, [candidate.taskId,now,state,candidate.leaseGeneration,action.action==='REQUEUE'?1:0]);
+        const settlements = await closeRecoveredReservations(client, candidate, now);
+        actions.push(settlements.length > 0 ? { ...action, settlements } : action);
       }
       return actions;
     });
   }
+}
+
+/**
+ * (a2) STEP 2, IN THE SWEEP'S OWN TRANSACTION: every reservation the recovered task left open (a
+ * `budget.reserved` row of this task with no `budget.settled` for its id), closed by the shared rule
+ * (`planJuliusRecoverySettlements`) and written by the shared row, before the lease change commits.
+ *
+ * Each close is an ordinary append (`appendJuliusEventWithin`), which locks the run row and moves
+ * the run's stream counter. So a settlement another writer commits while this sweep runs moves the
+ * same counter: this serializable transaction then fails with 40001, `juliusSerializable` retries
+ * it, and the retry reads that settlement and writes no second close. The locks are taken task
+ * first, then run, the order the fenced handoff takes them too.
+ */
+async function closeRecoveredReservations(
+  client: PoolClient,
+  task: Pick<JuliusRecoveryCandidate, 'runId' | 'projectId' | 'taskId'>,
+  now: string,
+): Promise<JuliusRecoverySettlement[]> {
+  const reserved = await client.query<{ reservation_id: string; role: string | null; attempt: unknown }>(
+    `SELECT reservation_id,role,attempt FROM (
+       SELECT DISTINCT ON (e.payload->'facts'->>'reservationId') e.payload->'facts'->>'reservationId' AS reservation_id,
+              e.payload->'facts'->>'role' AS role,e.payload->'facts'->'attempt' AS attempt,e.sequence
+         FROM relay_wonderland.events e
+        WHERE e.stream_id=$1 AND e.event_type='julius.budget.reserved' AND e.payload->>'taskId'=$2
+          AND COALESCE(e.payload->'facts'->>'reservationId','')<>''
+          AND NOT EXISTS(SELECT 1 FROM relay_wonderland.events s WHERE s.stream_id=e.stream_id AND s.event_type='julius.budget.settled'
+                          AND s.payload->'facts'->>'reservationId'=e.payload->'facts'->>'reservationId')
+        ORDER BY e.payload->'facts'->>'reservationId',e.sequence) opened
+     ORDER BY sequence`,
+    [task.runId, task.taskId]);
+  if (reserved.rows.length === 0) return [];
+  const dispatched = await client.query<{ attempt: unknown; reservation_id: string | null }>(
+    `SELECT e.payload->'facts'->'attempt' AS attempt,NULLIF(e.payload->'facts'->>'reservationId','') AS reservation_id FROM relay_wonderland.events e WHERE e.stream_id=$1 AND e.event_type='julius.worker.dispatched' AND e.payload->>'taskId'=$2`,
+    [task.runId, task.taskId]);
+  const open: JuliusOpenReservation[] = reserved.rows.map((row) => ({
+    reservationId: row.reservation_id,
+    role: row.role,
+    attempt: typeof row.attempt === 'number' ? row.attempt : null,
+  }));
+  const settlements = planJuliusRecoverySettlements(open, dispatched.rows.map((row) => ({
+    attempt: typeof row.attempt === 'number' ? row.attempt : null,
+    reservationId: row.reservation_id,
+  })));
+  for (const [index, settlement] of settlements.entries()) {
+    await appendJuliusEventWithin(client, juliusRecoverySettlementEvent({ ...task, reservation: open[index]!, settlement, occurredAt: now }));
+  }
+  return settlements;
 }

@@ -338,8 +338,16 @@ export async function resumeJuliusRun(
   // a PENDING approval, it went to READY: a state that says it continues when
   // driven, when it is still waiting on an approver. The claim and `advanceRun`
   // held it anyway, but the row and the route's reply said something untrue.
+  //
+  // A KNOWN RESIDUAL (the review of fb42b29f, finding 4, its probe P12). This
+  // read comes BEFORE `lifecycle()`'s own reload. A grant that lands between
+  // them does not move a PAUSED run (F1), so the reload still finds it PAUSED
+  // and the resume walks it to BLOCKED with nothing pending. Nothing is
+  // dispatched and no money moves: the row and the route's reply are wrong for
+  // one advance, and the next idle advance walks the run on. The fix, when this
+  // area is next touched: read the approvals after the reload.
   const waiting = (await deps.store.pendingApprovals(input.runId, input.projectId)).length > 0;
-  return lifecycle(input, waiting ? 'BLOCKED' : 'READY', 'OPERATOR_RESUMED', deps, false, 'run.resumed');
+  return lifecycle(input, waiting ? 'BLOCKED' : 'READY', 'OPERATOR_RESUMED', deps, false, 'run.resumed', 'PAUSED');
 }
 
 /**
@@ -365,6 +373,11 @@ async function lifecycle(
   // What the change IS, which is not always the state it lands in: a resume
   // that lands in BLOCKED (still waiting on an approval) is still a resume.
   announcement: LifecycleEventType | undefined = LIFECYCLE_EVENT[to],
+  // The state the change starts FROM, checked on THIS read. A resume decided
+  // its target from an earlier read; if another resume and a grant landed in
+  // between, the run is READY now, and walking it to BLOCKED would hold it on
+  // nothing (review of ab5ac9f8, P3-2).
+  requireFrom?: JuliusMissionState,
 ): Promise<JuliusLifecycleOutcome> {
   const run = await deps.store.loadRun(input.runId, input.projectId);
   if (run === null) return { applied: false, reasonCode: 'RUN_NOT_FOUND', safeMessage: 'No such run in this project.' };
@@ -372,6 +385,12 @@ async function lifecycle(
     return {
       applied: false, reasonCode: 'ACTOR_AND_REASON_REQUIRED',
       safeMessage: 'A lifecycle change records who asked and why. Neither may be blank.',
+    };
+  }
+  if (requireFrom !== undefined && run.state !== requireFrom) {
+    return {
+      applied: false, reasonCode: `RUN_NOT_${requireFrom}`,
+      safeMessage: `This run is ${run.state}, not ${requireFrom}: another change landed first, so this one does nothing.`,
     };
   }
   if (run.state === to) {

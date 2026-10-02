@@ -38,11 +38,13 @@ import { planRunStatePath, transitionIsLegal } from './julius-state-path';
  */
 export { planRunStatePath, transitionIsLegal };
 import {
-  juliusArchitectureGateFor, juliusFindingsGateFor, prepareClaimedTask, resumeUnverifiedTasks, runClaimedTask, serveArchitectureTriggers,
+  holdClaimAtAdmission, juliusArchitectureGateFor, juliusFindingsGateFor, prepareClaimedTask, resumeUnverifiedTasks, runClaimedTask, serveArchitectureTriggers,
+  taskAttemptCeiling,
   type JuliusPipelineDependencies, type JuliusTaskOutcome,
 } from './julius-task-pipeline';
 import { continuationConcurrency } from './julius-continuation';
 import { juliusRunHaltingFailureClass } from './julius-coding-agent';
+import { JuliusPersistenceUnavailable } from './julius-execution-coordinator';
 import type { JuliusClaimedTask, JuliusRecoveryDriver, JuliusRunRow } from './julius-runtime-ports';
 import { validateJuliusEvent } from './julius-events';
 import { JULIUS_RUNTIME_VERSION } from './julius-runtime';
@@ -102,6 +104,22 @@ export interface JuliusTickReport {
    * or took a slot in the run's concurrency allowance for this tick.
    */
   readonly refusedBeforeAdmission: number;
+  /**
+   * Tasks whose attempt ended with Julius unable to write even its ending
+   * (`JuliusPersistenceUnavailable`). A driver seeing this should back off
+   * rather than spin. `handed` says whether each may have been paid for: a
+   * handed task is left to recovery, which never dispatches it again.
+   */
+  readonly persistenceUnavailable: readonly JuliusPersistenceUnavailableClaim[];
+}
+
+/** One claim whose attempt met a store outage, and what is known about its money. */
+export interface JuliusPersistenceUnavailableClaim {
+  readonly taskId: string;
+  readonly runId: string;
+  readonly handed: boolean;
+  readonly phase: string;
+  readonly storeErrorClass: string | null;
 }
 
 export interface JuliusRunAdvance {
@@ -392,8 +410,9 @@ export class JuliusRunLoop {
     let yieldedForConcurrency = 0;
     let lostLeases = 0;
     let refusedBeforeAdmission = 0;
+    const persistenceUnavailable: JuliusPersistenceUnavailableClaim[] = [];
 
-    for (const claim of claims) {
+    for (const [index, claim] of claims.entries()) {
       touchedRunIds.add(claim.runId);
       const policy = await this.resolvePolicy(claim, scope, policyCache);
       if (policy === null) {
@@ -494,15 +513,26 @@ export class JuliusRunLoop {
        * `null` means the lease moved while we decided. The task is somebody
        * else's now: do not run it, and do not finish it either, because
        * finishing needs the generation we no longer hold.
+       *
+       * A HELD ADMISSION means the RUN refused it: paused, blocked, or holding
+       * an approval after the dispatch boundary had already looked (F3).
+       * Nothing was spent and the lease is still ours, so the task is handed
+       * back or ended exactly as the boundary would have done.
        */
-      const attempt = await this.deps.store.admitTask({
+      const admission = await this.deps.store.admitTask({
         taskId: claim.taskId, owner: this.deps.owner,
         leaseGeneration: claim.leaseGeneration, now: this.deps.clock.now(),
       });
-      if (attempt === null) {
+      if (admission === null) {
         lostLeases += 1;
         continue;
       }
+      if (typeof admission !== 'number') {
+        refusedBeforeAdmission += 1;
+        outcomes.push(await holdClaimAtAdmission(request, this.deps, scope));
+        continue;
+      }
+      const attempt = admission;
       /**
        * THE LEASE IS RENEWED FROM ADMISSION, not trusted from the claim. A task
        * queued behind another in this tick spent its lease waiting; the first
@@ -539,6 +569,37 @@ export class JuliusRunLoop {
           // attempt actually being run.
           ...request, ...(linked === null ? {} : { signal: linked.signal }), claim: { ...claim, attempt },
         }, this.deps, preflight));
+      } catch (error) {
+        /**
+         * ONE TASK'S THROW NO LONGER ABANDONS THE TICK.
+         *
+         * A throw here used to leave the loop, and every task claimed after
+         * this one waited out its lease with nobody running it: a lease of delay
+         * each, and a recovery spent against each for no fault of its own.
+         *
+         * A store OUTAGE is Julius's persistence failing even at the ending
+         * (`JuliusPersistenceUnavailable`), and it is isolated to this task:
+         *   - not handed: nothing was spent, and this process KNOWS it, which
+         *     is a stronger fact than the one recovery would read later (a
+         *     `worker.dispatched` write that committed but was never
+         *     acknowledged reads there as handed). So it goes straight back,
+         *     while its attempts last. Admission spent one; at the ceiling it
+         *     is left to its lease, and the sweep ends it with the
+         *     `recovery.action` row that explains it, so a flapping store
+         *     cannot cycle a task through claim and admission without bound;
+         *   - handed: it may have been paid for, so it is left exactly as it
+         *     is. When its lease expires, recovery ends it as
+         *     HANDED_OUTCOME_UNKNOWN and never dispatches it again.
+         * Anything else is a defect rather than an outage. It still propagates,
+         * but only after the claims nobody has started are handed back, so one
+         * defect cannot strand the rest of the batch.
+         */
+        if (!(error instanceof JuliusPersistenceUnavailable)) {
+          await this.handBack(claims.slice(index + 1));
+          throw error;
+        }
+        persistenceUnavailable.push({ taskId: claim.taskId, runId: claim.runId, handed: error.handed, phase: error.phase, storeErrorClass: error.storeErrorClass });
+        if (!error.handed && attempt < taskAttemptCeiling(claim.taskType)) await this.handBack([claim]);
       } finally {
         linked?.detach();
         await keeper?.stop();
@@ -578,7 +639,28 @@ export class JuliusRunLoop {
       claimed: claimed.length, outcomes, runs,
       unresolvedPolicyRunIds: [...unresolvedPolicyRunIds], yieldedForConcurrency,
       yieldedForFairness: yielded.length, lostLeases, refusedBeforeAdmission,
+      persistenceUnavailable,
     };
+  }
+
+  /**
+   * CLAIMS BACK TO RUNNABLE AT ONCE, rather than after a lease of waiting.
+   * Best effort: a store that cannot take the hand-back leaves each task to
+   * its lease, which is where it already was. A claim this tick never reached
+   * spent no attempt; one that met an outage before its handoff spent the one
+   * its admission took, which is what bounds how often that can happen.
+   */
+  private async handBack(claims: readonly JuliusClaimedTask[]): Promise<void> {
+    for (const claim of claims) {
+      try {
+        await this.deps.store.finishTask({
+          taskId: claim.taskId, owner: this.deps.owner, leaseGeneration: claim.leaseGeneration,
+          state: 'FAILED', now: this.deps.clock.now(), nextAttemptAt: this.deps.clock.now(),
+        });
+      } catch {
+        // The store is the thing failing. The lease will bring the task back.
+      }
+    }
   }
 
   private async resolvePolicy(
@@ -707,7 +789,15 @@ export class JuliusRunLoop {
         // nobody can follow.
         correlationId: action.taskId ?? run.runId, causationId: null,
         occurredAt: this.deps.clock.now(),
-        facts: { action: action.action, reasonCode: action.reasonCode, owner: this.deps.owner },
+        facts: {
+          action: action.action, reasonCode: action.reasonCode, owner: this.deps.owner,
+          // (a2) step 2: the store closed what the lost attempt left open, in the same step as the
+          // lease change. This only reports it; the closing rows are the store's own.
+          ...(action.settlements !== undefined && action.settlements.length > 0 ? {
+            reservationsReleased: action.settlements.filter((settlement) => settlement.released).length,
+            reservationsHeldUnknown: action.settlements.filter((settlement) => !settlement.released).length,
+          } : {}),
+        },
       };
       validateJuliusEvent(event);
       await this.deps.store.appendEvent(event);

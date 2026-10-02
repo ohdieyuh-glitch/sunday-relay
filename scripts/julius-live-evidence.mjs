@@ -36,6 +36,8 @@ const ALLOWED = [
   // tokens only, exactly as `liveBillingPaths`, `claudeAuthLine` and the ledger check print them.
   /^  billing paths: architect=(API_BILLED|SUBSCRIPTION|NOT_APPLICABLE|UNKNOWN) coder=(API_BILLED|SUBSCRIPTION|UNDECIDED) reviewer=(API_BILLED|SUBSCRIPTION|NOT_APPLICABLE|UNKNOWN|UNDECLARED)$/u,
   /^  CLAUDE AUTH: (API KEY|SUBSCRIPTION) provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=(n\/a|max|pro|team|enterprise|unknown) api_key_used=(true|false) api_cost_applicable=(true|false)$/u,
+  // WHY a Claude auth mode was refused: the RESULT: BLOCKED that follows says only that it was.
+  /^  CLAUDE AUTH: REFUSED — [a-z_]+: .+$/u,
   // WHICH subscription credential (stored login or setup-token token) — a class name, never a value.
   /^  claude auth source: (local_subscription|subscription_oauth_token|anthropic_api_key)$/u,
   /^  live_ledger: (BOUND|UNBOUND|UNKNOWN)$/u,
@@ -49,10 +51,20 @@ const ALLOWED = [
   /^JULIUS LIVE MISSION crashed: .+$/u,
   /^  cause: .+$/u,
   // The tick account: what the mission's structure permitted, before the first
-  // dispatch, and what the run consumed. Closed tokens and numbers only.
-  /^  tick budget: planned=\d+ hard_max=\d+ units=[A-Za-z_,]+ repair_rounds=\d+ segment_ceiling=\d+ reviewer=(required|not_required) attempts=\d+ override=(none|\d+) version=julius-tick-budget\.v1$/u,
+  // dispatch, and what the run consumed. Closed tokens and numbers only, EXACTLY
+  // as `liveTickBudgetLine` and `liveTickAccountLine` print them: when the two
+  // gained `disagreement=` and `architecture=`, shapes that still lacked them
+  // dropped both lines from every paid run's artifact (P4).
+  /^  tick budget: planned=\d+ hard_max=\d+ units=[A-Za-z_,]+ repair_rounds=\d+ segment_ceiling=\d+ reviewer=(required|not_required) attempts=\d+ disagreement=(one_rebuttal_one_re_review_per_review|unreachable) architecture=max_\d+_consultations_per_run override=(none|\d+) version=julius-tick-budget\.v1$/u,
   /^  wall clock deadline: (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z|UNKNOWN)$/u,
-  /^  ticks: consumed=\d+ allowance=\d+ remaining=\d+ beyond_main_path=\d+ retries=\d+ exhausted=(yes|no)$/u,
+  /^  ticks: consumed=\d+ allowance=\d+ remaining=\d+ beyond_main_path=\d+ disagreement=\d+ architecture=\d+ retries=\d+ exhausted=(yes|no)$/u,
+  // Which workflow attempt the run's peer records are scoped to (`liveExecutionScope`).
+  /^  peer execution scope: (gh-\d{1,20}\.\d{1,4}|local)$/u,
+  // The research a contract granted and what it can reach (`liveResearchLines`): closed tokens.
+  /^  research: NOT AUTHORISED \(no contract clause\) — every ask is refused research_not_authorized$/u,
+  // `(none)`: a sealed clause that names no role grants nobody anything, and says so (F4).
+  /^  research: authorised for ([A-Z_]+(, [A-Z_]+)*|\(none\)) across \d+ allowance\(s\); \d+ observed backend\(s\)$/u,
+  /^    [a-z_]+\/[a-z_]+: [a-z_]+( — retrieval will be refused)?$/u,
   /^Run [\w:.-]+ accepted in state [A-Z_]+; driving the Julius run loop\.$/u,
   /^  run: [\w:.-]+$/u,
   /^  task [\w:.-]+ \[[\w:.-]+\/[\w:.-]+\] → [A-Z_]+$/u,

@@ -31,7 +31,11 @@ describe('the execution scope of a live process', () => {
     const open = entry.indexOf('assembleLiveJuliusRuntime({');
     const body = entry.slice(open, entry.indexOf('});', open));
     expect(body).toContain('executionScope: liveExecutionScope(env)');
-    expect(entry).toContain('peer execution scope: ${liveExecutionScope(env)}');
+    // Printed by `liveExecutionScopeLine` (P4), so the allowlist's test can generate the line it keeps.
+    const printed = entry.indexOf('out(liveExecutionScopeLine(liveExecutionScope(env)))');
+    expect(printed).toBeGreaterThan(-1);
+    expect(printed, 'before the first dispatch').toBeLessThan(entry.indexOf('await driveJuliusRunToTerminal('));
+    expect(readFileSync(join(process.cwd(), 'relay-bridge/julius/live-report-lines.ts'), 'utf8')).toContain('peer execution scope: ${scope}');
     const composition = readFileSync(join(process.cwd(), 'relay-bridge/julius/live-composition.ts'), 'utf8');
     expect(composition).toContain('{ executionScope: options.executionScope }');
   });

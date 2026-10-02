@@ -194,6 +194,75 @@ const emptyAccount = (
 const settlementIsKnown = (basis: JuliusCostBasis, usdMicros: number | null): boolean =>
   usdMicros !== null && (basis === 'PROVIDER_REPORTED' || basis === 'MEASURED_FROM_USAGE');
 
+/** What one `budget.settled` row proves about its reservation, read once. */
+export interface JuliusSettlementReading {
+  /** The writer said NOTHING WAS SENT. Stated explicitly, never inferred from a null. */
+  readonly released: boolean;
+  /** A figure the provider reported or usage measured, when the row carries one. */
+  readonly knownUsdMicros: number | null;
+  /** No bill, but the runtime's own price for the execution (`NOT_APPLICABLE` with a figure). */
+  readonly executionUsdMicros: number | null;
+}
+
+export function juliusSettlementReading(facts: Readonly<Record<string, unknown>>): JuliusSettlementReading {
+  const basis = safeJuliusCostBasis(facts.costBasis);
+  const reported = num(facts.usdMicros);
+  return {
+    released: facts.released === true,
+    knownUsdMicros: settlementIsKnown(basis, reported) ? reported : null,
+    executionUsdMicros: basis === 'NOT_APPLICABLE' ? num(facts.executionUsdMicros) : null,
+  };
+}
+
+/** How one reservation is charged: still held, freed, or settled in one of three ways. */
+export type JuliusReservationCharge =
+  | { readonly kind: 'OUTSTANDING' }
+  | { readonly kind: 'RELEASED' }
+  | { readonly kind: 'KNOWN'; readonly usdMicros: number }
+  | { readonly kind: 'EXECUTION'; readonly usdMicros: number }
+  | { readonly kind: 'UNKNOWN' };
+
+const largest = (values: readonly (number | null)[]): number | null =>
+  values.reduce<number | null>((max, value) => (value !== null && (max === null || value > max) ? value : max), null);
+
+/**
+ * ONE RESERVATION, CHARGED ONCE, BY EVERYTHING ITS SETTLEMENT ROWS PROVE ((a2) step 3).
+ *
+ * The ledger kept a reservation's FIRST settlement and ignored the rest. Once recovery closes what a
+ * lost attempt left open, a reservation can honestly carry two rows (the sweep's close, and a late
+ * settlement from an attempt whose lease lapsed while it was alive), and first-wins under-counts:
+ * closed UNKNOWN then the provider's larger figure lost the figure, and closed RELEASED then a figure
+ * read money spent as money never sent. The rule, whatever the order:
+ *   - NO ROW: still held (outstanding).
+ *   - ONLY RELEASED ROWS: nothing was sent. The one case that genuinely frees capacity.
+ *   - A RELEASED ROW NEVER OUTWEIGHS ONE THAT SAYS MONEY MAY HAVE GONE; the others decide:
+ *     - the largest PRICED figure is charged, in its own kind: a known figure (a bill, or measured
+ *       usage) or the runtime's priced execution (NO BILL, BUT A PRICED EXECUTION: a subscription-
+ *       backed dispatch reports `NOT_APPLICABLE` and carries its own price). Where an UNKNOWN close
+ *       stands beside it, the larger of that figure and the hold, because the close says the spend
+ *       may exceed it;
+ *     - with no priced figure, UNKNOWN, charged at what it HELD, never at nothing.
+ * So the charge is never less than any one of the rows would have charged alone. Rows are never
+ * SUMMED: two rows for one reservation are one dispatch's money recorded twice, and the
+ * settlement-integrity check is what reports the pair. A single row reads exactly as it always did.
+ */
+export function juliusReservationCharge(
+  holdUsdMicros: number,
+  settlements: readonly JuliusSettlementReading[],
+): JuliusReservationCharge {
+  if (settlements.length === 0) return { kind: 'OUTSTANDING' };
+  const spending = settlements.filter((reading) => !reading.released);
+  if (spending.length === 0) return { kind: 'RELEASED' };
+  const known = largest(spending.map((reading) => reading.knownUsdMicros));
+  const execution = largest(spending.map((reading) => reading.executionUsdMicros));
+  const unknownClose = spending.some((reading) => reading.knownUsdMicros === null && reading.executionUsdMicros === null);
+  const priced: JuliusReservationCharge | null = known !== null && (execution === null || known >= execution)
+    ? { kind: 'KNOWN', usdMicros: known }
+    : execution !== null ? { kind: 'EXECUTION', usdMicros: execution } : null;
+  if (priced === null) return { kind: 'UNKNOWN' };
+  return unknownClose && priced.usdMicros < holdUsdMicros ? { kind: 'UNKNOWN' } : priced;
+}
+
 /**
  * Build the ledger from the run's own durable budget rows.
  *
@@ -226,6 +295,9 @@ export function projectJuliusSlotLedger(input: {
     return created;
   };
 
+  // PASS 1: every reservation, in ledger order, with every settlement row that followed it. A row
+  // that settles a reservation not yet opened is impossible in ledger order and is ignored.
+  const reservations = new Map<string, { readonly reservation: JuliusSlotReservation; readonly settlements: JuliusSettlementReading[] }>();
   for (const row of input.rows) {
     if (row.type === 'budget.allocated') {
       // NOT A MOVEMENT. An allocation is a decision recorded beside the money,
@@ -244,14 +316,10 @@ export function projectJuliusSlotLedger(input: {
       // be attributed. It is COUNTED in the revision — it is a real ledger
       // movement — and left out of the accounts rather than guessed at.
       if (reservationId === null || slot === null || usdMicros === null) continue;
-      if (open.has(reservationId)) continue;
-      open.set(reservationId, { reservationId, slot: slot as JuliusWorkerRole, taskId: row.taskId ?? '', usdMicros });
-      const account = accountFor(slot);
-      accounts.set(slot, {
-        ...account,
-        reservationsOpened: account.reservationsOpened + 1,
-        outstandingUsdMicros: account.outstandingUsdMicros + usdMicros,
-        outstandingCount: account.outstandingCount + 1,
+      if (reservations.has(reservationId)) continue;
+      reservations.set(reservationId, {
+        reservation: { reservationId, slot: slot as JuliusWorkerRole, taskId: row.taskId ?? '', usdMicros },
+        settlements: [],
       });
       continue;
     }
@@ -259,62 +327,49 @@ export function projectJuliusSlotLedger(input: {
     revision += 1;
     const reservationId = text(row.facts.reservationId);
     if (reservationId === null) continue;
-    const reservation = open.get(reservationId);
-    if (reservation === undefined) continue;
-    open.delete(reservationId);
+    reservations.get(reservationId)?.settlements.push(juliusSettlementReading(row.facts));
+  }
 
-    const basis = safeJuliusCostBasis(row.facts.costBasis);
-    const reported = num(row.facts.usdMicros);
+  // PASS 2: each reservation charged ONCE, by everything its rows prove (`juliusReservationCharge`).
+  for (const { reservation, settlements } of reservations.values()) {
     const account = accountFor(reservation.slot);
-    const released = row.facts.released === true;
-
-    if (released) {
-      // NOTHING WAS SENT. The only case that genuinely frees capacity, and the
-      // caller states it explicitly — this is never inferred from a null.
-      accounts.set(reservation.slot, {
-        ...account,
-        outstandingUsdMicros: account.outstandingUsdMicros - reservation.usdMicros,
-        outstandingCount: account.outstandingCount - 1,
-        releasedUsdMicros: account.releasedUsdMicros + reservation.usdMicros,
-      });
-      continue;
+    const opened = { ...account, reservationsOpened: account.reservationsOpened + 1 };
+    const charge = juliusReservationCharge(reservation.usdMicros, settlements);
+    switch (charge.kind) {
+      case 'OUTSTANDING':
+        open.set(reservation.reservationId, reservation);
+        accounts.set(reservation.slot, {
+          ...opened,
+          outstandingUsdMicros: opened.outstandingUsdMicros + reservation.usdMicros,
+          outstandingCount: opened.outstandingCount + 1,
+        });
+        break;
+      case 'RELEASED':
+        accounts.set(reservation.slot, { ...opened, releasedUsdMicros: opened.releasedUsdMicros + reservation.usdMicros });
+        break;
+      case 'KNOWN':
+        accounts.set(reservation.slot, {
+          ...opened,
+          settledKnownUsdMicros: opened.settledKnownUsdMicros + charge.usdMicros,
+          settledKnownCount: opened.settledKnownCount + 1,
+        });
+        break;
+      case 'EXECUTION':
+        accounts.set(reservation.slot, {
+          ...opened,
+          settledExecutionUsdMicros: opened.settledExecutionUsdMicros + charge.usdMicros,
+          settledExecutionCount: opened.settledExecutionCount + 1,
+        });
+        break;
+      case 'UNKNOWN':
+        // Charged at what it HELD, not at nothing.
+        accounts.set(reservation.slot, {
+          ...opened,
+          settledUnknownUsdMicros: opened.settledUnknownUsdMicros + reservation.usdMicros,
+          settledUnknownCount: opened.settledUnknownCount + 1,
+        });
+        break;
     }
-    if (settlementIsKnown(basis, reported)) {
-      accounts.set(reservation.slot, {
-        ...account,
-        outstandingUsdMicros: account.outstandingUsdMicros - reservation.usdMicros,
-        outstandingCount: account.outstandingCount - 1,
-        settledKnownUsdMicros: account.settledKnownUsdMicros + (reported as number),
-        settledKnownCount: account.settledKnownCount + 1,
-      });
-      continue;
-    }
-    /**
-     * NO BILL, BUT A PRICED EXECUTION. A subscription-backed dispatch reports
-     * `NOT_APPLICABLE` and carries the runtime's own figure beside it; the slot is
-     * charged that figure, as an API dispatch is charged its bill. Without a
-     * figure the consumption is unknown, and it falls through to the rule below:
-     * charged at what it held.
-     */
-    const execution = basis === 'NOT_APPLICABLE' ? num(row.facts.executionUsdMicros) : null;
-    if (execution !== null) {
-      accounts.set(reservation.slot, {
-        ...account,
-        outstandingUsdMicros: account.outstandingUsdMicros - reservation.usdMicros,
-        outstandingCount: account.outstandingCount - 1,
-        settledExecutionUsdMicros: account.settledExecutionUsdMicros + execution,
-        settledExecutionCount: account.settledExecutionCount + 1,
-      });
-      continue;
-    }
-    // UNKNOWN. Charged at what it HELD, not at nothing.
-    accounts.set(reservation.slot, {
-      ...account,
-      outstandingUsdMicros: account.outstandingUsdMicros - reservation.usdMicros,
-      outstandingCount: account.outstandingCount - 1,
-      settledUnknownUsdMicros: account.settledUnknownUsdMicros + reservation.usdMicros,
-      settledUnknownCount: account.settledUnknownCount + 1,
-    });
   }
 
   let committed = 0;

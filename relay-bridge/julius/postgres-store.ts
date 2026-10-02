@@ -56,7 +56,8 @@ export function createJuliusPostgresRuntimeStore(
   pool: Pool,
 ): JuliusRuntimeStore & JuliusRecoveryDriver & JuliusTimelineReader
   & Required<Pick<JuliusRuntimeReader, 'haltingFailureClasses'>>
-  & Required<Pick<JuliusApprovalStore, 'pendingApprovals' | 'deniedApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>> {
+  & Required<Pick<JuliusApprovalStore, 'pendingApprovals' | 'deniedApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>>
+  & Required<Pick<JuliusRuntimeStore, 'appendHandoffEvent' | 'appendSettlementEvent'>> {
   const runs = new JuliusPostgresRepository(pool);
   const results = new JuliusRecoveryPostgresRepository(pool);
   const contexts = new JuliusContextPostgresRepository(pool);
@@ -86,6 +87,10 @@ export function createJuliusPostgresRuntimeStore(
     recoverExpired: results.recoverExpired.bind(results),
     persist: contexts.persist.bind(contexts),
     appendEvent: async (event) => (await events.append(event)).recorded,
+    // THE HANDOFF, FENCED BY THE LEASE ((a2)): `worker.dispatched` only while the attempt owns the task.
+    appendHandoffEvent: (input) => events.appendHandoff(input),
+    // A RELEASE WRITTEN ONLY WHEN IT SAYS SOMETHING ((a2) step 3): decided against the reservation's settlements.
+    appendSettlementEvent: (event) => events.appendSettlement(event),
     appendTrajectory: (event) => trajectories.append(event),
     tasksForRun: reader.tasksForRun.bind(reader),
     evidenceForRun: reader.evidenceForRun.bind(reader),

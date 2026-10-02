@@ -96,6 +96,18 @@ export interface JuliusClaimedTask {
   readonly attempt: number;
 }
 
+/**
+ * An admission the RUN refused, not the lease: the run was held (paused,
+ * blocked, terminal, or holding a PENDING or DENIED approval) when the attempt
+ * would have been spent. Nothing was spent, and the caller still holds the lease.
+ */
+export interface JuliusAdmissionHeld {
+  readonly held: true;
+  readonly runState: JuliusMissionState;
+  readonly pendingApprovals: number;
+  readonly deniedApprovals: number;
+}
+
 /** Structurally identical to `JuliusResultReceipt`. */
 export interface JuliusResultReceiptRow {
   readonly recorded: boolean;
@@ -138,10 +150,20 @@ export interface JuliusRunWriter {
    *
    * Returns the NEW execution attempt, or null when the lease has moved on —
    * the caller no longer owns the task and must not run it or finish it.
+   *
+   * AND THE LAST GOVERNANCE CHECK BEFORE MONEY. The dispatch boundary read the
+   * run and its approvals before the context was compiled and the contract
+   * checked; a pause, an approval gate or a denial committed in between was
+   * never seen, and the provider was called for a run its operator had just
+   * paused. So admission re-reads them in the same atomic write, and a run that
+   * may not start new work (`JULIUS_CLAIMABLE_RUN_STATES`, and no PENDING or
+   * DENIED approval, exactly as the claim) answers `JuliusAdmissionHeld`:
+   * nothing is spent, and the caller still owns the task and must hand it back
+   * or end it.
    */
   admitTask(input: {
     taskId: string; owner: string; leaseGeneration: number; now: string;
-  }): Promise<number | null>;
+  }): Promise<number | null | JuliusAdmissionHeld>;
   heartbeat(input: {
     taskId: string; owner: string; leaseGeneration: number; now: string; leaseExpiresAt: string;
   }): Promise<boolean>;
@@ -287,6 +309,34 @@ export interface JuliusEventWriter {
    * `julius-event-append-conformance.ts` now runs one set of cases against both.
    */
   appendEvent(event: JuliusOperationalEvent): Promise<boolean>;
+  /**
+   * THE HANDOFF, FENCED BY THE LEASE ((a2)).
+   *
+   * `worker.dispatched` is the fact that makes an attempt "handed": everything
+   * after it may have been paid for, and recovery never dispatches it again. So
+   * it is written only while the attempt still OWNS the task (ACTIVE, this
+   * owner, this lease generation), with the task row locked for the write. A
+   * recovery that took the task first makes this answer LEASE_LOST, and the
+   * caller must not call the provider. A recovery that comes second skips the
+   * locked task and reads it as handed on its next sweep. Optional: a store
+   * without it is written through unfenced, as before.
+   */
+  appendHandoffEvent?(input: {
+    event: JuliusOperationalEvent; owner: string; leaseGeneration: number;
+  }): Promise<'RECORDED' | 'DUPLICATE' | 'LEASE_LOST'>;
+  /**
+   * A RELEASE, WRITTEN ONLY WHEN IT SAYS SOMETHING ((a2) step 3).
+   *
+   * A `budget.settled` row from the coordinator's own release, decided against
+   * the settlements its reservation already carries, under the run-row lock
+   * (`juliusLateSettlementDecision`): a row carrying cost is always written; a
+   * FREE release after closes that were all released is SAME_MEANING and not
+   * written; a FREE release after a close that says money may have gone is
+   * written with a `budget.settlement.conflict` event (CONFLICT): two readings
+   * that disagree, neither shown false, both kept.
+   * Optional: a store without it writes every release, as before.
+   */
+  appendSettlementEvent?(event: JuliusOperationalEvent): Promise<'RECORDED' | 'DUPLICATE' | 'SAME_MEANING' | 'CONFLICT'>;
 }
 
 export interface JuliusTrajectoryWriter {

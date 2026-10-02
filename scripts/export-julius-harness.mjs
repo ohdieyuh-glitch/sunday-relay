@@ -234,6 +234,7 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-file-authority.ts', 'TOOLS'],
   ['src/relay/mission/julius/julius-artifacts.ts', 'ARTIFACTS / EVIDENCE'],
   ['src/relay/mission/julius/julius-verification-runtime.ts', 'VERIFICATION'],
+  ['src/relay/mission/julius/julius-attempt-evidence.ts', 'VERIFICATION'],
   ['src/relay/mission/julius/julius-repair-runtime.ts', 'REPAIR'],
   ['src/relay/mission/julius/julius-repair-lineage.ts', 'REPAIR'],
   ['src/relay/mission/julius/julius-release-runtime.ts', 'TASK GRAPH / SCHEDULER'],
@@ -412,6 +413,12 @@ const FILE_RULES = [
   ['src/relay/mission/trace/', 'EVENTS / TRAJECTORIES'],
   // Bridge-side composition.
   ['relay-bridge/julius-live-mission.ts', 'MISSION CONTRACT / BOOTSTRAP'],
+  // What the entrypoint prints after RESULT: each evidence row, labelled when it belongs to an
+  // attempt the decision did not read. A printer of its own so the allowlist's test generates from it.
+  ['relay-bridge/julius/live-evidence-lines.ts', 'MISSION CONTRACT / BOOTSTRAP'],
+  // The rest of what it prints, each one physical line: the tick budget and account, the peer
+  // execution scope, the research, and the refusals.
+  ['relay-bridge/julius/live-report-lines.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/mission-contract.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/bootstrap.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/mission-seed.ts', 'MISSION CONTRACT / BOOTSTRAP'],

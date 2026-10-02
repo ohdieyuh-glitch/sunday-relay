@@ -28,6 +28,8 @@ import { createHash } from 'node:crypto';
 import type { JuliusContractReviewCharge } from '../../src/relay/mission/julius/julius-task-contract';
 import {
   JuliusDispatchError,
+  juliusStoreErrorClass,
+  juliusStoreErrorIsTransient,
   reviewChargeFor,
   reviewStageOf,
   reviewSubjectTaskId,
@@ -630,6 +632,12 @@ const providerFacts = (
   outcome: GptRunOutcome,
   startedAtMs: number,
   maxOutputTokens: number,
+  /**
+   * The instant the dispatch is reported complete. A success path passes the one
+   * it also puts on `usage.runtimeMs`, so the dispatch row and the trajectory row
+   * carry the same reading; every other caller reads the clock here, as before.
+   */
+  completedAtMs: number = Date.now(),
 ): {
   readonly servedModel: string | null;
   readonly responseId: string | null;
@@ -658,7 +666,7 @@ const providerFacts = (
   maxOutputTokens,
   // A success is by definition not incomplete; null there is the true answer.
   incompleteReason: outcome.ok ? null : outcome.incompleteReason ?? null,
-  elapsedMs: Date.now() - startedAtMs,
+  elapsedMs: completedAtMs - startedAtMs,
 });
 
 /**
@@ -1130,6 +1138,7 @@ export function createLiveArchitectAdapter(input: {
               outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
             }));
         }
+        const completedAtMs = Date.now();
         return {
           workerId: input.worker.workerId,
           providerId: input.worker.providerId,
@@ -1152,7 +1161,7 @@ export function createLiveArchitectAdapter(input: {
             occurredAt: nowIso(),
           }],
           diagnostics: planDiagnostics({
-            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens, completedAtMs),
             requestedModel: input.config.model,
             jsonParseable: true, validationPassed: true, outcome: 'succeeded',
             attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
@@ -1161,6 +1170,8 @@ export function createLiveArchitectAdapter(input: {
             inputTokens: outcome.usage.inputTokens ?? undefined,
             outputTokens: outcome.usage.outputTokens ?? undefined,
             toolCalls: 0,
+            // The same reading as the dispatch row's `elapsedMs`; see the plan path below.
+            runtimeMs: completedAtMs - startedAtMs,
             costBasis: 'UNKNOWN',
             ...ARCHITECT_BILLING,
           },
@@ -1186,6 +1197,7 @@ export function createLiveArchitectAdapter(input: {
               outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
             }));
         }
+        const completedAtMs = Date.now();
         return {
           workerId: input.worker.workerId,
           providerId: input.worker.providerId,
@@ -1209,7 +1221,7 @@ export function createLiveArchitectAdapter(input: {
             occurredAt: nowIso(),
           }],
           diagnostics: planDiagnostics({
-            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens, completedAtMs),
             requestedModel: input.config.model,
             jsonParseable: true, validationPassed: true, outcome: 'succeeded',
             attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
@@ -1218,6 +1230,8 @@ export function createLiveArchitectAdapter(input: {
             inputTokens: outcome.usage.inputTokens ?? undefined,
             outputTokens: outcome.usage.outputTokens ?? undefined,
             toolCalls: 0,
+            // The same reading as the dispatch row's `elapsedMs`; see the plan path below.
+            runtimeMs: completedAtMs - startedAtMs,
             costBasis: 'UNKNOWN',
             ...ARCHITECT_BILLING,
           },
@@ -1237,6 +1251,7 @@ export function createLiveArchitectAdapter(input: {
             }));
         }
         input.artifacts.put(guidanceRef(dispatch.taskId), outcome.outputText);
+        const completedAtMs = Date.now();
         return {
           workerId: input.worker.workerId,
           providerId: input.worker.providerId,
@@ -1265,7 +1280,7 @@ export function createLiveArchitectAdapter(input: {
             occurredAt: nowIso(),
           }],
           diagnostics: planDiagnostics({
-            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens, completedAtMs),
             requestedModel: input.config.model,
             jsonParseable: true, validationPassed: true, outcome: 'succeeded',
             attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
@@ -1274,6 +1289,8 @@ export function createLiveArchitectAdapter(input: {
             inputTokens: outcome.usage.inputTokens ?? undefined,
             outputTokens: outcome.usage.outputTokens ?? undefined,
             toolCalls: 0,
+            // The same reading as the dispatch row's `elapsedMs`; see the plan path below.
+            runtimeMs: completedAtMs - startedAtMs,
             costBasis: 'UNKNOWN',
             ...ARCHITECT_BILLING,
           },
@@ -1302,6 +1319,7 @@ export function createLiveArchitectAdapter(input: {
           }));
       }
       input.artifacts.put(planRef(snapshot.runId), outcome.outputText);
+      const completedAtMs = Date.now();
       return {
         workerId: input.worker.workerId,
         providerId: input.worker.providerId,
@@ -1356,7 +1374,7 @@ export function createLiveArchitectAdapter(input: {
          * dispatch bought one provider call or two.
          */
         diagnostics: planDiagnostics({
-          ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+          ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens, completedAtMs),
           requestedModel: input.config.model,
           jsonParseable: true, validationPassed: true, outcome: 'succeeded',
           attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
@@ -1365,6 +1383,17 @@ export function createLiveArchitectAdapter(input: {
           inputTokens: outcome.usage.inputTokens ?? undefined,
           outputTokens: outcome.usage.outputTokens ?? undefined,
           toolCalls: 0,
+          /**
+           * THE WALL TIME THIS DISPATCH TOOK, ON THE ROW THE EVALS READ.
+           *
+           * The coordinator fills the trajectory's `durationMs` from
+           * `usage.runtimeMs`, and no live adapter reported it — only the
+           * runtime fixtures did — so paid run 36915013287 recorded tokens on
+           * every provider dispatch and a null duration on all four. This is the
+           * same reading `providerFacts` puts on the dispatch row as `elapsedMs`,
+           * taken once, so the two rows cannot disagree.
+           */
+          runtimeMs: completedAtMs - startedAtMs,
           // Tokens, never a price: this provider reports no cost, so the basis
           // is UNKNOWN and the reservation stays held rather than settling at
           // zero. Unknown is not free.
@@ -1514,12 +1543,30 @@ export function createJuliusCodingAgentAdapter(input: {
        */
       const restoreRequest = dispatch.workspace === undefined ? null
         : { toTree: dispatch.workspace.restoreToTree, expectedTree: dispatch.workspace.expectedTree };
-      const before = await input.shell.run({
-        ...shellScope,
-        invocationKey: `${dispatch.taskId}:base`,
-        command: juliusAttemptStartCommand(restoreRequest),
-        timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.base,
-      });
+      /**
+       * BEFORE THE SESSION, JULIUS'S OWN STORE FAILING IS JULIUS'S, AND NOTHING
+       * RAN. The start snapshot writes PostgreSQL through the shell port, and a
+       * raw store error from it used to reach the kernel unnamed: a socket
+       * errno read as a provider timeout. No session has been launched here,
+       * so the failure says so, and a transient one may be retried for free.
+       * An executor refusal keeps its own meaning, unchanged.
+       */
+      const before = await (async () => {
+        try {
+          return await input.shell.run({
+            ...shellScope,
+            invocationKey: `${dispatch.taskId}:base`,
+            command: juliusAttemptStartCommand(restoreRequest),
+            timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.base,
+          });
+        } catch (error) {
+          const storeErrorClass = error instanceof JuliusDispatchError ? null : juliusStoreErrorClass(error);
+          if (storeErrorClass === null) throw error;
+          throw new JuliusDispatchError('PERSISTENCE_FAILURE', juliusStoreErrorIsTransient(storeErrorClass),
+            'Julius could not record the attempt start in its own store; no coding session was launched.',
+            'persist_before_session', { runtimeStarted: false, storeErrorClass });
+        }
+      })();
       const attemptStart = before.status === 'SUCCEEDED'
         ? parseJuliusAttemptStart(before.stdout, restoreRequest)
         : { headRevision: null, baseTree: null, startTree: null, restore: restoreRequest === null ? null : { outcome: 'REFUSED_EXECUTOR' as const, toTree: restoreRequest.toTree, expectedTree: restoreRequest.expectedTree, observedTree: null, removed: 0, restored: 0 } };
@@ -1537,7 +1584,18 @@ export function createJuliusCodingAgentAdapter(input: {
         participationProtocol: juliusParticipationProtocol(),
         researchAuthority: researchAuthorityFor(input.researchPolicyFor, snapshot.packet.missionId, input.worker.role),
       });
+      /**
+       * THE WALL TIME OF THE PROVIDER SESSION, measured around the one call that
+       * buys it, exactly as the architect's is measured around its own. Paid run
+       * 36915013287's Coding Agent row carried no `elapsed_ms` at all, so the
+       * only role whose latency the beta most needs to know had none. The
+       * executor steps that follow (status, diff, test) are not the provider's
+       * time and are measured by their own invocations. The same reading lands
+       * on the dispatch row (`elapsedMs`) and the trajectory row (`runtimeMs`).
+       */
+      const providerStartedAtMs = Date.now();
       const outcome = await input.provider.execute(request, dispatch.signal);
+      const providerElapsedMs = Date.now() - providerStartedAtMs;
 
       /** The close-out look at the workspace: the tree this attempt leaves, the change set, and who changed what. */
       const closeStep = () => input.shell.run({
@@ -1598,6 +1656,7 @@ export function createJuliusCodingAgentAdapter(input: {
             codingAgentFailure: outcome.failure,
             operatorActionRequired: disposition.operatorAction,
             runtimeStarted: outcome.runtimeStarted,
+            elapsedMs: providerElapsedMs,
             ...(outcome.costUsdMicros === null ? {} : { costUsdMicros: outcome.costUsdMicros }),
           },
           {
@@ -1620,16 +1679,37 @@ export function createJuliusCodingAgentAdapter(input: {
        * so the reservation was released at $0 for a session the runtime had
        * billed. The provider's cost rides on any failure from here on.
        */
+      //
+      // AND EVERY FAILURE AFTER THE SESSION CARRIES IT, while a store failure is
+      // Julius's own and is never retried (independent review F8, F9, F10). A
+      // raw error used to leave here unwrapped: an ETIMEDOUT from Julius's own
+      // write became a provider TIMEOUT and was retried, buying a SECOND paid
+      // session; a code-less driver string became the worker's failure; and
+      // either way the session's cost facts were dropped.
       const afterSession = async <T,>(step: () => Promise<T>): Promise<T> => {
         try {
           return await step();
         } catch (error) {
-          if (!(error instanceof JuliusDispatchError)) throw error;
-          throw new JuliusDispatchError(error.code, error.retryable, error.safeMessage, error.failureClass, {
-            ...(error.diagnostics ?? {}),
-            runtimeStarted: true,
-            ...sessionCostFacts(outcome.observation),
-          });
+          const consumed = { runtimeStarted: true, ...sessionCostFacts(outcome.observation) };
+          if (error instanceof JuliusDispatchError) {
+            // A retry of this task is a new paid session, so NO failure after
+            // one earns it: not bookkeeping, however transient the store, and
+            // not a typed error that arrives saying it is retryable. The code
+            // keeps its meaning; the retry does not survive the session. (The
+            // shell port throws only non-retryable typed errors today, so this
+            // held by each error's own flag; review of d980f3b6, D11.)
+            throw new JuliusDispatchError(error.code, false, error.safeMessage, error.failureClass, {
+              ...(error.diagnostics ?? {}), ...consumed,
+            });
+          }
+          const storeErrorClass = juliusStoreErrorClass(error);
+          if (storeErrorClass !== null) {
+            throw new JuliusDispatchError('PERSISTENCE_FAILURE', false,
+              'Julius could not record a step after the coding session in its own store.', 'persist_after_session',
+              { ...consumed, storeErrorClass });
+          }
+          throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'A step after the coding session failed.',
+            'after_session_failure', consumed);
         }
       };
 
@@ -1757,13 +1837,15 @@ export function createJuliusCodingAgentAdapter(input: {
             occurredAt: nowIso(),
           }]),
         ],
-        diagnostics: { ...observation.diagnostics, codingAgentProvider: input.provider.providerKind },
+        diagnostics: { ...observation.diagnostics, codingAgentProvider: input.provider.providerKind, elapsedMs: providerElapsedMs },
         usage: {
           inputTokens: observation.inputTokens ?? undefined,
           outputTokens: observation.outputTokens ?? undefined,
           usdMicros: observation.costUsdMicros ?? undefined,
           // INVOCATIONS, not distinct tool names.
           toolCalls: observation.toolInvocations ?? undefined,
+          // The provider session's wall time, the same reading as `elapsedMs` above.
+          runtimeMs: providerElapsedMs,
           /**
            * `PROVIDER_REPORTED` only when the provider actually reported a figure.
            * Anything else is UNKNOWN, which the ledger holds as an unreleased
@@ -2216,6 +2298,22 @@ export function createLiveHermesReviewerAdapter(input: {
        * what is true of it — no tokens, no cost, `source: 'unavailable'`.
        */
       const reviewUsage: HermesUsage = outcome.usage !== null && typeof outcome.usage === 'object' ? outcome.usage : UNKNOWN_USAGE;
+      const reviewDiagnostics = reviewerDiagnostics({
+        diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath,
+        startedAt: outcome.startedAt, completedAt: outcome.completedAt,
+        usage: reviewUsage,
+      });
+      /**
+       * THE REVIEW'S WALL TIME ON THE TRAJECTORY ROW, as well as the dispatch row.
+       * The coordinator reads `usage.runtimeMs`; the reviewer only ever put its
+       * time in `elapsedMs`, so paid run 36915013287 recorded both reviews'
+       * durations on the dispatch rows and a null on the trajectory. The same
+       * reading, and nothing when the transport measured none.
+       */
+      const reviewElapsedMs = typeof reviewDiagnostics.elapsedMs === 'number'
+        && Number.isSafeInteger(reviewDiagnostics.elapsedMs) && reviewDiagnostics.elapsedMs >= 0
+        ? reviewDiagnostics.elapsedMs
+        : null;
       return {
         workerId: input.worker.workerId,
         providerId: input.worker.providerId,
@@ -2246,11 +2344,7 @@ export function createLiveHermesReviewerAdapter(input: {
          * — the number the next timeout has to be read against — survived
          * nowhere at all.
          */
-        diagnostics: reviewerDiagnostics({
-          diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath,
-          startedAt: outcome.startedAt, completedAt: outcome.completedAt,
-          usage: reviewUsage,
-        }),
+        diagnostics: reviewDiagnostics,
         /**
          * TOKENS AND AN ESTIMATE, NEVER A BILL.
          *
@@ -2266,6 +2360,7 @@ export function createLiveHermesReviewerAdapter(input: {
           outputTokens: reviewUsage.outputTokens ?? undefined,
           costBasis: harnessEstimateMicros(reviewUsage) === null ? 'UNKNOWN' : 'ESTIMATED',
           estimatedUsdMicros: harnessEstimateMicros(reviewUsage) ?? undefined,
+          ...(reviewElapsedMs === null ? {} : { runtimeMs: reviewElapsedMs }),
           // As the operator declared it; the ledger drops it if it contradicts the basis.
           ...(billingPath === null ? {} : { billingPath }),
         },

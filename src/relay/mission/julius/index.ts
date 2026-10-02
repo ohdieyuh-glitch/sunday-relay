@@ -22,6 +22,7 @@ export * from './julius-allocation-runtime';
 export * from './julius-trajectory';
 export * from './julius-events';
 export * from './julius-state-path';
+export * from './julius-attempt-evidence';
 export * from './julius-continuation';
 export * from './julius-runtime-ports';
 export * from './julius-subagent-runtime';

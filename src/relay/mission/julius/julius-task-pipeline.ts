@@ -34,6 +34,7 @@
 import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import { requestJuliusApproval, type JuliusApprovalStore } from './julius-lifecycle-runtime';
 import { JULIUS_CLAIMABLE_RUN_STATES } from './julius-state-path';
+import { juliusCurrentAttemptEvidence } from './julius-attempt-evidence';
 import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionOutcome, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest, type JuliusUnrecordedBookkeeping } from './julius-execution-coordinator';
 import { safeReasonCode, type JuliusDispatchWorkspace, type JuliusProviderRouter } from './julius-router';
@@ -411,6 +412,50 @@ class RuntimeLedger {
   }
 
   /**
+   * `eventOnce` for the one event the lease fences: the handoff ((a2)). The
+   * store writes `worker.dispatched` only while this attempt still owns the
+   * task, and says LEASE_LOST otherwise. A store without the fence is written
+   * through unfenced, as every store was before.
+   */
+  async handoffOnce(
+    key: string,
+    input: { taskId: string; workerId?: string | null; facts: Record<string, string | number | boolean | null> },
+    fence: { readonly owner: string; readonly leaseGeneration: number },
+  ): Promise<'RECORDED' | 'DUPLICATE' | 'LEASE_LOST'> {
+    let event = this.composedOnce.get(key);
+    if (event === undefined) {
+      event = this.compose('worker.dispatched', input);
+      this.composedOnce.set(key, event);
+    }
+    if (this.deps.store.appendHandoffEvent === undefined) {
+      return (await this.deps.store.appendEvent(event)) ? 'RECORDED' : 'DUPLICATE';
+    }
+    return this.deps.store.appendHandoffEvent({ event, owner: fence.owner, leaseGeneration: fence.leaseGeneration });
+  }
+
+  /**
+   * `eventOnce` for a release's `budget.settled` ((a2) step 3). The store decides
+   * it against the settlements its reservation already carries: a free release
+   * after closes that were all released says nothing and is not written; one
+   * after a close that says money may have gone is written with a named
+   * conflict. A store without the port writes it, as every store did.
+   */
+  async settleOnce(
+    key: string,
+    input: { taskId: string | null; workerId?: string | null; facts: Record<string, string | number | boolean | null> },
+  ): Promise<'RECORDED' | 'DUPLICATE' | 'SAME_MEANING' | 'CONFLICT'> {
+    let event = this.composedOnce.get(key);
+    if (event === undefined) {
+      event = this.compose('budget.settled', input);
+      this.composedOnce.set(key, event);
+    }
+    if (this.deps.store.appendSettlementEvent === undefined) {
+      return (await this.deps.store.appendEvent(event)) ? 'RECORDED' : 'DUPLICATE';
+    }
+    return this.deps.store.appendSettlementEvent(event);
+  }
+
+  /**
    * THE SAME EVENT, BUILT BUT NOT WRITTEN.
    *
    * An event that explains a decision is written inside the decision's own
@@ -727,6 +772,37 @@ async function holdAtDispatchBoundary(
     },
   });
   return { kind: 'REFUSED', outcome: { kind: 'HELD', taskId: claim.taskId, reasonCode, runState: run.state } };
+}
+
+/**
+ * THE ADMISSION REFUSED A HELD RUN (F3), AND THE BOUNDARY'S RULE DECIDES WHAT
+ * HAPPENS TO THE TASK.
+ *
+ * `admitTask` re-read the run under a lock and found it held after the
+ * boundary had let the task through: paused, blocked, awaiting a person,
+ * denied or ended. The same rule answers here, from a fresh read, so the task
+ * goes back unspent or ends exactly as it would have at the boundary. If the
+ * hold has already lifted by this read, the task still goes back unspent, and
+ * the next claim admits it.
+ */
+export async function holdClaimAtAdmission(
+  request: JuliusPipelineRequest,
+  deps: JuliusPipelineDependencies,
+  scope: { readonly projectId: string },
+): Promise<JuliusTaskOutcome> {
+  const { claim } = request;
+  const run = await deps.store.loadRun(claim.runId, scope.projectId);
+  if (run === null) {
+    return { kind: 'HALTED', taskId: claim.taskId, reasonCode: 'RUN_NOT_IN_SCOPE', safeSummary: 'The claimed task belongs to a run outside this scope.' };
+  }
+  const ledger = new RuntimeLedger(deps, run, `${claim.taskId}:${claim.leaseGeneration}`);
+  const held = await holdAtDispatchBoundary({ claim, run, ledger, policyRevision: request.policy.revision }, deps);
+  if (held !== null && held.kind === 'REFUSED') return held.outcome;
+  const now = deps.clock.now();
+  await deps.store.finishTask({
+    taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state: 'FAILED', now, nextAttemptAt: now,
+  });
+  return { kind: 'HELD', taskId: claim.taskId, reasonCode: 'RUN_HELD_AT_ADMISSION', runState: run.state };
 }
 
 /**
@@ -3288,8 +3364,14 @@ function executionPorts(
        * absent amount frees capacity. That is safe precisely because it is
        * reached only when the boundary reported NO spend and did NOT report
        * unknown spend — nothing was sent, so there is nothing to hold.
+       *
+       * AND A LATE ONE SAYS SOMETHING OR IS NOT WRITTEN ((a2) step 3). Recovery
+       * may have closed this reservation already, while this attempt was alive
+       * with a lapsed lease. The store decides against that close: a free
+       * release after a released close is not written; one after an unknown
+       * close is written and the conflict named (`settleOnce`).
        */
-      await ledger.eventOnce(`release:${reservationId}:budget.settled`, 'budget.settled', {
+      await ledger.settleOnce(`release:${reservationId}:budget.settled`, {
         taskId: claim.taskId,
         facts: {
           reservationId, usdMicros: typeof usdMicros === 'number' ? usdMicros : null, reason,
@@ -3346,6 +3428,16 @@ function executionPorts(
       // the same claimed task, as do the coordinator's other events.)
       // Keyed by the coordinator's own idempotency key, so a write it repeats is the same event.
       await ledger.eventOnce(idempotencyKey, type, { taskId, facts: { ...facts, runId: run.runId } });
+    },
+    // THE HANDOFF, FENCED BY THIS CLAIM'S LEASE ((a2)): the same facts as any
+    // coordinator event, written only while this owner holds this generation.
+    recordHandoff: async ({ taskId, payload, idempotencyKey, leaseGeneration }) => {
+      const facts: Record<string, string | number | boolean | null> = {};
+      for (const [key, value] of Object.entries(payload)) {
+        facts[key] = value === null || ['string', 'number', 'boolean'].includes(typeof value) ? value as string | number | boolean | null : String(value);
+      }
+      const answer = await ledger.handoffOnce(idempotencyKey, { taskId, facts: { ...facts, runId: run.runId } }, { owner: deps.owner, leaseGeneration });
+      return answer !== 'LEASE_LOST';
     },
   };
 }
@@ -5016,7 +5108,13 @@ async function settleRebuttal(input: Parameters<typeof verifyExecutedTask>[0] & 
 }
 
 async function settleReReview(
-  input: Parameters<typeof verifyExecutedTask>[0] & { readonly tasks: readonly JuliusTask[]; readonly rebuttalTask: JuliusTask; readonly verdict: string | null },
+  input: Parameters<typeof verifyExecutedTask>[0] & {
+    readonly tasks: readonly JuliusTask[];
+    /** The attempt-reduced rows the verdict was read from (`juliusCurrentAttemptEvidence`), never the whole history. */
+    readonly evidence: readonly JuliusEvidence[];
+    readonly rebuttalTask: JuliusTask;
+    readonly verdict: string | null;
+  },
 ): Promise<JuliusTaskOutcome> {
   const { deps, run, ledger, task } = input;
   const reviewHead = juliusSegmentLineageRootOf(task, input.tasks).taskId;
@@ -5025,7 +5123,10 @@ async function settleReReview(
     disagreement = await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'RE_REVIEW', verdict: input.verdict }, workerId: input.workerId });
   }
   const peers = peerContextFor(deps, run, ledger);
-  const verdictEvidence = (await deps.store.evidenceForRun(run.runId, run.projectId)).find((item) => item.taskId === task.taskId && item.type === 'REVIEW_FINDING');
+  // THE ANSWER IS THE VERDICT THAT WAS APPLIED (defect A, A-6): the first verdict row of the attempt
+  // the decision read, as `settlePeerRequestsForDecision` names it. Read from every attempt, a row a
+  // lost lease left behind was named as the answer to a question it did not decide.
+  const verdictEvidence = input.evidence.find((item) => item.taskId === task.taskId && item.type === 'REVIEW_FINDING');
   await moveJuliusPeerRequest(peers, {
     kind: 'REVIEW_REQUEST', anchor: reviewHead, to: 'ANSWERED', from: ['OPEN'], responseRef: verdictEvidence?.evidenceId ?? task.taskId,
     causeRef: `${task.taskId}:verdict`, taskId: input.rebuttalTask.taskId, workerId: input.workerId, firstWrite: true,
@@ -5306,13 +5407,28 @@ async function verifyExecutedTask(input: {
   duplicate: boolean;
 }): Promise<JuliusTaskOutcome> {
   const { deps, run, ledger, task } = input;
-  const [tasks, evidence, findings, criteria, decisions] = await Promise.all([
+  const [tasks, evidenceRows, findings, criteria, decisions] = await Promise.all([
     deps.store.tasksForRun(run.runId, run.projectId),
     deps.store.evidenceForRun(run.runId, run.projectId),
     effectiveFindingsOf(deps, run),
     deps.store.criteriaForRun(run.runId, run.projectId),
     deps.store.decisionsForRun(run.runId, run.projectId),
   ]);
+  /**
+   * THE ATTEMPT BEING JUDGED, NOT THE ONES BEFORE IT (defect A). Rows reach a
+   * task from outside the lease fence (the tool settlement while an attempt
+   * runs; the coordinator before acceptance), so an attempt that failed or
+   * lost its lease leaves rows behind, and reading them all sent the next
+   * attempt's clean work to a paid repair. Every task is reduced to its latest
+   * attempt's rows here, which is what the decision, the criteria and the
+   * review verdict below all read. A row that names no attempt is kept.
+   *
+   * THE ATTEMPT IS THE ONE THE TASK ROW NAMES, not the latest one that wrote a
+   * row: a SUCCEEDED task's generation is the attempt that was accepted, so an
+   * accepted attempt that wrote nothing is judged on nothing (REQUIRED_EVIDENCE_
+   * MISSING) and never on the rows a lost lease left behind.
+   */
+  const evidence = juliusCurrentAttemptEvidence(evidenceRows, tasks);
   /**
    * WHETHER THE WORK WAS REVIEWED, read from the task rows — one rule, shared
    * with the liveness judgement in `canStillBeAccepted`, rather than a store
@@ -5489,7 +5605,7 @@ async function verifyExecutedTask(input: {
 
   // THE ONE RE-REVIEW OF A MAINTAINED POSITION resolves its disagreement.
   if (reviewedTask !== null && reviewedTask.taskType === 'rebuttal' && reviewedTask.role === 'PROMPT_ARCHITECT') {
-    return settleReReview({ ...input, tasks, rebuttalTask: reviewedTask, verdict: applied?.verdict ?? null });
+    return settleReReview({ ...input, tasks, evidence, rebuttalTask: reviewedTask, verdict: applied?.verdict ?? null });
   }
 
   /**
@@ -5551,6 +5667,8 @@ async function verifyExecutedTask(input: {
   const evaluated = evaluateJuliusVerification({
     task: subject,
     evidence,
+    // A finding may cite ANY attempt's row; only the decision reads the current one.
+    citableEvidence: evidenceRows,
     criteria,
     // The findings the reviewer just recorded are read back, because
     // `findings` was loaded before this task ran and a decision made without

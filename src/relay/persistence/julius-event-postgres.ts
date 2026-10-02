@@ -1,4 +1,4 @@
-import type{Pool}from'pg';import{juliusSerializable}from'./julius-serializable';import{JuliusEventIdConflict,canonicalJuliusEventIdentity,validateJuliusEvent,type JuliusOperationalEvent}from'../mission/julius';const json=(v:unknown)=>JSON.stringify(v);
+import type{Pool}from'pg';import{juliusSerializable}from'./julius-serializable';import{JuliusEventIdConflict,canonicalJuliusEventIdentity,juliusLateSettlementDecision,juliusSettlementConflictEvent,validateJuliusEvent,type JuliusOperationalEvent,type JuliusPriorSettlement}from'../mission/julius';const json=(v:unknown)=>JSON.stringify(v);
 /**
  * IS THE ROW ALREADY THIS EVENT?
  *
@@ -48,4 +48,21 @@ export async function appendJuliusEventWithin(client:JuliusEventTransaction,even
  * Unretried, one 40001 against a concurrent writer threw out of the run loop's
  * tick and stranded every task it had claimed.
  */
-export class JuliusEventPostgresRepository{constructor(private readonly pool:Pool){}async append(event:JuliusOperationalEvent):Promise<{recorded:boolean;sequence:number}>{return juliusSerializable(this.pool,(client)=>appendJuliusEventWithin(client,event));}}
+export class JuliusEventPostgresRepository{constructor(private readonly pool:Pool){}async append(event:JuliusOperationalEvent):Promise<{recorded:boolean;sequence:number}>{return juliusSerializable(this.pool,(client)=>appendJuliusEventWithin(client,event));}
+/**
+ * THE HANDOFF, FENCED BY THE LEASE ((a2)). The task row is read FOR SHARE in the same
+ * serializable transaction as the insert. A recovery that already holds it (`FOR UPDATE OF t
+ * SKIP LOCKED`) makes this wait, then see the cleared lease and answer LEASE_LOST, and nothing
+ * is dispatched. A recovery that comes second skips this locked task and reads the committed
+ * handoff on its next sweep.
+ */
+async appendHandoff(input:{event:JuliusOperationalEvent;owner:string;leaseGeneration:number}):Promise<'RECORDED'|'DUPLICATE'|'LEASE_LOST'>{return juliusSerializable(this.pool,async(client)=>{const held=await client.query(`SELECT 1 FROM relay_wonderland.julius_tasks WHERE task_id=$1 AND run_id=$2 AND state='ACTIVE' AND lease_owner=$3 AND lease_generation=$4 FOR SHARE`,[input.event.taskId,input.event.runId,input.owner,input.leaseGeneration]);if(!held.rows[0])return'LEASE_LOST' as const;return(await appendJuliusEventWithin(client,input.event)).recorded?'RECORDED' as const:'DUPLICATE' as const;});}
+/**
+ * A RELEASE, DECIDED AGAINST ITS RESERVATION'S SETTLEMENTS ((a2) step 3). The run row is locked FOR UPDATE
+ * first, the lock every append of this run takes, so no two writers of one reservation decide at once. The
+ * settlements the reservation already carries are read, `juliusLateSettlementDecision` decides, and the
+ * release (with a named conflict when there is one) is appended in the same serializable transaction.
+ * A sweep that closed the reservation after this snapshot moved the run's stream counter, so this fails
+ * with 40001, is retried by `juliusSerializable`, and the retry decides against the close.
+ */
+async appendSettlement(event:JuliusOperationalEvent):Promise<'RECORDED'|'DUPLICATE'|'SAME_MEANING'|'CONFLICT'>{return juliusSerializable(this.pool,async(client)=>{validateJuliusEvent(event);const owned=await client.query('SELECT 1 FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2 FOR UPDATE',[event.runId,event.projectId]);if(!owned.rows[0])throw new Error('julius_run_not_found');const reservationId=typeof event.facts.reservationId==='string'?event.facts.reservationId:null;const rows:Array<{event_id:string;released:string|null;reason:string|null}>=reservationId===null?[]:(await client.query(`SELECT event_id,payload->'facts'->>'released' AS released,payload->'facts'->>'reason' AS reason FROM relay_wonderland.events WHERE stream_id=$1 AND event_type='julius.budget.settled' AND payload->'facts'->>'reservationId'=$2 ORDER BY sequence`,[event.runId,reservationId])).rows;if(rows.some((row)=>row.event_id===event.eventId))return(await appendJuliusEventWithin(client,event)).recorded?'RECORDED' as const:'DUPLICATE' as const;const prior:JuliusPriorSettlement[]=rows.map((row)=>({eventId:row.event_id,released:row.released==='true',reason:row.reason}));const decision=juliusLateSettlementDecision({released:event.facts.released===true},prior);if(decision==='SAME_MEANING')return'SAME_MEANING' as const;await appendJuliusEventWithin(client,event);if(decision==='CONFLICT'){await appendJuliusEventWithin(client,juliusSettlementConflictEvent({release:event,prior}));return'CONFLICT' as const;}return'RECORDED' as const;});}}

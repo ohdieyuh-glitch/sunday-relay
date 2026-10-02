@@ -42,7 +42,11 @@
 
 import type { JuliusMemoryClaim } from './julius-memory-trust';
 import { juliusClaimStandingKey } from './julius-claim-ledger';
-import { MAX_TASK_RECOVERIES, planJuliusRecovery, type JuliusRecoveryAction } from './julius-recovery';
+import {
+  MAX_TASK_RECOVERIES, juliusLateSettlementDecision, juliusRecoverySettlementEvent, juliusSettlementConflictEvent,
+  planJuliusRecovery, planJuliusRecoverySettlements,
+  type JuliusOpenReservation, type JuliusPriorSettlement, type JuliusRecoveryAction, type JuliusRecoverySettlement,
+} from './julius-recovery';
 import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
 import { JULIUS_CLAIMABLE_RUN_STATES } from './julius-state-path';
 import { JuliusEventIdConflict, canonicalJuliusEventIdentity, type JuliusOperationalEvent } from './julius-events';
@@ -219,6 +223,40 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     return true;
   };
 
+  /**
+   * (a2) STEP 2, THE MEMORY HALF: every reservation a recovered task left open, closed by the
+   * shared rule (`planJuliusRecoverySettlements`) and written by the shared row. Synchronous, so it
+   * lands in the same step as the lease change, as the PostgreSQL sweep's single transaction does.
+   */
+  const closeRecoveredReservations = (runId: string, projectId: string, taskId: string, now: string): JuliusRecoverySettlement[] => {
+    const settled = new Set(eventLog
+      .filter((event) => event.type === 'budget.settled' && event.runId === runId)
+      .map((event) => event.facts.reservationId));
+    const open: JuliusOpenReservation[] = [];
+    for (const event of eventLog) {
+      if (event.type !== 'budget.reserved' || event.runId !== runId || event.taskId !== taskId) continue;
+      const reservationId = event.facts.reservationId;
+      if (typeof reservationId !== 'string' || reservationId.length === 0 || settled.has(reservationId)) continue;
+      if (open.some((row) => row.reservationId === reservationId)) continue;
+      open.push({
+        reservationId,
+        role: typeof event.facts.role === 'string' ? event.facts.role : null,
+        attempt: typeof event.facts.attempt === 'number' ? event.facts.attempt : null,
+      });
+    }
+    const dispatched = eventLog
+      .filter((event) => event.type === 'worker.dispatched' && event.runId === runId && event.taskId === taskId)
+      .map((event) => ({
+        attempt: typeof event.facts.attempt === 'number' ? event.facts.attempt : null,
+        reservationId: typeof event.facts.reservationId === 'string' && event.facts.reservationId.length > 0 ? event.facts.reservationId : null,
+      }));
+    const settlements = planJuliusRecoverySettlements(open, dispatched);
+    settlements.forEach((settlement, index) => {
+      recordEvent(juliusRecoverySettlementEvent({ runId, projectId, taskId, reservation: open[index]!, settlement, occurredAt: now }));
+    });
+    return settlements;
+  };
+
   return {
     /* ------------------------------------------------------------ seeding */
     seedRun(run) { runs.set(run.runId, { ...run }); },
@@ -260,11 +298,16 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         // The SAME decision the PostgreSQL sweep takes, taken by the same
         // function, so the two stores cannot drift on which bound stopped a
         // task or on what it is called.
+        // HANDED is read from the same durable fact the PostgreSQL sweep reads: a
+        // `worker.dispatched` event for this task at its current attempt.
+        const handed = eventLog.some((event) => event.type === 'worker.dispatched'
+          && event.runId === task.runId && event.taskId === task.taskId && event.facts.attempt === task.attempt);
         const action = planJuliusRecovery({
           runId: task.runId, projectId: run.projectId, runState: run.state, taskId: task.taskId,
           attempt: task.attempt, maxRetries: RECOVERY_MAX_ATTEMPTS - 1,
           leaseGeneration: task.leaseGeneration,
           recoveries: task.recoveries, maxRecoveries: MAX_TASK_RECOVERIES,
+          handed,
         });
         const requeue = action.action === 'REQUEUE';
         task.state = requeue ? 'RUNNABLE' : action.action === 'CANCEL_TASK' ? 'CANCELLED' : 'FAILED';
@@ -276,7 +319,8 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         // and would make the number mean two things.
         if (requeue) task.recoveries += 1;
         task.version += 1;
-        actions.push(action);
+        const settlements = closeRecoveredReservations(task.runId, run.projectId, task.taskId, now);
+        actions.push(settlements.length > 0 ? { ...action, settlements } : action);
       }
       return actions;
     },
@@ -408,6 +452,17 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       const task = tasks.get(input.taskId);
       if (task === undefined || task.state !== 'ACTIVE') return null;
       if (task.leaseOwner !== input.owner || task.leaseGeneration !== input.leaseGeneration) return null;
+      // THE CLAIM'S RULE, AGAIN, AT THE LAST MOMENT: a run that was held after
+      // this task was claimed spends nothing. The PostgreSQL admission carries
+      // the same rule under a lock on the run row.
+      const run = runs.get(task.runId);
+      if (run === undefined) return null;
+      const held = [...approvals.values()].filter((row) => row.runId === task.runId);
+      const pendingApprovals = held.filter((row) => row.state === 'PENDING').length;
+      const deniedApprovals = held.filter((row) => row.state === 'DENIED').length;
+      if (!CLAIMABLE_RUN_STATES.includes(run.state) || pendingApprovals > 0 || deniedApprovals > 0) {
+        return { held: true, runState: run.state, pendingApprovals, deniedApprovals };
+      }
       task.attempt += 1;
       task.version += 1;
       return task.attempt;
@@ -708,6 +763,32 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       return recordEvent(event);
     },
 
+    /** The handoff, only while this attempt owns the task. The PostgreSQL store locks the row for it. */
+    async appendHandoffEvent(input) {
+      const task = input.event.taskId === null ? undefined : tasks.get(input.event.taskId);
+      if (task === undefined || task.state !== 'ACTIVE' || task.leaseOwner !== input.owner || task.leaseGeneration !== input.leaseGeneration) {
+        return 'LEASE_LOST';
+      }
+      return recordEvent(input.event) ? 'RECORDED' : 'DUPLICATE';
+    },
+
+    /** A release decided against its reservation's settlements, in one synchronous step ((a2) step 3). */
+    async appendSettlementEvent(event) {
+      const reservationId = event.facts.reservationId;
+      if (identities.has(event.eventId)) return recordEvent(event) ? 'RECORDED' : 'DUPLICATE';
+      const prior: JuliusPriorSettlement[] = typeof reservationId !== 'string' ? [] : eventLog
+        .filter((row) => row.type === 'budget.settled' && row.runId === event.runId && row.facts.reservationId === reservationId)
+        .map((row) => ({ eventId: row.eventId, released: row.facts.released === true, reason: typeof row.facts.reason === 'string' ? row.facts.reason : null }));
+      const decision = juliusLateSettlementDecision({ released: event.facts.released === true }, prior);
+      if (decision === 'SAME_MEANING') return 'SAME_MEANING';
+      recordEvent(event);
+      if (decision === 'CONFLICT') {
+        recordEvent(juliusSettlementConflictEvent({ release: event, prior }));
+        return 'CONFLICT';
+      }
+      return 'RECORDED';
+    },
+
     /**
      * The safe timeline, from the ledger, scoped by BOTH run and project.
      *
@@ -758,6 +839,7 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
           taskId: task.taskId, missionId: task.missionId, parentTaskId: task.parentTaskId,
           dependencyIds: task.dependencyIds, requiredEvidenceTypes: task.requiredEvidenceTypes,
           taskType: task.taskType, role: task.role, ordinal: task.ordinal, state: task.state,
+          leaseGeneration: task.leaseGeneration,
         }));
     },
     async evidenceForRun(runId, projectId) {

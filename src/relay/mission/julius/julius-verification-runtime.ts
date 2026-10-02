@@ -21,10 +21,16 @@ export interface JuliusVerificationPolicy{readonly revision:string;readonly revi
 /** Enough for real mid-mission collaboration, far short of a loop. */
 export const JULIUS_DEFAULT_MAX_CODER_SEGMENTS=4;
 export type JuliusVerificationAction={readonly action:'SCHEDULE_REVIEW';readonly role:'INDEPENDENT_REVIEWER'}|{readonly action:'DECIDE';readonly decision:JuliusVerificationDecision;readonly criteriaSatisfied:readonly string[];readonly criteriaMissing:readonly string[];readonly missionCompletable:boolean};
-export function evaluateJuliusVerification(input:{task:JuliusTask;evidence:readonly JuliusEvidence[];criteria:readonly JuliusAcceptanceCriterion[];findings:readonly JuliusReviewerFinding[];policy:JuliusVerificationPolicy;reviewCompleted:boolean;allTasks:readonly JuliusTask[];priorDecisions:readonly JuliusRecordedDecision[]}):JuliusVerificationAction{
+/**
+ * `citableEvidence` is every row a finding may cite, which is MORE than the rows a decision reads:
+ * a decision reads only the attempt being judged (defect A), while a finding recorded earlier may
+ * cite a superseded attempt's row. Checked against the reduced set, one such finding made every
+ * verification of its run throw `reviewer_finding_evidence_not_found`. Absent, it is `evidence`.
+ */
+export function evaluateJuliusVerification(input:{task:JuliusTask;evidence:readonly JuliusEvidence[];citableEvidence?:readonly JuliusEvidence[];criteria:readonly JuliusAcceptanceCriterion[];findings:readonly JuliusReviewerFinding[];policy:JuliusVerificationPolicy;reviewCompleted:boolean;allTasks:readonly JuliusTask[];priorDecisions:readonly JuliusRecordedDecision[]}):JuliusVerificationAction{
  if(input.policy.reviewerRequired&&!input.reviewCompleted)return{action:'SCHEDULE_REVIEW',role:'INDEPENDENT_REVIEWER'};
  for(const finding of input.findings)if(finding.evidenceIds.length===0)throw new Error('reviewer_finding_requires_evidence');
- const evidenceIds=new Set(input.evidence.map(value=>value.evidenceId));for(const finding of input.findings)if(finding.evidenceIds.some(id=>!evidenceIds.has(id)))throw new Error('reviewer_finding_evidence_not_found');
+ const evidenceIds=new Set((input.citableEvidence??input.evidence).map(value=>value.evidenceId));for(const finding of input.findings)if(finding.evidenceIds.some(id=>!evidenceIds.has(id)))throw new Error('reviewer_finding_evidence_not_found');
  /**
   * ACCEPTANCE CRITERIA ARE A MISSION CONDITION, judged when acceptance would
   * complete the mission. They used to be judged against THIS task's evidence

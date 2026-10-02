@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **207 production files** across 20/20 subsystems (2 roots, 178 traced, 9 not composed by the live root, 18 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **210 production files** across 20/20 subsystems (2 roots, 181 traced, 9 not composed by the live root, 18 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -38,7 +38,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | entrypoint (relay-bridge/julius-live-mission.ts) | connectors (gpt-architect, prompt-architect contracts) | 1 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 1 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | kernel (src/relay/mission/julius/) | 1 | 0 |
-| entrypoint (relay-bridge/julius-live-mission.ts) | live composition (relay-bridge/julius/) | 8 | 0 |
+| entrypoint (relay-bridge/julius-live-mission.ts) | live composition (relay-bridge/julius/) | 10 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | other | 1 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | persistence (src/relay/persistence/) | 6 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 1 |
@@ -48,8 +48,8 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 20 | 5 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 10 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 24 | 5 |
-| live composition (relay-bridge/julius/) | other | 5 | 3 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 27 | 7 |
+| live composition (relay-bridge/julius/) | other | 6 | 4 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 17 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 2 | 0 |
 | other | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 2 | 2 |
@@ -85,6 +85,8 @@ How an authorized Mission Contract becomes a durable Julius run: the contract sh
 | `relay-bridge/julius-live-mission.ts` | root | — |
 | `relay-bridge/julius-mission-routes.ts` | not composed by the live root | — |
 | `relay-bridge/julius/bootstrap.ts` | traced | `relay-bridge/julius-live-mission.ts` |
+| `relay-bridge/julius/live-evidence-lines.ts` | traced | `relay-bridge/julius-live-mission.ts` |
+| `relay-bridge/julius/live-report-lines.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/julius/mission-contract.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/julius/mission-seed.ts` | traced | `relay-bridge/julius/bootstrap.ts` |
 | `src/relay/integration/julius/index.ts` | not composed by the live root | — |
@@ -296,6 +298,7 @@ Acceptance criteria, reviewer findings, `verifyTask` and `evaluateJuliusVerifica
 
 | production source | role | reached from |
 | --- | --- | --- |
+| `src/relay/mission/julius/julius-attempt-evidence.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-verification-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 
 ### 14 REPAIR
@@ -346,7 +349,7 @@ Every authoritative transition has exactly one event type; the trajectory is the
 | production source | role | reached from |
 | --- | --- | --- |
 | `src/relay/mission/julius/julius-artifact-reference.ts` | traced | `src/relay/mission/julius/julius-execution-coordinator.ts` |
-| `src/relay/mission/julius/julius-events.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-events.ts` | traced | `src/relay/mission/julius/julius-recovery.ts` |
 | `src/relay/mission/julius/julius-metrics.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-slot-report.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-trajectory.ts` | traced | `src/relay/mission/julius/index.ts` |
@@ -408,7 +411,7 @@ C.A.R.D. roles resolved to live adapters — fail closed, naming every missing v
 
 | production source | role | reached from |
 | --- | --- | --- |
-| `relay-bridge/julius/live-composition.ts` | traced | `relay-bridge/julius-live-mission.ts` |
+| `relay-bridge/julius/live-composition.ts` | traced | `relay-bridge/julius/live-report-lines.ts` |
 | `relay-bridge/julius/live-workers.ts` | traced | `relay-bridge/julius/executor-effects.ts` |
 | `relay-bridge/julius/research-mediator.ts` | traced | `relay-bridge/julius/live-composition.ts` |
 | `relay-bridge/live-reach-service.ts` | traced | `relay-bridge/julius/research-mediator.ts` |

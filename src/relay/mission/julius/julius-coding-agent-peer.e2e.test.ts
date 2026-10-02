@@ -375,15 +375,97 @@ describe('P27b — the same result delivered twice is read once', () => {
     const preflight = await prepareClaimedTask(request, harness.deps, { projectId: 'prj-1' });
     if (preflight.kind !== 'ELIGIBLE') throw new Error(`not eligible: ${preflight.kind}`);
     const attempt = await harness.store.admitTask({ taskId: 'build-1', owner: harness.deps.owner, leaseGeneration: claim!.leaseGeneration, now: harness.clock.now() });
-    const admitted = { ...request, claim: { ...request.claim, attempt: attempt! } };
+    if (typeof attempt !== 'number') throw new Error('not admitted');
+    const admitted = { ...request, claim: { ...request.claim, attempt } };
 
     await runClaimedTask(admitted, harness.deps, preflight);
     // The process delivers the same attempt again — a redelivery after a crash, a retried handler.
     await runClaimedTask(admitted, harness.deps, preflight).catch(() => undefined);
 
-    const completed = factsOf(harness, 'worker.completed').filter((facts) => facts.duplicate === true);
-    expect(completed.length, 'the replay really was read as a duplicate').toBeGreaterThan(0);
+    // THE REPLAY STOPS AT THE HANDOFF ((a2)). It used to reach the provider a second time and have its
+    // answer read as a duplicate; the lease-fenced handoff now refuses it, because the attempt it
+    // redelivers no longer owns an ACTIVE task. One provider call, one handoff, and still one record.
+    const coder = harness.adapters.get('coder-adapter') as unknown as { dispatches: readonly { taskId: string }[] };
+    expect(coder.dispatches.filter((dispatch) => dispatch.taskId === 'build-1'), 'the replay called no provider').toHaveLength(1);
+    expect(harness.store.events().filter((event) => event.type === 'worker.dispatched' && event.taskId === 'build-1'), 'and handed nothing').toHaveLength(1);
     expect(rowsOf(harness, 'coder.implementation.recorded').filter((row) => row.taskId === 'build-1')).toHaveLength(1);
+    expect(rowsOf(harness, 'architecture.observed').filter((row) => row.taskId === 'build-1')).toHaveLength(1);
+  });
+
+  /**
+   * THE DUPLICATE BRANCH IS STILL REACHABLE, SO IT IS PINNED HERE (the review of fd588ed4, finding 1).
+   * The fence refuses a redelivery only once the task has LEFT its lease. The same admitted attempt
+   * delivered twice while its task is still ACTIVE, under the same owner and generation, passes the
+   * fence twice (each delivery composes its own handoff), reaches the provider twice, and the second
+   * answer is accepted as a duplicate. The run loop never does this: it runs each admitted claim once.
+   * What stays true even then is the guard this pins: a duplicate answer records nothing again.
+   */
+  it('a CONCURRENT same-lease redelivery still records its implementation and its observations exactly once', async () => {
+    const implementation = {
+      providerKind: 'generic-scripted',
+      workspace: { captured: true, truncated: false, changes: [{ path: 'src/relay/journal.ts', change: 'MODIFIED' }] },
+    };
+    const answer = { kind: 'succeed' as const, evidence: BUILD_EVIDENCE, implementation, architectureObservations: [INVALIDATED] };
+    const harness = build({
+      architect: [PLAN_WITH_ARCHITECTURE, CONSULT_ALIGNED, CONSULT_ALIGNED],
+      coder: [answer, answer],
+      reviewer: PASSES(6),
+    });
+    for (let index = 0; index < 32 && harness.store.taskRow('build-1')!.state !== 'RUNNABLE'; index += 1) {
+      const report = await harness.loop.tick({ projectId: 'prj-1' });
+      if (report.claimed === 0) await harness.loop.advanceRun('run-1', 'prj-1');
+    }
+    expect(harness.store.taskRow('build-1')!.state).toBe('RUNNABLE');
+
+    // Both deliveries pass the fence before either provider call answers.
+    const store = harness.store as unknown as { appendHandoffEvent: (input: unknown) => Promise<string> };
+    const fence = store.appendHandoffEvent.bind(store);
+    const answers: string[] = [];
+    let bothHanded = (): void => undefined;
+    const handed = new Promise<void>((resolve) => { bothHanded = resolve; });
+    store.appendHandoffEvent = async (input) => {
+      const result = await fence(input);
+      answers.push(result);
+      if (answers.length === 2) bothHanded();
+      return result;
+    };
+    const inner = harness.adapters.get('coder-adapter')!;
+    (harness.adapters as Map<string, typeof inner>).set('coder-adapter', {
+      ...inner,
+      async dispatch(input) {
+        await Promise.race([handed, new Promise((resolve) => setTimeout(resolve, 300))]);
+        return inner.dispatch(input);
+      },
+    });
+
+    const now = harness.clock.now();
+    const [claim] = await harness.store.claimRunnable({
+      owner: harness.deps.owner, now, leaseExpiresAt: new Date(Date.parse(now) + 60_000).toISOString(), limit: 1, projectId: 'prj-1',
+    });
+    expect(claim!.taskId).toBe('build-1');
+    const run = (await harness.store.loadRun('run-1', 'prj-1'))!;
+    const policy = (await harness.policies.policyFor(run))!;
+    const request: JuliusPipelineRequest = {
+      claim: claim!, policy: policy.card, verification: policy.verification,
+      capability: harness.policies.capabilityFor(claim!), capabilityFor: (value) => harness.policies.capabilityFor(value),
+    };
+    const preflight = await prepareClaimedTask(request, harness.deps, { projectId: 'prj-1' });
+    if (preflight.kind !== 'ELIGIBLE') throw new Error(`not eligible: ${preflight.kind}`);
+    const attempt = await harness.store.admitTask({ taskId: 'build-1', owner: harness.deps.owner, leaseGeneration: claim!.leaseGeneration, now: harness.clock.now() });
+    if (typeof attempt !== 'number') throw new Error('not admitted');
+    const admitted = { ...request, claim: { ...request.claim, attempt } };
+
+    await Promise.all([
+      runClaimedTask(admitted, harness.deps, preflight),
+      runClaimedTask(admitted, harness.deps, preflight).catch(() => undefined),
+    ]);
+
+    expect(answers, 'both deliveries passed the fence: the task was still ACTIVE under their lease').toEqual(['RECORDED', 'RECORDED']);
+    const coder = inner as unknown as { dispatches: readonly { taskId: string }[] };
+    expect(coder.dispatches.filter((dispatch) => dispatch.taskId === 'build-1'), 'the known P3: both reached the provider').toHaveLength(2);
+    const completed = harness.store.events().filter((event) => event.type === 'worker.completed' && event.taskId === 'build-1');
+    expect(completed.map((event) => event.facts.duplicate).sort(), 'the second answer took the duplicate branch').toEqual([false, true]);
+    expect(rowsOf(harness, 'coder.implementation.recorded').filter((row) => row.taskId === 'build-1'), 'and recorded nothing again').toHaveLength(1);
     expect(rowsOf(harness, 'architecture.observed').filter((row) => row.taskId === 'build-1')).toHaveLength(1);
   });
 });

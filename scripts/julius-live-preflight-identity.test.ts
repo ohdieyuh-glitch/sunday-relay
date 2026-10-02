@@ -220,6 +220,62 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
     expect(untouched.rows[0], 'another run’s pending dispatch must never be claimed by a preflight').toEqual({ state: 'AUTHORIZED', dispatch_generation: '0' });
   });
 
+  /**
+   * DEFECT B, AGAINST THE PRODUCTION CLAIM. The live shell port used to sweep up to sixteen AUTHORIZED
+   * invocations of ANY run and keep its own, leaving every other one DISPATCHING under a caller that
+   * would never execute it. Scoped to one invocation in one project, the same SQL takes that one only.
+   * Both names or neither: a claim naming only one of them is refused.
+   */
+  it('DEFECT B: the production dispatch claim, scoped, takes only its own invocation and leaves another project’s pending', async () => {
+    const mine = fixture();
+    const theirs = fixture();
+    await seedPreflightIdentity(pool, mine);
+    await seedPreflightIdentity(pool, theirs);
+    const tools = new JuliusToolPostgresRepository(pool);
+    const pend = async (identity: PreflightIdentity, step = 7): Promise<string> => {
+      const id = invocationId(identity, step);
+      await tools.request({
+        invocationId: id, idempotencyKey: id, requestDigest: DIGEST,
+        tenantId: identity.tenantId, projectId: identity.projectId, runId: identity.runId, taskId: identity.taskId,
+        workerId: identity.workerId, leaseGeneration: identity.leaseGeneration, policyRevision: identity.policyRevision,
+        toolId: 'shell.bash', toolVersion: '1', mutationClass: 'WORKSPACE', requestedAt: new Date().toISOString(),
+      });
+      expect(await tools.authorize({
+        invocationId: id, tenantId: identity.tenantId, projectId: identity.projectId, requestDigest: DIGEST,
+        policyRevision: identity.policyRevision, budgetReservationId: `budget:${id}`, authorizedAt: new Date().toISOString(),
+      })).toBe(true);
+      return id;
+    };
+    const theirsId = await pend(theirs);
+    const mineId = await pend(mine);
+    // A second step of the same task, pending in the SAME project: the project alone cannot tell them apart.
+    const siblingId = await pend(mine, 8);
+    const now = new Date().toISOString();
+    const claimedUntil = new Date(Date.now() + 120_000).toISOString();
+    const stateOf = async (id: string) => (await pool.query<{ state: string; dispatch_generation: string }>(
+      'SELECT state, dispatch_generation FROM relay_wonderland.julius_tool_invocations WHERE invocation_id=$1', [id])).rows[0];
+
+    const claimed = await tools.claimDispatch({ claimedBy: 'julius-live', now, claimedUntil, limit: 16, invocationId: mineId, projectId: mine.projectId });
+    expect(claimed.map((entry) => entry.invocation.invocationId), 'the claim took its own invocation and nothing else').toEqual([mineId]);
+    expect(await stateOf(theirsId), 'another project’s pending dispatch is still theirs to claim').toEqual({ state: 'AUTHORIZED', dispatch_generation: '0' });
+    expect(await stateOf(siblingId), 'and so is another step pending in the same project').toEqual({ state: 'AUTHORIZED', dispatch_generation: '0' });
+
+    const misScoped = await tools.claimDispatch({ claimedBy: 'julius-live', now, claimedUntil, limit: 16, invocationId: theirsId, projectId: mine.projectId });
+    expect(misScoped, 'an invocation named under the wrong project is never claimed').toEqual([]);
+    // Both names or neither (the review of cd0665df, P3): a half-scoped claim is refused before it touches a row.
+    await expect(tools.claimDispatch({ claimedBy: 'julius-live', now, claimedUntil, limit: 16, invocationId: theirsId }), 'an invocation named without its project')
+      .rejects.toThrow('tool_dispatch_claim_half_scoped');
+    await expect(tools.claimDispatch({ claimedBy: 'julius-live', now, claimedUntil, limit: 16, projectId: mine.projectId }), 'a project named without an invocation')
+      .rejects.toThrow('tool_dispatch_claim_half_scoped');
+    // An empty name is a name: compared, it matches no row, so it narrows a claim to nothing.
+    expect(await tools.claimDispatch({ claimedBy: 'julius-live', now, claimedUntil, limit: 16, invocationId: '', projectId: mine.projectId }), 'an empty invocation id').toEqual([]);
+    expect(await tools.claimDispatch({ claimedBy: 'julius-live', now, claimedUntil, limit: 16, invocationId: theirsId, projectId: '' }), 'an empty project').toEqual([]);
+    expect(await stateOf(theirsId), 'the half-scoped and empty claims took nothing').toEqual({ state: 'AUTHORIZED', dispatch_generation: '0' });
+    expect(await stateOf(siblingId)).toEqual({ state: 'AUTHORIZED', dispatch_generation: '0' });
+    const theirClaim = await tools.claimDispatch({ claimedBy: 'julius-live-other', now, claimedUntil, limit: 16, invocationId: theirsId, projectId: theirs.projectId });
+    expect(theirClaim.map((entry) => entry.invocation.invocationId), 'named with its own project, the same invocation is claimed').toEqual([theirsId]);
+  });
+
   it('MUTATION: without the invocation seed, the executor’s insert fails with 23503 exactly as dry run #2 did', async () => {
     const identity = fixture();
     await seedPreflightIdentity(pool, identity);

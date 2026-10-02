@@ -71,6 +71,11 @@ import { createPostgresMissionSeedStore } from './julius/mission-seed';
 import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 import { createExecutorShellPort } from './julius/executor-effects';
 import { createLiveArtifactExchange, juliusReviewerBillingPath } from './julius/live-workers';
+import { liveEvidenceLines } from './julius/live-evidence-lines';
+import {
+  liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveOneLine, liveResearchLines, liveTickAccountLine, liveTickBudgetLine,
+  liveWorkersBlockedLines,
+} from './julius/live-report-lines';
 import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
@@ -344,8 +349,20 @@ export function researchReachSummary(
 
 const EXECUTOR_ENV = ['JULIUS_EXECUTOR_ENDPOINT', 'JULIUS_SCOPED_CREDENTIALS', 'EXECUTOR_KEY_ID', 'JULIUS_PUBLIC_KEY_PATH', 'JULIUS_CALLER_ID'] as const;
 
-function presence(env: Record<string, string | undefined>, names: readonly string[]): string {
-  return names.map((name) => `  ${name}: ${env[name] ? 'SET' : 'MISSING'}`).join('\n');
+/**
+ * ONE ROW PER NAME, AND EACH ROW IS ITS OWN LINE.
+ *
+ * Returned as rows, never joined. `out` escapes every line break
+ * (`liveOneLine`), so one call holding eleven rows printed ONE physical line.
+ * Every reader of these rows is line-anchored:
+ *  - the paid workflow's preflight grep (`^  NAME: SET$`);
+ *  - the local launcher's;
+ *  - the artifact allowlist.
+ * They all found nothing, so the preflight step failed closed on the first
+ * name (JUJU's review of ef0c09c3, F1).
+ */
+function presence(env: Record<string, string | undefined>, names: readonly string[]): readonly string[] {
+  return names.map((name) => `  ${name}: ${env[name] ? 'SET' : 'MISSING'}`);
 }
 
 /* --------------------------------------------------- research observation */
@@ -560,7 +577,8 @@ export async function observeResearchCommand(input: {
 /* ------------------------------------------------------------------ main */
 
 async function main(argv: readonly string[]): Promise<number> {
-  const out = (line: string): void => { process.stdout.write(`${line}\n`); };
+  // ONE PHYSICAL LINE PER LINE: text Julius did not write can carry a line break (`liveOneLine`).
+  const out = (line: string): void => { process.stdout.write(`${liveOneLine(line)}\n`); };
   const flag = (name: string): boolean => argv.includes(`--${name}`);
   const option = (name: string): string | null => {
     const index = argv.indexOf(`--${name}`);
@@ -575,7 +593,7 @@ async function main(argv: readonly string[]): Promise<number> {
     return observeResearchCommand({
       contractPath: option('contract'),
       out,
-      err: (line) => { process.stderr.write(`${line}\n`); },
+      err: (line) => { process.stderr.write(`${liveOneLine(line)}\n`); },
     });
   }
   if (argv[0] !== 'run' || option('contract') === null) {
@@ -636,7 +654,7 @@ async function main(argv: readonly string[]): Promise<number> {
   out('JULIUS LIVE MISSION — preflight');
   out(`  mission: ${contract.missionId} (project ${contract.projectId})`);
   out(`  requested models: architect=${preflight.requested.architectModel ?? 'MISSING'} coder=${preflight.requested.codingModel ?? 'MISSING'} reviewer=${preflight.requested.reviewerProvider ?? 'MISSING'}/${preflight.requested.reviewerModel ?? 'MISSING'}`);
-  out(presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', CLAUDE_SUBSCRIPTION_TOKEN_ENV, 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV]));
+  for (const row of presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', CLAUDE_SUBSCRIPTION_TOKEN_ENV, 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV])) out(row);
   out('  note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.');
 
   /**
@@ -674,7 +692,7 @@ async function main(argv: readonly string[]): Promise<number> {
   let coderProvenance: ClaudeAuthProvenance | null = null;
   let claudeAuthBlocked = false;
   if (!authMode.ok) {
-    out(`  CLAUDE AUTH: REFUSED — ${authMode.refusal}: ${authMode.because}`);
+    out(liveClaudeAuthRefusedLine(authMode));
     claudeAuthBlocked = true;
   } else {
     // THE CHILD'S OWN ENVIRONMENT, composed by the same function and from the same
@@ -847,7 +865,8 @@ async function main(argv: readonly string[]): Promise<number> {
       researchPolicyFor: researchPolicyOf,
     });
     if (!resolution.ok) {
-      for (const problem of resolution.problems) out(`BLOCKED ${problem.role}: ${problem.missing.join(', ')}`);
+      // Each role's problem, then the outcome: an artifact never says nothing (`liveWorkersBlockedLines`).
+      for (const line of liveWorkersBlockedLines(resolution.problems)) out(line);
       return 1;
     }
 
@@ -911,16 +930,12 @@ async function main(argv: readonly string[]): Promise<number> {
         researchProbes: observed.probes,
       }),
     });
-    if (researchClause === undefined) {
-      out('  research: NOT AUTHORISED (no contract clause) — every ask is refused research_not_authorized');
-    } else {
-      out(`  research: authorised for ${[...researchClause.roles].join(', ')} across ${researchClause.allowances.length} allowance(s); ${observed.probes.length} observed backend(s)`);
-      /* WHAT THE CLAUSE CAN ACTUALLY REACH, said before the money is spent
-         rather than discovered one refusal at a time in the evidence. */
-      for (const row of researchReachSummary(researchClause, observed.probes)) {
-        out(`    ${row.source}/${row.capability}: ${row.readiness}${row.readiness === 'ready' ? '' : ' — retrieval will be refused'}`);
-      }
-    }
+    /* WHAT THE CLAUSE CAN ACTUALLY REACH, said before the money is spent
+       rather than discovered one refusal at a time in the evidence. */
+    for (const line of liveResearchLines(researchClause === undefined ? null : {
+      roles: [...researchClause.roles], allowances: researchClause.allowances.length,
+      observedBackends: observed.probes.length, reach: researchReachSummary(researchClause, observed.probes),
+    })) out(line);
     /* THE ALLOWANCE, SAID BEFORE THE FIRST DISPATCH: counted from this run's
        seeded units and the verification policy it was assembled with, so the
        evidence shows what the mission was permitted before it shows what it
@@ -929,9 +944,9 @@ async function main(argv: readonly string[]): Promise<number> {
     const tickBudget = await liveTickBudgetFor({
       store: handoffs.store, runId: submitted.runId, projectId: contract.projectId, verification: runtime.verification,
     });
-    out(`  tick budget: planned=${tickBudget.plannedTicks} hard_max=${tickBudget.hardMaxTicks} ${tickBudget.reason} override=${tickOverride.override ?? 'none'} version=${tickBudget.version}`);
+    out(liveTickBudgetLine(tickBudget, tickOverride.override));
     out(`  wall clock deadline: ${wallClockDeadline(env)}`);
-    out(`  peer execution scope: ${liveExecutionScope(env)}`);
+    out(liveExecutionScopeLine(liveExecutionScope(env)));
     const outcome = await driveJuliusRunToTerminal({
       loop: runtime.loop, store: handoffs.store,
       runId: submitted.runId, projectId: contract.projectId,
@@ -943,15 +958,20 @@ async function main(argv: readonly string[]): Promise<number> {
     const evidence = await handoffs.store.evidenceForRun(submitted.runId, contract.projectId);
     const findings = await handoffs.store.findingsForRun(submitted.runId, contract.projectId);
     const decisions = await handoffs.store.decisionsForRun(submitted.runId, contract.projectId);
+    /*
+     * THE RUN IS NAMED DIRECTLY UNDER ITS RESULT, then the details (JUJU's review of ef0c09c3, F10).
+     * The gate credits a RESULT only to a `  run:` line at most three lines below it. With the cause
+     * and the tick account in between, `run:` sat in the last slot, and one more kept line would have
+     * left the RESULT unattributed, which the gate reads as no answer. Directly under the RESULT, no
+     * detail line can push it out of the window.
+     */
     out(`RESULT: ${outcome.state}${outcome.stalled ? ' (stalled before terminal state)' : ''} after ${outcome.ticks} ticks`);
-    if (outcome.haltCause !== null) out(`  cause: ${outcome.haltCause}`);
-    if (outcome.tickAccount !== null) {
-      const ticks = outcome.tickAccount;
-      out(`  ticks: consumed=${ticks.ticksConsumed} allowance=${ticks.allowance} remaining=${ticks.ticksRemaining} beyond_main_path=${ticks.beyondMainPath} disagreement=${ticks.disagreementTicks} architecture=${ticks.architectureTicks} retries=${ticks.retries} exhausted=${ticks.exhausted ? 'yes' : 'no'}`);
-    }
     out(`  run: ${submitted.runId}`);
+    if (outcome.haltCause !== null) out(`  cause: ${outcome.haltCause}`);
+    if (outcome.tickAccount !== null) out(liveTickAccountLine(outcome.tickAccount));
     for (const task of tasks) out(`  task ${task.taskId} [${task.role}/${task.taskType}] → ${task.state}`);
-    for (const item of evidence) out(`  evidence ${item.evidenceId} [${item.type}/${item.status}] ${item.safeSummary}`);
+    // A row from an attempt the decision did not read is labelled, not hidden (`liveEvidenceLines`).
+    for (const line of liveEvidenceLines(evidence, tasks)) out(line);
     for (const finding of findings) out(`  finding ${finding.findingId} blocking=${finding.blocking} status=${finding.status} — ${finding.claim}`);
     out(`  verification decisions: ${decisions.map((decision) => decision.action).join(', ') || 'none'}`);
     return outcome.state === 'COMPLETED' ? 0 : 1;
@@ -966,7 +986,7 @@ if (typeof require !== 'undefined' && require.main === module) {
   main(process.argv.slice(2)).then(
     (code) => { process.exitCode = code; },
     (error) => {
-      process.stdout.write(`JULIUS LIVE MISSION crashed: ${error instanceof Error ? error.message.slice(0, 300) : 'unknown error'}\n`);
+      process.stdout.write(`${liveOneLine(`JULIUS LIVE MISSION crashed: ${error instanceof Error ? error.message.slice(0, 300) : 'unknown error'}`)}\n`);
       process.exitCode = 1;
     },
   );

@@ -9,8 +9,8 @@
  * on a 40001 its worker never saw.
  *
  * This names the class from the driver's own code, and never from a message a
- * provider could have written. The two exceptions are pg's two fixed driver
- * strings, matched exactly. It answers null for anything that is not a store
+ * provider could have written. The exceptions are the fixed strings pg and
+ * pg-pool raise with no code, matched exactly. It answers null for anything that is not a store
  * error at all, so a domain refusal (`stale_worker_result`) or a dispatch error
  * keeps its own meaning.
  *
@@ -56,6 +56,8 @@ const DRIVER_CONNECTION_MESSAGES: ReadonlySet<string> = new Set([
   'Query read timeout',
   'timeout expired',
   'timeout exceeded when trying to connect',
+  // pg-pool's own, when `connectionTimeoutMillis` expires (independent review F11).
+  'Connection terminated due to connection timeout',
 ]);
 
 export function juliusStoreErrorClass(error: unknown): JuliusStoreErrorClass | null {

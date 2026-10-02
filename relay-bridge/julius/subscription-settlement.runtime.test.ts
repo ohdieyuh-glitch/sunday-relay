@@ -186,6 +186,102 @@ describe('the adapter reports a subscription dispatch as no bill, at every endin
       billingPath: 'SUBSCRIPTION', executionCostUsdMicros: PRICED_MICROS,
     });
   });
+
+  /**
+   * JULIUS'S OWN STORE, AFTER A PAID SESSION (independent review F8, F9, F10).
+   * The executor steps write PostgreSQL through the shell port. A raw store
+   * error used to leave the adapter unwrapped: an ETIMEDOUT became a provider
+   * TIMEOUT and was retried, buying a second paid session (F8); a code-less
+   * driver string became the worker's failure (F9); and either way the
+   * session's cost facts were dropped (F10).
+   */
+  const afterASession = (refusal: () => Error) => adapterOver('CLAUDE_SUBSCRIPTION', [SUCCESS], createFakeExecutorShell({
+    diff: DIFF_TEXT, status: [' M src/slug.ts'], testExitCode: 0, refuse: 'diff', refusal,
+  }));
+  const sessionFacts = { runtimeStarted: true, costBasis: 'NOT_APPLICABLE', billingPath: 'SUBSCRIPTION', executionCostUsdMicros: PRICED_MICROS };
+
+  it('F8: a socket ETIMEDOUT from Julius’s own write after the session is Julius’s, not retried, and keeps the session’s cost', async () => {
+    const { adapter, sdk } = afterASession(() => Object.assign(new Error('read ETIMEDOUT'), { code: 'ETIMEDOUT' }));
+    const refusal = await refusalOf(adapter.dispatch(DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'PERSISTENCE_FAILURE', retryable: false });
+    expect(refusal.diagnostics).toMatchObject({ ...sessionFacts, storeErrorClass: 'connection' });
+    expect(sdk.calls.count, 'one paid session, never a second').toBe(1);
+  });
+
+  it('F9: a code-less driver string after the session is a store failure, not the worker’s', async () => {
+    const { adapter } = afterASession(() => new Error('Connection terminated unexpectedly'));
+    const refusal = await refusalOf(adapter.dispatch(DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'PERSISTENCE_FAILURE', retryable: false });
+    expect(refusal.diagnostics).toMatchObject({ ...sessionFacts, storeErrorClass: 'connection' });
+  });
+
+  it('F8: a persistence failure that arrives already typed as retryable is still never retried after the session', async () => {
+    const { adapter, sdk } = afterASession(() => new JuliusDispatchError('PERSISTENCE_FAILURE', true, 'Store blip.', 'persist_during_dispatch'));
+    const refusal = await refusalOf(adapter.dispatch(DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'PERSISTENCE_FAILURE', retryable: false });
+    expect(refusal.diagnostics).toMatchObject(sessionFacts);
+    expect(sdk.calls.count).toBe(1);
+  });
+
+  it('F10: any other raw error after the session still carries what the session consumed', async () => {
+    const { adapter } = afterASession(() => new TypeError('Cannot read properties of undefined'));
+    const refusal = await refusalOf(adapter.dispatch(DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', retryable: false });
+    expect(refusal.diagnostics).toMatchObject(sessionFacts);
+  });
+
+  // The review of d980f3b6 (a2_orphan_reservations/REVIEW_fb42b29f_d980f3b6_fd588ed4.md), finding 3:
+  // its probe D3, verbatim. The STATUS step is the first executor write after a paid session, and
+  // its wrapper was held by no test.
+  it('REVIEW PROBE D3: a socket ETIMEDOUT from the STATUS (close-out) step after the session is Julius\'s, not retried, and keeps the cost', async () => {
+    const { adapter } = adapterOver('CLAUDE_SUBSCRIPTION', [SUCCESS], createFakeExecutorShell({
+      diff: DIFF_TEXT, status: [' M src/slug.ts'], testExitCode: 0, refuse: 'status',
+      refusal: () => Object.assign(new Error('read ETIMEDOUT'), { code: 'ETIMEDOUT' }),
+    }));
+    const refusal = await refusalOf(adapter.dispatch(DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'PERSISTENCE_FAILURE', retryable: false });
+    expect(refusal.diagnostics).toMatchObject({ ...sessionFacts, storeErrorClass: 'connection' });
+  });
+
+  it('D11: a typed error that arrives retryable after the session keeps its code and loses the retry', async () => {
+    const { adapter, sdk } = afterASession(() => new JuliusDispatchError('TIMEOUT', true, 'The diff step timed out.', 'executor_timeout'));
+    const refusal = await refusalOf(adapter.dispatch(DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'TIMEOUT', retryable: false });
+    expect(refusal.diagnostics).toMatchObject(sessionFacts);
+    expect(sdk.calls.count, 'one paid session, never a second').toBe(1);
+  });
+
+  it('BEFORE the session, a transient store error says nothing ran, and may be retried for free', async () => {
+    const { adapter, sdk } = adapterOver('CLAUDE_SUBSCRIPTION', [SUCCESS], createFakeExecutorShell({
+      diff: DIFF_TEXT, status: [' M src/slug.ts'], testExitCode: 0, refuse: 'base',
+      refusal: () => Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }),
+    }));
+    const refusal = await refusalOf(adapter.dispatch(DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'PERSISTENCE_FAILURE', retryable: true });
+    expect(refusal.diagnostics).toMatchObject({ runtimeStarted: false, storeErrorClass: 'connection' });
+    expect(sdk.calls.count, 'no session was launched').toBe(0);
+  });
+
+  it('D6: BEFORE the session, a store error that is not transient is Julius\'s and is not retried', async () => {
+    const { adapter, sdk } = adapterOver('CLAUDE_SUBSCRIPTION', [SUCCESS], createFakeExecutorShell({
+      diff: DIFF_TEXT, status: [' M src/slug.ts'], testExitCode: 0, refuse: 'base',
+      refusal: () => Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505', severity: 'ERROR' }),
+    }));
+    const refusal = await refusalOf(adapter.dispatch(DISPATCH as never));
+    expect(refusal).toMatchObject({ code: 'PERSISTENCE_FAILURE', retryable: false });
+    expect(refusal.diagnostics).toMatchObject({ runtimeStarted: false, storeErrorClass: 'integrity' });
+    expect(sdk.calls.count, 'no session was launched').toBe(0);
+  });
+
+  it('D7: BEFORE the session, a raw error that is not the store\'s is passed up as itself, never called a store failure', async () => {
+    const { adapter, sdk } = adapterOver('CLAUDE_SUBSCRIPTION', [SUCCESS], createFakeExecutorShell({
+      diff: DIFF_TEXT, status: [' M src/slug.ts'], testExitCode: 0, refuse: 'base',
+      refusal: () => new TypeError('Cannot read properties of undefined'),
+    }));
+    const settled = await adapter.dispatch(DISPATCH as never).then(() => null, (error: unknown) => error);
+    expect(settled, 'not relabelled as Julius\'s own store failure').toBeInstanceOf(TypeError);
+    expect(sdk.calls.count, 'no session was launched').toBe(0);
+  });
 });
 
 /* =================================================== the kernel's ledger */

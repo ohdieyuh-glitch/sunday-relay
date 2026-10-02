@@ -38,6 +38,7 @@ import {
 } from './julius-lifecycle-runtime';
 import type { JuliusClock, JuliusEventWriter, JuliusIdFactory, JuliusRunRow, JuliusRuntimeStore } from './julius-runtime-ports';
 import { juliusCostComponent } from './julius-cost-accounting';
+import { juliusCurrentAttemptEvidence } from './julius-attempt-evidence';
 
 /* -------------------------------------------------------------- identity */
 
@@ -113,6 +114,10 @@ export interface JuliusRunView {
  *     re-derives it.
  *   - A criterion is satisfied by the verification evaluator's own rule — every
  *     required evidence type present and PASSED — imported rather than re-spelt.
+ *   - Criteria and deliverables read each task's evidence reduced to the attempt
+ *     its task row names, as the decision does: a row a failed or lost lease left
+ *     behind satisfies nothing and is not a deliverable. `inspectEvidence` is the
+ *     unreduced history.
  *   - An unknown cost is null beside a count of what is unknown, never zero.
  *   - A deliverable whose body was not retained says `retained: false` rather
  *     than reading as an empty one.
@@ -152,9 +157,10 @@ export interface JuliusMissionResultView {
     readonly evidenceIds: readonly string[];
   }[];
   /**
-   * WHAT THE MISSION MADE. Every PASSED evidence row that is a product rather
-   * than a judgement — a diff, an artifact, a test result — with the reference
-   * a body can be fetched by and whether one was retained at all.
+   * WHAT THE MISSION MADE. Every PASSED evidence row of the attempt the decision
+   * read that is a product rather than a judgement — a diff, an artifact, a test
+   * result — with the reference a body can be fetched by and whether one was
+   * retained at all.
    */
   readonly deliverables: readonly {
     readonly evidenceId: string;
@@ -326,6 +332,7 @@ export class JuliusRuntimeApi {
     return allow(await this.deps.store.tasksForRun(runId, identity.projectId));
   }
 
+  /** Every attempt's rows, the raw history: a superseded attempt's rows are listed, not judged. */
   async inspectEvidence(identity: JuliusApiIdentity, runId: string): Promise<JuliusApiResult<readonly JuliusEvidence[]>> {
     const run = await this.#authorizedRun(identity, runId, 'run:read');
     if (!run.ok) return run;
@@ -354,9 +361,10 @@ export class JuliusRuntimeApi {
     const authorized = await this.#authorizedRun(identity, runId, 'run:read');
     if (!authorized.ok) return authorized;
     const run = authorized.value;
-    const [criteria, evidence, findings, decisions, entries] = await Promise.all([
+    const [criteria, evidence, tasks, findings, decisions, entries] = await Promise.all([
       this.deps.store.criteriaForRun(runId, identity.projectId),
       this.deps.store.evidenceForRun(runId, identity.projectId),
+      this.deps.store.tasksForRun(runId, identity.projectId),
       this.deps.store.findingsForRun(runId, identity.projectId),
       this.deps.store.decisionsForRun(runId, identity.projectId),
       // ONE WALK, TWO PROJECTIONS: the slots and the failure both come from the
@@ -365,7 +373,16 @@ export class JuliusRuntimeApi {
     ]);
     const slots = projectJuliusSlotViews(entries);
 
-    const passed = evidence.filter((item) => item.status === 'PASSED');
+    /**
+     * THE ATTEMPT THE DECISION READ, NOT EVERY ATTEMPT (defect A, A-6). The
+     * decision reads each task's rows reduced to the attempt its task row names
+     * (`juliusCurrentAttemptEvidence`), so a failed or lost lease's rows count for
+     * nothing there. Read unreduced here, such a row showed a criterion as
+     * satisfied, and listed a deliverable, that the decision never credited: a
+     * record that disagreed with the decision. The full history stays
+     * `inspectEvidence`.
+     */
+    const passed = juliusCurrentAttemptEvidence(evidence, tasks).filter((item) => item.status === 'PASSED');
     /**
      * A CRITERION THAT REQUIRES NOTHING IS NOT SATISFIED BY NOTHING.
      *
@@ -701,6 +718,8 @@ export function projectJuliusSlotViews(
 
   const text = (value: unknown): string | null =>
     (typeof value === 'string' && value.trim() !== '' ? value : null);
+  /** Settlements that name their reservation, gathered so each reservation counts once, on its first row's slot. */
+  const byReservation = new Map<string, { readonly account: ReturnType<typeof slot>; knownUsdMicros: number | null; unpriced: boolean }>();
   const roleOf = (entry: JuliusTimelineEntry): JuliusDefaultRole | null => {
     const stated = text(entry.facts.role);
     if (stated !== null && (JULIUS_DEFAULT_ROLES as readonly string[]).includes(stated)) {
@@ -753,6 +772,25 @@ export function projectJuliusSlotViews(
          * for every reader; a row with no basis is read as it always was.
          */
         const component = juliusCostComponent({ taskId: entry.taskId ?? '', basis: entry.facts.costBasis, usdMicros: entry.facts.usdMicros });
+        /**
+         * ONE RESERVATION, ONE COMPONENT ((a2) step 3). A reservation can carry
+         * two rows honestly (the sweep's close, then a late settlement), and two
+         * figures for one dispatch were SUMMED here. A row that names its
+         * reservation is gathered and counted once, below: its largest figure is
+         * the floor, and anything unpriced is one component. A row that names no
+         * reservation counts as it always did.
+         */
+        const reservationId = text(entry.facts.reservationId);
+        if (reservationId !== null) {
+          const gathered = byReservation.get(reservationId) ?? { account, knownUsdMicros: null, unpriced: false };
+          if (component.knownUsdMicros !== null) {
+            gathered.knownUsdMicros = Math.max(gathered.knownUsdMicros ?? component.knownUsdMicros, component.knownUsdMicros);
+          } else {
+            gathered.unpriced = true;
+          }
+          byReservation.set(reservationId, gathered);
+          break;
+        }
         // AN UNKNOWN SETTLEMENT IS NOT A FREE ONE. It is counted as a component
         // nobody priced, which is what turns the sum into a floor.
         if (component.knownUsdMicros !== null) {
@@ -765,6 +803,10 @@ export function projectJuliusSlotViews(
       default:
         break;
     }
+  }
+  for (const gathered of byReservation.values()) {
+    if (gathered.knownUsdMicros !== null) gathered.account.knownUsdMicros += gathered.knownUsdMicros;
+    if (gathered.unpriced) gathered.account.unknownCostComponents += 1;
   }
 
   return JULIUS_DEFAULT_ROLES.map((role): JuliusSlotView => {
