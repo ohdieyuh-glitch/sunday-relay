@@ -8,22 +8,39 @@
  * WHAT IS NOT REAL HERE, said on its face:
  *   - SESSIONS: `POST /dev/session {"player":"kai"}` mints a token for player `usr_kai` holding the `social` capability. No
  *     account, no pairing, no password -- which is why it listens on 127.0.0.1 only and refuses any Origin.
- *   - STORAGE: in memory; a restart forgets everything (persistence is the store's other implementation).
+ *   - STORAGE: in memory; a restart forgets everything -- UNLESS started with `--pg <url>` (a THROWAWAY database: the
+ *     portable test PostgreSQL), when it runs the real chain + 030 and the DURABLE store, so a restart of this server
+ *     proves what a backend restart gives back. Never pointed at a live database: the URL must be 127.0.0.1.
  *
  *   node_modules/.bin/esbuild relay-bridge/dev-social-server.ts --bundle --platform=node --format=esm --outfile=<scratch>/dev-social.mjs
- *   node <scratch>/dev-social.mjs [port]        (default 8796)
+ *   node <scratch>/dev-social.mjs [port] [--pg postgresql://postgres@127.0.0.1:54329/<throwaway>]   (default 8796)
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomBytes } from 'node:crypto';
-import { createInMemorySocialStore } from '../src/relay/social/social-store';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { Pool } from 'pg';
+import { openSocialPostgresStore } from '../src/relay/persistence/social-postgres';
+import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
+import { createInMemorySocialStore, type SocialStore } from '../src/relay/social/social-store';
 import { handleSocialRoute, type SocialSessionFacts } from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 
 const MAX_BODY = 64 * 1024;
 
-export function createDevSocialServer() {
-  const store = createInMemorySocialStore();
+/** A throwaway database, migrated (the chain, then 030) and opened as the durable store. Loopback URLs only. */
+export async function openDevPostgresStore(url: string, repoRoot: string): Promise<{ store: SocialStore; pool: Pool }> {
+  if (!/^postgres(ql)?:\/\/[^@]*@127\.0\.0\.1:\d+\//.test(url)) throw new Error('the dev social server only uses a loopback throwaway database');
+  const pool = new Pool({ connectionString: url });
+  await new TransactionalWonderlandDatabase(pool).migrate();
+  const applied = await pool.query(`SELECT 1 FROM relay_wonderland.schema_migrations WHERE version='030_wonderland_social'`);
+  if (applied.rowCount === 0) await pool.query(readFileSync(join(repoRoot, 'src', 'relay', 'social', 'persistence', '030_wonderland_social.sql'), 'utf8'));
+  return { store: await openSocialPostgresStore(pool), pool };
+}
+
+export function createDevSocialServer(durable?: { store: SocialStore; pool: Pool }) {
+  const store = durable?.store ?? createInMemorySocialStore();
   const sessions = new Map<string, SocialSessionFacts & { displayName: string }>();
 
   const send = (res: ServerResponse, status: number, body: unknown) => {
@@ -65,6 +82,10 @@ export function createDevSocialServer() {
         if (req.method === 'POST' && path === '/dev/session') {
           const player = body !== null && typeof body === 'object' ? (body as Record<string, unknown>).player : undefined;
           if (typeof player !== 'string' || !/^[a-z][a-z0-9_]{1,23}$/.test(player)) return send(res, 400, { error: { kind: 'bad_player', message: 'player must be a short lowercase name' } });
+          if (durable !== undefined) {
+            // the durable store's rows reference players: a development player is one, in the throwaway database
+            await durable.pool.query(`INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING`, [`usr_${player}`]);
+          }
           const token = `dev-${player}-${randomBytes(12).toString('hex')}`;
           sessions.set(token, {
             sessionId: token.slice(-8),
@@ -99,7 +120,12 @@ export function createDevSocialServer() {
 const entry = process.argv[1] ?? '';
 if (/dev-social(-server)?\.(m?js|ts)$/.test(entry)) {
   const port = Number.parseInt(process.argv[2] ?? '8796', 10);
-  createDevSocialServer().listen(port, '127.0.0.1', () => {
-    console.log(`WONDERLAND SOCIAL DEV SERVER on http://127.0.0.1:${port} -- loopback only, in memory, DEVELOPMENT SESSIONS`);
-  });
+  const pgAt = process.argv.indexOf('--pg');
+  const repoRoot = process.env.WONDERLAND_SOCIAL_REPO ?? process.cwd();
+  void (async () => {
+    const durable = pgAt > 0 ? await openDevPostgresStore(process.argv[pgAt + 1] ?? '', repoRoot) : undefined;
+    createDevSocialServer(durable).listen(port, '127.0.0.1', () => {
+      console.log(`WONDERLAND SOCIAL DEV SERVER on http://127.0.0.1:${port} -- loopback only, ${durable ? 'DURABLE (throwaway PostgreSQL)' : 'in memory'}, DEVELOPMENT SESSIONS`);
+    });
+  })();
 }
