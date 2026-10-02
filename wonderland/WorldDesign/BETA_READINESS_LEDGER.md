@@ -56,9 +56,11 @@ multiple real Wonderland clients, by CORE and independently by Second.
 | R16 | **Multiplayer / social foundation -- WONDERLAND MULTIPLAYER PHASE 1, end to end** (founder, 2026-10-02: "WONDERLAND IS MULTIPLAYER BEFORE LAUNCH"; architecture decided: a SHARED PRESENCE LAYER, each world executing locally, authenticated players in the same Wonderland/server context existing together through synchronized state via the social backend; no authoritative dedicated-server simulation claimed; dedicated servers later only for experiences needing authority (competitive GVE, PvP, shared physics, economy)). The loop: sign in -> friends (requests, accept/decline/cancel, remove, block, mute, report, recent players) -> presence (online, in Wonderland, creating, working with Julius, private server, GVE, mission, party, away, busy, offline) -> another user's profile (LEFT: primary Compound AI Agent + primary Relay Dog, prominent; skins via the canonical registry) -> direct messages with unread state and history -> create/join a party, invite, leader controls -> join the same Wonderland/server context and SEE each other in-world (player and Relay Dog representations, movement/presence) -> join/leave updates -> privacy/block/mute/report enforced (no leaks) -> state survives reconnect/restart. Unreal: Social Hub, Friends, Friend Requests, Recent Players, Messages, Parties, Party Voice (mute, self-mute, speaking, connect/reconnect, provider abstraction; NO faked connected voice: a real provider before 1.0), User Profiles. Backend: in sunday-relay MAIN (routes, least-privilege desktop social capability with session identity = actor, snapshot.read as an aggregation of existing authorized reads only, PostgreSQL persistence surviving a backend restart, migration 030 after main's 028/029, privacy-safe events polled first, push-compatible). **Acceptance: TWO ACTUAL Wonderland clients with different authenticated identities** (request, accept, presence update, message, party create/invite/join, the same context with both representations visible, block/privacy, restart/reconnect); synthetic users are never evidence | 25 | 0 | `local/wonderland-social` (Second, ACTIVE, HIGH PRIORITY, rebased onto RC10 7f8e08d8): client hub (Friends / Requests / Recent / Messages / Party + voice panel), voice abstraction (UNAVAILABLE by default), live HTTP client with an event poll, developer-only synthetic preview people; server commands + an atomic in-memory store with an event log + gated routes, 45/45 TS tests incl. two-player flows, mutation-checked; a loopback DEVELOPMENT social server for two-client tests. Nothing wired or deployed. **2026-10-02, 17d1c084 compiled and run in a package for the first time** (Second, `_qa_handoff/social/`): boot OK; wl.Qa.Social 17/17; a player session shows no preview people, a NOT CONNECTED hub, voice UNAVAILABLE (3/3); **first two-real-client run** on the loopback DEVELOPMENT social server (kai 5/5, nova 6/6: a friend request crossed, friends both ways, each sees the other ONLINE, a message and reply crossed, the same two-person party in both). Not the gate: the sessions are minted, not authenticated; no PostgreSQL persistence, no main-line routes, no same-world presence, no block or restart in that run, no voice provider | the whole loop, end to end. **LAUNCH GATE: no private/public alpha or beta launch until R16 = 1.0** |
 | | **Total** | **100** | | | |
 
-**WONDERLAND BETA READINESS: 54.00%** (16 rows; **the FINAL RC is now RC10** 7f8e08d8 = RC9 + Shadow Flame, built
-2026-10-02 05:02, zip 5F2E08C8…733B. RC9's CORE + Second evidence is a non-final package now, so those rows stand at 0.75
-until re-earned on RC10; R14 0 waits for the soak; **R16 0: the multiplayer launch loop is not built**).
+**WONDERLAND BETA READINESS: 54.00%** (16 rows; **the FINAL RC becomes RC11** = RC10 7f8e08d8 + Second's NEW TASK
+TERMINAL "+" fix 4414cbfa, the founder's photo task. CORE folded it in on 2026-10-02 ~08:30, before Second's RC10 pass
+began; the build is queued behind Second's two-client slot. RC10 (built 05:02, zip 5F2E08C8…733B) and RC9 are non-final
+packages now, so their CORE + Second evidence stands at 0.75 until re-earned on RC11; R14 0 waits for RC11's soak;
+**R16 0: the multiplayer launch loop is not built**).
 **NOT LAUNCHABLE: the R16 launch gate is shut.** WONDERLAND VERIFIED 80% MILESTONE was reached at 80.50% on the 15-row
 single-player scale (R4, 2026-10-01); that scale no longer defines launch readiness.
 R1 4.5 + R2 4.5 + R3 4.5 + R4 6.75 + R5 1.6875 + R6 1.6875 + R7 4.5 + R8 4.5 + R9 3.9375 + R10 3.9375 + R11 3.375 +
@@ -66,6 +68,11 @@ R12 3.9375 + R13 2.8125 + R14 0 + R15 3.375 + R16 0 = 54.00.
 - **Plan (founder, 2026-10-02):**
   - RC10 = RC9 + Second's Shadow Flame skin once runtime-verified; it carries verified fixes but is not a launch
     candidate.
+  - RC11 = RC10 + Second's NEW TASK TERMINAL "+" fix (4414cbfa, from the founder's photo). The + was an 18pt glyph in a
+    strip held to 24 units, so its lower half was clipped; it is now two drawn bars in the same 40 x 24 gold square.
+    CORE's decision (it owns canonical integration): a founder-reported defect belongs in the build the founder launches,
+    and Second's RC10 pass had not started, so nothing is verified twice. CORE re-runs its chain on RC11; Second's
+    independent pass and the soak run on RC11. Not a launch candidate either.
   - A later PRE-LAUNCH RC must contain the completed multiplayer/social foundation (Second owns its development; CORE
     integrates each verified milestone into canonical).
   - On every new final RC, every 1.0 is re-earned by CORE and Second; until then rows fall back to 0.75, and R11/R14
@@ -109,10 +116,15 @@ R12 3.9375 + R13 2.8125 + R14 0 + R15 3.375 + R16 0 = 54.00.
     gate. R16 was added at weight 25, credit 0; the other weights x0.75; every row keeps its credit.
   - 70.875% -> 54.00% on 2026-10-02 05:02 (PROCEDURAL, the founder's rule): RC10 (7f8e08d8, Shadow Flame) became the
     final RC, so RC9's 1.0 rows (R1-R10, R12, R13, R15) fall back to 0.75 until CORE and Second re-earn them on RC10.
-- With every row at 0.75 except R14 (0), CORE alone is at its ceiling of 72.00%. Everything above it comes from the final
-  RC: CORE's RC9 chain plus Second's independent RC9 pass (each row to 1.0), and RC9's soak (R14, R11).
+  - 54.00% -> 54.00% on 2026-10-02 ~08:30 (no change): the final RC moves from RC10 to RC11 (+ the "+" fix 4414cbfa)
+    before Second's RC10 pass began. Every row was already at 0.75 or 0, so nothing falls back.
+- With R1-R15 at 0.75 except R14 (0), and R16 at 0, CORE alone is at its ceiling of 54.00%. Everything above it comes
+  from the final RC:
+  - CORE's chain plus Second's independent pass on it, each row to 1.0 (R1-R15 at 1.0 = 75 points);
+  - its 60-minute soak (R14, R11);
+  - R16, the multiplayer launch gate (25 points), only with the real two-client loop.
 
-### RC10 package evidence (CORE) -- the FINAL RC since 2026-10-02 05:02
+### RC10 package evidence (CORE) -- final RC 2026-10-02 05:02 to ~08:30, superseded by RC11 before Second's pass
 
 - Build: 0.1.0-rc10, commit 7f8e08d81c1284e25de8cd558a377b0ce5634827 = merge(be1cbcd7 task3, 9dbd93b8 Shadow Flame; on RC9
   3806f26a). Tree 1225c329, audited: Second's 10 files from 9dbd93b8, every other path from task3. Label
