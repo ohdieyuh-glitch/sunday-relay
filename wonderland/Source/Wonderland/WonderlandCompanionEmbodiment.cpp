@@ -2750,23 +2750,25 @@ void AWonderlandCompanionEmbodiment::RebuildShadows(float TimeSeconds)
 			float Height = static_cast<float>(Anchor.Z);
 			if (T.Style == 0)
 			{
-				// RISING: up off the shoulders and back, drifting round a little, leaning out as it climbs.
-				Radius = AnchorRadius + 0.24f * Len * Along + Curl * Along;
+				// RISING: up off the shoulders and back, drifting round a little, leaning well OUT as it climbs -- the first runtime
+				// pass kept it inside the head's width, where the head hid it.
+				Radius = AnchorRadius + 0.42f * Len * FMath::Pow(Along, 0.8f) + Curl * Along;
 				Angle = AnchorTurn + 0.38f * FMath::Sin(2.0f * PI * (0.45f * Along - TimeSeconds / (SwellPeriod * 0.7f)) + StripPhase)
 					+ Dir * FMath::Lerp(0.4f, 0.9f, Variant) * Along;
 				Height += 0.92f * Len * Along + 0.06f * Len * FMath::Sin(2.0f * PI * (0.8f * Along - TimeSeconds / CurlPeriod) + StripPhase);
 			}
 			else if (T.Style == 1)
 			{
-				// ORBITING: round the torso, curling as it goes, some spiralling up and some down.
-				Radius = FMath::Max(AnchorRadius * 1.6f, 0.38f * Len) + Curl;
+				// ORBITING: round the torso BEYOND the arms (the first pass orbited at the arms' own radius: black on black), curling
+				// as it goes, some spiralling up and some down.
+				Radius = FMath::Max(AnchorRadius * 2.4f, 0.55f * Len) + Curl;
 				Angle = Turn + Dir * FMath::Lerp(1.6f, 2.6f, Variant) * Along;
 				Height += Climb * Len * Along + 0.10f * Len * FMath::Sin(2.0f * PI * (0.7f * Along - TimeSeconds / CurlPeriod) + StripPhase);
 			}
 			else
 			{
 				// SWEEPING: low past the legs, dipping, then lifting at the end -- the ones that trail furthest.
-				Radius = FMath::Lerp(AnchorRadius, FMath::Max(AnchorRadius * 1.7f, 0.42f * Len), FMath::SmoothStep(0.0f, 0.45f, Along)) + Curl;
+				Radius = FMath::Lerp(AnchorRadius, FMath::Max(AnchorRadius * 2.4f, 0.60f * Len), FMath::SmoothStep(0.0f, 0.45f, Along)) + Curl;
 				Angle = AnchorTurn + 0.6f * (Turn - AnchorTurn) + Dir * 1.5f * Along;
 				Height += -0.30f * Len * FMath::Sin(PI * FMath::Min(Along * 1.2f, 1.0f)) + 0.15f * Len * Along;
 			}
@@ -2787,7 +2789,8 @@ void AWonderlandCompanionEmbodiment::RebuildShadows(float TimeSeconds)
 		// ---- THE RIBBON: two crossed tapered blades through the spine, twisting slowly, widest mid-strip, with a swell of
 		// width running along it so it reads as smoke rather than as a flat card.
 		FPile& Pile = Piles.FindOrAdd(Source.Material);
-		const float BaseHalfWidth = FMath::Clamp(0.06f * T.Reach, 2.5f, 7.0f);
+		// WIDE ENOUGH TO READ AS A STRIP: the first runtime pass (half-width 2.5-7 uu) drew threads the eye lost against the body.
+		const float BaseHalfWidth = FMath::Clamp(0.075f * T.Reach, 4.0f, 12.0f);
 		for (int32 Blade = 0; Blade < 2; ++Blade)
 		{
 			const int32 First = Pile.Verts.Num();
@@ -2875,9 +2878,22 @@ FString AWonderlandCompanionEmbodiment::DescribeShadows() const
 	{
 		Material = MaterialInstances[ShadowSources[0].Material]->GetName();
 	}
-	return FString::Printf(TEXT("tendrils %d (rise %d, orbit %d, sweep %d) | detail %d | vertices %d | sections %d | visible %s | material %s"),
+	// HOW FAR OUT AND UP THE STRIPS REACH, in actor space: the number that says whether they leave the silhouette at all.
+	float Out = 0.0f;
+	float Up = 0.0f;
+	for (const FVector& Tip : ShadowTips)
+	{
+		Out = FMath::Max(Out, static_cast<float>(FVector2D(Tip.X, Tip.Y).Size()));
+		Up = FMath::Max(Up, static_cast<float>(Tip.Z));
+	}
+	float Widest = 0.0f;
+	for (const FShadowTendril& T : ShadowTendrils)
+	{
+		Widest = FMath::Max(Widest, FMath::Clamp(0.075f * T.Reach, 4.0f, 12.0f));
+	}
+	return FString::Printf(TEXT("tendrils %d (rise %d, orbit %d, sweep %d) | detail %d | vertices %d | sections %d | visible %s | material %s | tips out to %.0f uu, up to %.0f uu, strips up to %.0f uu wide"),
 		ShadowTendrils.Num(), Styles[0], Styles[1], Styles[2], ShadowDetail, ShadowVertexCount,
-		Surface != nullptr ? Surface->GetNumSections() : 0, (Surface != nullptr && Surface->IsVisible()) ? TEXT("yes") : TEXT("no"), *Material);
+		Surface != nullptr ? Surface->GetNumSections() : 0, (Surface != nullptr && Surface->IsVisible()) ? TEXT("yes") : TEXT("no"), *Material, Out, Up, Widest * 2.0f);
 }
 
 bool AWonderlandCompanionEmbodiment::HasLiveShadows() const

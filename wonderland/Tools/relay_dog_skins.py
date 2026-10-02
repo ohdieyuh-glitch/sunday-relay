@@ -3199,8 +3199,9 @@ SHADOW_EYES = (1.00, 0.84, 0.12)
 SHADOW_COAT = (0.016, 0.019, 0.042)
 SHADOW_COAT_DEEP = (0.009, 0.010, 0.022)
 #: THE STRIPS: black. Blue may appear only as the faintest rim (founder: "Their visual identity must remain BLACK SHADOW
-#: ENERGY"), so the strip material is a rim material whose colour is one step above black.
-SHADOW_STRIP = (0.006, 0.007, 0.016)
+#: ENERGY"), so the strip material is a rim material whose colour is one step above black -- with just enough navy that its
+#: grazing edge separates a black strip from a dark wall or the wardrobe's night-blue stage (the first runtime pass: invisible there).
+SHADOW_STRIP = (0.010, 0.014, 0.046)
 #: The few emissive accents the founder allows ("controlled dark-blue highlights; emissive accents where appropriate").
 SHADOW_EDGE = (0.10, 0.26, 0.95)
 
@@ -3229,7 +3230,7 @@ def shadow_flame():
     figure.material("visor", "lit", VISOR, 1.0)
     figure.material("eye", "glow", SHADOW_EYES, 7.5)
     figure.material("eyehalo", "add", SHADOW_EYES, 7.5 * 0.35)
-    figure.material("shadow", "rim", SHADOW_STRIP, 2.4)
+    figure.material("shadow", "rim", SHADOW_STRIP, 3.0)
     figure.material("voidedge", "glow", SHADOW_EDGE, 0.30)
     base_dog(figure)          # marks the Dog's extent: nothing added below can change its height
     d = DOG
@@ -3254,14 +3255,17 @@ def shadow_flame():
 
     # ---- THE SHADOW ANCHORS. Each box only bounds where its tendrils are born; none is ever drawn.
     #      part             parent  pivot (the region's centre)                              count  reach (Dog units)
+    # REACH IS HOW FAR OUTSIDE THE DOG THEY GO. The first runtime pass reached 8-15 units and the strips never left the
+    # silhouette -- black on black, hidden behind the head -- so they now reach well past it: up over the head, round
+    # beyond the arms, out past the legs.
     back_z = d["torso_z"] + th * 0.30
-    figure.part("shadow_back", "body", (-td * 0.5, 0.0, back_z), "shadow", 4, 15.0)
+    figure.part("shadow_back", "body", (-td * 0.5, 0.0, back_z), "shadow", 4, 26.0)
     figure.box("shadow_back", "shadow", (-td * 0.5, 0.0, back_z), (1.0, tw + 3.0, th * 0.45))
-    figure.part("shadow_torso", "body", (0.0, 0.0, d["torso_z"]), "shadow", 4, 11.0)
+    figure.part("shadow_torso", "body", (0.0, 0.0, d["torso_z"]), "shadow", 4, 16.0)
     figure.box("shadow_torso", "shadow", (0.0, 0.0, d["torso_z"]), (td, tw, th * 0.6))
-    figure.part("shadow_hips", "body", (-td * 0.3, 0.0, hip_z + 0.6), "shadow", 3, 10.0)
+    figure.part("shadow_hips", "body", (-td * 0.3, 0.0, hip_z + 0.6), "shadow", 3, 14.0)
     figure.box("shadow_hips", "shadow", (-td * 0.3, 0.0, hip_z + 0.6), (td * 0.8, tw + 1.0, 1.2))
-    figure.part("shadow_head", "head", (-hd * 0.35, 0.0, d["head_z"] + hh * 0.30), "shadow", 2, 8.0)
+    figure.part("shadow_head", "head", (-hd * 0.35, 0.0, d["head_z"] + hh * 0.30), "shadow", 2, 18.0)
     figure.box("shadow_head", "shadow", (-hd * 0.35, 0.0, d["head_z"] + hh * 0.30), (hd * 0.4, hw * 0.8, hh * 0.3))
     return figure
 

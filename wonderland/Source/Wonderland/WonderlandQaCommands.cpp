@@ -2801,7 +2801,7 @@ namespace
 						S.Hidden.Add(*It);
 					}
 				}
-				QaShadowCamera(S, World, PC, D, 0.0, 430.0);
+				QaShadowCamera(S, World, PC, D, 0.0, 720.0);
 				Next(8);
 			}
 			break;
@@ -2809,7 +2809,7 @@ namespace
 			if (In >= 1.5)
 			{
 				QaShadowShot(S, TEXT("1_front"));
-				QaShadowCamera(S, World, PC, D, 40.0, 430.0);
+				QaShadowCamera(S, World, PC, D, 40.0, 720.0);
 				Next(9);
 			}
 			break;
