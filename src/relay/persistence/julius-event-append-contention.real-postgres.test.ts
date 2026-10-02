@@ -417,9 +417,9 @@ suite('Julius event appends under SERIALIZABLE, in both plan states (row 13 (i),
   });
 
   it('030: a TRUNCATE of events is refused, as the foreign key refused it (row triggers never see a TRUNCATE)', async () => {
+    // The refusal itself is the evidence: refusalOf rolls back, so the table's contents afterwards would prove nothing.
     const refused = await refusalOf([['TRUNCATE relay_wonderland.events', []]]);
-    expect(refused?.message).toContain('events_truncate_refused');
-    expect(await count('SELECT count(*)::int AS n FROM relay_wonderland.events', []), 'CONTROL: the ledger is intact').toBeGreaterThan(0);
+    expect(refused?.message, 'without the guard the TRUNCATE succeeds and this is null').toContain('events_truncate_refused');
   });
 
   it('030: an event’s id, and an outbox row’s event id, never change (the foreign key covered updates)', async () => {
