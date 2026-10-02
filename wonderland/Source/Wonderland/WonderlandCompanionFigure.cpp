@@ -46,6 +46,7 @@ namespace
 		if (Token == TEXT("knee")) { Out = EWonderlandCompanionMotion::Knee; return true; }
 		if (Token == TEXT("spine")) { Out = EWonderlandCompanionMotion::Spine; return true; }
 		if (Token == TEXT("trail")) { Out = EWonderlandCompanionMotion::Trail; return true; }
+		if (Token == TEXT("shadow")) { Out = EWonderlandCompanionMotion::Shadow; return true; }
 		return false;
 	}
 }

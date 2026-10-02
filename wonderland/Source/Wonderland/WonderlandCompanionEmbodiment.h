@@ -840,6 +840,67 @@ private:
 	/** Lays the flame ribbons down for this frame. Cheap: a few hundred triangles for a whole figure. */
 	void RebuildFlames(float TimeSeconds);
 
+	/**
+	 * LIVING SHADOW, NOT BOXES (Shadow Flame; founder, 2026-10-01: "animated DARK BLACK STRIPS / SHADOW TENDRILS moving
+	 * around the Relay Dog ... NOT ordinary fire ... supernatural shadow ribbons ... The motion should feel ALIVE").
+	 *
+	 * Every part a figure tags `shadow` is a place where tendrils are born; its boxes are measured, never drawn.
+	 * RebuildShadows lays every tendril each frame as a tapered black ribbon (two crossed blades, like the flames, so it
+	 * has body from every side) whose spine is a function of time with its OWN speed, curl, height, radius, phase and
+	 * lifetime -- no two move together -- and which trails through the Dog's recent path when it moves.
+	 */
+	struct FShadowSource
+	{
+		int32 PartIndex = INDEX_NONE;
+		int32 Material = INDEX_NONE;
+		/** The region the tendrils are born in, in the part's own space, uu. */
+		FVector Centre = FVector::ZeroVector;
+		FVector HalfSize = FVector::ZeroVector;
+	};
+	struct FShadowTendril
+	{
+		int32 Source = INDEX_NONE;
+		/** 0 rises off the back and past the head; 1 orbits the torso; 2 sweeps low by the legs and trails. */
+		int32 Style = 0;
+		/** Where it is born, in its part's space, uu. */
+		FVector Anchor = FVector::ZeroVector;
+		/** How far it reaches at full length, uu. */
+		float Reach = 0.0f;
+		/** Everything else about it -- speeds, curls, phases, lifetime -- is drawn from this. */
+		float Seed = 0.0f;
+	};
+	TArray<FShadowSource> ShadowSources;
+	TArray<FShadowTendril> ShadowTendrils;
+	/**
+	 * NOT A UPROPERTY, ON PURPOSE: a new reflected member is a new early FName, and a shifted name table crashed a UE 5.8
+	 * package at boot inside Niagara. The actor keeps the component alive through its own component list
+	 * (AddInstanceComponent); this is only a handle to it.
+	 */
+	TWeakObjectPtr<UProceduralMeshComponent> ShadowSurface;
+	/** Where the figure has been, newest last (xyz world location, w the time): the tendrils trail through it. */
+	TArray<FVector4> ShadowPath;
+	/** The detail the mesh section was last built at (0 near, 1 mid, 2 far), so a change rebuilds the topology. */
+	int32 ShadowDetail = -1;
+	/** Every live tendril's tip after the last rebuild, in actor space: what QA measures motion and independence on. */
+	TArray<FVector> ShadowTips;
+	/** Each tip's width envelope (0 invisible .. 1 full): a tendril between lifetimes is invisible, and QA must not read
+	 *  the jump to its next lifetime as a visible jump. */
+	TArray<float> ShadowTipWeights;
+	int32 ShadowVertexCount = 0;
+	/** Lays the shadow tendrils down for this frame. Cheap: under two thousand triangles for the whole figure. */
+	void RebuildShadows(float TimeSeconds);
+
+public:
+	/** QA: "tendrils N detail D vertices V material M" -- empty for a figure without shadow. */
+	FString DescribeShadows() const;
+	/** QA: every live tendril's tip, in actor space, after the last frame. Empty for a figure without shadow. */
+	const TArray<FVector>& GetShadowTips() const { return ShadowTips; }
+	/** QA: each tip's width envelope, parallel to GetShadowTips (0 invisible, between lifetimes .. 1 full). */
+	const TArray<float>& GetShadowTipWeights() const { return ShadowTipWeights; }
+	/** QA: whether the shadow surface exists and has something drawn in it right now. */
+	bool HasLiveShadows() const;
+
+private:
 	bool bGaitDrivenExternally = false;
 	FWonderlandWornPose WornPose;
 

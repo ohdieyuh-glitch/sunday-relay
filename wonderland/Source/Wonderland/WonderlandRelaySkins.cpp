@@ -120,6 +120,13 @@ void UWonderlandRelaySkinSubsystem::BuildRegistry()
 		TEXT("From the sheet: a skeletal deer mask with great antlers and glowing blue eyes, dark layered ritual armour with bone plates and a skull charm, blue fire, the simple tail."),
 		TEXT("Baal.wlvox"), Rgb(0x3E, 0x8E, 0xFF), Rgb(0x4C, 0xA8, 0xFF), false);
 
+	// ---- SHADOW FLAME, AN ADDITION (founder, 2026-10-01: "BUILD THE SHADOW FLAME RELAY DOG SKIN"). The canonical standing
+	// Relay Dog, unclothed, near-black with a midnight-blue edge and glowing yellow eyes; its black shadow strips are not in
+	// the figure as boxes but drawn live by AWonderlandCompanionEmbodiment::RebuildShadows from the figure's `shadow` parts.
+	Add(TEXT("shadow_flame"), TEXT("SHADOW FLAME"), TEXT("SHADOW"),
+		TEXT("From the sheet: the canonical Relay Dog in near-black with a midnight-blue edge and glowing yellow eyes, wrapped in living black shadow strips that rise, curl round it and trail behind."),
+		TEXT("ShadowFlame.wlvox"), Rgb(0x2C, 0x3C, 0x9A), Rgb(0xFF, 0xD6, 0x1F), false);
+
 	// BEE AND HAGOROMO ARE OUT OF THE LINEUP (founder, 2026-09-23): "REMOVE THE BEE / BUMBLEBEE SKIN... REMOVE
 	// HAGOROMO from the active mascot lineup as well. Same rule: no Wardrobe entry, no active selection, no
 	// preview entry, no runtime choice."
@@ -133,7 +140,7 @@ void UWonderlandRelaySkinSubsystem::BuildRegistry()
 	// still built by the forge. Unlike Bee and Hagoromo they do not drop to the base form -- they have successors, and
 	// MigrateRetired carries a remembered arden_infernal* to jack_flame and apollo* to baal.
 	//
-	// The active lineup is Relay OG, Celestial Light, Skeleton Flame (V2, with its V1 twin), Jack Flame and Baal.
+	// The active lineup is Relay OG, Celestial Light, Skeleton Flame (V2, with its V1 twin), Jack Flame, Baal and Shadow Flame.
 }
 
 const FWonderlandRelaySkin* UWonderlandRelaySkinSubsystem::Find(FName SkinId) const
