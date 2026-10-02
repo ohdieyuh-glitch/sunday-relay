@@ -1,0 +1,15 @@
+manifest_version=1
+source=github-actions
+commit=88b8b1d0daf0abb3a60ed83fd7c8abae2da9d040
+tree=67e0e5664e3b2fcfe2b2750f7634d9b3681339ef
+tracked_changes=0
+mode=paid
+mode_basis=dispatch_confirm_live
+julius_run_id=run:efb6e20f0d11885bc5085a68
+workflow_run_id=36915013287
+workflow_run_attempt=1
+workflow_ref=ohdieyuh-glitch/sunday-relay/.github/workflows/julius-first-live-mission.yml@refs/heads/main
+event=workflow_dispatch
+ref=refs/heads/main
+github_sha=88b8b1d0daf0abb3a60ed83fd7c8abae2da9d040
+produced_at=2026-10-01T19:41:18Z

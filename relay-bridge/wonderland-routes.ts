@@ -22,6 +22,12 @@ export async function handleWonderlandRoute(input: WonderlandRouteRequest, deps:
   const token = sessionTokenFrom(input.authorization);
   const verified = token === null ? null : deps.sessions.verifySession({ token, origin: input.origin, now: input.now });
   if (verified === null || !verified.ok || verified.participantId === null) return { status: 401, body: { error: 'authenticated player identity required' } };
+  // A NATIVE session's scope is the Julius world stream and nothing else (founder
+  // decision, 2026-09-27). These routes WRITE -- challenges and presence -- so a
+  // native client is refused here rather than admitted by accident. Letting the
+  // desktop client post presence may well be wanted later; that is a decision to
+  // widen `native_world` on purpose, not a default this route should grant.
+  if (verified.scope === 'native_world') return { status: 403, body: { error: 'a native Wonderland session reaches only the Julius world stream' } };
   const playerId = verified.participantId;
   const body = asRecord(input.body);
   try {

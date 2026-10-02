@@ -1,0 +1,24 @@
+diff --git a/src/relay/workspace/julius-tools/node-tool-adapter.ts b/src/relay/workspace/julius-tools/node-tool-adapter.ts
+index fec0b40..0536a45 100644
+--- a/src/relay/workspace/julius-tools/node-tool-adapter.ts
++++ b/src/relay/workspace/julius-tools/node-tool-adapter.ts
+@@ -9,6 +9,8 @@ const hash=(value:string|Buffer)=>createHash('sha256').update(value).digest('hex
+ const SECRET=/(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|(?:api[_-]?key|token|secret|password)\s*[=:]\s*[^\s'\"]+)/gi;
+ const redact=(value:string)=>value.replace(SECRET,'[REDACTED]');
+ const text=(args:Readonly<Record<string,unknown>>,key:string):string=>{const value=args[key];if(typeof value!=='string')throw new Error(`tool_argument_${key}_required`);return value;};
++export const juliusSearchPath=(relativePath:string):string=>relativePath.replaceAll('\\','/');
++export const juliusSearchNeedleMatches=(relativePath:string,needle:string):boolean=>juliusSearchPath(relativePath).includes(juliusSearchPath(needle.replaceAll('*','')));
+ 
+ async function boundedPath(root:string,requested:string,forCreation=false):Promise<string>{
+  if(!requested||isAbsolute(requested))throw new Error('workspace_path_refused');const rootReal=await realpath(root);const candidate=resolve(rootReal,requested);const rel=relative(rootReal,candidate);if(rel==='..'||rel.startsWith(`..${sep}`)||isAbsolute(rel))throw new Error('workspace_path_refused');
+@@ -35,8 +37,8 @@ export class NodeJuliusToolAdapter implements JuliusToolAdapter {
+    case'fs.mkdir':await mkdir(path,{recursive:args.recursive===true});mutations.push({path:requested,beforeHash:null,afterHash:hash('directory')});break;
+    case'fs.remove':{const prior=await before(path);await rm(path,{recursive:args.recursive===true,force:false});mutations.push({path:requested,beforeHash:prior,afterHash:null});break;}
+    case'fs.copy':case'fs.move':{const destinationRequested=text(args,'destination');const destination=await boundedPath(context.workspaceRoot,destinationRequested,true);const prior=await before(destination);if(request.toolId==='fs.copy')await copyFile(path,destination,constants.COPYFILE_EXCL);else await rename(path,destination);mutations.push({path:destinationRequested,beforeHash:prior,afterHash:await before(destination)});break;}
+-   case'search.grep':{const pattern=text(args,'pattern');const regex=new RegExp(pattern,args.ignoreCase===true?'i':'');const files=await this.walk(path,Number(args.maxFiles??1000));const matches:string[]=[];for(const file of files){const content=await readFile(file,'utf8');content.split('\n').forEach((line,index)=>{if(regex.test(line)&&matches.length<1000)matches.push(`${relative(context.workspaceRoot,file)}:${index+1}:${line}`);});}stdout=matches.join('\n');break;}
+-   case'search.find':case'search.glob':{const needle=String(args.pattern??'');stdout=(await this.walk(path,Number(args.maxFiles??1000))).map(file=>relative(context.workspaceRoot,file)).filter(file=>file.includes(needle.replaceAll('*',''))).join('\n');break;}
++   case'search.grep':{const pattern=text(args,'pattern');const regex=new RegExp(pattern,args.ignoreCase===true?'i':'');const files=await this.walk(path,Number(args.maxFiles??1000));const matches:string[]=[];for(const file of files){const content=await readFile(file,'utf8');content.split('\n').forEach((line,index)=>{if(regex.test(line)&&matches.length<1000)matches.push(`${juliusSearchPath(relative(context.workspaceRoot,file))}:${index+1}:${line}`);});}stdout=matches.join('\n');break;}
++   case'search.find':case'search.glob':{const needle=String(args.pattern??'');stdout=(await this.walk(path,Number(args.maxFiles??1000))).map(file=>juliusSearchPath(relative(context.workspaceRoot,file))).filter(file=>juliusSearchNeedleMatches(file,needle)).join('\n');break;}
+    default:throw new Error('tool_not_implemented');
+   }
+   const type=mutations.length?'FILE_MUTATION':'ARTIFACT';const facts={toolId:request.toolId,pathsChanged:mutations.length,outputBytes:Buffer.byteLength(stdout)};return this.result(request,decision,started,'SUCCEEDED',0,'Tool completed.',redact(stdout),'',mutations,[evidence(request,type,facts)]);

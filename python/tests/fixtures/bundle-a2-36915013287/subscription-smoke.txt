@@ -1,0 +1,5 @@
+subscription_smoke_auth_exit=0
+subscription_smoke_auth provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION method=oauth_token plan=absent result=SUBSCRIPTION_LOGIN_PRESENT
+subscription_smoke_cli_exit=0
+subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=claude-opus-5-5 match=EXACT
+subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=PASS

@@ -25,6 +25,7 @@ import { JuliusContractPostgresRepository } from '../../src/relay/persistence/ju
 import { JuliusTimelinePostgresRepository } from '../../src/relay/persistence/julius-timeline-postgres';
 import { JuliusClaimPostgresRepository } from '../../src/relay/persistence/julius-claim-postgres';
 import { JuliusLifecyclePostgresRepository } from '../../src/relay/persistence/julius-lifecycle-postgres';
+import { ProjectBrainPostgresStore } from '../../src/relay/persistence/project-brain-postgres';
 
 /**
  * THE TIMELINE READER IS IN THE RETURN TYPE, not left to a structural probe.
@@ -67,6 +68,7 @@ export function createJuliusPostgresRuntimeStore(
   const timeline = new JuliusTimelinePostgresRepository(pool);
   const claims = new JuliusClaimPostgresRepository(pool);
   const lifecycle = new JuliusLifecyclePostgresRepository(pool);
+  const projectBrain = new ProjectBrainPostgresStore(pool);
   return {
     loadRun: runs.loadRun.bind(runs),
     transition: runs.transition.bind(runs),
@@ -90,7 +92,22 @@ export function createJuliusPostgresRuntimeStore(
     findingsForRun: reader.findingsForRun.bind(reader),
     criteriaForRun: reader.criteriaForRun.bind(reader),
     decisionsForRun: reader.decisionsForRun.bind(reader),
-    brainEntriesForRun: reader.brainEntriesForRun.bind(reader),
+    /**
+     * THE ONE PROJECT BRAIN, AS JULIUS READS IT: this run's own entries, then what
+     * people stated to the project (project-wide, or about this run) through
+     * Wonderland or the operator. Those arrive as user-stated, unverified
+     * instructions (`projectBrainContextEntries`), so the context compiler ranks
+     * them below the locked contract, Julius's decisions and cited findings. A
+     * store error is thrown, never swallowed: a packet compiled without the Brain
+     * it was supposed to see would be a silent wrong answer.
+     */
+    brainEntriesForRun: async (runId, projectId) => {
+      const [own, stated] = await Promise.all([
+        reader.brainEntriesForRun(runId, projectId),
+        projectBrain.contextEntriesForRun(runId, projectId),
+      ]);
+      return [...own, ...stated];
+    },
     repairRoundsFor: reader.repairRoundsFor.bind(reader),
     activeTaskCount: reader.activeTaskCount.bind(reader),
     executedBindingFor: reader.executedBindingFor.bind(reader),

@@ -1,0 +1,5 @@
+evidence_id	evidence_type	status	safe_summary	occurred_at
+run:efb6e20f0d11885bc5085a68:plan:1:0	ARTIFACT	PASSED	Validated architect plan held for this run (15847 chars).	2026-09-29 12:32:02.676+00
+run:efb6e20f0d11885bc5085a68:plan:review:1:0	REVIEW_FINDING	PASSED	Independent review verdict approved with no blocking findings (served model grok-build-0.1).	2026-09-29 12:33:45.067+00
+tool:run:efb6e20f0d11885bc5085a68:build:base:g1	COMMAND_EXECUTION	PASSED	Executor ran a shell effect for run:efb6e20f0d11885bc5085a68:build: exit 0.	2026-09-29 12:33:45.946+00
+(3 rows)

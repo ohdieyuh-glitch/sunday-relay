@@ -28,6 +28,8 @@
     "relay:julius:build": "esbuild relay-bridge/julius-live-mission.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-live-mission.cjs --external:@anthropic-ai/claude-agent-sdk --external:pg --log-level=warning",
     "relay:julius:mission": "npm run relay:julius:build --silent && node dist-relay-bridge/julius-live-mission.cjs",
     "relay:julius:preflight:build": "esbuild scripts/julius-live-preflight.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-live-preflight.cjs --external:pg --log-level=warning",
+    "project-brain:proof:build": "esbuild scripts/project-brain-proof-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/project-brain-proof.cjs --external:@anthropic-ai/claude-agent-sdk --external:pg --log-level=warning",
+    "project-brain:proof": "npm run relay:bridge:build --silent && npm run project-brain:proof:build --silent && node dist-relay-bridge/project-brain-proof.cjs",
     "julius:recovery-drill:build": "esbuild scripts/julius-recovery-drill-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-recovery-drill.cjs --external:pg --log-level=warning",
     "julius:recovery-drill": "npm run julius:recovery-drill:build --silent && node dist-relay-bridge/julius-recovery-drill.cjs",
     "julius:failure-recovery-drill:build": "esbuild scripts/julius-failure-recovery-drill-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-failure-recovery-drill.cjs --external:pg --log-level=warning",
