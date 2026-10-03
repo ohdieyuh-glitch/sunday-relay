@@ -46,6 +46,12 @@ namespace RelayDogArmedStance
 		return Clamp01(ArmedWeight) * Shape.FeetOutDeg * (1.0f - 0.6f * Clamp01(Pose.Stride.ArmsBack));
 	}
 
+	float KneesOutDeg(const RelayDogStride::FDogPose& Pose, float ArmedWeight, const FShape& Shape)
+	{
+		// Standing and walking; gone as the run's arms-back posture comes in, where the legs work straight fore and aft.
+		return Clamp01(ArmedWeight) * Shape.KneesOutDeg * (1.0f - Clamp01(Pose.Stride.ArmsBack));
+	}
+
 	void Apply(RelayDogStride::FDogPose& Pose, float ArmedWeight, float DashWeight, float LegLengthUU, float ThighUU, float ShinUU,
 		float LeftOutFactor, float RightOutFactor, const FShape& Shape)
 	{

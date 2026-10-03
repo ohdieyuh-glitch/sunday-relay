@@ -916,6 +916,8 @@ private:
 	RelayDogArmedStance::FState ArmedStance;
 	/** How far each hip is swept outward this frame by the stance (degrees; 0 whenever the swords are not held). */
 	float StanceFeetOutDeg = 0.0f;
+	/** How far each thigh is turned outward this frame by the stance (degrees, a yaw at the hip; 0 whenever the swords are not held). */
+	float StanceKneesOutDeg = 0.0f;
 	/** THE MISSION HANDOFF'S PRESENTATION (M3): the swords, and each companion becoming its own. Plain C++, not reflected. */
 	WonderlandHandoffSwords::FPresentation HandoffSwords;
 	WonderlandHandoffTransform::FPresentation HandoffTransform;

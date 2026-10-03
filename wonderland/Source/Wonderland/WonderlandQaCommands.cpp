@@ -7706,7 +7706,7 @@ namespace
 
 	/** The knees' bend now, degrees (Second, 10-03: "visible leg bend" needs a number, not only a pelvis drop): the angle between each thigh's
 	 *  long axis and its shin's -- Relay OG's own leg pivots, which a worn skin's legs follow. -1 where a pivot is missing. */
-	void QaKneeBend(const ARelayDogCharacter* Dog, float& OutLeft, float& OutRight)
+	void QaKneeBend(const ARelayDogCharacter* Dog, float& OutLeft, float& OutRight, bool bFromBehind = false)
 	{
 		OutLeft = -1.0f;
 		OutRight = -1.0f;
@@ -7741,8 +7741,19 @@ namespace
 				continue;
 			}
 			// the canon's legs hang down their pivots' -Z (dog_v2.py builds every part in its joint's own frame)
-			const FVector ThighDown = -Thighs[LegSide]->GetComponentQuat().GetAxisZ();
-			const FVector ShinDown = -Shins[LegSide]->GetComponentQuat().GetAxisZ();
+			FVector ThighDown = -Thighs[LegSide]->GetComponentQuat().GetAxisZ();
+			FVector ShinDown = -Shins[LegSide]->GetComponentQuat().GetAxisZ();
+			if (bFromBehind)
+			{
+				// AS THE GAMEPLAY CAMERA SEES IT, from behind: the Dog's own forward taken out of both, the angle left in its side-up plane
+				const FVector DogAhead = Dog->GetActorForwardVector().GetSafeNormal();
+				ThighDown = (ThighDown - DogAhead * FVector::DotProduct(ThighDown, DogAhead)).GetSafeNormal();
+				ShinDown = (ShinDown - DogAhead * FVector::DotProduct(ShinDown, DogAhead)).GetSafeNormal();
+				if (ThighDown.IsNearlyZero() || ShinDown.IsNearlyZero())
+				{
+					continue;
+				}
+			}
 			(LegSide == 0 ? OutLeft : OutRight) = static_cast<float>(FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(ThighDown, ShinDown), -1.0, 1.0))));
 		}
 	}
@@ -8035,12 +8046,16 @@ namespace
 			float KneeLeft = -1.0f;
 			float KneeRight = -1.0f;
 			QaKneeBend(Dog, KneeLeft, KneeRight);
+			float BehindLeft = -1.0f;
+			float BehindRight = -1.0f;
+			QaKneeBend(Dog, BehindLeft, BehindRight, true);
 			const bool bOk = Dog->GetArmedStanceWeight() == 1.0f && Ahead >= 10.0f && Out >= 6.0f && Feet >= 5.0f && FMath::Abs(Sink) <= 1.5f && Lean >= 5.0f
 				&& KneeLeft >= 15.0f && KneeRight >= 15.0f;
 			S.Check(FString::Printf(TEXT("ST2.%d"), S.Skin + 1), bOk,
 				FString::Printf(TEXT("%s armed, standing: stance weight %.3f; hands %+.1f uu forward (>= 10) and %+.1f apart (>= 6); soles %+.1f apart (>= 5), ")
-					TEXT("%+.1f uu off the ground they stood on (within 1.5: the same feet); body pitch moved %.1f deg (>= 5); knees bent %.0f / %.0f deg (>= 15: a visible bend) | %s"),
-					*SkinName, Dog->GetArmedStanceWeight(), Ahead, Out, Feet, Sink, Lean, KneeLeft, KneeRight, *QaDescribeStance(R)));
+					TEXT("%+.1f uu off the ground they stood on (within 1.5: the same feet); body pitch moved %.1f deg (>= 5); knees bent %.0f / %.0f deg (>= 15: a visible bend), ")
+					TEXT("%.0f / %.0f deg of it seen from behind (the gameplay camera's view; reported) | %s"),
+					*SkinName, Dog->GetArmedStanceWeight(), Ahead, Out, Feet, Sink, Lean, KneeLeft, KneeRight, BehindLeft, BehindRight, *QaDescribeStance(R)));
 			S.Shot = 0;
 			S.bArmedShots = true;
 			QaStanceShow(S, World, Dog, true);
@@ -9234,12 +9249,14 @@ namespace
 		{ TEXT("P1_ready_default"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 19;wl.Handoff.Stance.Crouch 10;wl.Handoff.Stance.RunOut 32") },
 		{ TEXT("P2_round3b"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 10;wl.Handoff.Stance.Elbow 22;wl.Handoff.Stance.FeetOut 16;wl.Handoff.Stance.Crouch 7;wl.Handoff.Stance.RunOut 32") },
 		{ TEXT("P3_narrower"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 24;wl.Handoff.SwordVForward 24;wl.Handoff.Stance.Out 26;wl.Handoff.Stance.Shoulder 18;wl.Handoff.Stance.Elbow 34;wl.Handoff.Stance.FeetOut 10;wl.Handoff.Stance.Crouch 5;wl.Handoff.Stance.RunOut 20") },
-		// THE LEGS FOR THE FOUNDER TO PICK (Second, 10-03: round 4's knees read as straight as 3b's): the default's arms and V, the crouch and
-		// the feet swept, framed in front and at the side from knee height, each with its knees' measured bend
-		{ TEXT("L1_crouch10_feet19"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 19;wl.Handoff.Stance.Crouch 10;wl.Handoff.Stance.RunOut 32") },
-		{ TEXT("L2_crouch14_feet20"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 20;wl.Handoff.Stance.Crouch 14;wl.Handoff.Stance.RunOut 32") },
-		{ TEXT("L3_crouch18_feet21"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 21;wl.Handoff.Stance.Crouch 18;wl.Handoff.Stance.RunOut 32") },
-		{ TEXT("L4_crouch22_feet22"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 22;wl.Handoff.Stance.Crouch 22;wl.Handoff.Stance.RunOut 32") },
+		// THE LEGS FOR THE FOUNDER TO PICK (Second, 10-03: round 4's knees read as straight). The knees DID bend (~58 deg at crouch 8 on a
+		// 48-uu leg) but in a plane facing forward, which the gameplay camera behind the Dog barely sees. So: today's look, then the knees
+		// turned out over the toes (wl.Handoff.Stance.KneesOut) with the feet a little wider -- framed BEHIND and at the SIDE from knee
+		// height, each with the true knee bend and the bend seen from behind, measured
+		{ TEXT("L1_crouch10_feet19_knees0"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 19;wl.Handoff.Stance.Crouch 10;wl.Handoff.Stance.KneesOut 0;wl.Handoff.Stance.RunOut 32") },
+		{ TEXT("L2_crouch8_feet22_knees20"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 22;wl.Handoff.Stance.Crouch 8;wl.Handoff.Stance.KneesOut 20;wl.Handoff.Stance.RunOut 32") },
+		{ TEXT("L3_crouch10_feet24_knees30"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 24;wl.Handoff.Stance.Crouch 10;wl.Handoff.Stance.KneesOut 30;wl.Handoff.Stance.RunOut 32") },
+		{ TEXT("L4_crouch12_feet26_knees40"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 26;wl.Handoff.Stance.Crouch 12;wl.Handoff.Stance.KneesOut 40;wl.Handoff.Stance.RunOut 32") },
 	};
 
 	void QaStanceApply(UWorld* World, const TCHAR* Commands)
@@ -9405,8 +9422,8 @@ namespace
 			{
 				FQaStance Shim;
 				Shim.Camera = S.Camera;
-				// 160 uu off, the camera 60 uu below the body's middle: at the knees
-				QaStanceCamera(Shim, World, Dog, S.Shot == 0 ? 0.0 : 90.0, 160.0, -60.0, 45.0f);
+				// 160 uu off, the camera 60 uu below the body's middle: at the knees -- BEHIND (where the player's camera is) and at the side
+				QaStanceCamera(Shim, World, Dog, S.Shot == 0 ? 180.0 : 90.0, 160.0, -60.0, 45.0f);
 				S.Camera = Shim.Camera;
 				if (In < 1.2)
 				{
@@ -9415,9 +9432,12 @@ namespace
 				float KneeLeft = -1.0f;
 				float KneeRight = -1.0f;
 				QaKneeBend(Dog, KneeLeft, KneeRight);
-				static const TCHAR* const KneeShots[] = { TEXT("front_knee"), TEXT("side_knee") };
-				UE_LOG(LogWonderlandQa, Display, TEXT("WLSCQA %s %s | knees bent %.0f / %.0f deg; stance weight %.2f"), Preset.Name, KneeShots[S.Shot], KneeLeft, KneeRight,
-					Dog->GetArmedStanceWeight());
+				float BehindLeft = -1.0f;
+				float BehindRight = -1.0f;
+				QaKneeBend(Dog, BehindLeft, BehindRight, true);
+				static const TCHAR* const KneeShots[] = { TEXT("behind_knee"), TEXT("side_knee") };
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSCQA %s %s | knees bent %.0f / %.0f deg, %.0f / %.0f deg of it seen from behind; stance weight %.2f"), Preset.Name,
+					KneeShots[S.Shot], KneeLeft, KneeRight, BehindLeft, BehindRight, Dog->GetArmedStanceWeight());
 				S.Frame(FString::Printf(TEXT("stance_%s_%s"), Preset.Name, KneeShots[S.Shot]));
 				++S.Shot;
 				S.PhaseAt = Now;

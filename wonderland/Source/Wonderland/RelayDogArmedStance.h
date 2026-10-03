@@ -34,6 +34,12 @@ namespace RelayDogArmedStance
 		float CrouchUU = 10.0f;
 		/** Each hip swept outward: the feet spaced for movement. */
 		float FeetOutDeg = 19.0f;
+		/**
+		 * Each thigh turned outward about the vertical (the knees out over the toes), degrees. FeetOut is a roll, so the knee folds in a
+		 * plane facing forward -- a bend the gameplay camera, BEHIND the Dog, barely sees (round 4: ~58 deg of knee read as straight).
+		 * Turned out, the same bend shows from behind. 0 = the look before it (the founder picks from wl.Qa.StanceCalib's L frames).
+		 */
+		float KneesOutDeg = 0.0f;
 		/** The ready arms, standing and walking: raised forward and out, the forearms up -- the blades carried out from the body. */
 		float ReadyShoulderDeg = 12.0f;
 		float ReadyElbowDeg = 25.0f;
@@ -77,4 +83,7 @@ namespace RelayDogArmedStance
 
 	/** How far each hip is swept outward at these weights. The pose has no field for a leg's sweep, so the caller writes it. */
 	float FeetOutDeg(const RelayDogStride::FDogPose& Pose, float ArmedWeight, const FShape& Shape = FShape());
+
+	/** How far each thigh is turned outward at these weights (standing and walking; none in the run). The caller writes it as a yaw. */
+	float KneesOutDeg(const RelayDogStride::FDogPose& Pose, float ArmedWeight, const FShape& Shape = FShape());
 }

@@ -3610,6 +3610,8 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 						if (Performed <= 0.001f)
 						{
 							SolvedHip.Roll = CopiedHip.Roll;
+							// and its knees-out turn (wl.Handoff.Stance.KneesOut), 0 unless the stance asks for it
+							SolvedHip.Yaw = CopiedHip.Yaw;
 						}
 						WriteJoint(Pivot, Part.RestLocation, Performed <= 0.001f ? SolvedHip
 							: FQuat::Slerp(SolvedHip.Quaternion(), CopiedHip.Quaternion(), Performed).Rotator());

@@ -65,6 +65,8 @@ namespace RelayDogHandoffTuning
 	TAutoConsoleVariable<float> CVarStanceLean(TEXT("wl.Handoff.Stance.Lean"), 8.0f, TEXT("Mission Handoff stance: body lean added standing and walking, degrees."));
 	TAutoConsoleVariable<float> CVarStanceCrouch(TEXT("wl.Handoff.Stance.Crouch"), 10.0f, TEXT("Mission Handoff stance: how much lower the pelvis rides standing and walking, uu."));
 	TAutoConsoleVariable<float> CVarStanceFeetOut(TEXT("wl.Handoff.Stance.FeetOut"), 19.0f, TEXT("Mission Handoff stance: each hip swept outward, degrees (the feet spaced)."));
+	TAutoConsoleVariable<float> CVarStanceKneesOut(TEXT("wl.Handoff.Stance.KneesOut"), 0.0f,
+		TEXT("Mission Handoff stance: each thigh turned outward about the vertical, degrees (the knees out over the toes, so the bend shows from behind). 0 = the look before it."));
 	TAutoConsoleVariable<float> CVarStanceShoulder(TEXT("wl.Handoff.Stance.Shoulder"), 12.0f, TEXT("Mission Handoff stance: the ready arms raised forward, degrees."));
 	TAutoConsoleVariable<float> CVarStanceElbow(TEXT("wl.Handoff.Stance.Elbow"), 25.0f, TEXT("Mission Handoff stance: the ready forearms folded up, degrees."));
 	TAutoConsoleVariable<float> CVarStanceOut(TEXT("wl.Handoff.Stance.Out"), 44.0f, TEXT("Mission Handoff stance: the ready arms swept out from the body, degrees."));
@@ -84,6 +86,7 @@ namespace RelayDogHandoffTuning
 		// the legs from wl.Qa.StanceCalib's knee-height frames
 		Shape.CrouchUU = FMath::Clamp(CVarStanceCrouch.GetValueOnGameThread(), 0.0f, 30.0f);
 		Shape.FeetOutDeg = FMath::Clamp(CVarStanceFeetOut.GetValueOnGameThread(), 0.0f, 30.0f);
+		Shape.KneesOutDeg = FMath::Clamp(CVarStanceKneesOut.GetValueOnGameThread(), 0.0f, 45.0f);
 		Shape.ReadyShoulderDeg = FMath::Clamp(CVarStanceShoulder.GetValueOnGameThread(), -90.0f, 120.0f);
 		Shape.ReadyElbowDeg = FMath::Clamp(CVarStanceElbow.GetValueOnGameThread(), 0.0f, 140.0f);
 		Shape.ReadyOutDeg = FMath::Clamp(CVarStanceOut.GetValueOnGameThread(), 0.0f, 80.0f);
@@ -2735,6 +2738,7 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	RelayDogArmedStance::Apply(Pose, ArmedStance.Armed.Value, ArmedStance.Dash.Value, 0.8f * HeadWidthUU, (0.8f - 0.5125f) * HeadWidthUU,
 		0.5125f * HeadWidthUU, ArmChainLeft.OutwardSign * ArmLeft.SideSign, ArmChainRight.OutwardSign * ArmRight.SideSign, ArmedShape);
 	StanceFeetOutDeg = RelayDogArmedStance::FeetOutDeg(Pose, ArmedStance.Armed.Value, ArmedShape);
+	StanceKneesOutDeg = RelayDogArmedStance::KneesOutDeg(Pose, ArmedStance.Armed.Value, ArmedShape);
 
 	// ---- AND THE COSTUME WEARS THE SAME STRIDE, so a mascot skin is a change of appearance and nothing else.
 	//
@@ -2779,9 +2783,11 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	}
 	// THE STANCE'S SPACED FEET are each hip swept outward (the measured roll that carries a limb away from the centre line);
 	// 0 whenever the swords are not held, so these are the same writes as ever.
-	if (LegLeft.Hip != nullptr) LegLeft.Hip->SetRelativeRotation(FRotator(SolvedL.HipDeg, 0.0f, StanceFeetOutDeg * LegChainLeft.OutwardSign));
+	// THE KNEES OUT (wl.Handoff.Stance.KneesOut): the same hip turned about the vertical, outward by the same measured sign -- a yaw is applied
+	// after the roll and the pitch, so the thigh's forward swing, and the knee's fold with it, face out over the toes
+	if (LegLeft.Hip != nullptr) LegLeft.Hip->SetRelativeRotation(FRotator(SolvedL.HipDeg, StanceKneesOutDeg * LegChainLeft.OutwardSign, StanceFeetOutDeg * LegChainLeft.OutwardSign));
 	if (LegLeft.Shin != nullptr) LegLeft.Shin->SetRelativeRotation(FRotator(-SolvedL.KneeDeg, 0.0f, 0.0f));
-	if (LegRight.Hip != nullptr) LegRight.Hip->SetRelativeRotation(FRotator(SolvedR.HipDeg, 0.0f, StanceFeetOutDeg * LegChainRight.OutwardSign));
+	if (LegRight.Hip != nullptr) LegRight.Hip->SetRelativeRotation(FRotator(SolvedR.HipDeg, StanceKneesOutDeg * LegChainRight.OutwardSign, StanceFeetOutDeg * LegChainRight.OutwardSign));
 	if (LegRight.Shin != nullptr) LegRight.Shin->SetRelativeRotation(FRotator(-SolvedR.KneeDeg, 0.0f, 0.0f));
 
 	auto WriteArm = [](const FRelayDogArm& Arm, const RelayDogStride::FArmPose& ArmPose)
