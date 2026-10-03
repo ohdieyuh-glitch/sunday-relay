@@ -1055,6 +1055,10 @@ private:
 	TObjectPtr<UWonderlandUsageHudWidget> UsageHud;
 
 	TSharedPtr<SWonderlandLiveTerminal> Terminal;
+	/** /keep (Second's review, 10-03): the last objective whose random-looking words were redacted, held in memory only, for 30 s. */
+	FGuid PendingKeepId;
+	FString PendingKeepText;
+	double PendingKeepAt = 0.0;
 	TSharedPtr<SWonderlandWorldMap> WorldMap;
 	TSharedPtr<SWonderlandProjectBrainPanel> BrainPanel;
 	TSharedPtr<SWonderlandCommandStation> CommandStation;

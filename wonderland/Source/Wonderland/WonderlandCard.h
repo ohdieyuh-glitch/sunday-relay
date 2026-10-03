@@ -139,14 +139,30 @@ public:
 
 	/** The secret refusal every stored string passes: provider keys, private keys, tokens, credential references. */
 	static bool LooksLikeSecret(const FString& Text);
+	/** One credential-shaped word the free-text screen found: where it is in the text it was given, and whether it is CERTAIN (a
+	 *  vendor key, a 'sk-' key, a credential word or the word after "Bearer", a JWT-like or PEM line: never stored) or STATISTICAL
+	 *  (random-looking: stored as typed only after the player's explicit /keep). */
+	struct FSecretFind
+	{
+		int32 Start = 0;
+		int32 Length = 0;
+		bool bCertain = false;
+	};
 	/**
-	 * THE RULE FOR FREE TEXT (a Mission Contract objective, a typed line), shape-only and measured (10-03): prose, paths, URLs, ids and
-	 * code identifiers pass; a 'sk-' key, the credential words, a vendor-prefixed key, a JWT-like dotted token, a hex run of 24+ and a
-	 * random-looking letter/digit segment are refused. LooksLikeSecret stays the stricter rule for C.A.R.D. labels and ids.
+	 * THE FREE-TEXT SCREEN, v2 (the founder's fail-closed; Second's direction and review, 10-03). Every whitespace word is screened:
+	 * flagged when it carries a CERTAIN shape, or when ANY random signal fires on a 20+ key-character piece of it -- Second's COMBO B:
+	 * 3+ letter/digit pairs; a hex run; 3+ one-letter lowercase runs; letter pairs under 55% common English; no letters. Exempt only
+	 * recognised structures: a URL's host (its path and query are still screened), a canonical UUID, an e-mail, a version, an ISO
+	 * date/time. Measured on Second's corpus (card_second/core_v2f_vs_comboB.py): >= 99.3% of every random shape of 20+ characters;
+	 * 0.24% of 9,714 standard-library identifiers of 20+ and 2 of 23 real objectives flagged -- those are REDACTED and /keep stores
+	 * them as typed. A canonical UUID used as a key is NOT caught (by design: indistinguishable from an id).
 	 */
-	static bool LooksLikeSecretInProse(const FString& Text);
-	/** Free text holds a secret: LooksLikeSecretInProse as written OR once its invisible characters are gone (a zero-width space
-	 *  inside a key does not hide it). The objective screen, the terminal's mask and the restore-time redaction all use this. */
+	static void FindSecrets(const FString& Text, TArray<FSecretFind>& OutFinds);
+	/** The text with each find replaced by "[a key: never shown or stored]" -- every find, or only the CERTAIN ones (bKeepStatistical). */
+	static FString RedactSecrets(const FString& Text, const TArray<FSecretFind>& Finds, bool bKeepStatistical = false);
+	/** The text without invisible characters (zero-width, bidi, soft hyphen, BOM, tags) and with no length cap: what the screen reads. */
+	static FString WithoutInvisibleText(const FString& Text);
+	/** Free text holds a secret: the screen finds something in it as written OR once its invisible characters are gone. */
 	static bool HoldsSecret(const FString& Text);
 	/** A line as it may be SHOWN: every word that holds a secret replaced; a line whose secret no single word shows ("Bearer" and its
 	 *  token apart) replaced whole. What it returns never holds a secret. */

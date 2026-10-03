@@ -372,6 +372,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
 	bool SubmitDraft(FGuid LocalId, const FString& Objective);
 
+	/**
+	 * THE OBJECTIVE AS IT MAY BE KEPT (the founder's fail-closed; Second's review, 10-03): every word the free-text screen
+	 * (FWonderlandCardStore::FindSecrets) flags is REDACTED before anything is saved -- a CERTAIN one always, a STATISTICAL one unless
+	 * bKeepAsTyped (the player's explicit /keep). Counts what was removed. An objective that was nothing but a key is refused.
+	 * SubmitDraft is this with bKeepAsTyped false. Plain C++: no reflection.
+	 */
+	bool SubmitDraftScreened(FGuid LocalId, const FString& Objective, bool bKeepAsTyped, int32& OutRedactedCertain, int32& OutRedactedStatistical);
+	/** /keep: a contract's objective stored again as typed -- its CERTAIN finds still removed. False when it is not a contract. */
+	bool KeepObjectiveAsTyped(FGuid LocalId, const FString& Typed, int32& OutRedactedCertain);
+
 	/** Throw away an unused slot. Refuses once it is a contract: a real mission is not dismissed by tidying. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
 	bool DismissDraft(FGuid LocalId);

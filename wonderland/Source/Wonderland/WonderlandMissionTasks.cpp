@@ -507,6 +507,45 @@ FGuid UWonderlandMissionTaskSubsystem::AddDraft()
 
 bool UWonderlandMissionTaskSubsystem::SubmitDraft(FGuid LocalId, const FString& Objective)
 {
+	int32 RedactedCertain = 0;
+	int32 RedactedStatistical = 0;
+	return SubmitDraftScreened(LocalId, Objective, false, RedactedCertain, RedactedStatistical);
+}
+
+namespace
+{
+	/** The objective as the free-text screen lets it be kept: its invisible characters gone, every find redacted (the statistical
+	 *  ones only without /keep). Counts what was removed. */
+	FString WonderlandScreenObjective(const FString& Typed, bool bKeepAsTyped, int32& OutCertain, int32& OutStatistical)
+	{
+		OutCertain = 0;
+		OutStatistical = 0;
+		const FString Clean = FWonderlandCardStore::WithoutInvisibleText(Typed);
+		TArray<FWonderlandCardStore::FSecretFind> Finds;
+		FWonderlandCardStore::FindSecrets(Clean, Finds);
+		if (Finds.Num() == 0)
+		{
+			return Typed;
+		}
+		for (const FWonderlandCardStore::FSecretFind& Find : Finds)
+		{
+			(Find.bCertain ? OutCertain : OutStatistical) += Find.bCertain || !bKeepAsTyped ? 1 : 0;
+		}
+		return FWonderlandCardStore::RedactSecrets(Clean, Finds, bKeepAsTyped);
+	}
+
+	/** True when nothing but redaction markers and spaces is left: a contract must stand for a task. */
+	bool WonderlandOnlyRedacted(const FString& Kept)
+	{
+		return Kept.Replace(TEXT("[a key: never shown or stored]"), TEXT("")).TrimStartAndEnd().IsEmpty();
+	}
+}
+
+bool UWonderlandMissionTaskSubsystem::SubmitDraftScreened(FGuid LocalId, const FString& Objective, bool bKeepAsTyped, int32& OutRedactedCertain,
+	int32& OutRedactedStatistical)
+{
+	OutRedactedCertain = 0;
+	OutRedactedStatistical = 0;
 	FWonderlandMissionTask* Task = FindMutable(LocalId);
 	if (Task == nullptr)
 	{
@@ -524,11 +563,12 @@ bool UWonderlandMissionTaskSubsystem::SubmitDraft(FGuid LocalId, const FString& 
 		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused: a Mission Contract needs an objective"));
 		return false;
 	}
-	if (FWonderlandCardStore::HoldsSecret(Trimmed))
+	// NEVER A SECRET ON DISK (the founder: secrets are never persisted in the Project Brain, and Mission Context is its section 04;
+	// Second's review, 10-03): every flagged word is redacted before the first write -- the objective is kept, the key is not
+	const FString Kept = WonderlandScreenObjective(Trimmed, bKeepAsTyped, OutRedactedCertain, OutRedactedStatistical);
+	if (WonderlandOnlyRedacted(Kept))
 	{
-		// NEVER A SECRET ON DISK (the founder: secrets are never persisted in the Project Brain, and Mission Context is its section
-		// 04; Second's review, 10-03): a key or password typed as an objective is refused WHOLE -- nothing of it is saved or logged
-		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused: the objective holds something shaped like a key or password; nothing was saved"));
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused: the objective was nothing but something shaped like a key or password; nothing was saved"));
 		return false;
 	}
 	if (IsAtContractLimit())
@@ -536,13 +576,39 @@ bool UWonderlandMissionTaskSubsystem::SubmitDraft(FGuid LocalId, const FString& 
 		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused: %d Mission Contracts kept, the most this PC stores"), NumContracts());
 		return false;
 	}
-	Task->Objective = Trimmed;
+	Task->Objective = Kept;
+	if (OutRedactedCertain + OutRedactedStatistical > 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK %d part(s) of the objective shaped like a key or password redacted before saving (%d certain)"),
+			OutRedactedCertain + OutRedactedStatistical, OutRedactedCertain);
+	}
 	// QUEUED, AND LOCAL, BECAUSE THAT IS THE TRUTH IN THIS BUILD. No Julius link reaches this world, so the contract
 	// is real and waiting, and the source says who said so. When a scheduler exists it reports through
 	// ApplySchedulerState and this same task moves on -- nothing in the presentation has to change to believe it.
 	Touch(*Task, EWonderlandTaskState::Queued, EWonderlandTaskSource::Local);
 	UE_LOG(LogTemp, Display, TEXT("WLTASK contract accepted, QUEUED (local: Julius has not acknowledged it)"));
 	// GRAY BECOMING RED IS THE MOMENT SOMETHING WORTH KEEPING EXISTS, so this is the first write.
+	SaveContracts();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
+	return true;
+}
+
+bool UWonderlandMissionTaskSubsystem::KeepObjectiveAsTyped(FGuid LocalId, const FString& Typed, int32& OutRedactedCertain)
+{
+	OutRedactedCertain = 0;
+	FWonderlandMissionTask* Task = FindMutable(LocalId);
+	if (Task == nullptr || !WonderlandTaskIsContract(Task->State))
+	{
+		return false;
+	}
+	int32 Statistical = 0;
+	const FString Kept = WonderlandScreenObjective(Typed.TrimStartAndEnd(), true, OutRedactedCertain, Statistical);
+	if (WonderlandOnlyRedacted(Kept))
+	{
+		return false;
+	}
+	Task->Objective = Kept;
+	UE_LOG(LogTemp, Display, TEXT("WLTASK /keep: the objective stored as typed (%d certain part(s) still removed)"), OutRedactedCertain);
 	SaveContracts();
 	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;

@@ -119,7 +119,7 @@ namespace
 	/** A label as it is stored, or false when it is secret-shaped either way: cleaning must never reassemble a key. */
 	bool AcceptLabel(const FString& Raw, FString& OutClean)
 	{
-		if (LooksSecretAnyWay(Raw))
+		if (LooksSecretAnyWay(Raw) || FWonderlandCardStore::HoldsSecret(Raw))
 		{
 			return false;
 		}
@@ -131,7 +131,7 @@ namespace
 	 * passes the refusal, ids included. */
 	bool IsCleanId(const FString& Id)
 	{
-		return WonderlandBeta::IsSafeId(Id) && !FWonderlandCardStore::LooksLikeSecret(Id);
+		return WonderlandBeta::IsSafeId(Id) && !FWonderlandCardStore::LooksLikeSecret(Id) && !FWonderlandCardStore::HoldsSecret(Id);
 	}
 
 	/** Deeper than this is a nesting bomb, never a C.A.R.D. file (which nests 5 levels; the rest is a later build's room). */
@@ -389,93 +389,415 @@ namespace
 		return false;
 	}
 
-	/**
-	 * One ASCII letter/digit segment (every other character separates: URLs, UUIDs, paths and kebab/snake names fall into short
-	 * pieces). Measured 10-03 against random tokens and real objectives: a hex run of 24+; a 20+ segment with 2+ digits in 2+ groups,
-	 * 6+ letters and vowels at most 30% of them; a 32+ segment with letters, digits in 2+ groups and vowels under 30%.
-	 */
-	bool CardSegmentLooksSecret(const FString& Segment)
+	bool CardHexChar(TCHAR Char)
 	{
+		return CardAsciiDigit(Char) || (Char >= TEXT('a') && Char <= TEXT('f')) || (Char >= TEXT('A') && Char <= TEXT('F'));
+	}
+
+	/** The key characters a token is made of (base64's + / = and base64url's - _ included: a key is never split on them). */
+	bool CardKeyCharacter(TCHAR Char)
+	{
+		return CardAsciiLetter(Char) || CardAsciiDigit(Char) || Char == TEXT('+') || Char == TEXT('/') || Char == TEXT('=') || Char == TEXT('_')
+			|| Char == TEXT('-');
+	}
+
+	/** The 195 commonest English letter pairs: 95% of the letter pairs in Python's bundled documentation prose (Second's table, 10-03,
+	 *  card_second/common_bigrams_195.txt), as a 26x26 table built on first use. */
+	struct FCardPairTable
+	{
+		bool Common[26][26];
+		FCardPairTable()
+		{
+			FMemory::Memzero(Common);
+			const TCHAR* const Pairs = TEXT("ab ac ad ai al am an ap ar as at au av ay ba be bj bl bo bu by ca cc ce ch ci ck cl co cr ct cu de di do ds du ea ec ed ee ef el em en ep eq er es et ev ex ey fa fe fi fo fr fu ge gi gn gu ha he hi ho ia ib ic id ie if ig il im in io ip ir is it iv je ke la ld le lf li ll lo ls lt lu ly ma mb me mi mo mp mu na nc nd ne ng ni nl no ns nt nu ob oc od of ol om on op or os ot ou ov ow pa pe pi pl po pp pr pt py qu ra rd re rg ri rm rn ro rr rs rt ru ry sa sc se sh si so sp ss st su sy ta te th ti to tr ts tt tu ty ua ub uc ue ui ul um un up ur us ut va ve vi wh wi wo xc xe xp yp yt");
+			const int32 Count = FCString::Strlen(Pairs);
+			for (int32 At = 0; At + 1 < Count; At += 3)
+			{
+				Common[Pairs[At] - TEXT('a')][Pairs[At + 1] - TEXT('a')] = true;
+			}
+		}
+	};
+
+	bool CardCommonPair(TCHAR A, TCHAR B)
+	{
+		static const FCardPairTable Table;
+		const TCHAR LowA = FChar::ToLower(A);
+		const TCHAR LowB = FChar::ToLower(B);
+		return LowA >= TEXT('a') && LowA <= TEXT('z') && LowB >= TEXT('a') && LowB <= TEXT('z') && Table.Common[LowA - TEXT('a')][LowB - TEXT('a')];
+	}
+
+	bool CardLowerLetter(TCHAR Char)
+	{
+		return Char >= TEXT('a') && Char <= TEXT('z');
+	}
+
+	/**
+	 * ANY random signal on one 20+ candidate: Second's COMBO B (10-03), transcribed 1:1 from card_second/secret_rule_signals.py and
+	 * secret_rule_v2_measure.py's stats(). Measured on Second's corpus: >= 99.3% of every random shape of 20+ characters (letters-
+	 * only 24 the worst), 0.24% of 9,714 standard-library identifiers of 20+, 2 of 23 real objectives; CORE's own v2f lost on both.
+	 */
+	bool CardCandidateLooksRandom(const FString& Candidate)
+	{
+		const int32 Count = Candidate.Len();
+		if (Count < 20)
+		{
+			return false;
+		}
 		int32 Letters = 0;
 		int32 Digits = 0;
-		int32 Vowels = 0;
-		int32 Groups = 0;
+		int32 LetterDigit = 0;
+		int32 Pairs = 0;
+		int32 CommonPairs = 0;
+		int32 OneLowerRuns = 0;
 		bool bHexOnly = true;
-		bool bPrevDigit = false;
-		for (int32 At = 0; At < Segment.Len(); ++At)
+		for (int32 At = 0; At < Count; ++At)
 		{
-			const TCHAR Char = Segment[At];
-			const bool bDigitChar = CardAsciiDigit(Char);
-			Letters += CardAsciiLetter(Char) ? 1 : 0;
-			Digits += bDigitChar ? 1 : 0;
-			Vowels += FCString::Strchr(TEXT("aeiouAEIOU"), Char) != nullptr ? 1 : 0;
-			bHexOnly &= bDigitChar || (Char >= TEXT('a') && Char <= TEXT('f')) || (Char >= TEXT('A') && Char <= TEXT('F'));
-			Groups += bDigitChar && !bPrevDigit ? 1 : 0;
-			bPrevDigit = bDigitChar;
+			const TCHAR Char = Candidate[At];
+			const bool bLetter = CardAsciiLetter(Char);
+			const bool bDigit = CardAsciiDigit(Char);
+			Letters += bLetter ? 1 : 0;
+			Digits += bDigit ? 1 : 0;
+			bHexOnly &= CardHexChar(Char);
+			if (At + 1 < Count)
+			{
+				const TCHAR Next = Candidate[At + 1];
+				LetterDigit += (bLetter && CardAsciiDigit(Next)) || (bDigit && CardAsciiLetter(Next)) ? 1 : 0;
+				if (bLetter && CardAsciiLetter(Next))
+				{
+					++Pairs;
+					CommonPairs += CardCommonPair(Char, Next) ? 1 : 0;
+				}
+			}
+			// a lowercase run of exactly one letter, not at the candidate's start or end ("aBcD" -> c)
+			if (CardLowerLetter(Char) && At > 0 && At + 1 < Count && !CardLowerLetter(Candidate[At - 1]) && !CardLowerLetter(Candidate[At + 1]))
+			{
+				++OneLowerRuns;
+			}
 		}
-		const int32 Count = Segment.Len();
-		if (Count >= 24 && Letters > 0 && Digits > 0 && bHexOnly)
+		return LetterDigit >= 3                                  // letters and digits interleaved
+			|| (bHexOnly && Letters > 0 && Digits > 0)           // a hex run
+			|| OneLowerRuns >= 3                                 // random mixed case
+			|| (Pairs >= 12 && 100 * CommonPairs < 55 * Pairs)   // letter pairs English does not make
+			|| Letters == 0;                                     // no letters at all
+	}
+
+	/** A word made of 20+ key-character pieces any of which looks random (pieces split at '.' and at every non-key character). */
+	bool CardPiecesLookRandom(const FString& Text)
+	{
+		FString Piece;
+		for (int32 At = 0; At <= Text.Len(); ++At)
+		{
+			const TCHAR Char = At < Text.Len() ? Text[At] : TEXT(' ');
+			if (CardKeyCharacter(Char))
+			{
+				Piece.AppendChar(Char);
+				continue;
+			}
+			if (CardCandidateLooksRandom(Piece))
+			{
+				return true;
+			}
+			Piece.Reset();
+		}
+		return false;
+	}
+
+	bool CardAllOf(const FString& Text, int32 From, int32 To, bool (*Test)(TCHAR))
+	{
+		for (int32 At = From; At < To; ++At)
+		{
+			if (!Test(Text[At]))
+			{
+				return false;
+			}
+		}
+		return To > From;
+	}
+
+	bool CardDigitChar(TCHAR Char)
+	{
+		return CardAsciiDigit(Char);
+	}
+
+	/** A recognised structure (exempt): a canonical UUID, an e-mail, a version, an ISO date/time. */
+	bool CardWordIsStructure(const FString& Word)
+	{
+		const int32 Count = Word.Len();
+		// UUID 8-4-4-4-12
+		if (Count == 36 && Word[8] == TEXT('-') && Word[13] == TEXT('-') && Word[18] == TEXT('-') && Word[23] == TEXT('-')
+			&& CardAllOf(Word, 0, 8, &CardHexChar) && CardAllOf(Word, 9, 13, &CardHexChar) && CardAllOf(Word, 14, 18, &CardHexChar)
+			&& CardAllOf(Word, 19, 23, &CardHexChar) && CardAllOf(Word, 24, 36, &CardHexChar))
 		{
 			return true;
 		}
-		if (Count >= 20 && Digits >= 2 && Letters >= 6 && 10 * Vowels <= 3 * Letters && Groups >= 2)
+		// e-mail: one '@', a local part of e-mail characters, a dotted domain ending in 2+ letters
+		int32 AtSign = INDEX_NONE;
+		if (Word.FindChar(TEXT('@'), AtSign) && AtSign > 0 && Word.Find(TEXT("@"), ESearchCase::CaseSensitive, ESearchDir::FromEnd) == AtSign)
 		{
-			return true;
+			bool bLocal = true;
+			for (int32 At = 0; At < AtSign; ++At)
+			{
+				const TCHAR Char = Word[At];
+				bLocal &= CardAsciiLetter(Char) || CardAsciiDigit(Char) || FCString::Strchr(TEXT("._%+-"), Char) != nullptr;
+			}
+			const FString Domain = Word.Mid(AtSign + 1);
+			int32 LastDot = INDEX_NONE;
+			bool bDomain = Domain.FindLastChar(TEXT('.'), LastDot) && LastDot > 0 && Domain.Len() - LastDot - 1 >= 2;
+			for (int32 At = 0; bDomain && At < Domain.Len(); ++At)
+			{
+				const TCHAR Char = Domain[At];
+				bDomain &= CardAsciiLetter(Char) || CardAsciiDigit(Char) || Char == TEXT('.') || Char == TEXT('-');
+			}
+			for (int32 At = LastDot + 1; bDomain && At < Domain.Len(); ++At)
+			{
+				bDomain &= CardAsciiLetter(Domain[At]);
+			}
+			if (bLocal && bDomain)
+			{
+				return true;
+			}
 		}
-		return Count >= 32 && Letters > 0 && Digits > 0 && 10 * Vowels < 3 * Letters && Groups >= 2;
+		// a version: v?digits(.digits){1,3} then optionally [-+] and version characters
+		{
+			int32 At = Count > 0 && (Word[0] == TEXT('v') || Word[0] == TEXT('V')) ? 1 : 0;
+			int32 Groups = 0;
+			bool bOk = true;
+			while (At < Count && bOk)
+			{
+				const int32 Start = At;
+				while (At < Count && CardAsciiDigit(Word[At]))
+				{
+					++At;
+				}
+				bOk = At > Start;
+				++Groups;
+				if (At < Count && Word[At] == TEXT('.') && Groups < 4)
+				{
+					++At;
+					continue;
+				}
+				break;
+			}
+			if (bOk && Groups >= 2)
+			{
+				if (At == Count)
+				{
+					return true;
+				}
+				if (Word[At] == TEXT('-') || Word[At] == TEXT('+'))
+				{
+					bool bTail = At + 1 < Count;
+					for (int32 Tail = At + 1; bTail && Tail < Count; ++Tail)
+					{
+						bTail &= CardAsciiLetter(Word[Tail]) || CardAsciiDigit(Word[Tail]) || Word[Tail] == TEXT('.') || Word[Tail] == TEXT('-');
+					}
+					if (bTail)
+					{
+						return true;
+					}
+				}
+			}
+		}
+		// an ISO date, optionally with a time and a zone: dddd-dd-dd[Thh:mm[:ss[.fff]][Z|+hh:mm]]
+		if (Count >= 10 && CardAllOf(Word, 0, 4, &CardDigitChar) && Word[4] == TEXT('-') && CardAllOf(Word, 5, 7, &CardDigitChar) && Word[7] == TEXT('-')
+			&& CardAllOf(Word, 8, 10, &CardDigitChar))
+		{
+			if (Count == 10)
+			{
+				return true;
+			}
+			if (Word[10] == TEXT('T') || Word[10] == TEXT('t'))
+			{
+				bool bTime = true;
+				for (int32 At = 11; At < Count; ++At)
+				{
+					bTime &= CardAsciiDigit(Word[At]) || FCString::Strchr(TEXT(":.Z+-z"), Word[At]) != nullptr;
+				}
+				if (bTime && Count >= 16)
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** A URL (scheme://...): the host is exempt; the path and the query, piece by piece and value by value, are screened. */
+	bool CardUrlLooksSecret(const FString& Word, bool& bOutUrl)
+	{
+		bOutUrl = false;
+		const int32 Scheme = Word.Find(TEXT("://"));
+		if (Scheme <= 0 || !CardAsciiLetter(Word[0]))
+		{
+			return false;
+		}
+		for (int32 At = 1; At < Scheme; ++At)
+		{
+			if (!(CardAsciiLetter(Word[At]) || CardAsciiDigit(Word[At]) || Word[At] == TEXT('+') || Word[At] == TEXT('.') || Word[At] == TEXT('-')))
+			{
+				return false;
+			}
+		}
+		bOutUrl = true;
+		int32 PathStart = Scheme + 3;
+		while (PathStart < Word.Len() && FCString::Strchr(TEXT("/?#"), Word[PathStart]) == nullptr)
+		{
+			++PathStart;
+		}
+		TArray<FString> Pieces;
+		Word.Mid(PathStart).ParseIntoArray(Pieces, TEXT("/"), true);
+		TArray<FString> Split;
+		for (const FString& Piece : Pieces)
+		{
+			TArray<FString> Inner;
+			Piece.ParseIntoArray(Inner, TEXT("?"), true);
+			for (const FString& Part : Inner)
+			{
+				TArray<FString> Pairs;
+				Part.ParseIntoArray(Pairs, TEXT("&"), true);
+				for (const FString& Pair : Pairs)
+				{
+					TArray<FString> Hashes;
+					Pair.ParseIntoArray(Hashes, TEXT("#"), true);
+					Split.Append(Hashes);
+				}
+			}
+		}
+		for (const FString& Piece : Split)
+		{
+			int32 Eq = INDEX_NONE;
+			const FString Value = Piece.FindChar(TEXT('='), Eq) ? Piece.Mid(Eq + 1) : Piece;
+			if (CardPiecesLookRandom(Value))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** A CERTAIN word: a credential word, a 'sk-' key, a vendor-prefixed key, a JWT-like dotted word, a PEM line. */
+	bool CardWordIsCertain(const FString& Word)
+	{
+		return CardHasCredentialWord(Word) || WonderlandSidekickSecrets::LooksLikeKey(Word) || CardHasVendorKey(Word) || CardHasDottedToken(Word)
+			|| Word.Contains(TEXT("-----"));
 	}
 }
 
-bool FWonderlandCardStore::LooksLikeSecretInProse(const FString& Text)
+void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>& OutFinds)
 {
-	if (Text.IsEmpty())
+	OutFinds.Reset();
+	static const TCHAR* const Edges = TEXT(".,;:!?()[]{}<>\"'`");
+	bool bAfterBearer = false;
+	bool bInPem = false;
+	const int32 Count = Text.Len();
+	int32 At = 0;
+	while (At < Count)
 	{
-		return false;
-	}
-	if (WonderlandSidekickSecrets::LooksLikeKey(Text) || CardHasCredentialWord(Text) || CardHasVendorKey(Text) || CardHasDottedToken(Text))
-	{
-		return true;
-	}
-	FString Segment;
-	for (int32 Index = 0; Index <= Text.Len(); ++Index)
-	{
-		const TCHAR Char = Index < Text.Len() ? Text[Index] : TEXT(' ');
-		if (CardAsciiLetter(Char) || CardAsciiDigit(Char))
+		while (At < Count && FChar::IsWhitespace(Text[At]))
 		{
-			Segment.AppendChar(Char);
+			++At;
+		}
+		const int32 WordStart = At;
+		while (At < Count && !FChar::IsWhitespace(Text[At]))
+		{
+			++At;
+		}
+		if (At == WordStart)
+		{
 			continue;
 		}
-		if (!Segment.IsEmpty() && CardSegmentLooksSecret(Segment))
+		int32 Start = WordStart;
+		int32 End = At;
+		while (Start < End && FCString::Strchr(Edges, Text[Start]) != nullptr)
 		{
-			return true;
+			++Start;
 		}
-		Segment.Reset();
+		while (End > Start && FCString::Strchr(Edges, Text[End - 1]) != nullptr)
+		{
+			--End;
+		}
+		if (End <= Start)
+		{
+			continue;
+		}
+		const FString Word = Text.Mid(Start, End - Start);
+		// A PEM BLOCK is certain from its BEGIN line to its END line; the word after "Bearer" is a token
+		const bool bPemStart = Word.Contains(TEXT("-----BEGIN"));
+		bInPem |= bPemStart;
+		const bool bCertain = bInPem || bAfterBearer || CardWordIsCertain(Word);
+		if (bInPem && !bPemStart && Word.Contains(TEXT("-----")))
+		{
+			bInPem = false;
+		}
+		bAfterBearer = Word.Equals(TEXT("Bearer"), ESearchCase::IgnoreCase);
+		if (bCertain)
+		{
+			OutFinds.Add({ Start, End - Start, true });
+			continue;
+		}
+		if (CardWordIsStructure(Word))
+		{
+			continue;
+		}
+		bool bUrl = false;
+		if (CardUrlLooksSecret(Word, bUrl))
+		{
+			OutFinds.Add({ Start, End - Start, false });
+			continue;
+		}
+		if (bUrl)
+		{
+			continue;
+		}
+		if (CardPiecesLookRandom(Word.Replace(TEXT("."), TEXT(" "))))
+		{
+			OutFinds.Add({ Start, End - Start, false });
+		}
 	}
-	return false;
+}
+
+FString FWonderlandCardStore::RedactSecrets(const FString& Text, const TArray<FSecretFind>& Finds, bool bKeepStatistical)
+{
+	FString Out;
+	int32 From = 0;
+	for (const FSecretFind& Find : Finds)
+	{
+		if (bKeepStatistical && !Find.bCertain)
+		{
+			continue;
+		}
+		Out += Text.Mid(From, Find.Start - From);
+		Out += TEXT("[a key: never shown or stored]");
+		From = Find.Start + Find.Length;
+	}
+	Out += Text.Mid(From);
+	return Out;
+}
+
+FString FWonderlandCardStore::WithoutInvisibleText(const FString& Text)
+{
+	return WithoutInvisible(Text);
 }
 
 bool FWonderlandCardStore::HoldsSecret(const FString& Text)
 {
-	return LooksLikeSecretInProse(Text) || LooksLikeSecretInProse(WithoutInvisible(Text));
+	TArray<FSecretFind> Finds;
+	FindSecrets(Text, Finds);
+	if (Finds.Num() > 0)
+	{
+		return true;
+	}
+	FindSecrets(WithoutInvisible(Text), Finds);
+	return Finds.Num() > 0;
 }
 
 FString FWonderlandCardStore::MaskForDisplay(const FString& Line)
 {
-	if (!HoldsSecret(Line))
-	{
-		return Line;
-	}
-	TArray<FString> Words;
-	Line.ParseIntoArray(Words, TEXT(" "), true);
-	for (FString& Word : Words)
-	{
-		if (HoldsSecret(Word))
-		{
-			Word = TEXT("[a key: never shown or stored]");
-		}
-	}
-	const FString Masked = FString::Join(Words, TEXT(" "));
-	return HoldsSecret(Masked) ? FString(TEXT("[a line holding a key or password: never shown or stored]")) : Masked;
+	// what is shown is the line without its invisible characters, every find (certain and statistical) replaced
+	const FString Clean = WithoutInvisible(Line);
+	TArray<FSecretFind> Finds;
+	FindSecrets(Clean, Finds);
+	return Finds.Num() > 0 ? RedactSecrets(Clean, Finds) : Line;
 }
 
 bool FWonderlandCardStore::LooksLikeSecret(const FString& Text)

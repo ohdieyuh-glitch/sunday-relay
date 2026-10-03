@@ -10154,20 +10154,23 @@ namespace
 		}));
 
 	/* ================================================================ wl.Qa.SecretInput: a key typed anywhere is never kept, never shown
-	 * The founder: secrets are never persisted in the Project Brain or C.A.R.D. Second's review (10-03, by code): a key typed as a
-	 * Mission Contract objective (the "+" tab, and the terminal) was SAVED to the contracts file and echoed. Keys are built at run time
-	 * (no key shape in the binary). Each search proves itself first: a marker the QA put there must be FOUND in the same bytes.
-	 *   SI4 (first) the control: an ordinary objective, a 12-character commit id in it, is ACCEPTED and saved -- keys are blocked,
-	 *       tasks are not -- and its marker is found in the contracts file
-	 *   SI1 a key as an objective (SubmitDraft, the door both the tab and the terminal use): refused, the draft still a draft, no part
-	 *       of it in the contracts file (as bytes and as UTF-16), nor in the log (whose own marker IS found)
-	 *   SI2 the same with a zero-width space inside the key: refused too (the check reads the text with its invisibles gone as well)
+	 * The founder: secrets are never persisted in the Project Brain or C.A.R.D.; fail-closed validation or redaction per field (10-03).
+	 * The objective screen v2 (Second's direction; COMBO B measured on Second's corpus) REDACTS every flagged word and keeps the task:
+	 * a CERTAIN shape always, a STATISTICAL one unless the player's explicit /keep. Keys are built at run time (no key shape in the
+	 * binary). Every search proves itself first: a marker the QA put there must be FOUND in the same bytes.
+	 *   SI4 (first) the control: an ordinary objective (a 12-character commit id in it) ACCEPTED, stored unchanged, its marker found
+	 *   SI1 a key as an objective: accepted with the key REDACTED -- no part of it in the stored objective, the contracts file (as bytes
+	 *       and as UTF-16) nor the log (whose own marker IS found)
+	 *   SI2 the same with a zero-width space inside the key (which the raw rule misses): redacted too
 	 *   SI3 what the terminal draws for typed lines (MaskForDisplay): no part of either key, nor of a short "Bearer" token
-	 *   SI5 Second's high-confidence shapes (a vendor key behind an underscore prefix, a JWT-like token, password=..., a 24-hex run, a
-	 *       vendor key split by a zero-width space): every one refused, no part in the contracts file nor the log, masked on screen
-	 *   SI6 ten real objectives (a pull-request URL, a UUID, a path, a version, a date, code identifiers, an e-mail) ACCEPTED
-	 *   SI7 the transcription check: random letter/digit tokens of 20, 24, 32 and 44 (300 each, a FIXED seed) caught at the rates the
-	 *       measured Python reference gives (73 / 79 / 88 / 94%), within 10 points -- the rate is reported, never a lucky token
+	 *   SI5 Second's certain shapes (an underscore-prefixed vendor key, a JWT-like token, password=..., a vendor key split by a
+	 *       zero-width space) and a 24-hex run: each redacted on submit; the certain ones STILL redacted after /keep; none in the file
+	 *       nor the log; masked on screen
+	 *   SI6 ten real objectives (a pull-request URL, a UUID, a path, a version, a date, code identifiers, an e-mail) stored UNCHANGED
+	 *   SI7 the transcription check: random letter/digit tokens of 20, 24, 32 and 44 (300 each, a FIXED seed) caught at COMBO B's
+	 *       measured rates (99.7-100%), at least 95% -- the rate is reported, never a lucky token
+	 *   SI8 /keep: a random-looking identifier redacted, then stored exactly as typed; a vendor key beside it still removed
+	 *   SI9 C.A.R.D. (Second's finding 3): a 24-character key given as a card's name through the terminal is refused, never stored
 	 */
 	struct FQaSecretInput
 	{
@@ -10223,6 +10226,7 @@ namespace
 		FQaSecretInput& S = *GQaSecretInput;
 		UWorld* World = S.World.Get();
 		UWonderlandMissionTaskSubsystem* Set = QaTaskSet(World);
+		UWonderlandSidekickSubsystem* Sidekicks = QaSidekicks(World);
 		ARelayDogCharacter* Dog = QaDog(World);
 		auto Stop = [&S](const TCHAR* Why)
 		{
@@ -10235,14 +10239,28 @@ namespace
 			}
 			return false;
 		};
-		if (World == nullptr || Set == nullptr)
+		if (World == nullptr || Set == nullptr || Sidekicks == nullptr)
 		{
-			return Stop(TEXT("the world or the task set went away"));
+			return Stop(TEXT("the world, the task set or the sidekick subsystem went away"));
 		}
 		if (QaNow() - S.StartedAt < 4.0 || Dog == nullptr || !Dog->GetCharacterMovement()->IsMovingOnGround())
 		{
 			return QaNow() - S.StartedAt < 40.0 ? true : Stop(TEXT("never ready"));
 		}
+		const FString Marker = TEXT("[a key: never shown or stored]");
+		FRandomStream Stream(20261003);
+		auto Random = [&Stream](const TCHAR* Alphabet, int32 Count)
+		{
+			const int32 Size = FCString::Strlen(Alphabet);
+			FString Out;
+			for (int32 Index = 0; Index < Count; ++Index)
+			{
+				Out.AppendChar(Alphabet[Stream.RandRange(0, Size - 1)]);
+			}
+			return Out;
+		};
+		const TCHAR* const Base62 = TEXT("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789");
+		const TCHAR* const Base64Url = TEXT("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_");
 		const FString Digits = FGuid::NewGuid().ToString(EGuidFormats::Digits);
 		const FString Prefix = FString(TEXT("s")) + TEXT("k-");
 		const FString KeyOne = Prefix + FGuid::NewGuid().ToString(EGuidFormats::Digits);
@@ -10262,30 +10280,61 @@ namespace
 			}
 			return false;
 		};
+		// ONE OBJECTIVE THROUGH THE SCREEN, the door both the "+" tab and the terminal use: accepted, what was removed, what was kept
+		struct FSubmitted
+		{
+			bool bAccepted = false;
+			int32 Certain = 0;
+			int32 Statistical = 0;
+			FString Kept;
+			FGuid Id;
+		};
+		TArray<FGuid> Leftover;
+		auto Submit = [Set, &Leftover](const FString& Objective)
+		{
+			FSubmitted Out;
+			Out.Id = Set->AddDraft();
+			Out.bAccepted = Set->SubmitDraftScreened(Out.Id, Objective, false, Out.Certain, Out.Statistical);
+			const FWonderlandMissionTask* Task = Set->Find(Out.Id);
+			Out.Kept = Task != nullptr ? Task->Objective : FString();
+			if (!Out.bAccepted)
+			{
+				Leftover.Add(Out.Id);
+			}
+			return Out;
+		};
+		auto ReadFile = []()
+		{
+			TArray<uint8> Bytes;
+			FFileHelper::LoadFileToArray(Bytes, *UWonderlandMissionTaskSubsystem::SlotPath());
+			return Bytes;
+		};
+		auto ReadLog = [](const FString& LogMarker, bool& bOutRead)
+		{
+			UE_LOG(LogWonderlandQa, Display, TEXT("%s"), *LogMarker);
+			GLog->Flush();
+			FString Text;
+			FFileHelper::LoadFileToString(Text, *FPlatformOutputDevices::GetAbsoluteLogFilename());
+			bOutRead = Text.Contains(LogMarker);
+			return Text;
+		};
 
-		// SI4 FIRST: the control, so the contracts file exists and the byte search is proven on it
-		const FString Marker = FString(TEXT("QaSI")) + Digits.Left(8);
-		const FGuid Ordinary = Set->AddDraft();
-		const bool bAccepted = Set->SubmitDraft(Ordinary, FString::Printf(TEXT("fix the login bug from commit 3f9a2b7c1d0e -- %s"), *Marker));
-		TArray<uint8> FileBytes;
-		FFileHelper::LoadFileToArray(FileBytes, *UWonderlandMissionTaskSubsystem::SlotPath());
-		const bool bMarkerInFile = QaBytesHold(FileBytes, Marker);
-		S.Check(TEXT("SI4"), bAccepted && bMarkerInFile, FString::Printf(TEXT("an ordinary objective with a 12-character commit id: %s; its marker %s in the contracts file (%d bytes) -- the byte search %s"),
-			bAccepted ? TEXT("ACCEPTED and saved") : TEXT("REFUSED"), bMarkerInFile ? TEXT("found") : TEXT("NOT found"), FileBytes.Num(),
-			bMarkerInFile ? TEXT("works") : TEXT("is BLIND")));
+		// SI4 FIRST: the control -- the contracts file exists and the byte search is proven on it
+		const FString ControlMarker = FString(TEXT("QaSI")) + Digits.Left(8);
+		const FString Ordinary = FString::Printf(TEXT("fix the login bug from commit 3f9a2b7c1d0e -- %s"), *ControlMarker);
+		const FSubmitted Control = Submit(Ordinary);
+		TArray<uint8> FileBytes = ReadFile();
+		const bool bMarkerInFile = QaBytesHold(FileBytes, ControlMarker);
+		S.Check(TEXT("SI4"), Control.bAccepted && Control.Certain + Control.Statistical == 0 && Control.Kept == Ordinary && bMarkerInFile,
+			FString::Printf(TEXT("an ordinary objective with a 12-character commit id: %s, %s; its marker %s in the contracts file (%d bytes) -- the byte search %s"),
+				Control.bAccepted ? TEXT("accepted") : TEXT("REFUSED"), Control.Kept == Ordinary ? TEXT("stored unchanged") : TEXT("ALTERED"),
+				bMarkerInFile ? TEXT("found") : TEXT("NOT found"), FileBytes.Num(), bMarkerInFile ? TEXT("works") : TEXT("is BLIND")));
 
 		// SI1 and SI2: the keys as objectives
-		const FGuid DraftOne = Set->AddDraft();
-		const bool bRefusedOne = !Set->SubmitDraft(DraftOne, FString::Printf(TEXT("deploy with %s please"), *KeyOne));
-		const FWonderlandMissionTask* TaskOne = Set->Find(DraftOne);
-		const bool bDraftOne = TaskOne != nullptr && !WonderlandTaskIsContract(TaskOne->State);
-		const FGuid DraftTwo = Set->AddDraft();
-		const bool bRefusedTwo = !Set->SubmitDraft(DraftTwo, FString::Printf(TEXT("deploy with %s please"), *KeyTwo));
-		const FWonderlandMissionTask* TaskTwo = Set->Find(DraftTwo);
-		const bool bDraftTwo = TaskTwo != nullptr && !WonderlandTaskIsContract(TaskTwo->State);
-		FileBytes.Reset();
-		FFileHelper::LoadFileToArray(FileBytes, *UWonderlandMissionTaskSubsystem::SlotPath());
-		bool bInFile = false;
+		const FSubmitted One = Submit(FString::Printf(TEXT("deploy with %s please"), *KeyOne));
+		const FSubmitted Two = Submit(FString::Printf(TEXT("deploy with %s please"), *KeyTwo));
+		FileBytes = ReadFile();
+		bool bInFile = QaBytesHold(FileBytes, Digits.Right(22));
 		for (const FString& Part : Parts(KeyOne))
 		{
 			bInFile |= QaBytesHold(FileBytes, Part);
@@ -10294,48 +10343,30 @@ namespace
 		{
 			bInFile |= QaBytesHold(FileBytes, Part);
 		}
-		bInFile |= QaBytesHold(FileBytes, Digits.Right(22));
-		const FString LogMarker = FString(TEXT("WLSIQA log marker ")) + FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(12);
-		UE_LOG(LogWonderlandQa, Display, TEXT("%s"), *LogMarker);
-		GLog->Flush();
-		FString LogText;
-		FFileHelper::LoadFileToString(LogText, *FPlatformOutputDevices::GetAbsoluteLogFilename());
-		const bool bLogRead = LogText.Contains(LogMarker);
+		bool bLogRead = false;
+		const FString LogText = ReadLog(FString(TEXT("WLSIQA log marker ")) + FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(12), bLogRead);
 		const bool bInLog = Holds(LogText, KeyOne) || Holds(LogText, KeyTwoWhole) || LogText.Contains(Digits.Right(22));
-		S.Check(TEXT("SI1"), bRefusedOne && bDraftOne && FileBytes.Num() > 0 && !bInFile && bLogRead && !bInLog,
-			FString::Printf(TEXT("a run-time key as an objective: %s, the slot %s; the contracts file (%d bytes) %s; the log (its own marker %s) %s"),
-				bRefusedOne ? TEXT("refused") : TEXT("ACCEPTED"), bDraftOne ? TEXT("still a draft") : TEXT("a CONTRACT"), FileBytes.Num(),
+		S.Check(TEXT("SI1"), One.bAccepted && One.Certain >= 1 && One.Kept.Contains(Marker) && !Holds(One.Kept, KeyOne) && FileBytes.Num() > 0 && !bInFile && bLogRead && !bInLog,
+			FString::Printf(TEXT("a run-time key as an objective: %s with %d part(s) redacted; the stored objective '%s'; the contracts file (%d bytes) %s; the log (its own marker %s) %s"),
+				One.bAccepted ? TEXT("accepted") : TEXT("REFUSED"), One.Certain + One.Statistical, *One.Kept, FileBytes.Num(),
 				bInFile ? TEXT("HOLDS a part of a key") : TEXT("holds no part of either key"), bLogRead ? TEXT("found") : TEXT("NOT found: the log could not be read"),
 				bInLog ? TEXT("HOLDS a part of a key") : TEXT("holds no part of either key")));
-		S.Check(TEXT("SI2"), bRefusedTwo && bDraftTwo && !FWonderlandCardStore::LooksLikeSecret(KeyTwo) && FWonderlandCardStore::HoldsSecret(KeyTwo),
-			FString::Printf(TEXT("the same with a zero-width space inside the key (which the raw check alone misses: %s): %s, the slot %s"),
-				FWonderlandCardStore::LooksLikeSecret(KeyTwo) ? TEXT("it does NOT miss it") : TEXT("yes"), bRefusedTwo ? TEXT("refused") : TEXT("ACCEPTED"),
-				bDraftTwo ? TEXT("still a draft") : TEXT("a CONTRACT")));
+		S.Check(TEXT("SI2"), Two.bAccepted && Two.Certain + Two.Statistical >= 1 && !Holds(Two.Kept, KeyTwoWhole) && !Two.Kept.Contains(Digits.Right(22))
+			&& !FWonderlandCardStore::LooksLikeSecret(KeyTwo) && FWonderlandCardStore::HoldsSecret(KeyTwo),
+			FString::Printf(TEXT("the key with a zero-width space inside (the raw rule alone misses it: %s): %s with %d part(s) redacted; the stored objective '%s'"),
+				FWonderlandCardStore::LooksLikeSecret(KeyTwo) ? TEXT("it does NOT") : TEXT("yes"), Two.bAccepted ? TEXT("accepted") : TEXT("REFUSED"),
+				Two.Certain + Two.Statistical, *Two.Kept));
 
 		// SI3: what the terminal draws
 		const FString ShownOne = FWonderlandCardStore::MaskForDisplay(FString(TEXT("/card attach api ")) + KeyOne);
 		const FString ShownTwo = FWonderlandCardStore::MaskForDisplay(FString::Printf(TEXT("deploy with %s please"), *KeyTwo));
 		const FString Token = FString(TEXT("ab")) + TEXT("12cd");
 		const FString ShownThree = FWonderlandCardStore::MaskForDisplay(FString(TEXT("Authorization: Bearer ")) + Token);
-		const bool bShownClean = !Holds(ShownOne, KeyOne) && !Holds(ShownTwo, KeyTwoWhole) && !ShownTwo.Contains(Digits.Right(22))
-			&& !ShownThree.Contains(Token) && !FWonderlandCardStore::HoldsSecret(ShownOne) && !FWonderlandCardStore::HoldsSecret(ShownTwo)
-			&& !FWonderlandCardStore::HoldsSecret(ShownThree);
+		const bool bShownClean = !Holds(ShownOne, KeyOne) && !Holds(ShownTwo, KeyTwoWhole) && !ShownTwo.Contains(Digits.Right(22)) && !ShownThree.Contains(Token)
+			&& !FWonderlandCardStore::HoldsSecret(ShownOne) && !FWonderlandCardStore::HoldsSecret(ShownTwo) && !FWonderlandCardStore::HoldsSecret(ShownThree);
 		S.Check(TEXT("SI3"), bShownClean, FString::Printf(TEXT("the terminal draws '%s', '%s' and '%s'"), *ShownOne, *ShownTwo, *ShownThree));
 
-		// SI5: Second's high-confidence shapes, every one built at run time
-		FRandomStream Stream(20261003);
-		auto Random = [&Stream](const TCHAR* Alphabet, int32 Count)
-		{
-			const int32 Size = FCString::Strlen(Alphabet);
-			FString Out;
-			for (int32 Index = 0; Index < Count; ++Index)
-			{
-				Out.AppendChar(Alphabet[Stream.RandRange(0, Size - 1)]);
-			}
-			return Out;
-		};
-		const TCHAR* const Base62 = TEXT("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789");
-		const TCHAR* const Base64Url = TEXT("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_");
+		// SI5: Second's certain shapes (and a 24-hex run, statistical): redacted on submit; the certain ones still after /keep
 		const FString VendorFront = FString(TEXT("xo")) + TEXT("xb-") + Random(Base62, 20) + TEXT("a1");
 		const FString VendorBack = Random(Base62, 20) + TEXT("b2");
 		FString SplitVendor = VendorFront;
@@ -10346,38 +10377,42 @@ namespace
 			const TCHAR* Name;
 			FString Value;
 			FString Whole;
+			bool bCertain;
 		};
 		TArray<FSecretShape> Shapes;
 		{
 			const FString Under = FString(TEXT("gh")) + TEXT("p_") + Random(Base62, 34) + TEXT("c3");
-			Shapes.Add({ TEXT("an underscore-prefixed vendor key"), Under, Under });
+			Shapes.Add({ TEXT("an underscore-prefixed vendor key"), Under, Under, true });
 			const FString Dotted = Random(Base64Url, 18) + TEXT("d4.") + Random(Base64Url, 18) + TEXT("e5.") + Random(Base64Url, 18) + TEXT("f6");
-			Shapes.Add({ TEXT("a JWT-like token"), Dotted, Dotted });
+			Shapes.Add({ TEXT("a JWT-like token"), Dotted, Dotted, true });
 			const FString Pass = FString(TEXT("pass")) + TEXT("word=") + Random(Base62, 10);
-			Shapes.Add({ TEXT("password=..."), Pass, Pass });
+			Shapes.Add({ TEXT("password=..."), Pass, Pass, true });
+			Shapes.Add({ TEXT("a vendor key split by a zero-width space"), SplitVendor, VendorFront + VendorBack, true });
 			const FString Hex = Random(TEXT("0123456789abcdef"), 22) + TEXT("a7");
-			Shapes.Add({ TEXT("a 24-hex run"), Hex, Hex });
-			Shapes.Add({ TEXT("a vendor key split by a zero-width space"), SplitVendor, VendorFront + VendorBack });
+			Shapes.Add({ TEXT("a 24-hex run"), Hex, Hex, false });
 		}
 		FString ShapeDetail;
 		bool bShapesClean = true;
-		TArray<FGuid> ShapeDrafts;
 		for (const FSecretShape& Shape : Shapes)
 		{
-			const FGuid Draft = Set->AddDraft();
-			ShapeDrafts.Add(Draft);
-			const bool bHeld = FWonderlandCardStore::HoldsSecret(Shape.Value);
-			const bool bRefused = !Set->SubmitDraft(Draft, FString::Printf(TEXT("use %s for the deploy"), *Shape.Value));
-			const bool bMasked = !Holds(FWonderlandCardStore::MaskForDisplay(FString::Printf(TEXT("use %s for the deploy"), *Shape.Value)), Shape.Whole);
-			const bool bOk = bHeld && bRefused && bMasked;
+			const FString Typed = FString::Printf(TEXT("use %s for the deploy"), *Shape.Value);
+			const FSubmitted Done = Submit(Typed);
+			bool bOk = Done.bAccepted && Done.Certain + Done.Statistical >= 1 && !Holds(Done.Kept, Shape.Whole)
+				&& !Holds(FWonderlandCardStore::MaskForDisplay(Typed), Shape.Whole);
+			if (bOk && Shape.bCertain)
+			{
+				int32 StillRemoved = 0;
+				const bool bKeptCall = Set->KeepObjectiveAsTyped(Done.Id, Typed, StillRemoved);
+				const FWonderlandMissionTask* After = Set->Find(Done.Id);
+				bOk = bKeptCall && StillRemoved >= 1 && After != nullptr && !Holds(After->Objective, Shape.Whole);
+			}
 			bShapesClean &= bOk;
-			ShapeDetail += FString::Printf(TEXT("%s%s %s"), ShapeDetail.IsEmpty() ? TEXT("") : TEXT("; "), Shape.Name, bOk ? TEXT("refused + masked") : TEXT("GOT THROUGH"));
+			ShapeDetail += FString::Printf(TEXT("%s%s %s"), ShapeDetail.IsEmpty() ? TEXT("") : TEXT("; "), Shape.Name,
+				bOk ? (Shape.bCertain ? TEXT("redacted, and still after /keep") : TEXT("redacted")) : TEXT("GOT THROUGH"));
 		}
-		TArray<uint8> ShapeBytes;
-		FFileHelper::LoadFileToArray(ShapeBytes, *UWonderlandMissionTaskSubsystem::SlotPath());
-		GLog->Flush();
-		FString ShapeLog;
-		FFileHelper::LoadFileToString(ShapeLog, *FPlatformOutputDevices::GetAbsoluteLogFilename());
+		const TArray<uint8> ShapeBytes = ReadFile();
+		bool bShapeLogRead = false;
+		const FString ShapeLog = ReadLog(FString(TEXT("WLSIQA shape marker ")) + FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(12), bShapeLogRead);
 		bool bShapeOnDisk = false;
 		for (const FSecretShape& Shape : Shapes)
 		{
@@ -10386,14 +10421,11 @@ namespace
 				bShapeOnDisk |= QaBytesHold(ShapeBytes, Part) || ShapeLog.Contains(Part);
 			}
 		}
-		S.Check(TEXT("SI5"), bShapesClean && !bShapeOnDisk && ShapeBytes.Num() > 0,
-			FString::Printf(TEXT("Second's shapes: %s; any part in the contracts file or the log: %s"), *ShapeDetail, bShapeOnDisk ? TEXT("YES") : TEXT("none")));
-		for (const FGuid& Draft : ShapeDrafts)
-		{
-			Set->DismissDraft(Draft);
-		}
+		S.Check(TEXT("SI5"), bShapesClean && !bShapeOnDisk && ShapeBytes.Num() > 0 && bShapeLogRead,
+			FString::Printf(TEXT("Second's shapes: %s; any part in the contracts file or the log (its marker %s): %s"), *ShapeDetail,
+				bShapeLogRead ? TEXT("found") : TEXT("NOT found"), bShapeOnDisk ? TEXT("YES") : TEXT("none")));
 
-		// SI6: real objectives are tasks, not keys
+		// SI6: real objectives are tasks, not keys -- stored exactly as typed
 		static const TCHAR* const RealObjectives[] = {
 			TEXT("review PR https://github.com/i-wonder/sunday-relay/pull/1234 before Friday"),
 			TEXT("check record 550e8400-e29b-41d4-a716-446655440000 in the contracts table"),
@@ -10405,65 +10437,99 @@ namespace
 			TEXT("add tests for SHA256HMACSigner2024 and the md5 fallback"),
 			TEXT("set wl.Handoff.Stance.Crouch to 11 and wl.Handoff.Stance.FeetOut to 20"),
 			TEXT("email beta-tester@example.com about the Saturday build") };
-		int32 Accepted = 0;
-		FString Refused;
+		int32 Unchanged = 0;
+		FString Altered;
 		for (const TCHAR* Objective : RealObjectives)
 		{
-			const FGuid Draft = Set->AddDraft();
-			if (Set->SubmitDraft(Draft, Objective))
+			const FSubmitted Done = Submit(Objective);
+			if (Done.bAccepted && Done.Certain + Done.Statistical == 0 && Done.Kept == Objective)
 			{
-				++Accepted;
+				++Unchanged;
 			}
 			else
 			{
-				Refused += FString::Printf(TEXT("%s'%s'"), Refused.IsEmpty() ? TEXT("") : TEXT(", "), Objective);
-				Set->DismissDraft(Draft);
+				Altered += FString::Printf(TEXT("%s'%s' -> '%s'"), Altered.IsEmpty() ? TEXT("") : TEXT(", "), Objective, *Done.Kept);
 			}
 		}
-		S.Check(TEXT("SI6"), Accepted == static_cast<int32>(UE_ARRAY_COUNT(RealObjectives)), FString::Printf(TEXT("%d of %d real objectives (URL, UUID, path, version, date, identifiers, e-mail) accepted%s"),
-			Accepted, static_cast<int32>(UE_ARRAY_COUNT(RealObjectives)), Refused.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; REFUSED: %s"), *Refused)));
+		S.Check(TEXT("SI6"), Unchanged == static_cast<int32>(UE_ARRAY_COUNT(RealObjectives)),
+			FString::Printf(TEXT("%d of %d real objectives (URL, UUID, path, version, date, identifiers, e-mail) stored exactly as typed%s"), Unchanged,
+				static_cast<int32>(UE_ARRAY_COUNT(RealObjectives)), Altered.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; ALTERED: %s"), *Altered)));
 
-		// SI7: the transcription check, a fixed seed, the measured reference rates
-		struct FRateBand
-		{
-			int32 Length;
-			int32 Low;
-			int32 High;
-		};
-		const FRateBand Rates[] = { { 20, 63, 83 }, { 24, 69, 89 }, { 32, 78, 98 }, { 44, 84, 100 } };
+		// SI7: the transcription check -- a fixed seed, COMBO B's measured rates
+		const int32 Lengths[] = { 20, 24, 32, 44 };
 		FRandomStream RateStream(1003);
 		bool bRatesIn = true;
 		FString RateDetail;
-		for (const FRateBand& Rate : Rates)
+		for (const int32 Length : Lengths)
 		{
 			int32 Caught = 0;
 			for (int32 Sample = 0; Sample < 300; ++Sample)
 			{
 				FString RateToken;
-				for (int32 Index = 0; Index < Rate.Length; ++Index)
+				for (int32 Index = 0; Index < Length; ++Index)
 				{
 					RateToken.AppendChar(Base62[RateStream.RandRange(0, 61)]);
 				}
 				Caught += FWonderlandCardStore::HoldsSecret(FString::Printf(TEXT("please use %s for the deploy"), *RateToken)) ? 1 : 0;
 			}
 			const int32 Percent = FMath::RoundToInt(Caught * 100.0 / 300.0);
-			const bool bIn = Percent >= Rate.Low && Percent <= Rate.High;
-			bRatesIn &= bIn;
-			RateDetail += FString::Printf(TEXT("%s%d chars %d%% (reference %d-%d%%)%s"), RateDetail.IsEmpty() ? TEXT("") : TEXT("; "), Rate.Length, Percent, Rate.Low, Rate.High,
-				bIn ? TEXT("") : TEXT(" OUT"));
+			bRatesIn &= Percent >= 95;
+			RateDetail += FString::Printf(TEXT("%s%d chars %d%%"), RateDetail.IsEmpty() ? TEXT("") : TEXT("; "), Length, Percent);
 		}
-		S.Check(TEXT("SI7"), bRatesIn, FString::Printf(TEXT("random letter/digit tokens caught by shape (300 each, fixed seed): %s -- the honest limit: a short prefix-less token can get through"), *RateDetail));
+		S.Check(TEXT("SI7"), bRatesIn, FString::Printf(TEXT("random letter/digit tokens caught by shape (300 each, fixed seed; COMBO B measured 99.7-100%%, floor 95%%): %s"), *RateDetail));
 
-		Set->DismissDraft(DraftOne);
-		Set->DismissDraft(DraftTwo);
+		// SI8: /keep stores a random-looking identifier as typed -- never a certain shape beside it
+		const FString Identifier = TEXT("clean up K8sClusterRBACv2Config before the release");
+		const FSubmitted Flagged = Submit(Identifier);
+		int32 KeptRemoved = -1;
+		const bool bIdentifierKept = Flagged.bAccepted && Set->KeepObjectiveAsTyped(Flagged.Id, Identifier, KeptRemoved);
+		const FWonderlandMissionTask* AsTyped = Set->Find(Flagged.Id);
+		const FString Vendor = FString(TEXT("gh")) + TEXT("p_") + Random(Base62, 34) + TEXT("e7");
+		const FString Mixed = FString::Printf(TEXT("ship %s with K8sClusterRBACv2Config"), *Vendor);
+		const FSubmitted MixedDone = Submit(Mixed);
+		int32 MixedRemoved = 0;
+		const bool bMixedCall = MixedDone.bAccepted && Set->KeepObjectiveAsTyped(MixedDone.Id, Mixed, MixedRemoved);
+		const FWonderlandMissionTask* MixedTask = Set->Find(MixedDone.Id);
+		const bool bMixedOk = bMixedCall && MixedRemoved >= 1 && MixedTask != nullptr && MixedTask->Objective.Contains(TEXT("K8sClusterRBACv2Config"))
+			&& !Holds(MixedTask->Objective, Vendor);
+		S.Check(TEXT("SI8"), Flagged.Statistical >= 1 && Flagged.Certain == 0 && Flagged.Kept.Contains(Marker) && bIdentifierKept && KeptRemoved == 0 && AsTyped != nullptr
+			&& AsTyped->Objective == Identifier && bMixedOk,
+			FString::Printf(TEXT("a random-looking identifier: redacted (%d statistical) then /keep stored it %s; beside a vendor key, /keep kept the identifier and removed the key: %s"),
+				Flagged.Statistical, AsTyped != nullptr && AsTyped->Objective == Identifier ? TEXT("exactly as typed") : TEXT("NOT as typed"), bMixedOk ? TEXT("yes") : TEXT("NO")));
+
+		// SI9: C.A.R.D. -- a 24-character key as a card's name, through the terminal, is refused and never stored
+		const FString CardKey = Random(Base62, 22) + TEXT("x9");
+		TArray<FString> Rows;
+		WonderlandCardDirector::HandleTerminalLine(World, FString(TEXT("/card new ")) + CardKey, Rows);
+		const FWonderlandCardStore& Store = Sidekicks->GetCardStore();
+		bool bCardKept = false;
+		for (const FWonderlandCard& Card : Store.GetCards())
+		{
+			bCardKept |= Holds(Card.Name, CardKey);
+		}
+		TArray<uint8> CardBytes;
+		FFileHelper::LoadFileToArray(CardBytes, *Store.GetPath());
+		bool bCardOnDisk = false;
+		for (const FString& Part : Parts(CardKey))
+		{
+			bCardOnDisk |= QaBytesHold(CardBytes, Part);
+		}
+		S.Check(TEXT("SI9"), FWonderlandCardStore::HoldsSecret(CardKey) && !bCardKept && !bCardOnDisk,
+			FString::Printf(TEXT("a 24-character key given as a C.A.R.D. name through the terminal: the screen flags it %s; a card holds it: %s; Cards.sav (%d bytes) holds a part: %s"),
+				FWonderlandCardStore::HoldsSecret(CardKey) ? TEXT("yes") : TEXT("NO"), bCardKept ? TEXT("YES") : TEXT("no"), CardBytes.Num(), bCardOnDisk ? TEXT("YES") : TEXT("no")));
+
+		for (const FGuid& Draft : Leftover)
+		{
+			Set->DismissDraft(Draft);
+		}
 		return Stop(nullptr);
 	}
 
 	FAutoConsoleCommandWithWorldAndArgs GQaSecretInputCommand(
 		TEXT("wl.Qa.SecretInput"),
-		TEXT("A key typed anywhere is never kept and never shown (the founder's rule; Second's review): an ordinary objective accepted (SI4), ")
-		TEXT("a run-time key as an objective refused and absent from the contracts file and the log (SI1), with a zero-width space inside it ")
-		TEXT("too (SI2), and masked in what the terminal draws (SI3). `quit` exits after. WLSIQA lines."),
+		TEXT("A key typed anywhere is never kept and never shown (the founder's fail-closed; Second's review): objectives keep the task and lose ")
+		TEXT("the key (SI1-SI2, SI5), real objectives stay as typed (SI6), the terminal masks (SI3), COMBO B's rates hold (SI7), /keep never ")
+		TEXT("stores a certain shape (SI8), a key cannot name a C.A.R.D. (SI9). `quit` exits after. WLSIQA lines."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (GQaSecretInput.IsValid() || World == nullptr)

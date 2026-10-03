@@ -4428,6 +4428,29 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		return true;
 	}
 
+	if (Command == TEXT("/keep"))
+	{
+		// THE PLAYER'S EXPLICIT OVERRIDE for a random-looking word that was not a key (Second's review, 10-03): the last redacted
+		// objective stored as typed, within 30 s -- a key's CERTAIN shapes are removed even then, and the held text is wiped either way
+		FString Said = TEXT("Nothing to keep: /keep stores the last objective exactly as typed, within 30 s of a redaction.");
+		if (PendingKeepId.IsValid() && FPlatformTime::Seconds() - PendingKeepAt <= 30.0)
+		{
+			if (UWonderlandMissionTaskSubsystem* KeepSet = Tasks())
+			{
+				int32 StillRemoved = 0;
+				if (KeepSet->KeepObjectiveAsTyped(PendingKeepId, PendingKeepText, StillRemoved))
+				{
+					Said = StillRemoved > 0 ? FString::Printf(TEXT("Kept as typed -- except %d part(s) with a key's certain shape, which are never stored."), StillRemoved)
+						: FString(TEXT("Kept exactly as typed."));
+				}
+			}
+		}
+		PendingKeepText.Empty();
+		PendingKeepId.Invalidate();
+		Terminal->AddJuliusRow(TEXT("You"), Line, Said);
+		return true;
+	}
+
 	if (Command == TEXT("/card") || Command == TEXT("/cards"))
 	{
 		// C.A.R.D. (founder, 2026-10-02: the fifth Project Brain component). The actions live in WonderlandCardDirector; this only
@@ -4468,6 +4491,11 @@ void UWonderlandUiSubsystem::HandleTerminalSubmit(const FString& Text)
 	{
 		return;
 	}
+	if (PendingKeepId.IsValid() && FPlatformTime::Seconds() - PendingKeepAt > 30.0)
+	{
+		PendingKeepText.Empty();
+		PendingKeepId.Invalidate();
+	}
 	if (HandleTerminalCommand(Text))
 	{
 		return;
@@ -4485,21 +4513,35 @@ void UWonderlandUiSubsystem::HandleTerminalSubmit(const FString& Text)
 		if (Draft != nullptr && !WonderlandTaskIsContract(Draft->State))
 		{
 			const FGuid DraftId = Draft->LocalId;
-			if (Set->SubmitDraft(DraftId, Text))
+			int32 RedactedCertain = 0;
+			int32 RedactedStatistical = 0;
+			if (Set->SubmitDraftScreened(DraftId, Text, false, RedactedCertain, RedactedStatistical))
 			{
-				Terminal->AddJuliusRow(TEXT("You"), Text, Set->DidLastSaveFail()
+				FString Removed;
+				if (RedactedCertain + RedactedStatistical > 0)
+				{
+					Removed = FString::Printf(TEXT(" %d part(s) shaped like a key or password were removed before saving."), RedactedCertain + RedactedStatistical);
+					if (RedactedStatistical > 0)
+					{
+						PendingKeepId = DraftId;
+						PendingKeepText = Text;
+						PendingKeepAt = FPlatformTime::Seconds();
+						Removed += TEXT(" If one was not a key, type /keep within 30 s to save it as typed (a key's certain shapes are removed even then).");
+					}
+				}
+				Terminal->AddJuliusRow(TEXT("You"), Text, (Set->DidLastSaveFail()
 					? FString(TEXT("A Mission Contract, QUEUED -- but it could NOT be saved to this PC (is the Wonderland folder writable, "
 						"or the disk full?). It lasts this session only. Julius is not part of this beta build, so nothing will run it yet."))
 					: FString(TEXT("Saved as a Mission Contract, QUEUED on this PC. Julius is not part of this beta build, so nothing will run it yet. "
-						"Close the tab with X and it stays saved: /tasks lists your contracts, /tasks open N brings one back.")));
+						"Close the tab with X and it stays saved: /tasks lists your contracts, /tasks open N brings one back."))) + Removed);
 				UE_LOG(LogWonderlandUi, Display, TEXT("WLUI terminal objective submitted: draft became a QUEUED Mission Contract (%d characters)"), Text.Len());
 				return;
 			}
 			if (FWonderlandCardStore::HoldsSecret(Text))
 			{
 				// the task set refused it whole; the row says why (the terminal masks the key in what it draws)
-				Terminal->AddJuliusRow(TEXT("You"), Text, FString(TEXT("Not saved: that objective holds something shaped like a key or password, so it was "
-					"neither saved nor sent. Type the task without it -- a key belongs in Julius Connect, never in a task.")));
+				Terminal->AddJuliusRow(TEXT("You"), Text, FString(TEXT("Not saved: that objective was nothing but something shaped like a key or password, so "
+					"nothing was saved or sent. Type the task itself -- a key belongs in Julius Connect, never in a task.")));
 				return;
 			}
 			Terminal->AddJuliusRow(TEXT("You"), Text, Set->IsAtContractLimit()
