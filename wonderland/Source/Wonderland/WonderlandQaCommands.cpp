@@ -59,6 +59,7 @@
 #include "Camera/CameraComponent.h"
 #include "WonderlandSkinStage.h"
 #include "WonderlandCard.h"
+#include "WonderlandCardCapabilities.h"
 #include "WonderlandMissionHandoff.h"
 #include "WonderlandHandoffDirector.h"
 #include "WonderlandCompanionFormation.h"
@@ -4491,6 +4492,327 @@ namespace
 			{
 				RunCardQa();
 			}
+			if (Args.Contains(TEXT("quit")))
+			{
+				FPlatformMisc::RequestExit(false);
+			}
+		}));
+
+	/* ================================================================ wl.Qa.CardRefs: C.A.R.D.'s references, RESOLVED (M7a)
+	 * Every rule of WonderlandCardCapabilities, proved on readings built here -- each state of both authorities, the founder's
+	 * locks, the authority separation, untrusted text -- then THIS boot's own reading. Read-only by design: Cards.sav is
+	 * hashed before and after. Every line: WLCRQA <id> PASS|FAIL | detail.
+	 */
+	struct FCardRefQa
+	{
+		int32 Pass = 0;
+		int32 Fail = 0;
+		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLCRQA %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+	};
+
+	FWonderlandCompanionRef QaCrCompanion(int32 Slot, EWonderlandCardCompanionKind Kind, const TCHAR* ProviderId)
+	{
+		FWonderlandCompanionRef Ref;
+		Ref.Slot = Slot;
+		Ref.Kind = Kind;
+		Ref.ProviderId = ProviderId;
+		return Ref;
+	}
+
+	FWonderlandCapabilityRef QaCrCapability(EWonderlandCapabilityKind Kind, const TCHAR* Id)
+	{
+		FWonderlandCapabilityRef Ref;
+		Ref.Kind = Kind;
+		Ref.Id = Id;
+		return Ref;
+	}
+
+	void QaCrProvider(WonderlandCardCapabilities::FReading& Reading, const TCHAR* Id, const TCHAR* Backs, bool bReady, const FString& Detail)
+	{
+		FWonderlandSidekickProvider& Provider = Reading.Providers.AddDefaulted_GetRef();
+		Provider.ProviderId = Id;
+		Provider.DisplayName = FString::Printf(TEXT("QA provider %s"), Id);
+		Provider.Backs = Backs;
+		Provider.bReady = bReady;
+		Provider.Detail = Detail;
+	}
+
+	FWonderlandSidekick& QaCrLive(WonderlandCardCapabilities::FReading& Reading, const TCHAR* SidekickId, const TCHAR* ProviderId, const TCHAR* State)
+	{
+		FWonderlandSidekick& Live = Reading.Sidekicks.AddDefaulted_GetRef();
+		Live.SidekickId = SidekickId;
+		Live.ProviderId = ProviderId;
+		Live.State = State;
+		return Live;
+	}
+
+	FJuliusConnectService& QaCrService(WonderlandCardCapabilities::FReading& Reading, const TCHAR* Id, const TCHAR* State)
+	{
+		FJuliusConnectService& Service = Reading.Services.AddDefaulted_GetRef();
+		Service.ConnectorId = Id;
+		Service.DisplayName = FString::Printf(TEXT("QA connector %s"), Id);
+		Service.Kind = TEXT("REAL SERVICE");
+		Service.State = State;
+		Service.StateLabel = FString(State).Replace(TEXT("_"), TEXT(" ")).ToLower();
+		Service.bReachable = true;
+		Service.RouteLabel = TEXT("QA route");
+		return Service;
+	}
+
+	/** Both authorities online: providers for every rule, the LLM Companion connected to qa-llm, Jhinn on the fixture. */
+	WonderlandCardCapabilities::FReading QaCrOnline()
+	{
+		WonderlandCardCapabilities::FReading Reading;
+		Reading.CompanionLink = EWonderlandSidekickLink::Online;
+		Reading.ConnectLink = EJuliusConnectLink::Online;
+		QaCrProvider(Reading, TEXT("dev-companion"), TEXT("llm_companion"), true, TEXT("built in"));
+		QaCrProvider(Reading, TEXT("dev-single-agent"), TEXT("single_agent"), true, TEXT("built in"));
+		QaCrProvider(Reading, TEXT("qa-llm"), TEXT("llm_companion"), true, TEXT("ready"));
+		QaCrProvider(Reading, TEXT("qa-agent"), TEXT("single_agent"), false, TEXT("sign in to the QA agent first"));
+		QaCrProvider(Reading, TEXT("qa-harness"), TEXT("single_agent"), true, TEXT("ready"));
+		QaCrLive(Reading, TEXT("llm-companion"), TEXT("qa-llm"), TEXT("CONNECTED")).ModelId = TEXT("qa-model");
+		QaCrLive(Reading, TEXT("jhinn"), TEXT("dev-single-agent"), TEXT("SIMULATED"));
+		return Reading;
+	}
+
+	void RunCardRefsQa(UWorld* World)
+	{
+		namespace CardCaps = WonderlandCardCapabilities;
+		using St = EWonderlandCardStatus;
+		using Ck = EWonderlandCardCompanionKind;
+		using Cp = EWonderlandCapabilityKind;
+		FCardRefQa Q;
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLCRQA BEGIN | %s"), *WonderlandBeta::BuildLabel());
+
+		// READ-ONLY: the store's bytes before and after everything below
+		const FString CardsPath = FWonderlandCardStore::DefaultPath();
+		auto StoreHash = [&CardsPath]()
+		{
+			TArray<uint8> Bytes;
+			const bool bThere = FFileHelper::LoadFileToArray(Bytes, *CardsPath, FILEREAD_Silent);
+			return bThere ? FString::Printf(TEXT("%d bytes crc %08x"), Bytes.Num(), FCrc::MemCrc32(Bytes.GetData(), Bytes.Num())) : FString(TEXT("absent"));
+		};
+		const FString StoreBefore = StoreHash();
+
+		// ---- THE COMPANION RUNTIME
+		CardCaps::FReading Off;
+		Off.CompanionProblem = TEXT("QA: nothing listening");
+		Off.ConnectProblem = TEXT("QA: the service is not running");
+		{
+			const FWonderlandCardRefStatus R = CardCaps::ResolveCompanion(QaCrCompanion(0, Ck::Llm, TEXT("qa-llm")), Off);
+			Q.Check(TEXT("CR1"), R.Status == St::Unavailable && R.Reason.Contains(TEXT("offline")) && R.Reason.Contains(TEXT("QA: nothing listening")),
+				FString::Printf(TEXT("runtime offline -> %s"), *CardCaps::Describe(R)));
+		}
+		{
+			CardCaps::FReading StillConnecting = QaCrOnline();
+			StillConnecting.CompanionLink = EWonderlandSidekickLink::Connecting;
+			const FWonderlandCardRefStatus R = CardCaps::ResolveCompanion(QaCrCompanion(0, Ck::Llm, TEXT("qa-llm")), StillConnecting);
+			Q.Check(TEXT("CR2"), R.Status == St::Unavailable && R.Reason.Contains(TEXT("still connecting")),
+				FString::Printf(TEXT("runtime connecting (a provider ready on it) -> %s"), *CardCaps::Describe(R)));
+		}
+		const CardCaps::FReading On = QaCrOnline();
+		{
+			const FWonderlandCardRefStatus R = CardCaps::ResolveCompanion(QaCrCompanion(0, Ck::Llm, TEXT("qa-nobody")), On);
+			Q.Check(TEXT("CR3"), R.Status == St::Unavailable && R.Reason.Contains(TEXT("offers no provider")), FString::Printf(TEXT("unknown provider -> %s"), *CardCaps::Describe(R)));
+		}
+		{
+			const FWonderlandCardRefStatus R = CardCaps::ResolveCompanion(QaCrCompanion(0, Ck::Llm, TEXT("qa-harness")), On);
+			Q.Check(TEXT("CR4"), R.Status == St::Unavailable && R.Reason.Contains(TEXT("backs single_agent")),
+				FString::Printf(TEXT("a single agent in the LLM Companion's slot -> %s"), *CardCaps::Describe(R)));
+		}
+		{
+			const FWonderlandCardRefStatus R = CardCaps::ResolveCompanion(QaCrCompanion(1, Ck::Agent, TEXT("qa-agent")), On);
+			Q.Check(TEXT("CR5"), R.Status == St::Unconfigured && R.Reason == TEXT("sign in to the QA agent first") && !R.bSimulated,
+				FString::Printf(TEXT("not ready: the provider's own words, verbatim -> %s"), *CardCaps::Describe(R)));
+		}
+		{
+			const FWonderlandCardRefStatus R = CardCaps::ResolveCompanion(QaCrCompanion(1, Ck::Harness, TEXT("qa-harness")), On);
+			Q.Check(TEXT("CR6"), R.Status == St::Ready && !R.bSimulated && R.Reason.Contains(TEXT("not connected")),
+				FString::Printf(TEXT("a harness ready on the machine, not in the slot yet -> %s"), *CardCaps::Describe(R)));
+		}
+		{
+			const FWonderlandCardRefStatus R = CardCaps::ResolveCompanion(QaCrCompanion(0, Ck::Llm, TEXT("qa-llm")), On);
+			Q.Check(TEXT("CR7"), R.Status == St::Ready && !R.bSimulated && R.Reason.Contains(TEXT("qa-model")),
+				FString::Printf(TEXT("connected in its slot -> %s"), *CardCaps::Describe(R)));
+		}
+		{
+			// THE FOUNDER'S LOCK: the provider says ready, the companion in the slot still waits for the go-ahead
+			CardCaps::FReading Locked = QaCrOnline();
+			Locked.Sidekicks[0].State = TEXT("AUTH_REQUIRED");
+			Locked.Sidekicks[0].Note = TEXT("QA: live use is not allowed yet");
+			const FWonderlandCardRefStatus R = CardCaps::ResolveCompanion(QaCrCompanion(0, Ck::Llm, TEXT("qa-llm")), Locked);
+			Q.Check(TEXT("CR8"), R.Status == St::Unconfigured && R.Reason.StartsWith(TEXT("AUTH_REQUIRED")) && R.Reason.Contains(TEXT("not allowed yet")),
+				FString::Printf(TEXT("ready provider, AUTH_REQUIRED in the slot -> %s"), *CardCaps::Describe(R)));
+		}
+		{
+			const FWonderlandCardRefStatus InSlot = CardCaps::ResolveCompanion(QaCrCompanion(1, Ck::Agent, TEXT("dev-single-agent")), On);
+			const FWonderlandCardRefStatus NotInSlot = CardCaps::ResolveCompanion(QaCrCompanion(0, Ck::Llm, TEXT("dev-companion")), On);
+			Q.Check(TEXT("CR9"), InSlot.Status == St::Ready && InSlot.bSimulated && NotInSlot.Status == St::Ready && NotInSlot.bSimulated
+				&& CardCaps::Describe(InSlot).StartsWith(TEXT("READY (SIMULATED)")),
+				FString::Printf(TEXT("fixtures are marked: in the slot -> %s; not in it -> %s"), *CardCaps::Describe(InSlot), *CardCaps::Describe(NotInSlot)));
+		}
+		{
+			CardCaps::FReading Failed = QaCrOnline();
+			Failed.Sidekicks[0].State = TEXT("FAILED");
+			Failed.Sidekicks[0].Failure = TEXT("QA: the provider answered 500");
+			const FWonderlandCardRefStatus R = CardCaps::ResolveCompanion(QaCrCompanion(0, Ck::Llm, TEXT("qa-llm")), Failed);
+			Q.Check(TEXT("CR10"), R.Status == St::Unavailable && R.Reason.Contains(TEXT("FAILED")) && R.Reason.Contains(TEXT("answered 500")),
+				FString::Printf(TEXT("FAILED in the slot -> %s"), *CardCaps::Describe(R)));
+		}
+		{
+			// THE AUTHORITY SEPARATION: Julius is the only compound agent; no card can seat one, on either side
+			const FWonderlandCardRefStatus LeftSeat = CardCaps::ResolveCompanion(QaCrCompanion(0, Ck::CompoundAgent, TEXT("qa-llm")), On);
+			const FWonderlandCardRefStatus RightSeat = CardCaps::ResolveCompanion(QaCrCompanion(1, Ck::CompoundAgent, TEXT("qa-harness")), On);
+			Q.Check(TEXT("CR11"), LeftSeat.Status == St::Unavailable && RightSeat.Status == St::Unavailable && LeftSeat.Reason.Contains(TEXT("Julius")),
+				FString::Printf(TEXT("compound agent -> %s"), *CardCaps::Describe(LeftSeat)));
+		}
+		{
+			const FWonderlandCardRefStatus LlmRight = CardCaps::ResolveCompanion(QaCrCompanion(1, Ck::Llm, TEXT("qa-llm")), On);
+			const FWonderlandCardRefStatus AgentLeft = CardCaps::ResolveCompanion(QaCrCompanion(0, Ck::Agent, TEXT("qa-agent")), On);
+			const FWonderlandCardRefStatus Third = CardCaps::ResolveCompanion(QaCrCompanion(2, Ck::Agent, TEXT("qa-agent")), On);
+			Q.Check(TEXT("CR12"), LlmRight.Status == St::Unavailable && AgentLeft.Status == St::Unavailable && Third.Status == St::Unavailable,
+				FString::Printf(TEXT("the sides never swap: LLM on the RIGHT -> %s; agent on the LEFT -> %s; slot 2 -> %s"),
+					*CardCaps::Describe(LlmRight), *CardCaps::Describe(AgentLeft), *CardCaps::Describe(Third)));
+		}
+
+		// ---- JULIUS CONNECT (MCP servers and APIs) AND SKILLS
+		{
+			const FWonderlandCardRefStatus Mcp = CardCaps::ResolveCapability(QaCrCapability(Cp::Mcp, TEXT("qa-files")), Off);
+			const FWonderlandCardRefStatus Api = CardCaps::ResolveCapability(QaCrCapability(Cp::Api, TEXT("qa-mail")), Off);
+			Q.Check(TEXT("CR13"), Mcp.Status == St::Unavailable && Api.Status == St::Unavailable && Mcp.Reason.Contains(TEXT("Julius Connect is offline"))
+				&& Mcp.Reason.Contains(TEXT("QA: the service is not running")), FString::Printf(TEXT("Connect offline -> %s"), *CardCaps::Describe(Mcp)));
+		}
+		{
+			const FWonderlandCardRefStatus R = CardCaps::ResolveCapability(QaCrCapability(Cp::Mcp, TEXT("qa-nothing")), On);
+			Q.Check(TEXT("CR14"), R.Status == St::Unavailable && R.Reason.Contains(TEXT("lists no connector")), FString::Printf(TEXT("unknown connector -> %s"), *CardCaps::Describe(R)));
+		}
+		{
+			CardCaps::FReading Connected = QaCrOnline();
+			QaCrService(Connected, TEXT("qa-files"), TEXT("CONNECTED"));
+			QaCrService(Connected, TEXT("qa-devfiles"), TEXT("CONNECTED")).Kind = TEXT("DEVELOPMENT CONNECTOR");
+			const FWonderlandCardRefStatus Real = CardCaps::ResolveCapability(QaCrCapability(Cp::Mcp, TEXT("qa-files")), Connected);
+			const FWonderlandCardRefStatus Fixture = CardCaps::ResolveCapability(QaCrCapability(Cp::Api, TEXT("qa-devfiles")), Connected);
+			Q.Check(TEXT("CR15"), Real.Status == St::Ready && !Real.bSimulated && Real.Reason.Contains(TEXT("QA route")) && Fixture.Status == St::Ready && Fixture.bSimulated,
+				FString::Printf(TEXT("CONNECTED -> %s; a development connector -> %s"), *CardCaps::Describe(Real), *CardCaps::Describe(Fixture)));
+		}
+		{
+			CardCaps::FReading States = QaCrOnline();
+			static const TCHAR* const Fixable[] = { TEXT("CREDENTIAL_REQUIRED"), TEXT("AUTHORIZATION_REQUIRED"), TEXT("CONNECTING"), TEXT("RECONNECT_REQUIRED"),
+				TEXT("REVOKED"), TEXT("EXPIRED") };
+			static const TCHAR* const Broken[] = { TEXT("RATE_LIMITED"), TEXT("FAILED"), TEXT("UNAVAILABLE"), TEXT("QA_STRANGE") };
+			for (const TCHAR* State : Fixable) { QaCrService(States, State, State); }
+			for (const TCHAR* State : Broken) { QaCrService(States, State, State); }
+			FJuliusConnectService& Down = QaCrService(States, TEXT("qa-down"), TEXT("CONNECTED"));
+			Down.bReachable = false;
+			Down.UnavailableReason = TEXT("QA: the route is down");
+			int32 Mapped = 0;
+			FString Wrong;
+			for (const TCHAR* State : Fixable)
+			{
+				const FWonderlandCardRefStatus R = CardCaps::ResolveCapability(QaCrCapability(Cp::Api, State), States);
+				if (R.Status == St::Unconfigured) { ++Mapped; } else { Wrong += FString::Printf(TEXT(" %s=%s"), State, CardCaps::StatusWord(R.Status)); }
+			}
+			for (const TCHAR* State : Broken)
+			{
+				const FWonderlandCardRefStatus R = CardCaps::ResolveCapability(QaCrCapability(Cp::Mcp, State), States);
+				if (R.Status == St::Unavailable) { ++Mapped; } else { Wrong += FString::Printf(TEXT(" %s=%s"), State, CardCaps::StatusWord(R.Status)); }
+			}
+			const FWonderlandCardRefStatus DownR = CardCaps::ResolveCapability(QaCrCapability(Cp::Mcp, TEXT("qa-down")), States);
+			const bool bDown = DownR.Status == St::Unavailable && DownR.Reason.Contains(TEXT("the route is down"));
+			Q.Check(TEXT("CR16"), Mapped == static_cast<int32>(UE_ARRAY_COUNT(Fixable) + UE_ARRAY_COUNT(Broken)) && bDown,
+				FString::Printf(TEXT("%d of %d states mapped (a person can fix: UNCONFIGURED; broken or unknown: UNAVAILABLE)%s; unreachable -> %s"),
+					Mapped, static_cast<int32>(UE_ARRAY_COUNT(Fixable) + UE_ARRAY_COUNT(Broken)), Wrong.IsEmpty() ? TEXT("") : *(TEXT(", wrong:") + Wrong), *CardCaps::Describe(DownR)));
+		}
+		{
+			const FWonderlandCardRefStatus SkillOn = CardCaps::ResolveCapability(QaCrCapability(Cp::Skill, TEXT("qa-skill")), On);
+			const FWonderlandCardRefStatus SkillOff = CardCaps::ResolveCapability(QaCrCapability(Cp::Skill, TEXT("qa-skill")), Off);
+			Q.Check(TEXT("CR17"), SkillOn.Status == St::Unavailable && SkillOff.Status == St::Unavailable && SkillOn.Reason.Contains(TEXT("no skill registry")),
+				FString::Printf(TEXT("a skill cannot be checked from here, so it is never READY -> %s"), *CardCaps::Describe(SkillOn)));
+		}
+
+		// ---- UNTRUSTED TEXT: a runtime's reason is shown, so it is cleaned, capped, and never a credential
+		{
+			// a credential-SHAPED run, built at run time so no key-shaped literal is planted in the package (the release scan)
+			FString Shaped;
+			for (int32 Index = 0; Index < 20; ++Index) { Shaped += TEXT("q7"); }
+			CardCaps::FReading Hostile = QaCrOnline();
+			Hostile.Providers[3].Detail = FString::Printf(TEXT("sign in with %s"), *Shaped);
+			const FWonderlandCardRefStatus Key = CardCaps::ResolveCompanion(QaCrCompanion(1, Ck::Agent, TEXT("qa-agent")), Hostile);
+			// the same run split by a ZERO WIDTH SPACE: whole only once the invisible character is dropped
+			FString SplitRaw = Shaped.Left(20);
+			SplitRaw.AppendChar(static_cast<TCHAR>(0x200B));
+			SplitRaw += Shaped.Mid(20);
+			const FString Split = CardCaps::CleanReason(SplitRaw);
+			// controls, a right-to-left override, a TAG character (U+E0041 as its surrogate pair), a line break
+			FString MessyRaw = TEXT("plain");
+			MessyRaw.AppendChar(static_cast<TCHAR>(0x202E));
+			MessyRaw += TEXT(" evil");
+			MessyRaw.AppendChar(static_cast<TCHAR>(0x01));
+			MessyRaw.AppendChar(static_cast<TCHAR>(0xDB40));
+			MessyRaw.AppendChar(static_cast<TCHAR>(0xDC41));
+			MessyRaw.AppendChar(static_cast<TCHAR>(0x0A));
+			MessyRaw += TEXT("next line");
+			const FString Messy = CardCaps::CleanReason(MessyRaw);
+			const FString Long = CardCaps::CleanReason(FString::ChrN(1000, TEXT('x')));
+			const bool bKey = Key.Status == St::Unconfigured && !Key.Reason.Contains(Shaped) && Key.Reason.Contains(TEXT("withheld"));
+			const bool bSplit = Split.Contains(TEXT("withheld"));
+			const bool bMessy = Messy == TEXT("plain evil next line");
+			const bool bLong = Long.Len() == 160;
+			Q.Check(TEXT("CR18"), bKey && bSplit && bMessy && bLong,
+				FString::Printf(TEXT("a key-shaped reason -> '%s'; split by a zero width -> '%s'; controls/bidi/tag/newline -> '%s'; 1000 chars -> %d"),
+					*Key.Reason, *Split, *Messy, Long.Len()));
+		}
+
+		// ---- THIS BOOT: the real reading, as the C.A.R.D. section will show it
+		{
+			const CardCaps::FReading Real = CardCaps::Read(World != nullptr ? World->GetGameInstance() : nullptr);
+			FWonderlandCard Probe;
+			Probe.Id = TEXT("qa-probe");
+			Probe.Name = TEXT("QA probe");
+			Probe.Companions = { QaCrCompanion(0, Ck::Llm, TEXT("dev-companion")), QaCrCompanion(1, Ck::Agent, TEXT("dev-single-agent")) };
+			Probe.Capabilities = { QaCrCapability(Cp::Mcp, TEXT("qa-files")), QaCrCapability(Cp::Skill, TEXT("qa-skill")) };
+			const TArray<FString> Lines = CardCaps::DescribeCard(Probe, Real);
+			bool bWords = true;
+			bool bClean = true;
+			for (const FString& Line : Lines)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLCRQA card | %s"), *Line);
+				bClean &= !FWonderlandCardStore::LooksLikeSecret(Line);
+			}
+			// what this boot's links are decides what every reference may say: an offline authority vouches for nothing
+			const FWonderlandCardRefStatus Companion = CardCaps::ResolveCompanion(Probe.Companions[0], Real);
+			const FWonderlandCardRefStatus Mcp = CardCaps::ResolveCapability(Probe.Capabilities[0], Real);
+			const bool bCompanionHonest = Real.CompanionLink == EWonderlandSidekickLink::Online || Companion.Status == St::Unavailable;
+			const bool bMcpHonest = Real.ConnectLink == EJuliusConnectLink::Online || Mcp.Status == St::Unavailable;
+			for (const FString& Line : Lines)
+			{
+				if (Line.StartsWith(TEXT("C.A.R.D."))) { continue; }
+				bWords &= Line.Contains(TEXT(": READY")) || Line.Contains(TEXT(" READY")) || Line.Contains(TEXT("UNCONFIGURED")) || Line.Contains(TEXT("UNAVAILABLE"))
+					|| Line.Contains(TEXT("none chosen")) || Line.Contains(TEXT("none attached"));
+			}
+			Q.Check(TEXT("CR19"), Lines.Num() == 5 && bWords && bClean && bCompanionHonest && bMcpHonest,
+				FString::Printf(TEXT("this boot: companion runtime %s, Julius Connect %s; %d lines, each with one of the three words, none credential-shaped"),
+					Real.CompanionLink == EWonderlandSidekickLink::Online ? TEXT("ONLINE") : TEXT("not online"),
+					Real.ConnectLink == EJuliusConnectLink::Online ? TEXT("ONLINE") : TEXT("not online"), Lines.Num()));
+		}
+
+		const FString StoreAfter = StoreHash();
+		Q.Check(TEXT("CR20"), StoreBefore == StoreAfter, FString::Printf(TEXT("read-only: Cards.sav %s before, %s after"), *StoreBefore, *StoreAfter));
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLCRQA END %d pass, %d fail"), Q.Pass, Q.Fail);
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaCardRefsCommand(
+		TEXT("wl.Qa.CardRefs"),
+		TEXT("C.A.R.D. M7a: every rule that resolves a card's companions and capabilities to READY / UNCONFIGURED / UNAVAILABLE, on ")
+		TEXT("built readings (every state, the founder's locks, the authority separation, untrusted text), then this boot's own ")
+		TEXT("reading. Read-only. `quit` exits after. Logs WLCRQA lines."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			RunCardRefsQa(World);
 			if (Args.Contains(TEXT("quit")))
 			{
 				FPlatformMisc::RequestExit(false);
