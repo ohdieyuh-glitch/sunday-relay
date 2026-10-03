@@ -271,7 +271,25 @@ bool FWonderlandProjectBrainLink::Tick(float /*DeltaSeconds*/)
 	const FString Paired = Julius->GetPairedProjectId();
 	if (Paired.IsEmpty())
 	{
-		LastProblem = TEXT("not paired: the development preview is shown");
+		// NEVER PAIRED: the labelled preview. PAIRED BEFORE, NOW NOT (a 401 here or on the stream, or the session ended): the last
+		// live view stays on screen labelled NOT CONNECTED and refuses writes -- a stale view must never read as live (Second, 10-03).
+		if (bHaveView)
+		{
+			LastProblem = TEXT("the session ended or was refused: the last view is shown, labelled NOT CONNECTED");
+			if (UWonderlandProjectBrainSubsystem* Model = Brain.Get())
+			{
+				Model->MarkLinkLost(TEXT("the bridge no longer accepts this client's session."));
+			}
+			bHaveView = false;
+			bDirty = true;
+			Cursor.Reset();
+			ProjectId.Reset();
+		}
+		else
+		{
+			LastProblem = Brain->GetModel().bLive ? TEXT("not paired: the last view is shown, labelled NOT CONNECTED")
+				: TEXT("not paired: the development preview is shown");
+		}
 		NextAttemptAt = FPlatformTime::Seconds() + WonderlandProjectBrainLinkTuning::IdleSeconds;
 		return true;
 	}

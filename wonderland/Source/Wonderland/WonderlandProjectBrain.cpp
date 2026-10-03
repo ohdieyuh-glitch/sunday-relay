@@ -1,6 +1,8 @@
 #include "WonderlandProjectBrain.h"
 
+#include "Engine/GameInstance.h"
 #include "WonderlandBeta.h"
+#include "WonderlandCard.h"
 #include "WonderlandCompanionSubsystem.h"
 #include "WonderlandMissionHandoff.h"
 #include "WonderlandJuliusStream.h"
@@ -97,6 +99,22 @@ bool UWonderlandProjectBrainSubsystem::Propose(FName SurfaceId, const FString& T
 	{
 		return false;
 	}
+	// NO KEY EVER LEAVES THIS CLIENT AS A MEMORY (the founder's "never persist secrets in the Project Brain"; Second, 10-03): the
+	// same fail-closed screen C.A.R.D. and the Mission Contract objective use, on the text as typed AND without its invisible
+	// characters. Refused whole -- never sent, never kept here, never logged (the log says only its length) -- in the preview too.
+	if (FWonderlandCardStore::HoldsSecret(Line))
+	{
+		SetWriteNote(TEXT("Not sent: that line holds something shaped like a key or password. Project Brain never stores credentials -- "
+			"keep them in Julius Connect, and write the memory without them."));
+		UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN proposal on %s REFUSED before sending: it holds a credential shape (%d characters)"),
+			*SurfaceId.ToString(), Line.Len());
+		return false;
+	}
+	if (Model.bLive && Model.bLinkLost)
+	{
+		SetWriteNote(TEXT("Not sent: this world is no longer connected to Project Brain. /brain pair <code> connects it again."));
+		return false;
+	}
 	if (Model.bLive)
 	{
 		// LIVE: SENT, NOT KEPT. Nothing is added here; the proposal appears when the bridge says Project Brain holds
@@ -125,6 +143,11 @@ bool UWonderlandProjectBrainSubsystem::Review(FName SurfaceId, int32 LineIndex, 
 	if (Model.bLive)
 	{
 		// A REVIEW NAMES THE MEMORY IT REVIEWS, by Project Brain's own reference -- never by the text on screen.
+		if (Model.bLinkLost)
+		{
+			SetWriteNote(TEXT("Not sent: this world is no longer connected to Project Brain. /brain pair <code> connects it again."));
+			return false;
+		}
 		if (!Surface->EntryRefs.IsValidIndex(LineIndex))
 		{
 			return false;
@@ -143,6 +166,7 @@ bool UWonderlandProjectBrainSubsystem::Review(FName SurfaceId, int32 LineIndex, 
 void UWonderlandProjectBrainSubsystem::AdoptLive(const FWonderlandBrainLiveView& View)
 {
 	Model.bLive = true;
+	Model.bLinkLost = false;
 	Model.bDevelopmentPreview = false;
 	Model.ProjectName = View.ProjectId;
 	Model.MissionTitle = View.MissionTitle;
@@ -186,6 +210,95 @@ void UWonderlandProjectBrainSubsystem::SetWriteNote(const FString& Note)
 	}
 	Model.WriteNote = Note;
 	OnBrainChanged.Broadcast();
+}
+
+void UWonderlandProjectBrainSubsystem::MarkLinkLost(const FString& Why)
+{
+	// ONLY A LIVE VIEW CAN GO STALE: the preview is labelled as the preview already, and stays exactly as it is.
+	if (!Model.bLive || Model.bLinkLost)
+	{
+		return;
+	}
+	Model.bLinkLost = true;
+	Model.SourceLine = FString::Printf(TEXT("NOT CONNECTED  ·  LAST READ AT BRAIN REVISION %d  ·  %s"), Model.BrainRevision, *Why.ToUpper());
+	Model.WriteNote = FString::Printf(TEXT("Not connected: %s What is shown is what Project Brain held when it was last read; nothing can be sent "
+		"until /brain pair <code> connects this world again."), *Why);
+	UE_LOG(LogWonderlandProjectBrain, Warning, TEXT("WLBRAIN link lost: %s (the last view, revision %d, stays on screen labelled NOT CONNECTED)"), *Why,
+		Model.BrainRevision);
+	OnBrainChanged.Broadcast();
+}
+
+FString UWonderlandProjectBrainSubsystem::MaskTerminalEcho(const FString& Line)
+{
+	// "/brain pair <code>": the code is a one-time credential for this player's session -- never echoed or logged.
+	FString Command;
+	FString Rest;
+	if (!Line.TrimStartAndEnd().Split(TEXT(" "), &Command, &Rest))
+	{
+		return Line;
+	}
+	FString Verb;
+	FString Code;
+	if (!Rest.TrimStartAndEnd().Split(TEXT(" "), &Verb, &Code))
+	{
+		Verb = Rest.TrimStartAndEnd();
+	}
+	return Verb.Equals(TEXT("pair"), ESearchCase::IgnoreCase) && !Code.TrimStartAndEnd().IsEmpty()
+		? FString::Printf(TEXT("%s pair %s"), *Command, TEXT("••••••"))
+		: FWonderlandCardStore::MaskForDisplay(Line);
+}
+
+void UWonderlandProjectBrainSubsystem::HandleTerminalLine(const FString& Argument, FString& OutSaid)
+{
+	FString Verb = Argument.TrimStartAndEnd();
+	FString Rest;
+	Argument.TrimStartAndEnd().Split(TEXT(" "), &Verb, &Rest);
+	Rest = Rest.TrimStartAndEnd();
+	UGameInstance* Instance = GetGameInstance();
+	UWonderlandJuliusStreamSubsystem* Stream = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusStreamSubsystem>() : nullptr;
+	if (Verb.IsEmpty() || Verb.Equals(TEXT("status"), ESearchCase::IgnoreCase))
+	{
+		const FString Where = Model.bLive
+			? (Model.bLinkLost ? FString(TEXT("NOT CONNECTED (showing the last view read)")) : FString(TEXT("LIVE")))
+			: FString(TEXT("DEVELOPMENT PREVIEW (sample data; not connected)"));
+		const FString Bridge = Stream == nullptr ? FString(TEXT("no Julius link in this world"))
+			: Stream->GetBridgeUrl().IsEmpty() ? FString(TEXT("no bridge configured for this build"))
+			: Stream->IsPaired() ? FString::Printf(TEXT("paired for project %s"), Stream->GetPairedProjectId().IsEmpty() ? TEXT("(none named)") : *Stream->GetPairedProjectId())
+			: FString(TEXT("not paired -- /brain pair <code> with the code from the Wonderland website"));
+		OutSaid = FString::Printf(TEXT("Project Brain: %s, project %s, brain revision %d; %s. %s"), *Where, *Model.ProjectName, Model.BrainRevision, *Bridge,
+			*DescribeLink());
+		return;
+	}
+	if (Verb.Equals(TEXT("pair"), ESearchCase::IgnoreCase))
+	{
+		if (Stream == nullptr)
+		{
+			OutSaid = TEXT("Not paired: there is no Julius link in this world.");
+			return;
+		}
+		if (Rest.IsEmpty())
+		{
+			OutSaid = TEXT("/brain pair <code> -- the pairing code shown on the Wonderland website for your project.");
+			return;
+		}
+		if (Stream->GetBridgeUrl().IsEmpty())
+		{
+			OutSaid = TEXT("Not paired: this build has no Project Brain bridge configured.");
+			return;
+		}
+		// THE STREAM REDEEMS IT (the one place a session is made); the answer arrives on the link, and /brain status reads it.
+		Stream->Pair(Rest);
+		UE_LOG(LogWonderlandProjectBrain, Display, TEXT("WLBRAIN /brain pair: a %d-character code sent to the bridge (the code itself is never logged)"), Rest.Len());
+		OutSaid = TEXT("Pairing with the bridge... /brain status says when Project Brain is live.");
+		return;
+	}
+	if (Verb.Equals(TEXT("refresh"), ESearchCase::IgnoreCase))
+	{
+		RefreshLink();
+		OutSaid = Model.bLive ? TEXT("Reading Project Brain again from the bridge.") : TEXT("Not paired yet: nothing to read. /brain pair <code> first.");
+		return;
+	}
+	OutSaid = TEXT("/brain [status] | pair <code> | refresh -- Project Brain: where it stands, connect this world with the website's code, read it again.");
 }
 
 FString UWonderlandProjectBrainSubsystem::GetSurfaceAccess(FName SurfaceId) const

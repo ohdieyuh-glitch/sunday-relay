@@ -117,6 +117,11 @@ struct FWonderlandBrainModel
 	TArray<FWonderlandBrainSurface> Surfaces;
 	/** True once a live view from the bridge has been adopted. */
 	bool bLive = false;
+	/**
+	 * Live, then CUT OFF: the bridge refused this client's session (401) or the session ended. What is shown is what was last
+	 * read, and says so; nothing is sent until the next live view (Second, 10-03: a stale view must never read as live).
+	 */
+	bool bLinkLost = false;
 	/** Live only: what the last write said -- saving, saved, or why it was refused. Empty before any. */
 	FString WriteNote;
 };
@@ -161,8 +166,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Project Brain")
 	bool IsDevelopmentPreview() const { return Model.bDevelopmentPreview; }
 
-	UFUNCTION(BlueprintPure, Category = "Wonderland|Project Brain")
-	bool IsLive() const { return Model.bLive; }
+	/** Plain C++, not a UFUNCTION: a new reflected name can shift the FName table under Niagara's type hash (RC1, 10-01). */
+	bool IsLive() const { return Model.bLive && !Model.bLinkLost; }
 
 	/**
 	 * REPLACE THE MODEL'S CONTENT WITH THE BRIDGE'S VIEW. Titles, groups, access and purpose stay the panel's own; the
@@ -173,6 +178,21 @@ public:
 
 	/** Live: the outcome of the last write, for the panel to say. */
 	void SetWriteNote(const FString& Note);
+
+	/** Live, then cut off: keep the last view, label it NOT CONNECTED with the reason, refuse writes until a live view is read again. */
+	void MarkLinkLost(const FString& Why);
+
+	/**
+	 * `/brain` IN THE LIVE TERMINAL -- the player's own path to Project Brain (Second, 10-03; until now only the console command
+	 * wl.Julius.Pair could pair): `/brain` or `/brain status` says where things stand; `/brain pair <code>` redeems the website's
+	 * pairing code through the stream (the code is never logged or echoed); `/brain refresh` reads the view again.
+	 */
+	void HandleTerminalLine(const FString& Argument, FString& OutSaid);
+	/** The line as the terminal may echo it: a pairing code is never shown back. */
+	static FString MaskTerminalEcho(const FString& Line);
+
+	/** wl.Qa.BrainLink only: put back the model it saved before its fixtures, so a QA boot ends where it began. */
+	void ReplaceModelForQa(const FWonderlandBrainModel& InModel) { Model = InModel; OnBrainChanged.Broadcast(); }
 
 	/**
 	 * WHERE A LIVE WRITE GOES. Bound by UWonderlandProjectBrainLinkSubsystem; each returns true when the request was
