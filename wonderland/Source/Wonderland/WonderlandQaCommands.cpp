@@ -60,6 +60,9 @@
 #include "WonderlandSkinStage.h"
 #include "WonderlandCard.h"
 #include "WonderlandMissionHandoff.h"
+#include "Components/BoxComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Engine/CollisionProfile.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandQa, Log, All);
 
@@ -4391,6 +4394,540 @@ namespace
 			{
 				FPlatformMisc::RequestExit(false);
 			}
+		}));
+
+	/* ================================================================ wl.Qa.Handoff: Mission Handoff traversal, M1
+	 * The founder's acceptance list, measured in the PACKAGED game with the real movement component:
+	 *   S1-S3  normal run vs Mission Handoff run vs dash. Pre-registered before any measurement: the handoff run is at least
+	 *          1.35x the normal run, and the dash peaks at at least 2.0x the HANDOFF run;
+	 *   I1-I9  the Forward rules, delivered exactly as BindKey delivers them (the character's own key handlers);
+	 *   W1     a dash into a blocking wall never passes through it -- and does reach it;
+	 *   R1     giving the swords back restores every speed.
+	 * Real-key abuse (the OS's key repeat, focus loss) is Second's, by real input. Logs WLHANDQA lines; `quit` exits after.
+	 */
+	struct FHandKey
+	{
+		float At;
+		bool bUpArrow;
+		bool bDown;
+	};
+
+	struct FHandTest
+	{
+		const TCHAR* Id;
+		const TCHAR* What;
+		TArray<FHandKey> Keys;
+		int32 WantDashes;
+		int32 WantRefusals;
+		/** Wait out the dash cooldown before this test (false only for the test that must land INSIDE it). */
+		bool bAfterCooldown;
+	};
+
+	struct FQaHand
+	{
+		TWeakObjectPtr<UWorld> World;
+		TWeakObjectPtr<ARelayDogCharacter> Dog;
+		TWeakObjectPtr<AActor> Wall;
+		FTSTicker::FDelegateHandle Handle;
+		bool bQuit = false;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		int32 Phase = 0;
+		float PhaseAt = 0.0f;
+		float LastNow = 0.0f;
+		FVector Forward = FVector::ForwardVector;
+		float SpeedSum = 0.0f;
+		int32 Samples = 0;
+		float NormalRun = 0.0f;
+		float HandoffRun = 0.0f;
+		float DashPeak = 0.0f;
+		float DashSeconds = 0.0f;
+		TArray<FHandTest> Tests;
+		int32 TestIndex = 0;
+		int32 KeyIndex = 0;
+		bool bTestStarted = false;
+		int32 DashBase = 0;
+		int32 RefusedBase = 0;
+		bool bReturnedMidDash = false;
+		FVector WallCenter = FVector::ZeroVector;
+		float MaxAlong = -1.0e9f;
+		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLHANDQA %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+	};
+	TSharedPtr<FQaHand> GQaHand;
+
+	FWonderlandMissionHandoff* QaHandoff(UWorld* World)
+	{
+		UWonderlandSidekickSubsystem* Sidekicks = QaSidekicks(World);
+		return Sidekicks != nullptr ? &Sidekicks->GetMissionHandoff() : nullptr;
+	}
+
+	/** The clearest heading across open ground from the Dog: 16 headings, a sphere of the capsule's radius swept at its height. */
+	float QaClearHeading(UWorld* World, ARelayDogCharacter* Dog, float Want, FVector& OutForward)
+	{
+		const float Radius = Dog->GetCapsuleComponent()->GetScaledCapsuleRadius();
+		const FVector Start = Dog->GetActorLocation() + FVector(0.0f, 0.0f, 20.0f);
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(Dog);
+		float Best = -1.0f;
+		for (int32 N = 0; N < 16; ++N)
+		{
+			const FVector Way = FRotator(0.0f, N * 22.5f, 0.0f).Vector();
+			FHitResult Hit;
+			const bool bHit = World->SweepSingleByChannel(Hit, Start, Start + Way * Want, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeSphere(Radius), Params);
+			const float Free = bHit ? Hit.Distance : Want;
+			if (Free > Best)
+			{
+				Best = Free;
+				OutForward = Way;
+			}
+		}
+		return Best;
+	}
+
+	/** Faces the camera (and so the Forward key and the dash) along a heading. */
+	void QaFace(ARelayDogCharacter* Dog, const FVector& Forward)
+	{
+		if (AController* Controller = Dog->GetController())
+		{
+			Controller->SetControlRotation(FRotator(0.0f, Forward.Rotation().Yaw, 0.0f));
+		}
+	}
+
+	void QaHandRelease(ARelayDogCharacter* Dog)
+	{
+		Dog->QaForwardKey(false, false);
+		Dog->QaForwardKey(true, false);
+		Dog->QaRunKey(false);
+	}
+
+	void QaHandFinish(FQaHand& H, const TCHAR* Why)
+	{
+		if (ARelayDogCharacter* Dog = H.Dog.Get())
+		{
+			QaHandRelease(Dog);
+		}
+		if (AActor* Wall = H.Wall.Get())
+		{
+			Wall->Destroy();
+		}
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLHANDQA END pass=%d fail=%d%s"), H.Pass, H.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
+		if (H.bQuit)
+		{
+			FPlatformMisc::RequestExit(false);
+		}
+	}
+
+	TArray<FHandTest> QaHandTests()
+	{
+		TArray<FHandTest> T;
+		T.Add({ TEXT("I1"), TEXT("one tap"), { { 0.00f, false, true }, { 0.06f, false, false } }, 0, 0, true });
+		T.Add({ TEXT("I2"), TEXT("two taps 0.45 s apart (slower than the window)"),
+			{ { 0.00f, false, true }, { 0.06f, false, false }, { 0.45f, false, true }, { 0.51f, false, false } }, 0, 0, true });
+		T.Add({ TEXT("I3"), TEXT("W held while Up is tapped twice (no new Forward press)"),
+			{ { 0.00f, false, true }, { 0.10f, true, true }, { 0.15f, true, false }, { 0.20f, true, true }, { 0.25f, true, false }, { 0.40f, false, false } }, 0, 0, true });
+		T.Add({ TEXT("I4"), TEXT("W held with the key repeating (repeated presses while down)"),
+			{ { 0.00f, false, true }, { 0.05f, false, true }, { 0.10f, false, true }, { 0.15f, false, true }, { 0.30f, false, false } }, 0, 0, true });
+		T.Add({ TEXT("I5"), TEXT("W tapped, then Up 0.15 s later (one semantic Forward)"),
+			{ { 0.00f, false, true }, { 0.06f, false, false }, { 0.15f, true, true }, { 0.30f, true, false } }, 1, 0, true });
+		T.Add({ TEXT("I6"), TEXT("a double tap inside the cooldown"),
+			{ { 0.00f, false, true }, { 0.05f, false, false }, { 0.12f, false, true }, { 0.17f, false, false } }, 0, 1, false });
+		T.Add({ TEXT("I7"), TEXT("three quick taps (no chaining)"),
+			{ { 0.00f, false, true }, { 0.05f, false, false }, { 0.10f, false, true }, { 0.15f, false, false }, { 0.20f, false, true }, { 0.25f, false, false } }, 1, 0, true });
+		T.Add({ TEXT("I8"), TEXT("the swords given back mid-dash"),
+			{ { 0.00f, false, true }, { 0.05f, false, false }, { 0.10f, false, true }, { 0.60f, false, false } }, 1, 0, true });
+		T.Add({ TEXT("I9"), TEXT("a double tap with no swords held"),
+			{ { 0.00f, false, true }, { 0.05f, false, false }, { 0.10f, false, true }, { 0.20f, false, false } }, 0, 0, true });
+		return T;
+	}
+
+	bool QaHandTick(float)
+	{
+		if (!GQaHand.IsValid())
+		{
+			return false;
+		}
+		FQaHand& H = *GQaHand;
+		UWorld* World = H.World.Get();
+		ARelayDogCharacter* Dog = H.Dog.Get();
+		FWonderlandMissionHandoff* Handoff = QaHandoff(World);
+		if (World == nullptr || Dog == nullptr || Handoff == nullptr || Dog->GetCharacterMovement() == nullptr)
+		{
+			QaHandFinish(H, TEXT("the world, the Dog or the handoff went away"));
+			GQaHand.Reset();
+			return false;
+		}
+		UCharacterMovementComponent* Move = Dog->GetCharacterMovement();
+		const float Now = World->GetTimeSeconds();
+		const float Dt = FMath::Max(0.0f, Now - H.LastNow);
+		H.LastNow = Now;
+		const float In = Now - H.PhaseAt;
+		const float Ground = FVector(Dog->GetVelocity().X, Dog->GetVelocity().Y, 0.0f).Size();
+		const float Radius = Dog->GetCapsuleComponent()->GetScaledCapsuleRadius();
+		FString Why;
+		auto Next = [&H, Now]()
+		{
+			++H.Phase;
+			H.PhaseAt = Now;
+			H.SpeedSum = 0.0f;
+			H.Samples = 0;
+		};
+		auto Stop = [&H](const TCHAR* Reason)
+		{
+			QaHandFinish(H, Reason);
+			GQaHand.Reset();
+			return false;
+		};
+		FWonderlandMissionHandoff::FCompanionsPresent Both;
+		Both.bLeft = true;
+		Both.bRight = true;
+
+		switch (H.Phase)
+		{
+		case 0:
+		{
+			// THE WORLD READY: the first launch's welcome closed, and the Dog standing on loaded ground for a moment
+			if (UWonderlandUiSubsystem* U = QaUi(World))
+			{
+				if (U->IsWelcomeOpen())
+				{
+					U->DismissWelcome();
+				}
+			}
+			if (In < 3.0f || !Move->IsMovingOnGround())
+			{
+				return In < 30.0f ? true : Stop(TEXT("the Dog never stood on loaded ground"));
+			}
+			// START UNEQUIPPED: a bed that last ran armed must not measure the "normal" run armed (Second's H5)
+			if (Handoff->GetState() == EWonderlandHandoffState::Held)
+			{
+				Handoff->Return(Why);
+			}
+			if (Handoff->GetState() != EWonderlandHandoffState::Idle)
+			{
+				return In < 38.0f ? true : Stop(TEXT("the handoff did not return to idle"));
+			}
+			Next();
+			return true;
+		}
+		case 1:
+		{
+			// S1, THE NORMAL RUN: Forward and Shift held across open ground
+			const float Clear = QaClearHeading(World, Dog, 2600.0f, H.Forward);
+			if (Clear < 1400.0f)
+			{
+				H.Check(TEXT("S1"), false, FString::Printf(TEXT("no open ground for the measurement (best heading clear for %.0f uu)"), Clear));
+				return Stop(TEXT("no open ground"));
+			}
+			QaFace(Dog, H.Forward);
+			Dog->QaRunKey(true);
+			Dog->QaForwardKey(false, true);
+			Next();
+			return true;
+		}
+		case 2:
+			Dog->AddMovementInput(H.Forward, 1.0f);
+			if (In >= 1.2f)
+			{
+				H.SpeedSum += Ground;
+				++H.Samples;
+			}
+			if (In >= 1.8f)
+			{
+				H.NormalRun = H.Samples > 0 ? H.SpeedSum / H.Samples : 0.0f;
+				H.Check(TEXT("S1"), H.NormalRun > 0.9f * Dog->RunSpeedUU && H.NormalRun < 1.1f * Dog->RunSpeedUU && !Dog->IsHandoffArmed(),
+					FString::Printf(TEXT("normal run, no swords: %.0f uu/s (the run band is %.0f)"), H.NormalRun, Dog->RunSpeedUU));
+				QaHandRelease(Dog);
+				Next();
+			}
+			return true;
+		case 3:
+			if (In < 1.0f)
+			{
+				return true;
+			}
+			// THE SWORDS TAKEN UP (roaming, no mission). M1's QA states the companions present; the terminal action (M1b) reads
+			// them from their bodies.
+			if (!Handoff->Begin(TEXT("angelic_twin_swords"), FString(), EWonderlandHandoffEntry::Roaming, Both, Why))
+			{
+				H.Check(TEXT("S2"), false, FString::Printf(TEXT("the handoff could not begin: %s"), *Why));
+				return Stop(TEXT("no handoff"));
+			}
+			Next();
+			return true;
+		case 4:
+		{
+			if (!Dog->IsHandoffArmed())
+			{
+				return In < 8.0f ? true : Stop(TEXT("the swords were never held"));
+			}
+			const float Clear = QaClearHeading(World, Dog, 2600.0f, H.Forward);
+			if (Clear < 1600.0f)
+			{
+				H.Check(TEXT("S2"), false, FString::Printf(TEXT("no open ground for the measurement (best heading clear for %.0f uu)"), Clear));
+				return Stop(TEXT("no open ground"));
+			}
+			QaFace(Dog, H.Forward);
+			Dog->QaRunKey(true);
+			Dog->QaForwardKey(false, true);
+			Next();
+			return true;
+		}
+		case 5:
+			// S2, THE HANDOFF RUN; then, still running, S3's double tap
+			Dog->AddMovementInput(H.Forward, 1.0f);
+			if (In >= 1.2f && In < 1.8f)
+			{
+				H.SpeedSum += Ground;
+				++H.Samples;
+			}
+			if (In >= 1.8f)
+			{
+				H.HandoffRun = H.Samples > 0 ? H.SpeedSum / H.Samples : 0.0f;
+				const float Ratio = H.NormalRun > 0.0f ? H.HandoffRun / H.NormalRun : 0.0f;
+				H.Check(TEXT("S2"), Ratio >= 1.35f,
+					FString::Printf(TEXT("Mission Handoff run: %.0f uu/s = %.2fx the normal run (pre-registered: >= 1.35x)"), H.HandoffRun, Ratio));
+				H.DashBase = Dog->GetDashCount();
+				Next();
+			}
+			return true;
+		case 6:
+			// S3, THE DASH from the handoff run: W up, down, up, down -- the second press within the window
+			Dog->AddMovementInput(H.Forward, 1.0f);
+			if (H.KeyIndex == 0 && In >= 0.00f) { Dog->QaForwardKey(false, false); H.KeyIndex = 1; }
+			if (H.KeyIndex == 1 && In >= 0.04f) { Dog->QaForwardKey(false, true); H.KeyIndex = 2; }
+			if (H.KeyIndex == 2 && In >= 0.08f) { Dog->QaForwardKey(false, false); H.KeyIndex = 3; }
+			if (H.KeyIndex == 3 && In >= 0.12f) { Dog->QaForwardKey(false, true); H.KeyIndex = 4; }
+			if (Dog->IsDashing())
+			{
+				H.DashPeak = FMath::Max(H.DashPeak, Ground);
+				H.DashSeconds += Dt;
+			}
+			if (In >= 1.0f)
+			{
+				const float Ratio = H.HandoffRun > 0.0f ? H.DashPeak / H.HandoffRun : 0.0f;
+				const bool bOne = Dog->GetDashCount() == H.DashBase + 1;
+				H.Check(TEXT("S3"), bOne && Ratio >= 2.0f,
+					FString::Printf(TEXT("dash: %d started, peak %.0f uu/s = %.2fx the handoff run (pre-registered: >= 2.0x), %.2fx the normal run"),
+						Dog->GetDashCount() - H.DashBase, H.DashPeak, Ratio, H.NormalRun > 0.0f ? H.DashPeak / H.NormalRun : 0.0f));
+				H.Check(TEXT("S3b"), H.DashSeconds > 0.35f && H.DashSeconds < 0.60f,
+					FString::Printf(TEXT("the dash lasted %.2f s (wl.Handoff.DashSeconds 0.45)"), H.DashSeconds));
+				QaHandRelease(Dog);
+				H.KeyIndex = 0;
+				H.Tests = QaHandTests();
+				H.TestIndex = 0;
+				H.bTestStarted = false;
+				Next();
+			}
+			return true;
+		case 7:
+		{
+			// I1-I9, ONE AT A TIME
+			if (H.TestIndex >= H.Tests.Num())
+			{
+				Next();
+				return true;
+			}
+			FHandTest& Test = H.Tests[H.TestIndex];
+			const bool bWantArmed = FCString::Strcmp(Test.Id, TEXT("I9")) != 0;
+			if (!H.bTestStarted)
+			{
+				// the right handoff state, the cooldown waited out where asked, and open ground ahead for a dash
+				if (bWantArmed && !Dog->IsHandoffArmed())
+				{
+					if (Handoff->GetState() == EWonderlandHandoffState::Idle)
+					{
+						Handoff->Begin(TEXT("angelic_twin_swords"), FString(), EWonderlandHandoffEntry::Roaming, Both, Why);
+					}
+					return In < 10.0f ? true : Stop(TEXT("the swords could not be taken up for a test"));
+				}
+				if (!bWantArmed && Handoff->GetState() != EWonderlandHandoffState::Idle)
+				{
+					return In < 10.0f ? true : Stop(TEXT("the handoff did not return for the unarmed test"));
+				}
+				if (Test.bAfterCooldown && In < 1.6f)
+				{
+					return true;
+				}
+				QaClearHeading(World, Dog, 1200.0f, H.Forward);
+				QaFace(Dog, H.Forward);
+				H.DashBase = Dog->GetDashCount();
+				H.RefusedBase = Dog->GetDashesRefused();
+				H.KeyIndex = 0;
+				H.bReturnedMidDash = false;
+				H.bTestStarted = true;
+				H.PhaseAt = Now;
+				return true;
+			}
+			while (H.KeyIndex < Test.Keys.Num() && In >= Test.Keys[H.KeyIndex].At)
+			{
+				Dog->QaForwardKey(Test.Keys[H.KeyIndex].bUpArrow, Test.Keys[H.KeyIndex].bDown);
+				++H.KeyIndex;
+			}
+			// I8: THE SWORDS GIVEN BACK 0.1 s INTO THE DASH; one frame later nothing of the traversal may remain
+			if (FCString::Strcmp(Test.Id, TEXT("I8")) == 0 && !H.bReturnedMidDash && In >= 0.20f)
+			{
+				const bool bWasDashing = Dog->IsDashing();
+				Handoff->Return(Why);
+				H.bReturnedMidDash = true;
+				H.Check(TEXT("I8a"), bWasDashing, FString::Printf(TEXT("a dash was under way when the swords were given back: %s"), bWasDashing ? TEXT("yes") : TEXT("NO")));
+			}
+			const float LastKey = Test.Keys.Num() > 0 ? Test.Keys.Last().At : 0.0f;
+			if (In < LastKey + 0.8f)
+			{
+				return true;
+			}
+			const int32 Dashes = Dog->GetDashCount() - H.DashBase;
+			const int32 Refusals = Dog->GetDashesRefused() - H.RefusedBase;
+			FString Extra;
+			bool bOk = Dashes == Test.WantDashes && Refusals == Test.WantRefusals;
+			if (FCString::Strcmp(Test.Id, TEXT("I8")) == 0)
+			{
+				const bool bRestored = !Dog->IsDashing() && !Dog->IsHandoffArmed() && FMath::IsNearlyEqual(Move->MaxAcceleration, Dog->GetNormalAcceleration(), 0.5f)
+					&& Move->MaxWalkSpeed <= Dog->RunSpeedUU + 0.5f;
+				bOk &= bRestored;
+				Extra = FString::Printf(TEXT("; after the return: dashing %s, armed %s, acceleration %.0f (normal %.0f), speed cap %.0f (run band %.0f)"),
+					Dog->IsDashing() ? TEXT("YES") : TEXT("no"), Dog->IsHandoffArmed() ? TEXT("YES") : TEXT("no"), Move->MaxAcceleration, Dog->GetNormalAcceleration(),
+					Move->MaxWalkSpeed, Dog->RunSpeedUU);
+			}
+			H.Check(Test.Id, bOk, FString::Printf(TEXT("%s: dashes %d (want %d), refused %d (want %d)%s"), Test.What, Dashes, Test.WantDashes, Refusals,
+				Test.WantRefusals, *Extra));
+			QaHandRelease(Dog);
+			++H.TestIndex;
+			H.bTestStarted = false;
+			H.PhaseAt = Now;
+			return true;
+		}
+		case 8:
+		{
+			// W1, THE WALL: the swords taken up again, a blocking wall 380 uu ahead, a dash straight at it
+			if (!Dog->IsHandoffArmed())
+			{
+				if (Handoff->GetState() == EWonderlandHandoffState::Idle)
+				{
+					Handoff->Begin(TEXT("angelic_twin_swords"), FString(), EWonderlandHandoffEntry::Roaming, Both, Why);
+				}
+				return In < 10.0f ? true : Stop(TEXT("the swords could not be taken up for the wall"));
+			}
+			if (In < 1.6f)
+			{
+				return true;
+			}
+			const float Clear = QaClearHeading(World, Dog, 900.0f, H.Forward);
+			if (Clear < 600.0f)
+			{
+				H.Check(TEXT("W1"), false, FString::Printf(TEXT("no open ground before the wall (best heading clear for %.0f uu)"), Clear));
+				return Stop(TEXT("no open ground"));
+			}
+			QaFace(Dog, H.Forward);
+			H.WallCenter = Dog->GetActorLocation() + H.Forward * 380.0f;
+			FActorSpawnParameters Spawn;
+			Spawn.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			AActor* Wall = World->SpawnActor<AActor>(AActor::StaticClass(), H.WallCenter, H.Forward.Rotation(), Spawn);
+			if (Wall == nullptr)
+			{
+				H.Check(TEXT("W1"), false, TEXT("the wall could not be spawned"));
+				return Stop(TEXT("no wall"));
+			}
+			UBoxComponent* Box = NewObject<UBoxComponent>(Wall);
+			Box->SetBoxExtent(FVector(20.0f, 400.0f, 300.0f));
+			Box->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+			Wall->SetRootComponent(Box);
+			Box->RegisterComponent();
+			Box->SetWorldLocationAndRotation(H.WallCenter, H.Forward.Rotation());
+			H.Wall = Wall;
+			H.MaxAlong = -1.0e9f;
+			H.DashBase = Dog->GetDashCount();
+			H.KeyIndex = 0;
+			Next();
+			return true;
+		}
+		case 9:
+		{
+			Dog->AddMovementInput(H.Forward, 1.0f);
+			if (H.KeyIndex == 0 && In >= 0.00f) { Dog->QaForwardKey(false, true); H.KeyIndex = 1; }
+			if (H.KeyIndex == 1 && In >= 0.05f) { Dog->QaForwardKey(false, false); H.KeyIndex = 2; }
+			if (H.KeyIndex == 2 && In >= 0.10f) { Dog->QaForwardKey(false, true); H.KeyIndex = 3; }
+			// how far along the dash the Dog's centre came, measured from the wall's centre (its near face is at -20)
+			H.MaxAlong = FMath::Max(H.MaxAlong, FVector::DotProduct(Dog->GetActorLocation() - H.WallCenter, H.Forward));
+			if (In < 1.0f)
+			{
+				return true;
+			}
+			const float Touch = -20.0f - Radius;
+			const bool bDashed = Dog->GetDashCount() == H.DashBase + 1;
+			const bool bHeld = H.MaxAlong <= Touch + 2.0f;
+			const bool bReached = H.MaxAlong >= Touch - 40.0f;
+			H.Check(TEXT("W1"), bDashed && bHeld && bReached,
+				FString::Printf(TEXT("a dash at a blocking wall 380 uu ahead: dashed %s; the Dog's centre came to %.1f uu of touching the wall's face ")
+					TEXT("(contact at %.1f, at most 2 uu past it allowed): passed through %s, reached it %s"), bDashed ? TEXT("yes") : TEXT("NO"),
+					Touch - H.MaxAlong, Touch, bHeld ? TEXT("no") : TEXT("YES"), bReached ? TEXT("yes") : TEXT("NO")));
+			QaHandRelease(Dog);
+			if (AActor* Wall = H.Wall.Get())
+			{
+				Wall->Destroy();
+			}
+			Next();
+			return true;
+		}
+		case 10:
+			// R1, THE RETURN: every speed restored
+			if (Handoff->GetState() == EWonderlandHandoffState::Held)
+			{
+				Handoff->Return(Why);
+			}
+			if (Handoff->GetState() != EWonderlandHandoffState::Idle && In < 6.0f)
+			{
+				return true;
+			}
+			if (In < 0.3f)
+			{
+				return true;
+			}
+			H.Check(TEXT("R1"), Handoff->GetState() == EWonderlandHandoffState::Idle && !Dog->IsHandoffArmed() && !Dog->IsDashing()
+				&& FMath::IsNearlyEqual(Move->MaxAcceleration, Dog->GetNormalAcceleration(), 0.5f) && Move->MaxWalkSpeed <= Dog->RunSpeedUU + 0.5f,
+				FString::Printf(TEXT("after the return: handoff %s, armed %s, dashing %s, acceleration %.0f (normal %.0f), speed cap %.0f"),
+					FWonderlandMissionHandoff::StateName(Handoff->GetState()), Dog->IsHandoffArmed() ? TEXT("YES") : TEXT("no"),
+					Dog->IsDashing() ? TEXT("YES") : TEXT("no"), Move->MaxAcceleration, Dog->GetNormalAcceleration(), Move->MaxWalkSpeed));
+			return Stop(nullptr);
+		default:
+			return Stop(TEXT("an unknown phase"));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaHandoffCommand(
+		TEXT("wl.Qa.Handoff"),
+		TEXT("Mission Handoff traversal, M1, in this (packaged) build: the normal run vs the handoff run vs the dash (pre-registered ")
+		TEXT("ratios), the Forward rules through the character's own key handlers, a dash into a blocking wall, and the return ")
+		TEXT("restoring every speed. Logs WLHANDQA lines; `quit` exits after."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaHand.IsValid())
+			{
+				return;
+			}
+			ARelayDogCharacter* Dog = QaDog(World);
+			if (Dog == nullptr || World == nullptr)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLHANDQA END pass=0 fail=1 (no Relay Dog to drive)"));
+				if (Args.Contains(TEXT("quit")))
+				{
+					FPlatformMisc::RequestExit(false);
+				}
+				return;
+			}
+			GQaHand = MakeShared<FQaHand>();
+			GQaHand->World = World;
+			GQaHand->Dog = Dog;
+			GQaHand->bQuit = Args.Contains(TEXT("quit"));
+			GQaHand->PhaseAt = World->GetTimeSeconds();
+			GQaHand->LastNow = GQaHand->PhaseAt;
+			GQaHand->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaHandTick), 0.0f);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLHANDQA armed at (%.0f, %.0f, %.0f)"), Dog->GetActorLocation().X, Dog->GetActorLocation().Y,
+				Dog->GetActorLocation().Z);
 		}));
 }
 

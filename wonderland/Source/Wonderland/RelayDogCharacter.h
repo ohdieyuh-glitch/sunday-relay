@@ -362,6 +362,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Relay Dog")
 	float DoubleTapWindow = 0.32f;
 
+	// ---------------------------------------------------------------- MISSION HANDOFF TRAVERSAL (M1)
+	/** The swords are HELD (FWonderlandMissionHandoff::IsArmed): the faster speeds and the dash apply. */
+	bool IsHandoffArmed() const;
+	bool IsDashing() const { return bDashActive; }
+	int32 GetDashCount() const { return DashCount; }
+	int32 GetDashesRefused() const { return DashesRefused; }
+	/** Normal roaming's acceleration (read at BeginPlay): what every exit from the handoff restores. */
+	float GetNormalAcceleration() const { return NormalAcceleration; }
+	/** QA only: a Forward key event exactly as BindKey delivers it (W, or the Up arrow), and the run modifier. */
+	void QaForwardKey(bool bUpArrow, bool bDown) { SetForwardKey(!bUpArrow, bDown); }
+	void QaRunKey(bool bDown) { bRunHeld = bDown; }
+
 protected:
 	void MoveForwardAxis(float Value);
 	void MoveBackwardAxis(float Value);
@@ -369,8 +381,18 @@ protected:
 	void MoveLeftAxis(float Value);
 	void TurnAxis(float Value);
 	void LookUpAxis(float Value);
+	/** The ONE semantic Forward's edges: pressed = neither key held -> one held; released = both up. */
 	void OnForwardPressed();
 	void OnForwardReleased();
+	/** W and the Up arrow, each tracked on its own (founder: they are the same semantic Forward action). */
+	void OnForwardWPressed();
+	void OnForwardWReleased();
+	void OnForwardUpPressed();
+	void OnForwardUpReleased();
+	void SetForwardKey(bool bW, bool bDown);
+	/** The Mission Handoff dash: a velocity through the movement component, never a teleport. */
+	bool TryStartDash(float Now);
+	void EndDash(const TCHAR* Why);
 	void OnRunPressed();
 	void OnRunReleased();
 	void OnWalkPressed();
@@ -837,6 +859,19 @@ private:
 	bool bForwardHeld = false;
 	bool bDoubleTapRun = false;
 	float LastForwardPressTime = -10.0f;
+	/** Which physical Forward keys are down; bForwardHeld is either of them. */
+	bool bForwardWHeld = false;
+	bool bForwardUpHeld = false;
+	/** THE MISSION HANDOFF DASH (M1). Times are the world's seconds; the cooldown runs from the dash's END. */
+	bool bHandoffArmedSeen = false;
+	bool bDashActive = false;
+	float DashStartedAt = -1000.0f;
+	float DashEndedAt = -1000.0f;
+	FVector DashDirection = FVector::ForwardVector;
+	int32 DashCount = 0;
+	int32 DashesRefused = 0;
+	/** Normal roaming's acceleration, read at BeginPlay and restored whenever the swords are not held. */
+	float NormalAcceleration = 900.0f;
 	int32 RouteIndex = 0;
 	float RouteHold = 0.0f;
 	/** How long the current leg has been attempted, seconds. */

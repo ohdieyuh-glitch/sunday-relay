@@ -38,6 +38,26 @@
 #include "Widgets/SViewport.h"
 #include "NavigationInvokerComponent.h"
 #include "WonderlandMissionOrb.h"
+#include "WonderlandSidekicks.h"
+
+// MISSION HANDOFF TRAVERSAL (founder, COMBAT STANCE + HIGH-SPEED ROAMING): every tunable named, in ONE place, and logged
+// once when the swords are taken up. Console variables, never reflected properties (the Niagara FName rule).
+namespace RelayDogHandoffTuning
+{
+	TAutoConsoleVariable<float> CVarMoveMultiplier(TEXT("wl.Handoff.MoveMultiplier"), 1.4f, TEXT("Mission Handoff: walk, jog and run speeds while the swords are held, as a multiple of normal roaming."));
+	TAutoConsoleVariable<float> CVarAcceleration(TEXT("wl.Handoff.Acceleration"), 1600.0f, TEXT("Mission Handoff: the movement acceleration while the swords are held, uu/s^2 (normal roaming keeps its own)."));
+	TAutoConsoleVariable<float> CVarDashSpeed(TEXT("wl.Handoff.DashSpeed"), 1700.0f, TEXT("Mission Handoff: the dash's ground speed, uu/s."));
+	TAutoConsoleVariable<float> CVarDashSeconds(TEXT("wl.Handoff.DashSeconds"), 0.45f, TEXT("Mission Handoff: how long one dash lasts, seconds."));
+	TAutoConsoleVariable<float> CVarDashAcceleration(TEXT("wl.Handoff.DashAcceleration"), 6000.0f, TEXT("Mission Handoff: the acceleration the dash owns while it lasts, uu/s^2."));
+	TAutoConsoleVariable<float> CVarDashCooldown(TEXT("wl.Handoff.DashCooldown"), 0.9f, TEXT("Mission Handoff: seconds after a dash ENDS before another can start."));
+	TAutoConsoleVariable<float> CVarDoubleTapWindow(TEXT("wl.Handoff.DoubleTapWindow"), 0.30f, TEXT("Mission Handoff: how quickly the second Forward tap must follow the first, seconds."));
+
+	float Multiplier() { return FMath::Clamp(CVarMoveMultiplier.GetValueOnGameThread(), 1.0f, 3.0f); }
+	float DashSpeed() { return FMath::Clamp(CVarDashSpeed.GetValueOnGameThread(), 100.0f, 6000.0f); }
+	float DashSeconds() { return FMath::Clamp(CVarDashSeconds.GetValueOnGameThread(), 0.05f, 2.0f); }
+	float DashCooldown() { return FMath::Clamp(CVarDashCooldown.GetValueOnGameThread(), 0.0f, 10.0f); }
+	float TapWindow() { return FMath::Clamp(CVarDoubleTapWindow.GetValueOnGameThread(), 0.05f, 1.0f); }
+}
 
 // THE READING POSE, TUNABLE LIVE. Named, not anonymous: the module is one unity translation unit.
 namespace RelayDogReadTuning
@@ -1304,10 +1324,13 @@ void ARelayDogCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	// DOUBLE-TAP FORWARD AND HOLD TO RUN. Both forward keys are watched, and
 	// the run lasts exactly as long as the key stays down -- releasing it ends
 	// the run rather than leaving the Dog sprinting into a hedge.
-	PlayerInputComponent->BindKey(EKeys::W, IE_Pressed, this, &ARelayDogCharacter::OnForwardPressed);
-	PlayerInputComponent->BindKey(EKeys::W, IE_Released, this, &ARelayDogCharacter::OnForwardReleased);
-	PlayerInputComponent->BindKey(EKeys::Up, IE_Pressed, this, &ARelayDogCharacter::OnForwardPressed);
-	PlayerInputComponent->BindKey(EKeys::Up, IE_Released, this, &ARelayDogCharacter::OnForwardReleased);
+	// W AND THE UP ARROW ARE ONE SEMANTIC FORWARD (founder, Mission Handoff): each key is tracked on its own, a press is
+	// the moment neither -> one is down and a release the moment both are up, so letting go of one key while the other
+	// still holds never ends the run, and holding W while tapping Up is never a double tap.
+	PlayerInputComponent->BindKey(EKeys::W, IE_Pressed, this, &ARelayDogCharacter::OnForwardWPressed);
+	PlayerInputComponent->BindKey(EKeys::W, IE_Released, this, &ARelayDogCharacter::OnForwardWReleased);
+	PlayerInputComponent->BindKey(EKeys::Up, IE_Pressed, this, &ARelayDogCharacter::OnForwardUpPressed);
+	PlayerInputComponent->BindKey(EKeys::Up, IE_Released, this, &ARelayDogCharacter::OnForwardUpReleased);
 
 	PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &ARelayDogCharacter::OnRunPressed);
 	PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &ARelayDogCharacter::OnRunReleased);
@@ -1424,11 +1447,21 @@ void ARelayDogCharacter::LookUpAxis(float Value)
 void ARelayDogCharacter::OnForwardPressed()
 {
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
-	if (Now - LastForwardPressTime <= DoubleTapWindow)
+	// WITH THE SWORDS HELD the window is the handoff's own (wl.Handoff.DoubleTapWindow), and the double tap DASHES.
+	const bool bArmed = IsHandoffArmed();
+	const float Window = bArmed ? RelayDogHandoffTuning::TapWindow() : DoubleTapWindow;
+	const bool bDouble = Now - LastForwardPressTime <= Window;
+	if (bDouble)
 	{
 		bDoubleTapRun = true;
+		if (bArmed)
+		{
+			TryStartDash(Now);
+		}
 	}
-	LastForwardPressTime = Now;
+	// WITH THE SWORDS HELD A PAIR IS USED UP: a third quick tap starts a new pair, so taps never chain into dash after dash.
+	// Ordinary roaming keeps its old timing exactly.
+	LastForwardPressTime = (bDouble && bArmed) ? -1000.0f : Now;
 	bForwardHeld = true;
 }
 
@@ -1440,6 +1473,84 @@ void ARelayDogCharacter::OnForwardReleased()
 	bDoubleTapRun = false;
 }
 
+void ARelayDogCharacter::OnForwardWPressed() { SetForwardKey(true, true); }
+void ARelayDogCharacter::OnForwardWReleased() { SetForwardKey(true, false); }
+void ARelayDogCharacter::OnForwardUpPressed() { SetForwardKey(false, true); }
+void ARelayDogCharacter::OnForwardUpReleased() { SetForwardKey(false, false); }
+
+void ARelayDogCharacter::SetForwardKey(bool bW, bool bDown)
+{
+	const bool bWasHeld = bForwardWHeld || bForwardUpHeld;
+	(bW ? bForwardWHeld : bForwardUpHeld) = bDown;
+	const bool bHeld = bForwardWHeld || bForwardUpHeld;
+	// the ONE semantic Forward's edges: a key repeat, or the second key while the first holds, is no edge at all
+	if (!bWasHeld && bHeld)
+	{
+		OnForwardPressed();
+	}
+	else if (bWasHeld && !bHeld)
+	{
+		OnForwardReleased();
+	}
+}
+
+bool ARelayDogCharacter::IsHandoffArmed() const
+{
+	const UGameInstance* Instance = GetGameInstance();
+	UWonderlandSidekickSubsystem* Sidekicks = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSidekickSubsystem>() : nullptr;
+	return Sidekicks != nullptr && Sidekicks->GetMissionHandoff().IsArmed();
+}
+
+bool ARelayDogCharacter::TryStartDash(float Now)
+{
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	FString Why;
+	if (bDashActive)
+	{
+		Why = TEXT("a dash is under way");
+	}
+	else if (Now - DashEndedAt < RelayDogHandoffTuning::DashCooldown())
+	{
+		Why = FString::Printf(TEXT("cooling down (%.2f s left)"), RelayDogHandoffTuning::DashCooldown() - (Now - DashEndedAt));
+	}
+	else if (Move == nullptr || !Move->IsMovingOnGround())
+	{
+		Why = TEXT("not on the ground");
+	}
+	else if (bAutoDemo || Overlay.bOrbit)
+	{
+		Why = TEXT("a performance is moving the Dog");
+	}
+	if (!Why.IsEmpty())
+	{
+		++DashesRefused;
+		UE_LOG(LogTemp, Display, TEXT("WLHANDOFF dash refused: %s"), *Why);
+		return false;
+	}
+	// THE WAY FORWARD FACES: the control yaw, as the Forward key moves the Dog
+	const float Yaw = Controller != nullptr ? Controller->GetControlRotation().Yaw : GetActorRotation().Yaw;
+	DashDirection = FRotationMatrix(FRotator(0.0f, Yaw, 0.0f)).GetUnitAxis(EAxis::X);
+	bDashActive = true;
+	DashStartedAt = Now;
+	++DashCount;
+	// A VELOCITY, NEVER A TELEPORT: the movement component sweeps every step, so walls, slopes and the world's edges hold
+	Move->Velocity = DashDirection * RelayDogHandoffTuning::DashSpeed() + FVector(0.0f, 0.0f, Move->Velocity.Z);
+	UE_LOG(LogTemp, Display, TEXT("WLHANDOFF dash %d: %.0f uu/s for %.2f s, the next no sooner than %.2f s after it ends"), DashCount,
+		RelayDogHandoffTuning::DashSpeed(), RelayDogHandoffTuning::DashSeconds(), RelayDogHandoffTuning::DashCooldown());
+	return true;
+}
+
+void ARelayDogCharacter::EndDash(const TCHAR* Why)
+{
+	if (!bDashActive)
+	{
+		return;
+	}
+	bDashActive = false;
+	DashEndedAt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	UE_LOG(LogTemp, Display, TEXT("WLHANDOFF dash %d ended after %.2f s: %s"), DashCount, DashEndedAt - DashStartedAt, Why);
+}
+
 void ARelayDogCharacter::OnRunPressed() { bRunHeld = true; }
 void ARelayDogCharacter::OnRunReleased() { bRunHeld = false; }
 void ARelayDogCharacter::OnWalkPressed() { bWalkHeld = true; }
@@ -1448,6 +1559,10 @@ void ARelayDogCharacter::OnWalkReleased() { bWalkHeld = false; }
 void ARelayDogCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	if (const UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		NormalAcceleration = Move->MaxAcceleration;
+	}
 	// THE EYES GLOW FROM THE FIRST FRAME. The day cycle re-drives the level every half second and on every
 	// repaint; this is so the Dog never draws a single frame with lit, unlit eyes.
 	SetEyeGlow(12.0f);
@@ -2386,6 +2501,25 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 
 	// ---------------------------------------------------------------- driving
 	FVector DesiredVelocity = FVector::ZeroVector;
+	// THE SWORDS TAKEN UP OR GIVEN BACK: the tuning is said once, and nothing of the traversal state outlives the return
+	const bool bArmedNow = IsHandoffArmed();
+	if (bArmedNow != bHandoffArmedSeen)
+	{
+		bHandoffArmedSeen = bArmedNow;
+		if (bArmedNow)
+		{
+			const float M = RelayDogHandoffTuning::Multiplier();
+			UE_LOG(LogTemp, Display, TEXT("WLHANDOFF tuning: move x%.2f (walk %.0f, jog %.0f, run %.0f uu/s), acceleration %.0f; dash %.0f uu/s for %.2f s ")
+				TEXT("(acceleration %.0f), cooldown %.2f s from its end, double tap %.2f s"), M, WalkSpeedUU * M, JogSpeedUU * M, RunSpeedUU * M,
+				RelayDogHandoffTuning::CVarAcceleration.GetValueOnGameThread(), RelayDogHandoffTuning::DashSpeed(), RelayDogHandoffTuning::DashSeconds(),
+				RelayDogHandoffTuning::CVarDashAcceleration.GetValueOnGameThread(), RelayDogHandoffTuning::DashCooldown(), RelayDogHandoffTuning::TapWindow());
+		}
+		else
+		{
+			EndDash(TEXT("the swords were given back"));
+			UE_LOG(LogTemp, Display, TEXT("WLHANDOFF traversal restored: normal speeds, acceleration %.0f"), NormalAcceleration);
+		}
+	}
 	// NOT WHILE THE PERFORMANCE WALKS. The player's speed band used to be written straight over the orbit's
 	// study pace, so the Dog circled the Contract at a jog (203 uu/s, logged mid-verification-approach).
 	if (!bAutoDemo && !Overlay.bOrbit)
@@ -2395,8 +2529,39 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		if (UCharacterMovementComponent* Move = GetCharacterMovement())
 		{
 			const bool bRunning = bRunHeld || (bDoubleTapRun && bForwardHeld);
-			Move->MaxWalkSpeed = bWalkHeld ? WalkSpeedUU : (bRunning ? RunSpeedUU : JogSpeedUU);
+			// THE MISSION HANDOFF MOVES FASTER EVEN BEFORE A DASH (founder): the one multiplier, applied here and only here
+			const float SpeedScale = bArmedNow ? RelayDogHandoffTuning::Multiplier() : 1.0f;
+			Move->MaxWalkSpeed = (bWalkHeld ? WalkSpeedUU : (bRunning ? RunSpeedUU : JogSpeedUU)) * SpeedScale;
+			Move->MaxAcceleration = bArmedNow ? FMath::Clamp(RelayDogHandoffTuning::CVarAcceleration.GetValueOnGameThread(), 100.0f, 20000.0f) : NormalAcceleration;
+			if (bDashActive)
+			{
+				const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+				if (Now - DashStartedAt >= RelayDogHandoffTuning::DashSeconds())
+				{
+					EndDash(TEXT("its time is up"));
+				}
+				else if (!Move->IsMovingOnGround())
+				{
+					EndDash(TEXT("the Dog left the ground"));
+				}
+				else
+				{
+					// THE DASH OWNS ITS SPEED AND ITS ACCELERATION while it lasts, and drives itself along the way it set out
+					Move->MaxWalkSpeed = RelayDogHandoffTuning::DashSpeed();
+					Move->MaxAcceleration = FMath::Clamp(RelayDogHandoffTuning::CVarDashAcceleration.GetValueOnGameThread(), 100.0f, 50000.0f);
+					AddMovementInput(DashDirection, 1.0f);
+				}
+			}
 		}
+	}
+	else
+	{
+		// a performance moves the Dog at its own pace: normal acceleration, and no dash carries into it
+		if (UCharacterMovementComponent* Move = GetCharacterMovement())
+		{
+			Move->MaxAcceleration = NormalAcceleration;
+		}
+		EndDash(TEXT("a performance took the Dog"));
 	}
 	if (bAutoDemo)
 	{

@@ -343,6 +343,12 @@ namespace WonderlandSidekickSecrets
 
 bool UWonderlandSidekickSubsystem::Tick(float DeltaSeconds)
 {
+	// THE MISSION HANDOFF'S PHASES advance in EVERY session, before the line below: it is presentation, never the
+	// companions' runtime, and it reads nothing from it.
+	if (Handoff.IsValid())
+	{
+		Handoff->Tick(DeltaSeconds);
+	}
 	// NOT PART OF THIS BETA (private beta): a player's session never contacts the companions' local runtime. An outside
 	// tester has none, and the founder's own machine must answer like theirs -- the clean-user baseline on this laptop
 	// read the founder's development service and drew its provider advice across the world.
