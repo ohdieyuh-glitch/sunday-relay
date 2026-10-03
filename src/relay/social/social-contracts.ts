@@ -71,6 +71,7 @@ export type SocialOperationId =
   | 'parties.promote'
   | 'parties.rules'
   | 'parties.self_mute'
+  | 'parties.voice_join'
   | 'party_invites.list'
   | 'party_invites.accept'
   | 'party_invites.decline'

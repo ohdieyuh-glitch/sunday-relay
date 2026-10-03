@@ -16,12 +16,22 @@
  * log no longer reaches back that far. The client then reads `snapshot.read` again; what it sees is what the presence
  * authority lets it see.
  *
- * NOT WIRED YET. The `social` capability is granted at pairing on the integrated line (founder-gated); until then
- * `verifySession` returns sessions without it and every call is refused at gate 3.
+ * HOW A SESSION GETS HERE (R16). The desktop client signs its player in by GitHub's device flow
+ * (wonderland-native-signin-routes.ts) and holds a `native_social` session carrying `social`; server.ts serves these routes
+ * only when the deployment sets WONDERLAND_SOCIAL_ENABLED=1.
+ *
+ * PARTY VOICE. `POST /parties/:id/voice/join` asks the configured provider's minter for a token to the caller's OWN party
+ * room, for the voice audience only (voiceAudienceFor: the members minus anyone blocked either way). With no provider it is
+ * 503 VOICE TRANSPORT PENDING: a connected voice state is never fabricated.
+ *
+ * THE DELIVERY TAP (tests and QA only). When server.ts is given WONDERLAND_SOCIAL_TAP, every events poll and every
+ * snapshot.read answered here is told to the tap: who received it, which event sequences and operations, and which user
+ * ids the snapshot named -- never a message body or any other content.
  */
 
 import type { SocialOperationId } from '../src/relay/social/social-contracts';
 import type { SocialPlayerIdentity, SocialStore } from '../src/relay/social/social-store';
+import { voiceAudienceFor } from '../src/relay/social/social-parties';
 import { bindSocialActor, nativeSocialMayCall, SOCIAL_OPERATIONS } from './wonderland-social-scope';
 
 export const SOCIAL_ROUTE_PREFIX = '/wonderland/social';
@@ -45,8 +55,37 @@ export interface SocialRouteResult {
 export interface SocialSessionFacts {
   readonly sessionId: string;
   readonly participantId: string;
-  /** Granted at pairing. */
+  /** The capabilities the session holds (a desktop sign-in's `native_social` session holds `social`). */
   readonly capabilities: readonly string[];
+  /** Which native scope verified it. Absent means `native_world` (the dev server and the older tests). */
+  readonly scope?: 'native_world' | 'native_social';
+}
+
+/** What a voice provider hands one member for their party's room. Its token is the member's own, for that room only. */
+export interface PartyVoiceGrant {
+  readonly providerId: string;
+  readonly roomId: string;
+  readonly participantToken: string;
+  readonly expiresAtIso: string;
+}
+
+/**
+ * THE PROVIDER SEAM. A real provider (EOS Voice, LiveKit, Vivox ...) implements this; it must admit the caller to the room
+ * ONLY as one of `audience`, and never anyone else on their behalf. Absent: party voice is honestly unavailable.
+ */
+export interface PartyVoiceTokenMinter {
+  readonly providerId: string;
+  mint(input: { readonly partyId: string; readonly participantId: string; readonly audience: readonly string[]; readonly nowIso: string }): Promise<PartyVoiceGrant>;
+}
+
+/** One answer as the tap records it: ids and sequence numbers only. */
+export interface SocialDeliveryRecord {
+  readonly at: string;
+  readonly recipient: string;
+  readonly kind: 'events' | 'snapshot';
+  readonly seqs: readonly number[];
+  readonly ops: readonly string[];
+  readonly userIds: readonly string[];
 }
 
 export interface SocialRouteDeps {
@@ -56,6 +95,30 @@ export interface SocialRouteDeps {
   readonly identify: (participantId: string) => Promise<SocialPlayerIdentity | null>;
   /** Null when this bridge has no social store: every call is 503. */
   readonly store: SocialStore | null;
+  /** The party voice provider's token minter. Absent or null: voice is 503 VOICE TRANSPORT PENDING. */
+  readonly voice?: PartyVoiceTokenMinter | null;
+  /** Tests and QA only: told about every events poll and snapshot answered. */
+  readonly tap?: ((record: SocialDeliveryRecord) => void) | null;
+}
+
+/** The keys of a social view that name a PERSON. Party, conversation and request ids are not people. */
+const PERSON_KEYS = new Set(['userId', 'leaderId', 'fromUserId', 'toUserId', 'senderId', 'otherUserId', 'targetId', 'blockerId', 'blockedId', 'memberIds']);
+
+/** Every person a view names, by the keys above, anywhere in it. Values only; never a body. */
+function peopleNamedIn(value: unknown, into: Set<string> = new Set()): Set<string> {
+  if (Array.isArray(value)) {
+    for (const item of value) peopleNamedIn(item, into);
+  } else if (value !== null && typeof value === 'object') {
+    for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+      if (PERSON_KEYS.has(key)) {
+        if (typeof inner === 'string' && inner !== '') into.add(inner);
+        if (Array.isArray(inner)) for (const id of inner) if (typeof id === 'string' && id !== '') into.add(id);
+      } else {
+        peopleNamedIn(inner, into);
+      }
+    }
+  }
+  return into;
 }
 
 const ok = (data: unknown): SocialRouteResult => ({ status: 200, body: { data } });
@@ -127,12 +190,13 @@ export async function handleSocialRoute(request: SocialRouteRequest, deps: Socia
   if (facts === null) return err(401, 'session_required', 'Sign in to Wonderland to use social.');
   // 3. the table
   const [pathname, search = ''] = request.path.split('?', 2);
-  const op = nativeSocialMayCall(request.method, pathname, { scope: 'native_world', participantId: facts.participantId, capabilities: facts.capabilities });
+  const scope = facts.scope ?? 'native_world';
+  const op = nativeSocialMayCall(request.method, pathname, { scope, participantId: facts.participantId, capabilities: facts.capabilities });
   if (op === null) return err(403, 'not_permitted', 'This session may not do that.');
   if (deps.store === null) return err(503, 'social_unavailable', 'Social is not available on this server.');
   // 4. the actor is the session's player
   const body = request.body !== null && typeof request.body === 'object' && !Array.isArray(request.body) ? (request.body as Record<string, unknown>) : {};
-  const actor = bindSocialActor({ scope: 'native_world', participantId: facts.participantId, capabilities: facts.capabilities }, body);
+  const actor = bindSocialActor({ scope, participantId: facts.participantId, capabilities: facts.capabilities }, body);
   if (!actor.ok) return err(403, 'actor_mismatch', actor.error);
   // 5. their social record
   const identity = await deps.identify(actor.actorId);
@@ -144,11 +208,30 @@ export async function handleSocialRoute(request: SocialRouteRequest, deps: Socia
   if (op.id === 'events.stream') {
     const after = Number.parseInt(query.after ?? '0', 10);
     const limit = Number.parseInt(query.limit ?? '100', 10);
-    return ok(await deps.store.eventsFor(actor.actorId, Number.isFinite(after) && after > 0 ? after : 0, Number.isFinite(limit) && limit > 0 ? limit : 100));
+    const page = await deps.store.eventsFor(actor.actorId, Number.isFinite(after) && after > 0 ? after : 0, Number.isFinite(limit) && limit > 0 ? limit : 100);
+    deps.tap?.({ at: nowIso, recipient: actor.actorId, kind: 'events', seqs: page.events.map((e) => e.seq), ops: page.events.map((e) => e.op), userIds: [] });
+    return ok(page);
+  }
+  if (op.id === 'parties.voice_join') {
+    const [partyId] = idsOf(op.template, pathname);
+    // The audience is the WALLED one: a non-member gets none at all, and a member never gets anyone blocked either way.
+    const audience = voiceAudienceFor(await deps.store.read(), actor.actorId, partyId ?? '');
+    if (audience.length === 0) return err(404, 'not-found', 'party not found');
+    if (deps.voice === undefined || deps.voice === null) return err(503, 'voice_unavailable', 'VOICE TRANSPORT PENDING');
+    let grant: PartyVoiceGrant;
+    try {
+      grant = await deps.voice.mint({ partyId: partyId ?? '', participantId: actor.actorId, audience, nowIso });
+    } catch {
+      return err(503, 'voice_unavailable', 'The voice provider could not admit you right now.');
+    }
+    return ok({ providerId: grant.providerId, roomId: grant.roomId, participantToken: grant.participantToken, expiresAt: grant.expiresAtIso, audience });
   }
   const result = await deps.store.apply(op.id as SocialOperationId, actor.actorId, { ids: idsOf(op.template, pathname), body, query }, nowIso);
   // A RETRYABLE FAILURE IS AN OUTAGE, NOT A REFUSAL: a durable write that did not commit changed nothing and says 503.
   if (!result.ok) return err(result.error.retryable === true ? 503 : statusFor(result.error.code), result.error.code, result.error.message);
+  if (op.id === 'snapshot.read') {
+    deps.tap?.({ at: nowIso, recipient: actor.actorId, kind: 'snapshot', seqs: [], ops: [], userIds: [...peopleNamedIn(result.value)].sort() });
+  }
   return ok(result.value);
 }
 
