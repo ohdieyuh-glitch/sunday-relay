@@ -150,6 +150,27 @@ namespace
 	}
 
 	/** Once a second while companions wait: applied the moment nothing blocks them, dropped when a newer SELECT replaced them. */
+	bool CardTickWaiting(float);
+
+	/** The companions of the card now, between missions with the runtime there; otherwise they wait, and why is said. */
+	FString CardApplyOrWait(UWorld* World, const FWonderlandCard& Card)
+	{
+		const FString Blocked = CardCompanionsBlocked(World);
+		if (Blocked.IsEmpty())
+		{
+			CardStopWaiting();
+			return FString::Printf(TEXT("companions: %s"), *CardApplyCompanions(World, Card));
+		}
+		GCardWaitingId = Card.Id;
+		GCardWaitingWhy = Blocked;
+		GCardWaitingWorld = World;
+		if (!GCardWaitingTicker.IsValid())
+		{
+			GCardWaitingTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&CardTickWaiting), 1.0f);
+		}
+		return FString::Printf(TEXT("companions wait: %s"), *Blocked);
+	}
+
 	bool CardTickWaiting(float)
 	{
 		UWorld* World = GCardWaitingWorld.Get();
@@ -244,23 +265,7 @@ namespace WonderlandCardDirector
 		}
 
 		// THE COMPANIONS: now between missions with the runtime there; otherwise they wait, and why is said
-		const FString Blocked = CardCompanionsBlocked(World);
-		if (Blocked.IsEmpty())
-		{
-			CardStopWaiting();
-			Said.Add(FString::Printf(TEXT("companions: %s"), *CardApplyCompanions(World, Card)));
-		}
-		else
-		{
-			GCardWaitingId = Card.Id;
-			GCardWaitingWhy = Blocked;
-			GCardWaitingWorld = World;
-			if (!GCardWaitingTicker.IsValid())
-			{
-				GCardWaitingTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&CardTickWaiting), 1.0f);
-			}
-			Said.Add(FString::Printf(TEXT("companions wait: %s"), *Blocked));
-		}
+		Said.Add(CardApplyOrWait(World, Card));
 
 		// THE MISSION HANDOFF FORM is read when the next handoff begins: swords are never swapped in a hand
 		Said.Add(FString::Printf(TEXT("Mission Handoff %s from the next handoff"), *Card.MissionHandoff));
@@ -348,6 +353,128 @@ namespace WonderlandCardDirector
 		return GCardConnectsSent;
 	}
 
+	bool Create(UWorld* World, const FString& Name, FString& OutId, FString& OutSaid)
+	{
+		UWonderlandSidekickSubsystem* Sidekicks = CardSidekicks(World);
+		if (Sidekicks == nullptr)
+		{
+			OutSaid = TEXT("C.A.R.D. is not available in this game");
+			return false;
+		}
+		FString Why;
+		OutId = Sidekicks->GetCardStore().Create(Name, Why);
+		OutSaid = OutId.IsEmpty() ? FString::Printf(TEXT("no new C.A.R.D.: %s"), *Why) : FString::Printf(TEXT("C.A.R.D. %s made"), *Name);
+		return !OutId.IsEmpty();
+	}
+
+	bool Delete(UWorld* World, const FString& IdOrName, FString& OutSaid)
+	{
+		UWonderlandSidekickSubsystem* Sidekicks = CardSidekicks(World);
+		if (Sidekicks == nullptr)
+		{
+			OutSaid = TEXT("C.A.R.D. is not available in this game");
+			return false;
+		}
+		FWonderlandCardStore& Store = Sidekicks->GetCardStore();
+		const FWonderlandCard* Named = FindNamedCard(Store, IdOrName);
+		if (Named == nullptr)
+		{
+			OutSaid = FString::Printf(TEXT("no C.A.R.D. called '%s'"), *WonderlandCardCapabilities::CleanReason(IdOrName));
+			return false;
+		}
+		const FString Id = Named->Id;
+		const FString Name = Named->Name;
+		FString Why;
+		if (!Store.Delete(Id, Why))
+		{
+			OutSaid = FString::Printf(TEXT("%s not deleted: %s"), *Name, *Why);
+			return false;
+		}
+		OutSaid = FString::Printf(TEXT("%s deleted; the active C.A.R.D. is %s"), *Name, *Store.GetActive().Name);
+		return true;
+	}
+
+	bool Attach(UWorld* World, EWonderlandCapabilityKind Kind, const FString& Id, const FString& Label, FString& OutSaid)
+	{
+		UWonderlandSidekickSubsystem* Sidekicks = CardSidekicks(World);
+		if (Sidekicks == nullptr)
+		{
+			OutSaid = TEXT("C.A.R.D. is not available in this game");
+			return false;
+		}
+		FWonderlandCardStore& Store = Sidekicks->GetCardStore();
+		FWonderlandCard Card = Store.GetActive();
+		FWonderlandCapabilityRef& Ref = Card.Capabilities.AddDefaulted_GetRef();
+		Ref.Kind = Kind;
+		Ref.Id = Id.TrimStartAndEnd();
+		Ref.Label = Label.TrimStartAndEnd();
+		FString Why;
+		// THE STORE IS THE GATE: an unsafe id, a credential-shaped id or label, too many references -- refused there, said here
+		if (!Store.Update(Card, Why))
+		{
+			OutSaid = FString::Printf(TEXT("not attached: %s"), *Why);
+			return false;
+		}
+		const WonderlandCardCapabilities::FReading Reading = WonderlandCardCapabilities::Read(World != nullptr ? World->GetGameInstance() : nullptr);
+		OutSaid = FString::Printf(TEXT("attached to %s: %s"), *Card.Name,
+			*WonderlandCardCapabilities::Describe(WonderlandCardCapabilities::ResolveCapability(Card.Capabilities.Last(), Reading)));
+		return true;
+	}
+
+	bool Detach(UWorld* World, int32 Index, FString& OutSaid)
+	{
+		UWonderlandSidekickSubsystem* Sidekicks = CardSidekicks(World);
+		if (Sidekicks == nullptr)
+		{
+			OutSaid = TEXT("C.A.R.D. is not available in this game");
+			return false;
+		}
+		FWonderlandCardStore& Store = Sidekicks->GetCardStore();
+		FWonderlandCard Card = Store.GetActive();
+		if (!Card.Capabilities.IsValidIndex(Index))
+		{
+			OutSaid = FString::Printf(TEXT("%s has no reference %d"), *Card.Name, Index + 1);
+			return false;
+		}
+		const FString Gone = Card.Capabilities[Index].Id;
+		Card.Capabilities.RemoveAt(Index);
+		FString Why;
+		if (!Store.Update(Card, Why))
+		{
+			OutSaid = FString::Printf(TEXT("not detached: %s"), *Why);
+			return false;
+		}
+		OutSaid = FString::Printf(TEXT("%s detached from %s"), *Gone, *Card.Name);
+		return true;
+	}
+
+	bool SetCompanion(UWorld* World, int32 Slot, EWonderlandCardCompanionKind Kind, const FString& ProviderId, FString& OutSaid)
+	{
+		UWonderlandSidekickSubsystem* Sidekicks = CardSidekicks(World);
+		if (Sidekicks == nullptr)
+		{
+			OutSaid = TEXT("C.A.R.D. is not available in this game");
+			return false;
+		}
+		FWonderlandCardStore& Store = Sidekicks->GetCardStore();
+		FWonderlandCard Card = Store.GetActive();
+		Card.Companions.RemoveAll([Slot](const FWonderlandCompanionRef& Each) { return Each.Slot == Slot; });
+		FWonderlandCompanionRef& Ref = Card.Companions.AddDefaulted_GetRef();
+		Ref.Slot = Slot;
+		Ref.Kind = Kind;
+		Ref.ProviderId = ProviderId.TrimStartAndEnd();
+		FString Why;
+		if (!Store.Update(Card, Why))
+		{
+			OutSaid = FString::Printf(TEXT("companion not set: %s"), *Why);
+			return false;
+		}
+		const FWonderlandCard Saved = Store.GetActive();
+		OutSaid = FString::Printf(TEXT("%s: slot %d is %s; %s"), *Saved.Name, Slot, *Ref.ProviderId, *CardApplyOrWait(World, Saved));
+		UE_LOG(LogTemp, Display, TEXT("WLCARD %s"), *OutSaid);
+		return true;
+	}
+
 	bool HandleTerminalLine(UWorld* World, const FString& Line, TArray<FString>& OutRows)
 	{
 		const FString Text = Line.TrimStartAndEnd();
@@ -408,9 +535,8 @@ namespace WonderlandCardDirector
 		}
 		else if (Verb.Equals(TEXT("new"), ESearchCase::IgnoreCase))
 		{
-			const FString Id = Store.Create(Arg, Why);
-			OutRows.Add(Id.IsEmpty() ? FString::Printf(TEXT("no new C.A.R.D.: %s"), *Why)
-				: FString::Printf(TEXT("C.A.R.D. %s made (%s); /card select %s to use it"), *Arg, *Id, *Id));
+			FString Id;
+			OutRows.Add(Create(World, Arg, Id, Said) ? FString::Printf(TEXT("%s (%s); /card select %s to use it"), *Said, *Id, *Id) : Said);
 		}
 		else if (Verb.Equals(TEXT("rename"), ESearchCase::IgnoreCase))
 		{
@@ -425,14 +551,75 @@ namespace WonderlandCardDirector
 		}
 		else if (Verb.Equals(TEXT("delete"), ESearchCase::IgnoreCase))
 		{
-			const FWonderlandCard* Named = FindNamedCard(Store, Arg);
-			const FString Id = Named != nullptr ? Named->Id : FString();
-			OutRows.Add(Named == nullptr ? FString::Printf(TEXT("no C.A.R.D. called '%s'"), *WonderlandCardCapabilities::CleanReason(Arg))
-				: (Store.Delete(Id, Why) ? FString::Printf(TEXT("deleted; the active C.A.R.D. is %s"), *Store.GetActive().Name) : FString::Printf(TEXT("not deleted: %s"), *Why)));
+			Delete(World, Arg, Said);
+			OutRows.Add(Said);
+		}
+		else if (Verb.Equals(TEXT("attach"), ESearchCase::IgnoreCase))
+		{
+			// /card attach mcp|api|skill <id> [label]
+			FString KindWord = Arg;
+			FString IdAndLabel;
+			Arg.Split(TEXT(" "), &KindWord, &IdAndLabel);
+			FString Id = IdAndLabel.TrimStartAndEnd();
+			FString Label;
+			IdAndLabel.TrimStartAndEnd().Split(TEXT(" "), &Id, &Label);
+			const bool bMcp = KindWord.Equals(TEXT("mcp"), ESearchCase::IgnoreCase);
+			const bool bApi = KindWord.Equals(TEXT("api"), ESearchCase::IgnoreCase);
+			const bool bSkill = KindWord.Equals(TEXT("skill"), ESearchCase::IgnoreCase);
+			if ((!bMcp && !bApi && !bSkill) || Id.IsEmpty())
+			{
+				OutRows.Add(TEXT("/card attach mcp|api|skill <id> [label] -- an MCP server or an API by its Julius Connect id, a skill by id; never a key"));
+			}
+			else
+			{
+				Attach(World, bMcp ? EWonderlandCapabilityKind::Mcp : (bApi ? EWonderlandCapabilityKind::Api : EWonderlandCapabilityKind::Skill), Id, Label, Said);
+				OutRows.Add(Said);
+			}
+		}
+		else if (Verb.Equals(TEXT("detach"), ESearchCase::IgnoreCase))
+		{
+			// /card detach <n>, counting from 1 as /card status lists them
+			Detach(World, FCString::Atoi(*Arg) - 1, Said);
+			OutRows.Add(Said);
+		}
+		else if (Verb.Equals(TEXT("companion"), ESearchCase::IgnoreCase))
+		{
+			// /card companion left|right <provider-id> [llm|agent|harness]
+			FString SideWord = Arg;
+			FString Rest2;
+			Arg.Split(TEXT(" "), &SideWord, &Rest2);
+			FString Provider = Rest2.TrimStartAndEnd();
+			FString KindWord;
+			Rest2.TrimStartAndEnd().Split(TEXT(" "), &Provider, &KindWord);
+			const bool bLeft = SideWord.Equals(TEXT("left"), ESearchCase::IgnoreCase);
+			const bool bRight = SideWord.Equals(TEXT("right"), ESearchCase::IgnoreCase);
+			if ((!bLeft && !bRight) || Provider.IsEmpty())
+			{
+				OutRows.Add(TEXT("/card companion left|right <provider-id> [llm|agent|harness] -- LEFT is the LLM Companion, RIGHT is Jhinn"));
+			}
+			else
+			{
+				EWonderlandCardCompanionKind Kind = bLeft ? EWonderlandCardCompanionKind::Llm : EWonderlandCardCompanionKind::Agent;
+				if (KindWord.Equals(TEXT("harness"), ESearchCase::IgnoreCase))
+				{
+					Kind = EWonderlandCardCompanionKind::Harness;
+				}
+				else if (KindWord.Equals(TEXT("agent"), ESearchCase::IgnoreCase))
+				{
+					Kind = EWonderlandCardCompanionKind::Agent;
+				}
+				else if (KindWord.Equals(TEXT("llm"), ESearchCase::IgnoreCase))
+				{
+					Kind = EWonderlandCardCompanionKind::Llm;
+				}
+				SetCompanion(World, bLeft ? 0 : 1, Kind, Provider, Said);
+				OutRows.Add(Said);
+			}
 		}
 		else
 		{
-			OutRows.Add(TEXT("/card [status] | /card list | /card select <name> | /card new <name> | /card rename <name> | /card save | /card delete <name>"));
+			OutRows.Add(TEXT("/card [status] | list | select <name> | new <name> | rename <name> | save | delete <name> | attach mcp|api|skill <id> [label] | ")
+				TEXT("detach <n> | companion left|right <provider-id> [llm|agent|harness]"));
 		}
 		return true;
 	}

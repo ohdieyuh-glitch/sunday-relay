@@ -22,9 +22,11 @@
 #include "Widgets/SCompoundWidget.h"
 #include "WonderlandProjectBrain.h"
 #include "WonderlandRelaySkins.h"
+#include "WonderlandCardView.h"
 
 class SEditableTextBox;
 class SVerticalBox;
+class UWorld;
 enum class EWonderlandBrainGlyph : uint8;
 
 class WONDERLAND_API SWonderlandProjectBrainPanel : public SCompoundWidget
@@ -69,6 +71,12 @@ public:
 		 */
 		SLATE_EVENT(FSimpleDelegate, OnToggleInspect)
 		SLATE_ATTRIBUTE(bool, IsInspecting)
+		/**
+		 * 05 C.A.R.D. (founder, 2026-10-02: the fifth Project Brain component). The section reads the store, the resolver and
+		 * the director through this world (WonderlandCardView) and changes a card only through WonderlandCardDirector -- the
+		 * Live Terminal's /card path. The panel keeps no C.A.R.D. state of its own.
+		 */
+		SLATE_ARGUMENT(TWeakObjectPtr<UWorld>, CardWorld)
 	SLATE_END_ARGS()
 
 	SWonderlandProjectBrainPanel();
@@ -119,6 +127,13 @@ public:
 	void SetSculptureLive(bool bLive);
 	bool IsSculptureLive() const { return bSculptureLive; }
 
+	/** Open C.A.R.D.'s page over the brain on one tab (handoff, mascot, companions, capabilities, saved), or close it with None. */
+	void OpenCardTab(FName Tab);
+	FName GetCardTab() const { return CardTab; }
+
+	/** Reads C.A.R.D. a few times a second, and redraws its page when what it shows has changed. */
+	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
+
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
 
@@ -135,9 +150,20 @@ private:
 	FText SurfaceLabel(FName SurfaceId) const;
 	FText ChipLabel(FName SurfaceId) const;
 	const FWonderlandBrainSurface* Surface(FName SurfaceId) const;
+	TSharedRef<SWidget> MakeCardStrip();
+	TSharedRef<SWidget> MakeCardTile(FName Tab, EWonderlandBrainGlyph Glyph, const TCHAR* Caption, TFunction<FString()> Value, TFunction<FLinearColor()> Dot);
+	void RefreshCardView(bool bForce);
+	void RebuildCardPage();
 
 	FWonderlandBrainModel Model;
 	FName Selected;
+	// 05 C.A.R.D.: a reading (never remembered past a quarter second), the open tab, and the page's body
+	TWeakObjectPtr<UWorld> CardWorld;
+	FWonderlandCardView CardView;
+	double CardViewAt = -1.0;
+	FString CardPageShown;
+	FName CardTab;
+	TSharedPtr<SVerticalBox> CardPageBody;
 	const FSlateBrush* HologramBrush = nullptr;
 
 	bool bSkinsOpen = false;

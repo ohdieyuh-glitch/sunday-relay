@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "WonderlandCard.h"
 
 class UWorld;
 
@@ -37,6 +38,23 @@ namespace WonderlandCardDirector
 	/** For the QA: how many Connect intents SELECT has sent to the companion runtime this session. */
 	WONDERLAND_API int32 GetConnectsSent();
 
-	/** The Live Terminal's /card: status, list, select <id|name>, new <name>, rename <name>, save, delete <id|name>. */
+	/** A new card by name (the store's defaults: Relay OG, as designed, the Angelic Twin Swords, no references). */
+	WONDERLAND_API bool Create(UWorld* World, const FString& Name, FString& OutId, FString& OutSaid);
+
+	/** Delete a card by id or name. Deleting the active one falls back to the built-in default; the Dog's look is untouched. */
+	WONDERLAND_API bool Delete(UWorld* World, const FString& IdOrName, FString& OutSaid);
+
+	/** Attach a typed reference to the active card (an MCP server or an API by its Julius Connect id, a skill by id). Never a
+	 *  key: the store refuses a credential-shaped value, and the credential stays with Julius Connect. */
+	WONDERLAND_API bool Attach(UWorld* World, EWonderlandCapabilityKind Kind, const FString& Id, const FString& Label, FString& OutSaid);
+
+	/** Detach the active card's Nth reference (0-based). */
+	WONDERLAND_API bool Detach(UWorld* World, int32 Index, FString& OutSaid);
+
+	/** Put a provider in one of the active card's companion slots (0 LEFT, 1 RIGHT), and apply it as SELECT would: now
+	 *  between missions with the runtime there, otherwise waiting (and why). An unusable reference is stored, reported, not sent. */
+	WONDERLAND_API bool SetCompanion(UWorld* World, int32 Slot, EWonderlandCardCompanionKind Kind, const FString& ProviderId, FString& OutSaid);
+
+	/** The Live Terminal's /card: status, list, select, new, rename, save, delete, attach, detach, companion. */
 	WONDERLAND_API bool HandleTerminalLine(UWorld* World, const FString& Line, TArray<FString>& OutRows);
 }

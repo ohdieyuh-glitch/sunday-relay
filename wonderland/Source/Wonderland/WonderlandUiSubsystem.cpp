@@ -711,6 +711,7 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 			}
 
 			SAssignNew(BrainPanel, SWonderlandProjectBrainPanel)
+				.CardWorld(GetWorld())   // 05 C.A.R.D.: the section reads and acts through this world (WonderlandCardView, WonderlandCardDirector)
 				.HologramBrush(BrainArtBrush.IsValid() ? BrainArtBrush.Get() : nullptr)
 				.SkinPreviewBrush(SkinPreviewBrush.IsValid() ? SkinPreviewBrush.Get() : nullptr)
 				.Skins(SkinRegistry != nullptr ? SkinRegistry->GetSkins() : TArray<FWonderlandRelaySkin>())
