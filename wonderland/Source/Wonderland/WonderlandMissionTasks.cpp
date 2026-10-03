@@ -402,9 +402,11 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 		FWonderlandMissionTask Task = Saved;
 		// A KEY KEPT BEFORE THE OBJECTIVE SCREEN EXISTED (Second's review, 10-03) is redacted as it comes back and the file is
 		// rewritten below: fail-closed per field, never shown, never logged, never kept
-		if (FWonderlandCardStore::HoldsSecret(Task.Objective))
+		bool bObjectiveRescreened = false;
+		const FString RescreenedObjective = ScreenRestoredObjective(Task, bObjectiveRescreened);
+		if (bObjectiveRescreened)
 		{
-			Task.Objective = FWonderlandCardStore::MaskForDisplay(Task.Objective);
+			Task.Objective = RescreenedObjective;
 			++Redacted;
 		}
 		// A NEW HANDLE FOR A NEW SESSION. The local id means nothing outside the machine it was minted on, and
@@ -537,6 +539,9 @@ namespace
 		return FWonderlandCardStore::RedactSecrets(Clean, Finds, bKeepAsTyped);
 	}
 
+	/** The lifecycle line /keep leaves: the objective is the player's own word, and a restart's restore must not take it back. */
+	const TCHAR* const WonderlandKeptMark = TEXT("KEPT AS TYPED (/keep)");
+
 	/** True when nothing but redaction markers and spaces is left: a contract must stand for a task. */
 	bool WonderlandOnlyRedacted(const FString& Kept)
 	{
@@ -611,10 +616,26 @@ bool UWonderlandMissionTaskSubsystem::KeepObjectiveAsTyped(FGuid LocalId, const 
 		return false;
 	}
 	Task->Objective = Kept;
+	// MARKED AS THE PLAYER'S OWN WORD, so a restart's restore does not take back what /keep gave (ScreenRestoredObjective)
+	Task->Lifecycle.Add(FString::Printf(TEXT("%s %s"), *FDateTime::UtcNow().ToIso8601(), WonderlandKeptMark));
 	UE_LOG(LogTemp, Display, TEXT("WLTASK /keep: the objective stored as typed (%d certain part(s) still removed)"), OutRedactedCertain);
 	SaveContracts();
 	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
+}
+
+FString UWonderlandMissionTaskSubsystem::ScreenRestoredObjective(const FWonderlandMissionTask& Task, bool& bOutChanged)
+{
+	// A WORD THE PLAYER KEPT WITH /keep IS THEIRS (CORE's read, round 5: the restore screened every objective in full, so the next restart
+	// undid every /keep). A kept task is re-screened for the CERTAIN class only: a key's certain shapes never survive, a kept word does.
+	// Any other objective gets the whole screen, fail-closed: a key kept before the screen existed. Either way it is idempotent -- the
+	// redaction's marker is never a find -- so a restored objective is not re-redacted on every load (Second's R8a).
+	const bool bPlayerKept = Task.Lifecycle.ContainsByPredicate([](const FString& Entry) { return Entry.Contains(WonderlandKeptMark); });
+	int32 Certain = 0;
+	int32 Statistical = 0;
+	const FString Screened = WonderlandScreenObjective(Task.Objective, bPlayerKept, Certain, Statistical);
+	bOutChanged = Certain + Statistical > 0;
+	return bOutChanged ? Screened : Task.Objective;
 }
 
 bool UWonderlandMissionTaskSubsystem::DismissDraft(FGuid LocalId)

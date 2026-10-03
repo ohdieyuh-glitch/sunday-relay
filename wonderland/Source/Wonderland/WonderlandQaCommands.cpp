@@ -12581,6 +12581,72 @@ namespace
 			SlotNote() + FString::Printf(TEXT("%d of %d typed patterns (Zzzz, abab, xxxx, 1111, lolol runs of 20+) stored exactly as typed%s"), PatternsKept, PatternCount,
 				PatternsAltered.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; ALTERED: %s"), *PatternsAltered)));
 
+		// SI12: THE SCREEN IS IDEMPOTENT, AND A RESTART KEEPS WHAT /keep GAVE (Second's R8a: the restore re-redacted "client secret: [marker]"
+		// on every load; CORE's read of the same code: it also took back every /keep). Every line this QA typed, screened twice, is what it
+		// was screened once; the restore's own rule (ScreenRestoredObjective) leaves a /keep'd word and a stored marker alone and still
+		// redacts a key nobody kept
+		TArray<FString> EveryLine = { Ordinary, FString::Printf(TEXT("deploy with %s please"), *KeyOne), FString::Printf(TEXT("deploy with %s please"), *KeyTwo),
+			FString(TEXT("Authorization: Bearer ")) + Token, Bang };
+		for (const FSecretShape& Shape : Shapes)
+		{
+			EveryLine.Add(FString::Printf(TEXT("use %s for the deploy"), *Shape.Value));
+		}
+		for (const TCHAR* Objective : RealObjectives)
+		{
+			EveryLine.Add(Objective);
+		}
+		for (const FString& Typed : Labelled)
+		{
+			EveryLine.Add(Typed);
+		}
+		for (const TCHAR* Pattern : Patterns)
+		{
+			EveryLine.Add(Pattern);
+		}
+		int32 NotIdempotent = 0;
+		FString FirstNotIdempotent;
+		for (const FString& Line : EveryLine)
+		{
+			const FString Once = FWonderlandCardStore::MaskForDisplay(Line);
+			const FString Twice = FWonderlandCardStore::MaskForDisplay(Once);
+			if (!Once.Equals(Twice, ESearchCase::CaseSensitive))
+			{
+				++NotIdempotent;
+				if (FirstNotIdempotent.IsEmpty())
+				{
+					FirstNotIdempotent = FString::Printf(TEXT("'%s' -> '%s'"), *Once, *Twice);
+				}
+			}
+		}
+		CaseMissedAt = SlotsMissed;
+		const FString KeepWord = TEXT("clean up K8sClusterRBACv2Config before the release");
+		const FSubmitted KeepDone = Submit(KeepWord);
+		int32 KeepRemoved = 0;
+		const bool bKeepRan = KeepDone.bAccepted && Set->KeepObjectiveAsTyped(KeepDone.Id, KeepWord, KeepRemoved);
+		const FWonderlandMissionTask* KeptTask = Set->Find(KeepDone.Id);
+		bool bKeptRescreened = true;
+		const FString KeptRestored = KeptTask != nullptr ? UWonderlandMissionTaskSubsystem::ScreenRestoredObjective(*KeptTask, bKeptRescreened) : FString();
+		const bool bKeepSurvives = bKeepRan && KeptTask != nullptr && !bKeptRescreened && KeptRestored.Equals(KeepWord, ESearchCase::CaseSensitive);
+		const FSubmitted MarkerDone = Submit(FString::Printf(TEXT("deploy with %s please"), *KeyOne));
+		const FWonderlandMissionTask* MarkerTask = Set->Find(MarkerDone.Id);
+		bool bMarkerRescreened = true;
+		const FString MarkerRestored = MarkerTask != nullptr ? UWonderlandMissionTaskSubsystem::ScreenRestoredObjective(*MarkerTask, bMarkerRescreened) : FString();
+		const bool bMarkerStable = MarkerTask != nullptr && !bMarkerRescreened && MarkerRestored.Equals(MarkerTask->Objective, ESearchCase::CaseSensitive);
+		// a key from before the screen, never kept: built in memory, as a legacy file would bring it back
+		FWonderlandMissionTask Legacy;
+		const FString LegacyToken = Random(Base62, 30) + TEXT("q7");
+		Legacy.Objective = FString::Printf(TEXT("use %s for the deploy"), *LegacyToken);
+		bool bLegacyRescreened = false;
+		const FString LegacyRestored = UWonderlandMissionTaskSubsystem::ScreenRestoredObjective(Legacy, bLegacyRescreened);
+		const bool bLegacyRedacted = bLegacyRescreened && !Holds(LegacyRestored, LegacyToken);
+		S.Check(TEXT("SI12"), SlotsMissed == CaseMissedAt && NotIdempotent == 0 && bKeepSurvives && bMarkerStable && bLegacyRedacted,
+			SlotNote() + FString::Printf(TEXT("%d of %d typed lines screened twice equal screened once%s; the restore's rule: a /keep'd word %s, a stored marker %s, a key nobody kept %s"),
+				EveryLine.Num() - NotIdempotent, EveryLine.Num(), FirstNotIdempotent.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (first that changed: %s)"), *FirstNotIdempotent),
+				bKeepSurvives ? TEXT("survives a restart's screen") : *FString::Printf(TEXT("is TAKEN BACK ('%s')"), *KeptRestored),
+				bMarkerStable ? TEXT("is left alone") : *FString::Printf(TEXT("is RE-REDACTED ('%s')"), *MarkerRestored),
+				bLegacyRedacted ? TEXT("is redacted") : TEXT("SURVIVES")));
+		FreeSlots();
+
 		FreeSlots();
 		return Stop(nullptr);
 	}

@@ -382,6 +382,13 @@ public:
 	/** /keep: a contract's objective stored again as typed -- its CERTAIN finds still removed. False when it is not a contract. */
 	bool KeepObjectiveAsTyped(FGuid LocalId, const FString& Typed, int32& OutRedactedCertain);
 
+	/**
+	 * THE RESTORE'S SCREEN, one rule for the load path and the QA (plain C++, not reflected). A task the player /keep'd is re-screened for
+	 * the CERTAIN class only, and any other in full, fail-closed. The redaction marker is never a find, so screening is idempotent.
+	 * bOutChanged: something was redacted.
+	 */
+	static FString ScreenRestoredObjective(const FWonderlandMissionTask& Task, bool& bOutChanged);
+
 	/** Throw away an unused slot. Refuses once it is a contract: a real mission is not dismissed by tidying. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
 	bool DismissDraft(FGuid LocalId);
