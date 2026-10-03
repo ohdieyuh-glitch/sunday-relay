@@ -57,4 +57,8 @@ namespace WonderlandCardDirector
 
 	/** The Live Terminal's /card: status, list, select, new, rename, save, delete, attach, detach, companion. */
 	WONDERLAND_API bool HandleTerminalLine(UWorld* World, const FString& Line, TArray<FString>& OutRows);
+
+	/** The typed line as the terminal may SHOW it back: every word the C.A.R.D. secret refusal flags (a provider key, a token)
+	 *  replaced -- a key typed into "/card attach api <key>" is refused by the store AND never shown (Second's review, 10-03). */
+	WONDERLAND_API FString MaskForEcho(const FString& Line);
 }

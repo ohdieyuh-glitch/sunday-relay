@@ -4426,7 +4426,7 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		// routes the line and answers it.
 		TArray<FString> Rows;
 		WonderlandCardDirector::HandleTerminalLine(GetWorld(), Line, Rows);
-		Terminal->AddJuliusRow(TEXT("You"), Line, FString::Join(Rows, TEXT("\n")));
+		Terminal->AddJuliusRow(TEXT("You"), WonderlandCardDirector::MaskForEcho(Line), FString::Join(Rows, TEXT("\n")));
 		return true;
 	}
 

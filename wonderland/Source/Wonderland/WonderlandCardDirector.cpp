@@ -44,6 +44,34 @@ namespace
 	}
 
 	/** The card a person named: by id, else by name ignoring case. */
+	/**
+	 * THE PLAYER'S CHANGE, ON DISK (Second's review, 10-03, by real input: a card the player made, dressed, saved and switched
+	 * never reached Cards.sav -- the director changed the store in memory only, and M0's P1 passed because that QA called Save()
+	 * itself). Every successful change ends here: the whole store written, sealed and atomically (FWonderlandCardStore::Save logs
+	 * "WLCARD saved"). Empty when written; otherwise the sentence saying it was NOT -- a change is never reported as saved alone.
+	 */
+	FString CardWriteToDisk(const FWonderlandCardStore& Store)
+	{
+		if (Store.Save())
+		{
+			return FString();
+		}
+		return Store.IsReadOnly()
+			? FString(TEXT("NOT saved to disk: the C.A.R.D. file was refused when the game started, so it is kept read-only this session"))
+			: FString(TEXT("NOT saved to disk: the write failed, so this change lasts only until the game closes"));
+	}
+
+	/** Writes the store and, when that fails, says so at the end of what the caller says. */
+	void CardSayWrite(const FWonderlandCardStore& Store, FString& InOutSaid)
+	{
+		const FString Disk = CardWriteToDisk(Store);
+		if (!Disk.IsEmpty())
+		{
+			InOutSaid += FString::Printf(TEXT(" -- %s"), *Disk);
+			UE_LOG(LogTemp, Warning, TEXT("WLCARD %s"), *InOutSaid);
+		}
+	}
+
 	const FWonderlandCard* FindNamedCard(const FWonderlandCardStore& Store, const FString& IdOrName)
 	{
 		const FString Wanted = IdOrName.TrimStartAndEnd();
@@ -236,6 +264,13 @@ namespace WonderlandCardDirector
 		const FWonderlandCard Card = Store.GetActive();
 		TArray<FString> Said;
 		Said.Add(FString::Printf(TEXT("C.A.R.D. %s selected"), *Card.Name));
+		{
+			const FString Disk = CardWriteToDisk(Store);
+			if (!Disk.IsEmpty())
+			{
+				Said.Add(Disk);
+			}
+		}
 
 		// THE SKIN, through the one door the wardrobe uses (the stage and the Dog follow the registry)
 		if (UWonderlandRelaySkinSubsystem* Skins = CardSkins(World))
@@ -345,6 +380,7 @@ namespace WonderlandCardDirector
 		}
 		OutSaid = FString::Printf(TEXT("saved to C.A.R.D. %s: skin %s, primary %s%s"), *Card.Name, *Card.Skin, *Card.Primary.Key,
 			bTyped ? TEXT(" (the primary on the Dog is a typed colour, which a C.A.R.D. cannot hold: palette keys only)") : TEXT(""));
+		CardSayWrite(Store, OutSaid);
 		UE_LOG(LogTemp, Display, TEXT("WLCARD %s"), *OutSaid);
 		return true;
 	}
@@ -368,9 +404,16 @@ namespace WonderlandCardDirector
 			return false;
 		}
 		FString Why;
-		OutId = Sidekicks->GetCardStore().Create(Name, Why);
-		OutSaid = OutId.IsEmpty() ? FString::Printf(TEXT("no new C.A.R.D.: %s"), *Why) : FString::Printf(TEXT("C.A.R.D. %s made"), *Name);
-		return !OutId.IsEmpty();
+		FWonderlandCardStore& Store = Sidekicks->GetCardStore();
+		OutId = Store.Create(Name, Why);
+		if (OutId.IsEmpty())
+		{
+			OutSaid = FString::Printf(TEXT("no new C.A.R.D.: %s"), *Why);
+			return false;
+		}
+		OutSaid = FString::Printf(TEXT("C.A.R.D. %s made"), *Name);
+		CardSayWrite(Store, OutSaid);
+		return true;
 	}
 
 	bool Delete(UWorld* World, const FString& IdOrName, FString& OutSaid)
@@ -397,6 +440,7 @@ namespace WonderlandCardDirector
 			return false;
 		}
 		OutSaid = FString::Printf(TEXT("%s deleted; the active C.A.R.D. is %s"), *Name, *Store.GetActive().Name);
+		CardSayWrite(Store, OutSaid);
 		return true;
 	}
 
@@ -424,6 +468,7 @@ namespace WonderlandCardDirector
 		const WonderlandCardCapabilities::FReading Reading = WonderlandCardCapabilities::Read(World != nullptr ? World->GetGameInstance() : nullptr);
 		OutSaid = FString::Printf(TEXT("attached to %s: %s"), *Card.Name,
 			*WonderlandCardCapabilities::Describe(WonderlandCardCapabilities::ResolveCapability(Card.Capabilities.Last(), Reading)));
+		CardSayWrite(Store, OutSaid);
 		return true;
 	}
 
@@ -451,6 +496,7 @@ namespace WonderlandCardDirector
 			return false;
 		}
 		OutSaid = FString::Printf(TEXT("%s detached from %s"), *Gone, *Card.Name);
+		CardSayWrite(Store, OutSaid);
 		return true;
 	}
 
@@ -477,8 +523,25 @@ namespace WonderlandCardDirector
 		}
 		const FWonderlandCard Saved = Store.GetActive();
 		OutSaid = FString::Printf(TEXT("%s: slot %d is %s; %s"), *Saved.Name, Slot, *Ref.ProviderId, *CardApplyOrWait(World, Saved));
+		CardSayWrite(Store, OutSaid);
 		UE_LOG(LogTemp, Display, TEXT("WLCARD %s"), *OutSaid);
 		return true;
+	}
+
+	FString MaskForEcho(const FString& Line)
+	{
+		TArray<FString> Words;
+		Line.ParseIntoArray(Words, TEXT(" "), true);
+		bool bMasked = false;
+		for (FString& Word : Words)
+		{
+			if (FWonderlandCardStore::LooksLikeSecret(Word))
+			{
+				Word = TEXT("[a key: never shown or stored]");
+				bMasked = true;
+			}
+		}
+		return bMasked ? FString::Join(Words, TEXT(" ")) : Line;
 	}
 
 	bool HandleTerminalLine(UWorld* World, const FString& Line, TArray<FString>& OutRows)
@@ -547,8 +610,16 @@ namespace WonderlandCardDirector
 		else if (Verb.Equals(TEXT("rename"), ESearchCase::IgnoreCase))
 		{
 			const FString Id = Store.GetActiveId();
-			OutRows.Add(Store.Rename(Id, Arg, Why) ? FString::Printf(TEXT("this C.A.R.D. is now called %s"), *Store.GetActive().Name)
-				: FString::Printf(TEXT("not renamed: %s"), *Why));
+			if (Store.Rename(Id, Arg, Why))
+			{
+				FString Renamed = FString::Printf(TEXT("this C.A.R.D. is now called %s"), *Store.GetActive().Name);
+				CardSayWrite(Store, Renamed);
+				OutRows.Add(Renamed);
+			}
+			else
+			{
+				OutRows.Add(FString::Printf(TEXT("not renamed: %s"), *Why));
+			}
 		}
 		else if (Verb.Equals(TEXT("save"), ESearchCase::IgnoreCase))
 		{

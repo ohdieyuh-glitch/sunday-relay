@@ -9915,6 +9915,226 @@ namespace
 			GQaSwordClip->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaSwordClipTick), 0.0f);
 		}));
 
+	/* ================================================================ wl.Qa.CardDisk: what the PLAYER does to a C.A.R.D. reaches the disk
+	 * Second's review (10-03, by real input): a card created, dressed, saved and switched in the game never reached Cards.sav -- the
+	 * director changed the store in memory only, and M0's P1 passed because that QA called Save() itself. This QA drives the director
+	 * exactly as the terminal does (HandleTerminalLine) and NEVER calls Save(): after each step it reads the C.A.R.D.s AS THE FILE
+	 * HOLDS THEM (a fresh store loaded from the live store's own path).
+	 *   CD0 the live store is the profile's Cards.sav, writable    CD1 /card new           CD2 /card select
+	 *   CD3 /card attach x2 + /card detach 2                       CD4 /card rename        CD5 /card save (a skin worn first)
+	 *   CD6 /card new + /card delete                               CD8 a key typed into /card attach: refused, absent from the
+	 *                                                                  file's text, and masked in what the terminal shows
+	 * `restart` (the same profile, booted again): CD7 the game's own store, loaded at boot, holds the renamed card ACTIVE with its
+	 * skill and its saved skin, and not the deleted card. `quit` exits after. WLCDQA lines.
+	 */
+	struct FQaCardDisk
+	{
+		TWeakObjectPtr<UWorld> World;
+		bool bQuit = false;
+		bool bRestart = false;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		int32 Phase = 0;
+		double PhaseAt = 0.0;
+		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLCDQA %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+	};
+	TSharedPtr<FQaCardDisk> GQaCardDisk;
+
+	/** The C.A.R.D.s as the FILE holds them: a fresh store loaded from the live store's own path -- never the live memory. */
+	bool QaCardsOnDisk(const FWonderlandCardStore& Live, TArray<FWonderlandCard>& OutCards, FString& OutActiveId, FString& OutNote)
+	{
+		OutCards.Reset();
+		OutActiveId.Reset();
+		if (!FPaths::FileExists(Live.GetPath()))
+		{
+			OutNote = TEXT("no Cards.sav on disk");
+			return false;
+		}
+		FWonderlandCardStore Disk(Live.GetPath());
+		Disk.Load();
+		OutCards = Disk.GetCards();
+		OutActiveId = Disk.GetActiveId();
+		OutNote = Disk.GetLoadNote();
+		return OutNote.IsEmpty();
+	}
+
+	const FWonderlandCard* QaCardNamed(const TArray<FWonderlandCard>& Cards, const FString& Name)
+	{
+		return Cards.FindByPredicate([&Name](const FWonderlandCard& Card) { return Card.Name.Equals(Name, ESearchCase::CaseSensitive); });
+	}
+
+	/** One line typed into the terminal, answered as the terminal answers it; logged masked, as the terminal shows it. */
+	FString QaCardType(UWorld* World, const FString& Line)
+	{
+		TArray<FString> Rows;
+		WonderlandCardDirector::HandleTerminalLine(World, Line, Rows);
+		const FString Answer = FString::Join(Rows, TEXT(" / "));
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLCDQA typed: %s -> %s"), *WonderlandCardDirector::MaskForEcho(Line), *WonderlandCardDirector::MaskForEcho(Answer));
+		return Answer;
+	}
+
+	bool QaCardDiskTick(float)
+	{
+		if (!GQaCardDisk.IsValid())
+		{
+			return false;
+		}
+		FQaCardDisk& S = *GQaCardDisk;
+		UWorld* World = S.World.Get();
+		UWonderlandSidekickSubsystem* Sidekicks = QaSidekicks(World);
+		ARelayDogCharacter* Dog = QaDog(World);
+		auto Stop = [&S](const TCHAR* Why)
+		{
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLCDQA END pass=%d fail=%d%s"), S.Pass, S.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
+			const bool bQuit = S.bQuit;
+			GQaCardDisk.Reset();
+			if (bQuit)
+			{
+				FPlatformMisc::RequestExit(false);
+			}
+			return false;
+		};
+		if (World == nullptr || Sidekicks == nullptr)
+		{
+			return Stop(TEXT("the world or the sidekick subsystem went away"));
+		}
+		const double Now = QaNow();
+		const double In = Now - S.PhaseAt;
+		const FWonderlandCardStore& Live = Sidekicks->GetCardStore();
+		TArray<FWonderlandCard> Cards;
+		FString ActiveId;
+		FString Note;
+		if (S.Phase == 0)
+		{
+			if (UWonderlandUiSubsystem* Ui = QaUi(World))
+			{
+				if (Ui->IsWelcomeOpen())
+				{
+					Ui->DismissWelcome();
+				}
+			}
+			if (In < 4.0 || Dog == nullptr || !Dog->GetCharacterMovement()->IsMovingOnGround())
+			{
+				return In < 40.0 ? true : Stop(TEXT("never ready"));
+			}
+			if (S.bRestart)
+			{
+				// CD7: the game loaded its store from the file at boot; nothing in this boot has written it
+				const FWonderlandCard* Kept = QaCardNamed(Live.GetCards(), TEXT("QaDiskRenamed"));
+				const bool bActive = Kept != nullptr && Live.GetActiveId() == Kept->Id;
+				const bool bSkill = Kept != nullptr && Kept->Capabilities.Num() == 1 && Kept->Capabilities[0].Id == TEXT("qa_disk_skill");
+				const bool bSkin = Kept != nullptr && Kept->Skin.Equals(TEXT("jack_flame"), ESearchCase::IgnoreCase);
+				const bool bGone = QaCardNamed(Live.GetCards(), TEXT("QaDiskGone")) == nullptr;
+				S.Check(TEXT("CD7"), bActive && bSkill && bSkin && bGone && Live.GetLoadNote().IsEmpty(),
+					FString::Printf(TEXT("after a restart the game's own store (%s, load note '%s') holds %d C.A.R.D.(s): QaDiskRenamed %s, active %s, its skill %s, its skin %s; QaDiskGone %s"),
+						*Live.GetPath(), *Live.GetLoadNote(), Live.GetCards().Num(), Kept != nullptr ? TEXT("present") : TEXT("MISSING"),
+						bActive ? TEXT("yes") : TEXT("NO"), bSkill ? TEXT("kept") : TEXT("LOST"), Kept != nullptr ? *Kept->Skin : TEXT("-"),
+						bGone ? TEXT("still deleted") : TEXT("BACK")));
+				return Stop(nullptr);
+			}
+			S.Check(TEXT("CD0"), Live.GetPath() == FWonderlandCardStore::DefaultPath() && !Live.IsReadOnly(),
+				FString::Printf(TEXT("the live store is %s (the profile's own: %s), writable %s; this QA never calls Save()"), *Live.GetPath(),
+					Live.GetPath() == FWonderlandCardStore::DefaultPath() ? TEXT("yes") : TEXT("NO"), Live.IsReadOnly() ? TEXT("NO") : TEXT("yes")));
+
+			QaCardType(World, TEXT("/card new QaDisk"));
+			QaCardsOnDisk(Live, Cards, ActiveId, Note);
+			const FWonderlandCard* Made = QaCardNamed(Cards, TEXT("QaDisk"));
+			S.Check(TEXT("CD1"), Made != nullptr && Note.IsEmpty(), FString::Printf(TEXT("/card new QaDisk: the file holds %d C.A.R.D.(s), QaDisk %s (load note '%s')"),
+				Cards.Num(), Made != nullptr ? TEXT("among them") : TEXT("ABSENT"), *Note));
+			const FString MadeId = Made != nullptr ? Made->Id : FString();
+
+			QaCardType(World, TEXT("/card select QaDisk"));
+			QaCardsOnDisk(Live, Cards, ActiveId, Note);
+			S.Check(TEXT("CD2"), !MadeId.IsEmpty() && ActiveId == MadeId, FString::Printf(TEXT("/card select QaDisk: the file's active C.A.R.D. is '%s' (want QaDisk's '%s')"), *ActiveId, *MadeId));
+
+			QaCardType(World, TEXT("/card attach skill qa_disk_skill QaDiskSkill"));
+			QaCardType(World, TEXT("/card attach skill qa_disk_two Two"));
+			QaCardType(World, TEXT("/card detach 2"));
+			QaCardsOnDisk(Live, Cards, ActiveId, Note);
+			const FWonderlandCard* Dressed = QaCardNamed(Cards, TEXT("QaDisk"));
+			const bool bOneSkill = Dressed != nullptr && Dressed->Capabilities.Num() == 1 && Dressed->Capabilities[0].Id == TEXT("qa_disk_skill");
+			S.Check(TEXT("CD3"), bOneSkill, FString::Printf(TEXT("two attaches and /card detach 2: the file's QaDisk holds %d reference(s)%s"),
+				Dressed != nullptr ? Dressed->Capabilities.Num() : -1, bOneSkill ? TEXT(", qa_disk_skill") : TEXT(" (want exactly qa_disk_skill)")));
+
+			QaCardType(World, TEXT("/card rename QaDiskRenamed"));
+			QaCardsOnDisk(Live, Cards, ActiveId, Note);
+			const FWonderlandCard* Renamed = QaCardNamed(Cards, TEXT("QaDiskRenamed"));
+			S.Check(TEXT("CD4"), Renamed != nullptr && Renamed->Id == MadeId && QaCardNamed(Cards, TEXT("QaDisk")) == nullptr,
+				FString::Printf(TEXT("/card rename QaDiskRenamed: the file's card '%s' is %s"), *MadeId, Renamed != nullptr ? TEXT("renamed") : TEXT("NOT renamed")));
+
+			GEngine->Exec(World, TEXT("wl.Skins.Wear jack_flame"));
+			S.Phase = 1;
+			S.PhaseAt = Now;
+			return true;
+		}
+		if (S.Phase == 1)
+		{
+			if (In < 3.0)
+			{
+				return true;
+			}
+			QaCardType(World, TEXT("/card save"));
+			QaCardsOnDisk(Live, Cards, ActiveId, Note);
+			const FWonderlandCard* Saved = QaCardNamed(Cards, TEXT("QaDiskRenamed"));
+			S.Check(TEXT("CD5"), Saved != nullptr && Saved->Skin.Equals(TEXT("jack_flame"), ESearchCase::IgnoreCase),
+				FString::Printf(TEXT("jack_flame worn, /card save: the file's QaDiskRenamed wears '%s'"), Saved != nullptr ? *Saved->Skin : TEXT("(no card)")));
+
+			QaCardType(World, TEXT("/card new QaDiskGone"));
+			QaCardType(World, TEXT("/card delete QaDiskGone"));
+			QaCardsOnDisk(Live, Cards, ActiveId, Note);
+			const FWonderlandCard* Still = QaCardNamed(Cards, TEXT("QaDiskRenamed"));
+			S.Check(TEXT("CD6"), QaCardNamed(Cards, TEXT("QaDiskGone")) == nullptr && Still != nullptr && ActiveId == Still->Id,
+				FString::Printf(TEXT("/card new + /card delete QaDiskGone: the file %s it, and QaDiskRenamed is %s"),
+					QaCardNamed(Cards, TEXT("QaDiskGone")) == nullptr ? TEXT("no longer holds") : TEXT("STILL holds"),
+					Still != nullptr && ActiveId == Still->Id ? TEXT("still active") : TEXT("NOT active")));
+
+			// CD8: a key typed where a reference belongs -- built at run time, so no key shape is in the binary
+			const FString Key = FString(TEXT("s")) + TEXT("k-") + FGuid::NewGuid().ToString(EGuidFormats::Digits);
+			const FString Typed = FString(TEXT("/card attach api ")) + Key;
+			const FString Answer = QaCardType(World, Typed);
+			const FString Shown = WonderlandCardDirector::MaskForEcho(Typed);
+			FString FileText;
+			FFileHelper::LoadFileToString(FileText, *Live.GetPath());
+			const FString Front = Key.Left(16);
+			const FString Back = Key.Right(16);
+			auto Holds = [&Front, &Back, &Key](const FString& Text) { return Text.Contains(Key) || Text.Contains(Front) || Text.Contains(Back); };
+			QaCardsOnDisk(Live, Cards, ActiveId, Note);
+			const FWonderlandCard* After = QaCardNamed(Cards, TEXT("QaDiskRenamed"));
+			const bool bRefused = After != nullptr && After->Capabilities.Num() == 1;
+			S.Check(TEXT("CD8"), FWonderlandCardStore::LooksLikeSecret(Key) && bRefused && !FileText.IsEmpty() && !Holds(FileText) && !Holds(Shown) && !Holds(Answer),
+				FString::Printf(TEXT("a run-time key typed into /card attach api: the store's refusal flags it %s; the card %s; the file's text %s; the terminal shows '%s'; the answer %s"),
+					FWonderlandCardStore::LooksLikeSecret(Key) ? TEXT("yes") : TEXT("NO"), bRefused ? TEXT("still holds only its skill") : TEXT("TOOK IT"),
+					FileText.IsEmpty() ? TEXT("could not be read") : (Holds(FileText) ? TEXT("HOLDS a part of it") : TEXT("holds no part of it")),
+					*Shown, Holds(Answer) ? TEXT("REPEATS a part of it") : TEXT("repeats no part of it")));
+			return Stop(nullptr);
+		}
+		return Stop(TEXT("an unknown phase"));
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaCardDiskCommand(
+		TEXT("wl.Qa.CardDisk"),
+		TEXT("What the player does to a C.A.R.D. reaches the disk (Second's review): the director driven as the terminal drives it, never ")
+		TEXT("Save() by the QA, every step read back from Cards.sav (CD0-CD6, CD8 a typed key refused, off the file and masked on screen); ")
+		TEXT("`restart`: CD7 the game's own store after a reboot on the same profile. `quit` exits after. WLCDQA lines."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaCardDisk.IsValid() || World == nullptr)
+			{
+				return;
+			}
+			GQaCardDisk = MakeShared<FQaCardDisk>();
+			GQaCardDisk->World = World;
+			GQaCardDisk->bQuit = Args.Contains(TEXT("quit"));
+			GQaCardDisk->bRestart = Args.Contains(TEXT("restart"));
+			GQaCardDisk->PhaseAt = QaNow();
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLCDQA BEGIN (%s) | %s"), GQaCardDisk->bRestart ? TEXT("restart") : TEXT("write"), *WonderlandBeta::BuildLabel());
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaCardDiskTick), 0.0f);
+		}));
+
 	/* ================================================================ wl.Qa.ActHands: the hands never through a mission prop
 	 * Second's review (10-03): the always-on hands would go through the book, the brush, the lens and the scraper of the acts the
 	 * founder accepted as they are (43/43, 09-30). The hands now step aside while a prop shows. Measured on Relay OG and on
