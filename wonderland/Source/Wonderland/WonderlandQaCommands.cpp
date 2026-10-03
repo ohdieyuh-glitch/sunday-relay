@@ -5411,6 +5411,20 @@ namespace
 				FString::Printf(TEXT("ready provider, AUTH_REQUIRED in the slot -> %s"), *CardCaps::Describe(R)));
 		}
 		{
+			// CR8b (Second's read of M7a): the SLOT is locked -- its companion is AUTH_REQUIRED on ANOTHER provider -- so a real provider
+			// that reports ready but is not in the slot yet must not read READY; a fixture in the same slot still does (simulated)
+			CardCaps::FReading SlotLocked = QaCrOnline();
+			SlotLocked.Sidekicks[0].ProviderId = TEXT("qa-other");
+			SlotLocked.Sidekicks[0].State = TEXT("AUTH_REQUIRED");
+			SlotLocked.Sidekicks[0].Note = TEXT("QA: live use is not allowed yet");
+			const FWonderlandCardRefStatus Real = CardCaps::ResolveCompanion(QaCrCompanion(0, Ck::Llm, TEXT("qa-llm")), SlotLocked);
+			const FWonderlandCardRefStatus Fixture = CardCaps::ResolveCompanion(QaCrCompanion(0, Ck::Llm, TEXT("dev-companion")), SlotLocked);
+			Q.Check(TEXT("CR8b"), Real.Status == St::Unconfigured && Real.Reason.Contains(TEXT("waiting for authorisation")) && Fixture.Status == St::Ready
+				&& Fixture.bSimulated,
+				FString::Printf(TEXT("the slot locked on another provider: a ready real provider -> %s; a fixture -> %s"), *CardCaps::Describe(Real),
+					*CardCaps::Describe(Fixture)));
+		}
+		{
 			const FWonderlandCardRefStatus InSlot = CardCaps::ResolveCompanion(QaCrCompanion(1, Ck::Agent, TEXT("dev-single-agent")), On);
 			const FWonderlandCardRefStatus NotInSlot = CardCaps::ResolveCompanion(QaCrCompanion(0, Ck::Llm, TEXT("dev-companion")), On);
 			Q.Check(TEXT("CR9"), InSlot.Status == St::Ready && InSlot.bSimulated && NotInSlot.Status == St::Ready && NotInSlot.bSimulated

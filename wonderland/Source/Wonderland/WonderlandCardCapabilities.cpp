@@ -208,6 +208,15 @@ namespace WonderlandCardCapabilities
 			return MakeRefStatus(S::Unavailable, FString::Printf(TEXT("the runtime reports '%s' for %s"), *ShownReason(State, TEXT("nothing")), CardSlotName(Ref.Slot)), bFixture);
 		}
 
+		// THE SLOT ITSELF WAITS FOR AUTHORISATION (Second's read of M7a): its companion, on whatever provider, is AUTH_REQUIRED -- how
+		// the founder's live-use lock shows. A real provider not yet in that slot is never READY then, whatever it reports about
+		// itself: connecting it may meet the same lock. A fixture is exempt (it is simulated and needs no authorisation).
+		if (!bFixture && Live != nullptr && Live->State == TEXT("AUTH_REQUIRED"))
+		{
+			return MakeRefStatus(S::Unconfigured, FString::Printf(TEXT("%s reports itself %s on this machine, but %s is waiting for authorisation (%s); it may need the same"),
+				*Name, Provider->bReady ? TEXT("ready") : TEXT("not ready"), CardSlotName(Ref.Slot), *ShownReason(Live->Note, TEXT("AUTH_REQUIRED"))));
+		}
+
 		// NOT IN THE SLOT YET: what the provider says about itself on this machine (the tool, the account, permission to spend)
 		if (Provider->bReady)
 		{
