@@ -175,6 +175,7 @@ namespace
 	// defined with the Mission Handoff QA below; the perf run's handoff phases and the C.A.R.D. QA use them too
 	ULocalPlayer* QaLocalPlayer(UWorld* World);
 	FWonderlandMissionHandoff* QaHandoff(UWorld* World);
+	float QaClearViewHeading(UWorld* World, ARelayDogCharacter* Dog, APlayerController* PC);
 	UWonderlandMissionSubsystem* QaMissions(UWorld* World);
 	AActor* QaCompanionBody(UWorld* World, int32 Index);
 
@@ -7736,6 +7737,12 @@ namespace
 			if (In < 4.0f || !Dog->GetCharacterMovement()->IsMovingOnGround() || State->IsEquipped())
 			{
 				return In < 40.0f ? true : Stop(TEXT("the Dog never stood ready with the swords put away"));
+			}
+			// THE CLEAR VIEW (Second's review, 10-03: a birdbath hid the rear shots): face a heading where the front, the back and the
+			// side all see the Dog unobstructed -- every shot is placed from the Dog's own forward, and it stands still until phase 20
+			if (APlayerController* ViewPC = World->GetFirstPlayerController())
+			{
+				QaClearViewHeading(World, Dog, ViewPC);
 			}
 			Next(1);
 			return true;
