@@ -58,6 +58,8 @@
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "WonderlandSkinStage.h"
+#include "WonderlandCard.h"
+#include "WonderlandMissionHandoff.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandQa, Log, All);
 
@@ -3697,6 +3699,527 @@ namespace
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			ArmQaPerf(World, true, Args.Num() > 0 ? FCString::Atod(*Args[0]) : 30.0);
+		}));
+
+	/* ================================================================ wl.Qa.Card: C.A.R.D. + Mission Handoff, M0 (the model)
+	 * Runs on a SCRATCH store (Saved/Wonderland/QaCards), never the player's Cards.sav, except the persist phases, which
+	 * prove the real store across a restart (founder: "persistence across restart"). Every line: WLCARDQA <id> PASS|FAIL.
+	 */
+	struct FCardQa
+	{
+		int32 Pass = 0;
+		int32 Fail = 0;
+		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLCARDQA %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+	};
+
+	FString QaCardDir()
+	{
+		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Wonderland"), TEXT("QaCards"));
+	}
+
+	/** A sealed file holding exactly this text (the store's own seal), for the hostile and fallback cases. */
+	void QaSealed(const FString& Path, const FString& Text)
+	{
+		WonderlandBeta::SaveSealedText(Path, Text);
+	}
+
+	bool QaFileHas(const FString& Path, const TCHAR* Needle)
+	{
+		TArray<uint8> Bytes;
+		if (!FFileHelper::LoadFileToArray(Bytes, *Path))
+		{
+			return false;
+		}
+		// the whole file, seal included: its 16 binary bytes cannot spell a needle
+		return FString::ConstructFromPtrSize(reinterpret_cast<const UTF8CHAR*>(Bytes.GetData()), Bytes.Num()).Contains(Needle, ESearchCase::IgnoreCase);
+	}
+
+	int32 QaRefusedBeside(const FString& Path)
+	{
+		TArray<FString> Found;
+		IFileManager::Get().FindFiles(Found, *FPaths::Combine(FPaths::GetPath(Path), FPaths::GetBaseFilename(Path) + TEXT(".refused-*")), true, false);
+		return Found.Num();
+	}
+
+	void RunCardQa()
+	{
+		FCardQa Q;
+		IFileManager& Files = IFileManager::Get();
+		const FString Dir = QaCardDir();
+		Files.DeleteDirectory(*Dir, /*RequireExists*/ false, /*Tree*/ true);
+		Files.MakeDirectory(*Dir, /*Tree*/ true);
+		const FString P = FPaths::Combine(Dir, TEXT("Cards.sav"));
+
+		// C1: A FRESH STORE -- the built-in card, active, with the two companions on their canonical sides
+		{
+			FWonderlandCardStore S(P);
+			S.Load();
+			const FWonderlandCard& A = S.GetActive();
+			Q.Check(TEXT("C1"), S.GetCards().Num() == 1 && S.GetActiveId() == FWonderlandCardStore::BuiltInId() && A.bBuiltIn && A.Companions.Num() == 2
+				&& A.Companions[0].Slot == 0 && A.Companions[0].Kind == EWonderlandCompanionKind::Llm && A.Companions[1].Slot == 1
+				&& A.MissionHandoff == TEXT("angelic_twin_swords") && S.GetLoadNote().IsEmpty(),
+				FString::Printf(TEXT("fresh store: %d card(s), active '%s', handoff '%s', LEFT slot0 %s, RIGHT slot1 %s"), S.GetCards().Num(), *S.GetActiveId(),
+					*A.MissionHandoff, A.Companions.Num() > 0 ? *A.Companions[0].ProviderId : TEXT("-"), A.Companions.Num() > 1 ? *A.Companions[1].ProviderId : TEXT("-")));
+		}
+		// C2: CREATE, EDIT, SELECT, SAVE, RELOAD
+		FString NewId;
+		{
+			FWonderlandCardStore S(P);
+			S.Load();
+			FString Why;
+			NewId = S.Create(TEXT("Explorer"), Why);
+			bool bUpdated = false;
+			if (const FWonderlandCard* Made = S.Find(NewId))
+			{
+				FWonderlandCard C = *Made;
+				C.Skin = TEXT("shadow_flame");
+				C.Primary.Key = TEXT("WHITE");
+				C.Primary.bChosen = true;
+				FWonderlandCapabilityRef Cap;
+				Cap.Kind = EWonderlandCapabilityKind::Mcp;
+				Cap.Id = TEXT("filesystem");
+				Cap.Label = TEXT("Files");
+				C.Capabilities.Add(Cap);
+				bUpdated = S.Update(C, Why);
+			}
+			const bool bSelected = S.Select(NewId, Why);
+			const bool bSaved = S.Save();
+			FWonderlandCardStore R(P);
+			R.Load();
+			const FWonderlandCard* Back = R.Find(NewId);
+			Q.Check(TEXT("C2"), !NewId.IsEmpty() && bUpdated && bSelected && bSaved && Back != nullptr && R.GetActiveId() == NewId
+				&& Back->Skin == TEXT("shadow_flame") && Back->Primary.Key == TEXT("WHITE") && Back->Primary.bChosen && Back->Capabilities.Num() == 1
+				&& Back->Capabilities[0].Kind == EWonderlandCapabilityKind::Mcp && Back->Name == TEXT("Explorer") && R.GetLoadNote().IsEmpty(),
+				FString::Printf(TEXT("created '%s', edited, selected, saved %s; reloaded: active '%s', skin %s, primary %s/%s, %d capability, note '%s'"),
+					*NewId, bSaved ? TEXT("ok") : TEXT("FAILED"), *R.GetActiveId(), Back != nullptr ? *Back->Skin : TEXT("-"),
+					Back != nullptr ? *Back->Primary.Key : TEXT("-"), Back != nullptr && Back->Primary.bChosen ? TEXT("chosen") : TEXT("-"),
+					Back != nullptr ? Back->Capabilities.Num() : -1, *R.GetLoadNote()));
+		}
+		// C3: SWITCH back to the default; the active id persists across a reload
+		{
+			FWonderlandCardStore S(P);
+			S.Load();
+			FString Why;
+			const bool bSel = S.Select(FWonderlandCardStore::BuiltInId(), Why) && S.Save();
+			FWonderlandCardStore R(P);
+			R.Load();
+			Q.Check(TEXT("C3"), bSel && R.GetActiveId() == FWonderlandCardStore::BuiltInId() && R.Find(NewId) != nullptr,
+				FString::Printf(TEXT("switched to the default and reloaded: active '%s', '%s' still stored %s"), *R.GetActiveId(), *NewId,
+					R.Find(NewId) != nullptr ? TEXT("yes") : TEXT("NO")));
+		}
+		// C4: DELETE -- the active card falls back to the built-in; the built-in cannot be deleted; the last user card can
+		{
+			FWonderlandCardStore S(P);
+			S.Load();
+			FString Why;
+			S.Select(NewId, Why);
+			const bool bDeleted = S.Delete(NewId, Why);
+			const FString ActiveAfter = S.GetActiveId();
+			FString WhyBuiltIn;
+			const bool bBuiltInRefused = !S.Delete(FWonderlandCardStore::BuiltInId(), WhyBuiltIn);
+			Q.Check(TEXT("C4"), bDeleted && ActiveAfter == FWonderlandCardStore::BuiltInId() && bBuiltInRefused && S.GetCards().Num() == 1,
+				FString::Printf(TEXT("deleted the active '%s': %s, active now '%s'; deleting the built-in refused %s ('%s'); %d card(s) left"),
+					*NewId, bDeleted ? TEXT("yes") : TEXT("NO"), *ActiveAfter, bBuiltInRefused ? TEXT("yes") : TEXT("NO"), *WhyBuiltIn, S.GetCards().Num()));
+		}
+		// C5: SECRETS ARE REFUSED, NOT STORED -- names and labels shaped like keys, tokens, private keys, credential refs
+		{
+			FWonderlandCardStore S(P);
+			S.Load();
+			// ASSEMBLED AT RUN TIME: a literal key prefix would sit in the package, where the release scan (pii_scan.py) reads
+			// for exactly those -- and a hit there must always mean a real leak
+			const FString Sk = FString(TEXT("sk")) + TEXT("-");
+			const FString Gh = FString(TEXT("gh")) + TEXT("p_");
+			const FString Pem = FString(TEXT("-----BEGIN PRIV")) + TEXT("ATE KEY----- MIIE");
+			const FString Tail = TEXT("0123456789abcdefghijklmnopqrstuvwxyzAB");
+			const FString Hostile[] = { Sk + TEXT("proj-") + Tail, TEXT("https://api.example.com/x?token=abc123"), Pem,
+				TEXT("credentialRef: vault://julius/openai"), TEXT("Bearer eyJhbGciOi"), Gh + Tail,
+				// split by a control character, which cleaning would remove: the key must not be reassembled into the file
+				Sk + TEXT("\nproj-") + Tail, FString(TEXT("gh\tp_")) + Tail };
+			int32 Refused = 0;
+			for (const FString& Text : Hostile)
+			{
+				FString Why;
+				if (S.Create(Text, Why).IsEmpty())
+				{
+					++Refused;
+				}
+				FWonderlandCard C = S.GetActive();
+				FWonderlandCapabilityRef Cap;
+				Cap.Kind = EWonderlandCapabilityKind::Api;
+				Cap.Id = TEXT("weather");
+				Cap.Label = Text;
+				C.Capabilities.Add(Cap);
+				if (!S.Update(C, Why))
+				{
+					++Refused;
+				}
+			}
+			// an ID shaped like a key is refused too (it is safe for an FName, and still never stored)
+			FString WhyId;
+			FWonderlandCard KeyId = S.GetActive();
+			FWonderlandCapabilityRef Cap;
+			Cap.Kind = EWonderlandCapabilityKind::Mcp;
+			Cap.Id = Gh + Tail;
+			Cap.Label = TEXT("Files");
+			KeyId.Capabilities.Add(Cap);
+			const bool bIdRefused = WonderlandBeta::IsSafeId(Cap.Id) && !S.Update(KeyId, WhyId);
+			S.Save();
+			const bool bClean = !QaFileHas(P, *(Sk + TEXT("proj"))) && !QaFileHas(P, TEXT("token=")) && !QaFileHas(P, TEXT("BEGIN PRIV"))
+				&& !QaFileHas(P, TEXT("vault://")) && !QaFileHas(P, TEXT("Bearer ")) && !QaFileHas(P, *Gh) && !QaFileHas(P, *Tail);
+			const int32 Expected = 2 * static_cast<int32>(UE_ARRAY_COUNT(Hostile));
+			Q.Check(TEXT("C5"), Refused == Expected && bIdRefused && bClean,
+				FString::Printf(TEXT("secret-shaped names and labels refused %d of %d; a key-shaped capability id refused %s; the saved file ")
+					TEXT("holds none of them: %s"), Refused, Expected, bIdRefused ? TEXT("yes") : TEXT("NO"), bClean ? TEXT("yes") : TEXT("NO")));
+		}
+		// C6: NAMES ARE CLEANED -- control characters and newlines stripped; a 10 kB name capped
+		{
+			FWonderlandCardStore S(P);
+			S.Load();
+			FString Why;
+			// (never a QA token in the hostile text: this line is echoed, and a harness counting PASS lines must not see one)
+			const FString Id1 = S.Create(TEXT("Line one\nforged second line\tend"), Why);
+			const FString Id2 = S.Create(FString::ChrN(10240, TEXT('x')), Why);
+			const FWonderlandCard* C1 = S.Find(Id1);
+			const FWonderlandCard* C2 = S.Find(Id2);
+			Q.Check(TEXT("C6"), C1 != nullptr && !C1->Name.Contains(TEXT("\n")) && !C1->Name.Contains(TEXT("\t")) && C2 != nullptr
+				&& C2->Name.Len() == FWonderlandCardStore::MaxLabelChars,
+				FString::Printf(TEXT("a name with a newline and a tab stored as '%s'; a 10240-char name stored at %d chars"),
+					C1 != nullptr ? *C1->Name : TEXT("-"), C2 != nullptr ? C2->Name.Len() : -1));
+		}
+		// C7: UNKNOWN IDS FALL BACK, WITH A NOTE -- a skin id that is not an id, a handoff id that is not an id
+		{
+			// (and two companion references: one with a slot no integer can hold, refused before any conversion; one valid)
+			QaSealed(P, TEXT("{\"format\":\"wonderland.cards.v1\",\"active\":\"x1\",\"cards\":[{\"id\":\"x1\",\"name\":\"Odd\",\"skin\":\"bad skin!!\",")
+				TEXT("\"missionHandoff\":\"../../etc\",\"primary\":{\"key\":\"WHITE\",\"chosen\":true},\"companions\":[")
+				TEXT("{\"slot\":1e300,\"kind\":\"llm\",\"provider\":\"dev-companion\",\"label\":\"Huge\"},")
+				TEXT("{\"slot\":1,\"kind\":\"agent\",\"provider\":\"dev-single-agent\",\"label\":\"JHINN\"}]}]}"));
+			FWonderlandCardStore S(P);
+			S.Load();
+			const FWonderlandCard* C = S.Find(TEXT("x1"));
+			const bool bSlots = C != nullptr && C->Companions.Num() == 1 && C->Companions[0].Slot == 1
+				&& S.GetLoadNote().Contains(TEXT("companion reference was refused"));
+			Q.Check(TEXT("C7"), C != nullptr && C->Skin == TEXT("relay_og") && C->MissionHandoff == TEXT("angelic_twin_swords") && S.GetActiveId() == TEXT("x1")
+				&& S.GetLoadNote().Contains(TEXT("unknown skin")) && S.Find(FWonderlandCardStore::BuiltInId()) != nullptr && bSlots,
+				FString::Printf(TEXT("a card naming an invalid skin and handoff: skin -> %s, handoff -> %s, built-in restored %s; a slot of 1e300 ")
+					TEXT("refused and the valid companion kept %s; note '%s'"),
+					C != nullptr ? *C->Skin : TEXT("-"), C != nullptr ? *C->MissionHandoff : TEXT("-"),
+					S.Find(FWonderlandCardStore::BuiltInId()) != nullptr ? TEXT("yes") : TEXT("NO"), bSlots ? TEXT("yes") : TEXT("NO"), *S.GetLoadNote()));
+		}
+		// C8: HOSTILE FILES -- each is set aside, the store starts from the default, nothing crashes
+		{
+			struct FCase { const TCHAR* Name; TFunction<void()> Plant; };
+			const FString Big = FString::ChrN(2 * 1024 * 1024, TEXT('a'));
+			TArray<FCase> Cases;
+			Cases.Add({ TEXT("truncated"), [&P]() { TArray<uint8> B; B.Add('{'); B.Add('"'); FFileHelper::SaveArrayToFile(B, *P); } });
+			Cases.Add({ TEXT("bad CRC"), [&P]() { WonderlandBeta::SaveSealedText(P, TEXT("{\"format\":\"wonderland.cards.v1\",\"cards\":[]}"));
+				TArray<uint8> B; FFileHelper::LoadFileToArray(B, *P); B[2] ^= 0x20; FFileHelper::SaveArrayToFile(B, *P); } });
+			Cases.Add({ TEXT("a valid seal around invalid JSON"), [&P]() { QaSealed(P, TEXT("{\"format\": \"wonderland.cards.v1\", \"cards\": [ {")); } });
+			Cases.Add({ TEXT("a 2 MB field"), [&P, &Big]() { QaSealed(P, FString::Printf(TEXT("{\"format\":\"wonderland.cards.v1\",\"cards\":[{\"id\":\"big\",\"name\":\"%s\"}]}"), *Big)); } });
+			Cases.Add({ TEXT("another format"), [&P]() { QaSealed(P, TEXT("{\"format\":\"wonderland.cards.v99\",\"cards\":[]}")); } });
+			Cases.Add({ TEXT("a nesting bomb"), [&P]() { QaSealed(P, FString::ChrN(20000, TEXT('[')) + FString::ChrN(20000, TEXT(']'))); } });
+			int32 Ok = 0;
+			FString Detail;
+			for (const FCase& Case : Cases)
+			{
+				Files.DeleteDirectory(*Dir, false, true);
+				Files.MakeDirectory(*Dir, true);
+				Case.Plant();
+				FWonderlandCardStore S(P);
+				S.Load();
+				const bool bAside = QaRefusedBeside(P) == 1 && !Files.FileExists(*P);
+				const bool bDefault = S.GetCards().Num() == 1 && S.GetActiveId() == FWonderlandCardStore::BuiltInId();
+				Ok += (bAside && bDefault && !S.GetLoadNote().IsEmpty()) ? 1 : 0;
+				Detail += FString::Printf(TEXT("%s%s: set aside %s, default %s"), Detail.IsEmpty() ? TEXT("") : TEXT("; "), Case.Name,
+					bAside ? TEXT("yes") : TEXT("NO"), bDefault ? TEXT("yes") : TEXT("NO"));
+			}
+			// and an active id naming no card: kept file, the default active, noted
+			Files.DeleteDirectory(*Dir, false, true);
+			Files.MakeDirectory(*Dir, true);
+			QaSealed(P, TEXT("{\"format\":\"wonderland.cards.v1\",\"active\":\"ghost\",\"cards\":[{\"id\":\"real\",\"name\":\"Real\"}]}"));
+			FWonderlandCardStore S(P);
+			S.Load();
+			const bool bGhost = S.GetActiveId() == FWonderlandCardStore::BuiltInId() && S.Find(TEXT("real")) != nullptr && S.GetLoadNote().Contains(TEXT("named no card"));
+			Q.Check(TEXT("C8"), Ok == Cases.Num() && bGhost,
+				FString::Printf(TEXT("%s; an active id naming no card -> default active, the real card kept: %s"), *Detail, bGhost ? TEXT("yes") : TEXT("NO")));
+		}
+		// C9: FIELDS A LATER BUILD ADDED -- a safe one kept and written back; a secret-shaped one and the excess dropped
+		{
+			Files.DeleteDirectory(*Dir, false, true);
+			Files.MakeDirectory(*Dir, true);
+			FString Extra;
+			for (int32 N = 0; N < 20; ++N)
+			{
+				Extra += FString::Printf(TEXT(",\"future_%d\":%d"), N, N);
+			}
+			// the secret-shaped value assembled at run time (see C5)
+			const FString Secret = FString(TEXT("sk")) + TEXT("-proj-abcdefghijklmnopqrstuvwxyz0123456789");
+			QaSealed(P, FString::Printf(TEXT("{\"format\":\"wonderland.cards.v1\",\"active\":\"f1\",\"cards\":[{\"id\":\"f1\",\"name\":\"Future\",")
+				TEXT("\"aura\":\"silver\",\"leak\":\"%s\"%s}]}"), *Secret, *Extra));
+			FWonderlandCardStore S(P);
+			S.Load();
+			const FWonderlandCard* C = S.Find(TEXT("f1"));
+			const int32 Kept = C != nullptr && C->Unknown.IsValid() ? C->Unknown->Values.Num() : 0;
+			const bool bAura = C != nullptr && C->Unknown.IsValid() && C->Unknown->HasField(TEXT("aura"));
+			const bool bLeak = C != nullptr && C->Unknown.IsValid() && C->Unknown->HasField(TEXT("leak"));
+			S.Save();
+			const bool bWrittenBack = QaFileHas(P, TEXT("silver"));
+			const bool bSecretGone = !QaFileHas(P, TEXT("abcdefghijklmnopqrstuvwxyz0123456789"));
+			Q.Check(TEXT("C9"), Kept == FWonderlandCardStore::MaxUnknownFields && bAura && !bLeak && bWrittenBack && bSecretGone,
+				FString::Printf(TEXT("22 unknown fields: %d kept (cap %d), 'aura' kept %s and written back %s, the secret-shaped 'leak' dropped %s"), Kept,
+					FWonderlandCardStore::MaxUnknownFields, bAura ? TEXT("yes") : TEXT("NO"), bWrittenBack ? TEXT("yes") : TEXT("NO"),
+					!bLeak && bSecretGone ? TEXT("yes") : TEXT("NO")));
+		}
+
+		// --- the Mission Handoff MODEL (M0: no visuals; the terminal action and the presentation come in M1)
+		const FString H = FPaths::Combine(Dir, TEXT("MissionHandoff.sav"));
+		FWonderlandMissionHandoff::FCompanionsPresent Both;
+		Both.bLeft = true;
+		Both.bRight = true;
+		// H1: a handoff runs its phases to HELD, and the write spy counts 0 along the way
+		{
+			FWonderlandMissionHandoff::ResetSpy();
+			FWonderlandMissionHandoff M(H);
+			M.Load([](const FString&) { return false; });
+			FString Why;
+			const bool bBegun = M.Begin(TEXT("angelic_twin_swords"), TEXT("m-qa-1"), EWonderlandHandoffEntry::MidMission, Both, Why);
+			TArray<FString> Seen;
+			Seen.Add(FWonderlandMissionHandoff::StateName(M.GetState()));
+			bool bArmedEarly = M.IsArmed();
+			for (int32 Step = 0; Step < 100 && M.GetState() != EWonderlandHandoffState::Held; ++Step)
+			{
+				if (M.Tick(0.1f))
+				{
+					Seen.Add(FWonderlandMissionHandoff::StateName(M.GetState()));
+				}
+				bArmedEarly |= M.IsArmed() && M.GetState() != EWonderlandHandoffState::Held;
+			}
+			const FString Path = FString::Join(Seen, TEXT(" > "));
+			Q.Check(TEXT("H1"), bBegun && Path == TEXT("ACKNOWLEDGED > TRANSFORMING > DELIVERING > HELD") && M.GetMissionId() == TEXT("m-qa-1")
+				&& !bArmedEarly && M.IsArmed() && FWonderlandMissionHandoff::GetMutationsInScope() == 0,
+				FString::Printf(TEXT("begin %s; phases %s; armed before HELD %s, at HELD %s; mission '%s'; writes counted inside the handoff ")
+					TEXT("path: %d (M0: the model's own path only; the mission/task mutators report to the spy from M1)"), bBegun ? TEXT("ok") : *Why,
+					*Path, bArmedEarly ? TEXT("YES") : TEXT("no"), M.IsArmed() ? TEXT("yes") : TEXT("NO"), *M.GetMissionId(),
+					FWonderlandMissionHandoff::GetMutationsInScope()));
+		}
+		// H2: refused while equipped, and without a companion body (named)
+		{
+			FWonderlandMissionHandoff M(FPaths::Combine(Dir, TEXT("MissionHandoff2.sav")));
+			M.Load([](const FString&) { return false; });
+			FString Why1;
+			FString Why2;
+			FString Why3;
+			FWonderlandMissionHandoff::FCompanionsPresent NoLeft = Both;
+			NoLeft.bLeft = false;
+			const bool bNoLeft = !M.Begin(TEXT("angelic_twin_swords"), FString(), EWonderlandHandoffEntry::Roaming, NoLeft, Why1);
+			M.Begin(TEXT("angelic_twin_swords"), FString(), EWonderlandHandoffEntry::Roaming, Both, Why2);
+			const bool bTwice = !M.Begin(TEXT("angelic_twin_swords"), FString(), EWonderlandHandoffEntry::Roaming, Both, Why3);
+			Q.Check(TEXT("H2"), bNoLeft && Why1.Contains(TEXT("LLM Companion")) && bTwice,
+				FString::Printf(TEXT("without the LEFT body: refused %s ('%s'); a second begin while equipped refused %s ('%s')"),
+					bNoLeft ? TEXT("yes") : TEXT("NO"), *Why1, bTwice ? TEXT("yes") : TEXT("NO"), *Why3));
+		}
+		// H3: ROAMING WITH NO MISSION -- allowed, visual only, nothing mission-shaped
+		{
+			FWonderlandMissionHandoff M(FPaths::Combine(Dir, TEXT("MissionHandoff3.sav")));
+			M.Load([](const FString&) { return false; });
+			FString Why;
+			const bool bBegun = M.Begin(TEXT("angelic_twin_swords"), FString(), EWonderlandHandoffEntry::Roaming, Both, Why);
+			Q.Check(TEXT("H3"), bBegun && M.GetMissionId().IsEmpty() && M.GetEntry() == EWonderlandHandoffEntry::Roaming,
+				FString::Printf(TEXT("roaming, no mission: begun %s, mission '%s' (must be empty)"), bBegun ? TEXT("yes") : *Why, *M.GetMissionId()));
+		}
+		// H4: RECONNECT RESTORES -- HELD, attached when the mission still runs; roaming with a note when it does not
+		{
+			FWonderlandMissionHandoff Alive(H);
+			Alive.Load([](const FString& Id) { return Id == TEXT("m-qa-1"); });
+			FWonderlandMissionHandoff Gone(H);
+			Gone.Load([](const FString&) { return false; });
+			Q.Check(TEXT("H4"), Alive.GetState() == EWonderlandHandoffState::Held && Alive.GetMissionId() == TEXT("m-qa-1")
+				&& Gone.GetState() == EWonderlandHandoffState::Held && Gone.GetMissionId().IsEmpty() && !Gone.GetLoadNote().IsEmpty(),
+				FString::Printf(TEXT("restored with the mission running: %s attached to '%s'; with it gone: %s, mission '%s', note '%s'"),
+					FWonderlandMissionHandoff::StateName(Alive.GetState()), *Alive.GetMissionId(), FWonderlandMissionHandoff::StateName(Gone.GetState()),
+					*Gone.GetMissionId(), *Gone.GetLoadNote()));
+		}
+		// H5: RETURN -- HELD > RETURNING > IDLE, and a reload is not equipped
+		{
+			FWonderlandMissionHandoff M(H);
+			M.Load([](const FString& Id) { return Id == TEXT("m-qa-1"); });
+			FString Why;
+			const bool bArmedBefore = M.IsArmed();
+			const bool bReturned = M.Return(Why);
+			// the founder's deactivation rule: nothing of the traversal state outlives the return's first moment
+			const bool bArmedAfterReturn = M.IsArmed();
+			for (int32 Step = 0; Step < 100 && M.GetState() != EWonderlandHandoffState::Idle; ++Step)
+			{
+				M.Tick(0.1f);
+			}
+			FWonderlandMissionHandoff R(H);
+			R.Load([](const FString&) { return true; });
+			Q.Check(TEXT("H5"), bArmedBefore && bReturned && !bArmedAfterReturn && M.GetState() == EWonderlandHandoffState::Idle
+				&& R.GetState() == EWonderlandHandoffState::Idle,
+				FString::Printf(TEXT("armed before the return %s; return %s; armed right after it %s; state %s; after a reload %s"),
+					bArmedBefore ? TEXT("yes") : TEXT("NO"), bReturned ? TEXT("ok") : *Why, bArmedAfterReturn ? TEXT("YES") : TEXT("no"),
+					FWonderlandMissionHandoff::StateName(M.GetState()), FWonderlandMissionHandoff::StateName(R.GetState())));
+		}
+		// H6: THE SPY'S POSITIVE CONTROL -- a write inside a handoff scope IS counted; one outside is not
+		{
+			FWonderlandMissionHandoff::ResetSpy();
+			FWonderlandMissionHandoff::NoteMutation(TEXT("QA outside any scope"));
+			const int32 Outside = FWonderlandMissionHandoff::GetMutationsInScope();
+			{
+				FWonderlandMissionHandoff::FScope Scope;
+				FWonderlandMissionHandoff::NoteMutation(TEXT("QA positive control"));
+			}
+			const int32 Inside = FWonderlandMissionHandoff::GetMutationsInScope();
+			const FString Last = FWonderlandMissionHandoff::GetLastMutationInScope();
+			FWonderlandMissionHandoff::ResetSpy();
+			Q.Check(TEXT("H6"), Outside == 0 && Inside == 1 && Last == TEXT("QA positive control"),
+				FString::Printf(TEXT("the spy: outside a scope %d (want 0), inside %d (want 1, '%s')"), Outside, Inside, *Last));
+		}
+		// H7: A HOSTILE RECORD -- set aside, not equipped
+		{
+			const FString HB = FPaths::Combine(Dir, TEXT("MissionHandoff7.sav"));
+			TArray<uint8> Bytes;
+			Bytes.Append(reinterpret_cast<const uint8*>("equipped=1"), 10);
+			FFileHelper::SaveArrayToFile(Bytes, *HB);
+			FWonderlandMissionHandoff M(HB);
+			M.Load([](const FString&) { return true; });
+			Q.Check(TEXT("H7"), M.GetState() == EWonderlandHandoffState::Idle && QaRefusedBeside(HB) == 1,
+				FString::Printf(TEXT("an unsealed 'equipped=1': state %s, set aside %s"), FWonderlandMissionHandoff::StateName(M.GetState()),
+					QaRefusedBeside(HB) == 1 ? TEXT("yes") : TEXT("NO")));
+		}
+		Files.DeleteDirectory(*Dir, false, true);
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLCARDQA END model pass=%d fail=%d"), Q.Pass, Q.Fail);
+	}
+
+	UWonderlandSidekickSubsystem* QaSidekicks(UWorld* World)
+	{
+		UGameInstance* Instance = World != nullptr ? World->GetGameInstance() : nullptr;
+		return Instance != nullptr ? Instance->GetSubsystem<UWonderlandSidekickSubsystem>() : nullptr;
+	}
+
+	/** RESTART, FIRST BOOT: the REAL stores (the profile's Saved/Wonderland), as the subsystem owns them. */
+	void RunCardPersistWrite(UWorld* World)
+	{
+		FCardQa Q;
+		UWonderlandSidekickSubsystem* Sidekicks = QaSidekicks(World);
+		if (Sidekicks == nullptr)
+		{
+			Q.Check(TEXT("P1"), false, TEXT("no sidekick subsystem: the real stores cannot be reached"));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLCARDQA END persist-write pass=%d fail=%d"), Q.Pass, Q.Fail);
+			return;
+		}
+		// P1: a card created, edited, selected and saved in the real store; the file on disk is sealed
+		FWonderlandCardStore& S = Sidekicks->GetCardStore();
+		FString Why;
+		const FString Id = S.Create(TEXT("Persisted"), Why);
+		bool bEdited = false;
+		if (const FWonderlandCard* Made = S.Find(Id))
+		{
+			FWonderlandCard C = *Made;
+			C.Skin = TEXT("shadow_flame");
+			C.Primary.Key = TEXT("WHITE");
+			C.Primary.bChosen = true;
+			bEdited = S.Update(C, Why);
+		}
+		const bool bSelected = S.Select(Id, Why);
+		const bool bSaved = S.Save();
+		FString Text;
+		FString LoadWhy;
+		const bool bSealed = WonderlandBeta::LoadSealedText(S.GetPath(), FWonderlandCardStore::MaxFileBytes, Text, LoadWhy);
+		Q.Check(TEXT("P1"), !Id.IsEmpty() && bEdited && bSelected && bSaved && bSealed && S.GetPath() == FWonderlandCardStore::DefaultPath(),
+			FString::Printf(TEXT("the real store (%s): created '%s', edited %s, selected %s, saved %s, sealed on disk %s"),
+				*FPaths::GetCleanFilename(S.GetPath()), *Id, bEdited ? TEXT("yes") : *Why, bSelected ? TEXT("yes") : TEXT("NO"),
+				bSaved ? TEXT("yes") : TEXT("NO"), bSealed ? TEXT("yes") : *LoadWhy));
+		// P2: the real handoff record, begun mid-mission and driven to HELD
+		FWonderlandMissionHandoff& M = Sidekicks->GetMissionHandoff();
+		FWonderlandMissionHandoff::FCompanionsPresent Both;
+		Both.bLeft = true;
+		Both.bRight = true;
+		const bool bBegun = M.Begin(TEXT("angelic_twin_swords"), TEXT("m-persist"), EWonderlandHandoffEntry::MidMission, Both, Why);
+		for (int32 Step = 0; Step < 100 && M.GetState() != EWonderlandHandoffState::Held; ++Step)
+		{
+			M.Tick(0.1f);
+		}
+		const bool bOnDisk = IFileManager::Get().FileExists(*FWonderlandMissionHandoff::DefaultPath());
+		Q.Check(TEXT("P2"), bBegun && M.IsArmed() && M.GetMissionId() == TEXT("m-persist") && bOnDisk,
+			FString::Printf(TEXT("the real handoff: begun %s, state %s, mission '%s', record on disk %s"), bBegun ? TEXT("yes") : *Why,
+				FWonderlandMissionHandoff::StateName(M.GetState()), *M.GetMissionId(), bOnDisk ? TEXT("yes") : TEXT("NO")));
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLCARDQA END persist-write pass=%d fail=%d"), Q.Pass, Q.Fail);
+	}
+
+	/** RESTART, SECOND BOOT: what the subsystem loaded AT BOOT, before anything here touched it; then a clean profile. */
+	void RunCardPersistCheck(UWorld* World)
+	{
+		FCardQa Q;
+		UWonderlandSidekickSubsystem* Sidekicks = QaSidekicks(World);
+		if (Sidekicks == nullptr)
+		{
+			Q.Check(TEXT("P3"), false, TEXT("no sidekick subsystem: the real stores cannot be reached"));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLCARDQA END persist-check pass=%d fail=%d"), Q.Pass, Q.Fail);
+			return;
+		}
+		// P3: the card came back, active, as it was saved
+		FWonderlandCardStore& S = Sidekicks->GetCardStore();
+		const FWonderlandCard Active = S.GetActive();
+		Q.Check(TEXT("P3"), Active.Name == TEXT("Persisted") && Active.Skin == TEXT("shadow_flame") && Active.Primary.Key == TEXT("WHITE")
+			&& Active.Primary.bChosen && !Active.bBuiltIn && S.GetCards().Num() == 2 && S.GetLoadNote().IsEmpty(),
+			FString::Printf(TEXT("after the restart: %d card(s), active '%s' named '%s', skin %s, primary %s%s, note '%s'"), S.GetCards().Num(),
+				*Active.Id, *Active.Name, *Active.Skin, *Active.Primary.Key, Active.Primary.bChosen ? TEXT(" (chosen)") : TEXT(""), *S.GetLoadNote()));
+		// P4: the handoff came back HELD without a replay. The mission it named is not running after a restart (M0 wires no
+		// mission source), so it is restored ROAMING with a note: nothing fabricated.
+		FWonderlandMissionHandoff& M = Sidekicks->GetMissionHandoff();
+		Q.Check(TEXT("P4"), M.GetState() == EWonderlandHandoffState::Held && M.IsArmed() && M.GetMissionId().IsEmpty()
+			&& M.GetEntry() == EWonderlandHandoffEntry::Roaming && M.GetLoadNote().Contains(TEXT("no longer running")),
+			FString::Printf(TEXT("after the restart: %s, mission '%s', entry %s, note '%s'"), FWonderlandMissionHandoff::StateName(M.GetState()),
+				*M.GetMissionId(), M.GetEntry() == EWonderlandHandoffEntry::Roaming ? TEXT("roaming") : TEXT("mid-mission"), *M.GetLoadNote()));
+		// P5: the profile left clean (Second's H5: a bed must never boot armed): the card deleted, the swords returned, and a
+		// fresh read of both files agrees
+		FString Why;
+		const bool bDeleted = S.Delete(Active.Id, Why) && S.Save();
+		const bool bReturned = M.Return(Why);
+		for (int32 Step = 0; Step < 100 && M.GetState() != EWonderlandHandoffState::Idle; ++Step)
+		{
+			M.Tick(0.1f);
+		}
+		FWonderlandCardStore Fresh(FWonderlandCardStore::DefaultPath());
+		Fresh.Load();
+		FWonderlandMissionHandoff FreshHandoff(FWonderlandMissionHandoff::DefaultPath());
+		FreshHandoff.Load([](const FString&) { return true; });
+		Q.Check(TEXT("P5"), bDeleted && bReturned && Fresh.GetActiveId() == FWonderlandCardStore::BuiltInId() && Fresh.GetCards().Num() == 1
+			&& FreshHandoff.GetState() == EWonderlandHandoffState::Idle,
+			FString::Printf(TEXT("clean-up: card deleted %s, swords returned %s; a fresh read: active '%s', %d card(s), handoff %s"),
+				bDeleted ? TEXT("yes") : TEXT("NO"), bReturned ? TEXT("yes") : TEXT("NO"), *Fresh.GetActiveId(), Fresh.GetCards().Num(),
+				FWonderlandMissionHandoff::StateName(FreshHandoff.GetState())));
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLCARDQA END persist-check pass=%d fail=%d"), Q.Pass, Q.Fail);
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaCardCommand(
+		TEXT("wl.Qa.Card"),
+		TEXT("C.A.R.D. + Mission Handoff, M0. No argument: the model on a scratch store -- the store (create, save, reload, switch, ")
+		TEXT("delete, secret refusal, hostile files, passthrough) and the handoff (phases, gates, roaming, restore, return, the write ")
+		TEXT("spy). `persist-write` then `persist-check` on the next boot: the REAL stores across a restart. `quit` exits after. ")
+		TEXT("Logs WLCARDQA lines."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (Args.Contains(TEXT("persist-write")))
+			{
+				RunCardPersistWrite(World);
+			}
+			else if (Args.Contains(TEXT("persist-check")))
+			{
+				RunCardPersistCheck(World);
+			}
+			else
+			{
+				RunCardQa();
+			}
+			if (Args.Contains(TEXT("quit")))
+			{
+				FPlatformMisc::RequestExit(false);
+			}
 		}));
 }
 

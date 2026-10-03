@@ -198,6 +198,10 @@ namespace SidekickConsole
 void UWonderlandSidekickSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
+	// C.A.R.D. + MISSION HANDOFF (M0): read once, at boot. A handoff that was equipped comes back HELD. M0 wires no mission
+	// source yet (M1), so a mission it was attached to is not known to be running: it is restored roaming, nothing fabricated.
+	GetCardStore().Load();
+	GetMissionHandoff().Load([](const FString&) { return false; });
 	Ticker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWonderlandSidekickSubsystem::Tick), 0.0f);
 }
 
@@ -218,6 +222,25 @@ void UWonderlandSidekickSubsystem::Deinitialize()
 	}
 	InFlight.Reset();
 	Super::Deinitialize();
+}
+
+FWonderlandCardStore& UWonderlandSidekickSubsystem::GetCardStore()
+{
+	if (!Cards.IsValid())
+	{
+		// before Initialize or after Deinitialize only: an unloaded store holding the default card, never a crash
+		Cards = MakeUnique<FWonderlandCardStore>(FWonderlandCardStore::DefaultPath());
+	}
+	return *Cards;
+}
+
+FWonderlandMissionHandoff& UWonderlandSidekickSubsystem::GetMissionHandoff()
+{
+	if (!Handoff.IsValid())
+	{
+		Handoff = MakeUnique<FWonderlandMissionHandoff>(FWonderlandMissionHandoff::DefaultPath());
+	}
+	return *Handoff;
 }
 
 FString UWonderlandSidekickSubsystem::BaseUrl()

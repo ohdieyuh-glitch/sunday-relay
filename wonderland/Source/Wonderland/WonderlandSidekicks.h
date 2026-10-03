@@ -26,6 +26,8 @@
 #include "Containers/Ticker.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Subsystems/GameInstanceSubsystem.h"
+#include "WonderlandCard.h"
+#include "WonderlandMissionHandoff.h"
 #include "WonderlandSidekicks.generated.h"
 
 class FJsonObject;
@@ -105,6 +107,12 @@ public:
 	int32 GetRevision() const { return Revision; }
 	FOnWonderlandSidekicksChanged OnChanged;
 
+	// ---------------------------------------------------------------- C.A.R.D. + Mission Handoff (M0: the model)
+	/** The user's C.A.R.D.s (Saved/Wonderland/Cards.sav), loaded at Initialize. Plain C++ on purpose (the FName rule). */
+	FWonderlandCardStore& GetCardStore();
+	/** The Mission Handoff state (Saved/Wonderland/MissionHandoff.sav), restored at Initialize without a replay. */
+	FWonderlandMissionHandoff& GetMissionHandoff();
+
 	// ---------------------------------------------------------------- what the user can ask for
 	/** Put a provider behind a companion. A real one will answer AUTH_REQUIRED until the founder has connected it. */
 	void Connect(const FString& SidekickId, const FString& ProviderId, const FString& ModelId = FString());
@@ -143,4 +151,7 @@ private:
 	int32 IntentsSent = 0;
 	TArray<FHttpRequestPtr> InFlight;
 	FTSTicker::FDelegateHandle Ticker;
+	// Not reflected (no UPROPERTY): the FName rule.
+	TUniquePtr<FWonderlandCardStore> Cards;
+	TUniquePtr<FWonderlandMissionHandoff> Handoff;
 };
