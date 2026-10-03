@@ -118,6 +118,16 @@ export class JuliusLifecyclePostgresRepository implements JuliusApprovalStore, J
     return result.rows.map((row) => this.map(row));
   }
 
+  /** The decided approvals, the durable governance decisions the trust core may rank as GOVERNANCE (decision B). */
+  async decidedApprovals(runId: string, projectId: string): Promise<readonly JuliusApprovalRecord[]> {
+    const result = await this.pool.query<Record<string, unknown>>(
+      `SELECT * FROM relay_wonderland.julius_approvals
+        WHERE run_id=$1 AND project_id=$2 AND state IN('APPROVED','DENIED') ORDER BY decided_at,approval_id LIMIT 200`,
+      [runId, projectId],
+    );
+    return result.rows.map((row) => this.map(row));
+  }
+
   async decideApproval(input: {
     runId: string; approvalId: string; projectId: string;
     state: Extract<JuliusApprovalState, 'APPROVED' | 'DENIED' | 'CANCELLED'>;

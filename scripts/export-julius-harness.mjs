@@ -277,6 +277,9 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-context-provenance.ts', 'DURABLE STATE / PROJECT BRAIN'],
   // The claim ledger: admission at every brain write, promotion on an accepted review, the record winning at compile.
   ['src/relay/mission/julius/julius-claim-ledger.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  // The lineage asserter (decision B): supersession and contradiction from structure, the compatibility table that
+  // halts a run holding a contradiction, and GOVERNANCE from durable decisions only. Reached from the pipeline.
+  ['src/relay/mission/julius/julius-lineage-asserter.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // Allocation decides what a dispatch MAY spend; this decides what is known
   // about what it DID spend, and on whose authority. Same subsystem: both are

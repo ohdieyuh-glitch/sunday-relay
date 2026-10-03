@@ -158,7 +158,7 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
       // since migration 014 and were never selected, so every entry reached the
       // context compiler unattributed, uncited and undated. The integrity layer
       // ranks on exactly those three.
-      `SELECT b.entry_id,b.entry_kind,b.safe_content,b.task_id,b.worker_id,b.evidence_ids,b.created_at FROM relay_wonderland.julius_brain_entries b
+      `SELECT b.entry_id,b.entry_kind,b.safe_content,b.task_id,b.worker_id,b.evidence_ids,b.created_at,b.revision FROM relay_wonderland.julius_brain_entries b
         WHERE b.run_id=$1 AND b.project_id=$2 ORDER BY b.revision LIMIT $3`,
       [runId, projectId, JULIUS_READ_LIMIT],
     );
@@ -182,6 +182,9 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
         recordedAt: new Date(String(row.created_at)).toISOString(),
         evidenceIds: parsed<string[]>(row.evidence_ids, []),
       },
+      // THE DURABLE ORDER the brain allocated (appendBrainEntry): the lineage asserter orders a task's verdicts by it,
+      // never by `created_at` (founder decision B, rule 1).
+      revision: Number(row.revision),
     }));
   }
 

@@ -75,6 +75,12 @@ export interface JuliusApprovalStore {
    * never happened. Optional, so a store that cannot say reads as holding none.
    */
   deniedApprovals?(runId: string, projectId: string): Promise<readonly JuliusApprovalRecord[]>;
+  /**
+   * The run's DECIDED approvals (APPROVED or DENIED), in decision order: the durable governance decisions the
+   * trust core may rank as GOVERNANCE (founder decision B, 2026-10-03). Never a pending one. Optional, so a store
+   * that cannot say gives no governance claim rather than an invented one.
+   */
+  decidedApprovals?(runId: string, projectId: string): Promise<readonly JuliusApprovalRecord[]>;
   /** Decides only a PENDING approval. A decided one stays decided. */
   decideApproval(input: {
     runId: string; approvalId: string; projectId: string;

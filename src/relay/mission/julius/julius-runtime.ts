@@ -5,6 +5,7 @@ import {
   type JuliusContextCandidate, type JuliusContextConflict, type JuliusContextSelection,
   type JuliusContextType,
 } from './julius-context-integrity';
+import type { JuliusRunContradiction } from './julius-lineage-asserter';
 import type { JuliusMemoryClaim } from './julius-memory-trust';
 import { effectivelyAcceptedTaskIds } from './julius-repair-lineage';
 
@@ -187,6 +188,12 @@ export interface JuliusBrainEntry {
    * `deriveJuliusContextQualification` is what reads it.
    */
   readonly provenance?: { readonly workerId: string; readonly recordedAt: string; readonly evidenceIds: readonly string[] };
+  /**
+   * THE DURABLE ORDER this run's brain gave the entry (`julius_brain_entries.revision`). The lineage asserter orders
+   * a task's verdicts by it, never by time (founder decision B). OPTIONAL for the same reason as provenance: an entry
+   * without one is never ordered, so it gets no lineage rather than an invented order.
+   */
+  readonly revision?: number;
 }
 export interface JuliusContextPacket {
   readonly missionId: string; readonly taskId: string; readonly workerId: string;
@@ -213,10 +220,16 @@ export interface JuliusContextPacket {
 export class JuliusContextIntegrityRefusal extends Error {
   readonly reasonCode = 'UNRESOLVED_AUTHORITATIVE_CLASH' as const;
   readonly conflicts: readonly JuliusContextConflict[];
-  constructor(conflicts: readonly JuliusContextConflict[]) {
+  /**
+   * The run-wide contradictions behind it, when the trust core's compatibility table found them (founder decision B):
+   * each with its family, subject, closed values and trusts, so the halt records the PAIR, not only that one existed.
+   */
+  readonly contradictions: readonly JuliusRunContradiction[];
+  constructor(conflicts: readonly JuliusContextConflict[], contradictions: readonly JuliusRunContradiction[] = []) {
     super('context_integrity_unresolved_clash');
     this.name = 'JuliusContextIntegrityRefusal';
     this.conflicts = conflicts;
+    this.contradictions = contradictions;
   }
 }
 
@@ -236,6 +249,11 @@ export interface JuliusContextQualification {
   readonly recordedAt: Readonly<Record<string, string>>;
   /** The entries that ARE the agreement in force. */
   readonly contractEntryIds: readonly string[];
+  /**
+   * Claim-id pairs the trust core's compatibility table found incompatible (`assertJuliusLineage`): the compiler
+   * may not resolve them, so a packet holding both fails closed. Absent means none were asserted.
+   */
+  readonly incompatible?: readonly (readonly [string, string])[];
 }
 
 export function compileJuliusContext(input: {
@@ -282,6 +300,7 @@ function compileQualified(
   const outcome = compileContextWithIntegrity({
     candidates, role: input.worker.role, taskId: input.task.taskId,
     contractEntryIds: qualification.contractEntryIds, budgetCharacters: input.maxCharacters,
+    incompatible: qualification.incompatible,
   });
   if (outcome.outcome === 'FAIL_CLOSED') throw new JuliusContextIntegrityRefusal(outcome.conflicts);
   const entryById = new Map(input.entries.map((entry) => [entry.entryId, entry]));
