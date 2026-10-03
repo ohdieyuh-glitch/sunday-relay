@@ -62,8 +62,12 @@ import {
   partyViewFor,
   promotePartyLeader,
   removePartyMember,
+  reconcileBlockedParties,
+  separateForBlock,
   setPartyRules,
   setSelfMuted,
+  sharedPartyBlockWarning,
+  sharedPartyOf,
 } from './social-parties';
 import { deriveActivity, resolvePresenceFor, resolveProfileFor, type WonderlandActivitySignals } from './social-presence';
 import { buildSocialView } from './social-preview';
@@ -255,7 +259,9 @@ function readSignals(raw: unknown): Check<WonderlandActivitySignals | null> {
 /**
  * APPLY ONE OPERATION for the actor. The caller has already: authenticated the session, refused anything not in the table,
  * and bound the actor to the session's own player (bindSocialActor). Ids come from the path; everything else from the body.
- * The audience then passes THE BLOCK FLOOR (see the header), judged on the state AFTER the operation.
+ * First any coexisting blocked pair is RECONCILED (reconcileBlockedParties: the founder's membership rule, applied to data
+ * from before it, a restore or a race; the store persists it with the operation's own change). The audience then passes
+ * THE BLOCK FLOOR (see the header), judged on the state AFTER the operation.
  */
 export function applySocialOperation(
   state: SocialState,
@@ -265,7 +271,7 @@ export function applySocialOperation(
   nowIso: string,
   world: WorldState = emptyWorldState(),
 ): RelayResult<SocialCommandOutcome> {
-  const outcome = applyOne(state, op, actorId, input, nowIso, world);
+  const outcome = applyOne(reconcileBlockedParties(state), op, actorId, input, nowIso, world);
   if (!outcome.ok || outcome.value.audience.length === 0) return outcome;
   const after = outcome.value.state;
   const audience = outcome.value.audience.filter((id) => id === actorId || !blockedEitherWay(after, actorId, id));
@@ -375,9 +381,25 @@ function applyOne(
     case 'friends.remove':
       return changed(removeFriend(state, actorId, id0), null, [actorId, id0]);
     case 'blocks.add': {
+      // F1, the founder's final rule: a block inside a shared party is committed ONLY after the blocker confirmed it.
+      // Without `confirmSharedParty: true` it is refused with the founder's own warning and NOTHING changes (no block, no
+      // membership change). Confirmed, it applies atomically: the block privacy AND the separation -- the leader removes
+      // the blocked member and stays leader; otherwise the blocker leaves and the blocked member stays (separateForBlock).
+      // The remaining members are told their party changed; the blocked player is told nothing (the block floor).
       const target = str(body, 'targetId', MAX_LABEL);
       if (!target.ok) return invalid(target.message);
-      return changed(blockUser(state, actorId, target.value as string, nowIso), null, [actorId]);
+      const targetId = target.value as string;
+      const confirm = bool(body, 'confirmSharedParty');
+      if (!confirm.ok) return invalid(confirm.message);
+      const shared = sharedPartyOf(state, actorId, targetId);
+      if (shared !== undefined && confirm.value !== true) {
+        const warning = sharedPartyBlockWarning(state, actorId, state.users[targetId]?.profile.displayName ?? 'this player');
+        return { ok: false, error: relayError('illegal-transition', `BLOCK_NEEDS_CONFIRMATION: ${warning} Confirm with confirmSharedParty.`) };
+      }
+      const separated = separateForBlock(state, actorId, targetId);
+      if (!separated.ok) return separated;
+      const remaining = shared !== undefined ? (separated.value.parties[shared.partyId]?.members.map((m) => m.userId) ?? []) : [];
+      return changed(blockUser(separated.value, actorId, targetId, nowIso), null, [actorId, ...remaining]);
     }
     case 'blocks.remove':
       return changed(unblockUser(state, actorId, id0), null, [actorId]);

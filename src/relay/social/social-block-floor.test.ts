@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applySocialOperation, type SocialCommandOutcome } from './social-commands';
 import { createSocialFixture, FIXTURE_USERS as U } from './social-fixtures';
+import { blockUser } from './social-friends';
 import { acceptPartyInvite, inviteToParty, partyViewFor } from './social-parties';
 import { buildSocialView } from './social-preview';
 import { partyOf, type SocialState } from './social-state';
@@ -31,12 +32,16 @@ function arenaRunWithABlock() {
   const joined = acceptPartyInvite(invited.value.state, U.KAI, invited.value.inviteId, NOW);
   if (!joined.ok) throw new Error(`accept: ${joined.error.message}`);
   s = joined.value;
-  s = run(s, U.LYRA, 'blocks.add', { targetId: U.ORION }).state;
+  // The domain block alone, WITHOUT the separation blocks.add now performs (social-block-separation.test.ts): a state
+  // with a block inside a shared party -- data from before the founder's rule, or any future path -- still leaks nothing.
+  const blocked = blockUser(s, U.LYRA, U.ORION, NOW);
+  if (!blocked.ok) throw new Error(`block: ${blocked.error.message}`);
+  s = blocked.value;
   return { s, pid };
 }
 
 describe('the block floor in a shared party', () => {
-  it('the block leaves both in the party (membership is the founder\'s call) but neither in the other\'s roster', () => {
+  it('a block inside a shared party (no separation) leaves neither in the other\'s roster', () => {
     const { s, pid } = arenaRunWithABlock();
     expect(s.parties[pid].members.map((m) => m.userId).sort()).toEqual([U.LYRA, U.ORION, U.KAI].sort());
     const orionSees = partyViewFor(s, U.ORION, pid);
@@ -63,18 +68,19 @@ describe('the block floor in a shared party', () => {
     expect(JSON.stringify(lyra.party)).not.toContain(U.ORION);
   });
 
-  it("no update the blocker causes reaches the blocked player, and none the other way; the third member gets both", () => {
+  it('the wall first, then reconciliation: the next operation separates the pair by the founder\'s rule, and neither hears the other', () => {
     const { s, pid } = arenaRunWithABlock();
-    const lyraMutes = run(s, U.LYRA, 'parties.self_mute', { muted: true });
-    expect(lyraMutes.audience).toContain(U.LYRA);
-    expect(lyraMutes.audience).toContain(U.KAI);
-    expect(lyraMutes.audience).not.toContain(U.ORION);
-    const orionRenames = run(lyraMutes.state, U.ORION, 'parties.rules', { name: 'Arena Run II' }, [pid]);
-    expect(orionRenames.audience).toContain(U.ORION);
-    expect(orionRenames.audience).toContain(U.KAI);
-    expect(orionRenames.audience).not.toContain(U.LYRA);
-    // and the blocked player's view never shows the blocker's live microphone
-    expect(partyViewFor(lyraMutes.state, U.ORION, pid)?.members.some((m) => m.userId === U.LYRA)).toBe(false);
+    // LYRA (a member) blocked ORION (the leader) inside the party; the next operation by anyone reconciles first:
+    // not the leader, so LYRA leaves -- ORION is not kicked by a member's block
+    const orionRenames = run(s, U.ORION, 'parties.rules', { name: 'Arena Run II' }, [pid]);
+    expect(partyOf(orionRenames.state, U.LYRA)).toBeUndefined();
+    expect(orionRenames.state.parties[pid].leaderId).toBe(U.ORION);
+    expect(orionRenames.state.parties[pid].members.map((m) => m.userId).sort()).toEqual([U.KAI, U.ORION].sort());
+    // the update ORION caused reaches the party that remains, never LYRA
+    expect([...orionRenames.audience].sort()).toEqual([U.KAI, U.ORION].sort());
+    // and nothing LYRA does reaches ORION
+    const lyraUpdates = run(orionRenames.state, U.LYRA, 'presence.update_self', { availability: 'BUSY' });
+    expect(lyraUpdates.audience).not.toContain(U.ORION);
   });
 
   it('without a block nothing is filtered', () => {

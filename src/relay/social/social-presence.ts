@@ -194,7 +194,11 @@ export function resolvePresenceFor(state: SocialState, viewerId: SocialUserId, s
   const party = partyOf(state, subjectId);
   const viewerParty = partyOf(state, viewerId);
   const sameParty = sharePartyWith(state, viewerId, subjectId);
-  const partyVisible = party !== undefined && (self || sameParty || (friend && party.privacy === 'OPEN_TO_FRIENDS'));
+  // THE BLOCK WALL REACHES THROUGH A FRIEND (F1, 2026-10-02): a friend's party that holds somebody blocked either way with
+  // the viewer is not shown at all -- no id, no member count, no join -- or the friend's presence would tell the viewer
+  // that the party they were removed from (or left) still exists, and who is likely still in it.
+  const partyHoldsBlocked = party !== undefined && party.members.some((m) => m.userId !== viewerId && blockedEitherWay(state, viewerId, m.userId));
+  const partyVisible = party !== undefined && (self || sameParty || (friend && party.privacy === 'OPEN_TO_FRIENDS' && !partyHoldsBlocked));
   const partyHasRoom = party !== undefined && party.members.length < PARTY_MAX_MEMBERS;
   const viewerMayInvite =
     viewerParty !== undefined &&

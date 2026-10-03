@@ -181,6 +181,61 @@ export function leaveParty(state: SocialState, actorId: SocialUserId): RelayResu
   );
 }
 
+/** The party two players are both in, if any. */
+export function sharedPartyOf(state: SocialState, a: SocialUserId, b: SocialUserId) {
+  const party = partyOf(state, a);
+  return party !== undefined && party.members.some((m) => m.userId === b) ? party : undefined;
+}
+
+/**
+ * F1, THE FOUNDER'S FINAL RULE (2026-10-02): "LEADER REMOVES, ELSE BLOCKER LEAVES". When A blocks B while they share a party:
+ *   - A LEADS: B is removed from A's party and A stays leader (a leader already has kick authority);
+ *   - otherwise: A, the blocker, leaves; B stays (an ordinary member must NEVER kick anyone merely by blocking them).
+ * Normal party semantics otherwise (no forced dissolution). Nothing changes when they share no party. The caller asks A to
+ * confirm first: blocks.add refuses a block inside a shared party without `confirmSharedParty`, and changes nothing.
+ */
+export function separateForBlock(state: SocialState, blockerId: SocialUserId, blockedId: SocialUserId): RelayResult<SocialState> {
+  const shared = sharedPartyOf(state, blockerId, blockedId);
+  if (shared === undefined) return ok(state);
+  return shared.leaderId === blockerId ? removePartyMember(state, blockerId, shared.partyId, blockedId) : leaveParty(state, blockerId);
+}
+
+/** What the confirmation says, by the same rule (the founder's own words). */
+export function sharedPartyBlockWarning(state: SocialState, blockerId: SocialUserId, blockedName: string): string | null {
+  const party = partyOf(state, blockerId);
+  if (party === undefined) return null;
+  return party.leaderId === blockerId
+    ? `Blocking ${blockedName} will also remove them from your party.`
+    : `Blocking ${blockedName} will cause you to leave this party.`;
+}
+
+/**
+ * RECONCILIATION. A block and a shared party should never coexist (blocks.add separates them; joins and invites across a
+ * block are refused), but data from before the rule, a restore or a race could carry one. The privacy wall (partyViewFor,
+ * the audience floor, the voice audience) already hides the pair from each other; this then resolves the membership by
+ * the same rule, for every such pair. Pure; applied before every operation (applySocialOperation).
+ */
+export function reconcileBlockedParties(state: SocialState): SocialState {
+  let next = state;
+  for (const block of state.blocks) {
+    if (sharedPartyOf(next, block.blockerId, block.blockedId) === undefined) continue;
+    const separated = separateForBlock(next, block.blockerId, block.blockedId);
+    if (separated.ok) next = separated.value;
+  }
+  return next;
+}
+
+/**
+ * WHO A PARTY MEMBER MAY HEAR AND SEE IN PARTY VOICE: the party's members, minus anyone blocked either way with them.
+ * The voice roster is built from this (through the party view), and a real provider's audio routing and tokens must be
+ * minted from it: two players blocked either way never hear each other, even while the wall holds a brief coexistence.
+ */
+export function voiceAudienceFor(state: SocialState, viewerId: SocialUserId, partyId: string): SocialUserId[] {
+  const party = state.parties[partyId];
+  if (party === undefined || !party.members.some((m) => m.userId === viewerId)) return [];
+  return party.members.map((m) => m.userId).filter((id) => id === viewerId || !blockedEitherWay(state, viewerId, id));
+}
+
 /** LEADER: remove a member (not themselves -- that is leaving). */
 export function removePartyMember(state: SocialState, actorId: SocialUserId, partyId: string, memberId: SocialUserId): RelayResult<SocialState> {
   const party = state.parties[partyId];

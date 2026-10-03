@@ -145,6 +145,11 @@ export function createLocalVoiceHarness(selfId: SocialUserId): LocalVoiceHarness
       return { ok: true, reason: null };
     },
     emit(event) {
+      // THE AUDIENCE IS THE ROSTER GIVEN TO connect() -- the party view, which the block wall already filtered (and
+      // voiceAudienceFor on the server). A provider's event about anybody else is dropped: it can update a member, never
+      // ADD one, so a player blocked either way is never heard or seen here, whatever the transport reports. A real new
+      // member arrives through the party view and a fresh connect().
+      if (event.kind !== 'connected' && event.kind !== 'connection' && !participants.has(event.userId)) return;
       switch (event.kind) {
         case 'connected':
           connection = 'CONNECTED';
