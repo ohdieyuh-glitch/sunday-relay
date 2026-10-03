@@ -10174,7 +10174,8 @@ namespace
 	 *   SI9 C.A.R.D. (Second's finding 3): a 24-character key given as a card's name through the terminal is refused, never stored
 	 *   SI10 credentials by their LABEL (Second's sink audit): a 12-character password after "password:", "pwd=", "passwd is",
 	 *        "secret:"; a 16-hex value after "api key:" and "api_key:"; "Authorization: Basic <base64>"; a password in a URL's
-	 *        userinfo -- every one below the statistical rules, every one redacted on submit, still after /keep, masked on screen
+	 *        userinfo; env-style and compound labels (DB_PASSWORD=, auth_token:, "secret key:") -- every one below the statistical
+	 *        rules, every one redacted on submit, still after /keep, masked on screen
 	 */
 	struct FQaSecretInput
 	{
@@ -10534,7 +10535,10 @@ namespace
 			FString::Printf(TEXT("use api key: %s for staging"), *HexValue),
 			FString::Printf(TEXT("restore api_key: %s from the vault"), *HexValue),
 			FString::Printf(TEXT("send Authorization: Basic %s to the proxy"), *BasicValue),
-			FString::Printf(TEXT("migrate postgres://app:%s@10.0.0.5/prod tonight"), *ShortPassword) };
+			FString::Printf(TEXT("migrate postgres://app:%s@10.0.0.5/prod tonight"), *ShortPassword),
+			FString::Printf(TEXT("export DB_PASSWORD=%s before the run"), *ShortPassword),
+			FString::Printf(TEXT("rotate auth_token: %s weekly"), *ShortPassword),
+			FString::Printf(TEXT("the secret key: %s is old"), *ShortPassword) };
 		auto HoldsValue = [&ShortPassword, &HexValue, &BasicValue](const FString& Text)
 		{
 			return Text.Contains(ShortPassword) || Text.Contains(HexValue) || Text.Contains(BasicValue);

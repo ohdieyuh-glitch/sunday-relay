@@ -685,17 +685,42 @@ namespace
 
 namespace
 {
-	/** A word naming a credential (Second's sink audit, 10-03): its value is the next word when it ends with ':' or '=', or the word
-	 *  after a lone ':' / '=' / "is". Short passwords are only catchable by their label -- no statistics sees "Tr0ub4dor&3x". */
+	/**
+	 * A word naming a credential (Second's sink audit and suffix rule, 10-03): its value is the next word when it ends with ':' or '=',
+	 * or the word after a lone ':' / '=' / "is". Read on its letters and digits only, lower case -- DB_PASSWORD is "dbpassword",
+	 * x-api-key "xapikey", username/password "usernamepassword" -- and matched by its ENDING, so the env-style and compound labels
+	 * people actually paste fire; "pass", "pw" and "creds" only whole, so "bypass:" and "compass=" do not. Short passwords are only
+	 * catchable by their label -- no statistic sees "Tr0ub4dor&3x".
+	 */
 	bool CardCredentialLabel(const FString& Lower)
 	{
-		static const TCHAR* const Labels[] = { TEXT("password"), TEXT("passwd"), TEXT("pwd"), TEXT("pass"), TEXT("passphrase"), TEXT("secret"),
-			TEXT("token"), TEXT("apikey"), TEXT("api_key"), TEXT("api-key"), TEXT("accesskey"), TEXT("access_key"), TEXT("access-key"),
-			TEXT("privatekey"), TEXT("private_key"), TEXT("private-key"), TEXT("clientsecret"), TEXT("client_secret"), TEXT("client-secret"),
-			TEXT("authorization"), TEXT("credential"), TEXT("credentials") };
-		for (const TCHAR* Label : Labels)
+		FString Bare;
+		for (int32 At = 0; At < Lower.Len(); ++At)
 		{
-			if (Lower.Equals(Label, ESearchCase::CaseSensitive))
+			const TCHAR Char = FChar::ToLower(Lower[At]);
+			if (CardAsciiLetter(Char) || CardAsciiDigit(Char))
+			{
+				Bare.AppendChar(Char);
+			}
+		}
+		if (Bare.IsEmpty())
+		{
+			return false;
+		}
+		static const TCHAR* const Whole[] = { TEXT("pass"), TEXT("pw"), TEXT("creds") };
+		for (const TCHAR* Label : Whole)
+		{
+			if (Bare.Equals(Label, ESearchCase::CaseSensitive))
+			{
+				return true;
+			}
+		}
+		static const TCHAR* const Endings[] = { TEXT("password"), TEXT("passwd"), TEXT("passphrase"), TEXT("passcode"), TEXT("passkey"), TEXT("pwd"),
+			TEXT("secret"), TEXT("token"), TEXT("apikey"), TEXT("accesskey"), TEXT("privatekey"), TEXT("secretkey"), TEXT("clientsecret"),
+			TEXT("credential"), TEXT("credentials"), TEXT("authorization") };
+		for (const TCHAR* Ending : Endings)
+		{
+			if (Bare.EndsWith(Ending, ESearchCase::CaseSensitive))
 			{
 				return true;
 			}
@@ -703,10 +728,12 @@ namespace
 		return false;
 	}
 
-	/** The first word of a two-word label: "api key", "access key", "private key", "client secret". */
+	/** The first word of a two-word label: "api key", "access key", "private key", "client secret", "secret key", "master key",
+	 *  "encryption key", "signing key", "ssh key". */
 	bool CardLabelQualifier(const FString& Lower)
 	{
-		return Lower == TEXT("api") || Lower == TEXT("access") || Lower == TEXT("private") || Lower == TEXT("client");
+		return Lower == TEXT("api") || Lower == TEXT("access") || Lower == TEXT("private") || Lower == TEXT("client") || Lower == TEXT("secret")
+			|| Lower == TEXT("master") || Lower == TEXT("encryption") || Lower == TEXT("signing") || Lower == TEXT("ssh");
 	}
 
 	/** A label and its value in one word: "pwd=X", "password:X", "api-key=X". */
