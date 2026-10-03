@@ -10319,7 +10319,9 @@ namespace
 			UE_LOG(LogWonderlandQa, Display, TEXT("%s"), *LogMarker);
 			GLog->Flush();
 			FString Text;
-			FFileHelper::LoadFileToString(Text, *FPlatformOutputDevices::GetAbsoluteLogFilename());
+			// THE LOG IS OPEN FOR WRITING by the engine: a plain read asks for no writers and Windows refuses it (round 3b's SI1: "its
+			// own marker NOT found: the log could not be read") -- read it as a file still being written
+			FFileHelper::LoadFileToString(Text, *FPlatformOutputDevices::GetAbsoluteLogFilename(), FFileHelper::EHashOptions::None, FILEREAD_AllowWrite);
 			bOutRead = Text.Contains(LogMarker);
 			return Text;
 		};
