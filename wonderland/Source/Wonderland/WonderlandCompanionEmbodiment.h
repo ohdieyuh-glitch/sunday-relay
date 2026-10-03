@@ -478,6 +478,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	int32 GetPartCount() const { return PartPivots.Num(); }
 
+	/**
+	 * THE HAND ON ONE SIDE (Mission Handoff: a held object sits in the hand the player SEES): the forearm joint on the +Y or
+	 * -Y side and its hand tip in that joint's own space -- the lowest box the forearm carries, the same far end the canon
+	 * measures for its own arms. False for a figure with no such limb. Plain C++, not reflected (the FName rule).
+	 */
+	bool GetHandFrame(bool bPlusY, USceneComponent*& OutForearm, FVector& OutTipLocal) const;
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	FString GetLastError() const { return LastError; }
 

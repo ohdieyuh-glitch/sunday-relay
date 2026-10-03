@@ -32,6 +32,7 @@
 #include "RelayDogArmedStance.h"
 #include "WonderlandHandoffSwords.h"
 #include "WonderlandHandoffTransform.h"
+#include "WonderlandHands.h"
 
 #include "RelayDogCharacter.generated.h"
 
@@ -390,8 +391,10 @@ public:
 	/** MISSION HANDOFF (M3): the swords and the transformation as shown, and where each hand's grip is (gold LEFT, cyan RIGHT). */
 	const WonderlandHandoffSwords::FPresentation& GetHandoffSwords() const { return HandoffSwords; }
 	const WonderlandHandoffTransform::FPresentation& GetHandoffTransform() const { return HandoffTransform; }
-	/** The grip of the hand on the Dog's own LEFT (+Y: the gold sword's) or RIGHT (the cyan's), in the world. */
+	/** The grip of the hand on the Dog's own LEFT (-Y, as for any actor: the gold sword's) or RIGHT (+Y: the cyan's), in the world. */
 	FTransform GetHandoffGripWorld(bool bLeftHand) const;
+	/** THE HANDS (M4): the visible body's hand on the Dog's own LEFT or RIGHT (Relay OG's canon forearm, or the worn skin's own). */
+	const WonderlandHands::FHand& GetHand(bool bLeftHand) const { return bLeftHand ? BodyHandMinusY : BodyHandPlusY; }
 
 protected:
 	void MoveForwardAxis(float Value);
@@ -906,6 +909,12 @@ private:
 	float HandoffHandsWeight = 0.0f;
 	/** Shows the swords and the transformation for the handoff's state this frame, after the pose is written. */
 	void UpdateHandoffPresentation(float DeltaSeconds);
+	/** THE HANDS ON THE VISIBLE BODY (M4): built on, or moved to, whichever body shows; their fingers closed by the swords' share. */
+	WonderlandHands::FHand BodyHandMinusY;
+	WonderlandHands::FHand BodyHandPlusY;
+	void UpdateHands(float DeltaSeconds);
+	/** The visible body's forearm on one physical side, its hand tip and its forward, in that forearm's space. */
+	bool VisibleForearm(bool bPlusY, USceneComponent*& OutForearm, FVector& OutTipLocal, FVector& OutForward) const;
 	int32 RouteIndex = 0;
 	float RouteHold = 0.0f;
 	/** How long the current leg has been attempted, seconds. */

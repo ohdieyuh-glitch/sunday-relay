@@ -8,6 +8,7 @@
 #include "WonderlandCompanionEmbodiment.h"
 #include "WonderlandCompanionSubsystem.h"
 #include "WonderlandGrip.h"
+#include "Camera/PlayerCameraManager.h"
 #include "WonderlandMascotStyle.h"
 
 #include "Camera/CameraComponent.h"
@@ -2794,7 +2795,9 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	// solved onto the book / brush / lens / Contract, legs crossed or trailing, props, the beam, the energy, the repair.
 	ApplyMissionPose(Pose, Overlay, MissionIn, DeltaSeconds);
 	UpdateMissionCamera(DeltaSeconds);
-	// THE MISSION HANDOFF'S SWORDS AND TRANSFORMATION, once every joint is written: the grips are where the hands now are
+	// THE HANDS ON THE VISIBLE BODY, then THE MISSION HANDOFF'S SWORDS AND TRANSFORMATION, once every joint is written: the grips
+	// are where the hands now are
+	UpdateHands(DeltaSeconds);
 	UpdateHandoffPresentation(DeltaSeconds);
 
 	// ---- AND THE COSTUME WEARS THE WHOLE OF IT, so a mascot skin is a change of appearance and nothing else.
@@ -2844,9 +2847,10 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 			(bPlus ? Dressed.ElbowPlusY : Dressed.ElbowMinusY) = Arm->Forearm->GetComponentLocation();
 			(bPlus ? Dressed.ShoulderAtPlusY : Dressed.ShoulderAtMinusY) = Arm->Shoulder->GetComponentLocation();
 		}
-		// AND WHILE THE SWORDS ARE IN THE HANDS, a worn skin's hands go onto the canon's grips by the same solve an act uses
-		// (the Mission Handoff architecture: "while anything is held, the costume hand solve ... is ON")
-		Dressed.MissionWeight = FMath::Max(Overlay.Weight, HandoffHandsWeight);
+		// A HELD SWORD SITS IN THE HAND THE PLAYER SEES (GetHandoffGripWorld: a worn skin's own hand), so the skin keeps its own
+		// arms on the canon's angles -- the stance, on its own proportions -- rather than being stretched up to the hidden
+		// canon's hands (24.5 uu higher on every skin)
+		Dressed.MissionWeight = Overlay.Weight;
 		Dressed.bHasCanonJoints = LegLeft.Hip != nullptr && LegLeft.Shin != nullptr && LegRight.Hip != nullptr
 			&& LegRight.Shin != nullptr && ArmLeft.Shoulder != nullptr && ArmRight.Shoulder != nullptr && HeadPivot != nullptr;
 		// Meditating crosses the legs and flying trails them, out of the sagittal plane a planar solve can follow; the
@@ -3379,18 +3383,76 @@ void ARelayDogCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	// THE COMPANIONS GET THEIR OWN SIZE AND VISIBILITY BACK whatever ends this Dog (a respawn, a travel, the session)
 	HandoffTransform.Release();
 	HandoffSwords.Destroy();
+	BodyHandMinusY.Destroy();
+	BodyHandPlusY.Destroy();
 	Super::EndPlay(EndPlayReason);
+}
+
+bool ARelayDogCharacter::VisibleForearm(bool bPlusY, USceneComponent*& OutForearm, FVector& OutTipLocal, FVector& OutForward) const
+{
+	// THE HAND THE PLAYER SEES: a worn skin's own forearm and hand tip (its figure faces +X, its joints at rest are the
+	// figure's axes), keyed by the physical side; the canon's otherwise
+	const AWonderlandCompanionEmbodiment* Worn = Costume;
+	if (Worn != nullptr && !Worn->IsHidden() && Worn->GetHandFrame(bPlusY, OutForearm, OutTipLocal))
+	{
+		OutForward = FVector(1.0, 0.0, 0.0);
+		return true;
+	}
+	const bool bUseArmLeft = (ArmLeft.SideSign > 0.0f) == bPlusY;
+	const FRelayDogArm& Arm = bUseArmLeft ? ArmLeft : ArmRight;
+	const RelayDogLimbs::FChain& Chain = bUseArmLeft ? ArmChainLeft : ArmChainRight;
+	if (Arm.Forearm == nullptr || !Chain.bMeasured)
+	{
+		return false;
+	}
+	OutForearm = Arm.Forearm;
+	OutTipLocal = Chain.TipLocal;
+	OutForward = FaceForwardInBody;
+	return true;
+}
+
+void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
+{
+	// EVERY MASCOT HAS HANDS (founder, 2026-10-02): built on the visible body's forearms -- moved with a skin worn or taken off --
+	// and owned by that body's actor, closing into fists by the swords' share of the hands
+	for (const bool bPlusY : { false, true })
+	{
+		WonderlandHands::FHand& Hand = bPlusY ? BodyHandPlusY : BodyHandMinusY;
+		USceneComponent* Forearm = nullptr;
+		FVector Tip = FVector::ZeroVector;
+		FVector Forward = FVector::ForwardVector;
+		if (!VisibleForearm(bPlusY, Forearm, Tip, Forward) || Forearm == nullptr)
+		{
+			continue;
+		}
+		Hand.Attach(Forearm->GetOwner() != nullptr ? Forearm->GetOwner() : this, Forearm, Tip, Forward, bPlusY ? 1.0f : -1.0f);
+		Hand.Pose(HandoffHandsWeight, DeltaSeconds);
+	}
 }
 
 FTransform ARelayDogCharacter::GetHandoffGripWorld(bool bLeftHand) const
 {
-	// THE DOG'S OWN LEFT IS ITS +Y SIDE (BindJoints: the canon maps the web's -x to Unreal's +y), where the LLM Companion's gold
-	// sword goes; the cyan, Jhinn's, goes to the other. The founder's sides never swap.
-	const bool bLeftIsArmLeft = ArmLeft.SideSign > 0.0f;
-	const bool bUseArmLeft = bLeftHand == bLeftIsArmLeft;
-	const FRelayDogArm& Arm = bUseArmLeft ? ArmLeft : ArmRight;
-	const RelayDogLimbs::FChain& Chain = bUseArmLeft ? ArmChainLeft : ArmChainRight;
-	return WonderlandGrip::HandGrip(Arm.Forearm, Chain.TipLocal, FaceForwardInBody, Arm.SideSign, WonderlandGrip::CurrentHold());
+	// THE DOG'S OWN LEFT IS ITS -Y SIDE, as for any actor (+Y is an actor's right), where the LLM Companion's gold sword goes; the
+	// cyan, Jhinn's, goes to the other. The founder's sides never swap. MEASURED, NOT ASSUMED: the first build took +Y for the
+	// left on the strength of a bind comment, and wl.Qa.HandoffSwords SW3 -- projecting both blades from the player's own camera
+	// behind the Dog -- put gold on the RIGHT of the screen (x 627 vs 430); Second read the same mirror off the frames.
+	const bool bPlusY = !bLeftHand;
+	USceneComponent* Forearm = nullptr;
+	FVector Tip = FVector::ZeroVector;
+	FVector Forward = FVector::ForwardVector;
+	if (!VisibleForearm(bPlusY, Forearm, Tip, Forward))
+	{
+		return FTransform(GetActorLocation());
+	}
+	const float Side = bPlusY ? 1.0f : -1.0f;
+	const WonderlandHands::FHand& Hand = bPlusY ? BodyHandPlusY : BodyHandMinusY;
+	const WonderlandGrip::FHold Hold = WonderlandGrip::CurrentHold();
+	// IN THE FIST once the hand is there: the grip passes through the closed fingers
+	if (Hand.IsOn(Forearm))
+	{
+		return WonderlandGrip::HandGripAt(Forearm, Tip, Hand.GripCentreLocal(), Forward, Side, Hold);
+	}
+	return WonderlandGrip::HandGrip(Forearm, Tip, Forward, Side, Hold);
 }
 
 void ARelayDogCharacter::UpdateHandoffPresentation(float DeltaSeconds)
@@ -3437,6 +3499,33 @@ void ARelayDogCharacter::UpdateHandoffPresentation(float DeltaSeconds)
 	Swords.TimeSeconds = Time;
 	Swords.DeltaSeconds = DeltaSeconds;
 	Swords.bDashing = bDashActive;
+	// HELD, PARENTED TO THE HANDS: each sword's forearm and its grip frame in that forearm's space (in the fist when a hand is on it)
+	for (const bool bLeft : { true, false })
+	{
+		USceneComponent* Forearm = nullptr;
+		FVector Tip = FVector::ZeroVector;
+		FVector Forward = FVector::ForwardVector;
+		if (VisibleForearm(!bLeft, Forearm, Tip, Forward) && Forearm != nullptr)
+		{
+			const WonderlandHands::FHand& Hand = bLeft ? BodyHandMinusY : BodyHandPlusY;
+			const WonderlandGrip::FHold Hold = WonderlandGrip::CurrentHold();
+			const FVector Along = Tip.IsNearlyZero() ? FVector(0.0, 0.0, -1.0) : Tip.GetSafeNormal();
+			const FVector Square = (Forward - Along * FVector::DotProduct(Forward, Along)).GetSafeNormal();
+			const FVector Centre = Hand.IsOn(Forearm) ? Hand.GripCentreLocal() : Tip - Along * Hold.IntoHandUU + Square * Hold.ForwardUU;
+			const FTransform Local = WonderlandGrip::HandGripLocal(Tip, Centre, Forward, bLeft ? -1.0f : 1.0f, Hold);
+			(bLeft ? Swords.LeftForearm : Swords.RightForearm) = Forearm;
+			(bLeft ? Swords.LeftGripLocal : Swords.RightGripLocal) = Local;
+		}
+	}
+	// the player's camera: a forming sword turns its broad face to it
+	Swords.ViewLocation = GetActorLocation() - GetActorForwardVector() * 400.0f + FVector(0.0f, 0.0f, 120.0f);
+	if (const APlayerController* ViewPC = Cast<APlayerController>(GetController()))
+	{
+		if (ViewPC->PlayerCameraManager != nullptr)
+		{
+			Swords.ViewLocation = ViewPC->PlayerCameraManager->GetCameraLocation();
+		}
+	}
 	HandoffSwords.Show(Swords);
 
 	WonderlandHandoffTransform::FShowInput Change;

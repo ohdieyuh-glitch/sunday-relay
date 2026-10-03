@@ -43,4 +43,18 @@ namespace WonderlandGrip
 	 * @param SideSign          +1 for the hand on the body's +Y side, -1 for the other: the mirror.
 	 */
 	FTransform HandGrip(const USceneComponent* Forearm, const FVector& TipLocal, const FVector& ForwardInForearm, float SideSign, const FHold& Hold);
+
+	/**
+	 * The same frame with its centre given: a hand's closed fist (WonderlandHands), where the grip belongs once there are
+	 * fingers to close round it. The axes are HandGrip's; IntoHandUU and ForwardUU are not used.
+	 */
+	FTransform HandGripAt(const USceneComponent* Forearm, const FVector& TipLocal, const FVector& CentreLocal, const FVector& ForwardInForearm,
+		float SideSign, const FHold& Hold);
+
+	/**
+	 * The grip frame IN THE FOREARM'S OWN SPACE (no scale): what a held object is parented to the forearm with, so it follows
+	 * every write of that joint in the same frame -- a worn skin's joints are written after the Dog's, and an object placed in
+	 * the world from them would trail the hand by a frame.
+	 */
+	FTransform HandGripLocal(const FVector& TipLocal, const FVector& CentreLocal, const FVector& ForwardInForearm, float SideSign, const FHold& Hold);
 }

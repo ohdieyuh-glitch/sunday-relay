@@ -6361,7 +6361,8 @@ namespace
 			S.Check(TEXT("SW2"), GoldOff <= 1.0f && CyanOff <= 1.0f,
 				FString::Printf(TEXT("held: the gold sword %.2f uu from the LEFT hand's grip, the cyan %.2f uu from the RIGHT's"), GoldOff, CyanOff));
 			// SW3: AS THE PLAYER SEES THEM, from the Dog's own camera behind it
-			FVector2D GoldScreen, CyanScreen;
+			FVector2D GoldScreen(0.0, 0.0);
+			FVector2D CyanScreen(0.0, 0.0);
 			const FVector GoldBlade = Swords.GetSwordWorld(true).TransformPosition(FVector(0.0f, 0.0f, 50.0f));
 			const FVector CyanBlade = Swords.GetSwordWorld(false).TransformPosition(FVector(0.0f, 0.0f, 50.0f));
 			const bool bProjected = PC->ProjectWorldLocationToScreen(GoldBlade, GoldScreen) && PC->ProjectWorldLocationToScreen(CyanBlade, CyanScreen);
@@ -6370,10 +6371,18 @@ namespace
 					GoldScreen.X, CyanScreen.X, bProjected && GoldScreen.X < CyanScreen.X ? TEXT("yes") : TEXT("NO")));
 			S.Frame(TEXT("sw_3_held_gameplay_camera_noon"));
 			// SW4: THE COMPANIONS ARE THE SWORDS NOW
+			// whole = every box the pair was built from is drawn (the first build's "> 300" was a guess, and the pair has 282)
 			const int32 Boxes = Swords.CountVisibleBoxes();
-			S.Check(TEXT("SW4"), LeftBody->IsHidden() && RightBody->IsHidden() && Change.GetPresence() == 0.0f && Swords.GetPresence() == 1.0f && Boxes > 300,
-				FString::Printf(TEXT("held: the LLM Companion %s, Jhinn %s (veiled: they are the swords), the swords whole %.2f with %d boxes drawn"),
-					LeftBody->IsHidden() ? TEXT("veiled") : TEXT("STILL SHOWN"), RightBody->IsHidden() ? TEXT("veiled") : TEXT("STILL SHOWN"), Swords.GetPresence(), Boxes));
+			S.Check(TEXT("SW4"), LeftBody->IsHidden() && RightBody->IsHidden() && Change.GetPresence() == 0.0f && Swords.GetPresence() == 1.0f && Boxes > 0
+				&& Boxes == Swords.GetBuiltBoxes(),
+				FString::Printf(TEXT("held: the LLM Companion %s, Jhinn %s (veiled: they are the swords), the swords whole %.2f with %d of %d boxes drawn"),
+					LeftBody->IsHidden() ? TEXT("veiled") : TEXT("STILL SHOWN"), RightBody->IsHidden() ? TEXT("veiled") : TEXT("STILL SHOWN"), Swords.GetPresence(), Boxes,
+					Swords.GetBuiltBoxes()));
+			// HD1: RELAY OG'S OWN HANDS, closed round the grips (the founder: functional hands and stable dual-grip sockets)
+			S.Check(TEXT("HD1"), Dog->GetHand(true).CountVisibleBoxes() == WonderlandHands::BoxesPerHand && Dog->GetHand(false).CountVisibleBoxes() == WonderlandHands::BoxesPerHand
+				&& Dog->GetHand(true).GetCurl() >= 0.9f && Dog->GetHand(false).GetCurl() >= 0.9f,
+				FString::Printf(TEXT("held: Relay OG's hands drawn %d + %d boxes, fists closed %.2f / %.2f (>= 0.9)"), Dog->GetHand(true).CountVisibleBoxes(),
+					Dog->GetHand(false).CountVisibleBoxes(), Dog->GetHand(true).GetCurl(), Dog->GetHand(false).GetCurl()));
 			S.Shot = 0;
 			Next(3);
 			return true;
@@ -6400,6 +6409,17 @@ namespace
 			if (In < (S.Phase == 4 && S.Shot == 0 ? 2.5f : 1.2f))
 			{
 				return true;
+			}
+			// SW3b, THE MIRROR TRAP (Second's H6): facing the Dog, its LEFT hand -- the gold -- is on the RIGHT of the screen
+			if (S.Phase == 3 && S.Shot == 0)
+			{
+				FVector2D GoldFront(0.0, 0.0);
+				FVector2D CyanFront(0.0, 0.0);
+				const bool bSeen = PC->ProjectWorldLocationToScreen(Swords.GetSwordWorld(true).TransformPosition(FVector(0.0f, 0.0f, 50.0f)), GoldFront)
+					&& PC->ProjectWorldLocationToScreen(Swords.GetSwordWorld(false).TransformPosition(FVector(0.0f, 0.0f, 50.0f)), CyanFront);
+				S.Check(TEXT("SW3b"), bSeen && GoldFront.X > CyanFront.X,
+					FString::Printf(TEXT("from IN FRONT of the Dog (the mirror trap): the gold blade at x %.0f, the cyan at x %.0f (gold on the screen's RIGHT, the Dog's own LEFT: %s)"),
+						GoldFront.X, CyanFront.X, bSeen && GoldFront.X > CyanFront.X ? TEXT("yes") : TEXT("NO")));
 			}
 			S.Frame(FString::Printf(TEXT("sw_4_held_%s_%s"), S.Phase == 3 ? TEXT("noon") : TEXT("night"), SwordShots[S.Shot].Name));
 			++S.Shot;
@@ -6440,6 +6460,11 @@ namespace
 					LeftBody->IsHidden() ? TEXT("HIDDEN") : TEXT("shown"), *LeftBody->GetActorScale3D().ToCompactString(), *S.LeftScale.ToCompactString(),
 					RightBody->IsHidden() ? TEXT("HIDDEN") : TEXT("shown"), *RightBody->GetActorScale3D().ToCompactString(), *S.RightScale.ToCompactString(),
 					Swords.CountVisibleBoxes(), Change.CountVisibleMotes()));
+			// HD2: the hands stay, and open again (functional hands: a fist only round something held)
+			S.Check(TEXT("HD2"), Dog->GetHand(true).CountVisibleBoxes() == WonderlandHands::BoxesPerHand && Dog->GetHand(false).CountVisibleBoxes() == WonderlandHands::BoxesPerHand
+				&& Dog->GetHand(true).GetCurl() <= 0.1f && Dog->GetHand(false).GetCurl() <= 0.1f,
+				FString::Printf(TEXT("given back: Relay OG's hands drawn %d + %d boxes, open (curl %.2f / %.2f, want <= 0.1)"), Dog->GetHand(true).CountVisibleBoxes(),
+					Dog->GetHand(false).CountVisibleBoxes(), Dog->GetHand(true).GetCurl(), Dog->GetHand(false).GetCurl()));
 			S.Skin = 1;
 			Next(6);
 			return true;
@@ -6469,9 +6494,18 @@ namespace
 			{
 				return In < 10.0f ? true : Stop(TEXT("a skin's swords were never held"));
 			}
-			S.Check(FString::Printf(TEXT("SW6.%d"), S.Skin + 1), Swords.CountVisibleBoxes() > 300 && Swords.GetPresence() == 1.0f,
-				FString::Printf(TEXT("%s holding both swords: %d boxes drawn (frames judged by eye; costume hands onto the grips: M4)"), FaceRoster[S.Skin],
-					Swords.CountVisibleBoxes()));
+		{
+			// the SKIN'S OWN hands hold them: built on its forearms, closed into fists, each sword's grip in its fist
+			const float GoldOff = FVector::Dist(Swords.GetSwordWorld(true).GetLocation(), Dog->GetHandoffGripWorld(true).GetLocation());
+			const float CyanOff = FVector::Dist(Swords.GetSwordWorld(false).GetLocation(), Dog->GetHandoffGripWorld(false).GetLocation());
+			const bool bHands = Dog->GetHand(true).CountVisibleBoxes() == WonderlandHands::BoxesPerHand && Dog->GetHand(false).CountVisibleBoxes() == WonderlandHands::BoxesPerHand
+				&& Dog->GetHand(true).GetCurl() >= 0.9f && Dog->GetHand(false).GetCurl() >= 0.9f;
+			S.Check(FString::Printf(TEXT("SW6.%d"), S.Skin + 1), Swords.CountVisibleBoxes() == Swords.GetBuiltBoxes() && Swords.GetBuiltBoxes() > 0 && Swords.GetPresence() == 1.0f
+				&& bHands && GoldOff <= 1.0f && CyanOff <= 1.0f,
+				FString::Printf(TEXT("%s holding both swords: %d of %d boxes drawn; its own hands %d + %d boxes, fists closed %.2f / %.2f (>= 0.9); the grips %.2f / %.2f uu ")
+					TEXT("from the fists (frames judged by eye)"), FaceRoster[S.Skin], Swords.CountVisibleBoxes(), Swords.GetBuiltBoxes(), Dog->GetHand(true).CountVisibleBoxes(),
+					Dog->GetHand(false).CountVisibleBoxes(), Dog->GetHand(true).GetCurl(), Dog->GetHand(false).GetCurl(), GoldOff, CyanOff));
+		}
 			S.Shot = 0;
 			Next(9);
 			return true;

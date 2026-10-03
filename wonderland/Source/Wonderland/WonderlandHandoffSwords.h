@@ -87,6 +87,16 @@ namespace WonderlandHandoffSwords
 		float DeltaSeconds = 0.0f;
 		/** A dash is under way: each sword draws its trail (gold LEFT, cyan RIGHT). */
 		bool bDashing = false;
+		/** Where the player's camera is: a forming sword turns its broad face to it (edge-on it reads as a line). */
+		FVector ViewLocation = FVector::ZeroVector;
+		/**
+		 * HELD, EACH SWORD IS PARENTED TO ITS HAND'S FOREARM with its grip frame in that forearm's space, so it follows every write
+		 * of that joint in the same frame (a worn skin's joints are written after the Dog's). Unset: placed in the world.
+		 */
+		TWeakObjectPtr<USceneComponent> LeftForearm;
+		TWeakObjectPtr<USceneComponent> RightForearm;
+		FTransform LeftGripLocal = FTransform::Identity;
+		FTransform RightGripLocal = FTransform::Identity;
 	};
 
 	/** The effects' sizes: how many boxes each carries. The trails are thin and short so a dash never fills the screen. */
@@ -113,8 +123,9 @@ namespace WonderlandHandoffSwords
 		/** How visible the swords are right now (0 hidden .. 1 fully formed), and where each is. */
 		float GetPresence() const { return Presence; }
 		FTransform GetSwordWorld(bool bGold) const;
-		/** The number of sword boxes drawn right now, for the QA (0 when hidden). */
+		/** The number of sword boxes drawn right now, for the QA (0 when hidden), and how many the pair was built from. */
 		int32 CountVisibleBoxes() const;
+		int32 GetBuiltBoxes() const { return Gold.Boxes + Cyan.Boxes; }
 		/** The effects drawn right now, for the QA: spiral ribbon boxes, floating particles, and trail segments. */
 		int32 CountVisibleRibbons() const;
 		int32 CountVisibleMotes() const;
@@ -141,8 +152,13 @@ namespace WonderlandHandoffSwords
 			int32 Boxes = 0;
 		};
 		void BuildOne(AActor* Owner, FSword& Sword, bool bGold, float Scale);
-		void Place(FSword& Sword, const FTransform& World, float Grow, bool bVisible);
+		void Place(FSword& Sword, const FTransform& World, float Grow, bool bVisible, USceneComponent* HoldIn = nullptr,
+			const FTransform& HoldLocal = FTransform::Identity);
 		void Animate(FSword& Sword, bool bGold, bool bVisible, const FShowInput& In);
+		/** Puts the parts' colours back from the live levels when a calibration variable has changed. */
+		void Recolour(FSword& Sword, bool bGold);
+		/** The levels the colours were last written with: exposure, blade, fuller, core, feather. */
+		float AppliedLevels[5] = { -1.0f, -1.0f, -1.0f, -1.0f, -1.0f };
 
 		FSword Gold;
 		FSword Cyan;

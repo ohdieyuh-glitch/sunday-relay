@@ -2986,6 +2986,22 @@ namespace
 	}
 }
 
+bool AWonderlandCompanionEmbodiment::GetHandFrame(bool bPlusY, USceneComponent*& OutForearm, FVector& OutTipLocal) const
+{
+	// THE ELBOW ON THAT SIDE carries the hand: its tip is its measured length straight down its own axis at rest
+	for (int32 Index = 0; Index < Motions.Num(); ++Index)
+	{
+		const FPartMotion& Part = Motions[Index];
+		if (Part.LimbKind == 4 && Part.LimbSide == (bPlusY ? 1 : -1) && PartPivots.IsValidIndex(Index) && PartPivots[Index] != nullptr)
+		{
+			OutForearm = PartPivots[Index];
+			OutTipLocal = FVector(0.0, 0.0, -Part.ShinUU);
+			return true;
+		}
+	}
+	return false;
+}
+
 bool AWonderlandCompanionEmbodiment::SolveLegToSole(int32 HipIndex, const FVector& SoleWorld, FRotator& OutHip, FRotator& OutKnee) const
 {
 	// A TWO-BONE SOLVE IN THE HIP'S OWN PARENT FRAME, where the hip rests at RestLocation and swings about Y.

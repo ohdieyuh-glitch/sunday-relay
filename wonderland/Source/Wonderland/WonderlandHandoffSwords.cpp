@@ -19,6 +19,24 @@ namespace
 	/** THE EMISSIVE SCALE, a console variable so the frames can calibrate it without a build (the white point is 25,000). */
 	TAutoConsoleVariable<float> CVarSwordExposure(TEXT("wl.Handoff.SwordExposure"), 4000.0f,
 		TEXT("Mission Handoff swords: the scene exposure their emissive parts are multiplied by (the mission props use 4000)."));
+	// EACH EMISSIVE PART'S LEVEL, live: the first frames read the blade light grey at noon (3.2) and the wings as grey planks
+	// (lit), so the blade, the orb and the fuller came up and the feathers now glow white. Settled by frames, never asserted.
+	TAutoConsoleVariable<float> CVarSwordBlade(TEXT("wl.Handoff.Sword.Blade"), 5.5f, TEXT("Mission Handoff swords: the white blade's emissive level."));
+	TAutoConsoleVariable<float> CVarSwordFuller(TEXT("wl.Handoff.Sword.Fuller"), 3.4f, TEXT("Mission Handoff swords: the fuller's (engraving / runes) emissive level."));
+	TAutoConsoleVariable<float> CVarSwordCore(TEXT("wl.Handoff.Sword.Core"), 10.0f, TEXT("Mission Handoff swords: the orb core's and the gems' emissive level."));
+	TAutoConsoleVariable<float> CVarSwordFeather(TEXT("wl.Handoff.Sword.Feather"), 1.3f, TEXT("Mission Handoff swords: the wings' feathers' emissive level."));
+
+	float SwordLevel(WonderlandHandoffSwords::ESwordPart Part)
+	{
+		switch (Part)
+		{
+		case WonderlandHandoffSwords::ESwordPart::Blade: return FMath::Clamp(CVarSwordBlade.GetValueOnGameThread(), 0.0f, 100.0f);
+		case WonderlandHandoffSwords::ESwordPart::Fuller: return FMath::Clamp(CVarSwordFuller.GetValueOnGameThread(), 0.0f, 100.0f);
+		case WonderlandHandoffSwords::ESwordPart::Core: return FMath::Clamp(CVarSwordCore.GetValueOnGameThread(), 0.0f, 100.0f);
+		case WonderlandHandoffSwords::ESwordPart::Feather: return FMath::Clamp(CVarSwordFeather.GetValueOnGameThread(), 0.0f, 100.0f);
+		default: return 1.0f;
+		}
+	}
 
 	FTransform BoxXf(const WonderlandHandoffSwords::FSwordBox& Box, float Scale)
 	{
@@ -51,21 +69,23 @@ namespace WonderlandHandoffSwords
 
 	bool IsEmissive(ESwordPart Part)
 	{
-		return Part == ESwordPart::Blade || Part == ESwordPart::Fuller || Part == ESwordPart::Core;
+		// the feathers glow too: lit, the thin white planks read grey against the sun (the first noon frames)
+		return Part == ESwordPart::Blade || Part == ESwordPart::Fuller || Part == ESwordPart::Core || Part == ESwordPart::Feather;
 	}
 
 	FLinearColor PartColour(ESwordPart Part, bool bGold)
 	{
-		// Emissive parts are LEVELS (times the exposure): the orb brightest, the blade "extremely bright" white, the fuller a
-		// stop under it in the sword's own energy colour -- so the detail survives instead of blooming every part to white.
+		// Emissive parts are LEVELS (times the exposure): the orb brightest, the blade "extremely bright" white, the fuller under
+		// it in the sword's own energy colour, the feathers a soft white -- so the detail survives instead of blooming every part
+		// to white. The levels are live console variables (wl.Handoff.Sword.*), calibrated by frames at noon and at night.
 		switch (Part)
 		{
-		case ESwordPart::Blade: return bGold ? FLinearColor(1.00f, 0.95f, 0.84f) * 3.2f : FLinearColor(0.90f, 0.96f, 1.00f) * 3.2f;
-		case ESwordPart::Fuller: return bGold ? FLinearColor(1.00f, 0.62f, 0.14f) * 2.4f : FLinearColor(0.16f, 0.82f, 1.00f) * 2.4f;
-		case ESwordPart::Core: return bGold ? FLinearColor(1.00f, 0.76f, 0.30f) * 6.0f : FLinearColor(0.32f, 0.92f, 1.00f) * 6.0f;
+		case ESwordPart::Blade: return (bGold ? FLinearColor(1.00f, 0.95f, 0.84f) : FLinearColor(0.90f, 0.96f, 1.00f)) * SwordLevel(Part);
+		case ESwordPart::Fuller: return (bGold ? FLinearColor(1.00f, 0.62f, 0.14f) : FLinearColor(0.16f, 0.82f, 1.00f)) * SwordLevel(Part);
+		case ESwordPart::Core: return (bGold ? FLinearColor(1.00f, 0.76f, 0.30f) : FLinearColor(0.32f, 0.92f, 1.00f)) * SwordLevel(Part);
+		case ESwordPart::Feather: return (bGold ? FLinearColor(1.00f, 0.95f, 0.84f) : FLinearColor(0.90f, 0.96f, 1.00f)) * SwordLevel(Part);
 		case ESwordPart::Metal: return bGold ? FLinearColor(0.86f, 0.62f, 0.18f) : FLinearColor(0.78f, 0.82f, 0.88f);
 		case ESwordPart::Grip: return bGold ? FLinearColor(0.93f, 0.91f, 0.86f) : FLinearColor(0.92f, 0.94f, 0.97f);
-		case ESwordPart::Feather: return bGold ? FLinearColor(0.97f, 0.94f, 0.86f) : FLinearColor(0.90f, 0.95f, 1.00f);
 		default: return FLinearColor::White;
 		}
 	}
@@ -511,16 +531,38 @@ namespace WonderlandHandoffSwords
 		return Count;
 	}
 
-	void FPresentation::Place(FSword& Sword, const FTransform& World, float Grow, bool bVisible)
+	void FPresentation::Place(FSword& Sword, const FTransform& World, float Grow, bool bVisible, USceneComponent* HoldIn, const FTransform& HoldLocal)
 	{
 		USceneComponent* Root = Sword.Root.Get();
 		if (Root == nullptr)
 		{
 			return;
 		}
-		FTransform At = World;
-		At.SetScale3D(FVector(FMath::Max(Grow, 0.001f) * BuiltScale));
-		Root->SetWorldTransform(At);
+		const FVector Scale(FMath::Max(Grow, 0.001f) * BuiltScale);
+		if (HoldIn != nullptr)
+		{
+			// IN THE HAND: parented to the forearm, the grip frame its relative place, its own size kept (absolute scale)
+			if (Root->GetAttachParent() != HoldIn)
+			{
+				Root->AttachToComponent(HoldIn, FAttachmentTransformRules::KeepWorldTransform);
+			}
+			Root->SetAbsolute(false, false, true);
+			Root->SetRelativeLocationAndRotation(HoldLocal.GetLocation(), HoldLocal.GetRotation());
+			Root->SetWorldScale3D(Scale);
+		}
+		else
+		{
+			// IN THE WORLD (forming, in flight, returning): back on the owner, placed absolutely
+			USceneComponent* Home = Root->GetOwner() != nullptr ? Root->GetOwner()->GetRootComponent() : nullptr;
+			if (Home != nullptr && Root->GetAttachParent() != Home)
+			{
+				Root->AttachToComponent(Home, FAttachmentTransformRules::KeepWorldTransform);
+			}
+			Root->SetAbsolute(true, true, true);
+			FTransform At = World;
+			At.SetScale3D(Scale);
+			Root->SetWorldTransform(At);
+		}
 		for (const TWeakObjectPtr<UInstancedStaticMeshComponent>& Part : Sword.Parts)
 		{
 			if (UInstancedStaticMeshComponent* Mesh = Part.Get())
@@ -539,11 +581,24 @@ namespace WonderlandHandoffSwords
 		{
 			return;
 		}
-		// Upright, facing as the hand will: the pose the sword forms in over its companion
-		auto Upright = [](const FVector& At, const FTransform& Grip)
+		// THE CALIBRATION IS LIVE: a level changed at the console reaches the swords on the next frame
+		const float Levels[5] = { CVarSwordExposure.GetValueOnGameThread(), SwordLevel(ESwordPart::Blade), SwordLevel(ESwordPart::Fuller),
+			SwordLevel(ESwordPart::Core), SwordLevel(ESwordPart::Feather) };
+		if (FMemory::Memcmp(Levels, AppliedLevels, sizeof(Levels)) != 0)
 		{
-			const FRotator Yaw(0.0f, Grip.Rotator().Yaw, 0.0f);
-			return FTransform(Yaw, At + FVector(0.0f, 0.0f, 30.0f));
+			Recolour(Gold, true);
+			Recolour(Cyan, false);
+			FMemory::Memcpy(AppliedLevels, Levels, sizeof(Levels));
+		}
+		// Upright ABOVE its companion, its broad face turned to the player's camera (edge-on, a forming sword reads as a line):
+		// the pose each sword forms in, out of its companion's light
+		const FVector View = In.ViewLocation;
+		auto Upright = [View](const FVector& At, const FTransform& Grip)
+		{
+			const FVector Where = At + FVector(0.0f, 0.0f, 70.0f);
+			const FVector Toward = (View - Where).GetSafeNormal2D();
+			const float Yaw = Toward.IsNearlyZero() ? Grip.Rotator().Yaw : Toward.Rotation().Yaw;
+			return FTransform(FRotator(0.0f, Yaw, 0.0f), Where);
 		};
 		auto Between = [](const FTransform& From, const FTransform& To, float T)
 		{
@@ -598,11 +653,29 @@ namespace WonderlandHandoffSwords
 			break;
 		}
 		Presence = bVisible ? Grow : 0.0f;
-		Place(Gold, GoldAt, Grow, bVisible);
-		Place(Cyan, CyanAt, Grow, bVisible);
+		// HELD: parented to the hands' forearms (the frame they are written in); otherwise placed in the world
+		const bool bInHands = In.State == EWonderlandHandoffState::Held;
+		USceneComponent* LeftHold = bInHands ? In.LeftForearm.Get() : nullptr;
+		USceneComponent* RightHold = bInHands ? In.RightForearm.Get() : nullptr;
+		Place(Gold, GoldAt, Grow, bVisible, LeftHold, In.LeftGripLocal);
+		Place(Cyan, CyanAt, Grow, bVisible, RightHold, In.RightGripLocal);
 		// the light lives once the sword has formed enough to carry it
 		Animate(Gold, true, bVisible && Grow > 0.35f, In);
 		Animate(Cyan, false, bVisible && Grow > 0.35f, In);
+	}
+
+	void FPresentation::Recolour(FSword& Sword, bool bGold)
+	{
+		const float Exposure = CVarSwordExposure.GetValueOnGameThread();
+		for (int32 PartIndex = 0; PartIndex < static_cast<int32>(ESwordPart::Count); ++PartIndex)
+		{
+			if (UMaterialInstanceDynamic* Mid = Sword.Materials[PartIndex].Get())
+			{
+				const ESwordPart Part = static_cast<ESwordPart>(PartIndex);
+				const FLinearColor Colour = PartColour(Part, bGold);
+				Mid->SetVectorParameterValue(TEXT("Color"), IsEmissive(Part) ? Colour * Exposure : Colour);
+			}
+		}
 	}
 
 	FTransform FPresentation::GetSwordWorld(bool bGold) const

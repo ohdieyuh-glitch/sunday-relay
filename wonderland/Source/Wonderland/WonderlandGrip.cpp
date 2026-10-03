@@ -30,10 +30,32 @@ namespace WonderlandGrip
 
 	FTransform HandGrip(const USceneComponent* Forearm, const FVector& TipLocal, const FVector& ForwardInForearm, float SideSign, const FHold& Hold)
 	{
+		const FVector Along = TipLocal.IsNearlyZero() ? FVector(0.0, 0.0, -1.0) : TipLocal.GetSafeNormal();
+		FVector Forward = ForwardInForearm - Along * FVector::DotProduct(ForwardInForearm, Along);
+		Forward = Forward.IsNearlyZero() ? FVector(1.0, 0.0, 0.0) : Forward.GetSafeNormal();
+		// THE GRIP'S CENTRE with no hand to close round it: a little back from the limb's tip and ahead of the bone's line
+		return HandGripAt(Forearm, TipLocal, TipLocal - Along * Hold.IntoHandUU + Forward * Hold.ForwardUU, ForwardInForearm, SideSign, Hold);
+	}
+
+	FTransform HandGripAt(const USceneComponent* Forearm, const FVector& TipLocal, const FVector& CentreLocal, const FVector& ForwardInForearm,
+		float SideSign, const FHold& Hold)
+	{
 		if (Forearm == nullptr)
 		{
 			return FTransform::Identity;
 		}
+		const FTransform Local = HandGripLocal(TipLocal, CentreLocal, ForwardInForearm, SideSign, Hold);
+		// into the world, without the rig's scale: the object carries its own
+		FTransform ForearmWorld = Forearm->GetComponentTransform();
+		ForearmWorld.SetScale3D(FVector::OneVector);
+		FTransform Out = Local * ForearmWorld;
+		Out.SetLocation(Forearm->GetComponentTransform().TransformPosition(CentreLocal));
+		Out.SetScale3D(FVector::OneVector);
+		return Out;
+	}
+
+	FTransform HandGripLocal(const FVector& TipLocal, const FVector& CentreLocal, const FVector& ForwardInForearm, float SideSign, const FHold& Hold)
+	{
 		// THE FOREARM'S OWN AXES: its length (shoulder side to tip), and the body's forward made square to it
 		const FVector Along = TipLocal.IsNearlyZero() ? FVector(0.0, 0.0, -1.0) : TipLocal.GetSafeNormal();
 		FVector Forward = ForwardInForearm - Along * FVector::DotProduct(ForwardInForearm, Along);
@@ -51,18 +73,9 @@ namespace WonderlandGrip
 		}
 		const FVector X = FVector::CrossProduct(Y, Z).GetSafeNormal();
 
-		// THE GRIP'S CENTRE: in the fist, a little back from the limb's tip and ahead of the bone's line
-		const FVector Centre = TipLocal - Along * Hold.IntoHandUU + Forward * Hold.ForwardUU;
-		const FMatrix Basis(FPlane(X, 0.0f), FPlane(Y, 0.0f), FPlane(Z, 0.0f), FPlane(Centre, 1.0f));
-		const FTransform Local(Basis);
-
-		// into the world, without the rig's scale: the object carries its own
-		FTransform ForearmWorld = Forearm->GetComponentTransform();
-		ForearmWorld.SetScale3D(FVector::OneVector);
-		const FVector WorldCentre = Forearm->GetComponentTransform().TransformPosition(Centre);
-		FTransform Out = Local * ForearmWorld;
-		Out.SetLocation(WorldCentre);
-		Out.SetScale3D(FVector::OneVector);
-		return Out;
+		const FMatrix Basis(FPlane(X, 0.0f), FPlane(Y, 0.0f), FPlane(Z, 0.0f), FPlane(CentreLocal, 1.0f));
+		FTransform Local(Basis);
+		Local.SetScale3D(FVector::OneVector);
+		return Local;
 	}
 }
