@@ -9255,13 +9255,6 @@ namespace
 		return Box;
 	}
 
-	FString QaObbName(const FQaObb& Box)
-	{
-		const USceneComponent* Where = Box.Mesh != nullptr && Box.Mesh->GetAttachParent() != nullptr ? Box.Mesh->GetAttachParent() : Box.Mesh;
-		const FString Name = Where != nullptr ? Where->GetName() : FString(TEXT("?"));
-		return Box.Instance == INDEX_NONE ? Name : FString::Printf(TEXT("%s#%d"), *Name, Box.Instance);
-	}
-
 	/** How deep two boxes overlap, in uu: the distance that would push them apart, the least over the 15 separating axes; 0 when apart. */
 	double QaObbDepth(const FQaObb& A, const FQaObb& B)
 	{
@@ -9308,55 +9301,6 @@ namespace
 			}
 		}
 		return Depth;
-	}
-
-	/** True when the segment From-To passes through the box. */
-	bool QaSegmentHitsObb(const FQaObb& Box, const FVector& From, const FVector& To)
-	{
-		const FVector Offset = From - Box.Centre;
-		const FVector Span = To - From;
-		double TMin = 0.0;
-		double TMax = 1.0;
-		for (int32 I = 0; I < 3; ++I)
-		{
-			const double Along = FVector::DotProduct(Offset, Box.Axis[I]);
-			const double Delta = FVector::DotProduct(Span, Box.Axis[I]);
-			const double Half = Box.Half[I];
-			if (FMath::Abs(Delta) < 1e-9)
-			{
-				if (FMath::Abs(Along) > Half)
-				{
-					return false;
-				}
-				continue;
-			}
-			double T0 = (-Half - Along) / Delta;
-			double T1 = (Half - Along) / Delta;
-			if (T0 > T1)
-			{
-				Swap(T0, T1);
-			}
-			TMin = FMath::Max(TMin, T0);
-			TMax = FMath::Min(TMax, T1);
-			if (TMin > TMax)
-			{
-				return false;
-			}
-		}
-		return true;
-	}
-
-	/** True when Part is, or hangs from, either forearm: the hand's end of the arm, where a grip belongs. */
-	bool QaUnderForearm(const USceneComponent* Part, const USceneComponent* Left, const USceneComponent* Right)
-	{
-		for (const USceneComponent* Up = Part; Up != nullptr; Up = Up->GetAttachParent())
-		{
-			if (Up == Left || Up == Right)
-			{
-				return true;
-			}
-		}
-		return false;
 	}
 
 	/** A mesh's boxes in the world: each instance of an instanced mesh, or the mesh itself -- its own bounds as a unit cube's. */
@@ -9773,11 +9717,636 @@ namespace
 	 * and each sword's are counted. CL1-CL6. WLCLQA lines.
 	 */
 	constexpr double QaMaterialClipUU = 3.0;
+	/** The grip -- and the lattice lying on it -- may sit this far into the fist that holds it (the fingers pressed on it). */
+	constexpr double QaGripContactUU = 1.0;
+	/** Anything else meeting a hand box deeper than this fails: a guard, a collar, a pommel, a blade, a feather, the other hand. */
+	constexpr double QaHandTouchUU = 0.25;
+	/** Solid depths are measured to this cap: the verdict only needs to know a part went deeper than QaMaterialClipUU. */
+	constexpr double QaSolidCapUU = 12.0;
+	constexpr double QaSolidCellUU = 8.0;
+
+	// GENERATED from wonderland-blender-forge/wonderland/v2/dog_canon.py by gen_canon_boxes.py (37 boxes): the Relay OG body as
+	// dog_v2.py builds it -- per mesh Mesh_<joint>_<surface>, in that joint's own frame, Unreal axes, in head widths.
+	struct FQaCanonBox
+	{
+		const TCHAR* Name;
+		const TCHAR* Mesh;
+		bool bSolid;
+		double CX, CY, CZ, SX, SY, SZ;
+	};
+	const FQaCanonBox QaCanonBoxes[] = {
+		{ TEXT("headBrow"), TEXT("Mesh_head_ivory"), true, 0.000000, -0.000000, 0.675000, 0.725000, 1.000000, 0.250000 },
+		{ TEXT("headJaw"), TEXT("Mesh_head_ivory"), true, 0.000000, -0.000000, 0.125000, 0.725000, 1.000000, 0.250000 },
+		{ TEXT("headStub"), TEXT("Mesh_head_ivory"), true, 0.000000, -0.000000, -0.075000, 0.300000, 0.300000, 0.150000 },
+		{ TEXT("headFrameLeft"), TEXT("Mesh_head_ivory"), true, 0.000000, 0.412500, 0.400000, 0.725000, 0.175000, 0.300000 },
+		{ TEXT("headFrameRight"), TEXT("Mesh_head_ivory"), true, 0.000000, -0.412500, 0.400000, 0.725000, 0.175000, 0.300000 },
+		{ TEXT("headBack"), TEXT("Mesh_head_ivory"), true, -0.110000, -0.000000, 0.400000, 0.505000, 0.650000, 0.300000 },
+		{ TEXT("earLeft"), TEXT("Mesh_head_ivory"), true, -0.025000, 0.320000, 0.920000, 0.200000, 0.190000, 0.240000 },
+		{ TEXT("earRight"), TEXT("Mesh_head_ivory"), true, -0.025000, -0.320000, 0.920000, 0.200000, 0.190000, 0.240000 },
+		{ TEXT("visorInterior"), TEXT("Mesh_head_visor"), true, 0.155000, -0.000000, 0.400000, 0.025000, 0.650000, 0.300000 },
+		{ TEXT("eyeLeft"), TEXT("Mesh_head_eye"), false, 0.182500, 0.122500, 0.365000, 0.025000, 0.135000, 0.135000 },
+		{ TEXT("eyeRight"), TEXT("Mesh_head_eye"), false, 0.182500, -0.122500, 0.365000, 0.025000, 0.135000, 0.135000 },
+		{ TEXT("neck"), TEXT("Mesh_root_ivory"), true, 0.000000, -0.000000, 1.812500, 0.325000, 0.325000, 0.175000 },
+		{ TEXT("upperTorso"), TEXT("Mesh_root_ivory"), true, 0.000000, -0.000000, 1.668750, 0.450000, 0.620000, 0.387500 },
+		{ TEXT("midTorso"), TEXT("Mesh_root_ivory"), true, 0.000000, -0.000000, 1.325000, 0.450000, 0.620000, 0.300000 },
+		{ TEXT("lowerTorso"), TEXT("Mesh_root_ivory"), true, 0.000000, -0.000000, 1.081250, 0.400000, 0.487500, 0.187500 },
+		{ TEXT("pelvisStep"), TEXT("Mesh_root_ivory"), true, 0.000000, -0.000000, 0.881250, 0.337500, 0.362500, 0.212500 },
+		{ TEXT("armLeftUpper"), TEXT("Mesh_armLeft_ivory"), true, 0.000000, 0.130000, -0.294200, 0.212500, 0.200000, 0.400000 },
+		{ TEXT("armLeftElbow"), TEXT("Mesh_armLeft_ivory"), true, 0.006300, 0.136300, -0.494200, 0.160000, 0.160000, 0.090000 },
+		{ TEXT("armLeftForearm"), TEXT("Mesh_forearmLeft_ivory"), true, 0.006200, 0.006200, -0.187500, 0.200000, 0.190000, 0.375000 },
+		{ TEXT("armLeftHand"), TEXT("Mesh_forearmLeft_ivory"), true, 0.018700, 0.016200, -0.475000, 0.225000, 0.205000, 0.200000 },
+		{ TEXT("armRightUpper"), TEXT("Mesh_armRight_ivory"), true, 0.000000, -0.130000, -0.294200, 0.212500, 0.200000, 0.400000 },
+		{ TEXT("armRightElbow"), TEXT("Mesh_armRight_ivory"), true, 0.006300, -0.136300, -0.494200, 0.160000, 0.160000, 0.090000 },
+		{ TEXT("armRightForearm"), TEXT("Mesh_forearmRight_ivory"), true, 0.006200, -0.006200, -0.187500, 0.200000, 0.190000, 0.375000 },
+		{ TEXT("armRightHand"), TEXT("Mesh_forearmRight_ivory"), true, 0.018700, -0.016200, -0.475000, 0.225000, 0.205000, 0.200000 },
+		{ TEXT("legLeftThigh"), TEXT("Mesh_legLeft_ivory"), true, 0.000000, -0.000000, -0.143750, 0.225000, 0.190000, 0.287500 },
+		{ TEXT("legRightThigh"), TEXT("Mesh_legRight_ivory"), true, 0.000000, -0.000000, -0.143750, 0.225000, 0.190000, 0.287500 },
+		{ TEXT("legLeftKnee"), TEXT("Mesh_legLeft_ivory"), true, 0.000000, -0.000000, -0.287500, 0.180000, 0.150000, 0.080000 },
+		{ TEXT("legRightKnee"), TEXT("Mesh_legRight_ivory"), true, 0.000000, -0.000000, -0.287500, 0.180000, 0.150000, 0.080000 },
+		{ TEXT("legLeftShin"), TEXT("Mesh_shinLeft_ivory"), true, 0.000000, -0.000000, -0.143750, 0.225000, 0.190000, 0.287500 },
+		{ TEXT("legRightShin"), TEXT("Mesh_shinRight_ivory"), true, 0.000000, -0.000000, -0.143750, 0.225000, 0.190000, 0.287500 },
+		{ TEXT("footLeft"), TEXT("Mesh_shinLeft_ivory"), true, 0.062500, 0.012500, -0.400000, 0.375000, 0.275000, 0.225000 },
+		{ TEXT("footRight"), TEXT("Mesh_shinRight_ivory"), true, 0.062500, -0.012500, -0.400000, 0.375000, 0.275000, 0.225000 },
+		{ TEXT("tail01"), TEXT("Mesh_tail_ivory"), true, -0.037500, -0.000000, -0.050000, 0.175000, 0.162500, 0.162500 },
+		{ TEXT("tail02"), TEXT("Mesh_tail_ivory"), true, -0.137500, -0.000000, -0.012500, 0.157000, 0.144500, 0.144500 },
+		{ TEXT("tail03"), TEXT("Mesh_tail_ivory"), true, -0.200000, -0.000000, 0.075000, 0.137500, 0.125000, 0.125000 },
+		{ TEXT("tail04"), TEXT("Mesh_tail_ivory"), true, -0.237500, -0.000000, 0.187500, 0.125000, 0.112500, 0.112500 },
+		{ TEXT("tailTip"), TEXT("Mesh_tail_ivory"), true, -0.250000, -0.000000, 0.287500, 0.112500, 0.100000, 0.100000 },
+	};
+	/**
+	 * A BODY AS ONE SOLID (Second's attack on SwordClip v1, finding 1: per-box depth has a ceiling -- a thin part pushed out of
+	 * one voxel is pushed into the next, so a blade buried in a torso read 3-5 uu "however deep"): its boxes, a uniform grid over
+	 * them, and the depth of a point as the distance it must travel to leave the UNION of them.
+	 */
+	struct FQaSolid
+	{
+		TArray<FQaObb> Boxes;
+		TArray<FString> Names;
+		TMap<FIntVector, TArray<int32>> Cells;
+		TArray<int32> Stamp;
+		int32 StampNow = 0;
+		FBox Bounds = FBox(ForceInit);
+		void Reset()
+		{
+			Boxes.Reset();
+			Names.Reset();
+			Cells.Reset();
+			Bounds = FBox(ForceInit);
+		}
+		void Add(const FQaObb& Box, const FString& Name)
+		{
+			Boxes.Add(Box);
+			Names.Add(Name);
+		}
+		static FIntVector CellOf(const FVector& Point)
+		{
+			return FIntVector(FMath::FloorToInt32(Point.X / QaSolidCellUU), FMath::FloorToInt32(Point.Y / QaSolidCellUU), FMath::FloorToInt32(Point.Z / QaSolidCellUU));
+		}
+		void Build()
+		{
+			Cells.Reset();
+			Stamp.Init(0, Boxes.Num());
+			StampNow = 0;
+			Bounds = FBox(ForceInit);
+			for (int32 Index = 0; Index < Boxes.Num(); ++Index)
+			{
+				const FQaObb& Box = Boxes[Index];
+				Bounds += FBox::BuildAABB(Box.Centre, Box.Reach);
+				const FIntVector Low = CellOf(Box.Centre - Box.Reach);
+				const FIntVector High = CellOf(Box.Centre + Box.Reach);
+				for (int32 CellX = Low.X; CellX <= High.X; ++CellX)
+				{
+					for (int32 CellY = Low.Y; CellY <= High.Y; ++CellY)
+					{
+						for (int32 CellZ = Low.Z; CellZ <= High.Z; ++CellZ)
+						{
+							Cells.FindOrAdd(FIntVector(CellX, CellY, CellZ)).Add(Index);
+						}
+					}
+				}
+			}
+		}
+		/** Every box with a cell within Radius of Point, each once. */
+		void Near(const FVector& Point, double Radius, TArray<int32>& OutIndices)
+		{
+			OutIndices.Reset();
+			++StampNow;
+			const FIntVector Low = CellOf(Point - FVector(Radius));
+			const FIntVector High = CellOf(Point + FVector(Radius));
+			for (int32 CellX = Low.X; CellX <= High.X; ++CellX)
+			{
+				for (int32 CellY = Low.Y; CellY <= High.Y; ++CellY)
+				{
+					for (int32 CellZ = Low.Z; CellZ <= High.Z; ++CellZ)
+					{
+						if (const TArray<int32>* InCell = Cells.Find(FIntVector(CellX, CellY, CellZ)))
+						{
+							for (const int32 Index : *InCell)
+							{
+								if (Stamp[Index] != StampNow)
+								{
+									Stamp[Index] = StampNow;
+									OutIndices.Add(Index);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		/** The first box holding Point, or INDEX_NONE. */
+		int32 InsideAt(const FVector& Point) const;
+	};
+
+	bool QaObbHolds(const FQaObb& Box, const FVector& Point)
+	{
+		const FVector Offset = Point - Box.Centre;
+		for (int32 AxisAt = 0; AxisAt < 3; ++AxisAt)
+		{
+			if (FMath::Abs(FVector::DotProduct(Offset, Box.Axis[AxisAt])) > Box.Half[AxisAt])
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	int32 FQaSolid::InsideAt(const FVector& Point) const
+	{
+		if (const TArray<int32>* InCell = Cells.Find(CellOf(Point)))
+		{
+			for (const int32 Index : *InCell)
+			{
+				if (QaObbHolds(Boxes[Index], Point))
+				{
+					return Index;
+				}
+			}
+		}
+		return INDEX_NONE;
+	}
+
+	/** Where a ray from From along the unit Way enters and leaves a box (its slabs); false when its line misses the box. */
+	bool QaRayObb(const FQaObb& Box, const FVector& From, const FVector& Way, double& OutEnter, double& OutExit)
+	{
+		double Enter = -TNumericLimits<double>::Max();
+		double Exit = TNumericLimits<double>::Max();
+		const FVector Offset = From - Box.Centre;
+		for (int32 AxisAt = 0; AxisAt < 3; ++AxisAt)
+		{
+			const double Start = FVector::DotProduct(Offset, Box.Axis[AxisAt]);
+			const double Speed = FVector::DotProduct(Way, Box.Axis[AxisAt]);
+			if (FMath::Abs(Speed) < 1.0e-9)
+			{
+				if (FMath::Abs(Start) > Box.Half[AxisAt])
+				{
+					return false;
+				}
+				continue;
+			}
+			double Near0 = (-Box.Half[AxisAt] - Start) / Speed;
+			double Far0 = (Box.Half[AxisAt] - Start) / Speed;
+			if (Near0 > Far0)
+			{
+				Swap(Near0, Far0);
+			}
+			Enter = FMath::Max(Enter, Near0);
+			Exit = FMath::Min(Exit, Far0);
+			if (Enter > Exit)
+			{
+				return false;
+			}
+		}
+		OutEnter = Enter;
+		OutExit = Exit;
+		return true;
+	}
+
+	/**
+	 * How deep Point is in the solid: the shortest way out of the UNION of its boxes, over 26 directions (the axes, the face and the
+	 * corner diagonals -- at most 12% over the true distance), capped at QaSolidCapUU. 0 outside. OutBox: the box holding it.
+	 */
+	double QaSolidDepth(FQaSolid& Solid, const FVector& Point, int32& OutBox)
+	{
+		OutBox = Solid.InsideAt(Point);
+		if (OutBox == INDEX_NONE)
+		{
+			return 0.0;
+		}
+		static TArray<FVector> Ways;
+		if (Ways.Num() == 0)
+		{
+			for (int32 WayX = -1; WayX <= 1; ++WayX)
+			{
+				for (int32 WayY = -1; WayY <= 1; ++WayY)
+				{
+					for (int32 WayZ = -1; WayZ <= 1; ++WayZ)
+					{
+						if (WayX != 0 || WayY != 0 || WayZ != 0)
+						{
+							Ways.Add(FVector(WayX, WayY, WayZ).GetSafeNormal());
+						}
+					}
+				}
+			}
+		}
+		TArray<int32> Around;
+		Solid.Near(Point, QaSolidCapUU + 1.0, Around);
+		double Least = QaSolidCapUU;
+		TArray<FVector2D, TInlineAllocator<64>> Spans;
+		for (const FVector& Way : Ways)
+		{
+			Spans.Reset();
+			for (const int32 Index : Around)
+			{
+				double Enter = 0.0;
+				double Exit = 0.0;
+				if (QaRayObb(Solid.Boxes[Index], Point, Way, Enter, Exit) && Exit > 0.0 && Enter < Least)
+				{
+					Spans.Add(FVector2D(Enter, Exit));
+				}
+			}
+			// THE WAY OUT OF THE UNION: from where the point is, through every span that begins before the ray has left
+			double Reached = 0.0;
+			bool bGrew = true;
+			while (bGrew && Reached < Least)
+			{
+				bGrew = false;
+				for (const FVector2D& Span : Spans)
+				{
+					if (Span.X <= Reached + 0.01 && Span.Y > Reached)
+					{
+						Reached = Span.Y;
+						bGrew = true;
+					}
+				}
+			}
+			Least = FMath::Min(Least, Reached);
+			if (Least <= 0.0)
+			{
+				break;
+			}
+		}
+		return Least;
+	}
+
+	/** Where a ray first enters the solid within Reach (OutT along the unit Way); false when it never does. */
+	bool QaSolidEntry(const FQaSolid& Solid, const FVector& From, const FVector& Way, double Reach, double& OutT)
+	{
+		OutT = Reach;
+		bool bMet = false;
+		for (const FQaObb& Box : Solid.Boxes)
+		{
+			double Enter = 0.0;
+			double Exit = 0.0;
+			if (QaRayObb(Box, From, Way, Enter, Exit) && Exit > 0.0 && Enter >= 0.0 && Enter < OutT)
+			{
+				OutT = Enter;
+				bMet = true;
+			}
+		}
+		return bMet;
+	}
+
+	/** Points spread through a box: every 3 uu along its longest side (2 at least, 60 at most), 3 x 3 across it, inset to 0.8-0.9. */
+	void QaBoxPoints(const FQaObb& Box, TArray<FVector>& OutPoints)
+	{
+		OutPoints.Reset();
+		int32 Long = 0;
+		for (int32 AxisAt = 1; AxisAt < 3; ++AxisAt)
+		{
+			Long = Box.Half[AxisAt] > Box.Half[Long] ? AxisAt : Long;
+		}
+		const int32 AcrossA = (Long + 1) % 3;
+		const int32 AcrossB = (Long + 2) % 3;
+		const int32 Slices = FMath::Clamp(FMath::CeilToInt32(2.0 * Box.Half[Long] / 3.0) + 1, 2, 60);
+		for (int32 Slice = 0; Slice < Slices; ++Slice)
+		{
+			const double Along = -0.9 + 1.8 * Slice / (Slices - 1);
+			for (const double AtA : { -0.8, 0.0, 0.8 })
+			{
+				for (const double AtB : { -0.8, 0.0, 0.8 })
+				{
+					OutPoints.Add(Box.Centre + Box.Axis[Long] * (Along * Box.Half[Long]) + Box.Axis[AcrossA] * (AtA * Box.Half[AcrossA])
+						+ Box.Axis[AcrossB] * (AtB * Box.Half[AcrossB]));
+				}
+			}
+		}
+	}
+
+	/** How deep a box goes into the solid: the deepest of its points (up to 48 of those inside, spread evenly), OutBox where. */
+	double QaBoxDepth(FQaSolid& Solid, const FQaObb& Box, TArray<FVector>& Points, int32& OutBox)
+	{
+		OutBox = INDEX_NONE;
+		if (!Solid.Bounds.IsValid || !Solid.Bounds.Intersect(FBox::BuildAABB(Box.Centre, Box.Reach)))
+		{
+			return 0.0;
+		}
+		QaBoxPoints(Box, Points);
+		TArray<int32, TInlineAllocator<128>> Inside;
+		for (int32 Index = 0; Index < Points.Num(); ++Index)
+		{
+			if (Solid.InsideAt(Points[Index]) != INDEX_NONE)
+			{
+				Inside.Add(Index);
+			}
+		}
+		if (Inside.Num() == 0)
+		{
+			return 0.0;
+		}
+		const int32 Stride = FMath::Max(1, (Inside.Num() + 47) / 48);
+		double Deepest = 0.0;
+		for (int32 Pick = 0; Pick < Inside.Num(); Pick += Stride)
+		{
+			int32 InBox = INDEX_NONE;
+			const double Depth = QaSolidDepth(Solid, Points[Inside[Pick]], InBox);
+			if (Depth > Deepest || OutBox == INDEX_NONE)
+			{
+				Deepest = FMath::Max(Deepest, Depth);
+				OutBox = InBox;
+			}
+		}
+		return Deepest;
+	}
+
+	/** One box of a sword: its name (the part's own component and instance) and whether it is the grip's wrap -- the grip, or the lattice on it. */
+	struct FQaSwordPart
+	{
+		FQaObb Box;
+		FString Name;
+		bool bGrip = false;
+	};
+
+	void QaSwordParts(const ARelayDogCharacter* Dog, bool bGold, TArray<FQaSwordPart>& OutParts)
+	{
+		OutParts.Reset();
+		const WonderlandHandoffSwords::FPresentation& Swords = Dog->GetHandoffSwords();
+		const FTransform SwordXf = Swords.GetSwordWorld(bGold);
+		TArray<const UInstancedStaticMeshComponent*> PartMeshes;
+		Swords.GetPartMeshes(bGold, PartMeshes);
+		for (const UInstancedStaticMeshComponent* PartMesh : PartMeshes)
+		{
+			if (PartMesh == nullptr || !PartMesh->IsVisible() || PartMesh->GetStaticMesh() == nullptr)
+			{
+				continue;
+			}
+			TArray<FQaObb> PartBoxes;
+			QaMeshObbs(PartMesh, PartBoxes);
+			const FString MeshName = PartMesh->GetName();
+			const bool bGripMesh = MeshName.Contains(TEXT("Grip"));
+			const bool bMetalMesh = MeshName.Contains(TEXT("Metal"));
+			for (const FQaObb& PartBox : PartBoxes)
+			{
+				// THE GRIP'S WRAP: the lattice of metal lying on the grip between its collars is what the fist holds, as the grip is
+				const FVector InSword = SwordXf.InverseTransformPosition(PartBox.Centre);
+				const bool bWrap = bMetalMesh && FMath::Abs(InSword.Z) < WonderlandHandoffSwords::GripHalfUU - 0.8 && FVector2D(InSword.X, InSword.Y).Size() < 2.7;
+				FQaSwordPart& Part = OutParts.AddDefaulted_GetRef();
+				Part.Box = PartBox;
+				Part.Name = FString::Printf(TEXT("%s#%d"), *MeshName, PartBox.Instance);
+				Part.bGrip = bGripMesh || bWrap;
+			}
+		}
+	}
+
+	void QaHandObbs(const WonderlandHands::FHand& Hand, TArray<FQaObb>& OutBoxes)
+	{
+		OutBoxes.Reset();
+		TArray<const UStaticMeshComponent*> HandParts;
+		Hand.GetBoxes(HandParts);
+		for (const UStaticMeshComponent* HandPart : HandParts)
+		{
+			if (HandPart != nullptr && HandPart->IsVisible() && HandPart->GetStaticMesh() != nullptr)
+			{
+				QaMeshObbs(HandPart, OutBoxes);
+			}
+		}
+	}
+
+	/** Relay OG's own meshes by name (Mesh_<joint>_<surface>, as dog_v2.py names them), and its head width off the head's mesh. */
+	double QaCanonMeshes(const ARelayDogCharacter* Dog, TMap<FString, const UStaticMeshComponent*>& OutByName)
+	{
+		OutByName.Reset();
+		TInlineComponentArray<UStaticMeshComponent*> DogMeshes;
+		Dog->GetComponents<UStaticMeshComponent>(DogMeshes);
+		for (const UStaticMeshComponent* DogMesh : DogMeshes)
+		{
+			if (DogMesh != nullptr && DogMesh->GetStaticMesh() != nullptr && DogMesh->GetName().StartsWith(TEXT("Mesh_")))
+			{
+				OutByName.Add(DogMesh->GetName(), DogMesh);
+			}
+		}
+		const UStaticMeshComponent* const* HeadMesh = OutByName.Find(TEXT("Mesh_head_ivory"));
+		// THE BROW IS ONE HEAD WIDTH ACROSS (the mesh's Y)
+		return HeadMesh != nullptr ? (*HeadMesh)->GetStaticMesh()->GetBounds().BoxExtent.Y * 2.0 : 0.0;
+	}
+
+	/**
+	 * RELAY OG AS ITS GENERATOR BUILT IT (Second's finding 6: per-mesh bounding boxes hold empty space -- the head fills 41% of its own):
+	 * the generator's boxes on Relay OG's own meshes. EVERY MESH'S BOUNDS ARE CHECKED against the table first; a mismatch, or a solid
+	 * mesh missing, is BLIND (OutWhy), never a guess.
+	 */
+	bool QaCanonSolid(const ARelayDogCharacter* Dog, FQaSolid& OutSolid, FString& OutWhy)
+	{
+		TMap<FString, const UStaticMeshComponent*> ByName;
+		const double HeadWidth = QaCanonMeshes(Dog, ByName);
+		if (HeadWidth < 10.0)
+		{
+			OutWhy = TEXT("Relay OG's head mesh (Mesh_head_ivory) not found: the generator's boxes cannot be placed");
+			return false;
+		}
+		TMap<FString, FBox> Union;
+		TSet<FString> SolidMeshes;
+		for (const FQaCanonBox& CanonRow : QaCanonBoxes)
+		{
+			const FVector RowCentre(CanonRow.CX, CanonRow.CY, CanonRow.CZ);
+			const FVector RowSize(CanonRow.SX, CanonRow.SY, CanonRow.SZ);
+			Union.FindOrAdd(FString(CanonRow.Mesh), FBox(ForceInit)) += FBox(RowCentre - RowSize * 0.5, RowCentre + RowSize * 0.5);
+			if (CanonRow.bSolid)
+			{
+				SolidMeshes.Add(FString(CanonRow.Mesh));
+			}
+		}
+		for (const TPair<FString, FBox>& Expected : Union)
+		{
+			const UStaticMeshComponent* const* Found = ByName.Find(Expected.Key);
+			if (Found == nullptr)
+			{
+				if (SolidMeshes.Contains(Expected.Key))
+				{
+					OutWhy += FString::Printf(TEXT("%s%s missing"), OutWhy.IsEmpty() ? TEXT("") : TEXT("; "), *Expected.Key);
+				}
+				continue;
+			}
+			const FBoxSphereBounds Shipped = (*Found)->GetStaticMesh()->GetBounds();
+			const FVector ShippedLow = Shipped.Origin - Shipped.BoxExtent;
+			const FVector ShippedHigh = Shipped.Origin + Shipped.BoxExtent;
+			const double Off = FMath::Max((ShippedLow - Expected.Value.Min * HeadWidth).GetAbsMax(), (ShippedHigh - Expected.Value.Max * HeadWidth).GetAbsMax());
+			if (Off > FMath::Max(0.75, HeadWidth * 0.0125))
+			{
+				OutWhy += FString::Printf(TEXT("%s%s is %.1f uu off the generator's boxes"), OutWhy.IsEmpty() ? TEXT("") : TEXT("; "), *Expected.Key, Off);
+			}
+		}
+		if (!OutWhy.IsEmpty())
+		{
+			return false;
+		}
+		for (int32 RowIndex = 0; RowIndex < static_cast<int32>(UE_ARRAY_COUNT(QaCanonBoxes)); ++RowIndex)
+		{
+			const FQaCanonBox& CanonRow = QaCanonBoxes[RowIndex];
+			const UStaticMeshComponent* const* Found = ByName.Find(FString(CanonRow.Mesh));
+			if (!CanonRow.bSolid || Found == nullptr || !(*Found)->IsVisible())
+			{
+				continue;
+			}
+			const FTransform Unit(FQuat::Identity, FVector(CanonRow.CX, CanonRow.CY, CanonRow.CZ) * HeadWidth, FVector(CanonRow.SX, CanonRow.SY, CanonRow.SZ) * (HeadWidth / 100.0));
+			OutSolid.Add(QaObb(*Found, RowIndex, Unit * (*Found)->GetComponentTransform()), FString(CanonRow.Name));
+		}
+		return true;
+	}
+
+	/** A named box of Relay OG's generator, where it is now in the world (its mesh followed even while a skin hides it). */
+	bool QaCanonPoint(const ARelayDogCharacter* Dog, const TCHAR* BoxName, FVector& OutPoint)
+	{
+		TMap<FString, const UStaticMeshComponent*> ByName;
+		const double HeadWidth = QaCanonMeshes(Dog, ByName);
+		for (const FQaCanonBox& CanonRow : QaCanonBoxes)
+		{
+			if (FCString::Strcmp(CanonRow.Name, BoxName) == 0)
+			{
+				const UStaticMeshComponent* const* Found = ByName.Find(FString(CanonRow.Mesh));
+				if (Found == nullptr || HeadWidth < 10.0)
+				{
+					return false;
+				}
+				OutPoint = (*Found)->GetComponentTransform().TransformPosition(FVector(CanonRow.CX, CanonRow.CY, CanonRow.CZ) * HeadWidth);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * THE BODY HOLDING THE SWORDS, AS ONE SOLID (Second's findings 1, 3, 6, 7, 8): a worn skin's parts drawn in Lit or Rim -- bone, cloth,
+	 * plate, whatever they are called -- else Relay OG's generator boxes. Both arms stay in, for both swords. False (OutWhy) when the
+	 * instrument cannot see a body: no solid at the chest is BLIND. OutCostume: which body it was.
+	 */
+	bool QaBodySolid(const ARelayDogCharacter* Dog, FQaSolid& OutSolid, FString& OutWhy, FString& OutNote, bool& bOutCostume)
+	{
+		OutSolid.Reset();
+		OutWhy.Reset();
+		OutNote.Reset();
+		const AWonderlandCompanionEmbodiment* Worn = Dog->GetCostume();
+		bOutCostume = Worn != nullptr && !Worn->IsHidden();
+		if (bOutCostume)
+		{
+			TInlineComponentArray<UInstancedStaticMeshComponent*> WornMeshes;
+			Worn->GetComponents<UInstancedStaticMeshComponent>(WornMeshes);
+			int32 LightMeshes = 0;
+			int32 SolidMeshes = 0;
+			for (const UInstancedStaticMeshComponent* WornMesh : WornMeshes)
+			{
+				if (WornMesh == nullptr || !WornMesh->IsVisible() || WornMesh->GetStaticMesh() == nullptr)
+				{
+					continue;
+				}
+				const FName WornPart = Worn->GetPartMeshName(WornMesh);
+				if (WornPart.IsNone())
+				{
+					continue;
+				}
+				if (!Worn->IsSolidMesh(WornMesh))
+				{
+					++LightMeshes;
+					continue;
+				}
+				++SolidMeshes;
+				TArray<FQaObb> WornBoxes;
+				QaMeshObbs(WornMesh, WornBoxes);
+				for (const FQaObb& WornBox : WornBoxes)
+				{
+					OutSolid.Add(WornBox, FString::Printf(TEXT("%s#%d"), *WornPart.ToString(), WornBox.Instance));
+				}
+			}
+			OutNote = FString::Printf(TEXT("%d solid part mesh(es), %d light one(s) left out (Glow/Additive); flames and strips (procedural) NOT MEASURED"),
+				SolidMeshes, LightMeshes);
+		}
+		else if (!QaCanonSolid(Dog, OutSolid, OutWhy))
+		{
+			return false;
+		}
+		if (OutSolid.Boxes.Num() == 0)
+		{
+			OutWhy = TEXT("no solid box at all");
+			return false;
+		}
+		OutSolid.Build();
+		FVector Chest = FVector::ZeroVector;
+		if (!QaCanonPoint(Dog, TEXT("upperTorso"), Chest) || OutSolid.InsideAt(Chest) == INDEX_NONE)
+		{
+			OutWhy = TEXT("nothing solid at the chest: the instrument cannot see the torso");
+			return false;
+		}
+		return true;
+	}
+
+	/** The phases a sword clip is sampled through, from Equip to Return (Second's finding 4). */
+	enum class EQaClipPhase : uint8
+	{
+		Forming,
+		Stand,
+		Walk,
+		Run,
+		Dash,
+		Stop,
+		Turn,
+		Jump,
+		SkinChange,
+		Return,
+		Count
+	};
+	const TCHAR* const QaClipPhaseNames[] = { TEXT("forming"), TEXT("stand"), TEXT("walk"), TEXT("run"), TEXT("dash x3"), TEXT("stop"), TEXT("turn 180"),
+		TEXT("jump"), TEXT("skin change held"), TEXT("return") };
+
+	struct FQaClipStats
+	{
+		int32 Samples = 0;
+		int32 BlindSamples = 0;
+		FString Blind;
+		double TopSpeed = 0.0;
+		double LastSpeed = 0.0;
+		int32 Dashes = 0;
+		double Turned = 0.0;
+		bool bLeftGround = false;
+		bool bCostumeSeen = false;
+		bool bCanonSeen = false;
+		double DeepestBody = 0.0;
+		FString DeepestBodyPair;
+		int32 MaterialHits = 0;
+		double GripContact = 0.0;
+		double OtherContact = 0.0;
+		int32 HandHits = 0;
+		double WorstHand = 0.0;
+		FString WorstHandPair;
+		float Misalign[2] = { 0.0f, 0.0f };
+		float Bend[2] = { 0.0f, 0.0f };
+		FString Note;
+		// the planted controls, run on THIS phase's own sample (Second: a control at the start cannot see a phase go blind)
+		bool bControlsRun = false;
+		bool bControlsOk = false;
+		FString ControlsDetail;
+		// the body's box count, the least seen, by which body it was; and the boxes within 30 uu of each sword's grip
+		int32 MinCostumeBoxes = MAX_int32;
+		int32 MinCanonBoxes = MAX_int32;
+		int32 MinNearSword[2] = { MAX_int32, MAX_int32 };
+	};
 
 	struct FQaSwordClip
 	{
 		TWeakObjectPtr<UWorld> World;
 		FTSTicker::FDelegateHandle Handle;
+		TWeakObjectPtr<ACameraActor> Camera;
+		FString Dir;
 		bool bQuit = false;
 		int32 Pass = 0;
 		int32 Fail = 0;
@@ -9787,57 +10356,213 @@ namespace
 		FVector Start = FVector::ZeroVector;
 		FVector Ahead = FVector::ForwardVector;
 		float StartYaw = 0.0f;
-		int32 Samples = 0;
-		int32 BoxesMin = MAX_int32;
-		int32 BoxesMax = 0;
-		int32 SwordBoxesMin = MAX_int32;
-		int32 ProbeMin = MAX_int32;
-		int32 Touching = 0;
-		double DeepestUU = 0.0;
-		FString DeepestPair;
-		TMap<FString, double> Material;
+		// one skin's run through the phases
+		int32 Step = 0;
+		double StepAt = 0.0;
+		double LastSampleAt = -1.0;
+		float LastYaw = 0.0f;
+		int32 DashBase = 0;
+		int32 DashKey = 0;
+		int32 Shots = 0;
+		int32 DashShot = 0;
+		bool bJumpAvailable = false;
+		TArray<FQaClipStats> Stats;
+		FQaSolid Solid;
+		TArray<FVector> Points;
 		void Check(const FString& Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLCLQA %s %s | %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
 		}
+		void Frame(const FString& Name)
+		{
+			int32 Width = 0;
+			int32 Height = 0;
+			const FString Path = Dir / (Name + TEXT(".png"));
+			const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLCLQA frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), Width, Height);
+		}
 	};
 	TSharedPtr<FQaSwordClip> GQaSwordClip;
 
-	/** Every box of the body holding the swords this frame: the worn skin's body boxes, else Relay OG's own meshes. */
-	void QaBodyObbs(ARelayDogCharacter* Dog, TArray<FQaObb>& OutBoxes)
+	/** One sample of both swords against the body (one solid) and against both hands (their own class). */
+	void QaClipMeasure(FQaSwordClip& S, ARelayDogCharacter* Dog, FQaClipStats& Into)
 	{
-		OutBoxes.Reset();
-		const USceneComponent* LeftArm = Dog->GetVisibleForearm(true);
-		const USceneComponent* RightArm = Dog->GetVisibleForearm(false);
-		const AWonderlandCompanionEmbodiment* Worn = Dog->GetCostume();
-		const bool bWorn = Worn != nullptr && !Worn->IsHidden();
-		TInlineComponentArray<UStaticMeshComponent*> Meshes;
-		if (bWorn)
+		FString Why;
+		FString Note;
+		bool bCostume = false;
+		if (!QaBodySolid(Dog, S.Solid, Why, Note, bCostume))
 		{
-			Worn->GetComponents<UStaticMeshComponent>(Meshes);
-		}
-		else
-		{
-			Dog->GetComponents<UStaticMeshComponent>(Meshes);
-		}
-		for (const UStaticMeshComponent* Mesh : Meshes)
-		{
-			if (Mesh == nullptr || !Mesh->IsVisible() || Mesh->GetStaticMesh() == nullptr || Mesh->ComponentHasTag(TEXT("WL_Prop"))
-				|| QaUnderForearm(Mesh, LeftArm, RightArm))
+			++Into.BlindSamples;
+			if (Into.Blind.IsEmpty())
 			{
-				continue;
+				Into.Blind = Why;
 			}
-			if (bWorn)
+			return;
+		}
+		(bCostume ? Into.bCostumeSeen : Into.bCanonSeen) = true;
+		if (!Note.IsEmpty())
+		{
+			Into.Note = Note;
+		}
+		int32& MinBoxes = bCostume ? Into.MinCostumeBoxes : Into.MinCanonBoxes;
+		MinBoxes = FMath::Min(MinBoxes, S.Solid.Boxes.Num());
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			TArray<int32> NearGrip;
+			S.Solid.Near(Dog->GetHandoffSwords().GetSwordWorld(Side == 0).GetLocation(), 30.0, NearGrip);
+			Into.MinNearSword[Side] = FMath::Min(Into.MinNearSword[Side], NearGrip.Num());
+		}
+		TArray<FQaObb> HandBoxes[2];
+		QaHandObbs(Dog->GetHand(true), HandBoxes[0]);
+		QaHandObbs(Dog->GetHand(false), HandBoxes[1]);
+		int32 SwordBoxes = 0;
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			// the gold is the Dog's own -Y hand's (GetHand(true)), the cyan the +Y hand's
+			const bool bGold = Side == 0;
+			TArray<FQaSwordPart> SwordParts;
+			QaSwordParts(Dog, bGold, SwordParts);
+			SwordBoxes += SwordParts.Num();
+			for (const FQaSwordPart& SwordPart : SwordParts)
 			{
-				const UInstancedStaticMeshComponent* Instanced = Cast<UInstancedStaticMeshComponent>(Mesh);
-				if (Instanced == nullptr || !Worn->IsBodyMesh(Instanced))
+				int32 InBox = INDEX_NONE;
+				const double Depth = QaBoxDepth(S.Solid, SwordPart.Box, S.Points, InBox);
+				if (Depth > Into.DeepestBody)
 				{
-					continue;
+					Into.DeepestBody = Depth;
+					Into.DeepestBodyPair = FString::Printf(TEXT("%s %s in %s"), bGold ? TEXT("gold") : TEXT("cyan"), *SwordPart.Name,
+						S.Solid.Names.IsValidIndex(InBox) ? *S.Solid.Names[InBox] : TEXT("?"));
+				}
+				Into.MaterialHits += Depth > QaMaterialClipUU ? 1 : 0;
+				// THE HANDS AS THEIR OWN CLASS (Second's finding 2): the grip's wrap may meet the fist that holds it; nothing else meets a hand
+				for (int32 HandSide = 0; HandSide < 2; ++HandSide)
+				{
+					const bool bHolding = HandSide == Side;
+					for (const FQaObb& HandPiece : HandBoxes[HandSide])
+					{
+						const FVector Gap = (HandPiece.Centre - SwordPart.Box.Centre).GetAbs() - HandPiece.Reach - SwordPart.Box.Reach;
+						if (Gap.X > 0.0 || Gap.Y > 0.0 || Gap.Z > 0.0)
+						{
+							continue;
+						}
+						const double Touch = QaObbDepth(SwordPart.Box, HandPiece);
+						if (Touch <= 0.0)
+						{
+							continue;
+						}
+						const bool bGripInItsFist = bHolding && SwordPart.bGrip;
+						(bGripInItsFist ? Into.GripContact : Into.OtherContact) = FMath::Max(bGripInItsFist ? Into.GripContact : Into.OtherContact, Touch);
+						if (Touch > (bGripInItsFist ? QaGripContactUU : QaHandTouchUU))
+						{
+							++Into.HandHits;
+							if (Touch > Into.WorstHand)
+							{
+								Into.WorstHand = Touch;
+								Into.WorstHandPair = FString::Printf(TEXT("%s %s in the %s hand (%s)"), bGold ? TEXT("gold") : TEXT("cyan"), *SwordPart.Name,
+									HandSide == 0 ? TEXT("left") : TEXT("right"), bHolding ? TEXT("its own") : TEXT("the OTHER"));
+							}
+						}
+					}
 				}
 			}
-			QaMeshObbs(Mesh, OutBoxes);
+			Into.Misalign[Side] = FMath::Max(Into.Misalign[Side], Dog->GetHand(bGold).GetGripMisalignDeg());
+			Into.Bend[Side] = FMath::Max(Into.Bend[Side], Dog->GetHand(bGold).GetWristBendDeg());
 		}
+		if (SwordBoxes > 0)
+		{
+			++Into.Samples;
+		}
+		Into.LastSpeed = Dog->GetVelocity().Size2D();
+		Into.TopSpeed = FMath::Max(Into.TopSpeed, Into.LastSpeed);
+	}
+
+	/**
+	 * THE CONTROLS (Second's finding 1: nothing tested sensitivity, only blindness): a feather and a blade segment planted 5 uu inside the
+	 * chest (found by a ray from in front) must read MATERIAL, and the same 5 uu outside must read nothing. Run on the solid THIS sample
+	 * just built, once in every phase (Second: a control run only at the start cannot see a phase whose geometry read goes blind).
+	 */
+	bool QaClipControls(FQaSwordClip& S, ARelayDogCharacter* Dog, FString& OutDetail)
+	{
+		OutDetail.Reset();
+		FVector Chest = FVector::ZeroVector;
+		QaCanonPoint(Dog, TEXT("upperTorso"), Chest);
+		const FVector Front = Dog->GetActorForwardVector().GetSafeNormal2D();
+		const FVector Across = FVector::CrossProduct(FVector::UpVector, Front).GetSafeNormal();
+		const FVector RayFrom = Chest + Front * 90.0;
+		double Met = 0.0;
+		if (!QaSolidEntry(S.Solid, RayFrom, -Front, 90.0, Met))
+		{
+			OutDetail = TEXT("BLIND: a ray from in front never met the chest");
+			return false;
+		}
+		const FVector Surface = RayFrom - Front * Met;
+		struct FPlanted
+		{
+			const TCHAR* What;
+			FVector Half;
+		};
+		const FPlanted Plants[] = { { TEXT("feather"), FVector(0.3, 4.0, 8.0) }, { TEXT("blade"), FVector(0.75, 2.5, 6.0) } };
+		bool bAllRight = true;
+		for (const FPlanted& Plant : Plants)
+		{
+			for (const double Inward : { 1.0, -1.0 })
+			{
+				FQaObb Control;
+				Control.Centre = Surface - Front * (Inward * (5.0 + Plant.Half.X));
+				Control.Axis[0] = Front;
+				Control.Axis[1] = Across;
+				Control.Axis[2] = FVector::UpVector;
+				Control.Half = Plant.Half;
+				for (int32 AxisAt = 0; AxisAt < 3; ++AxisAt)
+				{
+					Control.Reach[AxisAt] = Control.Half.X * FMath::Abs(Control.Axis[0][AxisAt]) + Control.Half.Y * FMath::Abs(Control.Axis[1][AxisAt])
+						+ Control.Half.Z * FMath::Abs(Control.Axis[2][AxisAt]);
+				}
+				int32 InBox = INDEX_NONE;
+				const double Depth = QaBoxDepth(S.Solid, Control, S.Points, InBox);
+				const bool bRight = Inward > 0.0 ? Depth > QaMaterialClipUU : Depth <= 0.0;
+				bAllRight &= bRight;
+				OutDetail += FString::Printf(TEXT("%s%s 5 uu %s reads %.1f uu%s"), OutDetail.IsEmpty() ? TEXT("") : TEXT(", "), Plant.What,
+					Inward > 0.0 ? TEXT("inside") : TEXT("outside"), Depth, bRight ? TEXT("") : TEXT(" -- WRONG"));
+			}
+		}
+		return bAllRight;
+	}
+
+	/** A close camera on a point, from a direction (the fists from the side and from above). */
+	void QaClipCamera(FQaSwordClip& S, UWorld* World, const FVector& Look, const FVector& From, float Fov)
+	{
+		APlayerController* PC = World->GetFirstPlayerController();
+		ACameraActor* Cam = S.Camera.Get();
+		if (Cam == nullptr)
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Cam = World->SpawnActor<ACameraActor>(From, FRotator::ZeroRotator, Params);
+			S.Camera = Cam;
+		}
+		if (Cam != nullptr && PC != nullptr)
+		{
+			Cam->SetActorLocationAndRotation(From, (Look - From).Rotation());
+			Cam->GetCameraComponent()->SetFieldOfView(Fov);
+			Cam->GetCameraComponent()->SetConstraintAspectRatio(false);
+			if (PC->GetViewTarget() != Cam)
+			{
+				PC->SetViewTargetWithBlend(Cam, 0.0f);
+			}
+		}
+	}
+
+	bool QaClipFist(const ARelayDogCharacter* Dog, bool bLeft, FVector& OutFist)
+	{
+		const USceneComponent* Arm = Dog->GetVisibleForearm(bLeft);
+		if (Arm == nullptr)
+		{
+			return false;
+		}
+		OutFist = Arm->GetComponentTransform().TransformPosition(Dog->GetHand(bLeft).GripCentreLocal());
+		return true;
 	}
 
 	bool QaSwordClipTick(float)
@@ -9851,8 +10576,17 @@ namespace
 		ARelayDogCharacter* Dog = QaDog(World);
 		FWonderlandMissionHandoff* Handoff = QaHandoff(World);
 		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
-		auto Stop = [&S](const TCHAR* Why)
+		const int32 Skins = static_cast<int32>(UE_ARRAY_COUNT(FaceRoster));
+		auto Stop = [&S, Skins](const TCHAR* Why)
 		{
+			// AN ABNORMAL STOP NAMES EVERY SKIN LEFT UNTESTED (Second's finding 9): a BLIND verdict, never a silent short count
+			if (Why != nullptr)
+			{
+				for (int32 Untested = S.Skin; Untested < Skins; ++Untested)
+				{
+					S.Check(FString::Printf(TEXT("CL%d"), Untested + 1), false, FString::Printf(TEXT("BLIND -- %s not measured: %s"), FaceRoster[Untested], Why));
+				}
+			}
 			if (UWorld* W = S.World.Get())
 			{
 				if (FWonderlandMissionHandoff* H = QaHandoff(W))
@@ -9861,8 +10595,20 @@ namespace
 					H->Return(Ignored);
 				}
 				GEngine->Exec(W, TEXT("wl.Skins.Wear relay_og"));
+				if (APlayerController* P = W->GetFirstPlayerController())
+				{
+					if (ARelayDogCharacter* D = QaDog(W))
+					{
+						D->QaForwardKey(false, false);
+						P->SetViewTargetWithBlend(D, 0.0f);
+					}
+				}
 			}
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLCLQA END pass=%d fail=%d%s"), S.Pass, S.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
+			if (ACameraActor* Cam = S.Camera.Get())
+			{
+				Cam->Destroy();
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLCLQA END pass=%d fail=%d expected=%d%s"), S.Pass, S.Fail, Skins, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
 			const bool bQuit = S.bQuit;
 			GQaSwordClip.Reset();
 			if (bQuit)
@@ -9877,10 +10623,10 @@ namespace
 		}
 		const double Now = QaNow();
 		const double In = Now - S.PhaseAt;
-		const int32 Skins = static_cast<int32>(UE_ARRAY_COUNT(FaceRoster));
 		switch (S.Phase)
 		{
 		case 0:
+		{
 			if (UWonderlandUiSubsystem* Ui = QaUi(World))
 			{
 				if (Ui->IsWelcomeOpen())
@@ -9892,13 +10638,24 @@ namespace
 			{
 				return In < 40.0 ? true : Stop(TEXT("never ready"));
 			}
-			QaClearHeading(World, Dog, 900.0f, S.Ahead);
+			QaClearHeading(World, Dog, 1500.0f, S.Ahead);
 			S.StartYaw = static_cast<float>(S.Ahead.Rotation().Yaw);
 			S.Start = Dog->GetActorLocation();
 			S.Skin = 0;
+			// THE SETTINGS THIS VERDICT COVERS (Second's finding 11): every Mission Handoff console variable, as it is now
+			FString Settings;
+			IConsoleManager::Get().ForEachConsoleObjectThatStartsWith(FConsoleObjectVisitor::CreateLambda([&Settings](const TCHAR* Name, IConsoleObject* Object)
+			{
+				if (IConsoleVariable* Variable = Object != nullptr ? Object->AsVariable() : nullptr)
+				{
+					Settings += FString::Printf(TEXT(" %s=%s"), Name, *Variable->GetString());
+				}
+			}), TEXT("wl.Handoff."));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLCLQA SETTINGS%s"), *Settings);
 			S.Phase = 1;
 			S.PhaseAt = Now;
 			return true;
+		}
 		case 1:
 			// ONE SKIN: the swords given back, the Dog home at the start, the skin worn
 			if (S.Skin >= Skins)
@@ -9923,142 +10680,346 @@ namespace
 			S.PhaseAt = Now;
 			return true;
 		case 2:
+		{
 			if (In < 3.0)
 			{
 				return true;
 			}
-			{
-				FString Said;
-				WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
-			}
-			S.Samples = 0;
-			S.BoxesMin = MAX_int32;
-			S.BoxesMax = 0;
-			S.SwordBoxesMin = MAX_int32;
-			S.ProbeMin = MAX_int32;
-			S.Touching = 0;
-			S.DeepestUU = 0.0;
-			S.DeepestPair.Reset();
-			S.Material.Reset();
+			FString Said;
+			WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
+			S.Stats.Reset();
+			S.Stats.SetNum(static_cast<int32>(EQaClipPhase::Count));
+			S.Step = static_cast<int32>(EQaClipPhase::Forming);
+			S.StepAt = Now;
+			S.LastSampleAt = -1.0;
+			S.Shots = 0;
+			S.DashShot = 0;
+			S.bJumpAvailable = false;
 			S.Phase = 3;
 			S.PhaseAt = Now;
 			return true;
+		}
 		case 3:
 		{
-			// held: two seconds standing, then two walking (the arms carry the swords), every frame measured
-			if (!Handoff->IsArmed())
+			const EQaClipPhase ClipStep = static_cast<EQaClipPhase>(S.Step);
+			const double StepIn = Now - S.StepAt;
+			FQaClipStats& Stats = S.Stats[S.Step];
+			auto Next = [&S, Now, Dog, PC](EQaClipPhase To, bool bHome)
 			{
-				return In < 12.0 ? true : Stop(TEXT("a skin's swords were never held"));
+				S.Step = static_cast<int32>(To);
+				S.StepAt = Now;
+				S.DashKey = 0;
+				if (bHome)
+				{
+					Dog->SetActorLocation(S.Start, false, nullptr, ETeleportType::TeleportPhysics);
+					Dog->SetActorRotation(FRotator(0.0f, S.StartYaw, 0.0f));
+					PC->SetControlRotation(FRotator(-12.0f, S.StartYaw, 0.0f));
+					Dog->GetCharacterMovement()->StopMovementImmediately();
+				}
+				// the yaw a phase's turning is counted from, AFTER the trip home (a teleport is not a turn)
+				S.LastYaw = static_cast<float>(Dog->GetActorRotation().Yaw);
+			};
+			// EVERY PHASE SAMPLED, at most 30 times a second
+			if (Now - S.LastSampleAt >= 1.0 / 30.0)
+			{
+				S.LastSampleAt = Now;
+				const int32 BlindBefore = Stats.BlindSamples;
+				QaClipMeasure(S, Dog, Stats);
+				if (!Stats.bControlsRun && Stats.BlindSamples == BlindBefore && Stats.Samples >= 1)
+				{
+					// THIS PHASE'S CONTROLS, on the very solid this sample measured the swords against
+					Stats.bControlsRun = true;
+					Stats.bControlsOk = QaClipControls(S, Dog, Stats.ControlsDetail);
+				}
+				const float Yaw = static_cast<float>(Dog->GetActorRotation().Yaw);
+				Stats.Turned += FMath::Abs(FMath::FindDeltaAngleDegrees(S.LastYaw, Yaw));
+				S.LastYaw = Yaw;
+				Stats.bLeftGround |= Dog->GetCharacterMovement()->IsFalling();
 			}
-			if (S.Samples == 0 && In < 5.0)
+			switch (ClipStep)
 			{
+			case EQaClipPhase::Forming:
+				if (Handoff->IsArmed())
+				{
+					Next(EQaClipPhase::Stand, false);
+				}
+				else if (StepIn > 12.0)
+				{
+					Stats.Blind = TEXT("the swords were never held");
+					S.Phase = 4;
+				}
+				return true;
+			case EQaClipPhase::Stand:
+			{
+				// THE FISTS FROM THE SIDE AND FROM ABOVE (Second: "shoot the held fists from the side and from above")
+				FVector LeftFist = FVector::ZeroVector;
+				FVector RightFist = FVector::ZeroVector;
+				const bool bFists = QaClipFist(Dog, true, LeftFist) && QaClipFist(Dog, false, RightFist);
+				const FVector Toward = Dog->GetActorRightVector().GetSafeNormal2D();
+				const FVector Front = Dog->GetActorForwardVector().GetSafeNormal2D();
+				static const double ShotAt[] = { 0.5, 0.9, 1.3 };
+				for (int32 ShotIndex = 0; ShotIndex < 3 && bFists; ++ShotIndex)
+				{
+					if (S.Shots == ShotIndex && StepIn >= ShotAt[ShotIndex])
+					{
+						const FVector Look = ShotIndex == 0 ? LeftFist : ShotIndex == 1 ? RightFist : (LeftFist + RightFist) * 0.5;
+						const FVector From = ShotIndex == 0 ? LeftFist - Toward * 55.0 + FVector(0.0, 0.0, 8.0)
+							: ShotIndex == 1 ? RightFist + Toward * 55.0 + FVector(0.0, 0.0, 8.0) : Look + FVector(0.0, 0.0, 110.0) + Front * 12.0;
+						QaClipCamera(S, World, Look, From, ShotIndex == 2 ? 50.0f : 40.0f);
+						S.Shots = ShotIndex + 10;
+					}
+					if (S.Shots == ShotIndex + 10 && StepIn >= ShotAt[ShotIndex] + 0.3)
+					{
+						static const TCHAR* const ShotNames[] = { TEXT("left_fist_side"), TEXT("right_fist_side"), TEXT("fists_from_above") };
+						S.Frame(FString::Printf(TEXT("clip_%s_%s"), FaceRoster[S.Skin], ShotNames[ShotIndex]));
+						S.Shots = ShotIndex + 1;
+					}
+				}
+				if (StepIn >= 1.8 && PC->GetViewTarget() != Dog)
+				{
+					PC->SetViewTargetWithBlend(Dog, 0.0f);
+				}
+				if (StepIn >= 2.2)
+				{
+					Next(EQaClipPhase::Walk, true);
+				}
 				return true;
 			}
-			if (S.Samples == 0)
-			{
-				S.PhaseAt = Now;
-			}
-			const double Held = Now - S.PhaseAt;
-			if (Held >= 2.0)
-			{
+			case EQaClipPhase::Walk:
+				Dog->AddMovementInput(S.Ahead, 0.35f);
+				if (StepIn >= 2.0)
+				{
+					Next(EQaClipPhase::Run, true);
+				}
+				return true;
+			case EQaClipPhase::Run:
 				Dog->AddMovementInput(S.Ahead, 1.0f);
-			}
-			TArray<FQaObb> Body;
-			QaBodyObbs(Dog, Body);
-			const float HalfHeight = Dog->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-			const FVector Centre = Dog->GetActorLocation();
-			const FVector ProbeA = Centre - FVector(0.0f, 0.0f, HalfHeight * 0.8f);
-			const FVector ProbeB = Centre + FVector(0.0f, 0.0f, HalfHeight * 0.8f);
-			int32 ProbeHits = 0;
-			for (const FQaObb& Box : Body)
-			{
-				ProbeHits += QaSegmentHitsObb(Box, ProbeA, ProbeB) ? 1 : 0;
-			}
-			const WonderlandHandoffSwords::FPresentation& Swords = Dog->GetHandoffSwords();
-			for (int32 Side = 0; Side < 2; ++Side)
-			{
-				TArray<const UInstancedStaticMeshComponent*> PartMeshes;
-				Swords.GetPartMeshes(Side == 0, PartMeshes);
-				TArray<FQaObb> Sword;
-				for (const UInstancedStaticMeshComponent* PartMesh : PartMeshes)
+				if (StepIn >= 1.5)
 				{
-					if (PartMesh->IsVisible() && PartMesh->GetStaticMesh() != nullptr)
-					{
-						QaMeshObbs(PartMesh, Sword);
-					}
+					S.DashBase = Dog->GetDashCount();
+					Next(EQaClipPhase::Dash, true);
 				}
-				S.SwordBoxesMin = FMath::Min(S.SwordBoxesMin, Sword.Num());
-				// the sword's own reach (one world box round all its parts): body boxes outside it are skipped
-				FVector Low(TNumericLimits<double>::Max());
-				FVector High(-TNumericLimits<double>::Max());
-				for (const FQaObb& Part : Sword)
+				return true;
+			case EQaClipPhase::Dash:
+			{
+				// THREE DASHES by the player's own double tap of W, each from home: run up, down, up, down, up (as the handoff QA's D1)
+				const int32 DashIndex = FMath::Min(static_cast<int32>(StepIn / 1.8), 2);
+				const double DashIn = StepIn - DashIndex * 1.8;
+				if (DashIndex > 0 && S.DashKey == 4)
 				{
-					Low = Low.ComponentMin(Part.Centre - Part.Reach);
-					High = High.ComponentMax(Part.Centre + Part.Reach);
+					S.DashKey = 0;
+					Dog->SetActorLocation(S.Start, false, nullptr, ETeleportType::TeleportPhysics);
+					Dog->SetActorRotation(FRotator(0.0f, S.StartYaw, 0.0f));
+					Dog->GetCharacterMovement()->StopMovementImmediately();
 				}
-				for (const FQaObb& Box : Body)
+				Dog->AddMovementInput(S.Ahead, 1.0f);
+				if (S.DashKey == 0 && DashIn >= 0.5) { Dog->QaForwardKey(false, true); S.DashKey = 1; }
+				if (S.DashKey == 1 && DashIn >= 0.55) { Dog->QaForwardKey(false, false); S.DashKey = 2; }
+				if (S.DashKey == 2 && DashIn >= 0.60) { Dog->QaForwardKey(false, true); S.DashKey = 3; }
+				if (S.DashKey == 3 && DashIn >= 1.10) { Dog->QaForwardKey(false, false); S.DashKey = 4; }
+				Stats.Dashes = Dog->GetDashCount() - S.DashBase;
+				// THE FISTS MID-DASH (Second: the -70 deg shoulders are the pose most likely to break the grip): the second dash, framed from
+				// the Dog's left, the camera following the fists every tick (the Dog outruns a still camera), one frame at its middle
+				if (DashIndex == 1 && S.DashShot < 2 && DashIn >= 0.62)
 				{
-					const FVector BoxLow = Box.Centre - Box.Reach;
-					const FVector BoxHigh = Box.Centre + Box.Reach;
-					if (BoxHigh.X < Low.X || BoxHigh.Y < Low.Y || BoxHigh.Z < Low.Z || BoxLow.X > High.X || BoxLow.Y > High.Y || BoxLow.Z > High.Z)
+					FVector LeftFist = FVector::ZeroVector;
+					FVector RightFist = FVector::ZeroVector;
+					if (QaClipFist(Dog, true, LeftFist) && QaClipFist(Dog, false, RightFist))
 					{
-						continue;
-					}
-					for (const FQaObb& Part : Sword)
-					{
-						const double Depth = QaObbDepth(Part, Box);
-						if (Depth <= 0.0)
+						const FVector Look = (LeftFist + RightFist) * 0.5;
+						QaClipCamera(S, World, Look, Look - Dog->GetActorRightVector().GetSafeNormal2D() * 130.0 + FVector(0.0, 0.0, 20.0), 55.0f);
+						S.DashShot = 1;
+						if (DashIn >= 0.85)
 						{
-							continue;
-						}
-						++S.Touching;
-						if (Depth > S.DeepestUU || Depth > QaMaterialClipUU)
-						{
-							const FString Pair = FString::Printf(TEXT("%s %s in %s"), Side == 0 ? TEXT("gold") : TEXT("cyan"), *QaObbName(Part), *QaObbName(Box));
-							if (Depth > S.DeepestUU)
-							{
-								S.DeepestUU = Depth;
-								S.DeepestPair = Pair;
-							}
-							if (Depth > QaMaterialClipUU)
-							{
-								double& Worst = S.Material.FindOrAdd(Pair);
-								Worst = FMath::Max(Worst, Depth);
-							}
+							S.Frame(FString::Printf(TEXT("clip_%s_fists_mid_dash"), FaceRoster[S.Skin]));
+							S.DashShot = 2;
 						}
 					}
 				}
-			}
-			S.BoxesMin = FMath::Min(S.BoxesMin, Body.Num());
-			S.BoxesMax = FMath::Max(S.BoxesMax, Body.Num());
-			S.ProbeMin = FMath::Min(S.ProbeMin, ProbeHits);
-			++S.Samples;
-			if (Held < 4.0)
-			{
+				if (S.DashShot == 2 && DashIn >= 1.0 && PC->GetViewTarget() != Dog)
+				{
+					PC->SetViewTargetWithBlend(Dog, 0.0f);
+				}
+				if (StepIn >= 5.4)
+				{
+					Dog->QaForwardKey(false, false);
+					Next(EQaClipPhase::Stop, false);
+				}
 				return true;
 			}
-			S.Material.ValueSort([](double A, double B) { return A > B; });
-			FString Named;
-			int32 Shown = 0;
-			for (const TPair<FString, double>& Clip : S.Material)
-			{
-				if (Shown++ < 5)
+			case EQaClipPhase::Stop:
+				if (StepIn >= 1.5)
 				{
-					Named += FString::Printf(TEXT("%s%s %.1f uu"), Named.IsEmpty() ? TEXT("") : TEXT("; "), *Clip.Key, Clip.Value);
+					Next(EQaClipPhase::Turn, true);
+				}
+				return true;
+			case EQaClipPhase::Turn:
+				Dog->AddMovementInput(StepIn < 1.0 ? S.Ahead : -S.Ahead, 1.0f);
+				if (StepIn >= 2.5)
+				{
+					S.bJumpAvailable = Dog->CanJump();
+					Next(EQaClipPhase::Jump, true);
+					if (S.bJumpAvailable)
+					{
+						Dog->Jump();
+					}
+				}
+				return true;
+			case EQaClipPhase::Jump:
+				if (StepIn >= 0.3)
+				{
+					Dog->StopJumping();
+				}
+				if (StepIn >= 1.5 || !S.bJumpAvailable)
+				{
+					if (S.Skin == 0)
+					{
+						Next(EQaClipPhase::SkinChange, false);
+						GEngine->Exec(World, TEXT("wl.Skins.Wear celestial_light"));
+					}
+					else
+					{
+						Next(EQaClipPhase::Return, false);
+						FString Ignored;
+						Handoff->Return(Ignored);
+					}
+				}
+				return true;
+			case EQaClipPhase::SkinChange:
+				// A SKIN CHANGED WHILE THE SWORDS ARE HELD: Relay OG's run only, to celestial_light and back
+				if (S.DashKey == 0 && StepIn >= 1.5)
+				{
+					GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+					S.DashKey = 1;
+				}
+				if (StepIn >= 3.0)
+				{
+					Next(EQaClipPhase::Return, false);
+					FString Ignored;
+					Handoff->Return(Ignored);
+				}
+				return true;
+			case EQaClipPhase::Return:
+				if (StepIn >= 3.0 || (StepIn >= 0.5 && !Handoff->IsEquipped()))
+				{
+					S.Phase = 4;
+					S.PhaseAt = Now;
+				}
+				return true;
+			default:
+				return Stop(TEXT("an unknown step"));
+			}
+		}
+		case 4:
+		{
+			// THE VERDICT FOR ONE SKIN: every phase happened and saw the body, the controls read right, no sword part deeper than 3 uu in the
+			// body, and no hand met by anything but the grip's wrap of its own sword
+			const FQaClipStats& Walk = S.Stats[static_cast<int32>(EQaClipPhase::Walk)];
+			const FQaClipStats& Run = S.Stats[static_cast<int32>(EQaClipPhase::Run)];
+			FString Phases;
+			FString Missing;
+			double DeepestBody = 0.0;
+			FString DeepestBodyPair;
+			double GripContact = 0.0;
+			double OtherContact = 0.0;
+			double WorstHand = 0.0;
+			FString WorstHandPair;
+			int32 MaterialHits = 0;
+			int32 HandHits = 0;
+			float Misalign[2] = { 0.0f, 0.0f };
+			float Bend[2] = { 0.0f, 0.0f };
+			FString Note;
+			int32 ControlsRight = 0;
+			int32 ControlsApplicable = 0;
+			const FString StandControls = S.Stats[static_cast<int32>(EQaClipPhase::Stand)].ControlsDetail;
+			for (int32 Index = 0; Index < static_cast<int32>(EQaClipPhase::Count); ++Index)
+			{
+				const EQaClipPhase Which = static_cast<EQaClipPhase>(Index);
+				const FQaClipStats& One = S.Stats[Index];
+				bool bHappened = One.Samples >= (Which == EQaClipPhase::Forming || Which == EQaClipPhase::Return ? 2 : 10) && One.BlindSamples == 0;
+				switch (Which)
+				{
+				case EQaClipPhase::Walk: bHappened &= One.TopSpeed >= 60.0 && One.TopSpeed <= Run.TopSpeed * 0.85; break;
+				case EQaClipPhase::Run: bHappened &= One.TopSpeed >= Walk.TopSpeed * 1.3; break;
+				case EQaClipPhase::Dash: bHappened &= One.Dashes >= 3; break;
+				case EQaClipPhase::Stop: bHappened &= One.LastSpeed <= 30.0; break;
+				case EQaClipPhase::Turn: bHappened &= One.Turned >= 150.0; break;
+				case EQaClipPhase::Jump: bHappened = !S.bJumpAvailable || (bHappened && One.bLeftGround); break;
+				case EQaClipPhase::SkinChange: bHappened = S.Skin != 0 || (bHappened && One.bCostumeSeen && One.bCanonSeen); break;
+				default: break;
+				}
+				const bool bApplies = !(Which == EQaClipPhase::SkinChange && S.Skin != 0) && !(Which == EQaClipPhase::Jump && !S.bJumpAvailable);
+				if (bApplies)
+				{
+					Phases += FString::Printf(TEXT("%s%s %d f, top %.0f uu/s%s, deepest %.1f"), Phases.IsEmpty() ? TEXT("") : TEXT("; "), QaClipPhaseNames[Index],
+						One.Samples, One.TopSpeed, Which == EQaClipPhase::Dash ? *FString::Printf(TEXT(", %d dashes"), One.Dashes)
+						: Which == EQaClipPhase::Turn ? *FString::Printf(TEXT(", turned %.0f deg"), One.Turned) : TEXT(""), One.DeepestBody);
+					UE_LOG(LogWonderlandQa, Display, TEXT("WLCLQA PHASE %s %s: %d samples (%d blind%s), top %.0f uu/s, last %.0f, dashes %d, turned %.0f deg, off the ground %d; body boxes at least %d skin / %d Relay OG, within 30 uu of the grips %d/%d; controls %s; body deepest %.2f uu (%s), MATERIAL %d; grip in its fist %.2f, anything else on a hand %.2f, hand faults %d (%s); misalign %.0f/%.0f deg, wrist %.0f/%.0f deg"),
+						FaceRoster[S.Skin], QaClipPhaseNames[Index], One.Samples, One.BlindSamples, One.Blind.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(": %s"), *One.Blind),
+						One.TopSpeed, One.LastSpeed, One.Dashes, One.Turned, One.bLeftGround ? 1 : 0,
+						One.MinCostumeBoxes == MAX_int32 ? 0 : One.MinCostumeBoxes, One.MinCanonBoxes == MAX_int32 ? 0 : One.MinCanonBoxes,
+						One.MinNearSword[0] == MAX_int32 ? 0 : One.MinNearSword[0], One.MinNearSword[1] == MAX_int32 ? 0 : One.MinNearSword[1],
+						One.bControlsRun ? *One.ControlsDetail : TEXT("NOT RUN"), One.DeepestBody,
+						One.DeepestBodyPair.IsEmpty() ? TEXT("none") : *One.DeepestBodyPair, One.MaterialHits, One.GripContact, One.OtherContact, One.HandHits,
+						One.WorstHandPair.IsEmpty() ? TEXT("none") : *One.WorstHandPair, One.Misalign[0], One.Misalign[1], One.Bend[0], One.Bend[1]);
+				}
+				if (!bHappened)
+				{
+					Missing += FString::Printf(TEXT("%s%s%s"), Missing.IsEmpty() ? TEXT("") : TEXT(", "), QaClipPhaseNames[Index],
+						One.Blind.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *One.Blind));
+				}
+				// THIS PHASE'S OWN CONTROLS read right, and its body never thinner than the stand's (Second: a skin change or a re-laid
+				// mesh must not empty the body silently)
+				ControlsApplicable += bApplies ? 1 : 0;
+				ControlsRight += bApplies && One.bControlsRun && One.bControlsOk ? 1 : 0;
+				if (bApplies && (!One.bControlsRun || !One.bControlsOk))
+				{
+					Missing += FString::Printf(TEXT("%s%s controls %s"), Missing.IsEmpty() ? TEXT("") : TEXT(", "), QaClipPhaseNames[Index],
+						One.bControlsRun ? *FString::Printf(TEXT("WRONG (%s)"), *One.ControlsDetail) : TEXT("NOT RUN"));
+				}
+				const FQaClipStats& Stand = S.Stats[static_cast<int32>(EQaClipPhase::Stand)];
+				const bool bThinner = Which == EQaClipPhase::SkinChange
+					? (One.bCostumeSeen && One.MinCostumeBoxes < 50) || (One.bCanonSeen && One.MinCanonBoxes < 30)
+					: (One.MinCostumeBoxes != MAX_int32 && Stand.MinCostumeBoxes != MAX_int32 && One.MinCostumeBoxes < Stand.MinCostumeBoxes * 9 / 10)
+						|| (One.MinCanonBoxes != MAX_int32 && Stand.MinCanonBoxes != MAX_int32 && One.MinCanonBoxes < Stand.MinCanonBoxes * 9 / 10);
+				if (bApplies && bThinner)
+				{
+					Missing += FString::Printf(TEXT("%s%s body thinner than the stand's (%d skin / %d Relay OG boxes)"), Missing.IsEmpty() ? TEXT("") : TEXT(", "),
+						QaClipPhaseNames[Index], One.MinCostumeBoxes == MAX_int32 ? 0 : One.MinCostumeBoxes, One.MinCanonBoxes == MAX_int32 ? 0 : One.MinCanonBoxes);
+				}
+				if (One.DeepestBody > DeepestBody)
+				{
+					DeepestBody = One.DeepestBody;
+					DeepestBodyPair = FString::Printf(TEXT("%s, %s"), *One.DeepestBodyPair, QaClipPhaseNames[Index]);
+				}
+				if (One.WorstHand > WorstHand)
+				{
+					WorstHand = One.WorstHand;
+					WorstHandPair = FString::Printf(TEXT("%s, %s"), *One.WorstHandPair, QaClipPhaseNames[Index]);
+				}
+				GripContact = FMath::Max(GripContact, One.GripContact);
+				OtherContact = FMath::Max(OtherContact, One.OtherContact);
+				MaterialHits += One.MaterialHits;
+				HandHits += One.HandHits;
+				for (int32 Side = 0; Side < 2; ++Side)
+				{
+					Misalign[Side] = FMath::Max(Misalign[Side], One.Misalign[Side]);
+					Bend[Side] = FMath::Max(Bend[Side], One.Bend[Side]);
+				}
+				if (!One.Note.IsEmpty())
+				{
+					Note = One.Note;
 				}
 			}
-			const bool bInstrument = S.Samples >= 30 && S.BoxesMin != MAX_int32 && S.BoxesMin >= 5 && S.SwordBoxesMin != MAX_int32 && S.SwordBoxesMin >= 10
-				&& S.ProbeMin != MAX_int32 && S.ProbeMin >= 1;
-			S.Check(FString::Printf(TEXT("CL%d"), S.Skin + 1), bInstrument && S.Material.Num() == 0,
-				FString::Printf(TEXT("%s holding the swords in the V, %d frames standing then walking; %d-%d body boxes and at least %d boxes a sword each frame, the centreline probe hitting at least %d (the instrument %s): deepest overlap %.1f uu%s, %d overlapping pair-frames, %d MATERIAL (> %.0f uu)%s"),
-					FaceRoster[S.Skin], S.Samples, S.BoxesMin == MAX_int32 ? 0 : S.BoxesMin, S.BoxesMax, S.SwordBoxesMin == MAX_int32 ? 0 : S.SwordBoxesMin,
-					S.ProbeMin == MAX_int32 ? 0 : S.ProbeMin, bInstrument ? TEXT("sees the body and the swords") : TEXT("BLIND -- no verdict"), S.DeepestUU,
-					S.DeepestPair.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *S.DeepestPair), S.Touching, S.Material.Num(), QaMaterialClipUU,
-					Named.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(": %s"), *Named)));
-			{
-				FString Ignored;
-				Handoff->Return(Ignored);
-			}
+			const bool bSaw = Missing.IsEmpty();
+			S.Check(FString::Printf(TEXT("CL%d"), S.Skin + 1), bSaw && MaterialHits == 0 && HandHits == 0,
+				FString::Printf(TEXT("%s, Equip to Return (the instrument %s): %s. Controls: %s. Body as ONE solid: deepest %.1f uu (%s), %d part-samples MATERIAL (> %.0f uu). Hands: the grip in its own fist at most %.2f uu (allowed %.1f), anything else on a hand at most %.2f uu (allowed %.2f), %d faults%s. Grip off the fist's wrap at most %.0f/%.0f deg, wrist bent at most %.0f/%.0f deg (gold/cyan)%s; jump %s"),
+					FaceRoster[S.Skin], bSaw ? TEXT("saw every phase") : *FString::Printf(TEXT("BLIND -- no verdict: %s"), *Missing),
+					*Phases, *FString::Printf(TEXT("%d of %d phases' own planted controls read right (the stand's: %s)"), ControlsRight, ControlsApplicable, StandControls.IsEmpty() ? TEXT("NOT RUN") : *StandControls), DeepestBody, DeepestBodyPair.IsEmpty() ? TEXT("none") : *DeepestBodyPair,
+					MaterialHits, QaMaterialClipUU, GripContact, QaGripContactUU, OtherContact, QaHandTouchUU, HandHits,
+					WorstHandPair.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (worst: %s)"), *WorstHandPair), Misalign[0], Misalign[1], Bend[0], Bend[1],
+					Note.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; %s"), *Note), S.bJumpAvailable ? TEXT("sampled") : TEXT("not possible in this game (CanJump false)")));
+			Dog->QaForwardKey(false, false);
 			++S.Skin;
 			S.Phase = 1;
 			S.PhaseAt = Now;
@@ -10071,9 +11032,11 @@ namespace
 
 	FAutoConsoleCommandWithWorldAndArgs GQaSwordClipCommand(
 		TEXT("wl.Qa.SwordClip"),
-		TEXT("No sword through the body that holds it (the founder's A5): every skin holding the swords in the V, standing then walking; ")
-		TEXT("every box of both swords against every body box (the arm's end and every WL_Prop left out), deeper than 3 uu = material; ")
-		TEXT("a centreline probe proves the instrument sees the body. `quit` exits after. WLCLQA lines."),
+		TEXT("v2 (Second's eleven findings): no sword through the body or a hand. Every skin from Equip to Return -- forming, standing, walking, ")
+		TEXT("running, three dashes, a stop, a 180, a jump, a skin change while held (Relay OG), the return. The body is ONE solid (a skin's ")
+		TEXT("Lit/Rim parts; Relay OG's generator boxes, checked against its meshes); a part deeper than 3 uu is MATERIAL; planted controls ")
+		TEXT("must read it. The hands are their own class: only the grip's wrap may meet its fist (1 uu). Fists framed from the side and above. ")
+		TEXT("`quit` exits after. WLCLQA lines."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (GQaSwordClip.IsValid() || World == nullptr)
@@ -10084,6 +11047,7 @@ namespace
 			GQaSwordClip->World = World;
 			GQaSwordClip->bQuit = Args.Contains(TEXT("quit"));
 			GQaSwordClip->PhaseAt = QaNow();
+			GQaSwordClip->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLCLIP"));
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLCLQA BEGIN | %s"), *WonderlandBeta::BuildLabel());
 			GQaSwordClip->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaSwordClipTick), 0.0f);
 		}));

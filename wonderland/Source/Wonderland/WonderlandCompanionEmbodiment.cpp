@@ -633,6 +633,7 @@ void AWonderlandCompanionEmbodiment::ClearBody()
 	PartPivots.Reset();
 	PartNames.Reset();
 	PartMeshIsBody.Reset();
+	PartMeshIsSolid.Reset();
 	PartMeshNames.Reset();
 	MaterialInstances.Reset();
 	FlameMaterialInstances.Reset();
@@ -1251,6 +1252,8 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		PartMeshNames.Add(Figure.Parts[PartIndex].Name);
 		// WHICH PARTS THE WARDROBE IS ALLOWED TO FRAME ON. See WonderlandPartIsFramingBody.
 		PartMeshIsBody.Add(WonderlandPartIsFramingBody(Figure.Parts[PartIndex].Name));
+		// WHAT IS DRAWN SOLID, by its material: Lit and Rim are bone, cloth and plate; Glow and Additive are light
+		PartMeshIsSolid.Add(Kind == EWonderlandCompanionMaterialKind::Lit || Kind == EWonderlandCompanionMaterialKind::Rim);
 		BoxCount += Group.Value.Num();
 	}
 
@@ -4032,6 +4035,30 @@ void AWonderlandCompanionEmbodiment::AnimateBeam(float TimeSeconds, const FWonde
 		BeamMesh->SetVisibility(true);
 	}
 	bBeamOn = true;
+}
+
+bool AWonderlandCompanionEmbodiment::IsSolidMesh(const UInstancedStaticMeshComponent* Mesh) const
+{
+	for (int32 Index = 0; Index < PartMeshes.Num(); ++Index)
+	{
+		if (PartMeshes[Index].Get() == Mesh)
+		{
+			return PartMeshIsSolid.IsValidIndex(Index) && PartMeshIsSolid[Index];
+		}
+	}
+	return false;
+}
+
+FName AWonderlandCompanionEmbodiment::GetPartMeshName(const UInstancedStaticMeshComponent* Mesh) const
+{
+	for (int32 Index = 0; Index < PartMeshes.Num(); ++Index)
+	{
+		if (PartMeshes[Index].Get() == Mesh)
+		{
+			return PartMeshNames.IsValidIndex(Index) ? PartMeshNames[Index] : NAME_None;
+		}
+	}
+	return NAME_None;
 }
 
 bool AWonderlandCompanionEmbodiment::IsBodyMesh(const UInstancedStaticMeshComponent* Mesh) const

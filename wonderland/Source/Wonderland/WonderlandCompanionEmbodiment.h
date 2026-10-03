@@ -484,6 +484,14 @@ public:
 	int32 GetPartCount() const { return PartPivots.Num(); }
 	/** For the QA: true for a mesh of the figure's BODY (bone, cloth, plate), false for its light (a halo, an aura, ghostfire) or one not its own. */
 	bool IsBodyMesh(const UInstancedStaticMeshComponent* Mesh) const;
+	/**
+	 * For the QA (wl.Qa.SwordClip v2, Second's finding 3): true for a mesh DRAWN SOLID -- built from a Lit or Rim material, whatever the
+	 * part is called (a skirt, a collar, a banner) -- and false for light (Glow, Additive) or a mesh not the figure's own. IsBodyMesh is
+	 * the wardrobe's framing list by part name, which is not the same thing.
+	 */
+	bool IsSolidMesh(const UInstancedStaticMeshComponent* Mesh) const;
+	/** For the QA: the figure part a mesh was built from, or NAME_None for a mesh not the figure's own. */
+	FName GetPartMeshName(const UInstancedStaticMeshComponent* Mesh) const;
 
 	/**
 	 * THE HAND ON ONE SIDE (Mission Handoff: a held object sits in the hand the player SEES): the forearm joint on the +Y or
@@ -684,6 +692,9 @@ private:
 	 * and false for one built from a Glow or Additive material -- a halo, a banner, ghostfire, an ember.
 	 */
 	TArray<bool> PartMeshIsBody;
+
+	/** Parallel to PartMeshes: true for a mesh built from a Lit or Rim material (drawn solid), false for Glow or Additive (light). */
+	TArray<bool> PartMeshIsSolid;
 
 	/** The figure part each entry of PartMeshes was built from. See DescribeFramingParts. */
 	TArray<FName> PartMeshNames;
