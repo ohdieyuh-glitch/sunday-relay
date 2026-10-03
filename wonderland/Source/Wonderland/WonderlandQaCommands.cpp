@@ -54,6 +54,9 @@
 #include "WonderlandSidekicks.h"
 #include "WonderlandTerritory.h"
 #include "EngineUtils.h"
+#include "Engine/DirectionalLight.h"
+#include "Components/LightComponent.h"
+#include "UObject/UObjectIterator.h"
 #include "Misc/FileHelper.h"
 #include "HAL/PlatformOutputDevices.h"
 #include "Camera/CameraActor.h"
@@ -2605,6 +2608,154 @@ namespace
 		UE_LOG(LogWonderlandQa, Display, TEXT("WLSHADOW frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), W, H);
 	}
 
+	// ---- IN THE SUN, OR SAID TO BE IN THE SHADE (Second, B65.4, 10-03). Round 3b's "noon" colourway frames were shot where
+	// ---- the Dog spawned, under a tree: CORE's pixel read of WHITE (157,135,113) was a white in warm shade, not at noon. The
+	// ---- founder's bar is "WHITE must read genuinely WHITE at noon", so the frames stand in the sun, or the log says they don't.
+	TAutoConsoleVariable<int32> CVarQaCwSunSpot(TEXT("wl.Qa.CwSunSpot"), 1,
+		TEXT("wl.Qa.ShadowColorways at noon: 1 moves the Dog (up to 15 m) to flat, open, SUNLIT ground when it spawned in shade; 0 keeps the spawn."));
+
+	/** The direction TOWARD the sun (the brightest directional light's rays reversed), or zero when there is none. */
+	FVector QaSunToward(UWorld* World)
+	{
+		const ADirectionalLight* Best = nullptr;
+		float BestIntensity = -1.0f;
+		for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+		{
+			const ULightComponent* Light = It->GetLightComponent();
+			const float Intensity = Light != nullptr && Light->IsVisible() ? Light->Intensity : -1.0f;
+			if (Intensity > BestIntensity)
+			{
+				BestIntensity = Intensity;
+				Best = *It;
+			}
+		}
+		return Best != nullptr ? -Best->GetActorForwardVector().GetSafeNormal() : FVector::ZeroVector;
+	}
+
+	/**
+	 * Does an INSTANCED shadow caster stand on the sun ray? The garden is instanced and its canopies need no collision, so a
+	 * trace alone would call the shade under a tree "sunlit". Instance BOUNDS are tested instead, every 100 uu for 25 m: a
+	 * conservative read (a bounding box shades more than its leaves), which is the right error for "is this frame at noon".
+	 */
+	bool QaInstancesOnRay(UWorld* World, const ARelayDogCharacter* D, const FVector& From, const FVector& Toward)
+	{
+		const FVector To = From + Toward * 2500.0;
+		FBox RayBox(ForceInit);
+		RayBox += From;
+		RayBox += To;
+		RayBox = RayBox.ExpandBy(80.0);
+		TArray<AActor*> Worn;
+		D->GetAttachedActors(Worn, true, true);
+		for (TObjectIterator<UInstancedStaticMeshComponent> It; It; ++It)
+		{
+			const UInstancedStaticMeshComponent* Ism = *It;
+			if (Ism == nullptr || Ism->GetWorld() != World || !Ism->IsRegistered() || !Ism->IsVisible() || !Ism->CastShadow
+				|| Ism->GetInstanceCount() == 0 || !Ism->Bounds.GetBox().Intersect(RayBox))
+			{
+				continue;
+			}
+			const AActor* Owner = Ism->GetOwner();
+			if (Owner == D || Worn.ContainsByPredicate([Owner](const AActor* Each) { return Each == Owner; }))
+			{
+				continue;
+			}
+			for (double T = 0.0; T <= 2500.0; T += 100.0)
+			{
+				if (Ism->GetInstancesOverlappingSphere(From + Toward * T, 40.0f, true).Num() > 0)
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** Is this point lit by the sun? A trace from just outside the body toward the sun (the Dog and what it wears ignored) AND
+	 *  no instanced caster's bounds on that ray. */
+	bool QaSunlitAt(UWorld* World, const ARelayDogCharacter* D, const FVector& Point, const FVector& Toward)
+	{
+		if (Toward.IsNearlyZero() || Toward.Z <= 0.05)
+		{
+			return false;
+		}
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(WlQaSun), false);
+		Params.AddIgnoredActor(D);
+		TArray<AActor*> Worn;
+		D->GetAttachedActors(Worn, true, true);
+		Params.AddIgnoredActors(Worn);
+		FHitResult Hit;
+		const FVector From = Point + Toward * 60.0;
+		return !World->LineTraceSingleByChannel(Hit, From, Point + Toward * 30000.0, ECC_Visibility, Params)
+			&& !QaInstancesOnRay(World, D, From, Toward);
+	}
+
+	/** Flat ground near Base, within MaxRise of its height, with nothing in the camera ring (8 x 320 uu) at head height. */
+	bool QaOpenGround(UWorld* World, const ARelayDogCharacter* D, const FVector& Candidate, double BaseFeetZ, double HeadUp, FVector& OutFeet)
+	{
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(WlQaGround), false);
+		Params.AddIgnoredActor(D);
+		TArray<AActor*> Worn;
+		D->GetAttachedActors(Worn, true, true);
+		Params.AddIgnoredActors(Worn);
+		FHitResult Floor;
+		if (!World->LineTraceSingleByChannel(Floor, Candidate + FVector(0.0, 0.0, 400.0), Candidate - FVector(0.0, 0.0, 600.0), ECC_Visibility, Params)
+			|| Floor.ImpactNormal.Z < 0.9 || FMath::Abs(Floor.ImpactPoint.Z - BaseFeetZ) > 120.0)
+		{
+			return false;
+		}
+		const FVector Head = Floor.ImpactPoint + FVector(0.0, 0.0, HeadUp);
+		for (int32 K = 0; K < 8; ++K)
+		{
+			const FVector Out = FVector(1.0, 0.0, 0.0).RotateAngleAxis(45.0 * K, FVector::UpVector);
+			FHitResult Wall;
+			if (World->LineTraceSingleByChannel(Wall, Head, Head + Out * 320.0, ECC_Visibility, Params))
+			{
+				return false;
+			}
+		}
+		OutFeet = Floor.ImpactPoint;
+		return true;
+	}
+
+	/** At noon, stand the Dog in the sun (or say why not). Returns the line the QA logs. */
+	FString QaStandInSun(UWorld* World, ARelayDogCharacter* D)
+	{
+		const FVector Toward = QaSunToward(World);
+		const double Half = D->GetSimpleCollisionHalfHeight();
+		const FVector Feet = D->GetActorLocation() - FVector(0.0, 0.0, Half);
+		const double HeadUp = D->GetCanonBodyHeightUu() * 0.85;
+		if (QaSunlitAt(World, D, Feet + FVector(0.0, 0.0, HeadUp), Toward))
+		{
+			return FString::Printf(TEXT("head SUNLIT at the spawn %s (sun toward %s)"), *Feet.ToCompactString(), *Toward.ToCompactString());
+		}
+		if (CVarQaCwSunSpot.GetValueOnGameThread() == 0 || Toward.IsNearlyZero())
+		{
+			return FString::Printf(TEXT("head in SHADE at the spawn %s, kept (%s)"), *Feet.ToCompactString(),
+				Toward.IsNearlyZero() ? TEXT("no sun found") : TEXT("wl.Qa.CwSunSpot 0"));
+		}
+		static const double Radii[] = { 300.0, 600.0, 900.0, 1200.0, 1500.0 };
+		for (const double Radius : Radii)
+		{
+			for (int32 K = 0; K < 16; ++K)
+			{
+				const FVector Candidate = Feet + FVector(Radius, 0.0, 0.0).RotateAngleAxis(22.5 * K, FVector::UpVector);
+				FVector Ground;
+				if (!QaOpenGround(World, D, Candidate, Feet.Z, HeadUp, Ground) || !QaSunlitAt(World, D, Ground + FVector(0.0, 0.0, HeadUp), Toward)
+					|| !QaSunlitAt(World, D, Ground + FVector(0.0, 0.0, HeadUp * 0.35), Toward))
+				{
+					continue;
+				}
+				const FVector To = Ground + FVector(0.0, 0.0, Half + 2.0);
+				if (D->TeleportTo(To, D->GetActorRotation(), false, true))
+				{
+					return FString::Printf(TEXT("head in SHADE at the spawn %s; MOVED %.0f uu to sunlit open ground %s (sun toward %s)"),
+						*Feet.ToCompactString(), Radius, *Ground.ToCompactString(), *Toward.ToCompactString());
+				}
+			}
+		}
+		return FString::Printf(TEXT("head in SHADE at the spawn %s and no sunlit open ground within 15 m: frames are SHADE frames"), *Feet.ToCompactString());
+	}
+
 	bool QaShadowTick(float)
 	{
 		if (!GQaShadow.IsValid())
@@ -3649,6 +3800,9 @@ namespace
 		case 1:
 			if (In >= 3.0)
 			{
+				// B65.4: noon frames stand in the sun, or say they don't (night and the restart check keep the spawn)
+				const FString Light = S.bNight ? FString(TEXT("night: the spawn kept (no sun to stand in)")) : QaStandInSun(World, D);
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSFCOLORWAYS light: %s"), *Light);
 				Next(2);
 			}
 			break;

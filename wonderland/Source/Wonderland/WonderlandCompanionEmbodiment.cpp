@@ -2161,8 +2161,13 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 			{
 				// the strips' edge stays subtle (founder, 10-01: "very subtle rim illumination"), the body's reads
 				const float Gain = bStrip ? WonderlandMascotStyle::SmokeStripRimGain() : WonderlandMascotStyle::SmokeRimGain();
-				Instance->SetVectorParameterValue(TEXT("RimColor"), bRecoloured ? WonderlandMascotStyle::SmokeRimTint(Want) * Gain
-					: Want * WonderlandTameGlow(Def.Strength));
+				// B65.4: the designed body's edges glow BLUE, as on the founder's sheet (wl.Shadow.DefaultRimGain 0 = the designed rim)
+				FLinearColor DesignedRim = Want * WonderlandTameGlow(Def.Strength);
+				if (bDesignedBody)
+				{
+					WonderlandMascotStyle::SmokeDesignedRim(DesignedRim);
+				}
+				Instance->SetVectorParameterValue(TEXT("RimColor"), bRecoloured ? WonderlandMascotStyle::SmokeRimTint(Want) * Gain : DesignedRim);
 				Instance->SetScalarParameterValue(TEXT("RimAmp"), RimBoost * WonderlandMascotStyle::SmokeRimAmp());
 				if (!bStrip || WonderlandMascotStyle::SmokeStripRelief())
 				{

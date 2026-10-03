@@ -373,12 +373,23 @@ namespace
 	// ---- B65.3 THE PROFILES (founder, 2026-10-03: white must READ white at noon, the default needs the reference's bright blue
 	// ---- marbling, black needs readable grey smoke). A colour's profile decides the base it is painted with and the depth of
 	// ---- its tone map; the pattern (the field above) is shared, so every colourway is one material identity.
-	TAutoConsoleVariable<FString> CVarSmokeDefaultVein(TEXT("wl.Shadow.DefaultVein"), TEXT("0.30 0.50 1.00"),
-		TEXT("Shadow smoke, the DESIGNED body: the colour of its bright veins (its cells are this x DefaultFloor, the designed navy)."));
-	TAutoConsoleVariable<float> CVarSmokeDefaultFloor(TEXT("wl.Shadow.DefaultFloor"), 0.045f,
-		TEXT("Shadow smoke, the DESIGNED body: the tone in the cells (0.045 x the vein blue = the designed navy)."));
-	TAutoConsoleVariable<float> CVarSmokeDefaultPower(TEXT("wl.Shadow.DefaultPower"), 4.0f,
-		TEXT("Shadow smoke, the DESIGNED body: how thin the bright veins are (higher = thinner)."));
+	// ---- B65.4 (Second, 10-03 after round 3b's frames: CORE's pixel read of the noon head gave DEFAULT (29,31,43) "dark navy
+	// ---- streaks, not bright blue marbling", WHITE (157,135,113) "warm beige", BLACK (11,7,6) "no readable grey highlights").
+	// ---- The founder's sheet shows a near-black body whose blue is LIGHT -- glowing edges and cracks -- not paint. So the
+	// ---- designed body gets wider, brighter veins AND a blue edge glow (the rim term, which the master already carries), the
+	// ---- light pick's glow is given in the scene's own units (B65.3 wrote 0.10 where the noon white is ~25,000: invisible), and
+	// ---- the dark pick's smoke is a readable grey. Every value is a console variable: tune by eye, no rebuild.
+	TAutoConsoleVariable<FString> CVarSmokeDefaultVein(TEXT("wl.Shadow.DefaultVein"), TEXT("0.28 0.55 1.00"),
+		TEXT("Shadow smoke, the DESIGNED body: the colour of its bright veins (its cells are this x DefaultFloor)."));
+	TAutoConsoleVariable<float> CVarSmokeDefaultFloor(TEXT("wl.Shadow.DefaultFloor"), 0.12f,
+		TEXT("Shadow smoke, the DESIGNED body: the tone in the cells (B65.3's 0.045 photographed as near-black navy)."));
+	TAutoConsoleVariable<float> CVarSmokeDefaultPower(TEXT("wl.Shadow.DefaultPower"), 2.2f,
+		TEXT("Shadow smoke, the DESIGNED body: how thin the bright veins are (higher = thinner; B65.3's 4 was too thin to read)."));
+	TAutoConsoleVariable<FString> CVarSmokeDefaultRim(TEXT("wl.Shadow.DefaultRim"), TEXT("0.25 0.55 1.00"),
+		TEXT("Shadow smoke, the DESIGNED body: the colour of its edge glow (the founder's sheet: blue light along every edge)."));
+	TAutoConsoleVariable<float> CVarSmokeDefaultRimGain(TEXT("wl.Shadow.DefaultRimGain"), 3.0f,
+		TEXT("Shadow smoke, the DESIGNED body: the edge glow's strength in rim units (RimColor; the master carries its own x1000). "
+		     "0 keeps the designed rim exactly as before B65.4."));
 	TAutoConsoleVariable<float> CVarSmokeLightValue(TEXT("wl.Shadow.LightValue"), 0.85f,
 		TEXT("Shadow smoke: a pick whose strongest channel is at least this, and ..."));
 	TAutoConsoleVariable<float> CVarSmokeLightSat(TEXT("wl.Shadow.LightSat"), 0.15f,
@@ -387,16 +398,17 @@ namespace
 		TEXT("Shadow smoke, a LIGHT pick: the tone in the billows (high, so white stays white)."));
 	TAutoConsoleVariable<float> CVarSmokeLightPower(TEXT("wl.Shadow.LightPower"), 1.3f,
 		TEXT("Shadow smoke, a LIGHT pick: how the tone falls from the creases into the billows."));
-	TAutoConsoleVariable<float> CVarSmokeLightGlow(TEXT("wl.Shadow.LightGlow"), 0.10f,
-		TEXT("Shadow smoke, a LIGHT pick: a small NEUTRAL glow (Emissive x EmissiveStrength) so white reads white under the warm noon sun; 0 = none."));
+	TAutoConsoleVariable<float> CVarSmokeLightGlow(TEXT("wl.Shadow.LightGlow"), 0.12f,
+		TEXT("Shadow smoke, a LIGHT pick: a NEUTRAL glow as a share of the noon white (~25,000 scene units), so white reads white in "
+		     "shade and under the warm sun; 0 = none. B65.3 wrote this share straight into EmissiveStrength, which drew nothing."));
 	TAutoConsoleVariable<float> CVarSmokeDarkValue(TEXT("wl.Shadow.DarkValue"), 0.06f,
 		TEXT("Shadow smoke: a pick whose strongest channel is at most this is DARK (black cells, grey smoke veins)."));
-	TAutoConsoleVariable<float> CVarSmokeDarkVein(TEXT("wl.Shadow.DarkVein"), 0.08f,
-		TEXT("Shadow smoke, a DARK pick: the grey of its smoke veins (its cells are this x DarkFloor)."));
+	TAutoConsoleVariable<float> CVarSmokeDarkVein(TEXT("wl.Shadow.DarkVein"), 0.20f,
+		TEXT("Shadow smoke, a DARK pick: the grey of its smoke veins (its cells are this x DarkFloor; B65.3's 0.08 did not read)."));
 	TAutoConsoleVariable<float> CVarSmokeDarkFloor(TEXT("wl.Shadow.DarkFloor"), 0.0f,
 		TEXT("Shadow smoke, a DARK pick: the tone in the cells (0 = black)."));
-	TAutoConsoleVariable<float> CVarSmokeDarkPower(TEXT("wl.Shadow.DarkPower"), 3.0f,
-		TEXT("Shadow smoke, a DARK pick: how thin the grey veins are."));
+	TAutoConsoleVariable<float> CVarSmokeDarkPower(TEXT("wl.Shadow.DarkPower"), 2.0f,
+		TEXT("Shadow smoke, a DARK pick: how thin the grey veins are (B65.3's 3 was too thin)."));
 
 	TAutoConsoleVariable<float> CVarSmokeBumpSoft(TEXT("wl.Shadow.SmokeBumpSoft"), 0.06f,
 		TEXT("Shadow smoke maps: how rounded the relief's creases are (0 = sharp)."));
@@ -800,24 +812,28 @@ namespace
 		}
 	}
 
-	/** The glow (M_WLMaster: Emissive x EmissiveStrength) back to the parent's own -- what every surface had before B65.3. */
+	/**
+	 * The glow (M_WLMaster: Emissive x EmissiveStrength) back to what every figure surface is BUILT with: the colour the parent
+	 * says and a strength of 0 (AWonderlandCompanionEmbodiment's build loop writes 0 on every Rim instance). B65.4: B65.3 put
+	 * the PARENT's strength back, which is not the built state and could light a surface the designed look kept dark.
+	 */
 	void RestoreParentGlow(UMaterialInstanceDynamic* Instance)
 	{
-		if (Instance == nullptr || Instance->Parent == nullptr)
+		if (Instance == nullptr)
 		{
 			return;
 		}
 		FLinearColor Colour = FLinearColor::Black;
-		if (Instance->Parent->GetVectorParameterValue(FMaterialParameterInfo(TEXT("Emissive")), Colour))
+		if (Instance->Parent != nullptr && Instance->Parent->GetVectorParameterValue(FMaterialParameterInfo(TEXT("Emissive")), Colour))
 		{
 			Instance->SetVectorParameterValue(TEXT("Emissive"), Colour);
 		}
-		float Strength = 0.0f;
-		if (Instance->Parent->GetScalarParameterValue(FMaterialParameterInfo(TEXT("EmissiveStrength")), Strength))
-		{
-			Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), Strength);
-		}
+		Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.0f);
 	}
+
+	/** The noon white in scene units: the post-process holds noon at EV100 14.2, where a sunlit ivory wall is ~20,000-25,000
+	 *  (see WonderlandSceneUnits in WonderlandCompanionEmbodiment.cpp). The light pick's glow is a share of THIS. */
+	constexpr float SmokeNoonWhite = 25000.0f;
 
 	enum class ESmokeProfile : uint8
 	{
@@ -849,7 +865,7 @@ namespace
 
 	FLinearColor SmokeDefaultVein()
 	{
-		FLinearColor Vein(0.30f, 0.50f, 1.00f, 1.0f);
+		FLinearColor Vein(0.28f, 0.55f, 1.00f, 1.0f);
 		FLinearColor Parsed;
 		if (ReadFlameColourText(CVarSmokeDefaultVein.GetValueOnGameThread(), Parsed))
 		{
@@ -1206,6 +1222,25 @@ namespace WonderlandMascotStyle
 		}
 	}
 
+	bool SmokeDesignedRim(FLinearColor& OutRim)
+	{
+		// THE FOUNDER'S SHEET LIGHTS EVERY EDGE BLUE: the designed body's rim takes the edge-glow colour at the given strength,
+		// in the same rim units the embodiment paints every rim with (the master's own x1000 is inside). 0 = the designed rim.
+		const float Gain = FMath::Clamp(CVarSmokeDefaultRimGain.GetValueOnGameThread(), 0.0f, 40.0f);
+		if (!(Gain > 0.0f))
+		{
+			return false;
+		}
+		FLinearColor Rim(0.25f, 0.55f, 1.00f, 1.0f);
+		FLinearColor Parsed;
+		if (ReadFlameColourText(CVarSmokeDefaultRim.GetValueOnGameThread(), Parsed))
+		{
+			Rim = FLinearColor(Parsed.R, Parsed.G, Parsed.B, 1.0f);
+		}
+		OutRim = FLinearColor(Rim.R * Gain, Rim.G * Gain, Rim.B * Gain, 1.0f);
+		return true;
+	}
+
 	FString SmokeProfileName(const FLinearColor& Pick, bool bDesignedBody)
 	{
 		switch (SmokeProfileFor(Pick, bDesignedBody))
@@ -1232,13 +1267,14 @@ namespace WonderlandMascotStyle
 		{
 			Instance->SetTextureParameterValue(TEXT("AlbedoTex"), Tone);
 		}
-		// A LIGHT PICK'S SMALL NEUTRAL GLOW: white lit by the warm noon sun reads cream; a little neutral self-light lifts it
-		// toward the tonemapper's white without tinting it (the founder: "WHITE must read genuinely WHITE at noon")
-		const float Glow = FMath::Clamp(CVarSmokeLightGlow.GetValueOnGameThread(), 0.0f, 4.0f);
+		// A LIGHT PICK'S NEUTRAL GLOW: white lit by the warm noon sun, or standing in warm shade, reads cream; neutral self-light
+		// lifts it toward the tonemapper's white without tinting it (the founder: "WHITE must read genuinely WHITE at noon").
+		// IN SCENE UNITS (B65.4): the share times the noon white. B65.3 wrote the bare share (0.10) -- a ten-thousandth of white.
+		const float Glow = FMath::Clamp(CVarSmokeLightGlow.GetValueOnGameThread(), 0.0f, 1.0f);
 		if (Profile == ESmokeProfile::Light && Glow > 0.0f)
 		{
 			Instance->SetVectorParameterValue(TEXT("Emissive"), FLinearColor::White);
-			Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), Glow);
+			Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), Glow * SmokeNoonWhite);
 		}
 		else
 		{
@@ -1305,11 +1341,13 @@ namespace WonderlandMascotStyle
 	{
 		const UTexture* Relief = SmokeTexture();
 		const FString Drawn = SmokeIsDrawn()
-			? FString::Printf(TEXT(" | smoke maps drawn (%s), %.1f ms, tone %s | profiles: designed vein %s floor %.3f power %.1f; light >= %.2f sat <= %.2f floor %.2f power %.1f glow %.2f; dark <= %.2f vein %.2f floor %.2f power %.1f"),
+			? FString::Printf(TEXT(" | smoke maps drawn (%s), %.1f ms, tone %s | profiles: designed vein %s floor %.3f power %.1f edge glow %s x %.1f; light >= %.2f sat <= %.2f floor %.2f power %.1f glow %.2f of the noon white (%.0f units); dark <= %.2f vein %.2f floor %.2f power %.1f"),
 				*GSmokeMaps.Signature, GSmokeMaps.DrawMs, SmokeToneMap() != nullptr ? TEXT("worn") : TEXT("off"),
 				*SmokeDefaultVein().ToString(), CVarSmokeDefaultFloor.GetValueOnGameThread(), CVarSmokeDefaultPower.GetValueOnGameThread(),
+				*CVarSmokeDefaultRim.GetValueOnGameThread(), CVarSmokeDefaultRimGain.GetValueOnGameThread(),
 				CVarSmokeLightValue.GetValueOnGameThread(), CVarSmokeLightSat.GetValueOnGameThread(), CVarSmokeLightFloor.GetValueOnGameThread(),
-				CVarSmokeLightPower.GetValueOnGameThread(), CVarSmokeLightGlow.GetValueOnGameThread(), CVarSmokeDarkValue.GetValueOnGameThread(),
+				CVarSmokeLightPower.GetValueOnGameThread(), CVarSmokeLightGlow.GetValueOnGameThread(),
+				FMath::Clamp(CVarSmokeLightGlow.GetValueOnGameThread(), 0.0f, 1.0f) * SmokeNoonWhite, CVarSmokeDarkValue.GetValueOnGameThread(),
 				CVarSmokeDarkVein.GetValueOnGameThread(), CVarSmokeDarkFloor.GetValueOnGameThread(), CVarSmokeDarkPower.GetValueOnGameThread())
 			: FString();
 		return FString::Printf(TEXT("relief %s at TexScale %.4f, DetailAmp %.2f, RoughVary %.2f, Roughness %.2f, Specular %.2f, RimAmp %.2f, rim top %.2f lift %.2f gain %.2f floor %.2f, strips rim gain %.2f relief %s, on DEFAULT %s%s"),

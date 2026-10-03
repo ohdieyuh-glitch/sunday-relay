@@ -348,6 +348,8 @@ namespace WonderlandMascotStyle
 	WONDERLAND_API FLinearColor SmokeBaseFor(const FLinearColor& Pick, bool bDesignedBody);
 	/** The profile ApplySmokeLook uses for this pick, by name (designed / light / dark / colour), for the QA's log. */
 	WONDERLAND_API FString SmokeProfileName(const FLinearColor& Pick, bool bDesignedBody);
+	/** B65.4: the designed body's EDGE GLOW (wl.Shadow.DefaultRim x DefaultRimGain, in rim units), or false to keep the designed rim. */
+	WONDERLAND_API bool SmokeDesignedRim(FLinearColor& OutRim);
 	/** One line naming the smoke look's current settings, for the QA's log. */
 	WONDERLAND_API FString DescribeSmokeLook();
 
