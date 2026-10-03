@@ -19,6 +19,7 @@
 #include "Styling/SlateTypes.h"
 #include "Widgets/SCompoundWidget.h"
 #include "WonderlandSocialProfilePanel.h"
+#include "WonderlandSocialSignIn.h"
 #include "WonderlandSocialTypes.h"
 
 class SBorder;
@@ -51,6 +52,9 @@ public:
 		SLATE_ARGUMENT(FString, VoiceLabel)
 		SLATE_EVENT(FOnWonderlandVoiceCommand, OnVoice)
 		SLATE_EVENT(FSimpleDelegate, OnRequestClose)
+		/** The player's sign-in, shown when there is no live service: SIGN IN, the GitHub code, CANCEL; SIGN OUT when live. Its
+		 *  buttons go through OnAction as "signin.start" / "signin.open" / "signin.cancel" / "signin.out". */
+		SLATE_ARGUMENT(FWonderlandSignInView, SignIn)
 	SLATE_END_ARGS()
 
 	SWonderlandSocialHubPanel();
@@ -67,6 +71,9 @@ public:
 	bool SendReply(const FString& Body);
 	/** The voice service's state changed (a command, a provider event, the preview's stepper): redraw the voice column. */
 	void SetVoice(const FWonderlandVoiceState& State, const FString& Label);
+	/** The sign-in changed (a code arrived, it was approved, it failed, the session ended). Stored only: the caller's
+	 *  SetSnapshot, which always follows it, redraws once. */
+	void SetSignIn(const FWonderlandSignInView& InView);
 	/** The service's view changed (a live update): redraw on the same tab, the same conversation if it is still there. */
 	void SetSnapshot(const FWonderlandSocialSnapshot& InSnapshot, bool bInConnected, const FString& InSourceLine, bool bInPreview);
 	/** The social service's answer to an action this hub asked for, shown at the foot. */
@@ -100,6 +107,8 @@ private:
 	int32 CountUnread() const;
 	FString NameOf(const FString& UserId) const;
 	TSharedRef<SWidget> MakeNotConnected();
+	/** SIGN IN, by state: the button, the code to enter at GitHub, the wait, the failure. */
+	TSharedRef<SWidget> MakeSignIn();
 	TSharedRef<SWidget> MakeSectionTitle(const FString& Title, int32 Count);
 	TSharedRef<SWidget> MakeEmpty(const FString& Line);
 	/** One person: avatar, name and handle, the presence line, a second line (context), and the row's actions. */
@@ -126,6 +135,7 @@ private:
 	FString VoiceLabel;
 	FOnWonderlandVoiceCommand OnVoice;
 	FString LastActionLine;
+	FWonderlandSignInView SignIn;
 
 	TSharedPtr<SBorder> RailHost;
 	TSharedPtr<SBorder> BodyHost;
