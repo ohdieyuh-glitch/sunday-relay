@@ -336,6 +336,18 @@ namespace WonderlandMascotStyle
 	WONDERLAND_API void RestoreSmokeDetail(UMaterialInstanceDynamic* Instance);
 	/** Write the smoke look's detail parameters (all but the colours and RimAmp) onto one rim material instance. */
 	WONDERLAND_API void ApplySmokeDetail(UMaterialInstanceDynamic* Instance);
+	/**
+	 * B65.3 (founder, 2026-10-03: "WHITE must read genuinely WHITE at noon ... DEFAULT: restore/strengthen the bright blue
+	 * smoky marbling ... BLACK: increase readable gray/smoky highlights"): the whole smoke look on one surface, by the
+	 * PROFILE of its colour -- the designed body (navy cells, bright blue veins), a light pick (white kept bright, soft
+	 * marbling, a small neutral glow), a dark pick (black cells, grey smoke veins) or any other colour (the pick exactly,
+	 * marbled with darker shades of itself). Writes BaseColor, the tone map, the relief, the roughness and the glow.
+	 */
+	WONDERLAND_API void ApplySmokeLook(UMaterialInstanceDynamic* Instance, const FLinearColor& Pick, bool bDesignedBody);
+	/** The base colour ApplySmokeLook paints for this pick: the pick itself, the designed body's vein blue, or a dark pick's grey. */
+	WONDERLAND_API FLinearColor SmokeBaseFor(const FLinearColor& Pick, bool bDesignedBody);
+	/** The profile ApplySmokeLook uses for this pick, by name (designed / light / dark / colour), for the QA's log. */
+	WONDERLAND_API FString SmokeProfileName(const FLinearColor& Pick, bool bDesignedBody);
 	/** One line naming the smoke look's current settings, for the QA's log. */
 	WONDERLAND_API FString DescribeSmokeLook();
 

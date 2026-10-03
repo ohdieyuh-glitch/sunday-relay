@@ -3182,8 +3182,10 @@ namespace
 				const TMap<FString, FQaPaint> P = QaPainted(Costume);
 				const FLinearColor Bone = QaPaintOf(P, TEXT("bone"));
 				const FLinearColor Deep = QaPaintOf(P, TEXT("bonedeep"));
-				// B65: the shell is the pick EXACTLY; the deep coat (cuffs, soles) a 0.62 shade of the same pick
-				const bool bExact = Swatch != nullptr && QaExact(Bone, Swatch->Value) && QaExact(Deep, Swatch->Value * 0.62f);
+				// B65: the shell is the pick EXACTLY; the deep coat (cuffs, soles) a 0.62 shade of the same pick. B65.3: a DARK pick's
+				// shell is its smoke grey (its cells stay black), so the shell is compared with the profile's base
+				const FLinearColor WantShell = Swatch != nullptr ? WonderlandMascotStyle::SmokeBaseFor(Swatch->Value, false) : FLinearColor(-1, -1, -1);
+				const bool bExact = Swatch != nullptr && QaExact(Bone, WantShell) && QaExact(Deep, Swatch->Value * 0.62f);
 				S.bAllExact &= bExact;
 				S.Trail += FString::Printf(TEXT("%s%s %s/%s%s"), S.Trail.IsEmpty() ? TEXT("") : TEXT(" -> "), *Key,
 					*QaRgb(Bone), *QaRgb(Deep), bExact ? TEXT("") : TEXT(" (WRONG)"));
@@ -3209,8 +3211,8 @@ namespace
 				if (S.Step <= 2)
 				{
 					const TCHAR* Id = S.Step == 0 ? TEXT("C1") : S.Step == 1 ? TEXT("C2") : TEXT("C3");
-					QaSfCheck(S, Id, bExact, FString::Printf(TEXT("%s picked: the coat (bone, bonedeep) painted %s / %s, want %s exactly (bonedeep x0.62)"),
-						*Key, *QaRgb(Bone), *QaRgb(Deep), Swatch != nullptr ? *QaRgb(Swatch->Value) : TEXT("?")));
+					QaSfCheck(S, Id, bExact, FString::Printf(TEXT("%s picked: the coat (bone, bonedeep) painted %s / %s, want %s exactly (bonedeep x0.62 of the pick; profile %s)"),
+						*Key, *QaRgb(Bone), *QaRgb(Deep), *QaRgb(WantShell), Swatch != nullptr ? *WonderlandMascotStyle::SmokeProfileName(Swatch->Value, false) : TEXT("?")));
 				}
 				if (S.Step == 0)
 				{
@@ -3247,10 +3249,14 @@ namespace
 				const FLinearColor Deep = QaPaintOf(P, TEXT("bonedeep"));
 				FString On;
 				const int32 Rings = QaPrimaryRings(On);
-				QaSfCheck(S, TEXT("C6"), QaExact(Bone, FLinearColor(0.016f, 0.019f, 0.042f)) && QaExact(Deep, FLinearColor(0.009f, 0.010f, 0.022f))
+				// B65.3: with the smoke on DEFAULT the designed shell is painted with its VEIN blue (its tone map's floor brings the
+				// cells down to the designed navy); the deep coat stays the designed navy
+				const FLinearColor DesignedShell(0.016f, 0.019f, 0.042f);
+				const FLinearColor WantShell = WonderlandMascotStyle::SmokeOnDefault() ? WonderlandMascotStyle::SmokeBaseFor(DesignedShell, true) : DesignedShell;
+				QaSfCheck(S, TEXT("C6"), QaExact(Bone, WantShell) && QaExact(Deep, FLinearColor(0.009f, 0.010f, 0.022f))
 					&& Rings == 1 && On == TEXT("DEFAULT"),
-					FString::Printf(TEXT("DEFAULT: the coat %s / %s (designed (0.016,0.019,0.042) / (0.009,0.010,0.022)); rings on: %s"),
-						*QaRgb(Bone), *QaRgb(Deep), *On));
+					FString::Printf(TEXT("DEFAULT: the coat %s / %s (want %s / designed (0.009,0.010,0.022)); rings on: %s"),
+						*QaRgb(Bone), *QaRgb(Deep), *QaRgb(WantShell), *On));
 				QaShadowShot(S.View, TEXT("7_default"));
 				GEngine->Exec(World, TEXT("wl.Skins.Wear skeleton_flame"));
 				Next(6);
@@ -3523,9 +3529,16 @@ namespace
 		const TPair<FName, FLinearColor>* StripSwatch = QaPrimarySwatch(Step.Strip);
 		// the designed colours, as the figure file declares them (RelaySkins/ShadowFlame.wlvox)
 		const FLinearColor DesignedBody(0.0160f, 0.0190f, 0.0420f), DesignedDeep(0.0090f, 0.0100f, 0.0220f), DesignedStrip(0.0100f, 0.0120f, 0.0300f);
-		const FLinearColor WantBody = bBodyDefault ? DesignedBody : (BodySwatch != nullptr ? BodySwatch->Value : FLinearColor(-1, -1, -1));
-		const FLinearColor WantDeep = bBodyDefault ? DesignedDeep : WantBody * 0.62f;
-		const FLinearColor WantStrip = bStripDefault ? DesignedStrip : (StripSwatch != nullptr ? StripSwatch->Value : FLinearColor(-1, -1, -1));
+		const FLinearColor PickBody = bBodyDefault ? DesignedBody : (BodySwatch != nullptr ? BodySwatch->Value : FLinearColor(-1, -1, -1));
+		const FLinearColor PickStrip = bStripDefault ? DesignedStrip : (StripSwatch != nullptr ? StripSwatch->Value : FLinearColor(-1, -1, -1));
+		// B65.3: the BASE by the colour's profile -- a light or any other pick EXACTLY itself (the pure-colour rule), a dark pick
+		// its smoke grey, the designed body (with the smoke on DEFAULT) its vein blue; the deep coat is unaffected (Lit)
+		const FLinearColor WantBody = bBodyDefault
+			? (WonderlandMascotStyle::SmokeOnDefault() ? WonderlandMascotStyle::SmokeBaseFor(DesignedBody, true) : DesignedBody)
+			: WonderlandMascotStyle::SmokeBaseFor(PickBody, false);
+		const FLinearColor WantDeep = bBodyDefault ? DesignedDeep : PickBody * 0.62f;
+		const FLinearColor WantStrip = bStripDefault ? DesignedStrip
+			: (WonderlandMascotStyle::SmokeStripRelief() ? WonderlandMascotStyle::SmokeBaseFor(PickStrip, false) : PickStrip);
 		QaCwCheck(S, TEXT("K1"), QaExact(P.Body, WantBody), FString::Printf(TEXT("%s: the body painted %s, want %s exactly"), *Tag, *QaRgb(P.Body), *QaRgb(WantBody)));
 		QaCwCheck(S, TEXT("K2"), QaExact(P.Deep, FLinearColor(WantDeep.R, WantDeep.G, WantDeep.B)),
 			FString::Printf(TEXT("%s: the deep coat %s, want %s (the same pick, deeper)"), *Tag, *QaRgb(P.Deep), *QaRgb(WantDeep)));
@@ -3534,19 +3547,20 @@ namespace
 		const bool bOnDefault = WonderlandMascotStyle::SmokeOnDefault();
 		const FString Smoke = WonderlandMascotStyle::SmokeTextureName();
 		const FString WantBodyRelief = (!bBodyDefault || bOnDefault) ? Smoke : S.First.BodyRelief;
-		const FString WantStripRelief = (!bStripDefault || bOnDefault) && WonderlandMascotStyle::SmokeStripRelief() ? Smoke
-			: (bStripDefault ? S.First.StripRelief : S.First.StripRelief);
+		// B65.3: the DESIGNED strips stay the designed black tendrils (no smoke); a picked strip colour takes it
+		const FString WantStripRelief = (!bStripDefault && WonderlandMascotStyle::SmokeStripRelief()) ? Smoke : S.First.StripRelief;
 		QaCwCheck(S, TEXT("K4"), Smoke != TEXT("none") && P.BodyRelief == WantBodyRelief && P.StripRelief == WantStripRelief,
 			FString::Printf(TEXT("%s: relief on the body '%s' (want '%s'), on the strips '%s' (want '%s'); the smoke texture '%s'"), *Tag,
 				*P.BodyRelief, *WantBodyRelief, *P.StripRelief, *WantStripRelief, *Smoke));
-		const FLinearColor WantBodyRim = bBodyDefault ? S.First.BodyRim : WonderlandMascotStyle::SmokeRimTint(WantBody) * WonderlandMascotStyle::SmokeRimGain();
-		const FLinearColor WantStripRim = bStripDefault ? S.First.StripRim : WonderlandMascotStyle::SmokeRimTint(WantStrip) * WonderlandMascotStyle::SmokeStripRimGain();
-		const FLinearColor BodyTint = WonderlandMascotStyle::SmokeRimTint(WantBody);
-		const float HueBase = QaHueDeg(WantBody);
+		// the rims follow the PICK (the embodiment tints from the chosen colour, never from a profile's base)
+		const FLinearColor WantBodyRim = bBodyDefault ? S.First.BodyRim : WonderlandMascotStyle::SmokeRimTint(PickBody) * WonderlandMascotStyle::SmokeRimGain();
+		const FLinearColor WantStripRim = bStripDefault ? S.First.StripRim : WonderlandMascotStyle::SmokeRimTint(PickStrip) * WonderlandMascotStyle::SmokeStripRimGain();
+		const FLinearColor BodyTint = WonderlandMascotStyle::SmokeRimTint(PickBody);
+		const float HueBase = QaHueDeg(PickBody);
 		const float HueTint = QaHueDeg(BodyTint);
 		const float HueGap = (HueBase < 0.0f || HueTint < 0.0f) ? 0.0f : FMath::Min(FMath::Abs(HueBase - HueTint), 360.0f - FMath::Abs(HueBase - HueTint));
 		const bool bBodyHue = bBodyDefault || HueBase < 0.0f || HueGap <= 6.0f;
-		const bool bBrighter = bBodyDefault || FMath::Max3(BodyTint.R, BodyTint.G, BodyTint.B) >= FMath::Max3(WantBody.R, WantBody.G, WantBody.B) - 0.001f;
+		const bool bBrighter = bBodyDefault || FMath::Max3(BodyTint.R, BodyTint.G, BodyTint.B) >= FMath::Max3(PickBody.R, PickBody.G, PickBody.B) - 0.001f;
 		QaCwCheck(S, TEXT("K5"), (S.Step == 0 || (QaExact(P.BodyRim, WantBodyRim) && QaExact(P.StripRim, WantStripRim))) && bBodyHue && bBrighter,
 			FString::Printf(TEXT("%s: rims body %s strips %s, want %s / %s; the body rim's hue %.1f vs the colour's %.1f deg (recoloured: the same hue, brighter, black a grey floor; DEFAULT: as designed)"), *Tag,
 				*QaRgb(P.BodyRim), *QaRgb(P.StripRim), *QaRgb(WantBodyRim), *QaRgb(WantStripRim), HueTint, HueBase));

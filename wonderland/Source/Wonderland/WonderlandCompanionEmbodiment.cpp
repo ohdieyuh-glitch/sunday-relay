@@ -2154,7 +2154,10 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 			const bool bRecoloured = bStrip
 				? (BodyRole == EWonderlandBodyRole::Mascot && WonderlandMascotStyle::HasChosenStrip())
 				: (bChosen && BodyRole == EWonderlandBodyRole::Mascot && WonderlandMascotStyle::IsPrimaryChannel(Def.Channel) && WonderlandMascotStyle::HasChosenPrimary());
-			if (bRecoloured || WonderlandMascotStyle::SmokeOnDefault())
+			// B65.3: the DESIGNED body wears the reference's marble (navy cells, bright blue veins); the designed STRIPS stay the
+			// fixed black tendrils they were designed as, and take the smoke only when their own colour is picked
+			const bool bDesignedBody = !bRecoloured && !bStrip && WonderlandMascotStyle::SmokeOnDefault();
+			if (bRecoloured || bDesignedBody)
 			{
 				// the strips' edge stays subtle (founder, 10-01: "very subtle rim illumination"), the body's reads
 				const float Gain = bStrip ? WonderlandMascotStyle::SmokeStripRimGain() : WonderlandMascotStyle::SmokeRimGain();
@@ -2163,7 +2166,9 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 				Instance->SetScalarParameterValue(TEXT("RimAmp"), RimBoost * WonderlandMascotStyle::SmokeRimAmp());
 				if (!bStrip || WonderlandMascotStyle::SmokeStripRelief())
 				{
-					WonderlandMascotStyle::ApplySmokeDetail(Instance);
+					// the base by the colour's profile (the pick exactly, or the designed vein blue, or a dark pick's smoke grey),
+					// its tone map, the relief and a light pick's glow
+					WonderlandMascotStyle::ApplySmokeLook(Instance, Want, bDesignedBody);
 				}
 				else
 				{
