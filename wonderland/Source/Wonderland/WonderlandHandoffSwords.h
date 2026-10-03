@@ -123,6 +123,8 @@ namespace WonderlandHandoffSwords
 		/** How visible the swords are right now (0 hidden .. 1 fully formed), and where each is. */
 		float GetPresence() const { return Presence; }
 		FTransform GetSwordWorld(bool bGold) const;
+		/** For the QA: what the sword hangs from now -- a hand's forearm while held, the owner's root otherwise. */
+		const USceneComponent* GetHeldBy(bool bGold) const;
 		/** The number of sword boxes drawn right now, for the QA (0 when hidden), and how many the pair was built from. */
 		int32 CountVisibleBoxes() const;
 		int32 GetBuiltBoxes() const { return Gold.Boxes + Cyan.Boxes; }

@@ -395,6 +395,8 @@ public:
 	FTransform GetHandoffGripWorld(bool bLeftHand) const;
 	/** THE HANDS (M4): the visible body's hand on the Dog's own LEFT or RIGHT (Relay OG's canon forearm, or the worn skin's own). */
 	const WonderlandHands::FHand& GetHand(bool bLeftHand) const { return bLeftHand ? BodyHandMinusY : BodyHandPlusY; }
+	/** For the QA: the forearm of the body the player sees for that hand (a worn skin's, else the canon's), or null. */
+	USceneComponent* GetVisibleForearm(bool bLeftHand) const;
 
 protected:
 	void MoveForwardAxis(float Value);

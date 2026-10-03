@@ -3411,6 +3411,15 @@ bool ARelayDogCharacter::VisibleForearm(bool bPlusY, USceneComponent*& OutForear
 	return true;
 }
 
+USceneComponent* ARelayDogCharacter::GetVisibleForearm(bool bLeftHand) const
+{
+	USceneComponent* Forearm = nullptr;
+	FVector Tip = FVector::ZeroVector;
+	FVector Forward = FVector::ForwardVector;
+	// the left hand is the Dog's own -Y side (see GetHandoffGripWorld)
+	return VisibleForearm(!bLeftHand, Forearm, Tip, Forward) ? Forearm : nullptr;
+}
+
 void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
 {
 	// EVERY MASCOT HAS HANDS (founder, 2026-10-02): built on the visible body's forearms -- moved with a skin worn or taken off --

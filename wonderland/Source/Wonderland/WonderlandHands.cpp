@@ -35,6 +35,7 @@ namespace WonderlandHands
 		}
 		Boxes.Reset();
 		On.Reset();
+		Source.Reset();
 	}
 
 	void FHand::Attach(AActor* Owner, USceneComponent* Forearm, const FVector& TipLocal, const FVector& Forward, float SideSign)
@@ -56,12 +57,13 @@ namespace WonderlandHands
 		// lowest -- the hand's end of that arm, in that skin
 		FBox Block(ForceInit);
 		UMaterialInterface* Material = nullptr;
+		UPrimitiveComponent* MaterialFrom = nullptr;
 		double Lowest = -1.0e9;
 		TArray<USceneComponent*> Children;
 		Forearm->GetChildrenComponents(false, Children);
 		for (USceneComponent* Child : Children)
 		{
-			const UPrimitiveComponent* Prim = Cast<UPrimitiveComponent>(Child);
+			UPrimitiveComponent* Prim = Cast<UPrimitiveComponent>(Child);
 			if (Prim == nullptr || Prim->ComponentHasTag(TEXT("WL_Prop")) || Prim->GetName().StartsWith(TEXT("Mission"))
 				|| Prim->GetName().StartsWith(TEXT("Verification")) || Prim->GetName().StartsWith(TEXT("WonderlandHand")))
 			{
@@ -80,6 +82,7 @@ namespace WonderlandHands
 			{
 				Lowest = Reach;
 				Material = Prim->GetMaterial(0);
+				MaterialFrom = Prim;
 			}
 		}
 		const FVector Extent = Block.IsValid ? Block.GetExtent() : FVector(5.0);
@@ -107,6 +110,7 @@ namespace WonderlandHands
 		Mesh->SetVisibility(bShown);
 		Boxes = Mesh;
 		On = Forearm;
+		Source = MaterialFrom;
 		Curl = 0.0f;
 		Pose(0.0f, 0.0f);
 	}
@@ -123,6 +127,17 @@ namespace WonderlandHands
 		if (Mesh == nullptr)
 		{
 			return;
+		}
+		// THE ARM'S OWN MATERIAL, FOLLOWED: a primary picked while holding, a skin's flame twin or a repaint can swap the forearm's
+		// material, and a hand that copied it once would keep the old colour (Second's break-test). Repaints in place need nothing:
+		// the hand wears the very same instance.
+		if (const UPrimitiveComponent* From = Source.Get())
+		{
+			UMaterialInterface* Now = From->GetNumMaterials() > 0 ? From->GetMaterial(0) : nullptr;
+			if (Now != nullptr && Mesh->GetMaterial(0) != Now)
+			{
+				Mesh->SetMaterial(0, Now);
+			}
 		}
 		const float Want = FMath::Clamp(Grip, 0.0f, 1.0f);
 		// EASED, NEVER SNAPPED: the fingers close as the sword arrives and open as it leaves
@@ -165,6 +180,20 @@ namespace WonderlandHands
 		const float ThumbB = 2.6f * U;
 		Mesh->UpdateInstanceTransform(Index++, HandBox(ThumbBase + T1 * (ThumbA * 0.5f), T1, Along, FVector(1.9f * U, 1.9f * U, ThumbA)), false, false, true);
 		Mesh->UpdateInstanceTransform(Index++, HandBox(ThumbBase + T1 * ThumbA + T2 * (ThumbB * 0.5f), T2, Along, FVector(1.7f * U, 1.8f * U, ThumbB)), false, true, true);
+	}
+
+	UMaterialInterface* FHand::GetWornMaterial() const
+	{
+		const UInstancedStaticMeshComponent* Mesh = Boxes.Get();
+		return Mesh != nullptr ? Mesh->GetMaterial(0) : nullptr;
+	}
+
+	bool FHand::WearsItsArmsMaterial() const
+	{
+		const UPrimitiveComponent* From = Source.Get();
+		const UMaterialInterface* Worn = GetWornMaterial();
+		// no source part (an arm with no primitive below it) wears the cube's own: nothing to follow, nothing stale
+		return From == nullptr || (Worn != nullptr && From->GetNumMaterials() > 0 && Worn == From->GetMaterial(0));
 	}
 
 	void FHand::SetShown(bool bInShown)
