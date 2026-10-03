@@ -9179,7 +9179,8 @@ namespace
 			// A CLOSE FRAME OF EACH NEW SET OF PROPS, once it has settled for half a second
 			FQaStance Shim;
 			Shim.Camera = S.Camera;
-			QaStanceCamera(Shim, World, Dog, 35.0, 190.0, 15.0, 45.0f);
+			// wide enough to see the Dog, its props and the hands round them over the mission consoles (190 uu read as a blur of body)
+			QaStanceCamera(Shim, World, Dog, 40.0, 330.0, 70.0, 50.0f);
 			S.Camera = Shim.Camera;
 			if (Mask != 0 && (S.SeenMasks & Mask) != Mask && Now - S.MaskSince >= 0.6)
 			{
