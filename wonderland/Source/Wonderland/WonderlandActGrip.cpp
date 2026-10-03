@@ -65,8 +65,10 @@ namespace WonderlandActGrip
 		const FQuat FistFrame(FMatrix(Way, Back, FVector::CrossProduct(Way, Back), FVector::ZeroVector));
 		const FQuat Turn = (FistFrame * ToolFrame.Inverse()).GetNormalized();
 
-		// FITTED TO THE HOLLOW: the cross-section square to the handle scaled so its half-width meets the palm's face, the length kept
-		const double Fit = Handle.HalfWidth > KINDA_SMALL_NUMBER ? FMath::Clamp(HollowRadius / Handle.HalfWidth, 0.5, 1.5) : 1.0;
+		// FITTED TO THE HOLLOW: the cross-section square to the handle scaled so its half-width meets the palm's face, the length kept.
+		// From 0.3: a hand of the smallest size (0.5) needs 0.36, and a floor at 0.5 left its handle too thick -- the fingers 48-70% of their
+		// thickness into it and its butt in the forearm (Second's review; sim_act_grip.py over hand sizes 0.5-2.0)
+		const double Fit = Handle.HalfWidth > KINDA_SMALL_NUMBER ? FMath::Clamp(HollowRadius / Handle.HalfWidth, 0.3, 1.5) : 1.0;
 		const FVector Scale(
 			FMath::Lerp(Fit, 1.0, FMath::Abs(ToolWay.X)),
 			FMath::Lerp(Fit, 1.0, FMath::Abs(ToolWay.Y)),
