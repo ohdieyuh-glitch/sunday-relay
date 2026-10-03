@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { JULIUS_RUN_HALTING_FAILURE_CLASSES } from './julius-coding-agent';
 import { JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW } from './julius-lineage-asserter';
+import { juliusRunLineageCheckFor } from './julius-task-pipeline';
 import { cardPolicy, createJuliusHarness, task, verificationPolicy, worker, type JuliusHarness } from './julius-runtime-fixtures';
 import type { JuliusRunRow } from './julius-runtime-ports';
 import { seedJuliusTaskContract } from './julius-task-contract';
@@ -88,6 +89,8 @@ async function driveInjecting(harness: JuliusHarness, taskId: string, inject: ()
   }
   return injected;
 }
+/** The planner's first repair round of plan-1 (`isJuliusRepairOf`: `repair:<parent>:<round>:task`). */
+const REPAIR_1 = 'repair:plan-1:1:task';
 const factsOf = (harness: JuliusHarness, type: string) => harness.store.events().filter((event) => event.type === type).map((event) => ({ taskId: event.taskId, facts: event.facts }));
 
 describe('decision B, the live contradiction path (ACCEPT x OPEN-BLOCKING-VERIFIED)', () => {
@@ -126,6 +129,104 @@ describe('decision B, the live contradiction path (ACCEPT x OPEN-BLOCKING-VERIFI
     expect(factsOf(harness, 'finding.transitioned').some((row) => row.facts.move === 'REVIEWER_RESOLVED' && row.facts.to === 'RESOLVED'), 'the finding was really resolved, by the re-review').toBe(true);
     expect(factsOf(harness, 'task.failed').filter((row) => row.facts.failureClass === 'context_integrity_unresolved_clash')).toEqual([]);
     expect((await harness.store.loadRun('run-1', 'prj-1'))!.state).toBe('COMPLETED');
+    /*
+     * JUDGED, NOT MERELY SILENT. plan-1 was accepted THROUGH its repair, so the pair (the repair's ACCEPT, the RESOLVED
+     * finding about plan-1) is one the table must judge, and the record shows it did: at the dispatch that acceptance
+     * released, and on the run's terminal event. Before effective acceptance this control could not fail: the ACCEPT
+     * sat on the repair, the finding on plan-1, and no pair ever formed (shown by flipping ACCEPT_X_RESOLVED to
+     * INCOMPATIBLE: the control still passed).
+     */
+    const judged = (pair: string): boolean => pair.startsWith(`acceptance:plan-1>${REPAIR_1}:ACCEPT_X_RESOLVED:finding:plan-1:`);
+    const compiled = factsOf(harness, 'context.compiled').filter((row) => row.taskId === 'build-1');
+    expect(compiled.length, 'build-1 was dispatched').toBeGreaterThan(0);
+    expect(compiled[0]!.facts).toMatchObject({ acceptanceJudged: 1, acceptanceIncompatible: 0 });
+    expect(String(compiled[0]!.facts.acceptanceJudgements).split(';').filter(judged), 'at the dispatch the acceptance released').toHaveLength(1);
+    const completed = factsOf(harness, 'run.completed');
+    expect(completed).toHaveLength(1);
+    expect(completed[0]!.facts).toMatchObject({ acceptanceIncompatible: 0 });
+    expect(String(completed[0]!.facts.acceptanceJudgements).split(';').filter(judged), 'and on the terminal event').toHaveLength(1);
+  });
+
+  it('C4, THE WRITE ORDER: the re-review\'s resolution is durable BEFORE the repair\'s accepting decision, so a dispatch between the two sees no clash', async () => {
+    const harness = build({ architect: [PLAN, PLAN], reviewer: [REJECT, PASS, PASS] });
+    const between: { resolvedAlready: boolean; contradictions: number; judgedPlan: number }[] = [];
+    const appendDecision = harness.store.appendDecision.bind(harness.store);
+    Object.assign(harness.store, {
+      appendDecision: async (input: Parameters<typeof appendDecision>[0]) => {
+        if (input.taskId === REPAIR_1 && input.decision.action === 'ACCEPT') {
+          // Exactly what a concurrent dispatch would read at this instant: the resolution written, the ACCEPT not yet.
+          const check = await juliusRunLineageCheckFor(harness.deps, (await harness.store.loadRun('run-1', 'prj-1'))!);
+          between.push({
+            resolvedAlready: factsOf(harness, 'finding.transitioned').some((row) => row.facts.move === 'REVIEWER_RESOLVED' && row.facts.to === 'RESOLVED'),
+            contradictions: check.contradictions.length,
+            judgedPlan: check.judgements.filter((held) => held.subject === 'acceptance:plan-1').length,
+          });
+        }
+        return appendDecision(input);
+      },
+    });
+    for (let index = 0; index < 48; index += 1) {
+      const report = await harness.loop.tick({ projectId: 'prj-1' });
+      if (report.claimed === 0) {
+        const advance = await harness.loop.advanceRun('run-1', 'prj-1');
+        if (advance === null || (!advance.changed && advance.resumedVerifications === 0)) break;
+      }
+    }
+    expect(between, 'the repair\'s ACCEPT was written once, and checked just before').toEqual([{ resolvedAlready: true, contradictions: 0, judgedPlan: 0 }]);
+    const after = await juliusRunLineageCheckFor(harness.deps, (await harness.store.loadRun('run-1', 'prj-1'))!);
+    expect(after.contradictions).toEqual([]);
+    expect(after.judgements.filter((held) => held.subject === 'acceptance:plan-1').map((held) => [held.acceptingTaskId, held.rowId])).toEqual([[REPAIR_1, 'ACCEPT_X_RESOLVED']]);
+    expect((await harness.store.loadRun('run-1', 'prj-1'))!.state).toBe('COMPLETED');
+  });
+
+  it('B-8a AT THE DEPENDENT\'S DISPATCH: plan-1 accepted THROUGH its repair, then a blocking verified finding about plan-1 still OPEN: build-1\'s dispatch refuses with the pair and the run HALTS', async () => {
+    const harness = build({ architect: [PLAN, PLAN], reviewer: [REJECT, PASS, PASS] });
+    expect(await driveInjecting(harness, REPAIR_1, () => harness.store.seedFinding(lateFinding('plan-1', 'OPEN')))).toBe(true);
+    expect((await harness.store.decisionsForRun('run-1', 'prj-1')).filter((decision) => decision.taskId === 'plan-1').map((decision) => decision.action),
+      'plan-1 itself was never accepted: only through its repair').toEqual(['REPAIR']);
+    const failed = factsOf(harness, 'task.failed').filter((row) => row.facts.failureClass === 'context_integrity_unresolved_clash');
+    expect(failed.map((row) => row.taskId), 'the dependent the effective acceptance released').toEqual(['build-1']);
+    expect(failed[0]!.facts).toMatchObject({
+      contradictions: 1, contradictionFamily: 'A', contradictionSubject: 'acceptance:plan-1', contradictionAcceptingTask: REPAIR_1,
+      contradictionRow: JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW,
+      contradictionRight: 'finding:plan-1:late-plan-1|claim:finding:plan-1:late-plan-1|OPEN_BLOCKING_VERIFIED|VERIFIED',
+    });
+    const left = String(failed[0]!.facts.contradictionLeft).split('|');
+    expect(left[0]!.startsWith(`brain:decision:${REPAIR_1}:ACCEPT:`), String(failed[0]!.facts.contradictionLeft)).toBe(true);
+    expect(left.slice(1)).toEqual([`claim:${left[0]!}`, 'ACCEPT', 'APPROVED']);
+    expect((await harness.store.loadRun('run-1', 'prj-1'))!.state, 'HALTED, not waiting').toBe('FAILED');
+    expect(factsOf(harness, 'run.failed').map((row) => row.facts.reasonCode)).toEqual(['context_integrity_unresolved_clash']);
+    expect(factsOf(harness, 'context.compiled').filter((row) => row.taskId === 'build-1'), 'no packet was compiled past it').toEqual([]);
+  });
+
+  it('B-8a AT COMPLETION: the finding about the repaired-and-accepted plan arrives as the last task is accepted: the run ends FAILED, never COMPLETED, with the pair', async () => {
+    const harness = build({ architect: [PLAN, PLAN], reviewer: [REJECT, PASS, PASS] });
+    const appendDecision = harness.store.appendDecision.bind(harness.store);
+    Object.assign(harness.store, {
+      appendDecision: async (input: Parameters<typeof appendDecision>[0]) => {
+        const appended = await appendDecision(input);
+        if (input.taskId === 'build-1' && input.decision.action === 'ACCEPT') harness.store.seedFinding(lateFinding('plan-1', 'OPEN'));
+        return appended;
+      },
+    });
+    for (let index = 0; index < 48; index += 1) {
+      const report = await harness.loop.tick({ projectId: 'prj-1' });
+      if (report.claimed === 0) {
+        const advance = await harness.loop.advanceRun('run-1', 'prj-1');
+        if (advance === null || (!advance.changed && advance.resumedVerifications === 0)) break;
+      }
+    }
+    expect(await accepted(harness, REPAIR_1), 'plan-1 was accepted through its repair').toBe(true);
+    expect(await accepted(harness, 'build-1'), 'build-1 was accepted').toBe(true);
+    expect((await harness.store.loadRun('run-1', 'prj-1'))!.state).toBe('FAILED');
+    const terminal = factsOf(harness, 'run.failed');
+    expect(terminal).toHaveLength(1);
+    expect(terminal[0]!.facts).toMatchObject({
+      reasonCode: 'context_integrity_unresolved_clash', contradictions: 1, contradictionFamily: 'A', contradictionSubject: 'acceptance:plan-1',
+      contradictionAcceptingTask: REPAIR_1, contradictionRow: JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW,
+      contradictionRight: 'finding:plan-1:late-plan-1|claim:finding:plan-1:late-plan-1|OPEN_BLOCKING_VERIFIED|VERIFIED',
+    });
+    expect(factsOf(harness, 'run.completed')).toEqual([]);
   });
 
   /**

@@ -38,13 +38,13 @@ import { planRunStatePath, transitionIsLegal } from './julius-state-path';
  */
 export { planRunStatePath, transitionIsLegal };
 import {
-  holdClaimAtAdmission, juliusArchitectureGateFor, juliusFindingsGateFor, juliusRunContradictionsFor, prepareClaimedTask, resumeUnverifiedTasks,
+  holdClaimAtAdmission, juliusArchitectureGateFor, juliusFindingsGateFor, juliusRunLineageCheckFor, prepareClaimedTask, resumeUnverifiedTasks,
   runClaimedTask, serveArchitectureTriggers, taskAttemptCeiling,
   type JuliusPipelineDependencies, type JuliusTaskOutcome,
 } from './julius-task-pipeline';
 import { continuationConcurrency } from './julius-continuation';
 import { juliusRunHaltingFailureClass } from './julius-coding-agent';
-import { juliusContradictionFacts } from './julius-lineage-asserter';
+import { juliusAcceptanceJudgementFacts, juliusContradictionFacts } from './julius-lineage-asserter';
 import { JuliusPersistenceUnavailable } from './julius-execution-coordinator';
 import type { JuliusClaimedTask, JuliusRecoveryDriver, JuliusRunRow } from './julius-runtime-ports';
 import { validateJuliusEvent } from './julius-events';
@@ -970,7 +970,7 @@ export class JuliusRunLoop {
       ]);
     }
 
-    let target: { state: JuliusMissionState; reasonCode: string; facts?: Readonly<Record<string, string | number>> } = targetRunState(tasks, decisions);
+    let target: { state: JuliusMissionState; reasonCode: string; facts?: Readonly<Record<string, string | number | null>> } = targetRunState(tasks, decisions);
 
     /**
      * THE ARCHITECT IS A PEER FOR THE WHOLE MISSION, NOT ONLY ITS FIRST
@@ -1029,10 +1029,13 @@ export class JuliusRunLoop {
      * would leave the contradiction standing, unrecorded.
      */
     if (target.state === 'COMPLETED' || generic) {
-      const contradictions = await juliusRunContradictionsFor(this.deps, run);
-      if (contradictions.length > 0) {
-        target = { state: 'FAILED', reasonCode: 'context_integrity_unresolved_clash', facts: juliusContradictionFacts(contradictions) };
-      }
+      const check = await juliusRunLineageCheckFor(this.deps, run);
+      // Every pair the table judged rides on the terminal event, compatible ones included: a COMPLETED run's record shows
+      // the founder's rule ran on the pairs it had, not merely that nothing fired.
+      const judged = juliusAcceptanceJudgementFacts(check.judgements);
+      target = check.contradictions.length > 0
+        ? { state: 'FAILED', reasonCode: 'context_integrity_unresolved_clash', facts: { ...judged, ...juliusContradictionFacts(check.contradictions) } }
+        : { ...target, facts: { ...(target.facts ?? {}), ...judged } };
     }
     if (target.state !== 'FAILED' && (target.state === 'COMPLETED' || generic)) {
       const findings = await juliusFindingsGateFor(this.deps, run);
@@ -1065,7 +1068,7 @@ export class JuliusRunLoop {
   async #applyTarget(
     run: JuliusRunRow,
     /** `facts`: what the terminal event records beside the reason — a halting contradiction's pair (decision B). */
-    target: { state: JuliusMissionState; reasonCode: string; facts?: Readonly<Record<string, string | number>> },
+    target: { state: JuliusMissionState; reasonCode: string; facts?: Readonly<Record<string, string | number | null>> },
     tasks: readonly JuliusTask[],
     decisions: readonly JuliusRecordedDecision[],
     resumed: number,
