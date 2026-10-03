@@ -74,6 +74,33 @@ RC10 7f8e08d8 + Second's NEW TASK TERMINAL "+" fix 4414cbfa (the founder's photo
 single-player scale (R4, 2026-10-01); that scale no longer defines launch readiness.
 R1 6 + R2 6 + R3 6 + R4 9 + R5 2.25 + R6 2.25 + R7 4.5 + R8 6 + R9 5.25 + R10 5.25 + R11 4.5 +
 R12 5.25 + R13 3.75 + R14 3 + R15 4.5 + R16 0 = 73.5.
+
+### FINAL-FEATURE RELEASE GATE: Mission Handoff + C.A.R.D. (a separate gate, not a weighted row)
+
+The founder's FINAL implementation (2026-10-02); FEATURE FREEZE follows it once it passes Second's independent review.
+- **A gate beside R16, not a 17th row.** It neither raises nor lowers the 73.5%: verified credit is never reduced because new
+  scope exists. A row's credit is revoked only if this work breaks a property that row has proven.
+- **No Alpha/Beta launch until this gate PASSES** (and R16 is 1.0). A part passes only on the final PRE-LAUNCH RC, verified by
+  CORE and independently by Second on that same RC. Founder-facing visuals are judged from exact before/after game frames,
+  never from logs alone.
+- Architecture, reviews and evidence: `_qa_handoff/mission_handoff/` (doc v1-v4, Second's reviews, the M0/M1a packets, the
+  founder's sword sheet and combat-stance directive).
+
+| Part | Requirement | State (2026-10-02 ~23:30) |
+|---|---|---|
+| G1 | C.A.R.D. store: sealed JSON, the secret refusal, the hostile files, restart; never a second authority | M0 703a7887: CORE's bed card QA 27/27. Second's own run pending |
+| G2 | Handoff state machine: entries A/B, sides fixed, persisted HELD across restart/reconnect, nothing fabricated | M0/M1a: CORE's bed. Second pending |
+| G3 | Traversal: handoff run >= 1.35x normal, dash >= 2.0x the handoff run, one semantic Forward, no repeat spam, collision | M1a 1a437c0b: CORE's bed 18/18 (1.40x, 2.34x, a wall held to 0.1 uu). Second's real-input pass pending |
+| G4 | The Live Terminal's action; the presentation exits mid-animation and resumes at the current beat; mission, runtime, Project Brain, approval, reviewer, provider and budget untouched (write spy + control run) | M1b 843e9252: code, NOT yet compiled |
+| G5 | Attack-ready stance in idle/walk/run/start-stop; normal roaming unchanged | not built (M2) |
+| G6 | The twin swords (the founder's sheet, checks 1-11 at noon and night); continuous transformation; gold LEFT / cyan RIGHT; dash trails <= 15% of the frame | not built (M3) |
+| G7 | Functional hands/fingers + stable dual-grip sockets on all six mascots; no material clipping of clothes, wings or swords | not built (M3: BP_RelayDog hands regen, founder-approved; M4: the five costumes) |
+| G8 | C.A.R.D. as the fifth Project Brain section (the founder's re-layout); imported AI / MCP / API / skills as typed, truthful references; the in-world Project Brain | not built (M6/M7) |
+| G9 | B63: both companion consoles survive a mid-mission colour change (history, status, mode, timer, shown state) | fix 857571e9: CORE's bed Q26 PASS. Second's P10 v3 pending. Also holds R7 at 0.75 |
+| G10 | B64: Shadow Flame primary applied PURE (white white; saturated colours not dark/navy) | Second's branch, uncommitted; package QA pending |
+| G11 | The full regression on the pre-launch RC: PackageCheck with Q26, Social, the boot matrix, wardrobe 26/26, the Shadow Flame colour QA, every mascot QA unequipped first (H5), R10 ABBA incl. streaming at speed (H4) | the pre-launch RC is not built |
+
+**GATE: OPEN (0 of 11 parts at final-RC level).**
 - **Plan (founder, 2026-10-02):**
   - RC10 = RC9 + Second's Shadow Flame skin once runtime-verified; it carries verified fixes but is not a launch
     candidate.
