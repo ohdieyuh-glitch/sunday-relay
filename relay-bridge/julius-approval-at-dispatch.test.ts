@@ -110,6 +110,7 @@ interface Stage {
   dispatches(): number;
   decide(approvalId: string, decision: 'APPROVED' | 'DENIED'): ReturnType<typeof decideJuliusApproval>;
   tick(): Promise<Awaited<ReturnType<ReturnType<typeof assembleLiveJuliusRuntime>['loop']['tick']>>>;
+  advance(): ReturnType<ReturnType<typeof assembleLiveJuliusRuntime>['loop']['advanceRun']>;
 }
 
 /**
@@ -151,6 +152,7 @@ function stage(options: {
       runId: RUN, projectId: PROJECT, approvalId, decision, approverId: 'ghu-founder', reason: `Reviewed: ${decision}.`,
     }, { store: memory as never, clock, approvers: anyone }),
     tick: () => runtime.loop.tick({ projectId: PROJECT }),
+    advance: () => runtime.loop.advanceRun(RUN, PROJECT),
   };
 }
 
@@ -749,6 +751,18 @@ describe('G. what the independent review of the governance fixes left (P3, writt
     expect(s.memory.trajectory().filter((row) => row.kind === 'COMPLETION').map((row) => row.outcome)).toEqual(['FAILED']);
     await s.drive(2);
     expect(failed(), 'an ended run writes no second ending').toHaveLength(1);
+  });
+
+  // Landed-main mutation run 2026-10-03, M8 SURVIVED: the terminal guard on the denial check was held by no test.
+  // Dropping it changes no state (no path leaves a terminal state), but the advance of a run its denial already ended
+  // reported APPROVAL_DENIED instead of RUN_TERMINAL, after re-reading the denial. A finished run is finished truth.
+  it('M8 a run its denial already ENDED is finished truth: the next advance reports RUN_TERMINAL, not the denial again', async () => {
+    const s = stage();
+    await s.memory.requestApproval(gate('apr-terminal'));
+    await denyAtTheStore(s.memory, 'apr-terminal');
+    expect((await s.drive(4)).state).toBe('FAILED');
+    expect(await s.advance()).toMatchObject({ changed: false, reasonCode: 'RUN_TERMINAL', resumedVerifications: 0 });
+    expect(s.memory.events().filter((event) => event.type === 'run.failed'), 'and nothing is written').toHaveLength(1);
   });
 });
 
