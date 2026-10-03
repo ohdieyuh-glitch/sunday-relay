@@ -6,19 +6,23 @@ import { classifyContextAuthority, compileContextWithIntegrity, detectContextCon
 import {
   JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW,
   JULIUS_ACCEPTING_VERDICTS,
+  JULIUS_DECISION_LOG_WRITER,
   JULIUS_LINEAGE_FAMILIES,
   JULIUS_LINEAGE_VERIFIED_TRUSTS,
   JULIUS_VERDICT_FINDING_TABLE,
   assertJuliusLineage,
+  juliusAcceptanceJudgementFacts,
   juliusContradictionConflict,
   juliusContradictionFacts,
   juliusGovernanceEntries,
-  juliusRunContradictions,
-  juliusRunContradictionsFromRecords,
+  juliusRunLineageCheck,
+  juliusRunLineageCheckFromRecords,
   juliusVerdictFindingRow,
 } from './julius-lineage-asserter';
 import type { JuliusMemoryClaim, JuliusMemoryProvenance, JuliusMemoryTrustState } from './julius-memory-trust';
-import type { JuliusBrainEntry, JuliusContextQualification, JuliusDecisionAction } from './julius-runtime';
+import { JULIUS_RELEASING_ACTIONS } from './julius-release-runtime';
+import type { JuliusBrainEntry, JuliusContextQualification, JuliusDecisionAction, JuliusRecordedDecision, JuliusTask } from './julius-runtime';
+import { task as taskFixture } from './julius-runtime-fixtures';
 import type { JuliusReviewerFinding } from './julius-verification-runtime';
 
 /**
@@ -152,81 +156,183 @@ describe('rule 2, CONTRADICTS: incompatible verified values of one subject fail 
 });
 
 describe('rule 2, run-wide: an accepted task with an open blocking verified finding is a contradiction the run holds', () => {
-  const task = 'run:a:build';
-  const recordedVerdict = (action: JuliusDecisionAction, revision: number, reason = 'TASK_VERIFIED') => {
-    const held = verdict(task, action, reason);
-    return { entry: held, claim: claim(held.entryId, 'APPROVED'), revision };
+  const subject = 'run:a:build';
+  const acceptance = (action: JuliusDecisionAction = 'ACCEPT', over: Partial<{ acceptingTaskId: string; trust: JuliusMemoryTrustState }> = {}) => {
+    const acceptingTaskId = over.acceptingTaskId ?? subject;
+    const entryId = `brain:decision:${acceptingTaskId}:${action}:TASK_VERIFIED`;
+    return { taskId: subject, acceptingTaskId, action, entryId, claim: claim(entryId, over.trust ?? 'APPROVED') };
   };
   const recordedFinding = (status: JuliusReviewerFinding['status'], blocking: boolean, trust: JuliusMemoryTrustState, id = 'f1') => ({
-    finding: { findingId: id, runId: 'run:a', taskId: task, reviewerWorkerId: 'independent-reviewer', severity: 'HIGH' as const, category: 'correctness', claim: 'x',
+    finding: { findingId: id, runId: 'run:a', taskId: subject, reviewerWorkerId: 'independent-reviewer', severity: 'HIGH' as const, category: 'correctness', claim: 'x',
       criterionId: null, evidenceIds: ['e1'], blocking, status, createdAt: AT },
     entryId: `finding:${id}`,
     claim: claim(`finding:${id}`, trust, 'reviewer_verified'),
   });
+  const recordedVerdict = (action: JuliusDecisionAction, revision: number, reason = 'TASK_VERIFIED') => {
+    const held = verdict(subject, action, reason);
+    return { entry: held, claim: claim(held.entryId, 'APPROVED'), revision };
+  };
 
-  it('ACCEPT + OPEN-BLOCKING-VERIFIED = CONTRADICTS (family A, the founder\'s row), recorded with both sides; ACCEPT + RESOLVED = compatible', () => {
-    const found = juliusRunContradictions({ verdicts: [recordedVerdict('ACCEPT', 9)], findings: [recordedFinding('OPEN', true, 'VERIFIED')] });
-    expect(found).toEqual([{
-      family: 'A', subject: `acceptance:${task}`, rowId: JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW,
-      left: { entryId: `brain:decision:${task}:ACCEPT:TASK_VERIFIED`, claimId: `claim:brain:decision:${task}:ACCEPT:TASK_VERIFIED`, value: 'ACCEPT', trust: 'APPROVED' },
+  it('ACCEPT + OPEN-BLOCKING-VERIFIED = CONTRADICTS (family A, the founder\'s row), recorded with both sides and the accepting task; ACCEPT + RESOLVED is judged COMPATIBLE', () => {
+    const check = juliusRunLineageCheck({ verdicts: [], acceptances: [acceptance()], findings: [recordedFinding('OPEN', true, 'VERIFIED')] });
+    expect(check.contradictions).toEqual([{
+      family: 'A', subject: `acceptance:${subject}`, rowId: JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW, acceptingTaskId: subject,
+      left: { entryId: `brain:decision:${subject}:ACCEPT:TASK_VERIFIED`, claimId: `claim:brain:decision:${subject}:ACCEPT:TASK_VERIFIED`, value: 'ACCEPT', trust: 'APPROVED' },
       right: { entryId: 'finding:f1', claimId: 'claim:finding:f1', value: 'OPEN_BLOCKING_VERIFIED', trust: 'VERIFIED' },
     }]);
-    expect(juliusContradictionConflict(found[0]!)).toMatchObject({ resolution: 'UNRESOLVED', keptClaimId: null, reasonCode: `INCOMPATIBLE_BY_COMPATIBILITY_TABLE:${JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW}` });
-    expect(juliusRunContradictions({ verdicts: [recordedVerdict('ACCEPT', 9)], findings: [recordedFinding('RESOLVED', true, 'VERIFIED')] })).toEqual([]);
+    expect(check.judgements.map((held) => `${held.subject} ${held.rowId} ${held.result}`)).toEqual([`acceptance:${subject} ${JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW} INCOMPATIBLE`]);
+    expect(juliusContradictionConflict(check.contradictions[0]!)).toMatchObject({ resolution: 'UNRESOLVED', keptClaimId: null, reasonCode: `INCOMPATIBLE_BY_COMPATIBILITY_TABLE:${JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW}` });
+    const resolved = juliusRunLineageCheck({ verdicts: [], acceptances: [acceptance()], findings: [recordedFinding('RESOLVED', true, 'VERIFIED')] });
+    expect(resolved.contradictions).toEqual([]);
+    expect(resolved.judgements.map((held) => `${held.rowId} ${held.result} ${held.right.value}`), 'judged, not skipped').toEqual(['ACCEPT_X_RESOLVED COMPATIBLE RESOLVED_BLOCKING_VERIFIED']);
   });
 
-  it('judges the LATEST verdict by revision: REPAIR then ACCEPT is an acceptance; ACCEPT then REPAIR is not', () => {
+  it('COMPLETE accepts too; an acceptance whose own standing is not verified judges nothing', () => {
     const open = [recordedFinding('OPEN', true, 'APPROVED')];
-    expect(juliusRunContradictions({ verdicts: [recordedVerdict('ACCEPT', 9), recordedVerdict('REPAIR', 5, 'BLOCKING')], findings: open })).toHaveLength(1);
-    expect(juliusRunContradictions({ verdicts: [recordedVerdict('ACCEPT', 5), recordedVerdict('REPAIR', 9, 'BLOCKING')], findings: open })).toEqual([]);
-    expect(juliusRunContradictions({ verdicts: [recordedVerdict('COMPLETE', 9)], findings: open }), 'COMPLETE accepts too').toHaveLength(1);
+    expect(juliusRunLineageCheck({ verdicts: [], acceptances: [acceptance('COMPLETE')], findings: open }).contradictions).toHaveLength(1);
+    expect(juliusRunLineageCheck({ verdicts: [], acceptances: [acceptance('ACCEPT', { trust: 'SUPERSEDED' })], findings: open })).toEqual({ judgements: [], contradictions: [] });
   });
 
-  it('below the verified rungs, or non-blocking, a finding does not contradict an acceptance; two verdicts at one revision with different actions do', () => {
-    expect(juliusRunContradictions({ verdicts: [recordedVerdict('ACCEPT', 9)], findings: [recordedFinding('OPEN', true, 'SUPPORTED'), recordedFinding('OPEN', false, 'VERIFIED', 'f2')] })).toEqual([]);
-    const tie = juliusRunContradictions({ verdicts: [recordedVerdict('ACCEPT', 9), recordedVerdict('REPAIR', 9, 'BLOCKING')], findings: [] });
-    expect(tie.map((held) => `${held.family} ${held.rowId}`)).toEqual(['V VERDICTS_AT_ONE_REVISION']);
+  it('below the verified rungs, or non-blocking, a finding does not contradict an acceptance (judged COMPATIBLE); two verdict mirrors at one revision with different actions do (family V)', () => {
+    const check = juliusRunLineageCheck({ verdicts: [], acceptances: [acceptance()], findings: [recordedFinding('OPEN', true, 'SUPPORTED'), recordedFinding('OPEN', false, 'VERIFIED', 'f2')] });
+    expect(check.contradictions).toEqual([]);
+    expect(check.judgements.map((held) => held.rowId)).toEqual(['ACCEPT_X_OPEN_BLOCKING_NOT_VERIFIED', 'ACCEPT_X_OPEN_NON_BLOCKING']);
+    const tie = juliusRunLineageCheck({ verdicts: [recordedVerdict('ACCEPT', 9), recordedVerdict('REPAIR', 9, 'BLOCKING')], acceptances: [], findings: [] });
+    expect(tie.contradictions.map((held) => `${held.family} ${held.rowId}`)).toEqual(['V VERDICTS_AT_ONE_REVISION']);
   });
 });
 
-describe('rule 2, from the run\'s durable records (what the dispatch path and completion check)', () => {
-  const task = 'run:a:build';
-  const accept: JuliusBrainEntry = {
-    entryId: `brain:decision:${task}:ACCEPT:TASK_VERIFIED`, kind: 'DECISION', text: 'ACCEPT (TASK_VERIFIED): verified', taskIds: [task],
-    allowedRoles: ['INDEPENDENT_REVIEWER'], sensitivity: 'INTERNAL', provenance: { workerId: 'independent-reviewer', recordedAt: AT, evidenceIds: ['e1'] }, revision: 9,
+describe('rule 2 from the run\'s durable records: EFFECTIVE acceptance, as the release path decides it (B-8a..e; Second Julius C1-C3, C5)', () => {
+  const PLAN = 'plan-1';
+  const R1 = `repair:${PLAN}:1:task`;
+  const R2 = `repair:${R1}:2:task`;
+  const work = (taskId: string, over: Partial<JuliusTask> = {}): JuliusTask =>
+    taskFixture({ taskId, role: 'PROMPT_ARCHITECT', taskType: 'plan', state: 'SUCCEEDED', ...over }) as JuliusTask;
+  const repairOf = (parentTaskId: string, taskId: string, ordinal: number, state: JuliusTask['state'] = 'SUCCEEDED'): JuliusTask =>
+    work(taskId, { parentTaskId, taskType: 'repair:plan', ordinal, state });
+  const decided = (taskId: string, action: JuliusDecisionAction, reasonCode = action === 'REPAIR' ? 'BLOCKING_FINDINGS' : 'TASK_VERIFIED'): JuliusRecordedDecision =>
+    ({ taskId, action, reasonCode, evidenceIds: ['e-decision'], safeSummary: 'closed values only' });
+  const mirror = (decision: JuliusRecordedDecision, revision: number | undefined): JuliusBrainEntry => ({
+    entryId: `brain:decision:${decision.taskId}:${decision.action}:${decision.reasonCode}`, kind: 'DECISION', text: `${decision.action} (${decision.reasonCode})`,
+    taskIds: [decision.taskId], allowedRoles: ['INDEPENDENT_REVIEWER'], sensitivity: 'INTERNAL',
+    provenance: { workerId: 'julius', recordedAt: AT, evidenceIds: ['e-decision'] }, ...(revision === undefined ? {} : { revision }),
+  });
+  const finding = (taskId: string, id: string, over: Partial<JuliusReviewerFinding> = {}): JuliusReviewerFinding => ({
+    findingId: id, runId: 'run:a', taskId, reviewerWorkerId: 'independent-reviewer', severity: 'HIGH', category: 'correctness', claim: 'x',
+    criterionId: null, evidenceIds: ['e1'], blocking: true, status: 'OPEN', createdAt: AT, ...over,
+  });
+  const repaired = [decided(PLAN, 'REPAIR'), decided(R1, 'ACCEPT')];
+  const oneRound = [work(PLAN), repairOf(PLAN, R1, 1)];
+  const brainOf = (decisions: readonly JuliusRecordedDecision[]) => decisions.map((decision, index) => mirror(decision, index + 1));
+  const check = (input: { tasks?: readonly JuliusTask[]; decisions?: readonly JuliusRecordedDecision[]; findings: readonly JuliusReviewerFinding[]; brain?: readonly JuliusBrainEntry[]; claims?: readonly JuliusMemoryClaim[] }) => {
+    const decisions = input.decisions ?? repaired;
+    return juliusRunLineageCheckFromRecords({
+      tasks: input.tasks ?? oneRound, decisions, brain: input.brain ?? brainOf(decisions), findings: input.findings, claims: input.claims ?? [],
+    });
   };
-  const finding = (id: string, evidenceIds: string[], over: Partial<JuliusReviewerFinding> = {}): JuliusReviewerFinding => ({
-    findingId: id, runId: 'run:a', taskId: task, reviewerWorkerId: 'independent-reviewer', severity: 'HIGH', category: 'correctness', claim: 'x',
-    criterionId: null, evidenceIds, blocking: true, status: 'OPEN', createdAt: AT, ...over,
+
+  it('B-8b, ONE DEFINITION: the asserter\'s accepting actions ARE the release path\'s, and the pipeline\'s every ACCEPT-or-COMPLETE test names exactly that pair', () => {
+    expect([...JULIUS_ACCEPTING_VERDICTS]).toEqual([...JULIUS_RELEASING_ACTIONS]);
+    const source = readFileSync(join(process.cwd(), 'src', 'relay', 'mission', 'julius', 'julius-task-pipeline.ts'), 'utf8');
+    const pairs = [...source.matchAll(/([A-Za-z_][\w.]*)\.action === '([A-Z_]+)' \|\| ([A-Za-z_][\w.]*)\.action === '([A-Z_]+)'/gu)]
+      // The pairs that name COMPLETE are the pipeline's acceptance tests; an ACCEPT paired with anything else (the architect's
+      // REPAIR-or-ACCEPT) is not one.
+      .filter((match) => match[2] === 'COMPLETE' || match[4] === 'COMPLETE');
+    expect(pairs.length, 'the six places the pipeline treats a decision as acceptance').toBe(6);
+    for (const match of pairs) expect([match[1] === match[3], match[2], match[4]]).toEqual([true, 'ACCEPT', 'COMPLETE']);
+    expect((source.match(/\.action === 'COMPLETE'/gu) ?? []).length, 'COMPLETE is never tested alone').toBe(6);
   });
 
-  it('a blocking OPEN finding that cites evidence stands VERIFIED from its own record, and contradicts the acceptance', () => {
-    const found = juliusRunContradictionsFromRecords({ brain: [accept], findings: [finding('f1', ['e1'])], claims: [] });
-    expect(found.map((held) => `${held.family} ${held.rowId} ${held.right.trust}`)).toEqual([`A ${JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW} VERIFIED`]);
+  it('a DIRECT acceptance: the task\'s own last decision, named by its mirror (control for the effective cases)', () => {
+    const found = check({ tasks: [work(PLAN)], decisions: [decided(PLAN, 'ACCEPT')], findings: [finding(PLAN, 'f1')] }).contradictions;
+    expect(found.map((held) => [held.subject, held.acceptingTaskId, held.left.entryId, held.right.value])).toEqual([
+      [`acceptance:${PLAN}`, PLAN, `brain:decision:${PLAN}:ACCEPT:TASK_VERIFIED`, 'OPEN_BLOCKING_VERIFIED'],
+    ]);
   });
 
-  it('one that cites nothing is not verified (the context layer\'s own rule), and a recorded standing wins over the derivation', () => {
-    expect(juliusRunContradictionsFromRecords({ brain: [accept], findings: [finding('f2', [])], claims: [] })).toEqual([]);
-    const recorded = { ...claim(`finding:${task}:f1`, 'SUPERSEDED', 'reviewer_verified') };
-    expect(juliusRunContradictionsFromRecords({ brain: [accept], findings: [finding('f1', ['e1'])], claims: [recorded] }), 'the record wins').toEqual([]);
+  it('B-8a: a parent REPAIRED and accepted THROUGH its repair, with a blocking verified finding about it still OPEN, is a contradiction: subject the parent, left the repair\'s accepting decision (C3)', () => {
+    const found = check({ findings: [finding(PLAN, 'f1')] }).contradictions;
+    expect(found).toEqual([{
+      family: 'A', subject: `acceptance:${PLAN}`, rowId: JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW, acceptingTaskId: R1,
+      left: { entryId: `brain:decision:${R1}:ACCEPT:TASK_VERIFIED`, claimId: `claim:brain:decision:${R1}:ACCEPT:TASK_VERIFIED`, value: 'ACCEPT', trust: 'APPROVED' },
+      right: { entryId: `finding:${PLAN}:f1`, claimId: `claim:finding:${PLAN}:f1`, value: 'OPEN_BLOCKING_VERIFIED', trust: 'VERIFIED' },
+    }]);
+    expect(juliusContradictionFacts(found)).toMatchObject({ contradictionSubject: `acceptance:${PLAN}`, contradictionAcceptingTask: R1 });
   });
 
-  it('a verdict with no durable revision cannot be ordered, so it is not judged; a RESOLVED finding never is', () => {
-    expect(juliusRunContradictionsFromRecords({ brain: [{ ...accept, revision: undefined }], findings: [finding('f1', ['e1'])], claims: [] })).toEqual([]);
-    expect(juliusRunContradictionsFromRecords({ brain: [accept], findings: [finding('f1', ['e1'], { status: 'RESOLVED' })], claims: [] })).toEqual([]);
+  it('B-8c: the same lineage with the finding RESOLVED (or DISMISSED) is JUDGED compatible, not skipped; so is a non-blocking open one', () => {
+    for (const status of ['RESOLVED', 'DISMISSED'] as const) {
+      const result = check({ findings: [finding(PLAN, 'f1', { status })] });
+      expect(result.contradictions, status).toEqual([]);
+      expect(result.judgements.map((held) => [held.subject, held.acceptingTaskId, held.rowId, held.result]), status).toEqual([[`acceptance:${PLAN}`, R1, 'ACCEPT_X_RESOLVED', 'COMPATIBLE']]);
+    }
+    expect(check({ findings: [finding(PLAN, 'f1', { blocking: false })] }).judgements.map((held) => held.rowId)).toEqual(['ACCEPT_X_OPEN_NON_BLOCKING']);
   });
 
-  it('as event facts the pair is flat, closed values and ids only, and bounded', () => {
-    const found = juliusRunContradictionsFromRecords({ brain: [accept], findings: [finding('f1', ['e1']), finding('f3', ['e2'])], claims: [] });
-    const facts = juliusContradictionFacts(found);
-    expect(Object.values(facts).every((value) => typeof value === 'string' || typeof value === 'number')).toBe(true);
+  it('two findings about the parent, one resolved: exactly one pair, and both judged', () => {
+    const result = check({ findings: [finding(PLAN, 'f1'), finding(PLAN, 'f2', { status: 'RESOLVED' })] });
+    expect(result.contradictions.map((held) => held.right.entryId)).toEqual([`finding:${PLAN}:f1`]);
+    expect(result.judgements.map((held) => `${held.right.entryId} ${held.result}`)).toEqual([`finding:${PLAN}:f1 INCOMPATIBLE`, `finding:${PLAN}:f2 COMPATIBLE`]);
+  });
+
+  it('B-8d: a TWO-DEEP repair chain accepts the root and the first round through the second round\'s decision', () => {
+    const decisions = [decided(PLAN, 'REPAIR'), decided(R1, 'REPAIR'), decided(R2, 'ACCEPT')];
+    const found = check({ tasks: [work(PLAN), repairOf(PLAN, R1, 1), repairOf(R1, R2, 2)], decisions, findings: [finding(PLAN, 'f-root'), finding(R1, 'f-round1')] }).contradictions;
+    expect(found.map((held) => [held.subject, held.acceptingTaskId])).toEqual([[`acceptance:${PLAN}`, R2], [`acceptance:${R1}`, R2]]);
+  });
+
+  it('a repair REJECTED AGAIN (its own repair not yet done) accepts nothing, so an open finding about the root disputes nothing', () => {
+    const decisions = [decided(PLAN, 'REPAIR'), decided(R1, 'REPAIR')];
+    const result = check({ tasks: [work(PLAN), repairOf(PLAN, R1, 1), repairOf(R1, R2, 2, 'ACTIVE')], decisions, findings: [finding(PLAN, 'f1'), finding(R1, 'f2')] });
+    expect(result).toEqual({ judgements: [], contradictions: [] });
+  });
+
+  it('B-8e: with NO brain mirror of the accepting decision, the contradiction still fires, naming the decision by its durable key and standing as the DECISION it is', () => {
+    const found = check({ brain: [], findings: [finding(PLAN, 'f1')] }).contradictions;
+    expect(found.map((held) => [held.acceptingTaskId, held.left.entryId, held.left.value, held.left.trust])).toEqual([[R1, `decision:${R1}:ACCEPT:TASK_VERIFIED`, 'ACCEPT', 'APPROVED']]);
+    expect(JULIUS_DECISION_LOG_WRITER).toBe('julius:decision-log');
+    // A mirror the store returned without a revision still names it (the revision orders family V only).
+    expect(check({ brain: brainOf(repaired).map((held) => ({ ...held, revision: undefined })), findings: [finding(PLAN, 'f1')] }).contradictions.map((held) => held.left.entryId))
+      .toEqual([`brain:decision:${R1}:ACCEPT:TASK_VERIFIED`]);
+  });
+
+  it('C2: the DECISION LOG says which decision is current, never the mirror\'s revision (a recurring triple keeps its first revision)', () => {
+    const open = [finding(PLAN, 'f1')];
+    // The log ends in REPAIR: not accepted, whatever revisions the mirrors carry.
+    const acceptThenRepair = [decided(PLAN, 'ACCEPT'), decided(PLAN, 'REPAIR')];
+    expect(check({ tasks: [work(PLAN)], decisions: acceptThenRepair, brain: [mirror(acceptThenRepair[0]!, 9), mirror(acceptThenRepair[1]!, 5)], findings: open }).contradictions).toEqual([]);
+    // The log ends in ACCEPT: accepted, even though its mirror's revision is the older one.
+    const repairThenAccept = [decided(PLAN, 'REPAIR'), decided(PLAN, 'ACCEPT')];
+    expect(check({ tasks: [work(PLAN)], decisions: repairThenAccept, brain: [mirror(repairThenAccept[0]!, 9), mirror(repairThenAccept[1]!, 5)], findings: open }).contradictions).toHaveLength(1);
+    // And a decision COMPLETE accepts, through the release path's own set.
+    expect(check({ tasks: [work(PLAN)], decisions: [decided(PLAN, 'COMPLETE')], findings: open }).contradictions.map((held) => held.left.value)).toEqual(['COMPLETE']);
+  });
+
+  it('a finding that cites nothing is not verified (the context layer\'s own rule), and a recorded standing wins over the derivation', () => {
+    expect(check({ findings: [finding(PLAN, 'f2', { evidenceIds: [] })] }).contradictions).toEqual([]);
+    const recorded = { ...claim(`finding:${PLAN}:f1`, 'SUPERSEDED', 'reviewer_verified') };
+    expect(check({ findings: [finding(PLAN, 'f1')], claims: [recorded] }).contradictions, 'the record wins').toEqual([]);
+  });
+
+  it('as event facts: flat scalars or null, bounded; the judged pairs ride beside them; a secret-shaped id is withheld, never fatal to the record', () => {
+    const result = check({ findings: [finding(PLAN, 'f1'), finding(PLAN, 'f3', { evidenceIds: ['e2'] })] });
+    const facts = { ...juliusAcceptanceJudgementFacts(result.judgements), ...juliusContradictionFacts(result.contradictions) };
+    expect(Object.values(facts).every((value) => value === null || typeof value === 'string' || typeof value === 'number')).toBe(true);
     expect(facts).toMatchObject({
-      contradictions: 2, contradictionFamily: 'A', contradictionSubject: `acceptance:${task}`, contradictionRow: JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW,
-      contradictionLeft: `${accept.entryId}|claim:${accept.entryId}|ACCEPT|APPROVED`,
-      contradictionRight: `finding:${task}:f1|claim:finding:${task}:f1|OPEN_BLOCKING_VERIFIED|VERIFIED`,
+      contradictions: 2, contradictionFamily: 'A', contradictionSubject: `acceptance:${PLAN}`, contradictionRow: JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW,
+      contradictionAcceptingTask: R1,
+      contradictionLeft: `brain:decision:${R1}:ACCEPT:TASK_VERIFIED|claim:brain:decision:${R1}:ACCEPT:TASK_VERIFIED|ACCEPT|APPROVED`,
+      contradictionRight: `finding:${PLAN}:f1|claim:finding:${PLAN}:f1|OPEN_BLOCKING_VERIFIED|VERIFIED`,
+      acceptanceJudged: 2, acceptanceIncompatible: 2,
+      acceptanceJudgements: `acceptance:${PLAN}>${R1}:${JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW}:finding:${PLAN}:f1;acceptance:${PLAN}>${R1}:${JULIUS_ACCEPTANCE_INCOMPATIBLE_ROW}:finding:${PLAN}:f3`,
     });
     expect(JSON.stringify(facts).length).toBeLessThan(8_192);
     expect(juliusContradictionFacts([])).toEqual({});
+    expect(juliusAcceptanceJudgementFacts([])).toEqual({ acceptanceJudged: 0, acceptanceIncompatible: 0, acceptanceJudgements: null });
+    const shaped = check({ findings: [finding(PLAN, 'token=abc')] });
+    const withheld = { ...juliusAcceptanceJudgementFacts(shaped.judgements), ...juliusContradictionFacts(shaped.contradictions) };
+    expect(withheld).toMatchObject({ contradictions: 1, contradictionRight: null, contradictionPairs: null, acceptanceJudged: 1, acceptanceJudgements: null });
+    expect(/(?:api[_-]?key|authorization|token|secret|password)\s*[=:]/iu.test(JSON.stringify(withheld)), 'the event validator would accept it').toBe(false);
   });
 });
 

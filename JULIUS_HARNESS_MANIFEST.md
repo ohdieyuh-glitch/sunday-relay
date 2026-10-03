@@ -132,7 +132,7 @@ One claimed task all the way through: policy, budget reservation, context compil
 | `src/relay/mission/julius/julius-lease-keeper.ts` | traced | `src/relay/mission/julius/julius-run-loop.ts` |
 | `src/relay/mission/julius/julius-peer-channel.ts` | traced | `src/relay/mission/julius/julius-architecture-state.ts` |
 | `src/relay/mission/julius/julius-peer-runtime.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
-| `src/relay/mission/julius/julius-release-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-release-runtime.ts` | traced | `src/relay/mission/julius/julius-lineage-asserter.ts` |
 | `src/relay/mission/julius/julius-research-protocol.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-segment-lineage.ts` | traced | `src/relay/mission/julius/julius-repair-lineage.ts` |
 | `src/relay/mission/julius/julius-store-failure.ts` | traced | `src/relay/mission/julius/julius-router.ts` |
@@ -312,7 +312,7 @@ A repair round planned from reviewer findings and a REPAIR decision, bounded by 
 
 | production source | role | reached from |
 | --- | --- | --- |
-| `src/relay/mission/julius/julius-repair-lineage.ts` | traced | `src/relay/mission/julius/julius-runtime.ts` |
+| `src/relay/mission/julius/julius-repair-lineage.ts` | traced | `src/relay/mission/julius/julius-release-runtime.ts` |
 | `src/relay/mission/julius/julius-repair-round.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-repair-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 
