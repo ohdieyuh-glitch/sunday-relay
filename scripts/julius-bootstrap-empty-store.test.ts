@@ -13,8 +13,11 @@ import { ledgerOrderProblem, main, notEmptyReasons, PUBLIC_OBJECTS_SQL, type Emp
 const ROOT = resolve(__dirname, '..');
 const DOCS = join(ROOT, 'docs', 'julius-migrations', '030');
 const MIGRATIONS = join(ROOT, 'src', 'relay', 'persistence', 'wonderland-migrations');
-const NEVER_DIALLED = 'postgres://bootstrap-test:unused@127.0.0.1:1/never';
-const ARGS = ['--expect-database', 'julius', '--expect-system-identifier', '7684592472855232550'];
+// No credentials at all: the URL is only ever refused or, in the control case, dialled at a closed port. (An inline
+// user:password, even a fake one, trips the repository boundary scan's secret detector, as it should.)
+const NEVER_DIALLED = 'postgres://127.0.0.1:1/never';
+// A placeholder identity: these cases never reach a server, so no real cluster's identifier belongs here.
+const ARGS = ['--expect-database', 'julius', '--expect-system-identifier', '1000000000000000001'];
 const EMPTY: EmptyFacts = { schemas: 'public', publicObjects: 0, extraExtensions: '', eventTriggers: 0, hasRelayWonderland: false, hasLedger: false };
 
 const run = async (argv: readonly string[], env: NodeJS.ProcessEnv, cwd = ROOT): Promise<{ code: number; lines: string[] }> => {
