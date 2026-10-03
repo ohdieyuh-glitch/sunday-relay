@@ -861,7 +861,9 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       return decisions.filter((value) => value.runId === runId).map(({ runId: _runId, ...value }) => ({ ...value }));
     },
     async brainEntriesForRun(runId, projectId) {
-      return inProject(runId, projectId) ? (brain.get(runId) ?? []).map((entry) => ({ ...entry })) : [];
+      // The brain is append-only here as in PostgreSQL, so an entry's place is its revision, as `appendBrainEntry`
+      // allocates it there: 1, 2, 3, … in the order written.
+      return inProject(runId, projectId) ? (brain.get(runId) ?? []).map((entry, index) => ({ ...entry, revision: entry.revision ?? index + 1 })) : [];
     },
 
     /* --------------------------------------------------------- the claim store */
@@ -960,6 +962,13 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     async deniedApprovals(runId, projectId) {
       return [...approvals.values()]
         .filter((row) => row.runId === runId && row.projectId === projectId && row.state === 'DENIED')
+        .map((row) => ({ ...row }));
+    },
+
+    async decidedApprovals(runId, projectId) {
+      return [...approvals.values()]
+        .filter((row) => row.runId === runId && row.projectId === projectId && (row.state === 'APPROVED' || row.state === 'DENIED'))
+        .sort((left, right) => (left.decidedAt ?? '').localeCompare(right.decidedAt ?? '') || left.approvalId.localeCompare(right.approvalId))
         .map((row) => ({ ...row }));
     },
 

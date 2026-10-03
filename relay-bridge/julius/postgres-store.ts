@@ -56,7 +56,7 @@ export function createJuliusPostgresRuntimeStore(
   pool: Pool,
 ): JuliusRuntimeStore & JuliusRecoveryDriver & JuliusTimelineReader
   & Required<Pick<JuliusRuntimeReader, 'haltingFailureClasses'>>
-  & Required<Pick<JuliusApprovalStore, 'pendingApprovals' | 'deniedApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>>
+  & Required<Pick<JuliusApprovalStore, 'pendingApprovals' | 'deniedApprovals' | 'decidedApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>>
   & Required<Pick<JuliusRuntimeStore, 'appendHandoffEvent' | 'appendSettlementEvent'>> {
   const runs = new JuliusPostgresRepository(pool);
   const results = new JuliusRecoveryPostgresRepository(pool);
@@ -138,6 +138,8 @@ export function createJuliusPostgresRuntimeStore(
     // task ends at the dispatch boundary, even when the denial's own move to
     // FAILED lost a race and never happened.
     deniedApprovals: lifecycle.deniedApprovals.bind(lifecycle),
+    // THE GOVERNANCE THE TRUST CORE MAY RANK (decision B): decided approvals only, from the same table.
+    decidedApprovals: lifecycle.decidedApprovals.bind(lifecycle),
     // THE C.A.R.D. GATE AT DISPATCH ASKS THROUGH THESE (`prepareClaimedTask`).
     // Bound from the same repository and table the bridge decides approvals
     // in. Without them the live job's gate has nowhere to put the question and
