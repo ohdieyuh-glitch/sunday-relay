@@ -8839,9 +8839,10 @@ namespace
 
 	const FQaStancePreset StancePresets[] = {
 		{ TEXT("P0_before"), TEXT("wl.Handoff.SwordBodyV 0;wl.Handoff.Stance.Out 18;wl.Handoff.Stance.Shoulder 22;wl.Handoff.Stance.Elbow 50;wl.Handoff.Stance.FeetOut 6;wl.Handoff.Stance.Crouch 2;wl.Handoff.Stance.RunOut 16") },
-		// index 1 is THE DEFAULT (SC1/SC2 measure it): P2 wider, CORE's and Second's pick 10-03, closest to the sheet's ~45 deg arms
-		{ TEXT("P1_wider_default"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 10;wl.Handoff.Stance.Elbow 22;wl.Handoff.Stance.FeetOut 16;wl.Handoff.Stance.Crouch 7;wl.Handoff.Stance.RunOut 32") },
-		{ TEXT("P2_previous"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 32;wl.Handoff.SwordVForward 18;wl.Handoff.Stance.Out 34;wl.Handoff.Stance.Shoulder 14;wl.Handoff.Stance.Elbow 28;wl.Handoff.Stance.FeetOut 13;wl.Handoff.Stance.Crouch 6;wl.Handoff.Stance.RunOut 26") },
+		// index 1 is THE DEFAULT (SC1/SC2 measure it): P2 canonical (the founder, 10-03) -- its V and arms-out -- with readiness and legs
+		// improved as the founder asked (round 3b's ST2 read the P2 hands only +8.7 uu forward); index 2 is P2 as round 3b built it
+		{ TEXT("P1_ready_default"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 19;wl.Handoff.Stance.Crouch 10;wl.Handoff.Stance.RunOut 32") },
+		{ TEXT("P2_round3b"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 10;wl.Handoff.Stance.Elbow 22;wl.Handoff.Stance.FeetOut 16;wl.Handoff.Stance.Crouch 7;wl.Handoff.Stance.RunOut 32") },
 		{ TEXT("P3_narrower"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 24;wl.Handoff.SwordVForward 24;wl.Handoff.Stance.Out 26;wl.Handoff.Stance.Shoulder 18;wl.Handoff.Stance.Elbow 34;wl.Handoff.Stance.FeetOut 10;wl.Handoff.Stance.Crouch 5;wl.Handoff.Stance.RunOut 20") },
 	};
 

@@ -31,12 +31,12 @@ namespace RelayDogArmedStance
 		float LeanDeg = 8.0f;
 		float RunLeanDeg = 3.0f;
 		/** How far the pelvis rides lower, standing and walking, uu: a ready knee, never a squat. */
-		float CrouchUU = 7.0f;
+		float CrouchUU = 10.0f;
 		/** Each hip swept outward: the feet spaced for movement. */
-		float FeetOutDeg = 16.0f;
+		float FeetOutDeg = 19.0f;
 		/** The ready arms, standing and walking: raised forward and out, the forearms up -- the blades carried out from the body. */
-		float ReadyShoulderDeg = 10.0f;
-		float ReadyElbowDeg = 22.0f;
+		float ReadyShoulderDeg = 12.0f;
+		float ReadyElbowDeg = 25.0f;
 		float ReadyOutDeg = 44.0f;
 		/** How much of the walk's own arm swing stays with the blades in hand: they are carried, not flung. */
 		float SwingKeep = 0.3f;
