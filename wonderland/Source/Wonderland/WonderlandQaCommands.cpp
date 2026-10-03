@@ -3356,6 +3356,8 @@ namespace
 		int32 SoakHitches = 0;
 		float SoakWorst = 0.0f;
 		FName BootSkin;
+		int32 DashesBefore = 0;         // the Mission Handoff's dash phase: the Dog's counts as it began
+		int32 RefusedBefore = 0;
 		FTSTicker::FDelegateHandle FrameHandle;
 		FTSTicker::FDelegateHandle StepHandle;
 	};
@@ -3718,26 +3720,41 @@ namespace
 				Next();
 			}
 			break;
-		case 11: // handoff_dash: the same, and a dash pair (W up, down, up, down) every 1.6 s
+		case 11: // handoff_dash: the same, and a double tap of W every 1.6 s
 		{
-			if (ARelayDogCharacter* Dog = QaDog(World))
+			ARelayDogCharacter* Dog = QaDog(World);
+			if (Dog != nullptr && In < 30.0)
 			{
-				const double Cycle = FMath::Fmod(In, 1.6);
-				const int32 Key = Cycle < 0.04 ? 0 : (Cycle < 0.08 ? 1 : (Cycle < 0.12 ? 2 : 3));
-				if (Key != P.Sub)
+				if (P.Sub == 0)
 				{
-					// 0 up, 1 down, 2 up, 3 down: two rising edges inside the double-tap window
-					Dog->QaForwardKey(false, Key % 2 == 1);
-					P.Sub = Key;
+					P.DashesBefore = Dog->GetDashCount();
+					P.RefusedBefore = Dog->GetDashesRefused();
+				}
+				// THIS STEP TICKS EVERY 0.1 s, too coarse to give each half of a tap its own tick inside the 0.30 s window
+				// reliably, so the pair is pressed inside ONE tick (down, up, down: two rising edges) and let go on the next.
+				// The dash and its trails are what this phase measures; the real-input timing is G3's real-input pass.
+				// Sub: even = waiting for pair Sub/2, due at Sub/2 x 1.6 s; odd = pressed, let go on this tick.
+				if (P.Sub % 2 == 1)
+				{
+					Dog->QaForwardKey(false, false);
+					++P.Sub;
+				}
+				else if (In >= (P.Sub / 2) * 1.6)
+				{
+					Dog->QaForwardKey(false, true);
+					Dog->QaForwardKey(false, false);
+					Dog->QaForwardKey(false, true);
+					++P.Sub;
 				}
 			}
 			if (In >= 30.0)
 			{
 				P.bWalking = false;
-				if (ARelayDogCharacter* Dog = QaDog(World))
+				if (Dog != nullptr)
 				{
 					Dog->QaForwardKey(false, false);
-					UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF handoff dashes %d, refused %d"), Dog->GetDashCount(), Dog->GetDashesRefused());
+					UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF handoff pairs %d, dashes %d, refused %d"), (P.Sub + 1) / 2,
+						Dog->GetDashCount() - P.DashesBefore, Dog->GetDashesRefused() - P.RefusedBefore);
 				}
 				FString Said;
 				WonderlandHandoffDirector::Return(QaLocalPlayer(World), Said);
