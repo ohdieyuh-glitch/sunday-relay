@@ -70,6 +70,19 @@ namespace WonderlandHands
 		bool WearsItsArmsMaterial() const;
 		/** True while the arm the hand is built on is itself drawn (its part visible, its actor not hidden). */
 		bool IsArmShown() const;
+		/**
+		 * THE FIST CLOSES ABOUT THE GRIP IT HOLDS (Second's review, 10-03): laid about the forearm's forward, the held grip crossed the
+		 * fist at 61-72 deg and sat 3-6 uu inside the palm and a finger. While a sword is held its axis (pommel to point, world) turns
+		 * the hand -- the fingers kept as near the arm's line as the grip allows, so mostly a roll about the forearm -- eased in with
+		 * the curl, the blade out of the thumb side. wl.Handoff.FistFollowsGrip 0 lays the old way (a before/after).
+		 */
+		void SetGripAxis(const FVector& WorldAxis);
+		void ClearGripAxis();
+		/** For the QA, after laying: the angle (deg) between the fist's wrap axis and the held grip's; how far the hand bends off the
+		 *  forearm's line; and how far its wrap axis rolled about the forearm. All 0 with no sword held. */
+		float GetGripMisalignDeg() const;
+		float GetWristBendDeg() const;
+		float GetWristRollDeg() const;
 
 	private:
 		/** Lays the boxes for the current curl, in the forearm's space. */
@@ -90,6 +103,11 @@ namespace WonderlandHands
 		float Curl = 0.0f;
 		/** The curl the boxes were last laid at (-1: not laid on this forearm yet). */
 		float LaidCurl = -1.0f;
+		/** The held grip's axis in the forearm's space (zero: no sword held, or the grip lies along the arm), and the frame laid. */
+		FVector GripAxis = FVector::ZeroVector;
+		FVector LaidGripAxis = FVector::ZeroVector;
+		FVector LaidAlong = FVector(0.0, 0.0, -1.0);
+		FVector LaidAhead = FVector(1.0, 0.0, 0.0);
 		bool bShown = true;
 	};
 

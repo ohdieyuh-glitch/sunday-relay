@@ -1,5 +1,6 @@
 // Copyright Wonderland. THE HANDS. See WonderlandHands.h.
 #include "WonderlandHands.h"
+#include "HAL/IConsoleManager.h"
 
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
@@ -18,6 +19,12 @@ namespace
 		const FMatrix Basis = FRotationMatrix::MakeFromZX(LongAxis.GetSafeNormal(), AcrossAxis.GetSafeNormal());
 		return FTransform(Basis.Rotator(), Centre, SizeAcrossThickLong / 100.0);
 	}
+}
+
+namespace
+{
+	TAutoConsoleVariable<int32> HandsFistFollowsGrip(TEXT("wl.Handoff.FistFollowsGrip"), 1,
+		TEXT("Mission Handoff: 1 = a fist closes ABOUT the grip it holds (the hand rolls to the sword); 0 = laid about the forearm's forward, the old way (a before/after)."));
 }
 
 namespace WonderlandHands
@@ -126,8 +133,43 @@ namespace WonderlandHands
 
 	FVector FHand::GripCentreLocal() const
 	{
-		// the fist's middle: a little more than half a palm down from the arm's end
-		return Tip + Along * (6.5f * Size * 0.55f);
+		// the fist's middle: a little more than half a palm down from the arm's end, along the hand as it is laid
+		return Tip + LaidAlong * (6.5f * Size * 0.55f);
+	}
+
+	void FHand::SetGripAxis(const FVector& WorldAxis)
+	{
+		const USceneComponent* Forearm = On.Get();
+		if (Forearm == nullptr || WorldAxis.IsNearlyZero() || HandsFistFollowsGrip.GetValueOnGameThread() == 0)
+		{
+			ClearGripAxis();
+			return;
+		}
+		const FVector InArm = Forearm->GetComponentTransform().InverseTransformVectorNoScale(WorldAxis).GetSafeNormal();
+		// a grip along the arm cannot be wrapped by a fist: the old lay, never a hand folded back on itself
+		GripAxis = FMath::Abs(FVector::DotProduct(InArm, Along)) > 0.95 ? FVector::ZeroVector : InArm;
+	}
+
+	void FHand::ClearGripAxis()
+	{
+		GripAxis = FVector::ZeroVector;
+	}
+
+	float FHand::GetGripMisalignDeg() const
+	{
+		return LaidGripAxis.IsNearlyZero() ? 0.0f
+			: static_cast<float>(FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FMath::Abs(FVector::DotProduct(LaidAhead, LaidGripAxis)), 0.0, 1.0))));
+	}
+
+	float FHand::GetWristBendDeg() const
+	{
+		return static_cast<float>(FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(LaidAlong, Along), -1.0, 1.0))));
+	}
+
+	float FHand::GetWristRollDeg() const
+	{
+		const FVector Flat = (LaidAhead - Along * FVector::DotProduct(LaidAhead, Along)).GetSafeNormal();
+		return Flat.IsNearlyZero() ? 0.0f : static_cast<float>(FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Flat, Ahead), -1.0, 1.0))));
 	}
 
 	void FHand::Pose(float Grip, float DeltaSeconds, bool bAllowed)
@@ -156,8 +198,9 @@ namespace WonderlandHands
 		const float Want = FMath::Clamp(Grip, 0.0f, 1.0f);
 		// EASED, NEVER SNAPPED: the fingers close as the sword arrives and open as it leaves
 		Curl = DeltaSeconds > 0.0f ? FMath::FInterpTo(Curl, Want, DeltaSeconds, 9.0f) : Want;
-		// ONLY WHEN THE CURL MOVED: the boxes ride on the forearm (their places are relative to it), so a settled hand costs nothing
-		if (LaidCurl < 0.0f || FMath::Abs(Curl - LaidCurl) > 0.002f)
+		// ONLY WHEN THE CURL OR THE HELD GRIP MOVED: the boxes ride on the forearm (their places are relative to it), so a settled
+		// hand costs nothing; a held grip turns against the arm as the arm moves, so it is followed
+		if (LaidCurl < 0.0f || FMath::Abs(Curl - LaidCurl) > 0.002f || !GripAxis.Equals(LaidGripAxis, 0.005))
 		{
 			Lay();
 			LaidCurl = Curl;
@@ -172,39 +215,57 @@ namespace WonderlandHands
 		const float PalmThick = 3.0f * U;
 		const float PalmLong = 6.5f * U;
 		const float PalmWide = 8.2f * U;
-		const FVector Centre = GripCentreLocal();
+		// THE FRAME THE FIST IS LAID IN: the forearm's own at rest; while a sword is held, turned so the fingers' wrap axis IS the grip's
+		// (the blade out of the thumb side), the fingers as near the arm's line as the grip allows -- eased in with the curl
+		FVector LayAlong = Along;
+		FVector LayAhead = Ahead;
+		FVector LayOut = Out;
+		if (!GripAxis.IsNearlyZero() && Curl > 0.0f)
+		{
+			const FVector GripAlong = (Along - GripAxis * FVector::DotProduct(Along, GripAxis)).GetSafeNormal();
+			const FQuat Rest(FMatrix(Ahead, Along, FVector::CrossProduct(Ahead, Along), FVector::ZeroVector));
+			const FQuat Held(FMatrix(GripAxis, GripAlong, FVector::CrossProduct(GripAxis, GripAlong), FVector::ZeroVector));
+			const FQuat Turned = FQuat::Slerp(Rest, Held, Curl).GetNormalized();
+			LayAhead = Turned.GetAxisX();
+			LayAlong = Turned.GetAxisY();
+			LayOut = (Turned.GetAxisZ() * Side).GetSafeNormal();
+		}
+		LaidAlong = LayAlong;
+		LaidAhead = LayAhead;
+		LaidGripAxis = GripAxis;
+		const FVector Centre = Tip + LayAlong * (PalmLong * 0.55f);
 		TArray<FTransform, TInlineAllocator<BoxesPerHand>> Laid;
 		// THE BACK OF THE HAND: on the forearm's line when open, moved out of the way of the grip as the fist closes
-		const FVector Palm = Centre + Out * ((HandleR + PalmThick * 0.5f) * Curl) - Along * (PalmLong * 0.05f);
-		Laid.Add(HandBox(Palm, Along, Ahead, FVector(PalmWide, PalmThick, PalmLong)));
+		const FVector Palm = Centre + LayOut * ((HandleR + PalmThick * 0.5f) * Curl) - LayAlong * (PalmLong * 0.05f);
+		Laid.Add(HandBox(Palm, LayAlong, LayAhead, FVector(PalmWide, PalmThick, PalmLong)));
 
 		// FOUR FINGERS from the palm's inner lower edge, each in two segments: relaxed a light curl, holding a fist round the grip
-		const float A1 = FMath::DegreesToRadians(FMath::Lerp(14.0f, 92.0f, Curl));
-		const float A2 = FMath::DegreesToRadians(FMath::Lerp(18.0f, 94.0f, Curl));
+		const float A1 = FMath::DegreesToRadians(FMath::Lerp(14.0f, 80.0f, Curl));
+		const float A2 = FMath::DegreesToRadians(FMath::Lerp(18.0f, 84.0f, Curl));
 		const float Proximal = 4.4f * U;
 		const float Distal = 3.2f * U;
 		const float Spacing = 2.05f * U;
 		for (int32 Finger = 0; Finger < 4; ++Finger)
 		{
 			const float Offset = (Finger - 1.5f) * Spacing;
-			const FVector Base = Palm + Along * (PalmLong * 0.5f) - Out * (PalmThick * 0.5f) + Ahead * Offset;
-			const FVector D1 = Along * FMath::Cos(A1) - Out * FMath::Sin(A1);
-			const FVector D2 = Along * FMath::Cos(A1 + A2) - Out * FMath::Sin(A1 + A2);
+			const FVector Base = Palm + LayAlong * (PalmLong * 0.5f) - LayOut * (PalmThick * 0.5f) + LayAhead * Offset;
+			const FVector D1 = LayAlong * FMath::Cos(A1) - LayOut * FMath::Sin(A1);
+			const FVector D2 = LayAlong * FMath::Cos(A1 + A2) - LayOut * FMath::Sin(A1 + A2);
 			const FVector Joint = Base + D1 * Proximal;
 			// the little finger a touch shorter: a hand, not a comb
 			const float Shorter = Finger == 0 || Finger == 3 ? 0.85f : 1.0f;
-			Laid.Add(HandBox(Base + D1 * (Proximal * 0.5f), D1, Ahead, FVector(1.7f * U, 1.9f * U, Proximal + 0.2f * U)));
-			Laid.Add(HandBox(Joint + D2 * (Distal * Shorter * 0.5f), D2, Ahead, FVector(1.6f * U, 1.8f * U, Distal * Shorter)));
+			Laid.Add(HandBox(Base + D1 * (Proximal * 0.5f), D1, LayAhead, FVector(1.7f * U, 1.9f * U, Proximal + 0.2f * U)));
+			Laid.Add(HandBox(Joint + D2 * (Distal * Shorter * 0.5f), D2, LayAhead, FVector(1.6f * U, 1.8f * U, Distal * Shorter)));
 		}
 
 		// THE THUMB, at the front of the hand: pointing down and forward relaxed, wrapping over the grip from the inside holding
-		const FVector ThumbBase = Palm - Along * (PalmLong * 0.2f) - Out * (PalmThick * 0.5f) + Ahead * (PalmWide * 0.5f - 0.6f * U);
-		const FVector T1 = FMath::Lerp(Ahead * 0.75f + Along * 0.65f, -Out * 0.85f - Along * 0.35f + Ahead * 0.25f, Curl).GetSafeNormal();
-		const FVector T2 = FMath::Lerp(Ahead * 0.5f + Along * 0.85f, -Out * 0.3f + Along * 0.9f + Ahead * 0.2f, Curl).GetSafeNormal();
+		const FVector ThumbBase = Palm - LayAlong * (PalmLong * 0.2f) - LayOut * (PalmThick * 0.5f) + LayAhead * (PalmWide * 0.5f - 0.6f * U);
+		const FVector T1 = FMath::Lerp(LayAhead * 0.75f + LayAlong * 0.65f, -LayOut * 0.4f - LayAlong * 0.85f + LayAhead * 0.25f, Curl).GetSafeNormal();
+		const FVector T2 = FMath::Lerp(LayAhead * 0.5f + LayAlong * 0.85f, -LayOut * 0.3f + LayAlong * 0.9f + LayAhead * 0.2f, Curl).GetSafeNormal();
 		const float ThumbA = 3.4f * U;
 		const float ThumbB = 2.6f * U;
-		Laid.Add(HandBox(ThumbBase + T1 * (ThumbA * 0.5f), T1, Along, FVector(1.9f * U, 1.9f * U, ThumbA)));
-		Laid.Add(HandBox(ThumbBase + T1 * ThumbA + T2 * (ThumbB * 0.5f), T2, Along, FVector(1.7f * U, 1.8f * U, ThumbB)));
+		Laid.Add(HandBox(ThumbBase + T1 * (ThumbA * 0.5f), T1, LayAlong, FVector(1.9f * U, 1.9f * U, ThumbA)));
+		Laid.Add(HandBox(ThumbBase + T1 * ThumbA + T2 * (ThumbB * 0.5f), T2, LayAlong, FVector(1.7f * U, 1.8f * U, ThumbB)));
 
 		for (int32 Index = 0; Index < Boxes.Num() && Index < Laid.Num(); ++Index)
 		{

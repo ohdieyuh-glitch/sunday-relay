@@ -3457,6 +3457,16 @@ void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
 			continue;
 		}
 		Hand.Attach(Forearm->GetOwner() != nullptr ? Forearm->GetOwner() : this, Forearm, Tip, Forward, bPlusY ? 1.0f : -1.0f);
+		// THE FIST CLOSES ABOUT THE SWORD IT HOLDS (Second's review, 10-03): the Dog's -Y hand holds the gold, its +Y hand the cyan
+		const bool bGoldHere = !bPlusY;
+		if (HandoffSwords.GetHeldBy(bGoldHere) == Forearm)
+		{
+			Hand.SetGripAxis(HandoffSwords.GetSwordWorld(bGoldHere).GetRotation().GetAxisZ());
+		}
+		else
+		{
+			Hand.ClearGripAxis();
+		}
 		Hand.Pose(HandoffHandsWeight, DeltaSeconds, !bPropsInHand);
 	}
 }
