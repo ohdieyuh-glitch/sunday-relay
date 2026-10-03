@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Dumps the safe columns of the Julius tables the first-live mission writes, one TSV per table,
 # into the directory given as the first argument. Only safe columns: no environment dump, no
-# config, no packet text, no credential-bearing row.
+# config, no packet text, no credential-bearing row. The one exception is `artifacts/`: the work
+# artifacts' bodies, as the founder approved (decision A), checked before they are copied and
+# scanned before the bundle is uploaded (see "THE WORK ARTIFACTS" below).
 #
 # WHY A SCRIPT. Free dry runs #1 and #2 uploaded `evidence.tsv` and `findings.tsv` reading only
 # `unavailable`: the inline queries named a column (`type`) and a table (`julius_findings`) that
@@ -142,10 +144,24 @@ write_manifest || echo 'JULIUS_EVIDENCE_MANIFEST unavailable'
 # UNKNOWN_OUTCOME the terminal sweep closes an unsettled one as; `task_id` ties it to its task.
 dump "SELECT run_id,mission_id,state,card_revision,created_at,updated_at FROM relay_wonderland.julius_runs ORDER BY created_at" runs.tsv
 dump "SELECT task_id,task_type,role,state,ordinal,parent_task_id,run_id FROM relay_wonderland.julius_tasks ORDER BY ordinal,task_id" tasks.tsv
-dump "SELECT evidence_id,evidence_type,status,safe_summary,occurred_at,run_id,task_id,integrity_hash FROM relay_wonderland.julius_evidence ORDER BY occurred_at" evidence.tsv
+dump "SELECT evidence_id,evidence_type,status,safe_summary,occurred_at,run_id,task_id,integrity_hash,artifact_ref FROM relay_wonderland.julius_evidence ORDER BY occurred_at" evidence.tsv
 dump "SELECT decision_id,task_id,action,reason_code,occurred_at,run_id,evidence_ids FROM relay_wonderland.julius_verification_decisions ORDER BY occurred_at" decisions.tsv
 dump "SELECT finding_id,blocking,status,claim,run_id,task_id,evidence_ids FROM relay_wonderland.julius_reviewer_findings ORDER BY created_at" findings.tsv
 dump "SELECT invocation_id,tool_id,state,requested_at,run_id,task_id,exit_code,recovery_state,completed_at FROM relay_wonderland.julius_tool_invocations ORDER BY requested_at" tool-invocations.tsv
+
+# THE WORK ARTIFACTS THE EVIDENCE NAMES, AND THEIR BODIES (founder decision A, 2026-10-03). `evidence.tsv` carries
+# each row's `artifact_ref` (`artifact:<artifact_id>`, appended last) beside its `integrity_hash`;
+# `work-artifacts.tsv` is the record of every body the run stored (content_hash, byte size, storage_ref; never the
+# body). The bodies themselves are copied into `artifacts/` by `scripts/julius-evidence-bodies.mjs`, which checks each
+# against its row before copying a byte and records every row's outcome in `artifacts/BODIES.tsv`. The bundle carries
+# its own resolver, `resolve-artifacts.mjs`, which verifies both hashes from the bundle's files alone.
+# HERE THE BUNDLE STOPS BEING TOKENS ONLY: the bodies are text the run's workers wrote (plans, diffs, test output),
+# as the founder approved, and no TSV column carries them. The credential scan that runs after this dump drops a body
+# that trips it and records the drop (DROPPED_BY_SCAN); a hit anywhere else still refuses the whole bundle.
+dump "SELECT artifact_id,project_id,run_id,task_id,lease_generation,role,kind,content_type,byte_size,content_hash,storage_ref,occurred_at,created_at FROM relay_wonderland.julius_work_artifacts ORDER BY occurred_at,artifact_id" work-artifacts.tsv
+here=$(cd "$(dirname "$0")/.." && pwd)
+node "$here/scripts/julius-evidence-bodies.mjs" "$out" || echo "julius-evidence-bodies: exited $?" >&2
+cp "$here/scripts/julius-evidence-resolve.mjs" "$out/resolve-artifacts.mjs" || echo 'julius-evidence-dump: resolve-artifacts.mjs was not copied' >&2
 
 # WHY A TASK FAILED, WITHOUT A RAW LOG.
 #

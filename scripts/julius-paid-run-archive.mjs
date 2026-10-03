@@ -65,6 +65,10 @@ export const CREDENTIAL_SHAPES = Object.freeze([
 ]);
 
 export const credentialShapesIn = (text) => CREDENTIAL_SHAPES.filter((shape) => shape.test(text)).map((shape) => shape.source);
+/** The only files the archive may drop instead of refusing: work-artifact bodies, named by the copier's hex digest. */
+export const ARCHIVE_DROPPABLE_BODY = /^artifacts\/[0-9a-f]{64}\.body$/u;
+/** Where the archive records the bodies its own scan dropped: a table beside the bundle's files, not one of them. */
+export const ARCHIVE_DROP_RECORD = 'archive-scan/DROPPED_BY_ARCHIVE_SCAN.tsv';
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
@@ -120,15 +124,30 @@ export function buildDocument({ meta, bundleDir, receipt, campaign, classificati
   if (files.length === 0) throw new Error('archive_bundle_empty');
   if (!files.some((file) => file.path.endsWith('tasks.tsv'))) throw new Error('archive_bundle_invalid: no tasks.tsv, this is not a julius-live-evidence bundle');
   const leaks = [];
-  const documentFiles = files.map((file) => {
+  // A WORK-ARTIFACT BODY THAT TRIPS A SHAPE IS DROPPED, NOT THE ARCHIVE (founder decision A, 2026-10-03). Bodies are
+  // the worker text the bundle now carries (plans, diffs, test output), so a fixture DSN in a project's diff must not
+  // cost the whole run's record. The body is not stored; its path, digest and size are, in a table of their own beside
+  // the bundle's files (no schema change). A shape anywhere else still refuses everything.
+  const dropped = [];
+  const documentFiles = files.flatMap((file) => {
     const text = file.bytes.toString('utf8');
-    for (const shape of credentialShapesIn(text)) leaks.push({ path: file.path, shape });
+    const shapes = credentialShapesIn(text);
+    if (shapes.length > 0 && ARCHIVE_DROPPABLE_BODY.test(file.path)) {
+      dropped.push({ path: file.path, sha256: file.sha256, bytes: String(file.bytes.length), marker: 'DROPPED_BY_ARCHIVE_SCAN' });
+      return [];
+    }
+    for (const shape of shapes) leaks.push({ path: file.path, shape });
     if (file.path.endsWith('.tsv')) {
       const table = parseTsv(text);
-      return { path: file.path, sha256: file.sha256, bytes: file.bytes.length, kind: 'table', table_status: table.status, columns: table.columns, malformed_rows: table.malformed, rows: table.rows, content: null };
+      return [{ path: file.path, sha256: file.sha256, bytes: file.bytes.length, kind: 'table', table_status: table.status, columns: table.columns, malformed_rows: table.malformed, rows: table.rows, content: null }];
     }
-    return { path: file.path, sha256: file.sha256, bytes: file.bytes.length, kind: 'text', table_status: null, columns: null, malformed_rows: null, rows: [], content: text };
+    return [{ path: file.path, sha256: file.sha256, bytes: file.bytes.length, kind: 'text', table_status: null, columns: null, malformed_rows: null, rows: [], content: text }];
   });
+  if (dropped.length > 0) {
+    const content = ['path\tsha256\tbytes\tmarker', ...dropped.map((row) => [row.path, row.sha256, row.bytes, row.marker].join('\t'))].join('\n');
+    documentFiles.push({ path: ARCHIVE_DROP_RECORD, sha256: sha256(Buffer.from(content, 'utf8')), bytes: Buffer.byteLength(content, 'utf8'), kind: 'table', table_status: 'READ',
+      columns: ['path', 'sha256', 'bytes', 'marker'], malformed_rows: 0, rows: dropped, content: null });
+  }
   if (receipt !== undefined) for (const shape of credentialShapesIn(receipt)) leaks.push({ path: 'receipt', shape });
   if (leaks.length > 0) {
     throw new Error(`archive_refused_credential_shaped_material: ${leaks.length} match(es) in ${[...new Set(leaks.map((leak) => leak.path))].join(', ')}`);

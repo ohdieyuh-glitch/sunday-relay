@@ -80,6 +80,28 @@ describe('nothing is persisted that should not be', () => {
     expect(() => archive.buildDocument({ meta: META, bundleDir: bundle({ 'notes.txt': 'hello' }) })).toThrow('archive_bundle_invalid');
   });
 
+  it('DECISION A: a work-artifact body that trips a shape is dropped and recorded, never stored; the rest of the run is archived', () => {
+    const dsn = ['postgresql:', '', 'app:FAKETESTNOTREAL@127.0.0.1:5432', 'app'].join('/'); // a fixture DSN in a project's diff
+    const body = `artifacts/${'a'.repeat(64)}.body`;
+    const clean = `artifacts/${'b'.repeat(64)}.body`;
+    const document = archive.buildDocument({ meta: META, bundleDir: bundle({ 'tasks.tsv': TASKS, 'runs.tsv': RUNS, [body]: `+ DATABASE_URL=${dsn}\n`, [clean]: 'plan\n' }) });
+    const paths = document.files.map((file: { path: string }) => file.path);
+    expect(paths, 'the offending body is not stored').not.toContain(body);
+    expect(paths, 'a clean body is').toContain(clean);
+    const record = document.files.find((file: { path: string }) => file.path === archive.ARCHIVE_DROP_RECORD);
+    expect(record.rows).toEqual([{ path: body, sha256: expect.stringMatching(/^[0-9a-f]{64}$/u), bytes: String(`+ DATABASE_URL=${dsn}\n`.length), marker: 'DROPPED_BY_ARCHIVE_SCAN' }]);
+    expect(JSON.stringify(document), 'nothing of the dropped body travels').not.toContain('FAKETESTNOTREAL');
+    expect(document.run.file_count, 'the downloaded artifact is still what the digest names').toBe(4);
+  });
+
+  it('DECISION A: only a body may be dropped — the same shape in a bundle file that is not a body still refuses the archive', () => {
+    const dsn = ['postgresql:', '', 'app:FAKETESTNOTREAL@127.0.0.1:5432', 'app'].join('/');
+    expect(() => archive.buildDocument({ meta: META, bundleDir: bundle({ 'tasks.tsv': TASKS, 'workspace.diff': `+ DATABASE_URL=${dsn}\n` }) }))
+      .toThrow('archive_refused_credential_shaped_material');
+    expect(() => archive.buildDocument({ meta: META, bundleDir: bundle({ 'tasks.tsv': TASKS, 'artifacts/not-a-digest.body': `+ ${dsn}\n` }) }), 'a body is named by its hex digest')
+      .toThrow('archive_refused_credential_shaped_material');
+  });
+
   it('refuses credential-shaped content anywhere, naming the file and never the value', () => {
     const key = ['sk', 'ant', 'A'.repeat(24)].join('-');
     const dir = bundle({ 'tasks.tsv': TASKS, 'executor-diagnostics.txt': `leaked=${key}\n` });
