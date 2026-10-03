@@ -25,13 +25,20 @@ const EVENT: JuliusOperationalEvent = {
   occurredAt: '2099-01-01T00:00:00.000Z', facts: { action: 'ACCEPT' },
 };
 
-/** A transaction that answers from a script and remembers what it was asked. */
+/**
+ * A transaction that answers from a script and remembers what it was asked. It answers the INSERT-FIRST append
+ * (row 13 (i)): `INSERT … ON CONFLICT (event_id) DO NOTHING` inserts no row and returns none when the id is
+ * already taken, and only then is the stored event read.
+ */
 const fakeClient = (rows: { existing?: { sequence: string; payload: unknown }; runOwned?: boolean }) => {
   const queries: { sql: string; values: readonly unknown[] }[] = [];
   return {
     queries,
     query: async (sql: string, values: readonly unknown[] = []) => {
       queries.push({ sql, values });
+      if (sql.includes('INSERT INTO relay_wonderland.events')) {
+        return rows.existing === undefined ? { rows: [{ event_id: values[0] }], rowCount: 1 } : { rows: [], rowCount: 0 };
+      }
       if (sql.includes('FROM relay_wonderland.events WHERE event_id')) {
         return { rows: rows.existing === undefined ? [] : [rows.existing], rowCount: rows.existing === undefined ? 0 : 1 };
       }
@@ -60,7 +67,16 @@ describe('an event appended inside someone elses transaction', () => {
   it('is idempotent for a replay of the same event, and writes nothing', async () => {
     const client = fakeClient({ existing: { sequence: '3', payload: juliusEventPayload(EVENT) } });
     expect(await appendJuliusEventWithin(client, EVENT)).toEqual({ recorded: false, sequence: 3 });
-    expect(client.queries.map((query) => query.sql).join(' | ')).not.toContain('INSERT INTO relay_wonderland.events');
+    // Insert-first: the replay's INSERT … ON CONFLICT DO NOTHING inserts no row, its counter step is rolled back to the
+    // savepoint before the stored event is read, and no outbox row is written. Nothing it did survives.
+    const sql = client.queries.map((query) => query.sql);
+    expect(sql.join(' | '), 'no outbox row for a replay').not.toContain('INSERT INTO relay_wonderland.outbox');
+    const inserted = sql.findIndex((statement) => statement.includes('INSERT INTO relay_wonderland.events'));
+    const undone = sql.indexOf('ROLLBACK TO SAVEPOINT julius_event_append');
+    const read = sql.findIndex((statement) => statement.includes('FROM relay_wonderland.events WHERE event_id'));
+    expect(inserted, 'the append is tried first').toBeGreaterThanOrEqual(0);
+    expect(undone, 'then its counter step is undone').toBeGreaterThan(inserted);
+    expect(read, 'and only then is the taken id read').toBeGreaterThan(undone);
   });
 
   it('refuses a different event under a used id, with the typed conflict', async () => {
