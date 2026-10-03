@@ -18,6 +18,7 @@
 #include "Engine/LocalPlayer.h"
 #include "WonderlandJuliusSubsystem.h"
 #include "WonderlandJuliusTaskState.h"
+#include "WonderlandMissionHandoff.h"
 #include "WonderlandMissionTasks.h"
 #include "WonderlandWireDecode.h"
 
@@ -459,6 +460,11 @@ FString UWonderlandJuliusStreamSubsystem::RunQuery(int64 Cursor) const
 
 TSharedRef<IHttpRequest, ESPMode::ThreadSafe> UWonderlandJuliusStreamSubsystem::NewRequest(const FString& Verb, const FString& Url) const
 {
+	// ANYTHING BUT A READ IS SENT TO JULIUS: a write the Mission Handoff path must never make (the write spy)
+	if (!Verb.Equals(TEXT("GET"), ESearchCase::IgnoreCase))
+	{
+		FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandJuliusStreamSubsystem::NewRequest (a Julius send)"));
+	}
 	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetURL(Url);
 	Request->SetVerb(Verb);
@@ -506,6 +512,7 @@ void UWonderlandJuliusStreamSubsystem::Pair(const FString& Code)
 	WonderlandJuliusStreamLogic::Json::Serialize(Body, Payload);
 
 	// Pairing carries no session of its own -- it is how this client gets one.
+	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandJuliusStreamSubsystem pairing (a Julius send)"));
 	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetURL(Base + TEXT("/relay-api/wonderland/native/session"));
 	Request->SetVerb(TEXT("POST"));

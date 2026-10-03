@@ -79,6 +79,7 @@
 #include "WonderlandSocialProfilePanel.h"
 #include "WonderlandSocialSubsystem.h"
 #include "WonderlandMissionBeat.h"
+#include "WonderlandHandoffDirector.h"
 #include "WonderlandMissionNarration.h"
 #include "WonderlandWorldMap.h"
 #include "WonderlandWonderWeb.h"
@@ -4377,12 +4378,38 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		return true;
 	}
 
+	if (Command == TEXT("/handoff"))
+	{
+		// MISSION HANDOFF (founder, 2026-10-02: started from the Julius Live Terminal). The action lives in
+		// WonderlandHandoffDirector; this only routes the line and answers it.
+		FString Said;
+		bool bClose = false;
+		WonderlandHandoffDirector::HandleTerminalLine(GetLocalPlayer<ULocalPlayer>(), Argument, Said, bClose);
+		Terminal->AddJuliusRow(TEXT("You"), Line, Said);
+		if (bClose)
+		{
+			// THE USER IS ROAMING AGAIN: the terminal steps aside on the NEXT frame -- not inside its own Enter handler, which
+			// hands the input box its keyboard focus right after this returns. Ctrl+T brings it back at any time.
+			const TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakThis](float)
+			{
+				if (WeakThis.IsValid() && WeakThis->IsLiveTerminalOpen())
+				{
+					WeakThis->ToggleLiveTerminal();
+				}
+				return false;
+			}), 0.0f);
+		}
+		return true;
+	}
+
 	if (Command == TEXT("/help") || Command == TEXT("/commands"))
 	{
 		Terminal->AddJuliusRow(TEXT("You"), Line,
 			TEXT("Press + above for a new task tab and type its objective to save it as a Mission Contract. "
 				"/tasks — list your contracts (open N, close N, delete N). /skin NAME — wear a skin (/skin list). "
-				"/cubs [n|off] — summon the Relay Dog's sub-agent cub ghosts."));
+				"/cubs [n|off] — summon the Relay Dog's sub-agent cub ghosts. "
+				"/handoff — Mission Handoff: roam while a mission carries on (/handoff again, or /handoff return, to come back)."));
 		return true;
 	}
 

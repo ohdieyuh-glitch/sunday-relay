@@ -1,5 +1,6 @@
 #include "WonderlandJuliusConnect.h"
 #include "WonderlandBeta.h"
+#include "WonderlandMissionHandoff.h"
 
 #include "Dom/JsonObject.h"
 #include "CoreGlobals.h"
@@ -610,6 +611,8 @@ void UWonderlandJuliusConnectSubsystem::Poll()
 
 void UWonderlandJuliusConnectSubsystem::Post(const TSharedRef<FJsonObject>& Intent, const FString& Describe)
 {
+	// A CONNECTION CHANGE (provider, capability, approval) is never the Mission Handoff's to make (the write spy)
+	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandJuliusConnectSubsystem::Post (a connection intent)"));
 	if (!WonderlandBeta::UseLocalAiServices())
 	{
 		Say(FString::Printf(TEXT("%s: not sent. %s"), *Describe, WonderlandBeta::AiUnavailableSentence()), false, true);

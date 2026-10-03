@@ -45,9 +45,19 @@ enum class EWonderlandHandoffEntry : uint8
 	MidMission,
 };
 
+/** A plain C++ delegate (no reflection, the FName rule): the state went From -> To. */
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnWonderlandHandoffStateChanged, EWonderlandHandoffState /*From*/, EWonderlandHandoffState /*To*/);
+
 class WONDERLAND_API FWonderlandMissionHandoff
 {
 public:
+	/**
+	 * Every state change, broadcast INSIDE the handoff's scope (the write spy counts anything a listener writes). The
+	 * mission presentation listens here to leave the animation when a handoff begins and to come back when it ends. A
+	 * restored HELD record at Load is not a change: a listener reads GetState() when it attaches.
+	 */
+	FOnWonderlandHandoffStateChanged OnStateChanged;
+
 	/** Saved/Wonderland/MissionHandoff.sav (sealed text). */
 	static FString DefaultPath();
 

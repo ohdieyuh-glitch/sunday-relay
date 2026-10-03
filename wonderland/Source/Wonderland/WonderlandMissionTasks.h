@@ -699,6 +699,11 @@ public:
 private:
 	void Touch(FWonderlandMissionTask& Task, EWonderlandTaskState To, EWonderlandTaskSource From);
 	FWonderlandMissionTask* FindMutable(FGuid LocalId);
+	/**
+	 * EVERY CHANGE TO THE TASK SET GOES OUT THROUGH HERE: the Mission Handoff's write spy counts it (WonderlandMissionHandoff.h)
+	 * -- a handoff must never be what changed a task -- and then the listeners hear it.
+	 */
+	void BroadcastTasksChanged(const TCHAR* What);
 
 	/**
 	 * IN STACK ORDER, OLDEST FIRST. Index 0 is the bottom of the stack -- the orb that was already there -- and a new

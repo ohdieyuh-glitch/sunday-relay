@@ -101,6 +101,7 @@ void FWonderlandMissionHandoff::SetState(EWonderlandHandoffState Next)
 		ObjectId.IsEmpty() ? TEXT("-") : *ObjectId, MissionId.IsEmpty() ? TEXT("none") : *MissionId,
 		Entry == EWonderlandHandoffEntry::MidMission ? TEXT("mid-mission") : TEXT("roaming"));
 	const bool bWasRecorded = IsRecordedEquipped();
+	const EWonderlandHandoffState Was = State;
 	State = Next;
 	PhaseSeconds = 0.0f;
 	// THE RECORD FOLLOWS THE EQUIPPED STATE: written when a handoff begins, cleared the moment the return BEGINS. A restart
@@ -110,6 +111,9 @@ void FWonderlandMissionHandoff::SetState(EWonderlandHandoffState Next)
 	{
 		Persist();
 	}
+	// INSIDE THE SCOPE: every caller of SetState holds an FScope, so whatever a listener does is on the spy's books
+	FScope Scope;
+	OnStateChanged.Broadcast(Was, State);
 }
 
 bool FWonderlandMissionHandoff::Persist() const

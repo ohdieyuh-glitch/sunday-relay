@@ -1508,6 +1508,17 @@ void ARelayDogCharacter::SetForwardKey(bool bW, bool bDown)
 	}
 }
 
+int32 ARelayDogCharacter::CountVisibleActProps() const
+{
+	int32 Visible = 0;
+	for (const UInstancedStaticMeshComponent* Part : { BookMesh.Get(), BookPagesMesh.Get(), BrushMesh.Get(), BrushHeadMesh.Get(), LensMesh.Get(),
+		LensGlassMesh.Get(), LensHandleMesh.Get(), LensGlintMesh.Get(), ScraperMesh.Get(), ScraperBladeMesh.Get() })
+	{
+		Visible += Part != nullptr && Part->IsVisible() ? 1 : 0;
+	}
+	return Visible;
+}
+
 bool ARelayDogCharacter::IsHandoffArmed() const
 {
 	const UGameInstance* Instance = GetGameInstance();

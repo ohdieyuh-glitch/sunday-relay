@@ -373,6 +373,8 @@ public:
 	/** QA only: a Forward key event exactly as BindKey delivers it (W, or the Up arrow), and the run modifier. */
 	void QaForwardKey(bool bUpArrow, bool bDown) { SetForwardKey(!bUpArrow, bDown); }
 	void QaRunKey(bool bDown) { bRunHeld = bDown; }
+	/** How many of the mission acts' props (book, brush, lens, scraper) are visible on the Dog right now: 0 once an act has let go. */
+	int32 CountVisibleActProps() const;
 
 protected:
 	void MoveForwardAxis(float Value);

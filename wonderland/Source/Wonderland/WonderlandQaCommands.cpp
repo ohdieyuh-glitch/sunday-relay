@@ -60,6 +60,10 @@
 #include "WonderlandSkinStage.h"
 #include "WonderlandCard.h"
 #include "WonderlandMissionHandoff.h"
+#include "WonderlandHandoffDirector.h"
+#include "WonderlandCompanionFormation.h"
+#include "WonderlandDogPerformance.h"
+#include "WonderlandMissionOrb.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/CollisionProfile.h"
@@ -4979,6 +4983,659 @@ namespace
 			GQaHand->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaHandTick), 0.0f);
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLHANDQA armed at (%.0f, %.0f, %.0f)"), Dog->GetActorLocation().X, Dog->GetActorLocation().Y,
 				Dog->GetActorLocation().Z);
+		}));
+
+	/* ================================================================ wl.Qa.HandoffMission: Mission Handoff M1b, the mission paths
+	 * The founder's canonical paths (2026-10-02), in the PACKAGED game, through the real routes (the Live Terminal's /handoff):
+	 *   A1-A8  Entry A, ROAMING with NO mission: the swords taken up through the terminal, which steps aside; NOTHING mission-
+	 *          shaped created (no Contract actor, task, fixture or attachment); the write spy 0. Its POSITIVE controls: a real
+	 *          mission write and a real task write made inside a handoff scope ARE counted; one outside a scope is not.
+	 *   C0     Scenario D, plain: the control run's record.
+	 *   H1-H3  Scenario D again, handed off (Entry B) at RESEARCH, REPAIR and VERIFICATION: the act lets go at once (no act, no
+	 *          props, the mission camera released, the companions out of the formation) while the mission runs on;
+	 *   R1-R2  the swords given back mid-mission (REVIEW): the CURRENT beat's act resumes, the Contract re-staged by the Dog;
+	 *   D1     a dash while the mission runs;
+	 *   C1-C5  the control run, PRE-REGISTERED: the same events, verdicts and beats in the same order, every event within 1.0 s
+	 *          of the plain run's time; the approval and the completion surfaced while handed off; the terminals told as often;
+	 *          the write spy 0 for the whole run; the mission's end leaves the swords held and clears the attachment;
+	 *   S1-S3  a mission STARTING while handed off (the founder's play command): no travel, no terminal taking the keyboard, no
+	 *          act, the attachment on the new mission; its end clears it; the swords given back.
+	 * Logs WLHMQA lines, frames to Saved/Screenshots/WLHANDOFF; `quit` exits after.
+	 */
+	struct FHmStep
+	{
+		const TCHAR* Id;
+		/** Take the swords up (at a beat whose act is WhenAct, from IDLE) or give them back (at such a beat, while HELD). */
+		bool bEquip;
+		EWonderlandDogAct WhenAct;
+		const TCHAR* What;
+	};
+
+	struct FQaHm
+	{
+		TWeakObjectPtr<UWorld> World;
+		TWeakObjectPtr<ARelayDogCharacter> Dog;
+		FTSTicker::FDelegateHandle Handle;
+		bool bQuit = false;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		int32 Phase = 0;
+		float PhaseAt = 0.0f;
+		FString Dir;
+		int32 OrbActors0 = 0;
+		int32 Tasks0 = 0;
+		int32 Contracts0 = 0;
+		FVector At0 = FVector::ZeroVector;
+		TArray<FWonderlandOfferedEvent> Plain;
+		int32 PlainNarrations = 0;
+		TArray<FHmStep> Steps;
+		int32 StepIndex = 0;
+		float StepAt = -1.0f;
+		float IdleAt = -1.0f;
+		bool bStepChecked = false;
+		int32 ResumesBase = 0;
+		bool bDashTried = false;
+		bool bDashChecked = false;
+		int32 DashBase = 0;
+		int32 DashKey = 0;
+		float DashAt = -1.0f;
+		FVector DashForward = FVector::ForwardVector;
+		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLHMQA %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+		void Frame(const FString& Name)
+		{
+			int32 Width = 0;
+			int32 Height = 0;
+			const FString Path = Dir / (Name + TEXT(".png"));
+			const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLHMQA frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), Width, Height);
+		}
+	};
+	TSharedPtr<FQaHm> GQaHm;
+
+	ULocalPlayer* QaLocalPlayer(UWorld* World)
+	{
+		const APlayerController* Controller = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		return Controller != nullptr ? Controller->GetLocalPlayer() : nullptr;
+	}
+
+	UWonderlandMissionSubsystem* QaMissions(UWorld* World)
+	{
+		ULocalPlayer* Player = QaLocalPlayer(World);
+		return Player != nullptr ? Player->GetSubsystem<UWonderlandMissionSubsystem>() : nullptr;
+	}
+
+	UWonderlandMissionTaskSubsystem* QaTaskSet(UWorld* World)
+	{
+		ULocalPlayer* Player = QaLocalPlayer(World);
+		return Player != nullptr ? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
+	}
+
+	int32 QaOrbActors(UWorld* World)
+	{
+		int32 Count = 0;
+		for (TActorIterator<AWonderlandMissionOrb> It(World); It; ++It)
+		{
+			Count += IsValid(*It) ? 1 : 0;
+		}
+		return Count;
+	}
+
+	EWonderlandDogAct QaBeatAct(const UWonderlandMissionSubsystem* Mission)
+	{
+		return WonderlandDogActForBeat(WonderlandBeatFromId(Mission->GetBeatId()));
+	}
+
+	/** The detached presentation, as the player would see it: no act, no prop, no mission camera, no companion in the formation. */
+	FString QaDetachedReading(const ARelayDogCharacter* Dog, const UWonderlandMissionSubsystem* Mission, bool& bOutOk)
+	{
+		const FString Follow = WonderlandCompanionFormationName(EWonderlandCompanionFormation::Follow);
+		const bool bNoAct = Dog->PerformingAct() == EWonderlandDogAct::None;
+		const int32 Props = Dog->CountVisibleActProps();
+		const float Cam = Dog->GetMissionCameraWeight();
+		const bool bLeftOut = !Mission->IsCompanionJoined(0) && Mission->GetCompanionFlight(0) == Follow;
+		const bool bRightOut = !Mission->IsCompanionJoined(1) && Mission->GetCompanionFlight(1) == Follow;
+		bOutOk = bNoAct && Props == 0 && Cam <= 0.01f && bLeftOut && bRightOut && Mission->IsPresentationDetached();
+		return FString::Printf(TEXT("act %s, act props visible %d, mission camera %.2f, LLM Companion %s/%s, Jhinn %s/%s, presentation %s"),
+			WonderlandDogActName(Dog->PerformingAct()), Props, Cam, Mission->IsCompanionJoined(0) ? TEXT("JOINED") : TEXT("not joined"),
+			*Mission->GetCompanionFlight(0), Mission->IsCompanionJoined(1) ? TEXT("JOINED") : TEXT("not joined"), *Mission->GetCompanionFlight(1),
+			Mission->IsPresentationDetached() ? TEXT("left") : TEXT("RUNNING"));
+	}
+
+	void QaHmFinish(FQaHm& H, const TCHAR* Why)
+	{
+		if (ARelayDogCharacter* Dog = H.Dog.Get())
+		{
+			QaHandRelease(Dog);
+		}
+		// NEVER LEAVE A BED ARMED (Second's H5): the next mascot QA must start with the companions as companions
+		if (FWonderlandMissionHandoff* State = QaHandoff(H.World.Get()))
+		{
+			FString Ignored;
+			State->Return(Ignored);
+		}
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLHMQA END pass=%d fail=%d%s"), H.Pass, H.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
+		if (H.bQuit)
+		{
+			FPlatformMisc::RequestExit(false);
+		}
+	}
+
+	bool QaHmTick(float)
+	{
+		if (!GQaHm.IsValid())
+		{
+			return false;
+		}
+		FQaHm& H = *GQaHm;
+		UWorld* World = H.World.Get();
+		ARelayDogCharacter* Dog = H.Dog.Get();
+		FWonderlandMissionHandoff* State = QaHandoff(World);
+		UWonderlandMissionSubsystem* Mission = QaMissions(World);
+		UWonderlandMissionTaskSubsystem* Tasks = QaTaskSet(World);
+		UWonderlandUiSubsystem* Ui = QaUi(World);
+		if (World == nullptr || Dog == nullptr || State == nullptr || Mission == nullptr || Tasks == nullptr || Ui == nullptr
+			|| Dog->GetCharacterMovement() == nullptr)
+		{
+			QaHmFinish(H, TEXT("the world, the Dog, the handoff, the missions, the tasks or the UI went away"));
+			GQaHm.Reset();
+			return false;
+		}
+		const float Now = World->GetTimeSeconds();
+		const float In = Now - H.PhaseAt;
+		auto Next = [&H, Now]()
+		{
+			++H.Phase;
+			H.PhaseAt = Now;
+		};
+		auto Stop = [&H](const TCHAR* Reason)
+		{
+			QaHmFinish(H, Reason);
+			GQaHm.Reset();
+			return false;
+		};
+		auto Terminal = [Ui](const TCHAR* Line)
+		{
+			Ui->SubmitTerminalLine(Line);
+		};
+
+		switch (H.Phase)
+		{
+		case 0:
+		{
+			// READY: the welcome closed, the Dog on loaded ground, no mission playing, the companions companions
+			if (Ui->IsWelcomeOpen())
+			{
+				Ui->DismissWelcome();
+			}
+			if (Mission->IsFixtureRunning())
+			{
+				Mission->StopFixture();
+				Mission->SetBeatById(TEXT("idle"));
+			}
+			if (State->IsArmed())
+			{
+				FString Ignored;
+				State->Return(Ignored);
+			}
+			if (In < 3.0f || !Dog->GetCharacterMovement()->IsMovingOnGround() || State->IsEquipped())
+			{
+				return In < 40.0f ? true : Stop(TEXT("the Dog never stood ready with the swords put away"));
+			}
+			const FWonderlandMissionHandoff::FCompanionsPresent Present = WonderlandHandoffDirector::ReadCompanions(QaLocalPlayer(World));
+			if (!Present.bLeft || !Present.bRight)
+			{
+				H.Check(TEXT("A0"), false, FString::Printf(TEXT("the companions' bodies: LLM Companion %s, Jhinn %s -- nothing to transform"),
+					Present.bLeft ? TEXT("here") : TEXT("MISSING"), Present.bRight ? TEXT("here") : TEXT("MISSING")));
+				return Stop(TEXT("no companions"));
+			}
+			H.OrbActors0 = QaOrbActors(World);
+			H.Tasks0 = Tasks->GetTasks().Num();
+			H.Contracts0 = Mission->GetContractsManifested();
+			FWonderlandMissionHandoff::ResetSpy();
+			if (!Ui->IsLiveTerminalOpen())
+			{
+				Ui->ToggleLiveTerminal();
+			}
+			Next();
+			return true;
+		}
+		case 1:
+		{
+			if (In < 0.5f)
+			{
+				return true;
+			}
+			// A1: ENTRY A THROUGH THE LIVE TERMINAL, with no mission running
+			Terminal(TEXT("/handoff"));
+			H.Check(TEXT("A1"), State->GetState() == EWonderlandHandoffState::Acknowledged && State->GetEntry() == EWonderlandHandoffEntry::Roaming
+				&& State->GetMissionId().IsEmpty() && Mission->GetRunningMissionId().IsEmpty(),
+				FString::Printf(TEXT("/handoff typed in the Live Terminal with no mission: handoff %s, entry %s, attached to '%s' (running mission '%s')"),
+					FWonderlandMissionHandoff::StateName(State->GetState()), State->GetEntry() == EWonderlandHandoffEntry::Roaming ? TEXT("roaming") : TEXT("MID-MISSION"),
+					*State->GetMissionId(), *Mission->GetRunningMissionId()));
+			Next();
+			return true;
+		}
+		case 2:
+		{
+			// held only after the transformation's 3.3 s: the terminal's next-frame step aside is long done by then
+			if (!State->IsArmed())
+			{
+				return In < 6.0f ? true : Stop(TEXT("the swords were never held"));
+			}
+			H.Check(TEXT("A2"), !Ui->IsLiveTerminalOpen(), FString::Printf(TEXT("the terminal stepped aside once the swords were taken up: %s"),
+				Ui->IsLiveTerminalOpen() ? TEXT("STILL OPEN") : TEXT("closed")));
+			const int32 Orbs = QaOrbActors(World);
+			const int32 TaskCount = Tasks->GetTasks().Num();
+			const bool bNothing = Orbs == H.OrbActors0 && TaskCount == H.Tasks0 && Mission->GetContractsManifested() == H.Contracts0 && !Mission->IsFixtureRunning()
+				&& !Mission->IsOrbInWorld() && State->GetMissionId().IsEmpty() && Mission->GetRunningMissionId().IsEmpty();
+			H.Check(TEXT("A3"), bNothing && FWonderlandMissionHandoff::GetMutationsInScope() == 0,
+				FString::Printf(TEXT("held, roaming: nothing mission-shaped -- Contract actors %d (before %d), tasks %d (before %d), contracts manifested %d (before %d), ")
+					TEXT("fixture %s, attached '%s'; writes inside the handoff path %d%s"), Orbs, H.OrbActors0, TaskCount, H.Tasks0, Mission->GetContractsManifested(),
+					H.Contracts0, Mission->IsFixtureRunning() ? TEXT("RUNNING") : TEXT("none"), *State->GetMissionId(), FWonderlandMissionHandoff::GetMutationsInScope(),
+					FWonderlandMissionHandoff::GetMutationsInScope() > 0 ? *FString::Printf(TEXT(" (last: %s)"), *FWonderlandMissionHandoff::GetLastMutationInScope()) : TEXT("")));
+			H.Frame(TEXT("hm_a_roaming_held_no_mission"));
+			Next();
+			return true;
+		}
+		case 3:
+		{
+			// THE SPY'S CONTROLS: a real write inside a handoff scope is counted; the same write outside one is not
+			const bool bLlm = Mission->IsLlmCompanionJoined();
+			const bool bJhinn = Mission->IsJhinnJoined();
+			FWonderlandMissionHandoff::ResetSpy();
+			{
+				FWonderlandMissionHandoff::FScope Scope;
+				Mission->SetJoinedIn(bLlm, bJhinn);
+			}
+			const int32 MissionCount = FWonderlandMissionHandoff::GetMutationsInScope();
+			const FString MissionLast = FWonderlandMissionHandoff::GetLastMutationInScope();
+			H.Check(TEXT("A4"), MissionCount == 1 && MissionLast.Contains(TEXT("SetJoinedIn")),
+				FString::Printf(TEXT("positive control, the mission: SetJoinedIn (unchanged values) inside a handoff scope counted %d (last '%s')"), MissionCount, *MissionLast));
+			FWonderlandMissionHandoff::ResetSpy();
+			FGuid Draft;
+			{
+				FWonderlandMissionHandoff::FScope Scope;
+				Draft = Tasks->AddDraft();
+				if (Draft.IsValid())
+				{
+					Tasks->DismissDraft(Draft);
+				}
+			}
+			const int32 TaskWrites = FWonderlandMissionHandoff::GetMutationsInScope();
+			H.Check(TEXT("A5"), Draft.IsValid() && TaskWrites == 2 && Tasks->GetTasks().Num() == H.Tasks0,
+				FString::Printf(TEXT("positive control, the task set: a draft added and dismissed inside a handoff scope counted %d writes (want 2; the draft %s), tasks back to %d"),
+					TaskWrites, Draft.IsValid() ? TEXT("made") : TEXT("REFUSED"), Tasks->GetTasks().Num()));
+			FWonderlandMissionHandoff::ResetSpy();
+			Mission->SetJoinedIn(bLlm, bJhinn);
+			H.Check(TEXT("A6"), FWonderlandMissionHandoff::GetMutationsInScope() == 0,
+				FString::Printf(TEXT("negative control: the same mission write OUTSIDE any handoff scope counted %d"), FWonderlandMissionHandoff::GetMutationsInScope()));
+			FWonderlandMissionHandoff::ResetSpy();
+			// and /handoff again: the swords given back
+			Terminal(TEXT("/handoff"));
+			H.Check(TEXT("A7"), State->GetState() == EWonderlandHandoffState::Returning,
+				FString::Printf(TEXT("/handoff typed again while held: handoff %s"), FWonderlandMissionHandoff::StateName(State->GetState())));
+			Next();
+			return true;
+		}
+		case 4:
+		{
+			if (State->IsEquipped())
+			{
+				return In < 5.0f ? true : Stop(TEXT("the swords were never given back"));
+			}
+			UCharacterMovementComponent* Move = Dog->GetCharacterMovement();
+			H.Check(TEXT("A8"), FWonderlandMissionHandoff::GetMutationsInScope() == 0 && !Dog->IsHandoffArmed()
+				&& FMath::IsNearlyEqual(Move->MaxAcceleration, Dog->GetNormalAcceleration(), 0.5f),
+				FString::Printf(TEXT("given back: handoff %s, writes inside the handoff path %d, acceleration %.0f (normal %.0f)"),
+					FWonderlandMissionHandoff::StateName(State->GetState()), FWonderlandMissionHandoff::GetMutationsInScope(), Move->MaxAcceleration, Dog->GetNormalAcceleration()));
+			// C0: SCENARIO D, PLAIN -- the control run's record
+			if (!Mission->RunScenario(TEXT("D"), 3.0f))
+			{
+				H.Check(TEXT("C0"), false, TEXT("Scenario D did not start"));
+				return Stop(TEXT("no scenario"));
+			}
+			Next();
+			return true;
+		}
+		case 5:
+		{
+			if (Mission->IsFixtureRunning())
+			{
+				return In < 150.0f ? true : Stop(TEXT("the plain Scenario D never finished"));
+			}
+			H.Plain = Mission->GetOfferedRecord();
+			H.PlainNarrations = Mission->GetTerminalNarrations();
+			const bool bCompleted = H.Plain.ContainsByPredicate([](const FWonderlandOfferedEvent& Row) { return Row.Beat == WonderlandBeatId(EWonderlandMissionBeat::CompleteVerified); });
+			H.Check(TEXT("C0"), H.Plain.Num() > 10 && bCompleted,
+				FString::Printf(TEXT("the plain run (the control): %d events offered, completion %s, terminals told %d times"), H.Plain.Num(),
+					bCompleted ? TEXT("reached") : TEXT("NOT reached"), H.PlainNarrations));
+			Next();
+			return true;
+		}
+		case 6:
+		{
+			if (In < 2.0f)
+			{
+				return true;
+			}
+			// THE HANDED-OFF RUN: the same scenario, the same pace; the user leaves and comes back at the founder's points
+			H.Steps.Reset();
+			H.Steps.Add({ TEXT("H1"), true, EWonderlandDogAct::ReadingTheBook, TEXT("handed off at RESEARCH") });
+			H.Steps.Add({ TEXT("R1"), false, EWonderlandDogAct::InspectingTheWork, TEXT("given back at REVIEW") });
+			H.Steps.Add({ TEXT("H2"), true, EWonderlandDogAct::CorrectingTheWork, TEXT("handed off at REPAIR") });
+			H.Steps.Add({ TEXT("R2"), false, EWonderlandDogAct::InspectingTheWork, TEXT("given back at the re-review") });
+			H.Steps.Add({ TEXT("H3"), true, EWonderlandDogAct::VerificationBeam, TEXT("handed off at VERIFICATION") });
+			H.StepIndex = 0;
+			H.StepAt = -1.0f;
+			H.IdleAt = -1.0f;
+			H.bStepChecked = false;
+			FWonderlandMissionHandoff::ResetSpy();
+			if (!Mission->RunScenario(TEXT("D"), 3.0f))
+			{
+				H.Check(TEXT("C1"), false, TEXT("Scenario D did not start the second time"));
+				return Stop(TEXT("no scenario"));
+			}
+			Next();
+			return true;
+		}
+		case 7:
+		{
+			// D1: A DASH WHILE THE MISSION RUNS (H1 held, its checks done)
+			if (H.StepIndex == 1 && H.bStepChecked && !H.bDashChecked)
+			{
+				if (!H.bDashTried)
+				{
+					const float Clear = QaClearHeading(World, Dog, 900.0f, H.DashForward);
+					if (Clear < 700.0f)
+					{
+						H.Check(TEXT("D1"), false, FString::Printf(TEXT("no open ground for a dash beside the mission (best heading clear for %.0f uu)"), Clear));
+						H.bDashChecked = true;
+					}
+					else
+					{
+						QaFace(Dog, H.DashForward);
+						H.DashBase = Dog->GetDashCount();
+						H.DashKey = 0;
+						H.DashAt = Now;
+						H.bDashTried = true;
+					}
+				}
+				else
+				{
+					const float Since = Now - H.DashAt;
+					if (H.DashKey == 0) { Dog->QaForwardKey(false, true); H.DashKey = 1; }
+					if (H.DashKey == 1 && Since >= 0.05f) { Dog->QaForwardKey(false, false); H.DashKey = 2; }
+					if (H.DashKey == 2 && Since >= 0.10f) { Dog->QaForwardKey(false, true); H.DashKey = 3; }
+					if (H.DashKey == 3 && Since >= 0.60f) { Dog->QaForwardKey(false, false); H.DashKey = 4; }
+					if (Since >= 1.2f)
+					{
+						H.Check(TEXT("D1"), Dog->GetDashCount() == H.DashBase + 1 && Mission->IsFixtureRunning(),
+							FString::Printf(TEXT("a double tap while handed off mid-mission: %d dash(es), the mission still playing %s"), Dog->GetDashCount() - H.DashBase,
+								Mission->IsFixtureRunning() ? TEXT("yes") : TEXT("NO")));
+						H.bDashChecked = true;
+						H.Frame(TEXT("hm_d1_after_dash_mission_running"));
+					}
+				}
+			}
+			// THE PLAN, step by step: each fires at its beat, and is checked before the next may fire
+			if (H.StepIndex < H.Steps.Num())
+			{
+				const FHmStep& Step = H.Steps[H.StepIndex];
+				if (H.StepAt < 0.0f)
+				{
+					const bool bReady = Step.bEquip ? State->GetState() == EWonderlandHandoffState::Idle : State->IsArmed();
+					if (Mission->IsFixtureRunning() && bReady && QaBeatAct(Mission) == Step.WhenAct && (Step.bEquip || H.bDashChecked || H.StepIndex != 1))
+					{
+						H.Frame(FString::Printf(TEXT("hm_%s_before"), Step.Id));
+						H.ResumesBase = Mission->GetPresentationResumes();
+						Terminal(TEXT("/handoff"));
+						H.StepAt = Now;
+						H.IdleAt = -1.0f;
+						H.bStepChecked = false;
+						if (Step.bEquip)
+						{
+							// AT ONCE, never waited out: the act is gone the moment the handoff begins
+							const FString Running = Mission->GetRunningMissionId();
+							H.Check(*FString::Printf(TEXT("%sa"), Step.Id), State->GetState() == EWonderlandHandoffState::Acknowledged
+								&& State->GetEntry() == EWonderlandHandoffEntry::MidMission && !Running.IsEmpty() && State->GetMissionId() == Running
+								&& Dog->PerformingAct() == EWonderlandDogAct::None && Mission->IsPresentationDetached(),
+								FString::Printf(TEXT("%s (beat %s): handoff %s, entry %s, attached to '%s' (running '%s'); the Dog's act at once: %s"), Step.What,
+									*Mission->GetBeatId().ToString(), FWonderlandMissionHandoff::StateName(State->GetState()),
+									State->GetEntry() == EWonderlandHandoffEntry::MidMission ? TEXT("mid-mission") : TEXT("ROAMING"), *State->GetMissionId(), *Running,
+									WonderlandDogActName(Dog->PerformingAct())));
+						}
+						else
+						{
+							H.Check(*FString::Printf(TEXT("%sa"), Step.Id), State->GetState() == EWonderlandHandoffState::Returning,
+								FString::Printf(TEXT("%s (beat %s): handoff %s"), Step.What, *Mission->GetBeatId().ToString(), FWonderlandMissionHandoff::StateName(State->GetState())));
+						}
+					}
+				}
+				else if (Step.bEquip && !H.bStepChecked && Now - H.StepAt >= 3.8f)
+				{
+					// the swords held; the camera's blend (1.6 s) and the act's crossfade long over
+					bool bOk = false;
+					const FString Reading = QaDetachedReading(Dog, Mission, bOk);
+					H.Check(*FString::Printf(TEXT("%sb"), Step.Id), bOk && State->IsArmed() && Mission->IsFixtureRunning(),
+						FString::Printf(TEXT("%s, 3.8 s later: handoff %s, the mission still playing %s (beat %s); %s"), Step.What, FWonderlandMissionHandoff::StateName(State->GetState()),
+							Mission->IsFixtureRunning() ? TEXT("yes") : TEXT("NO"), *Mission->GetBeatId().ToString(), *Reading));
+					H.Frame(FString::Printf(TEXT("hm_%s_held"), Step.Id));
+					H.bStepChecked = true;
+					++H.StepIndex;
+					H.StepAt = -1.0f;
+				}
+				else if (!Step.bEquip && !H.bStepChecked)
+				{
+					if (H.IdleAt < 0.0f)
+					{
+						if (State->GetState() == EWonderlandHandoffState::Idle)
+						{
+							H.IdleAt = Now;
+						}
+						else if (Now - H.StepAt > 4.0f)
+						{
+							H.Check(*FString::Printf(TEXT("%sb"), Step.Id), false, TEXT("the swords never became the companions again"));
+							H.bStepChecked = true;
+							++H.StepIndex;
+							H.StepAt = -1.0f;
+						}
+					}
+					else if (Now - H.IdleAt >= 1.2f)
+					{
+						// THE CURRENT BEAT'S ACT, the Contract staged by the Dog, the mission camera taking it back
+						const EWonderlandDogAct Want = QaBeatAct(Mission);
+						const bool bAct = Want == EWonderlandDogAct::None ? true : Dog->PerformingAct() == Want;
+						const float Reach = Mission->IsContractAnchored() ? FVector::Dist2D(Mission->GetContractAnchor(), Dog->GetActorLocation()) : -1.0f;
+						const bool bStaged = Want == EWonderlandDogAct::None || (Reach >= 0.0f && Reach < 1200.0f);
+						H.Check(*FString::Printf(TEXT("%sb"), Step.Id), bAct && bStaged && Mission->GetPresentationResumes() == H.ResumesBase + 1 && !Mission->IsPresentationDetached()
+							&& Dog->GetMissionCameraWeight() > 0.3f,
+							FString::Printf(TEXT("%s, 1.2 s after the swords were companions again: beat %s wants %s, the Dog performs %s; the Contract anchored %.0f uu from the Dog ")
+								TEXT("(re-staged where it stands: < 1200); presentation resumes %d (+%d); mission camera %.2f"), Step.What, *Mission->GetBeatId().ToString(),
+								WonderlandDogActName(Want), WonderlandDogActName(Dog->PerformingAct()), Reach, Mission->GetPresentationResumes(),
+								Mission->GetPresentationResumes() - H.ResumesBase, Dog->GetMissionCameraWeight()));
+						H.Frame(FString::Printf(TEXT("hm_%s_resumed"), Step.Id));
+						H.bStepChecked = true;
+						++H.StepIndex;
+						H.StepAt = -1.0f;
+					}
+				}
+			}
+			if (Mission->IsFixtureRunning())
+			{
+				return In < 160.0f ? true : Stop(TEXT("the handed-off Scenario D never finished"));
+			}
+			// THE MISSION HAS ENDED: every step must have fired
+			for (int32 Missing = H.StepIndex; Missing < H.Steps.Num(); ++Missing)
+			{
+				H.Check(H.Steps[Missing].Id, false, FString::Printf(TEXT("%s never happened: the mission ended first"), H.Steps[Missing].What));
+			}
+			Next();
+			return true;
+		}
+		case 8:
+		{
+			if (In < 0.5f)
+			{
+				return true;
+			}
+			// C1-C5: THE CONTROL RUN
+			const TArray<FWonderlandOfferedEvent>& Handed = Mission->GetOfferedRecord();
+			bool bSame = Handed.Num() == H.Plain.Num();
+			float Worst = 0.0f;
+			FString FirstDiff;
+			for (int32 Index = 0; Index < FMath::Min(Handed.Num(), H.Plain.Num()); ++Index)
+			{
+				const FWonderlandOfferedEvent& A = H.Plain[Index];
+				const FWonderlandOfferedEvent& B = Handed[Index];
+				if (A.EventType != B.EventType || A.Verdict != B.Verdict || A.Beat != B.Beat)
+				{
+					if (bSame)
+					{
+						FirstDiff = FString::Printf(TEXT(" first difference at %d: %s/%s/%s vs %s/%s/%s"), Index, *A.EventType.ToString(), *A.Verdict, *A.Beat.ToString(),
+							*B.EventType.ToString(), *B.Verdict, *B.Beat.ToString());
+					}
+					bSame = false;
+				}
+				Worst = FMath::Max(Worst, FMath::Abs(A.AtSeconds - B.AtSeconds));
+			}
+			H.Check(TEXT("C1"), bSame && Worst <= 1.0f,
+				FString::Printf(TEXT("the control run: %d events handed off vs %d plain, the same events, verdicts and beats in the same order %s; ")
+					TEXT("the largest timing difference %.2f s (pre-registered: <= 1.0 s)%s"), Handed.Num(), H.Plain.Num(), bSame ? TEXT("yes") : TEXT("NO"), Worst, *FirstDiff));
+			const FWonderlandOfferedEvent* Approval = Handed.FindByPredicate([](const FWonderlandOfferedEvent& Row) { return Row.Beat == WonderlandBeatId(EWonderlandMissionBeat::ApprovalContinue); });
+			const FWonderlandOfferedEvent* Done = Handed.FindByPredicate([](const FWonderlandOfferedEvent& Row) { return Row.Beat == WonderlandBeatId(EWonderlandMissionBeat::CompleteVerified); });
+			H.Check(TEXT("C2"), Approval != nullptr && Approval->bHandedOff && Done != nullptr && Done->bHandedOff,
+				FString::Printf(TEXT("surfaced while handed off: the approval %s, the completion %s"),
+					Approval == nullptr ? TEXT("NEVER CAME") : (Approval->bHandedOff ? TEXT("yes") : TEXT("came while NOT handed off")),
+					Done == nullptr ? TEXT("NEVER CAME") : (Done->bHandedOff ? TEXT("yes") : TEXT("came while NOT handed off"))));
+			H.Check(TEXT("C3"), Mission->GetTerminalNarrations() == H.PlainNarrations && H.PlainNarrations > 0,
+				FString::Printf(TEXT("the terminals kept being told: %d times handed off, %d plain"), Mission->GetTerminalNarrations(), H.PlainNarrations));
+			H.Check(TEXT("C4"), FWonderlandMissionHandoff::GetMutationsInScope() == 0,
+				FString::Printf(TEXT("the write spy over the whole handed-off run (three handoffs, two returns, a dash): %d writes inside the handoff path%s"),
+					FWonderlandMissionHandoff::GetMutationsInScope(), FWonderlandMissionHandoff::GetMutationsInScope() > 0
+						? *FString::Printf(TEXT(" (last: %s)"), *FWonderlandMissionHandoff::GetLastMutationInScope()) : TEXT("")));
+			bool bDetached = false;
+			const FString Reading = QaDetachedReading(Dog, Mission, bDetached);
+			H.Check(TEXT("C5"), State->IsArmed() && State->GetMissionId().IsEmpty() && bDetached,
+				FString::Printf(TEXT("the mission ended while handed off: handoff %s, attached to '%s' (want none), completion did not take the Dog: %s"),
+					FWonderlandMissionHandoff::StateName(State->GetState()), *State->GetMissionId(), *Reading));
+			H.Frame(TEXT("hm_c5_mission_ended_still_held"));
+			Terminal(TEXT("/handoff"));
+			Next();
+			return true;
+		}
+		case 9:
+		{
+			if (State->IsEquipped())
+			{
+				return In < 5.0f ? true : Stop(TEXT("the swords were never given back after the mission"));
+			}
+			if (In < 1.0f)
+			{
+				return true;
+			}
+			// S: A MISSION STARTING WHILE HANDED OFF -- the swords first, roaming
+			FWonderlandMissionHandoff::ResetSpy();
+			Terminal(TEXT("/handoff"));
+			Next();
+			return true;
+		}
+		case 10:
+		{
+			if (!State->IsArmed())
+			{
+				return In < 6.0f ? true : Stop(TEXT("the swords were never held for the starting mission"));
+			}
+			if (Ui->IsLiveTerminalOpen())
+			{
+				return In < 7.0f ? true : Stop(TEXT("the terminal never stepped aside"));
+			}
+			H.At0 = Dog->GetActorLocation();
+			// THE FOUNDER'S PLAY COMMAND, which would travel to the site and open the terminal
+			Mission->PlayScenario(TEXT("D"), 1.0f);
+			Next();
+			return true;
+		}
+		case 11:
+		{
+			if (!Mission->IsFixtureRunning() || In < 4.5f)
+			{
+				return In < 12.0f ? true : Stop(TEXT("the play command never started its mission"));
+			}
+			bool bDetached = false;
+			const FString Reading = QaDetachedReading(Dog, Mission, bDetached);
+			const float Moved = FVector::Dist2D(Dog->GetActorLocation(), H.At0);
+			const FString Running = Mission->GetRunningMissionId();
+			H.Check(TEXT("S1"), Moved < 400.0f && !Ui->IsLiveTerminalOpen() && bDetached && !Running.IsEmpty() && State->GetMissionId() == Running,
+				FString::Printf(TEXT("a mission started while handed off: the Dog moved %.0f uu (no travel: < 400), the terminal %s, attached to '%s' (running '%s'); %s"),
+					Moved, Ui->IsLiveTerminalOpen() ? TEXT("OPENED") : TEXT("left closed"), *State->GetMissionId(), *Running, *Reading));
+			H.Frame(TEXT("hm_s1_mission_started_while_held"));
+			// its end (the QA stops it: a write of the QA's own, outside the handoff path)
+			Mission->StopFixture();
+			Mission->SetBeatById(TEXT("idle"));
+			Next();
+			return true;
+		}
+		case 12:
+		{
+			if (In < 0.5f)
+			{
+				return true;
+			}
+			H.Check(TEXT("S2"), State->IsArmed() && State->GetMissionId().IsEmpty() && Mission->IsPresentationDetached(),
+				FString::Printf(TEXT("that mission stopped: handoff %s, attached to '%s' (want none)"), FWonderlandMissionHandoff::StateName(State->GetState()), *State->GetMissionId()));
+			Terminal(TEXT("/handoff"));
+			Next();
+			return true;
+		}
+		case 13:
+		{
+			if (State->IsEquipped())
+			{
+				return In < 5.0f ? true : Stop(TEXT("the swords were never given back at the end"));
+			}
+			H.Check(TEXT("S3"), FWonderlandMissionHandoff::GetMutationsInScope() == 0 && !Mission->IsPresentationDetached(),
+				FString::Printf(TEXT("given back: handoff %s, the presentation %s, writes inside the handoff path %d"), FWonderlandMissionHandoff::StateName(State->GetState()),
+					Mission->IsPresentationDetached() ? TEXT("STILL LEFT") : TEXT("back"), FWonderlandMissionHandoff::GetMutationsInScope()));
+			return Stop(nullptr);
+		}
+		default:
+			return Stop(TEXT("an unknown phase"));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaHandoffMissionCommand(
+		TEXT("wl.Qa.HandoffMission"),
+		TEXT("Mission Handoff M1b, the mission paths, in this (packaged) build: roaming with no mission through the Live Terminal's /handoff ")
+		TEXT("(nothing fabricated; the write spy and its controls), Scenario D plain vs handed off at RESEARCH, REPAIR and VERIFICATION with ")
+		TEXT("returns mid-mission (the pre-registered control run), and a mission starting while handed off. Logs WLHMQA lines; `quit` exits after."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaHm.IsValid())
+			{
+				return;
+			}
+			ARelayDogCharacter* Dog = QaDog(World);
+			if (Dog == nullptr || World == nullptr)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLHMQA END pass=0 fail=1 (no Relay Dog to drive)"));
+				if (Args.Contains(TEXT("quit")))
+				{
+					FPlatformMisc::RequestExit(false);
+				}
+				return;
+			}
+			GQaHm = MakeShared<FQaHm>();
+			GQaHm->World = World;
+			GQaHm->Dog = Dog;
+			GQaHm->bQuit = Args.Contains(TEXT("quit"));
+			GQaHm->PhaseAt = World->GetTimeSeconds();
+			GQaHm->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLHANDOFF"));
+			GQaHm->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaHmTick), 0.0f);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLHMQA armed at (%.0f, %.0f, %.0f)"), Dog->GetActorLocation().X, Dog->GetActorLocation().Y, Dog->GetActorLocation().Z);
 		}));
 }
 

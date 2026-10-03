@@ -198,8 +198,9 @@ namespace SidekickConsole
 void UWonderlandSidekickSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
-	// C.A.R.D. + MISSION HANDOFF (M0): read once, at boot. A handoff that was equipped comes back HELD. M0 wires no mission
-	// source yet (M1), so a mission it was attached to is not known to be running: it is restored roaming, nothing fabricated.
+	// C.A.R.D. + MISSION HANDOFF: read once, at boot, before any player's subsystems exist. A handoff that was equipped comes
+	// back HELD. No mission can be known to be running this early, so it is restored ROAMING, nothing fabricated; the mission
+	// presentation re-attaches it when it attaches, if a mission (a contract restored from this PC) is in fact running.
 	GetCardStore().Load();
 	GetMissionHandoff().Load([](const FString&) { return false; });
 	Ticker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWonderlandSidekickSubsystem::Tick), 0.0f);
@@ -496,6 +497,8 @@ void UWonderlandSidekickSubsystem::Accept(const FString& Text)
 
 void UWonderlandSidekickSubsystem::SendIntent(const FString& Body, const FString& Describe)
 {
+	// AN INTENT TO THE COMPANIONS' RUNTIME is provider execution: the Mission Handoff path never sends one (the write spy)
+	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandSidekickSubsystem::SendIntent (a provider send)"));
 	++IntentsSent;
 	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetURL(BaseUrl() + TEXT("/intents"));

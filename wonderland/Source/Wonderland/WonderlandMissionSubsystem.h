@@ -22,11 +22,26 @@
 #include "WonderlandMissionTasks.h"
 #include "WonderlandMissionBeat.h"
 #include "WonderlandMissionEvent.h"
+#include "WonderlandMissionHandoff.h"
 #include "WonderlandMissionSubsystem.generated.h"
 
 class APlayerController;
 class AWonderlandMissionOrb;
 class SWidget;
+
+/**
+ * ONE EVENT THE FOLD WAS OFFERED, as the control run reads it (Mission Handoff, Second's B3): the event, what the fold
+ * did with it, the beat the world showed after it, when (world seconds since the fixture started), and whether the
+ * user was handed off at that moment. Plain C++ (the FName rule): nothing here is reflected.
+ */
+struct FWonderlandOfferedEvent
+{
+	FName EventType;
+	FString Verdict;
+	FName Beat;
+	float AtSeconds = 0.0f;
+	bool bHandedOff = false;
+};
 
 UCLASS()
 class WONDERLAND_API UWonderlandMissionSubsystem : public ULocalPlayerSubsystem
@@ -456,7 +471,55 @@ public:
 
 	AWonderlandMissionOrb* GetOrb() const;
 
+	/* ------------------------------------------------- Mission Handoff: the presentation, LEFT and RESUMED */
+	// Plain C++, NOT UFUNCTIONs: see the note on reflected names in WonderlandBeta.h.
+	//
+	// THE FOUNDER'S CANON (2026-10-02): Mission Handoff leaves the mission's player-facing ANIMATION, never the mission. While
+	// the user is handed off -- the swords forming, held, or being given back -- the Dog performs no act, the companions fly
+	// no mission formation, the mission camera lets go and no travel or staging takes the Dog. Everything else here keeps
+	// running exactly as before: the fold, the beat, the strip, the terminals, the Contract. Nothing below writes mission
+	// truth; the handoff path runs inside FWonderlandMissionHandoff::FScope, so the write spy would count it if it did.
+
+	/** True from the moment a handoff begins until the swords are companions again: the presentation is left. */
+	bool IsPresentationDetached() const;
+
+	/** True while a mission's player-facing animation would be running: a Contract shown, or a contract being worked. */
+	bool IsMissionAnimationRunning() const;
+
+	/** The running mission's id, for the handoff's attachment (IsSafeId); empty when no mission runs. Reads only. */
+	FString GetRunningMissionId() const;
+
+	/** Every event offered since the fixture started, in order: the control run's record. */
+	const TArray<FWonderlandOfferedEvent>& GetOfferedRecord() const { return OfferedRecord; }
+
+	/** How many times the terminals were told an event since the fixture started: they keep updating while handed off. */
+	int32 GetTerminalNarrations() const { return TerminalNarrations; }
+
+	/** Where the presentation last resumed (the Dog's location), and whether the Contract was re-staged there. */
+	FVector GetLastResumeAt() const { return LastResumeAt; }
+	int32 GetPresentationResumes() const { return PresentationResumes; }
+	int32 GetPresentationLeaves() const { return PresentationLeaves; }
+
 private:
+	/** The game instance's Mission Handoff state, or nullptr (no game instance, or before the sidekicks exist). */
+	FWonderlandMissionHandoff* Handoff() const;
+	void BindHandoff();
+	void HandleHandoffState(EWonderlandHandoffState From, EWonderlandHandoffState To);
+	/** The handoff began: the Dog, the companions and the camera let go of the act. */
+	void LeavePresentation();
+	/** The swords are companions again: the presentation resumes at the CURRENT beat, re-staged where the Dog now stands. */
+	void ResumePresentationHere();
+	/** Tells the handoff which mission it is attached to, as missions start and end while it is equipped. */
+	void SyncHandoffAttachment();
+	FDelegateHandle HandoffChangedHandle;
+	bool bHandoffBound = false;
+	FString RunningMissionSeen;
+	TArray<FWonderlandOfferedEvent> OfferedRecord;
+	double FixtureStartedAt = 0.0;
+	int32 TerminalNarrations = 0;
+	FVector LastResumeAt = FVector::ZeroVector;
+	int32 PresentationResumes = 0;
+	int32 PresentationLeaves = 0;
 
 	/** The task set for this local player, or nullptr. Where a followed Julius run actually lives. */
 	const class UWonderlandMissionTaskSubsystem* TaskSet() const;

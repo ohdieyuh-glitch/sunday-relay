@@ -9,6 +9,7 @@
 #include "Misc/App.h"
 #include "Misc/Paths.h"
 #include "WonderlandBeta.h"
+#include "WonderlandMissionHandoff.h"
 
 namespace
 {
@@ -240,7 +241,7 @@ int32 UWonderlandMissionTaskSubsystem::ClearAllTasksForDevelopment()
 	// THE FILE GOES TOO, or the next Initialize brings them all straight back and this cleared nothing.
 	ForgetSavedContracts();
 	UE_LOG(LogTemp, Display, TEXT("WLTASK development: closed all %d slot(s) and forgot the saved set"), Closed);
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return Closed;
 }
 
@@ -350,7 +351,7 @@ bool UWonderlandMissionTaskSubsystem::DeleteLocalContract(FGuid LocalId)
 	}
 	UE_LOG(LogTemp, Display, TEXT("WLTASK deleted one of the player's contracts (%d-character objective; never part of a Julius run)"), ObjectiveLength);
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -419,7 +420,7 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 	{
 		UE_LOG(LogTemp, Display, TEXT("WLTASK restored %d Mission Contract(s); none is running until Julius says so"),
 			Restored);
-		OnTasksChanged.Broadcast();
+		BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	}
 	return Restored;
 }
@@ -462,6 +463,12 @@ void UWonderlandMissionTaskSubsystem::Touch(FWonderlandMissionTask& Task, EWonde
 		*FDateTime::UtcNow().ToIso8601(), WonderlandTaskStateName(To)));
 }
 
+void UWonderlandMissionTaskSubsystem::BroadcastTasksChanged(const TCHAR* What)
+{
+	FWonderlandMissionHandoff::NoteMutation(What);
+	OnTasksChanged.Broadcast();
+}
+
 FGuid UWonderlandMissionTaskSubsystem::AddDraft()
 {
 	if (!CanAddTask())
@@ -480,7 +487,7 @@ FGuid UWonderlandMissionTaskSubsystem::AddDraft()
 	// it. Selecting anything else would make the button take two clicks to mean one thing.
 	Selected = Task.LocalId;
 	UE_LOG(LogTemp, Display, TEXT("WLTASK new draft slot (%d of %d)"), Tasks.Num(), GetTaskCapacity());
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return Task.LocalId;
 }
 
@@ -516,7 +523,7 @@ bool UWonderlandMissionTaskSubsystem::SubmitDraft(FGuid LocalId, const FString& 
 	UE_LOG(LogTemp, Display, TEXT("WLTASK contract accepted, QUEUED (local: Julius has not acknowledged it)"));
 	// GRAY BECOMING RED IS THE MOMENT SOMETHING WORTH KEEPING EXISTS, so this is the first write.
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -544,7 +551,7 @@ bool UWonderlandMissionTaskSubsystem::DismissDraft(FGuid LocalId)
 	// The dismissed slot was never written, but the SELECTION moved, and coming back to a different contract
 	// than you left on is its own small untruth about where you were.
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -578,7 +585,7 @@ bool UWonderlandMissionTaskSubsystem::CloseFromWorkspace(FGuid LocalId)
 	UE_LOG(LogTemp, Display, TEXT("WLTASK tab closed: '%s' stays a %s contract, out of the workspace"),
 		*Task->Objective.Left(40), WonderlandTaskStateName(Task->State));
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -597,7 +604,7 @@ bool UWonderlandMissionTaskSubsystem::ReopenInWorkspace(FGuid LocalId)
 	Task->bInWorkspace = true;
 	Selected = LocalId;
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -652,7 +659,7 @@ bool UWonderlandMissionTaskSubsystem::SelectTask(FGuid LocalId)
 	// The view is worth remembering, though: coming back to a different contract than you left on is a small
 	// untruth about where you were, and it costs one file write to be right about.
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -680,7 +687,7 @@ bool UWonderlandMissionTaskSubsystem::ReportEvidence(const FString& ContractId, 
 	// three, and this call cannot tell a full set from a first instalment.
 	UE_LOG(LogTemp, Display, TEXT("WLTASK %s reported %d evidence reference(s)"), *ContractId, EvidenceIds.Num());
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -695,7 +702,7 @@ bool UWonderlandMissionTaskSubsystem::AdoptContractId(FGuid LocalId, const FStri
 	// THIS IS THE ONE FIELD A RESTART CANNOT REGENERATE, so it is written the instant it arrives. Without it a
 	// restored contract is a mission no scheduler can address by name.
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -794,7 +801,7 @@ bool UWonderlandMissionTaskSubsystem::ApplySchedulerState(
 		if (!Selected.IsValid()) { Selected = Task->LocalId; }
 	}
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -880,7 +887,7 @@ FGuid UWonderlandMissionTaskSubsystem::FollowJuliusRun(const FString& MissionId,
 	// then follows the new run while every surface names the old one.
 	FollowedContractId = MissionId;
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return Task->LocalId;
 }
 
@@ -982,7 +989,7 @@ bool UWonderlandMissionTaskSubsystem::ResetJuliusCarriers(const FString& Contrac
 	UE_LOG(LogTemp, Display, TEXT("WLTASK %s adopted a snapshot; its Julius carriers are unknown again"),
 		*ContractId);
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
