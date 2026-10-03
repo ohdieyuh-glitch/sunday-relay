@@ -190,8 +190,20 @@ namespace
 		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Wonderland"), TEXT("FlameColour.txt"));
 	}
 
+	bool ReadNumberTriple(const FString& Text, float MaxChannel, FLinearColor& Out);
+
 	/** THREE NUMBERS IN 0..1, or nothing. A hand edit, a corrupted file or a NaN is not a colour; it is the designed fire. */
 	bool ReadFlameColourText(const FString& Text, FLinearColor& Out)
+	{
+		return ReadNumberTriple(Text, 1.0f, Out);
+	}
+
+	/**
+	 * THREE NUMBERS IN 0..MaxChannel, or nothing (B65.6, Second's round-5 review: the DarkVeinTint "0.90 0.96 1.10" is a TINT -- a
+	 * multiplier, so a channel above 1 is its whole point -- and the 0..1 colour reader refused it, so every console value with a
+	 * channel over 1 was silently replaced by the hard-coded default while the look line printed the refused string).
+	 */
+	bool ReadNumberTriple(const FString& Text, float MaxChannel, FLinearColor& Out)
 	{
 		if (Text.Len() > 64)
 		{
@@ -212,7 +224,7 @@ namespace
 				return false;
 			}
 			Values[Index] = FCString::Atof(*Parts[Index]);
-			if (!FMath::IsFinite(Values[Index]) || Values[Index] < 0.0f || Values[Index] > 1.0f)
+			if (!FMath::IsFinite(Values[Index]) || Values[Index] < 0.0f || Values[Index] > MaxChannel)
 			{
 				return false;
 			}
@@ -390,7 +402,7 @@ namespace
 	// B65.5 (Second, round 4's variant VA): the rim term draws in SCENE units -- RimColor x RimAmp x Fresnel, no x1000 inside: 12 drew
 	// nothing against the ~25,000 noon white, and B65.4's clamp at 40 kept every console value from reaching a visible edge
 	TAutoConsoleVariable<float> CVarSmokeDefaultRimGain(TEXT("wl.Shadow.DefaultRimGain"), 6000.0f,
-		TEXT("Shadow smoke, the DESIGNED body: the edge glow's strength in SCENE units (RimColor's brightest channel; the noon white is "
+		TEXT("Shadow smoke, the DESIGNED body: the edge glow's strength in SCENE units (RimColor = the edge colour, 0..1 per channel, times this; the noon white is "
 		     "~25,000 and the Fresnel weights it toward the silhouette). 0 keeps the designed rim exactly as before B65.4."));
 	TAutoConsoleVariable<float> CVarSmokeDefaultGlow(TEXT("wl.Shadow.DefaultGlow"), 0.0f,
 		TEXT("Shadow smoke, the DESIGNED body: a uniform glow in the edge-glow colour, in scene units (the founder's sheet glows blue "
@@ -417,6 +429,39 @@ namespace
 		TEXT("Shadow smoke, a DARK pick: the tone in the cells (0 = black)."));
 	TAutoConsoleVariable<float> CVarSmokeDarkPower(TEXT("wl.Shadow.DarkPower"), 2.0f,
 		TEXT("Shadow smoke, a DARK pick: how thin the grey veins are (B65.3's 3 was too thin)."));
+
+	/**
+	 * THE TINT AND THE EDGE COLOUR THAT ARE ACTUALLY DRAWN (B65.6). One reader each, used by the paint AND by the look line, so the line
+	 * can never print a value the paint refused: a console value that does not parse keeps the designed default and says so.
+	 */
+	FLinearColor SmokeDarkTint(bool* bOutRefused = nullptr)
+	{
+		FLinearColor Parsed;
+		const bool bRead = ReadNumberTriple(CVarSmokeDarkVeinTint.GetValueOnGameThread(), 2.0f, Parsed);
+		if (bOutRefused != nullptr)
+		{
+			*bOutRefused = !bRead;
+		}
+		return bRead ? FLinearColor(Parsed.R, Parsed.G, Parsed.B, 1.0f) : FLinearColor(0.90f, 0.96f, 1.10f, 1.0f);
+	}
+
+	FLinearColor SmokeEdgeColour(bool* bOutRefused = nullptr)
+	{
+		FLinearColor Parsed;
+		const bool bRead = ReadFlameColourText(CVarSmokeDefaultRim.GetValueOnGameThread(), Parsed);
+		if (bOutRefused != nullptr)
+		{
+			*bOutRefused = !bRead;
+		}
+		return bRead ? FLinearColor(Parsed.R, Parsed.G, Parsed.B, 1.0f) : FLinearColor(0.25f, 0.55f, 1.00f, 1.0f);
+	}
+
+	/** "r g b" as drawn, plus "(console 'x' refused: the default)" when the console's value did not parse. */
+	FString DescribeTriple(const FLinearColor& Drawn, bool bRefused, const FString& Raw)
+	{
+		const FString Values = FString::Printf(TEXT("%.2f %.2f %.2f"), Drawn.R, Drawn.G, Drawn.B);
+		return bRefused ? FString::Printf(TEXT("%s (console '%s' refused: the default)"), *Values, *Raw.Left(40)) : Values;
+	}
 
 	TAutoConsoleVariable<float> CVarSmokeBumpSoft(TEXT("wl.Shadow.SmokeBumpSoft"), 0.06f,
 		TEXT("Shadow smoke maps: how rounded the relief's creases are (0 = sharp)."));
@@ -1223,12 +1268,8 @@ namespace WonderlandMascotStyle
 			// the smoke's grey: the tone map's floor of 0 keeps the cells black. B65.5: a little cool, so the grey reads GREY and not
 			// brown under the warm sandstone bounce (round 4's frames)
 			const float Grey = FMath::Clamp(CVarSmokeDarkVein.GetValueOnGameThread(), 0.0f, 1.0f);
-			FLinearColor Tint(0.90f, 0.96f, 1.10f, 1.0f);
-			FLinearColor Parsed;
-			if (ReadFlameColourText(CVarSmokeDarkVeinTint.GetValueOnGameThread(), Parsed))
-			{
-				Tint = FLinearColor(Parsed.R, Parsed.G, Parsed.B, 1.0f);
-			}
+			// B65.6: a TINT, read as one (channels up to 2) -- the colour reader refused "0.90 0.96 1.10" itself
+			const FLinearColor Tint = SmokeDarkTint();
 			return FLinearColor(FMath::Clamp(Grey * Tint.R, 0.0f, 1.0f), FMath::Clamp(Grey * Tint.G, 0.0f, 1.0f),
 				FMath::Clamp(Grey * Tint.B, 0.0f, 1.0f), 1.0f);
 		}
@@ -1248,12 +1289,7 @@ namespace WonderlandMascotStyle
 		{
 			return false;
 		}
-		FLinearColor Rim(0.25f, 0.55f, 1.00f, 1.0f);
-		FLinearColor Parsed;
-		if (ReadFlameColourText(CVarSmokeDefaultRim.GetValueOnGameThread(), Parsed))
-		{
-			Rim = FLinearColor(Parsed.R, Parsed.G, Parsed.B, 1.0f);
-		}
+		const FLinearColor Rim = SmokeEdgeColour();
 		OutRim = FLinearColor(Rim.R * Gain, Rim.G * Gain, Rim.B * Gain, 1.0f);
 		return true;
 	}
@@ -1297,12 +1333,7 @@ namespace WonderlandMascotStyle
 		else if (Profile == ESmokeProfile::Designed && DesignedGlow > 0.0f)
 		{
 			// B65.5: the designed body's optional uniform glow, in the edge-glow colour (normalised: its brightest channel = 1)
-			FLinearColor Rim(0.25f, 0.55f, 1.00f, 1.0f);
-			FLinearColor Parsed;
-			if (ReadFlameColourText(CVarSmokeDefaultRim.GetValueOnGameThread(), Parsed))
-			{
-				Rim = FLinearColor(Parsed.R, Parsed.G, Parsed.B, 1.0f);
-			}
+			const FLinearColor Rim = SmokeEdgeColour();
 			const float Top = FMath::Max(FMath::Max3(Rim.R, Rim.G, Rim.B), 1e-4f);
 			Instance->SetVectorParameterValue(TEXT("Emissive"), FLinearColor(Rim.R / Top, Rim.G / Top, Rim.B / Top, 1.0f));
 			Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), DesignedGlow);
@@ -1371,15 +1402,25 @@ namespace WonderlandMascotStyle
 	FString DescribeSmokeLook()
 	{
 		const UTexture* Relief = SmokeTexture();
+		// B65.6: the line prints what is DRAWN -- the parsed edge colour and tint (or the default, saying the console's value was
+		// refused) and the clamped strengths -- never a raw console string the paint did not use
+		bool bEdgeRefused = false;
+		const FLinearColor Edge = SmokeEdgeColour(&bEdgeRefused);
+		const FString EdgeLine = DescribeTriple(Edge, bEdgeRefused, CVarSmokeDefaultRim.GetValueOnGameThread());
+		bool bTintRefused = false;
+		const FLinearColor Tint = SmokeDarkTint(&bTintRefused);
+		const FString TintLine = DescribeTriple(Tint, bTintRefused, CVarSmokeDarkVeinTint.GetValueOnGameThread());
+		const float EdgeGain = FMath::Clamp(CVarSmokeDefaultRimGain.GetValueOnGameThread(), 0.0f, 30000.0f);
+		const float BodyGlow = FMath::Clamp(CVarSmokeDefaultGlow.GetValueOnGameThread(), 0.0f, 30000.0f);
 		const FString Drawn = SmokeIsDrawn()
 			? FString::Printf(TEXT(" | smoke maps drawn (%s), %.1f ms, tone %s | profiles: designed vein %s floor %.3f power %.1f edge glow %s x %.0f units, body glow %.0f units; light >= %.2f sat <= %.2f floor %.2f power %.1f glow %.2f of the noon white (%.0f units); dark <= %.2f vein %.2f tint %s floor %.2f power %.1f"),
 				*GSmokeMaps.Signature, GSmokeMaps.DrawMs, SmokeToneMap() != nullptr ? TEXT("worn") : TEXT("off"),
 				*SmokeDefaultVein().ToString(), CVarSmokeDefaultFloor.GetValueOnGameThread(), CVarSmokeDefaultPower.GetValueOnGameThread(),
-				*CVarSmokeDefaultRim.GetValueOnGameThread(), CVarSmokeDefaultRimGain.GetValueOnGameThread(), CVarSmokeDefaultGlow.GetValueOnGameThread(),
+				*EdgeLine, EdgeGain, BodyGlow,
 				CVarSmokeLightValue.GetValueOnGameThread(), CVarSmokeLightSat.GetValueOnGameThread(), CVarSmokeLightFloor.GetValueOnGameThread(),
 				CVarSmokeLightPower.GetValueOnGameThread(), CVarSmokeLightGlow.GetValueOnGameThread(),
 				FMath::Clamp(CVarSmokeLightGlow.GetValueOnGameThread(), 0.0f, 1.0f) * SmokeNoonWhite, CVarSmokeDarkValue.GetValueOnGameThread(),
-				CVarSmokeDarkVein.GetValueOnGameThread(), *CVarSmokeDarkVeinTint.GetValueOnGameThread(), CVarSmokeDarkFloor.GetValueOnGameThread(), CVarSmokeDarkPower.GetValueOnGameThread())
+				CVarSmokeDarkVein.GetValueOnGameThread(), *TintLine, CVarSmokeDarkFloor.GetValueOnGameThread(), CVarSmokeDarkPower.GetValueOnGameThread())
 			: FString();
 		return FString::Printf(TEXT("relief %s at TexScale %.4f, DetailAmp %.2f, RoughVary %.2f, Roughness %.2f, Specular %.2f, RimAmp %.2f, rim top %.2f lift %.2f gain %.2f floor %.2f, strips rim gain %.2f relief %s, on DEFAULT %s%s"),
 			Relief != nullptr ? *Relief->GetName() : TEXT("none"), CVarSmokeTexScale.GetValueOnGameThread(), CVarSmokeDetailAmp.GetValueOnGameThread(),
