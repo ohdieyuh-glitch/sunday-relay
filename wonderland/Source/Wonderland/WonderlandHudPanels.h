@@ -117,8 +117,11 @@ private:
 	TSharedPtr<class SWidgetSwitcher> Pages;
 
 	TSharedRef<SWidget> MakeColoursPage();
+	/** Keyed 1: the MASCOT PRIMARY, 2: the MASCOT STRIPS -- the PRIMARY palette (DEFAULT, WHITE, BLACK, then the shared set),
+	 *  picked and ringed through WonderlandMascotStyle::PickMascotPrimary / IsMascotPrimaryOn or PickMascotStrip /
+	 *  IsMascotStripOn, so DEFAULT and a real WHITE are told apart. 0: an ordinary row on the shared palette. */
 	TSharedRef<SWidget> MakeColourRow(const TCHAR* Label, const TCHAR* Note,
-		TFunction<FLinearColor()> Read, TFunction<void(FLinearColor)> Write);
+		TFunction<FLinearColor()> Read, TFunction<void(FLinearColor)> Write, int32 Keyed = 0);
 	TSharedRef<SWidget> MakeTabBar();
 	/** The pointer's shape and size, in the Colors tab. See P1 item 8. */
 	TSharedRef<SWidget> MakeCursorRow();

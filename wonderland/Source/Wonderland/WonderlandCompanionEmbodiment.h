@@ -192,6 +192,11 @@ public:
 	// Plain C++, NOT a UFUNCTION: a new reflected name shifts the FName table Niagara hashes (WonderlandBeta.h).
 	/** Whether this figure has fire that follows the mascot's FLAME colour (materials tagged `flame` / `flame_light`). */
 	bool DeclaresFlame() const;
+	/** Whether this figure has strips that follow the mascot's STRIPS colour, COLOR 3 (materials tagged `strip`). */
+	bool DeclaresStrips() const;
+	/** QA: what the material named Name is painted with right now -- BaseColor/RimColor on a rim, Color otherwise -- and,
+	 *  for a smoke surface, whether its relief texture is bound. False when the figure has no such material. */
+	bool QaReadPaint(FName Name, FLinearColor& OutBase, FLinearColor& OutRim, FString& OutRelief) const;
 
 	/**
 	 * Whether the clock is allowed to touch this body's glow at all. False for the wardrobe's preview figure,

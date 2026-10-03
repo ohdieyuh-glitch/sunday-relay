@@ -3021,6 +3021,754 @@ namespace
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLSHADOW armed (%s)"), GQaShadow->bRestart ? TEXT("restart check") : TEXT("S1-S15 and the frames"));
 		}));
 
+	/* ================================================================ wl.Qa.ShadowFlameColour (founder, 2026-10-02)
+	 *
+	 * THE SHADOW FLAME PRIMARY IS PURE: "WHITE -> pure white ... BLACK renders black ... a saturated color such as RED renders as
+	 * that selected red without dark tint ... switching colors repeatedly does not retain prior tint/state". Wears Shadow Flame,
+	 * picks PRIMARY swatches through the one door the Wardrobe and the Menu use (WonderlandMascotStyle::PickMascotPrimary, so
+	 * SaveAndApply -- the route B63's Q26 exercises), and reads back what each surface is PAINTED with (DescribeMaterialColours;
+	 * BaseColor on a rim). A frame per colour, three-quarter, into Saved/Screenshots/WLSFCOLOUR, for the pixel read.
+	 *   C1 WHITE: the coat is (1,1,1)   C2 BLACK: (0,0,0)   C3 CRIMSON: exactly the swatch, no dark tint
+	 *   C4 nine switches, each exactly the current pick (no prior tint)   C5 strips, visor, eyes and void edges never move with it
+	 *   C6 DEFAULT gives back the designed coat   C7 the rings: one PRIMARY swatch on, DEFAULT and WHITE told apart
+	 *   C8 an UNTAGGED shell keeps its multiply: Skeleton Flame's bone (not tagged `primary`) under CRIMSON is exactly its own
+	 *      WHITE reading times the swatch. (Not Relay OG: wearing Relay OG takes the costume off and shows the canon body,
+	 *      so there is no costume to read -- the first draft of C8 would have failed on a correct build.)
+	 * `restart`: C9 after a restart with WHITE chosen, the coat is still white.
+	 */
+	struct FQaSfColour
+	{
+		TWeakObjectPtr<UWorld> World;
+		FQaShadow View;   // the Shadow Flame QA's camera and frame writer
+		int32 Phase = 0;
+		double At = 0.0;
+		int32 Step = 0;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		bool bRestart = false;
+		bool bAllExact = true;
+		bool bFixedHeld = true;
+		FString Trail;
+		FString FixedTrail;
+		TMap<FString, FQaPaint> Fixed;   // strips, visor, eyes, void edges after the first pick
+		FQaPaint UntaggedWhite;          // C8: Skeleton Flame's bone with WHITE picked, the multiply's own calibration
+	};
+	TSharedPtr<FQaSfColour> GQaSfColour;
+
+	void QaSfCheck(FQaSfColour& S, const TCHAR* Id, bool bOk, const FString& Detail)
+	{
+		(bOk ? S.Pass : S.Fail)++;
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLSFCOLOUR %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+	}
+
+	const TPair<FName, FLinearColor>* QaPrimarySwatch(const TCHAR* Key)
+	{
+		const FName Want(Key);
+		return WonderlandMascotStyle::PrimaryPalette().FindByPredicate([&Want](const TPair<FName, FLinearColor>& S) { return S.Key == Want; });
+	}
+
+	bool QaExact(const FLinearColor& Got, const FLinearColor& Want)
+	{
+		return FMath::Abs(Got.R - Want.R) <= 0.002f && FMath::Abs(Got.G - Want.G) <= 0.002f && FMath::Abs(Got.B - Want.B) <= 0.002f;
+	}
+
+	// QaRgb: the one above (Wardrobe/skin QA), "r,g,b"
+
+	/** How many PRIMARY swatches show their ring, and their names. */
+	int32 QaPrimaryRings(FString& OutOn)
+	{
+		int32 On = 0;
+		for (const TPair<FName, FLinearColor>& Swatch : WonderlandMascotStyle::PrimaryPalette())
+		{
+			if (WonderlandMascotStyle::IsMascotPrimaryOn(Swatch.Key, Swatch.Value))
+			{
+				++On;
+				OutOn += FString::Printf(TEXT("%s%s"), OutOn.IsEmpty() ? TEXT("") : TEXT(","), *Swatch.Key.ToString());
+			}
+		}
+		return On;
+	}
+
+	FLinearColor QaPaintOf(const TMap<FString, FQaPaint>& P, const TCHAR* Name)
+	{
+		const FQaPaint* Found = P.Find(Name);
+		return Found != nullptr ? Found->Body : FLinearColor(-1.0f, -1.0f, -1.0f, 1.0f);
+	}
+
+	bool QaSfColourTick(float)
+	{
+		if (!GQaSfColour.IsValid())
+		{
+			return false;
+		}
+		FQaSfColour& S = *GQaSfColour;
+		UWorld* World = S.World.Get();
+		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		ARelayDogCharacter* D = QaDog(World);
+		const double In = QaNow() - S.At;
+		const auto Next = [&S](int32 Phase) { S.Phase = Phase; S.At = QaNow(); };
+		const auto Finish = [&S]()
+		{
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSFCOLOUR END pass=%d fail=%d"), S.Pass, S.Fail);
+			GQaSfColour.Reset();
+			FPlatformMisc::RequestExit(false);
+		};
+		if (World == nullptr || PC == nullptr || D == nullptr)
+		{
+			if (In > 120.0)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSFCOLOUR quit: no world or Relay Dog"));
+				Finish();
+				return false;
+			}
+			return true;
+		}
+		const AWonderlandCompanionEmbodiment* Costume = D->GetCostume();
+		// THE NINE PICKS (C1-C4): every colour more than once, a dark one between light ones, so a tint left behind shows.
+		static const TCHAR* const Picks[] = { TEXT("WHITE"), TEXT("BLACK"), TEXT("CRIMSON"), TEXT("WHITE"), TEXT("AZURE"),
+			TEXT("JADE"), TEXT("BLACK"), TEXT("CRIMSON"), TEXT("WHITE") };
+		static const TCHAR* const FixedNames[] = { TEXT("shadow"), TEXT("visor"), TEXT("eye"), TEXT("eyehalo"), TEXT("voidedge") };
+		const int32 NumPicks = static_cast<int32>(UE_ARRAY_COUNT(Picks));
+		switch (S.Phase)
+		{
+		case 0:
+			if (In >= 8.0)
+			{
+				if (UWonderlandUiSubsystem* U = QaUi(World))
+				{
+					U->DismissWelcome();
+					U->CloseOverlay();
+				}
+				if (!S.bRestart)
+				{
+					GEngine->Exec(World, TEXT("wl.Skins.Wear shadow_flame"));
+				}
+				Next(S.bRestart ? 50 : 1);
+			}
+			break;
+		case 1:
+			if (In >= 3.0)
+			{
+				QaShadowCamera(S.View, World, PC, D, 35.0, 260.0);
+				Next(2);
+			}
+			break;
+		case 2:   // pick the next swatch, through the Wardrobe's and the Menu's own door
+		{
+			const TPair<FName, FLinearColor>* Swatch = QaPrimarySwatch(Picks[S.Step]);
+			if (Swatch == nullptr)
+			{
+				QaSfCheck(S, TEXT("C4"), false, FString::Printf(TEXT("no PRIMARY swatch named %s"), Picks[S.Step]));
+				Finish();
+				return false;
+			}
+			WonderlandMascotStyle::PickMascotPrimary(Swatch->Key, Swatch->Value);
+			Next(3);
+			break;
+		}
+		case 3:   // what the coat is painted with now, and the surfaces that must not move
+			if (In >= 0.8)
+			{
+				const FString Key = Picks[S.Step];
+				const TPair<FName, FLinearColor>* Swatch = QaPrimarySwatch(Picks[S.Step]);
+				const TMap<FString, FQaPaint> P = QaPainted(Costume);
+				const FLinearColor Bone = QaPaintOf(P, TEXT("bone"));
+				const FLinearColor Deep = QaPaintOf(P, TEXT("bonedeep"));
+				// B65: the shell is the pick EXACTLY; the deep coat (cuffs, soles) a 0.62 shade of the same pick
+				const bool bExact = Swatch != nullptr && QaExact(Bone, Swatch->Value) && QaExact(Deep, Swatch->Value * 0.62f);
+				S.bAllExact &= bExact;
+				S.Trail += FString::Printf(TEXT("%s%s %s/%s%s"), S.Trail.IsEmpty() ? TEXT("") : TEXT(" -> "), *Key,
+					*QaRgb(Bone), *QaRgb(Deep), bExact ? TEXT("") : TEXT(" (WRONG)"));
+				// C5: the first pick is the reference; every later pick must leave these where they were (glows: the same hue)
+				for (const TCHAR* Name : FixedNames)
+				{
+					const FQaPaint* Now = P.Find(Name);
+					if (S.Step == 0)
+					{
+						if (Now != nullptr) { S.Fixed.Add(Name, *Now); }
+						continue;
+					}
+					const FQaPaint* Was = S.Fixed.Find(Name);
+					const bool bGlow = FString(Name).StartsWith(TEXT("eye")) || FString(Name) == TEXT("voidedge");
+					const bool bHeld = Now != nullptr && Was != nullptr && (bGlow ? QaSameHue(Now->Body, Was->Body) : QaExact(Now->Body, Was->Body));
+					if (!bHeld)
+					{
+						S.bFixedHeld = false;
+						S.FixedTrail += FString::Printf(TEXT(" %s moved at %s: %s -> %s;"), Name, *Key,
+							Was != nullptr ? *QaRgb(Was->Body) : TEXT("?"), Now != nullptr ? *QaRgb(Now->Body) : TEXT("?"));
+					}
+				}
+				if (S.Step <= 2)
+				{
+					const TCHAR* Id = S.Step == 0 ? TEXT("C1") : S.Step == 1 ? TEXT("C2") : TEXT("C3");
+					QaSfCheck(S, Id, bExact, FString::Printf(TEXT("%s picked: the coat (bone, bonedeep) painted %s / %s, want %s exactly (bonedeep x0.62)"),
+						*Key, *QaRgb(Bone), *QaRgb(Deep), Swatch != nullptr ? *QaRgb(Swatch->Value) : TEXT("?")));
+				}
+				if (S.Step == 0)
+				{
+					FString On;
+					const int32 Rings = QaPrimaryRings(On);
+					QaSfCheck(S, TEXT("C7"), Rings == 1 && On == TEXT("WHITE"),
+						FString::Printf(TEXT("after WHITE: %d PRIMARY ring(s) on (%s), want exactly WHITE -- not DEFAULT, though both are (1,1,1)"), Rings, *On));
+				}
+				if (S.Step <= 5)
+				{
+					QaShadowShot(S.View, *FString::Printf(TEXT("%d_%s"), S.Step + 1, *Key.ToLower()));
+				}
+				++S.Step;
+				Next(S.Step < NumPicks ? 2 : 4);
+			}
+			break;
+		case 4:
+			QaSfCheck(S, TEXT("C4"), S.bAllExact, FString::Printf(TEXT("%d switches, each exactly the current pick: %s"), NumPicks, *S.Trail));
+			QaSfCheck(S, TEXT("C5"), S.bFixedHeld, S.bFixedHeld
+				? FString::Printf(TEXT("strips, visor, eyes, eye halos and void edges unchanged through %d switches"), NumPicks)
+				: FString::Printf(TEXT("moved:%s"), *S.FixedTrail));
+			if (const TPair<FName, FLinearColor>* Default = QaPrimarySwatch(TEXT("DEFAULT")))
+			{
+				WonderlandMascotStyle::PickMascotPrimary(Default->Key, Default->Value);
+			}
+			Next(5);
+			break;
+		case 5:
+			if (In >= 0.8)
+			{
+				// C6: the coat as ShadowFlame.wlvox designs it
+				const TMap<FString, FQaPaint> P = QaPainted(Costume);
+				const FLinearColor Bone = QaPaintOf(P, TEXT("bone"));
+				const FLinearColor Deep = QaPaintOf(P, TEXT("bonedeep"));
+				FString On;
+				const int32 Rings = QaPrimaryRings(On);
+				QaSfCheck(S, TEXT("C6"), QaExact(Bone, FLinearColor(0.016f, 0.019f, 0.042f)) && QaExact(Deep, FLinearColor(0.009f, 0.010f, 0.022f))
+					&& Rings == 1 && On == TEXT("DEFAULT"),
+					FString::Printf(TEXT("DEFAULT: the coat %s / %s (designed (0.016,0.019,0.042) / (0.009,0.010,0.022)); rings on: %s"),
+						*QaRgb(Bone), *QaRgb(Deep), *On));
+				QaShadowShot(S.View, TEXT("7_default"));
+				GEngine->Exec(World, TEXT("wl.Skins.Wear skeleton_flame"));
+				Next(6);
+			}
+			break;
+		case 6:
+			if (In >= 3.0)
+			{
+				if (const TPair<FName, FLinearColor>* White = QaPrimarySwatch(TEXT("WHITE")))
+				{
+					WonderlandMascotStyle::PickMascotPrimary(White->Key, White->Value);
+				}
+				Next(9);
+			}
+			break;
+		case 9:   // C8's calibration: the untagged shell under WHITE is its authored colour, whatever this bed's figure authors
+			if (In >= 0.8)
+			{
+				const TMap<FString, FQaPaint> P = QaPainted(D->GetCostume());
+				const FQaPaint* Bone = P.Find(TEXT("bone"));
+				S.UntaggedWhite = Bone != nullptr ? *Bone : FQaPaint();
+				if (Bone == nullptr)
+				{
+					S.UntaggedWhite.Body = FLinearColor(-1.0f, -1.0f, -1.0f, 1.0f);
+				}
+				if (const TPair<FName, FLinearColor>* Crimson = QaPrimarySwatch(TEXT("CRIMSON")))
+				{
+					WonderlandMascotStyle::PickMascotPrimary(Crimson->Key, Crimson->Value);
+				}
+				Next(7);
+			}
+			break;
+		case 7:
+			if (In >= 0.8)
+			{
+				// C8: Skeleton Flame's shell is not tagged `primary`, so it keeps the multiply -- its WHITE reading times CRIMSON
+				const TMap<FString, FQaPaint> P = QaPainted(D->GetCostume());
+				const FQaPaint* Bone = P.Find(TEXT("bone"));
+				const TPair<FName, FLinearColor>* Crimson = QaPrimarySwatch(TEXT("CRIMSON"));
+				// an untagged material reports its channel as "None" (NAME_None), not an empty string
+				const bool bUntagged = Bone != nullptr && (Bone->Channel.IsEmpty() || Bone->Channel == TEXT("None"));
+				const FLinearColor Want = Crimson != nullptr ? S.UntaggedWhite.Body * Crimson->Value : FLinearColor::Black;
+				const bool bCalibrated = S.UntaggedWhite.Body.R > 0.05f;   // a real shell was read under WHITE
+				const bool bMultiply = bUntagged && bCalibrated && Crimson != nullptr && QaExact(Bone->Body, Want);
+				QaSfCheck(S, TEXT("C8"), bMultiply, FString::Printf(TEXT("Skeleton Flame bone (channel '%s'): WHITE %s, CRIMSON %s, want %s (its WHITE x the swatch): the multiply, unchanged"),
+					Bone != nullptr ? *Bone->Channel : TEXT("?"), *QaRgb(S.UntaggedWhite.Body), Bone != nullptr ? *QaRgb(Bone->Body) : TEXT("MISSING"),
+					*QaRgb(Want)));
+				// leave Shadow Flame worn in WHITE, for the restart boot
+				GEngine->Exec(World, TEXT("wl.Skins.Wear shadow_flame"));
+				if (const TPair<FName, FLinearColor>* White = QaPrimarySwatch(TEXT("WHITE")))
+				{
+					WonderlandMascotStyle::PickMascotPrimary(White->Key, White->Value);
+				}
+				Next(8);
+			}
+			break;
+		case 8:
+			if (In >= 3.0)
+			{
+				PC->SetViewTargetWithBlend(D, 0.0f);
+				Finish();
+				return false;
+			}
+			break;
+		case 50:   // `restart`
+			if (In >= 4.0)
+			{
+				const TMap<FString, FQaPaint> P = QaPainted(Costume);
+				const FLinearColor Bone = QaPaintOf(P, TEXT("bone"));
+				const FLinearColor Deep = QaPaintOf(P, TEXT("bonedeep"));
+				FString On;
+				QaPrimaryRings(On);
+				QaSfCheck(S, TEXT("C9"), D->GetWornSkinId() == FName(TEXT("shadow_flame")) && QaExact(Bone, FLinearColor::White)
+					&& QaExact(Deep, FLinearColor::White * 0.62f) && On == TEXT("WHITE"),
+					FString::Printf(TEXT("after a restart: wears '%s', the coat %s / %s, rings on: %s (want shadow_flame, white, WHITE)"),
+						*D->GetWornSkinId().ToString(), *QaRgb(Bone), *QaRgb(Deep), *On));
+				QaShadowCamera(S.View, World, PC, D, 35.0, 260.0);
+				Next(51);
+			}
+			break;
+		case 51:
+			if (In >= 1.0)
+			{
+				QaShadowShot(S.View, TEXT("8_restart_white"));
+				Finish();
+				return false;
+			}
+			break;
+		default:
+			break;
+		}
+		return true;
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaShadowFlameColour(
+		TEXT("wl.Qa.ShadowFlameColour"),
+		TEXT("The Shadow Flame PRIMARY is pure (C1-C8): WHITE, BLACK and CRIMSON painted exactly, nine switches with no prior tint, ")
+		TEXT("strips/visor/eyes/void edges untouched, DEFAULT back to the designed coat, the rings, Relay OG's multiply unchanged; frames ")
+		TEXT("into Saved/Screenshots/WLSFCOLOUR; leaves WHITE chosen and quits. `wl.Qa.ShadowFlameColour restart`: still white (C9)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaSfColour.IsValid())
+			{
+				return;
+			}
+			GQaSfColour = MakeShared<FQaSfColour>();
+			GQaSfColour->World = World;
+			GQaSfColour->At = QaNow();
+			GQaSfColour->bRestart = Args.Num() > 0 && Args[0].Equals(TEXT("restart"), ESearchCase::IgnoreCase);
+			GQaSfColour->View.Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLSFCOLOUR"));
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaSfColourTick), 0.0f);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSFCOLOUR armed (%s)"), GQaSfColour->bRestart ? TEXT("restart check") : TEXT("C1-C8 and the frames"));
+		}));
+
+	/* ================================================================ wl.Qa.ShadowColorways (B65, founder, 2026-10-02)
+	 *
+	 * "SHADOW MASCOT COLORWAYS + THIRD COLOR CHANNEL": every primary keeps the SAME smoky detail, COLOR 3 (the strips) is its
+	 * own channel, and all three persist. Wears Shadow Flame under a HELD sky (noon; `night` for 22:30) and steps through the
+	 * founder's matrix -- DEFAULT, WHITE, BLACK, CRIMSON, AZURE, JADE with the strips as designed; the strip combos
+	 * white/black, white/cyan, crimson/gold, black/white, azure/crimson; then white + GOLD eyes + cyan strips and crimson +
+	 * OBSIDIAN eyes (the darkest secondary offered) + white strips -- each through the Wardrobe's and the Menu's own doors
+	 * (PickMascotPrimary, PickMascotStrip, the secondary's SaveAndApply), reading back what every surface is painted with:
+	 *   K1 the body EXACTLY the pick (DEFAULT: the designed navy)    K2 the deep coat a 0.62 shade of the same pick
+	 *   K3 the strips EXACTLY their pick (DEFAULT: designed black)   K4 the smoke relief bound on body AND strips, every step
+	 *   K5 the rim = SmokeRimTint(base) x gain, same hue as the base K6 visor and void edges never move; eyes only with SECONDARY
+	 *   K7 a strip change leaves the body; a body change the strips K8 one PRIMARY ring and one STRIPS ring, the picked ones
+	 * Two frames a step (three-quarter, and the face from below, the founder's photo's view) into
+	 * Saved/Screenshots/WLSFCOLORWAYS_<noon|night>; leaves crimson / obsidian eyes / white strips chosen and quits.
+	 * `restart`: K9 the three channels came back after a restart, rings included, and the same two frames.
+	 */
+	struct FQaCwStep
+	{
+		const TCHAR* Body;
+		const TCHAR* Strip;
+		const TCHAR* Eyes;   // a SECONDARY swatch (the shared palette), or nullptr to leave the eyes alone
+	};
+	const FQaCwStep QaCwSteps[] = {
+		{TEXT("DEFAULT"), TEXT("DEFAULT"), nullptr}, {TEXT("WHITE"), TEXT("DEFAULT"), nullptr}, {TEXT("BLACK"), TEXT("DEFAULT"), nullptr},
+		{TEXT("CRIMSON"), TEXT("DEFAULT"), nullptr}, {TEXT("AZURE"), TEXT("DEFAULT"), nullptr}, {TEXT("JADE"), TEXT("DEFAULT"), nullptr},
+		{TEXT("WHITE"), TEXT("BLACK"), nullptr}, {TEXT("WHITE"), TEXT("CYAN"), nullptr}, {TEXT("CRIMSON"), TEXT("GOLD"), nullptr},
+		{TEXT("BLACK"), TEXT("WHITE"), nullptr}, {TEXT("AZURE"), TEXT("CRIMSON"), nullptr},
+		{TEXT("WHITE"), TEXT("CYAN"), TEXT("GOLD")}, {TEXT("CRIMSON"), TEXT("WHITE"), TEXT("OBSIDIAN")},
+	};
+
+	struct FQaCwPaint
+	{
+		FLinearColor Body, BodyRim, Deep, Strip, StripRim, Visor, Edge, Eye;
+		FString BodyRelief, StripRelief;
+		bool bRead = false;
+	};
+
+	struct FQaColorways
+	{
+		TWeakObjectPtr<UWorld> World;
+		FQaShadow View;
+		int32 Phase = 0;
+		double At = 0.0;
+		int32 Step = 0;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		bool bRestart = false;
+		bool bNight = false;
+		FQaCwPaint First;   // step 0, DEFAULT/DEFAULT: the designed paint every later DEFAULT is held to
+		FQaCwPaint Prev;
+	};
+	TSharedPtr<FQaColorways> GQaColorways;
+
+	void QaCwCheck(FQaColorways& S, const FString& Id, bool bOk, const FString& Detail)
+	{
+		(bOk ? S.Pass : S.Fail)++;
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLSFCOLORWAYS %s %s | %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+	}
+
+	FQaCwPaint QaCwRead(const AWonderlandCompanionEmbodiment* Costume)
+	{
+		FQaCwPaint P;
+		if (Costume == nullptr)
+		{
+			return P;
+		}
+		FLinearColor Unused;
+		FString NoRelief;
+		P.bRead = Costume->QaReadPaint(FName(TEXT("bone")), P.Body, P.BodyRim, P.BodyRelief)
+			&& Costume->QaReadPaint(FName(TEXT("bonedeep")), P.Deep, Unused, NoRelief)
+			&& Costume->QaReadPaint(FName(TEXT("shadow")), P.Strip, P.StripRim, P.StripRelief)
+			&& Costume->QaReadPaint(FName(TEXT("visor")), P.Visor, Unused, NoRelief)
+			&& Costume->QaReadPaint(FName(TEXT("voidedge")), P.Edge, Unused, NoRelief)
+			&& Costume->QaReadPaint(FName(TEXT("eye")), P.Eye, Unused, NoRelief);
+		return P;
+	}
+
+	const TPair<FName, FLinearColor>* QaSharedSwatch(const TCHAR* Key)
+	{
+		const FName Want(Key);
+		return WonderlandMascotStyle::Palette().FindByPredicate([&Want](const TPair<FName, FLinearColor>& S) { return S.Key == Want; });
+	}
+
+	/** Which swatches of the PRIMARY palette show a ring on the PRIMARY (bStrips false) or the STRIPS row. */
+	FString QaCwRings(bool bStrips, int32& OutCount)
+	{
+		FString On;
+		OutCount = 0;
+		for (const TPair<FName, FLinearColor>& Swatch : WonderlandMascotStyle::PrimaryPalette())
+		{
+			const bool bOn = bStrips ? WonderlandMascotStyle::IsMascotStripOn(Swatch.Key, Swatch.Value)
+				: WonderlandMascotStyle::IsMascotPrimaryOn(Swatch.Key, Swatch.Value);
+			if (bOn)
+			{
+				++OutCount;
+				On += FString::Printf(TEXT("%s%s"), On.IsEmpty() ? TEXT("") : TEXT(","), *Swatch.Key.ToString());
+			}
+		}
+		return On;
+	}
+
+	/** The founder's photo's view: close in front of the head, a little below it, looking up into the face. */
+	void QaCwFaceCamera(FQaShadow& V, UWorld* World, APlayerController* PC, ARelayDogCharacter* D)
+	{
+		const FVector Feet = D->GetActorLocation() - FVector(0.0, 0.0, D->GetSimpleCollisionHalfHeight());
+		const FVector Head = Feet + FVector(0.0, 0.0, D->GetCanonBodyHeightUu() * 0.80);
+		const FVector Toward = D->GetActorForwardVector().GetSafeNormal2D().RotateAngleAxis(-18.0, FVector::UpVector);
+		const FVector Where = Head + Toward * 150.0 - FVector(0.0, 0.0, 55.0);
+		ACameraActor* Cam = V.Camera.Get();
+		if (Cam == nullptr)
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Cam = World->SpawnActor<ACameraActor>(Where, FRotator::ZeroRotator, Params);
+			V.Camera = Cam;
+		}
+		if (Cam != nullptr)
+		{
+			Cam->SetActorLocationAndRotation(Where, (Head - Where).Rotation());
+			Cam->GetCameraComponent()->SetFieldOfView(52.0f);
+			Cam->GetCameraComponent()->SetConstraintAspectRatio(false);
+			PC->SetViewTargetWithBlend(Cam, 0.0f);
+		}
+	}
+
+	/** The hue angle in degrees (0..360), or -1 for a grey: "the same hue" by angle, so a highlight lifted a little toward
+	 *  white still counts as the same crimson while a navy one never would. */
+	float QaHueDeg(const FLinearColor& C)
+	{
+		const float Max = FMath::Max3(C.R, C.G, C.B);
+		const float Min = FMath::Min3(C.R, C.G, C.B);
+		const float Span = Max - Min;
+		if (Max <= 1e-6f || Span / Max < 0.05f)
+		{
+			return -1.0f;
+		}
+		float H = 0.0f;
+		if (Max == C.R) { H = 60.0f * FMath::Fmod((C.G - C.B) / Span, 6.0f); }
+		else if (Max == C.G) { H = 60.0f * ((C.B - C.R) / Span + 2.0f); }
+		else { H = 60.0f * ((C.R - C.G) / Span + 4.0f); }
+		return H < 0.0f ? H + 360.0f : H;
+	}
+
+	/** K1-K8 on the step just painted. */
+	void QaCwVerify(FQaColorways& S, const FQaCwStep& Step, const FQaCwPaint& P)
+	{
+		const FString Tag = FString::Printf(TEXT("%02d %s/%s%s"), S.Step, Step.Body, Step.Strip, Step.Eyes != nullptr ? *FString::Printf(TEXT(" eyes %s"), Step.Eyes) : TEXT(""));
+		if (!P.bRead)
+		{
+			QaCwCheck(S, TEXT("K0"), false, Tag + TEXT(": the costume's paint could not be read (bone/bonedeep/shadow/visor/voidedge/eye)"));
+			return;
+		}
+		const bool bBodyDefault = FCString::Strcmp(Step.Body, TEXT("DEFAULT")) == 0;
+		const bool bStripDefault = FCString::Strcmp(Step.Strip, TEXT("DEFAULT")) == 0;
+		const TPair<FName, FLinearColor>* BodySwatch = QaPrimarySwatch(Step.Body);
+		const TPair<FName, FLinearColor>* StripSwatch = QaPrimarySwatch(Step.Strip);
+		// the designed colours, as the figure file declares them (RelaySkins/ShadowFlame.wlvox)
+		const FLinearColor DesignedBody(0.0160f, 0.0190f, 0.0420f), DesignedDeep(0.0090f, 0.0100f, 0.0220f), DesignedStrip(0.0100f, 0.0120f, 0.0300f);
+		const FLinearColor WantBody = bBodyDefault ? DesignedBody : (BodySwatch != nullptr ? BodySwatch->Value : FLinearColor(-1, -1, -1));
+		const FLinearColor WantDeep = bBodyDefault ? DesignedDeep : WantBody * 0.62f;
+		const FLinearColor WantStrip = bStripDefault ? DesignedStrip : (StripSwatch != nullptr ? StripSwatch->Value : FLinearColor(-1, -1, -1));
+		QaCwCheck(S, TEXT("K1"), QaExact(P.Body, WantBody), FString::Printf(TEXT("%s: the body painted %s, want %s exactly"), *Tag, *QaRgb(P.Body), *QaRgb(WantBody)));
+		QaCwCheck(S, TEXT("K2"), QaExact(P.Deep, FLinearColor(WantDeep.R, WantDeep.G, WantDeep.B)),
+			FString::Printf(TEXT("%s: the deep coat %s, want %s (the same pick, deeper)"), *Tag, *QaRgb(P.Deep), *QaRgb(WantDeep)));
+		QaCwCheck(S, TEXT("K3"), QaExact(P.Strip, WantStrip), FString::Printf(TEXT("%s: the strips painted %s, want %s exactly"), *Tag, *QaRgb(P.Strip), *QaRgb(WantStrip)));
+		// RECOLOURED surfaces wear the smoke look; DESIGNED ones (DEFAULT) keep exactly what step 0 read, unless wl.Shadow.OnDefault
+		const bool bOnDefault = WonderlandMascotStyle::SmokeOnDefault();
+		const FString Smoke = WonderlandMascotStyle::SmokeTextureName();
+		const FString WantBodyRelief = (!bBodyDefault || bOnDefault) ? Smoke : S.First.BodyRelief;
+		const FString WantStripRelief = (!bStripDefault || bOnDefault) && WonderlandMascotStyle::SmokeStripRelief() ? Smoke
+			: (bStripDefault ? S.First.StripRelief : S.First.StripRelief);
+		QaCwCheck(S, TEXT("K4"), Smoke != TEXT("none") && P.BodyRelief == WantBodyRelief && P.StripRelief == WantStripRelief,
+			FString::Printf(TEXT("%s: relief on the body '%s' (want '%s'), on the strips '%s' (want '%s'); the smoke texture '%s'"), *Tag,
+				*P.BodyRelief, *WantBodyRelief, *P.StripRelief, *WantStripRelief, *Smoke));
+		const FLinearColor WantBodyRim = bBodyDefault ? S.First.BodyRim : WonderlandMascotStyle::SmokeRimTint(WantBody) * WonderlandMascotStyle::SmokeRimGain();
+		const FLinearColor WantStripRim = bStripDefault ? S.First.StripRim : WonderlandMascotStyle::SmokeRimTint(WantStrip) * WonderlandMascotStyle::SmokeStripRimGain();
+		const FLinearColor BodyTint = WonderlandMascotStyle::SmokeRimTint(WantBody);
+		const float HueBase = QaHueDeg(WantBody);
+		const float HueTint = QaHueDeg(BodyTint);
+		const float HueGap = (HueBase < 0.0f || HueTint < 0.0f) ? 0.0f : FMath::Min(FMath::Abs(HueBase - HueTint), 360.0f - FMath::Abs(HueBase - HueTint));
+		const bool bBodyHue = bBodyDefault || HueBase < 0.0f || HueGap <= 6.0f;
+		const bool bBrighter = bBodyDefault || FMath::Max3(BodyTint.R, BodyTint.G, BodyTint.B) >= FMath::Max3(WantBody.R, WantBody.G, WantBody.B) - 0.001f;
+		QaCwCheck(S, TEXT("K5"), (S.Step == 0 || (QaExact(P.BodyRim, WantBodyRim) && QaExact(P.StripRim, WantStripRim))) && bBodyHue && bBrighter,
+			FString::Printf(TEXT("%s: rims body %s strips %s, want %s / %s; the body rim's hue %.1f vs the colour's %.1f deg (recoloured: the same hue, brighter, black a grey floor; DEFAULT: as designed)"), *Tag,
+				*QaRgb(P.BodyRim), *QaRgb(P.StripRim), *QaRgb(WantBodyRim), *QaRgb(WantStripRim), HueTint, HueBase));
+		if (S.Step > 0)
+		{
+			const bool bFixed = QaExact(P.Visor, S.First.Visor) && QaSameHue(P.Edge, S.First.Edge);
+			const bool bEyes = Step.Eyes != nullptr ? !QaSameHue(P.Eye, S.First.Eye) || !QaExact(P.Eye, S.First.Eye) : QaSameHue(P.Eye, S.First.Eye);
+			QaCwCheck(S, TEXT("K6"), bFixed && bEyes, FString::Printf(TEXT("%s: visor %s (first %s), void edges %s (first %s), eyes %s (first %s) -- %s"), *Tag,
+				*QaRgb(P.Visor), *QaRgb(S.First.Visor), *QaRgb(P.Edge), *QaRgb(S.First.Edge), *QaRgb(P.Eye), *QaRgb(S.First.Eye),
+				Step.Eyes != nullptr ? TEXT("the eyes follow the SECONDARY picked") : TEXT("the eyes keep their colour")));
+			const FQaCwStep& Before = QaCwSteps[S.Step - 1];
+			const bool bSameBody = FCString::Strcmp(Before.Body, Step.Body) == 0;
+			const bool bSameStrip = FCString::Strcmp(Before.Strip, Step.Strip) == 0;
+			if (bSameBody || bSameStrip)
+			{
+				const bool bKept = (!bSameBody || (QaExact(P.Body, S.Prev.Body) && QaExact(P.BodyRim, S.Prev.BodyRim)))
+					&& (!bSameStrip || (QaExact(P.Strip, S.Prev.Strip) && QaExact(P.StripRim, S.Prev.StripRim)));
+				QaCwCheck(S, TEXT("K7"), bKept, FString::Printf(TEXT("%s: %s unchanged from the step before"), *Tag,
+					bSameBody && bSameStrip ? TEXT("body and strips") : (bSameBody ? TEXT("the body (only the strips were picked)") : TEXT("the strips (only the body was picked)"))));
+			}
+		}
+		int32 PrimaryRings = 0;
+		int32 StripRings = 0;
+		const FString PrimaryOn = QaCwRings(false, PrimaryRings);
+		const FString StripOn = QaCwRings(true, StripRings);
+		QaCwCheck(S, TEXT("K8"), PrimaryRings == 1 && StripRings == 1 && PrimaryOn == Step.Body && StripOn == Step.Strip,
+			FString::Printf(TEXT("%s: PRIMARY ring(s) %d (%s), STRIPS ring(s) %d (%s)"), *Tag, PrimaryRings, *PrimaryOn, StripRings, *StripOn));
+	}
+
+	bool QaColorwaysTick(float)
+	{
+		if (!GQaColorways.IsValid())
+		{
+			return false;
+		}
+		FQaColorways& S = *GQaColorways;
+		UWorld* World = S.World.Get();
+		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		ARelayDogCharacter* D = QaDog(World);
+		const double In = QaNow() - S.At;
+		const auto Next = [&S](int32 Phase) { S.Phase = Phase; S.At = QaNow(); };
+		const auto Finish = [&S]()
+		{
+			if (ACameraActor* Cam = S.View.Camera.Get())
+			{
+				Cam->Destroy();
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSFCOLORWAYS END pass=%d fail=%d"), S.Pass, S.Fail);
+			GQaColorways.Reset();
+			FPlatformMisc::RequestExit(false);
+		};
+		if (World == nullptr || PC == nullptr || D == nullptr)
+		{
+			if (In > 120.0)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSFCOLORWAYS quit: no world or Relay Dog"));
+				Finish();
+				return false;
+			}
+			return true;
+		}
+		const AWonderlandCompanionEmbodiment* Costume = D->GetCostume();
+		const int32 NumSteps = static_cast<int32>(UE_ARRAY_COUNT(QaCwSteps));
+		switch (S.Phase)
+		{
+		case 0:
+			if (In >= 8.0)
+			{
+				if (UWonderlandUiSubsystem* U = QaUi(World))
+				{
+					U->DismissWelcome();
+					U->CloseOverlay();
+				}
+				// THE SKY HELD STILL, so every frame of the matrix is lit the same and default vs recolour compare honestly
+				GEngine->Exec(World, TEXT("wl.Sky.DayMinutes 0"));
+				GEngine->Exec(World, S.bNight ? TEXT("wl.Sky.Hour 22.5") : TEXT("wl.Sky.Hour 12.5"));
+				if (!S.bRestart)
+				{
+					GEngine->Exec(World, TEXT("wl.Mascot.Reset"));
+					GEngine->Exec(World, TEXT("wl.Skins.Wear shadow_flame"));
+				}
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSFCOLORWAYS look: %s"), *WonderlandMascotStyle::DescribeSmokeLook());
+				Next(S.bRestart ? 50 : 1);
+			}
+			break;
+		case 1:
+			if (In >= 3.0)
+			{
+				Next(2);
+			}
+			break;
+		case 2:   // pick this step's colours, through the rows' own doors
+		{
+			const FQaCwStep& Step = QaCwSteps[S.Step];
+			if (const TPair<FName, FLinearColor>* Body = QaPrimarySwatch(Step.Body))
+			{
+				WonderlandMascotStyle::PickMascotPrimary(Body->Key, Body->Value);
+			}
+			if (const TPair<FName, FLinearColor>* Strip = QaPrimarySwatch(Step.Strip))
+			{
+				WonderlandMascotStyle::PickMascotStrip(Strip->Key, Strip->Value);
+			}
+			if (Step.Eyes != nullptr)
+			{
+				const TPair<FName, FLinearColor>* Eyes = QaSharedSwatch(Step.Eyes);
+				if (UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>(); Style != nullptr && Eyes != nullptr)
+				{
+					Style->Secondary = Eyes->Value;
+					Style->bChosen = true;
+					Style->bSecondaryChosen = true;
+					WonderlandMascotStyle::SaveAndApply();
+				}
+			}
+			Next(3);
+			break;
+		}
+		case 3:   // settled: read, check, and the three-quarter frame
+			if (In >= 1.5)
+			{
+				const FQaCwStep& Step = QaCwSteps[S.Step];
+				const FQaCwPaint P = QaCwRead(Costume);
+				if (S.Step == 0)
+				{
+					S.First = P;
+				}
+				QaCwVerify(S, Step, P);
+				S.Prev = P;
+				QaShadowCamera(S.View, World, PC, D, 35.0, 230.0);
+				Next(4);
+			}
+			break;
+		case 4:
+			if (In >= 0.6)
+			{
+				const FQaCwStep& Step = QaCwSteps[S.Step];
+				QaShadowShot(S.View, *FString::Printf(TEXT("%02d_%s_%s%s_threequarter"), S.Step, Step.Body, Step.Strip,
+					Step.Eyes != nullptr ? *FString::Printf(TEXT("_eyes_%s"), Step.Eyes) : TEXT("")).ToLower());
+				QaCwFaceCamera(S.View, World, PC, D);
+				Next(5);
+			}
+			break;
+		case 5:
+			if (In >= 0.6)
+			{
+				const FQaCwStep& Step = QaCwSteps[S.Step];
+				QaShadowShot(S.View, *FString::Printf(TEXT("%02d_%s_%s%s_face"), S.Step, Step.Body, Step.Strip,
+					Step.Eyes != nullptr ? *FString::Printf(TEXT("_eyes_%s"), Step.Eyes) : TEXT("")).ToLower());
+				++S.Step;
+				if (S.Step < NumSteps)
+				{
+					Next(2);
+				}
+				else
+				{
+					Next(9);
+				}
+			}
+			break;
+		case 9:
+			if (In >= 0.5)
+			{
+				Finish();
+				return false;
+			}
+			break;
+		case 50:   // THE RESTART BOOT: nothing picked; what came back by itself
+			if (In >= 4.0)
+			{
+				const FQaCwPaint P = QaCwRead(Costume);
+				const TPair<FName, FLinearColor>* Crimson = QaPrimarySwatch(TEXT("CRIMSON"));
+				const TPair<FName, FLinearColor>* White = QaPrimarySwatch(TEXT("WHITE"));
+				const TPair<FName, FLinearColor>* Obsidian = QaSharedSwatch(TEXT("OBSIDIAN"));
+				int32 PrimaryRings = 0;
+				int32 StripRings = 0;
+				const FString PrimaryOn = QaCwRings(false, PrimaryRings);
+				const FString StripOn = QaCwRings(true, StripRings);
+				const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+				const bool bOk = P.bRead && D->GetWornSkinId() == FName(TEXT("shadow_flame")) && Crimson != nullptr && White != nullptr && Obsidian != nullptr
+					&& QaExact(P.Body, Crimson->Value) && QaExact(P.Strip, White->Value) && Style.Secondary.Equals(Obsidian->Value, 0.002f)
+					&& PrimaryOn == TEXT("CRIMSON") && StripOn == TEXT("WHITE") && P.BodyRelief != TEXT("none");
+				QaCwCheck(S, TEXT("K9"), bOk, FString::Printf(TEXT("after a restart: wears '%s', body %s, strips %s, secondary %s, rings PRIMARY %s STRIPS %s, relief %s (want shadow_flame, crimson, white, obsidian)"),
+					*D->GetWornSkinId().ToString(), *QaRgb(P.Body), *QaRgb(P.Strip), *QaRgb(Style.Secondary), *PrimaryOn, *StripOn, *P.BodyRelief));
+				QaShadowCamera(S.View, World, PC, D, 35.0, 230.0);
+				Next(51);
+			}
+			break;
+		case 51:
+			if (In >= 0.6)
+			{
+				QaShadowShot(S.View, TEXT("restart_crimson_white_eyes_obsidian_threequarter"));
+				QaCwFaceCamera(S.View, World, PC, D);
+				Next(52);
+			}
+			break;
+		case 52:
+			if (In >= 0.6)
+			{
+				QaShadowShot(S.View, TEXT("restart_crimson_white_eyes_obsidian_face"));
+				Next(9);
+			}
+			break;
+		default:
+			break;
+		}
+		return true;
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaShadowColorways(
+		TEXT("wl.Qa.ShadowColorways"),
+		TEXT("B65: Shadow's colourways keep their detail and its strips are COLOR 3 (K1-K8 over the founder's matrix, two frames a step, ")
+		TEXT("into Saved/Screenshots/WLSFCOLORWAYS_<noon|night>); `night` holds the sky at 22:30 instead of noon; `restart`: K9 the three ")
+		TEXT("channels came back. Quits after."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaColorways.IsValid())
+			{
+				return;
+			}
+			GQaColorways = MakeShared<FQaColorways>();
+			GQaColorways->World = World;
+			GQaColorways->At = QaNow();
+			GQaColorways->bRestart = Args.ContainsByPredicate([](const FString& A) { return A.Equals(TEXT("restart"), ESearchCase::IgnoreCase); });
+			GQaColorways->bNight = Args.ContainsByPredicate([](const FString& A) { return A.Equals(TEXT("night"), ESearchCase::IgnoreCase); });
+			GQaColorways->View.Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots")
+				/ (GQaColorways->bNight ? TEXT("WLSFCOLORWAYS_night") : TEXT("WLSFCOLORWAYS_noon")));
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaColorwaysTick), 0.0f);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSFCOLORWAYS armed (%s, %s)"), GQaColorways->bRestart ? TEXT("restart check") : TEXT("K1-K8 and the frames"),
+				GQaColorways->bNight ? TEXT("night 22:30") : TEXT("noon 12:30"));
+		}));
+
 	/* ================================================================ wl.Qa.Wardrobe (founder, 2026-10-01)
 	 *
 	 * "WONDERLAND WARDROBE -- MASCOT SKIN PRESENTATION FIX": every skin (1) much closer in the Wardrobe's viewer, whole and

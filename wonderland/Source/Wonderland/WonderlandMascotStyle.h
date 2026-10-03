@@ -232,6 +232,29 @@ namespace WonderlandMascotStyle
 	WONDERLAND_API const TArray<TPair<FName, FLinearColor>>& Palette();
 
 	/**
+	 * THE MASCOT PRIMARY, PURE (founder, 2026-10-02: "WHITE -> pure white, BLACK -> black ... The chosen color should be
+	 * the actual visible primary color, not a blend with the skin's original dark body color").
+	 *
+	 * The PRIMARY rows offer DEFAULT, then a true WHITE and BLACK, then the shared palette. DEFAULT and WHITE are both
+	 * (1,1,1), so whether the primary is a REAL choice is kept beside the colour: in its own small file
+	 * (Saved/Wonderland/PrimaryChoice.txt, "CHOSEN" or "DEFAULT"), not a new config property, for the FName reason the
+	 * flame colour gives (a new reflected or config name crashed RC1 at boot). No file, or an unreadable one: a saved
+	 * non-white primary counts as chosen, white as DEFAULT -- exactly what the colourway meant before the file.
+	 *
+	 * A figure material tagged `primary` takes a chosen primary AS its colour; everything else keeps the multiply it had.
+	 */
+	WONDERLAND_API const TArray<TPair<FName, FLinearColor>>& PrimaryPalette();
+	WONDERLAND_API bool HasChosenPrimary();
+	/** Pick a PRIMARY swatch (DEFAULT included) from the Wardrobe or the Menu: the state, the file, SaveAndApply. */
+	WONDERLAND_API void PickMascotPrimary(FName Key, const FLinearColor& Colour);
+	/** Whether this PRIMARY swatch is the one on (its ring). */
+	WONDERLAND_API bool IsMascotPrimaryOn(FName Key, const FLinearColor& Colour);
+	/** Whether a figure's material channel takes the chosen primary as its colour: `primary`. */
+	WONDERLAND_API bool IsPrimaryChannel(FName Channel);
+	/** What the saved choice file is read with ("CHOSEN" / "DEFAULT", or false). For the QA's hostile inputs. */
+	WONDERLAND_API bool ParsePrimaryChoice(const FString& Text, bool& bOutChosen);
+
+	/**
 	 * THE FLAME COLOUR (founder, 2026-10-01: "When a flame-bearing mascot is equipped, the Color menu should expose a
 	 * separate: Flame Color. This must be independent from normal body/secondary color").
 	 *
@@ -254,6 +277,67 @@ namespace WonderlandMascotStyle
 	WONDERLAND_API bool IsFlameChannel(FName Channel);
 	/** Whether the skin the player's Relay Dog wears has any such fire. The FLAME rows show only then. */
 	WONDERLAND_API bool WornSkinHasFlame();
+
+	/**
+	 * THE STRIPS COLOUR -- COLOR 3 (founder, 2026-10-02, "SHADOW MASCOT COLORWAYS + THIRD COLOR CHANNEL": "The flowing black
+	 * strips / ribbons / tendrils surrounding the Shadow mascot need their OWN independently selectable color channel ...
+	 * Treat COLOR 3 similarly to how flame/accent regions are independently configurable on other mascot skins").
+	 *
+	 * The flame colour's twin: one colour, a figure opts its strips in by tagging them `strip` (no skin is named in code),
+	 * shown as its own STRIPS row in the Wardrobe and the Menu only while such a skin is worn. Unlike the fire, WHITE is a
+	 * real choice here (white strips), so DEFAULT -- the strips as designed -- is kept as the word itself: the file
+	 * Saved/Wonderland/StripColour.txt holds "DEFAULT" or three numbers in 0..1. A file, never a config property (the FName
+	 * reason above). Changing it moves the strips and nothing else: not the body, the eyes, the swords or the clothes.
+	 */
+	WONDERLAND_API bool HasChosenStrip();
+	/** The chosen strip colour; meaningful only when HasChosenStrip(). */
+	WONDERLAND_API FLinearColor StripColour();
+	/** Pick a STRIPS swatch (DEFAULT included) from the Wardrobe or the Menu: the state, the file, SaveAndApply. */
+	WONDERLAND_API void PickMascotStrip(FName Key, const FLinearColor& Colour);
+	/** Whether this STRIPS swatch is the one on (its ring); DEFAULT and WHITE are told apart. */
+	WONDERLAND_API bool IsMascotStripOn(FName Key, const FLinearColor& Colour);
+	/** What the saved file is read with: "DEFAULT", or three numbers in 0..1. For the QA's hostile inputs. */
+	WONDERLAND_API bool ParseStripColour(const FString& Text, bool& bOutChosen, FLinearColor& OutColour);
+	/** Whether a figure's material channel is a strip that follows the STRIPS colour: `strip`. */
+	WONDERLAND_API bool IsStripChannel(FName Channel);
+	/** Whether the skin the player's Relay Dog wears has any such strips. The STRIPS rows show only then. */
+	WONDERLAND_API bool WornSkinHasStrips();
+	/** Every reset's share of the small files: the primary back to DEFAULT (not CHOSEN) and the strips back to DEFAULT. */
+	WONDERLAND_API void ResetChoiceFiles();
+
+	/**
+	 * THE SMOKE LOOK (founder, 2026-10-02: "Changing Shadow's primary color must NOT remove its visual detail ... Every
+	 * colorway should preserve the SAME rich Shadow material identity. The selected color changes the palette, not the
+	 * amount of detail ... preserve detail through tonal variation, masks, normals, roughness, controlled highlights/shadows
+	 * ... Do NOT solve the detail problem by multiplying the selected color against the old navy material").
+	 *
+	 * A rim surface whose figure marks it `smoke` keeps its BASE colour exactly (pure colour rule), and takes its detail
+	 * from everything around the colour: a cloudy normal relief (the master's NormalTex, a cooked texture, projected at
+	 * TexScale), a roughness that wanders (RoughVary) so highlights travel across it, a little procedural relief
+	 * (DetailAmp), and a grazing-angle rim in a LIGHTER TINT OF THE SAME HUE -- never a multiply by the old navy. Black
+	 * keeps readable dark-grey highlights; white takes light-grey tonal relief and white edges. The DEFAULT colours wear
+	 * the same look, so the designed skin and every recolour are one material identity. Tunable live: wl.Shadow.*.
+	 */
+	WONDERLAND_API bool IsSmokeLook(FName Look);
+	/** The rim's tint for a smoke surface of this colour: the same hue lifted toward white, with a dark-grey floor. */
+	WONDERLAND_API FLinearColor SmokeRimTint(const FLinearColor& Base);
+	/** The rim's emissive gain for a smoke surface (RimColor = SmokeRimTint x this). */
+	WONDERLAND_API float SmokeRimGain();
+	/** The rim's amplitude for a smoke surface, before the night's rim boost multiplies it (RimAmp = boost x this). */
+	WONDERLAND_API float SmokeRimAmp();
+	/** The STRIPS' rim gain when a strip colour is chosen (subtle edges), and whether recoloured strips take the relief. */
+	WONDERLAND_API float SmokeStripRimGain();
+	WONDERLAND_API bool SmokeStripRelief();
+	/** Whether the DEFAULT colours wear the smoke look too (wl.Shadow.OnDefault; off: the designed look exactly). */
+	WONDERLAND_API bool SmokeOnDefault();
+	/** The relief texture the smoke look binds right now, by name, or "none" (for the QA). */
+	WONDERLAND_API FString SmokeTextureName();
+	/** Put a rim material instance back to its parent's own detail (undoes ApplySmokeDetail): DEFAULT leaves nothing behind. */
+	WONDERLAND_API void RestoreSmokeDetail(UMaterialInstanceDynamic* Instance);
+	/** Write the smoke look's detail parameters (all but the colours and RimAmp) onto one rim material instance. */
+	WONDERLAND_API void ApplySmokeDetail(UMaterialInstanceDynamic* Instance);
+	/** One line naming the smoke look's current settings, for the QA's log. */
+	WONDERLAND_API FString DescribeSmokeLook();
 
 	/**
 	 * SAVE, AND MAKE IT TRUE EVERYWHERE, NOW.
