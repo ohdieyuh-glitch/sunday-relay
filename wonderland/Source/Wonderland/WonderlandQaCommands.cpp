@@ -9041,6 +9041,256 @@ namespace
 			GQaStanceCalib->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaStanceCalibTick), 0.0f);
 		}));
 
+	/* ================================================================ wl.Qa.DashTrails: the dash's two trails, measured on screen
+	 * The founder's directive (H9): the dash leaves a gold trail from the LEFT hand and a cyan one from the RIGHT, never filling the
+	 * screen. From the player's own camera behind, three real dashes (a double tap of W, held swords): each frame of each dash, the
+	 * ribbons each trail sweeps are projected and their quad areas summed (true coverage, not a bounding box). DT1: the most they
+	 * cover is at most 15% of the frame, and more than nothing (they draw). DT2: at that moment the gold trail is on the screen's
+	 * LEFT of the cyan. A frame at the widest moment to Saved/Screenshots/WLDASH. WLDTQA lines.
+	 */
+	struct FQaDashTrails
+	{
+		TWeakObjectPtr<UWorld> World;
+		FTSTicker::FDelegateHandle Handle;
+		bool bQuit = false;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		int32 Phase = 0;
+		int32 Sub = 0;
+		int32 Dash = 0;
+		double PhaseAt = 0.0;
+		double MaxCover = 0.0;
+		double GoldXAtMax = 0.0;
+		double CyanXAtMax = 0.0;
+		int32 FramesWithTrails = 0;
+		bool bShot = false;
+		FString Dir;
+		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLDTQA %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+		void Frame(const FString& Name)
+		{
+			int32 Width = 0;
+			int32 Height = 0;
+			const FString Path = Dir / (Name + TEXT(".png"));
+			const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLDTQA frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), Width, Height);
+		}
+	};
+	TSharedPtr<FQaDashTrails> GQaDashTrails;
+
+	/** One trail's screen coverage (px^2): the quads between consecutive samples, each by the shoelace formula; and its centre's x. */
+	double QaTrailCover(APlayerController* PC, const TArray<FVector>& Tips, const TArray<FVector>& Roots, double& OutCentreX)
+	{
+		double Area = 0.0;
+		double SumX = 0.0;
+		int32 Points = 0;
+		for (int32 Index = 0; Index + 1 < Tips.Num(); ++Index)
+		{
+			FVector2D Q[4] = { FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector };
+			const FVector World[4] = { Tips[Index], Roots[Index], Roots[Index + 1], Tips[Index + 1] };
+			bool bAll = true;
+			for (int32 Corner = 0; Corner < 4; ++Corner)
+			{
+				bAll &= PC->ProjectWorldLocationToScreen(World[Corner], Q[Corner]);
+			}
+			if (!bAll)
+			{
+				continue;
+			}
+			double Twice = 0.0;
+			for (int32 Corner = 0; Corner < 4; ++Corner)
+			{
+				const FVector2D& A = Q[Corner];
+				const FVector2D& B = Q[(Corner + 1) % 4];
+				Twice += A.X * B.Y - B.X * A.Y;
+				SumX += A.X;
+				++Points;
+			}
+			Area += FMath::Abs(Twice) * 0.5;
+		}
+		OutCentreX = Points > 0 ? SumX / Points : 0.0;
+		return Area;
+	}
+
+	bool QaDashTrailsTick(float)
+	{
+		if (!GQaDashTrails.IsValid())
+		{
+			return false;
+		}
+		FQaDashTrails& S = *GQaDashTrails;
+		UWorld* World = S.World.Get();
+		ARelayDogCharacter* Dog = QaDog(World);
+		FWonderlandMissionHandoff* Handoff = QaHandoff(World);
+		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		auto Stop = [&S](const TCHAR* Why)
+		{
+			if (UWorld* W = S.World.Get())
+			{
+				if (ARelayDogCharacter* D = QaDog(W))
+				{
+					D->QaForwardKey(false, false);
+				}
+				if (FWonderlandMissionHandoff* H = QaHandoff(W))
+				{
+					FString Ignored;
+					H->Return(Ignored);
+				}
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLDTQA END pass=%d fail=%d%s"), S.Pass, S.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
+			const bool bQuit = S.bQuit;
+			GQaDashTrails.Reset();
+			if (bQuit)
+			{
+				FPlatformMisc::RequestExit(false);
+			}
+			return false;
+		};
+		if (World == nullptr || Dog == nullptr || Handoff == nullptr || PC == nullptr)
+		{
+			return Stop(TEXT("the world, the Dog or the handoff went away"));
+		}
+		const double Now = QaNow();
+		const double In = Now - S.PhaseAt;
+		switch (S.Phase)
+		{
+		case 0:
+			if (UWonderlandUiSubsystem* Ui = QaUi(World))
+			{
+				if (Ui->IsWelcomeOpen())
+				{
+					Ui->DismissWelcome();
+				}
+			}
+			if (In < 4.0 || !Dog->GetCharacterMovement()->IsMovingOnGround())
+			{
+				return In < 40.0 ? true : Stop(TEXT("never ready"));
+			}
+			GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+			GEngine->Exec(World, TEXT("wl.Sky.Hour 12"));
+			PC->SetViewTargetWithBlend(Dog, 0.0f);
+			if (!Handoff->IsEquipped())
+			{
+				FString Said;
+				WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
+			}
+			S.Phase = 1;
+			S.PhaseAt = Now;
+			return true;
+		case 1:
+			if (!Handoff->IsArmed() || In < 5.0)
+			{
+				return In < 15.0 ? true : Stop(TEXT("the swords were never held"));
+			}
+			// across open ground, the player's camera behind (QaClearHeading: the M1a dash QA's own open-ground heading)
+			{
+				FVector Ahead = FVector::ForwardVector;
+				const float Yaw = QaClearHeading(World, Dog, 1200.0f, Ahead);
+				Dog->SetActorRotation(FRotator(0.0f, Yaw, 0.0f));
+				PC->SetControlRotation(FRotator(-12.0f, Yaw, 0.0f));
+			}
+			S.Phase = 2;
+			S.Sub = 0;
+			S.PhaseAt = Now;
+			return true;
+		case 2:
+		{
+			// THREE DASHES: a double tap (both presses in one tick), let go on the next, then 0.8 s of the trails measured
+			if (S.Sub == 0)
+			{
+				if (In < 1.6)
+				{
+					return true;
+				}
+				Dog->QaForwardKey(false, true);
+				Dog->QaForwardKey(false, false);
+				Dog->QaForwardKey(false, true);
+				S.Sub = 1;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (S.Sub == 1)
+			{
+				Dog->QaForwardKey(false, false);
+				S.Sub = 2;
+				return true;
+			}
+			const WonderlandHandoffSwords::FPresentation& Swords = Dog->GetHandoffSwords();
+			TArray<FVector> Tips;
+			TArray<FVector> Roots;
+			double GoldX = 0.0;
+			double CyanX = 0.0;
+			Swords.GetTrailSamples(true, Tips, Roots);
+			const double Gold = QaTrailCover(PC, Tips, Roots, GoldX);
+			Swords.GetTrailSamples(false, Tips, Roots);
+			const double Cyan = QaTrailCover(PC, Tips, Roots, CyanX);
+			FVector2D Size(1280.0, 800.0);
+			if (GEngine != nullptr && GEngine->GameViewport != nullptr)
+			{
+				GEngine->GameViewport->GetViewportSize(Size);
+			}
+			const double Cover = (Gold + Cyan) / FMath::Max(Size.X * Size.Y, 1.0);
+			if (Gold > 0.0 && Cyan > 0.0)
+			{
+				++S.FramesWithTrails;
+				if (Cover > S.MaxCover)
+				{
+					S.MaxCover = Cover;
+					S.GoldXAtMax = GoldX;
+					S.CyanXAtMax = CyanX;
+				}
+				if (!S.bShot && In >= 0.25)
+				{
+					S.Frame(TEXT("dash_trails_player_camera_behind"));
+					S.bShot = true;
+				}
+			}
+			if (In < 0.8)
+			{
+				return true;
+			}
+			if (++S.Dash < 3)
+			{
+				S.Sub = 0;
+				S.PhaseAt = Now;
+				return true;
+			}
+			S.Check(TEXT("DT1"), S.MaxCover <= 0.15 && S.MaxCover > 0.0005 && S.FramesWithTrails >= 3,
+				FString::Printf(TEXT("three dashes from the player's camera: both trails drawn in %d frames, covering at most %.1f%% of the frame (<= 15%%)"),
+					S.FramesWithTrails, S.MaxCover * 100.0));
+			S.Check(TEXT("DT2"), S.MaxCover > 0.0 && S.GoldXAtMax < S.CyanXAtMax,
+				FString::Printf(TEXT("at the widest moment the gold trail's centre is at x %.0f and the cyan's at x %.0f (gold on the screen's LEFT, from the LEFT hand: %s)"),
+					S.GoldXAtMax, S.CyanXAtMax, S.GoldXAtMax < S.CyanXAtMax ? TEXT("yes") : TEXT("NO")));
+			return Stop(nullptr);
+		}
+		default:
+			return Stop(TEXT("an unknown phase"));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaDashTrailsCommand(
+		TEXT("wl.Qa.DashTrails"),
+		TEXT("The dash's trails on screen (the founder's H9): three real dashes holding the swords, from the player's camera behind -- the ")
+		TEXT("ribbons' true coverage at most 15% of the frame (DT1), gold on the LEFT of cyan (DT2); a frame to Saved/Screenshots/WLDASH. ")
+		TEXT("`quit` exits after. WLDTQA lines."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaDashTrails.IsValid() || World == nullptr)
+			{
+				return;
+			}
+			GQaDashTrails = MakeShared<FQaDashTrails>();
+			GQaDashTrails->World = World;
+			GQaDashTrails->bQuit = Args.Contains(TEXT("quit"));
+			GQaDashTrails->PhaseAt = QaNow();
+			GQaDashTrails->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLDASH"));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLDTQA BEGIN | %s"), *WonderlandBeta::BuildLabel());
+			GQaDashTrails->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaDashTrailsTick), 0.0f);
+		}));
+
 	/* ================================================================ wl.Qa.ActHands: the hands never through a mission prop
 	 * Second's review (10-03): the always-on hands would go through the book, the brush, the lens and the scraper of the acts the
 	 * founder accepted as they are (43/43, 09-30). The hands now step aside while a prop shows. Measured on Relay OG and on
