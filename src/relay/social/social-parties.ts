@@ -241,10 +241,16 @@ export function setSelfMuted(state: SocialState, actorId: SocialUserId, muted: b
   );
 }
 
-/** What a party looks like to one of its members, or to a friend allowed to see it. Null otherwise. */
+/**
+ * What a party looks like to one of its members, or to a friend allowed to see it. Null otherwise.
+ * A block does not break a shared party (blockUser), so the view is where it is enforced: a member blocked either way with
+ * the viewer is not in the viewer's roster at all -- no id, role or live mute (F1, 10-02) -- and `leaderId` is '' when the
+ * leader is such a member.
+ */
 export interface PartyView {
   readonly partyId: string;
   readonly name: string;
+  /** '' when the leader is somebody blocked either way with the viewer. */
   readonly leaderId: SocialUserId;
   readonly members: readonly { userId: SocialUserId; role: Party['members'][number]['role']; selfMuted: boolean }[];
   readonly privacy: PartyPrivacy;
@@ -263,11 +269,12 @@ export function partyViewFor(state: SocialState, viewerId: SocialUserId, partyId
     party.members.some((m) => areFriends(state, viewerId, m.userId)) &&
     !party.members.some((m) => blockedEitherWay(state, viewerId, m.userId));
   if (!member && !friendOfOpen) return null;
+  const hidden = (userId: SocialUserId): boolean => userId !== viewerId && blockedEitherWay(state, viewerId, userId);
   return {
     partyId: party.partyId,
     name: party.name,
-    leaderId: party.leaderId,
-    members: party.members.map((m) => ({ userId: m.userId, role: m.role, selfMuted: m.selfMuted })),
+    leaderId: hidden(party.leaderId) ? '' : party.leaderId,
+    members: party.members.filter((m) => !hidden(m.userId)).map((m) => ({ userId: m.userId, role: m.role, selfMuted: m.selfMuted })),
     privacy: party.privacy,
     invitePermission: party.invitePermission,
     viewerIsMember: member,

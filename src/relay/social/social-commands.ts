@@ -10,6 +10,8 @@
  *
  * PRIVACY IN THE AUDIENCE. A block, a mute and a report are told to nobody but the actor: the blocked, muted or reported
  * person is never sent an event about it (their views change on their next refresh, like any other). Reads have no audience.
+ * THE BLOCK FLOOR: no update a player CAUSES ever reaches anyone blocked either way with them -- a shared party (which a
+ * block does not break) included: B's self-mute or role change produces no event for the A that B blocked (F1, 10-02).
  *
  * Pure: the same state, operation and inputs give the same result on every machine.
  */
@@ -65,7 +67,7 @@ import {
 } from './social-parties';
 import { deriveActivity, resolvePresenceFor, resolveProfileFor, type WonderlandActivitySignals } from './social-presence';
 import { buildSocialView } from './social-preview';
-import { friendIdsOf, partyOf, type SocialState } from './social-state';
+import { blockedEitherWay, friendIdsOf, partyOf, type SocialState } from './social-state';
 import {
   WORLD_MOTIONS,
   contextOf,
@@ -253,6 +255,7 @@ function readSignals(raw: unknown): Check<WonderlandActivitySignals | null> {
 /**
  * APPLY ONE OPERATION for the actor. The caller has already: authenticated the session, refused anything not in the table,
  * and bound the actor to the session's own player (bindSocialActor). Ids come from the path; everything else from the body.
+ * The audience then passes THE BLOCK FLOOR (see the header), judged on the state AFTER the operation.
  */
 export function applySocialOperation(
   state: SocialState,
@@ -261,6 +264,21 @@ export function applySocialOperation(
   input: SocialCommandInput,
   nowIso: string,
   world: WorldState = emptyWorldState(),
+): RelayResult<SocialCommandOutcome> {
+  const outcome = applyOne(state, op, actorId, input, nowIso, world);
+  if (!outcome.ok || outcome.value.audience.length === 0) return outcome;
+  const after = outcome.value.state;
+  const audience = outcome.value.audience.filter((id) => id === actorId || !blockedEitherWay(after, actorId, id));
+  return { ok: true, value: { ...outcome.value, audience } };
+}
+
+function applyOne(
+  state: SocialState,
+  op: SocialOperationId,
+  actorId: SocialUserId,
+  input: SocialCommandInput,
+  nowIso: string,
+  world: WorldState,
 ): RelayResult<SocialCommandOutcome> {
   const { ids, body } = input;
   const nowMs = Date.parse(nowIso);
