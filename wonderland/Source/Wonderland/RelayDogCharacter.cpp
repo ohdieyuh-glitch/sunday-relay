@@ -3472,7 +3472,7 @@ void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
 			Hand.SetGripAxis(ArmXf.TransformVectorNoScale(WonderlandActGrip::ToolAxisInArm(Hand.GetAlong(), Hand.GetForward(), WonderlandActGrip::ToolTiltDeg())));
 			// ALREADY CLOSED WHEN THE TOOL APPEARS: a palm still opening would sit where the handle goes for a third of a second
 			Hand.Pose(1.0f, bToolInFist ? DeltaSeconds : 0.0f, true);
-			LayToolInFist(Hand, ArmXf, (PropMask & 2) != 0);
+			LayToolInFist(Hand, Forearm, (PropMask & 2) != 0);
 			bToolHeld = true;
 			continue;
 		}
@@ -3492,10 +3492,15 @@ void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
 	if (!bToolHeld && bToolLaidInFist)
 	{
 		// BACK ON THE FOREARM where the 09-30 acts had them: for wl.Dog.ActHands 0, and for a tool shown with no hand to hold it
+		USceneComponent* ToolSeat = ArmRight.Forearm != nullptr ? ArmRight.Forearm.Get() : BodyRoot.Get();
 		for (UInstancedStaticMeshComponent* Part : { BrushMesh.Get(), BrushHeadMesh.Get(), ScraperMesh.Get(), ScraperBladeMesh.Get() })
 		{
 			if (Part != nullptr)
 			{
+				if (ToolSeat != nullptr && Part->GetAttachParent() != ToolSeat)
+				{
+					Part->AttachToComponent(ToolSeat, FAttachmentTransformRules::KeepRelativeTransform);
+				}
 				Part->SetRelativeTransform(FTransform::Identity);
 			}
 		}
@@ -3503,8 +3508,13 @@ void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
 	}
 }
 
-void ARelayDogCharacter::LayToolInFist(const WonderlandHands::FHand& Hand, const FTransform& ArmXf, bool bBrush)
+void ARelayDogCharacter::LayToolInFist(const WonderlandHands::FHand& Hand, USceneComponent* Forearm, bool bBrush)
 {
+	if (Forearm == nullptr)
+	{
+		return;
+	}
+	const FTransform ArmXf = Forearm->GetComponentTransform();
 	// THE HANDLE THROUGH THE FIST (WonderlandActGrip): the grip point 2 in from the butt, so the butt stays inside the little finger
 	// and clear of the forearm's block, the rest reaching out of the thumb side; the cross-section fitted a little inside the palm's
 	// face (1.8 of its 2.1), so the thumb wrapping over the handle meets it rather than sinking in -- simulated over hand sizes
@@ -3519,13 +3529,29 @@ void ARelayDogCharacter::LayToolInFist(const WonderlandHands::FHand& Hand, const
 	const FVector BackOfHand = ArmXf.TransformVectorNoScale(FVector::CrossProduct(Hand.GetLaidAhead(), Hand.GetLaidAlong()) * Hand.GetSide());
 	const double Hollow = Hand.GetHollowRadius() * (1.8 / 2.1) * ArmXf.GetScale3D().GetAbsMin();
 	const FTransform ToolXf = WonderlandActGrip::ToolWorld(Handle, FistCentre, Wrap, BackOfHand, Hollow);
-	for (UInstancedStaticMeshComponent* Part : bBrush ? TArray<UInstancedStaticMeshComponent*>{ BrushMesh.Get(), BrushHeadMesh.Get() }
-		: TArray<UInstancedStaticMeshComponent*>{ ScraperMesh.Get(), ScraperBladeMesh.Get() })
+	// ONLY THE HANDLE IS FITTED TO THE HOLLOW: the brush's head and the scraper's blade keep the proportions the founder accepted on
+	// 09-30 (Second's review), unscaled on the very same axis
+	FTransform HeadXf = ToolXf;
+	HeadXf.SetScale3D(FVector::OneVector);
+	HeadXf.SetTranslation(FistCentre - ToolXf.GetRotation().RotateVector(Handle.GripPoint));
+	// RIDING ON THE ARM THE PLAYER SEES (Second's review, 10-03): a worn skin solves its arms in its own tick, after the Dog's, so a tool
+	// pinned in world space trailed the visible fist by a frame. Attached to that forearm by where it sits on it, it moves with it.
+	UInstancedStaticMeshComponent* HandlePart = bBrush ? BrushMesh.Get() : ScraperMesh.Get();
+	UInstancedStaticMeshComponent* HeadPart = bBrush ? BrushHeadMesh.Get() : ScraperBladeMesh.Get();
+	const FTransform HandleOnArm = ToolXf.GetRelativeTransform(ArmXf);
+	const FTransform HeadOnArm = HeadXf.GetRelativeTransform(ArmXf);
+	for (int32 PartIndex = 0; PartIndex < 2; ++PartIndex)
 	{
-		if (Part != nullptr)
+		UInstancedStaticMeshComponent* Part = PartIndex == 0 ? HandlePart : HeadPart;
+		if (Part == nullptr)
 		{
-			Part->SetWorldTransform(ToolXf);
+			continue;
 		}
+		if (Part->GetAttachParent() != Forearm)
+		{
+			Part->AttachToComponent(Forearm, FAttachmentTransformRules::KeepWorldTransform);
+		}
+		Part->SetRelativeTransform(PartIndex == 0 ? HandleOnArm : HeadOnArm);
 	}
 	bToolLaidInFist = true;
 }

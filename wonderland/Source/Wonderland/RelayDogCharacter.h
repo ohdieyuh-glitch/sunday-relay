@@ -870,8 +870,8 @@ private:
 	/** A tool is held in the working hand's fist this frame; the tool's parts carry a fist pose to put back when it is not. */
 	bool bToolInFist = false;
 	bool bToolLaidInFist = false;
-	/** Lays the shown tool (the brush, else the scraper) through Hand's closed fist on the forearm at ArmXf. */
-	void LayToolInFist(const WonderlandHands::FHand& Hand, const FTransform& ArmXf, bool bBrush);
+	/** Lays the shown tool (the brush, else the scraper) through Hand's closed fist, riding on Forearm (the one the player sees). */
+	void LayToolInFist(const WonderlandHands::FHand& Hand, USceneComponent* Forearm, bool bBrush);
 	/** True on any frame the player asked the Dog to move, so the orbit stands down. */
 	bool bPlayerDroveThisFrame = false;
 
