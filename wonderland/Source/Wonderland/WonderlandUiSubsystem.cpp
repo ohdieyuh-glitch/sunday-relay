@@ -496,6 +496,14 @@ void UWonderlandUiSubsystem::HandleCompanionSubmit(int32 Index, const FString& T
 	// what follows. The runtime's own report of this same ask is not echoed a second time.
 	if (Runtime != nullptr && Sidekick != nullptr && Runtime->GetLink() == EWonderlandSidekickLink::Online && Sidekick->State == TEXT("CONNECTED"))
 	{
+		// NEVER A SECRET SENT (Second's sink audit, 10-03): a line shaped like a key or password stays on this machine, masked
+		if (FWonderlandCardStore::HoldsSecret(Text))
+		{
+			Panel->Print(EWonderlandConsoleLine::Prompt, FWonderlandCardStore::MaskForDisplay(Text), FString(), 0.0f);
+			Panel->Print(EWonderlandConsoleLine::Note, TEXT("Not sent: that line holds something shaped like a key or password. A key belongs in Julius Connect."), FString(), 0.0f);
+			UE_LOG(LogWonderlandUi, Log, TEXT("WLUI companion terminal %d: a line shaped like a key was NOT sent (%d characters)"), Index, Text.Len());
+			return;
+		}
 		Panel->Print(EWonderlandConsoleLine::Prompt, Text, FString(), 0.0f);
 		Panel->BeginTask(EWonderlandConsoleActivity::Thinking, TEXT("Thinking"));
 		Panel->SetCounter(0, TEXT("chars"));

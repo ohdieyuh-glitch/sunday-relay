@@ -1,4 +1,5 @@
 #include "WonderlandRelaySkins.h"
+#include "WonderlandCard.h"
 #include "WonderlandBeta.h"
 
 #include "Engine/GameInstance.h"
@@ -162,7 +163,7 @@ bool UWonderlandRelaySkinSubsystem::EquipSkin(FName RequestedId)
 	const FWonderlandRelaySkin* Skin = Find(SkinId);
 	if (Skin == nullptr)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("WLSKIN refused: no skin named '%s'"), *SkinId.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("WLSKIN refused: no skin named '%s'"), *FWonderlandCardStore::MaskForDisplay(SkinId.ToString()));
 		return false;
 	}
 	if (Skin->Access == EWonderlandSkinAccess::Locked)

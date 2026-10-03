@@ -230,7 +230,7 @@ namespace
 		GCardWaitingName.Reset();
 		GCardWaitingWhy.Reset();
 		GCardWaitingWorld.Reset();
-		UE_LOG(LogTemp, Display, TEXT("WLCARD the waiting companions of %s are applied now: %s"), *Applying.Name, *CardApplyCompanions(World, Applying));
+		UE_LOG(LogTemp, Display, TEXT("WLCARD the waiting companions of %s are applied now: %s"), *FWonderlandCardStore::MaskForDisplay(Applying.Name), *FWonderlandCardStore::MaskForDisplay(CardApplyCompanions(World, Applying)));
 		return false;
 	}
 }
@@ -311,7 +311,7 @@ namespace WonderlandCardDirector
 		// THE MISSION HANDOFF FORM is read when the next handoff begins: swords are never swapped in a hand
 		Said.Add(FString::Printf(TEXT("Mission Handoff %s from the next handoff"), *Card.MissionHandoff));
 		OutSaid = FString::Join(Said, TEXT("; "));
-		UE_LOG(LogTemp, Display, TEXT("WLCARD %s"), *OutSaid);
+		UE_LOG(LogTemp, Display, TEXT("WLCARD %s"), *FWonderlandCardStore::MaskForDisplay(OutSaid));
 		return true;
 	}
 
@@ -381,7 +381,7 @@ namespace WonderlandCardDirector
 		OutSaid = FString::Printf(TEXT("saved to C.A.R.D. %s: skin %s, primary %s%s"), *Card.Name, *Card.Skin, *Card.Primary.Key,
 			bTyped ? TEXT(" (the primary on the Dog is a typed colour, which a C.A.R.D. cannot hold: palette keys only)") : TEXT(""));
 		CardSayWrite(Store, OutSaid);
-		UE_LOG(LogTemp, Display, TEXT("WLCARD %s"), *OutSaid);
+		UE_LOG(LogTemp, Display, TEXT("WLCARD %s"), *FWonderlandCardStore::MaskForDisplay(OutSaid));
 		return true;
 	}
 
@@ -524,7 +524,7 @@ namespace WonderlandCardDirector
 		const FWonderlandCard Saved = Store.GetActive();
 		OutSaid = FString::Printf(TEXT("%s: slot %d is %s; %s"), *Saved.Name, Slot, *Ref.ProviderId, *CardApplyOrWait(World, Saved));
 		CardSayWrite(Store, OutSaid);
-		UE_LOG(LogTemp, Display, TEXT("WLCARD %s"), *OutSaid);
+		UE_LOG(LogTemp, Display, TEXT("WLCARD %s"), *FWonderlandCardStore::MaskForDisplay(OutSaid));
 		return true;
 	}
 

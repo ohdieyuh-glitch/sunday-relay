@@ -333,8 +333,8 @@ bool UWonderlandMissionTaskSubsystem::DeleteLocalContract(FGuid LocalId)
 	}
 	if (Task->RunId.bKnown)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused to delete '%s': it belongs to Julius run %s"),
-			*Task->Objective.Left(40), *Task->RunId.Value);
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused to delete a contract of %d characters: it belongs to Julius run %s"),
+			Task->Objective.Len(), *Task->RunId.Value);
 		return false;
 	}
 	// THE LENGTH, NOT THE TEXT: a tester attaches this log to a bug report, and what they wrote is theirs (Second
@@ -381,6 +381,8 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 		const FString Aside = WonderlandBeta::SetAsideRefusedSave(SlotPath());
 		UE_LOG(LogTemp, Warning, TEXT("WLTASK the saved contracts could not be used (%s); set aside as %s"),
 			Why.IsEmpty() ? TEXT("unreadable") : *Why, Aside.IsEmpty() ? TEXT("(the move FAILED)") : *Aside);
+		// the set-aside copy is NOT screened (it could not be read): it may hold text typed before the secret screen existed
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK the set-aside copy may hold objectives typed before the secret screen existed; delete it once it is no longer needed"));
 		return 0;
 	}
 	const FString When = FDateTime::UtcNow().ToIso8601();
@@ -427,8 +429,9 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 	Selected.Invalidate();
 	if (Redacted > 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("WLTASK %d restored objective(s) held something shaped like a key or password: redacted, and the file rewritten"), Redacted);
-		SaveContracts();
+		const bool bRewritten = SaveContracts();
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK %d restored objective(s) held something shaped like a key or password: redacted; the file %s"), Redacted,
+			bRewritten ? TEXT("rewritten") : TEXT("NOT rewritten (the write failed): the redaction holds for this session only"));
 	}
 	if (Restored > 0)
 	{
@@ -669,8 +672,8 @@ bool UWonderlandMissionTaskSubsystem::CloseFromWorkspace(FGuid LocalId)
 			if (Tasks[Index].bInWorkspace) { Selected = Tasks[Index].LocalId; break; }
 		}
 	}
-	UE_LOG(LogTemp, Display, TEXT("WLTASK tab closed: '%s' stays a %s contract, out of the workspace"),
-		*Task->Objective.Left(40), WonderlandTaskStateName(Task->State));
+	UE_LOG(LogTemp, Display, TEXT("WLTASK tab closed: a contract of %d characters stays %s, out of the workspace"),
+		Task->Objective.Len(), WonderlandTaskStateName(Task->State));
 	SaveContracts();
 	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;

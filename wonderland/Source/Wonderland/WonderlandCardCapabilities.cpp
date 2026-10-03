@@ -1,5 +1,6 @@
 // Copyright Wonderland. C.A.R.D.'s references, resolved. See WonderlandCardCapabilities.h.
 #include "WonderlandCardCapabilities.h"
+#include "WonderlandCard.h"
 
 #include "Engine/GameInstance.h"
 #include "WonderlandBeta.h"
@@ -70,7 +71,7 @@ namespace WonderlandCardCapabilities
 	FString CleanReason(const FString& Text)
 	{
 		// THE WHOLE TEXT IS CHECKED, before any cap: a credential past the 160th character is still a credential
-		if (FWonderlandCardStore::LooksLikeSecret(Text))
+		if (FWonderlandCardStore::LooksLikeSecret(Text) || FWonderlandCardStore::HoldsSecret(Text))
 		{
 			return TEXT("(withheld: it looked like a credential)");
 		}

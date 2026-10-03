@@ -10172,6 +10172,9 @@ namespace
 	 *       measured rates (99.7-100%), at least 95% -- the rate is reported, never a lucky token
 	 *   SI8 /keep: a random-looking identifier redacted, then stored exactly as typed; a vendor key beside it still removed
 	 *   SI9 C.A.R.D. (Second's finding 3): a 24-character key given as a card's name through the terminal is refused, never stored
+	 *   SI10 credentials by their LABEL (Second's sink audit): a 12-character password after "password:", "pwd=", "passwd is",
+	 *        "secret:"; a 16-hex value after "api key:" and "api_key:"; "Authorization: Basic <base64>"; a password in a URL's
+	 *        userinfo -- every one below the statistical rules, every one redacted on submit, still after /keep, masked on screen
 	 */
 	struct FQaSecretInput
 	{
@@ -10518,6 +10521,44 @@ namespace
 		S.Check(TEXT("SI9"), FWonderlandCardStore::HoldsSecret(CardKey) && !bCardKept && !bCardOnDisk,
 			FString::Printf(TEXT("a 24-character key given as a C.A.R.D. name through the terminal: the screen flags it %s; a card holds it: %s; Cards.sav (%d bytes) holds a part: %s"),
 				FWonderlandCardStore::HoldsSecret(CardKey) ? TEXT("yes") : TEXT("NO"), bCardKept ? TEXT("YES") : TEXT("no"), CardBytes.Num(), bCardOnDisk ? TEXT("YES") : TEXT("no")));
+
+		// SI10: credentials by their LABEL -- values no statistic sees, taken with the label that names them
+		const FString ShortPassword = FString(TEXT("Tr0ub")) + TEXT("4dor&3x");
+		const FString HexValue = Random(TEXT("0123456789abcdef"), 14) + TEXT("9f");
+		const FString BasicValue = FString(TEXT("dXNlcj")) + TEXT("pwYXNz");
+		const FString Labelled[] = {
+			FString::Printf(TEXT("login with password: %s today"), *ShortPassword),
+			FString::Printf(TEXT("set pwd=%s on the box"), *ShortPassword),
+			FString::Printf(TEXT("the passwd is %s for now"), *ShortPassword),
+			FString::Printf(TEXT("rotate the secret: %s soon"), *ShortPassword),
+			FString::Printf(TEXT("use api key: %s for staging"), *HexValue),
+			FString::Printf(TEXT("restore api_key: %s from the vault"), *HexValue),
+			FString::Printf(TEXT("send Authorization: Basic %s to the proxy"), *BasicValue),
+			FString::Printf(TEXT("migrate postgres://app:%s@10.0.0.5/prod tonight"), *ShortPassword) };
+		auto HoldsValue = [&ShortPassword, &HexValue, &BasicValue](const FString& Text)
+		{
+			return Text.Contains(ShortPassword) || Text.Contains(HexValue) || Text.Contains(BasicValue);
+		};
+		int32 LabelledClean = 0;
+		FString LabelledDetail;
+		for (const FString& Typed : Labelled)
+		{
+			const FSubmitted Done = Submit(Typed);
+			int32 Still = 0;
+			const bool bKeepCall = Done.bAccepted && Set->KeepObjectiveAsTyped(Done.Id, Typed, Still);
+			const FWonderlandMissionTask* After = Set->Find(Done.Id);
+			const FString Stored = After != nullptr ? After->Objective : Done.Kept;
+			const bool bClean = Done.bAccepted && Done.Certain >= 1 && !HoldsValue(Done.Kept) && bKeepCall && Still >= 1 && !HoldsValue(Stored)
+				&& !HoldsValue(FWonderlandCardStore::MaskForDisplay(Typed));
+			LabelledClean += bClean ? 1 : 0;
+			if (!bClean)
+			{
+				LabelledDetail += FString::Printf(TEXT("%s'%s'"), LabelledDetail.IsEmpty() ? TEXT("") : TEXT(", "), *FWonderlandCardStore::MaskForDisplay(Typed));
+			}
+		}
+		S.Check(TEXT("SI10"), LabelledClean == static_cast<int32>(UE_ARRAY_COUNT(Labelled)),
+			FString::Printf(TEXT("%d of %d labelled credentials (password: / pwd= / passwd is / secret: / api key: / api_key: / Basic / URL userinfo) redacted on submit, still after /keep, masked on screen%s"),
+				LabelledClean, static_cast<int32>(UE_ARRAY_COUNT(Labelled)), LabelledDetail.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; GOT THROUGH: %s"), *LabelledDetail)));
 
 		for (const FGuid& Draft : Leftover)
 		{

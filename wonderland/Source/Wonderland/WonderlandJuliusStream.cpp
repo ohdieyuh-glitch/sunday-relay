@@ -1,4 +1,5 @@
 #include "WonderlandJuliusStream.h"
+#include "WonderlandCard.h"
 
 #include "CoreGlobals.h"
 #include "Dom/JsonObject.h"
@@ -848,6 +849,24 @@ void UWonderlandJuliusStreamSubsystem::CreateMission(const FString& IdempotencyK
 	if (CriterionIds.Num() != CriterionTexts.Num() || CriterionIds.Num() != CriterionBlocking.Num())
 	{
 		RefuseLocally(TEXT("criteria_mismatch"));
+		return;
+	}
+	// NEVER A SECRET SENT (the founder's fail-closed; Second's sink audit, 10-03): a field shaped like a key or password refuses the
+	// whole mission here -- nothing leaves this machine
+	const auto AnyHoldsSecret = [](const TArray<FString>& MissionLines)
+	{
+		for (const FString& MissionLine : MissionLines)
+		{
+			if (FWonderlandCardStore::HoldsSecret(MissionLine))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+	if (FWonderlandCardStore::HoldsSecret(Objective) || AnyHoldsSecret(Requirements) || AnyHoldsSecret(Constraints) || AnyHoldsSecret(CriterionTexts))
+	{
+		RefuseLocally(TEXT("holds_a_secret"));
 		return;
 	}
 

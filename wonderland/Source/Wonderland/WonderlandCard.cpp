@@ -683,12 +683,103 @@ namespace
 	}
 }
 
+namespace
+{
+	/** A word naming a credential (Second's sink audit, 10-03): its value is the next word when it ends with ':' or '=', or the word
+	 *  after a lone ':' / '=' / "is". Short passwords are only catchable by their label -- no statistics sees "Tr0ub4dor&3x". */
+	bool CardCredentialLabel(const FString& Lower)
+	{
+		static const TCHAR* const Labels[] = { TEXT("password"), TEXT("passwd"), TEXT("pwd"), TEXT("pass"), TEXT("passphrase"), TEXT("secret"),
+			TEXT("token"), TEXT("apikey"), TEXT("api_key"), TEXT("api-key"), TEXT("accesskey"), TEXT("access_key"), TEXT("access-key"),
+			TEXT("privatekey"), TEXT("private_key"), TEXT("private-key"), TEXT("clientsecret"), TEXT("client_secret"), TEXT("client-secret"),
+			TEXT("authorization"), TEXT("credential"), TEXT("credentials") };
+		for (const TCHAR* Label : Labels)
+		{
+			if (Lower.Equals(Label, ESearchCase::CaseSensitive))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** The first word of a two-word label: "api key", "access key", "private key", "client secret". */
+	bool CardLabelQualifier(const FString& Lower)
+	{
+		return Lower == TEXT("api") || Lower == TEXT("access") || Lower == TEXT("private") || Lower == TEXT("client");
+	}
+
+	/** A label and its value in one word: "pwd=X", "password:X", "api-key=X". */
+	bool CardLabelWithValue(const FString& Lower)
+	{
+		int32 Cut = INDEX_NONE;
+		for (int32 At = 0; At < Lower.Len(); ++At)
+		{
+			if (Lower[At] == TEXT(':') || Lower[At] == TEXT('='))
+			{
+				Cut = At;
+				break;
+			}
+		}
+		return Cut > 0 && Cut + 1 < Lower.Len() && CardCredentialLabel(Lower.Left(Cut));
+	}
+
+	/** A URL whose userinfo carries a password: scheme://user:PASS@host... */
+	bool CardUrlUserinfoPassword(const FString& Word)
+	{
+		const int32 Scheme = Word.Find(TEXT("://"));
+		if (Scheme <= 0)
+		{
+			return false;
+		}
+		int32 End = Scheme + 3;
+		while (End < Word.Len() && FCString::Strchr(TEXT("/?#"), Word[End]) == nullptr)
+		{
+			++End;
+		}
+		const FString Authority = Word.Mid(Scheme + 3, End - Scheme - 3);
+		int32 AtSign = INDEX_NONE;
+		if (!Authority.FindLastChar(TEXT('@'), AtSign))
+		{
+			return false;
+		}
+		int32 Colon = INDEX_NONE;
+		return Authority.Left(AtSign).FindChar(TEXT(':'), Colon) && Colon + 1 < AtSign;
+	}
+
+	/** 8+ characters of base64 (A-Z a-z 0-9 + / =): what follows "Basic" in an Authorization header. */
+	bool CardBase64Word(const FString& Word)
+	{
+		if (Word.Len() < 8)
+		{
+			return false;
+		}
+		for (int32 At = 0; At < Word.Len(); ++At)
+		{
+			const TCHAR Char = Word[At];
+			if (!(CardAsciiLetter(Char) || CardAsciiDigit(Char) || Char == TEXT('+') || Char == TEXT('/') || Char == TEXT('=')))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+}
+
 void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>& OutFinds)
 {
 	OutFinds.Reset();
 	static const TCHAR* const Edges = TEXT(".,;:!?()[]{}<>\"'`");
-	bool bAfterBearer = false;
-	bool bInPem = false;
+	// THE WORDS FIRST, each as typed (Raw: a label's ':' or '=' is read from it) and trimmed (Word), so a label can reach its value
+	struct FSpan
+	{
+		int32 Start;
+		int32 End;
+		FString Raw;
+		FString Word;
+		FString Lower;
+	};
+	TArray<FSpan> Spans;
 	const int32 Count = Text.Len();
 	int32 At = 0;
 	while (At < Count)
@@ -716,42 +807,85 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		{
 			--End;
 		}
-		if (End <= Start)
-		{
-			continue;
-		}
-		const FString Word = Text.Mid(Start, End - Start);
-		// A PEM BLOCK is certain from its BEGIN line to its END line; the word after "Bearer" is a token
-		const bool bPemStart = Word.Contains(TEXT("-----BEGIN"));
+		const FString Raw = Text.Mid(WordStart, At - WordStart);
+		const FString Word = Text.Mid(Start, FMath::Max(End - Start, 0));
+		Spans.Add({ Start, End, Raw, Word, Word.ToLower() });
+	}
+	TArray<bool> Certain;
+	Certain.Init(false, Spans.Num());
+	bool bInPem = false;
+	for (int32 Index = 0; Index < Spans.Num(); ++Index)
+	{
+		const FSpan& Span = Spans[Index];
+		// A PEM BLOCK is certain from its BEGIN line to its END line
+		const bool bPemStart = Span.Word.Contains(TEXT("-----BEGIN"));
 		bInPem |= bPemStart;
-		const bool bCertain = bInPem || bAfterBearer || CardWordIsCertain(Word);
-		if (bInPem && !bPemStart && Word.Contains(TEXT("-----")))
+		if (bInPem)
 		{
-			bInPem = false;
-		}
-		bAfterBearer = Word.Equals(TEXT("Bearer"), ESearchCase::IgnoreCase);
-		if (bCertain)
-		{
-			OutFinds.Add({ Start, End - Start, true });
+			Certain[Index] = true;
+			if (!bPemStart && Span.Word.Contains(TEXT("-----")))
+			{
+				bInPem = false;
+			}
 			continue;
 		}
-		if (CardWordIsStructure(Word))
+		if (!Span.Word.IsEmpty() && (CardWordIsCertain(Span.Word) || CardLabelWithValue(Span.Lower) || CardUrlUserinfoPassword(Span.Word)))
+		{
+			Certain[Index] = true;
+		}
+		// the word after "Bearer"; after "Basic" when it looks like base64
+		if (Index + 1 < Spans.Num())
+		{
+			if (Span.Lower == TEXT("bearer") || (Span.Lower == TEXT("basic") && CardBase64Word(Spans[Index + 1].Word)))
+			{
+				Certain[Index + 1] = true;
+			}
+		}
+		// A CREDENTIAL LABEL takes its value with it: "password: X", "secret = X", "api key: X", "pwd is X"
+		const bool bLabel = CardCredentialLabel(Span.Lower)
+			|| (Index > 0 && CardLabelQualifier(Spans[Index - 1].Lower) && (Span.Lower == TEXT("key") || Span.Lower == TEXT("secret")));
+		if (bLabel && Span.Raw.Len() > 0)
+		{
+			const TCHAR Last = Span.Raw[Span.Raw.Len() - 1];
+			if ((Last == TEXT(':') || Last == TEXT('=')) && Index + 1 < Spans.Num())
+			{
+				Certain[Index + 1] = true;
+			}
+			else if (Index + 2 < Spans.Num() && (Spans[Index + 1].Raw == TEXT(":") || Spans[Index + 1].Raw == TEXT("=") || Spans[Index + 1].Lower == TEXT("is")))
+			{
+				Certain[Index + 2] = true;
+			}
+		}
+	}
+	for (int32 Index = 0; Index < Spans.Num(); ++Index)
+	{
+		const FSpan& Span = Spans[Index];
+		if (Span.Word.IsEmpty())
+		{
+			continue;
+		}
+		if (Certain[Index])
+		{
+			OutFinds.Add({ Span.Start, Span.End - Span.Start, true });
+			continue;
+		}
+		if (CardWordIsStructure(Span.Word))
 		{
 			continue;
 		}
 		bool bUrl = false;
-		if (CardUrlLooksSecret(Word, bUrl))
+		if (CardUrlLooksSecret(Span.Word, bUrl))
 		{
-			OutFinds.Add({ Start, End - Start, false });
+			OutFinds.Add({ Span.Start, Span.End - Span.Start, false });
 			continue;
 		}
 		if (bUrl)
 		{
 			continue;
 		}
-		if (CardPiecesLookRandom(Word.Replace(TEXT("."), TEXT(" "))))
+		if (CardPiecesLookRandom(Span.Word.Replace(TEXT("."), TEXT(" "))))
 		{
-			OutFinds.Add({ Start, End - Start, false });
+			OutFinds.Add({ Span.Start, Span.End - Span.Start, false });
 		}
 	}
 }

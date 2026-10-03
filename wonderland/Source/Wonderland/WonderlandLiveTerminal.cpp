@@ -720,12 +720,14 @@ void SWonderlandLiveTerminal::AddJuliusRow(const FString& Role, const FString& H
 	// WHAT THE PLAYER TYPED IS DRAWN AND KEPT WITH ANY KEY MASKED (Second's review, 10-03): a key typed into any line -- a task, a
 	// /card attach -- is refused where it would be stored, and never drawn or held in these rows either
 	const FString ShownHeadline = Role == TEXT("You") ? FWonderlandCardStore::MaskForDisplay(Headline) : Headline;
-	JuliusRows.Add({ Time, Role, ShownHeadline, Detail });
+	// the answer to the player's line can echo an argument of it ("No task <arg>", a skin name): masked the same way
+	const FString ShownDetail = Role == TEXT("You") ? FWonderlandCardStore::MaskForDisplay(Detail) : Detail;
+	JuliusRows.Add({ Time, Role, ShownHeadline, ShownDetail });
 	LatestJuliusHeadline = ShownHeadline;
 	// The JULIUS 3.3 section draws its rows as the approved terminal always has: bullet, time, role, headline, sub-line.
 	if (const TSharedPtr<SWonderlandWorkLog> JuliusLog = GetWorkLog(TEXT("JULIUS 3.3")))
 	{
-		JuliusLog->AddJuliusRow(Time, Role, ShownHeadline, Detail);
+		JuliusLog->AddJuliusRow(Time, Role, ShownHeadline, ShownDetail);
 	}
 }
 
