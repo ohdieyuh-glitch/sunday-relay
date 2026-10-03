@@ -370,6 +370,34 @@ namespace
 		TEXT("Shadow smoke maps: the relief's octaves (few, so it reads as billows and not as a crumple)."));
 	TAutoConsoleVariable<float> CVarSmokeBumpGain(TEXT("wl.Shadow.SmokeBumpGain"), 0.35f,
 		TEXT("Shadow smoke maps: each finer octave's share of the relief."));
+	// ---- B65.3 THE PROFILES (founder, 2026-10-03: white must READ white at noon, the default needs the reference's bright blue
+	// ---- marbling, black needs readable grey smoke). A colour's profile decides the base it is painted with and the depth of
+	// ---- its tone map; the pattern (the field above) is shared, so every colourway is one material identity.
+	TAutoConsoleVariable<FString> CVarSmokeDefaultVein(TEXT("wl.Shadow.DefaultVein"), TEXT("0.30 0.50 1.00"),
+		TEXT("Shadow smoke, the DESIGNED body: the colour of its bright veins (its cells are this x DefaultFloor, the designed navy)."));
+	TAutoConsoleVariable<float> CVarSmokeDefaultFloor(TEXT("wl.Shadow.DefaultFloor"), 0.045f,
+		TEXT("Shadow smoke, the DESIGNED body: the tone in the cells (0.045 x the vein blue = the designed navy)."));
+	TAutoConsoleVariable<float> CVarSmokeDefaultPower(TEXT("wl.Shadow.DefaultPower"), 4.0f,
+		TEXT("Shadow smoke, the DESIGNED body: how thin the bright veins are (higher = thinner)."));
+	TAutoConsoleVariable<float> CVarSmokeLightValue(TEXT("wl.Shadow.LightValue"), 0.85f,
+		TEXT("Shadow smoke: a pick whose strongest channel is at least this, and ..."));
+	TAutoConsoleVariable<float> CVarSmokeLightSat(TEXT("wl.Shadow.LightSat"), 0.15f,
+		TEXT("Shadow smoke: ... whose saturation is at most this, is LIGHT (white kept bright, soft marbling)."));
+	TAutoConsoleVariable<float> CVarSmokeLightFloor(TEXT("wl.Shadow.LightFloor"), 0.85f,
+		TEXT("Shadow smoke, a LIGHT pick: the tone in the billows (high, so white stays white)."));
+	TAutoConsoleVariable<float> CVarSmokeLightPower(TEXT("wl.Shadow.LightPower"), 1.3f,
+		TEXT("Shadow smoke, a LIGHT pick: how the tone falls from the creases into the billows."));
+	TAutoConsoleVariable<float> CVarSmokeLightGlow(TEXT("wl.Shadow.LightGlow"), 0.10f,
+		TEXT("Shadow smoke, a LIGHT pick: a small NEUTRAL glow (Emissive x EmissiveStrength) so white reads white under the warm noon sun; 0 = none."));
+	TAutoConsoleVariable<float> CVarSmokeDarkValue(TEXT("wl.Shadow.DarkValue"), 0.06f,
+		TEXT("Shadow smoke: a pick whose strongest channel is at most this is DARK (black cells, grey smoke veins)."));
+	TAutoConsoleVariable<float> CVarSmokeDarkVein(TEXT("wl.Shadow.DarkVein"), 0.08f,
+		TEXT("Shadow smoke, a DARK pick: the grey of its smoke veins (its cells are this x DarkFloor)."));
+	TAutoConsoleVariable<float> CVarSmokeDarkFloor(TEXT("wl.Shadow.DarkFloor"), 0.0f,
+		TEXT("Shadow smoke, a DARK pick: the tone in the cells (0 = black)."));
+	TAutoConsoleVariable<float> CVarSmokeDarkPower(TEXT("wl.Shadow.DarkPower"), 3.0f,
+		TEXT("Shadow smoke, a DARK pick: how thin the grey veins are."));
+
 	TAutoConsoleVariable<float> CVarSmokeBumpSoft(TEXT("wl.Shadow.SmokeBumpSoft"), 0.06f,
 		TEXT("Shadow smoke maps: how rounded the relief's creases are (0 = sharp)."));
 
@@ -544,8 +572,38 @@ namespace
 		return Out;
 	}
 
-	/** Both maps, every mip down to 1x1. The mips are averages, so a far Dog's smoke flattens instead of sparkling. */
-	void DrawSmokeMaps(const FSmokeSettings& S, TArray<TArray<FColor>>& OutTone, TArray<TArray<FColor>>& OutBump)
+	/** One tone map's mips from the shared field (0 in the billows' hearts .. 1 along the creases, already normalised):
+	 *  Floor + (1 - Floor) x crease^Power, so a low floor and a high power give dark cells parted by thin bright veins
+	 *  (the designed body's marble) and a high floor gives a light pick soft, shallow clouds (B65.3). */
+	TArray<TArray<FColor>> MakeToneMips(const TArray<float>& Field01, float Floor, float Power)
+	{
+		TArray<float> Tone;
+		Tone.SetNumUninitialized(Field01.Num());
+		for (int32 K = 0; K < Field01.Num(); ++K)
+		{
+			Tone[K] = Floor + (1.0f - Floor) * FMath::Pow(Field01[K], Power);
+		}
+		TArray<TArray<FColor>> Mips;
+		for (int32 Side = SmokeMapSize; Side >= 1; Side /= 2)
+		{
+			TArray<FColor>& Mip = Mips.AddDefaulted_GetRef();
+			Mip.SetNumUninitialized(Side * Side);
+			for (int32 K = 0; K < Side * Side; ++K)
+			{
+				const uint8 G = SmokeByte(Tone[K]);
+				Mip[K] = FColor(G, G, G, 255);
+			}
+			if (Side > 1)
+			{
+				Tone = SmokeHalve(Tone, Side, 1);
+			}
+		}
+		return Mips;
+	}
+
+	/** The relief's mips (every one down to 1x1: averages, so a far Dog's smoke flattens instead of sparkling) and the tone
+	 *  FIELD every profile's tone map is drawn from (B65.3: one pattern, several depths). */
+	void DrawSmokeMaps(const FSmokeSettings& S, TArray<float>& OutToneField, TArray<TArray<FColor>>& OutBump)
 	{
 		const int32 N = SmokeMapSize;
 		const uint32 Seed = (uint32)S.Seed;
@@ -566,7 +624,7 @@ namespace
 				Field[J * N + I] = SmokeTurbulence(Wu, Wv, S.Cells, S.BumpOctaves, S.BumpGain, S.BumpSoft, Seed);
 			}
 		}
-		// THE TONE: white along the creases, falling to Dark in the billows' hearts
+		// THE TONE FIELD: 1 along the creases, 0 in the billows' hearts; each profile maps it to its own depth (MakeToneMips)
 		float Lo = TNumericLimits<float>::Max();
 		float Hi = TNumericLimits<float>::Lowest();
 		for (const float T : Tone)
@@ -577,8 +635,9 @@ namespace
 		const float Range = FMath::Max(Hi - Lo, 1e-6f);
 		for (float& T : Tone)
 		{
-			T = S.Dark + (1.0f - S.Dark) * FMath::Pow(1.0f - (T - Lo) / Range, S.TonePower);
+			T = 1.0f - (T - Lo) / Range;
 		}
+		OutToneField = Tone;
 		// THE BUMP: the field's slope, wrapping so the tile's edges meet, as a tangent-space normal's x and y
 		TArray<float> Slope;
 		Slope.SetNumUninitialized(N * N * 2);
@@ -595,14 +654,10 @@ namespace
 		}
 		for (int32 Side = N; Side >= 1; Side /= 2)
 		{
-			TArray<FColor>& ToneMip = OutTone.AddDefaulted_GetRef();
 			TArray<FColor>& BumpMip = OutBump.AddDefaulted_GetRef();
-			ToneMip.SetNumUninitialized(Side * Side);
 			BumpMip.SetNumUninitialized(Side * Side);
 			for (int32 K = 0; K < Side * Side; ++K)
 			{
-				const uint8 G = SmokeByte(Tone[K]);
-				ToneMip[K] = FColor(G, G, G, 255);
 				const float X = Slope[K * 2];
 				const float Y = Slope[K * 2 + 1];
 				const float Z = FMath::Sqrt(FMath::Max(0.0f, 1.0f - X * X - Y * Y));
@@ -610,7 +665,6 @@ namespace
 			}
 			if (Side > 1)
 			{
-				Tone = SmokeHalve(Tone, Side, 1);
 				Slope = SmokeHalve(Slope, Side, 2);
 			}
 		}
@@ -653,10 +707,35 @@ namespace
 		FString Signature;
 		TWeakObjectPtr<UTexture2D> Bump;
 		TWeakObjectPtr<UTexture2D> Tone;
+		/** The tone field every profile's tone map is drawn from, and those maps by "floor|power" (B65.3). */
+		TArray<float> ToneField;
+		TMap<FString, TWeakObjectPtr<UTexture2D>> Tones;
 		double DrawMs = 0.0;
 		bool bFailed = false;
 	};
 	FSmokeMaps GSmokeMaps;
+
+	/** A tone map of the current field at this depth, drawn once and kept until the field is redrawn. */
+	UTexture2D* SmokeToneFor(float Floor, float Power)
+	{
+		if (GSmokeMaps.ToneField.Num() != SmokeMapSize * SmokeMapSize)
+		{
+			return nullptr;
+		}
+		const FString Key = FString::Printf(TEXT("%.3f|%.2f"), Floor, Power);
+		if (const TWeakObjectPtr<UTexture2D>* Found = GSmokeMaps.Tones.Find(Key))
+		{
+			if (Found->IsValid())
+			{
+				return Found->Get();
+			}
+		}
+		UTexture2D* Made = MakeSmokeTexture(TEXT("WLSmokeTone"), MakeToneMips(GSmokeMaps.ToneField, Floor, Power));
+		GSmokeMaps.Tones.Add(Key, Made);
+		UE_LOG(LogTemp, Display, TEXT("WLMASCOT smoke tone drawn: floor %.3f power %.2f -> %s"), Floor, Power,
+			Made != nullptr ? *Made->GetName() : TEXT("FAILED"));
+		return Made;
+	}
 
 	bool SmokeIsDrawn()
 	{
@@ -673,19 +752,24 @@ namespace
 			return;
 		}
 		const double Start = FPlatformTime::Seconds();
-		TArray<TArray<FColor>> ToneMips;
 		TArray<TArray<FColor>> BumpMips;
-		DrawSmokeMaps(Settings, ToneMips, BumpMips);
+		DrawSmokeMaps(Settings, GSmokeMaps.ToneField, BumpMips);
 		if (UTexture2D* Old = GSmokeMaps.Bump.Get())
 		{
 			Old->RemoveFromRoot();
 		}
-		if (UTexture2D* Old = GSmokeMaps.Tone.Get())
+		// every tone map belonged to the old field: let them all go (an instance still wearing one keeps it until repainted)
+		for (TPair<FString, TWeakObjectPtr<UTexture2D>>& Pair : GSmokeMaps.Tones)
 		{
-			Old->RemoveFromRoot();
+			if (UTexture2D* Old = Pair.Value.Get())
+			{
+				Old->RemoveFromRoot();
+			}
 		}
+		GSmokeMaps.Tones.Reset();
 		GSmokeMaps.Bump = MakeSmokeTexture(TEXT("WLSmokeBump"), BumpMips);
-		GSmokeMaps.Tone = MakeSmokeTexture(TEXT("WLSmokeTone"), ToneMips);
+		// the colour profile's map is drawn up front (the B65.1 tone): every other profile draws its own on first use
+		GSmokeMaps.Tone = SmokeToneFor(Settings.Dark, Settings.TonePower);
 		GSmokeMaps.Signature = Signature;
 		GSmokeMaps.DrawMs = (FPlatformTime::Seconds() - Start) * 1000.0;
 		GSmokeMaps.bFailed = !GSmokeMaps.Bump.IsValid() || !GSmokeMaps.Tone.IsValid();
@@ -713,6 +797,85 @@ namespace
 			&& Instance->Parent->GetTextureParameterValue(FMaterialParameterInfo(Name), Default) && Default != nullptr)
 		{
 			Instance->SetTextureParameterValue(Name, Default);
+		}
+	}
+
+	/** The glow (M_WLMaster: Emissive x EmissiveStrength) back to the parent's own -- what every surface had before B65.3. */
+	void RestoreParentGlow(UMaterialInstanceDynamic* Instance)
+	{
+		if (Instance == nullptr || Instance->Parent == nullptr)
+		{
+			return;
+		}
+		FLinearColor Colour = FLinearColor::Black;
+		if (Instance->Parent->GetVectorParameterValue(FMaterialParameterInfo(TEXT("Emissive")), Colour))
+		{
+			Instance->SetVectorParameterValue(TEXT("Emissive"), Colour);
+		}
+		float Strength = 0.0f;
+		if (Instance->Parent->GetScalarParameterValue(FMaterialParameterInfo(TEXT("EmissiveStrength")), Strength))
+		{
+			Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), Strength);
+		}
+	}
+
+	enum class ESmokeProfile : uint8
+	{
+		Designed,   // the designed body: navy cells, bright blue veins (the founder's reference)
+		Light,      // white and near-white picks: kept bright, soft marbling, a small neutral glow
+		Dark,       // black and near-black picks: black cells, grey smoke veins
+		Colour      // every other pick: the pick exactly, marbled with darker shades of itself
+	};
+
+	ESmokeProfile SmokeProfileFor(const FLinearColor& Pick, bool bDesignedBody)
+	{
+		if (bDesignedBody)
+		{
+			return ESmokeProfile::Designed;
+		}
+		const float Top = FMath::Max3(Pick.R, Pick.G, Pick.B);
+		const float Low = FMath::Min3(Pick.R, Pick.G, Pick.B);
+		const float Saturation = Top > 1e-6f ? (Top - Low) / Top : 0.0f;
+		if (Top <= CVarSmokeDarkValue.GetValueOnGameThread())
+		{
+			return ESmokeProfile::Dark;
+		}
+		if (Top >= CVarSmokeLightValue.GetValueOnGameThread() && Saturation <= CVarSmokeLightSat.GetValueOnGameThread())
+		{
+			return ESmokeProfile::Light;
+		}
+		return ESmokeProfile::Colour;
+	}
+
+	FLinearColor SmokeDefaultVein()
+	{
+		FLinearColor Vein(0.30f, 0.50f, 1.00f, 1.0f);
+		FLinearColor Parsed;
+		if (ReadFlameColourText(CVarSmokeDefaultVein.GetValueOnGameThread(), Parsed))
+		{
+			Vein = FLinearColor(Parsed.R, Parsed.G, Parsed.B, 1.0f);
+		}
+		return Vein;
+	}
+
+	/** The tone map a profile wears: its own depth of the shared field. */
+	UTexture* SmokeToneForProfile(ESmokeProfile Profile)
+	{
+		if (!SmokeIsDrawn() || CVarSmokeTone.GetValueOnGameThread() == 0)
+		{
+			return nullptr;
+		}
+		EnsureSmokeMaps();
+		switch (Profile)
+		{
+		case ESmokeProfile::Designed:
+			return SmokeToneFor(FMath::Clamp(CVarSmokeDefaultFloor.GetValueOnGameThread(), 0.0f, 1.0f), FMath::Clamp(CVarSmokeDefaultPower.GetValueOnGameThread(), 0.1f, 12.0f));
+		case ESmokeProfile::Light:
+			return SmokeToneFor(FMath::Clamp(CVarSmokeLightFloor.GetValueOnGameThread(), 0.0f, 1.0f), FMath::Clamp(CVarSmokeLightPower.GetValueOnGameThread(), 0.1f, 12.0f));
+		case ESmokeProfile::Dark:
+			return SmokeToneFor(FMath::Clamp(CVarSmokeDarkFloor.GetValueOnGameThread(), 0.0f, 1.0f), FMath::Clamp(CVarSmokeDarkPower.GetValueOnGameThread(), 0.1f, 12.0f));
+		default:
+			return GSmokeMaps.Tone.Get();
 		}
 	}
 
@@ -1024,6 +1187,65 @@ namespace WonderlandMascotStyle
 		// embodiment writes boost x SmokeRimAmp() in both places.
 	}
 
+	FLinearColor SmokeBaseFor(const FLinearColor& Pick, bool bDesignedBody)
+	{
+		switch (SmokeProfileFor(Pick, bDesignedBody))
+		{
+		case ESmokeProfile::Designed:
+			// the VEINS' blue: the tone map's floor brings the cells down to the designed navy
+			return SmokeDefaultVein();
+		case ESmokeProfile::Dark:
+		{
+			// the smoke's grey: the tone map's floor of 0 keeps the cells black
+			const float Grey = FMath::Clamp(CVarSmokeDarkVein.GetValueOnGameThread(), 0.0f, 1.0f);
+			return FLinearColor(Grey, Grey, Grey, 1.0f);
+		}
+		default:
+			// the pure-colour rule: a light or any other pick is painted with EXACTLY itself
+			return FLinearColor(Pick.R, Pick.G, Pick.B, 1.0f);
+		}
+	}
+
+	FString SmokeProfileName(const FLinearColor& Pick, bool bDesignedBody)
+	{
+		switch (SmokeProfileFor(Pick, bDesignedBody))
+		{
+		case ESmokeProfile::Designed: return TEXT("designed");
+		case ESmokeProfile::Light:    return TEXT("light");
+		case ESmokeProfile::Dark:     return TEXT("dark");
+		default:                      return TEXT("colour");
+		}
+	}
+
+	void ApplySmokeLook(UMaterialInstanceDynamic* Instance, const FLinearColor& Pick, bool bDesignedBody)
+	{
+		if (Instance == nullptr)
+		{
+			return;
+		}
+		const ESmokeProfile Profile = SmokeProfileFor(Pick, bDesignedBody);
+		Instance->SetVectorParameterValue(TEXT("BaseColor"), SmokeBaseFor(Pick, bDesignedBody));
+		ApplySmokeDetail(Instance);
+		// THE PROFILE'S OWN TONE (ApplySmokeDetail bound the colour profile's): the designed body's thin bright veins, a light
+		// pick's shallow clouds, a dark pick's black cells with grey smoke
+		if (UTexture* Tone = SmokeToneForProfile(Profile))
+		{
+			Instance->SetTextureParameterValue(TEXT("AlbedoTex"), Tone);
+		}
+		// A LIGHT PICK'S SMALL NEUTRAL GLOW: white lit by the warm noon sun reads cream; a little neutral self-light lifts it
+		// toward the tonemapper's white without tinting it (the founder: "WHITE must read genuinely WHITE at noon")
+		const float Glow = FMath::Clamp(CVarSmokeLightGlow.GetValueOnGameThread(), 0.0f, 4.0f);
+		if (Profile == ESmokeProfile::Light && Glow > 0.0f)
+		{
+			Instance->SetVectorParameterValue(TEXT("Emissive"), FLinearColor::White);
+			Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), Glow);
+		}
+		else
+		{
+			RestoreParentGlow(Instance);
+		}
+	}
+
 	float SmokeRimAmp()
 	{
 		return FMath::Clamp(CVarSmokeRimAmp.GetValueOnGameThread(), 0.0f, 4.0f);
@@ -1066,6 +1288,7 @@ namespace WonderlandMascotStyle
 		}
 		RestoreParentTexture(Instance, TEXT("NormalTex"));
 		RestoreParentTexture(Instance, TEXT("AlbedoTex"));
+		RestoreParentGlow(Instance);
 		static const TCHAR* const Scalars[] = { TEXT("TexScale"), TEXT("RoughVary"), TEXT("Roughness"), TEXT("Specular") };
 		for (const TCHAR* Name : Scalars)
 		{
@@ -1082,14 +1305,19 @@ namespace WonderlandMascotStyle
 	{
 		const UTexture* Relief = SmokeTexture();
 		const FString Drawn = SmokeIsDrawn()
-			? FString::Printf(TEXT(" | smoke maps drawn (%s), %.1f ms, tone %s"), *GSmokeMaps.Signature, GSmokeMaps.DrawMs, SmokeToneMap() != nullptr ? TEXT("worn") : TEXT("off"))
+			? FString::Printf(TEXT(" | smoke maps drawn (%s), %.1f ms, tone %s | profiles: designed vein %s floor %.3f power %.1f; light >= %.2f sat <= %.2f floor %.2f power %.1f glow %.2f; dark <= %.2f vein %.2f floor %.2f power %.1f"),
+				*GSmokeMaps.Signature, GSmokeMaps.DrawMs, SmokeToneMap() != nullptr ? TEXT("worn") : TEXT("off"),
+				*SmokeDefaultVein().ToString(), CVarSmokeDefaultFloor.GetValueOnGameThread(), CVarSmokeDefaultPower.GetValueOnGameThread(),
+				CVarSmokeLightValue.GetValueOnGameThread(), CVarSmokeLightSat.GetValueOnGameThread(), CVarSmokeLightFloor.GetValueOnGameThread(),
+				CVarSmokeLightPower.GetValueOnGameThread(), CVarSmokeLightGlow.GetValueOnGameThread(), CVarSmokeDarkValue.GetValueOnGameThread(),
+				CVarSmokeDarkVein.GetValueOnGameThread(), CVarSmokeDarkFloor.GetValueOnGameThread(), CVarSmokeDarkPower.GetValueOnGameThread())
 			: FString();
 		return FString::Printf(TEXT("relief %s at TexScale %.4f, DetailAmp %.2f, RoughVary %.2f, Roughness %.2f, Specular %.2f, RimAmp %.2f, rim top %.2f lift %.2f gain %.2f floor %.2f, strips rim gain %.2f relief %s, on DEFAULT %s%s"),
 			Relief != nullptr ? *Relief->GetName() : TEXT("none"), CVarSmokeTexScale.GetValueOnGameThread(), CVarSmokeDetailAmp.GetValueOnGameThread(),
 			CVarSmokeRoughVary.GetValueOnGameThread(), CVarSmokeRoughness.GetValueOnGameThread(), CVarSmokeSpecular.GetValueOnGameThread(),
 			CVarSmokeRimAmp.GetValueOnGameThread(), CVarSmokeRimTop.GetValueOnGameThread(), CVarSmokeRimLift.GetValueOnGameThread(),
 			CVarSmokeRimGain.GetValueOnGameThread(), CVarSmokeRimFloor.GetValueOnGameThread(), CVarSmokeStripRimGain.GetValueOnGameThread(),
-			SmokeStripRelief() ? TEXT("yes") : TEXT("no"), SmokeOnDefault() ? TEXT("yes (detail only; the designed colours and rim kept)") : TEXT("no (designed look kept)"), *Drawn);
+			SmokeStripRelief() ? TEXT("yes") : TEXT("no"), SmokeOnDefault() ? TEXT("yes (the designed body's marble; the designed strips kept)") : TEXT("no (designed look kept)"), *Drawn);
 	}
 }
 
