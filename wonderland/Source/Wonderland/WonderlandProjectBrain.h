@@ -4,14 +4,15 @@
 // project memory; Julius acts and decides; Python computes; GVE proves, later. Wonderland is the embodied
 // interface to all of it and the record of none of it.
 //
-// THE WORLD IS NOT THE RECORD, and that is already a boundary in code, not a preference. The Wonderland brain
-// scope (src/relay/mission/wonderland/wonderland-brain-scope.ts) lets a world receive counts, revisions and
-// flags about Project Brain and never an entry's text, because the game client is the least trusted process in
-// the system. So what this subsystem holds is a PRESENTATION MODEL: which surfaces exist, who may change each
-// one, how many entries each holds, and the brain revision. Sample lines exist only in the development preview,
-// so the interface can be judged before anything is connected; a live source of entry text needs an
-// owner-scoped read contract that the founder has not yet decided, and until it exists a live brain shows
-// counts only.
+// THE WORLD IS NOT THE RECORD, and that is already a boundary in code, not a preference. What this subsystem holds
+// is a PRESENTATION MODEL: which surfaces exist, who may change each one, what each holds, and the brain revision.
+//
+// LIVE, WHEN PAIRED (founder directive, 2026-10-01). The owner-scoped read the paragraph above used to wait for
+// now exists: the bridge's /relay-api/wonderland/brain serves a project's Project Brain to that project's MEMBERS
+// only (not found and not yours look the same), by the panel's own surface ids, and UWonderlandProjectBrainLinkSubsystem
+// adopts it here with AdoptLive. Every line then comes from Julius's durable store -- an empty surface is empty --
+// and a proposal or review is SENT to Project Brain, saved there, and shown only once the bridge says so. Unpaired,
+// the labelled development preview remains, exactly as before.
 //
 // WHO MAY CHANGE WHAT, which is the point of the surface. Every surface carries one access:
 //
@@ -21,9 +22,10 @@
 //   SYSTEM   Julius and Project Brain own it: history, handoffs, agent state, accepted decisions, evidence,
 //            evaluations, trace, governance. Shown, never offered for editing.
 //
-// EDITS ARE PROPOSALS. Nothing typed here changes Project Brain; a line added in the world is recorded in this
-// session as PROPOSED and NOT SAVED (it is gone after a restart), and says so, until a Project Brain authority exists
-// to receive it.
+// EDITS ARE PROPOSALS. In the preview, a line added in the world is recorded in this session as PROPOSED and NOT
+// SAVED (it is gone after a restart), and says so. Live, the same action is a proposal to Project Brain itself: the
+// bridge records it with this player as its author and this client as its deliverer, and Julius reads it as a
+// person's statement -- never as a term of the contract until an owner adopts it.
 //
 // PLAIN TYPES ON PURPOSE: none of this crosses to Relay, so none of it belongs in the C++ <-> TypeScript
 // parity table.
@@ -32,6 +34,8 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "WonderlandProjectBrain.generated.h"
+
+class FWonderlandProjectBrainLink;
 
 enum class EWonderlandBrainAccess : uint8
 {
@@ -60,12 +64,44 @@ struct FWonderlandBrainSurface
 	FString Purpose;
 	/** Entries Project Brain reports. Always shown; it is the one thing a live world may know. */
 	int32 EntryCount = 0;
-	/** Development preview only. Never populated from a live source until an owner-scoped read contract exists. */
+	/** The entry lines: sample lines in the preview, Project Brain's own lines when live. */
 	TArray<FString> SampleLines;
-	/** Lines the owner added in this session. Proposed, not synced. */
+	/** Preview: lines the owner added in this session, not saved. Live: proposals Project Brain holds, saved. */
 	TArray<FString> Proposals;
-	/** Review decisions made in this session, as "Accepted: ..." or "Declined: ...". Proposed, not synced. */
+	/** Preview only: review decisions made in this session, as "Accepted: ..." or "Declined: ...", not saved. */
 	TArray<FString> Reviews;
+	/** Live only: the Project Brain reference of each entry line, index for index -- what a review names. */
+	TArray<FString> EntryRefs;
+};
+
+/** One line of a live surface, as the bridge sent it. */
+struct FWonderlandBrainLiveEntry
+{
+	FString Ref;
+	FString Line;
+	FString Status;
+	/** ACCEPTED, DECLINED, or empty when no person has reviewed it. */
+	FString Review;
+};
+
+/** One surface of the live view, by the panel's own id. */
+struct FWonderlandBrainLiveSurface
+{
+	FName Id;
+	int32 EntryCount = 0;
+	TArray<FWonderlandBrainLiveEntry> Entries;
+	TArray<FWonderlandBrainLiveEntry> Proposals;
+};
+
+/** The bridge's relay-wonderland-project-brain.v1 view, decoded. Nothing in it is invented on this side. */
+struct FWonderlandBrainLiveView
+{
+	FString ProjectId;
+	FString Cursor;
+	int32 BrainRevision = 0;
+	FString MissionTitle;
+	FString SourceLine;
+	TArray<FWonderlandBrainLiveSurface> Surfaces;
 };
 
 struct FWonderlandBrainModel
@@ -79,6 +115,10 @@ struct FWonderlandBrainModel
 	/** 1 Root red ... 7 Crown violet: the rank the brain glows with. */
 	int32 ChakraRank = 7;
 	TArray<FWonderlandBrainSurface> Surfaces;
+	/** True once a live view from the bridge has been adopted. */
+	bool bLive = false;
+	/** Live only: what the last write said -- saving, saved, or why it was refused. Empty before any. */
+	FString WriteNote;
 };
 
 UCLASS()
@@ -88,6 +128,7 @@ class WONDERLAND_API UWonderlandProjectBrainSubsystem : public UGameInstanceSubs
 
 public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
 
 	const FWonderlandBrainModel& GetModel() const { return Model; }
 	const FWonderlandBrainSurface* FindSurface(FName SurfaceId) const;
@@ -120,11 +161,40 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Project Brain")
 	bool IsDevelopmentPreview() const { return Model.bDevelopmentPreview; }
 
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Project Brain")
+	bool IsLive() const { return Model.bLive; }
+
+	/**
+	 * REPLACE THE MODEL'S CONTENT WITH THE BRIDGE'S VIEW. Titles, groups, access and purpose stay the panel's own; the
+	 * lines, counts, proposals and revision become Project Brain's. A surface the view does not name is shown empty --
+	 * never a sample line, once live.
+	 */
+	void AdoptLive(const FWonderlandBrainLiveView& View);
+
+	/** Live: the outcome of the last write, for the panel to say. */
+	void SetWriteNote(const FString& Note);
+
+	/**
+	 * WHERE A LIVE WRITE GOES. Bound by UWonderlandProjectBrainLinkSubsystem; each returns true when the request was
+	 * sent. Unbound (no link), a live model refuses rather than pretending to record anything locally.
+	 */
+	DECLARE_DELEGATE_RetVal_TwoParams(bool, FWonderlandBrainLivePropose, FName /*SurfaceId*/, const FString& /*Text*/);
+	DECLARE_DELEGATE_RetVal_ThreeParams(bool, FWonderlandBrainLiveReview, FName /*SurfaceId*/, const FString& /*EntryRef*/, bool /*bAccept*/);
+	FWonderlandBrainLivePropose LivePropose;
+	FWonderlandBrainLiveReview LiveReview;
+
+	/** `wl.Brain.Link`: what the link to the bridge's Project Brain is doing. Plain C++ on purpose (no new FNames). */
+	FString DescribeLink() const;
+	/** `wl.Brain.Refresh`: read the view again now. */
+	void RefreshLink();
+
 private:
 	void BuildDevelopmentPreview();
 	FWonderlandBrainSurface* FindMutable(FName SurfaceId);
 
 	FWonderlandBrainModel Model;
+	/** The bridge link that makes this model live once the client is paired; see WonderlandProjectBrainLink.h. */
+	TSharedPtr<FWonderlandProjectBrainLink> Link;
 };
 
 namespace WonderlandBrainText

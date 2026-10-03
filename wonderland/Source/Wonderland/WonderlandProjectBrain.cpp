@@ -3,6 +3,8 @@
 #include "WonderlandBeta.h"
 #include "WonderlandCompanionSubsystem.h"
 #include "WonderlandMissionHandoff.h"
+#include "WonderlandJuliusStream.h"
+#include "WonderlandProjectBrainLink.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandProjectBrain, Log, All);
 
@@ -39,6 +41,38 @@ void UWonderlandProjectBrainSubsystem::Initialize(FSubsystemCollectionBase& Coll
 	// Brain authority reaches Wonderland it replaces this model through the brain scope -- counts and revisions --
 	// and the sample lines go with it.
 	BuildDevelopmentPreview();
+	// THE LINK TO THE REAL PROJECT BRAIN. It reads nothing until the stream's session is paired for a project, so an
+	// unpaired world keeps the preview above, exactly as before. The session is the stream's, never held here.
+	Collection.InitializeDependency(UWonderlandJuliusStreamSubsystem::StaticClass());
+	Link = MakeShared<FWonderlandProjectBrainLink>(GetGameInstance(), this);
+	LivePropose.BindSP(Link.ToSharedRef(), &FWonderlandProjectBrainLink::SendProposal);
+	LiveReview.BindSP(Link.ToSharedRef(), &FWonderlandProjectBrainLink::SendReview);
+	Link->Start();
+}
+
+void UWonderlandProjectBrainSubsystem::Deinitialize()
+{
+	LivePropose.Unbind();
+	LiveReview.Unbind();
+	if (Link.IsValid())
+	{
+		Link->Stop();
+		Link.Reset();
+	}
+	Super::Deinitialize();
+}
+
+FString UWonderlandProjectBrainSubsystem::DescribeLink() const
+{
+	return Link.IsValid() ? Link->Describe() : FString(TEXT("WLBRAIN LINK: not started"));
+}
+
+void UWonderlandProjectBrainSubsystem::RefreshLink()
+{
+	if (Link.IsValid())
+	{
+		Link->Refresh();
+	}
 }
 
 const FWonderlandBrainSurface* UWonderlandProjectBrainSubsystem::FindSurface(FName SurfaceId) const
@@ -63,6 +97,16 @@ bool UWonderlandProjectBrainSubsystem::Propose(FName SurfaceId, const FString& T
 	{
 		return false;
 	}
+	if (Model.bLive)
+	{
+		// LIVE: SENT, NOT KEPT. Nothing is added here; the proposal appears when the bridge says Project Brain holds
+		// it (the next view). The bridge checks the access again, from the membership row, not from this panel.
+		const bool bSent = LivePropose.IsBound() && LivePropose.Execute(SurfaceId, Line.Left(4000));
+		SetWriteNote(bSent ? FString(TEXT("Sending to Project Brain...")) : FString(TEXT("Not saved: this world is not linked to Project Brain right now.")));
+		UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN proposal on %s %s: %d characters"),
+			*SurfaceId.ToString(), bSent ? TEXT("sent to Project Brain") : TEXT("NOT sent (no link)"), Line.Len());
+		return bSent;
+	}
 	Surface->Proposals.Add(Line.Left(240));
 	UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN proposal recorded on %s, not synced (no Project Brain authority): %d characters"),
 		*SurfaceId.ToString(), Line.Len());
@@ -78,11 +122,70 @@ bool UWonderlandProjectBrainSubsystem::Review(FName SurfaceId, int32 LineIndex, 
 	{
 		return false;
 	}
+	if (Model.bLive)
+	{
+		// A REVIEW NAMES THE MEMORY IT REVIEWS, by Project Brain's own reference -- never by the text on screen.
+		if (!Surface->EntryRefs.IsValidIndex(LineIndex))
+		{
+			return false;
+		}
+		const bool bSent = LiveReview.IsBound() && LiveReview.Execute(SurfaceId, Surface->EntryRefs[LineIndex], bAccept);
+		SetWriteNote(bSent ? FString(TEXT("Sending the review to Project Brain...")) : FString(TEXT("Not saved: this world is not linked to Project Brain right now.")));
+		return bSent;
+	}
 	Surface->Reviews.Add(FString::Printf(TEXT("%s: %s"), bAccept ? TEXT("Accepted") : TEXT("Declined"), *Surface->SampleLines[LineIndex]));
 	UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN review %s on %s line %d, not synced (no Project Brain authority)"),
 		bAccept ? TEXT("accept") : TEXT("decline"), *SurfaceId.ToString(), LineIndex);
 	OnBrainChanged.Broadcast();
 	return true;
+}
+
+void UWonderlandProjectBrainSubsystem::AdoptLive(const FWonderlandBrainLiveView& View)
+{
+	Model.bLive = true;
+	Model.bDevelopmentPreview = false;
+	Model.ProjectName = View.ProjectId;
+	Model.MissionTitle = View.MissionTitle;
+	Model.BrainRevision = View.BrainRevision;
+	Model.SourceLine = View.SourceLine;
+	for (FWonderlandBrainSurface& Surface : Model.Surfaces)
+	{
+		// The panel's own definition stays (title, group, access, purpose); only what Project Brain holds changes.
+		Surface.SampleLines.Reset();
+		Surface.EntryRefs.Reset();
+		Surface.Proposals.Reset();
+		Surface.Reviews.Reset();
+		Surface.EntryCount = 0;
+		const FWonderlandBrainLiveSurface* Live = View.Surfaces.FindByPredicate(
+			[&Surface](const FWonderlandBrainLiveSurface& Candidate) { return Candidate.Id == Surface.Id; });
+		if (Live == nullptr)
+		{
+			continue;
+		}
+		Surface.EntryCount = Live->EntryCount;
+		for (const FWonderlandBrainLiveEntry& Entry : Live->Entries)
+		{
+			// A person's review of a memory is shown on the memory itself, in Project Brain's word for it.
+			Surface.SampleLines.Add(Entry.Review.IsEmpty() ? Entry.Line : FString::Printf(TEXT("%s · %s"), *Entry.Review, *Entry.Line));
+			Surface.EntryRefs.Add(Entry.Ref);
+		}
+		for (const FWonderlandBrainLiveEntry& Proposal : Live->Proposals)
+		{
+			Surface.Proposals.Add(Proposal.Line);
+		}
+	}
+	UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN live view adopted for %s at revision %d"), *View.ProjectId, View.BrainRevision);
+	OnBrainChanged.Broadcast();
+}
+
+void UWonderlandProjectBrainSubsystem::SetWriteNote(const FString& Note)
+{
+	if (Model.WriteNote == Note)
+	{
+		return;
+	}
+	Model.WriteNote = Note;
+	OnBrainChanged.Broadcast();
 }
 
 FString UWonderlandProjectBrainSubsystem::GetSurfaceAccess(FName SurfaceId) const
