@@ -21,7 +21,9 @@ import { juliusSegmentSubjectTaskId } from './julius-segment-lineage';
  *   a material CHALLENGE (HOLD) only once Julius has resolved the disagreement as
  *     ARCHITECT_UPHELD. That resolution exists only because the rebuttal's
  *     re-review said CONTINUE or WARNING, so the gating review is then that
- *     re-review, never the challenge it overruled.
+ *     re-review, never the challenge it overruled. The resolution must be of THIS
+ *     hold: its challenge is the review the subject's latest applied row names,
+ *     and its re-review was applied after that row.
  * Anything stricter, an applied verdict of nothing at all, or a review whose
  * accepted attempt left no PASSED `REVIEW_FINDING` to cite, does not gate an
  * ACCEPT. The pipeline then writes a HALT that names why. The evidence is that
@@ -46,6 +48,8 @@ export interface JuliusAppliedReviewRow {
 /** A material disagreement about the subject that Julius resolved ARCHITECT_UPHELD. */
 export interface JuliusUpheldDisagreement {
   readonly subjectTaskId: string;
+  /** The challenge it resolved: the review whose material CHALLENGE held the subject. */
+  readonly challengeReviewTaskId: string;
   /** The re-review that decided it: the head of its dispatch lineage. */
   readonly reReviewTaskId: string;
 }
@@ -109,8 +113,15 @@ export function juliusAcceptReviewGate(input: {
   let gating = own;
   let throughResolution = false;
   if (own.route === 'HOLD') {
-    const reReviews = new Set(input.upheld.filter((item) => item.subjectTaskId === input.subject.taskId).map((item) => item.reReviewTaskId));
-    const reReview = input.applied.filter((row) => row.route === 'RE_REVIEW' && reReviews.has(lineageHeadOf(row.reviewTaskId))).at(-1);
+    // A RESOLUTION ANSWERS THE HOLD IT RESOLVED, AND NO OTHER. Its challenge must be the review `own` is, and its
+    // re-review must come after that hold: a later material challenge of the same work is a new hold no earlier
+    // re-review answered, and a re-review applied before a hold cannot have answered it.
+    const ownHead = lineageHeadOf(own.reviewTaskId);
+    const after = input.applied.slice(input.applied.lastIndexOf(own) + 1);
+    const reReviews = new Set(input.upheld
+      .filter((item) => item.subjectTaskId === input.subject.taskId && lineageHeadOf(item.challengeReviewTaskId) === ownHead)
+      .map((item) => item.reReviewTaskId));
+    const reReview = after.filter((row) => row.route === 'RE_REVIEW' && reReviews.has(lineageHeadOf(row.reviewTaskId))).at(-1);
     if (reReview !== undefined) {
       gating = reReview;
       throughResolution = true;

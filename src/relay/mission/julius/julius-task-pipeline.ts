@@ -4953,7 +4953,7 @@ async function acceptReviewGateFor(input: {
     })),
     upheld: foldJuliusDisagreements(rows)
       .filter((item) => item.material && item.status === 'RESOLVED' && item.resolution === 'ARCHITECT_UPHELD' && item.reReviewTaskId !== null)
-      .map((item) => ({ subjectTaskId: item.subjectTaskId, reReviewTaskId: item.reReviewTaskId! })),
+      .map((item) => ({ subjectTaskId: item.subjectTaskId, challengeReviewTaskId: item.reviewTaskId, reReviewTaskId: item.reReviewTaskId! })),
     evidence: input.evidence,
   });
 }

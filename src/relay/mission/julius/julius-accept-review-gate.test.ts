@@ -74,7 +74,7 @@ describe('V2-1 (unit) — a material challenge Julius resolved for the architect
   const reReview = (over: Partial<JuliusAppliedReviewRow> = {}) =>
     applied({ reviewTaskId: RE_REVIEW, reviewedTaskId: 'rebuttal:build-1:review:task', route: 'RE_REVIEW', ...over });
   const evidence = [...REVIEWED, row(`${RE_REVIEW}:1:0`, RE_REVIEW)];
-  const upheld = [{ subjectTaskId: 'build-1', reReviewTaskId: RE_REVIEW }];
+  const upheld = [{ subjectTaskId: 'build-1', challengeReviewTaskId: 'build-1:review', reReviewTaskId: RE_REVIEW }];
 
   it('is gated by the re-review that upheld the architect, never by the challenge it overruled', () => {
     expect(gate({ applied: [HOLD, reReview()], upheld, evidence })).toEqual({ outcome: 'CITED', reviewTaskId: RE_REVIEW, evidenceIds: [`${RE_REVIEW}:1:0`] });
@@ -94,8 +94,43 @@ describe('V2-1 (unit) — a material challenge Julius resolved for the architect
 
   it('refuses while unresolved, when another subject was upheld, and when the re-review did not pass', () => {
     expect(gate({ applied: [HOLD, reReview()], upheld: [], evidence }).outcome).toBe('REFUSED');
-    expect(gate({ applied: [HOLD, reReview()], upheld: [{ subjectTaskId: 'plan-1', reReviewTaskId: RE_REVIEW }], evidence }).outcome).toBe('REFUSED');
+    expect(gate({ applied: [HOLD, reReview()], upheld: [{ subjectTaskId: 'plan-1', challengeReviewTaskId: 'plan-1:review', reReviewTaskId: RE_REVIEW }], evidence }).outcome).toBe('REFUSED');
     expect(gate({ applied: [HOLD, reReview({ verdict: 'BLOCK' })], upheld, evidence })).toMatchObject({ outcome: 'REFUSED', reasonCode: 'REVIEW_NOT_PASSING', reviewTaskId: RE_REVIEW });
+  });
+});
+
+describe('F-V2-B1 (unit) — a resolution answers the hold it resolved, and no other', () => {
+  const HOLD = applied({ verdict: 'CHALLENGE', route: 'HOLD' });
+  const RE_REVIEW = 'rebuttal:build-1:review:task:review';
+  const reReview = applied({ reviewTaskId: RE_REVIEW, reviewedTaskId: 'rebuttal:build-1:review:task', route: 'RE_REVIEW' });
+  const evidence = [...REVIEWED, row(`${RE_REVIEW}:1:0`, RE_REVIEW)];
+  const upheld = [{ subjectTaskId: 'build-1', challengeReviewTaskId: 'build-1:review', reReviewTaskId: RE_REVIEW }];
+  const cited = { outcome: 'CITED', reviewTaskId: RE_REVIEW, evidenceIds: [`${RE_REVIEW}:1:0`] };
+
+  it('CONTROL: the hold, then the re-review that upheld the architect, is cited', () => {
+    expect(gate({ applied: [HOLD, reReview], upheld, evidence })).toEqual(cited);
+  });
+
+  it('a NEW material challenge of the same work after the resolution holds it again', () => {
+    const second = applied({ reviewTaskId: 'build-1:second-review', verdict: 'CHALLENGE', route: 'HOLD' });
+    expect(gate({ applied: [HOLD, reReview, second], upheld, evidence }))
+      .toMatchObject({ outcome: 'REFUSED', reasonCode: 'REVIEW_NOT_PASSING', reviewTaskId: 'build-1:second-review' });
+  });
+
+  it('a resolution of a DIFFERENT challenge of the same work does not answer this hold', () => {
+    expect(gate({ applied: [HOLD, reReview], upheld: [{ ...upheld[0], challengeReviewTaskId: 'build-1:earlier-review' }], evidence }))
+      .toMatchObject({ outcome: 'REFUSED', reasonCode: 'REVIEW_NOT_PASSING', reviewTaskId: 'build-1:review' });
+  });
+
+  it('a re-review applied BEFORE the hold it is said to answer gates nothing', () => {
+    expect(gate({ applied: [reReview, HOLD], upheld, evidence }))
+      .toMatchObject({ outcome: 'REFUSED', reasonCode: 'REVIEW_NOT_PASSING', reviewTaskId: 'build-1:review' });
+  });
+
+  it('the hold and its challenge are matched through a research continuation, either way round', () => {
+    const segment = 'segment:build-1:review:2:task';
+    expect(gate({ applied: [applied({ reviewTaskId: segment, verdict: 'CHALLENGE', route: 'HOLD' }), reReview], upheld, evidence })).toEqual(cited);
+    expect(gate({ applied: [HOLD, reReview], upheld: [{ ...upheld[0], challengeReviewTaskId: segment }], evidence })).toEqual(cited);
   });
 });
 
