@@ -26,7 +26,7 @@ class FJsonObject;
  */
 
 /** How a companion slot is filled: a typed reference to a provider the runtime knows (never a credential). */
-enum class EWonderlandCompanionKind : uint8
+enum class EWonderlandCardCompanionKind : uint8
 {
 	Llm,
 	Agent,
@@ -38,7 +38,7 @@ enum class EWonderlandCompanionKind : uint8
 struct FWonderlandCompanionRef
 {
 	int32 Slot = 0;
-	EWonderlandCompanionKind Kind = EWonderlandCompanionKind::Llm;
+	EWonderlandCardCompanionKind Kind = EWonderlandCardCompanionKind::Llm;
 	/** The provider's id as the runtime names it (IsSafeId): dev-companion, dev-single-agent, openai, claude-code ... */
 	FString ProviderId;
 	/** Shown, never parsed: secret-refused, length-capped, control characters stripped. */

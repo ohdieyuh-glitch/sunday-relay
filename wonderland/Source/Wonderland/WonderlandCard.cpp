@@ -20,23 +20,23 @@ namespace
 {
 	const TCHAR* const FormatTag = TEXT("wonderland.cards.v1");
 
-	const TCHAR* KindName(EWonderlandCompanionKind Kind)
+	const TCHAR* KindName(EWonderlandCardCompanionKind Kind)
 	{
 		switch (Kind)
 		{
-		case EWonderlandCompanionKind::Agent: return TEXT("agent");
-		case EWonderlandCompanionKind::CompoundAgent: return TEXT("compound_agent");
-		case EWonderlandCompanionKind::Harness: return TEXT("harness");
+		case EWonderlandCardCompanionKind::Agent: return TEXT("agent");
+		case EWonderlandCardCompanionKind::CompoundAgent: return TEXT("compound_agent");
+		case EWonderlandCardCompanionKind::Harness: return TEXT("harness");
 		default: return TEXT("llm");
 		}
 	}
 
-	bool ParseKind(const FString& Text, EWonderlandCompanionKind& Out)
+	bool ParseKind(const FString& Text, EWonderlandCardCompanionKind& Out)
 	{
-		if (Text == TEXT("llm")) { Out = EWonderlandCompanionKind::Llm; return true; }
-		if (Text == TEXT("agent")) { Out = EWonderlandCompanionKind::Agent; return true; }
-		if (Text == TEXT("compound_agent")) { Out = EWonderlandCompanionKind::CompoundAgent; return true; }
-		if (Text == TEXT("harness")) { Out = EWonderlandCompanionKind::Harness; return true; }
+		if (Text == TEXT("llm")) { Out = EWonderlandCardCompanionKind::Llm; return true; }
+		if (Text == TEXT("agent")) { Out = EWonderlandCardCompanionKind::Agent; return true; }
+		if (Text == TEXT("compound_agent")) { Out = EWonderlandCardCompanionKind::CompoundAgent; return true; }
+		if (Text == TEXT("harness")) { Out = EWonderlandCardCompanionKind::Harness; return true; }
 		return false;
 	}
 
@@ -258,12 +258,12 @@ FWonderlandCard FWonderlandCardStore::MakeDefaultCard()
 	// The two companions this build ships, on their canonical sides: the LLM Companion LEFT, Jhinn RIGHT.
 	FWonderlandCompanionRef Llm;
 	Llm.Slot = 0;
-	Llm.Kind = EWonderlandCompanionKind::Llm;
+	Llm.Kind = EWonderlandCardCompanionKind::Llm;
 	Llm.ProviderId = TEXT("dev-companion");
 	Llm.Label = TEXT("LLM COMPANION");
 	FWonderlandCompanionRef Jhinn;
 	Jhinn.Slot = 1;
-	Jhinn.Kind = EWonderlandCompanionKind::Agent;
+	Jhinn.Kind = EWonderlandCardCompanionKind::Agent;
 	Jhinn.ProviderId = TEXT("dev-single-agent");
 	Jhinn.Label = TEXT("JHINN");
 	Card.Companions = { Llm, Jhinn };

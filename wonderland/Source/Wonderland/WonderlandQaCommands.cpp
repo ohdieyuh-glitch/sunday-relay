@@ -3760,7 +3760,7 @@ namespace
 			S.Load();
 			const FWonderlandCard& A = S.GetActive();
 			Q.Check(TEXT("C1"), S.GetCards().Num() == 1 && S.GetActiveId() == FWonderlandCardStore::BuiltInId() && A.bBuiltIn && A.Companions.Num() == 2
-				&& A.Companions[0].Slot == 0 && A.Companions[0].Kind == EWonderlandCompanionKind::Llm && A.Companions[1].Slot == 1
+				&& A.Companions[0].Slot == 0 && A.Companions[0].Kind == EWonderlandCardCompanionKind::Llm && A.Companions[1].Slot == 1
 				&& A.MissionHandoff == TEXT("angelic_twin_swords") && S.GetLoadNote().IsEmpty(),
 				FString::Printf(TEXT("fresh store: %d card(s), active '%s', handoff '%s', LEFT slot0 %s, RIGHT slot1 %s"), S.GetCards().Num(), *S.GetActiveId(),
 					*A.MissionHandoff, A.Companions.Num() > 0 ? *A.Companions[0].ProviderId : TEXT("-"), A.Companions.Num() > 1 ? *A.Companions[1].ProviderId : TEXT("-")));
