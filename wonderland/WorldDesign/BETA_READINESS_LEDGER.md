@@ -86,19 +86,19 @@ The founder's FINAL implementation (2026-10-02); FEATURE FREEZE follows it once 
 - Architecture, reviews and evidence: `_qa_handoff/mission_handoff/` (doc v1-v4, Second's reviews, the M0/M1a packets, the
   founder's sword sheet and combat-stance directive).
 
-| Part | Requirement | State (2026-10-02 ~23:30) |
+| Part | Requirement | State (2026-10-03 ~00:30; beds = RC11 content + a branch exe, never a final-RC level) |
 |---|---|---|
-| G1 | C.A.R.D. store: sealed JSON, the secret refusal, the hostile files, restart; never a second authority | M0 703a7887: CORE's bed card QA 27/27. Second's own run pending |
-| G2 | Handoff state machine: entries A/B, sides fixed, persisted HELD across restart/reconnect, nothing fabricated | M0/M1a: CORE's bed. Second pending |
-| G3 | Traversal: handoff run >= 1.35x normal, dash >= 2.0x the handoff run, one semantic Forward, no repeat spam, collision | M1a 1a437c0b: CORE's bed 18/18 (1.40x, 2.34x, a wall held to 0.1 uu). Second's real-input pass pending |
-| G4 | The Live Terminal's action; the presentation exits mid-animation and resumes at the current beat; mission, runtime, Project Brain, approval, reviewer, provider and budget untouched (write spy + control run) | M1b 843e9252: code, NOT yet compiled |
-| G5 | Attack-ready stance in idle/walk/run/start-stop; normal roaming unchanged | not built (M2) |
-| G6 | The twin swords (the founder's sheet, checks 1-11 at noon and night); continuous transformation; gold LEFT / cyan RIGHT; dash trails <= 15% of the frame | not built (M3) |
-| G7 | Functional hands/fingers + stable dual-grip sockets on all six mascots; no material clipping of clothes, wings or swords | not built (M3: BP_RelayDog hands regen, founder-approved; M4: the five costumes) |
-| G8 | C.A.R.D. as the fifth Project Brain section (the founder's re-layout); imported AI / MCP / API / skills as typed, truthful references; the in-world Project Brain | not built (M6/M7) |
-| G9 | B63: both companion consoles survive a mid-mission colour change (history, status, mode, timer, shown state) | fix 857571e9: CORE's bed Q26 PASS. Second's P10 v3 pending. Also holds R7 at 0.75 |
-| G10 | B64: Shadow Flame primary applied PURE (white white; saturated colours not dark/navy) | Second's branch, uncommitted; package QA pending |
-| G11 | The full regression on the pre-launch RC: PackageCheck with Q26, Social, the boot matrix, wardrobe 26/26, the Shadow Flame colour QA, every mascot QA unequipped first (H5), R10 ABBA incl. streaming at speed (H4) | the pre-launch RC is not built |
+| G1 | C.A.R.D. store: sealed JSON, the secret refusal, the hostile files, restart; never a second authority | M0 703a7887: CORE's bed card QA 27/27, re-run 27/27 on the M1b and M3a beds. Second's own run pending |
+| G2 | Handoff state machine: entries A/B, sides fixed, persisted HELD across restart/reconnect, nothing fabricated | CORE's beds (card H1-H9, P2/P4; mission QA A1-A8 "nothing mission-shaped"). Second pending |
+| G3 | Traversal: handoff run >= 1.35x normal, dash >= 2.0x the handoff run, one semantic Forward, no repeat spam, collision | CORE's beds 18/18 x3 (1.40x, 2.34x, wall 0.1 uu). **Second's real-input pass PASS** on CoreM1_rc11 1a437c0b (`_qa_handoff/mission_handoff/m1a_second/dash_v1_run1`: 12 dashes, 1 refusal, no pass-through, focus loss clean). Ledge/slope (D12) pending |
+| G4 | The Live Terminal's action; the presentation exits mid-animation and resumes at the current beat; mission, runtime, Project Brain, approval, reviewer, provider and budget untouched (write spy + control run) | M1b 843e9252, CORE's beds: wl.Qa.HandoffMission 28/28 twice (control run: the same 22 events/verdicts/beats, max 0.02 s apart; spy 0 with positive controls 1 and 2; entry B at RESEARCH/REPAIR/VERIFICATION; returns resume the current beat). Second pending |
+| G5 | Attack-ready stance in idle/walk/run/start-stop; normal roaming unchanged | M2 + its fix 498c661a, CORE's M3a bed: wl.Qa.HandoffStance 24/24 (the first run's ST2 caught the arms sweeping IN; fixed). Frames judged; Second pending |
+| G6 | The twin swords (the founder's sheet, checks 1-11 at noon and night); continuous transformation; gold LEFT / cyan RIGHT; dash trails <= 15% of the frame | M3a 498c661a built; its QA FAILED SW3: the swords were MIRRORED (gold in the RIGHT hand; Second read the same off the frames). Fix + calibration in 9719ff56, not yet built |
+| G7 | Functional hands/fingers + stable dual-grip sockets on all six mascots; no material clipping of clothes, wings or swords | M4 9719ff56: hands built in code on the visible body (canon or worn skin), fists round the grips; not yet built. No BP regeneration or Content change needed |
+| G8 | C.A.R.D. as the fifth Project Brain section (the founder's re-layout); imported AI / MCP / API / skills as typed, truthful references; the in-world Project Brain | not built (M6/M7; the re-layout rebases onto B65) |
+| G9 | B63: both companion consoles survive a mid-mission colour change (history, status, mode, timer, shown state) | fix 857571e9: CORE's bed Q26 PASS (and on the M1b/M3a beds). **Second's real-input P10 v5 PASS** on CORE's bed (`_qa_handoff/b63_second_sat/p10v5_b63bed_2`: two colour changes, both consoles kept, timers counting). Holds R7 at 0.75 until the pre-launch RC |
+| G10 | Shadow Flame primary applied PURE (white white; saturated colours not dark/navy) AND, per the founder's 10-03 correction, the default's smoky detail kept in every colourway plus a third (strips) channel | B64 86a1a41c: FAIL on the founder's eye (flat boxes). B65 (Second) supersedes it; the founder's text: `_qa_handoff/shadow_flame/FOUNDER_SHADOW_COLORWAYS_THIRD_CHANNEL_2026-10-02.md` |
+| G11 | The full regression on the pre-launch RC: PackageCheck with Q26, Social, the boot matrix, wardrobe 26/26, the Shadow Flame colour QA, every mascot QA unequipped first (H5), R10 ABBA incl. streaming at speed (H4) and the pre-registered handoff_walk / handoff_dash phases | the pre-launch RC is not built |
 
 **GATE: OPEN (0 of 11 parts at final-RC level).**
 - **Plan (founder, 2026-10-02):**
