@@ -29,6 +29,7 @@
 #include "GameFramework/Character.h"
 #include "RelayDogStride.h"
 #include "RelayDogMissionPose.h"
+#include "RelayDogArmedStance.h"
 
 #include "RelayDogCharacter.generated.h"
 
@@ -373,8 +374,17 @@ public:
 	/** QA only: a Forward key event exactly as BindKey delivers it (W, or the Up arrow), and the run modifier. */
 	void QaForwardKey(bool bUpArrow, bool bDown) { SetForwardKey(!bUpArrow, bDown); }
 	void QaRunKey(bool bDown) { bRunHeld = bDown; }
+	void QaWalkKey(bool bDown) { bWalkHeld = bDown; }
 	/** How many of the mission acts' props (book, brush, lens, scraper) are visible on the Dog right now: 0 once an act has let go. */
 	int32 CountVisibleActProps() const;
+	/** The attack-ready stance's weight (0 roaming as ever, 1 with the swords held) and the dash's (M2). */
+	float GetArmedStanceWeight() const { return ArmedStance.Armed.Value; }
+	float GetDashStanceWeight() const { return ArmedStance.Dash.Value; }
+	/** The canon body's joints as written this frame, for the stance QA: each shoulder's and hip's relative rotation. */
+	FRotator GetCanonShoulderRotation(bool bPlusY) const;
+	FRotator GetCanonHipRotation(bool bPlusY) const;
+	/** The canon body's lean as written this frame (its root's pitch), degrees. */
+	float GetCanonBodyPitch() const;
 
 protected:
 	void MoveForwardAxis(float Value);
@@ -878,6 +888,10 @@ private:
 	bool bPerformanceMoving = false;
 	/** Normal roaming's acceleration, read at BeginPlay and restored whenever the swords are not held. */
 	float NormalAcceleration = 900.0f;
+	/** THE ATTACK-READY STANCE (M2): its two eased weights, armed and dashing (RelayDogArmedStance). Plain C++, not reflected. */
+	RelayDogArmedStance::FState ArmedStance;
+	/** How far each hip is swept outward this frame by the stance (degrees; 0 whenever the swords are not held). */
+	float StanceFeetOutDeg = 0.0f;
 	int32 RouteIndex = 0;
 	float RouteHold = 0.0f;
 	/** How long the current leg has been attempted, seconds. */

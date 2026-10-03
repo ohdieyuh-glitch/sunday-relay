@@ -5637,6 +5637,514 @@ namespace
 			GQaHm->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaHmTick), 0.0f);
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLHMQA armed at (%.0f, %.0f, %.0f)"), Dog->GetActorLocation().X, Dog->GetActorLocation().Y, Dog->GetActorLocation().Z);
 		}));
+
+	/* ================================================================ wl.Qa.HandoffStance: the attack-ready stance, M2
+	 * The founder's COMBAT STANCE (2026-10-02), on every skin in the faces QA's roster:
+	 *   ST1  standing unarmed: the baseline, measured on the canon's own joints and photographed front, side and from behind;
+	 *   ST2  the swords taken up (the terminal's path): the stance, MEASURED -- the hands come forward and out (the blades carried
+	 *        out from the body), the body leans, the feet are spaced, and the soles stay on the ground (a ready knee, the same
+	 *        feet) -- and photographed from the same three places;
+	 *   ST3  given back: every measure home to the baseline (normal roaming unchanged).
+	 * Then on Relay OG and Shadow Flame, armed and moving, photographed from the side as it goes: ST4 walking, ST5 running
+	 * (the blades trailing, swept out), ST6 a dash (the dash pose comes in). Frames to Saved/Screenshots/WLSTANCE. The swords
+	 * themselves arrive in M3: these frames show the stance only. WLSTQA lines; `quit` exits after.
+	 */
+	struct FStanceShot
+	{
+		const TCHAR* Name;
+		double Yaw;
+		double Distance;
+		double Rise;
+		float Fov;
+	};
+	const FStanceShot StanceShots[] = {
+		{ TEXT("front"), 0.0, 340.0, 20.0, 50.0f },
+		{ TEXT("side"), 90.0, 340.0, 20.0, 50.0f },
+		{ TEXT("behind"), 165.0, 340.0, 70.0, 50.0f },
+	};
+
+	struct FStanceReading
+	{
+		float HandForward = 0.0f;
+		float HandSpread = 0.0f;
+		float SoleSpread = 0.0f;
+		float SoleHeight = 0.0f;
+		float Pitch = 0.0f;
+	};
+
+	struct FQaStance
+	{
+		TWeakObjectPtr<UWorld> World;
+		TWeakObjectPtr<ARelayDogCharacter> Dog;
+		TWeakObjectPtr<ACameraActor> Camera;
+		TArray<TWeakObjectPtr<AActor>> Hidden;
+		FTSTicker::FDelegateHandle Handle;
+		bool bQuit = false;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		int32 Phase = 0;
+		float PhaseAt = 0.0f;
+		int32 Skin = 0;
+		int32 Shot = 0;
+		bool bArmedShots = false;
+		FString Dir;
+		FStanceReading Base;
+		int32 Moving = 0;
+		float Seen = 0.0f;
+		float SeenOut = 0.0f;
+		int32 DashBase = 0;
+		int32 Key = 0;
+		FVector Forward = FVector::ForwardVector;
+		void Check(const FString& Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSTQA %s %s | %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+	};
+	TSharedPtr<FQaStance> GQaStance;
+
+	/** The stance, read off the canon body (every skin wears exactly these joints). */
+	FStanceReading QaReadStance(const ARelayDogCharacter* Dog)
+	{
+		FStanceReading R;
+		const FVector At = Dog->GetActorLocation();
+		const FVector Fwd = Dog->GetActorForwardVector().GetSafeNormal2D();
+		const FVector HandA = Dog->GetCanonHandWorld(1.0f);
+		const FVector HandB = Dog->GetCanonHandWorld(-1.0f);
+		const FVector SoleA = Dog->GetCanonSoleWorld(1.0f);
+		const FVector SoleB = Dog->GetCanonSoleWorld(-1.0f);
+		R.HandForward = static_cast<float>((FVector::DotProduct(HandA - At, Fwd) + FVector::DotProduct(HandB - At, Fwd)) * 0.5);
+		R.HandSpread = static_cast<float>(FVector::Dist2D(HandA, HandB));
+		R.SoleSpread = static_cast<float>(FVector::Dist2D(SoleA, SoleB));
+		R.SoleHeight = static_cast<float>((SoleA.Z + SoleB.Z) * 0.5 - At.Z);
+		R.Pitch = Dog->GetCanonBodyPitch();
+		return R;
+	}
+
+	FString QaDescribeStance(const FStanceReading& R)
+	{
+		return FString::Printf(TEXT("hands %.1f uu ahead, %.1f apart; soles %.1f apart at %.1f; body pitch %.1f"), R.HandForward, R.HandSpread, R.SoleSpread,
+			R.SoleHeight, R.Pitch);
+	}
+
+	void QaStanceShow(FQaStance& S, UWorld* World, ARelayDogCharacter* Dog, bool bHideOthers)
+	{
+		// the companions, cubs and every other figure out of the shot -- never the Dog's costume, never the wardrobe stage's own
+		for (const TWeakObjectPtr<AActor>& Figure : S.Hidden)
+		{
+			if (AActor* A = Figure.Get())
+			{
+				A->SetActorHiddenInGame(false);
+			}
+		}
+		S.Hidden.Reset();
+		if (!bHideOthers)
+		{
+			return;
+		}
+		for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+		{
+			if (*It != Dog->GetCostume() && !It->IsHidden() && Cast<AWonderlandSkinStage>(It->GetOwner()) == nullptr)
+			{
+				It->SetActorHiddenInGame(true);
+				S.Hidden.Add(*It);
+			}
+		}
+	}
+
+	void QaStanceCamera(FQaStance& S, UWorld* World, ARelayDogCharacter* Dog, double Yaw, double Distance, double Rise, float Fov)
+	{
+		APlayerController* PC = World->GetFirstPlayerController();
+		const FVector Feet = Dog->GetActorLocation() - FVector(0.0, 0.0, Dog->GetSimpleCollisionHalfHeight());
+		const FVector Middle = Feet + FVector(0.0, 0.0, Dog->GetCanonBodyHeightUu() * 0.5);
+		const FVector Toward = Dog->GetActorForwardVector().GetSafeNormal2D().RotateAngleAxis(Yaw, FVector::UpVector);
+		const FVector Where = Middle + Toward * Distance + FVector(0.0, 0.0, Rise);
+		ACameraActor* Cam = S.Camera.Get();
+		if (Cam == nullptr)
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Cam = World->SpawnActor<ACameraActor>(Where, FRotator::ZeroRotator, Params);
+			S.Camera = Cam;
+		}
+		if (Cam != nullptr && PC != nullptr)
+		{
+			Cam->SetActorLocationAndRotation(Where, (Middle - Where).Rotation());
+			Cam->GetCameraComponent()->SetFieldOfView(Fov);
+			Cam->GetCameraComponent()->SetConstraintAspectRatio(false);
+			if (PC->GetViewTarget() != Cam)
+			{
+				PC->SetViewTargetWithBlend(Cam, 0.0f);
+			}
+		}
+	}
+
+	void QaStanceFrame(FQaStance& S, const FString& Name)
+	{
+		int32 Width = 0;
+		int32 Height = 0;
+		const FString Path = S.Dir / (Name + TEXT(".png"));
+		const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLSTQA frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), Width, Height);
+	}
+
+	void QaStanceFinish(FQaStance& S, const TCHAR* Why)
+	{
+		UWorld* World = S.World.Get();
+		ARelayDogCharacter* Dog = S.Dog.Get();
+		if (Dog != nullptr)
+		{
+			QaHandRelease(Dog);
+			Dog->QaWalkKey(false);
+		}
+		if (World != nullptr)
+		{
+			if (FWonderlandMissionHandoff* State = QaHandoff(World))
+			{
+				FString Ignored;
+				State->Return(Ignored);
+			}
+			if (Dog != nullptr)
+			{
+				QaStanceShow(S, World, Dog, false);
+				if (APlayerController* PC = World->GetFirstPlayerController())
+				{
+					PC->SetViewTargetWithBlend(Dog, 0.0f);
+				}
+				GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+			}
+		}
+		if (ACameraActor* Cam = S.Camera.Get())
+		{
+			Cam->Destroy();
+		}
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLSTQA END pass=%d fail=%d%s"), S.Pass, S.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
+		if (S.bQuit)
+		{
+			FPlatformMisc::RequestExit(false);
+		}
+	}
+
+	bool QaStanceTick(float)
+	{
+		if (!GQaStance.IsValid())
+		{
+			return false;
+		}
+		FQaStance& S = *GQaStance;
+		UWorld* World = S.World.Get();
+		ARelayDogCharacter* Dog = S.Dog.Get();
+		FWonderlandMissionHandoff* State = QaHandoff(World);
+		UWonderlandUiSubsystem* Ui = QaUi(World);
+		if (World == nullptr || Dog == nullptr || State == nullptr || Ui == nullptr || Dog->GetCharacterMovement() == nullptr)
+		{
+			QaStanceFinish(S, TEXT("the world, the Dog, the handoff or the UI went away"));
+			GQaStance.Reset();
+			return false;
+		}
+		const float Now = World->GetTimeSeconds();
+		const float In = Now - S.PhaseAt;
+		const int32 Skins = static_cast<int32>(UE_ARRAY_COUNT(FaceRoster));
+		const int32 Shots = static_cast<int32>(UE_ARRAY_COUNT(StanceShots));
+		auto Next = [&S, Now](int32 To)
+		{
+			S.Phase = To;
+			S.PhaseAt = Now;
+		};
+		auto Stop = [&S](const TCHAR* Reason)
+		{
+			QaStanceFinish(S, Reason);
+			GQaStance.Reset();
+			return false;
+		};
+		const FString SkinName = S.Skin < Skins ? FaceRoster[S.Skin] : TEXT("relay_og");
+
+		switch (S.Phase)
+		{
+		case 0:
+			// READY: the welcome put away, the Dog on loaded ground, the swords put away
+			if (Ui->IsWelcomeOpen())
+			{
+				Ui->DismissWelcome();
+			}
+			if (State->IsArmed())
+			{
+				FString Ignored;
+				State->Return(Ignored);
+			}
+			if (In < 4.0f || !Dog->GetCharacterMovement()->IsMovingOnGround() || State->IsEquipped())
+			{
+				return In < 40.0f ? true : Stop(TEXT("the Dog never stood ready with the swords put away"));
+			}
+			Next(1);
+			return true;
+		case 1:
+			// THE NEXT SKIN, unarmed
+			if (S.Skin >= Skins)
+			{
+				Next(20);
+				return true;
+			}
+			GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), *SkinName));
+			Next(2);
+			return true;
+		case 2:
+			if (In < 3.0f)
+			{
+				return true;
+			}
+			S.Base = QaReadStance(Dog);
+			S.Check(FString::Printf(TEXT("ST1.%d"), S.Skin + 1), Dog->GetArmedStanceWeight() == 0.0f,
+				FString::Printf(TEXT("%s unarmed (the baseline): stance weight %.3f; %s"), *SkinName, Dog->GetArmedStanceWeight(), *QaDescribeStance(S.Base)));
+			S.Shot = 0;
+			S.bArmedShots = false;
+			QaStanceShow(S, World, Dog, true);
+			Next(3);
+			return true;
+		case 3:
+		{
+			// THE THREE SHOTS (unarmed, then armed), each after the cut has settled
+			if (S.Shot >= Shots)
+			{
+				QaStanceShow(S, World, Dog, false);
+				Next(S.bArmedShots ? 6 : 4);
+				return true;
+			}
+			const FStanceShot& Shot = StanceShots[S.Shot];
+			QaStanceCamera(S, World, Dog, Shot.Yaw, Shot.Distance, Shot.Rise, Shot.Fov);
+			if (In < 1.2f)
+			{
+				return true;
+			}
+			QaStanceFrame(S, FString::Printf(TEXT("%d_%s_%s_%s"), S.Skin + 1, *SkinName, S.bArmedShots ? TEXT("armed") : TEXT("unarmed"), Shot.Name));
+			++S.Shot;
+			S.PhaseAt = Now;
+			return true;
+		}
+		case 4:
+		{
+			// THE SWORDS TAKEN UP, the way the terminal takes them
+			APlayerController* PC = World->GetFirstPlayerController();
+			if (PC != nullptr)
+			{
+				PC->SetViewTargetWithBlend(Dog, 0.0f);
+			}
+			FString Said;
+			if (!WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said))
+			{
+				S.Check(FString::Printf(TEXT("ST2.%d"), S.Skin + 1), false, FString::Printf(TEXT("%s: the swords could not be taken up: %s"), *SkinName, *Said));
+				return Stop(TEXT("no handoff"));
+			}
+			Next(5);
+			return true;
+		}
+		case 5:
+		{
+			if (!State->IsArmed() || In < 4.5f)
+			{
+				return In < 10.0f ? true : Stop(TEXT("the swords were never held"));
+			}
+			const FStanceReading R = QaReadStance(Dog);
+			const float Ahead = R.HandForward - S.Base.HandForward;
+			const float Out = R.HandSpread - S.Base.HandSpread;
+			const float Feet = R.SoleSpread - S.Base.SoleSpread;
+			const float Sink = R.SoleHeight - S.Base.SoleHeight;
+			const float Lean = FMath::Abs(R.Pitch - S.Base.Pitch);
+			const bool bOk = Dog->GetArmedStanceWeight() == 1.0f && Ahead >= 10.0f && Out >= 6.0f && Feet >= 5.0f && FMath::Abs(Sink) <= 1.5f && Lean >= 5.0f;
+			S.Check(FString::Printf(TEXT("ST2.%d"), S.Skin + 1), bOk,
+				FString::Printf(TEXT("%s armed, standing: stance weight %.3f; hands %+.1f uu forward (>= 10) and %+.1f apart (>= 6); soles %+.1f apart (>= 5), ")
+					TEXT("%+.1f uu off the ground they stood on (within 1.5: the same feet); body pitch moved %.1f deg (>= 5) | %s"),
+					*SkinName, Dog->GetArmedStanceWeight(), Ahead, Out, Feet, Sink, Lean, *QaDescribeStance(R)));
+			S.Shot = 0;
+			S.bArmedShots = true;
+			QaStanceShow(S, World, Dog, true);
+			Next(3);
+			return true;
+		}
+		case 6:
+		{
+			// GIVEN BACK: every measure home
+			APlayerController* PC = World->GetFirstPlayerController();
+			if (PC != nullptr && PC->GetViewTarget() != Dog)
+			{
+				PC->SetViewTargetWithBlend(Dog, 0.0f);
+			}
+			if (State->IsArmed())
+			{
+				FString Said;
+				WonderlandHandoffDirector::Return(QaLocalPlayer(World), Said);
+			}
+			if (State->IsEquipped() || In < 3.0f)
+			{
+				return In < 10.0f ? true : Stop(TEXT("the swords were never given back"));
+			}
+			const FStanceReading R = QaReadStance(Dog);
+			const bool bHome = Dog->GetArmedStanceWeight() == 0.0f && FMath::Abs(R.HandForward - S.Base.HandForward) <= 2.0f
+				&& FMath::Abs(R.HandSpread - S.Base.HandSpread) <= 2.0f && FMath::Abs(R.SoleSpread - S.Base.SoleSpread) <= 0.5f
+				&& FMath::Abs(R.SoleHeight - S.Base.SoleHeight) <= 0.5f && FMath::Abs(R.Pitch - S.Base.Pitch) <= 1.0f;
+			S.Check(FString::Printf(TEXT("ST3.%d"), S.Skin + 1), bHome,
+				FString::Printf(TEXT("%s given back: stance weight %.3f; %s (the baseline: %s)"), *SkinName, Dog->GetArmedStanceWeight(), *QaDescribeStance(R),
+					*QaDescribeStance(S.Base)));
+			++S.Skin;
+			Next(1);
+			return true;
+		}
+		case 20:
+		{
+			// ARMED AND MOVING, on Relay OG then Shadow Flame: a walk, a run, a dash, photographed from the side as it goes
+			if (S.Moving >= 2)
+			{
+				return Stop(nullptr);
+			}
+			GEngine->Exec(World, S.Moving == 0 ? TEXT("wl.Skins.Wear relay_og") : TEXT("wl.Skins.Wear shadow_flame"));
+			Next(21);
+			return true;
+		}
+		case 21:
+		{
+			if (In < 3.0f)
+			{
+				return true;
+			}
+			if (!State->IsArmed())
+			{
+				if (State->GetState() == EWonderlandHandoffState::Idle)
+				{
+					FString Said;
+					WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
+				}
+				return In < 12.0f ? true : Stop(TEXT("the swords could not be taken up to move"));
+			}
+			const float Clear = QaClearHeading(World, Dog, 1800.0f, S.Forward);
+			if (Clear < 1300.0f)
+			{
+				S.Check(FString::Printf(TEXT("ST4.%d"), S.Moving + 1), false, FString::Printf(TEXT("no open ground to move armed (best heading clear for %.0f uu)"), Clear));
+				return Stop(TEXT("no open ground"));
+			}
+			QaFace(Dog, S.Forward);
+			S.Seen = 0.0f;
+			S.SeenOut = 0.0f;
+			S.Key = 0;
+			QaStanceShow(S, World, Dog, true);
+			// the WALK: Ctrl's band (the default without a key is the jog)
+			Dog->QaWalkKey(true);
+			Next(22);
+			return true;
+		}
+		case 22:
+		case 23:
+		case 24:
+		{
+			// 22 WALK (no run key), 23 RUN, 24 DASH -- the camera riding beside the Dog, looking at it
+			const FString Moving = S.Moving == 0 ? FString(TEXT("relay_og")) : FString(TEXT("shadow_flame"));
+			Dog->AddMovementInput(S.Forward, 1.0f);
+			QaStanceCamera(S, World, Dog, 90.0, 420.0, 30.0, 55.0f);
+			const float Ground = FVector(Dog->GetVelocity().X, Dog->GetVelocity().Y, 0.0f).Size();
+			if (S.Phase == 22)
+			{
+				if (In >= 1.4f && S.Key == 0)
+				{
+					QaStanceFrame(S, FString::Printf(TEXT("m%d_%s_armed_walk_side"), S.Moving + 1, *Moving));
+					S.Check(FString::Printf(TEXT("ST4.%d"), S.Moving + 1), Dog->GetArmedStanceWeight() == 1.0f && Ground > 30.0f,
+						FString::Printf(TEXT("%s armed, walking at %.0f uu/s: stance weight %.2f"), *Moving, Ground, Dog->GetArmedStanceWeight()));
+					S.Key = 1;
+				}
+				if (In >= 1.6f)
+				{
+					Dog->QaWalkKey(false);
+					Dog->QaRunKey(true);
+					S.Key = 0;
+					Next(23);
+				}
+				return true;
+			}
+			if (S.Phase == 23)
+			{
+				const FRotator ShoulderA = Dog->GetCanonShoulderRotation(true);
+				const FRotator ShoulderB = Dog->GetCanonShoulderRotation(false);
+				if (In >= 0.9f)
+				{
+					S.SeenOut = FMath::Max(S.SeenOut, FMath::Min(FMath::Abs(ShoulderA.Roll), FMath::Abs(ShoulderB.Roll)));
+				}
+				if (In >= 1.5f && S.Key == 0)
+				{
+					QaStanceFrame(S, FString::Printf(TEXT("m%d_%s_armed_run_side"), S.Moving + 1, *Moving));
+					S.Check(FString::Printf(TEXT("ST5.%d"), S.Moving + 1), Dog->GetArmedStanceWeight() == 1.0f && Ground > 600.0f && S.SeenOut >= 12.0f,
+						FString::Printf(TEXT("%s armed, running at %.0f uu/s: the arms swept out %.1f deg (>= 12: the blades clear the legs); stance weight %.2f"),
+							*Moving, Ground, S.SeenOut, Dog->GetArmedStanceWeight()));
+					S.Key = 1;
+				}
+				if (In >= 1.7f)
+				{
+					// the dash, from the run: W up, down, up, down
+					S.DashBase = Dog->GetDashCount();
+					S.Key = 0;
+					Next(24);
+				}
+				return true;
+			}
+			// 24: THE DASH
+			if (S.Key == 0 && In >= 0.00f) { Dog->QaForwardKey(false, false); S.Key = 1; }
+			if (S.Key == 1 && In >= 0.04f) { Dog->QaForwardKey(false, true); S.Key = 2; }
+			if (S.Key == 2 && In >= 0.08f) { Dog->QaForwardKey(false, false); S.Key = 3; }
+			if (S.Key == 3 && In >= 0.12f) { Dog->QaForwardKey(false, true); S.Key = 4; }
+			S.Seen = FMath::Max(S.Seen, Dog->GetDashStanceWeight());
+			if (S.Key == 4 && Dog->IsDashing() && Dog->GetDashStanceWeight() > 0.6f)
+			{
+				QaStanceFrame(S, FString::Printf(TEXT("m%d_%s_armed_dash_side"), S.Moving + 1, *Moving));
+				S.Key = 5;
+			}
+			if (In >= 1.2f)
+			{
+				S.Check(FString::Printf(TEXT("ST6.%d"), S.Moving + 1), Dog->GetDashCount() == S.DashBase + 1 && S.Seen >= 0.6f && S.Key == 5,
+					FString::Printf(TEXT("%s armed, a dash from the run: %d dash(es), the dash pose's weight reached %.2f (>= 0.6), a frame mid-dash %s"),
+						*Moving, Dog->GetDashCount() - S.DashBase, S.Seen, S.Key == 5 ? TEXT("saved") : TEXT("NOT taken")));
+				QaHandRelease(Dog);
+				QaStanceShow(S, World, Dog, false);
+				if (APlayerController* PC = World->GetFirstPlayerController())
+				{
+					PC->SetViewTargetWithBlend(Dog, 0.0f);
+				}
+				++S.Moving;
+				Next(20);
+			}
+			return true;
+		}
+		default:
+			return Stop(TEXT("an unknown phase"));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaHandoffStanceCommand(
+		TEXT("wl.Qa.HandoffStance"),
+		TEXT("Mission Handoff M2, the attack-ready stance, in this (packaged) build: on every skin unarmed vs armed vs given back, measured ")
+		TEXT("on the canon's joints and photographed front, side and behind; then armed walking, running and dashing on Relay OG and Shadow ")
+		TEXT("Flame. Frames to Saved/Screenshots/WLSTANCE; WLSTQA lines; `quit` exits after."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaStance.IsValid())
+			{
+				return;
+			}
+			ARelayDogCharacter* Dog = QaDog(World);
+			if (Dog == nullptr || World == nullptr)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSTQA END pass=0 fail=1 (no Relay Dog to drive)"));
+				if (Args.Contains(TEXT("quit")))
+				{
+					FPlatformMisc::RequestExit(false);
+				}
+				return;
+			}
+			GQaStance = MakeShared<FQaStance>();
+			GQaStance->World = World;
+			GQaStance->Dog = Dog;
+			GQaStance->bQuit = Args.Contains(TEXT("quit"));
+			GQaStance->PhaseAt = World->GetTimeSeconds();
+			GQaStance->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLSTANCE"));
+			GQaStance->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaStanceTick), 0.0f);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSTQA armed at (%.0f, %.0f, %.0f)"), Dog->GetActorLocation().X, Dog->GetActorLocation().Y, Dog->GetActorLocation().Z);
+		}));
 }
 
 #endif

@@ -1508,6 +1508,23 @@ void ARelayDogCharacter::SetForwardKey(bool bW, bool bDown)
 	}
 }
 
+FRotator ARelayDogCharacter::GetCanonShoulderRotation(bool bPlusY) const
+{
+	const FRelayDogArm& Arm = (ArmLeft.SideSign > 0.0f) == bPlusY ? ArmLeft : ArmRight;
+	return Arm.Shoulder != nullptr ? Arm.Shoulder->GetRelativeRotation() : FRotator::ZeroRotator;
+}
+
+FRotator ARelayDogCharacter::GetCanonHipRotation(bool bPlusY) const
+{
+	const FRelayDogLeg& Leg = (LegLeft.LateralUU > 0.0f) == bPlusY ? LegLeft : LegRight;
+	return Leg.Hip != nullptr ? Leg.Hip->GetRelativeRotation() : FRotator::ZeroRotator;
+}
+
+float ARelayDogCharacter::GetCanonBodyPitch() const
+{
+	return BodyRoot != nullptr ? BodyRoot->GetRelativeRotation().Pitch : 0.0f;
+}
+
 int32 ARelayDogCharacter::CountVisibleActProps() const
 {
 	int32 Visible = 0;
@@ -2656,7 +2673,15 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	In.GroundDeltaLeft = TraceFootGround(Animator.Pose().FootLeft.Forward, LegLeft.LateralUU);
 	In.GroundDeltaRight = TraceFootGround(Animator.Pose().FootRight.Forward, LegRight.LateralUU);
 
-	const RelayDogStride::FDogPose& Pose = Animator.Update(In);
+	// THE MISSION HANDOFF'S ATTACK-READY STANCE (founder, 2026-10-02), laid onto the animator's pose by RelayDogArmedStance:
+	// eased in while the swords are held, out when they are given back, and EXACTLY the animator's pose at weight 0 -- normal
+	// roaming is untouched. Everything below writes this pose, so the canon body, the mission overlay and every worn skin
+	// carry the same stance.
+	RelayDogArmedStance::Step(ArmedStance, IsHandoffArmed(), bDashActive, DeltaSeconds);
+	RelayDogStride::FDogPose Pose = Animator.Update(In);
+	RelayDogArmedStance::Apply(Pose, ArmedStance.Armed.Value, ArmedStance.Dash.Value, 0.8f * HeadWidthUU, (0.8f - 0.5125f) * HeadWidthUU,
+		0.5125f * HeadWidthUU);
+	StanceFeetOutDeg = RelayDogArmedStance::FeetOutDeg(Pose, ArmedStance.Armed.Value);
 
 	// ---- AND THE COSTUME WEARS THE SAME STRIDE, so a mascot skin is a change of appearance and nothing else.
 	//
@@ -2699,9 +2724,11 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	{
 		TailPivot->SetRelativeRotation(FRotator(Pose.TailPitchDeg, Pose.TailYawDeg, 0.0f));
 	}
-	if (LegLeft.Hip != nullptr) LegLeft.Hip->SetRelativeRotation(FRotator(SolvedL.HipDeg, 0.0f, 0.0f));
+	// THE STANCE'S SPACED FEET are each hip swept outward (the measured roll that carries a limb away from the centre line);
+	// 0 whenever the swords are not held, so these are the same writes as ever.
+	if (LegLeft.Hip != nullptr) LegLeft.Hip->SetRelativeRotation(FRotator(SolvedL.HipDeg, 0.0f, StanceFeetOutDeg * LegChainLeft.OutwardSign));
 	if (LegLeft.Shin != nullptr) LegLeft.Shin->SetRelativeRotation(FRotator(-SolvedL.KneeDeg, 0.0f, 0.0f));
-	if (LegRight.Hip != nullptr) LegRight.Hip->SetRelativeRotation(FRotator(SolvedR.HipDeg, 0.0f, 0.0f));
+	if (LegRight.Hip != nullptr) LegRight.Hip->SetRelativeRotation(FRotator(SolvedR.HipDeg, 0.0f, StanceFeetOutDeg * LegChainRight.OutwardSign));
 	if (LegRight.Shin != nullptr) LegRight.Shin->SetRelativeRotation(FRotator(-SolvedR.KneeDeg, 0.0f, 0.0f));
 
 	auto WriteArm = [](const FRelayDogArm& Arm, const RelayDogStride::FArmPose& ArmPose)

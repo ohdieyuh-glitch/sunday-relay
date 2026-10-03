@@ -3450,6 +3450,14 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 					if (Performed < 0.999f && Knee != nullptr
 						&& SolveLegToSole(Index, bPlus ? WornPose.SolePlusY : WornPose.SoleMinusY, SolvedHip, SolvedKnee))
 					{
+						// THE CANON HIP'S OUTWARD SWEEP COMES WITH IT (the Mission Handoff's spaced feet, M2): the two-bone solve
+						// works in the leg's sagittal plane and would drop it. Walking and standing it is 0 on the canon -- its
+						// hips are written with no sweep -- so this is the solve exactly as before; only while no performed
+						// pose blends in, so an act's own crossfade is untouched.
+						if (Performed <= 0.001f)
+						{
+							SolvedHip.Roll = CopiedHip.Roll;
+						}
 						WriteJoint(Pivot, Part.RestLocation, Performed <= 0.001f ? SolvedHip
 							: FQuat::Slerp(SolvedHip.Quaternion(), CopiedHip.Quaternion(), Performed).Rotator());
 						WriteJointRotation(Knee, Performed <= 0.001f ? SolvedKnee
