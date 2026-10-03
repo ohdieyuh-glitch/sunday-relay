@@ -94,8 +94,18 @@ export type GrantFailure =
  * It is minted only by a SIGNED-IN PLAYER pairing their OWN client, bound to
  * that player at mint, and bound to `NATIVE_WORLD_AUDIENCE` instead of a web
  * origin, so a browser page can neither redeem one nor present one.
+ *
+ * `native_social` is the desktop client's SOCIAL scope (founder decision A,
+ * 2026-10-01: least privilege, no second identity system). It carries the
+ * player and NO project, because friends, messages and parties are a player's,
+ * not a project's. It is minted in exactly one way -- `mintNativeSocialSession`,
+ * called only after the bridge itself has verified the GitHub identity (the
+ * device-flow sign-in, wonderland-native-signin-routes.ts) -- and bound to
+ * `NATIVE_SOCIAL_AUDIENCE`. It is invisible to `verifySession` (so no browser
+ * route ever sees it) and refused by `verifyNativeSession` (so it can never read
+ * the Julius world stream); only `verifyNativeSocialSession` accepts it.
  */
-export type BrowserSessionScope = 'browser_read_only' | 'browser_control' | 'native_world';
+export type BrowserSessionScope = 'browser_read_only' | 'browser_control' | 'native_world' | 'native_social';
 
 /**
  * The audience a native grant and session are bound to, in the place a browser
@@ -104,6 +114,12 @@ export type BrowserSessionScope = 'browser_read_only' | 'browser_control' | 'nat
  * native client never has to spoof a web origin to hold one.
  */
 export const NATIVE_WORLD_AUDIENCE = 'wonderland-native://desktop';
+
+/**
+ * The audience a NATIVE SOCIAL session is bound to. Distinct from the world
+ * audience, so neither native credential can ever be taken for the other.
+ */
+export const NATIVE_SOCIAL_AUDIENCE = 'wonderland-native://social';
 
 export interface PairingGrantIssue {
   readonly grantId: string;
@@ -224,6 +240,25 @@ export interface BrowserSessionStore {
     token: string; now: number;
   }): { ok: true; sessionId: string; participantId: string; projectId: string }
     | { ok: false; reason: GrantFailure | 'not_native' };
+  /**
+   * Mint the desktop client's SOCIAL session for a player whose identity the
+   * BRIDGE ITSELF has just verified with GitHub (the device-flow sign-in). Like
+   * `mintIdentitySession`, it must never be called with a participant taken
+   * from a request body. Bound to NATIVE_SOCIAL_AUDIENCE, no project, the native
+   * lifetime; hashed at rest and revocable like every other session.
+   */
+  mintNativeSocialSession(input: {
+    now: number; participantId: string;
+  }): { ok: true; session: BrowserSessionIssue } | { ok: false; reason: 'invalid_participant' };
+  /**
+   * Verify a native SOCIAL session, and nothing else: a browser session, a
+   * native world session or anything not bound to NATIVE_SOCIAL_AUDIENCE is
+   * refused however valid it is (the copy guard, both ways).
+   */
+  verifyNativeSocialSession(input: {
+    token: string; now: number;
+  }): { ok: true; sessionId: string; participantId: string }
+    | { ok: false; reason: GrantFailure | 'not_native_social' };
   revokeSession(input: { token: string; now: number }): boolean;
   /**
    * Drops expired records. Called on the WRITE path only — a read must never
@@ -246,6 +281,11 @@ export function createBrowserSessionStore(): BrowserSessionStore {
   return {
     createGrant({ origin, now, scope = 'browser_read_only', participantId = null, projectId = null }) {
       sweep(now);
+      // A SOCIAL session has no grant: it is minted only after the bridge has
+      // verified the player with GitHub itself (mintNativeSocialSession).
+      if (scope === 'native_social') {
+        throw new Error('A native social session is minted only from a bridge-verified identity, never through a grant.');
+      }
       // A NATIVE grant is the player authorising their own client, so it must
       // name a real participant, the project it is for, and be bound to the
       // native audience. All three are enforced in the store, not only at the
@@ -331,6 +371,11 @@ export function createBrowserSessionStore(): BrowserSessionStore {
       if (scope === 'native_world') {
         throw new Error('A native session is created only by redeeming a native pairing grant.');
       }
+      // Nor a SOCIAL one: that is bound to the native social audience, never to
+      // a web origin, and has its own mint.
+      if (scope === 'native_social') {
+        throw new Error('A native social session is minted only by mintNativeSocialSession.');
+      }
       // The store is the last thing standing between "forgot to validate" and a
       // session that acts as nobody or as an unbounded string. A control
       // session with no verified participant is exactly what this path exists
@@ -362,6 +407,10 @@ export function createBrowserSessionStore(): BrowserSessionStore {
         if (!hashMatches(token, session.tokenHash)) continue;
         if (session.revokedAt !== null) return { ok: false, reason: 'already_consumed' };
         if (session.expiresAt <= now) return { ok: false, reason: 'expired' };
+        // A NATIVE SOCIAL session reaches no route that verifies here -- not even
+        // an originless call, which this method otherwise admits. Its own
+        // verifier is the only door it has.
+        if (session.scope === 'native_social') return { ok: false, reason: 'origin_mismatch' };
         // A session is bound to the origin it was paired for. A browser that
         // presents it from anywhere else is refused.
         if (origin !== undefined && session.origin !== origin) {
@@ -394,6 +443,38 @@ export function createBrowserSessionStore(): BrowserSessionStore {
         if (!isValidParticipantId(session.participantId)) return { ok: false, reason: 'not_native' };
         if (!isValidProjectId(session.projectId)) return { ok: false, reason: 'not_native' };
         return { ok: true, sessionId: session.sessionId, participantId: session.participantId, projectId: session.projectId };
+      }
+      return { ok: false, reason: 'not_found' };
+    },
+
+    mintNativeSocialSession({ now, participantId }) {
+      sweep(now);
+      if (!isValidParticipantId(participantId)) return { ok: false, reason: 'invalid_participant' };
+      const sessionId = randomBytes(9).toString('base64url');
+      const token = randomSecret();
+      const expiresAt = now + NATIVE_SESSION_TTL_MS;
+      sessions.set(sessionId, {
+        sessionId, tokenHash: sha256(token), origin: NATIVE_SOCIAL_AUDIENCE, expiresAt,
+        scope: 'native_social', participantId, projectId: null, revokedAt: null,
+      });
+      return {
+        ok: true,
+        session: { sessionId, token, origin: NATIVE_SOCIAL_AUDIENCE, expiresAt, scope: 'native_social', participantId, projectId: null },
+      };
+    },
+
+    verifyNativeSocialSession({ token, now }) {
+      for (const session of sessions.values()) {
+        if (!hashMatches(token, session.tokenHash)) continue;
+        if (session.revokedAt !== null) return { ok: false, reason: 'already_consumed' };
+        if (session.expiresAt <= now) return { ok: false, reason: 'expired' };
+        // THE COPY GUARD, both ways: a browser session, or a native WORLD
+        // session, carried into the social routes stops here.
+        if (session.scope !== 'native_social' || session.origin !== NATIVE_SOCIAL_AUDIENCE) {
+          return { ok: false, reason: 'not_native_social' };
+        }
+        if (!isValidParticipantId(session.participantId)) return { ok: false, reason: 'not_native_social' };
+        return { ok: true, sessionId: session.sessionId, participantId: session.participantId };
       }
       return { ok: false, reason: 'not_found' };
     },
@@ -465,7 +546,7 @@ export function browserSessionMayCall(
   // not even the read-only ones, because it acts as a player and none of those
   // routes were written expecting one from outside a browser. The world stream,
   // the only thing it exists for, authorises it separately (verifyNativeSession).
-  if (scope === 'native_world') return false;
+  if (scope === 'native_world' || scope === 'native_social') return false;
   if (method === 'GET') return BROWSER_READABLE.some((pattern) => pattern.test(path));
   if (method === 'POST' && scope === 'browser_control') {
     return BROWSER_CONTROL_WRITABLE.some((pattern) => pattern.test(path));

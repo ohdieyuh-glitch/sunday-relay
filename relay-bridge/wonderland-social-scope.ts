@@ -21,9 +21,10 @@
  * other bridge capability. Credentials, prompts, Brain data, provider secrets and mission state are not in any social view
  * (src/relay/social/social-contracts.ts NEVER_SOCIAL_CONCERNS), so even an admitted call cannot return them.
  *
- * To deploy (after RC8, with the founder's OK): add `capabilities` to the native grant/session records, ask the player at
- * pairing, route `/wonderland/social/*` through `nativeSocialMayCall` + `bindSocialActor`, and serve them from the social
- * domain. Until then this module changes no production behaviour.
+ * HOW IT IS GRANTED (R16, 2026-10-03). Not at project pairing -- a player with no project must still have friends -- but by
+ * the desktop client's own sign-in: GitHub's device flow, verified by the bridge itself, mints a `native_social` session
+ * (grants.ts) for the SAME `ghu-<id>` participant the website sign-in produces, holding exactly `social`. The routes are
+ * served only when the deployment sets WONDERLAND_SOCIAL_ENABLED=1 (server.ts); otherwise they answer 503.
  */
 
 export const NATIVE_SOCIAL_CAPABILITY = 'social' as const;
@@ -97,10 +98,13 @@ export const SOCIAL_OPERATIONS: readonly SocialOperation[] = Object.freeze([
 
 /** What the authorisation needs of a verified session; the same fields grants.ts already holds, plus the capability list. */
 export interface NativeSocialSessionFacts {
-  readonly scope: 'browser_read_only' | 'browser_control' | 'native_world';
+  readonly scope: 'browser_read_only' | 'browser_control' | 'native_world' | 'native_social';
   /** The player the session was minted for. The ONLY actor it can ever be. */
   readonly participantId: string | null;
-  /** Granted at pairing. Absent today: no production session carries `social`. */
+  /**
+   * The capabilities the session holds. A `native_social` session (the desktop client's device-flow sign-in) holds
+   * exactly `social`; a `native_world` session holds none today.
+   */
   readonly capabilities: readonly string[];
 }
 
@@ -110,7 +114,7 @@ export interface NativeSocialSessionFacts {
  * matched as given and must contain no '..', '%' or '//').
  */
 export function nativeSocialMayCall(method: string, path: string, session: NativeSocialSessionFacts): SocialOperation | null {
-  if (session.scope !== 'native_world' || session.participantId === null) return null;
+  if ((session.scope !== 'native_world' && session.scope !== 'native_social') || session.participantId === null) return null;
   if (!session.capabilities.includes(NATIVE_SOCIAL_CAPABILITY)) return null;
   if (path.includes('..') || path.includes('%') || path.includes('//')) return null;
   return SOCIAL_OPERATIONS.find((op) => op.method === method && op.pattern.test(path)) ?? null;
