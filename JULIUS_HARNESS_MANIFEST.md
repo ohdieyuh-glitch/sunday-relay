@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **216 production files** across 20/20 subsystems (2 roots, 187 traced, 8 not composed by the live root, 19 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **217 production files** across 20/20 subsystems (2 roots, 187 traced, 8 not composed by the live root, 20 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -409,6 +409,7 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/wonderland-migrations/028_julius_criteria_per_run.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-migrations/029_julius_project_brain.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-migrations/030_julius_outbox_event_no_reread.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
+| `src/relay/persistence/wonderland-migrations/031_julius_run_transition_hot.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 
 ### 19 LIVE PROVIDER COMPOSITION
