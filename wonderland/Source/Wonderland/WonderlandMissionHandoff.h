@@ -75,6 +75,11 @@ public:
 	float GetPhaseSeconds() const { return PhaseSeconds; }
 	/** Empty after a clean load; otherwise why the record was set aside or the attachment cleared. */
 	const FString& GetLoadNote() const { return LoadNote; }
+	/** A refused record that could not be set aside: nothing is written this session, so it is never overwritten. */
+	bool IsReadOnly() const { return bReadOnly; }
+
+	/** The Mission Handoff forms this build has. The first canonical form is the Angelic Twin Swords. */
+	static bool IsKnownForm(const FString& InObjectId);
 
 	/** Whether the two companions' embodiments exist and show (the gate is the bodies, never the provider: V2-2). */
 	struct FCompanionsPresent
@@ -125,8 +130,15 @@ public:
 	static void ResetSpy();
 
 private:
+	/**
+	 * What the RECORD says: equipped while the swords form or are held, and NOT from the moment the return begins -- a
+	 * restart during the return must not bring back swords the user already gave back (Second's M0-4).
+	 */
+	bool IsRecordedEquipped() const { return State != EWonderlandHandoffState::Idle && State != EWonderlandHandoffState::Returning; }
 	void SetState(EWonderlandHandoffState Next);
 	bool Persist() const;
+	/** Sets a refused record aside; when that fails, the session goes read-only. Returns the note. */
+	FString Refuse(const FString& Why);
 
 	FString Path;
 	EWonderlandHandoffState State = EWonderlandHandoffState::Idle;
@@ -135,4 +147,5 @@ private:
 	FString MissionId;
 	float PhaseSeconds = 0.0f;
 	FString LoadNote;
+	bool bReadOnly = false;
 };

@@ -102,10 +102,18 @@ public:
 
 	explicit FWonderlandCardStore(const FString& InPath);
 
-	/** Reads the file. A refused file is set aside (its new path in the load note) and the store starts from the default. */
+	/**
+	 * Reads the file. A refused file is set aside (its new path in the load note) and the store starts from the default;
+	 * one that cannot be set aside makes the store READ-ONLY for the session, so the original is never overwritten.
+	 */
 	void Load();
-	/** Writes the whole store, sealed and atomically. */
+	/**
+	 * Writes the whole store, sealed and atomically -- never more than the loader accepts: a store over MaxFileBytes is
+	 * refused and the file on disk is kept (Second's M0-1: a file the next boot would set aside loses every card).
+	 */
 	bool Save() const;
+	/** True when a refused file could not be set aside: every change and every save is refused this session. */
+	bool IsReadOnly() const { return bReadOnly; }
 
 	const TArray<FWonderlandCard>& GetCards() const { return Cards; }
 	const FWonderlandCard* Find(const FString& Id) const;
@@ -113,6 +121,8 @@ public:
 	const FWonderlandCard& GetActive() const;
 	const FString& GetActiveId() const { return ActiveId; }
 
+	// Every change below is refused, with OutWhy, when the store is read-only or would no longer fit in its file; a refused
+	// change leaves the store exactly as it was.
 	/** A new card, copied from the active one with a fresh id and this name. Returns the id, or empty with OutWhy. */
 	FString Create(const FString& Name, FString& OutWhy);
 	bool Rename(const FString& Id, const FString& Name, FString& OutWhy);
@@ -129,7 +139,10 @@ public:
 
 	/** The secret refusal every stored string passes: provider keys, private keys, tokens, credential references. */
 	static bool LooksLikeSecret(const FString& Text);
-	/** A label as it may be stored: control characters and newlines stripped, trimmed, capped at MaxLabelChars. */
+	/**
+	 * A label as it may be stored: control characters (C0, C1) and invisible format characters (zero-width, bidi, soft
+	 * hyphen, BOM, tags) stripped, trimmed, capped at MaxLabelChars. Ordinary spaces stay.
+	 */
 	static FString CleanLabel(const FString& Text);
 
 	static constexpr int32 MaxCards = 32;
@@ -149,9 +162,18 @@ private:
 	static bool FromJson(const TSharedPtr<FJsonObject>& Json, FWonderlandCard& Out, FString& OutNote);
 	bool Validate(FWonderlandCard& Card, FString& OutWhy) const;
 	FString NewId() const;
+	/** The store as the file holds it (condensed JSON). */
+	FString Serialised() const;
+	/** False, with OutWhy, when the store would be more than the loader accepts. */
+	bool FitsInFile(FString& OutWhy) const;
+	/** False, with OutWhy, when the store is read-only this session. */
+	bool Writable(FString& OutWhy) const;
+	/** Sets a refused file aside; when that fails, the store goes read-only. Returns the note. */
+	FString Refuse(const FString& Why);
 
 	FString Path;
 	TArray<FWonderlandCard> Cards;
 	FString ActiveId;
 	FString LoadNote;
+	bool bReadOnly = false;
 };

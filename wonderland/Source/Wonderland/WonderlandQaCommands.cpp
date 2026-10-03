@@ -3875,6 +3875,42 @@ namespace
 				FString::Printf(TEXT("secret-shaped names and labels refused %d of %d; a key-shaped capability id refused %s; the saved file ")
 					TEXT("holds none of them: %s"), Refused, Expected, bIdRefused ? TEXT("yes") : TEXT("NO"), bClean ? TEXT("yes") : TEXT("NO")));
 		}
+		// C5b: AN INVISIBLE CHARACTER NEVER HIDES A KEY (Second's M0-3) -- a key split by a zero-width space, a soft hyphen, a
+		// BOM, a C1 control, a TAG character, a word joiner or a bidi override is refused; one in an ordinary name is dropped;
+		// ordinary spaces stay (a key deliberately split by spaces is the documented limit)
+		{
+			FWonderlandCardStore S(P);
+			S.Load();
+			const FString Gh = FString(TEXT("gh")) + TEXT("p_");
+			const FString Half1 = TEXT("0123456789abcdef");
+			const FString Half2 = TEXT("ghijklmnopqrstuvwxyzAB");
+			FString Tag;  // U+E0041 as UTF-16
+			Tag.AppendChar(static_cast<TCHAR>(0xDB40));
+			Tag.AppendChar(static_cast<TCHAR>(0xDC41));
+			const FString Splitters[] = { FString::Chr(static_cast<TCHAR>(0x200B)), FString::Chr(static_cast<TCHAR>(0x00AD)),
+				FString::Chr(static_cast<TCHAR>(0xFEFF)), FString::Chr(static_cast<TCHAR>(0x0085)), Tag, FString::Chr(static_cast<TCHAR>(0x2060)),
+				FString::Chr(static_cast<TCHAR>(0x202E)) };
+			int32 Refused = 0;
+			for (const FString& Split : Splitters)
+			{
+				FString Why;
+				if (S.Create(Gh + Half1 + Split + Half2, Why).IsEmpty())
+				{
+					++Refused;
+				}
+			}
+			FString Why;
+			const FString KeptId = S.Create(FString(TEXT("Files")) + FString::Chr(static_cast<TCHAR>(0x200B)) + TEXT(" (local)"), Why);
+			const FString SpacedId = S.Create(TEXT("my notes part one two"), Why);
+			const FWonderlandCard* Kept = S.Find(KeptId);
+			const FWonderlandCard* Spaced = S.Find(SpacedId);
+			const bool bNames = Kept != nullptr && Kept->Name == TEXT("Files (local)") && Spaced != nullptr && Spaced->Name == TEXT("my notes part one two");
+			const int32 Expected = static_cast<int32>(UE_ARRAY_COUNT(Splitters));
+			Q.Check(TEXT("C5b"), Refused == Expected && bNames,
+				FString::Printf(TEXT("a key split by an invisible character (zero-width space, soft hyphen, BOM, C1, TAG, word joiner, bidi) ")
+					TEXT("refused %d of %d; a zero-width space in an ordinary name dropped, its spaces kept: %s"), Refused, Expected,
+					bNames ? TEXT("yes") : TEXT("NO")));
+		}
 		// C6: NAMES ARE CLEANED -- control characters and newlines stripped; a 10 kB name capped
 		{
 			FWonderlandCardStore S(P);
@@ -3896,18 +3932,24 @@ namespace
 			QaSealed(P, TEXT("{\"format\":\"wonderland.cards.v1\",\"active\":\"x1\",\"cards\":[{\"id\":\"x1\",\"name\":\"Odd\",\"skin\":\"bad skin!!\",")
 				TEXT("\"missionHandoff\":\"../../etc\",\"primary\":{\"key\":\"WHITE\",\"chosen\":true},\"companions\":[")
 				TEXT("{\"slot\":1e300,\"kind\":\"llm\",\"provider\":\"dev-companion\",\"label\":\"Huge\"},")
-				TEXT("{\"slot\":1,\"kind\":\"agent\",\"provider\":\"dev-single-agent\",\"label\":\"JHINN\"}]}]}"));
+				TEXT("{\"slot\":1,\"kind\":\"agent\",\"provider\":\"dev-single-agent\",\"label\":\"JHINN\"}]},")
+				// (Second's M0-5: a CLEAN id that names a form this build does not have; DEFAULT marked chosen)
+				TEXT("{\"id\":\"x2\",\"name\":\"Two\",\"missionHandoff\":\"excalibur\",\"primary\":{\"key\":\"DEFAULT\",\"chosen\":true}}]}"));
 			FWonderlandCardStore S(P);
 			S.Load();
 			const FWonderlandCard* C = S.Find(TEXT("x1"));
+			const FWonderlandCard* C2 = S.Find(TEXT("x2"));
 			const bool bSlots = C != nullptr && C->Companions.Num() == 1 && C->Companions[0].Slot == 1
 				&& S.GetLoadNote().Contains(TEXT("companion reference was refused"));
+			const bool bForm = C2 != nullptr && C2->MissionHandoff == TEXT("angelic_twin_swords") && S.GetLoadNote().Contains(TEXT("card x2: unknown Mission Handoff"))
+				&& C2->Primary.Key == TEXT("DEFAULT") && !C2->Primary.bChosen;
 			Q.Check(TEXT("C7"), C != nullptr && C->Skin == TEXT("relay_og") && C->MissionHandoff == TEXT("angelic_twin_swords") && S.GetActiveId() == TEXT("x1")
-				&& S.GetLoadNote().Contains(TEXT("unknown skin")) && S.Find(FWonderlandCardStore::BuiltInId()) != nullptr && bSlots,
+				&& S.GetLoadNote().Contains(TEXT("unknown skin")) && S.Find(FWonderlandCardStore::BuiltInId()) != nullptr && bSlots && bForm,
 				FString::Printf(TEXT("a card naming an invalid skin and handoff: skin -> %s, handoff -> %s, built-in restored %s; a slot of 1e300 ")
-					TEXT("refused and the valid companion kept %s; note '%s'"),
+					TEXT("refused and the valid companion kept %s; a clean but unknown form falls back and DEFAULT is stored not chosen %s; note '%s'"),
 					C != nullptr ? *C->Skin : TEXT("-"), C != nullptr ? *C->MissionHandoff : TEXT("-"),
-					S.Find(FWonderlandCardStore::BuiltInId()) != nullptr ? TEXT("yes") : TEXT("NO"), bSlots ? TEXT("yes") : TEXT("NO"), *S.GetLoadNote()));
+					S.Find(FWonderlandCardStore::BuiltInId()) != nullptr ? TEXT("yes") : TEXT("NO"), bSlots ? TEXT("yes") : TEXT("NO"),
+					bForm ? TEXT("yes") : TEXT("NO"), *S.GetLoadNote()));
 		}
 		// C8: HOSTILE FILES -- each is set aside, the store starts from the default, nothing crashes
 		{
@@ -3972,6 +4014,98 @@ namespace
 				FString::Printf(TEXT("22 unknown fields: %d kept (cap %d), 'aura' kept %s and written back %s, the secret-shaped 'leak' dropped %s"), Kept,
 					FWonderlandCardStore::MaxUnknownFields, bAura ? TEXT("yes") : TEXT("NO"), bWrittenBack ? TEXT("yes") : TEXT("NO"),
 					!bLeak && bSecretGone ? TEXT("yes") : TEXT("NO")));
+		}
+		// C9b: A SECRET NESTED IN A PASSTHROUGH VALUE (Second's M0-2) -- a key split by a newline inside an array, and one as a
+		// nested KEY, are dropped with their fields; an ordinary nested value is kept and written back
+		{
+			Files.DeleteDirectory(*Dir, false, true);
+			Files.MakeDirectory(*Dir, true);
+			// 20 + 20 key characters: no run reaches 32 until the newline between them is gone
+			const FString A20 = TEXT("abcdefghij0123456789");
+			const FString B20 = TEXT("klmnopqrst9876543210");
+			QaSealed(P, FString::Printf(TEXT("{\"format\":\"wonderland.cards.v1\",\"active\":\"n1\",\"cards\":[{\"id\":\"n1\",\"name\":\"Nested\",")
+				TEXT("\"inArray\":{\"x\":[\"%s\\n%s\"]},\"asKey\":{\"y\":{\"%s\\n%s\":1}},\"benign\":{\"deep\":[1,\"two\",{\"three\":true}]}}]}"),
+				*A20, *B20, *A20, *B20));
+			FWonderlandCardStore S(P);
+			S.Load();
+			const FWonderlandCard* C = S.Find(TEXT("n1"));
+			const bool bArrayDropped = C != nullptr && (!C->Unknown.IsValid() || !C->Unknown->HasField(TEXT("inArray")));
+			const bool bKeyDropped = C != nullptr && (!C->Unknown.IsValid() || !C->Unknown->HasField(TEXT("asKey")));
+			const bool bBenignKept = C != nullptr && C->Unknown.IsValid() && C->Unknown->HasField(TEXT("benign"));
+			S.Save();
+			const bool bGone = !QaFileHas(P, *A20) && !QaFileHas(P, *B20) && QaFileHas(P, TEXT("three"));
+			Q.Check(TEXT("C9b"), bArrayDropped && bKeyDropped && bBenignKept && bGone,
+				FString::Printf(TEXT("a key split by a newline inside a nested array dropped %s; one as a nested key dropped %s; an ordinary nested ")
+					TEXT("value kept %s; the saved file holds neither half, and the ordinary value: %s"), bArrayDropped ? TEXT("yes") : TEXT("NO"),
+					bKeyDropped ? TEXT("yes") : TEXT("NO"), bBenignKept ? TEXT("yes") : TEXT("NO"), bGone ? TEXT("yes") : TEXT("NO")));
+		}
+		// C10: THE FILE NEVER OUTGROWS ITS LOADER (Second's M0-1) -- copies of a card carrying 16 large passthrough fields are
+		// made until one would not fit: that one is refused and undone, the store saves, and a reload keeps EVERY card
+		{
+			Files.DeleteDirectory(*Dir, false, true);
+			Files.MakeDirectory(*Dir, true);
+			const FString Filler = FString::ChrN(3900, TEXT('a'));
+			FString Fields;
+			for (int32 N = 0; N < FWonderlandCardStore::MaxUnknownFields; ++N)
+			{
+				Fields += FString::Printf(TEXT(",\"pad%d\":\"%s\""), N, *Filler);
+			}
+			QaSealed(P, FString::Printf(TEXT("{\"format\":\"wonderland.cards.v1\",\"active\":\"heavy\",\"cards\":[{\"id\":\"heavy\",\"name\":\"Heavy\"%s}]}"), *Fields));
+			FWonderlandCardStore S(P);
+			S.Load();
+			int32 Made = 0;
+			FString RefusedWhy;
+			for (int32 N = 0; N < 12; ++N)
+			{
+				FString Why;
+				if (S.Create(FString::Printf(TEXT("Copy %d"), N + 1), Why).IsEmpty())
+				{
+					RefusedWhy = Why;
+					break;
+				}
+				++Made;
+			}
+			const int32 Before = S.GetCards().Num();
+			const bool bSaved = S.Save();
+			FWonderlandCardStore R(P);
+			R.Load();
+			const int64 Bytes = IFileManager::Get().FileSize(*P);
+			Q.Check(TEXT("C10"), Made >= 1 && RefusedWhy.Contains(TEXT("no longer fit")) && bSaved && R.GetCards().Num() == Before && R.GetLoadNote().IsEmpty()
+				&& Bytes > 0 && Bytes <= FWonderlandCardStore::MaxFileBytes + 16,
+				FString::Printf(TEXT("a card carrying 16 x 3.9 KB of passthrough: %d copies made, the next refused ('%s'); saved %s at %lld bytes ")
+					TEXT("(cap %lld + the seal); a reload keeps %d of %d card(s), note '%s'"), Made, *RefusedWhy, bSaved ? TEXT("yes") : TEXT("NO"), Bytes,
+					FWonderlandCardStore::MaxFileBytes, R.GetCards().Num(), Before, *R.GetLoadNote()));
+		}
+		// C11: A REFUSED FILE THAT CANNOT BE SET ASIDE (Second's M0-6) -- the store goes read-only: a change and a save are both
+		// refused and the original bytes are never overwritten. The set-aside is blocked by directories holding every name it
+		// could take in the next 40 s (the engine retries a failed move for ~5 s, logging that it could not).
+		{
+			Files.DeleteDirectory(*Dir, false, true);
+			Files.MakeDirectory(*Dir, true);
+			QaSealed(P, TEXT("{\"format\": \"wonderland.cards.v1\", \"cards\": [ {"));
+			TArray<uint8> Original;
+			FFileHelper::LoadFileToArray(Original, *P);
+			const FDateTime Now = FDateTime::UtcNow();
+			for (int32 Offset = -2; Offset <= 40; ++Offset)
+			{
+				const FDateTime At = Now + FTimespan::FromSeconds(Offset);
+				Files.MakeDirectory(*FPaths::Combine(Dir, FString::Printf(TEXT("Cards.refused-%s.sav"), *At.ToString(TEXT("%Y%m%d-%H%M%S")))), true);
+			}
+			FWonderlandCardStore S(P);
+			S.Load();
+			FString WhyCreate;
+			const bool bCreateRefused = S.Create(TEXT("Blocked"), WhyCreate).IsEmpty();
+			const bool bSaveRefused = !S.Save();
+			TArray<uint8> After;
+			FFileHelper::LoadFileToArray(After, *P);
+			const bool bUntouched = Original.Num() > 0 && After == Original;
+			Q.Check(TEXT("C11"), S.IsReadOnly() && bCreateRefused && WhyCreate.Contains(TEXT("read-only")) && bSaveRefused && bUntouched
+				&& S.GetLoadNote().Contains(TEXT("could not be set aside")),
+				FString::Printf(TEXT("a refused file whose set-aside was blocked: read-only %s, a change refused %s ('%s'), a save refused %s, the ")
+					TEXT("original bytes untouched %s; note '%s'"), S.IsReadOnly() ? TEXT("yes") : TEXT("NO"), bCreateRefused ? TEXT("yes") : TEXT("NO"),
+					*WhyCreate, bSaveRefused ? TEXT("yes") : TEXT("NO"), bUntouched ? TEXT("yes") : TEXT("NO"), *S.GetLoadNote()));
+			Files.DeleteDirectory(*Dir, false, true);
+			Files.MakeDirectory(*Dir, true);
 		}
 
 		// --- the Mission Handoff MODEL (M0: no visuals; the terminal action and the presentation come in M1)
@@ -4089,6 +4223,43 @@ namespace
 			Q.Check(TEXT("H7"), M.GetState() == EWonderlandHandoffState::Idle && QaRefusedBeside(HB) == 1,
 				FString::Printf(TEXT("an unsealed 'equipped=1': state %s, set aside %s"), FWonderlandMissionHandoff::StateName(M.GetState()),
 					QaRefusedBeside(HB) == 1 ? TEXT("yes") : TEXT("NO")));
+		}
+		// H8: A RESTART DURING THE RETURN does not bring the swords back (Second's M0-4): the record says not equipped the moment
+		// the return begins, while a restart while HELD still restores them
+		{
+			const FString H8 = FPaths::Combine(Dir, TEXT("MissionHandoff8.sav"));
+			FWonderlandMissionHandoff M(H8);
+			M.Load([](const FString&) { return false; });
+			FString Why;
+			M.Begin(TEXT("angelic_twin_swords"), FString(), EWonderlandHandoffEntry::Roaming, Both, Why);
+			for (int32 Step = 0; Step < 100 && M.GetState() != EWonderlandHandoffState::Held; ++Step)
+			{
+				M.Tick(0.1f);
+			}
+			FWonderlandMissionHandoff WhileHeld(H8);
+			WhileHeld.Load([](const FString&) { return true; });
+			const bool bReturned = M.Return(Why);
+			FWonderlandMissionHandoff WhileReturning(H8);
+			WhileReturning.Load([](const FString&) { return true; });
+			Q.Check(TEXT("H8"), WhileHeld.GetState() == EWonderlandHandoffState::Held && bReturned && M.GetState() == EWonderlandHandoffState::Returning
+				&& WhileReturning.GetState() == EWonderlandHandoffState::Idle,
+				FString::Printf(TEXT("a restart while held restores %s; return %s, now %s; a restart during the return restores %s (want IDLE)"),
+					FWonderlandMissionHandoff::StateName(WhileHeld.GetState()), bReturned ? TEXT("ok") : *Why, FWonderlandMissionHandoff::StateName(M.GetState()),
+					FWonderlandMissionHandoff::StateName(WhileReturning.GetState())));
+		}
+		// H9: A FORM THIS BUILD DOES NOT HAVE (Second's M0-5) -- Begin refuses it; a sealed record naming one restores not equipped
+		{
+			const FString H9 = FPaths::Combine(Dir, TEXT("MissionHandoff9.sav"));
+			FWonderlandMissionHandoff M(H9);
+			M.Load([](const FString&) { return false; });
+			FString Why;
+			const bool bRefused = !M.Begin(TEXT("excalibur"), FString(), EWonderlandHandoffEntry::Roaming, Both, Why);
+			QaSealed(H9, TEXT("wonderland.handoff.v1\nequipped=1\nobject=excalibur\nmission=-\nentry=roaming\n"));
+			FWonderlandMissionHandoff R(H9);
+			R.Load([](const FString&) { return true; });
+			Q.Check(TEXT("H9"), bRefused && R.GetState() == EWonderlandHandoffState::Idle && R.GetLoadNote().Contains(TEXT("does not have")),
+				FString::Printf(TEXT("begin with an unknown form refused %s ('%s'); a sealed record naming one restores %s, note '%s'"),
+					bRefused ? TEXT("yes") : TEXT("NO"), *Why, FWonderlandMissionHandoff::StateName(R.GetState()), *R.GetLoadNote()));
 		}
 		Files.DeleteDirectory(*Dir, false, true);
 		UE_LOG(LogWonderlandQa, Display, TEXT("WLCARDQA END model pass=%d fail=%d"), Q.Pass, Q.Fail);

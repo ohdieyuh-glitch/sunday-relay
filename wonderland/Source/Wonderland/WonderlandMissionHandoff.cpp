@@ -100,12 +100,13 @@ void FWonderlandMissionHandoff::SetState(EWonderlandHandoffState Next)
 	UE_LOG(LogTemp, Display, TEXT("WLHANDOFF %s -> %s | object %s | mission %s | entry %s"), StateName(State), StateName(Next),
 		ObjectId.IsEmpty() ? TEXT("-") : *ObjectId, MissionId.IsEmpty() ? TEXT("none") : *MissionId,
 		Entry == EWonderlandHandoffEntry::MidMission ? TEXT("mid-mission") : TEXT("roaming"));
-	const bool bWasEquipped = IsEquipped();
+	const bool bWasRecorded = IsRecordedEquipped();
 	State = Next;
 	PhaseSeconds = 0.0f;
-	// THE RECORD FOLLOWS THE EQUIPPED STATE: written when a handoff begins, cleared when it has fully returned. A
-	// restart in the middle of a transformation restores HELD, as the founder's reconnect rule asks.
-	if (bWasEquipped != IsEquipped())
+	// THE RECORD FOLLOWS THE EQUIPPED STATE: written when a handoff begins, cleared the moment the return BEGINS. A restart
+	// in the middle of a transformation restores HELD, as the founder's reconnect rule asks; a restart during the return
+	// does not bring back swords the user already gave back.
+	if (bWasRecorded != IsRecordedEquipped())
 	{
 		Persist();
 	}
@@ -113,10 +114,41 @@ void FWonderlandMissionHandoff::SetState(EWonderlandHandoffState Next)
 
 bool FWonderlandMissionHandoff::Persist() const
 {
-	const FString Text = FString::Printf(TEXT("%s\nequipped=%d\nobject=%s\nmission=%s\nentry=%s\n"), RecordFormat, IsEquipped() ? 1 : 0,
+	if (bReadOnly)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLHANDOFF not remembered this session: the record could not be set aside, so it is never overwritten"));
+		return false;
+	}
+	const FString Text = FString::Printf(TEXT("%s\nequipped=%d\nobject=%s\nmission=%s\nentry=%s\n"), RecordFormat, IsRecordedEquipped() ? 1 : 0,
 		ObjectId.IsEmpty() ? TEXT("-") : *ObjectId, MissionId.IsEmpty() ? TEXT("-") : *MissionId,
 		Entry == EWonderlandHandoffEntry::MidMission ? TEXT("mid_mission") : TEXT("roaming"));
 	return WonderlandBeta::SaveSealedText(Path, Text);
+}
+
+FString FWonderlandMissionHandoff::Refuse(const FString& Why)
+{
+	const FString Aside = WonderlandBeta::SetAsideRefusedSave(Path);
+	if (Aside.IsEmpty())
+	{
+		// THE ORIGINAL STAYS UNTOUCHED: a record that cannot be moved aside must not be overwritten by the next write either
+		bReadOnly = true;
+		return FString::Printf(TEXT("%s, and it could not be set aside; not equipped, and the handoff is not remembered this session"), *Why);
+	}
+	return FString::Printf(TEXT("%s; set aside as %s; not equipped"), *Why, *FPaths::GetCleanFilename(Aside));
+}
+
+bool FWonderlandMissionHandoff::IsKnownForm(const FString& InObjectId)
+{
+	// One place for the list: the C.A.R.D. store and the record both check against it.
+	static const TCHAR* const Forms[] = { TEXT("angelic_twin_swords") };
+	for (const TCHAR* Form : Forms)
+	{
+		if (InObjectId == Form)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 void FWonderlandMissionHandoff::Load(TFunctionRef<bool(const FString& MissionId)> MissionStillActive)
@@ -127,6 +159,7 @@ void FWonderlandMissionHandoff::Load(TFunctionRef<bool(const FString& MissionId)
 	MissionId.Reset();
 	PhaseSeconds = 0.0f;
 	LoadNote.Reset();
+	bReadOnly = false;
 	WonderlandBeta::RecoverInterruptedSave(Path);
 	FString Text;
 	FString Why;
@@ -134,9 +167,7 @@ void FWonderlandMissionHandoff::Load(TFunctionRef<bool(const FString& MissionId)
 	{
 		if (!Why.IsEmpty())
 		{
-			const FString Aside = WonderlandBeta::SetAsideRefusedSave(Path);
-			LoadNote = FString::Printf(TEXT("the handoff record could not be used (%s); set aside as %s; not equipped"), *Why,
-				*FPaths::GetCleanFilename(Aside));
+			LoadNote = Refuse(FString::Printf(TEXT("the handoff record could not be used (%s)"), *Why));
 			UE_LOG(LogTemp, Warning, TEXT("WLHANDOFF %s"), *LoadNote);
 		}
 		return;
@@ -159,9 +190,7 @@ void FWonderlandMissionHandoff::Load(TFunctionRef<bool(const FString& MissionId)
 	const FString* InEntry = Fields.Find(TEXT("entry"));
 	if (Lines.Num() == 0 || Lines[0] != RecordFormat || Equipped == nullptr || Object == nullptr || Mission == nullptr || InEntry == nullptr)
 	{
-		const FString Aside = WonderlandBeta::SetAsideRefusedSave(Path);
-		LoadNote = FString::Printf(TEXT("the handoff record is sealed but not a %s record; set aside as %s; not equipped"), RecordFormat,
-			*FPaths::GetCleanFilename(Aside));
+		LoadNote = Refuse(FString::Printf(TEXT("the handoff record is sealed but not a %s record"), RecordFormat));
 		UE_LOG(LogTemp, Warning, TEXT("WLHANDOFF %s"), *LoadNote);
 		return;
 	}
@@ -169,9 +198,10 @@ void FWonderlandMissionHandoff::Load(TFunctionRef<bool(const FString& MissionId)
 	{
 		return;
 	}
-	if (!WonderlandBeta::IsSafeId(*Object))
+	// A FORM THIS BUILD DOES NOT HAVE (a newer build's, or a hand edit) is never restored as something to hold
+	if (!WonderlandBeta::IsSafeId(*Object) || !IsKnownForm(*Object))
 	{
-		LoadNote = TEXT("the handoff record names no valid object; not equipped");
+		LoadNote = TEXT("the handoff record names a Mission Handoff form this build does not have; not equipped");
 		UE_LOG(LogTemp, Warning, TEXT("WLHANDOFF %s"), *LoadNote);
 		return;
 	}
@@ -201,9 +231,9 @@ bool FWonderlandMissionHandoff::Begin(const FString& InObjectId, const FString& 
 		OutWhy = TEXT("the Mission Handoff is already active");
 		return false;
 	}
-	if (!WonderlandBeta::IsSafeId(InObjectId))
+	if (!WonderlandBeta::IsSafeId(InObjectId) || !IsKnownForm(InObjectId))
 	{
-		OutWhy = TEXT("no Mission Handoff form is selected in the active C.A.R.D.");
+		OutWhy = TEXT("the active C.A.R.D. names no Mission Handoff form this build has");
 		return false;
 	}
 	if (!InMissionId.IsEmpty() && !WonderlandBeta::IsSafeId(InMissionId))

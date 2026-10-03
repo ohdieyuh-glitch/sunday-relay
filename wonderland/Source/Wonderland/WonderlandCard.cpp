@@ -5,10 +5,12 @@
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
 #include "Misc/Paths.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "WonderlandBeta.h"
+#include "WonderlandMissionHandoff.h"
 
 // The provider-key test the sidekick client already trusts (WonderlandSidekicks.cpp): one rule, not two copies of it.
 namespace WonderlandSidekickSecrets
@@ -58,33 +60,60 @@ namespace
 		return false;
 	}
 
+	/** CONDENSED: what is written is what is measured, and a re-save never grows past what the loader accepts. */
 	FString Serialise(const TSharedRef<FJsonObject>& Object)
 	{
 		FString Out;
-		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Out);
+		const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);
 		FJsonSerializer::Serialize(Object, Writer);
 		return Out;
 	}
 
-	/** The text with every control character removed and NO length cap: what cleaning a label could reassemble. */
-	FString WithoutControls(const FString& Text)
+	/**
+	 * A character no label shows: the C0 and C1 controls, and the invisible FORMAT characters (Unicode Cf) that split a key
+	 * so that no test sees it while a UI still draws it whole -- the soft hyphen, zero-width spaces and joiners, marks, bidi
+	 * controls, word joiners and invisible operators, the BOM, interlinear annotations (Second's M0-3). Ordinary spaces are
+	 * NOT among them: a 64-character label with its spaces removed would be refused for nothing.
+	 */
+	bool IsInvisible(uint32 Code)
+	{
+		return Code < 0x20 || (Code >= 0x7F && Code <= 0x9F) || Code == 0xAD || (Code >= 0x600 && Code <= 0x605) || Code == 0x61C
+			|| Code == 0x6DD || Code == 0x70F || Code == 0x180E || (Code >= 0x200B && Code <= 0x200F) || (Code >= 0x202A && Code <= 0x202E)
+			|| (Code >= 0x2060 && Code <= 0x2064) || (Code >= 0x2066 && Code <= 0x206F) || Code == 0xFEFF || (Code >= 0xFFF9 && Code <= 0xFFFB)
+			|| (Code >= 0xE0000 && Code <= 0xE007F);
+	}
+
+	/** The text without its invisible characters and with NO length cap: what cleaning a label could reassemble. */
+	FString WithoutInvisible(const FString& Text)
 	{
 		FString Out;
 		Out.Reserve(Text.Len());
-		for (const TCHAR Char : Text)
+		for (int32 Index = 0; Index < Text.Len(); ++Index)
 		{
-			if (Char >= 0x20 && Char != 0x7F)
+			const uint32 Code = static_cast<uint32>(Text[Index]);
+			// a TAG character (U+E0000-E007F, invisible ASCII look-alikes) is a surrogate pair in UTF-16: U+DB40, U+DC00-DC7F
+			if (Code == 0xDB40 && Index + 1 < Text.Len())
 			{
-				Out.AppendChar(Char);
+				const uint32 Low = static_cast<uint32>(Text[Index + 1]);
+				if (Low >= 0xDC00 && Low <= 0xDC7F)
+				{
+					++Index;
+					continue;
+				}
+			}
+			if (!IsInvisible(Code))
+			{
+				Out.AppendChar(Text[Index]);
 			}
 		}
 		return Out;
 	}
 
-	/** Secret-shaped as written, or once its control characters are gone ("sk-\nproj-..." is "sk-proj-..." after cleaning). */
+	/** Secret-shaped as written, or once its invisible characters are gone ("sk-\nproj-..." is "sk-proj-..." when cleaned). */
 	bool LooksSecretAnyWay(const FString& Text)
 	{
-		return FWonderlandCardStore::LooksLikeSecret(Text) || FWonderlandCardStore::LooksLikeSecret(WithoutControls(Text));
+		return FWonderlandCardStore::LooksLikeSecret(Text) || FWonderlandCardStore::LooksLikeSecret(WithoutInvisible(Text));
 	}
 
 	/** A label as it is stored, or false when it is secret-shaped either way: cleaning must never reassemble a key. */
@@ -147,6 +176,73 @@ namespace
 			}
 		}
 		return Deepest;
+	}
+
+	/**
+	 * Whether a passthrough value holds a secret ANYWHERE: every string value and every object key, at every depth, each
+	 * read as itself (Second's M0-2: the serialised shape escapes a newline into two characters, which would hide a key
+	 * split by one inside a nested array). Bounded by the nesting cap the loader already enforced.
+	 */
+	bool JsonHoldsSecret(const TSharedPtr<FJsonValue>& Value, int32 Depth)
+	{
+		if (!Value.IsValid())
+		{
+			return false;
+		}
+		if (Depth > MaxJsonNesting)
+		{
+			return true;
+		}
+		switch (Value->Type)
+		{
+		case EJson::String:
+		{
+			FString Text;
+			return Value->TryGetString(Text) && LooksSecretAnyWay(Text);
+		}
+		case EJson::Array:
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+			if (Value->TryGetArray(Items) && Items != nullptr)
+			{
+				for (const TSharedPtr<FJsonValue>& Item : *Items)
+				{
+					if (JsonHoldsSecret(Item, Depth + 1))
+					{
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+		case EJson::Object:
+		{
+			const TSharedPtr<FJsonObject>* Object = nullptr;
+			if (Value->TryGetObject(Object) && Object != nullptr && Object->IsValid())
+			{
+				for (const TPair<FString, TSharedPtr<FJsonValue>>& Field : (*Object)->Values)
+				{
+					if (LooksSecretAnyWay(Field.Key) || JsonHoldsSecret(Field.Value, Depth + 1))
+					{
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+		default:
+			return false;
+		}
+	}
+
+	/** DEFAULT is the skin's designed coat, never a colour someone chose (B64): it is stored as not chosen. */
+	void NormalisePrimary(FWonderlandCardPrimary& Primary)
+	{
+		if (Primary.Key.Equals(TEXT("DEFAULT"), ESearchCase::IgnoreCase))
+		{
+			Primary.Key = TEXT("DEFAULT");
+			Primary.bChosen = false;
+		}
 	}
 
 	/** A key every known field uses: passthrough keeps only names a person could have meant. */
@@ -230,20 +326,14 @@ bool FWonderlandCardStore::LooksLikeSecret(const FString& Text)
 
 FString FWonderlandCardStore::CleanLabel(const FString& Text)
 {
-	FString Out;
-	Out.Reserve(FMath::Min(Text.Len(), MaxLabelChars));
-	for (const TCHAR Char : Text)
+	// controls and invisible format characters are dropped: a label lands in logs and lines, never on two of them, and
+	// never hides anything from the eye
+	FString Out = WithoutInvisible(Text);
+	Out.LeftInline(MaxLabelChars);
+	// never half a character: a surrogate pair cut by the cap loses its first half too
+	if (Out.Len() > 0 && static_cast<uint32>(Out[Out.Len() - 1]) >= 0xD800 && static_cast<uint32>(Out[Out.Len() - 1]) <= 0xDBFF)
 	{
-		// newlines and every other control character are dropped: a label lands in logs and lines, never on two of them
-		if (Char < 0x20 || Char == 0x7F)
-		{
-			continue;
-		}
-		Out.AppendChar(Char);
-		if (Out.Len() >= MaxLabelChars)
-		{
-			break;
-		}
+		Out.LeftChopInline(1);
 	}
 	Out.TrimStartAndEndInline();
 	return Out;
@@ -359,7 +449,8 @@ bool FWonderlandCardStore::FromJson(const TSharedPtr<FJsonObject>& Json, FWonder
 	FString Text;
 	if (Json->TryGetStringField(TEXT("missionHandoff"), Text))
 	{
-		if (IsCleanId(Text))
+		// a clean id is not enough: it must be a form this build HAS (Second's M0-5)
+		if (IsCleanId(Text) && FWonderlandMissionHandoff::IsKnownForm(Text))
 		{
 			Out.MissionHandoff = Text;
 		}
@@ -402,6 +493,7 @@ bool FWonderlandCardStore::FromJson(const TSharedPtr<FJsonObject>& Json, FWonder
 			Out.Primary.bChosen = bChosen;
 		}
 	}
+	NormalisePrimary(Out.Primary);
 	const TArray<TSharedPtr<FJsonValue>>* Companions = nullptr;
 	if (Json->TryGetArrayField(TEXT("companions"), Companions) && Companions != nullptr)
 	{
@@ -477,13 +569,10 @@ bool FWonderlandCardStore::FromJson(const TSharedPtr<FJsonObject>& Json, FWonder
 		const TSharedRef<FJsonObject> Probe = MakeShared<FJsonObject>();
 		Probe->SetField(TEXT("v"), Field.Value);
 		const FString Shape = Serialise(Probe);
-		// a string value is also read as itself: the serialised shape escapes its control characters, which would hide a
-		// key split by one
-		FString AsText;
-		const bool bStringSecret = Field.Value.IsValid() && Field.Value->Type == EJson::String && Field.Value->TryGetString(AsText)
-			&& LooksSecretAnyWay(AsText);
+		// every string and key inside the value is also read as itself, at every depth: the serialised shape escapes control
+		// characters, which would hide a key split by one
 		if (!IsCleanId(Field.Key) || Out.Unknown->Values.Num() >= MaxUnknownFields || Shape.Len() > MaxUnknownBytes
-			|| LooksLikeSecret(Shape) || bStringSecret)
+			|| LooksLikeSecret(Shape) || JsonHoldsSecret(Field.Value, 0))
 		{
 			++Dropped;
 			continue;
@@ -501,6 +590,7 @@ void FWonderlandCardStore::Load()
 {
 	ResetToDefault();
 	LoadNote.Reset();
+	bReadOnly = false;
 	WonderlandBeta::RecoverInterruptedSave(Path);
 	FString Text;
 	FString Why;
@@ -508,8 +598,7 @@ void FWonderlandCardStore::Load()
 	{
 		if (!Why.IsEmpty())
 		{
-			const FString Aside = WonderlandBeta::SetAsideRefusedSave(Path);
-			LoadNote = FString::Printf(TEXT("Cards.sav could not be used (%s); set aside as %s"), *Why, *FPaths::GetCleanFilename(Aside));
+			LoadNote = Refuse(FString::Printf(TEXT("Cards.sav could not be used (%s)"), *Why));
 			UE_LOG(LogTemp, Warning, TEXT("WLCARD %s"), *LoadNote);
 		}
 		return;
@@ -518,8 +607,7 @@ void FWonderlandCardStore::Load()
 	// what it built would run that deep. No C.A.R.D. file nests more than a few levels.
 	if (JsonNesting(Text) > MaxJsonNesting)
 	{
-		const FString Aside = WonderlandBeta::SetAsideRefusedSave(Path);
-		LoadNote = FString::Printf(TEXT("Cards.sav nests deeper than %d levels; set aside as %s"), MaxJsonNesting, *FPaths::GetCleanFilename(Aside));
+		LoadNote = Refuse(FString::Printf(TEXT("Cards.sav nests deeper than %d levels"), MaxJsonNesting));
 		UE_LOG(LogTemp, Warning, TEXT("WLCARD %s"), *LoadNote);
 		return;
 	}
@@ -528,8 +616,7 @@ void FWonderlandCardStore::Load()
 	FString Format;
 	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid() || !Root->TryGetStringField(TEXT("format"), Format) || Format != FormatTag)
 	{
-		const FString Aside = WonderlandBeta::SetAsideRefusedSave(Path);
-		LoadNote = FString::Printf(TEXT("Cards.sav is sealed but does not hold %s; set aside as %s"), FormatTag, *FPaths::GetCleanFilename(Aside));
+		LoadNote = Refuse(FString::Printf(TEXT("Cards.sav is sealed but does not hold %s"), FormatTag));
 		UE_LOG(LogTemp, Warning, TEXT("WLCARD %s"), *LoadNote);
 		return;
 	}
@@ -547,12 +634,17 @@ void FWonderlandCardStore::Load()
 			}
 			const TSharedPtr<FJsonObject>* One = nullptr;
 			FWonderlandCard Card;
-			if (Value.IsValid() && Value->TryGetObject(One) && One != nullptr && FromJson(*One, Card, Notes)
-				&& !Loaded.ContainsByPredicate([&Card](const FWonderlandCard& C) { return C.Id == Card.Id; }))
+			if (!Value.IsValid() || !Value->TryGetObject(One) || One == nullptr || !FromJson(*One, Card, Notes))
 			{
-				Card.bBuiltIn = Card.Id == BuiltInId();
-				Loaded.Add(MoveTemp(Card));
+				continue;
 			}
+			if (Loaded.ContainsByPredicate([&Card](const FWonderlandCard& C) { return C.Id == Card.Id; }))
+			{
+				Notes += (Notes.IsEmpty() ? TEXT("") : TEXT("; ")) + FString::Printf(TEXT("card %s: a second card with that id was dropped"), *Card.Id);
+				continue;
+			}
+			Card.bBuiltIn = Card.Id == BuiltInId();
+			Loaded.Add(MoveTemp(Card));
 		}
 	}
 	// THE BUILT-IN CARD IS ALWAYS THERE: a file that lost it (hand-edited) gets it back, first.
@@ -582,7 +674,7 @@ void FWonderlandCardStore::Load()
 		LoadNote.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" | %s"), *LoadNote));
 }
 
-bool FWonderlandCardStore::Save() const
+FString FWonderlandCardStore::Serialised() const
 {
 	const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("format"), FormatTag);
@@ -593,7 +685,54 @@ bool FWonderlandCardStore::Save() const
 		List.Add(MakeShared<FJsonValueObject>(ToJson(Card)));
 	}
 	Root->SetArrayField(TEXT("cards"), List);
-	const bool bOk = WonderlandBeta::SaveSealedText(Path, Serialise(Root));
+	return Serialise(Root);
+}
+
+bool FWonderlandCardStore::FitsInFile(FString& OutWhy) const
+{
+	// measured as the loader measures it: the UTF-8 bytes the seal will cover
+	const FString Text = Serialised();
+	const int64 Bytes = FTCHARToUTF8(*Text, Text.Len()).Length();
+	if (Bytes > MaxFileBytes)
+	{
+		OutWhy = FString::Printf(TEXT("the C.A.R.D.s would no longer fit in their file (%lld KB of %lld KB)"), Bytes / 1024, MaxFileBytes / 1024);
+		return false;
+	}
+	return true;
+}
+
+bool FWonderlandCardStore::Writable(FString& OutWhy) const
+{
+	if (bReadOnly)
+	{
+		OutWhy = TEXT("the C.A.R.D.s are read-only this session: Cards.sav could not be set aside, so it is never overwritten");
+		return false;
+	}
+	return true;
+}
+
+FString FWonderlandCardStore::Refuse(const FString& Why)
+{
+	const FString Aside = WonderlandBeta::SetAsideRefusedSave(Path);
+	if (Aside.IsEmpty())
+	{
+		// THE ORIGINAL STAYS UNTOUCHED: a file that cannot be moved aside must not be overwritten by the next save either
+		bReadOnly = true;
+		return FString::Printf(TEXT("%s, and it could not be set aside; the C.A.R.D.s are read-only this session"), *Why);
+	}
+	return FString::Printf(TEXT("%s; set aside as %s"), *Why, *FPaths::GetCleanFilename(Aside));
+}
+
+bool FWonderlandCardStore::Save() const
+{
+	FString Why;
+	if (!Writable(Why) || !FitsInFile(Why))
+	{
+		// THE FILE ON DISK IS KEPT: never write what the next boot would set aside (every card would go with it)
+		UE_LOG(LogTemp, Warning, TEXT("WLCARD not saved: %s; the file on disk is kept"), *Why);
+		return false;
+	}
+	const bool bOk = WonderlandBeta::SaveSealedText(Path, Serialised());
 	UE_LOG(LogTemp, Display, TEXT("WLCARD saved %d card(s), active '%s': %s"), Cards.Num(), *ActiveId, bOk ? TEXT("ok") : TEXT("FAILED"));
 	return bOk;
 }
@@ -631,6 +770,12 @@ bool FWonderlandCardStore::Validate(FWonderlandCard& Card, FString& OutWhy) cons
 		OutWhy = TEXT("an id in it is not a valid id");
 		return false;
 	}
+	if (!FWonderlandMissionHandoff::IsKnownForm(Card.MissionHandoff))
+	{
+		OutWhy = TEXT("that Mission Handoff form is not in this build");
+		return false;
+	}
+	NormalisePrimary(Card.Primary);
 	if (Card.Companions.Num() > MaxCompanions || Card.Capabilities.Num() > MaxCapabilities)
 	{
 		OutWhy = TEXT("too many companions or capabilities");
@@ -659,6 +804,10 @@ bool FWonderlandCardStore::Validate(FWonderlandCard& Card, FString& OutWhy) cons
 
 FString FWonderlandCardStore::Create(const FString& Name, FString& OutWhy)
 {
+	if (!Writable(OutWhy))
+	{
+		return FString();
+	}
 	if (Cards.Num() >= MaxCards)
 	{
 		OutWhy = FString::Printf(TEXT("at most %d C.A.R.D.s"), MaxCards);
@@ -683,6 +832,12 @@ FString FWonderlandCardStore::Create(const FString& Name, FString& OutWhy)
 		return FString();
 	}
 	Cards.Add(Card);
+	// A COPY THAT WOULD NOT FIT is undone here, not discovered by a save (Second's M0-1): the store stays loadable
+	if (!FitsInFile(OutWhy))
+	{
+		Cards.RemoveAt(Cards.Num() - 1);
+		return FString();
+	}
 	return Card.Id;
 }
 
@@ -701,6 +856,10 @@ bool FWonderlandCardStore::Rename(const FString& Id, const FString& Name, FStrin
 
 bool FWonderlandCardStore::Delete(const FString& Id, FString& OutWhy)
 {
+	if (!Writable(OutWhy))
+	{
+		return false;
+	}
 	const int32 Index = Cards.IndexOfByPredicate([&Id](const FWonderlandCard& Card) { return Card.Id == Id; });
 	if (Index == INDEX_NONE)
 	{
@@ -722,6 +881,10 @@ bool FWonderlandCardStore::Delete(const FString& Id, FString& OutWhy)
 
 bool FWonderlandCardStore::Select(const FString& Id, FString& OutWhy)
 {
+	if (!Writable(OutWhy))
+	{
+		return false;
+	}
 	if (!IsCleanId(Id) || Find(Id) == nullptr)
 	{
 		OutWhy = TEXT("no such C.A.R.D.");
@@ -733,6 +896,10 @@ bool FWonderlandCardStore::Select(const FString& Id, FString& OutWhy)
 
 bool FWonderlandCardStore::Update(const FWonderlandCard& Card, FString& OutWhy)
 {
+	if (!Writable(OutWhy))
+	{
+		return false;
+	}
 	const int32 Index = Cards.IndexOfByPredicate([&Card](const FWonderlandCard& C) { return C.Id == Card.Id; });
 	if (Index == INDEX_NONE)
 	{
@@ -745,6 +912,13 @@ bool FWonderlandCardStore::Update(const FWonderlandCard& Card, FString& OutWhy)
 	{
 		return false;
 	}
+	FWonderlandCard Previous = MoveTemp(Cards[Index]);
 	Cards[Index] = MoveTemp(Next);
+	// A CHANGE THAT WOULD NOT FIT is undone: the card stays exactly as it was
+	if (!FitsInFile(OutWhy))
+	{
+		Cards[Index] = MoveTemp(Previous);
+		return false;
+	}
 	return true;
 }
