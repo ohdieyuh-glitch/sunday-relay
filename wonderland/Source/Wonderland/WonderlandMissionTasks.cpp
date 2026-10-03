@@ -385,6 +385,7 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 	}
 	const FString When = FDateTime::UtcNow().ToIso8601();
 	int32 Restored = 0;
+	int32 Redacted = 0;
 	for (const FWonderlandMissionTask& Saved : Save->Contracts)
 	{
 		if (!WonderlandTaskIsContract(Saved.State))
@@ -397,6 +398,13 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 		// select, close or submit after a restart. Restored contracts come back CLOSED (below), so they never count
 		// against the open tabs, and the record's own limit is applied where contracts are created, not here.
 		FWonderlandMissionTask Task = Saved;
+		// A KEY KEPT BEFORE THE OBJECTIVE SCREEN EXISTED (Second's review, 10-03) is redacted as it comes back and the file is
+		// rewritten below: fail-closed per field, never shown, never logged, never kept
+		if (FWonderlandCardStore::HoldsSecret(Task.Objective))
+		{
+			Task.Objective = FWonderlandCardStore::MaskForDisplay(Task.Objective);
+			++Redacted;
+		}
 		// A NEW HANDLE FOR A NEW SESSION. The local id means nothing outside the machine it was minted on, and
 		// ApplySchedulerState deliberately does not use it; the CONTRACT id is what came back unchanged.
 		Task.LocalId = FGuid::NewGuid();
@@ -417,6 +425,11 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 	// NOTHING IS SELECTED, because nothing is open. Selecting a task that is not in the workspace would put the
 	// mission strip on it and hand the + a slot the user cannot see.
 	Selected.Invalidate();
+	if (Redacted > 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK %d restored objective(s) held something shaped like a key or password: redacted, and the file rewritten"), Redacted);
+		SaveContracts();
+	}
 	if (Restored > 0)
 	{
 		UE_LOG(LogTemp, Display, TEXT("WLTASK restored %d Mission Contract(s); none is running until Julius says so"),
@@ -1034,7 +1047,7 @@ TArray<FString> UWonderlandMissionTaskSubsystem::DescribeTasks() const
 			WonderlandTaskIsContract(Task.State) ? TEXT("RED") : TEXT("GRAY"),
 			Task.Source == EWonderlandTaskSource::Julius ? TEXT("julius") : TEXT("local"),
 			Task.ContractId.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("[%s] "), *Task.ContractId),
-			Task.Objective.IsEmpty() ? TEXT("(no task entered)") : *Task.Objective.Left(58)));
+			Task.Objective.IsEmpty() ? TEXT("(no task entered)") : *FWonderlandCardStore::MaskForDisplay(Task.Objective).Left(58)));
 	}
 	return Lines;
 }

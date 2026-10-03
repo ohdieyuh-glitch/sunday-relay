@@ -272,9 +272,191 @@ FWonderlandCardStore::FWonderlandCardStore(const FString& InPath)
 	ResetToDefault();
 }
 
+namespace
+{
+	/** The words a credential arrives with. Any case. Shared by the label rule and the prose rule. */
+	bool CardHasCredentialWord(const FString& Text)
+	{
+		static const TCHAR* const CredentialWords[] = { TEXT("-----BEGIN"), TEXT("credentialRef"), TEXT("vault://"), TEXT("Bearer "), TEXT("token="),
+			TEXT("access_token"), TEXT("api_key"), TEXT("apikey="), TEXT("password="), TEXT("secret=") };
+		for (const TCHAR* Word : CredentialWords)
+		{
+			if (Text.Contains(Word, ESearchCase::IgnoreCase))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool CardAsciiLetter(TCHAR Char) { return (Char >= TEXT('A') && Char <= TEXT('Z')) || (Char >= TEXT('a') && Char <= TEXT('z')); }
+	bool CardAsciiDigit(TCHAR Char) { return Char >= TEXT('0') && Char <= TEXT('9'); }
+
+	/**
+	 * KEY PREFIXES, BUILT FROM HALVES AT RUN TIME: the release scan reads the package for exactly these, and a hit there must always
+	 * mean a real leak -- so no prefix is written whole in the binary.
+	 */
+	const TArray<FString>& CardVendorPrefixes()
+	{
+		static const TArray<FString> Prefixes = {
+			FString(TEXT("gh")) + TEXT("p_"), FString(TEXT("gh")) + TEXT("o_"), FString(TEXT("gh")) + TEXT("u_"), FString(TEXT("gh")) + TEXT("s_"),
+			FString(TEXT("gh")) + TEXT("r_"), FString(TEXT("github")) + TEXT("_pat_"), FString(TEXT("gl")) + TEXT("pat-"),
+			FString(TEXT("xo")) + TEXT("xb-"), FString(TEXT("xo")) + TEXT("xp-"), FString(TEXT("xo")) + TEXT("xa-"), FString(TEXT("xo")) + TEXT("xr-"),
+			FString(TEXT("xo")) + TEXT("xs-"), FString(TEXT("sk")) + TEXT("_live_"), FString(TEXT("sk")) + TEXT("_test_"),
+			FString(TEXT("rk")) + TEXT("_live_"), FString(TEXT("rk")) + TEXT("_test_"), FString(TEXT("AK")) + TEXT("IA"), FString(TEXT("AS")) + TEXT("IA"),
+			FString(TEXT("AI")) + TEXT("za"), FString(TEXT("hf")) + TEXT("_"), FString(TEXT("SG")) + TEXT("."), FString(TEXT("ya")) + TEXT("29."),
+			FString(TEXT("np")) + TEXT("m_"), FString(TEXT("py")) + TEXT("pi-"), FString(TEXT("dop")) + TEXT("_v1_"), FString(TEXT("sh")) + TEXT("pat_"),
+			FString(TEXT("sh")) + TEXT("pss_"), FString(TEXT("sq0")) + TEXT("atp-"), FString(TEXT("sq0")) + TEXT("csp-") };
+		return Prefixes;
+	}
+
+	/** A vendor prefix at a token start, followed by 16+ key characters holding letters AND digits ("hf_hub_cache" is a name, not a key). */
+	bool CardHasVendorKey(const FString& Text)
+	{
+		for (const FString& Prefix : CardVendorPrefixes())
+		{
+			int32 From = 0;
+			while (true)
+			{
+				const int32 At = Text.Find(Prefix, ESearchCase::CaseSensitive, ESearchDir::FromStart, From);
+				if (At == INDEX_NONE)
+				{
+					break;
+				}
+				const bool bStart = At == 0 || !(FChar::IsAlnum(Text[At - 1]) || Text[At - 1] == TEXT('_'));
+				int32 Run = 0;
+				bool bLetter = false;
+				bool bDigit = false;
+				for (int32 Index = At + Prefix.Len(); Index < Text.Len(); ++Index)
+				{
+					const TCHAR Char = Text[Index];
+					if (!(CardAsciiLetter(Char) || CardAsciiDigit(Char) || Char == TEXT('_') || Char == TEXT('-')))
+					{
+						break;
+					}
+					++Run;
+					bLetter |= CardAsciiLetter(Char);
+					bDigit |= CardAsciiDigit(Char);
+				}
+				if (bStart && Run >= 16 && bLetter && bDigit)
+				{
+					return true;
+				}
+				From = At + Prefix.Len();
+			}
+		}
+		return false;
+	}
+
+	/** A JWT-like word: 3+ dot-separated parts of 8+ key characters, 40+ long in all, holding letters and digits. */
+	bool CardHasDottedToken(const FString& Text)
+	{
+		TArray<FString> Words;
+		Text.ParseIntoArrayWS(Words);
+		for (FString Word : Words)
+		{
+			Word.TrimCharInline(TEXT('.'), nullptr);
+			for (const TCHAR Edge : { TEXT(','), TEXT(';'), TEXT(':'), TEXT('('), TEXT(')'), TEXT('['), TEXT(']'), TEXT('"'), TEXT('\'') })
+			{
+				Word.TrimCharInline(Edge, nullptr);
+			}
+			TArray<FString> Parts;
+			Word.ParseIntoArray(Parts, TEXT("."), false);
+			if (Parts.Num() < 3 || Word.Len() < 40)
+			{
+				continue;
+			}
+			bool bAll = true;
+			bool bLetter = false;
+			bool bDigit = false;
+			for (const FString& Part : Parts)
+			{
+				bAll &= Part.Len() >= 8;
+				for (int32 At = 0; At < Part.Len(); ++At)
+				{
+					const TCHAR Char = Part[At];
+					bAll &= CardAsciiLetter(Char) || CardAsciiDigit(Char) || Char == TEXT('_') || Char == TEXT('-') || Char == TEXT('+')
+						|| Char == TEXT('/') || Char == TEXT('=');
+					bLetter |= CardAsciiLetter(Char);
+					bDigit |= CardAsciiDigit(Char);
+				}
+			}
+			if (bAll && bLetter && bDigit)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * One ASCII letter/digit segment (every other character separates: URLs, UUIDs, paths and kebab/snake names fall into short
+	 * pieces). Measured 10-03 against random tokens and real objectives: a hex run of 24+; a 20+ segment with 2+ digits in 2+ groups,
+	 * 6+ letters and vowels at most 30% of them; a 32+ segment with letters, digits in 2+ groups and vowels under 30%.
+	 */
+	bool CardSegmentLooksSecret(const FString& Segment)
+	{
+		int32 Letters = 0;
+		int32 Digits = 0;
+		int32 Vowels = 0;
+		int32 Groups = 0;
+		bool bHexOnly = true;
+		bool bPrevDigit = false;
+		for (int32 At = 0; At < Segment.Len(); ++At)
+		{
+			const TCHAR Char = Segment[At];
+			const bool bDigitChar = CardAsciiDigit(Char);
+			Letters += CardAsciiLetter(Char) ? 1 : 0;
+			Digits += bDigitChar ? 1 : 0;
+			Vowels += FCString::Strchr(TEXT("aeiouAEIOU"), Char) != nullptr ? 1 : 0;
+			bHexOnly &= bDigitChar || (Char >= TEXT('a') && Char <= TEXT('f')) || (Char >= TEXT('A') && Char <= TEXT('F'));
+			Groups += bDigitChar && !bPrevDigit ? 1 : 0;
+			bPrevDigit = bDigitChar;
+		}
+		const int32 Count = Segment.Len();
+		if (Count >= 24 && Letters > 0 && Digits > 0 && bHexOnly)
+		{
+			return true;
+		}
+		if (Count >= 20 && Digits >= 2 && Letters >= 6 && 10 * Vowels <= 3 * Letters && Groups >= 2)
+		{
+			return true;
+		}
+		return Count >= 32 && Letters > 0 && Digits > 0 && 10 * Vowels < 3 * Letters && Groups >= 2;
+	}
+}
+
+bool FWonderlandCardStore::LooksLikeSecretInProse(const FString& Text)
+{
+	if (Text.IsEmpty())
+	{
+		return false;
+	}
+	if (WonderlandSidekickSecrets::LooksLikeKey(Text) || CardHasCredentialWord(Text) || CardHasVendorKey(Text) || CardHasDottedToken(Text))
+	{
+		return true;
+	}
+	FString Segment;
+	for (int32 Index = 0; Index <= Text.Len(); ++Index)
+	{
+		const TCHAR Char = Index < Text.Len() ? Text[Index] : TEXT(' ');
+		if (CardAsciiLetter(Char) || CardAsciiDigit(Char))
+		{
+			Segment.AppendChar(Char);
+			continue;
+		}
+		if (!Segment.IsEmpty() && CardSegmentLooksSecret(Segment))
+		{
+			return true;
+		}
+		Segment.Reset();
+	}
+	return false;
+}
+
 bool FWonderlandCardStore::HoldsSecret(const FString& Text)
 {
-	return LooksSecretAnyWay(Text);
+	return LooksLikeSecretInProse(Text) || LooksLikeSecretInProse(WithoutInvisible(Text));
 }
 
 FString FWonderlandCardStore::MaskForDisplay(const FString& Line)
@@ -308,14 +490,9 @@ bool FWonderlandCardStore::LooksLikeSecret(const FString& Text)
 	}
 	// The words a credential arrives with: a PEM block, a credential reference, a bearer token, a token or a password in a
 	// URL or a config line. Any case. A label never needs any of them.
-	static const TCHAR* const Words[] = { TEXT("-----BEGIN"), TEXT("credentialRef"), TEXT("vault://"), TEXT("Bearer "), TEXT("token="),
-		TEXT("access_token"), TEXT("api_key"), TEXT("apikey="), TEXT("password="), TEXT("secret=") };
-	for (const TCHAR* Word : Words)
+	if (CardHasCredentialWord(Text))
 	{
-		if (Text.Contains(Word, ESearchCase::IgnoreCase))
-		{
-			return true;
-		}
+		return true;
 	}
 	// A TOKEN-SHAPED RUN: 32 or more key characters holding both letters and digits. Every vendor's key is one (GitHub's,
 	// Slack's, Google's, a cloud secret's); a person's label never is, and a run of one letter is not. Matched by SHAPE,

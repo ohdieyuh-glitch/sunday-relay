@@ -139,8 +139,14 @@ public:
 
 	/** The secret refusal every stored string passes: provider keys, private keys, tokens, credential references. */
 	static bool LooksLikeSecret(const FString& Text);
-	/** The same refusal for ANY free text the game keeps or shows (a C.A.R.D. string, a Mission Contract objective, a typed line):
-	 *  secret-shaped as written OR once its invisible characters are gone -- a zero-width space inside a key does not hide it. */
+	/**
+	 * THE RULE FOR FREE TEXT (a Mission Contract objective, a typed line), shape-only and measured (10-03): prose, paths, URLs, ids and
+	 * code identifiers pass; a 'sk-' key, the credential words, a vendor-prefixed key, a JWT-like dotted token, a hex run of 24+ and a
+	 * random-looking letter/digit segment are refused. LooksLikeSecret stays the stricter rule for C.A.R.D. labels and ids.
+	 */
+	static bool LooksLikeSecretInProse(const FString& Text);
+	/** Free text holds a secret: LooksLikeSecretInProse as written OR once its invisible characters are gone (a zero-width space
+	 *  inside a key does not hide it). The objective screen, the terminal's mask and the restore-time redaction all use this. */
 	static bool HoldsSecret(const FString& Text);
 	/** A line as it may be SHOWN: every word that holds a secret replaced; a line whose secret no single word shows ("Bearer" and its
 	 *  token apart) replaced whole. What it returns never holds a secret. */

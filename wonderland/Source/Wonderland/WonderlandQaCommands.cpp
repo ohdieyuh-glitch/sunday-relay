@@ -10147,6 +10147,11 @@ namespace
 	 *       of it in the contracts file (as bytes and as UTF-16), nor in the log (whose own marker IS found)
 	 *   SI2 the same with a zero-width space inside the key: refused too (the check reads the text with its invisibles gone as well)
 	 *   SI3 what the terminal draws for typed lines (MaskForDisplay): no part of either key, nor of a short "Bearer" token
+	 *   SI5 Second's high-confidence shapes (a vendor key behind an underscore prefix, a JWT-like token, password=..., a 24-hex run, a
+	 *       vendor key split by a zero-width space): every one refused, no part in the contracts file nor the log, masked on screen
+	 *   SI6 ten real objectives (a pull-request URL, a UUID, a path, a version, a date, code identifiers, an e-mail) ACCEPTED
+	 *   SI7 the transcription check: random letter/digit tokens of 20, 24, 32 and 44 (300 each, a FIXED seed) caught at the rates the
+	 *       measured Python reference gives (73 / 79 / 88 / 94%), within 10 points -- the rate is reported, never a lucky token
 	 */
 	struct FQaSecretInput
 	{
@@ -10300,6 +10305,138 @@ namespace
 			&& !ShownThree.Contains(Token) && !FWonderlandCardStore::HoldsSecret(ShownOne) && !FWonderlandCardStore::HoldsSecret(ShownTwo)
 			&& !FWonderlandCardStore::HoldsSecret(ShownThree);
 		S.Check(TEXT("SI3"), bShownClean, FString::Printf(TEXT("the terminal draws '%s', '%s' and '%s'"), *ShownOne, *ShownTwo, *ShownThree));
+
+		// SI5: Second's high-confidence shapes, every one built at run time
+		FRandomStream Stream(20261003);
+		auto Random = [&Stream](const TCHAR* Alphabet, int32 Count)
+		{
+			const int32 Size = FCString::Strlen(Alphabet);
+			FString Out;
+			for (int32 Index = 0; Index < Count; ++Index)
+			{
+				Out.AppendChar(Alphabet[Stream.RandRange(0, Size - 1)]);
+			}
+			return Out;
+		};
+		const TCHAR* const Base62 = TEXT("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789");
+		const TCHAR* const Base64Url = TEXT("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_");
+		const FString VendorFront = FString(TEXT("xo")) + TEXT("xb-") + Random(Base62, 20) + TEXT("a1");
+		const FString VendorBack = Random(Base62, 20) + TEXT("b2");
+		FString SplitVendor = VendorFront;
+		SplitVendor.AppendChar(static_cast<TCHAR>(0x200B));
+		SplitVendor += VendorBack;
+		struct FSecretShape
+		{
+			const TCHAR* Name;
+			FString Value;
+			FString Whole;
+		};
+		TArray<FSecretShape> Shapes;
+		{
+			const FString Under = FString(TEXT("gh")) + TEXT("p_") + Random(Base62, 34) + TEXT("c3");
+			Shapes.Add({ TEXT("an underscore-prefixed vendor key"), Under, Under });
+			const FString Dotted = Random(Base64Url, 18) + TEXT("d4.") + Random(Base64Url, 18) + TEXT("e5.") + Random(Base64Url, 18) + TEXT("f6");
+			Shapes.Add({ TEXT("a JWT-like token"), Dotted, Dotted });
+			const FString Pass = FString(TEXT("pass")) + TEXT("word=") + Random(Base62, 10);
+			Shapes.Add({ TEXT("password=..."), Pass, Pass });
+			const FString Hex = Random(TEXT("0123456789abcdef"), 22) + TEXT("a7");
+			Shapes.Add({ TEXT("a 24-hex run"), Hex, Hex });
+			Shapes.Add({ TEXT("a vendor key split by a zero-width space"), SplitVendor, VendorFront + VendorBack });
+		}
+		FString ShapeDetail;
+		bool bShapesClean = true;
+		TArray<FGuid> ShapeDrafts;
+		for (const FSecretShape& Shape : Shapes)
+		{
+			const FGuid Draft = Set->AddDraft();
+			ShapeDrafts.Add(Draft);
+			const bool bHeld = FWonderlandCardStore::HoldsSecret(Shape.Value);
+			const bool bRefused = !Set->SubmitDraft(Draft, FString::Printf(TEXT("use %s for the deploy"), *Shape.Value));
+			const bool bMasked = !Holds(FWonderlandCardStore::MaskForDisplay(FString::Printf(TEXT("use %s for the deploy"), *Shape.Value)), Shape.Whole);
+			const bool bOk = bHeld && bRefused && bMasked;
+			bShapesClean &= bOk;
+			ShapeDetail += FString::Printf(TEXT("%s%s %s"), ShapeDetail.IsEmpty() ? TEXT("") : TEXT("; "), Shape.Name, bOk ? TEXT("refused + masked") : TEXT("GOT THROUGH"));
+		}
+		TArray<uint8> ShapeBytes;
+		FFileHelper::LoadFileToArray(ShapeBytes, *UWonderlandMissionTaskSubsystem::SlotPath());
+		GLog->Flush();
+		FString ShapeLog;
+		FFileHelper::LoadFileToString(ShapeLog, *FPlatformOutputDevices::GetAbsoluteLogFilename());
+		bool bShapeOnDisk = false;
+		for (const FSecretShape& Shape : Shapes)
+		{
+			for (const FString& Part : Parts(Shape.Whole))
+			{
+				bShapeOnDisk |= QaBytesHold(ShapeBytes, Part) || ShapeLog.Contains(Part);
+			}
+		}
+		S.Check(TEXT("SI5"), bShapesClean && !bShapeOnDisk && ShapeBytes.Num() > 0,
+			FString::Printf(TEXT("Second's shapes: %s; any part in the contracts file or the log: %s"), *ShapeDetail, bShapeOnDisk ? TEXT("YES") : TEXT("none")));
+		for (const FGuid& Draft : ShapeDrafts)
+		{
+			Set->DismissDraft(Draft);
+		}
+
+		// SI6: real objectives are tasks, not keys
+		static const TCHAR* const RealObjectives[] = {
+			TEXT("review PR https://github.com/i-wonder/sunday-relay/pull/1234 before Friday"),
+			TEXT("check record 550e8400-e29b-41d4-a716-446655440000 in the contracts table"),
+			TEXT("rename wonderland_social_backend_integration_test to social_e2e"),
+			TEXT("update docs/architecture/MISSION_HANDOFF_CARD_ARCHITECTURE.md with the C.A.R.D. section"),
+			TEXT("investigate why build 5b125d56 boots slowly on the laptop"),
+			TEXT("support the DE-AT-CH locale and ISO-8601 dates like 2026-10-03T11:35:16Z"),
+			TEXT("port handleOAuth2CallbackRequest to the new auth flow"),
+			TEXT("add tests for SHA256HMACSigner2024 and the md5 fallback"),
+			TEXT("set wl.Handoff.Stance.Crouch to 11 and wl.Handoff.Stance.FeetOut to 20"),
+			TEXT("email beta-tester@example.com about the Saturday build") };
+		int32 Accepted = 0;
+		FString Refused;
+		for (const TCHAR* Objective : RealObjectives)
+		{
+			const FGuid Draft = Set->AddDraft();
+			if (Set->SubmitDraft(Draft, Objective))
+			{
+				++Accepted;
+			}
+			else
+			{
+				Refused += FString::Printf(TEXT("%s'%s'"), Refused.IsEmpty() ? TEXT("") : TEXT(", "), Objective);
+				Set->DismissDraft(Draft);
+			}
+		}
+		S.Check(TEXT("SI6"), Accepted == static_cast<int32>(UE_ARRAY_COUNT(RealObjectives)), FString::Printf(TEXT("%d of %d real objectives (URL, UUID, path, version, date, identifiers, e-mail) accepted%s"),
+			Accepted, static_cast<int32>(UE_ARRAY_COUNT(RealObjectives)), Refused.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; REFUSED: %s"), *Refused)));
+
+		// SI7: the transcription check, a fixed seed, the measured reference rates
+		struct FRateBand
+		{
+			int32 Length;
+			int32 Low;
+			int32 High;
+		};
+		const FRateBand Rates[] = { { 20, 63, 83 }, { 24, 69, 89 }, { 32, 78, 98 }, { 44, 84, 100 } };
+		FRandomStream RateStream(1003);
+		bool bRatesIn = true;
+		FString RateDetail;
+		for (const FRateBand& Rate : Rates)
+		{
+			int32 Caught = 0;
+			for (int32 Sample = 0; Sample < 300; ++Sample)
+			{
+				FString RateToken;
+				for (int32 Index = 0; Index < Rate.Length; ++Index)
+				{
+					RateToken.AppendChar(Base62[RateStream.RandRange(0, 61)]);
+				}
+				Caught += FWonderlandCardStore::HoldsSecret(FString::Printf(TEXT("please use %s for the deploy"), *RateToken)) ? 1 : 0;
+			}
+			const int32 Percent = FMath::RoundToInt(Caught * 100.0 / 300.0);
+			const bool bIn = Percent >= Rate.Low && Percent <= Rate.High;
+			bRatesIn &= bIn;
+			RateDetail += FString::Printf(TEXT("%s%d chars %d%% (reference %d-%d%%)%s"), RateDetail.IsEmpty() ? TEXT("") : TEXT("; "), Rate.Length, Percent, Rate.Low, Rate.High,
+				bIn ? TEXT("") : TEXT(" OUT"));
+		}
+		S.Check(TEXT("SI7"), bRatesIn, FString::Printf(TEXT("random letter/digit tokens caught by shape (300 each, fixed seed): %s -- the honest limit: a short prefix-less token can get through"), *RateDetail));
 
 		Set->DismissDraft(DraftOne);
 		Set->DismissDraft(DraftTwo);
