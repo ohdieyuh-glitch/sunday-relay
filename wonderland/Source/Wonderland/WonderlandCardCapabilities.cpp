@@ -2,6 +2,7 @@
 #include "WonderlandCardCapabilities.h"
 
 #include "Engine/GameInstance.h"
+#include "WonderlandBeta.h"
 
 namespace
 {
@@ -135,6 +136,18 @@ namespace WonderlandCardCapabilities
 		else
 		{
 			Out.ConnectProblem = TEXT("this game has no Julius Connect client");
+		}
+		// THE PRIVATE BETA CALLS NO AI SERVICE: both authorities are off by design, and the reading says so from the first frame. A
+		// client that has not ticked yet still reads "connecting" (CR19 on the M6 bed read Julius Connect that way).
+		if (!WonderlandBeta::UseLocalAiServices())
+		{
+			Out.CompanionLink = EWonderlandSidekickLink::Offline;
+			Out.CompanionProblem = WonderlandBeta::AiUnavailableSentence();
+			Out.ConnectLink = EJuliusConnectLink::Offline;
+			Out.ConnectProblem = WonderlandBeta::AiUnavailableSentence();
+			Out.Providers.Reset();
+			Out.Sidekicks.Reset();
+			Out.Services.Reset();
 		}
 		return Out;
 	}
