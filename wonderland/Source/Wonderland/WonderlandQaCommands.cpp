@@ -10591,7 +10591,11 @@ namespace
 	 * founder accepted as they are (43/43, 09-30). The hands now step aside while a prop shows. Measured on Relay OG and on
 	 * celestial_light through a real mission fixture: in EVERY frame a prop shows, no hand box is drawn (HP1, HP3 -- with a
 	 * positive control: the acts must actually have run); after the mission both hands are back, open (HP2, HP4). A close frame
-	 * of each new set of props to Saved/Screenshots/WLACTS. WLAHQA lines.
+	 * of each new set of props to Saved/Screenshots/WLACTS.
+	 * HP5 (the founder, 10-03: data alone is not enough -- usable CLOSE frames of EACH prop, the scraper included): on both skins
+	 * every prop act is posed through SetMissionAct (wl.Dog.Act: the call a mission's beats make) -- book, paint, review, repair --
+	 * and its props framed close from two sides: all 16 frames taken, every prop set seen (the scraper's too), a hand drawn in none.
+	 * WLAHQA lines.
 	 */
 	struct FQaActHands
 	{
@@ -10611,6 +10615,13 @@ namespace
 		int32 LastMask = 0;
 		double MaskSince = 0.0;
 		FString Dir;
+		int32 ActIndex = 0;
+		int32 ViewIndex = 0;
+		bool bActIssued = false;
+		double ShotAt = 0.0;
+		int32 CloseShots = 0;
+		int32 CloseHands = 0;
+		int32 CloseMasks = 0;
 		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
@@ -10779,14 +10790,92 @@ namespace
 			S.Check(S.SkinIndex == 0 ? TEXT("HP2") : TEXT("HP4"), bBack,
 				FString::Printf(TEXT("%s after the mission: props drawn %d; hands drawn %d + %d boxes, open %.2f / %.2f"), Skin, Dog->CountVisibleActProps(),
 					Left.CountVisibleBoxes(), Right.CountVisibleBoxes(), Left.GetCurl(), Right.GetCurl()));
-			if (S.SkinIndex == 0)
+			S.Phase = 4;
+			S.ActIndex = 0;
+			S.ViewIndex = 0;
+			S.bActIssued = false;
+			S.ShotAt = 0.0;
+			S.PhaseAt = Now;
+			return true;
+		}
+		case 4:
+		{
+			// THE CLOSE SHOTS: every prop act posed through SetMissionAct, its props framed close from two sides, the hands drawn in none
+			static const TCHAR* const CloseActs[] = { TEXT("book"), TEXT("paint"), TEXT("review"), TEXT("repair") };
+			const int32 ActCount = static_cast<int32>(UE_ARRAY_COUNT(CloseActs));
+			if (S.ActIndex >= ActCount)
 			{
-				S.SkinIndex = 1;
-				S.Phase = 0;
+				GEngine->Exec(World, TEXT("wl.Dog.Act none"));
+				PC->SetViewTargetWithBlend(Dog, 0.0f);
+				if (S.SkinIndex == 0)
+				{
+					S.SkinIndex = 1;
+					S.Phase = 0;
+					S.PhaseAt = Now;
+					return true;
+				}
+				S.Check(TEXT("HP5"), S.CloseShots == 2 * ActCount * 2 && (S.CloseMasks & 0xF) == 0xF && S.CloseHands == 0,
+					FString::Printf(TEXT("close frames of every prop act on both skins (book, paint, review, repair -- the scraper's -- posed through SetMissionAct, two sides each): %d frames (want %d), prop sets seen 0x%X (want 0xF: 1 book, 2 brush, 4 lens, 8 scraper), a hand drawn in %d of them"),
+						S.CloseShots, 2 * ActCount * 2, S.CloseMasks, S.CloseHands));
+				return Stop(nullptr);
+			}
+			if (!S.bActIssued)
+			{
+				GEngine->Exec(World, *FString::Printf(TEXT("wl.Dog.Act %s"), CloseActs[S.ActIndex]));
+				S.bActIssued = true;
+				S.ViewIndex = 0;
+				S.ShotAt = 0.0;
 				S.PhaseAt = Now;
 				return true;
 			}
-			return Stop(nullptr);
+			if (In < 2.5)
+			{
+				return true;
+			}
+			// the props this act shows, where they are NOW (an act that circles the Contract moves them): the camera follows every tick
+			FBox ActProps(ForceInit);
+			TInlineComponentArray<UPrimitiveComponent*> ActParts;
+			Dog->GetComponents<UPrimitiveComponent>(ActParts);
+			for (const UPrimitiveComponent* ActPart : ActParts)
+			{
+				if (ActPart != nullptr && ActPart->IsVisible() && ActPart->GetName().StartsWith(TEXT("Mission")))
+				{
+					ActProps += ActPart->Bounds.GetBox();
+				}
+			}
+			ACameraActor* CloseCam = S.Camera.Get();
+			if (!ActProps.IsValid || CloseCam == nullptr)
+			{
+				return In < 8.0 ? true : Stop(TEXT("an act showed no prop to frame"));
+			}
+			const FVector PropCentre = ActProps.GetCenter();
+			const double CloseReach = FMath::Clamp(ActProps.GetExtent().Size() * 3.0, 70.0, 160.0);
+			const FVector CloseToward = Dog->GetActorForwardVector().GetSafeNormal2D().RotateAngleAxis(S.ViewIndex == 0 ? 50.0 : 105.0, FVector::UpVector);
+			const FVector CloseWhere = PropCentre + CloseToward * CloseReach + FVector(0.0, 0.0, CloseReach * 0.25);
+			CloseCam->SetActorLocationAndRotation(CloseWhere, (PropCentre - CloseWhere).Rotation());
+			CloseCam->GetCameraComponent()->SetFieldOfView(45.0f);
+			PC->SetViewTargetWithBlend(CloseCam, 0.0f);
+			if (S.ShotAt <= 0.0)
+			{
+				S.ShotAt = Now;
+			}
+			if (Now - S.ShotAt < 0.5)
+			{
+				return true;
+			}
+			const int32 CloseMask = Dog->GetVisibleActPropMask();
+			const int32 CloseDrawn = Dog->GetHand(true).CountVisibleBoxes() + Dog->GetHand(false).CountVisibleBoxes();
+			S.Frame(FString::Printf(TEXT("close_%s_%s_%s"), Skin, CloseActs[S.ActIndex], S.ViewIndex == 0 ? TEXT("a") : TEXT("b")));
+			++S.CloseShots;
+			S.CloseMasks |= CloseMask;
+			S.CloseHands += CloseDrawn > 0 ? 1 : 0;
+			S.ShotAt = 0.0;
+			if (++S.ViewIndex >= 2)
+			{
+				++S.ActIndex;
+				S.bActIssued = false;
+			}
+			return true;
 		}
 		default:
 			return Stop(TEXT("an unknown phase"));
