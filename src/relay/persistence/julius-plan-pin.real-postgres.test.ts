@@ -27,8 +27,9 @@ import { TransactionalWonderlandDatabase } from './wonderland-postgres';
  *   - PIN-2: a foreign-key check of julius_runs, on a connection whose CACHED plan for it is a sequential scan;
  *   - PIN-3: the product's own run statements, read verbatim from their source, plan as index scans;
  *   - PIN-4: two runs' transitions interleaved as the stress lost them: unpinned one is cancelled, pinned both commit;
- *   - PIN-5, THE RESIDUAL: two transitions that each READ their run before either WRITES still meet on the run
- *     index's leaf page (`state` is indexed, so a transition is never a HOT update), and one is cancelled even pinned.
+ *   - PIN-5: two transitions that each READ their run before either WRITES. Before migration 031 they met on the run
+ *     index's leaf page (`state` was indexed, so a transition was never a HOT update) and one was cancelled even
+ *     pinned; with 031 no index holds `state`, so both commit. The before/after pair is in the 031 suite (CYCLE).
  *
  * ITS OWN DATABASE, created and dropped here, autovacuum off on the tables involved, ANALYZED once after its eight
  * runs exist (S0, as the stress builds it). Runs wherever JULIUS_TEST_DATABASE_URL names a THROWAWAY server (never
@@ -266,13 +267,11 @@ suite('the plan pin: under SERIALIZABLE, a read of one run locks one run (row 13
     expect(pinned, 'pinned: both commit').toEqual({ a: 'COMMITTED', b: 'COMMITTED' });
   });
 
-  it('PIN-5, THE RESIDUAL: two transitions that each READ their run before either WRITES meet on the run index’s leaf page, and one is cancelled even pinned', async () => {
-    const pinned = await pair(JULIUS_PLAN_PIN, true, runs[5]!, runs[6]!);
-    expect(committed(pinned), 'one commits').toBe(1);
-    expect(failure(pinned), 'and the other is cancelled: the pin does not reach this cycle').toMatchObject({ code: '40001' });
+  it('PIN-5: two transitions that each READ their run before either WRITES both commit pinned: with 031 no index holds `state`, so a transition writes no index entry on the leaf both reads locked', async () => {
     const indexes = (await pool.query("SELECT indexdef FROM pg_indexes WHERE schemaname='relay_wonderland' AND tablename='julius_runs'")).rows
       .map((row: { indexdef: string }) => row.indexdef);
-    expect(indexes.some((definition) => definition.includes('(project_id, state, created_at)')),
-      'because `state` is indexed: a transition inserts index entries on the leaf both reads locked, never a HOT update').toBe(true);
+    expect(indexes.filter((definition) => /\(.*\bstate\b.*\)$/u.test(definition)), 'no index of julius_runs holds `state` (031)').toEqual([]);
+    const pinned = await pair(JULIUS_PLAN_PIN, true, runs[5]!, runs[6]!);
+    expect(pinned, 'pinned, both commit: a transition is a HOT update').toEqual({ a: 'COMMITTED', b: 'COMMITTED' });
   });
 });
