@@ -30,6 +30,8 @@
 #include "RelayDogStride.h"
 #include "RelayDogMissionPose.h"
 #include "RelayDogArmedStance.h"
+#include "WonderlandHandoffSwords.h"
+#include "WonderlandHandoffTransform.h"
 
 #include "RelayDogCharacter.generated.h"
 
@@ -385,6 +387,11 @@ public:
 	FRotator GetCanonHipRotation(bool bPlusY) const;
 	/** The canon body's lean as written this frame (its root's pitch), degrees. */
 	float GetCanonBodyPitch() const;
+	/** MISSION HANDOFF (M3): the swords and the transformation as shown, and where each hand's grip is (gold LEFT, cyan RIGHT). */
+	const WonderlandHandoffSwords::FPresentation& GetHandoffSwords() const { return HandoffSwords; }
+	const WonderlandHandoffTransform::FPresentation& GetHandoffTransform() const { return HandoffTransform; }
+	/** The grip of the hand on the Dog's own LEFT (+Y: the gold sword's) or RIGHT (the cyan's), in the world. */
+	FTransform GetHandoffGripWorld(bool bLeftHand) const;
 
 protected:
 	void MoveForwardAxis(float Value);
@@ -892,6 +899,13 @@ private:
 	RelayDogArmedStance::FState ArmedStance;
 	/** How far each hip is swept outward this frame by the stance (degrees; 0 whenever the swords are not held). */
 	float StanceFeetOutDeg = 0.0f;
+	/** THE MISSION HANDOFF'S PRESENTATION (M3): the swords, and each companion becoming its own. Plain C++, not reflected. */
+	WonderlandHandoffSwords::FPresentation HandoffSwords;
+	WonderlandHandoffTransform::FPresentation HandoffTransform;
+	/** How much of the swords is in the hands this frame (0..1): what a worn skin's hands follow onto the grips. */
+	float HandoffHandsWeight = 0.0f;
+	/** Shows the swords and the transformation for the handoff's state this frame, after the pose is written. */
+	void UpdateHandoffPresentation(float DeltaSeconds);
 	int32 RouteIndex = 0;
 	float RouteHold = 0.0f;
 	/** How long the current leg has been attempted, seconds. */

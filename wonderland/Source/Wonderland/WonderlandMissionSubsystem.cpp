@@ -1325,6 +1325,11 @@ FString UWonderlandMissionSubsystem::GetDogPerformingLabel() const
 
 FString UWonderlandMissionSubsystem::GetDogActLabel() const
 {
+	// HANDED OFF, THE DOG PERFORMS NOTHING: the strip says so rather than naming the act the beat would have asked for
+	if (IsPresentationDetached())
+	{
+		return TEXT("MISSION HANDOFF");
+	}
 	return WonderlandDogActName(WonderlandDogActForBeat(Beat));
 }
 

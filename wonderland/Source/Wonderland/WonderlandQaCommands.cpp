@@ -6060,18 +6060,17 @@ namespace
 			}
 			if (S.Phase == 23)
 			{
-				const FRotator ShoulderA = Dog->GetCanonShoulderRotation(true);
-				const FRotator ShoulderB = Dog->GetCanonShoulderRotation(false);
+				// OUT, NOT IN (the ST2 lesson): the hands' spread while running against the unarmed standing baseline, by position
 				if (In >= 0.9f)
 				{
-					S.SeenOut = FMath::Max(S.SeenOut, FMath::Min(FMath::Abs(ShoulderA.Roll), FMath::Abs(ShoulderB.Roll)));
+					S.SeenOut = FMath::Max(S.SeenOut, QaReadStance(Dog).HandSpread);
 				}
 				if (In >= 1.5f && S.Key == 0)
 				{
 					QaStanceFrame(S, FString::Printf(TEXT("m%d_%s_armed_run_side"), S.Moving + 1, *Moving));
-					S.Check(FString::Printf(TEXT("ST5.%d"), S.Moving + 1), Dog->GetArmedStanceWeight() == 1.0f && Ground > 600.0f && S.SeenOut >= 12.0f,
-						FString::Printf(TEXT("%s armed, running at %.0f uu/s: the arms swept out %.1f deg (>= 12: the blades clear the legs); stance weight %.2f"),
-							*Moving, Ground, S.SeenOut, Dog->GetArmedStanceWeight()));
+					S.Check(FString::Printf(TEXT("ST5.%d"), S.Moving + 1), Dog->GetArmedStanceWeight() == 1.0f && Ground > 600.0f && S.SeenOut >= S.Base.HandSpread + 6.0f,
+						FString::Printf(TEXT("%s armed, running at %.0f uu/s: the hands %.1f uu apart (the unarmed stand: %.1f; >= +6: swept OUT so the blades clear the legs); ")
+							TEXT("stance weight %.2f"), *Moving, Ground, S.SeenOut, S.Base.HandSpread, Dog->GetArmedStanceWeight()));
 					S.Key = 1;
 				}
 				if (In >= 1.7f)
@@ -6144,6 +6143,402 @@ namespace
 			GQaStance->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLSTANCE"));
 			GQaStance->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaStanceTick), 0.0f);
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLSTQA armed at (%.0f, %.0f, %.0f)"), Dog->GetActorLocation().X, Dog->GetActorLocation().Y, Dog->GetActorLocation().Z);
+		}));
+
+	/* ================================================================ wl.Qa.HandoffSwords: the swords and the transformation, M3a
+	 * Against the founder's sheet and canon (2026-10-02), in the packaged game, through the terminal's own path:
+	 *   SW1  the transformation is an EXCHANGE, never a cut: half-way through, each companion is partly itself and its sword
+	 *        partly formed, their shares summing to about one, with its light streaming into the sword;
+	 *   SW2  delivered: the GOLD sword in the Dog's own LEFT hand's grip and the CYAN in the RIGHT's (to 1 uu);
+	 *   SW3  the sides as the player sees them: from behind the Dog the gold sword is on the LEFT of the screen;
+	 *   SW4  while held, both companions are veiled (they ARE the swords) and the swords are whole;
+	 *   SW5  given back: the companions exactly as they were (size and visibility), the swords and the light gone;
+	 *   SW6  every skin holds both swords (frames, judged by eye; the costume hands onto the grips in M4).
+	 * Frames at noon and at night (wl.Sky.Hour) to Saved/Screenshots/WLSWORDS, judged against the sheet's checks 1-11.
+	 * WLSWQA lines; `quit` exits after.
+	 */
+	struct FQaSwords
+	{
+		TWeakObjectPtr<UWorld> World;
+		TWeakObjectPtr<ARelayDogCharacter> Dog;
+		TWeakObjectPtr<ACameraActor> Camera;
+		FTSTicker::FDelegateHandle Handle;
+		bool bQuit = false;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		int32 Phase = 0;
+		float PhaseAt = 0.0f;
+		FString Dir;
+		bool bMidChecked = false;
+		bool bDeliverShot = false;
+		bool bReturnShot = false;
+		FVector LeftScale = FVector::OneVector;
+		FVector RightScale = FVector::OneVector;
+		int32 Skin = 1;
+		int32 Shot = 0;
+		void Check(const FString& Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSWQA %s %s | %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+		void Frame(const FString& Name)
+		{
+			int32 Width = 0;
+			int32 Height = 0;
+			const FString Path = Dir / (Name + TEXT(".png"));
+			const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSWQA frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), Width, Height);
+		}
+	};
+	TSharedPtr<FQaSwords> GQaSwords;
+
+	const FStanceShot SwordShots[] = {
+		{ TEXT("front"), 0.0, 300.0, 40.0, 50.0f },
+		{ TEXT("34"), 40.0, 300.0, 40.0, 50.0f },
+		{ TEXT("behind"), 180.0, 320.0, 70.0, 50.0f },
+		{ TEXT("side"), 90.0, 300.0, 30.0, 50.0f },
+	};
+
+	AActor* QaCompanionBody(UWorld* World, int32 Index)
+	{
+		ULocalPlayer* Player = QaLocalPlayer(World);
+		const UWonderlandCompanionSubsystem* Companions = Player != nullptr ? Player->GetSubsystem<UWonderlandCompanionSubsystem>() : nullptr;
+		return Companions != nullptr ? Companions->GetEmbodiment(Index) : nullptr;
+	}
+
+	void QaSwordsFinish(FQaSwords& S, const TCHAR* Why)
+	{
+		UWorld* World = S.World.Get();
+		ARelayDogCharacter* Dog = S.Dog.Get();
+		if (World != nullptr)
+		{
+			if (FWonderlandMissionHandoff* State = QaHandoff(World))
+			{
+				FString Ignored;
+				State->Return(Ignored);
+			}
+			if (Dog != nullptr)
+			{
+				if (APlayerController* PC = World->GetFirstPlayerController())
+				{
+					PC->SetViewTargetWithBlend(Dog, 0.0f);
+				}
+			}
+			GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+			GEngine->Exec(World, TEXT("wl.Sky.Hour 12"));
+		}
+		if (ACameraActor* Cam = S.Camera.Get())
+		{
+			Cam->Destroy();
+		}
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLSWQA END pass=%d fail=%d%s"), S.Pass, S.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
+		if (S.bQuit)
+		{
+			FPlatformMisc::RequestExit(false);
+		}
+	}
+
+	/** The QA camera, in the same frame as the stance QA's (placed round the Dog's middle). */
+	void QaSwordsCamera(FQaSwords& S, UWorld* World, ARelayDogCharacter* Dog, const FStanceShot& Shot)
+	{
+		FQaStance Shim;
+		Shim.Camera = S.Camera;
+		QaStanceCamera(Shim, World, Dog, Shot.Yaw, Shot.Distance, Shot.Rise, Shot.Fov);
+		S.Camera = Shim.Camera;
+	}
+
+	bool QaSwordsTick(float)
+	{
+		if (!GQaSwords.IsValid())
+		{
+			return false;
+		}
+		FQaSwords& S = *GQaSwords;
+		UWorld* World = S.World.Get();
+		ARelayDogCharacter* Dog = S.Dog.Get();
+		FWonderlandMissionHandoff* State = QaHandoff(World);
+		UWonderlandUiSubsystem* Ui = QaUi(World);
+		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		if (World == nullptr || Dog == nullptr || State == nullptr || Ui == nullptr || PC == nullptr)
+		{
+			QaSwordsFinish(S, TEXT("the world, the Dog, the handoff or the UI went away"));
+			GQaSwords.Reset();
+			return false;
+		}
+		const float Now = World->GetTimeSeconds();
+		const float In = Now - S.PhaseAt;
+		auto Next = [&S, Now](int32 To)
+		{
+			S.Phase = To;
+			S.PhaseAt = Now;
+		};
+		auto Stop = [&S](const TCHAR* Reason)
+		{
+			QaSwordsFinish(S, Reason);
+			GQaSwords.Reset();
+			return false;
+		};
+		const WonderlandHandoffSwords::FPresentation& Swords = Dog->GetHandoffSwords();
+		const WonderlandHandoffTransform::FPresentation& Change = Dog->GetHandoffTransform();
+		AActor* LeftBody = QaCompanionBody(World, 0);
+		AActor* RightBody = QaCompanionBody(World, 1);
+		const int32 Skins = static_cast<int32>(UE_ARRAY_COUNT(FaceRoster));
+		const int32 Shots = static_cast<int32>(UE_ARRAY_COUNT(SwordShots));
+
+		switch (S.Phase)
+		{
+		case 0:
+			if (Ui->IsWelcomeOpen())
+			{
+				Ui->DismissWelcome();
+			}
+			if (State->IsArmed())
+			{
+				FString Ignored;
+				State->Return(Ignored);
+			}
+			if (In < 4.0f || !Dog->GetCharacterMovement()->IsMovingOnGround() || State->IsEquipped() || LeftBody == nullptr || RightBody == nullptr)
+			{
+				return In < 40.0f ? true : Stop(TEXT("never ready: the Dog on the ground, the swords away, both companions here"));
+			}
+			GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+			GEngine->Exec(World, TEXT("wl.Sky.Hour 12"));
+			S.LeftScale = LeftBody->GetActorScale3D();
+			S.RightScale = RightBody->GetActorScale3D();
+			Next(1);
+			return true;
+		case 1:
+		{
+			if (In < 2.0f)
+			{
+				return true;
+			}
+			FString Said;
+			if (!WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said))
+			{
+				S.Check(TEXT("SW1"), false, FString::Printf(TEXT("the swords could not be taken up: %s"), *Said));
+				return Stop(TEXT("no handoff"));
+			}
+			S.bMidChecked = false;
+			S.bDeliverShot = false;
+			Next(2);
+			return true;
+		}
+		case 2:
+		{
+			// SW1, HALF-WAY THROUGH THE TRANSFORMATION
+			if (!S.bMidChecked && State->GetState() == EWonderlandHandoffState::Transforming
+				&& State->GetPhaseSeconds() >= FWonderlandMissionHandoff::TransformSeconds * 0.5f)
+			{
+				const float Body = Change.GetPresence();
+				const float Sword = Swords.GetPresence();
+				const int32 Motes = Change.CountVisibleMotes();
+				S.Check(TEXT("SW1"), Body > 0.1f && Body < 0.9f && Sword > 0.1f && Sword < 0.9f && FMath::Abs(Body + Sword - 1.0f) <= 0.25f && Motes > 0,
+					FString::Printf(TEXT("half-way through the transformation: each companion %.2f itself, each sword %.2f formed (an exchange: both partial, ")
+						TEXT("summing to %.2f), %d motes of light streaming"), Body, Sword, Body + Sword, Motes));
+				S.Frame(TEXT("sw_1_transforming_noon"));
+				S.bMidChecked = true;
+			}
+			if (!S.bDeliverShot && State->GetState() == EWonderlandHandoffState::Delivering
+				&& State->GetPhaseSeconds() >= FWonderlandMissionHandoff::DeliverSeconds * 0.45f)
+			{
+				S.Frame(TEXT("sw_2_delivering_noon"));
+				S.bDeliverShot = true;
+			}
+			if (!State->IsArmed())
+			{
+				return In < 8.0f ? true : Stop(TEXT("the swords were never held"));
+			}
+			if (In < 4.5f)
+			{
+				return true;
+			}
+			// SW2: EACH SWORD IN ITS OWN HAND
+			const FVector GoldAt = Swords.GetSwordWorld(true).GetLocation();
+			const FVector CyanAt = Swords.GetSwordWorld(false).GetLocation();
+			const float GoldOff = FVector::Dist(GoldAt, Dog->GetHandoffGripWorld(true).GetLocation());
+			const float CyanOff = FVector::Dist(CyanAt, Dog->GetHandoffGripWorld(false).GetLocation());
+			S.Check(TEXT("SW2"), GoldOff <= 1.0f && CyanOff <= 1.0f,
+				FString::Printf(TEXT("held: the gold sword %.2f uu from the LEFT hand's grip, the cyan %.2f uu from the RIGHT's"), GoldOff, CyanOff));
+			// SW3: AS THE PLAYER SEES THEM, from the Dog's own camera behind it
+			FVector2D GoldScreen, CyanScreen;
+			const FVector GoldBlade = Swords.GetSwordWorld(true).TransformPosition(FVector(0.0f, 0.0f, 50.0f));
+			const FVector CyanBlade = Swords.GetSwordWorld(false).TransformPosition(FVector(0.0f, 0.0f, 50.0f));
+			const bool bProjected = PC->ProjectWorldLocationToScreen(GoldBlade, GoldScreen) && PC->ProjectWorldLocationToScreen(CyanBlade, CyanScreen);
+			S.Check(TEXT("SW3"), bProjected && GoldScreen.X < CyanScreen.X,
+				FString::Printf(TEXT("from the Dog's own camera behind it: the gold blade at x %.0f, the cyan at x %.0f (gold on the LEFT: %s)"),
+					GoldScreen.X, CyanScreen.X, bProjected && GoldScreen.X < CyanScreen.X ? TEXT("yes") : TEXT("NO")));
+			S.Frame(TEXT("sw_3_held_gameplay_camera_noon"));
+			// SW4: THE COMPANIONS ARE THE SWORDS NOW
+			const int32 Boxes = Swords.CountVisibleBoxes();
+			S.Check(TEXT("SW4"), LeftBody->IsHidden() && RightBody->IsHidden() && Change.GetPresence() == 0.0f && Swords.GetPresence() == 1.0f && Boxes > 300,
+				FString::Printf(TEXT("held: the LLM Companion %s, Jhinn %s (veiled: they are the swords), the swords whole %.2f with %d boxes drawn"),
+					LeftBody->IsHidden() ? TEXT("veiled") : TEXT("STILL SHOWN"), RightBody->IsHidden() ? TEXT("veiled") : TEXT("STILL SHOWN"), Swords.GetPresence(), Boxes));
+			S.Shot = 0;
+			Next(3);
+			return true;
+		}
+		case 3:
+		case 4:
+		{
+			// THE HELD SWORDS FROM FOUR PLACES: at noon (3), then at night (4)
+			if (S.Shot >= Shots)
+			{
+				if (S.Phase == 3)
+				{
+					GEngine->Exec(World, TEXT("wl.Sky.Hour 23"));
+					S.Shot = 0;
+					Next(4);
+					return true;
+				}
+				GEngine->Exec(World, TEXT("wl.Sky.Hour 12"));
+				PC->SetViewTargetWithBlend(Dog, 0.0f);
+				Next(5);
+				return true;
+			}
+			QaSwordsCamera(S, World, Dog, SwordShots[S.Shot]);
+			if (In < (S.Phase == 4 && S.Shot == 0 ? 2.5f : 1.2f))
+			{
+				return true;
+			}
+			S.Frame(FString::Printf(TEXT("sw_4_held_%s_%s"), S.Phase == 3 ? TEXT("noon") : TEXT("night"), SwordShots[S.Shot].Name));
+			++S.Shot;
+			S.PhaseAt = Now;
+			return true;
+		}
+		case 5:
+		{
+			// SW5: GIVEN BACK
+			if (In < 1.0f)
+			{
+				return true;
+			}
+			if (State->IsArmed())
+			{
+				FString Said;
+				WonderlandHandoffDirector::Return(QaLocalPlayer(World), Said);
+				S.bReturnShot = false;
+			}
+			if (!S.bReturnShot && State->GetState() == EWonderlandHandoffState::Returning
+				&& State->GetPhaseSeconds() >= FWonderlandMissionHandoff::ReturnSeconds * 0.75f)
+			{
+				S.Frame(TEXT("sw_5_returning_noon"));
+				S.bReturnShot = true;
+			}
+			if (State->IsEquipped())
+			{
+				return In < 8.0f ? true : Stop(TEXT("the swords were never given back"));
+			}
+			if (In < 2.5f)
+			{
+				return true;
+			}
+			const bool bBack = !LeftBody->IsHidden() && !RightBody->IsHidden() && LeftBody->GetActorScale3D().Equals(S.LeftScale, 1.0e-4f)
+				&& RightBody->GetActorScale3D().Equals(S.RightScale, 1.0e-4f) && Swords.CountVisibleBoxes() == 0 && Change.CountVisibleMotes() == 0;
+			S.Check(TEXT("SW5"), bBack,
+				FString::Printf(TEXT("given back: the LLM Companion %s at scale %s (was %s), Jhinn %s at %s (was %s); sword boxes drawn %d, motes %d"),
+					LeftBody->IsHidden() ? TEXT("HIDDEN") : TEXT("shown"), *LeftBody->GetActorScale3D().ToCompactString(), *S.LeftScale.ToCompactString(),
+					RightBody->IsHidden() ? TEXT("HIDDEN") : TEXT("shown"), *RightBody->GetActorScale3D().ToCompactString(), *S.RightScale.ToCompactString(),
+					Swords.CountVisibleBoxes(), Change.CountVisibleMotes()));
+			S.Skin = 1;
+			Next(6);
+			return true;
+		}
+		case 6:
+			// SW6: EVERY SKIN HOLDING BOTH SWORDS
+			if (S.Skin >= Skins)
+			{
+				return Stop(nullptr);
+			}
+			GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), FaceRoster[S.Skin]));
+			Next(7);
+			return true;
+		case 7:
+		{
+			if (In < 3.0f)
+			{
+				return true;
+			}
+			FString Said;
+			WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
+			Next(8);
+			return true;
+		}
+		case 8:
+			if (!State->IsArmed() || In < 4.6f)
+			{
+				return In < 10.0f ? true : Stop(TEXT("a skin's swords were never held"));
+			}
+			S.Check(FString::Printf(TEXT("SW6.%d"), S.Skin + 1), Swords.CountVisibleBoxes() > 300 && Swords.GetPresence() == 1.0f,
+				FString::Printf(TEXT("%s holding both swords: %d boxes drawn (frames judged by eye; costume hands onto the grips: M4)"), FaceRoster[S.Skin],
+					Swords.CountVisibleBoxes()));
+			S.Shot = 0;
+			Next(9);
+			return true;
+		case 9:
+		{
+			// front and behind for each skin
+			if (S.Shot >= 2)
+			{
+				PC->SetViewTargetWithBlend(Dog, 0.0f);
+				FString Said;
+				WonderlandHandoffDirector::Return(QaLocalPlayer(World), Said);
+				Next(10);
+				return true;
+			}
+			const FStanceShot& Shot = SwordShots[S.Shot == 0 ? 0 : 2];
+			QaSwordsCamera(S, World, Dog, Shot);
+			if (In < 1.2f)
+			{
+				return true;
+			}
+			S.Frame(FString::Printf(TEXT("sw_6_%d_%s_%s"), S.Skin + 1, FaceRoster[S.Skin], Shot.Name));
+			++S.Shot;
+			S.PhaseAt = Now;
+			return true;
+		}
+		case 10:
+			if (State->IsEquipped())
+			{
+				return In < 8.0f ? true : Stop(TEXT("a skin's swords were never given back"));
+			}
+			++S.Skin;
+			Next(6);
+			return true;
+		default:
+			return Stop(TEXT("an unknown phase"));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaHandoffSwordsCommand(
+		TEXT("wl.Qa.HandoffSwords"),
+		TEXT("Mission Handoff M3a, the swords and the transformation, in this (packaged) build: the exchange half-way through, gold in the ")
+		TEXT("LEFT hand and cyan in the RIGHT (and on the left of the screen from behind), the companions veiled while held and restored ")
+		TEXT("after, and every skin holding both. Frames at noon and night to Saved/Screenshots/WLSWORDS; WLSWQA lines; `quit` exits after."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaSwords.IsValid())
+			{
+				return;
+			}
+			ARelayDogCharacter* Dog = QaDog(World);
+			if (Dog == nullptr || World == nullptr)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSWQA END pass=0 fail=1 (no Relay Dog to drive)"));
+				if (Args.Contains(TEXT("quit")))
+				{
+					FPlatformMisc::RequestExit(false);
+				}
+				return;
+			}
+			GQaSwords = MakeShared<FQaSwords>();
+			GQaSwords->World = World;
+			GQaSwords->Dog = Dog;
+			GQaSwords->bQuit = Args.Contains(TEXT("quit"));
+			GQaSwords->PhaseAt = World->GetTimeSeconds();
+			GQaSwords->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLSWORDS"));
+			GQaSwords->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaSwordsTick), 0.0f);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSWQA armed at (%.0f, %.0f, %.0f)"), Dog->GetActorLocation().X, Dog->GetActorLocation().Y, Dog->GetActorLocation().Z);
 		}));
 }
 

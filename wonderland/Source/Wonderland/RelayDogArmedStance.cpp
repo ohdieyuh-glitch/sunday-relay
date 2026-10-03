@@ -47,7 +47,7 @@ namespace RelayDogArmedStance
 	}
 
 	void Apply(RelayDogStride::FDogPose& Pose, float ArmedWeight, float DashWeight, float LegLengthUU, float ThighUU, float ShinUU,
-		const FShape& Shape)
+		float LeftOutFactor, float RightOutFactor, const FShape& Shape)
 	{
 		const float W = Clamp01(ArmedWeight);
 		const float D = Clamp01(DashWeight);
@@ -91,29 +91,31 @@ namespace RelayDogArmedStance
 		}
 
 		// ---------------------------------------------------------------- the arms: the blades carried, never a T-pose
-		auto Arm = [&](RelayDogStride::FArmPose& Pose_)
+		auto Arm = [&](RelayDogStride::FArmPose& Pose_, float OutFactor)
 		{
+			// OUTWARD, ON THIS RIG: the stance's sweeps are outward amounts, turned into the writer's sign for this arm
+			const float Out = OutFactor < 0.0f ? -1.0f : 1.0f;
 			const RelayDogStride::FArmPose Walk = Pose_;
 			// Standing and walking: raised forward and out, the forearms up, a little of the walk's swing kept.
 			RelayDogStride::FArmPose Ready;
 			Ready.ShoulderDeg = Shape.ReadyShoulderDeg + Walk.ShoulderDeg * Shape.SwingKeep;
 			Ready.ElbowDeg = Shape.ReadyElbowDeg + Walk.ElbowDeg * Shape.SwingKeep;
-			Ready.ShoulderYawDeg = Shape.ReadyOutDeg;
-			// Running: the animator's own arms-back posture, swept out so the blades clear the legs.
+			Ready.ShoulderYawDeg = Shape.ReadyOutDeg * Out;
+			// Running: the animator's own arms-back posture, swept out at least this far so the blades clear the legs.
 			RelayDogStride::FArmPose Run;
 			Run.ShoulderDeg = Walk.ShoulderDeg;
 			Run.ElbowDeg = Walk.ElbowDeg + Shape.RunElbowAddDeg;
-			Run.ShoulderYawDeg = Max(Walk.ShoulderYawDeg, Shape.RunOutDeg);
+			Run.ShoulderYawDeg = Max(Walk.ShoulderYawDeg * Out, Shape.RunOutDeg) * Out;
 			RelayDogStride::FArmPose Armed = LerpArm(Ready, Run, Back);
 			// The dash: swept back and out, behind a body leaning into the burst.
 			RelayDogStride::FArmPose Dash;
 			Dash.ShoulderDeg = Shape.DashShoulderDeg;
 			Dash.ElbowDeg = Shape.DashElbowDeg;
-			Dash.ShoulderYawDeg = Shape.DashOutDeg;
+			Dash.ShoulderYawDeg = Shape.DashOutDeg * Out;
 			Armed = LerpArm(Armed, Dash, D);
 			Pose_ = LerpArm(Walk, Armed, Max(W, D));
 		};
-		Arm(Pose.ArmLeft);
-		Arm(Pose.ArmRight);
+		Arm(Pose.ArmLeft, LeftOutFactor);
+		Arm(Pose.ArmRight, RightOutFactor);
 	}
 }

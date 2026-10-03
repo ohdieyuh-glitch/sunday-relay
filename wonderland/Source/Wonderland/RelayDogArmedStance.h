@@ -63,9 +63,17 @@ namespace RelayDogArmedStance
 	/** Ease the weights toward the state: armed while the swords are held, dashing while a dash is under way. */
 	void Step(FState& State, bool bArmed, bool bDashing, float DeltaSeconds, const FShape& Shape = FShape());
 
-	/** The stance laid onto the animator's pose, in place. Both weights 0: the pose is left exactly as it was. */
+	/**
+	 * The stance laid onto the animator's pose, in place. Both weights 0: the pose is left exactly as it was.
+	 *
+	 * @param LeftOutFactor, RightOutFactor  +1 when a positive FArmPose::ShoulderYawDeg carries that arm AWAY from the body on
+	 *        this rig, -1 when it carries it in. The writer rolls a shoulder by ShoulderYawDeg x the arm's side; the rig's own
+	 *        outward roll is MEASURED at bind (RelayDogLimbs: OutwardSign), and the two need not agree -- the stance QA caught
+	 *        the "outward" sweep drawing the hands together (ST2, 2026-10-02). So the stance's sweeps go through the measured
+	 *        sign; the animator's own arms-back roll is left exactly as it was.
+	 */
 	void Apply(RelayDogStride::FDogPose& Pose, float ArmedWeight, float DashWeight, float LegLengthUU, float ThighUU, float ShinUU,
-		const FShape& Shape = FShape());
+		float LeftOutFactor, float RightOutFactor, const FShape& Shape = FShape());
 
 	/** How far each hip is swept outward at these weights. The pose has no field for a leg's sweep, so the caller writes it. */
 	float FeetOutDeg(const RelayDogStride::FDogPose& Pose, float ArmedWeight, const FShape& Shape = FShape());

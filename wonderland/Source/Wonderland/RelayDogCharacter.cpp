@@ -6,6 +6,8 @@
 #include "Engine/GameInstance.h"
 #include "WonderlandRelaySkins.h"
 #include "WonderlandCompanionEmbodiment.h"
+#include "WonderlandCompanionSubsystem.h"
+#include "WonderlandGrip.h"
 #include "WonderlandMascotStyle.h"
 
 #include "Camera/CameraComponent.h"
@@ -54,6 +56,41 @@ namespace RelayDogHandoffTuning
 	TAutoConsoleVariable<float> CVarDashAcceleration(TEXT("wl.Handoff.DashAcceleration"), 6000.0f, TEXT("Mission Handoff: the acceleration the dash owns while it lasts, uu/s^2."));
 	TAutoConsoleVariable<float> CVarDashCooldown(TEXT("wl.Handoff.DashCooldown"), 0.9f, TEXT("Mission Handoff: seconds after a dash ENDS before another can start."));
 	TAutoConsoleVariable<float> CVarDoubleTapWindow(TEXT("wl.Handoff.DoubleTapWindow"), 0.30f, TEXT("Mission Handoff: how quickly the second Forward tap must follow the first, seconds."));
+
+	// THE ATTACK-READY STANCE'S SHAPE (M2), tunable live so it is settled from game frames rather than by rebuilds. The defaults
+	// are RelayDogArmedStance::FShape's own.
+	TAutoConsoleVariable<float> CVarStanceLean(TEXT("wl.Handoff.Stance.Lean"), 8.0f, TEXT("Mission Handoff stance: body lean added standing and walking, degrees."));
+	TAutoConsoleVariable<float> CVarStanceCrouch(TEXT("wl.Handoff.Stance.Crouch"), 2.0f, TEXT("Mission Handoff stance: how much lower the pelvis rides standing and walking, uu."));
+	TAutoConsoleVariable<float> CVarStanceFeetOut(TEXT("wl.Handoff.Stance.FeetOut"), 6.0f, TEXT("Mission Handoff stance: each hip swept outward, degrees (the feet spaced)."));
+	TAutoConsoleVariable<float> CVarStanceShoulder(TEXT("wl.Handoff.Stance.Shoulder"), 22.0f, TEXT("Mission Handoff stance: the ready arms raised forward, degrees."));
+	TAutoConsoleVariable<float> CVarStanceElbow(TEXT("wl.Handoff.Stance.Elbow"), 50.0f, TEXT("Mission Handoff stance: the ready forearms folded up, degrees."));
+	TAutoConsoleVariable<float> CVarStanceOut(TEXT("wl.Handoff.Stance.Out"), 18.0f, TEXT("Mission Handoff stance: the ready arms swept out from the body, degrees."));
+	TAutoConsoleVariable<float> CVarStanceSwing(TEXT("wl.Handoff.Stance.SwingKeep"), 0.3f, TEXT("Mission Handoff stance: the share of the walk's arm swing kept, 0..1."));
+	TAutoConsoleVariable<float> CVarStanceRunOut(TEXT("wl.Handoff.Stance.RunOut"), 16.0f, TEXT("Mission Handoff stance: the running arms swept out, degrees."));
+	TAutoConsoleVariable<float> CVarStanceRunElbow(TEXT("wl.Handoff.Stance.RunElbow"), 14.0f, TEXT("Mission Handoff stance: extra forearm fold while running, degrees."));
+	TAutoConsoleVariable<float> CVarStanceDashLean(TEXT("wl.Handoff.Stance.DashLean"), 10.0f, TEXT("Mission Handoff stance: extra lean in a dash, degrees."));
+	TAutoConsoleVariable<float> CVarStanceDashShoulder(TEXT("wl.Handoff.Stance.DashShoulder"), -70.0f, TEXT("Mission Handoff stance: the dash's arms, swept back (negative), degrees."));
+	TAutoConsoleVariable<float> CVarStanceDashElbow(TEXT("wl.Handoff.Stance.DashElbow"), 10.0f, TEXT("Mission Handoff stance: the dash's forearm fold, degrees."));
+	TAutoConsoleVariable<float> CVarStanceDashOut(TEXT("wl.Handoff.Stance.DashOut"), 24.0f, TEXT("Mission Handoff stance: the dash's arms swept out, degrees."));
+
+	RelayDogArmedStance::FShape StanceShape()
+	{
+		RelayDogArmedStance::FShape Shape;
+		Shape.LeanDeg = FMath::Clamp(CVarStanceLean.GetValueOnGameThread(), -10.0f, 30.0f);
+		Shape.CrouchUU = FMath::Clamp(CVarStanceCrouch.GetValueOnGameThread(), 0.0f, 8.0f);
+		Shape.FeetOutDeg = FMath::Clamp(CVarStanceFeetOut.GetValueOnGameThread(), 0.0f, 20.0f);
+		Shape.ReadyShoulderDeg = FMath::Clamp(CVarStanceShoulder.GetValueOnGameThread(), -90.0f, 120.0f);
+		Shape.ReadyElbowDeg = FMath::Clamp(CVarStanceElbow.GetValueOnGameThread(), 0.0f, 140.0f);
+		Shape.ReadyOutDeg = FMath::Clamp(CVarStanceOut.GetValueOnGameThread(), 0.0f, 80.0f);
+		Shape.SwingKeep = FMath::Clamp(CVarStanceSwing.GetValueOnGameThread(), 0.0f, 1.0f);
+		Shape.RunOutDeg = FMath::Clamp(CVarStanceRunOut.GetValueOnGameThread(), 0.0f, 80.0f);
+		Shape.RunElbowAddDeg = FMath::Clamp(CVarStanceRunElbow.GetValueOnGameThread(), 0.0f, 120.0f);
+		Shape.DashLeanDeg = FMath::Clamp(CVarStanceDashLean.GetValueOnGameThread(), 0.0f, 40.0f);
+		Shape.DashShoulderDeg = FMath::Clamp(CVarStanceDashShoulder.GetValueOnGameThread(), -120.0f, 90.0f);
+		Shape.DashElbowDeg = FMath::Clamp(CVarStanceDashElbow.GetValueOnGameThread(), 0.0f, 140.0f);
+		Shape.DashOutDeg = FMath::Clamp(CVarStanceDashOut.GetValueOnGameThread(), 0.0f, 80.0f);
+		return Shape;
+	}
 
 	float Multiplier() { return FMath::Clamp(CVarMoveMultiplier.GetValueOnGameThread(), 1.0f, 3.0f); }
 	float DashSpeed() { return FMath::Clamp(CVarDashSpeed.GetValueOnGameThread(), 100.0f, 6000.0f); }
@@ -2677,11 +2714,13 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	// eased in while the swords are held, out when they are given back, and EXACTLY the animator's pose at weight 0 -- normal
 	// roaming is untouched. Everything below writes this pose, so the canon body, the mission overlay and every worn skin
 	// carry the same stance.
-	RelayDogArmedStance::Step(ArmedStance, IsHandoffArmed(), bDashActive, DeltaSeconds);
+	const RelayDogArmedStance::FShape ArmedShape = RelayDogHandoffTuning::StanceShape();
+	RelayDogArmedStance::Step(ArmedStance, IsHandoffArmed(), bDashActive, DeltaSeconds, ArmedShape);
 	RelayDogStride::FDogPose Pose = Animator.Update(In);
+	// each arm's outward, as the rig MEASURED it (ArmChain*.OutwardSign), in the writer's convention (roll = yaw x side)
 	RelayDogArmedStance::Apply(Pose, ArmedStance.Armed.Value, ArmedStance.Dash.Value, 0.8f * HeadWidthUU, (0.8f - 0.5125f) * HeadWidthUU,
-		0.5125f * HeadWidthUU);
-	StanceFeetOutDeg = RelayDogArmedStance::FeetOutDeg(Pose, ArmedStance.Armed.Value);
+		0.5125f * HeadWidthUU, ArmChainLeft.OutwardSign * ArmLeft.SideSign, ArmChainRight.OutwardSign * ArmRight.SideSign, ArmedShape);
+	StanceFeetOutDeg = RelayDogArmedStance::FeetOutDeg(Pose, ArmedStance.Armed.Value, ArmedShape);
 
 	// ---- AND THE COSTUME WEARS THE SAME STRIDE, so a mascot skin is a change of appearance and nothing else.
 	//
@@ -2755,6 +2794,8 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	// solved onto the book / brush / lens / Contract, legs crossed or trailing, props, the beam, the energy, the repair.
 	ApplyMissionPose(Pose, Overlay, MissionIn, DeltaSeconds);
 	UpdateMissionCamera(DeltaSeconds);
+	// THE MISSION HANDOFF'S SWORDS AND TRANSFORMATION, once every joint is written: the grips are where the hands now are
+	UpdateHandoffPresentation(DeltaSeconds);
 
 	// ---- AND THE COSTUME WEARS THE WHOLE OF IT, so a mascot skin is a change of appearance and nothing else.
 	//
@@ -2803,7 +2844,9 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 			(bPlus ? Dressed.ElbowPlusY : Dressed.ElbowMinusY) = Arm->Forearm->GetComponentLocation();
 			(bPlus ? Dressed.ShoulderAtPlusY : Dressed.ShoulderAtMinusY) = Arm->Shoulder->GetComponentLocation();
 		}
-		Dressed.MissionWeight = Overlay.Weight;
+		// AND WHILE THE SWORDS ARE IN THE HANDS, a worn skin's hands go onto the canon's grips by the same solve an act uses
+		// (the Mission Handoff architecture: "while anything is held, the costume hand solve ... is ON")
+		Dressed.MissionWeight = FMath::Max(Overlay.Weight, HandoffHandsWeight);
 		Dressed.bHasCanonJoints = LegLeft.Hip != nullptr && LegLeft.Shin != nullptr && LegRight.Hip != nullptr
 			&& LegRight.Shin != nullptr && ArmLeft.Shoulder != nullptr && ArmRight.Shoulder != nullptr && HeadPivot != nullptr;
 		// Meditating crosses the legs and flying trails them, out of the sagittal plane a planar solve can follow; the
@@ -3333,7 +3376,96 @@ void ARelayDogCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		FSlateApplication::Get().UnregisterInputPreProcessor(MissionCamInput);
 	}
 	MissionCamInput.Reset();
+	// THE COMPANIONS GET THEIR OWN SIZE AND VISIBILITY BACK whatever ends this Dog (a respawn, a travel, the session)
+	HandoffTransform.Release();
+	HandoffSwords.Destroy();
 	Super::EndPlay(EndPlayReason);
+}
+
+FTransform ARelayDogCharacter::GetHandoffGripWorld(bool bLeftHand) const
+{
+	// THE DOG'S OWN LEFT IS ITS +Y SIDE (BindJoints: the canon maps the web's -x to Unreal's +y), where the LLM Companion's gold
+	// sword goes; the cyan, Jhinn's, goes to the other. The founder's sides never swap.
+	const bool bLeftIsArmLeft = ArmLeft.SideSign > 0.0f;
+	const bool bUseArmLeft = bLeftHand == bLeftIsArmLeft;
+	const FRelayDogArm& Arm = bUseArmLeft ? ArmLeft : ArmRight;
+	const RelayDogLimbs::FChain& Chain = bUseArmLeft ? ArmChainLeft : ArmChainRight;
+	return WonderlandGrip::HandGrip(Arm.Forearm, Chain.TipLocal, FaceForwardInBody, Arm.SideSign, WonderlandGrip::CurrentHold());
+}
+
+void ARelayDogCharacter::UpdateHandoffPresentation(float DeltaSeconds)
+{
+	const UGameInstance* Instance = GetGameInstance();
+	UWonderlandSidekickSubsystem* Sidekicks = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSidekickSubsystem>() : nullptr;
+	const FWonderlandMissionHandoff* State = Sidekicks != nullptr ? &Sidekicks->GetMissionHandoff() : nullptr;
+	const EWonderlandHandoffState Now = State != nullptr && IsLocallyControlled() ? State->GetState() : EWonderlandHandoffState::Idle;
+	// NOTHING IS MADE BEFORE THE FIRST HANDOFF: a Dog that never hands off carries no swords and touches no companion
+	if (Now == EWonderlandHandoffState::Idle && !HandoffSwords.IsBuilt())
+	{
+		HandoffHandsWeight = 0.0f;
+		return;
+	}
+	const float Scale = FMath::Max(HeadWidthUU, 10.0f) / 60.0f;
+	HandoffSwords.Build(this, Scale);
+	HandoffTransform.Build(this);
+
+	// THE COMPANIONS, from the player's own companion subsystem: 0 the LLM Companion (LEFT), 1 Jhinn (RIGHT)
+	AActor* LeftBody = nullptr;
+	AActor* RightBody = nullptr;
+	if (const APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (const ULocalPlayer* Player = PC->GetLocalPlayer())
+		{
+			if (const UWonderlandCompanionSubsystem* Companions = Player->GetSubsystem<UWonderlandCompanionSubsystem>())
+			{
+				LeftBody = Companions->GetEmbodiment(0);
+				RightBody = Companions->GetEmbodiment(1);
+			}
+		}
+	}
+	const float Phase = State != nullptr ? State->GetPhaseSeconds() : 0.0f;
+	const float Time = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0f;
+
+	WonderlandHandoffSwords::FShowInput Swords;
+	Swords.State = Now;
+	Swords.PhaseSeconds = Phase;
+	Swords.LeftGrip = GetHandoffGripWorld(true);
+	Swords.RightGrip = GetHandoffGripWorld(false);
+	Swords.LeftCompanion = LeftBody != nullptr ? LeftBody->GetActorLocation() : Swords.LeftGrip.GetLocation();
+	Swords.RightCompanion = RightBody != nullptr ? RightBody->GetActorLocation() : Swords.RightGrip.GetLocation();
+	Swords.Scale = Scale;
+	Swords.TimeSeconds = Time;
+	Swords.DeltaSeconds = DeltaSeconds;
+	Swords.bDashing = bDashActive;
+	HandoffSwords.Show(Swords);
+
+	WonderlandHandoffTransform::FShowInput Change;
+	Change.State = Now;
+	Change.PhaseSeconds = Phase;
+	Change.LeftCompanion = LeftBody;
+	Change.RightCompanion = RightBody;
+	// into the middle of each blade, where its light gathers
+	Change.LeftSword = HandoffSwords.GetSwordWorld(true).TransformPosition(FVector(0.0f, 0.0f, 50.0f));
+	Change.RightSword = HandoffSwords.GetSwordWorld(false).TransformPosition(FVector(0.0f, 0.0f, 50.0f));
+	Change.TimeSeconds = Time;
+	HandoffTransform.Show(Change);
+
+	// HOW MUCH OF THE SWORDS IS IN THE HANDS: a worn skin's hands follow onto the grips by this share
+	switch (Now)
+	{
+	case EWonderlandHandoffState::Delivering:
+		HandoffHandsWeight = FMath::Clamp(Phase / FWonderlandMissionHandoff::DeliverSeconds, 0.0f, 1.0f);
+		break;
+	case EWonderlandHandoffState::Held:
+		HandoffHandsWeight = 1.0f;
+		break;
+	case EWonderlandHandoffState::Returning:
+		HandoffHandsWeight = 1.0f - FMath::Clamp(Phase / (FWonderlandMissionHandoff::ReturnSeconds * 0.5f), 0.0f, 1.0f);
+		break;
+	default:
+		HandoffHandsWeight = 0.0f;
+		break;
+	}
 }
 
 void ARelayDogCharacter::OrbitMissionCamera(float YawDegrees, float PitchDegrees)
