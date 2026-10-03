@@ -97,6 +97,11 @@ namespace WonderlandHandoffSwords
 		TWeakObjectPtr<USceneComponent> RightForearm;
 		FTransform LeftGripLocal = FTransform::Identity;
 		FTransform RightGripLocal = FTransform::Identity;
+		/** Held in the V around the body (WonderlandGrip::FHold::bBodyV): the grips' centres ride on the forearms, the blades'
+		 *  WORLD rotations come from the Dog's own frame -- so they never mirror or swing with a limb. */
+		bool bHoldWorldRotation = false;
+		FQuat LeftHoldRotation = FQuat::Identity;
+		FQuat RightHoldRotation = FQuat::Identity;
 	};
 
 	/** The effects' sizes: how many boxes each carries. The trails are thin and short so a dash never fills the screen. */
@@ -159,7 +164,7 @@ namespace WonderlandHandoffSwords
 		};
 		void BuildOne(AActor* Owner, FSword& Sword, bool bGold, float Scale);
 		void Place(FSword& Sword, const FTransform& World, float Grow, bool bVisible, USceneComponent* HoldIn = nullptr,
-			const FTransform& HoldLocal = FTransform::Identity);
+			const FTransform& HoldLocal = FTransform::Identity, const FQuat* HoldWorldRotation = nullptr);
 		void Animate(FSword& Sword, bool bGold, bool bVisible, const FShowInput& In);
 		/** Puts the parts' colours back from the live levels when a calibration variable has changed. */
 		void Recolour(FSword& Sword, bool bGold);

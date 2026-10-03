@@ -8015,6 +8015,60 @@ namespace
 	 * Frames at noon and at night (wl.Sky.Hour) to Saved/Screenshots/WLSWORDS, judged against the sheet's checks 1-11.
 	 * WLSWQA lines; `quit` exits after.
 	 */
+	/**
+	 * A CLEAR VIEW FOR THE FRAMES (Second, 10-03: a birdbath in the foreground hid the gold sword in every rear frame). Turns the Dog
+	 * and the player's camera to the first heading, in 30-degree steps from its own, from which the cameras behind, in front and at
+	 * the side all see its chest unobstructed (a sphere swept on the visibility channel, the Dog, its costume and the companions
+	 * ignored). Says which heading it chose, and says so when none was clear rather than pretending.
+	 */
+	float QaClearViewHeading(UWorld* World, ARelayDogCharacter* Dog, APlayerController* PC)
+	{
+		const FVector Chest = Dog->GetActorLocation() + FVector(0.0f, 0.0f, 30.0f);
+		FCollisionQueryParams Params(FName(TEXT("WLQaView")), false);
+		Params.AddIgnoredActor(Dog);
+		if (AActor* Worn = Dog->GetCostume())
+		{
+			Params.AddIgnoredActor(Worn);
+		}
+		for (int32 Index = 0; Index < 2; ++Index)
+		{
+			if (AActor* Companion = QaCompanionBody(World, Index))
+			{
+				Params.AddIgnoredActor(Companion);
+			}
+		}
+		const float BaseYaw = Dog->GetActorRotation().Yaw;
+		float Chosen = BaseYaw;
+		bool bClear = false;
+		for (int32 Step = 0; Step < 12 && !bClear; ++Step)
+		{
+			const float Yaw = BaseYaw + Step * 30.0f;
+			const FVector Ahead = FRotator(0.0f, Yaw, 0.0f).Vector();
+			const FVector Aside = FRotator(0.0f, Yaw + 90.0f, 0.0f).Vector();
+			const FVector Eyes[3] = { Chest - Ahead * 340.0f + FVector(0.0f, 0.0f, 90.0f), Chest + Ahead * 300.0f + FVector(0.0f, 0.0f, 20.0f),
+				Chest + Aside * 300.0f + FVector(0.0f, 0.0f, 20.0f) };
+			bool bAll = true;
+			for (const FVector& Eye : Eyes)
+			{
+				FHitResult Hit;
+				bAll &= !World->SweepSingleByChannel(Hit, Eye, Chest, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(20.0f), Params);
+			}
+			if (bAll)
+			{
+				Chosen = Yaw;
+				bClear = true;
+			}
+		}
+		Dog->SetActorRotation(FRotator(0.0f, Chosen, 0.0f));
+		if (PC != nullptr)
+		{
+			PC->SetControlRotation(FRotator(-12.0f, Chosen, 0.0f));
+		}
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLQA view: heading %.0f (%s)"), Chosen,
+			bClear ? TEXT("clear behind, in front and at the side") : TEXT("NO clear heading found; frames may be occluded"));
+		return Chosen;
+	}
+
 	struct FQaSwords
 	{
 		TWeakObjectPtr<UWorld> World;
@@ -8189,6 +8243,7 @@ namespace
 			}
 			GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
 			GEngine->Exec(World, TEXT("wl.Sky.Hour 12"));
+			QaClearViewHeading(World, Dog, PC);
 			S.LeftScale = LeftBody->GetActorScale3D();
 			S.RightScale = RightBody->GetActorScale3D();
 			Next(1);
@@ -8707,6 +8762,271 @@ namespace
 			return Stop(TEXT("an unknown phase"));
 		}
 	}
+
+	/* ================================================================ wl.Qa.StanceCalib: the stance and the V, judged on frames
+	 * The founder's stance sheet (checks 1-2): grounded and wide, the arms out and down, the blades angled OUT and UP around the
+	 * body -- never along it, across it or into the ground. Second read the first M6 frames: from the gameplay camera the blades
+	 * could show as glints at the feet. One boot, swords held on Relay OG, four presets set through the live CVars:
+	 *   P0 BEFORE (the forearm grip, the old stance), P1 the new defaults, P2 wider, P3 narrower.
+	 * Each: the player's own camera behind, a front and a side frame; P0 and P1 also running, from behind. Measured on the camera
+	 * behind: each blade's tip above its own fist by a share of the body's height on screen, and outside the body's edge on its own
+	 * side (gold on the screen's LEFT). SC1 asserts it for P1, the defaults; the other presets are logged for the judgement.
+	 * Frames to Saved/Screenshots/WLSTANCE. WLSCQA lines.
+	 */
+	struct FQaStanceCalib
+	{
+		TWeakObjectPtr<UWorld> World;
+		TWeakObjectPtr<ACameraActor> Camera;
+		FTSTicker::FDelegateHandle Handle;
+		bool bQuit = false;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		int32 Phase = 0;
+		int32 Preset = 0;
+		int32 Shot = 0;
+		double PhaseAt = 0.0;
+		FString Dir;
+		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSCQA %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+		void Frame(const FString& Name)
+		{
+			int32 Width = 0;
+			int32 Height = 0;
+			const FString Path = Dir / (Name + TEXT(".png"));
+			const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSCQA frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), Width, Height);
+		}
+	};
+	TSharedPtr<FQaStanceCalib> GQaStanceCalib;
+
+	struct FQaStancePreset
+	{
+		const TCHAR* Name;
+		const TCHAR* Commands;
+	};
+
+	const FQaStancePreset StancePresets[] = {
+		{ TEXT("P0_before"), TEXT("wl.Handoff.SwordBodyV 0;wl.Handoff.Stance.Out 18;wl.Handoff.Stance.Shoulder 22;wl.Handoff.Stance.Elbow 50;wl.Handoff.Stance.FeetOut 6;wl.Handoff.Stance.Crouch 2;wl.Handoff.Stance.RunOut 16") },
+		{ TEXT("P1_defaults"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 32;wl.Handoff.SwordVForward 18;wl.Handoff.Stance.Out 34;wl.Handoff.Stance.Shoulder 14;wl.Handoff.Stance.Elbow 28;wl.Handoff.Stance.FeetOut 13;wl.Handoff.Stance.Crouch 6;wl.Handoff.Stance.RunOut 26") },
+		{ TEXT("P2_wider"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 10;wl.Handoff.Stance.Elbow 22;wl.Handoff.Stance.FeetOut 16;wl.Handoff.Stance.Crouch 7;wl.Handoff.Stance.RunOut 32") },
+		{ TEXT("P3_narrower"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 24;wl.Handoff.SwordVForward 24;wl.Handoff.Stance.Out 26;wl.Handoff.Stance.Shoulder 18;wl.Handoff.Stance.Elbow 34;wl.Handoff.Stance.FeetOut 10;wl.Handoff.Stance.Crouch 5;wl.Handoff.Stance.RunOut 20") },
+	};
+
+	void QaStanceApply(UWorld* World, const TCHAR* Commands)
+	{
+		TArray<FString> Each;
+		FString(Commands).ParseIntoArray(Each, TEXT(";"), true);
+		for (const FString& Command : Each)
+		{
+			GEngine->Exec(World, *Command);
+		}
+	}
+
+	/** On the camera now: each tip's rise above its fist (share of the body's screen height) and its distance outside the body's edge
+	 *  on its own side, px (positive = outside). From behind the Dog's left is the screen's left; in front it is mirrored. */
+	FString QaStanceMeasure(APlayerController* PC, ARelayDogCharacter* Dog, bool bFromFront, bool& bOutV)
+	{
+		const WonderlandHandoffSwords::FPresentation& Swords = Dog->GetHandoffSwords();
+		const UCapsuleComponent* Capsule = Dog->GetCapsuleComponent();
+		const float Half = Capsule != nullptr ? Capsule->GetScaledCapsuleHalfHeight() : 90.0f;
+		const float Radius = Capsule != nullptr ? Capsule->GetScaledCapsuleRadius() : 40.0f;
+		const FVector At = Dog->GetActorLocation();
+		const FVector Right = Dog->GetActorRightVector();
+		FVector2D Top(0.0, 0.0), Bottom(0.0, 0.0), LeftEdge(0.0, 0.0), RightEdge(0.0, 0.0);
+		bool bSeen = PC->ProjectWorldLocationToScreen(At + FVector(0.0f, 0.0f, Half), Top) && PC->ProjectWorldLocationToScreen(At - FVector(0.0f, 0.0f, Half), Bottom)
+			&& PC->ProjectWorldLocationToScreen(At - Right * Radius, LeftEdge) && PC->ProjectWorldLocationToScreen(At + Right * Radius, RightEdge);
+		const double BodyH = FMath::Max(FMath::Abs(Bottom.Y - Top.Y), 1.0);
+		double Rise[2] = { 0.0, 0.0 };
+		double Outside[2] = { 0.0, 0.0 };
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			const bool bGold = Side == 0;
+			const FTransform Blade = Swords.GetSwordWorld(bGold);
+			FVector2D Tip(0.0, 0.0), Grip(0.0, 0.0);
+			bSeen &= PC->ProjectWorldLocationToScreen(Blade.TransformPosition(FVector(0.0f, 0.0f, WonderlandHandoffSwords::TipZ)), Tip)
+				&& PC->ProjectWorldLocationToScreen(Blade.GetLocation(), Grip);
+			Rise[Side] = (Grip.Y - Tip.Y) / BodyH;
+			// the Dog's own left edge is LeftEdge (its -Y); from behind it is on the screen's left, from in front on the right
+			const FVector2D& Edge = bGold ? LeftEdge : RightEdge;
+			const bool bEdgeIsScreenLeft = (Edge.X < (bGold ? RightEdge.X : LeftEdge.X));
+			Outside[Side] = bEdgeIsScreenLeft ? Edge.X - Tip.X : Tip.X - Edge.X;
+		}
+		bOutV = bSeen && Rise[0] >= 0.20 && Rise[1] >= 0.20 && Outside[0] >= 0.0 && Outside[1] >= 0.0;
+		return FString::Printf(TEXT("%s: gold tip %+.0f%% of the body's height above its fist, %+.0f px outside the body's left edge; cyan %+.0f%%, %+.0f px outside its right edge"),
+			bFromFront ? TEXT("in front") : TEXT("behind"), Rise[0] * 100.0, Outside[0], Rise[1] * 100.0, Outside[1]);
+	}
+
+	bool QaStanceCalibTick(float)
+	{
+		if (!GQaStanceCalib.IsValid())
+		{
+			return false;
+		}
+		FQaStanceCalib& S = *GQaStanceCalib;
+		UWorld* World = S.World.Get();
+		ARelayDogCharacter* Dog = QaDog(World);
+		FWonderlandMissionHandoff* Handoff = QaHandoff(World);
+		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		auto Stop = [&S](const TCHAR* Why)
+		{
+			if (UWorld* W = S.World.Get())
+			{
+				// the defaults back, the swords given back, the player's own camera
+				QaStanceApply(W, StancePresets[1].Commands);
+				if (FWonderlandMissionHandoff* H = QaHandoff(W))
+				{
+					FString Ignored;
+					H->Return(Ignored);
+				}
+				if (APlayerController* P = W->GetFirstPlayerController())
+				{
+					if (ARelayDogCharacter* D = QaDog(W))
+					{
+						P->SetViewTargetWithBlend(D, 0.0f);
+					}
+				}
+			}
+			if (ACameraActor* Cam = S.Camera.Get())
+			{
+				Cam->Destroy();
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSCQA END pass=%d fail=%d%s"), S.Pass, S.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
+			const bool bQuit = S.bQuit;
+			GQaStanceCalib.Reset();
+			if (bQuit)
+			{
+				FPlatformMisc::RequestExit(false);
+			}
+			return false;
+		};
+		if (World == nullptr || Dog == nullptr || Handoff == nullptr || PC == nullptr)
+		{
+			return Stop(TEXT("the world, the Dog or the handoff went away"));
+		}
+		const double Now = QaNow();
+		const double In = Now - S.PhaseAt;
+		const int32 Presets = static_cast<int32>(UE_ARRAY_COUNT(StancePresets));
+		switch (S.Phase)
+		{
+		case 0:
+			if (UWonderlandUiSubsystem* Ui = QaUi(World))
+			{
+				if (Ui->IsWelcomeOpen())
+				{
+					Ui->DismissWelcome();
+				}
+			}
+			if (In < 4.0 || !Dog->GetCharacterMovement()->IsMovingOnGround())
+			{
+				return In < 40.0 ? true : Stop(TEXT("never ready"));
+			}
+			GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+			GEngine->Exec(World, TEXT("wl.Sky.Hour 12"));
+			if (!Handoff->IsEquipped())
+			{
+				FString Said;
+				WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
+			}
+			S.Phase = 1;
+			S.PhaseAt = Now;
+			return true;
+		case 1:
+			if (!Handoff->IsArmed())
+			{
+				return In < 12.0 ? true : Stop(TEXT("the swords were never held"));
+			}
+			S.Preset = 0;
+			S.Shot = 0;
+			QaClearViewHeading(World, Dog, PC);
+			QaStanceApply(World, StancePresets[0].Commands);
+			S.Phase = 2;
+			S.PhaseAt = Now;
+			return true;
+		case 2:
+		{
+			// ONE PRESET: settle, then behind (the player's own camera), in front, at the side; P0 and P1 also running from behind
+			const FQaStancePreset& Preset = StancePresets[S.Preset];
+			const bool bRun = S.Preset <= 1;
+			const int32 Shots = bRun ? 4 : 3;
+			if (S.Shot >= Shots)
+			{
+				Dog->QaWalkKey(false);
+				if (++S.Preset >= Presets)
+				{
+					return Stop(nullptr);
+				}
+				QaStanceApply(World, StancePresets[S.Preset].Commands);
+				S.Shot = 0;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (S.Shot == 0 || S.Shot == 3)
+			{
+				PC->SetViewTargetWithBlend(Dog, 0.0f);
+				if (S.Shot == 3)
+				{
+					// running with the swords held, the player's camera behind: forward input every tick
+					Dog->AddMovementInput(Dog->GetActorForwardVector(), 1.0f);
+				}
+			}
+			else
+			{
+				FQaStance Shim;
+				Shim.Camera = S.Camera;
+				QaStanceCamera(Shim, World, Dog, S.Shot == 1 ? 0.0 : 90.0, 300.0, 40.0, 50.0f);
+				S.Camera = Shim.Camera;
+			}
+			if (In < (S.Shot == 0 ? 2.2 : (S.Shot == 3 ? 2.0 : 1.2)))
+			{
+				return true;
+			}
+			static const TCHAR* const ShotNames[] = { TEXT("behind"), TEXT("front"), TEXT("side"), TEXT("running_behind") };
+			if (S.Shot == 0 || S.Shot == 1)
+			{
+				bool bV = false;
+				const FString Reading = QaStanceMeasure(PC, Dog, S.Shot == 1, bV);
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSCQA %s %s | %s"), Preset.Name, ShotNames[S.Shot], *Reading);
+				if (S.Preset == 1 && S.Shot == 0)
+				{
+					S.Check(TEXT("SC1"), bV, FString::Printf(TEXT("the defaults, the player's own camera behind, held and standing: both blades rise above their fists (>= 20%% of the body) and stand outside the body on their own sides -- %s"), *Reading));
+				}
+				if (S.Preset == 1 && S.Shot == 1)
+				{
+					S.Check(TEXT("SC2"), bV, FString::Printf(TEXT("the defaults, in front (mirrored: gold on the screen's RIGHT): the V holds -- %s"), *Reading));
+				}
+			}
+			S.Frame(FString::Printf(TEXT("stance_%s_%s"), Preset.Name, ShotNames[S.Shot]));
+			++S.Shot;
+			S.PhaseAt = Now;
+			return true;
+		}
+		default:
+			return Stop(TEXT("an unknown phase"));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaStanceCalibCommand(
+		TEXT("wl.Qa.StanceCalib"),
+		TEXT("The stance and the V around the body, judged on frames: swords held on Relay OG under four presets (P0 before, P1 the ")
+		TEXT("defaults, P2 wider, P3 narrower) -- behind, in front, at the side, and running. SC1/SC2 measure the defaults' V. Frames to ")
+		TEXT("Saved/Screenshots/WLSTANCE. `quit` exits after. WLSCQA lines."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaStanceCalib.IsValid() || World == nullptr)
+			{
+				return;
+			}
+			GQaStanceCalib = MakeShared<FQaStanceCalib>();
+			GQaStanceCalib->World = World;
+			GQaStanceCalib->bQuit = Args.Contains(TEXT("quit"));
+			GQaStanceCalib->PhaseAt = QaNow();
+			GQaStanceCalib->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLSTANCE"));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSCQA BEGIN | %s"), *WonderlandBeta::BuildLabel());
+			GQaStanceCalib->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaStanceCalibTick), 0.0f);
+		}));
 
 	/* ================================================================ wl.Qa.ActHands: the hands never through a mission prop
 	 * Second's review (10-03): the always-on hands would go through the book, the brush, the lens and the scraper of the acts the

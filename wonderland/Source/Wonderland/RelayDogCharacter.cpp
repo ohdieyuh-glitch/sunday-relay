@@ -61,13 +61,13 @@ namespace RelayDogHandoffTuning
 	// THE ATTACK-READY STANCE'S SHAPE (M2), tunable live so it is settled from game frames rather than by rebuilds. The defaults
 	// are RelayDogArmedStance::FShape's own.
 	TAutoConsoleVariable<float> CVarStanceLean(TEXT("wl.Handoff.Stance.Lean"), 8.0f, TEXT("Mission Handoff stance: body lean added standing and walking, degrees."));
-	TAutoConsoleVariable<float> CVarStanceCrouch(TEXT("wl.Handoff.Stance.Crouch"), 2.0f, TEXT("Mission Handoff stance: how much lower the pelvis rides standing and walking, uu."));
-	TAutoConsoleVariable<float> CVarStanceFeetOut(TEXT("wl.Handoff.Stance.FeetOut"), 6.0f, TEXT("Mission Handoff stance: each hip swept outward, degrees (the feet spaced)."));
-	TAutoConsoleVariable<float> CVarStanceShoulder(TEXT("wl.Handoff.Stance.Shoulder"), 22.0f, TEXT("Mission Handoff stance: the ready arms raised forward, degrees."));
-	TAutoConsoleVariable<float> CVarStanceElbow(TEXT("wl.Handoff.Stance.Elbow"), 50.0f, TEXT("Mission Handoff stance: the ready forearms folded up, degrees."));
-	TAutoConsoleVariable<float> CVarStanceOut(TEXT("wl.Handoff.Stance.Out"), 18.0f, TEXT("Mission Handoff stance: the ready arms swept out from the body, degrees."));
+	TAutoConsoleVariable<float> CVarStanceCrouch(TEXT("wl.Handoff.Stance.Crouch"), 6.0f, TEXT("Mission Handoff stance: how much lower the pelvis rides standing and walking, uu."));
+	TAutoConsoleVariable<float> CVarStanceFeetOut(TEXT("wl.Handoff.Stance.FeetOut"), 13.0f, TEXT("Mission Handoff stance: each hip swept outward, degrees (the feet spaced)."));
+	TAutoConsoleVariable<float> CVarStanceShoulder(TEXT("wl.Handoff.Stance.Shoulder"), 14.0f, TEXT("Mission Handoff stance: the ready arms raised forward, degrees."));
+	TAutoConsoleVariable<float> CVarStanceElbow(TEXT("wl.Handoff.Stance.Elbow"), 28.0f, TEXT("Mission Handoff stance: the ready forearms folded up, degrees."));
+	TAutoConsoleVariable<float> CVarStanceOut(TEXT("wl.Handoff.Stance.Out"), 34.0f, TEXT("Mission Handoff stance: the ready arms swept out from the body, degrees."));
 	TAutoConsoleVariable<float> CVarStanceSwing(TEXT("wl.Handoff.Stance.SwingKeep"), 0.3f, TEXT("Mission Handoff stance: the share of the walk's arm swing kept, 0..1."));
-	TAutoConsoleVariable<float> CVarStanceRunOut(TEXT("wl.Handoff.Stance.RunOut"), 16.0f, TEXT("Mission Handoff stance: the running arms swept out, degrees."));
+	TAutoConsoleVariable<float> CVarStanceRunOut(TEXT("wl.Handoff.Stance.RunOut"), 26.0f, TEXT("Mission Handoff stance: the running arms swept out, degrees."));
 	TAutoConsoleVariable<float> CVarStanceRunElbow(TEXT("wl.Handoff.Stance.RunElbow"), 14.0f, TEXT("Mission Handoff stance: extra forearm fold while running, degrees."));
 	TAutoConsoleVariable<float> CVarStanceDashLean(TEXT("wl.Handoff.Stance.DashLean"), 10.0f, TEXT("Mission Handoff stance: extra lean in a dash, degrees."));
 	TAutoConsoleVariable<float> CVarStanceDashShoulder(TEXT("wl.Handoff.Stance.DashShoulder"), -70.0f, TEXT("Mission Handoff stance: the dash's arms, swept back (negative), degrees."));
@@ -3479,11 +3479,14 @@ FTransform ARelayDogCharacter::GetHandoffGripWorld(bool bLeftHand) const
 	const WonderlandHands::FHand& Hand = bPlusY ? BodyHandPlusY : BodyHandMinusY;
 	const WonderlandGrip::FHold Hold = WonderlandGrip::CurrentHold();
 	// IN THE FIST once the hand is there: the grip passes through the closed fingers
-	if (Hand.IsOn(Forearm))
+	FTransform Grip = Hand.IsOn(Forearm) ? WonderlandGrip::HandGripAt(Forearm, Tip, Hand.GripCentreLocal(), Forward, Side, Hold)
+		: WonderlandGrip::HandGrip(Forearm, Tip, Forward, Side, Hold);
+	// THE V AROUND THE BODY: the centre is the fist's, the direction the Dog's own (WonderlandGrip::BodyVRotation)
+	if (Hold.bBodyV)
 	{
-		return WonderlandGrip::HandGripAt(Forearm, Tip, Hand.GripCentreLocal(), Forward, Side, Hold);
+		Grip.SetRotation(WonderlandGrip::BodyVRotation(GetActorTransform(), bLeftHand, Hold));
 	}
-	return WonderlandGrip::HandGrip(Forearm, Tip, Forward, Side, Hold);
+	return Grip;
 }
 
 void ARelayDogCharacter::UpdateHandoffPresentation(float DeltaSeconds)
@@ -3557,9 +3560,14 @@ void ARelayDogCharacter::UpdateHandoffPresentation(float DeltaSeconds)
 			Swords.ViewLocation = ViewPC->PlayerCameraManager->GetCameraLocation();
 		}
 	}
-	HandoffSwords.Show(Swords);
+	// THE V AROUND THE BODY (the founder's stance sheet): the blades' directions from the Dog's own frame
+	const WonderlandGrip::FHold VHold = WonderlandGrip::CurrentHold();
+	Swords.bHoldWorldRotation = VHold.bBodyV;
+	Swords.LeftHoldRotation = WonderlandGrip::BodyVRotation(GetActorTransform(), true, VHold);
+	Swords.RightHoldRotation = WonderlandGrip::BodyVRotation(GetActorTransform(), false, VHold);
+		HandoffSwords.Show(Swords);
 
-	WonderlandHandoffTransform::FShowInput Change;
+		WonderlandHandoffTransform::FShowInput Change;
 	Change.State = Now;
 	Change.PhaseSeconds = Phase;
 	Change.LeftCompanion = LeftBody;

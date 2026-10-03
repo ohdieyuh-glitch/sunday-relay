@@ -533,7 +533,8 @@ namespace WonderlandHandoffSwords
 		return Count;
 	}
 
-	void FPresentation::Place(FSword& Sword, const FTransform& World, float Grow, bool bVisible, USceneComponent* HoldIn, const FTransform& HoldLocal)
+	void FPresentation::Place(FSword& Sword, const FTransform& World, float Grow, bool bVisible, USceneComponent* HoldIn, const FTransform& HoldLocal,
+		const FQuat* HoldWorldRotation)
 	{
 		USceneComponent* Root = Sword.Root.Get();
 		if (Root == nullptr)
@@ -561,11 +562,24 @@ namespace WonderlandHandoffSwords
 			{
 				Root->AttachToComponent(HoldIn, FAttachmentTransformRules::KeepWorldTransform);
 			}
-			if (Root->IsUsingAbsoluteLocation() || Root->IsUsingAbsoluteRotation() || !Root->IsUsingAbsoluteScale())
+			if (HoldWorldRotation != nullptr)
 			{
-				Root->SetAbsolute(false, false, true);
+				// THE V: the centre rides on the forearm (no lag behind a skin's later joint writes); the direction is the body's
+				if (Root->IsUsingAbsoluteLocation() || !Root->IsUsingAbsoluteRotation() || !Root->IsUsingAbsoluteScale())
+				{
+					Root->SetAbsolute(false, true, true);
+				}
+				Root->SetRelativeLocation(HoldLocal.GetLocation());
+				Root->SetWorldRotation(*HoldWorldRotation);
 			}
-			Root->SetRelativeLocationAndRotation(HoldLocal.GetLocation(), HoldLocal.GetRotation());
+			else
+			{
+				if (Root->IsUsingAbsoluteLocation() || Root->IsUsingAbsoluteRotation() || !Root->IsUsingAbsoluteScale())
+				{
+					Root->SetAbsolute(false, false, true);
+				}
+				Root->SetRelativeLocationAndRotation(HoldLocal.GetLocation(), HoldLocal.GetRotation());
+			}
 			Root->SetWorldScale3D(Scale);
 		}
 		else
@@ -678,8 +692,8 @@ namespace WonderlandHandoffSwords
 		const bool bInHands = In.State == EWonderlandHandoffState::Held;
 		USceneComponent* LeftHold = bInHands ? In.LeftForearm.Get() : nullptr;
 		USceneComponent* RightHold = bInHands ? In.RightForearm.Get() : nullptr;
-		Place(Gold, GoldAt, Grow, bVisible, LeftHold, In.LeftGripLocal);
-		Place(Cyan, CyanAt, Grow, bVisible, RightHold, In.RightGripLocal);
+		Place(Gold, GoldAt, Grow, bVisible, LeftHold, In.LeftGripLocal, In.bHoldWorldRotation ? &In.LeftHoldRotation : nullptr);
+		Place(Cyan, CyanAt, Grow, bVisible, RightHold, In.RightGripLocal, In.bHoldWorldRotation ? &In.RightHoldRotation : nullptr);
 		// the light lives once the sword has formed enough to carry it
 		Animate(Gold, true, bVisible && Grow > 0.35f, In);
 		Animate(Cyan, false, bVisible && Grow > 0.35f, In);

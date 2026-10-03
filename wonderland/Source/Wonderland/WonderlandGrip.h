@@ -30,10 +30,26 @@ namespace WonderlandGrip
 		float IntoHandUU = 4.0f;
 		/** Forward of the forearm's line (the fist's middle is ahead of the bone's line). */
 		float ForwardUU = 1.5f;
+		/**
+		 * THE V AROUND THE BODY (the founder's stance sheet, check 2: "the blades angled out and up ... no blade lies along the
+		 * body, crosses the torso or head, or points into the ground"). On: a held blade's DIRECTION is set in the Dog's own
+		 * frame -- up, out to its own side by VDeg, forward by VForwardDeg, its broad face to the camera behind -- so the pair
+		 * reads as a V at any arm angle and in any act of locomotion. Off: the blade follows the forearm (TiltDeg / RollDeg).
+		 */
+		bool bBodyV = true;
+		float VDeg = 32.0f;
+		float VForwardDeg = 18.0f;
 	};
 
 	/** The hold as the console variables have it right now. */
 	FHold CurrentHold();
+
+	/**
+	 * A held blade's world rotation in the V around the body: +Z up and out to the hand's own side (the Dog's own left is its -Y)
+	 * by Hold.VDeg and forward by Hold.VForwardDeg; +X (the broad face) toward the Dog's back. From the actor's transform only,
+	 * so it never mirrors with a limb's local axes.
+	 */
+	FQuat BodyVRotation(const FTransform& ActorWorld, bool bLeftHand, const FHold& Hold);
 
 	/**
 	 * The world transform of a held object's grip in a hand, with no scale.

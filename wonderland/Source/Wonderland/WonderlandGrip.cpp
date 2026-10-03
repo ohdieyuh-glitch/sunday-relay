@@ -14,6 +14,12 @@ namespace
 		TEXT("Mission Handoff grip: uu back from the limb's tip into the hand where the grip's centre sits."));
 	TAutoConsoleVariable<float> CVarGripForward(TEXT("wl.Handoff.GripForward"), 1.5f,
 		TEXT("Mission Handoff grip: uu forward of the forearm's line where the grip's centre sits."));
+	TAutoConsoleVariable<int32> CVarSwordBodyV(TEXT("wl.Handoff.SwordBodyV"), 1,
+		TEXT("Mission Handoff: 1 = held blades make a V around the body (the founder's stance sheet), 0 = they follow the forearm."));
+	TAutoConsoleVariable<float> CVarSwordV(TEXT("wl.Handoff.SwordV"), 32.0f,
+		TEXT("Mission Handoff: degrees a held blade leans OUT from straight up, to its own hand's side."));
+	TAutoConsoleVariable<float> CVarSwordVForward(TEXT("wl.Handoff.SwordVForward"), 18.0f,
+		TEXT("Mission Handoff: degrees a held blade leans FORWARD from the V's plane."));
 }
 
 namespace WonderlandGrip
@@ -25,7 +31,34 @@ namespace WonderlandGrip
 		Hold.RollDeg = FMath::Clamp(CVarGripRoll.GetValueOnGameThread(), -180.0f, 180.0f);
 		Hold.IntoHandUU = FMath::Clamp(CVarGripInto.GetValueOnGameThread(), -20.0f, 20.0f);
 		Hold.ForwardUU = FMath::Clamp(CVarGripForward.GetValueOnGameThread(), -20.0f, 20.0f);
+		Hold.bBodyV = CVarSwordBodyV.GetValueOnGameThread() != 0;
+		Hold.VDeg = FMath::Clamp(CVarSwordV.GetValueOnGameThread(), 0.0f, 85.0f);
+		Hold.VForwardDeg = FMath::Clamp(CVarSwordVForward.GetValueOnGameThread(), -60.0f, 60.0f);
 		return Hold;
+	}
+
+	FQuat BodyVRotation(const FTransform& ActorWorld, bool bLeftHand, const FHold& Hold)
+	{
+		const FQuat Facing = ActorWorld.GetRotation();
+		const FVector Forward = Facing.GetForwardVector();
+		const FVector Up = Facing.GetUpVector();
+		// THE HAND'S OWN SIDE, from the actor and never from a limb: the Dog's own left is its -Y
+		const FVector Outward = Facing.GetRightVector() * (bLeftHand ? -1.0f : 1.0f);
+		const float V = FMath::DegreesToRadians(Hold.VDeg);
+		const float F = FMath::DegreesToRadians(Hold.VForwardDeg);
+		const FVector InPlane = Up * FMath::Cos(V) + Outward * FMath::Sin(V);
+		const FVector Z = (InPlane * FMath::Cos(F) + Forward * FMath::Sin(F)).GetSafeNormal();
+		// the broad face to the camera behind: +X toward the Dog's back, square to the blade; +Y completes the frame as
+		// HandGripLocal's does (X = Y x Z, so Y = Z x X)
+		FVector X = -Forward - Z * FVector::DotProduct(-Forward, Z);
+		X = X.IsNearlyZero() ? FVector::CrossProduct(Outward, Z).GetSafeNormal() : X.GetSafeNormal();
+		FVector Y = FVector::CrossProduct(Z, X).GetSafeNormal();
+		if (!FMath::IsNearlyZero(Hold.RollDeg))
+		{
+			Y = Y.RotateAngleAxis(Hold.RollDeg, Z);
+			X = FVector::CrossProduct(Y, Z).GetSafeNormal();
+		}
+		return FMatrix(FPlane(X, 0.0f), FPlane(Y, 0.0f), FPlane(Z, 0.0f), FPlane(0.0f, 0.0f, 0.0f, 1.0f)).ToQuat();
 	}
 
 	FTransform HandGrip(const USceneComponent* Forearm, const FVector& TipLocal, const FVector& ForwardInForearm, float SideSign, const FHold& Hold)
