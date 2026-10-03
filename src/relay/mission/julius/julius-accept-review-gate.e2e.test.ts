@@ -166,6 +166,19 @@ describe('V2-3 — an ACCEPT that cannot cite a passing review is not written', 
     expect(harness.store.taskRow('build-1')!.state, 'the build is never released').toBe('BLOCKED');
     expect(harness.store.events().some((event) => event.type === 'contract.locked'), 'and its terms are never agreed').toBe(false);
   });
+
+  it('a HALT on the LAST work records the mission as NOT completable, though the verdict it replaced would have (Second Julius’s breakage case)', async () => {
+    const silent: Step = { kind: 'succeed', evidence: [], reviewVerdict: { verdict: 'CONTINUE', claim: 'Looks fine.' } };
+    const harness = build({ reviewer: [PASS, silent, PASS] });
+    await drain(harness);
+
+    expect((await decisionsOf(harness, 'build-1')).map((row) => `${row.action}:${row.reasonCode}`)).toEqual(['HALT:REVIEW_EVIDENCE_MISSING']);
+    // The build is the last work and its TEST satisfies the only criterion, so the pre-gate verdict was completable;
+    // the decision written is the HALT, and its record must not say otherwise.
+    const decided = harness.store.events().filter((event) => event.type === 'verification.decided' && event.taskId === 'build-1');
+    expect(decided.map((event) => [event.facts.action, event.facts.missionCompletable])).toEqual([['HALT', false]]);
+    expect(await runState(harness), 'and the run does not complete').not.toBe('COMPLETED');
+  });
 });
 
 describe('V2-1 — the gating review of a disagreement', () => {
