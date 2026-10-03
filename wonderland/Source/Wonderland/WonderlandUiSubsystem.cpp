@@ -5461,10 +5461,54 @@ void UWonderlandUiSubsystem::RefreshChrome()
 	WalletPanel.Reset();
 	Terminal.Reset();
 
+	// B63: THE COMPANION CONSOLES KEEP WHAT THEY SHOWED. A colour change mid-mission used to hand the visitor two fresh
+	// consoles -- the history gone, the timer back at zero, the mission "joined" a second time (Second, RC11 P10). The new
+	// pair now takes the old pair's state, and with it the feed's "already shown" keys: the new consoles HAVE been told
+	// everything the old ones were. (B56 reset those keys because remounted consoles started empty; carried over, they
+	// no longer do, and the status they carry is the one the feed last set -- OFFLINE stays OFFLINE.)
+	const TArray<TSharedPtr<SWonderlandCompanionConsole>> OldConsoles = CompanionTerminals;
+	const TArray<FString> KeptLiveTurn = CompanionLiveTurn;
+	const TArray<FString> KeptShownSession = CompanionShownSession;
+	const TArray<bool> KeptLinkWasDown = CompanionLinkWasDown;
+	const TArray<bool> KeptLinkSeenUp = CompanionLinkSeenUp;
+	const TArray<bool> KeptMissionTask = CompanionMissionTask;
+	const TArray<FString> KeptPendingAsk = CompanionPendingAsk;
+	const TArray<int32> KeptPendingTurns = CompanionPendingTurns;
+	const TArray<FString> KeptShownAnswerText = CompanionShownAnswerText;
+	const TArray<FString> KeptShownAsk = CompanionShownAsk;
+	const TArray<FString> KeptShownAnswer = CompanionShownAnswer;
+	const TArray<FString> KeptShownNote = CompanionShownNote;
+	const TArray<FString> KeptShownProvider = CompanionShownProvider;
+
 	UnmountCompanionTerminals();
 	UnmountHudFurniture();
 	MountHudFurniture();
 	MountCompanionTerminals();
+	int32 Carried = 0;
+	if (OldConsoles.Num() > 0 && OldConsoles.Num() == CompanionTerminals.Num())
+	{
+		for (int32 Index = 0; Index < CompanionTerminals.Num(); ++Index)
+		{
+			if (CompanionTerminals[Index].IsValid() && OldConsoles[Index].IsValid())
+			{
+				CompanionTerminals[Index]->AdoptStateFrom(*OldConsoles[Index]);
+				++Carried;
+			}
+		}
+		CompanionLiveTurn = KeptLiveTurn;
+		CompanionShownSession = KeptShownSession;
+		CompanionLinkWasDown = KeptLinkWasDown;
+		CompanionLinkSeenUp = KeptLinkSeenUp;
+		CompanionMissionTask = KeptMissionTask;
+		CompanionPendingAsk = KeptPendingAsk;
+		CompanionPendingTurns = KeptPendingTurns;
+		CompanionShownAnswerText = KeptShownAnswerText;
+		CompanionShownAsk = KeptShownAsk;
+		CompanionShownAnswer = KeptShownAnswer;
+		CompanionShownNote = KeptShownNote;
+		CompanionShownProvider = KeptShownProvider;
+	}
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI companion consoles remounted: %d of %d carried their state over"), Carried, CompanionTerminals.Num());
 	EnsureLiveTerminal();
 	if (Was != EOverlay::None)
 	{

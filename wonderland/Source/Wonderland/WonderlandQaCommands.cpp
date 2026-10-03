@@ -107,6 +107,13 @@ namespace
 		bool bConsoleFrame = false;
 		bool bScrolledAway = false;
 		bool bTerminalOpened = false;
+		// B63 (Q26): both consoles as they were just before a mid-mission colour change remounted them
+		TArray<FString> RemountText[2];
+		FString RemountStatus[2];
+		FString RemountFooter[2];
+		int32 RemountElapsed[2] = {0, 0};
+		int32 RemountJoined[2] = {0, 0};
+		const void* RemountOld[2] = {nullptr, nullptr};
 		// the FLAME row hidden on the two skins without fire (Q01e)
 		bool bOgHidden = false;
 		bool bClHidden = false;
@@ -1753,6 +1760,70 @@ namespace
 					FString::Printf(TEXT("scrolled back 4 rows: left the live end %s, still there 5 s later %s, %d new rows marked, back to live %s"),
 						Run.bScrolledAway ? TEXT("yes") : TEXT("NO"), bHeld ? TEXT("yes") : TEXT("NO"), Unseen,
 						Llm != nullptr && Llm->IsFollowing() ? TEXT("yes") : TEXT("NO")));
+				// then B63: a colour change while the mission plays. Both consoles are read as they are, and the chrome is
+				// rebuilt through the one route every colour writer takes (SaveAndApply -> OnChanged -> RefreshChrome), the
+				// Wardrobe's and the Menu's swatches included; nothing about the colours themselves changes.
+				const SWonderlandCompanionConsole* Before[2] = {Llm, Agent};
+				for (int32 C = 0; C < 2; ++C)
+				{
+					Run.RemountOld[C] = Before[C];
+					Run.RemountText[C].Reset();
+					Run.RemountJoined[C] = 0;
+					if (Before[C] != nullptr)
+					{
+						for (int32 Line = 0; Line < Before[C]->GetLineCount(); ++Line)
+						{
+							Run.RemountText[C].Add(Before[C]->GetLineText(Line));
+							Run.RemountJoined[C] += Before[C]->GetLineText(Line).Contains(TEXT("mission joined")) ? 1 : 0;
+						}
+						Run.RemountStatus[C] = Before[C]->GetStatus();
+						Run.RemountFooter[C] = Before[C]->GetFooterText();
+						Run.RemountElapsed[C] = Before[C]->GetElapsedSeconds();
+					}
+				}
+				WonderlandMascotStyle::SaveAndApply();
+				Run.ConsoleAt = In;
+				Run.Sub = 30;
+			}
+			else if (Run.Sub == 30 && In >= Run.ConsoleAt + 3.0)
+			{
+				// Q26 (B63): A COLOUR CHANGE MID-MISSION KEEPS BOTH CONSOLES. Three seconds after the remount each NEW console
+				// still shows the old one's history line for line (and may have added to it), the same status and footer
+				// modes, a task timer that kept counting rather than starting again, and no second "mission joined": the
+				// feed knows these consoles were already told. Before the fix both came back as a fresh mount (Second, RC11
+				// P10: JHINN's intro and "Planning… (2s)" where it had read task J-07 for 20 s).
+				const SWonderlandCompanionConsole* After[2] = {Llm, Agent};
+				bool bKept[2] = {false, false};
+				FString Why[2];
+				for (int32 C = 0; C < 2; ++C)
+				{
+					const SWonderlandCompanionConsole* A = After[C];
+					if (A == nullptr || static_cast<const void*>(A) == Run.RemountOld[C])
+					{
+						Why[C] = A == nullptr ? TEXT("no console") : TEXT("NOT remounted (same widget)");
+						continue;
+					}
+					int32 Same = 0;
+					int32 Joined = 0;
+					for (int32 Line = 0; Line < A->GetLineCount(); ++Line)
+					{
+						Joined += A->GetLineText(Line).Contains(TEXT("mission joined")) ? 1 : 0;
+					}
+					while (Same < Run.RemountText[C].Num() && Same < A->GetLineCount() && A->GetLineText(Same) == Run.RemountText[C][Same])
+					{
+						++Same;
+					}
+					const int32 Elapsed = A->GetElapsedSeconds();
+					bKept[C] = Run.RemountText[C].Num() > 0 && Same == Run.RemountText[C].Num() && A->GetStatus() == Run.RemountStatus[C]
+						&& A->GetFooterText() == Run.RemountFooter[C] && Elapsed >= Run.RemountElapsed[C] && Joined == Run.RemountJoined[C];
+					Why[C] = FString::Printf(TEXT("history %d/%d lines kept (now %d), status '%s'->'%s', timer %ds->%ds, 'mission joined' %d->%d"),
+						Same, Run.RemountText[C].Num(), A->GetLineCount(), *Run.RemountStatus[C], *A->GetStatus(), Run.RemountElapsed[C], Elapsed,
+						Run.RemountJoined[C], Joined);
+				}
+				QaFrame(Run, TEXT("07e_companion_after_remount"));
+				QaCheck(Run, TEXT("Q26"), bKept[0] && bKept[1],
+					FString::Printf(TEXT("a colour change mid-mission (B63): LLM %s -- %s | Jhinn %s -- %s"),
+						bKept[0] ? TEXT("kept") : TEXT("LOST"), *Why[0], bKept[1] ? TEXT("kept") : TEXT("LOST"), *Why[1]));
 				Missions->StopFixture();
 				Run.ConsoleAt = In;
 				Run.Sub = 4;

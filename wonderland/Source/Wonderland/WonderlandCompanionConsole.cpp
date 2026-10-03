@@ -562,6 +562,57 @@ void SWonderlandCompanionConsole::ClearLines()
 	NarratedBeat = NAME_None;
 }
 
+void SWonderlandCompanionConsole::AdoptStateFrom(const SWonderlandCompanionConsole& Old)
+{
+	// the transcript, and what is still on its way to it
+	Lines = Old.Lines;
+	Queue = Old.Queue;
+	NextRevealAt = Old.NextRevealAt;
+	PrintedThisTask = Old.PrintedThisTask;
+	bStreaming = Old.bStreaming;
+	StreamFirstLine = Old.StreamFirstLine;
+	StreamTarget = Old.StreamTarget;
+	StreamShown = Old.StreamShown;
+	StreamCatchUpBy = Old.StreamCatchUpBy;
+	// the task and its clock: every time here is the application's (NowSeconds), so the timer simply keeps counting
+	Activity = Old.Activity;
+	Verb = Old.Verb;
+	TaskStartedAt = Old.TaskStartedAt;
+	TaskEndedAt = Old.TaskEndedAt;
+	CycleOrigin = Old.CycleOrigin;
+	Counter = Old.Counter;
+	CounterUnit = Old.CounterUnit;
+	bCountLines = Old.bCountLines;
+	bInterruptible = Old.bInterruptible;
+	bFinishPending = Old.bFinishPending;
+	FinishAt = Old.FinishAt;
+	FinishSummary = Old.FinishSummary;
+	FailReason = Old.FailReason;
+	// the row, the footer and the labels
+	IdleText = Old.IdleText;
+	bQuiet = Old.bQuiet;
+	Subline = Old.Subline;
+	SessionLabel = Old.SessionLabel;
+	Mode = Old.Mode;
+	Status = Old.Status;
+	InputHint = Old.InputHint;
+	LatestActivity = Old.LatestActivity;
+	NarratedBeat = Old.NarratedBeat;
+	// the view: rows are rebuilt for this console's own width (lazily, as ClearLines leaves them); the reading position
+	// and whether it follows the newest line are kept
+	Rows.Reset();
+	RowsBuiltForLines = 0;
+	ScrollPos = Old.ScrollPos;
+	ScrollTarget = Old.ScrollTarget;
+	bFollow = Old.bFollow;
+	RowsWhenLeft = Old.RowsWhenLeft;
+	// anything typed and not yet sent
+	if (Input.IsValid() && Old.Input.IsValid())
+	{
+		Input->SetText(Old.Input->GetText());
+	}
+}
+
 void SWonderlandCompanionConsole::AddLine(const FString& Speaker, const FString& Text, bool bDim)
 {
 	if (Speaker == TEXT("You"))
