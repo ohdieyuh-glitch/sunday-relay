@@ -8,6 +8,10 @@
 
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/Texture.h"
+#include "Engine/Texture2D.h"
+#include "TextureResource.h"
+#include "UObject/Package.h"
+#include "HAL/PlatformTime.h"
 #include "Misc/ConfigCacheIni.h"
 #include "HAL/IConsoleManager.h"
 #include "GameFramework/PlayerController.h"
@@ -314,12 +318,12 @@ namespace
 
 	// ---- THE SMOKE LOOK'S SETTINGS (see WonderlandMascotStyle::IsSmokeLook), one place, console variables only (the FName
 	// ---- rule: never a reflected property). Read every time a smoke surface is painted, so a change shows on the next paint.
-	TAutoConsoleVariable<FString> CVarSmokeNormalTex(TEXT("wl.Shadow.NormalTex"), TEXT("T_ripple_n"),
-		TEXT("Shadow smoke look: the cooked normal texture (/Game/Wonderland/Textures/<name>) its relief is drawn with; 'none' for none."));
+	TAutoConsoleVariable<FString> CVarSmokeNormalTex(TEXT("wl.Shadow.NormalTex"), TEXT("smoke"),
+		TEXT("Shadow smoke look: 'smoke' = the smoke maps this file draws (B65.1, the default); or a cooked normal texture (/Game/Wonderland/Textures/<name>); 'none' for none."));
 	TAutoConsoleVariable<float> CVarSmokeTexScale(TEXT("wl.Shadow.TexScale"), 0.030f,
 		TEXT("Shadow smoke look: the relief's world projection scale (1 / uu per repeat)."));
-	TAutoConsoleVariable<float> CVarSmokeDetailAmp(TEXT("wl.Shadow.DetailAmp"), 0.10f,
-		TEXT("Shadow smoke look: the master's procedural normal relief (DetailAmp); 0 = none."));
+	TAutoConsoleVariable<float> CVarSmokeDetailAmp(TEXT("wl.Shadow.DetailAmp"), 0.0f,
+		TEXT("Shadow smoke look: the master's procedural normal noise (DetailAmp) on top of the relief; 0 = none (it scatters light into grey)."));
 	TAutoConsoleVariable<float> CVarSmokeRoughVary(TEXT("wl.Shadow.RoughVary"), 1.6f,
 		TEXT("Shadow smoke look: how far the roughness wanders (RoughVary), so highlights travel across the surface."));
 	TAutoConsoleVariable<float> CVarSmokeRoughness(TEXT("wl.Shadow.Roughness"), 0.42f,
@@ -340,14 +344,388 @@ namespace
 		TEXT("Shadow smoke look: the STRIPS' rim gain when a strip colour is chosen -- low, as the founder asked the strips' edges to be subtle."));
 	TAutoConsoleVariable<int32> CVarSmokeStripRelief(TEXT("wl.Shadow.StripRelief"), 1,
 		TEXT("Shadow smoke look: 1 = the strips take the relief too when recoloured, 0 = only their tinted edge."));
-	TAutoConsoleVariable<int32> CVarSmokeOnDefault(TEXT("wl.Shadow.OnDefault"), 0,
-		TEXT("Shadow smoke look: 0 = the DEFAULT colours keep the designed look exactly (RC11); 1 = they wear the smoke look too (for comparison)."));
+	TAutoConsoleVariable<int32> CVarSmokeOnDefault(TEXT("wl.Shadow.OnDefault"), 1,
+		TEXT("Shadow smoke look: 1 = the DEFAULT colours wear the smoke's detail too, with their own colours and rim (the founder's reference photo shows the default marbled); 0 = the designed look exactly (RC11)."));
+
+	// ---- THE SMOKE MAPS (B65.1): wl.Shadow.NormalTex "smoke", the default. Every setting below draws a new pair when changed.
+	TAutoConsoleVariable<int32> CVarSmokeCells(TEXT("wl.Shadow.SmokeCells"), 3,
+		TEXT("Shadow smoke maps: billows across one tile (a tile is 1/TexScale uu)."));
+	TAutoConsoleVariable<float> CVarSmokeWarp(TEXT("wl.Shadow.SmokeWarp"), 0.32f,
+		TEXT("Shadow smoke maps: how far the billows are swirled, in tiles."));
+	TAutoConsoleVariable<int32> CVarSmokeSeed(TEXT("wl.Shadow.SmokeSeed"), 7,
+		TEXT("Shadow smoke maps: the pattern's seed."));
+	TAutoConsoleVariable<int32> CVarSmokeTone(TEXT("wl.Shadow.SmokeTone"), 1,
+		TEXT("Shadow smoke maps: 1 = the tone map (AlbedoTex) is worn with the drawn relief; 0 = the relief only."));
+	TAutoConsoleVariable<float> CVarSmokeDark(TEXT("wl.Shadow.SmokeDark"), 0.55f,
+		TEXT("Shadow smoke maps: the tone in the billows' hearts, as a fraction of the colour (1 = no tonal variation)."));
+	TAutoConsoleVariable<float> CVarSmokeTonePower(TEXT("wl.Shadow.SmokeTonePower"), 1.6f,
+		TEXT("Shadow smoke maps: how quickly the tone falls from the creases into the billows."));
+	TAutoConsoleVariable<int32> CVarSmokeToneOctaves(TEXT("wl.Shadow.SmokeToneOctaves"), 4,
+		TEXT("Shadow smoke maps: the tone's octaves (more = finer wisps)."));
+	TAutoConsoleVariable<float> CVarSmokeToneGain(TEXT("wl.Shadow.SmokeToneGain"), 0.45f,
+		TEXT("Shadow smoke maps: each finer octave's share of the tone."));
+	TAutoConsoleVariable<float> CVarSmokeBump(TEXT("wl.Shadow.SmokeBump"), 0.14f,
+		TEXT("Shadow smoke maps: the relief's strength (0 = flat)."));
+	TAutoConsoleVariable<int32> CVarSmokeBumpOctaves(TEXT("wl.Shadow.SmokeBumpOctaves"), 2,
+		TEXT("Shadow smoke maps: the relief's octaves (few, so it reads as billows and not as a crumple)."));
+	TAutoConsoleVariable<float> CVarSmokeBumpGain(TEXT("wl.Shadow.SmokeBumpGain"), 0.35f,
+		TEXT("Shadow smoke maps: each finer octave's share of the relief."));
+	TAutoConsoleVariable<float> CVarSmokeBumpSoft(TEXT("wl.Shadow.SmokeBumpSoft"), 0.06f,
+		TEXT("Shadow smoke maps: how rounded the relief's creases are (0 = sharp)."));
+
+	// WHY DRAWN AND NOT COOKED. B65's frames tried the project's cooked normal maps on Shadow's coat, and none of them reads
+	// as smoke: ripple's water came out as corrugated stripes, cobble's stones as facets, metal's cells as crumpled foil,
+	// plaster as grit. A new cooked texture is an editor import and a cook, and the test beds reuse RC11's content. So the
+	// smoke is drawn here, once, from a tileable field of swirled turbulence -- soft billows parted by creases, the marbling
+	// of the founder's reference photo -- into TWO maps that line up texel for texel (the master projects AlbedoTex and
+	// NormalTex through the same world UVs):
+	//   - the TONE (AlbedoTex): a neutral grey, white along the creases and darker in the billows (wl.Shadow.SmokeDark). The
+	//     master multiplies it into the base, so the variation stays INSIDE the chosen colour -- "White genuinely white but
+	//     detailed (white/light-gray tonal variation) ... Crimson/Azure/Jade darker/brighter same-hue variation" -- never a
+	//     second colour, never the old navy;
+	//   - the BUMP (NormalTex): the same billows, smoother (fewer octaves, rounded creases), so the sun and the grazing rim
+	//     catch the cloud's shape.
+	// Transient objects and plain C++ only (the Niagara FName rule): nothing reflected holds them, so they are rooted here,
+	// and a changed setting draws a new pair while the old one is let go (an instance still wearing it keeps it until it is
+	// repainted). _qa_handoff/shadow_flame/b65/smoke/smoke_proto.py draws the same maps for a look without a boot.
+	constexpr int32 SmokeMapSize = 256;
+
+	uint32 SmokeHash(uint32 X, uint32 Y, uint32 Seed)
+	{
+		uint32 H = (X * 0x8DA6B343u) ^ (Y * 0xD8163841u) ^ (Seed * 0x9E3779B1u);
+		H ^= H >> 15;
+		H *= 0x2C1B3C6Du;
+		H ^= H >> 12;
+		H *= 0x297A2D39u;
+		H ^= H >> 15;
+		return H;
+	}
+
+	/** Gradient noise whose lattice wraps every Period cells, so the tile repeats with no seam (about -0.7..0.7). */
+	float SmokeNoise(float X, float Y, int32 Period, uint32 Seed)
+	{
+		struct FGradients
+		{
+			float X[256];
+			float Y[256];
+			FGradients()
+			{
+				for (int32 Index = 0; Index < 256; ++Index)
+				{
+					X[Index] = FMath::Cos(Index * (2.0f * PI / 256.0f));
+					Y[Index] = FMath::Sin(Index * (2.0f * PI / 256.0f));
+				}
+			}
+		};
+		static const FGradients Gradients;
+		const float X0 = FMath::FloorToFloat(X);
+		const float Y0 = FMath::FloorToFloat(Y);
+		const float Fx = X - X0;
+		const float Fy = Y - Y0;
+		const int32 Ix = (int32)X0;
+		const int32 Iy = (int32)Y0;
+		auto Corner = [Period, Seed](int32 Cx, int32 Cy, float Dx, float Dy)
+		{
+			const uint32 Wx = (uint32)(((Cx % Period) + Period) % Period);
+			const uint32 Wy = (uint32)(((Cy % Period) + Period) % Period);
+			const uint32 G = SmokeHash(Wx, Wy, Seed) & 255u;
+			return Gradients.X[G] * Dx + Gradients.Y[G] * Dy;
+		};
+		const float Sx = Fx * Fx * Fx * (Fx * (Fx * 6.0f - 15.0f) + 10.0f);
+		const float Sy = Fy * Fy * Fy * (Fy * (Fy * 6.0f - 15.0f) + 10.0f);
+		const float Near = FMath::Lerp(Corner(Ix, Iy, Fx, Fy), Corner(Ix + 1, Iy, Fx - 1.0f, Fy), Sx);
+		const float Far = FMath::Lerp(Corner(Ix, Iy + 1, Fx, Fy - 1.0f), Corner(Ix + 1, Iy + 1, Fx - 1.0f, Fy - 1.0f), Sx);
+		return FMath::Lerp(Near, Far, Sy);
+	}
+
+	/** Octaves of SmokeNoise, each twice as fine and half as strong, normalised. Still tileable: the periods double too. */
+	float SmokeFbm(float U, float V, int32 Cells, int32 Octaves, uint32 Seed)
+	{
+		float Sum = 0.0f;
+		float Amp = 1.0f;
+		float Norm = 0.0f;
+		int32 Period = Cells;
+		for (int32 Octave = 0; Octave < Octaves; ++Octave)
+		{
+			Sum += Amp * SmokeNoise(U * Period, V * Period, Period, Seed + 101u * (uint32)Octave);
+			Norm += Amp;
+			Amp *= 0.5f;
+			Period *= 2;
+		}
+		return Sum / Norm;
+	}
+
+	/** Turbulence: the octaves' MAGNITUDES, so every zero of the noise becomes a crease between two billows. Soft rounds the
+	 *  crease (sqrt(n^2 + s^2) - s), which keeps a relief soft enough to read as smoke. */
+	float SmokeTurbulence(float U, float V, int32 Cells, int32 Octaves, float Gain, float Soft, uint32 Seed)
+	{
+		float Sum = 0.0f;
+		float Amp = 1.0f;
+		float Norm = 0.0f;
+		int32 Period = Cells;
+		for (int32 Octave = 0; Octave < Octaves; ++Octave)
+		{
+			const float N = SmokeNoise(U * Period, V * Period, Period, Seed + 101u * (uint32)Octave);
+			Sum += Amp * (FMath::Sqrt(N * N + Soft * Soft) - Soft);
+			Norm += Amp;
+			Amp *= Gain;
+			Period *= 2;
+		}
+		return Sum / FMath::Max(Norm, 1e-6f);
+	}
+
+	struct FSmokeSettings
+	{
+		int32 Cells = 3;
+		float Warp = 0.32f;
+		int32 Seed = 7;
+		float Dark = 0.55f;
+		float TonePower = 1.6f;
+		int32 ToneOctaves = 4;
+		float ToneGain = 0.45f;
+		float Bump = 0.14f;
+		int32 BumpOctaves = 2;
+		float BumpGain = 0.35f;
+		float BumpSoft = 0.06f;
+
+		static FSmokeSettings Read()
+		{
+			FSmokeSettings S;
+			S.Cells = FMath::Clamp(CVarSmokeCells.GetValueOnGameThread(), 1, 16);
+			S.Warp = FMath::Clamp(CVarSmokeWarp.GetValueOnGameThread(), 0.0f, 1.0f);
+			S.Seed = CVarSmokeSeed.GetValueOnGameThread();
+			S.Dark = FMath::Clamp(CVarSmokeDark.GetValueOnGameThread(), 0.0f, 1.0f);
+			S.TonePower = FMath::Clamp(CVarSmokeTonePower.GetValueOnGameThread(), 0.1f, 8.0f);
+			S.ToneOctaves = FMath::Clamp(CVarSmokeToneOctaves.GetValueOnGameThread(), 1, 6);
+			S.ToneGain = FMath::Clamp(CVarSmokeToneGain.GetValueOnGameThread(), 0.0f, 1.0f);
+			S.Bump = FMath::Clamp(CVarSmokeBump.GetValueOnGameThread(), 0.0f, 1.0f);
+			S.BumpOctaves = FMath::Clamp(CVarSmokeBumpOctaves.GetValueOnGameThread(), 1, 6);
+			S.BumpGain = FMath::Clamp(CVarSmokeBumpGain.GetValueOnGameThread(), 0.0f, 1.0f);
+			S.BumpSoft = FMath::Clamp(CVarSmokeBumpSoft.GetValueOnGameThread(), 0.0f, 1.0f);
+			return S;
+		}
+
+		FString Describe() const
+		{
+			return FString::Printf(TEXT("cells %d warp %.2f seed %d | tone dark %.2f power %.2f octaves %d gain %.2f | bump %.3f octaves %d gain %.2f soft %.3f"),
+				Cells, Warp, Seed, Dark, TonePower, ToneOctaves, ToneGain, Bump, BumpOctaves, BumpGain, BumpSoft);
+		}
+	};
+
+	uint8 SmokeByte(float Value)
+	{
+		return (uint8)FMath::Clamp(FMath::RoundToInt(Value * 255.0f), 0, 255);
+	}
+
+	/** Halve a square map of floats (Channels per texel) by averaging each 2x2 block. */
+	TArray<float> SmokeHalve(const TArray<float>& Source, int32 Side, int32 Channels)
+	{
+		const int32 Half = FMath::Max(Side / 2, 1);
+		TArray<float> Out;
+		Out.SetNumZeroed(Half * Half * Channels);
+		for (int32 J = 0; J < Half; ++J)
+		{
+			for (int32 I = 0; I < Half; ++I)
+			{
+				for (int32 C = 0; C < Channels; ++C)
+				{
+					float Sum = 0.0f;
+					for (int32 Dj = 0; Dj < 2; ++Dj)
+					{
+						for (int32 Di = 0; Di < 2; ++Di)
+						{
+							Sum += Source[(FMath::Min(J * 2 + Dj, Side - 1) * Side + FMath::Min(I * 2 + Di, Side - 1)) * Channels + C];
+						}
+					}
+					Out[(J * Half + I) * Channels + C] = Sum * 0.25f;
+				}
+			}
+		}
+		return Out;
+	}
+
+	/** Both maps, every mip down to 1x1. The mips are averages, so a far Dog's smoke flattens instead of sparkling. */
+	void DrawSmokeMaps(const FSmokeSettings& S, TArray<TArray<FColor>>& OutTone, TArray<TArray<FColor>>& OutBump)
+	{
+		const int32 N = SmokeMapSize;
+		const uint32 Seed = (uint32)S.Seed;
+		TArray<float> Tone;
+		TArray<float> Field;
+		Tone.SetNumUninitialized(N * N);
+		Field.SetNumUninitialized(N * N);
+		for (int32 J = 0; J < N; ++J)
+		{
+			for (int32 I = 0; I < N; ++I)
+			{
+				const float U = (float)I / N;
+				const float V = (float)J / N;
+				// swirled first, by two more fields of the same noise, so the billows curl like smoke instead of sitting in a grid
+				const float Wu = U + S.Warp * SmokeFbm(U, V, S.Cells, 4, Seed + 11u);
+				const float Wv = V + S.Warp * SmokeFbm(U, V, S.Cells, 4, Seed + 23u);
+				Tone[J * N + I] = SmokeTurbulence(Wu, Wv, S.Cells, S.ToneOctaves, S.ToneGain, 0.0f, Seed);
+				Field[J * N + I] = SmokeTurbulence(Wu, Wv, S.Cells, S.BumpOctaves, S.BumpGain, S.BumpSoft, Seed);
+			}
+		}
+		// THE TONE: white along the creases, falling to Dark in the billows' hearts
+		float Lo = TNumericLimits<float>::Max();
+		float Hi = TNumericLimits<float>::Lowest();
+		for (const float T : Tone)
+		{
+			Lo = FMath::Min(Lo, T);
+			Hi = FMath::Max(Hi, T);
+		}
+		const float Range = FMath::Max(Hi - Lo, 1e-6f);
+		for (float& T : Tone)
+		{
+			T = S.Dark + (1.0f - S.Dark) * FMath::Pow(1.0f - (T - Lo) / Range, S.TonePower);
+		}
+		// THE BUMP: the field's slope, wrapping so the tile's edges meet, as a tangent-space normal's x and y
+		TArray<float> Slope;
+		Slope.SetNumUninitialized(N * N * 2);
+		for (int32 J = 0; J < N; ++J)
+		{
+			for (int32 I = 0; I < N; ++I)
+			{
+				const float Dx = (Field[J * N + (I + 1) % N] - Field[J * N + (I + N - 1) % N]) * 0.5f * N;
+				const float Dy = (Field[((J + 1) % N) * N + I] - Field[((J + N - 1) % N) * N + I]) * 0.5f * N;
+				const FVector3f Normal = FVector3f(-Dx * S.Bump, -Dy * S.Bump, 1.0f).GetSafeNormal();
+				Slope[(J * N + I) * 2] = Normal.X;
+				Slope[(J * N + I) * 2 + 1] = Normal.Y;
+			}
+		}
+		for (int32 Side = N; Side >= 1; Side /= 2)
+		{
+			TArray<FColor>& ToneMip = OutTone.AddDefaulted_GetRef();
+			TArray<FColor>& BumpMip = OutBump.AddDefaulted_GetRef();
+			ToneMip.SetNumUninitialized(Side * Side);
+			BumpMip.SetNumUninitialized(Side * Side);
+			for (int32 K = 0; K < Side * Side; ++K)
+			{
+				const uint8 G = SmokeByte(Tone[K]);
+				ToneMip[K] = FColor(G, G, G, 255);
+				const float X = Slope[K * 2];
+				const float Y = Slope[K * 2 + 1];
+				const float Z = FMath::Sqrt(FMath::Max(0.0f, 1.0f - X * X - Y * Y));
+				BumpMip[K] = FColor(SmokeByte(X * 0.5f + 0.5f), SmokeByte(Y * 0.5f + 0.5f), SmokeByte(Z * 0.5f + 0.5f), 255);
+			}
+			if (Side > 1)
+			{
+				Tone = SmokeHalve(Tone, Side, 1);
+				Slope = SmokeHalve(Slope, Side, 2);
+			}
+		}
+	}
+
+	/** One transient BGRA8 map with its whole mip chain: linear (never sRGB), never streamed, wrapping, rooted. */
+	UTexture2D* MakeSmokeTexture(const TCHAR* Base, const TArray<TArray<FColor>>& Mips)
+	{
+		UTexture2D* Texture = UTexture2D::CreateTransient(SmokeMapSize, SmokeMapSize, PF_B8G8R8A8,
+			MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), FName(Base)));
+		FTexturePlatformData* Data = Texture != nullptr ? Texture->GetPlatformData() : nullptr;
+		if (Data == nullptr || Data->Mips.Num() != 1)
+		{
+			return nullptr;
+		}
+		for (int32 Level = 0; Level < Mips.Num(); ++Level)
+		{
+			const int32 Side = FMath::Max(SmokeMapSize >> Level, 1);
+			if (Level > 0)
+			{
+				Data->Mips.Add(new FTexture2DMipMap(Side, Side, 1));
+			}
+			FTexture2DMipMap& Mip = Data->Mips[Level];
+			Mip.BulkData.Lock(LOCK_READ_WRITE);
+			void* Dest = Mip.BulkData.Realloc((int64)Side * Side * sizeof(FColor));
+			FMemory::Memcpy(Dest, Mips[Level].GetData(), (SIZE_T)Side * Side * sizeof(FColor));
+			Mip.BulkData.Unlock();
+		}
+		Texture->SRGB = false;
+		Texture->NeverStream = true;
+		Texture->AddressX = TA_Wrap;
+		Texture->AddressY = TA_Wrap;
+		Texture->UpdateResource();
+		Texture->AddToRoot();
+		return Texture;
+	}
+
+	struct FSmokeMaps
+	{
+		FString Signature;
+		TWeakObjectPtr<UTexture2D> Bump;
+		TWeakObjectPtr<UTexture2D> Tone;
+		double DrawMs = 0.0;
+		bool bFailed = false;
+	};
+	FSmokeMaps GSmokeMaps;
+
+	bool SmokeIsDrawn()
+	{
+		return CVarSmokeNormalTex.GetValueOnGameThread().TrimStartAndEnd().Equals(TEXT("smoke"), ESearchCase::IgnoreCase);
+	}
+
+	/** Draw the pair if the settings changed (or it was never drawn), once per setting even if it fails. */
+	void EnsureSmokeMaps()
+	{
+		const FSmokeSettings Settings = FSmokeSettings::Read();
+		const FString Signature = Settings.Describe();
+		if (Signature == GSmokeMaps.Signature && (GSmokeMaps.bFailed || (GSmokeMaps.Bump.IsValid() && GSmokeMaps.Tone.IsValid())))
+		{
+			return;
+		}
+		const double Start = FPlatformTime::Seconds();
+		TArray<TArray<FColor>> ToneMips;
+		TArray<TArray<FColor>> BumpMips;
+		DrawSmokeMaps(Settings, ToneMips, BumpMips);
+		if (UTexture2D* Old = GSmokeMaps.Bump.Get())
+		{
+			Old->RemoveFromRoot();
+		}
+		if (UTexture2D* Old = GSmokeMaps.Tone.Get())
+		{
+			Old->RemoveFromRoot();
+		}
+		GSmokeMaps.Bump = MakeSmokeTexture(TEXT("WLSmokeBump"), BumpMips);
+		GSmokeMaps.Tone = MakeSmokeTexture(TEXT("WLSmokeTone"), ToneMips);
+		GSmokeMaps.Signature = Signature;
+		GSmokeMaps.DrawMs = (FPlatformTime::Seconds() - Start) * 1000.0;
+		GSmokeMaps.bFailed = !GSmokeMaps.Bump.IsValid() || !GSmokeMaps.Tone.IsValid();
+		UE_LOG(LogTemp, Display, TEXT("WLMASCOT smoke maps drawn: %s | %dx%d, %d mips, %.1f ms | bump %s, tone %s"), *Signature,
+			SmokeMapSize, SmokeMapSize, BumpMips.Num(), GSmokeMaps.DrawMs,
+			GSmokeMaps.Bump.IsValid() ? *GSmokeMaps.Bump->GetName() : TEXT("FAILED"), GSmokeMaps.Tone.IsValid() ? *GSmokeMaps.Tone->GetName() : TEXT("FAILED"));
+	}
+
+	/** The tone map, worn only with the drawn relief (it is drawn to line up with it), or nullptr. */
+	UTexture* SmokeToneMap()
+	{
+		if (!SmokeIsDrawn() || CVarSmokeTone.GetValueOnGameThread() == 0)
+		{
+			return nullptr;
+		}
+		EnsureSmokeMaps();
+		return GSmokeMaps.Tone.Get();
+	}
+
+	/** Put one texture parameter back to the parent material's own default. */
+	void RestoreParentTexture(UMaterialInstanceDynamic* Instance, const TCHAR* Name)
+	{
+		UTexture* Default = nullptr;
+		if (Instance != nullptr && Instance->Parent != nullptr
+			&& Instance->Parent->GetTextureParameterValue(FMaterialParameterInfo(Name), Default) && Default != nullptr)
+		{
+			Instance->SetTextureParameterValue(Name, Default);
+		}
+	}
 
 	UTexture* SmokeTexture()
 	{
 		// LOADED ONCE PER NAME, and only from the project's own texture folder: the name is a console value, never a path.
 		static FString LoadedName;
 		static TWeakObjectPtr<UTexture> Loaded;
+		if (SmokeIsDrawn())
+		{
+			EnsureSmokeMaps();
+			return GSmokeMaps.Bump.Get();
+		}
 		const FString Name = CVarSmokeNormalTex.GetValueOnGameThread().TrimStartAndEnd();
 		if (Name.IsEmpty() || Name.Equals(TEXT("none"), ESearchCase::IgnoreCase) || !WonderlandBeta::IsSafeId(Name))
 		{
@@ -628,6 +1006,15 @@ namespace WonderlandMascotStyle
 		{
 			Instance->SetTextureParameterValue(TEXT("NormalTex"), Relief);
 		}
+		// THE TONE rides with the drawn relief only: it is drawn to line up with it, texel for texel
+		if (UTexture* Tone = SmokeToneMap())
+		{
+			Instance->SetTextureParameterValue(TEXT("AlbedoTex"), Tone);
+		}
+		else
+		{
+			RestoreParentTexture(Instance, TEXT("AlbedoTex"));
+		}
 		Instance->SetScalarParameterValue(TEXT("TexScale"), FMath::Clamp(CVarSmokeTexScale.GetValueOnGameThread(), 0.0005f, 0.5f));
 		Instance->SetScalarParameterValue(TEXT("DetailAmp"), FMath::Clamp(CVarSmokeDetailAmp.GetValueOnGameThread(), 0.0f, 0.6f));
 		Instance->SetScalarParameterValue(TEXT("RoughVary"), FMath::Clamp(CVarSmokeRoughVary.GetValueOnGameThread(), 0.0f, 3.5f));
@@ -660,7 +1047,12 @@ namespace WonderlandMascotStyle
 	FString SmokeTextureName()
 	{
 		const UTexture* Relief = SmokeTexture();
-		return Relief != nullptr ? Relief->GetName() : FString(TEXT("none"));
+		if (Relief == nullptr)
+		{
+			return FString(TEXT("none"));
+		}
+		// the tone is named with the relief, as AWonderlandCompanionEmbodiment::QaReadPaint reads them back off an instance
+		return SmokeToneMap() != nullptr ? Relief->GetName() + TEXT("+tone") : Relief->GetName();
 	}
 
 	void RestoreSmokeDetail(UMaterialInstanceDynamic* Instance)
@@ -672,11 +1064,8 @@ namespace WonderlandMascotStyle
 		{
 			return;
 		}
-		UTexture* Relief = nullptr;
-		if (Instance->Parent->GetTextureParameterValue(FMaterialParameterInfo(TEXT("NormalTex")), Relief) && Relief != nullptr)
-		{
-			Instance->SetTextureParameterValue(TEXT("NormalTex"), Relief);
-		}
+		RestoreParentTexture(Instance, TEXT("NormalTex"));
+		RestoreParentTexture(Instance, TEXT("AlbedoTex"));
 		static const TCHAR* const Scalars[] = { TEXT("TexScale"), TEXT("RoughVary"), TEXT("Roughness"), TEXT("Specular") };
 		for (const TCHAR* Name : Scalars)
 		{
@@ -692,12 +1081,15 @@ namespace WonderlandMascotStyle
 	FString DescribeSmokeLook()
 	{
 		const UTexture* Relief = SmokeTexture();
-		return FString::Printf(TEXT("relief %s at TexScale %.4f, DetailAmp %.2f, RoughVary %.2f, Roughness %.2f, Specular %.2f, RimAmp %.2f, rim top %.2f lift %.2f gain %.2f floor %.2f, strips rim gain %.2f relief %s, on DEFAULT %s"),
+		const FString Drawn = SmokeIsDrawn()
+			? FString::Printf(TEXT(" | smoke maps drawn (%s), %.1f ms, tone %s"), *GSmokeMaps.Signature, GSmokeMaps.DrawMs, SmokeToneMap() != nullptr ? TEXT("worn") : TEXT("off"))
+			: FString();
+		return FString::Printf(TEXT("relief %s at TexScale %.4f, DetailAmp %.2f, RoughVary %.2f, Roughness %.2f, Specular %.2f, RimAmp %.2f, rim top %.2f lift %.2f gain %.2f floor %.2f, strips rim gain %.2f relief %s, on DEFAULT %s%s"),
 			Relief != nullptr ? *Relief->GetName() : TEXT("none"), CVarSmokeTexScale.GetValueOnGameThread(), CVarSmokeDetailAmp.GetValueOnGameThread(),
 			CVarSmokeRoughVary.GetValueOnGameThread(), CVarSmokeRoughness.GetValueOnGameThread(), CVarSmokeSpecular.GetValueOnGameThread(),
 			CVarSmokeRimAmp.GetValueOnGameThread(), CVarSmokeRimTop.GetValueOnGameThread(), CVarSmokeRimLift.GetValueOnGameThread(),
 			CVarSmokeRimGain.GetValueOnGameThread(), CVarSmokeRimFloor.GetValueOnGameThread(), CVarSmokeStripRimGain.GetValueOnGameThread(),
-			SmokeStripRelief() ? TEXT("yes") : TEXT("no"), SmokeOnDefault() ? TEXT("yes") : TEXT("no (designed look kept)"));
+			SmokeStripRelief() ? TEXT("yes") : TEXT("no"), SmokeOnDefault() ? TEXT("yes (detail only; the designed colours and rim kept)") : TEXT("no (designed look kept)"), *Drawn);
 	}
 }
 
