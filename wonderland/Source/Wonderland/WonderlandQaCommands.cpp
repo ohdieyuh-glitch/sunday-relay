@@ -4449,6 +4449,10 @@ namespace
 		int32 DashBase = 0;
 		int32 RefusedBase = 0;
 		bool bReturnedMidDash = false;
+		float MidDashAt = 0.0f;
+		bool bMidDashWasDashing = false;
+		bool bMidDashChecked = false;
+		bool bMidDashEnded = false;
 		FVector WallCenter = FVector::ZeroVector;
 		float MaxAlong = -1.0e9f;
 		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
@@ -4537,6 +4541,10 @@ namespace
 			{ { 0.00f, false, true }, { 0.05f, false, false }, { 0.12f, false, true }, { 0.17f, false, false } }, 0, 1, false });
 		T.Add({ TEXT("I7"), TEXT("three quick taps (no chaining)"),
 			{ { 0.00f, false, true }, { 0.05f, false, false }, { 0.10f, false, true }, { 0.15f, false, false }, { 0.20f, false, true }, { 0.25f, false, false } }, 1, 0, true });
+		T.Add({ TEXT("I10"), TEXT("a teleport 0.1 s into a dash"),
+			{ { 0.00f, false, true }, { 0.05f, false, false }, { 0.10f, false, true }, { 0.60f, false, false } }, 1, 0, true });
+		T.Add({ TEXT("I11"), TEXT("the menu opened 0.1 s into a dash"),
+			{ { 0.00f, false, true }, { 0.05f, false, false }, { 0.10f, false, true }, { 0.60f, false, false } }, 1, 0, true });
 		T.Add({ TEXT("I8"), TEXT("the swords given back mid-dash"),
 			{ { 0.00f, false, true }, { 0.05f, false, false }, { 0.10f, false, true }, { 0.60f, false, false } }, 1, 0, true });
 		T.Add({ TEXT("I9"), TEXT("a double tap with no swords held"),
@@ -4758,6 +4766,9 @@ namespace
 				H.RefusedBase = Dog->GetDashesRefused();
 				H.KeyIndex = 0;
 				H.bReturnedMidDash = false;
+				H.bMidDashWasDashing = false;
+				H.bMidDashChecked = false;
+				H.bMidDashEnded = false;
 				H.bTestStarted = true;
 				H.PhaseAt = Now;
 				return true;
@@ -4775,6 +4786,39 @@ namespace
 				H.bReturnedMidDash = true;
 				H.Check(TEXT("I8a"), bWasDashing, FString::Printf(TEXT("a dash was under way when the swords were given back: %s"), bWasDashing ? TEXT("yes") : TEXT("NO")));
 			}
+			// I10 / I11: A TELEPORT, OR A PANEL OPENED, 0.1 s INTO THE DASH (Second's V2-5): the dash must end at once. It is
+			// read 0.1 s after the event, still inside the dash's own 0.45 s, so a dash that ran on would be caught.
+			const bool bI10 = FCString::Strcmp(Test.Id, TEXT("I10")) == 0;
+			const bool bI11 = FCString::Strcmp(Test.Id, TEXT("I11")) == 0;
+			if ((bI10 || bI11) && !H.bReturnedMidDash && In >= 0.20f)
+			{
+				H.bMidDashWasDashing = Dog->IsDashing();
+				if (bI10)
+				{
+					Dog->TeleportTo(Dog->GetActorLocation() + FVector(0.0f, 0.0f, 5.0f), Dog->GetActorRotation(), false, true);
+				}
+				else if (UWonderlandUiSubsystem* U = QaUi(World))
+				{
+					if (!U->IsMenuOpen())
+					{
+						U->ToggleMenu();
+					}
+				}
+				H.bReturnedMidDash = true;
+				H.MidDashAt = Now;
+			}
+			if ((bI10 || bI11) && H.bReturnedMidDash && !H.bMidDashChecked && Now - H.MidDashAt >= 0.10f)
+			{
+				H.bMidDashEnded = !Dog->IsDashing();
+				H.bMidDashChecked = true;
+				if (UWonderlandUiSubsystem* U = QaUi(World))
+				{
+					if (bI11 && U->IsMenuOpen())
+					{
+						U->ToggleMenu();
+					}
+				}
+			}
 			const float LastKey = Test.Keys.Num() > 0 ? Test.Keys.Last().At : 0.0f;
 			if (In < LastKey + 0.8f)
 			{
@@ -4784,6 +4828,12 @@ namespace
 			const int32 Refusals = Dog->GetDashesRefused() - H.RefusedBase;
 			FString Extra;
 			bool bOk = Dashes == Test.WantDashes && Refusals == Test.WantRefusals;
+			if (bI10 || bI11)
+			{
+				bOk &= H.bMidDashWasDashing && H.bMidDashEnded;
+				Extra = FString::Printf(TEXT("; dashing when it happened %s, the dash over 0.1 s later %s"), H.bMidDashWasDashing ? TEXT("yes") : TEXT("NO"),
+					H.bMidDashEnded ? TEXT("yes") : TEXT("NO"));
+			}
 			if (FCString::Strcmp(Test.Id, TEXT("I8")) == 0)
 			{
 				const bool bRestored = !Dog->IsDashing() && !Dog->IsHandoffArmed() && FMath::IsNearlyEqual(Move->MaxAcceleration, Dog->GetNormalAcceleration(), 0.5f)

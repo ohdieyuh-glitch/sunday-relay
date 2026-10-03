@@ -393,6 +393,8 @@ protected:
 	/** The Mission Handoff dash: a velocity through the movement component, never a teleport. */
 	bool TryStartDash(float Now);
 	void EndDash(const TCHAR* Why);
+	/** A teleport (travel, a respawn) ends a dash. */
+	virtual void TeleportSucceeded(bool bIsATest) override;
 	void OnRunPressed();
 	void OnRunReleased();
 	void OnWalkPressed();

@@ -39,6 +39,9 @@
 #include "NavigationInvokerComponent.h"
 #include "WonderlandMissionOrb.h"
 #include "WonderlandSidekicks.h"
+#include "WonderlandUiSubsystem.h"
+#include "Engine/LocalPlayer.h"
+#include "GameFramework/PlayerController.h"
 
 // MISSION HANDOFF TRAVERSAL (founder, COMBAT STANCE + HIGH-SPEED ROAMING): every tunable named, in ONE place, and logged
 // once when the swords are taken up. Console variables, never reflected properties (the Niagara FName rule).
@@ -57,6 +60,17 @@ namespace RelayDogHandoffTuning
 	float DashSeconds() { return FMath::Clamp(CVarDashSeconds.GetValueOnGameThread(), 0.05f, 2.0f); }
 	float DashCooldown() { return FMath::Clamp(CVarDashCooldown.GetValueOnGameThread(), 0.0f, 10.0f); }
 	float TapWindow() { return FMath::Clamp(CVarDoubleTapWindow.GetValueOnGameThread(), 0.05f, 1.0f); }
+
+	/** A panel the HUD opened over the world (Second's V2-5: a dash never runs on behind one). Read only while dashing. */
+	bool PanelOpen(const APawn* Pawn)
+	{
+		const APlayerController* Controller = Pawn != nullptr ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+		const ULocalPlayer* Local = Controller != nullptr ? Controller->GetLocalPlayer() : nullptr;
+		const UWonderlandUiSubsystem* Ui = Local != nullptr ? Local->GetSubsystem<UWonderlandUiSubsystem>() : nullptr;
+		return Ui != nullptr && (Ui->IsMenuOpen() || Ui->IsWorldMapOpen() || Ui->IsLiveTerminalOpen() || Ui->IsProjectBrainOpen()
+			|| Ui->IsBrainSkinsOpen() || Ui->IsMissionsOpen() || Ui->IsCommandStationOpen() || Ui->IsWonderWebOpen() || Ui->IsWalletOpen()
+			|| Ui->IsWelcomeOpen());
+	}
 }
 
 // THE READING POSE, TUNABLE LIVE. Named, not anonymous: the module is one unity translation unit.
@@ -1540,6 +1554,16 @@ bool ARelayDogCharacter::TryStartDash(float Now)
 	return true;
 }
 
+void ARelayDogCharacter::TeleportSucceeded(bool bIsATest)
+{
+	Super::TeleportSucceeded(bIsATest);
+	// A TELEPORT ENDS A DASH (Second's V2-5): the burst never carries on from where the Dog was put down
+	if (!bIsATest)
+	{
+		EndDash(TEXT("a teleport moved the Dog"));
+	}
+}
+
 void ARelayDogCharacter::EndDash(const TCHAR* Why)
 {
 	if (!bDashActive)
@@ -2543,6 +2567,10 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 				else if (!Move->IsMovingOnGround())
 				{
 					EndDash(TEXT("the Dog left the ground"));
+				}
+				else if (RelayDogHandoffTuning::PanelOpen(this))
+				{
+					EndDash(TEXT("a panel opened over the world"));
 				}
 				else
 				{
