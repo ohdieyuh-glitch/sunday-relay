@@ -128,7 +128,9 @@ suite('Julius event appends under SERIALIZABLE, in both plan states (row 13 (i),
 
   /**
    * THE 09-30 INTERLEAVING. A (run A) runs its append up to the events INSERT and waits; B, ANOTHER run, does its
-   * work and commits; then A's INSERT runs. Both are opened exactly as `juliusSerializable` opens them.
+   * work and commits; then A's INSERT runs. Both are opened SERIALIZABLE as `juliusSerializable` opens them, but
+   * WITHOUT its plan pin (`JULIUS_PLAN_PIN`), on purpose: the pin would turn S0's sequential scans into index scans,
+   * and these cases exist to show M1 and M2 are fixed in the append's own statements, under the worst plan as well.
    */
   const interleave = async (b: (client: PoolClient) => Promise<void>, idA?: string) => {
     const runA = await newRun('a');
