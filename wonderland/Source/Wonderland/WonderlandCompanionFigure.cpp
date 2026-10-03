@@ -149,6 +149,11 @@ bool FWonderlandCompanionFigure::Parse(const FString& Text, FWonderlandCompanion
 			{
 				Material.Channel = FName(*Tokens[7].ToLower());
 			}
+			// and the optional look after it (see FWonderlandCompanionMaterial::Look)
+			if (Tokens.Num() > 8)
+			{
+				Material.Look = FName(*Tokens[8].ToLower());
+			}
 			if (Figure.FindMaterial(Material.Name) != INDEX_NONE)
 			{
 				return Fail(TEXT("material declared twice"));

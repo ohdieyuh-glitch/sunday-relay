@@ -3,12 +3,12 @@
 wlvox 1
 voxel 5.7763
 body -0.044 26.790
-material bone rim 0.0160 0.0190 0.0420 3.200 primary
+material bone rim 0.0160 0.0190 0.0420 3.200 primary smoke
 material bonedeep lit 0.0090 0.0100 0.0220 1.000 primary
 material visor lit 0.0450 0.0420 0.0500 1.000
 material eye glow 1.0000 0.8400 0.1200 112.500
 material eyehalo add 1.0000 0.8400 0.1200 39.375
-material shadow rim 0.0100 0.0120 0.0300 2.400
+material shadow rim 0.0100 0.0120 0.0300 2.400 strip smoke
 material voidedge glow 0.1000 0.2600 0.9500 4.500
 part root - 0.000 0.000 0.000 spine 0.850 0.000
 part body root 0.000 0.000 11.850 none

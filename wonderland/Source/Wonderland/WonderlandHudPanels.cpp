@@ -419,26 +419,36 @@ SWonderlandMenuPanel::SWonderlandMenuPanel()
  * theme moves accents -- headings, the key hints, the chosen tab -- and the words stay ivory whatever is picked.
  */
 TSharedRef<SWidget> SWonderlandMenuPanel::MakeColourRow(const TCHAR* Label, const TCHAR* Note,
-	TFunction<FLinearColor()> Read, TFunction<void(FLinearColor)> Write, bool bMascotPrimary)
+	TFunction<FLinearColor()> Read, TFunction<void(FLinearColor)> Write, int32 Keyed)
 {
 	TSharedRef<SHorizontalBox> Chips = SNew(SHorizontalBox);
-	for (const TPair<FName, FLinearColor>& Swatch : bMascotPrimary ? WonderlandMascotStyle::PrimaryPalette() : WonderlandMascotStyle::Palette())
+	// 1 the MASCOT PRIMARY, 2 the MASCOT STRIPS: both offer DEFAULT, a true WHITE and BLACK, then the shared set
+	const bool bMascotPrimary = Keyed == 1;
+	const bool bMascotStrip = Keyed == 2;
+	for (const TPair<FName, FLinearColor>& Swatch : (bMascotPrimary || bMascotStrip) ? WonderlandMascotStyle::PrimaryPalette() : WonderlandMascotStyle::Palette())
 	{
 		const FLinearColor Colour = Swatch.Value;
 		const FName Key = Swatch.Key;
-		// THE MASCOT PRIMARY KNOWS ITS SWATCH, not just its colour: DEFAULT and WHITE are both (1,1,1).
+		// THE MASCOT PRIMARY AND STRIPS KNOW THEIR SWATCH, not just its colour: DEFAULT and WHITE are both (1,1,1).
 		TFunction<bool()> IsOn = bMascotPrimary
 			? TFunction<bool()>([Key, Colour]() { return WonderlandMascotStyle::IsMascotPrimaryOn(Key, Colour); })
+			: bMascotStrip
+			? TFunction<bool()>([Key, Colour]() { return WonderlandMascotStyle::IsMascotStripOn(Key, Colour); })
 			: TFunction<bool()>([Colour, Read]() { return Read && Read().Equals(Colour, 0.01f); });
 		Chips->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
 		[
 			SNew(SButton).ButtonStyle(&SwatchStyle).IsFocusable(false)
 			.ToolTipText(FText::FromName(Swatch.Key))
-			.OnClicked_Lambda([Colour, Key, Write, bMascotPrimary]()
+			.OnClicked_Lambda([Colour, Key, Write, bMascotPrimary, bMascotStrip]()
 			{
 				if (bMascotPrimary)
 				{
 					WonderlandMascotStyle::PickMascotPrimary(Key, Colour);   // the state, its file, SaveAndApply
+					return FReply::Handled();
+				}
+				if (bMascotStrip)
+				{
+					WonderlandMascotStyle::PickMascotStrip(Key, Colour);     // the state, its file, SaveAndApply
 					return FReply::Handled();
 				}
 				if (Write) { Write(Colour); }
@@ -505,7 +515,7 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 					TEXT("The Relay Dog's shell, on every skin. Halos, banners and the visor stay as authored."),
 					[Style]() { return Style() != nullptr ? Style()->Primary : FLinearColor::White; },
 					[Style](FLinearColor C) { if (Style()) { Style()->Primary = C; Style()->bChosen = true; } },
-					/*bMascotPrimary=*/true)
+					/*Keyed: the mascot primary*/1)
 			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
@@ -526,6 +536,21 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 						TEXT("The worn skin's fire, on its own. DEFAULT is the fire as designed; the shell, eyes, skull and suit never move with it."),
 						[]() { return WonderlandMascotStyle::FlameColour(); },
 						[](FLinearColor C) { WonderlandMascotStyle::SetFlameColour(C); })
+				]
+			]
+			// ---- COLOR 3, THE STRIPS, ITS OWN ROW (founder, 2026-10-02: "Shadow needs three independently controllable visual
+			// color regions ... COLOR 3 -- STRIPS / RIBBONS / TENDRILS"). Shown only while a skin with strips is worn (Shadow),
+			// exactly as the FLAME row is, so no skin gets a settings panel of its own.
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SBox)
+				.Visibility_Lambda([]() { return WonderlandMascotStyle::WornSkinHasStrips() ? EVisibility::Visible : EVisibility::Collapsed; })
+				[
+					MakeColourRow(TEXT("MASCOT  STRIPS"),
+						TEXT("The worn skin's flowing strips, on their own. DEFAULT is as designed; the body, eyes, swords and clothes never move with it."),
+						[]() { return WonderlandMascotStyle::StripColour(); },
+						[](FLinearColor) {},
+						/*Keyed: the mascot strips*/2)
 				]
 			]
 			+ SVerticalBox::Slot().AutoHeight()
@@ -627,8 +652,11 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 						S->CursorShape = TEXT("system");
 						S->CursorSize = 22.0f;
 					}
-					// AND THE FIRE, back to each skin's designed flames
+					// AND THE FIRE, back to each skin's designed flames; the primary's DEFAULT-or-chosen word and the strips
+					// too (B65: the reset used to leave PrimaryChoice.txt saying CHOSEN, so a later SECONDARY pick, which
+					// sets bChosen, painted Shadow's shell a "chosen" white nobody had picked)
 					WonderlandMascotStyle::SetFlameColour(FLinearColor::White);
+					WonderlandMascotStyle::ResetChoiceFiles();
 					WonderlandCursor::Forget();
 					WonderlandMascotStyle::SaveAndApply();
 					return FReply::Handled();

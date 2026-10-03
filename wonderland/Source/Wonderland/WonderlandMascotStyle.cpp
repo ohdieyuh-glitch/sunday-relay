@@ -7,6 +7,7 @@
 #include "EngineUtils.h"
 
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Engine/Texture.h"
 #include "Misc/ConfigCacheIni.h"
 #include "HAL/IConsoleManager.h"
 #include "GameFramework/PlayerController.h"
@@ -241,6 +242,128 @@ namespace
 		}
 		UE_LOG(LogTemp, Warning, TEXT("WLMASCOT the saved flame colour could not be read (%lld bytes); the fire is as designed until one is picked"), Size);
 	}
+
+	// THE STRIPS COLOUR'S ONE COPY (see WonderlandMascotStyle::HasChosenStrip). DEFAULT -- the strips as designed -- unless
+	// the file says otherwise; unlike the fire, WHITE is a real choice here, so the word DEFAULT is kept, not a colour.
+	bool GStripChosen = false;
+	FLinearColor GStripColour = FLinearColor::Black;
+	bool GStripLoaded = false;
+
+	FString StripColourPath()
+	{
+		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Wonderland"), TEXT("StripColour.txt"));
+	}
+
+	/** "DEFAULT", or three numbers in 0..1 (the flame file's rule), or nothing: a hand edit or a corrupted file is no choice. */
+	bool ReadStripText(const FString& Text, bool& bOutChosen, FLinearColor& OutColour)
+	{
+		const FString Word = Text.TrimStartAndEnd();
+		if (Word == TEXT("DEFAULT"))
+		{
+			bOutChosen = false;
+			OutColour = FLinearColor::Black;
+			return true;
+		}
+		FLinearColor Colour;
+		if (ReadFlameColourText(Word, Colour))
+		{
+			bOutChosen = true;
+			OutColour = Colour;
+			return true;
+		}
+		return false;
+	}
+
+	void LoadStripColour()
+	{
+		if (GStripLoaded)
+		{
+			return;
+		}
+		GStripLoaded = true;
+		const FString Path = StripColourPath();
+		WonderlandBeta::RecoverInterruptedSave(Path);
+		IFileManager& Files = IFileManager::Get();
+		if (!Files.FileExists(*Path))
+		{
+			return;
+		}
+		// A SIZE CAP BEFORE THE READ: one word or three short numbers.
+		FString Text;
+		bool bChosen = false;
+		FLinearColor Colour = FLinearColor::Black;
+		const int64 Size = Files.FileSize(*Path);
+		if (Size > 0 && Size <= 256 && FFileHelper::LoadFileToString(Text, *Path) && ReadStripText(Text, bChosen, Colour))
+		{
+			GStripChosen = bChosen;
+			GStripColour = Colour;
+			return;
+		}
+		UE_LOG(LogTemp, Warning, TEXT("WLMASCOT the saved strip colour could not be read (%lld bytes); the strips are as designed until one is picked"), Size);
+	}
+
+	void SaveStripColour(bool bChosen, const FLinearColor& Colour)
+	{
+		LoadStripColour();
+		GStripChosen = bChosen;
+		GStripColour = FLinearColor(FMath::Clamp(Colour.R, 0.0f, 1.0f), FMath::Clamp(Colour.G, 0.0f, 1.0f), FMath::Clamp(Colour.B, 0.0f, 1.0f), 1.0f);
+		// SAVED THE MOMENT IT IS PICKED, whole or not at all, like the flame colour beside it.
+		WonderlandBeta::SaveTextAtomically(StripColourPath(), bChosen
+			? FString::Printf(TEXT("%.4f %.4f %.4f"), GStripColour.R, GStripColour.G, GStripColour.B) : FString(TEXT("DEFAULT")));
+	}
+
+	// ---- THE SMOKE LOOK'S SETTINGS (see WonderlandMascotStyle::IsSmokeLook), one place, console variables only (the FName
+	// ---- rule: never a reflected property). Read every time a smoke surface is painted, so a change shows on the next paint.
+	TAutoConsoleVariable<FString> CVarSmokeNormalTex(TEXT("wl.Shadow.NormalTex"), TEXT("T_ripple_n"),
+		TEXT("Shadow smoke look: the cooked normal texture (/Game/Wonderland/Textures/<name>) its relief is drawn with; 'none' for none."));
+	TAutoConsoleVariable<float> CVarSmokeTexScale(TEXT("wl.Shadow.TexScale"), 0.030f,
+		TEXT("Shadow smoke look: the relief's world projection scale (1 / uu per repeat)."));
+	TAutoConsoleVariable<float> CVarSmokeDetailAmp(TEXT("wl.Shadow.DetailAmp"), 0.10f,
+		TEXT("Shadow smoke look: the master's procedural normal relief (DetailAmp); 0 = none."));
+	TAutoConsoleVariable<float> CVarSmokeRoughVary(TEXT("wl.Shadow.RoughVary"), 1.6f,
+		TEXT("Shadow smoke look: how far the roughness wanders (RoughVary), so highlights travel across the surface."));
+	TAutoConsoleVariable<float> CVarSmokeRoughness(TEXT("wl.Shadow.Roughness"), 0.42f,
+		TEXT("Shadow smoke look: the base roughness."));
+	TAutoConsoleVariable<float> CVarSmokeSpecular(TEXT("wl.Shadow.Specular"), 0.55f,
+		TEXT("Shadow smoke look: the specular level."));
+	TAutoConsoleVariable<float> CVarSmokeRimAmp(TEXT("wl.Shadow.RimAmp"), 1.0f,
+		TEXT("Shadow smoke look: the grazing-angle rim's amplitude (RimAmp)."));
+	TAutoConsoleVariable<float> CVarSmokeRimLift(TEXT("wl.Shadow.RimLift"), 0.30f,
+		TEXT("Shadow smoke look: how far a LIGHT colour's rim tint is lifted toward white (scaled by how light it is)."));
+	TAutoConsoleVariable<float> CVarSmokeRimTop(TEXT("wl.Shadow.RimTop"), 0.85f,
+		TEXT("Shadow smoke look: the rim tint's strongest channel, reached by scaling the colour up (hue and saturation kept)."));
+	TAutoConsoleVariable<float> CVarSmokeRimGain(TEXT("wl.Shadow.RimGain"), 0.60f,
+		TEXT("Shadow smoke look: the rim's emissive gain (RimColor = tint x gain, at grazing angles)."));
+	TAutoConsoleVariable<float> CVarSmokeRimFloor(TEXT("wl.Shadow.RimFloor"), 0.10f,
+		TEXT("Shadow smoke look: the darkest the rim's tint may be, so black keeps readable dark-grey highlights."));
+	TAutoConsoleVariable<float> CVarSmokeStripRimGain(TEXT("wl.Shadow.StripRimGain"), 0.25f,
+		TEXT("Shadow smoke look: the STRIPS' rim gain when a strip colour is chosen -- low, as the founder asked the strips' edges to be subtle."));
+	TAutoConsoleVariable<int32> CVarSmokeStripRelief(TEXT("wl.Shadow.StripRelief"), 1,
+		TEXT("Shadow smoke look: 1 = the strips take the relief too when recoloured, 0 = only their tinted edge."));
+	TAutoConsoleVariable<int32> CVarSmokeOnDefault(TEXT("wl.Shadow.OnDefault"), 0,
+		TEXT("Shadow smoke look: 0 = the DEFAULT colours keep the designed look exactly (RC11); 1 = they wear the smoke look too (for comparison)."));
+
+	UTexture* SmokeTexture()
+	{
+		// LOADED ONCE PER NAME, and only from the project's own texture folder: the name is a console value, never a path.
+		static FString LoadedName;
+		static TWeakObjectPtr<UTexture> Loaded;
+		const FString Name = CVarSmokeNormalTex.GetValueOnGameThread().TrimStartAndEnd();
+		if (Name.IsEmpty() || Name.Equals(TEXT("none"), ESearchCase::IgnoreCase) || !WonderlandBeta::IsSafeId(Name))
+		{
+			return nullptr;
+		}
+		if (Name != LoadedName || !Loaded.IsValid())
+		{
+			LoadedName = Name;
+			Loaded = LoadObject<UTexture>(nullptr, *FString::Printf(TEXT("/Game/Wonderland/Textures/%s.%s"), *Name, *Name));
+			if (!Loaded.IsValid())
+			{
+				UE_LOG(LogTemp, Warning, TEXT("WLMASCOT smoke look: no cooked texture '%s'; the relief is procedural only"), *Name);
+			}
+		}
+		return Loaded.Get();
+	}
 }
 
 namespace WonderlandMascotStyle
@@ -374,6 +497,207 @@ namespace WonderlandMascotStyle
 			}
 		}
 		return false;
+	}
+
+	bool HasChosenStrip()
+	{
+		LoadStripColour();
+		return GStripChosen;
+	}
+
+	FLinearColor StripColour()
+	{
+		LoadStripColour();
+		return GStripColour;
+	}
+
+	void PickMascotStrip(FName Key, const FLinearColor& Colour)
+	{
+		static const FName Default(TEXT("DEFAULT"));
+		SaveStripColour(Key != Default, Colour);
+		// THROUGH THE ONE DOOR, like every other row: the Dog, the Wardrobe's mannequin and both rows' rings move together.
+		SaveAndApply();
+		UE_LOG(LogTemp, Display, TEXT("WLMASCOT STRIPS %s = %s (%s)"), *Key.ToString(), *GStripColour.ToString(),
+			GStripChosen ? TEXT("chosen, the strips only") : TEXT("as designed"));
+	}
+
+	bool IsMascotStripOn(FName Key, const FLinearColor& Colour)
+	{
+		static const FName Default(TEXT("DEFAULT"));
+		if (Key == Default)
+		{
+			return !HasChosenStrip();
+		}
+		return HasChosenStrip() && StripColour().Equals(Colour, 0.01f);
+	}
+
+	bool ParseStripColour(const FString& Text, bool& bOutChosen, FLinearColor& OutColour)
+	{
+		return ReadStripText(Text, bOutChosen, OutColour);
+	}
+
+	bool IsStripChannel(FName Channel)
+	{
+		// made on the first call, at run time (see IsFlameChannel)
+		static const FName Strip(TEXT("strip"));
+		return Channel == Strip;
+	}
+
+	bool WornSkinHasStrips()
+	{
+		if (GEngine == nullptr)
+		{
+			return false;
+		}
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			const UWorld* World = Context.World();
+			if (World == nullptr || !World->IsGameWorld())
+			{
+				continue;
+			}
+			const APlayerController* Controller = World->GetFirstPlayerController();
+			const ARelayDogCharacter* Dog = Controller != nullptr ? Cast<ARelayDogCharacter>(Controller->GetPawn()) : nullptr;
+			if (Dog != nullptr)
+			{
+				const AWonderlandCompanionEmbodiment* Costume = Dog->GetCostume();
+				return Costume != nullptr && Costume->DeclaresStrips();
+			}
+		}
+		return false;
+	}
+
+	void ResetChoiceFiles()
+	{
+		SavePrimaryChoice(false);
+		SaveStripColour(false, FLinearColor::Black);
+	}
+
+	bool IsSmokeLook(FName Look)
+	{
+		// made on the first call, at run time (see IsFlameChannel)
+		static const FName Smoke(TEXT("smoke"));
+		return Look == Smoke;
+	}
+
+	FLinearColor SmokeRimTint(const FLinearColor& Base)
+	{
+		// THE SAME HUE, BRIGHTER -- never a multiply by another colour. The colour is scaled up until its strongest channel
+		// reaches wl.Shadow.RimTop, which keeps its hue AND its saturation (the designed navy's edges come out a clear
+		// blue, crimson's a brighter crimson, not pink), then lifted toward white only in proportion to how light and how
+		// unsaturated it already is (white and pale colours separate by a paler edge; dark ones never wash to pastel).
+		const float Top = FMath::Max3(Base.R, Base.G, Base.B);
+		const float Floor = FMath::Clamp(CVarSmokeRimFloor.GetValueOnGameThread(), 0.0f, 0.5f);
+		if (Top < 0.0001f)
+		{
+			// BLACK: readable dark-grey highlights, not nothing (founder: "retain readable dark-gray highlights ... details
+			// cannot disappear into a completely crushed black surface")
+			return FLinearColor(Floor, Floor, Floor, 1.0f);
+		}
+		const float Target = FMath::Max(Top, FMath::Clamp(CVarSmokeRimTop.GetValueOnGameThread(), 0.05f, 1.0f));
+		FLinearColor Tint = Base * (Target / Top);
+		// pale and unsaturated colours separate by a paler edge; a saturated one (crimson, azure, jade) keeps its saturation, so
+		// its highlight is a brighter crimson rather than pink
+		const float Saturation = (Top - FMath::Min3(Base.R, Base.G, Base.B)) / Top;
+		const float Lift = FMath::Clamp(CVarSmokeRimLift.GetValueOnGameThread(), 0.0f, 1.0f) * Top * (1.0f - Saturation);
+		Tint = FLinearColor(Tint.R + (1.0f - Tint.R) * Lift, Tint.G + (1.0f - Tint.G) * Lift, Tint.B + (1.0f - Tint.B) * Lift, 1.0f);
+		// and never darker than the floor, raised as a grey so the hue is kept
+		const float NewTop = FMath::Max3(Tint.R, Tint.G, Tint.B);
+		if (NewTop < Floor)
+		{
+			const float Raise = Floor - NewTop;
+			Tint = FLinearColor(Tint.R + Raise, Tint.G + Raise, Tint.B + Raise, 1.0f);
+		}
+		return FLinearColor(FMath::Min(Tint.R, 1.0f), FMath::Min(Tint.G, 1.0f), FMath::Min(Tint.B, 1.0f), 1.0f);
+	}
+
+	float SmokeRimGain()
+	{
+		return FMath::Clamp(CVarSmokeRimGain.GetValueOnGameThread(), 0.0f, 8.0f);
+	}
+
+	void ApplySmokeDetail(UMaterialInstanceDynamic* Instance)
+	{
+		if (Instance == nullptr)
+		{
+			return;
+		}
+		// EVERYTHING BUT THE COLOURS AND THE RIM'S AMPLITUDE: the relief, the roughness that wanders, the specular. The base and
+		// the rim tint are the caller's (ApplyColourway), so the pure-colour rule is decided in exactly one place.
+		if (UTexture* Relief = SmokeTexture())
+		{
+			Instance->SetTextureParameterValue(TEXT("NormalTex"), Relief);
+		}
+		Instance->SetScalarParameterValue(TEXT("TexScale"), FMath::Clamp(CVarSmokeTexScale.GetValueOnGameThread(), 0.0005f, 0.5f));
+		Instance->SetScalarParameterValue(TEXT("DetailAmp"), FMath::Clamp(CVarSmokeDetailAmp.GetValueOnGameThread(), 0.0f, 0.6f));
+		Instance->SetScalarParameterValue(TEXT("RoughVary"), FMath::Clamp(CVarSmokeRoughVary.GetValueOnGameThread(), 0.0f, 3.5f));
+		Instance->SetScalarParameterValue(TEXT("Roughness"), FMath::Clamp(CVarSmokeRoughness.GetValueOnGameThread(), 0.05f, 1.0f));
+		Instance->SetScalarParameterValue(TEXT("Specular"), FMath::Clamp(CVarSmokeSpecular.GetValueOnGameThread(), 0.0f, 1.0f));
+		// RimAmp is NOT written here: the night's rim boost owns it too (AWonderlandCompanionEmbodiment::SetRimBoost), so the
+		// embodiment writes boost x SmokeRimAmp() in both places.
+	}
+
+	float SmokeRimAmp()
+	{
+		return FMath::Clamp(CVarSmokeRimAmp.GetValueOnGameThread(), 0.0f, 4.0f);
+	}
+
+	float SmokeStripRimGain()
+	{
+		return FMath::Clamp(CVarSmokeStripRimGain.GetValueOnGameThread(), 0.0f, 8.0f);
+	}
+
+	bool SmokeStripRelief()
+	{
+		return CVarSmokeStripRelief.GetValueOnGameThread() != 0;
+	}
+
+	bool SmokeOnDefault()
+	{
+		return CVarSmokeOnDefault.GetValueOnGameThread() != 0;
+	}
+
+	FString SmokeTextureName()
+	{
+		const UTexture* Relief = SmokeTexture();
+		return Relief != nullptr ? Relief->GetName() : FString(TEXT("none"));
+	}
+
+	void RestoreSmokeDetail(UMaterialInstanceDynamic* Instance)
+	{
+		// BACK TO THE DESIGNED LOOK: every parameter ApplySmokeDetail wrote, put back to what the parent material says --
+		// the parent's own defaults, read from it rather than remembered here -- and DetailAmp to the 0 every figure rim is
+		// built with (AWonderlandCompanionEmbodiment's build loop). Picking DEFAULT after a colour leaves nothing behind.
+		if (Instance == nullptr || Instance->Parent == nullptr)
+		{
+			return;
+		}
+		UTexture* Relief = nullptr;
+		if (Instance->Parent->GetTextureParameterValue(FMaterialParameterInfo(TEXT("NormalTex")), Relief) && Relief != nullptr)
+		{
+			Instance->SetTextureParameterValue(TEXT("NormalTex"), Relief);
+		}
+		static const TCHAR* const Scalars[] = { TEXT("TexScale"), TEXT("RoughVary"), TEXT("Roughness"), TEXT("Specular") };
+		for (const TCHAR* Name : Scalars)
+		{
+			float Value = 0.0f;
+			if (Instance->Parent->GetScalarParameterValue(FMaterialParameterInfo(Name), Value))
+			{
+				Instance->SetScalarParameterValue(Name, Value);
+			}
+		}
+		Instance->SetScalarParameterValue(TEXT("DetailAmp"), 0.0f);
+	}
+
+	FString DescribeSmokeLook()
+	{
+		const UTexture* Relief = SmokeTexture();
+		return FString::Printf(TEXT("relief %s at TexScale %.4f, DetailAmp %.2f, RoughVary %.2f, Roughness %.2f, Specular %.2f, RimAmp %.2f, rim top %.2f lift %.2f gain %.2f floor %.2f, strips rim gain %.2f relief %s, on DEFAULT %s"),
+			Relief != nullptr ? *Relief->GetName() : TEXT("none"), CVarSmokeTexScale.GetValueOnGameThread(), CVarSmokeDetailAmp.GetValueOnGameThread(),
+			CVarSmokeRoughVary.GetValueOnGameThread(), CVarSmokeRoughness.GetValueOnGameThread(), CVarSmokeSpecular.GetValueOnGameThread(),
+			CVarSmokeRimAmp.GetValueOnGameThread(), CVarSmokeRimTop.GetValueOnGameThread(), CVarSmokeRimLift.GetValueOnGameThread(),
+			CVarSmokeRimGain.GetValueOnGameThread(), CVarSmokeRimFloor.GetValueOnGameThread(), CVarSmokeStripRimGain.GetValueOnGameThread(),
+			SmokeStripRelief() ? TEXT("yes") : TEXT("no"), SmokeOnDefault() ? TEXT("yes") : TEXT("no (designed look kept)"));
 	}
 }
 
@@ -516,6 +840,35 @@ namespace
 			UE_LOG(LogTemp, Display, TEXT("WLMASCOT FLAME = %s (saved and applied)"), *WonderlandMascotStyle::FlameColour().ToString());
 		}));
 
+	FAutoConsoleCommand GMascotStrips(
+		TEXT("wl.Mascot.Strips"),
+		TEXT("Shadow's strips, on their own (COLOR 3): wl.Mascot.Strips <PRIMARY-row swatch name, e.g. CYAN | r,g,b | #RRGGBB | default>. Saved."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			const FString Text = FString::Join(Args, TEXT(""));
+			if (Text.Equals(TEXT("default"), ESearchCase::IgnoreCase))
+			{
+				WonderlandMascotStyle::PickMascotStrip(FName(TEXT("DEFAULT")), FLinearColor::Black);
+				return;
+			}
+			// a swatch by its name first (the rows' own words), then a colour typed out
+			for (const TPair<FName, FLinearColor>& Swatch : WonderlandMascotStyle::PrimaryPalette())
+			{
+				if (Swatch.Key.ToString().Equals(Text, ESearchCase::IgnoreCase))
+				{
+					WonderlandMascotStyle::PickMascotStrip(Swatch.Key, Swatch.Value);
+					return;
+				}
+			}
+			FLinearColor Colour = FLinearColor::White;
+			if (Text.IsEmpty() || !ReadColour(Text, Colour))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("WLMASCOT usage: wl.Mascot.Strips <swatch name | r,g,b | #RRGGBB | default>"));
+				return;
+			}
+			WonderlandMascotStyle::PickMascotStrip(FName(TEXT("TYPED")), Colour);
+		}));
+
 	FAutoConsoleCommand GMascotReset(
 		TEXT("wl.Mascot.Reset"),
 		TEXT("Put the mascot back to the colours its skins were designed in."),
@@ -528,7 +881,8 @@ namespace
 				Settings->bChosen = false;
 				Settings->bSecondaryChosen = false;
 			}
-			SavePrimaryChoice(false);
+			// THE SMALL FILES: the primary back to DEFAULT and the strips (COLOR 3) back to the designed black
+			WonderlandMascotStyle::ResetChoiceFiles();
 			// AND THE FIRE: the designed flames are part of "the colours its skins were designed in".
 			WonderlandMascotStyle::SetFlameColour(FLinearColor::White);
 			// THROUGH THE ONE DOOR. SaveAndApply repaints even when nothing is chosen, which is exactly what a

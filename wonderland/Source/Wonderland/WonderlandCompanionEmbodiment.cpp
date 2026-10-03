@@ -21,6 +21,7 @@ namespace
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "Engine/Texture.h"
 #include "Misc/FileHelper.h"
 #include "HAL/FileManager.h"
 
@@ -1596,6 +1597,48 @@ bool AWonderlandCompanionEmbodiment::DeclaresFlame() const
 	return false;
 }
 
+bool AWonderlandCompanionEmbodiment::DeclaresStrips() const
+{
+	for (const FWonderlandCompanionMaterial& Material : BuiltMaterials)
+	{
+		if (WonderlandMascotStyle::IsStripChannel(Material.Channel))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool AWonderlandCompanionEmbodiment::QaReadPaint(FName Name, FLinearColor& OutBase, FLinearColor& OutRim, FString& OutRelief) const
+{
+	OutBase = OutRim = FLinearColor(-1.0f, -1.0f, -1.0f, 1.0f);
+	OutRelief = TEXT("none");
+	for (int32 Index = 0; Index < BuiltMaterials.Num(); ++Index)
+	{
+		if (BuiltMaterials[Index].Name != Name || !MaterialInstances.IsValidIndex(Index) || MaterialInstances[Index] == nullptr)
+		{
+			continue;
+		}
+		UMaterialInstanceDynamic* Instance = MaterialInstances[Index];
+		if (BuiltMaterials[Index].Kind == EWonderlandCompanionMaterialKind::Rim)
+		{
+			Instance->GetVectorParameterValue(FMaterialParameterInfo(TEXT("BaseColor")), OutBase);
+			Instance->GetVectorParameterValue(FMaterialParameterInfo(TEXT("RimColor")), OutRim);
+			UTexture* Relief = nullptr;
+			if (Instance->GetTextureParameterValue(FMaterialParameterInfo(TEXT("NormalTex")), Relief) && Relief != nullptr)
+			{
+				OutRelief = Relief->GetName();
+			}
+		}
+		else
+		{
+			Instance->GetVectorParameterValue(FMaterialParameterInfo(TEXT("Color")), OutBase);
+		}
+		return true;
+	}
+	return false;
+}
+
 FString AWonderlandCompanionEmbodiment::DescribeFramingParts() const
 {
 	// WHICH PARTS THE FRAMING BOX IS ACTUALLY MADE OF, and where each one sits.
@@ -1860,7 +1903,9 @@ void AWonderlandCompanionEmbodiment::SetRimBoost(float Amount)
 		}
 		if (MaterialInstances.IsValidIndex(Index) && MaterialInstances[Index] != nullptr)
 		{
-			MaterialInstances[Index]->SetScalarParameterValue(TEXT("RimAmp"), RimBoost);
+			// a smoke surface's own rim amplitude rides on the boost (B65), so the night lifts it exactly as much as any rim
+			const float Own = WonderlandMascotStyle::IsSmokeLook(BuiltMaterials[Index].Look) ? WonderlandMascotStyle::SmokeRimAmp() : 1.0f;
+			MaterialInstances[Index]->SetScalarParameterValue(TEXT("RimAmp"), RimBoost * Own);
 		}
 	}
 }
@@ -2036,6 +2081,13 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 			if (WonderlandMascotStyle::HasChosenPrimary())
 			{
 				Want = FLinearColor(Primary.R, Primary.G, Primary.B, Want.A);
+				// ---- AND THE COAT'S DEEP PARTS KEEP THEIR DEPTH (B65, founder: "darker crimson shadowing + brighter crimson
+				// highlights ... visible form separation"). A LIT `primary` surface is the deep coat (cuffs, soles): it takes a
+				// darker shade of the SAME colour, never the old navy. Black is already the deepest it can be.
+				if (Def.Kind == EWonderlandCompanionMaterialKind::Lit)
+				{
+					Want = FLinearColor(Primary.R * 0.62f, Primary.G * 0.62f, Primary.B * 0.62f, Want.A);
+				}
 			}
 		}
 		else
@@ -2047,6 +2099,21 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 			case EWonderlandColorChannel::None: default:                     break;
 			}
 		}
+	}
+
+	// ---- COLOR 3: A SKIN'S STRIPS FOLLOW THE STRIPS COLOUR (B65, founder, 2026-10-02: "The user should be able to change the
+	// strips without changing the body ... Changing Color 3 must NOT recolor the entire mascot; recolor eyes accidentally;
+	// affect companion swords; reset clothing").
+	//
+	// The fire's twin, and outside the colourway for the same reason: picking a primary or a secondary never moves the strips,
+	// and picking the strips moves nothing else. Declared by the figure (`strip`), so no skin is named here; only the Dog's
+	// own costume and the Wardrobe's mannequin of it wear it. The colour is taken as it is (the pure-colour rule): white
+	// strips are white, black strips black. Their detail -- the grazing-angle edge, the motion -- is the smoke look's below.
+	if (BodyRole == EWonderlandBodyRole::Mascot && WonderlandMascotStyle::IsStripChannel(Def.Channel)
+		&& WonderlandMascotStyle::HasChosenStrip())
+	{
+		const FLinearColor Strip = WonderlandMascotStyle::StripColour();
+		Want = FLinearColor(Strip.R, Strip.G, Strip.B, Want.A);
 	}
 
 	// ---- A FLAME SKIN'S FIRE FOLLOWS THE FLAME COLOUR (founder, 2026-10-01: "Flame Color ... This must be independent
@@ -2070,6 +2137,37 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 		break;
 	case EWonderlandCompanionMaterialKind::Rim:
 		Instance->SetVectorParameterValue(TEXT("BaseColor"), Want);
+		if (WonderlandMascotStyle::IsSmokeLook(Def.Look))
+		{
+			// ---- THE SMOKE LOOK (B65): the base stays EXACTLY the colour (above); the detail is a cloudy relief, a roughness
+			// that wanders and a grazing-angle rim in a BRIGHTER TINT OF THE SAME HUE -- "the selected color changes the palette,
+			// not the amount of detail" (WonderlandMascotStyle::IsSmokeLook). It is worn by a RECOLOURED surface; the designed
+			// colours keep the designed look exactly (the founder's reference is that look), unless wl.Shadow.OnDefault asks.
+			const bool bStrip = WonderlandMascotStyle::IsStripChannel(Def.Channel);
+			const bool bRecoloured = bStrip
+				? (BodyRole == EWonderlandBodyRole::Mascot && WonderlandMascotStyle::HasChosenStrip())
+				: (bChosen && BodyRole == EWonderlandBodyRole::Mascot && WonderlandMascotStyle::IsPrimaryChannel(Def.Channel) && WonderlandMascotStyle::HasChosenPrimary());
+			if (bRecoloured || WonderlandMascotStyle::SmokeOnDefault())
+			{
+				// the strips' edge stays subtle (founder, 10-01: "very subtle rim illumination"), the body's reads
+				const float Gain = bStrip ? WonderlandMascotStyle::SmokeStripRimGain() : WonderlandMascotStyle::SmokeRimGain();
+				Instance->SetVectorParameterValue(TEXT("RimColor"), bRecoloured ? WonderlandMascotStyle::SmokeRimTint(Want) * Gain
+					: Want * WonderlandTameGlow(Def.Strength));
+				Instance->SetScalarParameterValue(TEXT("RimAmp"), RimBoost * WonderlandMascotStyle::SmokeRimAmp());
+				if (!bStrip || WonderlandMascotStyle::SmokeStripRelief())
+				{
+					WonderlandMascotStyle::ApplySmokeDetail(Instance);
+				}
+				else
+				{
+					WonderlandMascotStyle::RestoreSmokeDetail(Instance);
+				}
+				break;
+			}
+			// THE DESIGNED LOOK, EXACTLY: nothing the smoke look wrote is left behind (a colour picked, then DEFAULT)
+			WonderlandMascotStyle::RestoreSmokeDetail(Instance);
+			Instance->SetScalarParameterValue(TEXT("RimAmp"), RimBoost);
+		}
 		// The rim keeps its own relationship to the base: it is the same hue, at the strength the figure asked
 		// for, so a recoloured shell still reads as a shell and not as a flat card.
 		Instance->SetVectorParameterValue(TEXT("RimColor"), Want * WonderlandTameGlow(Def.Strength));
