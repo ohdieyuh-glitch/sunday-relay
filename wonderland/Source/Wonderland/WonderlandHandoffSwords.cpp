@@ -24,7 +24,7 @@ namespace
 	TAutoConsoleVariable<float> CVarSwordBlade(TEXT("wl.Handoff.Sword.Blade"), 5.5f, TEXT("Mission Handoff swords: the white blade's emissive level."));
 	TAutoConsoleVariable<float> CVarSwordFuller(TEXT("wl.Handoff.Sword.Fuller"), 3.4f, TEXT("Mission Handoff swords: the fuller's (engraving / runes) emissive level."));
 	TAutoConsoleVariable<float> CVarSwordCore(TEXT("wl.Handoff.Sword.Core"), 10.0f, TEXT("Mission Handoff swords: the orb core's and the gems' emissive level."));
-	TAutoConsoleVariable<float> CVarSwordFeather(TEXT("wl.Handoff.Sword.Feather"), 1.3f, TEXT("Mission Handoff swords: the wings' feathers' emissive level."));
+	TAutoConsoleVariable<float> CVarSwordFeather(TEXT("wl.Handoff.Sword.Feather"), 4.8f, TEXT("Mission Handoff swords: the wings' feathers' emissive level."));
 
 	float SwordLevel(WonderlandHandoffSwords::ESwordPart Part)
 	{
