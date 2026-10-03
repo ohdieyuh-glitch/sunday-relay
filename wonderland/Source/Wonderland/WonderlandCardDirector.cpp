@@ -530,18 +530,7 @@ namespace WonderlandCardDirector
 
 	FString MaskForEcho(const FString& Line)
 	{
-		TArray<FString> Words;
-		Line.ParseIntoArray(Words, TEXT(" "), true);
-		bool bMasked = false;
-		for (FString& Word : Words)
-		{
-			if (FWonderlandCardStore::LooksLikeSecret(Word))
-			{
-				Word = TEXT("[a key: never shown or stored]");
-				bMasked = true;
-			}
-		}
-		return bMasked ? FString::Join(Words, TEXT(" ")) : Line;
+		return FWonderlandCardStore::MaskForDisplay(Line);
 	}
 
 	bool HandleTerminalLine(UWorld* World, const FString& Line, TArray<FString>& OutRows)

@@ -55,6 +55,7 @@
 #include "WonderlandTerritory.h"
 #include "EngineUtils.h"
 #include "Misc/FileHelper.h"
+#include "HAL/PlatformOutputDevices.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "WonderlandSkinStage.h"
@@ -8824,8 +8825,9 @@ namespace
 
 	const FQaStancePreset StancePresets[] = {
 		{ TEXT("P0_before"), TEXT("wl.Handoff.SwordBodyV 0;wl.Handoff.Stance.Out 18;wl.Handoff.Stance.Shoulder 22;wl.Handoff.Stance.Elbow 50;wl.Handoff.Stance.FeetOut 6;wl.Handoff.Stance.Crouch 2;wl.Handoff.Stance.RunOut 16") },
-		{ TEXT("P1_defaults"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 32;wl.Handoff.SwordVForward 18;wl.Handoff.Stance.Out 34;wl.Handoff.Stance.Shoulder 14;wl.Handoff.Stance.Elbow 28;wl.Handoff.Stance.FeetOut 13;wl.Handoff.Stance.Crouch 6;wl.Handoff.Stance.RunOut 26") },
-		{ TEXT("P2_wider"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 10;wl.Handoff.Stance.Elbow 22;wl.Handoff.Stance.FeetOut 16;wl.Handoff.Stance.Crouch 7;wl.Handoff.Stance.RunOut 32") },
+		// index 1 is THE DEFAULT (SC1/SC2 measure it): P2 wider, CORE's and Second's pick 10-03, closest to the sheet's ~45 deg arms
+		{ TEXT("P1_wider_default"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 10;wl.Handoff.Stance.Elbow 22;wl.Handoff.Stance.FeetOut 16;wl.Handoff.Stance.Crouch 7;wl.Handoff.Stance.RunOut 32") },
+		{ TEXT("P2_previous"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 32;wl.Handoff.SwordVForward 18;wl.Handoff.Stance.Out 34;wl.Handoff.Stance.Shoulder 14;wl.Handoff.Stance.Elbow 28;wl.Handoff.Stance.FeetOut 13;wl.Handoff.Stance.Crouch 6;wl.Handoff.Stance.RunOut 26") },
 		{ TEXT("P3_narrower"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 24;wl.Handoff.SwordVForward 24;wl.Handoff.Stance.Out 26;wl.Handoff.Stance.Shoulder 18;wl.Handoff.Stance.Elbow 34;wl.Handoff.Stance.FeetOut 10;wl.Handoff.Stance.Crouch 5;wl.Handoff.Stance.RunOut 20") },
 	};
 
@@ -10133,6 +10135,194 @@ namespace
 			GQaCardDisk->PhaseAt = QaNow();
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLCDQA BEGIN (%s) | %s"), GQaCardDisk->bRestart ? TEXT("restart") : TEXT("write"), *WonderlandBeta::BuildLabel());
 			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaCardDiskTick), 0.0f);
+		}));
+
+	/* ================================================================ wl.Qa.SecretInput: a key typed anywhere is never kept, never shown
+	 * The founder: secrets are never persisted in the Project Brain or C.A.R.D. Second's review (10-03, by code): a key typed as a
+	 * Mission Contract objective (the "+" tab, and the terminal) was SAVED to the contracts file and echoed. Keys are built at run time
+	 * (no key shape in the binary). Each search proves itself first: a marker the QA put there must be FOUND in the same bytes.
+	 *   SI4 (first) the control: an ordinary objective, a 12-character commit id in it, is ACCEPTED and saved -- keys are blocked,
+	 *       tasks are not -- and its marker is found in the contracts file
+	 *   SI1 a key as an objective (SubmitDraft, the door both the tab and the terminal use): refused, the draft still a draft, no part
+	 *       of it in the contracts file (as bytes and as UTF-16), nor in the log (whose own marker IS found)
+	 *   SI2 the same with a zero-width space inside the key: refused too (the check reads the text with its invisibles gone as well)
+	 *   SI3 what the terminal draws for typed lines (MaskForDisplay): no part of either key, nor of a short "Bearer" token
+	 */
+	struct FQaSecretInput
+	{
+		TWeakObjectPtr<UWorld> World;
+		bool bQuit = false;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		double StartedAt = 0.0;
+		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSIQA %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+	};
+	TSharedPtr<FQaSecretInput> GQaSecretInput;
+
+	/** True when the bytes hold the text as single bytes (a pure-ASCII string in a save) or as UTF-16LE. */
+	bool QaBytesHold(const TArray<uint8>& Bytes, const FString& Needle)
+	{
+		for (int32 Wide = 0; Wide < 2; ++Wide)
+		{
+			TArray<uint8> Pattern;
+			for (int32 Index = 0; Index < Needle.Len(); ++Index)
+			{
+				const uint32 Code = static_cast<uint32>(Needle[Index]);
+				Pattern.Add(static_cast<uint8>(Code & 0xFF));
+				if (Wide == 1)
+				{
+					Pattern.Add(static_cast<uint8>((Code >> 8) & 0xFF));
+				}
+			}
+			if (Pattern.Num() == 0 || Pattern.Num() > Bytes.Num())
+			{
+				continue;
+			}
+			for (int32 At = 0; At + Pattern.Num() <= Bytes.Num(); ++At)
+			{
+				if (FMemory::Memcmp(Bytes.GetData() + At, Pattern.GetData(), Pattern.Num()) == 0)
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	bool QaSecretInputTick(float)
+	{
+		if (!GQaSecretInput.IsValid())
+		{
+			return false;
+		}
+		FQaSecretInput& S = *GQaSecretInput;
+		UWorld* World = S.World.Get();
+		UWonderlandMissionTaskSubsystem* Set = QaTaskSet(World);
+		ARelayDogCharacter* Dog = QaDog(World);
+		auto Stop = [&S](const TCHAR* Why)
+		{
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSIQA END pass=%d fail=%d%s"), S.Pass, S.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
+			const bool bQuit = S.bQuit;
+			GQaSecretInput.Reset();
+			if (bQuit)
+			{
+				FPlatformMisc::RequestExit(false);
+			}
+			return false;
+		};
+		if (World == nullptr || Set == nullptr)
+		{
+			return Stop(TEXT("the world or the task set went away"));
+		}
+		if (QaNow() - S.StartedAt < 4.0 || Dog == nullptr || !Dog->GetCharacterMovement()->IsMovingOnGround())
+		{
+			return QaNow() - S.StartedAt < 40.0 ? true : Stop(TEXT("never ready"));
+		}
+		const FString Digits = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+		const FString Prefix = FString(TEXT("s")) + TEXT("k-");
+		const FString KeyOne = Prefix + FGuid::NewGuid().ToString(EGuidFormats::Digits);
+		FString KeyTwo = Prefix + Digits.Left(10);
+		KeyTwo.AppendChar(static_cast<TCHAR>(0x200B));
+		KeyTwo += Digits.Right(22);
+		const FString KeyTwoWhole = Prefix + Digits;
+		auto Parts = [](const FString& Key) { return TArray<FString>{ Key.Left(16), Key.Right(16) }; };
+		auto Holds = [&Parts](const FString& Text, const FString& Key)
+		{
+			for (const FString& Part : Parts(Key))
+			{
+				if (Text.Contains(Part))
+				{
+					return true;
+				}
+			}
+			return false;
+		};
+
+		// SI4 FIRST: the control, so the contracts file exists and the byte search is proven on it
+		const FString Marker = FString(TEXT("QaSI")) + Digits.Left(8);
+		const FGuid Ordinary = Set->AddDraft();
+		const bool bAccepted = Set->SubmitDraft(Ordinary, FString::Printf(TEXT("fix the login bug from commit 3f9a2b7c1d0e -- %s"), *Marker));
+		TArray<uint8> FileBytes;
+		FFileHelper::LoadFileToArray(FileBytes, *UWonderlandMissionTaskSubsystem::SlotPath());
+		const bool bMarkerInFile = QaBytesHold(FileBytes, Marker);
+		S.Check(TEXT("SI4"), bAccepted && bMarkerInFile, FString::Printf(TEXT("an ordinary objective with a 12-character commit id: %s; its marker %s in the contracts file (%d bytes) -- the byte search %s"),
+			bAccepted ? TEXT("ACCEPTED and saved") : TEXT("REFUSED"), bMarkerInFile ? TEXT("found") : TEXT("NOT found"), FileBytes.Num(),
+			bMarkerInFile ? TEXT("works") : TEXT("is BLIND")));
+
+		// SI1 and SI2: the keys as objectives
+		const FGuid DraftOne = Set->AddDraft();
+		const bool bRefusedOne = !Set->SubmitDraft(DraftOne, FString::Printf(TEXT("deploy with %s please"), *KeyOne));
+		const FWonderlandMissionTask* TaskOne = Set->Find(DraftOne);
+		const bool bDraftOne = TaskOne != nullptr && !WonderlandTaskIsContract(TaskOne->State);
+		const FGuid DraftTwo = Set->AddDraft();
+		const bool bRefusedTwo = !Set->SubmitDraft(DraftTwo, FString::Printf(TEXT("deploy with %s please"), *KeyTwo));
+		const FWonderlandMissionTask* TaskTwo = Set->Find(DraftTwo);
+		const bool bDraftTwo = TaskTwo != nullptr && !WonderlandTaskIsContract(TaskTwo->State);
+		FileBytes.Reset();
+		FFileHelper::LoadFileToArray(FileBytes, *UWonderlandMissionTaskSubsystem::SlotPath());
+		bool bInFile = false;
+		for (const FString& Part : Parts(KeyOne))
+		{
+			bInFile |= QaBytesHold(FileBytes, Part);
+		}
+		for (const FString& Part : Parts(KeyTwoWhole))
+		{
+			bInFile |= QaBytesHold(FileBytes, Part);
+		}
+		bInFile |= QaBytesHold(FileBytes, Digits.Right(22));
+		const FString LogMarker = FString(TEXT("WLSIQA log marker ")) + FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(12);
+		UE_LOG(LogWonderlandQa, Display, TEXT("%s"), *LogMarker);
+		GLog->Flush();
+		FString LogText;
+		FFileHelper::LoadFileToString(LogText, *FPlatformOutputDevices::GetAbsoluteLogFilename());
+		const bool bLogRead = LogText.Contains(LogMarker);
+		const bool bInLog = Holds(LogText, KeyOne) || Holds(LogText, KeyTwoWhole) || LogText.Contains(Digits.Right(22));
+		S.Check(TEXT("SI1"), bRefusedOne && bDraftOne && FileBytes.Num() > 0 && !bInFile && bLogRead && !bInLog,
+			FString::Printf(TEXT("a run-time key as an objective: %s, the slot %s; the contracts file (%d bytes) %s; the log (its own marker %s) %s"),
+				bRefusedOne ? TEXT("refused") : TEXT("ACCEPTED"), bDraftOne ? TEXT("still a draft") : TEXT("a CONTRACT"), FileBytes.Num(),
+				bInFile ? TEXT("HOLDS a part of a key") : TEXT("holds no part of either key"), bLogRead ? TEXT("found") : TEXT("NOT found: the log could not be read"),
+				bInLog ? TEXT("HOLDS a part of a key") : TEXT("holds no part of either key")));
+		S.Check(TEXT("SI2"), bRefusedTwo && bDraftTwo && !FWonderlandCardStore::LooksLikeSecret(KeyTwo) && FWonderlandCardStore::HoldsSecret(KeyTwo),
+			FString::Printf(TEXT("the same with a zero-width space inside the key (which the raw check alone misses: %s): %s, the slot %s"),
+				FWonderlandCardStore::LooksLikeSecret(KeyTwo) ? TEXT("it does NOT miss it") : TEXT("yes"), bRefusedTwo ? TEXT("refused") : TEXT("ACCEPTED"),
+				bDraftTwo ? TEXT("still a draft") : TEXT("a CONTRACT")));
+
+		// SI3: what the terminal draws
+		const FString ShownOne = FWonderlandCardStore::MaskForDisplay(FString(TEXT("/card attach api ")) + KeyOne);
+		const FString ShownTwo = FWonderlandCardStore::MaskForDisplay(FString::Printf(TEXT("deploy with %s please"), *KeyTwo));
+		const FString Token = FString(TEXT("ab")) + TEXT("12cd");
+		const FString ShownThree = FWonderlandCardStore::MaskForDisplay(FString(TEXT("Authorization: Bearer ")) + Token);
+		const bool bShownClean = !Holds(ShownOne, KeyOne) && !Holds(ShownTwo, KeyTwoWhole) && !ShownTwo.Contains(Digits.Right(22))
+			&& !ShownThree.Contains(Token) && !FWonderlandCardStore::HoldsSecret(ShownOne) && !FWonderlandCardStore::HoldsSecret(ShownTwo)
+			&& !FWonderlandCardStore::HoldsSecret(ShownThree);
+		S.Check(TEXT("SI3"), bShownClean, FString::Printf(TEXT("the terminal draws '%s', '%s' and '%s'"), *ShownOne, *ShownTwo, *ShownThree));
+
+		Set->DismissDraft(DraftOne);
+		Set->DismissDraft(DraftTwo);
+		return Stop(nullptr);
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaSecretInputCommand(
+		TEXT("wl.Qa.SecretInput"),
+		TEXT("A key typed anywhere is never kept and never shown (the founder's rule; Second's review): an ordinary objective accepted (SI4), ")
+		TEXT("a run-time key as an objective refused and absent from the contracts file and the log (SI1), with a zero-width space inside it ")
+		TEXT("too (SI2), and masked in what the terminal draws (SI3). `quit` exits after. WLSIQA lines."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaSecretInput.IsValid() || World == nullptr)
+			{
+				return;
+			}
+			GQaSecretInput = MakeShared<FQaSecretInput>();
+			GQaSecretInput->World = World;
+			GQaSecretInput->bQuit = Args.Contains(TEXT("quit"));
+			GQaSecretInput->StartedAt = QaNow();
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSIQA BEGIN | %s"), *WonderlandBeta::BuildLabel());
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaSecretInputTick), 0.0f);
 		}));
 
 	/* ================================================================ wl.Qa.ActHands: the hands never through a mission prop

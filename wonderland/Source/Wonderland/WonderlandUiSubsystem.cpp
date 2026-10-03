@@ -81,6 +81,7 @@
 #include "WonderlandMissionBeat.h"
 #include "WonderlandHandoffDirector.h"
 #include "WonderlandCardDirector.h"
+#include "WonderlandCard.h"
 #include "WonderlandMissionNarration.h"
 #include "WonderlandWorldMap.h"
 #include "WonderlandWonderWeb.h"
@@ -3036,9 +3037,16 @@ void UWonderlandUiSubsystem::MountTaskAddControl()
 							UWonderlandMissionTaskSubsystem* Set = WeakThis->Tasks();
 							if (Set == nullptr) { return; }
 							// GRAY BECOMES RED HERE, and only here. A blank line is refused by the set itself.
-							if (Set->SubmitDraft(Set->GetSelected(), Text.ToString()) && WeakThis->TaskEntry.IsValid())
+							const FString TypedObjective = Text.ToString();
+							if (Set->SubmitDraft(Set->GetSelected(), TypedObjective) && WeakThis->TaskEntry.IsValid())
 							{
 								WeakThis->TaskEntry->SetText(FText::GetEmpty());
+							}
+							else if (FWonderlandCardStore::HoldsSecret(TypedObjective) && WeakThis->TaskEntry.IsValid())
+							{
+								// refused whole (a key or password): taken off the screen, and the hint says why
+								WeakThis->TaskEntry->SetText(FText::GetEmpty());
+								WeakThis->TaskEntry->SetHintText(INVTEXT("not saved: that held a key or password -- type the task without it"));
 							}
 						})
 					]
@@ -4485,6 +4493,13 @@ void UWonderlandUiSubsystem::HandleTerminalSubmit(const FString& Text)
 					: FString(TEXT("Saved as a Mission Contract, QUEUED on this PC. Julius is not part of this beta build, so nothing will run it yet. "
 						"Close the tab with X and it stays saved: /tasks lists your contracts, /tasks open N brings one back.")));
 				UE_LOG(LogWonderlandUi, Display, TEXT("WLUI terminal objective submitted: draft became a QUEUED Mission Contract (%d characters)"), Text.Len());
+				return;
+			}
+			if (FWonderlandCardStore::HoldsSecret(Text))
+			{
+				// the task set refused it whole; the row says why (the terminal masks the key in what it draws)
+				Terminal->AddJuliusRow(TEXT("You"), Text, FString(TEXT("Not saved: that objective holds something shaped like a key or password, so it was "
+					"neither saved nor sent. Type the task without it -- a key belongs in Julius Connect, never in a task.")));
 				return;
 			}
 			Terminal->AddJuliusRow(TEXT("You"), Text, Set->IsAtContractLimit()

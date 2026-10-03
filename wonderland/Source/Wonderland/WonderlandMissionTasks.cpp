@@ -9,6 +9,7 @@
 #include "Misc/App.h"
 #include "Misc/Paths.h"
 #include "WonderlandBeta.h"
+#include "WonderlandCard.h"
 #include "WonderlandMissionHandoff.h"
 
 namespace
@@ -508,6 +509,13 @@ bool UWonderlandMissionTaskSubsystem::SubmitDraft(FGuid LocalId, const FString& 
 	{
 		// A RED ORB STANDING FOR NOTHING is the one outcome the gray/red rule exists to prevent.
 		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused: a Mission Contract needs an objective"));
+		return false;
+	}
+	if (FWonderlandCardStore::HoldsSecret(Trimmed))
+	{
+		// NEVER A SECRET ON DISK (the founder: secrets are never persisted in the Project Brain, and Mission Context is its section
+		// 04; Second's review, 10-03): a key or password typed as an objective is refused WHOLE -- nothing of it is saved or logged
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused: the objective holds something shaped like a key or password; nothing was saved"));
 		return false;
 	}
 	if (IsAtContractLimit())

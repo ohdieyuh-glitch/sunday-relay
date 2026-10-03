@@ -139,6 +139,12 @@ public:
 
 	/** The secret refusal every stored string passes: provider keys, private keys, tokens, credential references. */
 	static bool LooksLikeSecret(const FString& Text);
+	/** The same refusal for ANY free text the game keeps or shows (a C.A.R.D. string, a Mission Contract objective, a typed line):
+	 *  secret-shaped as written OR once its invisible characters are gone -- a zero-width space inside a key does not hide it. */
+	static bool HoldsSecret(const FString& Text);
+	/** A line as it may be SHOWN: every word that holds a secret replaced; a line whose secret no single word shows ("Bearer" and its
+	 *  token apart) replaced whole. What it returns never holds a secret. */
+	static FString MaskForDisplay(const FString& Line);
 	/**
 	 * A label as it may be stored: control characters (C0, C1) and invisible format characters (zero-width, bidi, soft
 	 * hyphen, BOM, tags) stripped, trimmed, capped at MaxLabelChars. Ordinary spaces stay.

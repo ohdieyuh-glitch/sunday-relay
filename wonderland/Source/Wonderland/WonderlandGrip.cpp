@@ -16,9 +16,9 @@ namespace
 		TEXT("Mission Handoff grip: uu forward of the forearm's line where the grip's centre sits."));
 	TAutoConsoleVariable<int32> CVarSwordBodyV(TEXT("wl.Handoff.SwordBodyV"), 1,
 		TEXT("Mission Handoff: 1 = held blades make a V around the body (the founder's stance sheet), 0 = they follow the forearm."));
-	TAutoConsoleVariable<float> CVarSwordV(TEXT("wl.Handoff.SwordV"), 32.0f,
+	TAutoConsoleVariable<float> CVarSwordV(TEXT("wl.Handoff.SwordV"), 42.0f,
 		TEXT("Mission Handoff: degrees a held blade leans OUT from straight up, to its own hand's side."));
-	TAutoConsoleVariable<float> CVarSwordVForward(TEXT("wl.Handoff.SwordVForward"), 18.0f,
+	TAutoConsoleVariable<float> CVarSwordVForward(TEXT("wl.Handoff.SwordVForward"), 12.0f,
 		TEXT("Mission Handoff: degrees a held blade leans FORWARD from the V's plane."));
 }
 

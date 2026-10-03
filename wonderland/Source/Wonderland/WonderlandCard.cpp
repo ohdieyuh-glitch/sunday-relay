@@ -272,6 +272,30 @@ FWonderlandCardStore::FWonderlandCardStore(const FString& InPath)
 	ResetToDefault();
 }
 
+bool FWonderlandCardStore::HoldsSecret(const FString& Text)
+{
+	return LooksSecretAnyWay(Text);
+}
+
+FString FWonderlandCardStore::MaskForDisplay(const FString& Line)
+{
+	if (!HoldsSecret(Line))
+	{
+		return Line;
+	}
+	TArray<FString> Words;
+	Line.ParseIntoArray(Words, TEXT(" "), true);
+	for (FString& Word : Words)
+	{
+		if (HoldsSecret(Word))
+		{
+			Word = TEXT("[a key: never shown or stored]");
+		}
+	}
+	const FString Masked = FString::Join(Words, TEXT(" "));
+	return HoldsSecret(Masked) ? FString(TEXT("[a line holding a key or password: never shown or stored]")) : Masked;
+}
+
 bool FWonderlandCardStore::LooksLikeSecret(const FString& Text)
 {
 	if (Text.IsEmpty())

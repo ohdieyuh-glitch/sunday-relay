@@ -37,8 +37,8 @@ namespace WonderlandGrip
 		 * reads as a V at any arm angle and in any act of locomotion. Off: the blade follows the forearm (TiltDeg / RollDeg).
 		 */
 		bool bBodyV = true;
-		float VDeg = 32.0f;
-		float VForwardDeg = 18.0f;
+		float VDeg = 42.0f;
+		float VForwardDeg = 12.0f;
 	};
 
 	/** The hold as the console variables have it right now. */

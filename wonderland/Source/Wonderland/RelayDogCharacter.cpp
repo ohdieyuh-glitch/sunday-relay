@@ -61,13 +61,13 @@ namespace RelayDogHandoffTuning
 	// THE ATTACK-READY STANCE'S SHAPE (M2), tunable live so it is settled from game frames rather than by rebuilds. The defaults
 	// are RelayDogArmedStance::FShape's own.
 	TAutoConsoleVariable<float> CVarStanceLean(TEXT("wl.Handoff.Stance.Lean"), 8.0f, TEXT("Mission Handoff stance: body lean added standing and walking, degrees."));
-	TAutoConsoleVariable<float> CVarStanceCrouch(TEXT("wl.Handoff.Stance.Crouch"), 6.0f, TEXT("Mission Handoff stance: how much lower the pelvis rides standing and walking, uu."));
-	TAutoConsoleVariable<float> CVarStanceFeetOut(TEXT("wl.Handoff.Stance.FeetOut"), 13.0f, TEXT("Mission Handoff stance: each hip swept outward, degrees (the feet spaced)."));
-	TAutoConsoleVariable<float> CVarStanceShoulder(TEXT("wl.Handoff.Stance.Shoulder"), 14.0f, TEXT("Mission Handoff stance: the ready arms raised forward, degrees."));
-	TAutoConsoleVariable<float> CVarStanceElbow(TEXT("wl.Handoff.Stance.Elbow"), 28.0f, TEXT("Mission Handoff stance: the ready forearms folded up, degrees."));
-	TAutoConsoleVariable<float> CVarStanceOut(TEXT("wl.Handoff.Stance.Out"), 34.0f, TEXT("Mission Handoff stance: the ready arms swept out from the body, degrees."));
+	TAutoConsoleVariable<float> CVarStanceCrouch(TEXT("wl.Handoff.Stance.Crouch"), 7.0f, TEXT("Mission Handoff stance: how much lower the pelvis rides standing and walking, uu."));
+	TAutoConsoleVariable<float> CVarStanceFeetOut(TEXT("wl.Handoff.Stance.FeetOut"), 16.0f, TEXT("Mission Handoff stance: each hip swept outward, degrees (the feet spaced)."));
+	TAutoConsoleVariable<float> CVarStanceShoulder(TEXT("wl.Handoff.Stance.Shoulder"), 10.0f, TEXT("Mission Handoff stance: the ready arms raised forward, degrees."));
+	TAutoConsoleVariable<float> CVarStanceElbow(TEXT("wl.Handoff.Stance.Elbow"), 22.0f, TEXT("Mission Handoff stance: the ready forearms folded up, degrees."));
+	TAutoConsoleVariable<float> CVarStanceOut(TEXT("wl.Handoff.Stance.Out"), 44.0f, TEXT("Mission Handoff stance: the ready arms swept out from the body, degrees."));
 	TAutoConsoleVariable<float> CVarStanceSwing(TEXT("wl.Handoff.Stance.SwingKeep"), 0.3f, TEXT("Mission Handoff stance: the share of the walk's arm swing kept, 0..1."));
-	TAutoConsoleVariable<float> CVarStanceRunOut(TEXT("wl.Handoff.Stance.RunOut"), 26.0f, TEXT("Mission Handoff stance: the running arms swept out, degrees."));
+	TAutoConsoleVariable<float> CVarStanceRunOut(TEXT("wl.Handoff.Stance.RunOut"), 32.0f, TEXT("Mission Handoff stance: the running arms swept out, degrees."));
 	TAutoConsoleVariable<float> CVarStanceRunElbow(TEXT("wl.Handoff.Stance.RunElbow"), 14.0f, TEXT("Mission Handoff stance: extra forearm fold while running, degrees."));
 	TAutoConsoleVariable<float> CVarStanceDashLean(TEXT("wl.Handoff.Stance.DashLean"), 10.0f, TEXT("Mission Handoff stance: extra lean in a dash, degrees."));
 	TAutoConsoleVariable<float> CVarStanceDashShoulder(TEXT("wl.Handoff.Stance.DashShoulder"), -70.0f, TEXT("Mission Handoff stance: the dash's arms, swept back (negative), degrees."));
