@@ -74,6 +74,9 @@ So the first local run of any of them, from such a checkout, would apply 030 to 
   - Earlier text calling this "the live store" with real mission history was never measured, and it was wrong.
 - **What it is not:** the paid mission job's database. That job runs on a fresh GitHub-hosted `ubuntu-24.04` runner, where `.github/julius-live-executor.sh` starts its own container, also named `julius-postgres`, with no volume. It is created empty for each run, so the chain applies there to an empty store and needs no runbook. This workstation container is the only persistent Julius store.
 - **Confirm before anything else:** `docker ps --filter name=julius-postgres`, then `docker exec julius-postgres psql -U julius -d julius -c "SELECT current_database(), current_user, version();"`, then **classify it** (above).
+- **What the deploy scripts leave in the container's /tmp** (files only; none touches the database):
+  - the pre-deploy: `/tmp/julius-pre-030.dump` (the backup, kept for rollback (c)) and `/tmp/precheck-030.sql`;
+  - every deploy wrapper: copies of the reviewed SQL it runs, as `/tmp/r1-classify-store.sql`, `/tmp/r1-fingerprint-store.sql`, `/tmp/r1-rowcounts-store.sql`, `/tmp/r1-postcheck.sql` and `/tmp/r1-rollback-bootstrap.sql`.
 - **Never point a test at this database.**
   - Tests read `JULIUS_TEST_DATABASE_URL` only.
   - The real-PostgreSQL evidence in step 5 runs on throwaway databases.
@@ -143,7 +146,10 @@ Use it only when the store classifies `EMPTY`. No ordinary entry point may initi
   - the cluster's `system_identifier`;
   - the container and image ids;
   - the role and tablespace lists.
-- It still takes a backup: `pg_dump -Fc` of the empty database. Its table of contents must list NO relay_wonderland object, and its restore into a throwaway container must classify EMPTY with an equal fingerprint.
+- It still takes a backup: `pg_dump -Fc` of the empty database.
+  - Its table of contents must list NO object at all: an empty database dumps to an empty TOC.
+  - `pg_restore` of it into a fresh throwaway database must exit 0.
+  - The TOC is the evidence. A fresh database reads EMPTY whatever is restored into it, so the restored copy's classification is recorded but proves nothing by itself.
 
 **E2. Land.** Exactly as for the populated path: the founder's landing block reads the E1 record.
 
@@ -168,7 +174,10 @@ Use it only when the store classifies `EMPTY`. No ordinary entry point may initi
 - **The wrapper also compares the driver's `LOADED` hashes with the landed head's blobs**, so a modified tree can never run here.
 - Exit codes:
   - exit 0 with `BOOTSTRAP OK` is the ONLY success;
-  - exit 2 `BOOTSTRAP FAILED … PARTIAL and is not initialized` means go to rollback (d);
+  - exit 2 `BOOTSTRAP FAILED …` means read the wrapper's record:
+    - the classifier then reads PARTIAL (rule 9): go to rollback (d);
+    - it reads EMPTY (rule 4): the failure came inside 001, which commits nothing. The record says `FAILED, NOTHING COMMITTED`; there is nothing to roll back (the rollback wrapper refuses it at P2), so re-run from E1 (PREDEPLOY, then BOOTSTRAP).
+    - The driver's own line says PARTIAL either way, since it cannot tell; the classifier decides.
   - exit 3 or 4 means nothing was written.
 
 **E4. Post-check (read-only).** PASS only if all of these hold:
