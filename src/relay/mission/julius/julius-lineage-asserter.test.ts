@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -12,6 +13,7 @@ import {
   JULIUS_VERDICT_FINDING_TABLE,
   assertJuliusLineage,
   juliusAcceptanceJudgementFacts,
+  juliusAcceptanceWitnesses,
   juliusContradictionConflict,
   juliusContradictionFacts,
   juliusGovernanceEntries,
@@ -21,8 +23,10 @@ import {
 } from './julius-lineage-asserter';
 import type { JuliusMemoryClaim, JuliusMemoryProvenance, JuliusMemoryTrustState } from './julius-memory-trust';
 import { JULIUS_RELEASING_ACTIONS } from './julius-release-runtime';
+import { effectivelyAcceptedTaskIds, isJuliusRepairOf } from './julius-repair-lineage';
 import type { JuliusBrainEntry, JuliusContextQualification, JuliusDecisionAction, JuliusRecordedDecision, JuliusTask } from './julius-runtime';
 import { task as taskFixture } from './julius-runtime-fixtures';
+import { juliusYieldContinuationOf } from './julius-segment-lineage';
 import type { JuliusReviewerFinding } from './julius-verification-runtime';
 
 /**
@@ -333,6 +337,86 @@ describe('rule 2 from the run\'s durable records: EFFECTIVE acceptance, as the r
     const withheld = { ...juliusAcceptanceJudgementFacts(shaped.judgements), ...juliusContradictionFacts(shaped.contradictions) };
     expect(withheld).toMatchObject({ contradictions: 1, contradictionRight: null, contradictionPairs: null, acceptanceJudged: 1, acceptanceJudgements: null });
     expect(/(?:api[_-]?key|authorization|token|secret|password)\s*[=:]/iu.test(JSON.stringify(withheld)), 'the event validator would accept it').toBe(false);
+  });
+
+  it('L1, THE WITNESS NEVER GOES MISSING: over 400 generated graphs (repair chains, yields, histories, every state) the witnesses are exactly the release path\'s accepted set, each names the accepting task\'s CURRENT releasing decision, and each is reached through SUCCEEDED accepted steps', () => {
+    let seed = 20261003;
+    const random = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    const pick = <T>(values: readonly T[]): T => values[Math.floor(random() * values.length)]!;
+    const STATES: JuliusTask['state'][] = ['SUCCEEDED', 'SUCCEEDED', 'SUCCEEDED', 'ACTIVE', 'FAILED', 'RUNNABLE'];
+    const ACTIONS: (JuliusDecisionAction | null)[] = [null, 'ACCEPT', 'COMPLETE', 'REPAIR', 'REPAIR', 'HALT', 'RETRY'];
+    const SEGMENT = /^segment:(.+):([1-9]\d*):task$/u;
+    const seen = { effective: 0, throughSegment: 0, twoDeep: 0, accepted: 0 };
+    for (let graph = 0; graph < 400; graph += 1) {
+      const tasks: JuliusTask[] = [];
+      const decisions: JuliusRecordedDecision[] = [];
+      const grow = (subject: JuliusTask, depth: number): void => {
+        tasks.push(subject);
+        // A history: an earlier decision the current one replaces (the log's LAST entry per task is current).
+        if (random() < 0.25) decisions.push(decided(subject.taskId, pick(['ACCEPT', 'REPAIR', 'HALT'] as const), 'EARLIER'));
+        const action = pick(ACTIONS);
+        if (action !== null) decisions.push(decided(subject.taskId, action));
+        if (depth >= 3) return;
+        if (action === 'REPAIR' || random() < 0.1) {
+          for (let round = 1; round <= 1 + Math.floor(random() * 2); round += 1) {
+            grow(work(`repair:${subject.taskId}:${round}:task`, { parentTaskId: subject.taskId, taskType: 'repair:plan', ordinal: tasks.length, state: pick(STATES) }), depth + 1);
+          }
+        }
+        if (action === null && random() < 0.7) {
+          // A yield: the unit's root carries on in its next segment (`juliusYieldContinuationOf`).
+          const match = SEGMENT.exec(subject.taskId);
+          const rootId = match === null ? subject.taskId : match[1]!;
+          const next = match === null ? 2 : Number(match[2]) + 1;
+          grow(work(`segment:${rootId}:${next}:task`, { parentTaskId: rootId, taskType: subject.taskType, ordinal: tasks.length, state: pick(STATES) }), depth + 1);
+        }
+      };
+      for (let root = 0; root < 1 + Math.floor(random() * 3); root += 1) grow(work(`plan-${String(root)}`, { ordinal: tasks.length, state: pick(STATES) }), 0);
+
+      const accepted = effectivelyAcceptedTaskIds(tasks, decisions, JULIUS_RELEASING_ACTIONS);
+      const witnesses = juliusAcceptanceWitnesses(tasks, decisions);
+      expect(witnesses.map((held) => held.taskId), `graph ${String(graph)}: the release path's set, exactly`).toEqual([...accepted].sort());
+      const current = new Map(decisions.map((decision) => [decision.taskId, decision]));
+      const byId = new Map(tasks.map((item) => [item.taskId, item]));
+      for (const held of witnesses) {
+        seen.accepted += 1;
+        expect(current.get(held.acceptingTaskId), `graph ${String(graph)} ${held.taskId}: the accepting task's CURRENT decision`).toBe(held.decision);
+        expect(JULIUS_RELEASING_ACTIONS.includes(held.decision.action), `graph ${String(graph)} ${held.taskId}`).toBe(true);
+        // Reached from the subject through the release walk's own steps, every one SUCCEEDED and itself accepted.
+        const reached = new Set([held.taskId]);
+        const queue = [held.taskId];
+        while (queue.length > 0) {
+          const at = byId.get(queue.shift()!);
+          if (at === undefined) continue;
+          const decision = current.get(at.taskId);
+          const steps = decision === undefined ? [juliusYieldContinuationOf(at, tasks)] : decision.action === 'REPAIR' ? tasks.filter((item) => isJuliusRepairOf(at, item)) : [];
+          for (const step of steps) {
+            if (step === null || step.state !== 'SUCCEEDED' || !accepted.has(step.taskId) || reached.has(step.taskId)) continue;
+            reached.add(step.taskId);
+            queue.push(step.taskId);
+          }
+        }
+        expect(reached.has(held.acceptingTaskId), `graph ${String(graph)} ${held.taskId} -> ${held.acceptingTaskId}`).toBe(true);
+        if (held.acceptingTaskId !== held.taskId) seen.effective += 1;
+        if (held.acceptingTaskId.startsWith('segment:')) seen.throughSegment += 1;
+        if (held.acceptingTaskId.startsWith('repair:repair:')) seen.twoDeep += 1;
+      }
+      expect(juliusAcceptanceWitnesses([...tasks].reverse(), decisions), `graph ${String(graph)}: task order changes nothing`).toEqual(witnesses);
+    }
+    // NOT VACUOUS: the generator reached every shape the walk has, many times over.
+    expect(seen.accepted).toBeGreaterThan(400);
+    expect(seen.effective).toBeGreaterThan(100);
+    expect(seen.throughSegment).toBeGreaterThan(20);
+    expect(seen.twoDeep).toBeGreaterThan(20);
+  });
+
+  it('L1, THE RELEASE WALK IS PINNED: an edit to effectivelyAcceptedTaskIds must come with the witness walk that mirrors it (juliusAcceptanceWitnesses), and then this pin', () => {
+    const source = readFileSync(join(process.cwd(), 'src', 'relay', 'mission', 'julius', 'julius-repair-lineage.ts'), 'utf8').replace(/\r\n/gu, '\n');
+    const start = source.indexOf('export function effectivelyAcceptedTaskIds(');
+    const end = source.indexOf('\n}\n', start) + 3;
+    expect(start, 'the release walk is where it was').toBeGreaterThan(0);
+    expect(createHash('sha256').update(source.slice(start, end)).digest('hex'),
+      'the release walk changed: mirror its steps in juliusAcceptanceWitnesses (julius-lineage-asserter.ts), then update this pin')
+      .toBe('e9b073cb893362716353c1b193f8781c6e76d436989472239ee0e17226336cb3');
   });
 });
 
