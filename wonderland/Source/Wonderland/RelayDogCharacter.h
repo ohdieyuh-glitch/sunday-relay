@@ -397,6 +397,8 @@ public:
 	const WonderlandHands::FHand& GetHand(bool bLeftHand) const { return bLeftHand ? BodyHandMinusY : BodyHandPlusY; }
 	/** For the QA: the forearm of the body the player sees for that hand (a worn skin's, else the canon's), or null. */
 	USceneComponent* GetVisibleForearm(bool bLeftHand) const;
+	/** For the QA: which mission act props show now, as bits -- 1 the book, 2 the brush, 4 the lens, 8 the scraper. */
+	int32 GetVisibleActPropMask() const;
 
 protected:
 	void MoveForwardAxis(float Value);

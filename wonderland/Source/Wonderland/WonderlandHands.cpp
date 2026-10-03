@@ -1,9 +1,9 @@
 // Copyright Wonderland. THE HANDS. See WonderlandHands.h.
 #include "WonderlandHands.h"
 
-#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInterface.h"
@@ -24,18 +24,23 @@ namespace WonderlandHands
 {
 	bool FHand::IsOn(const USceneComponent* Forearm) const
 	{
-		return Forearm != nullptr && On.Get() == Forearm && Boxes.IsValid();
+		return Forearm != nullptr && On.Get() == Forearm && Boxes.Num() == BoxesPerHand && Boxes[0].IsValid();
 	}
 
 	void FHand::Destroy()
 	{
-		if (UInstancedStaticMeshComponent* Mesh = Boxes.Get())
+		for (const TWeakObjectPtr<UStaticMeshComponent>& Box : Boxes)
 		{
-			Mesh->DestroyComponent();
+			if (UStaticMeshComponent* Mesh = Box.Get())
+			{
+				Mesh->DestroyComponent();
+			}
 		}
 		Boxes.Reset();
 		On.Reset();
 		Source.Reset();
+		// THE CURL IS KEPT: a hand rebuilt on another forearm while holding (a skin worn, a respawn) starts as the fist it was
+		LaidCurl = -1.0f;
 	}
 
 	void FHand::Attach(AActor* Owner, USceneComponent* Forearm, const FVector& TipLocal, const FVector& Forward, float SideSign)
@@ -90,29 +95,33 @@ namespace WonderlandHands
 		// a 10 uu forearm block carries a 1.0 hand; within half to double that
 		Size = static_cast<float>(FMath::Clamp(Across / 10.0, 0.5, 2.0));
 
-		UInstancedStaticMeshComponent* Mesh = NewObject<UInstancedStaticMeshComponent>(Owner,
-			MakeUniqueObjectName(Owner, UInstancedStaticMeshComponent::StaticClass(), Side > 0.0f ? TEXT("WonderlandHandPlusY") : TEXT("WonderlandHandMinusY")));
-		Mesh->SetMobility(EComponentMobility::Movable);
-		Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, HandCubePath));
-		if (Material != nullptr)
+		UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, HandCubePath);
+		for (int32 Index = 0; Index < BoxesPerHand; ++Index)
 		{
-			Mesh->SetMaterial(0, Material);
+			UStaticMeshComponent* Mesh = NewObject<UStaticMeshComponent>(Owner, MakeUniqueObjectName(Owner, UStaticMeshComponent::StaticClass(),
+				*FString::Printf(TEXT("WonderlandHand%s_%d"), Side > 0.0f ? TEXT("PlusY") : TEXT("MinusY"), Index)));
+			Mesh->SetMobility(EComponentMobility::Movable);
+			Mesh->SetStaticMesh(Cube);
+			if (Material != nullptr)
+			{
+				Mesh->SetMaterial(0, Material);
+			}
+			Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Mesh->SetGenerateOverlapEvents(false);
+			Mesh->SetCanEverAffectNavigation(false);
+			// a few small boxes: no distance field (the figures measured that it costs more than it shows)
+			Mesh->bAffectDistanceFieldLighting = false;
+			// the Dog's whole-body passes (the canon body's hide, the primary's paint) leave a WL_Prop alone: this code owns these
+			Mesh->ComponentTags.AddUnique(TEXT("WL_Prop"));
+			Mesh->SetupAttachment(Forearm);
+			Mesh->RegisterComponent();
+			Mesh->SetVisibility(bShown);
+			Boxes.Add(Mesh);
 		}
-		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Mesh->SetGenerateOverlapEvents(false);
-		Mesh->SetCanEverAffectNavigation(false);
-		Mesh->SetupAttachment(Forearm);
-		Mesh->RegisterComponent();
-		for (int32 i = 0; i < BoxesPerHand; ++i)
-		{
-			Mesh->AddInstance(FTransform(FRotator::ZeroRotator, Tip, FVector(0.001)));
-		}
-		Mesh->SetVisibility(bShown);
-		Boxes = Mesh;
 		On = Forearm;
 		Source = MaterialFrom;
-		Curl = 0.0f;
-		Pose(0.0f, 0.0f);
+		Lay();
+		LaidCurl = Curl;
 	}
 
 	FVector FHand::GripCentreLocal() const
@@ -121,10 +130,9 @@ namespace WonderlandHands
 		return Tip + Along * (6.5f * Size * 0.55f);
 	}
 
-	void FHand::Pose(float Grip, float DeltaSeconds)
+	void FHand::Pose(float Grip, float DeltaSeconds, bool bAllowed)
 	{
-		UInstancedStaticMeshComponent* Mesh = Boxes.Get();
-		if (Mesh == nullptr)
+		if (Boxes.Num() != BoxesPerHand || !Boxes[0].IsValid())
 		{
 			return;
 		}
@@ -134,24 +142,41 @@ namespace WonderlandHands
 		if (const UPrimitiveComponent* From = Source.Get())
 		{
 			UMaterialInterface* Now = From->GetNumMaterials() > 0 ? From->GetMaterial(0) : nullptr;
-			if (Now != nullptr && Mesh->GetMaterial(0) != Now)
+			if (Now != nullptr && Boxes[0]->GetMaterial(0) != Now)
 			{
-				Mesh->SetMaterial(0, Now);
+				for (const TWeakObjectPtr<UStaticMeshComponent>& Box : Boxes)
+				{
+					if (UStaticMeshComponent* Mesh = Box.Get())
+					{
+						Mesh->SetMaterial(0, Now);
+					}
+				}
 			}
 		}
 		const float Want = FMath::Clamp(Grip, 0.0f, 1.0f);
 		// EASED, NEVER SNAPPED: the fingers close as the sword arrives and open as it leaves
 		Curl = DeltaSeconds > 0.0f ? FMath::FInterpTo(Curl, Want, DeltaSeconds, 9.0f) : Want;
+		// ONLY WHEN THE CURL MOVED: the boxes ride on the forearm (their places are relative to it), so a settled hand costs nothing
+		if (LaidCurl < 0.0f || FMath::Abs(Curl - LaidCurl) > 0.002f)
+		{
+			Lay();
+			LaidCurl = Curl;
+		}
+		SetShown(bAllowed && IsArmShown());
+	}
+
+	void FHand::Lay()
+	{
 		const float U = Size;
 		const float HandleR = 2.1f * U;
 		const float PalmThick = 3.0f * U;
 		const float PalmLong = 6.5f * U;
 		const float PalmWide = 8.2f * U;
 		const FVector Centre = GripCentreLocal();
+		TArray<FTransform, TInlineAllocator<BoxesPerHand>> Laid;
 		// THE BACK OF THE HAND: on the forearm's line when open, moved out of the way of the grip as the fist closes
 		const FVector Palm = Centre + Out * ((HandleR + PalmThick * 0.5f) * Curl) - Along * (PalmLong * 0.05f);
-		int32 Index = 0;
-		Mesh->UpdateInstanceTransform(Index++, HandBox(Palm, Along, Ahead, FVector(PalmWide, PalmThick, PalmLong)), false, false, true);
+		Laid.Add(HandBox(Palm, Along, Ahead, FVector(PalmWide, PalmThick, PalmLong)));
 
 		// FOUR FINGERS from the palm's inner lower edge, each in two segments: relaxed a light curl, holding a fist round the grip
 		const float A1 = FMath::DegreesToRadians(FMath::Lerp(14.0f, 92.0f, Curl));
@@ -168,8 +193,8 @@ namespace WonderlandHands
 			const FVector Joint = Base + D1 * Proximal;
 			// the little finger a touch shorter: a hand, not a comb
 			const float Shorter = Finger == 0 || Finger == 3 ? 0.85f : 1.0f;
-			Mesh->UpdateInstanceTransform(Index++, HandBox(Base + D1 * (Proximal * 0.5f), D1, Ahead, FVector(1.7f * U, 1.9f * U, Proximal + 0.2f * U)), false, false, true);
-			Mesh->UpdateInstanceTransform(Index++, HandBox(Joint + D2 * (Distal * Shorter * 0.5f), D2, Ahead, FVector(1.6f * U, 1.8f * U, Distal * Shorter)), false, false, true);
+			Laid.Add(HandBox(Base + D1 * (Proximal * 0.5f), D1, Ahead, FVector(1.7f * U, 1.9f * U, Proximal + 0.2f * U)));
+			Laid.Add(HandBox(Joint + D2 * (Distal * Shorter * 0.5f), D2, Ahead, FVector(1.6f * U, 1.8f * U, Distal * Shorter)));
 		}
 
 		// THE THUMB, at the front of the hand: pointing down and forward relaxed, wrapping over the grip from the inside holding
@@ -178,39 +203,62 @@ namespace WonderlandHands
 		const FVector T2 = FMath::Lerp(Ahead * 0.5f + Along * 0.85f, -Out * 0.3f + Along * 0.9f + Ahead * 0.2f, Curl).GetSafeNormal();
 		const float ThumbA = 3.4f * U;
 		const float ThumbB = 2.6f * U;
-		Mesh->UpdateInstanceTransform(Index++, HandBox(ThumbBase + T1 * (ThumbA * 0.5f), T1, Along, FVector(1.9f * U, 1.9f * U, ThumbA)), false, false, true);
-		Mesh->UpdateInstanceTransform(Index++, HandBox(ThumbBase + T1 * ThumbA + T2 * (ThumbB * 0.5f), T2, Along, FVector(1.7f * U, 1.8f * U, ThumbB)), false, true, true);
+		Laid.Add(HandBox(ThumbBase + T1 * (ThumbA * 0.5f), T1, Along, FVector(1.9f * U, 1.9f * U, ThumbA)));
+		Laid.Add(HandBox(ThumbBase + T1 * ThumbA + T2 * (ThumbB * 0.5f), T2, Along, FVector(1.7f * U, 1.8f * U, ThumbB)));
+
+		for (int32 Index = 0; Index < Boxes.Num() && Index < Laid.Num(); ++Index)
+		{
+			if (UStaticMeshComponent* Mesh = Boxes[Index].Get())
+			{
+				Mesh->SetRelativeTransform(Laid[Index]);
+			}
+		}
+	}
+
+	bool FHand::IsArmShown() const
+	{
+		const UPrimitiveComponent* From = Source.Get();
+		const AActor* Owner = From != nullptr ? From->GetOwner() : nullptr;
+		return From != nullptr && From->IsVisible() && !From->bHiddenInGame && (Owner == nullptr || !Owner->IsHidden());
 	}
 
 	UMaterialInterface* FHand::GetWornMaterial() const
 	{
-		const UInstancedStaticMeshComponent* Mesh = Boxes.Get();
+		const UStaticMeshComponent* Mesh = Boxes.Num() > 0 ? Boxes[0].Get() : nullptr;
 		return Mesh != nullptr ? Mesh->GetMaterial(0) : nullptr;
 	}
 
 	bool FHand::WearsItsArmsMaterial() const
 	{
+		// A HAND THAT NEVER FOUND ITS ARM IS NOT WEARING IT (Second): it would be wearing the cube's own, and must not pass
 		const UPrimitiveComponent* From = Source.Get();
 		const UMaterialInterface* Worn = GetWornMaterial();
-		// no source part (an arm with no primitive below it) wears the cube's own: nothing to follow, nothing stale
-		return From == nullptr || (Worn != nullptr && From->GetNumMaterials() > 0 && Worn == From->GetMaterial(0));
+		return From != nullptr && Worn != nullptr && From->GetNumMaterials() > 0 && Worn == From->GetMaterial(0);
 	}
 
 	void FHand::SetShown(bool bInShown)
 	{
 		bShown = bInShown;
-		if (UInstancedStaticMeshComponent* Mesh = Boxes.Get())
+		for (const TWeakObjectPtr<UStaticMeshComponent>& Box : Boxes)
 		{
-			if (Mesh->IsVisible() != bShown)
+			if (UStaticMeshComponent* Mesh = Box.Get())
 			{
-				Mesh->SetVisibility(bShown);
+				if (Mesh->IsVisible() != bShown)
+				{
+					Mesh->SetVisibility(bShown);
+				}
 			}
 		}
 	}
 
 	int32 FHand::CountVisibleBoxes() const
 	{
-		const UInstancedStaticMeshComponent* Mesh = Boxes.Get();
-		return Mesh != nullptr && Mesh->IsVisible() ? Mesh->GetInstanceCount() : 0;
+		int32 Count = 0;
+		for (const TWeakObjectPtr<UStaticMeshComponent>& Box : Boxes)
+		{
+			const UStaticMeshComponent* Mesh = Box.Get();
+			Count += Mesh != nullptr && Mesh->IsVisible() ? 1 : 0;
+		}
+		return Count;
 	}
 }

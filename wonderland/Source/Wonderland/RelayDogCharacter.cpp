@@ -1563,6 +1563,15 @@ float ARelayDogCharacter::GetCanonBodyPitch() const
 	return BodyRoot != nullptr ? BodyRoot->GetRelativeRotation().Pitch : 0.0f;
 }
 
+int32 ARelayDogCharacter::GetVisibleActPropMask() const
+{
+	auto Shown = [](const UInstancedStaticMeshComponent* Part) { return Part != nullptr && Part->IsVisible(); };
+	return (Shown(BookMesh.Get()) || Shown(BookPagesMesh.Get()) ? 1 : 0)
+		| (Shown(BrushMesh.Get()) || Shown(BrushHeadMesh.Get()) ? 2 : 0)
+		| (Shown(LensMesh.Get()) || Shown(LensGlassMesh.Get()) || Shown(LensHandleMesh.Get()) || Shown(LensGlintMesh.Get()) ? 4 : 0)
+		| (Shown(ScraperMesh.Get()) || Shown(ScraperBladeMesh.Get()) ? 8 : 0);
+}
+
 int32 ARelayDogCharacter::CountVisibleActProps() const
 {
 	int32 Visible = 0;
@@ -3385,6 +3394,13 @@ void ARelayDogCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	HandoffSwords.Destroy();
 	BodyHandMinusY.Destroy();
 	BodyHandPlusY.Destroy();
+	// AND THE SKIN THIS DOG WORE GOES WITH IT (Second's review, 10-03): a Dog replaced after a far travel left its costume
+	// behind as a frozen statue; the new Dog dresses itself from the saved skin
+	if (Costume != nullptr && IsValid(Costume))
+	{
+		Costume->Destroy();
+	}
+	Costume = nullptr;
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -3423,7 +3439,11 @@ USceneComponent* ARelayDogCharacter::GetVisibleForearm(bool bLeftHand) const
 void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
 {
 	// EVERY MASCOT HAS HANDS (founder, 2026-10-02): built on the visible body's forearms -- moved with a skin worn or taken off --
-	// and owned by that body's actor, closing into fists by the swords' share of the hands
+	// and owned by that body's actor, closing into fists by the swords' share of the hands.
+	//
+	// NEVER THROUGH A MISSION PROP (Second's review, 10-03): while an act shows the book, the brush, the lens or the scraper, the
+	// hands step aside -- the founder accepted those acts as they are (43/43, 09-30), and a hand through a handle would undo it.
+	const bool bPropsInHand = CountVisibleActProps() > 0;
 	for (const bool bPlusY : { false, true })
 	{
 		WonderlandHands::FHand& Hand = bPlusY ? BodyHandPlusY : BodyHandMinusY;
@@ -3432,10 +3452,12 @@ void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
 		FVector Forward = FVector::ForwardVector;
 		if (!VisibleForearm(bPlusY, Forearm, Tip, Forward) || Forearm == nullptr)
 		{
+			// no arm the player can see: no hand floating where one was
+			Hand.SetShown(false);
 			continue;
 		}
 		Hand.Attach(Forearm->GetOwner() != nullptr ? Forearm->GetOwner() : this, Forearm, Tip, Forward, bPlusY ? 1.0f : -1.0f);
-		Hand.Pose(HandoffHandsWeight, DeltaSeconds);
+		Hand.Pose(HandoffHandsWeight, DeltaSeconds, !bPropsInHand);
 	}
 }
 

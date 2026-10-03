@@ -147,6 +147,10 @@ namespace WonderlandHandoffSwords
 			TWeakObjectPtr<UInstancedStaticMeshComponent> Motes;
 			/** THE DASH'S TRAIL, in the world: where the blade has just been, fading behind it. */
 			TWeakObjectPtr<UInstancedStaticMeshComponent> Trail;
+			/** The ribbons', the motes' and the trail's materials and their colours before exposure, so a live exposure change
+			 *  reaches them as it reaches the sword (Second's review: they kept the build-time exposure and drifted). */
+			TWeakObjectPtr<UMaterialInstanceDynamic> EffectMaterials[3];
+			FLinearColor EffectColours[3] = { FLinearColor::White, FLinearColor::White, FLinearColor::White };
 			TArray<FVector> TrailTips;
 			TArray<FVector> TrailRoots;
 			TArray<float> TrailAges;

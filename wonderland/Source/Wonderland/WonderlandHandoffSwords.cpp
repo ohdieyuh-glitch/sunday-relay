@@ -325,7 +325,7 @@ namespace WonderlandHandoffSwords
 		}
 
 		// ---------------------------------------------------------------- the living light: ribbons, particles, the dash's trail
-		auto Effect = [&](const TCHAR* Name, const FLinearColor& Colour, USceneComponent* AttachTo, bool bWorld, int32 Count)
+		auto Effect = [&](const TCHAR* Name, const FLinearColor& Colour, USceneComponent* AttachTo, bool bWorld, int32 Count, int32 Slot)
 		{
 			UInstancedStaticMeshComponent* Mesh = NewObject<UInstancedStaticMeshComponent>(Owner, MakeUniqueObjectName(Owner,
 				UInstancedStaticMeshComponent::StaticClass(), *FString::Printf(TEXT("HandoffSword%s%s"), bGold ? TEXT("Gold") : TEXT("Cyan"), Name)));
@@ -337,6 +337,8 @@ namespace WonderlandHandoffSwords
 				{
 					Mid->SetVectorParameterValue(TEXT("Color"), Colour * Exposure);
 					Mesh->SetMaterial(0, Mid);
+					Sword.EffectMaterials[Slot] = Mid;
+					Sword.EffectColours[Slot] = Colour;
 				}
 			}
 			Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -363,9 +365,9 @@ namespace WonderlandHandoffSwords
 		};
 		// the ribbons and the particles in the sword's energy colour; the particles a little paler, the trail the colour itself
 		const FLinearColor Energy = bGold ? FLinearColor(1.0f, 0.70f, 0.22f) : FLinearColor(0.22f, 0.86f, 1.0f);
-		Sword.Ribbons = Effect(TEXT("Ribbons"), Energy * 2.2f, Root, false, RibbonBoxesPerSword);
-		Sword.Motes = Effect(TEXT("Motes"), (Energy * 0.7f + FLinearColor(0.3f, 0.3f, 0.3f)) * 2.6f, Root, false, MotesPerSword);
-		Sword.Trail = Effect(TEXT("Trail"), Energy * 1.8f, Owner->GetRootComponent(), true, TrailSamples - 1);
+		Sword.Ribbons = Effect(TEXT("Ribbons"), Energy * 2.2f, Root, false, RibbonBoxesPerSword, 0);
+		Sword.Motes = Effect(TEXT("Motes"), (Energy * 0.7f + FLinearColor(0.3f, 0.3f, 0.3f)) * 2.6f, Root, false, MotesPerSword, 1);
+		Sword.Trail = Effect(TEXT("Trail"), Energy * 1.8f, Owner->GetRootComponent(), true, TrailSamples - 1, 2);
 	}
 
 	void FPresentation::Animate(FSword& Sword, bool bGold, bool bVisible, const FShowInput& In)
@@ -538,6 +540,19 @@ namespace WonderlandHandoffSwords
 		{
 			return;
 		}
+		// A HIDDEN SWORD IS NOT PLACED (Second's review: every frame after the first handoff, for swords nobody could see)
+		if (!bVisible)
+		{
+			for (const TWeakObjectPtr<UInstancedStaticMeshComponent>& Part : Sword.Parts)
+			{
+				UInstancedStaticMeshComponent* Mesh = Part.Get();
+				if (Mesh != nullptr && Mesh->IsVisible())
+				{
+					Mesh->SetVisibility(false);
+				}
+			}
+			return;
+		}
 		const FVector Scale(FMath::Max(Grow, 0.001f) * BuiltScale);
 		if (HoldIn != nullptr)
 		{
@@ -546,7 +561,10 @@ namespace WonderlandHandoffSwords
 			{
 				Root->AttachToComponent(HoldIn, FAttachmentTransformRules::KeepWorldTransform);
 			}
-			Root->SetAbsolute(false, false, true);
+			if (Root->IsUsingAbsoluteLocation() || Root->IsUsingAbsoluteRotation() || !Root->IsUsingAbsoluteScale())
+			{
+				Root->SetAbsolute(false, false, true);
+			}
 			Root->SetRelativeLocationAndRotation(HoldLocal.GetLocation(), HoldLocal.GetRotation());
 			Root->SetWorldScale3D(Scale);
 		}
@@ -558,7 +576,10 @@ namespace WonderlandHandoffSwords
 			{
 				Root->AttachToComponent(Home, FAttachmentTransformRules::KeepWorldTransform);
 			}
-			Root->SetAbsolute(true, true, true);
+			if (!Root->IsUsingAbsoluteLocation() || !Root->IsUsingAbsoluteRotation() || !Root->IsUsingAbsoluteScale())
+			{
+				Root->SetAbsolute(true, true, true);
+			}
 			FTransform At = World;
 			At.SetScale3D(Scale);
 			Root->SetWorldTransform(At);
@@ -674,6 +695,13 @@ namespace WonderlandHandoffSwords
 				const ESwordPart Part = static_cast<ESwordPart>(PartIndex);
 				const FLinearColor Colour = PartColour(Part, bGold);
 				Mid->SetVectorParameterValue(TEXT("Color"), IsEmissive(Part) ? Colour * Exposure : Colour);
+			}
+		}
+		for (int32 Slot = 0; Slot < 3; ++Slot)
+		{
+			if (UMaterialInstanceDynamic* Mid = Sword.EffectMaterials[Slot].Get())
+			{
+				Mid->SetVectorParameterValue(TEXT("Color"), Sword.EffectColours[Slot] * Exposure);
 			}
 		}
 	}

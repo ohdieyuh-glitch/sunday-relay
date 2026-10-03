@@ -8708,6 +8708,224 @@ namespace
 		}
 	}
 
+	/* ================================================================ wl.Qa.ActHands: the hands never through a mission prop
+	 * Second's review (10-03): the always-on hands would go through the book, the brush, the lens and the scraper of the acts the
+	 * founder accepted as they are (43/43, 09-30). The hands now step aside while a prop shows. Measured on Relay OG and on
+	 * celestial_light through a real mission fixture: in EVERY frame a prop shows, no hand box is drawn (HP1, HP3 -- with a
+	 * positive control: the acts must actually have run); after the mission both hands are back, open (HP2, HP4). A close frame
+	 * of each new set of props to Saved/Screenshots/WLACTS. WLAHQA lines.
+	 */
+	struct FQaActHands
+	{
+		TWeakObjectPtr<UWorld> World;
+		TWeakObjectPtr<ACameraActor> Camera;
+		FTSTicker::FDelegateHandle Handle;
+		bool bQuit = false;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		int32 Phase = 0;
+		int32 SkinIndex = 0;
+		double PhaseAt = 0.0;
+		int32 PropFrames = 0;
+		int32 Overlaps = 0;
+		FString FirstOverlap;
+		int32 SeenMasks = 0;
+		int32 LastMask = 0;
+		double MaskSince = 0.0;
+		FString Dir;
+		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+		void Frame(const FString& Name)
+		{
+			int32 Width = 0;
+			int32 Height = 0;
+			const FString Path = Dir / (Name + TEXT(".png"));
+			const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), Width, Height);
+		}
+	};
+	TSharedPtr<FQaActHands> GQaActHands;
+
+	bool QaActHandsTick(float)
+	{
+		if (!GQaActHands.IsValid())
+		{
+			return false;
+		}
+		FQaActHands& S = *GQaActHands;
+		UWorld* World = S.World.Get();
+		ARelayDogCharacter* Dog = QaDog(World);
+		FWonderlandMissionHandoff* Handoff = QaHandoff(World);
+		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		static const TCHAR* const Skins[] = { TEXT("relay_og"), TEXT("celestial_light") };
+		auto Stop = [&S](const TCHAR* Why)
+		{
+			if (UWorld* W = S.World.Get())
+			{
+				GEngine->Exec(W, TEXT("wl.Mission.Stop"));
+				GEngine->Exec(W, TEXT("wl.Skins.Wear relay_og"));
+				if (APlayerController* P = W->GetFirstPlayerController())
+				{
+					if (ARelayDogCharacter* D = QaDog(W))
+					{
+						P->SetViewTargetWithBlend(D, 0.0f);
+					}
+				}
+			}
+			if (ACameraActor* Cam = S.Camera.Get())
+			{
+				Cam->Destroy();
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA END pass=%d fail=%d%s"), S.Pass, S.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
+			const bool bQuit = S.bQuit;
+			GQaActHands.Reset();
+			if (bQuit)
+			{
+				FPlatformMisc::RequestExit(false);
+			}
+			return false;
+		};
+		if (World == nullptr || Dog == nullptr || Handoff == nullptr || PC == nullptr)
+		{
+			return Stop(TEXT("the world, the Dog or the handoff went away"));
+		}
+		const double Now = QaNow();
+		const double In = Now - S.PhaseAt;
+		const TCHAR* const Skin = Skins[FMath::Clamp(S.SkinIndex, 0, 1)];
+		switch (S.Phase)
+		{
+		case 0:
+			// READY: the welcome gone, no swords held, the skin worn
+			if (UWonderlandUiSubsystem* Ui = QaUi(World))
+			{
+				if (Ui->IsWelcomeOpen())
+				{
+					Ui->DismissWelcome();
+				}
+			}
+			if (Handoff->IsArmed())
+			{
+				FString Ignored;
+				Handoff->Return(Ignored);
+			}
+			if (In < 4.0 || Handoff->IsEquipped())
+			{
+				return In < 40.0 ? true : Stop(TEXT("never ready: the swords away"));
+			}
+			GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), Skin));
+			S.Phase = 1;
+			S.PhaseAt = Now;
+			return true;
+		case 1:
+			if (In < 3.0)
+			{
+				return true;
+			}
+			GEngine->Exec(World, TEXT("wl.Mission.Scenario B 5"));
+			S.PropFrames = 0;
+			S.Overlaps = 0;
+			S.FirstOverlap.Reset();
+			S.SeenMasks = 0;
+			S.LastMask = 0;
+			S.MaskSince = Now;
+			S.Phase = 2;
+			S.PhaseAt = Now;
+			return true;
+		case 2:
+		{
+			// EVERY FRAME OF THE MISSION: a prop shown with a hand drawn is an overlap
+			const int32 Mask = Dog->GetVisibleActPropMask();
+			const int32 HandBoxes = Dog->GetHand(true).CountVisibleBoxes() + Dog->GetHand(false).CountVisibleBoxes();
+			if (Mask != 0)
+			{
+				++S.PropFrames;
+				if (HandBoxes > 0)
+				{
+					if (S.Overlaps == 0)
+					{
+						S.FirstOverlap = FString::Printf(TEXT("props 0x%X with %d hand boxes drawn at %.1f s"), Mask, HandBoxes, In);
+					}
+					++S.Overlaps;
+				}
+			}
+			if (Mask != S.LastMask)
+			{
+				S.LastMask = Mask;
+				S.MaskSince = Now;
+			}
+			// A CLOSE FRAME OF EACH NEW SET OF PROPS, once it has settled for half a second
+			FQaStance Shim;
+			Shim.Camera = S.Camera;
+			QaStanceCamera(Shim, World, Dog, 35.0, 190.0, 15.0, 45.0f);
+			S.Camera = Shim.Camera;
+			if (Mask != 0 && (S.SeenMasks & Mask) != Mask && Now - S.MaskSince >= 0.6)
+			{
+				S.Frame(FString::Printf(TEXT("act_%s_props_%X"), Skin, Mask));
+				S.SeenMasks |= Mask;
+			}
+			if (In < 75.0 && !(S.SeenMasks == 0xF && In > 30.0))
+			{
+				return true;
+			}
+			GEngine->Exec(World, TEXT("wl.Mission.Stop"));
+			PC->SetViewTargetWithBlend(Dog, 0.0f);
+			S.Check(S.SkinIndex == 0 ? TEXT("HP1") : TEXT("HP3"), S.PropFrames >= 30 && S.Overlaps == 0,
+				FString::Printf(TEXT("%s through a mission: props shown in %d frames (sets seen 0x%X: 1 book, 2 brush, 4 lens, 8 scraper), a hand drawn in %d of them%s"),
+					Skin, S.PropFrames, S.SeenMasks, S.Overlaps, S.FirstOverlap.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (first: %s)"), *S.FirstOverlap)));
+			S.Phase = 3;
+			S.PhaseAt = Now;
+			return true;
+		}
+		case 3:
+		{
+			if (In < 3.0)
+			{
+				return true;
+			}
+			const WonderlandHands::FHand& Left = Dog->GetHand(true);
+			const WonderlandHands::FHand& Right = Dog->GetHand(false);
+			const bool bBack = Dog->CountVisibleActProps() == 0 && Left.CountVisibleBoxes() == WonderlandHands::BoxesPerHand
+				&& Right.CountVisibleBoxes() == WonderlandHands::BoxesPerHand && Left.GetCurl() <= 0.1f && Right.GetCurl() <= 0.1f;
+			S.Check(S.SkinIndex == 0 ? TEXT("HP2") : TEXT("HP4"), bBack,
+				FString::Printf(TEXT("%s after the mission: props drawn %d; hands drawn %d + %d boxes, open %.2f / %.2f"), Skin, Dog->CountVisibleActProps(),
+					Left.CountVisibleBoxes(), Right.CountVisibleBoxes(), Left.GetCurl(), Right.GetCurl()));
+			if (S.SkinIndex == 0)
+			{
+				S.SkinIndex = 1;
+				S.Phase = 0;
+				S.PhaseAt = Now;
+				return true;
+			}
+			return Stop(nullptr);
+		}
+		default:
+			return Stop(TEXT("an unknown phase"));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaActHandsCommand(
+		TEXT("wl.Qa.ActHands"),
+		TEXT("The hands never through a mission prop: Relay OG and celestial_light through a real mission fixture -- in every frame a prop ")
+		TEXT("shows, no hand drawn; after it, both hands back and open. Close frames of each prop set to Saved/Screenshots/WLACTS. ")
+		TEXT("`quit` exits after. WLAHQA lines."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaActHands.IsValid() || World == nullptr)
+			{
+				return;
+			}
+			GQaActHands = MakeShared<FQaActHands>();
+			GQaActHands->World = World;
+			GQaActHands->bQuit = Args.Contains(TEXT("quit"));
+			GQaActHands->PhaseAt = QaNow();
+			GQaActHands->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLACTS"));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA BEGIN | %s"), *WonderlandBeta::BuildLabel());
+			GQaActHands->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaActHandsTick), 0.0f);
+		}));
+
 	FAutoConsoleCommandWithWorldAndArgs GQaHandoffSwordsCommand(
 		TEXT("wl.Qa.HandoffSwords"),
 		TEXT("Mission Handoff M3a, the swords and the transformation, in this (packaged) build: the exchange half-way through, gold in the ")
