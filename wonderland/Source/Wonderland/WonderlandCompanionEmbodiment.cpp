@@ -1252,8 +1252,9 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		PartMeshNames.Add(Figure.Parts[PartIndex].Name);
 		// WHICH PARTS THE WARDROBE IS ALLOWED TO FRAME ON. See WonderlandPartIsFramingBody.
 		PartMeshIsBody.Add(WonderlandPartIsFramingBody(Figure.Parts[PartIndex].Name));
-		// WHAT IS DRAWN SOLID, by its material: Lit and Rim are bone, cloth and plate; Glow and Additive are light
-		PartMeshIsSolid.Add(Kind == EWonderlandCompanionMaterialKind::Lit || Kind == EWonderlandCompanionMaterialKind::Rim);
+		// WHAT IS DRAWN SOLID, by its material: Lit, Rim and Glow are opaque (Glow is opaque and unlit -- eyes, crystal and wisp
+		// cores); only Additive is light (Second's v2 review: celestial_light, skeleton_flame and baal are mostly Glow)
+		PartMeshIsSolid.Add(Kind != EWonderlandCompanionMaterialKind::Additive);
 		BoxCount += Group.Value.Num();
 	}
 

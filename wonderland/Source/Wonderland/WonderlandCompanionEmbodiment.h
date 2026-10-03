@@ -485,9 +485,9 @@ public:
 	/** For the QA: true for a mesh of the figure's BODY (bone, cloth, plate), false for its light (a halo, an aura, ghostfire) or one not its own. */
 	bool IsBodyMesh(const UInstancedStaticMeshComponent* Mesh) const;
 	/**
-	 * For the QA (wl.Qa.SwordClip v2, Second's finding 3): true for a mesh DRAWN SOLID -- built from a Lit or Rim material, whatever the
-	 * part is called (a skirt, a collar, a banner) -- and false for light (Glow, Additive) or a mesh not the figure's own. IsBodyMesh is
-	 * the wardrobe's framing list by part name, which is not the same thing.
+	 * For the QA (wl.Qa.SwordClip, Second's finding 3): true for a mesh DRAWN OPAQUE -- built from a Lit, Rim or Glow material (Glow is
+	 * opaque and unlit), whatever the part is called (a skirt, a collar, a banner) -- and false for Additive light or a mesh not the
+	 * figure's own. IsBodyMesh is the wardrobe's framing list by part name, which is not the same thing.
 	 */
 	bool IsSolidMesh(const UInstancedStaticMeshComponent* Mesh) const;
 	/** For the QA: the figure part a mesh was built from, or NAME_None for a mesh not the figure's own. */
@@ -693,7 +693,7 @@ private:
 	 */
 	TArray<bool> PartMeshIsBody;
 
-	/** Parallel to PartMeshes: true for a mesh built from a Lit or Rim material (drawn solid), false for Glow or Additive (light). */
+	/** Parallel to PartMeshes: true for a mesh drawn opaque (Lit, Rim, Glow), false for Additive light. */
 	TArray<bool> PartMeshIsSolid;
 
 	/** The figure part each entry of PartMeshes was built from. See DescribeFramingParts. */
