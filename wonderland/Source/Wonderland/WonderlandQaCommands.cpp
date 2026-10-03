@@ -9503,7 +9503,8 @@ namespace
 			// across open ground, the player's camera behind (QaClearHeading: the M1a dash QA's own open-ground heading)
 			{
 				FVector Ahead = FVector::ForwardVector;
-				const float Yaw = QaClearHeading(World, Dog, 1200.0f, Ahead);
+				QaClearHeading(World, Dog, 1200.0f, Ahead);
+				const float Yaw = static_cast<float>(Ahead.Rotation().Yaw);
 				Dog->SetActorRotation(FRotator(0.0f, Yaw, 0.0f));
 				PC->SetControlRotation(FRotator(-12.0f, Yaw, 0.0f));
 			}
@@ -9736,7 +9737,8 @@ namespace
 			{
 				return In < 40.0 ? true : Stop(TEXT("never ready"));
 			}
-			S.StartYaw = QaClearHeading(World, Dog, 900.0f, S.Ahead);
+			QaClearHeading(World, Dog, 900.0f, S.Ahead);
+			S.StartYaw = static_cast<float>(S.Ahead.Rotation().Yaw);
 			S.Start = Dog->GetActorLocation();
 			S.Skin = 0;
 			S.Phase = 1;
