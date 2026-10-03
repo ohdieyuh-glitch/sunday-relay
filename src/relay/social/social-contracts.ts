@@ -23,7 +23,7 @@
  * here as PENDING and null (founder, 2026-10-01: not the chakra scale, not Glicko), and the Relay Dog's chosen chakra tier
  * is a cosmetic field on the Dog, never the player's rank.
  *
- * PURE. No sockets, no clock, no storage. Time is an injected ISO string. Persistence (030_wonderland_social.sql) and
+ * PURE. No sockets, no clock, no storage. Time is an injected ISO string. Persistence (032_wonderland_social.sql) and
  * transport (the Relay Bridge's verified-session routes and SSE) bind to these types; nothing here depends on them.
  */
 

@@ -6,7 +6,7 @@
  * Immutable and pure, so the same sequence of commands gives the same state on every machine -- the property the
  * deterministic QA (social.test.ts) and, later, a server-side replay rely on.
  *
- * This is the DOMAIN layer. Persistence (030_wonderland_social.sql) stores the same records row by row; transport carries
+ * This is the DOMAIN layer. Persistence (032_wonderland_social.sql) stores the same records row by row; transport carries
  * commands in and views out. Neither is imported here.
  */
 

@@ -6,12 +6,16 @@ BEGIN;
 -- relationships, messages and parties outlive any one Unreal process.
 --
 -- FOUNDER DECISION (2026-10-02): the social backend lands in MAIN, and this
--- migration follows main's chain: ...026, 028_julius_criteria_per_run,
--- 029_julius_project_brain, then 030. It sits beside the social module until
--- its registration in wonderland-postgres.ts is agreed with the Julius lane
--- (julius-migration-chain.test.ts holds every file in wonderland-migrations/ to
--- that list); the move is then a rename. Written to the chain's own rules: one
--- transaction, and it stamps schema_migrations with its own version.
+-- migration follows main's chain. NUMBER 032 (agreed with MAIN JUJU,
+-- 2026-10-03): Julius takes 030 (#313) and 031 (the row 13(i) completion), and
+-- whichever lands second renumbers -- re-checked when the PR opens and again
+-- at merge. Registered in wonderland-postgres.ts like every other file here
+-- (julius-migration-chain.test.ts holds the directory and the list equal).
+-- ADDITIVE ONLY: it creates new relay_wonderland.social_* tables and indexes,
+-- referencing relay_wonderland.players (001), and touches no existing table or
+-- row, so it assumes no store state and is applied once by the version ledger.
+-- Written to the chain's own rules: one transaction, and it stamps
+-- schema_migrations with its own version.
 --
 -- WHAT A RESTART MUST GIVE BACK (founder): profiles, privacy, relationships,
 -- requests, blocks, mutes, reports, conversations, messages, read positions,
@@ -218,5 +222,5 @@ CREATE TABLE relay_wonderland.social_events(
 CREATE INDEX social_events_audience ON relay_wonderland.social_events USING gin(audience);
 CREATE INDEX social_events_at ON relay_wonderland.social_events(at);
 
-INSERT INTO relay_wonderland.schema_migrations(version) VALUES('030_wonderland_social');
+INSERT INTO relay_wonderland.schema_migrations(version) VALUES('032_wonderland_social');
 COMMIT;

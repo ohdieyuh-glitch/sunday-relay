@@ -26,7 +26,7 @@ import { newSocialUser, type SocialEventPage, type SocialPlayerIdentity, type So
 import { emptyWorldState, type WorldState } from '../social/world-presence';
 
 /**
- * WONDERLAND SOCIAL, DURABLE: the social store over PostgreSQL (030_wonderland_social.sql).
+ * WONDERLAND SOCIAL, DURABLE: the social store over PostgreSQL (wonderland-migrations/032_wonderland_social.sql).
  *
  * ONE STATE IN MEMORY, EVERY CHANGE WRITTEN THROUGH. The domain rules are pure functions over one SocialState
  * (src/relay/social), so the bridge -- one process (Railway) -- holds that state, runs each command against it ONE AT A

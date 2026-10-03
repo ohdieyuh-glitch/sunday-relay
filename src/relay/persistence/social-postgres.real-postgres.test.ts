@@ -1,6 +1,4 @@
 import { randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -22,7 +20,7 @@ import type { SocialStore } from '../social/social-store';
  * collides with one before it). Then a block, and the blocked player is never told.
  *
  * Runs only where JULIUS_TEST_DATABASE_URL names a THROWAWAY database (fresh: the social tables are global); `todo`
- * elsewhere. 030 is applied after the chain's own migrations, as it will be once it is registered.
+ * elsewhere. The chain's own migrate() applies 032_wonderland_social with the rest.
  */
 
 const databaseUrl = juliusTestDatabaseUrl();
@@ -56,10 +54,6 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
   beforeAll(async () => {
     pool = new Pool({ connectionString: databaseUrl! });
     await new TransactionalWonderlandDatabase(pool).migrate();
-    const applied = await pool.query(`SELECT 1 FROM relay_wonderland.schema_migrations WHERE version='030_wonderland_social'`);
-    if (applied.rowCount === 0) {
-      await pool.query(readFileSync(join(__dirname, '..', 'social', 'persistence', '030_wonderland_social.sql'), 'utf8'));
-    }
     for (const id of [KAI, NOVA, VEGA]) await pool.query(`INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING`, [id]);
     store = await openSocialPostgresStore(pool);
   }, 60_000);
@@ -67,18 +61,22 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
   // THE CATCH-ALL SHARES ONE DATABASE (real-infra runs every real-postgres file in parallel on it): everything this suite
   // made is removed, in foreign-key order. Parties first (leader_id does not cascade), then the conversations its players
   // are in, its events, and its players -- whose deletion cascades every other social_* row that names them.
-  afterAll(async () => {
-    if (pool === undefined) return;
+  const removeWhatThisSuiteMade = async (db: Pool): Promise<void> => {
     const ids = [KAI, NOVA, VEGA];
-    await pool.query(`DELETE FROM relay_wonderland.social_parties WHERE leader_id = ANY($1::text[])`, [ids]);
-    await pool.query(
+    await db.query(`DELETE FROM relay_wonderland.social_parties WHERE leader_id = ANY($1::text[])`, [ids]);
+    await db.query(
       `DELETE FROM relay_wonderland.social_conversations WHERE conversation_id IN
          (SELECT conversation_id FROM relay_wonderland.social_conversation_members WHERE player_id = ANY($1::text[]))`,
       [ids],
     );
-    await pool.query(`DELETE FROM relay_wonderland.social_events WHERE audience && $1::text[]`, [ids]);
-    await pool.query(`DELETE FROM relay_wonderland.players WHERE player_id = ANY($1::text[])`, [ids]);
-    await pool.end();
+    await db.query(`DELETE FROM relay_wonderland.social_events WHERE audience && $1::text[]`, [ids]);
+    await db.query(`DELETE FROM relay_wonderland.players WHERE player_id = ANY($1::text[])`, [ids]);
+    await db.end();
+  };
+  // beforeAll's first act constructs the pool, so it is absent only when that construction itself threw: then nothing
+  // was made, and there is nothing to remove. This is teardown, not a test; nothing here could assert.
+  afterAll(async () => {
+    await (pool === undefined ? Promise.resolve() : removeWhatThisSuiteMade(pool));
   });
 
   it('the loop, written through, comes back whole after a restart', async () => {
