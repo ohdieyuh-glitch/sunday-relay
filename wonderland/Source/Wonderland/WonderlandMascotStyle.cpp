@@ -320,7 +320,7 @@ namespace
 	// ---- rule: never a reflected property). Read every time a smoke surface is painted, so a change shows on the next paint.
 	TAutoConsoleVariable<FString> CVarSmokeNormalTex(TEXT("wl.Shadow.NormalTex"), TEXT("smoke"),
 		TEXT("Shadow smoke look: 'smoke' = the smoke maps this file draws (B65.1, the default); or a cooked normal texture (/Game/Wonderland/Textures/<name>); 'none' for none."));
-	TAutoConsoleVariable<float> CVarSmokeTexScale(TEXT("wl.Shadow.TexScale"), 0.030f,
+	TAutoConsoleVariable<float> CVarSmokeTexScale(TEXT("wl.Shadow.TexScale"), 0.022f,
 		TEXT("Shadow smoke look: the relief's world projection scale (1 / uu per repeat)."));
 	TAutoConsoleVariable<float> CVarSmokeDetailAmp(TEXT("wl.Shadow.DetailAmp"), 0.0f,
 		TEXT("Shadow smoke look: the master's procedural normal noise (DetailAmp) on top of the relief; 0 = none (it scatters light into grey)."));
@@ -336,9 +336,9 @@ namespace
 		TEXT("Shadow smoke look: how far a LIGHT colour's rim tint is lifted toward white (scaled by how light it is)."));
 	TAutoConsoleVariable<float> CVarSmokeRimTop(TEXT("wl.Shadow.RimTop"), 0.85f,
 		TEXT("Shadow smoke look: the rim tint's strongest channel, reached by scaling the colour up (hue and saturation kept)."));
-	TAutoConsoleVariable<float> CVarSmokeRimGain(TEXT("wl.Shadow.RimGain"), 0.60f,
+	TAutoConsoleVariable<float> CVarSmokeRimGain(TEXT("wl.Shadow.RimGain"), 0.80f,
 		TEXT("Shadow smoke look: the rim's emissive gain (RimColor = tint x gain, at grazing angles)."));
-	TAutoConsoleVariable<float> CVarSmokeRimFloor(TEXT("wl.Shadow.RimFloor"), 0.10f,
+	TAutoConsoleVariable<float> CVarSmokeRimFloor(TEXT("wl.Shadow.RimFloor"), 0.14f,
 		TEXT("Shadow smoke look: the darkest the rim's tint may be, so black keeps readable dark-grey highlights."));
 	TAutoConsoleVariable<float> CVarSmokeStripRimGain(TEXT("wl.Shadow.StripRimGain"), 0.25f,
 		TEXT("Shadow smoke look: the STRIPS' rim gain when a strip colour is chosen -- low, as the founder asked the strips' edges to be subtle."));
@@ -356,15 +356,15 @@ namespace
 		TEXT("Shadow smoke maps: the pattern's seed."));
 	TAutoConsoleVariable<int32> CVarSmokeTone(TEXT("wl.Shadow.SmokeTone"), 1,
 		TEXT("Shadow smoke maps: 1 = the tone map (AlbedoTex) is worn with the drawn relief; 0 = the relief only."));
-	TAutoConsoleVariable<float> CVarSmokeDark(TEXT("wl.Shadow.SmokeDark"), 0.55f,
+	TAutoConsoleVariable<float> CVarSmokeDark(TEXT("wl.Shadow.SmokeDark"), 0.45f,
 		TEXT("Shadow smoke maps: the tone in the billows' hearts, as a fraction of the colour (1 = no tonal variation)."));
-	TAutoConsoleVariable<float> CVarSmokeTonePower(TEXT("wl.Shadow.SmokeTonePower"), 1.6f,
+	TAutoConsoleVariable<float> CVarSmokeTonePower(TEXT("wl.Shadow.SmokeTonePower"), 1.3f,
 		TEXT("Shadow smoke maps: how quickly the tone falls from the creases into the billows."));
 	TAutoConsoleVariable<int32> CVarSmokeToneOctaves(TEXT("wl.Shadow.SmokeToneOctaves"), 4,
 		TEXT("Shadow smoke maps: the tone's octaves (more = finer wisps)."));
 	TAutoConsoleVariable<float> CVarSmokeToneGain(TEXT("wl.Shadow.SmokeToneGain"), 0.45f,
 		TEXT("Shadow smoke maps: each finer octave's share of the tone."));
-	TAutoConsoleVariable<float> CVarSmokeBump(TEXT("wl.Shadow.SmokeBump"), 0.14f,
+	TAutoConsoleVariable<float> CVarSmokeBump(TEXT("wl.Shadow.SmokeBump"), 0.10f,
 		TEXT("Shadow smoke maps: the relief's strength (0 = flat)."));
 	TAutoConsoleVariable<int32> CVarSmokeBumpOctaves(TEXT("wl.Shadow.SmokeBumpOctaves"), 2,
 		TEXT("Shadow smoke maps: the relief's octaves (few, so it reads as billows and not as a crumple)."));
@@ -479,11 +479,11 @@ namespace
 		int32 Cells = 3;
 		float Warp = 0.32f;
 		int32 Seed = 7;
-		float Dark = 0.55f;
-		float TonePower = 1.6f;
+		float Dark = 0.45f;
+		float TonePower = 1.3f;
 		int32 ToneOctaves = 4;
 		float ToneGain = 0.45f;
-		float Bump = 0.14f;
+		float Bump = 0.10f;
 		int32 BumpOctaves = 2;
 		float BumpGain = 0.35f;
 		float BumpSoft = 0.06f;
