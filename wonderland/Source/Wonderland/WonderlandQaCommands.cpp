@@ -10604,7 +10604,7 @@ namespace
 		// Second's 23 real objectives): demanding none would test a screen this is not. The label rules lose no word of these ten, of
 		// Second's 23, or of 31,974 identifiers (core_label_rule_check.py).
 		static const TCHAR* const ReferenceFlags = TEXT("SHA256HMACSigner2024");
-		int32 AsTyped = 0;
+		int32 RealAsTyped = 0;
 		int32 KeptBack = 0;
 		int32 Lost = 0;
 		bool bReferenceAgrees = true;
@@ -10615,7 +10615,7 @@ namespace
 			const bool bReferenceFlags = FCString::Strstr(Objective, ReferenceFlags) != nullptr;
 			if (Done.bAccepted && Done.Certain + Done.Statistical == 0 && Done.Kept == Objective)
 			{
-				++AsTyped;
+				++RealAsTyped;
 				bReferenceAgrees &= !bReferenceFlags;
 				continue;
 			}
@@ -10638,9 +10638,9 @@ namespace
 			}
 		}
 		const int32 RealCount = static_cast<int32>(UE_ARRAY_COUNT(RealObjectives));
-		S.Check(TEXT("SI6"), AsTyped + KeptBack == RealCount && Lost == 0 && bReferenceAgrees,
+		S.Check(TEXT("SI6"), RealAsTyped + KeptBack == RealCount && Lost == 0 && bReferenceAgrees,
 			FString::Printf(TEXT("%d real objectives (URL, UUID, path, version, date, identifiers, e-mail): %d stored exactly as typed at once, %d redacted as random-looking and given back exactly by /keep, %d lost; the random-looking finds %s Second's reference (it flags only %s)%s"),
-				RealCount, AsTyped, KeptBack, Lost, bReferenceAgrees ? TEXT("MATCH") : TEXT("do NOT match"), ReferenceFlags,
+				RealCount, RealAsTyped, KeptBack, Lost, bReferenceAgrees ? TEXT("MATCH") : TEXT("do NOT match"), ReferenceFlags,
 				RealDetail.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *RealDetail)));
 
 		// SI7: the transcription check -- a fixed seed, COMBO B's measured rates
