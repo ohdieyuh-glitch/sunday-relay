@@ -202,6 +202,11 @@ suite('Julius event appends under SERIALIZABLE, in both plan states (row 13 (i),
   }, 120_000);
 
   afterAll(async () => {
+    // pool.end() resolves before its idle clients have closed (pg-pool 3.14's _remove() does not await client.end()),
+    // so the terminate below can reach a client that is still closing, and pg-pool re-emits that 57P01 as the pool's
+    // 'error': with no listener, an unhandled error that fails the run (CI, 2026-10-03). The terminate is this
+    // suite's own teardown, so its echo is expected here and nowhere else.
+    pool?.on('error', () => undefined);
     await pool?.end().catch(() => undefined);
     if (admin !== undefined) {
       await admin.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()', [database]).catch(() => undefined);

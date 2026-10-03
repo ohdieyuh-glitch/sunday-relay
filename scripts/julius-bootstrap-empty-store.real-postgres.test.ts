@@ -47,16 +47,34 @@ suite('the EMPTY-store bootstrap against real PostgreSQL', () => {
     made.push(name);
     return name;
   };
+  /**
+   * Waits until no session of ONE pool (named by its application_name) is still connected to a case database.
+   * pool.end() resolves before its sockets close (pg-pool 3.14's _remove() does not await client.end()), so without
+   * this the next step can meet a session that is still closing: the driver's other-session gate would count it, and
+   * afterAll's DROP ... WITH (FORCE) would terminate it, which pg-pool re-emits as an unhandled 'error' (the 57P01
+   * that failed CI on 2026-10-03). Per pool, because the busy-session case holds a session open on purpose.
+   */
+  const quiet = async (name: string, application: string): Promise<void> => {
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const open = (await admin.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = $1 AND application_name = $2 AND backend_type = 'client backend'",
+        [name, application])).rows[0].n;
+      if (open === 0) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`the ${application} session(s) on ${name} did not close within 5 s`);
+  };
   /** Runs SQL on a case database in a pool that is CLOSED again, so the driver's other-session gate sees nobody. */
   const onDb = async <T>(name: string, work: (pool: Pool) => Promise<T>): Promise<T> => {
-    const pool = new Pool({ connectionString: urlOf(name), max: 1 });
-    try { return await work(pool); } finally { await pool.end(); }
+    const pool = new Pool({ connectionString: urlOf(name), max: 1, application_name: 'jboot-test' });
+    try { return await work(pool); } finally { pool.on('error', () => undefined); await pool.end(); await quiet(name, 'jboot-test'); }
   };
   const bootstrap = async (name: string, overrides: { database?: string; systemId?: string } = {}) => {
     const lines: string[] = [];
     const code = await main(
       ['--expect-database', overrides.database ?? name, '--expect-system-identifier', overrides.systemId ?? systemId],
       { JULIUS_BOOTSTRAP_DATABASE_URL: urlOf(name) }, ROOT, (line) => lines.push(line));
+    await quiet(name, 'julius-bootstrap-empty-store'); // the driver's own pool, ended in its finally, is closed first
     return { code, text: lines.join('\n') };
   };
   const hasSchema = (name: string) => onDb(name, async (pool) =>
@@ -106,13 +124,13 @@ suite('the EMPTY-store bootstrap against real PostgreSQL', () => {
 
   it('refuses while another session is connected, and writes nothing', async () => {
     const name = await fresh('busy');
-    const other = new Pool({ connectionString: urlOf(name), max: 1 });
+    const other = new Pool({ connectionString: urlOf(name), max: 1, application_name: 'jboot-test-other' });
     const held = await other.connect();
     try {
       const result = await bootstrap(name);
       expect(result.code, result.text).toBe(3);
       expect(result.text).toMatch(/^BOOTSTRAP REFUSED: 1 other session\(s\) on .*; stop every writer; nothing written$/mu);
-    } finally { held.release(); await other.end(); }
+    } finally { held.release(); other.on('error', () => undefined); await other.end(); await quiet(name, 'jboot-test-other'); }
     expect(await hasSchema(name)).toBe(false);
   }, 60_000);
 
