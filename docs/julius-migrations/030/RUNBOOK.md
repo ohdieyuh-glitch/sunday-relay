@@ -21,8 +21,9 @@ The guarantee the key gave is kept by triggers that read no relation:
 
 ## ORDER: steps 0–2 happen BEFORE the PR is landed
 
-Landing changes nothing in the local container by itself. But every entry point of a checkout that CONTAINS 030 (this branch, its PR, the landed main) migrates the database its environment names, and every workstation shell inherits the LIVE `DATABASE_URL`. These all call `migrate()` when they start:
+Landing changes nothing in the local container by itself. But every entry point of a checkout that CONTAINS 030 (this branch, its PR, the landed main) migrates the database its environment names, and every workstation shell inherits the LIVE `DATABASE_URL`. These eight all call `migrate()` when they start:
 - `relay-bridge/julius-live-mission.ts`;
+- `scripts/julius-live-preflight.ts`, the zero-dispatch preflight (`npm run relay:julius:preflight`), through `migrateIfNeeded`;
 - `scripts/julius-live-preflight-identity.ts`;
 - `scripts/julius-recovery-drill.ts`;
 - `scripts/julius-failure-recovery-drill.ts`;
