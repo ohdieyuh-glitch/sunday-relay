@@ -8786,6 +8786,10 @@ namespace
 		int32 Shot = 0;
 		double PhaseAt = 0.0;
 		FString Dir;
+		// THE SAME PLACE FOR EVERY PRESET (round 2's presets were shot where the last run ended -- a pillar, tree shade -- so the
+		// comparison mixed the pose with the place and the light): where the clear view was found, and its heading
+		FVector Start = FVector::ZeroVector;
+		float StartYaw = 0.0f;
 		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
@@ -8940,7 +8944,8 @@ namespace
 			}
 			S.Preset = 0;
 			S.Shot = 0;
-			QaClearViewHeading(World, Dog, PC);
+			S.StartYaw = QaClearViewHeading(World, Dog, PC);
+			S.Start = Dog->GetActorLocation();
 			QaStanceApply(World, StancePresets[0].Commands);
 			S.Phase = 2;
 			S.PhaseAt = Now;
@@ -8954,6 +8959,14 @@ namespace
 			if (S.Shot >= Shots)
 			{
 				Dog->QaWalkKey(false);
+				// back to the start (a short hop on the same streamed ground), the same heading, the camera behind it
+				Dog->SetActorLocation(S.Start, false, nullptr, ETeleportType::TeleportPhysics);
+				Dog->SetActorRotation(FRotator(0.0f, S.StartYaw, 0.0f));
+				PC->SetControlRotation(FRotator(-12.0f, S.StartYaw, 0.0f));
+				if (UCharacterMovementComponent* Move = Dog->GetCharacterMovement())
+				{
+					Move->StopMovementImmediately();
+				}
 				if (++S.Preset >= Presets)
 				{
 					return Stop(nullptr);
