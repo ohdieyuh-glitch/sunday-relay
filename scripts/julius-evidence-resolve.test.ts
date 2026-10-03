@@ -77,6 +77,27 @@ describe('the evidence bundle resolver (decision A)', () => {
     expect(verdicts(edited)).toEqual([`MISMATCH ${idOf('DIFF')}`]);
   });
 
+  it('A-2a, SAME-SIZE TAMPER: one body byte changed in place, its length kept, is a MISMATCH, here and off-host under --strict', () => {
+    // The appended byte above is caught by byte_size alone, so only a tamper that keeps the length proves the resolver
+    // hashes the body's bytes rather than trusting the content_hash recorded beside them.
+    const dir = bundleOf([{ id: idOf('DIFF'), body: 'body' }]);
+    const file = join(dir, 'artifacts', `${sha(idOf('DIFF'))}.body`);
+    const original = readFileSync(file);
+    const tampered = Buffer.from(original);
+    tampered[0] = tampered[0] === 0x62 ? 0x63 : 0x62;
+    writeFileSync(file, tampered);
+    expect(readFileSync(file).byteLength).toBe(original.byteLength);
+    expect(sha(readFileSync(file))).not.toBe(sha(original));
+    expect(verdicts(dir)).toEqual([`MISMATCH ${idOf('DIFF')}`]);
+    expect(exitOf(dir, true)).toBe(1);
+    copyFileSync(join(ROOT, 'scripts', 'julius-evidence-resolve.mjs'), join(dir, 'resolve-artifacts.mjs'));
+    const env = { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '' };
+    const run = spawnSync(process.execPath, [join(dir, 'resolve-artifacts.mjs'), '--strict'], { cwd: tmpdir(), env, encoding: 'utf8' });
+    expect(run.status, run.stderr).toBe(1);
+    expect(run.stdout).toContain(`RESOLVE MISMATCH ${idOf('DIFF')}`);
+    expect(run.stdout).toContain('strict=yes exit=1');
+  });
+
   it('A-4 / A-7, DROPPED_BY_SCAN: a body removed by the scan with an agreeing record resolves DROPPED_BY_SCAN, and that passes --strict', () => {
     const dir = bundleOf([{ id: idOf('DIFF'), body: 'credential-shaped text' }, { id: idOf('PLAN'), body: 'plan' }]);
     rmSync(join(dir, 'artifacts', `${sha(idOf('DIFF'))}.body`));
