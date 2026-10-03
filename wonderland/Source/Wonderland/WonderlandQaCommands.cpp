@@ -3713,14 +3713,25 @@ namespace
 		case 10: // handoff_walk: the walk's thirty seconds with the swords held
 			if (In >= 30.0)
 			{
-				QaPerfPhase(P, TEXT("handoff_dash"));
-				P.WalkBegan = QaNow();
-				P.Yaw = 0.0f;
-				P.Sub = 0;
+				// BACK TO THE WALK'S START before the dash phase (pre-registration rev 3): a walk keeps its ARRIVAL heading for its first
+				// five seconds (the yaw is only set at the first 60-degree step), so without this the dash phase began where
+				// handoff_walk ended, facing 300 degrees -- not the route it claims. A throwaway phase, compared on nothing.
+				P.bWalking = false;
+				QaPerfPhase(P, TEXT("handoff_travel"));
 				Next();
 			}
 			break;
-		case 11: // handoff_dash: the same, and a double tap of W every 1.6 s
+		case 11: // the travel back, the swords held through it
+			if (QaPerfTravel(P, World, TEXT("castle_approach")))
+			{
+				QaPerfPhase(P, TEXT("handoff_dash"));
+				P.bWalking = true;
+				P.WalkBegan = QaNow();
+				P.Yaw = 0.0f;
+				Next();
+			}
+			break;
+		case 12: // handoff_dash: the same, and a double tap of W every 1.6 s
 		{
 			ARelayDogCharacter* Dog = QaDog(World);
 			if (Dog != nullptr && In < 30.0)
