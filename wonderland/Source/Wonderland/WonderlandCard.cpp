@@ -760,6 +760,37 @@ namespace
 			|| Lower == TEXT("ntlm");
 	}
 
+	/** A label that takes the word right after it when that word looks like a password (Second's real-input leak, 10-03): every credential
+	 *  label but the bare short ones -- "pass", "pw" and "creds" are ordinary words too ("pass 2026-10-03 to the build"). */
+	bool CardDirectLabel(const FString& Lower)
+	{
+		FString Bare;
+		for (const TCHAR Char : Lower)
+		{
+			if (CardAsciiLetter(Char) || CardAsciiDigit(Char))
+			{
+				Bare.AppendChar(FChar::ToLower(Char));
+			}
+		}
+		return CardCredentialLabel(Lower) && Bare != TEXT("pass") && Bare != TEXT("pw") && Bare != TEXT("creds");
+	}
+
+	/** A word a person would use as a password: 6+ characters holding a digit or a symbol, or random-looking. "reset", "manager" and
+	 *  "sauce" are not -- "password reset", "password manager" and "the secret sauce" stay as typed. */
+	bool CardPasswordLike(const FString& Word)
+	{
+		if (Word.Len() < 6)
+		{
+			return false;
+		}
+		bool bDigitOrSymbol = false;
+		for (const TCHAR Char : Word)
+		{
+			bDigitOrSymbol |= !CardAsciiLetter(Char);
+		}
+		return bDigitOrSymbol || CardPiecesLookRandom(Word);
+	}
+
 	/** The first word of a two-word label: "api key", "access key", "private key", "client secret", "secret key", "master key",
 	 *  "encryption key", "signing key", "ssh key". */
 	bool CardLabelQualifier(const FString& Lower)
@@ -837,6 +868,9 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		FString Raw;
 		FString Word;
 		FString Lower;
+		/** The word as typed, its edge punctuation included: a credential's VALUE is redacted whole ("hunter2!" keeps no "!"). */
+		int32 RawStart;
+		int32 RawEnd;
 	};
 	TArray<FSpan> Spans;
 	const int32 Count = Text.Len();
@@ -868,7 +902,7 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		}
 		const FString Raw = Text.Mid(WordStart, At - WordStart);
 		const FString Word = Text.Mid(Start, FMath::Max(End - Start, 0));
-		Spans.Add({ Start, End, Raw, Word, Word.ToLower() });
+		Spans.Add({ Start, End, Raw, Word, Word.ToLower(), WordStart, At });
 	}
 	// THE REDACTION'S OWN MARKER IS NOT A KEY (round 4's SI3): a line drawn after redaction must not read as still holding one, and a
 	// label never takes the marker as its value -- that value is already gone
@@ -885,6 +919,10 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 	}
 	TArray<bool> Certain;
 	Certain.Init(false, Spans.Num());
+	// A VALUE GIVEN BY A LABEL (or Bearer / Basic, pwd=..., a URL's user:pass@) is redacted as typed, edge punctuation and all: trimmed, a
+	// password ending in "!" or ")" kept that character on screen and on disk (round 5's rule check: "the secret hunter2! goes in")
+	TArray<bool> TakenWhole;
+	TakenWhole.Init(false, Spans.Num());
 	bool bInPem = false;
 	for (int32 Index = 0; Index < Spans.Num(); ++Index)
 	{
@@ -905,7 +943,12 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 			}
 			continue;
 		}
-		if (!Span.Word.IsEmpty() && (CardWordIsCertain(Span.Word) || CardLabelWithValue(Span.Lower) || CardUrlUserinfoPassword(Span.Word)))
+		if (!Span.Word.IsEmpty() && (CardLabelWithValue(Span.Lower) || CardUrlUserinfoPassword(Span.Word)))
+		{
+			Certain[Index] = true;
+			TakenWhole[Index] = true;
+		}
+		else if (!Span.Word.IsEmpty() && CardWordIsCertain(Span.Word))
 		{
 			Certain[Index] = true;
 		}
@@ -915,6 +958,7 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 			if (Span.Lower == TEXT("bearer") || (Span.Lower == TEXT("basic") && CardBase64Word(Spans[Index + 1].Word)))
 			{
 				Certain[Index + 1] = true;
+				TakenWhole[Index + 1] = true;
 			}
 		}
 		// A CREDENTIAL LABEL takes its value with it: "password: X", "secret = X", "api key: X", "pwd is X"
@@ -932,6 +976,13 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 			{
 				ValueAt = Index + 2;
 			}
+			// A LABEL DIRECTLY FOLLOWED BY A PASSWORD-LIKE WORD (Second's real-input leak, 10-03: "the passwd Tr0ub4dor&3x is on the card"
+			// was stored as typed, the value below every statistic): that word is the value
+			else if (Index + 1 < Spans.Num() && !InRedaction[Index + 1] && CardPasswordLike(Spans[Index + 1].Word)
+				&& (CardDirectLabel(Span.Lower) || !CardCredentialLabel(Span.Lower)))
+			{
+				ValueAt = Index + 1;
+			}
 			// AN AUTHORIZATION SCHEME IS NOT THE CREDENTIAL (Second, 10-03): "Authorization: Bearer X" keeps "Bearer" readable and takes X;
 			// a scheme with nothing after it is taken itself (fail-closed)
 			if (ValueAt != INDEX_NONE && ValueAt + 1 < Spans.Num() && Span.Lower.Contains(TEXT("authorization")) && CardAuthScheme(Spans[ValueAt].Lower))
@@ -941,6 +992,7 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 			if (ValueAt != INDEX_NONE)
 			{
 				Certain[ValueAt] = true;
+				TakenWhole[ValueAt] = true;
 			}
 		}
 	}
@@ -954,7 +1006,8 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		}
 		if (Certain[Index])
 		{
-			OutFinds.Add({ Span.Start, Span.End - Span.Start, true });
+			const bool bWhole = TakenWhole[Index];
+			OutFinds.Add({ bWhole ? Span.RawStart : Span.Start, bWhole ? Span.RawEnd - Span.RawStart : Span.End - Span.Start, true });
 			continue;
 		}
 		if (CardWordIsStructure(Span.Word))

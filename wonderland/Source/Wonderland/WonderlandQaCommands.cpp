@@ -12350,7 +12350,9 @@ namespace
 			TEXT("port handleOAuth2CallbackRequest to the new auth flow"),
 			TEXT("add tests for SHA256HMACSigner2024 and the md5 fallback"),
 			TEXT("set wl.Handoff.Stance.Crouch to 11 and wl.Handoff.Stance.FeetOut to 20"),
-			TEXT("email beta-tester@example.com about the Saturday build") };
+			TEXT("email beta-tester@example.com about the Saturday build"),
+			// a label word with an ordinary word after it is not a credential (the control for round 5's label-then-value rule)
+			TEXT("send the password reset link to the beta testers") };
 		// EVERY ONE ACCEPTED and none loses a word for good (no certain find); the random-looking finds are EXACTLY the ones Second's
 		// reference COMBO B flags on these ten -- one, SHA256HMACSigner2024 (three letter/digit switches; core_v2f_vs_comboB.py) -- and
 		// each comes back exactly as typed by /keep. The statistical class is redacted-then-recoverable by design (COMBO B flags 2 of
@@ -12484,7 +12486,10 @@ namespace
 			FString::Printf(TEXT("migrate %s://app:%s@10.0.0.5/prod tonight"), *DatabaseScheme, *ShortPassword),
 			FString::Printf(TEXT("export DB_PASSWORD=%s before the run"), *ShortPassword),
 			FString::Printf(TEXT("rotate auth_token: %s weekly"), *ShortPassword),
-			FString::Printf(TEXT("the secret key: %s is old"), *ShortPassword) };
+			FString::Printf(TEXT("the secret key: %s is old"), *ShortPassword),
+			// a label then its value, nothing between (Second's real-input leak on round 4)
+			FString::Printf(TEXT("the passwd %s is on the card"), *ShortPassword),
+			FString::Printf(TEXT("my password %s for staging"), *ShortPassword) };
 		auto HoldsValue = [&ShortPassword, &HexValue, &BasicValue](const FString& Text)
 		{
 			return Text.Contains(ShortPassword) || Text.Contains(HexValue) || Text.Contains(BasicValue);
@@ -12515,9 +12520,14 @@ namespace
 					HoldsValue(Stored) ? TEXT("HOLDS IT") : TEXT("clean"), HoldsValue(FWonderlandCardStore::MaskForDisplay(Typed)) ? TEXT("SHOWS IT") : TEXT("masked"));
 			}
 		}
-		S.Check(TEXT("SI10"), SlotsMissed == CaseMissedAt && LabelledClean == static_cast<int32>(UE_ARRAY_COUNT(Labelled)),
-			SlotNote() + FString::Printf(TEXT("%d of %d labelled credentials (password: / pwd= / passwd is / secret: / api key: / api_key: / Basic / URL userinfo) redacted on submit, still after /keep, masked on screen%s"),
-				LabelledClean, static_cast<int32>(UE_ARRAY_COUNT(Labelled)), LabelledDetail.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; GOT THROUGH: %s"), *LabelledDetail)));
+		// THE VALUE WHOLE (round 5): a password ending in punctuation keeps no part of itself -- trimmed, "password: <v>!" left its "!" behind
+		const FString Bang = FString::Printf(TEXT("login with password: %s! today"), *ShortPassword);
+		const FSubmitted BangDone = Submit(Bang);
+		const bool bBangWhole = !BangDone.bNoSlot && BangDone.bAccepted && BangDone.Certain >= 1 && !BangDone.Kept.Contains(TEXT("]!")) && !HoldsValue(BangDone.Kept);
+		S.Check(TEXT("SI10"), SlotsMissed == CaseMissedAt && LabelledClean == static_cast<int32>(UE_ARRAY_COUNT(Labelled)) && bBangWhole,
+			SlotNote() + FString::Printf(TEXT("%d of %d labelled credentials (password: / pwd= / passwd is / secret: / api key: / api_key: / Basic / URL userinfo / a label then its value) redacted on submit, still after /keep, masked on screen%s"),
+				LabelledClean, static_cast<int32>(UE_ARRAY_COUNT(Labelled)), LabelledDetail.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; GOT THROUGH: %s"), *LabelledDetail))
+				+ FString::Printf(TEXT("; a password ending in '!' redacted whole: %s (stored '%s')"), bBangWhole ? TEXT("yes") : TEXT("NO"), *BangDone.Kept));
 		FreeSlots();
 
 		// SI11: PATTERNS A PERSON TYPES ARE NOT KEYS (Second's degenerate strings; round 4's card C6)
