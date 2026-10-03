@@ -114,6 +114,8 @@ public:
 	FString DescribeOpenSocialHub() const;
 	/** A social action asked of the service, its answer shown on the open hub or profile: exactly what their buttons call. */
 	void RequestSocialAction(const FString& OperationId, const FString& SubjectId) { HandleSocialAction(OperationId, SubjectId); }
+	/** QA: the player whose BLOCK is waiting for its confirmation (F1: a shared-party block is warned first), or empty. */
+	FString GetPendingBlockSubject() const { return PendingBlockSubject; }
 	/** What Esc and CLOSE do on a profile: back to the hub if it was opened from there, else closed. */
 	void BackFromProfile();
 	/** SEND in the hub's Messages: the body to the social service, its answer on the hub. The body is never logged. */
@@ -837,6 +839,9 @@ private:
 
 	/** Wonderland Social: a profile panel's action, asked of the social service, its answer shown on the panel. */
 	void HandleSocialAction(const FString& OperationId, const FString& SubjectId);
+	/** F1: a BLOCK on somebody in this player's party, warned and waiting for a second BLOCK (plain members: no reflection). */
+	FString PendingBlockSubject;
+	double PendingBlockAt = 0.0;
 	/** Wonderland Social: a mutual friend's chip clicked on a profile -- their profile, if this viewer may see it. */
 	void OpenSocialProfileById(const FString& UserId);
 	/** Wonderland Social: listen to the social subsystem once (live view changes, a server's answers). */

@@ -4915,9 +4915,43 @@ void UWonderlandUiSubsystem::HandleSocialAction(const FString& OperationId, cons
 	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
 	UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
 	IWonderlandSocialService* Service = Social != nullptr ? Social->GetService() : nullptr;
-	const FWonderlandSocialActionResult Result = Service != nullptr ? Service->Request(OperationId, SubjectId)
+	// F1, THE FOUNDER'S FINAL RULE (2026-10-02): a BLOCK on somebody in this player's party is committed only after it is
+	// confirmed. The first BLOCK only WARNS, in the founder's words -- a leader's block also removes them, anybody else's makes
+	// the blocker leave -- and a second BLOCK on the same person within 15 s confirms it (blocks.add.confirm). The server
+	// refuses an unconfirmed shared-party block anyway, so no surface can skip the warning.
+	FString Operation = OperationId;
+	FString Warning;
+	if (OperationId == TEXT("blocks.add") && Service != nullptr && !Service->IsDevelopmentPreview())
+	{
+		const FWonderlandSocialSnapshot& Snap = Service->GetSnapshot();
+		const bool bShared = Snap.bHasParty
+			&& Snap.Party.Members.ContainsByPredicate([&SubjectId](const FWonderlandSocialPartyMember& M) { return M.UserId == SubjectId; });
+		if (bShared)
+		{
+			const double Now = FPlatformTime::Seconds();
+			if (PendingBlockSubject != SubjectId || Now - PendingBlockAt > 15.0)
+			{
+				PendingBlockSubject = SubjectId;
+				PendingBlockAt = Now;
+				const FString* Name = Snap.NamesById.Find(SubjectId);
+				const FString Who = Name != nullptr ? *Name : SubjectId;
+				Warning = Snap.Party.bViewerIsLeader
+					? FString::Printf(TEXT("Blocking %s will also remove them from your party. Choose BLOCK again to confirm."), *Who)
+					: FString::Printf(TEXT("Blocking %s will cause you to leave this party. Choose BLOCK again to confirm."), *Who);
+				UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL block needs confirmation: %s in party %s (%s); nothing changed yet"), *SubjectId,
+					*Snap.Party.PartyId, Snap.Party.bViewerIsLeader ? TEXT("you lead: they will be removed") : TEXT("you will leave"));
+			}
+			else
+			{
+				PendingBlockSubject.Reset();
+				Operation = TEXT("blocks.add.confirm");
+			}
+		}
+	}
+	const FWonderlandSocialActionResult Result = !Warning.IsEmpty() ? FWonderlandSocialActionResult{false, Warning}
+		: Service != nullptr ? Service->Request(Operation, SubjectId)
 		: FWonderlandSocialActionResult{false, TEXT("Social is not available in this build")};
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL action %s on %s: %s%s"), *OperationId, *SubjectId, Result.bOk ? TEXT("ok") : TEXT("refused"),
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL action %s on %s: %s%s"), *Operation, *SubjectId, Result.bOk ? TEXT("ok") : TEXT("refused"),
 		Result.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Result.Reason));
 	// THE ANSWER GOES TO THE SURFACE THAT ASKED: the open one. A server's answer comes later (HandleSocialAnswered).
 	const FString Line = Result.bPending ? FString(TEXT("Sending…")) : Result.bOk ? FString(TEXT("Done")) : Result.Reason;

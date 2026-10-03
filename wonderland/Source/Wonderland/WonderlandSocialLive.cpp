@@ -445,6 +445,13 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::Request(const FStrin
 	if (OperationId == TEXT("requests.cancel")) return Ask(OperationId, SubjectId, TEXT("POST"), FString::Printf(TEXT("/requests/%s/cancel"), *SubjectId), MakeShared<FJsonObject>());
 	if (OperationId == TEXT("friends.remove")) return Ask(OperationId, SubjectId, TEXT("POST"), FString::Printf(TEXT("/friends/%s/remove"), *SubjectId), MakeShared<FJsonObject>());
 	if (OperationId == TEXT("blocks.add")) return Ask(OperationId, SubjectId, TEXT("POST"), TEXT("/blocks"), Object(TEXT("targetId"), SubjectId));
+	if (OperationId == TEXT("blocks.add.confirm"))
+	{
+		// F1: the player confirmed a block on somebody in their party (UWonderlandUiSubsystem::HandleSocialAction warned first)
+		TSharedPtr<FJsonObject> Body = Object(TEXT("targetId"), SubjectId);
+		Body->SetBoolField(TEXT("confirmSharedParty"), true);
+		return Ask(TEXT("blocks.add"), SubjectId, TEXT("POST"), TEXT("/blocks"), Body);
+	}
 	if (OperationId == TEXT("blocks.remove")) return Ask(OperationId, SubjectId, TEXT("POST"), FString::Printf(TEXT("/blocks/%s/remove"), *SubjectId), MakeShared<FJsonObject>());
 	if (OperationId == TEXT("mutes.set"))
 	{

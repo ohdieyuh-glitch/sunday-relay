@@ -650,6 +650,12 @@ FString SWonderlandSocialHubPanel::NameOf(const FString& UserId) const
 	{
 		return TEXT("You");
 	}
+	// NOBODY THIS VIEWER MAY SEE: the server sends an empty id where the block wall hides somebody (a party's leaderId);
+	// "led by " with nothing after it would itself say somebody is there.
+	if (UserId.IsEmpty())
+	{
+		return TEXT("—");
+	}
 	const FString* Name = Snapshot.NamesById.Find(UserId);
 	return Name != nullptr ? *Name : UserId;
 }
