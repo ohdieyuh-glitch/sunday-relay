@@ -747,6 +747,19 @@ namespace
 		return false;
 	}
 
+	/** What a redaction leaves in a line: one spelling, so the screen can tell its own marker from a key. */
+	const TCHAR* CardRedactionMarker()
+	{
+		return TEXT("[a key: never shown or stored]");
+	}
+
+	/** The scheme word of an Authorization header ("Authorization: Bearer X"): the credential is the word after it. */
+	bool CardAuthScheme(const FString& Lower)
+	{
+		return Lower == TEXT("bearer") || Lower == TEXT("basic") || Lower == TEXT("digest") || Lower == TEXT("token") || Lower == TEXT("negotiate")
+			|| Lower == TEXT("ntlm");
+	}
+
 	/** The first word of a two-word label: "api key", "access key", "private key", "client secret", "secret key", "master key",
 	 *  "encryption key", "signing key", "ssh key". */
 	bool CardLabelQualifier(const FString& Lower)
@@ -857,12 +870,29 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		const FString Word = Text.Mid(Start, FMath::Max(End - Start, 0));
 		Spans.Add({ Start, End, Raw, Word, Word.ToLower() });
 	}
+	// THE REDACTION'S OWN MARKER IS NOT A KEY (round 4's SI3): a line drawn after redaction must not read as still holding one, and a
+	// label never takes the marker as its value -- that value is already gone
+	TArray<bool> InRedaction;
+	InRedaction.Init(false, Spans.Num());
+	const FString RedactionMark = CardRedactionMarker();
+	for (int32 MarkAt = Text.Find(RedactionMark, ESearchCase::CaseSensitive); MarkAt != INDEX_NONE;
+		MarkAt = Text.Find(RedactionMark, ESearchCase::CaseSensitive, ESearchDir::FromStart, MarkAt + RedactionMark.Len()))
+	{
+		for (int32 Index = 0; Index < Spans.Num(); ++Index)
+		{
+			InRedaction[Index] |= Spans[Index].Start < MarkAt + RedactionMark.Len() && Spans[Index].End > MarkAt;
+		}
+	}
 	TArray<bool> Certain;
 	Certain.Init(false, Spans.Num());
 	bool bInPem = false;
 	for (int32 Index = 0; Index < Spans.Num(); ++Index)
 	{
 		const FSpan& Span = Spans[Index];
+		if (InRedaction[Index])
+		{
+			continue;
+		}
 		// A PEM BLOCK is certain from its BEGIN line to its END line
 		const bool bPemStart = Span.Word.Contains(TEXT("-----BEGIN"));
 		bInPem |= bPemStart;
@@ -893,20 +923,32 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		if (bLabel && Span.Raw.Len() > 0)
 		{
 			const TCHAR Last = Span.Raw[Span.Raw.Len() - 1];
+			int32 ValueAt = INDEX_NONE;
 			if ((Last == TEXT(':') || Last == TEXT('=')) && Index + 1 < Spans.Num())
 			{
-				Certain[Index + 1] = true;
+				ValueAt = Index + 1;
 			}
 			else if (Index + 2 < Spans.Num() && (Spans[Index + 1].Raw == TEXT(":") || Spans[Index + 1].Raw == TEXT("=") || Spans[Index + 1].Lower == TEXT("is")))
 			{
-				Certain[Index + 2] = true;
+				ValueAt = Index + 2;
+			}
+			// AN AUTHORIZATION SCHEME IS NOT THE CREDENTIAL (Second, 10-03): "Authorization: Bearer X" keeps "Bearer" readable and takes X;
+			// a scheme with nothing after it is taken itself (fail-closed)
+			if (ValueAt != INDEX_NONE && ValueAt + 1 < Spans.Num() && Span.Lower.Contains(TEXT("authorization")) && CardAuthScheme(Spans[ValueAt].Lower))
+			{
+				++ValueAt;
+			}
+			if (ValueAt != INDEX_NONE)
+			{
+				Certain[ValueAt] = true;
 			}
 		}
 	}
 	for (int32 Index = 0; Index < Spans.Num(); ++Index)
 	{
 		const FSpan& Span = Spans[Index];
-		if (Span.Word.IsEmpty())
+		// the marker is never a find, whatever rule pointed at it
+		if (Span.Word.IsEmpty() || InRedaction[Index])
 		{
 			continue;
 		}
@@ -947,7 +989,7 @@ FString FWonderlandCardStore::RedactSecrets(const FString& Text, const TArray<FS
 			continue;
 		}
 		Out += Text.Mid(From, Find.Start - From);
-		Out += TEXT("[a key: never shown or stored]");
+		Out += CardRedactionMarker();
 		From = Find.Start + Find.Length;
 	}
 	Out += Text.Mid(From);

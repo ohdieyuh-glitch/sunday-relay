@@ -118,6 +118,12 @@ public:
 	static constexpr float TransformSeconds = 1.8f;
 	static constexpr float DeliverSeconds = 0.9f;
 	static constexpr float ReturnSeconds = 1.4f;
+	/**
+	 * A HITCH PAUSES THE CHANGE, NEVER SKIPS IT (Second, round 4's SW5): the most a phase advances in one tick. A long frame -- a
+	 * screenshot, a streaming stall -- took the return from a quarter to its end in one step, and the companions popped to full size.
+	 * Every phase also SHOWS ITS END before the next begins (EndHeld), so a state never changes mid-pose.
+	 */
+	static constexpr float MaxPhaseStepSeconds = 0.1f;
 
 	static const TCHAR* StateName(EWonderlandHandoffState InState);
 
@@ -146,6 +152,8 @@ private:
 	 */
 	bool IsRecordedEquipped() const { return State != EWonderlandHandoffState::Idle && State != EWonderlandHandoffState::Returning; }
 	void SetState(EWonderlandHandoffState Next);
+	/** True once this phase has run its Length AND been held at its end for one tick (its last pose drawn). */
+	bool EndHeld(float Length);
 	bool Persist() const;
 	/** Sets a refused record aside; when that fails, the session goes read-only. Returns the note. */
 	FString Refuse(const FString& Why);
@@ -156,6 +164,7 @@ private:
 	FString ObjectId;
 	FString MissionId;
 	float PhaseSeconds = 0.0f;
+	bool bEndHeld = false;
 	FString LoadNote;
 	bool bReadOnly = false;
 };

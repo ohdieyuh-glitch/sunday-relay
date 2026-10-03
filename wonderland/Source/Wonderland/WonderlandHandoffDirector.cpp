@@ -73,10 +73,15 @@ bool WonderlandHandoffDirector::Equip(ULocalPlayer* Player, FString& OutSaid)
 		UE_LOG(LogTemp, Display, TEXT("WLHANDOFF equip refused: %s"), *Why);
 		return false;
 	}
+	// WHAT IS SAID FOLLOWS WHAT IS TRUE (the founder's /handoff canon, 10-03): a mission running while its animation is not showing still
+	// carries on and is still followed -- "no mission is running" is said only when none is
 	OutSaid = bMidMission
 		? FString::Printf(TEXT("MISSION HANDOFF. You leave the mission's animation and roam; the mission carries on (%s), and this terminal, the strip and the "
 			"companions' consoles keep following it. Faster roaming; double-tap W or Up to dash. /handoff again gives the swords back."),
 			MissionId.IsEmpty() ? TEXT("a mission") : *MissionId)
+		: !MissionId.IsEmpty()
+		? FString::Printf(TEXT("MISSION HANDOFF. The mission carries on (%s), and this terminal, the strip and the companions' consoles keep following it. "
+			"Faster roaming; double-tap W or Up to dash. /handoff again gives the swords back."), *MissionId)
 		: FString(TEXT("MISSION HANDOFF. No mission is running, so nothing mission-shaped was started: this is your roaming form. Faster roaming; "
 			"double-tap W or Up to dash. /handoff again gives the swords back."));
 	UE_LOG(LogTemp, Display, TEXT("WLHANDOFF equip: %s, form %s (C.A.R.D. %s), mission %s"), EntryWord(State.GetEntry()), *Card.MissionHandoff, *Card.Id,

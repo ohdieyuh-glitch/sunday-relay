@@ -1,5 +1,6 @@
 // Copyright Wonderland. THE TRANSFORMATION. See WonderlandHandoffTransform.h.
 #include "WonderlandHandoffTransform.h"
+#include "WonderlandFinite.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -148,7 +149,16 @@ namespace WonderlandHandoffTransform
 			Slot.bTouched = true;
 		}
 		const bool bHide = InPresence <= 0.01f;
-		Body->SetActorScale3D(Slot.RestScale * FMath::Max(InPresence, 0.01f));
+		const FVector VeiledScale = Slot.RestScale * FMath::Max(InPresence, 0.01f);
+		// DRAWABLE ONLY (round 4's GPU hang): a size that is not finite is never given to a companion
+		if (!FMath::IsFinite(InPresence) || !WonderlandFinite::IsDrawableScale(VeiledScale))
+		{
+			static bool bVeilWarned = false;
+			WonderlandFinite::NoteRefused(bVeilWarned, TEXT("companion veil"), FString::Printf(TEXT("%s: rest %s at presence %.3f"), *Body->GetName(),
+				*Slot.RestScale.ToString(), InPresence));
+			return;
+		}
+		Body->SetActorScale3D(VeiledScale);
 		if (bHide != Slot.bHidden)
 		{
 			Body->SetActorHiddenInGame(bHide);
@@ -160,6 +170,17 @@ namespace WonderlandHandoffTransform
 	{
 		if (Mesh == nullptr)
 		{
+			return;
+		}
+		// DRAWABLE ONLY (round 4's GPU hang): a stream between points that are not finite is not drawn at all
+		if (From.ContainsNaN() || To.ContainsNaN() || !FMath::IsFinite(InFlow) || !FMath::IsFinite(TimeSeconds))
+		{
+			static bool bFlowWarned = false;
+			WonderlandFinite::NoteRefused(bFlowWarned, TEXT("energy motes"), FString::Printf(TEXT("from %s to %s, flow %.3f"), *From.ToString(), *To.ToString(), InFlow));
+			if (Mesh->IsVisible())
+			{
+				Mesh->SetVisibility(false);
+			}
 			return;
 		}
 		const bool bShow = InFlow > 0.01f;
@@ -190,6 +211,8 @@ namespace WonderlandHandoffTransform
 
 	void FPresentation::Show(const FShowInput& In)
 	{
+		ShownState = In.State;
+		ShownPhase = In.PhaseSeconds;
 		Presence = CompanionPresence(In.State, In.PhaseSeconds);
 		Veil(Left, In.LeftCompanion.Get(), Presence);
 		Veil(Right, In.RightCompanion.Get(), Presence);

@@ -1,5 +1,6 @@
 // Copyright Wonderland. THE ANGELIC TWIN SWORDS. See WonderlandHandoffSwords.h.
 #include "WonderlandHandoffSwords.h"
+#include "WonderlandFinite.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
@@ -572,6 +573,15 @@ namespace WonderlandHandoffSwords
 					Mesh->SetVisibility(false);
 				}
 			}
+			return;
+		}
+		// DRAWABLE ONLY (round 4's GPU hang): a sword whose frame is not finite keeps its last place
+		if (!FMath::IsFinite(Grow) || !WonderlandFinite::IsDrawable(World) || !WonderlandFinite::IsDrawable(HoldLocal)
+			|| (HoldWorldRotation != nullptr && HoldWorldRotation->ContainsNaN()))
+		{
+			static bool bSwordPlaceWarned = false;
+			WonderlandFinite::NoteRefused(bSwordPlaceWarned, TEXT("sword"), FString::Printf(TEXT("in the world %s, in the hand %s, grow %.3f"), *World.ToString(),
+				*HoldLocal.ToString(), Grow));
 			return;
 		}
 		const FVector Scale(FMath::Max(Grow, 0.001f) * BuiltScale);

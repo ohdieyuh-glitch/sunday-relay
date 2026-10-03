@@ -104,6 +104,7 @@ void FWonderlandMissionHandoff::SetState(EWonderlandHandoffState Next)
 	const EWonderlandHandoffState Was = State;
 	State = Next;
 	PhaseSeconds = 0.0f;
+	bEndHeld = false;
 	// THE RECORD FOLLOWS THE EQUIPPED STATE: written when a handoff begins, cleared the moment the return BEGINS. A restart
 	// in the middle of a transformation restores HELD, as the founder's reconnect rule asks; a restart during the return
 	// does not bring back swords the user already gave back.
@@ -162,6 +163,7 @@ void FWonderlandMissionHandoff::Load(TFunctionRef<bool(const FString& MissionId)
 	ObjectId.Reset();
 	MissionId.Reset();
 	PhaseSeconds = 0.0f;
+	bEndHeld = false;
 	LoadNote.Reset();
 	bReadOnly = false;
 	WonderlandBeta::RecoverInterruptedSave(Path);
@@ -296,6 +298,23 @@ void FWonderlandMissionHandoff::AttachMission(const FString& NewMissionId)
 	}
 }
 
+bool FWonderlandMissionHandoff::EndHeld(float Length)
+{
+	if (PhaseSeconds < Length)
+	{
+		return false;
+	}
+	// EVERY PHASE SHOWS ITS END BEFORE THE NEXT BEGINS: the first tick past its length holds the phase AT its length, so the presentation
+	// draws its last pose once -- the companions whole, the swords gone -- and the next tick moves on from exactly that pose
+	if (!bEndHeld)
+	{
+		PhaseSeconds = Length;
+		bEndHeld = true;
+		return false;
+	}
+	return true;
+}
+
 bool FWonderlandMissionHandoff::Tick(float DeltaSeconds)
 {
 	FScope Scope;
@@ -303,21 +322,21 @@ bool FWonderlandMissionHandoff::Tick(float DeltaSeconds)
 	{
 		return false;
 	}
-	PhaseSeconds += FMath::Max(0.0f, DeltaSeconds);
+	PhaseSeconds += FMath::Clamp(DeltaSeconds, 0.0f, MaxPhaseStepSeconds);
 	const EWonderlandHandoffState Before = State;
 	switch (State)
 	{
 	case EWonderlandHandoffState::Acknowledged:
-		if (PhaseSeconds >= AcknowledgeSeconds) { SetState(EWonderlandHandoffState::Transforming); }
+		if (EndHeld(AcknowledgeSeconds)) { SetState(EWonderlandHandoffState::Transforming); }
 		break;
 	case EWonderlandHandoffState::Transforming:
-		if (PhaseSeconds >= TransformSeconds) { SetState(EWonderlandHandoffState::Delivering); }
+		if (EndHeld(TransformSeconds)) { SetState(EWonderlandHandoffState::Delivering); }
 		break;
 	case EWonderlandHandoffState::Delivering:
-		if (PhaseSeconds >= DeliverSeconds) { SetState(EWonderlandHandoffState::Held); }
+		if (EndHeld(DeliverSeconds)) { SetState(EWonderlandHandoffState::Held); }
 		break;
 	case EWonderlandHandoffState::Returning:
-		if (PhaseSeconds >= ReturnSeconds)
+		if (EndHeld(ReturnSeconds))
 		{
 			SetState(EWonderlandHandoffState::Idle);
 			ObjectId.Reset();

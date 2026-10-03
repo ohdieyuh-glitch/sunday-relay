@@ -1,5 +1,6 @@
 #include "RelayDogCharacter.h"
 #include "WonderlandActGrip.h"
+#include "WonderlandFinite.h"
 #include "RelayDogPresentation.h"
 
 #include "Components/PointLightComponent.h"
@@ -3542,6 +3543,15 @@ void ARelayDogCharacter::LayToolInFist(const WonderlandHands::FHand& Hand, UScen
 	UInstancedStaticMeshComponent* HeadPart = bBrush ? BrushHeadMesh.Get() : ScraperBladeMesh.Get();
 	const FTransform HandleOnArm = ToolXf.GetRelativeTransform(ArmXf);
 	const FTransform HeadOnArm = HeadXf.GetRelativeTransform(ArmXf);
+	// DRAWABLE ONLY (round 4's GPU hang): a tool whose frame is not finite is not moved -- it keeps its last place
+	if (!WonderlandFinite::IsDrawable(HandleOnArm) || !WonderlandFinite::IsDrawable(HeadOnArm))
+	{
+		static bool bToolLayWarned = false;
+		WonderlandFinite::NoteRefused(bToolLayWarned, TEXT("tool in the fist"), FString::Printf(TEXT("%s on %s: handle %s, head %s (fist %s, wrap %s, back %s, hollow %.2f)"),
+			bBrush ? TEXT("brush") : TEXT("scraper"), *Forearm->GetName(), *HandleOnArm.ToString(), *HeadOnArm.ToString(), *FistCentre.ToString(), *Wrap.ToString(),
+			*BackOfHand.ToString(), Hollow));
+		return;
+	}
 	for (int32 PartIndex = 0; PartIndex < 2; ++PartIndex)
 	{
 		UInstancedStaticMeshComponent* Part = PartIndex == 0 ? HandlePart : HeadPart;

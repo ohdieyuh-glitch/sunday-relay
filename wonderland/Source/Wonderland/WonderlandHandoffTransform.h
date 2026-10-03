@@ -50,6 +50,9 @@ namespace WonderlandHandoffTransform
 		/** For the QA: how present each body is being drawn (1 untouched), and how many energy motes show. */
 		float GetPresence() const { return Presence; }
 		int32 CountVisibleMotes() const;
+		/** For the QA's continuity check: the state and phase this presentation last DREW (a tick behind the state's own, by tick order). */
+		EWonderlandHandoffState GetShownState() const { return ShownState; }
+		float GetShownPhase() const { return ShownPhase; }
 
 	private:
 		struct FVeiled
@@ -68,6 +71,8 @@ namespace WonderlandHandoffTransform
 		TWeakObjectPtr<UInstancedStaticMeshComponent> CyanMotes;
 		bool bBuilt = false;
 		float Presence = 1.0f;
+		EWonderlandHandoffState ShownState = EWonderlandHandoffState::Idle;
+		float ShownPhase = 0.0f;
 	};
 
 	/** How many motes stream from each companion. */

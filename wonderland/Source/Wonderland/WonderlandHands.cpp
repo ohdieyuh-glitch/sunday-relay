@@ -1,5 +1,6 @@
 // Copyright Wonderland. THE HANDS. See WonderlandHands.h.
 #include "WonderlandHands.h"
+#include "WonderlandFinite.h"
 #include "HAL/IConsoleManager.h"
 
 #include "Components/PrimitiveComponent.h"
@@ -283,7 +284,17 @@ namespace WonderlandHands
 		{
 			if (UStaticMeshComponent* Mesh = Boxes[Index].Get())
 			{
-				Mesh->SetRelativeTransform(Laid[Index]);
+				// DRAWABLE ONLY (round 4's GPU hang): a box whose frame is not finite keeps its last place
+				if (WonderlandFinite::IsDrawable(Laid[Index]))
+				{
+					Mesh->SetRelativeTransform(Laid[Index]);
+				}
+				else
+				{
+					static bool bHandBoxWarned = false;
+					WonderlandFinite::NoteRefused(bHandBoxWarned, TEXT("hand box"), FString::Printf(TEXT("box %d (%s), hand size %.2f, curl %.2f: %s"), Index,
+						*Mesh->GetName(), Size, Curl, *Laid[Index].ToString()));
+				}
 			}
 		}
 	}

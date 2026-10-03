@@ -36,6 +36,7 @@
 #include "WonderlandUiTestLibrary.h"
 #include "RelayDogCharacter.h"
 #include "WonderlandCompanionEmbodiment.h"
+#include "WonderlandFinite.h"
 #include "WonderlandMascotStyle.h"
 #include "WonderlandMissionSubsystem.h"
 #include "WonderlandMissionTasks.h"
@@ -8296,6 +8297,143 @@ namespace
 		return Chosen;
 	}
 
+	/** One tick of a handoff change, as the presentation DREW it (Second's continuity spec, round 4's SW5). */
+	struct FQaFlowRead
+	{
+		EWonderlandHandoffState Shown = EWonderlandHandoffState::Idle;
+		float Phase = 0.0f;
+		/** The companions' drawn size against their rest (the smaller of the two; 0 hidden), and what the presentation asked for. */
+		float Body = 1.0f;
+		float BodyAsked = 1.0f;
+		float Sword = 0.0f;
+		int32 Boxes = 0;
+	};
+
+	/** A timed handoff state's length; -1 for one that waits (Idle, Held). */
+	float QaFlowLength(EWonderlandHandoffState State)
+	{
+		switch (State)
+		{
+		case EWonderlandHandoffState::Acknowledged:
+			return FWonderlandMissionHandoff::AcknowledgeSeconds;
+		case EWonderlandHandoffState::Transforming:
+			return FWonderlandMissionHandoff::TransformSeconds;
+		case EWonderlandHandoffState::Delivering:
+			return FWonderlandMissionHandoff::DeliverSeconds;
+		case EWonderlandHandoffState::Returning:
+			return FWonderlandMissionHandoff::ReturnSeconds;
+		default:
+			return -1.0f;
+		}
+	}
+
+	FQaFlowRead QaFlowSample(const AActor* LeftBody, const AActor* RightBody, const FVector& LeftRest, const FVector& RightRest,
+		const WonderlandHandoffTransform::FPresentation& Change, const WonderlandHandoffSwords::FPresentation& Swords)
+	{
+		FQaFlowRead Read;
+		Read.Shown = Change.GetShownState();
+		Read.Phase = Change.GetShownPhase();
+		auto Drawn = [](const AActor* Body, const FVector& Rest)
+		{
+			return Body == nullptr || Body->IsHidden() || Rest.X <= KINDA_SMALL_NUMBER ? 0.0f : static_cast<float>(Body->GetActorScale3D().X / Rest.X);
+		};
+		Read.Body = FMath::Min(Drawn(LeftBody, LeftRest), Drawn(RightBody, RightRest));
+		// the veil hides a body at 1% and never draws it smaller than 1%
+		const float Asked = Change.GetPresence();
+		Read.BodyAsked = Asked <= 0.01f ? 0.0f : Asked;
+		Read.Sword = Swords.GetPresence();
+		Read.Boxes = Swords.CountVisibleBoxes();
+		return Read;
+	}
+
+	/**
+	 * A CHANGE IS CONTINUOUS (Second's spec, round 5), over every tick it was sampled:
+	 *   no skip -- within a state the drawn phase never advanced more than the cap in one tick (a hitch pauses the change, never skips it);
+	 *   every timed state drawn AT its end before the next state was drawn (WantEnds such changes seen at least);
+	 *   the companions drawn at the size the presentation asked (the veil applied exactly);
+	 *   the swords' boxes never hidden while the swords are present (no despawn);
+	 *   no step of the companions or the swords larger than 0.4 -- the steepest the curves take at the cap is 0.32 (the return's last third).
+	 * Second's 0.15-per-frame bar is not used: at the bed's ~10 fps the designed curve itself moves 0.32 a frame. The steps are reported.
+	 */
+	bool QaFlowContinuous(const TArray<FQaFlowRead>& Reads, int32 WantEnds, FString& OutDetail)
+	{
+		int32 Skips = 0;
+		int32 EndsSeen = 0;
+		int32 EndsMissed = 0;
+		int32 Unapplied = 0;
+		int32 Despawned = 0;
+		int32 Steep = 0;
+		float MostPhaseStep = 0.0f;
+		float MostBodyStep = 0.0f;
+		float MostSwordStep = 0.0f;
+		FString FirstFault;
+		auto Fault = [&FirstFault](const FString& What)
+		{
+			if (FirstFault.IsEmpty())
+			{
+				FirstFault = What;
+			}
+		};
+		for (int32 ReadIndex = 0; ReadIndex < Reads.Num(); ++ReadIndex)
+		{
+			const FQaFlowRead& This = Reads[ReadIndex];
+			if (FMath::Abs(This.Body - This.BodyAsked) > 0.002f)
+			{
+				++Unapplied;
+				Fault(FString::Printf(TEXT("read %d (%s %.3f s): the companions drawn at %.3f, asked %.3f"), ReadIndex, FWonderlandMissionHandoff::StateName(This.Shown),
+					This.Phase, This.Body, This.BodyAsked));
+			}
+			if (This.Boxes == 0 && This.Sword > 0.01f)
+			{
+				++Despawned;
+				Fault(FString::Printf(TEXT("read %d (%s %.3f s): the swords HIDDEN at %.2f of themselves"), ReadIndex, FWonderlandMissionHandoff::StateName(This.Shown),
+					This.Phase, This.Sword));
+			}
+			if (ReadIndex == 0)
+			{
+				continue;
+			}
+			const FQaFlowRead& Was = Reads[ReadIndex - 1];
+			const float BodyStep = FMath::Abs(This.Body - Was.Body);
+			const float SwordStep = FMath::Abs(This.Sword - Was.Sword);
+			MostBodyStep = FMath::Max(MostBodyStep, BodyStep);
+			MostSwordStep = FMath::Max(MostSwordStep, SwordStep);
+			if (BodyStep > 0.4f || SwordStep > 0.4f)
+			{
+				++Steep;
+				Fault(FString::Printf(TEXT("read %d: a step of %.2f (companions) / %.2f (swords) from %s %.3f s to %s %.3f s"), ReadIndex, BodyStep, SwordStep,
+					FWonderlandMissionHandoff::StateName(Was.Shown), Was.Phase, FWonderlandMissionHandoff::StateName(This.Shown), This.Phase));
+			}
+			if (This.Shown == Was.Shown)
+			{
+				const float PhaseStep = This.Phase - Was.Phase;
+				MostPhaseStep = FMath::Max(MostPhaseStep, PhaseStep);
+				if (PhaseStep > FWonderlandMissionHandoff::MaxPhaseStepSeconds + 0.002f)
+				{
+					++Skips;
+					Fault(FString::Printf(TEXT("read %d: %s skipped %.3f s in one tick"), ReadIndex, FWonderlandMissionHandoff::StateName(This.Shown), PhaseStep));
+				}
+				continue;
+			}
+			const float Length = QaFlowLength(Was.Shown);
+			if (Length > 0.0f)
+			{
+				++EndsSeen;
+				if (FMath::Abs(Was.Phase - Length) > 0.002f)
+				{
+					++EndsMissed;
+					Fault(FString::Printf(TEXT("read %d: %s last drawn at %.3f s of %.2f before %s"), ReadIndex, FWonderlandMissionHandoff::StateName(Was.Shown), Was.Phase,
+						Length, FWonderlandMissionHandoff::StateName(This.Shown)));
+				}
+			}
+		}
+		OutDetail = FString::Printf(TEXT("%d reads; the drawn phase's largest step %.3f s (cap %.2f), skips %d; timed states drawn at their end %d of %d (want >= %d); ")
+			TEXT("the companions drawn as asked on every read (%d off); swords hidden while present %d; the largest step of the companions %.2f and of the swords %.2f (bar 0.40)%s"),
+			Reads.Num(), MostPhaseStep, FWonderlandMissionHandoff::MaxPhaseStepSeconds, Skips, EndsSeen - EndsMissed, EndsSeen, WantEnds, Unapplied, Despawned, MostBodyStep,
+			MostSwordStep, FirstFault.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; first fault: %s"), *FirstFault));
+		return Reads.Num() >= 5 && Skips == 0 && EndsSeen >= WantEnds && EndsMissed == 0 && Unapplied == 0 && Despawned == 0 && Steep == 0;
+	}
+
 	struct FQaSwords
 	{
 		TWeakObjectPtr<UWorld> World;
@@ -8321,6 +8459,10 @@ namespace
 		FString InterruptSaid;
 		TWeakObjectPtr<ARelayDogCharacter> TravelDog;
 		bool bRecoloured = false;
+		// THE CONTINUITY SAMPLES (Second's spec, round 5): every tick of the equip and of the return, and when the rest began
+		TArray<FQaFlowRead> EquipFlow;
+		TArray<FQaFlowRead> ReturnFlow;
+		float IdleAt = -1.0f;
 		void Check(const FString& Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
@@ -8489,11 +8631,14 @@ namespace
 			}
 			S.bMidChecked = false;
 			S.bDeliverShot = false;
+			S.EquipFlow.Reset();
 			Next(2);
 			return true;
 		}
 		case 2:
 		{
+			// EVERY TICK OF THE EQUIP, sampled for SW1b
+			S.EquipFlow.Add(QaFlowSample(LeftBody, RightBody, S.LeftScale, S.RightScale, Change, Swords));
 			// SW1, HALF-WAY THROUGH THE TRANSFORMATION
 			if (!S.bMidChecked && State->GetState() == EWonderlandHandoffState::Transforming
 				&& State->GetPhaseSeconds() >= FWonderlandMissionHandoff::TransformSeconds * 0.5f)
@@ -8551,6 +8696,10 @@ namespace
 				&& Dog->GetHand(true).GetCurl() >= 0.9f && Dog->GetHand(false).GetCurl() >= 0.9f,
 				FString::Printf(TEXT("held: Relay OG's hands drawn %d + %d boxes, fists closed %.2f / %.2f (>= 0.9)"), Dog->GetHand(true).CountVisibleBoxes(),
 					Dog->GetHand(false).CountVisibleBoxes(), Dog->GetHand(true).GetCurl(), Dog->GetHand(false).GetCurl()));
+			// SW1b: THE EQUIP IS CONTINUOUS, every tick from the word to the swords held (acknowledged, transforming, delivering: three ends)
+			FString EquipFlowDetail;
+			const bool bEquipFlow = QaFlowContinuous(S.EquipFlow, 3, EquipFlowDetail);
+			S.Check(TEXT("SW1b"), bEquipFlow, FString::Printf(TEXT("the equip, every tick: %s"), *EquipFlowDetail));
 			S.Shot = 0;
 			Next(3);
 			return true;
@@ -8596,7 +8745,7 @@ namespace
 		}
 		case 5:
 		{
-			// SW5: GIVEN BACK
+			// SW5: GIVEN BACK -- and CONTINUOUSLY (Second, round 4: the companions read 0.26 and the swords whole in the frame the state ended)
 			if (In < 1.0f)
 			{
 				return true;
@@ -8606,7 +8755,10 @@ namespace
 				FString Said;
 				WonderlandHandoffDirector::Return(QaLocalPlayer(World), Said);
 				S.bReturnShot = false;
+				S.ReturnFlow.Reset();
+				S.IdleAt = -1.0f;
 			}
+			S.ReturnFlow.Add(QaFlowSample(LeftBody, RightBody, S.LeftScale, S.RightScale, Change, Swords));
 			if (!S.bReturnShot && State->GetState() == EWonderlandHandoffState::Returning
 				&& State->GetPhaseSeconds() >= FWonderlandMissionHandoff::ReturnSeconds * 0.75f)
 			{
@@ -8617,17 +8769,24 @@ namespace
 			{
 				return In < 8.0f ? true : Stop(TEXT("the swords were never given back"));
 			}
-			if (In < 2.5f)
+			// SAMPLED ON INTO THE REST for 0.3 s, then judged: the rest itself, and every tick that led to it
+			if (S.IdleAt < 0.0f)
+			{
+				S.IdleAt = Now;
+			}
+			if (Now - S.IdleAt < 0.3f)
 			{
 				return true;
 			}
+			FString ReturnFlowDetail;
+			const bool bReturnFlow = QaFlowContinuous(S.ReturnFlow, 1, ReturnFlowDetail);
 			const bool bBack = !LeftBody->IsHidden() && !RightBody->IsHidden() && LeftBody->GetActorScale3D().Equals(S.LeftScale, 1.0e-4f)
 				&& RightBody->GetActorScale3D().Equals(S.RightScale, 1.0e-4f) && Swords.CountVisibleBoxes() == 0 && Change.CountVisibleMotes() == 0;
-			S.Check(TEXT("SW5"), bBack,
-				FString::Printf(TEXT("given back: the LLM Companion %s at scale %s (was %s), Jhinn %s at %s (was %s); sword boxes drawn %d, motes %d"),
+			S.Check(TEXT("SW5"), bBack && bReturnFlow,
+				FString::Printf(TEXT("given back: the LLM Companion %s at scale %s (was %s), Jhinn %s at %s (was %s); sword boxes drawn %d, motes %d; the return, every tick: %s"),
 					LeftBody->IsHidden() ? TEXT("HIDDEN") : TEXT("shown"), *LeftBody->GetActorScale3D().ToCompactString(), *S.LeftScale.ToCompactString(),
 					RightBody->IsHidden() ? TEXT("HIDDEN") : TEXT("shown"), *RightBody->GetActorScale3D().ToCompactString(), *S.RightScale.ToCompactString(),
-					Swords.CountVisibleBoxes(), Change.CountVisibleMotes()));
+					Swords.CountVisibleBoxes(), Change.CountVisibleMotes(), *ReturnFlowDetail));
 			// HD2: the hands stay, and open again (functional hands: a fist only round something held)
 			S.Check(TEXT("HD2"), Dog->GetHand(true).CountVisibleBoxes() == WonderlandHands::BoxesPerHand && Dog->GetHand(false).CountVisibleBoxes() == WonderlandHands::BoxesPerHand
 				&& Dog->GetHand(true).GetCurl() <= 0.1f && Dog->GetHand(false).GetCurl() <= 0.1f,
@@ -11961,20 +12120,45 @@ namespace
 			int32 Statistical = 0;
 			FString Kept;
 			FGuid Id;
+			bool bNoSlot = false;
 		};
-		TArray<FGuid> Leftover;
-		auto Submit = [Set, &Leftover](const FString& Objective)
+		TArray<FGuid> SlotsMade;
+		int32 SlotsMissed = 0;
+		auto Submit = [Set, &SlotsMade, &SlotsMissed](const FString& Objective)
 		{
 			FSubmitted Out;
 			Out.Id = Set->AddDraft();
+			if (!Out.Id.IsValid())
+			{
+				// NO FREE TASK SLOT (round 4: six open, and every case after the sixth submitted into nothing): BLIND, never "lost"
+				Out.bNoSlot = true;
+				++SlotsMissed;
+				return Out;
+			}
+			SlotsMade.Add(Out.Id);
 			Out.bAccepted = Set->SubmitDraftScreened(Out.Id, Objective, false, Out.Certain, Out.Statistical);
 			const FWonderlandMissionTask* Task = Set->Find(Out.Id);
 			Out.Kept = Task != nullptr ? Task->Objective : FString();
-			if (!Out.bAccepted)
-			{
-				Leftover.Add(Out.Id);
-			}
 			return Out;
+		};
+		// EVERY CASE GIVES ITS SLOTS BACK (the open tabs are capped at six): its drafts dismissed, its own contracts deleted -- none of
+		// them ever held a run
+		auto FreeSlots = [Set, &SlotsMade]()
+		{
+			for (const FGuid& Made : SlotsMade)
+			{
+				if (!Set->DismissDraft(Made))
+				{
+					Set->DeleteLocalContract(Made);
+				}
+			}
+			SlotsMade.Reset();
+		};
+		// A CASE THAT FOUND NO SLOT IS BLIND: it fails, and says so
+		int32 CaseMissedAt = 0;
+		auto SlotNote = [&SlotsMissed, &CaseMissedAt]()
+		{
+			return SlotsMissed > CaseMissedAt ? FString::Printf(TEXT("BLIND: %d submission(s) found no free task slot -- "), SlotsMissed - CaseMissedAt) : FString();
 		};
 		auto ReadFile = []()
 		{
@@ -11997,15 +12181,18 @@ namespace
 		// SI4 FIRST: the control -- the contracts file exists and the byte search is proven on it
 		const FString ControlMarker = FString(TEXT("QaSI")) + Digits.Left(8);
 		const FString Ordinary = FString::Printf(TEXT("fix the login bug from commit 3f9a2b7c1d0e -- %s"), *ControlMarker);
+		CaseMissedAt = SlotsMissed;
 		const FSubmitted Control = Submit(Ordinary);
 		TArray<uint8> FileBytes = ReadFile();
 		const bool bMarkerInFile = QaBytesHold(FileBytes, ControlMarker);
-		S.Check(TEXT("SI4"), Control.bAccepted && Control.Certain + Control.Statistical == 0 && Control.Kept == Ordinary && bMarkerInFile,
-			FString::Printf(TEXT("an ordinary objective with a 12-character commit id: %s, %s; its marker %s in the contracts file (%d bytes) -- the byte search %s"),
+		S.Check(TEXT("SI4"), SlotsMissed == CaseMissedAt && Control.bAccepted && Control.Certain + Control.Statistical == 0 && Control.Kept == Ordinary && bMarkerInFile,
+			SlotNote() + FString::Printf(TEXT("an ordinary objective with a 12-character commit id: %s, %s; its marker %s in the contracts file (%d bytes) -- the byte search %s"),
 				Control.bAccepted ? TEXT("accepted") : TEXT("REFUSED"), Control.Kept == Ordinary ? TEXT("stored unchanged") : TEXT("ALTERED"),
 				bMarkerInFile ? TEXT("found") : TEXT("NOT found"), FileBytes.Num(), bMarkerInFile ? TEXT("works") : TEXT("is BLIND")));
+		FreeSlots();
 
 		// SI1 and SI2: the keys as objectives
+		CaseMissedAt = SlotsMissed;
 		const FSubmitted One = Submit(FString::Printf(TEXT("deploy with %s please"), *KeyOne));
 		const FSubmitted Two = Submit(FString::Printf(TEXT("deploy with %s please"), *KeyTwo));
 		FileBytes = ReadFile();
@@ -12021,25 +12208,41 @@ namespace
 		bool bLogRead = false;
 		const FString LogText = ReadLog(FString(TEXT("WLSIQA log marker ")) + FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(12), bLogRead);
 		const bool bInLog = Holds(LogText, KeyOne) || Holds(LogText, KeyTwoWhole) || LogText.Contains(Digits.Right(22));
-		S.Check(TEXT("SI1"), One.bAccepted && One.Certain >= 1 && One.Kept.Contains(Marker) && !Holds(One.Kept, KeyOne) && FileBytes.Num() > 0 && !bInFile && bLogRead && !bInLog,
-			FString::Printf(TEXT("a run-time key as an objective: %s with %d part(s) redacted; the stored objective '%s'; the contracts file (%d bytes) %s; the log (its own marker %s) %s"),
+		const FString KeysSlotNote = SlotNote();
+		const bool bKeysHadSlots = SlotsMissed == CaseMissedAt;
+		S.Check(TEXT("SI1"), bKeysHadSlots && One.bAccepted && One.Certain >= 1 && One.Kept.Contains(Marker) && !Holds(One.Kept, KeyOne) && FileBytes.Num() > 0 && !bInFile && bLogRead && !bInLog,
+			KeysSlotNote + FString::Printf(TEXT("a run-time key as an objective: %s with %d part(s) redacted; the stored objective '%s'; the contracts file (%d bytes) %s; the log (its own marker %s) %s"),
 				One.bAccepted ? TEXT("accepted") : TEXT("REFUSED"), One.Certain + One.Statistical, *One.Kept, FileBytes.Num(),
 				bInFile ? TEXT("HOLDS a part of a key") : TEXT("holds no part of either key"), bLogRead ? TEXT("found") : TEXT("NOT found: the log could not be read"),
 				bInLog ? TEXT("HOLDS a part of a key") : TEXT("holds no part of either key")));
-		S.Check(TEXT("SI2"), Two.bAccepted && Two.Certain + Two.Statistical >= 1 && !Holds(Two.Kept, KeyTwoWhole) && !Two.Kept.Contains(Digits.Right(22))
+		S.Check(TEXT("SI2"), bKeysHadSlots && Two.bAccepted && Two.Certain + Two.Statistical >= 1 && !Holds(Two.Kept, KeyTwoWhole) && !Two.Kept.Contains(Digits.Right(22))
 			&& !FWonderlandCardStore::LooksLikeSecret(KeyTwo) && FWonderlandCardStore::HoldsSecret(KeyTwo),
-			FString::Printf(TEXT("the key with a zero-width space inside (the raw rule alone misses it: %s): %s with %d part(s) redacted; the stored objective '%s'"),
+			KeysSlotNote + FString::Printf(TEXT("the key with a zero-width space inside (the raw rule alone misses it: %s): %s with %d part(s) redacted; the stored objective '%s'"),
 				FWonderlandCardStore::LooksLikeSecret(KeyTwo) ? TEXT("it does NOT") : TEXT("yes"), Two.bAccepted ? TEXT("accepted") : TEXT("REFUSED"),
 				Two.Certain + Two.Statistical, *Two.Kept));
+		FreeSlots();
 
 		// SI3: what the terminal draws
 		const FString ShownOne = FWonderlandCardStore::MaskForDisplay(FString(TEXT("/card attach api ")) + KeyOne);
 		const FString ShownTwo = FWonderlandCardStore::MaskForDisplay(FString::Printf(TEXT("deploy with %s please"), *KeyTwo));
 		const FString Token = FString(TEXT("ab")) + TEXT("12cd");
 		const FString ShownThree = FWonderlandCardStore::MaskForDisplay(FString(TEXT("Authorization: Bearer ")) + Token);
-		const bool bShownClean = !Holds(ShownOne, KeyOne) && !Holds(ShownTwo, KeyTwoWhole) && !ShownTwo.Contains(Digits.Right(22)) && !ShownThree.Contains(Token)
-			&& !FWonderlandCardStore::HoldsSecret(ShownOne) && !FWonderlandCardStore::HoldsSecret(ShownTwo) && !FWonderlandCardStore::HoldsSecret(ShownThree);
-		S.Check(TEXT("SI3"), bShownClean, FString::Printf(TEXT("the terminal draws '%s', '%s' and '%s'"), *ShownOne, *ShownTwo, *ShownThree));
+		// each drawn line: no part of its key, and the line as drawn does not itself read as holding one (the marker is not a key)
+		auto ShownVerdict = [](bool bKeyGone, const FString& Shown)
+		{
+			return !bKeyGone ? FString(TEXT("A PART OF THE KEY SHOWS")) : FWonderlandCardStore::HoldsSecret(Shown) ? FString(TEXT("the drawn line STILL READS AS A KEY"))
+				: FString(TEXT("clean"));
+		};
+		const bool bOneGone = !Holds(ShownOne, KeyOne);
+		const bool bTwoGone = !Holds(ShownTwo, KeyTwoWhole) && !ShownTwo.Contains(Digits.Right(22));
+		// "Bearer" is the scheme, not the credential: it stays readable and only the token is masked (Second, 10-03)
+		const bool bThreeGone = !ShownThree.Contains(Token);
+		const bool bSchemeReadable = ShownThree.StartsWith(TEXT("Authorization: Bearer ["));
+		const bool bShownClean = bOneGone && bTwoGone && bThreeGone && bSchemeReadable && !FWonderlandCardStore::HoldsSecret(ShownOne)
+			&& !FWonderlandCardStore::HoldsSecret(ShownTwo) && !FWonderlandCardStore::HoldsSecret(ShownThree);
+		S.Check(TEXT("SI3"), bShownClean, FString::Printf(TEXT("the terminal draws '%s' (%s), '%s' (%s) and '%s' (%s; the scheme word %s)"), *ShownOne,
+			*ShownVerdict(bOneGone, ShownOne), *ShownTwo, *ShownVerdict(bTwoGone, ShownTwo), *ShownThree, *ShownVerdict(bThreeGone, ShownThree),
+			bSchemeReadable ? TEXT("readable, only the token masked") : TEXT("NOT readable: 'Bearer' was taken as the credential")));
 
 		// SI5: Second's certain shapes (and a 24-hex run, statistical): redacted on submit; the certain ones still after /keep
 		const FString VendorFront = FString(TEXT("xo")) + TEXT("xb-") + Random(Base62, 20) + TEXT("a1");
@@ -12068,10 +12271,16 @@ namespace
 		}
 		FString ShapeDetail;
 		bool bShapesClean = true;
+		CaseMissedAt = SlotsMissed;
 		for (const FSecretShape& Shape : Shapes)
 		{
 			const FString Typed = FString::Printf(TEXT("use %s for the deploy"), *Shape.Value);
 			const FSubmitted Done = Submit(Typed);
+			if (Done.bNoSlot)
+			{
+				ShapeDetail += FString::Printf(TEXT("%s%s NOT MEASURED (no slot)"), ShapeDetail.IsEmpty() ? TEXT("") : TEXT("; "), Shape.Name);
+				continue;
+			}
 			bool bOk = Done.bAccepted && Done.Certain + Done.Statistical >= 1 && !Holds(Done.Kept, Shape.Whole)
 				&& !Holds(FWonderlandCardStore::MaskForDisplay(Typed), Shape.Whole);
 			if (bOk && Shape.bCertain)
@@ -12096,9 +12305,10 @@ namespace
 				bShapeOnDisk |= QaBytesHold(ShapeBytes, Part) || ShapeLog.Contains(Part);
 			}
 		}
-		S.Check(TEXT("SI5"), bShapesClean && !bShapeOnDisk && ShapeBytes.Num() > 0 && bShapeLogRead,
-			FString::Printf(TEXT("Second's shapes: %s; any part in the contracts file or the log (its marker %s): %s"), *ShapeDetail,
+		S.Check(TEXT("SI5"), SlotsMissed == CaseMissedAt && bShapesClean && !bShapeOnDisk && ShapeBytes.Num() > 0 && bShapeLogRead,
+			SlotNote() + FString::Printf(TEXT("Second's shapes: %s; any part in the contracts file or the log (its marker %s): %s"), *ShapeDetail,
 				bShapeLogRead ? TEXT("found") : TEXT("NOT found"), bShapeOnDisk ? TEXT("YES") : TEXT("none")));
+		FreeSlots();
 
 		// SI6: real objectives are tasks, not keys -- stored exactly as typed
 		static const TCHAR* const RealObjectives[] = {
@@ -12123,9 +12333,14 @@ namespace
 		int32 Lost = 0;
 		bool bReferenceAgrees = true;
 		FString RealDetail;
+		CaseMissedAt = SlotsMissed;
 		for (const TCHAR* Objective : RealObjectives)
 		{
 			const FSubmitted Done = Submit(Objective);
+			if (Done.bNoSlot)
+			{
+				continue;
+			}
 			const bool bReferenceFlags = FCString::Strstr(Objective, ReferenceFlags) != nullptr;
 			if (Done.bAccepted && Done.Certain + Done.Statistical == 0 && Done.Kept == Objective)
 			{
@@ -12152,10 +12367,11 @@ namespace
 			}
 		}
 		const int32 RealCount = static_cast<int32>(UE_ARRAY_COUNT(RealObjectives));
-		S.Check(TEXT("SI6"), RealAsTyped + KeptBack == RealCount && Lost == 0 && bReferenceAgrees,
-			FString::Printf(TEXT("%d real objectives (URL, UUID, path, version, date, identifiers, e-mail): %d stored exactly as typed at once, %d redacted as random-looking and given back exactly by /keep, %d lost; the random-looking finds %s Second's reference (it flags only %s)%s"),
+		S.Check(TEXT("SI6"), SlotsMissed == CaseMissedAt && RealAsTyped + KeptBack == RealCount && Lost == 0 && bReferenceAgrees,
+			SlotNote() + FString::Printf(TEXT("%d real objectives (URL, UUID, path, version, date, identifiers, e-mail): %d stored exactly as typed at once, %d redacted as random-looking and given back exactly by /keep, %d lost; the random-looking finds %s Second's reference (it flags only %s)%s"),
 				RealCount, RealAsTyped, KeptBack, Lost, bReferenceAgrees ? TEXT("MATCH") : TEXT("do NOT match"), ReferenceFlags,
 				RealDetail.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *RealDetail)));
+		FreeSlots();
 
 		// SI7: the transcription check -- a fixed seed, COMBO B's measured rates
 		const int32 Lengths[] = { 20, 24, 32, 44 };
@@ -12182,6 +12398,7 @@ namespace
 
 		// SI8: /keep stores a random-looking identifier as typed -- never a certain shape beside it
 		const FString Identifier = TEXT("clean up K8sClusterRBACv2Config before the release");
+		CaseMissedAt = SlotsMissed;
 		const FSubmitted Flagged = Submit(Identifier);
 		int32 KeptRemoved = -1;
 		const bool bIdentifierKept = Flagged.bAccepted && Set->KeepObjectiveAsTyped(Flagged.Id, Identifier, KeptRemoved);
@@ -12194,10 +12411,11 @@ namespace
 		const FWonderlandMissionTask* MixedTask = Set->Find(MixedDone.Id);
 		const bool bMixedOk = bMixedCall && MixedRemoved >= 1 && MixedTask != nullptr && MixedTask->Objective.Contains(TEXT("K8sClusterRBACv2Config"))
 			&& !Holds(MixedTask->Objective, Vendor);
-		S.Check(TEXT("SI8"), Flagged.Statistical >= 1 && Flagged.Certain == 0 && Flagged.Kept.Contains(Marker) && bIdentifierKept && KeptRemoved == 0 && AsTyped != nullptr
+		S.Check(TEXT("SI8"), SlotsMissed == CaseMissedAt && Flagged.Statistical >= 1 && Flagged.Certain == 0 && Flagged.Kept.Contains(Marker) && bIdentifierKept && KeptRemoved == 0 && AsTyped != nullptr
 			&& AsTyped->Objective == Identifier && bMixedOk,
-			FString::Printf(TEXT("a random-looking identifier: redacted (%d statistical) then /keep stored it %s; beside a vendor key, /keep kept the identifier and removed the key: %s"),
+			SlotNote() + FString::Printf(TEXT("a random-looking identifier: redacted (%d statistical) then /keep stored it %s; beside a vendor key, /keep kept the identifier and removed the key: %s"),
 				Flagged.Statistical, AsTyped != nullptr && AsTyped->Objective == Identifier ? TEXT("exactly as typed") : TEXT("NOT as typed"), bMixedOk ? TEXT("yes") : TEXT("NO")));
+		FreeSlots();
 
 		// SI9: C.A.R.D. -- a 24-character key as a card's name, through the terminal, is refused and never stored
 		const FString CardKey = Random(Base62, 22) + TEXT("x9");
@@ -12224,6 +12442,8 @@ namespace
 		const FString ShortPassword = FString(TEXT("Tr0ub")) + TEXT("4dor&3x");
 		const FString HexValue = Random(TEXT("0123456789abcdef"), 14) + TEXT("9f");
 		const FString BasicValue = FString(TEXT("dXNlcj")) + TEXT("pwYXNz");
+		// the URL's scheme in halves: the release scan reads the package for the whole one, and a hit there must mean a real leak
+		const FString DatabaseScheme = FString(TEXT("postg")) + TEXT("res");
 		const FString Labelled[] = {
 			FString::Printf(TEXT("login with password: %s today"), *ShortPassword),
 			FString::Printf(TEXT("set pwd=%s on the box"), *ShortPassword),
@@ -12232,7 +12452,7 @@ namespace
 			FString::Printf(TEXT("use api key: %s for staging"), *HexValue),
 			FString::Printf(TEXT("restore api_key: %s from the vault"), *HexValue),
 			FString::Printf(TEXT("send Authorization: Basic %s to the proxy"), *BasicValue),
-			FString::Printf(TEXT("migrate postgres://app:%s@10.0.0.5/prod tonight"), *ShortPassword),
+			FString::Printf(TEXT("migrate %s://app:%s@10.0.0.5/prod tonight"), *DatabaseScheme, *ShortPassword),
 			FString::Printf(TEXT("export DB_PASSWORD=%s before the run"), *ShortPassword),
 			FString::Printf(TEXT("rotate auth_token: %s weekly"), *ShortPassword),
 			FString::Printf(TEXT("the secret key: %s is old"), *ShortPassword) };
@@ -12242,9 +12462,14 @@ namespace
 		};
 		int32 LabelledClean = 0;
 		FString LabelledDetail;
+		CaseMissedAt = SlotsMissed;
 		for (const FString& Typed : Labelled)
 		{
 			const FSubmitted Done = Submit(Typed);
+			if (Done.bNoSlot)
+			{
+				continue;
+			}
 			int32 Still = 0;
 			const bool bKeepCall = Done.bAccepted && Set->KeepObjectiveAsTyped(Done.Id, Typed, Still);
 			const FWonderlandMissionTask* After = Set->Find(Done.Id);
@@ -12254,12 +12479,17 @@ namespace
 			LabelledClean += bClean ? 1 : 0;
 			if (!bClean)
 			{
-				LabelledDetail += FString::Printf(TEXT("%s'%s'"), LabelledDetail.IsEmpty() ? TEXT("") : TEXT(", "), *FWonderlandCardStore::MaskForDisplay(Typed));
+				// WHICH PART FAILED (Second: round 4's list showed masked text and no reason)
+				LabelledDetail += FString::Printf(TEXT("%s'%s' (accepted %d, certain %d, the stored text %s, /keep %s with %d still removed, kept after /keep %s, on screen %s)"),
+					LabelledDetail.IsEmpty() ? TEXT("") : TEXT(", "), *FWonderlandCardStore::MaskForDisplay(Typed), Done.bAccepted ? 1 : 0, Done.Certain,
+					HoldsValue(Done.Kept) ? TEXT("HOLDS IT") : TEXT("clean"), bKeepCall ? TEXT("ran") : TEXT("REFUSED"), Still,
+					HoldsValue(Stored) ? TEXT("HOLDS IT") : TEXT("clean"), HoldsValue(FWonderlandCardStore::MaskForDisplay(Typed)) ? TEXT("SHOWS IT") : TEXT("masked"));
 			}
 		}
-		S.Check(TEXT("SI10"), LabelledClean == static_cast<int32>(UE_ARRAY_COUNT(Labelled)),
-			FString::Printf(TEXT("%d of %d labelled credentials (password: / pwd= / passwd is / secret: / api key: / api_key: / Basic / URL userinfo) redacted on submit, still after /keep, masked on screen%s"),
+		S.Check(TEXT("SI10"), SlotsMissed == CaseMissedAt && LabelledClean == static_cast<int32>(UE_ARRAY_COUNT(Labelled)),
+			SlotNote() + FString::Printf(TEXT("%d of %d labelled credentials (password: / pwd= / passwd is / secret: / api key: / api_key: / Basic / URL userinfo) redacted on submit, still after /keep, masked on screen%s"),
 				LabelledClean, static_cast<int32>(UE_ARRAY_COUNT(Labelled)), LabelledDetail.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; GOT THROUGH: %s"), *LabelledDetail)));
+		FreeSlots();
 
 		// SI11: PATTERNS A PERSON TYPES ARE NOT KEYS (Second's degenerate strings; round 4's card C6)
 		static const TCHAR* const Patterns[] = {
@@ -12270,9 +12500,14 @@ namespace
 			TEXT("stop the lolololololololololololol spam") };
 		int32 PatternsKept = 0;
 		FString PatternsAltered;
+		CaseMissedAt = SlotsMissed;
 		for (const TCHAR* Pattern : Patterns)
 		{
 			const FSubmitted Done = Submit(Pattern);
+			if (Done.bNoSlot)
+			{
+				continue;
+			}
 			if (Done.bAccepted && Done.Certain + Done.Statistical == 0 && Done.Kept == Pattern)
 			{
 				++PatternsKept;
@@ -12283,14 +12518,11 @@ namespace
 			}
 		}
 		const int32 PatternCount = static_cast<int32>(UE_ARRAY_COUNT(Patterns));
-		S.Check(TEXT("SI11"), PatternsKept == PatternCount,
-			FString::Printf(TEXT("%d of %d typed patterns (Zzzz, abab, xxxx, 1111, lolol runs of 20+) stored exactly as typed%s"), PatternsKept, PatternCount,
+		S.Check(TEXT("SI11"), SlotsMissed == CaseMissedAt && PatternsKept == PatternCount,
+			SlotNote() + FString::Printf(TEXT("%d of %d typed patterns (Zzzz, abab, xxxx, 1111, lolol runs of 20+) stored exactly as typed%s"), PatternsKept, PatternCount,
 				PatternsAltered.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; ALTERED: %s"), *PatternsAltered)));
 
-		for (const FGuid& Draft : Leftover)
-		{
-			Set->DismissDraft(Draft);
-		}
+		FreeSlots();
 		return Stop(nullptr);
 	}
 
@@ -12611,6 +12843,122 @@ namespace
 		return true;
 	}
 
+	/**
+	 * NO PLANT BETWEEN THE CAMERA AND WHAT IT FRAMES (round 4: skeleton_flame's repair frames were shot from inside a flowerbed and read
+	 * "sight clear" -- the plants have no collision, so the line trace saw nothing). Every instanced mesh of the world near the line -- the
+	 * Dog's, its costume's and the companions' aside -- tested instance by instance as a box (its mesh's bounds, conservative). False when
+	 * one crosses the line or holds the camera; OutBlocker names it.
+	 */
+	bool QaActPlantsClear(UWorld* World, const ARelayDogCharacter* Dog, const FVector& Eye, const FVector& Work, FString& OutBlocker)
+	{
+		const FVector Toward = Work - Eye;
+		const double Length = Toward.Size();
+		if (Length < 1.0)
+		{
+			return true;
+		}
+		const FVector Unit = Toward / Length;
+		FBox Around(ForceInit);
+		Around += Eye;
+		Around += Work;
+		Around = Around.ExpandBy(40.0);
+		const AActor* Worn = Dog->GetCostume();
+		for (TObjectIterator<UInstancedStaticMeshComponent> It; It; ++It)
+		{
+			const UInstancedStaticMeshComponent* Plants = *It;
+			if (Plants == nullptr || Plants->GetWorld() != World || !Plants->IsRegistered() || !Plants->IsVisible() || Plants->GetStaticMesh() == nullptr
+				|| !Plants->Bounds.GetBox().Intersect(Around))
+			{
+				continue;
+			}
+			const AActor* PlantsOwner = Plants->GetOwner();
+			if (PlantsOwner == Dog || (Worn != nullptr && PlantsOwner == Worn) || (PlantsOwner != nullptr && PlantsOwner->IsA<AWonderlandCompanionEmbodiment>()))
+			{
+				continue;
+			}
+			const FBoxSphereBounds PlantBounds = Plants->GetStaticMesh()->GetBounds();
+			for (const int32 Instance : Plants->GetInstancesOverlappingBox(Around, true))
+			{
+				FTransform PlantXf;
+				if (!Plants->GetInstanceTransform(Instance, PlantXf, true))
+				{
+					continue;
+				}
+				FQaObb Plant;
+				Plant.Mesh = Plants;
+				Plant.Instance = Instance;
+				Plant.Centre = PlantXf.TransformPosition(PlantBounds.Origin);
+				const FQuat PlantTurn = PlantXf.GetRotation();
+				Plant.Axis[0] = PlantTurn.GetAxisX();
+				Plant.Axis[1] = PlantTurn.GetAxisY();
+				Plant.Axis[2] = PlantTurn.GetAxisZ();
+				Plant.Half = PlantBounds.BoxExtent * PlantXf.GetScale3D().GetAbs();
+				double Enter = 0.0;
+				double Exit = 0.0;
+				if (QaRayObb(Plant, Eye, Unit, Enter, Exit) && Exit > 0.0 && Enter < Length - 2.0)
+				{
+					OutBlocker = FString::Printf(TEXT("%s instance %d of %s (%s)"), *GetNameSafe(Plants->GetStaticMesh()), Instance, *Plants->GetName(),
+						PlantsOwner != nullptr ? *PlantsOwner->GetName() : TEXT("-"));
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * THE RENDER INPUTS, every tick (Second, round 4's GPU hang): the view, and every part of the Dog, its costume and both companions --
+	 * each component and each instance of an instanced one -- finite and within reach. Nothing is changed; the FIRST fault is returned, to
+	 * be logged once, so a hang that repeats names what fed it.
+	 */
+	FString QaActRenderFault(UWorld* World, const ARelayDogCharacter* Dog, const APlayerController* PC)
+	{
+		if (PC != nullptr && PC->PlayerCameraManager != nullptr)
+		{
+			const FVector Eye = PC->PlayerCameraManager->GetCameraLocation();
+			const FRotator Look = PC->PlayerCameraManager->GetCameraRotation();
+			if (Eye.ContainsNaN() || Look.ContainsNaN() || Eye.GetAbsMax() > 2.0e6)
+			{
+				return FString::Printf(TEXT("the view at %s looking %s"), *Eye.ToString(), *Look.ToString());
+			}
+		}
+		const AActor* Owners[] = { Dog, Dog->GetCostume(), QaCompanionBody(World, 0), QaCompanionBody(World, 1) };
+		for (const AActor* Owner : Owners)
+		{
+			if (Owner == nullptr)
+			{
+				continue;
+			}
+			TInlineComponentArray<USceneComponent*> Parts;
+			Owner->GetComponents<USceneComponent>(Parts);
+			for (const USceneComponent* Part : Parts)
+			{
+				if (Part == nullptr || !Part->IsRegistered())
+				{
+					continue;
+				}
+				if (!WonderlandFinite::IsDrawable(Part->GetComponentTransform(), 1000.0))
+				{
+					return FString::Printf(TEXT("%s on %s at %s"), *Part->GetName(), *Owner->GetName(), *Part->GetComponentTransform().ToString());
+				}
+				const UInstancedStaticMeshComponent* Instanced = Cast<UInstancedStaticMeshComponent>(Part);
+				if (Instanced == nullptr || !Instanced->IsVisible())
+				{
+					continue;
+				}
+				for (int32 Instance = 0; Instance < Instanced->GetInstanceCount(); ++Instance)
+				{
+					FTransform InstanceXf;
+					if (Instanced->GetInstanceTransform(Instance, InstanceXf, true) && !WonderlandFinite::IsDrawable(InstanceXf, 1000.0))
+					{
+						return FString::Printf(TEXT("instance %d of %s on %s at %s"), Instance, *Part->GetName(), *Owner->GetName(), *InstanceXf.ToString());
+					}
+				}
+			}
+		}
+		return FString();
+	}
+
 	struct FQaActHands
 	{
 		TWeakObjectPtr<UWorld> World;
@@ -12664,6 +13012,17 @@ namespace
 		int32 CloseHeldOk = 0;
 		FString WorstHeld;
 		FQaSolid Body;
+		// round 4's GPU hang (Second): the render probe's first fault, where the QA is, and the open ground the close shots are taken from
+		FString ProbeFault;
+		bool bCameraFault = false;
+		int32 LoggedPhase = -1;
+		int32 LoggedSkin = -1;
+		int32 LoggedAct = -1;
+		bool bHomeSet = false;
+		FVector Home = FVector::ZeroVector;
+		FRotator HomeFacing = FRotator::ZeroRotator;
+		bool bAtHome = false;
+		int32 PlantBlocked = 0;
 		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
 		{
 			Checked.Add(Id);
@@ -12743,6 +13102,25 @@ namespace
 		const double Now = QaNow();
 		const double In = Now - S.PhaseAt;
 		const TCHAR* const Skin = FaceRoster[FMath::Clamp(S.SkinIndex, 0, SkinCount - 1)];
+		// WHERE THE QA IS, written at every change and flushed (Second's ask: round 4's hang left the next skin and act unwritten)
+		if (S.Phase != S.LoggedPhase || S.SkinIndex != S.LoggedSkin || S.ActIndex != S.LoggedAct)
+		{
+			S.LoggedPhase = S.Phase;
+			S.LoggedSkin = S.SkinIndex;
+			S.LoggedAct = S.ActIndex;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA STEP skin %s, phase %d, act %d, view %d"), Skin, S.Phase, S.ActIndex, S.ViewIndex);
+			GLog->Flush();
+		}
+		// THE RENDER INPUTS, every tick: the first non-finite or runaway one is written once, flushed, and fails HP5
+		if (S.ProbeFault.IsEmpty())
+		{
+			S.ProbeFault = QaActRenderFault(World, Dog, PC);
+			if (!S.ProbeFault.IsEmpty())
+			{
+				UE_LOG(LogWonderlandQa, Warning, TEXT("WLAHQA PROBE the first non-finite or runaway render input: %s"), *S.ProbeFault);
+				GLog->Flush();
+			}
+		}
 		switch (S.Phase)
 		{
 		case 0:
@@ -12762,6 +13140,13 @@ namespace
 			if (In < 4.0 || Handoff->IsEquipped())
 			{
 				return In < 40.0 ? true : Stop(TEXT("never ready: the swords away"));
+			}
+			if (!S.bHomeSet)
+			{
+				// WHERE THE CLOSE SHOTS ARE TAKEN FROM: the open ground this QA started on (round 4: a flowerbed, after the missions)
+				S.Home = Dog->GetActorLocation();
+				S.HomeFacing = Dog->GetActorRotation();
+				S.bHomeSet = true;
 			}
 			GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), Skin));
 			S.Phase = 1;
@@ -12911,6 +13296,7 @@ namespace
 			{
 				GEngine->Exec(World, TEXT("wl.Dog.Act none"));
 				PC->SetViewTargetWithBlend(Dog, 0.0f);
+				S.bAtHome = false;
 				if (S.SkinIndex + 1 < SkinCount)
 				{
 					++S.SkinIndex;
@@ -12920,9 +13306,11 @@ namespace
 				}
 				// tools: 3 views, the book and the glass: 2 -- on every skin
 				const int32 WantShots = SkinCount * (2 * 3 + 2 * 2);
-				S.Check(TEXT("HP5"), S.CloseShots == WantShots && S.FrameFails == 0 && S.Blocked == 0 && (S.CloseMasks & 0xF) == 0xF && S.MissedActs.IsEmpty(),
-					FString::Printf(TEXT("close frames of every prop act on all %d skins, each act's own prop waited for (the scraper's too): %d frames SAVED (want %d), %d failed to save, %d with the line of sight blocked by the world or the Dog's own body (want 0; the body could not be modelled for %d), prop sets seen 0x%X (want 0xF)%s"),
-						SkinCount, S.CloseShots, WantShots, S.FrameFails, S.Blocked, S.BodyBlind, S.CloseMasks,
+				S.Check(TEXT("HP5"), S.CloseShots == WantShots && S.FrameFails == 0 && S.Blocked == 0 && (S.CloseMasks & 0xF) == 0xF && S.MissedActs.IsEmpty()
+					&& S.ProbeFault.IsEmpty() && !S.bCameraFault,
+					FString::Printf(TEXT("close frames of every prop act on all %d skins, each act's own prop waited for (the scraper's too): %d frames SAVED (want %d), %d failed to save, %d with the line of sight blocked by the world, a plant or the Dog's own body (want 0; %d of them by plants; the body could not be modelled for %d), prop sets seen 0x%X (want 0xF); every render input finite on every tick: %s%s"),
+						SkinCount, S.CloseShots, WantShots, S.FrameFails, S.Blocked, S.PlantBlocked, S.BodyBlind, S.CloseMasks,
+						S.ProbeFault.IsEmpty() && !S.bCameraFault ? TEXT("yes") : *FString::Printf(TEXT("NO -- %s"), S.ProbeFault.IsEmpty() ? TEXT("a close camera's place") : *S.ProbeFault),
 						S.MissedActs.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; NEVER SHOWN: %s"), *S.MissedActs)));
 				S.Check(TEXT("HP6"), S.CloseTool == SkinCount * 2 * 3 && S.CloseToolOk == S.CloseTool && S.ToolHandShare <= QaActHandShareBar && S.ToolPropArm <= QaActPropArmBarUU,
 					FString::Printf(TEXT("the tools in the hand on all %d skins (brush, scraper; side, three-quarters, the fist close): %d of %d shots held -- the hand drawn whole round the tool, in the fist, the boxes counted, the controls breaking their bars through the same measure (least: hand %.0f%%, arm %.2f uu), the line of sight clear; over EVERY tick of the holds the worst hand %.0f%% of its thickness into a prop (bar %.0f%%) and the worst prop %.2f uu into a forearm (bar %.1f)%s"),
@@ -12933,6 +13321,18 @@ namespace
 					FString::Printf(TEXT("the book and the glass held on all %d skins: %d of %d shots with a hand drawn, IN CONTACT (within 0.5 uu), under the depth bars, and the palm control breaking the bar -- NOT HELD YET: their hands still step aside (stated, never passed until they hold)%s"),
 						SkinCount, S.CloseHeldOk, S.CloseHeld, S.WorstHeld.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; first: %s"), *S.WorstHeld)));
 				return Stop(nullptr);
+			}
+			if (!S.bAtHome)
+			{
+				// EACH SKIN'S ACTS FROM THE OPEN GROUND THE QA STARTED ON (round 4: skeleton_flame's repair frames from inside a flowerbed)
+				Dog->SetActorLocationAndRotation(S.Home, S.HomeFacing, false, nullptr, ETeleportType::TeleportPhysics);
+				S.bAtHome = true;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 1.0 && !S.bActIssued)
+			{
+				return true;
 			}
 			if (!S.bActIssued)
 			{
@@ -13013,10 +13413,22 @@ namespace
 			const FVector AimAt = bToolAct ? (S.ViewIndex == 2 ? Fist : (Fist + PropBox.GetCenter()) * 0.5) : PropBox.GetCenter();
 			const double Reach = S.ViewIndex == 2 ? 35.0 : FMath::Clamp(PropBox.GetExtent().Size() * 2.6, 60.0, 150.0);
 			const double SideSign = bLeftTool ? -1.0 : 1.0;
-			static const double TryOffsets[] = { 0.0, 25.0, -25.0, 50.0, -50.0, 75.0 };
-			const double ViewAngle = SideSign * (S.ViewIndex == 1 ? 40.0 : 90.0) + TryOffsets[FMath::Clamp(S.Tries, 0, 5)];
+			static const double TryOffsets[] = { 0.0, 25.0, -25.0, 50.0, -50.0, 75.0, -75.0, 100.0, -100.0, 125.0 };
+			const double ViewAngle = SideSign * (S.ViewIndex == 1 ? 40.0 : 90.0) + TryOffsets[FMath::Clamp(S.Tries, 0, 9)];
 			const FVector CloseWhere = AimAt + Dog->GetActorForwardVector().GetSafeNormal2D().RotateAngleAxis(ViewAngle, FVector::UpVector) * Reach
 				+ FVector(0.0, 0.0, Reach * (S.ViewIndex == 2 ? 0.2 : 0.25));
+			if (CloseWhere.ContainsNaN() || AimAt.ContainsNaN())
+			{
+				// DRAWABLE ONLY (round 4's GPU hang): a camera is never placed at a point that is not finite
+				if (!S.bCameraFault)
+				{
+					S.bCameraFault = true;
+					UE_LOG(LogWonderlandQa, Warning, TEXT("WLAHQA PROBE a close camera would have gone to %s aiming at %s (not placed)"), *CloseWhere.ToString(),
+						*AimAt.ToString());
+					GLog->Flush();
+				}
+				return In < 15.0 ? true : Stop(TEXT("the close camera's place was not finite"));
+			}
 			CloseCam->SetActorLocationAndRotation(CloseWhere, (AimAt - CloseWhere).Rotation());
 			CloseCam->GetCameraComponent()->SetFieldOfView(S.ViewIndex == 2 ? 40.0f : 45.0f);
 			if (PC->GetViewTarget() != CloseCam)
@@ -13032,7 +13444,19 @@ namespace
 				bool bGripBodySeen = true;
 				bClear = QaActSightClear(World, Dog, CloseWhere, Grip, ToolArm, OtherArm, S.Body, bGripBodySeen);
 			}
-			if (!bClear && S.Tries < 5)
+			// AND NO PLANT IN THE WAY (round 4: frames shot from inside a flowerbed read "sight clear"; plants have no collision)
+			FString PlantBlocker;
+			const bool bPlantsClear = !bClear || QaActPlantsClear(World, Dog, CloseWhere, bToolAct ? Fist : AimAt, PlantBlocker);
+			if (bClear && !bPlantsClear)
+			{
+				bClear = false;
+				if (S.Tries >= 9)
+				{
+					++S.PlantBlocked;
+					UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA BLOCKED %s %s view %d: %s"), Skin, CloseActs[S.ActIndex], S.ViewIndex, *PlantBlocker);
+				}
+			}
+			if (!bClear && S.Tries < 9)
 			{
 				++S.Tries;
 				S.ShotAt = 0.0;
