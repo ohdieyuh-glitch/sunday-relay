@@ -7703,6 +7703,49 @@ namespace
 		float Pitch = 0.0f;
 	};
 
+	/** The knees' bend now, degrees (Second, 10-03: "visible leg bend" needs a number, not only a pelvis drop): the angle between each thigh's
+	 *  long axis and its shin's -- Relay OG's own leg pivots, which a worn skin's legs follow. -1 where a pivot is missing. */
+	void QaKneeBend(const ARelayDogCharacter* Dog, float& OutLeft, float& OutRight)
+	{
+		OutLeft = -1.0f;
+		OutRight = -1.0f;
+		const USceneComponent* Thighs[2] = { nullptr, nullptr };
+		const USceneComponent* Shins[2] = { nullptr, nullptr };
+		TInlineComponentArray<USceneComponent*> LegParts;
+		Dog->GetComponents<USceneComponent>(LegParts);
+		for (const USceneComponent* LegPart : LegParts)
+		{
+			const FString LegName = LegPart != nullptr ? LegPart->GetName() : FString();
+			if (LegName == TEXT("Pivot_legLeft"))
+			{
+				Thighs[0] = LegPart;
+			}
+			else if (LegName == TEXT("Pivot_legRight"))
+			{
+				Thighs[1] = LegPart;
+			}
+			else if (LegName == TEXT("Pivot_shinLeft"))
+			{
+				Shins[0] = LegPart;
+			}
+			else if (LegName == TEXT("Pivot_shinRight"))
+			{
+				Shins[1] = LegPart;
+			}
+		}
+		for (int32 LegSide = 0; LegSide < 2; ++LegSide)
+		{
+			if (Thighs[LegSide] == nullptr || Shins[LegSide] == nullptr)
+			{
+				continue;
+			}
+			// the canon's legs hang down their pivots' -Z (dog_v2.py builds every part in its joint's own frame)
+			const FVector ThighDown = -Thighs[LegSide]->GetComponentQuat().GetAxisZ();
+			const FVector ShinDown = -Shins[LegSide]->GetComponentQuat().GetAxisZ();
+			(LegSide == 0 ? OutLeft : OutRight) = static_cast<float>(FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(ThighDown, ShinDown), -1.0, 1.0))));
+		}
+	}
+
 	struct FQaStance
 	{
 		TWeakObjectPtr<UWorld> World;
@@ -7987,11 +8030,16 @@ namespace
 			const float Feet = R.SoleSpread - S.Base.SoleSpread;
 			const float Sink = R.SoleHeight - S.Base.SoleHeight;
 			const float Lean = FMath::Abs(R.Pitch - S.Base.Pitch);
-			const bool bOk = Dog->GetArmedStanceWeight() == 1.0f && Ahead >= 10.0f && Out >= 6.0f && Feet >= 5.0f && FMath::Abs(Sink) <= 1.5f && Lean >= 5.0f;
+			// A VISIBLE BEND (Second, 10-03, from the founder's "improve visible leg bend"): both knees bent at least 15 deg, measured
+			float KneeLeft = -1.0f;
+			float KneeRight = -1.0f;
+			QaKneeBend(Dog, KneeLeft, KneeRight);
+			const bool bOk = Dog->GetArmedStanceWeight() == 1.0f && Ahead >= 10.0f && Out >= 6.0f && Feet >= 5.0f && FMath::Abs(Sink) <= 1.5f && Lean >= 5.0f
+				&& KneeLeft >= 15.0f && KneeRight >= 15.0f;
 			S.Check(FString::Printf(TEXT("ST2.%d"), S.Skin + 1), bOk,
 				FString::Printf(TEXT("%s armed, standing: stance weight %.3f; hands %+.1f uu forward (>= 10) and %+.1f apart (>= 6); soles %+.1f apart (>= 5), ")
-					TEXT("%+.1f uu off the ground they stood on (within 1.5: the same feet); body pitch moved %.1f deg (>= 5) | %s"),
-					*SkinName, Dog->GetArmedStanceWeight(), Ahead, Out, Feet, Sink, Lean, *QaDescribeStance(R)));
+					TEXT("%+.1f uu off the ground they stood on (within 1.5: the same feet); body pitch moved %.1f deg (>= 5); knees bent %.0f / %.0f deg (>= 15: a visible bend) | %s"),
+					*SkinName, Dog->GetArmedStanceWeight(), Ahead, Out, Feet, Sink, Lean, KneeLeft, KneeRight, *QaDescribeStance(R)));
 			S.Shot = 0;
 			S.bArmedShots = true;
 			QaStanceShow(S, World, Dog, true);
@@ -8998,6 +9046,12 @@ namespace
 		{ TEXT("P1_ready_default"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 19;wl.Handoff.Stance.Crouch 10;wl.Handoff.Stance.RunOut 32") },
 		{ TEXT("P2_round3b"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 10;wl.Handoff.Stance.Elbow 22;wl.Handoff.Stance.FeetOut 16;wl.Handoff.Stance.Crouch 7;wl.Handoff.Stance.RunOut 32") },
 		{ TEXT("P3_narrower"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 24;wl.Handoff.SwordVForward 24;wl.Handoff.Stance.Out 26;wl.Handoff.Stance.Shoulder 18;wl.Handoff.Stance.Elbow 34;wl.Handoff.Stance.FeetOut 10;wl.Handoff.Stance.Crouch 5;wl.Handoff.Stance.RunOut 20") },
+		// THE LEGS FOR THE FOUNDER TO PICK (Second, 10-03: round 4's knees read as straight as 3b's): the default's arms and V, the crouch and
+		// the feet swept, framed in front and at the side from knee height, each with its knees' measured bend
+		{ TEXT("L1_crouch10_feet19"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 19;wl.Handoff.Stance.Crouch 10;wl.Handoff.Stance.RunOut 32") },
+		{ TEXT("L2_crouch14_feet20"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 20;wl.Handoff.Stance.Crouch 14;wl.Handoff.Stance.RunOut 32") },
+		{ TEXT("L3_crouch18_feet21"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 21;wl.Handoff.Stance.Crouch 18;wl.Handoff.Stance.RunOut 32") },
+		{ TEXT("L4_crouch22_feet22"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 22;wl.Handoff.Stance.Crouch 22;wl.Handoff.Stance.RunOut 32") },
 	};
 
 	void QaStanceApply(UWorld* World, const TCHAR* Commands)
@@ -9136,7 +9190,9 @@ namespace
 			// ONE PRESET: settle, then behind (the player's own camera), in front, at the side; P0 and P1 also running from behind
 			const FQaStancePreset& Preset = StancePresets[S.Preset];
 			const bool bRun = S.Preset <= 1;
-			const int32 Shots = bRun ? 4 : 3;
+			// a LEG preset (L*): in front and at the side, from knee height
+			const bool bLegs = Preset.Name[0] == TEXT('L');
+			const int32 Shots = bLegs ? 2 : (bRun ? 4 : 3);
 			if (S.Shot >= Shots)
 			{
 				Dog->QaWalkKey(false);
@@ -9154,6 +9210,28 @@ namespace
 				}
 				QaStanceApply(World, StancePresets[S.Preset].Commands);
 				S.Shot = 0;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (bLegs)
+			{
+				FQaStance Shim;
+				Shim.Camera = S.Camera;
+				// 160 uu off, the camera 60 uu below the body's middle: at the knees
+				QaStanceCamera(Shim, World, Dog, S.Shot == 0 ? 0.0 : 90.0, 160.0, -60.0, 45.0f);
+				S.Camera = Shim.Camera;
+				if (In < 1.2)
+				{
+					return true;
+				}
+				float KneeLeft = -1.0f;
+				float KneeRight = -1.0f;
+				QaKneeBend(Dog, KneeLeft, KneeRight);
+				static const TCHAR* const KneeShots[] = { TEXT("front_knee"), TEXT("side_knee") };
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSCQA %s %s | knees bent %.0f / %.0f deg; stance weight %.2f"), Preset.Name, KneeShots[S.Shot], KneeLeft, KneeRight,
+					Dog->GetArmedStanceWeight());
+				S.Frame(FString::Printf(TEXT("stance_%s_%s"), Preset.Name, KneeShots[S.Shot]));
+				++S.Shot;
 				S.PhaseAt = Now;
 				return true;
 			}

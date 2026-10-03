@@ -79,8 +79,10 @@ namespace RelayDogHandoffTuning
 	{
 		RelayDogArmedStance::FShape Shape;
 		Shape.LeanDeg = FMath::Clamp(CVarStanceLean.GetValueOnGameThread(), -10.0f, 30.0f);
-		Shape.CrouchUU = FMath::Clamp(CVarStanceCrouch.GetValueOnGameThread(), 0.0f, 8.0f);
-		Shape.FeetOutDeg = FMath::Clamp(CVarStanceFeetOut.GetValueOnGameThread(), 0.0f, 20.0f);
+		// up to 30 uu and 30 deg (Second, 10-03: round 4's "crouch 10" was clamped to 8 here, so the knees read as 3b's): the founder picks
+		// the legs from wl.Qa.StanceCalib's knee-height frames
+		Shape.CrouchUU = FMath::Clamp(CVarStanceCrouch.GetValueOnGameThread(), 0.0f, 30.0f);
+		Shape.FeetOutDeg = FMath::Clamp(CVarStanceFeetOut.GetValueOnGameThread(), 0.0f, 30.0f);
 		Shape.ReadyShoulderDeg = FMath::Clamp(CVarStanceShoulder.GetValueOnGameThread(), -90.0f, 120.0f);
 		Shape.ReadyElbowDeg = FMath::Clamp(CVarStanceElbow.GetValueOnGameThread(), 0.0f, 140.0f);
 		Shape.ReadyOutDeg = FMath::Clamp(CVarStanceOut.GetValueOnGameThread(), 0.0f, 80.0f);
