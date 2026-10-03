@@ -9051,298 +9051,9 @@ namespace
 			GQaStanceCalib->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaStanceCalibTick), 0.0f);
 		}));
 
-	/* ================================================================ wl.Qa.DashTrails: the dash's two trails, measured on screen
-	 * The founder's directive (H9): the dash leaves a gold trail from the LEFT hand and a cyan one from the RIGHT, never filling the
-	 * screen. From the player's own camera behind, three real dashes (a double tap of W, held swords): each frame of each dash, the
-	 * ribbons each trail sweeps are projected and their quad areas summed (true coverage, not a bounding box). DT1: the most they
-	 * cover is at most 15% of the frame, and more than nothing (they draw). DT2: at that moment the gold trail is on the screen's
-	 * LEFT of the cyan. A frame at the widest moment to Saved/Screenshots/WLDASH. WLDTQA lines.
+	/* ================================================================ box geometry for the QAs (wl.Qa.DashTrails, wl.Qa.SwordClip)
+	 * Every QA here measures what is DRAWN: an instanced mesh's instances, or a mesh, as oriented boxes from the mesh's own bounds.
 	 */
-	struct FQaDashTrails
-	{
-		TWeakObjectPtr<UWorld> World;
-		FTSTicker::FDelegateHandle Handle;
-		bool bQuit = false;
-		int32 Pass = 0;
-		int32 Fail = 0;
-		int32 Phase = 0;
-		int32 Sub = 0;
-		int32 Dash = 0;
-		double PhaseAt = 0.0;
-		double MaxCover = 0.0;
-		double GoldXAtMax = 0.0;
-		double CyanXAtMax = 0.0;
-		int32 FramesWithTrails = 0;
-		bool bShot = false;
-		FString Dir;
-		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
-		{
-			(bOk ? Pass : Fail) += 1;
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLDTQA %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
-		}
-		void Frame(const FString& Name)
-		{
-			int32 Width = 0;
-			int32 Height = 0;
-			const FString Path = Dir / (Name + TEXT(".png"));
-			const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLDTQA frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), Width, Height);
-		}
-	};
-	TSharedPtr<FQaDashTrails> GQaDashTrails;
-
-	/** One trail's screen coverage (px^2): the quads between consecutive samples, each by the shoelace formula; and its centre's x. */
-	double QaTrailCover(APlayerController* PC, const TArray<FVector>& Tips, const TArray<FVector>& Roots, double& OutCentreX)
-	{
-		double Area = 0.0;
-		double SumX = 0.0;
-		int32 Points = 0;
-		for (int32 Index = 0; Index + 1 < Tips.Num(); ++Index)
-		{
-			FVector2D Q[4] = { FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector };
-			const FVector World[4] = { Tips[Index], Roots[Index], Roots[Index + 1], Tips[Index + 1] };
-			bool bAll = true;
-			for (int32 Corner = 0; Corner < 4; ++Corner)
-			{
-				bAll &= PC->ProjectWorldLocationToScreen(World[Corner], Q[Corner]);
-			}
-			if (!bAll)
-			{
-				continue;
-			}
-			double Twice = 0.0;
-			for (int32 Corner = 0; Corner < 4; ++Corner)
-			{
-				const FVector2D& A = Q[Corner];
-				const FVector2D& B = Q[(Corner + 1) % 4];
-				Twice += A.X * B.Y - B.X * A.Y;
-				SumX += A.X;
-				++Points;
-			}
-			Area += FMath::Abs(Twice) * 0.5;
-		}
-		OutCentreX = Points > 0 ? SumX / Points : 0.0;
-		return Area;
-	}
-
-	bool QaDashTrailsTick(float)
-	{
-		if (!GQaDashTrails.IsValid())
-		{
-			return false;
-		}
-		FQaDashTrails& S = *GQaDashTrails;
-		UWorld* World = S.World.Get();
-		ARelayDogCharacter* Dog = QaDog(World);
-		FWonderlandMissionHandoff* Handoff = QaHandoff(World);
-		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
-		auto Stop = [&S](const TCHAR* Why)
-		{
-			if (UWorld* W = S.World.Get())
-			{
-				if (ARelayDogCharacter* D = QaDog(W))
-				{
-					D->QaForwardKey(false, false);
-				}
-				if (FWonderlandMissionHandoff* H = QaHandoff(W))
-				{
-					FString Ignored;
-					H->Return(Ignored);
-				}
-			}
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLDTQA END pass=%d fail=%d%s"), S.Pass, S.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
-			const bool bQuit = S.bQuit;
-			GQaDashTrails.Reset();
-			if (bQuit)
-			{
-				FPlatformMisc::RequestExit(false);
-			}
-			return false;
-		};
-		if (World == nullptr || Dog == nullptr || Handoff == nullptr || PC == nullptr)
-		{
-			return Stop(TEXT("the world, the Dog or the handoff went away"));
-		}
-		const double Now = QaNow();
-		const double In = Now - S.PhaseAt;
-		switch (S.Phase)
-		{
-		case 0:
-			if (UWonderlandUiSubsystem* Ui = QaUi(World))
-			{
-				if (Ui->IsWelcomeOpen())
-				{
-					Ui->DismissWelcome();
-				}
-			}
-			if (In < 4.0 || !Dog->GetCharacterMovement()->IsMovingOnGround())
-			{
-				return In < 40.0 ? true : Stop(TEXT("never ready"));
-			}
-			GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
-			GEngine->Exec(World, TEXT("wl.Sky.Hour 12"));
-			PC->SetViewTargetWithBlend(Dog, 0.0f);
-			if (!Handoff->IsEquipped())
-			{
-				FString Said;
-				WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
-			}
-			S.Phase = 1;
-			S.PhaseAt = Now;
-			return true;
-		case 1:
-			if (!Handoff->IsArmed() || In < 5.0)
-			{
-				return In < 15.0 ? true : Stop(TEXT("the swords were never held"));
-			}
-			// across open ground, the player's camera behind (QaClearHeading: the M1a dash QA's own open-ground heading)
-			{
-				FVector Ahead = FVector::ForwardVector;
-				const float Yaw = QaClearHeading(World, Dog, 1200.0f, Ahead);
-				Dog->SetActorRotation(FRotator(0.0f, Yaw, 0.0f));
-				PC->SetControlRotation(FRotator(-12.0f, Yaw, 0.0f));
-			}
-			S.Phase = 2;
-			S.Sub = 0;
-			S.PhaseAt = Now;
-			return true;
-		case 2:
-		{
-			// THREE DASHES: a double tap (both presses in one tick), let go on the next, then 0.8 s of the trails measured
-			if (S.Sub == 0)
-			{
-				if (In < 1.6)
-				{
-					return true;
-				}
-				Dog->QaForwardKey(false, true);
-				Dog->QaForwardKey(false, false);
-				Dog->QaForwardKey(false, true);
-				S.Sub = 1;
-				S.PhaseAt = Now;
-				return true;
-			}
-			if (S.Sub == 1)
-			{
-				Dog->QaForwardKey(false, false);
-				S.Sub = 2;
-				return true;
-			}
-			const WonderlandHandoffSwords::FPresentation& Swords = Dog->GetHandoffSwords();
-			TArray<FVector> Tips;
-			TArray<FVector> Roots;
-			double GoldX = 0.0;
-			double CyanX = 0.0;
-			Swords.GetTrailSamples(true, Tips, Roots);
-			const double Gold = QaTrailCover(PC, Tips, Roots, GoldX);
-			Swords.GetTrailSamples(false, Tips, Roots);
-			const double Cyan = QaTrailCover(PC, Tips, Roots, CyanX);
-			FVector2D Size(1280.0, 800.0);
-			if (GEngine != nullptr && GEngine->GameViewport != nullptr)
-			{
-				GEngine->GameViewport->GetViewportSize(Size);
-			}
-			const double Cover = (Gold + Cyan) / FMath::Max(Size.X * Size.Y, 1.0);
-			if (Gold > 0.0 && Cyan > 0.0)
-			{
-				++S.FramesWithTrails;
-				if (Cover > S.MaxCover)
-				{
-					S.MaxCover = Cover;
-					S.GoldXAtMax = GoldX;
-					S.CyanXAtMax = CyanX;
-				}
-				if (!S.bShot && In >= 0.25)
-				{
-					S.Frame(TEXT("dash_trails_player_camera_behind"));
-					S.bShot = true;
-				}
-			}
-			if (In < 0.8)
-			{
-				return true;
-			}
-			if (++S.Dash < 3)
-			{
-				S.Sub = 0;
-				S.PhaseAt = Now;
-				return true;
-			}
-			S.Check(TEXT("DT1"), S.MaxCover <= 0.15 && S.MaxCover > 0.0005 && S.FramesWithTrails >= 3,
-				FString::Printf(TEXT("three dashes from the player's camera: both trails drawn in %d frames, covering at most %.1f%% of the frame (<= 15%%)"),
-					S.FramesWithTrails, S.MaxCover * 100.0));
-			S.Check(TEXT("DT2"), S.MaxCover > 0.0 && S.GoldXAtMax < S.CyanXAtMax,
-				FString::Printf(TEXT("at the widest moment the gold trail's centre is at x %.0f and the cyan's at x %.0f (gold on the screen's LEFT, from the LEFT hand: %s)"),
-					S.GoldXAtMax, S.CyanXAtMax, S.GoldXAtMax < S.CyanXAtMax ? TEXT("yes") : TEXT("NO")));
-			return Stop(nullptr);
-		}
-		default:
-			return Stop(TEXT("an unknown phase"));
-		}
-	}
-
-	FAutoConsoleCommandWithWorldAndArgs GQaDashTrailsCommand(
-		TEXT("wl.Qa.DashTrails"),
-		TEXT("The dash's trails on screen (the founder's H9): three real dashes holding the swords, from the player's camera behind -- the ")
-		TEXT("ribbons' true coverage at most 15% of the frame (DT1), gold on the LEFT of cyan (DT2); a frame to Saved/Screenshots/WLDASH. ")
-		TEXT("`quit` exits after. WLDTQA lines."),
-		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
-		{
-			if (GQaDashTrails.IsValid() || World == nullptr)
-			{
-				return;
-			}
-			GQaDashTrails = MakeShared<FQaDashTrails>();
-			GQaDashTrails->World = World;
-			GQaDashTrails->bQuit = Args.Contains(TEXT("quit"));
-			GQaDashTrails->PhaseAt = QaNow();
-			GQaDashTrails->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLDASH"));
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLDTQA BEGIN | %s"), *WonderlandBeta::BuildLabel());
-			GQaDashTrails->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaDashTrailsTick), 0.0f);
-		}));
-
-	/* ================================================================ wl.Qa.SwordClip: no sword through the body that holds it (A5)
-	 * The founder: "verify clothes/wings/swords do not materially clip". For every skin holding the swords in the V, standing and then
-	 * walking: EVERY BOX OF BOTH SWORDS (blade, fuller, guard, grip, feathered wings, core -- as drawn, instance by instance) against
-	 * every box of the body that holds them -- a worn skin's BODY boxes (bone, cloth, plate, wings; never its light), or Relay OG's
-	 * own meshes -- leaving out the arm's end (the forearm and what hangs from it, where the grip sits by design) and every WL_Prop.
-	 * A pair's depth is the distance that would push the two apart (the least overlap over the 15 separating axes of two boxes; the
-	 * logic validated against a corner-projection reference, 20000/20000). A MATERIAL clip is deeper than 3 uu (a twentieth of the
-	 * head). THE INSTRUMENT CAN FAIL: a probe down the body's centreline must hit its boxes every frame, and both the body's boxes
-	 * and each sword's are counted. CL1-CL6. WLCLQA lines.
-	 */
-	constexpr double QaMaterialClipUU = 3.0;
-
-	struct FQaSwordClip
-	{
-		TWeakObjectPtr<UWorld> World;
-		FTSTicker::FDelegateHandle Handle;
-		bool bQuit = false;
-		int32 Pass = 0;
-		int32 Fail = 0;
-		int32 Phase = 0;
-		int32 Skin = 0;
-		double PhaseAt = 0.0;
-		FVector Start = FVector::ZeroVector;
-		FVector Ahead = FVector::ForwardVector;
-		float StartYaw = 0.0f;
-		int32 Samples = 0;
-		int32 BoxesMin = MAX_int32;
-		int32 BoxesMax = 0;
-		int32 SwordBoxesMin = MAX_int32;
-		int32 ProbeMin = MAX_int32;
-		int32 Touching = 0;
-		double DeepestUU = 0.0;
-		FString DeepestPair;
-		TMap<FString, double> Material;
-		void Check(const FString& Id, bool bOk, const FString& Detail)
-		{
-			(bOk ? Pass : Fail) += 1;
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLCLQA %s %s | %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
-		}
-	};
-	TSharedPtr<FQaSwordClip> GQaSwordClip;
-
 	/** An oriented box in the world: its centre, unit axes, half sizes, the half size of its world-aligned bounds, and whose it is. */
 	struct FQaObb
 	{
@@ -9497,6 +9208,429 @@ namespace
 			}
 		}
 	}
+
+	/**
+	 * A box's area on screen (px^2) and its centre's x, as drawn: the box clipped at the camera's near plane (the corners in front,
+	 * and where each of its 12 edges crosses the plane), projected, the convex hull of those points (a convex body in front of the
+	 * camera projects to the hull of its vertices), clipped to the frame (Sutherland-Hodgman), by the shoelace formula. Validated in
+	 * Python against rays cast through random pixels: 400 boxes in front of, around and behind the camera, no area beyond 4 sigma,
+	 * no centre off by 25 px. OutFailed counts points in front of the camera that the view still refused to project.
+	 */
+	double QaBoxScreenArea(APlayerController* PC, const FQaObb& Box, const FVector& CamLoc, const FVector& CamFwd, const FVector2D& Size,
+		double& OutCentreX, int32& OutFailed)
+	{
+		constexpr double NearUU = 10.0;
+		OutCentreX = 0.0;
+		FVector Corners[8];
+		double Ahead[8];
+		const double Plane = FVector::DotProduct(CamFwd, CamLoc) + NearUU;
+		for (int32 Corner = 0; Corner < 8; ++Corner)
+		{
+			Corners[Corner] = Box.Centre
+				+ Box.Axis[0] * ((Corner & 1) ? Box.Half.X : -Box.Half.X)
+				+ Box.Axis[1] * ((Corner & 2) ? Box.Half.Y : -Box.Half.Y)
+				+ Box.Axis[2] * ((Corner & 4) ? Box.Half.Z : -Box.Half.Z);
+			Ahead[Corner] = FVector::DotProduct(CamFwd, Corners[Corner]) - Plane;
+		}
+		TArray<FVector, TInlineAllocator<20>> Front;
+		for (int32 Corner = 0; Corner < 8; ++Corner)
+		{
+			if (Ahead[Corner] >= 0.0)
+			{
+				Front.Add(Corners[Corner]);
+			}
+		}
+		for (int32 From = 0; From < 8; ++From)
+		{
+			for (const int32 Bit : { 1, 2, 4 })
+			{
+				const int32 To = From | Bit;
+				if (To != From && (Ahead[From] < 0.0) != (Ahead[To] < 0.0))
+				{
+					Front.Add(Corners[From] + (Corners[To] - Corners[From]) * (Ahead[From] / (Ahead[From] - Ahead[To])));
+				}
+			}
+		}
+		if (Front.Num() < 3)
+		{
+			return 0.0;
+		}
+		TArray<FVector2D, TInlineAllocator<20>> Points;
+		for (const FVector& Point : Front)
+		{
+			FVector2D OnScreen = FVector2D::ZeroVector;
+			if (PC->ProjectWorldLocationToScreen(Point, OnScreen))
+			{
+				Points.Add(OnScreen);
+			}
+			else
+			{
+				++OutFailed;
+			}
+		}
+		if (Points.Num() < 3)
+		{
+			return 0.0;
+		}
+		// the convex hull (Andrew's monotone chain: the lower chain, then the upper)
+		Points.Sort([](const FVector2D& L, const FVector2D& R) { return L.X < R.X || (L.X == R.X && L.Y < R.Y); });
+		auto Turn = [](const FVector2D& O, const FVector2D& P, const FVector2D& Q) { return (P.X - O.X) * (Q.Y - O.Y) - (P.Y - O.Y) * (Q.X - O.X); };
+		TArray<FVector2D, TInlineAllocator<32>> Poly;
+		for (int32 Chain = 0; Chain < 2; ++Chain)
+		{
+			const int32 First = Poly.Num();
+			for (int32 Index = 0; Index < Points.Num(); ++Index)
+			{
+				const FVector2D& Point = Points[Chain == 0 ? Index : Points.Num() - 1 - Index];
+				while (Poly.Num() >= First + 2 && Turn(Poly[Poly.Num() - 2], Poly[Poly.Num() - 1], Point) <= 0.0)
+				{
+					Poly.Pop();
+				}
+				Poly.Add(Point);
+			}
+			Poly.Pop();
+		}
+		// the frame: keep what lies inside each of its four edges
+		TArray<FVector2D, TInlineAllocator<32>> Kept;
+		for (int32 Edge = 0; Edge < 4 && Poly.Num() >= 3; ++Edge)
+		{
+			const bool bAlongX = Edge < 2;
+			const bool bAbove = Edge == 0 || Edge == 2;
+			const double Limit = Edge == 1 ? Size.X : (Edge == 3 ? Size.Y : 0.0);
+			auto Inside = [bAlongX, bAbove, Limit](const FVector2D& P) { const double V = bAlongX ? P.X : P.Y; return bAbove ? V >= Limit : V <= Limit; };
+			auto Crossing = [bAlongX, Limit](const FVector2D& P, const FVector2D& Q)
+			{
+				if (bAlongX)
+				{
+					return FVector2D(Limit, P.Y + (Q.Y - P.Y) * (Limit - P.X) / (Q.X - P.X));
+				}
+				return FVector2D(P.X + (Q.X - P.X) * (Limit - P.Y) / (Q.Y - P.Y), Limit);
+			};
+			Kept.Reset();
+			for (int32 Index = 0; Index < Poly.Num(); ++Index)
+			{
+				const FVector2D& Cur = Poly[Index];
+				const FVector2D& Prev = Poly[(Index + Poly.Num() - 1) % Poly.Num()];
+				if (Inside(Cur))
+				{
+					if (!Inside(Prev))
+					{
+						Kept.Add(Crossing(Prev, Cur));
+					}
+					Kept.Add(Cur);
+				}
+				else if (Inside(Prev))
+				{
+					Kept.Add(Crossing(Prev, Cur));
+				}
+			}
+			Poly = Kept;
+		}
+		if (Poly.Num() < 3)
+		{
+			return 0.0;
+		}
+		double Twice = 0.0;
+		double SumX = 0.0;
+		for (int32 Index = 0; Index < Poly.Num(); ++Index)
+		{
+			const FVector2D& P = Poly[Index];
+			const FVector2D& Q = Poly[(Index + 1) % Poly.Num()];
+			const double Wedge = P.X * Q.Y - Q.X * P.Y;
+			Twice += Wedge;
+			SumX += (P.X + Q.X) * Wedge;
+		}
+		if (FMath::Abs(Twice) < 1e-9)
+		{
+			return 0.0;
+		}
+		OutCentreX = SumX / (3.0 * Twice);
+		return FMath::Abs(Twice) * 0.5;
+	}
+
+	/** One sword's dash trail on screen as drawn: every segment's box (QaBoxScreenArea), summed, and their area-weighted centre x. */
+	double QaTrailOnScreen(APlayerController* PC, const UInstancedStaticMeshComponent* Trail, const FVector& CamLoc, const FVector& CamFwd,
+		const FVector2D& Size, double& OutCentreX, int32& OutFailed)
+	{
+		OutCentreX = 0.0;
+		if (Trail == nullptr || Trail->GetStaticMesh() == nullptr)
+		{
+			return 0.0;
+		}
+		TArray<FQaObb> Segments;
+		QaMeshObbs(Trail, Segments);
+		double Area = 0.0;
+		double Weighted = 0.0;
+		for (const FQaObb& Segment : Segments)
+		{
+			double CentreX = 0.0;
+			const double Part = QaBoxScreenArea(PC, Segment, CamLoc, CamFwd, Size, CentreX, OutFailed);
+			Area += Part;
+			Weighted += Part * CentreX;
+		}
+		OutCentreX = Area > 0.0 ? Weighted / Area : 0.0;
+		return Area;
+	}
+
+	/* ================================================================ wl.Qa.DashTrails: the dash's two trails, measured on screen
+	 * The founder's directive (H9): the dash leaves a gold trail from the LEFT hand and a cyan one from the RIGHT, never filling the
+	 * screen. From the player's own camera behind, three real dashes (a double tap of W, held swords): each frame of each dash, every
+	 * segment each trail DRAWS (the trail mesh's instances, already narrowed by their fade) is clipped at the camera's near plane and
+	 * at the frame and its area summed (QaBoxScreenArea) -- so a trail sweeping past or through the camera counts in full, never
+	 * skipped. DT1: the most they cover is at most 15% of the frame, more than nothing (they draw), and the view refused no point.
+	 * DT2: at that moment the gold trail's centre is on the screen's LEFT of the cyan's. A frame to Saved/Screenshots/WLDASH.
+	 */
+	struct FQaDashTrails
+	{
+		TWeakObjectPtr<UWorld> World;
+		FTSTicker::FDelegateHandle Handle;
+		bool bQuit = false;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		int32 Phase = 0;
+		int32 Sub = 0;
+		int32 Dash = 0;
+		double PhaseAt = 0.0;
+		double MaxCover = 0.0;
+		double GoldXAtMax = 0.0;
+		double CyanXAtMax = 0.0;
+		int32 FramesWithTrails = 0;
+		int32 Failed = 0;
+		bool bShot = false;
+		FString Dir;
+		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLDTQA %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+		void Frame(const FString& Name)
+		{
+			int32 Width = 0;
+			int32 Height = 0;
+			const FString Path = Dir / (Name + TEXT(".png"));
+			const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLDTQA frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), Width, Height);
+		}
+	};
+	TSharedPtr<FQaDashTrails> GQaDashTrails;
+
+	bool QaDashTrailsTick(float)
+	{
+		if (!GQaDashTrails.IsValid())
+		{
+			return false;
+		}
+		FQaDashTrails& S = *GQaDashTrails;
+		UWorld* World = S.World.Get();
+		ARelayDogCharacter* Dog = QaDog(World);
+		FWonderlandMissionHandoff* Handoff = QaHandoff(World);
+		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		auto Stop = [&S](const TCHAR* Why)
+		{
+			if (UWorld* W = S.World.Get())
+			{
+				if (ARelayDogCharacter* D = QaDog(W))
+				{
+					D->QaForwardKey(false, false);
+				}
+				if (FWonderlandMissionHandoff* H = QaHandoff(W))
+				{
+					FString Ignored;
+					H->Return(Ignored);
+				}
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLDTQA END pass=%d fail=%d%s"), S.Pass, S.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
+			const bool bQuit = S.bQuit;
+			GQaDashTrails.Reset();
+			if (bQuit)
+			{
+				FPlatformMisc::RequestExit(false);
+			}
+			return false;
+		};
+		if (World == nullptr || Dog == nullptr || Handoff == nullptr || PC == nullptr)
+		{
+			return Stop(TEXT("the world, the Dog or the handoff went away"));
+		}
+		const double Now = QaNow();
+		const double In = Now - S.PhaseAt;
+		switch (S.Phase)
+		{
+		case 0:
+			if (UWonderlandUiSubsystem* Ui = QaUi(World))
+			{
+				if (Ui->IsWelcomeOpen())
+				{
+					Ui->DismissWelcome();
+				}
+			}
+			if (In < 4.0 || !Dog->GetCharacterMovement()->IsMovingOnGround())
+			{
+				return In < 40.0 ? true : Stop(TEXT("never ready"));
+			}
+			GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+			GEngine->Exec(World, TEXT("wl.Sky.Hour 12"));
+			PC->SetViewTargetWithBlend(Dog, 0.0f);
+			if (!Handoff->IsEquipped())
+			{
+				FString Said;
+				WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
+			}
+			S.Phase = 1;
+			S.PhaseAt = Now;
+			return true;
+		case 1:
+			if (!Handoff->IsArmed() || In < 5.0)
+			{
+				return In < 15.0 ? true : Stop(TEXT("the swords were never held"));
+			}
+			// across open ground, the player's camera behind (QaClearHeading: the M1a dash QA's own open-ground heading)
+			{
+				FVector Ahead = FVector::ForwardVector;
+				const float Yaw = QaClearHeading(World, Dog, 1200.0f, Ahead);
+				Dog->SetActorRotation(FRotator(0.0f, Yaw, 0.0f));
+				PC->SetControlRotation(FRotator(-12.0f, Yaw, 0.0f));
+			}
+			S.Phase = 2;
+			S.Sub = 0;
+			S.PhaseAt = Now;
+			return true;
+		case 2:
+		{
+			// THREE DASHES: a double tap (both presses in one tick), let go on the next, then 0.8 s of the trails measured
+			if (S.Sub == 0)
+			{
+				if (In < 1.6)
+				{
+					return true;
+				}
+				Dog->QaForwardKey(false, true);
+				Dog->QaForwardKey(false, false);
+				Dog->QaForwardKey(false, true);
+				S.Sub = 1;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (S.Sub == 1)
+			{
+				Dog->QaForwardKey(false, false);
+				S.Sub = 2;
+				return true;
+			}
+			const WonderlandHandoffSwords::FPresentation& Swords = Dog->GetHandoffSwords();
+			FVector2D Size(1280.0, 800.0);
+			if (GEngine != nullptr && GEngine->GameViewport != nullptr)
+			{
+				GEngine->GameViewport->GetViewportSize(Size);
+			}
+			FVector CamLoc = FVector::ZeroVector;
+			FRotator CamRot = FRotator::ZeroRotator;
+			PC->GetPlayerViewPoint(CamLoc, CamRot);
+			const FVector CamFwd = CamRot.Vector();
+			double GoldX = 0.0;
+			double CyanX = 0.0;
+			const double Gold = QaTrailOnScreen(PC, Swords.GetTrailMesh(true), CamLoc, CamFwd, Size, GoldX, S.Failed);
+			const double Cyan = QaTrailOnScreen(PC, Swords.GetTrailMesh(false), CamLoc, CamFwd, Size, CyanX, S.Failed);
+			const double Cover = (Gold + Cyan) / FMath::Max(Size.X * Size.Y, 1.0);
+			if (Gold > 0.0 && Cyan > 0.0)
+			{
+				++S.FramesWithTrails;
+				if (Cover > S.MaxCover)
+				{
+					S.MaxCover = Cover;
+					S.GoldXAtMax = GoldX;
+					S.CyanXAtMax = CyanX;
+				}
+				if (!S.bShot && In >= 0.25)
+				{
+					S.Frame(TEXT("dash_trails_player_camera_behind"));
+					S.bShot = true;
+				}
+			}
+			if (In < 0.8)
+			{
+				return true;
+			}
+			if (++S.Dash < 3)
+			{
+				S.Sub = 0;
+				S.PhaseAt = Now;
+				return true;
+			}
+			S.Check(TEXT("DT1"), S.MaxCover <= 0.15 && S.MaxCover > 0.0005 && S.FramesWithTrails >= 3 && S.Failed == 0,
+				FString::Printf(TEXT("three dashes from the player's camera: both trails drawn in %d frames, covering at most %.1f%% of the frame (<= 15%%; every drawn segment clipped at the camera and the frame; points the view refused: %d)"),
+					S.FramesWithTrails, S.MaxCover * 100.0, S.Failed));
+			S.Check(TEXT("DT2"), S.MaxCover > 0.0 && S.GoldXAtMax < S.CyanXAtMax,
+				FString::Printf(TEXT("at the widest moment the gold trail's centre is at x %.0f and the cyan's at x %.0f (gold on the screen's LEFT, from the LEFT hand: %s)"),
+					S.GoldXAtMax, S.CyanXAtMax, S.GoldXAtMax < S.CyanXAtMax ? TEXT("yes") : TEXT("NO")));
+			return Stop(nullptr);
+		}
+		default:
+			return Stop(TEXT("an unknown phase"));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaDashTrailsCommand(
+		TEXT("wl.Qa.DashTrails"),
+		TEXT("The dash's trails on screen (the founder's H9): three real dashes holding the swords, from the player's camera behind -- the ")
+		TEXT("ribbons' true coverage at most 15% of the frame (DT1), gold on the LEFT of cyan (DT2); a frame to Saved/Screenshots/WLDASH. ")
+		TEXT("`quit` exits after. WLDTQA lines."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaDashTrails.IsValid() || World == nullptr)
+			{
+				return;
+			}
+			GQaDashTrails = MakeShared<FQaDashTrails>();
+			GQaDashTrails->World = World;
+			GQaDashTrails->bQuit = Args.Contains(TEXT("quit"));
+			GQaDashTrails->PhaseAt = QaNow();
+			GQaDashTrails->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLDASH"));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLDTQA BEGIN | %s"), *WonderlandBeta::BuildLabel());
+			GQaDashTrails->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaDashTrailsTick), 0.0f);
+		}));
+
+	/* ================================================================ wl.Qa.SwordClip: no sword through the body that holds it (A5)
+	 * The founder: "verify clothes/wings/swords do not materially clip". For every skin holding the swords in the V, standing and then
+	 * walking: EVERY BOX OF BOTH SWORDS (blade, fuller, guard, grip, feathered wings, core -- as drawn, instance by instance) against
+	 * every box of the body that holds them -- a worn skin's BODY boxes (bone, cloth, plate, wings; never its light), or Relay OG's
+	 * own meshes -- leaving out the arm's end (the forearm and what hangs from it, where the grip sits by design) and every WL_Prop.
+	 * A pair's depth is the distance that would push the two apart (the least overlap over the 15 separating axes of two boxes; the
+	 * logic validated against a corner-projection reference, 20000/20000). A MATERIAL clip is deeper than 3 uu (a twentieth of the
+	 * head). THE INSTRUMENT CAN FAIL: a probe down the body's centreline must hit its boxes every frame, and both the body's boxes
+	 * and each sword's are counted. CL1-CL6. WLCLQA lines.
+	 */
+	constexpr double QaMaterialClipUU = 3.0;
+
+	struct FQaSwordClip
+	{
+		TWeakObjectPtr<UWorld> World;
+		FTSTicker::FDelegateHandle Handle;
+		bool bQuit = false;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		int32 Phase = 0;
+		int32 Skin = 0;
+		double PhaseAt = 0.0;
+		FVector Start = FVector::ZeroVector;
+		FVector Ahead = FVector::ForwardVector;
+		float StartYaw = 0.0f;
+		int32 Samples = 0;
+		int32 BoxesMin = MAX_int32;
+		int32 BoxesMax = 0;
+		int32 SwordBoxesMin = MAX_int32;
+		int32 ProbeMin = MAX_int32;
+		int32 Touching = 0;
+		double DeepestUU = 0.0;
+		FString DeepestPair;
+		TMap<FString, double> Material;
+		void Check(const FString& Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLCLQA %s %s | %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+	};
+	TSharedPtr<FQaSwordClip> GQaSwordClip;
 
 	/** Every box of the body holding the swords this frame: the worn skin's body boxes, else Relay OG's own meshes. */
 	void QaBodyObbs(ARelayDogCharacter* Dog, TArray<FQaObb>& OutBoxes)

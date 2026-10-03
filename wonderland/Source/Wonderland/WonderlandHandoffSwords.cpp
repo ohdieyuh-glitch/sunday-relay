@@ -546,18 +546,11 @@ namespace WonderlandHandoffSwords
 		}
 	}
 
-	void FPresentation::GetTrailSamples(bool bGold, TArray<FVector>& OutTips, TArray<FVector>& OutRoots) const
+	const UInstancedStaticMeshComponent* FPresentation::GetTrailMesh(bool bGold) const
 	{
-		OutTips.Reset();
-		OutRoots.Reset();
 		const FSword& Sword = bGold ? Gold : Cyan;
 		const UInstancedStaticMeshComponent* Mesh = Sword.Trail.Get();
-		if (Mesh == nullptr || !Mesh->IsVisible() || Sword.TrailWeight <= 0.01f || Sword.TrailTips.Num() != Sword.TrailRoots.Num())
-		{
-			return;
-		}
-		OutTips = Sword.TrailTips;
-		OutRoots = Sword.TrailRoots;
+		return Mesh != nullptr && Mesh->IsVisible() && Sword.TrailWeight > 0.01f ? Mesh : nullptr;
 	}
 
 	void FPresentation::Place(FSword& Sword, const FTransform& World, float Grow, bool bVisible, USceneComponent* HoldIn, const FTransform& HoldLocal,
