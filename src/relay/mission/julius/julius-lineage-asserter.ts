@@ -1,8 +1,13 @@
 import { mergeJuliusDurableStanding } from './julius-claim-ledger';
 import type { JuliusContextConflict, JuliusContextType } from './julius-context-integrity';
-import { deriveJuliusContextQualification } from './julius-context-provenance';
+import { JULIUS_UNKNOWN_RECORDED_AT, deriveJuliusContextQualification } from './julius-context-provenance';
 import type { JuliusMemoryClaim, JuliusMemoryTrustState } from './julius-memory-trust';
-import { JULIUS_DEFAULT_ROLES, type JuliusBrainEntry, type JuliusContextQualification, type JuliusDecisionAction } from './julius-runtime';
+import { JULIUS_RELEASING_ACTIONS } from './julius-release-runtime';
+import { effectivelyAcceptedTaskIds, isJuliusRepairOf } from './julius-repair-lineage';
+import {
+  JULIUS_DEFAULT_ROLES, type JuliusBrainEntry, type JuliusContextQualification, type JuliusDecisionAction, type JuliusRecordedDecision, type JuliusTask,
+} from './julius-runtime';
+import { juliusYieldContinuationOf } from './julius-segment-lineage';
 import type { JuliusReviewerFinding } from './julius-verification-runtime';
 
 /**
@@ -28,8 +33,10 @@ import type { JuliusReviewerFinding } from './julius-verification-runtime';
  * THE COMPATIBILITY TABLE is rule 2's live path. A task ACCEPTED while a
  * blocking VERIFIED finding about it is still OPEN cannot both be true, and
  * the table says so, never a comparison of text. It is applied RUN-WIDE, to
- * the run's durable verdicts and findings, because a packet never holds both:
+ * the run's durable decisions and findings, because a packet never holds both:
  * admission is task-scoped, and an accepted task is not dispatched again.
+ * ACCEPTED is the release path's own effective acceptance, so a parent accepted
+ * through its repair is judged exactly as one accepted directly.
  *
  * Pure: it reads only its arguments, orders everything by a total key, and
  * returns new values. The same inputs in any order give the same output.
@@ -244,7 +251,7 @@ export function assertJuliusLineage(input: {
 
 /* ---------------------------------------------------------------- rule 2, run-wide */
 
-/** A verdict as the run recorded it: its brain entry, the claim the run holds for it, and its durable revision. */
+/** A verdict as the brain mirrors it: its entry, the claim the run holds for it, and its durable revision (family V). */
 export interface JuliusRecordedVerdict {
   readonly entry: JuliusBrainEntry;
   readonly claim: JuliusMemoryClaim;
@@ -256,90 +263,216 @@ export interface JuliusRecordedFinding {
   readonly entryId: string;
   readonly claim: JuliusMemoryClaim;
 }
+/** An acceptance as the run recorded it: the accepted task, the decision that accepts it, and how that decision stands. */
+export interface JuliusRecordedAcceptance {
+  readonly taskId: string;
+  readonly acceptingTaskId: string;
+  readonly action: JuliusDecisionAction;
+  readonly entryId: string;
+  readonly claim: JuliusMemoryClaim;
+}
+
+/** One side of a judged pair: the entry that names it, the claim the run holds for it, its value and its standing. */
+export interface JuliusLineageSide {
+  readonly entryId: string;
+  readonly claimId: string;
+  readonly value: string;
+  readonly trust: JuliusMemoryTrustState;
+}
 
 /** One contradiction the run holds, with everything a reviewer needs to see it again. */
 export interface JuliusRunContradiction {
   readonly family: 'A' | 'V';
   readonly subject: string;
   readonly rowId: string;
-  readonly left: { readonly entryId: string; readonly claimId: string; readonly value: string; readonly trust: JuliusMemoryTrustState };
-  readonly right: { readonly entryId: string; readonly claimId: string; readonly value: string; readonly trust: JuliusMemoryTrustState };
+  /** Family A: the task whose own decision accepts the subject, the subject itself or the repair it was accepted through. */
+  readonly acceptingTaskId?: string;
+  readonly left: JuliusLineageSide;
+  readonly right: JuliusLineageSide;
+}
+
+/** One (acceptance, finding) pair the table judged, compatible or not: the record that the founder's rule ran. */
+export interface JuliusAcceptanceJudgement {
+  readonly subject: string;
+  readonly acceptingTaskId: string;
+  readonly rowId: string;
+  readonly result: JuliusCompatibilityRow['result'];
+  readonly left: JuliusLineageSide;
+  readonly right: JuliusLineageSide;
+}
+
+/** The run-wide check: every pair the table judged, and the contradictions the run holds (family A's and family V's). */
+export interface JuliusRunLineageCheck {
+  readonly judgements: readonly JuliusAcceptanceJudgement[];
+  readonly contradictions: readonly JuliusRunContradiction[];
 }
 
 /**
- * EVERY CONTRADICTION THE RUN HOLDS, whatever any one packet would show.
- *
- * Per task, the latest verdict by durable revision (two verified verdicts at
- * the same revision with different actions are themselves a contradiction,
- * family V: an ordering that cannot be trusted is not a verdict). When that
- * verdict is an acceptance, every effective finding about the task is judged by
- * the table, and an INCOMPATIBLE row is a family A contradiction. Sorted, so the
- * same run gives the same list.
+ * WHERE A TASK'S ACCEPTANCE COMES FROM: a task the release path counts as accepted, and the decision that accepts it,
+ * which is the task's own, or that of the repair (or the segment) it was accepted through.
  */
-export function juliusRunContradictions(input: {
+export interface JuliusAcceptanceWitness {
+  readonly taskId: string;
+  readonly acceptingTaskId: string;
+  readonly decision: JuliusRecordedDecision;
+}
+
+/**
+ * EFFECTIVE ACCEPTANCE, AS THE RELEASE PATH DECIDES IT (the founder's rule is about the STATE; Second Julius, C1).
+ *
+ * WHICH tasks are accepted is `effectivelyAcceptedTaskIds` over the durable decision log with `JULIUS_RELEASING_ACTIONS`,
+ * the very call that releases dependents, so "accepted enough to unblock what depends on it" and "accepted, for the
+ * founder's row" cannot disagree. A parent REPAIRED and accepted through its repair, at any depth, is accepted, and so is
+ * a dispatch that yielded to an accepted segment. A task's current decision is its LAST in the log, never the brain's
+ * mirror of it: the mirror is idempotent by `task:action:reasonCode`, so a recurring triple keeps its first revision (C2).
+ *
+ * Nothing here decides acceptance a second time. This only NAMES, for each task in that set, the decision that accepts
+ * it, walking (with backtracking) through tasks already in the set. Every task on the path the release walk took is in
+ * the set, so such a path always exists; a task without one is a broken invariant, and it throws rather than go unjudged.
+ */
+export function juliusAcceptanceWitnesses(
+  tasks: readonly JuliusTask[],
+  decisions: readonly JuliusRecordedDecision[],
+): readonly JuliusAcceptanceWitness[] {
+  const accepted = effectivelyAcceptedTaskIds(tasks, decisions, JULIUS_RELEASING_ACTIONS);
+  const current = new Map<string, JuliusRecordedDecision>();
+  for (const decision of decisions) current.set(decision.taskId, decision);
+  const byId = new Map(tasks.map((task) => [task.taskId, task]));
+  // The release walk's own steps: a REPAIR through its repair children, an undecided dispatch through its continuation.
+  const stepsFrom = (subject: JuliusTask): readonly JuliusTask[] => {
+    const decision = current.get(subject.taskId);
+    if (decision === undefined) {
+      const continuation = juliusYieldContinuationOf(subject, tasks);
+      return continuation === null ? [] : [continuation];
+    }
+    return decision.action === 'REPAIR' ? tasks.filter((task) => isJuliusRepairOf(subject, task)) : [];
+  };
+  const witness = (taskId: string, path: Set<string>): Omit<JuliusAcceptanceWitness, 'taskId'> | null => {
+    const decision = current.get(taskId);
+    if (decision !== undefined && JULIUS_RELEASING_ACTIONS.includes(decision.action)) return { acceptingTaskId: taskId, decision };
+    const subject = byId.get(taskId);
+    if (subject === undefined || path.has(taskId)) return null;
+    path.add(taskId);
+    const steps = stepsFrom(subject).filter((task) => task.state === 'SUCCEEDED' && accepted.has(task.taskId))
+      .sort((left, right) => left.ordinal - right.ordinal || byKey(left.taskId, right.taskId));
+    for (const step of steps) {
+      const found = witness(step.taskId, path);
+      if (found !== null) return found;
+    }
+    path.delete(taskId);
+    return null;
+  };
+  return [...accepted].sort(byKey).map((taskId) => {
+    const found = witness(taskId, new Set());
+    if (found === null) throw new Error(`julius_acceptance_witness_missing:${taskId}`);
+    return { taskId, ...found };
+  });
+}
+
+const findingValue = (finding: Pick<JuliusReviewerFinding, 'status' | 'blocking'>, trust: JuliusMemoryTrustState): string =>
+  `${finding.status}_${finding.blocking ? 'BLOCKING' : 'NON_BLOCKING'}_${isVerified(trust) ? 'VERIFIED' : 'NOT_VERIFIED'}`;
+const byPair = (
+  left: { readonly subject: string; readonly left: JuliusLineageSide; readonly right: JuliusLineageSide },
+  right: { readonly subject: string; readonly left: JuliusLineageSide; readonly right: JuliusLineageSide },
+): number => byKey(left.subject, right.subject) || byKey(left.left.entryId, right.left.entryId) || byKey(left.right.entryId, right.right.entryId);
+
+/**
+ * EVERY CONTRADICTION THE RUN HOLDS, whatever any one packet would show, and every pair the table judged.
+ *
+ * Family A, the founder's row: for each ACCEPTED task whose accepting decision stands verified, every effective finding
+ * about that task is judged by the table, and an INCOMPATIBLE row is a contradiction. The COMPATIBLE pairs are returned
+ * too, so a run's record shows the rule ran on the pairs the run had, not merely that nothing fired.
+ * Family V: two verified verdict mirrors of one task at the same durable revision with different actions, an ordering
+ * that cannot be trusted (the brain allocates revisions under the run-row lock, so only a corrupt store holds one).
+ * Sorted, so the same run gives the same lists.
+ */
+export function juliusRunLineageCheck(input: {
   readonly verdicts: readonly JuliusRecordedVerdict[];
+  readonly acceptances: readonly JuliusRecordedAcceptance[];
   readonly findings: readonly JuliusRecordedFinding[];
-}): readonly JuliusRunContradiction[] {
-  const found: JuliusRunContradiction[] = [];
-  const latest = new Map<string, { placement: JuliusLineagePlacement; verdict: JuliusRecordedVerdict }[]>();
+}): JuliusRunLineageCheck {
+  const contradictions: JuliusRunContradiction[] = [];
+  const top = new Map<string, { placement: JuliusLineagePlacement; verdict: JuliusRecordedVerdict }[]>();
   for (const verdict of input.verdicts) {
     const placement = placeJuliusLineageEntry(verdict.entry, { [verdict.entry.entryId]: verdict.revision });
     if (placement === null || placement.family !== 'V' || !isVerified(verdict.claim.trust)) continue;
-    const taskId = placement.subject.slice('verdict:'.length);
-    const held = latest.get(taskId) ?? [];
-    if (held.length === 0 || placement.order > held[0]!.placement.order) latest.set(taskId, [{ placement, verdict }]);
-    else if (placement.order === held[0]!.placement.order) latest.set(taskId, [...held, { placement, verdict }]);
+    const held = top.get(placement.subject) ?? [];
+    if (held.length === 0 || placement.order > held[0]!.placement.order) top.set(placement.subject, [{ placement, verdict }]);
+    else if (placement.order === held[0]!.placement.order) top.set(placement.subject, [...held, { placement, verdict }]);
   }
-  for (const taskId of [...latest.keys()].sort(byKey)) {
-    const tied = latest.get(taskId)!.sort((left, right) => byKey(left.verdict.entry.entryId, right.verdict.entry.entryId));
+  for (const subject of [...top.keys()].sort(byKey)) {
+    const tied = top.get(subject)!.sort((left, right) => byKey(left.verdict.entry.entryId, right.verdict.entry.entryId));
     for (const [index, left] of tied.entries()) {
       for (const right of tied.slice(index + 1)) {
         if (left.placement.value === right.placement.value) continue;
-        found.push({
-          family: 'V', subject: `verdict:${taskId}`, rowId: 'VERDICTS_AT_ONE_REVISION',
+        contradictions.push({
+          family: 'V', subject, rowId: 'VERDICTS_AT_ONE_REVISION',
           left: { entryId: left.verdict.entry.entryId, claimId: left.verdict.claim.claimId, value: left.placement.value, trust: left.verdict.claim.trust },
           right: { entryId: right.verdict.entry.entryId, claimId: right.verdict.claim.claimId, value: right.placement.value, trust: right.verdict.claim.trust },
         });
       }
     }
-    for (const { placement, verdict } of tied) {
-      const action = placement.value as JuliusDecisionAction;
-      const findings = input.findings.filter((recorded) => recorded.finding.taskId === taskId)
-        .sort((left, right) => byKey(left.entryId, right.entryId));
-      for (const recorded of findings) {
-        const row = juliusVerdictFindingRow({ verdict: action, status: recorded.finding.status, blocking: recorded.finding.blocking, trust: recorded.claim.trust });
-        if (row.result !== 'INCOMPATIBLE') continue;
-        found.push({
-          family: 'A', subject: `acceptance:${taskId}`, rowId: row.rowId,
-          left: { entryId: verdict.entry.entryId, claimId: verdict.claim.claimId, value: action, trust: verdict.claim.trust },
-          right: { entryId: recorded.entryId, claimId: recorded.claim.claimId, value: 'OPEN_BLOCKING_VERIFIED', trust: recorded.claim.trust },
-        });
-      }
+  }
+  const judgements: JuliusAcceptanceJudgement[] = [];
+  for (const acceptance of input.acceptances) {
+    if (!isVerified(acceptance.claim.trust)) continue;
+    const subject = `acceptance:${acceptance.taskId}`;
+    const left: JuliusLineageSide = { entryId: acceptance.entryId, claimId: acceptance.claim.claimId, value: acceptance.action, trust: acceptance.claim.trust };
+    for (const recorded of input.findings) {
+      if (recorded.finding.taskId !== acceptance.taskId) continue;
+      const row = juliusVerdictFindingRow({ verdict: acceptance.action, status: recorded.finding.status, blocking: recorded.finding.blocking, trust: recorded.claim.trust });
+      const right: JuliusLineageSide = { entryId: recorded.entryId, claimId: recorded.claim.claimId, value: findingValue(recorded.finding, recorded.claim.trust), trust: recorded.claim.trust };
+      judgements.push({ subject, acceptingTaskId: acceptance.acceptingTaskId, rowId: row.rowId, result: row.result, left, right });
+      if (row.result === 'INCOMPATIBLE') contradictions.push({ family: 'A', subject, rowId: row.rowId, acceptingTaskId: acceptance.acceptingTaskId, left, right });
     }
   }
-  return found.sort((left, right) => byKey(left.subject, right.subject) || byKey(left.left.entryId, right.left.entryId)
-    || byKey(left.right.entryId, right.right.entryId));
+  return { judgements: judgements.sort(byPair), contradictions: contradictions.sort(byPair) };
 }
 
+/** Who wrote an accepting decision the brain never mirrored: Julius's own decision log (C2). */
+export const JULIUS_DECISION_LOG_WRITER = 'julius:decision-log' as const;
+
+/** The DECISION entry an unmirrored decision stands as, named by its durable key (`appendDecision`'s, unique in a run). */
+const decisionEntryFor = (witness: JuliusAcceptanceWitness): JuliusBrainEntry => ({
+  entryId: `decision:${witness.acceptingTaskId}:${witness.decision.action}:${witness.decision.reasonCode}`,
+  kind: 'DECISION',
+  text: `${witness.decision.action} (${witness.decision.reasonCode})`,
+  taskIds: [witness.acceptingTaskId],
+  allowedRoles: [...JULIUS_DEFAULT_ROLES],
+  sensitivity: 'INTERNAL',
+  provenance: { workerId: JULIUS_DECISION_LOG_WRITER, recordedAt: JULIUS_UNKNOWN_RECORDED_AT, evidenceIds: witness.decision.evidenceIds },
+});
+
 /**
- * THE RUN'S CONTRADICTIONS FROM ITS DURABLE RECORDS: the brain (with each entry's revision), the effective
- * findings and the claim standings the run recorded. What a packet would hold does not matter here.
+ * THE RUN-WIDE CHECK FROM ITS DURABLE RECORDS: the brain (with each entry's revision), the effective findings, the
+ * claim standings the run recorded, the run's tasks and its decision log. What a packet would hold does not matter here.
  *
- * A verdict's claim, and a finding's, is derived exactly as the context layer derives a DECISION or a FINDING entry,
- * then any standing the run recorded for it replaces the derivation (`mergeJuliusDurableStanding`, "the record
- * wins"). A finding's entry is built from the finding's OWN durable record — its reviewer, its time and the evidence
- * it cites — so a blocking finding that cites evidence stands VERIFIED, and one that cites none does not
- * (`needsEvidence`). The dispatch path's finding entries carry no provenance, so read from a packet every finding
- * would be UNVERIFIED and the founder's row could never be reached; it is built here from the record instead.
+ * Every claim is derived exactly as the context layer derives its kind, then any standing the run recorded for it
+ * replaces the derivation (`mergeJuliusDurableStanding`, "the record wins"):
+ *   - an ACCEPTANCE is named by the brain's mirror of its accepting decision (`brain:decision:<task>:<action>:<reason>`)
+ *     and stands as that entry stands. When the brain holds no mirror, it is named by the decision's own key and stands
+ *     as the DECISION entry it would have mirrored, so the contradiction fires either way (C2);
+ *   - a FINDING's entry is built from the finding's OWN durable record — its reviewer, its time and the evidence it
+ *     cites — so a blocking finding that cites evidence stands VERIFIED, and one that cites none does not
+ *     (`needsEvidence`). The dispatch path's finding entries carry no provenance, so read from a packet every finding
+ *     would be UNVERIFIED and the founder's row could never be reached; it is built here from the record instead.
  */
-export function juliusRunContradictionsFromRecords(input: {
+export function juliusRunLineageCheckFromRecords(input: {
   readonly brain: readonly JuliusBrainEntry[];
   /** Effective findings (`juliusEffectiveFindings`): OPEN only while unresolved. */
   readonly findings: readonly JuliusReviewerFinding[];
   readonly claims: readonly JuliusMemoryClaim[];
-}): readonly JuliusRunContradiction[] {
+  readonly tasks: readonly JuliusTask[];
+  /** The durable decision log in log order (`decisionsForRun`): a task's current decision is its last. */
+  readonly decisions: readonly JuliusRecordedDecision[];
+}): JuliusRunLineageCheck {
   const verdictEntries = input.brain.filter((entry) => entry.revision !== undefined
     && placeJuliusLineageEntry(entry, { [entry.entryId]: entry.revision })?.family === 'V');
+  const mirrors = new Map(input.brain.map((entry) => [entry.entryId, entry]));
+  const acceptanceEntries = juliusAcceptanceWitnesses(input.tasks, input.decisions).map((witness) => ({
+    witness,
+    entry: mirrors.get(`brain:decision:${witness.acceptingTaskId}:${witness.decision.action}:${witness.decision.reasonCode}`) ?? decisionEntryFor(witness),
+  }));
   const findingEntries = input.findings.map((finding) => ({
     finding,
     entry: {
@@ -352,15 +485,22 @@ export function juliusRunContradictionsFromRecords(input: {
       provenance: { workerId: finding.reviewerWorkerId, recordedAt: finding.createdAt, evidenceIds: finding.evidenceIds },
     },
   }));
-  const standing = mergeJuliusDurableStanding(
-    deriveJuliusContextQualification([...verdictEntries, ...findingEntries.map((item) => item.entry)]),
-    input.claims,
-  );
+  const entries = new Map<string, JuliusBrainEntry>();
+  for (const entry of [...verdictEntries, ...acceptanceEntries.map((item) => item.entry), ...findingEntries.map((item) => item.entry)]) {
+    entries.set(entry.entryId, entry);
+  }
+  const standing = mergeJuliusDurableStanding(deriveJuliusContextQualification([...entries.values()]), input.claims);
   const claimFor = new Map(standing.claims.map((held) => [held.entryId, held]));
-  return juliusRunContradictions({
+  return juliusRunLineageCheck({
     verdicts: verdictEntries.flatMap((entry) => {
       const held = claimFor.get(entry.entryId);
       return held === undefined ? [] : [{ entry, claim: held, revision: entry.revision! }];
+    }),
+    acceptances: acceptanceEntries.flatMap(({ witness, entry }) => {
+      const held = claimFor.get(entry.entryId);
+      return held === undefined ? [] : [{
+        taskId: witness.taskId, acceptingTaskId: witness.acceptingTaskId, action: witness.decision.action, entryId: entry.entryId, claim: held,
+      }];
     }),
     findings: findingEntries.flatMap(({ finding, entry }) => {
       const held = claimFor.get(entry.entryId);
@@ -369,23 +509,51 @@ export function juliusRunContradictionsFromRecords(input: {
   });
 }
 
+/** The contradictions alone: what a dispatch and a run's terminal transition refuse on. */
+export const juliusRunContradictionsFromRecords = (
+  input: Parameters<typeof juliusRunLineageCheckFromRecords>[0],
+): readonly JuliusRunContradiction[] => juliusRunLineageCheckFromRecords(input).contradictions;
+
+/**
+ * TEXT FOR AN EVENT FACT, OR NULL. The event validator refuses a WHOLE event whose facts hold a secret's shape, so an id
+ * that merely looked like one would cost the halt its record; the shape is withheld and the counts still land.
+ */
+const factText = (text: string): string | null =>
+  (/(?:api[_-]?key|authorization|token|secret|password)\s*[=:]/iu.test(text) ? null : text);
+
 /**
  * A RUN CONTRADICTION AS EVENT FACTS: flat, closed values and ids only (an event's facts are scalars and bounded),
- * so a reviewer can read the pair back from the ledger after the halt. The first contradiction in full; all of them
- * as a bounded list.
+ * so a reviewer can read the pair back from the ledger after the halt. The first contradiction in full, with the task
+ * whose decision accepted its subject; all of them as a bounded list.
  */
-export function juliusContradictionFacts(contradictions: readonly JuliusRunContradiction[]): Readonly<Record<string, string | number>> {
+export function juliusContradictionFacts(contradictions: readonly JuliusRunContradiction[]): Readonly<Record<string, string | number | null>> {
   const first = contradictions[0];
   if (first === undefined) return {};
-  const side = (held: JuliusRunContradiction['left']) => `${held.entryId}|${held.claimId}|${held.value}|${held.trust}`;
+  const side = (held: JuliusLineageSide) => `${held.entryId}|${held.claimId}|${held.value}|${held.trust}`;
   return {
     contradictions: contradictions.length,
     contradictionFamily: first.family,
-    contradictionSubject: first.subject,
+    contradictionSubject: factText(first.subject),
     contradictionRow: first.rowId,
-    contradictionLeft: side(first.left),
-    contradictionRight: side(first.right),
-    contradictionPairs: contradictions.map((held) => `${held.family}:${held.rowId}:${held.left.claimId}>${held.right.claimId}`).join(';').slice(0, 2_000),
+    contradictionLeft: factText(side(first.left)),
+    contradictionRight: factText(side(first.right)),
+    ...(first.acceptingTaskId === undefined ? {} : { contradictionAcceptingTask: factText(first.acceptingTaskId) }),
+    contradictionPairs: factText(contradictions.map((held) => `${held.family}:${held.rowId}:${held.left.claimId}>${held.right.claimId}`).join(';').slice(0, 2_000)),
+  };
+}
+
+/**
+ * THE TABLE'S WORK, ON THE RECORD: every (acceptance, finding) pair it judged and the row it chose, compatible pairs
+ * included, so a run's ledger shows the founder's rule ran on the pairs the run had, not merely that nothing fired.
+ * Flat, closed values and ids, bounded.
+ */
+export function juliusAcceptanceJudgementFacts(judgements: readonly JuliusAcceptanceJudgement[]): Readonly<Record<string, string | number | null>> {
+  return {
+    acceptanceJudged: judgements.length,
+    acceptanceIncompatible: judgements.filter((judgement) => judgement.result === 'INCOMPATIBLE').length,
+    acceptanceJudgements: judgements.length === 0 ? null : factText(judgements
+      .map((judgement) => `${judgement.subject}>${judgement.acceptingTaskId}:${judgement.rowId}:${judgement.right.entryId}`)
+      .join(';').slice(0, 1_500)),
   };
 }
 
@@ -427,7 +595,11 @@ const TOKEN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/u;
  */
 export function juliusGovernanceEntries(input: {
   readonly decisions: readonly JuliusGovernanceDecision[];
-  /** Every worker id this run dispatches to: none of them may be a governance decider. */
+  /**
+   * The worker ids this run's own records name (the dispatching worker, every brain entry's writer, every finding's
+   * reviewer): none of them may be a governance decider. Not the registry's whole roster, which the pipeline cannot
+   * list; a registered worker that has written nothing in this run is not caught here (Second Julius, O1).
+   */
   readonly workerIds: readonly string[];
 }): {
   readonly entries: readonly JuliusBrainEntry[];

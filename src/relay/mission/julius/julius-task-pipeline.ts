@@ -46,8 +46,8 @@ import { juliusContractDisposition, juliusContractDispositionFacts } from './jul
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { deriveJuliusContextQualification } from './julius-context-provenance';
 import {
-  assertJuliusLineage, juliusContradictionConflict, juliusContradictionFacts, juliusGovernanceEntries, juliusRunContradictionsFromRecords,
-  type JuliusLineageRefusal, type JuliusRunContradiction,
+  assertJuliusLineage, juliusAcceptanceJudgementFacts, juliusContradictionConflict, juliusContradictionFacts, juliusGovernanceEntries,
+  juliusRunLineageCheckFromRecords, type JuliusLineageRefusal, type JuliusRunLineageCheck,
 } from './julius-lineage-asserter';
 import type { JuliusBrainAppend } from './julius-runtime-ports';
 import { juliusAdmittedClaimFor, juliusClaimPromotionsOnAccept, mergeJuliusDurableStanding } from './julius-claim-ledger';
@@ -1416,11 +1416,20 @@ export async function runClaimedTask(
      * RULE 2'S LIVE PATH, RUN-WIDE. A task ACCEPTED while a blocking VERIFIED
      * finding about it is still OPEN is a contradiction the RUN holds, whatever
      * this packet shows: admission is task-scoped, and an accepted task is never
-     * dispatched again, so no packet would hold both. Judged by the trust core's
-     * closed table over the run's own records, and never resolved: the dispatch
-     * is refused with the pair, and its failure class halts the run.
+     * dispatched again, so no packet would hold both. ACCEPTED is the release
+     * path's effective acceptance over the decision log, so a parent accepted
+     * through its repair counts, and the dependent this dispatch may be is
+     * exactly what that acceptance released. Judged by the trust core's closed
+     * table over the run's own records, and never resolved: the dispatch is
+     * refused with the pair, and its failure class halts the run.
      */
-    const contradictions = juliusRunContradictionsFromRecords({ brain, findings, claims: durableClaims });
+    const decisionLog = await deps.store.decisionsForRun(run.runId, run.projectId);
+    const lineageCheck: JuliusRunLineageCheck = juliusRunLineageCheckFromRecords({
+      brain, findings, claims: durableClaims, decisions: decisionLog,
+      // The graph only once something was decided: an acceptance needs a decision, and a run's first dispatches have none.
+      tasks: decisionLog.length === 0 ? [] : runTasks.length > 0 ? runTasks : await deps.store.tasksForRun(run.runId, run.projectId),
+    });
+    const contradictions = lineageCheck.contradictions;
     let snapshot;
     try {
       if (contradictions.length > 0) {
@@ -1633,6 +1642,9 @@ export async function runClaimedTask(
         governanceEntries: governance.entries.length,
         lineageRefusals: lineage.refusals.length + governance.refusals.length,
         lineageRefusalIds: lineageRefusalIdsOf([...lineage.refusals, ...governance.refusals]),
+        // And every (acceptance, finding) pair the run-wide check judged, compatible ones included: the record that the
+        // founder's rule ran on the pairs this run had, not only that nothing fired.
+        ...juliusAcceptanceJudgementFacts(lineageCheck.judgements),
       },
     });
     /**
@@ -4842,19 +4854,21 @@ export async function juliusFindingsGateFor(
 }
 
 /**
- * THE RUN'S CONTRADICTIONS, FROM ITS DURABLE RECORDS (founder decision B, 2026-10-03): the brain with its revisions,
- * the effective findings and the recorded claim standings, judged by the trust core's table. What `advanceRun` checks
- * before a run may complete, wait or stop, as the dispatch path does before every packet.
+ * THE RUN'S LINEAGE CHECK, FROM ITS DURABLE RECORDS (founder decision B, 2026-10-03): the brain with its revisions, the
+ * effective findings, the recorded claim standings, the tasks and the decision log, judged by the trust core's table.
+ * What `advanceRun` checks before a run may complete, wait or stop, as the dispatch path does before every packet.
  */
-export async function juliusRunContradictionsFor(
+export async function juliusRunLineageCheckFor(
   deps: JuliusPipelineDependencies, run: JuliusRunRow,
-): Promise<readonly JuliusRunContradiction[]> {
-  const [brain, findings, claims] = await Promise.all([
+): Promise<JuliusRunLineageCheck> {
+  const [brain, findings, claims, tasks, decisions] = await Promise.all([
     deps.store.brainEntriesForRun(run.runId, run.projectId),
     effectiveFindingsOf(deps, run),
     deps.store.claimsForRun(run.runId, run.projectId),
+    deps.store.tasksForRun(run.runId, run.projectId),
+    deps.store.decisionsForRun(run.runId, run.projectId),
   ]);
-  return juliusRunContradictionsFromRecords({ brain, findings, claims });
+  return juliusRunLineageCheckFromRecords({ brain, findings, claims, tasks, decisions });
 }
 
 /** Every finding in this run, with the life the ledger gives it. */
