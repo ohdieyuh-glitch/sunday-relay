@@ -15,7 +15,7 @@
  */
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   loadBridgeConfig, productionConfigProblems, productionConfigWarnings, type BridgeConfig,
@@ -80,6 +80,12 @@ import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePor
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
+import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute } from './wonderland-native-signin-routes';
+import { handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
+import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
+import { GITHUB_STUB_BANNER, githubRootsForNativeSignIn } from './wonderland-github-stub-seam';
+import { openSocialPostgresStore } from '../src/relay/persistence/social-postgres';
+import type { SocialStore } from '../src/relay/social/social-store';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -251,6 +257,47 @@ export function createBridgeServer(
    */
   const browserSessions = createBrowserSessionStore();
   const wonderland = wonderlandBackend ?? WonderlandBackend.empty();
+  /**
+   * WONDERLAND SOCIAL (R16): the desktop client's own sign-in (GitHub's device flow) and the social routes. OFF unless the
+   * deployment sets WONDERLAND_SOCIAL_ENABLED=1; off, both answer 503 and nothing else changes.
+   *   - The social store opens on the same Julius pool, lazily, and assumes the schema (032_wonderland_social) is already
+   *     migrated: this bridge is NOT a migration entry point. No schema, no store: 503.
+   *   - Who a player is (their GitHub login, for their social record) is remembered when they sign in, in memory, beside
+   *     their session -- which also dies with the process.
+   *   - Party voice has no provider yet: 503 VOICE TRANSPORT PENDING (wonderland-social-routes.ts).
+   *   - WONDERLAND_SOCIAL_TAP=<file> (tests and QA only) appends one line per events poll / snapshot answered: ids and
+   *     sequences, never content. Refused in production.
+   *   - WONDERLAND_SOCIAL_GITHUB_STUB (development rehearsal only) is fenced in wonderland-github-stub-seam.ts: a misuse
+   *     refuses to start.
+   */
+  const socialEnabled = process.env.WONDERLAND_SOCIAL_ENABLED === '1';
+  const socialGithub = githubRootsForNativeSignIn(process.env);
+  if (socialGithub.stub) console.warn(`[relay-bridge] ${GITHUB_STUB_BANNER}`);
+  const socialTapPath = process.env.WONDERLAND_SOCIAL_TAP?.trim() || null;
+  if (socialTapPath !== null && process.env.NODE_ENV === 'production') {
+    throw new Error('WONDERLAND_SOCIAL_TAP is set in production: refusing to start (the delivery tap is a test instrument).');
+  }
+  const socialTap = socialTapPath === null || !socialEnabled ? null : (record: SocialDeliveryRecord): void => {
+    try {
+      appendFileSync(socialTapPath, `${JSON.stringify(record)}\n`);
+    } catch {
+      // a test instrument must never break the route it watches
+    }
+  };
+  const socialPendingSignIns = createPendingSignInStore();
+  const socialLogins = new Map<string, string>();
+  let socialStoreReady: SocialStore | null = null;
+  let socialStoreOpening: Promise<SocialStore | null> | null = null;
+  const socialStore = async (): Promise<SocialStore | null> => {
+    if (socialStoreReady !== null) return socialStoreReady;
+    const pool = juliusPool();
+    if (pool === null) return null;
+    socialStoreOpening ??= openSocialPostgresStore(pool).then(
+      (opened) => { socialStoreReady = opened; socialStoreOpening = null; return opened; },
+      () => { socialStoreOpening = null; return null; },
+    );
+    return socialStoreOpening;
+  };
   /**
    * THE PROJECT BRAIN, on the same Julius pool as every other Julius family, so
    * what Wonderland reads and writes is what the mission job reads. Lazy, so a
@@ -606,6 +653,71 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             send(res, githubAuthResult.status, githubAuthResult.body, cors);
             return;
           }
+        }
+
+        /**
+         * THE WONDERLAND DESKTOP SIGN-IN (R16), in front of native pairing, which claims `/wonderland/native/` and
+         * answers 404 for any path it does not serve.
+         */
+        if (isNativeSignInRoute(path.replace('/relay-api', ''))) {
+          const signInResult = await handleNativeSignInRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+            origin,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            now: Date.now(),
+          }, {
+            enabled: socialEnabled,
+            clientId: process.env.RELAY_GITHUB_APP_CLIENT_ID?.trim() || null,
+            sessions: browserSessions,
+            pending: socialPendingSignIns,
+            recordPlayer: async ({ participantId, login }) => {
+              const pool = juliusPool();
+              if (pool === null) throw new Error('no database to record the player in');
+              await pool.query('INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING', [participantId]);
+              socialLogins.set(participantId, login);
+            },
+            oauthRoot: socialGithub.oauthRoot,
+            apiRoot: socialGithub.apiRoot,
+          });
+          if (signInResult !== null) send(res, signInResult.status, signInResult.body, cors);
+          return;
+        }
+
+        /**
+         * WONDERLAND SOCIAL (R16), in front of the Wonderland family, which claims every `/wonderland/` path. The path is
+         * passed WITH its query string: the events poll reads `?after=`.
+         */
+        if (isSocialRoute(path.replace('/relay-api', ''))) {
+          if (!socialEnabled) {
+            send(res, 503, { error: { kind: 'social_unavailable', message: 'Social is not available on this server.' } }, cors);
+            return;
+          }
+          const socialResult = await handleSocialRoute({
+            method,
+            path: (req.url ?? '/').replace(/^\/relay-api/, ''),
+            authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+            origin,
+            body: method === 'POST' ? await readBody(req) : null,
+            now: Date.now(),
+          }, {
+            verifySession: (token, now) => {
+              const verified = browserSessions.verifyNativeSocialSession({ token, now });
+              return verified.ok
+                ? { sessionId: verified.sessionId, participantId: verified.participantId, capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social' }
+                : null;
+            },
+            identify: async (participantId) => {
+              const login = socialLogins.get(participantId);
+              return login === undefined ? null : { userId: participantId, displayName: login, handle: `@${login}` };
+            },
+            store: await socialStore(),
+            voice: null,
+            tap: socialTap,
+          });
+          if (socialResult !== null) send(res, socialResult.status, socialResult.body, cors);
+          return;
         }
 
         /**
