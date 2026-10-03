@@ -55,14 +55,14 @@ suite('the EMPTY-store bootstrap against real PostgreSQL', () => {
    * that failed CI on 2026-10-03). Per pool, because the busy-session case holds a session open on purpose.
    */
   const quiet = async (name: string, application: string): Promise<void> => {
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      const open = (await admin.query<{ n: number }>(
+    let open = -1;
+    for (let attempt = 0; attempt < 200 && open !== 0; attempt += 1) {
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 25));
+      open = (await admin.query<{ n: number }>(
         "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = $1 AND application_name = $2 AND backend_type = 'client backend'",
         [name, application])).rows[0].n;
-      if (open === 0) return;
-      await new Promise((resolve) => setTimeout(resolve, 25));
     }
-    throw new Error(`the ${application} session(s) on ${name} did not close within 5 s`);
+    if (open !== 0) throw new Error(`the ${application} session(s) on ${name} did not close within 5 s`);
   };
   /** Runs SQL on a case database in a pool that is CLOSED again, so the driver's other-session gate sees nobody. */
   const onDb = async <T>(name: string, work: (pool: Pool) => Promise<T>): Promise<T> => {
