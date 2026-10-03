@@ -482,6 +482,8 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	int32 GetPartCount() const { return PartPivots.Num(); }
+	/** For the QA: true for a mesh of the figure's BODY (bone, cloth, plate), false for its light (a halo, an aura, ghostfire) or one not its own. */
+	bool IsBodyMesh(const UInstancedStaticMeshComponent* Mesh) const;
 
 	/**
 	 * THE HAND ON ONE SIDE (Mission Handoff: a held object sits in the hand the player SEES): the forearm joint on the +Y or

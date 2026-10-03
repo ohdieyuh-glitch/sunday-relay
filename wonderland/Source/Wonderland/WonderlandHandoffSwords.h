@@ -139,6 +139,8 @@ namespace WonderlandHandoffSwords
 		int32 CountVisibleTrail() const;
 		/** For the QA: the trail as the world sees it -- each sample's blade tip and root, in order -- while it shows, else nothing. */
 		void GetTrailSamples(bool bGold, TArray<FVector>& OutTips, TArray<FVector>& OutRoots) const;
+		/** For the QA: the sword's own part meshes as drawn (blade, fuller, metal, grip, feathers, core) -- never its light. */
+		void GetPartMeshes(bool bGold, TArray<const UInstancedStaticMeshComponent*>& OutMeshes) const;
 		/** Removes every component it made (the owner going away, or a rebuild). */
 		void Destroy();
 

@@ -4024,3 +4024,14 @@ void AWonderlandCompanionEmbodiment::AnimateBeam(float TimeSeconds, const FWonde
 	bBeamOn = true;
 }
 
+bool AWonderlandCompanionEmbodiment::IsBodyMesh(const UInstancedStaticMeshComponent* Mesh) const
+{
+	for (int32 Index = 0; Index < PartMeshes.Num(); ++Index)
+	{
+		if (PartMeshes[Index].Get() == Mesh)
+		{
+			return PartMeshIsBody.IsValidIndex(Index) && PartMeshIsBody[Index];
+		}
+	}
+	return false;
+}

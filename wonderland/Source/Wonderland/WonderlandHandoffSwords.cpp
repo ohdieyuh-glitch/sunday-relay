@@ -533,6 +533,19 @@ namespace WonderlandHandoffSwords
 		return Count;
 	}
 
+	void FPresentation::GetPartMeshes(bool bGold, TArray<const UInstancedStaticMeshComponent*>& OutMeshes) const
+	{
+		OutMeshes.Reset();
+		const FSword& Sword = bGold ? Gold : Cyan;
+		for (const TWeakObjectPtr<UInstancedStaticMeshComponent>& PartMesh : Sword.Parts)
+		{
+			if (const UInstancedStaticMeshComponent* Mesh = PartMesh.Get())
+			{
+				OutMeshes.Add(Mesh);
+			}
+		}
+	}
+
 	void FPresentation::GetTrailSamples(bool bGold, TArray<FVector>& OutTips, TArray<FVector>& OutRoots) const
 	{
 		OutTips.Reset();
