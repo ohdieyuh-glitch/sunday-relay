@@ -70,6 +70,9 @@ namespace WonderlandHands
 		FVector GetLaidAhead() const { return LaidAhead; }
 		/** +1 on the body's +Y side, -1 on the other: the back of the hand is (LaidAhead x LaidAlong) * Side. */
 		float GetSide() const { return Side; }
+		/** For the QA: the forearm's tip the hand grows from (the forearm's space), and the hand's size against a 10 uu arm. */
+		FVector GetTipLocal() const { return Tip; }
+		float GetSize() const { return Size; }
 		/** The closed fist's hollow round its centre (the palm's face), in the forearm's space: what a held handle is fitted to. */
 		float GetHollowRadius() const { return 2.1f * Size; }
 		/** For the QA: the boxes the hand is made of (palm, fingers, thumb), to measure against the props. */

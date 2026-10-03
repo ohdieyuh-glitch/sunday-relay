@@ -11102,6 +11102,42 @@ namespace
 				S.CloseHeldHands += ToolHandBoxes + OtherHandBoxes > 0 ? 1 : 0;
 				S.MaxHeldHand = FMath::Max(S.MaxHeldHand, HandDepth);
 				S.MaxHeldArm = FMath::Max(S.MaxHeldArm, ArmDepth);
+				// THE NUMBERS TO HOLD THEM WITH NEXT: each forearm's tip and axes in the book's or the glass's own frame (the book: X
+				// along the spine, Y across, Z out of the pages; the glass: X out of the glass, Z up the handle from its foot)
+				const TCHAR* const FrameName = Want == 1 ? TEXT("MissionBook") : TEXT("MissionLensHandle");
+				const UStaticMeshComponent* FramePart = nullptr;
+				TInlineComponentArray<UStaticMeshComponent*> FrameParts;
+				Dog->GetComponents<UStaticMeshComponent>(FrameParts);
+				for (const UStaticMeshComponent* Candidate : FrameParts)
+				{
+					if (Candidate != nullptr && Candidate->IsVisible() && Candidate->GetName().StartsWith(FrameName)
+						&& !Candidate->GetName().StartsWith(TEXT("MissionBookPages")) && !Candidate->GetName().StartsWith(TEXT("MissionBookTurningPage")))
+					{
+						FramePart = Candidate;
+						break;
+					}
+				}
+				if (FramePart != nullptr)
+				{
+					const FTransform PropXf = FramePart->GetComponentTransform();
+					for (const bool bLeftSide : { true, false })
+					{
+						const USceneComponent* GeomArm = Dog->GetVisibleForearm(bLeftSide);
+						const WonderlandHands::FHand& GeomHand = Dog->GetHand(bLeftSide);
+						if (GeomArm == nullptr)
+						{
+							continue;
+						}
+						const FTransform GeomArmXf = GeomArm->GetComponentTransform();
+						const FVector TipInProp = PropXf.InverseTransformPosition(GeomArmXf.TransformPosition(GeomHand.GetTipLocal()));
+						const FVector AlongInProp = PropXf.InverseTransformVectorNoScale(GeomArmXf.TransformVectorNoScale(GeomHand.GetAlong()));
+						const FVector AheadInProp = PropXf.InverseTransformVectorNoScale(GeomArmXf.TransformVectorNoScale(GeomHand.GetForward()));
+						UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA GEOM %s %s hand (%s): in the frame of %s, tip (%.1f, %.1f, %.1f) uu, along (%.2f, %.2f, %.2f), thumb side (%.2f, %.2f, %.2f), hand size %.2f, arm scale %.2f"),
+							*ShotName, bLeftSide ? TEXT("left") : TEXT("right"), bLeftSide == Dog->IsToolHandLeft() ? TEXT("working") : TEXT("free"),
+							*FramePart->GetName(), TipInProp.X, TipInProp.Y, TipInProp.Z, AlongInProp.X, AlongInProp.Y, AlongInProp.Z,
+							AheadInProp.X, AheadInProp.Y, AheadInProp.Z, GeomHand.GetSize(), GeomArmXf.GetScale3D().GetAbsMin());
+					}
+				}
 			}
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA SHOT %s props 0x%X sight %s (tries %d) tool hand %d boxes, other %d, in the fist %d, curl %.2f, wrist %.1f deg; hand-in-prop %.2f uu (%s); prop-in-arm %.2f uu (%s); control %.2f"),
 				*ShotName, Mask, bClear ? TEXT("clear") : TEXT("BLOCKED"), S.Tries, ToolHandBoxes, OtherHandBoxes, Dog->IsToolInFist() ? 1 : 0,
