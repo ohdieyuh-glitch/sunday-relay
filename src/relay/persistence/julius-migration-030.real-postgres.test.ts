@@ -55,7 +55,7 @@ suite('migration 030 under the founder gates (row 13 (i))', () => {
     return pool;
   };
   const constraints = async (pool: Pool): Promise<string[]> => (await pool.query(
-    "SELECT conrelid::regclass::text || '|' || conname || '|' || contype || '|' || pg_get_constraintdef(oid) AS c FROM pg_constraint WHERE connamespace = 'relay_wonderland'::regnamespace ORDER BY 1",
+    "SELECT conrelid::regclass::text || '|' || conname || '|' || contype::text || '|' || pg_get_constraintdef(oid) AS c FROM pg_constraint WHERE connamespace = 'relay_wonderland'::regnamespace ORDER BY 1",
   )).rows.map((row: { c: string }) => row.c);
   const triggers = async (pool: Pool): Promise<string[]> => (await pool.query(
     "SELECT tgname FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN ('relay_wonderland.events'::regclass,'relay_wonderland.outbox'::regclass) ORDER BY 1",
