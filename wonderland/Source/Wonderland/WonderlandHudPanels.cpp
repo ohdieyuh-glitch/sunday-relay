@@ -419,18 +419,28 @@ SWonderlandMenuPanel::SWonderlandMenuPanel()
  * theme moves accents -- headings, the key hints, the chosen tab -- and the words stay ivory whatever is picked.
  */
 TSharedRef<SWidget> SWonderlandMenuPanel::MakeColourRow(const TCHAR* Label, const TCHAR* Note,
-	TFunction<FLinearColor()> Read, TFunction<void(FLinearColor)> Write)
+	TFunction<FLinearColor()> Read, TFunction<void(FLinearColor)> Write, bool bMascotPrimary)
 {
 	TSharedRef<SHorizontalBox> Chips = SNew(SHorizontalBox);
-	for (const TPair<FName, FLinearColor>& Swatch : WonderlandMascotStyle::Palette())
+	for (const TPair<FName, FLinearColor>& Swatch : bMascotPrimary ? WonderlandMascotStyle::PrimaryPalette() : WonderlandMascotStyle::Palette())
 	{
 		const FLinearColor Colour = Swatch.Value;
+		const FName Key = Swatch.Key;
+		// THE MASCOT PRIMARY KNOWS ITS SWATCH, not just its colour: DEFAULT and WHITE are both (1,1,1).
+		TFunction<bool()> IsOn = bMascotPrimary
+			? TFunction<bool()>([Key, Colour]() { return WonderlandMascotStyle::IsMascotPrimaryOn(Key, Colour); })
+			: TFunction<bool()>([Colour, Read]() { return Read && Read().Equals(Colour, 0.01f); });
 		Chips->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
 		[
 			SNew(SButton).ButtonStyle(&SwatchStyle).IsFocusable(false)
 			.ToolTipText(FText::FromName(Swatch.Key))
-			.OnClicked_Lambda([Colour, Write]()
+			.OnClicked_Lambda([Colour, Key, Write, bMascotPrimary]()
 			{
+				if (bMascotPrimary)
+				{
+					WonderlandMascotStyle::PickMascotPrimary(Key, Colour);   // the state, its file, SaveAndApply
+					return FReply::Handled();
+				}
 				if (Write) { Write(Colour); }
 				WonderlandMascotStyle::SaveAndApply();
 				return FReply::Handled();
@@ -443,10 +453,9 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColourRow(const TCHAR* Label, cons
 					+ SOverlay::Slot()
 					[
 						SNew(SImage).Image(&SwatchRingBrush)
-						.Visibility_Lambda([Colour, Read]()
+						.Visibility_Lambda([IsOn]()
 						{
-							return Read && Read().Equals(Colour, 0.01f)
-								? EVisibility::HitTestInvisible : EVisibility::Hidden;
+							return IsOn() ? EVisibility::HitTestInvisible : EVisibility::Hidden;
 						})
 					]
 				]
@@ -495,7 +504,8 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 				MakeColourRow(TEXT("MASCOT  PRIMARY"),
 					TEXT("The Relay Dog's shell, on every skin. Halos, banners and the visor stay as authored."),
 					[Style]() { return Style() != nullptr ? Style()->Primary : FLinearColor::White; },
-					[Style](FLinearColor C) { if (Style()) { Style()->Primary = C; Style()->bChosen = true; } })
+					[Style](FLinearColor C) { if (Style()) { Style()->Primary = C; Style()->bChosen = true; } },
+					/*bMascotPrimary=*/true)
 			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[

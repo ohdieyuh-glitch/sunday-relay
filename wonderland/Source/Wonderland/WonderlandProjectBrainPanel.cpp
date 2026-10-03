@@ -1298,7 +1298,8 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSwatchRow(int32 Which)
 			.Font(Font("Bold", 8, 200)).ColorAndOpacity(Mist(0.95f))
 		]
 	];
-	for (const TPair<FName, FLinearColor>& Swatch : WonderlandMascotStyle::Palette())
+	// THE PRIMARY ROW OFFERS A TRUE WHITE AND BLACK after DEFAULT (founder, 2026-10-02), the Menu's MASCOT PRIMARY row the same.
+	for (const TPair<FName, FLinearColor>& Swatch : bPrimary ? WonderlandMascotStyle::PrimaryPalette() : WonderlandMascotStyle::Palette())
 	{
 		const FLinearColor Colour = Swatch.Value;
 		const FName Label = Swatch.Key;
@@ -1307,13 +1308,19 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSwatchRow(int32 Which)
 			SNew(SButton)
 			.ButtonStyle(&SwatchStyle)
 			.ToolTipText(FText::FromName(Label))
-			.OnClicked_Lambda([bPrimary, bFlame, Colour]()
+			.OnClicked_Lambda([bPrimary, bFlame, Colour, Label]()
 			{
 				// THE FLAME IS ITS OWN STATE, read and written by the Menu's FLAME row too (WonderlandMascotStyle).
 				if (bFlame)
 				{
 					WonderlandMascotStyle::SetFlameColour(Colour);
 					WonderlandMascotStyle::SaveAndApply();
+					return FReply::Handled();
+				}
+				// THE PRIMARY KNOWS ITS SWATCH: DEFAULT and WHITE are both (1,1,1) (WonderlandMascotStyle::PrimaryPalette).
+				if (bPrimary)
+				{
+					WonderlandMascotStyle::PickMascotPrimary(Label, Colour);
 					return FReply::Handled();
 				}
 				// ONE CANONICAL STATE, WRITTEN FROM BOTH PLACES. The founder's rule: "Wardrobe color controls
@@ -1339,11 +1346,16 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSwatchRow(int32 Which)
 					+ SOverlay::Slot()
 					[
 						SNew(SImage).Image(&SwatchRingBrush)
-						.Visibility_Lambda([bPrimary, bFlame, Colour]()
+						.Visibility_Lambda([bPrimary, bFlame, Colour, Label]()
 						{
 							if (bFlame)
 							{
 								return WonderlandMascotStyle::FlameColour().Equals(Colour, 0.01f)
+									? EVisibility::HitTestInvisible : EVisibility::Hidden;
+							}
+							if (bPrimary)
+							{
+								return WonderlandMascotStyle::IsMascotPrimaryOn(Label, Colour)
 									? EVisibility::HitTestInvisible : EVisibility::Hidden;
 							}
 							const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();

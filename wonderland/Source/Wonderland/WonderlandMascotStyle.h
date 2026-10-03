@@ -232,6 +232,29 @@ namespace WonderlandMascotStyle
 	WONDERLAND_API const TArray<TPair<FName, FLinearColor>>& Palette();
 
 	/**
+	 * THE MASCOT PRIMARY, PURE (founder, 2026-10-02: "WHITE -> pure white, BLACK -> black ... The chosen color should be
+	 * the actual visible primary color, not a blend with the skin's original dark body color").
+	 *
+	 * The PRIMARY rows offer DEFAULT, then a true WHITE and BLACK, then the shared palette. DEFAULT and WHITE are both
+	 * (1,1,1), so whether the primary is a REAL choice is kept beside the colour: in its own small file
+	 * (Saved/Wonderland/PrimaryChoice.txt, "CHOSEN" or "DEFAULT"), not a new config property, for the FName reason the
+	 * flame colour gives (a new reflected or config name crashed RC1 at boot). No file, or an unreadable one: a saved
+	 * non-white primary counts as chosen, white as DEFAULT -- exactly what the colourway meant before the file.
+	 *
+	 * A figure material tagged `primary` takes a chosen primary AS its colour; everything else keeps the multiply it had.
+	 */
+	WONDERLAND_API const TArray<TPair<FName, FLinearColor>>& PrimaryPalette();
+	WONDERLAND_API bool HasChosenPrimary();
+	/** Pick a PRIMARY swatch (DEFAULT included) from the Wardrobe or the Menu: the state, the file, SaveAndApply. */
+	WONDERLAND_API void PickMascotPrimary(FName Key, const FLinearColor& Colour);
+	/** Whether this PRIMARY swatch is the one on (its ring). */
+	WONDERLAND_API bool IsMascotPrimaryOn(FName Key, const FLinearColor& Colour);
+	/** Whether a figure's material channel takes the chosen primary as its colour: `primary`. */
+	WONDERLAND_API bool IsPrimaryChannel(FName Channel);
+	/** What the saved choice file is read with ("CHOSEN" / "DEFAULT", or false). For the QA's hostile inputs. */
+	WONDERLAND_API bool ParsePrimaryChoice(const FString& Text, bool& bOutChosen);
+
+	/**
 	 * THE FLAME COLOUR (founder, 2026-10-01: "When a flame-bearing mascot is equipped, the Color menu should expose a
 	 * separate: Flame Color. This must be independent from normal body/secondary color").
 	 *

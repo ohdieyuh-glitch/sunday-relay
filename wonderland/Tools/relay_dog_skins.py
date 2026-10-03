@@ -3225,8 +3225,12 @@ def shadow_flame():
     """
     figure = Figure("RELAY DOG SKIN -- SHADOW FLAME", 7501)
     # start()'s materials, with the coat's rim strength raised: at strength 1 a near-black rim is invisible.
-    figure.material("bone", "rim", SHADOW_COAT, 3.2)
-    figure.material("bonedeep", "lit", SHADOW_COAT_DEEP, 1.0)
+    # THE SHELL IS THE PRIMARY REGION (founder, 2026-10-02: "WHITE -> pure white ... not a blend with the skin's original
+    # dark body color"). Tagged `primary`, a chosen PRIMARY becomes these surfaces' colour outright; the multiply every other
+    # skin's near-white shell takes would leave this near-black coat near-black whatever was picked. Strips, visor, eyes and
+    # the blue void edges are not the shell and keep their designed colours.
+    figure.material("bone", "rim", SHADOW_COAT, 3.2, "primary")
+    figure.material("bonedeep", "lit", SHADOW_COAT_DEEP, 1.0, "primary")
     figure.material("visor", "lit", VISOR, 1.0)
     figure.material("eye", "glow", SHADOW_EYES, 7.5)
     figure.material("eyehalo", "add", SHADOW_EYES, 7.5 * 0.35)

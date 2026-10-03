@@ -123,6 +123,59 @@ namespace WonderlandMascotStyle
 
 namespace
 {
+	// WHETHER THE MASCOT PRIMARY IS A REAL CHOICE (see WonderlandMascotStyle::PrimaryPalette). -1: no readable file (the
+	// colour decides, as before the file), 0: DEFAULT, 1: CHOSEN.
+	int32 GPrimaryChoice = -1;
+	bool GPrimaryChoiceLoaded = false;
+
+	FString PrimaryChoicePath()
+	{
+		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Wonderland"), TEXT("PrimaryChoice.txt"));
+	}
+
+	/** "CHOSEN" or "DEFAULT", or nothing: a hand edit or a corrupted file is not a choice. */
+	bool ReadPrimaryChoiceText(const FString& Text, bool& bOutChosen)
+	{
+		const FString Word = Text.TrimStartAndEnd();
+		if (Word == TEXT("CHOSEN")) { bOutChosen = true; return true; }
+		if (Word == TEXT("DEFAULT")) { bOutChosen = false; return true; }
+		return false;
+	}
+
+	void LoadPrimaryChoice()
+	{
+		if (GPrimaryChoiceLoaded)
+		{
+			return;
+		}
+		GPrimaryChoiceLoaded = true;
+		const FString Path = PrimaryChoicePath();
+		WonderlandBeta::RecoverInterruptedSave(Path);
+		IFileManager& Files = IFileManager::Get();
+		if (!Files.FileExists(*Path))
+		{
+			return;
+		}
+		// A SIZE CAP BEFORE THE READ: the file holds one short word.
+		FString Text;
+		bool bChosen = false;
+		const int64 Size = Files.FileSize(*Path);
+		if (Size > 0 && Size <= 32 && FFileHelper::LoadFileToString(Text, *Path) && ReadPrimaryChoiceText(Text, bChosen))
+		{
+			GPrimaryChoice = bChosen ? 1 : 0;
+			return;
+		}
+		UE_LOG(LogTemp, Warning, TEXT("WLMASCOT the saved primary choice could not be read (%lld bytes); the colour decides"), Size);
+	}
+
+	void SavePrimaryChoice(bool bChosen)
+	{
+		LoadPrimaryChoice();
+		GPrimaryChoice = bChosen ? 1 : 0;
+		// SAVED THE MOMENT IT IS PICKED, whole or not at all, like the flame colour beside it.
+		WonderlandBeta::SaveTextAtomically(PrimaryChoicePath(), bChosen ? TEXT("CHOSEN") : TEXT("DEFAULT"));
+	}
+
 	// THE FLAME COLOUR'S ONE COPY (see WonderlandMascotStyle::FlameColour). White is the designed fire.
 	FLinearColor GFlameColour = FLinearColor::White;
 	bool GFlameColourLoaded = false;
@@ -207,6 +260,78 @@ namespace WonderlandMascotStyle
 	{
 		const FLinearColor Colour = FlameColour();
 		return !(Colour.R >= 0.995f && Colour.G >= 0.995f && Colour.B >= 0.995f);
+	}
+
+	const TArray<TPair<FName, FLinearColor>>& PrimaryPalette()
+	{
+		// made on the first call, at run time: never names created during static initialisation (WonderlandBeta.h)
+		static const TArray<TPair<FName, FLinearColor>> Swatches = []()
+		{
+			TArray<TPair<FName, FLinearColor>> Out;
+			const TArray<TPair<FName, FLinearColor>>& Shared = Palette();
+			Out.Add(Shared[0]);   // DEFAULT, first, as in every row
+			Out.Add({FName(TEXT("WHITE")), FLinearColor(1.0f, 1.0f, 1.0f, 1.0f)});
+			Out.Add({FName(TEXT("BLACK")), FLinearColor(0.0f, 0.0f, 0.0f, 1.0f)});
+			for (int32 Index = 1; Index < Shared.Num(); ++Index)
+			{
+				Out.Add(Shared[Index]);
+			}
+			return Out;
+		}();
+		return Swatches;
+	}
+
+	bool ParsePrimaryChoice(const FString& Text, bool& bOutChosen)
+	{
+		return ReadPrimaryChoiceText(Text, bOutChosen);
+	}
+
+	bool HasChosenPrimary()
+	{
+		const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+		if (!Style.bChosen)
+		{
+			return false;
+		}
+		LoadPrimaryChoice();
+		if (GPrimaryChoice >= 0)
+		{
+			return GPrimaryChoice == 1;
+		}
+		// NO FILE: what the colourway meant before it -- white was "as designed", anything else a choice
+		return !(Style.Primary.R >= 0.995f && Style.Primary.G >= 0.995f && Style.Primary.B >= 0.995f);
+	}
+
+	void PickMascotPrimary(FName Key, const FLinearColor& Colour)
+	{
+		static const FName Default(TEXT("DEFAULT"));
+		if (UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>())
+		{
+			Style->Primary = FLinearColor(FMath::Clamp(Colour.R, 0.0f, 1.0f), FMath::Clamp(Colour.G, 0.0f, 1.0f), FMath::Clamp(Colour.B, 0.0f, 1.0f), 1.0f);
+			Style->bChosen = true;
+			SavePrimaryChoice(Key != Default);
+			// THROUGH THE ONE DOOR, like every other row: the Dog, the Wardrobe's mannequin and both rows' rings move together.
+			SaveAndApply();
+			UE_LOG(LogTemp, Display, TEXT("WLMASCOT PRIMARY %s = %s (%s)"), *Key.ToString(), *Style->Primary.ToString(),
+				Key == Default ? TEXT("as designed") : TEXT("chosen, pure on `primary` surfaces"));
+		}
+	}
+
+	bool IsMascotPrimaryOn(FName Key, const FLinearColor& Colour)
+	{
+		static const FName Default(TEXT("DEFAULT"));
+		if (Key == Default)
+		{
+			return !HasChosenPrimary();
+		}
+		return HasChosenPrimary() && UWonderlandMascotStyleSettings::Get().Primary.Equals(Colour, 0.01f);
+	}
+
+	bool IsPrimaryChannel(FName Channel)
+	{
+		// made on the first call, at run time (see IsFlameChannel)
+		static const FName Primary(TEXT("primary"));
+		return Channel == Primary;
 	}
 
 	void SetFlameColour(const FLinearColor& Colour)
@@ -325,6 +450,10 @@ namespace
 		(bPrimary ? Settings->Primary : Settings->Secondary) = Colour;
 		Settings->bChosen = true;
 		Settings->bSecondaryChosen |= !bPrimary;
+		if (bPrimary)
+		{
+			SavePrimaryChoice(true);   // a colour typed at the console is a real choice, white included
+		}
 		// THROUGH THE SAME DOOR AS THE WARDROBE AND THE MENU. This used to save and repaint by itself, which
 		// made the console a third writer of a state the founder asked to have exactly one of.
 		WonderlandMascotStyle::SaveAndApply();
@@ -399,6 +528,7 @@ namespace
 				Settings->bChosen = false;
 				Settings->bSecondaryChosen = false;
 			}
+			SavePrimaryChoice(false);
 			// AND THE FIRE: the designed flames are part of "the colours its skins were designed in".
 			WonderlandMascotStyle::SetFlameColour(FLinearColor::White);
 			// THROUGH THE ONE DOOR. SaveAndApply repaints even when nothing is chosen, which is exactly what a

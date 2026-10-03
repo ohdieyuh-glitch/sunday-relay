@@ -1569,7 +1569,10 @@ FString AWonderlandCompanionEmbodiment::DescribeMaterialColours() const
 		FLinearColor Twin = FLinearColor::Black;
 		if (MaterialInstances.IsValidIndex(Index) && MaterialInstances[Index] != nullptr)
 		{
-			MaterialInstances[Index]->GetVectorParameterValue(FMaterialParameterInfo(TEXT("Color")), Body);
+			// A RIM surface is painted through BaseColor (and RimColor), never Color (ApplyColourway): reading Color there
+			// reported the parent's default, so a rim shell's paint -- Shadow Flame's coat -- was invisible to every proof.
+			const TCHAR* Painted = BuiltMaterials[Index].Kind == EWonderlandCompanionMaterialKind::Rim ? TEXT("BaseColor") : TEXT("Color");
+			MaterialInstances[Index]->GetVectorParameterValue(FMaterialParameterInfo(Painted), Body);
 		}
 		if (FlameMaterialInstances.IsValidIndex(Index) && FlameMaterialInstances[Index] != nullptr)
 		{
@@ -2018,6 +2021,21 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 				Want = Def.Channel == TEXT("secondary_deep")
 					? WonderlandMascotStyle::DeepAccentColour(Want, Secondary)
 					: WonderlandMascotStyle::AccentColour(Want, Secondary, Def.Channel == TEXT("secondary_light"));
+			}
+		}
+		else if (WonderlandMascotStyle::IsPrimaryChannel(Def.Channel))
+		{
+			// ---- A `primary` SURFACE TAKES THE CHOSEN PRIMARY AS ITS COLOUR (founder, 2026-10-02: "WHITE -> pure white ...
+			// Do not allow the default near-black/navy Shadow Flame base to tint or multiply the selected primary color").
+			//
+			// The multiply below is a tint, and a tint of a near-white shell is the chosen colour -- but Shadow Flame's coat
+			// is authored near-black, and anything times near-black stays near-black: white left it exactly as designed,
+			// every other colour came out dark. A figure tags its shell `primary` to say the chosen colour IS the shell's
+			// colour. Only a REAL choice does it (HasChosenPrimary): DEFAULT still means the coat as designed. A Rim surface
+			// keeps its rim at the figure's strength, in the same hue (see the switch below), so the shell still reads.
+			if (WonderlandMascotStyle::HasChosenPrimary())
+			{
+				Want = FLinearColor(Primary.R, Primary.G, Primary.B, Want.A);
 			}
 		}
 		else
