@@ -2621,6 +2621,21 @@ void UWonderlandUiSubsystem::StageWardrobe(bool bOpen)
 	}
 }
 
+bool UWonderlandUiSubsystem::OpenBrainCardTab(FName Tab)
+{
+	if (!IsProjectBrainOpen() || !BrainPanel.IsValid())
+	{
+		return false;
+	}
+	BrainPanel->OpenCardTab(Tab);
+	return true;
+}
+
+FName UWonderlandUiSubsystem::GetBrainCardTab() const
+{
+	return BrainPanel.IsValid() ? BrainPanel->GetCardTab() : NAME_None;
+}
+
 bool UWonderlandUiSubsystem::SetBrainSkinsOpen(bool bOpen)
 {
 	if (!IsProjectBrainOpen() || !BrainPanel.IsValid())

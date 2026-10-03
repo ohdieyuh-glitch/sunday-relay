@@ -6071,6 +6071,194 @@ namespace
 			GQaCardSelect->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaCardSelectTick), 0.0f);
 		}));
 
+	/* ================================================================ wl.Qa.BrainFrames: Project Brain in five sections (M6)
+	 * The founder's re-layout, photographed in the package: the five-section view, then C.A.R.D.'s page on each tab, then the
+	 * wardrobe opening over it (the page steps aside; the Dog still framed in its window). Frames to Saved/Screenshots/WLBRAIN,
+	 * judged by eye (and by Second's real-input before/after at 1080p and the founder's resolution). WLBFQA lines.
+	 */
+	struct FQaBrainFrames
+	{
+		TWeakObjectPtr<UWorld> World;
+		FTSTicker::FDelegateHandle Handle;
+		bool bQuit = false;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		int32 Phase = 0;
+		int32 Tab = 0;
+		double PhaseAt = 0.0;
+		FString Dir;
+		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLBFQA %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+		void Frame(const FString& Name)
+		{
+			int32 Width = 0;
+			int32 Height = 0;
+			const FString Path = Dir / (Name + TEXT(".png"));
+			const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLBFQA frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), Width, Height);
+		}
+	};
+	TSharedPtr<FQaBrainFrames> GQaBrainFrames;
+
+	bool QaBrainFramesTick(float)
+	{
+		if (!GQaBrainFrames.IsValid())
+		{
+			return false;
+		}
+		FQaBrainFrames& S = *GQaBrainFrames;
+		UWorld* World = S.World.Get();
+		UWonderlandUiSubsystem* Ui = QaUi(World);
+		auto Stop = [&S](const TCHAR* Why)
+		{
+			if (UWonderlandUiSubsystem* U = QaUi(S.World.Get()))
+			{
+				U->OpenBrainCardTab(NAME_None);
+				U->SetBrainSkinsOpen(false);
+				if (U->IsProjectBrainOpen())
+				{
+					U->ToggleProjectBrain();
+				}
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLBFQA END pass=%d fail=%d%s"), S.Pass, S.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
+			const bool bQuit = S.bQuit;
+			GQaBrainFrames.Reset();
+			if (bQuit)
+			{
+				FPlatformMisc::RequestExit(false);
+			}
+			return false;
+		};
+		if (World == nullptr || Ui == nullptr)
+		{
+			return Stop(TEXT("the world or the UI went away"));
+		}
+		const double Now = QaNow();
+		const double In = Now - S.PhaseAt;
+		static const TCHAR* const Tabs[] = { TEXT("handoff"), TEXT("mascot"), TEXT("companions"), TEXT("capabilities"), TEXT("saved") };
+		switch (S.Phase)
+		{
+		case 0:
+			if (Ui->IsWelcomeOpen())
+			{
+				Ui->DismissWelcome();
+			}
+			if (In < 5.0)
+			{
+				return true;
+			}
+			GEngine->Exec(World, TEXT("wl.Sky.Hour 12"));
+			if (!Ui->IsProjectBrainOpen())
+			{
+				Ui->ToggleProjectBrain();
+			}
+			S.Phase = 1;
+			S.PhaseAt = Now;
+			return true;
+		case 1:
+			// the living brain stages into its window first
+			if (In < 3.5)
+			{
+				return true;
+			}
+			S.Check(TEXT("BF1"), Ui->IsProjectBrainOpen() && Ui->GetBrainCardTab().IsNone(),
+				FString::Printf(TEXT("Project Brain open in five sections, nothing over the brain (C.A.R.D. tab '%s'): frame brain_five_sections"),
+					*Ui->GetBrainCardTab().ToString()));
+			S.Frame(TEXT("brain_five_sections"));
+			S.Tab = 0;
+			S.Phase = 2;
+			S.PhaseAt = Now;
+			return true;
+		case 2:
+			// C.A.R.D.'s page on each tab, opened the way a tile click opens it
+			if (S.Tab >= static_cast<int32>(UE_ARRAY_COUNT(Tabs)))
+			{
+				Ui->OpenBrainCardTab(NAME_None);
+				S.Phase = 3;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 0.1)
+			{
+				return true;
+			}
+			if (Ui->GetBrainCardTab().ToString() != Tabs[S.Tab])
+			{
+				Ui->OpenBrainCardTab(FName(Tabs[S.Tab]));
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 1.2)
+			{
+				return true;
+			}
+			S.Check(*FString::Printf(TEXT("BF2.%d"), S.Tab + 1), Ui->GetBrainCardTab().ToString() == Tabs[S.Tab],
+				FString::Printf(TEXT("C.A.R.D.'s page on %s: frame card_%s"), Tabs[S.Tab], Tabs[S.Tab]));
+			S.Frame(FString::Printf(TEXT("card_%d_%s"), S.Tab + 1, Tabs[S.Tab]));
+			++S.Tab;
+			S.PhaseAt = Now;
+			return true;
+		case 3:
+			// THE WARDROBE OVER IT: the page steps aside for the wardrobe, and the Dog is framed in the wardrobe's window
+			if (In < 0.5)
+			{
+				return true;
+			}
+			if (S.Tab >= 0)
+			{
+				Ui->OpenBrainCardTab(FName(TEXT("mascot")));
+				Ui->SetBrainSkinsOpen(true);
+				S.Tab = -1;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 2.5)
+			{
+				return true;
+			}
+			S.Check(TEXT("BF3"), Ui->IsProjectBrainOpen(), TEXT("the wardrobe opened from C.A.R.D.'s mascot page: frame wardrobe_over_card (the Dog framed in its window, the page hidden)"));
+			S.Frame(TEXT("wardrobe_over_card"));
+			Ui->SetBrainSkinsOpen(false);
+			S.Phase = 4;
+			S.PhaseAt = Now;
+			return true;
+		case 4:
+			if (In < 1.5)
+			{
+				return true;
+			}
+			// one step back at a time: with the wardrobe shut, the page it covered is back
+			S.Check(TEXT("BF4"), Ui->GetBrainCardTab().ToString() == TEXT("mascot"),
+				FString::Printf(TEXT("the wardrobe shut: C.A.R.D.'s page is back on '%s': frame card_after_wardrobe"), *Ui->GetBrainCardTab().ToString()));
+			S.Frame(TEXT("card_after_wardrobe"));
+			return Stop(nullptr);
+		default:
+			return Stop(TEXT("an unknown phase"));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaBrainFramesCommand(
+		TEXT("wl.Qa.BrainFrames"),
+		TEXT("Project Brain M6: the five-section view, C.A.R.D.'s page on each tab, and the wardrobe over it, photographed to ")
+		TEXT("Saved/Screenshots/WLBRAIN. `quit` exits after. WLBFQA lines."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaBrainFrames.IsValid() || World == nullptr)
+			{
+				return;
+			}
+			GQaBrainFrames = MakeShared<FQaBrainFrames>();
+			GQaBrainFrames->World = World;
+			GQaBrainFrames->bQuit = Args.Contains(TEXT("quit"));
+			GQaBrainFrames->PhaseAt = QaNow();
+			GQaBrainFrames->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLBRAIN"));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLBFQA BEGIN | %s"), *WonderlandBeta::BuildLabel());
+			GQaBrainFrames->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaBrainFramesTick), 0.0f);
+		}));
+
 	/* ================================================================ wl.Qa.Handoff: Mission Handoff traversal, M1
 	 * The founder's acceptance list, measured in the PACKAGED game with the real movement component:
 	 *   S1-S3  normal run vs Mission Handoff run vs dash. Pre-registered before any measurement: the handoff run is at least

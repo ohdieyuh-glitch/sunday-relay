@@ -207,6 +207,10 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
 	bool SetBrainSkinsOpen(bool bOpen);
+	/** 05 C.A.R.D.: open its page on one tab (handoff, mascot, companions, capabilities, saved), or close it with None -- the same
+	 *  call a tile click makes. False when Project Brain is not open. */
+	bool OpenBrainCardTab(FName Tab);
+	FName GetBrainCardTab() const;
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	bool IsBrainSkinsOpen() const;
