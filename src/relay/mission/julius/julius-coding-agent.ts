@@ -186,12 +186,20 @@ export const juliusFailureIsContentRefusal = (failureClass: string | null | unde
  *  - the dispatch boundary refuses the run's claims;
  *  - the reroute loop does not try another worker.
  *
+ * Founder rule (2026-10-03, decision B): a contradiction the trust core cannot
+ * resolve — above all a task ACCEPTED while a blocking VERIFIED finding about it
+ * is still OPEN — is never chosen between and never executed past: the run is
+ * HALTED, the pair is recorded, the evidence is kept for review. That is
+ * `context_integrity_unresolved_clash`, which until then failed only its task
+ * and left every dependent BLOCKED.
+ *
  * CLOSED. Only this list decides it. Anything else a task fails with ends the
  * run the ordinary way.
  */
 export const JULIUS_RUN_HALTING_FAILURE_CLASSES: readonly string[] = Object.freeze([
   'coder_served_model_mismatch',
   'coder_served_model_unattested',
+  'context_integrity_unresolved_clash',
 ]);
 
 /** The class, when it is one that ends the run; otherwise null. */

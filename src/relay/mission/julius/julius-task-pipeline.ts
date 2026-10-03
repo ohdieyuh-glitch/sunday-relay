@@ -45,6 +45,10 @@ import { consistentJuliusBillingPath, juliusCostComponent } from './julius-cost-
 import { juliusContractDisposition, juliusContractDispositionFacts } from './julius-contract-disposition';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { deriveJuliusContextQualification } from './julius-context-provenance';
+import {
+  assertJuliusLineage, juliusContradictionConflict, juliusContradictionFacts, juliusGovernanceEntries, juliusRunContradictionsFromRecords,
+  type JuliusLineageRefusal, type JuliusRunContradiction,
+} from './julius-lineage-asserter';
 import type { JuliusBrainAppend } from './julius-runtime-ports';
 import { juliusAdmittedClaimFor, juliusClaimPromotionsOnAccept, mergeJuliusDurableStanding } from './julius-claim-ledger';
 import { JULIUS_DEFAULT_MAX_CODER_SEGMENTS, evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
@@ -226,7 +230,7 @@ export interface JuliusPipelineDependencies {
    * hold an approval at all.
    */
   readonly store: JuliusRuntimeStore & JuliusRecoveryDriver
-    & Partial<Pick<JuliusApprovalStore, 'pendingApprovals' | 'deniedApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>>;
+    & Partial<Pick<JuliusApprovalStore, 'pendingApprovals' | 'deniedApprovals' | 'decidedApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>>;
   readonly router: JuliusProviderRouter;
   readonly budget: JuliusBudgetPort;
   readonly clock: JuliusClock;
@@ -1370,14 +1374,58 @@ export async function runClaimedTask(
      * prevents — one fat unverified memory crowding out the finding a repair
      * exists to address — is a failure of the real path only.
      */
-    const contextEntries = [...brain, ...priorFindings.map((finding) => findingEntryFor(task, finding))];
-    const derivedQualification = (deps.contextQualification ?? deriveJuliusContextQualification)(contextEntries);
+    const workedEntries = [...brain, ...priorFindings.map((finding) => findingEntryFor(task, finding))];
+    const derivedQualification = (deps.contextQualification ?? deriveJuliusContextQualification)(workedEntries);
     // THE RECORD WINS. A standing the claim ledger recorded — an admission, a
     // reviewer's promotion — replaces the derived one for the same claim; an
     // entry with no recorded claim keeps its derivation. `julius-claim-ledger.ts`.
-    const qualification = mergeJuliusDurableStanding(derivedQualification, await deps.store.claimsForRun(run.runId, run.projectId));
+    const durableClaims = await deps.store.claimsForRun(run.runId, run.projectId);
+    const recorded = mergeJuliusDurableStanding(derivedQualification, durableClaims);
+    /**
+     * LINEAGE AND GOVERNANCE, ASSERTED (founder decision B, 2026-10-03).
+     *
+     * After the record has won, because the merge replaces every claim it holds
+     * a standing for: lineage asserted before it would be overwritten. Only the
+     * run's DECIDED approvals become governance entries (rule 3), never a worker
+     * of this run (rule 4); a later verified verdict supersedes an earlier one by
+     * the brain's durable revision (rule 1). `julius-lineage-asserter.ts`.
+     */
+    const governance = juliusGovernanceEntries({
+      decisions: (deps.store.decidedApprovals === undefined ? [] : await deps.store.decidedApprovals(run.runId, run.projectId))
+        .flatMap((record) => (record.state === 'APPROVED' || record.state === 'DENIED') ? [{
+          kind: 'APPROVAL' as const, decisionId: record.approvalId, taskId: record.taskId, state: record.state,
+          operation: record.operation, policyRevision: record.policyRevision, decidedBy: record.decidedBy ?? '', decidedAt: record.decidedAt ?? '',
+        }] : []),
+      workerIds: [...new Set([worker.workerId, ...brain.flatMap((entry) => (entry.provenance === undefined ? [] : [entry.provenance.workerId])),
+        ...findings.map((finding) => finding.reviewerWorkerId)])],
+    });
+    const contextEntries = [...workedEntries, ...governance.entries];
+    const lineage = assertJuliusLineage({
+      qualification: {
+        ...recorded,
+        claims: [...recorded.claims, ...governance.claims],
+        contextTypes: { ...recorded.contextTypes, ...governance.contextTypes },
+        recordedAt: { ...recorded.recordedAt, ...governance.recordedAt },
+      },
+      entries: contextEntries,
+      revisions: Object.fromEntries(contextEntries.flatMap((entry) => (entry.revision === undefined ? [] : [[entry.entryId, entry.revision]]))),
+      governanceEntryIds: governance.entries.map((entry) => entry.entryId),
+    });
+    const qualification = lineage.qualification;
+    /**
+     * RULE 2'S LIVE PATH, RUN-WIDE. A task ACCEPTED while a blocking VERIFIED
+     * finding about it is still OPEN is a contradiction the RUN holds, whatever
+     * this packet shows: admission is task-scoped, and an accepted task is never
+     * dispatched again, so no packet would hold both. Judged by the trust core's
+     * closed table over the run's own records, and never resolved: the dispatch
+     * is refused with the pair, and its failure class halts the run.
+     */
+    const contradictions = juliusRunContradictionsFromRecords({ brain, findings, claims: durableClaims });
     let snapshot;
     try {
+      if (contradictions.length > 0) {
+        throw new JuliusContextIntegrityRefusal(contradictions.map(juliusContradictionConflict), contradictions);
+      }
       snapshot = createJuliusContextSnapshot({
       qualification,
       contextId: deps.ids.next('context'),
@@ -1437,6 +1485,8 @@ export async function runClaimedTask(
           conflicts: error.conflicts.length,
           clashClaimIds: clash === undefined ? null : clash.claimIds.join('|'),
           clashEntryIds: clash === undefined ? null : clash.entryIds.join('|'),
+          // The PAIR, when the trust core's table found it (decision B): family, subject, closed values, trusts.
+          ...juliusContradictionFacts(error.contradictions),
         },
       });
       await deps.store.finishTask({
@@ -1575,6 +1625,14 @@ export async function runClaimedTask(
       facts: {
         contextId, characterCount: snapshot.characterCount, truncated: snapshot.truncated,
         redactionCount: snapshot.redactionCount, contentHash: snapshot.contentHash, researchAnswerIncluded,
+        // WHAT THE TRUST CORE ASSERTED FOR THIS PACKET (decision B), durable beside the compile: how many claims a
+        // later verified one superseded, how many pairs nothing may resolve, the governance entries it carried, and
+        // every refusal — a demoted forged authority, an unproven governance decider — by code and subject.
+        lineageSuperseded: qualification.claims.filter((held) => held.trust === 'SUPERSEDED').length,
+        lineageIncompatible: (qualification.incompatible ?? []).length,
+        governanceEntries: governance.entries.length,
+        lineageRefusals: lineage.refusals.length + governance.refusals.length,
+        lineageRefusalIds: lineageRefusalIdsOf([...lineage.refusals, ...governance.refusals]),
       },
     });
     /**
@@ -4783,6 +4841,22 @@ export async function juliusFindingsGateFor(
   });
 }
 
+/**
+ * THE RUN'S CONTRADICTIONS, FROM ITS DURABLE RECORDS (founder decision B, 2026-10-03): the brain with its revisions,
+ * the effective findings and the recorded claim standings, judged by the trust core's table. What `advanceRun` checks
+ * before a run may complete, wait or stop, as the dispatch path does before every packet.
+ */
+export async function juliusRunContradictionsFor(
+  deps: JuliusPipelineDependencies, run: JuliusRunRow,
+): Promise<readonly JuliusRunContradiction[]> {
+  const [brain, findings, claims] = await Promise.all([
+    deps.store.brainEntriesForRun(run.runId, run.projectId),
+    effectiveFindingsOf(deps, run),
+    deps.store.claimsForRun(run.runId, run.projectId),
+  ]);
+  return juliusRunContradictionsFromRecords({ brain, findings, claims });
+}
+
 /** Every finding in this run, with the life the ledger gives it. */
 async function findingLivesOf(
   deps: JuliusPipelineDependencies,
@@ -6883,6 +6957,16 @@ function repairContextFindings(
 }
 
 /** A finding as a context entry: scoped to this task and this role, never SECRET, never the reviewer's raw body. */
+/**
+ * The refusals as one bounded fact. An event refuses anything shaped like a credential assignment, and these ids came
+ * from stores, so a list that would trip that check is recorded by count only rather than failing the compile.
+ */
+const lineageRefusalIdsOf = (refusals: readonly JuliusLineageRefusal[]): string | null => {
+  if (refusals.length === 0) return null;
+  const text = refusals.map((refusal) => `${refusal.code}:${refusal.subjectId}`).join(' ').slice(0, 1_500);
+  return /(?:api[_-]?key|authorization|token|secret|password)\s*[=:]/iu.test(text) ? null : text;
+};
+
 const findingEntryFor = (task: JuliusTask, finding: JuliusReviewerFinding): JuliusBrainEntry => ({
   entryId: `finding:${task.taskId}:${finding.findingId}`,
   kind: 'FINDING',
