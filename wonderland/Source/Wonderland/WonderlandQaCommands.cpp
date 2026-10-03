@@ -9175,6 +9175,14 @@ namespace
 			{
 				S.LastMask = Mask;
 				S.MaskSince = Now;
+				// the mission's Live Terminal covers the lower half of the frame: shut it for the shot that follows in 0.6 s
+				if (UWonderlandUiSubsystem* Ui = QaUi(World))
+				{
+					if (Mask != 0 && Ui->IsLiveTerminalOpen())
+					{
+						Ui->ToggleLiveTerminal();
+					}
+				}
 			}
 			// A CLOSE FRAME OF EACH NEW SET OF PROPS, once it has settled for half a second
 			FQaStance Shim;
