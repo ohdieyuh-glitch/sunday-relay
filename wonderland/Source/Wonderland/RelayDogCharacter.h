@@ -872,6 +872,8 @@ private:
 	FVector DashDirection = FVector::ForwardVector;
 	int32 DashCount = 0;
 	int32 DashesRefused = 0;
+	/** A performance (the auto-demo, a mission orbit) is moving the Dog: refreshed every tick, read by the dash's gate. */
+	bool bPerformanceMoving = false;
 	/** Normal roaming's acceleration, read at BeginPlay and restored whenever the swords are not held. */
 	float NormalAcceleration = 900.0f;
 	int32 RouteIndex = 0;

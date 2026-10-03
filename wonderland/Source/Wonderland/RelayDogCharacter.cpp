@@ -1531,7 +1531,7 @@ bool ARelayDogCharacter::TryStartDash(float Now)
 	{
 		Why = TEXT("not on the ground");
 	}
-	else if (bAutoDemo || Overlay.bOrbit)
+	else if (bPerformanceMoving)
 	{
 		Why = TEXT("a performance is moving the Dog");
 	}
@@ -2449,6 +2449,8 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		MissionIn.OrbitDirection = OrbitDetourStage == 3 ? -1.0f : 1.0f;
 	}
 	const RelayDogMission::FStageOverlay Overlay = Mission.Update(MissionIn);
+	// what the dash's gate reads between ticks (an input handler cannot see this frame's overlay)
+	bPerformanceMoving = bAutoDemo || Overlay.bOrbit;
 
 	// FACING. Only a stationary act done at the work -- hovering to verify, standing at a fault to repair -- turns the
 	// body to the Contract (founder, 2026-09-16: the Dog faces where it walks; the camera holds the Contract). This takes
