@@ -1629,6 +1629,13 @@ bool AWonderlandCompanionEmbodiment::QaReadPaint(FName Name, FLinearColor& OutBa
 			{
 				OutRelief = Relief->GetName();
 			}
+			// B65.1: the smoke's tone map rides with its relief (WonderlandMascotStyle::SmokeTextureName names them the same way)
+			UTexture* Tone = nullptr;
+			if (Instance->GetTextureParameterValue(FMaterialParameterInfo(TEXT("AlbedoTex")), Tone) && Tone != nullptr
+				&& Tone->GetName().StartsWith(TEXT("WLSmokeTone")))
+			{
+				OutRelief += TEXT("+tone");
+			}
 		}
 		else
 		{
