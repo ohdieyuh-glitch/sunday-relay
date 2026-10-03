@@ -17,6 +17,8 @@ namespace
 {
 	// THE ENVELOPE: at most one card's companions wait (a newer SELECT replaces an older one), with the world to apply them in
 	FString GCardWaitingId;
+	/** Shown to a person: the card's name, never its id. */
+	FString GCardWaitingName;
 	FString GCardWaitingWhy;
 	TWeakObjectPtr<UWorld> GCardWaitingWorld;
 	FTSTicker::FDelegateHandle GCardWaitingTicker;
@@ -145,6 +147,7 @@ namespace
 		}
 		GCardWaitingTicker.Reset();
 		GCardWaitingId.Reset();
+		GCardWaitingName.Reset();
 		GCardWaitingWhy.Reset();
 		GCardWaitingWorld.Reset();
 	}
@@ -162,6 +165,7 @@ namespace
 			return FString::Printf(TEXT("companions: %s"), *CardApplyCompanions(World, Card));
 		}
 		GCardWaitingId = Card.Id;
+		GCardWaitingName = Card.Name;
 		GCardWaitingWhy = Blocked;
 		GCardWaitingWorld = World;
 		if (!GCardWaitingTicker.IsValid())
@@ -181,6 +185,7 @@ namespace
 			// the world went, the card went, or another card was selected since: nothing of this one waits any more
 			GCardWaitingTicker.Reset();
 			GCardWaitingId.Reset();
+			GCardWaitingName.Reset();
 			GCardWaitingWhy.Reset();
 			GCardWaitingWorld.Reset();
 			return false;
@@ -194,6 +199,7 @@ namespace
 		const FWonderlandCard Applying = *Card;
 		GCardWaitingTicker.Reset();
 		GCardWaitingId.Reset();
+		GCardWaitingName.Reset();
 		GCardWaitingWhy.Reset();
 		GCardWaitingWorld.Reset();
 		UE_LOG(LogTemp, Display, TEXT("WLCARD the waiting companions of %s are applied now: %s"), *Applying.Name, *CardApplyCompanions(World, Applying));
@@ -345,7 +351,7 @@ namespace WonderlandCardDirector
 
 	FString DescribeWaiting()
 	{
-		return GCardWaitingId.IsEmpty() ? FString() : FString::Printf(TEXT("the companions of C.A.R.D. %s wait: %s"), *GCardWaitingId, *GCardWaitingWhy);
+		return GCardWaitingId.IsEmpty() ? FString() : FString::Printf(TEXT("the companions of C.A.R.D. %s wait: %s"), *GCardWaitingName, *GCardWaitingWhy);
 	}
 
 	int32 GetConnectsSent()
