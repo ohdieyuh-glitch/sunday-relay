@@ -3,6 +3,7 @@
 #include "WonderlandFinite.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
+#include "HAL/IConsoleManager.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -19,7 +20,14 @@ namespace
 		return T * T * (3.0f - 2.0f * T);
 	}
 
-	UInstancedStaticMeshComponent* MakeMotes(AActor* Owner, const TCHAR* Name, const FLinearColor& Colour)
+	TAutoConsoleVariable<int32> CVarHandoffBreakup(
+		TEXT("wl.Handoff.Breakup"),
+		1,
+		TEXT("Mission Handoff: 1 (default) = each companion BREAKS into light shards that re-form along its sword, and back on the return (the founder's ")
+		TEXT("/handoff canon, 10-03: \"luminous breakup; reformation into each sword\"). 0 = the body only draws in while the motes stream (the 10-02 look)."),
+		ECVF_Default);
+
+	UInstancedStaticMeshComponent* MakeMotes(AActor* Owner, const TCHAR* Name, const FLinearColor& Colour, int32 Count = WonderlandHandoffTransform::MotesPerSide)
 	{
 		UInstancedStaticMeshComponent* Mesh = NewObject<UInstancedStaticMeshComponent>(Owner,
 			MakeUniqueObjectName(Owner, UInstancedStaticMeshComponent::StaticClass(), Name));
@@ -42,7 +50,7 @@ namespace
 		Mesh->SetAbsolute(true, true, true);
 		Mesh->RegisterComponent();
 		Mesh->SetWorldTransform(FTransform::Identity);
-		for (int32 i = 0; i < WonderlandHandoffTransform::MotesPerSide; ++i)
+		for (int32 i = 0; i < Count; ++i)
 		{
 			Mesh->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(0.01)), true);
 		}
@@ -104,6 +112,16 @@ namespace WonderlandHandoffTransform
 		// the LLM Companion's light is gold, Jhinn's cyan: the colours of the swords they become
 		GoldMotes = MakeMotes(Owner, TEXT("HandoffEnergyGold"), FLinearColor(1.0f, 0.74f, 0.28f) * 4000.0f * 2.6f);
 		CyanMotes = MakeMotes(Owner, TEXT("HandoffEnergyCyan"), FLinearColor(0.28f, 0.90f, 1.0f) * 4000.0f * 2.6f);
+		// THE BREAKUP'S SHARDS: the same light, larger -- pieces of the body, not sparks
+		GoldShards = MakeMotes(Owner, TEXT("HandoffShardsGold"), FLinearColor(1.0f, 0.86f, 0.52f) * 4000.0f * 2.0f, ShardsPerSide);
+		CyanShards = MakeMotes(Owner, TEXT("HandoffShardsCyan"), FLinearColor(0.45f, 0.92f, 1.0f) * 4000.0f * 2.0f, ShardsPerSide);
+		FRandomStream ShardStream(20261003);
+		for (int32 Shard = 0; Shard < ShardsPerSide; ++Shard)
+		{
+			ShardSeeds.Add(ShardStream.GetUnitVector() * ShardStream.FRandRange(0.45f, 1.0f));
+			ShardSpins.Add(ShardStream.GetUnitVector());
+			ShardSizes.Add(ShardStream.FRandRange(0.10f, 0.20f));
+		}
 	}
 
 	void FPresentation::Veil(FVeiled& Slot, AActor* Body, float InPresence)
@@ -146,6 +164,13 @@ namespace WonderlandHandoffTransform
 		if (!Slot.bTouched)
 		{
 			Slot.RestScale = Body->GetActorScale3D();
+			// WHERE ITS LIGHT BREAKS FROM: the body as it stands, before any of it is drawn in
+			const FBox RestBox = Body->GetComponentsBoundingBox(true);
+			if (RestBox.IsValid && WonderlandFinite::IsDrawableScale(RestBox.GetExtent(), 1000.0))
+			{
+				Slot.RestOffset = RestBox.GetCenter() - Body->GetActorLocation();
+				Slot.RestExtent = RestBox.GetExtent().ComponentMax(FVector(4.0));
+			}
 			Slot.bTouched = true;
 		}
 		const bool bHide = InPresence <= 0.01f;
@@ -209,6 +234,45 @@ namespace WonderlandHandoffTransform
 		}
 	}
 
+	void FPresentation::Shatter(UInstancedStaticMeshComponent* Mesh, const FVeiled& Slot, const AActor* Body, const FVector& BladeMiddle, const FVector& BladeAxis,
+		float Reach, float Break, float Spin)
+	{
+		if (Mesh == nullptr)
+		{
+			return;
+		}
+		const bool bShow = Body != nullptr && Break > 0.0f && Break < 1.0f && ShardSeeds.Num() == ShardsPerSide && !BladeMiddle.ContainsNaN()
+			&& !BladeAxis.ContainsNaN() && FMath::IsFinite(Reach);
+		if (Mesh->IsVisible() != bShow)
+		{
+			Mesh->SetVisibility(bShow);
+		}
+		if (!bShow)
+		{
+			return;
+		}
+		const FVector Middle = Body->GetActorLocation() + Slot.RestOffset;
+		const float Largest = static_cast<float>(Slot.RestExtent.GetMax());
+		const FVector Blade = BladeAxis.IsNearlyZero() ? FVector::UpVector : BladeAxis.GetSafeNormal();
+		const int32 Count = FMath::Min(Mesh->GetInstanceCount(), ShardsPerSide);
+		for (int32 Shard = 0; Shard < Count; ++Shard)
+		{
+			// EACH SHARD BREAKS AWAY AT ITS OWN MOMENT from its own place in the body, bursts outward past the body's edge, then flies to its
+			// own place along the blade and shrinks into it -- the body drawing in as its light leaves it
+			const float Leaves = 0.05f + 0.5f * static_cast<float>(Shard) / Count;
+			const float Born = Ease01((Break - Leaves) / 0.05f);
+			const float Burst = Ease01((Break - Leaves) / 0.25f);
+			const float Gather = Ease01((Break - Leaves - 0.25f) / FMath::Max(0.95f - Leaves - 0.25f, 0.05f));
+			const FVector FromBody = Middle + ShardSeeds[Shard] * Slot.RestExtent * (0.35f + 0.95f * Burst);
+			const FVector OnBlade = BladeMiddle + Blade * (Reach * (2.0f * (Shard + 0.5f) / Count - 1.0f));
+			FVector Place = FMath::Lerp(FromBody, OnBlade, Gather);
+			Place.Z += FMath::Sin(Gather * PI) * 0.25f * Largest;
+			const float Size = Born * ShardSizes[Shard] * Largest * (1.0f - 0.85f * Gather);
+			const FQuat Turn(ShardSpins[Shard], Spin * (Break * 4.0f * PI + Shard));
+			Mesh->UpdateInstanceTransform(Shard, FTransform(Turn, Place, FVector(Size / 100.0f)), true, Shard == Count - 1, true);
+		}
+	}
+
 	void FPresentation::Show(const FShowInput& In)
 	{
 		ShownState = In.State;
@@ -220,6 +284,21 @@ namespace WonderlandHandoffTransform
 		{
 			return;
 		}
+		// THE BREAKUP: across the transformation; the return plays it backwards over its last stretch, as the sword shrinks into the body
+		float Break = 0.0f;
+		if (CVarHandoffBreakup.GetValueOnGameThread() != 0)
+		{
+			if (In.State == EWonderlandHandoffState::Transforming)
+			{
+				Break = In.PhaseSeconds / FWonderlandMissionHandoff::TransformSeconds;
+			}
+			else if (In.State == EWonderlandHandoffState::Returning)
+			{
+				Break = 1.0f - FMath::Clamp((In.PhaseSeconds / FWonderlandMissionHandoff::ReturnSeconds - 0.62f) / 0.38f, 0.0f, 1.0f);
+			}
+		}
+		Shatter(GoldShards.Get(), Left, In.LeftCompanion.Get(), In.LeftSword, In.LeftSwordAxis, In.SwordReach, Break, 1.0f);
+		Shatter(CyanShards.Get(), Right, In.RightCompanion.Get(), In.RightSword, In.RightSwordAxis, In.SwordReach, Break, -1.0f);
 		const float Energy = EnergyFlow(In.State, In.PhaseSeconds);
 		const AActor* LeftBody = In.LeftCompanion.Get();
 		const AActor* RightBody = In.RightCompanion.Get();
@@ -243,6 +322,30 @@ namespace WonderlandHandoffTransform
 			}
 		}
 		Presence = 1.0f;
+	}
+
+	const UInstancedStaticMeshComponent* FPresentation::GetShards(bool bGold) const
+	{
+		return bGold ? GoldShards.Get() : CyanShards.Get();
+	}
+
+	int32 FPresentation::CountVisibleShards() const
+	{
+		int32 Count = 0;
+		for (const TWeakObjectPtr<UInstancedStaticMeshComponent>& Shards : { GoldShards, CyanShards })
+		{
+			const UInstancedStaticMeshComponent* Mesh = Shards.Get();
+			if (Mesh == nullptr || !Mesh->IsVisible())
+			{
+				continue;
+			}
+			for (int32 Shard = 0; Shard < Mesh->GetInstanceCount(); ++Shard)
+			{
+				FTransform ShardXf;
+				Count += Mesh->GetInstanceTransform(Shard, ShardXf) && ShardXf.GetScale3D().GetAbsMax() > 0.001 ? 1 : 0;
+			}
+		}
+		return Count;
 	}
 
 	int32 FPresentation::CountVisibleMotes() const

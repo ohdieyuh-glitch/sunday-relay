@@ -36,6 +36,10 @@ namespace WonderlandHandoffTransform
 		TWeakObjectPtr<AActor> RightCompanion;
 		FVector LeftSword = FVector::ZeroVector;
 		FVector RightSword = FVector::ZeroVector;
+		/** Each blade's line (its +Z) and half its drawn length: the breakup's shards re-form along it as the sword grows. */
+		FVector LeftSwordAxis = FVector::UpVector;
+		FVector RightSwordAxis = FVector::UpVector;
+		float SwordReach = 50.0f;
 		float TimeSeconds = 0.0f;
 	};
 
@@ -50,6 +54,9 @@ namespace WonderlandHandoffTransform
 		/** For the QA: how present each body is being drawn (1 untouched), and how many energy motes show. */
 		float GetPresence() const { return Presence; }
 		int32 CountVisibleMotes() const;
+		/** For the QA: the light shards of the breakup drawn now (both sides), and each side's shards. */
+		int32 CountVisibleShards() const;
+		const UInstancedStaticMeshComponent* GetShards(bool bGold) const;
 		/** For the QA's continuity check: the state and phase this presentation last DREW (a tick behind the state's own, by tick order). */
 		EWonderlandHandoffState GetShownState() const { return ShownState; }
 		float GetShownPhase() const { return ShownPhase; }
@@ -59,16 +66,28 @@ namespace WonderlandHandoffTransform
 		{
 			TWeakObjectPtr<AActor> Body;
 			FVector RestScale = FVector::OneVector;
+			/** The body's middle (from its actor's origin) and its half-size when it was first changed: where its light breaks from. */
+			FVector RestOffset = FVector::ZeroVector;
+			FVector RestExtent = FVector(30.0);
 			bool bHidden = false;
 			bool bTouched = false;
 		};
 		void Veil(FVeiled& Slot, AActor* Body, float Presence);
 		void Flow(UInstancedStaticMeshComponent* Mesh, const FVector& From, const FVector& To, float Flow, float TimeSeconds, float Spin);
+		/** The breakup at Break (0..1 of the transformation; the return plays it backwards): Body's shards between it and its blade. */
+		void Shatter(UInstancedStaticMeshComponent* Mesh, const FVeiled& Slot, const AActor* Body, const FVector& BladeMiddle, const FVector& BladeAxis,
+			float Reach, float Break, float Spin);
 
 		FVeiled Left;
 		FVeiled Right;
 		TWeakObjectPtr<UInstancedStaticMeshComponent> GoldMotes;
 		TWeakObjectPtr<UInstancedStaticMeshComponent> CyanMotes;
+		TWeakObjectPtr<UInstancedStaticMeshComponent> GoldShards;
+		TWeakObjectPtr<UInstancedStaticMeshComponent> CyanShards;
+		/** Each shard's own place in the body (in its half-sizes), spin axis and size (of the body's largest half-size): fixed once. */
+		TArray<FVector> ShardSeeds;
+		TArray<FVector> ShardSpins;
+		TArray<float> ShardSizes;
 		bool bBuilt = false;
 		float Presence = 1.0f;
 		EWonderlandHandoffState ShownState = EWonderlandHandoffState::Idle;
@@ -77,4 +96,7 @@ namespace WonderlandHandoffTransform
 
 	/** How many motes stream from each companion. */
 	inline constexpr int32 MotesPerSide = 28;
+
+	/** How many light shards each companion breaks into (the founder's /handoff canon, 10-03: "luminous breakup; reformation"). */
+	inline constexpr int32 ShardsPerSide = 20;
 }

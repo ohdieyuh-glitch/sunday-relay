@@ -8646,9 +8646,37 @@ namespace
 				const float Body = Change.GetPresence();
 				const float Sword = Swords.GetPresence();
 				const int32 Motes = Change.CountVisibleMotes();
-				S.Check(TEXT("SW1"), Body > 0.1f && Body < 0.9f && Sword > 0.1f && Sword < 0.9f && FMath::Abs(Body + Sword - 1.0f) <= 0.25f && Motes > 0,
+				// THE BREAKUP (the founder's /handoff canon, 10-03: "luminous breakup; reformation into each sword"): both companions' light shards
+				// drawn, spread wider than what is left of each body -- the body breaking up, not only shrinking
+				int32 ShardsDrawn = 0;
+				double SpreadLeast = TNumericLimits<double>::Max();
+				for (const bool bGold : { true, false })
+				{
+					const UInstancedStaticMeshComponent* Shards = Change.GetShards(bGold);
+					const AActor* ShardBody = bGold ? LeftBody : RightBody;
+					FBox ShardBox(ForceInit);
+					if (Shards != nullptr && Shards->IsVisible())
+					{
+						for (int32 Shard = 0; Shard < Shards->GetInstanceCount(); ++Shard)
+						{
+							FTransform ShardXf;
+							if (Shards->GetInstanceTransform(Shard, ShardXf, true) && ShardXf.GetScale3D().GetAbsMax() > 0.001)
+							{
+								++ShardsDrawn;
+								ShardBox += ShardXf.GetLocation();
+							}
+						}
+					}
+					const FBox BodyNow = ShardBody != nullptr ? ShardBody->GetComponentsBoundingBox(true) : FBox(ForceInit);
+					SpreadLeast = FMath::Min(SpreadLeast, ShardBox.IsValid && BodyNow.IsValid && BodyNow.GetExtent().GetMax() > KINDA_SMALL_NUMBER
+						? ShardBox.GetExtent().GetMax() / BodyNow.GetExtent().GetMax() : 0.0);
+				}
+				const bool bBreakup = ShardsDrawn >= WonderlandHandoffTransform::ShardsPerSide && SpreadLeast >= 1.2;
+				S.Check(TEXT("SW1"), Body > 0.1f && Body < 0.9f && Sword > 0.1f && Sword < 0.9f && FMath::Abs(Body + Sword - 1.0f) <= 0.25f && Motes > 0 && bBreakup,
 					FString::Printf(TEXT("half-way through the transformation: each companion %.2f itself, each sword %.2f formed (an exchange: both partial, ")
-						TEXT("summing to %.2f), %d motes of light streaming"), Body, Sword, Body + Sword, Motes));
+						TEXT("summing to %.2f), %d motes of light streaming; the breakup: %d light shards drawn (want >= %d of both sides' %d), spread %.2fx the ")
+						TEXT("body left (the least side; want >= 1.2: pieces leaving the body, not only a shrink)"), Body, Sword, Body + Sword, Motes, ShardsDrawn,
+						WonderlandHandoffTransform::ShardsPerSide, 2 * WonderlandHandoffTransform::ShardsPerSide, SpreadLeast >= TNumericLimits<double>::Max() ? 0.0 : SpreadLeast));
 				S.Frame(TEXT("sw_1_transforming_noon"));
 				S.bMidChecked = true;
 			}
@@ -8687,10 +8715,10 @@ namespace
 			// whole = every box the pair was built from is drawn (the first build's "> 300" was a guess, and the pair has 282)
 			const int32 Boxes = Swords.CountVisibleBoxes();
 			S.Check(TEXT("SW4"), LeftBody->IsHidden() && RightBody->IsHidden() && Change.GetPresence() == 0.0f && Swords.GetPresence() == 1.0f && Boxes > 0
-				&& Boxes == Swords.GetBuiltBoxes(),
-				FString::Printf(TEXT("held: the LLM Companion %s, Jhinn %s (veiled: they are the swords), the swords whole %.2f with %d of %d boxes drawn"),
+				&& Boxes == Swords.GetBuiltBoxes() && Change.CountVisibleShards() == 0,
+				FString::Printf(TEXT("held: the LLM Companion %s, Jhinn %s (veiled: they are the swords), the swords whole %.2f with %d of %d boxes drawn, light shards left %d"),
 					LeftBody->IsHidden() ? TEXT("veiled") : TEXT("STILL SHOWN"), RightBody->IsHidden() ? TEXT("veiled") : TEXT("STILL SHOWN"), Swords.GetPresence(), Boxes,
-					Swords.GetBuiltBoxes()));
+					Swords.GetBuiltBoxes(), Change.CountVisibleShards()));
 			// HD1: RELAY OG'S OWN HANDS, closed round the grips (the founder: functional hands and stable dual-grip sockets)
 			S.Check(TEXT("HD1"), Dog->GetHand(true).CountVisibleBoxes() == WonderlandHands::BoxesPerHand && Dog->GetHand(false).CountVisibleBoxes() == WonderlandHands::BoxesPerHand
 				&& Dog->GetHand(true).GetCurl() >= 0.9f && Dog->GetHand(false).GetCurl() >= 0.9f,
@@ -8781,12 +8809,13 @@ namespace
 			FString ReturnFlowDetail;
 			const bool bReturnFlow = QaFlowContinuous(S.ReturnFlow, 1, ReturnFlowDetail);
 			const bool bBack = !LeftBody->IsHidden() && !RightBody->IsHidden() && LeftBody->GetActorScale3D().Equals(S.LeftScale, 1.0e-4f)
-				&& RightBody->GetActorScale3D().Equals(S.RightScale, 1.0e-4f) && Swords.CountVisibleBoxes() == 0 && Change.CountVisibleMotes() == 0;
+				&& RightBody->GetActorScale3D().Equals(S.RightScale, 1.0e-4f) && Swords.CountVisibleBoxes() == 0 && Change.CountVisibleMotes() == 0
+				&& Change.CountVisibleShards() == 0;
 			S.Check(TEXT("SW5"), bBack && bReturnFlow,
-				FString::Printf(TEXT("given back: the LLM Companion %s at scale %s (was %s), Jhinn %s at %s (was %s); sword boxes drawn %d, motes %d; the return, every tick: %s"),
+				FString::Printf(TEXT("given back: the LLM Companion %s at scale %s (was %s), Jhinn %s at %s (was %s); sword boxes drawn %d, motes %d, light shards %d; the return, every tick: %s"),
 					LeftBody->IsHidden() ? TEXT("HIDDEN") : TEXT("shown"), *LeftBody->GetActorScale3D().ToCompactString(), *S.LeftScale.ToCompactString(),
 					RightBody->IsHidden() ? TEXT("HIDDEN") : TEXT("shown"), *RightBody->GetActorScale3D().ToCompactString(), *S.RightScale.ToCompactString(),
-					Swords.CountVisibleBoxes(), Change.CountVisibleMotes(), *ReturnFlowDetail));
+					Swords.CountVisibleBoxes(), Change.CountVisibleMotes(), Change.CountVisibleShards(), *ReturnFlowDetail));
 			// HD2: the hands stay, and open again (functional hands: a fist only round something held)
 			S.Check(TEXT("HD2"), Dog->GetHand(true).CountVisibleBoxes() == WonderlandHands::BoxesPerHand && Dog->GetHand(false).CountVisibleBoxes() == WonderlandHands::BoxesPerHand
 				&& Dog->GetHand(true).GetCurl() <= 0.1f && Dog->GetHand(false).GetCurl() <= 0.1f,
