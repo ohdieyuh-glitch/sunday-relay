@@ -20,7 +20,7 @@ const scratch: string[] = [];
 afterAll(() => { for (const dir of scratch) rmSync(dir, { recursive: true, force: true }); });
 const idOf = (kind: string) => `julius-work-artifact.v1:run:abc:run:abc:build:g1:${kind}`;
 
-type Spec = { id: string; body: string; evidence?: Array<{ evidenceId: string; fullText?: string; ref?: string; integrity?: string }> };
+type Spec = { id: string; body: string; kind?: string; evidence?: Array<{ evidenceId: string; fullText?: string; ref?: string; integrity?: string }> };
 /** A bundle as the dump, the copier and (optionally) the scan leave it. Free text with a newline and a tab included. */
 const bundleOf = (specs: Spec[], extraEvidence: string[] = []) => {
   const dir = mkdtempSync(join(tmpdir(), 'julius-resolve-'));
@@ -32,7 +32,7 @@ const bundleOf = (specs: Spec[], extraEvidence: string[] = []) => {
   for (const spec of specs) {
     const bytes = Buffer.from(spec.body, 'utf8');
     const name = `artifacts/${sha(spec.id)}.body`;
-    work.push([spec.id, 'prj-a', 'run:abc', 'run:abc:build', '1', 'CODING_AGENT', 'DIFF', 'text/plain', String(bytes.byteLength), sha(bytes), `local://${'a'.repeat(64)}/${'b'.repeat(64)}/${sha(spec.id)}`, '2026-10-03'].join('\t'));
+    work.push([spec.id, 'prj-a', 'run:abc', 'run:abc:build', '1', 'CODING_AGENT', spec.kind ?? 'DIFF', 'text/plain', String(bytes.byteLength), sha(bytes), `local://${'a'.repeat(64)}/${'b'.repeat(64)}/${sha(spec.id)}`, '2026-10-03'].join('\t'));
     copied.push([spec.id, name, sha(bytes), String(bytes.byteLength), 'COPIED'].join('\t'));
     writeFileSync(join(dir, name), bytes);
     for (const row of spec.evidence ?? [{ evidenceId: `${spec.id}:e` }]) {
@@ -106,7 +106,7 @@ describe('the evidence bundle resolver (decision A)', () => {
       { evidenceId: 'spaced', ref: `artifact: ${idOf('DIFF')}` },
       { evidenceId: 'unknown', ref: 'artifact:julius-work-artifact.v1:none' },
     ] }]);
-    expect(verdicts(dir)).toEqual(['UNRESOLVABLE other-scheme', 'UNRESOLVABLE spaced', 'UNRESOLVABLE unknown', `RESOLVED ${idOf('DIFF')}`]);
+    expect(verdicts(dir)).toEqual(['UNRESOLVABLE other-scheme', 'UNRESOLVABLE spaced', 'UNRESOLVABLE unknown', `ORPHAN_ARTIFACT ${idOf('DIFF')}`]);
     expect(exitOf(dir, false)).toBe(1);
   });
 
@@ -125,7 +125,7 @@ describe('the evidence bundle resolver (decision A)', () => {
   it('lists a hash-only evidence row without failing, and fails an artifact row with no integrity_hash, an unexpected file and an absent dump', () => {
     const hashOnly = ['tool:1\tCOMMAND_EXECUTION\tPASSED\tran\t2026-10-03\trun:abc\trun:abc:build\t' + sha('stdout') + '\t'];
     const dir = bundleOf([{ id: idOf('DIFF'), body: 'x', evidence: [{ evidenceId: 'no-hash', integrity: '' }] }], hashOnly);
-    expect(verdicts(dir)).toEqual(['UNVERIFIABLE no-hash', 'HASH_ONLY tool:1', `RESOLVED ${idOf('DIFF')}`]);
+    expect(verdicts(dir)).toEqual(['UNVERIFIABLE no-hash', 'HASH_ONLY tool:1', `ORPHAN_ARTIFACT ${idOf('DIFF')}`]);
     writeFileSync(join(dir, 'artifacts', 'planted.body'), 'x');
     expect(verdicts(dir).some((line) => line.startsWith('UNEXPECTED_FILE artifacts/(sha256 ')), 'named by digest, never by its own name').toBe(true);
     rmSync(join(dir, 'work-artifacts.tsv'));
@@ -142,6 +142,15 @@ describe('the evidence bundle resolver (decision A)', () => {
     expect(run.status, 'the tampered body, the bad refs and the stray file all fail it').toBe(1);
     expect(run.stdout).toContain(`RESOLVE MISMATCH ${idOf('DIFF')}`);
     expect(`${run.stdout}${run.stderr}`, 'nothing of the bundle text is repeated').not.toContain(marker);
+  });
+
+  it('ORPHANS: a base revision no evidence row names resolves on its content alone; any other unnamed artifact is an ORPHAN_ARTIFACT, which fails --strict', () => {
+    const dir = bundleOf([
+      { id: idOf('BASE_REVISION'), body: 'base', kind: 'BASE_REVISION', evidence: [] },
+      { id: idOf('DIFF'), body: 'stored, never asserted', evidence: [] },
+    ]);
+    expect(verdicts(dir)).toEqual([`RESOLVED ${idOf('BASE_REVISION')}`, `ORPHAN_ARTIFACT ${idOf('DIFF')}`]);
+    expect([exitOf(dir, false), exitOf(dir, true)]).toEqual([1, 1]);
   });
 
   it('A-6, OFF-HOST: copied into a bundle as resolve-artifacts.mjs, it resolves that bundle in a child process with no database variable and no network', () => {

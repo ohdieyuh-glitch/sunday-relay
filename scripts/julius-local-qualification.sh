@@ -232,53 +232,60 @@ check_secrets_file_mode() {
 # DROPPED_BY_SCAN; a hit anywhere else, a grep error, or a body the copier did not record refuses the bundle.
 # LAYER ONE catches shapes this rig never minted. LAYER TWO matches, literally, every value this rig
 # holds. Neither says WHICH value matched.
-credential_scan() {
-  # Returns 1 for every case that must refuse the WHOLE bundle (the caller deletes it), 0 when the bundle may be kept.
-  # It runs as an `if` condition, where bash ignores `set -e`, so every grep's code is read explicitly: 0 = hit,
-  # 1 = none, 2+ = an error, and an error is never read as clean (as in the workflow step, r2).
-  local dir=$1 needles value rc shape_hits exact_hits outside file row layer hits record dropped=0
-  [ -d "$dir" ] || return 0
+credential_scan() (
+  # A SUBSHELL, so its EXIT trap is its own: the needle file (this rig's secret values, mode 600) is removed on every
+  # way out, an interrupt included. Exits 1 for every case that must refuse the WHOLE bundle (the caller deletes it),
+  # 0 when the bundle may be kept. It runs as an `if` condition, where bash ignores `set -e`, so every grep's code is
+  # read explicitly: 0 = hit, 1 = none, 2+ = an error, and an error is never read as clean (as in the workflow step).
+  dir=$1
+  dropped=0
+  [ -d "$dir" ] || exit 0
   needles=$(umask 077; mktemp)
+  trap 'rm -f "$needles"' EXIT
   for value in "${EXECUTOR_ROOT_VALUE:-}" "${DB_PASSWORD_VALUE:-}" "$(stored_secret OPENAI_API_KEY)" "$(stored_secret XAI_API_KEY)"; do
     if [ -n "$value" ]; then printf '%s\n' "$value" >> "$needles"; fi
   done
   printf '%s' "${SCOPED_VALUE:-}" | tr ',' '\n' | sed -n 's/.*:"\([A-Za-z0-9_-]\{20,\}\)".*/\1/p' | awk '{ print }' >> "$needles" || true
   shape_hits=$(grep -rlE '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' "$dir") && rc=0 || rc=$?
-  if [ "$rc" -gt 1 ]; then rm -f "$needles"; return 1; fi
+  [ "$rc" -le 1 ] || exit 1
   exact_hits=''
   if [ -s "$needles" ]; then
     exact_hits=$(grep -rlF -f "$needles" "$dir") && rc=0 || rc=$?
-    if [ "$rc" -gt 1 ]; then rm -f "$needles"; return 1; fi
+    [ "$rc" -le 1 ] || exit 1
   fi
-  # A hit outside a work-artifact body refuses the whole bundle, as it always has.
-  outside=$(printf '%s\n%s\n' "$shape_hits" "$exact_hits" | sed '/^$/d' | sed "s|^$dir/||" | grep -vE '^artifacts/[0-9a-f]{64}[.]body$') && rc=0 || rc=$?
-  if [ "$rc" -gt 1 ] || [ -n "$outside" ]; then rm -f "$needles"; return 1; fi
+  # A hit outside a work-artifact body refuses the whole bundle, as it always has. The directory prefix is stripped by
+  # parameter expansion, never by a pattern built from the path.
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    rel=${file#"$dir"/}
+    [[ "$rel" =~ ^artifacts/[0-9a-f]{64}[.]body$ ]] || exit 1
+  done <<< "$shape_hits
+$exact_hits"
   # A hit inside a body drops that body only, recorded (decision A); a body BODIES.tsv does not name refuses everything.
   record="$dir/artifacts/DROPPED_BY_SCAN.tsv"
   for layer in shape exact; do
     if [ "$layer" = shape ]; then hits=$shape_hits; else hits=$exact_hits; fi
-    for file in $(printf '%s\n' "$hits" | sed '/^$/d' | sort -u); do
-      [ -f "$file" ] || continue
-      if [ ! -f "$dir/artifacts/BODIES.tsv" ]; then rm -f "$needles"; return 1; fi
+    while IFS= read -r file; do
+      [ -n "$file" ] && [ -f "$file" ] || continue
+      [ -f "$dir/artifacts/BODIES.tsv" ] || exit 1
       row=$(awk -F'\t' -v b="artifacts/${file##*/}" '$2 == b && $5 == "COPIED" { print $1 "\t" $2 "\t" $3 "\t" $4; exit }' "$dir/artifacts/BODIES.tsv")
-      if [ -z "$row" ]; then rm -f "$needles"; return 1; fi
+      [ -n "$row" ] || exit 1
       [ -f "$record" ] || printf 'artifact_id\tbody\tcontent_hash\tbyte_size\tlayer\tmarker\n' > "$record"
       printf '%s\t%s\tDROPPED_BY_SCAN\n' "$row" "$layer" >> "$record"
       rm -f "$file"
       dropped=$((dropped + 1))
-    done
+    done <<< "$(printf '%s\n' "$hits" | sed '/^$/d' | sort -u)"
   done
   # Both layers again over what is left: it must now be clean (grep 1); a hit or an error refuses the bundle.
   grep -rqE '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' "$dir" && rc=0 || rc=$?
-  if [ "$rc" -ne 1 ]; then rm -f "$needles"; return 1; fi
+  [ "$rc" -eq 1 ] || exit 1
   if [ -s "$needles" ]; then
     grep -rqF -f "$needles" "$dir" && rc=0 || rc=$?
-    if [ "$rc" -ne 1 ]; then rm -f "$needles"; return 1; fi
+    [ "$rc" -eq 1 ] || exit 1
   fi
-  rm -f "$needles"
   [ "$dropped" -eq 0 ] || say "EVIDENCE: $dropped work-artifact bodies dropped by the scan (artifacts/DROPPED_BY_SCAN.tsv)"
-  return 0
-}
+  exit 0
+)
 
 # --------------------------------------------------------------------------- Hermes, the reviewer
 

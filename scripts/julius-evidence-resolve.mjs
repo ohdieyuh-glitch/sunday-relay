@@ -11,8 +11,10 @@
  *     the worker produced. The store keeps at most 256 Ki UTF-16 units, so a longer text's stored body cannot match it.
  *
  * VERDICTS, one per artifact (and per unresolvable evidence row):
- *   RESOLVED          the body matches content_hash and byte_size, and every integrity_hash naming it
- *                     (an artifact no evidence row names is checked by content_hash alone, and says so);
+ *   RESOLVED          the body matches content_hash and byte_size, and every integrity_hash naming it (a
+ *                     BASE_REVISION, which no evidence row names by design, is checked by content_hash alone, and says so);
+ *   ORPHAN_ARTIFACT   any other kind of artifact that no evidence row names: its body matches its record, but nothing
+ *                     the run asserted points at it, so it proves nothing — --strict fails it;
  *   TRUNCATED         content_hash matches, an integrity_hash does not, and the body is EXACTLY the cap long in UTF-16
  *                     units (decoded, never counted in bytes): honest, but it does not verify, so --strict fails it;
  *   DROPPED_BY_SCAN   the credential scan removed the body, and its record agrees with BODIES.tsv (id, body, hash) and
@@ -41,6 +43,8 @@ export const BODY_CAP_UNITS = 256 * 1024;
 const HEX64 = /^[0-9a-f]{64}$/u;
 const ARTIFACT_REF = /^artifact:(\S+)$/u;
 const PASSING = new Set(['RESOLVED', 'DROPPED_BY_SCAN', 'HASH_ONLY']);
+/** The kinds migration 024 allows; any other value read from the bundle is printed only as a digest. */
+const ARTIFACT_KINDS = new Set(['PLAN', 'GUIDANCE', 'DIFF', 'TEST_OUTPUT', 'BASE_REVISION', 'REVIEW_PACKET', 'RESEARCH']);
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 /**
  * A value this resolver will not repeat: its digest and length. The workflow publishes the resolver's output to the job
@@ -151,7 +155,13 @@ export function resolveBundle(bundleDir) {
       continue;
     }
     const naming = integrity.get(id) ?? [];
-    if (naming.length === 0) { add('RESOLVED', id, `content_hash ${digest}; no evidence row names it`); continue; }
+    if (naming.length === 0) {
+      // A base revision is recorded so a diff can be read against it; no evidence row ever names one. Any other kind
+      // with no evidence row is a body the run stored and never asserted anything about.
+      if (row.kind === 'BASE_REVISION') add('RESOLVED', id, `content_hash ${digest}; a base revision, which no evidence row names`);
+      else add('ORPHAN_ARTIFACT', id, `content_hash ${digest}; no evidence row names this ${ARTIFACT_KINDS.has(row.kind) ? row.kind : `(${opaque(row.kind ?? '')})`} artifact`);
+      continue;
+    }
     const unequal = naming.filter((entry) => entry.hash !== digest);
     if (unequal.length === 0) { add('RESOLVED', id, `content_hash = integrity_hash = ${digest} (${naming.map((entry) => entry.evidenceId).join(',')})`); continue; }
     const atCap = bytes.toString('utf8').length === BODY_CAP_UNITS;
