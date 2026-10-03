@@ -167,6 +167,10 @@ namespace
 		return Controller != nullptr ? Cast<ARelayDogCharacter>(Controller->GetPawn()) : nullptr;
 	}
 
+	// defined with the Mission Handoff QA below; the perf run's handoff phases use them too
+	ULocalPlayer* QaLocalPlayer(UWorld* World);
+	FWonderlandMissionHandoff* QaHandoff(UWorld* World);
+
 	void QaCheck(FQaRun& Run, const TCHAR* Id, bool bOk, const FString& Detail)
 	{
 		(bOk ? Run.Pass : Run.Fail)++;
@@ -3665,8 +3669,83 @@ namespace
 		case 8: // creation through the terminal: three contracts written, then deleted
 			if (U != nullptr && P.Sub < 3) { U->PressAddTaskForQa(); U->SubmitTerminalLine(FString::Printf(TEXT("perf note %d"), P.Sub)); ++P.Sub; }
 			else if (U != nullptr && P.Sub < 6) { U->SubmitTerminalLine(TEXT("/tasks delete 1")); ++P.Sub; }
-			else if (In >= 4.0) { QaPerfFinish(P, World); return false; }
+			else if (In >= 4.0)
+			{
+				// THE MISSION HANDOFF PHASES (pre-registered with Second, 2026-10-03, BEFORE any measurement), APPENDED so every phase
+				// above runs exactly as it always has: the travel back and the swords' arrival are a throwaway "handoff_setup" phase
+				// that nothing is compared on; then "handoff_walk" (the walk phase's own route and turns, swords held) and
+				// "handoff_dash" (the same with a dash pair every 1.6 s), each compared with the baseline's "walk" under the same
+				// fixed tolerance as every other phase.
+				QaPerfPhase(P, TEXT("handoff_setup"));
+				Next();
+			}
 			break;
+		case 9: // back to the walk's place, then the swords taken up the way the terminal takes them
+			if (P.Sub < 2)
+			{
+				if (QaPerfTravel(P, World, TEXT("castle_approach"))) { P.Sub = 2; P.SubStart = QaNow(); }
+			}
+			else if (P.Sub == 2)
+			{
+				FString Said;
+				WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF handoff equip: %s"), *Said);
+				P.Sub = 3;
+				P.SubStart = QaNow();
+			}
+			else
+			{
+				const FWonderlandMissionHandoff* State = QaHandoff(World);
+				const bool bHeld = State != nullptr && State->IsArmed();
+				if ((bHeld && QaNow() - P.SubStart >= 4.5) || QaNow() - P.SubStart >= 12.0)
+				{
+					UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF handoff %s"), bHeld ? TEXT("held") : TEXT("NEVER HELD: the handoff phases measure the unarmed Dog"));
+					QaPerfPhase(P, TEXT("handoff_walk"));
+					P.bWalking = true;
+					P.WalkBegan = QaNow();
+					P.Yaw = 0.0f;
+					Next();
+				}
+			}
+			break;
+		case 10: // handoff_walk: the walk's thirty seconds with the swords held
+			if (In >= 30.0)
+			{
+				QaPerfPhase(P, TEXT("handoff_dash"));
+				P.WalkBegan = QaNow();
+				P.Yaw = 0.0f;
+				P.Sub = 0;
+				Next();
+			}
+			break;
+		case 11: // handoff_dash: the same, and a dash pair (W up, down, up, down) every 1.6 s
+		{
+			if (ARelayDogCharacter* Dog = QaDog(World))
+			{
+				const double Cycle = FMath::Fmod(In, 1.6);
+				const int32 Key = Cycle < 0.04 ? 0 : (Cycle < 0.08 ? 1 : (Cycle < 0.12 ? 2 : 3));
+				if (Key != P.Sub)
+				{
+					// 0 up, 1 down, 2 up, 3 down: two rising edges inside the double-tap window
+					Dog->QaForwardKey(false, Key % 2 == 1);
+					P.Sub = Key;
+				}
+			}
+			if (In >= 30.0)
+			{
+				P.bWalking = false;
+				if (ARelayDogCharacter* Dog = QaDog(World))
+				{
+					Dog->QaForwardKey(false, false);
+					UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF handoff dashes %d, refused %d"), Dog->GetDashCount(), Dog->GetDashesRefused());
+				}
+				FString Said;
+				WonderlandHandoffDirector::Return(QaLocalPlayer(World), Said);
+				QaPerfFinish(P, World);
+				return false;
+			}
+			break;
+		}
 		default:
 			break;
 		}
