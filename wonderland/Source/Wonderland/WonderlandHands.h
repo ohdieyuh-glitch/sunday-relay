@@ -6,6 +6,8 @@
 class AActor;
 class USceneComponent;
 class UInstancedStaticMeshComponent;
+class UMaterialInterface;
+class UPrimitiveComponent;
 
 /**
  * FOUNDER (2026-10-02): "Every mascot needs stylized functional hands/fingers and stable dual-grip sockets." The canon
@@ -50,10 +52,15 @@ namespace WonderlandHands
 		/** The hand's own axes in the forearm's space, so a grip lies across the fist. */
 		FVector GetAlong() const { return Along; }
 		FVector GetForward() const { return Ahead; }
+		/** For the QA: the material the hand wears now, and whether it is still its forearm's own (a recolour, a flame twin). */
+		UMaterialInterface* GetWornMaterial() const;
+		bool WearsItsArmsMaterial() const;
 
 	private:
 		TWeakObjectPtr<USceneComponent> On;
 		TWeakObjectPtr<UInstancedStaticMeshComponent> Boxes;
+		/** The part of the arm whose material the hand wears: followed every pose, never copied once. */
+		TWeakObjectPtr<UPrimitiveComponent> Source;
 		FVector Tip = FVector::ZeroVector;
 		FVector Along = FVector(0.0, 0.0, -1.0);
 		FVector Ahead = FVector(1.0, 0.0, 0.0);

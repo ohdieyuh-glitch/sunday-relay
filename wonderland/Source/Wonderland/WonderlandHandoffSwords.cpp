@@ -684,6 +684,12 @@ namespace WonderlandHandoffSwords
 		return Root != nullptr ? Root->GetComponentTransform() : FTransform::Identity;
 	}
 
+	const USceneComponent* FPresentation::GetHeldBy(bool bGold) const
+	{
+		const USceneComponent* Root = (bGold ? Gold : Cyan).Root.Get();
+		return Root != nullptr ? Root->GetAttachParent() : nullptr;
+	}
+
 	int32 FPresentation::CountVisibleBoxes() const
 	{
 		int32 Count = 0;

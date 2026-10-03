@@ -6272,6 +6272,12 @@ namespace
 		FVector RightScale = FVector::OneVector;
 		int32 Skin = 1;
 		int32 Shot = 0;
+		// Second's break-tests (10-03): a step within a phase, what an equip mid-return said, the Dog a travel began with
+		int32 Sub = 0;
+		bool bInterruptRefused = false;
+		FString InterruptSaid;
+		TWeakObjectPtr<ARelayDogCharacter> TravelDog;
+		bool bRecoloured = false;
 		void Check(const FString& Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
@@ -6322,6 +6328,10 @@ namespace
 			}
 			GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
 			GEngine->Exec(World, TEXT("wl.Sky.Hour 12"));
+			if (S.bRecoloured)
+			{
+				GEngine->Exec(World, TEXT("wl.Mascot.Reset"));
+			}
 		}
 		if (ACameraActor* Cam = S.Camera.Get())
 		{
@@ -6352,12 +6362,29 @@ namespace
 		FQaSwords& S = *GQaSwords;
 		UWorld* World = S.World.Get();
 		ARelayDogCharacter* Dog = S.Dog.Get();
+		if (Dog == nullptr && World != nullptr)
+		{
+			// A FAR TRAVEL CAN REPLACE THE PAWN (a Dog left outside its streamed cell is destroyed and respawned): follow the new one
+			Dog = QaDog(World);
+			S.Dog = Dog;
+		}
 		FWonderlandMissionHandoff* State = QaHandoff(World);
 		UWonderlandUiSubsystem* Ui = QaUi(World);
 		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
-		if (World == nullptr || Dog == nullptr || State == nullptr || Ui == nullptr || PC == nullptr)
+		if (World == nullptr || State == nullptr || Ui == nullptr || PC == nullptr || (Dog == nullptr && S.Phase != 24))
 		{
 			QaSwordsFinish(S, TEXT("the world, the Dog, the handoff or the UI went away"));
+			GQaSwords.Reset();
+			return false;
+		}
+		if (Dog == nullptr)
+		{
+			// the far travel's phase waits for its Dog (and times out on its own)
+			if (World->GetTimeSeconds() - S.PhaseAt < 100.0f)
+			{
+				return true;
+			}
+			QaSwordsFinish(S, TEXT("no Dog after the far travel"));
 			GQaSwords.Reset();
 			return false;
 		}
@@ -6367,6 +6394,7 @@ namespace
 		{
 			S.Phase = To;
 			S.PhaseAt = Now;
+			S.Sub = 0;
 		};
 		auto Stop = [&S](const TCHAR* Reason)
 		{
@@ -6569,7 +6597,8 @@ namespace
 			// SW6: EVERY SKIN HOLDING BOTH SWORDS
 			if (S.Skin >= Skins)
 			{
-				return Stop(nullptr);
+				Next(20);
+				return true;
 			}
 			GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), FaceRoster[S.Skin]));
 			Next(7);
@@ -6635,6 +6664,283 @@ namespace
 			++S.Skin;
 			Next(6);
 			return true;
+		case 20:
+			// SECOND'S BREAK-TESTS (10-03), run here first. SW3c: Relay OG, the QA camera IN FRONT before the swords start forming
+			if (S.Sub == 0)
+			{
+				GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+				S.Sub = 1;
+			}
+			QaSwordsCamera(S, World, Dog, SwordShots[0]);
+			if (In < 3.0f)
+			{
+				return true;
+			}
+			{
+				FString Said;
+				if (!WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said))
+				{
+					S.Check(TEXT("SW3c.front"), false, FString::Printf(TEXT("the swords could not be taken up for the break-tests: %s"), *Said));
+					return Stop(TEXT("no handoff for the break-tests"));
+				}
+			}
+			Next(21);
+			return true;
+		case 21:
+		{
+			// SW3c: WHILE THE SWORDS FORM the pair's sides already hold -- a sword turning its face to the camera must never swap them.
+			// From IN FRONT at 55% of the transformation (gold on the screen's RIGHT), then from BEHIND at 85% (gold on its LEFT)
+			const bool bFront = S.Sub == 0;
+			const float Through = State->GetPhaseSeconds() / FWonderlandMissionHandoff::TransformSeconds;
+			QaSwordsCamera(S, World, Dog, SwordShots[bFront ? 0 : 2]);
+			if (S.Sub < 2 && State->GetState() == EWonderlandHandoffState::Transforming && Through >= (bFront ? 0.55f : 0.85f))
+			{
+				FVector2D Gold(0.0, 0.0);
+				FVector2D Cyan(0.0, 0.0);
+				const bool bSeen = PC->ProjectWorldLocationToScreen(Swords.GetSwordWorld(true).GetLocation(), Gold)
+					&& PC->ProjectWorldLocationToScreen(Swords.GetSwordWorld(false).GetLocation(), Cyan);
+				const bool bSides = bSeen && (bFront ? Gold.X > Cyan.X : Gold.X < Cyan.X);
+				S.Check(bFront ? TEXT("SW3c.front") : TEXT("SW3c.behind"), bSides && Swords.GetPresence() > 0.2f,
+					FString::Printf(TEXT("forming (%.0f%% through, the swords %.2f formed), seen from %s: gold at x %.0f, cyan at x %.0f (gold on the screen's %s: %s)"),
+						Through * 100.0f, Swords.GetPresence(), bFront ? TEXT("IN FRONT") : TEXT("BEHIND"), Gold.X, Cyan.X,
+						bFront ? TEXT("RIGHT") : TEXT("LEFT"), bSides ? TEXT("yes") : TEXT("NO")));
+				S.Frame(bFront ? TEXT("sw_7_forming_front") : TEXT("sw_7_forming_behind"));
+				++S.Sub;
+			}
+			if (State->IsArmed() || In > 6.0f)
+			{
+				if (S.Sub < 2)
+				{
+					S.Check(S.Sub == 0 ? TEXT("SW3c.front") : TEXT("SW3c.behind"), false,
+						FString::Printf(TEXT("only %d of the 2 forming views were taken before the swords were held"), S.Sub));
+				}
+				PC->SetViewTargetWithBlend(Dog, 0.0f);
+				Next(22);
+			}
+			return true;
+		}
+		case 22:
+			if (!State->IsArmed() || In < 1.5f)
+			{
+				return In < 10.0f ? true : Stop(TEXT("the break-test swords were never held"));
+			}
+			if (S.Sub == 0)
+			{
+				// HD3: A PRIMARY PICKED WHILE HOLDING -- the fists must take their arms' colour now, never keep the old one
+				GEngine->Exec(World, TEXT("wl.Mascot.Primary #3D7BFF"));
+				S.bRecoloured = true;
+				S.Sub = 1;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 1.0f)
+			{
+				return true;
+			}
+			{
+				const WonderlandHands::FHand& LeftHand = Dog->GetHand(true);
+				const WonderlandHands::FHand& RightHand = Dog->GetHand(false);
+				const bool bLeftWorn = LeftHand.GetWornMaterial() != nullptr && LeftHand.WearsItsArmsMaterial();
+				const bool bRightWorn = RightHand.GetWornMaterial() != nullptr && RightHand.WearsItsArmsMaterial();
+				S.Check(TEXT("HD3"), bLeftWorn && bRightWorn && LeftHand.GetCurl() >= 0.9f && RightHand.GetCurl() >= 0.9f,
+					FString::Printf(TEXT("a primary picked while holding: each fist wears its arm's own material now (LEFT %s, RIGHT %s), still closed %.2f / %.2f ")
+						TEXT("(the colour is judged on the frame)"), bLeftWorn ? TEXT("yes") : TEXT("NO"), bRightWorn ? TEXT("yes") : TEXT("NO"), LeftHand.GetCurl(), RightHand.GetCurl()));
+				S.Frame(TEXT("sw_8_recoloured_held"));
+			}
+			Next(23);
+			return true;
+		case 23:
+			if (S.Sub == 0)
+			{
+				// RP1: ANOTHER SKIN WORN WHILE HOLDING -- the old forearms go with the old body; the swords must move to the new ones
+				GEngine->Exec(World, TEXT("wl.Skins.Wear celestial_light"));
+				S.Sub = 1;
+				return true;
+			}
+			if (In < 3.0f)
+			{
+				return true;
+			}
+			{
+				const USceneComponent* LeftArm = Dog->GetVisibleForearm(true);
+				const USceneComponent* RightArm = Dog->GetVisibleForearm(false);
+				const bool bOnArms = LeftArm != nullptr && RightArm != nullptr && LeftArm->GetOwner() != Dog && Swords.GetHeldBy(true) == LeftArm
+					&& Swords.GetHeldBy(false) == RightArm;
+				const float GoldOff = FVector::Dist(Swords.GetSwordWorld(true).GetLocation(), Dog->GetHandoffGripWorld(true).GetLocation());
+				const float CyanOff = FVector::Dist(Swords.GetSwordWorld(false).GetLocation(), Dog->GetHandoffGripWorld(false).GetLocation());
+				const WonderlandHands::FHand& LeftHand = Dog->GetHand(true);
+				const WonderlandHands::FHand& RightHand = Dog->GetHand(false);
+				const bool bHands = LeftHand.IsOn(LeftArm) && RightHand.IsOn(RightArm) && LeftHand.GetCurl() >= 0.9f && RightHand.GetCurl() >= 0.9f
+					&& LeftHand.WearsItsArmsMaterial() && RightHand.WearsItsArmsMaterial();
+				S.Check(TEXT("RP1"), State->IsArmed() && bOnArms && bHands && GoldOff <= 1.0f && CyanOff <= 1.0f && Swords.CountVisibleBoxes() == Swords.GetBuiltBoxes(),
+					FString::Printf(TEXT("a skin worn while holding: the swords hang from the new skin's own forearms (%s), its own fists closed %.2f / %.2f in its own material (%s), ")
+						TEXT("the grips %.2f / %.2f uu from them, %d of %d boxes drawn"), bOnArms ? TEXT("yes") : TEXT("NO"), LeftHand.GetCurl(), RightHand.GetCurl(),
+						bHands ? TEXT("yes") : TEXT("NO"), GoldOff, CyanOff, Swords.CountVisibleBoxes(), Swords.GetBuiltBoxes()));
+				S.Frame(TEXT("sw_9_skin_changed_held"));
+			}
+			Next(24);
+			return true;
+		case 24:
+		{
+			// RP2: A FAR TRAVEL WHILE HOLDING (Second: the Dog-dies-outside-its-cell trap). Survived or replaced, the Dog at the other end
+			// must hold the swords in its own hands, the companions still veiled
+			UWonderlandTravelSubsystem* Travel = QaTravel(World);
+			if (S.Sub == 0)
+			{
+				FText Refusal;
+				S.TravelDog = Dog;
+				if (Travel == nullptr || !Travel->RequestTravel(TEXT("noctis_heartland_west"), Refusal))
+				{
+					S.Check(TEXT("RP2"), false, FString::Printf(TEXT("a far travel while holding was refused: %s"),
+						Travel == nullptr ? TEXT("no travel subsystem") : *Refusal.ToString()));
+					Next(26);
+					return true;
+				}
+				S.Sub = 1;
+				return true;
+			}
+			if (S.Sub == 1)
+			{
+				if (Travel != nullptr && Travel->IsTravelling() && In < 100.0f)
+				{
+					return true;
+				}
+				S.Sub = 2;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 3.0f)
+			{
+				return true;
+			}
+			{
+				const bool bSameDog = S.TravelDog.IsValid() && S.TravelDog.Get() == Dog;
+				const USceneComponent* LeftArm = Dog->GetVisibleForearm(true);
+				const USceneComponent* RightArm = Dog->GetVisibleForearm(false);
+				const bool bOnArms = LeftArm != nullptr && RightArm != nullptr && Swords.GetHeldBy(true) == LeftArm && Swords.GetHeldBy(false) == RightArm;
+				const float GoldOff = FVector::Dist(Swords.GetSwordWorld(true).GetLocation(), Dog->GetHandoffGripWorld(true).GetLocation());
+				const float CyanOff = FVector::Dist(Swords.GetSwordWorld(false).GetLocation(), Dog->GetHandoffGripWorld(false).GetLocation());
+				const bool bVeiled = LeftBody != nullptr && RightBody != nullptr && LeftBody->IsHidden() && RightBody->IsHidden();
+				S.Check(TEXT("RP2"), State->IsArmed() && bOnArms && GoldOff <= 1.0f && CyanOff <= 1.0f && Swords.CountVisibleBoxes() == Swords.GetBuiltBoxes()
+					&& Swords.GetBuiltBoxes() > 0 && bVeiled,
+					FString::Printf(TEXT("after a far travel while holding (the Dog %s; %s): held %s, the swords in its own hands %s, the grips %.2f / %.2f uu, %d of %d boxes ")
+						TEXT("drawn, the companions veiled %s"), bSameDog ? TEXT("survived") : TEXT("was REPLACED"),
+						Travel != nullptr ? *Travel->GetLastTravelReport() : TEXT("no report"), State->IsArmed() ? TEXT("yes") : TEXT("NO"),
+						bOnArms ? TEXT("yes") : TEXT("NO"), GoldOff, CyanOff, Swords.CountVisibleBoxes(), Swords.GetBuiltBoxes(), bVeiled ? TEXT("yes") : TEXT("NO")));
+				S.Frame(TEXT("sw_10_after_far_travel_held"));
+			}
+			Next(26);
+			return true;
+		}
+		case 26:
+			// HD4: A RETURN INTERRUPTED -- an equip asked for while the swords go back (either entry) is refused, the handoff still being
+			// active; the return finishes, and no fist stays closed on nothing
+			if (S.Sub == 0)
+			{
+				if (!State->IsArmed())
+				{
+					if (!State->IsEquipped())
+					{
+						FString Said;
+						WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
+					}
+					return In < 12.0f ? true : Stop(TEXT("HD4: no swords held to give back"));
+				}
+				FString Said;
+				WonderlandHandoffDirector::Return(QaLocalPlayer(World), Said);
+				S.Sub = 1;
+				return true;
+			}
+			if (S.Sub == 1)
+			{
+				if (State->GetState() == EWonderlandHandoffState::Returning && State->GetPhaseSeconds() >= 0.3f)
+				{
+					FString Said;
+					S.bInterruptRefused = !WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
+					S.InterruptSaid = Said;
+					S.Sub = 2;
+				}
+				return In < 16.0f ? true : Stop(TEXT("HD4: the return never got under way"));
+			}
+			if (State->IsEquipped())
+			{
+				return In < 20.0f ? true : Stop(TEXT("HD4: the swords were never given back"));
+			}
+			if (S.Sub == 2)
+			{
+				S.Sub = 3;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 1.0f)
+			{
+				return true;
+			}
+			S.Check(TEXT("HD4"), S.bInterruptRefused && Dog->GetHand(true).GetCurl() <= 0.1f && Dog->GetHand(false).GetCurl() <= 0.1f && Swords.CountVisibleBoxes() == 0,
+				FString::Printf(TEXT("an equip asked for mid-return was %s ('%s'); the return finished: fists open %.2f / %.2f (want <= 0.1), sword boxes drawn %d"),
+					S.bInterruptRefused ? TEXT("refused") : TEXT("ACCEPTED"), *S.InterruptSaid, Dog->GetHand(true).GetCurl(), Dog->GetHand(false).GetCurl(),
+					Swords.CountVisibleBoxes()));
+			Next(27);
+			return true;
+		case 27:
+			// HD5: A SKIN WORN WHILE THE SWORDS GO BACK -- the new body's own hands must end open too
+			if (S.Sub == 0)
+			{
+				if (!State->IsEquipped())
+				{
+					FString Said;
+					WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
+				}
+				S.Sub = 1;
+				return true;
+			}
+			if (S.Sub == 1)
+			{
+				if (!State->IsArmed() || In < 4.6f)
+				{
+					return In < 12.0f ? true : Stop(TEXT("HD5: the swords were never held"));
+				}
+				FString Said;
+				WonderlandHandoffDirector::Return(QaLocalPlayer(World), Said);
+				S.Sub = 2;
+				return true;
+			}
+			if (S.Sub == 2)
+			{
+				if (State->GetState() == EWonderlandHandoffState::Returning && State->GetPhaseSeconds() >= 0.3f)
+				{
+					GEngine->Exec(World, TEXT("wl.Skins.Wear jack_flame"));
+					S.Sub = 3;
+				}
+				return In < 16.0f ? true : Stop(TEXT("HD5: the return never got under way"));
+			}
+			if (State->IsEquipped())
+			{
+				return In < 20.0f ? true : Stop(TEXT("HD5: the swords were never given back"));
+			}
+			if (S.Sub == 3)
+			{
+				S.Sub = 4;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 3.0f)
+			{
+				return true;
+			}
+			{
+				const USceneComponent* LeftArm = Dog->GetVisibleForearm(true);
+				const USceneComponent* RightArm = Dog->GetVisibleForearm(false);
+				const WonderlandHands::FHand& LeftHand = Dog->GetHand(true);
+				const WonderlandHands::FHand& RightHand = Dog->GetHand(false);
+				const bool bNewHands = LeftArm != nullptr && RightArm != nullptr && LeftArm->GetOwner() != Dog && LeftHand.IsOn(LeftArm) && RightHand.IsOn(RightArm);
+				S.Check(TEXT("HD5"), bNewHands && LeftHand.GetCurl() <= 0.1f && RightHand.GetCurl() <= 0.1f && LeftHand.CountVisibleBoxes() == WonderlandHands::BoxesPerHand
+					&& RightHand.CountVisibleBoxes() == WonderlandHands::BoxesPerHand,
+					FString::Printf(TEXT("a skin worn mid-return: the new skin's own hands (%s), drawn %d + %d boxes, open %.2f / %.2f (want <= 0.1)"),
+						bNewHands ? TEXT("yes") : TEXT("NO"), LeftHand.CountVisibleBoxes(), RightHand.CountVisibleBoxes(), LeftHand.GetCurl(), RightHand.GetCurl()));
+				S.Frame(TEXT("sw_11_skin_changed_mid_return"));
+			}
+			return Stop(nullptr);
 		default:
 			return Stop(TEXT("an unknown phase"));
 		}
@@ -6644,7 +6950,9 @@ namespace
 		TEXT("wl.Qa.HandoffSwords"),
 		TEXT("Mission Handoff M3a, the swords and the transformation, in this (packaged) build: the exchange half-way through, gold in the ")
 		TEXT("LEFT hand and cyan in the RIGHT (and on the left of the screen from behind), the companions veiled while held and restored ")
-		TEXT("after, and every skin holding both. Frames at noon and night to Saved/Screenshots/WLSWORDS; WLSWQA lines; `quit` exits after."),
+		TEXT("after, and every skin holding both; then Second's break-tests: the sides while forming (SW3c), a recolour (HD3), a skin (RP1) and a ")
+		TEXT("far travel (RP2) while held, and interrupted returns (HD4, HD5). Frames at noon and night to Saved/Screenshots/WLSWORDS; WLSWQA lines; ")
+		TEXT("`quit` exits after."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (GQaSwords.IsValid())
