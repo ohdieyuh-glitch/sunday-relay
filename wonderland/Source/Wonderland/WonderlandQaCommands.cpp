@@ -60,6 +60,7 @@
 #include "WonderlandSkinStage.h"
 #include "WonderlandCard.h"
 #include "WonderlandCardCapabilities.h"
+#include "WonderlandCardDirector.h"
 #include "WonderlandMissionHandoff.h"
 #include "WonderlandHandoffDirector.h"
 #include "WonderlandCompanionFormation.h"
@@ -168,9 +169,11 @@ namespace
 		return Controller != nullptr ? Cast<ARelayDogCharacter>(Controller->GetPawn()) : nullptr;
 	}
 
-	// defined with the Mission Handoff QA below; the perf run's handoff phases use them too
+	// defined with the Mission Handoff QA below; the perf run's handoff phases and the C.A.R.D. QA use them too
 	ULocalPlayer* QaLocalPlayer(UWorld* World);
 	FWonderlandMissionHandoff* QaHandoff(UWorld* World);
+	UWonderlandMissionSubsystem* QaMissions(UWorld* World);
+	AActor* QaCompanionBody(UWorld* World, int32 Index);
 
 	void QaCheck(FQaRun& Run, const TCHAR* Id, bool bOk, const FString& Detail)
 	{
@@ -5576,6 +5579,482 @@ namespace
 			{
 				FPlatformMisc::RequestExit(false);
 			}
+		}));
+
+	/* ================================================================ wl.Qa.CardSelect: C.A.R.D. SELECT through the authorities (M7b)
+	 * On the player's REAL store: two QA cards are made and removed, and the card that was active is selected again at the end.
+	 *   CS1 SELECT while roaming: the skin through the registry, the primary through the wardrobe's pick; the companions now -- or,
+	 *       with the companion runtime offline (every bed), WAITING with that reason and nothing sent at it;
+	 *   CS2 a pick through the wardrobe's own door makes the card MODIFIED; SAVE TO C.A.R.D. writes the live look back and clears it;
+	 *   CS3 SELECT MID-MISSION: the look hot-swaps, the companions wait for the mission (the envelope), and the write spy counts
+	 *       nothing the running mission owns -- a positive control first proves the spy counts;
+	 *   CS4 the mission ends: the companions stop waiting for it;
+	 *   CS5 ten switches in two seconds while the swords form (Second's rule): settled, exactly the built swords drawn, no costume
+	 *       left behind, the last selection active;
+	 *   CS6 deleting the active card falls back to the built-in default (the look is not changed by a delete).
+	 * Every line: WLCSQA <id> PASS|FAIL | detail.
+	 */
+	struct FQaCardSelect
+	{
+		TWeakObjectPtr<UWorld> World;
+		FTSTicker::FDelegateHandle Handle;
+		bool bQuit = false;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		int32 Phase = 0;
+		int32 Sub = 0;
+		double PhaseAt = 0.0;
+		double LastSwitchAt = 0.0;
+		FString OriginalActive;
+		FString CardA;
+		FString CardB;
+		FString RunningAtSelect;
+		FString LastSelected;
+		int32 ConnectsBefore = 0;
+		int32 SpyControl = -1;
+		int32 SpyCounted = -1;
+		FString SpyLast;
+		int32 Switches = 0;
+		int32 FiguresBefore = 0;
+		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
+		{
+			(bOk ? Pass : Fail) += 1;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLCSQA %s %s | %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+		}
+	};
+	TSharedPtr<FQaCardSelect> GQaCardSelect;
+
+	UWonderlandSidekickSubsystem* QaCsSidekicks(UWorld* World)
+	{
+		UGameInstance* Instance = World != nullptr ? World->GetGameInstance() : nullptr;
+		return Instance != nullptr ? Instance->GetSubsystem<UWonderlandSidekickSubsystem>() : nullptr;
+	}
+
+	UWonderlandRelaySkinSubsystem* QaCsSkins(UWorld* World)
+	{
+		UGameInstance* Instance = World != nullptr ? World->GetGameInstance() : nullptr;
+		return Instance != nullptr ? Instance->GetSubsystem<UWonderlandRelaySkinSubsystem>() : nullptr;
+	}
+
+	bool QaCsWears(UWorld* World, const TCHAR* SkinId)
+	{
+		const UWonderlandRelaySkinSubsystem* Skins = QaCsSkins(World);
+		return Skins != nullptr && Skins->GetEquippedSkinId().ToString().Equals(SkinId, ESearchCase::IgnoreCase);
+	}
+
+	bool QaCsPrimaryIs(const TCHAR* Key)
+	{
+		for (const TPair<FName, FLinearColor>& Swatch : WonderlandMascotStyle::PrimaryPalette())
+		{
+			if (Swatch.Key.ToString().Equals(Key, ESearchCase::IgnoreCase))
+			{
+				return WonderlandMascotStyle::IsMascotPrimaryOn(Swatch.Key, Swatch.Value);
+			}
+		}
+		return false;
+	}
+
+	/** Every figure on show that is not the Dog's costume, a companion, or the wardrobe stage's own: a left-behind costume adds one. */
+	int32 QaCsLooseFigures(UWorld* World)
+	{
+		const ARelayDogCharacter* Dog = QaDog(World);
+		const AActor* Left = QaCompanionBody(World, 0);
+		const AActor* Right = QaCompanionBody(World, 1);
+		int32 Count = 0;
+		for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+		{
+			if (!It->IsHidden() && (Dog == nullptr || *It != Dog->GetCostume()) && *It != Left && *It != Right
+				&& Cast<AWonderlandSkinStage>(It->GetOwner()) == nullptr)
+			{
+				++Count;
+			}
+		}
+		return Count;
+	}
+
+	void QaCardSelectFinish(FQaCardSelect& S, const TCHAR* Why)
+	{
+		UWorld* World = S.World.Get();
+		if (World != nullptr)
+		{
+			if (FWonderlandMissionHandoff* State = QaHandoff(World))
+			{
+				FString Ignored;
+				State->Return(Ignored);
+			}
+			GEngine->Exec(World, TEXT("wl.Mission.Stop"));
+			if (UWonderlandSidekickSubsystem* Sidekicks = QaCsSidekicks(World))
+			{
+				// PUT IT BACK: the QA cards removed, the card that was active selected again (its look applied through the authorities)
+				FWonderlandCardStore& Store = Sidekicks->GetCardStore();
+				FString Ignored;
+				const FString Back = Store.Find(S.OriginalActive) != nullptr ? S.OriginalActive : FString(FWonderlandCardStore::BuiltInId());
+				WonderlandCardDirector::Select(World, Back, Ignored);
+				for (const FString& Id : { S.CardA, S.CardB })
+				{
+					if (!Id.IsEmpty() && Store.Find(Id) != nullptr)
+					{
+						Store.Delete(Id, Ignored);
+					}
+				}
+			}
+		}
+		if (S.Handle.IsValid())
+		{
+			FTSTicker::GetCoreTicker().RemoveTicker(S.Handle);
+		}
+		UE_LOG(LogWonderlandQa, Display, TEXT("WLCSQA END pass=%d fail=%d%s"), S.Pass, S.Fail, Why != nullptr ? *FString::Printf(TEXT(" (%s)"), Why) : TEXT(""));
+		if (S.bQuit)
+		{
+			FPlatformMisc::RequestExit(false);
+		}
+	}
+
+	bool QaCardSelectTick(float)
+	{
+		if (!GQaCardSelect.IsValid())
+		{
+			return false;
+		}
+		FQaCardSelect& S = *GQaCardSelect;
+		UWorld* World = S.World.Get();
+		UWonderlandSidekickSubsystem* Sidekicks = QaCsSidekicks(World);
+		UWonderlandRelaySkinSubsystem* Skins = QaCsSkins(World);
+		UWonderlandMissionSubsystem* Mission = QaMissions(World);
+		FWonderlandMissionHandoff* Handoff = QaHandoff(World);
+		ARelayDogCharacter* Dog = QaDog(World);
+		auto Stop = [&S](const TCHAR* Why)
+		{
+			S.Handle.Reset();   // the ticker ends by returning false; Finish must not remove it a second time
+			QaCardSelectFinish(S, Why);
+			GQaCardSelect.Reset();
+			return false;
+		};
+		if (World == nullptr || Sidekicks == nullptr || Skins == nullptr || Mission == nullptr || Handoff == nullptr || Dog == nullptr)
+		{
+			return Stop(TEXT("the world, the store, the registry, the mission, the handoff or the Dog went away"));
+		}
+		FWonderlandCardStore& Store = Sidekicks->GetCardStore();
+		const double Now = QaNow();
+		const double In = Now - S.PhaseAt;
+		auto Next = [&S, Now](int32 To)
+		{
+			S.Phase = To;
+			S.Sub = 0;
+			S.PhaseAt = Now;
+		};
+		const bool bRuntimeOnline = Sidekicks->GetLink() == EWonderlandSidekickLink::Online;
+		FString Said;
+		FString Why;
+
+		switch (S.Phase)
+		{
+		case 0:
+		{
+			if (UWonderlandUiSubsystem* Ui = QaUi(World))
+			{
+				if (Ui->IsWelcomeOpen())
+				{
+					Ui->DismissWelcome();
+				}
+			}
+			if (In < 4.0 || Handoff->IsEquipped())
+			{
+				if (Handoff->IsArmed())
+				{
+					Handoff->Return(Why);
+				}
+				return In < 40.0 ? true : Stop(TEXT("never ready: the swords away"));
+			}
+			S.OriginalActive = Store.GetActiveId();
+			S.CardA = Store.Create(TEXT("QA Select A"), Why);
+			S.CardB = Store.Create(TEXT("QA Select B"), Why);
+			const FWonderlandCard* MadeA = Store.Find(S.CardA);
+			const FWonderlandCard* MadeB = Store.Find(S.CardB);
+			bool bMade = MadeA != nullptr && MadeB != nullptr;
+			if (bMade)
+			{
+				FWonderlandCard A = *MadeA;
+				A.Skin = TEXT("celestial_light");
+				A.Primary.Key = TEXT("WHITE");
+				A.Primary.bChosen = true;
+				A.Companions = { QaCrCompanion(0, EWonderlandCardCompanionKind::Llm, TEXT("dev-companion")),
+					QaCrCompanion(1, EWonderlandCardCompanionKind::Agent, TEXT("dev-single-agent")) };
+				FWonderlandCard B = *MadeB;
+				B.Skin = TEXT("jack_flame");
+				B.Primary.Key = TEXT("BLACK");
+				B.Primary.bChosen = true;
+				B.Companions = A.Companions;
+				bMade = Store.Update(A, Why) && Store.Update(B, Why);
+			}
+			S.Check(TEXT("CS0"), bMade, FString::Printf(TEXT("two QA cards on the real store (the active one was %s): %s"), *S.OriginalActive,
+				bMade ? TEXT("made") : *FString::Printf(TEXT("NOT made: %s"), *Why)));
+			if (!bMade)
+			{
+				return Stop(TEXT("no QA cards"));
+			}
+			Next(1);
+			return true;
+		}
+		case 1:
+			// CS1: SELECT WHILE ROAMING
+			if (S.Sub == 0)
+			{
+				S.ConnectsBefore = WonderlandCardDirector::GetConnectsSent();
+				WonderlandCardDirector::Select(World, S.CardA, Said);
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLCSQA select A: %s"), *Said);
+				S.Sub = 1;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 3.0)
+			{
+				return true;
+			}
+			{
+				const FString Waiting = WonderlandCardDirector::DescribeWaiting();
+				const int32 Sent = WonderlandCardDirector::GetConnectsSent() - S.ConnectsBefore;
+				// online: applied now and nothing waits; offline (every bed): they WAIT, saying why, and nothing was sent at a dead runtime
+				const bool bCompanions = bRuntimeOnline ? Waiting.IsEmpty() : (Waiting.Contains(TEXT("companion runtime")) && Sent == 0);
+				FString What;
+				const bool bModified = WonderlandCardDirector::IsModified(World, &What);
+				S.Check(TEXT("CS1"), Store.GetActiveId() == S.CardA && QaCsWears(World, TEXT("celestial_light")) && QaCsPrimaryIs(TEXT("WHITE")) && !bModified && bCompanions,
+					FString::Printf(TEXT("selected while roaming: active %s, skin celestial_light %s, primary WHITE %s, modified %s; the runtime %s, companions %s (%d sent)"),
+						Store.GetActiveId() == S.CardA ? TEXT("yes") : TEXT("NO"), QaCsWears(World, TEXT("celestial_light")) ? TEXT("worn") : TEXT("NOT worn"),
+						QaCsPrimaryIs(TEXT("WHITE")) ? TEXT("on") : TEXT("NOT on"), bModified ? *What : TEXT("no"), bRuntimeOnline ? TEXT("online") : TEXT("offline"),
+						Waiting.IsEmpty() ? TEXT("applied") : *Waiting, Sent));
+			}
+			Next(2);
+			return true;
+		case 2:
+			// CS2: MODIFIED, then SAVE TO C.A.R.D.
+			if (S.Sub == 0)
+			{
+				Skins->EquipSkin(FName(TEXT("baal")));
+				S.Sub = 1;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 3.0)
+			{
+				return true;
+			}
+			{
+				FString What;
+				const bool bModifiedBefore = WonderlandCardDirector::IsModified(World, &What);
+				const bool bSaved = WonderlandCardDirector::SaveLiveToActive(World, Said);
+				const FWonderlandCard* A = Store.Find(S.CardA);
+				const bool bModifiedAfter = WonderlandCardDirector::IsModified(World);
+				S.Check(TEXT("CS2"), bModifiedBefore && What.Contains(TEXT("baal")) && bSaved && A != nullptr && A->Skin.Equals(TEXT("baal"), ESearchCase::IgnoreCase)
+					&& !bModifiedAfter,
+					FString::Printf(TEXT("a wardrobe pick: MODIFIED %s ('%s'); SAVE TO C.A.R.D.: %s; the card's skin now %s; modified after %s"),
+						bModifiedBefore ? TEXT("yes") : TEXT("NO"), *What, *Said, A != nullptr ? *A->Skin : TEXT("(gone)"), bModifiedAfter ? TEXT("STILL") : TEXT("no")));
+			}
+			Next(3);
+			return true;
+		case 3:
+			// CS3: SELECT MID-MISSION (the envelope)
+			if (S.Sub == 0)
+			{
+				GEngine->Exec(World, TEXT("wl.Mission.Scenario B 5"));
+				S.Sub = 1;
+				return true;
+			}
+			if (S.Sub == 1)
+			{
+				if (Mission->GetRunningMissionId().IsEmpty())
+				{
+					return In < 20.0 ? true : Stop(TEXT("CS3: the QA mission never ran"));
+				}
+				S.RunningAtSelect = Mission->GetRunningMissionId();
+				// THE SPY COUNTS: a mutation noted inside a scope on purpose must read 1
+				FWonderlandMissionHandoff::ResetSpy();
+				{
+					FWonderlandMissionHandoff::FScope Scope;
+					FWonderlandMissionHandoff::NoteMutation(TEXT("wl.Qa.CardSelect positive control"));
+				}
+				S.SpyControl = FWonderlandMissionHandoff::GetMutationsInScope();
+				// THEN THE SELECT, inside a scope: nothing the running mission owns may be written by it
+				FWonderlandMissionHandoff::ResetSpy();
+				S.ConnectsBefore = WonderlandCardDirector::GetConnectsSent();
+				{
+					FWonderlandMissionHandoff::FScope Scope;
+					WonderlandCardDirector::Select(World, S.CardB, Said);
+				}
+				S.SpyCounted = FWonderlandMissionHandoff::GetMutationsInScope();
+				S.SpyLast = FWonderlandMissionHandoff::GetLastMutationInScope();
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLCSQA select B mid-mission %s: %s"), *S.RunningAtSelect, *Said);
+				S.Sub = 2;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 3.0)
+			{
+				return true;
+			}
+			{
+				const FString Waiting = WonderlandCardDirector::DescribeWaiting();
+				const int32 Sent = WonderlandCardDirector::GetConnectsSent() - S.ConnectsBefore;
+				const bool bStillRunning = Mission->GetRunningMissionId() == S.RunningAtSelect;
+				S.Check(TEXT("CS3"), S.SpyControl == 1 && S.SpyCounted == 0 && QaCsWears(World, TEXT("jack_flame")) && QaCsPrimaryIs(TEXT("BLACK"))
+					&& Waiting.Contains(TEXT("mission")) && Sent == 0 && bStillRunning,
+					FString::Printf(TEXT("mid-mission %s: the look hot-swapped (jack_flame %s, BLACK %s); the companions wait for the mission (%s), %d sent; ")
+						TEXT("the spy counted %d of the mission's writes (control %d)%s; the mission %s"), *S.RunningAtSelect,
+						QaCsWears(World, TEXT("jack_flame")) ? TEXT("worn") : TEXT("NOT worn"), QaCsPrimaryIs(TEXT("BLACK")) ? TEXT("on") : TEXT("NOT on"),
+						Waiting.IsEmpty() ? TEXT("NOTHING WAITS") : *Waiting, Sent, S.SpyCounted, S.SpyControl,
+						S.SpyLast.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(", last '%s'"), *S.SpyLast), bStillRunning ? TEXT("runs on") : TEXT("CHANGED")));
+			}
+			Next(4);
+			return true;
+		case 4:
+			// CS4: THE MISSION ENDS, and the companions stop waiting for it
+			if (S.Sub == 0)
+			{
+				S.ConnectsBefore = WonderlandCardDirector::GetConnectsSent();
+				GEngine->Exec(World, TEXT("wl.Mission.Stop"));
+				S.Sub = 1;
+				return true;
+			}
+			if (S.Sub == 1)
+			{
+				if (!Mission->GetRunningMissionId().IsEmpty())
+				{
+					return In < 15.0 ? true : Stop(TEXT("CS4: the QA mission never ended"));
+				}
+				S.Sub = 2;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 2.5)
+			{
+				return true;
+			}
+			{
+				const FString Waiting = WonderlandCardDirector::DescribeWaiting();
+				const int32 Sent = WonderlandCardDirector::GetConnectsSent() - S.ConnectsBefore;
+				const bool bMoved = !Waiting.Contains(TEXT("mission")) && (bRuntimeOnline ? Waiting.IsEmpty() : Waiting.Contains(TEXT("companion runtime")));
+				S.Check(TEXT("CS4"), bMoved, FString::Printf(TEXT("the mission ended: the companions %s (%d sent since; the runtime %s)"),
+					Waiting.IsEmpty() ? TEXT("are applied") : *Waiting, Sent, bRuntimeOnline ? TEXT("online") : TEXT("offline")));
+			}
+			Next(5);
+			return true;
+		case 5:
+		{
+			// CS5: TEN SWITCHES IN TWO SECONDS WHILE THE SWORDS FORM
+			if (S.Sub == 0)
+			{
+				S.FiguresBefore = QaCsLooseFigures(World);
+				if (!WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said))
+				{
+					S.Check(TEXT("CS5"), false, FString::Printf(TEXT("the swords could not be taken up: %s"), *Said));
+					Next(6);
+					return true;
+				}
+				S.Switches = 0;
+				S.LastSwitchAt = 0.0;
+				S.Sub = 1;
+				return true;
+			}
+			if (S.Sub == 1)
+			{
+				if (Handoff->GetState() != EWonderlandHandoffState::Transforming && S.Switches == 0)
+				{
+					return In < 10.0 ? true : Stop(TEXT("CS5: the swords never began to form"));
+				}
+				if (S.Switches < 10 && Now - S.LastSwitchAt >= 0.2)
+				{
+					S.LastSelected = S.Switches % 2 == 0 ? S.CardA : S.CardB;
+					WonderlandCardDirector::Select(World, S.LastSelected, Said);
+					S.LastSwitchAt = Now;
+					++S.Switches;
+				}
+				if (S.Switches >= 10)
+				{
+					S.Sub = 2;
+				}
+				return true;
+			}
+			if (S.Sub == 2)
+			{
+				if (!Handoff->IsArmed())
+				{
+					return In < 25.0 ? true : Stop(TEXT("CS5: the swords were never held after the switching"));
+				}
+				S.Sub = 3;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (S.Sub == 3)
+			{
+				if (In < 2.5)
+				{
+					return true;
+				}
+				const WonderlandHandoffSwords::FPresentation& Swords = Dog->GetHandoffSwords();
+				const int32 Loose = QaCsLooseFigures(World);
+				S.Check(TEXT("CS5"), Store.GetActiveId() == S.LastSelected && Swords.GetBuiltBoxes() > 0 && Swords.CountVisibleBoxes() == Swords.GetBuiltBoxes()
+					&& Loose <= S.FiguresBefore && Handoff->IsArmed(),
+					FString::Printf(TEXT("10 switches while the swords formed: settled HELD %s, the last selection active %s, %d of %d sword boxes drawn, loose figures %d (was %d)"),
+						Handoff->IsArmed() ? TEXT("yes") : TEXT("NO"), Store.GetActiveId() == S.LastSelected ? TEXT("yes") : TEXT("NO"), Swords.CountVisibleBoxes(),
+						Swords.GetBuiltBoxes(), Loose, S.FiguresBefore));
+				WonderlandHandoffDirector::Return(QaLocalPlayer(World), Said);
+				S.Sub = 4;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (Handoff->IsEquipped())
+			{
+				return In < 10.0 ? true : Stop(TEXT("CS5: the swords were never given back"));
+			}
+			Next(6);
+			return true;
+		}
+		case 6:
+		{
+			// CS6: DELETING THE ACTIVE CARD falls back to the built-in default, and a delete changes nothing on the Dog
+			if (S.Sub == 0)
+			{
+				WonderlandCardDirector::Select(World, S.CardA, Said);
+				S.Sub = 1;
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 2.0)
+			{
+				return true;
+			}
+			const FString SkinBefore = Skins->GetEquippedSkinId().ToString();
+			const bool bDeleted = Store.Delete(S.CardA, Why);
+			const bool bDefault = Store.GetActiveId() == FWonderlandCardStore::BuiltInId();
+			const bool bLookKept = Skins->GetEquippedSkinId().ToString() == SkinBefore;
+			S.Check(TEXT("CS6"), bDeleted && bDefault && bLookKept && Store.Find(S.CardA) == nullptr,
+				FString::Printf(TEXT("the active card deleted %s%s: the active one is now %s (built in %s); the Dog still wears %s (%s)"),
+					bDeleted ? TEXT("yes") : TEXT("NO"), bDeleted ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *Why), *Store.GetActiveId(),
+					bDefault ? TEXT("yes") : TEXT("NO"), *Skins->GetEquippedSkinId().ToString(), bLookKept ? TEXT("kept") : TEXT("CHANGED")));
+			return Stop(nullptr);
+		}
+		default:
+			return Stop(TEXT("an unknown phase"));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaCardSelectCommand(
+		TEXT("wl.Qa.CardSelect"),
+		TEXT("C.A.R.D. M7b: SELECT through the authorities on the real store (two QA cards made and removed, the active card put back): ")
+		TEXT("the skin and primary, the companions now or waiting (and why), MODIFIED and SAVE TO C.A.R.D., a mid-mission select under the ")
+		TEXT("write spy (the envelope), ten switches while the swords form, and deleting the active card. `quit` exits after. WLCSQA lines."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaCardSelect.IsValid() || World == nullptr)
+			{
+				return;
+			}
+			GQaCardSelect = MakeShared<FQaCardSelect>();
+			GQaCardSelect->World = World;
+			GQaCardSelect->bQuit = Args.Contains(TEXT("quit"));
+			GQaCardSelect->PhaseAt = QaNow();
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLCSQA BEGIN | %s"), *WonderlandBeta::BuildLabel());
+			GQaCardSelect->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaCardSelectTick), 0.0f);
 		}));
 
 	/* ================================================================ wl.Qa.Handoff: Mission Handoff traversal, M1

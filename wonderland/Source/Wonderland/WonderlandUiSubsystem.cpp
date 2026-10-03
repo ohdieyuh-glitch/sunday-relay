@@ -80,6 +80,7 @@
 #include "WonderlandSocialSubsystem.h"
 #include "WonderlandMissionBeat.h"
 #include "WonderlandHandoffDirector.h"
+#include "WonderlandCardDirector.h"
 #include "WonderlandMissionNarration.h"
 #include "WonderlandWorldMap.h"
 #include "WonderlandWonderWeb.h"
@@ -4403,13 +4404,24 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		return true;
 	}
 
+	if (Command == TEXT("/card") || Command == TEXT("/cards"))
+	{
+		// C.A.R.D. (founder, 2026-10-02: the fifth Project Brain component). The actions live in WonderlandCardDirector; this only
+		// routes the line and answers it.
+		TArray<FString> Rows;
+		WonderlandCardDirector::HandleTerminalLine(GetWorld(), Line, Rows);
+		Terminal->AddJuliusRow(TEXT("You"), Line, FString::Join(Rows, TEXT("\n")));
+		return true;
+	}
+
 	if (Command == TEXT("/help") || Command == TEXT("/commands"))
 	{
 		Terminal->AddJuliusRow(TEXT("You"), Line,
 			TEXT("Press + above for a new task tab and type its objective to save it as a Mission Contract. "
 				"/tasks — list your contracts (open N, close N, delete N). /skin NAME — wear a skin (/skin list). "
 				"/cubs [n|off] — summon the Relay Dog's sub-agent cub ghosts. "
-				"/handoff — Mission Handoff: roam while a mission carries on (/handoff again, or /handoff return, to come back)."));
+				"/handoff — Mission Handoff: roam while a mission carries on (/handoff again, or /handoff return, to come back). "
+				"/card — your C.A.R.D. loadout (list, select NAME, new NAME, save, rename NAME, delete NAME)."));
 		return true;
 	}
 
