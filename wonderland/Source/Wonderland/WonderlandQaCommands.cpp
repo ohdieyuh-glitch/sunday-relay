@@ -11294,6 +11294,8 @@ namespace
 	 *        "secret:"; a 16-hex value after "api key:" and "api_key:"; "Authorization: Basic <base64>"; a password in a URL's
 	 *        userinfo; env-style and compound labels (DB_PASSWORD=, auth_token:, "secret key:") -- every one below the statistical
 	 *        rules, every one redacted on submit, still after /keep, masked on screen
+	 *   SI11 patterns a person types are not keys (round 4's card C6: ten thousand 'x' read as random): zero-entropy runs -- Zzzz..., abab...,
+	 *        xxxx..., 1111..., lolol... -- stored exactly as typed (the statistical class needs 8 distinct characters, 6 for digits only)
 	 */
 	struct FQaSecretInput
 	{
@@ -11710,6 +11712,32 @@ namespace
 		S.Check(TEXT("SI10"), LabelledClean == static_cast<int32>(UE_ARRAY_COUNT(Labelled)),
 			FString::Printf(TEXT("%d of %d labelled credentials (password: / pwd= / passwd is / secret: / api key: / api_key: / Basic / URL userinfo) redacted on submit, still after /keep, masked on screen%s"),
 				LabelledClean, static_cast<int32>(UE_ARRAY_COUNT(Labelled)), LabelledDetail.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; GOT THROUGH: %s"), *LabelledDetail)));
+
+		// SI11: PATTERNS A PERSON TYPES ARE NOT KEYS (Second's degenerate strings; round 4's card C6)
+		static const TCHAR* const Patterns[] = {
+			TEXT("rename Zzzzzzzzzzzzzzzzzzzzzzzz to the sleepy one"),
+			TEXT("repeat abababababababababababab twice"),
+			TEXT("replace the xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx placeholder"),
+			TEXT("count 11111111111111111111 ones"),
+			TEXT("stop the lolololololololololololol spam") };
+		int32 PatternsKept = 0;
+		FString PatternsAltered;
+		for (const TCHAR* Pattern : Patterns)
+		{
+			const FSubmitted Done = Submit(Pattern);
+			if (Done.bAccepted && Done.Certain + Done.Statistical == 0 && Done.Kept == Pattern)
+			{
+				++PatternsKept;
+			}
+			else
+			{
+				PatternsAltered += FString::Printf(TEXT("%s'%s' -> '%s'"), PatternsAltered.IsEmpty() ? TEXT("") : TEXT(", "), Pattern, *Done.Kept);
+			}
+		}
+		const int32 PatternCount = static_cast<int32>(UE_ARRAY_COUNT(Patterns));
+		S.Check(TEXT("SI11"), PatternsKept == PatternCount,
+			FString::Printf(TEXT("%d of %d typed patterns (Zzzz, abab, xxxx, 1111, lolol runs of 20+) stored exactly as typed%s"), PatternsKept, PatternCount,
+				PatternsAltered.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; ALTERED: %s"), *PatternsAltered)));
 
 		for (const FGuid& Draft : Leftover)
 		{

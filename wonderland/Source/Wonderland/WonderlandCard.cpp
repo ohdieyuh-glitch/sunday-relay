@@ -443,6 +443,25 @@ namespace
 		{
 			return false;
 		}
+		// FEW DISTINCT CHARACTERS IS A PATTERN, NOT A KEY (round 4's card C6: ten thousand 'x' as a card's name read as random -- no letter
+		// pair is common). Gated on 8 distinct characters, case-folded -- Second's measurement on their corpus: the worst recall over every
+		// random shape stays 99.5%, eleven degenerate strings (xxxx, abab, abcabc, Zzzz, Hmmm, 1111, xoxo, lolol...) go from 8 flagged to 0,
+		// and a gate of 10 cost recall (95.3%). DIGITS ONLY have ten symbols, so 8 would let 7.4% of random 20-digit keys through (CORE's
+		// measurement): those are gated at 6 (0.02%). The certain class (labels with values, vendor keys, JWT, PEM, URL userinfo) is untouched.
+		TSet<TCHAR> Distinct;
+		bool bAnyLetter = false;
+		for (int32 Seen = 0; Seen < Count; ++Seen)
+		{
+			bAnyLetter |= CardAsciiLetter(Candidate[Seen]);
+			if (Distinct.Num() < 8)
+			{
+				Distinct.Add(FChar::ToLower(Candidate[Seen]));
+			}
+		}
+		if (Distinct.Num() < (bAnyLetter ? 8 : 6))
+		{
+			return false;
+		}
 		int32 Letters = 0;
 		int32 Digits = 0;
 		int32 LetterDigit = 0;
