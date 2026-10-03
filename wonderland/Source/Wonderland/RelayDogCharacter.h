@@ -395,6 +395,11 @@ public:
 	FTransform GetHandoffGripWorld(bool bLeftHand) const;
 	/** THE HANDS (M4): the visible body's hand on the Dog's own LEFT or RIGHT (Relay OG's canon forearm, or the worn skin's own). */
 	const WonderlandHands::FHand& GetHand(bool bLeftHand) const { return bLeftHand ? BodyHandMinusY : BodyHandPlusY; }
+	/** For the QA: whether the act tools (the brush, the scraper) are worked by the Dog's own left (-Y) hand, and whether one is
+	 *  in that hand's fist now (wl.Dog.ActHands); the tool's handle while one shows (nullptr otherwise). */
+	bool IsToolHandLeft() const { return !(ArmRight.SideSign > 0.0f); }
+	bool IsToolInFist() const { return bToolInFist; }
+	const UInstancedStaticMeshComponent* GetShownToolHandle() const;
 	/** For the QA: the forearm of the body the player sees for that hand (a worn skin's, else the canon's), or null. */
 	USceneComponent* GetVisibleForearm(bool bLeftHand) const;
 	/** For the QA: which mission act props show now, as bits -- 1 the book, 2 the brush, 4 the lens, 8 the scraper. */
@@ -862,6 +867,11 @@ private:
 	TObjectPtr<class UMaterialInstanceDynamic> BeamHaloMid = nullptr;
 
 	bool bMissionPropsBuilt = false;
+	/** A tool is held in the working hand's fist this frame; the tool's parts carry a fist pose to put back when it is not. */
+	bool bToolInFist = false;
+	bool bToolLaidInFist = false;
+	/** Lays the shown tool (the brush, else the scraper) through Hand's closed fist on the forearm at ArmXf. */
+	void LayToolInFist(const WonderlandHands::FHand& Hand, const FTransform& ArmXf, bool bBrush);
 	/** True on any frame the player asked the Dog to move, so the orbit stands down. */
 	bool bPlayerDroveThisFrame = false;
 

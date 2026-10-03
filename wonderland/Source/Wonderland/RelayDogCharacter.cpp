@@ -1,4 +1,5 @@
 #include "RelayDogCharacter.h"
+#include "WonderlandActGrip.h"
 #include "RelayDogPresentation.h"
 
 #include "Components/PointLightComponent.h"
@@ -3441,9 +3442,16 @@ void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
 	// EVERY MASCOT HAS HANDS (founder, 2026-10-02): built on the visible body's forearms -- moved with a skin worn or taken off --
 	// and owned by that body's actor, closing into fists by the swords' share of the hands.
 	//
-	// NEVER THROUGH A MISSION PROP (Second's review, 10-03): while an act shows the book, the brush, the lens or the scraper, the
-	// hands step aside -- the founder accepted those acts as they are (43/43, 09-30), and a hand through a handle would undo it.
-	const bool bPropsInHand = CountVisibleActProps() > 0;
+	// THE TOOLS IN THE FIST (the founder, 10-03: visible proof that the hands and fingers never pass through the props): the brush
+	// and the scraper are laid through the working hand's closed fist the way a sword is (WonderlandActGrip). The book and the glass
+	// still send both hands aside -- they are not held yet (Second's review, 10-03: never a hand through a handle). wl.Dog.ActHands 0
+	// restores the 09-30 look the founder accepted (43/43): every prop on the forearm, the hands aside while any shows.
+	const int32 PropMask = GetVisibleActPropMask();
+	const bool bToolsInFist = WonderlandActGrip::ToolsInTheFist();
+	const bool bToolShown = (PropMask & (2 | 8)) != 0;
+	const bool bHandsAside = bToolsInFist ? (PropMask & (1 | 4)) != 0 : PropMask != 0;
+	const bool bToolSidePlusY = !IsToolHandLeft();
+	bool bToolHeld = false;
 	for (const bool bPlusY : { false, true })
 	{
 		WonderlandHands::FHand& Hand = bPlusY ? BodyHandPlusY : BodyHandMinusY;
@@ -3457,6 +3465,17 @@ void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
 			continue;
 		}
 		Hand.Attach(Forearm->GetOwner() != nullptr ? Forearm->GetOwner() : this, Forearm, Tip, Forward, bPlusY ? 1.0f : -1.0f);
+		if (bToolsInFist && bToolShown && !bHandsAside && bPlusY == bToolSidePlusY)
+		{
+			// THE TOOL'S HAND: the wrap turned off the arm's line toward the thumb, the fist closed, the tool laid through it
+			const FTransform ArmXf = Forearm->GetComponentTransform();
+			Hand.SetGripAxis(ArmXf.TransformVectorNoScale(WonderlandActGrip::ToolAxisInArm(Hand.GetAlong(), Hand.GetForward(), WonderlandActGrip::ToolTiltDeg())));
+			// ALREADY CLOSED WHEN THE TOOL APPEARS: a palm still opening would sit where the handle goes for a third of a second
+			Hand.Pose(1.0f, bToolInFist ? DeltaSeconds : 0.0f, true);
+			LayToolInFist(Hand, ArmXf, (PropMask & 2) != 0);
+			bToolHeld = true;
+			continue;
+		}
 		// THE FIST CLOSES ABOUT THE SWORD IT HOLDS (Second's review, 10-03): the Dog's -Y hand holds the gold, its +Y hand the cyan
 		const bool bGoldHere = !bPlusY;
 		if (HandoffSwords.GetHeldBy(bGoldHere) == Forearm)
@@ -3467,8 +3486,57 @@ void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
 		{
 			Hand.ClearGripAxis();
 		}
-		Hand.Pose(HandoffHandsWeight, DeltaSeconds, !bPropsInHand);
+		Hand.Pose(HandoffHandsWeight, DeltaSeconds, !bHandsAside);
 	}
+	bToolInFist = bToolHeld;
+	if (!bToolHeld && bToolLaidInFist)
+	{
+		// BACK ON THE FOREARM where the 09-30 acts had them: for wl.Dog.ActHands 0, and for a tool shown with no hand to hold it
+		for (UInstancedStaticMeshComponent* Part : { BrushMesh.Get(), BrushHeadMesh.Get(), ScraperMesh.Get(), ScraperBladeMesh.Get() })
+		{
+			if (Part != nullptr)
+			{
+				Part->SetRelativeTransform(FTransform::Identity);
+			}
+		}
+		bToolLaidInFist = false;
+	}
+}
+
+void ARelayDogCharacter::LayToolInFist(const WonderlandHands::FHand& Hand, const FTransform& ArmXf, bool bBrush)
+{
+	// THE HANDLE THROUGH THE FIST (WonderlandActGrip): the grip point 2 in from the butt, so the butt stays inside the little finger
+	// and clear of the forearm's block, the rest reaching out of the thumb side; the cross-section fitted a little inside the palm's
+	// face (1.8 of its 2.1), so the thumb wrapping over the handle meets it rather than sinking in -- simulated over hand sizes
+	// 0.7-1.3: no hand box more than 0.83 uu into the tool, the tool nowhere in the forearm's block (sim_act_grip.py, 10-03)
+	const double ToolU = FMath::Max(HeadWidthUU, 10.0f) / 60.0;
+	WonderlandActGrip::FToolHandle Handle;
+	Handle.Toward = FVector(0.0, 0.0, -1.0);
+	Handle.GripPoint = bBrush ? FVector(4.0 * ToolU, 0.0, -13.0 * ToolU) : FVector(4.0 * ToolU, 0.0, -29.0 * ToolU);
+	Handle.HalfWidth = 2.5 * ToolU;
+	const FVector FistCentre = ArmXf.TransformPosition(Hand.GripCentreLocal());
+	const FVector Wrap = ArmXf.TransformVectorNoScale(Hand.GetLaidAhead());
+	const FVector BackOfHand = ArmXf.TransformVectorNoScale(FVector::CrossProduct(Hand.GetLaidAhead(), Hand.GetLaidAlong()) * Hand.GetSide());
+	const double Hollow = Hand.GetHollowRadius() * (1.8 / 2.1) * ArmXf.GetScale3D().GetAbsMin();
+	const FTransform ToolXf = WonderlandActGrip::ToolWorld(Handle, FistCentre, Wrap, BackOfHand, Hollow);
+	for (UInstancedStaticMeshComponent* Part : bBrush ? TArray<UInstancedStaticMeshComponent*>{ BrushMesh.Get(), BrushHeadMesh.Get() }
+		: TArray<UInstancedStaticMeshComponent*>{ ScraperMesh.Get(), ScraperBladeMesh.Get() })
+	{
+		if (Part != nullptr)
+		{
+			Part->SetWorldTransform(ToolXf);
+		}
+	}
+	bToolLaidInFist = true;
+}
+
+const UInstancedStaticMeshComponent* ARelayDogCharacter::GetShownToolHandle() const
+{
+	if (BrushMesh != nullptr && BrushMesh->IsVisible())
+	{
+		return BrushMesh.Get();
+	}
+	return ScraperMesh != nullptr && ScraperMesh->IsVisible() ? ScraperMesh.Get() : nullptr;
 }
 
 FTransform ARelayDogCharacter::GetHandoffGripWorld(bool bLeftHand) const

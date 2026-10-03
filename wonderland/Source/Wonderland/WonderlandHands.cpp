@@ -131,6 +131,18 @@ namespace WonderlandHands
 		LaidCurl = Curl;
 	}
 
+	void FHand::GetBoxes(TArray<const UStaticMeshComponent*>& OutBoxes) const
+	{
+		OutBoxes.Reset();
+		for (const TWeakObjectPtr<UStaticMeshComponent>& Box : Boxes)
+		{
+			if (const UStaticMeshComponent* Mesh = Box.Get())
+			{
+				OutBoxes.Add(Mesh);
+			}
+		}
+	}
+
 	FVector FHand::GripCentreLocal() const
 	{
 		// the fist's middle: a little more than half a palm down from the arm's end, along the hand as it is laid

@@ -10590,17 +10590,122 @@ namespace
 			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaSecretInputTick), 0.0f);
 		}));
 
-	/* ================================================================ wl.Qa.ActHands: the hands never through a mission prop
-	 * Second's review (10-03): the always-on hands would go through the book, the brush, the lens and the scraper of the acts the
-	 * founder accepted as they are (43/43, 09-30). The hands now step aside while a prop shows. Measured on Relay OG and on
-	 * celestial_light through a real mission fixture: in EVERY frame a prop shows, no hand box is drawn (HP1, HP3 -- with a
-	 * positive control: the acts must actually have run); after the mission both hands are back, open (HP2, HP4). A close frame
-	 * of each new set of props to Saved/Screenshots/WLACTS.
-	 * HP5 (the founder, 10-03: data alone is not enough -- usable CLOSE frames of EACH prop, the scraper included): on both skins
-	 * every prop act is posed through SetMissionAct (wl.Dog.Act: the call a mission's beats make) -- book, paint, review, repair --
-	 * and its props framed close from two sides: all 16 frames taken, every prop set seen (the scraper's too), a hand drawn in none.
-	 * WLAHQA lines.
+	/* ================================================================ wl.Qa.ActHands: hands seen holding, never through a prop
+	 * The founder (10-03): a founder-facing PASS needs VISIBLE proof that the hands and fingers do not pass through the props, in
+	 * close frames of each prop, the scraper included. Second (10-03): a PASS by absence -- hands hidden while props show -- proves
+	 * nothing. So the brush and the scraper are held by the working hand's drawn fist (WonderlandActGrip), and this measures it:
+	 *   HP1/HP3 on Relay OG / celestial_light through a real mission fixture: in EVERY frame a tool shows, the tool's hand is drawn
+	 *        whole and closed with the tool in it (at least 10 such frames: the acts must have run); in every frame the book or the
+	 *        glass shows, no hand is drawn (they are not held yet: never a hand through them)
+	 *   HP2/HP4 after the mission both hands are back, open
+	 *   HP5 every prop act posed through SetMissionAct (wl.Dog.Act, the call a mission's beats make) -- book, paint, review, repair --
+	 *        on both skins, each act's OWN prop waited for (the scraper's too), framed close from the side and three-quarters with
+	 *        a clear line of sight both ways (walls and companions tried round): 16 frames, none blocked, every prop set seen
+	 *   HP6 the TOOLS in those close frames: the hand drawn whole round the tool, no hand box more than 1 uu into a prop (a gripped
+	 *        handle meets the fingers), no prop more than 0.5 uu into a forearm's own block, and a planted control -- the same
+	 *        handle pushed 2 uu toward the palm -- reading at least 1 uu, so the measure can fail
+	 *   HP7 the BOOK and the GLASS the same way: FAILS until they are held (their hands still step aside; stated, never passed)
+	 * Frames to Saved/Screenshots/WLACTS; WLAHQA lines, one SHOT line per close frame with its depths.
 	 */
+	/** The act's boxes as drawn now: the tool hand's [0] and the other's [1], the props shown, and the visible forearms' own blocks. */
+	struct FQaActBoxes
+	{
+		TArray<FQaObb> Hands[2];
+		TArray<FQaObb> Props;
+		TArray<FQaObb> Arms;
+		FQaObb ToolHandle;
+		bool bToolHandle = false;
+	};
+
+	void QaActBoxes(const ARelayDogCharacter* Dog, FQaActBoxes& Out)
+	{
+		const bool bLeftTool = Dog->IsToolHandLeft();
+		for (int32 Which = 0; Which < 2; ++Which)
+		{
+			const bool bLeftSide = Which == 0 ? bLeftTool : !bLeftTool;
+			TArray<const UStaticMeshComponent*> HandParts;
+			Dog->GetHand(bLeftSide).GetBoxes(HandParts);
+			for (const UStaticMeshComponent* HandPart : HandParts)
+			{
+				if (HandPart != nullptr && HandPart->IsVisible() && HandPart->GetStaticMesh() != nullptr)
+				{
+					QaMeshObbs(HandPart, Out.Hands[Which]);
+				}
+			}
+			// THE ARM'S OWN BLOCK: what the forearm draws itself -- not the props riding on it, not the hand
+			if (const USceneComponent* ArmOn = Dog->GetVisibleForearm(bLeftSide))
+			{
+				TArray<USceneComponent*> ArmChildren;
+				ArmOn->GetChildrenComponents(false, ArmChildren);
+				for (const USceneComponent* ArmChild : ArmChildren)
+				{
+					const UStaticMeshComponent* ArmBlock = Cast<UStaticMeshComponent>(ArmChild);
+					if (ArmBlock == nullptr || !ArmBlock->IsVisible() || ArmBlock->GetStaticMesh() == nullptr || ArmBlock->ComponentHasTag(TEXT("WL_Prop"))
+						|| ArmBlock->GetName().StartsWith(TEXT("Mission")) || ArmBlock->GetName().StartsWith(TEXT("Verification"))
+						|| ArmBlock->GetName().StartsWith(TEXT("WonderlandHand")))
+					{
+						continue;
+					}
+					QaMeshObbs(ArmBlock, Out.Arms);
+				}
+			}
+		}
+		TInlineComponentArray<UStaticMeshComponent*> DogMeshes;
+		Dog->GetComponents<UStaticMeshComponent>(DogMeshes);
+		for (const UStaticMeshComponent* DogMesh : DogMeshes)
+		{
+			if (DogMesh != nullptr && DogMesh->IsVisible() && DogMesh->GetStaticMesh() != nullptr && DogMesh->GetName().StartsWith(TEXT("Mission"))
+				&& !DogMesh->GetName().StartsWith(TEXT("MissionEnergy")))
+			{
+				QaMeshObbs(DogMesh, Out.Props);
+			}
+		}
+		if (const UInstancedStaticMeshComponent* ToolMesh = Dog->GetShownToolHandle())
+		{
+			TArray<FQaObb> ToolBoxes;
+			QaMeshObbs(ToolMesh, ToolBoxes);
+			if (ToolBoxes.Num() > 0)
+			{
+				Out.ToolHandle = ToolBoxes[0];
+				Out.bToolHandle = true;
+			}
+		}
+	}
+
+	/** The deepest overlap between any box of A and any of B (uu; 0 when none touch), and which pair. */
+	double QaDeepestPair(const TArray<FQaObb>& A, const TArray<FQaObb>& B, FString& OutPair)
+	{
+		double Deepest = 0.0;
+		for (const FQaObb& FromA : A)
+		{
+			for (const FQaObb& FromB : B)
+			{
+				const double PairDepth = QaObbDepth(FromA, FromB);
+				if (PairDepth > Deepest)
+				{
+					Deepest = PairDepth;
+					OutPair = FString::Printf(TEXT("%s in %s"), FromA.Mesh != nullptr ? *FromA.Mesh->GetName() : TEXT("?"),
+						FromB.Mesh != nullptr ? *FromB.Mesh->GetName() : TEXT("?"));
+				}
+			}
+		}
+		return Deepest;
+	}
+
+	/** Nothing between the camera and the work, either way (a camera inside a wall sees out of it unhit): the Dog and its skin aside. */
+	bool QaActSightClear(UWorld* World, const ARelayDogCharacter* Dog, const FVector& Eye, const FVector& Work)
+	{
+		FCollisionQueryParams Sight = FCollisionQueryParams::DefaultQueryParam;
+		Sight.AddIgnoredActor(Dog);
+		if (const AActor* Worn = Dog->GetCostume())
+		{
+			Sight.AddIgnoredActor(Worn);
+		}
+		FHitResult SightHit;
+		return !World->LineTraceSingleByChannel(SightHit, Eye, Work, ECC_Visibility, Sight)
+			&& !World->LineTraceSingleByChannel(SightHit, Work, Eye, ECC_Visibility, Sight);
+	}
+
 	struct FQaActHands
 	{
 		TWeakObjectPtr<UWorld> World;
@@ -10624,8 +10729,26 @@ namespace
 		bool bActIssued = false;
 		double ShotAt = 0.0;
 		int32 CloseShots = 0;
-		int32 CloseHands = 0;
 		int32 CloseMasks = 0;
+		int32 Tries = 0;
+		int32 Blocked = 0;
+		FString MissedActs;
+		// the mission: tool frames and how many were held in a drawn closed fist; book or glass frames
+		int32 ToolFrames = 0;
+		int32 ToolGripped = 0;
+		FString FirstLoose;
+		int32 HeldFrames = 0;
+		// the close frames: tools, and the book and the glass
+		int32 CloseTool = 0;
+		int32 CloseToolOk = 0;
+		double MaxToolHand = 0.0;
+		double MaxToolArm = 0.0;
+		double MinControl = 1.0e9;
+		FString WorstTool;
+		int32 CloseHeld = 0;
+		int32 CloseHeldHands = 0;
+		double MaxHeldHand = 0.0;
+		double MaxHeldArm = 0.0;
 		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
@@ -10729,17 +10852,35 @@ namespace
 			return true;
 		case 2:
 		{
-			// EVERY FRAME OF THE MISSION: a prop shown with a hand drawn is an overlap
+			// EVERY FRAME OF THE MISSION: a tool shown is held in the tool hand's drawn closed fist; the book or the glass, no hand drawn
 			const int32 Mask = Dog->GetVisibleActPropMask();
+			const WonderlandHands::FHand& ToolHand = Dog->GetHand(Dog->IsToolHandLeft());
 			const int32 HandBoxes = Dog->GetHand(true).CountVisibleBoxes() + Dog->GetHand(false).CountVisibleBoxes();
 			if (Mask != 0)
 			{
 				++S.PropFrames;
+			}
+			if ((Mask & (2 | 8)) != 0)
+			{
+				++S.ToolFrames;
+				if (ToolHand.CountVisibleBoxes() == WonderlandHands::BoxesPerHand && ToolHand.GetCurl() >= 0.95f && Dog->IsToolInFist())
+				{
+					++S.ToolGripped;
+				}
+				else if (S.FirstLoose.IsEmpty())
+				{
+					S.FirstLoose = FString::Printf(TEXT("tool 0x%X at %.1f s: hand %d boxes, curl %.2f, in the fist %d"), Mask, In,
+						ToolHand.CountVisibleBoxes(), ToolHand.GetCurl(), Dog->IsToolInFist() ? 1 : 0);
+				}
+			}
+			if ((Mask & (1 | 4)) != 0)
+			{
+				++S.HeldFrames;
 				if (HandBoxes > 0)
 				{
 					if (S.Overlaps == 0)
 					{
-						S.FirstOverlap = FString::Printf(TEXT("props 0x%X with %d hand boxes drawn at %.1f s"), Mask, HandBoxes, In);
+						S.FirstOverlap = FString::Printf(TEXT("book/glass 0x%X with %d hand boxes drawn at %.1f s"), Mask, HandBoxes, In);
 					}
 					++S.Overlaps;
 				}
@@ -10774,9 +10915,14 @@ namespace
 			}
 			GEngine->Exec(World, TEXT("wl.Mission.Stop"));
 			PC->SetViewTargetWithBlend(Dog, 0.0f);
-			S.Check(S.SkinIndex == 0 ? TEXT("HP1") : TEXT("HP3"), S.PropFrames >= 30 && S.Overlaps == 0,
-				FString::Printf(TEXT("%s through a mission: props shown in %d frames (sets seen 0x%X: 1 book, 2 brush, 4 lens, 8 scraper), a hand drawn in %d of them%s"),
-					Skin, S.PropFrames, S.SeenMasks, S.Overlaps, S.FirstOverlap.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (first: %s)"), *S.FirstOverlap)));
+			S.Check(S.SkinIndex == 0 ? TEXT("HP1") : TEXT("HP3"), S.PropFrames >= 30 && S.ToolFrames >= 10 && S.ToolGripped == S.ToolFrames && S.Overlaps == 0,
+				FString::Printf(TEXT("%s through a mission: props shown in %d frames (sets seen 0x%X: 1 book, 2 brush, 4 lens, 8 scraper); a tool in %d, held in the hand's drawn closed fist in %d (want all, at least 10)%s; the book or the glass in %d, a hand drawn in %d of those (want 0: not held yet)%s"),
+					Skin, S.PropFrames, S.SeenMasks, S.ToolFrames, S.ToolGripped, S.FirstLoose.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (first loose: %s)"), *S.FirstLoose),
+					S.HeldFrames, S.Overlaps, S.FirstOverlap.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (first: %s)"), *S.FirstOverlap)));
+			S.ToolFrames = 0;
+			S.ToolGripped = 0;
+			S.FirstLoose.Reset();
+			S.HeldFrames = 0;
 			S.Phase = 3;
 			S.PhaseAt = Now;
 			return true;
@@ -10804,8 +10950,10 @@ namespace
 		}
 		case 4:
 		{
-			// THE CLOSE SHOTS: every prop act posed through SetMissionAct, its props framed close from two sides, the hands drawn in none
+			// THE CLOSE SHOTS: every prop act posed through SetMissionAct, its OWN prop waited for, framed close from the side and
+			// three-quarters with a clear line of sight, and measured: the hands, the props and the forearms' blocks, box against box
 			static const TCHAR* const CloseActs[] = { TEXT("book"), TEXT("paint"), TEXT("review"), TEXT("repair") };
+			static const int32 CloseWants[] = { 1, 2, 4, 8 };
 			const int32 ActCount = static_cast<int32>(UE_ARRAY_COUNT(CloseActs));
 			if (S.ActIndex >= ActCount)
 			{
@@ -10818,9 +10966,17 @@ namespace
 					S.PhaseAt = Now;
 					return true;
 				}
-				S.Check(TEXT("HP5"), S.CloseShots == 2 * ActCount * 2 && (S.CloseMasks & 0xF) == 0xF && S.CloseHands == 0,
-					FString::Printf(TEXT("close frames of every prop act on both skins (book, paint, review, repair -- the scraper's -- posed through SetMissionAct, two sides each): %d frames (want %d), prop sets seen 0x%X (want 0xF: 1 book, 2 brush, 4 lens, 8 scraper), a hand drawn in %d of them"),
-						S.CloseShots, 2 * ActCount * 2, S.CloseMasks, S.CloseHands));
+				const int32 WantShots = 2 * ActCount * 2;
+				S.Check(TEXT("HP5"), S.CloseShots == WantShots && S.Blocked == 0 && (S.CloseMasks & 0xF) == 0xF && S.MissedActs.IsEmpty(),
+					FString::Printf(TEXT("close frames of every prop act on both skins, each act's own prop waited for (book, paint, review, repair -- the scraper's), from the side and three-quarters: %d frames (want %d), %d with the line of sight blocked (want 0), prop sets seen 0x%X (want 0xF)%s"),
+						S.CloseShots, WantShots, S.Blocked, S.CloseMasks, S.MissedActs.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; NEVER SHOWN: %s"), *S.MissedActs)));
+				S.Check(TEXT("HP6"), S.CloseTool == 8 && S.CloseToolOk == S.CloseTool,
+					FString::Printf(TEXT("the tools in the hand (brush, scraper; both skins, two sides): %d of %d close frames held -- the hand drawn whole round the tool, no hand box more than 1 uu into a prop (deepest %.2f), no prop more than 0.5 uu into a forearm's block (deepest %.2f), the planted control (the handle 2 uu toward the palm) reading at least 1 uu (least %.2f)%s"),
+						S.CloseToolOk, S.CloseTool, S.MaxToolHand, S.MaxToolArm, S.MinControl > 1.0e8 ? -1.0 : S.MinControl,
+						S.WorstTool.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; worst: %s"), *S.WorstTool)));
+				S.Check(TEXT("HP7"), S.CloseHeld == 8 && S.CloseHeldHands == S.CloseHeld && S.MaxHeldHand <= 1.0 && S.MaxHeldArm <= 0.5,
+					FString::Printf(TEXT("the book and the glass in the hands: hands drawn in %d of %d close frames, deepest hand-in-prop %.2f, deepest prop-in-forearm %.2f -- NOT HELD YET: their hands still step aside (stated, never passed until they hold)"),
+						S.CloseHeldHands, S.CloseHeld, S.MaxHeldHand, S.MaxHeldArm));
 				return Stop(nullptr);
 			}
 			if (!S.bActIssued)
@@ -10829,36 +10985,65 @@ namespace
 				S.bActIssued = true;
 				S.ViewIndex = 0;
 				S.ShotAt = 0.0;
+				S.Tries = 0;
 				S.PhaseAt = Now;
 				return true;
 			}
-			if (In < 2.5)
+			// THE ACT'S OWN PROP: the repair act names the fault with the glass before the scraper takes it out
+			const int32 Want = CloseWants[S.ActIndex];
+			const int32 Mask = Dog->GetVisibleActPropMask();
+			if (In < 1.5 || ((Mask & Want) == 0 && In < 15.0))
 			{
+				// the prop the act is about went away (the repair act names the fault with the glass between scrapes): the settle restarts
+				S.ShotAt = 0.0;
 				return true;
 			}
-			// the props this act shows, where they are NOW (an act that circles the Contract moves them): the camera follows every tick
-			FBox ActProps(ForceInit);
-			TInlineComponentArray<UPrimitiveComponent*> ActParts;
-			Dog->GetComponents<UPrimitiveComponent>(ActParts);
-			for (const UPrimitiveComponent* ActPart : ActParts)
+			if ((Mask & Want) == 0)
 			{
-				if (ActPart != nullptr && ActPart->IsVisible() && ActPart->GetName().StartsWith(TEXT("Mission")))
+				S.MissedActs += FString::Printf(TEXT("%s%s %s (0x%X)"), S.MissedActs.IsEmpty() ? TEXT("") : TEXT(", "), Skin, CloseActs[S.ActIndex], Want);
+				++S.ActIndex;
+				S.bActIssued = false;
+				return true;
+			}
+			FQaActBoxes ActBoxes;
+			QaActBoxes(Dog, ActBoxes);
+			const bool bToolAct = (Want & (2 | 8)) != 0;
+			FBox AimBox(ForceInit);
+			for (const FQaObb& PropBox : ActBoxes.Props)
+			{
+				AimBox += FBox::BuildAABB(PropBox.Centre, PropBox.Reach);
+			}
+			if (bToolAct)
+			{
+				for (const FQaObb& FistPart : ActBoxes.Hands[0])
 				{
-					ActProps += ActPart->Bounds.GetBox();
+					AimBox += FBox::BuildAABB(FistPart.Centre, FistPart.Reach);
 				}
 			}
 			ACameraActor* CloseCam = S.Camera.Get();
-			if (!ActProps.IsValid || CloseCam == nullptr)
+			if (!AimBox.IsValid || CloseCam == nullptr)
 			{
-				return In < 8.0 ? true : Stop(TEXT("an act showed no prop to frame"));
+				return In < 15.0 ? true : Stop(TEXT("an act showed no prop to frame"));
 			}
-			const FVector PropCentre = ActProps.GetCenter();
-			const double CloseReach = FMath::Clamp(ActProps.GetExtent().Size() * 3.0, 70.0, 160.0);
-			const FVector CloseToward = Dog->GetActorForwardVector().GetSafeNormal2D().RotateAngleAxis(S.ViewIndex == 0 ? 50.0 : 105.0, FVector::UpVector);
-			const FVector CloseWhere = PropCentre + CloseToward * CloseReach + FVector(0.0, 0.0, CloseReach * 0.25);
-			CloseCam->SetActorLocationAndRotation(CloseWhere, (PropCentre - CloseWhere).Rotation());
+			// THE CAMERA FOLLOWS THE WORK every tick (an act that circles the Contract moves it), from the tool hand's side
+			const FVector AimAt = AimBox.GetCenter();
+			const double CloseReach = FMath::Clamp(AimBox.GetExtent().Size() * 2.6, 60.0, 150.0);
+			const double SideSign = Dog->IsToolHandLeft() ? -1.0 : 1.0;
+			static const double TryOffsets[] = { 0.0, 25.0, -25.0, 50.0, -50.0, 75.0 };
+			const double ViewAngle = SideSign * (S.ViewIndex == 0 ? 90.0 : 40.0) + TryOffsets[FMath::Clamp(S.Tries, 0, 5)];
+			const FVector CloseWhere = AimAt + Dog->GetActorForwardVector().GetSafeNormal2D().RotateAngleAxis(ViewAngle, FVector::UpVector) * CloseReach
+				+ FVector(0.0, 0.0, CloseReach * 0.25);
+			CloseCam->SetActorLocationAndRotation(CloseWhere, (AimAt - CloseWhere).Rotation());
 			CloseCam->GetCameraComponent()->SetFieldOfView(45.0f);
 			PC->SetViewTargetWithBlend(CloseCam, 0.0f);
+			const bool bClear = QaActSightClear(World, Dog, CloseWhere, AimAt);
+			if (!bClear && S.Tries < 5)
+			{
+				// a wall or a companion in the way: round to the next angle
+				++S.Tries;
+				S.ShotAt = 0.0;
+				return true;
+			}
 			if (S.ShotAt <= 0.0)
 			{
 				S.ShotAt = Now;
@@ -10867,13 +11052,65 @@ namespace
 			{
 				return true;
 			}
-			const int32 CloseMask = Dog->GetVisibleActPropMask();
-			const int32 CloseDrawn = Dog->GetHand(true).CountVisibleBoxes() + Dog->GetHand(false).CountVisibleBoxes();
-			S.Frame(FString::Printf(TEXT("close_%s_%s_%s"), Skin, CloseActs[S.ActIndex], S.ViewIndex == 0 ? TEXT("a") : TEXT("b")));
+			// MEASURED AS DRAWN: hands against props, props against the forearms' own blocks, and the planted control
+			TArray<FQaObb> BothHands = ActBoxes.Hands[0];
+			BothHands.Append(ActBoxes.Hands[1]);
+			FString HandPair;
+			FString ArmPair;
+			const double HandDepth = QaDeepestPair(BothHands, ActBoxes.Props, HandPair);
+			const double ArmDepth = QaDeepestPair(ActBoxes.Props, ActBoxes.Arms, ArmPair);
+			double Control = -1.0;
+			if (ActBoxes.bToolHandle && ActBoxes.Hands[0].Num() > 0)
+			{
+				// THE SAME HANDLE PUSHED 2 uu TOWARD THE PALM, square to its own length: the measure must read it as through
+				const FQaObb& Palm = ActBoxes.Hands[0][0];
+				FQaObb Planted = ActBoxes.ToolHandle;
+				int32 LongAxis = 0;
+				for (int32 AxisIndex = 1; AxisIndex < 3; ++AxisIndex)
+				{
+					LongAxis = Planted.Half[AxisIndex] > Planted.Half[LongAxis] ? AxisIndex : LongAxis;
+				}
+				FVector ToPalm = Palm.Centre - Planted.Centre;
+				ToPalm -= Planted.Axis[LongAxis] * FVector::DotProduct(ToPalm, Planted.Axis[LongAxis]);
+				Planted.Centre += ToPalm.GetSafeNormal() * 2.0;
+				Control = QaObbDepth(Palm, Planted);
+			}
+			const int32 ToolHandBoxes = ActBoxes.Hands[0].Num();
+			const int32 OtherHandBoxes = ActBoxes.Hands[1].Num();
+			const FString ShotName = FString::Printf(TEXT("close_%s_%s_%s"), Skin, CloseActs[S.ActIndex], S.ViewIndex == 0 ? TEXT("side") : TEXT("threequarter"));
+			S.Frame(ShotName);
 			++S.CloseShots;
-			S.CloseMasks |= CloseMask;
-			S.CloseHands += CloseDrawn > 0 ? 1 : 0;
+			S.CloseMasks |= Mask;
+			S.Blocked += bClear ? 0 : 1;
+			if (bToolAct)
+			{
+				++S.CloseTool;
+				const bool bHeldWell = ToolHandBoxes == WonderlandHands::BoxesPerHand && Dog->IsToolInFist() && HandDepth <= 1.0 && ArmDepth <= 0.5 && Control >= 1.0;
+				S.CloseToolOk += bHeldWell ? 1 : 0;
+				S.MaxToolHand = FMath::Max(S.MaxToolHand, HandDepth);
+				S.MaxToolArm = FMath::Max(S.MaxToolArm, ArmDepth);
+				S.MinControl = FMath::Min(S.MinControl, Control);
+				if (!bHeldWell && S.WorstTool.IsEmpty())
+				{
+					S.WorstTool = FString::Printf(TEXT("%s: hand %d boxes, in the fist %d, hand-in-prop %.2f (%s), prop-in-arm %.2f (%s), control %.2f"), *ShotName,
+						ToolHandBoxes, Dog->IsToolInFist() ? 1 : 0, HandDepth, *HandPair, ArmDepth, *ArmPair, Control);
+				}
+			}
+			else
+			{
+				++S.CloseHeld;
+				S.CloseHeldHands += ToolHandBoxes + OtherHandBoxes > 0 ? 1 : 0;
+				S.MaxHeldHand = FMath::Max(S.MaxHeldHand, HandDepth);
+				S.MaxHeldArm = FMath::Max(S.MaxHeldArm, ArmDepth);
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA SHOT %s props 0x%X sight %s (tries %d) tool hand %d boxes, other %d, in the fist %d, curl %.2f, wrist %.1f deg; hand-in-prop %.2f uu (%s); prop-in-arm %.2f uu (%s); control %.2f"),
+				*ShotName, Mask, bClear ? TEXT("clear") : TEXT("BLOCKED"), S.Tries, ToolHandBoxes, OtherHandBoxes, Dog->IsToolInFist() ? 1 : 0,
+				Dog->GetHand(Dog->IsToolHandLeft()).GetCurl(), Dog->GetHand(Dog->IsToolHandLeft()).GetWristBendDeg(), HandDepth,
+				HandPair.IsEmpty() ? TEXT("none") : *HandPair, ArmDepth, ArmPair.IsEmpty() ? TEXT("none") : *ArmPair, Control);
 			S.ShotAt = 0.0;
+			S.Tries = 0;
+			// the next view waits for its own prop afresh: 15 s from now, not from the act's start
+			S.PhaseAt = Now;
 			if (++S.ViewIndex >= 2)
 			{
 				++S.ActIndex;

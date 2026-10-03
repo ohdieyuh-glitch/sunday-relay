@@ -65,6 +65,15 @@ namespace WonderlandHands
 		/** The hand's own axes in the forearm's space, so a grip lies across the fist. */
 		FVector GetAlong() const { return Along; }
 		FVector GetForward() const { return Ahead; }
+		/** The frame the fist was last laid in (the forearm's space): the fingers' way, and the wrap axis -- a held grip's. */
+		FVector GetLaidAlong() const { return LaidAlong; }
+		FVector GetLaidAhead() const { return LaidAhead; }
+		/** +1 on the body's +Y side, -1 on the other: the back of the hand is (LaidAhead x LaidAlong) * Side. */
+		float GetSide() const { return Side; }
+		/** The closed fist's hollow round its centre (the palm's face), in the forearm's space: what a held handle is fitted to. */
+		float GetHollowRadius() const { return 2.1f * Size; }
+		/** For the QA: the boxes the hand is made of (palm, fingers, thumb), to measure against the props. */
+		void GetBoxes(TArray<const UStaticMeshComponent*>& OutBoxes) const;
 		/** For the QA: the material the hand wears now, and whether it is its arm's own -- FALSE for a hand that never found its arm. */
 		UMaterialInterface* GetWornMaterial() const;
 		bool WearsItsArmsMaterial() const;
