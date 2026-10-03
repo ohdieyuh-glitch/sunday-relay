@@ -1949,13 +1949,13 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeCardStrip()
 	return SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)
 		[
-			MakeCardTile(TEXT("handoff"), EWonderlandBrainGlyph::Sparkle, TEXT("mission_handoff"),
+			MakeCardTile(TEXT("handoff"), EWonderlandBrainGlyph::Sparkle, TEXT("handoff"),
 				[this]() { return CardView.HandoffForm.IsEmpty() ? FString(TEXT("—")) : FString::Printf(TEXT("%s · %s"), *CardView.HandoffForm, *CardView.HandoffState); },
 				[this]() { return CardView.HandoffState == TEXT("HELD") ? CardStatusColour(EWonderlandCardStatus::Ready) : Mist(0.55f); })
 		]
 		+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)
 		[
-			MakeCardTile(TEXT("mascot"), EWonderlandBrainGlyph::Person, TEXT("mascot_clothes"),
+			MakeCardTile(TEXT("mascot"), EWonderlandBrainGlyph::Person, TEXT("mascot"),
 				[this]() { return FString::Printf(TEXT("%s · %s%s"), *CardView.Skin.ToUpper(), *CardView.Primary, CardView.bModified ? TEXT(" · MODIFIED") : TEXT("")); },
 				[this]() { return CardView.bModified ? CardStatusColour(EWonderlandCardStatus::Unconfigured) : Mist(0.55f); })
 		]
@@ -1968,7 +1968,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeCardStrip()
 		]
 		+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)
 		[
-			MakeCardTile(TEXT("capabilities"), EWonderlandBrainGlyph::Link, TEXT("skills_mcp_apis"),
+			MakeCardTile(TEXT("capabilities"), EWonderlandBrainGlyph::Link, TEXT("skills_mcp"),
 				[this]() { return CardView.Capabilities.Num() == 0 ? FString(TEXT("NONE ATTACHED"))
 					: FString::Printf(TEXT("%d ATTACHED · %d READY"), CardView.Capabilities.Num(), CardView.CountCapabilities(EWonderlandCardStatus::Ready)); },
 				[this]() { return CardWorstColour(CardView.Capabilities); })
