@@ -190,6 +190,7 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
 |---|---|---|---|
 | **#322** | Decision C corrected carry (`julius-carry.v2`). Only verified repair findings and accepted decisions travel; every exclusion is recorded by code; four-point proof | base `main` | green |
 | **#326** | C on the **paid venue**: a WITH arm learns from its pair's verified evidence bundle (`carryFrom`, input `carry_source_run`, `verify-carry`, `carry-export.json`, `carry.tsv`) | on #322 | green (6/6) |
+| **#331** | C **option B prepared, not chosen**: the reviewer names each finding's kind, a contract may promote kinds (`promotedWarningCategories`), and the bundle records each warning's kind (`review-warnings.tsv`). Rehearsed on real PostgreSQL: a promoting WITHOUT arm teaches a WITH arm; its control is refused for free. The four frozen missions' binding digests are pinned and unchanged | on #326 | see the PR |
 | **#324** | 031+032 (+033) migration window tooling (`docs/julius-migrations/window/`) and its Docker rehearsal records | base `relay/julius-13i-completion-r2` | n/a |
 | **#323** | Wonderland social backend and privacy wall P1–P5, migration **033** | on #321 | green |
 | **#325** | Wonderland voice/EOS: rooms are cliques of mutual visibility, PUID binding, **035 staged** behind 034 | on #323 | green |
@@ -211,8 +212,9 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
   - Applying 031–033 there needs a reviewed live-store procedure (`DATABASE_URL` stays parked).
 - **Stale PRs:** #290, #291 and #293–#297 are fully folded into `main` (via #301/#304/#305/#310/#311). Recommend closing; that is the founder's call.
 - **Do not dispatch C's four paid runs yet.** On the retained paid record, **0 of 5** bundles would have been a valid WITHOUT arm. All three completed runs passed review with no blocking finding, so a WITH arm would be refused in preflight (`CARRY_SOURCE_NOT_A_VALID_PAIR`).
-  - Two facts the design must respect: the same contract gives the same Julius run id, and `promotedWarningCategories` is unreachable from a contract.
-  - Options A, B and C are in `docs/JULIUS_DECISION_C_PAIR_VALIDITY.md` (#326). The choice belongs to the founder and SECOND.
+  - Two facts the design must respect: the same contract gives the same Julius run id, and, on `main`, warning promotion is unreachable: no contract field reaches it, and the reviewer was never asked a finding's kind.
+  - Options A, B and C are in `docs/JULIUS_DECISION_C_PAIR_VALIDITY.md` (#326). **Option B is prepared in #331.** The choice belongs to the founder and SECOND.
+  - Whether M2's two warnings would have been promoted is UNKNOWN: its bundle kept no declared kinds.
 - **Local-run caveats** (not product defects; CI is unaffected):
   - **One test fails only inside a Claude Code cloud container:** `relay-bridge/julius/coding-agent-child-env.runtime.test.ts` "the login probe approves a first-party Max login…".
     - The container sets `ANTHROPIC_BASE_URL` for its own proxy. `classifyClaudeAuth` classifies that as a gateway before it reads the fake CLI.
