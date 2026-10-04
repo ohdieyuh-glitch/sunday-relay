@@ -5102,6 +5102,12 @@ void UWonderlandUiSubsystem::HandleSocialChanged()
 	SocialHubPanel->SetSignIn(Social != nullptr ? Social->GetSignInView() : FWonderlandSignInView());
 	SocialHubPanel->SetSnapshot(Snapshot != nullptr ? *Snapshot : FWonderlandSocialSnapshot(), Snapshot != nullptr,
 		Social != nullptr ? Social->GetSourceLine() : FString(), Social == nullptr || Social->GetService() == nullptr || Social->GetService()->IsDevelopmentPreview());
+	// THE VOICE REDRAWS WITH IT (Second's review: an EOS join that landed later left the panel on CONNECTING): the same SetVoice the
+	// commands use, content only -- the layout is unchanged
+	if (const IWonderlandVoiceService* VoiceNow = Social != nullptr ? Social->GetVoice() : nullptr)
+	{
+		SocialHubPanel->SetVoice(VoiceNow->GetState(), VoiceNow->GetPreviewLabel());
+	}
 }
 
 void UWonderlandUiSubsystem::HandleSocialAnswered(const FString& OperationId, const FString& SubjectId, const FWonderlandSocialActionResult& Answer)

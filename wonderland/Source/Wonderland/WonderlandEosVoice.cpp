@@ -2,12 +2,13 @@
 
 #include "WonderlandSocialLive.h"
 
+#include "Containers/Ticker.h"
 #include "Dom/JsonObject.h"
+#include "HAL/PlatformMisc.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
-#include "Misc/SecureHash.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "IEOSSDKManager.h"
@@ -20,8 +21,8 @@
 struct FWonderlandEosVoice::FImpl
 {
 	IEOSPlatformHandlePtr Platform;
+	/** THE ONE VOICE USER: IVoiceChat is itself an IVoiceChatUser; login, channels and events all go through it. */
 	IVoiceChatPtr VoiceChat;
-	IVoiceChatUser* User = nullptr;
 };
 
 namespace
@@ -41,6 +42,9 @@ namespace
 		int32_t Length = static_cast<int32_t>(sizeof(Buffer));
 		return EOS_ProductUserId_ToString(Id, Buffer, &Length) == EOS_EResult::EOS_Success ? FString(UTF8_TO_TCHAR(Buffer)) : FString();
 	}
+
+	/** Sign-in retries: after 2, 5 and 15 s; then the panel's next JOIN VOICE starts over. */
+	constexpr float EosSignInRetrySeconds[] = { 2.0f, 5.0f, 15.0f };
 }
 
 namespace WonderlandEosVoice
@@ -51,7 +55,19 @@ namespace WonderlandEosVoice
 		{
 			return FString();
 		}
-		return TEXT("#") + FMD5::HashAnsiString(*(TEXT("wlvoice:") + Id)).Left(8);
+		// the backend's own: createHash('sha256').update(id, 'utf8').digest('hex').slice(0, 12)
+		const FTCHARToUTF8 Utf8(*Id);
+		FSHA256Signature Signature;
+		if (!FPlatformMisc::GetSHA256Signature(Utf8.Get(), static_cast<uint32>(Utf8.Length()), Signature))
+		{
+			return TEXT("#?");
+		}
+		return TEXT("#") + Signature.ToString().ToLower().Left(12);
+	}
+
+	FString HashedPuid(const FString& InProductUserId)
+	{
+		return Hashed(InProductUserId.ToLower());
 	}
 
 	bool ReadConfig(const FString& Path, FWonderlandEosVoice::FConfig& Out, FString& OutWhy)
@@ -149,13 +165,12 @@ FWonderlandEosVoice::FWonderlandEosVoice(FWonderlandSocialLiveService* InLive, c
 
 FWonderlandEosVoice::~FWonderlandEosVoice()
 {
-	*Alive = false;
 	if (Impl->VoiceChat.IsValid())
 	{
-		if (Impl->User != nullptr)
+		// a room still held is LEFT, not dropped; then the voice user goes with its instance
+		if (!RoomId.IsEmpty())
 		{
-			Impl->VoiceChat->ReleaseUser(Impl->User);
-			Impl->User = nullptr;
+			Impl->VoiceChat->LeaveChannel(RoomId, FOnVoiceChatChannelLeaveCompleteDelegate());
 		}
 		Impl->VoiceChat->Uninitialize();
 	}
@@ -171,20 +186,22 @@ bool FWonderlandEosVoice::Start(FString& OutWhy)
 		OutWhy = TEXT("the EOS SDK is not initialized in this build");
 		return false;
 	}
-	FEOSSDKPlatformConfig Platform;
-	Platform.Name = TEXT("WonderlandVoice");
-	Platform.ProductId = Config.ProductId;
-	Platform.SandboxId = Config.SandboxId;
-	Platform.DeploymentId = Config.DeploymentId;
-	Platform.ClientId = Config.ClientId;
-	Platform.ClientSecret = Config.ClientSecret;
+	FEOSSDKPlatformConfig PlatformConfig;
+	PlatformConfig.Name = TEXT("WonderlandVoice");
+	PlatformConfig.ProductId = Config.ProductId;
+	PlatformConfig.SandboxId = Config.SandboxId;
+	PlatformConfig.DeploymentId = Config.DeploymentId;
+	PlatformConfig.ClientId = Config.ClientId;
+	PlatformConfig.ClientSecret = Config.ClientSecret;
 	// EACH INSTANCE ITS OWN EOS CACHE, under its own -userdir (Second's review #1: one Windows user's two instances must not share a PUID)
-	Platform.CacheDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("EOS"));
-	Platform.bEnableRTC = true;
-	Platform.bDisableOverlay = true;
-	Platform.bDisableSocialOverlay = true;
-	Sdk->AddPlatformConfig(Platform, true);
-	Impl->Platform = Sdk->CreatePlatform(Platform.Name);
+	PlatformConfig.CacheDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("EOS"));
+	PlatformConfig.bEnableRTC = true;
+	PlatformConfig.bDisableOverlay = true;
+	PlatformConfig.bDisableSocialOverlay = true;
+	Sdk->AddPlatformConfig(PlatformConfig, true);
+	Impl->Platform = Sdk->CreatePlatform(PlatformConfig.Name);
+	// the secret is the SDK manager's now; this object keeps none of it
+	Config.ClientSecret.Reset();
 	if (!Impl->Platform.IsValid())
 	{
 		OutWhy = TEXT("EOS refused to create the platform (check the product, sandbox, deployment and client in the founder's file)");
@@ -204,6 +221,7 @@ void FWonderlandEosVoice::SignIn()
 		OnSignInFailed(TEXT("no EOS Connect interface"));
 		return;
 	}
+	bSigningIn = true;
 	// EOS CONNECT BY DEVICE ID: created once (a duplicate is fine), then the login; an unknown device creates its user
 	FEosCall* Call = new FEosCall{ Alive, this, ConnectApi, FString::Printf(TEXT("Wonderland %s"), *FGuid::NewGuid().ToString().Left(6)) };
 	EOS_Connect_CreateDeviceIdOptions Device = {};
@@ -280,6 +298,7 @@ void FWonderlandEosVoice::SignIn()
 
 void FWonderlandEosVoice::OnSignedIn(const FString& InProductUserId)
 {
+	bSigningIn = false;
 	if (InProductUserId.IsEmpty())
 	{
 		OnSignInFailed(TEXT("no product user id"));
@@ -287,6 +306,7 @@ void FWonderlandEosVoice::OnSignedIn(const FString& InProductUserId)
 	}
 	ProductUserId = InProductUserId;
 	bSignedIn = true;
+	SignInAttempts = 0;
 	// THE DAY-ONE CHECK (Second's review #1): each instance logs its PUID, hashed; two R16 clients must differ
 	UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: signed in as puid %s (cache %s)"), *GetHashedProductUserId(),
 		*WonderlandEosVoice::Hashed(FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir())));
@@ -295,8 +315,24 @@ void FWonderlandEosVoice::OnSignedIn(const FString& InProductUserId)
 
 void FWonderlandEosVoice::OnSignInFailed(const FString& Why)
 {
-	UE_LOG(LogTemp, Warning, TEXT("WLVOICE eos: sign-in failed: %s"), *Why);
+	bSigningIn = false;
+	UE_LOG(LogTemp, Warning, TEXT("WLVOICE eos: sign-in failed (attempt %d): %s"), SignInAttempts + 1, *Why);
 	SetConnection(TEXT("FAILED"), FString::Printf(TEXT("EOS sign-in failed (%s)"), *Why));
+	// TRY AGAIN, a few times, spaced out (Second's review: one failure left voice "still signing in" forever)
+	if (SignInAttempts < static_cast<int32>(UE_ARRAY_COUNT(EosSignInRetrySeconds)))
+	{
+		const float Delay = EosSignInRetrySeconds[SignInAttempts];
+		SignInAttempts += 1;
+		TWeakPtr<bool> WeakAlive = Alive;
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([this, WeakAlive](float)
+		{
+			if (WeakAlive.IsValid() && !bSignedIn && !bSigningIn)
+			{
+				SignIn();
+			}
+			return false;
+		}), Delay);
+	}
 }
 
 void FWonderlandEosVoice::StartVoice()
@@ -307,89 +343,19 @@ void FWonderlandEosVoice::StartVoice()
 		SetConnection(TEXT("FAILED"), TEXT("EOS voice is not in this build"));
 		return;
 	}
-	Impl->VoiceChat = Factory->CreateInstanceWithPlatform(Impl->Platform);
-	if (!Impl->VoiceChat.IsValid() || !Impl->VoiceChat->Initialize())
+	if (!Impl->VoiceChat.IsValid())
 	{
-		SetConnection(TEXT("FAILED"), TEXT("EOS voice did not start"));
-		return;
+		Impl->VoiceChat = Factory->CreateInstanceWithPlatform(Impl->Platform);
+		if (!Impl->VoiceChat.IsValid() || !Impl->VoiceChat->Initialize())
+		{
+			Impl->VoiceChat.Reset();
+			SetConnection(TEXT("FAILED"), TEXT("EOS voice did not start"));
+			return;
+		}
+		BindVoiceEvents();
 	}
-	IVoiceChat* Voice = Impl->VoiceChat.Get();
 	TWeakPtr<bool> WeakAlive = Alive;
-	Voice->OnVoiceChatChannelExited().AddLambda([this, WeakAlive](const FString& Channel, const FVoiceChatResult& Reason)
-	{
-		if (!WeakAlive.IsValid() || Channel != RoomId)
-		{
-			return;
-		}
-		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: EXIT room %s (%s%s)"), *WonderlandEosVoice::Hashed(Channel), bLeaving ? TEXT("left") : TEXT("ended by the server"),
-			Reason.IsSuccess() ? TEXT("") : *FString::Printf(TEXT(", %s"), *Reason.ErrorCode));
-		const bool bAsked = bLeaving;
-		bLeaving = false;
-		RoomId.Reset();
-		State.Participants.Reset();
-		RoomNameByProductId.Reset();
-		SetConnection(TEXT("DISCONNECTED"), bAsked ? FString() : TEXT("removed from the voice room"));
-	});
-	Voice->OnVoiceChatPlayerAdded().AddLambda([this, WeakAlive](const FString& Channel, const FString& Player)
-	{
-		if (!WeakAlive.IsValid() || Channel != RoomId)
-		{
-			return;
-		}
-		const FString UserId = UserIdFor(Player);
-		RoomNameByProductId.Add(Player.ToLower(), Player);
-		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: ADDED %s (puid %s) to room %s"), *UserId, *WonderlandEosVoice::Hashed(Player), *WonderlandEosVoice::Hashed(Channel));
-		if (FindParticipant(UserId) == nullptr)
-		{
-			FWonderlandVoiceParticipant Joined;
-			Joined.UserId = UserId;
-			Joined.bConnected = true;
-			State.Participants.Add(Joined);
-		}
-		Notify();
-	});
-	Voice->OnVoiceChatPlayerRemoved().AddLambda([this, WeakAlive](const FString& Channel, const FString& Player)
-	{
-		if (!WeakAlive.IsValid() || Channel != RoomId)
-		{
-			return;
-		}
-		const FString UserId = UserIdFor(Player);
-		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: REMOVED %s (puid %s) from room %s"), *UserId, *WonderlandEosVoice::Hashed(Player), *WonderlandEosVoice::Hashed(Channel));
-		State.Participants.RemoveAll([&UserId](const FWonderlandVoiceParticipant& P) { return P.UserId == UserId; });
-		Notify();
-	});
-	Voice->OnVoiceChatPlayerTalkingUpdated().AddLambda([this, WeakAlive](const FString& Channel, const FString& Player, bool bTalking)
-	{
-		if (!WeakAlive.IsValid() || Channel != RoomId)
-		{
-			return;
-		}
-		if (FWonderlandVoiceParticipant* P = FindParticipant(UserIdFor(Player)))
-		{
-			if (P->bSpeaking != bTalking)
-			{
-				// THE EVIDENCE "A HEARS B": a REMOTE player's talking, as received through the room
-				UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: TALKING %s %s (puid %s)"), *P->UserId, bTalking ? TEXT("on") : TEXT("off"), *WonderlandEosVoice::Hashed(Player));
-				P->bSpeaking = bTalking && !P->bMicMuted;
-				Notify();
-			}
-		}
-	});
-	Voice->OnVoiceChatPlayerMuteUpdated().AddLambda([this, WeakAlive](const FString& Channel, const FString& Player, bool bMuted)
-	{
-		if (!WeakAlive.IsValid() || Channel != RoomId)
-		{
-			return;
-		}
-		if (FWonderlandVoiceParticipant* P = FindParticipant(UserIdFor(Player)))
-		{
-			P->bMicMuted = bMuted;
-			P->bSpeaking = P->bSpeaking && !bMuted;
-			Notify();
-		}
-	});
-	Voice->Connect(FOnVoiceChatConnectCompleteDelegate::CreateLambda([this, WeakAlive](const FVoiceChatResult& Result)
+	Impl->VoiceChat->Connect(FOnVoiceChatConnectCompleteDelegate::CreateLambda([this, WeakAlive](const FVoiceChatResult& Result)
 	{
 		if (!WeakAlive.IsValid())
 		{
@@ -400,13 +366,7 @@ void FWonderlandEosVoice::StartVoice()
 			SetConnection(TEXT("FAILED"), FString::Printf(TEXT("EOS voice did not connect (%s)"), *Result.ErrorCode));
 			return;
 		}
-		Impl->User = Impl->VoiceChat->CreateUser();
-		if (Impl->User == nullptr)
-		{
-			SetConnection(TEXT("FAILED"), TEXT("EOS voice made no user"));
-			return;
-		}
-		Impl->User->Login(FPlatformMisc::GetPlatformUserForUserIndex(0), ProductUserId, FString(),
+		Impl->VoiceChat->Login(FPlatformMisc::GetPlatformUserForUserIndex(0), ProductUserId, FString(),
 			FOnVoiceChatLoginCompleteDelegate::CreateLambda([this, WeakAlive](const FString&, const FVoiceChatResult& LoginResult)
 		{
 			if (!WeakAlive.IsValid())
@@ -425,21 +385,117 @@ void FWonderlandEosVoice::StartVoice()
 	}));
 }
 
+void FWonderlandEosVoice::BindVoiceEvents()
+{
+	IVoiceChat* Voice = Impl->VoiceChat.Get();
+	TWeakPtr<bool> WeakAlive = Alive;
+	Voice->OnVoiceChatChannelExited().AddLambda([this, WeakAlive](const FString& Channel, const FVoiceChatResult& Reason)
+	{
+		if (!WeakAlive.IsValid() || Channel != RoomId)
+		{
+			return;
+		}
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: EXIT room %s (%s%s)"), *WonderlandEosVoice::Hashed(Channel), bLeaving ? TEXT("left") : TEXT("ended by the server"),
+			Reason.IsSuccess() ? TEXT("") : *FString::Printf(TEXT(", %s"), *Reason.ErrorCode));
+		EndRoom(bLeaving, bLeaving ? FString() : FString(TEXT("removed from the voice room")));
+	});
+	Voice->OnVoiceChatPlayerAdded().AddLambda([this, WeakAlive](const FString& Channel, const FString& Player)
+	{
+		if (!WeakAlive.IsValid() || Channel != RoomId)
+		{
+			return;
+		}
+		const FString Key = Player.ToLower();
+		RoomNameByProductId.Add(Key, Player);
+		if (Key == ProductUserId.ToLower())
+		{
+			return;   // this player: the self row is the panel's own (SelfParticipant)
+		}
+		const bool bBound = UserByProductId.Contains(Key);
+		const FString UserId = UserIdFor(Player);
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: ADDED %s (puid %s) to room %s%s"), *UserId, *WonderlandEosVoice::HashedPuid(Player),
+			*WonderlandEosVoice::Hashed(Channel), bBound ? TEXT("") : TEXT(" -- not yet bound: asking the authority again"));
+		if (FindParticipant(UserId) == nullptr)
+		{
+			FWonderlandVoiceParticipant Joined;
+			Joined.UserId = UserId;
+			Joined.bConnected = true;
+			State.Participants.Add(Joined);
+		}
+		if (!bBound)
+		{
+			// A MEMBER BOUND AFTER THIS CLIENT JOINED (Second's review #3): the join answer is idempotent; ask again and re-name them
+			RefreshAudience();
+		}
+		Notify();
+	});
+	Voice->OnVoiceChatPlayerRemoved().AddLambda([this, WeakAlive](const FString& Channel, const FString& Player)
+	{
+		if (!WeakAlive.IsValid() || Channel != RoomId)
+		{
+			return;
+		}
+		const FString UserId = UserIdFor(Player);
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: REMOVED %s (puid %s) from room %s"), *UserId, *WonderlandEosVoice::HashedPuid(Player), *WonderlandEosVoice::Hashed(Channel));
+		State.Participants.RemoveAll([&UserId](const FWonderlandVoiceParticipant& P) { return P.UserId == UserId; });
+		Notify();
+	});
+	Voice->OnVoiceChatPlayerTalkingUpdated().AddLambda([this, WeakAlive](const FString& Channel, const FString& Player, bool bTalking)
+	{
+		if (!WeakAlive.IsValid() || Channel != RoomId)
+		{
+			return;
+		}
+		const bool bSelf = Player.ToLower() == ProductUserId.ToLower();
+		FWonderlandVoiceParticipant* P = bSelf ? &SelfParticipant() : FindParticipant(UserIdFor(Player));
+		if (P != nullptr && P->bSpeaking != (bTalking && !P->bMicMuted))
+		{
+			// THE EVIDENCE "A HEARS B": a REMOTE player's talking, as received through the room
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: TALKING %s %s (puid %s%s)"), *P->UserId, bTalking ? TEXT("on") : TEXT("off"),
+				*WonderlandEosVoice::HashedPuid(Player), bSelf ? TEXT(", this player") : TEXT(", received"));
+			P->bSpeaking = bTalking && !P->bMicMuted;
+			Notify();
+		}
+	});
+	// THIS LISTENER muted (or unmuted) a REMOTE player (EOSVoiceChatUser: SetPlayerMuted's echo) -- a local mute, never the other's mic
+	Voice->OnVoiceChatPlayerMuteUpdated().AddLambda([this, WeakAlive](const FString& Channel, const FString& Player, bool bMuted)
+	{
+		if (!WeakAlive.IsValid() || Channel != RoomId)
+		{
+			return;
+		}
+		if (FWonderlandVoiceParticipant* P = FindParticipant(UserIdFor(Player)))
+		{
+			P->bMutedLocally = bMuted;
+			Notify();
+		}
+	});
+}
+
 FWonderlandVoiceCommandResult FWonderlandEosVoice::Connect(const FString& PartyId, const TArray<FString>& MemberIds)
 {
-	if (!bVoiceReady || Impl->User == nullptr)
+	if (!bVoiceReady)
 	{
+		if (!bSignedIn && !bSigningIn)
+		{
+			// a sign-in that gave up is started over by the next JOIN VOICE
+			SignInAttempts = 0;
+			SignIn();
+			return FWonderlandVoiceCommandResult{false, TEXT("signing in to EOS again; try JOIN VOICE in a moment")};
+		}
 		return FWonderlandVoiceCommandResult{false, bSignedIn ? TEXT("voice is still starting") : TEXT("still signing in to EOS")};
 	}
 	if (Live == nullptr)
 	{
 		return FWonderlandVoiceCommandResult{false, TEXT("not connected to Wonderland's social service")};
 	}
-	if (!RoomId.IsEmpty())
+	if (!RoomId.IsEmpty() || bJoining)
 	{
-		return FWonderlandVoiceCommandResult{false, TEXT("already in the voice room")};
+		return FWonderlandVoiceCommandResult{false, TEXT("already in (or joining) the voice room")};
 	}
 	State.PartyId = PartyId;
+	bJoining = true;
+	bCancelJoin = false;
 	SetConnection(TEXT("CONNECTING"), FString());
 	TWeakPtr<bool> WeakAlive = Alive;
 	// THE AUTHORITY DECIDES: the room token is minted for this PUID only if the signed-in player may be in this party's voice
@@ -449,92 +505,221 @@ FWonderlandVoiceCommandResult FWonderlandEosVoice::Connect(const FString& PartyI
 		{
 			return;
 		}
+		if (bCancelJoin)
+		{
+			bJoining = false;
+			bCancelJoin = false;
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: join cancelled before the room (LEAVE)"));
+			SetConnection(TEXT("DISCONNECTED"), FString());
+			return;
+		}
 		FString Provider;
 		FString Room;
 		FString Token;
 		if (Status != 200 || !Data.IsValid() || !Data->TryGetStringField(TEXT("providerId"), Provider) || Provider != TEXT("eos")
 			|| !Data->TryGetStringField(TEXT("roomId"), Room) || !Data->TryGetStringField(TEXT("participantToken"), Token))
 		{
+			bJoining = false;
 			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: join refused (%d)"), Status);
-			SetConnection(TEXT("FAILED"), Status == 503 ? FString(WonderlandVoice::TransportPending()) : FString::Printf(TEXT("the party's voice refused (%d %s)"), Status, *Problem));
+			SetConnection(TEXT("FAILED"), Status == 503 ? FString(TEXT("the server has no voice provider (503)"))
+				: FString::Printf(TEXT("the party's voice refused (%d %s)"), Status, *Problem));
 			return;
 		}
-		// the authority's bindings, PUID -> member (only these name anyone in the room)
-		UserByProductId.Reset();
-		const TArray<TSharedPtr<FJsonValue>>* Audience = nullptr;
-		if (Data->TryGetArrayField(TEXT("audience"), Audience))
-		{
-			for (const TSharedPtr<FJsonValue>& Member : *Audience)
-			{
-				const TSharedPtr<FJsonObject>* MemberObject = nullptr;
-				FString UserId;
-				FString Puid;
-				// the authority's pairs are {userId, puid} (Second's 7ef54bdd), PUIDs lowercase: matched case-blind
-				if (Member.IsValid() && Member->TryGetObject(MemberObject) && (*MemberObject)->TryGetStringField(TEXT("userId"), UserId)
-					&& (*MemberObject)->TryGetStringField(TEXT("puid"), Puid))
-				{
-					UserByProductId.Add(Puid.ToLower(), UserId);
-				}
-			}
-		}
-		RoomId = Room;
+		ReadAudience(Data);
+		LastRoomId = Room;
+		LastToken = Token;
 		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: joining room %s for party %s (%d members bound)"), *WonderlandEosVoice::Hashed(Room),
 			*WonderlandEosVoice::Hashed(PartyId), UserByProductId.Num());
-		Impl->User->JoinChannel(Room, Token, EVoiceChatChannelType::NonPositional,
-			FOnVoiceChatChannelJoinCompleteDelegate::CreateLambda([this, WeakAlive](const FString& Channel, const FVoiceChatResult& Result)
-		{
-			if (!WeakAlive.IsValid())
-			{
-				return;
-			}
-			if (!Result.IsSuccess())
-			{
-				UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: join of room %s failed (%s)"), *WonderlandEosVoice::Hashed(Channel), *Result.ErrorCode);
-				RoomId.Reset();
-				SetConnection(TEXT("FAILED"), FString::Printf(TEXT("could not join the voice room (%s)"), *Result.ErrorCode));
-				return;
-			}
-			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: JOINED room %s"), *WonderlandEosVoice::Hashed(Channel));
-			SetConnection(TEXT("CONNECTED"), FString());
-		}));
+		JoinRoom(Room, Token);
 	});
 	return FWonderlandVoiceCommandResult{true, FString()};
 }
 
+void FWonderlandEosVoice::JoinRoom(const FString& Room, const FString& Token)
+{
+	RoomId = Room;
+	TWeakPtr<bool> WeakAlive = Alive;
+	Impl->VoiceChat->JoinChannel(Room, Token, EVoiceChatChannelType::NonPositional,
+		FOnVoiceChatChannelJoinCompleteDelegate::CreateLambda([this, WeakAlive](const FString& Channel, const FVoiceChatResult& Result)
+	{
+		if (!WeakAlive.IsValid())
+		{
+			return;
+		}
+		bJoining = false;
+		if (!Result.IsSuccess())
+		{
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: join of room %s failed (%s)"), *WonderlandEosVoice::Hashed(Channel), *Result.ErrorCode);
+			if (Channel == RoomId)
+			{
+				RoomId.Reset();
+			}
+			bCancelJoin = false;
+			SetConnection(TEXT("FAILED"), FString::Printf(TEXT("could not join the voice room (%s)"), *Result.ErrorCode));
+			return;
+		}
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: JOINED room %s"), *WonderlandEosVoice::Hashed(Channel));
+		if (bCancelJoin)
+		{
+			// a LEAVE pressed while the channel was joining: leave it now that it can be left
+			bCancelJoin = false;
+			bLeaving = true;
+			Impl->VoiceChat->LeaveChannel(Channel, FOnVoiceChatChannelLeaveCompleteDelegate());
+			return;
+		}
+		FWonderlandVoiceParticipant& Self = SelfParticipant();
+		Self.bConnected = true;
+		Self.bMicMuted = bLocalMicMuted;
+		SetConnection(TEXT("CONNECTED"), FString());
+	}));
+}
+
+void FWonderlandEosVoice::ReadAudience(const TSharedPtr<FJsonObject>& Data)
+{
+	// the authority's pairs are {userId, puid} (Second's 7ef54bdd), PUIDs lowercase: matched case-blind; this player's own is known
+	UserByProductId.Reset();
+	if (!ProductUserId.IsEmpty() && !ViewerId().IsEmpty())
+	{
+		UserByProductId.Add(ProductUserId.ToLower(), ViewerId());
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Audience = nullptr;
+	if (!Data.IsValid() || !Data->TryGetArrayField(TEXT("audience"), Audience))
+	{
+		return;
+	}
+	for (const TSharedPtr<FJsonValue>& Member : *Audience)
+	{
+		const TSharedPtr<FJsonObject>* MemberObject = nullptr;
+		FString UserId;
+		FString Puid;
+		if (Member.IsValid() && Member->TryGetObject(MemberObject) && (*MemberObject)->TryGetStringField(TEXT("userId"), UserId)
+			&& (*MemberObject)->TryGetStringField(TEXT("puid"), Puid))
+		{
+			UserByProductId.Add(Puid.ToLower(), UserId);
+		}
+	}
+}
+
+void FWonderlandEosVoice::RefreshAudience()
+{
+	const double NowSeconds = FPlatformTime::Seconds();
+	if (bAudienceRefreshing || Live == nullptr || State.PartyId.IsEmpty() || NowSeconds - LastAudienceRefresh < 1.0)
+	{
+		return;
+	}
+	bAudienceRefreshing = true;
+	LastAudienceRefresh = NowSeconds;
+	TWeakPtr<bool> WeakAlive = Alive;
+	Live->JoinVoice(State.PartyId, ProductUserId, [this, WeakAlive](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString&)
+	{
+		if (!WeakAlive.IsValid())
+		{
+			return;
+		}
+		bAudienceRefreshing = false;
+		if (Status != 200 || !Data.IsValid())
+		{
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: audience refresh refused (%d)"), Status);
+			return;
+		}
+		ReadAudience(Data);
+		// re-name every row the room showed before its member was bound; the token of this answer is not used (the room is held)
+		for (FWonderlandVoiceParticipant& P : State.Participants)
+		{
+			if (P.UserId.StartsWith(TEXT("unbound ")))
+			{
+				for (const TPair<FString, FString>& Room : RoomNameByProductId)
+				{
+					if (P.UserId == FString::Printf(TEXT("unbound %s"), *WonderlandEosVoice::HashedPuid(Room.Key)))
+					{
+						if (const FString* Named = UserByProductId.Find(Room.Key))
+						{
+							UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: puid %s is %s"), *WonderlandEosVoice::HashedPuid(Room.Key), **Named);
+							P.UserId = *Named;
+						}
+					}
+				}
+			}
+		}
+		Notify();
+	});
+}
+
 FWonderlandVoiceCommandResult FWonderlandEosVoice::Disconnect()
 {
-	if (Impl->User == nullptr || RoomId.IsEmpty())
+	if (bLeaving)
+	{
+		return FWonderlandVoiceCommandResult{true, FString()};   // already leaving (the panel, or the party gone)
+	}
+	if (bJoining)
+	{
+		// LEAVE while the join is under way: it is cancelled as soon as it lands (the authority's answer, or the channel's)
+		bCancelJoin = true;
+		SetConnection(TEXT("DISCONNECTED"), TEXT("leaving"));
+		return FWonderlandVoiceCommandResult{true, FString()};
+	}
+	if (!Impl->VoiceChat.IsValid() || RoomId.IsEmpty())
 	{
 		return FWonderlandVoiceCommandResult{false, TEXT("not in a voice room")};
 	}
 	bLeaving = true;
-	Impl->User->LeaveChannel(RoomId, FOnVoiceChatChannelLeaveCompleteDelegate());
+	TWeakPtr<bool> WeakAlive = Alive;
+	const FString Leaving = RoomId;
+	Impl->VoiceChat->LeaveChannel(Leaving, FOnVoiceChatChannelLeaveCompleteDelegate::CreateLambda([this, WeakAlive, Leaving](const FString&, const FVoiceChatResult& Result)
+	{
+		// the channel's EXIT normally cleans up; if it never comes (a leave that failed), the room is let go here all the same
+		if (WeakAlive.IsValid() && RoomId == Leaving)
+		{
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: left room %s%s"), *WonderlandEosVoice::Hashed(Leaving), Result.IsSuccess() ? TEXT("") : TEXT(" (the leave reported an error)"));
+			EndRoom(true, FString());
+		}
+	}));
 	return FWonderlandVoiceCommandResult{true, FString()};
+}
+
+void FWonderlandEosVoice::EndRoom(bool bAsked, const FString& Why)
+{
+	bLeaving = false;
+	bJoining = false;
+	bCancelJoin = false;
+	RoomId.Reset();
+	State.Participants.Reset();
+	RoomNameByProductId.Reset();
+	SetConnection(TEXT("DISCONNECTED"), bAsked ? FString() : Why);
 }
 
 FWonderlandVoiceCommandResult FWonderlandEosVoice::SetMicMuted(bool bMuted)
 {
-	if (Impl->User == nullptr)
+	if (!Impl->VoiceChat.IsValid())
 	{
 		return FWonderlandVoiceCommandResult{false, TEXT("voice is not started")};
 	}
-	Impl->User->SetAudioInputDeviceMuted(bMuted);
+	Impl->VoiceChat->SetAudioInputDeviceMuted(bMuted);
+	bLocalMicMuted = bMuted;
+	// the panel reads this player's own row for MUTE MIC / UNMUTE MIC (Second's review #4)
+	if (!RoomId.IsEmpty())
+	{
+		FWonderlandVoiceParticipant& Self = SelfParticipant();
+		Self.bMicMuted = bMuted;
+		Self.bSpeaking = Self.bSpeaking && !bMuted;
+	}
 	UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: mic %s"), bMuted ? TEXT("muted") : TEXT("open"));
+	Notify();
 	return FWonderlandVoiceCommandResult{true, FString()};
 }
 
 FWonderlandVoiceCommandResult FWonderlandEosVoice::SetLocallyMuted(const FString& UserId, bool bMuted)
 {
-	if (Impl->User == nullptr)
+	if (!Impl->VoiceChat.IsValid())
 	{
 		return FWonderlandVoiceCommandResult{false, TEXT("voice is not started")};
 	}
 	for (const TPair<FString, FString>& Bound : UserByProductId)
 	{
-		if (Bound.Value == UserId)
+		if (Bound.Value == UserId && Bound.Key != ProductUserId.ToLower())
 		{
 			const FString* RoomName = RoomNameByProductId.Find(Bound.Key);
-			Impl->User->SetPlayerMuted(RoomName != nullptr ? *RoomName : Bound.Key, bMuted);
+			Impl->VoiceChat->SetPlayerMuted(RoomName != nullptr ? *RoomName : Bound.Key, bMuted);
 			if (FWonderlandVoiceParticipant* P = FindParticipant(UserId))
 			{
 				P->bMutedLocally = bMuted;
@@ -544,6 +729,33 @@ FWonderlandVoiceCommandResult FWonderlandEosVoice::SetLocallyMuted(const FString
 		}
 	}
 	return FWonderlandVoiceCommandResult{false, TEXT("not in this voice room")};
+}
+
+bool FWonderlandEosVoice::ReplayLastToken()
+{
+	if (!Impl->VoiceChat.IsValid() || LastRoomId.IsEmpty() || LastToken.IsEmpty())
+	{
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: REPLAY -- no earlier room token in this session"));
+		return false;
+	}
+	UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: REPLAY of the last token for room %s (after a removal it must be refused)"), *WonderlandEosVoice::Hashed(LastRoomId));
+	TWeakPtr<bool> WeakAlive = Alive;
+	Impl->VoiceChat->JoinChannel(LastRoomId, LastToken, EVoiceChatChannelType::NonPositional,
+		FOnVoiceChatChannelJoinCompleteDelegate::CreateLambda([this, WeakAlive](const FString& Channel, const FVoiceChatResult& Result)
+	{
+		if (!WeakAlive.IsValid())
+		{
+			return;
+		}
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: REPLAY result for room %s: %s"), *WonderlandEosVoice::Hashed(Channel),
+			Result.IsSuccess() ? TEXT("JOINED (the old token still works)") : *FString::Printf(TEXT("refused (%s)"), *Result.ErrorCode));
+		if (Result.IsSuccess())
+		{
+			// evidence only: never stay in a room by a token the authority took back
+			Impl->VoiceChat->LeaveChannel(Channel, FOnVoiceChatChannelLeaveCompleteDelegate());
+		}
+	}));
+	return true;
 }
 
 FString FWonderlandEosVoice::Describe() const
@@ -563,7 +775,7 @@ FString FWonderlandEosVoice::Describe() const
 
 FString FWonderlandEosVoice::GetHashedProductUserId() const
 {
-	return WonderlandEosVoice::Hashed(ProductUserId);
+	return WonderlandEosVoice::HashedPuid(ProductUserId);
 }
 
 void FWonderlandEosVoice::SetConnection(const TCHAR* Connection, const FString& Detail)
@@ -578,6 +790,25 @@ void FWonderlandEosVoice::Notify()
 	Changed.Broadcast();
 }
 
+FString FWonderlandEosVoice::ViewerId() const
+{
+	return Live != nullptr ? Live->GetSnapshot().ViewerId : FString();
+}
+
+FWonderlandVoiceParticipant& FWonderlandEosVoice::SelfParticipant()
+{
+	const FString Me = ViewerId();
+	if (FWonderlandVoiceParticipant* Found = FindParticipant(Me))
+	{
+		return *Found;
+	}
+	FWonderlandVoiceParticipant Self;
+	Self.UserId = Me;
+	Self.bConnected = true;
+	Self.bMicMuted = bLocalMicMuted;
+	return State.Participants.Add_GetRef(Self);
+}
+
 FWonderlandVoiceParticipant* FWonderlandEosVoice::FindParticipant(const FString& UserId)
 {
 	return State.Participants.FindByPredicate([&UserId](const FWonderlandVoiceParticipant& P) { return P.UserId == UserId; });
@@ -587,5 +818,5 @@ FString FWonderlandEosVoice::UserIdFor(const FString& InProductUserId) const
 {
 	// a PUID the authority did not bind is shown as an unknown member, never as anyone it might claim to be
 	const FString* UserId = UserByProductId.Find(InProductUserId.ToLower());
-	return UserId != nullptr ? *UserId : FString::Printf(TEXT("unbound %s"), *WonderlandEosVoice::Hashed(InProductUserId));
+	return UserId != nullptr ? *UserId : FString::Printf(TEXT("unbound %s"), *WonderlandEosVoice::HashedPuid(InProductUserId));
 }

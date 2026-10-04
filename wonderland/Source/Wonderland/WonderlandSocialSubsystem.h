@@ -39,6 +39,8 @@ public:
 
 	/** Party voice: never null. A build with no provider has the honest UNAVAILABLE service. */
 	IWonderlandVoiceService* GetVoice() const { return Voice.Get(); }
+	/** The live session's EOS voice, or null (no -WLEosConfig, a preview, no live session): QA and the R16 evidence commands. */
+	class FWonderlandEosVoice* GetEosVoice() const;
 	/** The preview's scripted voice, in a developer session with a preview; null otherwise. */
 	FWonderlandVoicePreviewScript* GetVoicePreview() const { return VoicePreview; }
 
@@ -90,7 +92,9 @@ private:
 	void DropLive();
 	/** Make this the service, forward its changes and answers, and tell the surfaces. */
 	void Adopt(TUniquePtr<IWonderlandSocialService> NewService);
-	void HandleServiceChanged() { SocialChanged.Broadcast(); }
+	/** A view or the voice changed: leave a voice room whose party is gone (Second's review), then tell every surface. */
+	void HandleServiceChanged();
+	void LeaveVoiceIfPartyGone();
 	void HandleServiceAnswered(const FString& Op, const FString& Subject, const FWonderlandSocialActionResult& Answer) { SocialAnswered.Broadcast(Op, Subject, Answer); }
 	void HandleWorldChanged();
 	bool TickRemotePlayers(float DeltaSeconds);

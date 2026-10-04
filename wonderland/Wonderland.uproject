@@ -32,6 +32,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "VoiceChat",
+			"Enabled": true
+		},
+		{
 			"Name": "ModelingToolsEditorMode",
 			"Enabled": true,
 			"TargetAllowList": [
