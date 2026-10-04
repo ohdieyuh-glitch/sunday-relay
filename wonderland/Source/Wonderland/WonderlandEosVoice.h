@@ -72,8 +72,10 @@ private:
 	bool bSignedIn = false;
 	bool bVoiceReady = false;
 	bool bLeaving = false;
-	/** PUID -> userId, as the authority's join answer bound them (Second's review #2: only server-bound mappings). */
+	/** lowercased PUID -> userId, as the authority's join answer bound them (Second's review #2: only server-bound mappings). */
 	TMap<FString, FString> UserByProductId;
+	/** The room's own spelling of each player (lowercased PUID -> as EOS names it), for muting one. */
+	TMap<FString, FString> RoomNameByProductId;
 	/** Callbacks hold a weak copy: a service replaced or destroyed mid-request is never called back into. */
 	TSharedRef<bool> Alive = MakeShared<bool>(true);
 };

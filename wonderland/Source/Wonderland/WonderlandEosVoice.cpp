@@ -293,6 +293,7 @@ void FWonderlandEosVoice::StartVoice()
 		bLeaving = false;
 		RoomId.Reset();
 		State.Participants.Reset();
+		RoomNameByProductId.Reset();
 		SetConnection(TEXT("DISCONNECTED"), bAsked ? FString() : TEXT("removed from the voice room"));
 	});
 	Voice->OnVoiceChatPlayerAdded().AddLambda([this, WeakAlive](const FString& Channel, const FString& Player)
@@ -302,6 +303,7 @@ void FWonderlandEosVoice::StartVoice()
 			return;
 		}
 		const FString UserId = UserIdFor(Player);
+		RoomNameByProductId.Add(Player.ToLower(), Player);
 		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: ADDED %s (puid %s) to room %s"), *UserId, *WonderlandEosVoice::Hashed(Player), *WonderlandEosVoice::Hashed(Channel));
 		if (FindParticipant(UserId) == nullptr)
 		{
@@ -433,10 +435,11 @@ FWonderlandVoiceCommandResult FWonderlandEosVoice::Connect(const FString& PartyI
 				const TSharedPtr<FJsonObject>* MemberObject = nullptr;
 				FString UserId;
 				FString Puid;
+				// the authority's pairs are {userId, puid} (Second's 7ef54bdd), PUIDs lowercase: matched case-blind
 				if (Member.IsValid() && Member->TryGetObject(MemberObject) && (*MemberObject)->TryGetStringField(TEXT("userId"), UserId)
-					&& (*MemberObject)->TryGetStringField(TEXT("eosProductUserId"), Puid))
+					&& (*MemberObject)->TryGetStringField(TEXT("puid"), Puid))
 				{
-					UserByProductId.Add(Puid, UserId);
+					UserByProductId.Add(Puid.ToLower(), UserId);
 				}
 			}
 		}
@@ -496,7 +499,8 @@ FWonderlandVoiceCommandResult FWonderlandEosVoice::SetLocallyMuted(const FString
 	{
 		if (Bound.Value == UserId)
 		{
-			Impl->User->SetPlayerMuted(Bound.Key, bMuted);
+			const FString* RoomName = RoomNameByProductId.Find(Bound.Key);
+			Impl->User->SetPlayerMuted(RoomName != nullptr ? *RoomName : Bound.Key, bMuted);
 			if (FWonderlandVoiceParticipant* P = FindParticipant(UserId))
 			{
 				P->bMutedLocally = bMuted;
@@ -548,6 +552,6 @@ FWonderlandVoiceParticipant* FWonderlandEosVoice::FindParticipant(const FString&
 FString FWonderlandEosVoice::UserIdFor(const FString& InProductUserId) const
 {
 	// a PUID the authority did not bind is shown as an unknown member, never as anyone it might claim to be
-	const FString* UserId = UserByProductId.Find(InProductUserId);
+	const FString* UserId = UserByProductId.Find(InProductUserId.ToLower());
 	return UserId != nullptr ? *UserId : FString::Printf(TEXT("unbound %s"), *WonderlandEosVoice::Hashed(InProductUserId));
 }
