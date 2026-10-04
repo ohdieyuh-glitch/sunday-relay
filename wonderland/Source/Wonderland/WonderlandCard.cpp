@@ -1072,6 +1072,39 @@ namespace
 	const TCHAR* const CardValueSymbols = TEXT("!@#$%^&*+=?~|<>\\;:,\"'`()[]{}");
 	const TCHAR* const CardQuoteOpen = TEXT("\"'`\u201C\u2018\u00AB");
 	const TCHAR* const CardQuoteClose = TEXT("\"'`\u201D\u2019\u00BB");
+	// r8 (QaRuleParticle; Second's r7 leak 7): a label in another script with its particle, the value after a space -- longest first
+	const TCHAR* const CardParticles[] = { TEXT("\u306F\u3001"), TEXT("\uB294"), TEXT("\uC740"), TEXT("\uC774"), TEXT("\uAC00"), TEXT("\uB97C"),
+		TEXT("\uC744"), TEXT("\u306F"), TEXT("\u304C"), TEXT("\u3092"), TEXT("\u662F"), TEXT("\u4E3A"), TEXT("\u70BA"), TEXT("\uFF1A"), TEXT(":") };
+	// r8 (QaRuleCommonPw; Second's r7 leak 6): the commonest weak passwords -- after "is" at a clause's end they ARE the password
+	const TCHAR* const CardCommonPasswords[] = { TEXT("secret"), TEXT("password"), TEXT("passw0rd"), TEXT("changeme"), TEXT("letmein"), TEXT("admin"),
+		TEXT("default"), TEXT("welcome"), TEXT("qwerty"), TEXT("guest"), TEXT("root"), TEXT("test"), TEXT("pass"), TEXT("master"), TEXT("login"),
+		TEXT("iloveyou"), TEXT("monkey"), TEXT("dragon"), TEXT("sunshine"), TEXT("abc123"), TEXT("123456"), TEXT("12345678"), TEXT("111111") };
+	// r8 (QaRuleEchoPipe; Second's r7 leak 5): what reads a password from a pipe, and what writes one into it
+	const TCHAR* const CardPipeConsumers[] = { TEXT("--password-stdin"), TEXT("--pass-stdin"), TEXT("chpasswd"), TEXT("passwd"), TEXT("--stdin") };
+	const TCHAR* const CardEchoWords[] = { TEXT("echo"), TEXT("printf") };
+	// r8 (QaRulePerf; Second's r7 (A)): the screen's bounds -- a longer text is read in windows that overlap, a value's continuation stops
+	// after so many pieces (and is judged whole only while it could be one value), and so many distinct values go to EVERY OCCURRENCE
+	constexpr int32 CardScreenCap = 4096;
+	constexpr int32 CardScreenOverlap = 512;
+	constexpr int32 CardMaxRun = 64;
+	constexpr int32 CardMaxValues = 64;
+	constexpr int32 CardMaxWhole = 512;
+
+	/** r8 (QaRuleParticle): a label in another script followed by its particle ("<Korean password>neun", "<Japanese password>wa"). */
+	bool CardParticleLabel(const FString& OrigWord)
+	{
+		const FString Orig = CardTrimEdges(OrigWord);
+		for (const TCHAR* Particle : CardParticles)
+		{
+			const int32 ParticleLen = FCString::Strlen(Particle);
+			if (Orig.Len() > ParticleLen && Orig.EndsWith(Particle, ESearchCase::CaseSensitive)
+				&& CardOneOf(Orig.LeftChop(ParticleLen), CardForeignScriptLabels))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
 
 	FString CardBare(const FString& Text)
 	{
@@ -1202,7 +1235,11 @@ namespace
 		{
 			Orig.LeftChopInline(1);
 		}
-		return CardOneOf(Orig, CardForeignScriptLabels) ? ECardLabelKind::Normal : ECardLabelKind::None;
+		if (CardOneOf(Orig, CardForeignScriptLabels))
+		{
+			return ECardLabelKind::Normal;
+		}
+		return CardRuleOn(FWonderlandCardStore::QaRuleParticle) && CardParticleLabel(OrigWord) ? ECardLabelKind::Normal : ECardLabelKind::None;
 	}
 
 	ECardLabelKind CardLabelKind(const FString& RawWord, const FString& OrigWord = FString(), const FString& PreviousLower = FString())
@@ -1631,6 +1668,82 @@ namespace
 		return Out;
 	}
 
+	/** r8 (QaRuleExpand; Second's r7 leak 1): the compatibility EXPANSIONS a one-for-one fold cannot make, or null. */
+	const TCHAR* CardExpansion(uint32 Code)
+	{
+		switch (Code)
+		{
+		case 0x00DF: return TEXT("ss");
+		case 0x1E9E: return TEXT("SS");
+		case 0xFB00: return TEXT("ff");
+		case 0xFB01: return TEXT("fi");
+		case 0xFB02: return TEXT("fl");
+		case 0xFB03: return TEXT("ffi");
+		case 0xFB04: return TEXT("ffl");
+		case 0xFB05: return TEXT("st");
+		case 0xFB06: return TEXT("st");
+		case 0x0132: return TEXT("IJ");
+		case 0x0133: return TEXT("ij");
+		case 0x01C4: return TEXT("DZ");
+		case 0x01C5: return TEXT("Dz");
+		case 0x01C6: return TEXT("dz");
+		case 0x01C7: return TEXT("LJ");
+		case 0x01C8: return TEXT("Lj");
+		case 0x01C9: return TEXT("lj");
+		case 0x01CA: return TEXT("NJ");
+		case 0x01CB: return TEXT("Nj");
+		case 0x01CC: return TEXT("nj");
+		case 0x01F1: return TEXT("DZ");
+		case 0x01F2: return TEXT("Dz");
+		case 0x01F3: return TEXT("dz");
+		default: return nullptr;
+		}
+	}
+
+	/**
+	 * THE MATCHING VIEW WITH ITS EXPANSIONS (r8, QaRuleExpand): CardFold, and each character a one-for-one fold cannot spell -- the sharp s, a
+	 * ligature, a digraph -- written as its letters, so "pa<eszett>word" and "con<fi>g password" read as typed words. OutStart[i] / OutEnd[i]
+	 * are the characters of Text that the folded character i stands for: a find on the folded view lands on the characters as typed.
+	 */
+	FString CardFoldMapped(const FString& Text, TArray<int32>& OutStart, TArray<int32>& OutEnd)
+	{
+		const FString Base = CardFold(Text);
+		bool bAny = false;
+		if (CardRuleOn(FWonderlandCardStore::QaRuleFold) && CardRuleOn(FWonderlandCardStore::QaRuleExpand))
+		{
+			for (const TCHAR Char : Text)
+			{
+				if (CardExpansion(static_cast<uint32>(Char)) != nullptr)
+				{
+					bAny = true;
+					break;
+				}
+			}
+		}
+		OutStart.Reset(Text.Len() + 8);
+		OutEnd.Reset(Text.Len() + 8);
+		FString Out;
+		Out.Reserve(Text.Len() + 8);
+		for (int32 At = 0; At < Text.Len(); ++At)
+		{
+			const TCHAR* Expansion = bAny ? CardExpansion(static_cast<uint32>(Text[At])) : nullptr;
+			if (Expansion != nullptr)
+			{
+				for (const TCHAR* Letter = Expansion; *Letter != 0; ++Letter)
+				{
+					Out.AppendChar(*Letter);
+					OutStart.Add(At);
+					OutEnd.Add(At + 1);
+				}
+				continue;
+			}
+			Out.AppendChar(Base[At]);
+			OutStart.Add(At);
+			OutEnd.Add(At + 1);
+		}
+		return Out;
+	}
+
 	/** A surrogate pair that draws nothing: a TAG character (U+E0000-E007F, r6), and (r7) a variation selector of the supplement
 	 *  (U+E0100-E01EF), a musical format control (U+1D173-1D17A), a shorthand format control (U+1BCA0-1BCA3). */
 	bool CardInvisiblePair(uint32 High, uint32 Low)
@@ -1991,7 +2104,27 @@ namespace
 				return true;
 			}
 		}
-		return CardOneOf(CardTrimEdges(Orig), CardForeignScriptLabels);
+		return CardOneOf(CardTrimEdges(Orig), CardForeignScriptLabels) || (CardRuleOn(FWonderlandCardStore::QaRuleParticle) && CardParticleLabel(Orig));
+	}
+
+	/** r8 (QaRuleNameWeak): a NAME's shape inside a noun phrase ("the Server42xq box"): letters and digits, '-' '_' '.', and nothing else. */
+	bool CardNameShaped(const FString& Word)
+	{
+		if (Word.IsEmpty() || Word.Len() > 24)
+		{
+			return false;
+		}
+		bool bLetter = false;
+		for (const TCHAR Char : Word)
+		{
+			const bool bAsciiLetter = (Char >= TEXT('a') && Char <= TEXT('z')) || (Char >= TEXT('A') && Char <= TEXT('Z'));
+			if (!bAsciiLetter && !CardAsciiDigit(Char) && Char != TEXT('-') && Char != TEXT('_') && Char != TEXT('.'))
+			{
+				return false;
+			}
+			bLetter |= bAsciiLetter;
+		}
+		return bLetter;
 	}
 
 	/** Where the redaction's own marker stands -- and (r7, QaRuleFold) the same words typed in another case: "[A key: ...]<value>" is the
@@ -2065,8 +2198,73 @@ namespace
 void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>& OutFinds)
 {
 	OutFinds.Reset();
-	// r7: THE MATCHING VIEW (CardFold) -- the same length, every index the same character; the words are read from it, the finds land on Text
-	const FString Folded = CardFold(Text);
+	const bool bPerf = CardRuleOn(QaRulePerf);
+	// r8 (QaRulePerf; Second's attack on r7 (A)): A LONG TEXT IN WINDOWS -- CardScreenCap characters each, overlapping by CardScreenOverlap and
+	// cut at a space, so the time is linear in the length and every word (and every label's window, a few words long) is read whole in at
+	// least one of them. r7 read any length at once, and parts of it grew with the square: 2.8k characters of wrapped words took ~3 s
+	if (bPerf && Text.Len() > CardScreenCap)
+	{
+		TArray<FSecretFind> Part;
+		int32 From = 0;
+		while (From < Text.Len())
+		{
+			int32 To = FMath::Min(Text.Len(), From + CardScreenCap);
+			if (To < Text.Len())
+			{
+				for (int32 At = To - 1; At >= From + CardScreenCap / 2; --At)
+				{
+					if (Text[At] == TEXT(' '))
+					{
+						To = At;
+						break;
+					}
+				}
+			}
+			FindSecrets(Text.Mid(From, To - From), Part);
+			for (FSecretFind& Find : Part)
+			{
+				Find.Start += From;
+				OutFinds.Add(Find);
+			}
+			if (To >= Text.Len())
+			{
+				break;
+			}
+			const int32 Next = FMath::Max(From + 1, To - CardScreenOverlap);
+			int32 Back = INDEX_NONE;
+			for (int32 At = Next; At > From; --At)
+			{
+				if (Text[At] == TEXT(' '))
+				{
+					Back = At;
+					break;
+				}
+			}
+			From = Back != INDEX_NONE ? Back + 1 : Next;
+		}
+		CardMergeFinds(OutFinds);
+		return;
+	}
+	// r7: THE MATCHING VIEW (CardFold) -- every index the same character; the words are read from it, the finds land on Text. r8
+	// (QaRuleExpand): with its expansions ("pa<eszett>word" is "password"), each folded character mapped to the characters it stands for
+	TArray<int32> FoldStart;
+	TArray<int32> FoldEnd;
+	const FString Folded = CardFoldMapped(Text, FoldStart, FoldEnd);
+	auto OrigOf = [&Text, &FoldStart, &FoldEnd](int32 From, int32 To)
+	{
+		return To > From ? Text.Mid(FoldStart[From], FoldEnd[To - 1] - FoldStart[From]) : FString();
+	};
+	auto OntoText = [&Text, &FoldStart, &FoldEnd](int32 From, int32 To, FSecretFind& Find)
+	{
+		if (To <= From)
+		{
+			Find.Start = From < FoldStart.Num() ? FoldStart[From] : Text.Len();
+			Find.Length = 0;
+			return;
+		}
+		Find.Start = FoldStart[From];
+		Find.Length = FoldEnd[To - 1] - FoldStart[From];
+	};
 	// THE WORDS FIRST, each as typed (Raw: a label's ':' or '=' is read from it) and trimmed (Word), so a label can reach its value
 	struct FSpan
 	{
@@ -2086,13 +2284,13 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		FString Orig;
 	};
 	TArray<FSpan> Spans;
-	const int32 Count = Text.Len();
+	const int32 Count = Folded.Len();
 	// THE REDACTION'S OWN MARKER IS NOT A KEY (round 4's SI3), AND IT IS ITS OWN TOKEN (r6, Second's MAJOR 2): a word never crosses a
 	// marker's edge, so "[marker]<value>" or "<value>[marker]" is not exempt for overlapping it
 	const FString RedactionMark = CardRedactionMarker();
 	const bool bMarkerSplit = CardRuleOn(QaRuleMarkerSplit);
 	const TArray<TPair<int32, int32>> Marks = CardFindMarks(Folded);
-	auto AddWords = [&Folded, &Text, &Spans, &Marks, bMarkerSplit](int32 From, int32 To)
+	auto AddWords = [&Folded, &Spans, &Marks, &OrigOf, bMarkerSplit](int32 From, int32 To)
 	{
 		int32 At = From;
 		while (At < To)
@@ -2125,8 +2323,7 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 				&& ((WordStart == From && Marks.ContainsByPredicate([From](const TPair<int32, int32>& Mark) { return Mark.Value == From; }))
 					|| (WordEnd == To && Marks.ContainsByPredicate([To](const TPair<int32, int32>& Mark) { return Mark.Key == To; })));
 			const FString Word = Folded.Mid(Start, FMath::Max(End - Start, 0));
-			Spans.Add({ Start, End, Folded.Mid(WordStart, At - WordStart), Word, Word.ToLower(), WordStart, At, false, bGlued,
-				Text.Mid(Start, FMath::Max(End - Start, 0)) });
+			Spans.Add({ Start, End, Folded.Mid(WordStart, At - WordStart), Word, Word.ToLower(), WordStart, At, false, bGlued, OrigOf(Start, End) });
 		}
 	};
 	if (bMarkerSplit)
@@ -2169,13 +2366,17 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 	TArray<TPair<FString, uint8>> Values;
 	const bool bClasses = CardRuleOn(QaRuleClasses);
 	const bool bContinue = CardRuleOn(QaRuleContinue);
-	auto Take = [&](int32 At, const FString& Value, ECardLabelKind Kind, bool bAssigned, const FString& Rest, bool bForced)
+	auto Take = [&](int32 At, const FString& Value, ECardLabelKind Kind, bool bAssigned, const FString& Rest, bool bForced, bool bWeakOnly = false)
 	{
 		if (At < 0 || At >= NumSpans || Spans[At].bMarker || Spans[At].Word.IsEmpty())
 		{
 			return;
 		}
-		const uint8 Got = (!bClasses || bForced || CardValueStrong(Value, Kind, bAssigned) || (!Rest.IsEmpty() && CardValueStrong(Rest, Kind, bAssigned))) ? 2 : 1;
+		uint8 Got = (!bClasses || bForced || CardValueStrong(Value, Kind, bAssigned) || (!Rest.IsEmpty() && CardValueStrong(Rest, Kind, bAssigned))) ? 2 : 1;
+		if (bWeakOnly && bClasses)
+		{
+			Got = 1;   // r8: a name the noun phrase held, taken for want of a value -- redacted, and /keep gives it back
+		}
 		Class[At] = FMath::Max(Class[At], Got);
 		TakenWhole[At] = true;
 		if (!Value.IsEmpty() && bContinue)
@@ -2233,8 +2434,19 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		}
 		int32 Quoted = 0;
 		int32 Phrase = 0;
+		int32 Steps = 0;
+		FString WholeValue = CardTrimEdges(Spans[First].Word);
+		while (WholeValue.EndsWith(TEXT("\\"), ESearchCase::CaseSensitive))
+		{
+			WholeValue.LeftChopInline(1);
+		}
 		while (true)
 		{
+			++Steps;
+			if (bPerf && Steps > CardMaxRun)
+			{
+				return;   // r8: no value runs on for more than CardMaxRun pieces
+			}
 			int32 Next = Last + 1;
 			if (Next < NumSpans && Spans[Next].bMarker)
 			{
@@ -2267,18 +2479,31 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 				Quoted += bWrapped ? 0 : 1;
 				Take(Next, Candidate.Word, Kind, true, FString(), false);
 				Run.Add(Next);
-				// ONE VALUE, judged whole: a wrapped or quoted password's pieces are as strong as all of it
-				FString Whole;
-				for (const int32 Piece : Run)
+				// ONE VALUE, judged whole: a wrapped or quoted password's pieces are as strong as all of it -- r8: grown one piece at a time
+				// (r7 rebuilt it from every piece at every piece: the square of the run) and judged while it could still be one value
+				if (bPerf)
 				{
-					FString Part = CardTrimEdges(Spans[Piece].Word);
-					while (Part.EndsWith(TEXT("\\"), ESearchCase::CaseSensitive))
+					FString Added = CardTrimEdges(Candidate.Word);
+					while (Added.EndsWith(TEXT("\\"), ESearchCase::CaseSensitive))
 					{
-						Part.LeftChopInline(1);
+						Added.LeftChopInline(1);
 					}
-					Whole += Part;
+					WholeValue += Added;
 				}
-				if (bClasses && CardValueStrong(Whole, Kind, true))
+				else
+				{
+					WholeValue.Reset();
+					for (const int32 Piece : Run)
+					{
+						FString Part = CardTrimEdges(Spans[Piece].Word);
+						while (Part.EndsWith(TEXT("\\"), ESearchCase::CaseSensitive))
+						{
+							Part.LeftChopInline(1);
+						}
+						WholeValue += Part;
+					}
+				}
+				if (bClasses && (!bPerf || WholeValue.Len() <= CardMaxWhole) && CardValueStrong(WholeValue, Kind, true))
 				{
 					for (const int32 Piece : Run)
 					{
@@ -2331,9 +2556,14 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		bool bAfterQualifier = false;
 		int32 Qualifiers = 0;
 		int32 Pending = INDEX_NONE;
+		bool bPendingName = false;
+		bool bTaken = false;
+		// r8 (QaRuleWideWindow; Second's r7 leaks 2/3): "the password for the brand new shared prod db box is X" -- a noun phrase of nine words
+		const bool bWide = bNounPhrase && CardRuleOn(QaRuleWideWindow);
+		const int32 MaxQualifiers = bWide ? 10 : 5;
 		int32 Next = Index + 1;
 		int32 Skips = 0;
-		const int32 MaxSkips = bNounPhrase ? 8 : 4;
+		const int32 MaxSkips = bWide ? 14 : (bNounPhrase ? 8 : 4);
 		while (Next < NumSpans && Skips <= MaxSkips)
 		{
 			const FSpan& Candidate = Spans[Next];
@@ -2420,7 +2650,7 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 			const FString Previous1 = Next - 1 > Index ? Spans[Next - 1].Lower : FString();
 			const FString Previous2 = Next - 2 > Index ? Spans[Next - 2].Lower : FString();
 			bool bQualifierPlace = CardOneOf(Previous1, CardPrepositions) || (CardOneOf(Previous1, CardArticles) && CardOneOf(Previous2, CardPrepositions));
-			if (bNounPhrase && bPrepositionSeen && !bCopula && Qualifiers < 5)
+			if (bNounPhrase && bPrepositionSeen && !bCopula && Qualifiers < MaxQualifiers)
 			{
 				bQualifierPlace = true;
 			}
@@ -2464,11 +2694,35 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 					continue;
 				}
 			}
+			// r8 (QaRuleNameWeak; Second's r7): a NAME inside the noun phrase ("the password for the Server42xq box is X") is held like any
+			// qualifier and taken -- weak, so /keep gives it back -- only when no value follows; r7 took it CERTAIN and looked no further
+			if (CardRuleOn(QaRuleNameWeak) && bNounPhrase && bPrepositionSeen && !bCopula && !bStrong && Qualifiers < MaxQualifiers
+				&& CardValueLike(Candidate.Word, Kind) && CardNameShaped(Candidate.Word))
+			{
+				if (Pending == INDEX_NONE)
+				{
+					Pending = Next;
+					bPendingName = true;
+				}
+				bAfterQualifier = true;
+				++Qualifiers;
+				++Next;
+				++Skips;
+				continue;
+			}
 			// AN AUTHORIZATION SCHEME IS NOT THE CREDENTIAL (Second, 10-03): "Authorization: Bearer X" keeps "Bearer" readable and takes X
 			if (Label.Lower.Contains(TEXT("authorization")) && CardAuthScheme(Lower) && Next + 1 < NumSpans)
 			{
 				++Next;
 				continue;
+			}
+			// r8 (QaRuleCommonPw; Second's r7 leak 6): "the password is secret!" -- a common weak password at the clause's end IS the password
+			if (CardRuleOn(QaRuleCommonPw) && bFillers && bWordy && (bCopula || bStrong) && CardOneOf(Lower, CardCommonPasswords) && ClauseFinal(Next))
+			{
+				Take(Next, Candidate.Word, Kind, bStrong, FString(), false);
+				bTaken = true;
+				Pending = INDEX_NONE;
+				break;
 			}
 			if (bFillers && CardOneOf(Lower, CardNonValues) && !(Kind == ECardLabelKind::Phrase && bStrong && !ClauseFinal(Next)))
 			{
@@ -2496,15 +2750,129 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 			{
 				Take(Next, Candidate.Word, Kind, bStrong, FString(), false);
 				ContinueAfter(Next, Kind);
+				bTaken = true;
 				Pending = INDEX_NONE;
 			}
 			break;
 		}
+		// r8 (QaRuleCopulaScan; Second's r7 leak 4): "the password associated with the account is X" -- the window stopped on a word that is
+		// neither a connector nor a qualifier; within ten words, inside the clause and before another label, an "is" / "was" / '=' / ':'
+		// and then a value-like word (never a URL) is the label's value, whatever the words between
+		if (!bTaken && CardRuleOn(QaRuleCopulaScan))
+		{
+			const int32 Limit = FMath::Min(NumSpans, Index + 11);
+			for (int32 At = Index + 1; At < Limit; ++At)
+			{
+				const FSpan& Word = Spans[At];
+				if (Word.bMarker)
+				{
+					break;
+				}
+				const FString& BeforeRaw = Spans[At - 1].Raw;
+				if (At > Index + 1 && BeforeRaw.Len() > 0 && FCString::Strchr(TEXT(".;!?"), BeforeRaw[BeforeRaw.Len() - 1]) != nullptr)
+				{
+					break;
+				}
+				if (CardOneOf(Word.Lower, CardClauseJoins))
+				{
+					break;
+				}
+				if (At > Index + 1 && CardIsAlphaWord(Word.Word) && CardKindOfBare(CardBare(Word.Lower)) != ECardLabelKind::None)
+				{
+					break;   // another label: its own window reads what follows
+				}
+				const bool bAssign = CardOneOf(Word.Raw, CardStrongConnectors) || Word.Raw.EndsWith(TEXT(":"), ESearchCase::CaseSensitive)
+					|| Word.Raw.EndsWith(TEXT("="), ESearchCase::CaseSensitive);
+				if (!CardOneOf(Word.Lower, CardCopulas) && !bAssign)
+				{
+					continue;
+				}
+				int32 ValueAt = At + 1;
+				while (ValueAt < NumSpans && !Spans[ValueAt].bMarker && CardOneOf(Spans[ValueAt].Lower, CardFillers))
+				{
+					++ValueAt;
+				}
+				if (ValueAt < NumSpans && !Spans[ValueAt].bMarker)
+				{
+					const FSpan& Value = Spans[ValueAt];
+					if (!Value.Word.IsEmpty() && CardValueLike(Value.Word, Kind) && !CardOneOf(Value.Lower, CardNonValues) && !CardOneOf(Value.Lower, CardStopwords)
+						&& !Value.Word.Contains(TEXT("://")) && !Value.Lower.StartsWith(TEXT("www."))
+						&& !(CardIsAlphaWord(Value.Word) && CardKindOfBare(CardBare(Value.Lower)) != ECardLabelKind::None))
+					{
+						Take(ValueAt, Value.Word, Kind, bAssign, FString(), false);
+						ContinueAfter(ValueAt, Kind);
+						Pending = INDEX_NONE;
+					}
+				}
+				break;
+			}
+		}
 		if (Pending != INDEX_NONE)
 		{
-			Take(Pending, Spans[Pending].Word, Kind, false, FString(), false);
+			Take(Pending, Spans[Pending].Word, Kind, false, FString(), false, bPendingName);
 		}
 	};
+	// r8: each word's FIRST place, read once (r7 looked back over every earlier word for every CLI flag: the square of the length)
+	TMap<FString, int32> FirstAt;
+	for (int32 Index = 0; Index < NumSpans; ++Index)
+	{
+		if (!Spans[Index].bMarker && !FirstAt.Contains(Spans[Index].Lower))
+		{
+			FirstAt.Add(Spans[Index].Lower, Index);
+		}
+	}
+	// r8 (QaRuleEchoPipe; Second's r7 leak 5): "echo X | docker login --password-stdin", "echo 'user:X' | chpasswd", "echo X | sudo -S cmd" --
+	// what echo or printf writes into a pipe that a password reader drinks from is the password
+	if (CardRuleOn(QaRuleEchoPipe))
+	{
+		for (int32 Index = 0; Index < NumSpans; ++Index)
+		{
+			if (Spans[Index].bMarker || !CardOneOf(Spans[Index].Lower, CardEchoWords))
+			{
+				continue;
+			}
+			int32 Bar = INDEX_NONE;
+			for (int32 At = Index + 1; At < FMath::Min(NumSpans, Index + 8); ++At)
+			{
+				if (Spans[At].bMarker)
+				{
+					break;
+				}
+				if (Spans[At].Raw.StartsWith(TEXT("|"), ESearchCase::CaseSensitive))
+				{
+					Bar = At;
+					break;
+				}
+			}
+			if (Bar == INDEX_NONE)
+			{
+				continue;
+			}
+			bool bConsumer = false;
+			for (int32 At = Bar + 1; At < FMath::Min(NumSpans, Bar + 10) && !bConsumer; ++At)
+			{
+				const FString& Raw = Spans[At].Raw;
+				if (Raw == TEXT(";") || Raw == TEXT("&&") || Raw == TEXT("||") || Raw.EndsWith(TEXT(";"), ESearchCase::CaseSensitive))
+				{
+					break;
+				}
+				bConsumer = CardOneOf(Spans[At].Lower, CardPipeConsumers) || (Spans[At].Lower == TEXT("-s") && Spans[At - 1].Lower == TEXT("sudo"));
+			}
+			if (!bConsumer)
+			{
+				continue;
+			}
+			for (int32 At = Index + 1; At < Bar; ++At)
+			{
+				const FString& Word = Spans[At].Word;
+				if (Word.IsEmpty() || Spans[At].bMarker || (Word.StartsWith(TEXT("-"), ESearchCase::CaseSensitive) && Word.Len() <= 3) || Word.Contains(TEXT("%")))
+				{
+					continue;   // echo's own flags, printf's format
+				}
+				Take(At, Word, ECardLabelKind::Normal, true, FString(), false);
+			}
+		}
+	}
 	int32 Pem = 0;
 	bool bInPem = false;
 	for (int32 Index = 0; Index < NumSpans; ++Index)
@@ -2638,9 +3006,17 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 					continue;
 				}
 				bool bAfterCommand = false;
-				for (int32 Before = 0; Before < Index && !bAfterCommand; ++Before)
+				if (bPerf)
 				{
-					bAfterCommand = Spans[Before].Lower.Equals(Cli.Command, ESearchCase::CaseSensitive);
+					const int32* CommandAt = FirstAt.Find(FString(Cli.Command));
+					bAfterCommand = CommandAt != nullptr && *CommandAt < Index;
+				}
+				else
+				{
+					for (int32 Before = 0; Before < Index && !bAfterCommand; ++Before)
+					{
+						bAfterCommand = Spans[Before].Lower.Equals(Cli.Command, ESearchCase::CaseSensitive);
+					}
 				}
 				if (!bAfterCommand)
 				{
@@ -2693,6 +3069,28 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 	// "passwords").
 	if (bContinue)
 	{
+		if (bPerf)
+		{
+			// r8: each distinct value once, at its strongest, at most CardMaxValues of them (r7 searched every word for every value found,
+			// each repeat again: 88k characters took 1.4 s in Second's port)
+			TArray<TPair<FString, uint8>> Distinct;
+			TMap<FString, int32> Seen;
+			for (const TPair<FString, uint8>& Found : Values)
+			{
+				if (const int32* Already = Seen.Find(Found.Key))
+				{
+					Distinct[*Already].Value = FMath::Max(Distinct[*Already].Value, Found.Value);
+					continue;
+				}
+				if (Distinct.Num() >= CardMaxValues)
+				{
+					continue;
+				}
+				Seen.Add(Found.Key, Distinct.Num());
+				Distinct.Add(Found);
+			}
+			Values = MoveTemp(Distinct);
+		}
 		for (const TPair<FString, uint8>& Found : Values)
 		{
 			const FString& Value = Found.Key;
@@ -2735,8 +3133,7 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		{
 			const bool bWhole = TakenWhole[Index];
 			FSecretFind Find;
-			Find.Start = bWhole ? Span.RawStart : Span.Start;
-			Find.Length = bWhole ? Span.RawEnd - Span.RawStart : Span.End - Span.Start;
+			OntoText(bWhole ? Span.RawStart : Span.Start, bWhole ? Span.RawEnd : Span.End, Find);
 			Find.bCertain = Class[Index] == 2;
 			Find.bWeak = Class[Index] == 1;
 			Find.bShape = Shape[Index];
@@ -2750,7 +3147,9 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		bool bUrl = false;
 		if (CardUrlLooksSecret(Span.Word, bUrl))
 		{
-			OutFinds.Add({ Span.Start, Span.End - Span.Start, false });
+			FSecretFind Find;
+			OntoText(Span.Start, Span.End, Find);
+			OutFinds.Add(Find);
 			continue;
 		}
 		if (bUrl)
@@ -2759,7 +3158,9 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		}
 		if (CardPiecesLookRandom(Span.Word.Replace(TEXT("."), TEXT(" "))))
 		{
-			OutFinds.Add({ Span.Start, Span.End - Span.Start, false });
+			FSecretFind Find;
+			OntoText(Span.Start, Span.End, Find);
+			OutFinds.Add(Find);
 		}
 	}
 }
