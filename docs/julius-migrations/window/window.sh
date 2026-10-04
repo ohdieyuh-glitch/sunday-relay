@@ -76,6 +76,8 @@ utc() { date -u +%Y%m%dT%H%M%SZ; }
 sql_file() { docker exec -i "$CONTAINER" psql -X -q -U "$DBUSER" -d "$DB" -v ON_ERROR_STOP=1 -A -x -F '|' < "$1"; }
 sql_raw() { docker exec -i "$CONTAINER" psql -X -q -U "$DBUSER" -d "$DB" -v ON_ERROR_STOP=1 < "$1"; }
 sql_value() { docker exec -i "$CONTAINER" psql -X -q -U "$DBUSER" -d "$DB" -v ON_ERROR_STOP=1 -A -t -c "$1"; }
+# Row-count lines except the ledger's own table: a migration adds exactly one ledger row, which the ledger check proves.
+data_rows() { grep '^rows ' "$1" | grep -v '^rows relay_wonderland\.schema_migrations = ' ; }
 value_of() { grep -E "^$1\|" "$2" | head -1 | cut -d'|' -f2- || true; }
 check_all() { # check_all "<k=v ...>" file label
   local ok=1 pair key want got
@@ -154,14 +156,14 @@ for M in "${WINDOW[@]}"; do
   sql_raw "$REPO/docs/julius-migrations/030/rowcounts-store.sql" > "$RECORD/rowcounts-after-$M.txt"
   if [ "$M" = "033" ]; then
     # 033 only ADDS tables, all empty: every earlier line is unchanged, and every new line is a social_* table at 0 rows.
-    removed="$(diff <(grep '^rows ' "$RECORD/rowcounts-before-$M.txt") <(grep '^rows ' "$RECORD/rowcounts-after-$M.txt") | grep '^<' || true)"
-    added_bad="$(diff <(grep '^rows ' "$RECORD/rowcounts-before-$M.txt") <(grep '^rows ' "$RECORD/rowcounts-after-$M.txt") | grep '^>' | grep -vE '^> rows relay_wonderland\.social_[a-z_]+ = 0$' || true)"
+    removed="$(diff <(data_rows "$RECORD/rowcounts-before-$M.txt") <(data_rows "$RECORD/rowcounts-after-$M.txt") | grep '^<' || true)"
+    added_bad="$(diff <(data_rows "$RECORD/rowcounts-before-$M.txt") <(data_rows "$RECORD/rowcounts-after-$M.txt") | grep '^>' | grep -vE '^> rows relay_wonderland\.social_[a-z_]+ = 0$' || true)"
     [ -z "$removed" ] && [ -z "$added_bad" ] || stop "033 changed existing rows, or added a non-empty or non-social table"
     say "  rows: unchanged; 033 added only empty social_* tables ok"
   else
-    diff -q <(grep '^rows ' "$RECORD/rowcounts-before-$M.txt") <(grep '^rows ' "$RECORD/rowcounts-after-$M.txt") >/dev/null \
+    diff -q <(data_rows "$RECORD/rowcounts-before-$M.txt") <(data_rows "$RECORD/rowcounts-after-$M.txt") >/dev/null \
       || stop "$M changed row counts"
-    say "  rows: every table's count unchanged ok"
+    say "  rows: every table's count unchanged (the ledger aside, +1 above) ok"
   fi
   sql_raw "$REPO/docs/julius-migrations/030/fingerprint-store.sql" > "$RECORD/fingerprint-after-$M.txt"
   say "  catalog after $M: $(tail -1 "$RECORD/fingerprint-after-$M.txt")"
