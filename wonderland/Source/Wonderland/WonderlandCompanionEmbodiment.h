@@ -207,6 +207,8 @@ public:
 	bool QaLegAt(float SideSign, FVector& OutHip, FVector& OutKnee, FVector& OutSole) const;
 	/** QA (the charging stance, 10-04): this figure's own head joint in WORLD space (its first `head` part). False if none. */
 	bool QaHeadAt(FVector& OutHead) const;
+	/** QA: where this figure's own head faces in the world (its first `head` part's +X, the figures' facing). False if none. */
+	bool QaHeadForward(FVector& OutForward) const;
 	/** QA: this figure's own shoulder on one side (+1 = the +Y arm): its swing, degrees, the angle its hanging axis makes forward of
 	 *  straight down in its parent's frame (continuous past 90, unlike a rotator's pitch). False if none. */
 	bool QaShoulderSwing(float SideSign, float& OutDeg) const;

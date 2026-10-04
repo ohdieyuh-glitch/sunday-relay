@@ -6576,6 +6576,10 @@ namespace
 		int32 TipSamplesSprint = 0;
 		float CamTrailPeak = 0.0f;
 		float CamGapAtOff = -1.0f;
+		// the camera's distance from its resting place on THIS tick and the tick before: the switch-off is seen in the same tick the spring
+		// arm already applied it, so the gap that matters is the one before (Second's review of e5d809bb)
+		float CamGapLast = -1.0f;
+		float CamGapBefore = -1.0f;
 		TArray<FHandTest> Tests;
 		int32 TestIndex = 0;
 		int32 KeyIndex = 0;
@@ -6986,8 +6990,10 @@ namespace
 					}
 					if (H.bCamRestSet && H.LagOffAt < 0.0f)
 					{
-						H.CamTrailPeak = FMath::Max(H.CamTrailPeak, static_cast<float>((CamOff - H.CamOffRest).Size()));
-						H.CamGapAtOff = static_cast<float>((CamOff - H.CamOffRest).Size());
+						const float GapNow = static_cast<float>((CamOff - H.CamOffRest).Size());
+						H.CamTrailPeak = FMath::Max(H.CamTrailPeak, GapNow);
+						H.CamGapBefore = H.CamGapLast;
+						H.CamGapLast = GapNow;
 					}
 					H.LastCamOff = CamOff;
 					H.bHaveCamOff = true;
@@ -7014,6 +7020,7 @@ namespace
 				{
 					H.LagOffAt = In;
 					H.LagOffRatio = LagRatio;
+					H.CamGapAtOff = H.CamGapBefore;
 					// the tick before, this one, and the four after it: the camera's own step must stay a step, never a snap
 					H.CamJumpMax = H.CamJumpBefore;
 					H.CamJumpTicksLeft = 5;
@@ -8173,6 +8180,13 @@ namespace
 		float SoleGap = 0.0f;
 		/** [0] the +Y leg, [1] the -Y leg. */
 		FVector Sole[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		/** Each sole across the Dog (+Y / -Y), from its centre line, uu: planted means sideways too (C5). */
+		float SoleSide[2] = { 0.0f, 0.0f };
+		/** C11: the -Y hip ahead of the +Y hip, uu. C12: the hips' midpoint ahead of the soles'. C13: the head's facing above level, deg. */
+		float LeadAhead = 0.0f;
+		float HipsAhead = 0.0f;
+		float HeadLookDeg = 0.0f;
+		bool bHeadLook = false;
 		float KneeDeg[2] = { -1.0f, -1.0f };
 		/** The swords by the side they are DRAWN on -- [0] the Dog's own left (-Y), [1] its right (+Y) -- never by the slot they came from. */
 		float SwordPresence = 0.0f;
@@ -8241,6 +8255,16 @@ namespace
 		const FVector ToHead = Head - HipMid;
 		R.BendDeg = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(FVector::DotProduct(ToHead, Fwd), ToHead.Z)));
 		R.HeadAhead = static_cast<float>(FVector::DotProduct(ToHead, Fwd));
+		R.LeadAhead = static_cast<float>(FVector::DotProduct(HipMinus - HipPlus, Fwd));
+		R.HipsAhead = static_cast<float>(FVector::DotProduct(HipMid - SoleMid, Fwd));
+		R.SoleSide[0] = static_cast<float>(FVector::DotProduct(SolePlus - Dog->GetActorLocation(), Right));
+		R.SoleSide[1] = static_cast<float>(FVector::DotProduct(SoleMinus - Dog->GetActorLocation(), Right));
+		FVector Facing;
+		if (Dog->QaDrawnHeadForward(Facing))
+		{
+			R.HeadLookDeg = static_cast<float>(FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Facing.Z, -1.0, 1.0))));
+			R.bHeadLook = true;
+		}
 		R.MassAhead = static_cast<float>(FVector::DotProduct((Head + HipMid) * 0.5 - SoleMid, Fwd));
 		R.HipShift = static_cast<float>(FVector::DotProduct(HipMid - SoleMid, Right));
 		R.PelvisDrop = static_cast<float>(HipPlus.Z - HipMinus.Z);
@@ -8300,8 +8324,10 @@ namespace
 	/** ST2C1-C8, each with its line; [0] is unused. */
 	struct FQaChargeVerdict
 	{
-		bool bOk[9] = { true, false, false, false, false, false, false, false, false };
-		FString Line[9];
+		// C1-C8, and (Second's review of 92f83bff: ST2C could not see the turn, the hips' direction or the head) C11 the front side
+		// leading, C12 the hips carried forward, C13 the head looking ahead; 9 and 10 are ST2C9/ST2C10's own ids, judged elsewhere
+		bool bOk[14] = { true };
+		FString Line[14];
 	};
 
 	/**
@@ -8314,7 +8340,7 @@ namespace
 		FQaChargeVerdict V;
 		if (!R.bRead || !U.bRead)
 		{
-			for (int32 CheckNo = 1; CheckNo <= 8; ++CheckNo)
+			for (int32 CheckNo = 1; CheckNo <= 13; ++CheckNo)
 			{
 				V.Line[CheckNo] = FString::Printf(TEXT("the drawn body could not be read (armed: %s, unarmed: %s)"), R.bRead ? TEXT("read") : TEXT("NOT read"),
 					U.bRead ? TEXT("read") : TEXT("NOT read"));
@@ -8336,10 +8362,15 @@ namespace
 		const float GapGrowth = R.SoleGap - U.SoleGap;
 		const float SinkPlus = static_cast<float>(R.Sole[0].Z - U.Sole[0].Z);
 		const float SinkMinus = static_cast<float>(R.Sole[1].Z - U.Sole[1].Z);
-		V.bOk[5] = R.FrontAhead >= 5.0f && R.RearBehind >= 8.0f && GapGrowth <= 6.0f && FMath::Abs(SinkPlus) <= 1.5f && FMath::Abs(SinkMinus) <= 1.5f;
+		// planted SIDEWAYS too (Second's review: front/rear are read from the hips, so both soles could slide across WITH the hips and pass)
+		const float SlidePlus = R.SoleSide[0] - U.SoleSide[0];
+		const float SlideMinus = R.SoleSide[1] - U.SoleSide[1];
+		V.bOk[5] = R.FrontAhead >= 5.0f && R.RearBehind >= 8.0f && GapGrowth <= 6.0f && FMath::Abs(SinkPlus) <= 1.5f && FMath::Abs(SinkMinus) <= 1.5f
+			&& FMath::Abs(SlidePlus) <= 4.0f && FMath::Abs(SlideMinus) <= 4.0f;
 		V.Line[5] = FString::Printf(TEXT("the -Y sole %+.1f uu ahead of the hips (want >= 5), the +Y sole %+.1f behind them (want >= 8); the soles %.1f apart sideways, ")
-			TEXT("%+.1f over the unarmed stand (want <= +6: close, sideways only); each sole %+.1f / %+.1f uu off the ground it stood on (+Y / -Y; within 1.5)"),
-			R.FrontAhead, R.RearBehind, R.SoleGap, GapGrowth, SinkPlus, SinkMinus);
+			TEXT("%+.1f over the unarmed stand (want <= +6: close, sideways only); each sole %+.1f / %+.1f uu off the ground it stood on (+Y / -Y; within 1.5) ")
+			TEXT("and %+.1f / %+.1f uu across from where it stood (within 4)"),
+			R.FrontAhead, R.RearBehind, R.SoleGap, GapGrowth, SinkPlus, SinkMinus, SlidePlus, SlideMinus);
 		// >= 30 (Second's review of 92f83bff: the two-bone solve's reach clamp leaves every solved knee >= ~12 deg, so ">= 8" passed a straight
 		// "loaded" leg; the model gives 44 / 64, and ST2CX6 -- the crouch taken away -- must turn this red)
 		V.bOk[6] = R.KneeDeg[0] >= 30.0f && R.KneeDeg[1] >= 30.0f && R.KneeDeg[0] - U.KneeDeg[0] >= 5.0f && R.KneeDeg[1] - U.KneeDeg[1] >= 5.0f;
@@ -8363,6 +8394,18 @@ namespace
 				bWantGold ? TEXT("gold, >= +0.08") : TEXT("cyan, <= -0.05"), R.TipAbove[Side], R.TipBelowFist[Side], R.TipBehind[Side], R.TipOut[Side]);
 		}
 		V.bOk[8] = bBlades;
+		// C11-C13 (Second's review of 92f83bff), each against the same body unarmed
+		const float Lead = R.LeadAhead - U.LeadAhead;
+		V.bOk[11] = Lead >= 1.0f;
+		V.Line[11] = FString::Printf(TEXT("the front (-Y) side leading: its hip %+.1f uu ahead of the +Y hip, %+.1f over unarmed (want >= +1.0: the body turned into the run)"),
+			R.LeadAhead, Lead);
+		const float HipsGo = R.HipsAhead - U.HipsAhead;
+		V.bOk[12] = HipsGo >= 1.5f;
+		V.Line[12] = FString::Printf(TEXT("the hips carried forward: %+.1f uu ahead of the soles' midpoint, %+.1f over unarmed (want >= +1.5: over the front foot, never back)"),
+			R.HipsAhead, HipsGo);
+		V.bOk[13] = R.bHeadLook && R.HeadLookDeg >= -15.0f && R.HeadLookDeg <= 15.0f;
+		V.Line[13] = FString::Printf(TEXT("the head looking ahead: its facing %+.1f deg from level (want within 15: forward with the chest, eyes on the way ahead; %s)"),
+			R.HeadLookDeg, R.bHeadLook ? TEXT("read") : TEXT("NOT READ"));
 		V.Line[8] = FString::Printf(TEXT("the blades low and TRAILING (presence %.2f, want 1): %s"), R.SwordPresence, *BladeLine);
 		return V;
 	}
@@ -8718,7 +8761,7 @@ namespace
 			{
 				const FQaChargeReading Charge = QaReadCharge(Dog);
 				const FQaChargeVerdict Verdict = QaJudgeCharge(Charge, S.ChargeUnarmed[S.Skin], BodyH);
-				for (int32 CheckNo = 1; CheckNo <= 8; ++CheckNo)
+				for (const int32 CheckNo : { 1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13 })
 				{
 					S.Check(FString::Printf(TEXT("ST2C%d.%d"), CheckNo, S.Skin + 1), Verdict.bOk[CheckNo],
 						FString::Printf(TEXT("%s, the charging stance: %s"), *SkinName, *Verdict.Line[CheckNo]));
@@ -9081,15 +9124,20 @@ namespace
 		case 31:
 		case 32:
 		case 33:
+		case 34:
+		case 35:
+		case 36:
 		{
 			// THE CONTROLS (control-must-be-able-to-fail), on Relay OG, armed: each sign flipped through its own knob -- the bend backward
 			// (Stance.Bend -24), the pelvis the other way (Stance.Tilt -5), the front foot behind (Stance.Front -12) -- must turn ITS check
 			// RED; each knob put back before the next, and ST2CXR then reads the stance green again
 			// ...and the knees: the crouch taken away (Stance.Crouch 0) must turn ST2C6 red (the model: both knees at the reach clamp, 11.9 deg)
+			// ...and the turn backwards (Stance.Turn -8: the rear side leads), the hips carried BACK (Stance.HipForward -3), the head bent with
+			// the body (Stance.HeadKeep 0): C11, C12 and C13 must each go red
 			static const TCHAR* const ControlKnobs[] = { TEXT("wl.Handoff.Stance.Bend"), TEXT("wl.Handoff.Stance.Tilt"), TEXT("wl.Handoff.Stance.Front"),
-				TEXT("wl.Handoff.Stance.Crouch") };
-			static const TCHAR* const ControlFlips[] = { TEXT("-24"), TEXT("-5"), TEXT("-12"), TEXT("0") };
-			static const int32 ControlJudged[] = { 1, 4, 5, 6 };
+				TEXT("wl.Handoff.Stance.Crouch"), TEXT("wl.Handoff.Stance.Turn"), TEXT("wl.Handoff.Stance.HipForward"), TEXT("wl.Handoff.Stance.HeadKeep") };
+			static const TCHAR* const ControlFlips[] = { TEXT("-24"), TEXT("-5"), TEXT("-12"), TEXT("0"), TEXT("-8"), TEXT("-3"), TEXT("0") };
+			static const int32 ControlJudged[] = { 1, 4, 5, 6, 11, 12, 13 };
 			const int32 Which = S.Phase - 30;
 			const int32 Judged = ControlJudged[Which];
 			if (S.ControlKnob.IsEmpty())
@@ -9120,7 +9168,7 @@ namespace
 			Next(S.Phase + 1);
 			return true;
 		}
-		case 34:
+		case 37:
 		{
 			// every knob put back: the stance reads as it did
 			if (In < 1.2f)
@@ -9128,10 +9176,15 @@ namespace
 				return true;
 			}
 			const FQaChargeVerdict Verdict = QaJudgeCharge(QaReadCharge(Dog), S.ChargeUnarmed[0], FMath::Max(Dog->GetCanonBodyHeightUu(), 1.0f));
-			S.Check(TEXT("ST2CXR"), Verdict.bOk[1] && Verdict.bOk[4] && Verdict.bOk[5] && Verdict.bOk[6],
-				FString::Printf(TEXT("the knobs put back, the stance green again: ST2C1 %s (%s); ST2C4 %s (%s); ST2C5 %s (%s); ST2C6 %s (%s)"),
-					Verdict.bOk[1] ? TEXT("green") : TEXT("RED"), *Verdict.Line[1], Verdict.bOk[4] ? TEXT("green") : TEXT("RED"), *Verdict.Line[4],
-					Verdict.bOk[5] ? TEXT("green") : TEXT("RED"), *Verdict.Line[5], Verdict.bOk[6] ? TEXT("green") : TEXT("RED"), *Verdict.Line[6]));
+			FString Back;
+			bool bAllBack = true;
+			for (const int32 CheckNo : { 1, 4, 5, 6, 11, 12, 13 })
+			{
+				bAllBack = bAllBack && Verdict.bOk[CheckNo];
+				Back += FString::Printf(TEXT("%sST2C%d %s (%s)"), Back.IsEmpty() ? TEXT("") : TEXT("; "), CheckNo, Verdict.bOk[CheckNo] ? TEXT("green") : TEXT("RED"),
+					*Verdict.Line[CheckNo]);
+			}
+			S.Check(TEXT("ST2CXR"), bAllBack, FString::Printf(TEXT("the knobs put back, the stance green again: %s"), *Back));
 			QaStanceBeginKnees(S, World);
 			Next(7);
 			return true;
@@ -11590,7 +11643,7 @@ namespace
 			const FQaChargeReading Charge = QaReadCharge(Dog);
 			const FQaChargeVerdict Verdict = QaJudgeCharge(Charge, W.Unarmed, BodyH);
 			FString Marks;
-			for (int32 CheckNo = 1; CheckNo <= 8; ++CheckNo)
+			for (const int32 CheckNo : { 1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13 })
 			{
 				Marks += FString::Printf(TEXT("%sC%d %s"), Marks.IsEmpty() ? TEXT("") : TEXT(" "), CheckNo, Verdict.bOk[CheckNo] ? TEXT("pass") : TEXT("FAIL"));
 			}

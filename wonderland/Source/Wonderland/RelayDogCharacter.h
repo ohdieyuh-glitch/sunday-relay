@@ -390,6 +390,8 @@ public:
 	 */
 	bool QaDrawnBody(FVector& OutHead, FVector& OutHipPlusY, FVector& OutHipMinusY, FVector& OutKneePlusY, FVector& OutKneeMinusY,
 		FVector& OutSolePlusY, FVector& OutSoleMinusY) const;
+	/** QA: where the DRAWN head faces, a unit vector in the world (a worn skin's own head, else Relay OG's). False while unbound. */
+	bool QaDrawnHeadForward(FVector& OutForward) const;
 	int32 GetDashCount() const { return DashCount; }
 	int32 GetDashesRefused() const { return DashesRefused; }
 	/** Normal roaming's acceleration (read at BeginPlay): what every exit from the handoff restores. */

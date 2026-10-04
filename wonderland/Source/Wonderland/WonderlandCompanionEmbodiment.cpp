@@ -1651,6 +1651,19 @@ bool AWonderlandCompanionEmbodiment::QaHeadAt(FVector& OutHead) const
 	return false;
 }
 
+bool AWonderlandCompanionEmbodiment::QaHeadForward(FVector& OutForward) const
+{
+	for (int32 Index = 0; Index < Motions.Num() && Index < PartPivots.Num(); ++Index)
+	{
+		if (Motions[Index].Motion == EWonderlandCompanionMotion::Head && PartPivots[Index] != nullptr)
+		{
+			OutForward = PartPivots[Index]->GetForwardVector();
+			return true;
+		}
+	}
+	return false;
+}
+
 bool AWonderlandCompanionEmbodiment::QaShoulderSwing(float SideSign, float& OutDeg) const
 {
 	for (int32 Index = 0; Index < Motions.Num() && Index < PartPivots.Num(); ++Index)

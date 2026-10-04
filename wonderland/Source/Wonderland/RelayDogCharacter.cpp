@@ -2353,6 +2353,20 @@ bool ARelayDogCharacter::QaDrawnBody(FVector& OutHead, FVector& OutHipPlusY, FVe
 	return bPlusFound && bMinusFound;
 }
 
+bool ARelayDogCharacter::QaDrawnHeadForward(FVector& OutForward) const
+{
+	if (const AWonderlandCompanionEmbodiment* Worn = Costume)
+	{
+		return Worn->QaHeadForward(OutForward);
+	}
+	if (HeadPivot == nullptr)
+	{
+		return false;
+	}
+	OutForward = HeadPivot->GetComponentQuat().RotateVector(FaceForwardInBody).GetSafeNormal();
+	return !OutForward.IsNearlyZero();
+}
+
 FVector ARelayDogCharacter::GetCanonHandWorld(float SideSign) const
 {
 	// THE HAND TIP THE MISSION CHOREOGRAPHY SOLVES ONTO ITS PROPS: the far end of the forearm's meshes (MeasureChain's
