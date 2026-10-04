@@ -378,7 +378,14 @@ function applyOne(
         },
         nowIso,
       );
-      return changed(next, null, [actorId, ...friendIdsOf(state, actorId), ...partyMembers(state, actorId)]);
+      // P1, NOTHING INFERRED FROM THE EVENT STREAM (Second, 10-04): told to the actor and to those who could see their presence
+      // before OR after the change -- going hidden and coming back are told; a change made while hidden from someone (an activity,
+      // a sign-out) is told to nobody else, or its timing would say the hidden player is there.
+      if (!next.ok) return next;
+      const seers = [...friendIdsOf(state, actorId), ...partyMembers(state, actorId)].filter(
+        (id) => !presenceHiddenFrom(state, id, actorId) || !presenceHiddenFrom(next.value, id, actorId),
+      );
+      return changed(next, null, [actorId, ...seers]);
     }
     case 'privacy.update_self': {
       const patch: Record<string, SocialAudience> = {};

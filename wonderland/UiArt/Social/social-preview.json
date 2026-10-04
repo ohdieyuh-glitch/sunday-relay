@@ -100,7 +100,8 @@
         "block": false,
         "report": false
       },
-      "restrictedReason": null
+      "restrictedReason": null,
+      "availability": "AVAILABLE"
     },
     "relationship": "SELF",
     "mutualFriendIds": [],
@@ -623,7 +624,8 @@
           "block": false,
           "report": false
         },
-        "restrictedReason": null
+        "restrictedReason": null,
+        "availability": "AVAILABLE"
       },
       "relationship": "SELF",
       "mutualFriendIds": [],

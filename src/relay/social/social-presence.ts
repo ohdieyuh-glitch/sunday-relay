@@ -196,6 +196,8 @@ export function resolvePresenceFor(state: SocialState, viewerId: SocialUserId, s
       lastSeenAtIso: seesPresence && presence.availability !== 'APPEAR_OFFLINE' ? presence.lastSeenAtIso : null,
       can: baseActions,
       restrictedReason: seesPresence ? 'OFFLINE' : privacy.presenceVisibility === 'FRIENDS' ? 'FRIENDS_ONLY' : 'PRIVATE',
+      // the player's own choice, to them alone
+      ...(self ? { availability: presence.availability } : {}),
     };
   }
 
@@ -260,6 +262,8 @@ export function resolvePresenceFor(state: SocialState, viewerId: SocialUserId, s
     lastSeenAtIso: presence.lastSeenAtIso,
     can,
     restrictedReason: activityHidden || (presence.location !== null && location === null) ? (friend ? 'PRIVATE' : 'FRIENDS_ONLY') : null,
+    // the player's own choice, to them alone: SELF is exempt from APPEAR_OFFLINE above, so onlineState cannot say it
+    ...(self ? { availability: presence.availability } : {}),
   };
 }
 

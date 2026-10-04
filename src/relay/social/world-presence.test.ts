@@ -5,6 +5,7 @@ import { blockUser } from './social-friends';
 import { recentPlayersViewFor } from './social-parties';
 import { resolvePresenceFor } from './social-presence';
 import type { SocialState } from './social-state';
+import { friendIdsOf } from './social-state';
 import {
   WORLD_AVATAR_STALE_MS,
   WORLD_PUBLIC_CAPACITY,
@@ -470,5 +471,64 @@ describe("the founder's 10-04 ruling P3: ONE canonical visibility rule, and no s
     const read = applySocialOperation(s, 'privacy.read_self', U.KAI, { ids: [], body: {}, query: {} }, at(0), emptyWorldState());
     expect(read.ok).toBe(true);
     if (read.ok) expect(JSON.stringify(read.value.data)).not.toContain('appearInRecentPlayers');
+  });
+});
+
+describe("the presence control (founder 10-04, CORE's Hub): the player's own choice, to them alone; nothing inferred from events (Second)", () => {
+  const snapshotOf = (s: SocialState, who: string) => {
+    const r = applySocialOperation(s, 'snapshot.read', who, { ids: [], body: {}, query: {} }, at(900), emptyWorldState());
+    if (!r.ok) throw new Error(r.error.message);
+    return r.value.data as { self: { presence: Record<string, unknown> } };
+  };
+  /** Every object anywhere in a view that is ABOUT this user (carries their userId). */
+  const aboutUser = (value: unknown, userId: string, out: Record<string, unknown>[] = []): Record<string, unknown>[] => {
+    if (Array.isArray(value)) for (const v of value) aboutUser(v, userId, out);
+    else if (value !== null && typeof value === 'object') {
+      const o = value as Record<string, unknown>;
+      if (o.userId === userId) out.push(o);
+      for (const v of Object.values(o)) aboutUser(v, userId, out);
+    }
+    return out;
+  };
+  const update = (s: SocialState, who: string, body: Record<string, unknown>, ms: number) => {
+    const r = applySocialOperation(s, 'presence.update_self', who, { ids: [], body, query: {} }, at(ms), emptyWorldState());
+    if (!r.ok) throw new Error(r.error.message);
+    return r.value;
+  };
+
+  it("snapshot.self.presence.availability is the player's own choice -- APPEAR_OFFLINE included -- and no other player's snapshot carries it for them", () => {
+    let s = createSocialFixture();
+    for (const availability of ['AWAY', 'BUSY', 'APPEAR_OFFLINE', 'AVAILABLE'] as const) {
+      s = update(s, U.KAI, { availability }, 100).state;
+      expect(snapshotOf(s, U.KAI).self.presence.availability, availability).toBe(availability);
+      for (const viewer of Object.keys(s.users).filter((id) => id !== U.KAI)) {
+        const about = aboutUser(snapshotOf(s, viewer), U.KAI);
+        for (const o of about) expect(Object.keys(o), `${viewer} reading Kai at ${availability}`).not.toContain('availability');
+      }
+    }
+    // the control: the others DO read Kai (the walk is not blind), and what they see is the result -- appearing offline reads OFFLINE
+    expect(aboutUser(snapshotOf(s, U.NOVA), U.KAI).length).toBeGreaterThan(0);
+    s = update(s, U.KAI, { availability: 'APPEAR_OFFLINE' }, 200).state;
+    expect(resolvePresenceFor(s, U.NOVA, U.KAI)?.onlineState).toBe('OFFLINE');
+    expect(snapshotOf(s, U.KAI).self.presence.onlineState).toBe('ONLINE'); // why the field exists: SELF reads ONLINE
+  });
+
+  it('a presence change is told only to those who could see it before or after: going hidden and coming back are told; a change made while hidden is told to nobody else', () => {
+    let s = update(createSocialFixture(), U.KAI, { availability: 'AVAILABLE', connected: true }, 100).state;
+    const toldOf = (body: Record<string, unknown>, ms: number) => {
+      const out = update(s, U.KAI, body, ms);
+      s = out.state;
+      return [...out.audience].sort();
+    };
+    const visible = toldOf({ activityDetail: 'in the open' }, 200);
+    expect(visible).toEqual(expect.arrayContaining([U.KAI, ...friendIdsOf(s, U.KAI)]));
+    expect(visible.length).toBeGreaterThan(3);
+    expect(toldOf({ availability: 'APPEAR_OFFLINE' }, 300)).toEqual(visible); // going hidden: their views change
+    expect(toldOf({ activityDetail: 'while hidden' }, 400)).toEqual([U.KAI]); // a change while hidden: nobody else
+    expect(toldOf({ connected: false }, 450)).toEqual([U.KAI]); // signing out while hidden: nobody learns when
+    expect(toldOf({ connected: true, availability: 'BUSY' }, 500)).toEqual(visible); // coming back: told
+    // an audience that leaves the friends out hides the same way
+    s = { ...s, users: { ...s.users, [U.KAI]: { ...s.users[U.KAI], privacy: { ...s.users[U.KAI].privacy, presenceVisibility: 'NOBODY' } } } };
+    expect(toldOf({ activityDetail: 'to nobody' }, 600)).toEqual([U.KAI]);
   });
 });

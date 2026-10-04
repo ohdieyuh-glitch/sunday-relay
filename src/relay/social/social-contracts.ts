@@ -183,6 +183,12 @@ export interface UserPresenceView {
   readonly can: SocialActionAvailability;
   /** Why something is hidden or refused, for a tooltip -- never the subject's settings verbatim. */
   readonly restrictedReason: SocialRestrictedReason | null;
+  /**
+   * The player's OWN chosen availability: in their own view (SELF) only, never in anyone else's view of them. Their Hub's
+   * presence control shows what they chose -- APPEAR_OFFLINE included, which their own onlineState does not show -- while
+   * everybody else sees only the result (founder 10-04: the presence control in the Social Hub).
+   */
+  readonly availability?: SocialAvailability;
 }
 
 /** The founder's list of presence states, as one headline per person per viewer. */
