@@ -1271,7 +1271,8 @@ void SWonderlandWelcomePanel::Construct(const FArguments& InArgs)
 							"Julius and the AI companions are not connected in this build, and nothing here calls an AI service. "
 							"Tasks you write in the agent terminal (press +, then type the objective) are saved as QUEUED Mission "
 							"Contracts on this PC, and the Missions panel can play a SIMULATED mission so you can see how one unfolds. "
-							"Wonderland is single-player for now. Your skin, colours, settings and tasks are saved on this PC.")))
+							"Friends, messages, parties and voice open with /social in the agent terminal, once you sign in to a Wonderland "
+							"server. Your skin, colours, settings and tasks are saved on this PC.")))
 						.Font(WonderlandUi::Sans(10)).ColorAndOpacity(WonderlandUi::Cream(0.80f)).AutoWrapText(true)
 					]
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 18.0f, 0.0f, 0.0f)
