@@ -45,7 +45,6 @@ import {
   declineFriendRequest,
   fileReport,
   pendingRequestsFor,
-  recentPlayersFor,
   removeFriend,
   sendFriendRequest,
   setMute,
@@ -63,6 +62,7 @@ import {
   promotePartyLeader,
   removePartyMember,
   reconcileBlockedParties,
+  recentPlayersViewFor,
   separateForBlock,
   setPartyRules,
   setSelfMuted,
@@ -317,7 +317,7 @@ function applyOne(
     case 'requests.list':
       return unchanged(state, pendingRequestsFor(state, actorId));
     case 'recent.list':
-      return unchanged(state, recentPlayersFor(state, actorId));
+      return unchanged(state, recentPlayersViewFor(state, actorId));
     case 'conversations.list':
       return unchanged(state, conversationsFor(state, actorId));
     case 'messages.list': {

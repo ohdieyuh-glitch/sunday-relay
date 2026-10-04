@@ -327,7 +327,11 @@ export interface RecentPlayerEntry {
   readonly ownerId: SocialUserId;
   readonly userId: SocialUserId;
   readonly context: RecentPlayerContext;
-  /** e.g. the session name or "GVE: Tower Lane". Profile-safe. */
+  /**
+   * e.g. the session name or "GVE: Tower Lane". Profile-safe. For a PARTY meeting it is STORED as the party's id -- the label's
+   * source -- and shown to each viewer through recentPlayersViewFor (social-parties.ts): the party's name only while that viewer
+   * may see that party (never across a wall), else "Party". No stored label ever names a person.
+   */
   readonly contextLabel: string;
   readonly metAtIso: string;
 }

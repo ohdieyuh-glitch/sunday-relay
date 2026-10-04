@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applySocialOperation, type SocialCommandOutcome } from './social-commands';
 import { createSocialFixture, FIXTURE_USERS as U } from './social-fixtures';
-import { partyInvitesFor } from './social-parties';
+import { partyInvitesFor, recentPlayersViewFor } from './social-parties';
 import { conversationsFor } from './social-conversations';
 import { buildSocialView } from './social-preview';
 import { partyOf, type SocialState } from './social-state';
@@ -227,5 +227,38 @@ describe('D7 / ruling (b): a block hides the pair\'s DM from both; an unfriended
     expect(op(s, U.KAI, 'messages.list', {}, [dm]).ok).toBe(true);
     s = must(s, U.NOVA, 'privacy.update_self', { messagePolicy: 'EVERYONE' }).state;
     expect(op(s, U.KAI, 'messages.send', { body: 'thanks' }, [dm]).ok).toBe(true);
+  });
+});
+
+describe('D2 / D3: a party name never carries a person, and a recent-player label never crosses a wall', () => {
+  it('a party nobody named is "Party", not the leader\'s name', () => {
+    const s = must(createSocialFixture(), U.KAI, 'parties.create', {}).state;
+    expect(partyOf(s, U.KAI)!.name).toBe('Party');
+    expect(partyOf(s, U.KAI)!.name).not.toContain('Kai');
+  });
+
+  it('B met C in A\'s party; after A blocks B, B\'s label for C names neither A nor A\'s party -- across a rename -- while C still reads it', () => {
+    // Orion leads the open "Arena Run" with Lyra; Kai (Orion's friend) joins it, and so meets Lyra in Orion's party
+    let s = createSocialFixture();
+    const arena = partyOf(s, U.ORION)!.partyId;
+    s = must(s, U.KAI, 'parties.join', {}, [arena]).state;
+    const label = (st: SocialState, owner: string, other: string) => recentPlayersViewFor(st, owner).find((e) => e.userId === other)?.contextLabel;
+    expect(label(s, U.KAI, U.LYRA)).toBe('Arena Run'); // Kai may see the party: its name
+    // the stored label is the party's id -- the source -- never a name
+    expect(s.recentPlayers.find((e) => e.ownerId === U.KAI && e.userId === U.LYRA)?.contextLabel).toBe(arena);
+    s = must(s, U.ORION, 'blocks.add', { targetId: U.KAI, confirmSharedParty: true }).state; // the leader blocks Kai: Kai is removed
+    s = must(s, U.ORION, 'parties.rules', { name: 'Orion Secret Plans' }, [arena]).state;
+    expect(label(s, U.KAI, U.LYRA)).toBe('Party');
+    expect(JSON.stringify(view(s, U.KAI))).not.toMatch(/Arena Run|Orion Secret Plans/);
+    const recent = op(s, U.KAI, 'recent.list');
+    expect(recent.ok && JSON.stringify(recent.value.data)).not.toMatch(/Arena Run|Orion Secret Plans/);
+    // Lyra, still in the party, reads the live name for Kai
+    expect(label(s, U.LYRA, U.KAI)).toBe('Orion Secret Plans');
+  });
+
+  it('a label stored before the fix (a name, not an id) reads as "Party"', () => {
+    const s = createSocialFixture();
+    const legacy = { ...s, recentPlayers: [{ ownerId: U.KAI, userId: U.SOL, context: 'PARTY' as const, contextLabel: "Mira's party", metAtIso: NOW }] };
+    expect(recentPlayersViewFor(legacy, U.KAI)[0].contextLabel).toBe('Party');
   });
 });

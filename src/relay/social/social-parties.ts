@@ -17,10 +17,11 @@ import {
   type PartyInvite,
   type PartyInvitePermission,
   type PartyPrivacy,
+  type RecentPlayerEntry,
   type SocialUserId,
 } from './social-contracts';
 import { areFriends, blockedEitherWay, hasUser, mintId, partyOf, type SocialState } from './social-state';
-import { recordPlayedTogether } from './social-friends';
+import { recentPlayersFor, recordPlayedTogether } from './social-friends';
 
 const denied = (message: string) => fail<SocialState>(relayError('permission-denied', message));
 const invalid = (message: string) => fail<SocialState>(relayError('validation-failed', message));
@@ -38,6 +39,13 @@ function withoutParty(state: SocialState, partyId: string): SocialState {
   };
 }
 
+/**
+ * A party nobody named is called this. It used to be "<leader's display name>'s party", which carried the leader's name to
+ * wherever the party's name went -- recent-player labels, an heir's party, invites -- including past a wall (Second's R16 run,
+ * 10-04: B, blocked by A, read "stub-alpha's party"). The client may still draw "<leader>'s party" from the leader it can see.
+ */
+export const DEFAULT_PARTY_NAME = 'Party';
+
 /** START A PARTY with the actor as leader. Refused while they are already in one. */
 export function createParty(
   state: SocialState,
@@ -50,7 +58,7 @@ export function createParty(
   const minted = mintId(state, 'pty');
   const party: Party = {
     partyId: minted.id,
-    name: (input.name ?? '').trim().slice(0, 40) || `${state.users[actorId].profile.displayName}'s party`,
+    name: (input.name ?? '').trim().slice(0, 40) || DEFAULT_PARTY_NAME,
     leaderId: actorId,
     members: [{ userId: actorId, role: 'LEADER', joinedAtIso: atIso, selfMuted: false }],
     privacy: input.privacy ?? 'INVITE_ONLY',
@@ -124,7 +132,8 @@ function addMember(state: SocialState, party: Party, userId: SocialUserId, atIso
     version: party.version + 1,
   });
   for (const member of party.members) {
-    const recorded = recordPlayedTogether(next, member.userId, userId, 'PARTY', party.name, atIso);
+    // the label's SOURCE, not its text: resolved for each viewer by recentPlayersViewFor, so it never crosses a wall
+    const recorded = recordPlayedTogether(next, member.userId, userId, 'PARTY', party.partyId, atIso);
     if (recorded.ok) next = recorded.value;
   }
   return ok(next);
@@ -364,4 +373,17 @@ export function partyViewFor(state: SocialState, viewerId: SocialUserId, partyId
     viewerIsLeader: party.leaderId === viewerId,
     viewerMayInvite: member && mayInvite(party, viewerId) && party.members.length < PARTY_MAX_MEMBERS,
   };
+}
+
+/**
+ * THE RECENT PLAYERS TAB, labelled for its viewer. A PARTY meeting's stored label is the party's id (its source); it is shown as
+ * that party's name only while this viewer may see the party (partyViewFor: a member, or a friend of an open party -- and never
+ * across a wall), else as DEFAULT_PARTY_NAME. So no label names, or derives from, somebody behind the viewer's wall, and a rename
+ * reaches only those who may see the party anyway (Second's R16 run, 10-04: B's entry for C read "stub-alpha's party" after A
+ * blocked B, across restarts). Labels stored before this (a name, not an id) read as DEFAULT_PARTY_NAME.
+ */
+export function recentPlayersViewFor(state: SocialState, ownerId: SocialUserId): RecentPlayerEntry[] {
+  return recentPlayersFor(state, ownerId).map((e) =>
+    e.context === 'PARTY' ? { ...e, contextLabel: partyViewFor(state, ownerId, e.contextLabel)?.name ?? DEFAULT_PARTY_NAME } : e,
+  );
 }

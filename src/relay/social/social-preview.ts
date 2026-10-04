@@ -24,8 +24,8 @@ import type {
   UserProfileView,
 } from './social-contracts';
 import { FIXTURE_NOW, FIXTURE_USERS, createSocialFixture } from './social-fixtures';
-import { pendingRequestsFor, recentPlayersFor } from './social-friends';
-import { acceptPartyInvite, partyInvitesFor, partyViewFor, type PartyView } from './social-parties';
+import { pendingRequestsFor } from './social-friends';
+import { acceptPartyInvite, partyInvitesFor, partyViewFor, recentPlayersViewFor, type PartyView } from './social-parties';
 import { resolvePresenceFor, resolveProfileFor } from './social-presence';
 import { friendIdsOf, partyOf, type SocialState } from './social-state';
 import { createLocalVoiceHarness, createUnavailableVoiceService } from './social-voice';
@@ -103,7 +103,7 @@ export function buildSocialView(state: SocialState, viewerId: SocialUserId, nowI
     .filter((p): p is PartyView => p !== null && !p.viewerIsMember);
   const mine = partyOf(state, viewerId);
   const myParty = mine !== undefined ? partyViewFor(state, viewerId, mine.partyId) : null;
-  const recentPlayers = recentPlayersFor(state, viewerId);
+  const recentPlayers = recentPlayersViewFor(state, viewerId);
   const invites = partyInvitesFor(state, viewerId, nowIso);
 
   /*
