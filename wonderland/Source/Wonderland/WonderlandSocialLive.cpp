@@ -7,6 +7,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Misc/ScopeExit.h"
+#include "HAL/IConsoleManager.h"
 
 // Named, not anonymous: the module is one unity translation unit.
 namespace WonderlandSocialLiveDetail
@@ -359,55 +360,60 @@ void FWonderlandSocialLiveService::TickWorld()
 	Call(TEXT("POST"), TEXT("/world/state"), Body, [this](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
 	{
 		bWorldBusy = false;
-		NextWorldAt = FPlatformTime::Seconds() + (Problem.IsEmpty() ? WonderlandSocialLiveDetail::WorldSeconds : WonderlandSocialLiveDetail::RetrySeconds);
-		if (!Problem.IsEmpty())
-		{
-			// A REFUSAL IS NEVER A REMOVAL (Second's review of 4d31c524: since b7dd6eae the server answers a removal 200 with no context).
-			if (Status == 404 && bWorldWanted)
-			{
-				// 404 "Join a world first": the server's sweep forgot this player (silent for 15 s -- a hitch, a modal, sleep). The figures
-				// shown are stale now, so they go (Second's review m5), and the SAME world is joined again quietly -- on the backoff, so a
-				// server that keeps forgetting is not asked several times a second (m4).
-				if (!bAutoJoinInFlight && !bAutoJoinPending)
-				{
-					UE_LOG(LogTemp, Display, TEXT("WLWORLD the server no longer holds this player's world (404): joining the same one again quietly"));
-					RejoinContextId = WorldView.ContextId;   // a FRIEND rejoin must land in this same world, or the player is not moved (m2)
-					WorldView = FWonderlandWorldView();
-					WorldChanged.Broadcast();
-					ScheduleAutoJoin(WorldTarget, WorldArg);
-				}
-			}
-			else if (Problem != LastError)
-			{
-				// any other refusal (a 400: a position or skin the server will not take) stays put -- and is SAID, once per new reason (m3)
-				UE_LOG(LogTemp, Warning, TEXT("WLWORLD the world report was refused (HTTP %d): %s -- staying"), Status, *Problem);
-			}
-			LastError = Problem;
-			return;
-		}
-		if (!Data.IsValid())
-		{
-			// a 200 without a view (only something that is not the bridge -- a proxy -- answers so): never read as a removal
-			LastError = TEXT("the world answer carried no view");
-			return;
-		}
-		AutoJoinAttempts = 0;   // a report the server ANSWERED resets the backoff, never a join alone (m4)
-		const bool bWasPrivate = WorldView.bInWorld && WorldView.Kind == TEXT("PRIVATE_SERVER");
-		WorldView = WonderlandSocialLiveDetail::ParseWorldView(Data);
-		if (bWasPrivate && !WorldView.bInWorld && bWorldWanted)
-		{
-			// TAKEN OUT OF A PRIVATE SERVER BY THE SERVER (founder P4/P5, 10-04: a block either way removes the member; the owner stays):
-			// the server answers ok with NO context (Second b7dd6eae). Only the generic words, never why; then the public world this map
-			// is -- joined quietly, so its "Done" can never overwrite the words (Second's review M1).
-			UE_LOG(LogTemp, Display, TEXT("WLWORLD removed from a private server by the server: back to the public world"));
-			Answered.Broadcast(TEXT("world.removed"), FString(), FWonderlandSocialActionResult{false, TEXT("You can't stay in this server."), false});
-			WorldChanged.Broadcast();
-			RejoinContextId.Reset();
-			ScheduleAutoJoin(TEXT("PUBLIC"), TEXT("golden_arrival"));
-			return;
-		}
-		WorldChanged.Broadcast();
+		HandleWorldReport(Status, Data, Problem);
 	});
+}
+
+void FWonderlandSocialLiveService::HandleWorldReport(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+{
+	NextWorldAt = FPlatformTime::Seconds() + (Problem.IsEmpty() ? WonderlandSocialLiveDetail::WorldSeconds : WonderlandSocialLiveDetail::RetrySeconds);
+	if (!Problem.IsEmpty())
+	{
+		// A REFUSAL IS NEVER A REMOVAL (Second's review of 4d31c524: since b7dd6eae the server answers a removal 200 with no context).
+		if (Status == 404 && bWorldWanted)
+		{
+			// 404 "Join a world first": the server's sweep forgot this player (silent for 15 s -- a hitch, a modal, sleep). The figures
+			// shown are stale now, so they go (Second's review m5), and the SAME world is joined again quietly -- on the backoff, so a
+			// server that keeps forgetting is not asked several times a second (m4).
+			if (!bAutoJoinInFlight && !bAutoJoinPending)
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLWORLD the server no longer holds this player's world (404): joining the same one again quietly"));
+				RejoinContextId = WorldView.ContextId;   // a FRIEND rejoin must land in this same world, or the player is not moved (m2)
+				WorldView = FWonderlandWorldView();
+				WorldChanged.Broadcast();
+				ScheduleAutoJoin(WorldTarget, WorldArg);
+			}
+		}
+		else if (Problem != LastError)
+		{
+			// any other refusal (a 400: a position or skin the server will not take) stays put -- and is SAID, once per new reason (m3)
+			UE_LOG(LogTemp, Warning, TEXT("WLWORLD the world report was refused (HTTP %d): %s -- staying"), Status, *Problem);
+		}
+		LastError = Problem;
+		return;
+	}
+	if (!Data.IsValid())
+	{
+		// a 200 without a view (only something that is not the bridge -- a proxy -- answers so): never read as a removal
+		LastError = TEXT("the world answer carried no view");
+		return;
+	}
+	AutoJoinAttempts = 0;   // a report the server ANSWERED resets the backoff, never a join alone (m4)
+	const bool bWasPrivate = WorldView.bInWorld && WorldView.Kind == TEXT("PRIVATE_SERVER");
+	WorldView = WonderlandSocialLiveDetail::ParseWorldView(Data);
+	if (bWasPrivate && !WorldView.bInWorld && bWorldWanted)
+	{
+		// TAKEN OUT OF A PRIVATE SERVER BY THE SERVER (founder P4/P5, 10-04: a block either way removes the member; the owner stays):
+		// the server answers ok with NO context (Second b7dd6eae). Only the generic words, never why; then the public world this map
+		// is -- joined quietly, so its "Done" can never overwrite the words (Second's review M1).
+		UE_LOG(LogTemp, Display, TEXT("WLWORLD removed from a private server by the server: back to the public world"));
+		Answered.Broadcast(TEXT("world.removed"), FString(), FWonderlandSocialActionResult{false, TEXT("You can't stay in this server."), false});
+		WorldChanged.Broadcast();
+		RejoinContextId.Reset();
+		ScheduleAutoJoin(TEXT("PUBLIC"), TEXT("golden_arrival"));
+		return;
+	}
+	WorldChanged.Broadcast();
 }
 
 void FWonderlandSocialLiveService::ScheduleAutoJoin(const FString& Target, const FString& Arg)
@@ -673,4 +679,148 @@ void FWonderlandSocialLiveService::ReportPresence(bool bConnected)
 			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live presence not reported: %s"), *Problem);
 		}
 	});
+}
+
+FWonderlandSocialLiveService::FQaAutoJoinPlan FWonderlandSocialLiveService::QaAutoJoinPlan() const
+{
+	FQaAutoJoinPlan Plan;
+	Plan.bPending = bAutoJoinPending;
+	Plan.Target = AutoJoinTarget;
+	Plan.Arg = AutoJoinArg;
+	Plan.InSeconds = NextAutoJoinAt - FPlatformTime::Seconds();
+	Plan.Attempts = AutoJoinAttempts;
+	Plan.RejoinContextId = RejoinContextId;
+	return Plan;
+}
+
+void FWonderlandSocialLiveService::QaSetWorld(const FWonderlandWorldView& View, bool bWanted)
+{
+	WorldView = View;
+	bWorldWanted = bWanted;
+	bAutoJoinPending = false;
+	bAutoJoinInFlight = false;
+	AutoJoinAttempts = 0;
+	RejoinContextId.Reset();
+}
+
+namespace WonderlandSocialLiveDetail
+{
+	/** R16 P4/P5 CLIENT QA (founder 10-04: a block either way removes the member from a private server, with the generic words only;
+	 *  Second's review m6: the client has no way to own a private server, so the run proves P4/P5 at the protocol level and THIS proves
+	 *  the client's half). World answers are fed as if the server sent them, into a throwaway service on a dead loopback port
+	 *  (127.0.0.1:9; nothing listens, never a real server). WR1-WR9 + WRC1 (the reveal judge can fail). WLQA WORLDRM lines. */
+	FAutoConsoleCommand GQaWorldRemoval(
+		TEXT("wl.Qa.WorldRemoval"),
+		TEXT("QA: the client's half of a private-server removal (P4/P5) and the 404/400 world answers -- fed answers, dead loopback port."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			int32 Passed = 0;
+			int32 Failed = 0;
+			auto Check = [&Passed, &Failed](const FString& Id, bool bOk, const FString& What)
+			{
+				(bOk ? Passed : Failed) += 1;
+				UE_LOG(LogTemp, Display, TEXT("WLQA WORLDRM %s %s -- %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *What);
+			};
+			auto World = [](const FString& ContextId, const FString& Kind)
+			{
+				FWonderlandWorldView View;
+				View.bInWorld = true;
+				View.ContextId = ContextId;
+				View.Kind = Kind;
+				View.ServerName = TEXT("qa-owner-server");
+				return View;
+			};
+			auto Answer = [](const FString& ContextId, const FString& Kind)
+			{
+				TSharedPtr<FJsonObject> Made = MakeShared<FJsonObject>();
+				Made->SetArrayField(TEXT("avatars"), TArray<TSharedPtr<FJsonValue>>());
+				if (!ContextId.IsEmpty())
+				{
+					TSharedPtr<FJsonObject> Context = MakeShared<FJsonObject>();
+					Context->SetStringField(TEXT("contextId"), ContextId);
+					Context->SetStringField(TEXT("kind"), Kind);
+					Context->SetStringField(TEXT("serverName"), TEXT("qa-owner-server"));
+					Made->SetObjectField(TEXT("context"), Context);
+				}
+				return Made;
+			};
+			TUniquePtr<FWonderlandSocialLiveService> Probe = MakeUnique<FWonderlandSocialLiveService>(TEXT("http://127.0.0.1:9"), TEXT("qa-world"));
+			TArray<FString> Ops;
+			FString RemovedReason;
+			bool bRemovedOk = true;
+			int32 Changes = 0;
+			Probe->OnAnswered().AddLambda([&Ops, &RemovedReason, &bRemovedOk](const FString& Op, const FString&, const FWonderlandSocialActionResult& Result)
+			{
+				Ops.Add(Op);
+				if (Op == TEXT("world.removed"))
+				{
+					RemovedReason = Result.Reason;
+					bRemovedOk = Result.bOk;
+				}
+			});
+			Probe->OnWorldChanged().AddLambda([&Changes]() { Changes += 1; });
+			const FString Private = TEXT("ctx_qa_private");
+
+			// WR1: removed from a private server (the server answers ok with NO context): the generic words, then the public world at once
+			Probe->QaSetWorld(World(Private, TEXT("PRIVATE_SERVER")), true);
+			Probe->QaFeedWorldReport(200, Answer(FString(), FString()), FString());
+			FWonderlandSocialLiveService::FQaAutoJoinPlan Plan = Probe->QaAutoJoinPlan();
+			Check(TEXT("WR1"), Ops.Contains(TEXT("world.removed")) && RemovedReason == TEXT("You can't stay in this server.") && !bRemovedOk
+				&& !Probe->GetWorldView().bInWorld && Plan.bPending && Plan.Target == TEXT("PUBLIC") && Plan.Arg == TEXT("golden_arrival") && Plan.InSeconds <= 0.5,
+				FString::Printf(TEXT("a removal says the generic words and plans the public world at once (pending %d, %s/%s, in %.1f s)"),
+					Plan.bPending ? 1 : 0, *Plan.Target, *Plan.Arg, Plan.InSeconds));
+			// WR2: the words never say why or who; WRC1: the same judge DOES catch a reason that did
+			auto Reveals = [&Private](const FString& Text)
+			{
+				return Text.Contains(TEXT("block")) || Text.Contains(TEXT("owner")) || Text.Contains(TEXT("qa-owner-server")) || Text.Contains(Private);
+			};
+			Check(TEXT("WR2"), !RemovedReason.IsEmpty() && !Reveals(RemovedReason), TEXT("the removal names no block, no owner, no server"));
+			Check(TEXT("WRC1"), Reveals(TEXT("You were blocked by qa-owner-server")), TEXT("control: a reason that names the block IS caught by the same judge"));
+
+			// WR3: the server forgot the world (404): no removal words, the stale view goes, the SAME world is planned, its context kept
+			Ops.Reset();
+			Changes = 0;
+			Probe->QaSetWorld(World(TEXT("ctx_qa_friend"), TEXT("FRIEND_WORLD")), true);
+			Probe->QaFeedWorldReport(404, nullptr, TEXT("Join a world first"));
+			Plan = Probe->QaAutoJoinPlan();
+			Check(TEXT("WR3"), !Ops.Contains(TEXT("world.removed")) && !Probe->GetWorldView().bInWorld && Changes >= 1 && Plan.bPending
+				&& Plan.RejoinContextId == TEXT("ctx_qa_friend"),
+				FString::Printf(TEXT("a 404 is not a removal: view cleared (%d change), rejoin planned, context kept"), Changes));
+			// WR4: a server that keeps forgetting is asked on the backoff (2 s, then 5 s), and an ANSWERED report resets it
+			Probe->QaClearPendingJoin();
+			Probe->QaFeedWorldReport(404, nullptr, TEXT("Join a world first"));
+			const double Wait1 = Probe->QaAutoJoinPlan().InSeconds;
+			Probe->QaClearPendingJoin();
+			Probe->QaFeedWorldReport(404, nullptr, TEXT("Join a world first"));
+			const double Wait2 = Probe->QaAutoJoinPlan().InSeconds;
+			Probe->QaClearPendingJoin();
+			Probe->QaFeedWorldReport(200, Answer(TEXT("pub_qa"), TEXT("PUBLIC")), FString());
+			Check(TEXT("WR4"), Wait1 > 1.5 && Wait1 <= 2.1 && Wait2 > 4.5 && Wait2 <= 5.1 && Probe->QaAutoJoinPlan().Attempts == 0,
+				FString::Printf(TEXT("backoff %.1f s then %.1f s; an answered report resets it (attempts %d)"), Wait1, Wait2, Probe->QaAutoJoinPlan().Attempts));
+			// WR5: any other refusal (400) keeps the player where they are: no removal, no join, the view unchanged
+			Ops.Reset();
+			Probe->QaSetWorld(World(TEXT("pub_qa"), TEXT("PUBLIC")), true);
+			Probe->QaFeedWorldReport(400, nullptr, TEXT("position out of range"));
+			Check(TEXT("WR5"), Ops.Num() == 0 && !Probe->QaAutoJoinPlan().bPending && Probe->GetWorldView().ContextId == TEXT("pub_qa"),
+				TEXT("a 400 keeps the player in the same world, says nothing on screen, plans no join"));
+			// WR6: no context after a PUBLIC world is not a private-server removal
+			Probe->QaFeedWorldReport(200, Answer(FString(), FString()), FString());
+			Check(TEXT("WR6"), !Ops.Contains(TEXT("world.removed")), TEXT("leaving a PUBLIC world never shows the removal words"));
+			// WR7: the same private server answered with its context: nothing happens
+			Probe->QaSetWorld(World(Private, TEXT("PRIVATE_SERVER")), true);
+			Probe->QaFeedWorldReport(200, Answer(Private, TEXT("PRIVATE_SERVER")), FString());
+			Check(TEXT("WR7"), !Ops.Contains(TEXT("world.removed")) && Probe->GetWorldView().ContextId == Private && !Probe->QaAutoJoinPlan().bPending,
+				TEXT("a private server that still holds the player: no removal"));
+			// WR8: a player who chose to leave is never told they were removed, nor put back
+			Probe->QaSetWorld(World(Private, TEXT("PRIVATE_SERVER")), false);
+			Probe->QaFeedWorldReport(200, Answer(FString(), FString()), FString());
+			Check(TEXT("WR8"), !Ops.Contains(TEXT("world.removed")) && !Probe->QaAutoJoinPlan().bPending, TEXT("no removal words or rejoin for a player who left"));
+			// WR9: a 200 without a view (a proxy, never the bridge) is not a removal either
+			Probe->QaSetWorld(World(Private, TEXT("PRIVATE_SERVER")), true);
+			Probe->QaFeedWorldReport(200, nullptr, FString());
+			Check(TEXT("WR9"), !Ops.Contains(TEXT("world.removed")) && Probe->GetWorldView().ContextId == Private,
+				TEXT("an ok answer with no body keeps the player and shows nothing"));
+			Probe.Reset();
+			UE_LOG(LogTemp, Display, TEXT("WLQA WORLDRM END pass=%d fail=%d"), Passed, Failed);
+		}));
 }

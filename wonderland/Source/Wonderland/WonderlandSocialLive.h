@@ -70,6 +70,22 @@ public:
 	void GetEosClientConfig(TFunction<void(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)> Done);
 	FSimpleMulticastDelegate& OnWorldChanged() { return WorldChanged; }
 
+	/** QA ONLY (wl.Qa.WorldRemoval): put this service in a world, feed a world report's answer as if the server sent it, and read the
+	 *  automatic-join plan it left. Never called outside the QA command. */
+	struct FQaAutoJoinPlan
+	{
+		bool bPending = false;
+		FString Target;
+		FString Arg;
+		double InSeconds = 0.0;
+		int32 Attempts = 0;
+		FString RejoinContextId;
+	};
+	void QaSetWorld(const FWonderlandWorldView& View, bool bWanted);
+	void QaFeedWorldReport(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem) { HandleWorldReport(Status, Data, Problem); }
+	void QaClearPendingJoin() { bAutoJoinPending = false; }
+	FQaAutoJoinPlan QaAutoJoinPlan() const;
+
 private:
 	bool Tick(float DeltaSeconds);
 	void PollEvents();
@@ -98,6 +114,8 @@ private:
 	bool bRefreshAgain = false;
 	FTSTicker::FDelegateHandle TickerHandle;
 	void TickWorld();
+	/** A world report's answer: a 404 rejoins quietly, any other refusal stays, a private server's no-context ok is a removal. */
+	void HandleWorldReport(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem);
 	TFunction<bool(FWonderlandAvatarReport&)> AvatarSource;
 	FWonderlandWorldView WorldView;
 	FSimpleMulticastDelegate WorldChanged;
