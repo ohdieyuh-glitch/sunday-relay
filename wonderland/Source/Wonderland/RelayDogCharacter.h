@@ -400,6 +400,12 @@ public:
 		OutHopRate = ArmedStance.HopRate;
 		return LastStanceState;
 	}
+	/** QA: the planted feet held in the world -- catch-up steps forced by a foot drifting off its spot, and holds dropped by a stall or a jump. */
+	void QaFeetLock(int32& OutOverstretches, int32& OutDrops) const
+	{
+		OutOverstretches = ArmedStance.Feet.Overstretches;
+		OutDrops = ArmedStance.Feet.Drops;
+	}
 	int32 GetDashCount() const { return DashCount; }
 	int32 GetDashesRefused() const { return DashesRefused; }
 	/** Normal roaming's acceleration (read at BeginPlay): what every exit from the handoff restores. */
@@ -971,6 +977,10 @@ private:
 	float StanceChargeWeight = 0.0f;
 	/** The founder's stance state last logged (RelayDogArmedStance::StateName), so each change is said once. */
 	FString LastStanceState = TEXT("unarmed");
+	/** The actor's place and yaw the frame before (the stance carries its planted feet through the real motion); unread after a spawn. */
+	FVector StanceLastAt = FVector::ZeroVector;
+	float StanceLastYaw = 0.0f;
+	bool bStanceMotionRead = false;
 	/** THE SPRINT'S END, measured (QaLastSprintEnd): Forward's release edge, and the last end's reason and lateness. */
 	float ForwardReleasedAt = -1000.0f;
 	FString LastSprintEndCode = TEXT("none");

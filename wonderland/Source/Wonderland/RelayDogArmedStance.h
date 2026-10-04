@@ -61,9 +61,13 @@ namespace RelayDogArmedStance
 		 * needs and a planted foot never slides; the pushed leg trails HopTrailUU behind; the swinging knee tucks HopTuckUU; the body
 		 * rises HopApexUU through the flight and presses HopCompressUU into each landing.
 		 */
-		float FastFromUU = 480.0f;
-		float FastFullUU = 700.0f;
+		// A BINARY TARGET WITH HYSTERESIS (Second's port, 4b5790e3: a ramp between two speeds left a steady 590 at a part weight forever, two
+		// leg solutions blended and both feet dragged ~22-39 uu a frame): FAST comes ON at FastFullUU and goes OFF below FastFromUU, so between
+		// them the Dog stays in whichever state it was in, and the 0.15 s spring is the only blend
+		float FastFromUU = 520.0f;
+		float FastFullUU = 640.0f;
 		float FastSmoothSeconds = 0.15f;
+		float FastOffSeconds = 0.25f;
 		/** 0 = THE VIDEO's lunge-skip (the rear leg stretched behind, the front foot tapping); 1 = the alternating bound. */
 		int HopStyle = 0;
 		float HopRateBase = 3.5f;
@@ -78,7 +82,20 @@ namespace RelayDogArmedStance
 		/** The skip: the body this much lower, the tapping foot's lift between taps, the trailing foot's skim over the ground, uu. */
 		float HopCrouchUU = 8.0f;
 		float HopTapLiftUU = 6.0f;
-		float HopSkimUU = 3.0f;
+		float HopSkimUU = 5.0f;   // over PlantBandUU: the trailing foot skims in the air, never a "down" foot dragged
+		/**
+		 * THE PLANTED FOOT, HELD IN THE WORLD (Second's port: blending two leg solutions dragged the feet through every transition). A foot
+		 * whose target is within PlantBandUU of the ground LOCKS where it is and is held there through the Dog's REAL motion (Step carries
+		 * it), until its target rises out of the band or drifts PlantSlackUU away; then a CATCH-UP STEP of CatchUpSeconds takes it, lifted
+		 * at least CatchUpLiftUU at the middle, to the target -- across the ground only while it is above the band, so it never glides.
+		 */
+		float PlantBandUU = 2.5f;
+		float PlantSlackUU = 12.0f;
+		float CatchUpSeconds = 0.12f;
+		float CatchUpLiftUU = 6.0f;
+		/** QA ONLY (wl.Handoff.Hop.QaSkate; the ST2C9 control): the tapping foot's contact moves this share of the ground speed in the world
+		 *  and no foot is locked -- a skating hop, which ST2C9 must turn RED. 0 in play. */
+		float QaSkate = 0.0f;
 		/** Each hip swept outward: a touch -- the feet stay about hip width apart (P2's 19 deg doubled the spacing). */
 		float FeetOutDeg = 2.0f;
 		/**
@@ -105,10 +122,10 @@ namespace RelayDogArmedStance
 		float RunElbowAddDeg = 14.0f;
 		/** The dash (the founder's Genshin sprint reference): a sprinter's arms -- a little back and out, still PUMPING with the stride
 		 *  (DashSwingKeep of the stride's own swing, never the run's locked arms-back), the blades trailing low. */
-		float DashShoulderDeg = -25.0f;
+		float DashShoulderDeg = -33.0f;   // Second's port fit (10-04): the low-handed skins' tips >= +2 through the hop
 		float DashElbowDeg = 20.0f;
 		float DashOutDeg = 4.0f;   // round 7a4 S4: at 12 the pumping hands carried a tip 89.5 uu out (half the body is 87)
-		float DashSwingKeep = 0.8f;
+		float DashSwingKeep = 0.6f;     // ...and the back swing stopping at the horizontal (a 32 deg pump)
 		/** Seconds to ease the stance in or out (a critically damped spring: nothing pops), and the dash in or out. */
 		float ArmedSmoothSeconds = 0.22f;
 		float DashSmoothSeconds = 0.07f;
@@ -120,22 +137,61 @@ namespace RelayDogArmedStance
 	 * SPEED MOVEMENT is Fast (the hop); the DASH/BURST is Dash (and Fast); STOP/RECOVERY is Fast and the gait easing back out, the body
 	 * rising into the standing stance. HopPhase counts hops (each whole number a landing), advancing only while Fast is on.
 	 */
+	/** One foot held in the world: where, in the ACTOR's frame (X forward, Y right, from the actor's origin), as of this frame. */
+	struct FFootLock
+	{
+		bool bLocked = false;
+		float X = 0.0f;
+		float Y = 0.0f;
+		/** A catch-up step's progress 0..1 (1 = none under way). bFromWorld: it left a spot still DOWN (drifted off), so From is that spot,
+		 *  held in the world; else the target rose and From is the lock's offset from it, eased out in the air (the target's own swing
+		 *  leaves the ground still in the world; holding the foot back on its spot and then catching up whipped it ~70 uu a frame). */
+		float StepS = 1.0f;
+		bool bFromWorld = false;
+		float FromX = 0.0f;
+		float FromY = 0.0f;
+	};
+
+	/**
+	 * THE FEET HELD IN THE WORLD, carried through the actor's REAL motion each frame (Second's review: an odometer -- speed x time along the
+	 * facing -- skates a planted foot on every turn, slope, wall and correction; mouse-steering a sprint is a constant turn). [0] Pose.LegLeft
+	 * (+Y), [1] Pose.LegRight (-Y). Released, with no catch-up, on a discontinuity: a frame over 50 ms, a jump over 150 uu, the hop off.
+	 */
+	struct FFeetLock
+	{
+		FFootLock Foot[2];
+		float DeltaSeconds = 0.0f;
+		/** Counted for the QA: catch-ups forced by a foot drifting PlantSlackUU from its lock, and locks dropped by a discontinuity. */
+		int Overstretches = 0;
+		int Drops = 0;
+	};
+
 	struct FState
 	{
 		RelayDogStride::FSpring Armed;
 		RelayDogStride::FSpring Dash;
 		RelayDogStride::FSpring Fast;
+		/** FAST's target, held between FastFromUU and FastFullUU (hysteresis); off only after FastOffSeconds below FastFromUU (or at
+		 *  once under half of it: a real stop), so a wobbling stick does not flip the body faster than its spring blends. */
+		bool bFastOn = false;
+		float BelowFor = 0.0f;
 		float HopPhase = 0.0f;
 		float HopRate = 0.0f;
 		/** The ground speed the phase advanced by this frame: the stride is laid out from the same number (one speed). */
 		float HopSpeed = 0.0f;
+		FFeetLock Feet;
 	};
 
 	/** Which of the founder's states the weights are in, for the log and the QA ("summon/ready", "moving", "fast hop", "dash"...). */
 	const char* StateName(const FState& State, float GaitWeight);
 
-	/** Ease the weights toward the state: armed while the swords are held, dashing while a dash is under way, fast above FastFromUU. */
-	void Step(FState& State, bool bArmed, bool bDashing, float SpeedUU, float DeltaSeconds, const FShape& Shape = FShape());
+	/**
+	 * Ease the weights toward the state: armed while the swords are held, dashing while a dash is under way, fast ON at FastFullUU and OFF
+	 * below FastFromUU. MoveForwardUU / MoveRightUU / TurnDeg: the actor's REAL motion over this frame, in its frame of the frame before
+	 * (forward, right, and its yaw's change, + = to the right); they carry the locked feet. bJumped: a teleport or a respawn this frame.
+	 */
+	void Step(FState& State, bool bArmed, bool bDashing, float SpeedUU, float DeltaSeconds, const FShape& Shape = FShape(),
+		float MoveForwardUU = 0.0f, float MoveRightUU = 0.0f, float TurnDeg = 0.0f, bool bJumped = false);
 
 	/**
 	 * The stance laid onto the animator's pose, in place. Both weights 0: the pose is left exactly as it was.
@@ -151,10 +207,11 @@ namespace RelayDogArmedStance
 	 * @param HipYLeft, HipYRight  Pose.LegLeft's and Pose.LegRight's hips across the body, uu, as measured (the canon's LegLeft
 	 *        hangs at +Y). The leg on HipYRight's side is the front one.
 	 * The body's part goes to Pose.Stance (in the rig's own signs), each leg's sweep to Pose.Stance.Leg*OutDeg.
+	 * @param Feet  the feet held in the world (FState::Feet, carried by Step); null = no lock (the targets as they are).
 	 */
 	void Apply(RelayDogStride::FDogPose& Pose, float ArmedWeight, float DashWeight, float FastWeight, float HopPhase, float HopRate, float HopSpeedUU,
 		float LegLengthUU, float ThighUU, float ShinUU, float LeftOutFactor, float RightOutFactor, float HipPivotUU, float HipYLeft, float HipYRight,
-		const FShape& Shape = FShape());
+		const FShape& Shape = FShape(), FFeetLock* Feet = nullptr);
 
 	/** How far each hip is swept outward at these weights while moving (Apply folds it into each leg's own sweep). */
 	float FeetOutDeg(const RelayDogStride::FDogPose& Pose, float ArmedWeight, const FShape& Shape = FShape());

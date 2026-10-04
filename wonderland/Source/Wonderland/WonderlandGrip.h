@@ -43,7 +43,7 @@ namespace WonderlandGrip
 		float VForwardDeg = 10.0f;
 		/** In the sprint (eased by the dash's weight): the tips trailing back, like the trails they leave -- as far back as the charge's, so
 		 *  a pumping hand never drives a 123 uu blade into the floor (Second's review of 92f83bff: -35 put the tips 15 uu below the soles). */
-		float DashVForwardDeg = -72.0f;
+		float DashVForwardDeg = -80.0f;   // Second's port fit (10-04): with DashShoulder -33 / SwingKeep 0.6, every skin's tip >= +2 moving, the width <= half the body
 		/** ...and flatter in the fast hop and the dash, where the bent body carries the hands lower (founder, 10-04: the bend is fast). */
 		float DashVDeg = 104.0f;
 		/** STANDING ARMED (founder, 10-04, the last photo: "swords carried low"): the blades low and diagonal -- down and out by

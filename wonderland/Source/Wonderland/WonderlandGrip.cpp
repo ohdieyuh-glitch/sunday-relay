@@ -26,7 +26,7 @@ namespace
 		TEXT("Mission Handoff: in the charging stance (armed, standing), degrees a held blade points from STRAIGHT UP, out to its own side."));
 	TAutoConsoleVariable<float> CVarSwordChargeVForward(TEXT("wl.Handoff.SwordChargeVForward"), -64.0f,
 		TEXT("Mission Handoff: in the charging stance, degrees a held blade leans FORWARD (negative: trailing back behind the charge)."));
-	TAutoConsoleVariable<float> CVarSwordDashVForward(TEXT("wl.Handoff.SwordDashVForward"), -72.0f,
+	TAutoConsoleVariable<float> CVarSwordDashVForward(TEXT("wl.Handoff.SwordDashVForward"), -80.0f,
 		TEXT("Mission Handoff: in the sprint, degrees a held blade leans FORWARD from the V's plane (negative: the tips trail back)."));
 }
 
@@ -42,7 +42,7 @@ namespace WonderlandGrip
 		Hold.bBodyV = CVarSwordBodyV.GetValueOnGameThread() != 0;
 		Hold.VDeg = FMath::Clamp(CVarSwordV.GetValueOnGameThread(), 0.0f, 170.0f);
 		Hold.VForwardDeg = FMath::Clamp(CVarSwordVForward.GetValueOnGameThread(), -60.0f, 60.0f);
-		Hold.DashVForwardDeg = FMath::Clamp(CVarSwordDashVForward.GetValueOnGameThread(), -80.0f, 60.0f);
+		Hold.DashVForwardDeg = FMath::Clamp(CVarSwordDashVForward.GetValueOnGameThread(), -100.0f, 60.0f);
 		Hold.ChargeVDeg = FMath::Clamp(CVarSwordChargeV.GetValueOnGameThread(), 0.0f, 170.0f);
 		Hold.DashVDeg = FMath::Clamp(CVarSwordDashV.GetValueOnGameThread(), 0.0f, 170.0f);
 		Hold.ChargeVForwardDeg = FMath::Clamp(CVarSwordChargeVForward.GetValueOnGameThread(), -85.0f, 60.0f);

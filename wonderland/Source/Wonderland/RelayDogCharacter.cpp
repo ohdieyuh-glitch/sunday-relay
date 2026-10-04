@@ -77,15 +77,23 @@ namespace RelayDogHandoffTuning
 	TAutoConsoleVariable<float> CVarStanceRunBend(TEXT("wl.Handoff.Stance.RunBend"), 6.0f, TEXT("Mission Handoff stance: the forward bend walking and running armed, degrees."));
 	TAutoConsoleVariable<float> CVarStanceFastBend(TEXT("wl.Handoff.Stance.FastBend"), 42.0f, TEXT("Mission Handoff stance: the forward bend in FAST movement (the hop, the dash), degrees: the founder's video, charging."));
 	// THE FAST HOP (founder, 10-04: fast movement is skipping/hopping, not a run): when it comes in, and its rhythm and shape (RelayDogArmedStance::FShape)
-	TAutoConsoleVariable<float> CVarStanceFastFrom(TEXT("wl.Handoff.Stance.FastFrom"), 480.0f, TEXT("Mission Handoff stance: the ground speed the fast hop starts to come in at, uu/s."));
-	TAutoConsoleVariable<float> CVarStanceFastFull(TEXT("wl.Handoff.Stance.FastFull"), 700.0f, TEXT("Mission Handoff stance: the ground speed the fast hop is fully in at, uu/s (the armed run is 728)."));
+	TAutoConsoleVariable<float> CVarStanceFastFrom(TEXT("wl.Handoff.Stance.FastFrom"), 520.0f, TEXT("Mission Handoff stance: the fast hop goes OFF below this ground speed (held FastOff seconds; at once under half), uu/s."));
+	TAutoConsoleVariable<float> CVarStanceFastFull(TEXT("wl.Handoff.Stance.FastFull"), 640.0f, TEXT("Mission Handoff stance: the fast hop comes ON at this ground speed, uu/s (the armed run is 728; between FastFrom and this it holds)."));
+	TAutoConsoleVariable<float> CVarStanceFastSmooth(TEXT("wl.Handoff.Stance.FastSmooth"), 0.15f, TEXT("Mission Handoff stance: seconds the fast weight eases in and out over (the hop's bend; the ST2C14 control sets 0.001)."));
+	TAutoConsoleVariable<float> CVarStanceFastOff(TEXT("wl.Handoff.Stance.FastOff"), 0.25f, TEXT("Mission Handoff stance: seconds under FastFrom before the hop goes off (a wobbling stick holds it)."));
 	TAutoConsoleVariable<int32> CVarHopStyle(TEXT("wl.Handoff.Hop.Style"), 0,
 		TEXT("Mission Handoff hop: 0 = the founder's video, a lunge-skip (the rear leg stretched behind, the front foot tapping); 1 = an alternating bound."));
 	TAutoConsoleVariable<float> CVarHopRateBase(TEXT("wl.Handoff.Hop.RateBase"), 3.5f, TEXT("Mission Handoff hop: hops a second = this + speed / RatePerUU."));
 	TAutoConsoleVariable<float> CVarHopRatePerUU(TEXT("wl.Handoff.Hop.RatePerUU"), 800.0f, TEXT("Mission Handoff hop: uu/s of speed per extra hop a second."));
 	TAutoConsoleVariable<float> CVarHopCrouch(TEXT("wl.Handoff.Hop.Crouch"), 8.0f, TEXT("Mission Handoff hop: how much lower the body rides in the skip, uu."));
 	TAutoConsoleVariable<float> CVarHopTapLift(TEXT("wl.Handoff.Hop.TapLift"), 6.0f, TEXT("Mission Handoff hop: the tapping foot's lift between taps, uu."));
-	TAutoConsoleVariable<float> CVarHopSkim(TEXT("wl.Handoff.Hop.Skim"), 3.0f, TEXT("Mission Handoff hop: the trailing foot's height over the ground, uu."));
+	TAutoConsoleVariable<float> CVarHopSkim(TEXT("wl.Handoff.Hop.Skim"), 5.0f, TEXT("Mission Handoff hop: the trailing foot's height over the ground, uu (over PlantBand: in the air)."));
+	// THE PLANTED FOOT HELD IN THE WORLD (RelayDogArmedStance::FFeetLock; Second's port of 4b5790e3: the hop's transitions dragged the feet 22-83 uu a frame)
+	TAutoConsoleVariable<float> CVarHopPlantBand(TEXT("wl.Handoff.Hop.PlantBand"), 2.5f, TEXT("Mission Handoff hop: a foot whose target is within this of the ground is held where it is in the world, uu."));
+	TAutoConsoleVariable<float> CVarHopPlantSlack(TEXT("wl.Handoff.Hop.PlantSlack"), 12.0f, TEXT("Mission Handoff hop: a held foot steps to its target once the target is this far off, uu."));
+	TAutoConsoleVariable<float> CVarHopCatchUp(TEXT("wl.Handoff.Hop.CatchUp"), 0.12f, TEXT("Mission Handoff hop: the catch-up step's length, seconds."));
+	TAutoConsoleVariable<float> CVarHopCatchUpLift(TEXT("wl.Handoff.Hop.CatchUpLift"), 6.0f, TEXT("Mission Handoff hop: the catch-up step's lift at its middle, uu."));
+	TAutoConsoleVariable<float> CVarHopQaSkate(TEXT("wl.Handoff.Hop.QaSkate"), 0.0f, TEXT("QA ONLY (the ST2C9 control): the tapping foot slides this share of the ground speed and no foot is held. 0 in play."));
 	TAutoConsoleVariable<float> CVarHopReach(TEXT("wl.Handoff.Hop.Reach"), 28.0f, TEXT("Mission Handoff hop: the planted foot's travel each side of the hip, uu (sets how short the contact is)."));
 	TAutoConsoleVariable<float> CVarHopTrail(TEXT("wl.Handoff.Hop.Trail"), 40.0f, TEXT("Mission Handoff hop: how far the pushed leg trails behind the hip, uu."));
 	TAutoConsoleVariable<float> CVarHopTuck(TEXT("wl.Handoff.Hop.Tuck"), 18.0f, TEXT("Mission Handoff hop: how high the swinging foot tucks, uu."));
@@ -112,10 +120,10 @@ namespace RelayDogHandoffTuning
 	TAutoConsoleVariable<float> CVarStanceSwing(TEXT("wl.Handoff.Stance.SwingKeep"), 0.3f, TEXT("Mission Handoff stance: the share of the walk's arm swing kept, 0..1."));
 	TAutoConsoleVariable<float> CVarStanceRunOut(TEXT("wl.Handoff.Stance.RunOut"), 20.0f, TEXT("Mission Handoff stance: the running arms swept out, degrees."));
 	TAutoConsoleVariable<float> CVarStanceRunElbow(TEXT("wl.Handoff.Stance.RunElbow"), 14.0f, TEXT("Mission Handoff stance: extra forearm fold while running, degrees."));
-	TAutoConsoleVariable<float> CVarStanceDashShoulder(TEXT("wl.Handoff.Stance.DashShoulder"), -25.0f, TEXT("Mission Handoff stance: the dash's arms, swept back (negative), degrees."));
+	TAutoConsoleVariable<float> CVarStanceDashShoulder(TEXT("wl.Handoff.Stance.DashShoulder"), -33.0f, TEXT("Mission Handoff stance: the dash's arms, swept back (negative), degrees."));
 	TAutoConsoleVariable<float> CVarStanceDashElbow(TEXT("wl.Handoff.Stance.DashElbow"), 20.0f, TEXT("Mission Handoff stance: the dash's forearm fold, degrees."));
 	TAutoConsoleVariable<float> CVarStanceDashOut(TEXT("wl.Handoff.Stance.DashOut"), 4.0f, TEXT("Mission Handoff stance: the dash's arms swept out, degrees."));
-	TAutoConsoleVariable<float> CVarStanceDashSwing(TEXT("wl.Handoff.Stance.DashSwingKeep"), 0.8f, TEXT("Mission Handoff stance: the share of the sprint's own arm swing the dash keeps, 0..1."));
+	TAutoConsoleVariable<float> CVarStanceDashSwing(TEXT("wl.Handoff.Stance.DashSwingKeep"), 0.6f, TEXT("Mission Handoff stance: the share of the sprint's own arm swing the dash keeps, 0..1."));
 
 	RelayDogArmedStance::FShape StanceShape()
 	{
@@ -137,6 +145,13 @@ namespace RelayDogHandoffTuning
 		Shape.HopCrouchUU = FMath::Clamp(CVarHopCrouch.GetValueOnGameThread(), 0.0f, 20.0f);
 		Shape.HopTapLiftUU = FMath::Clamp(CVarHopTapLift.GetValueOnGameThread(), 0.0f, 30.0f);
 		Shape.HopSkimUU = FMath::Clamp(CVarHopSkim.GetValueOnGameThread(), 0.0f, 20.0f);
+		Shape.FastOffSeconds = FMath::Clamp(CVarStanceFastOff.GetValueOnGameThread(), 0.0f, 2.0f);
+		Shape.FastSmoothSeconds = FMath::Clamp(CVarStanceFastSmooth.GetValueOnGameThread(), 0.001f, 1.0f);
+		Shape.PlantBandUU = FMath::Clamp(CVarHopPlantBand.GetValueOnGameThread(), 0.0f, 10.0f);
+		Shape.PlantSlackUU = FMath::Clamp(CVarHopPlantSlack.GetValueOnGameThread(), 1.0f, 60.0f);
+		Shape.CatchUpSeconds = FMath::Clamp(CVarHopCatchUp.GetValueOnGameThread(), 0.02f, 0.5f);
+		Shape.CatchUpLiftUU = FMath::Clamp(CVarHopCatchUpLift.GetValueOnGameThread(), 0.0f, 30.0f);
+		Shape.QaSkate = FMath::Clamp(CVarHopQaSkate.GetValueOnGameThread(), 0.0f, 1.0f);
 		Shape.HipForwardUU = FMath::Clamp(CVarStanceHipForward.GetValueOnGameThread(), -15.0f, 15.0f);
 		Shape.HipShiftUU = FMath::Clamp(CVarStanceHipShift.GetValueOnGameThread(), -10.0f, 10.0f);
 		Shape.TiltDeg = FMath::Clamp(CVarStanceTilt.GetValueOnGameThread(), -15.0f, 15.0f);
@@ -2894,15 +2909,37 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	// roaming is untouched. Everything below writes this pose, so the canon body, the mission overlay and every worn skin
 	// carry the same stance.
 	const RelayDogArmedStance::FShape ArmedShape = RelayDogHandoffTuning::StanceShape();
-	RelayDogArmedStance::Step(ArmedStance, IsHandoffArmed(), bDashActive, SpeedUU, DeltaSeconds, ArmedShape);
+	// the actor's REAL motion over this frame, in its frame of the frame before: it carries the planted feet held in the world through turns,
+	// slopes, walls and corrections (Second's review: an odometer along the facing skated a planted foot on every turn)
+	float StanceMoveForward = 0.0f;
+	float StanceMoveRight = 0.0f;
+	float StanceTurnDeg = 0.0f;
+	const bool bStanceJumped = !bStanceMotionRead;
+	{
+		const FVector StanceNowAt = GetActorLocation();
+		const float StanceNowYaw = static_cast<float>(GetActorRotation().Yaw);
+		if (bStanceMotionRead)
+		{
+			const FVector Moved = FRotator(0.0, StanceLastYaw, 0.0).UnrotateVector(StanceNowAt - StanceLastAt);
+			StanceMoveForward = static_cast<float>(Moved.X);
+			StanceMoveRight = static_cast<float>(Moved.Y);
+			StanceTurnDeg = static_cast<float>(FRotator::NormalizeAxis(static_cast<double>(StanceNowYaw - StanceLastYaw)));
+		}
+		StanceLastAt = StanceNowAt;
+		StanceLastYaw = StanceNowYaw;
+		bStanceMotionRead = true;
+	}
+	RelayDogArmedStance::Step(ArmedStance, IsHandoffArmed(), bDashActive, SpeedUU, DeltaSeconds, ArmedShape, StanceMoveForward, StanceMoveRight, StanceTurnDeg,
+		bStanceJumped);
 	// THE FOUNDER'S STATES (10-04), said once each time the body moves from one to the next: the evidence lines for the summon, the ready stance,
 	// the movement, the fast hop and the dash (RelayDogArmedStance::StateName)
 	{
 		const FString StateNow = ANSI_TO_TCHAR(RelayDogArmedStance::StateName(ArmedStance, Animator.Pose().GaitWeight));
 		if (StateNow != LastStanceState)
 		{
-			UE_LOG(LogTemp, Display, TEXT("WLHANDOFF stance state: %s -> %s (armed %.2f, fast %.2f, dash %.2f, %.0f uu/s, %.1f hops a second)"),
-				*LastStanceState, *StateNow, ArmedStance.Armed.Value, ArmedStance.Fast.Value, ArmedStance.Dash.Value, SpeedUU, ArmedStance.HopRate);
+			UE_LOG(LogTemp, Display, TEXT("WLHANDOFF stance state: %s -> %s (armed %.2f, fast %.2f [%s: on at %.0f, off under %.0f], dash %.2f, %.0f uu/s, %.1f hops a second)"),
+				*LastStanceState, *StateNow, ArmedStance.Armed.Value, ArmedStance.Fast.Value, ArmedStance.bFastOn ? TEXT("held on") : TEXT("held off"),
+				ArmedShape.FastFullUU, ArmedShape.FastFromUU, ArmedStance.Dash.Value, SpeedUU, ArmedStance.HopRate);
 			LastStanceState = StateNow;
 		}
 	}
@@ -2946,7 +2983,7 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		ArmedStance.HopSpeed, 0.8f * HeadWidthUU,
 		(0.8f - 0.5125f) * HeadWidthUU,
 		0.5125f * HeadWidthUU, ArmChainLeft.OutwardSign * ArmLeft.SideSign, ArmChainRight.OutwardSign * ArmRight.SideSign, HipPivotUU,
-		LegLeft.LateralUU, LegRight.LateralUU, ArmedShape);
+		LegLeft.LateralUU, LegRight.LateralUU, ArmedShape, &ArmedStance.Feet);
 	StanceLegLeftOutDeg = Pose.Stance.LegLeftOutDeg;
 	// THE LOW, TRAILING HOLD AT EVERY ARMED GAIT (Second's review of 92f83bff): fading it out as the gait came in put the walk back on
 	// the photo stance's V 122 / F +10 -- a 123 uu blade dropping 64 uu from a hand 36-52 uu up, the tips 24 uu INTO the ground -- and swept
