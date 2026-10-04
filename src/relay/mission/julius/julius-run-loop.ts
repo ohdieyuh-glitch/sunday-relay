@@ -38,12 +38,13 @@ import { planRunStatePath, transitionIsLegal } from './julius-state-path';
  */
 export { planRunStatePath, transitionIsLegal };
 import {
-  holdClaimAtAdmission, juliusArchitectureGateFor, juliusFindingsGateFor, prepareClaimedTask, resumeUnverifiedTasks, runClaimedTask, serveArchitectureTriggers,
-  taskAttemptCeiling,
+  holdClaimAtAdmission, juliusArchitectureGateFor, juliusFindingsGateFor, juliusRunLineageCheckFor, prepareClaimedTask, resumeUnverifiedTasks,
+  runClaimedTask, serveArchitectureTriggers, taskAttemptCeiling,
   type JuliusPipelineDependencies, type JuliusTaskOutcome,
 } from './julius-task-pipeline';
 import { continuationConcurrency } from './julius-continuation';
 import { juliusRunHaltingFailureClass } from './julius-coding-agent';
+import { juliusAcceptanceJudgementFacts, juliusContradictionFacts } from './julius-lineage-asserter';
 import { JuliusPersistenceUnavailable } from './julius-execution-coordinator';
 import type { JuliusClaimedTask, JuliusRecoveryDriver, JuliusRunRow } from './julius-runtime-ports';
 import { validateJuliusEvent } from './julius-events';
@@ -969,7 +970,7 @@ export class JuliusRunLoop {
       ]);
     }
 
-    let target = targetRunState(tasks, decisions);
+    let target: { state: JuliusMissionState; reasonCode: string; facts?: Readonly<Record<string, string | number | null>> } = targetRunState(tasks, decisions);
 
     /**
      * THE ARCHITECT IS A PEER FOR THE WHOLE MISSION, NOT ONLY ITS FIRST
@@ -1018,7 +1019,25 @@ export class JuliusRunLoop {
      */
     const generic = (target.state === 'VERIFYING' && target.reasonCode === 'ALL_TASKS_TERMINAL')
       || (target.state === 'BLOCKED' && target.reasonCode === 'RUN_CANNOT_PROGRESS');
+    /**
+     * A RUN THAT HOLDS A CONTRADICTION IS HALTED: NOT COMPLETED, AND NOT LEFT WAITING (founder decision B, 2026-10-03).
+     *
+     * A task ACCEPTED while a blocking VERIFIED finding about it is still OPEN cannot both be true. The trust core's
+     * table says so, and nothing chooses between them. The run ends FAILED under the halting class, and the pair rides
+     * on its terminal event, so the evidence a reviewer needs survives the halt. Checked where completion is decided,
+     * and wherever a run stopped for a generic reason, BEFORE the findings gate: that gate can only hold, and a hold
+     * would leave the contradiction standing, unrecorded.
+     */
     if (target.state === 'COMPLETED' || generic) {
+      const check = await juliusRunLineageCheckFor(this.deps, run);
+      // Every pair the table judged rides on the terminal event, compatible ones included: a COMPLETED run's record shows
+      // the founder's rule ran on the pairs it had, not merely that nothing fired.
+      const judged = juliusAcceptanceJudgementFacts(check.judgements);
+      target = check.contradictions.length > 0
+        ? { state: 'FAILED', reasonCode: 'context_integrity_unresolved_clash', facts: { ...judged, ...juliusContradictionFacts(check.contradictions) } }
+        : { ...target, facts: { ...(target.facts ?? {}), ...judged } };
+    }
+    if (target.state !== 'FAILED' && (target.state === 'COMPLETED' || generic)) {
       const findings = await juliusFindingsGateFor(this.deps, run);
       if (!findings.ok) target = { state: target.state === 'BLOCKED' ? 'BLOCKED' : 'VERIFYING', reasonCode: findings.reasonCode };
     }
@@ -1048,7 +1067,8 @@ export class JuliusRunLoop {
    */
   async #applyTarget(
     run: JuliusRunRow,
-    target: { state: JuliusMissionState; reasonCode: string },
+    /** `facts`: what the terminal event records beside the reason — a halting contradiction's pair (decision B). */
+    target: { state: JuliusMissionState; reasonCode: string; facts?: Readonly<Record<string, string | number | null>> },
     tasks: readonly JuliusTask[],
     decisions: readonly JuliusRecordedDecision[],
     resumed: number,
@@ -1105,7 +1125,7 @@ export class JuliusRunLoop {
         runId, projectId, type: current.state === 'COMPLETED' ? 'run.completed' as const : 'run.failed' as const,
         taskId: null, workerId: null, correlationId: runId, causationId: null,
         occurredAt: this.deps.clock.now(),
-        facts: { reasonCode: target.reasonCode, tasks: tasks.length, decisions: decisions.length },
+        facts: { ...(target.facts ?? {}), reasonCode: target.reasonCode, tasks: tasks.length, decisions: decisions.length },
       };
       validateJuliusEvent(event);
       await this.deps.store.appendEvent(event);

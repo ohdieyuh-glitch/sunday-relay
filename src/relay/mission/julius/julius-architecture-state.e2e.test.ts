@@ -183,11 +183,20 @@ describe('P14 — the architecture the architect holds becomes state every worke
     const inForce = foldJuliusArchitecture(rows(harness));
     expect(inForce!.revision).toBe(2);
     expect(inForce!.components[0]!.responsibility).toBe('Streams the page instead of buffering it.');
-    // The coder, which ran after both, was shown both revisions: nothing is
-    // erased, and the record says which is current.
+    // The coder, which ran after both, is shown the revision IN FORCE (founder
+    // decision B, 2026-10-03: a later verified revision of the same subject
+    // SUPERSEDES the earlier). Nothing is erased: revision 1 stays on the record
+    // — its brain entry and its `architecture.recorded` fact above — and the
+    // packet's own integrity record says which superseded which.
     const packet = packetsFor(harness, 'build-1');
     expect(packet).toContain('ARCHITECTURE (revision 2)');
-    expect(packet).toContain('ARCHITECTURE (revision 1)');
+    expect(packet, 'a superseded revision is not handed to a worker as current').not.toContain('ARCHITECTURE (revision 1)');
+    const snapshot = harness.store.contexts().filter((held) => held.taskId === 'build-1').at(-1)!;
+    expect(snapshot.integrityExcludedEntryIds, 'excluded, and recorded as excluded').toContain(juliusArchitectureEntryId('run-1', 1));
+    expect(snapshot.integrityConflicts).toContainEqual(expect.objectContaining({
+      entryIds: [juliusArchitectureEntryId('run-1', 2), juliusArchitectureEntryId('run-1', 1)].sort(),
+      resolution: 'RESOLVED_BY_SUPERSESSION',
+    }));
   });
 });
 

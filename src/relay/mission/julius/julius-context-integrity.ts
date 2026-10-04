@@ -278,7 +278,11 @@ const byStanding = (left: JuliusContextRanking, right: JuliusContextRanking): nu
  */
 export function detectContextConflicts(
   _candidates: readonly JuliusContextCandidate[],
-  _input: { readonly contractEntryIds: readonly string[] },
+  _input: {
+    readonly contractEntryIds: readonly string[];
+    /** Claim-id pairs the trust core's compatibility table found incompatible: nothing may resolve them. */
+    readonly incompatible?: readonly (readonly [string, string])[];
+  },
 ): readonly JuliusContextConflict[] {
   const byClaimId = new Map(_candidates.map((candidate) => [candidate.claim.claimId, candidate]));
   const contractText = _candidates
@@ -308,8 +312,9 @@ export function detectContextConflicts(
     }
   }
 
+  const incompatible = new Set((_input.incompatible ?? []).map(([left, right]) => (left < right ? `${left}\u0000${right}` : `${right}\u0000${left}`)));
   return [...pairs.values()]
-    .map(([first, second]) => resolveConflict(first, second, contractTerms))
+    .map(([first, second]) => resolveConflict(first, second, contractTerms, incompatible))
     .sort((left, right) => left.claimIds[0].localeCompare(right.claimIds[0])
       || left.claimIds[1].localeCompare(right.claimIds[1]));
 }
@@ -324,6 +329,7 @@ function resolveConflict(
   first: JuliusContextCandidate,
   second: JuliusContextCandidate,
   contractTerms: ReadonlySet<string>,
+  incompatible: ReadonlySet<string>,
 ): JuliusContextConflict {
   const claimIds = [first.claim.claimId, second.claim.claimId] as const;
   const entryIds = [first.entry.entryId, second.entry.entryId] as const;
@@ -332,6 +338,13 @@ function resolveConflict(
     keptClaimId: string | null,
     reasonCode: string,
   ): JuliusContextConflict => ({ entryIds, claimIds, resolution, keptClaimId, reasonCode });
+
+  // 0. THE COMPATIBILITY TABLE SAID THESE CANNOT BOTH HOLD (founder decision B, 2026-10-03): incompatible VERIFIED
+  //    values of one subject. Nothing below may choose between them — not lineage, not authority, not trust, not the
+  //    contract — because choosing is exactly the silent resolution the founder forbade. Unresolved, so it fails closed.
+  if (incompatible.has(`${first.claim.claimId}\u0000${second.claim.claimId}`)) {
+    return settled('UNRESOLVED', null, 'INCOMPATIBLE_BY_COMPATIBILITY_TABLE');
+  }
 
   // 1. SUPERSESSION — the run said so itself, in a field written when the later
   //    claim was admitted. Nothing else is as direct.
@@ -438,6 +451,8 @@ export function compileContextWithIntegrity(_input: {
   readonly taskId: string;
   readonly contractEntryIds: readonly string[];
   readonly budgetCharacters: number;
+  /** The trust core's incompatible claim pairs (julius-lineage-asserter.ts); absent means none. */
+  readonly incompatible?: readonly (readonly [string, string])[];
 }): JuliusContextIntegrityOutcome {
   assertBudget(_input.budgetCharacters);
 
@@ -451,7 +466,7 @@ export function compileContextWithIntegrity(_input: {
   // 2. CONFLICTS OVER WHAT THIS ROLE MAY SEE. Terminal claims stay in this pass
   //    so supersession lineage survives into the record — but out-of-scope ones
   //    do not, or an entry this role may never read would reach it as a claim id.
-  const conflicts = detectContextConflicts(inScope, { contractEntryIds: _input.contractEntryIds });
+  const conflicts = detectContextConflicts(inScope, { contractEntryIds: _input.contractEntryIds, incompatible: _input.incompatible });
 
   // 3. WHAT MAY BE CURRENT TRUTH. A CONTRADICTED or SUPERSEDED claim is never
   //    returned, whatever standing it once held.

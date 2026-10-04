@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **215 production files** across 20/20 subsystems (2 roots, 186 traced, 8 not composed by the live root, 19 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **216 production files** across 20/20 subsystems (2 roots, 187 traced, 8 not composed by the live root, 19 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -102,13 +102,14 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | --- | --- | --- |
 | `relay-bridge/julius/mission-knowledge.ts` | traced | `relay-bridge/julius/bootstrap.ts` |
 | `src/relay/mission/julius/index.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
-| `src/relay/mission/julius/julius-claim-ledger.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
+| `src/relay/mission/julius/julius-claim-ledger.ts` | traced | `src/relay/mission/julius/julius-lineage-asserter.ts` |
 | `src/relay/mission/julius/julius-context-integrity.ts` | traced | `src/relay/mission/julius/julius-runtime.ts` |
-| `src/relay/mission/julius/julius-context-provenance.ts` | traced | `src/relay/mission/julius/index.ts` |
-| `src/relay/mission/julius/julius-context-snapshot.ts` | traced | `src/relay/mission/julius/julius-coding-agent.ts` |
+| `src/relay/mission/julius/julius-context-provenance.ts` | traced | `src/relay/mission/julius/julius-claim-ledger.ts` |
+| `src/relay/mission/julius/julius-context-snapshot.ts` | traced | `src/relay/mission/julius/julius-runtime-ports.ts` |
+| `src/relay/mission/julius/julius-lineage-asserter.ts` | traced | `src/relay/mission/julius/julius-runtime.ts` |
 | `src/relay/mission/julius/julius-memory-store.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-memory-trust.ts` | traced | `src/relay/mission/julius/julius-context-integrity.ts` |
-| `src/relay/mission/julius/julius-runtime-ports.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-runtime-ports.ts` | traced | `src/relay/mission/julius/julius-claim-ledger.ts` |
 | `src/relay/mission/julius/julius-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-state-path.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/project-brain/project-brain-document.ts` | traced | `src/relay/persistence/project-brain-postgres.ts` |
@@ -131,11 +132,11 @@ One claimed task all the way through: policy, budget reservation, context compil
 | `src/relay/mission/julius/julius-lease-keeper.ts` | traced | `src/relay/mission/julius/julius-run-loop.ts` |
 | `src/relay/mission/julius/julius-peer-channel.ts` | traced | `src/relay/mission/julius/julius-architecture-state.ts` |
 | `src/relay/mission/julius/julius-peer-runtime.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
-| `src/relay/mission/julius/julius-release-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-release-runtime.ts` | traced | `src/relay/mission/julius/julius-lineage-asserter.ts` |
 | `src/relay/mission/julius/julius-research-protocol.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-segment-lineage.ts` | traced | `src/relay/mission/julius/julius-repair-lineage.ts` |
 | `src/relay/mission/julius/julius-store-failure.ts` | traced | `src/relay/mission/julius/julius-router.ts` |
-| `src/relay/mission/julius/julius-task-contract.ts` | traced | `src/relay/mission/julius/julius-continuous-lifecycle.ts` |
+| `src/relay/mission/julius/julius-task-contract.ts` | traced | `src/relay/mission/julius/julius-runtime-ports.ts` |
 | `src/relay/mission/julius/julius-task-pipeline.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-tick-budget.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-worker-participation.ts` | traced | `src/relay/mission/julius/index.ts` |
@@ -303,7 +304,7 @@ Acceptance criteria, reviewer findings, `verifyTask` and `evaluateJuliusVerifica
 | --- | --- | --- |
 | `src/relay/mission/julius/julius-accept-review-gate.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-attempt-evidence.ts` | traced | `src/relay/mission/julius/index.ts` |
-| `src/relay/mission/julius/julius-verification-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-verification-runtime.ts` | traced | `src/relay/mission/julius/julius-runtime-ports.ts` |
 
 ### 14 REPAIR
 
@@ -311,7 +312,7 @@ A repair round planned from reviewer findings and a REPAIR decision, bounded by 
 
 | production source | role | reached from |
 | --- | --- | --- |
-| `src/relay/mission/julius/julius-repair-lineage.ts` | traced | `src/relay/mission/julius/julius-runtime.ts` |
+| `src/relay/mission/julius/julius-repair-lineage.ts` | traced | `src/relay/mission/julius/julius-release-runtime.ts` |
 | `src/relay/mission/julius/julius-repair-round.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-repair-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 
@@ -322,7 +323,7 @@ A deterministic recovery plan derived exclusively from durable state, and autono
 | production source | role | reached from |
 | --- | --- | --- |
 | `src/relay/mission/julius/julius-continuation.ts` | traced | `src/relay/mission/julius/index.ts` |
-| `src/relay/mission/julius/julius-recovery.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-recovery.ts` | traced | `src/relay/mission/julius/julius-runtime-ports.ts` |
 
 ### 16 LEASES / BUDGETS / PERMISSIONS
 
@@ -353,10 +354,10 @@ Every authoritative transition has exactly one event type; the trajectory is the
 | production source | role | reached from |
 | --- | --- | --- |
 | `src/relay/mission/julius/julius-artifact-reference.ts` | traced | `src/relay/mission/julius/julius-execution-coordinator.ts` |
-| `src/relay/mission/julius/julius-events.ts` | traced | `src/relay/mission/julius/julius-recovery.ts` |
+| `src/relay/mission/julius/julius-events.ts` | traced | `src/relay/mission/julius/julius-runtime-ports.ts` |
 | `src/relay/mission/julius/julius-metrics.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-slot-report.ts` | traced | `src/relay/mission/julius/index.ts` |
-| `src/relay/mission/julius/julius-trajectory.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-trajectory.ts` | traced | `src/relay/mission/julius/julius-runtime-ports.ts` |
 | `src/relay/mission/trace/trace-canonicalization.ts` | traced | `src/relay/mcp/domain/mcp-fingerprint.ts` |
 | `src/relay/mission/trace/trace-errors.ts` | traced | `src/relay/mission/trace/trace-canonicalization.ts` |
 | `src/relay/mission/trace/trace-hashing.ts` | traced | `src/relay/mcp/domain/mcp-fingerprint.ts` |
