@@ -116,6 +116,12 @@ export interface NativeSignInDeps {
    * their social record is named from. Throws when it cannot be recorded; nothing is minted then.
    */
   readonly recordPlayer: (player: { readonly participantId: string; readonly login: string }) => Promise<void>;
+  /**
+   * THE SOCIAL SCHEMA IS THERE (MAIN JUJU's early read, 10-04; the founder's explicit-apply ruling for 032). With the flag on but the
+   * schema not yet applied to this store, sign-in answers the same 503 the social routes do -- before GitHub is asked and before any
+   * players row is written. Absent: ready (the tests' default).
+   */
+  readonly socialReady?: () => Promise<boolean>;
   readonly fetchImpl?: SignInFetch;
   readonly oauthRoot?: string;
   readonly apiRoot?: string;
@@ -182,6 +188,7 @@ export async function handleNativeSignInRoute(
   }
 
   if (!deps.enabled || deps.clientId === null || deps.clientId.trim() === '') return UNAVAILABLE();
+  if (deps.socialReady !== undefined && !(await deps.socialReady())) return UNAVAILABLE();
   const clientId = deps.clientId.trim();
 
   /* ---------------------------------------------------------------- start */

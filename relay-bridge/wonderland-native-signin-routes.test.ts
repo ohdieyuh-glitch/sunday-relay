@@ -72,6 +72,23 @@ describe('desktop sign-in: who may start it', () => {
     expect(gh.calls).toHaveLength(0);
   });
 
+  it('is 503 while the social schema is absent (032 not applied) -- before GitHub is asked, and no player is recorded', async () => {
+    const gh = github({ token: [() => ({ access_token: USER_TOKEN })] });
+    let ready = false;
+    const b = bridge(gh, { socialReady: async () => ready });
+    const start = await b.call('start');
+    expect(start.status).toBe(503);
+    expect(start.body.error?.kind).toBe('signin_unavailable');
+    expect(gh.calls).toHaveLength(0);
+    // the control: the same bridge with the schema present signs in, so the gate is the only difference
+    ready = true;
+    const handle = (await b.call('start')).body.data.handle as string;
+    ready = false;
+    expect((await b.call('poll', { handle }, T0 + 1)).status).toBe(503);
+    expect(b.recorded).toHaveLength(0);
+    expect(b.sessions.size.sessions).toBe(0);
+  });
+
   it('is 503 when GitHub refuses the device flow, and never echoes GitHub', async () => {
     const gh = github({ device: () => ({ error: 'device_flow_disabled', error_description: LEAK }) });
     const r = await bridge(gh).call('start');

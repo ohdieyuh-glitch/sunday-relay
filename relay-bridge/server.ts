@@ -672,6 +672,8 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             clientId: process.env.RELAY_GITHUB_APP_CLIENT_ID?.trim() || null,
             sessions: browserSessions,
             pending: socialPendingSignIns,
+            // the schema first: a store whose 032 is not applied makes sign-in 503 before anything is written (founder ruling a)
+            socialReady: async () => (await socialStore()) !== null,
             recordPlayer: async ({ participantId, login }) => {
               const pool = juliusPool();
               if (pool === null) throw new Error('no database to record the player in');
