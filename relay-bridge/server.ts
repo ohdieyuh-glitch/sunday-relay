@@ -79,6 +79,8 @@ import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
+import { handleWonderlandSocialRoute, isWonderlandSocialRoute } from './wonderland-social-routes';
+import { WonderlandSocialPostgresStore } from '../src/relay/persistence/wonderland-social-postgres';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -630,6 +632,34 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             membership: pairingPool === null ? null : new WonderlandMembershipPostgres(pairingPool),
           });
           if (nativeResult !== null) send(res, nativeResult.status, nativeResult.body, cors);
+          return;
+        }
+
+        /**
+         * WONDERLAND SOCIAL, in front of the Wonderland family for the same reason
+         * the native pairing routes are: `isWonderlandRoute` claims the whole
+         * prefix. Friends, blocks, parties, private servers, presence, Recent
+         * Players and messages, behind the privacy wall (wonderland-social-routes.ts).
+         * Durable in the Julius pool's database (migration 033); no database, 503.
+         * A paired NATIVE client does not reach it until a reviewed decision widens
+         * `native_world` (allowNative: false).
+         */
+        if (isWonderlandSocialRoute(path.replace('/relay-api', ''))) {
+          const socialPool = juliusPool();
+          const socialResult = await handleWonderlandSocialRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            url: (req.url ?? '/').replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+            origin,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            now: Date.now(),
+          }, {
+            store: socialPool === null ? null : new WonderlandSocialPostgresStore(socialPool),
+            sessions: browserSessions,
+            allowNative: false,
+          });
+          if (socialResult !== null) send(res, socialResult.status, socialResult.body, cors);
           return;
         }
 

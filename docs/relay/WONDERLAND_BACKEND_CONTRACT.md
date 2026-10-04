@@ -24,6 +24,8 @@ Visibility is `OWNER`, `PARTICIPANTS`, or `PUBLIC`. `PARTICIPANTS` is battle mem
 | `GET` | `/relay-api/wonderland/brain?projectId=…` · `/brain/events` | the existing panel's surfaces from the durable Project Brain, and its live feed |
 | `POST` | `/relay-api/wonderland/brain/proposals` · `/reviews` · `/mutations` | the panel's Propose and Accept/Decline, saved with provenance, idempotent, version-checked |
 | `POST` | `/relay-api/wonderland/native/pair` · `/session` · `/revoke` | pair a desktop client for one project from the signed-in website |
+| `POST` | `/relay-api/wonderland/social/commands` | one social command as the session's player — friends, blocks, parties, private servers, presence, messages; idempotent by `commandId` — see [WONDERLAND_SOCIAL.md](WONDERLAND_SOCIAL.md) |
+| `GET` | `/relay-api/wonderland/social/me` · `/roster` · `/instances` · `/presence/:id` · `/conversations/:id` · `/servers/:id` | the player's social world, every answer a privacy-wall projection (P1–P5, party, DM, no inference) |
 
 Every mutating request carries a globally unique `commandId`. Retrying the same command returns its first result and does not duplicate a Mission, battle, worker set, reward, or Avatar progression.
 
