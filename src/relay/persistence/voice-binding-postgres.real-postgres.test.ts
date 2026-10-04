@@ -31,11 +31,14 @@ suite('party voice PUID bindings on real PostgreSQL', () => {
     for (const id of [A, B]) await pool.query('INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING', [id]);
   }, 60_000);
 
-  // Shared databases: remove what this suite made (the binding rows cascade with the players).
+  // Shared databases: remove what this suite made (the binding rows cascade with the players). The pool is absent only when
+  // beforeAll's first act threw: then nothing was made. This is teardown, not a test; nothing here could assert.
+  const removeWhatThisSuiteMade = async (db: Pool): Promise<void> => {
+    await db.query('DELETE FROM relay_wonderland.players WHERE player_id = ANY($1::text[])', [[A, B]]);
+    await db.end();
+  };
   afterAll(async () => {
-    if (pool === undefined) return;
-    await pool.query('DELETE FROM relay_wonderland.players WHERE player_id = ANY($1::text[])', [[A, B]]);
-    await pool.end();
+    await (pool === undefined ? Promise.resolve() : removeWhatThisSuiteMade(pool));
   });
 
   it('migration 033 is applied and binds, refuses and re-binds by the rule -- durably, and never two owners for one PUID', async () => {
