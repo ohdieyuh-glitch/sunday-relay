@@ -2232,7 +2232,9 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 					// COLOR 2, THE MARBLING (founder, 2026-10-04: "COLOR 2 = secondary/accent/marbling"): a chosen SECONDARY paints the
 					// BODY's veins over COLOR 1's own cells -- never the strips, which are COLOR 3's alone, and only on a real choice
 					// (HasChosenSecondary), so DEFAULT keeps the profile's one-colour marble exactly as before
-					if (!bStrip && BodyRole == EWonderlandBodyRole::Mascot && Style.HasChosenSecondary())
+					// (and the DEFAULT swatch, which is White, is "as designed": the one-colour marble, never white veins)
+					if (!bStrip && BodyRole == EWonderlandBodyRole::Mascot && Style.HasChosenSecondary()
+						&& !WonderlandMascotStyle::IsDesignedWhite(Style.Secondary))
 					{
 						WonderlandMascotStyle::ApplySmokeMarble(Instance, Want, bDesignedBody, Style.Secondary);
 					}

@@ -20,6 +20,8 @@
 #include "Containers/Ticker.h"
 #include "Dom/JsonObject.h"
 #include "Engine/Engine.h"
+#include "Engine/GameInstance.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -66,6 +68,8 @@ namespace WonderlandShadowColourQa
 		TMap<FString, FString> AfterRestart;
 		TMap<FString, FString> AfterJade;
 		TMap<FString, FString> OthersBefore;
+		/** The second card the DEFAULT-secondary step saves to (SC3.13), so the QA card keeps its colours for the restart. */
+		FString DefaultCardId;
 	};
 	TSharedPtr<FSc3Run> GSc3Run;
 
@@ -223,7 +227,7 @@ namespace WonderlandShadowColourQa
 				Fields[2].ParseIntoArray(Rgb, TEXT(","));
 				const FLinearColor Body = Rgb.Num() == 3
 					? FLinearColor(FCString::Atof(*Rgb[0]), FCString::Atof(*Rgb[1]), FCString::Atof(*Rgb[2]), 1.0f) : FLinearColor::Black;
-				Out.Add(It->GetName() + TEXT(".") + Fields[0], Sc3HueWord(Body));
+				Out.Add(It->GetName() + TEXT(".") + Fields[0], FString::Printf(TEXT("%s val %.2f"), *Sc3HueWord(Body), FMath::Max3(Body.R, Body.G, Body.B)));
 			}
 		}
 		return Out;
@@ -406,6 +410,66 @@ namespace WonderlandShadowColourQa
 		UE_LOG(LogTemp, Display, TEXT("WLSC3 frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), Width, Height);
 	}
 
+	/**
+	 * WHERE THE HEAD AND THE BODY ARE IN A FRAME, in the viewport's pixels, logged beside the shot (Second's review of Color 3: the marble
+	 * checks read the code's own records, so COLOR 2 and COLOR 3 are judged VISIBLE only on the frames -- the runner's PIXEL measure). The
+	 * head is left out of that measure: the eyes follow COLOR 2 by their own long-standing rule. Boxes round the canon height (every skin
+	 * stands at Relay OG's), wide enough for the arms and the strips.
+	 */
+	void Sc3Boxes(APlayerController* PC, ARelayDogCharacter* Dog, const TCHAR* Name)
+	{
+		const FVector Feet = Dog->GetActorLocation() - FVector(0.0, 0.0, Dog->GetSimpleCollisionHalfHeight());
+		const double Tall = Dog->GetCanonBodyHeightUu();
+		const FVector Ahead = Dog->GetActorForwardVector().GetSafeNormal2D();
+		const FVector Across = FVector::CrossProduct(FVector::UpVector, Ahead);
+		auto Project = [&](double Z0, double Z1, double HalfWidth, double HalfDepth, FIntRect& OutRect) -> bool
+		{
+			bool bAny = false;
+			FVector2D Lo(1.0e9, 1.0e9);
+			FVector2D Hi(-1.0e9, -1.0e9);
+			for (int32 Corner = 0; Corner < 8; ++Corner)
+			{
+				const FVector At = Feet + Ahead * ((Corner & 1) ? HalfDepth : -HalfDepth) + Across * ((Corner & 2) ? HalfWidth : -HalfWidth)
+					+ FVector(0.0, 0.0, (Corner & 4) ? Z1 : Z0);
+				FVector2D OnScreen;
+				if (PC->ProjectWorldLocationToScreen(At, OnScreen))
+				{
+					Lo = FVector2D(FMath::Min(Lo.X, OnScreen.X), FMath::Min(Lo.Y, OnScreen.Y));
+					Hi = FVector2D(FMath::Max(Hi.X, OnScreen.X), FMath::Max(Hi.Y, OnScreen.Y));
+					bAny = true;
+				}
+			}
+			OutRect = FIntRect(FMath::FloorToInt(Lo.X), FMath::FloorToInt(Lo.Y), FMath::CeilToInt(Hi.X), FMath::CeilToInt(Hi.Y));
+			return bAny;
+		};
+		FIntRect HeadRect;
+		FIntRect BodyRect;
+		const bool bHead = Project(0.62 * Tall, 1.06 * Tall, 0.26 * Tall, 0.22 * Tall, HeadRect);
+		const bool bBody = Project(0.0, 0.66 * Tall, 0.42 * Tall, 0.30 * Tall, BodyRect);
+		FVector2D View = FVector2D::ZeroVector;
+		if (GEngine != nullptr && GEngine->GameViewport != nullptr)
+		{
+			GEngine->GameViewport->GetViewportSize(View);
+		}
+		UE_LOG(LogTemp, Display, TEXT("WLSC3 boxes %s head %d %d %d %d body %d %d %d %d viewport %.0fx%.0f%s"), Name,
+			HeadRect.Min.X, HeadRect.Min.Y, HeadRect.Max.X, HeadRect.Max.Y, BodyRect.Min.X, BodyRect.Min.Y, BodyRect.Max.X, BodyRect.Max.Y,
+			View.X, View.Y, bHead && bBody ? TEXT("") : TEXT(" (NOT PROJECTED)"));
+	}
+
+	/** A frame for the PIXEL measure: the shot and, in the same tick, where the head and body are in it. */
+	void Sc3Measured(const FSc3Run& Run, APlayerController* PC, ARelayDogCharacter* Dog, const TCHAR* Name)
+	{
+		Sc3Shot(Run, Name);
+		Sc3Boxes(PC, Dog, Name);
+	}
+
+	/** The SECONDARY row's first swatch, DEFAULT, as the palette holds it. */
+	FLinearColor Palette0Colour()
+	{
+		const TArray<TPair<FName, FLinearColor>>& Shared = WonderlandMascotStyle::Palette();
+		return Shared.Num() > 0 ? Shared[0].Value : FLinearColor::White;
+	}
+
 	/** The Wardrobe's SECONDARY swatch, exactly as its click writes it (WonderlandProjectBrainPanel::MakeSwatchRow). */
 	void Sc3PickSecondary(const FLinearColor& Colour)
 	{
@@ -532,6 +596,8 @@ namespace WonderlandShadowColourQa
 				Run.OthersBefore = Sc3Others(World, Costume);
 				UE_LOG(LogTemp, Display, TEXT("WLSC3 worn %s, %d surfaces, %d other bodies' surfaces; look: %s"), *Dog->GetWornSkinId().ToString(),
 					Run.Before.Num(), Run.OthersBefore.Num(), *WonderlandMascotStyle::DescribeSmokeLook());
+				// the frames' camera FIRST: every measured frame (a-e) is taken from this one place, with the sky held still
+				Sc3Camera(Run, World, PC, Dog);
 				// COLOR 1 -- the PRIMARY row's door
 				WonderlandMascotStyle::PickMascotPrimary(White->Key, White->Value);
 				Next(3);
@@ -553,6 +619,8 @@ namespace WonderlandShadowColourQa
 				// THE CONTROL: the "only the strips" judgement, run on this body change, must say NO
 				Sc3Check(Run, TEXT("SC3.1c"), Changed != TEXT("shadow"), FString::Printf(TEXT("control: a COLOR 1 change read as 'only the strips'? %s"),
 					Changed == TEXT("shadow") ? TEXT("YES (the judge cannot fail)") : TEXT("no")));
+				// PIXEL frame a: COLOR 1 WHITE, no secondary, the strips as designed -- the reference the azure marbling is measured against
+				Sc3Measured(Run, PC, Dog, TEXT("a_c1-white_c2-none_c3-default"));
 				// COLOR 2 -- the Wardrobe's SECONDARY swatch
 				Sc3PickSecondary(Azure->Value);
 				Next(4);
@@ -567,8 +635,9 @@ namespace WonderlandShadowColourQa
 				const bool bNotStrips = Sc3Line(Run.AfterPrimary, TEXT("shadow")) == Sc3Line(Run.AfterSecondary, TEXT("shadow"));
 				const bool bNotDeep = Sc3Line(Run.AfterPrimary, TEXT("bonedeep")) == Sc3Line(Run.AfterSecondary, TEXT("bonedeep"));
 				Sc3Check(Run, TEXT("SC3.2"), bMarble && bNotStrips && bNotDeep && Sc3ChangedWithin(Changed, TEXT("bone,eye,eyehalo"), TEXT("bone")),
-					FString::Printf(TEXT("COLOR 2 AZURE: changed [%s] (want bone, and the eyes by their existing SECONDARY rule); the body's marble %s; the strips %s, the deep coat %s"),
+					FString::Printf(TEXT("COLOR 2 AZURE (DATA: the marble the code drew; VISIBLE is judged on the frames, PIXEL M2): changed [%s] (want bone, and the eyes by their existing SECONDARY rule); the body's marble %s; the strips %s, the deep coat %s"),
 						*Changed, *Got, bNotStrips ? TEXT("untouched") : TEXT("MOVED"), bNotDeep ? TEXT("untouched") : TEXT("MOVED")));
+				Sc3Measured(Run, PC, Dog, TEXT("b_c2-azure"));
 				// COLOR 3 -- the STRIPS row's door
 				WonderlandMascotStyle::PickMascotStrip(Crimson->Key, Crimson->Value);
 				Next(5);
@@ -585,9 +654,10 @@ namespace WonderlandShadowColourQa
 						*Changed, *Got, *Sc3Rgb(Sc3StripWant(Crimson->Value))));
 				// THE CONTROL: the same reader, asked whether the strips are COLOR 2's azure, must say NO
 				FString Wrong;
-				Sc3Check(Run, TEXT("SC3.3c"), !Sc3BaseIs(Costume, TEXT("shadow"), Sc3StripWant(Azure->Value), Wrong),
+				const bool bReadAsAzure = Sc3BaseIs(Costume, TEXT("shadow"), Sc3StripWant(Azure->Value), Wrong);
+				Sc3Check(Run, TEXT("SC3.3c"), !bReadAsAzure,
 					FString::Printf(TEXT("control: the strips %s read as azure %s? %s"), *Wrong, *Sc3Rgb(Sc3StripWant(Azure->Value)),
-						Sc3BaseIs(Costume, TEXT("shadow"), Sc3StripWant(Azure->Value), Wrong) ? TEXT("YES (the reader cannot fail)") : TEXT("no")));
+						bReadAsAzure ? TEXT("YES (the reader cannot fail)") : TEXT("no")));
 				// SC3.4: nothing else in the world moved -- the companions, the swords they become
 				const TMap<FString, FString> Others = Sc3Others(World, Costume);
 				if (Run.OthersBefore.Num() == 0)
@@ -600,6 +670,33 @@ namespace WonderlandShadowColourQa
 					Sc3Check(Run, TEXT("SC3.4"), Moved.IsEmpty(), FString::Printf(TEXT("%d companion surfaces across COLOR 1/2/3: moved [%s] (want none)"),
 						Others.Num(), *Moved));
 				}
+				Sc3Measured(Run, PC, Dog, TEXT("c_c3-crimson"));
+				// the strips back to DEFAULT for one frame (the COLOR 3 pixel pair), then CRIMSON again before SAVE TO C.A.R.D.
+				WonderlandMascotStyle::PickMascotStrip(FName(TEXT("DEFAULT")), FLinearColor::White);
+				Next(30);
+			}
+			break;
+		case 30:
+			if (In >= 1.5)
+			{
+				const TMap<FString, FString> DefaultStrips = Sc3Snapshot(Costume);
+				const FString Changed = Sc3Changed(Run.AfterStrips, DefaultStrips);
+				const bool bDesigned = Sc3Line(DefaultStrips, TEXT("shadow")) == Sc3Line(Run.AfterSecondary, TEXT("shadow"));
+				Sc3Check(Run, TEXT("SC3.3d"), Changed == TEXT("shadow") && bDesigned && !WonderlandMascotStyle::HasChosenStrip(),
+					FString::Printf(TEXT("COLOR 3 DEFAULT (data): changed [%s] (want shadow only); the strips as designed again (as before CRIMSON): %s"),
+						*Changed, bDesigned ? TEXT("yes") : TEXT("NO")));
+				Sc3Measured(Run, PC, Dog, TEXT("d_c3-default"));
+				WonderlandMascotStyle::PickMascotStrip(Crimson->Key, Crimson->Value);
+				Next(31);
+			}
+			break;
+		case 31:
+			if (In >= 1.5)
+			{
+				const TMap<FString, FString> Again = Sc3Snapshot(Costume);
+				const FString Differs = Sc3Changed(Run.AfterStrips, Again);
+				Sc3Check(Run, TEXT("SC3.3e"), Differs.IsEmpty() && Again.Num() > 0,
+					FString::Printf(TEXT("CRIMSON again before the save: every surface as at SC3.3 (differs [%s], want none; %d surfaces)"), *Differs, Again.Num()));
 				Sc3Camera(Run, World, PC, Dog);
 				Next(6);
 			}
@@ -677,6 +774,56 @@ namespace WonderlandShadowColourQa
 				Sc3Check(Run, TEXT("SC3.7c"), VersusGold == TEXT("shadow"),
 					FString::Printf(TEXT("control: the reloaded look against the gold one differs at [%s] (want shadow: the comparison can tell)"), *VersusGold));
 				Sc3Shot(Run, TEXT("3_card-reloaded"));
+				// THE SECONDARY ROW'S DEFAULT (Second's review, 10-04): on a SECOND card, so the QA card keeps its colours for the restart
+				if (!WonderlandCardDirector::Create(World, TEXT("QA COLOR3 DEFAULT"), Run.DefaultCardId, Said))
+				{
+					Sc3Check(Run, TEXT("SC3.13"), false, FString::Printf(TEXT("no second card for the DEFAULT step: %s"), *Said));
+					Finish();
+					return false;
+				}
+				WonderlandCardDirector::Select(World, Run.DefaultCardId, Said);
+				Sc3PickSecondary(Palette0Colour());
+				Next(40);
+			}
+			break;
+		case 40:
+			if (In >= 1.5)
+			{
+				FLinearColor Cells;
+				FLinearColor Veins;
+				FLinearColor DrawnCells;
+				FLinearColor DrawnVeins;
+				float PeakDrawn = 0.0f;
+				float PeakAsked = 0.0f;
+				const bool bMarble = Costume != nullptr && Costume->QaReadMarble(FName(TEXT("bone")), Cells, Veins, DrawnCells, DrawnVeins, PeakDrawn, PeakAsked);
+				const bool bOneColour = Sc3BaseIs(Costume, TEXT("bone"), WonderlandMascotStyle::SmokeBaseFor(White->Value, false), Got);
+				Sc3Measured(Run, PC, Dog, TEXT("e_c2-default"));
+				const bool bSaved = WonderlandCardDirector::SaveLiveToActive(World, Said);
+				const FWonderlandCard* DefaultCard = Store->Find(Run.DefaultCardId);
+				const bool bCardDefault = DefaultCard != nullptr && DefaultCard->Secondary.bRecorded && !DefaultCard->Secondary.bChosen;
+				Sc3Check(Run, TEXT("SC3.13"), !bMarble && bOneColour && bSaved && bCardDefault,
+					FString::Printf(TEXT("COLOR 2 DEFAULT (the row's first swatch, White): the body's marble %s (want none: as designed); the body %s (the one-colour look); ")
+						TEXT("SAVE TO C.A.R.D. '%s'; the card holds colour 2 %s (want DEFAULT, never WHITE)"), bMarble ? TEXT("STILL DRAWN") : TEXT("none"), *Got, *Said,
+						DefaultCard != nullptr ? *WonderlandCardDirector::DescribeColour(DefaultCard->Secondary) : TEXT("(gone)")));
+				// THE CONTROL: the QA card's own colour 2 (AZURE) must NOT read as DEFAULT -- the reader can tell them apart
+				const FWonderlandCard* QaCard = Store->Find(Run.CardId);
+				const bool bQaDefault = QaCard != nullptr && QaCard->Secondary.bRecorded && !QaCard->Secondary.bChosen;
+				Sc3Check(Run, TEXT("SC3.13c"), QaCard != nullptr && !bQaDefault,
+					FString::Printf(TEXT("control: the QA card's colour 2 %s read as DEFAULT? %s"),
+						QaCard != nullptr ? *WonderlandCardDirector::DescribeColour(QaCard->Secondary) : TEXT("(gone)"), bQaDefault ? TEXT("YES (cannot fail)") : TEXT("no")));
+				WonderlandCardDirector::Select(World, Run.CardId, Said);
+				UE_LOG(LogTemp, Display, TEXT("WLSC3 select said: %s"), *Said);
+				Next(41);
+			}
+			break;
+		case 41:
+			if (In >= 1.5)
+			{
+				const TMap<FString, FString> Back = Sc3Snapshot(Costume);
+				const FString Differs = Sc3Changed(Run.AfterStrips, Back);
+				Sc3Check(Run, TEXT("SC3.14"), Back.Num() > 0 && Differs.IsEmpty() && Store->GetActiveId() == Run.CardId && !WonderlandCardDirector::IsModified(World),
+					FString::Printf(TEXT("back on the QA card for the restart: every surface as saved (differs [%s], want none); active %s; modified %s"), *Differs,
+						Store->GetActiveId() == Run.CardId ? TEXT("yes") : TEXT("NO"), WonderlandCardDirector::IsModified(World) ? TEXT("YES") : TEXT("no")));
 				UE_LOG(LogTemp, Display, TEXT("WLSC3 left for the restart: card %s active, WHITE / AZURE marbling / CRIMSON strips"), *Run.CardId);
 				Finish();
 				return false;
@@ -696,7 +843,7 @@ namespace WonderlandShadowColourQa
 				const bool bPaint = Sc3MarbleIs(Costume, WonderlandMascotStyle::SmokeMarbleCellsFor(White->Value, false), Azure->Value, Got)
 					&& Sc3BaseIs(Costume, TEXT("shadow"), Sc3StripWant(Crimson->Value), GotStrips);
 				Sc3Check(Run, TEXT("SC3.8"), bLive && bPaint,
-					FString::Printf(TEXT("after a clean exit and a restart: wears %s; COLOR 1 WHITE ring %s; COLOR 2 %s; COLOR 3 %s; painted body %s, strips %s"),
+					FString::Printf(TEXT("after a clean exit and a restart (DATA: the paint the code holds; the frames carry what is visible): wears %s; COLOR 1 WHITE ring %s; COLOR 2 %s; COLOR 3 %s; painted body %s, strips %s"),
 						*Dog->GetWornSkinId().ToString(), WonderlandMascotStyle::IsMascotPrimaryOn(White->Key, White->Value) ? TEXT("on") : TEXT("OFF"),
 						*Sc3Rgb(Style.Secondary), *Sc3Rgb(WonderlandMascotStyle::StripColour()), *Got, *GotStrips));
 				const FWonderlandCard* Card = Store->GetCards().FindByPredicate([](const FWonderlandCard& Each) { return Each.Name == Sc3CardName; });
@@ -738,8 +885,23 @@ namespace WonderlandShadowColourQa
 			{
 				const TMap<FString, FString> Reloaded = Sc3Snapshot(Costume);
 				const FString Differs = Sc3Changed(Run.AfterRestart, Reloaded);
-				Sc3Check(Run, TEXT("SC3.10"), !Run.CardId.IsEmpty() && Differs.IsEmpty(),
-					FString::Printf(TEXT("SELECT after the restart: every surface exactly as it came back (differs [%s], want none)"), *Differs));
+				int32 Unreadable = 0;
+				for (const TPair<FString, FString>& Surface : Reloaded)
+				{
+					Unreadable += Surface.Value == TEXT("unreadable") ? 1 : 0;
+				}
+				Sc3Check(Run, TEXT("SC3.10"), !Run.CardId.IsEmpty() && Reloaded.Num() > 0 && Unreadable == 0 && Differs.IsEmpty(),
+					FString::Printf(TEXT("SELECT after the restart: every surface exactly as it came back (differs [%s], want none; %d surfaces, %d unreadable)"),
+						*Differs, Reloaded.Num(), Unreadable));
+				// THE CONTROL: the same reading with ONE surface (the strips) altered must be told apart, by exactly that surface
+				TMap<FString, FString> Altered = Reloaded;
+				if (FString* Strips = Altered.Find(TEXT("shadow")))
+				{
+					*Strips += TEXT(" (altered by the control)");
+				}
+				const FString Caught = Sc3Changed(Run.AfterRestart, Altered);
+				Sc3Check(Run, TEXT("SC3.10c"), Caught == TEXT("shadow"),
+					FString::Printf(TEXT("control: one altered surface found as [%s] (want shadow: the comparison can fail)"), *Caught));
 				// CHANGE ONLY COLOR 3 AGAIN -- JADE
 				WonderlandMascotStyle::PickMascotStrip(Jade->Key, Jade->Value);
 				Next(23);
@@ -790,7 +952,8 @@ namespace WonderlandShadowColourQa
 	FAutoConsoleCommandWithWorldAndArgs GSc3Command(
 		TEXT("wl.Qa.ShadowColour3"),
 		TEXT("Shadow Flame's three colours through the real Project Brain / C.A.R.D. path (founder, 10-04): COLOR 1 WHITE, COLOR 2 AZURE marbling, ")
-		TEXT("COLOR 3 CRIMSON strips through the rows' own doors, SAVE TO C.A.R.D., only COLOR 3 changed, the card reloaded (SC3.0-SC3.7), then quits. ")
+		TEXT("COLOR 3 CRIMSON strips through the rows' own doors, SAVE TO C.A.R.D., only COLOR 3 changed, the card reloaded (SC3.0-SC3.7), the SECONDARY row's ")
+		TEXT("DEFAULT on a second card (SC3.13-SC3.14), then quits; frames a-e with their head/body boxes for the runner's PIXEL measure (VISIBLE is judged there). ")
 		TEXT("`restart` (the next boot): the colours and the card came back, reload, only COLOR 3 changed again (SC3.8-SC3.12). Frames in Saved/Screenshots/WLSHADOWCOLOR3."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{

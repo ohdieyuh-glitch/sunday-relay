@@ -219,6 +219,13 @@ namespace WonderlandMascotStyle
 	WONDERLAND_API FLinearColor AccentColour(const FLinearColor& Authored, const FLinearColor& Chosen, bool bLight);
 
 	/**
+	 * WHITE IS "AS DESIGNED" for a SECONDARY pick: the row's DEFAULT swatch is White, AccentColour returns the authored colour for it,
+	 * and the COLOR 2 marble and the C.A.R.D. read it the same way (Second's review of Color 3, 10-04: the DEFAULT swatch drew WHITE
+	 * veins on the Shadow body and a card recorded it as WHITE). The eyes keep their own long-standing rule.
+	 */
+	WONDERLAND_API bool IsDesignedWhite(const FLinearColor& Colour);
+
+	/**
 	 * A SECONDARY-COLOURED CLOTH: the chosen Secondary as a DEEP SHADE, for a lit surface a figure tags
 	 * `secondary_deep` -- Jack Flame's suit (founder, 2026-09-30: "The Jack Flame secondary color must now control
 	 * ALL THREE: flames, tie, suit ... while preserving material detail/readability").
