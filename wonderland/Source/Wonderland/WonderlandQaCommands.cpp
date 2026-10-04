@@ -13602,6 +13602,16 @@ namespace
 	 *          SI13 TAB / LF / CRLF / VT between a label and its value (MAJOR 1)  SI14 a value glued to the marker (MAJOR 2)
 	 *          SI15 label shapes and values (MAJOR 3)  SI16 over-redaction /keep cannot undo (finding 4): stored as typed
 	 *   SI17 the corpus's 19 regression controls; a '#' inside a URL userinfo password redacted (CONTROL: the rule off, it leaks)
+	 *   SI18-SI25 (r7) Second's static attack on r6 (card_second/r6_attack: 50 of 100 new synthetic attacks leaked), one check per r7 rule, each
+	 *        case predicted first in CORE's r7 model (m6_core/r7_secrets/si_r7_cases.py, the table generated from it) and each with a PLANTED
+	 *        CONTROL -- that rule off, every case must turn back (leak, or a strong value come back after /keep):
+	 *          SI18 look-alike / full-width / blank-glyph / %3D / a marker typed in another case  SI19 a noun phrase before "is"
+	 *          SI20 fillers, a parenthesised value, a clause-final word, glued -> and |  SI21 lists, wraps, quoted runs, a pass phrase, a value
+	 *          past a typed marker, every repeat  SI22 CLI credentials, user:X@host, X@host, config pastes, Authorization:Bearer
+	 *          SI23 p@ssword, password1, OTP, door code, license key, a bare key, Passwort, contrase\u00F1a, Russian, Chinese
+	 *   SI24 (r7) label prose: stored as typed, or altered and given back EXACTLY by /keep, and never rewritten by a restart's restore
+	 *        (CONTROL: the classes off -- every label value certain, r6 -- each altered line is lost to /keep or rewritten)
+	 *   SI25 (r7) a PEM block to the end of its END line: its body never back after /keep (CONTROL: the PEM rule off, /keep gives it back)
 	 */
 	struct FQaSecretInput
 	{
@@ -14304,9 +14314,9 @@ namespace
 			| FWonderlandCardStore::QaRuleLoginPair,
 			TEXT("label shapes and values: was / for staging: / (staging): / - / -> / := / password's / passwords: / pass / pw / login name:value / ?pwd= / ?passwd= / ?api-key= / DB_PASS= / SMTP_PASS= / REDIS_AUTH= / pin / passcode / Swordfish / SwordFishKing / 5 characters / NBSP / ideographic space / curly quotes / guillemets (Second's MAJOR 3)"),
 			TEXT("the label window, the label forms, the URL pieces, the login pair"));
-		R5Check(TEXT("SI16"), 4, FWonderlandCardStore::QaRuleValueLike,
+		R5Check(TEXT("SI16"), 4, FWonderlandCardStore::QaRuleValueLike | FWonderlandCardStore::QaRuleFold,
 			TEXT("over-redaction /keep cannot undo: reset-flow, door's, e-mail, an ISO date, hash_compare, level-2, a quantity after token, refresh_handler, r\u00E9union, v2.0-alpha, quarterly-ish -- each stored as typed (Second's finding 4)"),
-			TEXT("the value-likeness test"));
+			TEXT("the value-likeness test, and r7's fold (which reads r\u00E9union as ASCII: either rule keeps it)"));
 		// SI17: the corpus's 19 controls (every shape round 4 and 5 fixed, plus the reset sentence) as the corpus says; and a password with a
 		// '#' in a URL's userinfo (CORE's r6 measurement: 24% of Second's userinfo probes leaked) -- with its control
 		CaseMissedAt = SlotsMissed;
@@ -14345,6 +14355,296 @@ namespace
 				ControlCount, ControlsAsCorpus, ControlWrong.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- FIRST WRONG '%s'"), *ControlWrong),
 				bHashClean ? TEXT("is redacted") : TEXT("GETS THROUGH"), bHashControlLeaks ? TEXT("leaks, as it must") : TEXT("does NOT leak (BLIND control)")));
 
+		// SI18-SI23: SECOND'S STATIC ATTACK ON r6 (card_second/r6_attack, 10-04: 50 of 100 new synthetic attacks leaked) -- one check per r7 rule.
+		// Every case was predicted first in CORE's r7 model and this table is GENERATED from it (m6_core/r7_secrets/si_r7_cases.py, never
+		// retyped); the values are joined here from halves. Each case goes through the product's door (SubmitDraftScreened), the terminal's
+		// (MaskForDisplay) and /keep: CLEAN = the value in neither, and a STRONG value still gone after /keep (a label's weak value is given back
+		// by /keep, by design). THE PLANTED CONTROL: the check's rule off for that case's calls, every case must turn back -- the value leaks,
+		// or a strong one comes back after /keep.
+		struct FR7Case
+		{
+			const TCHAR* Template;
+			const TCHAR* Value;
+			/** 18 fold, 19 noun phrase, 20 fillers, 21 continuation, 22 CLI and config pastes, 23 labels. */
+			int32 Check;
+			/** A strong value: still gone after /keep. */
+			bool bStrong;
+		};
+		static const FR7Case R7Cases[] = {
+			{ TEXT("p\u0430ssword: {V}"), TEXT("{V}"), 18, true },
+			{ TEXT("password\uFF1A{V}"), TEXT("{V}"), 18, true },
+			{ TEXT("password\u2800{V}"), TEXT("{V}"), 18, true },
+			{ TEXT("password\u3164{V}"), TEXT("{V}"), 18, true },
+			{ TEXT("password\uFE0F{V}"), TEXT("{V}"), 18, true },
+			{ TEXT("password\u034F{V}"), TEXT("{V}"), 18, true },
+			{ TEXT("password\uFF1D{V}"), TEXT("{V}"), 18, true },
+			{ TEXT("\uFF50\uFF41\uFF53\uFF53\uFF57\uFF4F\uFF52\uFF44: {V}"), TEXT("{V}"), 18, true },
+			{ TEXT("open https://h.example.com/login?pwd%3D{V} now"), TEXT("{V}"), 18, true },
+			{ TEXT("[A key: never shown or stored]{V}"), TEXT("{V}"), 18, true },
+			{ TEXT("the password for the new staging db box is {V}"), TEXT("{V}"), 19, true },
+			{ TEXT("the password for the staging server is {V}"), TEXT("{V}"), 19, true },
+			{ TEXT("the password to the prod database is {V}"), TEXT("{V}"), 19, true },
+			{ TEXT("the password of the admin account is {V}"), TEXT("{V}"), 19, true },
+			{ TEXT("the api token for the staging cluster is {T}"), TEXT("{T}"), 19, true },
+			{ TEXT("the password on the build server is {V}"), TEXT("{V}"), 19, true },
+			{ TEXT("password ({V})"), TEXT("{V}"), 20, true },
+			{ TEXT("pwd ({V})"), TEXT("{V}"), 20, true },
+			{ TEXT("token ({T})"), TEXT("{T}"), 20, true },
+			{ TEXT("password (it is {V})"), TEXT("{V}"), 20, true },
+			{ TEXT("password: now {V}"), TEXT("{V}"), 20, true },
+			{ TEXT("password: it's {V}"), TEXT("{V}"), 20, true },
+			{ TEXT("pwd = probably {V}"), TEXT("{V}"), 20, true },
+			{ TEXT("the password is {W}"), TEXT("{W}"), 20, false },
+			{ TEXT("my password is Correct-Horse-Battery"), TEXT("Correct-Horse-Battery"), 20, false },
+			{ TEXT("password->{V}"), TEXT("{V}"), 20, true },
+			{ TEXT("password|{V}"), TEXT("{V}"), 20, true },
+			{ TEXT("password: {A}\\\n{B}"), TEXT("{B}"), 21, true },
+			{ TEXT("passwords: {V}, {V2}"), TEXT("{V2}"), 21, true },
+			{ TEXT("password: {V} (again: {V})"), TEXT("{V}"), 21, true },
+			{ TEXT("passphrase: correct horse battery staple"), TEXT("horse battery staple"), 21, false },
+			{ TEXT("password: \"{Q1} {Q2} {Q3}\""), TEXT("{Q2}"), 21, true },
+			{ TEXT("password: [a key: never shown or stored] {V}"), TEXT("{V}"), 21, true },
+			{ TEXT("set the password to {V} and confirm with {V}"), TEXT("{V}"), 21, true },
+			{ TEXT("Authorization:Bearer {T}"), TEXT("{T}"), 22, true },
+			{ TEXT("curl -u admin:{V} https://api.example.com/v1"), TEXT("{V}"), 22, true },
+			{ TEXT("mysql -u root -p{V} prod"), TEXT("{V}"), 22, true },
+			{ TEXT("sshpass -p {V} ssh deploy{AT}10.0.0.5"), TEXT("{V}"), 22, true },
+			{ TEXT("connect admin:{V}{AT}db.example.com"), TEXT("{V}"), 22, true },
+			{ TEXT("git clone https://{T}{AT}github.com/org/repo"), TEXT("{T}"), 22, true },
+			{ TEXT("docker login -u bob -p {V}"), TEXT("{V}"), 22, true },
+			{ TEXT("login bob / {V}"), TEXT("{V}"), 22, true },
+			{ TEXT("redis-cli -a {V} ping"), TEXT("{V}"), 22, true },
+			{ TEXT("{\"user\":\"bob\",\"pwd\":\"{V}\"}"), TEXT("{V}"), 22, true },
+			{ TEXT("user=bob,password={V}"), TEXT("{V}"), 22, true },
+			{ TEXT("p@ssword: {V}"), TEXT("{V}"), 23, true },
+			{ TEXT("password1: {V}"), TEXT("{V}"), 23, true },
+			{ TEXT("the door code {P} opens it"), TEXT("{P}"), 23, true },
+			{ TEXT("OTP {P} expires soon"), TEXT("{P}"), 23, true },
+			{ TEXT("license key: {L}"), TEXT("{L}"), 23, true },
+			{ TEXT("key: {T}"), TEXT("{T}"), 23, true },
+			{ TEXT("Passwort: {V}"), TEXT("{V}"), 23, true },
+			{ TEXT("contrase\u00F1a: {V}"), TEXT("{V}"), 23, true },
+			{ TEXT("\u043F\u0430\u0440\u043E\u043B\u044C: {V}"), TEXT("{V}"), 23, true },
+			{ TEXT("\u5BC6\u7801\uFF1A{V}"), TEXT("{V}"), 23, true },
+			{ TEXT("Set-Cookie: sessionid={T}; Path=/"), TEXT("{T}"), 23, true },
+		};
+		auto R7Fill = [](const TCHAR* Text)
+		{
+			FString Out = Text;
+			Out.ReplaceInline(TEXT("{V2}"), *(FString(TEXT("Zz9#k")) + TEXT("Lm3Qr")), ESearchCase::CaseSensitive);
+			Out.ReplaceInline(TEXT("{V}"), *(FString(TEXT("Hx7!q")) + TEXT("Pw2zL")), ESearchCase::CaseSensitive);
+			Out.ReplaceInline(TEXT("{T}"), *(FString(TEXT("ZtQ9mK2v")) + TEXT("X8pL4nR7")), ESearchCase::CaseSensitive);
+			Out.ReplaceInline(TEXT("{P}"), *(FString(TEXT("4829")) + TEXT("13")), ESearchCase::CaseSensitive);
+			Out.ReplaceInline(TEXT("{L}"), *(FString(TEXT("QA7X-9KLM")) + TEXT("-2PQR-8ZTW")), ESearchCase::CaseSensitive);
+			Out.ReplaceInline(TEXT("{A}"), TEXT("Hx7!q"), ESearchCase::CaseSensitive);
+			Out.ReplaceInline(TEXT("{B}"), TEXT("Pw2zL"), ESearchCase::CaseSensitive);
+			Out.ReplaceInline(TEXT("{Q1}"), TEXT("Hx7"), ESearchCase::CaseSensitive);
+			Out.ReplaceInline(TEXT("{Q2}"), TEXT("qPw2"), ESearchCase::CaseSensitive);
+			Out.ReplaceInline(TEXT("{Q3}"), TEXT("zL9"), ESearchCase::CaseSensitive);
+			Out.ReplaceInline(TEXT("{W}"), *(FString(TEXT("marma")) + TEXT("lade")), ESearchCase::CaseSensitive);
+			// the '@' of a user:X@host joined here too: the release scan reads the package for user:password@ shapes
+			Out.ReplaceInline(TEXT("{AT}"), TEXT("@"), ESearchCase::CaseSensitive);
+			return Out;
+		};
+		// ONE CASE through both doors and /keep (a case that found no slot is BLIND, counted by SlotNote)
+		struct FR7Outcome
+		{
+			bool bClean = false;
+			bool bKeptClean = false;
+			FString Stored;
+		};
+		auto R7Run = [&](const FR7Case& Case)
+		{
+			FR7Outcome Out;
+			const FString Typed = R7Fill(Case.Template);
+			const FString Value = R7Fill(Case.Value);
+			const FString Trimmed = Typed.TrimStartAndEnd();
+			const FSubmitted Done = Submit(Typed);
+			const FString Shown = FWonderlandCardStore::MaskForDisplay(Trimmed);
+			Out.Stored = Done.Kept;
+			Out.bClean = !Done.bNoSlot && !Value.IsEmpty() && !Done.Kept.Contains(Value) && !Shown.Contains(Value);
+			int32 Still = 0;
+			const bool bR7KeepRan = !Done.bNoSlot && Done.bAccepted && Set->KeepObjectiveAsTyped(Done.Id, Typed, Still);
+			const FWonderlandMissionTask* AfterKeep = Done.bNoSlot ? nullptr : Set->Find(Done.Id);
+			Out.bKeptClean = !Done.bNoSlot && (!bR7KeepRan || (AfterKeep != nullptr && !AfterKeep->Objective.Contains(Value)));
+			FreeSlots();
+			return Out;
+		};
+		auto R7Check = [&](const TCHAR* Id, int32 Check, uint32 RulesOff, const TCHAR* What, const TCHAR* RuleName)
+		{
+			CaseMissedAt = SlotsMissed;
+			int32 Cases = 0;
+			int32 Clean = 0;
+			int32 Flipped = 0;
+			FString Wrong;
+			FString NotFlipped;
+			for (const FR7Case& Case : R7Cases)
+			{
+				if (Case.Check != Check)
+				{
+					continue;
+				}
+				++Cases;
+				const FR7Outcome On = R7Run(Case);
+				if (On.bClean && (On.bKeptClean || !Case.bStrong))
+				{
+					++Clean;
+				}
+				else if (Wrong.IsEmpty())
+				{
+					// shown MASKED: the stored text of a leak still holds the fake value
+					Wrong = FString::Printf(TEXT("'%s' -> '%s'%s"), *FWonderlandCardStore::MaskForDisplay(R7Fill(Case.Template)),
+						*FWonderlandCardStore::MaskForDisplay(On.Stored), On.bClean ? TEXT(" (its value BACK after /keep)") : TEXT(""));
+				}
+				FWonderlandCardStore::QaRulesOff() = RulesOff;
+				const FR7Outcome R7Control = R7Run(Case);
+				FWonderlandCardStore::QaRulesOff() = 0;
+				if (!R7Control.bClean || (Case.bStrong && !R7Control.bKeptClean))
+				{
+					++Flipped;
+				}
+				else if (NotFlipped.IsEmpty())
+				{
+					NotFlipped = FWonderlandCardStore::MaskForDisplay(R7Fill(Case.Template));
+				}
+			}
+			S.Check(Id, SlotsMissed == CaseMissedAt && Cases > 0 && Clean == Cases && Flipped == Cases,
+				SlotNote() + FString::Printf(TEXT("%s: %d of %d redacted on submit and on screen (a strong value still after /keep)%s; the CONTROL (%s off): %d of %d turn back%s"),
+					What, Clean, Cases, Wrong.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- FIRST WRONG %s"), *Wrong), RuleName, Flipped, Cases,
+					NotFlipped.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- the rule does not decide '%s' (BLIND control)"), *NotFlipped)));
+		};
+		R7Check(TEXT("SI18"), 18, FWonderlandCardStore::QaRuleFold,
+			TEXT("look-alike letters (Cyrillic a, full-width), full-width : and =, blank glyphs U+2800 U+3164, U+FE0F and U+034F glue, %3D, a marker typed in another case (Second's (e))"),
+			TEXT("the fold"));
+		R7Check(TEXT("SI19"), 19, FWonderlandCardStore::QaRuleNounPhrase,
+			TEXT("a noun phrase between the label and \"is\": for the new staging db box / for the staging server / to the prod database / of the admin account / on the build server (Second's finding 1)"),
+			TEXT("the noun phrase"));
+		R7Check(TEXT("SI20"), 20, FWonderlandCardStore::QaRuleFillers | FWonderlandCardStore::QaRuleContinue,
+			TEXT("a parenthesised value, fillers after a connector (now / it's / probably), a clause-final word after \"is\", Correct-Horse-Battery, glued -> and | (Second's findings 4-5)"),
+			TEXT("the fillers and the continuation"));
+		R7Check(TEXT("SI21"), 21, FWonderlandCardStore::QaRuleContinue,
+			TEXT("a backslash wrap, \"X, Y\", a repeat, a pass phrase, a quoted run, a value past a typed marker, \"confirm with X\" (Second's next tier, (d))"),
+			TEXT("the continuation"));
+		R7Check(TEXT("SI22"), 22, FWonderlandCardStore::QaRuleCli | FWonderlandCardStore::QaRuleUrlPieces,
+			TEXT("Authorization:Bearer, curl -u, mysql -p, sshpass -p, user:X@host, X@host, docker login -p, login bob / X, redis-cli -a, a JSON paste, user=bob,password= (Second's findings 2-3)"),
+			TEXT("the CLI forms and every piece of a word"));
+		R7Check(TEXT("SI23"), 23, FWonderlandCardStore::QaRuleLabels,
+			TEXT("p@ssword, password1, a door code, OTP, a license key, a bare key, Passwort, contrase\u00F1a, Russian, Chinese, a session id (Second's next tier)"),
+			TEXT("the r7 labels"));
+
+		// SI24: A LABEL'S WEAK VALUE COSTS A /keep, NEVER A WORD (Second's (a)/(b), r7). Label prose -- every line stored as typed, or altered and
+		// given back EXACTLY by /keep -- and none rewritten by a restart's restore (a pre-r7 contract holding it). THE CONTROL: the classes off
+		// (every label value certain, as r6), each altered line must be lost to /keep or rewritten by the restore.
+		static const TCHAR* const LabelProse[] = {
+			TEXT("fix password: required validation"),
+			TEXT("token: invalid error on login"),
+			TEXT("api key: missing in staging"),
+			TEXT("password Manager"),
+			TEXT("the password Policy page"),
+			TEXT("the secret is Kubernetes"),
+			TEXT("auth: OAuth2 flow"),
+			TEXT("passwords: hash them"),
+			TEXT("SORT_KEY = name"),
+			TEXT("cache_key = user_id"),
+			TEXT("primary_key: id"),
+			TEXT("MAX_TOKEN=4096"),
+			TEXT("pin 2026 roadmap to the wiki"),
+			TEXT("password: see the vault"),
+			TEXT("the token is Expired on staging"),
+			TEXT("update the password Policy page"),
+			TEXT("buy a password Manager licence") };
+		CaseMissedAt = SlotsMissed;
+		int32 ProseAltered = 0;
+		int32 ProseGivenBack = 0;
+		int32 ProseRestoreSame = 0;
+		int32 ProseFlipped = 0;
+		FString ProseWrong;
+		FString ProseNotFlipped;
+		auto ProseKeep = [&](const TCHAR* Line, bool& bOutAltered)
+		{
+			const FSubmitted Done = Submit(Line);
+			bOutAltered = !Done.Kept.Equals(Line, ESearchCase::CaseSensitive);
+			int32 Still = 0;
+			bool bBack = !Done.bNoSlot && !bOutAltered;
+			if (!Done.bNoSlot && bOutAltered && Done.bAccepted && Set->KeepObjectiveAsTyped(Done.Id, Line, Still))
+			{
+				const FWonderlandMissionTask* Kept = Set->Find(Done.Id);
+				bBack = Kept != nullptr && Kept->Objective.Equals(Line, ESearchCase::CaseSensitive);
+			}
+			FreeSlots();
+			return bBack;
+		};
+		for (const TCHAR* Line : LabelProse)
+		{
+			bool bAltered = false;
+			const bool bBack = ProseKeep(Line, bAltered);
+			FWonderlandMissionTask ProseLegacy;
+			ProseLegacy.Objective = Line;
+			bool bRewritten = true;
+			UWonderlandMissionTaskSubsystem::ScreenRestoredObjective(ProseLegacy, bRewritten);
+			ProseAltered += bAltered ? 1 : 0;
+			ProseGivenBack += bBack ? 1 : 0;
+			ProseRestoreSame += bRewritten ? 0 : 1;
+			if ((!bBack || bRewritten) && ProseWrong.IsEmpty())
+			{
+				ProseWrong = FString::Printf(TEXT("'%s' (/keep %s, the restore %s)"), Line, bBack ? TEXT("gives it back") : TEXT("does NOT give it back"),
+					bRewritten ? TEXT("REWRITES it") : TEXT("leaves it"));
+			}
+			if (!bAltered)
+			{
+				continue;
+			}
+			FWonderlandCardStore::QaRulesOff() = FWonderlandCardStore::QaRuleClasses;
+			bool bOffAltered = false;
+			const bool bOffBack = ProseKeep(Line, bOffAltered);
+			bool bOffRewritten = false;
+			UWonderlandMissionTaskSubsystem::ScreenRestoredObjective(ProseLegacy, bOffRewritten);
+			FWonderlandCardStore::QaRulesOff() = 0;
+			if (!bOffBack || bOffRewritten)
+			{
+				++ProseFlipped;
+			}
+			else if (ProseNotFlipped.IsEmpty())
+			{
+				ProseNotFlipped = Line;
+			}
+		}
+		const int32 ProseCount = static_cast<int32>(UE_ARRAY_COUNT(LabelProse));
+		S.Check(TEXT("SI24"), SlotsMissed == CaseMissedAt && ProseAltered > 0 && ProseGivenBack == ProseCount && ProseRestoreSame == ProseCount && ProseFlipped == ProseAltered,
+			SlotNote() + FString::Printf(TEXT("%d label-prose lines (r6 lost 30 of Second's 40 for good): %d altered, %d of %d stored as typed or given back EXACTLY by /keep, %d of %d left alone by a restart's restore%s; the CONTROL (the classes off): %d of the %d altered lost or rewritten%s"),
+				ProseCount, ProseAltered, ProseGivenBack, ProseCount, ProseRestoreSame, ProseCount,
+				ProseWrong.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- FIRST WRONG %s"), *ProseWrong), ProseFlipped, ProseAltered,
+				ProseNotFlipped.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- the rule does not decide '%s' (BLIND control)"), *ProseNotFlipped)));
+
+		// SI25: A PEM BLOCK TO THE END OF ITS END LINE (Second's A28: r6 stopped at the BEGIN line's own dashes, so the body was only
+		// statistical and /keep gave it back). The body is built at run time and the label words in pieces (the release scan reads the package
+		// for them). THE CONTROL: the PEM rule off, /keep must give the body back.
+		const FString PemLabel = FString(TEXT("PRI")) + TEXT("VATE") + TEXT(" K") + TEXT("EY");
+		const FString PemBody = Random(Base62, 54);
+		const FString PemTyped = FString::Printf(TEXT("install -----BEGIN %s----- %s -----END %s----- on the box"), *PemLabel, *PemBody, *PemLabel);
+		auto PemKeep = [&](bool& bOutSubmittedClean)
+		{
+			const FSubmitted Done = Submit(PemTyped);
+			bOutSubmittedClean = !Done.bNoSlot && !Done.Kept.Contains(PemBody) && !FWonderlandCardStore::MaskForDisplay(PemTyped).Contains(PemBody);
+			int32 Still = 0;
+			const bool bPemKeepRan = !Done.bNoSlot && Done.bAccepted && Set->KeepObjectiveAsTyped(Done.Id, PemTyped, Still);
+			const FWonderlandMissionTask* Kept = Done.bNoSlot ? nullptr : Set->Find(Done.Id);
+			const bool bBack = bPemKeepRan && Kept != nullptr && Kept->Objective.Contains(PemBody);
+			FreeSlots();
+			return bBack;
+		};
+		CaseMissedAt = SlotsMissed;
+		bool bPemSubmittedClean = false;
+		const bool bPemBack = PemKeep(bPemSubmittedClean);
+		FWonderlandCardStore::QaRulesOff() = FWonderlandCardStore::QaRulePem;
+		bool bPemControlSubmitted = false;
+		const bool bPemControlBack = PemKeep(bPemControlSubmitted);
+		FWonderlandCardStore::QaRulesOff() = 0;
+		S.Check(TEXT("SI25"), SlotsMissed == CaseMissedAt && bPemSubmittedClean && !bPemBack && bPemControlBack,
+			SlotNote() + FString::Printf(TEXT("a PEM block (a 54-character body) in an objective: the body %s on submit and on screen, %s after /keep; the CONTROL (the PEM rule off): /keep %s"),
+				bPemSubmittedClean ? TEXT("redacted") : TEXT("KEPT OR SHOWN"), bPemBack ? TEXT("BACK") : TEXT("still gone"),
+				bPemControlBack ? TEXT("gives it back, as r6 did") : TEXT("does NOT give it back (BLIND control)")));
+
 		// SI12: THE SCREEN IS IDEMPOTENT, AND A RESTART KEEPS WHAT /keep GAVE (Second's R8a: the restore re-redacted "client secret: [marker]"
 		// on every load; CORE's read of the same code: it also took back every /keep). Every line this QA typed, screened twice, is what it
 		// was screened once; the restore's own rule (ScreenRestoredObjective) leaves a /keep'd word and a stored marker alone and still
@@ -14371,6 +14671,15 @@ namespace
 		{
 			EveryLine.Add(R5Fill(Case.Template));
 		}
+		for (const FR7Case& Case : R7Cases)
+		{
+			EveryLine.Add(R7Fill(Case.Template));
+		}
+		for (const TCHAR* Line : LabelProse)
+		{
+			EveryLine.Add(Line);
+		}
+		EveryLine.Add(PemTyped);
 		int32 NotIdempotent = 0;
 		FString FirstNotIdempotent;
 		for (const FString& Line : EveryLine)
@@ -14523,7 +14832,8 @@ namespace
 		TEXT("A key typed anywhere is never kept and never shown (the founder's fail-closed; Second's review): objectives keep the task and lose ")
 		TEXT("the key (SI1-SI2, SI5), real objectives stay as typed (SI6), the terminal masks (SI3), COMBO B's rates hold (SI7), /keep never ")
 		TEXT("stores a certain shape (SI8), a key cannot name a C.A.R.D. (SI9), labels (SI10), patterns (SI11), idempotence + the restore round ")
-		TEXT("trip (SI12/SI12b), Second's round-5 corpus with planted controls (SI13-SI17). `quit` exits after. WLSIQA lines."),
+		TEXT("trip (SI12/SI12b), Second's round-5 corpus with planted controls (SI13-SI17), Second's r6 attack by r7 rule with planted controls ")
+		TEXT("(SI18-SI23), label prose kept by /keep and never rewritten by a restore (SI24), a PEM body never kept (SI25). `quit` exits after. WLSIQA lines."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (GQaSecretInput.IsValid() || World == nullptr)
