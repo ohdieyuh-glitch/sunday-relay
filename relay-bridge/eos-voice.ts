@@ -19,10 +19,18 @@ import type { PartyVoiceGrant, PartyVoiceTokenMinter } from './wonderland-social
  */
 
 /* ============================================================================================================================
- * EPIC'S VOICE WEB API, AS THIS FILE SPEAKS IT -- verify against Epic's Voice Web API page at R16 run time
- * (https://dev.epicgames.com/docs/web-api-ref/voice-web-api; the EOS auth token endpoint). EVERY Epic URL, form field, header and
- * JSON field name this module uses is here, and nowhere else. As of 10-04 they come from Epic's indexed reference text
- * (SECOND_EOS_VOICE_BACKEND_NOTES.md); the live page renders client-side and was not read field by field.
+ * EPIC'S VOICE WEB API, AS THIS FILE SPEAKS IT (https://dev.epicgames.com/docs/web-api-ref/voice-web-api; the EOS auth token
+ * endpoint). EVERY Epic URL, form field, header and JSON field name this module uses is here, and nowhere else.
+ * VERIFIED against Epic on 2026-10-04 07:34Z by a backend probe through loadEosVoiceConfig and these constants (evidence:
+ * _qa_handoff/social/eos_probe/probe_status_20261004T0734Z.txt):
+ *   - the token: oauth 200 with {access_token, expires_in, expires_at, ...};
+ *   - the room: createRoomToken 200 with {clientBaseUrl, participants[{clientIp, hardMuted, puid, token}], roomId, roomOptions,
+ *     deploymentId};
+ *   - the participant: DELETE .../participants/{puid} 204.
+ * STILL UNVERIFIED: that the DELETE also revokes the removed participant's room token (Epic documents it; not yet observed); the
+ * room token's lifetime (the answer carries no expiry field -- roomTokenAssumedTtlMs, 10 min, is an assumption); and Epic does
+ * NOT validate PUIDs, so the server-side PUID binding (migration 034) is the ONLY guard
+ * on who a room token is minted for.
  * ========================================================================================================================== */
 export const EPIC = Object.freeze({
   apiRoot: 'https://api.epicgames.dev',
