@@ -166,7 +166,8 @@ namespace RelayDogArmedStance
 		const float FastW = Clamp01(FastWeight);
 		// THE BEND BELONGS TO FAST MOVEMENT (founder, 10-04): upright standing and through the summon, a little at an ordinary pace, and
 		// the video's charging bend only as the hop (or the dash) comes in -- and back up as it goes, eased by the weights, never snapped
-		const float Bend = Lerp(Stand * Shape.BendDeg + W * Gait * Shape.RunBendDeg, Shape.FastBendDeg, Max(FastW, D));
+		// (by the FAST weight alone -- it carries the dash, on a 0.15 s spring: the dash's own 0.07 s one bent the body ~6 deg a frame)
+		const float Bend = Lerp(Stand * Shape.BendDeg + W * Gait * Shape.RunBendDeg, Shape.FastBendDeg, FastW);
 		// the front foot hangs on HipYRight's side; its hip is the free one, dropped, and that side leads
 		const float FrontY = HipYRight < 0.0f ? -1.0f : 1.0f;
 		Body.BendDeg = Bend;
@@ -341,6 +342,12 @@ namespace RelayDogArmedStance
 				Body.LegLeftOutDeg = Lerp(Body.LegLeftOutDeg, HopLeftOut, FastW);
 				Body.LegRightOutDeg = Lerp(Body.LegRightOutDeg, HopRightOut, FastW);
 				Pose.BobUU = Lerp(Pose.BobUU, Arc, FastW);
+				// THE HOP OWNS THE BODY: the run's own sway, counter-yaw, roll and pitch wobble move the hips under a planted foot (the hop harness:
+				// 3-9 uu of slide with them in), so they go as the hop comes in; the roll into a turn stays, it is steering
+				Pose.SwayUU *= 1.0f - FastW;
+				Pose.BodyYawDeg *= 1.0f - FastW;
+				Pose.Body.RollDeg *= 1.0f - FastW;
+				Pose.Body.PitchDeg *= 1.0f - FastW;
 			}
 		}
 
