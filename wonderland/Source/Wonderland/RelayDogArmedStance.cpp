@@ -11,6 +11,12 @@ namespace RelayDogArmedStance
 		float Lerp(float A, float B, float T) { return A + (B - A) * T; }
 
 		constexpr float StanceDegToRad = 3.14159265358979f / 180.0f;
+		constexpr float StancePi = 3.14159265358979f;
+
+		float StanceFrac(float V) { return V - std::floor(V); }
+		float StanceClamp(float V, float Lo, float Hi) { return V < Lo ? Lo : (V > Hi ? Hi : V); }
+		float StanceSmooth(float T) { const float C = Clamp01(T); return C * C * (3.0f - 2.0f * C); }
+		float StanceBand(float V, float From, float To) { return To > From ? StanceSmooth((V - From) / (To - From)) : (V >= To ? 1.0f : 0.0f); }
 
 		/** A vector in the actor's frame (X forward, Y right, Z up), engine-free. */
 		struct FStanceVec
@@ -72,14 +78,49 @@ namespace RelayDogArmedStance
 		}
 	}
 
-	void Step(FState& State, bool bArmed, bool bDashing, float DeltaSeconds, const FShape& Shape)
+	void Step(FState& State, bool bArmed, bool bDashing, float SpeedUU, float DeltaSeconds, const FShape& Shape)
 	{
 		const float Armed = bArmed ? 1.0f : 0.0f;
 		const float Dash = bArmed && bDashing ? 1.0f : 0.0f;
+		// FAST: armed and quick (the armed run, the sprint) or dashing -- the hop
+		const float Fast = bArmed ? Max(StanceBand(SpeedUU, Shape.FastFromUU, Shape.FastFullUU), Dash) : 0.0f;
 		RelayDogStride::SpringStep(State.Armed, Armed, Shape.ArmedSmoothSeconds, DeltaSeconds);
 		RelayDogStride::SpringStep(State.Dash, Dash, Shape.DashSmoothSeconds, DeltaSeconds);
+		RelayDogStride::SpringStep(State.Fast, Fast, Shape.FastSmoothSeconds, DeltaSeconds);
 		Settle(State.Armed, Armed);
 		Settle(State.Dash, Dash);
+		Settle(State.Fast, Fast);
+		// the hops: faster with the speed, counted only while the hop is on, and started on a landing each time it comes in
+		State.HopRate = StanceClamp(Shape.HopRateBase + SpeedUU / Max(Shape.HopRatePerUU, 1.0f), Shape.HopRateMin, Shape.HopRateMax);
+		if (State.Fast.Value > 0.001f)
+		{
+			State.HopPhase += State.HopRate * (DeltaSeconds > 0.0f ? DeltaSeconds : 0.0f);
+		}
+		else
+		{
+			State.HopPhase = 0.0f;
+		}
+	}
+
+	const char* StateName(const FState& State, float GaitWeight)
+	{
+		if (State.Armed.Value <= 0.001f && State.Dash.Value <= 0.001f)
+		{
+			return "unarmed";
+		}
+		if (State.Dash.Value > 0.5f)
+		{
+			return "dash";
+		}
+		if (State.Fast.Value > 0.5f)
+		{
+			return "fast hop";
+		}
+		if (State.Fast.Value > 0.001f)
+		{
+			return "into or out of the hop";
+		}
+		return Clamp01(GaitWeight) > 0.1f ? "moving" : (State.Armed.Value < 0.999f ? "summon / settling" : "ready");
 	}
 
 	float FeetOutDeg(const RelayDogStride::FDogPose& Pose, float ArmedWeight, const FShape& Shape)
@@ -94,8 +135,9 @@ namespace RelayDogArmedStance
 		return Clamp01(ArmedWeight) * Shape.KneesOutDeg * (1.0f - Clamp01(Pose.Stride.ArmsBack));
 	}
 
-	void Apply(RelayDogStride::FDogPose& Pose, float ArmedWeight, float DashWeight, float LegLengthUU, float ThighUU, float ShinUU,
-		float LeftOutFactor, float RightOutFactor, float HipPivotUU, float HipYLeft, float HipYRight, const FShape& Shape)
+	void Apply(RelayDogStride::FDogPose& Pose, float ArmedWeight, float DashWeight, float FastWeight, float HopPhase, float LegLengthUU,
+		float ThighUU, float ShinUU, float LeftOutFactor, float RightOutFactor, float HipPivotUU, float HipYLeft, float HipYRight,
+		const FShape& Shape)
 	{
 		const float W = Clamp01(ArmedWeight);
 		const float D = Clamp01(DashWeight);
@@ -121,7 +163,10 @@ namespace RelayDogArmedStance
 		// ---------------------------------------------------------------- the body: bent forward about the hips, about to charge
 		RelayDogStride::FDogPose::FStanceBody& Body = Pose.Stance;
 		Body = RelayDogStride::FDogPose::FStanceBody();
-		const float Bend = Lerp(Stand * Shape.BendDeg + W * Gait * Shape.RunBendDeg, Shape.DashBendDeg, D);
+		const float FastW = Clamp01(FastWeight);
+		// THE BEND BELONGS TO FAST MOVEMENT (founder, 10-04): upright standing and through the summon, a little at an ordinary pace, and
+		// the video's charging bend only as the hop (or the dash) comes in -- and back up as it goes, eased by the weights, never snapped
+		const float Bend = Lerp(Stand * Shape.BendDeg + W * Gait * Shape.RunBendDeg, Shape.FastBendDeg, Max(FastW, D));
 		// the front foot hangs on HipYRight's side; its hip is the free one, dropped, and that side leads
 		const float FrontY = HipYRight < 0.0f ? -1.0f : 1.0f;
 		Body.BendDeg = Bend;
@@ -213,6 +258,90 @@ namespace RelayDogArmedStance
 			Body.LegLeftOutDeg = Solve(Pose.LegLeft, Pose.FootLeft, HipYLeft, -Stand * Shape.RearUU);
 			Body.LegRightOutDeg = Solve(Pose.LegRight, Pose.FootRight, HipYRight, Stand * Shape.FrontUU);
 			Pose.PelvisDropUU += Lowered;
+
+			// ------------------------------------------------------------ THE FAST HOP (founder, 10-04: "NOT normal running")
+			//
+			// Bounding, foot to foot: each hop one foot is planted, briefly, ahead of the hip -- passed over by the body at the ground
+			// speed, so it never slides -- and pushes; the body springs up into a short low flight with that leg left stretched behind;
+			// the other foot swings through, knee tucked, and lands ahead; the body presses into the landing and springs straight on.
+			// The animator's own run is set aside by the hop's weight, legs and bob alike; its foot targets are solved by the same
+			// body-frame chain as the standing feet, with the body's arc in the hip's height.
+			if (FastW > 0.001f)
+			{
+				const float Speed = Max(Pose.SpeedUU, 1.0f);
+				const float Rate = StanceClamp(Shape.HopRateBase + Speed / Max(Shape.HopRatePerUU, 1.0f), Shape.HopRateMin, Shape.HopRateMax);
+				const float HopLength = Speed / Rate;
+				const float Contact = StanceClamp(2.0f * Shape.HopReachUU / Max(HopLength, 1.0f), 0.12f, 0.4f);
+				const float Lead = 0.5f * HopLength * Contact;
+				const float InHop = StanceFrac(HopPhase);
+				const float Arc = InHop < Contact ? -Shape.HopCompressUU * std::sin(StancePi * InHop / Contact)
+					: Shape.HopApexUU * std::sin(StancePi * (InHop - Contact) / (1.0f - Contact));
+				// each foot over two hops: planted, pushed off and trailing, still trailing under the other's landing, swung through
+				auto HopFoot = [&](float Q, float& OutForward, float& OutLift)
+				{
+					const float Tuck = Shape.HopTuckUU;
+					if (Q < Contact)
+					{
+						OutForward = Lead - 2.0f * Lead * (Q / Contact);
+						OutLift = 0.0f;
+					}
+					else if (Q < 1.0f)
+					{
+						const float S = (Q - Contact) / (1.0f - Contact);
+						OutForward = Lerp(-Lead, -Shape.HopTrailUU, StanceSmooth(S * 2.0f));
+						OutLift = Tuck * (0.25f * std::sin(StancePi * S) + 0.1f * S);
+					}
+					else if (Q < 1.0f + Contact)
+					{
+						OutForward = -Shape.HopTrailUU;
+						OutLift = Tuck * 0.1f;
+					}
+					else
+					{
+						const float S = (Q - 1.0f - Contact) / (1.0f - Contact);
+						OutForward = Lerp(-Shape.HopTrailUU, Lead, StanceSmooth(S));
+						OutLift = Tuck * (std::sin(StancePi * S) + 0.1f * (1.0f - S));
+					}
+				};
+				auto HopSolve = [&](RelayDogStride::FLegPose& Leg, float HipY, float Q) -> float
+				{
+					const float Side = HipY < 0.0f ? -1.0f : 1.0f;
+					float FootForward = 0.0f;
+					float FootLift = 0.0f;
+					HopFoot(Q, FootForward, FootLift);
+					const FStanceVec Across = RigRotate(Axes, FStanceVec{ 0.0f, HipY, 0.0f });
+					const FStanceVec HipMoved = { Hips.X + Across.X, Hips.Y + Across.Y - HipY, -Lowered + Across.Z + Arc };
+					const FStanceVec Foot3 = { FootForward, Side * HipNow * std::sin(FeetOut * StanceDegToRad), FootLift - HipNow };
+					const FStanceVec Reach = RigUnrotate(Axes, FStanceVec{ Foot3.X - HipMoved.X, Foot3.Y - HipMoved.Y, Foot3.Z - HipMoved.Z });
+					FStanceVec Aim = Reach;
+					RelayDogStride::FLegPose Hop;
+					float Lateral = 0.0f;
+					for (int Pass = 0; Pass <= 4; ++Pass)
+					{
+						RelayDogStride::FFootPose To;
+						To.Forward = Aim.X;
+						To.Lift = 0.0f;
+						Hop = RelayDogStride::LegPose(To, ThighUU, ShinUU, std::sqrt(Aim.Y * Aim.Y + Aim.Z * Aim.Z));
+						Lateral = std::atan2(Aim.Y, -Aim.Z) / StanceDegToRad;
+						if (Pass == 4)
+						{
+							break;
+						}
+						const FStanceVec ShinInHip = RigRotate(RigAxes(-Hop.KneeDeg, 0.0f, 0.0f), FStanceVec{ 0.0f, 0.0f, -ShinUU });
+						const FStanceVec Chain = RigRotate(RigAxes(Hop.HipDeg, 0.0f, -Lateral), FStanceVec{ ShinInHip.X, ShinInHip.Y, ShinInHip.Z - ThighUU });
+						Aim = { Aim.X + Reach.X - Chain.X, Aim.Y + Reach.Y - Chain.Y, Aim.Z + Reach.Z - Chain.Z };
+					}
+					Leg.HipDeg = Lerp(Leg.HipDeg, Hop.HipDeg, FastW);
+					Leg.KneeDeg = Lerp(Leg.KneeDeg, Hop.KneeDeg, FastW);
+					return Lateral * Side;
+				};
+				// the canon's LegLeft (+Y) lands on the even hops, LegRight (-Y) on the odd ones
+				const float HopLeftOut = HopSolve(Pose.LegLeft, HipYLeft, std::fmod(HopPhase, 2.0f));
+				const float HopRightOut = HopSolve(Pose.LegRight, HipYRight, std::fmod(HopPhase + 1.0f, 2.0f));
+				Body.LegLeftOutDeg = Lerp(Body.LegLeftOutDeg, HopLeftOut, FastW);
+				Body.LegRightOutDeg = Lerp(Body.LegRightOutDeg, HopRightOut, FastW);
+				Pose.BobUU = Lerp(Pose.BobUU, Arc, FastW);
+			}
 		}
 
 		// ---------------------------------------------------------------- the arms: the blades carried, never a T-pose
@@ -236,12 +365,14 @@ namespace RelayDogArmedStance
 			// THE SPRINT'S ARMS PUMP (the Genshin reference): a little back and out, carrying most of the stride's own swing --
 			// the SWING ITSELF, from the stride's phase: the animator's arms are locked back at a run's speed (its anime
 			// posture, ArmsBack 1), and keeping a share of a locked arm only swept it further back (Second's review, 10-04).
-			const RelayDogStride::FArmPose Swing = RelayDogStride::ArmPose(Pose.StridePhase, &Pose_ == &Pose.ArmLeft, Gait, 0.0f);
+			// (in the hop, on the HOP's rhythm: one swing of each arm over two hops)
+			const RelayDogStride::FArmPose Swing = RelayDogStride::ArmPose(FastW > 0.001f ? HopPhase * 0.5f : Pose.StridePhase, &Pose_ == &Pose.ArmLeft,
+				FastW > 0.001f ? 1.0f : Gait, 0.0f);
 			RelayDogStride::FArmPose Dash;
 			Dash.ShoulderDeg = Shape.DashShoulderDeg + Swing.ShoulderDeg * Shape.DashSwingKeep;
 			Dash.ElbowDeg = Shape.DashElbowDeg + Swing.ElbowDeg * Shape.DashSwingKeep;
 			Dash.ShoulderYawDeg = Shape.DashOutDeg * Out;
-			Armed = LerpArm(Armed, Dash, D);
+			Armed = LerpArm(Armed, Dash, Max(D, FastW));
 			Pose_ = LerpArm(Walk, Armed, Max(W, D));
 		};
 		Arm(Pose.ArmLeft, LeftOutFactor);

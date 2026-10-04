@@ -20,9 +20,11 @@ namespace
 		TEXT("Mission Handoff: degrees a held blade points from STRAIGHT UP, out to its own hand's side (under 90 up, over 90 down; the founder's 10-03 stance: 122, low and diagonal)."));
 	TAutoConsoleVariable<float> CVarSwordVForward(TEXT("wl.Handoff.SwordVForward"), 10.0f,
 		TEXT("Mission Handoff: degrees a held blade leans FORWARD from the V's plane."));
-	TAutoConsoleVariable<float> CVarSwordChargeV(TEXT("wl.Handoff.SwordChargeV"), 110.0f,
+	TAutoConsoleVariable<float> CVarSwordDashV(TEXT("wl.Handoff.SwordDashV"), 110.0f,
+		TEXT("Mission Handoff: in the fast hop and the dash, degrees a held blade points from STRAIGHT UP, out to its own side (flatter: the body is bent)."));
+	TAutoConsoleVariable<float> CVarSwordChargeV(TEXT("wl.Handoff.SwordChargeV"), 128.0f,
 		TEXT("Mission Handoff: in the charging stance (armed, standing), degrees a held blade points from STRAIGHT UP, out to its own side."));
-	TAutoConsoleVariable<float> CVarSwordChargeVForward(TEXT("wl.Handoff.SwordChargeVForward"), -72.0f,
+	TAutoConsoleVariable<float> CVarSwordChargeVForward(TEXT("wl.Handoff.SwordChargeVForward"), -64.0f,
 		TEXT("Mission Handoff: in the charging stance, degrees a held blade leans FORWARD (negative: trailing back behind the charge)."));
 	TAutoConsoleVariable<float> CVarSwordDashVForward(TEXT("wl.Handoff.SwordDashVForward"), -72.0f,
 		TEXT("Mission Handoff: in the sprint, degrees a held blade leans FORWARD from the V's plane (negative: the tips trail back)."));
@@ -42,6 +44,7 @@ namespace WonderlandGrip
 		Hold.VForwardDeg = FMath::Clamp(CVarSwordVForward.GetValueOnGameThread(), -60.0f, 60.0f);
 		Hold.DashVForwardDeg = FMath::Clamp(CVarSwordDashVForward.GetValueOnGameThread(), -80.0f, 60.0f);
 		Hold.ChargeVDeg = FMath::Clamp(CVarSwordChargeV.GetValueOnGameThread(), 0.0f, 170.0f);
+		Hold.DashVDeg = FMath::Clamp(CVarSwordDashV.GetValueOnGameThread(), 0.0f, 170.0f);
 		Hold.ChargeVForwardDeg = FMath::Clamp(CVarSwordChargeVForward.GetValueOnGameThread(), -85.0f, 60.0f);
 		return Hold;
 	}
@@ -51,6 +54,7 @@ namespace WonderlandGrip
 		FHold Out = Hold;
 		const float W = FMath::Clamp(DashWeight, 0.0f, 1.0f);
 		Out.VForwardDeg = Hold.VForwardDeg + (Hold.DashVForwardDeg - Hold.VForwardDeg) * W;
+		Out.VDeg = Hold.VDeg + (Hold.DashVDeg - Hold.VDeg) * W;
 		return Out;
 	}
 

@@ -7055,10 +7055,16 @@ namespace
 					FString::Printf(TEXT("the blades while the Dog MOVES: the lower tip at least %.1f uu over the ground in the handoff run (%d frames) and %.1f in the dash ")
 						TEXT("and sprint (%d frames) (want >= 2: never into the ground); the farther tip at most %.1f uu from the centre line (want <= %.1f: half the body)"),
 						H.TipLowRun, H.TipSamplesRun, H.TipLowSprint, H.TipSamplesSprint, H.TipWide, 0.5f * BodyHigh));
-				H.Check(TEXT("S3d"), Visible >= 3.0f && Visible <= 6.0f,
-					FString::Printf(TEXT("the sprint's legs AS SEEN: the canon hip swings %.2f times a second, %d frames over %.2f s (3-6: a sprinter's, ")
-						TEXT("never the ~10/s blur that read as a slide); the animator's own count %.2f, reported only"),
-						Visible, H.HipPitch.Num(), H.HipAt.Num() > 1 ? H.HipAt.Last() - H.HipAt[0] : 0.0f, Commanded));
+				// THE HOP (founder, 10-04): each leg swings once over TWO hops, so at the hop's 3-5.5 hops a second the canon hip cycles 1.5-2.75
+				// times; the ~10/s blur that read as a slide still fails, and so would a run cycle at a sprinter's 4+
+				float HopFast = 0.0f;
+				float HopPhaseNow = 0.0f;
+				float HopRateNow = 0.0f;
+				Dog->QaStanceState(HopFast, HopPhaseNow, HopRateNow);
+				H.Check(TEXT("S3d"), Visible >= 1.4f && Visible <= 3.5f,
+					FString::Printf(TEXT("the sprint's legs AS SEEN: the canon hip swings %.2f times a second, %d frames over %.2f s (1.4-3.5: each leg once ")
+						TEXT("every two hops -- the HOP, not a run cycle, never the ~10/s blur); the hop asked %.2f hops a second (fast %.2f); the animator's own count %.2f, reported only"),
+						Visible, H.HipPitch.Num(), H.HipAt.Num() > 1 ? H.HipAt.Last() - H.HipAt[0] : 0.0f, HopRateNow, HopFast, Commanded));
 			}
 			if (H.bS3Judged && ((H.LagOffAt >= 0.0f && H.CamJumpTicksLeft <= 0) || In >= 5.5f))
 			{
@@ -8184,6 +8190,8 @@ namespace
 		float SoleSide[2] = { 0.0f, 0.0f };
 		/** C11: the -Y hip ahead of the +Y hip, uu. C12: the hips' midpoint ahead of the soles'. C13: the head's facing above level, deg. */
 		float LeadAhead = 0.0f;
+		/** The hips' midpoint's height in the world (the hop's rise and fall). */
+		float HipZ = 0.0f;
 		float HipsAhead = 0.0f;
 		float HeadLookDeg = 0.0f;
 		bool bHeadLook = false;
@@ -8256,6 +8264,7 @@ namespace
 		R.BendDeg = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(FVector::DotProduct(ToHead, Fwd), ToHead.Z)));
 		R.HeadAhead = static_cast<float>(FVector::DotProduct(ToHead, Fwd));
 		R.LeadAhead = static_cast<float>(FVector::DotProduct(HipMinus - HipPlus, Fwd));
+		R.HipZ = static_cast<float>(HipMid.Z);
 		R.HipsAhead = static_cast<float>(FVector::DotProduct(HipMid - SoleMid, Fwd));
 		R.SoleSide[0] = static_cast<float>(FVector::DotProduct(SolePlus - Dog->GetActorLocation(), Right));
 		R.SoleSide[1] = static_cast<float>(FVector::DotProduct(SoleMinus - Dog->GetActorLocation(), Right));
@@ -8348,12 +8357,12 @@ namespace
 			return V;
 		}
 		const float Added = R.BendDeg - U.BendDeg;
-		V.bOk[1] = Added >= 15.0f && Added <= 40.0f;
-		V.Line[1] = FString::Printf(TEXT("bend %+.1f deg forward from the hips (unarmed %+.1f): %+.1f added (want 15-40 FORWARD; negative leans back)"),
+		V.bOk[1] = Added >= -1.0f && Added <= 8.0f;
+		V.Line[1] = FString::Printf(TEXT("bend %+.1f deg forward from the hips (unarmed %+.1f): %+.1f added (want -1..+8: the torso UPRIGHT, never bent over standing)"),
 			R.BendDeg, U.BendDeg, Added);
-		V.bOk[2] = R.MassAhead >= 0.06f * BodyH;
-		V.Line[2] = FString::Printf(TEXT("the mass (head and hips) %+.1f uu ahead of the soles' midpoint (want >= %.1f: 6%% of the %.0f uu body; unarmed %+.1f)"),
-			R.MassAhead, 0.06f * BodyH, BodyH, U.MassAhead);
+		V.bOk[2] = FMath::Abs(R.MassAhead - U.MassAhead) <= 0.06f * BodyH;
+		V.Line[2] = FString::Printf(TEXT("the mass (head and hips) %+.1f uu ahead of the soles' midpoint, %+.1f over unarmed (want within %.1f: balanced over the feet, 6%% of the %.0f uu body)"),
+			R.MassAhead, R.MassAhead - U.MassAhead, 0.06f * BodyH, BodyH);
 		V.bOk[3] = R.HipShift >= 1.5f;
 		V.Line[3] = FString::Printf(TEXT("the hips %+.1f uu toward +Y (onto the loaded rear leg) of the soles' midpoint (want >= +1.5; unarmed %+.1f)"), R.HipShift, U.HipShift);
 		V.bOk[4] = R.PelvisTiltDeg >= 3.0f;
@@ -8365,19 +8374,20 @@ namespace
 		// planted SIDEWAYS too (Second's review: front/rear are read from the hips, so both soles could slide across WITH the hips and pass)
 		const float SlidePlus = R.SoleSide[0] - U.SoleSide[0];
 		const float SlideMinus = R.SoleSide[1] - U.SoleSide[1];
-		V.bOk[5] = R.FrontAhead >= 5.0f && R.RearBehind >= 8.0f && GapGrowth <= 6.0f && FMath::Abs(SinkPlus) <= 1.5f && FMath::Abs(SinkMinus) <= 1.5f
+		V.bOk[5] = R.FrontAhead >= 3.0f && R.RearBehind >= 2.0f && GapGrowth <= 6.0f && FMath::Abs(SinkPlus) <= 1.5f && FMath::Abs(SinkMinus) <= 1.5f
 			&& FMath::Abs(SlidePlus) <= 4.0f && FMath::Abs(SlideMinus) <= 4.0f;
-		V.Line[5] = FString::Printf(TEXT("the -Y sole %+.1f uu ahead of the hips (want >= 5), the +Y sole %+.1f behind them (want >= 8); the soles %.1f apart sideways, ")
+		V.Line[5] = FString::Printf(TEXT("the -Y sole %+.1f uu ahead of the hips (want >= 3), the +Y sole %+.1f behind them (want >= 2); the soles %.1f apart sideways, ")
 			TEXT("%+.1f over the unarmed stand (want <= +6: close, sideways only); each sole %+.1f / %+.1f uu off the ground it stood on (+Y / -Y; within 1.5) ")
 			TEXT("and %+.1f / %+.1f uu across from where it stood (within 4)"),
 			R.FrontAhead, R.RearBehind, R.SoleGap, GapGrowth, SinkPlus, SinkMinus, SlidePlus, SlideMinus);
 		// >= 30 (Second's review of 92f83bff: the two-bone solve's reach clamp leaves every solved knee >= ~12 deg, so ">= 8" passed a straight
 		// "loaded" leg; the model gives 44 / 64, and ST2CX6 -- the crouch taken away -- must turn this red)
-		V.bOk[6] = R.KneeDeg[0] >= 30.0f && R.KneeDeg[1] >= 30.0f && R.KneeDeg[0] - U.KneeDeg[0] >= 5.0f && R.KneeDeg[1] - U.KneeDeg[1] >= 5.0f;
-		V.Line[6] = FString::Printf(TEXT("knees bent %.1f / %.1f deg (+Y / -Y, from the drawn hip, knee and sole; want >= 30 and >= 5 more than the unarmed %.1f / %.1f)"),
+		V.bOk[6] = R.KneeDeg[0] >= 20.0f && R.KneeDeg[1] >= 20.0f && R.KneeDeg[0] - U.KneeDeg[0] >= 5.0f && R.KneeDeg[1] - U.KneeDeg[1] >= 5.0f;
+		V.Line[6] = FString::Printf(TEXT("knees bent %.1f / %.1f deg (+Y / -Y, from the drawn hip, knee and sole; want >= 20: soft, never locked straight, and >= 5 more than the unarmed %.1f / %.1f)"),
 			R.KneeDeg[0], R.KneeDeg[1], U.KneeDeg[0], U.KneeDeg[1]);
-		V.bOk[7] = R.HeadAhead >= 0.12f * BodyH;
-		V.Line[7] = FString::Printf(TEXT("the head %+.1f uu ahead of the hips (want >= %.1f: 12%% of the body; unarmed %+.1f)"), R.HeadAhead, 0.12f * BodyH, U.HeadAhead);
+		V.bOk[7] = FMath::Abs(R.HeadAhead - U.HeadAhead) <= 0.08f * BodyH;
+		V.Line[7] = FString::Printf(TEXT("the head %+.1f uu ahead of the hips, %+.1f over unarmed (want within %.1f: over the body, upright, 8%% of it)"), R.HeadAhead,
+			R.HeadAhead - U.HeadAhead, 0.08f * BodyH);
 		bool bBlades = R.SwordPresence >= 0.99f;
 		FString BladeLine;
 		for (int32 Side = 0; Side < 2; ++Side)
@@ -8400,8 +8410,8 @@ namespace
 		V.Line[11] = FString::Printf(TEXT("the front (-Y) side leading: its hip %+.1f uu ahead of the +Y hip, %+.1f over unarmed (want >= +1.0: the body turned into the run)"),
 			R.LeadAhead, Lead);
 		const float HipsGo = R.HipsAhead - U.HipsAhead;
-		V.bOk[12] = HipsGo >= 1.5f;
-		V.Line[12] = FString::Printf(TEXT("the hips carried forward: %+.1f uu ahead of the soles' midpoint, %+.1f over unarmed (want >= +1.5: over the front foot, never back)"),
+		V.bOk[12] = FMath::Abs(R.HipsAhead) <= 2.5f;
+		V.Line[12] = FString::Printf(TEXT("the hips over the feet: %+.1f uu ahead of the soles' midpoint, %+.1f over unarmed (want within 2.5: balanced between them, never pushed back)"),
 			R.HipsAhead, HipsGo);
 		V.bOk[13] = R.bHeadLook && R.HeadLookDeg >= -15.0f && R.HeadLookDeg <= 15.0f;
 		V.Line[13] = FString::Printf(TEXT("the head looking ahead: its facing %+.1f deg from level (want within 15: forward with the chest, eyes on the way ahead; %s)"),
@@ -8453,6 +8463,22 @@ namespace
 		float C9ArmLow[2] = { 1000.0f, 1000.0f };
 		float C9ArmHigh[2] = { -1000.0f, -1000.0f };
 		bool bC9Ground = true;
+		// THE HOP (founder, 10-04: fast movement is skipping/hopping, the body bent and charging), over +0.25..+1.25 s of it: the drawn soles'
+		// ground (read standing), frames with BOTH soles off it, landings (both off -> one down), the hips' height range, a planted sole's
+		// largest slide, the head's facing; then THE STOP: W up and still, 1.5 s, the bend back up without a snap
+		float C9Ground = 0.0f;
+		int32 C9Frames = 0;
+		int32 C9Airborne = 0;
+		int32 C9Landings = 0;
+		bool bC9WasAir = false;
+		float C9HipLow = 1.0e9f;
+		float C9HipHigh = -1.0e9f;
+		float C9HeadLow = 1000.0f;
+		float C9HeadHigh = -1000.0f;
+		float C9StopAt = -1.0f;
+		float C9StopBend = -1000.0f;
+		float C9StopStep = 0.0f;
+		float C9LastBend = -1000.0f;
 		void Check(const FString& Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
@@ -9007,6 +9033,19 @@ namespace
 			S.C9BendEarly = -1000.0f;
 			S.C9BendLate = -1000.0f;
 			S.C9SpeedLate = 0.0f;
+			S.C9Ground = 0.0f;
+			S.C9Frames = 0;
+			S.C9Airborne = 0;
+			S.C9Landings = 0;
+			S.bC9WasAir = false;
+			S.C9HipLow = 1.0e9f;
+			S.C9HipHigh = -1.0e9f;
+			S.C9HeadLow = 1000.0f;
+			S.C9HeadHigh = -1000.0f;
+			S.C9StopAt = -1.0f;
+			S.C9StopBend = -1000.0f;
+			S.C9StopStep = 0.0f;
+			S.C9LastBend = -1000.0f;
 			S.bC9DashingLate = false;
 			for (int32 ArmSide = 0; ArmSide < 2; ++ArmSide)
 			{
@@ -9040,9 +9079,17 @@ namespace
 		{
 			const FString Moving = S.Moving == 0 ? FString(TEXT("relay_og")) : FString(TEXT("shadow_flame"));
 			const FQaChargeReading& Zero = S.ChargeUnarmed[S.Moving == 0 ? 0 : static_cast<int32>(UE_ARRAY_COUNT(FaceRoster)) - 1];
-			Dog->AddMovementInput(S.Forward, 1.0f);
+			if (S.C9StopAt < 0.0f)
+			{
+				Dog->AddMovementInput(S.Forward, 1.0f);
+			}
 			QaStanceCamera(S, World, Dog, 90.0, 420.0, 30.0, 55.0f);
 			const float Ground = FVector(Dog->GetVelocity().X, Dog->GetVelocity().Y, 0.0f).Size();
+			if (In < 0.02f)
+			{
+				const FQaChargeReading Standing = QaReadCharge(Dog);
+				S.C9Ground = static_cast<float>(FMath::Min(Standing.Sole[0].Z, Standing.Sole[1].Z));
+			}
 			// from a stand: W down, up, down -- the second press within the window -- and HELD
 			if (S.Key == 0 && In >= 0.00f) { Dog->QaForwardKey(false, true); S.Key = 1; }
 			if (S.Key == 1 && In >= 0.04f) { Dog->QaForwardKey(false, false); S.Key = 2; }
@@ -9070,6 +9117,23 @@ namespace
 				}
 				if (Since >= 0.25f && Since <= 1.25f)
 				{
+					const FQaChargeReading Now = QaReadCharge(Dog);
+					if (Now.bRead)
+					{
+						const bool bAir = Now.Sole[0].Z > S.C9Ground + 1.5 && Now.Sole[1].Z > S.C9Ground + 1.5;
+						++S.C9Frames;
+						S.C9Airborne += bAir ? 1 : 0;
+						S.C9Landings += (!bAir && S.bC9WasAir) ? 1 : 0;
+						S.bC9WasAir = bAir;
+						const float HipZ = Now.HipZ;
+						S.C9HipLow = FMath::Min(S.C9HipLow, HipZ);
+						S.C9HipHigh = FMath::Max(S.C9HipHigh, HipZ);
+						if (Now.bHeadLook)
+						{
+							S.C9HeadLow = FMath::Min(S.C9HeadLow, Now.HeadLookDeg);
+							S.C9HeadHigh = FMath::Max(S.C9HeadHigh, Now.HeadLookDeg);
+						}
+					}
 					static const TCHAR* const ShoulderPivots[] = { TEXT("Pivot_armLeft"), TEXT("Pivot_armRight") };
 					const AWonderlandCompanionEmbodiment* WornArms = Dog->GetCostume();
 					for (int32 ArmSide = 0; ArmSide < 2; ++ArmSide)
@@ -9098,17 +9162,47 @@ namespace
 				{
 					return true;
 				}
-				const IConsoleVariable* SprintVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Handoff.SprintSpeed"));
-				const float Sprint = SprintVar != nullptr ? SprintVar->GetFloat() : 1150.0f;
-				const float Swing[2] = { S.C9ArmHigh[0] - S.C9ArmLow[0], S.C9ArmHigh[1] - S.C9ArmLow[1] };
-				const bool bFlow = Zero.bRead && S.C9BendEarly >= 8.0f && S.C9BendLate >= 8.0f && S.C9BendLate <= 25.0f && S.bC9DashingLate
-					&& S.C9SpeedLate >= 0.8f * Sprint && Swing[0] >= 25.0f && Swing[1] >= 25.0f;
-				S.Check(FString::Printf(TEXT("ST2C9.%d"), S.Moving + 1), bFlow,
-					FString::Printf(TEXT("%s, the charge into the dash: the bend added %+.1f deg at +0.25 s into the burst (>= 8: no snap upright) and %+.1f ")
-						TEXT("at +1.0 s (8-25 FORWARD); at +1.0 s %s at %.0f uu/s (>= %.0f: 80%% of the sprint); the shoulders' pitch range over +0.25..+1.25 s ")
-						TEXT("%.0f / %.0f deg (the left / right pivot; >= 25: the arms PUMP)"),
-						*Moving, S.C9BendEarly, S.C9BendLate, S.bC9DashingLate ? TEXT("sprinting") : TEXT("NOT dashing"), S.C9SpeedLate, 0.8f * Sprint,
-						Swing[0], Swing[1]));
+				if (S.C9StopAt < 0.0f)
+				{
+					const IConsoleVariable* SprintVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Handoff.SprintSpeed"));
+					const float Sprint = SprintVar != nullptr ? SprintVar->GetFloat() : 1150.0f;
+					const float Swing[2] = { S.C9ArmHigh[0] - S.C9ArmLow[0], S.C9ArmHigh[1] - S.C9ArmLow[1] };
+					const float AirShare = S.C9Frames > 0 ? static_cast<float>(S.C9Airborne) / S.C9Frames : 0.0f;
+					const float LandingsPerSecond = static_cast<float>(S.C9Landings) / 1.0f;
+					const float Rise = S.C9HipHigh - S.C9HipLow;
+					// THE FAST HOP (founder, 10-04 video): bent well forward, charging; airborne a real share of the time; landing and springing
+					// several times a second; the body rising and falling with each hop; the arms pumping; the head on the way ahead
+					const bool bHop = Zero.bRead && S.C9BendEarly >= 8.0f && S.C9BendLate >= 25.0f && S.C9BendLate <= 50.0f && S.bC9DashingLate
+						&& S.C9SpeedLate >= 0.8f * Sprint && AirShare >= 0.25f && LandingsPerSecond >= 2.5f && LandingsPerSecond <= 7.0f && Rise >= 4.0f
+						&& Swing[0] >= 25.0f && Swing[1] >= 25.0f && S.C9HeadLow >= -15.0f && S.C9HeadHigh <= 15.0f;
+					S.Check(FString::Printf(TEXT("ST2C9.%d"), S.Moving + 1), bHop,
+						FString::Printf(TEXT("%s, the FAST HOP from the stance: the bend added %+.1f deg at +0.25 s (>= 8: coming in, no snap) and %+.1f at +1.0 s ")
+							TEXT("(25-50: charging); at +1.0 s %s at %.0f uu/s (>= %.0f); over +0.25..+1.25 s BOTH soles off the ground %.0f%% of %d frames (>= 25%%), ")
+							TEXT("%d landings (2.5-7 a second: hop, hop, hop), the hips' height range %.1f uu (>= 4: rising and falling each hop); the shoulders' ")
+							TEXT("range %.0f / %.0f deg (>= 25: pumping); the head %+.0f..%+.0f deg (within 15: on the way ahead)"),
+							*Moving, S.C9BendEarly, S.C9BendLate, S.bC9DashingLate ? TEXT("dashing") : TEXT("NOT dashing"), S.C9SpeedLate, 0.8f * Sprint,
+							AirShare * 100.0f, S.C9Frames, S.C9Landings, Rise, Swing[0], Swing[1], S.C9HeadLow, S.C9HeadHigh));
+					// THE STOP: W up, the stick let go
+					Dog->QaForwardKey(false, false);
+					S.C9StopAt = In;
+					return true;
+				}
+				// STOP / RECOVERY (founder, 10-04: "stopping naturally returns to the upright standing stance; no obvious animation snapping"):
+				// the bend every frame for 1.5 s, its largest one-frame change, and where it ends
+				const float BendNow = QaReadCharge(Dog).BendDeg - Zero.BendDeg;
+				if (S.C9LastBend > -900.0f)
+				{
+					S.C9StopStep = FMath::Max(S.C9StopStep, FMath::Abs(BendNow - S.C9LastBend));
+				}
+				S.C9LastBend = BendNow;
+				if (In - S.C9StopAt < 1.5f)
+				{
+					return true;
+				}
+				S.Check(FString::Printf(TEXT("ST2C14.%d"), S.Moving + 1), BendNow <= 8.0f && BendNow >= -3.0f && S.C9StopStep <= 4.0f,
+					FString::Printf(TEXT("%s, the STOP: 1.5 s after W came up the bend added is %+.1f deg (want 0-8: back to the upright stance), its largest ")
+						TEXT("one-frame change through the stop %.2f deg (want <= 4: no snapping); now %.0f uu/s"),
+						*Moving, BendNow, S.C9StopStep, Ground));
 			}
 			QaHandRelease(Dog);
 			QaStanceShow(S, World, Dog, false);
@@ -9126,7 +9220,6 @@ namespace
 		case 33:
 		case 34:
 		case 35:
-		case 36:
 		{
 			// THE CONTROLS (control-must-be-able-to-fail), on Relay OG, armed: each sign flipped through its own knob -- the bend backward
 			// (Stance.Bend -24), the pelvis the other way (Stance.Tilt -5), the front foot behind (Stance.Front -12) -- must turn ITS check
@@ -9135,9 +9228,11 @@ namespace
 			// ...and the turn backwards (Stance.Turn -8: the rear side leads), the hips carried BACK (Stance.HipForward -3), the head bent with
 			// the body (Stance.HeadKeep 0): C11, C12 and C13 must each go red
 			static const TCHAR* const ControlKnobs[] = { TEXT("wl.Handoff.Stance.Bend"), TEXT("wl.Handoff.Stance.Tilt"), TEXT("wl.Handoff.Stance.Front"),
-				TEXT("wl.Handoff.Stance.Crouch"), TEXT("wl.Handoff.Stance.Turn"), TEXT("wl.Handoff.Stance.HipForward"), TEXT("wl.Handoff.Stance.HeadKeep") };
-			static const TCHAR* const ControlFlips[] = { TEXT("-24"), TEXT("-5"), TEXT("-12"), TEXT("0"), TEXT("-8"), TEXT("-3"), TEXT("0") };
-			static const int32 ControlJudged[] = { 1, 4, 5, 6, 11, 12, 13 };
+				TEXT("wl.Handoff.Stance.Crouch"), TEXT("wl.Handoff.Stance.Turn"), TEXT("wl.Handoff.Stance.HipForward") };
+			// (standing upright, 10-04: the bend's control is now a CHARGING bend, +24, which the photo's stance must reject; C13 has no
+			// standing control -- upright, the head is level whatever HeadKeep -- and is judged where it can fail, in the hop, ST2C9)
+			static const TCHAR* const ControlFlips[] = { TEXT("24"), TEXT("-5"), TEXT("-12"), TEXT("0"), TEXT("-8"), TEXT("-4") };
+			static const int32 ControlJudged[] = { 1, 4, 5, 6, 11, 12 };
 			const int32 Which = S.Phase - 30;
 			const int32 Judged = ControlJudged[Which];
 			if (S.ControlKnob.IsEmpty())
@@ -9168,7 +9263,7 @@ namespace
 			Next(S.Phase + 1);
 			return true;
 		}
-		case 37:
+		case 36:
 		{
 			// every knob put back: the stance reads as it did
 			if (In < 1.2f)
@@ -10407,7 +10502,7 @@ namespace
 	const TCHAR* const StanceKnobs[] = { TEXT("wl.Handoff.SwordBodyV"), TEXT("wl.Handoff.SwordV"), TEXT("wl.Handoff.SwordVForward"),
 		TEXT("wl.Handoff.SwordChargeV"), TEXT("wl.Handoff.SwordChargeVForward"), TEXT("wl.Handoff.Stance.Out"), TEXT("wl.Handoff.Stance.Shoulder"),
 		TEXT("wl.Handoff.Stance.Elbow"), TEXT("wl.Handoff.Stance.FeetOut"), TEXT("wl.Handoff.Stance.Crouch"), TEXT("wl.Handoff.Stance.RunOut"),
-		TEXT("wl.Handoff.Stance.Bend"), TEXT("wl.Handoff.Stance.RunBend"), TEXT("wl.Handoff.Stance.DashBend"), TEXT("wl.Handoff.Stance.HipForward"),
+		TEXT("wl.Handoff.Stance.Bend"), TEXT("wl.Handoff.Stance.RunBend"), TEXT("wl.Handoff.Stance.FastBend"), TEXT("wl.Handoff.Stance.HipForward"),
 		TEXT("wl.Handoff.Stance.HipShift"), TEXT("wl.Handoff.Stance.Tilt"), TEXT("wl.Handoff.Stance.Turn"), TEXT("wl.Handoff.Stance.Front"),
 		TEXT("wl.Handoff.Stance.Rear"), TEXT("wl.Handoff.Stance.HeadKeep"), TEXT("wl.Handoff.Stance.KneesOut") };
 

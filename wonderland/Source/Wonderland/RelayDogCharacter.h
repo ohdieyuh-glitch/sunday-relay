@@ -392,6 +392,14 @@ public:
 		FVector& OutSolePlusY, FVector& OutSoleMinusY) const;
 	/** QA: where the DRAWN head faces, a unit vector in the world (a worn skin's own head, else Relay OG's). False while unbound. */
 	bool QaDrawnHeadForward(FVector& OutForward) const;
+	/** QA: the founder's stance state now ("ready", "moving", "fast hop", "dash"...), the fast hop's weight, its phase (hops) and rate. */
+	FString QaStanceState(float& OutFast, float& OutHopPhase, float& OutHopRate) const
+	{
+		OutFast = ArmedStance.Fast.Value;
+		OutHopPhase = ArmedStance.HopPhase;
+		OutHopRate = ArmedStance.HopRate;
+		return LastStanceState;
+	}
 	int32 GetDashCount() const { return DashCount; }
 	int32 GetDashesRefused() const { return DashesRefused; }
 	/** Normal roaming's acceleration (read at BeginPlay): what every exit from the handoff restores. */
@@ -961,6 +969,8 @@ private:
 	float StanceLegRightOutDeg = 0.0f;
 	/** How much of the charging stance is on (armed and standing, 0..1): the blades' low trailing hold eases in by it. */
 	float StanceChargeWeight = 0.0f;
+	/** The founder's stance state last logged (RelayDogArmedStance::StateName), so each change is said once. */
+	FString LastStanceState = TEXT("unarmed");
 	/** THE SPRINT'S END, measured (QaLastSprintEnd): Forward's release edge, and the last end's reason and lateness. */
 	float ForwardReleasedAt = -1000.0f;
 	FString LastSprintEndCode = TEXT("none");

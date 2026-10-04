@@ -44,10 +44,12 @@ namespace WonderlandGrip
 		/** In the sprint (eased by the dash's weight): the tips trailing back, like the trails they leave -- as far back as the charge's, so
 		 *  a pumping hand never drives a 123 uu blade into the floor (Second's review of 92f83bff: -35 put the tips 15 uu below the soles). */
 		float DashVForwardDeg = -72.0f;
-		/** THE CHARGING STANCE (founder, 10-04: "arms and swords low, naturally following the charging body"): standing, the blades
-		 *  low and trailing -- out and down by ChargeVDeg, back by ChargeVForwardDeg -- behind a body about to run. */
-		float ChargeVDeg = 110.0f;
-		float ChargeVForwardDeg = -72.0f;
+		/** ...and flatter in the fast hop and the dash, where the bent body carries the hands lower (founder, 10-04: the bend is fast). */
+		float DashVDeg = 110.0f;
+		/** STANDING ARMED (founder, 10-04, the last photo: "swords carried low"): the blades low and diagonal -- down and out by
+		 *  ChargeVDeg, back by ChargeVForwardDeg -- from an upright body; never into the ground, never a wide V. */
+		float ChargeVDeg = 128.0f;
+		float ChargeVForwardDeg = -64.0f;
 	};
 
 	/** The hold with the sprint's trailing tips eased in by DashWeight (0..1). */
