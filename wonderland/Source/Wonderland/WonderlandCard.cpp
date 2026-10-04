@@ -1037,6 +1037,9 @@ namespace
 	// r8 (QaRuleEchoPipe; Second's r7 leak 5): what reads a password from a pipe, and what writes one into it
 	const TCHAR* const CardPipeConsumers[] = { TEXT("--password-stdin"), TEXT("--pass-stdin"), TEXT("chpasswd"), TEXT("passwd"), TEXT("--stdin") };
 	const TCHAR* const CardEchoWords[] = { TEXT("echo"), TEXT("printf") };
+	// r9 (QaRuleHeredoc; Second's r8 attack S6): the words of a heredoc's command run, skipped before its body ("cat <<EOF | passwd --stdin")
+	const TCHAR* const CardHeredocCommands[] = { TEXT("passwd"), TEXT("chpasswd"), TEXT("docker"), TEXT("login"), TEXT("sudo"), TEXT("cat"),
+		TEXT("mysql"), TEXT("redis-cli"), TEXT("tee") };
 	// r8 (QaRulePerf; Second's r7 (A)): the screen's bounds -- a longer text is read in windows that overlap, a value's continuation stops
 	// after so many pieces (and is judged whole only while it could be one value), and so many distinct values go to EVERY OCCURRENCE
 	constexpr int32 CardScreenCap = 4096;
@@ -2159,6 +2162,40 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 	// least one of them. r7 read any length at once, and parts of it grew with the square: 2.8k characters of wrapped words took ~3 s
 	if (bPerf && Text.Len() > CardScreenCap)
 	{
+		// r9 (QaRuleMarkerAtomic; Second's r8 attack, finding 1): THE MARKERS OF THE WHOLE LINE FIRST, and no window cut ever lands inside one.
+		// The marker holds spaces, so r8 could cut it; a second screen then read its pieces as words and nested a new marker in it, the line
+		// growing on every re-render ("[a [a key: ...] never shown or stored]")
+		const TArray<TPair<int32, int32>> WholeMarks = CardRuleOn(QaRuleMarkerAtomic) ? CardFindMarks(Text) : TArray<TPair<int32, int32>>();
+		// the marks are in order and never overlap: the last one starting at or before a position is the only one that can hold it
+		auto LastMarkFrom = [&WholeMarks](int32 Position)
+		{
+			int32 Low = 0;
+			int32 High = WholeMarks.Num();
+			while (Low < High)
+			{
+				const int32 Mid = (Low + High) / 2;
+				if (WholeMarks[Mid].Key <= Position)
+				{
+					Low = Mid + 1;
+				}
+				else
+				{
+					High = Mid;
+				}
+			}
+			return Low - 1;
+		};
+		auto SnapOutsideMark = [&WholeMarks, &LastMarkFrom](int32 Cut)
+		{
+			const int32 Holder = LastMarkFrom(Cut - 1);
+			return Holder >= 0 && Cut < WholeMarks[Holder].Value ? WholeMarks[Holder].Key : Cut;
+		};
+		// r9 (QaRuleCrossWindow; Second's r8 attack, finding 2): every CERTAIN value a window found, at most CardMaxValues of them, is hunted
+		// on the WHOLE line after the windows -- r8's every-occurrence ran per window, so a strong value repeated 4,096 characters on stayed
+		// on screen. Weak values stay per window (a stated residual)
+		const bool bCrossWindow = CardRuleOn(QaRuleCrossWindow);
+		TArray<FString> CrossValues;
+		const FString CrossMark = CardRedactionMarker();
 		TArray<FSecretFind> Part;
 		int32 From = 0;
 		while (From < Text.Len())
@@ -2174,12 +2211,24 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 						break;
 					}
 				}
+				const int32 SnappedTo = SnapOutsideMark(To);
+				To = SnappedTo > From ? SnappedTo : To;
 			}
 			FindSecrets(Text.Mid(From, To - From), Part);
 			for (FSecretFind& Find : Part)
 			{
 				Find.Start += From;
 				OutFinds.Add(Find);
+				if (bCrossWindow && Find.bCertain && CrossValues.Num() < CardMaxValues)
+				{
+					const FString Value = Text.Mid(Find.Start, Find.Length);
+					// case-sensitive, as the hunt is (an FString set would fold "Hx7q" and "hx7q" into one)
+					if (Value.Len() >= 4 && !Value.Contains(CrossMark)
+						&& !CrossValues.ContainsByPredicate([&Value](const FString& Held) { return Held.Equals(Value, ESearchCase::CaseSensitive); }))
+					{
+						CrossValues.Add(Value);
+					}
+				}
 			}
 			if (To >= Text.Len())
 			{
@@ -2195,7 +2244,29 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 					break;
 				}
 			}
-			From = Back != INDEX_NONE ? Back + 1 : Next;
+			const int32 NextFrom = Back != INDEX_NONE ? Back + 1 : Next;
+			const int32 SnappedFrom = SnapOutsideMark(NextFrom);
+			From = SnappedFrom > From ? SnappedFrom : NextFrom;
+		}
+		// one search of the line per value (at most CardMaxValues): linear in the length; an occurrence inside a marker is the marker's own text
+		for (const FString& Value : CrossValues)
+		{
+			for (int32 At = Text.Find(Value, ESearchCase::CaseSensitive); At != INDEX_NONE;
+				At = Text.Find(Value, ESearchCase::CaseSensitive, ESearchDir::FromStart, At + 1))
+			{
+				const int32 Holder = LastMarkFrom(At);
+				const bool bInsideMark = Holder >= 0 && At + Value.Len() <= WholeMarks[Holder].Value;
+				if (!bInsideMark)
+				{
+					FSecretFind Find;
+					Find.Start = At;
+					Find.Length = Value.Len();
+					Find.bCertain = true;
+					Find.bWeak = false;
+					Find.bShape = false;
+					OutFinds.Add(Find);
+				}
+			}
 		}
 		CardMergeFinds(OutFinds);
 		return;
@@ -2825,6 +2896,95 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 					continue;   // echo's own flags, printf's format
 				}
 				Take(At, Word, ECardLabelKind::Normal, true, FString(), false);
+			}
+		}
+	}
+	// r9 (QaRuleHeredoc; Second's r8 attack S6): A HEREDOC OR HERE-STRING FEEDING A PASSWORD READER -- "cat <<EOF | passwd --stdin" then the
+	// password then "EOF", "cat <<'EOF' | chpasswd" then "bob:<value>", "passwd --stdin <<< X", "docker login --password-stdin <<< X". The value
+	// is the heredoc's body up to its delimiter, or the here-string's word. "cat notes.txt | wc -l" has neither. Each operator looks at most
+	// twelve words around it and takes at most CardMaxRun body words: the pass stays linear
+	if (CardRuleOn(QaRuleHeredoc))
+	{
+		auto ReadsPassword = [&Spans](int32 At)
+		{
+			return !Spans[At].bMarker && (CardOneOf(Spans[At].Lower, CardPipeConsumers) || Spans[At].Lower == TEXT("passwd") || Spans[At].Lower == TEXT("chpasswd"));
+		};
+		for (int32 Index = 0; Index < NumSpans; ++Index)
+		{
+			const FSpan& Redirect = Spans[Index];
+			if (Redirect.bMarker)
+			{
+				continue;
+			}
+			if (Redirect.Raw.StartsWith(TEXT("<<<"), ESearchCase::CaseSensitive))
+			{
+				bool bReader = false;
+				for (int32 At = FMath::Max(0, Index - 12); At < Index && !bReader; ++At)
+				{
+					bReader = ReadsPassword(At);
+				}
+				if (!bReader)
+				{
+					continue;
+				}
+				if (Redirect.Raw.Len() > 3 && !Redirect.Word.IsEmpty())
+				{
+					Take(Index, Redirect.Word, ECardLabelKind::Normal, true, FString(), false);   // "<<<X", glued
+				}
+				else if (Index + 1 < NumSpans && !Spans[Index + 1].bMarker && !Spans[Index + 1].Word.IsEmpty())
+				{
+					Take(Index + 1, Spans[Index + 1].Word, ECardLabelKind::Normal, true, FString(), false);
+				}
+				continue;
+			}
+			if (!Redirect.Raw.StartsWith(TEXT("<<"), ESearchCase::CaseSensitive))
+			{
+				continue;
+			}
+			// "<<EOF", "<<'EOF'", "<<\"EOF\"": the delimiter is the word, its quotes and angle brackets already trimmed
+			const FString Delimiter = Redirect.Word;
+			if (Delimiter.IsEmpty())
+			{
+				continue;
+			}
+			bool bReader = false;
+			bool bChpasswd = false;
+			for (int32 At = Index + 1; At < FMath::Min(NumSpans, Index + 12); ++At)
+			{
+				bReader |= ReadsPassword(At);
+				bChpasswd |= Spans[At].Lower == TEXT("chpasswd");
+			}
+			if (!bReader)
+			{
+				continue;
+			}
+			// past the command run ("| passwd --stdin"), then the body up to the delimiter
+			int32 Body = Index + 1;
+			while (Body < NumSpans && !Spans[Body].bMarker
+				&& (Spans[Body].Raw == TEXT("|") || Spans[Body].Raw.StartsWith(TEXT("-"), ESearchCase::CaseSensitive)
+					|| CardOneOf(Spans[Body].Lower, CardPipeConsumers) || CardOneOf(Spans[Body].Lower, CardHeredocCommands)))
+			{
+				++Body;
+			}
+			int32 BodyTaken = 0;
+			for (; Body < NumSpans && BodyTaken < CardMaxRun; ++Body)
+			{
+				const FSpan& BodySpan = Spans[Body];
+				if (BodySpan.bMarker || BodySpan.bGlued)
+				{
+					continue;   // a value a first screen already took: the second screen leaves it (idempotent)
+				}
+				if (BodySpan.Word.Equals(Delimiter, ESearchCase::CaseSensitive) || BodySpan.Raw.Equals(Delimiter, ESearchCase::CaseSensitive))
+				{
+					break;
+				}
+				// chpasswd reads "user:password": a bare word is not its value. The pair is taken whole, as the label and echo-pipe rules take
+				// it -- the password alone would leave "user:" glued to the marker, and a second screen would take that (not idempotent)
+				if (!BodySpan.Word.IsEmpty() && (!bChpasswd || BodySpan.Word.Contains(TEXT(":"))))
+				{
+					Take(Body, BodySpan.Word, ECardLabelKind::Normal, true, FString(), false);
+					++BodyTaken;
+				}
 			}
 		}
 	}
