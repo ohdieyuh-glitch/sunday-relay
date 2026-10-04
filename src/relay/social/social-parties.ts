@@ -387,3 +387,24 @@ export function recentPlayersViewFor(state: SocialState, ownerId: SocialUserId):
     e.context === 'PARTY' ? { ...e, contextLabel: partyViewFor(state, ownerId, e.contextLabel)?.name ?? DEFAULT_PARTY_NAME } : e,
   );
 }
+
+/** Somebody who was in a party before a change and is not in it after (left, was removed, separated by a block, or it ended). */
+export interface PartyDeparture {
+  readonly partyId: string;
+  readonly userId: SocialUserId;
+}
+
+/**
+ * WHO LEFT WHICH PARTY between two states: every member of every party in `before` who is not a member of that same party in
+ * `after` (a leave, a leader's removal, a block's F1 separation -- the leader removes / the blocker leaves -- a reconciliation of
+ * a carried-in blocked pair, or the last member out). The stores hand this to their after-commit hook, so party voice can take
+ * the departed out of that party's room server-side (relay-bridge/eos-voice.ts). Pure, in party then member order.
+ */
+export function partyDepartures(before: SocialState, after: SocialState): PartyDeparture[] {
+  const out: PartyDeparture[] = [];
+  for (const party of Object.values(before.parties)) {
+    const stays = new Set(after.parties[party.partyId]?.members.map((m) => m.userId) ?? []);
+    for (const m of party.members) if (!stays.has(m.userId)) out.push({ partyId: party.partyId, userId: m.userId });
+  }
+  return out;
+}

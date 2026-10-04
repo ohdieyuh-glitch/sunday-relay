@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { juliusTestDatabaseUrl } from './julius-test-database';
+import { openSocialPostgresStore } from './social-postgres';
 import { createPostgresVoiceBindings } from './voice-binding-postgres';
 import { TransactionalWonderlandDatabase } from './wonderland-postgres';
 
@@ -58,5 +59,37 @@ suite('party voice PUID bindings on real PostgreSQL', () => {
     expect(owners.rowCount).toBe(1);
     // the table itself refuses a malformed PUID and a second owner
     await expect(pool.query('INSERT INTO relay_wonderland.voice_puid_binding(user_id, puid, session_id, bound_at) VALUES($1, $2, $3, $4)', [B, 'NOT-A-PUID', 's', NOW])).rejects.toThrow();
+  }, 60_000);
+
+  it('the PostgreSQL social store tells a party departure only AFTER its transaction committed (what voice removal reads)', async () => {
+    // the hook looks at the database from ANOTHER connection the instant it is told: the departed row must already be gone
+    const seen: Array<Promise<number>> = [];
+    const told: string[] = [];
+    const store = await openSocialPostgresStore(pool, {
+      afterCommit: (commit) => {
+        for (const d of commit.departures) {
+          told.push(`${commit.op}:${d.userId}`);
+          seen.push(pool.query('SELECT count(*)::int AS n FROM relay_wonderland.social_party_members WHERE party_id = $1 AND player_id = $2', [d.partyId, d.userId]).then((r) => r.rows[0].n as number));
+        }
+      },
+    });
+    const run = async (op: Parameters<typeof store.apply>[0], actor: string, ids: string[], body: Record<string, unknown>) => {
+      const r = await store.apply(op, actor, { ids, body, query: {} }, NOW);
+      if (!r.ok) throw new Error(`${op}: ${r.error.message}`);
+      return r.value as Record<string, unknown> | null;
+    };
+    for (const id of [A, B]) await store.ensureUser({ userId: id, displayName: id, handle: `@${id}` }, NOW);
+    await run('requests.send', A, [], { toUserId: B });
+    await run('requests.accept', B, [(await store.read()).requests.find((r) => r.toUserId === B && r.status === 'PENDING')!.requestId], {});
+    const pid = String((await run('parties.create', A, [], {}))?.partyId);
+    await run('party_invites.accept', B, [String((await run('parties.invite', A, [pid], { toUserId: B }))?.inviteId)], {});
+    expect(told).toEqual([]);
+    await run('parties.leave', B, [pid], {});
+    expect(told).toEqual([`parties.leave:${B}`]);
+    expect(await Promise.all(seen)).toEqual([0]);
+    await run('parties.leave', A, [pid], {}); // the last one out ends the party: told as a departure too
+    expect(told).toEqual([`parties.leave:${B}`, `parties.leave:${A}`]);
+    expect(await Promise.all(seen)).toEqual([0, 0]);
+    await pool.query('DELETE FROM relay_wonderland.social_events WHERE audience && $1::text[]', [[A, B]]);
   }, 60_000);
 });

@@ -22,7 +22,7 @@ import {
 } from '../social/social-contracts';
 import { applySocialOperation, type SocialCommandInput } from '../social/social-commands';
 import { emptySocialState, type SocialState, type SocialUserRecord } from '../social/social-state';
-import { newSocialUser, viewerCursor, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
+import { newSocialUser, tellAfterCommit, viewerCursor, type SocialAfterCommit, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
 import { emptyWorldState, type WorldState } from '../social/world-presence';
 
 /**
@@ -408,6 +408,8 @@ async function writeChanges(c: PoolClient, before: SocialState, after: SocialSta
 export interface SocialPostgresOptions {
   /** How long the event log keeps an event (default 7 days); a client further behind is told to reset. */
   readonly eventRetentionMs?: number;
+  /** Told after each change that took somebody out of a party, once its transaction COMMITTED (party voice removal). */
+  readonly afterCommit?: SocialAfterCommit;
 }
 
 /** Read every social row back and serve the store. THROWS when the database cannot be reached (the route answers 503). */
@@ -468,8 +470,11 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
           } catch (error) {
             return { ok: false, error: relayError('stale-ledger-version', 'the change could not be saved; nothing was changed', { retryable: true }) };
           }
+          const before = state;
           state = next;
           if (outcome.value.world !== undefined) world = outcome.value.world;
+          // AFTER THE COMMIT, never before it, and never waited on (voice removal retries on its own; the change stands)
+          tellAfterCommit(options.afterCommit, op, actorId, before, next);
         }
         return { ok: true, value: outcome.value.data };
       }),

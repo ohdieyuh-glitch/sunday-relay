@@ -26,6 +26,7 @@ import {
 } from './social-contracts';
 import { applySocialOperation, type SocialCommandInput } from './social-commands';
 import { emptySocialState, type SocialState, type SocialUserRecord } from './social-state';
+import { partyDepartures, type PartyDeparture } from './social-parties';
 import { emptyWorldState, type WorldState } from './world-presence';
 
 /** What a change says to the people it concerns: which operation, and when. Nothing of its content. */
@@ -113,9 +114,36 @@ interface StoredEvent extends SocialEvent {
   readonly audience: ReadonlySet<SocialUserId>;
 }
 
+/** What a committed change did to party membership (voice removal reads it; nothing here waits for the reader). */
+export interface SocialCommit {
+  readonly op: SocialOperationId;
+  readonly actorId: SocialUserId;
+  readonly departures: readonly PartyDeparture[];
+}
+
+/**
+ * Told AFTER a change is committed (the in-memory state adopted; on PostgreSQL, after the transaction committed), only when
+ * somebody left a party. Called synchronously and never awaited: a hook that throws or hangs cannot block or fail the change.
+ */
+export type SocialAfterCommit = (commit: SocialCommit) => void;
+
+/** Run the hook for a committed change, fenced: it can neither throw into nor delay the operation. */
+export function tellAfterCommit(hook: SocialAfterCommit | undefined, op: SocialOperationId, actorId: SocialUserId, before: SocialState, after: SocialState): void {
+  if (hook === undefined || before === after) return;
+  const departures = partyDepartures(before, after);
+  if (departures.length === 0) return;
+  try {
+    hook({ op, actorId, departures });
+  } catch {
+    // the change stands; whatever reads departures settles its own failures
+  }
+}
+
 export interface InMemorySocialStoreOptions {
   /** How many events the log keeps before the oldest go (a client further behind is told to refresh). */
   readonly maxEvents?: number;
+  /** Told after each committed change that took somebody out of a party (party voice removal). */
+  readonly afterCommit?: SocialAfterCommit;
 }
 
 /** The development and test store: one process, atomic, nothing survives a restart. */
@@ -147,12 +175,14 @@ export function createInMemorySocialStore(initial: SocialState = emptySocialStat
         if (!outcome.ok) return outcome;
         if (outcome.value.world !== undefined) world = outcome.value.world;
         if (outcome.value.state !== state || (outcome.value.audience.length > 0 && op.startsWith('world.'))) {
+          const before = state;
           state = outcome.value.state;
           if (outcome.value.audience.length > 0) {
             seq += 1;
             log.push({ seq, op: outcome.value.eventOp ?? op, atIso: nowIso, audience: new Set(outcome.value.audience) });
             if (log.length > maxEvents) log.splice(0, log.length - maxEvents);
           }
+          tellAfterCommit(options.afterCommit, op, actorId, before, state);
         }
         return { ok: true, value: outcome.value.data };
       }),
