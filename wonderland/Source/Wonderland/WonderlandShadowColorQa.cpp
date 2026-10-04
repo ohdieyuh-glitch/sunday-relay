@@ -892,12 +892,13 @@ namespace WonderlandShadowColourQa
 						FString::Printf(TEXT("COLOR 2 DEFAULT: the eye drawn %s (%s), want the authored eye's hue %s (within 4 deg; never white)"),
 							bDefaultEyeRead ? *Sc3Rgb(DefaultEyeDrawn) : TEXT("unreadable"), bDefaultEyeRead ? *Sc3HueWord(DefaultEyeDrawn) : TEXT("-"),
 							Run.bEyeAuthored ? *Sc3HueWord(Run.EyeAuthored) : TEXT("(the authored eye was unreadable)")));
-					// THE CONTROL: the bug's colour -- the authored eye's level as WHITE -- asked the same question must say NO
-					const float AuthoredPeak = FMath::Max3(Run.EyeAuthored.R, Run.EyeAuthored.G, Run.EyeAuthored.B);
-					const FLinearColor WhiteBugEye(AuthoredPeak, AuthoredPeak, AuthoredPeak, 1.0f);
-					Sc3Check(Run, TEXT("SC3.13ec"), Run.bEyeAuthored && !Sc3SameHue(WhiteBugEye, Run.EyeAuthored, 4.0f),
-						FString::Printf(TEXT("control: a white eye %s read as the designed hue? %s"), *Sc3Rgb(WhiteBugEye),
-							Sc3SameHue(WhiteBugEye, Run.EyeAuthored, 4.0f) ? TEXT("YES (the judge cannot fail)") : TEXT("no")));
+					// THE CONTROL (Second's RC13 review m8: a WHITE eye can never pass -- Sc3HueOf rejects every grey -- so it proved nothing):
+					// a COLOURED eye that is not the designed one -- the authored eye tinted by the QA's own azure, the colour the old rule drew
+					// for COLOR 2 -- asked the same question must say NO. That needs the judge to tell hues apart, which it can fail to do.
+					const FLinearColor TintedEye = Run.EyeAuthored * Azure->Value;
+					Sc3Check(Run, TEXT("SC3.13ec"), Run.bEyeAuthored && !Sc3SameHue(TintedEye, Run.EyeAuthored, 4.0f),
+						FString::Printf(TEXT("control: an azure-tinted eye %s (%s) read as the designed hue %s? %s"), *Sc3Rgb(TintedEye), *Sc3HueWord(TintedEye),
+							*Sc3HueWord(Run.EyeAuthored), Sc3SameHue(TintedEye, Run.EyeAuthored, 4.0f) ? TEXT("YES (the judge cannot fail)") : TEXT("no")));
 				}
 				WonderlandCardDirector::Select(World, Run.CardId, Said);
 				UE_LOG(LogTemp, Display, TEXT("WLSC3 select said: %s"), *Said);
