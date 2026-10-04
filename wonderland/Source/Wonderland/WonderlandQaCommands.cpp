@@ -12241,6 +12241,14 @@ namespace
 	 *        rules, every one redacted on submit, still after /keep, masked on screen
 	 *   SI11 patterns a person types are not keys (round 4's card C6: ten thousand 'x' read as random): zero-entropy runs -- Zzzz..., abab...,
 	 *        xxxx..., 1111..., lolol... -- stored exactly as typed (the statistical class needs 8 distinct characters, 6 for digits only)
+	 *   SI12 every typed line (the corpus's 66 too) screened twice equals screened once; the restore's rule keeps a /keep and a marker
+	 *   SI12b the same through the product: SaveContracts -> RestoreContracts, every objective byte-identical; CONTROL a contract stored
+	 *        with every r6 rule off MUST be changed by the restore, which says so
+	 *   SI13-SI16 Second's round-5 findings corpus (66 cases verbatim, card_second/r5_findings_corpus.json), one check per finding, each with
+	 *        a PLANTED CONTROL -- its rule off, every d831cbd1 failure of that finding must turn back:
+	 *          SI13 TAB / LF / CRLF / VT between a label and its value (MAJOR 1)  SI14 a value glued to the marker (MAJOR 2)
+	 *          SI15 label shapes and values (MAJOR 3)  SI16 over-redaction /keep cannot undo (finding 4): stored as typed
+	 *   SI17 the corpus's 19 regression controls; a '#' inside a URL userinfo password redacted (CONTROL: the rule off, it leaks)
 	 */
 	struct FQaSecretInput
 	{
@@ -12770,6 +12778,220 @@ namespace
 			SlotNote() + FString::Printf(TEXT("%d of %d typed patterns (Zzzz, abab, xxxx, 1111, lolol runs of 20+) stored exactly as typed%s"), PatternsKept, PatternCount,
 				PatternsAltered.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; ALTERED: %s"), *PatternsAltered)));
 
+		// SI13-SI17: SECOND'S ROUND-5 FINDINGS CORPUS (card_second/r5_findings_corpus.json, 66 cases verbatim; the values built here at run
+		// time, never written whole). Each case goes through the product's door (SubmitDraftScreened) and the terminal's (MaskForDisplay):
+		// REDACTED = the value in neither; INTACT = both equal the typed line, trimmed. Each finding's check carries a PLANTED CONTROL: the
+		// same cases with that finding's rule switched off (FWonderlandCardStore::QaRulesOff, for those calls only) must turn the other way
+		// -- leak, or over-redact -- in every case that failed on d831cbd1; a case its rule does not decide would prove nothing.
+		struct FR5Case
+		{
+			const TCHAR* Template;
+			const TCHAR* Value;
+			bool bRedacted;
+			/** 0 a control, 1 control whitespace, 2 a value glued to the marker, 3 label shapes and values, 4 over-redaction. */
+			int32 Finding;
+			/** The d831cbd1 verdict was a FAIL (Second's transcription): the cases the r6 rules exist for. */
+			bool bFailedBefore;
+		};
+		static const FR5Case R5Cases[] = {
+			{ TEXT("the passwd {V} is on the card"), TEXT("{V}"), true, 0, false },
+			{ TEXT("my password {V} for staging"), TEXT("{V}"), true, 0, false },
+			{ TEXT("login with password: {V}! today"), TEXT("{V}"), true, 0, false },
+			{ TEXT("password:  {V}"), TEXT("{V}"), true, 0, false },
+			{ TEXT("\"password\" \"{V}\""), TEXT("{V}"), true, 0, false },
+			{ TEXT("(secret: {V})"), TEXT("{V}"), true, 0, false },
+			{ TEXT("PASSWORD {V}"), TEXT("{V}"), true, 0, false },
+			{ TEXT("passwd={V}"), TEXT("{V}"), true, 0, false },
+			{ TEXT("passwd ={V}"), TEXT("{V}"), true, 0, false },
+			{ TEXT("pwd:{V}"), TEXT("{V}"), true, 0, false },
+			{ TEXT("the password is {V}"), TEXT("{V}"), true, 0, false },
+			{ TEXT("password, {V}"), TEXT("{V}"), true, 0, false },
+			{ TEXT("password: {V} token: {T}"), TEXT("{V}"), true, 0, false },
+			{ TEXT("open https://api.example.com/v1/items?token={T} now"), TEXT("{T}"), true, 0, false },
+			{ TEXT("{\"api_key\":\"{T}\"}"), TEXT("{T}"), true, 0, false },
+			{ TEXT("{\"password\":\"{V}\"}"), TEXT("{V}"), true, 0, false },
+			{ TEXT("deploy with {SK} please"), TEXT("{SK}"), true, 0, false },
+			{ TEXT("send the password reset link to the beta testers"), TEXT(""), false, 0, false },
+			{ TEXT("pass 2026-10-03 to the build"), TEXT(""), false, 0, false },
+			{ TEXT("password\t{V}"), TEXT("{V}"), true, 1, true },
+			{ TEXT("password\n{V}"), TEXT("{V}"), true, 1, true },
+			{ TEXT("secret\t{V}"), TEXT("{V}"), true, 1, true },
+			{ TEXT("api key\t{V}"), TEXT("{V}"), true, 1, true },
+			{ TEXT("password\r\n{V}"), TEXT("{V}"), true, 1, true },
+			{ TEXT("the password\tis\t{V}"), TEXT("{V}"), true, 1, true },
+			{ TEXT("my password\v{V}"), TEXT("{V}"), true, 1, true },
+			{ TEXT("[a key: never shown or stored]{V}"), TEXT("{V}"), true, 2, true },
+			{ TEXT("the passwd {V}[a key: never shown or stored]"), TEXT("{V}"), true, 2, true },
+			{ TEXT("password: [a key: never shown or stored]{SK}"), TEXT("{SK}"), true, 2, true },
+			{ TEXT("the password was {V}"), TEXT("{V}"), true, 3, true },
+			{ TEXT("password for staging: {V}"), TEXT("{V}"), true, 3, true },
+			{ TEXT("password (staging): {V}"), TEXT("{V}"), true, 3, true },
+			{ TEXT("password - {V}"), TEXT("{V}"), true, 3, true },
+			{ TEXT("password -> {V}"), TEXT("{V}"), true, 3, true },
+			{ TEXT("password := {V}"), TEXT("{V}"), true, 3, true },
+			{ TEXT("my password's {V}"), TEXT("{V}"), true, 3, true },
+			{ TEXT("passwords: {V}"), TEXT("{V}"), true, 3, true },
+			{ TEXT("user admin pass {V}"), TEXT("{V}"), true, 3, true },
+			{ TEXT("pw {V}"), TEXT("{V}"), true, 3, true },
+			{ TEXT("login admin:{V}"), TEXT("{V}"), true, 3, true },
+			{ TEXT("open https://api.example.com/login?pwd={V} now"), TEXT("{V}"), true, 3, true },
+			{ TEXT("open https://api.example.com/login?passwd={V} now"), TEXT("{V}"), true, 3, true },
+			{ TEXT("export DB_PASS={V} now"), TEXT("{V}"), true, 3, true },
+			{ TEXT("export SMTP_PASS={V}"), TEXT("{V}"), true, 3, true },
+			{ TEXT("export REDIS_AUTH={V}"), TEXT("{V}"), true, 3, false },
+			{ TEXT("open https://api.example.com/login?api-key={T} now"), TEXT("{T}"), true, 3, true },
+			{ TEXT("pin 482913 for the door"), TEXT("482913"), true, 3, true },
+			{ TEXT("the passcode 482913"), TEXT("482913"), true, 3, false },
+			{ TEXT("the password Swordfish is on the card"), TEXT("Swordfish"), true, 3, true },
+			{ TEXT("the password SwordFishKing is on the card"), TEXT("SwordFishKing"), true, 3, true },
+			{ TEXT("the passwd ab1!x is on the card"), TEXT("ab1!x"), true, 3, true },
+			{ TEXT("password\u00A0{V}"), TEXT("{V}"), true, 3, false },
+			{ TEXT("password\u3000{V}"), TEXT("{V}"), true, 3, false },
+			{ TEXT("password \u201C{V}\u201D"), TEXT("{V}"), true, 3, false },
+			{ TEXT("password \u00AB{V}\u00BB"), TEXT("{V}"), true, 3, false },
+			{ TEXT("fix the password reset-flow bug"), TEXT(""), false, 4, true },
+			{ TEXT("find the secret door's key"), TEXT(""), false, 4, true },
+			{ TEXT("send the password e-mail to the beta testers"), TEXT(""), false, 4, true },
+			{ TEXT("expire the session token 2026-10-03 at noon"), TEXT(""), false, 4, true },
+			{ TEXT("fix the password hash_compare bug"), TEXT(""), false, 4, true },
+			{ TEXT("open the secret level-2 door"), TEXT(""), false, 4, true },
+			{ TEXT("set token 128000 as the limit"), TEXT(""), false, 4, true },
+			{ TEXT("update the token refresh_handler"), TEXT(""), false, 4, true },
+			{ TEXT("the secret r\u00E9union"), TEXT(""), false, 4, true },
+			{ TEXT("the secret v2.0-alpha release notes"), TEXT(""), false, 4, true },
+			{ TEXT("rotate the api key quarterly-ish"), TEXT(""), false, 4, true },
+		};
+		const FString R5Value = FString(TEXT("Tr0ub")) + TEXT("4dor&3x");
+		const FString R5Token = FString(TEXT("Zq9pL")) + TEXT("2mN7x");
+		const FString R5Key = Prefix + TEXT("proj-") + TEXT("AAAAbbbb") + TEXT("CCCCdddd") + TEXT("1234567890");
+		auto R5Fill = [&R5Value, &R5Token, &R5Key](const TCHAR* Text)
+		{
+			FString Out = Text;
+			Out.ReplaceInline(TEXT("{SK}"), *R5Key, ESearchCase::CaseSensitive);
+			Out.ReplaceInline(TEXT("{V}"), *R5Value, ESearchCase::CaseSensitive);
+			Out.ReplaceInline(TEXT("{T}"), *R5Token, ESearchCase::CaseSensitive);
+			return Out;
+		};
+		// ONE CASE, both doors; true when it came out as the corpus says. A case that found no slot is BLIND (counted by SlotNote).
+		auto R5AsCorpus = [&](const FR5Case& Case, FString& OutStored)
+		{
+			const FString Typed = R5Fill(Case.Template);
+			const FString Value = R5Fill(Case.Value);
+			const FString Trimmed = Typed.TrimStartAndEnd();
+			const FSubmitted Done = Submit(Typed);
+			const FString Shown = FWonderlandCardStore::MaskForDisplay(Trimmed);
+			OutStored = Done.Kept;
+			FreeSlots();
+			if (Done.bNoSlot)
+			{
+				return false;
+			}
+			if (Case.bRedacted)
+			{
+				return !Value.IsEmpty() && !Done.Kept.Contains(Value) && !Shown.Contains(Value);
+			}
+			return Done.Kept.Equals(Trimmed, ESearchCase::CaseSensitive) && Shown.Equals(Trimmed, ESearchCase::CaseSensitive);
+		};
+		// ONE FINDING: every case with every rule on, then (the control) with RulesOff -- how many of the d831cbd1 failures flip
+		auto R5Check = [&](const TCHAR* Id, int32 Finding, uint32 RulesOff, const TCHAR* What, const TCHAR* RuleName)
+		{
+			CaseMissedAt = SlotsMissed;
+			int32 Cases = 0;
+			int32 AsCorpus = 0;
+			int32 FailedBefore = 0;
+			int32 Flipped = 0;
+			FString Wrong;
+			FString NotFlipped;
+			for (const FR5Case& Case : R5Cases)
+			{
+				if (Case.Finding != Finding)
+				{
+					continue;
+				}
+				++Cases;
+				FString Stored;
+				if (R5AsCorpus(Case, Stored))
+				{
+					++AsCorpus;
+				}
+				else if (Wrong.IsEmpty())
+				{
+					// shown MASKED: the stored text of a leak still holds the fake value
+					Wrong = FString::Printf(TEXT("'%s' -> '%s'"), *FWonderlandCardStore::MaskForDisplay(R5Fill(Case.Template)),
+						*FWonderlandCardStore::MaskForDisplay(Stored));
+				}
+				if (!Case.bFailedBefore)
+				{
+					continue;
+				}
+				++FailedBefore;
+				FWonderlandCardStore::QaRulesOff() = RulesOff;
+				FString ControlStored;
+				const bool bControlAsCorpus = R5AsCorpus(Case, ControlStored);
+				FWonderlandCardStore::QaRulesOff() = 0;
+				if (!bControlAsCorpus)
+				{
+					++Flipped;
+				}
+				else if (NotFlipped.IsEmpty())
+				{
+					NotFlipped = FWonderlandCardStore::MaskForDisplay(R5Fill(Case.Template));
+				}
+			}
+			S.Check(Id, SlotsMissed == CaseMissedAt && Cases > 0 && AsCorpus == Cases && Flipped == FailedBefore,
+				SlotNote() + FString::Printf(TEXT("%s: %d of %d as Second's corpus says%s; the CONTROL (%s off): %d of the %d d831cbd1 failures turn back%s"),
+					What, AsCorpus, Cases, Wrong.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- FIRST WRONG %s"), *Wrong), RuleName, Flipped, FailedBefore,
+					NotFlipped.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- the rule does not decide '%s' (BLIND control)"), *NotFlipped)));
+		};
+		R5Check(TEXT("SI13"), 1, FWonderlandCardStore::QaRuleSpaces | FWonderlandCardStore::QaRuleBothViews,
+			TEXT("a TAB / LF / CRLF / VT between a label and its value (Second's MAJOR 1)"), TEXT("spaces kept + the split view"));
+		R5Check(TEXT("SI14"), 2, FWonderlandCardStore::QaRuleMarkerSplit,
+			TEXT("a value glued to the redaction marker (Second's MAJOR 2)"), TEXT("the marker as its own token"));
+		R5Check(TEXT("SI15"), 3, FWonderlandCardStore::QaRuleLabelWindow | FWonderlandCardStore::QaRuleLabelForms | FWonderlandCardStore::QaRuleUrlPieces
+			| FWonderlandCardStore::QaRuleLoginPair,
+			TEXT("label shapes and values: was / for staging: / (staging): / - / -> / := / password's / passwords: / pass / pw / login name:value / ?pwd= / ?passwd= / ?api-key= / DB_PASS= / SMTP_PASS= / REDIS_AUTH= / pin / passcode / Swordfish / SwordFishKing / 5 characters / NBSP / ideographic space / curly quotes / guillemets (Second's MAJOR 3)"),
+			TEXT("the label window, the label forms, the URL pieces, the login pair"));
+		R5Check(TEXT("SI16"), 4, FWonderlandCardStore::QaRuleValueLike,
+			TEXT("over-redaction /keep cannot undo: reset-flow, door's, e-mail, an ISO date, hash_compare, level-2, a quantity after token, refresh_handler, r\u00E9union, v2.0-alpha, quarterly-ish -- each stored as typed (Second's finding 4)"),
+			TEXT("the value-likeness test"));
+		// SI17: the corpus's 19 controls (every shape round 4 and 5 fixed, plus the reset sentence) as the corpus says; and a password with a
+		// '#' in a URL's userinfo (CORE's r6 measurement: 24% of Second's userinfo probes leaked) -- with its control
+		CaseMissedAt = SlotsMissed;
+		int32 ControlsAsCorpus = 0;
+		int32 ControlCount = 0;
+		FString ControlWrong;
+		for (const FR5Case& Case : R5Cases)
+		{
+			if (Case.Finding != 0)
+			{
+				continue;
+			}
+			++ControlCount;
+			FString Stored;
+			if (R5AsCorpus(Case, Stored))
+			{
+				++ControlsAsCorpus;
+			}
+			else if (ControlWrong.IsEmpty())
+			{
+				ControlWrong = FWonderlandCardStore::MaskForDisplay(R5Fill(Case.Template));
+			}
+		}
+		const FString HashPassword = FString(TEXT("Tr0ub")) + TEXT("4dor#3x");
+		const FString HashUrl = FString::Printf(TEXT("migrate %s://app:%s@10.0.0.5/prod tonight"), *DatabaseScheme, *HashPassword);
+		const FSubmitted HashDone = Submit(HashUrl);
+		const bool bHashClean = !HashDone.bNoSlot && !HashDone.Kept.Contains(HashPassword) && !FWonderlandCardStore::MaskForDisplay(HashUrl).Contains(HashPassword);
+		FreeSlots();
+		FWonderlandCardStore::QaRulesOff() = FWonderlandCardStore::QaRuleUrlPieces;
+		const FSubmitted HashControl = Submit(HashUrl);
+		const bool bHashControlLeaks = !HashControl.bNoSlot && HashControl.Kept.Contains(HashPassword);
+		FWonderlandCardStore::QaRulesOff() = 0;
+		FreeSlots();
+		S.Check(TEXT("SI17"), SlotsMissed == CaseMissedAt && ControlCount > 0 && ControlsAsCorpus == ControlCount && bHashClean && bHashControlLeaks,
+			SlotNote() + FString::Printf(TEXT("the corpus's %d regression controls: %d as the corpus says%s; a '#' inside a URL's userinfo password %s, and with the userinfo-to-'/' rule off it %s (the CONTROL)"),
+				ControlCount, ControlsAsCorpus, ControlWrong.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- FIRST WRONG '%s'"), *ControlWrong),
+				bHashClean ? TEXT("is redacted") : TEXT("GETS THROUGH"), bHashControlLeaks ? TEXT("leaks, as it must") : TEXT("does NOT leak (BLIND control)")));
+
 		// SI12: THE SCREEN IS IDEMPOTENT, AND A RESTART KEEPS WHAT /keep GAVE (Second's R8a: the restore re-redacted "client secret: [marker]"
 		// on every load; CORE's read of the same code: it also took back every /keep). Every line this QA typed, screened twice, is what it
 		// was screened once; the restore's own rule (ScreenRestoredObjective) leaves a /keep'd word and a stored marker alone and still
@@ -12791,6 +13013,10 @@ namespace
 		for (const TCHAR* Pattern : Patterns)
 		{
 			EveryLine.Add(Pattern);
+		}
+		for (const FR5Case& Case : R5Cases)
+		{
+			EveryLine.Add(R5Fill(Case.Template));
 		}
 		int32 NotIdempotent = 0;
 		FString FirstNotIdempotent;
@@ -12836,6 +13062,105 @@ namespace
 				bLegacyRedacted ? TEXT("is redacted") : TEXT("SURVIVES")));
 		FreeSlots();
 
+		// SI12b: THE ROUND TRIP THROUGH THE PRODUCT (Second's round-5 finding 5: SI12 tests the restore's rule as a helper only). Objectives
+		// of every kind the screen touches are submitted -- a /keep'd word, a redacted key, a label past "was", a TAB between a label and its
+		// value, a value glued to a marker -- written by SaveContracts and read back by RestoreContracts, the very call a restart makes. Every
+		// restored objective must be byte-identical to one saved, and the restore must not say it redacted anything. THE CONTROL: one more
+		// contract is submitted with every r6 rule off, so its stored objective still holds its value -- the restore MUST change that one
+		// (and say so), or this check could not see a re-redaction at all.
+		CaseMissedAt = SlotsMissed;
+		const TArray<FString> RoundTyped = { KeepWord, FString::Printf(TEXT("deploy with %s please"), *KeyOne),
+			FString::Printf(TEXT("the password was %s yesterday"), *ShortPassword), FString::Printf(TEXT("password\t%s"), *ShortPassword),
+			FString::Printf(TEXT("the passwd %s%s"), *ShortPassword, *Marker) };
+		int32 RoundSubmitted = 0;
+		for (int32 Index = 0; Index < RoundTyped.Num(); ++Index)
+		{
+			const FSubmitted RoundDone = Submit(RoundTyped[Index]);
+			if (RoundDone.bNoSlot || !RoundDone.bAccepted)
+			{
+				continue;
+			}
+			++RoundSubmitted;
+			if (Index == 0)
+			{
+				int32 RoundRemoved = 0;
+				Set->KeepObjectiveAsTyped(RoundDone.Id, RoundTyped[0], RoundRemoved);
+			}
+		}
+		const FString PlantedValue = FString(TEXT("Qq7!")) + Random(Base62, 10);
+		const FString PlantedTyped = FString::Printf(TEXT("the password was %s for the restore control"), *PlantedValue);
+		FWonderlandCardStore::QaRulesOff() = 0xFFFFFFFFu;
+		const FSubmitted Planted = Submit(PlantedTyped);
+		FWonderlandCardStore::QaRulesOff() = 0;
+		const bool bPlantedHeld = !Planted.bNoSlot && Planted.bAccepted && Planted.Kept.Contains(PlantedValue);
+		const bool bRoundSaved = Set->SaveContracts();
+		// what is in memory now is what the file holds: the saved objectives, and the ids that are not the restore's
+		TArray<FString> SavedObjectives;
+		TSet<FGuid> HeldBefore;
+		for (const FWonderlandMissionTask& Held : Set->GetTasks())
+		{
+			HeldBefore.Add(Held.LocalId);
+			if (WonderlandTaskIsContract(Held.State) && !Held.Objective.Contains(PlantedValue))
+			{
+				SavedObjectives.Add(Held.Objective);
+			}
+		}
+		const FString RestoreMark = FString(TEXT("QaSI12bRestore")) + Digits.Left(8);
+		bool bRestoreMarkRead = false;
+		ReadLog(RestoreMark, bRestoreMarkRead);
+		const int32 RestoredCount = Set->RestoreContracts();
+		bool bRestoreEndRead = false;
+		const FString RestoreLog = ReadLog(RestoreMark + TEXT("End"), bRestoreEndRead);
+		const int32 MarkAt = RestoreLog.Find(RestoreMark, ESearchCase::CaseSensitive);
+		const FString AfterMark = MarkAt == INDEX_NONE ? FString() : RestoreLog.Mid(MarkAt);
+		const bool bRestoreSaidRedacted = AfterMark.Contains(TEXT("restored objective(s) held something"));
+		int32 RestoredSame = 0;
+		int32 RestoredChanged = 0;
+		bool bPlantedRedacted = false;
+		bool bAnyValueBack = false;
+		FString FirstChanged;
+		TArray<FGuid> RestoredIds;
+		for (const FWonderlandMissionTask& Restored : Set->GetTasks())
+		{
+			if (HeldBefore.Contains(Restored.LocalId))
+			{
+				continue;
+			}
+			RestoredIds.Add(Restored.LocalId);
+			bAnyValueBack |= Restored.Objective.Contains(ShortPassword) || Holds(Restored.Objective, KeyOne);
+			if (Restored.Objective.Contains(TEXT("for the restore control")))
+			{
+				bPlantedRedacted = !Restored.Objective.Contains(PlantedValue);
+				continue;
+			}
+			if (SavedObjectives.Contains(Restored.Objective))
+			{
+				++RestoredSame;
+			}
+			else
+			{
+				++RestoredChanged;
+				if (FirstChanged.IsEmpty())
+				{
+					FirstChanged = FWonderlandCardStore::MaskForDisplay(Restored.Objective);
+				}
+			}
+		}
+		// the restore's copies go (they are this QA's), then this case's own
+		for (const FGuid& RestoredId : RestoredIds)
+		{
+			Set->DeleteLocalContract(RestoredId);
+		}
+		FreeSlots();
+		S.Check(TEXT("SI12b"), SlotsMissed == CaseMissedAt && RoundSubmitted == RoundTyped.Num() && bRoundSaved && RestoredCount == SavedObjectives.Num() + 1
+			&& RestoredSame == SavedObjectives.Num() && RestoredChanged == 0 && !bAnyValueBack && bPlantedHeld && bPlantedRedacted && bRestoreSaidRedacted
+			&& bRestoreMarkRead && bRestoreEndRead,
+			SlotNote() + FString::Printf(TEXT("SaveContracts -> RestoreContracts (the restart's own call): %d restored of %d saved; %d byte-identical, %d CHANGED by the restore%s; no value back: %s | the CONTROL (a contract stored with every r6 rule off): its value %s on disk before the restore, %s by it, the restore %s it (the log %s)"),
+				RestoredCount, SavedObjectives.Num() + 1, RestoredSame, RestoredChanged,
+				FirstChanged.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (first: '%s')"), *FirstChanged), bAnyValueBack ? TEXT("NO -- A VALUE CAME BACK") : TEXT("yes"),
+				bPlantedHeld ? TEXT("held") : TEXT("NOT held (the control could not be planted)"), bPlantedRedacted ? TEXT("redacted") : TEXT("NOT redacted"),
+				bRestoreSaidRedacted ? TEXT("said it redacted") : TEXT("did NOT say it redacted"), bRestoreMarkRead && bRestoreEndRead ? TEXT("read") : TEXT("NOT read")));
+
 		FreeSlots();
 		return Stop(nullptr);
 	}
@@ -12844,7 +13169,8 @@ namespace
 		TEXT("wl.Qa.SecretInput"),
 		TEXT("A key typed anywhere is never kept and never shown (the founder's fail-closed; Second's review): objectives keep the task and lose ")
 		TEXT("the key (SI1-SI2, SI5), real objectives stay as typed (SI6), the terminal masks (SI3), COMBO B's rates hold (SI7), /keep never ")
-		TEXT("stores a certain shape (SI8), a key cannot name a C.A.R.D. (SI9). `quit` exits after. WLSIQA lines."),
+		TEXT("stores a certain shape (SI8), a key cannot name a C.A.R.D. (SI9), labels (SI10), patterns (SI11), idempotence + the restore round ")
+		TEXT("trip (SI12/SI12b), Second's round-5 corpus with planted controls (SI13-SI17). `quit` exits after. WLSIQA lines."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (GQaSecretInput.IsValid() || World == nullptr)
