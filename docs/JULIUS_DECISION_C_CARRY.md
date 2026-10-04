@@ -194,10 +194,20 @@ run. Both manifest digests matched a recomputation, and the claim's tab,
 newline, quote and backslash survived. The verifier and selection read the real
 file to `VERIFIED_REPAIR_FINDING=1`, `CARRY_PAIR_VALID`.
 
-**Not proven offline, and said so.** The fetch step's GitHub API calls: the run
-record, the artifact listing with its `digest` field, and the archive download.
-These need a real paid WITHOUT run to fetch from. The WITH arm's preflight is
-the first live check, and it spends nothing.
+**Checked against GitHub's real records.** For M2's paid run 37222057584 the
+API answered:
+- **Run record:** `path` `.github/workflows/julius-first-live-mission.yml`,
+  `event` `workflow_dispatch`, a `display_title` the run-name grammar parses,
+  and a numeric `run_attempt`.
+- **Artifact listing:** for `julius-live-evidence`, it carries `expired` and
+  `digest: "sha256:<hex>"`.
+
+The verifier is pinned to those shapes by a test.
+
+**Not proven offline.** The archive download and unzip on a runner, with the
+job's own token. The repository trust gate admits only `main`'s reviewed tip,
+so this transport can first run live after it lands, at a WITH arm's preflight,
+which spends nothing.
 
 ## Not done here
 

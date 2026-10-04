@@ -148,6 +148,23 @@ describe('a paired arm\'s bundle, verified', () => {
     expect(selection.selected[0]!.text).toContain(`Source: run ${RUN}, about task ${RUN}:build; raised by review ${RUN}:review, repaired by ${RUN}:repair-1; resolved by review ${RUN}:review:repair-1.`);
   });
 
+  it('accepts GitHub\'s REAL record of a paid run: the path, event, title and artifact digest shapes of paid run 37222057584', () => {
+    // As the API answered on 2026-10-04 for M2's paid run (get workflow run; list run artifacts), with the
+    // fetch step's own projection applied (`.id|tostring`, `.run_attempt|tostring`, the artifact `digest`).
+    const real = bundle({
+      record: {
+        path: '.github/workflows/julius-first-live-mission.yml',
+        event: 'workflow_dispatch',
+        displayTitle: 'julius mission=julius-live-mission-2 lane=regression mode=paid key=julius-live-mission-2@0a2b4d162a09#regression#a7',
+        artifactDigest: 'sha256:23499c7cdc01fa787c81f0941332a617c91e31878c9ad17a0623127daa245896',
+        archiveSha256: '23499c7cdc01fa787c81f0941332a617c91e31878c9ad17a0623127daa245896',
+      },
+      manifest: { mission: 'julius-live-mission-2' },
+      expect: { sourceMission: 'julius-live-mission-2' },
+    });
+    expect(refusalOf(real)).toBe('VERIFIED');
+  });
+
   it('a WITHOUT arm whose findings were never resolved verifies, and is still no pair: nothing it holds may be inherited', () => {
     const doc = exportDocument();
     const verdict = verifyJuliusCarryArchive(bundle({ exportDoc: { ...doc, ledger: (doc.ledger as unknown[]).slice(0, 5) } }));
