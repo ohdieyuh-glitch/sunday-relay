@@ -105,7 +105,9 @@ Each item names its owner.
 1. **A hosted PostgreSQL for the bridge.**
    - The hosted bridge does not migrate at boot. Without a database, social answers 503.
    - Provisioning is the founder's (account and billing).
-   - Applying the chain through 033 (and 035 once 034 exists) is JUJU's, but only under a **reviewed live-store procedure**. Until then `DATABASE_URL` stays parked.
+   - Applying the chain through 033 (and 035 once 034 exists) is JUJU's, under the procedure in [WONDERLAND_HOSTED_STORE.md](WONDERLAND_HOSTED_STORE.md). That procedure is built and rehearsed (including this whole scenario on a store it bootstrapped) and **AWAITING INDEPENDENT REVIEW**. It runs only after 031–033 land.
+   - `DATABASE_URL` stays parked: the bridge is attached through `JULIUS_DATABASE_URL`.
+   - The operator checks the result at `GET /relay-api/wonderland/readiness`.
 2. **Three real identities** signed in through the hosted site's own sign-in.
    - The third identity is the founder's.
    - The second game client uses a second Windows account.

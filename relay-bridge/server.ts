@@ -97,6 +97,7 @@ import {
   type WonderlandFetch,
 } from './wonderland-voice/eos';
 import { WonderlandVoicePostgresStore } from '../src/relay/persistence/wonderland-voice-postgres';
+import { handleWonderlandReadinessRoute, readWonderlandStoreReadiness, WONDERLAND_READINESS_PATH } from './wonderland-store-readiness';
 import { WonderlandSocialPostgresStore } from '../src/relay/persistence/wonderland-social-postgres';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 
@@ -719,6 +720,24 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
          * the privacy wall's plan gives them (wonderland-voice-routes.ts). Live only
          * when EOS is configured AND migration 035 is applied; otherwise 503, naming why.
          */
+        /**
+         * WONDERLAND STORE READINESS, for the operator: whether this bridge's database is configured, answers, and
+         * holds which of this build's migrations, and so which Wonderland surfaces are ready, as facts
+         * (`wonderland-store-readiness.ts`). Ahead of the Wonderland family, which claims every `/wonderland/` path.
+         */
+        if (path.replace('/relay-api', '') === WONDERLAND_READINESS_PATH) {
+          const readinessAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const storePool = juliusPool();
+          const readiness = await handleWonderlandReadinessRoute(
+            { method, path: WONDERLAND_READINESS_PATH, operator: bearerMatches(readinessAuthz, process.env.RELAY_BRIDGE_API_TOKEN) },
+            () => readWonderlandStoreReadiness({
+              pool: storePool, missingConfig: storePool === null ? [...JULIUS_RUNTIME_DATABASE_ENV_NAMES] : [], env: process.env,
+            }),
+          );
+          if (readiness !== null) send(res, readiness.status, readiness.body, cors);
+          return;
+        }
+
         if (isWonderlandVoiceRoute(path.replace('/relay-api', ''))) {
           const voiceResult = await handleWonderlandVoiceRoute({
             method,

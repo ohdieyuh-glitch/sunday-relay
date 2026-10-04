@@ -26,6 +26,7 @@
     "relay:bridge:build": "esbuild relay-bridge/server.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/server.cjs --external:@anthropic-ai/claude-agent-sdk --external:pg --log-level=warning",
     "relay:bridge": "npm run relay:bridge:build --silent && node dist-relay-bridge/server.cjs",
     "relay:julius:build": "esbuild relay-bridge/julius-live-mission.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-live-mission.cjs --external:@anthropic-ai/claude-agent-sdk --external:pg --log-level=warning",
+    "relay:wonderland-store:build": "esbuild relay-bridge/wonderland-store.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/wonderland-store.cjs --external:pg --log-level=warning",
     "relay:julius:mission": "npm run relay:julius:build --silent && node dist-relay-bridge/julius-live-mission.cjs",
     "relay:julius:preflight:build": "esbuild scripts/julius-live-preflight.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-live-preflight.cjs --external:pg --log-level=warning",
     "project-brain:proof:build": "esbuild scripts/project-brain-proof-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/project-brain-proof.cjs --external:@anthropic-ai/claude-agent-sdk --external:pg --log-level=warning",
