@@ -40,6 +40,8 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
   let pool: Pool;
   let store: SocialStore;
   let clock = Date.parse('2026-10-02T15:00:00.000Z');
+  let conversationId = '';
+  let partyId = '';
 
   const call = async (who: string, method: string, path: string, body: unknown = null) => {
     clock += 1000;
@@ -88,11 +90,11 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
     const requestId = (await call('nova', 'GET', '/snapshot')).body.data.requests.incoming[0].requestId;
     expect((await call('nova', 'POST', `/requests/${requestId}/accept`)).status).toBe(200);
     expect((await call('kai', 'POST', '/presence', { connected: true, availability: 'BUSY', signals: { juliusWorking: true } })).status).toBe(200);
-    const conversationId = (await call('kai', 'POST', '/conversations', { otherUserId: NOVA })).body.data.conversationId;
+    conversationId = (await call('kai', 'POST', '/conversations', { otherUserId: NOVA })).body.data.conversationId;
     expect((await call('kai', 'POST', `/conversations/${conversationId}/messages`, { body: 'first' })).status).toBe(200);
     expect((await call('kai', 'POST', `/conversations/${conversationId}/messages`, { body: 'second' })).status).toBe(200);
     expect((await call('nova', 'POST', `/conversations/${conversationId}/read`, { sequence: 1 })).status).toBe(200);
-    const partyId = (await call('kai', 'POST', '/parties', { name: 'Lab Crew' })).body.data.partyId;
+    partyId = (await call('kai', 'POST', '/parties', { name: 'Lab Crew' })).body.data.partyId;
     expect((await call('kai', 'POST', `/parties/${partyId}/invites`, { toUserId: NOVA })).status).toBe(200);
     const inviteId = (await call('nova', 'GET', '/snapshot')).body.data.partyInvites[0].inviteId;
     expect((await call('nova', 'POST', `/party-invites/${inviteId}/accept`)).status).toBe(200);
@@ -130,8 +132,9 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
     const ids = (await store.read()).requests.map((r) => r.requestId);
     expect(new Set(ids).size).toBe(ids.length);
 
-    // A BLOCK, durable, and never told to the blocked player. They share Kai's party, so F1 holds it until Nova confirms
-    // (unconfirmed: refused, nothing changes); confirmed, Nova -- not the leader -- leaves, and Kai keeps his party.
+    // A BLOCK, durable, and never NAMED to the blocked player. They share Kai's party, so F1 holds it until Nova confirms
+    // (unconfirmed: refused, nothing changes); confirmed, Nova -- not the leader -- leaves, and Kai keeps his party. Kai is told
+    // exactly what any member who leaves tells those who stay (parties.leave; founder, 10-04) -- never a block.
     const kaiLatest = (await call('kai', 'GET', '/events')).body.data.latest;
     const novaLatest = (await call('nova', 'GET', '/events')).body.data.latest;
     const unconfirmed = await call('nova', 'POST', '/blocks', { targetId: KAI });
@@ -139,7 +142,7 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
     expect(unconfirmed.body.error?.message).toContain('will cause you to leave this party');
     expect((await store.read()).blocks).toEqual([]);
     expect((await call('nova', 'POST', '/blocks', { targetId: KAI, confirmSharedParty: true })).status).toBe(200);
-    expect((await call('kai', 'GET', `/events?after=${kaiLatest}`)).body.data.events).toEqual([]);
+    expect((await call('kai', 'GET', `/events?after=${kaiLatest}`)).body.data.events.map((e: any) => e.op)).toEqual(['parties.leave']);
     // what the blocker's own log says is the party change, never a block (nothing names a block, in the durable rows too)
     const novaTold = (await call('nova', 'GET', `/events?after=${novaLatest}`)).body.data.events.map((e: any) => e.op);
     expect(novaTold).toContain('parties.leave');
@@ -151,5 +154,49 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
     expect(partyOf(await store.read(), NOVA)).toBeUndefined();
     expect(partyOf(await store.read(), KAI)?.members.map((m) => m.userId)).toEqual([KAI]);
     expect((await call('kai', 'POST', `/conversations/${conversationId}/messages`, { body: 'hello?' })).status).not.toBe(200);
+  }, 60_000);
+
+  it('the wall is durable: the hidden DM, revoked invites, labels and every viewer cursor survive a restart', async () => {
+    // (continuing: Nova has blocked Kai) FOUNDER RULING (b): their DM is gone for BOTH, after a restart too
+    store = await openSocialPostgresStore(pool);
+    for (const who of ['kai', 'nova']) {
+      const snapshot = (await call(who, 'GET', '/snapshot')).body.data;
+      expect(snapshot.conversations.map((c: any) => c.conversationId)).not.toContain(conversationId);
+      expect(Object.keys(snapshot.messages)).not.toContain(conversationId);
+      expect((await call(who, 'GET', `/conversations/${conversationId}/messages`)).body.error?.kind).toBe('not-found');
+    }
+    // a recent-player label is stored as its party (the source), never a name; Nova, no longer able to see it, reads "Party"
+    const label = await pool.query(`SELECT context_label FROM relay_wonderland.social_recent_players WHERE owner_id = $1 AND user_id = $2`, [NOVA, KAI]);
+    expect(label.rows[0]?.context_label).toBe(partyId);
+    // (Kai is behind Nova's wall: her recent list skips him outright; the label rule shows on Kai's side after the unblock)
+
+    // THE CURSOR IS EACH VIEWER'S OWN: Vega acting (no relation to Kai) does not move Kai's latest
+    const kaiCursor = (await call('kai', 'GET', '/events')).body.data.latest;
+    for (let i = 0; i < 3; i += 1) await call('vega', 'POST', '/presence', { connected: true, activityDetail: `vega ${i}` });
+    const kaiAfterVega = (await call('kai', 'GET', `/events?after=${kaiCursor}`)).body.data;
+    expect(kaiAfterVega.events).toEqual([]);
+    expect(kaiAfterVega.latest).toBe(kaiCursor);
+
+    // A PENDING INVITE DIES WITH THE BLOCK, durably: Kai befriends Vega, invites her, Vega blocks Kai
+    const vegaRequest = (await call('kai', 'GET', '/snapshot')).body.data.requests.incoming[0].requestId;
+    expect((await call('kai', 'POST', `/requests/${vegaRequest}/accept`)).status).toBe(200);
+    const inviteId = (await call('kai', 'POST', `/parties/${partyId}/invites`, { toUserId: VEGA })).body.data.inviteId;
+    expect((await call('vega', 'POST', '/blocks', { targetId: KAI })).status).toBe(200);
+    store = await openSocialPostgresStore(pool);
+    const row = await pool.query(`SELECT status FROM relay_wonderland.social_party_invites WHERE invite_id = $1`, [inviteId]);
+    expect(row.rows[0]?.status).toBe('REVOKED');
+    expect((await call('vega', 'GET', '/snapshot')).body.data.partyInvites).toEqual([]);
+    expect((await call('vega', 'POST', `/blocks/${KAI}/remove`)).status).toBe(200);
+    expect((await call('vega', 'POST', `/party-invites/${inviteId}/accept`)).body.error?.kind).toBe('not-found');
+    expect(partyOf(await store.read(), VEGA)).toBeUndefined();
+
+    // THE UNBLOCK BRINGS THE DM BACK UNCHANGED, for both
+    expect((await call('nova', 'POST', `/blocks/${KAI}/remove`)).status).toBe(200);
+    store = await openSocialPostgresStore(pool);
+    for (const who of ['kai', 'nova']) {
+      expect((await call(who, 'GET', `/conversations/${conversationId}/messages`)).body.data.map((m: any) => m.body)).toEqual(['first', 'second']);
+    }
+    // and Kai's own label for Nova (met in his own party, which he still sees) reads its name
+    expect((await call('kai', 'GET', '/recent-players')).body.data.find((e: any) => e.userId === NOVA)?.contextLabel).toBe('Lab Crew');
   }, 60_000);
 });
