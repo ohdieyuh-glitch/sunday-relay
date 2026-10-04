@@ -394,6 +394,13 @@ namespace RelayDogPoseTuning
 	TAutoConsoleVariable<float> CVarMedKnee(TEXT("wl.Dog.Pose.MeditateKnee"), 118.0f, TEXT("PREPARATION: shins folded back under, degrees."));
 	TAutoConsoleVariable<float> CVarFlyLift(TEXT("wl.Dog.Pose.FlyLift"), 150.0f, TEXT("VERIFICATION: how high the Dog flies, uu."));
 	TAutoConsoleVariable<float> CVarFlyLean(TEXT("wl.Dog.Pose.FlyLean"), 9.0f, TEXT("VERIFICATION: how far the flying Dog leans into its beam, degrees."));
+	// A FOUNDER DECISION, NOT A FIX MADE FOR HIM (10-04, during the freeze). The animator writes its lean -- 3 deg in the jog, up to 17
+	// in the run at 520 uu/s -- and its head glances in a "forward/down is positive" convention, straight into pitches that on this rig
+	// (the face is +X) mean the opposite: the running Dog has always leaned BACK, and its glances "up" look down. The armed stance no
+	// longer uses that lean (FDogPose::FStanceBody). 1 draws the unarmed lean and glances the way they were written, for a side-by-side
+	// film; 0 (the default) keeps the look every accepted run was judged on.
+	TAutoConsoleVariable<int32> CVarForwardIsForward(TEXT("wl.Dog.Pose.ForwardIsForward"), 0,
+		TEXT("1 = the animator's lean and head glances drawn as written (forward lean forward, a glance up looks up); 0 = as accepted (inverted on this rig)."));
 	TAutoConsoleVariable<float> CVarFlyHipFwd(TEXT("wl.Dog.Pose.FlyHipForward"), -14.0f, TEXT("VERIFICATION: thighs trailing, degrees."));
 	TAutoConsoleVariable<float> CVarFlyKnee(TEXT("wl.Dog.Pose.FlyKnee"), 40.0f, TEXT("VERIFICATION: knees folded back, degrees."));
 	TAutoConsoleVariable<float> CVarStrokeUp(TEXT("wl.Dog.Pose.StrokeHeight"), 15.0f, TEXT("IMPLEMENTATION: how far a brush stroke travels up and down, uu."));
@@ -2913,7 +2920,8 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		// tilted and turned about the HIPS (its shift carries the root so the rotation pivots there), never the actor rotated.
 		BodyRoot->SetRelativeLocation(BodyRestLocation + FVector(Pose.Stance.ShiftX, Pose.SwayUU + Pose.Stance.ShiftY,
 			Pose.BobUU - Pose.PelvisDropUU + Pose.Stance.ShiftZ));
-		BodyRoot->SetRelativeRotation(FRotator(Pose.LeanDeg + Pose.Body.PitchDeg + Pose.Stance.PitchDeg, Pose.BodyYawDeg + Pose.Stance.YawDeg,
+		const float AsWritten = RelayDogPoseTuning::CVarForwardIsForward.GetValueOnGameThread() != 0 ? -1.0f : 1.0f;
+		BodyRoot->SetRelativeRotation(FRotator(AsWritten * (Pose.LeanDeg + Pose.Body.PitchDeg) + Pose.Stance.PitchDeg, Pose.BodyYawDeg + Pose.Stance.YawDeg,
 		                                       Pose.Body.RollDeg + Pose.TurnRollDeg + Pose.Stance.RollDeg));
 	}
 	if (HeadPivot != nullptr)
@@ -2921,7 +2929,8 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		// The head keeps its own level against the body's lean, so the Dog
 		// looks where it is going instead of at the floor -- and through the
 		// stance's bend it gives most of it back: forward with the chest, eyes ahead.
-		HeadPivot->SetRelativeRotation(FRotator(Pose.HeadPitchDeg - Pose.LeanDeg + Pose.Stance.HeadPitchDeg,
+		const float GlanceAsWritten = RelayDogPoseTuning::CVarForwardIsForward.GetValueOnGameThread() != 0 ? -1.0f : 1.0f;
+		HeadPivot->SetRelativeRotation(FRotator(GlanceAsWritten * (Pose.HeadPitchDeg - Pose.LeanDeg) + Pose.Stance.HeadPitchDeg,
 			Pose.HeadYawDeg + Pose.Stance.HeadYawDeg, Pose.Stance.HeadRollDeg));
 	}
 	if (TailPivot != nullptr)
