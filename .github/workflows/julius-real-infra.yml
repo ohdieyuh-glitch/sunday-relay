@@ -353,7 +353,8 @@ jobs:
         run: |
           set -euo pipefail
           : "${JULIUS_TEST_DATABASE_URL:?the throwaway-database step exports it}"
-          npx vitest run real-postgres --reporter=default --reporter=json --outputFile=/tmp/julius-real-postgres.json
+          # ROW 13(iii): the three suites gated only on a test database run here too, under the same todo gate.
+          npx vitest run real-postgres julius-live-chain.e2e julius-recovery-drill julius-drill-support --reporter=default --reporter=json --outputFile=/tmp/julius-real-postgres.json
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const report = JSON.parse(readFileSync("/tmp/julius-real-postgres.json", "utf8"));
@@ -445,3 +446,60 @@ jobs:
           rm -f /tmp/julius-public.pem 2>/dev/null || true
           sudo umount /tmp/julius-workspace/tenant/ws 2>/dev/null || true
           sudo rm -rf /tmp/julius-workspace /tmp/julius-executor 2>/dev/null || true
+  real-infra-julius:
+    # ROW 13(iii) (founder ruling R-13iii-VENUE; Second: its OWN job). real-infra-julius.test.ts drives REAL Docker
+    # sandboxes, and its quarantine case reconciles every `julius.sandbox` container on the daemon with an empty receipts
+    # store, so it must never share a daemon with a live executor. The same pinned images; a throwaway PostgreSQL; the
+    # same todo gate as the real-PostgreSQL step: a case that did not run is not a case that passed.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: '22', cache: npm }
+      - run: npm ci
+      - run: npm run relay:executor:build && npm run relay:julius:preflight:build
+      - name: Build the pinned sandbox and executor images
+        id: images
+        run: ./.github/julius-live-images.sh
+      - name: A throwaway PostgreSQL 16 the real-infrastructure suite may write
+        run: |
+          set -euo pipefail
+          password=$(openssl rand -hex 24)
+          echo "::add-mask::$password"
+          docker run -d --name julius-real-infra-pg -e POSTGRES_USER=julius -e POSTGRES_PASSWORD="$password" -e POSTGRES_DB=julius \
+            -p 127.0.0.1:55432:5432 postgres:16-bookworm >/dev/null
+          # The image's init runs a TEMPORARY server on the socket only (listen_addresses=''), then restarts it: a socket
+          # probe can answer from that server just before it shuts down (#316). Only the final server answers over TCP.
+          for i in $(seq 1 60); do docker exec julius-real-infra-pg pg_isready -h 127.0.0.1 -p 5432 -U julius -d julius >/dev/null 2>&1 && break; sleep 1; done
+          docker exec julius-real-infra-pg pg_isready -h 127.0.0.1 -p 5432 -U julius -d julius
+          created=0
+          for i in $(seq 1 10); do docker exec julius-real-infra-pg createdb -U julius julius_suites && { created=1; break; }; sleep 1; done
+          [ "$created" = 1 ] || { echo 'real_infra_pg_not_ready: createdb never succeeded' >&2; exit 1; }
+          printf 'JULIUS_TEST_DATABASE_URL=postgresql://%s:%s@127.0.0.1:55432/julius_suites\n' julius "$password" >> "$GITHUB_ENV"
+      - name: The real-infrastructure suite runs on real Docker and real PostgreSQL, and not one of its cases is todo
+        env:
+          JULIUS_REAL_INFRA: '1'
+          JULIUS_REAL_POSTGRES: '1'
+          JULIUS_SANDBOX_IMAGE: ${{ steps.images.outputs.sandbox }}
+        run: |
+          set -euo pipefail
+          : "${JULIUS_TEST_DATABASE_URL:?the throwaway-database step exports it}"
+          npx vitest run src/relay/persistence/real-infra-julius.test.ts --reporter=default --reporter=json --outputFile=/tmp/julius-real-infra.json
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync("/tmp/julius-real-infra.json", "utf8"));
+            const files = report.testResults.map((file) => file.name.replace(`${process.cwd()}/`, ""));
+            const idle = report.numTodoTests + report.numPendingTests;
+            console.log(`real-infrastructure suite: ${files.length} files, ${report.numPassedTests} passed, ${report.numFailedTests} failed, ${idle} todo/skipped`);
+            for (const file of files) console.log(`  ${file}`);
+            if (files.length !== 1) { console.error("real_infra_suite_missing: expected exactly real-infra-julius.test.ts"); process.exit(1); }
+            if (idle > 0) { console.error(`real_infra_not_run: ${idle} case(s) did not run`); process.exit(1); }
+          '
+      - name: Cleanup
+        if: always()
+        run: |
+          docker ps -aq --filter 'label=julius.sandbox' | xargs -r docker rm -f 2>/dev/null || true
+          docker rm -f julius-real-infra-pg 2>/dev/null || true
