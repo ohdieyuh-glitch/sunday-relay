@@ -129,9 +129,12 @@ export function removeFriend(state: SocialState, actorId: SocialUserId, friendId
 /* ----------------------------------------------------------------- block */
 
 /**
- * BLOCK. Ends the friendship, withdraws pending requests both ways, and from now on the presence authority shows each to
- * the other as OFFLINE with nothing else (social-presence.ts). Party membership is NOT broken here: leaving a party is the
- * member's own act (social-parties.ts refuses new invites and joins across the block).
+ * BLOCK. Ends the friendship, withdraws pending friend requests both ways, REVOKES every pending party invite that would carry
+ * one of the pair to the other (sent between them, either way and whichever of them invited; or to one of them into a party
+ * the other is in), and from now on the presence authority shows each to the other as nothing more than a stranger
+ * (social-presence.ts). A revoked invite stays revoked: unblocking restores nobody to a party (Second's R16 W7/W8, 10-04).
+ * Party membership is NOT broken here: blocks.add separates a shared party first (F1, social-parties.ts separateForBlock),
+ * and social-parties.ts refuses new invites and joins across the wall.
  */
 export function blockUser(state: SocialState, actorId: SocialUserId, targetId: SocialUserId, atIso: string): RelayResult<SocialState> {
   const exist = bothExist(state, actorId, targetId);
@@ -140,6 +143,12 @@ export function blockUser(state: SocialState, actorId: SocialUserId, targetId: S
   const withoutFriendship = areFriends(state, actorId, targetId) ? removeFriend(state, actorId, targetId) : ok(state);
   if (!withoutFriendship.ok) return withoutFriendship;
   const next = withoutFriendship.value;
+  const isMember = (partyId: string, userId: SocialUserId) => next.parties[partyId]?.members.some((m) => m.userId === userId) ?? false;
+  const crossesTheWall = (i: SocialState['partyInvites'][number]) =>
+    (i.fromUserId === actorId && i.toUserId === targetId) ||
+    (i.fromUserId === targetId && i.toUserId === actorId) ||
+    (i.toUserId === actorId && isMember(i.partyId, targetId)) ||
+    (i.toUserId === targetId && isMember(i.partyId, actorId));
   return ok({
     ...next,
     requests: next.requests.map((r) =>
@@ -148,6 +157,7 @@ export function blockUser(state: SocialState, actorId: SocialUserId, targetId: S
         ? { ...r, status: 'CANCELLED', resolvedAtIso: atIso }
         : r,
     ),
+    partyInvites: next.partyInvites.map((i) => (i.status === 'PENDING' && crossesTheWall(i) ? { ...i, status: 'REVOKED' } : i)),
     blocks: [...next.blocks, { blockerId: actorId, blockedId: targetId, sinceIso: atIso }],
   });
 }

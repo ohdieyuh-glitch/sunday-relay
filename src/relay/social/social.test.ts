@@ -294,7 +294,8 @@ describe('parties', () => {
     expect(s.partyInvites.find((i) => i.inviteId === inv.inviteId)?.status).toBe('EXPIRED');
 
     // ACROSS A BLOCK: Mira (who blocked Kai) befriends Lyra, so friendship alone would admit her to the open party -- but Kai
-    // is in it, and the block refuses her.
+    // is in it, and the block refuses her. FOUNDER RULING (a), 10-04: the refusal is an ordinary "can't join" that names
+    // nothing -- exactly the answer for a party that does not exist.
     let b = createSocialFixture();
     const arena = partyOf(b, U.ORION)!.partyId;
     b = must(joinParty(b, U.KAI, arena, T(1)));
@@ -302,7 +303,7 @@ describe('parties', () => {
     b = must(acceptFriendRequest(b, U.LYRA, b.requests.find((r) => r.fromUserId === U.MIRA && r.toUserId === U.LYRA)!.requestId, T(2)));
     const refused = joinParty(b, U.MIRA, arena, T(3));
     expect(refused.ok).toBe(false);
-    if (!refused.ok) expect(refused.error.message).toBe('you cannot join this party');
+    if (!refused.ok) expect(refused.error).toEqual((joinParty(b, U.MIRA, 'pty_missing', T(3)) as { error: unknown }).error);
   });
 
   it('a friend joins an OPEN party from the Friends list; the leader removes and promotes', () => {

@@ -65,9 +65,22 @@ function mayInvite(party: Party, actorId: SocialUserId): boolean {
   return party.leaderId === actorId || (party.invitePermission === 'ANY_MEMBER' && party.members.some((m) => m.userId === actorId));
 }
 
+/** Somebody in the party (other than this person) has a block with them, either way: the party is behind their wall. */
+export function walledFromParty(state: SocialState, party: Party, userId: SocialUserId): boolean {
+  return party.members.some((m) => m.userId !== userId && blockedEitherWay(state, userId, m.userId));
+}
+
+/**
+ * THE ONE ANSWER to "this person cannot be invited" (founder, 10-04: every refusal across a wall reads exactly like the
+ * stranger case). Not a friend, blocked either way with the inviter, or walled from anybody already in the party: the same
+ * code, the same words, the same work (a pure check; nothing is written either way).
+ */
+export const NOT_INVITABLE = 'this person cannot be invited';
+
 /**
  * INVITE SOMEBODY. The inviter must be allowed to by the party's rule; the invitee must be a friend of the inviter, not
- * blocked either way, not in this party, and the party must have room. One pending invite per person per party.
+ * blocked either way with the inviter or with ANY member (an invite never carries a party -- its name included -- across a
+ * wall), not in this party, and the party must have room. One pending invite per person per party.
  */
 export function inviteToParty(
   state: SocialState,
@@ -80,8 +93,8 @@ export function inviteToParty(
   if (party === undefined) return fail(relayError('not-found', 'party not found'));
   if (!hasUser(state, toUserId)) return fail(relayError('not-found', 'user not found'));
   if (!mayInvite(party, actorId)) return fail(relayError('permission-denied', 'you cannot invite to this party'));
-  if (blockedEitherWay(state, actorId, toUserId)) return fail(relayError('permission-denied', 'this person cannot be invited'));
-  if (!areFriends(state, actorId, toUserId)) return fail(relayError('permission-denied', 'only friends can be invited'));
+  const walled = blockedEitherWay(state, actorId, toUserId) || walledFromParty(state, party, toUserId);
+  if (!areFriends(state, actorId, toUserId) || walled) return fail(relayError('permission-denied', NOT_INVITABLE));
   if (party.members.some((m) => m.userId === toUserId)) return fail(relayError('validation-failed', 'already in this party'));
   if (party.members.length >= PARTY_MAX_MEMBERS) return fail(relayError('validation-failed', 'the party is full'));
   if (state.partyInvites.some((i) => i.partyId === partyId && i.toUserId === toUserId && i.status === 'PENDING')) {
@@ -117,17 +130,28 @@ function addMember(state: SocialState, party: Party, userId: SocialUserId, atIso
   return ok(next);
 }
 
-/** ACCEPT. Only the invitee, only while pending and unexpired, only into a party with room, and not while in another party. */
+/** An invite that crosses a wall: its inviter, or anybody in its party, has a block with the invitee, either way. */
+function inviteIsWalled(state: SocialState, invite: PartyInvite): boolean {
+  const party = state.parties[invite.partyId];
+  return blockedEitherWay(state, invite.toUserId, invite.fromUserId) || (party !== undefined && walledFromParty(state, party, invite.toUserId));
+}
+
+/**
+ * ACCEPT. Only the invitee, only while pending and unexpired, only into a party with room, and not while in another party.
+ * FOUNDER RULING (a), 10-04: nobody joins a party that holds somebody they blocked or who blocked them -- and the refusal reads
+ * exactly like an invite that is no longer there (a block revokes such invites: blockUser; this answers the same for any that
+ * a later join brought behind a wall).
+ */
 export function acceptPartyInvite(state: SocialState, actorId: SocialUserId, inviteId: string, atIso: string): RelayResult<SocialState> {
   const invite = state.partyInvites.find((i) => i.inviteId === inviteId);
   if (invite === undefined || invite.status !== 'PENDING') return missing('pending party invite');
   if (invite.toUserId !== actorId) return denied('only the invited person can accept');
+  if (inviteIsWalled(state, invite)) return missing('pending party invite');
   if (Date.parse(atIso) > Date.parse(invite.expiresAtIso)) return ok(settleInvite(state, inviteId, 'EXPIRED'));
   const party = state.parties[invite.partyId];
   if (party === undefined) return ok(settleInvite(state, inviteId, 'REVOKED'));
   if (partyOf(state, actorId)) return invalid('leave your current party first');
   if (party.members.length >= PARTY_MAX_MEMBERS) return invalid('the party is full');
-  if (party.members.some((m) => blockedEitherWay(state, actorId, m.userId))) return denied('you cannot join this party');
   return addMember(settleInvite(state, inviteId, 'ACCEPTED'), party, actorId, atIso);
 }
 
@@ -138,23 +162,27 @@ export function declinePartyInvite(state: SocialState, actorId: SocialUserId, in
   return ok(settleInvite(state, inviteId, 'DECLINED'));
 }
 
-/** Pending, unexpired invites to one person: the Parties tab's inbox. */
+/**
+ * Pending, unexpired invites to one person: the Parties tab's inbox. Never one across a wall: its inviter's name, its party's
+ * name and its existence stay on the other side (a block revokes them; this holds for any a later join walled).
+ */
 export function partyInvitesFor(state: SocialState, userId: SocialUserId, nowIso: string): PartyInvite[] {
   return state.partyInvites.filter(
-    (i) => i.toUserId === userId && i.status === 'PENDING' && Date.parse(nowIso) <= Date.parse(i.expiresAtIso) && state.parties[i.partyId] !== undefined,
+    (i) => i.toUserId === userId && i.status === 'PENDING' && Date.parse(nowIso) <= Date.parse(i.expiresAtIso) && state.parties[i.partyId] !== undefined
+      && !inviteIsWalled(state, i),
   );
 }
 
 /**
  * JOIN WITHOUT AN INVITE: only an OPEN_TO_FRIENDS party, only for a friend of some member, never across a block with any
- * member, and only with room.
+ * member, and only with room. A party behind the joiner's wall answers exactly as a party that does not exist (founder
+ * ruling (a): the refusal is an ordinary "can't join", and it names nothing -- not even that the party is there).
  */
 export function joinParty(state: SocialState, actorId: SocialUserId, partyId: string, atIso: string): RelayResult<SocialState> {
   const party = state.parties[partyId];
-  if (party === undefined) return missing('party');
+  if (party === undefined || walledFromParty(state, party, actorId)) return missing('party');
   if (partyOf(state, actorId)) return invalid('leave your current party first');
   if (party.privacy !== 'OPEN_TO_FRIENDS') return denied('this party is invite only');
-  if (party.members.some((m) => blockedEitherWay(state, actorId, m.userId))) return denied('you cannot join this party');
   if (!party.members.some((m) => areFriends(state, actorId, m.userId))) return denied('only friends of the party can join');
   if (party.members.length >= PARTY_MAX_MEMBERS) return invalid('the party is full');
   return addMember(state, party, actorId, atIso);
