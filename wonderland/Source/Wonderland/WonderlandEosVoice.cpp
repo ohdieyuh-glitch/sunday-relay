@@ -179,12 +179,41 @@ TUniquePtr<FWonderlandEosVoice> FWonderlandEosVoice::TryCreate(FWonderlandSocial
 	{
 		return nullptr;
 	}
-	TUniquePtr<FWonderlandEosVoice> Service(new FWonderlandEosVoice(InLive, Read));
+	return TryCreateWithConfig(InLive, Read, OutWhy);
+}
+
+TUniquePtr<FWonderlandEosVoice> FWonderlandEosVoice::TryCreateWithConfig(FWonderlandSocialLiveService* InLive, const FConfig& InConfig, FString& OutWhy)
+{
+	TUniquePtr<FWonderlandEosVoice> Service(new FWonderlandEosVoice(InLive, InConfig));
 	if (!Service->Start(OutWhy))
 	{
 		return nullptr;
 	}
 	return Service;
+}
+
+bool WonderlandEosVoice::ConfigFromServer(const TSharedPtr<FJsonObject>& Data, FWonderlandEosVoice::FConfig& Out, FString& OutWhy)
+{
+	// THE SERVER'S ANSWER, as the contract names it (Second's route, 10-04): the schema first, then five non-empty strings. A problem
+	// names the FIELD only; the values are never logged, kept only in Out, and dropped by the caller once EOS holds them.
+	FString Schema;
+	if (!Data.IsValid() || !Data->TryGetStringField(TEXT("schema"), Schema) || Schema != TEXT("wonderland-eos-client-config.v1"))
+	{
+		OutWhy = TEXT("the server's voice config is not wonderland-eos-client-config.v1");
+		return false;
+	}
+	static const TCHAR* const Names[] = { TEXT("productId"), TEXT("sandboxId"), TEXT("deploymentId"), TEXT("clientId"), TEXT("clientSecret") };
+	FString* const Fields[] = { &Out.ProductId, &Out.SandboxId, &Out.DeploymentId, &Out.ClientId, &Out.ClientSecret };
+	for (int32 Index = 0; Index < static_cast<int32>(UE_ARRAY_COUNT(Names)); ++Index)
+	{
+		if (!Data->TryGetStringField(Names[Index], *Fields[Index]) || Fields[Index]->IsEmpty())
+		{
+			OutWhy = FString::Printf(TEXT("the server's voice config has no %s"), Names[Index]);
+			Out = FWonderlandEosVoice::FConfig();
+			return false;
+		}
+	}
+	return true;
 }
 
 FWonderlandEosVoice::FWonderlandEosVoice(FWonderlandSocialLiveService* InLive, const FConfig& InConfig)

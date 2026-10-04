@@ -112,6 +112,9 @@ private:
 	FOnWonderlandSocialChanged SocialChanged;
 	FOnWonderlandSocialChanged VoiceChanged;
 	void HandleVoiceChanged() { VoiceChanged.Broadcast(); }
+	/** THE SHIPPED VOICE PATH (founder 10-04: "the backend hands it out"): with no -WLEosConfig, ask the signed-in session's server for
+	 *  the EOS game-client config and start EOS voice from it, in memory only. */
+	void RequestEosConfigFromServer();
 	FOnWonderlandSocialAnswered SocialAnswered;
 	TUniquePtr<IWonderlandVoiceService> Voice;
 	FWonderlandVoicePreviewScript* VoicePreview = nullptr;

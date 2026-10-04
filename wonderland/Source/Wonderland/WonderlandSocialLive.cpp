@@ -185,6 +185,12 @@ void FWonderlandSocialLiveService::JoinVoice(const FString& PartyId, const FStri
 	Call(TEXT("POST"), FString::Printf(TEXT("/parties/%s/voice/join"), *PartyId), Body, MoveTemp(Done));
 }
 
+void FWonderlandSocialLiveService::GetEosClientConfig(TFunction<void(int32, const TSharedPtr<FJsonObject>&, const FString&)> Done)
+{
+	// the session is the only key (Relay-Session, as every social route); the answer carries a client secret, so nothing here logs it
+	Call(TEXT("GET"), TEXT("/voice/eos-client-config"), nullptr, MoveTemp(Done));
+}
+
 void FWonderlandSocialLiveService::Call(const FString& Verb, const FString& Path, const TSharedPtr<FJsonObject>& Body,
 	TFunction<void(int32, const TSharedPtr<FJsonObject>&, const FString&)> Done)
 {
@@ -342,7 +348,18 @@ void FWonderlandSocialLiveService::TickWorld()
 			LastError = Problem;
 			return;
 		}
+		const bool bWasPrivate = WorldView.bInWorld && WorldView.Kind == TEXT("PRIVATE_SERVER");
 		WorldView = WonderlandSocialLiveDetail::ParseWorldView(Data);
+		if (bWasPrivate && !WorldView.bInWorld && bWorldWanted)
+		{
+			// TAKEN OUT OF A PRIVATE SERVER BY THE SERVER (founder P4/P5, 10-04: a block either way removes the member; the owner stays).
+			// Only the generic words, never why; then back to the public world this map is.
+			UE_LOG(LogTemp, Display, TEXT("WLWORLD removed from a private server by the server: back to the public world"));
+			Answered.Broadcast(TEXT("world.removed"), FString(), FWonderlandSocialActionResult{false, TEXT("You can't stay in this server."), false});
+			WorldChanged.Broadcast();
+			JoinWorld(TEXT("PUBLIC"), TEXT("golden_arrival"));
+			return;
+		}
 		WorldChanged.Broadcast();
 	});
 }

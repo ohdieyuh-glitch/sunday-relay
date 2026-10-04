@@ -62,6 +62,11 @@ public:
 		FString ClientSecret;
 	};
 
+	/** THE SHIPPED PATH (founder 10-04: "the backend hands it out"): a service from the GAME-client config this signed-in session was
+	 *  given by the server, in memory only -- never in the package, never persisted, never logged. -WLEosConfig stays a developer
+	 *  override (TryCreate). Null with OutWhy when EOS refuses it. */
+	static TUniquePtr<FWonderlandEosVoice> TryCreateWithConfig(FWonderlandSocialLiveService* InLive, const FConfig& InConfig, FString& OutWhy);
+
 private:
 	FWonderlandEosVoice(FWonderlandSocialLiveService* InLive, const FConfig& InConfig);
 	bool Start(FString& OutWhy);
@@ -136,4 +141,7 @@ namespace WonderlandEosVoice
 	WONDERLAND_API FString HashedPuid(const FString& InProductUserId);
 	/** The founder's EOS file: a .env (EOS_PRODUCT_ID ... EOS_GAME_CLIENT_SECRET) or a JSON object. False: OutWhy names the key. */
 	WONDERLAND_API bool ReadConfig(const FString& Path, FWonderlandEosVoice::FConfig& Out, FString& OutWhy);
+	/** The server's answer ({data} of GET /voice/eos-client-config): schema "wonderland-eos-client-config.v1" and five non-empty strings.
+	 *  False: OutWhy names the missing FIELD, never a value. */
+	WONDERLAND_API bool ConfigFromServer(const TSharedPtr<FJsonObject>& Data, FWonderlandEosVoice::FConfig& Out, FString& OutWhy);
 }

@@ -256,7 +256,8 @@ bool UWonderlandSocialSubsystem::ConnectWith(const FString& BaseUrl, const FStri
 	TUniquePtr<FWonderlandSocialLiveService> Connected = MakeUnique<FWonderlandSocialLiveService>(BaseUrl, Token);
 	Live = Connected.Get();
 	Scene = TEXT("live");
-	// R16 REAL VOICE (founder, 10-04: EOS Voice), only with the founder's EOS file (-WLEosConfig); else honestly pending, never faked
+	// R16 REAL VOICE (founder, 10-04: EOS Voice). A developer's -WLEosConfig file first; else THE SHIPPED PATH (founder 10-04: "the
+	// backend hands it out"): the signed-in session asks its server for the GAME-client config. Until then honestly pending, never faked.
 	{
 		FString VoiceWhy;
 		TUniquePtr<FWonderlandEosVoice> Eos = FWonderlandEosVoice::TryCreate(Live, VoiceWhy);
@@ -265,7 +266,11 @@ bool UWonderlandSocialSubsystem::ConnectWith(const FString& BaseUrl, const FStri
 			Voice = MoveTemp(Eos);
 			// every voice change redraws the surfaces (Second's review: the panel sat on CONNECTING), and may leave a party's room
 			Voice->OnChanged().AddUObject(this, &UWonderlandSocialSubsystem::HandleVoiceChanged);
-			UE_LOG(LogTemp, Display, TEXT("WLVOICE: EOS voice on (the authority mints each room)"));
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE: EOS voice on (the developer's -WLEosConfig; the authority mints each room)"));
+		}
+		else if (VoiceWhy == TEXT("no -WLEosConfig"))
+		{
+			RequestEosConfigFromServer();
 		}
 		else
 		{
@@ -283,6 +288,45 @@ bool UWonderlandSocialSubsystem::ConnectWith(const FString& BaseUrl, const FStri
 	Live->JoinWorld(TEXT("PUBLIC"), TEXT("golden_arrival"));
 	UE_LOG(LogTemp, Display, TEXT("WLSOCIAL live: connecting to %s"), *BaseUrl);
 	return true;
+}
+
+void UWonderlandSocialSubsystem::RequestEosConfigFromServer()
+{
+	if (Live == nullptr)
+	{
+		return;
+	}
+	FWonderlandSocialLiveService* const Asked = Live;
+	UE_LOG(LogTemp, Display, TEXT("WLVOICE: asking the server for the EOS game-client config (held in memory only, never logged)"));
+	const TWeakObjectPtr<UWonderlandSocialSubsystem> WeakThis(this);
+	Asked->GetEosClientConfig([WeakThis, Asked](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+	{
+		UWonderlandSocialSubsystem* Self = WeakThis.Get();
+		if (Self == nullptr || Self->Live != Asked)
+		{
+			return;   // signed out, or another session started meanwhile: this answer belongs to nobody now
+		}
+		FWonderlandEosVoice::FConfig Config;
+		FString Why;
+		if (Status != 200 || !WonderlandEosVoice::ConfigFromServer(Data, Config, Why))
+		{
+			const FString Reason = Status == 503 ? FString(TEXT("the server has no voice (503)"))
+				: Status != 200 ? FString::Printf(TEXT("the server refused the voice config (%d %s)"), Status, *Problem) : Why;
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE: no voice provider in this session (%s): VOICE TRANSPORT PENDING"), *Reason);
+			return;
+		}
+		TUniquePtr<FWonderlandEosVoice> Eos = FWonderlandEosVoice::TryCreateWithConfig(Asked, Config, Why);
+		Config = FWonderlandEosVoice::FConfig();   // this copy goes now: the EOS SDK manager holds what it needs, the service drops its secret
+		if (!Eos.IsValid())
+		{
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE: no voice provider in this session (%s): VOICE TRANSPORT PENDING"), *Why);
+			return;
+		}
+		Self->Voice = MoveTemp(Eos);
+		Self->Voice->OnChanged().AddUObject(Self, &UWonderlandSocialSubsystem::HandleVoiceChanged);
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE: EOS voice on (the game-client config from the server, in memory only; the authority mints each room)"));
+		Self->HandleVoiceChanged();
+	});
 }
 
 bool UWonderlandSocialSubsystem::ReportLocalPlayer(FWonderlandAvatarReport& Out) const

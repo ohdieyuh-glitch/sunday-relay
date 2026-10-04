@@ -61,6 +61,10 @@ public:
 	 *  Done(status, the grant {providerId, roomId, participantToken, audience}, problem) on the game thread. */
 	void JoinVoice(const FString& PartyId, const FString& EosProductUserId,
 		TFunction<void(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)> Done);
+	/** R16 SHIPPED VOICE (founder 10-04: "the backend hands it out"): GET /voice/eos-client-config for this signed-in session -- the EOS
+	 *  GAME-client config, {schema "wonderland-eos-client-config.v1", productId, sandboxId, deploymentId, clientId, clientSecret} inside
+	 *  the usual {data}. The caller holds it in memory only: never logged, never persisted. 503 = the server has no voice. */
+	void GetEosClientConfig(TFunction<void(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)> Done);
 	FSimpleMulticastDelegate& OnWorldChanged() { return WorldChanged; }
 
 private:
