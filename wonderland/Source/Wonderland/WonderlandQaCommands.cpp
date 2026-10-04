@@ -10487,7 +10487,10 @@ namespace
 			Above[Side] = TipAt.Z - GroundZ;
 			Wide[Side] = FMath::Abs(FVector::DotProduct(TipAt - At, Right));
 		}
-		bOutV = bSeen && Rise[0] <= -0.05 && Rise[1] <= -0.05 && Outside[0] >= 0.0 && Outside[1] >= 0.0 && Drop[0] >= 5.0 && Drop[1] >= 5.0
+		// the camera's drop is the player's view, BEHIND: from IN FRONT a blade trailing ~115 uu back, away from a camera looking down, projects
+		// ABOVE its fist whatever its height (round 7a4 SC2: +10% on the screen with the tip 19 uu under the fist in the world) -- reported
+		// there, judged in the world
+		bOutV = bSeen && (bFromFront || (Rise[0] <= -0.05 && Rise[1] <= -0.05)) && Outside[0] >= 0.0 && Outside[1] >= 0.0 && Drop[0] >= 5.0 && Drop[1] >= 5.0
 			&& Above[0] >= 2.0 && Above[1] >= 2.0 && Wide[0] <= 0.5 * BodyHeight && Wide[1] <= 0.5 * BodyHeight;
 		return FString::Printf(TEXT("%s: gold tip %+.0f%% of the body's height above its fist, %+.0f px outside the body's left edge; cyan %+.0f%%, %+.0f px outside its right edge; ")
 			TEXT("in the world the tips %.0f / %.0f uu below their fists (>= 5), %.0f / %.0f above the ground (>= 2), %.0f / %.0f from the centreline (<= %.0f: half the body)"),
