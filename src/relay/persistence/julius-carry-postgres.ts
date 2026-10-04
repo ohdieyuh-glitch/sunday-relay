@@ -3,7 +3,8 @@ import type { Pool } from 'pg';
 import type { JuliusBrainEntry } from '../mission/julius';
 import {
   juliusCarryManifestFacts,
-  type JuliusCarryArm, type JuliusCarryClaimCandidate, type JuliusCarrySelection, type JuliusCarrySourceRun,
+  type JuliusCarryArchiveOrigin, type JuliusCarryArm, type JuliusCarryClaimCandidate, type JuliusCarrySelection,
+  type JuliusCarrySourceRun,
 } from '../mission/julius/julius-carry';
 import type { JuliusPeerLedgerEntry } from '../mission/julius/julius-peer-channel';
 import { brainKindFromStored } from './julius-brain-kinds';
@@ -158,6 +159,8 @@ export class JuliusCarryPostgresRepository {
   /**
    * Points 2 and 3: write the selected copies and the manifest, once.
    * Returns how many copies THIS call wrote; a replay returns 0 and writes nothing.
+   * `origin` names a paired arm's verified bundle when the sources were read
+   * from one rather than from this database; absent, the manifest says STORE.
    */
   async restore(input: {
     readonly runId: string;
@@ -166,6 +169,7 @@ export class JuliusCarryPostgresRepository {
     readonly selection: JuliusCarrySelection;
     readonly firstRevision: number;
     readonly occurredAt: string;
+    readonly origin?: JuliusCarryArchiveOrigin | null;
   }): Promise<number> {
     if (await this.manifestRecorded(input.runId)) return 0;
     let written = 0;
@@ -199,7 +203,7 @@ export class JuliusCarryPostgresRepository {
       correlationId: input.runId,
       causationId: null,
       occurredAt: input.occurredAt,
-      facts: juliusCarryManifestFacts({ arm: input.arm, selection: input.selection, written }),
+      facts: juliusCarryManifestFacts({ arm: input.arm, selection: input.selection, written, origin: input.origin ?? null }),
     });
     return written;
   }

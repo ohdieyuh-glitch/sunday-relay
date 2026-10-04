@@ -35,7 +35,11 @@ export declare function dispatchArgs(input: {
   readonly acknowledgeRerun?: boolean;
   readonly maxTicks?: string;
   readonly hermesRef?: string;
+  /** Decision C: a WITH arm names its paired WITHOUT arm's workflow run. */
+  readonly carrySourceRun?: string;
 }): string[];
+
+export declare const CARRY_SOURCE_RUN_PATTERN: RegExp;
 
 export interface DispatchGitHub {
   mainSha(): string;
@@ -74,6 +78,7 @@ export declare function runPaidDispatch(
     readonly maxTicks?: string;
     readonly hermesRef?: string;
     readonly dryPlan?: boolean;
+    readonly carrySourceRun?: string;
   },
   deps: {
     readonly github: unknown;

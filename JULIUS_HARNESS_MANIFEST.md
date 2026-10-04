@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **218 production files** across 20/20 subsystems (2 roots, 189 traced, 8 not composed by the live root, 19 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **220 production files** across 20/20 subsystems (2 roots, 191 traced, 8 not composed by the live root, 19 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -38,7 +38,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | entrypoint (relay-bridge/julius-live-mission.ts) | connectors (gpt-architect, prompt-architect contracts) | 1 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 1 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | kernel (src/relay/mission/julius/) | 1 | 0 |
-| entrypoint (relay-bridge/julius-live-mission.ts) | live composition (relay-bridge/julius/) | 11 | 0 |
+| entrypoint (relay-bridge/julius-live-mission.ts) | live composition (relay-bridge/julius/) | 12 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | other | 1 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | persistence (src/relay/persistence/) | 7 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 1 |
@@ -48,7 +48,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 20 | 5 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 10 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 30 | 7 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 33 | 7 |
 | live composition (relay-bridge/julius/) | other | 6 | 4 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 16 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 2 | 0 |
@@ -100,8 +100,10 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 
 | production source | role | reached from |
 | --- | --- | --- |
+| `relay-bridge/julius/carry-archive.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/julius/mission-knowledge.ts` | traced | `relay-bridge/julius/bootstrap.ts` |
 | `src/relay/mission/julius/index.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
+| `src/relay/mission/julius/julius-carry-archive.ts` | traced | `relay-bridge/julius/mission-contract.ts` |
 | `src/relay/mission/julius/julius-carry.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-claim-ledger.ts` | traced | `src/relay/mission/julius/julius-lineage-asserter.ts` |
 | `src/relay/mission/julius/julius-context-integrity.ts` | traced | `src/relay/mission/julius/julius-runtime.ts` |

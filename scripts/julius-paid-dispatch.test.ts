@@ -88,6 +88,12 @@ describe('the key names the attempt', () => {
     expect(paid).toContain('dispatch_key=m@0845c593a8eb#lab#a1');
     expect(dispatchArgs({ mission: 'm', lane: 'lab', key: 'k'.repeat(8), paid: false })).not.toContain('confirm_live=RUN LIVE MISSION');
   });
+
+  it('DECISION C: a WITH arm\'s preflight and paid run both name its pair\'s run; no other dispatch names one', () => {
+    const args = dispatchArgs({ mission: 'm', lane: 'lab', key: 'k'.repeat(8), paid: false, carrySourceRun: '37300000001' });
+    expect(args.slice(-2)).toEqual(['-f', 'carry_source_run=37300000001']);
+    expect(dispatchArgs({ mission: 'm', lane: 'lab', key: 'k'.repeat(8), paid: true }).join(' ')).not.toContain('carry_source_run');
+  });
 });
 
 describe('an ambiguous dispatch never becomes two runs', () => {
@@ -137,6 +143,18 @@ describe('the paid dispatch enters the queue only after the rig proved itself fo
     expect(fake.dispatched[0]).not.toContain('confirm_live=RUN LIVE MISSION');
     expect(fake.dispatched[1]).toContain('confirm_live=RUN LIVE MISSION');
     expect(fake.dispatched[1]).toContain(`dispatch_key=${PAID_KEY}`);
+  });
+
+  it('DECISION C: a WITH arm names its pair\'s run on the preflight AND the paid request; a malformed one is refused before either', async () => {
+    const fake = fakeGitHub({});
+    const result = await runPaidDispatch({ mission: 'julius-continuous-1', lane: 'qualification', paid: true, carrySourceRun: '37300000001' }, deps(fake.github));
+    expect(result.outcome).toBe('DISPATCHED');
+    expect(fake.dispatched).toHaveLength(2);
+    for (const request of fake.dispatched) expect(request).toContain('carry_source_run=37300000001');
+    const malformed = fakeGitHub({});
+    expect(await runPaidDispatch({ mission: 'julius-continuous-1', lane: 'qualification', paid: true, carrySourceRun: '37x' }, deps(malformed.github)))
+      .toMatchObject({ outcome: 'REFUSED', reason: 'carry_source_run_invalid' });
+    expect(malformed.dispatched).toHaveLength(0);
   });
 
   it('a failed preflight refuses the paid dispatch: no paid request is ever made', async () => {

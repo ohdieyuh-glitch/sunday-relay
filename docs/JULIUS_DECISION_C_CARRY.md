@@ -75,6 +75,9 @@ These are implemented in `src/relay/mission/julius/julius-carry.ts`, which is pu
 
 - A live mission contract may declare `"carryArm": "WITHOUT"` or `"WITH"`
   (`relay-bridge/julius/mission-contract.ts`). Any other value is refused.
+- A WITH arm may also declare `"carryFrom"`: its paired WITHOUT mission's
+  directory. The paid venue requires it (see below). On any other arm it is
+  refused.
 - The arm is part of the contract digest, so the two arms of a pair are always
   two runs, never one resumed as the other.
 - An arm's second attempt (WITHOUT-2 after WITHOUT-1) is a rerun of the same
@@ -96,11 +99,109 @@ document. Those belong to the founder and SECOND.
   final head and must not be substituted with a cloud run.
 - This gate does not change 13 (i)'s earned score.
 
+## The paid venue: a carry that crosses databases
+
+**The gap.** Every paid mission job gets a fresh PostgreSQL that is destroyed
+with the runner. The carry above reads its sources from the receiving run's own
+store, so on the paid venue a WITH arm found nothing of its pair, and its pair
+gate refused it as `CARRY_EMPTY` every time. As first built, C could not run on
+the only venue that runs paid missions.
+
+**What crosses.** Only what the paid workflow already keeps: the WITHOUT arm's
+evidence bundle (90 days). Three additions make it a carry source:
+
+- `carry-export.json` in every paid bundle. It holds the reviewer findings of
+  the one run the manifest names, and the `finding.*` ledger rows that give them
+  their lives, in ledger order and under named fact keys only. It is written by
+  `.github/julius-carry-export.sql` in the same shape the store reader returns,
+  so the bundle selects exactly what the store would have, item for item.
+- Three manifest lines: `mission=`, `contract_sha256=` (the contract file the
+  job ran), and `carry_export_sha256=`, which is appended the moment the export
+  is written.
+- `carry.tsv`. This holds points 2 and 4 as tokens: the `knowledge.carried`
+  manifest and each `context.compiled` row's `carriedReceived` facts. With it,
+  every point of the proof is readable from a bundle after its database is gone.
+  Point 3 was already in `project-brain.tsv`.
+
+**How a WITH arm uses it** (`julius-carry-archive.ts`, `relay-bridge/julius/carry-archive.ts`):
+
+1. The WITH contract names its pair: `"carryArm": "WITH", "carryFrom": "<WITHOUT
+   mission directory>"`. The pairing is part of the contract digest, so it is
+   frozen with the arm and never chosen at dispatch.
+2. The WITH dispatch names the WITHOUT arm's paid workflow run:
+   `julius-paid-dispatch.mjs --mission <WITH> ... --carry-source-run <run id>`.
+   This sets the workflow input `carry_source_run` on the preflight and on the
+   paid request.
+3. **Fetch.** A workflow step uses the job's own read-only token
+   (`actions: read`, already granted; no new permission). It fetches that run's
+   one unexpired `julius-live-evidence` bundle and writes GitHub's own record of
+   the run beside it: workflow file, event, commit, title, attempt, and the
+   archive digest GitHub recorded next to the sha256 of what was downloaded.
+4. **Verify** (`verify-carry`, before the attempt marker, on every dispatch).
+   Each part is checked against what the receiving job knows for itself:
+   - **GitHub's record:** this repository's paid workflow, `workflow_dispatch`,
+     titled `mode=paid` for the paired mission, at the bundle's commit, with the
+     archive digest matching.
+   - **The manifest:** `mode=paid`, a clean checkout, and the same attempt.
+     It must name the **same commit as the receiving job**: the arms of a pair
+     run one frozen code, so main moving between arms refuses the WITH arm.
+     It must name the paired mission, at that mission's contract digest in this
+     checkout, and one Julius run.
+   - **The export:** the sha256 the manifest recorded, that run, every finding
+     that run's, and this mission's project.
+
+   Then the same selection and pair gate the bootstrap applies run as a preview.
+   A pair whose WITHOUT arm left no verified repair finding is refused as
+   `CARRY_SOURCE_NOT_A_VALID_PAIR` while refusing is still free.
+5. **LIVE** is handed the same bundle and verifies it again with the same code.
+   The carry is then selected from that bundle **alone**, never from whatever
+   else a database holds, and restored into the WITH run. The manifest event
+   carries `origin=ARCHIVE` and names the source by workflow run, commit and
+   digests. The WITH bundle keeps the pair's files it learned from under
+   `carry-source/`.
+
+**Refusals, all before a run exists.** These come from the domain verifier,
+each reached by its own test:
+
+`CARRY_SOURCE_EXPECTATION_INVALID`, `_RUN_RECORD_MISSING`,
+`_RUN_RECORD_MISMATCH`, `_NOT_THE_PAID_WORKFLOW`, `_NOT_DISPATCHED`,
+`_NOT_PAID`, `_MISSION_MISMATCH`, `_ARCHIVE_DIGEST_MISMATCH`,
+`_MANIFEST_MISSING`, `_MANIFEST_UNREADABLE`, `_COMMIT_MISMATCH`, `_DIRTY`,
+`_RUN_UNNAMED`, `_CONTRACT_MISMATCH`, `_EXPORT_MISSING`,
+`_EXPORT_DIGEST_MISMATCH`, `_EXPORT_MALFORMED`, `_EXPORT_RUN_MISMATCH`,
+`_PROJECT_MISMATCH`.
+
+The pairing adds four more:
+
+- `CARRY_SOURCE_REQUIRED`: a WITH arm on the paid venue with no bundle.
+- `CARRY_SOURCE_UNEXPECTED`: a bundle given to an arm that does not learn.
+- `CARRY_SOURCE_UNPAIRED`: no `carryFrom`, or the arm names itself.
+- `CARRY_SOURCE_NOT_A_VALID_PAIR`.
+
+**Proof.**
+
+| Suite | What it proves |
+|---|---|
+| `julius-carry-archive.test.ts` | One valid bundle, and **one change per refusal**. A closing case proves no refusal code is unreached. The parser is strict: no unknown field, ledger order, scalar facts, bounds. The worst-case manifest stays under the 8 KiB fact budget. |
+| `relay-bridge/julius/carry-archive.test.ts` | The files on disk: the export's own bytes hashed, the pair's contract read beside the receiving one, and the pairing rules. `verify-carry` exit codes. Every line survives the evidence allowlist. |
+| `julius-carry-archive.real-postgres.test.ts` | **Two databases.** The WITHOUT run lives in one. The dump's own query file exports it, and the bundle's selection **equals the WITHOUT store's own selection**. The WITH arm bootstraps in a second database that never held the WITHOUT run; its planner's `context.compiled` records `carriedReceived: 1`; and the dump's `carry.tsv` query reads points 2 and 4 back as tokens. Three mutants are killed: the timestamp precision, the origin, and the source. |
+| `scripts/julius-first-live-mission.test.ts` | The workflow's shape: the input and its gate, a fetch with no new permission, verify before the attempt marker, LIVE handed the bundle only when named, the WITH bundle keeping its source, and the dump's export, digest and `carry.tsv`. |
+
+Checked once by hand in this change (not CI): the real dump script, through
+`docker exec -i` and `psql -v`, against a Docker PostgreSQL holding a WITHOUT
+run. Both manifest digests matched a recomputation, and the claim's tab,
+newline, quote and backslash survived. The verifier and selection read the real
+file to `VERIFIED_REPAIR_FINDING=1`, `CARRY_PAIR_VALID`.
+
+**Not proven offline, and said so.** The fetch step's GitHub API calls: the run
+record, the artifact listing with its `digest` field, and the archive download.
+These need a real paid WITHOUT run to fetch from. The WITH arm's preflight is
+the first live check, and it spends nothing.
+
 ## Not done here
 
 - The four paid C arms. These come after #321, 033, 034 and 035, then the freeze.
-- SECOND's independent verdict on this change.
-- A preflight-time pair check inside `julius-first-live-mission.yml`. The
-  bootstrap refusal already lands before any provider dispatch. Moving the check
-  earlier, into the paid-slot admission, changes a workflow file and needs a
-  separate reviewed change.
+  The WITHOUT and WITH contracts, with `carryArm` and `carryFrom`, belong to the
+  founder and SECOND.
+- SECOND's independent verdict on this change and on the paid-venue transport.
+  The transport changes the one workflow that can spend.

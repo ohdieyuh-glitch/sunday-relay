@@ -154,6 +154,32 @@ export interface JuliusCarryExclusion {
   readonly detail: string | null;
 }
 
+/**
+ * WHERE A CARRY'S SOURCES WERE READ FROM, WHEN NOT FROM THE RECEIVING RUN'S OWN
+ * STORE: a paired WITHOUT arm's verified evidence bundle
+ * (`julius-carry-archive.ts`). Everything here is a token the receiving job
+ * checked for itself, so a reader of the WITH arm's manifest can fetch the
+ * source bundle by its workflow run and compare digests without trusting either
+ * arm's word for it.
+ */
+export interface JuliusCarryArchiveOrigin {
+  readonly kind: 'ARCHIVE';
+  readonly sourceRunId: string;
+  readonly sourceProjectId: string;
+  /** The paired WITHOUT mission (the WITH contract's `carryFrom`). */
+  readonly sourceMission: string;
+  readonly workflowRunId: string;
+  readonly workflowRunAttempt: string;
+  /** The commit both arms ran. */
+  readonly commit: string;
+  /** The source mission's contract file, as the receiving checkout holds it. */
+  readonly contractSha256: string;
+  /** `carry-export.json`, as the source manifest recorded it and the receiving job re-hashed it. */
+  readonly exportSha256: string;
+  /** The bundle archive downloaded, as GitHub recorded its digest. */
+  readonly archiveSha256: string;
+}
+
 export interface JuliusCarrySelection {
   readonly version: typeof JULIUS_CARRY_VERSION;
   readonly selected: readonly JuliusCarryItem[];
@@ -409,21 +435,33 @@ export const juliusCarriedIdsIn = (packetSourceEntryIds: readonly string[]): rea
   Object.freeze(packetSourceEntryIds.filter(isJuliusCarriedEntryId));
 
 /**
+ * How long either id list on the manifest may be. Two of them, the counts, the
+ * exclusion tally and an archive origin must fit the ledger's 8 KiB fact budget
+ * together at their worst, which a test pins.
+ */
+export const JULIUS_CARRY_MANIFEST_LIST_CHARS = 2_500;
+
+/**
  * THE MANIFEST AS EVENT FACTS: scalars only, bounded, and never a quoted claim,
  * so it fits the ledger's 8 KiB fact budget and its secret filter. Counts are
  * exact; the id lists are truncated with a flag saying so, never silently.
+ *
+ * `origin` says where the sources were read: `STORE`, the receiving run's own
+ * database, or `ARCHIVE`, a paired arm's verified evidence bundle, named by its
+ * workflow run, commit and digests so the source can be fetched and checked.
  */
 export function juliusCarryManifestFacts(input: {
   readonly arm: JuliusCarryArm | null;
   readonly selection: JuliusCarrySelection;
   readonly written: number;
+  readonly origin?: JuliusCarryArchiveOrigin | null;
 }): Record<string, string | number | boolean | null> {
   const ids = input.selection.selected.map((item) => item.entryId).join(' ');
   const refusals = input.selection.excluded.map((item) => `${item.reasonCode}:${item.sourceRunId}:${item.sourceRef}`).join(' ');
   // These ids came from stores. A list that would trip the ledger's
   // credential-assignment check is recorded by count only, never failing the write.
   const safe = (text: string): string | null =>
-    (/(?:api[_-]?key|authorization|token|secret|password)\s*[=:]/iu.test(text) ? null : bounded(text, 3_000) || null);
+    (/(?:api[_-]?key|authorization|token|secret|password)\s*[=:]/iu.test(text) ? null : bounded(text, JULIUS_CARRY_MANIFEST_LIST_CHARS) || null);
   const byCode = new Map<string, number>();
   for (const item of input.selection.excluded) byCode.set(item.reasonCode, (byCode.get(item.reasonCode) ?? 0) + 1);
   return {
@@ -437,8 +475,28 @@ export function juliusCarryManifestFacts(input: {
     excludedByCode: [...byCode.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([code, count]) => `${code}=${String(count)}`).join(' ') || null,
     written: input.written,
     selectedEntryIds: safe(ids),
-    selectedEntryIdsTruncated: ids.length > 3_000,
+    selectedEntryIdsTruncated: ids.length > JULIUS_CARRY_MANIFEST_LIST_CHARS,
     excludedRefs: safe(refusals),
-    excludedRefsTruncated: refusals.length > 3_000,
+    excludedRefsTruncated: refusals.length > JULIUS_CARRY_MANIFEST_LIST_CHARS,
+    ...juliusCarryOriginFacts(input.origin ?? null),
+  };
+}
+
+/** The origin as scalar facts. A token that would trip the ledger's credential check is recorded as null, never failing the write. */
+export function juliusCarryOriginFacts(origin: JuliusCarryArchiveOrigin | null): Record<string, string | null> {
+  if (origin === null) return { origin: 'STORE' };
+  const token = (text: string): string | null =>
+    (/(?:api[_-]?key|authorization|token|secret|password)\s*[=:]/iu.test(text) ? null : bounded(text, 256));
+  return {
+    origin: 'ARCHIVE',
+    sourceRunId: token(origin.sourceRunId),
+    sourceProjectId: token(origin.sourceProjectId),
+    sourceMission: token(origin.sourceMission),
+    sourceWorkflowRunId: token(origin.workflowRunId),
+    sourceWorkflowRunAttempt: token(origin.workflowRunAttempt),
+    sourceCommit: token(origin.commit),
+    sourceContractSha256: token(origin.contractSha256),
+    sourceExportSha256: token(origin.exportSha256),
+    sourceArchiveSha256: token(origin.archiveSha256),
   };
 }

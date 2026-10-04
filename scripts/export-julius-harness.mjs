@@ -278,6 +278,7 @@ const FILE_RULES = [
   // The claim ledger: admission at every brain write, promotion on an accepted review, the record winning at compile.
   ['src/relay/mission/julius/julius-claim-ledger.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-carry.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-carry-archive.ts', 'DURABLE STATE / PROJECT BRAIN'],
   // The lineage asserter (decision B): supersession and contradiction from structure, the compatibility table that
   // halts a run holding a contradiction, and GOVERNANCE from durable decisions only. Reached from the pipeline.
   ['src/relay/mission/julius/julius-lineage-asserter.ts', 'DURABLE STATE / PROJECT BRAIN'],
@@ -430,6 +431,7 @@ const FILE_RULES = [
   ['relay-bridge/julius/mission-seed.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   // What one mission verified, inherited by the next: the minimum truthful reuse.
   ['relay-bridge/julius/mission-knowledge.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['relay-bridge/julius/carry-archive.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['relay-bridge/julius/postgres-store.ts', 'PERSISTENCE'],
   ['relay-bridge/julius/executor-effects.ts', 'TOOLS'],
   ['relay-bridge/julius/sandbox-limits.ts', 'TOOLS'],

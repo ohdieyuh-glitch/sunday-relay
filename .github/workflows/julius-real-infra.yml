@@ -378,9 +378,14 @@ jobs:
           set -euo pipefail
           ./.github/julius-live-evidence-dump.sh /tmp/julius-evidence-check
           failed=0
-          for file in /tmp/julius-evidence-check/*.tsv; do
+          for file in /tmp/julius-evidence-check/*.tsv /tmp/julius-evidence-check/carry-export.json; do
             if grep -qx 'unavailable' "$file"; then echo "evidence_query_invalid:$(basename "$file")" >&2; failed=1; else echo "$(basename "$file"): $(head -n 1 "$file")"; fi
           done
+          # THE CARRY EXPORT IS ONE JSON DOCUMENT (Decision C), and the manifest recorded its digest.
+          jq -e '.format == "julius-carry-export.v1"' /tmp/julius-evidence-check/carry-export.json > /dev/null \
+            || { echo 'evidence_query_invalid:carry-export.json is not one julius-carry-export.v1 document' >&2; failed=1; }
+          grep -Eq '^carry_export_sha256=[0-9a-f]{64}$' /tmp/julius-evidence-check/bundle-manifest.txt \
+            || { echo 'evidence_query_invalid:bundle-manifest.txt recorded no carry export digest' >&2; failed=1; }
           rm -rf /tmp/julius-evidence-check
           [ "$failed" -eq 0 ]
       - name: The Julius capability drills hold on real PostgreSQL

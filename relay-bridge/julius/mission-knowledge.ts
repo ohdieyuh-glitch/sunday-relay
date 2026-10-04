@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 
 import {
   selectJuliusCarry,
-  type JuliusCarryArm, type JuliusCarrySelection,
+  type JuliusCarryArchiveOrigin, type JuliusCarryArm, type JuliusCarrySelection, type JuliusCarrySourceRun,
 } from '../../src/relay/mission/julius/julius-carry';
 import { JuliusCarryPostgresRepository } from '../../src/relay/persistence/julius-carry-postgres';
 
@@ -58,5 +58,35 @@ export function createPostgresMissionKnowledgeStore(pool: Pool): MissionKnowledg
       return selectJuliusCarry({ targetRunId: input.targetRunId, sources, claims });
     },
     restore: (input) => carry.restore(input),
+  };
+}
+
+/**
+ * THE PAID VENUE'S CARRY: SOURCES FROM A PAIRED ARM'S VERIFIED BUNDLE.
+ *
+ * A paid job's database is fresh, so the paired WITHOUT arm's findings are not
+ * in it. They arrive as ONE source run read from that arm's evidence bundle and
+ * verified before this store exists (`readJuliusCarryArchive`). Selection reads
+ * that source and ONLY that source: a WITH arm learns from its pair, never from
+ * whatever else a database happens to hold, and the claims path stays empty
+ * because the bundle carries findings, not standings. Everything after
+ * selection is the store path's own: the same `selectJuliusCarry`, the same
+ * pair gate in the bootstrap, the same restore into this run, with the manifest
+ * naming the bundle it learned from.
+ */
+export function createArchivedMissionKnowledgeStore(input: {
+  readonly pool: Pool;
+  readonly archive: { readonly source: JuliusCarrySourceRun; readonly origin: JuliusCarryArchiveOrigin };
+}): MissionKnowledgeStore {
+  const carry = new JuliusCarryPostgresRepository(input.pool);
+  const { source, origin } = input.archive;
+  return {
+    async select(request) {
+      // Verified against the contract's project when the bundle was read; a
+      // store composed for one project must never answer for another.
+      if (request.projectId !== origin.sourceProjectId) throw new Error('carry_archive_project_mismatch');
+      return selectJuliusCarry({ targetRunId: request.targetRunId, sources: [source], claims: [] });
+    },
+    restore: (request) => carry.restore({ ...request, origin }),
   };
 }
