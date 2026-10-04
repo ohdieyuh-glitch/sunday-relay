@@ -4,7 +4,9 @@ import type { JuliusOperationalEvent } from '../mission/julius';
 import { JuliusEventPostgresRepository } from './julius-event-postgres';
 import { JuliusPostgresRepository } from './julius-postgres';
 import { JuliusRepairPostgresRepository } from './julius-repair-postgres';
-import { JULIUS_PLAN_PIN, JULIUS_SERIALIZABLE_ATTEMPTS, isJuliusSerializationFailure, juliusSerializable } from './julius-serializable';
+import {
+  JULIUS_PLAN_PIN, JULIUS_SERIALIZABLE_ATTEMPTS, JULIUS_WRITE_LOCK, JULIUS_WRITE_UNLOCK, isJuliusSerializationFailure, juliusSerializable,
+} from './julius-serializable';
 import { JuliusSubagentPostgresRepository } from './julius-subagent-postgres';
 import { JuliusToolPostgresRepository } from './julius-tool-postgres';
 
@@ -18,6 +20,9 @@ import { JuliusToolPostgresRepository } from './julius-tool-postgres';
  * connection, and that a conflict the CALLER must see is never absorbed.
  */
 
+/** H3 (row 13 (i) r5): the write lock wraps every attempt. These cases are about the TRANSACTION inside it, so its two
+ *  statements are answered and not recorded; the H3 case records and pins them. */
+const writeLock = (sql: string): boolean => sql === JULIUS_WRITE_LOCK || sql === JULIUS_WRITE_UNLOCK;
 const serialization = () => Object.assign(new Error('could not serialize access due to read/write dependencies among transactions'), { code: '40001' });
 
 /** A pool whose transactions fail with the scripted errors, in order, then succeed. */
@@ -35,6 +40,7 @@ function flakyPool(failures: readonly unknown[]) {
         const failure = failures[attempt - 1];
         return {
           async query(sql: string) {
+            if (writeLock(sql)) return { rows: [], rowCount: 1 };
             log.push(`${attempt}:${sql.split(/\s+/u).slice(0, 3).join(' ')}`);
             if (sql.startsWith('INSERT') && failure !== undefined) throw failure;
             if (sql.includes('stream_sequences')) return { rows: [{ sequence: '1' }], rowCount: 1 };
@@ -111,6 +117,7 @@ describe('a serialization failure is retried, because PostgreSQL guarantees it r
         const mine = attempt;
         return {
           async query(sql: string) {
+            if (writeLock(sql)) return { rows: [], rowCount: 1 };
             log.push(`${mine}:${sql.split(/\s+/u)[0]}`);
             if (sql === 'COMMIT' && mine === 1) throw serialization();
             return { rows: [], rowCount: 1 };
@@ -151,6 +158,7 @@ describe('a serialization failure is retried, because PostgreSQL guarantees it r
         const failing = attempt === 1;
         return {
           async query(sql: string) {
+            if (writeLock(sql)) return { rows: [], rowCount: 1 };
             mine.push(sql);
             if (failing && sql.startsWith('INSERT')) throw serialization();
             return { rows: [], rowCount: 1 };
@@ -181,6 +189,7 @@ describe('a serialization failure is retried, because PostgreSQL guarantees it r
       async connect() {
         return {
           async query(sql: string) {
+            if (writeLock(sql)) return { rows: [], rowCount: 1 };
             log.push(sql.split(/\s+/u)[0]!);
             if (sql === JULIUS_PLAN_PIN) throw Object.assign(new Error('unrecognized configuration parameter "plan_cache_mode"'), { code: '42704' });
             return { rows: [], rowCount: 1 };
@@ -290,6 +299,7 @@ function scriptedPool(failures: readonly unknown[], respond: (sql: string) => { 
         let failed = false;
         return {
           async query(sql: string) {
+            if (writeLock(sql)) return { rows: [], rowCount: 1 };
             log.push(`${attempt}:${sql.split(/\s+/u).slice(0, 3).join(' ')}`);
             // The scripted conflict lands on the attempt's first write, as PostgreSQL's would.
             if (!failed && failure !== undefined && sql.startsWith('INSERT')) { failed = true; throw failure; }
@@ -381,5 +391,71 @@ describe('the remaining SERIALIZABLE writers retry on the shared policy', () => 
     await expect(new JuliusToolPostgresRepository(fake.pool).request(TOOL_REQUEST)).rejects.toThrow('tool_stale_authority');
     expect(fake.attempts()).toBe(1);
     expect(fake.log.at(-1)).toBe('1:ROLLBACK');
+  });
+});
+
+/**
+ * H3 (row 13 (i) candidate r5, founder ruling 2026-10-04): ONE JULIUS WRITER AT A TIME. The cases above are about the
+ * transaction; these record EVERY statement, the write lock's included, and pin where the lock sits and that it always
+ * comes back.
+ */
+describe('H3: every attempt holds the Julius write lock around its own transaction', () => {
+  const recording = (fail: (sql: string, attempt: number) => unknown) => {
+    const statements: string[][] = [];
+    const released: unknown[] = [];
+    let attempt = 0;
+    const pool = {
+      async connect() {
+        attempt += 1;
+        const mine: string[] = [];
+        const at = attempt;
+        statements.push(mine);
+        return {
+          async query(sql: string) {
+            mine.push(sql);
+            const failure = fail(sql, at);
+            if (failure !== undefined) throw failure;
+            return { rows: [], rowCount: 1 };
+          },
+          release(destroy?: unknown) { released.push(destroy); },
+        };
+      },
+    } as never;
+    return { pool, statements, released };
+  };
+  const BEGIN = 'BEGIN ISOLATION LEVEL SERIALIZABLE';
+  const noPause = { pause: async () => undefined };
+
+  it('takes the lock BEFORE BEGIN and gives it back AFTER COMMIT or ROLLBACK, on every attempt, a retried one included', async () => {
+    const fake = recording((sql, at) => (at === 1 && sql.startsWith('INSERT') ? serialization() : undefined));
+    expect(await juliusSerializable(fake.pool, async (client) => { await client.query('INSERT INTO t VALUES (1)'); return 7; }, noPause)).toBe(7);
+    expect(fake.statements).toEqual([
+      [JULIUS_WRITE_LOCK, BEGIN, JULIUS_PLAN_PIN, 'INSERT INTO t VALUES (1)', 'ROLLBACK', JULIUS_WRITE_UNLOCK],
+      [JULIUS_WRITE_LOCK, BEGIN, JULIUS_PLAN_PIN, 'INSERT INTO t VALUES (1)', 'COMMIT', JULIUS_WRITE_UNLOCK],
+    ]);
+    expect(fake.released, 'a lock that came back keeps its connection pooled').toEqual([undefined, undefined]);
+  });
+
+  it('gives the lock back when the body fails for any other reason, and does not retry', async () => {
+    const fake = recording(() => undefined);
+    await expect(juliusSerializable(fake.pool, async () => { throw new Error('julius_task_not_found'); }, noPause)).rejects.toThrow('julius_task_not_found');
+    expect(fake.statements).toEqual([[JULIUS_WRITE_LOCK, BEGIN, JULIUS_PLAN_PIN, 'ROLLBACK', JULIUS_WRITE_UNLOCK]]);
+  });
+
+  it('a nested call inside the body does not take the lock again (it would wait on its own caller)', async () => {
+    const outer = recording(() => undefined);
+    const inner = recording(() => undefined);
+    await juliusSerializable(outer.pool, async (client) => {
+      await juliusSerializable(inner.pool, async (nested) => { await nested.query('SELECT 1'); }, noPause);
+      await client.query('SELECT 2');
+    }, noPause);
+    expect(outer.statements).toEqual([[JULIUS_WRITE_LOCK, BEGIN, JULIUS_PLAN_PIN, 'SELECT 2', 'COMMIT', JULIUS_WRITE_UNLOCK]]);
+    expect(inner.statements).toEqual([[BEGIN, JULIUS_PLAN_PIN, 'SELECT 1', 'COMMIT']]);
+  });
+
+  it('an unlock that fails destroys the connection instead of pooling it with the lock still held', async () => {
+    const fake = recording((sql) => (sql === JULIUS_WRITE_UNLOCK ? new Error('connection reset') : undefined));
+    expect(await juliusSerializable(fake.pool, async () => 'ok', noPause)).toBe('ok');
+    expect(fake.released).toEqual([true]);
   });
 });
