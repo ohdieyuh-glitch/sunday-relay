@@ -54,6 +54,14 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * trajectory and, on the WITH arm, the comparison and the gate's decision. A PROMOTE is
   * written as a PROPOSAL: the claim ledger above stays the only writer of a memory's standing. */
  'learning.arm.recorded',
+ /* WHAT A RUN INHERITED, ON THE RECORD (founder ruling 2026-10-04; `julius-claim-ledger.ts`, "THE
+  * CARRY, CORRECTED"). `knowledge.carried` is one row per new run, written at bootstrap in the same
+  * transaction as the rows it describes: what earlier runs of the mission verified and this run's
+  * planner inherits — from which run and task, under which scope — and every candidate left behind,
+  * by reason; or the carry's failure, by a closed code. `knowledge.consumed` is one dispatch whose
+  * packet was owed carried rows: which arrived, by id, and which the budget evicted. Ids, closed
+  * tokens, counts and digests only; never the text of a finding. */
+ 'knowledge.carried','knowledge.consumed',
  /* a task's work was superseded rather than done: a declined request, re-planned into a continuation */
  'task.superseded',
  /* the task/sprint contract: what a worker was charged with, and when it stopped being arguable */

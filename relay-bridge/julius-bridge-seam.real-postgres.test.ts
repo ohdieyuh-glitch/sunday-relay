@@ -3,7 +3,10 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
+import { juliusCarriedCopyId, juliusClaimIdFor } from '../src/relay/mission/julius/julius-claim-ledger';
+import { juliusFindingTransitionFacts } from '../src/relay/mission/julius/julius-finding-lifecycle';
 import { JuliusClaimPostgresRepository } from '../src/relay/persistence/julius-claim-postgres';
+import { JuliusEventPostgresRepository } from '../src/relay/persistence/julius-event-postgres';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { composeJuliusMissionBootstrap, handleJuliusMissionRoute } from './julius-mission-routes';
 import { composeJuliusStateApi, handleJuliusStateRoute, type JuliusStateRoutePorts } from './julius-state-routes';
@@ -290,90 +293,116 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
     expect(dataOf<{ runId: string }>(await create(body)).runId).toBe(runId);
   });
 
-  it('what mission A VERIFIED is inherited by mission B — and what A only asserted is not', async () => {
-    // The founder's item: verified useful information from mission A must improve
-    // a later relevant mission. This is the durable half — that B's Project Brain
-    // really holds A's verified fact, with A's author and A's standing, and holds
-    // nothing A merely asserted. The packet half (that B's worker is HANDED it,
-    // and that unrelated residue is excluded) is `julius-learning-loop.e2e`.
+  /**
+   * A FINDING MISSION A'S REVIEWER RAISED, A REPAIR ANSWERED AND THE RE-REVIEW
+   * RESOLVED — written row by row the way the pipeline writes it: the finding
+   * row on A's plan, then its life on A's ledger (`finding.recorded`, then
+   * `finding.transitioned` REPAIR_SUCCEEDED and REVIEWER_RESOLVED).
+   */
+  async function resolvedFinding(runId: string, projectId: string, claim: string): Promise<string> {
+    const findingId = `finding:evidence:${runId}:plan-review`;
+    await pool.query(
+      `INSERT INTO relay_wonderland.julius_reviewer_findings(finding_id,run_id,task_id,reviewer_worker_id,severity,category,claim,criterion_id,evidence_ids,blocking,status,created_at,updated_at)
+       VALUES($1,$2,$3,'independent-reviewer-hermes','HIGH','review',$4,NULL,'["evidence:plan-review"]',true,'OPEN',now(),now())`,
+      [findingId, runId, `${runId}:plan`, claim]);
+    const events = new JuliusEventPostgresRepository(pool);
+    const append = (type: 'finding.recorded' | 'finding.transitioned', facts: Record<string, string | number | boolean | null>) => events.append({
+      eventId: `seam:${randomBytes(6).toString('hex')}`, runId, projectId, type, taskId: `${runId}:plan`, workerId: 'independent-reviewer-hermes',
+      correlationId: `seam:${runId}`, causationId: null, occurredAt: new Date().toISOString(), facts,
+    });
+    await append('finding.recorded', { findingId, evidenceId: 'evidence:plan-review', blocking: true, reviewTaskId: `${runId}:plan:review` });
+    await append('finding.transitioned', juliusFindingTransitionFacts({ findingId, move: 'REPAIR_SUCCEEDED', at: '2026-10-04T10:00:00.000Z', repairTaskId: `repair:${runId}:plan:1:task` }));
+    await append('finding.transitioned', juliusFindingTransitionFacts({ findingId, move: 'REVIEWER_RESOLVED', at: '2026-10-04T10:05:00.000Z', reviewTaskId: `review:repair:${runId}:plan:1:task` }));
+    return findingId;
+  }
+
+  it('what mission A’s reviewer verified and a repair answered reaches the next run of THAT mission’s plan — and nothing else of A does', async () => {
+    // The founder's ruling (2026-10-04): a verified reviewer finding must reach the next run's PLANNER, structured,
+    // and nothing may become approved, run-wide or inherited merely because a standing said VERIFIED. This is the
+    // durable half through the production route composition; the packet half (the planner is HANDED it, and no
+    // other worker is) is `julius-carry-reaches-planner.real-postgres.test.ts`.
     const id = nonce();
     const missionA = contractFor(id);
-    const runA = dataOf<{ runId: string }>(await create(JSON.stringify(missionA))).runId;
+    const body = JSON.stringify(missionA);
+    const runA = dataOf<{ runId: string }>(await create(body)).runId;
+    const claim = 'The save format must be written little-endian; the loader rejects big-endian.';
+    const findingId = await resolvedFinding(runA, missionA.projectId, claim);
 
-    // MISSION A LEARNS TWO THINGS. One a reviewer verifies; one stays an
-    // assertion. Written the way the runtime writes them: a brain row authored
-    // by a worker, and a claim standing recorded for it.
+    // WHAT THE FIRST CARRY WOULD HAVE HANDED OVER, and must not now: a brain row whose standing alone says VERIFIED
+    // (no finding behind it, no lifecycle), and one that is merely asserted.
     const claims = new JuliusClaimPostgresRepository(pool);
-    const facts = [
-      { entryId: `${runA}:verified`, text: 'The save format must be written little-endian; the loader rejects big-endian.', trust: 'VERIFIED' as const },
+    const rows = [
+      { entryId: `${runA}:standing-says-verified`, text: 'The loader must be rewritten from scratch.', trust: 'VERIFIED' as const },
       { entryId: `${runA}:asserted`, text: 'The loader is probably fine with either byte order.', trust: 'UNVERIFIED' as const },
     ];
-    for (const [index, fact] of facts.entries()) {
+    for (const [index, row] of rows.entries()) {
       await pool.query(
         `INSERT INTO relay_wonderland.julius_brain_entries
            (entry_id,run_id,project_id,task_id,worker_id,entry_kind,safe_content,evidence_ids,revision,created_at)
          VALUES($1,$2,$3,NULL,'coder','FINDING',$4,'["evidence:a-1"]',$5,now())`,
-        [fact.entryId, runA, missionA.projectId, fact.text, 50 + index],
+        [row.entryId, runA, missionA.projectId, row.text, 50 + index],
       );
       await claims.recordClaimStanding({
         runId: runA, projectId: missionA.projectId,
         claim: {
-          claimId: `claim:${fact.entryId}`, entryId: fact.entryId, provenance: 'tool_observed',
-          trust: fact.trust, assertedBy: 'coder', assertedAt: '2026-09-27T09:00:00.000Z',
+          claimId: `claim:${row.entryId}`, entryId: row.entryId, provenance: 'tool_observed',
+          trust: row.trust, assertedBy: 'coder', assertedAt: '2026-09-27T09:00:00.000Z',
           evidence: [{ kind: 'REVIEW', id: 'evidence:review-a' }], supersedes: null, contradicts: [],
         },
-        reason: fact.trust === 'VERIFIED' ? 'REVIEW_ACCEPTED' : 'ADMITTED',
+        reason: row.trust === 'VERIFIED' ? 'REVIEW_ACCEPTED' : 'ADMITTED',
         occurredAt: '2026-09-27T09:00:00.000Z',
       });
     }
 
-    // MISSION B, a different mission in the same project, created the ordinary way.
-    const missionB = { ...contractFor(nonce()), projectId: missionA.projectId, tenantId: missionA.tenantId };
-    const runB = dataOf<{ runId: string }>(await create(JSON.stringify(missionB))).runId;
-
-    const inherited = await pool.query<{ entry_id: string; safe_content: string; worker_id: string }>(
-      'SELECT entry_id, safe_content, worker_id FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE $2',
+    // THE NEXT RUN OF THE SAME MISSION: an explicit rerun, created the ordinary way.
+    const runB = dataOf<{ runId: string }>(await createRerun(body, `seam-rerun-${id}`)).runId;
+    expect(runB).not.toBe(runA);
+    const inherited = await pool.query<{ entry_id: string; task_id: string | null; safe_content: string; worker_id: string }>(
+      'SELECT entry_id, task_id, safe_content, worker_id FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE $2',
       [runB, 'carried:%']);
-    expect(inherited.rows.map((row) => row.safe_content), 'the verified fact, and only it').toEqual([facts[0]!.text]);
-    // THE COPY KEEPS ITS AUTHOR: attributing it to the bootstrap would both
-    // slander the worker and let B's reviewer "verify" Julius's own words.
-    expect(inherited.rows[0]!.worker_id).toBe('coder');
-    expect(inherited.rows[0]!.entry_id).toBe(`carried:${runA}:${facts[0]!.entryId}`);
+    // THE FINDING, AND ONLY IT: under an id that names its source AND its heir, scoped to B's plan, never run-wide.
+    expect(inherited.rows.map((row) => [row.entry_id, row.task_id])).toEqual([[juliusCarriedCopyId(runB, runA, findingId), `${runB}:plan`]]);
+    // THE COPY KEEPS ITS AUTHOR — the reviewer who raised it — and says where it came from.
+    expect(inherited.rows[0]!.worker_id).toBe('independent-reviewer-hermes');
+    expect(inherited.rows[0]!.safe_content.split('\n')).toEqual(expect.arrayContaining([
+      `SOURCE RUN: ${runA} (READY)`, `SOURCE TASK: ${runA}:plan (plan, PROMPT_ARCHITECT)`, `REVIEWER'S CLAIM: ${claim}`,
+    ]));
+    for (const absent of ['rewritten from scratch', 'probably fine']) {
+      expect(inherited.rows.map((row) => row.safe_content).join('\n'), `${absent} must not be inherited`).not.toContain(absent);
+    }
 
-    // AND THE STANDING TRAVELLED, so B ranks a verified fact as verified.
-    const carriedClaims = await claims.claimsForRun(runB, missionB.projectId);
-    const carried = carriedClaims.find((claim) => claim.entryId.startsWith('carried:'));
-    expect(carried?.trust).toBe('VERIFIED');
-    expect(carried?.assertedBy, 'A’s asserter, so B’s reviewer cannot self-verify it').toBe('coder');
-    const history = await claims.claimStandingHistory(carried!.claimId, missionB.projectId);
-    expect(history, 'one standing, recorded once').toHaveLength(1);
+    // AND ITS STANDING: admission's own derivation of a cited finding, the reviewer as asserter, one row, its source named.
+    const standing = (await claims.claimsForRun(runB, missionA.projectId)).find((held) => held.entryId === inherited.rows[0]!.entry_id);
+    expect(standing).toMatchObject({ trust: 'VERIFIED', provenance: 'reviewer_verified', assertedBy: 'independent-reviewer-hermes', claimId: juliusClaimIdFor(inherited.rows[0]!.entry_id) });
+    expect(await claims.claimStandingHistory(standing!.claimId, missionA.projectId), 'one standing, recorded once').toHaveLength(1);
 
-    // A REPLAY INHERITS NOTHING TWICE.
-    await create(JSON.stringify(missionB));
+    // THE RECORD: one `knowledge.carried` row on B, naming what it left behind and why.
+    const recorded = await pool.query<{ facts: Record<string, string | number | boolean | null> }>(
+      `SELECT payload->'facts' AS facts FROM relay_wonderland.events WHERE stream_id = $1 AND event_type = 'julius.knowledge.carried'`, [runB]);
+    expect(recorded.rows).toHaveLength(1);
+    expect(recorded.rows[0]!.facts).toMatchObject({ outcome: 'CARRIED', carried: 1, carriedFindings: 1, sourceRunIds: runA });
+    expect(String(recorded.rows[0]!.facts.excludedByReason), 'a standing alone is not a finding').toContain('entry_kind_not_carried=1');
+
+    // A REPLAY INHERITS NOTHING TWICE: the run already moved past CREATED, so the bootstrap does not carry again.
+    await createRerun(body, `seam-rerun-${id}`);
     const again = await pool.query<{ n: number }>(
       'SELECT count(*)::int AS n FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE $2', [runB, 'carried:%']);
     expect(again.rows[0]!.n).toBe(1);
+
+    // A DIFFERENT MISSION OF THE SAME PROJECT inherits nothing of A: "the project" is not a relation the carry may use.
+    const missionC = { ...contractFor(nonce()), projectId: missionA.projectId, tenantId: missionA.tenantId };
+    const runC = dataOf<{ runId: string }>(await create(JSON.stringify(missionC))).runId;
+    const rowsC = await pool.query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE $2', [runC, 'carried:%']);
+    expect(rowsC.rows[0]!.n).toBe(0);
   });
 
   it('knowledge does not cross projects', async () => {
     const id = nonce();
     const missionA = contractFor(id);
     const runA = dataOf<{ runId: string }>(await create(JSON.stringify(missionA))).runId;
-    const claims = new JuliusClaimPostgresRepository(pool);
-    await pool.query(
-      `INSERT INTO relay_wonderland.julius_brain_entries
-         (entry_id,run_id,project_id,task_id,worker_id,entry_kind,safe_content,evidence_ids,revision,created_at)
-       VALUES($1,$2,$3,NULL,'coder','FINDING','A fact that belongs to one project.','[]',60,now())`,
-      [`${runA}:private`, runA, missionA.projectId]);
-    await claims.recordClaimStanding({
-      runId: runA, projectId: missionA.projectId,
-      claim: {
-        claimId: `claim:${runA}:private`, entryId: `${runA}:private`, provenance: 'tool_observed',
-        trust: 'VERIFIED', assertedBy: 'coder', assertedAt: '2026-09-27T09:00:00.000Z',
-        evidence: [{ kind: 'REVIEW', id: 'evidence:review-a' }], supersedes: null, contradicts: [],
-      },
-      reason: 'REVIEW_ACCEPTED', occurredAt: '2026-09-27T09:00:00.000Z',
-    });
+    // A finding that WOULD be inherited by A's own next run (the case above proves the rule carries it).
+    await resolvedFinding(runA, missionA.projectId, 'A fact that belongs to one project.');
 
     // A mission in ANOTHER project inherits nothing of it.
     const elsewhere = contractFor(nonce());

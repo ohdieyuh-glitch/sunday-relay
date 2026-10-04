@@ -1132,7 +1132,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'learning.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'knowledge-carry.tsv', 'learning.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -1448,7 +1448,7 @@ describe('the evidence dump names only tables and columns the migrations create'
       expect(dump.columns, `${dump.file} carries run_id`).toContain('run_id');
     }
     const script = read('.github/julius-live-evidence-dump.sh');
-    for (const file of ['failures.tsv', 'budget.tsv', 'settlement-integrity.tsv', 'worker-diagnostics.tsv', 'contract-events.tsv', 'effort.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'finding-lifecycle.tsv', 'learning.tsv']) {
+    for (const file of ['failures.tsv', 'budget.tsv', 'settlement-integrity.tsv', 'worker-diagnostics.tsv', 'contract-events.tsv', 'effort.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'finding-lifecycle.tsv', 'learning.tsv', 'knowledge-carry.tsv']) {
       const query = script.split('\n').find((line) => line.startsWith('dump "SELECT') && line.endsWith(` ${file}`)) ?? '';
       expect(query, `${file} exports its stream as run_id`).toContain('e.stream_id AS run_id');
     }
@@ -1530,6 +1530,40 @@ describe('the evidence dump names only tables and columns the migrations create'
       expect(query, `the learning dump exports ${key}`).toContain(`e.payload->'facts'->>'${key}'`);
     }
     expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+  });
+
+  /**
+   * WHAT A RUN INHERITED REACHES THE BUNDLE (founder ruling 2026-10-04, R2). The four-point evidence — what the
+   * earlier run wrote, what became eligible, what was carried, and that the planner received it — must be
+   * readable from the artifact, and the ledger dies with the runner. So both carry events are dumped: the
+   * decision (`knowledge.carried`: the sources, the eligible count, one token per carried row with its digest,
+   * every exclusion by reason) and each packet's receipt (`knowledge.consumed`: owed, admitted by id, evicted).
+   * And the paid entrypoint's WITH arm is pinned to REQUIRE a non-empty carry from its own WITHOUT run: that
+   * statement runs only after `--confirm-live`, where no offline test reaches.
+   */
+  it('exports what each run inherited, why the rest was left behind, and what each packet received, and no payload', () => {
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const query = script.split('\n').find((entry) => entry.startsWith('dump "SELECT') && entry.endsWith(' knowledge-carry.tsv')) ?? '';
+    expect(query, 'the carry dump must exist').not.toBe('');
+    expect(query).toContain("WHERE e.event_type IN ('julius.knowledge.carried','julius.knowledge.consumed')");
+    const catalogue = read('src/relay/mission/julius/julius-events.ts');
+    for (const type of ['knowledge.carried', 'knowledge.consumed']) expect(catalogue, `${type} is a real event type`).toContain(`'${type}'`);
+    for (const key of ['carryVersion', 'outcome', 'reasonCode', 'missionId', 'scopeTaskId', 'scopeRole', 'sourceRunIds', 'candidates',
+      'eligible', 'carried', 'carriedFindings', 'carriedArchitecture', 'carriedEntries', 'excludedByReason', 'excludedRefs',
+      'contextId', 'role', 'taskType', 'inScope', 'admitted', 'admittedEntryIds', 'evicted', 'evictedEntryIds', 'missing']) {
+      expect(query, `the carry dump exports ${key}`).toContain(`e.payload->'facts'->>'${key}'`);
+    }
+    for (const prose of ["'claim'", "'text'", "'safeText'"]) expect(query.includes(prose), `the carry dump must not export ${prose}`).toBe(false);
+    expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+
+    const entry = read('relay-bridge/julius-live-mission.ts').replace(/\s+/gu, ' ');
+    const statement = "...(contract.learningPair?.arm === 'WITH' && contract.learningPair.withoutRunId !== undefined ? { carry: { required: true, fromRunIds: [contract.learningPair.withoutRunId] } } : {}),";
+    expect(entry.split(statement).length - 1, 'arm WITH requires a carry from its own arm WITHOUT, once, at the bootstrap call').toBe(1);
+    const bootstrap = read('relay-bridge/julius/bootstrap.ts').replace(/\s+/gu, ' ');
+    expect(bootstrap, 'a required carry that is empty or failed refuses the bootstrap by name')
+      .toContain("if (deps.carry?.required === true && (carry === null || carry.outcome !== 'CARRIED' || carry.carried < 1)) { return refuse('carried_knowledge_required',");
+    expect(bootstrap.indexOf("return refuse('carried_knowledge_required',"), 'and it refuses before the run is advanced to READY')
+      .toBeLessThan(bootstrap.indexOf("for (const step of ['PLANNING', 'READY'] as const)"));
   });
 });
 
@@ -3379,7 +3413,7 @@ describe('the event dumps are ordered by the ledger position, not by the wall cl
   it('covers every chronological event dump, so a new one cannot arrive unordered', () => {
     expect(eventDumps().map(named).sort())
       .toEqual(['budget.tsv', 'contract-events.tsv', 'effort.tsv', 'failures.tsv', 'finding-lifecycle.tsv',
-        'learning.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
+        'knowledge-carry.tsv', 'learning.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
   });
 
   it('carries the position the ledger allocated, and the stream it is a position within', () => {
