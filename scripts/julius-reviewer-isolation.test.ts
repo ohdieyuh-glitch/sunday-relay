@@ -364,7 +364,7 @@ describe('the proof runs on every dispatch and its line reaches the evidence', (
     expect(collect.body).toMatch(/if:\s*always\(\)/u);
     expect(collect.body).toContain('cp /tmp/julius-hermes-bootstrap.evidence.txt \\\n            julius-live-evidence/hermes-bootstrap.evidence.txt');
     // The scan's shape layer, read from the workflow rather than retyped.
-    const shape = /grep -rEq '([^']+)' julius-live-evidence/u.exec(workflow)?.[1];
+    const shape = /grep -rlE '([^']+)' julius-live-evidence/u.exec(workflow)?.[1];
     expect(shape).toBeDefined();
     const verdict = verifyReviewerIsolation(PROVEN, EXPECTED);
     expect(verdict.ok).toBe(true);

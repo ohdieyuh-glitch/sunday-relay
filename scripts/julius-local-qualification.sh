@@ -69,6 +69,7 @@ export JULIUS_TENANT_ID=tenant
 export JULIUS_PROJECT_ID=prj-julius-first-live
 export EXECUTOR_KEY_ID=julius-live-key
 export JULIUS_FLEET_ROOT=/tmp/julius-workspace
+export JULIUS_WORK_ARTIFACT_ROOT=/tmp/julius-work-artifacts
 export JULIUS_WORKSPACE=/tmp/julius-workspace/tenant/ws
 export JULIUS_RECEIPT_HOST_ROOT=/tmp/julius-executor/receipts
 export JULIUS_PUBLIC_KEY_PATH=/tmp/julius-public.pem
@@ -227,23 +228,64 @@ check_secrets_file_mode() {
 #
 # MIRRORS the workflow step 'Refuse to publish evidence that contains credential material', which
 # lives inline in the workflow YAML (the worker App cannot edit workflows), so it is restated here.
+# Decision A (founder, 2026-10-03): a hit inside a work-artifact body drops that body only, recorded as
+# DROPPED_BY_SCAN; a hit anywhere else, a grep error, or a body the copier did not record refuses the bundle.
 # LAYER ONE catches shapes this rig never minted. LAYER TWO matches, literally, every value this rig
 # holds. Neither says WHICH value matched.
-credential_scan() {
-  local dir=$1 needles leaked=0 value
-  [ -d "$dir" ] || return 0
-  if grep -rEq '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' "$dir"; then
-    return 1
-  fi
+credential_scan() (
+  # A SUBSHELL, so its EXIT trap is its own: the needle file (this rig's secret values, mode 600) is removed on every
+  # way out, an interrupt included. Exits 1 for every case that must refuse the WHOLE bundle (the caller deletes it),
+  # 0 when the bundle may be kept. It runs as an `if` condition, where bash ignores `set -e`, so every grep's code is
+  # read explicitly: 0 = hit, 1 = none, 2+ = an error, and an error is never read as clean (as in the workflow step).
+  dir=$1
+  dropped=0
+  [ -d "$dir" ] || exit 0
   needles=$(umask 077; mktemp)
+  trap 'rm -f "$needles"' EXIT
   for value in "${EXECUTOR_ROOT_VALUE:-}" "${DB_PASSWORD_VALUE:-}" "$(stored_secret OPENAI_API_KEY)" "$(stored_secret XAI_API_KEY)"; do
-    [ -n "$value" ] && printf '%s\n' "$value" >> "$needles"
+    if [ -n "$value" ]; then printf '%s\n' "$value" >> "$needles"; fi
   done
   printf '%s' "${SCOPED_VALUE:-}" | tr ',' '\n' | sed -n 's/.*:"\([A-Za-z0-9_-]\{20,\}\)".*/\1/p' | awk '{ print }' >> "$needles" || true
-  if [ -s "$needles" ] && grep -rF -f "$needles" "$dir" >/dev/null 2>&1; then leaked=1; fi
-  rm -f "$needles"
-  [ "$leaked" -eq 0 ]
-}
+  shape_hits=$(grep -rlE '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' "$dir") && rc=0 || rc=$?
+  [ "$rc" -le 1 ] || exit 1
+  exact_hits=''
+  if [ -s "$needles" ]; then
+    exact_hits=$(grep -rlF -f "$needles" "$dir") && rc=0 || rc=$?
+    [ "$rc" -le 1 ] || exit 1
+  fi
+  # A hit outside a work-artifact body refuses the whole bundle, as it always has. The directory prefix is stripped by
+  # parameter expansion, never by a pattern built from the path.
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    rel=${file#"$dir"/}
+    [[ "$rel" =~ ^artifacts/[0-9a-f]{64}[.]body$ ]] || exit 1
+  done <<< "$shape_hits
+$exact_hits"
+  # A hit inside a body drops that body only, recorded (decision A); a body BODIES.tsv does not name refuses everything.
+  record="$dir/artifacts/DROPPED_BY_SCAN.tsv"
+  for layer in shape exact; do
+    if [ "$layer" = shape ]; then hits=$shape_hits; else hits=$exact_hits; fi
+    while IFS= read -r file; do
+      [ -n "$file" ] && [ -f "$file" ] || continue
+      [ -f "$dir/artifacts/BODIES.tsv" ] || exit 1
+      row=$(awk -F'\t' -v b="artifacts/${file##*/}" '$2 == b && $5 == "COPIED" { print $1 "\t" $2 "\t" $3 "\t" $4; exit }' "$dir/artifacts/BODIES.tsv")
+      [ -n "$row" ] || exit 1
+      [ -f "$record" ] || printf 'artifact_id\tbody\tcontent_hash\tbyte_size\tlayer\tmarker\n' > "$record"
+      printf '%s\t%s\tDROPPED_BY_SCAN\n' "$row" "$layer" >> "$record"
+      rm -f "$file"
+      dropped=$((dropped + 1))
+    done <<< "$(printf '%s\n' "$hits" | sed '/^$/d' | sort -u)"
+  done
+  # Both layers again over what is left: it must now be clean (grep 1); a hit or an error refuses the bundle.
+  grep -rqE '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' "$dir" && rc=0 || rc=$?
+  [ "$rc" -eq 1 ] || exit 1
+  if [ -s "$needles" ]; then
+    grep -rqF -f "$needles" "$dir" && rc=0 || rc=$?
+    [ "$rc" -eq 1 ] || exit 1
+  fi
+  [ "$dropped" -eq 0 ] || say "EVIDENCE: $dropped work-artifact bodies dropped by the scan (artifacts/DROPPED_BY_SCAN.tsv)"
+  exit 0
+)
 
 # --------------------------------------------------------------------------- Hermes, the reviewer
 

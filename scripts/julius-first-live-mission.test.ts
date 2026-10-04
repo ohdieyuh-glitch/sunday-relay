@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { execFileSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { liveBillingPaths, liveExecutionScope, parseLiveMissionContract } from '../relay-bridge/julius-live-mission';
@@ -1024,8 +1024,8 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'worker-diagnostics.tsv']);
-    expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
+    expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
       expect(columns, `${dump.file} reads relay_wonderland.${dump.table}, which no migration creates`).toBeDefined();
@@ -1033,6 +1033,25 @@ describe('the evidence dump names only tables and columns the migrations create'
         expect(columns!.has(column), `${dump.file}: ${dump.table}.${column} is not a column the migrations create`).toBe(true);
       }
     }
+  });
+
+  /**
+   * DECISION A (founder, 2026-10-03): the bundle names each evidence row's artifact and carries the artifacts' record
+   * and bodies, so it resolves without the run's database. The columns are pinned here against the migrations (the
+   * case above already checks each is real); the copy and the resolver are their own suites
+   * (julius-evidence-bodies, julius-evidence-resolve).
+   */
+  it('DECISION A: evidence.tsv ends with integrity_hash and artifact_ref, work-artifacts.tsv carries every column 024 creates, and the dump copies the bodies and the resolver after it', () => {
+    const dumps = queries();
+    const evidence = dumps.find((dump) => dump.file === 'evidence.tsv')!;
+    expect(evidence.columns.slice(-2), 'appended last, so no column a reader uses moves').toEqual(['integrity_hash', 'artifact_ref']);
+    const artifacts = dumps.find((dump) => dump.file === 'work-artifacts.tsv')!;
+    expect(artifacts.table).toBe('julius_work_artifacts');
+    expect([...artifacts.columns].sort(), 'the whole record of each body, and nothing but the record').toEqual([...schema().get('julius_work_artifacts')!].sort());
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const at = (text: string) => script.indexOf(text);
+    expect(at('node scripts/julius-evidence-bodies.mjs "$out"'), 'the bodies are copied').toBeGreaterThan(at('" work-artifacts.tsv'));
+    expect(at('cp scripts/julius-evidence-resolve.mjs "$out/resolve-artifacts.mjs"'), 'and the resolver travels with them').toBeGreaterThan(at('" work-artifacts.tsv'));
   });
 
   it('is held by the Docker regression against a migrated database as well', () => {
@@ -2030,8 +2049,10 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     // includes one edit that silently broke its Bearer clause. So the REAL
     // pattern is extracted from the workflow and executed, not admired.
     const scanStep = stepScript('Refuse to publish evidence that contains credential material');
-    const pattern = /grep -rEq '(.+)' julius-live-evidence/u.exec(scanStep)?.[1];
+    const pattern = /grep -rlE '(.+)' julius-live-evidence/u.exec(scanStep)?.[1];
     expect(pattern, 'the shape scan must exist in the scan step').toBeDefined();
+    // Decision A scans twice (list the hits, then rescan after a body is dropped): one pattern, never two.
+    expect(/grep -rqE '(.+)' julius-live-evidence/u.exec(scanStep)?.[1], 'the rescan uses the same pattern, byte for byte').toBe(pattern);
 
     const matches = (line: string): boolean => {
       try {
@@ -2049,11 +2070,85 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
   it('the workflow also matches this job\u2019s exact ephemeral values, not only shapes', () => {
     const scan = stepScript('Refuse to publish evidence that contains credential material');
     expect(scan, 'a shape rule cannot know what a derived scoped credential looks like')
-      .toContain('grep -rF -f');
-    expect(scan, 'the needle file must not survive the step').toContain('rm -f "$needles"');
-    expect(scan, 'a leak must delete the evidence, not merely warn').toContain('rm -rf julius-live-evidence');
+      .toContain('grep -rlF -f "$needles" julius-live-evidence');
+    expect(scan, 'and the rescan after a drop reads them too').toContain('grep -rqF -f "$needles" julius-live-evidence');
+    // FAIL CLOSED ON EVERY EXIT PATH (decision A, Second's P1): the step runs under `bash -e`, and the upload runs
+    // `if: always()`, so the bundle goes unless the step's very last statement ran.
+    expect(scan, 'the needles never survive, and the bundle survives only a clean finish')
+      .toContain(`trap 'rm -f "$needles"; [ "$clean" = 1 ] || rm -rf julius-live-evidence' EXIT`);
+    const statements = scan.split('\n').map((line) => line.trim()).filter((line) => line !== '' && !line.startsWith('#'));
+    expect(statements.at(-1), 'clean=1 is the last statement').toBe('clean=1');
     expect(workflow.indexOf('Refuse to publish evidence'), 'the scan must precede the upload')
       .toBeLessThan(workflow.indexOf('name: julius-live-evidence'));
+  });
+
+  /**
+   * DECISION A, RUN RATHER THAN READ: the scan step is extracted from the workflow and executed as GitHub executes
+   * it (`bash -eo pipefail`) over bundles built as the dump writes them. A body that trips a scan is dropped and
+   * recorded; anything else that trips it, a missing record, a grep error or a failing command deletes the bundle.
+   */
+  describe('the scan step, executed (decision A)', () => {
+    const bashBinary = process.platform === 'win32' && existsSync('C:\\Program Files\\Git\\bin\\bash.exe') ? 'C:\\Program Files\\Git\\bin\\bash.exe' : 'bash';
+    const ids = ['julius-work-artifact.v1:run:5408584e00ffb49fd1c011a1:run:5408584e00ffb49fd1c011a1:build:g1:DIFF',
+      'julius-work-artifact.v1:run:5408584e00ffb49fd1c011a1:run:5408584e00ffb49fd1c011a1:plan:g1:PLAN'];
+    const hex = (value: string) => createHash('sha256').update(value).digest('hex');
+    const shapeKey = () => ['sk', 'ant', 'api03', 'A'.repeat(24)].join('-'); // assembled at run time
+    const LIVE = 'root-secret-value-0123456789';
+    const run = (mutate: (bundle: string) => void, script = stepScript('Refuse to publish evidence that contains credential material')) => {
+      const root = mkdtempSync(join(tmpdir(), 'julius-scan-step-'));
+      const bundle = join(root, 'julius-live-evidence');
+      mkdirSync(join(bundle, 'artifacts'), { recursive: true });
+      const bodies = ['artifact_id\tbody\tcontent_hash\tbyte_size\tstatus'];
+      for (const id of ids) {
+        const text = `body of ${id.split(':').at(-1)}\n`;
+        writeFileSync(join(bundle, 'artifacts', `${hex(id)}.body`), text);
+        bodies.push([id, `artifacts/${hex(id)}.body`, hex(text), String(Buffer.byteLength(text)), 'COPIED'].join('\t'));
+      }
+      writeFileSync(join(bundle, 'artifacts', 'BODIES.tsv'), `${bodies.join('\n')}\n`);
+      writeFileSync(join(bundle, 'work-artifacts.tsv'), `artifact_id\tstorage_ref\n${ids.map((id) => `${id}\tlocal://${hex('t')}/${hex('p')}/${hex(id)}`).join('\n')}\n(2 rows)\n`);
+      writeFileSync(join(bundle, 'workspace.diff'), 'diff --git a/x b/x\n+task-free text\n');
+      mutate(bundle);
+      writeFileSync(join(root, 'step.sh'), script);
+      const env = { PATH: process.env.PATH ?? '', EXECUTOR_ROOT: LIVE, DB_PASSWORD: 'db-password-0123456789', SCOPED: '', OPENAI_API_KEY: '', ANTHROPIC_API_KEY: '',
+        CLAUDE_CODE_OAUTH_TOKEN: '', XAI_API_KEY: '', TMPDIR: root, SystemRoot: process.env.SystemRoot ?? '' };
+      const result = spawnSync(bashBinary, ['-eo', 'pipefail', 'step.sh'], { cwd: root, env, encoding: 'utf8' });
+      const kept = existsSync(bundle);
+      const record = join(bundle, 'artifacts', 'DROPPED_BY_SCAN.tsv');
+      return { status: result.status, stderr: result.stderr, kept, dropped: kept && existsSync(record) ? readFileSync(record, 'utf8').trim().split('\n').slice(1) : [],
+        leftover: `${result.stdout}${result.stderr}` };
+    };
+    const firstBody = (bundle: string) => join(bundle, 'artifacts', `${hex(ids[0]!)}.body`);
+
+    it('keeps a clean bundle, drops only the body that trips a shape or a live value (recording it), and never prints what matched', () => {
+      expect(run(() => undefined)).toMatchObject({ status: 0, kept: true, dropped: [] });
+      const shape = run((bundle) => appendFileSync(firstBody(bundle), `key = ${shapeKey()}\n`));
+      expect(shape).toMatchObject({ status: 0, kept: true });
+      expect(shape.dropped.map((line) => line.split('\t').slice(-2).join(' '))).toEqual(['shape DROPPED_BY_SCAN']);
+      expect(shape.dropped[0]!.split('\t')[0], 'the record names the artifact').toBe(ids[0]);
+      const exact = run((bundle) => appendFileSync(firstBody(bundle), `leaked ${LIVE}\n`));
+      expect(exact).toMatchObject({ status: 0, kept: true });
+      expect(exact.dropped.map((line) => line.split('\t').slice(-2).join(' '))).toEqual(['exact DROPPED_BY_SCAN']);
+      expect(`${shape.leftover}${exact.leftover}`, 'nothing that matched is printed').not.toMatch(new RegExp(`${shapeKey()}|${LIVE}`, 'u'));
+    });
+
+    it('deletes the WHOLE bundle for a hit outside a body, a body the copier never recorded, or no record at all', () => {
+      expect(run((bundle) => appendFileSync(join(bundle, 'workspace.diff'), `+ token ${shapeKey()}\n`))).toMatchObject({ status: 1, kept: false });
+      expect(run((bundle) => appendFileSync(join(bundle, 'work-artifacts.tsv'), `${LIVE}\n`))).toMatchObject({ status: 1, kept: false });
+      expect(run((bundle) => writeFileSync(join(bundle, 'artifacts', `${'f'.repeat(64)}.body`), `${shapeKey()}\n`))).toMatchObject({ status: 1, kept: false });
+      expect(run((bundle) => { appendFileSync(firstBody(bundle), `${shapeKey()}\n`); rmSync(join(bundle, 'artifacts', 'BODIES.tsv')); })).toMatchObject({ status: 1, kept: false });
+    });
+
+    it('FAILS CLOSED: a command failing mid-step under bash -e, or a grep that errors, deletes the bundle rather than uploading it unscanned', () => {
+      const scan = stepScript('Refuse to publish evidence that contains credential material');
+      const injected = scan.replace(/^(refuse\(\) .*)$/mu, '$1\nfalse');
+      expect(injected, 'the fault is injected after the trap').not.toBe(scan);
+      expect(run(() => undefined, injected)).toMatchObject({ status: 1, kept: false });
+      if (process.platform !== 'win32' && process.getuid?.() !== 0) {
+        const unreadable = run((bundle) => { writeFileSync(join(bundle, 'locked.txt'), 'x'); chmodSync(join(bundle, 'locked.txt'), 0o000); });
+        expect(unreadable, 'grep exits 2 on an unreadable file: an error is never read as clean').toMatchObject({ status: 1, kept: false });
+        expect(unreadable.stderr).toContain('evidence_scan_error');
+      }
+    });
   });
 });
 

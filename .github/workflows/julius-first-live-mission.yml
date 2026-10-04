@@ -238,6 +238,10 @@ jobs:
       JULIUS_PROJECT_ID: prj-julius-first-live
       EXECUTOR_KEY_ID: julius-live-key
       JULIUS_FLEET_ROOT: /tmp/julius-workspace
+      # THE WORK ARTIFACTS' ROOT, explicit (decision A): the mission stores each body here and the evidence dump copies
+      # them from here, so the two never have to agree on a temp-directory guess. A literal path, like the roots above:
+      # GitHub does not offer the `runner` context to a job-level env.
+      JULIUS_WORK_ARTIFACT_ROOT: /tmp/julius-work-artifacts
       JULIUS_WORKSPACE: /tmp/julius-workspace/tenant/ws
       # THE RECEIPT TRANSPORT (PR #214, proven on real Docker). The executor asks the
       # host Docker daemon to bind-mount each sandbox's scoped receipt directory,
@@ -1285,43 +1289,92 @@ jobs:
         run: |
           set -uo pipefail
           if [ ! -d julius-live-evidence ]; then exit 0; fi
-
-          # LAYER ONE — shapes. Catches a credential this job never minted.
-          # `sk-ant-oat01-…` (a setup-token subscription token) is covered by the
-          # first alternative; an assignment of the token variable is named too.
-          if grep -rEq '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' julius-live-evidence; then
-            echo 'evidence_contains_credential_shaped_material: refusing to upload' >&2
-            rm -rf julius-live-evidence
-            exit 1
-          fi
-
-          # LAYER TWO — the exact values this job actually holds. A shape rule
-          # cannot know what a 43-character base64url scoped credential looks
-          # like, so the values themselves are matched literally. The needle
-          # file is written with a restrictive umask, never leaves the runner,
-          # and is removed before the upload step can see it.
           umask 077
           needles=$(mktemp)
+          clean=0
+          # FAIL CLOSED ON EVERY EXIT PATH: the needles always go, and the bundle goes too unless the very last
+          # statement below ran. GitHub's `bash -e` can end this step at any failing command, and the upload runs
+          # `if: always()`.
+          trap 'rm -f "$needles"; [ "$clean" = 1 ] || rm -rf julius-live-evidence' EXIT
+          refuse() { echo "$1: refusing to upload" >&2; exit 1; }
+
+          # LAYER TWO's needles — the exact values this job actually holds. A shape rule cannot know what a
+          # 43-character base64url scoped credential looks like, so the values themselves are matched literally.
           for value in "$EXECUTOR_ROOT" "$DB_PASSWORD" "$OPENAI_API_KEY" "$ANTHROPIC_API_KEY" "$CLAUDE_CODE_OAUTH_TOKEN" "$XAI_API_KEY"; do
-            [ -n "$value" ] && printf '%s\n' "$value" >> "$needles"
+            if [ -n "$value" ]; then printf '%s\n' "$value" >> "$needles"; fi
           done
-          # Every derived scoped credential, pulled out of the JSON map.
-          # awk re-terminates every record: without it the map's final value
-          # arrives without a trailing newline, and anything appended later
-          # would fuse with it into one useless needle.
+          # Every derived scoped credential, pulled out of the JSON map. awk re-terminates every record: without it
+          # the map's final value arrives without a trailing newline, and anything appended later would fuse with it.
           printf '%s' "$SCOPED" | tr ',' '\n' | sed -n 's/.*:"\([A-Za-z0-9_-]\{20,\}\)".*/\1/p' | awk '{ print }' >> "$needles" || true
-          leaked=0
-          if [ -s "$needles" ] && grep -rF -f "$needles" julius-live-evidence >/dev/null 2>&1; then
-            leaked=1
+
+          # WHICH FILES EACH LAYER MATCHES, by name only (nothing that matched is printed). grep: 0 = hit, 1 = none,
+          # 2+ = an error, and an error is NEVER read as clean.
+          # LAYER ONE — shapes. Catches a credential this job never minted. `sk-ant-oat01-…` (a setup-token
+          # subscription token) is covered by the first alternative; an assignment of the token variable is named too.
+          shape_hits=$(grep -rlE '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' julius-live-evidence) && rc=0 || rc=$?
+          [ "$rc" -le 1 ] || refuse evidence_scan_error
+          exact_hits=''
+          if [ -s "$needles" ]; then
+            exact_hits=$(grep -rlF -f "$needles" julius-live-evidence) && rc=0 || rc=$?
+            [ "$rc" -le 1 ] || refuse evidence_scan_error
           fi
-          rm -f "$needles"
-          if [ "$leaked" -eq 1 ]; then
-            # Deliberately does not say WHICH value matched.
-            echo 'evidence_contains_a_live_credential: refusing to upload' >&2
-            rm -rf julius-live-evidence
-            exit 1
+
+          # A HIT OUTSIDE A WORK-ARTIFACT BODY REFUSES THE WHOLE BUNDLE, as it always has. Which layer is said;
+          # which value matched is deliberately not.
+          body='^julius-live-evidence/artifacts/[0-9a-f]{64}[.]body$'
+          outside=$(printf '%s\n' "$shape_hits" | sed '/^$/d' | grep -vE "$body") && rc=0 || rc=$?
+          [ "$rc" -le 1 ] || refuse evidence_scan_error
+          [ -z "$outside" ] || refuse evidence_contains_credential_shaped_material
+          outside=$(printf '%s\n' "$exact_hits" | sed '/^$/d' | grep -vE "$body") && rc=0 || rc=$?
+          [ "$rc" -le 1 ] || refuse evidence_scan_error
+          [ -z "$outside" ] || refuse evidence_contains_a_live_credential
+
+          # A HIT INSIDE A BODY DROPS THAT BODY ONLY (founder decision A, 2026-10-03), and records it: the artifact id,
+          # body, content hash and size from BODIES.tsv, the layer, and DROPPED_BY_SCAN — never the matched text. A body
+          # that BODIES.tsv does not name as COPIED (or no BODIES.tsv at all) is not this pipeline's: the bundle is refused.
+          record=julius-live-evidence/artifacts/DROPPED_BY_SCAN.tsv
+          for layer in shape exact; do
+            if [ "$layer" = shape ]; then hits=$shape_hits; else hits=$exact_hits; fi
+            for file in $(printf '%s\n' "$hits" | sed '/^$/d' | sort -u); do
+              [ -f "$file" ] || continue
+              [ -f julius-live-evidence/artifacts/BODIES.tsv ] || refuse evidence_body_unrecorded
+              row=$(awk -F'\t' -v b="artifacts/${file##*/}" '$2 == b && $5 == "COPIED" { print $1 "\t" $2 "\t" $3 "\t" $4; exit }' julius-live-evidence/artifacts/BODIES.tsv)
+              [ -n "$row" ] || refuse evidence_body_unrecorded
+              [ -f "$record" ] || printf 'artifact_id\tbody\tcontent_hash\tbyte_size\tlayer\tmarker\n' > "$record"
+              printf '%s\t%s\tDROPPED_BY_SCAN\n' "$row" "$layer" >> "$record"
+              rm -f "$file"
+            done
+          done
+
+          # BOTH LAYERS AGAIN over what is left: the bundle must now be clean (grep exits 1), or none of it is uploaded.
+          # A hit (0) and an error (2+) both refuse.
+          grep -rqE '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' julius-live-evidence && rc=0 || rc=$?
+          [ "$rc" -eq 1 ] || refuse evidence_scan_not_clean_after_drop
+          if [ -s "$needles" ]; then
+            grep -rqF -f "$needles" julius-live-evidence && rc=0 || rc=$?
+            [ "$rc" -eq 1 ] || refuse evidence_scan_not_clean_after_drop
           fi
-          echo 'evidence scan clean (shapes and exact values)'
+          dropped=0
+          if [ -f "$record" ]; then dropped=$(( $(wc -l < "$record") - 1 )); fi
+          echo "evidence scan clean (shapes and exact values); work-artifact bodies dropped by the scan: $dropped"
+          clean=1
+
+      # THE BUNDLE RESOLVES ITSELF (decision A). The resolver the dump copied in verifies every body against both
+      # hashes from the bundle alone. A body that does not verify is evidence of a fault: this step FAILS VISIBLY and
+      # names it, and the bundle is still uploaded (it is the evidence of that fault). Nothing is written into the
+      # bundle after the scan: the report goes to the job summary.
+      - name: The evidence bundle resolves every artifact it names (strict)
+        if: always()
+        run: |
+          set -uo pipefail
+          if [ ! -f julius-live-evidence/resolve-artifacts.mjs ]; then echo 'no resolver in the bundle (no dump ran)'; exit 0; fi
+          set +e
+          node julius-live-evidence/resolve-artifacts.mjs --strict | tee "$RUNNER_TEMP/resolve-artifacts.txt"
+          code=${PIPESTATUS[0]}
+          set -e
+          { echo '### Evidence bundle resolution (strict)'; echo '```'; cat "$RUNNER_TEMP/resolve-artifacts.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 0 ]; then echo "::error title=Evidence bundle does not resolve::resolve-artifacts --strict exited $code (see the job summary)"; fi
+          exit "$code"
 
       # THE PAID-RUN ARCHIVE'S EXPORT. This job's PostgreSQL is disposable and
       # dies with the runner whatever step runs next, so this artifact is the
