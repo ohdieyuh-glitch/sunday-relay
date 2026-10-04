@@ -90,8 +90,10 @@ namespace RelayDogHandoffTuning
 	TAutoConsoleVariable<float> CVarStanceKneesOut(TEXT("wl.Handoff.Stance.KneesOut"), 0.0f,
 		TEXT("Mission Handoff stance: each thigh turned outward about the vertical, degrees (the knees out over the toes, so the bend shows from behind). 0 = the look before it."));
 	TAutoConsoleVariable<float> CVarStanceShoulder(TEXT("wl.Handoff.Stance.Shoulder"), 4.0f, TEXT("Mission Handoff stance: the ready arms raised forward, degrees."));
-	TAutoConsoleVariable<float> CVarStanceElbow(TEXT("wl.Handoff.Stance.Elbow"), 18.0f, TEXT("Mission Handoff stance: the ready forearms folded up, degrees."));
-	TAutoConsoleVariable<float> CVarStanceOut(TEXT("wl.Handoff.Stance.Out"), 14.0f, TEXT("Mission Handoff stance: the ready arms swept out from the body, degrees."));
+	// the charging stance's arms (charge_model.py, 10-04): the forearms folded so the hands ride ~35-40 uu up and the trailing blades'
+	// tips stay ~15-22 uu above the ground and within ~70 uu either side -- never the 100 uu spread of a wide V
+	TAutoConsoleVariable<float> CVarStanceElbow(TEXT("wl.Handoff.Stance.Elbow"), 40.0f, TEXT("Mission Handoff stance: the ready forearms folded up, degrees."));
+	TAutoConsoleVariable<float> CVarStanceOut(TEXT("wl.Handoff.Stance.Out"), 6.0f, TEXT("Mission Handoff stance: the ready arms swept out from the body, degrees."));
 	TAutoConsoleVariable<float> CVarStanceSwing(TEXT("wl.Handoff.Stance.SwingKeep"), 0.3f, TEXT("Mission Handoff stance: the share of the walk's arm swing kept, 0..1."));
 	TAutoConsoleVariable<float> CVarStanceRunOut(TEXT("wl.Handoff.Stance.RunOut"), 20.0f, TEXT("Mission Handoff stance: the running arms swept out, degrees."));
 	TAutoConsoleVariable<float> CVarStanceRunElbow(TEXT("wl.Handoff.Stance.RunElbow"), 14.0f, TEXT("Mission Handoff stance: extra forearm fold while running, degrees."));

@@ -174,15 +174,36 @@ namespace RelayDogArmedStance
 				// where the foot goes: the animator's place, this much ahead, swept out by the stance's spacing, on the ground
 				const FStanceVec Foot3 = { At.Forward + Ahead, Side * HipNow * std::sin(FeetOut * StanceDegToRad), At.Lift - HipNow };
 				const FStanceVec Reach = RigUnrotate(Axes, FStanceVec{ Foot3.X - HipMoved.X, Foot3.Y - HipMoved.Y, Foot3.Z - HipMoved.Z });
-				RelayDogStride::FFootPose To;
-				To.Forward = Reach.X;
-				To.Lift = 0.0f;
-				const float Down = std::sqrt(Reach.Y * Reach.Y + Reach.Z * Reach.Z);
-				const RelayDogStride::FLegPose Bent = RelayDogStride::LegPose(To, ThighUU, ShinUU, Down);
-				Leg.HipDeg += Bent.HipDeg - Base.HipDeg;
-				Leg.KneeDeg += Bent.KneeDeg - Base.KneeDeg;
+				// SOLVED, THEN CHECKED AGAINST THE WRITER'S OWN CHAIN, and the aim corrected: the writer rolls the hip AFTER its pitch
+				// (FRotator(hip, 0, roll)), so a foot far forward and out (the front foot: ~76 deg of hip, ~15 of roll) lands 1.6 uu
+				// off a solve that treats the two apart. Four passes put it on the spot (charge_model.py: 1.63 -> 0.00 uu).
+				// The roll the writer applies is minus the lateral angle on both legs: the rig measured each leg's outward roll as
+				// minus its side (WLDOG MEASURED leg L signs +1/-1/-1).
+				FStanceVec Aim = Reach;
+				RelayDogStride::FLegPose Bent;
+				float Lateral = 0.0f;
+				for (int Pass = 0; Pass <= 4; ++Pass)
+				{
+					RelayDogStride::FFootPose To;
+					To.Forward = Aim.X;
+					To.Lift = 0.0f;
+					Bent = RelayDogStride::LegPose(To, ThighUU, ShinUU, std::sqrt(Aim.Y * Aim.Y + Aim.Z * Aim.Z));
+					Lateral = std::atan2(Aim.Y, -Aim.Z) / StanceDegToRad;
+					if (Pass == 4)
+					{
+						break;
+					}
+					const FStanceVec ShinInHip = RigRotate(RigAxes(-Bent.KneeDeg, 0.0f, 0.0f), FStanceVec{ 0.0f, 0.0f, -ShinUU });
+					const FStanceVec Chain = RigRotate(RigAxes(Bent.HipDeg, 0.0f, -Lateral), FStanceVec{ ShinInHip.X, ShinInHip.Y, ShinInHip.Z - ThighUU });
+					Aim = { Aim.X + Reach.X - Chain.X, Aim.Y + Reach.Y - Chain.Y, Aim.Z + Reach.Z - Chain.Z };
+				}
+				// THE ANIMATOR'S OWN SHARE IS ITS SOLVE x THE GAIT: standing it writes straight legs (0, 0), not the upright solve
+				// (which the 0.995 reach clamp leaves ~8 deg of hip and ~12 of knee off straight), so only the gait's share of that
+				// solve is taken back out -- or a standing Dog's knees came out ~12 deg short of the stance's (charge_model.py).
+				Leg.HipDeg += Bent.HipDeg - Base.HipDeg * Gait;
+				Leg.KneeDeg += Bent.KneeDeg - Base.KneeDeg * Gait;
 				// and the sideways part, as a sweep AWAY from the centre line (the writer turns it into the rig's measured roll)
-				return std::atan2(Reach.Y, -Reach.Z) / StanceDegToRad * Side;
+				return Lateral * Side;
 			};
 			// the canon's LegLeft hangs at +Y, the Dog's own RIGHT: behind, loaded; LegRight (-Y, the Dog's own LEFT): ahead
 			Body.LegLeftOutDeg = Solve(Pose.LegLeft, Pose.FootLeft, HipYLeft, -Stand * Shape.RearUU);
