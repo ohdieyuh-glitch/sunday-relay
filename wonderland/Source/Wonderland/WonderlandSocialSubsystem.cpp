@@ -547,6 +547,42 @@ namespace WonderlandSocialCommands
 			UE_LOG(LogTemp, Display, TEXT("WLQA EOSCFG END pass=%d fail=%d"), Passed, Failed);
 		}));
 
+	/** R16 PRESENCE QA (founder 10-04: the hub's presence control, with tests + negative controls): the client sends only the
+	 *  authority's four availabilities. A throwaway live service on a dead loopback port (127.0.0.1:9, nothing listens; never a real
+	 *  server) is asked presence.set: an unknown word, a lowercase one and an empty one must be refused BEFORE sending; the four must be
+	 *  accepted (sent, pending). PC1 proves the refusal is specific: a real operation on the same service is not refused. WLQA PRESENCE. */
+	FAutoConsoleCommand GQaPresenceChoice(
+		TEXT("wl.Qa.PresenceChoice"),
+		TEXT("QA: the hub's presence choices -- only AVAILABLE/AWAY/BUSY/APPEAR_OFFLINE leave the client (dead loopback port, no real server)."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			int32 Passed = 0;
+			int32 Failed = 0;
+			TUniquePtr<FWonderlandSocialLiveService> Probe = MakeUnique<FWonderlandSocialLiveService>(TEXT("http://127.0.0.1:9"), TEXT("qa-presence"));
+			auto Line = [&Passed, &Failed](const FString& Id, bool bOk, const FString& What)
+			{
+				(bOk ? Passed : Failed) += 1;
+				UE_LOG(LogTemp, Display, TEXT("WLQA PRESENCE %s %s -- %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *What);
+			};
+			int32 Case = 1;
+			for (const TCHAR* Wrong : { TEXT("INVISIBLE"), TEXT("away"), TEXT("ONLINE"), TEXT("") })
+			{
+				const FWonderlandSocialActionResult Got = Probe->Request(TEXT("presence.set"), Wrong);
+				Line(FString::Printf(TEXT("PR%d"), Case++), !Got.bOk && !Got.bPending,
+					FString::Printf(TEXT("'%s' refused before sending (%s)"), Wrong, *Got.Reason));
+			}
+			for (const TCHAR* Right : { TEXT("AVAILABLE"), TEXT("AWAY"), TEXT("BUSY"), TEXT("APPEAR_OFFLINE") })
+			{
+				const FWonderlandSocialActionResult Got = Probe->Request(TEXT("presence.set"), Right);
+				Line(FString::Printf(TEXT("PR%d"), Case++), Got.bOk && Got.bPending, FString::Printf(TEXT("'%s' accepted and sent"), Right));
+			}
+			// THE CONTROL: the refusal is the presence rule's, not the service's -- a real operation on the same probe is sent
+			const FWonderlandSocialActionResult Other = Probe->Request(TEXT("requests.send"), TEXT("qa_user"));
+			Line(TEXT("PC1"), Other.bOk && Other.bPending, TEXT("control: requests.send on the same service is NOT refused"));
+			Probe.Reset();   // cancels every request it started (they were to a dead port)
+			UE_LOG(LogTemp, Display, TEXT("WLQA PRESENCE END pass=%d fail=%d"), Passed, Failed);
+		}));
+
 	/** Open a player's profile from the social service's view -- the same path a Friends row will take. */
 	FAutoConsoleCommandWithWorldAndArgs GSocialProfile(
 		TEXT("wl.Social.Profile"),
