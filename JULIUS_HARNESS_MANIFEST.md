@@ -486,6 +486,7 @@ Production Julius modules that implement a Julius port but are not reached from 
 
 | package | kind |
 | --- | --- |
+| `node:async_hooks` | node |
 | `node:child_process` | node |
 | `node:crypto` | node |
 | `node:fs` | node |
