@@ -1,5 +1,7 @@
 #include "WonderlandSocialSignIn.h"
 
+#include "WonderlandBeta.h"
+
 #include "Dom/JsonObject.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
@@ -16,10 +18,20 @@
 // Named, not anonymous: the module builds as one unity translation unit.
 namespace WonderlandSocialSignInLogic
 {
-	/** The only page the client will ever open for a sign-in: GitHub's own. A bridge cannot send the player elsewhere. */
+	/** The only page the client will ever open for a sign-in: GitHub's own. A bridge cannot send the player elsewhere. The ONE
+	 *  exception is a DEVELOPER session against the bridge's fenced loopback GitHub stand-in (WONDERLAND_SOCIAL_GITHUB_STUB: refused in
+	 *  production, its identities never count for R16): a loopback http page. A player build never takes that branch. */
 	bool IsGitHubPage(const FString& Uri)
 	{
-		return Uri.StartsWith(TEXT("https://github.com/"), ESearchCase::IgnoreCase) && !Uri.Contains(TEXT(" ")) && Uri.Len() < 200;
+		if (Uri.Contains(TEXT(" ")) || Uri.Len() >= 200)
+		{
+			return false;
+		}
+		if (Uri.StartsWith(TEXT("https://github.com/"), ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+		return WonderlandBeta::IsDeveloperSession() && (Uri.StartsWith(TEXT("http://127.0.0.1:")) || Uri.StartsWith(TEXT("http://localhost:")));
 	}
 
 	/** A refusal, in words for a person. The kind is the bridge's short code; nothing GitHub said is ever echoed. */
