@@ -38,6 +38,39 @@ import type { Pool, PoolClient } from 'pg';
  */
 export const JULIUS_SERIALIZABLE_ATTEMPTS = 6;
 
+/**
+ * THE PLAN PIN: A SERIALIZABLE READ OF ONE RUN LOCKS ONE RUN, NOT THE TABLE.
+ *
+ * WHAT IT WAS (row 13 (i), the third mechanism, measured 2026-10-03). Under
+ * SERIALIZABLE every read takes a predicate lock, and the plan decides its size:
+ * an index scan locks the index page it searched and the row it returned; a
+ * sequential scan locks the WHOLE relation, and reads every row in it. Every
+ * Julius transaction reads `julius_runs`: the append's run-ownership read, a
+ * transition's own UPDATE, and every foreign key that names a run. On a fresh
+ * database — every CI job, every paid run — that table holds a few rows on one
+ * page, so the planner reads it sequentially. Then any two overlapping
+ * transactions on two DIFFERENT runs form a read/write cycle (each read the
+ * other's row, each wrote under the other's relation lock), and one is
+ * cancelled with 40001. The fixed append still lost two transitions to it under
+ * the 8-writer stress (78–81 conflicts per run); with this pin, 1.
+ *
+ * WHAT IT IS. Before its body, each attempt's transaction asks the planner for
+ * index scans (`enable_seqscan` off: a table no index can answer is still read
+ * sequentially) and for a fresh plan at every execution (`plan_cache_mode`
+ * force_custom_plan), so a foreign-key check's generic plan, cached earlier on
+ * this pooled connection without the pin, cannot bring the relation lock back.
+ * Both are SET LOCAL: they end with the transaction and never reach the pool.
+ * And SET, unlike a SELECT, takes no snapshot, so the transaction's snapshot is
+ * still fixed by the body's first statement, exactly as before the pin.
+ * Planner settings change no result, only how rows are found.
+ *
+ * WHAT IT IS NOT. A transition whose read and write are separate statements can
+ * still meet another run's transition on the run index's leaf page: `state` is
+ * indexed, so every transition inserts index entries there. That residual is
+ * measured, not assumed away (`julius-plan-pin.real-postgres.test.ts`, PIN-5).
+ */
+export const JULIUS_PLAN_PIN = 'SET LOCAL enable_seqscan = off; SET LOCAL plan_cache_mode = force_custom_plan';
+
 /** PostgreSQL's serialization failure or deadlock, and not a caller-owned conflict. */
 export function isJuliusSerializationFailure(error: unknown): boolean {
   if (error === null || typeof error !== 'object' || !('code' in error)) return false;
@@ -47,9 +80,10 @@ export function isJuliusSerializationFailure(error: unknown): boolean {
 }
 
 /**
- * Run `effect` in one SERIALIZABLE transaction, retrying a serialization
- * failure up to `attempts` times with a short jittered pause. Every attempt
- * gets its own connection, rolls back on failure and releases the connection.
+ * Run `effect` in one SERIALIZABLE transaction under the plan pin, retrying a
+ * serialization failure up to `attempts` times with a short jittered pause.
+ * Every attempt gets its own connection and its own pin, rolls back on failure
+ * and releases the connection.
  */
 export async function juliusSerializable<T>(
   pool: Pick<Pool, 'connect'>,
@@ -62,6 +96,7 @@ export async function juliusSerializable<T>(
     const client = await pool.connect();
     try {
       await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+      await client.query(JULIUS_PLAN_PIN);
       const value = await effect(client);
       await client.query('COMMIT');
       return value;

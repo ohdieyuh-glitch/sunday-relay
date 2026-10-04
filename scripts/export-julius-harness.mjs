@@ -232,6 +232,8 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-artifacts.ts', 'ARTIFACTS / EVIDENCE'],
   ['src/relay/mission/julius/julius-verification-runtime.ts', 'VERIFICATION'],
   ['src/relay/mission/julius/julius-attempt-evidence.ts', 'VERIFICATION'],
+  // An ACCEPT cites the review whose verdict was applied, or is not written.
+  ['src/relay/mission/julius/julius-accept-review-gate.ts', 'VERIFICATION'],
   ['src/relay/mission/julius/julius-repair-runtime.ts', 'REPAIR'],
   ['src/relay/mission/julius/julius-repair-lineage.ts', 'REPAIR'],
   ['src/relay/mission/julius/julius-release-runtime.ts', 'TASK GRAPH / SCHEDULER'],

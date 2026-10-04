@@ -4,7 +4,7 @@ import type { JuliusOperationalEvent } from '../mission/julius';
 import { JuliusEventPostgresRepository } from './julius-event-postgres';
 import { JuliusPostgresRepository } from './julius-postgres';
 import { JuliusRepairPostgresRepository } from './julius-repair-postgres';
-import { JULIUS_SERIALIZABLE_ATTEMPTS, isJuliusSerializationFailure, juliusSerializable } from './julius-serializable';
+import { JULIUS_PLAN_PIN, JULIUS_SERIALIZABLE_ATTEMPTS, isJuliusSerializationFailure, juliusSerializable } from './julius-serializable';
 import { JuliusSubagentPostgresRepository } from './julius-subagent-postgres';
 import { JuliusToolPostgresRepository } from './julius-tool-postgres';
 
@@ -126,8 +126,73 @@ describe('a serialization failure is retried, because PostgreSQL guarantees it r
     expect(value).toBe('committed on the second attempt');
     expect(attempt, 'the commit-time conflict was retried').toBe(2);
     expect(releases, 'both connections were given back').toBe(2);
-    expect(log, 'attempt 1 rolled back AFTER its failed COMMIT; attempt 2 committed')
-      .toEqual(['1:BEGIN', '1:INSERT', '1:COMMIT', '1:ROLLBACK', '2:BEGIN', '2:INSERT', '2:COMMIT']);
+    expect(log, 'attempt 1 rolled back AFTER its failed COMMIT; attempt 2 committed; each attempt pinned its plan (SET LOCAL)')
+      .toEqual(['1:BEGIN', '1:SET', '1:INSERT', '1:COMMIT', '1:ROLLBACK', '2:BEGIN', '2:SET', '2:INSERT', '2:COMMIT']);
+  });
+
+  /**
+   * THE PLAN PIN (row 13 (i), the third mechanism). A sequential scan under
+   * SERIALIZABLE locks the whole relation, and on a fresh database the planner
+   * reads the small `julius_runs` table no other way. Every attempt therefore
+   * asks for index scans and per-execution plans BEFORE its body runs, so no
+   * statement of the body, and no foreign-key check it triggers, is planned
+   * without the pin. Whether the pin does what it asks is a real-PostgreSQL
+   * question (`julius-plan-pin.real-postgres.test.ts`); these cases pin where and
+   * how it is asked.
+   */
+  it('every attempt pins its plan right after BEGIN and before its body, a retried attempt included', async () => {
+    const statements: string[][] = [];
+    let attempt = 0;
+    const pool = {
+      async connect() {
+        attempt += 1;
+        const mine: string[] = [];
+        statements.push(mine);
+        const failing = attempt === 1;
+        return {
+          async query(sql: string) {
+            mine.push(sql);
+            if (failing && sql.startsWith('INSERT')) throw serialization();
+            return { rows: [], rowCount: 1 };
+          },
+          release() {},
+        };
+      },
+    } as never;
+    await juliusSerializable(pool, async (client) => { await client.query('INSERT INTO t VALUES(1)'); }, { pause: noPause });
+    expect(statements, 'attempt 1 failed in its body and rolled back; attempt 2 was pinned again before it ran').toEqual([
+      ['BEGIN ISOLATION LEVEL SERIALIZABLE', JULIUS_PLAN_PIN, 'INSERT INTO t VALUES(1)', 'ROLLBACK'],
+      ['BEGIN ISOLATION LEVEL SERIALIZABLE', JULIUS_PLAN_PIN, 'INSERT INTO t VALUES(1)', 'COMMIT'],
+    ]);
+  });
+
+  it('the pin is LOCAL to its transaction, takes no snapshot, and asks for exactly two things: index scans and a plan per execution', () => {
+    const statements = JULIUS_PLAN_PIN.split(';').map((statement) => statement.trim());
+    expect(statements, 'two SET LOCALs: they end with the transaction; a SET (unlike a SELECT) does not fix the snapshot')
+      .toEqual(['SET LOCAL enable_seqscan = off', 'SET LOCAL plan_cache_mode = force_custom_plan']);
+    expect(JULIUS_PLAN_PIN, 'nothing for the session or the pool').not.toMatch(/SET\s+SESSION|set_config|SELECT/iu);
+  });
+
+  it('a pin the server refuses fails the attempt: the body never runs unpinned, and the attempt rolls back and releases', async () => {
+    const log: string[] = [];
+    let releases = 0;
+    let bodyRan = false;
+    const pool = {
+      async connect() {
+        return {
+          async query(sql: string) {
+            log.push(sql.split(/\s+/u)[0]!);
+            if (sql === JULIUS_PLAN_PIN) throw Object.assign(new Error('unrecognized configuration parameter "plan_cache_mode"'), { code: '42704' });
+            return { rows: [], rowCount: 1 };
+          },
+          release() { releases += 1; },
+        };
+      },
+    } as never;
+    await expect(juliusSerializable(pool, async () => { bodyRan = true; }, { pause: noPause })).rejects.toMatchObject({ code: '42704' });
+    expect(bodyRan, 'no unpinned body').toBe(false);
+    expect(log, 'not a serialization failure, so not retried').toEqual(['BEGIN', 'SET', 'ROLLBACK']);
+    expect(releases).toBe(1);
   });
 
   /**
