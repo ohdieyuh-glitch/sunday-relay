@@ -374,8 +374,9 @@ public:
 
 	/**
 	 * THE OBJECTIVE AS IT MAY BE KEPT (the founder's fail-closed; Second's review, 10-03): every word the free-text screen
-	 * (FWonderlandCardStore::FindSecrets) flags is REDACTED before anything is saved -- a CERTAIN one always, a STATISTICAL one unless
-	 * bKeepAsTyped (the player's explicit /keep). Counts what was removed. An objective that was nothing but a key is refused.
+	 * (FWonderlandCardStore::FindSecrets) flags is REDACTED before anything is saved -- a CERTAIN one always, a STATISTICAL one or (r7) a
+	 * label's WEAK value unless bKeepAsTyped (the player's explicit /keep). Counts what was removed. An objective that was nothing but a key
+	 * is refused.
 	 * SubmitDraft is this with bKeepAsTyped false. Plain C++: no reflection.
 	 */
 	bool SubmitDraftScreened(FGuid LocalId, const FString& Objective, bool bKeepAsTyped, int32& OutRedactedCertain, int32& OutRedactedStatistical);
@@ -384,7 +385,9 @@ public:
 
 	/**
 	 * THE RESTORE'S SCREEN, one rule for the load path and the QA (plain C++, not reflected). A task the player /keep'd is re-screened for
-	 * the CERTAIN class only, and any other in full, fail-closed. The redaction marker is never a find, so screening is idempotent.
+	 * what is certain by its own SHAPE only (r7), and any other fail-closed -- except a label's weak value, which a restore never applies
+	 * (r7, Second's (b): r6 rewrote pre-r6 prose for good). The redaction marker is never a find and the screen runs to its fixpoint, so
+	 * screening is idempotent.
 	 * bOutChanged: something was redacted.
 	 */
 	static FString ScreenRestoredObjective(const FWonderlandMissionTask& Task, bool& bOutChanged);

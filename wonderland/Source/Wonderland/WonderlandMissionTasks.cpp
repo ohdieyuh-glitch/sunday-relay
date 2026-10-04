@@ -521,14 +521,21 @@ namespace
 {
 	/** The objective as the free-text screen lets it be kept: screened as every redacting caller screens (ScreenText: space-like
 	 *  characters kept as spaces, invisibles gone, both views read -- Second's round-5 MAJORs 1-3), every find redacted (the statistical
-	 *  ones only without /keep). Counts what was removed. */
-	FString WonderlandScreenObjective(const FString& Typed, bool bKeepAsTyped, int32& OutCertain, int32& OutStatistical)
+	 *  ones only without /keep). Counts what was removed.
+	 *  r7 (Second's (b)), bForRestore: a RESTART applies no label's weak value -- a pre-r7 contract's prose ("update the password Policy page")
+	 *  is never rewritten -- and to a /keep'd objective only what is certain by its own SHAPE, so the player's word survives whatever its
+	 *  neighbours became. */
+	FString WonderlandScreenObjective(const FString& Typed, bool bKeepAsTyped, int32& OutCertain, int32& OutStatistical, bool bForRestore = false)
 	{
 		OutCertain = 0;
 		OutStatistical = 0;
 		FString Screened;
 		TArray<FWonderlandCardStore::FSecretFind> Finds;
 		FWonderlandCardStore::ScreenText(Typed, Screened, Finds);
+		if (bForRestore && (FWonderlandCardStore::QaRulesOff() & FWonderlandCardStore::QaRuleClasses) == 0)
+		{
+			Finds.RemoveAll([bKeepAsTyped](const FWonderlandCardStore::FSecretFind& Find) { return bKeepAsTyped ? !Find.bShape : Find.bWeak; });
+		}
 		if (Finds.Num() == 0)
 		{
 			return Typed;
@@ -628,13 +635,14 @@ bool UWonderlandMissionTaskSubsystem::KeepObjectiveAsTyped(FGuid LocalId, const 
 FString UWonderlandMissionTaskSubsystem::ScreenRestoredObjective(const FWonderlandMissionTask& Task, bool& bOutChanged)
 {
 	// A WORD THE PLAYER KEPT WITH /keep IS THEIRS (CORE's read, round 5: the restore screened every objective in full, so the next restart
-	// undid every /keep). A kept task is re-screened for the CERTAIN class only: a key's certain shapes never survive, a kept word does.
-	// Any other objective gets the whole screen, fail-closed: a key kept before the screen existed. Either way it is idempotent -- the
-	// redaction's marker is never a find -- so a restored objective is not re-redacted on every load (Second's R8a).
+	// undid every /keep). A kept task is re-screened for what is certain by its own SHAPE only (r7): a key never survives, a kept word does.
+	// Any other objective gets the screen fail-closed -- a key or a strong password kept before the screen existed -- except a label's WEAK
+	// value (r7, Second's (b)): r6 rewrote "update the password Policy page" for good at the first restart. Either way it is idempotent -- the
+	// redaction's marker is never a find, and the screen runs to its fixpoint -- so a restored objective is not re-redacted on every load.
 	const bool bPlayerKept = Task.Lifecycle.ContainsByPredicate([](const FString& Entry) { return Entry.Contains(WonderlandKeptMark); });
 	int32 Certain = 0;
 	int32 Statistical = 0;
-	const FString Screened = WonderlandScreenObjective(Task.Objective, bPlayerKept, Certain, Statistical);
+	const FString Screened = WonderlandScreenObjective(Task.Objective, bPlayerKept, Certain, Statistical, true);
 	bOutChanged = Certain + Statistical > 0;
 	return bOutChanged ? Screened : Task.Objective;
 }

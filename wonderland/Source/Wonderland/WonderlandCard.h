@@ -140,13 +140,20 @@ public:
 	/** The secret refusal every stored string passes: provider keys, private keys, tokens, credential references. */
 	static bool LooksLikeSecret(const FString& Text);
 	/** One credential-shaped word the free-text screen found: where it is in the text it was given, and whether it is CERTAIN (a
-	 *  vendor key, a 'sk-' key, a credential word or the word after "Bearer", a JWT-like or PEM line: never stored) or STATISTICAL
-	 *  (random-looking: stored as typed only after the player's explicit /keep). */
+	 *  vendor key, a 'sk-' key, a JWT-like or PEM line, a URL's user:pass@, or (r7) a value a label names that is a credential by its own
+	 *  look: never stored) or keep-able -- STATISTICAL (random-looking) or (r7) a label's WEAK value (a plain or capitalised word, a short
+	 *  number): stored as typed only after the player's explicit /keep. */
 	struct FSecretFind
 	{
 		int32 Start = 0;
 		int32 Length = 0;
 		bool bCertain = false;
+		/** r7 (Second's (a)/(b)): a label's weak value -- redacted, /keep gives it back, and a restart's restore never applies it, so a
+		 *  pre-r7 contract's prose ("update the password Policy page") is never rewritten. */
+		bool bWeak = false;
+		/** r7: certain by its OWN shape, whatever stands around it (a key, a PEM block, a URL's user:pass@) -- the only class a restore
+		 *  applies to a /keep'd objective, so the player's word survives whatever its neighbours became. */
+		bool bShape = false;
 	};
 	/**
 	 * THE FREE-TEXT SCREEN, v2 (the founder's fail-closed; Second's direction and review, 10-03). Every whitespace word is screened:
@@ -168,6 +175,9 @@ public:
 	 * -- and every invisible character gone. OutFinds are over OutScreened: its own finds, plus the finds of the same text split AT its
 	 * invisibles (a zero-width space between a label and its value), each widened to its whole word there, never into a marker; overlaps
 	 * merged. Measured in Python first (CORE r6 model: Second's 66-case corpus 66/66, 0 of 18,000 fuzzed lines change on a second pass).
+	 * r7 (Second's static attack on r6, 10-04): the words are matched on a FOLDED view (look-alike, full-width, marked and math letters and
+	 * connectors read as the ASCII they are drawn as; blank glyphs split words; variation selectors and CGJ are invisible) -- what is stored
+	 * is never folded; and the screen runs to a FIXPOINT: re-screened on what it would store until nothing new is found.
 	 */
 	static void ScreenText(const FString& Text, FString& OutScreened, TArray<FSecretFind>& OutFinds);
 	/** Free text holds a secret: ScreenText finds something in it, or the screen does in it exactly as written. */
@@ -184,6 +194,15 @@ public:
 		QaRuleUrlPieces = 1u << 5,    // label=value read in every piece of a word (a URL's query), the userinfo up to the first '/'
 		QaRuleValueLike = 1u << 6,    // the value-likeness test (off: d831cbd1's 'password-like', which over-redacted)
 		QaRuleLoginPair = 1u << 7,    // "login name:value"
+		// r7 (Second's r6 attack): each a planted control of wl.Qa.SecretInput SI18-SI25
+		QaRuleFold = 1u << 8,         // the folded matching view, blank glyphs as spaces, zero-width marks as invisible, a marker in any case
+		QaRuleNounPhrase = 1u << 9,   // "the password for the new staging db box is X": a noun phrase after a preposition
+		QaRuleFillers = 1u << 10,     // fillers after a connector, a parenthesised value, a clause-final word after "is", status words stop
+		QaRuleContinue = 1u << 11,    // lists, wraps, quoted runs, pass phrases, past a typed marker, every repeat, the fixpoint
+		QaRuleCli = 1u << 12,         // CLI credentials, user:X@host with no scheme, X@host, "login bob / X", "Authorization:Bearer X"
+		QaRuleLabels = 1u << 13,      // OTP, door/access codes, license keys, a bare key, session ids, numbered/leet labels, other languages
+		QaRuleClasses = 1u << 14,     // a label's weak value keep-able and never applied by a restore (off: every label value certain, r6)
+		QaRulePem = 1u << 15,         // a PEM block to the end of its END line (off: r6, which stopped at the BEGIN line's own dashes)
 	};
 	static uint32& QaRulesOff() { static uint32 Off = 0; return Off; }
 	/** A line as it may be SHOWN: every word that holds a secret replaced; a line whose secret no single word shows ("Bearer" and its

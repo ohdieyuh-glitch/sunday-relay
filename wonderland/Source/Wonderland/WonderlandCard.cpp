@@ -864,9 +864,25 @@ namespace
 			|| Code == 0x3000;
 	}
 
+	/** r7 (Second's r6 attack, 10-04): a glyph drawn BLANK though Unicode calls it something else -- the braille blank, the Hangul fillers --
+	 *  separates words as a space does ("password<U+2800>X" was one word no rule read). */
+	bool CardBlankGlyph(uint32 Code)
+	{
+		return Code == 0x2800 || Code == 0x3164 || Code == 0x115F || Code == 0x1160 || Code == 0xFFA0;
+	}
+
+	/** r7: a mark that draws nothing between two letters -- the variation selectors, the combining grapheme joiner, the Khmer inherent vowels,
+	 *  the Mongolian selectors -- is as invisible to the screen as a zero-width space ("password<U+FE0F>X" was glued). Not IsInvisible: a
+	 *  C.A.R.D. label keeps its emoji presentation. */
+	bool CardZeroWidthMark(uint32 Code)
+	{
+		return (Code >= 0xFE00 && Code <= 0xFE0F) || Code == 0x34F || Code == 0x17B4 || Code == 0x17B5 || (Code >= 0x180B && Code <= 0x180F);
+	}
+
 	bool CardSplitsWords(TCHAR Char)
 	{
-		return FChar::IsWhitespace(Char) || CardSpaceLike(static_cast<uint32>(Char));
+		const uint32 Code = static_cast<uint32>(Char);
+		return FChar::IsWhitespace(Char) || CardSpaceLike(Code) || (CardRuleOn(FWonderlandCardStore::QaRuleFold) && CardBlankGlyph(Code));
 	}
 
 	/** The punctuation a word is trimmed of: ASCII, and the typographic quotes ("password “X”", "password «X»"). */
@@ -934,6 +950,84 @@ namespace
 		TEXT("secret"), TEXT("token"), TEXT("apikey"), TEXT("accesskey"), TEXT("privatekey"), TEXT("secretkey"), TEXT("clientsecret"),
 		TEXT("credential"), TEXT("credentials"), TEXT("authorization") };
 
+	/* ------------------------------------------------------------------ r7 (Second's static attack on r6, 10-04: 50 of 100 new attacks leaked)
+	 * Measured in Python before this port (CORE r7 model, m6_core/r7_secrets/r7_screen_model.py, built on Second's own transcription of
+	 * r6): Second's 100 attacks 0 leak (r6: 50); Second's 66-case corpus 66/66; CORE's label x connector x value fuzz 0 of 48,960 (r6: 70%)
+	 * and CLI/config pastes 0 of 460 (r6: 65%); a STRONG value back after /keep 0 of 36,720; label-colon prose 5 of 40 altered, each undone
+	 * by /keep (r6: 30 of 40, for good); ordinary prose 0 of 50; real objectives 2 of 23 and identifiers 23 of 31,974 as before; 0 of
+	 * 10,000 + 18,000 fuzzed lines change on a second pass and 0 /keep'd objectives change at a restore. */
+	const TCHAR* const CardCopulas[] = { TEXT("is"), TEXT("was"), TEXT("were"), TEXT("are"), TEXT("equals"), TEXT("be") };
+	/** Words between a connector and its value that are never the value ("password: now X", "pwd = probably X", "password (it is X)"). */
+	const TCHAR* const CardFillers[] = { TEXT("now"), TEXT("it's"), TEXT("it\u2019s"), TEXT("its"), TEXT("it"), TEXT("probably"), TEXT("maybe"),
+		TEXT("just"), TEXT("actually"), TEXT("currently"), TEXT("simply"), TEXT("likely"), TEXT("perhaps"), TEXT("definitely"), TEXT("still"),
+		TEXT("also"), TEXT("literally"), TEXT("basically"), TEXT("temporarily"), TEXT("again"), TEXT("finally"), TEXT("is"), TEXT("was"),
+		TEXT("be"), TEXT("will") };
+	/** What a word after "password:" or "the token is" says about its STATE or WHERE it is, never what it is ("password: required", "token:
+	 *  expired", "password: see the vault", "secret: don't cache it"): the window stops there. */
+	const TCHAR* const CardNonValues[] = { TEXT("required"), TEXT("optional"), TEXT("invalid"), TEXT("valid"), TEXT("expired"), TEXT("missing"),
+		TEXT("none"), TEXT("null"), TEXT("nil"), TEXT("empty"), TEXT("blank"), TEXT("tbd"), TEXT("tba"), TEXT("n/a"), TEXT("pending"), TEXT("unknown"),
+		TEXT("unset"), TEXT("set"), TEXT("reset"), TEXT("changed"), TEXT("updated"), TEXT("rotated"), TEXT("revoked"), TEXT("hashed"),
+		TEXT("encrypted"), TEXT("masked"), TEXT("hidden"), TEXT("redacted"), TEXT("removed"), TEXT("deleted"), TEXT("stored"), TEXT("saved"),
+		TEXT("kept"), TEXT("needed"), TEXT("mandatory"), TEXT("wrong"), TEXT("incorrect"), TEXT("correct"), TEXT("weak"), TEXT("strong"),
+		TEXT("short"), TEXT("long"), TEXT("secure"), TEXT("insecure"), TEXT("safe"), TEXT("unsafe"), TEXT("broken"), TEXT("fine"), TEXT("ok"),
+		TEXT("okay"), TEXT("ready"), TEXT("done"), TEXT("same"), TEXT("different"), TEXT("forgotten"), TEXT("lost"), TEXT("compromised"),
+		TEXT("leaked"), TEXT("disabled"), TEXT("enabled"), TEXT("locked"), TEXT("unlocked"), TEXT("see"), TEXT("check"), TEXT("ask"), TEXT("use"),
+		TEXT("refer"), TEXT("below"), TEXT("above"), TEXT("attached"), TEXT("provided"), TEXT("default"), TEXT("generated"), TEXT("random"),
+		TEXT("temporary"), TEXT("private"), TEXT("public"), TEXT("secret"), TEXT("sensitive"), TEXT("confidential"), TEXT("too"), TEXT("here"),
+		TEXT("there"), TEXT("inside"), TEXT("elsewhere"), TEXT("unchanged"), TEXT("don't"), TEXT("dont"), TEXT("don\u2019t"), TEXT("do"),
+		TEXT("does"), TEXT("never"), TEXT("should"), TEXT("must"), TEXT("can't"), TEXT("cannot"), TEXT("won't"), TEXT("isn't"), TEXT("not") };
+	const TCHAR* const CardClauseJoins[] = { TEXT("and"), TEXT("but"), TEXT("so"), TEXT("or"), TEXT("then"), TEXT("please"), TEXT("thanks"), TEXT("thx") };
+	/** The endings of words that describe ("the password is changing"), never name, a value. */
+	const TCHAR* const CardProseSuffixes[] = { TEXT("ed"), TEXT("ing"), TEXT("ly"), TEXT("able"), TEXT("ible"), TEXT("ful"), TEXT("less"),
+		TEXT("ous"), TEXT("ive") };
+	/** The first word of a two-word label r7 adds: "license key", "recovery key", "wifi key", "root secret" ... */
+	const TCHAR* const CardQualifiersR7[] = { TEXT("license"), TEXT("licence"), TEXT("product"), TEXT("serial"), TEXT("activation"),
+		TEXT("registration"), TEXT("recovery"), TEXT("wifi"), TEXT("backup"), TEXT("deploy"), TEXT("root"), TEXT("admin"), TEXT("session"), TEXT("auth"),
+		TEXT("decryption"), TEXT("gpg"), TEXT("pgp"), TEXT("door"), TEXT("access"), TEXT("security"), TEXT("verification"), TEXT("otp"), TEXT("2fa"),
+		TEXT("mfa"), TEXT("pin"), TEXT("gate"), TEXT("alarm"), TEXT("safe"), TEXT("lock"), TEXT("entry"), TEXT("garage"), TEXT("sms"), TEXT("login"),
+		TEXT("unlock"), TEXT("one-time"), TEXT("master"), TEXT("api") };
+	/** The word before "code" that makes it a credential: "door code", "access code", "2fa code" -- never "error code" or "source code". */
+	const TCHAR* const CardCodeQualifiers[] = { TEXT("door"), TEXT("access"), TEXT("security"), TEXT("verification"), TEXT("auth"), TEXT("2fa"),
+		TEXT("mfa"), TEXT("otp"), TEXT("backup"), TEXT("recovery"), TEXT("pin"), TEXT("gate"), TEXT("alarm"), TEXT("safe"), TEXT("lock"),
+		TEXT("entry"), TEXT("garage"), TEXT("wifi"), TEXT("one-time"), TEXT("sms"), TEXT("login"), TEXT("unlock"), TEXT("pass"), TEXT("secret") };
+	const TCHAR* const CardPinWords[] = { TEXT("otp"), TEXT("totp"), TEXT("hotp"), TEXT("mfacode"), TEXT("2facode"), TEXT("smscode") };
+	const TCHAR* const CardTokenWords[] = { TEXT("sessionid"), TEXT("sessid"), TEXT("sessionkey"), TEXT("sessioncookie") };
+	/** The word for password in other languages, its accents folded (Passwort, Kennwort, contrasena, wachtwoord, senha, haslo, sifre ...). */
+	const TCHAR* const CardForeignLabels[] = { TEXT("passwort"), TEXT("kennwort"), TEXT("contrasena"), TEXT("clave"), TEXT("senha"),
+		TEXT("wachtwoord"), TEXT("losenord"), TEXT("adgangskode"), TEXT("passord"), TEXT("salasana"), TEXT("haslo"), TEXT("sifre"), TEXT("heslo"),
+		TEXT("jelszo"), TEXT("parola"), TEXT("motdepasse"), TEXT("mdp"), TEXT("lozinka"), TEXT("geslo"), TEXT("parool"), TEXT("parolis"),
+		TEXT("slaptazodis") };
+	/** ... and in other scripts, as typed (Russian in three cases, Chinese, Japanese, Korean, Hebrew, Hindi, Thai). */
+	const TCHAR* const CardForeignScriptLabels[] = { TEXT("\u043F\u0430\u0440\u043E\u043B\u044C"), TEXT("\u041F\u0430\u0440\u043E\u043B\u044C"),
+		TEXT("\u041F\u0410\u0420\u041E\u041B\u042C"), TEXT("\u5BC6\u7801"), TEXT("\u5BC6\u78BC"), TEXT("\u30D1\u30B9\u30EF\u30FC\u30C9"),
+		TEXT("\uBE44\uBC00\uBC88\uD638"), TEXT("\uC554\uD638"), TEXT("\u05E1\u05D9\u05E1\u05DE\u05D4"), TEXT("\u092A\u093E\u0938\u0935\u0930\u094D\u0921"),
+		TEXT("\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E48\u0E32\u0E19") };
+	/** Labels written with no space before their value ("<password>:X", "<password> is X" in one word), and what may join them -- longest first. */
+	const TCHAR* const CardForeignGluedLabels[] = { TEXT("\u5BC6\u7801"), TEXT("\u5BC6\u78BC"), TEXT("\u30D1\u30B9\u30EF\u30FC\u30C9"),
+		TEXT("\uBE44\uBC00\uBC88\uD638") };
+	const TCHAR* const CardGlueAfter[] = { TEXT("\u306F\u3001"), TEXT(":"), TEXT("="), TEXT("\u662F"), TEXT("\u4E3A"), TEXT("\u70BA"), TEXT("\u306F"),
+		TEXT("\uB294"), TEXT("\uC740") };
+	/** A password-family label: its clause-final plain word after "is" is taken ("the password is marmalade"); a token's or a key's is not. */
+	const TCHAR* const CardPasswordFamily[] = { TEXT("password"), TEXT("passwd"), TEXT("passphrase"), TEXT("passcode"), TEXT("pwd") };
+	/** The CLI user flags a "name:value" login pair follows ("curl -u admin:X"). */
+	const TCHAR* const CardCliLoginFlags[] = { TEXT("-u"), TEXT("--user"), TEXT("--username"), TEXT("-user"), TEXT("--login") };
+	/** A CLI password flag is one only after its own command: "mysql -pX", "sshpass -p X", "docker login -p X", "redis-cli -a X" -- never
+	 *  "ssh -p 2222" or "mkdir -p dir". */
+	struct FCardCliPassword
+	{
+		const TCHAR* Command;
+		const TCHAR* Flag;
+	};
+	const FCardCliPassword CardCliPasswords[] = { { TEXT("sshpass"), TEXT("-p") }, { TEXT("mysql"), TEXT("-p") }, { TEXT("mysqldump"), TEXT("-p") },
+		{ TEXT("mysqladmin"), TEXT("-p") }, { TEXT("mariadb"), TEXT("-p") }, { TEXT("mariadb-dump"), TEXT("-p") }, { TEXT("login"), TEXT("-p") },
+		{ TEXT("redis-cli"), TEXT("-a") } };
+	/** "name:value@host" with no scheme is a login unless the name is a scheme of its own ("mailto:bob@example.com"). */
+	const TCHAR* const CardNotUserinfo[] = { TEXT("mailto"), TEXT("tel"), TEXT("sip"), TEXT("sips"), TEXT("xmpp"), TEXT("http"), TEXT("https"),
+		TEXT("ftp"), TEXT("ssh"), TEXT("file"), TEXT("news"), TEXT("urn"), TEXT("data") };
+	const TCHAR* const CardValueSymbols = TEXT("!@#$%^&*+=?~|<>\\;:,\"'`()[]{}");
+	const TCHAR* const CardQuoteOpen = TEXT("\"'`\u201C\u2018\u00AB");
+	const TCHAR* const CardQuoteClose = TEXT("\"'`\u201D\u2019\u00BB");
+
 	FString CardBare(const FString& Text)
 	{
 		FString Bare;
@@ -949,10 +1043,124 @@ namespace
 
 	/** What a label word is: Whole (a short word that is a label only with a value: pass, pw, creds, auth), Pin (pin/pincode: 4+ digits),
 	 *  Token (a number after it is a quantity: "set token 128000 as the limit"), EnvKey (*_KEY: its value must look like one, or
-	 *  "SORT_KEY=name" would go), Normal. */
-	enum class ECardLabelKind : uint8 { None, Whole, Pin, Token, EnvKey, Normal };
+	 *  "SORT_KEY=name" would go), Normal; r7: Phrase (a pass phrase: its words after the first are taken too). */
+	enum class ECardLabelKind : uint8 { None, Whole, Pin, Token, EnvKey, Normal, Phrase };
 
-	ECardLabelKind CardLabelKind(const FString& RawWord)
+	/** r7: "p@ssw0rd", "pa$$word", "s3cr3t" read as the letters they stand for. */
+	TCHAR CardLeet(TCHAR Char)
+	{
+		switch (Char)
+		{
+		case TEXT('@'): case TEXT('4'): return TEXT('a');
+		case TEXT('0'): return TEXT('o');
+		case TEXT('$'): case TEXT('5'): return TEXT('s');
+		case TEXT('3'): return TEXT('e');
+		case TEXT('1'): case TEXT('!'): return TEXT('i');
+		case TEXT('7'): return TEXT('t');
+		case TEXT('|'): return TEXT('l');
+		default: return Char;
+		}
+	}
+
+	/** The kind a label's letters and digits name (r6's rule, read once for every spelling r7 tries). */
+	ECardLabelKind CardKindOfBare(const FString& Bare)
+	{
+		if (Bare.IsEmpty())
+		{
+			return ECardLabelKind::None;
+		}
+		if (Bare == TEXT("pin") || Bare == TEXT("pincode"))
+		{
+			return ECardLabelKind::Pin;
+		}
+		if (Bare == TEXT("pass") || Bare == TEXT("pw") || Bare == TEXT("creds") || Bare == TEXT("auth"))
+		{
+			return ECardLabelKind::Whole;
+		}
+		for (const TCHAR* Ending : CardLabelEndings)
+		{
+			const bool bPlural = Bare.EndsWith(TEXT("s"), ESearchCase::CaseSensitive) && Bare.LeftChop(1).EndsWith(Ending, ESearchCase::CaseSensitive)
+				&& FCString::Strcmp(Ending, TEXT("credentials")) != 0;
+			if (Bare.EndsWith(Ending, ESearchCase::CaseSensitive) || bPlural)
+			{
+				if (FCString::Strcmp(Ending, TEXT("passphrase")) == 0 && CardRuleOn(FWonderlandCardStore::QaRuleContinue))
+				{
+					return ECardLabelKind::Phrase;
+				}
+				return FCString::Strcmp(Ending, TEXT("token")) == 0 ? ECardLabelKind::Token : ECardLabelKind::Normal;
+			}
+		}
+		return ECardLabelKind::None;
+	}
+
+	/** r7's labels (QaRuleLabels): OTP, a door/access code, a bare "key", a session id, the word in other languages and scripts, a numbered
+	 *  label ("password1"), a leet one ("p@ssw0rd"). Lower and Bare are the word's; Orig is it as typed (unfolded). */
+	ECardLabelKind CardLabelKindR7(const FString& Lower, const FString& Bare, const FString& OrigWord, const FString& PreviousLower)
+	{
+		if (CardOneOf(Bare, CardPinWords))
+		{
+			return ECardLabelKind::Pin;
+		}
+		if (Bare == TEXT("key"))
+		{
+			return ECardLabelKind::EnvKey;
+		}
+		if (Bare == TEXT("code") && CardOneOf(PreviousLower, CardCodeQualifiers))
+		{
+			return ECardLabelKind::Normal;
+		}
+		if (CardOneOf(Bare, CardTokenWords))
+		{
+			return ECardLabelKind::Token;
+		}
+		if (CardOneOf(Bare, CardForeignLabels))
+		{
+			return ECardLabelKind::Normal;
+		}
+		FString Stripped = Lower;
+		while (Stripped.Len() > 0 && FCString::Strchr(TEXT("0123456789-=:>|"), Stripped[Stripped.Len() - 1]) != nullptr)
+		{
+			Stripped.LeftChopInline(1);
+		}
+		const FString StrippedBare = CardBare(Stripped);
+		if (!StrippedBare.Equals(Bare, ESearchCase::CaseSensitive) && StrippedBare.Len() >= 4)
+		{
+			const ECardLabelKind Numbered = CardKindOfBare(StrippedBare);
+			if (Numbered != ECardLabelKind::None)
+			{
+				return Numbered;
+			}
+		}
+		int32 Letters = 0;
+		for (const TCHAR Char : Stripped)
+		{
+			Letters += CardAsciiLetter(Char) ? 1 : 0;
+		}
+		if (Letters >= 2)
+		{
+			FString Leet;
+			for (const TCHAR Char : Stripped)
+			{
+				Leet.AppendChar(CardLeet(Char));
+			}
+			if (!Leet.Equals(Stripped, ESearchCase::CaseSensitive))
+			{
+				const ECardLabelKind Spelled = CardKindOfBare(CardBare(Leet));
+				if (Spelled != ECardLabelKind::None)
+				{
+					return Spelled;
+				}
+			}
+		}
+		FString Orig = CardTrimEdges(OrigWord);
+		while (Orig.Len() > 0 && FCString::Strchr(TEXT("-=:>|"), Orig[Orig.Len() - 1]) != nullptr)
+		{
+			Orig.LeftChopInline(1);
+		}
+		return CardOneOf(Orig, CardForeignScriptLabels) ? ECardLabelKind::Normal : ECardLabelKind::None;
+	}
+
+	ECardLabelKind CardLabelKind(const FString& RawWord, const FString& OrigWord = FString(), const FString& PreviousLower = FString())
 	{
 		const FString Word = CardTrimEdges(RawWord);
 		if (!CardRuleOn(FWonderlandCardStore::QaRuleLabelForms))
@@ -987,28 +1195,13 @@ namespace
 			}
 		}
 		const FString Bare = CardBare(Lower);
-		if (Bare.IsEmpty())
+		const ECardLabelKind Kind = CardKindOfBare(Bare);
+		// an empty Bare still reaches r7: a label in another script has no ASCII letters at all
+		if (Kind != ECardLabelKind::None || !CardRuleOn(FWonderlandCardStore::QaRuleLabels))
 		{
-			return ECardLabelKind::None;
+			return Kind;
 		}
-		if (Bare == TEXT("pin") || Bare == TEXT("pincode"))
-		{
-			return ECardLabelKind::Pin;
-		}
-		if (Bare == TEXT("pass") || Bare == TEXT("pw") || Bare == TEXT("creds") || Bare == TEXT("auth"))
-		{
-			return ECardLabelKind::Whole;
-		}
-		for (const TCHAR* Ending : CardLabelEndings)
-		{
-			const bool bPlural = Bare.EndsWith(TEXT("s"), ESearchCase::CaseSensitive) && Bare.LeftChop(1).EndsWith(Ending, ESearchCase::CaseSensitive)
-				&& FCString::Strcmp(Ending, TEXT("credentials")) != 0;
-			if (Bare.EndsWith(Ending, ESearchCase::CaseSensitive) || bPlural)
-			{
-				return FCString::Strcmp(Ending, TEXT("token")) == 0 ? ECardLabelKind::Token : ECardLabelKind::Normal;
-			}
-		}
-		return ECardLabelKind::None;
+		return CardLabelKindR7(Lower, Bare, OrigWord, PreviousLower);
 	}
 
 	/** A lowercase letters-only part reads as English: short, a common word the pair test misreads, or a vowel and >= 60% of its letter
@@ -1069,7 +1262,7 @@ namespace
 	 * right after a label ("the password Swordfish"), a word no English reads like, digits or symbols in a part, 4+ words joined (a
 	 * pass phrase).
 	 */
-	bool CardValueLike(const FString& Word, ECardLabelKind Kind)
+	bool CardValueLikeBase(const FString& Word, ECardLabelKind Kind)
 	{
 		if (!CardRuleOn(FWonderlandCardStore::QaRuleValueLike))
 		{
@@ -1144,63 +1337,39 @@ namespace
 		return Parts.Num() >= 4;   // a pass phrase of four or more words
 	}
 
-	/** A label and its value in one word, read in EVERY piece of it -- split at ? & ; # -- so a URL's query is read pair by pair and the
-	 *  scheme's ':' is never taken as the cut ("https://h/login?pwd=X", "?api-key=X", "DB_PASS=X"). */
-	bool CardLabelWithValueR6(const FString& Word)
+	/** r7: two or more capitalised words joined by - _ . ("Correct-Horse-Battery"): a pass phrase, not prose. */
+	bool CardCapitalisedJoined(const FString& Word)
 	{
-		if (!CardRuleOn(FWonderlandCardStore::QaRuleUrlPieces))
-		{
-			return CardLabelWithValue(Word.ToLower());
-		}
-		int32 From = 0;
+		int32 Parts = 0;
+		int32 Capitals = 0;
+		FString Part;
 		for (int32 At = 0; At <= Word.Len(); ++At)
 		{
-			if (At < Word.Len() && FCString::Strchr(TEXT("?&;#"), Word[At]) == nullptr)
+			const TCHAR Char = At < Word.Len() ? Word[At] : TEXT('-');
+			if (Char == TEXT('-') || Char == TEXT('_') || Char == TEXT('.'))
 			{
-				continue;
-			}
-			FString Piece = Word.Mid(From, At - From);
-			From = At + 1;
-			int32 Lead = 0;
-			while (Lead < Piece.Len() && CardEdge(Piece[Lead]))
-			{
-				++Lead;
-			}
-			Piece.RightChopInline(Lead);
-			int32 Cut = INDEX_NONE;
-			for (int32 Find = 0; Find < Piece.Len(); ++Find)
-			{
-				if (Piece[Find] == TEXT(':') || Piece[Find] == TEXT('='))
+				if (!Part.IsEmpty())
 				{
-					Cut = Find;
-					break;
+					if (!CardAllOf(Part, 0, Part.Len(), &CardAsciiLetter))
+					{
+						return false;
+					}
+					++Parts;
+					Capitals += FChar::IsUpper(Part[0]) ? 1 : 0;
 				}
-			}
-			if (Cut <= 0 || Cut + 1 >= Piece.Len())
-			{
+				Part.Reset();
 				continue;
 			}
-			const ECardLabelKind Kind = CardLabelKind(Piece.Left(Cut));
-			if (Kind == ECardLabelKind::None)
-			{
-				continue;
-			}
-			FString Value = Piece.Mid(Cut + 1);
-			while (Value.Len() > 0 && (Value[0] == TEXT(':') || Value[0] == TEXT('=')))
-			{
-				Value.RightChopInline(1);
-			}
-			Value = CardTrimEdges(Value);
-			if (Kind == ECardLabelKind::EnvKey && !CardValueLike(Value, Kind))
-			{
-				continue;
-			}
-			if (!Value.IsEmpty())
-			{
-				return true;
-			}
+			Part.AppendChar(Char);
 		}
-		return false;
+		return Parts >= 2 && Capitals >= 2;
+	}
+
+	bool CardValueLike(const FString& Word, ECardLabelKind Kind)
+	{
+		const ECardLabelKind Read = Kind == ECardLabelKind::Phrase ? ECardLabelKind::Normal : Kind;
+		return CardValueLikeBase(Word, Read) || (CardRuleOn(FWonderlandCardStore::QaRuleFillers) && CardRuleOn(FWonderlandCardStore::QaRuleValueLike)
+			&& !Word.IsEmpty() && CardCapitalisedJoined(Word));
 	}
 
 	/** The second word of a two-word label glued to its value: "api key:X", "client secret=X" (the word "key:X" / "secret=X"). */
@@ -1254,9 +1423,605 @@ namespace
 	}
 }
 
+namespace
+{
+	/* ------------------------------------------------------------------ r7: the matching view, a value's strength, label=value read whole */
+
+	/** r7: GENERATED from the CORE r7 model (m6_core/r7_secrets/gen_fold_cpp.py), never typed: every BMP character the screen reads as
+	 *  one ASCII letter, digit or connector -- marked and compatibility Latin letters, small capitals, the Cyrillic and Greek letters drawn
+	 *  like Latin ones, circled and super/subscript forms, the colon/equals/dash/bar/slash look-alikes. Sorted; 819 entries. */
+	const uint16 CardFoldFrom[] = {
+		0x00AA, 0x00B2, 0x00B3, 0x00B9, 0x00BA, 0x00C0, 0x00C1, 0x00C2, 0x00C3, 0x00C4, 0x00C5, 0x00C7, 0x00C8, 0x00C9, 0x00CA, 0x00CB,
+		0x00CC, 0x00CD, 0x00CE, 0x00CF, 0x00D1, 0x00D2, 0x00D3, 0x00D4, 0x00D5, 0x00D6, 0x00D8, 0x00D9, 0x00DA, 0x00DB, 0x00DC, 0x00DD,
+		0x00DF, 0x00E0, 0x00E1, 0x00E2, 0x00E3, 0x00E4, 0x00E5, 0x00E7, 0x00E8, 0x00E9, 0x00EA, 0x00EB, 0x00EC, 0x00ED, 0x00EE, 0x00EF,
+		0x00F1, 0x00F2, 0x00F3, 0x00F4, 0x00F5, 0x00F6, 0x00F8, 0x00F9, 0x00FA, 0x00FB, 0x00FC, 0x00FD, 0x00FF, 0x0100, 0x0101, 0x0102,
+		0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0108, 0x0109, 0x010A, 0x010B, 0x010C, 0x010D, 0x010E, 0x010F, 0x0110, 0x0111, 0x0112,
+		0x0113, 0x0114, 0x0115, 0x0116, 0x0117, 0x0118, 0x0119, 0x011A, 0x011B, 0x011C, 0x011D, 0x011E, 0x011F, 0x0120, 0x0121, 0x0122,
+		0x0123, 0x0124, 0x0125, 0x0126, 0x0127, 0x0128, 0x0129, 0x012A, 0x012B, 0x012C, 0x012D, 0x012E, 0x012F, 0x0130, 0x0131, 0x0134,
+		0x0135, 0x0136, 0x0137, 0x0139, 0x013A, 0x013B, 0x013C, 0x013D, 0x013E, 0x0141, 0x0142, 0x0143, 0x0144, 0x0145, 0x0146, 0x0147,
+		0x0148, 0x014C, 0x014D, 0x014E, 0x014F, 0x0150, 0x0151, 0x0154, 0x0155, 0x0156, 0x0157, 0x0158, 0x0159, 0x015A, 0x015B, 0x015C,
+		0x015D, 0x015E, 0x015F, 0x0160, 0x0161, 0x0162, 0x0163, 0x0164, 0x0165, 0x0166, 0x0167, 0x0168, 0x0169, 0x016A, 0x016B, 0x016C,
+		0x016D, 0x016E, 0x016F, 0x0170, 0x0171, 0x0172, 0x0173, 0x0174, 0x0175, 0x0176, 0x0177, 0x0178, 0x0179, 0x017A, 0x017B, 0x017C,
+		0x017D, 0x017E, 0x017F, 0x0180, 0x01A0, 0x01A1, 0x01AF, 0x01B0, 0x01B5, 0x01B6, 0x01C0, 0x01CD, 0x01CE, 0x01CF, 0x01D0, 0x01D1,
+		0x01D2, 0x01D3, 0x01D4, 0x01D5, 0x01D6, 0x01D7, 0x01D8, 0x01D9, 0x01DA, 0x01DB, 0x01DC, 0x01DE, 0x01DF, 0x01E0, 0x01E1, 0x01E6,
+		0x01E7, 0x01E8, 0x01E9, 0x01EA, 0x01EB, 0x01EC, 0x01ED, 0x01F0, 0x01F4, 0x01F5, 0x01F8, 0x01F9, 0x01FA, 0x01FB, 0x0200, 0x0201,
+		0x0202, 0x0203, 0x0204, 0x0205, 0x0206, 0x0207, 0x0208, 0x0209, 0x020A, 0x020B, 0x020C, 0x020D, 0x020E, 0x020F, 0x0210, 0x0211,
+		0x0212, 0x0213, 0x0214, 0x0215, 0x0216, 0x0217, 0x0218, 0x0219, 0x021A, 0x021B, 0x021E, 0x021F, 0x0226, 0x0227, 0x0228, 0x0229,
+		0x022A, 0x022B, 0x022C, 0x022D, 0x022E, 0x022F, 0x0230, 0x0231, 0x0232, 0x0233, 0x024B, 0x0262, 0x026A, 0x0274, 0x0280, 0x028F,
+		0x0299, 0x029C, 0x029F, 0x02B0, 0x02B2, 0x02B3, 0x02B7, 0x02B8, 0x02D0, 0x02E1, 0x02E2, 0x02E3, 0x0391, 0x0392, 0x0395, 0x0396,
+		0x0397, 0x0399, 0x039A, 0x039C, 0x039D, 0x039F, 0x03A1, 0x03A4, 0x03A5, 0x03A7, 0x03B1, 0x03B3, 0x03B5, 0x03B9, 0x03BA, 0x03BD,
+		0x03BF, 0x03C1, 0x03C5, 0x03C7, 0x0405, 0x0406, 0x0408, 0x0410, 0x0412, 0x0415, 0x041A, 0x041C, 0x041D, 0x041E, 0x0420, 0x0421,
+		0x0422, 0x0423, 0x0425, 0x0430, 0x0435, 0x043A, 0x043E, 0x0440, 0x0441, 0x0443, 0x0445, 0x0455, 0x0456, 0x0458, 0x04BA, 0x04BB,
+		0x04C0, 0x04CF, 0x0501, 0x051A, 0x051B, 0x051C, 0x051D, 0x0589, 0x05C3, 0x1400, 0x16EC, 0x1D00, 0x1D03, 0x1D04, 0x1D05, 0x1D07,
+		0x1D0A, 0x1D0B, 0x1D0D, 0x1D0E, 0x1D0F, 0x1D10, 0x1D18, 0x1D19, 0x1D1A, 0x1D1B, 0x1D1C, 0x1D20, 0x1D21, 0x1D22, 0x1D2C, 0x1D2E,
+		0x1D30, 0x1D31, 0x1D33, 0x1D34, 0x1D35, 0x1D36, 0x1D37, 0x1D38, 0x1D39, 0x1D3A, 0x1D3C, 0x1D3E, 0x1D3F, 0x1D40, 0x1D41, 0x1D42,
+		0x1D43, 0x1D47, 0x1D48, 0x1D49, 0x1D4D, 0x1D4F, 0x1D50, 0x1D52, 0x1D56, 0x1D57, 0x1D58, 0x1D5B, 0x1D62, 0x1D63, 0x1D64, 0x1D65,
+		0x1D9C, 0x1DA0, 0x1DBB, 0x1E00, 0x1E01, 0x1E02, 0x1E03, 0x1E04, 0x1E05, 0x1E06, 0x1E07, 0x1E08, 0x1E09, 0x1E0A, 0x1E0B, 0x1E0C,
+		0x1E0D, 0x1E0E, 0x1E0F, 0x1E10, 0x1E11, 0x1E12, 0x1E13, 0x1E14, 0x1E15, 0x1E16, 0x1E17, 0x1E18, 0x1E19, 0x1E1A, 0x1E1B, 0x1E1C,
+		0x1E1D, 0x1E1E, 0x1E1F, 0x1E20, 0x1E21, 0x1E22, 0x1E23, 0x1E24, 0x1E25, 0x1E26, 0x1E27, 0x1E28, 0x1E29, 0x1E2A, 0x1E2B, 0x1E2C,
+		0x1E2D, 0x1E2E, 0x1E2F, 0x1E30, 0x1E31, 0x1E32, 0x1E33, 0x1E34, 0x1E35, 0x1E36, 0x1E37, 0x1E38, 0x1E39, 0x1E3A, 0x1E3B, 0x1E3C,
+		0x1E3D, 0x1E3E, 0x1E3F, 0x1E40, 0x1E41, 0x1E42, 0x1E43, 0x1E44, 0x1E45, 0x1E46, 0x1E47, 0x1E48, 0x1E49, 0x1E4A, 0x1E4B, 0x1E4C,
+		0x1E4D, 0x1E4E, 0x1E4F, 0x1E50, 0x1E51, 0x1E52, 0x1E53, 0x1E54, 0x1E55, 0x1E56, 0x1E57, 0x1E58, 0x1E59, 0x1E5A, 0x1E5B, 0x1E5C,
+		0x1E5D, 0x1E5E, 0x1E5F, 0x1E60, 0x1E61, 0x1E62, 0x1E63, 0x1E64, 0x1E65, 0x1E66, 0x1E67, 0x1E68, 0x1E69, 0x1E6A, 0x1E6B, 0x1E6C,
+		0x1E6D, 0x1E6E, 0x1E6F, 0x1E70, 0x1E71, 0x1E72, 0x1E73, 0x1E74, 0x1E75, 0x1E76, 0x1E77, 0x1E78, 0x1E79, 0x1E7A, 0x1E7B, 0x1E7C,
+		0x1E7D, 0x1E7E, 0x1E7F, 0x1E80, 0x1E81, 0x1E82, 0x1E83, 0x1E84, 0x1E85, 0x1E86, 0x1E87, 0x1E88, 0x1E89, 0x1E8A, 0x1E8B, 0x1E8C,
+		0x1E8D, 0x1E8E, 0x1E8F, 0x1E90, 0x1E91, 0x1E92, 0x1E93, 0x1E94, 0x1E95, 0x1E96, 0x1E97, 0x1E98, 0x1E99, 0x1EA0, 0x1EA1, 0x1EA2,
+		0x1EA3, 0x1EA4, 0x1EA5, 0x1EA6, 0x1EA7, 0x1EA8, 0x1EA9, 0x1EAA, 0x1EAB, 0x1EAC, 0x1EAD, 0x1EAE, 0x1EAF, 0x1EB0, 0x1EB1, 0x1EB2,
+		0x1EB3, 0x1EB4, 0x1EB5, 0x1EB6, 0x1EB7, 0x1EB8, 0x1EB9, 0x1EBA, 0x1EBB, 0x1EBC, 0x1EBD, 0x1EBE, 0x1EBF, 0x1EC0, 0x1EC1, 0x1EC2,
+		0x1EC3, 0x1EC4, 0x1EC5, 0x1EC6, 0x1EC7, 0x1EC8, 0x1EC9, 0x1ECA, 0x1ECB, 0x1ECC, 0x1ECD, 0x1ECE, 0x1ECF, 0x1ED0, 0x1ED1, 0x1ED2,
+		0x1ED3, 0x1ED4, 0x1ED5, 0x1ED6, 0x1ED7, 0x1ED8, 0x1ED9, 0x1EDA, 0x1EDB, 0x1EDC, 0x1EDD, 0x1EDE, 0x1EDF, 0x1EE0, 0x1EE1, 0x1EE2,
+		0x1EE3, 0x1EE4, 0x1EE5, 0x1EE6, 0x1EE7, 0x1EE8, 0x1EE9, 0x1EEA, 0x1EEB, 0x1EEC, 0x1EED, 0x1EEE, 0x1EEF, 0x1EF0, 0x1EF1, 0x1EF2,
+		0x1EF3, 0x1EF4, 0x1EF5, 0x1EF6, 0x1EF7, 0x1EF8, 0x1EF9, 0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2015, 0x2024, 0x2044, 0x2070,
+		0x2071, 0x2074, 0x2075, 0x2076, 0x2077, 0x2078, 0x2079, 0x207C, 0x207F, 0x2080, 0x2081, 0x2082, 0x2083, 0x2084, 0x2085, 0x2086,
+		0x2087, 0x2088, 0x2089, 0x208C, 0x2090, 0x2091, 0x2092, 0x2093, 0x2095, 0x2096, 0x2097, 0x2098, 0x2099, 0x209A, 0x209B, 0x209C,
+		0x2102, 0x210A, 0x210B, 0x210C, 0x210D, 0x210E, 0x2110, 0x2111, 0x2112, 0x2113, 0x2115, 0x2119, 0x211A, 0x211B, 0x211C, 0x211D,
+		0x2124, 0x2128, 0x212A, 0x212C, 0x212D, 0x212F, 0x2130, 0x2131, 0x2133, 0x2134, 0x2139, 0x2145, 0x2146, 0x2147, 0x2148, 0x2149,
+		0x2160, 0x2164, 0x2169, 0x216C, 0x216D, 0x216E, 0x216F, 0x2170, 0x2174, 0x2179, 0x217C, 0x217D, 0x217E, 0x217F, 0x2212, 0x2215,
+		0x2223, 0x2236, 0x2460, 0x2461, 0x2462, 0x2463, 0x2464, 0x2465, 0x2466, 0x2467, 0x2468, 0x24B6, 0x24B7, 0x24B8, 0x24B9, 0x24BA,
+		0x24BB, 0x24BC, 0x24BD, 0x24BE, 0x24BF, 0x24C0, 0x24C1, 0x24C2, 0x24C3, 0x24C4, 0x24C5, 0x24C6, 0x24C7, 0x24C8, 0x24C9, 0x24CA,
+		0x24CB, 0x24CC, 0x24CD, 0x24CE, 0x24CF, 0x24D0, 0x24D1, 0x24D2, 0x24D3, 0x24D4, 0x24D5, 0x24D6, 0x24D7, 0x24D8, 0x24D9, 0x24DA,
+		0x24DB, 0x24DC, 0x24DD, 0x24DE, 0x24DF, 0x24E0, 0x24E1, 0x24E2, 0x24E3, 0x24E4, 0x24E5, 0x24E6, 0x24E7, 0x24E8, 0x24E9, 0x24EA,
+		0x2C7C, 0x2C7D, 0xA731, 0xA789, 0xA78A, 0xA7F2, 0xA7F3, 0xA7F4, 0xFE13, 0xFE33, 0xFE34, 0xFE4D, 0xFE4E, 0xFE4F, 0xFE52, 0xFE55,
+		0xFE63, 0xFE66, 0xFE6B
+	};
+	const ANSICHAR CardFoldTo[] =
+		"a231oAAAAAACEEEEIIIINOOOOOOUUUUYsaaaaaaceeeeiiiinoooooouuuuyyAaAaAaCcCcCcCcDdDdEeEeEeEeEeGgGgGgG"
+		"gHhHhIiIiIiIiIiJjKkLlLlLlLlNnNnNnOoOoOoRrRrRrSsSsSsSsTtTtTtUuUuUuUuUuUuWwYyYZzZzZzsbOoUuZz|AaIiO"
+		"oUuUuUuUuUuAaAaGgKkOoOojGgNnAaAaAaEeEeIiIiOoOoRrRrUuUuSsTtHhAaEeOoOoOoOoYyqginrybhlhjrwy:lsxABEZ"
+		"HIKMNOPTYXayeikvopuxSIJABEKMHOPCTYXaekopcyxsijHhIldQqWw::=:abcdejkmnooprrtuvwzABDEGHIJKLMNOPRTUW"
+		"abdegkmoptuviruvcfzAaBbBbBbCcDdDdDdDdDdEeEeEeEeEeFfGgHhHhHhHhHhIiIiKkKkKkLlLlLlLlMmMmMmNnNnNnNnO"
+		"oOoOoOoPpPpRrRrRrRrSsSsSsSsSsTtTtTtTtUuUuUuUuUuVvVvWwWwWwWwWwXxXxYyZzZzZzhtwyAaAaAaAaAaAaAaAaAaA"
+		"aAaAaEeEeEeEeEeEeEeEeIiIiOoOoOoOoOoOoOoOoOoOoOoOoUuUuUuUuUuUuUuYyYyYyYy------./0i456789=n0123456"
+		"789=aeoxhklmnpstCgHHHhIILlNPQRRRZZKBCeEFMoiDdeijIVXLCDMivxlcdm-/|:123456789ABCDEFGHIJKLMNOPQRSTU"
+		"VWXYZabcdefghijklmnopqrstuvwxyz0jVs:=CFQ:_____.:-=@";
+	static_assert(UE_ARRAY_COUNT(CardFoldFrom) + 1 == UE_ARRAY_COUNT(CardFoldTo), "the fold table's two halves are one table");
+
+	/** A math alphanumeric (U+1D400-1D6A3 letters, U+1D7CE-1D7FF digits: a surrogate pair) as the ASCII it is drawn as, or 0. */
+	TCHAR CardMathAlnum(uint32 CodePoint)
+	{
+		if (CodePoint >= 0x1D400 && CodePoint <= 0x1D6A3)
+		{
+			const uint32 Letter = (CodePoint - 0x1D400) % 52;
+			return Letter < 26 ? static_cast<TCHAR>(TEXT('A') + Letter) : static_cast<TCHAR>(TEXT('a') + Letter - 26);
+		}
+		if (CodePoint >= 0x1D7CE && CodePoint <= 0x1D7FF)
+		{
+			return static_cast<TCHAR>(TEXT('0') + (CodePoint - 0x1D7CE) % 10);
+		}
+		return 0;
+	}
+
+	/** One BMP character as the ASCII the screen reads it as (full-width forms by their offset, the rest from the table), or 0. */
+	TCHAR CardFoldChar(uint32 Code)
+	{
+		if (Code >= 0xFF01 && Code <= 0xFF5E)
+		{
+			return static_cast<TCHAR>(Code - 0xFEE0);
+		}
+		int32 Low = 0;
+		int32 High = static_cast<int32>(UE_ARRAY_COUNT(CardFoldFrom)) - 1;
+		while (Low <= High)
+		{
+			const int32 Middle = (Low + High) / 2;
+			const uint32 At = CardFoldFrom[Middle];
+			if (At == Code)
+			{
+				return static_cast<TCHAR>(CardFoldTo[Middle]);
+			}
+			if (At < Code)
+			{
+				Low = Middle + 1;
+			}
+			else
+			{
+				High = Middle - 1;
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * THE MATCHING VIEW (r7, QaRuleFold; Second's (e)): the text folded ONE CHARACTER FOR ONE -- full-width, look-alike, marked and math letters
+	 * to the ASCII they are drawn as ("p<Cyrillic a>ssword", "<full-width>password"), the look-alike connectors to ':' '=' '-' '|' '/', and
+	 * "%3D" / "%3A" to "===" / ":::" -- so every index is the same character in both. What is MATCHED is folded; what is stored and shown never
+	 * is: an accented or Russian objective keeps its letters.
+	 */
+	FString CardFold(const FString& Text)
+	{
+		if (!CardRuleOn(FWonderlandCardStore::QaRuleFold))
+		{
+			return Text;
+		}
+		FString Out = Text;
+		const int32 Count = Text.Len();
+		for (int32 At = 0; At < Count; ++At)
+		{
+			const uint32 Code = static_cast<uint32>(Text[At]);
+			if (Code == TEXT('%') && At + 2 < Count && Text[At + 1] == TEXT('3') && FCString::Strchr(TEXT("DdAa"), Text[At + 2]) != nullptr)
+			{
+				const TCHAR Connector = (Text[At + 2] == TEXT('D') || Text[At + 2] == TEXT('d')) ? TEXT('=') : TEXT(':');
+				Out[At] = Connector;
+				Out[At + 1] = Connector;
+				Out[At + 2] = Connector;
+				At += 2;
+				continue;
+			}
+			if (Code == 0xD835 && At + 1 < Count && static_cast<uint32>(Text[At + 1]) >= 0xDC00 && static_cast<uint32>(Text[At + 1]) <= 0xDFFF)
+			{
+				const TCHAR Plain = CardMathAlnum(0x10000 + ((Code - 0xD800) << 10) + (static_cast<uint32>(Text[At + 1]) - 0xDC00));
+				if (Plain != 0)
+				{
+					Out[At] = Plain;
+					Out[At + 1] = static_cast<TCHAR>(0xAD);
+				}
+				++At;
+				continue;
+			}
+			const TCHAR Plain = CardFoldChar(Code);
+			if (Plain != 0)
+			{
+				Out[At] = Plain;
+			}
+		}
+		return Out;
+	}
+
+	/** A surrogate pair that draws nothing: a TAG character (U+E0000-E007F, r6), and (r7) a variation selector of the supplement
+	 *  (U+E0100-E01EF), a musical format control (U+1D173-1D17A), a shorthand format control (U+1BCA0-1BCA3). */
+	bool CardInvisiblePair(uint32 High, uint32 Low)
+	{
+		if (High == 0xDB40)
+		{
+			return (Low >= 0xDC00 && Low <= 0xDC7F) || (CardRuleOn(FWonderlandCardStore::QaRuleFold) && Low >= 0xDD00 && Low <= 0xDDEF);
+		}
+		if (!CardRuleOn(FWonderlandCardStore::QaRuleFold))
+		{
+			return false;
+		}
+		return (High == 0xD834 && Low >= 0xDD73 && Low <= 0xDD7A) || (High == 0xD82F && Low >= 0xDCA0 && Low <= 0xDCA3);
+	}
+
+	/** CERTAIN BY ITS OWN SHAPE, whatever stands around it: a 'sk-' key, a vendor-prefixed key, a JWT-like dotted word, a PEM line. */
+	bool CardShapeCertain(const FString& Word)
+	{
+		return WonderlandSidekickSecrets::LooksLikeKey(Word) || CardHasVendorKey(Word) || CardHasDottedToken(Word) || Word.Contains(TEXT("-----BEGIN"))
+			|| Word.Contains(TEXT("-----END"));
+	}
+
+	/**
+	 * A VALUE THAT IS A CREDENTIAL BY ITS OWN LOOK (r7, CORE's refinement of Second's (a)): a label that finds it may NOT give it back on /keep,
+	 * and a restart's restore applies it. A key or random shape; 6+ digits (4+ after "pin:"), never a quantity after "token"; 6+ characters
+	 * that look like a value and hold a letter with two digits or a symbol ("Tr0ub4dor&3x", "Zq9pL2mN7x"). Not: a plain or capitalised word
+	 * ("Swordfish", "Manager", "marmalade"), "hunter2", "1Password" -- those a label finds WEAK: redacted, and /keep gives them back.
+	 */
+	bool CardValueStrong(const FString& Value, ECardLabelKind Kind, bool bAssigned)
+	{
+		if (Value.IsEmpty())
+		{
+			return false;
+		}
+		if (CardShapeCertain(Value) || CardPiecesLookRandom(Value))
+		{
+			return true;
+		}
+		if (CardAllOf(Value, 0, Value.Len(), &CardDigitChar))
+		{
+			return Kind != ECardLabelKind::Token && (Value.Len() >= 6 || (bAssigned && Kind == ECardLabelKind::Pin && Value.Len() >= 4));
+		}
+		if (Value.Len() < 6 || !CardValueLike(Value, Kind))
+		{
+			return false;
+		}
+		bool bLetter = false;
+		int32 Digits = 0;
+		int32 Symbols = 0;
+		for (const TCHAR Char : Value)
+		{
+			bLetter |= CardAsciiLetter(Char);
+			Digits += CardAsciiDigit(Char) ? 1 : 0;
+			Symbols += Char != 0 && FCString::Strchr(CardValueSymbols, Char) != nullptr ? 1 : 0;
+		}
+		return bLetter && (Digits >= 2 || Symbols >= 1);
+	}
+
+	/** A further word of the same value (a list, a run past a marker): value-like and no status word, and -- unless a comma listed it -- not
+	 *  a lone capitalised word ("password: X Thanks"). */
+	bool CardContLike(const FString& Word, ECardLabelKind Kind, bool bAfterComma)
+	{
+		if (Word.IsEmpty() || !CardValueLike(Word, Kind) || CardOneOf(Word.ToLower(), CardNonValues))
+		{
+			return false;
+		}
+		if (bAfterComma)
+		{
+			return true;
+		}
+		const bool bPlainCapital = CardIsAlphaWord(Word) && CardAllOf(Word, 0, Word.Len(), &CardAsciiLetter) && !CardInnerUpper(Word);
+		return !bPlainCapital;
+	}
+
+	/** A plain lowercase word that can be a password-family label's value at the END of its clause ("the password is marmalade"): not a
+	 *  stopword, a status, a day, a connector, nor a describing form (-ed -ing -ly -able -ible -ful -less -ous -ive). */
+	bool CardPlainClauseWord(const FString& Word)
+	{
+		if (Word.Len() < 3)
+		{
+			return false;
+		}
+		for (const TCHAR Char : Word)
+		{
+			if (Char < TEXT('a') || Char > TEXT('z'))
+			{
+				return false;
+			}
+		}
+		if (CardOneOf(Word, CardStopwords) || CardOneOf(Word, CardNonValues) || CardOneOf(Word, CardNotValues) || CardOneOf(Word, CardWeakConnectors))
+		{
+			return false;
+		}
+		for (const TCHAR* Suffix : CardProseSuffixes)
+		{
+			if (Word.EndsWith(Suffix, ESearchCase::CaseSensitive) && Word.Len() > FCString::Strlen(Suffix) + 2)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** What one word's label=value holds: the label's kind, the value up to the next piece, the REST of the word (a password holding '&' or
+	 *  '#' is cut there by the piece split, so its strength is read on the rest too), and whether the value is an Authorization scheme whose
+	 *  credential is the next word ("Authorization:Bearer X"). */
+	struct FCardLabelValue
+	{
+		bool bFound = false;
+		ECardLabelKind Kind = ECardLabelKind::None;
+		FString Value;
+		FString Rest;
+		bool bSchemeNext = false;
+	};
+
+	bool CardLabelValueAccept(ECardLabelKind Kind, const FString& Value)
+	{
+		if (Value.IsEmpty())
+		{
+			return false;
+		}
+		// an env key's value -- and (r7) a token's -- must look like one: "SORT_KEY=name", "MAX_TOKEN=4096" are settings
+		if (Kind == ECardLabelKind::EnvKey || (Kind == ECardLabelKind::Token && CardRuleOn(FWonderlandCardStore::QaRuleClasses)))
+		{
+			return CardValueLike(Value, Kind);
+		}
+		const FString Lower = Value.ToLower();
+		return !(CardRuleOn(FWonderlandCardStore::QaRuleClasses) && (CardOneOf(Lower, CardNonValues) || CardOneOf(Lower, CardStopwords)));
+	}
+
+	/**
+	 * A LABEL AND ITS VALUE IN ONE WORD (r7; Second's finding 2): read at EVERY ':' / '=' (and, r7, a glued "->" / "|") of every piece split at
+	 * ? & ; # , -- a config paste whose secret is not its first key ({"user":"bob","pwd":"X"}, "user=bob,password=X"), a URL's query pair by
+	 * pair. "Authorization:Bearer X" names the next word. A label in Chinese, Japanese or Korean is read glued to its value ("<password>:X").
+	 */
+	FCardLabelValue CardLabelWithValueR7(const FString& Word, const FString& Orig)
+	{
+		FCardLabelValue Out;
+		if (!CardRuleOn(FWonderlandCardStore::QaRuleUrlPieces))
+		{
+			// d831cbd1: the first ':' or '=' of the word
+			if (!CardLabelWithValue(Word.ToLower()))
+			{
+				return Out;
+			}
+			int32 Cut = 0;
+			while (Cut < Word.Len() && Word[Cut] != TEXT(':') && Word[Cut] != TEXT('='))
+			{
+				++Cut;
+			}
+			FString Value = Word.Mid(Cut + 1);
+			while (Value.Len() > 0 && (Value[0] == TEXT(':') || Value[0] == TEXT('=')))
+			{
+				Value.RightChopInline(1);
+			}
+			Out.bFound = true;
+			Out.Kind = ECardLabelKind::Normal;
+			Out.Value = CardTrimEdges(Value);
+			return Out;
+		}
+		if (CardRuleOn(FWonderlandCardStore::QaRuleLabels))
+		{
+			int32 Lead = 0;
+			while (Lead < Orig.Len() && CardEdge(Orig[Lead]))
+			{
+				++Lead;
+			}
+			for (const TCHAR* Label : CardForeignGluedLabels)
+			{
+				const int32 LabelLen = FCString::Strlen(Label);
+				if (Orig.Len() < Lead + LabelLen || FCString::Strncmp(*Orig + Lead, Label, LabelLen) != 0)
+				{
+					continue;
+				}
+				int32 From = Lead + LabelLen;
+				for (const TCHAR* Glue : CardGlueAfter)
+				{
+					const int32 GlueLen = FCString::Strlen(Glue);
+					if ((Orig.Len() >= From + GlueLen && FCString::Strncmp(*Orig + From, Glue, GlueLen) == 0)
+						|| (Word.Len() >= From + GlueLen && FCString::Strncmp(*Word + From, Glue, GlueLen) == 0))
+					{
+						From += GlueLen;
+						break;
+					}
+				}
+				while (From < Word.Len() && FCString::Strchr(TEXT(":=|->"), Word[From]) != nullptr)
+				{
+					++From;
+				}
+				const FString Value = CardTrimEdges(Word.Mid(From));
+				if (!Value.IsEmpty())
+				{
+					Out.bFound = true;
+					Out.Kind = ECardLabelKind::Normal;
+					Out.Value = Value;
+					return Out;
+				}
+			}
+		}
+		const TCHAR* const Cuts = CardRuleOn(FWonderlandCardStore::QaRuleFillers) ? TEXT(":=|>") : TEXT(":=");
+		int32 From = 0;
+		for (int32 At = 0; At <= Word.Len(); ++At)
+		{
+			if (At < Word.Len() && FCString::Strchr(TEXT("?&;#,"), Word[At]) == nullptr)
+			{
+				continue;
+			}
+			int32 Base = From;
+			const int32 End = At;
+			From = At + 1;
+			while (Base < End && CardEdge(Word[Base]))
+			{
+				++Base;
+			}
+			int32 Previous = Base;
+			for (int32 Cut = Base; Cut < End; ++Cut)
+			{
+				if (FCString::Strchr(Cuts, Word[Cut]) == nullptr)
+				{
+					continue;
+				}
+				if (Cut <= Previous)
+				{
+					Previous = Cut + 1;
+					continue;
+				}
+				if (Word[Cut] == TEXT('>') && !(Cut > Base && (Word[Cut - 1] == TEXT('-') || Word[Cut - 1] == TEXT('='))))
+				{
+					continue;
+				}
+				const FString Label = Word.Mid(Previous, Cut - Previous);
+				const ECardLabelKind Kind = CardLabelKind(Label, Orig.Mid(Previous, Cut - Previous));
+				if (Kind != ECardLabelKind::None)
+				{
+					int32 ValueAt = Cut + 1;
+					while (ValueAt < End && FCString::Strchr(Cuts, Word[ValueAt]) != nullptr)
+					{
+						++ValueAt;
+					}
+					const FString Value = CardTrimEdges(Word.Mid(ValueAt, End - ValueAt));
+					if (CardRuleOn(FWonderlandCardStore::QaRuleCli) && CardAuthScheme(Value.ToLower()) && Label.Contains(TEXT("authorization")))
+					{
+						Out.bFound = true;
+						Out.Kind = Kind;
+						Out.Value = Value;
+						Out.bSchemeNext = true;
+						return Out;
+					}
+					if (CardLabelValueAccept(Kind, Value))
+					{
+						Out.bFound = true;
+						Out.Kind = Kind;
+						Out.Value = Value;
+						Out.Rest = CardTrimEdges(Word.Mid(ValueAt));
+						return Out;
+					}
+				}
+				Previous = Cut + 1;
+			}
+		}
+		return Out;
+	}
+
+	/** user:PASS@host with NO scheme ("connect admin:X@db.example.com"): the value, or empty. A name that is a scheme ("mailto:") is not. */
+	FString CardSchemelessUserinfo(const FString& RawWord)
+	{
+		const FString Word = CardTrimEdges(RawWord);
+		if (Word.Contains(TEXT("://")))
+		{
+			return FString();
+		}
+		int32 AtSign = INDEX_NONE;
+		int32 Colon = INDEX_NONE;
+		if (!Word.FindLastChar(TEXT('@'), AtSign) || AtSign <= 0 || !Word.FindChar(TEXT(':'), Colon) || Colon <= 0 || Colon + 1 >= AtSign)
+		{
+			return FString();
+		}
+		const FString Name = Word.Left(Colon);
+		if (Name.Len() > 40 || CardOneOf(Name.ToLower(), CardNotUserinfo))
+		{
+			return FString();
+		}
+		for (const TCHAR Char : Name)
+		{
+			if (!(CardAsciiLetter(Char) || CardAsciiDigit(Char) || Char == TEXT('.') || Char == TEXT('_') || Char == TEXT('-')))
+			{
+				return FString();
+			}
+		}
+		FString Host = Word.Mid(AtSign + 1);
+		for (const TCHAR Stop : { TEXT('/'), TEXT(':'), TEXT('?'), TEXT('#') })
+		{
+			int32 StopAt = INDEX_NONE;
+			if (Host.FindChar(Stop, StopAt))
+			{
+				Host.LeftInline(StopAt);
+			}
+		}
+		if (Host.IsEmpty())
+		{
+			return FString();
+		}
+		for (const TCHAR Char : Host)
+		{
+			if (!(CardAsciiLetter(Char) || CardAsciiDigit(Char) || Char == TEXT('.') || Char == TEXT('-')))
+			{
+				return FString();
+			}
+		}
+		if (!Host.Contains(TEXT(".")) && !Host.Equals(TEXT("localhost"), ESearchCase::IgnoreCase))
+		{
+			return FString();
+		}
+		return Word.Mid(Colon + 1, AtSign - Colon - 1);
+	}
+
+	/** https://TOKEN@host -- a token as a URL's user, no ':' ("git clone https://X@github.com/org/repo"): the token, or empty. */
+	FString CardUrlUserToken(const FString& Word)
+	{
+		const int32 Scheme = Word.Find(TEXT("://"));
+		if (Scheme <= 0)
+		{
+			return FString();
+		}
+		int32 End = Scheme + 3;
+		while (End < Word.Len() && Word[End] != TEXT('/'))
+		{
+			++End;
+		}
+		const FString Authority = Word.Mid(Scheme + 3, End - Scheme - 3);
+		int32 AtSign = INDEX_NONE;
+		if (!Authority.FindLastChar(TEXT('@'), AtSign) || AtSign <= 0)
+		{
+			return FString();
+		}
+		const FString User = Authority.Left(AtSign);
+		int32 Colon = INDEX_NONE;
+		return User.FindChar(TEXT(':'), Colon) ? FString() : User;
+	}
+
+	/** A password-family label ("password", "passwd", "pwd", "pass", "Passwort", a numbered "password2" ...). */
+	bool CardPasswordFamilyLabel(const FString& Word, const FString& Orig)
+	{
+		const FString Bare = CardBare(CardTrimEdges(Word).ToLower());
+		if (Bare == TEXT("pass") || Bare == TEXT("pw") || CardOneOf(Bare, CardForeignLabels))
+		{
+			return true;
+		}
+		FString Numbered = Bare;
+		while (Numbered.Len() > 0 && CardAsciiDigit(Numbered[Numbered.Len() - 1]))
+		{
+			Numbered.LeftChopInline(1);
+		}
+		for (const TCHAR* Family : CardPasswordFamily)
+		{
+			if (Numbered.EndsWith(Family, ESearchCase::CaseSensitive))
+			{
+				return true;
+			}
+		}
+		return CardOneOf(CardTrimEdges(Orig), CardForeignScriptLabels);
+	}
+
+	/** Where the redaction's own marker stands -- and (r7, QaRuleFold) the same words typed in another case: "[A key: ...]<value>" is the
+	 *  marker a value is glued to, not a word that hides it. */
+	TArray<TPair<int32, int32>> CardFindMarks(const FString& Text)
+	{
+		TArray<TPair<int32, int32>> Marks;
+		const FString Mark = CardRedactionMarker();
+		const ESearchCase::Type Case = CardRuleOn(FWonderlandCardStore::QaRuleFold) ? ESearchCase::IgnoreCase : ESearchCase::CaseSensitive;
+		for (int32 At = Text.Find(Mark, Case); At != INDEX_NONE; At = Text.Find(Mark, Case, ESearchDir::FromStart, At + Mark.Len()))
+		{
+			Marks.Add(TPair<int32, int32>(At, At + Mark.Len()));
+		}
+		return Marks;
+	}
+
+	/** In order, overlaps merged: certain if either is, a weak label value only if both are (and neither certain), a shape if either is. */
+	void CardMergeFinds(TArray<FWonderlandCardStore::FSecretFind>& Finds)
+	{
+		Finds.Sort([](const FWonderlandCardStore::FSecretFind& A, const FWonderlandCardStore::FSecretFind& B)
+		{
+			return A.Start < B.Start || (A.Start == B.Start && A.Length < B.Length);
+		});
+		TArray<FWonderlandCardStore::FSecretFind> Merged;
+		for (const FWonderlandCardStore::FSecretFind& Find : Finds)
+		{
+			if (Merged.Num() > 0 && Find.Start < Merged.Last().Start + Merged.Last().Length)
+			{
+				FWonderlandCardStore::FSecretFind& Last = Merged.Last();
+				const int32 End = FMath::Max(Last.Start + Last.Length, Find.Start + Find.Length);
+				Last.Length = End - Last.Start;
+				Last.bCertain |= Find.bCertain;
+				Last.bWeak = Last.bWeak && Find.bWeak && !Last.bCertain;
+				Last.bShape |= Find.bShape;
+				continue;
+			}
+			Merged.Add(Find);
+		}
+		Finds = MoveTemp(Merged);
+	}
+
+	/** The text with every find replaced by the marker, and for each character of it the span of the original text it stands for. */
+	void CardRedactWithMap(const FString& Text, const TArray<FWonderlandCardStore::FSecretFind>& Finds, FString& OutRedacted, TArray<TPair<int32, int32>>& OutOwner)
+	{
+		OutRedacted.Reset();
+		OutOwner.Reset();
+		const FString Mark = CardRedactionMarker();
+		int32 From = 0;
+		for (const FWonderlandCardStore::FSecretFind& Find : Finds)
+		{
+			for (int32 At = From; At < Find.Start; ++At)
+			{
+				OutRedacted.AppendChar(Text[At]);
+				OutOwner.Add(TPair<int32, int32>(At, At + 1));
+			}
+			for (int32 At = 0; At < Mark.Len(); ++At)
+			{
+				OutRedacted.AppendChar(Mark[At]);
+				OutOwner.Add(TPair<int32, int32>(Find.Start, Find.Start + Find.Length));
+			}
+			From = Find.Start + Find.Length;
+		}
+		for (int32 At = From; At < Text.Len(); ++At)
+		{
+			OutRedacted.AppendChar(Text[At]);
+			OutOwner.Add(TPair<int32, int32>(At, At + 1));
+		}
+	}
+}
+
 void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>& OutFinds)
 {
 	OutFinds.Reset();
+	// r7: THE MATCHING VIEW (CardFold) -- the same length, every index the same character; the words are read from it, the finds land on Text
+	const FString Folded = CardFold(Text);
 	// THE WORDS FIRST, each as typed (Raw: a label's ':' or '=' is read from it) and trimmed (Word), so a label can reach its value
 	struct FSpan
 	{
@@ -1272,6 +2037,8 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		bool bMarker;
 		/** Touching a marker with no space between (r6): a value glued to it is taken. */
 		bool bGlued;
+		/** r7: the word unfolded, as typed (a label in another script is read as written). */
+		FString Orig;
 	};
 	TArray<FSpan> Spans;
 	const int32 Count = Text.Len();
@@ -1279,23 +2046,18 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 	// marker's edge, so "[marker]<value>" or "<value>[marker]" is not exempt for overlapping it
 	const FString RedactionMark = CardRedactionMarker();
 	const bool bMarkerSplit = CardRuleOn(QaRuleMarkerSplit);
-	TArray<TPair<int32, int32>> Marks;
-	for (int32 MarkAt = Text.Find(RedactionMark, ESearchCase::CaseSensitive); MarkAt != INDEX_NONE;
-		MarkAt = Text.Find(RedactionMark, ESearchCase::CaseSensitive, ESearchDir::FromStart, MarkAt + RedactionMark.Len()))
-	{
-		Marks.Add(TPair<int32, int32>(MarkAt, MarkAt + RedactionMark.Len()));
-	}
-	auto AddWords = [&Text, &Spans, &Marks, bMarkerSplit](int32 From, int32 To)
+	const TArray<TPair<int32, int32>> Marks = CardFindMarks(Folded);
+	auto AddWords = [&Folded, &Text, &Spans, &Marks, bMarkerSplit](int32 From, int32 To)
 	{
 		int32 At = From;
 		while (At < To)
 		{
-			while (At < To && CardSplitsWords(Text[At]))
+			while (At < To && CardSplitsWords(Folded[At]))
 			{
 				++At;
 			}
 			const int32 WordStart = At;
-			while (At < To && !CardSplitsWords(Text[At]))
+			while (At < To && !CardSplitsWords(Folded[At]))
 			{
 				++At;
 			}
@@ -1305,11 +2067,11 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 			}
 			int32 Start = WordStart;
 			int32 End = At;
-			while (Start < End && CardEdge(Text[Start]))
+			while (Start < End && CardEdge(Folded[Start]))
 			{
 				++Start;
 			}
-			while (End > Start && CardEdge(Text[End - 1]))
+			while (End > Start && CardEdge(Folded[End - 1]))
 			{
 				--End;
 			}
@@ -1317,8 +2079,9 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 			const bool bGlued = bMarkerSplit
 				&& ((WordStart == From && Marks.ContainsByPredicate([From](const TPair<int32, int32>& Mark) { return Mark.Value == From; }))
 					|| (WordEnd == To && Marks.ContainsByPredicate([To](const TPair<int32, int32>& Mark) { return Mark.Key == To; })));
-			const FString Word = Text.Mid(Start, FMath::Max(End - Start, 0));
-			Spans.Add({ Start, End, Text.Mid(WordStart, At - WordStart), Word, Word.ToLower(), WordStart, At, false, bGlued });
+			const FString Word = Folded.Mid(Start, FMath::Max(End - Start, 0));
+			Spans.Add({ Start, End, Folded.Mid(WordStart, At - WordStart), Word, Word.ToLower(), WordStart, At, false, bGlued,
+				Text.Mid(Start, FMath::Max(End - Start, 0)) });
 		}
 	};
 	if (bMarkerSplit)
@@ -1327,7 +2090,7 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		for (const TPair<int32, int32>& Mark : Marks)
 		{
 			AddWords(Previous, Mark.Key);
-			Spans.Add({ Mark.Key, Mark.Value, RedactionMark, RedactionMark, RedactionMark.ToLower(), Mark.Key, Mark.Value, true, false });
+			Spans.Add({ Mark.Key, Mark.Value, RedactionMark, RedactionMark, RedactionMark.ToLower(), Mark.Key, Mark.Value, true, false, RedactionMark });
 			Previous = Mark.Value;
 		}
 		AddWords(Previous, Count);
@@ -1345,99 +2108,212 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		}
 	}
 	const int32 NumSpans = Spans.Num();
-	TArray<bool> Certain;
-	Certain.Init(false, NumSpans);
+	// r7: THE CLASS of each word -- 0 none, 1 a label's WEAK value (redacted; /keep gives it back; a restore never applies it), 2 CERTAIN
+	// (never kept). A label-derived value is certain only when it is a credential by its own look (CardValueStrong) -- Second's (a), with
+	// CORE's refinement that the founder's fail-closed still holds for every password a label names
+	TArray<uint8> Class;
+	Class.Init(0, NumSpans);
+	// CERTAIN BY ITS OWN SHAPE (a key, a PEM block, a URL's user:pass@): what a restore applies to a /keep'd objective
+	TArray<bool> Shape;
+	Shape.Init(false, NumSpans);
 	// A VALUE GIVEN BY A LABEL (or Bearer / Basic, pwd=..., a URL's user:pass@) is redacted as typed, edge punctuation and all: trimmed, a
 	// password ending in "!" or ")" kept that character on screen and on disk (round 5's rule check: "the secret hunter2! goes in")
 	TArray<bool> TakenWhole;
 	TakenWhole.Init(false, NumSpans);
-	bool bInPem = false;
-	for (int32 Index = 0; Index < NumSpans; ++Index)
+	// r7 (Second's (d)): every value a label found, so EVERY other occurrence of it goes too
+	TArray<TPair<FString, uint8>> Values;
+	const bool bClasses = CardRuleOn(QaRuleClasses);
+	const bool bContinue = CardRuleOn(QaRuleContinue);
+	auto Take = [&](int32 At, const FString& Value, ECardLabelKind Kind, bool bAssigned, const FString& Rest, bool bForced)
 	{
-		const FSpan& Span = Spans[Index];
-		if (Span.bMarker)
+		if (At < 0 || At >= NumSpans || Spans[At].bMarker || Spans[At].Word.IsEmpty())
 		{
-			continue;
+			return;
 		}
-		// A PEM BLOCK is certain from its BEGIN line to its END line
-		const bool bPemStart = Span.Word.Contains(TEXT("-----BEGIN"));
-		bInPem |= bPemStart;
-		if (bInPem)
+		const uint8 Got = (!bClasses || bForced || CardValueStrong(Value, Kind, bAssigned) || (!Rest.IsEmpty() && CardValueStrong(Rest, Kind, bAssigned))) ? 2 : 1;
+		Class[At] = FMath::Max(Class[At], Got);
+		TakenWhole[At] = true;
+		if (!Value.IsEmpty() && bContinue)
 		{
-			Certain[Index] = true;
-			if (!bPemStart && Span.Word.Contains(TEXT("-----")))
+			Values.Add(TPair<FString, uint8>(Value, Got));
+		}
+	};
+	// the end of a clause: the last word, a word ending in . , ; ! ? ), or one before "and" / "but" / "please" -- never a marker (that was a
+	// word before a first pass redacted it)
+	auto ClauseFinal = [&Spans, NumSpans](int32 At)
+	{
+		if (At + 1 >= NumSpans)
+		{
+			return true;
+		}
+		const FString& Raw = Spans[At].Raw;
+		if (Raw.Len() > 0 && FCString::Strchr(TEXT(".,;!?)"), Raw[Raw.Len() - 1]) != nullptr)
+		{
+			return true;
+		}
+		return !Spans[At + 1].bMarker && CardOneOf(Spans[At + 1].Lower, CardClauseJoins);
+	};
+	// r7 (QaRuleContinue): A VALUE'S CONTINUATION -- a backslash-newline wrap and a quoted run (one value, judged whole), a pass phrase's words,
+	// a list ("X, Y"), a further value-like word, and past a marker as the window looks past one (a second pass sees a redacted value as a
+	// marker; the first must already have taken what the second would)
+	auto ContinueAfter = [&](int32 First, ECardLabelKind Kind)
+	{
+		if (!bContinue)
+		{
+			return;
+		}
+		TArray<int32> Run = { First };
+		int32 Last = First;
+		const FString& FirstRaw = Spans[First].Raw;
+		bool bQuoteOpen = FirstRaw.Len() > 0 && FCString::Strchr(CardQuoteOpen, FirstRaw[0]) != nullptr
+			&& !(FirstRaw.Len() > 1 && FCString::Strchr(CardQuoteClose, FirstRaw[FirstRaw.Len() - 1]) != nullptr);
+		if (bQuoteOpen)
+		{
+			// a quoted run only when its quote CLOSES within six words: an unclosed quote is not a value spanning the prose after it
+			bool bCloses = false;
+			for (int32 Ahead = First + 1; Ahead < FMath::Min(NumSpans, First + 7); ++Ahead)
 			{
-				bInPem = false;
+				if (Spans[Ahead].bMarker)
+				{
+					break;
+				}
+				const FString& AheadRaw = Spans[Ahead].Raw;
+				if (AheadRaw.Len() > 0 && FCString::Strchr(CardQuoteClose, AheadRaw[AheadRaw.Len() - 1]) != nullptr)
+				{
+					bCloses = true;
+					break;
+				}
 			}
-			continue;
+			bQuoteOpen = bCloses;
 		}
-		// A VALUE GLUED TO THE MARKER (r6) is screened as the credential it most likely is, whole
-		if (Span.bGlued && !Span.Word.IsEmpty())
+		int32 Quoted = 0;
+		int32 Phrase = 0;
+		while (true)
 		{
-			Certain[Index] = true;
-			TakenWhole[Index] = true;
-		}
-		bool bLabelWithValue = CardLabelWithValueR6(Span.Word);
-		// a two-word label glued to its value: "api key:X", "client secret=X"
-		if (!bLabelWithValue && Index > 0 && CardRuleOn(QaRuleLabelForms) && CardLabelQualifier(Spans[Index - 1].Lower) && CardGluedTwoWordValue(Span.Lower))
-		{
-			bLabelWithValue = true;
-		}
-		if (!Span.Word.IsEmpty() && (bLabelWithValue || CardUrlUserinfoPassword(Span.Word)))
-		{
-			Certain[Index] = true;
-			TakenWhole[Index] = true;
-		}
-		else if (!Span.Word.IsEmpty() && CardWordIsCertain(Span.Word))
-		{
-			Certain[Index] = true;
-		}
-		// the word after "Bearer"; after "Basic" when it looks like base64
-		if (Index + 1 < NumSpans && !Spans[Index + 1].bMarker)
-		{
-			if (Span.Lower == TEXT("bearer") || (Span.Lower == TEXT("basic") && CardBase64Word(Spans[Index + 1].Word)))
+			int32 Next = Last + 1;
+			if (Next < NumSpans && Spans[Next].bMarker)
 			{
-				Certain[Index + 1] = true;
-				TakenWhole[Index + 1] = true;
+				while (Next < NumSpans && Spans[Next].bMarker)
+				{
+					++Next;
+				}
+				if (Next < NumSpans && CardContLike(Spans[Next].Word, Kind, false))
+				{
+					Take(Next, Spans[Next].Word, Kind, false, FString(), false);
+					Last = Next;
+					bQuoteOpen = false;
+					continue;
+				}
+				return;
 			}
+			if (Next >= NumSpans)
+			{
+				return;
+			}
+			const FString& LastRaw = Spans[Last].Raw;
+			const FSpan& Candidate = Spans[Next];
+			if (bQuoteOpen && Candidate.Raw.Len() > 0 && FCString::Strchr(TEXT("”’»"), Candidate.Raw[0]) != nullptr)
+			{
+				bQuoteOpen = false;   // the quote closed before this word
+			}
+			const bool bWrapped = LastRaw.EndsWith(TEXT("\\"), ESearchCase::CaseSensitive);
+			if (bWrapped || (bQuoteOpen && Quoted < 6))
+			{
+				Quoted += bWrapped ? 0 : 1;
+				Take(Next, Candidate.Word, Kind, true, FString(), false);
+				Run.Add(Next);
+				// ONE VALUE, judged whole: a wrapped or quoted password's pieces are as strong as all of it
+				FString Whole;
+				for (const int32 Piece : Run)
+				{
+					FString Part = CardTrimEdges(Spans[Piece].Word);
+					while (Part.EndsWith(TEXT("\\"), ESearchCase::CaseSensitive))
+					{
+						Part.LeftChopInline(1);
+					}
+					Whole += Part;
+				}
+				if (bClasses && CardValueStrong(Whole, Kind, true))
+				{
+					for (const int32 Piece : Run)
+					{
+						Class[Piece] = 2;
+					}
+				}
+				if (bQuoteOpen && Candidate.Raw.Len() > 0 && FCString::Strchr(CardQuoteClose, Candidate.Raw[Candidate.Raw.Len() - 1]) != nullptr)
+				{
+					bQuoteOpen = false;
+				}
+				Last = Next;
+				continue;
+			}
+			if (Kind == ECardLabelKind::Phrase && Phrase < 8 && !(LastRaw.Len() > 0 && FCString::Strchr(TEXT(".;!?"), LastRaw[LastRaw.Len() - 1]) != nullptr)
+				&& CardIsAlphaWord(Candidate.Word) && !CardOneOf(Candidate.Lower, CardStopwords) && !CardOneOf(Candidate.Lower, CardNonValues))
+			{
+				++Phrase;
+				Take(Next, Candidate.Word, Kind, true, FString(), false);
+				Last = Next;
+				continue;
+			}
+			const bool bAfterComma = LastRaw.Len() > 0 && (LastRaw[LastRaw.Len() - 1] == TEXT(',') || LastRaw[LastRaw.Len() - 1] == TEXT(';'));
+			if (CardContLike(Candidate.Word, Kind, bAfterComma))
+			{
+				Take(Next, Candidate.Word, Kind, bAfterComma, FString(), false);
+				Last = Next;
+				continue;
+			}
+			return;
 		}
-		// A LOGIN PAIR without a URL (r6): "login admin:<value>"
-		if (CardRuleOn(QaRuleLoginPair) && Index > 0 && CardOneOf(Spans[Index - 1].Lower, CardLoginWords) && CardLoginPair(Span.Word))
-		{
-			Certain[Index] = true;
-			TakenWhole[Index] = true;
-		}
-		// A CREDENTIAL LABEL takes its value with it (r6, the LABEL WINDOW, Second's MAJOR 3): after an ASSIGNMENT (':' '=' ':=' '->' '-',
-		// on the label or a qualifier closing it -- "password for staging: X", "password (staging): X") the next word, a stopword excepted;
-		// otherwise, past the connectors ("was", "is", "for", "the") and a qualifier after a preposition ("for prod", "to the db"), the first
-		// word that LOOKS like a credential (CardValueLike). At most five words on.
-		ECardLabelKind Kind = CardLabelKind(Span.Word);
-		if (Kind == ECardLabelKind::None && Index > 0 && CardLabelQualifier(Spans[Index - 1].Lower) && (Span.Lower == TEXT("key") || Span.Lower == TEXT("secret")))
-		{
-			Kind = ECardLabelKind::Normal;
-		}
-		if (Kind == ECardLabelKind::None || Span.Raw.IsEmpty() || !CardRuleOn(QaRuleLabelWindow))
-		{
-			continue;
-		}
-		FString LabelRaw = Span.Raw;
+	};
+	// A CREDENTIAL LABEL takes its value with it (r6 the LABEL WINDOW; r7 Second's (c)): after an ASSIGNMENT (':' '=' ':=' '->' '-' '|', on the
+	// label or a qualifier closing it -- "password for staging: X", "password (staging): X") the next word, a stopword or a status word
+	// excepted and fillers skipped ("password: now X"); otherwise, past the connectors and a NOUN PHRASE after a preposition ("for the new
+	// staging db box is X"), the first word that LOOKS like a credential, a parenthesised one ("pwd (X)"), or -- a password-family label after
+	// "is", at its clause's end -- a plain word ("the password is marmalade"). At most nine words on.
+	auto LabelWindow = [&](int32 Index, ECardLabelKind Kind, bool bWordy)
+	{
+		const FSpan& Label = Spans[Index];
+		const bool bNounPhrase = CardRuleOn(QaRuleNounPhrase);
+		const bool bFillers = CardRuleOn(QaRuleFillers);
+		FString LabelRaw = Label.Raw;
 		while (LabelRaw.Len() > 0 && (LabelRaw[LabelRaw.Len() - 1] == TEXT('"') || LabelRaw[LabelRaw.Len() - 1] == TEXT('\'')))
 		{
 			LabelRaw.LeftChopInline(1);
 		}
 		bool bStrong = LabelRaw.EndsWith(TEXT(":"), ESearchCase::CaseSensitive) || LabelRaw.EndsWith(TEXT("="), ESearchCase::CaseSensitive);
+		bool bCopula = false;
+		bool bPrepositionSeen = false;
 		bool bAfterQualifier = false;
+		int32 Qualifiers = 0;
+		int32 Pending = INDEX_NONE;
 		int32 Next = Index + 1;
 		int32 Skips = 0;
-		while (Next < NumSpans && Skips <= 4)
+		const int32 MaxSkips = bNounPhrase ? 8 : 4;
+		while (Next < NumSpans && Skips <= MaxSkips)
 		{
 			const FSpan& Candidate = Spans[Next];
 			if (Candidate.bMarker)
 			{
-				break;   // that value is already gone
+				// that value is already gone -- or (r7) a marker the player TYPED stands between the label and the value
+				if (bContinue && (bStrong || bCopula || Next == Index + 1))
+				{
+					int32 After = Next;
+					while (After < NumSpans && Spans[After].bMarker)
+					{
+						++After;
+					}
+					if (After < NumSpans && CardContLike(Spans[After].Word, Kind, false))
+					{
+						Take(After, Spans[After].Word, Kind, bStrong, FString(), false);
+						ContinueAfter(After, Kind);
+					}
+				}
+				Pending = INDEX_NONE;
+				break;
 			}
 			const FString& Raw = Candidate.Raw;
-			if (CardOneOf(Raw, CardStrongConnectors))
+			const FString& Lower = Candidate.Lower;
+			if (CardOneOf(Raw, CardStrongConnectors) || (bFillers && Raw == TEXT("|")))
 			{
 				bStrong = true;
 				++Next;
@@ -1446,49 +2322,360 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 			}
 			if (!bStrong && (Raw.EndsWith(TEXT(":"), ESearchCase::CaseSensitive) || Raw.EndsWith(TEXT("="), ESearchCase::CaseSensitive))
 				&& Candidate.Word.Len() <= 24
-				&& (Next == Index + 1 || CardOneOf(Spans[Next - 1].Lower, CardPrepositions) || Raw.StartsWith(TEXT("("), ESearchCase::CaseSensitive)))
+				&& (Next == Index + 1 || CardOneOf(Spans[Next - 1].Lower, CardPrepositions) || Raw.StartsWith(TEXT("("), ESearchCase::CaseSensitive)
+					|| (bNounPhrase && bPrepositionSeen && !bCopula)))
 			{
 				bStrong = true;
 				++Next;
 				++Skips;
 				continue;
 			}
-			if (!bStrong && CardOneOf(Candidate.Lower, CardWeakConnectors))
+			if (bFillers && (bStrong || bCopula || (Raw.StartsWith(TEXT("("), ESearchCase::CaseSensitive) && !Raw.EndsWith(TEXT(")"), ESearchCase::CaseSensitive)))
+				&& CardOneOf(Lower, CardFillers))
 			{
+				++Next;
+				++Skips;
+				continue;
+			}
+			if (bNounPhrase && !bStrong && !bCopula && CardOneOf(Lower, CardPrepositions) && !CardOneOf(Lower, CardWeakConnectors))
+			{
+				bPrepositionSeen = true;
+				++Next;
+				++Skips;
+				continue;
+			}
+			if (!bStrong && CardOneOf(Lower, CardWeakConnectors))
+			{
+				if (CardOneOf(Lower, CardCopulas))
+				{
+					bCopula = true;
+				}
+				if (CardOneOf(Lower, CardPrepositions) && !bCopula)
+				{
+					bPrepositionSeen = true;
+				}
 				++Next;
 				++Skips;
 				continue;
 			}
 			if (!bStrong && Raw.StartsWith(TEXT("("), ESearchCase::CaseSensitive) && Raw.EndsWith(TEXT(")"), ESearchCase::CaseSensitive))
 			{
+				// r7: "pwd (X)" -- a parenthesised word is the value when it looks like one, a qualifier ("(staging)") when not
+				if (bFillers && CardValueLike(Candidate.Word, Kind) && !CardOneOf(Candidate.Word.ToLower(), CardNonValues))
+				{
+					Take(Next, Candidate.Word, Kind, false, FString(), false);
+					ContinueAfter(Next, Kind);
+					Pending = INDEX_NONE;
+					break;
+				}
 				++Next;
 				++Skips;
 				continue;
 			}
 			const FString Previous1 = Next - 1 > Index ? Spans[Next - 1].Lower : FString();
 			const FString Previous2 = Next - 2 > Index ? Spans[Next - 2].Lower : FString();
-			if (!bStrong && (CardOneOf(Previous1, CardPrepositions) || (CardOneOf(Previous1, CardArticles) && CardOneOf(Previous2, CardPrepositions)))
-				&& CardIsAlphaWord(Candidate.Word) && Candidate.Word.Len() <= 16 && !CardValueLike(Candidate.Word, Kind))
+			bool bQualifierPlace = CardOneOf(Previous1, CardPrepositions) || (CardOneOf(Previous1, CardArticles) && CardOneOf(Previous2, CardPrepositions));
+			if (bNounPhrase && bPrepositionSeen && !bCopula && Qualifiers < 5)
 			{
-				bAfterQualifier = true;
-				++Next;
-				++Skips;
-				continue;
+				bQualifierPlace = true;
+			}
+			bool bQualifierWord = false;
+			if (bNounPhrase)
+			{
+				bool bAllowed = Candidate.Word.Len() <= 20;
+				bool bAnyLetter = false;
+				for (const TCHAR Char : Candidate.Word)
+				{
+					bAllowed &= FChar::IsAlpha(Char) || Char == TEXT('-') || Char == TEXT('_') || Char == TEXT('\'');
+					bAnyLetter |= FChar::IsAlpha(Char);
+				}
+				bQualifierWord = (bAllowed && bAnyLetter) || (CardAllOf(Candidate.Word, 0, Candidate.Word.Len(), &CardDigitChar) && Candidate.Word.Len() <= 3);
+			}
+			else
+			{
+				bQualifierWord = CardIsAlphaWord(Candidate.Word) && Candidate.Word.Len() <= 16;
+			}
+			if (!bStrong && bQualifierPlace && bQualifierWord)
+			{
+				if (!CardValueLike(Candidate.Word, Kind))
+				{
+					bAfterQualifier = true;
+					++Qualifiers;
+					++Next;
+					++Skips;
+					continue;
+				}
+				// a value-like word INSIDE the noun phrase ("for the MyServer box is X"): held, taken only if no value follows
+				if (bNounPhrase && bPrepositionSeen && !bCopula && !CardValueStrong(Candidate.Word, Kind, false))
+				{
+					if (Pending == INDEX_NONE)
+					{
+						Pending = Next;
+					}
+					bAfterQualifier = true;
+					++Qualifiers;
+					++Next;
+					++Skips;
+					continue;
+				}
 			}
 			// AN AUTHORIZATION SCHEME IS NOT THE CREDENTIAL (Second, 10-03): "Authorization: Bearer X" keeps "Bearer" readable and takes X
-			if (Span.Lower.Contains(TEXT("authorization")) && CardAuthScheme(Candidate.Lower) && Next + 1 < NumSpans)
+			if (Label.Lower.Contains(TEXT("authorization")) && CardAuthScheme(Lower) && Next + 1 < NumSpans)
 			{
 				++Next;
 				continue;
 			}
-			const bool bTake = (bStrong && !CardOneOf(Candidate.Lower, CardStopwords))
+			if (bFillers && CardOneOf(Lower, CardNonValues) && !(Kind == ECardLabelKind::Phrase && bStrong && !ClauseFinal(Next)))
+			{
+				break;   // "password: required", "token: see the vault" -- a state, not a value
+			}
+			if (bClasses && CardIsAlphaWord(Candidate.Word) && CardKindOfBare(CardBare(Lower)) != ECardLabelKind::None && !CardValueLike(Candidate.Word, Kind))
+			{
+				break;   // another label ("password: token ..."), never a value
+			}
+			if (CardRuleOn(QaRuleLabels) && Kind == ECardLabelKind::Pin && !bStrong && !bCopula && Candidate.Word.Len() == 4
+				&& CardAllOf(Candidate.Word, 0, 4, &CardDigitChar)
+				&& (Candidate.Word.StartsWith(TEXT("19"), ESearchCase::CaseSensitive) || Candidate.Word.StartsWith(TEXT("20"), ESearchCase::CaseSensitive)))
+			{
+				break;   // "pin 2026 roadmap": a year
+			}
+			// an env key's or a token's value must LOOK like one even after '=' ("SORT_KEY = name", "token -> refresh mapping")
+			const bool bAssigns = bStrong && !(bClasses && (Kind == ECardLabelKind::EnvKey || Kind == ECardLabelKind::Token) && !CardValueLike(Candidate.Word, Kind));
+			bool bTake = (bAssigns && !CardOneOf(Lower, CardStopwords))
 				|| (CardValueLike(Candidate.Word, Kind) && !(bAfterQualifier && CardAllOf(Candidate.Word, 0, Candidate.Word.Len(), &CardDigitChar)));
+			if (!bTake && bFillers && bCopula && !bStrong && bWordy && CardPlainClauseWord(Candidate.Word) && ClauseFinal(Next))
+			{
+				bTake = true;
+			}
 			if (bTake && !Candidate.Word.IsEmpty())
 			{
-				Certain[Next] = true;
-				TakenWhole[Next] = true;
+				Take(Next, Candidate.Word, Kind, bStrong, FString(), false);
+				ContinueAfter(Next, Kind);
+				Pending = INDEX_NONE;
 			}
 			break;
+		}
+		if (Pending != INDEX_NONE)
+		{
+			Take(Pending, Spans[Pending].Word, Kind, false, FString(), false);
+		}
+	};
+	int32 Pem = 0;
+	bool bInPem = false;
+	for (int32 Index = 0; Index < NumSpans; ++Index)
+	{
+		const FSpan& Span = Spans[Index];
+		if (Span.bMarker)
+		{
+			continue;
+		}
+		// A PEM BLOCK is certain from its BEGIN line to the end of its END line (r7: r6 stopped at the BEGIN line's own closing dashes, so the
+		// body was only statistical and /keep gave it back -- Second's attack A28)
+		if (CardRuleOn(QaRulePem))
+		{
+			if (Pem == 0 && Span.Word.Contains(TEXT("-----BEGIN")))
+			{
+				Pem = 1;
+			}
+			if (Pem != 0)
+			{
+				Class[Index] = 2;
+				Shape[Index] = true;
+				if (Pem == 1)
+				{
+					const int32 EndAt = Span.Word.Find(TEXT("-----END"));
+					if (EndAt != INDEX_NONE)
+					{
+						Pem = Span.Word.Mid(EndAt + 8).Contains(TEXT("-----")) ? 0 : 2;
+					}
+				}
+				else if (Span.Word.Contains(TEXT("-----")))
+				{
+					Pem = 0;
+				}
+				continue;
+			}
+		}
+		else
+		{
+			const bool bPemStart = Span.Word.Contains(TEXT("-----BEGIN"));
+			bInPem |= bPemStart;
+			if (bInPem)
+			{
+				Class[Index] = 2;
+				Shape[Index] = true;
+				if (!bPemStart && Span.Word.Contains(TEXT("-----")))
+				{
+					bInPem = false;
+				}
+				continue;
+			}
+		}
+		// A VALUE GLUED TO THE MARKER (r6) is screened as the credential it most likely is, whole
+		if (Span.bGlued && !Span.Word.IsEmpty())
+		{
+			Take(Index, Span.Word, ECardLabelKind::Normal, false, FString(), false);
+		}
+		const FString PreviousLower = Index > 0 ? Spans[Index - 1].Lower : FString();
+		const bool bQualified = Index > 0 && (CardLabelQualifier(PreviousLower) || (CardRuleOn(QaRuleLabels) && CardOneOf(PreviousLower, CardQualifiersR7)));
+		FCardLabelValue LabelValue = CardLabelWithValueR7(Span.Word, Span.Orig);
+		// a two-word label glued to its value: "api key:X", "client secret=X", "license key:X"
+		if (!LabelValue.bFound && bQualified && CardRuleOn(QaRuleLabelForms) && CardGluedTwoWordValue(Span.Lower))
+		{
+			int32 Cut = 0;
+			while (Cut < Span.Word.Len() && Span.Word[Cut] != TEXT(':') && Span.Word[Cut] != TEXT('='))
+			{
+				++Cut;
+			}
+			FString Value = Span.Word.Mid(Cut + 1);
+			while (Value.Len() > 0 && (Value[0] == TEXT(':') || Value[0] == TEXT('=')))
+			{
+				Value.RightChopInline(1);
+			}
+			LabelValue.bFound = true;
+			LabelValue.Kind = ECardLabelKind::Normal;
+			LabelValue.Value = CardTrimEdges(Value);
+		}
+		if (!Span.Word.IsEmpty() && LabelValue.bFound && LabelValue.bSchemeNext)
+		{
+			// "Authorization:Bearer X" (r7): the scheme stays readable, X goes
+			if (Index + 1 < NumSpans && !Spans[Index + 1].bMarker)
+			{
+				Take(Index + 1, Spans[Index + 1].Word, ECardLabelKind::Token, true, FString(), false);
+			}
+		}
+		else if (!Span.Word.IsEmpty() && LabelValue.bFound)
+		{
+			Take(Index, LabelValue.Value, LabelValue.Kind, true, LabelValue.Rest, false);
+		}
+		else if (!Span.Word.IsEmpty() && CardUrlUserinfoPassword(Span.Word))
+		{
+			Class[Index] = 2;
+			Shape[Index] = true;
+			TakenWhole[Index] = true;
+		}
+		else if (!Span.Word.IsEmpty() && CardShapeCertain(Span.Word))
+		{
+			Class[Index] = 2;
+			Shape[Index] = true;
+		}
+		else if (!Span.Word.IsEmpty() && !bClasses && (CardHasCredentialWord(Span.Word) || Span.Word.Contains(TEXT("-----"))))
+		{
+			// r6: a credential WORD was certain on its own; r7 finds the value it carries (label=value) or nothing
+			Class[Index] = 2;
+			Shape[Index] = true;
+		}
+		// the word after "Bearer"; after "Basic" when it looks like base64 -- an Authorization scheme's credential is one by its place
+		if (Index + 1 < NumSpans && !Spans[Index + 1].bMarker)
+		{
+			const FSpan& After = Spans[Index + 1];
+			if ((Span.Lower == TEXT("bearer") || (Span.Lower == TEXT("basic") && CardBase64Word(After.Word))) && !(bClasses && CardOneOf(After.Lower, CardStopwords)))
+			{
+				const bool bSchemeValue = Span.Lower == TEXT("basic") || (CardValueLike(After.Word, ECardLabelKind::Token) && After.Word.Len() >= 8);
+				Take(Index + 1, After.Word, ECardLabelKind::Token, true, FString(), bSchemeValue);
+			}
+		}
+		// A LOGIN PAIR without a URL (r6): "login admin:<value>"; r7: after a CLI user flag ("curl -u admin:<value>")
+		const bool bLoginWord = Index > 0 && (CardOneOf(PreviousLower, CardLoginWords) || (CardRuleOn(QaRuleCli) && CardOneOf(Spans[Index - 1].Word, CardCliLoginFlags)));
+		if (CardRuleOn(QaRuleLoginPair) && bLoginWord && CardLoginPair(Span.Word))
+		{
+			int32 Colon = INDEX_NONE;
+			Span.Word.FindChar(TEXT(':'), Colon);
+			Take(Index, Span.Word.Mid(Colon + 1), ECardLabelKind::Normal, true, FString(), false);
+		}
+		// r7 (QaRuleCli; Second's finding 3): a CLI password flag after its own command, user:X@host with no scheme, https://X@host, "login bob / X"
+		if (CardRuleOn(QaRuleCli))
+		{
+			for (const FCardCliPassword& Cli : CardCliPasswords)
+			{
+				if (!Span.Word.StartsWith(Cli.Flag, ESearchCase::CaseSensitive))
+				{
+					continue;
+				}
+				bool bAfterCommand = false;
+				for (int32 Before = 0; Before < Index && !bAfterCommand; ++Before)
+				{
+					bAfterCommand = Spans[Before].Lower.Equals(Cli.Command, ESearchCase::CaseSensitive);
+				}
+				if (!bAfterCommand)
+				{
+					continue;
+				}
+				const int32 FlagLen = FCString::Strlen(Cli.Flag);
+				if (Span.Word.Equals(Cli.Flag, ESearchCase::CaseSensitive))
+				{
+					if (Index + 1 < NumSpans && !Spans[Index + 1].bMarker)
+					{
+						Take(Index + 1, Spans[Index + 1].Word, ECardLabelKind::Normal, true, FString(), false);
+					}
+				}
+				else if (Span.Word.Len() > FlagLen && Span.Word[FlagLen] != TEXT('-'))
+				{
+					Take(Index, Span.Word.Mid(FlagLen), ECardLabelKind::Normal, true, FString(), false);
+				}
+				break;
+			}
+			const FString Userinfo = CardSchemelessUserinfo(Span.Word);
+			if (!Userinfo.IsEmpty())
+			{
+				Take(Index, Userinfo, ECardLabelKind::Normal, true, FString(), false);
+			}
+			const FString UserToken = CardUrlUserToken(Span.Word);
+			if (!UserToken.IsEmpty() && CardValueLike(UserToken, ECardLabelKind::Token))
+			{
+				Take(Index, UserToken, ECardLabelKind::Token, true, FString(), false);
+			}
+			if (Span.Raw == TEXT("/") && Index >= 2 && CardOneOf(Spans[Index - 2].Lower, CardLoginWords) && Index + 1 < NumSpans && !Spans[Index + 1].bMarker
+				&& CardValueLike(Spans[Index + 1].Word, ECardLabelKind::Normal))
+			{
+				Take(Index + 1, Spans[Index + 1].Word, ECardLabelKind::Normal, true, FString(), false);
+			}
+		}
+		// THE LABEL WINDOW
+		ECardLabelKind Kind = CardLabelKind(Span.Word, Span.Orig, PreviousLower);
+		if (Kind == ECardLabelKind::None && bQualified && (Span.Lower == TEXT("key") || Span.Lower == TEXT("secret")))
+		{
+			Kind = ECardLabelKind::Normal;
+		}
+		if (Kind == ECardLabelKind::None || Span.Raw.IsEmpty() || !CardRuleOn(QaRuleLabelWindow))
+		{
+			continue;
+		}
+		LabelWindow(Index, Kind, CardPasswordFamilyLabel(Span.Word, Span.Orig));
+	}
+	// EVERY OCCURRENCE of a value a label found (r7, Second's (d): redaction by position left "password: X (again: X)" showing its second X).
+	// A certain value goes wherever it stands, glued into another word or not; a weak one only as a word of its own ("pass" never takes
+	// "passwords").
+	if (bContinue)
+	{
+		for (const TPair<FString, uint8>& Found : Values)
+		{
+			const FString& Value = Found.Key;
+			if (Value.Len() < 4 || CardOneOf(Value.ToLower(), CardStopwords))
+			{
+				continue;
+			}
+			for (int32 Index = 0; Index < NumSpans; ++Index)
+			{
+				const FSpan& Span = Spans[Index];
+				if (Span.bMarker || Class[Index] != 0 || Span.Word.IsEmpty())
+				{
+					continue;
+				}
+				bool bHit = false;
+				for (int32 At = Span.Word.Find(Value, ESearchCase::CaseSensitive); At != INDEX_NONE && !bHit;
+					At = Span.Word.Find(Value, ESearchCase::CaseSensitive, ESearchDir::FromStart, At + 1))
+				{
+					const TCHAR Before = At > 0 ? Span.Word[At - 1] : TEXT(' ');
+					const TCHAR After = At + Value.Len() < Span.Word.Len() ? Span.Word[At + Value.Len()] : TEXT(' ');
+					bHit = Found.Value == 2 || !(FChar::IsAlnum(Before) || FChar::IsAlnum(After));
+				}
+				if (bHit)
+				{
+					Class[Index] = Found.Value;
+					TakenWhole[Index] = true;
+				}
+			}
 		}
 	}
 	for (int32 Index = 0; Index < NumSpans; ++Index)
@@ -1499,10 +2686,16 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		{
 			continue;
 		}
-		if (Certain[Index])
+		if (Class[Index] != 0)
 		{
 			const bool bWhole = TakenWhole[Index];
-			OutFinds.Add({ bWhole ? Span.RawStart : Span.Start, bWhole ? Span.RawEnd - Span.RawStart : Span.End - Span.Start, true });
+			FSecretFind Find;
+			Find.Start = bWhole ? Span.RawStart : Span.Start;
+			Find.Length = bWhole ? Span.RawEnd - Span.RawStart : Span.End - Span.Start;
+			Find.bCertain = Class[Index] == 2;
+			Find.bWeak = Class[Index] == 1;
+			Find.bShape = Shape[Index];
+			OutFinds.Add(Find);
 			continue;
 		}
 		if (CardWordIsStructure(Span.Word))
@@ -1553,6 +2746,7 @@ void FWonderlandCardStore::ScreenText(const FString& Text, FString& OutScreened,
 {
 	OutFinds.Reset();
 	const bool bSpaces = CardRuleOn(QaRuleSpaces);
+	const bool bFold = CardRuleOn(QaRuleFold);
 	// TWO VIEWS OF ONE LINE, character for character: JOINED (what is stored: spaces normalised, invisibles gone -- a key split by a
 	// zero-width space is whole again) and SPLIT (the invisibles as spaces too -- a label and its value split by one stay two words)
 	FString Joined;
@@ -1564,8 +2758,9 @@ void FWonderlandCardStore::ScreenText(const FString& Text, FString& OutScreened,
 	for (int32 Index = 0; Index < Text.Len(); ++Index)
 	{
 		const uint32 Code = static_cast<uint32>(Text[Index]);
-		// a TAG character (U+E0000-E007F, invisible ASCII look-alikes) is a surrogate pair in UTF-16: U+DB40, U+DC00-DC7F
-		if (Code == 0xDB40 && Index + 1 < Text.Len() && static_cast<uint32>(Text[Index + 1]) >= 0xDC00 && static_cast<uint32>(Text[Index + 1]) <= 0xDC7F)
+		// a pair that draws nothing (CardInvisiblePair): a TAG character, and (r7) a supplement variation selector, a musical or shorthand
+		// format control
+		if (Code >= 0xD800 && Code <= 0xDBFF && Index + 1 < Text.Len() && CardInvisiblePair(Code, static_cast<uint32>(Text[Index + 1])))
 		{
 			Split.AppendChar(TEXT(' '));
 			Split.AppendChar(TEXT(' '));
@@ -1574,14 +2769,16 @@ void FWonderlandCardStore::ScreenText(const FString& Text, FString& OutScreened,
 			++Index;
 			continue;
 		}
-		if (bSpaces && CardSpaceLike(Code))
+		// r7: a blank glyph (U+2800, the Hangul fillers) separates words as a space does
+		if (bSpaces && (CardSpaceLike(Code) || (bFold && CardBlankGlyph(Code))))
 		{
 			SplitToJoined.Add(Joined.Len());
 			Joined.AppendChar(TEXT(' '));
 			Split.AppendChar(TEXT(' '));
 			continue;
 		}
-		if (IsInvisible(Code))
+		// r7: a variation selector, CGJ or the like is as invisible as a zero-width space
+		if (IsInvisible(Code) || (bFold && CardZeroWidthMark(Code)))
 		{
 			SplitToJoined.Add(INDEX_NONE);
 			Split.AppendChar(TEXT(' '));
@@ -1600,11 +2797,9 @@ void FWonderlandCardStore::ScreenText(const FString& Text, FString& OutScreened,
 		// to the marker the redaction writes (so a second screen finds nothing new)
 		TArray<bool> InMark;
 		InMark.Init(false, Joined.Len());
-		const FString RedactionMark = CardRedactionMarker();
-		for (int32 MarkAt = Joined.Find(RedactionMark, ESearchCase::CaseSensitive); MarkAt != INDEX_NONE;
-			MarkAt = Joined.Find(RedactionMark, ESearchCase::CaseSensitive, ESearchDir::FromStart, MarkAt + RedactionMark.Len()))
+		for (const TPair<int32, int32>& Mark : CardFindMarks(CardFold(Joined)))
 		{
-			for (int32 At = MarkAt; At < MarkAt + RedactionMark.Len(); ++At)
+			for (int32 At = Mark.Key; At < Mark.Value; ++At)
 			{
 				InMark[At] = true;
 			}
@@ -1636,24 +2831,38 @@ void FWonderlandCardStore::ScreenText(const FString& Text, FString& OutScreened,
 			{
 				++To;
 			}
-			OutFinds.Add({ From, To - From, Find.bCertain });
+			FSecretFind Widened = Find;
+			Widened.Start = From;
+			Widened.Length = To - From;
+			OutFinds.Add(Widened);
 		}
-		// in order, overlaps merged (a merged find is certain if either was)
-		OutFinds.Sort([](const FSecretFind& A, const FSecretFind& B) { return A.Start < B.Start || (A.Start == B.Start && A.Length < B.Length); });
-		TArray<FSecretFind> Merged;
-		for (const FSecretFind& Find : OutFinds)
+		CardMergeFinds(OutFinds);
+	}
+	// THE FIXPOINT (r7): the screen runs again on what it would store until it finds nothing new, each new find mapped back onto the line
+	// (CardRedactWithMap). A value one rule found can stand where another rule's value stood -- a label, a marker, a value -- and a second
+	// pass of the screen must never see more than the first (the restore's idempotence; Second's 10,000-line fuzz: 0 change)
+	if (CardRuleOn(QaRuleContinue))
+	{
+		FString Redacted;
+		TArray<TPair<int32, int32>> Owner;
+		TArray<FSecretFind> Again;
+		for (int32 Pass = 0; Pass < 4; ++Pass)
 		{
-			if (Merged.Num() > 0 && Find.Start < Merged.Last().Start + Merged.Last().Length)
+			CardRedactWithMap(Joined, OutFinds, Redacted, Owner);
+			FindSecrets(Redacted, Again);
+			if (Again.Num() == 0)
 			{
-				FSecretFind& Last = Merged.Last();
-				const int32 End = FMath::Max(Last.Start + Last.Length, Find.Start + Find.Length);
-				Last.Length = End - Last.Start;
-				Last.bCertain |= Find.bCertain;
-				continue;
+				break;
 			}
-			Merged.Add(Find);
+			for (const FSecretFind& Find : Again)
+			{
+				FSecretFind Mapped = Find;
+				Mapped.Start = Owner[Find.Start].Key;
+				Mapped.Length = Owner[Find.Start + Find.Length - 1].Value - Mapped.Start;
+				OutFinds.Add(Mapped);
+			}
+			CardMergeFinds(OutFinds);
 		}
-		OutFinds = MoveTemp(Merged);
 	}
 	OutScreened = MoveTemp(Joined);
 }
