@@ -1,5 +1,7 @@
 #include "WonderlandSocialSubsystem.h"
 
+#include "WonderlandEosVoice.h"
+
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
@@ -216,6 +218,20 @@ bool UWonderlandSocialSubsystem::ConnectWith(const FString& BaseUrl, const FStri
 	TUniquePtr<FWonderlandSocialLiveService> Connected = MakeUnique<FWonderlandSocialLiveService>(BaseUrl, Token);
 	Live = Connected.Get();
 	Scene = TEXT("live");
+	// R16 REAL VOICE (founder, 10-04: EOS Voice), only with the founder's EOS file (-WLEosConfig); else honestly pending, never faked
+	{
+		FString VoiceWhy;
+		TUniquePtr<FWonderlandEosVoice> Eos = FWonderlandEosVoice::TryCreate(Live, VoiceWhy);
+		if (Eos.IsValid())
+		{
+			Voice = MoveTemp(Eos);
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE: EOS voice on (the authority mints each room)"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE: no voice provider in this session (%s): VOICE TRANSPORT PENDING"), *VoiceWhy);
+		}
+	}
 	// MULTIPLAYER PHASE 1: report this player's Dog, draw the others, and join the public world this map is.
 	Live->SetAvatarSource([WeakThis = TWeakObjectPtr<UWonderlandSocialSubsystem>(this)](FWonderlandAvatarReport& Out)
 	{
