@@ -39,7 +39,9 @@ namespace WonderlandHandoffTransform
 		/** Each blade's line (its +Z) and half its drawn length: the breakup's shards re-form along it as the sword grows. */
 		FVector LeftSwordAxis = FVector::UpVector;
 		FVector RightSwordAxis = FVector::UpVector;
-		float SwordReach = 50.0f;
+		/** Each blade's OWN half-length (round 6: one value, the left sword's, served both). */
+		float LeftSwordReach = 50.0f;
+		float RightSwordReach = 50.0f;
 		float TimeSeconds = 0.0f;
 	};
 

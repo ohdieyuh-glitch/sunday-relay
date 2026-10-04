@@ -8589,6 +8589,14 @@ namespace
 		TArray<FQaFlowRead> EquipFlow;
 		TArray<FQaFlowRead> ReturnFlow;
 		float IdleAt = -1.0f;
+		// SW1c (round 6, Second's finding 8): each companion's ORIGINAL body, taken by the QA itself before the equip (offset from its actor,
+		// half-size), and per side over the whole transformation the most shards drawn at once, outside that body (the burst), and flown
+		FVector RestOffset[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		FVector RestExtent[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		int32 ShardsMost[2] = { 0, 0 };
+		int32 BurstMost[2] = { 0, 0 };
+		int32 FlightMost[2] = { 0, 0 };
+		bool bBreakupJudged = false;
 		void Check(const FString& Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
@@ -8749,6 +8757,18 @@ namespace
 			{
 				return true;
 			}
+			// SW1c's reference: each companion's body as it stands BEFORE anything is drawn in (the QA's own measure, not the product's record)
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				const AActor* Whole = Side == 0 ? LeftBody : RightBody;
+				const FBox WholeBox = Whole != nullptr ? Whole->GetComponentsBoundingBox(true) : FBox(ForceInit);
+				S.RestOffset[Side] = WholeBox.IsValid ? WholeBox.GetCenter() - Whole->GetActorLocation() : FVector::ZeroVector;
+				S.RestExtent[Side] = WholeBox.IsValid ? WholeBox.GetExtent() : FVector::ZeroVector;
+				S.ShardsMost[Side] = 0;
+				S.BurstMost[Side] = 0;
+				S.FlightMost[Side] = 0;
+			}
+			S.bBreakupJudged = false;
 			FString Said;
 			if (!WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said))
 			{
@@ -8765,6 +8785,60 @@ namespace
 		{
 			// EVERY TICK OF THE EQUIP, sampled for SW1b
 			S.EquipFlow.Add(QaFlowSample(LeftBody, RightBody, S.LeftScale, S.RightScale, Change, Swords));
+			// SW1c: EVERY TICK of the transformation, EACH SIDE ON ITS OWN, against that companion's ORIGINAL body (Second's finding 8: SW1 compared
+			// the shards with the SHRUNK body, so shards only filling the old outline passed; a speck of 0.1 uu counted; 20 of 40 across both
+			// sides passed with one side dark). Drawn = >= 0.5 uu across; the BURST = drawn and outside the original body; FLOWN = outside it and
+			// nearer its OWN blade than that body (>= 0.3 uu: shards shrink as they merge). The bed runs ~10 fps, so a test that needs a
+			// shard ON the blade in the transformation's last few frames could miss it; "nearer the blade than the body" holds for most of the
+			// gather, and a shard that never left the outline can never meet it.
+			if (State->GetState() == EWonderlandHandoffState::Transforming)
+			{
+				for (int32 Side = 0; Side < 2; ++Side)
+				{
+					const UInstancedStaticMeshComponent* SideShards = Change.GetShards(Side == 0);
+					const AActor* SideBody = Side == 0 ? LeftBody : RightBody;
+					if (SideShards == nullptr || !SideShards->IsVisible() || SideBody == nullptr || S.RestExtent[Side].IsNearlyZero())
+					{
+						continue;
+					}
+					const FBox Original = FBox::BuildAABB(SideBody->GetActorLocation() + S.RestOffset[Side], S.RestExtent[Side] * 1.05);
+					const FTransform SideSword = Swords.GetSwordWorld(Side == 0);
+					const FVector BladeFrom = SideSword.TransformPosition(FVector::ZeroVector);
+					const FVector BladeTo = SideSword.TransformPosition(FVector(0.0, 0.0, 100.0));
+					int32 Drawn = 0;
+					int32 Outside = 0;
+					int32 Flown = 0;
+					for (int32 Shard = 0; Shard < SideShards->GetInstanceCount(); ++Shard)
+					{
+						FTransform ShardXf;
+						if (!SideShards->GetInstanceTransform(Shard, ShardXf, true))
+						{
+							continue;
+						}
+						const double Across = ShardXf.GetScale3D().GetAbsMax() * 100.0;   // the shard mesh is 100 uu across at scale 1
+						const FVector ShardAt = ShardXf.GetLocation();
+						const bool bOutside = !Original.IsInsideOrOn(ShardAt);
+						Drawn += Across >= 0.5 ? 1 : 0;
+						Outside += Across >= 0.5 && bOutside ? 1 : 0;
+						Flown += Across >= 0.3 && bOutside
+							&& FMath::PointDistToSegment(ShardAt, BladeFrom, BladeTo) < FMath::Sqrt(Original.ComputeSquaredDistanceToPoint(ShardAt)) ? 1 : 0;
+					}
+					S.ShardsMost[Side] = FMath::Max(S.ShardsMost[Side], Drawn);
+					S.BurstMost[Side] = FMath::Max(S.BurstMost[Side], Outside);
+					S.FlightMost[Side] = FMath::Max(S.FlightMost[Side], Flown);
+				}
+			}
+			else if (S.bMidChecked && !S.bBreakupJudged)
+			{
+				S.bBreakupJudged = true;
+				const int32 Want = WonderlandHandoffTransform::ShardsPerSide;
+				const bool bBrokeUp = S.ShardsMost[0] >= Want && S.ShardsMost[1] >= Want && S.BurstMost[0] >= 6 && S.BurstMost[1] >= 6
+					&& S.FlightMost[0] >= 10 && S.FlightMost[1] >= 10;
+				S.Check(TEXT("SW1c"), bBrokeUp,
+					FString::Printf(TEXT("the breakup over the whole transformation, each side on its own, against each companion's ORIGINAL body: gold %d drawn ")
+						TEXT("at once (want %d), %d outside that body (the burst; want >= 6), %d flown, i.e. outside it and nearer its own blade than the body (want >= 10); ")
+						TEXT("cyan %d / %d / %d"), S.ShardsMost[0], Want, S.BurstMost[0], S.FlightMost[0], S.ShardsMost[1], S.BurstMost[1], S.FlightMost[1]));
+			}
 			// SW1, HALF-WAY THROUGH THE TRANSFORMATION
 			if (!S.bMidChecked && State->GetState() == EWonderlandHandoffState::Transforming
 				&& State->GetPhaseSeconds() >= FWonderlandMissionHandoff::TransformSeconds * 0.5f)
@@ -8797,11 +8871,10 @@ namespace
 					SpreadLeast = FMath::Min(SpreadLeast, ShardBox.IsValid && BodyNow.IsValid && BodyNow.GetExtent().GetMax() > KINDA_SMALL_NUMBER
 						? ShardBox.GetExtent().GetMax() / BodyNow.GetExtent().GetMax() : 0.0);
 				}
-				const bool bBreakup = ShardsDrawn >= WonderlandHandoffTransform::ShardsPerSide && SpreadLeast >= 1.2;
-				S.Check(TEXT("SW1"), Body > 0.1f && Body < 0.9f && Sword > 0.1f && Sword < 0.9f && FMath::Abs(Body + Sword - 1.0f) <= 0.25f && Motes > 0 && bBreakup,
+				S.Check(TEXT("SW1"), Body > 0.1f && Body < 0.9f && Sword > 0.1f && Sword < 0.9f && FMath::Abs(Body + Sword - 1.0f) <= 0.25f && Motes > 0,
 					FString::Printf(TEXT("half-way through the transformation: each companion %.2f itself, each sword %.2f formed (an exchange: both partial, ")
 						TEXT("summing to %.2f), %d motes of light streaming; the breakup: %d light shards drawn (want >= %d of both sides' %d), spread %.2fx the ")
-						TEXT("body left (the least side; want >= 1.2: pieces leaving the body, not only a shrink)"), Body, Sword, Body + Sword, Motes, ShardsDrawn,
+						TEXT("body left (the least side; REPORTED only: SW1c judges the breakup, per side, against the ORIGINAL body)"), Body, Sword, Body + Sword, Motes, ShardsDrawn,
 						WonderlandHandoffTransform::ShardsPerSide, 2 * WonderlandHandoffTransform::ShardsPerSide, SpreadLeast >= TNumericLimits<double>::Max() ? 0.0 : SpreadLeast));
 				S.Frame(TEXT("sw_1_transforming_noon"));
 				S.bMidChecked = true;

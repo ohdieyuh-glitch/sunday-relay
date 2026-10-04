@@ -3729,7 +3729,8 @@ void ARelayDogCharacter::UpdateHandoffPresentation(float DeltaSeconds)
 	// THE BLADES' LINES, for the breakup's shards to re-form along (each half-length grows with its sword)
 	Change.LeftSwordAxis = HandoffSwords.GetSwordWorld(true).GetRotation().GetAxisZ();
 	Change.RightSwordAxis = HandoffSwords.GetSwordWorld(false).GetRotation().GetAxisZ();
-	Change.SwordReach = 50.0f * static_cast<float>(HandoffSwords.GetSwordWorld(true).GetScale3D().GetAbsMax());
+	Change.LeftSwordReach = 50.0f * static_cast<float>(HandoffSwords.GetSwordWorld(true).GetScale3D().GetAbsMax());
+	Change.RightSwordReach = 50.0f * static_cast<float>(HandoffSwords.GetSwordWorld(false).GetScale3D().GetAbsMax());
 	Change.TimeSeconds = Time;
 	HandoffTransform.Show(Change);
 
