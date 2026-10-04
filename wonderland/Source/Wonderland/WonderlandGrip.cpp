@@ -20,9 +20,9 @@ namespace
 		TEXT("Mission Handoff: degrees a held blade points from STRAIGHT UP, out to its own hand's side (under 90 up, over 90 down; the founder's 10-03 stance: 122, low and diagonal)."));
 	TAutoConsoleVariable<float> CVarSwordVForward(TEXT("wl.Handoff.SwordVForward"), 10.0f,
 		TEXT("Mission Handoff: degrees a held blade leans FORWARD from the V's plane."));
-	TAutoConsoleVariable<float> CVarSwordDashV(TEXT("wl.Handoff.SwordDashV"), 110.0f,
+	TAutoConsoleVariable<float> CVarSwordDashV(TEXT("wl.Handoff.SwordDashV"), 104.0f,
 		TEXT("Mission Handoff: in the fast hop and the dash, degrees a held blade points from STRAIGHT UP, out to its own side (flatter: the body is bent)."));
-	TAutoConsoleVariable<float> CVarSwordChargeV(TEXT("wl.Handoff.SwordChargeV"), 128.0f,
+	TAutoConsoleVariable<float> CVarSwordChargeV(TEXT("wl.Handoff.SwordChargeV"), 122.0f,
 		TEXT("Mission Handoff: in the charging stance (armed, standing), degrees a held blade points from STRAIGHT UP, out to its own side."));
 	TAutoConsoleVariable<float> CVarSwordChargeVForward(TEXT("wl.Handoff.SwordChargeVForward"), -64.0f,
 		TEXT("Mission Handoff: in the charging stance, degrees a held blade leans FORWARD (negative: trailing back behind the charge)."));

@@ -8639,6 +8639,9 @@ namespace
 		GEngine->Exec(World, TEXT("wl.Handoff.Stance.Crouch 10"));
 	}
 
+	TAutoConsoleVariable<int32> CVarQaHopTrace(TEXT("wl.Qa.HopTrace"), 0,
+		TEXT("QA: 1 logs every frame of ST2C9's hop (WLHOPTRACE): the drawn soles and hips against the canon's own."));
+
 	bool QaStanceTick(float)
 	{
 		if (!GQaStance.IsValid())
@@ -9159,6 +9162,16 @@ namespace
 						++S.C9TipSamples;
 					}
 					const FQaChargeReading HopRead = QaReadCharge(Dog);
+					// wl.Qa.HopTrace 1: every frame of the hop, the DRAWN soles and hips against the canon's own (a worn skin solves its legs onto
+					// the canon's soles; round 8a, Shadow Flame: 2 landings a second and a 27 uu hip range where Relay OG had 4 and 12)
+					if (CVarQaHopTrace.GetValueOnGameThread() != 0)
+					{
+						const FVector CanonPlus = Dog->GetCanonSoleWorld(1.0f);
+						const FVector CanonMinus = Dog->GetCanonSoleWorld(-1.0f);
+						UE_LOG(LogWonderlandQa, Display, TEXT("WLHOPTRACE %s +%.3f s | drawn soles z %+.2f / %+.2f, hips z %.2f | canon soles z %+.2f / %+.2f | drawn-canon sole gap %.2f / %.2f uu"),
+							*Moving, Since, HopRead.Sole[0].Z - S.C9Ground, HopRead.Sole[1].Z - S.C9Ground, HopRead.HipZ - S.C9Ground, CanonPlus.Z - S.C9Ground,
+							CanonMinus.Z - S.C9Ground, FVector::Dist(HopRead.Sole[0], CanonPlus), FVector::Dist(HopRead.Sole[1], CanonMinus));
+					}
 					if (HopRead.bRead)
 					{
 						const bool bAir = HopRead.Sole[0].Z > S.C9Ground + 1.5 && HopRead.Sole[1].Z > S.C9Ground + 1.5;

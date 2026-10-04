@@ -3960,8 +3960,10 @@ FTransform ARelayDogCharacter::GetHandoffGripWorld(bool bLeftHand) const
 	}
 	const float Side = bPlusY ? 1.0f : -1.0f;
 	const WonderlandHands::FHand& Hand = bPlusY ? BodyHandPlusY : BodyHandMinusY;
+	// the standing hold (low, steep) standing; the moving one (flatter, trailing) as soon as the Dog moves, at any armed gait -- round 8a's
+	// ST2C15 had the steep blades 5-20 uu INTO the ground in the jog -- and through the hop and the dash
 	const WonderlandGrip::FHold Hold = WonderlandGrip::WithDash(WonderlandGrip::WithCharge(WonderlandGrip::CurrentHold(), StanceChargeWeight),
-		FMath::Max(ArmedStance.Dash.Value, ArmedStance.Fast.Value));
+		FMath::Max(FMath::Max(ArmedStance.Dash.Value, ArmedStance.Fast.Value), ArmedStance.Armed.Value * FMath::Clamp(Animator.Pose().GaitWeight, 0.0f, 1.0f)));
 	// IN THE FIST once the hand is there: the grip passes through the closed fingers
 	FTransform Grip = Hand.IsOn(Forearm) ? WonderlandGrip::HandGripAt(Forearm, Tip, Hand.GripCentreLocal(), Forward, Side, Hold)
 		: WonderlandGrip::HandGrip(Forearm, Tip, Forward, Side, Hold);
@@ -4046,7 +4048,7 @@ void ARelayDogCharacter::UpdateHandoffPresentation(float DeltaSeconds)
 	}
 	// THE V AROUND THE BODY (the founder's stance sheet): the blades' directions from the Dog's own frame
 	const WonderlandGrip::FHold VHold = WonderlandGrip::WithDash(WonderlandGrip::WithCharge(WonderlandGrip::CurrentHold(), StanceChargeWeight),
-		FMath::Max(ArmedStance.Dash.Value, ArmedStance.Fast.Value));
+		FMath::Max(FMath::Max(ArmedStance.Dash.Value, ArmedStance.Fast.Value), ArmedStance.Armed.Value * FMath::Clamp(Animator.Pose().GaitWeight, 0.0f, 1.0f)));
 	Swords.bHoldWorldRotation = VHold.bBodyV;
 	Swords.LeftHoldRotation = WonderlandGrip::BodyVRotation(GetActorTransform(), true, VHold);
 	Swords.RightHoldRotation = WonderlandGrip::BodyVRotation(GetActorTransform(), false, VHold);
