@@ -211,8 +211,10 @@ namespace RelayDogStride
 		FStride Out = Run;
 		Out.StrideLength = Run.StrideLength + (Long - Run.StrideLength) * W;
 		Out.DutyFactor = Run.DutyFactor + (Duty - Run.DutyFactor) * W;
-		// a bound, not a shuffle: the feet come up and the body rides the flight
-		Out.LiftHeight = Run.LiftHeight + (Leg * 0.34f - Run.LiftHeight) * W;
+		// a bound, not a shuffle: the feet come up and the body rides the flight -- but no higher than the run's own (round 7a, the real
+		// arithmetic driven through the sprint, s3d_harness): at 0.34 of the leg the swing thigh rose to 120 deg, 30 past horizontal, a
+		// cartoon high kick; at 0.24 it peaks at ~102, the accepted 520 uu/s run's own ~104, at the same cadence
+		Out.LiftHeight = Run.LiftHeight + (Leg * 0.24f - Run.LiftHeight) * W;
 		Out.BobHeight = Run.BobHeight + (Leg * 0.14f - Run.BobHeight) * W;
 		// NO LEAN OR ARMS HERE. The sprint's bend into the speed is the armed stance's (RelayDogArmedStance: DashBendDeg, about the
 		// hips): LeanDeg is written as a pitch that leans this rig BACK (FDogPose::FStanceBody). And its arms PUMP with the stride

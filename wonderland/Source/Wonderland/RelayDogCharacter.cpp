@@ -1692,6 +1692,14 @@ void ARelayDogCharacter::TeleportSucceeded(bool bIsATest)
 	if (!bIsATest)
 	{
 		EndDash(TEXT("a teleport moved the Dog"), TEXT("teleport"));
+		// and a lag still EASING OUT after a sprint that already ended goes too (review, 10-04): EndDash returns early without a dash
+		// running, so a teleport inside the ease-out swooped the camera across the jump, and streaming follows the view
+		if (bCameraLagEasing && CameraBoom != nullptr)
+		{
+			CameraBoom->bEnableCameraLag = false;
+			CameraBoom->CameraLagMaxDistance = 0.0f;
+			bCameraLagEasing = false;
+		}
 	}
 }
 
@@ -3078,6 +3086,7 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 			Dressed.StanceYawDeg = Pose.Stance.YawDeg;
 			Dressed.StanceRollDeg = Pose.Stance.RollDeg;
 			Dressed.StancePivotUU = Pose.Stance.PivotUU;
+			Dressed.StanceWeight = FMath::Max(ArmedStance.Armed.Value, ArmedStance.Dash.Value);
 		}
 	}
 	// COMPOSED WHETHER OR NOT ANYTHING IS WEARING IT, so Relay OG's own numbers can be held against an
@@ -4520,8 +4529,10 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 		const float Still = FMath::Clamp((O.Meditate + O.Fly) / FMath::Max(W, 0.001f), 0.0f, 1.0f) * W;
 		BodyRoot->SetRelativeLocation(BodyRestLocation + FVector(0.0f, Pose.SwayUU * (1.0f - Still),
 			(Pose.BobUU - Pose.PelvisDropUU) * (1.0f - Still) + O.LiftUU));
-		BodyRoot->SetRelativeRotation(FRotator(Pose.LeanDeg + Pose.Body.PitchDeg + O.Fly * CVarFlyLean.GetValueOnGameThread(),
-			Pose.BodyYawDeg * (1.0f - Still), (Pose.Body.RollDeg + Pose.TurnRollDeg) * (1.0f - Still)));
+		// the same terms as the stride's own write (ForwardIsForward, the armed stance's body), so nothing pops as an act comes in or out
+		const float ActAsWritten = CVarForwardIsForward.GetValueOnGameThread() != 0 ? -1.0f : 1.0f;
+		BodyRoot->SetRelativeRotation(FRotator(ActAsWritten * (Pose.LeanDeg + Pose.Body.PitchDeg) + Pose.Stance.PitchDeg + O.Fly * CVarFlyLean.GetValueOnGameThread(),
+			(Pose.BodyYawDeg + Pose.Stance.YawDeg) * (1.0f - Still), (Pose.Body.RollDeg + Pose.TurnRollDeg + Pose.Stance.RollDeg) * (1.0f - Still)));
 	}
 
 	const FTransform BodyXf = BodyRoot != nullptr ? BodyRoot->GetComponentTransform() : GetActorTransform();

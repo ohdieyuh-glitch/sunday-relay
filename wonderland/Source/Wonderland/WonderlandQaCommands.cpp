@@ -6555,6 +6555,13 @@ namespace
 		float LagOffAt = -1.0f;
 		float LagOffRatio = -1.0f;
 		float LagLastOnRatio = -1.0f;
+		// S3e, MEASURED (review of round 7: the ratio above is the product's own rule re-derived, so it could not fail on its own): the
+		// camera's offset from the Dog every tick, and the largest one-frame change of it from the tick before the lag went off to four after
+		FVector LastCamOff = FVector::ZeroVector;
+		bool bHaveCamOff = false;
+		float CamJumpBefore = 0.0f;
+		float CamJumpMax = -1.0f;
+		int32 CamJumpTicksLeft = -1;
 		TArray<FHandTest> Tests;
 		int32 TestIndex = 0;
 		int32 KeyIndex = 0;
@@ -6621,7 +6628,13 @@ namespace
 		Dog->QaRunKey(false);
 	}
 
-	/** A canon pivot's pitch against its parent, degrees (Pivot_<joint>, as dog_v2.py names them); -1000 when the rig has no such pivot. */
+	/**
+	 * A canon pivot's SWING against its parent, degrees (Pivot_<joint>, as dog_v2.py names them): the angle its hanging axis makes forward
+	 * of straight down -- a hanging limb's own pitch, CONTINUOUS past 90. Round 7a read GetRelativeRotation().Pitch, which a rotator
+	 * keeps within +-90: the sprint's thigh passes horizontal (the accepted run's does too, ~104 deg), every swing past it folded back
+	 * into two more crossings, and S3d counted 7.72 a second off a leg cycling 4.08 (s3d_harness, the real arithmetic). -1000 when the
+	 * rig has no such pivot.
+	 */
 	float QaCanonPivotPitch(const ARelayDogCharacter* Dog, const TCHAR* Pivot)
 	{
 		TInlineComponentArray<USceneComponent*> Joints;
@@ -6630,7 +6643,8 @@ namespace
 		{
 			if (Joint != nullptr && Joint->GetName() == Pivot)
 			{
-				return static_cast<float>(Joint->GetRelativeRotation().Pitch);
+				const FVector Hanging = Joint->GetRelativeRotation().Quaternion().RotateVector(FVector(0.0, 0.0, -1.0));
+				return static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(Hanging.X, -Hanging.Z)));
 			}
 		}
 		return -1000.0f;
@@ -6904,6 +6918,25 @@ namespace
 			}
 			// S3e: the camera's catch-up lag, every tick -- on while dashing, then eased out: when it goes off, the Dog's speed over the
 			// catch-up speed it was left at (the camera's gap behind the Dog, uu) must already be small
+			{
+				const APlayerController* CamPc = Cast<APlayerController>(Dog->GetController());
+				if (CamPc != nullptr && CamPc->PlayerCameraManager != nullptr)
+				{
+					const FVector CamOff = CamPc->PlayerCameraManager->GetCameraLocation() - Dog->GetActorLocation();
+					const float CamJump = H.bHaveCamOff ? static_cast<float>((CamOff - H.LastCamOff).Size()) : 0.0f;
+					H.LastCamOff = CamOff;
+					H.bHaveCamOff = true;
+					if (H.CamJumpTicksLeft > 0)
+					{
+						H.CamJumpMax = FMath::Max(H.CamJumpMax, CamJump);
+						--H.CamJumpTicksLeft;
+					}
+					else if (H.LagOffAt < 0.0f)
+					{
+						H.CamJumpBefore = CamJump;
+					}
+				}
+			}
 			if (const USpringArmComponent* Boom = Dog->FindComponentByClass<USpringArmComponent>())
 			{
 				const float LagRatio = Boom->CameraLagSpeed > 0.0f ? Ground / Boom->CameraLagSpeed : 0.0f;
@@ -6916,6 +6949,9 @@ namespace
 				{
 					H.LagOffAt = In;
 					H.LagOffRatio = LagRatio;
+					// the tick before, this one, and the four after it: the camera's own step must stay a step, never a snap
+					H.CamJumpMax = H.CamJumpBefore;
+					H.CamJumpTicksLeft = 5;
 				}
 			}
 			if (In >= 1.70f && !H.bS3Judged)
@@ -6946,14 +6982,15 @@ namespace
 						TEXT("never the ~10/s blur that read as a slide); the animator's own count %.2f, reported only"),
 						Visible, H.HipPitch.Num(), H.HipAt.Num() > 1 ? H.HipAt.Last() - H.HipAt[0] : 0.0f, Commanded));
 			}
-			if (H.bS3Judged && (H.LagOffAt >= 0.0f || In >= 5.5f))
+			if (H.bS3Judged && ((H.LagOffAt >= 0.0f && H.CamJumpTicksLeft <= 0) || In >= 5.5f))
 			{
-				// S3e (CORE, 10-04, from Second's review #6: a lag switched off under a moving Dog snapped the camera ~70 uu in one frame)
-				H.Check(TEXT("S3e"), H.bLagSeenOn && H.LagOffAt >= 0.0f && H.LagOffRatio >= 0.0f && H.LagOffRatio <= 2.3f,
-					FString::Printf(TEXT("the camera's catch-up lag: on in the dash %s; off at %.2f s (%.2f s after the release) with the Dog at %.0f uu/s, ")
-						TEXT("|v| / catch-up %.2f uu when it went (want <= 2.3: the product's 2 and one frame), %.2f on the tick before"),
-						H.bLagSeenOn ? TEXT("yes") : TEXT("NO"), H.LagOffAt, H.LagOffAt >= 0.0f ? H.LagOffAt - H.ReleasedAt : -1.0f, Ground, H.LagOffRatio,
-						H.LagLastOnRatio));
+				// S3e (CORE, 10-04, from Second's review #6: a lag switched off under a moving Dog snapped the camera ~70 uu in one frame):
+				// judged on the CAMERA -- its offset from the Dog may not jump more than 4 uu in one frame around the switch-off
+				H.Check(TEXT("S3e"), H.bLagSeenOn && H.LagOffAt >= 0.0f && H.CamJumpMax >= 0.0f && H.CamJumpMax <= 4.0f,
+					FString::Printf(TEXT("the camera's catch-up lag: on in the dash %s; off at %.2f s (%.2f s after the release) with the Dog at %.0f uu/s; ")
+						TEXT("the camera's largest one-frame step against the Dog around it %.2f uu (want <= 4: no snap); the product's |v| / catch-up then %.2f, reported only"),
+						H.bLagSeenOn ? TEXT("yes") : TEXT("NO"), H.LagOffAt, H.LagOffAt >= 0.0f ? H.LagOffAt - H.ReleasedAt : -1.0f, Ground, H.CamJumpMax,
+						H.LagOffRatio));
 				QaHandRelease(Dog);
 				H.KeyIndex = 0;
 				H.Tests = QaHandTests();
@@ -8053,6 +8090,8 @@ namespace
 		float HipShift = 0.0f;
 		/** The -Y hip LOWER than the +Y hip, uu (the pelvis down to the free leg). */
 		float PelvisDrop = 0.0f;
+		/** The pelvis's tilt, degrees: the -Y hip's drop over the hips' span (C4 judges this, so a narrow-hipped skin is held to the tilt). */
+		float PelvisTiltDeg = 0.0f;
 		float FrontAhead = 0.0f;
 		float RearBehind = 0.0f;
 		/** The soles apart sideways only, uu. */
@@ -8130,6 +8169,8 @@ namespace
 		R.MassAhead = static_cast<float>(FVector::DotProduct((Head + HipMid) * 0.5 - SoleMid, Fwd));
 		R.HipShift = static_cast<float>(FVector::DotProduct(HipMid - SoleMid, Right));
 		R.PelvisDrop = static_cast<float>(HipPlus.Z - HipMinus.Z);
+		const double HipSpan = FVector::Dist(HipPlus, HipMinus);
+		R.PelvisTiltDeg = HipSpan > 1.0 ? static_cast<float>(FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp((HipPlus.Z - HipMinus.Z) / HipSpan, -1.0, 1.0)))) : 0.0f;
 		R.FrontAhead = static_cast<float>(FVector::DotProduct(SoleMinus - HipMid, Fwd));
 		R.RearBehind = static_cast<float>(-FVector::DotProduct(SolePlus - HipMid, Fwd));
 		R.SoleGap = static_cast<float>(FMath::Abs(FVector::DotProduct(SolePlus - SoleMinus, Right)));
@@ -8214,8 +8255,9 @@ namespace
 			R.MassAhead, 0.06f * BodyH, BodyH, U.MassAhead);
 		V.bOk[3] = R.HipShift >= 1.5f;
 		V.Line[3] = FString::Printf(TEXT("the hips %+.1f uu toward +Y (onto the loaded rear leg) of the soles' midpoint (want >= +1.5; unarmed %+.1f)"), R.HipShift, U.HipShift);
-		V.bOk[4] = R.PelvisDrop >= 1.0f;
-		V.Line[4] = FString::Printf(TEXT("the -Y hip %+.1f uu LOWER than the +Y hip (want >= +1.0: the pelvis down to the free leg; unarmed %+.1f)"), R.PelvisDrop, U.PelvisDrop);
+		V.bOk[4] = R.PelvisTiltDeg >= 3.0f;
+		V.Line[4] = FString::Printf(TEXT("the pelvis tilted %+.1f deg down to the free -Y leg, its hip %+.1f uu lower (want >= +3.0 deg; unarmed %+.1f deg)"),
+			R.PelvisTiltDeg, R.PelvisDrop, U.PelvisTiltDeg);
 		const float GapGrowth = R.SoleGap - U.SoleGap;
 		const float SinkPlus = static_cast<float>(R.Sole[0].Z - U.Sole[0].Z);
 		const float SinkMinus = static_cast<float>(R.Sole[1].Z - U.Sole[1].Z);
@@ -8909,9 +8951,15 @@ namespace
 				if (Since >= 0.25f && Since <= 1.25f)
 				{
 					static const TCHAR* const ShoulderPivots[] = { TEXT("Pivot_armLeft"), TEXT("Pivot_armRight") };
+					const AWonderlandCompanionEmbodiment* WornArms = Dog->GetCostume();
 					for (int32 ArmSide = 0; ArmSide < 2; ++ArmSide)
 					{
-						const float Pitch = QaCanonPivotPitch(Dog, ShoulderPivots[ArmSide]);
+						// the DRAWN arms: a worn skin's own shoulders (review of round 7), else Relay OG's (Pivot_armLeft hangs at +Y)
+						float Pitch = -1000.0f;
+						if (WornArms == nullptr || !WornArms->QaShoulderSwing(ArmSide == 0 ? 1.0f : -1.0f, Pitch))
+						{
+							Pitch = QaCanonPivotPitch(Dog, ShoulderPivots[ArmSide]);
+						}
 						if (Pitch > -900.0f)
 						{
 							S.C9ArmLow[ArmSide] = FMath::Min(S.C9ArmLow[ArmSide], Pitch);

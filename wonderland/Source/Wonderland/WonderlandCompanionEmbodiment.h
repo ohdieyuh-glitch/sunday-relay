@@ -207,6 +207,9 @@ public:
 	bool QaLegAt(float SideSign, FVector& OutHip, FVector& OutKnee, FVector& OutSole) const;
 	/** QA (the charging stance, 10-04): this figure's own head joint in WORLD space (its first `head` part). False if none. */
 	bool QaHeadAt(FVector& OutHead) const;
+	/** QA: this figure's own shoulder on one side (+1 = the +Y arm): its swing, degrees, the angle its hanging axis makes forward of
+	 *  straight down in its parent's frame (continuous past 90, unlike a rotator's pitch). False if none. */
+	bool QaShoulderSwing(float SideSign, float& OutDeg) const;
 
 	/**
 	 * Whether the clock is allowed to touch this body's glow at all. False for the wardrobe's preview figure,
@@ -671,7 +674,9 @@ private:
 	FVector DesiredLocation(const APawn* Pawn) const;
 	void Animate(float TimeSeconds);
 	/** The hip and knee rotations that put the sole of the leg at HipIndex on SoleWorld (a worn costume's legs). */
-	bool SolveLegToSole(int32 HipIndex, const FVector& SoleWorld, FRotator& OutHip, FRotator& OutKnee) const;
+	/** LateralShare 0: the planar solve (the foot's sideways place ignored, no roll). Toward 1 (the armed stance): the sideways part is
+	 *  solved too, as a roll, and the result checked against this leg's own chain (OutHip.Roll = that roll). */
+	bool SolveLegToSole(int32 HipIndex, const FVector& SoleWorld, FRotator& OutHip, FRotator& OutKnee, float LateralShare = 0.0f) const;
 	/**
 	 * The shoulder and elbow rotations that put the hand of the arm at ShoulderIndex where the canon's hand on the same
 	 * side is, bending its elbow toward the side the canon's elbow bends -- corrected as little as possible from the

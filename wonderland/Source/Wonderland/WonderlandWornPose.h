@@ -162,4 +162,6 @@ struct FWonderlandWornPose
 	float StanceYawDeg = 0.0f;
 	float StanceRollDeg = 0.0f;
 	float StancePivotUU = 0.0f;
+	/** How much of the armed stance is on (0..1): a costume solves its own legs' sideways part by this share. */
+	float StanceWeight = 0.0f;
 };

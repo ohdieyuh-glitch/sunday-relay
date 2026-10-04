@@ -1651,6 +1651,21 @@ bool AWonderlandCompanionEmbodiment::QaHeadAt(FVector& OutHead) const
 	return false;
 }
 
+bool AWonderlandCompanionEmbodiment::QaShoulderSwing(float SideSign, float& OutDeg) const
+{
+	for (int32 Index = 0; Index < Motions.Num() && Index < PartPivots.Num(); ++Index)
+	{
+		const FPartMotion& Part = Motions[Index];
+		if (Part.LimbKind == 3 && Part.LimbSide != 0 && (Part.LimbSide > 0) == (SideSign > 0.0f) && PartPivots[Index] != nullptr)
+		{
+			const FVector Hanging = PartPivots[Index]->GetRelativeRotation().Quaternion().RotateVector(FVector(0.0, 0.0, -1.0));
+			OutDeg = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(Hanging.X, -Hanging.Z)));
+			return true;
+		}
+	}
+	return false;
+}
+
 bool AWonderlandCompanionEmbodiment::QaReadPaint(FName Name, FLinearColor& OutBase, FLinearColor& OutRim, FString& OutRelief) const
 {
 	OutBase = OutRim = FLinearColor(-1.0f, -1.0f, -1.0f, 1.0f);
@@ -3214,7 +3229,7 @@ bool AWonderlandCompanionEmbodiment::GetHandFrame(bool bPlusY, USceneComponent*&
 	return false;
 }
 
-bool AWonderlandCompanionEmbodiment::SolveLegToSole(int32 HipIndex, const FVector& SoleWorld, FRotator& OutHip, FRotator& OutKnee) const
+bool AWonderlandCompanionEmbodiment::SolveLegToSole(int32 HipIndex, const FVector& SoleWorld, FRotator& OutHip, FRotator& OutKnee, float LateralShare) const
 {
 	// A TWO-BONE SOLVE IN THE HIP'S OWN PARENT FRAME, where the hip rests at RestLocation and swings about Y.
 	//
@@ -3235,17 +3250,42 @@ bool AWonderlandCompanionEmbodiment::SolveLegToSole(int32 HipIndex, const FVecto
 	}
 	const FVector Target = Frame->GetComponentTransform().InverseTransformPosition(SoleWorld);
 	const FVector Reach = Target - Part.RestLocation;
-	const float Forward = static_cast<float>(Reach.X);
-	const float Down = static_cast<float>(-Reach.Z);
 	const float Thigh = Part.ThighUU;
 	const float Shin = Part.ShinUU;
-	const float Span = FMath::Clamp(FMath::Sqrt(Forward * Forward + Down * Down),
-		FMath::Abs(Thigh - Shin) + 0.01f, Thigh + Shin - 0.001f);
-	const float Bend = PI - FMath::Acos(FMath::Clamp((Thigh * Thigh + Shin * Shin - Span * Span) / (2.0f * Thigh * Shin), -1.0f, 1.0f));
-	const float Lead = FMath::Acos(FMath::Clamp((Thigh * Thigh + Span * Span - Shin * Shin) / (2.0f * Thigh * Span), -1.0f, 1.0f));
-	const float Toward = FMath::Atan2(Forward, Down);
-	OutHip = FRotator(FMath::RadiansToDegrees(Toward + Lead), 0.0f, 0.0f);
-	OutKnee = FRotator(-FMath::RadiansToDegrees(Bend), 0.0f, 0.0f);
+	// THE SIDEWAYS PART, AS THE STANCE COMES IN (founder 10-04, the charging stance; review of round 7): the canon's soles move out
+	// from under a tilted, shifted body, and a planar solve that then takes the CANON's roll lands this leg's sole off its spot -- the
+	// writer rolls after the pitch, and these hips sit at their own width. So the target's sideways part is solved here as a roll,
+	// and the aim corrected against this leg's own chain (FRotator(pitch, 0, roll), the knee folded by -bend), as the canon's is.
+	// At share 0 the sideways part is dropped and no pass runs: exactly the planar solve it always was.
+	const float Share = FMath::Clamp(LateralShare, 0.0f, 1.0f);
+	const FVector Want(Reach.X, Reach.Y * Share, Reach.Z);
+	FVector Aim = Want;
+	float PitchDeg = 0.0f;
+	float BendDeg = 0.0f;
+	float LateralDeg = 0.0f;
+	for (int32 Pass = 0; Pass <= 4; ++Pass)
+	{
+		const float Forward = static_cast<float>(Aim.X);
+		const float Down = static_cast<float>(FMath::Sqrt(Aim.Y * Aim.Y + Aim.Z * Aim.Z));
+		const float Span = FMath::Clamp(FMath::Sqrt(Forward * Forward + Down * Down),
+			FMath::Abs(Thigh - Shin) + 0.01f, Thigh + Shin - 0.001f);
+		const float Bend = PI - FMath::Acos(FMath::Clamp((Thigh * Thigh + Shin * Shin - Span * Span) / (2.0f * Thigh * Shin), -1.0f, 1.0f));
+		const float Lead = FMath::Acos(FMath::Clamp((Thigh * Thigh + Span * Span - Shin * Shin) / (2.0f * Thigh * Span), -1.0f, 1.0f));
+		const float Toward = FMath::Atan2(Forward, Down);
+		PitchDeg = FMath::RadiansToDegrees(Toward + Lead);
+		BendDeg = FMath::RadiansToDegrees(Bend);
+		LateralDeg = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(Aim.Y), static_cast<float>(-Aim.Z)));
+		if (Pass == 4 || Share <= 0.0f)
+		{
+			break;
+		}
+		const FVector ShinInHip = FRotator(-BendDeg, 0.0f, 0.0f).RotateVector(FVector(0.0, 0.0, -Shin));
+		const FVector Chain = FRotator(PitchDeg, 0.0f, -LateralDeg).RotateVector(FVector(ShinInHip.X, ShinInHip.Y, ShinInHip.Z - Thigh));
+		Aim += Want - Chain;
+	}
+	// a negative roll swings a hanging limb toward +Y (UE's rotation; the canon measured the same on its own legs)
+	OutHip = FRotator(PitchDeg, 0.0f, Share > 0.0f ? -LateralDeg : 0.0f);
+	OutKnee = FRotator(-BendDeg, 0.0f, 0.0f);
 	return true;
 }
 
@@ -3676,7 +3716,7 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 					FRotator SolvedHip = CopiedHip;
 					FRotator SolvedKnee = CopiedShin;
 					if (Performed < 0.999f && Knee != nullptr
-						&& SolveLegToSole(Index, bPlus ? WornPose.SolePlusY : WornPose.SoleMinusY, SolvedHip, SolvedKnee))
+						&& SolveLegToSole(Index, bPlus ? WornPose.SolePlusY : WornPose.SoleMinusY, SolvedHip, SolvedKnee, WornPose.StanceWeight))
 					{
 						// THE CANON HIP'S OUTWARD SWEEP COMES WITH IT (the Mission Handoff's spaced feet, M2): the two-bone solve
 						// works in the leg's sagittal plane and would drop it. Walking and standing it is 0 on the canon -- its
@@ -3686,7 +3726,11 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 						{
 							// The roll as the canon wrote it BEFORE its knees-out turn (the canon hip's own rotator is now turned
 							// about its hip-to-sole line, so it no longer holds a clean roll).
-							SolvedHip.Roll = bPlus ? WornPose.StanceHipRollPlusY : WornPose.StanceHipRollMinusY;
+							// As the armed stance comes in, the roll becomes this leg's OWN (solved onto the canon's sole above); the canon's
+							// is kept only for what is left of the share, so the change is eased, never a step.
+							const float StanceShare = FMath::Clamp(WornPose.StanceWeight, 0.0f, 1.0f);
+							SolvedHip.Roll = static_cast<float>(SolvedHip.Roll)
+								+ (bPlus ? WornPose.StanceHipRollPlusY : WornPose.StanceHipRollMinusY) * (1.0f - StanceShare);
 							SolvedHip.Yaw = 0.0f;
 							// and the knees out (wl.Handoff.Stance.KneesOut, 0 unless the stance asks for it) about THIS skin's own
 							// hip-to-sole line, on its own thigh and shin: the foot it solved onto the canon's sole stays there. The
