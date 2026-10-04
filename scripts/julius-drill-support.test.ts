@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { execFile } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -351,14 +351,28 @@ const suite = enabled ? describe : describe.todo;
 const runProcess = promisify(execFile);
 
 suite('the failure-recovery and repair-loop drills, run for real', () => {
+  // Each case's database is its own, so it goes when the suite does, whatever the verdict.
+  const made: string[] = [];
   const freshDatabase = async (): Promise<string> => {
     const name = `juliusdrill${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
     const admin = new Pool({ connectionString: databaseUrl! });
     try { await admin.query(`CREATE DATABASE ${name}`); } finally { await admin.end(); }
+    made.push(name);
     const url = new URL(databaseUrl!);
     url.pathname = `/${name}`;
     return url.toString();
   };
+  afterAll(async () => {
+    const admin = new Pool({ connectionString: databaseUrl! });
+    try {
+      for (const name of made) {
+        await admin.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()', [name]);
+        await admin.query(`DROP DATABASE IF EXISTS ${name}`);
+      }
+    } finally {
+      await admin.end();
+    }
+  }, 60_000);
 
   it('retries a transient provider failure, refuses to retry a permanent one, and the gate believes it', async () => {
     const out = mkdtempSync(join(tmpdir(), 'julius-failure-drill-'));
