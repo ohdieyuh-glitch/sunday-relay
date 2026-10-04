@@ -197,6 +197,7 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
 | **#328** | Wonderland social display names: the verified GitHub login is recorded at sign-in, and a nameless request never erases it | on #325 | green |
 | **#330** | Wonderland presence is a **lease**: a presence not refreshed for 120 s is absent everywhere (reads and decisions), a stale heartbeat is `NOT_IN_INSTANCE`, and the next live heartbeat moves live players out of a departed player's voice room | on #328 | see the PR |
 | **#327** | Wonderland R16 harness: 24 closed-list checks over HTTP against the real bridge **process**. The scenario keeps the heartbeat, and LEASE fails on a lapse. The restart check is split: DURABLE as stored, then RECONNECT (HELD/REENTERED), then PRESENCE | **restacked on #330** (it must sit above every product change) | green before the restack; re-run on the new head |
+| **#332** | Wonderland **hosted store**: `relay-bridge/wonderland-store.ts` (`inspect`/`bootstrap`) brings the bridge's store from nothing to migrated on a record and REFUSES every database it did not create (the permanent store's case included). `GET /relay-api/wonderland/readiness` (operator only) reports the store as facts. Rehearsed on real PostgreSQL through the real bridge process and the whole R16 scenario | on #327 | see the PR |
 
 **Findings to act on:**
 - **C could not run on the paid venue.** Every paid job's database is fresh, so a WITH arm was always `CARRY_EMPTY`. #326 is the transport. Without it, no C pair can run.
@@ -209,7 +210,8 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
 - **034 (Project Brain) has no spec in the repo.** The founder and SECOND must define it. 035's guard requires a `034_%` stamp.
 - **Hosted R16 needs a hosted PostgreSQL** for the Railway bridge, because the bridge never migrates at boot.
   - Provisioning is the founder's.
-  - Applying 031–033 there needs a reviewed live-store procedure (`DATABASE_URL` stays parked).
+  - The procedure is built and rehearsed (`docs/relay/WONDERLAND_HOSTED_STORE.md`, #332) and **AWAITING INDEPENDENT REVIEW**. It runs only after 031–033 land.
+  - It attaches the store through `JULIUS_DATABASE_URL`; `DATABASE_URL` stays parked.
 - **Stale PRs:** #290, #291 and #293–#297 are fully folded into `main` (via #301/#304/#305/#310/#311). Recommend closing; that is the founder's call.
 - **Do not dispatch C's four paid runs yet.** On the retained paid record, **0 of 5** bundles would have been a valid WITHOUT arm. All three completed runs passed review with no blocking finding, so a WITH arm would be refused in preflight (`CARRY_SOURCE_NOT_A_VALID_PAIR`).
   - Two facts the design must respect: the same contract gives the same Julius run id, and, on `main`, warning promotion is unreachable: no contract field reaches it, and the reviewer was never asked a finding's kind.
