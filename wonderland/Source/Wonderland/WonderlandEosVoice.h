@@ -85,6 +85,8 @@ private:
 	FWonderlandVoiceParticipant& SelfParticipant();
 	FWonderlandVoiceParticipant* FindParticipant(const FString& UserId);
 	FString UserIdFor(const FString& InProductUserId) const;
+	/** The panel row a room member was shown under (RowUserByPuid), else the authority's binding (UserIdFor). */
+	FString RowUserFor(const FString& InProductUserId) const;
 
 	struct FImpl;
 	TUniquePtr<FImpl> Impl;
@@ -106,6 +108,8 @@ private:
 	bool bJoining = false;
 	bool bCancelJoin = false;
 	bool bLeaving = false;
+	/** This player's own leave was refused and the room is held (HoldRoomAfterFailedLeave): its later exit is a client-side drop. */
+	bool bHeldAfterFailedLeave = false;
 	bool bLocalMicMuted = false;
 	bool bAudienceRefreshing = false;
 	bool bAudienceRefreshPending = false;

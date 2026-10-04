@@ -1141,7 +1141,9 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeVoice()
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth()
 				[
-					bConnectedish ? MakeVoiceButton(TEXT("LEAVE VOICE"), TEXT("disconnect"), FString(), true)
+					// a room HELD after a refused leave still offers LEAVE VOICE (Second's RC13 review C1: FAILED showed JOIN VOICE, which the
+					// held room refused -- a dead instruction)
+					(bConnectedish || Voice.bRoomHeld) ? MakeVoiceButton(TEXT("LEAVE VOICE"), TEXT("disconnect"), FString(), true)
 						: MakeVoiceButton(TEXT("JOIN VOICE"), TEXT("connect"), Snapshot.Party.PartyId, Snapshot.bHasParty)
 				]
 				+ SHorizontalBox::Slot().AutoWidth()

@@ -201,7 +201,8 @@ void UWonderlandSocialSubsystem::LeaveVoiceIfPartyGone()
 		return;
 	}
 	const FWonderlandVoiceState& VoiceNow = Eos->GetState();
-	if (VoiceNow.Connection != TEXT("CONNECTED") && VoiceNow.Connection != TEXT("CONNECTING"))
+	// a room HELD after a refused leave counts too (Second's RC13 review C1: FAILED was skipped, so a gone party kept its room)
+	if (VoiceNow.Connection != TEXT("CONNECTED") && VoiceNow.Connection != TEXT("CONNECTING") && !VoiceNow.bRoomHeld)
 	{
 		return;
 	}

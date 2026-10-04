@@ -37,6 +37,9 @@ struct FWonderlandVoiceState
 	/** Why, for a person: "VOICE TRANSPORT PENDING", "network changed", "provider refused" … */
 	FString Detail;
 	TArray<FWonderlandVoiceParticipant> Participants;
+	/** A room is still HELD after a leave the provider refused (Second's RC13 review C1): LEAVE VOICE stays on offer whatever
+	 *  Connection says (it reads FAILED), and a party that is gone still leaves it. Client-side only; not in social-contracts.ts. */
+	bool bRoomHeld = false;
 };
 
 struct FWonderlandVoiceCommandResult
