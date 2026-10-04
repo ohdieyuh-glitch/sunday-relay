@@ -14,6 +14,7 @@
 //
 // Not in Shipping: a development instrument, like every other wl.* switch.
 #include "CoreMinimal.h"
+#include "Misc/ScopeExit.h"
 #include "Misc/CoreDelegates.h"
 #include "WonderlandCompanionConsole.h"
 
@@ -14428,6 +14429,17 @@ namespace
 			}
 			SlotsMade.Reset();
 		};
+		// ONE SLOT BACK AT ONCE (round 8g: SI6 submits 11 objectives and SI10 13 into a board capped at six open tabs; freed only at the
+		// case's end, every submission after the sixth found no slot and the case went BLIND) -- each objective's slot is given back as
+		// soon as it has been judged
+		auto FreeOne = [Set, &SlotsMade](const FGuid& Made)
+		{
+			if (!Set->DismissDraft(Made))
+			{
+				Set->DeleteLocalContract(Made);
+			}
+			SlotsMade.Remove(Made);
+		};
 		// A CASE THAT FOUND NO SLOT IS BLIND: it fails, and says so
 		int32 CaseMissedAt = 0;
 		auto SlotNote = [&SlotsMissed, &CaseMissedAt]()
@@ -14617,6 +14629,10 @@ namespace
 			{
 				continue;
 			}
+			ON_SCOPE_EXIT
+			{
+				FreeOne(Done.Id);
+			};
 			const bool bReferenceFlags = FCString::Strstr(Objective, ReferenceFlags) != nullptr;
 			if (Done.bAccepted && Done.Certain + Done.Statistical == 0 && Done.Kept == Objective)
 			{
@@ -14749,6 +14765,10 @@ namespace
 			{
 				continue;
 			}
+			ON_SCOPE_EXIT
+			{
+				FreeOne(Done.Id);
+			};
 			int32 Still = 0;
 			const bool bKeepCall = Done.bAccepted && Set->KeepObjectiveAsTyped(Done.Id, Typed, Still);
 			const FWonderlandMissionTask* After = Set->Find(Done.Id);
