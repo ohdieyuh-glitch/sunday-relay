@@ -5050,6 +5050,11 @@ void UWonderlandUiSubsystem::HandleSocialAction(const FString& OperationId, cons
 		{
 			return;
 		}
+		// a notice belongs to the session it was given in (Second's review, minor 7): a new sign-in or a sign-out drops it
+		if (OperationId == TEXT("signin.start") || OperationId == TEXT("signin.out"))
+		{
+			PendingSocialNotice.Reset();
+		}
 		if (OperationId == TEXT("signin.start")) { Social->StartSignIn(); }
 		else if (OperationId == TEXT("signin.cancel")) { Social->CancelSignIn(); }
 		else if (OperationId == TEXT("signin.out")) { Social->SignOut(); }
@@ -5190,6 +5195,10 @@ void UWonderlandUiSubsystem::HandleSocialVoiceChanged()
 
 void UWonderlandUiSubsystem::HandleSocialAnswered(const FString& OperationId, const FString& SubjectId, const FWonderlandSocialActionResult& Answer)
 {
+	if (OperationId == TEXT("world.join.auto"))
+	{
+		return;   // a join the client made by itself: no screen answers it, so its "Done" never overwrites a notice (Second's review M1)
+	}
 	const FString Line = Answer.bOk ? FString(TEXT("Done")) : Answer.Reason;
 	if (Open == EOverlay::Social && SocialHubPanel.IsValid())
 	{

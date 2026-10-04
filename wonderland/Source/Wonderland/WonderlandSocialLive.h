@@ -101,6 +101,18 @@ private:
 	bool bWorldWanted = false;
 	bool bWorldBusy = false;
 	double NextWorldAt = 0.0;
+	/** A join this client makes BY ITSELF -- after a removal, or when the server forgot the world (404) -- answers as "world.join.auto"
+	 *  (no screen shows it) and, refused, is tried again on a backoff (Second's review of 4d31c524 / 804b528d). */
+	FWonderlandSocialActionResult JoinWorldAs(const FString& Target, const FString& Arg, bool bAutomatic);
+	/** The last world joined (target + argument): a forgotten player is put back into the SAME one. */
+	FString WorldTarget = TEXT("PUBLIC");
+	FString WorldArg = TEXT("golden_arrival");
+	bool bAutoJoinInFlight = false;
+	bool bAutoJoinPending = false;
+	int32 AutoJoinAttempts = 0;
+	double NextAutoJoinAt = 0.0;
+	FString AutoJoinTarget;
+	FString AutoJoinArg;
 	TArray<TSharedRef<IHttpRequest, ESPMode::ThreadSafe>> InFlight;
 	/** Callbacks hold a weak copy: a service replaced or destroyed mid-request is never called back into. */
 	TSharedRef<bool> Alive = MakeShared<bool>(true);

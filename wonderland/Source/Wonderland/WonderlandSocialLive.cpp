@@ -313,6 +313,11 @@ bool FWonderlandSocialLiveService::Tick(float)
 			Refresh();
 		}
 	}
+	// AN AUTOMATIC JOIN THAT WAS REFUSED is tried again on its own clock (JoinWorldAs), never two at once
+	if (bAutoJoinPending && !bAutoJoinInFlight && FPlatformTime::Seconds() >= NextAutoJoinAt)
+	{
+		JoinWorldAs(AutoJoinTarget, AutoJoinArg, true);
+	}
 	if (bWorldWanted && !bWorldBusy && FPlatformTime::Seconds() >= NextWorldAt)
 	{
 		TickWorld();
@@ -346,29 +351,36 @@ void FWonderlandSocialLiveService::TickWorld()
 		if (!Problem.IsEmpty())
 		{
 			LastError = Problem;
-			// TAKEN OUT OF A PRIVATE SERVER (founder P4/P5; Second's server contract 14c5fdb6: the removed player's next world.state is
-			// REFUSED, permission-denied, with the server's own generic words "You can't stay in this server." for 60 s). Any refusal of
-			// world.state while this client stood in a private server takes it out: the server's words, never why, then the public world.
-			if (WorldView.bInWorld && WorldView.Kind == TEXT("PRIVATE_SERVER") && bWorldWanted && Status >= 400 && Status < 500 && Status != 401)
+			// A REFUSAL IS NEVER A REMOVAL (Second's review of 4d31c524: since b7dd6eae the server answers a removal 200 with no context).
+			// 404 "Join a world first": the server's sweep forgot this player (silent for 15 s -- a hitch, a modal, sleep), so the SAME
+			// world is joined again quietly. 400 (a position out of range): logged, and the player stays.
+			if (Status == 404 && bWorldWanted && !bAutoJoinInFlight && !bAutoJoinPending)
 			{
-				UE_LOG(LogTemp, Display, TEXT("WLWORLD removed from a private server by the server (HTTP %d): back to the public world"), Status);
-				WorldView = FWonderlandWorldView();
-				Answered.Broadcast(TEXT("world.removed"), FString(), FWonderlandSocialActionResult{false, Problem, false});
-				WorldChanged.Broadcast();
-				JoinWorld(TEXT("PUBLIC"), TEXT("golden_arrival"));
+				UE_LOG(LogTemp, Display, TEXT("WLWORLD the server no longer holds this player's world (404): joining the same one again quietly"));
+				JoinWorldAs(WorldTarget, WorldArg, true);
 			}
+			return;
+		}
+		if (!Data.IsValid())
+		{
+			// a 200 without a view (only something that is not the bridge -- a proxy -- answers so): never read as a removal
+			LastError = TEXT("the world answer carried no view");
 			return;
 		}
 		const bool bWasPrivate = WorldView.bInWorld && WorldView.Kind == TEXT("PRIVATE_SERVER");
 		WorldView = WonderlandSocialLiveDetail::ParseWorldView(Data);
 		if (bWasPrivate && !WorldView.bInWorld && bWorldWanted)
 		{
-			// TAKEN OUT OF A PRIVATE SERVER BY THE SERVER (founder P4/P5, 10-04: a block either way removes the member; the owner stays).
-			// Only the generic words, never why; then back to the public world this map is.
+			// TAKEN OUT OF A PRIVATE SERVER BY THE SERVER (founder P4/P5, 10-04: a block either way removes the member; the owner stays):
+			// the server answers ok with NO context for 60 s (Second b7dd6eae). Only the generic words, never why; then the public world
+			// this map is -- joined quietly, so its "Done" can never overwrite the words (Second's review M1).
 			UE_LOG(LogTemp, Display, TEXT("WLWORLD removed from a private server by the server: back to the public world"));
 			Answered.Broadcast(TEXT("world.removed"), FString(), FWonderlandSocialActionResult{false, TEXT("You can't stay in this server."), false});
 			WorldChanged.Broadcast();
-			JoinWorld(TEXT("PUBLIC"), TEXT("golden_arrival"));
+			if (!bAutoJoinInFlight)
+			{
+				JoinWorldAs(TEXT("PUBLIC"), TEXT("golden_arrival"), true);
+			}
 			return;
 		}
 		WorldChanged.Broadcast();
@@ -377,6 +389,16 @@ void FWonderlandSocialLiveService::TickWorld()
 
 FWonderlandSocialActionResult FWonderlandSocialLiveService::JoinWorld(const FString& Target, const FString& Arg)
 {
+	return JoinWorldAs(Target, Arg, false);
+}
+
+FWonderlandSocialActionResult FWonderlandSocialLiveService::JoinWorldAs(const FString& Target, const FString& Arg, bool bAutomatic)
+{
+	if (bAutomatic)
+	{
+		bAutoJoinInFlight = true;
+	}
+	bAutoJoinPending = false;   // this join replaces any planned retry; a player's own join ends the automatic ones
 	TSharedPtr<FJsonObject> Body = WonderlandSocialLiveDetail::Object(TEXT("target"), Target.ToUpper());
 	if (Target.Equals(TEXT("PUBLIC"), ESearchCase::IgnoreCase))
 	{
@@ -386,8 +408,12 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::JoinWorld(const FStr
 	else if (Target.Equals(TEXT("PRIVATE"), ESearchCase::IgnoreCase)) { Body->SetStringField(TEXT("name"), Arg); }
 	else if (Target.Equals(TEXT("FRIEND"), ESearchCase::IgnoreCase)) { Body->SetStringField(TEXT("userId"), Arg); }
 	else if (Target.Equals(TEXT("INVITE"), ESearchCase::IgnoreCase)) { Body->SetStringField(TEXT("inviteId"), Arg); }
-	Call(TEXT("POST"), TEXT("/world/join"), Body, [this](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+	Call(TEXT("POST"), TEXT("/world/join"), Body, [this, Target, Arg, bAutomatic](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
 	{
+		if (bAutomatic)
+		{
+			bAutoJoinInFlight = false;
+		}
 		FWonderlandSocialActionResult Answer;
 		Answer.bOk = Problem.IsEmpty();
 		Answer.Reason = Problem;
@@ -396,14 +422,31 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::JoinWorld(const FStr
 			bWorldWanted = true;
 			NextWorldAt = 0.0;
 			WorldView = WonderlandSocialLiveDetail::ParseWorldView(Data);
-			UE_LOG(LogTemp, Display, TEXT("WLWORLD joined %s (%s), %d of %d here"), *WorldView.ContextId, *WorldView.ServerName, WorldView.Population, WorldView.Capacity);
+			WorldTarget = Target.ToUpper();   // the world a forgotten player is put back into (the 404 path above)
+			WorldArg = Arg;
+			AutoJoinAttempts = 0;
+			UE_LOG(LogTemp, Display, TEXT("WLWORLD joined %s (%s), %d of %d here%s"), *WorldView.ContextId, *WorldView.ServerName, WorldView.Population,
+				WorldView.Capacity, bAutomatic ? TEXT(" (automatically)") : TEXT(""));
 			WorldChanged.Broadcast();
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("WLWORLD join refused: %s"), *Problem);
+			UE_LOG(LogTemp, Warning, TEXT("WLWORLD join refused%s: %s"), bAutomatic ? TEXT(" (automatic)") : TEXT(""), *Problem);
+			if (bAutomatic)
+			{
+				// THE WAY BACK (Second's review, minor 1): the same world refused it -> the public world; the public world refused it (or
+				// nothing answered) -> again, spaced out, until it takes or the player joins somewhere themselves
+				static const double Backoffs[] = { 2.0, 5.0, 15.0, 30.0 };
+				const bool bWasPublic = Target.Equals(TEXT("PUBLIC"), ESearchCase::IgnoreCase);
+				AutoJoinTarget = bWasPublic ? Target : FString(TEXT("PUBLIC"));
+				AutoJoinArg = bWasPublic ? Arg : FString(TEXT("golden_arrival"));
+				NextAutoJoinAt = FPlatformTime::Seconds() + Backoffs[FMath::Min(AutoJoinAttempts, 3)];
+				AutoJoinAttempts += 1;
+				bAutoJoinPending = true;
+			}
 		}
-		Answered.Broadcast(TEXT("world.join"), FString(), Answer);
+		// AN AUTOMATIC JOIN ANSWERS NO SCREEN (Second's review M1): the player did not ask, and its "Done" must never overwrite a notice
+		Answered.Broadcast(bAutomatic ? TEXT("world.join.auto") : TEXT("world.join"), FString(), Answer);
 		Refresh();
 	});
 	return FWonderlandSocialActionResult{true, TEXT("Joining…"), true};
@@ -412,6 +455,7 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::JoinWorld(const FStr
 FWonderlandSocialActionResult FWonderlandSocialLiveService::LeaveWorld()
 {
 	bWorldWanted = false;
+	bAutoJoinPending = false;   // the player chose to leave: no automatic join puts them back
 	WorldView = FWonderlandWorldView();
 	WorldChanged.Broadcast();
 	return Ask(TEXT("world.leave"), FString(), TEXT("POST"), TEXT("/world/leave"), MakeShared<FJsonObject>());
