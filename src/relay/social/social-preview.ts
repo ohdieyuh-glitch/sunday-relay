@@ -102,8 +102,32 @@ export function buildSocialView(state: SocialState, viewerId: SocialUserId, nowI
     .map((id) => partyViewFor(state, viewerId, id))
     .filter((p): p is PartyView => p !== null && !p.viewerIsMember);
   const mine = partyOf(state, viewerId);
+  const myParty = mine !== undefined ? partyViewFor(state, viewerId, mine.partyId) : null;
+  const recentPlayers = recentPlayersFor(state, viewerId);
+  const invites = partyInvitesFor(state, viewerId, nowIso);
+
+  /*
+   * WHO `profiles` DESCRIBES -- ONE RULE, the same for a stranger and for anybody behind the viewer's wall (founder, 10-04:
+   * the presence or absence of a person must not reveal a block). Not every player on the server: only the people the viewer
+   * already meets on a surface of this same view -- themselves, their friends, requests either way, their recent players, the
+   * members of their party and of the parties they may see, the other side of the conversations they may see (and the
+   * senders in them), whoever invited them -- plus the people they blocked themselves, so they can unblock. Every one of
+   * those surfaces is already walled, so a blocker is absent exactly as a stranger is absent: the same absence an unfriend
+   * leaves. Anybody else's card is still one profile.read away.
+   */
+  const described = new Set<SocialUserId>([viewerId, ...friends.map((f) => f.userId)]);
+  for (const r of pending.incoming) described.add(r.fromUserId);
+  for (const r of pending.outgoing) described.add(r.toUserId);
+  for (const e of recentPlayers) described.add(e.userId);
+  for (const p of [myParty, ...visibleParties]) for (const m of p?.members ?? []) described.add(m.userId);
+  for (const c of conversations) {
+    if (c.otherUserId !== null) described.add(c.otherUserId);
+    for (const m of state.messages[c.conversationId] ?? []) described.add(m.senderId);
+  }
+  for (const i of invites) described.add(i.fromUserId);
+  for (const b of state.blocks) if (b.blockerId === viewerId) described.add(b.blockedId);
   const profiles: Record<SocialUserId, UserProfileView> = {};
-  for (const userId of Object.keys(state.users).sort()) {
+  for (const userId of [...described].sort()) {
     const view = resolveProfileFor(state, viewerId, userId);
     if (view !== null) profiles[userId] = view;
   }
@@ -122,14 +146,14 @@ export function buildSocialView(state: SocialState, viewerId: SocialUserId, nowI
       incoming: pending.incoming.map((r) => ({ requestId: r.requestId, from: row(state, viewerId, r.fromUserId)! })).filter((r) => r.from !== null),
       outgoing: pending.outgoing.map((r) => ({ requestId: r.requestId, to: row(state, viewerId, r.toUserId)! })).filter((r) => r.to !== null),
     },
-    recentPlayers: recentPlayersFor(state, viewerId)
+    recentPlayers: recentPlayers
       .map((e) => ({ ...e, person: row(state, viewerId, e.userId)! }))
       .filter((e) => e.person !== null),
     conversations,
     messages: Object.fromEntries(conversations.map((c) => [c.conversationId, state.messages[c.conversationId] ?? []])),
-    party: mine !== undefined ? partyViewFor(state, viewerId, mine.partyId) : null,
+    party: myParty,
     visibleParties,
-    partyInvites: partyInvitesFor(state, viewerId, nowIso)
+    partyInvites: invites
       .map((i) => ({ ...i, partyName: state.parties[i.partyId]?.name ?? 'Party', from: row(state, viewerId, i.fromUserId)! }))
       .filter((i) => i.from !== null),
     profiles,

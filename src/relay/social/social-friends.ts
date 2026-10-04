@@ -49,20 +49,24 @@ function befriend(state: SocialState, a: SocialUserId, b: SocialUserId, atIso: s
 
 /* -------------------------------------------------------------- requests */
 
+/** The one refusal for "you cannot ask this person": a stranger who accepts no requests, and anybody across a wall. */
+export const NOT_ACCEPTING_REQUESTS = 'this person is not accepting friend requests';
+
 /**
- * SEND A FRIEND REQUEST. Refused across a block (either way, and without saying which way), to an existing friend, to
- * somebody who accepts no requests, and as a duplicate. A request crossing one already sent the other way IS the answer:
- * the two become friends at once.
+ * SEND A FRIEND REQUEST. Refused to an existing friend, to somebody who accepts no requests, as a duplicate, and across a
+ * block either way -- which answers EXACTLY as a stranger who accepts no requests (founder, 10-04: a refusal across a wall is
+ * the stranger's; the blocked side is shown the blocker as such a stranger, social-presence.ts privateStrangerView). A
+ * request crossing one already sent the other way IS the answer: the two become friends at once.
  */
 export function sendFriendRequest(state: SocialState, actorId: SocialUserId, toUserId: SocialUserId, atIso: string): RelayResult<SocialState> {
   const exist = bothExist(state, actorId, toUserId);
   if (!exist.ok) return fail(exist.error);
-  if (blockedEitherWay(state, actorId, toUserId)) return denied('this person cannot be added');
+  if (blockedEitherWay(state, actorId, toUserId)) return denied(NOT_ACCEPTING_REQUESTS);
   if (areFriends(state, actorId, toUserId)) return invalid('already friends');
   if (pendingRequestBetween(state, actorId, toUserId)) return invalid('a request is already pending');
   const crossing = pendingRequestBetween(state, toUserId, actorId);
   if (crossing) return ok(befriend(resolveRequest(state, crossing.requestId, 'ACCEPTED', atIso), actorId, toUserId, atIso));
-  if (state.users[toUserId].privacy.friendRequestPolicy !== 'EVERYONE') return denied('this person is not accepting friend requests');
+  if (state.users[toUserId].privacy.friendRequestPolicy !== 'EVERYONE') return denied(NOT_ACCEPTING_REQUESTS);
   const minted = mintId(state, 'freq');
   const request: FriendRequest = {
     requestId: minted.id,
@@ -79,12 +83,15 @@ function ownPending(state: SocialState, requestId: string): FriendRequest | unde
   return state.requests.find((r) => r.requestId === requestId && r.status === 'PENDING');
 }
 
-/** Only the RECIPIENT accepts. A block placed since the request was sent makes it unacceptable. */
+/**
+ * Only the RECIPIENT accepts. A block placed since the request was sent makes it unacceptable (a block cancels it; a request
+ * carried across one -- old data -- reads exactly like a request that is gone).
+ */
 export function acceptFriendRequest(state: SocialState, actorId: SocialUserId, requestId: string, atIso: string): RelayResult<SocialState> {
   const request = ownPending(state, requestId);
   if (request === undefined) return missing('pending friend request');
   if (request.toUserId !== actorId) return denied('only the recipient can accept a friend request');
-  if (blockedEitherWay(state, request.fromUserId, request.toUserId)) return denied('this person cannot be added');
+  if (blockedEitherWay(state, request.fromUserId, request.toUserId)) return missing('pending friend request');
   return ok(befriend(resolveRequest(state, requestId, 'ACCEPTED', atIso), request.fromUserId, request.toUserId, atIso));
 }
 

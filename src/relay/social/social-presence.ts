@@ -108,10 +108,31 @@ const NOTHING: SocialActionAvailability = Object.freeze({
 });
 
 /**
+ * A STRANGER WHO SHARES NOTHING: exactly what a viewer with no relationship sees of somebody whose every audience is NOBODY
+ * (presence, messages, friend requests) -- OFFLINE, no last-seen, restricted as PRIVATE; the profile opens, nothing else is
+ * offered but mute, block and report. It is how the BLOCKED side sees the blocker (founder, 10-04: nothing shown to the
+ * blocked side names BLOCKED; the projection is an ordinary private stranger's, field for field).
+ */
+export function privateStrangerView(subjectId: SocialUserId): UserPresenceView {
+  return {
+    userId: subjectId,
+    onlineState: 'OFFLINE',
+    headline: 'OFFLINE',
+    activityLabel: null,
+    location: null,
+    partyId: null,
+    lastSeenAtIso: null,
+    can: { ...NOTHING, viewProfile: true, mute: true, block: true, report: true },
+    restrictedReason: 'PRIVATE',
+  };
+}
+
+/**
  * ONE PERSON AS ONE VIEWER MAY SEE THEM.
  *
  * The order of the checks is the policy:
- *   1. a block either way -> OFFLINE, nothing else, and the only actions left are the ones that manage the block itself;
+ *   1. a block either way -> nothing live. The BLOCKER sees their own block (OFFLINE, BLOCKED, unblock/report: they manage it);
+ *      the BLOCKED sees an ordinary private stranger (privateStrangerView) -- never a word that names the block;
  *   2. not connected, APPEAR_OFFLINE, or outside the presence audience -> OFFLINE with no activity or place;
  *   3. AWAY / BUSY are the person's own words and replace the activity headline (the activity may still be listed);
  *   4. activity, location and a private server are each gated by their own audience;
@@ -122,7 +143,8 @@ export function resolvePresenceFor(state: SocialState, viewerId: SocialUserId, s
   if (subject === undefined) return null;
   const relationship = relationshipOf(state, viewerId, subjectId);
 
-  if (relationship === 'BLOCKED' || relationship === 'BLOCKED_BY') {
+  if (relationship === 'BLOCKED_BY') return privateStrangerView(subjectId);
+  if (relationship === 'BLOCKED') {
     return {
       userId: subjectId,
       onlineState: 'OFFLINE',
@@ -131,8 +153,8 @@ export function resolvePresenceFor(state: SocialState, viewerId: SocialUserId, s
       location: null,
       partyId: null,
       lastSeenAtIso: null,
-      // The blocker can still unblock and report; the blocked can still report. Nobody can reach the other.
-      can: { ...NOTHING, viewProfile: relationship === 'BLOCKED', block: false, report: true },
+      // The blocker can still open the card to unblock, and report. Nobody can reach the other.
+      can: { ...NOTHING, viewProfile: true, block: false, report: true },
       restrictedReason: 'BLOCKED',
     };
   }
@@ -235,19 +257,29 @@ export function resolvePresenceFor(state: SocialState, viewerId: SocialUserId, s
 /**
  * A PROFILE AS ONE VIEWER SEES IT. The public card is the owner's own showcase (already profile-safe by its types); the
  * presence, relationship, mutual friends and party status are this viewer's, through the same resolver as every list.
+ *
+ * THE BLOCKED SIDE OPENS THE BLOCKER'S PROFILE EXACTLY AS A STRANGER WHO SHARES NOTHING (founder, 10-04: "the same as a stranger
+ * who doesn't share -- pick the stranger answer and use it for both"): the public card, presence privateStrangerView,
+ * relationship NONE, no mutual friends, no party. Mutual friends are therefore shown to nobody with no relationship: for a
+ * stranger they would be a live window onto the subject's friend list, and showing them to strangers but not to the blocked
+ * side would itself name the block.
  */
 export function resolveProfileFor(state: SocialState, viewerId: SocialUserId, subjectId: SocialUserId): UserProfileView | null {
   const subject = state.users[subjectId];
   const presence = resolvePresenceFor(state, viewerId, subjectId);
-  // Somebody the subject has blocked does not get their profile at all, from any surface.
   if (subject === undefined || presence === null || !presence.can.viewProfile) return null;
-  const relationship = relationshipOf(state, viewerId, subjectId);
+  const actual = relationshipOf(state, viewerId, subjectId);
+  const relationship = actual === 'BLOCKED_BY' ? 'NONE' : actual;
   const blocked = blockedEitherWay(state, viewerId, subjectId);
   const mine = new Set(friendIdsOf(state, viewerId));
   const mutualFriendIds =
-    blocked || viewerId === subjectId ? [] : friendIdsOf(state, subjectId).filter((id) => mine.has(id) && !blockedEitherWay(state, viewerId, id));
+    blocked || viewerId === subjectId || relationship === 'NONE'
+      ? []
+      : friendIdsOf(state, subjectId).filter((id) => mine.has(id) && !blockedEitherWay(state, viewerId, id));
   const party = partyOf(state, subjectId);
   const partyKnown = presence.partyId !== null;
+  // A count is a roster: members behind the viewer's wall are not in it.
+  const visibleMembers = party === undefined ? 0 : party.members.filter((m) => m.userId === viewerId || !blockedEitherWay(state, viewerId, m.userId)).length;
   return {
     profile: subject.profile,
     presence,
@@ -255,7 +287,7 @@ export function resolveProfileFor(state: SocialState, viewerId: SocialUserId, su
     mutualFriendIds,
     partyStatus: {
       inParty: partyKnown,
-      memberCount: partyKnown && party !== undefined ? party.members.length : null,
+      memberCount: partyKnown && party !== undefined ? visibleMembers : null,
       joinable: presence.can.joinParty,
     },
   };

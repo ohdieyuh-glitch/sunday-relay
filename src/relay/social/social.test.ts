@@ -182,16 +182,21 @@ describe('privacy hides restricted activity and location', () => {
 });
 
 describe('blocks', () => {
-  it('a blocked user sees the blocker OFFLINE with nothing else, and cannot open their profile', () => {
+  it('a blocked user sees the blocker OFFLINE with nothing else -- as an ordinary private stranger, never as BLOCKED', () => {
     const s = createSocialFixture();
     const mira = resolvePresenceFor(s, U.KAI, U.MIRA)!;
     expect(mira.onlineState).toBe('OFFLINE');
     expect(mira.activityLabel).toBeNull();
     expect(mira.location).toBeNull();
     expect(mira.lastSeenAtIso).toBeNull();
-    expect(mira.restrictedReason).toBe('BLOCKED');
+    // founder, 10-04: nothing shown to the blocked side names the block; it reads as a stranger who shares nothing
+    expect(mira.restrictedReason).toBe('PRIVATE');
     expect(mira.can.message).toBe(false);
-    expect(resolveProfileFor(s, U.KAI, U.MIRA)).toBeNull();
+    expect(mira.can.sendFriendRequest).toBe(false);
+    const card = resolveProfileFor(s, U.KAI, U.MIRA);
+    expect(card?.relationship).toBe('NONE');
+    expect(card?.mutualFriendIds).toEqual([]);
+    expect(card?.partyStatus).toEqual({ inParty: false, memberCount: null, joinable: false });
   });
 
   it('blocking ends the friendship, the requests, messages and invites both ways; unblocking restores nothing', () => {

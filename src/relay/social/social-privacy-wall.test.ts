@@ -5,6 +5,9 @@ import { partyInvitesFor } from './social-parties';
 import { conversationsFor } from './social-conversations';
 import { buildSocialView } from './social-preview';
 import { partyOf, type SocialState } from './social-state';
+import { ensureSocialUser } from './social-store';
+import { resolvePresenceFor } from './social-presence';
+import type { UserProfileView } from './social-contracts';
 
 /*
  * THE PRIVACY WALL, AS SECOND'S ADVERSARIAL R16 HARNESS FOUND IT (2026-10-04, stub identities on a throwaway database), and the
@@ -108,6 +111,74 @@ describe('D2 / ruling (a): nobody is invited or joins across a wall, and the ref
     expect(JSON.stringify(view(s, U.NOVA))).not.toContain('Builders');
     expect(refusal(op(s, U.NOVA, 'party_invites.accept', {}, [novaInvite]))).toBe(refusal(op(s, U.NOVA, 'party_invites.accept', {}, ['pinv_gone'])));
     expect(partyOf(s, U.NOVA)).toBeUndefined();
+  });
+});
+
+/** A stranger to everybody, online, who shares nothing: every audience NOBODY. */
+function withPrivateStranger(s: SocialState, id = 'usr_zed'): SocialState {
+  const zed = ensureSocialUser(s, { userId: id, displayName: 'Zed', handle: '@zed' }, NOW);
+  const record = zed.users[id];
+  return {
+    ...zed,
+    users: {
+      ...zed.users,
+      [id]: {
+        ...record,
+        presence: { ...record.presence, connected: true, activity: 'EXPLORING' },
+        privacy: { ...record.privacy, presenceVisibility: 'NOBODY', activityVisibility: 'NOBODY', locationVisibility: 'NOBODY', messagePolicy: 'NOBODY', friendRequestPolicy: 'NOBODY' },
+      },
+    },
+  };
+}
+const withoutId = <T extends { userId: string }>(v: T) => ({ ...v, userId: '<subject>' });
+
+describe('D1 / D4: the blocked side sees the blocker as an ordinary private stranger, and is refused as one', () => {
+  it('presence: field for field what a stranger who shares nothing shows -- never BLOCKED', () => {
+    const s = withPrivateStranger(createSocialFixture()); // the fixture's Mira has blocked Kai
+    const blocker = resolvePresenceFor(s, U.KAI, U.MIRA)!;
+    expect(withoutId(blocker)).toEqual(withoutId(resolvePresenceFor(s, U.KAI, 'usr_zed')!));
+    expect(blocker.restrictedReason).toBe('PRIVATE');
+    expect(JSON.stringify(blocker)).not.toMatch(/BLOCKED|blocked/);
+    // the blocker still sees their own block, to manage it
+    expect(resolvePresenceFor(s, U.MIRA, U.KAI)!.restrictedReason).toBe('BLOCKED');
+  });
+
+  it('profile.read and showcase.read of the blocker answer exactly as a private stranger\'s: relationship NONE, no mutual friends, no party', () => {
+    const s = withPrivateStranger(createSocialFixture());
+    const blocker = op(s, U.KAI, 'profile.read', {}, [U.MIRA]);
+    const stranger = op(s, U.KAI, 'profile.read', {}, ['usr_zed']);
+    if (!blocker.ok || !stranger.ok) throw new Error('both profiles must open');
+    const shape = (v: SocialCommandOutcome) => {
+      const { profile: _card, presence, ...rest } = v.data as UserProfileView;
+      return { ...rest, presence: withoutId(presence) };
+    };
+    expect(shape(blocker.value)).toEqual(shape(stranger.value));
+    expect((blocker.value.data as UserProfileView).relationship).toBe('NONE');
+    expect(JSON.stringify(blocker.value.data)).not.toMatch(/BLOCKED/);
+    expect(op(s, U.KAI, 'showcase.read', {}, [U.MIRA]).ok).toBe(op(s, U.KAI, 'showcase.read', {}, ['usr_zed']).ok);
+  });
+
+  it('snapshot.profiles: a blocker is absent exactly as a stranger is absent -- the same absence an unfriend leaves', () => {
+    const s = withPrivateStranger(createSocialFixture());
+    const kai = view(s, U.KAI);
+    expect(kai.profiles[U.MIRA]).toBeUndefined();
+    expect(kai.profiles['usr_zed']).toBeUndefined();
+    expect(kai.profiles[U.NOVA]?.relationship).toBe('FRIEND');
+    // the blocker keeps their own block list (to unblock), as BLOCKED
+    expect(view(s, U.MIRA).profiles[U.KAI]?.relationship).toBe('BLOCKED');
+    // Kai and Juno: friends, nothing else shared. An unfriend and a block leave Kai's snapshot with the same people in it.
+    const unfriended = must(createSocialFixture(), U.JUNO, 'friends.remove', {}, [U.KAI]).state;
+    const blocked = must(createSocialFixture(), U.JUNO, 'blocks.add', { targetId: U.KAI }).state;
+    expect(Object.keys(view(blocked, U.KAI).profiles)).toEqual(Object.keys(view(unfriended, U.KAI).profiles));
+    expect(view(blocked, U.KAI).profiles[U.JUNO]).toBeUndefined();
+  });
+
+  it('a friend request across the wall, either way, answers exactly as one to a stranger who accepts none', () => {
+    const s = withPrivateStranger(createSocialFixture());
+    const toStranger = refusal(op(s, U.KAI, 'requests.send', { toUserId: 'usr_zed' }));
+    expect(toStranger).toBe('permission-denied: this person is not accepting friend requests');
+    expect(refusal(op(s, U.KAI, 'requests.send', { toUserId: U.MIRA }))).toBe(toStranger); // the blocked side
+    expect(refusal(op(s, U.MIRA, 'requests.send', { toUserId: U.KAI }))).toBe(toStranger); // the blocker
   });
 });
 
