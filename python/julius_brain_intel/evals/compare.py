@@ -29,7 +29,10 @@ NOT_DIRECTIONAL = "NOT_DIRECTIONAL"
 
 
 def match_keys(analysis: Mapping[str, Any]) -> dict[str, Any]:
-    """What must be equal for two runs to be a matched pair."""
+    """What must be equal for two runs to be a matched pair: the contract (its binding digest), the
+    mode, the requested models and the runtime. NEVER a run's own identity: the two arms of a
+    registered pair are two runs of ONE contract, each with its own rerun key, so their Julius run
+    ids differ by design and a pair matched on them could never match."""
     roles = analysis.get("roles")
     requested: dict[str, str] = {}
     if isinstance(roles, list):
@@ -38,19 +41,27 @@ def match_keys(analysis: Mapping[str, Any]) -> dict[str, Any]:
     binding = analysis.get("binding", {})
     return {
         "mode": binding.get("mode"),
-        # The Julius run id is derived from the mission contract's digest: equal ids = the same contract.
-        "juliusRunId": binding.get("juliusRunId"),
+        "contractDigest": binding.get("contractDigest"),
         "requestedModels": dict(sorted(requested.items())),
+        "runtimeVersion": binding.get("runtimeVersion"),
     }
 
 
 def match_check(baseline: Mapping[str, Any], candidate: Mapping[str, Any]) -> dict[str, Any]:
-    """Matched = same contract, mode and requested models. The commit is reported, not matched:
-    a code change is usually the very intervention being measured."""
+    """Matched = same contract, mode, requested models and runtime. The commit is reported, not
+    matched: a code change is usually the very intervention being measured.
+
+    A bundle whose run recorded no learning arm carries no contract digest. For two such bundles
+    the Julius run id stands in for the contract, as it always did (without a rerun key it is
+    derived from the contract's digest, so equal ids = the same contract) -- and only then."""
     a, b = match_keys(baseline), match_keys(candidate)
     differences = [
         {"key": key, "baseline": a[key], "candidate": b[key]} for key in a if a[key] != b[key]
     ]
+    if a["contractDigest"] is None and b["contractDigest"] is None:
+        runs = (baseline.get("binding", {}).get("juliusRunId"), candidate.get("binding", {}).get("juliusRunId"))
+        if runs[0] != runs[1]:
+            differences.append({"key": "juliusRunId", "baseline": runs[0], "candidate": runs[1]})
     commits = (baseline.get("binding", {}).get("commit"), candidate.get("binding", {}).get("commit"))
     return {"matched": not differences, "differences": differences,
             "commitChanged": commits[0] != commits[1], "commits": {"baseline": commits[0], "candidate": commits[1]}}

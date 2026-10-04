@@ -1,6 +1,6 @@
 import unittest
 
-from helpers import A1, A2, TempDirs, set_manifest
+from helpers import A1, A2, TempDirs, arm_bundle, arm_record, julius, set_manifest
 from julius_brain_intel.boundary import load_bundle
 from julius_brain_intel.evals import (
     bootstrap_diff_ci, cliffs_delta, compare_runs, extract_metrics, marginal_value, mission_quality, permutation_p,
@@ -74,6 +74,28 @@ class CompareTests(unittest.TestCase):
     def test_every_report_disclaims_readiness(self):
         report = compare_runs(self.a2, self.a2)
         self.assertIn("awards no beta-readiness credit", report["authority"])
+
+    def arm(self, run_id, workflow_run, **record):
+        return analyze_bundle(load_bundle(arm_bundle(self.tmp, "0" * 64, run_id, workflow_run,
+                                                     records=[arm_record(run_id, "WITHOUT", "0" * 64, **record)])))
+
+    def test_two_arms_of_one_contract_match_although_their_run_ids_differ(self):
+        # Each arm of a registered pair takes its own run id through its rerun key: the contract digest is the match.
+        report = compare_runs(self.arm(julius(1), "51"), self.arm(julius(2), "52"))
+        self.assertTrue(report["match"]["matched"], report["match"])
+
+    def test_another_contract_or_runtime_is_unmatched(self):
+        base = self.arm(julius(1), "51")
+        for over, key in (({"objective": "sha256:" + "f" * 64}, "contractDigest"), ({"runtime": "julius-runtime.v2"}, "runtimeVersion")):
+            report = compare_runs(base, self.arm(julius(2), "52", **over))
+            self.assertFalse(report["match"]["matched"])
+            self.assertEqual([d["key"] for d in report["match"]["differences"]], [key])
+
+    def test_without_a_contract_digest_the_julius_run_id_still_stands_for_the_contract(self):
+        other = analyze_bundle(load_bundle(self.tmp.bundle(A2, {"bundle-manifest.txt": set_manifest(julius_run_id=julius(7))})))
+        report = compare_runs(self.a2, other)
+        self.assertFalse(report["match"]["matched"])
+        self.assertEqual([d["key"] for d in report["match"]["differences"]], ["juliusRunId"])
 
 
 class StatsTests(unittest.TestCase):
