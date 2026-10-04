@@ -1,4 +1,5 @@
 #include "WonderlandCompanionEmbodiment.h"
+#include "WonderlandKneesOut.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -1609,6 +1610,30 @@ bool AWonderlandCompanionEmbodiment::DeclaresStrips() const
 		{
 			return true;
 		}
+	}
+	return false;
+}
+
+bool AWonderlandCompanionEmbodiment::QaLegAt(float SideSign, FVector& OutHip, FVector& OutKnee, FVector& OutSole) const
+{
+	for (int32 Index = 0; Index < Motions.Num() && Index < PartPivots.Num(); ++Index)
+	{
+		const FPartMotion& Part = Motions[Index];
+		if (Part.LimbKind != 1 || Part.LimbSide == 0 || (Part.LimbSide > 0) != (SideSign > 0.0f))
+		{
+			continue;
+		}
+		const USceneComponent* Hip = PartPivots[Index].Get();
+		const USceneComponent* Knee = PartPivots.IsValidIndex(Part.LowerIndex) ? PartPivots[Part.LowerIndex].Get() : nullptr;
+		if (Hip == nullptr || Knee == nullptr || Part.ShinUU <= 1.0f)
+		{
+			return false;
+		}
+		OutHip = Hip->GetComponentLocation();
+		OutKnee = Knee->GetComponentLocation();
+		// the shin in the knee's own frame, scale included (the lengths are in the part hierarchy's units)
+		OutSole = Knee->GetComponentTransform().TransformPosition(FVector(0.0, 0.0, -Part.ShinUU));
+		return true;
 	}
 	return false;
 }
@@ -3609,9 +3634,15 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 						// pose blends in, so an act's own crossfade is untouched.
 						if (Performed <= 0.001f)
 						{
-							SolvedHip.Roll = CopiedHip.Roll;
-							// and its knees-out turn (wl.Handoff.Stance.KneesOut), 0 unless the stance asks for it
-							SolvedHip.Yaw = CopiedHip.Yaw;
+							// The roll as the canon wrote it BEFORE its knees-out turn (the canon hip's own rotator is now turned
+							// about its hip-to-sole line, so it no longer holds a clean roll).
+							SolvedHip.Roll = bPlus ? WornPose.StanceHipRollPlusY : WornPose.StanceHipRollMinusY;
+							SolvedHip.Yaw = 0.0f;
+							// and the knees out (wl.Handoff.Stance.KneesOut, 0 unless the stance asks for it) about THIS skin's own
+							// hip-to-sole line, on its own thigh and shin: the foot it solved onto the canon's sole stays there. The
+							// canon's turn is never copied on top (round 5's double turn).
+							SolvedHip = WonderlandKneesOut::TurnAboutSole(SolvedHip, SolvedKnee, FVector(0.0, 0.0, -Part.ThighUU), Part.ShinUU,
+								bPlus ? 1.0f : -1.0f, WornPose.StanceKneesOutDeg);
 						}
 						WriteJoint(Pivot, Part.RestLocation, Performed <= 0.001f ? SolvedHip
 							: FQuat::Slerp(SolvedHip.Quaternion(), CopiedHip.Quaternion(), Performed).Rotator());

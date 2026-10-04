@@ -297,8 +297,8 @@ namespace WonderlandHandoffTransform
 				Break = 1.0f - FMath::Clamp((In.PhaseSeconds / FWonderlandMissionHandoff::ReturnSeconds - 0.62f) / 0.38f, 0.0f, 1.0f);
 			}
 		}
-		Shatter(GoldShards.Get(), Left, In.LeftCompanion.Get(), In.LeftSword, In.LeftSwordAxis, In.SwordReach, Break, 1.0f);
-		Shatter(CyanShards.Get(), Right, In.RightCompanion.Get(), In.RightSword, In.RightSwordAxis, In.SwordReach, Break, -1.0f);
+		Shatter(GoldShards.Get(), Left, In.LeftCompanion.Get(), In.LeftSword, In.LeftSwordAxis, In.LeftSwordReach, Break, 1.0f);
+		Shatter(CyanShards.Get(), Right, In.RightCompanion.Get(), In.RightSword, In.RightSwordAxis, In.RightSwordReach, Break, -1.0f);
 		const float Energy = EnergyFlow(In.State, In.PhaseSeconds);
 		const AActor* LeftBody = In.LeftCompanion.Get();
 		const AActor* RightBody = In.RightCompanion.Get();
@@ -314,7 +314,8 @@ namespace WonderlandHandoffTransform
 	{
 		Veil(Left, nullptr, 1.0f);
 		Veil(Right, nullptr, 1.0f);
-		for (const TWeakObjectPtr<UInstancedStaticMeshComponent>& Motes : { GoldMotes, CyanMotes })
+		// the motes AND the breakup's shards (round 6: Release hid the motes only)
+		for (const TWeakObjectPtr<UInstancedStaticMeshComponent>& Motes : { GoldMotes, CyanMotes, GoldShards, CyanShards })
 		{
 			if (UInstancedStaticMeshComponent* Mesh = Motes.Get())
 			{

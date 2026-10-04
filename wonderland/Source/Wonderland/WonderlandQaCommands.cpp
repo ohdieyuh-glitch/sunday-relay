@@ -36,6 +36,7 @@
 #include "WonderlandUiTestLibrary.h"
 #include "RelayDogCharacter.h"
 #include "WonderlandCompanionEmbodiment.h"
+#include "WonderlandKneesOut.h"
 #include "WonderlandFinite.h"
 #include "WonderlandActGrip.h"
 #include "Framework/Application/SlateApplication.h"
@@ -7763,6 +7764,76 @@ namespace
 		}
 	}
 
+	/** THE KNEES OUT, SIGNED (round 6; Second's review of 53cb041d: the from-behind bend is unsigned and only reported, so knees turned
+	 *  IN passed). On the body the player SEES -- the worn costume's own legs, else Relay OG's -- for the +Y leg [0] and the -Y leg
+	 *  [1]: how far the knee stands OUT of its hip-to-sole line toward its own side (uu; negative = inward), and where the sole is. */
+	bool QaKneesOutOfLine(const ARelayDogCharacter* Dog, float OutOff[2], FVector OutSole[2], FString& OutWhose)
+	{
+		const FVector Lateral = Dog->GetActorRightVector();
+		const AWonderlandCompanionEmbodiment* Costume = Dog->GetCostume();
+		const bool bCostume = IsValid(Costume) && !Dog->GetWornSkinId().IsNone();
+		OutWhose = bCostume ? FString::Printf(TEXT("%s's own legs"), *Dog->GetWornSkinId().ToString()) : FString(TEXT("Relay OG's legs"));
+		TInlineComponentArray<USceneComponent*> LegParts;
+		if (!bCostume)
+		{
+			Dog->GetComponents<USceneComponent>(LegParts);
+		}
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			const float SideSign = Side == 0 ? 1.0f : -1.0f;
+			FVector Hip;
+			FVector Knee;
+			FVector Sole;
+			bool bFound = false;
+			if (bCostume)
+			{
+				bFound = Costume->QaLegAt(SideSign, Hip, Knee, Sole);
+			}
+			else
+			{
+				const USceneComponent* Thigh = nullptr;
+				const USceneComponent* Shin = nullptr;
+				// QaKneeBend's names: Pivot_leg<Left|Right> and its Pivot_shin<Left|Right>; the side by where the hip hangs
+				for (const TCHAR* Which : { TEXT("Left"), TEXT("Right") })
+				{
+					const USceneComponent* ThighFound = nullptr;
+					const USceneComponent* ShinFound = nullptr;
+					for (const USceneComponent* LegPart : LegParts)
+					{
+						const FString LegName = LegPart != nullptr ? LegPart->GetName() : FString();
+						if (LegName == FString(TEXT("Pivot_leg")) + Which)
+						{
+							ThighFound = LegPart;
+						}
+						else if (LegName == FString(TEXT("Pivot_shin")) + Which)
+						{
+							ShinFound = LegPart;
+						}
+					}
+					if (ThighFound != nullptr && ShinFound != nullptr && (ThighFound->GetRelativeLocation().Y >= 0.0) == (SideSign > 0.0f))
+					{
+						Thigh = ThighFound;
+						Shin = ShinFound;
+					}
+				}
+				if (Thigh != nullptr && Shin != nullptr)
+				{
+					Hip = Thigh->GetComponentLocation();
+					Knee = Shin->GetComponentLocation();
+					Sole = Dog->GetCanonSoleWorld(SideSign);
+					bFound = true;
+				}
+			}
+			if (!bFound)
+			{
+				return false;
+			}
+			OutOff[Side] = static_cast<float>(WonderlandKneesOut::KneeOutOfLine(Hip, Knee, Sole, Lateral, SideSign));
+			OutSole[Side] = Sole;
+		}
+		return true;
+	}
+
 	struct FQaStance
 	{
 		TWeakObjectPtr<UWorld> World;
@@ -7786,6 +7857,10 @@ namespace
 		int32 DashBase = 0;
 		int32 Key = 0;
 		FVector Forward = FVector::ForwardVector;
+		/** ST2K (round 6): each knee's offset out of its hip-to-sole line and each sole at KneesOut as found, and that value (restored). */
+		float KneeOffBase[2] = { 0.0f, 0.0f };
+		FVector SoleBase[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		FString KneesOutWas;
 		void Check(const FString& Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
@@ -8061,6 +8136,42 @@ namespace
 					TEXT("%+.1f uu off the ground they stood on (within 1.5: the same feet); body pitch moved %.1f deg (>= 5); knees bent %.0f / %.0f deg (>= 15: a visible bend), ")
 					TEXT("%.0f / %.0f deg of it seen from behind (the gameplay camera's view; reported) | %s"),
 					*SkinName, Dog->GetArmedStanceWeight(), Ahead, Out, Feet, Sink, Lean, KneeLeft, KneeRight, BehindLeft, BehindRight, *QaDescribeStance(R)));
+			// ST2K next (round 6): the knees turned out by a known angle on the body the player sees, then the armed frames as built
+			{
+				FString Whose;
+				if (!QaKneesOutOfLine(Dog, S.KneeOffBase, S.SoleBase, Whose))
+				{
+					S.KneeOffBase[0] = S.KneeOffBase[1] = TNumericLimits<float>::Max();   // ST2K then FAILS: the legs were not found
+				}
+				const IConsoleVariable* KneesVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Handoff.Stance.KneesOut"));
+				S.KneesOutWas = KneesVar != nullptr ? KneesVar->GetString() : FString(TEXT("0"));
+				GEngine->Exec(World, TEXT("wl.Handoff.Stance.KneesOut 25"));
+			}
+			Next(7);
+			return true;
+		}
+		case 7:
+		{
+			// ST2K: KneesOut 25 -- each knee OUT of its hip-to-sole line by >= 3 uu more than as found (a knee turned IN reads negative,
+			// a turn that never reached the legs reads ~0: both FAIL), and each sole within 1 uu of where it stood (the foot planted).
+			// Measured on the worn costume's OWN legs when a skin is worn (round 5 measured Relay OG's for every skin). Then restored.
+			if (In < 0.6f)
+			{
+				return true;
+			}
+			float Off[2] = { 0.0f, 0.0f };
+			FVector Sole[2];
+			FString Whose;
+			const bool bRead = QaKneesOutOfLine(Dog, Off, Sole, Whose);
+			const float DriftPlus = bRead ? static_cast<float>(FVector::Dist(Sole[0], S.SoleBase[0])) : -1.0f;
+			const float DriftMinus = bRead ? static_cast<float>(FVector::Dist(Sole[1], S.SoleBase[1])) : -1.0f;
+			const bool bOk = bRead && Off[0] - S.KneeOffBase[0] >= 3.0f && Off[1] - S.KneeOffBase[1] >= 3.0f && Off[0] >= 2.0f && Off[1] >= 2.0f
+				&& DriftPlus >= 0.0f && DriftPlus <= 1.0f && DriftMinus >= 0.0f && DriftMinus <= 1.0f;
+			S.Check(FString::Printf(TEXT("ST2K.%d"), S.Skin + 1), bOk,
+				FString::Printf(TEXT("%s, KneesOut 25 on %s: knees out of their hip-to-sole lines %+.1f / %+.1f uu (+Y / -Y leg; as found %+.1f / %+.1f; ")
+					TEXT("want >= +3 more and >= +2: OUT, not in); soles moved %.2f / %.2f uu (<= 1: planted)"),
+					*SkinName, *Whose, Off[0], Off[1], S.KneeOffBase[0], S.KneeOffBase[1], DriftPlus, DriftMinus));
+			GEngine->Exec(World, *FString::Printf(TEXT("wl.Handoff.Stance.KneesOut %s"), *S.KneesOutWas));
 			S.Shot = 0;
 			S.bArmedShots = true;
 			QaStanceShow(S, World, Dog, true);
@@ -8483,6 +8594,14 @@ namespace
 		TArray<FQaFlowRead> EquipFlow;
 		TArray<FQaFlowRead> ReturnFlow;
 		float IdleAt = -1.0f;
+		// SW1c (round 6, Second's finding 8): each companion's ORIGINAL body, taken by the QA itself before the equip (offset from its actor,
+		// half-size), and per side over the whole transformation the most shards drawn at once, outside that body (the burst), and flown
+		FVector RestOffset[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		FVector RestExtent[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		int32 ShardsMost[2] = { 0, 0 };
+		int32 BurstMost[2] = { 0, 0 };
+		int32 FlightMost[2] = { 0, 0 };
+		bool bBreakupJudged = false;
 		void Check(const FString& Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
@@ -8643,6 +8762,18 @@ namespace
 			{
 				return true;
 			}
+			// SW1c's reference: each companion's body as it stands BEFORE anything is drawn in (the QA's own measure, not the product's record)
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				const AActor* Whole = Side == 0 ? LeftBody : RightBody;
+				const FBox WholeBox = Whole != nullptr ? Whole->GetComponentsBoundingBox(true) : FBox(ForceInit);
+				S.RestOffset[Side] = WholeBox.IsValid ? WholeBox.GetCenter() - Whole->GetActorLocation() : FVector::ZeroVector;
+				S.RestExtent[Side] = WholeBox.IsValid ? WholeBox.GetExtent() : FVector::ZeroVector;
+				S.ShardsMost[Side] = 0;
+				S.BurstMost[Side] = 0;
+				S.FlightMost[Side] = 0;
+			}
+			S.bBreakupJudged = false;
 			FString Said;
 			if (!WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said))
 			{
@@ -8659,6 +8790,60 @@ namespace
 		{
 			// EVERY TICK OF THE EQUIP, sampled for SW1b
 			S.EquipFlow.Add(QaFlowSample(LeftBody, RightBody, S.LeftScale, S.RightScale, Change, Swords));
+			// SW1c: EVERY TICK of the transformation, EACH SIDE ON ITS OWN, against that companion's ORIGINAL body (Second's finding 8: SW1 compared
+			// the shards with the SHRUNK body, so shards only filling the old outline passed; a speck of 0.1 uu counted; 20 of 40 across both
+			// sides passed with one side dark). Drawn = >= 0.5 uu across; the BURST = drawn and outside the original body; FLOWN = outside it and
+			// nearer its OWN blade than that body (>= 0.3 uu: shards shrink as they merge). The bed runs ~10 fps, so a test that needs a
+			// shard ON the blade in the transformation's last few frames could miss it; "nearer the blade than the body" holds for most of the
+			// gather, and a shard that never left the outline can never meet it.
+			if (State->GetState() == EWonderlandHandoffState::Transforming)
+			{
+				for (int32 Side = 0; Side < 2; ++Side)
+				{
+					const UInstancedStaticMeshComponent* SideShards = Change.GetShards(Side == 0);
+					const AActor* SideBody = Side == 0 ? LeftBody : RightBody;
+					if (SideShards == nullptr || !SideShards->IsVisible() || SideBody == nullptr || S.RestExtent[Side].IsNearlyZero())
+					{
+						continue;
+					}
+					const FBox Original = FBox::BuildAABB(SideBody->GetActorLocation() + S.RestOffset[Side], S.RestExtent[Side] * 1.05);
+					const FTransform SideSword = Swords.GetSwordWorld(Side == 0);
+					const FVector BladeFrom = SideSword.TransformPosition(FVector::ZeroVector);
+					const FVector BladeTo = SideSword.TransformPosition(FVector(0.0, 0.0, 100.0));
+					int32 Drawn = 0;
+					int32 Outside = 0;
+					int32 Flown = 0;
+					for (int32 Shard = 0; Shard < SideShards->GetInstanceCount(); ++Shard)
+					{
+						FTransform ShardXf;
+						if (!SideShards->GetInstanceTransform(Shard, ShardXf, true))
+						{
+							continue;
+						}
+						const double Across = ShardXf.GetScale3D().GetAbsMax() * 100.0;   // the shard mesh is 100 uu across at scale 1
+						const FVector ShardAt = ShardXf.GetLocation();
+						const bool bOutside = !Original.IsInsideOrOn(ShardAt);
+						Drawn += Across >= 0.5 ? 1 : 0;
+						Outside += Across >= 0.5 && bOutside ? 1 : 0;
+						Flown += Across >= 0.3 && bOutside
+							&& FMath::PointDistToSegment(ShardAt, BladeFrom, BladeTo) < FMath::Sqrt(Original.ComputeSquaredDistanceToPoint(ShardAt)) ? 1 : 0;
+					}
+					S.ShardsMost[Side] = FMath::Max(S.ShardsMost[Side], Drawn);
+					S.BurstMost[Side] = FMath::Max(S.BurstMost[Side], Outside);
+					S.FlightMost[Side] = FMath::Max(S.FlightMost[Side], Flown);
+				}
+			}
+			else if (S.bMidChecked && !S.bBreakupJudged)
+			{
+				S.bBreakupJudged = true;
+				const int32 Want = WonderlandHandoffTransform::ShardsPerSide;
+				const bool bBrokeUp = S.ShardsMost[0] >= Want && S.ShardsMost[1] >= Want && S.BurstMost[0] >= 6 && S.BurstMost[1] >= 6
+					&& S.FlightMost[0] >= 10 && S.FlightMost[1] >= 10;
+				S.Check(TEXT("SW1c"), bBrokeUp,
+					FString::Printf(TEXT("the breakup over the whole transformation, each side on its own, against each companion's ORIGINAL body: gold %d drawn ")
+						TEXT("at once (want %d), %d outside that body (the burst; want >= 6), %d flown, i.e. outside it and nearer its own blade than the body (want >= 10); ")
+						TEXT("cyan %d / %d / %d"), S.ShardsMost[0], Want, S.BurstMost[0], S.FlightMost[0], S.ShardsMost[1], S.BurstMost[1], S.FlightMost[1]));
+			}
 			// SW1, HALF-WAY THROUGH THE TRANSFORMATION
 			if (!S.bMidChecked && State->GetState() == EWonderlandHandoffState::Transforming
 				&& State->GetPhaseSeconds() >= FWonderlandMissionHandoff::TransformSeconds * 0.5f)
@@ -8691,11 +8876,10 @@ namespace
 					SpreadLeast = FMath::Min(SpreadLeast, ShardBox.IsValid && BodyNow.IsValid && BodyNow.GetExtent().GetMax() > KINDA_SMALL_NUMBER
 						? ShardBox.GetExtent().GetMax() / BodyNow.GetExtent().GetMax() : 0.0);
 				}
-				const bool bBreakup = ShardsDrawn >= WonderlandHandoffTransform::ShardsPerSide && SpreadLeast >= 1.2;
-				S.Check(TEXT("SW1"), Body > 0.1f && Body < 0.9f && Sword > 0.1f && Sword < 0.9f && FMath::Abs(Body + Sword - 1.0f) <= 0.25f && Motes > 0 && bBreakup,
+				S.Check(TEXT("SW1"), Body > 0.1f && Body < 0.9f && Sword > 0.1f && Sword < 0.9f && FMath::Abs(Body + Sword - 1.0f) <= 0.25f && Motes > 0,
 					FString::Printf(TEXT("half-way through the transformation: each companion %.2f itself, each sword %.2f formed (an exchange: both partial, ")
 						TEXT("summing to %.2f), %d motes of light streaming; the breakup: %d light shards drawn (want >= %d of both sides' %d), spread %.2fx the ")
-						TEXT("body left (the least side; want >= 1.2: pieces leaving the body, not only a shrink)"), Body, Sword, Body + Sword, Motes, ShardsDrawn,
+						TEXT("body left (the least side; REPORTED only: SW1c judges the breakup, per side, against the ORIGINAL body)"), Body, Sword, Body + Sword, Motes, ShardsDrawn,
 						WonderlandHandoffTransform::ShardsPerSide, 2 * WonderlandHandoffTransform::ShardsPerSide, SpreadLeast >= TNumericLimits<double>::Max() ? 0.0 : SpreadLeast));
 				S.Frame(TEXT("sw_1_transforming_noon"));
 				S.bMidChecked = true;
