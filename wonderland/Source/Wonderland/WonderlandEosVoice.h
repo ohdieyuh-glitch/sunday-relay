@@ -144,4 +144,8 @@ namespace WonderlandEosVoice
 	/** The server's answer ({data} of GET /voice/eos-client-config): schema "wonderland-eos-client-config.v1" and five non-empty strings.
 	 *  False: OutWhy names the missing FIELD, never a value. */
 	WONDERLAND_API bool ConfigFromServer(const TSharedPtr<FJsonObject>& Data, FWonderlandEosVoice::FConfig& Out, FString& OutWhy);
+	/** Overwrite a string's characters with zeros, then free it (a credential never outlives its use as readable memory). */
+	WONDERLAND_API void WipeString(FString& Value);
+	/** WipeString on every field of an EOS config. */
+	WONDERLAND_API void WipeConfig(FWonderlandEosVoice::FConfig& Config);
 }

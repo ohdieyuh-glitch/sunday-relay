@@ -255,6 +255,7 @@ bool UWonderlandSocialSubsystem::ConnectWith(const FString& BaseUrl, const FStri
 	Voice = MakeUnique<FWonderlandVoiceUnavailable>();   // a real provider is the founder's choice; until then, honestly pending
 	TUniquePtr<FWonderlandSocialLiveService> Connected = MakeUnique<FWonderlandSocialLiveService>(BaseUrl, Token);
 	Live = Connected.Get();
+	++LiveGeneration;   // every live session its own number: late answers for an earlier one are recognized and dropped
 	Scene = TEXT("live");
 	// R16 REAL VOICE (founder, 10-04: EOS Voice). A developer's -WLEosConfig file first; else THE SHIPPED PATH (founder 10-04: "the
 	// backend hands it out"): the signed-in session asks its server for the GAME-client config. Until then honestly pending, never faked.
@@ -290,19 +291,21 @@ bool UWonderlandSocialSubsystem::ConnectWith(const FString& BaseUrl, const FStri
 	return true;
 }
 
-void UWonderlandSocialSubsystem::RequestEosConfigFromServer()
+void UWonderlandSocialSubsystem::RequestEosConfigFromServer(int32 Attempt)
 {
 	if (Live == nullptr)
 	{
 		return;
 	}
 	FWonderlandSocialLiveService* const Asked = Live;
+	// THE SESSION IT WAS ASKED FOR, by generation: a pointer alone could match a later session allocated at the same address
+	const int32 AskedGeneration = LiveGeneration;
 	UE_LOG(LogTemp, Display, TEXT("WLVOICE: asking the server for the EOS game-client config (held in memory only, never logged)"));
 	const TWeakObjectPtr<UWonderlandSocialSubsystem> WeakThis(this);
-	Asked->GetEosClientConfig([WeakThis, Asked](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+	Asked->GetEosClientConfig([WeakThis, Asked, AskedGeneration, Attempt](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
 	{
 		UWonderlandSocialSubsystem* Self = WeakThis.Get();
-		if (Self == nullptr || Self->Live != Asked)
+		if (Self == nullptr || Self->Live != Asked || Self->LiveGeneration != AskedGeneration)
 		{
 			return;   // signed out, or another session started meanwhile: this answer belongs to nobody now
 		}
@@ -312,11 +315,27 @@ void UWonderlandSocialSubsystem::RequestEosConfigFromServer()
 		{
 			const FString Reason = Status == 503 ? FString(TEXT("the server has no voice (503)"))
 				: Status != 200 ? FString::Printf(TEXT("the server refused the voice config (%d %s)"), Status, *Problem) : Why;
-			UE_LOG(LogTemp, Display, TEXT("WLVOICE: no voice provider in this session (%s): VOICE TRANSPORT PENDING"), *Reason);
+			// ONE RETRY, spaced out (Second's review of 310b4dc7): no answer, a timeout, a 429 or a proxy's 5xx may pass; a 401/403/404 will
+			// not. One retry stays far inside the route's 6 a minute.
+			const bool bRetryable = Attempt == 0 && Status != 200 && Status != 401 && Status != 403 && Status != 404;
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE: no voice provider in this session (%s): VOICE TRANSPORT PENDING%s"), *Reason,
+				bRetryable ? TEXT(" -- asking once more in 15 s") : TEXT(""));
+			if (bRetryable)
+			{
+				FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakThis, Asked, AskedGeneration](float)
+				{
+					UWonderlandSocialSubsystem* Again = WeakThis.Get();
+					if (Again != nullptr && Again->Live == Asked && Again->LiveGeneration == AskedGeneration)
+					{
+						Again->RequestEosConfigFromServer(1);
+					}
+					return false;
+				}), 15.0f);
+			}
 			return;
 		}
 		TUniquePtr<FWonderlandEosVoice> Eos = FWonderlandEosVoice::TryCreateWithConfig(Asked, Config, Why);
-		Config = FWonderlandEosVoice::FConfig();   // this copy goes now: the EOS SDK manager holds what it needs, the service drops its secret
+		WonderlandEosVoice::WipeConfig(Config);   // this copy is zeroed now: the EOS SDK holds what it needs, the service wiped its own
 		if (!Eos.IsValid())
 		{
 			UE_LOG(LogTemp, Display, TEXT("WLVOICE: no voice provider in this session (%s): VOICE TRANSPORT PENDING"), *Why);
@@ -455,7 +474,7 @@ namespace WonderlandSocialCommands
 			UGameInstance* Instance = World != nullptr ? World->GetGameInstance() : nullptr;
 			const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
 			const FWonderlandEosVoice* Eos = Social != nullptr ? Social->GetEosVoice() : nullptr;
-			UE_LOG(LogTemp, Display, TEXT("WLVOICE %s"), Eos != nullptr ? *Eos->Describe() : TEXT("no EOS voice in this session (no -WLEosConfig, or not live)"));
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE %s"), Eos != nullptr ? *Eos->Describe() : TEXT("no EOS voice in this session (not signed in, the server's voice config not received yet, or the server has no voice)"));
 			// the pinned vector both sides hash (Second's backend test): the R16 evidence shows client and authority lines join
 			UE_LOG(LogTemp, Display, TEXT("WLVOICE hash vector 0123456789abcdef0123456789abcdef -> %s"), *WonderlandEosVoice::HashedPuid(TEXT("0123456789abcdef0123456789abcdef")));
 		}));

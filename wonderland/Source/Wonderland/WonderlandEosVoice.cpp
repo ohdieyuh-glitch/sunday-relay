@@ -192,6 +192,24 @@ TUniquePtr<FWonderlandEosVoice> FWonderlandEosVoice::TryCreateWithConfig(FWonder
 	return Service;
 }
 
+void WonderlandEosVoice::WipeString(FString& Value)
+{
+	for (TCHAR& Character : Value.GetCharArray())
+	{
+		Character = TEXT('\0');
+	}
+	Value.Empty();
+}
+
+void WonderlandEosVoice::WipeConfig(FWonderlandEosVoice::FConfig& Config)
+{
+	WipeString(Config.ProductId);
+	WipeString(Config.SandboxId);
+	WipeString(Config.DeploymentId);
+	WipeString(Config.ClientId);
+	WipeString(Config.ClientSecret);
+}
+
 bool WonderlandEosVoice::ConfigFromServer(const TSharedPtr<FJsonObject>& Data, FWonderlandEosVoice::FConfig& Out, FString& OutWhy)
 {
 	// THE SERVER'S ANSWER, as the contract names it (Second's route, 10-04): the schema first, then five non-empty strings. A problem
@@ -209,7 +227,7 @@ bool WonderlandEosVoice::ConfigFromServer(const TSharedPtr<FJsonObject>& Data, F
 		if (!Data->TryGetStringField(Names[Index], *Fields[Index]) || Fields[Index]->IsEmpty())
 		{
 			OutWhy = FString::Printf(TEXT("the server's voice config has no %s"), Names[Index]);
-			Out = FWonderlandEosVoice::FConfig();
+			WipeConfig(Out);
 			return false;
 		}
 	}
@@ -278,15 +296,25 @@ bool FWonderlandEosVoice::Start(FString& OutWhy)
 	PlatformConfig.bDisableSocialOverlay = true;
 	Sdk->AddPlatformConfig(PlatformConfig, true);
 	Impl->Platform = Sdk->CreatePlatform(PlatformConfig.Name);
-	// the secret is the SDK manager's now; this object keeps none of it
-	Config.ClientSecret.Reset();
+	// THE SECRET'S LIFETIME (Second's review of 310b4dc7): the SDK manager keeps every added config for the process's life, so the
+	// named one is overwritten by a blank (the name only) as soon as the platform exists or failed to, and every copy here is ZEROED
+	// before it is freed. The EOS SDK keeps its own inside the platform; the founder ruled that runtime delivery is not secret from
+	// the machine's owner -- this only keeps the secret from outliving its use.
+	{
+		FEOSSDKPlatformConfig Blank;
+		Blank.Name = PlatformConfig.Name;
+		Sdk->AddPlatformConfig(Blank, true);
+	}
+	WonderlandEosVoice::WipeString(PlatformConfig.ClientSecret);
+	WonderlandEosVoice::WipeString(PlatformConfig.ClientId);
+	WonderlandEosVoice::WipeConfig(Config);
 	if (!Impl->Platform.IsValid())
 	{
-		OutWhy = TEXT("EOS refused to create the platform (check the product, sandbox, deployment and client in the founder's file)");
+		OutWhy = TEXT("EOS refused to create the platform (check the EOS product configuration)");
 		return false;
 	}
-	UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: platform up (product %s, deployment %s); signing in"),
-		*WonderlandEosVoice::Hashed(Config.ProductId), *WonderlandEosVoice::Hashed(Config.DeploymentId));
+	// no product or deployment fingerprint in the log (Second's review: stable fingerprints in evidence, even hashed)
+	UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: platform up; signing in"));
 	SignIn();
 	return true;
 }
