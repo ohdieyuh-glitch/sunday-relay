@@ -6,7 +6,7 @@ import { query as realSdkQuery } from '@anthropic-ai/claude-agent-sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { JULIUS_CONTEXT_COMPILER_VERSION, JuliusDispatchError, type JuliusContextSnapshot } from '../../src/relay/mission/julius';
-import { classifyClaudeAuth } from '../../src/relay/connectors/claude-code/capability-probe';
+import { CLAUDE_AUTH_PROVIDER_OVERRIDES, classifyClaudeAuth } from '../../src/relay/connectors/claude-code/capability-probe';
 import {
   ANTHROPIC_CREDENTIAL_ENV_NAMES, JULIUS_CLAUDE_AUTH_ENV, decideClaudeAuth,
 } from '../hosted-coding-agent/hosted-auth';
@@ -150,20 +150,27 @@ let scratch = '';
  * make every assertion below about a child that was never started.
  */
 let workspace = '';
-let parentKey: string | undefined;
-let parentToken: string | undefined;
+/**
+ * EVERY CASE STARTS FROM A PARENT WITH NO CREDENTIAL AND NO PROVIDER OVERRIDE,
+ * whatever the host exports: the probe's own override table (a gateway such as
+ * the `ANTHROPIC_BASE_URL` Claude Code's cloud container sets would otherwise
+ * decide the case before any login is read), and the subscription token.
+ * A case that needs one sets it; all are restored afterwards.
+ */
+const HOST_ENV = [...CLAUDE_AUTH_PROVIDER_OVERRIDES.map(([name]) => name), 'CLAUDE_CODE_OAUTH_TOKEN'];
+let hostEnv: Record<string, string | undefined> = {};
 beforeEach(() => {
-  parentToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-  delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  hostEnv = Object.fromEntries(HOST_ENV.map((name) => [name, process.env[name]]));
+  for (const name of HOST_ENV) delete process.env[name];
   scratch = mkdtempSync(join(tmpdir(), 'julius-child-env-'));
   workspace = join(scratch, 'workspace');
   mkdirSync(workspace);
   writeFileSync(join(scratch, 'fake-claude.mjs'), FAKE_CHILD);
-  parentKey = process.env.ANTHROPIC_API_KEY;
 });
 afterEach(() => {
-  if (parentKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = parentKey;
-  if (parentToken === undefined) delete process.env.CLAUDE_CODE_OAUTH_TOKEN; else process.env.CLAUDE_CODE_OAUTH_TOKEN = parentToken;
+  for (const [name, value] of Object.entries(hostEnv)) {
+    if (value === undefined) delete process.env[name]; else process.env[name] = value;
+  }
   rmSync(scratch, { recursive: true, force: true });
 });
 
@@ -390,8 +397,7 @@ describe('the Max login is classified separately, and cannot excuse a key the ch
       '',
     ].join('\n'));
     chmodSync(cli, 0o755);
-    // The probe refuses outright when the PARENT holds a key: that is its own first check.
-    delete process.env.ANTHROPIC_API_KEY;
+    // The probe refuses outright when the PARENT holds a key or names a gateway: every override was cleared before this case.
     const classified = classifyClaudeAuth(new Date().toISOString(), cli);
     if (process.platform === 'win32') {
       expect(classified.approvedForLiveRun, 'an unobserved login is never approved').toBe(false);

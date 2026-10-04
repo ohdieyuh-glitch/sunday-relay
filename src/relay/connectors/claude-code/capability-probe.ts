@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { accessSync, constants, existsSync, realpathSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import type {
-  CapabilitySupport, ClaudeAuthClassification, ClaudeCodeCapabilityProfile,
+  AuthSourceClass, CapabilitySupport, ClaudeAuthClassification, ClaudeCodeCapabilityProfile,
 } from './contracts';
 
 /**
@@ -137,6 +137,24 @@ const redact = (raw: string): string =>
  * retaining email, org, or token material. Never calls a model. Returns
  * approvedForLiveRun=true ONLY for a logged-in first-party subscription.
  */
+/**
+ * THE ENVIRONMENT THAT DECIDES A RUN'S PATH BEFORE ANY LOGIN IS READ, in the
+ * order `classifyClaudeAuth` checks it: the first one set wins, whatever a login
+ * also says, because each means an API-billed or third-party path.
+ *
+ * One table, exported, so a test that must establish "no override is set"
+ * clears exactly these and cannot fall behind when one is added. Two tests kept
+ * their own copies, and one copy missed `ANTHROPIC_BASE_URL`, which Claude
+ * Code's own cloud container exports: that test failed there and nowhere else.
+ */
+export const CLAUDE_AUTH_PROVIDER_OVERRIDES: readonly (readonly [envName: string, sourceClass: AuthSourceClass])[] = Object.freeze([
+  Object.freeze(['CLAUDE_CODE_USE_BEDROCK', 'bedrock'] as const),
+  Object.freeze(['CLAUDE_CODE_USE_VERTEX', 'vertex'] as const),
+  Object.freeze(['ANTHROPIC_BASE_URL', 'gateway'] as const),
+  Object.freeze(['ANTHROPIC_API_KEY', 'api_key'] as const),
+  Object.freeze(['ANTHROPIC_AUTH_TOKEN', 'api_key'] as const),
+]);
+
 export function classifyClaudeAuth(now: string, executablePath: string | null): ClaudeAuthClassification {
   const fallback: ClaudeAuthClassification = {
     loggedIn: false, sourceClass: 'unknown', approvedForLiveRun: false,
@@ -146,11 +164,8 @@ export function classifyClaudeAuth(now: string, executablePath: string | null): 
 
   // Provider env overrides are checked FIRST: their presence means an
   // API-billed / third-party path even if a login also exists.
-  if (process.env.CLAUDE_CODE_USE_BEDROCK) return { ...fallback, sourceClass: 'bedrock', classifiedAt: now };
-  if (process.env.CLAUDE_CODE_USE_VERTEX) return { ...fallback, sourceClass: 'vertex', classifiedAt: now };
-  if (process.env.ANTHROPIC_BASE_URL) return { ...fallback, sourceClass: 'gateway', classifiedAt: now };
-  if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) {
-    return { ...fallback, sourceClass: 'api_key', classifiedAt: now };
+  for (const [name, sourceClass] of CLAUDE_AUTH_PROVIDER_OVERRIDES) {
+    if (process.env[name]) return { ...fallback, sourceClass, classifiedAt: now };
   }
 
   const raw = tryExec(executablePath, ['auth', 'status', '--json']) ?? tryExec(executablePath, ['auth', 'status']);
