@@ -480,6 +480,73 @@ namespace WonderlandSocialCommands
 			}
 		}));
 
+	/** R16 SHIPPED VOICE QA (founder 10-04: "tests/negative controls for every rule"): the server's EOS game-client config goes through
+	 *  ONE strict parser (WonderlandEosVoice::ConfigFromServer). Synthetic canary values only -- never a real credential, never logged.
+	 *  A valid answer parses; a wrong or missing schema, a null payload, and each field missing or empty are refused; no refusal reason
+	 *  carries a value; a refusal leaves nothing behind. EC1 proves the value-in-reason judge can fail. No network. WLQA EOSCFG lines. */
+	FAutoConsoleCommand GQaEosConfigParse(
+		TEXT("wl.Qa.EosConfigParse"),
+		TEXT("QA: the server's EOS game-client config parser, with synthetic values and negative controls (no network, no real credential)."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			int32 Passed = 0;
+			int32 Failed = 0;
+			auto Check = [&Passed, &Failed](const FString& Id, bool bOk, const FString& What)
+			{
+				(bOk ? Passed : Failed) += 1;
+				UE_LOG(LogTemp, Display, TEXT("WLQA EOSCFG %s %s -- %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *What);
+			};
+			static const TCHAR* const CfgNames[] = { TEXT("productId"), TEXT("sandboxId"), TEXT("deploymentId"), TEXT("clientId"), TEXT("clientSecret") };
+			const FString Canary = FString::Printf(TEXT("qacanary%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(16));
+			auto Make = [&Canary](const FString& Skip, const FString& Blank, const FString& Schema)
+			{
+				TSharedPtr<FJsonObject> Made = MakeShared<FJsonObject>();
+				if (!Schema.IsEmpty())
+				{
+					Made->SetStringField(TEXT("schema"), Schema);
+				}
+				for (const TCHAR* CfgName : CfgNames)
+				{
+					if (Skip != CfgName)
+					{
+						Made->SetStringField(CfgName, Blank == CfgName ? FString() : FString::Printf(TEXT("%s-%s"), CfgName, *Canary));
+					}
+				}
+				return Made;
+			};
+			const FString V1 = TEXT("wonderland-eos-client-config.v1");
+			{
+				FWonderlandEosVoice::FConfig Got;
+				FString Why;
+				const bool bOk = WonderlandEosVoice::ConfigFromServer(Make(FString(), FString(), V1), Got, Why);
+				Check(TEXT("E1"), bOk && Got.ClientSecret == FString::Printf(TEXT("clientSecret-%s"), *Canary) && Got.ProductId.StartsWith(TEXT("productId-")),
+					TEXT("a valid v1 answer parses, every field read"));
+			}
+			auto Refused = [&Check, &Canary](const FString& Id, const TSharedPtr<FJsonObject>& Data, const FString& WantInWhy)
+			{
+				FWonderlandEosVoice::FConfig Got;
+				FString Why;
+				const bool bOk = WonderlandEosVoice::ConfigFromServer(Data, Got, Why);
+				const bool bClean = !Why.Contains(Canary) && Got.ClientSecret.IsEmpty() && Got.ClientId.IsEmpty();
+				Check(Id, !bOk && bClean && (WantInWhy.IsEmpty() || Why.Contains(WantInWhy)),
+					FString::Printf(TEXT("refused%s; the reason names %s and carries no value; nothing kept"), bOk ? TEXT(" -- NOT (accepted)") : TEXT(""),
+						WantInWhy.IsEmpty() ? TEXT("the schema") : *WantInWhy));
+			};
+			Refused(TEXT("E2"), Make(FString(), FString(), TEXT("wonderland-eos-client-config.v2")), FString());
+			Refused(TEXT("E3"), Make(FString(), FString(), FString()), FString());
+			Refused(TEXT("E4"), TSharedPtr<FJsonObject>(), FString());
+			int32 Case = 5;
+			for (const TCHAR* CfgName : CfgNames)
+			{
+				Refused(FString::Printf(TEXT("E%d"), Case++), Make(CfgName, FString(), V1), CfgName);   // the field missing
+				Refused(FString::Printf(TEXT("E%d"), Case++), Make(FString(), CfgName, V1), CfgName);   // the field empty
+			}
+			// THE JUDGE'S CONTROL: a reason that DID carry a value must be caught by the same Contains test
+			const FString Leaky = FString::Printf(TEXT("the server's voice config has no clientSecret-%s"), *Canary);
+			Check(TEXT("EC1"), Leaky.Contains(Canary), TEXT("control: a reason carrying a value IS detected by the value-in-reason judge"));
+			UE_LOG(LogTemp, Display, TEXT("WLQA EOSCFG END pass=%d fail=%d"), Passed, Failed);
+		}));
+
 	/** Open a player's profile from the social service's view -- the same path a Friends row will take. */
 	FAutoConsoleCommandWithWorldAndArgs GSocialProfile(
 		TEXT("wl.Social.Profile"),
