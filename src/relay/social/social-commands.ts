@@ -92,6 +92,12 @@ export interface SocialCommandOutcome {
   readonly data: unknown;
   readonly audience: readonly SocialUserId[];
   readonly world?: WorldState;
+  /**
+   * The operation the audience is TOLD about, when it must not be the actor's own. A block that separates a shared party is
+   * told to the remaining members as the party change it made (a member removed, or a member who left) -- an event named
+   * `blocks.add` would tell them a block happened, and who, by who left (the founder's wall: nothing names a block).
+   */
+  readonly eventOp?: SocialOperationId;
 }
 
 /** The operation's inputs: the path's ids in order (e.g. a request id, a party id then a member id) and the JSON body. */
@@ -402,7 +408,10 @@ function applyOne(
       const separated = separateForBlock(state, actorId, targetId);
       if (!separated.ok) return separated;
       const remaining = shared !== undefined ? (separated.value.parties[shared.partyId]?.members.map((m) => m.userId) ?? []) : [];
-      return changed(blockUser(separated.value, actorId, targetId, nowIso), null, [actorId, ...remaining]);
+      const outcome = changed(blockUser(separated.value, actorId, targetId, nowIso), null, [actorId, ...remaining]);
+      // TOLD AS THE PARTY CHANGE, NEVER AS A BLOCK: the leader removed a member, or the blocker left.
+      if (!outcome.ok || shared === undefined) return outcome;
+      return { ok: true, value: { ...outcome.value, eventOp: shared.leaderId === actorId ? 'parties.remove_member' : 'parties.leave' } };
     }
     case 'blocks.remove':
       return changed(unblockUser(state, actorId, id0), null, [actorId]);

@@ -462,7 +462,7 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
             await transact(async (c) => {
               await writeChanges(c, state, next);
               if (outcome.value.audience.length > 0) {
-                await c.query(`INSERT INTO relay_wonderland.social_events(op, at, audience) VALUES($1,$2,$3)`, [op, nowIso, [...outcome.value.audience]]);
+                await c.query(`INSERT INTO relay_wonderland.social_events(op, at, audience) VALUES($1,$2,$3)`, [outcome.value.eventOp ?? op, nowIso, [...outcome.value.audience]]);
               }
             });
           } catch (error) {

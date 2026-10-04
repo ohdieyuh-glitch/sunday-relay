@@ -8,6 +8,7 @@ import { juliusTestDatabaseUrl } from './julius-test-database';
 import { openSocialPostgresStore } from './social-postgres';
 import { TransactionalWonderlandDatabase } from './wonderland-postgres';
 import type { SocialStore } from '../social/social-store';
+import { partyOf } from '../social/social-state';
 
 /**
  * WONDERLAND SOCIAL ON REAL POSTGRESQL, ACROSS A RESTART.
@@ -129,14 +130,26 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
     const ids = (await store.read()).requests.map((r) => r.requestId);
     expect(new Set(ids).size).toBe(ids.length);
 
-    // A BLOCK, durable, and never told to the blocked player
+    // A BLOCK, durable, and never told to the blocked player. They share Kai's party, so F1 holds it until Nova confirms
+    // (unconfirmed: refused, nothing changes); confirmed, Nova -- not the leader -- leaves, and Kai keeps his party.
     const kaiLatest = (await call('kai', 'GET', '/events')).body.data.latest;
-    expect((await call('nova', 'POST', '/blocks', { targetId: KAI })).status).toBe(200);
+    const novaLatest = (await call('nova', 'GET', '/events')).body.data.latest;
+    const unconfirmed = await call('nova', 'POST', '/blocks', { targetId: KAI });
+    expect(unconfirmed.status).toBe(409);
+    expect(unconfirmed.body.error?.message).toContain('will cause you to leave this party');
+    expect((await store.read()).blocks).toEqual([]);
+    expect((await call('nova', 'POST', '/blocks', { targetId: KAI, confirmSharedParty: true })).status).toBe(200);
     expect((await call('kai', 'GET', `/events?after=${kaiLatest}`)).body.data.events).toEqual([]);
+    // what the blocker's own log says is the party change, never a block (nothing names a block, in the durable rows too)
+    const novaTold = (await call('nova', 'GET', `/events?after=${novaLatest}`)).body.data.events.map((e: any) => e.op);
+    expect(novaTold).toContain('parties.leave');
+    expect(novaTold).not.toContain('blocks.add');
     store = await openSocialPostgresStore(pool);
     const kaiAfterBlock = (await call('kai', 'GET', '/snapshot')).body.data;
     expect(kaiAfterBlock.friends).toEqual([]);
     expect(kaiAfterBlock.profiles[NOVA]).toBeUndefined();
+    expect(partyOf(await store.read(), NOVA)).toBeUndefined();
+    expect(partyOf(await store.read(), KAI)?.members.map((m) => m.userId)).toEqual([KAI]);
     expect((await call('kai', 'POST', `/conversations/${conversationId}/messages`, { body: 'hello?' })).status).not.toBe(200);
   }, 60_000);
 });

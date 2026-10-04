@@ -139,7 +139,7 @@ export function createInMemorySocialStore(initial: SocialState = emptySocialStat
           state = outcome.value.state;
           if (outcome.value.audience.length > 0) {
             seq += 1;
-            log.push({ seq, op, atIso: nowIso, audience: new Set(outcome.value.audience) });
+            log.push({ seq, op: outcome.value.eventOp ?? op, atIso: nowIso, audience: new Set(outcome.value.audience) });
             if (log.length > maxEvents) log.splice(0, log.length - maxEvents);
           }
         }
