@@ -246,7 +246,7 @@ credential_scan() (
     if [ -n "$value" ]; then printf '%s\n' "$value" >> "$needles"; fi
   done
   printf '%s' "${SCOPED_VALUE:-}" | tr ',' '\n' | sed -n 's/.*:"\([A-Za-z0-9_-]\{20,\}\)".*/\1/p' | awk '{ print }' >> "$needles" || true
-  shape_hits=$(grep -rlE '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' "$dir") && rc=0 || rc=$?
+  shape_hits=$(grep -rlE '((^|[^A-Za-z0-9_-])sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' "$dir") && rc=0 || rc=$?
   [ "$rc" -le 1 ] || exit 1
   exact_hits=''
   if [ -s "$needles" ]; then
@@ -277,7 +277,7 @@ $exact_hits"
     done <<< "$(printf '%s\n' "$hits" | sed '/^$/d' | sort -u)"
   done
   # Both layers again over what is left: it must now be clean (grep 1); a hit or an error refuses the bundle.
-  grep -rqE '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' "$dir" && rc=0 || rc=$?
+  grep -rqE '((^|[^A-Za-z0-9_-])sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' "$dir" && rc=0 || rc=$?
   [ "$rc" -eq 1 ] || exit 1
   if [ -s "$needles" ]; then
     grep -rqF -f "$needles" "$dir" && rc=0 || rc=$?
