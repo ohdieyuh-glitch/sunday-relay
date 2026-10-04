@@ -942,8 +942,18 @@ async function main(argv: readonly string[]): Promise<number> {
         putTaskContract: bootstrapContracts.putTaskContract.bind(bootstrapContracts),
       },
       seeds: createPostgresMissionSeedStore(pool),
-      // The project's verified knowledge, inherited by this mission.
+      // What earlier runs of this mission verified, inherited by this run's planner.
       knowledge: createPostgresMissionKnowledgeStore(pool),
+      /*
+       * A REGISTERED ARM WITH INHERITS FROM ITS OWN ARM WITHOUT, OR IT DOES NOT START (founder ruling
+       * 2026-10-04, R2). The source is pinned to the WITHOUT run the registration names, and an empty or
+       * failed carry refuses the bootstrap before the run is READY: the RESULT line says
+       * `carried_knowledge_required`, the `knowledge.carried` event says why, and no provider is paid for
+       * an experiment about inherited knowledge that inherited nothing. Every other mission is unchanged.
+       */
+      ...(contract.learningPair?.arm === 'WITH' && contract.learningPair.withoutRunId !== undefined
+        ? { carry: { required: true, fromRunIds: [contract.learningPair.withoutRunId] } }
+        : {}),
       tenantId: contract.tenantId,
       executionId,
     });

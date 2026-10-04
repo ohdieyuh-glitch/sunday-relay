@@ -50,7 +50,9 @@ import {
   juliusRunLineageCheckFromRecords, type JuliusLineageRefusal, type JuliusRunLineageCheck,
 } from './julius-lineage-asserter';
 import type { JuliusBrainAppend } from './julius-runtime-ports';
-import { juliusAdmittedClaimFor, juliusClaimPromotionsOnAccept, mergeJuliusDurableStanding } from './julius-claim-ledger';
+import {
+  isJuliusCarriedEntryId, juliusAdmittedClaimFor, juliusClaimPromotionsOnAccept, juliusKnowledgeConsumedFacts, mergeJuliusDurableStanding,
+} from './julius-claim-ledger';
 import { JULIUS_DEFAULT_MAX_CODER_SEGMENTS, evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
 import { juliusWorkUnitRootOf, repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
@@ -1665,6 +1667,34 @@ export async function runClaimedTask(
           contextId, attempt: claim.attempt, count: consumedGuidance.length,
           entryIds: consumedGuidance.join(' ').slice(0, 1_500),
         },
+      });
+    }
+    /**
+     * WHAT THIS DISPATCH INHERITED FROM AN EARLIER RUN, BY NAME (founder ruling
+     * 2026-10-04, R2 point 4).
+     *
+     * The bootstrap's carry wrote this run's inherited rows, scoped to its plan
+     * task (`julius-claim-ledger.ts`, "THE CARRY, CORRECTED"), and recorded what
+     * it wrote. Whether the planner was then HANDED them is a fact about this
+     * packet, so it is recorded here, from the snapshot's own source ids, beside
+     * the context id: every carried row this task and role were owed, which
+     * arrived, and which the budget evicted. A packet owed nothing writes nothing,
+     * so every other dispatch's ledger is unchanged.
+     */
+    const inherited = juliusKnowledgeConsumedFacts({
+      owed: brain
+        .filter((entry) => isJuliusCarriedEntryId(entry.entryId) && entry.allowedRoles.includes(worker.role)
+          && (entry.taskIds.length === 0 || entry.taskIds.includes(task.taskId)))
+        .map((entry) => entry.entryId),
+      sourceEntryIds: snapshot.sourceEntryIds,
+      evictedEntryIds: snapshot.integrityEvictedEntryIds,
+      excludedEntryIds: snapshot.integrityExcludedEntryIds,
+      attempt: claim.attempt, role: worker.role, taskType: task.taskType,
+    });
+    if (inherited !== null) {
+      await ledger.event('knowledge.consumed', {
+        taskId: task.taskId, workerId: worker.workerId,
+        facts: { contextId, ...inherited },
       });
     }
     await ledger.trajectory('CONTEXT_COMPILED', {

@@ -1,102 +1,57 @@
 import type { Pool } from 'pg';
 
-import { juliusCarriedClaim, juliusCarriedEntryId, type JuliusCarriedKnowledge } from '../../src/relay/mission/julius/julius-claim-ledger';
-import { brainKindToStored } from '../../src/relay/persistence/julius-brain-kinds';
-import { JuliusClaimPostgresRepository } from '../../src/relay/persistence/julius-claim-postgres';
+import type { JuliusKnowledgeCarryOutcome } from '../../src/relay/mission/julius/julius-claim-ledger';
+import { JuliusClaimPostgresRepository, type JuliusKnowledgeCarryRequest } from '../../src/relay/persistence/julius-claim-postgres';
 
 /**
- * WHAT ONE MISSION VERIFIED, HANDED TO THE NEXT — the minimum that makes reuse
- * truthful, and nothing beyond it.
+ * WHAT AN EARLIER RUN OF A MISSION VERIFIED, HANDED TO THE NEXT RUN'S PLANNER —
+ * the minimum that makes reuse truthful, and nothing beyond it.
  *
- * THE GAP THIS CLOSES. A context packet is compiled from the brain entries of
+ * THE GAP THIS CLOSED. A context packet is compiled from the brain entries of
  * ONE RUN, so everything a mission learned died with it: the matched-pair
- * learning proof had to SEED the prior fact itself, and the readiness page said
- * plainly that the improvement rested on the fixture's premise. Nothing in
- * production carried a verified fact from mission A into mission B.
+ * learning proof had to SEED the prior fact itself. The first carry closed that
+ * gap and opened a worse one (founder ruling 2026-10-04): it copied every claim
+ * that READ verified or approved, and a DECISION entry is approved by its kind,
+ * so verification verdicts about another run's tasks and an architecture
+ * nobody accepted arrived as approved instructions, run-wide, for every role,
+ * from any mission of the project — while the reviewer's actual finding never
+ * travelled at all.
  *
- * WHAT IS CARRIED, AND WHAT IS NOT. Only claims a REVIEWER's evidence (or a
- * decision) put at VERIFIED or APPROVED — never an assertion, never a worker's
- * own note about itself, never a contradicted or superseded standing. Only from
- * the same project. Never from the run doing the carrying. Newest first, capped,
- * because a project's knowledge grows without bound and a packet does not.
+ * WHAT IS CARRIED NOW is decided by one pure rule in the claim ledger
+ * (`planJuliusKnowledgeCarry`, "THE CARRY, CORRECTED"): a blocking reviewer
+ * finding a repair answered and an independent re-review RESOLVED, and the
+ * design in force when the newest completed run of the SAME mission ended.
+ * Every carried row is scoped to the new run's plan task and keeps where it
+ * came from. Everything else is excluded by name.
  *
- * WHAT THE CARRY DOES NOT DECIDE. Relevance. It hands mission B a small set of
- * verified facts with their provenance intact; the context integrity layer
- * ranks them against B's own material, applies B's role and task scope, and
- * evicts what does not fit B's budget. That is deliberate: a carry that tried
- * to judge relevance would be a second, dumber ranker in front of the real one.
+ * WHAT IS RECORDED. The whole decision — what travelled, from which run and
+ * task, under which scope, and every candidate left behind with its reason — is
+ * ONE `knowledge.carried` event, written in the same transaction as the rows. A
+ * carry that cannot be decided or written is a FAILED event with a closed
+ * reason. The bootstrap is told the outcome and decides whether it may start;
+ * nothing here is swallowed.
  *
- * WHY THE STANDING TRAVELS WITH IT. The copy's claim keeps A's trust, A's
- * asserter and the evidence it was verified on (see `juliusCarriedClaim`).
- * Re-deriving it would demote a reviewer-verified fact to an assertion, and B
- * would rank a fact as a guess. It is not a promotion: nobody verifies anything
- * here, and because `assertedBy` still names A's asserter, B's reviewer cannot
- * self-verify it either.
+ * WHAT THE CARRY DOES NOT DECIDE. Ranking. The context integrity layer still
+ * ranks what arrives against the plan's own material and spends the budget —
+ * and the dispatch records, per packet, which carried rows arrived
+ * (`knowledge.consumed`).
  */
 
 export interface MissionKnowledgeStore {
-  /** What this project has verified, excluding the run that is about to carry it. */
-  verifiedProjectKnowledge(input: {
-    readonly projectId: string;
-    readonly excludeRunId: string;
-    readonly limit: number;
-  }): Promise<readonly JuliusCarriedKnowledge[]>;
   /**
-   * Write the carried copies and their standings. Returns how many rows are new,
-   * so a replayed bootstrap reports 0 rather than pretending to have learned
-   * something twice.
+   * Decide, write and record what this run inherits. Never throws: a failure is
+   * an outcome (`FAILED`, with its reason) and is on the ledger when the store
+   * can still write at all.
    */
-  carryKnowledge(input: {
-    readonly runId: string;
-    readonly projectId: string;
-    readonly carried: readonly JuliusCarriedKnowledge[];
-    readonly firstRevision: number;
-    readonly occurredAt: string;
-  }): Promise<number>;
+  carryKnowledge(input: JuliusKnowledgeCarryRequest): Promise<JuliusKnowledgeCarryOutcome>;
 }
 
-/** How many verified facts one mission may inherit. A packet, not an archive. */
+/** How many rows one run may inherit. A packet, not an archive. */
 export const JULIUS_CARRIED_KNOWLEDGE_LIMIT = 12;
 
 export function createPostgresMissionKnowledgeStore(pool: Pool): MissionKnowledgeStore {
   const claims = new JuliusClaimPostgresRepository(pool);
   return {
-    verifiedProjectKnowledge: (input) => claims.verifiedProjectKnowledge(input),
-    async carryKnowledge(input) {
-      let written = 0;
-      let revision = input.firstRevision;
-      for (const carried of input.carried) {
-        const entryId = juliusCarriedEntryId(carried.sourceRunId, carried.entry.entryId);
-        /**
-         * THE COPY KEEPS ITS AUTHOR. `worker_id` is A's asserter, not
-         * `relay-bootstrap`: the claim ledger reads authorship to refuse
-         * self-verification, and a carried fact attributed to the bootstrap
-         * would let any reviewer "verify" it in B while telling a reader that
-         * Julius asserted something a model did.
-         */
-        const inserted = await pool.query(
-          `INSERT INTO relay_wonderland.julius_brain_entries
-             (entry_id,run_id,project_id,task_id,worker_id,entry_kind,safe_content,evidence_ids,revision,created_at)
-           VALUES($1,$2,$3,NULL,$4,$5,$6,$7::jsonb,$8,$9) ON CONFLICT DO NOTHING`,
-          [
-            entryId, input.runId, input.projectId, carried.claim.assertedBy,
-            brainKindToStored(carried.entry.kind), carried.entry.text,
-            JSON.stringify(carried.entry.evidenceIds), revision, input.occurredAt,
-          ],
-        );
-        if ((inserted.rowCount ?? 0) === 0) continue;
-        revision += 1;
-        written += 1;
-        // The standing, about the copy, unchanged — and the reason names where
-        // it came from, so the history answers "why is this VERIFIED here".
-        await claims.recordClaimStanding({
-          runId: input.runId, projectId: input.projectId,
-          claim: juliusCarriedClaim(carried),
-          reason: `CARRIED_FROM:${carried.sourceRunId}`,
-          occurredAt: input.occurredAt,
-        });
-      }
-      return written;
-    },
+    carryKnowledge: (input) => claims.carryProjectKnowledge(input),
   };
 }
