@@ -49,10 +49,15 @@ namespace WonderlandMascotStyle
 		return EWonderlandColorChannel::None;
 	}
 
+	bool IsDesignedWhite(const FLinearColor& Colour)
+	{
+		return Colour.R >= 0.995f && Colour.G >= 0.995f && Colour.B >= 0.995f;
+	}
+
 	FLinearColor AccentColour(const FLinearColor& Authored, const FLinearColor& Chosen, bool bLight)
 	{
 		// DEFAULT is White and means "the colours it was designed in".
-		if (Chosen.R >= 0.995f && Chosen.G >= 0.995f && Chosen.B >= 0.995f)
+		if (IsDesignedWhite(Chosen))
 		{
 			return Authored;
 		}

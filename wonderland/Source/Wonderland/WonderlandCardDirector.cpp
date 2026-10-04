@@ -111,13 +111,21 @@ namespace
 	 * through, the SAME authorities the Wardrobe and the Menu rows use (the mascot settings' Secondary, StripColour.txt, FlameColour.txt)
 	 * -- a card never paints a material itself, so nothing here can reach the eyes, swords, clothes or body by another road.
 	 */
+	/** A live colour as a card keeps it: each channel in 0..1 (the file's reader refuses anything else, so an out-of-range console
+	 *  value would be saved and then read back as NOT SAVED -- Second's review, 10-04). */
+	FLinearColor CardClamped(const FLinearColor& Colour)
+	{
+		return FLinearColor(FMath::Clamp(Colour.R, 0.0f, 1.0f), FMath::Clamp(Colour.G, 0.0f, 1.0f), FMath::Clamp(Colour.B, 0.0f, 1.0f), 1.0f);
+	}
+
 	FWonderlandCardColour CardLiveSecondary()
 	{
 		FWonderlandCardColour Out;
 		Out.bRecorded = true;
 		const UWonderlandMascotStyleSettings* Style = GetDefault<UWonderlandMascotStyleSettings>();
-		Out.bChosen = Style != nullptr && Style->HasChosenSecondary();
-		Out.Colour = Out.bChosen ? FLinearColor(Style->Secondary.R, Style->Secondary.G, Style->Secondary.B, 1.0f) : FLinearColor::Black;
+		// the SECONDARY row's DEFAULT swatch is White, "as designed" (WonderlandMascotStyle::IsDesignedWhite): a card records DEFAULT for it
+		Out.bChosen = Style != nullptr && Style->HasChosenSecondary() && !WonderlandMascotStyle::IsDesignedWhite(Style->Secondary);
+		Out.Colour = Out.bChosen ? CardClamped(Style->Secondary) : FLinearColor::Black;
 		return Out;
 	}
 
@@ -126,8 +134,7 @@ namespace
 		FWonderlandCardColour Out;
 		Out.bRecorded = true;
 		Out.bChosen = WonderlandMascotStyle::HasChosenStrip();
-		const FLinearColor Strip = WonderlandMascotStyle::StripColour();
-		Out.Colour = Out.bChosen ? FLinearColor(Strip.R, Strip.G, Strip.B, 1.0f) : FLinearColor::Black;
+		Out.Colour = Out.bChosen ? CardClamped(WonderlandMascotStyle::StripColour()) : FLinearColor::Black;
 		return Out;
 	}
 
@@ -136,8 +143,7 @@ namespace
 		FWonderlandCardColour Out;
 		Out.bRecorded = true;
 		Out.bChosen = WonderlandMascotStyle::HasChosenFlame();
-		const FLinearColor Fire = WonderlandMascotStyle::FlameColour();
-		Out.Colour = Out.bChosen ? FLinearColor(Fire.R, Fire.G, Fire.B, 1.0f) : FLinearColor::Black;
+		Out.Colour = Out.bChosen ? CardClamped(WonderlandMascotStyle::FlameColour()) : FLinearColor::Black;
 		return Out;
 	}
 
@@ -427,6 +433,23 @@ namespace WonderlandCardDirector
 		Said.Add(CardApplyColour(TEXT("colour 2 (secondary)"), Card.Secondary, CardLiveSecondary(), [&Card]() { CardPutSecondary(Card.Secondary); }));
 		Said.Add(CardApplyColour(TEXT("colour 3 (strips)"), Card.Strips, CardLiveStrips(), [&Card]() { CardPutStrips(Card.Strips); }));
 		Said.Add(CardApplyColour(TEXT("flame"), Card.Flame, CardLiveFlame(), [&Card]() { CardPutFlame(Card.Flame); }));
+		// A CARD WITH NO COLOURWAY AT ALL comes back as one (Second's review, 10-04): picking any swatch sets the mascot's sticky "a colour
+		// was chosen" flag, and the eyes tint by it, so a card saved before any colour was chosen came back with tinted eyes. When the card
+		// recorded its secondary as DEFAULT and its primary is DEFAULT, the flag goes back too. An older card that never recorded the
+		// secondary is left alone, as every unrecorded channel is.
+		if (!Card.Primary.bChosen && Card.Secondary.bRecorded && !Card.Secondary.bChosen)
+		{
+			if (UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>())
+			{
+				if (Style->bChosen)
+				{
+					Style->bChosen = false;
+					Style->bSecondaryChosen = false;
+					WonderlandMascotStyle::SaveAndApply();
+					Said.Add(TEXT("no colourway (as designed)"));
+				}
+			}
+		}
 
 		// THE COMPANIONS: now between missions with the runtime there; otherwise they wait, and why is said
 		Said.Add(CardApplyOrWait(World, Card));
