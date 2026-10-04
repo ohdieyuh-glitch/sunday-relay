@@ -124,7 +124,9 @@ WHAT THIS BETA DOES NOT INCLUDE
 - Julius and the AI companions are not connected in this build. Nothing in the beta calls an AI service.
   Tasks you write are saved on your PC as QUEUED Mission Contracts; the Missions panel (J) can play a SIMULATED
   mission so you can see how one unfolds.
-- Wonderland is single-player for now.
+- Friends, messages, parties and party voice live in the Social Hub: type /social in the agent terminal (Ctrl+T).
+  They need a Wonderland social server and a GitHub sign-in. This build connects only when a server is set up for
+  your test session; without one, the hub says "Social is not connected in this build" and nothing is sent.
 
 REQUIREMENTS
 - Windows 10 or 11, 64-bit
@@ -140,9 +142,10 @@ INSTALL AND RUN
    then "Run anyway". If Windows says "The publisher could not be verified" instead, click Run.
    If Smart App Control is turned on, Windows blocks unsigned programs and offers no way to run them. Wonderland
    cannot start on that PC until the beta is signed; please tell us rather than turning Smart App Control off.
-4. Windows may ask whether to allow Wonderland on public and private networks. Please click Cancel: Wonderland does
-   not use the network. The request comes from a diagnostics feature of the game engine, which this build switches
-   off right after it starts.
+4. Windows may ask whether to allow Wonderland on public and private networks. Please click Cancel: nothing in
+   Wonderland needs other computers to connect to it. The request comes from a diagnostics feature of the game
+   engine, which this build switches off right after it starts. Wonderland connects out only after you sign in
+   to social: to the social server, and to Epic Online Services for party voice.
 5. If Windows reports a missing VCRUNTIME140.dll or MSVCP140.dll, run Engine\Extras\Redist\en-us\vc_redist.x64.exe
    once from this folder, then start Wonderland again.
 
@@ -151,6 +154,7 @@ W A S D move, mouse look, Shift run, Ctrl walk, Space jump.
 M          the world map: choose a place, then Teleport.
 B          the Project Brain, and the wardrobe (Switch Skin).
 J          Missions.        Ctrl+T   the agent terminals.        C   command presets.
+/social    typed in the agent terminal: the Social Hub (friends, requests, recent players, messages, party, voice).
 Esc / Tab  the menu: settings, colours, how to play, quit.
 
 SETTINGS
