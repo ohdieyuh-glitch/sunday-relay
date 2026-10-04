@@ -1,6 +1,9 @@
 #include "WonderlandProjectBrainPanel.h"
+#include "WonderlandCardCapabilities.h"
+#include "WonderlandCardDirector.h"
 
 #include "Framework/Application/SlateApplication.h"
+#include "HAL/IConsoleManager.h"
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Images/SImage.h"
@@ -44,6 +47,60 @@ namespace WonderlandBrainLook
 	FLinearColor Violet(float A = 1.0f) { return WonderlandUi::Srgb(0x5A, 0x44, 0xC8, A); }
 	FLinearColor Beam(float A = 1.0f) { return WonderlandUi::Srgb(0x35, 0x49, 0xC0, A); }
 	FLinearColor Night(float A = 1.0f) { return WonderlandUi::Srgb(0xF7, 0xF7, 0xFB, A); }
+
+	/** C.A.R.D.'s three words, as colours that read on the white panel: ready, a person can fix it, cannot be used from here. */
+	FLinearColor CardStatusColour(EWonderlandCardStatus Status)
+	{
+		switch (Status)
+		{
+		case EWonderlandCardStatus::Ready:        return WonderlandUi::Srgb(0x1F, 0x9D, 0x5B);
+		case EWonderlandCardStatus::Unconfigured: return WonderlandUi::Srgb(0xC9, 0x8A, 0x10);
+		default:                                  return WonderlandUi::Srgb(0xC6, 0x3B, 0x3B);
+		}
+	}
+
+	/** The worst of a set: one reference that cannot be used colours the whole tile; none at all is quiet. */
+	FLinearColor CardWorstColour(const TArray<FWonderlandCardViewRef>& Refs)
+	{
+		if (Refs.Num() == 0)
+		{
+			return Mist(0.55f);
+		}
+		EWonderlandCardStatus Worst = EWonderlandCardStatus::Ready;
+		for (const FWonderlandCardViewRef& Ref : Refs)
+		{
+			if (Ref.Status == EWonderlandCardStatus::Unavailable)
+			{
+				return CardStatusColour(Ref.Status);
+			}
+			if (Ref.Status == EWonderlandCardStatus::Unconfigured)
+			{
+				Worst = Ref.Status;
+			}
+		}
+		return CardStatusColour(Worst);
+	}
+
+	/** Everything the open page shows, as one string: the page is redrawn only when this changes. */
+	FString CardSignature(const FWonderlandCardView& View, FName Tab)
+	{
+		FString Out = Tab.ToString();
+		Out += View.ActiveId + TEXT("|") + View.HandoffState + TEXT("|") + View.Skin + TEXT("|") + View.Primary + TEXT("|") + View.ModifiedWhat + TEXT("|") + View.Waiting;
+		Out += TEXT("|") + View.Colour2 + TEXT("|") + View.Colour3 + TEXT("|") + View.Flame;
+		Out += View.bModified ? TEXT("|M") : TEXT("|-");
+		for (const TArray<FWonderlandCardViewRef>* Set : { &View.Companions, &View.Capabilities })
+		{
+			for (const FWonderlandCardViewRef& Ref : *Set)
+			{
+				Out += FString::Printf(TEXT("|%s:%d:%d:%s"), *Ref.Label, static_cast<int32>(Ref.Status), Ref.bSimulated ? 1 : 0, *Ref.Reason);
+			}
+		}
+		for (const FWonderlandCardViewEntry& Entry : View.Cards)
+		{
+			Out += FString::Printf(TEXT("|%s:%s:%d"), *Entry.Id, *Entry.Name, Entry.bActive ? 1 : 0);
+		}
+		return Out;
+	}
 
 	/**
 	 * BLACK SNOW ACROSS THE WHOLE PANEL (founder, 2026-09-25).
@@ -103,10 +160,14 @@ namespace WonderlandBrainLook
 	// THE FRAME'S PROPORTIONS, as fractions of the viewport, measured from the founder's reference so the
 	// panels, the connectors and the brain keep the composition at any resolution.
 	struct FRect { float X0, Y0, X1, Y1; };
-	constexpr FRect Panel1 = {0.042f, 0.141f, 0.446f, 0.388f};
-	constexpr FRect Panel2 = {0.042f, 0.404f, 0.446f, 0.620f};
-	constexpr FRect Panel3 = {0.042f, 0.636f, 0.446f, 0.776f};
-	constexpr FRect Panel4 = {0.042f, 0.792f, 0.446f, 0.912f};
+	// FIVE SECTIONS (founder, 2026-10-02: C.A.R.D. is the fifth Project Brain component, "Re-layout into five sections"). The
+	// column keeps its width and its top; each of the four keeps its order and its share, a little shorter, and 05 C.A.R.D.
+	// takes the foot. Was: 0.141-0.388, 0.404-0.620, 0.636-0.776, 0.792-0.912.
+	constexpr FRect Panel1 = {0.042f, 0.141f, 0.446f, 0.336f};
+	constexpr FRect Panel2 = {0.042f, 0.348f, 0.446f, 0.522f};
+	constexpr FRect Panel3 = {0.042f, 0.534f, 0.446f, 0.656f};
+	constexpr FRect Panel4 = {0.042f, 0.668f, 0.446f, 0.778f};
+	constexpr FRect Panel5 = {0.042f, 0.790f, 0.446f, 0.930f};
 	constexpr FRect Hologram = {0.502f, 0.125f, 0.892f, 0.956f};
 	constexpr FRect Inspector = {0.515f, 0.140f, 0.885f, 0.880f};
 	// THE SKIN VIEW STANDS WHERE THE INSPECTOR STANDS, a little wider because it carries a figure and a list side by
@@ -115,14 +176,17 @@ namespace WonderlandBrainLook
 
 	struct FConnector { float FromX, FromY, ToX, ToY; };
 	constexpr FConnector Connectors[] = {
-		{0.446f, 0.184f, 0.548f, 0.272f},
-		{0.446f, 0.271f, 0.530f, 0.345f},
-		{0.446f, 0.356f, 0.524f, 0.398f},
-		{0.446f, 0.436f, 0.523f, 0.455f},
-		{0.446f, 0.537f, 0.533f, 0.505f},
-		{0.446f, 0.661f, 0.550f, 0.560f},
-		{0.446f, 0.752f, 0.566f, 0.608f},
-		{0.446f, 0.852f, 0.640f, 0.842f},
+		// each leaves its panel at the SAME place along it as before the re-layout, and arrives where it always did
+		{0.446f, 0.175f, 0.548f, 0.272f},
+		{0.446f, 0.244f, 0.530f, 0.345f},
+		{0.446f, 0.311f, 0.524f, 0.398f},
+		{0.446f, 0.374f, 0.523f, 0.455f},
+		{0.446f, 0.455f, 0.533f, 0.505f},
+		{0.446f, 0.556f, 0.550f, 0.560f},
+		{0.446f, 0.635f, 0.566f, 0.608f},
+		{0.446f, 0.723f, 0.640f, 0.842f},
+		// 05 C.A.R.D. into the root of the brain
+		{0.446f, 0.860f, 0.668f, 0.884f},
 	};
 
 	/** Crown to root, as the frame's CHAKRA ADAPTIVE row reads. */
@@ -306,7 +370,7 @@ public:
 			FSlateRoundedBoxBrush(FLinearColor::Transparent, 23.0f, Violet(0.090f), 2.5f),
 			FSlateRoundedBoxBrush(FLinearColor::Transparent, 26.5f, Violet(0.055f), 2.5f),
 		};
-		for (const FRect& Rect : {Panel1, Panel2, Panel3, Panel4})
+		for (const FRect& Rect : {Panel1, Panel2, Panel3, Panel4, Panel5})
 		{
 			for (int32 Ring = 0; Ring < 4; ++Ring)
 			{
@@ -522,6 +586,8 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 	EquippedSkin = InArgs._EquippedSkin;
 	OnChooseSkin = InArgs._OnChooseSkin;
 	OnSkinPreviewPainted = InArgs._OnSkinPreviewPainted;
+	CardWorld = InArgs._CardWorld;
+	RefreshCardView(true);
 
 	SelectableStyle = FButtonStyle()
 		.SetNormal(ClearBrush)
@@ -675,7 +741,7 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 						const bool bWanted = HologramBrush != nullptr && !bSkinsOpen && !bSculptureLive;
 						return bWanted ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
 					})
-					.ColorAndOpacity_Lambda([this]() { return FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, Selected.IsNone() ? 1.0f : 0.30f)); })
+					.ColorAndOpacity_Lambda([this]() { return FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, Selected.IsNone() && CardTab.IsNone() ? 1.0f : 0.30f)); })
 				]
 			]
 		]
@@ -684,7 +750,7 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 			SNew(SWonderlandBrainCoreGlow)
 			.Visibility_Lambda([this]() { return bSkinsOpen ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 			.ChakraRank_Lambda([this]() { return Model.ChakraRank; })
-			.Dim_Lambda([this]() { return Selected.IsNone() ? 1.0f : 0.25f; })
+			.Dim_Lambda([this]() { return Selected.IsNone() && CardTab.IsNone() ? 1.0f : 0.25f; })
 		]
 		// The title.
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.042f, 0.036f)).AutoSize(true).Alignment(FVector2D(0.0, 0.0))
@@ -753,6 +819,10 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 		[
 			MakeGlassPanel(TEXT("04"), EWonderlandBrainGlyph::Target, TEXT("MISSION CONTEXT"), TEXT("WHAT THIS MISSION IS HOLDING"), MissionBody)
 		]
+		+ SConstraintCanvas::Slot().Anchors(Slot(Panel5)).Offset(FMargin(0.0f))
+		[
+			MakeGlassPanel(TEXT("05"), EWonderlandBrainGlyph::Wallet, TEXT("C.A.R.D."), TEXT("YOUR LOADOUT, READY TO HAND OFF"), MakeCardStrip())
+		]
 		// The side captions, as the frame sets them.
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.823f, 0.058f)).AutoSize(true).Alignment(FVector2D(0.0, 0.0))
 		[
@@ -790,7 +860,7 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 		]
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.42f, 0.978f)).AutoSize(true).Alignment(FVector2D(0.0, 0.0))
 		[
-			Caption(TEXT("B or Esc to close   ·   choose any memory, system or component to inspect it"), Font("Regular", 8, 60), Mist(0.75f))
+			Caption(TEXT("B or Esc to close   ·   choose any memory, system, component or C.A.R.D. to inspect it"), Font("Regular", 8, 60), Mist(0.75f))
 		]
 		// RELAY DOG SKINS: the live mascot and its wardrobe, over the brain.
 		+ SConstraintCanvas::Slot().Anchors(Slot(SkinView)).Offset(FMargin(0.0f))
@@ -806,6 +876,21 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 			.Padding(FMargin(22.0f, 18.0f))
 			[
 				InspectorBody.ToSharedRef()
+			]
+		]
+		// 05 C.A.R.D.'s page: one tab at a time, where the inspector stands, over the brain
+		+ SConstraintCanvas::Slot().Anchors(Slot(Inspector)).Offset(FMargin(0.0f))
+		[
+			SNew(SBorder)
+			.Visibility_Lambda([this]() { return CardTab.IsNone() || bSkinsOpen ? EVisibility::Collapsed : EVisibility::Visible; })
+			.BorderImage(&InspectorBrush)
+			.Padding(FMargin(22.0f, 18.0f))
+			[
+				SNew(SScrollBox)
+				+ SScrollBox::Slot()
+				[
+					SAssignNew(CardPageBody, SVerticalBox)
+				]
 			]
 		]
 	];
@@ -959,6 +1044,12 @@ void SWonderlandProjectBrainPanel::Refresh(const FWonderlandBrainModel& InModel)
 void SWonderlandProjectBrainPanel::Select(FName SurfaceId)
 {
 	Selected = (SurfaceId.IsNone() || Surface(SurfaceId) == nullptr) ? NAME_None : SurfaceId;
+	if (!Selected.IsNone() && !CardTab.IsNone())
+	{
+		// one thing over the brain at a time: a surface chosen closes C.A.R.D.'s page
+		CardTab = NAME_None;
+		RebuildCardPage();
+	}
 	RebuildInspector();
 	if (!Selected.IsNone() && ProposalInput.IsValid() && FSlateApplication::IsInitialized())
 	{
@@ -1282,38 +1373,62 @@ void SWonderlandProjectBrainPanel::SetSkinsOpen(bool bOpen)
 	}
 }
 
+// QA ONLY (wl.Qa.WardrobeSwatches' control): 1 draws the colourway rows at their full width again, unscaled, so the Wardrobe's
+// card list covers the last swatches as it did before the rows were fitted to their column (Second, R7, 10-04). Never set in play.
+static TAutoConsoleVariable<int32> CVarWardrobeSwatchOverflowQa(TEXT("wl.Qa.WardrobeOverflow"), 0,
+	TEXT("QA only: 1 = the Wardrobe's colourway rows at full width, unscaled (re-creates the R7 overlap for wl.Qa.WardrobeSwatches' control)."));
+
 TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSwatchRow(int32 Which)
 {
 	using namespace WonderlandBrainLook;
-	// 0 PRIMARY, 1 SECONDARY, 2 FLAME (founder, 2026-10-01: the flame skins' fire, on its own row)
+	// 0 PRIMARY, 1 SECONDARY, 2 FLAME (founder, 2026-10-01: the flame skins' fire, on its own row), 3 STRIPS (B65, founder,
+	// 2026-10-02: Shadow's strips are COLOR 3, "exposed cleanly in Project Brain -> Wardrobe -> Shadow -> Colorways")
 	const bool bPrimary = Which == 0;
 	const bool bFlame = Which == 2;
+	const bool bStrip = Which == 3;
 	TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
 	Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
 	[
 		SNew(SBox).WidthOverride(74.0f)
 		[
 			SNew(STextBlock)
-			.Text(bFlame ? INVTEXT("FLAME") : (bPrimary ? INVTEXT("PRIMARY") : INVTEXT("SECONDARY")))
+			.Text(bStrip ? INVTEXT("STRIPS") : bFlame ? INVTEXT("FLAME") : (bPrimary ? INVTEXT("PRIMARY") : INVTEXT("SECONDARY")))
 			.Font(Font("Bold", 8, 200)).ColorAndOpacity(Mist(0.95f))
 		]
 	];
-	for (const TPair<FName, FLinearColor>& Swatch : WonderlandMascotStyle::Palette())
+	// THE PRIMARY ROW OFFERS A TRUE WHITE AND BLACK after DEFAULT (founder, 2026-10-02), the Menu's MASCOT PRIMARY row the same.
+	// THE STRIPS ROW OFFERS THE SAME (white strips and black strips are both real choices, DEFAULT the designed ones).
+	// each swatch named for QA (wl.Qa.WardrobeSwatches hit-tests its centre against its own button): row word and colour
+	const TCHAR* const RowWord = bStrip ? TEXT("STRIPS") : bFlame ? TEXT("FLAME") : (bPrimary ? TEXT("PRIMARY") : TEXT("SECONDARY"));
+	for (const TPair<FName, FLinearColor>& Swatch : (bPrimary || bStrip) ? WonderlandMascotStyle::PrimaryPalette() : WonderlandMascotStyle::Palette())
 	{
 		const FLinearColor Colour = Swatch.Value;
 		const FName Label = Swatch.Key;
 		Row->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
 		[
 			SNew(SButton)
+			.Tag(FName(*FString::Printf(TEXT("WardrobeSwatch.%s.%s"), RowWord, *Label.ToString())))
 			.ButtonStyle(&SwatchStyle)
 			.ToolTipText(FText::FromName(Label))
-			.OnClicked_Lambda([bPrimary, bFlame, Colour]()
+			.OnClicked_Lambda([bPrimary, bFlame, bStrip, Colour, Label]()
 			{
+				// THE STRIPS ARE THEIR OWN STATE TOO, read and written by the Menu's STRIPS row (WonderlandMascotStyle).
+				if (bStrip)
+				{
+					WonderlandMascotStyle::PickMascotStrip(Label, Colour);
+					return FReply::Handled();
+				}
 				// THE FLAME IS ITS OWN STATE, read and written by the Menu's FLAME row too (WonderlandMascotStyle).
 				if (bFlame)
 				{
 					WonderlandMascotStyle::SetFlameColour(Colour);
 					WonderlandMascotStyle::SaveAndApply();
+					return FReply::Handled();
+				}
+				// THE PRIMARY KNOWS ITS SWATCH: DEFAULT and WHITE are both (1,1,1) (WonderlandMascotStyle::PrimaryPalette).
+				if (bPrimary)
+				{
+					WonderlandMascotStyle::PickMascotPrimary(Label, Colour);
 					return FReply::Handled();
 				}
 				// ONE CANONICAL STATE, WRITTEN FROM BOTH PLACES. The founder's rule: "Wardrobe color controls
@@ -1339,11 +1454,21 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSwatchRow(int32 Which)
 					+ SOverlay::Slot()
 					[
 						SNew(SImage).Image(&SwatchRingBrush)
-						.Visibility_Lambda([bPrimary, bFlame, Colour]()
+						.Visibility_Lambda([bPrimary, bFlame, bStrip, Colour, Label]()
 						{
+							if (bStrip)
+							{
+								return WonderlandMascotStyle::IsMascotStripOn(Label, Colour)
+									? EVisibility::HitTestInvisible : EVisibility::Hidden;
+							}
 							if (bFlame)
 							{
 								return WonderlandMascotStyle::FlameColour().Equals(Colour, 0.01f)
+									? EVisibility::HitTestInvisible : EVisibility::Hidden;
+							}
+							if (bPrimary)
+							{
+								return WonderlandMascotStyle::IsMascotPrimaryOn(Label, Colour)
 									? EVisibility::HitTestInvisible : EVisibility::Hidden;
 							}
 							const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
@@ -1370,7 +1495,22 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeColourStrip()
 	// PRIMARY is the shell every skin shares; SECONDARY is the status eyes and a skin's secondary accents -- the
 	// surfaces its figure tags `secondary`, which on Jack Flame are the tie and the suit; FLAME, shown only on a skin
 	// with fire, is that fire on its own (founder, 2026-10-01). Halos, banners and the black visor are never reached.
+	//
+	// THE ROWS FIT THEIR OWN COLUMN (Second, R7, 10-04: with Shadow Flame worn, the PRIMARY row's JADE, ROSE, SLATE and OBSIDIAN and
+	// the SECONDARY row's last swatches ran past the preview column's right edge, under the skin-card list beside it, and a click there
+	// hit the card). A row of fifteen 18 uu swatches is ~430 uu wide; the column is ~325 at the founder's window. So the block is
+	// scaled DOWN -- uniformly, all rows alike, never up -- to the column's width: the same rows, colours, order and words, in place;
+	// at a window wide enough for them nothing changes. The note below stays outside and wraps as before.
 	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			SNew(SScaleBox)
+			.Stretch_Lambda([]() { return CVarWardrobeSwatchOverflowQa.GetValueOnGameThread() != 0 ? EStretch::None : EStretch::ScaleToFitX; })
+			.StretchDirection(EStretchDirection::DownOnly)
+			.HAlign(HAlign_Left)
+			.VAlign(VAlign_Top)
+			[
+		SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
 		[
 			SNew(STextBlock).Text(INVTEXT("COLOURWAY"))
@@ -1386,10 +1526,21 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeColourStrip()
 				MakeSwatchRow(2)
 			]
 		]
+		// COLOR 3, shown only on a skin with strips (Shadow), as FLAME is only on a skin with fire
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+		[
+			SNew(SBox)
+			.Visibility_Lambda([]() { return WonderlandMascotStyle::WornSkinHasStrips() ? EVisibility::Visible : EVisibility::Collapsed; })
+			[
+				MakeSwatchRow(3)
+			]
+		]
+			]
+		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
 		[
 			SNew(STextBlock)
-			.Text(INVTEXT("PRIMARY paints the shell, SECONDARY the status eyes and the skin's secondary accents (Jack Flame's tie and suit), FLAME the skin's fire. Halos and the visor are left as designed."))
+			.Text(INVTEXT("PRIMARY paints the shell, SECONDARY the status eyes and the skin's secondary accents (Jack Flame's tie and suit), FLAME the skin's fire, STRIPS Shadow's flowing strips. Halos and the visor are left as designed."))
 			.Font(Font("Regular", 7, 180)).ColorAndOpacity(Mist(0.75f))
 			.AutoWrapText(true)
 		];
@@ -1778,6 +1929,10 @@ FReply SWonderlandProjectBrainPanel::OnKeyDown(const FGeometry& MyGeometry, cons
 		{
 			SetSkinsOpen(false);
 		}
+		else if (!CardTab.IsNone())
+		{
+			OpenCardTab(NAME_None);
+		}
 		else if (!Selected.IsNone())
 		{
 			Select(NAME_None);
@@ -1809,4 +1964,339 @@ FReply SWonderlandProjectBrainPanel::OnKeyDown(const FGeometry& MyGeometry, cons
 		return FReply::Handled();
 	}
 	return SCompoundWidget::OnKeyDown(MyGeometry, InKeyEvent);
+}
+
+// ================================================================================================================= 05 C.A.R.D.
+// The fifth Project Brain component (founder, 2026-10-02: "Re-layout into five sections"). Read live from WonderlandCardView and
+// changed only through WonderlandCardDirector, the same path as the Live Terminal's /card: the panel keeps no C.A.R.D. state.
+
+TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeCardStrip()
+{
+	using namespace WonderlandBrainLook;
+	return SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+		[
+			MakeCardTile(TEXT("handoff"), EWonderlandBrainGlyph::Sparkle, TEXT("handoff"),
+				[this]() { return CardView.HandoffForm.IsEmpty() ? FString(TEXT("—")) : FString::Printf(TEXT("%s · %s"), *CardView.HandoffForm, *CardView.HandoffState); },
+				[this]() { return CardView.HandoffState == TEXT("HELD") ? CardStatusColour(EWonderlandCardStatus::Ready) : Mist(0.55f); })
+		]
+		+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+		[
+			MakeCardTile(TEXT("mascot"), EWonderlandBrainGlyph::Person, TEXT("mascot"),
+				[this]() { return FString::Printf(TEXT("%s · %s%s"), *CardView.Skin.ToUpper(), *CardView.Primary, CardView.bModified ? TEXT(" · MODIFIED") : TEXT("")); },
+				[this]() { return CardView.bModified ? CardStatusColour(EWonderlandCardStatus::Unconfigured) : Mist(0.55f); })
+		]
+		+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+		[
+			MakeCardTile(TEXT("companions"), EWonderlandBrainGlyph::People, TEXT("companions"),
+				[this]() { return CardView.Companions.Num() < 2 ? FString(TEXT("—"))
+					: FString::Printf(TEXT("%s · %s"), *CardView.Companions[0].Label.ToUpper(), *CardView.Companions[1].Label.ToUpper()); },
+				[this]() { return CardWorstColour(CardView.Companions); })
+		]
+		+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+		[
+			MakeCardTile(TEXT("capabilities"), EWonderlandBrainGlyph::Link, TEXT("skills_mcp"),
+				[this]() { return CardView.Capabilities.Num() == 0 ? FString(TEXT("NONE ATTACHED"))
+					: FString::Printf(TEXT("%d ATTACHED · %d READY"), CardView.Capabilities.Num(), CardView.CountCapabilities(EWonderlandCardStatus::Ready)); },
+				[this]() { return CardWorstColour(CardView.Capabilities); })
+		]
+		+ SHorizontalBox::Slot().FillWidth(1.0f)
+		[
+			MakeCardTile(TEXT("saved"), EWonderlandBrainGlyph::Layers, TEXT("saved_cards"),
+				[this]() { return FString::Printf(TEXT("%s · %d SAVED"), *CardView.ActiveName.ToUpper(), CardView.Cards.Num()); },
+				[]() { return Violet(0.8f); })
+		];
+}
+
+TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeCardTile(FName Tab, EWonderlandBrainGlyph Glyph, const TCHAR* Caption,
+	TFunction<FString()> Value, TFunction<FLinearColor()> Dot)
+{
+	using namespace WonderlandBrainLook;
+	static const FSlateRoundedBoxBrush DotBrush(FLinearColor::White, 3.5f);
+	return SNew(SBorder)
+		.BorderImage_Lambda([this, Tab]() -> const FSlateBrush* { return CardTab == Tab ? &SelectedBrush : &CardBrush; })
+		.Padding(FMargin(0.0f))
+		[
+			SNew(SButton)
+			.ButtonStyle(&SelectableStyle)
+			.ContentPadding(FMargin(0.0f))
+			.OnClicked_Lambda([this, Tab]() { OpenCardTab(CardTab == Tab ? NAME_None : Tab); return FReply::Handled(); })
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().Padding(10.0f, 8.0f, 9.0f, 3.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 7.0f, 0.0f)
+					[
+						SNew(SWonderlandBrainIcon).Glyph(Glyph).Size(16.0f).Color(Violet()).Thickness(1.4f)
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(FText::FromString(Caption)).Font(Font("Regular", 9, 40)).ColorAndOpacity(BrainInk(0.95f))
+						.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(7.0f).HeightOverride(7.0f)
+						[
+							SNew(SImage).Image(&DotBrush).ColorAndOpacity_Lambda([Dot]() { return FSlateColor(Dot()); })
+						]
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(10.0f, 0.0f, 9.0f, 8.0f)
+				[
+					SNew(STextBlock).Text_Lambda([Value]() { return FText::FromString(Value()); }).Font(Font("Bold", 8, 60)).ColorAndOpacity(BrainInk(0.8f))
+					.AutoWrapText(true)
+				]
+			]
+		];
+}
+
+void SWonderlandProjectBrainPanel::OpenCardTab(FName Tab)
+{
+	CardTab = Tab;
+	if (!CardTab.IsNone())
+	{
+		// ONE THING OVER THE BRAIN AT A TIME: the inspector and the wardrobe step aside for the page
+		if (!Selected.IsNone())
+		{
+			Selected = NAME_None;
+			RebuildInspector();
+		}
+		if (bSkinsOpen)
+		{
+			SetSkinsOpen(false);
+		}
+	}
+	RefreshCardView(true);
+	RebuildCardPage();
+	if (FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().SetKeyboardFocus(SharedThis(this), EFocusCause::SetDirectly);
+	}
+}
+
+void SWonderlandProjectBrainPanel::RefreshCardView(bool bForce)
+{
+	const double Now = FPlatformTime::Seconds();
+	if (!bForce && CardViewAt >= 0.0 && Now - CardViewAt < 0.25)
+	{
+		return;
+	}
+	CardViewAt = Now;
+	CardView = WonderlandCardView::Build(CardWorld.Get());
+}
+
+void SWonderlandProjectBrainPanel::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+{
+	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+	RefreshCardView(false);
+	if (!CardTab.IsNone() && WonderlandBrainLook::CardSignature(CardView, CardTab) != CardPageShown)
+	{
+		RebuildCardPage();
+	}
+}
+
+void SWonderlandProjectBrainPanel::RebuildCardPage()
+{
+	using namespace WonderlandBrainLook;
+	if (!CardPageBody.IsValid())
+	{
+		return;
+	}
+	CardPageBody->ClearChildren();
+	CardPageShown = CardSignature(CardView, CardTab);
+	if (CardTab.IsNone())
+	{
+		return;
+	}
+	static const FSlateRoundedBoxBrush DotBrush(FLinearColor::White, 4.0f);
+	const FWonderlandCardView& V = CardView;
+	const FString TabId = CardTab.ToString();
+	auto Add = [this](TSharedRef<SWidget> Widget, float Top)
+	{
+		CardPageBody->AddSlot().AutoHeight().Padding(0.0f, Top, 0.0f, 0.0f)[Widget];
+	};
+	auto Line = [](const FString& Text, const FSlateFontInfo& FontInfo, const FLinearColor& Colour) -> TSharedRef<SWidget>
+	{
+		return SNew(STextBlock).Text(FText::FromString(Text)).Font(FontInfo).ColorAndOpacity(Colour).AutoWrapText(true);
+	};
+	// EVERY ACTION GOES THROUGH THE DIRECTOR, and the page is redrawn on the NEXT tick -- never inside the click that changed it
+	auto Act = [this](const FString& Label, TFunction<void(UWorld*)> Do) -> TSharedRef<SWidget>
+	{
+		return SNew(SButton).ButtonStyle(&ActionStyle)
+			.OnClicked_Lambda([this, Do]()
+			{
+				if (UWorld* World = CardWorld.Get())
+				{
+					Do(World);
+				}
+				RefreshCardView(true);
+				CardPageShown.Reset();
+				return FReply::Handled();
+			})
+			[
+				SNew(STextBlock).Text(FText::FromString(Label)).Font(Font("Bold", 9, 160)).ColorAndOpacity(BrainInk())
+			];
+	};
+	auto RefRow = [&Line](const FWonderlandCardViewRef& Ref) -> TSharedRef<SWidget>
+	{
+		return SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(8.0f).HeightOverride(8.0f)
+					[
+						SNew(SImage).Image(&DotBrush).ColorAndOpacity(FSlateColor(CardStatusColour(Ref.Status)))
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+				[
+					Line(Ref.Title, Font("Regular", 8, 220), Mist())
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+				[
+					Line(Ref.Label, Font("Bold", 11, 40), BrainInk())
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+				[
+					Line(FString(WonderlandCardCapabilities::StatusWord(Ref.Status)) + (Ref.bSimulated ? TEXT(" · SIMULATED") : TEXT("")),
+						Font("Bold", 8, 160), CardStatusColour(Ref.Status))
+				]
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(16.0f, 3.0f, 0.0f, 0.0f)
+			[
+				Line(Ref.Reason, Font("Regular", 9), Mist())
+			];
+	};
+
+	const TCHAR* Title = TabId == TEXT("handoff") ? TEXT("MISSION HANDOFF") : TabId == TEXT("mascot") ? TEXT("MASCOT · CLOTHES")
+		: TabId == TEXT("companions") ? TEXT("COMPANIONS · IMPORTED AI") : TabId == TEXT("capabilities") ? TEXT("SKILLS · MCP · APIs") : TEXT("SAVED C.A.R.D.s");
+	Add(SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+		[
+			Line(FString::Printf(TEXT("05  C.A.R.D.  ·  %s"), Title), Font("Regular", 8, 260), Mist())
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+		[
+			SNew(SButton).ButtonStyle(&SelectableStyle).ContentPadding(FMargin(8.0f, 2.0f))
+			.OnClicked_Lambda([this]() { OpenCardTab(NAME_None); return FReply::Handled(); })
+			[
+				SNew(STextBlock).Text(FText::FromString(TEXT("×  ESC"))).Font(Font("Regular", 9, 120)).ColorAndOpacity(Mist())
+			]
+		], 0.0f);
+	if (!V.bAvailable)
+	{
+		Add(Line(V.Unavailable, Font("Regular", 11), BrainInk()), 12.0f);
+		return;
+	}
+	Add(Line(FString::Printf(TEXT("ACTIVE  %s"), *V.ActiveName.ToUpper()), Font("Light", 22, 120), BrainInk()), 8.0f);
+	if (V.bModified)
+	{
+		Add(SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+			[
+				Line(FString::Printf(TEXT("MODIFIED — %s"), *V.ModifiedWhat), Font("Regular", 9), CardStatusColour(EWonderlandCardStatus::Unconfigured))
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+			[
+				Act(TEXT("SAVE TO C.A.R.D."), [](UWorld* World) { FString Said; WonderlandCardDirector::SaveLiveToActive(World, Said); })
+			], 6.0f);
+	}
+
+	if (TabId == TEXT("handoff"))
+	{
+		Add(Line(FString::Printf(TEXT("%s  ·  %s"), *V.HandoffForm, *V.HandoffState), Font("Bold", 13, 80), BrainInk()), 16.0f);
+		Add(Line(TEXT("GOLD SWORD · LEFT HAND — the LLM Companion"), Font("Regular", 11), BrainInk(0.9f)), 12.0f);
+		Add(Line(TEXT("CYAN SWORD · RIGHT HAND — Jhinn"), Font("Regular", 11), BrainInk(0.9f)), 4.0f);
+		Add(Line(TEXT("Hand off from the Live Terminal with /handoff, mid-mission or roaming: the mission carries on, and you roam with the swords. "
+			"Double-tap W to dash. /handoff again gives them back."), Font("Regular", 9), Mist()), 14.0f);
+		Add(Line(TEXT("The form comes from the active C.A.R.D. when a handoff begins; swords already held never change in the hand."),
+			Font("Regular", 9), Mist()), 6.0f);
+	}
+	else if (TabId == TEXT("mascot"))
+	{
+		Add(Line(FString::Printf(TEXT("SKIN  %s"), *V.Skin.ToUpper()), Font("Bold", 13, 80), BrainInk()), 16.0f);
+		Add(Line(FString::Printf(TEXT("PRIMARY  %s"), *V.Primary), Font("Bold", 13, 80), BrainInk()), 6.0f);
+		// COLOR 2 AND COLOR 3 AND THE FLAME, as this card holds them (founder, 2026-10-04: the three colours through the C.A.R.D.)
+		Add(Line(FString::Printf(TEXT("COLOR 2 · ACCENTS / MARBLING  %s"), *V.Colour2), Font("Bold", 10, 80), BrainInk(0.9f)), 6.0f);
+		Add(Line(FString::Printf(TEXT("COLOR 3 · STRIPS  %s"), *V.Colour3), Font("Bold", 10, 80), BrainInk(0.9f)), 4.0f);
+		Add(Line(FString::Printf(TEXT("FLAME  %s"), *V.Flame), Font("Bold", 10, 80), BrainInk(0.9f)), 4.0f);
+		Add(SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SButton).ButtonStyle(&ActionStyle)
+				.OnClicked_Lambda([this]() { SetSkinsOpen(true); return FReply::Handled(); })
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("OPEN WARDROBE"))).Font(Font("Bold", 9, 160)).ColorAndOpacity(BrainInk())
+				]
+			], 14.0f);
+		Add(Line(TEXT("Pick a skin or a colour in the wardrobe, then SAVE TO C.A.R.D. to keep that look in this loadout. Selecting a C.A.R.D. "
+			"puts its look on through the wardrobe's own door."), Font("Regular", 9), Mist()), 10.0f);
+	}
+	else if (TabId == TEXT("companions"))
+	{
+		for (const FWonderlandCardViewRef& Ref : V.Companions)
+		{
+			Add(RefRow(Ref), 14.0f);
+		}
+		if (!V.Waiting.IsEmpty())
+		{
+			Add(Line(V.Waiting, Font("Regular", 9), CardStatusColour(EWonderlandCardStatus::Unconfigured)), 12.0f);
+		}
+		Add(Line(TEXT("A C.A.R.D. names a provider for each side; the companion runtime connects it, and keys never enter a C.A.R.D. Between missions "
+			"a selected C.A.R.D.'s companions take their places; a running mission keeps the ones it started with. Set one from the Live Terminal: "
+			"/card companion left|right <provider>."), Font("Regular", 9), Mist()), 14.0f);
+	}
+	else if (TabId == TEXT("capabilities"))
+	{
+		if (V.Capabilities.Num() == 0)
+		{
+			Add(Line(TEXT("Nothing attached yet."), Font("Regular", 11), BrainInk(0.9f)), 16.0f);
+		}
+		for (const FWonderlandCardViewRef& Ref : V.Capabilities)
+		{
+			Add(RefRow(Ref), 14.0f);
+		}
+		Add(Line(TEXT("MCP servers and APIs are referenced by their Julius Connect connection; Julius Connect holds the credential, never this C.A.R.D. "
+			"Attach one from the Live Terminal: /card attach mcp|api|skill <id>."), Font("Regular", 9), Mist()), 14.0f);
+	}
+	else
+	{
+		for (const FWonderlandCardViewEntry& Entry : V.Cards)
+		{
+			const FString Id = Entry.Id;
+			TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+				[
+					Line(FString::Printf(TEXT("%s%s%s"), *Entry.Name, Entry.bActive ? TEXT("  ·  ACTIVE") : TEXT(""), Entry.bBuiltIn ? TEXT("  ·  BUILT IN") : TEXT("")),
+						Font(Entry.bActive ? "Bold" : "Regular", 11, 40), BrainInk())
+				];
+			if (!Entry.bActive)
+			{
+				Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				[
+					Act(TEXT("SELECT"), [Id](UWorld* World) { FString Said; WonderlandCardDirector::Select(World, Id, Said); })
+				];
+			}
+			if (!Entry.bActive && !Entry.bBuiltIn)
+			{
+				Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				[
+					Act(TEXT("DELETE"), [Id](UWorld* World) { FString Said; WonderlandCardDirector::Delete(World, Id, Said); })
+				];
+			}
+			Add(Row, 10.0f);
+		}
+		const int32 Next = V.Cards.Num() + 1;
+		Add(SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				Act(TEXT("NEW C.A.R.D."), [Next](UWorld* World) { FString Id; FString Said; WonderlandCardDirector::Create(World, FString::Printf(TEXT("C.A.R.D. %d"), Next), Id, Said); })
+			], 16.0f);
+		Add(Line(TEXT("Selecting one puts on its skin and colour now, and its companions between missions. The built-in C.A.R.D. is always here."),
+			Font("Regular", 9), Mist()), 10.0f);
+	}
 }

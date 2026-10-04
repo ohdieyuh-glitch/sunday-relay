@@ -2,6 +2,7 @@
 
 #include "WonderlandBeta.h"
 #include "WonderlandCompanionSubsystem.h"
+#include "WonderlandMissionHandoff.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandProjectBrain, Log, All);
 
@@ -52,6 +53,8 @@ FWonderlandBrainSurface* UWonderlandProjectBrainSubsystem::FindMutable(FName Sur
 
 bool UWonderlandProjectBrainSubsystem::Propose(FName SurfaceId, const FString& Text)
 {
+	// PROJECT BRAIN STATE: never the Mission Handoff's to write (the write spy)
+	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandProjectBrainSubsystem::Propose"));
 	FWonderlandBrainSurface* Surface = FindMutable(SurfaceId);
 	const FString Line = Text.TrimStartAndEnd();
 	// THE ACCESS IS CHECKED HERE, not only in the panel: a surface that is not the owner's is refused at the one
@@ -69,6 +72,7 @@ bool UWonderlandProjectBrainSubsystem::Propose(FName SurfaceId, const FString& T
 
 bool UWonderlandProjectBrainSubsystem::Review(FName SurfaceId, int32 LineIndex, bool bAccept)
 {
+	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandProjectBrainSubsystem::Review"));
 	FWonderlandBrainSurface* Surface = FindMutable(SurfaceId);
 	if (Surface == nullptr || Surface->Access != EWonderlandBrainAccess::Review || !Surface->SampleLines.IsValidIndex(LineIndex))
 	{

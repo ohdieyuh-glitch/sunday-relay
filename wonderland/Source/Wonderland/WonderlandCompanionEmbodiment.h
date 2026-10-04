@@ -192,6 +192,26 @@ public:
 	// Plain C++, NOT a UFUNCTION: a new reflected name shifts the FName table Niagara hashes (WonderlandBeta.h).
 	/** Whether this figure has fire that follows the mascot's FLAME colour (materials tagged `flame` / `flame_light`). */
 	bool DeclaresFlame() const;
+	/** Whether this figure has strips that follow the mascot's STRIPS colour, COLOR 3 (materials tagged `strip`). */
+	bool DeclaresStrips() const;
+	/** QA: what the material named Name is painted with right now -- BaseColor/RimColor on a rim, Color otherwise -- and,
+	 *  for a smoke surface, whether its relief texture is bound. False when the figure has no such material. */
+	bool QaReadPaint(FName Name, FLinearColor& OutBase, FLinearColor& OutRim, FString& OutRelief) const;
+	/** QA (COLOR 2, the marbling): the two-colour marble the material named Name is WEARING right now, read off its own bound
+	 *  AlbedoTex -- the cells and veins it was drawn for, what its pixels came out as, and the BaseColor peak it is drawn at
+	 *  (the colours on screen are the texel times that peak). False when that surface wears no marble. */
+	bool QaReadMarble(FName Name, FLinearColor& OutCells, FLinearColor& OutVeins, FLinearColor& OutDrawnCells, FLinearColor& OutDrawnVeins,
+		float& OutPeakDrawn, float& OutPeakAsked) const;
+	/** QA (round 6, the knees out): this figure's own leg on one side (+1 = the +Y leg), in WORLD space -- its hip joint, its
+	 *  knee joint, and its sole (the knee plus the shin along the knee's -Z, the length the leg solve uses). False if not found. */
+	bool QaLegAt(float SideSign, FVector& OutHip, FVector& OutKnee, FVector& OutSole) const;
+	/** QA (the charging stance, 10-04): this figure's own head joint in WORLD space (its first `head` part). False if none. */
+	bool QaHeadAt(FVector& OutHead) const;
+	/** QA: where this figure's own head faces in the world (its first `head` part's +X, the figures' facing). False if none. */
+	bool QaHeadForward(FVector& OutForward) const;
+	/** QA: this figure's own shoulder on one side (+1 = the +Y arm): its swing, degrees, the angle its hanging axis makes forward of
+	 *  straight down in its parent's frame (continuous past 90, unlike a rotator's pitch). False if none. */
+	bool QaShoulderSwing(float SideSign, float& OutDeg) const;
 
 	/**
 	 * Whether the clock is allowed to touch this body's glow at all. False for the wardrobe's preview figure,
@@ -477,6 +497,23 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	int32 GetPartCount() const { return PartPivots.Num(); }
+	/** For the QA: true for a mesh of the figure's BODY (bone, cloth, plate), false for its light (a halo, an aura, ghostfire) or one not its own. */
+	bool IsBodyMesh(const UInstancedStaticMeshComponent* Mesh) const;
+	/**
+	 * For the QA (wl.Qa.SwordClip, Second's finding 3): true for a mesh DRAWN OPAQUE -- built from a Lit, Rim or Glow material (Glow is
+	 * opaque and unlit), whatever the part is called (a skirt, a collar, a banner) -- and false for Additive light or a mesh not the
+	 * figure's own. IsBodyMesh is the wardrobe's framing list by part name, which is not the same thing.
+	 */
+	bool IsSolidMesh(const UInstancedStaticMeshComponent* Mesh) const;
+	/** For the QA: the figure part a mesh was built from, or NAME_None for a mesh not the figure's own. */
+	FName GetPartMeshName(const UInstancedStaticMeshComponent* Mesh) const;
+
+	/**
+	 * THE HAND ON ONE SIDE (Mission Handoff: a held object sits in the hand the player SEES): the forearm joint on the +Y or
+	 * -Y side and its hand tip in that joint's own space -- the lowest box the forearm carries, the same far end the canon
+	 * measures for its own arms. False for a figure with no such limb. Plain C++, not reflected (the FName rule).
+	 */
+	bool GetHandFrame(bool bPlusY, USceneComponent*& OutForearm, FVector& OutTipLocal) const;
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	FString GetLastError() const { return LastError; }
@@ -639,7 +676,9 @@ private:
 	FVector DesiredLocation(const APawn* Pawn) const;
 	void Animate(float TimeSeconds);
 	/** The hip and knee rotations that put the sole of the leg at HipIndex on SoleWorld (a worn costume's legs). */
-	bool SolveLegToSole(int32 HipIndex, const FVector& SoleWorld, FRotator& OutHip, FRotator& OutKnee) const;
+	/** LateralShare 0: the planar solve (the foot's sideways place ignored, no roll). Toward 1 (the armed stance): the sideways part is
+	 *  solved too, as a roll, and the result checked against this leg's own chain (OutHip.Roll = that roll). */
+	bool SolveLegToSole(int32 HipIndex, const FVector& SoleWorld, FRotator& OutHip, FRotator& OutKnee, float LateralShare = 0.0f) const;
 	/**
 	 * The shoulder and elbow rotations that put the hand of the arm at ShoulderIndex where the canon's hand on the same
 	 * side is, bending its elbow toward the side the canon's elbow bends -- corrected as little as possible from the
@@ -670,6 +709,9 @@ private:
 	 * and false for one built from a Glow or Additive material -- a halo, a banner, ghostfire, an ember.
 	 */
 	TArray<bool> PartMeshIsBody;
+
+	/** Parallel to PartMeshes: true for a mesh drawn opaque (Lit, Rim, Glow), false for Additive light. */
+	TArray<bool> PartMeshIsSolid;
 
 	/** The figure part each entry of PartMeshes was built from. See DescribeFramingParts. */
 	TArray<FName> PartMeshNames;

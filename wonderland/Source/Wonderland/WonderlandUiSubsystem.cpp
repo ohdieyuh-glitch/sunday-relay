@@ -79,6 +79,9 @@
 #include "WonderlandSocialProfilePanel.h"
 #include "WonderlandSocialSubsystem.h"
 #include "WonderlandMissionBeat.h"
+#include "WonderlandHandoffDirector.h"
+#include "WonderlandCardDirector.h"
+#include "WonderlandCard.h"
 #include "WonderlandMissionNarration.h"
 #include "WonderlandWorldMap.h"
 #include "WonderlandWonderWeb.h"
@@ -493,6 +496,14 @@ void UWonderlandUiSubsystem::HandleCompanionSubmit(int32 Index, const FString& T
 	// what follows. The runtime's own report of this same ask is not echoed a second time.
 	if (Runtime != nullptr && Sidekick != nullptr && Runtime->GetLink() == EWonderlandSidekickLink::Online && Sidekick->State == TEXT("CONNECTED"))
 	{
+		// NEVER A SECRET SENT (Second's sink audit, 10-03): a line shaped like a key or password stays on this machine, masked
+		if (FWonderlandCardStore::HoldsSecret(Text))
+		{
+			Panel->Print(EWonderlandConsoleLine::Prompt, FWonderlandCardStore::MaskForDisplay(Text), FString(), 0.0f);
+			Panel->Print(EWonderlandConsoleLine::Note, TEXT("Not sent: that line holds something shaped like a key or password. A key belongs in Julius Connect."), FString(), 0.0f);
+			UE_LOG(LogWonderlandUi, Log, TEXT("WLUI companion terminal %d: a line shaped like a key was NOT sent (%d characters)"), Index, Text.Len());
+			return;
+		}
 		Panel->Print(EWonderlandConsoleLine::Prompt, Text, FString(), 0.0f);
 		Panel->BeginTask(EWonderlandConsoleActivity::Thinking, TEXT("Thinking"));
 		Panel->SetCounter(0, TEXT("chars"));
@@ -709,6 +720,7 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 			}
 
 			SAssignNew(BrainPanel, SWonderlandProjectBrainPanel)
+				.CardWorld(GetWorld())   // 05 C.A.R.D.: the section reads and acts through this world (WonderlandCardView, WonderlandCardDirector)
 				.HologramBrush(BrainArtBrush.IsValid() ? BrainArtBrush.Get() : nullptr)
 				.SkinPreviewBrush(SkinPreviewBrush.IsValid() ? SkinPreviewBrush.Get() : nullptr)
 				.Skins(SkinRegistry != nullptr ? SkinRegistry->GetSkins() : TArray<FWonderlandRelaySkin>())
@@ -988,6 +1000,7 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 			.Voice(Social != nullptr && Social->GetVoice() != nullptr ? Social->GetVoice()->GetState() : FWonderlandVoiceState())
 			.VoiceLabel(Social != nullptr && Social->GetVoice() != nullptr ? Social->GetVoice()->GetPreviewLabel() : FString())
 			.OnVoice_Lambda([WeakThis](const FString& Command, const FString& Subject) { if (WeakThis.IsValid()) { WeakThis->HandleVoiceCommand(Command, Subject); } })
+			.SignIn(Social != nullptr ? Social->GetSignInView() : FWonderlandSignInView())
 			.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
 		Panel = SocialHubPanel;
 		Focus = SocialHubPanel;
@@ -2618,6 +2631,21 @@ void UWonderlandUiSubsystem::StageWardrobe(bool bOpen)
 	}
 }
 
+bool UWonderlandUiSubsystem::OpenBrainCardTab(FName Tab)
+{
+	if (!IsProjectBrainOpen() || !BrainPanel.IsValid())
+	{
+		return false;
+	}
+	BrainPanel->OpenCardTab(Tab);
+	return true;
+}
+
+FName UWonderlandUiSubsystem::GetBrainCardTab() const
+{
+	return BrainPanel.IsValid() ? BrainPanel->GetCardTab() : NAME_None;
+}
+
 bool UWonderlandUiSubsystem::SetBrainSkinsOpen(bool bOpen)
 {
 	if (!IsProjectBrainOpen() || !BrainPanel.IsValid())
@@ -3018,9 +3046,16 @@ void UWonderlandUiSubsystem::MountTaskAddControl()
 							UWonderlandMissionTaskSubsystem* Set = WeakThis->Tasks();
 							if (Set == nullptr) { return; }
 							// GRAY BECOMES RED HERE, and only here. A blank line is refused by the set itself.
-							if (Set->SubmitDraft(Set->GetSelected(), Text.ToString()) && WeakThis->TaskEntry.IsValid())
+							const FString TypedObjective = Text.ToString();
+							if (Set->SubmitDraft(Set->GetSelected(), TypedObjective) && WeakThis->TaskEntry.IsValid())
 							{
 								WeakThis->TaskEntry->SetText(FText::GetEmpty());
+							}
+							else if (FWonderlandCardStore::HoldsSecret(TypedObjective) && WeakThis->TaskEntry.IsValid())
+							{
+								// refused whole (a key or password): taken off the screen, and the hint says why
+								WeakThis->TaskEntry->SetText(FText::GetEmpty());
+								WeakThis->TaskEntry->SetHintText(INVTEXT("not saved: that held a key or password -- type the task without it"));
 							}
 						})
 					]
@@ -4377,12 +4412,72 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		return true;
 	}
 
+	if (Command == TEXT("/handoff"))
+	{
+		// MISSION HANDOFF (founder, 2026-10-02: started from the Julius Live Terminal). The action lives in
+		// WonderlandHandoffDirector; this only routes the line and answers it.
+		FString Said;
+		bool bClose = false;
+		WonderlandHandoffDirector::HandleTerminalLine(GetLocalPlayer<ULocalPlayer>(), Argument, Said, bClose);
+		Terminal->AddJuliusRow(TEXT("You"), Line, Said);
+		if (bClose)
+		{
+			// THE USER IS ROAMING AGAIN: the terminal steps aside on the NEXT frame -- not inside its own Enter handler, which
+			// hands the input box its keyboard focus right after this returns. Ctrl+T brings it back at any time.
+			const TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakThis](float)
+			{
+				if (WeakThis.IsValid() && WeakThis->IsLiveTerminalOpen())
+				{
+					WeakThis->ToggleLiveTerminal();
+				}
+				return false;
+			}), 0.0f);
+		}
+		return true;
+	}
+
+	if (Command == TEXT("/keep"))
+	{
+		// THE PLAYER'S EXPLICIT OVERRIDE for a random-looking word that was not a key (Second's review, 10-03): the last redacted
+		// objective stored as typed, within 30 s -- a key's CERTAIN shapes are removed even then, and the held text is wiped either way
+		FString Said = TEXT("Nothing to keep: /keep stores the last objective exactly as typed, within 30 s of a redaction.");
+		if (PendingKeepId.IsValid() && FPlatformTime::Seconds() - PendingKeepAt <= 30.0)
+		{
+			if (UWonderlandMissionTaskSubsystem* KeepSet = Tasks())
+			{
+				int32 StillRemoved = 0;
+				if (KeepSet->KeepObjectiveAsTyped(PendingKeepId, PendingKeepText, StillRemoved))
+				{
+					Said = StillRemoved > 0 ? FString::Printf(TEXT("Kept as typed -- except %d part(s) with a key's certain shape, which are never stored."), StillRemoved)
+						: FString(TEXT("Kept exactly as typed."));
+				}
+			}
+		}
+		PendingKeepText.Empty();
+		PendingKeepId.Invalidate();
+		Terminal->AddJuliusRow(TEXT("You"), Line, Said);
+		return true;
+	}
+
+	if (Command == TEXT("/card") || Command == TEXT("/cards"))
+	{
+		// C.A.R.D. (founder, 2026-10-02: the fifth Project Brain component). The actions live in WonderlandCardDirector; this only
+		// routes the line and answers it.
+		TArray<FString> Rows;
+		WonderlandCardDirector::HandleTerminalLine(GetWorld(), Line, Rows);
+		Terminal->AddJuliusRow(TEXT("You"), WonderlandCardDirector::MaskForEcho(Line), FString::Join(Rows, TEXT("\n")));
+		return true;
+	}
+
 	if (Command == TEXT("/help") || Command == TEXT("/commands"))
 	{
 		Terminal->AddJuliusRow(TEXT("You"), Line,
 			TEXT("Press + above for a new task tab and type its objective to save it as a Mission Contract. "
 				"/tasks — list your contracts (open N, close N, delete N). /skin NAME — wear a skin (/skin list). "
-				"/cubs [n|off] — summon the Relay Dog's sub-agent cub ghosts."));
+				"/cubs [n|off] — summon the Relay Dog's sub-agent cub ghosts. "
+				"/handoff — Mission Handoff: roam while a mission carries on (/handoff again, or /handoff return, to come back). "
+				"/card — your C.A.R.D. loadout (list, select NAME, new NAME, save, rename NAME, delete NAME)."));
 		return true;
 	}
 
@@ -4405,6 +4500,11 @@ void UWonderlandUiSubsystem::HandleTerminalSubmit(const FString& Text)
 	{
 		return;
 	}
+	if (PendingKeepId.IsValid() && FPlatformTime::Seconds() - PendingKeepAt > 30.0)
+	{
+		PendingKeepText.Empty();
+		PendingKeepId.Invalidate();
+	}
 	if (HandleTerminalCommand(Text))
 	{
 		return;
@@ -4422,14 +4522,35 @@ void UWonderlandUiSubsystem::HandleTerminalSubmit(const FString& Text)
 		if (Draft != nullptr && !WonderlandTaskIsContract(Draft->State))
 		{
 			const FGuid DraftId = Draft->LocalId;
-			if (Set->SubmitDraft(DraftId, Text))
+			int32 RedactedCertain = 0;
+			int32 RedactedStatistical = 0;
+			if (Set->SubmitDraftScreened(DraftId, Text, false, RedactedCertain, RedactedStatistical))
 			{
-				Terminal->AddJuliusRow(TEXT("You"), Text, Set->DidLastSaveFail()
+				FString Removed;
+				if (RedactedCertain + RedactedStatistical > 0)
+				{
+					Removed = FString::Printf(TEXT(" %d part(s) shaped like a key or password were removed before saving."), RedactedCertain + RedactedStatistical);
+					if (RedactedStatistical > 0)
+					{
+						PendingKeepId = DraftId;
+						PendingKeepText = Text;
+						PendingKeepAt = FPlatformTime::Seconds();
+						Removed += TEXT(" If one was not a key, type /keep within 30 s to save it as typed (a key's certain shapes are removed even then).");
+					}
+				}
+				Terminal->AddJuliusRow(TEXT("You"), Text, (Set->DidLastSaveFail()
 					? FString(TEXT("A Mission Contract, QUEUED -- but it could NOT be saved to this PC (is the Wonderland folder writable, "
 						"or the disk full?). It lasts this session only. Julius is not part of this beta build, so nothing will run it yet."))
 					: FString(TEXT("Saved as a Mission Contract, QUEUED on this PC. Julius is not part of this beta build, so nothing will run it yet. "
-						"Close the tab with X and it stays saved: /tasks lists your contracts, /tasks open N brings one back.")));
+						"Close the tab with X and it stays saved: /tasks lists your contracts, /tasks open N brings one back."))) + Removed);
 				UE_LOG(LogWonderlandUi, Display, TEXT("WLUI terminal objective submitted: draft became a QUEUED Mission Contract (%d characters)"), Text.Len());
+				return;
+			}
+			if (FWonderlandCardStore::HoldsSecret(Text))
+			{
+				// the task set refused it whole; the row says why (the terminal masks the key in what it draws)
+				Terminal->AddJuliusRow(TEXT("You"), Text, FString(TEXT("Not saved: that objective was nothing but something shaped like a key or password, so "
+					"nothing was saved or sent. Type the task itself -- a key belongs in Julius Connect, never in a task.")));
 				return;
 			}
 			Terminal->AddJuliusRow(TEXT("You"), Text, Set->IsAtContractLimit()
@@ -4860,9 +4981,60 @@ void UWonderlandUiSubsystem::HandleSocialAction(const FString& OperationId, cons
 	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
 	UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
 	IWonderlandSocialService* Service = Social != nullptr ? Social->GetService() : nullptr;
-	const FWonderlandSocialActionResult Result = Service != nullptr ? Service->Request(OperationId, SubjectId)
+	// SIGN IN (R16): the hub's SIGN IN / OPEN GITHUB / CANCEL / SIGN OUT. Not social operations: they go to the sign-in.
+	if (OperationId.StartsWith(TEXT("signin.")))
+	{
+		if (Social == nullptr)
+		{
+			return;
+		}
+		if (OperationId == TEXT("signin.start")) { Social->StartSignIn(); }
+		else if (OperationId == TEXT("signin.cancel")) { Social->CancelSignIn(); }
+		else if (OperationId == TEXT("signin.out")) { Social->SignOut(); }
+		else if (OperationId == TEXT("signin.open") && !Social->OpenSignInBrowser() && SocialHubPanel.IsValid())
+		{
+			SocialHubPanel->ShowActionResult(FString::Printf(TEXT("Couldn't open a browser: go to %s yourself"), *Social->GetSignInView().VerificationUri));
+		}
+		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL hub %s: %s"), *OperationId, *Social->DescribeSignIn());
+		return;
+	}
+	// F1, THE FOUNDER'S FINAL RULE (2026-10-02): a BLOCK on somebody in this player's party is committed only after it is
+	// confirmed. The first BLOCK only WARNS, in the founder's words -- a leader's block also removes them, anybody else's makes
+	// the blocker leave -- and a second BLOCK on the same person within 15 s confirms it (blocks.add.confirm). The server
+	// refuses an unconfirmed shared-party block anyway, so no surface can skip the warning.
+	FString Operation = OperationId;
+	FString Warning;
+	if (OperationId == TEXT("blocks.add") && Service != nullptr && !Service->IsDevelopmentPreview())
+	{
+		const FWonderlandSocialSnapshot& Snap = Service->GetSnapshot();
+		const bool bShared = Snap.bHasParty
+			&& Snap.Party.Members.ContainsByPredicate([&SubjectId](const FWonderlandSocialPartyMember& M) { return M.UserId == SubjectId; });
+		if (bShared)
+		{
+			const double Now = FPlatformTime::Seconds();
+			if (PendingBlockSubject != SubjectId || Now - PendingBlockAt > 15.0)
+			{
+				PendingBlockSubject = SubjectId;
+				PendingBlockAt = Now;
+				const FString* Name = Snap.NamesById.Find(SubjectId);
+				const FString Who = Name != nullptr ? *Name : SubjectId;
+				Warning = Snap.Party.bViewerIsLeader
+					? FString::Printf(TEXT("Blocking %s will also remove them from your party. Choose BLOCK again to confirm."), *Who)
+					: FString::Printf(TEXT("Blocking %s will cause you to leave this party. Choose BLOCK again to confirm."), *Who);
+				UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL block needs confirmation: %s in party %s (%s); nothing changed yet"), *SubjectId,
+					*Snap.Party.PartyId, Snap.Party.bViewerIsLeader ? TEXT("you lead: they will be removed") : TEXT("you will leave"));
+			}
+			else
+			{
+				PendingBlockSubject.Reset();
+				Operation = TEXT("blocks.add.confirm");
+			}
+		}
+	}
+	const FWonderlandSocialActionResult Result = !Warning.IsEmpty() ? FWonderlandSocialActionResult{false, Warning}
+		: Service != nullptr ? Service->Request(Operation, SubjectId)
 		: FWonderlandSocialActionResult{false, TEXT("Social is not available in this build")};
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL action %s on %s: %s%s"), *OperationId, *SubjectId, Result.bOk ? TEXT("ok") : TEXT("refused"),
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL action %s on %s: %s%s"), *Operation, *SubjectId, Result.bOk ? TEXT("ok") : TEXT("refused"),
 		Result.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Result.Reason));
 	// THE ANSWER GOES TO THE SURFACE THAT ASKED: the open one. A server's answer comes later (HandleSocialAnswered).
 	const FString Line = Result.bPending ? FString(TEXT("Sending…")) : Result.bOk ? FString(TEXT("Done")) : Result.Reason;
@@ -4927,6 +5099,7 @@ void UWonderlandUiSubsystem::HandleSocialChanged()
 	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
 	const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
 	const FWonderlandSocialSnapshot* Snapshot = Social != nullptr ? Social->GetSnapshot() : nullptr;
+	SocialHubPanel->SetSignIn(Social != nullptr ? Social->GetSignInView() : FWonderlandSignInView());
 	SocialHubPanel->SetSnapshot(Snapshot != nullptr ? *Snapshot : FWonderlandSocialSnapshot(), Snapshot != nullptr,
 		Social != nullptr ? Social->GetSourceLine() : FString(), Social == nullptr || Social->GetService() == nullptr || Social->GetService()->IsDevelopmentPreview());
 }
@@ -5461,10 +5634,54 @@ void UWonderlandUiSubsystem::RefreshChrome()
 	WalletPanel.Reset();
 	Terminal.Reset();
 
+	// B63: THE COMPANION CONSOLES KEEP WHAT THEY SHOWED. A colour change mid-mission used to hand the visitor two fresh
+	// consoles -- the history gone, the timer back at zero, the mission "joined" a second time (Second, RC11 P10). The new
+	// pair now takes the old pair's state, and with it the feed's "already shown" keys: the new consoles HAVE been told
+	// everything the old ones were. (B56 reset those keys because remounted consoles started empty; carried over, they
+	// no longer do, and the status they carry is the one the feed last set -- OFFLINE stays OFFLINE.)
+	const TArray<TSharedPtr<SWonderlandCompanionConsole>> OldConsoles = CompanionTerminals;
+	const TArray<FString> KeptLiveTurn = CompanionLiveTurn;
+	const TArray<FString> KeptShownSession = CompanionShownSession;
+	const TArray<bool> KeptLinkWasDown = CompanionLinkWasDown;
+	const TArray<bool> KeptLinkSeenUp = CompanionLinkSeenUp;
+	const TArray<bool> KeptMissionTask = CompanionMissionTask;
+	const TArray<FString> KeptPendingAsk = CompanionPendingAsk;
+	const TArray<int32> KeptPendingTurns = CompanionPendingTurns;
+	const TArray<FString> KeptShownAnswerText = CompanionShownAnswerText;
+	const TArray<FString> KeptShownAsk = CompanionShownAsk;
+	const TArray<FString> KeptShownAnswer = CompanionShownAnswer;
+	const TArray<FString> KeptShownNote = CompanionShownNote;
+	const TArray<FString> KeptShownProvider = CompanionShownProvider;
+
 	UnmountCompanionTerminals();
 	UnmountHudFurniture();
 	MountHudFurniture();
 	MountCompanionTerminals();
+	int32 Carried = 0;
+	if (OldConsoles.Num() > 0 && OldConsoles.Num() == CompanionTerminals.Num())
+	{
+		for (int32 Index = 0; Index < CompanionTerminals.Num(); ++Index)
+		{
+			if (CompanionTerminals[Index].IsValid() && OldConsoles[Index].IsValid())
+			{
+				CompanionTerminals[Index]->AdoptStateFrom(*OldConsoles[Index]);
+				++Carried;
+			}
+		}
+		CompanionLiveTurn = KeptLiveTurn;
+		CompanionShownSession = KeptShownSession;
+		CompanionLinkWasDown = KeptLinkWasDown;
+		CompanionLinkSeenUp = KeptLinkSeenUp;
+		CompanionMissionTask = KeptMissionTask;
+		CompanionPendingAsk = KeptPendingAsk;
+		CompanionPendingTurns = KeptPendingTurns;
+		CompanionShownAnswerText = KeptShownAnswerText;
+		CompanionShownAsk = KeptShownAsk;
+		CompanionShownAnswer = KeptShownAnswer;
+		CompanionShownNote = KeptShownNote;
+		CompanionShownProvider = KeptShownProvider;
+	}
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI companion consoles remounted: %d of %d carried their state over"), Carried, CompanionTerminals.Num());
 	EnsureLiveTerminal();
 	if (Was != EOverlay::None)
 	{

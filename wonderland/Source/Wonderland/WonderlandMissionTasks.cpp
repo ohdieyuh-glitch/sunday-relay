@@ -9,6 +9,8 @@
 #include "Misc/App.h"
 #include "Misc/Paths.h"
 #include "WonderlandBeta.h"
+#include "WonderlandCard.h"
+#include "WonderlandMissionHandoff.h"
 
 namespace
 {
@@ -240,7 +242,7 @@ int32 UWonderlandMissionTaskSubsystem::ClearAllTasksForDevelopment()
 	// THE FILE GOES TOO, or the next Initialize brings them all straight back and this cleared nothing.
 	ForgetSavedContracts();
 	UE_LOG(LogTemp, Display, TEXT("WLTASK development: closed all %d slot(s) and forgot the saved set"), Closed);
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return Closed;
 }
 
@@ -331,8 +333,8 @@ bool UWonderlandMissionTaskSubsystem::DeleteLocalContract(FGuid LocalId)
 	}
 	if (Task->RunId.bKnown)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused to delete '%s': it belongs to Julius run %s"),
-			*Task->Objective.Left(40), *Task->RunId.Value);
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused to delete a contract of %d characters: it belongs to Julius run %s"),
+			Task->Objective.Len(), *Task->RunId.Value);
 		return false;
 	}
 	// THE LENGTH, NOT THE TEXT: a tester attaches this log to a bug report, and what they wrote is theirs (Second
@@ -350,7 +352,7 @@ bool UWonderlandMissionTaskSubsystem::DeleteLocalContract(FGuid LocalId)
 	}
 	UE_LOG(LogTemp, Display, TEXT("WLTASK deleted one of the player's contracts (%d-character objective; never part of a Julius run)"), ObjectiveLength);
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -379,10 +381,13 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 		const FString Aside = WonderlandBeta::SetAsideRefusedSave(SlotPath());
 		UE_LOG(LogTemp, Warning, TEXT("WLTASK the saved contracts could not be used (%s); set aside as %s"),
 			Why.IsEmpty() ? TEXT("unreadable") : *Why, Aside.IsEmpty() ? TEXT("(the move FAILED)") : *Aside);
+		// the set-aside copy is NOT screened (it could not be read): it may hold text typed before the secret screen existed
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK the set-aside copy may hold objectives typed before the secret screen existed; delete it once it is no longer needed"));
 		return 0;
 	}
 	const FString When = FDateTime::UtcNow().ToIso8601();
 	int32 Restored = 0;
+	int32 Redacted = 0;
 	for (const FWonderlandMissionTask& Saved : Save->Contracts)
 	{
 		if (!WonderlandTaskIsContract(Saved.State))
@@ -395,6 +400,15 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 		// select, close or submit after a restart. Restored contracts come back CLOSED (below), so they never count
 		// against the open tabs, and the record's own limit is applied where contracts are created, not here.
 		FWonderlandMissionTask Task = Saved;
+		// A KEY KEPT BEFORE THE OBJECTIVE SCREEN EXISTED (Second's review, 10-03) is redacted as it comes back and the file is
+		// rewritten below: fail-closed per field, never shown, never logged, never kept
+		bool bObjectiveRescreened = false;
+		const FString RescreenedObjective = ScreenRestoredObjective(Task, bObjectiveRescreened);
+		if (bObjectiveRescreened)
+		{
+			Task.Objective = RescreenedObjective;
+			++Redacted;
+		}
 		// A NEW HANDLE FOR A NEW SESSION. The local id means nothing outside the machine it was minted on, and
 		// ApplySchedulerState deliberately does not use it; the CONTRACT id is what came back unchanged.
 		Task.LocalId = FGuid::NewGuid();
@@ -415,11 +429,17 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 	// NOTHING IS SELECTED, because nothing is open. Selecting a task that is not in the workspace would put the
 	// mission strip on it and hand the + a slot the user cannot see.
 	Selected.Invalidate();
+	if (Redacted > 0)
+	{
+		const bool bRewritten = SaveContracts();
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK %d restored objective(s) held something shaped like a key or password: redacted; the file %s"), Redacted,
+			bRewritten ? TEXT("rewritten") : TEXT("NOT rewritten (the write failed): the redaction holds for this session only"));
+	}
 	if (Restored > 0)
 	{
 		UE_LOG(LogTemp, Display, TEXT("WLTASK restored %d Mission Contract(s); none is running until Julius says so"),
 			Restored);
-		OnTasksChanged.Broadcast();
+		BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	}
 	return Restored;
 }
@@ -462,6 +482,12 @@ void UWonderlandMissionTaskSubsystem::Touch(FWonderlandMissionTask& Task, EWonde
 		*FDateTime::UtcNow().ToIso8601(), WonderlandTaskStateName(To)));
 }
 
+void UWonderlandMissionTaskSubsystem::BroadcastTasksChanged(const TCHAR* What)
+{
+	FWonderlandMissionHandoff::NoteMutation(What);
+	OnTasksChanged.Broadcast();
+}
+
 FGuid UWonderlandMissionTaskSubsystem::AddDraft()
 {
 	if (!CanAddTask())
@@ -480,12 +506,64 @@ FGuid UWonderlandMissionTaskSubsystem::AddDraft()
 	// it. Selecting anything else would make the button take two clicks to mean one thing.
 	Selected = Task.LocalId;
 	UE_LOG(LogTemp, Display, TEXT("WLTASK new draft slot (%d of %d)"), Tasks.Num(), GetTaskCapacity());
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return Task.LocalId;
 }
 
 bool UWonderlandMissionTaskSubsystem::SubmitDraft(FGuid LocalId, const FString& Objective)
 {
+	int32 RedactedCertain = 0;
+	int32 RedactedStatistical = 0;
+	return SubmitDraftScreened(LocalId, Objective, false, RedactedCertain, RedactedStatistical);
+}
+
+namespace
+{
+	/** The objective as the free-text screen lets it be kept: screened as every redacting caller screens (ScreenText: space-like
+	 *  characters kept as spaces, invisibles gone, both views read -- Second's round-5 MAJORs 1-3), every find redacted (the statistical
+	 *  ones only without /keep). Counts what was removed.
+	 *  r7 (Second's (b)), bForRestore: a RESTART applies no label's weak value -- a pre-r7 contract's prose ("update the password Policy page")
+	 *  is never rewritten -- and to a /keep'd objective only what is certain by its own SHAPE, so the player's word survives whatever its
+	 *  neighbours became. PRECISELY (r8, Second's attack on r7 (B)): a never-/kept objective's restore skips only the WEAK finds -- a label's
+	 *  STRONG (certain) value IS applied, as are the statistical finds, which is the founder's fail-closed rule; a pre-r7 "the password is
+	 *  marmalade" (weak) stays on disk as it was. */
+	FString WonderlandScreenObjective(const FString& Typed, bool bKeepAsTyped, int32& OutCertain, int32& OutStatistical, bool bForRestore = false)
+	{
+		OutCertain = 0;
+		OutStatistical = 0;
+		FString Screened;
+		TArray<FWonderlandCardStore::FSecretFind> Finds;
+		FWonderlandCardStore::ScreenText(Typed, Screened, Finds);
+		if (bForRestore && (FWonderlandCardStore::QaRulesOff() & FWonderlandCardStore::QaRuleClasses) == 0)
+		{
+			Finds.RemoveAll([bKeepAsTyped](const FWonderlandCardStore::FSecretFind& Find) { return bKeepAsTyped ? !Find.bShape : Find.bWeak; });
+		}
+		if (Finds.Num() == 0)
+		{
+			return Typed;
+		}
+		for (const FWonderlandCardStore::FSecretFind& Find : Finds)
+		{
+			(Find.bCertain ? OutCertain : OutStatistical) += Find.bCertain || !bKeepAsTyped ? 1 : 0;
+		}
+		return FWonderlandCardStore::RedactSecrets(Screened, Finds, bKeepAsTyped);
+	}
+
+	/** The lifecycle line /keep leaves: the objective is the player's own word, and a restart's restore must not take it back. */
+	const TCHAR* const WonderlandKeptMark = TEXT("KEPT AS TYPED (/keep)");
+
+	/** True when nothing but redaction markers and spaces is left: a contract must stand for a task. */
+	bool WonderlandOnlyRedacted(const FString& Kept)
+	{
+		return Kept.Replace(TEXT("[a key: never shown or stored]"), TEXT("")).TrimStartAndEnd().IsEmpty();
+	}
+}
+
+bool UWonderlandMissionTaskSubsystem::SubmitDraftScreened(FGuid LocalId, const FString& Objective, bool bKeepAsTyped, int32& OutRedactedCertain,
+	int32& OutRedactedStatistical)
+{
+	OutRedactedCertain = 0;
+	OutRedactedStatistical = 0;
 	FWonderlandMissionTask* Task = FindMutable(LocalId);
 	if (Task == nullptr)
 	{
@@ -503,12 +581,25 @@ bool UWonderlandMissionTaskSubsystem::SubmitDraft(FGuid LocalId, const FString& 
 		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused: a Mission Contract needs an objective"));
 		return false;
 	}
+	// NEVER A SECRET ON DISK (the founder: secrets are never persisted in the Project Brain, and Mission Context is its section 04;
+	// Second's review, 10-03): every flagged word is redacted before the first write -- the objective is kept, the key is not
+	const FString Kept = WonderlandScreenObjective(Trimmed, bKeepAsTyped, OutRedactedCertain, OutRedactedStatistical);
+	if (WonderlandOnlyRedacted(Kept))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused: the objective was nothing but something shaped like a key or password; nothing was saved"));
+		return false;
+	}
 	if (IsAtContractLimit())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused: %d Mission Contracts kept, the most this PC stores"), NumContracts());
 		return false;
 	}
-	Task->Objective = Trimmed;
+	Task->Objective = Kept;
+	if (OutRedactedCertain + OutRedactedStatistical > 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK %d part(s) of the objective shaped like a key or password redacted before saving (%d certain)"),
+			OutRedactedCertain + OutRedactedStatistical, OutRedactedCertain);
+	}
 	// QUEUED, AND LOCAL, BECAUSE THAT IS THE TRUTH IN THIS BUILD. No Julius link reaches this world, so the contract
 	// is real and waiting, and the source says who said so. When a scheduler exists it reports through
 	// ApplySchedulerState and this same task moves on -- nothing in the presentation has to change to believe it.
@@ -516,8 +607,46 @@ bool UWonderlandMissionTaskSubsystem::SubmitDraft(FGuid LocalId, const FString& 
 	UE_LOG(LogTemp, Display, TEXT("WLTASK contract accepted, QUEUED (local: Julius has not acknowledged it)"));
 	// GRAY BECOMING RED IS THE MOMENT SOMETHING WORTH KEEPING EXISTS, so this is the first write.
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
+}
+
+bool UWonderlandMissionTaskSubsystem::KeepObjectiveAsTyped(FGuid LocalId, const FString& Typed, int32& OutRedactedCertain)
+{
+	OutRedactedCertain = 0;
+	FWonderlandMissionTask* Task = FindMutable(LocalId);
+	if (Task == nullptr || !WonderlandTaskIsContract(Task->State))
+	{
+		return false;
+	}
+	int32 Statistical = 0;
+	const FString Kept = WonderlandScreenObjective(Typed.TrimStartAndEnd(), true, OutRedactedCertain, Statistical);
+	if (WonderlandOnlyRedacted(Kept))
+	{
+		return false;
+	}
+	Task->Objective = Kept;
+	// MARKED AS THE PLAYER'S OWN WORD, so a restart's restore does not take back what /keep gave (ScreenRestoredObjective)
+	Task->Lifecycle.Add(FString::Printf(TEXT("%s %s"), *FDateTime::UtcNow().ToIso8601(), WonderlandKeptMark));
+	UE_LOG(LogTemp, Display, TEXT("WLTASK /keep: the objective stored as typed (%d certain part(s) still removed)"), OutRedactedCertain);
+	SaveContracts();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
+	return true;
+}
+
+FString UWonderlandMissionTaskSubsystem::ScreenRestoredObjective(const FWonderlandMissionTask& Task, bool& bOutChanged)
+{
+	// A WORD THE PLAYER KEPT WITH /keep IS THEIRS (CORE's read, round 5: the restore screened every objective in full, so the next restart
+	// undid every /keep). A kept task is re-screened for what is certain by its own SHAPE only (r7): a key never survives, a kept word does.
+	// Any other objective gets the screen fail-closed -- a key or a strong password kept before the screen existed -- except a label's WEAK
+	// value (r7, Second's (b)): r6 rewrote "update the password Policy page" for good at the first restart. Either way it is idempotent -- the
+	// redaction's marker is never a find, and the screen runs to its fixpoint -- so a restored objective is not re-redacted on every load.
+	const bool bPlayerKept = Task.Lifecycle.ContainsByPredicate([](const FString& Entry) { return Entry.Contains(WonderlandKeptMark); });
+	int32 Certain = 0;
+	int32 Statistical = 0;
+	const FString Screened = WonderlandScreenObjective(Task.Objective, bPlayerKept, Certain, Statistical, true);
+	bOutChanged = Certain + Statistical > 0;
+	return bOutChanged ? Screened : Task.Objective;
 }
 
 bool UWonderlandMissionTaskSubsystem::DismissDraft(FGuid LocalId)
@@ -544,7 +673,7 @@ bool UWonderlandMissionTaskSubsystem::DismissDraft(FGuid LocalId)
 	// The dismissed slot was never written, but the SELECTION moved, and coming back to a different contract
 	// than you left on is its own small untruth about where you were.
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -575,10 +704,10 @@ bool UWonderlandMissionTaskSubsystem::CloseFromWorkspace(FGuid LocalId)
 			if (Tasks[Index].bInWorkspace) { Selected = Tasks[Index].LocalId; break; }
 		}
 	}
-	UE_LOG(LogTemp, Display, TEXT("WLTASK tab closed: '%s' stays a %s contract, out of the workspace"),
-		*Task->Objective.Left(40), WonderlandTaskStateName(Task->State));
+	UE_LOG(LogTemp, Display, TEXT("WLTASK tab closed: a contract of %d characters stays %s, out of the workspace"),
+		Task->Objective.Len(), WonderlandTaskStateName(Task->State));
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -597,7 +726,7 @@ bool UWonderlandMissionTaskSubsystem::ReopenInWorkspace(FGuid LocalId)
 	Task->bInWorkspace = true;
 	Selected = LocalId;
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -652,7 +781,7 @@ bool UWonderlandMissionTaskSubsystem::SelectTask(FGuid LocalId)
 	// The view is worth remembering, though: coming back to a different contract than you left on is a small
 	// untruth about where you were, and it costs one file write to be right about.
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -680,7 +809,7 @@ bool UWonderlandMissionTaskSubsystem::ReportEvidence(const FString& ContractId, 
 	// three, and this call cannot tell a full set from a first instalment.
 	UE_LOG(LogTemp, Display, TEXT("WLTASK %s reported %d evidence reference(s)"), *ContractId, EvidenceIds.Num());
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -695,7 +824,7 @@ bool UWonderlandMissionTaskSubsystem::AdoptContractId(FGuid LocalId, const FStri
 	// THIS IS THE ONE FIELD A RESTART CANNOT REGENERATE, so it is written the instant it arrives. Without it a
 	// restored contract is a mission no scheduler can address by name.
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -794,7 +923,7 @@ bool UWonderlandMissionTaskSubsystem::ApplySchedulerState(
 		if (!Selected.IsValid()) { Selected = Task->LocalId; }
 	}
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -880,7 +1009,7 @@ FGuid UWonderlandMissionTaskSubsystem::FollowJuliusRun(const FString& MissionId,
 	// then follows the new run while every surface names the old one.
 	FollowedContractId = MissionId;
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return Task->LocalId;
 }
 
@@ -982,7 +1111,7 @@ bool UWonderlandMissionTaskSubsystem::ResetJuliusCarriers(const FString& Contrac
 	UE_LOG(LogTemp, Display, TEXT("WLTASK %s adopted a snapshot; its Julius carriers are unknown again"),
 		*ContractId);
 	SaveContracts();
-	OnTasksChanged.Broadcast();
+	BroadcastTasksChanged(ANSI_TO_TCHAR(__FUNCTION__));
 	return true;
 }
 
@@ -1019,7 +1148,7 @@ TArray<FString> UWonderlandMissionTaskSubsystem::DescribeTasks() const
 			WonderlandTaskIsContract(Task.State) ? TEXT("RED") : TEXT("GRAY"),
 			Task.Source == EWonderlandTaskSource::Julius ? TEXT("julius") : TEXT("local"),
 			Task.ContractId.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("[%s] "), *Task.ContractId),
-			Task.Objective.IsEmpty() ? TEXT("(no task entered)") : *Task.Objective.Left(58)));
+			Task.Objective.IsEmpty() ? TEXT("(no task entered)") : *FWonderlandCardStore::MaskForDisplay(Task.Objective).Left(58)));
 	}
 	return Lines;
 }

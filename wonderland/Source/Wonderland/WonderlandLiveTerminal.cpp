@@ -14,6 +14,7 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
+#include "WonderlandCard.h"
 #include "WonderlandJuliusWorkLog.h"
 #include "WonderlandUiStyle.h"
 
@@ -716,12 +717,17 @@ void SWonderlandLiveTerminal::RebuildJuliusBody()
 void SWonderlandLiveTerminal::AddJuliusRow(const FString& Role, const FString& Headline, const FString& Detail)
 {
 	const FString Time = FDateTime::Now().ToString(TEXT("%H:%M:%S"));
-	JuliusRows.Add({ Time, Role, Headline, Detail });
-	LatestJuliusHeadline = Headline;
+	// WHAT THE PLAYER TYPED IS DRAWN AND KEPT WITH ANY KEY MASKED (Second's review, 10-03): a key typed into any line -- a task, a
+	// /card attach -- is refused where it would be stored, and never drawn or held in these rows either
+	const FString ShownHeadline = Role == TEXT("You") ? FWonderlandCardStore::MaskForDisplay(Headline) : Headline;
+	// the answer to the player's line can echo an argument of it ("No task <arg>", a skin name): masked the same way
+	const FString ShownDetail = Role == TEXT("You") ? FWonderlandCardStore::MaskForDisplay(Detail) : Detail;
+	JuliusRows.Add({ Time, Role, ShownHeadline, ShownDetail });
+	LatestJuliusHeadline = ShownHeadline;
 	// The JULIUS 3.3 section draws its rows as the approved terminal always has: bullet, time, role, headline, sub-line.
 	if (const TSharedPtr<SWonderlandWorkLog> JuliusLog = GetWorkLog(TEXT("JULIUS 3.3")))
 	{
-		JuliusLog->AddJuliusRow(Time, Role, Headline, Detail);
+		JuliusLog->AddJuliusRow(Time, Role, ShownHeadline, ShownDetail);
 	}
 }
 

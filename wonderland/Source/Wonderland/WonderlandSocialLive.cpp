@@ -210,6 +210,15 @@ void FWonderlandSocialLiveService::Call(const FString& Verb, const FString& Path
 			Done(0, nullptr, TEXT("Wonderland social could not be reached"));
 			return;
 		}
+		// THE SESSION IS GONE (expired, revoked, or the bridge restarted: its sessions live in memory). Said ONCE; polling
+		// stops; the owner forgets the token and offers SIGN IN again. Social state itself is durable on the server.
+		if (Status == 401 && !bSessionEnded)
+		{
+			bSessionEnded = true;
+			LastError = TEXT("the server ended this session");
+			UE_LOG(LogTemp, Display, TEXT("WLSOCIAL live: HTTP 401 -- the server ended this session"));
+			SessionEndedEvent.Broadcast();
+		}
 		const FString Text = Response->GetContentAsString();
 		if (Text.Len() > WonderlandSocialLiveDetail::MaxResponseBytes)
 		{
@@ -273,6 +282,10 @@ void FWonderlandSocialLiveService::Refresh()
 
 bool FWonderlandSocialLiveService::Tick(float)
 {
+	if (bSessionEnded)
+	{
+		return true;   // nothing more is asked with a dead session; the owner replaces this service
+	}
 	if (!bPolling && FPlatformTime::Seconds() >= NextPollAt)
 	{
 		PollEvents();
@@ -445,6 +458,13 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::Request(const FStrin
 	if (OperationId == TEXT("requests.cancel")) return Ask(OperationId, SubjectId, TEXT("POST"), FString::Printf(TEXT("/requests/%s/cancel"), *SubjectId), MakeShared<FJsonObject>());
 	if (OperationId == TEXT("friends.remove")) return Ask(OperationId, SubjectId, TEXT("POST"), FString::Printf(TEXT("/friends/%s/remove"), *SubjectId), MakeShared<FJsonObject>());
 	if (OperationId == TEXT("blocks.add")) return Ask(OperationId, SubjectId, TEXT("POST"), TEXT("/blocks"), Object(TEXT("targetId"), SubjectId));
+	if (OperationId == TEXT("blocks.add.confirm"))
+	{
+		// F1: the player confirmed a block on somebody in their party (UWonderlandUiSubsystem::HandleSocialAction warned first)
+		TSharedPtr<FJsonObject> Body = Object(TEXT("targetId"), SubjectId);
+		Body->SetBoolField(TEXT("confirmSharedParty"), true);
+		return Ask(TEXT("blocks.add"), SubjectId, TEXT("POST"), TEXT("/blocks"), Body);
+	}
 	if (OperationId == TEXT("blocks.remove")) return Ask(OperationId, SubjectId, TEXT("POST"), FString::Printf(TEXT("/blocks/%s/remove"), *SubjectId), MakeShared<FJsonObject>());
 	if (OperationId == TEXT("mutes.set"))
 	{

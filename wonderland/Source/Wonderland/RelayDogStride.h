@@ -115,6 +115,13 @@ namespace RelayDogStride
 	 *  @param LegLengthUU hip-to-ground distance at rest, uu (48 at W=60). */
 	FStride StrideForSpeed(float SpeedUU, float LegLengthUU);
 
+	/** THE SPRINT (the Mission Handoff dash; founder, 10-03, the Genshin "Running vs Dashing" reference): the run as a BOUNDING
+	 *  sprint, by Weight 0..1 (0 = Run, exactly). At dash speeds StrideForSpeed's reach-capped stride makes the legs cycle ~10 times
+	 *  a second -- a blur that reads as a frozen slide. Here the cadence is held at CyclesPerSecond by lengthening the stride, and
+	 *  the planted part of each stride is shortened (a flight phase) so a foot is never asked past the leg's reach: no slide.
+	 *  Lift and bob rise with it; the lean is a sprint's, never a dive. */
+	FStride SprintStride(const FStride& Run, float SpeedUU, float LegLengthUU, float Weight, float CyclesPerSecond);
+
 	/** One foot's contribution, in the body's frame.
 	 *
 	 *  `Forward` is measured against the body: during stance it moves BACKWARD
@@ -370,6 +377,35 @@ namespace RelayDogStride
 		 *  was last frame. */
 		FFootPose FootLeft;
 		FFootPose FootRight;
+
+		/**
+		 * THE ARMED STANCE'S BODY (RelayDogArmedStance writes it; the animator leaves it zero), in the RIG'S OWN rotation signs --
+		 * the writer adds these as they are. Not LeanDeg's convention: the animator's pitches were written for a "forward is
+		 * positive" body, and on this rig (the face is +X) a positive pitch lifts the face, so LeanDeg has always leaned the
+		 * Dog BACK (founder, 10-04: "BEND MUCH MORE FORWARD"). The stance's bend is about the HIPS, not the soles: Shift moves
+		 * the root so the rotation turns about the hips (the root's pivot is on the ground), plus the hips' own shift.
+		 */
+		struct FStanceBody
+		{
+			float PitchDeg = 0.0f;
+			float YawDeg = 0.0f;
+			float RollDeg = 0.0f;
+			float ShiftX = 0.0f;
+			float ShiftY = 0.0f;
+			float ShiftZ = 0.0f;
+			/** Added to the head's own rotation (it is the body's child): the head kept looking ahead through the bend. */
+			float HeadPitchDeg = 0.0f;
+			float HeadYawDeg = 0.0f;
+			float HeadRollDeg = 0.0f;
+			/** Each leg swept away from the centre line, degrees (+ = outward); the writer turns it into the rig's measured roll. */
+			float LegLeftOutDeg = 0.0f;
+			float LegRightOutDeg = 0.0f;
+			/** The true forward bend, degrees (+ = the chest forward), for the log and the costume. */
+			float BendDeg = 0.0f;
+			/** The hips' height above the root's pivot that the bend turns about, uu (a costume re-centres it on its own hips). */
+			float PivotUU = 0.0f;
+		};
+		FStanceBody Stance;
 	};
 
 	/** Everything the actor measures each frame. */
@@ -409,6 +445,11 @@ namespace RelayDogStride
 		 *  easing lives here where it can be proven on stairs without one. */
 		float GroundDeltaLeft = 0.0f;
 		float GroundDeltaRight = 0.0f;
+
+		/** 0..1: how much of the stride is the Mission Handoff SPRINT (SprintStride), and its cadence in cycles a second. 0 = the
+		 *  animator exactly as before. */
+		float SprintWeight = 0.0f;
+		float SprintCycles = 4.3f;
 
 		/** Optional runtime look target, degrees relative to the body. When
 		 *  bHasLookTarget is false the interest scheduler chooses. */

@@ -198,6 +198,11 @@ namespace SidekickConsole
 void UWonderlandSidekickSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
+	// C.A.R.D. + MISSION HANDOFF: read once, at boot, before any player's subsystems exist. A handoff that was equipped comes
+	// back HELD. No mission can be known to be running this early, so it is restored ROAMING, nothing fabricated; the mission
+	// presentation re-attaches it when it attaches, if a mission (a contract restored from this PC) is in fact running.
+	GetCardStore().Load();
+	GetMissionHandoff().Load([](const FString&) { return false; });
 	Ticker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWonderlandSidekickSubsystem::Tick), 0.0f);
 }
 
@@ -218,6 +223,25 @@ void UWonderlandSidekickSubsystem::Deinitialize()
 	}
 	InFlight.Reset();
 	Super::Deinitialize();
+}
+
+FWonderlandCardStore& UWonderlandSidekickSubsystem::GetCardStore()
+{
+	if (!Cards.IsValid())
+	{
+		// before Initialize or after Deinitialize only: an unloaded store holding the default card, never a crash
+		Cards = MakeUnique<FWonderlandCardStore>(FWonderlandCardStore::DefaultPath());
+	}
+	return *Cards;
+}
+
+FWonderlandMissionHandoff& UWonderlandSidekickSubsystem::GetMissionHandoff()
+{
+	if (!Handoff.IsValid())
+	{
+		Handoff = MakeUnique<FWonderlandMissionHandoff>(FWonderlandMissionHandoff::DefaultPath());
+	}
+	return *Handoff;
 }
 
 FString UWonderlandSidekickSubsystem::BaseUrl()
@@ -320,6 +344,12 @@ namespace WonderlandSidekickSecrets
 
 bool UWonderlandSidekickSubsystem::Tick(float DeltaSeconds)
 {
+	// THE MISSION HANDOFF'S PHASES advance in EVERY session, before the line below: it is presentation, never the
+	// companions' runtime, and it reads nothing from it.
+	if (Handoff.IsValid())
+	{
+		Handoff->Tick(DeltaSeconds);
+	}
 	// NOT PART OF THIS BETA (private beta): a player's session never contacts the companions' local runtime. An outside
 	// tester has none, and the founder's own machine must answer like theirs -- the clean-user baseline on this laptop
 	// read the founder's development service and drew its provider advice across the world.
@@ -467,6 +497,8 @@ void UWonderlandSidekickSubsystem::Accept(const FString& Text)
 
 void UWonderlandSidekickSubsystem::SendIntent(const FString& Body, const FString& Describe)
 {
+	// AN INTENT TO THE COMPANIONS' RUNTIME is provider execution: the Mission Handoff path never sends one (the write spy)
+	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandSidekickSubsystem::SendIntent (a provider send)"));
 	++IntentsSent;
 	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetURL(BaseUrl() + TEXT("/intents"));

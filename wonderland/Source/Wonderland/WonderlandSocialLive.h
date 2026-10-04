@@ -43,6 +43,9 @@ public:
 	void ReportPresence(bool bConnected);
 	/** For QA and the log: "live http://… as usr_kai | events 12 | snapshot 3 s old | last error …". */
 	FString Describe() const;
+	/** The server refused the session (HTTP 401), once: it expired, was revoked, or the bridge restarted. Polling stops. */
+	FSimpleMulticastDelegate& OnSessionEnded() { return SessionEndedEvent; }
+	bool HasSessionEnded() const { return bSessionEnded; }
 
 	// ---- MULTIPLAYER PHASE 1: the shared presence layer
 	/** Where this player's own representation is, asked each report (false: nothing to report this tick). */
@@ -58,6 +61,8 @@ public:
 private:
 	bool Tick(float DeltaSeconds);
 	void PollEvents();
+	bool bSessionEnded = false;
+	FSimpleMulticastDelegate SessionEndedEvent;
 	/** One call to the social routes. Done(status, data object or null, problem text) runs on the game thread. */
 	void Call(const FString& Verb, const FString& Path, const TSharedPtr<FJsonObject>& Body,
 		TFunction<void(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)> Done);

@@ -29,6 +29,10 @@
 #include "GameFramework/Character.h"
 #include "RelayDogStride.h"
 #include "RelayDogMissionPose.h"
+#include "RelayDogArmedStance.h"
+#include "WonderlandHandoffSwords.h"
+#include "WonderlandHandoffTransform.h"
+#include "WonderlandHands.h"
 
 #include "RelayDogCharacter.generated.h"
 
@@ -362,6 +366,83 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Relay Dog")
 	float DoubleTapWindow = 0.32f;
 
+	// ---------------------------------------------------------------- MISSION HANDOFF TRAVERSAL (M1)
+	/** The swords are HELD (FWonderlandMissionHandoff::IsArmed): the faster speeds and the dash apply. */
+	bool IsHandoffArmed() const;
+	bool IsDashing() const { return bDashActive; }
+	/** QA: how many stride cycles a second the legs make right now (the sprint must read as a sprinter's, never a ~10/s blur). */
+	float QaStrideCycles() const
+	{
+		const RelayDogStride::FDogPose& Now = Animator.Pose();
+		return Now.Stride.StrideLength > 1.0f ? Now.SpeedUU / Now.Stride.StrideLength : 0.0f;
+	}
+	/** QA: why the last sprint ended ("released", "cap", "stopped", "airborne", "panel", "teleport", "disarmed", "performance", or
+	 *  "none"), and how long after Forward's release edge it did (-1 if Forward was still held) -- measured, never a printed promise. */
+	FString QaLastSprintEnd(float& OutSecondsAfterRelease) const
+	{
+		OutSecondsAfterRelease = LastSprintEndAfterRelease;
+		return LastSprintEndCode;
+	}
+	/**
+	 * QA: the DRAWN body's points in the world -- the worn costume's own parts when a skin is worn, else Relay OG's pivots -- so a
+	 * stance is judged on what is on screen. Hips and knees are the joints; soles are the ground points the legs stand on. False
+	 * while the rig is unbound.
+	 */
+	bool QaDrawnBody(FVector& OutHead, FVector& OutHipPlusY, FVector& OutHipMinusY, FVector& OutKneePlusY, FVector& OutKneeMinusY,
+		FVector& OutSolePlusY, FVector& OutSoleMinusY) const;
+	/** QA: where the DRAWN head faces, a unit vector in the world (a worn skin's own head, else Relay OG's). False while unbound. */
+	bool QaDrawnHeadForward(FVector& OutForward) const;
+	/** QA: the founder's stance state now ("ready", "moving", "fast hop", "dash"...), the fast hop's weight, its phase (hops) and rate. */
+	FString QaStanceState(float& OutFast, float& OutHopPhase, float& OutHopRate) const
+	{
+		OutFast = ArmedStance.Fast.Value;
+		OutHopPhase = ArmedStance.HopPhase;
+		OutHopRate = ArmedStance.HopRate;
+		return LastStanceState;
+	}
+	/** QA: the planted feet held in the world -- catch-up steps forced by a foot drifting off its spot, and holds dropped by a stall or a jump. */
+	void QaFeetLock(int32& OutOverstretches, int32& OutDrops) const
+	{
+		OutOverstretches = ArmedStance.Feet.Overstretches;
+		OutDrops = ArmedStance.Feet.Drops;
+	}
+	int32 GetDashCount() const { return DashCount; }
+	int32 GetDashesRefused() const { return DashesRefused; }
+	/** Normal roaming's acceleration (read at BeginPlay): what every exit from the handoff restores. */
+	float GetNormalAcceleration() const { return NormalAcceleration; }
+	/** QA only: a Forward key event exactly as BindKey delivers it (W, or the Up arrow), and the run modifier. */
+	void QaForwardKey(bool bUpArrow, bool bDown) { SetForwardKey(!bUpArrow, bDown); }
+	void QaRunKey(bool bDown) { bRunHeld = bDown; }
+	void QaWalkKey(bool bDown) { bWalkHeld = bDown; }
+	/** How many of the mission acts' props (book, brush, lens, scraper) are visible on the Dog right now: 0 once an act has let go. */
+	int32 CountVisibleActProps() const;
+	/** The attack-ready stance's weight (0 roaming as ever, 1 with the swords held) and the dash's (M2). */
+	float GetArmedStanceWeight() const { return ArmedStance.Armed.Value; }
+	float GetDashStanceWeight() const { return ArmedStance.Dash.Value; }
+	/** The canon body's joints as written this frame, for the stance QA: each shoulder's and hip's relative rotation. */
+	FRotator GetCanonShoulderRotation(bool bPlusY) const;
+	FRotator GetCanonHipRotation(bool bPlusY) const;
+	/** The canon body's lean as written this frame (its root's pitch), degrees. */
+	float GetCanonBodyPitch() const;
+	/** MISSION HANDOFF (M3): the swords and the transformation as shown, and where each hand's grip is (gold LEFT, cyan RIGHT). */
+	const WonderlandHandoffSwords::FPresentation& GetHandoffSwords() const { return HandoffSwords; }
+	const WonderlandHandoffTransform::FPresentation& GetHandoffTransform() const { return HandoffTransform; }
+	/** The grip of the hand on the Dog's own LEFT (-Y, as for any actor: the gold sword's) or RIGHT (+Y: the cyan's), in the world. */
+	FTransform GetHandoffGripWorld(bool bLeftHand) const;
+	/** THE HANDS (M4): the visible body's hand on the Dog's own LEFT or RIGHT (Relay OG's canon forearm, or the worn skin's own). */
+	const WonderlandHands::FHand& GetHand(bool bLeftHand) const { return bLeftHand ? BodyHandMinusY : BodyHandPlusY; }
+	/** For the QA: whether the act tools (the brush, the scraper) are worked by the Dog's own left (-Y) hand, and whether one is
+	 *  in that hand's fist now (wl.Dog.ActHands); the tool's handle while one shows (nullptr otherwise). */
+	bool IsToolHandLeft() const { return !(ArmRight.SideSign > 0.0f); }
+	bool IsToolInFist() const { return bToolInFist; }
+	/** For the QA: the magnifying glass is held in the working hand's closed fist this frame (wl.Dog.ActHold). */
+	bool IsLensInFist() const { return bLensInFist; }
+	const UInstancedStaticMeshComponent* GetShownToolHandle() const;
+	/** For the QA: the forearm of the body the player sees for that hand (a worn skin's, else the canon's), or null. */
+	USceneComponent* GetVisibleForearm(bool bLeftHand) const;
+	/** For the QA: which mission act props show now, as bits -- 1 the book, 2 the brush, 4 the lens, 8 the scraper. */
+	int32 GetVisibleActPropMask() const;
+
 protected:
 	void MoveForwardAxis(float Value);
 	void MoveBackwardAxis(float Value);
@@ -369,8 +450,21 @@ protected:
 	void MoveLeftAxis(float Value);
 	void TurnAxis(float Value);
 	void LookUpAxis(float Value);
+	/** The ONE semantic Forward's edges: pressed = neither key held -> one held; released = both up. */
 	void OnForwardPressed();
 	void OnForwardReleased();
+	/** W and the Up arrow, each tracked on its own (founder: they are the same semantic Forward action). */
+	void OnForwardWPressed();
+	void OnForwardWReleased();
+	void OnForwardUpPressed();
+	void OnForwardUpReleased();
+	void SetForwardKey(bool bW, bool bDown);
+	/** The Mission Handoff dash: a velocity through the movement component, never a teleport. */
+	bool TryStartDash(float Now);
+	/** Why: the log's words. Code: the reason QaLastSprintEnd reports. */
+	void EndDash(const TCHAR* Why, const TCHAR* Code);
+	/** A teleport (travel, a respawn) ends a dash. */
+	virtual void TeleportSucceeded(bool bIsATest) override;
 	void OnRunPressed();
 	void OnRunReleased();
 	void OnWalkPressed();
@@ -812,6 +906,27 @@ private:
 	TObjectPtr<class UMaterialInstanceDynamic> BeamHaloMid = nullptr;
 
 	bool bMissionPropsBuilt = false;
+	/** A tool is held in the working hand's fist this frame; the tool's parts carry a fist pose to put back when it is not. */
+	bool bToolInFist = false;
+	bool bToolLaidInFist = false;
+	/** Lays the shown tool (the brush, else the scraper) through Hand's closed fist, riding on Forearm (the one the player sees). */
+	void LayToolInFist(const WonderlandHands::FHand& Hand, USceneComponent* Forearm, bool bBrush);
+	/**
+	 * THE GLASS IN THE FIST (act hands v4): the glass's aim and its designed handle-up this frame (world, from ApplyMissionPose); the
+	 * handle-up as shown (square to the visible forearm, eased); where the fist sat off that forearm's end (the Body's space: next frame's
+	 * arm goal takes it off, so the fist lands on the grip and the glass stays on the eye's line); the handle as last laid.
+	 */
+	FVector LensAimShown = FVector::ZeroVector;
+	FVector LensUpDesigned = FVector::ZeroVector;
+	FVector LensUpShown = FVector::ZeroVector;
+	FVector LensFistOffsetInBody = FVector::ZeroVector;
+	double LensHandleFitLaid = 1.0;
+	double LensHandleLongerLaid = 0.0;
+	bool bLensInFist = false;
+	/** Lays the glass round Hand's closed fist, riding on Forearm (the one the player sees). False when there is nothing to lay yet. */
+	bool LayLensInFist(WonderlandHands::FHand& Hand, USceneComponent* Forearm, float DeltaSeconds);
+	/** The glass's handle: its cross-section scaled by Fit, and Longer (head-width sixtieths) added below with the cap; 1, 0 = as built. */
+	void LayLensHandle(double Fit, double Longer);
 	/** True on any frame the player asked the Dog to move, so the orbit stands down. */
 	bool bPlayerDroveThisFrame = false;
 
@@ -837,6 +952,56 @@ private:
 	bool bForwardHeld = false;
 	bool bDoubleTapRun = false;
 	float LastForwardPressTime = -10.0f;
+	/** Which physical Forward keys are down; bForwardHeld is either of them. */
+	bool bForwardWHeld = false;
+	bool bForwardUpHeld = false;
+	/** THE MISSION HANDOFF DASH (M1). Times are the world's seconds; the cooldown runs from the dash's END. */
+	bool bHandoffArmedSeen = false;
+	bool bDashActive = false;
+	float DashStartedAt = -1000.0f;
+	float DashEndedAt = -1000.0f;
+	FVector DashDirection = FVector::ForwardVector;
+	int32 DashCount = 0;
+	int32 DashesRefused = 0;
+	/** A performance (the auto-demo, a mission orbit) is moving the Dog: refreshed every tick, read by the dash's gate. */
+	bool bPerformanceMoving = false;
+	/** Normal roaming's acceleration, read at BeginPlay and restored whenever the swords are not held. */
+	float NormalAcceleration = 900.0f;
+	/** THE ATTACK-READY STANCE (M2): its two eased weights, armed and dashing (RelayDogArmedStance). Plain C++, not reflected. */
+	RelayDogArmedStance::FState ArmedStance;
+	/** How far each hip is swept away from the centre line this frame by the stance (degrees; 0 whenever the swords are not held):
+	 *  the stance's spacing, and the sideways part of putting each foot back under a tilted, shifted body. */
+	float StanceLegLeftOutDeg = 0.0f;
+	float StanceLegRightOutDeg = 0.0f;
+	/** How much of the charging stance is on (armed and standing, 0..1): the blades' low trailing hold eases in by it. */
+	float StanceChargeWeight = 0.0f;
+	/** The founder's stance state last logged (RelayDogArmedStance::StateName), so each change is said once. */
+	FString LastStanceState = TEXT("unarmed");
+	/** The actor's place and yaw the frame before (the stance carries its planted feet through the real motion); unread after a spawn. */
+	FVector StanceLastAt = FVector::ZeroVector;
+	float StanceLastYaw = 0.0f;
+	bool bStanceMotionRead = false;
+	/** THE SPRINT'S END, measured (QaLastSprintEnd): Forward's release edge, and the last end's reason and lateness. */
+	float ForwardReleasedAt = -1000.0f;
+	FString LastSprintEndCode = TEXT("none");
+	float LastSprintEndAfterRelease = -1.0f;
+	/** The camera's lag after a sprint: when it ended and whether the end was a teleport (no lag carries across one). */
+	bool bCameraLagEasing = false;
+	/** How far each thigh is turned outward this frame by the stance (degrees, a yaw at the hip; 0 whenever the swords are not held). */
+	float StanceKneesOutDeg = 0.0f;
+	/** THE MISSION HANDOFF'S PRESENTATION (M3): the swords, and each companion becoming its own. Plain C++, not reflected. */
+	WonderlandHandoffSwords::FPresentation HandoffSwords;
+	WonderlandHandoffTransform::FPresentation HandoffTransform;
+	/** How much of the swords is in the hands this frame (0..1): what a worn skin's hands follow onto the grips. */
+	float HandoffHandsWeight = 0.0f;
+	/** Shows the swords and the transformation for the handoff's state this frame, after the pose is written. */
+	void UpdateHandoffPresentation(float DeltaSeconds);
+	/** THE HANDS ON THE VISIBLE BODY (M4): built on, or moved to, whichever body shows; their fingers closed by the swords' share. */
+	WonderlandHands::FHand BodyHandMinusY;
+	WonderlandHands::FHand BodyHandPlusY;
+	void UpdateHands(float DeltaSeconds);
+	/** The visible body's forearm on one physical side, its hand tip and its forward, in that forearm's space. */
+	bool VisibleForearm(bool bPlusY, USceneComponent*& OutForearm, FVector& OutTipLocal, FVector& OutForward) const;
 	int32 RouteIndex = 0;
 	float RouteHold = 0.0f;
 	/** How long the current leg has been attempted, seconds. */

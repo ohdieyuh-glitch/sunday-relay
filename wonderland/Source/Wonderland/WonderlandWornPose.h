@@ -140,4 +140,28 @@ struct FWonderlandWornPose
 
 	/** False until a Dog has handed one down; the body then keeps its own idle, as a free companion should. */
 	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") bool bValid = false;
+
+	// THE MISSION HANDOFF STANCE'S LEGS, handed down as NUMBERS rather than read back off the canon hip (round 6). Plain C++
+	// members, NOT reflected (the Niagara FName rule): they travel by WearCanonicalPose's C++ copy, never through reflection.
+	// The canon hip is now the stance's roll TURNED about its hip-to-sole line (WonderlandKneesOut), so its rotator no longer
+	// holds a clean roll to copy; a skin takes the roll from here, solves its own leg onto the canon's (unmoved) sole, and turns
+	// its own knee out by the same angle about its OWN hip-to-sole line.
+	/** The stance's feet-out roll on each side's hip, as the canon writes it before the knees-out turn (degrees). */
+	float StanceHipRollPlusY = 0.0f;
+	float StanceHipRollMinusY = 0.0f;
+	/** wl.Handoff.Stance.KneesOut as eased in this frame (degrees, >= 0; 0 whenever the swords are not held). */
+	float StanceKneesOutDeg = 0.0f;
+	/**
+	 * THE CHARGING STANCE'S BODY (founder, 10-04), plain like the above. The canon root is moved forward (BodyForwardUU, beside
+	 * SwayUU and BobUU) so its bend turns about ITS hips, StancePivotUU above the root's pivot; the Stance* rotation is the part of
+	 * the written body rotation that turns about them. A costume whose hips sit at another height re-centres the same rotation on
+	 * its own hips, so its body bends where its legs join it rather than a canon hip's height above them.
+	 */
+	float BodyForwardUU = 0.0f;
+	float StancePitchDeg = 0.0f;
+	float StanceYawDeg = 0.0f;
+	float StanceRollDeg = 0.0f;
+	float StancePivotUU = 0.0f;
+	/** How much of the armed stance is on (0..1): a costume solves its own legs' sideways part by this share. */
+	float StanceWeight = 0.0f;
 };

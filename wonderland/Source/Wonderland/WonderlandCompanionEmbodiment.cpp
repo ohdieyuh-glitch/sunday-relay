@@ -1,4 +1,5 @@
 #include "WonderlandCompanionEmbodiment.h"
+#include "WonderlandKneesOut.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -21,6 +22,7 @@ namespace
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "Engine/Texture.h"
 #include "Misc/FileHelper.h"
 #include "HAL/FileManager.h"
 
@@ -632,6 +634,7 @@ void AWonderlandCompanionEmbodiment::ClearBody()
 	PartPivots.Reset();
 	PartNames.Reset();
 	PartMeshIsBody.Reset();
+	PartMeshIsSolid.Reset();
 	PartMeshNames.Reset();
 	MaterialInstances.Reset();
 	FlameMaterialInstances.Reset();
@@ -1250,6 +1253,9 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		PartMeshNames.Add(Figure.Parts[PartIndex].Name);
 		// WHICH PARTS THE WARDROBE IS ALLOWED TO FRAME ON. See WonderlandPartIsFramingBody.
 		PartMeshIsBody.Add(WonderlandPartIsFramingBody(Figure.Parts[PartIndex].Name));
+		// WHAT IS DRAWN SOLID, by its material: Lit, Rim and Glow are opaque (Glow is opaque and unlit -- eyes, crystal and wisp
+		// cores); only Additive is light (Second's v2 review: celestial_light, skeleton_flame and baal are mostly Glow)
+		PartMeshIsSolid.Add(Kind != EWonderlandCompanionMaterialKind::Additive);
 		BoxCount += Group.Value.Num();
 	}
 
@@ -1569,7 +1575,10 @@ FString AWonderlandCompanionEmbodiment::DescribeMaterialColours() const
 		FLinearColor Twin = FLinearColor::Black;
 		if (MaterialInstances.IsValidIndex(Index) && MaterialInstances[Index] != nullptr)
 		{
-			MaterialInstances[Index]->GetVectorParameterValue(FMaterialParameterInfo(TEXT("Color")), Body);
+			// A RIM surface is painted through BaseColor (and RimColor), never Color (ApplyColourway): reading Color there
+			// reported the parent's default, so a rim shell's paint -- Shadow Flame's coat -- was invisible to every proof.
+			const TCHAR* Painted = BuiltMaterials[Index].Kind == EWonderlandCompanionMaterialKind::Rim ? TEXT("BaseColor") : TEXT("Color");
+			MaterialInstances[Index]->GetVectorParameterValue(FMaterialParameterInfo(Painted), Body);
 		}
 		if (FlameMaterialInstances.IsValidIndex(Index) && FlameMaterialInstances[Index] != nullptr)
 		{
@@ -1589,6 +1598,147 @@ bool AWonderlandCompanionEmbodiment::DeclaresFlame() const
 		{
 			return true;
 		}
+	}
+	return false;
+}
+
+bool AWonderlandCompanionEmbodiment::DeclaresStrips() const
+{
+	for (const FWonderlandCompanionMaterial& Material : BuiltMaterials)
+	{
+		if (WonderlandMascotStyle::IsStripChannel(Material.Channel))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool AWonderlandCompanionEmbodiment::QaLegAt(float SideSign, FVector& OutHip, FVector& OutKnee, FVector& OutSole) const
+{
+	for (int32 Index = 0; Index < Motions.Num() && Index < PartPivots.Num(); ++Index)
+	{
+		const FPartMotion& Part = Motions[Index];
+		if (Part.LimbKind != 1 || Part.LimbSide == 0 || (Part.LimbSide > 0) != (SideSign > 0.0f))
+		{
+			continue;
+		}
+		const USceneComponent* Hip = PartPivots[Index].Get();
+		const USceneComponent* Knee = PartPivots.IsValidIndex(Part.LowerIndex) ? PartPivots[Part.LowerIndex].Get() : nullptr;
+		if (Hip == nullptr || Knee == nullptr || Part.ShinUU <= 1.0f)
+		{
+			return false;
+		}
+		OutHip = Hip->GetComponentLocation();
+		OutKnee = Knee->GetComponentLocation();
+		// the shin in the knee's own frame, scale included (the lengths are in the part hierarchy's units)
+		OutSole = Knee->GetComponentTransform().TransformPosition(FVector(0.0, 0.0, -Part.ShinUU));
+		return true;
+	}
+	return false;
+}
+
+bool AWonderlandCompanionEmbodiment::QaHeadAt(FVector& OutHead) const
+{
+	for (int32 Index = 0; Index < Motions.Num() && Index < PartPivots.Num(); ++Index)
+	{
+		if (Motions[Index].Motion == EWonderlandCompanionMotion::Head && PartPivots[Index] != nullptr)
+		{
+			OutHead = PartPivots[Index]->GetComponentLocation();
+			return true;
+		}
+	}
+	return false;
+}
+
+bool AWonderlandCompanionEmbodiment::QaHeadForward(FVector& OutForward) const
+{
+	for (int32 Index = 0; Index < Motions.Num() && Index < PartPivots.Num(); ++Index)
+	{
+		if (Motions[Index].Motion == EWonderlandCompanionMotion::Head && PartPivots[Index] != nullptr)
+		{
+			OutForward = PartPivots[Index]->GetForwardVector();
+			return true;
+		}
+	}
+	return false;
+}
+
+bool AWonderlandCompanionEmbodiment::QaShoulderSwing(float SideSign, float& OutDeg) const
+{
+	for (int32 Index = 0; Index < Motions.Num() && Index < PartPivots.Num(); ++Index)
+	{
+		const FPartMotion& Part = Motions[Index];
+		if (Part.LimbKind == 3 && Part.LimbSide != 0 && (Part.LimbSide > 0) == (SideSign > 0.0f) && PartPivots[Index] != nullptr)
+		{
+			const FVector Hanging = PartPivots[Index]->GetRelativeRotation().Quaternion().RotateVector(FVector(0.0, 0.0, -1.0));
+			OutDeg = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(Hanging.X, -Hanging.Z)));
+			return true;
+		}
+	}
+	return false;
+}
+
+bool AWonderlandCompanionEmbodiment::QaReadPaint(FName Name, FLinearColor& OutBase, FLinearColor& OutRim, FString& OutRelief) const
+{
+	OutBase = OutRim = FLinearColor(-1.0f, -1.0f, -1.0f, 1.0f);
+	OutRelief = TEXT("none");
+	for (int32 Index = 0; Index < BuiltMaterials.Num(); ++Index)
+	{
+		if (BuiltMaterials[Index].Name != Name || !MaterialInstances.IsValidIndex(Index) || MaterialInstances[Index] == nullptr)
+		{
+			continue;
+		}
+		UMaterialInstanceDynamic* Instance = MaterialInstances[Index];
+		if (BuiltMaterials[Index].Kind == EWonderlandCompanionMaterialKind::Rim)
+		{
+			Instance->GetVectorParameterValue(FMaterialParameterInfo(TEXT("BaseColor")), OutBase);
+			Instance->GetVectorParameterValue(FMaterialParameterInfo(TEXT("RimColor")), OutRim);
+			UTexture* Relief = nullptr;
+			if (Instance->GetTextureParameterValue(FMaterialParameterInfo(TEXT("NormalTex")), Relief) && Relief != nullptr)
+			{
+				OutRelief = Relief->GetName();
+			}
+			// B65.1: the smoke's tone map rides with its relief (WonderlandMascotStyle::SmokeTextureName names them the same way)
+			UTexture* Tone = nullptr;
+			if (Instance->GetTextureParameterValue(FMaterialParameterInfo(TEXT("AlbedoTex")), Tone) && Tone != nullptr
+				&& Tone->GetName().StartsWith(TEXT("WLSmokeTone")))
+			{
+				OutRelief += TEXT("+tone");
+			}
+		}
+		else
+		{
+			Instance->GetVectorParameterValue(FMaterialParameterInfo(TEXT("Color")), OutBase);
+		}
+		return true;
+	}
+	return false;
+}
+
+bool AWonderlandCompanionEmbodiment::QaReadMarble(FName Name, FLinearColor& OutCells, FLinearColor& OutVeins, FLinearColor& OutDrawnCells,
+	FLinearColor& OutDrawnVeins, float& OutPeakDrawn, float& OutPeakAsked) const
+{
+	OutCells = OutVeins = OutDrawnCells = OutDrawnVeins = FLinearColor(-1.0f, -1.0f, -1.0f, 1.0f);
+	OutPeakDrawn = OutPeakAsked = -1.0f;
+	for (int32 Index = 0; Index < BuiltMaterials.Num(); ++Index)
+	{
+		if (BuiltMaterials[Index].Name != Name || !MaterialInstances.IsValidIndex(Index) || MaterialInstances[Index] == nullptr)
+		{
+			continue;
+		}
+		UMaterialInstanceDynamic* Instance = MaterialInstances[Index];
+		UTexture* Tone = nullptr;
+		if (!Instance->GetTextureParameterValue(FMaterialParameterInfo(TEXT("AlbedoTex")), Tone) || Tone == nullptr
+			|| !WonderlandMascotStyle::SmokeMarbleOf(Tone, OutCells, OutVeins, OutPeakAsked, OutDrawnCells, OutDrawnVeins))
+		{
+			return false;
+		}
+		// THE PEAK THE SURFACE IS ACTUALLY DRAWN AT: its own BaseColor (grey -- the colours ride in the map), read off the instance
+		FLinearColor Base = FLinearColor::Black;
+		Instance->GetVectorParameterValue(FMaterialParameterInfo(TEXT("BaseColor")), Base);
+		OutPeakDrawn = Base.R;
+		return true;
 	}
 	return false;
 }
@@ -1857,7 +2007,9 @@ void AWonderlandCompanionEmbodiment::SetRimBoost(float Amount)
 		}
 		if (MaterialInstances.IsValidIndex(Index) && MaterialInstances[Index] != nullptr)
 		{
-			MaterialInstances[Index]->SetScalarParameterValue(TEXT("RimAmp"), RimBoost);
+			// a smoke surface's own rim amplitude rides on the boost (B65), so the night lifts it exactly as much as any rim
+			const float Own = WonderlandMascotStyle::IsSmokeLook(BuiltMaterials[Index].Look) ? WonderlandMascotStyle::SmokeRimAmp() : 1.0f;
+			MaterialInstances[Index]->SetScalarParameterValue(TEXT("RimAmp"), RimBoost * Own);
 		}
 	}
 }
@@ -2020,6 +2172,28 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 					: WonderlandMascotStyle::AccentColour(Want, Secondary, Def.Channel == TEXT("secondary_light"));
 			}
 		}
+		else if (WonderlandMascotStyle::IsPrimaryChannel(Def.Channel))
+		{
+			// ---- A `primary` SURFACE TAKES THE CHOSEN PRIMARY AS ITS COLOUR (founder, 2026-10-02: "WHITE -> pure white ...
+			// Do not allow the default near-black/navy Shadow Flame base to tint or multiply the selected primary color").
+			//
+			// The multiply below is a tint, and a tint of a near-white shell is the chosen colour -- but Shadow Flame's coat
+			// is authored near-black, and anything times near-black stays near-black: white left it exactly as designed,
+			// every other colour came out dark. A figure tags its shell `primary` to say the chosen colour IS the shell's
+			// colour. Only a REAL choice does it (HasChosenPrimary): DEFAULT still means the coat as designed. A Rim surface
+			// keeps its rim at the figure's strength, in the same hue (see the switch below), so the shell still reads.
+			if (WonderlandMascotStyle::HasChosenPrimary())
+			{
+				Want = FLinearColor(Primary.R, Primary.G, Primary.B, Want.A);
+				// ---- AND THE COAT'S DEEP PARTS KEEP THEIR DEPTH (B65, founder: "darker crimson shadowing + brighter crimson
+				// highlights ... visible form separation"). A LIT `primary` surface is the deep coat (cuffs, soles): it takes a
+				// darker shade of the SAME colour, never the old navy. Black is already the deepest it can be.
+				if (Def.Kind == EWonderlandCompanionMaterialKind::Lit)
+				{
+					Want = FLinearColor(Primary.R * 0.62f, Primary.G * 0.62f, Primary.B * 0.62f, Want.A);
+				}
+			}
+		}
 		else
 		{
 			switch (Channel)
@@ -2029,6 +2203,21 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 			case EWonderlandColorChannel::None: default:                     break;
 			}
 		}
+	}
+
+	// ---- COLOR 3: A SKIN'S STRIPS FOLLOW THE STRIPS COLOUR (B65, founder, 2026-10-02: "The user should be able to change the
+	// strips without changing the body ... Changing Color 3 must NOT recolor the entire mascot; recolor eyes accidentally;
+	// affect companion swords; reset clothing").
+	//
+	// The fire's twin, and outside the colourway for the same reason: picking a primary or a secondary never moves the strips,
+	// and picking the strips moves nothing else. Declared by the figure (`strip`), so no skin is named here; only the Dog's
+	// own costume and the Wardrobe's mannequin of it wear it. The colour is taken as it is (the pure-colour rule): white
+	// strips are white, black strips black. Their detail -- the grazing-angle edge, the motion -- is the smoke look's below.
+	if (BodyRole == EWonderlandBodyRole::Mascot && WonderlandMascotStyle::IsStripChannel(Def.Channel)
+		&& WonderlandMascotStyle::HasChosenStrip())
+	{
+		const FLinearColor Strip = WonderlandMascotStyle::StripColour();
+		Want = FLinearColor(Strip.R, Strip.G, Strip.B, Want.A);
 	}
 
 	// ---- A FLAME SKIN'S FIRE FOLLOWS THE FLAME COLOUR (founder, 2026-10-01: "Flame Color ... This must be independent
@@ -2052,6 +2241,59 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 		break;
 	case EWonderlandCompanionMaterialKind::Rim:
 		Instance->SetVectorParameterValue(TEXT("BaseColor"), Want);
+		if (WonderlandMascotStyle::IsSmokeLook(Def.Look))
+		{
+			// ---- THE SMOKE LOOK (B65): the base stays EXACTLY the colour (above); the detail is a cloudy relief, a roughness
+			// that wanders and a grazing-angle rim in a BRIGHTER TINT OF THE SAME HUE -- "the selected color changes the palette,
+			// not the amount of detail" (WonderlandMascotStyle::IsSmokeLook). It is worn by a RECOLOURED surface; the designed
+			// colours keep the designed look exactly (the founder's reference is that look), unless wl.Shadow.OnDefault asks.
+			const bool bStrip = WonderlandMascotStyle::IsStripChannel(Def.Channel);
+			const bool bRecoloured = bStrip
+				? (BodyRole == EWonderlandBodyRole::Mascot && WonderlandMascotStyle::HasChosenStrip())
+				: (bChosen && BodyRole == EWonderlandBodyRole::Mascot && WonderlandMascotStyle::IsPrimaryChannel(Def.Channel) && WonderlandMascotStyle::HasChosenPrimary());
+			// B65.3: the DESIGNED body wears the reference's marble (navy cells, bright blue veins); the designed STRIPS stay the
+			// fixed black tendrils they were designed as, and take the smoke only when their own colour is picked
+			const bool bDesignedBody = !bRecoloured && !bStrip && WonderlandMascotStyle::SmokeOnDefault();
+			if (bRecoloured || bDesignedBody)
+			{
+				// the strips' edge stays subtle (founder, 10-01: "very subtle rim illumination"), the body's reads
+				const float Gain = bStrip ? WonderlandMascotStyle::SmokeStripRimGain() : WonderlandMascotStyle::SmokeRimGain();
+				// B65.4: the designed body's edges glow BLUE, as on the founder's sheet (wl.Shadow.DefaultRimGain 0 = the designed rim)
+				FLinearColor DesignedRim = Want * WonderlandTameGlow(Def.Strength);
+				if (bDesignedBody)
+				{
+					WonderlandMascotStyle::SmokeDesignedRim(DesignedRim);
+				}
+				Instance->SetVectorParameterValue(TEXT("RimColor"), bRecoloured ? WonderlandMascotStyle::SmokeRimTint(Want) * Gain : DesignedRim);
+				Instance->SetScalarParameterValue(TEXT("RimAmp"), RimBoost * WonderlandMascotStyle::SmokeRimAmp());
+				if (!bStrip || WonderlandMascotStyle::SmokeStripRelief())
+				{
+					// the base by the colour's profile (the pick exactly, or the designed vein blue, or a dark pick's smoke grey),
+					// its tone map, the relief and a light pick's glow
+					// COLOR 2, THE MARBLING (founder, 2026-10-04: "COLOR 2 = secondary/accent/marbling"): a chosen SECONDARY paints the
+					// BODY's veins over COLOR 1's own cells -- never the strips, which are COLOR 3's alone, and only on a real choice
+					// (HasChosenSecondary), so DEFAULT keeps the profile's one-colour marble exactly as before
+					// (and the DEFAULT swatch, which is White, is "as designed": the one-colour marble, never white veins)
+					if (!bStrip && BodyRole == EWonderlandBodyRole::Mascot && Style.HasChosenSecondary()
+						&& !WonderlandMascotStyle::IsDesignedWhite(Style.Secondary))
+					{
+						WonderlandMascotStyle::ApplySmokeMarble(Instance, Want, bDesignedBody, Style.Secondary);
+					}
+					else
+					{
+						WonderlandMascotStyle::ApplySmokeLook(Instance, Want, bDesignedBody);
+					}
+				}
+				else
+				{
+					WonderlandMascotStyle::RestoreSmokeDetail(Instance);
+				}
+				break;
+			}
+			// THE DESIGNED LOOK, EXACTLY: nothing the smoke look wrote is left behind (a colour picked, then DEFAULT)
+			WonderlandMascotStyle::RestoreSmokeDetail(Instance);
+			Instance->SetScalarParameterValue(TEXT("RimAmp"), RimBoost);
+		}
 		// The rim keeps its own relationship to the base: it is the same hue, at the strength the figure asked
 		// for, so a recoloured shell still reads as a shell and not as a flat card.
 		Instance->SetVectorParameterValue(TEXT("RimColor"), Want * WonderlandTameGlow(Def.Strength));
@@ -2986,7 +3228,23 @@ namespace
 	}
 }
 
-bool AWonderlandCompanionEmbodiment::SolveLegToSole(int32 HipIndex, const FVector& SoleWorld, FRotator& OutHip, FRotator& OutKnee) const
+bool AWonderlandCompanionEmbodiment::GetHandFrame(bool bPlusY, USceneComponent*& OutForearm, FVector& OutTipLocal) const
+{
+	// THE ELBOW ON THAT SIDE carries the hand: its tip is its measured length straight down its own axis at rest
+	for (int32 Index = 0; Index < Motions.Num(); ++Index)
+	{
+		const FPartMotion& Part = Motions[Index];
+		if (Part.LimbKind == 4 && Part.LimbSide == (bPlusY ? 1 : -1) && PartPivots.IsValidIndex(Index) && PartPivots[Index] != nullptr)
+		{
+			OutForearm = PartPivots[Index];
+			OutTipLocal = FVector(0.0, 0.0, -Part.ShinUU);
+			return true;
+		}
+	}
+	return false;
+}
+
+bool AWonderlandCompanionEmbodiment::SolveLegToSole(int32 HipIndex, const FVector& SoleWorld, FRotator& OutHip, FRotator& OutKnee, float LateralShare) const
 {
 	// A TWO-BONE SOLVE IN THE HIP'S OWN PARENT FRAME, where the hip rests at RestLocation and swings about Y.
 	//
@@ -3007,17 +3265,47 @@ bool AWonderlandCompanionEmbodiment::SolveLegToSole(int32 HipIndex, const FVecto
 	}
 	const FVector Target = Frame->GetComponentTransform().InverseTransformPosition(SoleWorld);
 	const FVector Reach = Target - Part.RestLocation;
-	const float Forward = static_cast<float>(Reach.X);
-	const float Down = static_cast<float>(-Reach.Z);
 	const float Thigh = Part.ThighUU;
 	const float Shin = Part.ShinUU;
-	const float Span = FMath::Clamp(FMath::Sqrt(Forward * Forward + Down * Down),
-		FMath::Abs(Thigh - Shin) + 0.01f, Thigh + Shin - 0.001f);
-	const float Bend = PI - FMath::Acos(FMath::Clamp((Thigh * Thigh + Shin * Shin - Span * Span) / (2.0f * Thigh * Shin), -1.0f, 1.0f));
-	const float Lead = FMath::Acos(FMath::Clamp((Thigh * Thigh + Span * Span - Shin * Shin) / (2.0f * Thigh * Span), -1.0f, 1.0f));
-	const float Toward = FMath::Atan2(Forward, Down);
-	OutHip = FRotator(FMath::RadiansToDegrees(Toward + Lead), 0.0f, 0.0f);
-	OutKnee = FRotator(-FMath::RadiansToDegrees(Bend), 0.0f, 0.0f);
+	// THE SIDEWAYS PART, AS THE STANCE COMES IN (founder 10-04, the charging stance; review of round 7): the canon's soles move out
+	// from under a tilted, shifted body, and a planar solve that then takes the CANON's roll lands this leg's sole off its spot -- the
+	// writer rolls after the pitch, and these hips sit at their own width. So the target's sideways part is solved here as a roll,
+	// and the aim corrected against this leg's own chain (FRotator(pitch, 0, roll), the knee folded by -bend), as the canon's is.
+	// At share 0 the sideways part is dropped and no pass runs: exactly the planar solve it always was.
+	const float Share = FMath::Clamp(LateralShare, 0.0f, 1.0f);
+	const FVector Want(Reach.X, Reach.Y * Share, Reach.Z);
+	FVector Aim = Want;
+	float PitchDeg = 0.0f;
+	float BendDeg = 0.0f;
+	float LateralDeg = 0.0f;
+	for (int32 Pass = 0; Pass <= 4; ++Pass)
+	{
+		// the writer's order: pitch, then a roll about the leg's own forward axis -- so the line is atan2(forward, down) at the whole reach
+		// and the sideways angle asin(across / reach); atan2(across, down) exploded as a leg swung forward (the hop's touchdown)
+		const float AimLength = static_cast<float>(Aim.Size());
+		const float AimInPlane = static_cast<float>(FMath::Sqrt(Aim.X * Aim.X + Aim.Z * Aim.Z));
+		const float AimStretch = AimInPlane > 0.01f ? AimLength / AimInPlane : 1.0f;
+		const float Forward = static_cast<float>(Aim.X) * AimStretch;
+		const float Down = static_cast<float>(-Aim.Z) * AimStretch;
+		const float Span = FMath::Clamp(FMath::Sqrt(Forward * Forward + Down * Down),
+			FMath::Abs(Thigh - Shin) + 0.01f, Thigh + Shin - 0.001f);
+		const float Bend = PI - FMath::Acos(FMath::Clamp((Thigh * Thigh + Shin * Shin - Span * Span) / (2.0f * Thigh * Shin), -1.0f, 1.0f));
+		const float Lead = FMath::Acos(FMath::Clamp((Thigh * Thigh + Span * Span - Shin * Shin) / (2.0f * Thigh * Span), -1.0f, 1.0f));
+		const float Toward = FMath::Atan2(Forward, Down);
+		PitchDeg = FMath::RadiansToDegrees(Toward + Lead);
+		BendDeg = FMath::RadiansToDegrees(Bend);
+		LateralDeg = AimLength > 0.01f ? FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(static_cast<float>(Aim.Y) / AimLength, -1.0f, 1.0f))) : 0.0f;
+		if (Pass == 4 || Share <= 0.0f)
+		{
+			break;
+		}
+		const FVector ShinInHip = FRotator(-BendDeg, 0.0f, 0.0f).RotateVector(FVector(0.0, 0.0, -Shin));
+		const FVector Chain = FRotator(PitchDeg, 0.0f, -LateralDeg).RotateVector(FVector(ShinInHip.X, ShinInHip.Y, ShinInHip.Z - Thigh));
+		Aim += Want - Chain;
+	}
+	// a negative roll swings a hanging limb toward +Y (UE's rotation; the canon measured the same on its own legs)
+	OutHip = FRotator(PitchDeg, 0.0f, Share > 0.0f ? -LateralDeg : 0.0f);
+	OutKnee = FRotator(-BendDeg, 0.0f, 0.0f);
 	return true;
 }
 
@@ -3448,8 +3736,28 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 					FRotator SolvedHip = CopiedHip;
 					FRotator SolvedKnee = CopiedShin;
 					if (Performed < 0.999f && Knee != nullptr
-						&& SolveLegToSole(Index, bPlus ? WornPose.SolePlusY : WornPose.SoleMinusY, SolvedHip, SolvedKnee))
+						&& SolveLegToSole(Index, bPlus ? WornPose.SolePlusY : WornPose.SoleMinusY, SolvedHip, SolvedKnee, WornPose.StanceWeight))
 					{
+						// THE CANON HIP'S OUTWARD SWEEP COMES WITH IT (the Mission Handoff's spaced feet, M2): the two-bone solve
+						// works in the leg's sagittal plane and would drop it. Walking and standing it is 0 on the canon -- its
+						// hips are written with no sweep -- so this is the solve exactly as before; only while no performed
+						// pose blends in, so an act's own crossfade is untouched.
+						if (Performed <= 0.001f)
+						{
+							// The roll as the canon wrote it BEFORE its knees-out turn (the canon hip's own rotator is now turned
+							// about its hip-to-sole line, so it no longer holds a clean roll).
+							// As the armed stance comes in, the roll becomes this leg's OWN (solved onto the canon's sole above); the canon's
+							// is kept only for what is left of the share, so the change is eased, never a step.
+							const float StanceShare = FMath::Clamp(WornPose.StanceWeight, 0.0f, 1.0f);
+							SolvedHip.Roll = static_cast<float>(SolvedHip.Roll)
+								+ (bPlus ? WornPose.StanceHipRollPlusY : WornPose.StanceHipRollMinusY) * (1.0f - StanceShare);
+							SolvedHip.Yaw = 0.0f;
+							// and the knees out (wl.Handoff.Stance.KneesOut, 0 unless the stance asks for it) about THIS skin's own
+							// hip-to-sole line, on its own thigh and shin: the foot it solved onto the canon's sole stays there. The
+							// canon's turn is never copied on top (round 5's double turn).
+							SolvedHip = WonderlandKneesOut::TurnAboutSole(SolvedHip, SolvedKnee, FVector(0.0, 0.0, -Part.ThighUU), Part.ShinUU,
+								bPlus ? 1.0f : -1.0f, WornPose.StanceKneesOutDeg);
+						}
 						WriteJoint(Pivot, Part.RestLocation, Performed <= 0.001f ? SolvedHip
 							: FQuat::Slerp(SolvedHip.Quaternion(), CopiedHip.Quaternion(), Performed).Rotator());
 						WriteJointRotation(Knee, Performed <= 0.001f ? SolvedKnee
@@ -3541,9 +3849,29 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 				// against the canon body's own root: 14.880 against 17.519 uu of bob, a ratio of 0.849.
 				//
 				// An authority's value is not a starting point to be scaled. It is the value.
-				WriteJoint(Pivot, 
-					Part.RestLocation + FVector(0.0, WornPose.SwayUU, WornPose.BobUU + WornPose.LiftUU),
-					FRotator(WornPose.BodyPitchDeg, WornPose.BodyYawDeg, WornPose.BodyRollDeg));
+				FVector Carried(WornPose.BodyForwardUU, WornPose.SwayUU, WornPose.BobUU + WornPose.LiftUU);
+				// THE CHARGING STANCE'S BEND ON THIS FIGURE'S OWN HIPS (founder, 10-04; FWonderlandWornPose::StancePivotUU): the canon's
+				// root was carried so its bend turns about the CANON's hips; these hips sit at their own height, so the same rotation
+				// is re-centred on them -- the body bends where its legs join it, and the legs (solved onto the canon's soles) follow.
+				if (WornPose.StancePivotUU > 0.0f)
+				{
+					float HipSum = 0.0f;
+					int32 HipCount = 0;
+					for (const FPartMotion& HipPart : Motions)
+					{
+						if (HipPart.LimbKind == 1 && HipPart.ThighUU > 1.0f && HipPart.ShinUU > 1.0f)
+						{
+							HipSum += HipPart.ThighUU + HipPart.ShinUU;
+							++HipCount;
+						}
+					}
+					if (HipCount > 0)
+					{
+						const FVector Gap(0.0, 0.0, WornPose.StancePivotUU - HipSum / HipCount);
+						Carried += FRotator(WornPose.StancePitchDeg, WornPose.StanceYawDeg, WornPose.StanceRollDeg).RotateVector(Gap) - Gap;
+					}
+				}
+				WriteJoint(Pivot, Part.RestLocation + Carried, FRotator(WornPose.BodyPitchDeg, WornPose.BodyYawDeg, WornPose.BodyRollDeg));
 				break;
 			}
 			WriteJoint(Pivot, 
@@ -3877,3 +4205,38 @@ void AWonderlandCompanionEmbodiment::AnimateBeam(float TimeSeconds, const FWonde
 	bBeamOn = true;
 }
 
+bool AWonderlandCompanionEmbodiment::IsSolidMesh(const UInstancedStaticMeshComponent* Mesh) const
+{
+	for (int32 Index = 0; Index < PartMeshes.Num(); ++Index)
+	{
+		if (PartMeshes[Index].Get() == Mesh)
+		{
+			return PartMeshIsSolid.IsValidIndex(Index) && PartMeshIsSolid[Index];
+		}
+	}
+	return false;
+}
+
+FName AWonderlandCompanionEmbodiment::GetPartMeshName(const UInstancedStaticMeshComponent* Mesh) const
+{
+	for (int32 Index = 0; Index < PartMeshes.Num(); ++Index)
+	{
+		if (PartMeshes[Index].Get() == Mesh)
+		{
+			return PartMeshNames.IsValidIndex(Index) ? PartMeshNames[Index] : NAME_None;
+		}
+	}
+	return NAME_None;
+}
+
+bool AWonderlandCompanionEmbodiment::IsBodyMesh(const UInstancedStaticMeshComponent* Mesh) const
+{
+	for (int32 Index = 0; Index < PartMeshes.Num(); ++Index)
+	{
+		if (PartMeshes[Index].Get() == Mesh)
+		{
+			return PartMeshIsBody.IsValidIndex(Index) && PartMeshIsBody[Index];
+		}
+	}
+	return false;
+}

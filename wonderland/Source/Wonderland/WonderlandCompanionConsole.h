@@ -200,6 +200,14 @@ public:
 	/** Clear the history, as a new mission does. The status row and modes are the feed's and stay. */
 	void ClearLines();
 
+	/**
+	 * CARRY ON FROM A PREDECESSOR (B63). A colour change rebuilds the chrome and remounts both consoles; the new console takes
+	 * over everything the old one showed -- its history and the lines still queued, an answer streaming in, the task and its
+	 * clock, the status row, the modes and labels, the reading position and anything typed -- so a remount changes colours
+	 * and nothing else. Only its own title, accent and emblem, the things the rebuild exists to change, stay its own.
+	 */
+	void AdoptStateFrom(const SWonderlandCompanionConsole& Old);
+
 	/** The older terminals' call: "You" is a prompt, an empty speaker or a dim line is a note, anything else words. */
 	void AddLine(const FString& Speaker, const FString& Text, bool bDim);
 

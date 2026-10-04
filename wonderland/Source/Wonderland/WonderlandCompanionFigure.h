@@ -112,6 +112,13 @@ struct FWonderlandCompanionMaterial
 	 * Older engines stop reading the line at the strength, so a tagged figure still loads everywhere.
 	 */
 	FName Channel;
+	/**
+	 * OPTIONAL: how the surface is DRAWN, after the channel -- `material bone rim 0.016 0.019 0.042 3.200 primary smoke`.
+	 * "smoke" (founder, 2026-10-02, Shadow's colourways): the rim surface keeps a smoky, cloudy relief and same-hue
+	 * highlights in EVERY colour, the designed one included (WonderlandMascotStyle::IsSmokeLook). Empty: drawn as before.
+	 * Older engines ignore the extra word, so the figure still loads everywhere.
+	 */
+	FName Look;
 };
 
 struct FWonderlandCompanionPart

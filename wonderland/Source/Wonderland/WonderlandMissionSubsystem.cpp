@@ -1,6 +1,8 @@
 #include "WonderlandMissionSubsystem.h"
 #include "WonderlandMissionTasks.h"
 #include "WonderlandBeta.h"
+#include "WonderlandSidekicks.h"
+#include "Engine/GameInstance.h"
 
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
@@ -274,6 +276,14 @@ void UWonderlandMissionSubsystem::Deinitialize()
 	{
 		LocalPlayer->OnPlayerControllerChanged().Remove(ControllerChangedHandle);
 	}
+	if (bHandoffBound)
+	{
+		if (FWonderlandMissionHandoff* State = Handoff())
+		{
+			State->OnStateChanged.Remove(HandoffChangedHandle);
+		}
+		bHandoffBound = false;
+	}
 	Super::Deinitialize();
 }
 
@@ -304,6 +314,9 @@ void UWonderlandMissionSubsystem::Attach(APlayerController* Controller)
 	// means a player is present in Wonderland; it does not mean a task is being executed. The contract is
 	// manifested by ShowBeat when a beat arrives that describes a running task, and by nothing else.
 	MountStrip();
+	// THE MISSION HANDOFF, before the first TellTheDog below: a handoff restored HELD at boot (the founder's reconnect rule)
+	// comes up with the presentation already left -- no act frame, no camera swing.
+	BindHandoff();
 
 	// FOLLOW THE TASK SET FROM HERE ON. Attaching still spawns nothing -- a player being present is not a task being
 	// executed, which is the founder's canon of 2026-09-16 -- but a task EXISTING is, and that is what this listens
@@ -326,6 +339,7 @@ void UWonderlandMissionSubsystem::Attach(APlayerController* Controller)
 						// and a contract could walk its whole lifecycle with the mascot standing still -- measured in
 						// PIE as seven stages with dog_act NONE seven times.
 						WeakThis->TellTheDog();
+						WeakThis->SyncHandoffAttachment();
 					}
 				});
 			}
@@ -414,6 +428,14 @@ void UWonderlandMissionSubsystem::TellTheDog()
 	if (Dog == nullptr)
 	{
 		// Not every body the player can wear is the canonical Dog -- the hub pawn and a spectator are not.
+		return;
+	}
+	// HANDED OFF: NO ACT AND NO CONTRACT, so the act ends (the props settle, the arms come home), the mission camera blends
+	// back to the player and every `Contract != nullptr` gate in the Dog goes quiet with it. The mission runs on; the Dog
+	// is the player's again (founder, 2026-10-02: "exit the player-facing animation", "no book/brush/lens while handed off").
+	if (IsPresentationDetached())
+	{
+		Dog->SetMissionAct(EWonderlandDogAct::None, nullptr);
 		return;
 	}
 	bool bMissionRunning = WonderlandBeatShowsContract(Beat);
@@ -619,6 +641,8 @@ bool UWonderlandMissionSubsystem::SetBeatById(FName BeatId)
  */
 void UWonderlandMissionSubsystem::ShowBeat(EWonderlandMissionBeat Wanted)
 {
+	// THE BEAT IS MISSION STATE AS THE WORLD HOLDS IT: a write the Mission Handoff path must never make (the write spy)
+	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandMissionSubsystem::ShowBeat"));
 	const bool bWasShowing = WonderlandBeatShowsContract(Beat);
 	const bool bShowing = WonderlandBeatShowsContract(Wanted);
 	Beat = Wanted;
@@ -628,6 +652,7 @@ void UWonderlandMissionSubsystem::ShowBeat(EWonderlandMissionBeat Wanted)
 		DismissContract();
 		TellTheDog();
 		TellTheCompanions();
+		SyncHandoffAttachment();
 		return;
 	}
 	if (AWonderlandMissionOrb* Body = EnsureContract())
@@ -660,6 +685,7 @@ void UWonderlandMissionSubsystem::ShowBeat(EWonderlandMissionBeat Wanted)
 	}
 	TellTheDog();
 	TellTheCompanions();
+	SyncHandoffAttachment();
 }
 
 FName UWonderlandMissionSubsystem::AdvanceBeat()
@@ -671,6 +697,7 @@ FName UWonderlandMissionSubsystem::AdvanceBeat()
 
 void UWonderlandMissionSubsystem::ResetProgression()
 {
+	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandMissionSubsystem::ResetProgression"));
 	if (AWonderlandMissionOrb* Body = Orb.Get())
 	{
 		Body->ResetProgression();
@@ -776,7 +803,9 @@ void UWonderlandMissionSubsystem::TellTheCompanions()
 	{
 		return;
 	}
-	const bool bMissionRunning = WonderlandBeatShowsContract(Beat);
+	// HANDED OFF, the companions fly no mission formation and send nothing into the Contract: they are the user's swords
+	// (or becoming them). What they SAY carries on -- their consoles are told by TellTheTerminals, which this does not touch.
+	const bool bMissionRunning = WonderlandBeatShowsContract(Beat) && !IsPresentationDetached();
 	const int32 Count = Companions->GetEmbodimentCount();
 	// Joined companions share a circle between themselves, opposite each other, so they never meet.
 	const int32 JoinedCount = (bLlmJoined ? 1 : 0) + (bJhinnJoined ? 1 : 0);
@@ -827,6 +856,9 @@ AWonderlandCompanionEmbodiment* UWonderlandMissionSubsystem::Companion(int32 Ind
 
 void UWonderlandMissionSubsystem::SetJoinedIn(bool bLlmCompanion, bool bJhinnAgent)
 {
+	// WHO TAKES PART IS THE MISSION'S, not the presentation's: the handoff never changes it (and the QA's positive control
+	// calls this inside a handoff scope on purpose, to prove the spy is wired to a real mutator)
+	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandMissionSubsystem::SetJoinedIn"));
 	bLlmJoined = bLlmCompanion;
 	bJhinnJoined = bJhinnAgent;
 	UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION simulated /join in: LLM Companion %s, Jhinn %s"),
@@ -866,8 +898,10 @@ bool UWonderlandMissionSubsystem::PlayScenario(FName ScenarioLetter, float Secon
 	const FName Site(*CVarMissionSite.GetValueOnGameThread().TrimStartAndEnd());
 	UWorld* World = GetWorld();
 	UWonderlandTravelSubsystem* Travel = World != nullptr ? World->GetSubsystem<UWonderlandTravelSubsystem>() : nullptr;
+	// HANDED OFF, A MISSION STARTS WHERE THE USER IS (Second's V3-3): no travel takes the Dog to the site, and the mission
+	// starts with its presentation already left. Returning the swords later stages it where the Dog stands then.
 	const bool bStayHere = Site.IsNone() || Site == FName(TEXT("none")) || Travel == nullptr
-		|| Travel->GetNearestOfferedDestination(1500.0) == Site;
+		|| Travel->GetNearestOfferedDestination(1500.0) == Site || IsPresentationDetached();
 	if (!bStayHere)
 	{
 		FText Refusal;
@@ -1174,7 +1208,9 @@ void UWonderlandMissionSubsystem::StartScenarioAndWatch(FName ScenarioLetter, fl
 	// ONE COMMAND TO WATCH IT: the terminal the mission narrates into opens with it.
 	ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
 	UWonderlandUiSubsystem* Ui = Player != nullptr ? Player->GetSubsystem<UWonderlandUiSubsystem>() : nullptr;
-	if (bRunning && Ui != nullptr && !Ui->IsLiveTerminalOpen())
+	// HANDED OFF, the terminal does not open on its own: it would take the keyboard from a user who is roaming. The strip
+	// names the mission, and Ctrl+T opens the terminal whenever the user wants it.
+	if (bRunning && Ui != nullptr && !Ui->IsLiveTerminalOpen() && !IsPresentationDetached())
 	{
 		Ui->ToggleLiveTerminal();
 	}
@@ -1226,6 +1262,7 @@ void UWonderlandMissionSubsystem::TellTheTerminals(FName EventType, bool bBeatCh
 	}
 	Ui->NarrateMissionEvent(EventType, Beat, FString::Printf(TEXT("%s %d/%d"), *GetChakraName(), GetChakraStep(), WonderlandChakraSteps),
 		bBeatChanged, bNewMission, bLlmJoined, bJhinnJoined);
+	++TerminalNarrations;
 }
 
 int32 UWonderlandMissionSubsystem::GetCompanionPulsesSent() const
@@ -1288,6 +1325,11 @@ FString UWonderlandMissionSubsystem::GetDogPerformingLabel() const
 
 FString UWonderlandMissionSubsystem::GetDogActLabel() const
 {
+	// HANDED OFF, THE DOG PERFORMS NOTHING: the strip says so rather than naming the act the beat would have asked for
+	if (IsPresentationDetached())
+	{
+		return TEXT("MISSION HANDOFF");
+	}
 	return WonderlandDogActName(WonderlandDogActForBeat(Beat));
 }
 
@@ -1330,9 +1372,17 @@ bool UWonderlandMissionSubsystem::StartFixture(FName FixtureId, float SecondsPer
 	{
 		return false;
 	}
+	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandMissionSubsystem::StartFixture"));
 	StopFixture();
 	Playing = Found;
 	Fold = FWonderlandMissionFold();
+	OfferedRecord.Reset();
+	TerminalNarrations = 0;
+	{
+		const APlayerController* Controller = BoundController.Get();
+		const UWorld* World = Controller != nullptr ? Controller->GetWorld() : GetWorld();
+		FixtureStartedAt = World != nullptr ? World->GetTimeSeconds() : 0.0;
+	}
 	PlayIndex = 0;
 	PlayClock = 0.0f;
 	FinishHold = 0.0f;
@@ -1355,6 +1405,10 @@ bool UWonderlandMissionSubsystem::StartFixture(FName FixtureId, float SecondsPer
 void UWonderlandMissionSubsystem::StopFixture()
 {
 	const bool bWasPlaying = Playing != nullptr;
+	if (bWasPlaying)
+	{
+		FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandMissionSubsystem::StopFixture"));
+	}
 	if (PlayTicker.IsValid())
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(PlayTicker);
@@ -1391,12 +1445,26 @@ FString UWonderlandMissionSubsystem::GetLastEventVerdict() const
 
 void UWonderlandMissionSubsystem::OfferEvent(const FWonderlandMissionEvent& Event)
 {
+	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandMissionSubsystem::OfferEvent"));
 	LastEventType = Event.Type;
 	// A labelled stand-in names its beat; a real event is resolved from its type. Both go through the same
 	// fold, so the counters mean the same thing either way.
 	LastVerdict = Event.bSimulationOnly
 		? WonderlandApplySimulatedEvent(Fold, Event)
 		: WonderlandApplyEvent(Fold, Event);
+	// THE CONTROL RUN'S RECORD (Mission Handoff, Second's B3): the event, the verdict, the beat it leaves the fold on, and when.
+	// Bounded: a fixture is a few dozen events; a runaway stream stops being recorded rather than growing without end.
+	if (OfferedRecord.Num() < 512)
+	{
+		FWonderlandOfferedEvent& Row = OfferedRecord.AddDefaulted_GetRef();
+		Row.EventType = Event.Type;
+		Row.Verdict = WonderlandEventVerdictName(LastVerdict);
+		Row.Beat = WonderlandBeatId(Fold.Beat);
+		const APlayerController* Controller = BoundController.Get();
+		const UWorld* World = Controller != nullptr ? Controller->GetWorld() : GetWorld();
+		Row.AtSeconds = World != nullptr ? static_cast<float>(World->GetTimeSeconds() - FixtureStartedAt) : 0.0f;
+		Row.bHandedOff = IsPresentationDetached();
+	}
 
 	UE_LOG(LogWonderlandMissionUi, Verbose, TEXT("WLMISSION event %s -> %s | %s"),
 		*Event.Type.ToString(), WonderlandEventVerdictName(LastVerdict), *WonderlandDescribeFold(Fold));
@@ -1717,4 +1785,183 @@ FName UWonderlandMissionSubsystem::GetFoldMissionId() const
 		}
 	}
 	return Fold.MissionId;
+}
+
+/* ------------------------------------------------------------------ Mission Handoff: the presentation, left and resumed */
+
+namespace
+{
+	/** The contract the Dog would be performing (a working one first, else the selected one), or nullptr: GetPerformingState's rule. */
+	const FWonderlandMissionTask* PerformingContract(const UWonderlandMissionTaskSubsystem& Tasks)
+	{
+		for (const FWonderlandMissionTask& Row : Tasks.GetTasks())
+		{
+			switch (Row.State)
+			{
+			case EWonderlandTaskState::Preparation:
+			case EWonderlandTaskState::Research:
+			case EWonderlandTaskState::Implementation:
+			case EWonderlandTaskState::Verification:
+			case EWonderlandTaskState::Review:
+			case EWonderlandTaskState::Repair:
+				return &Row;
+			default:
+				break;
+			}
+		}
+		const FWonderlandMissionTask* Chosen = Tasks.GetSelectedTask();
+		return Chosen != nullptr && WonderlandDogActForTaskState(Chosen->State) != EWonderlandDogAct::None ? Chosen : nullptr;
+	}
+}
+
+FWonderlandMissionHandoff* UWonderlandMissionSubsystem::Handoff() const
+{
+	const ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	UGameInstance* Instance = Player != nullptr ? Player->GetGameInstance() : nullptr;
+	UWonderlandSidekickSubsystem* Sidekicks = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSidekickSubsystem>() : nullptr;
+	return Sidekicks != nullptr ? &Sidekicks->GetMissionHandoff() : nullptr;
+}
+
+bool UWonderlandMissionSubsystem::IsPresentationDetached() const
+{
+	const FWonderlandMissionHandoff* State = Handoff();
+	return State != nullptr && State->IsEquipped();
+}
+
+bool UWonderlandMissionSubsystem::IsMissionAnimationRunning() const
+{
+	if (WonderlandBeatShowsContract(Beat))
+	{
+		return true;
+	}
+	const UWonderlandMissionTaskSubsystem* Tasks = TaskSet();
+	return Tasks != nullptr && PerformingContract(*Tasks) != nullptr;
+}
+
+FString UWonderlandMissionSubsystem::GetRunningMissionId() const
+{
+	if (WonderlandBeatShowsContract(Beat))
+	{
+		// The fold's mission (a fixture's, or the followed Julius run's). A beat with no id yet is still A mission.
+		const FName Id = GetFoldMissionId();
+		const FString Text = Id.IsNone() ? FString() : Id.ToString();
+		return WonderlandBeta::IsSafeId(Text) ? Text : FString(TEXT("mission"));
+	}
+	const UWonderlandMissionTaskSubsystem* Tasks = TaskSet();
+	const FWonderlandMissionTask* Row = Tasks != nullptr ? PerformingContract(*Tasks) : nullptr;
+	if (Row == nullptr)
+	{
+		return FString();
+	}
+	// THE BACKEND'S ID WHEN IT HAS ONE: it survives a restart, the local id does not (the task set's own rule)
+	return WonderlandBeta::IsSafeId(Row->ContractId) ? Row->ContractId : Row->LocalId.ToString(EGuidFormats::Digits);
+}
+
+void UWonderlandMissionSubsystem::BindHandoff()
+{
+	if (bHandoffBound)
+	{
+		return;
+	}
+	FWonderlandMissionHandoff* State = Handoff();
+	if (State == nullptr)
+	{
+		return;
+	}
+	HandoffChangedHandle = State->OnStateChanged.AddUObject(this, &UWonderlandMissionSubsystem::HandleHandoffState);
+	bHandoffBound = true;
+	if (State->IsEquipped())
+	{
+		UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION the Mission Handoff is %s at attach: the mission presentation starts LEFT"),
+			FWonderlandMissionHandoff::StateName(State->GetState()));
+	}
+	// A HANDOFF RESTORED AT BOOT comes back roaming (nothing could be checked before the world existed); a mission that IS
+	// running now -- a contract restored from this PC -- attaches it again, honestly, because it exists.
+	RunningMissionSeen.Reset();
+	SyncHandoffAttachment();
+}
+
+void UWonderlandMissionSubsystem::HandleHandoffState(EWonderlandHandoffState From, EWonderlandHandoffState To)
+{
+	if (From == EWonderlandHandoffState::Idle && To != EWonderlandHandoffState::Idle)
+	{
+		LeavePresentation();
+	}
+	else if (From != EWonderlandHandoffState::Idle && To == EWonderlandHandoffState::Idle)
+	{
+		ResumePresentationHere();
+	}
+}
+
+void UWonderlandMissionSubsystem::LeavePresentation()
+{
+	// THE HANDOFF PATH, ON THE SPY'S BOOKS: nothing below may write mission truth
+	FWonderlandMissionHandoff::FScope Scope;
+	++PresentationLeaves;
+	// "the mission runs on" only when there is one (Second's round-5 nit: it was said with none)
+	UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION Mission Handoff: the presentation is LEFT at beat %s (%s)"),
+		*WonderlandBeatId(Beat).ToString(), IsMissionAnimationRunning() ? TEXT("a mission animation was running; the mission runs on")
+			: TEXT("no mission animation was running; nothing to run on"));
+	// The Dog and the companions let go at once -- never waited out. The Contract stays where the mission put it: the work
+	// is there, and the user may roam away from it.
+	TellTheDog();
+	TellTheCompanions();
+}
+
+void UWonderlandMissionSubsystem::ResumePresentationHere()
+{
+	FWonderlandMissionHandoff::FScope Scope;
+	++PresentationResumes;
+	APlayerController* Controller = BoundController.Get();
+	const APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	LastResumeAt = Pawn != nullptr ? Pawn->GetActorLocation() : FVector::ZeroVector;
+	bool bRestaged = false;
+	// RE-STAGED WHERE THE DOG STANDS (Second's V3-2): the user may have roamed hundreds of metres from the site. The Contract
+	// comes to them through the same probe and staging a mission starts with -- no travel, no cut -- and the act that plays
+	// is the CURRENT beat's, never a replay of the ones the user skipped.
+	if (AWonderlandMissionOrb* Body = Orb.Get())
+	{
+		if (WonderlandBeatShowsContract(Beat) && Pawn != nullptr)
+		{
+			Body->ReleaseAnchor();
+			ProbeClearanceNow();
+			ApplyStaging(LastStaging);
+			if (WonderlandDogActForBeat(Beat) != EWonderlandDogAct::None)
+			{
+				Body->AnchorHere();
+			}
+			bRestaged = true;
+		}
+	}
+	TellTheDog();
+	TellTheCompanions();
+	UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION Mission Handoff over: the presentation resumes at beat %s%s"),
+		*WonderlandBeatId(Beat).ToString(), bRestaged ? *FString::Printf(TEXT(", the Contract re-staged by the Dog at %s"), *LastResumeAt.ToCompactString())
+		: TEXT(" (no Contract to stage)"));
+}
+
+void UWonderlandMissionSubsystem::SyncHandoffAttachment()
+{
+	const FString Now = GetRunningMissionId();
+	if (Now == RunningMissionSeen)
+	{
+		return;
+	}
+	const FString Was = RunningMissionSeen;
+	RunningMissionSeen = Now;
+	FWonderlandMissionHandoff* State = Handoff();
+	if (State == nullptr || !State->IsEquipped())
+	{
+		return;
+	}
+	// A mission that ENDED while handed off clears the attachment (the swords stay); one that STARTED takes it (detached
+	// from the start); a restart of the scenario moves it to the new mission -- never two.
+	if (!Was.IsEmpty())
+	{
+		State->DetachMission(Was);
+	}
+	if (!Now.IsEmpty())
+	{
+		State->AttachMission(Now);
+	}
 }

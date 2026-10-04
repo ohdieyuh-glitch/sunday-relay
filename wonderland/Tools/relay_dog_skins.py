@@ -70,15 +70,18 @@ class Figure:
         self.part_names = set()
         self.boxes = []
 
-    def material(self, name, kind, rgb, strength=1.0, channel=None):
+    def material(self, name, kind, rgb, strength=1.0, channel=None, look=None):
         # CHANNEL (founder, 2026-09-29): an optional player-colour tag written after the strength -- "secondary"
         # makes the surface follow the mascot SECONDARY at its authored brightness, "secondary_light" the same
         # colour lifted toward white, "secondary_deep" a deep shade of it for a lit cloth (Jack Flame's suit, 2026-09-30).
         # The engine reads it in WonderlandCompanionFigure.cpp; older engines stop at
         # the strength, so a tagged figure loads everywhere.
+        # LOOK (B65, founder 2026-10-02): an optional word after the channel saying how the surface is DRAWN -- "smoke"
+        # keeps Shadow's cloudy relief and same-hue highlights in every colour. A look needs a channel before it (use
+        # "none" for an untagged surface); older engines ignore the extra word.
         if name in self.material_names:
             return
-        self.materials.append((name, kind, rgb, strength, channel))
+        self.materials.append((name, kind, rgb, strength, channel if channel else ("none" if look else None), look))
         self.material_names.add(name)
 
     def part(self, name, parent, pivot, motion="none", a=None, b=None):
@@ -473,11 +476,12 @@ class Figure:
         extent = getattr(self, "dog_extent", None)
         if extent:
             lines.append("body %.3f %.3f" % (extent[0], extent[1]))
-        for name, kind, rgb, strength, channel in self.materials:
+        for name, kind, rgb, strength, channel, look in self.materials:
             if kind in ("glow", "add"):
                 strength *= GLOW_SCALE
-            lines.append("material %s %s %.4f %.4f %.4f %.3f%s" % (name, kind, rgb[0], rgb[1], rgb[2], strength,
-                                                               "" if not channel else " " + channel))
+            lines.append("material %s %s %.4f %.4f %.4f %.3f%s%s" % (name, kind, rgb[0], rgb[1], rgb[2], strength,
+                                                               "" if not channel else " " + channel,
+                                                               "" if not look else " " + look))
         for name, parent, pivot, motion, a, b in self.parts:
             extra = "" if a is None else (" %.3f" % a) + ("" if b is None else " %.3f" % b)
             lines.append("part %s %s %.3f %.3f %.3f %s%s" % (name, parent, pivot[0], pivot[1], pivot[2], motion, extra))
@@ -3225,8 +3229,12 @@ def shadow_flame():
     """
     figure = Figure("RELAY DOG SKIN -- SHADOW FLAME", 7501)
     # start()'s materials, with the coat's rim strength raised: at strength 1 a near-black rim is invisible.
-    figure.material("bone", "rim", SHADOW_COAT, 3.2)
-    figure.material("bonedeep", "lit", SHADOW_COAT_DEEP, 1.0)
+    # THE SHELL IS THE PRIMARY REGION (founder, 2026-10-02: "WHITE -> pure white ... not a blend with the skin's original
+    # dark body color"). Tagged `primary`, a chosen PRIMARY becomes these surfaces' colour outright; the multiply every other
+    # skin's near-white shell takes would leave this near-black coat near-black whatever was picked. Strips, visor, eyes and
+    # the blue void edges are not the shell and keep their designed colours.
+    figure.material("bone", "rim", SHADOW_COAT, 3.2, "primary", "smoke")
+    figure.material("bonedeep", "lit", SHADOW_COAT_DEEP, 1.0, "primary")
     figure.material("visor", "lit", VISOR, 1.0)
     figure.material("eye", "glow", SHADOW_EYES, 7.5)
     figure.material("eyehalo", "add", SHADOW_EYES, 7.5 * 0.35)
@@ -3234,7 +3242,9 @@ def shadow_flame():
     # read in the world but VANISHED in the wardrobe (black on the stage's black) -- the founder's "faint energy edges"
     # are what lets a black strip exist against black. At (0.010, 0.014, 0.046) x 3.0 the wardrobe's showcase light turned
     # whole ribbons royal blue ("very subtle rim illumination" only), so the edge is greyer and dimmer.
-    figure.material("shadow", "rim", SHADOW_STRIP, 2.4)
+    # COLOR 3 (B65, founder 2026-10-02): the strips follow their own STRIPS colour (`strip`), and keep the smoke look's
+    # same-hue edge in every colour -- black strips stay black with a dark-grey edge, white strips white.
+    figure.material("shadow", "rim", SHADOW_STRIP, 2.4, "strip", "smoke")
     figure.material("voidedge", "glow", SHADOW_EDGE, 0.30)
     base_dog(figure)          # marks the Dog's extent: nothing added below can change its height
     d = DOG

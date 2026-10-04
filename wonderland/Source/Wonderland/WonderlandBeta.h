@@ -97,6 +97,20 @@ namespace WonderlandBeta
 	 */
 	WONDERLAND_API USaveGame* LoadSealedGame(const FString& Path, UClass* Expected, FString& OutWhy);
 
+	/**
+	 * A TEXT FILE, SEALED: the same seal as a save game's (the tag, the length, the CRC-32) after the text's UTF-8 bytes,
+	 * written atomically. For the plain-C++ stores -- C.A.R.D. and the Mission Handoff record -- which have no USaveGame
+	 * class by design (a new reflected name shifts the FName table Niagara hashes).
+	 */
+	WONDERLAND_API bool SaveSealedText(const FString& Path, const FString& Text);
+
+	/**
+	 * The text at Path when its seal holds and it is at most MaxBytes; anything else is refused: false, with OutWhy saying
+	 * why. A missing file is false with OutWhy empty. There is no unsealed path: these files were sealed from their first
+	 * byte.
+	 */
+	WONDERLAND_API bool LoadSealedText(const FString& Path, int64 MaxBytes, FString& OutText, FString& OutWhy);
+
 	/** Moves a refused save beside itself as <name>.refused-<UTC><ext>, so the next save cannot overwrite it; the new path, or empty. */
 	WONDERLAND_API FString SetAsideRefusedSave(const FString& Path);
 

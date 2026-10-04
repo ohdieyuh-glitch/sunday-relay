@@ -193,6 +193,35 @@ namespace RelayDogStride
 		return CurrentOffset + (Target - CurrentOffset) * Alpha;
 	}
 
+	FStride SprintStride(const FStride& Run, float SpeedUU, float LegLengthUU, float Weight, float CyclesPerSecond)
+	{
+		const float W = Clamp(Weight, 0.0f, 1.0f);
+		if (W <= 0.0f || SpeedUU <= 1.0f || Run.StrideLength <= 1.0f)
+		{
+			return Run;
+		}
+		const float Leg = LegLengthUU > 1.0f ? LegLengthUU : 1.0f;
+		const float Cycles = Clamp(CyclesPerSecond, 2.5f, 6.0f);
+		// THE CADENCE HELD: as fast as the body goes, the legs cycle at a sprinter's rate, so the stride is what grows
+		const float Long = SpeedUU / Cycles > Run.StrideLength ? SpeedUU / Cycles : Run.StrideLength;
+		// THE PLANTED PART FITS THE REACH: the stance shortens and the flight between steps lengthens, so a planted foot never
+		// travels farther than the leg can follow it (92% of the reach, the rest is the slack the IK needs)
+		const float Excursion = 2.0f * ReachHalfSpan(Leg, Run.HipHeightUU) * 0.92f;
+		const float Duty = Clamp(Excursion / Long, 0.16f, Run.DutyFactor);
+		FStride Out = Run;
+		Out.StrideLength = Run.StrideLength + (Long - Run.StrideLength) * W;
+		Out.DutyFactor = Run.DutyFactor + (Duty - Run.DutyFactor) * W;
+		// a bound, not a shuffle: the feet come up and the body rides the flight -- but no higher than the run's own (round 7a, the real
+		// arithmetic driven through the sprint, s3d_harness): at 0.34 of the leg the swing thigh rose to 120 deg, 30 past horizontal, a
+		// cartoon high kick; at 0.24 it peaks at ~102, the accepted 520 uu/s run's own ~104, at the same cadence
+		Out.LiftHeight = Run.LiftHeight + (Leg * 0.24f - Run.LiftHeight) * W;
+		Out.BobHeight = Run.BobHeight + (Leg * 0.14f - Run.BobHeight) * W;
+		// NO LEAN OR ARMS HERE. The sprint's bend into the speed is the armed stance's (RelayDogArmedStance: DashBendDeg, about the
+		// hips): LeanDeg is written as a pitch that leans this rig BACK (FDogPose::FStanceBody). And its arms PUMP with the stride
+		// there -- this used to push ArmsBack to 1, the arms locked behind with no swing at all (Second's review, 10-04).
+		return Out;
+	}
+
 	float ReachHalfSpan(float LegLengthUU, float HipHeightUU)
 	{
 		const float Leg = LegLengthUU > 0.1f ? LegLengthUU : 0.1f;
@@ -422,7 +451,8 @@ namespace RelayDogStride
 		SpringStep(SpeedFilter, In.SpeedUU, 0.16f, Dt);
 		const float Speed = SpeedFilter.Value > 0.0f ? SpeedFilter.Value : 0.0f;
 
-		const FStride Stride = StrideForSpeed(Speed, LegLengthUU);
+		// THE MISSION HANDOFF SPRINT rides on the run (0 = exactly the run)
+		const FStride Stride = SprintStride(StrideForSpeed(Speed, LegLengthUU), Speed, LegLengthUU, In.SprintWeight, In.SprintCycles);
 		Current.Stride = Stride;
 		Current.SpeedUU = Speed;
 

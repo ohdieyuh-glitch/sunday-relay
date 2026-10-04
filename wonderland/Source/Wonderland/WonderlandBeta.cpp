@@ -499,6 +499,63 @@ namespace WonderlandBeta
 		return Loaded;
 	}
 
+	bool SaveSealedText(const FString& Path, const FString& Text)
+	{
+		const FTCHARToUTF8 Utf8(*Text, Text.Len());
+		TArray<uint8> Bytes;
+		Bytes.Append(reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
+		const uint32 Length = static_cast<uint32>(Bytes.Num());
+		const uint32 Crc = FCrc::MemCrc32(Bytes.GetData(), Bytes.Num());
+		Bytes.Append(SealTag, UE_ARRAY_COUNT(SealTag));
+		PutU32(Bytes, Length);
+		PutU32(Bytes, Crc);
+		return SaveBytesAtomically(Path, Bytes);
+	}
+
+	bool LoadSealedText(const FString& Path, int64 MaxBytes, FString& OutText, FString& OutWhy)
+	{
+		OutText.Reset();
+		OutWhy.Reset();
+		IFileManager& Files = IFileManager::Get();
+		if (!Files.FileExists(*Path))
+		{
+			return false;
+		}
+		// THE CAP IS READ FROM THE SIZE, before a byte is loaded: an oversized file is refused without being read into memory
+		const int64 Size = Files.FileSize(*Path);
+		if (Size < SealSize || Size - SealSize > FMath::Min(MaxBytes, MaxSaveBytes))
+		{
+			OutWhy = FString::Printf(TEXT("it is %lld bytes"), Size);
+			return false;
+		}
+		TArray<uint8> File;
+		if (!FFileHelper::LoadFileToArray(File, *Path) || File.Num() < SealSize)
+		{
+			OutWhy = TEXT("it could not be read");
+			return false;
+		}
+		const uint8* Seal = File.GetData() + File.Num() - SealSize;
+		if (FMemory::Memcmp(Seal, SealTag, UE_ARRAY_COUNT(SealTag)) != 0)
+		{
+			OutWhy = TEXT("it carries no seal");
+			return false;
+		}
+		const uint32 Length = GetU32(Seal + 8);
+		const uint32 Crc = GetU32(Seal + 12);
+		if (static_cast<int64>(Length) != static_cast<int64>(File.Num() - SealSize))
+		{
+			OutWhy = FString::Printf(TEXT("its seal names %u bytes but %d precede it"), Length, File.Num() - SealSize);
+			return false;
+		}
+		if (FCrc::MemCrc32(File.GetData(), static_cast<int32>(Length)) != Crc)
+		{
+			OutWhy = TEXT("its bytes no longer match their seal");
+			return false;
+		}
+		OutText = FString::ConstructFromPtrSize(reinterpret_cast<const UTF8CHAR*>(File.GetData()), static_cast<int32>(Length));
+		return true;
+	}
+
 	FString SetAsideRefusedSave(const FString& Path)
 	{
 		// THE FILE NAME ONLY is rewritten, never the folders above it.

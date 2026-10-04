@@ -429,12 +429,16 @@ namespace WonderlandSocialQa
 //   LSQ6 A's party invitation reached B, B accepted: both see one party of two
 //   LSQ7 each sees the other ONLINE (presence across clients)
 //   LSQ8 MULTIPLAYER PHASE 1: both in the same world context, each sees the other's Relay Dog STANDING in its own world
-//   LSQ9 B blocks A: each one's figure of the other disappears, and A's friendship with B is gone from A's own view
+//   F1, THE FOUNDER'S FINAL RULE ("LEADER REMOVES, ELSE BLOCKER LEAVES", every shared-party block confirmed first). A leads
+//   the party. By default B (a member) blocks A; with `leaderblocks` A (the leader) blocks B:
+//   LSQ10 the blocker's first BLOCK only WARNS (the founder's words) and changes nothing: still friends, still one party of two
+//   LSQ9  confirmed: each one's figure of the other disappears, and the friendship is gone from each one's own view
+//   LSQ11 the membership by the rule: B blocking -> B left, A still leads; A blocking -> B removed, A still leads
 // `... restart` (after the DURABLE dev server was restarted from its database alone, fresh sessions, fresh clients):
-//   LSQR1 the conversation came back, both messages in order    LSQR2 the block came back: no friendship either way; A (the
-//   BLOCKED player) gets no profile of B at all, B (the blocker) sees A as BLOCKED -- the profile authority's rule ("somebody
-//   the subject has blocked does not get their profile"), which keeps the blocker able to see and undo the block
-//                                                                 LSQR3 (A) A is still in the party A leads
+//   LSQR1 the conversation came back, both messages in order    LSQR2 the block came back: no friendship either way; the
+//   BLOCKED player gets no profile of the blocker at all, the blocker sees them as BLOCKED -- the profile authority's rule
+//   ("somebody the subject has blocked does not get their profile"), which keeps the blocker able to see and undo the block
+//   LSQR3 the membership came back: A still leads a party B is not in; B is in no party
 // Frames to Saved/Screenshots/WLSOCIALLIVE. Sends no input; quits when its side is done (or after 4 minutes).
 namespace WonderlandSocialLiveQa
 {
@@ -445,6 +449,8 @@ namespace WonderlandSocialLiveQa
 		FString Peer;
 		bool bA = true;
 		bool bRestart = false;
+		/** F1: the LEADER (A) blocks; by default the member (B) does. */
+		bool bLeaderBlocks = false;
 		FString Url;
 		int32 Phase = 0;
 		double At = 0.0;
@@ -545,6 +551,29 @@ namespace WonderlandSocialLiveQa
 		return S.bHasParty && S.Party.Members.Num() == 2
 			&& S.Party.Members.ContainsByPredicate([&A](const FWonderlandSocialPartyMember& M) { return M.UserId == A; })
 			&& S.Party.Members.ContainsByPredicate([&B](const FWonderlandSocialPartyMember& M) { return M.UserId == B; });
+	}
+
+	/** F1: whether THIS client is the one who blocks (B by default; A, the leader, with `leaderblocks`). */
+	bool IsBlocker(const FLive& L) { return L.bLeaderBlocks ? L.bA : !L.bA; }
+
+	/** F1's membership, as this client sees it after the separation: A still leads a party Peer is not in; B is in none. */
+	/** F1: the founder's warning, in their words, on the hub the BLOCK was asked from -- the leader's or the member's. */
+	bool WarningOnHub(const FLive& L, const UWonderlandUiSubsystem* U)
+	{
+		const FString Shown = U != nullptr ? U->DescribeOpenSocialHub() : FString();
+		const TCHAR* Want = L.bA ? TEXT("will also remove them from your party. Choose BLOCK again to confirm.")
+			: TEXT("will cause you to leave this party. Choose BLOCK again to confirm.");
+		return Shown.Contains(Want);
+	}
+
+	bool MembershipRight(const FLive& L, const FWonderlandSocialSnapshot& S, const FString& PeerId, FString& OutWhat)
+	{
+		const bool bPeerIn = S.bHasParty && S.Party.Members.ContainsByPredicate([&PeerId](const FWonderlandSocialPartyMember& M) { return M.UserId == PeerId; });
+		OutWhat = S.bHasParty
+			? FString::Printf(TEXT("party %s, %d member(s), %s, %s %s"), *S.Party.PartyId, S.Party.Members.Num(),
+				S.Party.bViewerIsLeader ? TEXT("leading it") : TEXT("not leading"), *PeerId, bPeerIn ? TEXT("STILL IN IT") : TEXT("not in it"))
+			: FString(TEXT("in no party"));
+		return L.bA ? (S.bHasParty && S.Party.bViewerIsLeader && !bPeerIn) : !S.bHasParty;
 	}
 
 	void Finish(FLive& L)
@@ -702,15 +731,52 @@ namespace WonderlandSocialLiveQa
 			{
 				Shot(L, TEXT("4_world_peer_visible"));
 				RestoreView(L, World);
+				Next(IsBlocker(L) ? 33 : 32);
+			}
+			break;
+		case 33:   // `leaderblocks`: A (the leader) blocks B, once B has had time to photograph A's Dog -- the FIRST BLOCK only warns
+			if (In >= 10.0)
+			{
+				// the BLOCK is asked from the open hub, so the founder's warning lands on a surface the frame can show
+				U->OpenSocialHub(TEXT("party"));
+				Next(36);
+			}
+			break;
+		case 36:
+			if (In >= 1.5)
+			{
+				U->RequestSocialAction(TEXT("blocks.add"), PeerId);
+				Next(34);
+			}
+			break;
+		case 34:   // LSQ10 (A): warned, nothing changed; then the confirming BLOCK
+			if (In >= 2.0)
+			{
+				const bool bWarnShown = WarningOnHub(L, U);
+				Shot(L, TEXT("4b_block_warning"));
+				Check(L, TEXT("LSQ10"), bWarnShown && U->GetPendingBlockSubject() == PeerId && S != nullptr && Friend(*S, PeerId) != nullptr && PartyOfTwo(*S, MeId, PeerId),
+					FString::Printf(TEXT("the first BLOCK only warned (waiting on %s): the founder's warning on the hub %s, still friends %s, still one party of two %s"),
+						*U->GetPendingBlockSubject(), bWarnShown ? TEXT("yes") : TEXT("NO"), S != nullptr && Friend(*S, PeerId) != nullptr ? TEXT("yes") : TEXT("NO"),
+						S != nullptr && PartyOfTwo(*S, MeId, PeerId) ? TEXT("yes") : TEXT("NO")));
+				U->RequestSocialAction(TEXT("blocks.add"), PeerId);
+				U->CloseOverlay();
 				Next(32);
 			}
 			break;
-		case 32:   // LSQ9 (A): B blocks A -- B's figure leaves A's world, the friendship leaves A's view
+		case 32:   // LSQ9 + LSQ11 (A): the figure, the friendship and B's party place gone from A's own view; A still leads
 			if (Live != nullptr && !Live->GetWorldView().Avatars.ContainsByPredicate([&PeerId](const FWonderlandRemoteAvatar& A) { return A.UserId == PeerId; })
 				&& Social->NumRemotePlayers() == 0 && S != nullptr && Friend(*S, PeerId) == nullptr)
 			{
+				FString What;
+				const bool bMembership = MembershipRight(L, *S, PeerId, What);
+				if (!bMembership && In < 60.0)
+				{
+					break;   // the party change reaches A's view on its next read (a block is told to nobody: the resync)
+				}
 				Check(L, TEXT("LSQ9"), true, FString::Printf(TEXT("after the block: no figure of %s in %s's world (%s), no friendship in %s's view"), *PeerId, *MeId,
 					*Social->DescribeRemotePlayers(), *MeId));
+				Check(L, TEXT("LSQ11"), bMembership, FString::Printf(TEXT("%s: %s (want: A still leads, %s not in the party -- %s)"),
+					*MeId, *What, *PeerId, L.bLeaderBlocks ? TEXT("the leader's block removed them") : TEXT("the blocker left, the leader was not kicked")));
 				Shot(L, TEXT("5_world_after_block"));
 				Finish(L);
 			}
@@ -805,18 +871,53 @@ namespace WonderlandSocialLiveQa
 				Next(41);
 			}
 			break;
-		case 41:   // give A time to photograph B's Dog, then block A
+		case 41:   // give A time to photograph B's Dog; then B blocks A (default) -- the FIRST BLOCK only warns -- or waits to be removed
+			if (!IsBlocker(L))
+			{
+				Next(42);
+				break;
+			}
 			if (In >= 10.0)
 			{
+				U->OpenSocialHub(TEXT("party"));
+				Next(46);
+			}
+			break;
+		case 46:
+			if (In >= 1.5)
+			{
 				U->RequestSocialAction(TEXT("blocks.add"), PeerId);
+				Next(45);
+			}
+			break;
+		case 45:   // LSQ10 (B): warned, nothing changed; then the confirming BLOCK
+			if (In >= 2.0)
+			{
+				const bool bWarnShown = WarningOnHub(L, U);
+				Shot(L, TEXT("4b_block_warning"));
+				Check(L, TEXT("LSQ10"), bWarnShown && U->GetPendingBlockSubject() == PeerId && S != nullptr && Friend(*S, PeerId) != nullptr && PartyOfTwo(*S, MeId, PeerId),
+					FString::Printf(TEXT("the first BLOCK only warned (waiting on %s): the founder's warning on the hub %s, still friends %s, still one party of two %s"),
+						*U->GetPendingBlockSubject(), bWarnShown ? TEXT("yes") : TEXT("NO"), S != nullptr && Friend(*S, PeerId) != nullptr ? TEXT("yes") : TEXT("NO"),
+						S != nullptr && PartyOfTwo(*S, MeId, PeerId) ? TEXT("yes") : TEXT("NO")));
+				U->RequestSocialAction(TEXT("blocks.add"), PeerId);
+				U->CloseOverlay();
 				Next(42);
 			}
 			break;
-		case 42:   // LSQ9 (B)
+		case 42:   // LSQ9 + LSQ11 (B): the figure and the friendship gone; B in no party (left by its own block, or removed by A's)
 			if (Live != nullptr && !Live->GetWorldView().Avatars.ContainsByPredicate([&PeerId](const FWonderlandRemoteAvatar& A) { return A.UserId == PeerId; })
-				&& Social->NumRemotePlayers() == 0)
+				&& Social->NumRemotePlayers() == 0 && S != nullptr && Friend(*S, PeerId) == nullptr)
 			{
-				Check(L, TEXT("LSQ9"), true, FString::Printf(TEXT("after blocking: no figure of %s in %s's world (%s)"), *PeerId, *MeId, *Social->DescribeRemotePlayers()));
+				FString What;
+				const bool bMembership = MembershipRight(L, *S, PeerId, What);
+				if (!bMembership && In < 60.0)
+				{
+					break;   // a block is told to nobody but its actor: the blocked side reads it on its next resync
+				}
+				Check(L, TEXT("LSQ9"), true, FString::Printf(TEXT("after the block: no figure of %s in %s's world (%s), no friendship in %s's view"),
+					*PeerId, *MeId, *Social->DescribeRemotePlayers(), *MeId));
+				Check(L, TEXT("LSQ11"), bMembership, FString::Printf(TEXT("%s: %s (want: in no party -- %s)"), *MeId, *What,
+					L.bLeaderBlocks ? TEXT("removed by the leader's block") : TEXT("left by its own block")));
 				Finish(L);
 			}
 			break;
@@ -834,19 +935,22 @@ namespace WonderlandSocialLiveQa
 				const FString Want = FString::Printf(TEXT("hello from %s|hello back from %s"), L.bA ? *L.Me : *L.Peer, L.bA ? *L.Peer : *L.Me);
 				Check(L, TEXT("LSQR1"), FString::Join(Bodies, TEXT("|")) == Want,
 					FString::Printf(TEXT("conversation %s after the restart: [%s] (want [%s])"), C != nullptr ? *C->ConversationId : TEXT("MISSING"), *FString::Join(Bodies, TEXT("|")), *Want));
-				// B blocked A. A (blocked) gets no profile of B; B (the blocker) still sees A, as BLOCKED (see the header).
+				// the BLOCKED player gets no profile of the blocker; the blocker still sees them, as BLOCKED (see the header)
 				const bool bNoFriend = Friend(*S, PeerId) == nullptr;
 				const FWonderlandSocialProfileView* PeerProfile = S->Profiles.Find(PeerId);
-				const bool bProfileRight = L.bA ? PeerProfile == nullptr : (PeerProfile != nullptr && PeerProfile->Relationship == TEXT("BLOCKED"));
+				const bool bBlocker = IsBlocker(L);
+				const bool bProfileRight = bBlocker ? (PeerProfile != nullptr && PeerProfile->Relationship == TEXT("BLOCKED")) : PeerProfile == nullptr;
 				Check(L, TEXT("LSQR2"), bNoFriend && bProfileRight, FString::Printf(TEXT("the block after the restart: friendship %s, %s's profile %s (want %s)"),
 					bNoFriend ? TEXT("gone") : TEXT("STILL THERE"), *PeerId,
 					PeerProfile == nullptr ? TEXT("hidden") : *FString::Printf(TEXT("visible as %s"), *PeerProfile->Relationship),
-					L.bA ? TEXT("hidden: the blocked player") : TEXT("visible as BLOCKED: the blocker")));
-				if (L.bA)
-				{
-					Check(L, TEXT("LSQR3"), S->bHasParty && S->Party.bViewerIsLeader, FString::Printf(TEXT("party after the restart: %s (leader %s)"),
-						S->bHasParty ? *S->Party.PartyId : TEXT("NONE"), S->bHasParty ? *S->Party.LeaderId : TEXT("-")));
-				}
+					bBlocker ? TEXT("visible as BLOCKED: the blocker") : TEXT("hidden: the blocked player")));
+				// F1's membership came back: A still leads a party B is not in; B is in no party
+				// The verdict first, then the line: C++ leaves the order of a call's arguments open, and the first run's line was
+				// printed from What before MembershipRight had filled it (an empty "party after the restart:").
+				FString What;
+				const bool bMembership = MembershipRight(L, *S, PeerId, What);
+				Check(L, TEXT("LSQR3"), bMembership, FString::Printf(TEXT("party after the restart: %s (want %s)"), *What,
+					L.bA ? TEXT("A still leading, B not in it") : TEXT("B in no party")));
 				U->OpenSocialHub(TEXT("messages"));
 				Next(51);
 			}
@@ -867,8 +971,9 @@ namespace WonderlandSocialLiveQa
 
 	FAutoConsoleCommandWithWorldAndArgs GQaSocialLive(
 		TEXT("wl.Qa.SocialLive"),
-		TEXT("Two real clients, one loop: `wl.Qa.SocialLive <me> <peer> <a|b> [http://127.0.0.1:8796]` on the DEVELOPMENT social server ")
-		TEXT("(developer sessions). A asks (friend request, message, party); B answers; each checks what crossed (LSQ1-LSQ7); quits."),
+		TEXT("Two real clients, one loop: `wl.Qa.SocialLive <me> <peer> <a|b> [http://127.0.0.1:8796] [restart] [leaderblocks]` on the ")
+		TEXT("DEVELOPMENT social server (developer sessions). A asks (friend request, message, party); B answers; each checks what crossed ")
+		TEXT("(LSQ1-LSQ11: the world, and F1's confirmed block -- B blocks by default, A the leader with `leaderblocks`); quits."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (GLive.IsValid() || Args.Num() < 3)
@@ -882,7 +987,12 @@ namespace WonderlandSocialLiveQa
 			GLive->Peer = Args[1].ToLower();
 			GLive->bA = Args[2].Equals(TEXT("a"), ESearchCase::IgnoreCase);
 			GLive->Url = Args.Num() > 3 ? Args[3] : FString(TEXT("http://127.0.0.1:8796"));
-			GLive->bRestart = Args.Num() > 4 && Args[4].Equals(TEXT("restart"), ESearchCase::IgnoreCase);
+			// the flags after the url, in any order
+			for (int32 Index = 4; Index < Args.Num(); ++Index)
+			{
+				GLive->bRestart |= Args[Index].Equals(TEXT("restart"), ESearchCase::IgnoreCase);
+				GLive->bLeaderBlocks |= Args[Index].Equals(TEXT("leaderblocks"), ESearchCase::IgnoreCase);
+			}
 			GLive->At = Now();
 			GLive->StartedAt = Now();
 			GLive->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLSOCIALLIVE"));

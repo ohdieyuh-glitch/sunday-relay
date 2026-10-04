@@ -1,5 +1,7 @@
 #include "WonderlandJuliusConnect.h"
+#include "WonderlandCard.h"
 #include "WonderlandBeta.h"
+#include "WonderlandMissionHandoff.h"
 
 #include "Dom/JsonObject.h"
 #include "CoreGlobals.h"
@@ -610,6 +612,8 @@ void UWonderlandJuliusConnectSubsystem::Poll()
 
 void UWonderlandJuliusConnectSubsystem::Post(const TSharedRef<FJsonObject>& Intent, const FString& Describe)
 {
+	// A CONNECTION CHANGE (provider, capability, approval) is never the Mission Handoff's to make (the write spy)
+	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandJuliusConnectSubsystem::Post (a connection intent)"));
 	if (!WonderlandBeta::UseLocalAiServices())
 	{
 		Say(FString::Printf(TEXT("%s: not sent. %s"), *Describe, WonderlandBeta::AiUnavailableSentence()), false, true);
@@ -792,6 +796,12 @@ bool UWonderlandJuliusConnectSubsystem::DeclinePrompt()
 void UWonderlandJuliusConnectSubsystem::Connect(const FString& ConnectorIdOrName)
 {
 	const FString What = ConnectorIdOrName.TrimStartAndEnd();
+	// NEVER A SECRET SENT (Second's sink audit, 10-03): a connector is named, never keyed -- nothing shaped like a key leaves or is logged
+	if (FWonderlandCardStore::HoldsSecret(What))
+	{
+		UE_LOG(LogJuliusConnect, Warning, TEXT("WLCONNECT refused: the name holds something shaped like a key or password (%d characters); nothing was sent"), What.Len());
+		return;
+	}
 	const TSharedRef<FJsonObject> Json = Intent(TEXT("connect"));
 	if (Surface.FindService(What) != nullptr)
 	{

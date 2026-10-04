@@ -372,6 +372,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
 	bool SubmitDraft(FGuid LocalId, const FString& Objective);
 
+	/**
+	 * THE OBJECTIVE AS IT MAY BE KEPT (the founder's fail-closed; Second's review, 10-03): every word the free-text screen
+	 * (FWonderlandCardStore::FindSecrets) flags is REDACTED before anything is saved -- a CERTAIN one always, a STATISTICAL one or (r7) a
+	 * label's WEAK value unless bKeepAsTyped (the player's explicit /keep). Counts what was removed. An objective that was nothing but a key
+	 * is refused.
+	 * SubmitDraft is this with bKeepAsTyped false. Plain C++: no reflection.
+	 */
+	bool SubmitDraftScreened(FGuid LocalId, const FString& Objective, bool bKeepAsTyped, int32& OutRedactedCertain, int32& OutRedactedStatistical);
+	/** /keep: a contract's objective stored again as typed -- its CERTAIN finds still removed. False when it is not a contract. */
+	bool KeepObjectiveAsTyped(FGuid LocalId, const FString& Typed, int32& OutRedactedCertain);
+
+	/**
+	 * THE RESTORE'S SCREEN, one rule for the load path and the QA (plain C++, not reflected). A task the player /keep'd is re-screened for
+	 * what is certain by its own SHAPE only (r7), and any other fail-closed -- except a label's weak value, which a restore never applies
+	 * (r7, Second's (b): r6 rewrote pre-r6 prose for good). The redaction marker is never a find and the screen runs to its fixpoint, so
+	 * screening is idempotent.
+	 * bOutChanged: something was redacted.
+	 */
+	static FString ScreenRestoredObjective(const FWonderlandMissionTask& Task, bool& bOutChanged);
+
 	/** Throw away an unused slot. Refuses once it is a contract: a real mission is not dismissed by tidying. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
 	bool DismissDraft(FGuid LocalId);
@@ -699,6 +719,11 @@ public:
 private:
 	void Touch(FWonderlandMissionTask& Task, EWonderlandTaskState To, EWonderlandTaskSource From);
 	FWonderlandMissionTask* FindMutable(FGuid LocalId);
+	/**
+	 * EVERY CHANGE TO THE TASK SET GOES OUT THROUGH HERE: the Mission Handoff's write spy counts it (WonderlandMissionHandoff.h)
+	 * -- a handoff must never be what changed a task -- and then the listeners hear it.
+	 */
+	void BroadcastTasksChanged(const TCHAR* What);
 
 	/**
 	 * IN STACK ORDER, OLDEST FIRST. Index 0 is the bottom of the stack -- the orb that was already there -- and a new

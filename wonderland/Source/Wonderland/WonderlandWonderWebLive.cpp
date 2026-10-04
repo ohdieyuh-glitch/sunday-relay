@@ -1,4 +1,5 @@
 #include "WonderlandWonderWebLive.h"
+#include "WonderlandCard.h"
 #include "WonderlandBeta.h"
 
 #include "Engine/Texture2D.h"
@@ -176,7 +177,7 @@ void UWonderlandWonderWebLiveSubsystem::Navigate(const FString& TabId, const FSt
 	Page.bLoading = true;
 	Page.Problem.Reset();
 	Page.WantedAt = FPlatformTime::Seconds();
-	UE_LOG(LogWonderWebLive, Display, TEXT("WLLIVE navigate %s -> %s"), *TabId, *Url);
+	UE_LOG(LogWonderWebLive, Display, TEXT("WLLIVE navigate %s -> %s"), *TabId, *FWonderlandCardStore::MaskForDisplay(Url));
 	// The page is opened first, then sized to the window it will be drawn in, then sent to the address: that way it lays
 	// itself out once, for the shape it is actually going to be seen in.
 	SendIntent(TabId, FString::Printf(TEXT("{\"op\":\"viewport\",\"tab\":\"%s\",\"width\":%d,\"height\":%d}"), *TabId, Page.Viewport.X, Page.Viewport.Y), TEXT("viewport"));
