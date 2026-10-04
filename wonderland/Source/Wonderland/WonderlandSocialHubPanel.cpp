@@ -325,13 +325,45 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeRail()
 			SNew(STextBlock).Visibility(bConnected && !bDevelopmentPreview && SignIn.State == EWonderlandSignInState::SignedIn ? EVisibility::Visible : EVisibility::Collapsed)
 			.Text(T(FString::Printf(TEXT("signed in as @%s"), *SignIn.Login))).Font(WonderlandUi::Sans(8, false, 60)).ColorAndOpacity(WonderlandUi::Dim())
 		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
+		// THE PLAYER'S OWN PRESENCE (founder 10-04: "a small presence control", content in the existing hub, no redesign): the four
+		// choices the authority knows. The chosen one is the plain button, the others quiet; what OTHERS see is decided by the server.
+		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f, 8.0f, 4.0f, 2.0f)
+		[
+			SNew(STextBlock).Visibility(bConnected && !bDevelopmentPreview && SignIn.State == EWonderlandSignInState::SignedIn ? EVisibility::Visible : EVisibility::Collapsed)
+			.Text(T(TEXT("YOUR STATUS"))).Font(WonderlandUi::Sans(8, true, 120)).ColorAndOpacity(WonderlandUi::Dim())
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f)
+		[
+			SNew(SBox).Visibility(bConnected && !bDevelopmentPreview && SignIn.State == EWonderlandSignInState::SignedIn ? EVisibility::Visible : EVisibility::Collapsed)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth()[ MakeButton(TEXT("AVAILABLE"), TEXT("presence.set"), TEXT("AVAILABLE"), true, OwnAvailability() != TEXT("AVAILABLE")) ]
+				+ SHorizontalBox::Slot().AutoWidth()[ MakeButton(TEXT("AWAY"), TEXT("presence.set"), TEXT("AWAY"), true, OwnAvailability() != TEXT("AWAY")) ]
+			]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f)
+		[
+			SNew(SBox).Visibility(bConnected && !bDevelopmentPreview && SignIn.State == EWonderlandSignInState::SignedIn ? EVisibility::Visible : EVisibility::Collapsed)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth()[ MakeButton(TEXT("BUSY"), TEXT("presence.set"), TEXT("BUSY"), true, OwnAvailability() != TEXT("BUSY")) ]
+				+ SHorizontalBox::Slot().AutoWidth()[ MakeButton(TEXT("APPEAR OFFLINE"), TEXT("presence.set"), TEXT("APPEAR_OFFLINE"), true, OwnAvailability() != TEXT("APPEAR_OFFLINE")) ]
+			]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 2.0f)
 		[
 			SNew(SBox).Visibility(bConnected && !bDevelopmentPreview && SignIn.State == EWonderlandSignInState::SignedIn ? EVisibility::Visible : EVisibility::Collapsed)
 			[
 				MakeButton(TEXT("SIGN OUT"), TEXT("signin.out"), FString(), true, true)
 			]
 		];
+}
+
+FString SWonderlandSocialHubPanel::OwnAvailability() const
+{
+	// the player's OWN presence as the server reads it back (snapshot.self): ONLINE is AVAILABLE; OFFLINE while signed in is APPEAR OFFLINE
+	const FString& State = Snapshot.Self.Presence.OnlineState;
+	return State == TEXT("ONLINE") ? FString(TEXT("AVAILABLE")) : State == TEXT("OFFLINE") ? FString(TEXT("APPEAR_OFFLINE")) : State;
 }
 
 TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeTabButton(ETab Which, const FString& Label, const FString& Count)

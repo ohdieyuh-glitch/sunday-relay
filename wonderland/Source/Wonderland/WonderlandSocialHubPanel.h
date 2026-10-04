@@ -105,6 +105,8 @@ private:
 	/** The DIRECT conversation with this person, if the inbox has one. */
 	const FWonderlandSocialConversationRow* FindDirect(const FString& UserId) const;
 	int32 CountUnread() const;
+	/** The player's own presence choice as the server reads it back: AVAILABLE, AWAY, BUSY or APPEAR_OFFLINE (YOUR STATUS row). */
+	FString OwnAvailability() const;
 	FString NameOf(const FString& UserId) const;
 	TSharedRef<SWidget> MakeNotConnected();
 	/** SIGN IN, by state: the button, the code to enter at GitHub, the wait, the failure. */

@@ -514,6 +514,22 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::Request(const FStrin
 		// The reason picker is the report dialog's (to come); until then a report says OTHER and carries no note.
 		return Ask(OperationId, SubjectId, TEXT("POST"), TEXT("/reports"), Object(TEXT("reportedId"), SubjectId, TEXT("reason"), TEXT("OTHER")));
 	}
+	if (OperationId == TEXT("presence.set"))
+	{
+		// THE PLAYER'S OWN PRESENCE (founder 10-04: a small presence control in the hub, so P1 is chosen by a real click): the subject is
+		// the availability itself, one of the authority's four (social-contracts.ts SOCIAL_AVAILABILITY); presence.update_self keeps the rest
+		static const TCHAR* const Availabilities[] = { TEXT("AVAILABLE"), TEXT("AWAY"), TEXT("BUSY"), TEXT("APPEAR_OFFLINE") };
+		bool bKnown = false;
+		for (const TCHAR* Known : Availabilities)
+		{
+			bKnown = bKnown || SubjectId.Equals(Known, ESearchCase::CaseSensitive);
+		}
+		if (!bKnown)
+		{
+			return Refuse(TEXT("That is not a presence choice"));
+		}
+		return Ask(OperationId, SubjectId, TEXT("POST"), TEXT("/presence"), Object(TEXT("availability"), SubjectId));
+	}
 	if (OperationId == TEXT("conversations.open")) return Ask(OperationId, SubjectId, TEXT("POST"), TEXT("/conversations"), Object(TEXT("otherUserId"), SubjectId));
 	if (OperationId == TEXT("parties.create")) return Ask(OperationId, SubjectId, TEXT("POST"), TEXT("/parties"), MakeShared<FJsonObject>());
 	if (OperationId == TEXT("parties.join")) return Ask(OperationId, SubjectId, TEXT("POST"), FString::Printf(TEXT("/parties/%s/join"), *SubjectId), MakeShared<FJsonObject>());
