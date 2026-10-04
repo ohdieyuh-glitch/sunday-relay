@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { createInMemorySocialStore, type SocialStore } from '../src/relay/social/social-store';
 import { partyOf } from '../src/relay/social/social-state';
 import { createInMemoryVoiceBindings } from '../src/relay/social/voice-binding';
-import { EPIC, EosVoiceTokenMinter, createVoiceRemovals, eosVoiceFromEnv, hashId, loadEosVoiceConfig, type EosFetch, type EosVoiceConfig } from './eos-voice';
+import { EPIC, EosVoiceTokenMinter, createVoiceRemovals, eosVoiceFromEnv, hashId, hashPuid, loadEosVoiceConfig, type EosFetch, type EosVoiceConfig } from './eos-voice';
 
 /*
  * PARTY VOICE ON EOS, AGAINST A RECORDED EPIC FAKE (R16 EOS voice backend). Every request the bridge would send to
@@ -61,6 +61,29 @@ function epicFake(script: { token?: Answer[]; room?: Answer[]; remove?: Array<An
 
 const PUID_A = hex(16);
 const PUID_B = hex(16);
+
+/*
+ * THE HASHED-ID FORM, pinned (10-04): the game cannot SHA-256 on UE 5.8 (GetSHA256Signature is checkf(false) on Windows), so the
+ * client tags ids with FSHA1 and the bridge must produce the SAME tag. One known vector, for the client and the bridge to cross-check.
+ */
+describe('hashed ids: "#" + SHA-1 first 12', () => {
+  it('pins the known vector, computed independently with node crypto and written out', () => {
+    const input = '0123456789abcdef0123456789abcdef';
+    const independent = `#${createHash('sha1').update(Buffer.from(input, 'utf8')).digest('hex').slice(0, 12)}`;
+    expect(hashId(input)).toBe(independent);
+    expect(hashId(input)).toBe('#b1775a785f09');
+    expect(hashId(input)).toMatch(/^#[0-9a-f]{12}$/);
+    // not the old form (sha256 first 12, no '#')
+    expect(hashId(input)).not.toBe(createHash('sha256').update(input, 'utf8').digest('hex').slice(0, 12));
+  });
+
+  it('a PUID is lowercased first; a room id is hashed exactly as the client receives it', () => {
+    expect(hashPuid('0123456789ABCDEF0123456789ABCDEF')).toBe('#b1775a785f09');
+    expect(hashPuid('  0123456789abcdef0123456789ABCDEF ')).toBe('#b1775a785f09');
+    // hashId itself does not fold case: the room id string is the client's, byte for byte
+    expect(hashId('0123456789ABCDEF0123456789ABCDEF')).not.toBe('#b1775a785f09');
+  });
+});
 
 describe('the EOS config file', () => {
   it('missing variable, unreadable file, bad JSON or a field out of shape: no minter (voice stays 503), and the log names nothing in it', () => {
@@ -294,7 +317,7 @@ describe('server-side removal after a committed party departure', () => {
     await w.removals.idle();
     expect(w.deletes()).toEqual([w.deleteOf(w.people.a), w.deleteOf(w.people.a), w.deleteOf(w.people.a)]);
     expect(w.backoffs).toEqual([250, 1000]);
-    expect(w.log.some((l) => l.includes('after 2 retries') && l.includes(hashId(w.puid[w.people.a])))).toBe(true);
+    expect(w.log.some((l) => l.includes('after 2 retries') && l.includes(hashPuid(w.puid[w.people.a])))).toBe(true);
     const g = await voicedArena({ remove: [{ status: 500 }, { status: 500 }, { status: 500 }, { status: 500 }] });
     await g.run('parties.leave', g.people.b, [g.pid], {});
     await g.removals.idle();
@@ -334,8 +357,15 @@ describe('logs carry hashed ids only', () => {
     for (const forbidden of [cfg.clientSecret, cfg.roomSalt, ...epic.issued.access, ...epic.issued.room, media, media.split('?')[1], PUID_B, grant.roomId]) {
       expect(all, 'a log line carries a secret or a raw id').not.toContain(forbidden);
     }
-    expect(all).toContain(hashId(PUID_B));
+    expect(all).toContain(hashPuid(PUID_B));
     expect(all).toContain(hashId(grant.roomId));
+    // the mint line, exactly: the room id as the client received it (grant.roomId), the PUID lowercased
+    expect(log.filter((l) => l.includes('room token minted'))).toEqual([`eos voice: room token minted room=${hashId(grant.roomId)} puid=${hashPuid(PUID_B)}`]);
+    // every id on a log line is the '#' + 12-hex SHA-1 tag; no bare 12-hex (the old sha256 form) or 32-hex id is left
+    for (const line of log) {
+      for (const tag of line.match(/(room|puid)=(\S+)/g) ?? []) expect(tag, line).toMatch(/^(room|puid)=#[0-9a-f]{12}$/);
+      expect(line, line).not.toMatch(/[0-9a-f]{32}/);
+    }
     expect(log.length).toBeGreaterThanOrEqual(5);
   });
 });

@@ -2,7 +2,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import type { PartyDeparture } from '../src/relay/social/social-parties';
-import type { VoiceBindingStore } from '../src/relay/social/voice-binding';
+import { normalizePuid, type VoiceBindingStore } from '../src/relay/social/voice-binding';
 import type { PartyVoiceGrant, PartyVoiceTokenMinter } from './wonderland-social-routes';
 
 /**
@@ -13,7 +13,7 @@ import type { PartyVoiceGrant, PartyVoiceTokenMinter } from './wonderland-social
  *   - createVoiceRemovals: after a committed party departure (leave, a leader's removal, a block's F1 separation), the departed
  *     PUID is removed from that party's room server-side -- Epic's removeParticipant also revokes their room token -- retried
  *     with backoff, never blocking or failing the social change.
- * NOTHING SECRET IS LOGGED: room ids and PUIDs appear only hashed (sha256, 12 hex); never a client secret, an access token, a
+ * NOTHING SECRET IS LOGGED: room ids and PUIDs appear only hashed ('#' + sha1, 12 hex); never a client secret, an access token, a
  * participant token or the media server address. The HTTP is behind an injectable fetch, so tests use a recorded fake; the real
  * API is exercised only by the R16 run.
  */
@@ -42,8 +42,17 @@ export const EPIC = Object.freeze({
   roomTokenAssumedTtlMs: 10 * 60_000,
 });
 
-/** sha256, first 12 hex: the only form in which an id reaches a log line. */
-export const hashId = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 12);
+/**
+ * THE ONLY FORM IN WHICH AN ID REACHES A LOG LINE: '#' + the first 12 lowercase hex of SHA-1(UTF-8 bytes of the value).
+ * SHA-1 because the game hashes the same ids with FSHA1 (UE 5.8 has no SHA-256 on Windows: GetSHA256Signature is checkf(false)),
+ * so a client log line and a bridge log line about the same room or PUID can be matched. A log correlation tag, not a secret:
+ * '0123456789abcdef0123456789abcdef' -> '#b1775a785f09' (pinned in eos-voice.test.ts).
+ * Inputs: a room id exactly as the client receives it (the 32-hex roomId of the grant); a PUID through hashPuid (lowercased).
+ */
+export const hashId = (value: string): string => `#${createHash('sha1').update(value, 'utf8').digest('hex').slice(0, 12)}`;
+
+/** A PUID's log tag: lowercased first (normalizePuid), so 'ABC...' and 'abc...' -- one EOS account -- carry one tag. */
+export const hashPuid = (puid: string): string => hashId(normalizePuid(puid) ?? puid.trim().toLowerCase());
 
 /* ------------------------------------------------------------------------------------------------ config */
 
@@ -251,7 +260,7 @@ export class EosVoiceTokenMinter implements PartyVoiceTokenMinter {
     const mine = participants.find((p) => p[EPIC.roomAnswer.puid] === puid);
     const token = typeof mine?.[EPIC.roomAnswer.token] === 'string' ? (mine[EPIC.roomAnswer.token] as string) : '';
     if (clientBaseUrl === '' || token === '') throw new Error('createRoomToken answered without a media endpoint or a token for the caller');
-    this.log(`eos voice: room token minted room=${hashId(roomId)} puid=${hashId(puid)}`);
+    this.log(`eos voice: room token minted room=${hashId(roomId)} puid=${hashPuid(puid)}`);
     return {
       providerId: this.providerId,
       roomId,
@@ -309,15 +318,15 @@ export function createVoiceRemovals(deps: {
     for (let attempt = 0; attempt <= backoff.length; attempt += 1) {
       try {
         await deps.target.removeParticipant(roomId, puid);
-        log(`eos voice: removed room=${hashId(roomId)} puid=${hashId(puid)}${attempt > 0 ? ` after ${attempt} retr${attempt === 1 ? 'y' : 'ies'}` : ''}`);
+        log(`eos voice: removed room=${hashId(roomId)} puid=${hashPuid(puid)}${attempt > 0 ? ` after ${attempt} retr${attempt === 1 ? 'y' : 'ies'}` : ''}`);
         return;
       } catch (error) {
         const status = error instanceof EosHttpError ? error.status : 'network';
-        log(`eos voice: removal failed room=${hashId(roomId)} puid=${hashId(puid)} attempt ${attempt + 1} (${status})`);
+        log(`eos voice: removal failed room=${hashId(roomId)} puid=${hashPuid(puid)} attempt ${attempt + 1} (${status})`);
         if (attempt < backoff.length) await sleep(backoff[attempt]);
       }
     }
-    log(`eos voice: removal GAVE UP room=${hashId(roomId)} puid=${hashId(puid)}`);
+    log(`eos voice: removal GAVE UP room=${hashId(roomId)} puid=${hashPuid(puid)}`);
   };
   return {
     onDepartures(departures) {
