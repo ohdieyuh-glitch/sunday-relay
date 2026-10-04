@@ -43,10 +43,16 @@ namespace WonderlandGrip
 		float VForwardDeg = 10.0f;
 		/** In the sprint (eased by the dash's weight): the tips trailing back, like the trails they leave. */
 		float DashVForwardDeg = -35.0f;
+		/** THE CHARGING STANCE (founder, 10-04: "arms and swords low, naturally following the charging body"): standing, the blades
+		 *  low and trailing -- out and down by ChargeVDeg, back by ChargeVForwardDeg -- behind a body about to run. */
+		float ChargeVDeg = 120.0f;
+		float ChargeVForwardDeg = -55.0f;
 	};
 
 	/** The hold with the sprint's trailing tips eased in by DashWeight (0..1). */
 	FHold WithDash(const FHold& Hold, float DashWeight);
+	/** The hold with the charging stance's low, trailing blades eased in by ChargeWeight (0..1: armed and standing). */
+	FHold WithCharge(const FHold& Hold, float ChargeWeight);
 
 	/** The hold as the console variables have it right now. */
 	FHold CurrentHold();

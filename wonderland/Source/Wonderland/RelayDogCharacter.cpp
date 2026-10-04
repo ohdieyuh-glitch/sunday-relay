@@ -71,20 +71,30 @@ namespace RelayDogHandoffTuning
 
 	// THE ATTACK-READY STANCE'S SHAPE (M2), tunable live so it is settled from game frames rather than by rebuilds. The defaults
 	// are RelayDogArmedStance::FShape's own.
-	TAutoConsoleVariable<float> CVarStanceLean(TEXT("wl.Handoff.Stance.Lean"), 2.0f, TEXT("Mission Handoff stance: body lean added standing and walking, degrees."));
-	TAutoConsoleVariable<float> CVarStanceCrouch(TEXT("wl.Handoff.Stance.Crouch"), 1.5f, TEXT("Mission Handoff stance: how much lower the pelvis rides standing and walking, uu."));
+	// THE CHARGING STANCE (founder, 10-04: "BEND MUCH MORE FORWARD ... about to CHARGE"). The bends are TRUE forward bends about the
+	// hips; the old Stance.Lean / RunLean / DashLean leaned this rig BACK (RelayDogStride::FDogPose::FStanceBody) and are gone.
+	TAutoConsoleVariable<float> CVarStanceBend(TEXT("wl.Handoff.Stance.Bend"), 24.0f, TEXT("Mission Handoff stance: the forward bend standing, about the hips, degrees (+ = chest forward)."));
+	TAutoConsoleVariable<float> CVarStanceRunBend(TEXT("wl.Handoff.Stance.RunBend"), 6.0f, TEXT("Mission Handoff stance: the forward bend walking and running armed, degrees."));
+	TAutoConsoleVariable<float> CVarStanceDashBend(TEXT("wl.Handoff.Stance.DashBend"), 14.0f, TEXT("Mission Handoff stance: the forward bend in the sprint, degrees."));
+	TAutoConsoleVariable<float> CVarStanceHipForward(TEXT("wl.Handoff.Stance.HipForward"), 3.0f, TEXT("Mission Handoff stance: the hips carried forward standing, uu."));
+	TAutoConsoleVariable<float> CVarStanceHipShift(TEXT("wl.Handoff.Stance.HipShift"), 3.0f, TEXT("Mission Handoff stance: the hips shifted toward the loaded (rear) leg standing, uu."));
+	TAutoConsoleVariable<float> CVarStanceTilt(TEXT("wl.Handoff.Stance.Tilt"), 5.0f, TEXT("Mission Handoff stance: the pelvis tilted, the free (front) hip lower, degrees."));
+	TAutoConsoleVariable<float> CVarStanceTurn(TEXT("wl.Handoff.Stance.Turn"), 8.0f, TEXT("Mission Handoff stance: the body turned to lead with the front side, degrees."));
+	TAutoConsoleVariable<float> CVarStanceFront(TEXT("wl.Handoff.Stance.Front"), 12.0f, TEXT("Mission Handoff stance: standing, the Dog's own LEFT foot this far ahead of the hips, uu."));
+	TAutoConsoleVariable<float> CVarStanceRear(TEXT("wl.Handoff.Stance.Rear"), 14.0f, TEXT("Mission Handoff stance: standing, its RIGHT foot (loaded, pushing) this far behind the hips, uu."));
+	TAutoConsoleVariable<float> CVarStanceHeadKeep(TEXT("wl.Handoff.Stance.HeadKeep"), 0.8f, TEXT("Mission Handoff stance: the share of the bend the head gives back to keep looking ahead, 0..1."));
+	TAutoConsoleVariable<float> CVarSprintAcceleration(TEXT("wl.Handoff.SprintAcceleration"), 1600.0f,
+		TEXT("Mission Handoff: the acceleration once the burst becomes the sprint, uu/s^2 (the burst keeps DashAcceleration)."));
+	TAutoConsoleVariable<float> CVarStanceCrouch(TEXT("wl.Handoff.Stance.Crouch"), 7.0f, TEXT("Mission Handoff stance: how much lower the pelvis rides standing and walking, uu."));
 	TAutoConsoleVariable<float> CVarStanceFeetOut(TEXT("wl.Handoff.Stance.FeetOut"), 2.0f, TEXT("Mission Handoff stance: each hip swept outward, degrees (the feet spaced)."));
 	TAutoConsoleVariable<float> CVarStanceKneesOut(TEXT("wl.Handoff.Stance.KneesOut"), 0.0f,
 		TEXT("Mission Handoff stance: each thigh turned outward about the vertical, degrees (the knees out over the toes, so the bend shows from behind). 0 = the look before it."));
-	TAutoConsoleVariable<float> CVarStanceStagger(TEXT("wl.Handoff.Stance.Stagger"), 6.0f,
-		TEXT("Mission Handoff stance: standing, the Dog's own LEFT foot this far ahead (its right 30% of it behind), uu -- the reference's offset foot."));
 	TAutoConsoleVariable<float> CVarStanceShoulder(TEXT("wl.Handoff.Stance.Shoulder"), 4.0f, TEXT("Mission Handoff stance: the ready arms raised forward, degrees."));
 	TAutoConsoleVariable<float> CVarStanceElbow(TEXT("wl.Handoff.Stance.Elbow"), 18.0f, TEXT("Mission Handoff stance: the ready forearms folded up, degrees."));
 	TAutoConsoleVariable<float> CVarStanceOut(TEXT("wl.Handoff.Stance.Out"), 14.0f, TEXT("Mission Handoff stance: the ready arms swept out from the body, degrees."));
 	TAutoConsoleVariable<float> CVarStanceSwing(TEXT("wl.Handoff.Stance.SwingKeep"), 0.3f, TEXT("Mission Handoff stance: the share of the walk's arm swing kept, 0..1."));
 	TAutoConsoleVariable<float> CVarStanceRunOut(TEXT("wl.Handoff.Stance.RunOut"), 20.0f, TEXT("Mission Handoff stance: the running arms swept out, degrees."));
 	TAutoConsoleVariable<float> CVarStanceRunElbow(TEXT("wl.Handoff.Stance.RunElbow"), 14.0f, TEXT("Mission Handoff stance: extra forearm fold while running, degrees."));
-	TAutoConsoleVariable<float> CVarStanceDashLean(TEXT("wl.Handoff.Stance.DashLean"), 2.0f, TEXT("Mission Handoff stance: extra lean in a dash, degrees."));
 	TAutoConsoleVariable<float> CVarStanceDashShoulder(TEXT("wl.Handoff.Stance.DashShoulder"), -25.0f, TEXT("Mission Handoff stance: the dash's arms, swept back (negative), degrees."));
 	TAutoConsoleVariable<float> CVarStanceDashElbow(TEXT("wl.Handoff.Stance.DashElbow"), 20.0f, TEXT("Mission Handoff stance: the dash's forearm fold, degrees."));
 	TAutoConsoleVariable<float> CVarStanceDashOut(TEXT("wl.Handoff.Stance.DashOut"), 12.0f, TEXT("Mission Handoff stance: the dash's arms swept out, degrees."));
@@ -93,20 +103,28 @@ namespace RelayDogHandoffTuning
 	RelayDogArmedStance::FShape StanceShape()
 	{
 		RelayDogArmedStance::FShape Shape;
-		Shape.LeanDeg = FMath::Clamp(CVarStanceLean.GetValueOnGameThread(), -10.0f, 30.0f);
+		// signed ranges, so a QA control can set the opposite of each and watch it fail
+		Shape.BendDeg = FMath::Clamp(CVarStanceBend.GetValueOnGameThread(), -30.0f, 45.0f);
+		Shape.RunBendDeg = FMath::Clamp(CVarStanceRunBend.GetValueOnGameThread(), -20.0f, 30.0f);
+		Shape.DashBendDeg = FMath::Clamp(CVarStanceDashBend.GetValueOnGameThread(), -20.0f, 35.0f);
+		Shape.HipForwardUU = FMath::Clamp(CVarStanceHipForward.GetValueOnGameThread(), -15.0f, 15.0f);
+		Shape.HipShiftUU = FMath::Clamp(CVarStanceHipShift.GetValueOnGameThread(), -10.0f, 10.0f);
+		Shape.TiltDeg = FMath::Clamp(CVarStanceTilt.GetValueOnGameThread(), -15.0f, 15.0f);
+		Shape.TurnDeg = FMath::Clamp(CVarStanceTurn.GetValueOnGameThread(), -30.0f, 30.0f);
+		Shape.FrontUU = FMath::Clamp(CVarStanceFront.GetValueOnGameThread(), -25.0f, 25.0f);
+		Shape.RearUU = FMath::Clamp(CVarStanceRear.GetValueOnGameThread(), -25.0f, 25.0f);
+		Shape.HeadKeep = FMath::Clamp(CVarStanceHeadKeep.GetValueOnGameThread(), 0.0f, 1.0f);
 		// up to 30 uu and 30 deg (Second, 10-03: round 4's "crouch 10" was clamped to 8 here, so the knees read as 3b's): the founder picks
 		// the legs from wl.Qa.StanceCalib's knee-height frames
 		Shape.CrouchUU = FMath::Clamp(CVarStanceCrouch.GetValueOnGameThread(), 0.0f, 30.0f);
 		Shape.FeetOutDeg = FMath::Clamp(CVarStanceFeetOut.GetValueOnGameThread(), 0.0f, 30.0f);
 		Shape.KneesOutDeg = FMath::Clamp(CVarStanceKneesOut.GetValueOnGameThread(), 0.0f, 45.0f);
-		Shape.StaggerUU = FMath::Clamp(CVarStanceStagger.GetValueOnGameThread(), -15.0f, 15.0f);
 		Shape.ReadyShoulderDeg = FMath::Clamp(CVarStanceShoulder.GetValueOnGameThread(), -90.0f, 120.0f);
 		Shape.ReadyElbowDeg = FMath::Clamp(CVarStanceElbow.GetValueOnGameThread(), 0.0f, 140.0f);
 		Shape.ReadyOutDeg = FMath::Clamp(CVarStanceOut.GetValueOnGameThread(), 0.0f, 80.0f);
 		Shape.SwingKeep = FMath::Clamp(CVarStanceSwing.GetValueOnGameThread(), 0.0f, 1.0f);
 		Shape.RunOutDeg = FMath::Clamp(CVarStanceRunOut.GetValueOnGameThread(), 0.0f, 80.0f);
 		Shape.RunElbowAddDeg = FMath::Clamp(CVarStanceRunElbow.GetValueOnGameThread(), 0.0f, 120.0f);
-		Shape.DashLeanDeg = FMath::Clamp(CVarStanceDashLean.GetValueOnGameThread(), 0.0f, 40.0f);
 		Shape.DashShoulderDeg = FMath::Clamp(CVarStanceDashShoulder.GetValueOnGameThread(), -120.0f, 90.0f);
 		Shape.DashElbowDeg = FMath::Clamp(CVarStanceDashElbow.GetValueOnGameThread(), 0.0f, 140.0f);
 		Shape.DashOutDeg = FMath::Clamp(CVarStanceDashOut.GetValueOnGameThread(), 0.0f, 80.0f);
@@ -1544,6 +1562,10 @@ void ARelayDogCharacter::OnForwardPressed()
 
 void ARelayDogCharacter::OnForwardReleased()
 {
+	if (bForwardHeld)
+	{
+		ForwardReleasedAt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	}
 	bForwardHeld = false;
 	// The run ends with the key. A double tap that latched a sprint the player
 	// could not stop by letting go would be a trap, not a control.
@@ -1660,11 +1682,11 @@ void ARelayDogCharacter::TeleportSucceeded(bool bIsATest)
 	// A TELEPORT ENDS A DASH (Second's V2-5): the burst never carries on from where the Dog was put down
 	if (!bIsATest)
 	{
-		EndDash(TEXT("a teleport moved the Dog"));
+		EndDash(TEXT("a teleport moved the Dog"), TEXT("teleport"));
 	}
 }
 
-void ARelayDogCharacter::EndDash(const TCHAR* Why)
+void ARelayDogCharacter::EndDash(const TCHAR* Why, const TCHAR* Code)
 {
 	if (!bDashActive)
 	{
@@ -1672,6 +1694,14 @@ void ARelayDogCharacter::EndDash(const TCHAR* Why)
 	}
 	bDashActive = false;
 	DashEndedAt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	LastSprintEndCode = Code;
+	LastSprintEndAfterRelease = bForwardHeld ? -1.0f : DashEndedAt - ForwardReleasedAt;
+	// A TELEPORT TAKES THE CAMERA WITH IT: no lag is left to swoop across the jump (Second's review, 10-04)
+	if (FCString::Strcmp(Code, TEXT("teleport")) == 0 && CameraBoom != nullptr)
+	{
+		CameraBoom->bEnableCameraLag = false;
+		bCameraLagEasing = false;
+	}
 	UE_LOG(LogTemp, Display, TEXT("WLHANDOFF dash %d ended after %.2f s: %s"), DashCount, DashEndedAt - DashStartedAt, Why);
 }
 
@@ -2273,6 +2303,39 @@ FVector ARelayDogCharacter::GetCanonSoleWorld(float SideSign) const
 	return GetActorLocation() - FVector(0.0, 0.0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
 }
 
+bool ARelayDogCharacter::QaDrawnBody(FVector& OutHead, FVector& OutHipPlusY, FVector& OutHipMinusY, FVector& OutKneePlusY,
+	FVector& OutKneeMinusY, FVector& OutSolePlusY, FVector& OutSoleMinusY) const
+{
+	// WHAT IS ON SCREEN: a worn skin's own joints when one is worn (its legs are solved onto the canon's soles, its body is the
+	// canon's re-centred on its own hips), else Relay OG's.
+	if (const AWonderlandCompanionEmbodiment* Worn = Costume)
+	{
+		return Worn->QaHeadAt(OutHead) && Worn->QaLegAt(1.0f, OutHipPlusY, OutKneePlusY, OutSolePlusY)
+			&& Worn->QaLegAt(-1.0f, OutHipMinusY, OutKneeMinusY, OutSoleMinusY);
+	}
+	if (HeadPivot == nullptr)
+	{
+		return false;
+	}
+	OutHead = HeadPivot->GetComponentLocation();
+	bool bPlusFound = false;
+	bool bMinusFound = false;
+	for (const FRelayDogLeg* Leg : {&LegLeft, &LegRight})
+	{
+		if (Leg->Hip == nullptr || Leg->Shin == nullptr)
+		{
+			continue;
+		}
+		const bool bOnPlus = Leg->Hip->GetRelativeLocation().Y >= 0.0;
+		(bOnPlus ? OutHipPlusY : OutHipMinusY) = Leg->Hip->GetComponentLocation();
+		(bOnPlus ? OutKneePlusY : OutKneeMinusY) = Leg->Shin->GetComponentLocation();
+		(bOnPlus ? bPlusFound : bMinusFound) = true;
+	}
+	OutSolePlusY = GetCanonSoleWorld(1.0f);
+	OutSoleMinusY = GetCanonSoleWorld(-1.0f);
+	return bPlusFound && bMinusFound;
+}
+
 FVector ARelayDogCharacter::GetCanonHandWorld(float SideSign) const
 {
 	// THE HAND TIP THE MISSION CHOREOGRAPHY SOLVES ONTO ITS PROPS: the far end of the forearm's meshes (MeasureChain's
@@ -2644,7 +2707,7 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		}
 		else
 		{
-			EndDash(TEXT("the swords were given back"));
+			EndDash(TEXT("the swords were given back"), TEXT("disarmed"));
 			UE_LOG(LogTemp, Display, TEXT("WLHANDOFF traversal restored: normal speeds, acceleration %.0f"), NormalAcceleration);
 		}
 	}
@@ -2668,36 +2731,38 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 				const bool bBurst = DashFor < RelayDogHandoffTuning::DashSeconds();
 				if (DashFor >= RelayDogHandoffTuning::SprintMaxSeconds())
 				{
-					EndDash(TEXT("its time is up"));
+					EndDash(TEXT("its time is up"), TEXT("cap"));
 				}
 				else if (!bBurst && !bForwardHeld)
 				{
-					EndDash(TEXT("Forward was released"));
+					EndDash(TEXT("Forward was released"), TEXT("released"));
 				}
 				else if (!bBurst && FVector(Move->Velocity.X, Move->Velocity.Y, 0.0f).Size() < 0.25f * RelayDogHandoffTuning::SprintSpeed())
 				{
-					EndDash(TEXT("something stopped the sprint"));
+					EndDash(TEXT("something stopped the sprint"), TEXT("stopped"));
 				}
 				else if (!Move->IsMovingOnGround())
 				{
-					EndDash(TEXT("the Dog left the ground"));
+					EndDash(TEXT("the Dog left the ground"), TEXT("airborne"));
 				}
 				else if (RelayDogHandoffTuning::PanelOpen(this))
 				{
-					EndDash(TEXT("a panel opened over the world"));
+					EndDash(TEXT("a panel opened over the world"), TEXT("panel"));
 				}
 				else
 				{
 					// THE BURST OWNS ITS SPEED AND ITS ACCELERATION and drives itself along the way it set out; THE SPRINT after it is the
 					// player's own running (Forward steers it, as any run), at the sprint's speed
-					Move->MaxAcceleration = FMath::Clamp(RelayDogHandoffTuning::CVarDashAcceleration.GetValueOnGameThread(), 100.0f, 50000.0f);
 					if (bBurst)
 					{
+						Move->MaxAcceleration = FMath::Clamp(RelayDogHandoffTuning::CVarDashAcceleration.GetValueOnGameThread(), 100.0f, 50000.0f);
 						Move->MaxWalkSpeed = RelayDogHandoffTuning::DashSpeed();
 						AddMovementInput(DashDirection, 1.0f);
 					}
 					else
 					{
+						// a runner's acceleration once the burst is spent (Second's review: the sprint kept the burst's 6000)
+						Move->MaxAcceleration = FMath::Clamp(RelayDogHandoffTuning::CVarSprintAcceleration.GetValueOnGameThread(), 100.0f, 50000.0f);
 						Move->MaxWalkSpeed = RelayDogHandoffTuning::SprintSpeed();
 					}
 				}
@@ -2711,7 +2776,7 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		{
 			Move->MaxAcceleration = NormalAcceleration;
 		}
-		EndDash(TEXT("a performance took the Dog"));
+		EndDash(TEXT("a performance took the Dog"), TEXT("performance"));
 	}
 	if (bAutoDemo)
 	{
@@ -2771,27 +2836,48 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	// carry the same stance.
 	const RelayDogArmedStance::FShape ArmedShape = RelayDogHandoffTuning::StanceShape();
 	RelayDogArmedStance::Step(ArmedStance, IsHandoffArmed(), bDashActive, DeltaSeconds, ArmedShape);
-	// THE CAMERA LETS THE SPRINTER PULL AWAY (the Genshin reference): a catch-up lag only while dashing and 0.8 s after (at speed 9 the
-	// camera has caught up 99.9% by then, so turning it off never jumps), never in ordinary play, where the 09-03 input-latency fix keeps
-	// the player's camera tight. The demo path keeps its own lag.
+	// THE CAMERA LETS THE SPRINTER PULL AWAY (the Genshin reference): a catch-up lag while dashing, never in ordinary play, where the
+	// 09-03 input-latency fix keeps the player's camera tight. The demo path keeps its own lag.
+	// EASED OUT, NEVER SWITCHED OFF UNDER A MOVING DOG (Second's review, 10-04): a lag holds the camera about speed/catch-up behind, so
+	// turning it off while the Dog still runs snapped ~70 uu in one frame. After the sprint the catch-up speed climbs until that gap is
+	// under 2 uu, and only then does the lag go. A teleport ends it at once (EndDash): no lag swoops across a jump.
 	if (CameraBoom != nullptr && !bAutoDemo)
 	{
 		const float CatchUp = RelayDogHandoffTuning::DashCameraLag();
 		const float LagNow = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
-		const bool bLag = CatchUp > 0.0f && (bDashActive || LagNow - DashEndedAt < 0.8f);
-		if (CameraBoom->bEnableCameraLag != bLag)
+		if (CatchUp > 0.0f && bDashActive)
 		{
-			CameraBoom->bEnableCameraLag = bLag;
-			CameraBoom->CameraLagSpeed = CatchUp > 0.0f ? CatchUp : 8.0f;
+			CameraBoom->bEnableCameraLag = true;
+			CameraBoom->CameraLagSpeed = CatchUp;
+			CameraBoom->CameraLagMaxDistance = 400.0f;
+			bCameraLagEasing = true;
+		}
+		else if (bCameraLagEasing && CameraBoom->bEnableCameraLag)
+		{
+			const float Since = FMath::Max(0.0f, LagNow - DashEndedAt);
+			const float EaseSpeed = FMath::Max(CatchUp, 1.0f) * FMath::Exp(2.5f * Since);
+			CameraBoom->CameraLagSpeed = EaseSpeed;
+			if (Since > 0.3f && GetVelocity().Size2D() / EaseSpeed < 2.0f)
+			{
+				CameraBoom->bEnableCameraLag = false;
+				CameraBoom->CameraLagMaxDistance = 0.0f;
+				bCameraLagEasing = false;
+			}
 		}
 	}
 	In.SprintWeight = ArmedStance.Dash.Value;
 	In.SprintCycles = RelayDogHandoffTuning::SprintCadence();
 	RelayDogStride::FDogPose Pose = Animator.Update(In);
-	// each arm's outward, as the rig MEASURED it (ArmChain*.OutwardSign), in the writer's convention (roll = yaw x side)
+	// each arm's outward, as the rig MEASURED it (ArmChain*.OutwardSign), in the writer's convention (roll = yaw x side); the hips
+	// where the rig has them (the bend turns about them; LegLeft's side, as measured, is the back foot's)
+	const float HipPivotUU = LegLeft.Hip != nullptr && LegRight.Hip != nullptr
+		? 0.5f * static_cast<float>(LegLeft.Hip->GetRelativeLocation().Z + LegRight.Hip->GetRelativeLocation().Z) : 0.8f * HeadWidthUU;
 	RelayDogArmedStance::Apply(Pose, ArmedStance.Armed.Value, ArmedStance.Dash.Value, 0.8f * HeadWidthUU, (0.8f - 0.5125f) * HeadWidthUU,
-		0.5125f * HeadWidthUU, ArmChainLeft.OutwardSign * ArmLeft.SideSign, ArmChainRight.OutwardSign * ArmRight.SideSign, ArmedShape);
-	StanceFeetOutDeg = RelayDogArmedStance::FeetOutDeg(Pose, ArmedStance.Armed.Value, ArmedShape);
+		0.5125f * HeadWidthUU, ArmChainLeft.OutwardSign * ArmLeft.SideSign, ArmChainRight.OutwardSign * ArmRight.SideSign, HipPivotUU,
+		LegLeft.LateralUU, LegRight.LateralUU, ArmedShape);
+	StanceLegLeftOutDeg = Pose.Stance.LegLeftOutDeg;
+	StanceChargeWeight = ArmedStance.Armed.Value * (1.0f - FMath::Clamp(Pose.GaitWeight, 0.0f, 1.0f));
+	StanceLegRightOutDeg = Pose.Stance.LegRightOutDeg;
 	StanceKneesOutDeg = RelayDogArmedStance::KneesOutDeg(Pose, ArmedStance.Armed.Value, ArmedShape);
 
 	// ---- AND THE COSTUME WEARS THE SAME STRIDE, so a mascot skin is a change of appearance and nothing else.
@@ -2821,15 +2907,20 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	// relative and the chain composes on its own.
 	if (BodyRoot != nullptr)
 	{
-		BodyRoot->SetRelativeLocation(BodyRestLocation + FVector(0.0f, Pose.SwayUU, Pose.BobUU - Pose.PelvisDropUU));
-		BodyRoot->SetRelativeRotation(FRotator(Pose.LeanDeg + Pose.Body.PitchDeg, Pose.BodyYawDeg,
-		                                       Pose.Body.RollDeg + Pose.TurnRollDeg));
+		// THE ARMED STANCE'S BODY (Pose.Stance, zero unless the swords are held) is added in the rig's own signs: bent forward,
+		// tilted and turned about the HIPS (its shift carries the root so the rotation pivots there), never the actor rotated.
+		BodyRoot->SetRelativeLocation(BodyRestLocation + FVector(Pose.Stance.ShiftX, Pose.SwayUU + Pose.Stance.ShiftY,
+			Pose.BobUU - Pose.PelvisDropUU + Pose.Stance.ShiftZ));
+		BodyRoot->SetRelativeRotation(FRotator(Pose.LeanDeg + Pose.Body.PitchDeg + Pose.Stance.PitchDeg, Pose.BodyYawDeg + Pose.Stance.YawDeg,
+		                                       Pose.Body.RollDeg + Pose.TurnRollDeg + Pose.Stance.RollDeg));
 	}
 	if (HeadPivot != nullptr)
 	{
 		// The head keeps its own level against the body's lean, so the Dog
-		// looks where it is going instead of at the floor.
-		HeadPivot->SetRelativeRotation(FRotator(Pose.HeadPitchDeg - Pose.LeanDeg, Pose.HeadYawDeg, 0.0f));
+		// looks where it is going instead of at the floor -- and through the
+		// stance's bend it gives most of it back: forward with the chest, eyes ahead.
+		HeadPivot->SetRelativeRotation(FRotator(Pose.HeadPitchDeg - Pose.LeanDeg + Pose.Stance.HeadPitchDeg,
+			Pose.HeadYawDeg + Pose.Stance.HeadYawDeg, Pose.Stance.HeadRollDeg));
 	}
 	if (TailPivot != nullptr)
 	{
@@ -2843,13 +2934,13 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	{
 		const FVector ThighLocal(0.0, 0.0, -(0.8f - 0.5125f) * HeadWidthUU);
 		const float ShinUU = 0.5125f * HeadWidthUU;
-		auto WriteLeg = [&](FRelayDogLeg& Leg, const RelayDogLimbs::FChain& Chain, float HipDeg, float KneeDeg)
+		auto WriteLeg = [&](FRelayDogLeg& Leg, const RelayDogLimbs::FChain& Chain, float HipDeg, float KneeDeg, float OutDeg)
 		{
 			const FRotator Fold(-KneeDeg, 0.0f, 0.0f);
 			if (Leg.Hip != nullptr)
 			{
 				const float Side = Leg.Hip->GetRelativeLocation().Y >= 0.0 ? 1.0f : -1.0f;
-				Leg.Hip->SetRelativeRotation(WonderlandKneesOut::TurnAboutSole(FRotator(HipDeg, 0.0f, StanceFeetOutDeg * Chain.OutwardSign), Fold,
+				Leg.Hip->SetRelativeRotation(WonderlandKneesOut::TurnAboutSole(FRotator(HipDeg, 0.0f, OutDeg * Chain.OutwardSign), Fold,
 					ThighLocal, ShinUU, Side, StanceKneesOutDeg));
 			}
 			if (Leg.Shin != nullptr)
@@ -2857,8 +2948,8 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 				Leg.Shin->SetRelativeRotation(Fold);
 			}
 		};
-		WriteLeg(LegLeft, LegChainLeft, SolvedL.HipDeg, SolvedL.KneeDeg);
-		WriteLeg(LegRight, LegChainRight, SolvedR.HipDeg, SolvedR.KneeDeg);
+		WriteLeg(LegLeft, LegChainLeft, SolvedL.HipDeg, SolvedL.KneeDeg, StanceLegLeftOutDeg);
+		WriteLeg(LegRight, LegChainRight, SolvedR.HipDeg, SolvedR.KneeDeg, StanceLegRightOutDeg);
 	}
 
 	auto WriteArm = [](const FRelayDogArm& Arm, const RelayDogStride::FArmPose& ArmPose)
@@ -2919,11 +3010,11 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		// and the turn itself, which a skin applies about its OWN hip-to-sole line.
 		if (LegLeft.Hip != nullptr)
 		{
-			(OnPlusY(LegLeft.Hip) ? Dressed.StanceHipRollPlusY : Dressed.StanceHipRollMinusY) = StanceFeetOutDeg * LegChainLeft.OutwardSign;
+			(OnPlusY(LegLeft.Hip) ? Dressed.StanceHipRollPlusY : Dressed.StanceHipRollMinusY) = StanceLegLeftOutDeg * LegChainLeft.OutwardSign;
 		}
 		if (LegRight.Hip != nullptr)
 		{
-			(OnPlusY(LegRight.Hip) ? Dressed.StanceHipRollPlusY : Dressed.StanceHipRollMinusY) = StanceFeetOutDeg * LegChainRight.OutwardSign;
+			(OnPlusY(LegRight.Hip) ? Dressed.StanceHipRollPlusY : Dressed.StanceHipRollMinusY) = StanceLegRightOutDeg * LegChainRight.OutwardSign;
 		}
 		Dressed.StanceKneesOutDeg = StanceKneesOutDeg;
 		for (const FRelayDogArm* Arm : {&ArmLeft, &ArmRight})
@@ -2970,6 +3061,12 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 			Dressed.BodyPitchDeg = Written.Pitch;
 			Dressed.BodyYawDeg = Written.Yaw;
 			Dressed.BodyRollDeg = Written.Roll;
+			// THE STANCE'S FORWARD SHIFT and the rotation it pivots, so a costume turns the bend about ITS OWN hips
+			Dressed.BodyForwardUU = static_cast<float>(Offset.X);
+			Dressed.StancePitchDeg = Pose.Stance.PitchDeg;
+			Dressed.StanceYawDeg = Pose.Stance.YawDeg;
+			Dressed.StanceRollDeg = Pose.Stance.RollDeg;
+			Dressed.StancePivotUU = Pose.Stance.PivotUU;
 		}
 	}
 	// COMPOSED WHETHER OR NOT ANYTHING IS WEARING IT, so Relay OG's own numbers can be held against an
@@ -3795,7 +3892,8 @@ FTransform ARelayDogCharacter::GetHandoffGripWorld(bool bLeftHand) const
 	}
 	const float Side = bPlusY ? 1.0f : -1.0f;
 	const WonderlandHands::FHand& Hand = bPlusY ? BodyHandPlusY : BodyHandMinusY;
-	const WonderlandGrip::FHold Hold = WonderlandGrip::WithDash(WonderlandGrip::CurrentHold(), ArmedStance.Dash.Value);
+	const WonderlandGrip::FHold Hold = WonderlandGrip::WithDash(WonderlandGrip::WithCharge(WonderlandGrip::CurrentHold(), StanceChargeWeight),
+		ArmedStance.Dash.Value);
 	// IN THE FIST once the hand is there: the grip passes through the closed fingers
 	FTransform Grip = Hand.IsOn(Forearm) ? WonderlandGrip::HandGripAt(Forearm, Tip, Hand.GripCentreLocal(), Forward, Side, Hold)
 		: WonderlandGrip::HandGrip(Forearm, Tip, Forward, Side, Hold);
@@ -3879,7 +3977,8 @@ void ARelayDogCharacter::UpdateHandoffPresentation(float DeltaSeconds)
 		}
 	}
 	// THE V AROUND THE BODY (the founder's stance sheet): the blades' directions from the Dog's own frame
-	const WonderlandGrip::FHold VHold = WonderlandGrip::WithDash(WonderlandGrip::CurrentHold(), ArmedStance.Dash.Value);
+	const WonderlandGrip::FHold VHold = WonderlandGrip::WithDash(WonderlandGrip::WithCharge(WonderlandGrip::CurrentHold(), StanceChargeWeight),
+		ArmedStance.Dash.Value);
 	Swords.bHoldWorldRotation = VHold.bBodyV;
 	Swords.LeftHoldRotation = WonderlandGrip::BodyVRotation(GetActorTransform(), true, VHold);
 	Swords.RightHoldRotation = WonderlandGrip::BodyVRotation(GetActorTransform(), false, VHold);

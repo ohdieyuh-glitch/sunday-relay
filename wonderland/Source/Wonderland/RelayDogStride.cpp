@@ -214,9 +214,9 @@ namespace RelayDogStride
 		// a bound, not a shuffle: the feet come up and the body rides the flight
 		Out.LiftHeight = Run.LiftHeight + (Leg * 0.34f - Run.LiftHeight) * W;
 		Out.BobHeight = Run.BobHeight + (Leg * 0.14f - Run.BobHeight) * W;
-		// the reference sprints nearly upright: a lean into the speed, never the anime dive
-		Out.LeanDeg = Run.LeanDeg + (11.0f - Run.LeanDeg) * W;
-		Out.ArmsBack = Run.ArmsBack + (1.0f - Run.ArmsBack) * W;
+		// NO LEAN OR ARMS HERE. The sprint's bend into the speed is the armed stance's (RelayDogArmedStance: DashBendDeg, about the
+		// hips): LeanDeg is written as a pitch that leans this rig BACK (FDogPose::FStanceBody). And its arms PUMP with the stride
+		// there -- this used to push ArmsBack to 1, the arms locked behind with no swing at all (Second's review, 10-04).
 		return Out;
 	}
 

@@ -376,6 +376,20 @@ public:
 		const RelayDogStride::FDogPose& Now = Animator.Pose();
 		return Now.Stride.StrideLength > 1.0f ? Now.SpeedUU / Now.Stride.StrideLength : 0.0f;
 	}
+	/** QA: why the last sprint ended ("released", "cap", "stopped", "airborne", "panel", "teleport", "disarmed", "performance", or
+	 *  "none"), and how long after Forward's release edge it did (-1 if Forward was still held) -- measured, never a printed promise. */
+	FString QaLastSprintEnd(float& OutSecondsAfterRelease) const
+	{
+		OutSecondsAfterRelease = LastSprintEndAfterRelease;
+		return LastSprintEndCode;
+	}
+	/**
+	 * QA: the DRAWN body's points in the world -- the worn costume's own parts when a skin is worn, else Relay OG's pivots -- so a
+	 * stance is judged on what is on screen. Hips and knees are the joints; soles are the ground points the legs stand on. False
+	 * while the rig is unbound.
+	 */
+	bool QaDrawnBody(FVector& OutHead, FVector& OutHipPlusY, FVector& OutHipMinusY, FVector& OutKneePlusY, FVector& OutKneeMinusY,
+		FVector& OutSolePlusY, FVector& OutSoleMinusY) const;
 	int32 GetDashCount() const { return DashCount; }
 	int32 GetDashesRefused() const { return DashesRefused; }
 	/** Normal roaming's acceleration (read at BeginPlay): what every exit from the handoff restores. */
@@ -431,7 +445,8 @@ protected:
 	void SetForwardKey(bool bW, bool bDown);
 	/** The Mission Handoff dash: a velocity through the movement component, never a teleport. */
 	bool TryStartDash(float Now);
-	void EndDash(const TCHAR* Why);
+	/** Why: the log's words. Code: the reason QaLastSprintEnd reports. */
+	void EndDash(const TCHAR* Why, const TCHAR* Code);
 	/** A teleport (travel, a respawn) ends a dash. */
 	virtual void TeleportSucceeded(bool bIsATest) override;
 	void OnRunPressed();
@@ -938,8 +953,18 @@ private:
 	float NormalAcceleration = 900.0f;
 	/** THE ATTACK-READY STANCE (M2): its two eased weights, armed and dashing (RelayDogArmedStance). Plain C++, not reflected. */
 	RelayDogArmedStance::FState ArmedStance;
-	/** How far each hip is swept outward this frame by the stance (degrees; 0 whenever the swords are not held). */
-	float StanceFeetOutDeg = 0.0f;
+	/** How far each hip is swept away from the centre line this frame by the stance (degrees; 0 whenever the swords are not held):
+	 *  the stance's spacing, and the sideways part of putting each foot back under a tilted, shifted body. */
+	float StanceLegLeftOutDeg = 0.0f;
+	float StanceLegRightOutDeg = 0.0f;
+	/** How much of the charging stance is on (armed and standing, 0..1): the blades' low trailing hold eases in by it. */
+	float StanceChargeWeight = 0.0f;
+	/** THE SPRINT'S END, measured (QaLastSprintEnd): Forward's release edge, and the last end's reason and lateness. */
+	float ForwardReleasedAt = -1000.0f;
+	FString LastSprintEndCode = TEXT("none");
+	float LastSprintEndAfterRelease = -1.0f;
+	/** The camera's lag after a sprint: when it ended and whether the end was a teleport (no lag carries across one). */
+	bool bCameraLagEasing = false;
 	/** How far each thigh is turned outward this frame by the stance (degrees, a yaw at the hip; 0 whenever the swords are not held). */
 	float StanceKneesOutDeg = 0.0f;
 	/** THE MISSION HANDOFF'S PRESENTATION (M3): the swords, and each companion becoming its own. Plain C++, not reflected. */

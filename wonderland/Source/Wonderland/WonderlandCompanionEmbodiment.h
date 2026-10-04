@@ -200,6 +200,8 @@ public:
 	/** QA (round 6, the knees out): this figure's own leg on one side (+1 = the +Y leg), in WORLD space -- its hip joint, its
 	 *  knee joint, and its sole (the knee plus the shin along the knee's -Z, the length the leg solve uses). False if not found. */
 	bool QaLegAt(float SideSign, FVector& OutHip, FVector& OutKnee, FVector& OutSole) const;
+	/** QA (the charging stance, 10-04): this figure's own head joint in WORLD space (its first `head` part). False if none. */
+	bool QaHeadAt(FVector& OutHead) const;
 
 	/**
 	 * Whether the clock is allowed to touch this body's glow at all. False for the wardrobe's preview figure,

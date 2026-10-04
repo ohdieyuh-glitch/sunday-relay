@@ -1638,6 +1638,19 @@ bool AWonderlandCompanionEmbodiment::QaLegAt(float SideSign, FVector& OutHip, FV
 	return false;
 }
 
+bool AWonderlandCompanionEmbodiment::QaHeadAt(FVector& OutHead) const
+{
+	for (int32 Index = 0; Index < Motions.Num() && Index < PartPivots.Num(); ++Index)
+	{
+		if (Motions[Index].Motion == EWonderlandCompanionMotion::Head && PartPivots[Index] != nullptr)
+		{
+			OutHead = PartPivots[Index]->GetComponentLocation();
+			return true;
+		}
+	}
+	return false;
+}
+
 bool AWonderlandCompanionEmbodiment::QaReadPaint(FName Name, FLinearColor& OutBase, FLinearColor& OutRim, FString& OutRelief) const
 {
 	OutBase = OutRim = FLinearColor(-1.0f, -1.0f, -1.0f, 1.0f);
@@ -3735,9 +3748,29 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 				// against the canon body's own root: 14.880 against 17.519 uu of bob, a ratio of 0.849.
 				//
 				// An authority's value is not a starting point to be scaled. It is the value.
-				WriteJoint(Pivot, 
-					Part.RestLocation + FVector(0.0, WornPose.SwayUU, WornPose.BobUU + WornPose.LiftUU),
-					FRotator(WornPose.BodyPitchDeg, WornPose.BodyYawDeg, WornPose.BodyRollDeg));
+				FVector Carried(WornPose.BodyForwardUU, WornPose.SwayUU, WornPose.BobUU + WornPose.LiftUU);
+				// THE CHARGING STANCE'S BEND ON THIS FIGURE'S OWN HIPS (founder, 10-04; FWonderlandWornPose::StancePivotUU): the canon's
+				// root was carried so its bend turns about the CANON's hips; these hips sit at their own height, so the same rotation
+				// is re-centred on them -- the body bends where its legs join it, and the legs (solved onto the canon's soles) follow.
+				if (WornPose.StancePivotUU > 0.0f)
+				{
+					float HipSum = 0.0f;
+					int32 HipCount = 0;
+					for (const FPartMotion& HipPart : Motions)
+					{
+						if (HipPart.LimbKind == 1 && HipPart.ThighUU > 1.0f && HipPart.ShinUU > 1.0f)
+						{
+							HipSum += HipPart.ThighUU + HipPart.ShinUU;
+							++HipCount;
+						}
+					}
+					if (HipCount > 0)
+					{
+						const FVector Gap(0.0, 0.0, WornPose.StancePivotUU - HipSum / HipCount);
+						Carried += FRotator(WornPose.StancePitchDeg, WornPose.StanceYawDeg, WornPose.StanceRollDeg).RotateVector(Gap) - Gap;
+					}
+				}
+				WriteJoint(Pivot, Part.RestLocation + Carried, FRotator(WornPose.BodyPitchDeg, WornPose.BodyYawDeg, WornPose.BodyRollDeg));
 				break;
 			}
 			WriteJoint(Pivot, 

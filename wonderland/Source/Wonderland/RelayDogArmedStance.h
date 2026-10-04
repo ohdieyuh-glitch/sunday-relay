@@ -30,11 +30,27 @@ namespace RelayDogArmedStance
 		// THE FOUNDER'S CANONICAL STANCE, 2026-10-03 (the reference photo; it supersedes the P2 "wider stance"): legs relatively close
 		// together, one foot a little ahead, knees only slightly bent, the torso upright, shoulders level, the arms LOWERED and the
 		// blades held low and diagonal, out and down from the body -- composed, ready to move, never a wide split or a crouch.
-		/** Body lean added, standing and walking: upright (the run already leans; see RunLeanDeg). */
-		float LeanDeg = 2.0f;
-		float RunLeanDeg = 3.0f;
-		/** How far the pelvis rides lower, standing and walking, uu: on the canon leg 1.5 uu is a ~30 deg knee -- slightly bent. */
-		float CrouchUU = 1.5f;
+		//
+		// THE FOUNDER'S CHARGING STANCE, 2026-10-04 (it builds on the photo's narrow feet and low blades): "the Relay Dog must BEND
+		// MUCH MORE FORWARD and look like it is about to CHARGE" -- a strong forward bend, the hips shifted and the pelvis angled
+		// into the movement, the shoulders tilted, the head forward, the weight forward; one loaded, pushing leg and the other
+		// placed to start the run; knees bent; narrow; the arms and blades low, following the body. Through the body's own
+		// hierarchy -- the bend turns about the HIPS and the legs are re-solved onto planted feet -- never the actor rotated.
+		/** The forward bend standing, degrees, about the hips (+ = the chest forward). The TRUE bend: see FStanceBody. */
+		float BendDeg = 24.0f;
+		/** Armed and moving: the bend at the gait, and in the sprint (the Genshin reference leans into the speed). */
+		float RunBendDeg = 6.0f;
+		float DashBendDeg = 14.0f;
+		/** The hips carried forward over the front foot, and across toward the loaded leg, uu (standing). */
+		float HipForwardUU = 3.0f;
+		float HipShiftUU = 3.0f;
+		/** The pelvis angled: the free (front) hip this much lower, degrees; and the body turned to lead with the front side. */
+		float TiltDeg = 5.0f;
+		float TurnDeg = 8.0f;
+		/** The head held this share level through the bend (1 = looking straight ahead, 0 = bent with the body). */
+		float HeadKeep = 0.8f;
+		/** How far the pelvis rides lower, standing and walking, uu: the loaded knees of a body about to push off. */
+		float CrouchUU = 7.0f;
 		/** Each hip swept outward: a touch -- the feet stay about hip width apart (P2's 19 deg doubled the spacing). */
 		float FeetOutDeg = 2.0f;
 		/**
@@ -44,11 +60,12 @@ namespace RelayDogArmedStance
 		 */
 		float KneesOutDeg = 0.0f;
 		/**
-		 * THE OFFSET FOOT (the reference): standing, the Dog's own LEFT foot -- the gold sword's side, the canon's Pose.LegRight, which
-		 * hangs at -Y -- this far ahead of the hip, and its right foot 30% of it behind, uu. Faded out as the gait comes in, so the walk's
-		 * own feet take over.
+		 * THE FEET (standing): the Dog's own LEFT foot -- the gold sword's side, the canon's Pose.LegRight, which hangs at -Y -- this far
+		 * ahead of the hips, placed to start the run; its RIGHT foot this far behind, loaded and pushing, uu. Faded out as the gait comes
+		 * in, so the walk's own feet take over.
 		 */
-		float StaggerUU = 6.0f;
+		float FrontUU = 12.0f;
+		float RearUU = 14.0f;
 		/** The ready arms, standing and walking: LOWERED, a little forward and away from the body, the elbows soft -- the blades low. */
 		float ReadyShoulderDeg = 4.0f;
 		float ReadyElbowDeg = 18.0f;
@@ -59,8 +76,7 @@ namespace RelayDogArmedStance
 		float RunOutDeg = 20.0f;
 		float RunElbowAddDeg = 14.0f;
 		/** The dash (the founder's Genshin sprint reference): a sprinter's arms -- a little back and out, still PUMPING with the stride
-		 *  (DashSwingKeep of the run's own swing), the blades trailing low. The sprint's lean comes from the stride (SprintStride). */
-		float DashLeanDeg = 2.0f;
+		 *  (DashSwingKeep of the stride's own swing, never the run's locked arms-back), the blades trailing low. */
 		float DashShoulderDeg = -25.0f;
 		float DashElbowDeg = 20.0f;
 		float DashOutDeg = 12.0f;
@@ -89,10 +105,16 @@ namespace RelayDogArmedStance
 	 *        the "outward" sweep drawing the hands together (ST2, 2026-10-02). So the stance's sweeps go through the measured
 	 *        sign; the animator's own arms-back roll is left exactly as it was.
 	 */
+	/**
+	 * @param HipPivotUU  the hips' height above the body root's pivot, uu, as the rig has them (the bend turns about it).
+	 * @param HipYLeft, HipYRight  Pose.LegLeft's and Pose.LegRight's hips across the body, uu, as measured (the canon's LegLeft
+	 *        hangs at +Y). The leg on HipYRight's side is the front one.
+	 * The body's part goes to Pose.Stance (in the rig's own signs), each leg's sweep to Pose.Stance.Leg*OutDeg.
+	 */
 	void Apply(RelayDogStride::FDogPose& Pose, float ArmedWeight, float DashWeight, float LegLengthUU, float ThighUU, float ShinUU,
-		float LeftOutFactor, float RightOutFactor, const FShape& Shape = FShape());
+		float LeftOutFactor, float RightOutFactor, float HipPivotUU, float HipYLeft, float HipYRight, const FShape& Shape = FShape());
 
-	/** How far each hip is swept outward at these weights. The pose has no field for a leg's sweep, so the caller writes it. */
+	/** How far each hip is swept outward at these weights while moving (Apply folds it into each leg's own sweep). */
 	float FeetOutDeg(const RelayDogStride::FDogPose& Pose, float ArmedWeight, const FShape& Shape = FShape());
 
 	/** How far each thigh is turned outward at these weights (standing and walking; none in the run). The caller writes it as a yaw. */
