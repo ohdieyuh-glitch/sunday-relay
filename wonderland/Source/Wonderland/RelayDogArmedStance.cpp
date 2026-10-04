@@ -75,24 +75,30 @@ namespace RelayDogArmedStance
 		// the animator's own blending is kept, and at full gait weight the result is exactly the lowered solve. The run
 		// already rides 26% low, so the crouch is a standing and walking thing.
 		const float Drop = W * Shape.CrouchUU * (1.0f - Back);
+		// THE OFFSET FOOT is a standing thing: faded out as the gait comes in, so the walk's own feet take over
+		const float Stagger = W * Shape.StaggerUU * (1.0f - Gait);
 		const float Full = ThighUU + ShinUU;
-		if (Drop > 0.001f && Full > 1.0f)
+		if ((Drop > 0.001f || Stagger > 0.001f) && Full > 1.0f)
 		{
 			float HipNow = LegLengthUU - Pose.PelvisDropUU;
 			HipNow = HipNow < 0.6f * Full ? 0.6f * Full : (HipNow > Full ? Full : HipNow);
 			const float HipLow = Max(HipNow - Drop, 0.6f * Full);
-			auto Lower = [&](RelayDogStride::FLegPose& Leg, const RelayDogStride::FFootPose& Foot)
+			auto Lower = [&](RelayDogStride::FLegPose& Leg, const RelayDogStride::FFootPose& Foot, float Ahead)
 			{
 				RelayDogStride::FFootPose At = Foot;
 				At.Forward *= Gait;
 				At.Lift *= Gait;
+				// the same solve onto the foot where the stance wants it: Ahead uu in front of where the animator has it
+				RelayDogStride::FFootPose To = At;
+				To.Forward += Ahead;
 				const RelayDogStride::FLegPose Base = RelayDogStride::LegPose(At, ThighUU, ShinUU, HipNow);
-				const RelayDogStride::FLegPose Low = RelayDogStride::LegPose(At, ThighUU, ShinUU, HipLow);
+				const RelayDogStride::FLegPose Low = RelayDogStride::LegPose(To, ThighUU, ShinUU, HipLow);
 				Leg.HipDeg += Low.HipDeg - Base.HipDeg;
 				Leg.KneeDeg += Low.KneeDeg - Base.KneeDeg;
 			};
-			Lower(Pose.LegLeft, Pose.FootLeft);
-			Lower(Pose.LegRight, Pose.FootRight);
+			// the canon's LegLeft hangs at +Y, the Dog's own RIGHT: a little behind; LegRight (-Y, the Dog's own LEFT): ahead
+			Lower(Pose.LegLeft, Pose.FootLeft, -0.3f * Stagger);
+			Lower(Pose.LegRight, Pose.FootRight, Stagger);
 			Pose.PelvisDropUU += HipNow - HipLow;
 		}
 
@@ -114,9 +120,10 @@ namespace RelayDogArmedStance
 			Run.ShoulderYawDeg = Max(Walk.ShoulderYawDeg * Out, Shape.RunOutDeg) * Out;
 			RelayDogStride::FArmPose Armed = LerpArm(Ready, Run, Back);
 			// The dash: swept back and out, behind a body leaning into the burst.
+			// THE SPRINT'S ARMS PUMP (the Genshin reference): a little back and out, carrying most of the stride's own swing
 			RelayDogStride::FArmPose Dash;
-			Dash.ShoulderDeg = Shape.DashShoulderDeg;
-			Dash.ElbowDeg = Shape.DashElbowDeg;
+			Dash.ShoulderDeg = Shape.DashShoulderDeg + Walk.ShoulderDeg * Shape.DashSwingKeep;
+			Dash.ElbowDeg = Shape.DashElbowDeg + Walk.ElbowDeg * Shape.DashSwingKeep;
 			Dash.ShoulderYawDeg = Shape.DashOutDeg * Out;
 			Armed = LerpArm(Armed, Dash, D);
 			Pose_ = LerpArm(Walk, Armed, Max(W, D));

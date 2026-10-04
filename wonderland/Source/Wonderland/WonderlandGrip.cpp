@@ -16,10 +16,12 @@ namespace
 		TEXT("Mission Handoff grip: uu forward of the forearm's line where the grip's centre sits."));
 	TAutoConsoleVariable<int32> CVarSwordBodyV(TEXT("wl.Handoff.SwordBodyV"), 1,
 		TEXT("Mission Handoff: 1 = held blades make a V around the body (the founder's stance sheet), 0 = they follow the forearm."));
-	TAutoConsoleVariable<float> CVarSwordV(TEXT("wl.Handoff.SwordV"), 42.0f,
-		TEXT("Mission Handoff: degrees a held blade leans OUT from straight up, to its own hand's side."));
-	TAutoConsoleVariable<float> CVarSwordVForward(TEXT("wl.Handoff.SwordVForward"), 12.0f,
+	TAutoConsoleVariable<float> CVarSwordV(TEXT("wl.Handoff.SwordV"), 122.0f,
+		TEXT("Mission Handoff: degrees a held blade points from STRAIGHT UP, out to its own hand's side (under 90 up, over 90 down; the founder's 10-03 stance: 122, low and diagonal)."));
+	TAutoConsoleVariable<float> CVarSwordVForward(TEXT("wl.Handoff.SwordVForward"), 10.0f,
 		TEXT("Mission Handoff: degrees a held blade leans FORWARD from the V's plane."));
+	TAutoConsoleVariable<float> CVarSwordDashVForward(TEXT("wl.Handoff.SwordDashVForward"), -35.0f,
+		TEXT("Mission Handoff: in the sprint, degrees a held blade leans FORWARD from the V's plane (negative: the tips trail back)."));
 }
 
 namespace WonderlandGrip
@@ -32,9 +34,18 @@ namespace WonderlandGrip
 		Hold.IntoHandUU = FMath::Clamp(CVarGripInto.GetValueOnGameThread(), -20.0f, 20.0f);
 		Hold.ForwardUU = FMath::Clamp(CVarGripForward.GetValueOnGameThread(), -20.0f, 20.0f);
 		Hold.bBodyV = CVarSwordBodyV.GetValueOnGameThread() != 0;
-		Hold.VDeg = FMath::Clamp(CVarSwordV.GetValueOnGameThread(), 0.0f, 85.0f);
+		Hold.VDeg = FMath::Clamp(CVarSwordV.GetValueOnGameThread(), 0.0f, 170.0f);
 		Hold.VForwardDeg = FMath::Clamp(CVarSwordVForward.GetValueOnGameThread(), -60.0f, 60.0f);
+		Hold.DashVForwardDeg = FMath::Clamp(CVarSwordDashVForward.GetValueOnGameThread(), -80.0f, 60.0f);
 		return Hold;
+	}
+
+	FHold WithDash(const FHold& Hold, float DashWeight)
+	{
+		FHold Out = Hold;
+		const float W = FMath::Clamp(DashWeight, 0.0f, 1.0f);
+		Out.VForwardDeg = Hold.VForwardDeg + (Hold.DashVForwardDeg - Hold.VForwardDeg) * W;
+		return Out;
 	}
 
 	FQuat BodyVRotation(const FTransform& ActorWorld, bool bLeftHand, const FHold& Hold)

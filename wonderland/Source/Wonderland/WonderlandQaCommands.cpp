@@ -6485,6 +6485,13 @@ namespace
 		float HandoffRun = 0.0f;
 		float DashPeak = 0.0f;
 		float DashSeconds = 0.0f;
+		// THE SPRINT after the burst (founder, 10-03: the Genshin reference): its speed and cadence while W is held, and its end on release
+		float SprintSum = 0.0f;
+		int32 SprintSamples = 0;
+		float CadenceSum = 0.0f;
+		int32 CadenceSamples = 0;
+		bool bSprintLate = false;
+		float ReleasedAt = -1.0f;
 		TArray<FHandTest> Tests;
 		int32 TestIndex = 0;
 		int32 KeyIndex = 0;
@@ -6746,26 +6753,50 @@ namespace
 			}
 			return true;
 		case 6:
-			// S3, THE DASH from the handoff run: W up, down, up, down -- the second press within the window
-			Dog->AddMovementInput(H.Forward, 1.0f);
+			// S3, THE DASH from the handoff run: W up, down, up, down -- the second press within the window -- then W HELD (the sprint),
+			// then W released at 1.2 s (the sprint ends)
+			if (H.KeyIndex <= 4)
+			{
+				Dog->AddMovementInput(H.Forward, 1.0f);
+			}
 			if (H.KeyIndex == 0 && In >= 0.00f) { Dog->QaForwardKey(false, false); H.KeyIndex = 1; }
 			if (H.KeyIndex == 1 && In >= 0.04f) { Dog->QaForwardKey(false, true); H.KeyIndex = 2; }
 			if (H.KeyIndex == 2 && In >= 0.08f) { Dog->QaForwardKey(false, false); H.KeyIndex = 3; }
 			if (H.KeyIndex == 3 && In >= 0.12f) { Dog->QaForwardKey(false, true); H.KeyIndex = 4; }
+			if (H.KeyIndex == 4 && In >= 1.20f) { Dog->QaForwardKey(false, false); H.KeyIndex = 5; H.ReleasedAt = In; }
 			if (Dog->IsDashing())
 			{
 				H.DashPeak = FMath::Max(H.DashPeak, Ground);
 				H.DashSeconds += Dt;
+				// the sprint's window: well after the 0.35 s burst, W still held
+				if (In >= 0.75f && In < 1.15f)
+				{
+					H.SprintSum += Ground;
+					++H.SprintSamples;
+					H.CadenceSum += Dog->QaStrideCycles();
+					++H.CadenceSamples;
+					H.bSprintLate = H.bSprintLate || In >= 1.05f;
+				}
 			}
-			if (In >= 1.0f)
+			if (In >= 1.45f)
 			{
 				const float Ratio = H.HandoffRun > 0.0f ? H.DashPeak / H.HandoffRun : 0.0f;
 				const bool bOne = Dog->GetDashCount() == H.DashBase + 1;
 				H.Check(TEXT("S3"), bOne && Ratio >= 2.0f,
 					FString::Printf(TEXT("dash: %d started, peak %.0f uu/s = %.2fx the handoff run (pre-registered: >= 2.0x), %.2fx the normal run"),
 						Dog->GetDashCount() - H.DashBase, H.DashPeak, Ratio, H.NormalRun > 0.0f ? H.DashPeak / H.NormalRun : 0.0f));
-				H.Check(TEXT("S3b"), H.DashSeconds > 0.35f && H.DashSeconds < 0.60f,
-					FString::Printf(TEXT("the dash lasted %.2f s (wl.Handoff.DashSeconds 0.45)"), H.DashSeconds));
+				// S3b-S3d (founder, 10-03: the dash is the Genshin reference -- a burst INTO A SPRINT held while W is held)
+				const float Sprint = H.SprintSamples > 0 ? H.SprintSum / H.SprintSamples : 0.0f;
+				const float SprintRatio = H.HandoffRun > 0.0f ? Sprint / H.HandoffRun : 0.0f;
+				H.Check(TEXT("S3b"), H.bSprintLate && SprintRatio >= 1.4f,
+					FString::Printf(TEXT("the sprint after the burst, W held: still dashing at 1.05 s %s, %.0f uu/s = %.2fx the handoff run (>= 1.4x: a sprint, held)"),
+						H.bSprintLate ? TEXT("yes") : TEXT("NO"), Sprint, SprintRatio));
+				H.Check(TEXT("S3c"), !Dog->IsDashing() && H.ReleasedAt > 0.0f,
+					FString::Printf(TEXT("W released at %.2f s: the dash %s 0.25 s later (it must end with the release); %.2f s dashing in all"),
+						H.ReleasedAt, Dog->IsDashing() ? TEXT("STILL RUNNING") : TEXT("ended"), H.DashSeconds));
+				const float Cadence = H.CadenceSamples > 0 ? H.CadenceSum / H.CadenceSamples : 0.0f;
+				H.Check(TEXT("S3d"), Cadence >= 3.0f && Cadence <= 6.0f,
+					FString::Printf(TEXT("the sprint's legs: %.2f stride cycles a second (3-6: a sprinter's, never the ~10/s blur that read as a slide)"), Cadence));
 				QaHandRelease(Dog);
 				H.KeyIndex = 0;
 				H.Tests = QaHandTests();
@@ -7708,6 +7739,10 @@ namespace
 		float SoleSpread = 0.0f;
 		float SoleHeight = 0.0f;
 		float Pitch = 0.0f;
+		/** How far the Dog's own LEFT sole (-Y) is ahead of its right, uu (the founder's 10-03 reference: one foot a little ahead). */
+		float SoleStagger = 0.0f;
+		/** The hands' height above the actor's origin, uu (the reference: the arms LOWERED, never raised into a guard). */
+		float HandHeight = 0.0f;
 	};
 
 	/** The knees' bend now, degrees (Second, 10-03: "visible leg bend" needs a number, not only a pelvis drop): the angle between each thigh's
@@ -7861,6 +7896,7 @@ namespace
 		float KneeOffBase[2] = { 0.0f, 0.0f };
 		FVector SoleBase[2] = { FVector::ZeroVector, FVector::ZeroVector };
 		FString KneesOutWas;
+		FString CrouchWas;
 		void Check(const FString& Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
@@ -7884,13 +7920,15 @@ namespace
 		R.SoleSpread = static_cast<float>(FVector::Dist2D(SoleA, SoleB));
 		R.SoleHeight = static_cast<float>((SoleA.Z + SoleB.Z) * 0.5 - At.Z);
 		R.Pitch = Dog->GetCanonBodyPitch();
+		R.SoleStagger = static_cast<float>(FVector::DotProduct(SoleB - SoleA, Fwd));
+		R.HandHeight = static_cast<float>((HandA.Z + HandB.Z) * 0.5 - At.Z);
 		return R;
 	}
 
 	FString QaDescribeStance(const FStanceReading& R)
 	{
-		return FString::Printf(TEXT("hands %.1f uu ahead, %.1f apart; soles %.1f apart at %.1f; body pitch %.1f"), R.HandForward, R.HandSpread, R.SoleSpread,
-			R.SoleHeight, R.Pitch);
+		return FString::Printf(TEXT("hands %.1f uu ahead, %.1f apart, at %.1f; soles %.1f apart at %.1f, the left %.1f ahead; body pitch %.1f"), R.HandForward,
+			R.HandSpread, R.HandHeight, R.SoleSpread, R.SoleHeight, R.SoleStagger, R.Pitch);
 	}
 
 	void QaStanceShow(FQaStance& S, UWorld* World, ARelayDogCharacter* Dog, bool bHideOthers)
@@ -8129,13 +8167,47 @@ namespace
 			float BehindLeft = -1.0f;
 			float BehindRight = -1.0f;
 			QaKneeBend(Dog, BehindLeft, BehindRight, true);
-			const bool bOk = Dog->GetArmedStanceWeight() == 1.0f && Ahead >= 10.0f && Out >= 6.0f && Feet >= 5.0f && FMath::Abs(Sink) <= 1.5f && Lean >= 5.0f
-				&& KneeLeft >= 15.0f && KneeRight >= 15.0f;
+			// THE FOUNDER'S CANONICAL STANCE, 10-03 (the reference photo; it supersedes P2's "hands >= 10 forward, feet >= 5 apart, lean >= 5"):
+			// the feet CLOSE (the spread grows by no more than 6 uu over the unarmed stand), one foot a little ahead (the Dog's own left by 3-12
+			// uu), the torso UPRIGHT (pitch moved <= 4 deg), the knees only SLIGHTLY bent (8-40 deg), the same feet (sink within 1.5 uu), the
+			// arms LOWERED (the hands raised by no more than 4 uu) and a little away from the body (>= 3 uu wider)
+			const float Stagger = R.SoleStagger - S.Base.SoleStagger;
+			const float Raised = R.HandHeight - S.Base.HandHeight;
+			const bool bOk = Dog->GetArmedStanceWeight() == 1.0f && Feet <= 6.0f && Stagger >= 3.0f && Stagger <= 12.0f && Lean <= 4.0f
+				&& KneeLeft >= 8.0f && KneeRight >= 8.0f && KneeLeft <= 40.0f && KneeRight <= 40.0f && FMath::Abs(Sink) <= 1.5f
+				&& Raised <= 4.0f && Out >= 3.0f && Ahead >= -4.0f && Ahead <= 10.0f;
 			S.Check(FString::Printf(TEXT("ST2.%d"), S.Skin + 1), bOk,
-				FString::Printf(TEXT("%s armed, standing: stance weight %.3f; hands %+.1f uu forward (>= 10) and %+.1f apart (>= 6); soles %+.1f apart (>= 5), ")
-					TEXT("%+.1f uu off the ground they stood on (within 1.5: the same feet); body pitch moved %.1f deg (>= 5); knees bent %.0f / %.0f deg (>= 15: a visible bend), ")
-					TEXT("%.0f / %.0f deg of it seen from behind (the gameplay camera's view; reported) | %s"),
-					*SkinName, Dog->GetArmedStanceWeight(), Ahead, Out, Feet, Sink, Lean, KneeLeft, KneeRight, BehindLeft, BehindRight, *QaDescribeStance(R)));
+				FString::Printf(TEXT("%s armed, standing (the founder's 10-03 reference): stance weight %.3f; soles %+.1f apart (<= 6: close), the left %+.1f ahead ")
+					TEXT("(3-12: one foot a little forward), %+.1f uu off the ground they stood on (within 1.5: the same feet); body pitch moved %.1f deg (<= 4: upright); ")
+					TEXT("knees bent %.0f / %.0f deg (8-40: slightly), %.0f / %.0f of it from behind (reported); hands raised %+.1f uu (<= 4: lowered), %+.1f apart (>= 3), ")
+					TEXT("%+.1f forward (-4..10) | %s"),
+					*SkinName, Dog->GetArmedStanceWeight(), Feet, Stagger, Sink, Lean, KneeLeft, KneeRight, BehindLeft, BehindRight, Raised, Out, Ahead, *QaDescribeStance(R)));
+			// ST2S: THE BLADES LOW AND DIAGONAL, as the reference holds them -- each tip DOWN from its grip (>= 30 uu), OUT to its own hand's side
+			// (>= 25 uu), never into the ground (>= 2 uu above the soles); gold on the Dog's own LEFT (-Y), cyan on its RIGHT
+			{
+				const WonderlandHandoffSwords::FPresentation& Blades = Dog->GetHandoffSwords();
+				const FVector Right = Dog->GetActorRightVector().GetSafeNormal2D();
+				const double SoleGround = FMath::Min(Dog->GetCanonSoleWorld(1.0f).Z, Dog->GetCanonSoleWorld(-1.0f).Z);
+				FString BladeLine;
+				bool bBlades = true;
+				for (const bool bGold : { true, false })
+				{
+					const FTransform Blade = Blades.GetSwordWorld(bGold);
+					const FVector Grip = Blade.GetLocation();
+					const FVector BladeTip = Blade.TransformPosition(FVector(0.0, 0.0, WonderlandHandoffSwords::TipZ));
+					const double OwnSide = bGold ? -1.0 : 1.0;
+					const double Down = Grip.Z - BladeTip.Z;
+					const double Outward = FVector::DotProduct(BladeTip - Grip, Right) * OwnSide;
+					const double AboveGround = BladeTip.Z - SoleGround;
+					const bool bSide = FVector::DotProduct(Grip - Dog->GetActorLocation(), Right) * OwnSide > 0.0;
+					const bool bThis = Down >= 30.0 && Outward >= 25.0 && AboveGround >= 2.0 && bSide;
+					bBlades = bBlades && bThis;
+					BladeLine += FString::Printf(TEXT("%s%s: tip %.0f uu down, %.0f out, %.0f above the ground, on its own side %s"), BladeLine.IsEmpty() ? TEXT("") : TEXT("; "),
+						bGold ? TEXT("gold (left)") : TEXT("cyan (right)"), Down, Outward, AboveGround, bSide ? TEXT("yes") : TEXT("NO"));
+				}
+				S.Check(FString::Printf(TEXT("ST2S.%d"), S.Skin + 1), bBlades,
+					FString::Printf(TEXT("%s, the blades low and diagonal (want each tip >= 30 down, >= 25 out, >= 2 above the ground): %s"), *SkinName, *BladeLine));
+			}
 			// ST2K next (round 6): the knees turned out by a known angle on the body the player sees, then the armed frames as built
 			{
 				FString Whose;
@@ -8146,6 +8218,11 @@ namespace
 				const IConsoleVariable* KneesVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Handoff.Stance.KneesOut"));
 				S.KneesOutWas = KneesVar != nullptr ? KneesVar->GetString() : FString(TEXT("0"));
 				GEngine->Exec(World, TEXT("wl.Handoff.Stance.KneesOut 25"));
+				// THE TURN NEEDS A BENT KNEE TO SHOW (Second, round 6: the rise is ~4 uu at a 58 deg knee, ~1.1 at 15 deg): the founder's 10-03
+				// stance bends the knees only slightly, so ST2K tests the MECHANISM on a crouch of 10 for its own measurement, then restores it
+				const IConsoleVariable* CrouchVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Handoff.Stance.Crouch"));
+				S.CrouchWas = CrouchVar != nullptr ? CrouchVar->GetString() : FString(TEXT("1.5"));
+				GEngine->Exec(World, TEXT("wl.Handoff.Stance.Crouch 10"));
 			}
 			Next(7);
 			return true;
@@ -8162,7 +8239,8 @@ namespace
 			float Off[2] = { 0.0f, 0.0f };
 			FVector Sole[2];
 			FString Whose;
-			const bool bRead = QaKneesOutOfLine(Dog, Off, Sole, Whose);
+			const bool bRead = QaKneesOutOfLine(Dog, Off, Sole, Whose)
+				&& (SkinName == TEXT("relay_og") || Dog->GetWornSkinId() == FName(*SkinName));
 			const float DriftPlus = bRead ? static_cast<float>(FVector::Dist(Sole[0], S.SoleBase[0])) : -1.0f;
 			const float DriftMinus = bRead ? static_cast<float>(FVector::Dist(Sole[1], S.SoleBase[1])) : -1.0f;
 			const bool bOk = bRead && Off[0] - S.KneeOffBase[0] >= 3.0f && Off[1] - S.KneeOffBase[1] >= 3.0f && Off[0] >= 2.0f && Off[1] >= 2.0f
@@ -8172,6 +8250,7 @@ namespace
 					TEXT("want >= +3 more and >= +2: OUT, not in); soles moved %.2f / %.2f uu (<= 1: planted)"),
 					*SkinName, *Whose, Off[0], Off[1], S.KneeOffBase[0], S.KneeOffBase[1], DriftPlus, DriftMinus));
 			GEngine->Exec(World, *FString::Printf(TEXT("wl.Handoff.Stance.KneesOut %s"), *S.KneesOutWas));
+			GEngine->Exec(World, *FString::Printf(TEXT("wl.Handoff.Stance.Crouch %s"), *S.CrouchWas));
 			S.Shot = 0;
 			S.bArmedShots = true;
 			QaStanceShow(S, World, Dog, true);
@@ -9432,20 +9511,13 @@ namespace
 	};
 
 	const FQaStancePreset StancePresets[] = {
-		{ TEXT("P0_before"), TEXT("wl.Handoff.SwordBodyV 0;wl.Handoff.Stance.Out 18;wl.Handoff.Stance.Shoulder 22;wl.Handoff.Stance.Elbow 50;wl.Handoff.Stance.FeetOut 6;wl.Handoff.Stance.Crouch 2;wl.Handoff.Stance.RunOut 16") },
-		// index 1 is THE DEFAULT (SC1/SC2 measure it): P2 canonical (the founder, 10-03) -- its V and arms-out -- with readiness and legs
-		// improved as the founder asked (round 3b's ST2 read the P2 hands only +8.7 uu forward); index 2 is P2 as round 3b built it
-		{ TEXT("P1_ready_default"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 19;wl.Handoff.Stance.Crouch 10;wl.Handoff.Stance.RunOut 32") },
-		{ TEXT("P2_round3b"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 10;wl.Handoff.Stance.Elbow 22;wl.Handoff.Stance.FeetOut 16;wl.Handoff.Stance.Crouch 7;wl.Handoff.Stance.RunOut 32") },
-		{ TEXT("P3_narrower"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 24;wl.Handoff.SwordVForward 24;wl.Handoff.Stance.Out 26;wl.Handoff.Stance.Shoulder 18;wl.Handoff.Stance.Elbow 34;wl.Handoff.Stance.FeetOut 10;wl.Handoff.Stance.Crouch 5;wl.Handoff.Stance.RunOut 20") },
-		// THE LEGS FOR THE FOUNDER TO PICK (Second, 10-03: round 4's knees read as straight). The knees DID bend (~58 deg at crouch 8 on a
-		// 48-uu leg) but in a plane facing forward, which the gameplay camera behind the Dog barely sees. So: today's look, then the knees
-		// turned out over the toes (wl.Handoff.Stance.KneesOut) with the feet a little wider -- framed BEHIND and at the SIDE from knee
-		// height, each with the true knee bend and the bend seen from behind, measured
-		{ TEXT("L1_crouch10_feet19_knees0"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 19;wl.Handoff.Stance.Crouch 10;wl.Handoff.Stance.KneesOut 0;wl.Handoff.Stance.RunOut 32") },
-		{ TEXT("L2_crouch8_feet22_knees20"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 22;wl.Handoff.Stance.Crouch 8;wl.Handoff.Stance.KneesOut 20;wl.Handoff.Stance.RunOut 32") },
-		{ TEXT("L3_crouch10_feet24_knees30"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 24;wl.Handoff.Stance.Crouch 10;wl.Handoff.Stance.KneesOut 30;wl.Handoff.Stance.RunOut 32") },
-		{ TEXT("L4_crouch12_feet26_knees40"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 26;wl.Handoff.Stance.Crouch 12;wl.Handoff.Stance.KneesOut 40;wl.Handoff.Stance.RunOut 32") },
+		// THE FOUNDER'S CANONICAL STANCE, 10-03 (the reference photo; it supersedes P2): every preset sets EVERY key, so none leaks into the next.
+		// index 0 is the stance it replaces (P2 wide, the raised V) for the before/after; index 1 is THE DEFAULT (SC1/SC2 measure it);
+		// 2 and 3 are the blade angle either side of it, for the founder's eye
+		{ TEXT("W0_before_P2_wide"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 19;wl.Handoff.Stance.Crouch 10;wl.Handoff.Stance.RunOut 32;wl.Handoff.Stance.Stagger 0;wl.Handoff.Stance.Lean 8;wl.Handoff.Stance.KneesOut 0") },
+		{ TEXT("R1_reference_default"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 122;wl.Handoff.SwordVForward 10;wl.Handoff.Stance.Out 14;wl.Handoff.Stance.Shoulder 4;wl.Handoff.Stance.Elbow 18;wl.Handoff.Stance.FeetOut 2;wl.Handoff.Stance.Crouch 1.5;wl.Handoff.Stance.RunOut 20;wl.Handoff.Stance.Stagger 6;wl.Handoff.Stance.Lean 2;wl.Handoff.Stance.KneesOut 0") },
+		{ TEXT("R2_blades_flatter"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 108;wl.Handoff.SwordVForward 10;wl.Handoff.Stance.Out 14;wl.Handoff.Stance.Shoulder 4;wl.Handoff.Stance.Elbow 18;wl.Handoff.Stance.FeetOut 2;wl.Handoff.Stance.Crouch 1.5;wl.Handoff.Stance.RunOut 20;wl.Handoff.Stance.Stagger 6;wl.Handoff.Stance.Lean 2;wl.Handoff.Stance.KneesOut 0") },
+		{ TEXT("R3_blades_steeper_foot9"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 135;wl.Handoff.SwordVForward 10;wl.Handoff.Stance.Out 14;wl.Handoff.Stance.Shoulder 4;wl.Handoff.Stance.Elbow 24;wl.Handoff.Stance.FeetOut 2;wl.Handoff.Stance.Crouch 1.5;wl.Handoff.Stance.RunOut 20;wl.Handoff.Stance.Stagger 9;wl.Handoff.Stance.Lean 2;wl.Handoff.Stance.KneesOut 0") },
 	};
 
 	void QaStanceApply(UWorld* World, const TCHAR* Commands)
@@ -9487,7 +9559,9 @@ namespace
 			const bool bEdgeIsScreenLeft = (Edge.X < (bGold ? RightEdge.X : LeftEdge.X));
 			Outside[Side] = bEdgeIsScreenLeft ? Edge.X - Tip.X : Tip.X - Edge.X;
 		}
-		bOutV = bSeen && Rise[0] >= 0.20 && Rise[1] >= 0.20 && Outside[0] >= 0.0 && Outside[1] >= 0.0;
+		// THE FOUNDER'S 10-03 STANCE: the blades held LOW and diagonal -- each tip BELOW its fist (by >= 15% of the body's height on screen)
+		// and past the body's edge on its own side (P2's raised V wanted the tips 20% ABOVE the fists)
+		bOutV = bSeen && Rise[0] <= -0.15 && Rise[1] <= -0.15 && Outside[0] >= 0.0 && Outside[1] >= 0.0;
 		return FString::Printf(TEXT("%s: gold tip %+.0f%% of the body's height above its fist, %+.0f px outside the body's left edge; cyan %+.0f%%, %+.0f px outside its right edge"),
 			bFromFront ? TEXT("in front") : TEXT("behind"), Rise[0] * 100.0, Outside[0], Rise[1] * 100.0, Outside[1]);
 	}
@@ -9660,11 +9734,11 @@ namespace
 				UE_LOG(LogWonderlandQa, Display, TEXT("WLSCQA %s %s | %s"), Preset.Name, ShotNames[S.Shot], *Reading);
 				if (S.Preset == 1 && S.Shot == 0)
 				{
-					S.Check(TEXT("SC1"), bV, FString::Printf(TEXT("the defaults, the player's own camera behind, held and standing: both blades rise above their fists (>= 20%% of the body) and stand outside the body on their own sides -- %s"), *Reading));
+					S.Check(TEXT("SC1"), bV, FString::Printf(TEXT("the defaults, the player's own camera behind, held and standing: both blades go DOWN from their fists (>= 15%% of the body) and reach outside the body on their own sides (the founder's 10-03 stance) -- %s"), *Reading));
 				}
 				if (S.Preset == 1 && S.Shot == 1)
 				{
-					S.Check(TEXT("SC2"), bV, FString::Printf(TEXT("the defaults, in front (mirrored: gold on the screen's RIGHT): the V holds -- %s"), *Reading));
+					S.Check(TEXT("SC2"), bV, FString::Printf(TEXT("the defaults, in front (mirrored: gold on the screen's RIGHT): the blades still low, down and out -- %s"), *Reading));
 				}
 			}
 			S.Frame(FString::Printf(TEXT("stance_%s_%s"), Preset.Name, ShotNames[S.Shot]));

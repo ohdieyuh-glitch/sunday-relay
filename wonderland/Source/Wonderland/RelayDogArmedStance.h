@@ -27,33 +27,44 @@ namespace RelayDogArmedStance
 	 */
 	struct FShape
 	{
-		/** Body lean added, standing and walking (the run already leans hard; see RunLeanDeg). */
-		float LeanDeg = 8.0f;
+		// THE FOUNDER'S CANONICAL STANCE, 2026-10-03 (the reference photo; it supersedes the P2 "wider stance"): legs relatively close
+		// together, one foot a little ahead, knees only slightly bent, the torso upright, shoulders level, the arms LOWERED and the
+		// blades held low and diagonal, out and down from the body -- composed, ready to move, never a wide split or a crouch.
+		/** Body lean added, standing and walking: upright (the run already leans; see RunLeanDeg). */
+		float LeanDeg = 2.0f;
 		float RunLeanDeg = 3.0f;
-		/** How far the pelvis rides lower, standing and walking, uu: a ready knee, never a squat. */
-		float CrouchUU = 10.0f;
-		/** Each hip swept outward: the feet spaced for movement. */
-		float FeetOutDeg = 19.0f;
+		/** How far the pelvis rides lower, standing and walking, uu: on the canon leg 1.5 uu is a ~30 deg knee -- slightly bent. */
+		float CrouchUU = 1.5f;
+		/** Each hip swept outward: a touch -- the feet stay about hip width apart (P2's 19 deg doubled the spacing). */
+		float FeetOutDeg = 2.0f;
 		/**
 		 * Each thigh turned outward about the vertical (the knees out over the toes), degrees. FeetOut is a roll, so the knee folds in a
 		 * plane facing forward -- a bend the gameplay camera, BEHIND the Dog, barely sees (round 4: ~58 deg of knee read as straight).
 		 * Turned out, the same bend shows from behind. 0 = the look before it (the founder picks from wl.Qa.StanceCalib's L frames).
 		 */
 		float KneesOutDeg = 0.0f;
-		/** The ready arms, standing and walking: raised forward and out, the forearms up -- the blades carried out from the body. */
-		float ReadyShoulderDeg = 12.0f;
-		float ReadyElbowDeg = 25.0f;
-		float ReadyOutDeg = 44.0f;
+		/**
+		 * THE OFFSET FOOT (the reference): standing, the Dog's own LEFT foot -- the gold sword's side, the canon's Pose.LegRight, which
+		 * hangs at -Y -- this far ahead of the hip, and its right foot 30% of it behind, uu. Faded out as the gait comes in, so the walk's
+		 * own feet take over.
+		 */
+		float StaggerUU = 6.0f;
+		/** The ready arms, standing and walking: LOWERED, a little forward and away from the body, the elbows soft -- the blades low. */
+		float ReadyShoulderDeg = 4.0f;
+		float ReadyElbowDeg = 18.0f;
+		float ReadyOutDeg = 14.0f;
 		/** How much of the walk's own arm swing stays with the blades in hand: they are carried, not flung. */
 		float SwingKeep = 0.3f;
 		/** Running (the animator's arms-back posture): the blades trail, swept out so they clear the legs, forearms a little bent. */
-		float RunOutDeg = 32.0f;
+		float RunOutDeg = 20.0f;
 		float RunElbowAddDeg = 14.0f;
-		/** The dash: a stronger lean and both blades swept back and out, like the trails they leave. */
-		float DashLeanDeg = 10.0f;
-		float DashShoulderDeg = -70.0f;
-		float DashElbowDeg = 10.0f;
-		float DashOutDeg = 24.0f;
+		/** The dash (the founder's Genshin sprint reference): a sprinter's arms -- a little back and out, still PUMPING with the stride
+		 *  (DashSwingKeep of the run's own swing), the blades trailing low. The sprint's lean comes from the stride (SprintStride). */
+		float DashLeanDeg = 2.0f;
+		float DashShoulderDeg = -25.0f;
+		float DashElbowDeg = 20.0f;
+		float DashOutDeg = 12.0f;
+		float DashSwingKeep = 0.8f;
 		/** Seconds to ease the stance in or out (a critically damped spring: nothing pops), and the dash in or out. */
 		float ArmedSmoothSeconds = 0.22f;
 		float DashSmoothSeconds = 0.07f;

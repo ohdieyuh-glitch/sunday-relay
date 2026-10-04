@@ -115,6 +115,13 @@ namespace RelayDogStride
 	 *  @param LegLengthUU hip-to-ground distance at rest, uu (48 at W=60). */
 	FStride StrideForSpeed(float SpeedUU, float LegLengthUU);
 
+	/** THE SPRINT (the Mission Handoff dash; founder, 10-03, the Genshin "Running vs Dashing" reference): the run as a BOUNDING
+	 *  sprint, by Weight 0..1 (0 = Run, exactly). At dash speeds StrideForSpeed's reach-capped stride makes the legs cycle ~10 times
+	 *  a second -- a blur that reads as a frozen slide. Here the cadence is held at CyclesPerSecond by lengthening the stride, and
+	 *  the planted part of each stride is shortened (a flight phase) so a foot is never asked past the leg's reach: no slide.
+	 *  Lift and bob rise with it; the lean is a sprint's, never a dive. */
+	FStride SprintStride(const FStride& Run, float SpeedUU, float LegLengthUU, float Weight, float CyclesPerSecond);
+
 	/** One foot's contribution, in the body's frame.
 	 *
 	 *  `Forward` is measured against the body: during stance it moves BACKWARD
@@ -409,6 +416,11 @@ namespace RelayDogStride
 		 *  easing lives here where it can be proven on stairs without one. */
 		float GroundDeltaLeft = 0.0f;
 		float GroundDeltaRight = 0.0f;
+
+		/** 0..1: how much of the stride is the Mission Handoff SPRINT (SprintStride), and its cadence in cycles a second. 0 = the
+		 *  animator exactly as before. */
+		float SprintWeight = 0.0f;
+		float SprintCycles = 4.3f;
 
 		/** Optional runtime look target, degrees relative to the body. When
 		 *  bHasLookTarget is false the interest scheduler chooses. */

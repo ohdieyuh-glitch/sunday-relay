@@ -370,6 +370,12 @@ public:
 	/** The swords are HELD (FWonderlandMissionHandoff::IsArmed): the faster speeds and the dash apply. */
 	bool IsHandoffArmed() const;
 	bool IsDashing() const { return bDashActive; }
+	/** QA: how many stride cycles a second the legs make right now (the sprint must read as a sprinter's, never a ~10/s blur). */
+	float QaStrideCycles() const
+	{
+		const RelayDogStride::FDogPose& Now = Animator.Pose();
+		return Now.Stride.StrideLength > 1.0f ? Now.SpeedUU / Now.Stride.StrideLength : 0.0f;
+	}
 	int32 GetDashCount() const { return DashCount; }
 	int32 GetDashesRefused() const { return DashesRefused; }
 	/** Normal roaming's acceleration (read at BeginPlay): what every exit from the handoff restores. */

@@ -37,9 +37,16 @@ namespace WonderlandGrip
 		 * reads as a V at any arm angle and in any act of locomotion. Off: the blade follows the forearm (TiltDeg / RollDeg).
 		 */
 		bool bBodyV = true;
-		float VDeg = 42.0f;
-		float VForwardDeg = 12.0f;
+		/** Degrees from STRAIGHT UP, out to the blade's own side: under 90 the V points up, over 90 down. The founder's 10-03 stance
+		 *  reference holds both blades LOW and diagonal, out and down from the body: 122. */
+		float VDeg = 122.0f;
+		float VForwardDeg = 10.0f;
+		/** In the sprint (eased by the dash's weight): the tips trailing back, like the trails they leave. */
+		float DashVForwardDeg = -35.0f;
 	};
+
+	/** The hold with the sprint's trailing tips eased in by DashWeight (0..1). */
+	FHold WithDash(const FHold& Hold, float DashWeight);
 
 	/** The hold as the console variables have it right now. */
 	FHold CurrentHold();
