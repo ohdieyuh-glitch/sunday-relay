@@ -1304,7 +1304,10 @@ void SWonderlandProjectBrainPanel::RebuildInspector()
 			? FText::FromString(Model.WriteNote.IsEmpty()
 				? FString(TEXT("Live: Project Brain on the bridge. Every line is what it holds; proposals and reviews are sent to it and shown once saved."))
 				: FString::Printf(TEXT("Live: Project Brain on the bridge. %s"), *Model.WriteNote))
-			: INVTEXT("Development preview: sample data, nothing sent. A connected Project Brain gives this world counts and revisions, never entry text, until an owner-scoped read is approved."))
+			// the last write's note shows in the preview too (Second's RC13 review: a refused, credential-shaped PROPOSE cleared the
+			// input and vanished without a word)
+			: FText::FromString(FString(TEXT("Development preview: sample data, nothing sent. A connected Project Brain gives this world counts and revisions, never entry text, until an owner-scoped read is approved."))
+				+ (Model.WriteNote.IsEmpty() ? FString() : FString::Printf(TEXT(" %s"), *Model.WriteNote))))
 		.Font(Font("Regular", 8)).ColorAndOpacity(Mist(0.8f)).AutoWrapText(true)
 	];
 }

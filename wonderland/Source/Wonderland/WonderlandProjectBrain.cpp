@@ -128,6 +128,7 @@ bool UWonderlandProjectBrainSubsystem::Propose(FName SurfaceId, const FString& T
 		return bSent;
 	}
 	Surface->Proposals.Add(Line.Left(240));
+	SetWriteNote(FString());   // the preview now shows the last note (a refusal); a proposal kept clears it
 	UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN proposal recorded on %s, not synced (no Project Brain authority): %d characters"),
 		*SurfaceId.ToString(), Line.Len());
 	OnBrainChanged.Broadcast();
@@ -262,6 +263,14 @@ void UWonderlandProjectBrainSubsystem::HandleTerminalLine(const FString& Argumen
 	Rest = Rest.TrimStartAndEnd();
 	UGameInstance* Instance = GetGameInstance();
 	UWonderlandJuliusStreamSubsystem* Stream = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusStreamSubsystem>() : nullptr;
+	// A BUILD WITH NO BRIDGE HAS NOTHING TO PAIR WITH (Second's RC13 review B6): every verb pointed the player at a website code this
+	// build can never redeem. Unless a bridge is configured (or a view is already live), each one gets the same truthful line.
+	if (!Model.bLive && (Stream == nullptr || Stream->GetBridgeUrl().IsEmpty()))
+	{
+		OutSaid = TEXT("Project Brain is not connected in this build: the entries you see are samples, and what you propose is kept until you quit, not saved.");
+		UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN /brain %s (no bridge in this build): %s"), Verb.IsEmpty() ? TEXT("status") : *Verb.Left(16), *DescribeLink());
+		return;
+	}
 	if (Verb.IsEmpty() || Verb.Equals(TEXT("status"), ESearchCase::IgnoreCase))
 	{
 		const FString Where = Model.bLive
@@ -271,8 +280,9 @@ void UWonderlandProjectBrainSubsystem::HandleTerminalLine(const FString& Argumen
 			: Stream->GetBridgeUrl().IsEmpty() ? FString(TEXT("no bridge configured for this build"))
 			: Stream->IsPaired() ? FString::Printf(TEXT("paired for project %s"), Stream->GetPairedProjectId().IsEmpty() ? TEXT("(none named)") : *Stream->GetPairedProjectId())
 			: FString(TEXT("not paired -- /brain pair <code> with the code from the Wonderland website"));
-		OutSaid = FString::Printf(TEXT("Project Brain: %s, project %s, brain revision %d; %s. %s"), *Where, *Model.ProjectName, Model.BrainRevision, *Bridge,
-			*DescribeLink());
+		// the link's DEVELOPER diagnostics go to the log, never into the player's answer (Second's RC13 review B5: R7 debug exposure)
+		OutSaid = FString::Printf(TEXT("Project Brain: %s, project %s, brain revision %d; %s."), *Where, *Model.ProjectName, Model.BrainRevision, *Bridge);
+		UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN /brain status: %s"), *DescribeLink());
 		return;
 	}
 	if (Verb.Equals(TEXT("pair"), ESearchCase::IgnoreCase))
@@ -336,7 +346,13 @@ void UWonderlandProjectBrainSubsystem::HandleTerminalLine(const FString& Argumen
 			return;
 		}
 		const TArray<FPendingProposal> Pending = ListPendingProposals();
-		const int32 Number = Rest.IsNumeric() ? FCString::Atoi(*Rest) : 0;
+		// A WHOLE NUMBER ONLY (Second's RC13 review: IsNumeric takes "1.9", which Atoi cut to proposal 1)
+		bool bWholeNumber = !Rest.IsEmpty() && Rest.Len() <= 6;
+		for (const TCHAR Digit : Rest)
+		{
+			bWholeNumber = bWholeNumber && FChar::IsDigit(Digit);
+		}
+		const int32 Number = bWholeNumber ? FCString::Atoi(*Rest) : 0;
 		if (!Pending.IsValidIndex(Number - 1) || Pending[Number - 1].Version < 1 || !Pending[Number - 1].Ref.StartsWith(TEXT("pbr:")))
 		{
 			OutSaid = FString::Printf(TEXT("Not sent: there is no proposal %s. /brain proposals lists them."), Rest.IsEmpty() ? TEXT("with that number") : *Rest.Left(12));

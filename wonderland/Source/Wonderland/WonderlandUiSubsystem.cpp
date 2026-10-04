@@ -992,7 +992,7 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 			.Snapshot(Snapshot != nullptr ? *Snapshot : FWonderlandSocialSnapshot())
 			.bConnected(Snapshot != nullptr)
 			.SourceLine(Social != nullptr ? Social->GetSourceLine() : FString())
-			.bDevelopmentPreview(Social == nullptr || Social->GetService() == nullptr || Social->GetService()->IsDevelopmentPreview())
+			.bDevelopmentPreview(Social != nullptr && Social->GetService() != nullptr && Social->GetService()->IsDevelopmentPreview())   // a preview only when a service IS one (Second's RC13 review B7: with no service the sign-in buttons said "DEVELOPMENT PREVIEW: changes nothing", and they do act)
 			.InitialTab(Tab)
 			.OnAction_Lambda([WeakThis](const FString& Operation, const FString& Subject) { if (WeakThis.IsValid()) { WeakThis->HandleSocialAction(Operation, Subject); } })
 			.OnOpenProfile_Lambda([WeakThis](const FString& UserId) { if (WeakThis.IsValid()) { WeakThis->OpenSocialProfileById(UserId); } })
@@ -4520,7 +4520,7 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		else
 		{
 			HubWhy = !BoundController.IsValid() ? FString(TEXT("no player is bound to this screen"))
-				: FString::Printf(TEXT("another screen is open (%s)"), OverlayName(Open));
+				: FString::Printf(TEXT("the hub did not come up (%s is showing)"), OverlayName(Open));
 		}
 		UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL hub from the terminal (%s %s): %s %s"), *Command, *HubTab,
 			bHubOpened ? TEXT("opened") : TEXT("NOT opened:"), *HubWhy);
@@ -4538,7 +4538,7 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 				"/cubs [n|off] — summon the Relay Dog's sub-agent cub ghosts. "
 				"/handoff — Mission Handoff: roam while a mission carries on (/handoff again, or /handoff return, to come back). "
 				"/card — your C.A.R.D. loadout (list, select NAME, new NAME, save, rename NAME, delete NAME). "
-				"/brain — Project Brain (status, pair CODE from the Wonderland website, refresh). "
+				"/brain — Project Brain (status; it says whether this build can connect it). "
 				"/social [friends|requests|recent|messages|party] — the Social Hub (/friends, /party open their tabs)."));
 		return true;
 	}
@@ -5022,7 +5022,7 @@ bool UWonderlandUiSubsystem::OpenPlayerProfile(const FWonderlandSocialProfileVie
 		{
 			PendingProfileNames = Snapshot->NamesById;
 		}
-		bPendingProfilePreview = Social->GetService() == nullptr || Social->GetService()->IsDevelopmentPreview();
+		bPendingProfilePreview = Social->GetService() != nullptr && Social->GetService()->IsDevelopmentPreview();
 	}
 	OpenOverlay(EOverlay::Profile);
 	return Open == EOverlay::Profile;
@@ -5164,7 +5164,7 @@ void UWonderlandUiSubsystem::HandleSocialChanged()
 	const FWonderlandSocialSnapshot* Snapshot = Social != nullptr ? Social->GetSnapshot() : nullptr;
 	SocialHubPanel->SetSignIn(Social != nullptr ? Social->GetSignInView() : FWonderlandSignInView());
 	SocialHubPanel->SetSnapshot(Snapshot != nullptr ? *Snapshot : FWonderlandSocialSnapshot(), Snapshot != nullptr,
-		Social != nullptr ? Social->GetSourceLine() : FString(), Social == nullptr || Social->GetService() == nullptr || Social->GetService()->IsDevelopmentPreview());
+		Social != nullptr ? Social->GetSourceLine() : FString(), Social != nullptr && Social->GetService() != nullptr && Social->GetService()->IsDevelopmentPreview());
 	// THE VOICE REDRAWS WITH IT (Second's review: an EOS join that landed later left the panel on CONNECTING): the same SetVoice the
 	// commands use, content only -- the layout is unchanged
 	if (const IWonderlandVoiceService* VoiceNow = Social != nullptr ? Social->GetVoice() : nullptr)
