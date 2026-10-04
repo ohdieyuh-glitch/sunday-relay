@@ -95,7 +95,7 @@ namespace RelayDogArmedStance
 	}
 
 	void Apply(RelayDogStride::FDogPose& Pose, float ArmedWeight, float DashWeight, float LegLengthUU, float ThighUU, float ShinUU,
-		float LeftOutFactor, float RightOutFactor, const FShape& Shape)
+		float LeftOutFactor, float RightOutFactor, float HipPivotUU, float HipYLeft, float HipYRight, const FShape& Shape)
 	{
 		const float W = Clamp01(ArmedWeight);
 		const float D = Clamp01(DashWeight);
