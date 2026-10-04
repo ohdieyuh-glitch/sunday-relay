@@ -4492,8 +4492,9 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 	if (Command == TEXT("/social") || Command == TEXT("/friends") || Command == TEXT("/party"))
 	{
 		// SOCIAL, THE PLAYER'S WAY IN (R16, Second's review of RC12: the hub opened from the developer console only, so a tester could not
-		// reach it): content in the existing terminal, like /card and /brain -- the HUD is unchanged. /social [friends|requests|recent|party];
-		// /friends and /party open their own tabs. A build with no social connection opens the hub on its honest "not connected" view.
+		// reach it): content in the existing terminal, like /card and /brain -- the HUD is unchanged. /social [friends|requests|recent|
+		// messages|party]; /friends and /party open their own tabs. A build with no social connection opens the hub on its honest "not
+		// connected" view. The answer names the tab that ACTUALLY opened (read back from the hub), never the words typed.
 		FString HubTab = Argument.TrimStartAndEnd().ToLower();
 		if (Command == TEXT("/friends"))
 		{
@@ -4503,11 +4504,29 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		{
 			HubTab = TEXT("party");
 		}
+		SWonderlandSocialHubPanel::ETab Wanted = SWonderlandSocialHubPanel::ETab::Friends;
+		if (!HubTab.IsEmpty() && !SWonderlandSocialHubPanel::ParseTab(HubTab, Wanted))
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line,
+				FString::Printf(TEXT("There is no %s tab. Try /social friends, requests, recent, messages or party."), *HubTab));
+			return true;
+		}
 		const bool bHubOpened = OpenSocialHub(HubTab);
-		UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL hub from the terminal (%s %s): %s"), *Command, *HubTab, bHubOpened ? TEXT("opened") : TEXT("NOT opened"));
+		FString HubWhy;
+		if (bHubOpened && SocialHubPanel.IsValid())
+		{
+			HubWhy = FString::Printf(TEXT("on %s"), SWonderlandSocialHubPanel::TabName(SocialHubPanel->GetTab()));
+		}
+		else
+		{
+			HubWhy = !BoundController.IsValid() ? FString(TEXT("no player is bound to this screen"))
+				: FString::Printf(TEXT("another screen is open (%s)"), OverlayName(Open));
+		}
+		UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL hub from the terminal (%s %s): %s %s"), *Command, *HubTab,
+			bHubOpened ? TEXT("opened") : TEXT("NOT opened:"), *HubWhy);
 		Terminal->AddJuliusRow(TEXT("You"), Line, bHubOpened
-			? (HubTab.IsEmpty() ? FString(TEXT("Social Hub opened.")) : FString::Printf(TEXT("Social Hub opened on %s."), *HubTab))
-			: FString(TEXT("The Social Hub could not open here.")));
+			? FString::Printf(TEXT("Social Hub opened %s."), *HubWhy)
+			: FString::Printf(TEXT("The Social Hub could not open: %s."), *HubWhy));
 		return true;
 	}
 
@@ -4520,7 +4539,7 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 				"/handoff — Mission Handoff: roam while a mission carries on (/handoff again, or /handoff return, to come back). "
 				"/card — your C.A.R.D. loadout (list, select NAME, new NAME, save, rename NAME, delete NAME). "
 				"/brain — Project Brain (status, pair CODE from the Wonderland website, refresh). "
-				"/social — friends, requests, recent players and your party (/friends, /party open their tabs)."));
+				"/social [friends|requests|recent|messages|party] — the Social Hub (/friends, /party open their tabs)."));
 		return true;
 	}
 
