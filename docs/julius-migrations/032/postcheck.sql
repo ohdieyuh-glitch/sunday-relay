@@ -2,8 +2,10 @@
 -- (RUNBOOK.md, step 4.)
 -- PASS only if ALL of:
 --   delete_trigger_matches = t, registry_triggers_match = t, function_is_030 = f and function_has_forget = t;
+--   remember_is_030 = f and remember_has_filter = t;
 --   the trigger listing equals the pre-check's, line for line (032 adds, drops and re-creates no trigger);
 --   function_definition equals the pre-check's with exactly the forget added (the IF ... END IF block), nothing removed;
+--   remember_definition equals the pre-check's with exactly its SELECT line changed (the filter appended), nothing else;
 --   orphan_outbox_rows = 0;
 --   events_rows and outbox_rows EQUAL the pre-check's (the writers were stopped for the deploy);
 --   migration_032_applied = t, ledger_count = the pre-check's + 1 and ledger_last = 032_julius_outbox_event_delete_forgets.
@@ -18,10 +20,19 @@ SELECT c.relname AS on_table, t.tgname AS trigger_name, t.tgenabled AS enabled, 
 SELECT pg_get_functiondef(p.oid) AS function_definition, md5(p.prosrc) AS function_body_md5,
        pg_get_userbyid(p.proowner) AS function_owner
   FROM pg_proc p WHERE p.oid = to_regprocedure('relay_wonderland.outbox_follows_event_delete()');
+SELECT pg_get_functiondef(p.oid) AS remember_definition, md5(p.prosrc) AS remember_body_md5,
+       pg_get_userbyid(p.proowner) AS remember_owner
+  FROM pg_proc p WHERE p.oid = to_regprocedure('relay_wonderland.events_written_remember()');
 WITH fn AS (
   SELECT btrim(regexp_replace(p.prosrc, '[[:space:]]+', ' ', 'g')) AS body
     FROM pg_proc p
    WHERE p.oid = to_regprocedure('relay_wonderland.outbox_follows_event_delete()')
+     AND p.prolang = (SELECT l.oid FROM pg_language l WHERE l.lanname = 'plpgsql')
+     AND p.prorettype = 'trigger'::regtype AND p.prokind = 'f' AND NOT p.prosecdef AND p.proconfig IS NULL
+), rem AS (
+  SELECT btrim(regexp_replace(p.prosrc, '[[:space:]]+', ' ', 'g')) AS body
+    FROM pg_proc p
+   WHERE p.oid = to_regprocedure('relay_wonderland.events_written_remember()')
      AND p.prolang = (SELECT l.oid FROM pg_language l WHERE l.lanname = 'plpgsql')
      AND p.prorettype = 'trigger'::regtype AND p.prokind = 'f' AND NOT p.prosecdef AND p.proconfig IS NULL
 ), expected AS (
@@ -41,7 +52,31 @@ BEGIN
   END IF;
   RETURN NULL;
 END;
-$body032$, '[[:space:]]+', ' ', 'g')) AS body_032
+$body032$, '[[:space:]]+', ' ', 'g')) AS body_032,
+         btrim(regexp_replace($remember030$
+DECLARE
+  written text;
+BEGIN
+  SELECT string_agg(event_id, chr(31)) INTO written FROM written_events;
+  IF written IS NOT NULL THEN
+    PERFORM set_config('relay_wonderland.events_written',
+      coalesce(current_setting('relay_wonderland.events_written', true), '') || chr(31) || written || chr(31), true);
+  END IF;
+  RETURN NULL;
+END;
+$remember030$, '[[:space:]]+', ' ', 'g')) AS remember_030,
+         btrim(regexp_replace($remember032$
+DECLARE
+  written text;
+BEGIN
+  SELECT string_agg(event_id, chr(31)) INTO written FROM written_events WHERE event_id <> '' AND position(chr(31) IN event_id) = 0;
+  IF written IS NOT NULL THEN
+    PERFORM set_config('relay_wonderland.events_written',
+      coalesce(current_setting('relay_wonderland.events_written', true), '') || chr(31) || written || chr(31), true);
+  END IF;
+  RETURN NULL;
+END;
+$remember032$, '[[:space:]]+', ' ', 'g')) AS remember_032
 )
 SELECT EXISTS (
          SELECT 1 FROM pg_trigger t
@@ -62,7 +97,9 @@ SELECT EXISTS (
             AND t.tgtype = 7 AND t.tgenabled = 'O'
        )) AS registry_triggers_match,
        EXISTS (SELECT 1 FROM fn, expected WHERE fn.body = expected.body_030) AS function_is_030,
-       EXISTS (SELECT 1 FROM fn, expected WHERE fn.body = expected.body_032) AS function_has_forget;
+       EXISTS (SELECT 1 FROM fn, expected WHERE fn.body = expected.body_032) AS function_has_forget,
+       EXISTS (SELECT 1 FROM rem, expected WHERE rem.body = expected.remember_030) AS remember_is_030,
+       EXISTS (SELECT 1 FROM rem, expected WHERE rem.body = expected.remember_032) AS remember_has_filter;
 SELECT (SELECT count(*) FROM relay_wonderland.events) AS events_rows,
        (SELECT count(*) FROM relay_wonderland.outbox) AS outbox_rows,
        (SELECT count(*) FROM relay_wonderland.outbox o

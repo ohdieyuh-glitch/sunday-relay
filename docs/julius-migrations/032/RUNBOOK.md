@@ -1,12 +1,20 @@
 # Migration 032 on the LIVE Julius database: runbook (CANDIDATE, 2026-10-04)
 
-Migration `032_julius_outbox_event_delete_forgets` replaces ONE function body, `relay_wonderland.outbox_follows_event_delete()`, the function behind 030's trigger `outbox_follows_event_delete` (`AFTER DELETE ON relay_wonderland.events FOR EACH ROW`):
-- kept: the cascade (deleting an event deletes its outbox row);
-- added: the deleted id is forgotten from the transaction's written-event registry (the setting `relay_wonderland.events_written`), by a string rewrite that reads no relation.
+Migration `032_julius_outbox_event_delete_forgets` replaces TWO function bodies, the two of 030's written-event registry (the setting `relay_wonderland.events_written`) that can let an outbox row name a missing event:
+- `relay_wonderland.outbox_follows_event_delete()`, behind 030's trigger `outbox_follows_event_delete` (`AFTER DELETE ON relay_wonderland.events FOR EACH ROW`):
+  - kept: the cascade (deleting an event deletes its outbox row);
+  - added: the deleted id is forgotten from the registry, by a string rewrite that reads no relation.
+- `relay_wonderland.events_written_remember()`, behind 030's trigger `events_written_remember` (`AFTER INSERT ON relay_wonderland.events FOR EACH STATEMENT`):
+  - kept: every well-formed id the statement wrote is registered, read from the statement's transition table only;
+  - added: an id that is empty or holds chr(31) is left out, so its parts are never registered. No outbox row can name such an id anyway (030 refuses it), and a statement that wrote only such ids registers nothing.
 
-No table, index, constraint, trigger or row changes. `CREATE OR REPLACE` keeps the function's oid, so the trigger is neither dropped nor re-created.
+No table, index, constraint, trigger or row changes. `CREATE OR REPLACE` keeps each function's oid, so neither trigger is dropped or re-created.
 
-Why: under 030 alone, `INSERT event E -> DELETE event E -> INSERT outbox(E)` in ONE transaction commits an outbox row naming a missing event, which the foreign key 030 replaced refused (Codex finding (1) on #313, confirmed by Second Julius: `_qa_handoff/julius_readiness/landing/SECOND_JUDGEMENT_CODEX_030_P1_20261004.md`). The exposure today is nil (no production path does it); after 032 the database refuses it (`23503 outbox_event_not_written`).
+Why: under 030 alone, either of these in ONE transaction commits an outbox row naming a missing event, which the foreign key 030 replaced refused:
+- `INSERT event E -> DELETE event E -> INSERT outbox(E)` (Codex finding (1) on #313, confirmed by Second Julius: `_qa_handoff/julius_readiness/landing/SECOND_JUDGEMENT_CODEX_030_P1_20261004.md`);
+- `INSERT event 'r' || chr(31) || 's' -> INSERT outbox('r')` (found while drafting 032; the independent reviewer ruled it folded in).
+
+The exposure today is nil (no production path does either); after 032 the database refuses both (`23503 outbox_event_not_written`).
 
 It is the same discipline as 030 and 031:
 - the guard and the post-check run inside the migration's one transaction;
@@ -57,7 +65,7 @@ Therefore:
 **1. Back up and verify, at 031.** Do not continue without a verified dump. It holds the state 031's post-check verified, so rollback (c) returns to 031, not to 030.
 ```
 docker exec julius-postgres pg_dump -U julius -d julius -Fc -f /tmp/julius-pre-032.dump
-docker exec julius-postgres pg_restore --list /tmp/julius-pre-032.dump > julius-pre-032.toc   # must list relay_wonderland objects, the function outbox_follows_event_delete among them
+docker exec julius-postgres pg_restore --list /tmp/julius-pre-032.dump > julius-pre-032.toc   # must list relay_wonderland objects, the functions outbox_follows_event_delete and events_written_remember among them
 docker cp julius-postgres:/tmp/julius-pre-032.dump <backup-dir>/julius-pre-032-<UTC>.dump
 sha256sum <backup-dir>/julius-pre-032-<UTC>.dump > <backup-dir>/julius-pre-032-<UTC>.dump.sha256
 ```
@@ -69,6 +77,7 @@ docker exec -i julius-postgres psql -U julius -d julius < docs/julius-migrations
 STOP unless:
 - `delete_trigger_matches = t` and `registry_triggers_match = t`;
 - `function_is_030 = t` and `function_has_forget = f`;
+- `remember_is_030 = t` and `remember_has_filter = f`;
 - `orphan_outbox_rows = 0`;
 - `migration_030_applied = t`, `migration_031_applied = t` and `migration_032_applied = f`;
 - `ledger_last = 031_julius_run_transition_hot` (nothing after 031 is applied).
@@ -81,11 +90,11 @@ docker exec -i julius-postgres psql -U julius -d julius -v ON_ERROR_STOP=1 < src
 - It raises `migration_032_refused`, changing NOTHING, unless:
   - 030 and 031 are applied and 032 is not;
   - the trigger `outbox_follows_event_delete` is exactly 030's (AFTER DELETE FOR EACH ROW, enabled, calling the function), and so are the registry triggers `events_written_remember` and `outbox_requires_event_written`;
-  - the function is exactly 030's (plpgsql, returning trigger, no settings, not SECURITY DEFINER, and 030's body compared with whitespace normalized, so a checkout's line endings do not refuse it and any other change does);
+  - both functions, `outbox_follows_event_delete()` and `events_written_remember()`, are exactly 030's (plpgsql, returning trigger, no settings, not SECURITY DEFINER, and 030's body compared with whitespace normalized, so a checkout's line endings do not refuse it and any other change does);
   - no outbox row names a missing event.
-- It raises `migration_032_postcheck` if, after the change, the trigger is not 030's, the function does not carry exactly the forget 032 writes, or an outbox row names a missing event.
-- `CREATE OR REPLACE FUNCTION` rewrites one catalog row. It takes no lock on `events` or `outbox`, and the trigger is never absent. The writers are stopped anyway.
-- Apply from a clean LF checkout of the landed head. The guard does not care about line endings, but the R1 catalog fingerprint hashes the function body byte for byte (`body_md5`), so a CRLF copy would not match a reference built on Linux.
+- It raises `migration_032_postcheck` if, after the change, the delete trigger is not 030's, either function does not carry exactly the body 032 writes (the forget; the filter), or an outbox row names a missing event.
+- `CREATE OR REPLACE FUNCTION` rewrites two catalog rows. It takes no lock on `events` or `outbox`, and neither trigger is ever absent. The writers are stopped anyway.
+- Apply from a clean LF checkout of the landed head. The guard does not care about line endings, but the R1 catalog fingerprint hashes each function body byte for byte (`body_md5`), so a CRLF copy would not match a reference built on Linux.
 - Keep its `NOTICE migration_032_precheck: ...` line with the deploy record.
 
 **4. Post-check (read-only). Compare it with step 2.**
@@ -95,8 +104,10 @@ docker exec -i julius-postgres psql -U julius -d julius < docs/julius-migrations
 PASS only if all of these hold:
 - `delete_trigger_matches = t` and `registry_triggers_match = t`;
 - `function_is_030 = f` and `function_has_forget = t`;
+- `remember_is_030 = f` and `remember_has_filter = t`;
 - the trigger listing equals step 2's, line for line;
 - `function_definition` equals step 2's with exactly the forget added (the `IF ... END IF` block), and nothing removed;
+- `remember_definition` equals step 2's with exactly its `SELECT string_agg(...)` line changed (the filter appended), and nothing else;
 - `orphan_outbox_rows = 0`;
 - `events_rows` and `outbox_rows` equal step 2's;
 - `migration_032_applied = t`, `ledger_count` = step 2's + 1, and `ledger_last = 032_julius_outbox_event_delete_forgets`.
@@ -106,7 +117,7 @@ PASS only if all of these hold:
 - `julius-event-append-contention`, `julius-event-append`, `julius-live-preflight-identity`;
 - the window's pre-registered row 13 (i) stress and census (031's step 5).
 
-**6. Restart the writers** only when 031's AND 032's post-checks have PASSED, Second has verified the window's record, and `DATABASE_URL` is restored intentionally by the founder, as the explicit approved procedure says. Watch the first appends for `23503 outbox_event_not_written` or `outbox_event_id_malformed`. Either means a writer outside the five pinned ones, or a writer that writes an outbox row after deleting its event, so STOP.
+**6. Restart the writers** only when 031's AND 032's post-checks have PASSED, Second has verified the window's record, and `DATABASE_URL` is restored intentionally by the founder, as the explicit approved procedure says. Watch the first appends for `23503 outbox_event_not_written` or `outbox_event_id_malformed`. Either means a writer outside the five pinned ones, a writer that writes an outbox row after deleting its event, or one that names a part of an event id holding chr(31), so STOP.
 
 ## Classifying the store in this window
 
@@ -126,11 +137,11 @@ If later migrations (033 Wonderland social, 034 Project Brain, 035 voice) are al
 ```
 docker exec -i julius-postgres psql -U julius -d julius < docs/julius-migrations/032/down.sql
 ```
-- It restores 030's function body byte for byte and deletes the 032 stamp, in one transaction.
-- It refuses, changing nothing, unless 032 is applied, nothing after 032 is applied, the function is exactly 032's and the trigger is still 030's.
-- Afterwards the store has 030's defect again.
+- It restores both of 030's function bodies byte for byte and deletes the 032 stamp, in one transaction.
+- It refuses, changing nothing, unless 032 is applied, nothing after 032 is applied, both functions are exactly 032's and the delete trigger is still 030's.
+- Afterwards the store has both of 030's orphan paths again.
 - **Then deploy code that no longer lists 032;** otherwise the next `migrate()` re-applies it.
-- Re-run step 2's check: `function_is_030 = t` and `migration_032_applied = f`, and the trigger listing and `function_definition` equal the original pre-check's.
-- **Rollback order:** 032's down BEFORE 031's down, and both before 030's. 031's and 030's down scripts do not look for 032. Run out of order, they would leave the ledger holding 032 without its predecessors (a gap, classifier rule 10), and 030's would leave a 032 stamp for a function it dropped.
+- Re-run step 2's check: `function_is_030 = t`, `remember_is_030 = t` and `migration_032_applied = f`, and the trigger listing, `function_definition` and `remember_definition` equal the original pre-check's.
+- **Rollback order:** 032's down BEFORE 031's down, and both before 030's. 031's and 030's down scripts do not look for 032. Run out of order, they would leave the ledger holding 032 without its predecessors (a gap, classifier rule 10), and 030's would leave a 032 stamp for the two functions it dropped.
 
 **(c) Last resort: restore the pre-032 backup** into a NEW database first and inspect it before replacing anything, as in 030's rollback (c). It holds the verified 031 state. Do not `pg_restore --clean` over the live database without the founder.

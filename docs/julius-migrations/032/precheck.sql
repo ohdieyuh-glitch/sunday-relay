@@ -2,6 +2,7 @@
 -- with the deploy record. (RUNBOOK.md, step 2.)
 -- STOP THE DEPLOY unless ALL of:
 --   delete_trigger_matches = t, registry_triggers_match = t, function_is_030 = t and function_has_forget = f;
+--   remember_is_030 = t and remember_has_filter = f;
 --   orphan_outbox_rows = 0;
 --   migration_030_applied = t, migration_031_applied = t and migration_032_applied = f;
 --   ledger_last = 031_julius_run_transition_hot (032 follows 031 directly: nothing later is applied).
@@ -10,23 +11,33 @@
 \set ON_ERROR_STOP on
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SELECT now() AS checked_at, current_database() AS database, current_user AS checked_by, version() AS server;
--- Every trigger on the two tables, by definition and state; the post-check must list the same lines (032 replaces one
--- function body and creates, drops or re-creates no trigger).
+-- Every trigger on the two tables, by definition and state; the post-check must list the same lines (032 replaces two
+-- function bodies and creates, drops or re-creates no trigger).
 SELECT c.relname AS on_table, t.tgname AS trigger_name, t.tgenabled AS enabled, pg_get_triggerdef(t.oid) AS definition
   FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
  WHERE NOT t.tgisinternal AND t.tgrelid IN ('relay_wonderland.outbox'::regclass, 'relay_wonderland.events'::regclass)
  ORDER BY 1, 2;
--- The function as it stands, for the record: the post-check's definition must be this one with exactly the forget added.
+-- The two functions as they stand, for the record: the post-check's definitions must be these, the delete function's with
+-- exactly the forget added, the remember function's with exactly its SELECT line filtered.
 SELECT pg_get_functiondef(p.oid) AS function_definition, md5(p.prosrc) AS function_body_md5,
        pg_get_userbyid(p.proowner) AS function_owner
   FROM pg_proc p WHERE p.oid = to_regprocedure('relay_wonderland.outbox_follows_event_delete()');
+SELECT pg_get_functiondef(p.oid) AS remember_definition, md5(p.prosrc) AS remember_body_md5,
+       pg_get_userbyid(p.proowner) AS remember_owner
+  FROM pg_proc p WHERE p.oid = to_regprocedure('relay_wonderland.events_written_remember()');
 -- The trigger 032 keeps (AFTER DELETE FOR EACH ROW: tgtype 9), the two registry triggers (AFTER INSERT FOR EACH
--- STATEMENT with its transition table: 4; BEFORE INSERT FOR EACH ROW: 7), and the function's body against 030's and
+-- STATEMENT with its transition table: 4; BEFORE INSERT FOR EACH ROW: 7), and each function's body against 030's and
 -- 032's, each compared with every run of whitespace made one space (line endings do not count, anything else does).
 WITH fn AS (
   SELECT btrim(regexp_replace(p.prosrc, '[[:space:]]+', ' ', 'g')) AS body
     FROM pg_proc p
    WHERE p.oid = to_regprocedure('relay_wonderland.outbox_follows_event_delete()')
+     AND p.prolang = (SELECT l.oid FROM pg_language l WHERE l.lanname = 'plpgsql')
+     AND p.prorettype = 'trigger'::regtype AND p.prokind = 'f' AND NOT p.prosecdef AND p.proconfig IS NULL
+), rem AS (
+  SELECT btrim(regexp_replace(p.prosrc, '[[:space:]]+', ' ', 'g')) AS body
+    FROM pg_proc p
+   WHERE p.oid = to_regprocedure('relay_wonderland.events_written_remember()')
      AND p.prolang = (SELECT l.oid FROM pg_language l WHERE l.lanname = 'plpgsql')
      AND p.prorettype = 'trigger'::regtype AND p.prokind = 'f' AND NOT p.prosecdef AND p.proconfig IS NULL
 ), expected AS (
@@ -46,7 +57,31 @@ BEGIN
   END IF;
   RETURN NULL;
 END;
-$body032$, '[[:space:]]+', ' ', 'g')) AS body_032
+$body032$, '[[:space:]]+', ' ', 'g')) AS body_032,
+         btrim(regexp_replace($remember030$
+DECLARE
+  written text;
+BEGIN
+  SELECT string_agg(event_id, chr(31)) INTO written FROM written_events;
+  IF written IS NOT NULL THEN
+    PERFORM set_config('relay_wonderland.events_written',
+      coalesce(current_setting('relay_wonderland.events_written', true), '') || chr(31) || written || chr(31), true);
+  END IF;
+  RETURN NULL;
+END;
+$remember030$, '[[:space:]]+', ' ', 'g')) AS remember_030,
+         btrim(regexp_replace($remember032$
+DECLARE
+  written text;
+BEGIN
+  SELECT string_agg(event_id, chr(31)) INTO written FROM written_events WHERE event_id <> '' AND position(chr(31) IN event_id) = 0;
+  IF written IS NOT NULL THEN
+    PERFORM set_config('relay_wonderland.events_written',
+      coalesce(current_setting('relay_wonderland.events_written', true), '') || chr(31) || written || chr(31), true);
+  END IF;
+  RETURN NULL;
+END;
+$remember032$, '[[:space:]]+', ' ', 'g')) AS remember_032
 )
 SELECT EXISTS (
          SELECT 1 FROM pg_trigger t
@@ -67,7 +102,9 @@ SELECT EXISTS (
             AND t.tgtype = 7 AND t.tgenabled = 'O'
        )) AS registry_triggers_match,
        EXISTS (SELECT 1 FROM fn, expected WHERE fn.body = expected.body_030) AS function_is_030,
-       EXISTS (SELECT 1 FROM fn, expected WHERE fn.body = expected.body_032) AS function_has_forget;
+       EXISTS (SELECT 1 FROM fn, expected WHERE fn.body = expected.body_032) AS function_has_forget,
+       EXISTS (SELECT 1 FROM rem, expected WHERE rem.body = expected.remember_030) AS remember_is_030,
+       EXISTS (SELECT 1 FROM rem, expected WHERE rem.body = expected.remember_032) AS remember_has_filter;
 SELECT (SELECT count(*) FROM relay_wonderland.events) AS events_rows,
        (SELECT count(*) FROM relay_wonderland.outbox) AS outbox_rows,
        (SELECT count(*) FROM relay_wonderland.outbox o
