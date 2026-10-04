@@ -42,6 +42,25 @@ describe('the frozen pins hold, and a drifted pin refuses', () => {
     }
   });
 
+  it('every frozen mission holds every one of its pins at HEAD, so its preflight prints that count', () => {
+    // The count a dispatch's preflight must print is per mission, not Mission 6's 4: a throwaway-tree
+    // mission pins its one directory. A pin added for a mission must also be held here.
+    const counts = new Map<string, number>();
+    for (const line of read('.github/julius-mission-pins.txt').split('\n')) {
+      const [name] = line.trim().split(/\s+/u);
+      if (!name || name.startsWith('#')) continue;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    expect([...counts.keys()].sort()).toEqual(['julius-live-mission-2', 'julius-live-mission-3', 'julius-live-mission-5', 'julius-live-mission-6']);
+    expect(counts.get('julius-live-mission-5'), 'Mission 5 is a throwaway tree: its directory is its one pin').toBe(1);
+    for (const [mission, count] of counts) {
+      const run = pins([mission, '.', 'HEAD']);
+      expect(run.stderr, mission).toBe('');
+      expect(run.stdout).toMatch(new RegExp(`^mission_pins_verified=${count} mission=${mission} revision=[0-9a-f]{40}$`, 'mu'));
+      expect(run.status, mission).toBe(0);
+    }
+  });
+
   it('a mission that is not listed is not frozen, and passes with zero pins', () => {
     const run = pins(['julius-first-live', '.', 'HEAD']);
     expect(run.stdout).toMatch(/^mission_pins_verified=0 /mu);

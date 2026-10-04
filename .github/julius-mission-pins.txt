@@ -15,3 +15,11 @@ julius-live-mission-6 .github/julius-missions/julius-live-mission-6 93dd0ab35fb3
 julius-live-mission-6 src/relay/workspace/julius-tools/node-tool-adapter.ts fec0b40f0f6a0756df48b904cb3b32a2132706da
 julius-live-mission-6 .github/julius-mission-slice/resolve.mjs c222c8c51867ffd31b66b6713dbcd11b92535fff
 julius-live-mission-6 .github/julius-mission-slice/loader.mjs b811ab9107dbe59b25e0d92a84ff5ffd5e6c1ccd
+#
+# Missions 2, 3 and 5 were frozen on 2026-10-02 by the founder's paid-run roadmap ("mission
+# contract/seed pinned and reviewed" before each Alpha dispatch; Mission 5's drift repair approved
+# and to be frozen before dispatch). Each is a throwaway tree, so one pin, its directory, holds the
+# contract and every seeded byte; nothing is sliced from main.
+julius-live-mission-2 .github/julius-missions/julius-live-mission-2 eb14c23a310d54566c63f17cae293a680472a6d1
+julius-live-mission-3 .github/julius-missions/julius-live-mission-3 42fb10ca04e556b71017d267215ddcacb62d54c2
+julius-live-mission-5 .github/julius-missions/julius-live-mission-5 c3381ce915673c85b04b6011f8a69a8f25fdc88f
