@@ -47,6 +47,9 @@ struct FWonderlandSignInView
 	FString Login;
 	/** `ghu-<id>` (SignedIn only). */
 	FString ParticipantId;
+	/** Signed in through a page on THIS machine -- the bridge's GitHub stand-in, developer sessions only: NOT a real person (Waiting and
+	 *  SignedIn only). The hub says TEST IDENTITY; the log said so when the code arrived. */
+	bool bTestIdentity = false;
 	/** The line a person reads under the state. */
 	FString Message;
 };

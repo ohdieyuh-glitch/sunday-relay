@@ -92,13 +92,20 @@ namespace WonderlandEosVoice
 			OutWhy = TEXT("the EOS file named by -WLEosConfig cannot be read");
 			return false;
 		}
+		TMap<FString, FString> Env;
+		TArray<FString> Lines;
+		// the file's text and every piece cut from it are zeroed before they are freed (Second's review M1)
+		ON_SCOPE_EXIT
+		{
+			WipeString(Text);
+			for (FString& Line : Lines) { WipeString(Line); }
+			for (TPair<FString, FString>& Pair : Env) { WipeString(Pair.Value); }
+		};
 		// THE FOUNDER'S FILE IS A .env (10-04: eos-game.env): KEY=VALUE lines, EOS_PRODUCT_ID, EOS_SANDBOX_ID, EOS_DEPLOYMENT_ID,
 		// EOS_GAME_CLIENT_ID, EOS_GAME_CLIENT_SECRET; '#' comments and quotes allowed. A JSON object with productId ... clientSecret is
 		// still read. Values are kept in memory only; a problem names the key, never its value.
-		TMap<FString, FString> Env;
 		// a JSON object is read as JSON (its values may hold '='); everything else as KEY=VALUE lines
 		const bool bJson = Text.TrimStart().StartsWith(TEXT("{"));
-		TArray<FString> Lines;
 		Text.ParseIntoArrayLines(Lines);
 		for (const FString& Line : bJson ? TArray<FString>() : Lines)
 		{
@@ -175,6 +182,7 @@ TUniquePtr<FWonderlandEosVoice> FWonderlandEosVoice::TryCreate(FWonderlandSocial
 		return nullptr;
 	}
 	FConfig Read;
+	ON_SCOPE_EXIT { WonderlandEosVoice::WipeConfig(Read); };   // the developer file's copy, zeroed like the server's (Second's review M1)
 	if (!WonderlandEosVoice::ReadConfig(Path, Read, OutWhy))
 	{
 		return nullptr;
@@ -279,6 +287,7 @@ bool FWonderlandEosVoice::Start(FString& OutWhy)
 	IEOSSDKManager* Sdk = IEOSSDKManager::Get();
 	if (Sdk == nullptr || !Sdk->IsInitialized())
 	{
+		WonderlandEosVoice::WipeConfig(Config);   // no platform will ever take it: zeroed here, not left to the destructor (Second's review M1)
 		OutWhy = TEXT("the EOS SDK is not initialized in this build");
 		return false;
 	}
@@ -297,9 +306,11 @@ bool FWonderlandEosVoice::Start(FString& OutWhy)
 	Sdk->AddPlatformConfig(PlatformConfig, true);
 	Impl->Platform = Sdk->CreatePlatform(PlatformConfig.Name);
 	// THE SECRET'S LIFETIME (Second's review of 310b4dc7): the SDK manager keeps every added config for the process's life, so the
-	// named one is overwritten by a blank (the name only) as soon as the platform exists or failed to, and every copy here is ZEROED
-	// before it is freed. The EOS SDK keeps its own inside the platform; the founder ruled that runtime delivery is not secret from
-	// the machine's owner -- this only keeps the secret from outliving its use.
+	// named one is overwritten by a blank (the name only) as soon as the platform exists or failed to, and THIS CLIENT'S OWN copies
+	// are zeroed before they are freed. Copies the engine makes (the HTTP payload, the JSON reader's, the parsed tree's, the SDK
+	// manager's replaced entry and its UTF-8 temporaries) and the EOS SDK's own inside the platform are freed as the engine frees them
+	// (Second's review of 4e877962, M1); the founder ruled that runtime delivery is not secret from the machine's owner -- this only
+	// keeps this client's copies from outliving their use, and every copy stays in memory: never logged, never written.
 	{
 		FEOSSDKPlatformConfig Blank;
 		Blank.Name = PlatformConfig.Name;

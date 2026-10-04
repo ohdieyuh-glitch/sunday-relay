@@ -323,7 +323,8 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeRail()
 		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f, 18.0f, 4.0f, 2.0f)
 		[
 			SNew(STextBlock).Visibility(bConnected && !bDevelopmentPreview && SignIn.State == EWonderlandSignInState::SignedIn ? EVisibility::Visible : EVisibility::Collapsed)
-			.Text(T(FString::Printf(TEXT("signed in as @%s"), *SignIn.Login))).Font(WonderlandUi::Sans(8, false, 60)).ColorAndOpacity(WonderlandUi::Dim())
+			.Text(T(SignIn.bTestIdentity ? FString::Printf(TEXT("TEST IDENTITY @%s (not a real GitHub account)"), *SignIn.Login)
+				: FString::Printf(TEXT("signed in as @%s"), *SignIn.Login))).Font(WonderlandUi::Sans(8, false, 60)).ColorAndOpacity(WonderlandUi::Dim())
 		]
 		// THE PLAYER'S OWN PRESENCE (founder 10-04: "a small presence control", content in the existing hub, no redesign): the four
 		// choices the authority knows. The chosen one is the plain button, the others quiet; what OTHERS see is decided by the server.

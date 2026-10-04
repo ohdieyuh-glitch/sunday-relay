@@ -53,6 +53,9 @@ public:
 	/** Join a world context: PUBLIC (Arg = place id), PRIVATE (Arg = name), FRIEND (Arg = user id), INVITE (Arg = invite
 	 *  id), PARTY. The answer arrives through OnAnswered ("world.join"); the view through OnWorldChanged. */
 	FWonderlandSocialActionResult JoinWorld(const FString& Target, const FString& Arg);
+	/** The same join, made by the client ITSELF when bAutomatic (the sign-in's public world, a removal, a forgotten world): it answers as
+	 *  "world.join.auto", which no screen shows, and a refusal is retried on a backoff (Second's reviews of 4d31c524 / 804b528d / aabfb10c). */
+	FWonderlandSocialActionResult JoinWorldAs(const FString& Target, const FString& Arg, bool bAutomatic);
 	FWonderlandSocialActionResult LeaveWorld();
 	FWonderlandSocialActionResult InviteToWorld(const FString& UserId);
 	const FWonderlandWorldView& GetWorldView() const { return WorldView; }
@@ -101,9 +104,12 @@ private:
 	bool bWorldWanted = false;
 	bool bWorldBusy = false;
 	double NextWorldAt = 0.0;
-	/** A join this client makes BY ITSELF -- after a removal, or when the server forgot the world (404) -- answers as "world.join.auto"
-	 *  (no screen shows it) and, refused, is tried again on a backoff (Second's review of 4d31c524 / 804b528d). */
-	FWonderlandSocialActionResult JoinWorldAs(const FString& Target, const FString& Arg, bool bAutomatic);
+	/** Plans the next automatic join: at once the first time, then on a 2/5/15/30 s backoff until a world report is answered again. */
+	void ScheduleAutoJoin(const FString& Target, const FString& Arg);
+	/** Every join's number: only the LATEST join's answer moves anything (Second's review m1). */
+	int32 JoinSeq = 0;
+	/** The world a 404 rejoin must land back in; a FRIEND rejoin that lands elsewhere is not followed (m2). */
+	FString RejoinContextId;
 	/** The last world joined (target + argument): a forgotten player is put back into the SAME one. */
 	FString WorldTarget = TEXT("PUBLIC");
 	FString WorldArg = TEXT("golden_arrival");

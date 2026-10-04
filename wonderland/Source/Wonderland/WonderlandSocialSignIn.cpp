@@ -3,6 +3,7 @@
 #include "WonderlandBeta.h"
 
 #include "Dom/JsonObject.h"
+#include "HAL/IConsoleManager.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
 #include "HttpModule.h"
@@ -18,10 +19,52 @@
 // Named, not anonymous: the module builds as one unity translation unit.
 namespace WonderlandSocialSignInLogic
 {
+	/** A page on THIS machine, read exactly (Second's conditions for the stub rehearsal, 10-04): http(s)://, then a host that IS
+	 *  127.0.0.1, localhost or [::1] -- with at most a port of digits -- and the authority ends there. No prefix match:
+	 *  "http://127.0.0.1.evil.example/", "http://localhost@evil.example/" and "http://127.0.0.1:1@evil.example/" are refused. */
+	bool IsLoopbackPage(const FString& Uri)
+	{
+		FString Rest;
+		if (Uri.StartsWith(TEXT("http://"), ESearchCase::IgnoreCase)) { Rest = Uri.RightChop(7); }
+		else if (Uri.StartsWith(TEXT("https://"), ESearchCase::IgnoreCase)) { Rest = Uri.RightChop(8); }
+		else { return false; }
+		int32 End = Rest.Len();
+		for (int32 At = 0; At < Rest.Len(); ++At)
+		{
+			if (Rest[At] == TEXT('/') || Rest[At] == TEXT('?') || Rest[At] == TEXT('#'))
+			{
+				End = At;
+				break;
+			}
+		}
+		const FString Authority = Rest.Left(End);
+		static const TCHAR* const Hosts[] = { TEXT("127.0.0.1"), TEXT("localhost"), TEXT("[::1]") };
+		for (const TCHAR* Host : Hosts)
+		{
+			if (Authority.Equals(Host, ESearchCase::IgnoreCase))
+			{
+				return true;
+			}
+			const FString WithPort = FString(Host) + TEXT(":");
+			if (Authority.StartsWith(WithPort, ESearchCase::IgnoreCase))
+			{
+				const FString Port = Authority.RightChop(WithPort.Len());
+				bool bDigits = Port.Len() >= 1 && Port.Len() <= 5;
+				for (const TCHAR Character : Port)
+				{
+					bDigits = bDigits && FChar::IsDigit(Character);
+				}
+				return bDigits;
+			}
+		}
+		return false;
+	}
+
 	/** The only page the client will ever open for a sign-in: GitHub's own. A bridge cannot send the player elsewhere. The ONE
-	 *  exception is a DEVELOPER session against the bridge's fenced loopback GitHub stand-in (WONDERLAND_SOCIAL_GITHUB_STUB: refused in
-	 *  production, its identities never count for R16): a loopback http page. A player build never takes that branch. */
-	bool IsGitHubPage(const FString& Uri)
+	 *  exception is a DEVELOPER session (-wldev) against the bridge's fenced loopback GitHub stand-in (WONDERLAND_SOCIAL_GITHUB_STUB:
+	 *  refused in production, its identities NOT real and never R16 evidence): a page on this machine, read exactly. A player session
+	 *  never takes that branch, and a Shipping build does not have it. bDeveloper is a parameter so the QA can try both sessions. */
+	bool IsSignInPage(const FString& Uri, bool bDeveloper)
 	{
 		if (Uri.Contains(TEXT(" ")) || Uri.Len() >= 200)
 		{
@@ -31,7 +74,16 @@ namespace WonderlandSocialSignInLogic
 		{
 			return true;
 		}
-		return WonderlandBeta::IsDeveloperSession() && (Uri.StartsWith(TEXT("http://127.0.0.1:")) || Uri.StartsWith(TEXT("http://localhost:")));
+#if UE_BUILD_SHIPPING
+		return false;
+#else
+		return bDeveloper && IsLoopbackPage(Uri);
+#endif
+	}
+
+	bool IsGitHubPage(const FString& Uri)
+	{
+		return IsSignInPage(Uri, WonderlandBeta::IsDeveloperSession());
 	}
 
 	/** A refusal, in words for a person. The kind is the bridge's short code; nothing GitHub said is ever echoed. */
@@ -116,6 +168,10 @@ void FWonderlandSocialSignIn::SetState(EWonderlandSignInState State, const FStri
 		View.Login.Reset();
 		View.ParticipantId.Reset();
 	}
+	if (State != EWonderlandSignInState::Waiting && State != EWonderlandSignInState::SignedIn)
+	{
+		View.bTestIdentity = false;
+	}
 	UE_LOG(LogTemp, Display, TEXT("WLSOCIAL signin %s"), *Describe());
 	Changed.Broadcast();
 }
@@ -165,6 +221,13 @@ void FWonderlandSocialSignIn::Start()
 			// Written before SetState, which keeps the code fields for Waiting (and clears them for every other state).
 			View.UserCode = Code;
 			View.VerificationUri = Uri;
+			// THE STUB IS SAID OUT LOUD (Second, 10-04): a page on this machine is only ever the GitHub stand-in, so this identity is NOT
+			// a real person -- the log line voids any run as evidence, and the hub shows TEST IDENTITY for as long as it is signed in
+			View.bTestIdentity = !Uri.StartsWith(TEXT("https://github.com/"), ESearchCase::IgnoreCase);
+			if (View.bTestIdentity)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL signin via a LOOPBACK page (developer session; identities NOT real)"));
+			}
 			View.ExpiresAt = FPlatformTime::Seconds() + FMath::Clamp(SecondsLeft, 0.0, 3600.0);
 			SetState(EWonderlandSignInState::Waiting, TEXT("Open the GitHub page, enter this code and approve Wonderland. This screen updates by itself."));
 			return;
@@ -239,7 +302,9 @@ void FWonderlandSocialSignIn::Poll()
 				// Written before SetState, which keeps the identity fields for SignedIn (and clears them for every other state).
 				View.Login = Login;
 				View.ParticipantId = Participant;
-				SetState(EWonderlandSignInState::SignedIn, FString::Printf(TEXT("Signed in as @%s."), *Login));
+				SetState(EWonderlandSignInState::SignedIn, View.bTestIdentity
+					? FString::Printf(TEXT("Signed in as @%s -- a TEST IDENTITY, not a real GitHub account."), *Login)
+					: FString::Printf(TEXT("Signed in as @%s."), *Login));
 				if (OnSignedIn)
 				{
 					OnSignedIn(BaseUrl, Token);
@@ -347,4 +412,60 @@ void FWonderlandSocialSignIn::Post(const FString& Path, const FString& Body, con
 		Done(Status, Data, Kind);
 	});
 	Request->ProcessRequest();
+}
+
+namespace WonderlandSocialSignInLogic
+{
+	/** SIGN-IN PAGE QA (Second's conditions for the stub rehearsal, 10-04): which verification pages a sign-in will open, in a PLAYER
+	 *  session and a DEVELOPER one. GitHub's page in both; a page on this machine only in a developer session (and never in Shipping);
+	 *  every lookalike refused in both. SC1 proves the lookalikes are real: the old prefix rule accepted one. No network. WLQA SIGNPAGE. */
+	FAutoConsoleCommand GQaSignInPage(
+		TEXT("wl.Qa.SignInPage"),
+		TEXT("QA: which sign-in pages are opened in a player and a developer session -- GitHub's, loopback (developer only), lookalikes (never)."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			int32 Passed = 0;
+			int32 Failed = 0;
+			auto Check = [&Passed, &Failed](const FString& Id, bool bOk, const FString& What)
+			{
+				(bOk ? Passed : Failed) += 1;
+				UE_LOG(LogTemp, Display, TEXT("WLQA SIGNPAGE %s %s -- %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *What);
+			};
+#if UE_BUILD_SHIPPING
+			const bool bDeveloperTakesLoopback = false;   // the branch is not in a Shipping build
+#else
+			const bool bDeveloperTakesLoopback = true;
+#endif
+			const FString GitHub = TEXT("https://github.com/login/device");
+			Check(TEXT("S1"), IsSignInPage(GitHub, false) && IsSignInPage(GitHub, true), TEXT("control: GitHub's own page is opened in BOTH sessions"));
+			const FString Stub = TEXT("http://127.0.0.1:8798/login/device");
+			Check(TEXT("S2"), !IsSignInPage(Stub, false), TEXT("a PLAYER session refuses a page on this machine"));
+			Check(TEXT("S3"), IsSignInPage(Stub, true) == bDeveloperTakesLoopback, TEXT("a DEVELOPER session opens it (not in Shipping)"));
+			Check(TEXT("S4"), IsSignInPage(TEXT("http://localhost:8798/x"), true) == bDeveloperTakesLoopback
+				&& IsSignInPage(TEXT("http://[::1]:8798/"), true) == bDeveloperTakesLoopback && IsSignInPage(TEXT("http://localhost"), true) == bDeveloperTakesLoopback,
+				TEXT("a developer session opens localhost and [::1] too, with or without a port"));
+			static const TCHAR* const Refused[] = {
+				TEXT("https://evil.example/login/device"),       // https, not GitHub
+				TEXT("http://127.0.0.1.evil.example/"),          // a lookalike host
+				TEXT("http://localhost@evil.example/"),          // userinfo before the real host
+				TEXT("http://127.0.0.1:1@evil.example/"),        // a port-shaped userinfo
+				TEXT("http://localhost:8798@evil.example/"),
+				TEXT("http://127.0.0.1:123456/"),                // not a port
+				TEXT("http://127.0.0.1:/"),                      // an empty port
+				TEXT("http://127.0.0.1:80\\@evil.example/"),    // a backslash in the authority
+				TEXT("https://github.com.evil.example/login/device"),
+				TEXT("ftp://127.0.0.1/"),
+				TEXT("http://127.0.0.1 /") };
+			int32 Case = 5;
+			for (const TCHAR* Uri : Refused)
+			{
+				Check(FString::Printf(TEXT("S%d"), Case++), !IsSignInPage(Uri, false) && !IsSignInPage(Uri, true),
+					FString::Printf(TEXT("refused in BOTH sessions: %s"), Uri));
+			}
+			// THE CONTROL (each refusal can fail): the rule this replaced -- a prefix match -- ACCEPTED a lookalike above
+			const FString Lookalike = TEXT("http://127.0.0.1:1@evil.example/");
+			Check(TEXT("SC1"), Lookalike.StartsWith(TEXT("http://127.0.0.1:")) && !IsLoopbackPage(Lookalike),
+				TEXT("control: the old prefix rule accepts the port-shaped lookalike; the exact reading does not"));
+			UE_LOG(LogTemp, Display, TEXT("WLQA SIGNPAGE END pass=%d fail=%d"), Passed, Failed);
+		}));
 }

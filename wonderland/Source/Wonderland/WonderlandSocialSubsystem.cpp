@@ -286,7 +286,9 @@ bool UWonderlandSocialSubsystem::ConnectWith(const FString& BaseUrl, const FStri
 	Live->OnWorldChanged().AddUObject(this, &UWonderlandSocialSubsystem::HandleWorldChanged);
 	Live->OnSessionEnded().AddUObject(this, &UWonderlandSocialSubsystem::HandleLiveSessionEnded);
 	Adopt(MoveTemp(Connected));
-	Live->JoinWorld(TEXT("PUBLIC"), TEXT("golden_arrival"));
+	// the sign-in's own join is AUTOMATIC (Second's review M2): one refusal or blip here would otherwise leave the player out of the shared
+	// world for the whole session -- automatic, it is retried on the backoff, and its answer reaches no screen
+	Live->JoinWorldAs(TEXT("PUBLIC"), TEXT("golden_arrival"), true);
 	UE_LOG(LogTemp, Display, TEXT("WLSOCIAL live: connecting to %s"), *BaseUrl);
 	return true;
 }
