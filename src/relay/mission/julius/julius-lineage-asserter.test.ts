@@ -356,18 +356,21 @@ describe('rule 2 from the run\'s durable records: EFFECTIVE acceptance, as the r
         if (random() < 0.25) decisions.push(decided(subject.taskId, pick(['ACCEPT', 'REPAIR', 'HALT'] as const), 'EARLIER'));
         const action = pick(ACTIONS);
         if (action !== null) decisions.push(decided(subject.taskId, action));
-        if (depth >= 3) return;
-        if (action === 'REPAIR' || random() < 0.1) {
-          for (let round = 1; round <= 1 + Math.floor(random() * 2); round += 1) {
-            grow(work(`repair:${subject.taskId}:${round}:task`, { parentTaskId: subject.taskId, taskType: 'repair:plan', ordinal: tasks.length, state: pick(STATES) }), depth + 1);
+        // Below depth 3 a subject may grow repairs and a yield; at depth 3 it is a leaf (no random() draw either, so
+        // every generated graph is the one the earlier early-return form drew).
+        if (depth < 3) {
+          if (action === 'REPAIR' || random() < 0.1) {
+            for (let round = 1; round <= 1 + Math.floor(random() * 2); round += 1) {
+              grow(work(`repair:${subject.taskId}:${round}:task`, { parentTaskId: subject.taskId, taskType: 'repair:plan', ordinal: tasks.length, state: pick(STATES) }), depth + 1);
+            }
           }
-        }
-        if (action === null && random() < 0.7) {
-          // A yield: the unit's root carries on in its next segment (`juliusYieldContinuationOf`).
-          const match = SEGMENT.exec(subject.taskId);
-          const rootId = match === null ? subject.taskId : match[1]!;
-          const next = match === null ? 2 : Number(match[2]) + 1;
-          grow(work(`segment:${rootId}:${next}:task`, { parentTaskId: rootId, taskType: subject.taskType, ordinal: tasks.length, state: pick(STATES) }), depth + 1);
+          if (action === null && random() < 0.7) {
+            // A yield: the unit's root carries on in its next segment (`juliusYieldContinuationOf`).
+            const match = SEGMENT.exec(subject.taskId);
+            const rootId = match === null ? subject.taskId : match[1]!;
+            const next = match === null ? 2 : Number(match[2]) + 1;
+            grow(work(`segment:${rootId}:${next}:task`, { parentTaskId: rootId, taskType: subject.taskType, ordinal: tasks.length, state: pick(STATES) }), depth + 1);
+          }
         }
       };
       for (let root = 0; root < 1 + Math.floor(random() * 3); root += 1) grow(work(`plan-${String(root)}`, { ordinal: tasks.length, state: pick(STATES) }), 0);
