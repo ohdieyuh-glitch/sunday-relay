@@ -261,29 +261,29 @@ const nonEmpty = (value: unknown): boolean => typeof value === 'string' && value
  */
 export function validateJuliusTaskContract(contract: JuliusTaskContract): JuliusTaskContractValidation {
   const errors: string[] = [];
-  const require = (ok: boolean, code: string): void => { if (!ok) errors.push(code); };
+  const requireThat = (ok: boolean, code: string): void => { if (!ok) errors.push(code); };
 
-  require(nonEmpty(contract.contractId), 'contract_id_required');
-  require(nonEmpty(contract.runId), 'run_id_required');
-  require(nonEmpty(contract.taskId), 'task_id_required');
-  require(Number.isInteger(contract.missionContractRevision) && contract.missionContractRevision >= 1,
+  requireThat(nonEmpty(contract.contractId), 'contract_id_required');
+  requireThat(nonEmpty(contract.runId), 'run_id_required');
+  requireThat(nonEmpty(contract.taskId), 'task_id_required');
+  requireThat(Number.isInteger(contract.missionContractRevision) && contract.missionContractRevision >= 1,
     'mission_contract_revision_invalid');
-  require(Number.isInteger(contract.contractRevision) && contract.contractRevision >= 1,
+  requireThat(Number.isInteger(contract.contractRevision) && contract.contractRevision >= 1,
     'contract_revision_invalid');
 
-  require(nonEmpty(contract.objective), 'objective_required');
-  require(nonEmpty(contract.responsibilityBoundary), 'responsibility_boundary_required');
-  require(nonEmpty(contract.stoppingCondition), 'stopping_condition_required');
+  requireThat(nonEmpty(contract.objective), 'objective_required');
+  requireThat(nonEmpty(contract.responsibilityBoundary), 'responsibility_boundary_required');
+  requireThat(nonEmpty(contract.stoppingCondition), 'stopping_condition_required');
 
   // A contract with no expected output describes no deliverable, and a contract
   // with no required input cannot say whether its handoff was complete.
-  require(contract.requiredInputs.length > 0, 'required_inputs_required');
-  require(contract.expectedOutputs.length > 0, 'expected_outputs_required');
-  require(contract.inScope.length > 0, 'in_scope_required');
+  requireThat(contract.requiredInputs.length > 0, 'required_inputs_required');
+  requireThat(contract.expectedOutputs.length > 0, 'expected_outputs_required');
+  requireThat(contract.inScope.length > 0, 'in_scope_required');
   // `outOfScope`, `prohibitedActions`, `dependencyTaskIds`, `requiredChecks` and
   // `repairRules` may legitimately be empty: "nothing" is a real answer to each.
 
-  require(contract.blockingAcceptanceCriteria.length > 0, 'blocking_acceptance_criteria_required');
+  requireThat(contract.blockingAcceptanceCriteria.length > 0, 'blocking_acceptance_criteria_required');
   const seenCriterionIds = new Set<string>();
   for (const criterion of contract.blockingAcceptanceCriteria) {
     if (!nonEmpty(criterion.criterionId)) { errors.push('criterion_id_required'); continue; }
@@ -296,25 +296,25 @@ export function validateJuliusTaskContract(contract: JuliusTaskContract): Julius
     if (criterion.requiredEvidenceTypes.length === 0) errors.push(`criterion_evidence_required:${criterion.criterionId}`);
   }
 
-  require(contract.requiredEvidence.length > 0, 'required_evidence_required');
-  require(contract.reviewCriteria.length > 0, 'review_criteria_required');
-  require(contract.failureConditions.length > 0, 'failure_conditions_required');
+  requireThat(contract.requiredEvidence.length > 0, 'required_evidence_required');
+  requireThat(contract.reviewCriteria.length > 0, 'review_criteria_required');
+  requireThat(contract.failureConditions.length > 0, 'failure_conditions_required');
 
-  require(Number.isInteger(contract.budget.ceilingUsdMicros) && contract.budget.ceilingUsdMicros > 0,
+  requireThat(Number.isInteger(contract.budget.ceilingUsdMicros) && contract.budget.ceilingUsdMicros > 0,
     'budget_ceiling_invalid');
-  require(Number.isInteger(contract.budget.maxRepairRounds) && contract.budget.maxRepairRounds >= 0,
+  requireThat(Number.isInteger(contract.budget.maxRepairRounds) && contract.budget.maxRepairRounds >= 0,
     'budget_repair_rounds_invalid');
 
   // A locked contract without a digest, or a draft carrying one, are both
   // records that would let a downstream dispatch cite a binding that was never
   // agreed. Checked here so no store can persist either shape.
   if (contract.state === 'LOCKED') {
-    require(nonEmpty(contract.bindingDigest), 'locked_contract_requires_binding_digest');
-    require(nonEmpty(contract.lockedAt), 'locked_contract_requires_locked_at');
-    require(nonEmpty(contract.lockedByEvaluatorId), 'locked_contract_requires_evaluator');
+    requireThat(nonEmpty(contract.bindingDigest), 'locked_contract_requires_binding_digest');
+    requireThat(nonEmpty(contract.lockedAt), 'locked_contract_requires_locked_at');
+    requireThat(nonEmpty(contract.lockedByEvaluatorId), 'locked_contract_requires_evaluator');
   } else if (contract.state === 'DRAFT' || contract.state === 'CHALLENGED') {
-    require(contract.bindingDigest === null, 'unlocked_contract_must_not_carry_binding_digest');
-    require(contract.lockedAt === null, 'unlocked_contract_must_not_carry_locked_at');
+    requireThat(contract.bindingDigest === null, 'unlocked_contract_must_not_carry_binding_digest');
+    requireThat(contract.lockedAt === null, 'unlocked_contract_must_not_carry_locked_at');
   }
 
   return { valid: errors.length === 0, errors: Object.freeze(errors) };
