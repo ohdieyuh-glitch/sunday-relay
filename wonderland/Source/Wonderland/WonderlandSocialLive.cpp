@@ -346,6 +346,17 @@ void FWonderlandSocialLiveService::TickWorld()
 		if (!Problem.IsEmpty())
 		{
 			LastError = Problem;
+			// TAKEN OUT OF A PRIVATE SERVER (founder P4/P5; Second's server contract 14c5fdb6: the removed player's next world.state is
+			// REFUSED, permission-denied, with the server's own generic words "You can't stay in this server." for 60 s). Any refusal of
+			// world.state while this client stood in a private server takes it out: the server's words, never why, then the public world.
+			if (WorldView.bInWorld && WorldView.Kind == TEXT("PRIVATE_SERVER") && bWorldWanted && Status >= 400 && Status < 500 && Status != 401)
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLWORLD removed from a private server by the server (HTTP %d): back to the public world"), Status);
+				WorldView = FWonderlandWorldView();
+				Answered.Broadcast(TEXT("world.removed"), FString(), FWonderlandSocialActionResult{false, Problem, false});
+				WorldChanged.Broadcast();
+				JoinWorld(TEXT("PUBLIC"), TEXT("golden_arrival"));
+			}
 			return;
 		}
 		const bool bWasPrivate = WorldView.bInWorld && WorldView.Kind == TEXT("PRIVATE_SERVER");
