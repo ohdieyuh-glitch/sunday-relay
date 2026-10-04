@@ -25,6 +25,15 @@ struct FWonderlandEosVoice::FImpl
 	IEOSPlatformHandlePtr Platform;
 	/** THE ONE VOICE USER: IVoiceChat is itself an IVoiceChatUser; login, channels and events all go through it. */
 	IVoiceChatPtr VoiceChat;
+	/** EOS Connect's "this login expires in ~10 minutes" notification (Second's RC13 review: nothing renewed it, so a session past
+	 *  the login's lifetime lost voice), and what its plain C callback reaches back into: the service, while it is alive. */
+	EOS_NotificationId AuthExpiry = EOS_INVALID_NOTIFICATIONID;
+	struct FExpiryTarget
+	{
+		TWeakPtr<bool> Alive;
+		FWonderlandEosVoice* Service = nullptr;
+	};
+	TUniquePtr<FExpiryTarget> ExpiryTarget;
 };
 
 namespace
@@ -47,6 +56,13 @@ namespace
 
 	/** Sign-in retries: after 2, 5 and 15 s; then the panel's next JOIN VOICE starts over. */
 	constexpr float EosSignInRetrySeconds[] = { 2.0f, 5.0f, 15.0f };
+
+	/** A player id for a WLVOICE line: hashed like every other id there (Second's RC13 review: raw user ids broke the "hashed ids only"
+	 *  contract). An "unbound #…" row is already a hash and stays as it is. */
+	FString VoiceLogId(const FString& UserId)
+	{
+		return UserId.StartsWith(TEXT("unbound ")) ? UserId : WonderlandEosVoice::Hashed(UserId);
+	}
 }
 
 namespace WonderlandEosVoice
@@ -183,11 +199,26 @@ FWonderlandEosVoice::FWonderlandEosVoice(FWonderlandSocialLiveService* InLive, c
 
 FWonderlandEosVoice::~FWonderlandEosVoice()
 {
+	// TEARDOWN IS NOT A SERVER REMOVAL (Second's RC13 review B2): a quit, a SIGN OUT or the 401 sign-in-again ends this object while
+	// it may hold a room, and the engine's exit event fires INSIDE LeaveChannel/Uninitialize -- with bLeaving unset it logged "EXIT
+	// ... (ended by the server)", the R16 block step's own evidence words. Every callback is made inert FIRST (the strong Alive they
+	// hold a weak copy of is replaced, so each one returns at its IsValid check), and the leave is logged here, as what it is.
+	bLeaving = true;
+	Alive = MakeShared<bool>(false);
+	if (Impl->AuthExpiry != EOS_INVALID_NOTIFICATIONID && Impl->Platform.IsValid())
+	{
+		if (const EOS_HConnect ConnectApi = EOS_Platform_GetConnectInterface(*Impl->Platform))
+		{
+			EOS_Connect_RemoveNotifyAuthExpiration(ConnectApi, Impl->AuthExpiry);
+		}
+		Impl->AuthExpiry = EOS_INVALID_NOTIFICATIONID;
+	}
 	if (Impl->VoiceChat.IsValid())
 	{
 		// a room still held is LEFT, not dropped; then the voice user goes with its instance
 		if (!RoomId.IsEmpty())
 		{
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: EXIT room %s (left: this client's voice is shutting down)"), *WonderlandEosVoice::Hashed(RoomId));
 			Impl->VoiceChat->LeaveChannel(RoomId, FOnVoiceChatChannelLeaveCompleteDelegate());
 		}
 		Impl->VoiceChat->Uninitialize();
@@ -322,18 +353,92 @@ void FWonderlandEosVoice::OnSignedIn(const FString& InProductUserId)
 		OnSignInFailed(TEXT("no product user id"));
 		return;
 	}
+	if (bRenewing)
+	{
+		// THE LOGIN RENEWED before it expired (WatchAuthExpiry): the same device credential, so the same PUID; voice and any room are
+		// left exactly as they are
+		bRenewing = false;
+		RenewAttempts = 0;
+		const bool bSame = InProductUserId.Equals(ProductUserId, ESearchCase::IgnoreCase);
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: EOS login renewed (puid %s%s)"), *WonderlandEosVoice::HashedPuid(InProductUserId),
+			bSame ? TEXT("") : TEXT(" -- NOT the same puid: voice keeps the first"));
+		return;
+	}
 	ProductUserId = InProductUserId;
 	bSignedIn = true;
 	SignInAttempts = 0;
 	// THE DAY-ONE CHECK (Second's review #1): each instance logs its PUID, hashed; two R16 clients must differ
 	UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: signed in as puid %s (cache %s)"), *GetHashedProductUserId(),
 		*WonderlandEosVoice::Hashed(FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir())));
+	WatchAuthExpiry();
 	StartVoice();
+}
+
+void FWonderlandEosVoice::WatchAuthExpiry()
+{
+	if (Impl->AuthExpiry != EOS_INVALID_NOTIFICATIONID || !Impl->Platform.IsValid())
+	{
+		return;
+	}
+	const EOS_HConnect ConnectApi = EOS_Platform_GetConnectInterface(*Impl->Platform);
+	if (ConnectApi == nullptr)
+	{
+		return;
+	}
+	Impl->ExpiryTarget = MakeUnique<FImpl::FExpiryTarget>();
+	Impl->ExpiryTarget->Alive = Alive;
+	Impl->ExpiryTarget->Service = this;
+	EOS_Connect_AddNotifyAuthExpirationOptions Options = {};
+	Options.ApiVersion = EOS_CONNECT_ADDNOTIFYAUTHEXPIRATION_API_LATEST;
+	Impl->AuthExpiry = EOS_Connect_AddNotifyAuthExpiration(ConnectApi, &Options, Impl->ExpiryTarget.Get(), [](const EOS_Connect_AuthExpirationCallbackInfo* Data)
+	{
+		const FImpl::FExpiryTarget* Target = Data != nullptr ? static_cast<const FImpl::FExpiryTarget*>(Data->ClientData) : nullptr;
+		if (Target != nullptr && Target->Alive.IsValid() && Target->Service != nullptr)
+		{
+			Target->Service->RenewSignIn();
+		}
+	});
+}
+
+void FWonderlandEosVoice::RenewSignIn()
+{
+	if (bSigningIn)
+	{
+		return;
+	}
+	// EOS asks for a fresh login ~10 minutes before this one lapses: the device credential logs in again (EOS_Connect_Login)
+	UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: EOS login expires soon: renewing (puid %s)"), *GetHashedProductUserId());
+	bRenewing = true;
+	SignIn();
 }
 
 void FWonderlandEosVoice::OnSignInFailed(const FString& Why)
 {
 	bSigningIn = false;
+	if (bRenewing)
+	{
+		// A RENEWAL THAT FAILED: the voice in use is left alone (the old login lasts a few minutes more); tried again, spaced out
+		UE_LOG(LogTemp, Warning, TEXT("WLVOICE eos: EOS login renewal failed (attempt %d): %s"), RenewAttempts + 1, *Why);
+		if (RenewAttempts < 3)
+		{
+			RenewAttempts += 1;
+			TWeakPtr<bool> RenewAlive = Alive;
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([this, RenewAlive](float)
+			{
+				if (RenewAlive.IsValid() && bRenewing && !bSigningIn)
+				{
+					SignIn();
+				}
+				return false;
+			}), 20.0f);
+		}
+		else
+		{
+			bRenewing = false;
+			RenewAttempts = 0;
+		}
+		return;
+	}
 	UE_LOG(LogTemp, Warning, TEXT("WLVOICE eos: sign-in failed (attempt %d): %s"), SignInAttempts + 1, *Why);
 	SetConnection(TEXT("FAILED"), FString::Printf(TEXT("EOS sign-in failed (%s)"), *Why));
 	// TRY AGAIN, a few times, spaced out (Second's review: one failure left voice "still signing in" forever)
@@ -434,7 +539,10 @@ void FWonderlandEosVoice::BindVoiceEvents()
 		}
 		const bool bBound = UserByProductId.Contains(Key);
 		const FString UserId = UserIdFor(Player);
-		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: ADDED %s (puid %s) to room %s%s"), *UserId, *WonderlandEosVoice::HashedPuid(Player),
+		// THE ROW KEEPS THE NAME IT WAS SHOWN WITH (Second's RC13 review): removal used to look the PUID up in the CURRENT binding,
+		// which every audience refresh resets, so a member who left stayed on the panel as connected (or speaking)
+		RowUserByPuid.Add(Key, UserId);
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: ADDED %s (puid %s) to room %s%s"), *VoiceLogId(UserId), *WonderlandEosVoice::HashedPuid(Player),
 			*WonderlandEosVoice::Hashed(Channel), bBound ? TEXT("") : TEXT(" -- not yet bound: asking the authority again"));
 		if (FindParticipant(UserId) == nullptr)
 		{
@@ -456,8 +564,12 @@ void FWonderlandEosVoice::BindVoiceEvents()
 		{
 			return;
 		}
-		const FString UserId = UserIdFor(Player);
-		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: REMOVED %s (puid %s) from room %s"), *UserId, *WonderlandEosVoice::HashedPuid(Player), *WonderlandEosVoice::Hashed(Channel));
+		const FString Key = Player.ToLower();
+		const FString* Shown = RowUserByPuid.Find(Key);
+		const FString UserId = Shown != nullptr ? *Shown : UserIdFor(Player);
+		RowUserByPuid.Remove(Key);
+		RoomNameByProductId.Remove(Key);
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: REMOVED %s (puid %s) from room %s"), *VoiceLogId(UserId), *WonderlandEosVoice::HashedPuid(Player), *WonderlandEosVoice::Hashed(Channel));
 		State.Participants.RemoveAll([&UserId](const FWonderlandVoiceParticipant& P) { return P.UserId == UserId; });
 		Notify();
 	});
@@ -472,7 +584,7 @@ void FWonderlandEosVoice::BindVoiceEvents()
 		if (P != nullptr && P->bSpeaking != (bTalking && !P->bMicMuted))
 		{
 			// THE EVIDENCE "A HEARS B": a REMOTE player's talking, as received through the room
-			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: TALKING %s %s (puid %s%s)"), *P->UserId, bTalking ? TEXT("on") : TEXT("off"),
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: TALKING %s %s (puid %s%s)"), *VoiceLogId(P->UserId), bTalking ? TEXT("on") : TEXT("off"),
 				*WonderlandEosVoice::HashedPuid(Player), bSelf ? TEXT(", this player") : TEXT(", received"));
 			P->bSpeaking = bTalking && !P->bMicMuted;
 			Notify();
@@ -591,15 +703,24 @@ void FWonderlandEosVoice::JoinRoom(const FString& Room, const FString& Token)
 			// a LEAVE pressed while the channel was joining: leave it now that it can be left
 			bCancelJoin = false;
 			bLeaving = true;
-			Impl->VoiceChat->LeaveChannel(Channel, FOnVoiceChatChannelLeaveCompleteDelegate::CreateLambda([this, WeakAlive, Channel](const FString&, const FVoiceChatResult&)
+			Impl->VoiceChat->LeaveChannel(Channel, FOnVoiceChatChannelLeaveCompleteDelegate::CreateLambda([this, WeakAlive, Channel](const FString&, const FVoiceChatResult& LeaveResult)
 			{
 				if (WeakAlive.IsValid() && RoomId == Channel)
 				{
-					EndRoom(true, FString());
+					if (LeaveResult.IsSuccess())
+					{
+						EndRoom(true, FString());
+					}
+					else
+					{
+						HoldRoomAfterFailedLeave(Channel, LeaveResult.ErrorCode);
+					}
 				}
 			}));
 			return;
 		}
+		// a room joined transmits to all of this client's channels (a failed leave earlier set NO channels: HoldRoomAfterFailedLeave)
+		Impl->VoiceChat->TransmitToAllChannels();
 		FWonderlandVoiceParticipant& Self = SelfParticipant();
 		Self.bConnected = true;
 		Self.bMicMuted = bLocalMicMuted;
@@ -702,8 +823,9 @@ void FWonderlandEosVoice::RefreshAudience()
 					{
 						if (const FString* Named = UserByProductId.Find(Room.Key))
 						{
-							UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: puid %s is %s"), *WonderlandEosVoice::HashedPuid(Room.Key), **Named);
+							UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: puid %s is %s"), *WonderlandEosVoice::HashedPuid(Room.Key), *VoiceLogId(*Named));
 							P.UserId = *Named;
+							RowUserByPuid.Add(Room.Key, *Named);
 						}
 					}
 				}
@@ -735,14 +857,32 @@ FWonderlandVoiceCommandResult FWonderlandEosVoice::Disconnect()
 	const FString Leaving = RoomId;
 	Impl->VoiceChat->LeaveChannel(Leaving, FOnVoiceChatChannelLeaveCompleteDelegate::CreateLambda([this, WeakAlive, Leaving](const FString&, const FVoiceChatResult& Result)
 	{
-		// the channel's EXIT normally cleans up; if it never comes (a leave that failed), the room is let go here all the same
+		// the channel's EXIT normally cleans up first; this is the leave's own answer
 		if (WeakAlive.IsValid() && RoomId == Leaving)
 		{
-			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: left room %s%s"), *WonderlandEosVoice::Hashed(Leaving), Result.IsSuccess() ? TEXT("") : TEXT(" (the leave reported an error)"));
-			EndRoom(true, FString());
+			if (Result.IsSuccess())
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: left room %s"), *WonderlandEosVoice::Hashed(Leaving));
+				EndRoom(true, FString());
+				return;
+			}
+			HoldRoomAfterFailedLeave(Leaving, Result.ErrorCode);
 		}
 	}));
 	return FWonderlandVoiceCommandResult{true, FString()};
+}
+
+void FWonderlandEosVoice::HoldRoomAfterFailedLeave(const FString& Room, const FString& ErrorCode)
+{
+	// A FAILED LEAVE MUST NOT FAIL OPEN (Second's RC13 review B3): letting the room go here cleared RoomId, so the still-joined
+	// channel's events were ignored while EOS kept sending the microphone (transmit mode All) and the panel read DISCONNECTED. Now the
+	// microphone transmits to NO channel at once, the room stays held (its events still count, and a JOIN elsewhere is refused), and
+	// the panel says so; LEAVE can be pressed again.
+	Impl->VoiceChat->TransmitToNoChannels();
+	bLeaving = false;
+	UE_LOG(LogTemp, Warning, TEXT("WLVOICE eos: LEAVE of room %s FAILED (%s): the microphone now transmits to no channel; still in the room until a leave succeeds"),
+		*WonderlandEosVoice::Hashed(Room), *ErrorCode);
+	SetConnection(TEXT("FAILED"), FString::Printf(TEXT("could not leave the voice room (%s); your microphone is off. Press LEAVE again."), *ErrorCode));
 }
 
 void FWonderlandEosVoice::EndRoom(bool bAsked, const FString& Why)
@@ -753,6 +893,7 @@ void FWonderlandEosVoice::EndRoom(bool bAsked, const FString& Why)
 	RoomId.Reset();
 	State.Participants.Reset();
 	RoomNameByProductId.Reset();
+	RowUserByPuid.Reset();
 	SetConnection(TEXT("DISCONNECTED"), bAsked ? FString() : Why);
 }
 
@@ -781,6 +922,22 @@ FWonderlandVoiceCommandResult FWonderlandEosVoice::SetLocallyMuted(const FString
 	if (!Impl->VoiceChat.IsValid())
 	{
 		return FWonderlandVoiceCommandResult{false, TEXT("voice is not started")};
+	}
+	// BY THE ROW AS SHOWN (Second's RC13 review: an "unbound #…" row has no binding, so MUTE on it always answered "not in this voice
+	// room"), then by the authority's binding
+	for (const TPair<FString, FString>& Row : RowUserByPuid)
+	{
+		if (Row.Value == UserId && Row.Key != ProductUserId.ToLower())
+		{
+			const FString* RoomName = RoomNameByProductId.Find(Row.Key);
+			Impl->VoiceChat->SetPlayerMuted(RoomName != nullptr ? *RoomName : Row.Key, bMuted);
+			if (FWonderlandVoiceParticipant* P = FindParticipant(UserId))
+			{
+				P->bMutedLocally = bMuted;
+			}
+			Notify();
+			return FWonderlandVoiceCommandResult{true, FString()};
+		}
 	}
 	for (const TPair<FString, FString>& Bound : UserByProductId)
 	{
@@ -839,7 +996,7 @@ FString FWonderlandEosVoice::Describe() const
 	{
 		if (P.bSpeaking)
 		{
-			Talking += (Talking.IsEmpty() ? TEXT("") : TEXT(", ")) + P.UserId;
+			Talking += (Talking.IsEmpty() ? TEXT("") : TEXT(", ")) + VoiceLogId(P.UserId);
 		}
 	}
 	return FString::Printf(TEXT("eos | puid %s | %s | %s | room %s | %d in the room%s"), *GetHashedProductUserId(), bSignedIn ? TEXT("signed in") : TEXT("signing in"),

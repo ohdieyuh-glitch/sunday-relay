@@ -68,6 +68,11 @@ private:
 	void SignIn();
 	void OnSignedIn(const FString& InProductUserId);
 	void OnSignInFailed(const FString& Why);
+	/** EOS Connect's expiry notice -> a fresh login before this one lapses (Second's RC13 review: nothing renewed it). */
+	void WatchAuthExpiry();
+	void RenewSignIn();
+	/** A leave EOS refused: keep the room, stop the microphone at once, say so (Second's RC13 review B3: it failed open). */
+	void HoldRoomAfterFailedLeave(const FString& Room, const FString& ErrorCode);
 	void StartVoice();
 	void BindVoiceEvents();
 	void JoinRoom(const FString& Room, const FString& Token);
@@ -91,6 +96,9 @@ private:
 	bool bSignedIn = false;
 	bool bSigningIn = false;
 	int32 SignInAttempts = 0;
+	/** A login renewal under way (RenewSignIn): its answer leaves voice and the room alone. */
+	bool bRenewing = false;
+	int32 RenewAttempts = 0;
 	bool bVoiceReady = false;
 	/** The voice start (Initialize / Connect / Login) failed: the next JOIN VOICE starts it again. */
 	bool bVoiceFailed = false;
@@ -109,6 +117,9 @@ private:
 	TMap<FString, FString> UserByProductId;
 	/** The room's own spelling of each player (lowercased PUID -> as EOS names it), for muting one. */
 	TMap<FString, FString> RoomNameByProductId;
+	/** Each room member's row as the panel shows it (lowercased PUID -> the userId or "unbound #…" it was added under): removal and
+	 *  MUTE find the row by this, never by the current binding, which an audience refresh resets (Second's RC13 review). */
+	TMap<FString, FString> RowUserByPuid;
 	/** Callbacks hold a weak copy: a service replaced or destroyed mid-request is never called back into. */
 	TSharedRef<bool> Alive = MakeShared<bool>(true);
 };
