@@ -32,13 +32,17 @@ export class JuliusRecoveryPostgresRepository {
     return juliusSerializable(this.pool, async (client) => {
       const existing = await client.query<{ status: string }>('SELECT status FROM relay_wonderland.julius_worker_results WHERE run_id=$1 AND idempotency_key=$2 FOR UPDATE', [input.runId, input.idempotencyKey]);
       if (existing.rows[0]) return { recorded: false, duplicate: true, taskState: existing.rows[0].status };
-      const task = await client.query<{ state: string; lease_generation: string; project_id: string; run_state: JuliusMissionState }>(`SELECT t.state,t.lease_generation,r.project_id,r.state AS run_state FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.task_id=$1 AND t.run_id=$2 FOR UPDATE OF t,r`, [input.taskId, input.runId]);
+      // ONE TASK, FOUND BY ITS PRIMARY KEY ONLY (row 13 (i) candidate r3). With `t.run_id=$2` as an index qual the planner
+      // found it through `julius_task_run_state` (run_id, …), a scan over every task of the run that SSI promoted to a
+      // lock on the whole `julius_tasks` heap page, and a task created on that page by a concurrent run became a pivot at
+      // its events/outbox INSERT (H0 diag). Same condition; as IS NOT DISTINCT FROM no btree can use it.
+      const task = await client.query<{ state: string; lease_generation: string; project_id: string; run_state: JuliusMissionState }>(`SELECT t.state,t.lease_generation,r.project_id,r.state AS run_state FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.task_id=$1 AND t.run_id IS NOT DISTINCT FROM $2::text FOR UPDATE OF t,r`, [input.taskId, input.runId]);
       const row = task.rows[0]; if (!row || row.project_id !== input.projectId) throw new Error('julius_task_not_found');
       if (row.run_state === 'CANCELLED' || row.state === 'CANCELLED') throw new Error('result_after_cancellation');
       if (row.state !== 'ACTIVE' || Number(row.lease_generation) !== input.leaseGeneration) throw new Error('stale_worker_result');
       await client.query(`INSERT INTO relay_wonderland.julius_worker_results(result_id,run_id,task_id,lease_generation,worker_id,status,safe_summary,evidence_ids,provider_receipt_ids,idempotency_key,occurred_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11)`, [input.resultId,input.runId,input.taskId,input.leaseGeneration,input.workerId,input.status,input.safeSummary,json(input.evidenceIds),json(input.providerReceiptIds),input.idempotencyKey,input.occurredAt]);
       const next = input.status === 'SUCCEEDED' ? 'SUCCEEDED' : input.status === 'FAILED' ? 'FAILED' : 'CANCELLED';
-      await client.query(`UPDATE relay_wonderland.julius_tasks SET state=$4,lease_owner=NULL,lease_expires_at=NULL,version=version+1,updated_at=$5 WHERE task_id=$1 AND run_id=$2 AND lease_generation=$3`, [input.taskId,input.runId,input.leaseGeneration,next,input.occurredAt]);
+      await client.query(`UPDATE relay_wonderland.julius_tasks SET state=$4,lease_owner=NULL,lease_expires_at=NULL,version=version+1,updated_at=$5 WHERE task_id=$1 AND (run_id,lease_generation) IS NOT DISTINCT FROM ($2::text,$3::bigint)`, [input.taskId,input.runId,input.leaseGeneration,next,input.occurredAt]);
       return { recorded: true, duplicate: false, taskState: next };
     });
   }
