@@ -5,6 +5,7 @@
 #include "Containers/Ticker.h"
 #include "Dom/JsonObject.h"
 #include "HAL/PlatformMisc.h"
+#include "Misc/ScopeExit.h"
 #include "Misc/SecureHash.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
@@ -97,26 +98,18 @@ namespace WonderlandEosVoice
 				continue;
 			}
 			Value = Value.TrimStartAndEnd();
+			// an inline comment first -- " # ..." after whitespace (ids and secrets hold no spaces) -- then the quotes around what is left
+			for (int32 At = 1; At < Value.Len(); ++At)
+			{
+				if (Value[At] == TEXT('#') && FChar::IsWhitespace(Value[At - 1]))
+				{
+					Value = Value.Left(At).TrimEnd();
+					break;
+				}
+			}
 			if (Value.Len() >= 2 && ((Value.StartsWith(TEXT("\"")) && Value.EndsWith(TEXT("\""))) || (Value.StartsWith(TEXT("'")) && Value.EndsWith(TEXT("'")))))
 			{
 				Value = Value.Mid(1, Value.Len() - 2);
-			}
-			else
-			{
-				// an inline comment: " # ..." after whitespace (ids and secrets hold no spaces)
-				int32 Hash = INDEX_NONE;
-				for (int32 At = 1; At < Value.Len(); ++At)
-				{
-					if (Value[At] == TEXT('#') && FChar::IsWhitespace(Value[At - 1]))
-					{
-						Hash = At;
-						break;
-					}
-				}
-				if (Hash != INDEX_NONE)
-				{
-					Value = Value.Left(Hash).TrimEnd();
-				}
 			}
 			Env.Add(Key.TrimStartAndEnd(), Value);
 		}
@@ -657,11 +650,16 @@ void FWonderlandEosVoice::RefreshAudience()
 			TWeakPtr<bool> RetryAlive = Alive;
 			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([this, RetryAlive](float)
 			{
-				if (RetryAlive.IsValid() && bAudienceRefreshPending && !bAudienceRefreshing)
+				if (!RetryAlive.IsValid() || !bAudienceRefreshPending)
 				{
-					bAudienceRefreshPending = false;
-					RefreshAudience();
+					return false;
 				}
+				if (bAudienceRefreshing)
+				{
+					return true;   // the earlier answer is still on its way: keep waiting (Second's third pass: a one-shot here lost it)
+				}
+				bAudienceRefreshPending = false;
+				RefreshAudience();
 				return false;
 			}), 1.2f);
 		}
@@ -677,10 +675,16 @@ void FWonderlandEosVoice::RefreshAudience()
 			return;
 		}
 		bAudienceRefreshing = false;
-		if (bAudienceRefreshPending)
+		// one more asked for while this was in flight runs once this answer is read (below; throttled again if need be)
+		const bool bRunPending = bAudienceRefreshPending;
+		bAudienceRefreshPending = false;
+		ON_SCOPE_EXIT
 		{
-			// one more was asked for while this was in flight: the ticker set then runs it
-		}
+			if (bRunPending && WeakAlive.IsValid())
+			{
+				RefreshAudience();
+			}
+		};
 		if (Status != 200 || !Data.IsValid())
 		{
 			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: audience refresh refused (%d)"), Status);

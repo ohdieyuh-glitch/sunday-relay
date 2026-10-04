@@ -424,9 +424,14 @@ namespace WonderlandSocialCommands
 			UGameInstance* Instance = World != nullptr ? World->GetGameInstance() : nullptr;
 			UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
 			FWonderlandEosVoice* Eos = Social != nullptr ? Social->GetEosVoice() : nullptr;
-			if (Eos == nullptr || !Eos->ReplayLastToken())
+			// the service says why it will not (no earlier token; still in a room); only "no EOS voice at all" is said here
+			if (Eos == nullptr)
 			{
-				UE_LOG(LogTemp, Display, TEXT("WLVOICE REPLAY: nothing to replay (no EOS voice, or no earlier token)"));
+				UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: QA REPLAY of the previous token -- no EOS voice in this session"));
+			}
+			else
+			{
+				Eos->ReplayLastToken();
 			}
 		}));
 
