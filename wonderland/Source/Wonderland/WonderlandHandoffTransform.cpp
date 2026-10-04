@@ -27,6 +27,13 @@ namespace
 		TEXT("/handoff canon, 10-03: \"luminous breakup; reformation into each sword\"). 0 = the body only draws in while the motes stream (the 10-02 look)."),
 		ECVF_Default);
 
+	TAutoConsoleVariable<float> CVarShardBurst(
+		TEXT("wl.Handoff.ShardBurst"),
+		1.8f,
+		TEXT("Mission Handoff: how far each light shard bursts out of the companion before it flies to the sword, in the body's half-extents along the ")
+		TEXT("shard's own direction (1.75 and over clears the body's box from any direction)."),
+		ECVF_Default);
+
 	UInstancedStaticMeshComponent* MakeMotes(AActor* Owner, const TCHAR* Name, const FLinearColor& Colour, int32 Count = WonderlandHandoffTransform::MotesPerSide)
 	{
 		UInstancedStaticMeshComponent* Mesh = NewObject<UInstancedStaticMeshComponent>(Owner,
@@ -263,7 +270,14 @@ namespace WonderlandHandoffTransform
 			const float Born = Ease01((Break - Leaves) / 0.05f);
 			const float Burst = Ease01((Break - Leaves) / 0.25f);
 			const float Gather = Ease01((Break - Leaves - 0.25f) / FMath::Max(0.95f - Leaves - 0.25f, 0.05f));
-			const FVector FromBody = Middle + ShardSeeds[Shard] * Slot.RestExtent * (0.35f + 0.95f * Burst);
+			// OUT PAST THE BODY'S EDGE, EVERY SHARD (SW1c, rounds 3-6: gold 4 of 20, cyan 1 of 20 ever left the body): the burst used to scale
+			// the shard's own random seed (0.45-1.0 long) by at most 1.3, so most stayed inside the companion they broke from and the breakup
+			// read as a shimmer on the body. Now it starts where its seed puts it inside the body and is carried along the seed's DIRECTION
+			// to ShardBurst half-extents -- past the box's surface from any direction at 1.75 -- before it gathers to the blade.
+			const FVector BurstDir = ShardSeeds[Shard].GetSafeNormal();
+			const float BurstOut = 0.35f * static_cast<float>(ShardSeeds[Shard].Size())
+				+ FMath::Clamp(CVarShardBurst.GetValueOnGameThread(), 0.5f, 4.0f) * Burst;
+			const FVector FromBody = Middle + BurstDir * Slot.RestExtent * BurstOut;
 			const FVector OnBlade = BladeMiddle + Blade * (Reach * (2.0f * (Shard + 0.5f) / Count - 1.0f));
 			FVector Place = FMath::Lerp(FromBody, OnBlade, Gather);
 			Place.Z += FMath::Sin(Gather * PI) * 0.25f * Largest;
