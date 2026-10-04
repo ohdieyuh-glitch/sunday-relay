@@ -11061,6 +11061,9 @@ namespace
 		float Yaw = 0.0f;
 		/** The side and front views: QaStanceCamera's own camera, kept across ticks. */
 		FQaStance View;
+		/** `unarmed`: the same beats with no swords (the double tap is then the ordinary RUN), for the founder's decision on the animator's
+		 *  inverted lean (wl.Dog.Pose.ForwardIsForward 0 vs 1, set before the command) -- the armed stance owns its own bend. */
+		bool bUnarmed = false;
 	};
 	TSharedPtr<FQaHandoffFilm> GQaHandoffFilm;
 
@@ -11134,7 +11137,7 @@ namespace
 			GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
 			GEngine->Exec(World, TEXT("wl.Sky.Hour 12"));
 			PC->SetViewTargetWithBlend(Dog, 0.0f);
-			if (!Handoff->IsEquipped())
+			if (!F.bUnarmed && !Handoff->IsEquipped())
 			{
 				FString Said;
 				WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
@@ -11142,7 +11145,7 @@ namespace
 			Next(1);
 			return true;
 		case 1:
-			if (!Handoff->IsArmed() || In < 5.0)
+			if ((!F.bUnarmed && !Handoff->IsArmed()) || In < 5.0)
 			{
 				return In < 20.0 ? true : Finish(TEXT("the swords were never held"));
 			}
@@ -11158,7 +11161,9 @@ namespace
 			{
 				return true;   // the camera settles behind
 			}
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM begin handoff"));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM begin handoff%s | wl.Dog.Pose.ForwardIsForward %d"), F.bUnarmed ? TEXT(" (UNARMED)") : TEXT(""),
+				IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Dog.Pose.ForwardIsForward")) != nullptr
+					? IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Dog.Pose.ForwardIsForward"))->GetInt() : -1);
 			F.BeganAt = Now;
 			F.NextLog = Now;
 			Next(3);
@@ -11212,12 +11217,37 @@ namespace
 			QaStanceCamera(F.View, World, Dog, 0.0, 300.0, 30.0, 50.0f);
 			if (In >= 3.0)
 			{
-				UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM last beat at %.1f s"), Now - F.BeganAt);
 				PC->SetViewTargetWithBlend(Dog, 0.0f);
+				Dog->SetActorRotation(FRotator(0.0f, F.Yaw + 180.0f, 0.0f));   // back the way it came: the clear heading, the other way
+				F.Ahead = -F.Ahead;
+				PC->SetControlRotation(FRotator(-10.0f, F.Yaw + 180.0f, 0.0f));
 				Next(9);
 			}
 			return true;
 		case 9:
+			// THE SPRINT FROM THE SIDE (the bend into the speed and the legs cycling, which the camera behind cannot show): the double tap
+			// and W held 3 s, a camera keeping beside the Dog; then released
+			QaStanceCamera(F.View, World, Dog, -90.0, 420.0, 20.0, 55.0f);
+			Dog->AddMovementInput(F.Ahead, 1.0f);
+			if (F.Sub == 0 && In >= 1.10) { Dog->QaForwardKey(false, true); F.Sub = 1; }
+			if (F.Sub == 1 && In >= 1.15) { Dog->QaForwardKey(false, false); F.Sub = 2; }
+			if (F.Sub == 2 && In >= 1.20) { Dog->QaForwardKey(false, true); F.Sub = 3; }
+			if (F.Sub == 3 && In >= 4.20)
+			{
+				Dog->QaForwardKey(false, false);
+				Next(10);
+			}
+			return true;
+		case 10:
+			QaStanceCamera(F.View, World, Dog, -90.0, 420.0, 20.0, 55.0f);
+			if (In >= 2.0)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM last beat at %.1f s"), Now - F.BeganAt);
+				PC->SetViewTargetWithBlend(Dog, 0.0f);
+				Next(11);
+			}
+			return true;
+		case 11:
 			return In < 8.0 ? true : Finish(TEXT("done"));
 		default:
 			return Finish(TEXT("an unknown step"));
@@ -11238,6 +11268,7 @@ namespace
 			GQaHandoffFilm = MakeShared<FQaHandoffFilm>();
 			GQaHandoffFilm->World = World;
 			GQaHandoffFilm->bQuit = Args.Contains(TEXT("quit"));
+			GQaHandoffFilm->bUnarmed = Args.Contains(TEXT("unarmed"));
 			GQaHandoffFilm->StepAt = QaNow();
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM handoff staging | %s"), *WonderlandBeta::BuildLabel());
 			GQaHandoffFilm->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaHandoffFilmTick), 0.0f);
