@@ -171,6 +171,8 @@ describe('F1: leader removes, else blocker leaves', () => {
     const out = ok(s, U.KAI, 'blocks.add', { targetId: U.NOVA });
     expect(hasBlocked(out.state, U.KAI, U.NOVA)).toBe(true);
     expect(JSON.stringify(out.state.parties)).toBe(parties);
-    expect(out.audience).toEqual([U.KAI]);
+    // the ended friendship is told to both exactly as an unfriend (founder, 10-04: nothing names a block)
+    expect([...out.audience].sort()).toEqual([U.KAI, U.NOVA].sort());
+    expect(out.eventOp).toBe('friends.remove');
   });
 });

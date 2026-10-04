@@ -73,7 +73,7 @@ import {
 } from './social-parties';
 import { deriveActivity, resolvePresenceFor, resolveProfileFor, type WonderlandActivitySignals } from './social-presence';
 import { buildSocialView } from './social-preview';
-import { blockedEitherWay, friendIdsOf, partyOf, type SocialState } from './social-state';
+import { areFriends, blockedEitherWay, friendIdsOf, partyOf, type SocialState } from './social-state';
 import {
   WORLD_MOTIONS,
   contextOf,
@@ -409,8 +409,10 @@ function applyOne(
       // the blocked member and stays leader; otherwise the blocker leaves and the blocked member stays (separateForBlock).
       // Everybody the change concerns is told it AS THE ORDINARY PARTY CHANGE and nothing more (founder, 10-04): the remaining
       // members, and the blocked member too -- removed (a kick: parties.remove_member, exactly what a leader's removal tells the
-      // removed) or left behind by the blocker (parties.leave, exactly what any leave tells those who stay). Nothing names a
-      // block; the block itself (and its own `blocks.add`) is told to the blocker alone.
+      // removed) or left behind by the blocker (parties.leave, exactly what any leave tells those who stay). Outside a shared
+      // party, a block that ends a FRIENDSHIP is told exactly as an unfriend is (friends.remove, to both). Nothing names a
+      // block; a block that changes nothing the other side can see (a stranger's) keeps its own `blocks.add`, told to the
+      // blocker alone.
       const target = str(body, 'targetId', MAX_LABEL);
       if (!target.ok) return invalid(target.message);
       const targetId = target.value as string;
@@ -424,14 +426,19 @@ function applyOne(
       const separated = separateForBlock(state, actorId, targetId);
       if (!separated.ok) return separated;
       const remaining = shared !== undefined ? (separated.value.parties[shared.partyId]?.members.map((m) => m.userId) ?? []) : [];
-      const told = shared !== undefined ? [actorId, ...remaining, targetId] : [actorId];
+      const endsFriendship = areFriends(state, actorId, targetId);
+      const told = shared !== undefined || endsFriendship ? [actorId, ...remaining, targetId] : [actorId];
       const outcome = changed(blockUser(separated.value, actorId, targetId, nowIso), null, told);
-      // TOLD AS THE PARTY CHANGE, NEVER AS A BLOCK: the leader removed a member, or the blocker left.
-      if (!outcome.ok || shared === undefined) return outcome;
-      return {
-        ok: true,
-        value: { ...outcome.value, eventOp: shared.leaderId === actorId ? 'parties.remove_member' : 'parties.leave', floorExempt: [targetId] },
-      };
+      if (!outcome.ok) return outcome;
+      // TOLD AS THE ORDINARY CHANGE, NEVER AS A BLOCK: the leader removed a member, the blocker left, or a friendship ended.
+      if (shared !== undefined) {
+        return {
+          ok: true,
+          value: { ...outcome.value, eventOp: shared.leaderId === actorId ? 'parties.remove_member' : 'parties.leave', floorExempt: [targetId] },
+        };
+      }
+      if (endsFriendship) return { ok: true, value: { ...outcome.value, eventOp: 'friends.remove', floorExempt: [targetId] } };
+      return outcome;
     }
     case 'blocks.remove':
       return changed(unblockUser(state, actorId, id0), null, [actorId]);

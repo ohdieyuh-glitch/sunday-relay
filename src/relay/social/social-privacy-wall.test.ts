@@ -382,3 +382,31 @@ describe('D8: the events cursor is the viewer\'s own, never a global count', () 
     expect(rest.events).toHaveLength(1);
   });
 });
+
+describe('D6b: a block that ends a friendship (no shared party) is told exactly as an unfriend', () => {
+  async function friendsStore() {
+    const store = createInMemorySocialStore();
+    for (const id of [U.KAI, U.NOVA]) await store.ensureUser({ userId: id, displayName: id, handle: `@${id}` }, NOW);
+    const run = async (name: Parameters<typeof store.apply>[0], actor: string, ids: string[], body: Record<string, unknown>) => {
+      const r = await store.apply(name, actor, { ids, body, query: {} }, NOW);
+      if (!r.ok) throw new Error(`${name}: ${r.error.message}`);
+    };
+    await run('requests.send', U.KAI, [], { toUserId: U.NOVA });
+    await run('requests.accept', U.NOVA, [(await store.read()).requests[0].requestId], {});
+    return { store, run, since: async () => (await store.eventsFor(U.KAI, 0, 100)).latest, opsAfter: async (after: number) => (await store.eventsFor(U.KAI, after, 100)).events.map((e) => e.op) };
+  }
+
+  it('Kai, blocked by his friend Nova, gets exactly what Nova unfriending him gives him (friends.remove), nothing naming a block', async () => {
+    const blocked = await friendsStore();
+    const b0 = await blocked.since();
+    await blocked.run('blocks.add', U.NOVA, [], { targetId: U.KAI });
+    const unfriended = await friendsStore();
+    const u0 = await unfriended.since();
+    await unfriended.run('friends.remove', U.NOVA, [U.KAI], {});
+    expect(await blocked.opsAfter(b0)).toEqual(['friends.remove']);
+    expect(await blocked.opsAfter(b0)).toEqual(await unfriended.opsAfter(u0));
+    // a stranger's block changes nothing Kai can see, and tells him nothing
+    const s = createSocialFixture();
+    expect(must(s, U.KAI, 'blocks.add', { targetId: U.VEGA }).audience).toEqual([U.KAI]);
+  });
+});

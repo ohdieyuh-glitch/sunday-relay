@@ -131,12 +131,12 @@ describe('the social routes: two players, the launch loop', () => {
     expect((await w.kai.get('/snapshot')).body.data.party.members.map((m: any) => m.userId)).toEqual(['usr_kai']);
   });
 
-  it('block: the blocked player is never told, can no longer message, and the blocker vanishes from their view', async () => {
+  it('block: the blocked player is never told of a block (only of the ended friendship, as by any unfriend), can no longer message, and the blocker vanishes from their view', async () => {
     const w = await friends();
     const conversationId = (await w.kai.post('/conversations', { otherUserId: 'usr_nova' })).body.data.conversationId;
     const kaiBefore = (await w.kai.get('/events')).body.data.latest;
     expect((await w.nova.post('/blocks', { targetId: 'usr_kai' })).status).toBe(200);
-    expect((await w.kai.get(`/events?after=${kaiBefore}`)).body.data.events).toEqual([]);
+    expect((await w.kai.get(`/events?after=${kaiBefore}`)).body.data.events.map((e: any) => e.op)).toEqual(['friends.remove']);
     expect((await w.kai.post(`/conversations/${conversationId}/messages`, { body: 'hello?' })).status).not.toBe(200);
     const kaiView = (await w.kai.get('/snapshot')).body.data;
     expect(kaiView.friends).toEqual([]);
