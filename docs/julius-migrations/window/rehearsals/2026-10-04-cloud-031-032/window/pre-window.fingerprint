@@ -1,0 +1,1535 @@
+column relay_wonderland.agent_ratings #1 agent_id text not-null
+column relay_wonderland.agent_ratings #10 updated_at timestamp with time zone not-null
+column relay_wonderland.agent_ratings #11 version bigint not-null default=1
+column relay_wonderland.agent_ratings #2 mode text not-null
+column relay_wonderland.agent_ratings #3 rating double precision not-null
+column relay_wonderland.agent_ratings #4 deviation double precision not-null
+column relay_wonderland.agent_ratings #5 volatility double precision not-null
+column relay_wonderland.agent_ratings #6 period bigint not-null
+column relay_wonderland.agent_ratings #7 battle_count bigint not-null
+column relay_wonderland.agent_ratings #8 provisional boolean not-null
+column relay_wonderland.agent_ratings #9 source_battle_id text
+column relay_wonderland.agents #1 agent_id text not-null
+column relay_wonderland.agents #2 owner_id text not-null
+column relay_wonderland.agents #3 data jsonb not-null default='{}'::jsonb
+column relay_wonderland.agents #4 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.artifacts #1 artifact_id text not-null
+column relay_wonderland.artifacts #2 project_id text not-null
+column relay_wonderland.artifacts #3 owner_id text not-null
+column relay_wonderland.artifacts #4 battle_id text
+column relay_wonderland.artifacts #5 execution_id text
+column relay_wonderland.artifacts #6 visibility text not-null
+column relay_wonderland.artifacts #7 metadata jsonb not-null
+column relay_wonderland.artifacts #8 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.artifacts #9 expires_at timestamp with time zone
+column relay_wonderland.battle_participants #1 battle_id text not-null
+column relay_wonderland.battle_participants #2 player_id text not-null
+column relay_wonderland.battle_participants #3 agent_id text
+column relay_wonderland.battle_participants #4 card_version_id text
+column relay_wonderland.battle_participants #5 side smallint not-null
+column relay_wonderland.battles #1 battle_id text not-null
+column relay_wonderland.battles #10 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.battles #2 project_id text not-null
+column relay_wonderland.battles #3 mission_id text not-null
+column relay_wonderland.battles #4 mode text not-null
+column relay_wonderland.battles #5 state text not-null
+column relay_wonderland.battles #6 snapshot jsonb not-null
+column relay_wonderland.battles #7 result jsonb
+column relay_wonderland.battles #8 version bigint not-null default=1
+column relay_wonderland.battles #9 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.budget_reservations #1 reservation_id text not-null
+column relay_wonderland.budget_reservations #10 usd_micros bigint not-null default=0
+column relay_wonderland.budget_reservations #11 tool_calls bigint not-null default=0
+column relay_wonderland.budget_reservations #12 compute_ms bigint not-null default=0
+column relay_wonderland.budget_reservations #13 runtime_ms bigint not-null default=0
+column relay_wonderland.budget_reservations #14 swarm_workers bigint not-null default=0
+column relay_wonderland.budget_reservations #15 committed_amounts jsonb
+column relay_wonderland.budget_reservations #16 receipt_id text
+column relay_wonderland.budget_reservations #17 denial_reason text
+column relay_wonderland.budget_reservations #18 expires_at timestamp with time zone not-null
+column relay_wonderland.budget_reservations #19 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.budget_reservations #2 execution_id text not-null
+column relay_wonderland.budget_reservations #20 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.budget_reservations #3 worker_id text
+column relay_wonderland.budget_reservations #4 operation_key text not-null
+column relay_wonderland.budget_reservations #5 idempotency_key text not-null
+column relay_wonderland.budget_reservations #6 state text not-null
+column relay_wonderland.budget_reservations #7 input_tokens bigint not-null default=0
+column relay_wonderland.budget_reservations #8 cached_tokens bigint not-null default=0
+column relay_wonderland.budget_reservations #9 output_tokens bigint not-null default=0
+column relay_wonderland.card_versions #1 card_version_id text not-null
+column relay_wonderland.card_versions #2 agent_id text not-null
+column relay_wonderland.card_versions #3 owner_id text not-null
+column relay_wonderland.card_versions #4 version integer not-null
+column relay_wonderland.card_versions #5 snapshot jsonb not-null
+column relay_wonderland.card_versions #6 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.challenges #1 challenge_id text not-null
+column relay_wonderland.challenges #2 project_id text not-null
+column relay_wonderland.challenges #3 challenger_id text not-null
+column relay_wonderland.challenges #4 challenged_id text not-null
+column relay_wonderland.challenges #5 status text not-null
+column relay_wonderland.challenges #6 snapshot jsonb not-null
+column relay_wonderland.challenges #7 version bigint not-null default=1
+column relay_wonderland.challenges #8 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.challenges #9 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.entity_records #1 kind text not-null
+column relay_wonderland.entity_records #2 record_id text not-null
+column relay_wonderland.entity_records #3 project_id text
+column relay_wonderland.entity_records #4 battle_id text
+column relay_wonderland.entity_records #5 owner_id text
+column relay_wonderland.entity_records #6 data jsonb not-null
+column relay_wonderland.entity_records #7 version bigint not-null default=1
+column relay_wonderland.entity_records #8 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.entity_records #9 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.eval_effects #1 battle_id text not-null
+column relay_wonderland.eval_effects #2 effect_kind text not-null
+column relay_wonderland.eval_effects #3 effect_key text not-null
+column relay_wonderland.eval_effects #4 data jsonb not-null
+column relay_wonderland.eval_effects #5 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.eval_runtimes #1 battle_id text not-null
+column relay_wonderland.eval_runtimes #2 project_id text not-null
+column relay_wonderland.eval_runtimes #3 state text not-null
+column relay_wonderland.eval_runtimes #4 representation_version text not-null
+column relay_wonderland.eval_runtimes #5 rebuttal_deadline timestamp with time zone
+column relay_wonderland.eval_runtimes #6 snapshot jsonb not-null
+column relay_wonderland.eval_runtimes #7 version bigint not-null
+column relay_wonderland.eval_runtimes #8 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.eval_runtimes #9 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.events #1 event_id text not-null
+column relay_wonderland.events #10 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.events #2 stream_id text not-null
+column relay_wonderland.events #3 project_id text not-null
+column relay_wonderland.events #4 sequence bigint not-null
+column relay_wonderland.events #5 event_type text not-null
+column relay_wonderland.events #6 visibility text not-null
+column relay_wonderland.events #7 battle_id text
+column relay_wonderland.events #8 payload jsonb not-null
+column relay_wonderland.events #9 occurred_at timestamp with time zone not-null
+column relay_wonderland.execution_sessions #1 execution_id text not-null
+column relay_wonderland.execution_sessions #10 snapshot jsonb not-null
+column relay_wonderland.execution_sessions #11 checkpoint jsonb not-null
+column relay_wonderland.execution_sessions #12 version bigint not-null default=1
+column relay_wonderland.execution_sessions #13 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.execution_sessions #14 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.execution_sessions #2 battle_id text
+column relay_wonderland.execution_sessions #3 mission_id text not-null
+column relay_wonderland.execution_sessions #4 project_id text not-null
+column relay_wonderland.execution_sessions #5 player_id text not-null
+column relay_wonderland.execution_sessions #6 agent_id text not-null
+column relay_wonderland.execution_sessions #7 card_version_id text not-null
+column relay_wonderland.execution_sessions #8 state text not-null
+column relay_wonderland.execution_sessions #9 workspace_isolation_ref text not-null
+column relay_wonderland.execution_usage #1 execution_id text not-null
+column relay_wonderland.execution_usage #2 usage jsonb not-null
+column relay_wonderland.execution_usage #3 version bigint not-null default=1
+column relay_wonderland.execution_usage #4 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.gauntlet_rounds #1 gauntlet_id text not-null
+column relay_wonderland.gauntlet_rounds #10 completed_at timestamp with time zone
+column relay_wonderland.gauntlet_rounds #2 round integer not-null
+column relay_wonderland.gauntlet_rounds #3 work_id text not-null
+column relay_wonderland.gauntlet_rounds #4 phase text not-null
+column relay_wonderland.gauntlet_rounds #5 outcome text
+column relay_wonderland.gauntlet_rounds #6 duration_ms bigint
+column relay_wonderland.gauntlet_rounds #7 usd_micros bigint
+column relay_wonderland.gauntlet_rounds #8 finding_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.gauntlet_rounds #9 started_at timestamp with time zone not-null
+column relay_wonderland.gauntlet_runs #1 gauntlet_id text not-null
+column relay_wonderland.gauntlet_runs #10 retries integer not-null default=0
+column relay_wonderland.gauntlet_runs #11 max_rounds integer not-null
+column relay_wonderland.gauntlet_runs #12 max_retries integer not-null
+column relay_wonderland.gauntlet_runs #13 max_duration_ms bigint not-null
+column relay_wonderland.gauntlet_runs #14 max_usd_micros bigint not-null
+column relay_wonderland.gauntlet_runs #15 used_duration_ms bigint not-null default=0
+column relay_wonderland.gauntlet_runs #16 used_usd_micros bigint not-null default=0
+column relay_wonderland.gauntlet_runs #17 halt_reason text
+column relay_wonderland.gauntlet_runs #18 version bigint not-null default=1
+column relay_wonderland.gauntlet_runs #19 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.gauntlet_runs #2 run_id text not-null
+column relay_wonderland.gauntlet_runs #20 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.gauntlet_runs #3 project_id text not-null
+column relay_wonderland.gauntlet_runs #4 subject_task_id text not-null
+column relay_wonderland.gauntlet_runs #5 activated_by text not-null
+column relay_wonderland.gauntlet_runs #6 activated_at timestamp with time zone not-null
+column relay_wonderland.gauntlet_runs #7 activation text not-null
+column relay_wonderland.gauntlet_runs #8 state text not-null
+column relay_wonderland.gauntlet_runs #9 round integer not-null default=0
+column relay_wonderland.gve_runs #1 run_id text not-null
+column relay_wonderland.gve_runs #10 adapter_id text not-null
+column relay_wonderland.gve_runs #11 adapter_version text not-null
+column relay_wonderland.gve_runs #12 configuration_hash text not-null
+column relay_wonderland.gve_runs #13 status text not-null
+column relay_wonderland.gve_runs #14 queued_at timestamp with time zone not-null
+column relay_wonderland.gve_runs #15 started_at timestamp with time zone
+column relay_wonderland.gve_runs #16 completed_at timestamp with time zone
+column relay_wonderland.gve_runs #17 evidence_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.gve_runs #18 artifact_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.gve_runs #19 measurements jsonb not-null default='{}'::jsonb
+column relay_wonderland.gve_runs #2 version text not-null
+column relay_wonderland.gve_runs #20 failure text
+column relay_wonderland.gve_runs #21 score_eligible boolean not-null default=false
+column relay_wonderland.gve_runs #22 snapshot jsonb not-null
+column relay_wonderland.gve_runs #23 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.gve_runs #3 policy_version text not-null
+column relay_wonderland.gve_runs #4 project_id text not-null
+column relay_wonderland.gve_runs #5 mission_id text not-null
+column relay_wonderland.gve_runs #6 battle_id text
+column relay_wonderland.gve_runs #7 execution_id text not-null
+column relay_wonderland.gve_runs #8 agent_id text not-null
+column relay_wonderland.gve_runs #9 category text not-null
+column relay_wonderland.hidden_test_fixtures #1 fixture_id text not-null
+column relay_wonderland.hidden_test_fixtures #2 version integer not-null
+column relay_wonderland.hidden_test_fixtures #3 mission_id text not-null
+column relay_wonderland.hidden_test_fixtures #4 integrity_hash text not-null
+column relay_wonderland.hidden_test_fixtures #5 adapter_id text not-null
+column relay_wonderland.hidden_test_fixtures #6 policy_version text not-null
+column relay_wonderland.hidden_test_fixtures #7 server_locator text not-null
+column relay_wonderland.hidden_test_fixtures #8 metadata jsonb not-null
+column relay_wonderland.hidden_test_fixtures #9 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.idempotency #1 scope text not-null
+column relay_wonderland.idempotency #2 command_id text not-null
+column relay_wonderland.idempotency #3 request_hash text not-null
+column relay_wonderland.idempotency #4 response jsonb not-null
+column relay_wonderland.idempotency #5 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.idempotency #6 expires_at timestamp with time zone
+column relay_wonderland.inventory_definitions #1 item_id text not-null
+column relay_wonderland.inventory_definitions #2 version integer not-null
+column relay_wonderland.inventory_definitions #3 item_type text not-null
+column relay_wonderland.inventory_definitions #4 rarity text not-null
+column relay_wonderland.inventory_definitions #5 definition jsonb not-null
+column relay_wonderland.inventory_definitions #6 deprecated boolean not-null default=false
+column relay_wonderland.inventory_definitions #7 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.inventory_equipment #1 player_id text not-null
+column relay_wonderland.inventory_equipment #2 slot text not-null
+column relay_wonderland.inventory_equipment #3 item_id text not-null
+column relay_wonderland.inventory_equipment #4 item_version integer not-null
+column relay_wonderland.inventory_equipment #5 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.inventory_grants #1 grant_id text not-null
+column relay_wonderland.inventory_grants #2 grant_key text not-null
+column relay_wonderland.inventory_grants #3 player_id text not-null
+column relay_wonderland.inventory_grants #4 battle_id text
+column relay_wonderland.inventory_grants #5 item_id text not-null
+column relay_wonderland.inventory_grants #6 data jsonb not-null
+column relay_wonderland.inventory_grants #7 granted_at timestamp with time zone not-null default=now()
+column relay_wonderland.inventory_grants #8 revoked_at timestamp with time zone
+column relay_wonderland.inventory_grants #9 item_version integer not-null default=1
+column relay_wonderland.julius_acceptance_criteria #1 criterion_id text not-null
+column relay_wonderland.julius_acceptance_criteria #2 run_id text not-null
+column relay_wonderland.julius_acceptance_criteria #3 description text not-null
+column relay_wonderland.julius_acceptance_criteria #4 required_evidence_types jsonb not-null
+column relay_wonderland.julius_acceptance_criteria #5 ordinal integer not-null
+column relay_wonderland.julius_acceptance_criteria #6 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_approvals #1 approval_id text not-null
+column relay_wonderland.julius_approvals #10 requested_at timestamp with time zone not-null
+column relay_wonderland.julius_approvals #11 decided_at timestamp with time zone
+column relay_wonderland.julius_approvals #12 decided_by text
+column relay_wonderland.julius_approvals #13 decision_reason text
+column relay_wonderland.julius_approvals #14 idempotency_key text not-null
+column relay_wonderland.julius_approvals #2 run_id text not-null
+column relay_wonderland.julius_approvals #3 project_id text not-null
+column relay_wonderland.julius_approvals #4 task_id text
+column relay_wonderland.julius_approvals #5 operation text not-null
+column relay_wonderland.julius_approvals #6 policy_revision text not-null
+column relay_wonderland.julius_approvals #7 reason_code text not-null
+column relay_wonderland.julius_approvals #8 safe_rationale text not-null
+column relay_wonderland.julius_approvals #9 state text not-null
+column relay_wonderland.julius_artifacts #1 artifact_id text not-null
+column relay_wonderland.julius_artifacts #10 content_hash text not-null
+column relay_wonderland.julius_artifacts #11 storage_ref text not-null
+column relay_wonderland.julius_artifacts #12 created_at timestamp with time zone not-null
+column relay_wonderland.julius_artifacts #13 expires_at timestamp with time zone
+column relay_wonderland.julius_artifacts #2 tenant_id text not-null
+column relay_wonderland.julius_artifacts #3 project_id text not-null
+column relay_wonderland.julius_artifacts #4 run_id text not-null
+column relay_wonderland.julius_artifacts #5 task_id text not-null
+column relay_wonderland.julius_artifacts #6 invocation_id text not-null
+column relay_wonderland.julius_artifacts #7 kind text not-null
+column relay_wonderland.julius_artifacts #8 content_type text not-null
+column relay_wonderland.julius_artifacts #9 byte_size bigint not-null
+column relay_wonderland.julius_brain_entries #1 entry_id text not-null
+column relay_wonderland.julius_brain_entries #10 created_at timestamp with time zone not-null
+column relay_wonderland.julius_brain_entries #2 run_id text not-null
+column relay_wonderland.julius_brain_entries #3 project_id text not-null
+column relay_wonderland.julius_brain_entries #4 task_id text
+column relay_wonderland.julius_brain_entries #5 worker_id text not-null
+column relay_wonderland.julius_brain_entries #6 entry_kind text not-null
+column relay_wonderland.julius_brain_entries #7 safe_content text not-null
+column relay_wonderland.julius_brain_entries #8 evidence_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_brain_entries #9 revision bigint not-null
+column relay_wonderland.julius_claim_standings #1 claim_id text not-null
+column relay_wonderland.julius_claim_standings #10 evidence jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_claim_standings #11 supersedes text
+column relay_wonderland.julius_claim_standings #12 contradicts jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_claim_standings #13 reason text not-null
+column relay_wonderland.julius_claim_standings #14 recorded_at timestamp with time zone not-null
+column relay_wonderland.julius_claim_standings #2 standing_revision integer not-null
+column relay_wonderland.julius_claim_standings #3 project_id text not-null
+column relay_wonderland.julius_claim_standings #4 run_id text not-null
+column relay_wonderland.julius_claim_standings #5 entry_id text not-null
+column relay_wonderland.julius_claim_standings #6 provenance text not-null
+column relay_wonderland.julius_claim_standings #7 trust text not-null
+column relay_wonderland.julius_claim_standings #8 asserted_by text not-null
+column relay_wonderland.julius_claim_standings #9 asserted_at timestamp with time zone not-null
+column relay_wonderland.julius_context_snapshots #1 context_id text not-null
+column relay_wonderland.julius_context_snapshots #10 content_hash text not-null
+column relay_wonderland.julius_context_snapshots #11 character_count integer not-null
+column relay_wonderland.julius_context_snapshots #12 truncated boolean not-null
+column relay_wonderland.julius_context_snapshots #13 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_context_snapshots #14 worker_role text not-null default='SPECIALIST:unknown'::text
+column relay_wonderland.julius_context_snapshots #15 dependency_task_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_context_snapshots #16 evidence_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_context_snapshots #17 finding_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_context_snapshots #18 acceptance_criterion_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_context_snapshots #19 redaction_count integer not-null default=0
+column relay_wonderland.julius_context_snapshots #2 run_id text not-null
+column relay_wonderland.julius_context_snapshots #20 integrity_version text
+column relay_wonderland.julius_context_snapshots #21 integrity_conflicts jsonb
+column relay_wonderland.julius_context_snapshots #22 integrity_excluded_entry_ids jsonb
+column relay_wonderland.julius_context_snapshots #23 integrity_evicted_entry_ids jsonb
+column relay_wonderland.julius_context_snapshots #3 task_id text not-null
+column relay_wonderland.julius_context_snapshots #4 worker_id text not-null
+column relay_wonderland.julius_context_snapshots #5 compiler_version text not-null
+column relay_wonderland.julius_context_snapshots #6 mission_contract_revision bigint not-null
+column relay_wonderland.julius_context_snapshots #7 card_revision text not-null
+column relay_wonderland.julius_context_snapshots #8 project_brain_revision bigint not-null
+column relay_wonderland.julius_context_snapshots #9 source_entry_ids jsonb not-null
+column relay_wonderland.julius_criterion_evidence #1 criterion_id text not-null
+column relay_wonderland.julius_criterion_evidence #2 evidence_id text not-null
+column relay_wonderland.julius_criterion_evidence #3 run_id text not-null
+column relay_wonderland.julius_evidence #1 evidence_id text not-null
+column relay_wonderland.julius_evidence #10 occurred_at timestamp with time zone not-null
+column relay_wonderland.julius_evidence #11 idempotency_key text not-null
+column relay_wonderland.julius_evidence #2 run_id text not-null
+column relay_wonderland.julius_evidence #3 task_id text not-null
+column relay_wonderland.julius_evidence #4 worker_id text not-null
+column relay_wonderland.julius_evidence #5 evidence_type text not-null
+column relay_wonderland.julius_evidence #6 status text not-null
+column relay_wonderland.julius_evidence #7 safe_summary text not-null
+column relay_wonderland.julius_evidence #8 artifact_ref text
+column relay_wonderland.julius_evidence #9 integrity_hash text
+column relay_wonderland.julius_repair_cycles #1 repair_id text not-null
+column relay_wonderland.julius_repair_cycles #10 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_repair_cycles #11 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_repair_cycles #2 run_id text not-null
+column relay_wonderland.julius_repair_cycles #3 original_task_id text not-null
+column relay_wonderland.julius_repair_cycles #4 repair_task_id text not-null
+column relay_wonderland.julius_repair_cycles #5 round integer not-null
+column relay_wonderland.julius_repair_cycles #6 finding_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_repair_cycles #7 evidence_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_repair_cycles #8 budget_reservation_id text not-null
+column relay_wonderland.julius_repair_cycles #9 state text not-null
+column relay_wonderland.julius_reviewer_findings #1 finding_id text not-null
+column relay_wonderland.julius_reviewer_findings #10 blocking boolean not-null
+column relay_wonderland.julius_reviewer_findings #11 status text not-null
+column relay_wonderland.julius_reviewer_findings #12 created_at timestamp with time zone not-null
+column relay_wonderland.julius_reviewer_findings #13 updated_at timestamp with time zone not-null
+column relay_wonderland.julius_reviewer_findings #2 run_id text not-null
+column relay_wonderland.julius_reviewer_findings #3 task_id text not-null
+column relay_wonderland.julius_reviewer_findings #4 reviewer_worker_id text not-null
+column relay_wonderland.julius_reviewer_findings #5 severity text not-null
+column relay_wonderland.julius_reviewer_findings #6 category text not-null
+column relay_wonderland.julius_reviewer_findings #7 claim text not-null
+column relay_wonderland.julius_reviewer_findings #8 criterion_id text
+column relay_wonderland.julius_reviewer_findings #9 evidence_ids jsonb not-null
+column relay_wonderland.julius_runs #1 run_id text not-null
+column relay_wonderland.julius_runs #10 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_runs #11 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_runs #12 lifecycle_reason text
+column relay_wonderland.julius_runs #13 lifecycle_actor text
+column relay_wonderland.julius_runs #14 lifecycle_at timestamp with time zone
+column relay_wonderland.julius_runs #2 mission_id text not-null
+column relay_wonderland.julius_runs #3 project_id text not-null
+column relay_wonderland.julius_runs #4 state text not-null
+column relay_wonderland.julius_runs #5 runtime_version text not-null
+column relay_wonderland.julius_runs #6 card_revision text not-null
+column relay_wonderland.julius_runs #7 mission_contract_revision bigint not-null
+column relay_wonderland.julius_runs #8 project_brain_revision bigint not-null
+column relay_wonderland.julius_runs #9 version bigint not-null default=1
+column relay_wonderland.julius_sandboxes #1 sandbox_id text not-null
+column relay_wonderland.julius_sandboxes #10 image_digest text not-null
+column relay_wonderland.julius_sandboxes #11 workspace_snapshot text not-null
+column relay_wonderland.julius_sandboxes #12 policy_revision text not-null
+column relay_wonderland.julius_sandboxes #13 resource_limits jsonb not-null
+column relay_wonderland.julius_sandboxes #14 state text not-null
+column relay_wonderland.julius_sandboxes #15 created_at timestamp with time zone not-null
+column relay_wonderland.julius_sandboxes #16 last_heartbeat_at timestamp with time zone not-null
+column relay_wonderland.julius_sandboxes #17 expires_at timestamp with time zone not-null
+column relay_wonderland.julius_sandboxes #18 recovery_claim_generation bigint not-null default=0
+column relay_wonderland.julius_sandboxes #19 recovery_claimed_until timestamp with time zone
+column relay_wonderland.julius_sandboxes #2 tenant_id text not-null
+column relay_wonderland.julius_sandboxes #20 sandbox_policy jsonb not-null default='{}'::jsonb
+column relay_wonderland.julius_sandboxes #21 dispatch_generation bigint
+column relay_wonderland.julius_sandboxes #22 execution_token_hash text
+column relay_wonderland.julius_sandboxes #23 recovery_from_state text
+column relay_wonderland.julius_sandboxes #24 recovery_owner text
+column relay_wonderland.julius_sandboxes #25 owner_expires_at timestamp with time zone not-null default=(clock_timestamp() + '00:00:30'::interval)
+column relay_wonderland.julius_sandboxes #3 project_id text not-null
+column relay_wonderland.julius_sandboxes #4 run_id text not-null
+column relay_wonderland.julius_sandboxes #5 task_id text not-null
+column relay_wonderland.julius_sandboxes #6 invocation_id text not-null
+column relay_wonderland.julius_sandboxes #7 lease_generation bigint not-null
+column relay_wonderland.julius_sandboxes #8 runtime_instance_id text not-null
+column relay_wonderland.julius_sandboxes #9 container_id text
+column relay_wonderland.julius_subagents #1 request_id text not-null
+column relay_wonderland.julius_subagents #10 state text not-null
+column relay_wonderland.julius_subagents #11 denial_reason text
+column relay_wonderland.julius_subagents #12 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_subagents #13 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_subagents #2 run_id text not-null
+column relay_wonderland.julius_subagents #3 project_id text not-null
+column relay_wonderland.julius_subagents #4 parent_task_id text not-null
+column relay_wonderland.julius_subagents #5 child_task_id text not-null
+column relay_wonderland.julius_subagents #6 depth integer not-null
+column relay_wonderland.julius_subagents #7 capability text not-null
+column relay_wonderland.julius_subagents #8 permissions jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_subagents #9 budget_reservation_id text not-null
+column relay_wonderland.julius_task_contracts #1 contract_id text not-null
+column relay_wonderland.julius_task_contracts #10 locked_at timestamp with time zone
+column relay_wonderland.julius_task_contracts #11 locked_by_evaluator_id text
+column relay_wonderland.julius_task_contracts #12 created_at timestamp with time zone not-null
+column relay_wonderland.julius_task_contracts #2 contract_revision integer not-null
+column relay_wonderland.julius_task_contracts #3 run_id text not-null
+column relay_wonderland.julius_task_contracts #4 project_id text not-null
+column relay_wonderland.julius_task_contracts #5 task_id text not-null
+column relay_wonderland.julius_task_contracts #6 mission_contract_revision integer not-null
+column relay_wonderland.julius_task_contracts #7 state text not-null
+column relay_wonderland.julius_task_contracts #8 safe_terms jsonb not-null
+column relay_wonderland.julius_task_contracts #9 binding_digest text
+column relay_wonderland.julius_task_dependencies #1 task_id text not-null
+column relay_wonderland.julius_task_dependencies #2 dependency_task_id text not-null
+column relay_wonderland.julius_tasks #1 task_id text not-null
+column relay_wonderland.julius_tasks #10 lease_owner text
+column relay_wonderland.julius_tasks #11 lease_generation bigint not-null default=0
+column relay_wonderland.julius_tasks #12 lease_expires_at timestamp with time zone
+column relay_wonderland.julius_tasks #13 last_heartbeat timestamp with time zone
+column relay_wonderland.julius_tasks #14 attempt integer not-null default=0
+column relay_wonderland.julius_tasks #15 next_attempt_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_tasks #16 version bigint not-null default=1
+column relay_wonderland.julius_tasks #17 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_tasks #18 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_tasks #19 recoveries integer not-null default=0
+column relay_wonderland.julius_tasks #2 run_id text not-null
+column relay_wonderland.julius_tasks #3 parent_task_id text
+column relay_wonderland.julius_tasks #4 role text not-null
+column relay_wonderland.julius_tasks #5 task_type text not-null
+column relay_wonderland.julius_tasks #6 state text not-null
+column relay_wonderland.julius_tasks #7 ordinal integer not-null
+column relay_wonderland.julius_tasks #8 required_evidence_types jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_tasks #9 worker_id text
+column relay_wonderland.julius_tool_execution_receipts #1 invocation_id text not-null
+column relay_wonderland.julius_tool_execution_receipts #10 completed_at timestamp with time zone
+column relay_wonderland.julius_tool_execution_receipts #11 result_digest text
+column relay_wonderland.julius_tool_execution_receipts #12 before_state_digest text
+column relay_wonderland.julius_tool_execution_receipts #13 after_state_digest text
+column relay_wonderland.julius_tool_execution_receipts #14 result jsonb
+column relay_wonderland.julius_tool_execution_receipts #2 project_id text not-null
+column relay_wonderland.julius_tool_execution_receipts #3 dispatch_generation bigint not-null
+column relay_wonderland.julius_tool_execution_receipts #4 sandbox_id text not-null
+column relay_wonderland.julius_tool_execution_receipts #5 execution_token_hash text not-null
+column relay_wonderland.julius_tool_execution_receipts #6 request_digest text not-null
+column relay_wonderland.julius_tool_execution_receipts #7 effect_classification text not-null
+column relay_wonderland.julius_tool_execution_receipts #8 state text not-null
+column relay_wonderland.julius_tool_execution_receipts #9 started_at timestamp with time zone
+column relay_wonderland.julius_tool_invocations #1 invocation_id text not-null
+column relay_wonderland.julius_tool_invocations #10 policy_revision text not-null
+column relay_wonderland.julius_tool_invocations #11 tool_id text not-null
+column relay_wonderland.julius_tool_invocations #12 tool_version text not-null
+column relay_wonderland.julius_tool_invocations #13 mutation_class text not-null
+column relay_wonderland.julius_tool_invocations #14 state text not-null
+column relay_wonderland.julius_tool_invocations #15 sandbox_id text
+column relay_wonderland.julius_tool_invocations #16 budget_reservation_id text
+column relay_wonderland.julius_tool_invocations #17 exit_code integer
+column relay_wonderland.julius_tool_invocations #18 safe_summary text
+column relay_wonderland.julius_tool_invocations #19 stdout_preview text not-null default=''::text
+column relay_wonderland.julius_tool_invocations #2 idempotency_key text not-null
+column relay_wonderland.julius_tool_invocations #20 stdout_artifact_id text
+column relay_wonderland.julius_tool_invocations #21 stderr_preview text not-null default=''::text
+column relay_wonderland.julius_tool_invocations #22 stderr_artifact_id text
+column relay_wonderland.julius_tool_invocations #23 evidence_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_tool_invocations #24 artifact_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_tool_invocations #25 duration_ms bigint
+column relay_wonderland.julius_tool_invocations #26 requested_at timestamp with time zone not-null
+column relay_wonderland.julius_tool_invocations #27 authorized_at timestamp with time zone
+column relay_wonderland.julius_tool_invocations #28 started_at timestamp with time zone
+column relay_wonderland.julius_tool_invocations #29 completed_at timestamp with time zone
+column relay_wonderland.julius_tool_invocations #3 request_digest text not-null
+column relay_wonderland.julius_tool_invocations #30 dispatch_generation bigint not-null default=0
+column relay_wonderland.julius_tool_invocations #31 dispatch_claimed_by text
+column relay_wonderland.julius_tool_invocations #32 dispatch_claimed_until timestamp with time zone
+column relay_wonderland.julius_tool_invocations #33 effect_classification text not-null default='NON_IDEMPOTENT_MUTATION'::text
+column relay_wonderland.julius_tool_invocations #34 recovery_state text not-null default='NONE'::text
+column relay_wonderland.julius_tool_invocations #35 recovery_claimed_by text
+column relay_wonderland.julius_tool_invocations #36 recovery_claimed_until timestamp with time zone
+column relay_wonderland.julius_tool_invocations #4 tenant_id text not-null
+column relay_wonderland.julius_tool_invocations #5 project_id text not-null
+column relay_wonderland.julius_tool_invocations #6 run_id text not-null
+column relay_wonderland.julius_tool_invocations #7 task_id text not-null
+column relay_wonderland.julius_tool_invocations #8 worker_id text not-null
+column relay_wonderland.julius_tool_invocations #9 lease_generation bigint not-null
+column relay_wonderland.julius_tool_outbox #1 invocation_id text not-null
+column relay_wonderland.julius_tool_outbox #10 delivered_at timestamp with time zone
+column relay_wonderland.julius_tool_outbox #2 project_id text not-null
+column relay_wonderland.julius_tool_outbox #3 state text not-null default='PENDING'::text
+column relay_wonderland.julius_tool_outbox #4 attempts integer not-null default=0
+column relay_wonderland.julius_tool_outbox #5 next_attempt_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_tool_outbox #6 claimed_by text
+column relay_wonderland.julius_tool_outbox #7 claimed_until timestamp with time zone
+column relay_wonderland.julius_tool_outbox #8 last_error text
+column relay_wonderland.julius_tool_outbox #9 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_tool_settlements #1 invocation_id text not-null
+column relay_wonderland.julius_tool_settlements #10 result_digest text not-null
+column relay_wonderland.julius_tool_settlements #11 command_digest text not-null
+column relay_wonderland.julius_tool_settlements #12 result jsonb not-null
+column relay_wonderland.julius_tool_settlements #2 project_id text not-null
+column relay_wonderland.julius_tool_settlements #3 budget_reservation_id text not-null
+column relay_wonderland.julius_tool_settlements #4 receipt_digest text not-null
+column relay_wonderland.julius_tool_settlements #5 resource_usage jsonb not-null
+column relay_wonderland.julius_tool_settlements #6 settlement_state text not-null
+column relay_wonderland.julius_tool_settlements #7 settled_at timestamp with time zone not-null
+column relay_wonderland.julius_tool_settlements #8 settlement_id text not-null
+column relay_wonderland.julius_tool_settlements #9 dispatch_generation bigint not-null
+column relay_wonderland.julius_trajectory_events #1 trajectory_event_id text not-null
+column relay_wonderland.julius_trajectory_events #10 policy_version text not-null
+column relay_wonderland.julius_trajectory_events #11 card_revision text not-null
+column relay_wonderland.julius_trajectory_events #12 mission_contract_revision bigint not-null
+column relay_wonderland.julius_trajectory_events #13 project_brain_revision bigint not-null
+column relay_wonderland.julius_trajectory_events #14 duration_ms bigint
+column relay_wonderland.julius_trajectory_events #15 usd_micros bigint
+column relay_wonderland.julius_trajectory_events #16 input_tokens bigint
+column relay_wonderland.julius_trajectory_events #17 output_tokens bigint
+column relay_wonderland.julius_trajectory_events #18 outcome text
+column relay_wonderland.julius_trajectory_events #19 safe_facts jsonb not-null default='{}'::jsonb
+column relay_wonderland.julius_trajectory_events #2 run_id text not-null
+column relay_wonderland.julius_trajectory_events #20 idempotency_key text not-null
+column relay_wonderland.julius_trajectory_events #21 occurred_at timestamp with time zone not-null
+column relay_wonderland.julius_trajectory_events #22 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_trajectory_events #3 project_id text not-null
+column relay_wonderland.julius_trajectory_events #4 event_kind text not-null
+column relay_wonderland.julius_trajectory_events #5 task_id text
+column relay_wonderland.julius_trajectory_events #6 worker_id text
+column relay_wonderland.julius_trajectory_events #7 provider_id text
+column relay_wonderland.julius_trajectory_events #8 context_id text
+column relay_wonderland.julius_trajectory_events #9 runtime_version text not-null
+column relay_wonderland.julius_transitions #1 transition_id text not-null
+column relay_wonderland.julius_transitions #10 sequence bigint not-null
+column relay_wonderland.julius_transitions #2 run_id text not-null
+column relay_wonderland.julius_transitions #3 from_state text not-null
+column relay_wonderland.julius_transitions #4 to_state text not-null
+column relay_wonderland.julius_transitions #5 reason_code text not-null
+column relay_wonderland.julius_transitions #6 safe_summary text not-null
+column relay_wonderland.julius_transitions #7 evidence_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_transitions #8 runtime_version text not-null
+column relay_wonderland.julius_transitions #9 occurred_at timestamp with time zone not-null
+column relay_wonderland.julius_verification_decisions #1 decision_id text not-null
+column relay_wonderland.julius_verification_decisions #10 idempotency_key text not-null
+column relay_wonderland.julius_verification_decisions #2 run_id text not-null
+column relay_wonderland.julius_verification_decisions #3 task_id text not-null
+column relay_wonderland.julius_verification_decisions #4 action text not-null
+column relay_wonderland.julius_verification_decisions #5 reason_code text not-null
+column relay_wonderland.julius_verification_decisions #6 safe_summary text not-null
+column relay_wonderland.julius_verification_decisions #7 evidence_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_verification_decisions #8 policy_revision text not-null
+column relay_wonderland.julius_verification_decisions #9 occurred_at timestamp with time zone not-null
+column relay_wonderland.julius_work_artifacts #1 artifact_id text not-null
+column relay_wonderland.julius_work_artifacts #10 content_hash text not-null
+column relay_wonderland.julius_work_artifacts #11 storage_ref text not-null
+column relay_wonderland.julius_work_artifacts #12 occurred_at timestamp with time zone not-null
+column relay_wonderland.julius_work_artifacts #13 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_work_artifacts #2 project_id text not-null
+column relay_wonderland.julius_work_artifacts #3 run_id text not-null
+column relay_wonderland.julius_work_artifacts #4 task_id text not-null
+column relay_wonderland.julius_work_artifacts #5 lease_generation bigint not-null
+column relay_wonderland.julius_work_artifacts #6 role text not-null
+column relay_wonderland.julius_work_artifacts #7 kind text not-null
+column relay_wonderland.julius_work_artifacts #8 content_type text not-null
+column relay_wonderland.julius_work_artifacts #9 byte_size bigint not-null
+column relay_wonderland.julius_worker_results #1 result_id text not-null
+column relay_wonderland.julius_worker_results #10 idempotency_key text not-null
+column relay_wonderland.julius_worker_results #11 occurred_at timestamp with time zone not-null
+column relay_wonderland.julius_worker_results #12 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.julius_worker_results #2 run_id text not-null
+column relay_wonderland.julius_worker_results #3 task_id text not-null
+column relay_wonderland.julius_worker_results #4 lease_generation bigint not-null
+column relay_wonderland.julius_worker_results #5 worker_id text not-null
+column relay_wonderland.julius_worker_results #6 status text not-null
+column relay_wonderland.julius_worker_results #7 safe_summary text not-null
+column relay_wonderland.julius_worker_results #8 evidence_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.julius_worker_results #9 provider_receipt_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.mission_contracts #1 mission_id text not-null
+column relay_wonderland.mission_contracts #2 project_id text not-null
+column relay_wonderland.mission_contracts #3 stage text not-null
+column relay_wonderland.mission_contracts #4 canonical_hash text not-null
+column relay_wonderland.mission_contracts #5 snapshot jsonb not-null
+column relay_wonderland.mission_contracts #6 version bigint not-null default=1
+column relay_wonderland.mission_contracts #7 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.mission_contracts #8 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.outbox #1 outbox_id text not-null
+column relay_wonderland.outbox #10 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.outbox #11 delivered_at timestamp with time zone
+column relay_wonderland.outbox #2 event_id text not-null
+column relay_wonderland.outbox #3 project_id text not-null
+column relay_wonderland.outbox #4 status text not-null default='PENDING'::text
+column relay_wonderland.outbox #5 attempts integer not-null default=0
+column relay_wonderland.outbox #6 claimed_by text
+column relay_wonderland.outbox #7 claimed_until timestamp with time zone
+column relay_wonderland.outbox #8 next_attempt_at timestamp with time zone not-null default=now()
+column relay_wonderland.outbox #9 last_error text
+column relay_wonderland.players #1 player_id text not-null
+column relay_wonderland.players #2 data jsonb not-null default='{}'::jsonb
+column relay_wonderland.players #3 version bigint not-null default=1
+column relay_wonderland.players #4 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.players #5 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.presence #1 session_id text not-null
+column relay_wonderland.presence #2 project_id text not-null
+column relay_wonderland.presence #3 player_id text not-null
+column relay_wonderland.presence #4 snapshot jsonb not-null
+column relay_wonderland.presence #5 expires_at timestamp with time zone not-null
+column relay_wonderland.presence #6 version bigint not-null default=1
+column relay_wonderland.presence #7 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.project_brain_links #1 link_id text not-null
+column relay_wonderland.project_brain_links #2 project_id text not-null
+column relay_wonderland.project_brain_links #3 from_ref text not-null
+column relay_wonderland.project_brain_links #4 relation text not-null
+column relay_wonderland.project_brain_links #5 to_ref text not-null
+column relay_wonderland.project_brain_links #6 mutation_id text not-null
+column relay_wonderland.project_brain_links #7 created_at timestamp with time zone not-null
+column relay_wonderland.project_brain_mutations #1 mutation_id text not-null
+column relay_wonderland.project_brain_mutations #10 author_id text not-null
+column relay_wonderland.project_brain_mutations #11 deliverer_kind text not-null
+column relay_wonderland.project_brain_mutations #12 deliverer_id text not-null
+column relay_wonderland.project_brain_mutations #13 event_id text not-null
+column relay_wonderland.project_brain_mutations #14 result jsonb not-null
+column relay_wonderland.project_brain_mutations #15 occurred_at timestamp with time zone not-null
+column relay_wonderland.project_brain_mutations #2 project_id text not-null
+column relay_wonderland.project_brain_mutations #3 idempotency_key text not-null
+column relay_wonderland.project_brain_mutations #4 request_hash text not-null
+column relay_wonderland.project_brain_mutations #5 operation text not-null
+column relay_wonderland.project_brain_mutations #6 record_id text
+column relay_wonderland.project_brain_mutations #7 resulting_version bigint
+column relay_wonderland.project_brain_mutations #8 run_id text
+column relay_wonderland.project_brain_mutations #9 author_kind text not-null
+column relay_wonderland.project_brain_record_versions #1 record_id text not-null
+column relay_wonderland.project_brain_record_versions #10 author_kind text not-null
+column relay_wonderland.project_brain_record_versions #11 author_id text not-null
+column relay_wonderland.project_brain_record_versions #12 deliverer_kind text not-null
+column relay_wonderland.project_brain_record_versions #13 deliverer_id text not-null
+column relay_wonderland.project_brain_record_versions #14 recorded_at timestamp with time zone not-null
+column relay_wonderland.project_brain_record_versions #2 project_id text not-null
+column relay_wonderland.project_brain_record_versions #3 version bigint not-null
+column relay_wonderland.project_brain_record_versions #4 mutation_id text not-null
+column relay_wonderland.project_brain_record_versions #5 status text not-null
+column relay_wonderland.project_brain_record_versions #6 title text not-null
+column relay_wonderland.project_brain_record_versions #7 body text not-null
+column relay_wonderland.project_brain_record_versions #8 subject_ref text
+column relay_wonderland.project_brain_record_versions #9 content_hash text not-null
+column relay_wonderland.project_brain_records #1 record_id text not-null
+column relay_wonderland.project_brain_records #10 version bigint not-null
+column relay_wonderland.project_brain_records #11 content_hash text not-null
+column relay_wonderland.project_brain_records #12 author_kind text not-null
+column relay_wonderland.project_brain_records #13 author_id text not-null
+column relay_wonderland.project_brain_records #14 deliverer_kind text not-null
+column relay_wonderland.project_brain_records #15 deliverer_id text not-null
+column relay_wonderland.project_brain_records #16 created_at timestamp with time zone not-null
+column relay_wonderland.project_brain_records #17 updated_at timestamp with time zone not-null
+column relay_wonderland.project_brain_records #18 last_mutation_id text not-null
+column relay_wonderland.project_brain_records #2 project_id text not-null
+column relay_wonderland.project_brain_records #3 run_id text
+column relay_wonderland.project_brain_records #4 scope text not-null
+column relay_wonderland.project_brain_records #5 domain text not-null
+column relay_wonderland.project_brain_records #6 status text not-null
+column relay_wonderland.project_brain_records #7 title text not-null
+column relay_wonderland.project_brain_records #8 body text not-null
+column relay_wonderland.project_brain_records #9 subject_ref text
+column relay_wonderland.project_members #1 project_id text not-null
+column relay_wonderland.project_members #2 player_id text not-null
+column relay_wonderland.project_members #3 role text not-null
+column relay_wonderland.projects #1 project_id text not-null
+column relay_wonderland.projects #2 data jsonb not-null default='{}'::jsonb
+column relay_wonderland.projects #3 version bigint not-null default=1
+column relay_wonderland.projects #4 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.projects #5 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.provider_operations #1 operation_id text not-null
+column relay_wonderland.provider_operations #10 requested jsonb not-null
+column relay_wonderland.provider_operations #11 receipt jsonb
+column relay_wonderland.provider_operations #12 failure_reason text
+column relay_wonderland.provider_operations #13 overage_dimensions jsonb not-null default='[]'::jsonb
+column relay_wonderland.provider_operations #14 version bigint not-null default=1
+column relay_wonderland.provider_operations #15 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.provider_operations #16 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.provider_operations #2 execution_id text not-null
+column relay_wonderland.provider_operations #3 worker_id text
+column relay_wonderland.provider_operations #4 idempotency_key text not-null
+column relay_wonderland.provider_operations #5 provider text not-null
+column relay_wonderland.provider_operations #6 model text not-null
+column relay_wonderland.provider_operations #7 state text not-null
+column relay_wonderland.provider_operations #8 reservation_id text
+column relay_wonderland.provider_operations #9 provider_request_id text
+column relay_wonderland.provider_receipts #1 receipt_id text not-null
+column relay_wonderland.provider_receipts #2 execution_id text not-null
+column relay_wonderland.provider_receipts #3 provider_request_id text
+column relay_wonderland.provider_receipts #4 receipt jsonb not-null
+column relay_wonderland.provider_receipts #5 occurred_at timestamp with time zone not-null
+column relay_wonderland.provider_receipts #6 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.rating_history #1 battle_id text not-null
+column relay_wonderland.rating_history #2 agent_id text not-null
+column relay_wonderland.rating_history #3 mode text not-null
+column relay_wonderland.rating_history #4 snapshot jsonb not-null
+column relay_wonderland.rating_history #5 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.rewards #1 grant_id text not-null
+column relay_wonderland.rewards #2 reward_key text not-null
+column relay_wonderland.rewards #3 battle_id text not-null
+column relay_wonderland.rewards #4 player_id text not-null
+column relay_wonderland.rewards #5 data jsonb not-null
+column relay_wonderland.rewards #6 granted_at timestamp with time zone not-null default=now()
+column relay_wonderland.schema_migrations #1 version text not-null
+column relay_wonderland.schema_migrations #2 applied_at timestamp with time zone not-null default=now()
+column relay_wonderland.stream_sequences #1 stream_id text not-null
+column relay_wonderland.stream_sequences #2 next_sequence bigint not-null
+column relay_wonderland.swarm_runs #1 swarm_id text not-null
+column relay_wonderland.swarm_runs #10 budget jsonb not-null
+column relay_wonderland.swarm_runs #11 state text not-null
+column relay_wonderland.swarm_runs #12 activated_at timestamp with time zone not-null
+column relay_wonderland.swarm_runs #13 deadline timestamp with time zone not-null
+column relay_wonderland.swarm_runs #14 cancellation_reason text
+column relay_wonderland.swarm_runs #15 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.swarm_runs #16 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.swarm_runs #2 battle_id text not-null
+column relay_wonderland.swarm_runs #3 parent_execution_id text not-null
+column relay_wonderland.swarm_runs #4 parent_agent_id text not-null
+column relay_wonderland.swarm_runs #5 card_version_id text not-null
+column relay_wonderland.swarm_runs #6 mode text not-null
+column relay_wonderland.swarm_runs #7 requested_roles jsonb not-null
+column relay_wonderland.swarm_runs #8 authorized_roles jsonb not-null
+column relay_wonderland.swarm_runs #9 concurrency_ceiling integer not-null
+column relay_wonderland.swarm_workers #1 worker_id text not-null
+column relay_wonderland.swarm_workers #10 state text not-null
+column relay_wonderland.swarm_workers #11 provider_operation_id text
+column relay_wonderland.swarm_workers #12 budget_reservation_id text
+column relay_wonderland.swarm_workers #13 usage jsonb not-null default='{}'::jsonb
+column relay_wonderland.swarm_workers #14 evidence_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.swarm_workers #15 artifact_ids jsonb not-null default='[]'::jsonb
+column relay_wonderland.swarm_workers #16 result jsonb
+column relay_wonderland.swarm_workers #17 safe_error text
+column relay_wonderland.swarm_workers #18 created_at timestamp with time zone not-null default=now()
+column relay_wonderland.swarm_workers #19 updated_at timestamp with time zone not-null default=now()
+column relay_wonderland.swarm_workers #2 swarm_id text not-null
+column relay_wonderland.swarm_workers #3 role text not-null
+column relay_wonderland.swarm_workers #4 execution_id text
+column relay_wonderland.swarm_workers #5 lease_owner text
+column relay_wonderland.swarm_workers #6 lease_generation bigint not-null default=0
+column relay_wonderland.swarm_workers #7 lease_expires_at timestamp with time zone
+column relay_wonderland.swarm_workers #8 last_heartbeat timestamp with time zone
+column relay_wonderland.swarm_workers #9 attempt integer not-null default=0
+constraint relay_wonderland.agent_ratings agent_ratings_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES relay_wonderland.agents(agent_id)
+constraint relay_wonderland.agent_ratings agent_ratings_battle_count_check CHECK ((battle_count >= 0))
+constraint relay_wonderland.agent_ratings agent_ratings_deviation_check CHECK ((deviation > (0)::double precision))
+constraint relay_wonderland.agent_ratings agent_ratings_mode_check CHECK ((mode = ANY (ARRAY['GOAL'::text, 'EVAL'::text])))
+constraint relay_wonderland.agent_ratings agent_ratings_period_check CHECK ((period >= 0))
+constraint relay_wonderland.agent_ratings agent_ratings_pkey PRIMARY KEY (agent_id, mode)
+constraint relay_wonderland.agent_ratings agent_ratings_source_battle_id_fkey FOREIGN KEY (source_battle_id) REFERENCES relay_wonderland.battles(battle_id)
+constraint relay_wonderland.agent_ratings agent_ratings_volatility_check CHECK ((volatility > (0)::double precision))
+constraint relay_wonderland.agents agents_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES relay_wonderland.players(player_id)
+constraint relay_wonderland.agents agents_pkey PRIMARY KEY (agent_id)
+constraint relay_wonderland.artifacts artifacts_battle_id_fkey FOREIGN KEY (battle_id) REFERENCES relay_wonderland.battles(battle_id)
+constraint relay_wonderland.artifacts artifacts_execution_id_fkey FOREIGN KEY (execution_id) REFERENCES relay_wonderland.execution_sessions(execution_id)
+constraint relay_wonderland.artifacts artifacts_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES relay_wonderland.players(player_id)
+constraint relay_wonderland.artifacts artifacts_pkey PRIMARY KEY (artifact_id)
+constraint relay_wonderland.artifacts artifacts_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.artifacts artifacts_visibility_check CHECK ((visibility = ANY (ARRAY['OWNER'::text, 'PARTICIPANTS'::text, 'PUBLIC'::text])))
+constraint relay_wonderland.battle_participants battle_participants_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES relay_wonderland.agents(agent_id)
+constraint relay_wonderland.battle_participants battle_participants_battle_id_agent_id_key UNIQUE (battle_id, agent_id)
+constraint relay_wonderland.battle_participants battle_participants_battle_id_fkey FOREIGN KEY (battle_id) REFERENCES relay_wonderland.battles(battle_id) ON DELETE CASCADE
+constraint relay_wonderland.battle_participants battle_participants_battle_id_side_key UNIQUE (battle_id, side)
+constraint relay_wonderland.battle_participants battle_participants_card_version_id_fkey FOREIGN KEY (card_version_id) REFERENCES relay_wonderland.card_versions(card_version_id)
+constraint relay_wonderland.battle_participants battle_participants_pkey PRIMARY KEY (battle_id, player_id)
+constraint relay_wonderland.battle_participants battle_participants_player_id_fkey FOREIGN KEY (player_id) REFERENCES relay_wonderland.players(player_id)
+constraint relay_wonderland.battle_participants battle_participants_side_check CHECK ((side = ANY (ARRAY[1, 2])))
+constraint relay_wonderland.battles battles_mission_id_fkey FOREIGN KEY (mission_id) REFERENCES relay_wonderland.mission_contracts(mission_id)
+constraint relay_wonderland.battles battles_mission_id_key UNIQUE (mission_id)
+constraint relay_wonderland.battles battles_mode_check CHECK ((mode = ANY (ARRAY['GOAL'::text, 'EVAL'::text])))
+constraint relay_wonderland.battles battles_pkey PRIMARY KEY (battle_id)
+constraint relay_wonderland.battles battles_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.budget_reservations budget_reservations_cached_tokens_check CHECK ((cached_tokens >= 0))
+constraint relay_wonderland.budget_reservations budget_reservations_check CHECK (((state = 'DENIED'::text) = (denial_reason IS NOT NULL)))
+constraint relay_wonderland.budget_reservations budget_reservations_check1 CHECK (((state = 'COMMITTED'::text) = (committed_amounts IS NOT NULL)))
+constraint relay_wonderland.budget_reservations budget_reservations_compute_ms_check CHECK ((compute_ms >= 0))
+constraint relay_wonderland.budget_reservations budget_reservations_execution_id_fkey FOREIGN KEY (execution_id) REFERENCES relay_wonderland.execution_sessions(execution_id) ON DELETE CASCADE
+constraint relay_wonderland.budget_reservations budget_reservations_execution_id_idempotency_key_key UNIQUE (execution_id, idempotency_key)
+constraint relay_wonderland.budget_reservations budget_reservations_input_tokens_check CHECK ((input_tokens >= 0))
+constraint relay_wonderland.budget_reservations budget_reservations_output_tokens_check CHECK ((output_tokens >= 0))
+constraint relay_wonderland.budget_reservations budget_reservations_pkey PRIMARY KEY (reservation_id)
+constraint relay_wonderland.budget_reservations budget_reservations_receipt_id_fkey FOREIGN KEY (receipt_id) REFERENCES relay_wonderland.provider_receipts(receipt_id)
+constraint relay_wonderland.budget_reservations budget_reservations_runtime_ms_check CHECK ((runtime_ms >= 0))
+constraint relay_wonderland.budget_reservations budget_reservations_state_check CHECK ((state = ANY (ARRAY['RESERVED'::text, 'COMMITTED'::text, 'RELEASED'::text, 'EXPIRED'::text, 'DENIED'::text])))
+constraint relay_wonderland.budget_reservations budget_reservations_swarm_workers_check CHECK ((swarm_workers >= 0))
+constraint relay_wonderland.budget_reservations budget_reservations_tool_calls_check CHECK ((tool_calls >= 0))
+constraint relay_wonderland.budget_reservations budget_reservations_usd_micros_check CHECK ((usd_micros >= 0))
+constraint relay_wonderland.card_versions card_versions_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES relay_wonderland.agents(agent_id)
+constraint relay_wonderland.card_versions card_versions_agent_id_version_key UNIQUE (agent_id, version)
+constraint relay_wonderland.card_versions card_versions_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES relay_wonderland.players(player_id)
+constraint relay_wonderland.card_versions card_versions_pkey PRIMARY KEY (card_version_id)
+constraint relay_wonderland.card_versions card_versions_version_check CHECK ((version > 0))
+constraint relay_wonderland.challenges challenges_challenged_id_fkey FOREIGN KEY (challenged_id) REFERENCES relay_wonderland.players(player_id)
+constraint relay_wonderland.challenges challenges_challenger_id_fkey FOREIGN KEY (challenger_id) REFERENCES relay_wonderland.players(player_id)
+constraint relay_wonderland.challenges challenges_check CHECK ((challenger_id <> challenged_id))
+constraint relay_wonderland.challenges challenges_pkey PRIMARY KEY (challenge_id)
+constraint relay_wonderland.challenges challenges_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.entity_records entity_records_battle_id_fkey FOREIGN KEY (battle_id) REFERENCES relay_wonderland.battles(battle_id)
+constraint relay_wonderland.entity_records entity_records_kind_check CHECK ((kind = ANY (ARRAY['PROJECT_BRAIN'::text, 'PROJECT_AVATAR'::text, 'GOAL_RESULT'::text, 'EVAL_FINDING'::text, 'REBUTTAL'::text, 'GVE_EVIDENCE'::text, 'SWARM'::text, 'SUBAGENT'::text, 'CARD_RECOMMENDATION'::text, 'AGENT_STATISTICS'::text, 'RATING'::text])))
+constraint relay_wonderland.entity_records entity_records_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES relay_wonderland.players(player_id)
+constraint relay_wonderland.entity_records entity_records_pkey PRIMARY KEY (kind, record_id)
+constraint relay_wonderland.entity_records entity_records_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.eval_effects eval_effects_battle_id_fkey FOREIGN KEY (battle_id) REFERENCES relay_wonderland.eval_runtimes(battle_id) ON DELETE CASCADE
+constraint relay_wonderland.eval_effects eval_effects_effect_kind_check CHECK ((effect_kind = ANY (ARRAY['EVALUATOR_EXECUTION'::text, 'FINDING'::text, 'REBUTTAL'::text, 'ADJUDICATION'::text, 'RESULT'::text, 'RATING'::text, 'STATISTICS'::text, 'RECOMMENDATION'::text, 'REWARD'::text])))
+constraint relay_wonderland.eval_effects eval_effects_pkey PRIMARY KEY (battle_id, effect_kind, effect_key)
+constraint relay_wonderland.eval_runtimes eval_runtimes_battle_id_fkey FOREIGN KEY (battle_id) REFERENCES relay_wonderland.battles(battle_id) ON DELETE CASCADE
+constraint relay_wonderland.eval_runtimes eval_runtimes_pkey PRIMARY KEY (battle_id)
+constraint relay_wonderland.eval_runtimes eval_runtimes_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.eval_runtimes eval_runtimes_state_check CHECK ((state = ANY (ARRAY['CREATED'::text, 'PREPARING'::text, 'EVALUATING'::text, 'REBUTTAL_WINDOW'::text, 'ADJUDICATING'::text, 'FINALIZING'::text, 'COMPLETE'::text, 'FAILED'::text, 'CANCELLED'::text])))
+constraint relay_wonderland.eval_runtimes eval_runtimes_version_check CHECK ((version > 0))
+constraint relay_wonderland.events events_battle_id_fkey FOREIGN KEY (battle_id) REFERENCES relay_wonderland.battles(battle_id)
+constraint relay_wonderland.events events_pkey PRIMARY KEY (event_id)
+constraint relay_wonderland.events events_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.events events_sequence_check CHECK ((sequence > 0))
+constraint relay_wonderland.events events_stream_id_sequence_key UNIQUE (stream_id, sequence)
+constraint relay_wonderland.execution_sessions execution_sessions_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES relay_wonderland.agents(agent_id)
+constraint relay_wonderland.execution_sessions execution_sessions_battle_id_fkey FOREIGN KEY (battle_id) REFERENCES relay_wonderland.battles(battle_id)
+constraint relay_wonderland.execution_sessions execution_sessions_card_version_id_fkey FOREIGN KEY (card_version_id) REFERENCES relay_wonderland.card_versions(card_version_id)
+constraint relay_wonderland.execution_sessions execution_sessions_mission_id_fkey FOREIGN KEY (mission_id) REFERENCES relay_wonderland.mission_contracts(mission_id)
+constraint relay_wonderland.execution_sessions execution_sessions_pkey PRIMARY KEY (execution_id)
+constraint relay_wonderland.execution_sessions execution_sessions_player_id_fkey FOREIGN KEY (player_id) REFERENCES relay_wonderland.players(player_id)
+constraint relay_wonderland.execution_sessions execution_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.execution_sessions execution_sessions_version_check CHECK ((version > 0))
+constraint relay_wonderland.execution_usage execution_usage_execution_id_fkey FOREIGN KEY (execution_id) REFERENCES relay_wonderland.execution_sessions(execution_id) ON DELETE CASCADE
+constraint relay_wonderland.execution_usage execution_usage_pkey PRIMARY KEY (execution_id)
+constraint relay_wonderland.gauntlet_rounds gauntlet_rounds_duration_ms_check CHECK (((duration_ms IS NULL) OR (duration_ms >= 0)))
+constraint relay_wonderland.gauntlet_rounds gauntlet_rounds_gauntlet_id_fkey FOREIGN KEY (gauntlet_id) REFERENCES relay_wonderland.gauntlet_runs(gauntlet_id) ON DELETE CASCADE
+constraint relay_wonderland.gauntlet_rounds gauntlet_rounds_outcome_check CHECK (((outcome IS NULL) OR (outcome = ANY (ARRAY['PASSED'::text, 'FAILED'::text, 'HALTED'::text, 'CANCELLED'::text]))))
+constraint relay_wonderland.gauntlet_rounds gauntlet_rounds_phase_check CHECK ((phase = ANY (ARRAY['REVIEW'::text, 'REPAIR'::text])))
+constraint relay_wonderland.gauntlet_rounds gauntlet_rounds_pkey PRIMARY KEY (gauntlet_id, round, phase)
+constraint relay_wonderland.gauntlet_rounds gauntlet_rounds_round_check CHECK ((round > 0))
+constraint relay_wonderland.gauntlet_rounds gauntlet_rounds_usd_micros_check CHECK (((usd_micros IS NULL) OR (usd_micros >= 0)))
+constraint relay_wonderland.gauntlet_rounds gauntlet_rounds_work_id_key UNIQUE (work_id)
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_activation_check CHECK ((activation = ANY (ARRAY['INACTIVE'::text, 'ACTIVE'::text, 'CLEARED'::text, 'HALTED'::text, 'CANCELLED'::text])))
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_max_duration_ms_check CHECK ((max_duration_ms > 0))
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_max_retries_check CHECK ((max_retries >= 0))
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_max_rounds_check CHECK ((max_rounds > 0))
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_max_usd_micros_check CHECK ((max_usd_micros >= 0))
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_pkey PRIMARY KEY (gauntlet_id)
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_retries_check CHECK ((retries >= 0))
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_round_check CHECK ((round >= 0))
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_run_id_subject_task_id_key UNIQUE (run_id, subject_task_id)
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_state_check CHECK ((state = ANY (ARRAY['READY'::text, 'RUNNING'::text, 'VERIFYING'::text, 'REPAIRING'::text, 'CLEARED'::text, 'HALTED'::text, 'CANCELLED'::text])))
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_subject_task_id_fkey FOREIGN KEY (subject_task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_used_duration_ms_check CHECK ((used_duration_ms >= 0))
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_used_usd_micros_check CHECK ((used_usd_micros >= 0))
+constraint relay_wonderland.gauntlet_runs gauntlet_runs_version_check CHECK ((version > 0))
+constraint relay_wonderland.gve_runs gve_runs_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES relay_wonderland.agents(agent_id)
+constraint relay_wonderland.gve_runs gve_runs_battle_id_fkey FOREIGN KEY (battle_id) REFERENCES relay_wonderland.battles(battle_id)
+constraint relay_wonderland.gve_runs gve_runs_category_check CHECK ((category = ANY (ARRAY['VISIBLE_TESTS'::text, 'HIDDEN_TESTS'::text, 'ADVERSARIAL'::text, 'ROBUSTNESS'::text, 'SECURITY'::text, 'PERFORMANCE'::text, 'REGRESSION'::text])))
+constraint relay_wonderland.gve_runs gve_runs_check CHECK (((NOT score_eligible) OR (status = ANY (ARRAY['PASSED'::text, 'FAILED'::text]))))
+constraint relay_wonderland.gve_runs gve_runs_execution_id_fkey FOREIGN KEY (execution_id) REFERENCES relay_wonderland.execution_sessions(execution_id)
+constraint relay_wonderland.gve_runs gve_runs_mission_id_fkey FOREIGN KEY (mission_id) REFERENCES relay_wonderland.mission_contracts(mission_id)
+constraint relay_wonderland.gve_runs gve_runs_pkey PRIMARY KEY (run_id)
+constraint relay_wonderland.gve_runs gve_runs_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.gve_runs gve_runs_status_check CHECK ((status = ANY (ARRAY['QUEUED'::text, 'RUNNING'::text, 'PASSED'::text, 'FAILED'::text, 'UNAVAILABLE'::text, 'ERROR'::text])))
+constraint relay_wonderland.hidden_test_fixtures hidden_test_fixtures_mission_id_fixture_id_version_key UNIQUE (mission_id, fixture_id, version)
+constraint relay_wonderland.hidden_test_fixtures hidden_test_fixtures_mission_id_fkey FOREIGN KEY (mission_id) REFERENCES relay_wonderland.mission_contracts(mission_id)
+constraint relay_wonderland.hidden_test_fixtures hidden_test_fixtures_pkey PRIMARY KEY (fixture_id)
+constraint relay_wonderland.hidden_test_fixtures hidden_test_fixtures_version_check CHECK ((version > 0))
+constraint relay_wonderland.idempotency idempotency_pkey PRIMARY KEY (scope, command_id)
+constraint relay_wonderland.inventory_definitions inventory_definitions_item_type_check CHECK ((item_type = ANY (ARRAY['RELAY_DOG_SKIN'::text, 'PROJECT_AVATAR_SKIN'::text, 'TITLE'::text, 'BADGE'::text, 'PLUGIN'::text, 'TOOL'::text, 'COSMETIC'::text, 'CURRENCY'::text, 'XP_GRANT'::text])))
+constraint relay_wonderland.inventory_definitions inventory_definitions_pkey PRIMARY KEY (item_id, version)
+constraint relay_wonderland.inventory_definitions inventory_definitions_version_check CHECK ((version > 0))
+constraint relay_wonderland.inventory_equipment inventory_equipment_item_id_item_version_fkey FOREIGN KEY (item_id, item_version) REFERENCES relay_wonderland.inventory_definitions(item_id, version)
+constraint relay_wonderland.inventory_equipment inventory_equipment_pkey PRIMARY KEY (player_id, slot)
+constraint relay_wonderland.inventory_equipment inventory_equipment_player_id_fkey FOREIGN KEY (player_id) REFERENCES relay_wonderland.players(player_id)
+constraint relay_wonderland.inventory_grants inventory_grants_battle_id_fkey FOREIGN KEY (battle_id) REFERENCES relay_wonderland.battles(battle_id)
+constraint relay_wonderland.inventory_grants inventory_grants_grant_key_key UNIQUE (grant_key)
+constraint relay_wonderland.inventory_grants inventory_grants_pkey PRIMARY KEY (grant_id)
+constraint relay_wonderland.inventory_grants inventory_grants_player_id_fkey FOREIGN KEY (player_id) REFERENCES relay_wonderland.players(player_id)
+constraint relay_wonderland.julius_acceptance_criteria julius_acceptance_criteria_ordinal_check CHECK ((ordinal >= 0))
+constraint relay_wonderland.julius_acceptance_criteria julius_acceptance_criteria_pkey PRIMARY KEY (run_id, criterion_id)
+constraint relay_wonderland.julius_acceptance_criteria julius_acceptance_criteria_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_acceptance_criteria julius_acceptance_criteria_run_id_ordinal_key UNIQUE (run_id, ordinal)
+constraint relay_wonderland.julius_approvals julius_approvals_check CHECK (((state = 'PENDING'::text) = (decided_at IS NULL)))
+constraint relay_wonderland.julius_approvals julius_approvals_check1 CHECK (((state = 'PENDING'::text) = (decided_by IS NULL)))
+constraint relay_wonderland.julius_approvals julius_approvals_pkey PRIMARY KEY (approval_id)
+constraint relay_wonderland.julius_approvals julius_approvals_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_approvals julius_approvals_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_approvals julius_approvals_run_id_idempotency_key_key UNIQUE (run_id, idempotency_key)
+constraint relay_wonderland.julius_approvals julius_approvals_state_check CHECK ((state = ANY (ARRAY['PENDING'::text, 'APPROVED'::text, 'DENIED'::text, 'CANCELLED'::text])))
+constraint relay_wonderland.julius_approvals julius_approvals_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_artifacts julius_artifacts_byte_size_check CHECK ((byte_size >= 0))
+constraint relay_wonderland.julius_artifacts julius_artifacts_content_hash_check CHECK ((length(content_hash) = 64))
+constraint relay_wonderland.julius_artifacts julius_artifacts_pkey PRIMARY KEY (artifact_id)
+constraint relay_wonderland.julius_artifacts julius_artifacts_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_artifacts julius_artifacts_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_artifacts julius_artifacts_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_artifacts julius_artifacts_tenant_id_project_id_artifact_id_key UNIQUE (tenant_id, project_id, artifact_id)
+constraint relay_wonderland.julius_artifacts julius_artifacts_tenant_id_project_id_run_id_task_id_invoc_fkey FOREIGN KEY (tenant_id, project_id, run_id, task_id, invocation_id) REFERENCES relay_wonderland.julius_tool_invocations(tenant_id, project_id, run_id, task_id, invocation_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_brain_entries julius_brain_entries_entry_kind_check CHECK ((entry_kind = ANY (ARRAY['DECISION'::text, 'FINDING'::text, 'REPAIR'::text, 'ARTIFACT'::text, 'CONSTRAINT'::text, 'RESEARCH_NOTE'::text, 'HANDOFF'::text, 'ACCEPTANCE_UPDATE'::text])))
+constraint relay_wonderland.julius_brain_entries julius_brain_entries_pkey PRIMARY KEY (entry_id)
+constraint relay_wonderland.julius_brain_entries julius_brain_entries_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_brain_entries julius_brain_entries_revision_check CHECK ((revision > 0))
+constraint relay_wonderland.julius_brain_entries julius_brain_entries_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_brain_entries julius_brain_entries_run_id_revision_key UNIQUE (run_id, revision)
+constraint relay_wonderland.julius_brain_entries julius_brain_entries_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id)
+constraint relay_wonderland.julius_claim_standings julius_claim_standings_pkey PRIMARY KEY (claim_id, standing_revision)
+constraint relay_wonderland.julius_claim_standings julius_claim_standings_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_claim_standings julius_claim_standings_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id)
+constraint relay_wonderland.julius_claim_standings julius_claim_standings_trust_check CHECK ((trust = ANY (ARRAY['UNVERIFIED'::text, 'SUPPORTED'::text, 'VERIFIED'::text, 'APPROVED'::text, 'CONTRADICTED'::text, 'SUPERSEDED'::text])))
+constraint relay_wonderland.julius_context_snapshots julius_context_snapshots_character_count_check CHECK ((character_count >= 0))
+constraint relay_wonderland.julius_context_snapshots julius_context_snapshots_pkey PRIMARY KEY (context_id)
+constraint relay_wonderland.julius_context_snapshots julius_context_snapshots_redaction_count_check CHECK ((redaction_count >= 0))
+constraint relay_wonderland.julius_context_snapshots julius_context_snapshots_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_context_snapshots julius_context_snapshots_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_context_snapshots julius_context_snapshots_task_id_worker_id_content_hash_key UNIQUE (task_id, worker_id, content_hash)
+constraint relay_wonderland.julius_criterion_evidence julius_criterion_evidence_criterion_fkey FOREIGN KEY (run_id, criterion_id) REFERENCES relay_wonderland.julius_acceptance_criteria(run_id, criterion_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_criterion_evidence julius_criterion_evidence_evidence_id_fkey FOREIGN KEY (evidence_id) REFERENCES relay_wonderland.julius_evidence(evidence_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_criterion_evidence julius_criterion_evidence_pkey PRIMARY KEY (run_id, criterion_id, evidence_id)
+constraint relay_wonderland.julius_evidence julius_evidence_pkey PRIMARY KEY (evidence_id)
+constraint relay_wonderland.julius_evidence julius_evidence_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_evidence julius_evidence_run_id_idempotency_key_key UNIQUE (run_id, idempotency_key)
+constraint relay_wonderland.julius_evidence julius_evidence_status_check CHECK ((status = ANY (ARRAY['PASSED'::text, 'FAILED'::text, 'INCONCLUSIVE'::text])))
+constraint relay_wonderland.julius_evidence julius_evidence_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_repair_cycles julius_repair_cycles_original_task_id_fkey FOREIGN KEY (original_task_id) REFERENCES relay_wonderland.julius_tasks(task_id)
+constraint relay_wonderland.julius_repair_cycles julius_repair_cycles_original_task_id_round_key UNIQUE (original_task_id, round)
+constraint relay_wonderland.julius_repair_cycles julius_repair_cycles_pkey PRIMARY KEY (repair_id)
+constraint relay_wonderland.julius_repair_cycles julius_repair_cycles_repair_task_id_fkey FOREIGN KEY (repair_task_id) REFERENCES relay_wonderland.julius_tasks(task_id)
+constraint relay_wonderland.julius_repair_cycles julius_repair_cycles_repair_task_id_key UNIQUE (repair_task_id)
+constraint relay_wonderland.julius_repair_cycles julius_repair_cycles_round_check CHECK ((round > 0))
+constraint relay_wonderland.julius_repair_cycles julius_repair_cycles_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_repair_cycles julius_repair_cycles_state_check CHECK ((state = ANY (ARRAY['SCHEDULED'::text, 'ACTIVE'::text, 'VERIFIED'::text, 'FAILED'::text, 'CANCELLED'::text])))
+constraint relay_wonderland.julius_reviewer_findings julius_reviewer_findings_criterion_fkey FOREIGN KEY (run_id, criterion_id) REFERENCES relay_wonderland.julius_acceptance_criteria(run_id, criterion_id)
+constraint relay_wonderland.julius_reviewer_findings julius_reviewer_findings_evidence_ids_check CHECK ((jsonb_array_length(evidence_ids) > 0))
+constraint relay_wonderland.julius_reviewer_findings julius_reviewer_findings_pkey PRIMARY KEY (finding_id)
+constraint relay_wonderland.julius_reviewer_findings julius_reviewer_findings_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_reviewer_findings julius_reviewer_findings_severity_check CHECK ((severity = ANY (ARRAY['INFO'::text, 'LOW'::text, 'MEDIUM'::text, 'HIGH'::text, 'CRITICAL'::text])))
+constraint relay_wonderland.julius_reviewer_findings julius_reviewer_findings_status_check CHECK ((status = ANY (ARRAY['OPEN'::text, 'RESOLVED'::text, 'DISMISSED'::text])))
+constraint relay_wonderland.julius_reviewer_findings julius_reviewer_findings_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_runs julius_runs_mission_contract_revision_check CHECK ((mission_contract_revision > 0))
+constraint relay_wonderland.julius_runs julius_runs_mission_id_fkey FOREIGN KEY (mission_id) REFERENCES relay_wonderland.mission_contracts(mission_id)
+constraint relay_wonderland.julius_runs julius_runs_mission_id_run_id_key UNIQUE (mission_id, run_id)
+constraint relay_wonderland.julius_runs julius_runs_pkey PRIMARY KEY (run_id)
+constraint relay_wonderland.julius_runs julius_runs_project_brain_revision_check CHECK ((project_brain_revision >= 0))
+constraint relay_wonderland.julius_runs julius_runs_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_runs julius_runs_state_check CHECK ((state = ANY (ARRAY['CREATED'::text, 'PLANNING'::text, 'READY'::text, 'EXECUTING'::text, 'WAITING'::text, 'REVIEWING'::text, 'REPAIRING'::text, 'VERIFYING'::text, 'BLOCKED'::text, 'PAUSED'::text, 'FAILED'::text, 'COMPLETED'::text, 'CANCELLED'::text])))
+constraint relay_wonderland.julius_runs julius_runs_version_check CHECK ((version > 0))
+constraint relay_wonderland.julius_sandboxes julius_sandboxes_dispatch_generation_check CHECK (((dispatch_generation IS NULL) OR (dispatch_generation > 0)))
+constraint relay_wonderland.julius_sandboxes julius_sandboxes_execution_token_hash_check CHECK (((execution_token_hash IS NULL) OR (length(execution_token_hash) = 64)))
+constraint relay_wonderland.julius_sandboxes julius_sandboxes_image_digest_check CHECK ((image_digest ~~ 'sha256:%'::text))
+constraint relay_wonderland.julius_sandboxes julius_sandboxes_invocation_id_key UNIQUE (invocation_id)
+constraint relay_wonderland.julius_sandboxes julius_sandboxes_lease_generation_check CHECK ((lease_generation > 0))
+constraint relay_wonderland.julius_sandboxes julius_sandboxes_pkey PRIMARY KEY (sandbox_id)
+constraint relay_wonderland.julius_sandboxes julius_sandboxes_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_sandboxes julius_sandboxes_project_id_sandbox_id_invocation_id_key UNIQUE (project_id, sandbox_id, invocation_id)
+constraint relay_wonderland.julius_sandboxes julius_sandboxes_project_id_sandbox_id_key UNIQUE (project_id, sandbox_id)
+constraint relay_wonderland.julius_sandboxes julius_sandboxes_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_sandboxes julius_sandboxes_state_check CHECK ((state = ANY (ARRAY['CREATING'::text, 'READY'::text, 'ACTIVE'::text, 'RECONCILING'::text, 'DESTROYING'::text, 'DESTROYED'::text, 'LOST'::text])))
+constraint relay_wonderland.julius_sandboxes julius_sandboxes_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_sandboxes julius_sandboxes_tenant_id_project_id_run_id_task_id_invoc_fkey FOREIGN KEY (tenant_id, project_id, run_id, task_id, invocation_id) REFERENCES relay_wonderland.julius_tool_invocations(tenant_id, project_id, run_id, task_id, invocation_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_subagents julius_subagents_child_task_id_fkey FOREIGN KEY (child_task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_subagents julius_subagents_child_task_id_key UNIQUE (child_task_id)
+constraint relay_wonderland.julius_subagents julius_subagents_depth_check CHECK ((depth > 0))
+constraint relay_wonderland.julius_subagents julius_subagents_parent_task_id_fkey FOREIGN KEY (parent_task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_subagents julius_subagents_pkey PRIMARY KEY (request_id)
+constraint relay_wonderland.julius_subagents julius_subagents_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_subagents julius_subagents_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_subagents julius_subagents_run_id_request_id_key UNIQUE (run_id, request_id)
+constraint relay_wonderland.julius_subagents julius_subagents_state_check CHECK ((state = ANY (ARRAY['AUTHORIZED'::text, 'ACTIVE'::text, 'SUCCEEDED'::text, 'FAILED'::text, 'CANCELLED'::text])))
+constraint relay_wonderland.julius_task_contracts julius_task_contract_binding CHECK ((((state = ANY (ARRAY['DRAFT'::text, 'CHALLENGED'::text])) AND (binding_digest IS NULL) AND (locked_at IS NULL) AND (locked_by_evaluator_id IS NULL)) OR ((state = ANY (ARRAY['LOCKED'::text, 'SUPERSEDED'::text])) AND (binding_digest IS NOT NULL) AND (locked_at IS NOT NULL) AND (locked_by_evaluator_id IS NOT NULL))))
+constraint relay_wonderland.julius_task_contracts julius_task_contracts_contract_revision_check CHECK ((contract_revision > 0))
+constraint relay_wonderland.julius_task_contracts julius_task_contracts_mission_contract_revision_check CHECK ((mission_contract_revision > 0))
+constraint relay_wonderland.julius_task_contracts julius_task_contracts_pkey PRIMARY KEY (contract_id, contract_revision)
+constraint relay_wonderland.julius_task_contracts julius_task_contracts_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_task_contracts julius_task_contracts_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_task_contracts julius_task_contracts_state_check CHECK ((state = ANY (ARRAY['DRAFT'::text, 'CHALLENGED'::text, 'LOCKED'::text, 'SUPERSEDED'::text])))
+constraint relay_wonderland.julius_task_contracts julius_task_contracts_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id)
+constraint relay_wonderland.julius_task_dependencies julius_task_dependencies_check CHECK ((task_id <> dependency_task_id))
+constraint relay_wonderland.julius_task_dependencies julius_task_dependencies_dependency_task_id_fkey FOREIGN KEY (dependency_task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_task_dependencies julius_task_dependencies_pkey PRIMARY KEY (task_id, dependency_task_id)
+constraint relay_wonderland.julius_task_dependencies julius_task_dependencies_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_tasks julius_tasks_attempt_check CHECK ((attempt >= 0))
+constraint relay_wonderland.julius_tasks julius_tasks_check CHECK (((state = 'ACTIVE'::text) = (lease_owner IS NOT NULL)))
+constraint relay_wonderland.julius_tasks julius_tasks_ordinal_check CHECK ((ordinal >= 0))
+constraint relay_wonderland.julius_tasks julius_tasks_parent_task_id_fkey FOREIGN KEY (parent_task_id) REFERENCES relay_wonderland.julius_tasks(task_id)
+constraint relay_wonderland.julius_tasks julius_tasks_pkey PRIMARY KEY (task_id)
+constraint relay_wonderland.julius_tasks julius_tasks_recoveries_check CHECK ((recoveries >= 0))
+constraint relay_wonderland.julius_tasks julius_tasks_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_tasks julius_tasks_run_id_ordinal_task_id_key UNIQUE (run_id, ordinal, task_id)
+constraint relay_wonderland.julius_tasks julius_tasks_state_check CHECK ((state = ANY (ARRAY['BLOCKED'::text, 'RUNNABLE'::text, 'ACTIVE'::text, 'SUCCEEDED'::text, 'FAILED'::text, 'CANCELLED'::text, 'SKIPPED'::text])))
+constraint relay_wonderland.julius_tasks julius_tasks_version_check CHECK ((version > 0))
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipt_project_id_sandbox_id_invoca_fkey FOREIGN KEY (project_id, sandbox_id, invocation_id) REFERENCES relay_wonderland.julius_sandboxes(project_id, sandbox_id, invocation_id) ON DELETE RESTRICT
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_after_state_digest_check CHECK (((after_state_digest IS NULL) OR (length(after_state_digest) = 64)))
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_before_state_digest_check CHECK (((before_state_digest IS NULL) OR (length(before_state_digest) = 64)))
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_check CHECK (((state = ANY (ARRAY['COMPLETED_WITH_RESULT'::text, 'FAILED_WITH_RESULT'::text])) = (completed_at IS NOT NULL)))
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_check1 CHECK (((state <> ALL (ARRAY['COMPLETED_WITH_RESULT'::text, 'FAILED_WITH_RESULT'::text])) OR (result IS NOT NULL)))
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_dispatch_generation_check CHECK ((dispatch_generation > 0))
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_effect_classification_check CHECK ((effect_classification = ANY (ARRAY['READ_ONLY'::text, 'IDEMPOTENT_MUTATION'::text, 'NON_IDEMPOTENT_MUTATION'::text, 'PROCESS_WITH_EXTERNAL_EFFECT'::text])))
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_execution_token_hash_check CHECK ((length(execution_token_hash) = 64))
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_execution_token_hash_key UNIQUE (execution_token_hash)
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_pkey PRIMARY KEY (invocation_id, dispatch_generation)
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_project_id_invocation_id_fkey FOREIGN KEY (project_id, invocation_id) REFERENCES relay_wonderland.julius_tool_invocations(project_id, invocation_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_request_digest_check CHECK ((length(request_digest) = 64))
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_result_digest_check CHECK (((result_digest IS NULL) OR (length(result_digest) = 64)))
+constraint relay_wonderland.julius_tool_execution_receipts julius_tool_execution_receipts_state_check CHECK ((state = ANY (ARRAY['NEVER_STARTED'::text, 'STARTED_UNKNOWN_OUTCOME'::text, 'STILL_RUNNING'::text, 'COMPLETED_WITH_RESULT'::text, 'FAILED_WITH_RESULT'::text, 'SANDBOX_GONE'::text])))
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_check CHECK (((state = ANY (ARRAY['SUCCEEDED'::text, 'FAILED'::text, 'DENIED'::text, 'CANCELLED'::text, 'TIMED_OUT'::text])) = (completed_at IS NOT NULL)))
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_duration_ms_check CHECK ((duration_ms >= 0))
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_effect_classification_check CHECK ((effect_classification = ANY (ARRAY['READ_ONLY'::text, 'IDEMPOTENT_MUTATION'::text, 'NON_IDEMPOTENT_MUTATION'::text, 'PROCESS_WITH_EXTERNAL_EFFECT'::text])))
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_lease_generation_check CHECK ((lease_generation > 0))
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_mutation_class_check CHECK ((mutation_class = ANY (ARRAY['NONE'::text, 'WORKSPACE'::text])))
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_pkey PRIMARY KEY (invocation_id)
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_project_id_invocation_id_key UNIQUE (project_id, invocation_id)
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_project_id_run_id_idempotency_key_key UNIQUE (project_id, run_id, idempotency_key)
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_recovery_state_check CHECK ((recovery_state = ANY (ARRAY['NONE'::text, 'RECONCILING'::text, 'UNKNOWN_OUTCOME'::text, 'AWAITING_DECISION'::text, 'RECONCILED'::text])))
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_request_digest_check CHECK ((length(request_digest) = 64))
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_state_check CHECK ((state = ANY (ARRAY['REQUESTED'::text, 'AUTHORIZED'::text, 'DISPATCHING'::text, 'RUNNING'::text, 'SUCCEEDED'::text, 'FAILED'::text, 'DENIED'::text, 'CANCELLED'::text, 'TIMED_OUT'::text])))
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_tool_invocations julius_tool_invocations_tenant_id_project_id_run_id_task_id_key UNIQUE (tenant_id, project_id, run_id, task_id, invocation_id)
+constraint relay_wonderland.julius_tool_outbox julius_tool_outbox_attempts_check CHECK ((attempts >= 0))
+constraint relay_wonderland.julius_tool_outbox julius_tool_outbox_check CHECK (((state = 'CLAIMED'::text) = (claimed_by IS NOT NULL)))
+constraint relay_wonderland.julius_tool_outbox julius_tool_outbox_invocation_id_fkey FOREIGN KEY (invocation_id) REFERENCES relay_wonderland.julius_tool_invocations(invocation_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_tool_outbox julius_tool_outbox_pkey PRIMARY KEY (invocation_id)
+constraint relay_wonderland.julius_tool_outbox julius_tool_outbox_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_tool_outbox julius_tool_outbox_state_check CHECK ((state = ANY (ARRAY['PENDING'::text, 'CLAIMED'::text, 'DELIVERED'::text, 'DEAD'::text])))
+constraint relay_wonderland.julius_tool_settlements julius_tool_settlements_budget_reservation_id_fkey FOREIGN KEY (budget_reservation_id) REFERENCES relay_wonderland.budget_reservations(reservation_id)
+constraint relay_wonderland.julius_tool_settlements julius_tool_settlements_check CHECK ((result_digest = receipt_digest))
+constraint relay_wonderland.julius_tool_settlements julius_tool_settlements_command_digest_check CHECK ((length(command_digest) = 64))
+constraint relay_wonderland.julius_tool_settlements julius_tool_settlements_dispatch_generation_check CHECK ((dispatch_generation > 0))
+constraint relay_wonderland.julius_tool_settlements julius_tool_settlements_pkey PRIMARY KEY (invocation_id)
+constraint relay_wonderland.julius_tool_settlements julius_tool_settlements_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_tool_settlements julius_tool_settlements_project_id_invocation_id_fkey FOREIGN KEY (project_id, invocation_id) REFERENCES relay_wonderland.julius_tool_invocations(project_id, invocation_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_tool_settlements julius_tool_settlements_receipt_digest_check CHECK ((length(receipt_digest) = 64))
+constraint relay_wonderland.julius_tool_settlements julius_tool_settlements_result_digest_check CHECK ((length(result_digest) = 64))
+constraint relay_wonderland.julius_tool_settlements julius_tool_settlements_settlement_id_key UNIQUE (settlement_id)
+constraint relay_wonderland.julius_tool_settlements julius_tool_settlements_settlement_state_check CHECK ((settlement_state = ANY (ARRAY['COMMITTED'::text, 'RELEASED'::text])))
+constraint relay_wonderland.julius_trajectory_events julius_trajectory_events_context_id_fkey FOREIGN KEY (context_id) REFERENCES relay_wonderland.julius_context_snapshots(context_id)
+constraint relay_wonderland.julius_trajectory_events julius_trajectory_events_duration_ms_check CHECK (((duration_ms IS NULL) OR (duration_ms >= 0)))
+constraint relay_wonderland.julius_trajectory_events julius_trajectory_events_event_kind_check CHECK ((event_kind = ANY (ARRAY['TASK_TOPOLOGY'::text, 'WORKER_SELECTED'::text, 'PROVIDER_SELECTED'::text, 'CONTEXT_COMPILED'::text, 'DISPATCH'::text, 'RETRY'::text, 'FALLBACK'::text, 'SUBAGENT'::text, 'FINDING'::text, 'REPAIR'::text, 'VERIFICATION'::text, 'RECOVERY'::text, 'COMPLETION'::text])))
+constraint relay_wonderland.julius_trajectory_events julius_trajectory_events_input_tokens_check CHECK (((input_tokens IS NULL) OR (input_tokens >= 0)))
+constraint relay_wonderland.julius_trajectory_events julius_trajectory_events_output_tokens_check CHECK (((output_tokens IS NULL) OR (output_tokens >= 0)))
+constraint relay_wonderland.julius_trajectory_events julius_trajectory_events_pkey PRIMARY KEY (trajectory_event_id)
+constraint relay_wonderland.julius_trajectory_events julius_trajectory_events_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_trajectory_events julius_trajectory_events_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_trajectory_events julius_trajectory_events_run_id_idempotency_key_key UNIQUE (run_id, idempotency_key)
+constraint relay_wonderland.julius_trajectory_events julius_trajectory_events_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id)
+constraint relay_wonderland.julius_trajectory_events julius_trajectory_events_usd_micros_check CHECK (((usd_micros IS NULL) OR (usd_micros >= 0)))
+constraint relay_wonderland.julius_transitions julius_transitions_pkey PRIMARY KEY (transition_id)
+constraint relay_wonderland.julius_transitions julius_transitions_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_transitions julius_transitions_run_id_sequence_key UNIQUE (run_id, sequence)
+constraint relay_wonderland.julius_verification_decisions julius_verification_decisions_action_check CHECK ((action = ANY (ARRAY['ACCEPT'::text, 'REPAIR'::text, 'REROUTE'::text, 'RETRY'::text, 'ESCALATE'::text, 'HALT'::text, 'COMPLETE'::text])))
+constraint relay_wonderland.julius_verification_decisions julius_verification_decisions_pkey PRIMARY KEY (decision_id)
+constraint relay_wonderland.julius_verification_decisions julius_verification_decisions_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_verification_decisions julius_verification_decisions_run_id_idempotency_key_key UNIQUE (run_id, idempotency_key)
+constraint relay_wonderland.julius_verification_decisions julius_verification_decisions_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_work_artifacts julius_work_artifacts_byte_size_check CHECK ((byte_size >= 0))
+constraint relay_wonderland.julius_work_artifacts julius_work_artifacts_content_hash_check CHECK ((length(content_hash) = 64))
+constraint relay_wonderland.julius_work_artifacts julius_work_artifacts_kind_check CHECK ((kind = ANY (ARRAY['PLAN'::text, 'GUIDANCE'::text, 'DIFF'::text, 'TEST_OUTPUT'::text, 'BASE_REVISION'::text, 'REVIEW_PACKET'::text, 'RESEARCH'::text])))
+constraint relay_wonderland.julius_work_artifacts julius_work_artifacts_lease_generation_check CHECK ((lease_generation >= 0))
+constraint relay_wonderland.julius_work_artifacts julius_work_artifacts_pkey PRIMARY KEY (artifact_id)
+constraint relay_wonderland.julius_work_artifacts julius_work_artifacts_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.julius_work_artifacts julius_work_artifacts_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_work_artifacts julius_work_artifacts_run_id_task_id_lease_generation_kind_key UNIQUE (run_id, task_id, lease_generation, kind)
+constraint relay_wonderland.julius_work_artifacts julius_work_artifacts_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_worker_results julius_worker_results_lease_generation_check CHECK ((lease_generation > 0))
+constraint relay_wonderland.julius_worker_results julius_worker_results_pkey PRIMARY KEY (result_id)
+constraint relay_wonderland.julius_worker_results julius_worker_results_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_worker_results julius_worker_results_run_id_idempotency_key_key UNIQUE (run_id, idempotency_key)
+constraint relay_wonderland.julius_worker_results julius_worker_results_status_check CHECK ((status = ANY (ARRAY['SUCCEEDED'::text, 'FAILED'::text, 'CANCELLED'::text])))
+constraint relay_wonderland.julius_worker_results julius_worker_results_task_id_fkey FOREIGN KEY (task_id) REFERENCES relay_wonderland.julius_tasks(task_id) ON DELETE CASCADE
+constraint relay_wonderland.julius_worker_results julius_worker_results_task_id_lease_generation_key UNIQUE (task_id, lease_generation)
+constraint relay_wonderland.mission_contracts mission_contracts_pkey PRIMARY KEY (mission_id)
+constraint relay_wonderland.mission_contracts mission_contracts_project_id_canonical_hash_key UNIQUE (project_id, canonical_hash)
+constraint relay_wonderland.mission_contracts mission_contracts_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.outbox outbox_attempts_check CHECK ((attempts >= 0))
+constraint relay_wonderland.outbox outbox_check CHECK (((status = 'CLAIMED'::text) = (claimed_by IS NOT NULL)))
+constraint relay_wonderland.outbox outbox_event_id_key UNIQUE (event_id)
+constraint relay_wonderland.outbox outbox_pkey PRIMARY KEY (outbox_id)
+constraint relay_wonderland.outbox outbox_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.outbox outbox_status_check CHECK ((status = ANY (ARRAY['PENDING'::text, 'CLAIMED'::text, 'DELIVERED'::text, 'DEAD'::text])))
+constraint relay_wonderland.players players_pkey PRIMARY KEY (player_id)
+constraint relay_wonderland.presence presence_pkey PRIMARY KEY (session_id)
+constraint relay_wonderland.presence presence_player_id_fkey FOREIGN KEY (player_id) REFERENCES relay_wonderland.players(player_id) ON DELETE CASCADE
+constraint relay_wonderland.presence presence_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id) ON DELETE CASCADE
+constraint relay_wonderland.project_brain_links project_brain_links_check CHECK ((from_ref <> to_ref))
+constraint relay_wonderland.project_brain_links project_brain_links_from_ref_check CHECK (((length(from_ref) >= 1) AND (length(from_ref) <= 300)))
+constraint relay_wonderland.project_brain_links project_brain_links_mutation_id_fkey FOREIGN KEY (mutation_id) REFERENCES relay_wonderland.project_brain_mutations(mutation_id)
+constraint relay_wonderland.project_brain_links project_brain_links_pkey PRIMARY KEY (link_id)
+constraint relay_wonderland.project_brain_links project_brain_links_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.project_brain_links project_brain_links_project_id_from_ref_relation_to_ref_key UNIQUE (project_id, from_ref, relation, to_ref)
+constraint relay_wonderland.project_brain_links project_brain_links_relation_check CHECK ((relation = ANY (ARRAY['SATISFIES'::text, 'REFINES'::text, 'RESPONDS_TO'::text, 'SUPPORTS'::text, 'CONTRADICTS'::text, 'SUPERSEDES'::text, 'DERIVED_FROM'::text, 'CONCERNS'::text, 'ACKNOWLEDGES'::text, 'REVIEWS'::text])))
+constraint relay_wonderland.project_brain_links project_brain_links_to_ref_check CHECK (((length(to_ref) >= 1) AND (length(to_ref) <= 300)))
+constraint relay_wonderland.project_brain_mutations project_brain_mutations_idempotency_key_check CHECK (((length(idempotency_key) >= 8) AND (length(idempotency_key) <= 200)))
+constraint relay_wonderland.project_brain_mutations project_brain_mutations_operation_check CHECK ((operation = ANY (ARRAY['CREATE'::text, 'REVISE'::text, 'SET_STATUS'::text, 'LINK'::text])))
+constraint relay_wonderland.project_brain_mutations project_brain_mutations_pkey PRIMARY KEY (mutation_id)
+constraint relay_wonderland.project_brain_mutations project_brain_mutations_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.project_brain_mutations project_brain_mutations_project_id_idempotency_key_key UNIQUE (project_id, idempotency_key)
+constraint relay_wonderland.project_brain_mutations project_brain_mutations_request_hash_check CHECK ((length(request_hash) = 64))
+constraint relay_wonderland.project_brain_mutations project_brain_mutations_resulting_version_check CHECK (((resulting_version IS NULL) OR (resulting_version > 0)))
+constraint relay_wonderland.project_brain_mutations project_brain_mutations_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id)
+constraint relay_wonderland.project_brain_record_versions project_brain_record_versions_content_hash_check CHECK ((length(content_hash) = 64))
+constraint relay_wonderland.project_brain_record_versions project_brain_record_versions_mutation_id_fkey FOREIGN KEY (mutation_id) REFERENCES relay_wonderland.project_brain_mutations(mutation_id)
+constraint relay_wonderland.project_brain_record_versions project_brain_record_versions_pkey PRIMARY KEY (record_id, version)
+constraint relay_wonderland.project_brain_record_versions project_brain_record_versions_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.project_brain_record_versions project_brain_record_versions_record_id_fkey FOREIGN KEY (record_id) REFERENCES relay_wonderland.project_brain_records(record_id)
+constraint relay_wonderland.project_brain_record_versions project_brain_record_versions_version_check CHECK ((version > 0))
+constraint relay_wonderland.project_brain_records project_brain_records_body_check CHECK ((length(body) <= 4000))
+constraint relay_wonderland.project_brain_records project_brain_records_check CHECK (((scope = 'MISSION'::text) = (run_id IS NOT NULL)))
+constraint relay_wonderland.project_brain_records project_brain_records_content_hash_check CHECK ((length(content_hash) = 64))
+constraint relay_wonderland.project_brain_records project_brain_records_domain_check CHECK ((domain = ANY (ARRAY['USER_FACT'::text, 'PREFERENCE'::text, 'IDENTITY'::text, 'INSTRUCTION'::text, 'WORKFLOW'::text, 'SCRATCHPAD'::text, 'SHARED_CONTEXT'::text, 'OBJECTIVE_NOTE'::text, 'REQUIREMENT'::text, 'CONSTRAINT'::text, 'ACCEPTANCE_CRITERION'::text, 'ARCHITECTURE_NOTE'::text, 'DECISION'::text, 'RESEARCH_NOTE'::text, 'MISSION_INPUT'::text, 'MEMORY_REVIEW'::text, 'FINDING_RESPONSE'::text, 'GOVERNANCE_ACK'::text, 'COMPANION_RESULT'::text])))
+constraint relay_wonderland.project_brain_records project_brain_records_pkey PRIMARY KEY (record_id)
+constraint relay_wonderland.project_brain_records project_brain_records_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id)
+constraint relay_wonderland.project_brain_records project_brain_records_record_id_check CHECK ((record_id ~ '^pbr:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text))
+constraint relay_wonderland.project_brain_records project_brain_records_run_id_fkey FOREIGN KEY (run_id) REFERENCES relay_wonderland.julius_runs(run_id)
+constraint relay_wonderland.project_brain_records project_brain_records_scope_check CHECK ((scope = ANY (ARRAY['PROJECT'::text, 'MISSION'::text])))
+constraint relay_wonderland.project_brain_records project_brain_records_status_check CHECK ((status = ANY (ARRAY['PROPOSED'::text, 'ACTIVE'::text, 'ADOPTED'::text, 'ACCEPTED'::text, 'DECLINED'::text, 'RESOLVED'::text, 'ACKNOWLEDGED'::text, 'WITHDRAWN'::text, 'SUPERSEDED'::text])))
+constraint relay_wonderland.project_brain_records project_brain_records_subject_ref_check CHECK (((subject_ref IS NULL) OR ((length(subject_ref) >= 1) AND (length(subject_ref) <= 300))))
+constraint relay_wonderland.project_brain_records project_brain_records_title_check CHECK (((length(title) >= 1) AND (length(title) <= 200)))
+constraint relay_wonderland.project_brain_records project_brain_records_version_check CHECK ((version > 0))
+constraint relay_wonderland.project_members project_members_pkey PRIMARY KEY (project_id, player_id)
+constraint relay_wonderland.project_members project_members_player_id_fkey FOREIGN KEY (player_id) REFERENCES relay_wonderland.players(player_id) ON DELETE CASCADE
+constraint relay_wonderland.project_members project_members_project_id_fkey FOREIGN KEY (project_id) REFERENCES relay_wonderland.projects(project_id) ON DELETE CASCADE
+constraint relay_wonderland.projects projects_pkey PRIMARY KEY (project_id)
+constraint relay_wonderland.provider_operations provider_operations_execution_id_fkey FOREIGN KEY (execution_id) REFERENCES relay_wonderland.execution_sessions(execution_id) ON DELETE CASCADE
+constraint relay_wonderland.provider_operations provider_operations_execution_id_idempotency_key_key UNIQUE (execution_id, idempotency_key)
+constraint relay_wonderland.provider_operations provider_operations_pkey PRIMARY KEY (operation_id)
+constraint relay_wonderland.provider_operations provider_operations_provider_provider_request_id_key UNIQUE (provider, provider_request_id)
+constraint relay_wonderland.provider_operations provider_operations_reservation_id_fkey FOREIGN KEY (reservation_id) REFERENCES relay_wonderland.budget_reservations(reservation_id)
+constraint relay_wonderland.provider_operations provider_operations_state_check CHECK ((state = ANY (ARRAY['PLANNED'::text, 'RESERVED'::text, 'DISPATCHED'::text, 'RECEIPT_RECEIVED'::text, 'COMMITTED'::text, 'RELEASED'::text, 'EXPIRED'::text, 'FAILED'::text])))
+constraint relay_wonderland.provider_receipts provider_receipts_execution_id_fkey FOREIGN KEY (execution_id) REFERENCES relay_wonderland.execution_sessions(execution_id) ON DELETE CASCADE
+constraint relay_wonderland.provider_receipts provider_receipts_execution_id_provider_request_id_key UNIQUE (execution_id, provider_request_id)
+constraint relay_wonderland.provider_receipts provider_receipts_pkey PRIMARY KEY (receipt_id)
+constraint relay_wonderland.rating_history rating_history_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES relay_wonderland.agents(agent_id)
+constraint relay_wonderland.rating_history rating_history_battle_id_fkey FOREIGN KEY (battle_id) REFERENCES relay_wonderland.battles(battle_id)
+constraint relay_wonderland.rating_history rating_history_mode_check CHECK ((mode = ANY (ARRAY['GOAL'::text, 'EVAL'::text])))
+constraint relay_wonderland.rating_history rating_history_pkey PRIMARY KEY (battle_id, agent_id, mode)
+constraint relay_wonderland.rewards rewards_battle_id_fkey FOREIGN KEY (battle_id) REFERENCES relay_wonderland.battles(battle_id)
+constraint relay_wonderland.rewards rewards_pkey PRIMARY KEY (grant_id)
+constraint relay_wonderland.rewards rewards_player_id_fkey FOREIGN KEY (player_id) REFERENCES relay_wonderland.players(player_id)
+constraint relay_wonderland.rewards rewards_reward_key_key UNIQUE (reward_key)
+constraint relay_wonderland.schema_migrations schema_migrations_pkey PRIMARY KEY (version)
+constraint relay_wonderland.stream_sequences stream_sequences_next_sequence_check CHECK ((next_sequence > 0))
+constraint relay_wonderland.stream_sequences stream_sequences_pkey PRIMARY KEY (stream_id)
+constraint relay_wonderland.swarm_runs swarm_runs_battle_id_fkey FOREIGN KEY (battle_id) REFERENCES relay_wonderland.battles(battle_id)
+constraint relay_wonderland.swarm_runs swarm_runs_card_version_id_fkey FOREIGN KEY (card_version_id) REFERENCES relay_wonderland.card_versions(card_version_id)
+constraint relay_wonderland.swarm_runs swarm_runs_concurrency_ceiling_check CHECK ((concurrency_ceiling > 0))
+constraint relay_wonderland.swarm_runs swarm_runs_mode_check CHECK ((mode = ANY (ARRAY['GOAL'::text, 'EVAL'::text])))
+constraint relay_wonderland.swarm_runs swarm_runs_parent_agent_id_fkey FOREIGN KEY (parent_agent_id) REFERENCES relay_wonderland.agents(agent_id)
+constraint relay_wonderland.swarm_runs swarm_runs_parent_execution_id_fkey FOREIGN KEY (parent_execution_id) REFERENCES relay_wonderland.execution_sessions(execution_id)
+constraint relay_wonderland.swarm_runs swarm_runs_pkey PRIMARY KEY (swarm_id)
+constraint relay_wonderland.swarm_runs swarm_runs_state_check CHECK ((state = ANY (ARRAY['PENDING'::text, 'RUNNING'::text, 'COMPLETE'::text, 'PARTIAL'::text, 'FAILED'::text, 'CANCELLED'::text])))
+constraint relay_wonderland.swarm_workers swarm_workers_attempt_check CHECK ((attempt >= 0))
+constraint relay_wonderland.swarm_workers swarm_workers_budget_reservation_id_fkey FOREIGN KEY (budget_reservation_id) REFERENCES relay_wonderland.budget_reservations(reservation_id)
+constraint relay_wonderland.swarm_workers swarm_workers_check CHECK (((state = ANY (ARRAY['CLAIMED'::text, 'STARTING'::text, 'RUNNING'::text])) = (lease_owner IS NOT NULL)))
+constraint relay_wonderland.swarm_workers swarm_workers_execution_id_fkey FOREIGN KEY (execution_id) REFERENCES relay_wonderland.execution_sessions(execution_id)
+constraint relay_wonderland.swarm_workers swarm_workers_pkey PRIMARY KEY (worker_id)
+constraint relay_wonderland.swarm_workers swarm_workers_provider_operation_id_fkey FOREIGN KEY (provider_operation_id) REFERENCES relay_wonderland.provider_operations(operation_id)
+constraint relay_wonderland.swarm_workers swarm_workers_state_check CHECK ((state = ANY (ARRAY['PENDING'::text, 'CLAIMED'::text, 'STARTING'::text, 'RUNNING'::text, 'COMPLETE'::text, 'FAILED'::text, 'CANCELLED'::text, 'TIMED_OUT'::text, 'BUDGET_EXHAUSTED'::text])))
+constraint relay_wonderland.swarm_workers swarm_workers_swarm_id_fkey FOREIGN KEY (swarm_id) REFERENCES relay_wonderland.swarm_runs(swarm_id) ON DELETE CASCADE
+extension plpgsql 1.0
+function relay_wonderland.event_id_immutable() returns trigger kind=f volatile=v secdef=false lang=plpgsql body_md5=6460d4bd20b5985f066de268745274db config=-
+function relay_wonderland.events_truncate_refused() returns trigger kind=f volatile=v secdef=false lang=plpgsql body_md5=8b6a5783caacaba86338c10f43326d15 config=-
+function relay_wonderland.events_written_remember() returns trigger kind=f volatile=v secdef=false lang=plpgsql body_md5=e3d7f86d472300f52ed44e333f501a2b config=-
+function relay_wonderland.outbox_follows_event_delete() returns trigger kind=f volatile=v secdef=false lang=plpgsql body_md5=ec497065cf389709fb68d917b7777b00 config=-
+function relay_wonderland.outbox_requires_event_written() returns trigger kind=f volatile=v secdef=false lang=plpgsql body_md5=5462c13dc48254e12a1bf6e0cbcfcff9 config=-
+function relay_wonderland.project_brain_notify() returns trigger kind=f volatile=v secdef=false lang=plpgsql body_md5=d0ed493ae5879918249026a5b75fc7b3 config=-
+function relay_wonderland.project_brain_record_guard() returns trigger kind=f volatile=v secdef=false lang=plpgsql body_md5=34d66674dfee0e464d627bf23850a86c config=-
+function relay_wonderland.project_brain_refuse_change() returns trigger kind=f volatile=v secdef=false lang=plpgsql body_md5=e4dd4c25d8a43ebdac648c00792f64f4 config=-
+index CREATE INDEX gauntlet_round_timeline ON relay_wonderland.gauntlet_rounds USING btree (gauntlet_id, round, started_at)
+index CREATE INDEX gauntlet_run_state ON relay_wonderland.gauntlet_runs USING btree (run_id, activation, state)
+index CREATE INDEX julius_approval_inbox ON relay_wonderland.julius_approvals USING btree (project_id, state, requested_at)
+index CREATE INDEX julius_brain_context ON relay_wonderland.julius_brain_entries USING btree (run_id, entry_kind, revision)
+index CREATE INDEX julius_claim_standings_run_idx ON relay_wonderland.julius_claim_standings USING btree (run_id, project_id)
+index CREATE INDEX julius_decision_task ON relay_wonderland.julius_verification_decisions USING btree (task_id, occurred_at)
+index CREATE INDEX julius_dependency_reverse ON relay_wonderland.julius_task_dependencies USING btree (dependency_task_id, task_id)
+index CREATE INDEX julius_evidence_task ON relay_wonderland.julius_evidence USING btree (task_id, occurred_at, evidence_id)
+index CREATE INDEX julius_finding_gate ON relay_wonderland.julius_reviewer_findings USING btree (run_id, task_id, status, blocking)
+index CREATE INDEX julius_repair_recovery ON relay_wonderland.julius_repair_cycles USING btree (run_id, state, round)
+index CREATE INDEX julius_result_run_timeline ON relay_wonderland.julius_worker_results USING btree (run_id, occurred_at, result_id)
+index CREATE INDEX julius_run_project_state ON relay_wonderland.julius_runs USING btree (project_id, state, created_at)
+index CREATE INDEX julius_sandbox_recovery ON relay_wonderland.julius_sandboxes USING btree (state, expires_at, last_heartbeat_at)
+index CREATE INDEX julius_subagent_parent ON relay_wonderland.julius_subagents USING btree (parent_task_id, state)
+index CREATE INDEX julius_subagent_run ON relay_wonderland.julius_subagents USING btree (run_id, state, created_at)
+index CREATE INDEX julius_task_claim ON relay_wonderland.julius_tasks USING btree (state, next_attempt_at, lease_expires_at, created_at)
+index CREATE INDEX julius_task_contract_by_run ON relay_wonderland.julius_task_contracts USING btree (run_id, contract_revision)
+index CREATE INDEX julius_task_run_state ON relay_wonderland.julius_tasks USING btree (run_id, state, ordinal)
+index CREATE INDEX julius_tool_outbox_claim ON relay_wonderland.julius_tool_outbox USING btree (state, next_attempt_at, claimed_until, created_at)
+index CREATE INDEX julius_tool_run ON relay_wonderland.julius_tool_invocations USING btree (project_id, run_id, requested_at)
+index CREATE INDEX julius_trajectory_eval ON relay_wonderland.julius_trajectory_events USING btree (project_id, runtime_version, event_kind, occurred_at)
+index CREATE INDEX julius_trajectory_run ON relay_wonderland.julius_trajectory_events USING btree (run_id, occurred_at, trajectory_event_id)
+index CREATE INDEX julius_transition_timeline ON relay_wonderland.julius_transitions USING btree (run_id, sequence)
+index CREATE INDEX julius_work_artifact_latest ON relay_wonderland.julius_work_artifacts USING btree (run_id, task_id, kind, lease_generation DESC)
+index CREATE INDEX julius_work_artifact_run ON relay_wonderland.julius_work_artifacts USING btree (project_id, run_id, occurred_at)
+index CREATE INDEX project_brain_links_to ON relay_wonderland.project_brain_links USING btree (project_id, to_ref)
+index CREATE INDEX project_brain_mutations_record ON relay_wonderland.project_brain_mutations USING btree (record_id, occurred_at)
+index CREATE INDEX project_brain_records_project ON relay_wonderland.project_brain_records USING btree (project_id, domain, status, updated_at)
+index CREATE INDEX project_brain_records_run ON relay_wonderland.project_brain_records USING btree (run_id) WHERE (run_id IS NOT NULL)
+index CREATE INDEX wonderland_artifact_scope ON relay_wonderland.artifacts USING btree (project_id, owner_id, battle_id)
+index CREATE INDEX wonderland_budget_active ON relay_wonderland.budget_reservations USING btree (execution_id, state, expires_at)
+index CREATE INDEX wonderland_entity_scope ON relay_wonderland.entity_records USING btree (kind, project_id, battle_id)
+index CREATE INDEX wonderland_eval_runtime_state ON relay_wonderland.eval_runtimes USING btree (state, updated_at)
+index CREATE INDEX wonderland_event_replay ON relay_wonderland.events USING btree (project_id, sequence)
+index CREATE INDEX wonderland_execution_battle_state ON relay_wonderland.execution_sessions USING btree (battle_id, state)
+index CREATE INDEX wonderland_gve_battle ON relay_wonderland.gve_runs USING btree (battle_id, category, status)
+index CREATE INDEX wonderland_gve_recovery ON relay_wonderland.gve_runs USING btree (status, queued_at)
+index CREATE INDEX wonderland_hidden_fixture_mission ON relay_wonderland.hidden_test_fixtures USING btree (mission_id, version)
+index CREATE INDEX wonderland_outbox_claim ON relay_wonderland.outbox USING btree (status, next_attempt_at, claimed_until, created_at)
+index CREATE INDEX wonderland_presence_expiry ON relay_wonderland.presence USING btree (project_id, expires_at)
+index CREATE INDEX wonderland_provider_operation_recovery ON relay_wonderland.provider_operations USING btree (state, updated_at)
+index CREATE INDEX wonderland_rating_history_agent ON relay_wonderland.rating_history USING btree (agent_id, mode, created_at DESC)
+index CREATE INDEX wonderland_swarm_battle ON relay_wonderland.swarm_runs USING btree (battle_id, state)
+index CREATE INDEX wonderland_swarm_worker_claim ON relay_wonderland.swarm_workers USING btree (state, lease_expires_at, created_at)
+index CREATE UNIQUE INDEX agent_ratings_pkey ON relay_wonderland.agent_ratings USING btree (agent_id, mode)
+index CREATE UNIQUE INDEX agents_pkey ON relay_wonderland.agents USING btree (agent_id)
+index CREATE UNIQUE INDEX artifacts_pkey ON relay_wonderland.artifacts USING btree (artifact_id)
+index CREATE UNIQUE INDEX battle_participants_battle_id_agent_id_key ON relay_wonderland.battle_participants USING btree (battle_id, agent_id)
+index CREATE UNIQUE INDEX battle_participants_battle_id_side_key ON relay_wonderland.battle_participants USING btree (battle_id, side)
+index CREATE UNIQUE INDEX battle_participants_pkey ON relay_wonderland.battle_participants USING btree (battle_id, player_id)
+index CREATE UNIQUE INDEX battles_mission_id_key ON relay_wonderland.battles USING btree (mission_id)
+index CREATE UNIQUE INDEX battles_pkey ON relay_wonderland.battles USING btree (battle_id)
+index CREATE UNIQUE INDEX budget_reservations_execution_id_idempotency_key_key ON relay_wonderland.budget_reservations USING btree (execution_id, idempotency_key)
+index CREATE UNIQUE INDEX budget_reservations_pkey ON relay_wonderland.budget_reservations USING btree (reservation_id)
+index CREATE UNIQUE INDEX card_versions_agent_id_version_key ON relay_wonderland.card_versions USING btree (agent_id, version)
+index CREATE UNIQUE INDEX card_versions_pkey ON relay_wonderland.card_versions USING btree (card_version_id)
+index CREATE UNIQUE INDEX challenges_pkey ON relay_wonderland.challenges USING btree (challenge_id)
+index CREATE UNIQUE INDEX entity_records_pkey ON relay_wonderland.entity_records USING btree (kind, record_id)
+index CREATE UNIQUE INDEX eval_effects_pkey ON relay_wonderland.eval_effects USING btree (battle_id, effect_kind, effect_key)
+index CREATE UNIQUE INDEX eval_runtimes_pkey ON relay_wonderland.eval_runtimes USING btree (battle_id)
+index CREATE UNIQUE INDEX events_pkey ON relay_wonderland.events USING btree (event_id)
+index CREATE UNIQUE INDEX events_stream_id_sequence_key ON relay_wonderland.events USING btree (stream_id, sequence)
+index CREATE UNIQUE INDEX execution_sessions_pkey ON relay_wonderland.execution_sessions USING btree (execution_id)
+index CREATE UNIQUE INDEX execution_usage_pkey ON relay_wonderland.execution_usage USING btree (execution_id)
+index CREATE UNIQUE INDEX gauntlet_rounds_pkey ON relay_wonderland.gauntlet_rounds USING btree (gauntlet_id, round, phase)
+index CREATE UNIQUE INDEX gauntlet_rounds_work_id_key ON relay_wonderland.gauntlet_rounds USING btree (work_id)
+index CREATE UNIQUE INDEX gauntlet_runs_pkey ON relay_wonderland.gauntlet_runs USING btree (gauntlet_id)
+index CREATE UNIQUE INDEX gauntlet_runs_run_id_subject_task_id_key ON relay_wonderland.gauntlet_runs USING btree (run_id, subject_task_id)
+index CREATE UNIQUE INDEX gve_runs_pkey ON relay_wonderland.gve_runs USING btree (run_id)
+index CREATE UNIQUE INDEX hidden_test_fixtures_mission_id_fixture_id_version_key ON relay_wonderland.hidden_test_fixtures USING btree (mission_id, fixture_id, version)
+index CREATE UNIQUE INDEX hidden_test_fixtures_pkey ON relay_wonderland.hidden_test_fixtures USING btree (fixture_id)
+index CREATE UNIQUE INDEX idempotency_pkey ON relay_wonderland.idempotency USING btree (scope, command_id)
+index CREATE UNIQUE INDEX inventory_definitions_pkey ON relay_wonderland.inventory_definitions USING btree (item_id, version)
+index CREATE UNIQUE INDEX inventory_equipment_pkey ON relay_wonderland.inventory_equipment USING btree (player_id, slot)
+index CREATE UNIQUE INDEX inventory_grants_grant_key_key ON relay_wonderland.inventory_grants USING btree (grant_key)
+index CREATE UNIQUE INDEX inventory_grants_pkey ON relay_wonderland.inventory_grants USING btree (grant_id)
+index CREATE UNIQUE INDEX julius_acceptance_criteria_pkey ON relay_wonderland.julius_acceptance_criteria USING btree (run_id, criterion_id)
+index CREATE UNIQUE INDEX julius_acceptance_criteria_run_id_ordinal_key ON relay_wonderland.julius_acceptance_criteria USING btree (run_id, ordinal)
+index CREATE UNIQUE INDEX julius_approval_one_pending ON relay_wonderland.julius_approvals USING btree (run_id, COALESCE(task_id, ''::text), operation) WHERE (state = 'PENDING'::text)
+index CREATE UNIQUE INDEX julius_approvals_pkey ON relay_wonderland.julius_approvals USING btree (approval_id)
+index CREATE UNIQUE INDEX julius_approvals_run_id_idempotency_key_key ON relay_wonderland.julius_approvals USING btree (run_id, idempotency_key)
+index CREATE UNIQUE INDEX julius_artifacts_pkey ON relay_wonderland.julius_artifacts USING btree (artifact_id)
+index CREATE UNIQUE INDEX julius_artifacts_tenant_id_project_id_artifact_id_key ON relay_wonderland.julius_artifacts USING btree (tenant_id, project_id, artifact_id)
+index CREATE UNIQUE INDEX julius_brain_entries_pkey ON relay_wonderland.julius_brain_entries USING btree (entry_id)
+index CREATE UNIQUE INDEX julius_brain_entries_run_id_revision_key ON relay_wonderland.julius_brain_entries USING btree (run_id, revision)
+index CREATE UNIQUE INDEX julius_claim_standings_pkey ON relay_wonderland.julius_claim_standings USING btree (claim_id, standing_revision)
+index CREATE UNIQUE INDEX julius_context_snapshots_pkey ON relay_wonderland.julius_context_snapshots USING btree (context_id)
+index CREATE UNIQUE INDEX julius_context_snapshots_task_id_worker_id_content_hash_key ON relay_wonderland.julius_context_snapshots USING btree (task_id, worker_id, content_hash)
+index CREATE UNIQUE INDEX julius_criterion_evidence_pkey ON relay_wonderland.julius_criterion_evidence USING btree (run_id, criterion_id, evidence_id)
+index CREATE UNIQUE INDEX julius_evidence_pkey ON relay_wonderland.julius_evidence USING btree (evidence_id)
+index CREATE UNIQUE INDEX julius_evidence_run_id_idempotency_key_key ON relay_wonderland.julius_evidence USING btree (run_id, idempotency_key)
+index CREATE UNIQUE INDEX julius_repair_cycles_original_task_id_round_key ON relay_wonderland.julius_repair_cycles USING btree (original_task_id, round)
+index CREATE UNIQUE INDEX julius_repair_cycles_pkey ON relay_wonderland.julius_repair_cycles USING btree (repair_id)
+index CREATE UNIQUE INDEX julius_repair_cycles_repair_task_id_key ON relay_wonderland.julius_repair_cycles USING btree (repair_task_id)
+index CREATE UNIQUE INDEX julius_reviewer_findings_pkey ON relay_wonderland.julius_reviewer_findings USING btree (finding_id)
+index CREATE UNIQUE INDEX julius_runs_mission_id_run_id_key ON relay_wonderland.julius_runs USING btree (mission_id, run_id)
+index CREATE UNIQUE INDEX julius_runs_pkey ON relay_wonderland.julius_runs USING btree (run_id)
+index CREATE UNIQUE INDEX julius_sandboxes_invocation_id_key ON relay_wonderland.julius_sandboxes USING btree (invocation_id)
+index CREATE UNIQUE INDEX julius_sandboxes_pkey ON relay_wonderland.julius_sandboxes USING btree (sandbox_id)
+index CREATE UNIQUE INDEX julius_sandboxes_project_id_sandbox_id_invocation_id_key ON relay_wonderland.julius_sandboxes USING btree (project_id, sandbox_id, invocation_id)
+index CREATE UNIQUE INDEX julius_sandboxes_project_id_sandbox_id_key ON relay_wonderland.julius_sandboxes USING btree (project_id, sandbox_id)
+index CREATE UNIQUE INDEX julius_subagents_child_task_id_key ON relay_wonderland.julius_subagents USING btree (child_task_id)
+index CREATE UNIQUE INDEX julius_subagents_pkey ON relay_wonderland.julius_subagents USING btree (request_id)
+index CREATE UNIQUE INDEX julius_subagents_run_id_request_id_key ON relay_wonderland.julius_subagents USING btree (run_id, request_id)
+index CREATE UNIQUE INDEX julius_task_contract_one_per_task ON relay_wonderland.julius_task_contracts USING btree (task_id, contract_revision)
+index CREATE UNIQUE INDEX julius_task_contract_single_lock ON relay_wonderland.julius_task_contracts USING btree (contract_id) WHERE (state = 'LOCKED'::text)
+index CREATE UNIQUE INDEX julius_task_contracts_pkey ON relay_wonderland.julius_task_contracts USING btree (contract_id, contract_revision)
+index CREATE UNIQUE INDEX julius_task_dependencies_pkey ON relay_wonderland.julius_task_dependencies USING btree (task_id, dependency_task_id)
+index CREATE UNIQUE INDEX julius_tasks_pkey ON relay_wonderland.julius_tasks USING btree (task_id)
+index CREATE UNIQUE INDEX julius_tasks_run_id_ordinal_task_id_key ON relay_wonderland.julius_tasks USING btree (run_id, ordinal, task_id)
+index CREATE UNIQUE INDEX julius_tool_execution_receipts_execution_token_hash_key ON relay_wonderland.julius_tool_execution_receipts USING btree (execution_token_hash)
+index CREATE UNIQUE INDEX julius_tool_execution_receipts_pkey ON relay_wonderland.julius_tool_execution_receipts USING btree (invocation_id, dispatch_generation)
+index CREATE UNIQUE INDEX julius_tool_invocations_pkey ON relay_wonderland.julius_tool_invocations USING btree (invocation_id)
+index CREATE UNIQUE INDEX julius_tool_invocations_project_id_invocation_id_key ON relay_wonderland.julius_tool_invocations USING btree (project_id, invocation_id)
+index CREATE UNIQUE INDEX julius_tool_invocations_project_id_run_id_idempotency_key_key ON relay_wonderland.julius_tool_invocations USING btree (project_id, run_id, idempotency_key)
+index CREATE UNIQUE INDEX julius_tool_invocations_tenant_id_project_id_run_id_task_id_key ON relay_wonderland.julius_tool_invocations USING btree (tenant_id, project_id, run_id, task_id, invocation_id)
+index CREATE UNIQUE INDEX julius_tool_outbox_pkey ON relay_wonderland.julius_tool_outbox USING btree (invocation_id)
+index CREATE UNIQUE INDEX julius_tool_settlements_pkey ON relay_wonderland.julius_tool_settlements USING btree (invocation_id)
+index CREATE UNIQUE INDEX julius_tool_settlements_settlement_id_key ON relay_wonderland.julius_tool_settlements USING btree (settlement_id)
+index CREATE UNIQUE INDEX julius_trajectory_events_pkey ON relay_wonderland.julius_trajectory_events USING btree (trajectory_event_id)
+index CREATE UNIQUE INDEX julius_trajectory_events_run_id_idempotency_key_key ON relay_wonderland.julius_trajectory_events USING btree (run_id, idempotency_key)
+index CREATE UNIQUE INDEX julius_transitions_pkey ON relay_wonderland.julius_transitions USING btree (transition_id)
+index CREATE UNIQUE INDEX julius_transitions_run_id_sequence_key ON relay_wonderland.julius_transitions USING btree (run_id, sequence)
+index CREATE UNIQUE INDEX julius_verification_decisions_pkey ON relay_wonderland.julius_verification_decisions USING btree (decision_id)
+index CREATE UNIQUE INDEX julius_verification_decisions_run_id_idempotency_key_key ON relay_wonderland.julius_verification_decisions USING btree (run_id, idempotency_key)
+index CREATE UNIQUE INDEX julius_work_artifacts_pkey ON relay_wonderland.julius_work_artifacts USING btree (artifact_id)
+index CREATE UNIQUE INDEX julius_work_artifacts_run_id_task_id_lease_generation_kind_key ON relay_wonderland.julius_work_artifacts USING btree (run_id, task_id, lease_generation, kind)
+index CREATE UNIQUE INDEX julius_worker_results_pkey ON relay_wonderland.julius_worker_results USING btree (result_id)
+index CREATE UNIQUE INDEX julius_worker_results_run_id_idempotency_key_key ON relay_wonderland.julius_worker_results USING btree (run_id, idempotency_key)
+index CREATE UNIQUE INDEX julius_worker_results_task_id_lease_generation_key ON relay_wonderland.julius_worker_results USING btree (task_id, lease_generation)
+index CREATE UNIQUE INDEX mission_contracts_pkey ON relay_wonderland.mission_contracts USING btree (mission_id)
+index CREATE UNIQUE INDEX mission_contracts_project_id_canonical_hash_key ON relay_wonderland.mission_contracts USING btree (project_id, canonical_hash)
+index CREATE UNIQUE INDEX outbox_event_id_key ON relay_wonderland.outbox USING btree (event_id)
+index CREATE UNIQUE INDEX outbox_pkey ON relay_wonderland.outbox USING btree (outbox_id)
+index CREATE UNIQUE INDEX players_pkey ON relay_wonderland.players USING btree (player_id)
+index CREATE UNIQUE INDEX presence_pkey ON relay_wonderland.presence USING btree (session_id)
+index CREATE UNIQUE INDEX project_brain_links_pkey ON relay_wonderland.project_brain_links USING btree (link_id)
+index CREATE UNIQUE INDEX project_brain_links_project_id_from_ref_relation_to_ref_key ON relay_wonderland.project_brain_links USING btree (project_id, from_ref, relation, to_ref)
+index CREATE UNIQUE INDEX project_brain_mutations_pkey ON relay_wonderland.project_brain_mutations USING btree (mutation_id)
+index CREATE UNIQUE INDEX project_brain_mutations_project_id_idempotency_key_key ON relay_wonderland.project_brain_mutations USING btree (project_id, idempotency_key)
+index CREATE UNIQUE INDEX project_brain_record_versions_pkey ON relay_wonderland.project_brain_record_versions USING btree (record_id, version)
+index CREATE UNIQUE INDEX project_brain_records_pkey ON relay_wonderland.project_brain_records USING btree (record_id)
+index CREATE UNIQUE INDEX project_members_pkey ON relay_wonderland.project_members USING btree (project_id, player_id)
+index CREATE UNIQUE INDEX projects_pkey ON relay_wonderland.projects USING btree (project_id)
+index CREATE UNIQUE INDEX provider_operations_execution_id_idempotency_key_key ON relay_wonderland.provider_operations USING btree (execution_id, idempotency_key)
+index CREATE UNIQUE INDEX provider_operations_pkey ON relay_wonderland.provider_operations USING btree (operation_id)
+index CREATE UNIQUE INDEX provider_operations_provider_provider_request_id_key ON relay_wonderland.provider_operations USING btree (provider, provider_request_id)
+index CREATE UNIQUE INDEX provider_receipts_execution_id_provider_request_id_key ON relay_wonderland.provider_receipts USING btree (execution_id, provider_request_id)
+index CREATE UNIQUE INDEX provider_receipts_pkey ON relay_wonderland.provider_receipts USING btree (receipt_id)
+index CREATE UNIQUE INDEX rating_history_pkey ON relay_wonderland.rating_history USING btree (battle_id, agent_id, mode)
+index CREATE UNIQUE INDEX rewards_pkey ON relay_wonderland.rewards USING btree (grant_id)
+index CREATE UNIQUE INDEX rewards_reward_key_key ON relay_wonderland.rewards USING btree (reward_key)
+index CREATE UNIQUE INDEX schema_migrations_pkey ON relay_wonderland.schema_migrations USING btree (version)
+index CREATE UNIQUE INDEX stream_sequences_pkey ON relay_wonderland.stream_sequences USING btree (stream_id)
+index CREATE UNIQUE INDEX swarm_runs_pkey ON relay_wonderland.swarm_runs USING btree (swarm_id)
+index CREATE UNIQUE INDEX swarm_workers_pkey ON relay_wonderland.swarm_workers USING btree (worker_id)
+index CREATE UNIQUE INDEX wonderland_inventory_unique_active ON relay_wonderland.inventory_grants USING btree (player_id, item_id) WHERE ((revoked_at IS NULL) AND (((data ->> 'unique'::text))::boolean = true))
+relation relay_wonderland.agent_ratings kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.agent_ratings_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.agents kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.agents_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.artifacts kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.artifacts_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.battle_participants kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.battle_participants_battle_id_agent_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.battle_participants_battle_id_side_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.battle_participants_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.battles kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.battles_mission_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.battles_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.budget_reservations kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.budget_reservations_execution_id_idempotency_key_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.budget_reservations_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.card_versions kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.card_versions_agent_id_version_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.card_versions_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.challenges kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.challenges_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.entity_records kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.entity_records_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.eval_effects kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.eval_effects_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.eval_runtimes kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.eval_runtimes_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.events kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.events_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.events_stream_id_sequence_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.execution_sessions kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.execution_sessions_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.execution_usage kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.execution_usage_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.gauntlet_round_timeline kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.gauntlet_rounds kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.gauntlet_rounds_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.gauntlet_rounds_work_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.gauntlet_run_state kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.gauntlet_runs kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.gauntlet_runs_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.gauntlet_runs_run_id_subject_task_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.gve_runs kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.gve_runs_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.hidden_test_fixtures kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.hidden_test_fixtures_mission_id_fixture_id_version_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.hidden_test_fixtures_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.idempotency kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.idempotency_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.inventory_definitions kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.inventory_definitions_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.inventory_equipment kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.inventory_equipment_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.inventory_grants kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.inventory_grants_grant_key_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.inventory_grants_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_acceptance_criteria kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_acceptance_criteria_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_acceptance_criteria_run_id_ordinal_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_approval_inbox kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_approval_one_pending kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_approvals kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_approvals_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_approvals_run_id_idempotency_key_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_artifacts kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_artifacts_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_artifacts_tenant_id_project_id_artifact_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_brain_context kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_brain_entries kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_brain_entries_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_brain_entries_run_id_revision_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_claim_standings kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_claim_standings_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_claim_standings_run_idx kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_context_snapshots kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_context_snapshots_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_context_snapshots_task_id_worker_id_content_hash_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_criterion_evidence kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_criterion_evidence_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_decision_task kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_dependency_reverse kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_evidence kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_evidence_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_evidence_run_id_idempotency_key_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_evidence_task kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_finding_gate kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_repair_cycles kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_repair_cycles_original_task_id_round_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_repair_cycles_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_repair_cycles_repair_task_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_repair_recovery kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_result_run_timeline kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_reviewer_findings kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_reviewer_findings_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_run_project_state kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_runs kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_runs_mission_id_run_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_runs_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_sandbox_recovery kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_sandboxes kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_sandboxes_invocation_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_sandboxes_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_sandboxes_project_id_sandbox_id_invocation_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_sandboxes_project_id_sandbox_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_subagent_parent kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_subagent_run kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_subagents kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_subagents_child_task_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_subagents_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_subagents_run_id_request_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_task_claim kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_task_contract_by_run kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_task_contract_one_per_task kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_task_contract_single_lock kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_task_contracts kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_task_contracts_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_task_dependencies kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_task_dependencies_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_task_run_state kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tasks kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tasks_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tasks_run_id_ordinal_task_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_execution_receipts kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_execution_receipts_execution_token_hash_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_execution_receipts_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_invocations kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_invocations_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_invocations_project_id_invocation_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_invocations_project_id_run_id_idempotency_key_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_invocations_tenant_id_project_id_run_id_task_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_outbox kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_outbox_claim kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_outbox_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_run kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_settlements kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_settlements_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_tool_settlements_settlement_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_trajectory_eval kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_trajectory_events kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_trajectory_events_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_trajectory_events_run_id_idempotency_key_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_trajectory_run kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_transition_timeline kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_transitions kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_transitions_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_transitions_run_id_sequence_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_verification_decisions kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_verification_decisions_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_verification_decisions_run_id_idempotency_key_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_work_artifact_latest kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_work_artifact_run kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_work_artifacts kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_work_artifacts_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_work_artifacts_run_id_task_id_lease_generation_kind_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_worker_results kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_worker_results_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_worker_results_run_id_idempotency_key_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.julius_worker_results_task_id_lease_generation_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.mission_contracts kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.mission_contracts_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.mission_contracts_project_id_canonical_hash_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.outbox kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.outbox_event_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.outbox_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.players kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.players_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.presence kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.presence_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_links kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_links_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_links_project_id_from_ref_relation_to_ref_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_links_to kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_mutations kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_mutations_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_mutations_project_id_idempotency_key_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_mutations_record kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_record_versions kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_record_versions_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_records kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_records_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_records_project kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_brain_records_run kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_members kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.project_members_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.projects kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.projects_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.provider_operations kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.provider_operations_execution_id_idempotency_key_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.provider_operations_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.provider_operations_provider_provider_request_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.provider_receipts kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.provider_receipts_execution_id_provider_request_id_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.provider_receipts_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.rating_history kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.rating_history_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.rewards kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.rewards_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.rewards_reward_key_key kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.schema_migrations kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.schema_migrations_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.stream_sequences kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.stream_sequences_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.swarm_runs kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.swarm_runs_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.swarm_workers kind=r persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.swarm_workers_pkey kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_artifact_scope kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_budget_active kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_entity_scope kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_eval_runtime_state kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_event_replay kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_execution_battle_state kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_gve_battle kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_gve_recovery kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_hidden_fixture_mission kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_inventory_unique_active kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_outbox_claim kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_presence_expiry kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_provider_operation_recovery kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_rating_history_agent kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_swarm_battle kind=i persistence=p rls=false owner=julius acl=-
+relation relay_wonderland.wonderland_swarm_worker_claim kind=i persistence=p rls=false owner=julius acl=-
+schema public owner=pg_database_owner
+schema relay_wonderland owner=julius
+trigger CREATE TRIGGER events_event_id_immutable BEFORE UPDATE OF event_id ON relay_wonderland.events FOR EACH ROW EXECUTE FUNCTION relay_wonderland.event_id_immutable() enabled=O
+trigger CREATE TRIGGER events_truncate_refused BEFORE TRUNCATE ON relay_wonderland.events FOR EACH STATEMENT EXECUTE FUNCTION relay_wonderland.events_truncate_refused() enabled=O
+trigger CREATE TRIGGER events_written_remember AFTER INSERT ON relay_wonderland.events REFERENCING NEW TABLE AS written_events FOR EACH STATEMENT EXECUTE FUNCTION relay_wonderland.events_written_remember() enabled=O
+trigger CREATE TRIGGER outbox_event_id_immutable BEFORE UPDATE OF event_id ON relay_wonderland.outbox FOR EACH ROW EXECUTE FUNCTION relay_wonderland.event_id_immutable() enabled=O
+trigger CREATE TRIGGER outbox_follows_event_delete AFTER DELETE ON relay_wonderland.events FOR EACH ROW EXECUTE FUNCTION relay_wonderland.outbox_follows_event_delete() enabled=O
+trigger CREATE TRIGGER outbox_requires_event_written BEFORE INSERT ON relay_wonderland.outbox FOR EACH ROW EXECUTE FUNCTION relay_wonderland.outbox_requires_event_written() enabled=O
+trigger CREATE TRIGGER project_brain_event_notify AFTER INSERT ON relay_wonderland.events FOR EACH ROW WHEN (((new.visibility = 'PROJECT'::text) AND ((new.event_type ~~ 'julius.%'::text) OR (new.event_type ~~ 'project_brain.%'::text)))) EXECUTE FUNCTION relay_wonderland.project_brain_notify() enabled=O
+trigger CREATE TRIGGER project_brain_links_immutable BEFORE DELETE OR UPDATE ON relay_wonderland.project_brain_links FOR EACH ROW EXECUTE FUNCTION relay_wonderland.project_brain_refuse_change() enabled=O
+trigger CREATE TRIGGER project_brain_mutations_immutable BEFORE DELETE OR UPDATE ON relay_wonderland.project_brain_mutations FOR EACH ROW EXECUTE FUNCTION relay_wonderland.project_brain_refuse_change() enabled=O
+trigger CREATE TRIGGER project_brain_records_guard BEFORE DELETE OR UPDATE ON relay_wonderland.project_brain_records FOR EACH ROW EXECUTE FUNCTION relay_wonderland.project_brain_record_guard() enabled=O
+trigger CREATE TRIGGER project_brain_versions_immutable BEFORE DELETE OR UPDATE ON relay_wonderland.project_brain_record_versions FOR EACH ROW EXECUTE FUNCTION relay_wonderland.project_brain_refuse_change() enabled=O
+FINGERPRINT sha256=6040e517e49707aaf27b3451ec330cc079ed7ebb8972e8691cc477ab67658249 lines=1534

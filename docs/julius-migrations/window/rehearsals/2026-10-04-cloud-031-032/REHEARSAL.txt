@@ -1,0 +1,10 @@
+REHEARSAL through 032, image postgres:16, container julius-window-rehearsal-1791145442, checkout acae9166ca71fed9b781aa3174b40a706caa9718 at 2026-10-04T20:24:02Z
+server 16.15 (Debian 16.15-1.pgdg13+2)
+store at 030: ledger_last=030_julius_outbox_event_no_reread ROWCOUNTS tables=65
+pre-window FINGERPRINT sha256=6040e517e49707aaf27b3451ec330cc079ed7ebb8972e8691cc477ab67658249 lines=1534
+R1 PASS: 032 at 030 refused (exit 3), catalog and rows unchanged
+R2 PASS: the window applied (35 conditions ok); post-window FINGERPRINT sha256=6b59133dcf3dd60a9f444688aaeab5497be76a9f1fd085e46f1d8af04a5bb641 lines=1534
+R3 PASS: 031 again refused (exit 3), catalog unchanged
+R4 PASS: DOWN returned the catalog and the rows to the pre-window store exactly
+R5 PASS: the window is deterministic (FINGERPRINT sha256=6b59133dcf3dd60a9f444688aaeab5497be76a9f1fd085e46f1d8af04a5bb641 lines=1534)
+RESULT: PASS
