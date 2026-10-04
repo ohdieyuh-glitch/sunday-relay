@@ -126,7 +126,8 @@ WHAT THIS BETA DOES NOT INCLUDE
   mission so you can see how one unfolds.
 - Friends, messages, parties and party voice live in the Social Hub: type /social in the agent terminal (Ctrl+T).
   They need a Wonderland social server and a GitHub sign-in. This build connects only when a server is set up for
-  your test session; without one, the hub says "Social is not connected in this build" and nothing is sent.
+  your test session; without one, pressing SIGN IN in the hub tells you social is not connected in this build, and
+  nothing is sent.
 
 REQUIREMENTS
 - Windows 10 or 11, 64-bit

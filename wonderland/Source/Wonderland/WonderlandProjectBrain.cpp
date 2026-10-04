@@ -268,7 +268,17 @@ void UWonderlandProjectBrainSubsystem::HandleTerminalLine(const FString& Argumen
 	if (!Model.bLive && (Stream == nullptr || Stream->GetBridgeUrl().IsEmpty()))
 	{
 		OutSaid = TEXT("Project Brain is not connected in this build: the entries you see are samples, and what you propose is kept until you quit, not saved.");
-		UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN /brain %s (no bridge in this build): %s"), Verb.IsEmpty() ? TEXT("status") : *Verb.Left(16), *DescribeLink());
+		// a CLASS of verb, never the word (Second's RC13 review C2: "/brain <a pasted key>" logged 16 characters of it)
+		static const TCHAR* const KnownVerbs[] = { TEXT("status"), TEXT("pair"), TEXT("refresh"), TEXT("proposals"), TEXT("adopt"), TEXT("withdraw") };
+		FString VerbClass = Verb.IsEmpty() ? FString(TEXT("status")) : FString::Printf(TEXT("other (%d chars)"), Verb.Len());
+		for (const TCHAR* Known : KnownVerbs)
+		{
+			if (Verb.Equals(Known, ESearchCase::IgnoreCase))
+			{
+				VerbClass = Known;
+			}
+		}
+		UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN /brain %s (no bridge in this build): %s"), *VerbClass, *DescribeLink());
 		return;
 	}
 	if (Verb.IsEmpty() || Verb.Equals(TEXT("status"), ESearchCase::IgnoreCase))
