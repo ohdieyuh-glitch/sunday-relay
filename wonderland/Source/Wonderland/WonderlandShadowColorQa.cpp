@@ -77,6 +77,11 @@ namespace WonderlandShadowColourQa
 		/** The eye's drawn colour just before COLOR 2 is picked (SC3.2e's control: the old tint was this times the pick). */
 		FLinearColor EyeBeforeSecondary = FLinearColor::Black;
 		bool bEyeBeforeSecondary = false;
+		/** The eye as AUTHORED, before any colour is picked: RC12's secondary rule drew THIS times the pick (SC3.2ec, Second's RC13
+		 *  review: the post-primary eye already carries the gold tint, so a control built on it described a colour RC12 never drew),
+		 *  and DEFAULT on the secondary row must draw its hue again (SC3.13e). */
+		FLinearColor EyeAuthored = FLinearColor::Black;
+		bool bEyeAuthored = false;
 	};
 	TSharedPtr<FSc3Run> GSc3Run;
 
@@ -629,6 +634,12 @@ namespace WonderlandShadowColourQa
 			{
 				Run.Before = Sc3Snapshot(Costume);
 				Run.OthersBefore = Sc3Others(World, Costume);
+				// the eye as authored (no colour chosen yet): SC3.2ec's old rule and SC3.13e's "as designed"
+				{
+					FLinearColor AuthoredRim;
+					FString AuthoredRelief;
+					Run.bEyeAuthored = Costume != nullptr && Costume->QaReadPaint(FName(TEXT("eye")), Run.EyeAuthored, AuthoredRim, AuthoredRelief);
+				}
 				UE_LOG(LogTemp, Display, TEXT("WLSC3 worn %s, %d surfaces, %d other bodies' surfaces; look: %s"), *Dog->GetWornSkinId().ToString(),
 					Run.Before.Num(), Run.OthersBefore.Num(), *WonderlandMascotStyle::DescribeSmokeLook());
 				// the frames' camera FIRST: every measured frame (a-e) is taken from this one place, with the sky held still
@@ -688,11 +699,12 @@ namespace WonderlandShadowColourQa
 					Sc3Check(Run, TEXT("SC3.2e"), bEyeRead && Sc3SameHue(Eye, Azure->Value, 4.0f),
 						FString::Printf(TEXT("COLOR 2 AZURE: the eye drawn %s (%s), want the secondary's hue %s (within 4 deg)"),
 							bEyeRead ? *Sc3Rgb(Eye) : TEXT("unreadable"), bEyeRead ? *Sc3HueWord(Eye) : TEXT("-"), *Sc3HueWord(Azure->Value)));
-					// THE CONTROL: the old rule's colour (the eye before the pick, times azure) asked the same question must say NO
-					const FLinearColor OldTint = Run.EyeBeforeSecondary * Azure->Value;
-					Sc3Check(Run, TEXT("SC3.2ec"), Run.bEyeBeforeSecondary && !Sc3SameHue(OldTint, Azure->Value, 4.0f),
-						FString::Printf(TEXT("control: the old tint %s (%s) read as azure? %s"), *Sc3Rgb(OldTint), *Sc3HueWord(OldTint),
-							!Run.bEyeBeforeSecondary ? TEXT("(the eye before the pick was unreadable)")
+					// THE CONTROL: the colour RC12's rule drew (the AUTHORED eye times azure: Second's RC13 review -- the post-primary eye
+					// already carries the gold tint, which RC12 never multiplied in) asked the same question must say NO
+					const FLinearColor OldTint = Run.EyeAuthored * Azure->Value;
+					Sc3Check(Run, TEXT("SC3.2ec"), Run.bEyeAuthored && !Sc3SameHue(OldTint, Azure->Value, 4.0f),
+						FString::Printf(TEXT("control: RC12's colour, the authored eye x azure %s (%s), read as azure? %s"), *Sc3Rgb(OldTint), *Sc3HueWord(OldTint),
+							!Run.bEyeAuthored ? TEXT("(the authored eye was unreadable)")
 								: Sc3SameHue(OldTint, Azure->Value, 4.0f) ? TEXT("YES (the judge cannot fail)") : TEXT("no")));
 				}
 				Sc3Measured(Run, PC, Dog, TEXT("b_c2-azure"));
@@ -869,6 +881,24 @@ namespace WonderlandShadowColourQa
 				Sc3Check(Run, TEXT("SC3.13c"), QaCard != nullptr && !bQaDefault,
 					FString::Printf(TEXT("control: the QA card's colour 2 %s read as DEFAULT? %s"),
 						QaCard != nullptr ? *WonderlandCardDirector::DescribeColour(QaCard->Secondary) : TEXT("(gone)"), bQaDefault ? TEXT("YES (cannot fail)") : TEXT("no")));
+				// SC3.13e: DEFAULT ON THE SECONDARY ROW DRAWS THE EYES AS DESIGNED (Second's RC13 review B4: the hue rule turned them WHITE,
+				// because the DEFAULT swatch is White and counts as a pick). By hue, against the eye as authored, since the glow pulses.
+				{
+					FLinearColor DefaultEyeDrawn;
+					FLinearColor DefaultEyeRim;
+					FString DefaultEyeRelief;
+					const bool bDefaultEyeRead = Costume != nullptr && Costume->QaReadPaint(FName(TEXT("eye")), DefaultEyeDrawn, DefaultEyeRim, DefaultEyeRelief);
+					Sc3Check(Run, TEXT("SC3.13e"), bDefaultEyeRead && Run.bEyeAuthored && Sc3SameHue(DefaultEyeDrawn, Run.EyeAuthored, 4.0f),
+						FString::Printf(TEXT("COLOR 2 DEFAULT: the eye drawn %s (%s), want the authored eye's hue %s (within 4 deg; never white)"),
+							bDefaultEyeRead ? *Sc3Rgb(DefaultEyeDrawn) : TEXT("unreadable"), bDefaultEyeRead ? *Sc3HueWord(DefaultEyeDrawn) : TEXT("-"),
+							Run.bEyeAuthored ? *Sc3HueWord(Run.EyeAuthored) : TEXT("(the authored eye was unreadable)")));
+					// THE CONTROL: the bug's colour -- the authored eye's level as WHITE -- asked the same question must say NO
+					const float AuthoredPeak = FMath::Max3(Run.EyeAuthored.R, Run.EyeAuthored.G, Run.EyeAuthored.B);
+					const FLinearColor WhiteBugEye(AuthoredPeak, AuthoredPeak, AuthoredPeak, 1.0f);
+					Sc3Check(Run, TEXT("SC3.13ec"), Run.bEyeAuthored && !Sc3SameHue(WhiteBugEye, Run.EyeAuthored, 4.0f),
+						FString::Printf(TEXT("control: a white eye %s read as the designed hue? %s"), *Sc3Rgb(WhiteBugEye),
+							Sc3SameHue(WhiteBugEye, Run.EyeAuthored, 4.0f) ? TEXT("YES (the judge cannot fail)") : TEXT("no")));
+				}
 				WonderlandCardDirector::Select(World, Run.CardId, Said);
 				UE_LOG(LogTemp, Display, TEXT("WLSC3 select said: %s"), *Said);
 				Next(41);

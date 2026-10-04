@@ -2207,7 +2207,10 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 				// the hue is the chosen secondary, the brightness is the level the eye was driven to above, halo share included.
 				// ONLY A REAL SECONDARY PICK (Second's review of 6910c590): a PRIMARY-only pick leaves Secondary at its default
 				// gold, and its eyes stay exactly as shipped -- the long-standing bChosen tint -- like the accents above.
-				if (!UWonderlandMascotStyleSettings::Get().HasChosenSecondary())
+				// DEFAULT IS AS DESIGNED (Second's RC13 review B4): the SECONDARY row's DEFAULT swatch is White and counts as a pick
+				// (bSecondaryChosen), so the hue rule turned every costume skin's eyes WHITE where RC12 drew them as designed. White
+				// keeps the shipped tint (x White = the authored eye), as AccentColour, the marble and the C.A.R.D. already read it.
+				if (!UWonderlandMascotStyleSettings::Get().HasChosenSecondary() || WonderlandMascotStyle::IsDesignedWhite(Secondary))
 				{
 					Want *= Secondary;
 					break;
