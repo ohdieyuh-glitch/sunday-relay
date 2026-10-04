@@ -99,7 +99,7 @@ namespace RelayDogHandoffTuning
 	TAutoConsoleVariable<float> CVarStanceRunElbow(TEXT("wl.Handoff.Stance.RunElbow"), 14.0f, TEXT("Mission Handoff stance: extra forearm fold while running, degrees."));
 	TAutoConsoleVariable<float> CVarStanceDashShoulder(TEXT("wl.Handoff.Stance.DashShoulder"), -25.0f, TEXT("Mission Handoff stance: the dash's arms, swept back (negative), degrees."));
 	TAutoConsoleVariable<float> CVarStanceDashElbow(TEXT("wl.Handoff.Stance.DashElbow"), 20.0f, TEXT("Mission Handoff stance: the dash's forearm fold, degrees."));
-	TAutoConsoleVariable<float> CVarStanceDashOut(TEXT("wl.Handoff.Stance.DashOut"), 12.0f, TEXT("Mission Handoff stance: the dash's arms swept out, degrees."));
+	TAutoConsoleVariable<float> CVarStanceDashOut(TEXT("wl.Handoff.Stance.DashOut"), 4.0f, TEXT("Mission Handoff stance: the dash's arms swept out, degrees."));
 	TAutoConsoleVariable<float> CVarStanceDashSwing(TEXT("wl.Handoff.Stance.DashSwingKeep"), 0.8f, TEXT("Mission Handoff stance: the share of the sprint's own arm swing the dash keeps, 0..1."));
 
 	RelayDogArmedStance::FShape StanceShape()

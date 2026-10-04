@@ -79,7 +79,7 @@ namespace RelayDogArmedStance
 		 *  (DashSwingKeep of the stride's own swing, never the run's locked arms-back), the blades trailing low. */
 		float DashShoulderDeg = -25.0f;
 		float DashElbowDeg = 20.0f;
-		float DashOutDeg = 12.0f;
+		float DashOutDeg = 4.0f;   // round 7a4 S4: at 12 the pumping hands carried a tip 89.5 uu out (half the body is 87)
 		float DashSwingKeep = 0.8f;
 		/** Seconds to ease the stance in or out (a critically damped spring: nothing pops), and the dash in or out. */
 		float ArmedSmoothSeconds = 0.22f;
