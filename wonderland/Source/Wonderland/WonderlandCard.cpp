@@ -249,7 +249,7 @@ namespace
 	bool IsKnownField(const FString& Key)
 	{
 		static const TCHAR* const Known[] = { TEXT("id"), TEXT("name"), TEXT("missionHandoff"), TEXT("skin"), TEXT("outfit"),
-			TEXT("primary"), TEXT("companions"), TEXT("capabilities"), TEXT("builtIn") };
+			TEXT("primary"), TEXT("secondary"), TEXT("strips"), TEXT("flame"), TEXT("companions"), TEXT("capabilities"), TEXT("builtIn") };
 		for (const TCHAR* Name : Known)
 		{
 			if (Key == Name)
@@ -259,6 +259,51 @@ namespace
 		}
 		return false;
 	}
+}
+
+FString FWonderlandCardStore::ColourText(const FWonderlandCardColour& Channel)
+{
+	return Channel.bChosen ? FString::Printf(TEXT("%.4f %.4f %.4f"), Channel.Colour.R, Channel.Colour.G, Channel.Colour.B) : FString(TEXT("DEFAULT"));
+}
+
+bool FWonderlandCardStore::ParseColourText(const FString& Text, FWonderlandCardColour& Out)
+{
+	const FString Trimmed = Text.TrimStartAndEnd();
+	if (Trimmed.Len() > 64)
+	{
+		return false;
+	}
+	if (Trimmed.Equals(TEXT("DEFAULT"), ESearchCase::IgnoreCase))
+	{
+		Out.bChosen = false;
+		Out.Colour = FLinearColor::Black;
+		Out.bRecorded = true;
+		return true;
+	}
+	TArray<FString> Parts;
+	Trimmed.ParseIntoArrayWS(Parts);
+	if (Parts.Num() != 3)
+	{
+		return false;
+	}
+	float Values[3] = { 0.0f, 0.0f, 0.0f };
+	for (int32 Index = 0; Index < 3; ++Index)
+	{
+		// IsNumeric: digits, one point and a sign -- no exponent, no "nan", no "inf"
+		if (!Parts[Index].IsNumeric())
+		{
+			return false;
+		}
+		Values[Index] = FCString::Atof(*Parts[Index]);
+		if (!FMath::IsFinite(Values[Index]) || Values[Index] < 0.0f || Values[Index] > 1.0f)
+		{
+			return false;
+		}
+	}
+	Out.bChosen = true;
+	Out.Colour = FLinearColor(Values[0], Values[1], Values[2], 1.0f);
+	Out.bRecorded = true;
+	return true;
 }
 
 FString FWonderlandCardStore::DefaultPath()
@@ -1806,6 +1851,19 @@ TSharedPtr<FJsonObject> FWonderlandCardStore::ToJson(const FWonderlandCard& Card
 	Primary->SetStringField(TEXT("key"), Card.Primary.Key);
 	Primary->SetBoolField(TEXT("chosen"), Card.Primary.bChosen);
 	Json->SetObjectField(TEXT("primary"), Primary);
+	// COLOR 2, COLOR 3 and the fire: written only once a save recorded them, so a card from before them stays exactly as it was
+	if (Card.Secondary.bRecorded)
+	{
+		Json->SetStringField(TEXT("secondary"), ColourText(Card.Secondary));
+	}
+	if (Card.Strips.bRecorded)
+	{
+		Json->SetStringField(TEXT("strips"), ColourText(Card.Strips));
+	}
+	if (Card.Flame.bRecorded)
+	{
+		Json->SetStringField(TEXT("flame"), ColourText(Card.Flame));
+	}
 	TArray<TSharedPtr<FJsonValue>> Companions;
 	for (const FWonderlandCompanionRef& Ref : Card.Companions)
 	{
@@ -1897,6 +1955,17 @@ bool FWonderlandCardStore::FromJson(const TSharedPtr<FJsonObject>& Json, FWonder
 		}
 	}
 	NormalisePrimary(Out.Primary);
+	// COLOR 2 / COLOR 3 / the fire: "DEFAULT" or three numbers in 0..1. A value that is neither is dropped with a note -- the
+	// channel then stays unrecorded, so selecting the card leaves the live colour alone rather than inventing one.
+	struct FChannelField { const TCHAR* Name; FWonderlandCardColour* Into; };
+	const FChannelField ChannelFields[] = { { TEXT("secondary"), &Out.Secondary }, { TEXT("strips"), &Out.Strips }, { TEXT("flame"), &Out.Flame } };
+	for (const FChannelField& Field : ChannelFields)
+	{
+		if (Json->TryGetStringField(Field.Name, Text) && !ParseColourText(Text, *Field.Into))
+		{
+			Note(FString::Printf(TEXT("card %s: an unreadable %s colour, not restored"), *Out.Id, Field.Name));
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Companions = nullptr;
 	if (Json->TryGetArrayField(TEXT("companions"), Companions) && Companions != nullptr)
 	{
