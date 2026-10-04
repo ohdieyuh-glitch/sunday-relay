@@ -920,7 +920,7 @@ function renderManifest(result) {
   const after = result.migrationsExcluded.filter((path) => !before.includes(path));
   const names = (paths) => paths.map((path) => `\`${path.slice(MIGRATION_DIR.length)}\``).join(', ');
   out.push(`- **pre-Julius schema** — ${names(before)} under \`${MIGRATION_DIR}\`: registered by the same migration runner and applied in order before the Julius migrations; Julius tables reference \`relay_wonderland.projects\`, \`mission_contracts\` and \`budget_reservations\` defined there, and 017 is the Gauntlet Loop's own storage, deliberately not Julius's.`);
-  if (after.length > 0) out.push(`- **non-Julius schema after the Julius migrations** — ${names(after)} under \`${MIGRATION_DIR}\`: registered by the same migration runner and applied in order after them; Wonderland Social's own storage (additive \`relay_wonderland.social_*\` tables referencing only \`relay_wonderland.players\`), deliberately not Julius's.`);
+  if (after.length > 0) out.push(`- **non-Julius schema after the Julius migrations** — ${names(after)} under \`${MIGRATION_DIR}\`: registered by the same migration runner and applied in order after them; Wonderland Social's own storage (additive \`relay_wonderland.social_*\` tables and party voice's \`voice_puid_binding\`, referencing only \`relay_wonderland.players\`), deliberately not Julius's.`);
   out.push('');
   out.push('Named "julius", outside the harness (no kernel dependency, or CI/test drivers):');
   out.push('');

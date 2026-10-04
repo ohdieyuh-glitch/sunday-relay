@@ -41,8 +41,9 @@ async function run(): Promise<void> {
     const database = new TransactionalWonderlandDatabase(pool);
     await database.migrate();
     const applied = [...(await database.appliedMigrationVersions())].sort();
-    console.log(`r16-migrate: ${url.slice(url.lastIndexOf('/') + 1)} at ${applied.length} versions; social 032 ${applied.includes('032_wonderland_social') ? 'APPLIED' : 'MISSING'}`);
-    if (!applied.includes('032_wonderland_social')) process.exitCode = 4;
+    const has = (version: string) => (applied.includes(version) ? 'APPLIED' : 'MISSING');
+    console.log(`r16-migrate: ${url.slice(url.lastIndexOf('/') + 1)} at ${applied.length} versions; social 032 ${has('032_wonderland_social')}; voice 033 ${has('033_wonderland_voice')}`);
+    if (!applied.includes('032_wonderland_social') || !applied.includes('033_wonderland_voice')) process.exitCode = 4;
   } finally {
     await pool.end();
   }
