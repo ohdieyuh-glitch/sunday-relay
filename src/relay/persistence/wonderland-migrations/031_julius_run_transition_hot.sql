@@ -33,12 +33,11 @@ BEGIN
        AND am.amname = 'btree' AND NOT i.indisunique AND NOT i.indisprimary AND NOT i.indisexclusion
        AND i.indisvalid AND i.indpred IS NULL AND i.indexprs IS NULL
        AND i.indnatts = 3 AND i.indnkeyatts = 3
-       AND i.indkey::int2[] = ARRAY[
-             (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'project_id'),
-             (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'state'),
-             (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'created_at')
-           ]::int2[]
-       AND i.indoption::int2[] = ARRAY[0, 0, 0]::int2[]
+       -- int2vector is 0-based; cast to int2[] it keeps lower bound 0, and array = compares bounds: compare each element.
+       AND i.indkey[0] = (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'project_id')
+       AND i.indkey[1] = (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'state')
+       AND i.indkey[2] = (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'created_at')
+       AND i.indoption[0] = 0 AND i.indoption[1] = 0 AND i.indoption[2] = 0
   ) THEN
     RAISE EXCEPTION 'migration_031_refused: julius_run_project_state is not the index 031 was written to replace (btree on julius_runs (project_id, state, created_at))';
   END IF;
@@ -72,11 +71,10 @@ BEGIN
        AND am.amname = 'btree' AND NOT i.indisunique AND NOT i.indisprimary AND NOT i.indisexclusion
        AND i.indisvalid AND i.indpred IS NULL AND i.indexprs IS NULL
        AND i.indnatts = 2 AND i.indnkeyatts = 2
-       AND i.indkey::int2[] = ARRAY[
-             (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'project_id'),
-             (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'created_at')
-           ]::int2[]
-       AND i.indoption::int2[] = ARRAY[0, 0]::int2[]
+       -- int2vector is 0-based; cast to int2[] it keeps lower bound 0, and array = compares bounds: compare each element.
+       AND i.indkey[0] = (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'project_id')
+       AND i.indkey[1] = (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'created_at')
+       AND i.indoption[0] = 0 AND i.indoption[1] = 0
   ) THEN
     RAISE EXCEPTION 'migration_031_postcheck: julius_run_project_created is not a btree on julius_runs (project_id, created_at)';
   END IF;
