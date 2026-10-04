@@ -204,6 +204,21 @@ describe('rule 2, run-wide: an accepted task with an open blocking verified find
     const tie = juliusRunLineageCheck({ verdicts: [recordedVerdict('ACCEPT', 9), recordedVerdict('REPAIR', 9, 'BLOCKING')], acceptances: [], findings: [] });
     expect(tie.contradictions.map((held) => `${held.family} ${held.rowId}`)).toEqual(['V VERDICTS_AT_ONE_REVISION']);
   });
+
+  it('B-3b: two verified mirrors of one task at one revision with EQUAL actions agree, run-wide too: no contradiction (family V)', () => {
+    const equal = juliusRunLineageCheck({ verdicts: [recordedVerdict('ACCEPT', 9), recordedVerdict('ACCEPT', 9, 'OPERATOR_VERIFIED')], acceptances: [], findings: [] });
+    expect(equal).toEqual({ judgements: [], contradictions: [] });
+  });
+
+  it('B-7b: a family-V contradiction names its sides by entry id, never by arrival: either input order gives the same record', () => {
+    const accept = recordedVerdict('ACCEPT', 9);
+    const repair = recordedVerdict('REPAIR', 9, 'BLOCKING');
+    const forward = juliusRunLineageCheck({ verdicts: [accept, repair], acceptances: [], findings: [] });
+    const reverse = juliusRunLineageCheck({ verdicts: [repair, accept], acceptances: [], findings: [] });
+    expect(forward.contradictions).toHaveLength(1);
+    expect(forward.contradictions[0]!.left.entryId, 'the lower entry id is the left side').toBe(accept.entry.entryId);
+    expect(reverse).toEqual(forward);
+  });
 });
 
 describe('rule 2 from the run\'s durable records: EFFECTIVE acceptance, as the release path decides it (B-8a..e; Second Julius C1-C3, C5)', () => {
@@ -490,6 +505,21 @@ describe('B-7, determinism', () => {
       const order = shuffle(entries.map((_, index) => index));
       const outcome = assertJuliusLineage({ qualification: qualify(order.map(pairAt)), entries: order.map((index) => entries[index]!), revisions });
       expect(canonical(outcome), `round ${round}`).toBe(reference);
+    }
+  });
+
+  it('B-7a: a later verified claim supersedes the TIED latest earlier claims\' first BY ENTRY ID, whichever order they arrive in', () => {
+    const tiedAccept = verdict('run:a:review', 'ACCEPT', 'X');
+    const tiedRepair = verdict('run:a:review', 'REPAIR', 'Y');
+    const later = verdict('run:a:review', 'ACCEPT', 'Z');
+    const revisions = { [tiedAccept.entryId]: 40, [tiedRepair.entryId]: 40, [later.entryId]: 41 };
+    const standing = (held: JuliusBrainEntry): JuliusMemoryClaim => claim(held.entryId, held === later ? 'APPROVED' : 'SUPPORTED');
+    const assertIn = (order: readonly JuliusBrainEntry[]) =>
+      assertJuliusLineage({ qualification: qualify(order.map((held) => [held, standing(held)])), entries: order, revisions });
+    for (const order of [[tiedAccept, tiedRepair, later], [tiedRepair, tiedAccept, later], [later, tiedRepair, tiedAccept]]) {
+      const asserted = assertIn(order);
+      expect(claimOf(asserted.qualification, later.entryId).supersedes, order.map((held) => held.entryId).join(' < ')).toBe(`claim:${tiedAccept.entryId}`);
+      expect(claimOf(asserted.qualification, tiedRepair.entryId).trust, 'both tied claims leave the packet').toBe('SUPERSEDED');
     }
   });
 });
