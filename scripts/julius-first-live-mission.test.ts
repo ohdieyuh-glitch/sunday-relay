@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { liveBillingPaths, liveExecutionScope, parseLiveMissionContract } from '../relay-bridge/julius-live-mission';
@@ -82,20 +82,85 @@ const seedKindOf = (mission: string): 'workspace' | 'slice' => {
 };
 
 /**
+ * Every file under a throwaway tree, as paths relative to it, `/`-separated.
+ *
+ * A TREE MAY BE NESTED. Mission 5's drift repair (its `DRIFT_REPAIR.md`) moved
+ * it from a slice to a throwaway tree that holds repository-shaped paths and
+ * the vendored harness, so a top-level read would see two directories, not the
+ * files the agent edits.
+ */
+const workspaceFilesOf = (mission: string): string[] => {
+  const root = resolve(ROOT, MISSIONS_DIR, mission, 'workspace');
+  const files: string[] = [];
+  const walk = (directory: string, prefix: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isDirectory()) walk(join(directory, entry.name), `${prefix}${entry.name}/`);
+      else files.push(`${prefix}${entry.name}`);
+    }
+  };
+  walk(root, '');
+  return files.sort();
+};
+
+/**
+ * A THROWAWAY TREE THAT IS A FROZEN SLICE carries the slice harness under
+ * `.julius/`, and with it read-only modules the coder must not edit. Its
+ * contract names those where a slice mission's does: in its constraints.
+ */
+const isSliceShaped = (mission: string): boolean =>
+  seedKindOf(mission) === 'slice' || existsSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace', '.julius'));
+
+/**
+ * MISSIONS KNOWN TO BE STALE, and why. A stale mission's seed already passes its
+ * declared test, so dispatching it would buy a completion nobody worked for.
+ * Listing one here is a recorded decision, not a convenience. It is keyed by the
+ * mission directory's TREE as it was judged, so a changed definition is judged
+ * again rather than inheriting the exemption; and the check fails the day the
+ * seed is RED again, so a restoration cannot leave the exemption behind.
+ */
+const STALE_MISSIONS: Readonly<Record<string, { readonly tree: string; readonly reason: string }>> = {
+  'julius-live-mission-4': {
+    tree: '1c9d3316580a6f2c3b665ee34d717b66b29b181d',
+    reason: 'its deliverable julius-memory-trust.ts was implemented on main in #288; not dispatchable without a founder restoration decision (2026-10-02)',
+  },
+};
+
+/**
+ * `slice.txt` AS THE RIG READS IT (`.github/julius-live-workspace.sh`): a `#`
+ * starts a comment, EVERY whitespace character is deleted, a blank line is
+ * dropped, and an absolute path, a `..` or a glob is refused. The rig reads with
+ * `while IFS= read -r`, which drops an unterminated last line, so the file must
+ * end in a newline. A friendlier parse here could pass a layout the rig would
+ * never provision.
+ */
+const rigSlicePaths = (mission: string): string[] => {
+  const text = read(`${MISSIONS_DIR}/${mission}/slice.txt`);
+  expect(text.endsWith('\n'), `${mission}: slice.txt must end in a newline, or the rig drops its last line`).toBe(true);
+  const paths: string[] = [];
+  for (const raw of text.split('\n').slice(0, -1)) {
+    const line = raw.replace(/#.*$/su, '').replace(/\s/gu, '');
+    if (line === '') continue;
+    expect(/^\/|\.\.|[*?[]/u.test(line), `${mission}: the rig refuses slice path ${line}`).toBe(false);
+    paths.push(line);
+  }
+  return paths;
+};
+
+/**
  * Files a mission seeds that are not scaffolding — the ones the agent edits.
  *
  * A SLICE MISSION'S DELIVERABLES ARE ITS PATHS, and they are repository paths,
  * so the basename is what a contract can readably name. `.julius/` is never
  * among them: the loader is harness, seeded beside the slice and outside every
- * path a slice may declare.
+ * path a slice may declare. The same holds for a frozen slice kept as a tree.
  */
 const deliverablesOf = (mission: string): string[] =>
   seedKindOf(mission) === 'workspace'
-    ? readdirSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'))
-      .filter((name) => !['package.json', 'README.md'].includes(name))
+    ? workspaceFilesOf(mission)
+      .filter((path) => !['package.json', 'README.md'].includes(path) && !path.startsWith('.julius/'))
+      .map((path) => path.slice(path.lastIndexOf('/') + 1))
       .sort()
-    : read(`${MISSIONS_DIR}/${mission}/slice.txt`)
-      .split('\n').map((line) => line.replace(/#.*$/u, '').trim()).filter((line) => line !== '')
+    : rigSlicePaths(mission)
       .map((path) => path.slice(path.lastIndexOf('/') + 1))
       .sort();
 
@@ -841,7 +906,7 @@ describe('the mission itself is bounded and aimed away from this repository', ()
        */
       const asks = [
         contract.objective, ...contract.requirements,
-        ...(seedKindOf(mission) === 'slice' ? contract.constraints ?? [] : []),
+        ...(isSliceShaped(mission) ? contract.constraints ?? [] : []),
       ].join(' ');
       expect(asks, `${mission}: the contract must ask for edits, never for a new file`).not.toMatch(/\bCreate\b/u);
       for (const file of deliverables) {
@@ -859,15 +924,33 @@ describe('the mission itself is bounded and aimed away from this repository', ()
       expect(contract.ok ? 'accepted' : contract.problem, mission).toBe('accepted');
       if (!contract.ok) continue;
 
-      // A SLICE MISSION HAS NO STUBS TO RUN HERE. Its seed is this repository's
-      // own files at a trusted SHA, which already pass their own tests — the
-      // thing that must fail until the work is done is the mission's NEW test,
-      // and `scripts/julius-mission-slice.test.ts` exercises slice provisioning
-      // end to end against the real files instead.
-      if (seedKindOf(mission) === 'slice') continue;
+      // A SLICE MISSION IS PROVISIONED HERE TOO, the way the rig lays it out: the
+      // slice paths at HEAD, the harness under `.julius/`, the seed overlay on
+      // top. Skipping slice missions here is how Missions 4 and 5 went stale
+      // unseen: #288 implemented their deliverables on main by hand, and every
+      // later dispatch would have sliced a finished task.
       const directory = mkdtempSync(join(tmpdir(), `julius-stubs-${mission}-`));
-      for (const file of readdirSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'))) {
-        writeFileSync(join(directory, file), read(`${MISSIONS_DIR}/${mission}/workspace/${file}`));
+      if (seedKindOf(mission) === 'slice') {
+        const paths = rigSlicePaths(mission);
+        execFileSync('sh', ['-c', `git -C '${ROOT}' archive --format=tar HEAD -- ${paths.join(' ')} | tar -x -C '${directory}'`]);
+        // PARITY: what landed is exactly what the archive of the rig-read list holds, file for file.
+        const archived = execFileSync('sh', ['-c', `git -C '${ROOT}' archive --format=tar HEAD -- ${paths.join(' ')} | tar -t`], { encoding: 'utf8' })
+          .split('\n').filter((entry) => entry !== '' && !entry.endsWith('/')).sort();
+        const landed: string[] = [];
+        const walk = (dir: string, prefix: string): void => {
+          for (const entry of readdirSync(dir, { withFileTypes: true })) {
+            if (entry.isDirectory()) walk(join(dir, entry.name), `${prefix}${entry.name}/`);
+            else landed.push(`${prefix}${entry.name}`);
+          }
+        };
+        walk(directory, '');
+        expect(landed.sort(), `${mission}: the provisioned slice must be exactly the archive of the rig-read paths`).toEqual(archived);
+        mkdirSync(join(directory, '.julius'), { recursive: true });
+        for (const file of ['resolve.mjs', 'loader.mjs']) cpSync(resolve(ROOT, '.github/julius-mission-slice', file), join(directory, '.julius', file));
+        const overlay = resolve(ROOT, MISSIONS_DIR, mission, 'seed');
+        if (existsSync(overlay)) cpSync(overlay, directory, { recursive: true });
+      } else {
+        cpSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'), directory, { recursive: true });
       }
       const [command, ...args] = contract.contract.testCommand.split(' ');
       expect(command, mission).toBe('node');
@@ -878,7 +961,27 @@ describe('the mission itself is bounded and aimed away from this repository', ()
       } catch (error) {
         code = (error as { status?: number }).status ?? 1;
       }
+      const stale = STALE_MISSIONS[mission];
+      const tree = execFileSync('git', ['-C', ROOT, 'rev-parse', `HEAD:${MISSIONS_DIR}/${mission}`], { encoding: 'utf8' }).trim();
+      if (stale !== undefined && stale.tree === tree) {
+        // AN EXEMPTION THAT NO LONGER APPLIES FAILS: restoring the mission must remove it.
+        expect(code, `${mission} is exempt as stale (${stale.reason}); it now FAILS at start, so restore it and drop the exemption`).toBe(0);
+        continue;
+      }
       expect(code, `${mission}: the seeded stubs must FAIL the declared test command, or completion is free`).not.toBe(0);
+    }
+  });
+
+  it("reads slice.txt by the rig's own rule, and fails the day the rig's rule changes", () => {
+    // `rigSlicePaths` mirrors these lines; if they change, the mirror must change with them.
+    const provisioning = read('.github/julius-live-workspace.sh');
+    for (const line of [
+      'while IFS= read -r line; do',
+      "line=${line%%#*}; line=$(printf '%s' \"$line\" | tr -d '[:space:]')",
+      "/*|*..*|*'*'*|*'?'*|*'['*) echo \"mission_slice_path_refused: $line\" >&2; exit 1 ;;",
+      'done < "$SLICE_FILE"',
+    ]) {
+      expect(provisioning, 'the rig\'s slice reading changed: update rigSlicePaths to match').toContain(line);
     }
   });
 
