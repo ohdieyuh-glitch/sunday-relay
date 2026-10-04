@@ -13352,6 +13352,34 @@ namespace
 			{ TEXT("\u043F\u0430\u0440\u043E\u043B\u044C: {V}"), TEXT("{V}"), 23, true },
 			{ TEXT("\u5BC6\u7801\uFF1A{V}"), TEXT("{V}"), 23, true },
 			{ TEXT("Set-Cookie: sessionid={T}; Path=/"), TEXT("{T}"), 23, true },
+			// r8 (Second's attack on r7, 10-04; predicted in m6_core/r8_secrets/si_r8_cases.py): 27 the expansions, 28 a long noun phrase,
+			// 29 a label then is / = within ten words, 30 echo into a password reader, 31 a common weak password, 32 a label with its particle
+			{ TEXT("pa\u00DFword: {V}"), TEXT("{V}"), 27, true },
+			{ TEXT("Pa\u00DFwort: {V}"), TEXT("{V}"), 27, true },
+			{ TEXT("PA\u1E9EWORD: {V}"), TEXT("{V}"), 27, true },
+			{ TEXT("the pa\u00DFphrase is {V}"), TEXT("{V}"), 27, true },
+			{ TEXT("pa\u00DFwd={V}"), TEXT("{V}"), 27, true },
+			{ TEXT("\uFB01x the pa\u00DFword: {V} now"), TEXT("{V}"), 27, true },
+			{ TEXT("the password for the brand new shared prod db box is {V}"), TEXT("{V}"), 28, true },
+			{ TEXT("the password for the brand new shared prod db rack box is {V}"), TEXT("{V}"), 28, true },
+			{ TEXT("the api token for the old shared staging build cluster node is {T}"), TEXT("{T}"), 28, true },
+			{ TEXT("the password associated with the account is {V}"), TEXT("{V}"), 29, true },
+			{ TEXT("the password we use for the account is {V}"), TEXT("{V}"), 29, true },
+			{ TEXT("the token that the build uses is {T}"), TEXT("{T}"), 29, true },
+			{ TEXT("the password that ops gave us = {V}"), TEXT("{V}"), 29, true },
+			{ TEXT("echo {V} | docker login --username bob --password-stdin"), TEXT("{V}"), 30, true },
+			{ TEXT("echo '{V}' | sudo -S apt update"), TEXT("{V}"), 30, true },
+			{ TEXT("printf '%s' {V} | docker login -u bob --password-stdin"), TEXT("{V}"), 30, true },
+			{ TEXT("echo 'bob:{V}' | chpasswd"), TEXT("{V}"), 30, true },
+			{ TEXT("echo -n {V} | passwd --stdin bob"), TEXT("{V}"), 30, true },
+			{ TEXT("the password is secret!"), TEXT("secret"), 31, false },
+			{ TEXT("the wifi password is default."), TEXT("default"), 31, false },
+			{ TEXT("password: secret"), TEXT("secret"), 31, false },
+			{ TEXT("my passphrase is secret"), TEXT("secret"), 31, false },
+			{ TEXT("\uBE44\uBC00\uBC88\uD638\uB294 {V}"), TEXT("{V}"), 32, true },
+			{ TEXT("\u30D1\u30B9\u30EF\u30FC\u30C9\u306F {V}"), TEXT("{V}"), 32, true },
+			{ TEXT("\u5BC6\u7801\u662F {V}"), TEXT("{V}"), 32, true },
+			{ TEXT("\uC554\uD638\uB294 {V}"), TEXT("{V}"), 32, true },
 		};
 		auto R7Fill = [](const TCHAR* Text)
 		{
@@ -13441,10 +13469,11 @@ namespace
 		R7Check(TEXT("SI18"), 18, FWonderlandCardStore::QaRuleFold,
 			TEXT("look-alike letters (Cyrillic a, full-width), full-width : and =, blank glyphs U+2800 U+3164, U+FE0F and U+034F glue, %3D, a marker typed in another case (Second's (e))"),
 			TEXT("the fold"));
-		R7Check(TEXT("SI19"), 19, FWonderlandCardStore::QaRuleNounPhrase,
+		// r8: the copula scan (SI29) reads these too, so their controls turn it off with their own rule
+		R7Check(TEXT("SI19"), 19, FWonderlandCardStore::QaRuleNounPhrase | FWonderlandCardStore::QaRuleCopulaScan,
 			TEXT("a noun phrase between the label and \"is\": for the new staging db box / for the staging server / to the prod database / of the admin account / on the build server (Second's finding 1)"),
 			TEXT("the noun phrase"));
-		R7Check(TEXT("SI20"), 20, FWonderlandCardStore::QaRuleFillers | FWonderlandCardStore::QaRuleContinue,
+		R7Check(TEXT("SI20"), 20, FWonderlandCardStore::QaRuleFillers | FWonderlandCardStore::QaRuleContinue | FWonderlandCardStore::QaRuleCopulaScan,
 			TEXT("a parenthesised value, fillers after a connector (now / it's / probably), a clause-final word after \"is\", Correct-Horse-Battery, glued -> and | (Second's findings 4-5)"),
 			TEXT("the fillers and the continuation"));
 		R7Check(TEXT("SI21"), 21, FWonderlandCardStore::QaRuleContinue,
@@ -13456,6 +13485,109 @@ namespace
 		R7Check(TEXT("SI23"), 23, FWonderlandCardStore::QaRuleLabels,
 			TEXT("p@ssword, password1, a door code, OTP, a license key, a bare key, Passwort, contrase\u00F1a, Russian, Chinese, a session id (Second's next tier)"),
 			TEXT("the r7 labels"));
+		// SI27-SI32 (r8): SECOND'S ATTACK ON r7 (card_second/r7_attack, 10-04: 7 genuine leaks of 193 new attacks) -- one check per r8 rule
+		R7Check(TEXT("SI27"), 27, FWonderlandCardStore::QaRuleExpand,
+			TEXT("a sharp s / capital sharp s in the label (pa\u00DFword, Pa\u00DFwort, PA\u1E9EWORD, pa\u00DFphrase, pa\u00DFwd), a ligature before it (Second's r7 leak 1)"),
+			TEXT("the expansions"));
+		R7Check(TEXT("SI28"), 28, FWonderlandCardStore::QaRuleWideWindow | FWonderlandCardStore::QaRuleCopulaScan,
+			TEXT("a noun phrase of eight and nine words before \"is\" (Second's r7 leaks 2-3)"), TEXT("the wide window and the copula scan"));
+		R7Check(TEXT("SI29"), 29, FWonderlandCardStore::QaRuleCopulaScan,
+			TEXT("a label, then is / = within ten words whatever lies between: associated with the account, we use for the account, that the build uses, that ops gave us (Second's r7 leak 4)"),
+			TEXT("the copula scan"));
+		R7Check(TEXT("SI30"), 30, FWonderlandCardStore::QaRuleEchoPipe,
+			TEXT("echo / printf into docker login --password-stdin, sudo -S, chpasswd, passwd --stdin (Second's r7 leak 5)"), TEXT("the echo pipe"));
+		R7Check(TEXT("SI31"), 31, FWonderlandCardStore::QaRuleCommonPw,
+			TEXT("a common weak password after \"is\" at a clause's end: secret!, default., password: secret, my passphrase is secret (Second's r7 leak 6) -- weak: /keep gives it back"),
+			TEXT("the common passwords"));
+		R7Check(TEXT("SI32"), 32, FWonderlandCardStore::QaRuleParticle,
+			TEXT("a label in another script with its particle, then a space: Korean neun / Japanese wa / Chinese shi (Second's r7 leak 7)"),
+			TEXT("the particles"));
+
+		// SI33 (r8): A NAME THE NOUN PHRASE HELD IS WEAK -- "the password for the Server42xq box": redacted on submit, given back EXACTLY by
+		// /keep; with a value after it ("... box is X") the name stays readable and X goes. r7 took the name CERTAIN and looked no further, so
+		// /keep could never give it back -- and the value after it went through. THE CONTROL: the rule off, /keep keeps the name or the value
+		// is left
+		{
+			CaseMissedAt = SlotsMissed;
+			const FString NameOnly = TEXT("the password for the Server42xq box");
+			const FString NameValue = FString(TEXT("the password for the Server42xq box is ")) + TEXT("Hx7!q") + TEXT("Pw2zL");
+			auto NameRun = [&](bool& bOutRedacted, bool& bOutBack, bool& bOutReadable)
+			{
+				const FSubmitted NameAlone = Submit(NameOnly);
+				bOutRedacted = !NameAlone.bNoSlot && NameAlone.bAccepted && NameAlone.Kept != NameOnly;
+				int32 Still = 0;
+				bOutBack = false;
+				if (!NameAlone.bNoSlot && NameAlone.bAccepted && Set->KeepObjectiveAsTyped(NameAlone.Id, NameOnly, Still))
+				{
+					const FWonderlandMissionTask* Kept = Set->Find(NameAlone.Id);
+					bOutBack = Kept != nullptr && Kept->Objective == NameOnly;
+				}
+				FreeSlots();
+				const FSubmitted NameThenValue = Submit(NameValue);
+				bOutReadable = !NameThenValue.bNoSlot && NameThenValue.Kept.Contains(TEXT("Server42xq")) && !NameThenValue.Kept.Contains(TEXT("Hx7!q") + FString(TEXT("Pw2zL")));
+				FreeSlots();
+			};
+			bool bRedacted = false;
+			bool bBack = false;
+			bool bReadable = false;
+			NameRun(bRedacted, bBack, bReadable);
+			FWonderlandCardStore::QaRulesOff() = FWonderlandCardStore::QaRuleNameWeak;
+			bool bControlRedacted = false;
+			bool bControlBack = false;
+			bool bControlReadable = false;
+			NameRun(bControlRedacted, bControlBack, bControlReadable);
+			FWonderlandCardStore::QaRulesOff() = 0;
+			S.Check(TEXT("SI33"), SlotsMissed == CaseMissedAt && bRedacted && bBack && bReadable && (!bControlBack || !bControlReadable),
+				SlotNote() + FString::Printf(TEXT("'%s' redacted on submit %s, given back exactly by /keep %s; with a value after it the name readable and the value gone %s; ")
+					TEXT("the CONTROL (the held name off): /keep gives it back %s, the name readable with its value gone %s (want one of them NO)"),
+					*NameOnly, bRedacted ? TEXT("yes") : TEXT("NO"), bBack ? TEXT("yes") : TEXT("NO"), bReadable ? TEXT("yes") : TEXT("NO"),
+					bControlBack ? TEXT("yes") : TEXT("no"), bControlReadable ? TEXT("yes") : TEXT("no")));
+		}
+
+		// SI26 (r8): THE SCREEN IS LINEAR (Second's r7 (A): a 2.8k-character line of backslash-wrapped words took ~3 s in its port, every value
+		// searched for in every word). The worst line -- "password:" and 1,500 wrapped words, ~6,000 characters -- and a line of 600 distinct
+		// values, each against a PLAIN line of the same length, through MaskForDisplay (the terminal's door), best of three. Within 60 ms and 4x
+		// the plain line (+2 ms). THE CONTROL: the linear path off (r7's): the worst line must take at least 3x as long -- the bound can fail
+		{
+			auto Best = [](const FString& Line)
+			{
+				double Fastest = 1.0e9;
+				for (int32 Run = 0; Run < 3; ++Run)
+				{
+					const double Began = FPlatformTime::Seconds();
+					FWonderlandCardStore::MaskForDisplay(Line);
+					Fastest = FMath::Min(Fastest, (FPlatformTime::Seconds() - Began) * 1000.0);
+				}
+				return Fastest;
+			};
+			FString Wrapped = TEXT("password: ");
+			for (int32 Piece = 0; Piece < 1500; ++Piece)
+			{
+				Wrapped += TEXT("ab\\\n");
+			}
+			FString Many = TEXT("passwords: ");
+			for (int32 Piece = 0; Piece < 600; ++Piece)
+			{
+				Many += FString::Printf(TEXT("Vq%04dx, "), Piece);
+			}
+			FString Plain;
+			while (Plain.Len() < Wrapped.Len())
+			{
+				Plain += TEXT("word ");
+			}
+			const double PlainMs = Best(Plain);
+			const double WrappedMs = Best(Wrapped);
+			const double ManyMs = Best(Many);
+			FWonderlandCardStore::QaRulesOff() = FWonderlandCardStore::QaRulePerf;
+			const double OldWrappedMs = Best(Wrapped);
+			FWonderlandCardStore::QaRulesOff() = 0;
+			const bool bFast = WrappedMs <= 60.0 && ManyMs <= 60.0 && WrappedMs <= 4.0 * PlainMs + 2.0 && ManyMs <= 4.0 * PlainMs + 2.0;
+			const bool bControl = OldWrappedMs >= 3.0 * WrappedMs;
+			S.Check(TEXT("SI26"), bFast && bControl,
+				FString::Printf(TEXT("the screen is linear: %d characters of wrapped words %.1f ms, %d characters of 600 distinct values %.1f ms, a plain line of %d %.1f ms ")
+					TEXT("(want each <= 60 ms and <= 4x the plain line + 2); the CONTROL (the linear path off, r7's): the wrapped line %.1f ms (want >= 3x: the bound can fail)"),
+					Wrapped.Len(), WrappedMs, Many.Len(), ManyMs, Plain.Len(), PlainMs, OldWrappedMs));
+		}
 
 		// SI24: A LABEL'S WEAK VALUE COSTS A /keep, NEVER A WORD (Second's (a)/(b), r7). Label prose -- every line stored as typed, or altered and
 		// given back EXACTLY by /keep -- and none rewritten by a restart's restore (a pre-r7 contract holding it). THE CONTROL: the classes off

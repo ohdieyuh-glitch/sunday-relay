@@ -524,7 +524,9 @@ namespace
 	 *  ones only without /keep). Counts what was removed.
 	 *  r7 (Second's (b)), bForRestore: a RESTART applies no label's weak value -- a pre-r7 contract's prose ("update the password Policy page")
 	 *  is never rewritten -- and to a /keep'd objective only what is certain by its own SHAPE, so the player's word survives whatever its
-	 *  neighbours became. */
+	 *  neighbours became. PRECISELY (r8, Second's attack on r7 (B)): a never-/kept objective's restore skips only the WEAK finds -- a label's
+	 *  STRONG (certain) value IS applied, as are the statistical finds, which is the founder's fail-closed rule; a pre-r7 "the password is
+	 *  marmalade" (weak) stays on disk as it was. */
 	FString WonderlandScreenObjective(const FString& Typed, bool bKeepAsTyped, int32& OutCertain, int32& OutStatistical, bool bForRestore = false)
 	{
 		OutCertain = 0;

@@ -203,6 +203,15 @@ public:
 		QaRuleLabels = 1u << 13,      // OTP, door/access codes, license keys, a bare key, session ids, numbered/leet labels, other languages
 		QaRuleClasses = 1u << 14,     // a label's weak value keep-able and never applied by a restore (off: every label value certain, r6)
 		QaRulePem = 1u << 15,         // a PEM block to the end of its END line (off: r6, which stopped at the BEGIN line's own dashes)
+		// r8 (Second's attack on r7, 10-04)
+		QaRulePerf = 1u << 16,        // linear time: long text in overlapping windows, runs grown not rebuilt, repeats de-duplicated (off: r7)
+		QaRuleExpand = 1u << 17,      // the compatibility expansions folded through an index map ("pa<eszett>word", ligatures, digraphs)
+		QaRuleWideWindow = 1u << 18,  // a noun phrase of up to ten words after a preposition ("for the brand new shared prod db box is X")
+		QaRuleCopulaScan = 1u << 19,  // a label, then "is" / "was" / '=' / ':' and a value-like word within ten words, whatever lies between
+		QaRuleEchoPipe = 1u << 20,    // "echo X | docker login --password-stdin", "| chpasswd", "| passwd --stdin", "| sudo -S"
+		QaRuleCommonPw = 1u << 21,    // a common weak password after "is" at a clause's end ("the password is secret!"), weak
+		QaRuleParticle = 1u << 22,    // a label in another script with its particle, then a space, then the value
+		QaRuleNameWeak = 1u << 23,    // a NAME inside the noun phrase held, and taken weak (keep-able) only when no value follows
 	};
 	static uint32& QaRulesOff() { static uint32 Off = 0; return Off; }
 	/** A line as it may be SHOWN: every word that holds a secret replaced; a line whose secret no single word shows ("Bearer" and its
