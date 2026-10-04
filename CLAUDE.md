@@ -190,14 +190,15 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
 |---|---|---|---|
 | **#322** | Decision C corrected carry (`julius-carry.v2`). Only verified repair findings and accepted decisions travel; every exclusion is recorded by code; four-point proof | base `main` | green |
 | **#326** | C on the **paid venue**: a WITH arm learns from its pair's verified evidence bundle (`carryFrom`, input `carry_source_run`, `verify-carry`, `carry-export.json`, `carry.tsv`) | on #322 | green (6/6) |
-| **#331** | C **option B prepared, not chosen**: the reviewer names each finding's kind, a contract may promote kinds (`promotedWarningCategories`), and the bundle records each warning's kind (`review-warnings.tsv`). Rehearsed on real PostgreSQL: a promoting WITHOUT arm teaches a WITH arm; its control is refused for free. The four frozen missions' binding digests are pinned and unchanged | on #326 | see the PR |
+| **#331** | C **option B prepared, not chosen**: the reviewer names each finding's kind, a contract may promote kinds (`promotedWarningCategories`), and the bundle records each warning's kind (`review-warnings.tsv`). Rehearsed on real PostgreSQL: a promoting WITHOUT arm teaches a WITH arm; its control is refused for free. The four frozen missions' binding digests are pinned and unchanged | on #326 | green (6/6) |
 | **#324** | 031+032 (+033) migration window tooling (`docs/julius-migrations/window/`) and its Docker rehearsal records | base `relay/julius-13i-completion-r2` | n/a |
 | **#323** | Wonderland social backend and privacy wall P1–P5, migration **033** | on #321 | green |
 | **#325** | Wonderland voice/EOS: rooms are cliques of mutual visibility, PUID binding, **035 staged** behind 034 | on #323 | green |
 | **#328** | Wonderland social display names: the verified GitHub login is recorded at sign-in, and a nameless request never erases it | on #325 | green |
-| **#330** | Wonderland presence is a **lease**: a presence not refreshed for 120 s is absent everywhere (reads and decisions), a stale heartbeat is `NOT_IN_INSTANCE`, and the next live heartbeat moves live players out of a departed player's voice room | on #328 | see the PR |
-| **#327** | Wonderland R16 harness: 24 closed-list checks over HTTP against the real bridge **process**. The scenario keeps the heartbeat, and LEASE fails on a lapse. The restart check is split: DURABLE as stored, then RECONNECT (HELD/REENTERED), then PRESENCE | **restacked on #330** (it must sit above every product change) | green before the restack; re-run on the new head |
-| **#332** | Wonderland **hosted store**: `relay-bridge/wonderland-store.ts` (`inspect`/`bootstrap`) brings the bridge's store from nothing to migrated on a record and REFUSES every database it did not create (the permanent store's case included). `GET /relay-api/wonderland/readiness` (operator only) reports the store as facts. Rehearsed on real PostgreSQL through the real bridge process and the whole R16 scenario | on #327 | see the PR |
+| **#330** | Wonderland presence is a **lease**: a presence not refreshed for 120 s is absent everywhere (reads and decisions), a stale heartbeat is `NOT_IN_INSTANCE`, and the next live heartbeat moves live players out of a departed player's voice room | on #328 | green (6/6) |
+| **#327** | Wonderland R16 harness: 24 closed-list checks over HTTP against the real bridge **process**. The scenario keeps the heartbeat, and LEASE fails on a lapse. The restart check is split: DURABLE as stored, then RECONNECT (HELD/REENTERED), then PRESENCE | **restacked on #330** (it must sit above every product change) | green (6/6) on the restacked head |
+| **#332** | Wonderland **hosted store**: `relay-bridge/wonderland-store.ts` (`inspect`/`bootstrap`) brings the bridge's store from nothing to migrated on a record and REFUSES every database it did not create (the permanent store's case included). `GET /relay-api/wonderland/readiness` (operator only) reports the store as facts. Rehearsed on real PostgreSQL through the real bridge process and the whole R16 scenario | on #327 | green (6/6) |
+| **#333** | Julius **local qualification reliability**, three fixes. `migrate()` serialises itself under a session advisory lock (`WONDERLAND_MIGRATION_LOCK`): 7 of 8 concurrent migrators of an EMPTY store used to be refused. The login-probe test clears the probe's own override table (`CLAUDE_AUTH_PROVIDER_OVERRIDES`). The drill suite drops the two databases it used to leak every run. The full suite against ONE fresh database, every real-PG suite live: 13,783 passed, 0 failed | base `main` | see the PR |
 
 **Findings to act on:**
 - **C could not run on the paid venue.** Every paid job's database is fresh, so a WITH arm was always `CARRY_EMPTY`. #326 is the transport. Without it, no C pair can run.
@@ -217,13 +218,17 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
   - Two facts the design must respect: the same contract gives the same Julius run id, and, on `main`, warning promotion is unreachable: no contract field reaches it, and the reviewer was never asked a finding's kind.
   - Options A, B and C are in `docs/JULIUS_DECISION_C_PAIR_VALIDITY.md` (#326). **Option B is prepared in #331.** The choice belongs to the founder and SECOND.
   - Whether M2's two warnings would have been promoted is UNKNOWN: its bundle kept no declared kinds.
-- **Local-run caveats** (not product defects; CI is unaffected):
-  - **One test fails only inside a Claude Code cloud container:** `relay-bridge/julius/coding-agent-child-env.runtime.test.ts` "the login probe approves a first-party Max login…".
-    - The container sets `ANTHROPIC_BASE_URL` for its own proxy. `classifyClaudeAuth` classifies that as a gateway before it reads the fake CLI.
-    - The test clears only `ANTHROPIC_API_KEY`. It fails identically on #328's base commit.
-  - **Real-PG suites collide on one database.** With `JULIUS_TEST_DATABASE_URL` naming ONE database, a full `npm test` runs every real-PG suite in parallel against it.
-    - The suites that write the base database directly then collide (`julius-approval-at-dispatch`, `real-infra-julius`: duplicate keys).
-    - Run those alone, or against a fresh database.
+- **Local-run caveats** (CI is unaffected). **#333 fixes the first three; until it lands, each still holds on `main`:**
+  - **The login-probe test fails only inside a Claude Code cloud container:** `relay-bridge/julius/coding-agent-child-env.runtime.test.ts` "the login probe approves a first-party Max login…".
+    - The container sets `ANTHROPIC_BASE_URL` for its own proxy, and `classifyClaudeAuth` classifies that as a gateway before it reads the fake CLI. The test cleared only `ANTHROPIC_API_KEY`.
+  - **Concurrent `migrate()` calls on an EMPTY store race:** 001's `CREATE SCHEMA IF NOT EXISTS` is not safe against a concurrent creator (`pg_namespace_nspname_index`).
+    - A full `npm test` with `JULIUS_TEST_DATABASE_URL` naming ONE fresh database runs every real-PG suite in parallel against it, so they met it (`julius-approval-at-dispatch`).
+    - CI never did, because its single-suite steps had migrated the database first.
+  - **`scripts/julius-drill-support.test.ts` leaks two `juliusdrill…` databases every run.** Drop them by hand on a local cluster.
+  - **What still holds after #333**, against ONE database under a full parallel run:
+    - `real-infra-julius.test.ts` seeds fixed ids, so it collides with an earlier run's rows. It is row 13(iii)'s own-job venue: give it its own database, as CI does.
+    - `julius-handoff-fence` (a2) can meet a cross-run 40001. Alone it passes 14/14. It is the 13(i) residual, #321's.
+    - Neither failed on #333's second full run (13,783 passed, 0 failed).
 
 ### Migrations
 
