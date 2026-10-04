@@ -37,7 +37,7 @@ import {
   type SocialReportReason,
   type SocialUserId,
 } from './social-contracts';
-import { conversationsFor, markRead, openDirectConversation, sendMessage } from './social-conversations';
+import { conversationsFor, isWalledDirect, markRead, openDirectConversation, sendMessage } from './social-conversations';
 import {
   acceptFriendRequest,
   blockUser,
@@ -322,7 +322,10 @@ function applyOne(
       return unchanged(state, conversationsFor(state, actorId));
     case 'messages.list': {
       const conversation = state.conversations[id0];
-      if (conversation === undefined || !conversation.memberIds.includes(actorId)) return { ok: false, error: relayError('not-found', 'conversation not found') };
+      // a DIRECT conversation across a block is hidden from both (ruling (b)): exactly a missing conversation's answer
+      if (conversation === undefined || !conversation.memberIds.includes(actorId) || isWalledDirect(state, conversation, actorId)) {
+        return { ok: false, error: relayError('not-found', 'conversation not found') };
+      }
       return unchanged(state, state.messages[id0] ?? []);
     }
     case 'parties.read': {

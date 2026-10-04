@@ -7,6 +7,12 @@
  * UNREAD IS ARITHMETIC, NOT A FLAG: each conversation numbers its messages 1, 2, 3 …, each member records the last number
  * they have read, and unread is the difference -- with one's own messages counting as read. A flag per message would have to
  * be written for every reader of every message; a number per member is written once per read.
+ *
+ * A BLOCK HIDES THE PAIR'S DIRECT CONVERSATION FROM BOTH (FOUNDER RULING (b), 2026-10-04 -- replacing the earlier rule that it
+ * "stays readable, it just cannot grow"). While a block stands either way, the DIRECT conversation between the pair is in
+ * neither one's list, snapshot or reads: listing skips it, and reading, writing, marking read or re-opening it answer exactly
+ * as a conversation that is not there (re-opening: as somebody not accepting your messages). Nothing is deleted: on the
+ * unblock it comes back unchanged.
  */
 
 import { fail, ok, relayError, type RelayResult } from '../protocol/errors';
@@ -29,9 +35,20 @@ export function directConversationId(a: SocialUserId, b: SocialUserId): string {
   return `dm_${x}__${y}`;
 }
 
+/** The refusal for "you may not write to this person": a policy that does not admit you, and anybody across a wall. */
+export const NOT_ACCEPTING_MESSAGES = 'this person is not accepting messages from you';
+
+/** A DIRECT conversation whose other member has a block with this member, either way: hidden from both (ruling (b)). */
+export function isWalledDirect(state: SocialState, conversation: Conversation, userId: SocialUserId): boolean {
+  if (conversation.kind !== 'DIRECT') return false;
+  const other = conversation.memberIds.find((id) => id !== userId);
+  return other !== undefined && blockedEitherWay(state, userId, other);
+}
+
 /**
- * OPEN (or find) THE DIRECT CONVERSATION. Only when the other person's message policy admits the actor and there is no block
- * either way -- the same `can.message` the presence authority shows on every surface.
+ * OPEN (or find) THE DIRECT CONVERSATION. Only when there is no block either way (a hidden conversation is never handed back:
+ * the answer is a stranger's who does not accept your messages) and -- for a new one -- the other person's message policy
+ * admits the actor: the same `can.message` the presence authority shows on every surface.
  */
 export function openDirectConversation(
   state: SocialState,
@@ -41,10 +58,11 @@ export function openDirectConversation(
 ): RelayResult<{ state: SocialState; conversationId: string }> {
   if (!hasUser(state, actorId) || !hasUser(state, otherId)) return fail(relayError('not-found', 'user not found'));
   if (actorId === otherId) return fail(relayError('validation-failed', 'a person cannot message themselves'));
+  if (blockedEitherWay(state, actorId, otherId)) return fail(relayError('permission-denied', NOT_ACCEPTING_MESSAGES));
   const id = directConversationId(actorId, otherId);
   if (state.conversations[id]) return ok({ state, conversationId: id });
   const view = resolvePresenceFor(state, actorId, otherId);
-  if (view === null || !view.can.message) return fail(relayError('permission-denied', 'this person is not accepting messages from you'));
+  if (view === null || !view.can.message) return fail(relayError('permission-denied', NOT_ACCEPTING_MESSAGES));
   const conversation: Conversation = {
     conversationId: id,
     kind: 'DIRECT',
@@ -92,8 +110,12 @@ export function openGroupConversation(
 }
 
 /**
- * SEND. A member only; text 1..2000 characters (trimmed); in a DIRECT conversation, refused once either side has blocked the
- * other -- the conversation stays readable, it just cannot grow.
+ * SEND. A member only; text 1..2000 characters (trimmed). In a DIRECT conversation:
+ *   - across a block either way the conversation is hidden from both (ruling (b)): the answer is exactly a missing
+ *     conversation's, before anything else is looked at;
+ *   - otherwise the other person's message policy must still admit the writer, as it had to when the conversation was opened:
+ *     somebody who unfriended you under a FRIENDS policy no longer receives your messages (Second's R16 run: an existing DM
+ *     was never re-checked).
  */
 export function sendMessage(
   state: SocialState,
@@ -103,16 +125,17 @@ export function sendMessage(
   atIso: string,
 ): RelayResult<SocialState> {
   const conversation = state.conversations[conversationId];
-  if (conversation === undefined) return fail(relayError('not-found', 'conversation not found'));
+  if (conversation === undefined || isWalledDirect(state, conversation, actorId)) return fail(relayError('not-found', 'conversation not found'));
   if (!conversation.memberIds.includes(actorId)) return denied('only a member can write here');
+  if (conversation.kind === 'DIRECT') {
+    const other = conversation.memberIds.find((id) => id !== actorId);
+    const recipient = other === undefined ? undefined : state.users[other];
+    if (recipient !== undefined && !audienceAdmits(state, recipient.privacy.messagePolicy, actorId, recipient.profile.userId)) return denied(NOT_ACCEPTING_MESSAGES);
+  }
   const kind = input.kind ?? 'TEXT';
   if (kind === 'SYSTEM') return denied('system messages are not sent by people');
   const body = input.body.trim();
   if (kind === 'TEXT' && (body.length === 0 || body.length > MESSAGE_MAX_CHARS)) return invalid(`a message is 1 to ${MESSAGE_MAX_CHARS} characters`);
-  if (conversation.kind === 'DIRECT') {
-    const other = conversation.memberIds.find((id) => id !== actorId);
-    if (other !== undefined && blockedEitherWay(state, actorId, other)) return denied('this conversation is closed');
-  }
   const minted = mintId(state, 'msg');
   const sequence = conversation.lastSequence + 1;
   const message: Message = {
@@ -141,10 +164,10 @@ function setRead(states: SocialState['readStates'], conversationId: string, user
   return [...states.filter((r) => !(r.conversationId === conversationId && r.userId === userId)), { conversationId, userId, lastReadSequence: sequence }];
 }
 
-/** Mark read up to `sequence` (default: everything). Never moves backwards. */
+/** Mark read up to `sequence` (default: everything). Never moves backwards. A hidden conversation is not there. */
 export function markRead(state: SocialState, actorId: SocialUserId, conversationId: string, sequence?: number): RelayResult<SocialState> {
   const conversation = state.conversations[conversationId];
-  if (conversation === undefined) return fail(relayError('not-found', 'conversation not found'));
+  if (conversation === undefined || isWalledDirect(state, conversation, actorId)) return fail(relayError('not-found', 'conversation not found'));
   if (!conversation.memberIds.includes(actorId)) return denied('only a member can read here');
   const upTo = Math.min(sequence ?? conversation.lastSequence, conversation.lastSequence);
   return ok({ ...state, readStates: setRead(state.readStates, conversationId, actorId, upTo) });
@@ -171,10 +194,10 @@ export interface ConversationSummary {
   readonly unread: number;
 }
 
-/** The Messages tab: newest first, with unread counts. */
+/** The Messages tab: newest first, with unread counts. Never a DIRECT conversation across a block (ruling (b)). */
 export function conversationsFor(state: SocialState, userId: SocialUserId): ConversationSummary[] {
   return Object.values(state.conversations)
-    .filter((c) => c.memberIds.includes(userId))
+    .filter((c) => c.memberIds.includes(userId) && !isWalledDirect(state, c, userId))
     .map((c) => {
       const other = c.kind === 'DIRECT' ? (c.memberIds.find((id) => id !== userId) ?? null) : null;
       const last = (state.messages[c.conversationId] ?? []).at(-1);

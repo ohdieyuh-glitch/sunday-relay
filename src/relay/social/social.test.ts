@@ -196,10 +196,10 @@ describe('blocks', () => {
 
   it('blocking ends the friendship, the requests, messages and invites both ways; unblocking restores nothing', () => {
     let s = createSocialFixture();
+    const dm = conversationsFor(s, U.KAI)[0].conversationId;
     s = must(blockUser(s, U.KAI, U.NOVA, T(1)));
     expect(resolvePresenceFor(s, U.NOVA, U.KAI)!.onlineState).toBe('OFFLINE');
     expect(resolvePresenceFor(s, U.KAI, U.NOVA)!.restrictedReason).toBe('BLOCKED');
-    const dm = conversationsFor(s, U.KAI)[0].conversationId;
     expect(sendMessage(s, U.NOVA, dm, { body: 'hello?' }, T(2)).ok).toBe(false);
     expect(sendFriendRequest(s, U.NOVA, U.KAI, T(2)).ok).toBe(false);
     s = must(unblockUser(s, U.KAI, U.NOVA));

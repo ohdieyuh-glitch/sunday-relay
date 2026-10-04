@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { applySocialOperation, type SocialCommandOutcome } from './social-commands';
 import { createSocialFixture, FIXTURE_USERS as U } from './social-fixtures';
 import { partyInvitesFor } from './social-parties';
+import { conversationsFor } from './social-conversations';
 import { buildSocialView } from './social-preview';
 import { partyOf, type SocialState } from './social-state';
 
@@ -107,5 +108,53 @@ describe('D2 / ruling (a): nobody is invited or joins across a wall, and the ref
     expect(JSON.stringify(view(s, U.NOVA))).not.toContain('Builders');
     expect(refusal(op(s, U.NOVA, 'party_invites.accept', {}, [novaInvite]))).toBe(refusal(op(s, U.NOVA, 'party_invites.accept', {}, ['pinv_gone'])));
     expect(partyOf(s, U.NOVA)).toBeUndefined();
+  });
+});
+
+describe('D7 / ruling (b): a block hides the pair\'s DM from both; an unfriended writer meets the message policy', () => {
+  const dmOf = (s: SocialState) => conversationsFor(s, U.KAI).find((c) => c.otherUserId === U.NOVA)!.conversationId;
+
+  it('while the block stands the DM is gone for BOTH -- list, snapshot, read, write, mark-read, re-open -- and returns unchanged', () => {
+    const before = createSocialFixture();
+    const dm = dmOf(before);
+    const history = before.messages[dm];
+    let s = must(before, U.NOVA, 'blocks.add', { targetId: U.KAI }).state;
+    const missing = (who: string) => ({
+      list: refusal(op(s, who, 'messages.list', {}, ['dm_nope'])),
+      send: refusal(op(s, who, 'messages.send', { body: 'x' }, ['dm_nope'])),
+      read: refusal(op(s, who, 'messages.read', {}, ['dm_nope'])),
+    });
+    for (const [who, other] of [[U.KAI, U.NOVA], [U.NOVA, U.KAI]]) {
+      expect(conversationsFor(s, who).map((c) => c.conversationId)).not.toContain(dm);
+      const snapshot = view(s, who);
+      expect(Object.keys(snapshot.messages)).not.toContain(dm);
+      expect(JSON.stringify({ c: snapshot.conversations, m: snapshot.messages })).not.toContain(other);
+      // the BLOCKED side's whole snapshot names the blocker nowhere; the blocker keeps only their own block entry (to unblock)
+      if (who === U.KAI) expect(JSON.stringify(snapshot)).not.toContain(other);
+      else expect(snapshot.profiles[other]?.relationship).toBe('BLOCKED');
+      expect(refusal(op(s, who, 'messages.list', {}, [dm]))).toBe(missing(who).list);
+      expect(refusal(op(s, who, 'messages.send', { body: 'still there?' }, [dm]))).toBe(missing(who).send);
+      expect(refusal(op(s, who, 'messages.read', {}, [dm]))).toBe(missing(who).read);
+      // re-opening it answers as a stranger who does not accept your messages (Vega, FRIENDS-only, is such a stranger to Kai)
+      expect(refusal(op(s, who, 'conversations.open', { otherUserId: other }))).toBe(refusal(op(s, U.KAI, 'conversations.open', { otherUserId: U.VEGA })));
+    }
+    s = must(s, U.NOVA, 'blocks.remove', {}, [U.KAI]).state;
+    expect(conversationsFor(s, U.KAI).map((c) => c.conversationId)).toContain(dm);
+    expect(s.messages[dm]).toEqual(history);
+    const back = op(s, U.NOVA, 'messages.list', {}, [dm]);
+    expect(back.ok && back.value.data).toEqual(history);
+  });
+
+  it('an unfriended writer is refused by a FRIENDS policy exactly as a new DM would be; an EVERYONE policy still admits them', () => {
+    let s = createSocialFixture();
+    const dm = dmOf(s);
+    s = must(s, U.NOVA, 'friends.remove', {}, [U.KAI]).state;
+    const toFormerFriend = op(s, U.KAI, 'messages.send', { body: 'are we still talking?' }, [dm]);
+    expect(refusal(toFormerFriend)).toBe('permission-denied: this person is not accepting messages from you');
+    expect(refusal(toFormerFriend)).toBe(refusal(op(s, U.KAI, 'conversations.open', { otherUserId: U.VEGA })));
+    // the conversation itself is still theirs to read (an unfriend is not a block)
+    expect(op(s, U.KAI, 'messages.list', {}, [dm]).ok).toBe(true);
+    s = must(s, U.NOVA, 'privacy.update_self', { messagePolicy: 'EVERYONE' }).state;
+    expect(op(s, U.KAI, 'messages.send', { body: 'thanks' }, [dm]).ok).toBe(true);
   });
 });
