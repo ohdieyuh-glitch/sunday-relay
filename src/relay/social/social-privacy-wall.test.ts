@@ -6,7 +6,7 @@ import { conversationsFor } from './social-conversations';
 import { emptyWorldState, worldViewFor } from './world-presence';
 import { buildSocialView } from './social-preview';
 import { partyOf, type SocialState } from './social-state';
-import { ensureSocialUser } from './social-store';
+import { createInMemorySocialStore, ensureSocialUser } from './social-store';
 import { resolvePresenceFor } from './social-presence';
 import type { UserProfileView } from './social-contracts';
 
@@ -294,5 +294,53 @@ describe('D5: the world population counts only who the viewer may see', () => {
     expect(worldViewFor(open.w, open.s, U.KAI, t).context?.population).toBe(3);
     open.leave(U.NOVA);
     expect(worldViewFor(open.w, open.s, U.KAI, t).context?.population).toBe(2);
+  });
+});
+
+describe('D6: a block that separates a party tells the member it happens to the ORDINARY change -- the kick, or the leave', () => {
+  async function storeWithArena() {
+    const store = createInMemorySocialStore();
+    const run = async (name: Parameters<typeof store.apply>[0], actor: string, ids: string[], body: Record<string, unknown>) => {
+      const r = await store.apply(name, actor, { ids, body, query: {} }, NOW);
+      if (!r.ok) throw new Error(`${name} by ${actor}: ${r.error.message}`);
+      return r.value as Record<string, unknown> | null;
+    };
+    for (const id of [U.ORION, U.LYRA, U.KAI]) await store.ensureUser({ userId: id, displayName: id, handle: `@${id}` }, NOW);
+    for (const friend of [U.LYRA, U.KAI]) {
+      await run('requests.send', U.ORION, [], { toUserId: friend });
+      await run('requests.accept', friend, [(await store.read()).requests.find((r) => r.toUserId === friend)!.requestId], {});
+    }
+    await run('parties.create', U.ORION, [], {});
+    const pid = partyOf(await store.read(), U.ORION)!.partyId;
+    for (const member of [U.LYRA, U.KAI]) await run('party_invites.accept', member, [String((await run('parties.invite', U.ORION, [pid], { toUserId: member }))?.inviteId)], {});
+    const since = async (who: string) => (await store.eventsFor(who, 0, 1000)).latest;
+    const opsAfter = async (who: string, after: number) => (await store.eventsFor(who, after, 1000)).events.map((e) => e.op);
+    return { store, run, pid, since, opsAfter };
+  }
+
+  it('removed by the leader\'s block, Lyra gets exactly what a removal by the leader gives (parties.remove_member), nothing else', async () => {
+    const blockCase = await storeWithArena();
+    const b0 = await blockCase.since(U.LYRA);
+    await blockCase.run('blocks.add', U.ORION, [], { targetId: U.LYRA, confirmSharedParty: true });
+    const kickCase = await storeWithArena();
+    const k0 = await kickCase.since(U.LYRA);
+    await kickCase.run('parties.remove_member', U.ORION, [kickCase.pid, U.LYRA], {});
+    expect(await blockCase.opsAfter(U.LYRA, b0)).toEqual(['parties.remove_member']);
+    expect(await blockCase.opsAfter(U.LYRA, b0)).toEqual(await kickCase.opsAfter(U.LYRA, k0));
+  });
+
+  it('left behind by Kai\'s block, Lyra gets exactly what any leave gives the members who stay (parties.leave)', async () => {
+    const blockCase = await storeWithArena();
+    const b0 = await blockCase.since(U.LYRA);
+    await blockCase.run('blocks.add', U.KAI, [], { targetId: U.LYRA, confirmSharedParty: true });
+    const leaveCase = await storeWithArena();
+    const l0 = await leaveCase.since(U.LYRA);
+    await leaveCase.run('parties.leave', U.KAI, [leaveCase.pid], {});
+    expect(await blockCase.opsAfter(U.LYRA, b0)).toEqual(['parties.leave']);
+    expect(await blockCase.opsAfter(U.LYRA, b0)).toEqual(await leaveCase.opsAfter(U.LYRA, l0));
+    // and what Kai (the blocker) does next never reaches Lyra: the exemption is the party change alone
+    const after = await blockCase.since(U.LYRA);
+    await blockCase.run('presence.update_self', U.KAI, [], { availability: 'BUSY' });
+    expect(await blockCase.opsAfter(U.LYRA, after)).toEqual([]);
   });
 });

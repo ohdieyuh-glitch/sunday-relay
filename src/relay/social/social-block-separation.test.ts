@@ -55,8 +55,9 @@ describe('F1: leader removes, else blocker leaves', () => {
     expect(partyOf(out.state, U.LYRA)).toBeUndefined();
     expect(out.state.parties[pid].leaderId).toBe(U.ORION);
     expect(members(out.state, pid)).toEqual([U.KAI, U.ORION].sort());
-    // the remaining party is told; the removed, blocked player is told nothing (they find it on their next refresh)
-    expect([...out.audience].sort()).toEqual([U.KAI, U.ORION].sort());
+    // the remaining party is told, and so is the removed player -- the ordinary kick (founder, 10-04), never a block
+    expect([...out.audience].sort()).toEqual([U.KAI, U.LYRA, U.ORION].sort());
+    expect(out.eventOp).toBe('parties.remove_member');
   });
 
   it('2. a non-leader blocks a member: after the confirmation the BLOCKER leaves and the blocked member stays', () => {

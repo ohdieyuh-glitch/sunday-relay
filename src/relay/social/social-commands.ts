@@ -12,6 +12,8 @@
  * person is never sent an event about it (their views change on their next refresh, like any other). Reads have no audience.
  * THE BLOCK FLOOR: no update a player CAUSES ever reaches anyone blocked either way with them -- a shared party (which a
  * block does not break) included: B's self-mute or role change produces no event for the A that B blocked (F1, 10-02).
+ * ONE EXCEPTION, THE ORDINARY PARTY CHANGE (founder, 10-04): when a block separates a shared party, the member it happens to
+ * is told exactly what a kick or a leave tells anyone (floorExempt) -- never that it was a block.
  *
  * Pure: the same state, operation and inputs give the same result on every machine.
  */
@@ -98,6 +100,13 @@ export interface SocialCommandOutcome {
    * `blocks.add` would tell them a block happened, and who, by who left (the founder's wall: nothing names a block).
    */
   readonly eventOp?: SocialOperationId;
+  /**
+   * Members of the audience the block floor must NOT remove: the person a block's party change happened TO, told exactly what
+   * any such change tells them (founder, 10-04: the member a leader's block removes gets the ORDINARY parties.remove_member, a
+   * kick; and the member a blocker leaves is told the ordinary parties.leave, as every remaining member of any leave is).
+   * Silence there was itself the tell: a kick, a leave and an unfriend each notify; a block alone did not.
+   */
+  readonly floorExempt?: readonly SocialUserId[];
 }
 
 /** The operation's inputs: the path's ids in order (e.g. a request id, a party id then a member id) and the JSON body. */
@@ -280,7 +289,8 @@ export function applySocialOperation(
   const outcome = applyOne(reconcileBlockedParties(state), op, actorId, input, nowIso, world);
   if (!outcome.ok || outcome.value.audience.length === 0) return outcome;
   const after = outcome.value.state;
-  const audience = outcome.value.audience.filter((id) => id === actorId || !blockedEitherWay(after, actorId, id));
+  const exempt = new Set(outcome.value.floorExempt ?? []);
+  const audience = outcome.value.audience.filter((id) => id === actorId || exempt.has(id) || !blockedEitherWay(after, actorId, id));
   return { ok: true, value: { ...outcome.value, audience } };
 }
 
@@ -397,7 +407,10 @@ function applyOne(
       // Without `confirmSharedParty: true` it is refused with the founder's own warning and NOTHING changes (no block, no
       // membership change). Confirmed, it applies atomically: the block privacy AND the separation -- the leader removes
       // the blocked member and stays leader; otherwise the blocker leaves and the blocked member stays (separateForBlock).
-      // The remaining members are told their party changed; the blocked player is told nothing (the block floor).
+      // Everybody the change concerns is told it AS THE ORDINARY PARTY CHANGE and nothing more (founder, 10-04): the remaining
+      // members, and the blocked member too -- removed (a kick: parties.remove_member, exactly what a leader's removal tells the
+      // removed) or left behind by the blocker (parties.leave, exactly what any leave tells those who stay). Nothing names a
+      // block; the block itself (and its own `blocks.add`) is told to the blocker alone.
       const target = str(body, 'targetId', MAX_LABEL);
       if (!target.ok) return invalid(target.message);
       const targetId = target.value as string;
@@ -411,10 +424,14 @@ function applyOne(
       const separated = separateForBlock(state, actorId, targetId);
       if (!separated.ok) return separated;
       const remaining = shared !== undefined ? (separated.value.parties[shared.partyId]?.members.map((m) => m.userId) ?? []) : [];
-      const outcome = changed(blockUser(separated.value, actorId, targetId, nowIso), null, [actorId, ...remaining]);
+      const told = shared !== undefined ? [actorId, ...remaining, targetId] : [actorId];
+      const outcome = changed(blockUser(separated.value, actorId, targetId, nowIso), null, told);
       // TOLD AS THE PARTY CHANGE, NEVER AS A BLOCK: the leader removed a member, or the blocker left.
       if (!outcome.ok || shared === undefined) return outcome;
-      return { ok: true, value: { ...outcome.value, eventOp: shared.leaderId === actorId ? 'parties.remove_member' : 'parties.leave' } };
+      return {
+        ok: true,
+        value: { ...outcome.value, eventOp: shared.leaderId === actorId ? 'parties.remove_member' : 'parties.leave', floorExempt: [targetId] },
+      };
     }
     case 'blocks.remove':
       return changed(unblockUser(state, actorId, id0), null, [actorId]);
