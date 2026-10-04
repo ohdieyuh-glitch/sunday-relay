@@ -193,8 +193,9 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
 | **#324** | 031+032 (+033) migration window tooling (`docs/julius-migrations/window/`) and its Docker rehearsal records | base `relay/julius-13i-completion-r2` | n/a |
 | **#323** | Wonderland social backend and privacy wall P1–P5, migration **033** | on #321 | green |
 | **#325** | Wonderland voice/EOS: rooms are cliques of mutual visibility, PUID binding, **035 staged** behind 034 | on #323 | green |
-| **#327** | Wonderland R16 harness: three-party privacy scenario over HTTP against the real bridge **process**, plus restart durability | on #325 | one re-run pending (see the 032 teardown finding) |
-| **#328** | Wonderland social display names: the verified GitHub login is recorded at sign-in, and a nameless request never erases it | on #325 | pending |
+| **#328** | Wonderland social display names: the verified GitHub login is recorded at sign-in, and a nameless request never erases it | on #325 | green |
+| **#330** | Wonderland presence is a **lease**: a presence not refreshed for 120 s is absent everywhere (reads and decisions), a stale heartbeat is `NOT_IN_INSTANCE`, and the next live heartbeat moves live players out of a departed player's voice room | on #328 | see the PR |
+| **#327** | Wonderland R16 harness: 24 closed-list checks over HTTP against the real bridge **process**. The scenario keeps the heartbeat, and LEASE fails on a lapse. The restart check is split: DURABLE as stored, then RECONNECT (HELD/REENTERED), then PRESENCE | **restacked on #330** (it must sit above every product change) | green before the restack; re-run on the new head |
 
 **Findings to act on:**
 - **C could not run on the paid venue.** Every paid job's database is fresh, so a WITH arm was always `CARRY_EMPTY`. #326 is the transport. Without it, no C pair can run.
@@ -209,6 +210,16 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
   - Provisioning is the founder's.
   - Applying 031–033 there needs a reviewed live-store procedure (`DATABASE_URL` stays parked).
 - **Stale PRs:** #290, #291 and #293–#297 are fully folded into `main` (via #301/#304/#305/#310/#311). Recommend closing; that is the founder's call.
+- **Do not dispatch C's four paid runs yet.** On the retained paid record, **0 of 5** bundles would have been a valid WITHOUT arm. All three completed runs passed review with no blocking finding, so a WITH arm would be refused in preflight (`CARRY_SOURCE_NOT_A_VALID_PAIR`).
+  - Two facts the design must respect: the same contract gives the same Julius run id, and `promotedWarningCategories` is unreachable from a contract.
+  - Options A, B and C are in `docs/JULIUS_DECISION_C_PAIR_VALIDITY.md` (#326). The choice belongs to the founder and SECOND.
+- **Local-run caveats** (not product defects; CI is unaffected):
+  - **One test fails only inside a Claude Code cloud container:** `relay-bridge/julius/coding-agent-child-env.runtime.test.ts` "the login probe approves a first-party Max login…".
+    - The container sets `ANTHROPIC_BASE_URL` for its own proxy. `classifyClaudeAuth` classifies that as a gateway before it reads the fake CLI.
+    - The test clears only `ANTHROPIC_API_KEY`. It fails identically on #328's base commit.
+  - **Real-PG suites collide on one database.** With `JULIUS_TEST_DATABASE_URL` naming ONE database, a full `npm test` runs every real-PG suite in parallel against it.
+    - The suites that write the base database directly then collide (`julius-approval-at-dispatch`, `real-infra-julius`: duplicate keys).
+    - Run those alone, or against a fresh database.
 
 ### Migrations
 
@@ -312,7 +323,8 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
 - the voice/EOS backend (#325): client config at runtime, ID-token
   verification, PUID binding, server-enforced room planning, 035 staged;
 - the scripted R16 harness (#327): `scripts/wonderland-r16-harness.mjs`;
-- account display names from the verified GitHub login (#328).
+- account display names from the verified GitHub login (#328);
+- presence liveness (#330). Presence is a lease, and CORE's client must send `UPDATE_PRESENCE` at least every 30 s and re-enter on `NOT_IN_INSTANCE` (`WONDERLAND_BACKEND_CONTRACT.md`).
 
 **What is NOT on GitHub anywhere:**
 - the RC12/RC14 packages and their evidence;
@@ -384,6 +396,8 @@ it come the apply rehearsal (cloud Docker rehearsal recorded in #324) and SECOND
 verdict; then #321 lands. C (+1.10) is the next score-bearing work, after 033–035.
 C needs #322 and #326 landed before the freeze, plus the four C contracts
 (WITHOUT/WITH with `carryArm`/`carryFrom`), which belong to the founder and SECOND.
+Those contracts first need a pair-validity choice: see "Do not dispatch C's four
+paid runs yet" above.
 
 ---
 
