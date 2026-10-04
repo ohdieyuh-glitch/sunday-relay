@@ -25,11 +25,10 @@ SELECT to_regclass('relay_wonderland.julius_run_project_state') IS NOT NULL AS o
             AND am.amname = 'btree' AND NOT i.indisunique AND NOT i.indisprimary AND NOT i.indisexclusion
             AND i.indisvalid AND i.indpred IS NULL AND i.indexprs IS NULL
             AND i.indnatts = 2 AND i.indnkeyatts = 2
-            AND i.indkey::int2[] = ARRAY[
-                  (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'project_id'),
-                  (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'created_at')
-                ]::int2[]
-            AND i.indoption::int2[] = ARRAY[0, 0]::int2[]
+            -- int2vector is 0-based; cast to int2[] it keeps lower bound 0, and array = compares bounds: compare each element.
+            AND i.indkey[0] = (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'project_id')
+            AND i.indkey[1] = (SELECT attnum FROM pg_attribute WHERE attrelid = 'relay_wonderland.julius_runs'::regclass AND attname = 'created_at')
+            AND i.indoption[0] = 0 AND i.indoption[1] = 0
        ) AS new_index_matches;
 SELECT string_agg(DISTINCT held.index_column, ', ' ORDER BY held.index_column) AS update_columns_indexed
   FROM (
