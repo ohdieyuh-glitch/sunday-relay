@@ -10255,6 +10255,210 @@ namespace
 			GQaDashTrails->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaDashTrailsTick), 0.0f);
 		}));
 
+	/* ================================================================ wl.Qa.HandoffFilm: the founder's 10-03 references, staged to be filmed
+	 * The twin-sword STANCE (his reference photo) and the DASH (Genshin's "Running vs Dashing") for a recorder that starts on "WLFILM begin"
+	 * (core_film_handoff.ps1): noon, open ground, the player's own camera behind; the swords taken up the terminal's way; then STAND 4 s,
+	 * JOG 3 s (W held), the DOUBLE TAP with W HELD 3.5 s (the burst, then the sprint), W released and 3.5 s to settle, the stance from the
+	 * SIDE 3 s and from the FRONT 3 s. Twice a second a "WLFILM beat" line gives the time, the ground speed, the stride cycles a second
+	 * and whether the dash is on, so every frame of the film has its numbers. Only the Dog's own key handlers and movement input are
+	 * used. `quit` exits 8 s after the last beat.
+	 */
+	struct FQaHandoffFilm
+	{
+		TWeakObjectPtr<UWorld> World;
+		FTSTicker::FDelegateHandle Handle;
+		bool bQuit = false;
+		int32 Step = 0;
+		int32 Sub = 0;
+		double StepAt = 0.0;
+		double BeganAt = -1.0;
+		double NextLog = 0.0;
+		FVector Ahead = FVector::ForwardVector;
+		float Yaw = 0.0f;
+		/** The side and front views: QaStanceCamera's own camera, kept across ticks. */
+		FQaStance View;
+	};
+	TSharedPtr<FQaHandoffFilm> GQaHandoffFilm;
+
+	bool QaHandoffFilmTick(float)
+	{
+		if (!GQaHandoffFilm.IsValid())
+		{
+			return false;
+		}
+		FQaHandoffFilm& F = *GQaHandoffFilm;
+		UWorld* World = F.World.Get();
+		ARelayDogCharacter* Dog = QaDog(World);
+		FWonderlandMissionHandoff* Handoff = QaHandoff(World);
+		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		auto Finish = [&F](const TCHAR* Why)
+		{
+			if (UWorld* W = F.World.Get())
+			{
+				if (ARelayDogCharacter* D = QaDog(W))
+				{
+					D->QaForwardKey(false, false);
+					if (APlayerController* P = W->GetFirstPlayerController())
+					{
+						P->SetViewTargetWithBlend(D, 0.0f);
+					}
+				}
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM end (%s)"), Why);
+			const bool bQuit = F.bQuit;
+			GQaHandoffFilm.Reset();
+			if (bQuit)
+			{
+				FPlatformMisc::RequestExit(false);
+			}
+			return false;
+		};
+		if (World == nullptr || Dog == nullptr || Handoff == nullptr || PC == nullptr)
+		{
+			return Finish(TEXT("the world, the Dog or the handoff went away"));
+		}
+		const double Now = QaNow();
+		const double In = Now - F.StepAt;
+		auto Next = [&F, Now](int32 To)
+		{
+			F.Step = To;
+			F.Sub = 0;
+			F.StepAt = Now;
+		};
+		// THE BEATS IN NUMBERS, twice a second while filming
+		if (F.BeganAt >= 0.0 && Now >= F.NextLog)
+		{
+			F.NextLog = Now + 0.5;
+			const float Ground = FVector(Dog->GetVelocity().X, Dog->GetVelocity().Y, 0.0f).Size();
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM beat %d t=%.1f: %.0f uu/s, %.2f stride cycles a second, dashing %s, stance %.2f"), F.Step, Now - F.BeganAt,
+				Ground, Dog->QaStrideCycles(), Dog->IsDashing() ? TEXT("yes") : TEXT("no"), Dog->GetArmedStanceWeight());
+		}
+		switch (F.Step)
+		{
+		case 0:
+			if (UWonderlandUiSubsystem* Ui = QaUi(World))
+			{
+				if (Ui->IsWelcomeOpen())
+				{
+					Ui->DismissWelcome();
+				}
+			}
+			if (In < 4.0 || !Dog->GetCharacterMovement()->IsMovingOnGround())
+			{
+				return In < 40.0 ? true : Finish(TEXT("never ready"));
+			}
+			GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+			GEngine->Exec(World, TEXT("wl.Sky.Hour 12"));
+			PC->SetViewTargetWithBlend(Dog, 0.0f);
+			if (!Handoff->IsEquipped())
+			{
+				FString Said;
+				WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
+			}
+			Next(1);
+			return true;
+		case 1:
+			if (!Handoff->IsArmed() || In < 5.0)
+			{
+				return In < 20.0 ? true : Finish(TEXT("the swords were never held"));
+			}
+			// across open ground (the M1a dash QA's own heading), the player's camera behind and a little above, as the reference's
+			QaClearHeading(World, Dog, 2600.0f, F.Ahead);
+			F.Yaw = static_cast<float>(F.Ahead.Rotation().Yaw);
+			Dog->SetActorRotation(FRotator(0.0f, F.Yaw, 0.0f));
+			PC->SetControlRotation(FRotator(-10.0f, F.Yaw, 0.0f));
+			Next(2);
+			return true;
+		case 2:
+			if (In < 1.0)
+			{
+				return true;   // the camera settles behind
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM begin handoff"));
+			F.BeganAt = Now;
+			F.NextLog = Now;
+			Next(3);
+			return true;
+		case 3:
+			// STAND: the founder's reference stance, from the player's camera behind
+			if (In >= 4.0)
+			{
+				Dog->QaForwardKey(false, true);
+				Next(4);
+			}
+			return true;
+		case 4:
+			// JOG, W held
+			Dog->AddMovementInput(F.Ahead, 1.0f);
+			if (In >= 3.0)
+			{
+				Dog->QaForwardKey(false, false);
+				Next(5);
+			}
+			return true;
+		case 5:
+			// THE DOUBLE TAP (two presses inside the window), then W HELD: the burst, then the sprint
+			Dog->AddMovementInput(F.Ahead, 1.0f);
+			if (F.Sub == 0 && In >= 0.05) { Dog->QaForwardKey(false, true); F.Sub = 1; }
+			if (F.Sub == 1 && In >= 0.10) { Dog->QaForwardKey(false, false); F.Sub = 2; }
+			if (F.Sub == 2 && In >= 0.15) { Dog->QaForwardKey(false, true); F.Sub = 3; }
+			if (F.Sub == 3 && In >= 3.65)
+			{
+				Dog->QaForwardKey(false, false);
+				Next(6);
+			}
+			return true;
+		case 6:
+			// RELEASED: the sprint ends and the Dog settles back into the stance, still from behind
+			if (In >= 3.5)
+			{
+				Next(7);
+			}
+			return true;
+		case 7:
+			// the stance from the SIDE (the Dog's own left, the gold sword's side)
+			QaStanceCamera(F.View, World, Dog, -90.0, 300.0, 30.0, 50.0f);
+			if (In >= 3.0)
+			{
+				Next(8);
+			}
+			return true;
+		case 8:
+			// and from the FRONT (mirrored: gold on the screen's right)
+			QaStanceCamera(F.View, World, Dog, 0.0, 300.0, 30.0, 50.0f);
+			if (In >= 3.0)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM last beat at %.1f s"), Now - F.BeganAt);
+				PC->SetViewTargetWithBlend(Dog, 0.0f);
+				Next(9);
+			}
+			return true;
+		case 9:
+			return In < 8.0 ? true : Finish(TEXT("done"));
+		default:
+			return Finish(TEXT("an unknown step"));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaHandoffFilmCommand(
+		TEXT("wl.Qa.HandoffFilm"),
+		TEXT("The founder's 10-03 references staged to be FILMED (core_film_handoff.ps1 starts on \"WLFILM begin\"): the twin-sword stance from ")
+		TEXT("behind, the side and the front; a jog; the double tap and W held (the burst, then the sprint); the release. WLFILM beat lines ")
+		TEXT("give the speed and the stride cadence twice a second. `quit` exits after."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaHandoffFilm.IsValid() || World == nullptr)
+			{
+				return;
+			}
+			GQaHandoffFilm = MakeShared<FQaHandoffFilm>();
+			GQaHandoffFilm->World = World;
+			GQaHandoffFilm->bQuit = Args.Contains(TEXT("quit"));
+			GQaHandoffFilm->StepAt = QaNow();
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM handoff staging | %s"), *WonderlandBeta::BuildLabel());
+			GQaHandoffFilm->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaHandoffFilmTick), 0.0f);
+		}));
+
 	/* ================================================================ wl.Qa.SwordClip: no sword through the body that holds it (A5)
 	 * The founder: "verify clothes/wings/swords do not materially clip". For every skin holding the swords in the V, standing and then
 	 * walking: EVERY BOX OF BOTH SWORDS (blade, fuller, guard, grip, feathered wings, core -- as drawn, instance by instance) against
