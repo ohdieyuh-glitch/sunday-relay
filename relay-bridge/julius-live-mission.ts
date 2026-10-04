@@ -76,14 +76,15 @@ import { LocalJuliusArtifactStore } from '../src/relay/workspace/julius-tools/lo
 import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/julius-work-artifact-postgres';
 import { liveEvidenceLines } from './julius/live-evidence-lines';
 import {
-  liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveOneLine, liveResearchLines, liveTickAccountLine, liveTickBudgetLine,
-  liveWorkersBlockedLines,
+  liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveLearningFailedLine, liveOneLine, liveResearchLines, liveTickAccountLine,
+  liveTickBudgetLine, liveWorkersBlockedLines,
 } from './julius/live-report-lines';
 import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
   driveJuliusRunToTerminal,
   liveTickBudgetFor,
+  recordJuliusLearningOutcome,
   resolveLiveWorkers,
 } from './julius/live-composition';
 import { JOB_BUDGET_MS } from './reviewer-deadline';
@@ -1000,6 +1001,32 @@ async function main(argv: readonly string[]): Promise<number> {
       ...(tickOverride.override === undefined ? {} : { maxTicks: tickOverride.override }),
     });
 
+    /*
+     * THE LEARNING LOOP, CALLED BY THE RUNTIME (E9-a), and only for a contract that registers an arm
+     * of a matched pair. Every other mission runs exactly as it did. The arm is measured off its own
+     * durable trajectory and recorded as ONE ledger event; arm WITH is also compared with arm WITHOUT
+     * from this same store and gated under the policy the contract declared, and a PROMOTE is recorded
+     * as a proposal and nothing more (`recordJuliusLearningOutcome`).
+     *
+     * BEFORE THE RESULT, so the `  run:` line stays directly under it (F10). A record that could not be
+     * made is said here and FAILS THE JOB: an arm of a registered pair whose measurement never reached
+     * the ledger is not a usable arm, and exit 0 would let it be counted as one.
+     */
+    let learningUnrecorded = false;
+    if (contract.learningPair !== undefined) {
+      try {
+        const learning = await recordJuliusLearningOutcome({
+          store: handoffs.store, runId: submitted.runId, projectId: contract.projectId,
+          registration: contract.learningPair, objectiveDigest: request.missionBindingDigest,
+          roles: resolution.entries.map((entry) => entry.worker.role),
+        });
+        for (const line of learning.lines) out(line);
+      } catch (error) {
+        learningUnrecorded = true;
+        out(liveLearningFailedLine(error));
+      }
+    }
+
     const tasks = await handoffs.store.tasksForRun(submitted.runId, contract.projectId);
     const evidence = await handoffs.store.evidenceForRun(submitted.runId, contract.projectId);
     const findings = await handoffs.store.findingsForRun(submitted.runId, contract.projectId);
@@ -1020,7 +1047,7 @@ async function main(argv: readonly string[]): Promise<number> {
     for (const line of liveEvidenceLines(evidence, tasks)) out(line);
     for (const finding of findings) out(`  finding ${finding.findingId} blocking=${finding.blocking} status=${finding.status} — ${finding.claim}`);
     out(`  verification decisions: ${decisions.map((decision) => decision.action).join(', ') || 'none'}`);
-    return outcome.state === 'COMPLETED' ? 0 : 1;
+    return outcome.state === 'COMPLETED' && !learningUnrecorded ? 0 : 1;
   } finally {
     await pool.end().catch(() => undefined);
   }

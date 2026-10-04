@@ -52,7 +52,26 @@ import {
   noJuliusResearch,
   type JuliusResearchLedger,
   type JuliusResearchPolicy,
+  JULIUS_RUNTIME_VERSION,
+  JULIUS_TERMINAL_MISSION_STATES,
+  compareJuliusLearningPair,
+  decideJuliusLearningPromotion,
+  juliusLearningArmEvent,
+  juliusLearningArmEventId,
+  juliusLearningMetrics,
+  juliusLearningPairRefusal,
+  readJuliusLearningArmRecord,
+  type JuliusLearningComparison,
+  type JuliusLearningMetrics,
+  type JuliusLearningPairOutcome,
+  type JuliusLearningPairing,
+  type JuliusLearningRegistration,
+  type JuliusOperationalEvent,
+  type JuliusTimelineEntry,
+  type JuliusTrajectoryEvent,
+  type JuliusTrajectoryReader,
 } from '../../src/relay/mission/julius';
+import { liveLearningLines } from './live-report-lines';
 import { createJuliusResearchMediator, juliusResearchPortFrom } from './research-mediator';
 import type { MeteredOutcome } from '../../src/relay/mission/live-reach';
 
@@ -1097,4 +1116,155 @@ async function failForTickBudget(args: {
     haltCause: state === 'FAILED' ? `${reasonCode}: ${safeSummary}` : null,
     tickAccount: account,
   };
+}
+
+/* ------------------------------------------- the Learning Loop's caller */
+
+/** What `recordJuliusLearningOutcome` did for one arm, and the lines the entrypoint prints for it. */
+export interface JuliusLearningOutcome {
+  /**
+   * RECORDED: this call wrote the arm's record. DUPLICATE: the same record
+   * already stood, as it does for a retried job. NOT_TERMINAL: the run has not
+   * finished, so there is no outcome to measure and nothing was written.
+   */
+  readonly record: 'RECORDED' | 'DUPLICATE' | 'NOT_TERMINAL';
+  readonly runId: string;
+  readonly runState: string;
+  readonly registration: JuliusLearningRegistration;
+  /** This arm's projection off its own trajectory. Null when nothing was measured. */
+  readonly metrics: JuliusLearningMetrics | null;
+  readonly trajectoryRows: number | null;
+  /** Arm WITH only: what it found when it met arm WITHOUT. */
+  readonly pair: JuliusLearningPairOutcome | null;
+  /** The event appended (or found standing). Null when nothing was written. */
+  readonly event: JuliusOperationalEvent | null;
+  readonly lines: readonly string[];
+}
+
+/**
+ * THE LEARNING LOOP'S RUNTIME CALLER (E9-a): one arm of a registered matched
+ * pair, measured at its terminal state and put on the record.
+ *
+ * Until this, nothing in the runtime called the loop. It was an evaluation
+ * surface a test read after a mission, so whether prior knowledge made the
+ * next mission better could only be answered by a person choosing which
+ * numbers to read, after the fact. The live mission now calls this after the
+ * drive, and ONLY for a contract that registers an arm (`learningPair`); every
+ * other mission is untouched.
+ *
+ *   ARM WITHOUT  projects its metrics from its own durable trajectory and
+ *                records them, with its pairing and the declared policy.
+ *   ARM WITH     does the same, then reads arm WITHOUT's RECORD and
+ *                TRAJECTORY from this same store and project, compares the
+ *                pair under the declared policy, and records the comparison
+ *                and the gate's decision beside its own measurement.
+ *
+ * ONE EVENT PER RUN, idempotent (`juliusLearningArmEventId`): a retried job
+ * finds its record standing and reports DUPLICATE, and a record that would SAY
+ * something different under the same id is refused by the ledger
+ * (`JuliusEventIdConflict`), so the first one stands.
+ *
+ * A REFUSED COMPARISON IS RECORDED, NOT THROWN. A WITHOUT arm that left no
+ * record, was registered under another digest or policy, or ran another
+ * objective is a pair the gate refuses, by name, on the record: an experiment
+ * that could not be scored is a result too. What IS thrown is what would make
+ * the record false: a run that is not in this project, or an arm WITH that
+ * resolved to its own WITHOUT run (the replay MATCHED_PAIR_PREREG §6 warns
+ * of), which would otherwise write a WITH verdict onto the WITHOUT run.
+ *
+ * NEVER A PROMOTION. On PROMOTE the record carries a PROPOSAL and this returns;
+ * `promoteJuliusMemoryClaim` is an independent authority's to call, and this
+ * function has no path to it.
+ *
+ * A RUN THAT HAS NOT FINISHED HAS NO OUTCOME: nothing is written, and the
+ * returned lines say so. A later attempt that drives the same run to its end
+ * records it then.
+ */
+export async function recordJuliusLearningOutcome(input: {
+  readonly store: Pick<JuliusRuntimeStore, 'loadRun' | 'appendEvent'> & JuliusTrajectoryReader & JuliusTimelineReader;
+  readonly runId: string;
+  readonly projectId: string;
+  readonly registration: JuliusLearningRegistration;
+  /** The mission's binding digest (`missionBindingDigest`): the objective both arms must share. */
+  readonly objectiveDigest: string;
+  /** The C.A.R.D. roles this run was resolved with. */
+  readonly roles: readonly string[];
+  readonly now?: () => string;
+}): Promise<JuliusLearningOutcome> {
+  const { store, runId, projectId, registration } = input;
+  const now = input.now ?? (() => new Date().toISOString());
+  const run = await store.loadRun(runId, projectId);
+  if (run === null) throw new Error('learning_run_not_found');
+  if (registration.arm === 'WITH' && registration.withoutRunId === runId) throw new Error('learning_pair_same_run');
+  const finish = (outcome: Omit<JuliusLearningOutcome, 'lines'>): JuliusLearningOutcome => ({ ...outcome, lines: liveLearningLines(outcome) });
+  if (!JULIUS_TERMINAL_MISSION_STATES.includes(run.state)) {
+    return finish({ record: 'NOT_TERMINAL', runId, runState: run.state, registration, metrics: null, trajectoryRows: null, pair: null, event: null });
+  }
+  const events = await store.trajectoryForRun(runId, projectId);
+  const pairing: JuliusLearningPairing = { objectiveDigest: input.objectiveDigest, roles: [...input.roles].sort(), runtimeVersion: JULIUS_RUNTIME_VERSION };
+  const metrics = juliusLearningMetrics(events, JULIUS_RUNTIME_VERSION);
+  const pair = registration.arm === 'WITH' ? await learningPairOutcome({ store, projectId, registration, events, pairing }) : null;
+  const event = juliusLearningArmEvent({
+    runId, projectId, runState: run.state, registration, pairing, metrics, trajectoryRows: events.length, pair, occurredAt: now(),
+  });
+  const recorded = await store.appendEvent(event);
+  return finish({ record: recorded ? 'RECORDED' : 'DUPLICATE', runId, runState: run.state, registration, metrics, trajectoryRows: events.length, pair, event });
+}
+
+/** Arm WITH against arm WITHOUT: the record first, then the trajectory, then the loop. */
+async function learningPairOutcome(input: {
+  readonly store: JuliusTrajectoryReader & JuliusTimelineReader;
+  readonly projectId: string;
+  readonly registration: JuliusLearningRegistration;
+  readonly events: readonly JuliusTrajectoryEvent[];
+  readonly pairing: JuliusLearningPairing;
+}): Promise<JuliusLearningPairOutcome> {
+  const { registration } = input;
+  const withoutRunId = registration.withoutRunId;
+  // The contract parser requires it of arm WITH; a registration built by hand gets no default.
+  if (withoutRunId === undefined) throw new Error('learning_without_run_required');
+  const refused = (reasonCode: string, found: { readonly withoutRunState: string | null; readonly withoutEventId: string | null }): JuliusLearningPairOutcome => {
+    const comparison: JuliusLearningComparison = { outcome: 'UNCOMPARABLE', reasonCode };
+    return { withoutRunId, ...found, withoutTrajectoryRows: null, comparison, decision: decideJuliusLearningPromotion(comparison, registration.policy) };
+  };
+  const recordId = juliusLearningArmEventId(withoutRunId);
+  const entry = await learningRecordOf(input.store, withoutRunId, input.projectId, recordId);
+  if (entry === null) return refused('learning_pair_without_unrecorded', { withoutRunState: null, withoutEventId: null });
+  const read = readJuliusLearningArmRecord(entry.facts);
+  if (!read.ok) return refused(read.reasonCode, { withoutRunState: null, withoutEventId: recordId });
+  const found = { withoutRunState: read.record.runState, withoutEventId: recordId };
+  const mismatch = juliusLearningPairRefusal({ registration, without: read.record });
+  if (mismatch !== null) return refused(mismatch, found);
+  // THE WITHOUT ARM'S PAIRING IS ITS OWN RECORD'S, never this contract's: recomputed
+  // here, the loop's matched-pair refusal could not fire (`julius-learning-record.ts`).
+  const withoutEvents = await input.store.trajectoryForRun(withoutRunId, input.projectId);
+  const comparison = compareJuliusLearningPair({
+    without: { events: withoutEvents, pairing: read.record.pairing },
+    with: { events: input.events, pairing: input.pairing },
+    dimensions: registration.policy.dimensions,
+  });
+  return { withoutRunId, ...found, withoutTrajectoryRows: withoutEvents.length, comparison, decision: decideJuliusLearningPromotion(comparison, registration.policy) };
+}
+
+const LEARNING_TIMELINE_PAGE = 500;
+
+/**
+ * THE WITHOUT ARM'S RECORD, found by its id on that run's own timeline, paged
+ * to the end: it is written after the run's last event, so it is on the last
+ * page a reader reaches. A page that claims more and carries nothing would
+ * loop forever, so it is a reader defect, refused by name.
+ */
+async function learningRecordOf(
+  reader: JuliusTimelineReader, runId: string, projectId: string, eventId: string,
+): Promise<JuliusTimelineEntry | null> {
+  let since = 0;
+  for (;;) {
+    const page = await reader.timeline({ runId, projectId, sinceSequence: since, limit: LEARNING_TIMELINE_PAGE });
+    const found = page.entries.find((entry) => entry.eventId === eventId);
+    if (found !== undefined) return found;
+    if (!page.hasMore) return null;
+    const last = page.entries[page.entries.length - 1];
+    if (last === undefined || last.sequence <= since) throw new Error('learning_timeline_not_advancing');
+    since = last.sequence;
+  }
 }
