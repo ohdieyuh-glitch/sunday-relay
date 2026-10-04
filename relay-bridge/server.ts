@@ -658,6 +658,13 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             installBaseUrl: githubInstallUrl === '' ? null : githubInstallUrl,
             claimStore: signInClaimStore,
             appIdentity: githubAppIdentity,
+            // The verified login becomes the player's social display name, from the
+            // account and never from a client. No social database: nothing to record.
+            onIdentityVerified: async ({ participantId, login }) => {
+              const socialPool = juliusPool();
+              if (socialPool === null) return;
+              await new WonderlandSocialPostgresStore(socialPool).upsertProfile({ playerId: participantId, displayName: login });
+            },
           });
           if (githubAuthResult !== null) {
             // The sign-in callback redirects the browser back to the frontend

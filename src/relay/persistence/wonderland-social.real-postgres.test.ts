@@ -124,6 +124,20 @@ suite('Wonderland social on real PostgreSQL (migration 033)', () => {
       expect(await refusalOf(pool, WONDERLAND_MIGRATION_033)).toBeNull();
     });
 
+    it('a name recorded from the account survives a request that knows none; a new player starts Unknown', async () => {
+      const pool = await create('names', WONDERLAND_MIGRATIONS);
+      const store = new WonderlandSocialPostgresStore(pool);
+      await store.upsertProfile({ playerId: 'ann', displayName: 'ann-on-github' });
+      await store.ensureProfile('ann');
+      await store.ensureProfile('ben');
+      await store.ensureProfile('ben');
+      const rows = await pool.query<{ player_id: string; display_name: string | null }>(
+        'SELECT player_id, display_name FROM relay_wonderland.social_profiles ORDER BY player_id');
+      expect(rows.rows).toEqual([{ player_id: 'ann', display_name: 'ann-on-github' }, { player_id: 'ben', display_name: null }]);
+      expect((await store.stateFor({ viewerId: 'ann' })).profiles.ann).toEqual({ displayName: 'ann-on-github' });
+      await expect(store.ensureProfile('not a player id')).rejects.toThrow('wonderland_social_player_invalid');
+    });
+
     it('the schema refuses the states the rules forbid: two parties for one player, self-blocks, a friendship stored twice', async () => {
       const pool = await create('constraints', WONDERLAND_MIGRATIONS);
       await pool.query("INSERT INTO relay_wonderland.players(player_id) VALUES('ann'),('ben')");

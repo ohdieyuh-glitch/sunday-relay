@@ -33,6 +33,12 @@ export interface WonderlandSocialStore {
   }): Promise<WonderlandSocialOutcome>;
   /** Server-side only: the account's display name, never a client's claim. */
   upsertProfile(input: { readonly playerId: string; readonly displayName: string | null }): Promise<void>;
+  /**
+   * The player EXISTS socially, without touching a name the account already
+   * gave them. A request that knows no name must never erase one: `null` here
+   * would be "Unknown" written over a verified name.
+   */
+  ensureProfile(playerId: string): Promise<void>;
   /** `publicInstanceIds`: the instances a listing will count, so their occupants are read too. */
   stateFor(input: { readonly viewerId: string; readonly publicInstanceIds?: readonly string[] }): Promise<WonderlandSocialState>;
   voiceStateFor(input: { readonly participantIds: readonly string[] }): Promise<WonderlandSocialState>;
@@ -57,6 +63,10 @@ export function createMemoryWonderlandSocialStore(initial: WonderlandSocialState
     async upsertProfile({ playerId, displayName }) {
       if (!isWonderlandPlayerId(playerId)) throw new Error('wonderland_social_player_invalid');
       state = { ...state, profiles: { ...state.profiles, [playerId]: { displayName } } };
+    },
+    async ensureProfile(playerId) {
+      if (!isWonderlandPlayerId(playerId)) throw new Error('wonderland_social_player_invalid');
+      if (state.profiles[playerId] === undefined) state = { ...state, profiles: { ...state.profiles, [playerId]: { displayName: null } } };
     },
     async stateFor() { return state; },
     async voiceStateFor() { return state; },

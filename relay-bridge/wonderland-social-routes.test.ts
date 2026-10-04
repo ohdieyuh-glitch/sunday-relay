@@ -167,3 +167,32 @@ describe('what a player is told', () => {
     expect((await call(player('ann'), 'DELETE', '/wonderland/social/me'))?.status).toBe(405);
   });
 });
+
+describe('display names come from the account, and a request that knows none never erases one', () => {
+  it('a name recorded at sign-in survives every later request, and reaches only those who may see the player', async () => {
+    const { store, player, command, call } = stage({ displayNameFor: undefined });
+    const ann = player('ann');
+    const bob = player('bob');
+    // What sign-in records from the verified identity (`onIdentityVerified`).
+    await store.upsertProfile({ playerId: 'ann', displayName: 'ann-on-github' });
+    for (const token of [ann, bob, ann]) await call(token, 'GET', '/wonderland/social/me');
+    for (const token of [ann, bob]) {
+      await command(token, { kind: 'ENTER_INSTANCE', instanceId: 'public:plaza', location: null, activity: 'IDLE', dogId: null });
+    }
+    const named = (view: unknown, playerId: string) =>
+      ((view as { data: { players: { playerId: string; displayName: string | null }[] } }).data.players.find((entry) => entry.playerId === playerId) ?? null);
+    expect(named((await call(bob, 'GET', '/wonderland/social/roster'))!.body, 'ann')?.displayName).toBe('ann-on-github');
+    // A player the account never named is Unknown — null — never a guess.
+    expect(named((await call(ann, 'GET', '/wonderland/social/roster'))!.body, 'bob')?.displayName).toBeNull();
+    expect(store.snapshot().profiles.ann).toEqual({ displayName: 'ann-on-github' });
+    // Hidden from strangers, the name goes with everything else.
+    await command(ann, { kind: 'SET_SETTINGS', settings: { visibility: 'HIDDEN_FROM_STRANGERS' } });
+    expect(JSON.stringify((await call(bob, 'GET', '/wonderland/social/roster'))!.body)).not.toContain('ann-on-github');
+  });
+
+  it('a composition with an authoritative source still supplies the name on every request', async () => {
+    const { store, player, call } = stage();
+    await call(player('cal'), 'GET', '/wonderland/social/me');
+    expect(store.snapshot().profiles.cal).toEqual({ displayName: 'CAL' });
+  });
+});

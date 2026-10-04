@@ -355,6 +355,16 @@ export class WonderlandSocialPostgresStore implements WonderlandSocialStore {
       [input.playerId, name]);
   }
 
+  async ensureProfile(playerId: string): Promise<void> {
+    if (!isWonderlandPlayerId(playerId)) throw new Error('wonderland_social_player_invalid');
+    await this.pool.query('INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING', [playerId]);
+    // A name already recorded (from the account, at sign-in) is left exactly as it is.
+    await this.pool.query(
+      `INSERT INTO relay_wonderland.social_profiles(player_id, display_name, updated_at) VALUES($1,NULL,now())
+       ON CONFLICT (player_id) DO NOTHING`,
+      [playerId]);
+  }
+
   private async readConsistent(request: SliceRequest): Promise<WonderlandSocialState> {
     const client = await this.pool.connect();
     try {

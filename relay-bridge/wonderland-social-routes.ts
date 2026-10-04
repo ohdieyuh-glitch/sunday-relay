@@ -162,8 +162,10 @@ export async function handleWonderlandSocialRoute(
   if (typeof player !== 'string') return player;
   const store = ports.store;
   // A signed-in player EXISTS socially from their first request: others can find them, befriend them and block them.
-  // The name is the account's when the composition supplies one, and Unknown (null) when it does not — never a guess.
-  await store.upsertProfile({ playerId: player, displayName: ports.displayNameFor === undefined ? null : await ports.displayNameFor(player) });
+  // The name is the account's: recorded at sign-in from the verified identity (`onIdentityVerified`), or supplied
+  // here by a composition that has an authoritative source. A request that knows no name never erases one.
+  if (ports.displayNameFor === undefined) await store.ensureProfile(player);
+  else await store.upsertProfile({ playerId: player, displayName: await ports.displayNameFor(player) });
   const tail = input.path.slice(WONDERLAND_SOCIAL_PREFIX.length);
   const segment = (prefix: string): string | null => {
     if (!tail.startsWith(prefix)) return null;

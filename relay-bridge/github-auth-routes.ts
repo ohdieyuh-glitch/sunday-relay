@@ -241,6 +241,14 @@ export interface GithubAuthDeps {
    *  list). Defaults to the real `fetch`; injected in tests so no real network
    *  is touched — mirrors github-app-installation's own `doFetch` seam. */
   readonly discoverFetch?: FetchLike;
+  /**
+   * WHO SIGNED IN, as GitHub itself answered: the participant id and the
+   * VERIFIED login, after the session is minted. The composition records the
+   * login as the player's display name (Wonderland social), so another player
+   * sees the account's own name — never a name a client chose. A failure here
+   * never fails a sign-in: the name then stays Unknown, which is true.
+   */
+  readonly onIdentityVerified?: (input: { readonly participantId: string; readonly login: string }) => Promise<void>;
 }
 
 /** A route result that may redirect. The github-auth callback redirects the
@@ -328,6 +336,9 @@ export async function handleGithubAuthRoute(
       // A verified GitHub id that does not fit the participant shape is a bug in
       // the encoding, not a user error — refuse rather than mint a nameless one.
       return errResult(500, 'session_mint_failed', 'The verified identity could not be turned into a session.');
+    }
+    if (deps.onIdentityVerified !== undefined) {
+      await deps.onIdentityVerified({ participantId, login: identity.login }).catch(() => undefined);
     }
     // The token must NOT ride in the redirect URL. Mint a one-time claim, and
     // send the browser back to the frontend with only that claim in the fragment

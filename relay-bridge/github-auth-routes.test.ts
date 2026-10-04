@@ -131,6 +131,29 @@ describe('GET /auth/github/callback mints a session from the verified identity',
     expect(d.stateStore.size).toBe(0);
   });
 
+  it('hands the VERIFIED login to the composition after minting, and a failure there never fails the sign-in', async () => {
+    const seen: Array<{ participantId: string; login: string }> = [];
+    const d = deps({ onIdentityVerified: async (input) => { seen.push({ ...input }); } });
+    const state = ((await start(d))?.body as { data: { state: string } }).data.state;
+    // A client cannot name itself: the callback carries only code and state, and the login is GitHub's answer.
+    const r = await callback(d, `code=abc&state=${state}&login=someone-else`);
+    expect(r?.status).toBe(302);
+    expect(seen).toEqual([{ participantId: 'ghu-4242', login: 'beta-user' }]);
+
+    const failing = deps({ onIdentityVerified: async () => { throw new Error('social database down'); } });
+    const failingState = ((await start(failing))?.body as { data: { state: string } }).data.state;
+    const signedIn = await callback(failing, `code=abc&state=${failingState}`);
+    expect(signedIn?.status, 'the session is still minted and claimed; the name stays Unknown').toBe(302);
+    expect((await redeemClaim(failing, claimFromRedirect(signedIn?.redirect)))?.status).toBe(200);
+  });
+
+  it('does not report an identity for a sign-in that did not happen', async () => {
+    const seen: unknown[] = [];
+    const d = deps({ onIdentityVerified: async (input) => { seen.push(input); } });
+    await callback(d, 'code=abc&state=forged');
+    expect(seen).toEqual([]);
+  });
+
   it('REFUSES a forged state and never exchanges a code (spends nothing)', async () => {
     let exchanged = false;
     const d = deps({ exchange: async () => { exchanged = true; return { login: 'x', id: 1, type: 'User' }; } });

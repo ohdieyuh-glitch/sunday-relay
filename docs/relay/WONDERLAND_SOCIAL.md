@@ -45,7 +45,14 @@ There is one relation, `wonderlandRelationOf`: `SELF`, `BLOCKED` (either directi
    - The final RC needs social from the native client, so widening the scope is a one-line, reviewed change. The code path and its tests already exist.
    - **The copy guard:** with no Origin, only a native credential is accepted, never a copied browser token.
 3. **Default visibility is `EVERYONE`**, stated as a constant, not inferred. Changing it is a product decision.
-4. **Display names come from the account layer.** The bridge has no account-name source yet, so names are `null` and render "Unknown". The route registers every signed-in player so that they can be found.
+4. **Display names come from the account layer.**
+   - At GitHub sign-in, the bridge records the **verified login** (GitHub's own answer, keyed by the stable account id `ghu-<id>`) as the player's display name, through `onIdentityVerified`.
+   - A rename on GitHub arrives with the next sign-in.
+   - A social request that knows no name only makes sure the player exists (`ensureProfile`). It never writes `null` over a recorded name.
+   - A player with no recorded name (e.g. a paired native session) is `null` and renders "Unknown", never a guess.
+   - A failure to record a name never fails a sign-in.
+   - No client can name itself.
+   - Proven end to end by `relay-bridge/wonderland-social-names.real-postgres.test.ts`: two GitHub sign-ins, each player shown the other's login, a rename, and hiding taking the name away. Two mutants are killed: a nameless upsert, and no recording at sign-in.
 5. **Two ordinary members of one server who block each other both stay.** Neither has authority over the other, and the wall makes them invisible and inaudible to each other.
 
 ## Not done here, and where it goes
