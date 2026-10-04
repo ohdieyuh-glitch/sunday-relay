@@ -143,6 +143,18 @@ export function audienceAdmits(
   }
 }
 
+/**
+ * HIDDEN FROM THIS VIEWER by the subject's own choice (the founder, 10-04, P1 + P2): their presence audience leaves the viewer
+ * out, or they appear offline. Not the same as offline -- someone who simply signed out is NOT hidden. Used where presence
+ * would otherwise leak sideways: the live world view (P1) and the Recent Players read (P2).
+ */
+export function presenceHiddenFrom(state: SocialState, viewerId: SocialUserId, subjectId: SocialUserId): boolean {
+  if (viewerId === subjectId) return false;
+  const subject = state.users[subjectId];
+  if (subject === undefined) return true;
+  return subject.presence.availability === 'APPEAR_OFFLINE' || !audienceAdmits(state, subject.privacy.presenceVisibility, viewerId, subjectId);
+}
+
 export function friendIdsOf(state: SocialState, userId: SocialUserId): SocialUserId[] {
   return state.friendships
     .filter((f) => f.userA === userId || f.userB === userId)

@@ -20,7 +20,7 @@
 
 import type { SocialServerKind, SocialUserId } from './social-contracts';
 import { resolvePresenceFor } from './social-presence';
-import { hasBlocked, partyOf, type SocialState } from './social-state';
+import { hasBlocked, partyOf, presenceHiddenFrom, type SocialState } from './social-state';
 
 export const WORLD_PUBLIC_CAPACITY = 32;
 export const WORLD_PRIVATE_CAPACITY = 16;
@@ -76,7 +76,16 @@ export interface WorldState {
   readonly avatars: Readonly<Record<SocialUserId, AvatarState>>;
   readonly invites: readonly WorldInvite[];
   readonly nextSerial: number;
+  /**
+   * Players an OWNER'S BLOCK just removed from that owner's private server (the founder, 10-04, P4), until when their next
+   * report is answered with the generic "You can't stay in this server." instead of "Join a world first". Never names a block.
+   */
+  readonly removals?: Readonly<Record<SocialUserId, number>>;
 }
+
+/** How long a removed player's next reports read "You can't stay in this server." (their client's tick learns it within it). */
+export const WORLD_REMOVAL_NOTICE_MS = 60_000;
+export const WORLD_REMOVAL_MESSAGE = "You can't stay in this server.";
 
 export function emptyWorldState(): WorldState {
   return { contexts: {}, avatars: {}, invites: [], nextSerial: 1 };
@@ -104,7 +113,8 @@ function withoutMember(world: WorldState, userId: SocialUserId): WorldState {
 }
 
 function withMember(world: WorldState, context: WorldContext, userId: SocialUserId): WorldState {
-  const left = withoutMember(world, userId);
+  const moved = world.removals?.[userId] === undefined ? world : { ...world, removals: Object.fromEntries(Object.entries(world.removals ?? {}).filter(([id]) => id !== userId)) };
+  const left = withoutMember(moved, userId);
   const current = left.contexts[context.contextId] ?? context;
   return { ...left, contexts: { ...left.contexts, [context.contextId]: { ...current, memberIds: [...current.memberIds, userId] } } };
 }
@@ -124,7 +134,10 @@ export function sweepWorld(world: WorldState, nowMs: number): WorldState {
     if (nowMs - a.reportedAtMs > WORLD_AVATAR_STALE_MS) next = withoutMember(next, a.userId);
   }
   const invites = next.invites.filter((i) => i.expiresAtMs > nowMs);
-  return invites.length === next.invites.length ? next : { ...next, invites };
+  if (invites.length !== next.invites.length) next = { ...next, invites };
+  const removals = Object.entries(next.removals ?? {}).filter(([, until]) => until > nowMs);
+  if (removals.length !== Object.keys(next.removals ?? {}).length) next = { ...next, removals: Object.fromEntries(removals) };
+  return next;
 }
 
 export type WorldJoinTarget =
@@ -243,6 +256,13 @@ export function leaveWorld(world: WorldState, actorId: SocialUserId): WorldState
   return withoutMember(world, actorId);
 }
 
+/** An OWNER'S BLOCK removes the blocked player from the owner's private server (the founder, 10-04, P4): out at once, and their
+ *  next reports read the generic WORLD_REMOVAL_MESSAGE for WORLD_REMOVAL_NOTICE_MS. */
+export function removeFromPrivateServer(world: WorldState, userId: SocialUserId, nowMs: number): WorldState {
+  const out = withoutMember(world, userId);
+  return { ...out, removals: { ...(out.removals ?? {}), [userId]: nowMs + WORLD_REMOVAL_NOTICE_MS } };
+}
+
 /** INVITE a friend into the actor's current context: the presence authority's `can.inviteToServer` decides. */
 export function inviteToWorld(world: WorldState, social: SocialState, actorId: SocialUserId, toUserId: SocialUserId, nowMs: number): WorldResult<{ world: WorldState; inviteId: string; delivered: boolean }> {
   const context = contextOf(world, actorId);
@@ -276,7 +296,10 @@ export interface AvatarReport {
 /** The actor's own representation, as their client reports it. Only ever their own; only inside their context. */
 export function reportAvatar(world: WorldState, actorId: SocialUserId, report: AvatarReport, nowMs: number): WorldResult<WorldState> {
   const context = contextOf(world, actorId);
-  if (context === undefined) return fail('not-found', 'Join a world first');
+  if (context === undefined) {
+    if ((world.removals?.[actorId] ?? 0) > nowMs) return fail('permission-denied', WORLD_REMOVAL_MESSAGE);
+    return fail('not-found', 'Join a world first');
+  }
   for (const n of [report.x, report.y, report.z, report.yaw, report.speed]) {
     if (!Number.isFinite(n) || Math.abs(n) > WORLD_COORD_LIMIT) return fail('validation-failed', 'position out of range');
   }
@@ -309,7 +332,11 @@ export interface WorldView {
 
 export function worldViewFor(world: WorldState, social: SocialState, viewerId: SocialUserId, nowMs: number): WorldView {
   const context = contextOf(world, viewerId);
-  const visible = (id: SocialUserId) => id !== viewerId && !hasBlocked(social, id, viewerId) && !hasBlocked(social, viewerId, id);
+  const unwalled = (id: SocialUserId) => id !== viewerId && !hasBlocked(social, id, viewerId) && !hasBlocked(social, viewerId, id);
+  // WHO IS SEEN IN THE WORLD (the founder, 10-04, P1): a player hiding their presence from this viewer -- appearing offline, or a
+  // presence audience that leaves the viewer out -- is not shown: no figure, no name, not counted. Friends follow the player's own
+  // settings, through the one presence rule. An invitation is the sender's own act, so it is judged by the wall alone.
+  const visible = (id: SocialUserId) => unwalled(id) && !presenceHiddenFrom(social, viewerId, id);
   const avatars =
     context === undefined
       ? []
@@ -319,7 +346,7 @@ export function worldViewFor(world: WorldState, social: SocialState, viewerId: S
           .filter((a): a is AvatarState => a !== undefined && nowMs - a.reportedAtMs <= WORLD_AVATAR_STALE_MS && a.contextId === context.contextId)
           .map((a) => ({ ...a, displayName: social.users[a.userId]?.profile.displayName ?? 'Player', ageMs: nowMs - a.reportedAtMs }));
   const invites = world.invites
-    .filter((i) => i.toUserId === viewerId && i.expiresAtMs > nowMs && visible(i.fromUserId) && world.contexts[i.contextId] !== undefined && !walledFromOwner(social, world.contexts[i.contextId], viewerId))
+    .filter((i) => i.toUserId === viewerId && i.expiresAtMs > nowMs && unwalled(i.fromUserId) && world.contexts[i.contextId] !== undefined && !walledFromOwner(social, world.contexts[i.contextId], viewerId))
     .map((i) => ({
       inviteId: i.inviteId,
       fromUserId: i.fromUserId,

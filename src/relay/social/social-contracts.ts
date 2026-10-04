@@ -246,8 +246,6 @@ export interface SocialPrivacySettings {
   readonly friendRequestPolicy: SocialAudience;
   /** Who may join the server you are in (when its own rules allow it at all). */
   readonly serverJoinPolicy: SocialAudience;
-  /** Whether you appear in other people's Recent Players. */
-  readonly appearInRecentPlayers: boolean;
 }
 
 export function defaultPrivacySettings(userId: SocialUserId): SocialPrivacySettings {
@@ -260,7 +258,6 @@ export function defaultPrivacySettings(userId: SocialUserId): SocialPrivacySetti
     messagePolicy: 'FRIENDS',
     friendRequestPolicy: 'EVERYONE',
     serverJoinPolicy: 'FRIENDS',
-    appearInRecentPlayers: true,
   };
 }
 

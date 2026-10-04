@@ -259,8 +259,12 @@ describe('D2 / D3: a party name never carries a person, and a recent-player labe
 
   it('a label stored before the fix (a name, not an id) reads as "Party"', () => {
     const s = createSocialFixture();
-    const legacy = { ...s, recentPlayers: [{ ownerId: U.KAI, userId: U.SOL, context: 'PARTY' as const, contextLabel: "Mira's party", metAtIso: NOW }] };
+    // the row's person is Vega, who is visible to Kai. (It was Sol, who APPEARS OFFLINE in the fixture: since the founder's P2,
+    // 10-04, a currently hidden player is left out of Recent Players at read time, so his row is not read at all -- asserted below.)
+    const legacy = { ...s, recentPlayers: [{ ownerId: U.KAI, userId: U.VEGA, context: 'PARTY' as const, contextLabel: "Mira's party", metAtIso: NOW }] };
     expect(recentPlayersViewFor(legacy, U.KAI)[0].contextLabel).toBe('Party');
+    const hiddenRow = { ...s, recentPlayers: [{ ownerId: U.KAI, userId: U.SOL, context: 'PARTY' as const, contextLabel: "Mira's party", metAtIso: NOW }] };
+    expect(recentPlayersViewFor(hiddenRow, U.KAI)).toEqual([]);
   });
 });
 

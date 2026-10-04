@@ -98,7 +98,6 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
             messagePolicy: pv.message_policy,
             friendRequestPolicy: pv.friend_request_policy,
             serverJoinPolicy: pv.server_join_policy,
-            appearInRecentPlayers: pv.appear_in_recent_players,
           };
     const pr = presence.get(id);
     const lastSeen = pr === undefined ? iso(p.member_since) : iso(pr.last_seen_at);
@@ -252,14 +251,14 @@ async function writeUser(c: PoolClient, id: string, record: SocialUserRecord, be
   if (before === undefined || before.privacy !== v) {
     await c.query(
       `INSERT INTO relay_wonderland.social_privacy(player_id, presence_visibility, activity_visibility, location_visibility, private_server_visibility,
-         message_policy, friend_request_policy, server_join_policy, appear_in_recent_players)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         message_policy, friend_request_policy, server_join_policy)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT(player_id) DO UPDATE SET presence_visibility=EXCLUDED.presence_visibility, activity_visibility=EXCLUDED.activity_visibility,
          location_visibility=EXCLUDED.location_visibility, private_server_visibility=EXCLUDED.private_server_visibility,
          message_policy=EXCLUDED.message_policy, friend_request_policy=EXCLUDED.friend_request_policy, server_join_policy=EXCLUDED.server_join_policy,
-         appear_in_recent_players=EXCLUDED.appear_in_recent_players, version=relay_wonderland.social_privacy.version+1, updated_at=now()`,
+         version=relay_wonderland.social_privacy.version+1, updated_at=now()`,
       [id, v.presenceVisibility, v.activityVisibility, v.locationVisibility, v.privateServerVisibility, v.messagePolicy, v.friendRequestPolicy,
-        v.serverJoinPolicy, v.appearInRecentPlayers],
+        v.serverJoinPolicy],
     );
   }
   const s = record.presence;

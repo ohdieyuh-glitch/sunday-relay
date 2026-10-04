@@ -74,7 +74,7 @@ import {
 } from './social-parties';
 import { deriveActivity, resolvePresenceFor, resolveProfileFor, type WonderlandActivitySignals } from './social-presence';
 import { buildSocialView } from './social-preview';
-import { areFriends, blockedEitherWay, friendIdsOf, partyOf, type SocialState } from './social-state';
+import { areFriends, blockedEitherWay, friendIdsOf, partyOf, presenceHiddenFrom, type SocialState } from './social-state';
 import {
   WORLD_MOTIONS,
   contextOf,
@@ -82,6 +82,7 @@ import {
   inviteToWorld,
   joinWorld,
   leaveWorld,
+  removeFromPrivateServer,
   reportAvatar,
   worldViewFor,
   type WorldJoinTarget,
@@ -429,8 +430,24 @@ function applyOne(
       const remaining = shared !== undefined ? (separated.value.parties[shared.partyId]?.members.map((m) => m.userId) ?? []) : [];
       const endsFriendship = areFriends(state, actorId, targetId);
       const told = shared !== undefined || endsFriendship ? [actorId, ...remaining, targetId] : [actorId];
-      const outcome = changed(blockUser(separated.value, actorId, targetId, nowIso), null, told);
-      if (!outcome.ok) return outcome;
+      const blocked = changed(blockUser(separated.value, actorId, targetId, nowIso), null, told);
+      if (!blocked.ok) return blocked;
+      // A BLOCK SEPARATES A PRIVATE SERVER'S OWNER FROM A MEMBER INSIDE IT, both ways (the founder, 10-04: P4 the owner blocks a
+      // member -> the member is removed; P5 a member blocks the owner -> the blocker leaves; the mirror of the party rule). The
+      // member is taken out at once, the owner stays, their location clears exactly as a leave clears it, and their next world
+      // report reads the generic "You can't stay in this server." (WORLD_REMOVAL_MESSAGE). Re-entry is refused while the block
+      // stands (walledFromOwner). Nothing names the block.
+      const memberOut = (ownerId: SocialUserId, memberId: SocialUserId): boolean => {
+        const server = world.contexts[`priv_${ownerId}`];
+        return server !== undefined && server.kind === 'PRIVATE_SERVER' && server.ownerId === ownerId && server.memberIds.includes(memberId);
+      };
+      const removedId = memberOut(actorId, targetId) ? targetId : memberOut(targetId, actorId) ? actorId : null;
+      let outcome = blocked;
+      if (removedId !== null) {
+        const cleared = updateOwnPresence(blocked.value.state, removedId, { location: null }, nowIso);
+        if (!cleared.ok) return cleared;
+        outcome = { ok: true, value: { ...blocked.value, state: cleared.value, world: removeFromPrivateServer(world, removedId, Date.parse(nowIso)) } };
+      }
       // TOLD AS THE ORDINARY CHANGE, NEVER AS A BLOCK: the leader removed a member, the blocker left, or a friendship ended.
       if (shared !== undefined) {
         return {
@@ -608,7 +625,8 @@ function applyOne(
           state: met,
           world: joined.value.world,
           data: worldViewFor(joined.value.world, met, actorId, nowMs),
-          audience: [actorId, ...friendIdsOf(state, actorId), ...ctx.memberIds],
+          // told only to whoever may see the actor (the founder, 10-04, P1): a hidden arrival moves nobody's view, so nobody is told
+          audience: [actorId, ...[...friendIdsOf(state, actorId), ...ctx.memberIds].filter((id) => !presenceHiddenFrom(met, id, actorId))],
         },
       };
     }
@@ -617,7 +635,8 @@ function applyOne(
       const left = leaveWorld(world, actorId);
       const located = updateOwnPresence(state, actorId, { location: null }, nowIso);
       if (!located.ok) return located;
-      return { ok: true, value: { state: located.value, world: left, data: null, audience: [actorId, ...friendIdsOf(state, actorId), ...(before?.memberIds ?? [])] } };
+      const seers = [...friendIdsOf(state, actorId), ...(before?.memberIds ?? [])].filter((id) => !presenceHiddenFrom(located.value, id, actorId));
+      return { ok: true, value: { state: located.value, world: left, data: null, audience: [actorId, ...seers] } };
     }
     case 'world.state': {
       const motion = oneOf(body, 'motion', WORLD_MOTIONS);

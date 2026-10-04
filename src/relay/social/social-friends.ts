@@ -21,6 +21,7 @@ import {
   hasUser,
   mintId,
   pendingRequestBetween,
+  presenceHiddenFrom,
   type SocialState,
 } from './social-state';
 
@@ -242,7 +243,9 @@ export function recordPlayedTogether(
   if (!exist.ok) return fail(exist.error);
   if (blockedEitherWay(state, a, b)) return ok(state);
   const add = (list: readonly RecentPlayerEntry[], ownerId: SocialUserId, userId: SocialUserId): RecentPlayerEntry[] => {
-    if (!state.users[userId].privacy.appearInRecentPlayers || (admits !== undefined && !admits(ownerId, userId))) return [...list];
+    // ONE RULE decides who lands in a list (the founder, 10-04, P3: the separate "appear in Recent Players" setting is gone):
+    // the presence authority, asked by the caller (`admits`), and the block wall above
+    if (admits !== undefined && !admits(ownerId, userId)) return [...list];
     const others = list.filter((e) => !(e.ownerId === ownerId && e.userId === userId));
     const mine = [{ ownerId, userId, context, contextLabel, metAtIso: atIso }, ...others.filter((e) => e.ownerId === ownerId)].slice(0, RECENT_PLAYERS_KEPT);
     return [...others.filter((e) => e.ownerId !== ownerId), ...mine];
@@ -250,9 +253,13 @@ export function recordPlayedTogether(
   return ok({ ...state, recentPlayers: add(add(state.recentPlayers, a, b), b, a) });
 }
 
-/** The Recent Players tab: newest first, never anybody now blocked either way. */
+/**
+ * The Recent Players tab: newest first, never anybody now blocked either way, and never anybody now HIDING their presence
+ * from the owner (the founder, 10-04, P2: filtered at READ time, so a row made while they were visible stays out of sight while
+ * they hide, and comes back unchanged if they show again). Someone merely offline stays listed.
+ */
 export function recentPlayersFor(state: SocialState, ownerId: SocialUserId): RecentPlayerEntry[] {
   return state.recentPlayers
-    .filter((e) => e.ownerId === ownerId && !blockedEitherWay(state, ownerId, e.userId))
+    .filter((e) => e.ownerId === ownerId && !blockedEitherWay(state, ownerId, e.userId) && !presenceHiddenFrom(state, ownerId, e.userId))
     .sort((x, y) => (x.metAtIso < y.metAtIso ? 1 : x.metAtIso > y.metAtIso ? -1 : 0));
 }

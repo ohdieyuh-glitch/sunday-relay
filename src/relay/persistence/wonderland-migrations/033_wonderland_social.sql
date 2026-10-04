@@ -37,7 +37,6 @@ CREATE TABLE relay_wonderland.social_privacy(
   message_policy text NOT NULL DEFAULT 'FRIENDS' CHECK(message_policy IN('EVERYONE','FRIENDS','PARTY','NOBODY')),
   friend_request_policy text NOT NULL DEFAULT 'EVERYONE' CHECK(friend_request_policy IN('EVERYONE','NOBODY')),
   server_join_policy text NOT NULL DEFAULT 'FRIENDS' CHECK(server_join_policy IN('EVERYONE','FRIENDS','PARTY','NOBODY')),
-  appear_in_recent_players boolean NOT NULL DEFAULT true,
   version bigint NOT NULL DEFAULT 1,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
