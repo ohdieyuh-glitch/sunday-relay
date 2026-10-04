@@ -85,6 +85,9 @@ import { endSocialPresence, handleSocialRoute, isSocialRoute, type SocialDeliver
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 import { GITHUB_STUB_BANNER, githubRootsForNativeSignIn } from './wonderland-github-stub-seam';
 import { openSocialPostgresStore } from '../src/relay/persistence/social-postgres';
+import { createPostgresVoiceBindings } from '../src/relay/persistence/voice-binding-postgres';
+import type { VoiceBindingStore } from '../src/relay/social/voice-binding';
+import { eosVoiceFromEnv } from './eos-voice';
 import type { SocialStore } from '../src/relay/social/social-store';
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -286,13 +289,26 @@ export function createBridgeServer(
   };
   const socialPendingSignIns = createPendingSignInStore();
   const socialLogins = new Map<string, string>();
+  /**
+   * PARTY VOICE = EOS (R16, founder 10-04), behind WONDERLAND_EOS_VOICE_CONFIG (the founder's file; never logged, no fallback;
+   * absent or invalid = voice 503 as before). PUIDs are bound on the Julius pool (migration 033); a committed party departure
+   * removes the departed PUID from that party's room server-side (eos-voice.ts createVoiceRemovals).
+   */
+  let voiceBindingsCache: VoiceBindingStore | null = null;
+  const voiceBindings = (): VoiceBindingStore | null => {
+    if (voiceBindingsCache !== null) return voiceBindingsCache;
+    const pool = juliusPool();
+    voiceBindingsCache = pool === null ? null : createPostgresVoiceBindings(pool);
+    return voiceBindingsCache;
+  };
+  const eosVoice = socialEnabled ? eosVoiceFromEnv(process.env, { bindings: voiceBindings, log: (line) => console.warn(`[relay-bridge] ${line}`) }) : null;
   let socialStoreReady: SocialStore | null = null;
   let socialStoreOpening: Promise<SocialStore | null> | null = null;
   const socialStore = async (): Promise<SocialStore | null> => {
     if (socialStoreReady !== null) return socialStoreReady;
     const pool = juliusPool();
     if (pool === null) return null;
-    socialStoreOpening ??= openSocialPostgresStore(pool).then(
+    socialStoreOpening ??= openSocialPostgresStore(pool, { afterCommit: (commit) => eosVoice?.removals.onDepartures(commit.departures) }).then(
       (opened) => { socialStoreReady = opened; socialStoreOpening = null; return opened; },
       () => { socialStoreOpening = null; return null; },
     );
@@ -717,7 +733,8 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
               return login === undefined ? null : { userId: participantId, displayName: login, handle: `@${login}` };
             },
             store: await socialStore(),
-            voice: null,
+            voice: eosVoice?.minter ?? null,
+            voiceBindings: eosVoice !== null ? voiceBindings() : null,
             tap: socialTap,
           });
           if (socialResult !== null) send(res, socialResult.status, socialResult.body, cors);

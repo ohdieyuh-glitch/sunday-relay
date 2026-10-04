@@ -20,9 +20,11 @@
  * (wonderland-native-signin-routes.ts) and holds a `native_social` session carrying `social`; server.ts serves these routes
  * only when the deployment sets WONDERLAND_SOCIAL_ENABLED=1.
  *
- * PARTY VOICE. `POST /parties/:id/voice/join` asks the configured provider's minter for a token to the caller's OWN party
- * room, for the voice audience only (voiceAudienceFor: the members minus anyone blocked either way). With no provider it is
- * 503 VOICE TRANSPORT PENDING: a connected voice state is never fabricated.
+ * PARTY VOICE. `POST /parties/:id/voice/join {eosProductUserId}` asks the configured provider's minter for a token to the
+ * caller's OWN party room, for the voice audience only (voiceAudienceFor: the members minus anyone blocked either way), for the
+ * caller's server-bound EOS PUID (src/relay/social/voice-binding.ts). A non-member, a walled caller, and another player's PUID all
+ * answer the stranger's 404; the answer's audience lists only server-bound PUID -> player pairs. With no provider (or no binding
+ * store) it is 503 VOICE TRANSPORT PENDING: a connected voice state is never fabricated.
  *
  * THE DELIVERY TAP (tests and QA only). When server.ts is given WONDERLAND_SOCIAL_TAP, every events poll and every
  * snapshot.read answered here is told to the tap: who received it, which event sequences and operations, and which user
@@ -32,6 +34,7 @@
 import type { SocialOperationId } from '../src/relay/social/social-contracts';
 import type { SocialPlayerIdentity, SocialStore } from '../src/relay/social/social-store';
 import { voiceAudienceFor } from '../src/relay/social/social-parties';
+import { normalizePuid, type VoiceBindingStore } from '../src/relay/social/voice-binding';
 import { bindSocialActor, nativeSocialMayCall, SOCIAL_OPERATIONS } from './wonderland-social-scope';
 
 export const SOCIAL_ROUTE_PREFIX = '/wonderland/social';
@@ -75,7 +78,8 @@ export interface PartyVoiceGrant {
  */
 export interface PartyVoiceTokenMinter {
   readonly providerId: string;
-  mint(input: { readonly partyId: string; readonly participantId: string; readonly audience: readonly string[]; readonly nowIso: string }): Promise<PartyVoiceGrant>;
+  /** `puid`: the caller's server-bound EOS ProductUserId (EOS voice admits exactly that PUID to the room). */
+  mint(input: { readonly partyId: string; readonly participantId: string; readonly audience: readonly string[]; readonly nowIso: string; readonly puid?: string }): Promise<PartyVoiceGrant>;
 }
 
 /** One answer as the tap records it: ids and sequence numbers only. */
@@ -97,6 +101,8 @@ export interface SocialRouteDeps {
   readonly store: SocialStore | null;
   /** The party voice provider's token minter. Absent or null: voice is 503 VOICE TRANSPORT PENDING. */
   readonly voice?: PartyVoiceTokenMinter | null;
+  /** Who holds which EOS PUID (migration 033). Required with a minter; absent: voice is 503. */
+  readonly voiceBindings?: VoiceBindingStore | null;
   /** Tests and QA only: told about every events poll and snapshot answered. */
   readonly tap?: ((record: SocialDeliveryRecord) => void) | null;
 }
@@ -215,16 +221,35 @@ export async function handleSocialRoute(request: SocialRouteRequest, deps: Socia
   if (op.id === 'parties.voice_join') {
     const [partyId] = idsOf(op.template, pathname);
     // The audience is the WALLED one: a non-member gets none at all, and a member never gets anyone blocked either way.
+    // Every refusal that concerns WHO the caller is answers exactly as a party that does not exist (the uniform stranger 404).
+    const notThere = () => err(404, 'not-found', 'party not found');
     const audience = voiceAudienceFor(await deps.store.read(), actor.actorId, partyId ?? '');
-    if (audience.length === 0) return err(404, 'not-found', 'party not found');
-    if (deps.voice === undefined || deps.voice === null) return err(503, 'voice_unavailable', 'VOICE TRANSPORT PENDING');
-    let grant: PartyVoiceGrant;
+    if (audience.length === 0) return notThere();
+    if (deps.voice === undefined || deps.voice === null || deps.voiceBindings === undefined || deps.voiceBindings === null) {
+      return err(503, 'voice_unavailable', 'VOICE TRANSPORT PENDING');
+    }
+    // THE CALLER'S EOS PUID, bound to them server-side (review #2): another player's PUID, or a different one of their own
+    // within the session that bound the first, is refused -- as a stranger is.
+    const puid = normalizePuid(body.eosProductUserId);
+    if (puid === null) return err(400, 'validation-failed', 'eosProductUserId must be an EOS ProductUserId (32 hex characters)');
+    let binding: string;
     try {
-      grant = await deps.voice.mint({ partyId: partyId ?? '', participantId: actor.actorId, audience, nowIso });
+      binding = await deps.voiceBindings.bind({ userId: actor.actorId, puid, sessionId: facts.sessionId, nowIso });
     } catch {
       return err(503, 'voice_unavailable', 'The voice provider could not admit you right now.');
     }
-    return ok({ providerId: grant.providerId, roomId: grant.roomId, participantToken: grant.participantToken, expiresAt: grant.expiresAtIso, audience });
+    if (binding === 'refused') return notThere();
+    let grant: PartyVoiceGrant;
+    let bound: ReadonlyMap<string, string>;
+    try {
+      grant = await deps.voice.mint({ partyId: partyId ?? '', participantId: actor.actorId, audience, nowIso, puid });
+      bound = await deps.voiceBindings.puidsOf(audience);
+    } catch {
+      return err(503, 'voice_unavailable', 'The voice provider could not admit you right now.');
+    }
+    // the audience a client maps voices with: ONLY server-bound PUID -> player pairs, only of the walled audience
+    const pairs = audience.filter((id) => bound.has(id)).map((id) => ({ userId: id, puid: bound.get(id) as string }));
+    return ok({ providerId: grant.providerId, roomId: grant.roomId, participantToken: grant.participantToken, expiresAt: grant.expiresAtIso, audience: pairs });
   }
   const result = await deps.store.apply(op.id as SocialOperationId, actor.actorId, { ids: idsOf(op.template, pathname), body, query }, nowIso);
   // A RETRYABLE FAILURE IS AN OUTAGE, NOT A REFUSAL: a durable write that did not commit changed nothing and says 503.
