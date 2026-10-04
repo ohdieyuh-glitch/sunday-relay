@@ -261,7 +261,7 @@ describe('it runs the workflow\'s own scripts, not copies of them', () => {
       const start = text.indexOf(`'${head}`);
       return start < 0 ? undefined : text.slice(start + 1, text.indexOf("'", start + 1));
     };
-    for (const head of ['^executor_(', '^(research_observation', '(sk-(ant-|proj-)?']) {
+    for (const head of ['^executor_(', '^(research_observation', '((^|[^A-Za-z0-9_-])sk-(ant-|proj-)?']) {
       const fromWorkflow = quoted(workflow, head);
       expect(fromWorkflow, `the workflow must still carry ${head}`).toBeDefined();
       expect(quoted(launcher, head), `${head} must be the workflow's pattern, verbatim`).toBe(fromWorkflow);

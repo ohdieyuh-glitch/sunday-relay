@@ -2067,6 +2067,30 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     expect(matches('  task run:abc [CODING_AGENT/build] → SUCCEEDED'), 'ordinary evidence must not trip it').toBe(false);
   });
 
+  it('F-A1: the sk- shape starts a TOKEN, so a glued word is ordinary text, and a key in every real position still trips the scan', () => {
+    // The founder's choice, 2026-10-04 (alpha_ab/F-A1_SCAN_SURFACE.md): without a left boundary these words matched the unbounded
+    // alternative, and one of them outside an artifact body deleted the whole bundle. Both directions are pinned on the REAL pattern:
+    // dropping the boundary fails the words, and a boundary that over-restricts fails the positions.
+    const scanStep = stepScript('Refuse to publish evidence that contains credential material');
+    const pattern = /grep -rlE '(.+)' julius-live-evidence/u.exec(scanStep)?.[1];
+    expect(pattern, 'the shape scan must exist in the scan step').toBeDefined();
+    const matches = (line: string): boolean => {
+      try {
+        execFileSync('grep', ['-Eq', pattern as string], { input: line, stdio: ['pipe', 'ignore', 'ignore'] });
+        return true;
+      } catch { return false; }
+    };
+    for (const word of ['task-runner-integration-tests', 'disk-usage-monitoring-threshold', 'flask-sqlalchemy-utils==3.1.1']) {
+      expect(matches(word), `${word} is a word, not a key`).toBe(false);
+    }
+    const key = ['sk-', 'proj-', 'AAAAAAAAAAAAAAAAAAAAAAAA'].join('');
+    const positions: readonly (readonly [string, string])[] = [
+      ['at the start of a line', key], ['after =', `OPENAI_API_KEY=${key}`], ['after :', `key:${key}`],
+      ['inside quotes', `"${key}"`], ['after (', `token(${key})`], ['after a space', `leaked ${key}`],
+    ];
+    for (const [where, line] of positions) expect(matches(line), `a key ${where} must still trip the scan`).toBe(true);
+  });
+
   it('the workflow also matches this job\u2019s exact ephemeral values, not only shapes', () => {
     const scan = stepScript('Refuse to publish evidence that contains credential material');
     expect(scan, 'a shape rule cannot know what a derived scoped credential looks like')
