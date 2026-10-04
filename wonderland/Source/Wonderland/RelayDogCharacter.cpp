@@ -3452,15 +3452,18 @@ void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
 	// and owned by that body's actor, closing into fists by the swords' share of the hands.
 	//
 	// THE TOOLS IN THE FIST (the founder, 10-03: visible proof that the hands and fingers never pass through the props): the brush
-	// and the scraper are laid through the working hand's closed fist the way a sword is (WonderlandActGrip). The book and the glass
-	// still send both hands aside -- they are not held yet (Second's review, 10-03: never a hand through a handle). wl.Dog.ActHands 0
-	// restores the 09-30 look the founder accepted (43/43): every prop on the forearm, the hands aside while any shows.
+	// and the scraper are laid through the working hand's closed fist the way a sword is (WonderlandActGrip). THE GLASS TOO (act hands
+	// v4, wl.Dog.ActHold): its handle through the working hand's closed fist, the other hand shown relaxed. The book still sends both
+	// hands aside -- it is not held yet (Second's review, 10-03: never a hand through a prop). wl.Dog.ActHands 0 restores the 09-30 look
+	// the founder accepted (43/43): every prop on the forearm, the hands aside while any shows.
 	const int32 PropMask = GetVisibleActPropMask();
 	const bool bToolsInFist = WonderlandActGrip::ToolsInTheFist();
 	const bool bToolShown = (PropMask & (2 | 8)) != 0;
-	const bool bHandsAside = bToolsInFist ? (PropMask & (1 | 4)) != 0 : PropMask != 0;
+	const bool bGlassHeld = WonderlandActGrip::GlassInTheFist() && PropMask == 4;
+	const bool bHandsAside = bToolsInFist ? ((PropMask & 1) != 0 || ((PropMask & 4) != 0 && !bGlassHeld)) : PropMask != 0;
 	const bool bToolSidePlusY = !IsToolHandLeft();
 	bool bToolHeld = false;
+	bool bGlassHeldNow = false;
 	for (const bool bPlusY : { false, true })
 	{
 		WonderlandHands::FHand& Hand = bPlusY ? BodyHandPlusY : BodyHandMinusY;
@@ -3474,6 +3477,18 @@ void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
 			continue;
 		}
 		Hand.Attach(Forearm->GetOwner() != nullptr ? Forearm->GetOwner() : this, Forearm, Tip, Forward, bPlusY ? 1.0f : -1.0f);
+		if (bGlassHeld && bPlusY == bToolSidePlusY)
+		{
+			// THE GLASS'S HAND: the fist closed about its handle, the glass laid round it on this forearm
+			bGlassHeldNow = LayLensInFist(Hand, Forearm, DeltaSeconds);
+			if (!bGlassHeldNow)
+			{
+				// nothing to hold it by yet (no aim this frame): the hand steps aside, as before v4
+				Hand.ClearGripAxis();
+				Hand.Pose(HandoffHandsWeight, DeltaSeconds, false);
+			}
+			continue;
+		}
 		if (bToolsInFist && bToolShown && !bHandsAside && bPlusY == bToolSidePlusY)
 		{
 			// THE TOOL'S HAND: the wrap turned off the arm's line toward the thumb, the fist closed, the tool laid through it
@@ -3498,6 +3513,19 @@ void ARelayDogCharacter::UpdateHands(float DeltaSeconds)
 		Hand.Pose(HandoffHandsWeight, DeltaSeconds, !bHandsAside);
 	}
 	bToolInFist = bToolHeld;
+	if (!bGlassHeldNow && bLensInFist)
+	{
+		// THE GLASS PUT BACK as built and where ApplyMissionPose places it, on the Body (wl.Dog.ActHold 0, or the act over)
+		USceneComponent* LensSeat = BodyRoot != nullptr ? BodyRoot.Get() : GetRootComponent();
+		if (LensRoot != nullptr && LensSeat != nullptr && LensRoot->GetAttachParent() != LensSeat)
+		{
+			LensRoot->AttachToComponent(LensSeat, FAttachmentTransformRules::KeepWorldTransform);
+		}
+		LayLensHandle(1.0, 0.0);
+		LensUpShown = FVector::ZeroVector;
+		LensFistOffsetInBody = FVector::ZeroVector;
+	}
+	bLensInFist = bGlassHeldNow;
 	if (!bToolHeld && bToolLaidInFist)
 	{
 		// BACK ON THE FOREARM where the 09-30 acts had them: for wl.Dog.ActHands 0, and for a tool shown with no hand to hold it
@@ -3574,13 +3602,99 @@ void ARelayDogCharacter::LayToolInFist(const WonderlandHands::FHand& Hand, UScen
 	bToolLaidInFist = true;
 }
 
+bool ARelayDogCharacter::LayLensInFist(WonderlandHands::FHand& Hand, USceneComponent* Forearm, float DeltaSeconds)
+{
+	if (Forearm == nullptr || LensRoot == nullptr || LensAimShown.IsNearlyZero() || LensUpDesigned.IsNearlyZero())
+	{
+		return false;
+	}
+	const FTransform ArmXf = Forearm->GetComponentTransform();
+	const double U = FMath::Max(HeadWidthUU, 10.0f) / 60.0;
+	// THE HANDLE SQUARE TO THE ARM, in the glass's own plane (the glass still faces along the eye's line), eased in: a hitch never snaps it
+	const FVector Aim = LensAimShown.GetSafeNormal();
+	const FVector Along = ArmXf.TransformVectorNoScale(Hand.GetAlong()).GetSafeNormal();
+	const FVector Wanted = WonderlandActGrip::LensUpSquareToArm(Aim, LensUpDesigned, Along, 60.0f);
+	FVector Up = Wanted;
+	if (bLensInFist && !LensUpShown.IsNearlyZero())
+	{
+		const double Ease = 1.0 - FMath::Exp(-FMath::Min(static_cast<double>(DeltaSeconds), 0.1) / 0.12);
+		Up = FMath::Lerp(LensUpShown, Wanted, Ease);
+		Up = (Up - Aim * FVector::DotProduct(Up, Aim)).GetSafeNormal();
+		if (Up.IsNearlyZero())
+		{
+			Up = Wanted;
+		}
+	}
+	// THE FIST CLOSED ABOUT THE HANDLE: the wrap axis is the handle's, the glass out of the thumb side (as a sword's blade)
+	Hand.SetGripAxis(Up);
+	Hand.Pose(1.0f, bLensInFist ? DeltaSeconds : 0.0f, true);
+	// ONLY WHAT THE HAND TOUCHES IS FITTED: the handle's cross-section to the hollow (as the tools' handles, 1.8 of the palm's 2.1), and 4
+	// longer below so the fist sits between the cap and the collar; the rim, the glass and the collar keep the 09-30 proportions
+	const double Hollow = Hand.GetHollowRadius() * (1.8 / 2.1) * ArmXf.GetScale3D().GetAbsMin();
+	LayLensHandle(FMath::Clamp(Hollow / (2.75 * U), 0.3, 1.5), WonderlandActGrip::LensHandleLonger);
+	// THE GLASS ROUND THE FIST, riding on the arm the player sees (a worn skin solves its arms after the Dog: attached, it moves with them)
+	const FVector FistCentre = ArmXf.TransformPosition(Hand.GripCentreLocal());
+	const FTransform LensXf(FRotationMatrix::MakeFromXZ(Aim, Up).ToQuat(), FistCentre - Up * (WonderlandActGrip::LensGripUp * U));
+	const FTransform LensOnArm = LensXf.GetRelativeTransform(ArmXf);
+	// DRAWABLE ONLY (round 4's GPU hang): a glass whose frame is not finite is not moved
+	if (!WonderlandFinite::IsDrawable(LensOnArm))
+	{
+		static bool bLensLayWarned = false;
+		WonderlandFinite::NoteRefused(bLensLayWarned, TEXT("glass in the fist"), FString::Printf(TEXT("on %s: %s (fist %s, aim %s, up %s)"), *Forearm->GetName(),
+			*LensOnArm.ToString(), *FistCentre.ToString(), *Aim.ToString(), *Up.ToString()));
+		return false;
+	}
+	if (LensRoot->GetAttachParent() != Forearm)
+	{
+		LensRoot->AttachToComponent(Forearm, FAttachmentTransformRules::KeepWorldTransform);
+	}
+	LensRoot->SetRelativeTransform(LensOnArm);
+	LensUpShown = Up;
+	LensCentreShown = LensXf.TransformPosition(FVector(0.0, 0.0, (RelayDogLensShape::HandleLength + RelayDogLensShape::RimRadius) * U));
+	// where the fist sits off the forearm's end, in the Body's space: the next frame's arm goal takes it off
+	if (BodyRoot != nullptr)
+	{
+		LensFistOffsetInBody = BodyRoot->GetComponentTransform().InverseTransformVectorNoScale(FistCentre - ArmXf.TransformPosition(Hand.GetTipLocal()));
+	}
+	return true;
+}
+
+void ARelayDogCharacter::LayLensHandle(double Fit, double Longer)
+{
+	if (FMath::IsNearlyEqual(Fit, LensHandleFitLaid, 0.005) && FMath::IsNearlyEqual(Longer, LensHandleLongerLaid, 0.005))
+	{
+		return;
+	}
+	using namespace RelayDogLensShape;
+	const double U = FMath::Max(HeadWidthUU, 10.0f) / 60.0;
+	const double H = HandleLength * U;
+	const double L = Longer * U;
+	// as BuildMissionProps lays them: the grip (MissionLensHandle's one box) and the cap (MissionLensRim's last: 32 rim segments, the collar, the cap)
+	if (LensHandleMesh != nullptr && LensHandleMesh->GetInstanceCount() == 1)
+	{
+		LensHandleMesh->UpdateInstanceTransform(0, DogPropBox(FVector(0.0, 0.0, H * 0.5 - L * 0.5), FVector(5.5 * U * Fit, 5.5 * U * Fit, H - 4.0 * U + L)),
+			false, true, true);
+	}
+	if (LensMesh != nullptr && LensMesh->GetInstanceCount() == 34)
+	{
+		LensMesh->UpdateInstanceTransform(33, DogPropBox(FVector(0.0, 0.0, 1.5 * U - L), FVector(7.5 * U, 7.5 * U, 4.0 * U)), false, true, true);
+	}
+	LensHandleFitLaid = Fit;
+	LensHandleLongerLaid = Longer;
+}
+
 const UInstancedStaticMeshComponent* ARelayDogCharacter::GetShownToolHandle() const
 {
 	if (BrushMesh != nullptr && BrushMesh->IsVisible())
 	{
 		return BrushMesh.Get();
 	}
-	return ScraperMesh != nullptr && ScraperMesh->IsVisible() ? ScraperMesh.Get() : nullptr;
+	if (ScraperMesh != nullptr && ScraperMesh->IsVisible())
+	{
+		return ScraperMesh.Get();
+	}
+	// the glass's handle while it is in the fist (act hands v4): the QA's hand control pushes it toward the palm as it does a tool's
+	return bLensInFist && LensHandleMesh != nullptr && LensHandleMesh->IsVisible() ? LensHandleMesh.Get() : nullptr;
 }
 
 FTransform ARelayDogCharacter::GetHandoffGripWorld(bool bLeftHand) const
@@ -4283,12 +4397,24 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 	};
 	const FVector LensWork = (O.Correct > O.Inspect) ? Crown : Heart;
 	const FLensHold Lens = HoldLens(Contract != nullptr ? LensWork : Neck + Fwd * 300.0, O.SweepPhase);
+	// THE GLASS IN THE FIST (act hands v4): the arm is sent so the FIST, not the forearm's end, lands where the handle is gripped -- the
+	// glass, laid round the fist (UpdateHands), then stands where it was designed, its centre on the eye's line. The handle-up is the one
+	// shown last frame (turned square to the arm), and the fist's offset from the arm's end is last frame's.
+	FVector LensHandGoal = Lens.Hand;
+	if (bLens && bLensInFist && !LensUpShown.IsNearlyZero())
+	{
+		const double HandleToCentre = (RelayDogLensShape::HandleLength + RelayDogLensShape::RimRadius) * LensU;
+		const FVector GripAt = Lens.Centre - LensUpShown * HandleToCentre + LensUpShown * (WonderlandActGrip::LensGripUp * LensU);
+		LensHandGoal = GripAt - BodyXf.TransformVectorNoScale(LensFistOffsetInBody);
+	}
 	if (ScraperMesh != nullptr) ScraperMesh->SetVisibility(bScraper);
 	if (ScraperBladeMesh != nullptr) ScraperBladeMesh->SetVisibility(bScraper);
 
 	if (!bLens)
 	{
 		LensCentreShown = FVector::ZeroVector;
+		LensAimShown = FVector::ZeroVector;
+		LensUpDesigned = FVector::ZeroVector;
 	}
 	float MissWorking = -1.0f;
 	float MissFree = -1.0f;
@@ -4389,7 +4515,7 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 		// through it, at the Contract beyond.
 		if (O.Inspect > KINDA_SMALL_NUMBER)
 		{
-			Add(O.Inspect, Lens.Hand, FreeRelaxed, Lens.Eye + Lens.Aim * 300.0);
+			Add(O.Inspect, LensHandGoal, FreeRelaxed, Lens.Eye + Lens.Aim * 300.0);
 		}
 		// VERIFICATION: both hands aimed at the Contract's heart.
 		if (O.Fly > KINDA_SMALL_NUMBER && Contract != nullptr)
@@ -4404,7 +4530,7 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 			{
 			case ERepairStage::Identify:
 				// The same glass, held the same way, on the crown.
-				Tool = Lens.Hand;
+				Tool = LensHandGoal;
 				break;
 			case ERepairStage::Erase:
 			{
@@ -4501,6 +4627,9 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 			LensRoot->SetWorldLocationAndRotation(HandAt, FRotationMatrix::MakeFromXZ(Lens.Aim, Lens.HandleUp).Rotator());
 			LensCentreShown = HandAt + Lens.HandleUp * ((RelayDogLensShape::HandleLength + RelayDogLensShape::RimRadius) * LensU);
 			LensEyeShown = Lens.Eye;
+			// for UpdateHands, which lays the glass round the fist when it is held (and moves LensCentreShown with it)
+			LensAimShown = Lens.Aim;
+			LensUpDesigned = Lens.HandleUp;
 		}
 
 		// ---------------------------------------------------------------- the head looks at the work

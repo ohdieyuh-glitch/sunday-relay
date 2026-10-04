@@ -20,6 +20,13 @@ namespace
 		TEXT("wrapped by a fist). Default 60: a 30-degree wrist, the tool still reaching out ahead of the hand, and its butt clear of ")
 		TEXT("the forearm's block (55 sank it 0.1-1.1 uu in; simulated over hand sizes 0.7-1.3, sim_act_grip.py)."),
 		ECVF_Default);
+
+	TAutoConsoleVariable<int32> GActGripGlassInFist(
+		TEXT("wl.Dog.ActHold"),
+		1,
+		TEXT("1 (default): the magnifying glass is held in the working hand's closed fist, its handle turned in the glass's own plane square ")
+		TEXT("to the forearm (act hands v4). 0: the round-5 look -- the hands step aside while the glass shows. Needs wl.Dog.ActHands 1."),
+		ECVF_Default);
 }
 
 namespace WonderlandActGrip
@@ -32,6 +39,41 @@ namespace WonderlandActGrip
 	float ToolTiltDeg()
 	{
 		return FMath::Clamp(GActGripTiltDeg.GetValueOnGameThread(), 35.0f, 90.0f);
+	}
+
+	bool GlassInTheFist()
+	{
+		return ToolsInTheFist() && GActGripGlassInFist.GetValueOnGameThread() != 0;
+	}
+
+	FVector LensUpSquareToArm(const FVector& Aim, const FVector& Designed, const FVector& ForearmAlong, float MaxDeg)
+	{
+		const FVector Out = Aim.GetSafeNormal();
+		const FVector Up = (Designed - Out * FVector::DotProduct(Designed, Out)).GetSafeNormal();
+		if (Out.IsNearlyZero() || Up.IsNearlyZero())
+		{
+			return Designed.GetSafeNormal();
+		}
+		// the forearm's way within the glass's plane; an arm pointing through the glass gives nothing to square to
+		const FVector InPlane = ForearmAlong - Out * FVector::DotProduct(ForearmAlong, Out);
+		if (InPlane.Size() < 0.2)
+		{
+			return Up;
+		}
+		// square to that way, in the plane, on the side nearer the design
+		FVector Square = FVector::CrossProduct(Out, InPlane.GetSafeNormal()).GetSafeNormal();
+		if (FVector::DotProduct(Square, Up) < 0.0)
+		{
+			Square = -Square;
+		}
+		const double Between = FMath::Acos(FMath::Clamp(FVector::DotProduct(Up, Square), -1.0, 1.0));
+		const double Most = FMath::DegreesToRadians(static_cast<double>(FMath::Clamp(MaxDeg, 0.0f, 90.0f)));
+		if (Between <= Most)
+		{
+			return Square;
+		}
+		const FVector Toward = (Square - Up * FVector::DotProduct(Square, Up)).GetSafeNormal();
+		return Toward.IsNearlyZero() ? Up : (Up * FMath::Cos(Most) + Toward * FMath::Sin(Most)).GetSafeNormal();
 	}
 
 	FVector ToolAxisInArm(const FVector& Along, const FVector& Ahead, float TiltDeg)

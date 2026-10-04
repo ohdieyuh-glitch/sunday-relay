@@ -399,6 +399,8 @@ public:
 	 *  in that hand's fist now (wl.Dog.ActHands); the tool's handle while one shows (nullptr otherwise). */
 	bool IsToolHandLeft() const { return !(ArmRight.SideSign > 0.0f); }
 	bool IsToolInFist() const { return bToolInFist; }
+	/** For the QA: the magnifying glass is held in the working hand's closed fist this frame (wl.Dog.ActHold). */
+	bool IsLensInFist() const { return bLensInFist; }
 	const UInstancedStaticMeshComponent* GetShownToolHandle() const;
 	/** For the QA: the forearm of the body the player sees for that hand (a worn skin's, else the canon's), or null. */
 	USceneComponent* GetVisibleForearm(bool bLeftHand) const;
@@ -872,6 +874,22 @@ private:
 	bool bToolLaidInFist = false;
 	/** Lays the shown tool (the brush, else the scraper) through Hand's closed fist, riding on Forearm (the one the player sees). */
 	void LayToolInFist(const WonderlandHands::FHand& Hand, USceneComponent* Forearm, bool bBrush);
+	/**
+	 * THE GLASS IN THE FIST (act hands v4): the glass's aim and its designed handle-up this frame (world, from ApplyMissionPose); the
+	 * handle-up as shown (square to the visible forearm, eased); where the fist sat off that forearm's end (the Body's space: next frame's
+	 * arm goal takes it off, so the fist lands on the grip and the glass stays on the eye's line); the handle as last laid.
+	 */
+	FVector LensAimShown = FVector::ZeroVector;
+	FVector LensUpDesigned = FVector::ZeroVector;
+	FVector LensUpShown = FVector::ZeroVector;
+	FVector LensFistOffsetInBody = FVector::ZeroVector;
+	double LensHandleFitLaid = 1.0;
+	double LensHandleLongerLaid = 0.0;
+	bool bLensInFist = false;
+	/** Lays the glass round Hand's closed fist, riding on Forearm (the one the player sees). False when there is nothing to lay yet. */
+	bool LayLensInFist(WonderlandHands::FHand& Hand, USceneComponent* Forearm, float DeltaSeconds);
+	/** The glass's handle: its cross-section scaled by Fit, and Longer (head-width sixtieths) added below with the cap; 1, 0 = as built. */
+	void LayLensHandle(double Fit, double Longer);
 	/** True on any frame the player asked the Dog to move, so the orbit stands down. */
 	bool bPlayerDroveThisFrame = false;
 
