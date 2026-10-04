@@ -4,6 +4,7 @@ import { childEnv, parseArgs } from './r16-local-bridge.mjs';
 import { createGitHubDeviceStub, parseIdentity } from './github-device-stub.mjs';
 import { createBrowserSessionStore } from '../relay-bridge/browser-session/grants';
 import { createPendingSignInStore, handleNativeSignInRoute } from '../relay-bridge/wonderland-native-signin-routes';
+import { R16_THROWAWAY_DATABASE, r16ThrowawayDatabase } from './r16-migrate-throwaway';
 
 /*
  * THE R16 LOCAL REHEARSAL'S FENCES, and the GitHub stub against the bridge's REAL sign-in code: the runner refuses every
@@ -47,6 +48,20 @@ describe('the runner refuses anything but the throwaway rehearsal', () => {
     }
     expect(env.RELAY_BRIDGE_API_TOKEN).not.toBe('op');
     expect(env).toMatchObject({ NODE_ENV: 'development', WONDERLAND_SOCIAL_ENABLED: '1', RELAY_BRIDGE_HOST: '127.0.0.1', RELAY_BRIDGE_PORT: '8797', RELAY_GITHUB_APP_CLIENT_ID: 'Iv1.x' });
+  });
+
+  it('the migrate helper fences on the port R16_THROWAWAY_PG_PORT names (default 54329), never 5432', () => {
+    // CORE's default, unchanged
+    expect(R16_THROWAWAY_DATABASE.test(GOOD)).toBe(true);
+    expect(r16ThrowawayDatabase({}).test('postgresql://postgres@127.0.0.1:54339/sw2_r16_1')).toBe(false);
+    // Second's portable instance, named
+    const second = r16ThrowawayDatabase({ R16_THROWAWAY_PG_PORT: '54339' });
+    expect(second.test('postgresql://postgres@127.0.0.1:54339/sw2_r16_7')).toBe(true);
+    expect(second.test('postgresql://postgres@127.0.0.1:54339/sw_r16_7')).toBe(true);
+    for (const db of [GOOD, 'postgresql://postgres@127.0.0.1:54339/julius', 'postgresql://postgres@127.0.0.1:54339/sw2_r16_1;x', 'postgresql://postgres@db.example:54339/sw2_r16_1']) {
+      expect(second.test(db), db).toBe(false);
+    }
+    expect(() => r16ThrowawayDatabase({ R16_THROWAWAY_PG_PORT: '5432' })).toThrow(/5432/);
   });
 });
 
