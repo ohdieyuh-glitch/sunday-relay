@@ -50,6 +50,9 @@
 #include "GameFramework/PlayerInput.h"
 #include "HAL/FileManager.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Components/MeshComponent.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "Misc/App.h"
 #include "UObject/UObjectArray.h"
 #include "WonderlandBeta.h"
@@ -6492,6 +6495,17 @@ namespace
 		int32 CadenceSamples = 0;
 		bool bSprintLate = false;
 		float ReleasedAt = -1.0f;
+		// S3c-S3e (Second's review of round 6; CORE, 10-04): the longest frame step in the dash window (S3c's one-tick allowance); the canon
+		// hip's pitch and when, through 1 s of the sprint (S3d counts its swings: the cadence AS SEEN, never the commanded one); and the
+		// camera's catch-up lag (S3e): seen on in the dash, when it went off, |v| over its catch-up speed then, and that ratio's last value on
+		float MaxTick = 0.0f;
+		TArray<float> HipPitch;
+		TArray<float> HipAt;
+		bool bS3Judged = false;
+		bool bLagSeenOn = false;
+		float LagOffAt = -1.0f;
+		float LagOffRatio = -1.0f;
+		float LagLastOnRatio = -1.0f;
 		TArray<FHandTest> Tests;
 		int32 TestIndex = 0;
 		int32 KeyIndex = 0;
@@ -6556,6 +6570,58 @@ namespace
 		Dog->QaForwardKey(false, false);
 		Dog->QaForwardKey(true, false);
 		Dog->QaRunKey(false);
+	}
+
+	/** A canon pivot's pitch against its parent, degrees (Pivot_<joint>, as dog_v2.py names them); -1000 when the rig has no such pivot. */
+	float QaCanonPivotPitch(const ARelayDogCharacter* Dog, const TCHAR* Pivot)
+	{
+		TInlineComponentArray<USceneComponent*> Joints;
+		Dog->GetComponents<USceneComponent>(Joints);
+		for (const USceneComponent* Joint : Joints)
+		{
+			if (Joint != nullptr && Joint->GetName() == Pivot)
+			{
+				return static_cast<float>(Joint->GetRelativeRotation().Pitch);
+			}
+		}
+		return -1000.0f;
+	}
+
+	/**
+	 * S3d (Second's review of round 6: S3d read the commanded cadence -- the CVar, by construction -- so it showed the wiring, not the
+	 * legs): stride cycles a second AS THE LEGS ARE SEEN -- the canon hip's swings through its own mean (a 3 deg band against jitter), two
+	 * crossings a cycle, over the time the samples span. -1 with fewer than 8 samples, under 0.2 s, or a missing pivot. At the bed's ~10
+	 * fps a cadence near 5 aliases (4.3 and 5.7 read alike, both in the band) and a ~10/s blur aliases toward 0 and FAILS -- the defect.
+	 */
+	float QaVisibleCycles(const TArray<float>& Pitch, const TArray<float>& At)
+	{
+		if (Pitch.Num() < 8 || At.Num() != Pitch.Num() || At.Last() - At[0] < 0.2f)
+		{
+			return -1.0f;
+		}
+		double Mean = 0.0;
+		for (const float Swing : Pitch)
+		{
+			if (Swing < -900.0f)
+			{
+				return -1.0f;
+			}
+			Mean += Swing;
+		}
+		Mean /= Pitch.Num();
+		int32 LastSide = 0;
+		int32 Crossings = 0;
+		for (const float Swing : Pitch)
+		{
+			const double Off = Swing - Mean;
+			const int32 SideNow = Off > 3.0 ? 1 : (Off < -3.0 ? -1 : 0);
+			if (SideNow != 0)
+			{
+				Crossings += LastSide != 0 && SideNow != LastSide ? 1 : 0;
+				LastSide = SideNow;
+			}
+		}
+		return static_cast<float>(Crossings * 0.5 / (At.Last() - At[0]));
 	}
 
 	void QaHandFinish(FQaHand& H, const TCHAR* Why)
@@ -6722,7 +6788,8 @@ namespace
 			{
 				return In < 8.0f ? true : Stop(TEXT("the swords were never held"));
 			}
-			const float Clear = QaClearHeading(World, Dog, 2600.0f, H.Forward);
+			// the CLEAREST heading out to 4200 uu (the run, the dash and the stick held forward until the camera lag eases out, S3e); the bar is unchanged
+			const float Clear = QaClearHeading(World, Dog, 4200.0f, H.Forward);
 			if (Clear < 1600.0f)
 			{
 				H.Check(TEXT("S2"), false, FString::Printf(TEXT("no open ground for the measurement (best heading clear for %.0f uu)"), Clear));
@@ -6753,17 +6820,19 @@ namespace
 			}
 			return true;
 		case 6:
-			// S3, THE DASH from the handoff run: W up, down, up, down -- the second press within the window -- then W HELD (the sprint),
-			// then W released at 1.2 s (the sprint ends)
-			if (H.KeyIndex <= 4)
-			{
-				Dog->AddMovementInput(H.Forward, 1.0f);
-			}
+		{
+			// S3, THE DASH from the handoff run: W up, down, up, down -- the second press within the window -- then W HELD (the sprint), then W
+			// released at 1.45 s (the sprint ends). THE STICK STAYS FORWARD after the release (Second's review of round 6: the QA stopped moving
+			// on the tick it let W go, so friction ended the sprint inside S3c's grace and a deleted release rule still passed): only the
+			// release can end this sprint, and S3c asserts the product's own end reason and when it came. The stick stays forward until the
+			// camera's lag has eased out (S3e), at most to 5.5 s.
+			Dog->AddMovementInput(H.Forward, 1.0f);
+			H.MaxTick = FMath::Max(H.MaxTick, Dt);
 			if (H.KeyIndex == 0 && In >= 0.00f) { Dog->QaForwardKey(false, false); H.KeyIndex = 1; }
 			if (H.KeyIndex == 1 && In >= 0.04f) { Dog->QaForwardKey(false, true); H.KeyIndex = 2; }
 			if (H.KeyIndex == 2 && In >= 0.08f) { Dog->QaForwardKey(false, false); H.KeyIndex = 3; }
 			if (H.KeyIndex == 3 && In >= 0.12f) { Dog->QaForwardKey(false, true); H.KeyIndex = 4; }
-			if (H.KeyIndex == 4 && In >= 1.20f) { Dog->QaForwardKey(false, false); H.KeyIndex = 5; H.ReleasedAt = In; }
+			if (H.KeyIndex == 4 && In >= 1.45f) { Dog->QaForwardKey(false, false); H.KeyIndex = 5; H.ReleasedAt = In; }
 			if (Dog->IsDashing())
 			{
 				H.DashPeak = FMath::Max(H.DashPeak, Ground);
@@ -6777,9 +6846,32 @@ namespace
 					++H.CadenceSamples;
 					H.bSprintLate = H.bSprintLate || In >= 1.05f;
 				}
+				// S3d: the canon hip through 1 s of the sprint (0.45-1.45 s: after the burst, W still held)
+				if (In >= 0.45f && In < 1.45f)
+				{
+					H.HipPitch.Add(QaCanonPivotPitch(Dog, TEXT("Pivot_legLeft")));
+					H.HipAt.Add(In);
+				}
 			}
-			if (In >= 1.45f)
+			// S3e: the camera's catch-up lag, every tick -- on while dashing, then eased out: when it goes off, the Dog's speed over the
+			// catch-up speed it was left at (the camera's gap behind the Dog, uu) must already be small
+			if (const USpringArmComponent* Boom = Dog->FindComponentByClass<USpringArmComponent>())
 			{
+				const float LagRatio = Boom->CameraLagSpeed > 0.0f ? Ground / Boom->CameraLagSpeed : 0.0f;
+				if (Boom->bEnableCameraLag)
+				{
+					H.bLagSeenOn = H.bLagSeenOn || Dog->IsDashing();
+					H.LagLastOnRatio = LagRatio;
+				}
+				else if (H.bLagSeenOn && H.LagOffAt < 0.0f && !Dog->IsDashing())
+				{
+					H.LagOffAt = In;
+					H.LagOffRatio = LagRatio;
+				}
+			}
+			if (In >= 1.70f && !H.bS3Judged)
+			{
+				H.bS3Judged = true;
 				const float Ratio = H.HandoffRun > 0.0f ? H.DashPeak / H.HandoffRun : 0.0f;
 				const bool bOne = Dog->GetDashCount() == H.DashBase + 1;
 				H.Check(TEXT("S3"), bOne && Ratio >= 2.0f,
@@ -6791,12 +6883,28 @@ namespace
 				H.Check(TEXT("S3b"), H.bSprintLate && SprintRatio >= 1.4f,
 					FString::Printf(TEXT("the sprint after the burst, W held: still dashing at 1.05 s %s, %.0f uu/s = %.2fx the handoff run (>= 1.4x: a sprint, held)"),
 						H.bSprintLate ? TEXT("yes") : TEXT("NO"), Sprint, SprintRatio));
-				H.Check(TEXT("S3c"), !Dog->IsDashing() && H.ReleasedAt > 0.0f,
-					FString::Printf(TEXT("W released at %.2f s: the dash %s 0.25 s later (it must end with the release); %.2f s dashing in all"),
-						H.ReleasedAt, Dog->IsDashing() ? TEXT("STILL RUNNING") : TEXT("ended"), H.DashSeconds));
-				const float Cadence = H.CadenceSamples > 0 ? H.CadenceSum / H.CadenceSamples : 0.0f;
-				H.Check(TEXT("S3d"), Cadence >= 3.0f && Cadence <= 6.0f,
-					FString::Printf(TEXT("the sprint's legs: %.2f stride cycles a second (3-6: a sprinter's, never the ~10/s blur that read as a slide)"), Cadence));
+				float AfterRelease = -1.0f;
+				const FString EndReason = Dog->QaLastSprintEnd(AfterRelease);
+				const float Allowed = 0.05f + H.MaxTick;
+				H.Check(TEXT("S3c"), !Dog->IsDashing() && H.ReleasedAt > 0.0f && EndReason == TEXT("released") && AfterRelease >= 0.0f && AfterRelease <= Allowed,
+					FString::Printf(TEXT("W released at %.2f s with the stick still forward: the sprint's own end reason '%s', %.3f s after the release ")
+						TEXT("(want 'released' within %.3f s: 0.05 and the longest frame, %.3f); %s now; %.2f s dashing in all"),
+						H.ReleasedAt, *EndReason, AfterRelease, Allowed, H.MaxTick, Dog->IsDashing() ? TEXT("STILL DASHING") : TEXT("not dashing"), H.DashSeconds));
+				const float Visible = QaVisibleCycles(H.HipPitch, H.HipAt);
+				const float Commanded = H.CadenceSamples > 0 ? H.CadenceSum / H.CadenceSamples : 0.0f;
+				H.Check(TEXT("S3d"), Visible >= 3.0f && Visible <= 6.0f,
+					FString::Printf(TEXT("the sprint's legs AS SEEN: the canon hip swings %.2f times a second, %d frames over %.2f s (3-6: a sprinter's, ")
+						TEXT("never the ~10/s blur that read as a slide); the animator's own count %.2f, reported only"),
+						Visible, H.HipPitch.Num(), H.HipAt.Num() > 1 ? H.HipAt.Last() - H.HipAt[0] : 0.0f, Commanded));
+			}
+			if (H.bS3Judged && (H.LagOffAt >= 0.0f || In >= 5.5f))
+			{
+				// S3e (CORE, 10-04, from Second's review #6: a lag switched off under a moving Dog snapped the camera ~70 uu in one frame)
+				H.Check(TEXT("S3e"), H.bLagSeenOn && H.LagOffAt >= 0.0f && H.LagOffRatio >= 0.0f && H.LagOffRatio <= 2.3f,
+					FString::Printf(TEXT("the camera's catch-up lag: on in the dash %s; off at %.2f s (%.2f s after the release) with the Dog at %.0f uu/s, ")
+						TEXT("|v| / catch-up %.2f uu when it went (want <= 2.3: the product's 2 and one frame), %.2f on the tick before"),
+						H.bLagSeenOn ? TEXT("yes") : TEXT("NO"), H.LagOffAt, H.LagOffAt >= 0.0f ? H.LagOffAt - H.ReleasedAt : -1.0f, Ground, H.LagOffRatio,
+						H.LagLastOnRatio));
 				QaHandRelease(Dog);
 				H.KeyIndex = 0;
 				H.Tests = QaHandTests();
@@ -6805,6 +6913,7 @@ namespace
 				Next();
 			}
 			return true;
+		}
 		case 7:
 		{
 			// I1-I9, ONE AT A TIME
@@ -7714,6 +7823,12 @@ namespace
 	 *        out from the body), the body leans, the feet are spaced, and the soles stay on the ground (a ready knee, the same
 	 *        feet) -- and photographed from the same three places;
 	 *   ST3  given back: every measure home to the baseline (normal roaming unchanged).
+	 *   ST2C THE FOUNDER'S CHARGING STANCE (10-04: "BEND MUCH MORE FORWARD ... about to CHARGE"), signed, on the body the player SEES,
+	 *        against each skin's own unarmed zero: C1 the bend forward from the hips, C2 the centre of mass ahead of the feet, C3 the hips
+	 *        onto the loaded +Y leg, C4 the pelvis down to the free -Y leg, C5 the -Y foot ahead / the +Y foot back / the soles close sideways
+	 *        / the same ground, C6 both knees bent, C7 the head forward, C8 both blades low and TRAILING, gold in the -Y (left) hand and cyan
+	 *        in the +Y by their DRAWN colour; on Relay OG ST2CX1/4/5 flip each sign through its own knob and must go RED (ST2CXR: green
+	 *        again); C9 (Relay OG, Shadow Flame) the charge INTO the dash; C10 given back, the drawn body home to its zero.
 	 * Then on Relay OG and Shadow Flame, armed and moving, photographed from the side as it goes: ST4 walking, ST5 running
 	 * (the blades trailing, swept out), ST6 a dash (the dash pose comes in). Frames to Saved/Screenshots/WLSTANCE. The swords
 	 * themselves arrive in M3: these frames show the stance only. WLSTQA lines; `quit` exits after.
@@ -7743,6 +7858,8 @@ namespace
 		float SoleStagger = 0.0f;
 		/** The hands' height above the actor's origin, uu (the reference: the arms LOWERED, never raised into a guard). */
 		float HandHeight = 0.0f;
+		/** The soles apart SIDEWAYS only, uu (Second's review of round 6: SoleSpread is a Dist2D, so ST2 counted the stagger as width). */
+		float SoleLateral = 0.0f;
 	};
 
 	/** The knees' bend now, degrees (Second, 10-03: "visible leg bend" needs a number, not only a pelvis drop): the angle between each thigh's
@@ -7869,6 +7986,219 @@ namespace
 		return true;
 	}
 
+	/**
+	 * THE FOUNDER'S CHARGING STANCE (10-04: "BEND MUCH MORE FORWARD ... about to CHARGE"), read off the body the player SEES
+	 * (ARelayDogCharacter::QaDrawnBody: a worn costume's own parts, else Relay OG's pivots), SIGNED, in the actor's frame: ahead along its
+	 * forward, toward its own right (+Y), up. Every ST2C bar is judged on these numbers, never on the product's record of its own pose.
+	 */
+	struct FQaChargeReading
+	{
+		bool bRead = false;
+		/** The head's lean from the hips' midpoint, degrees, FORWARD positive (CORE, 10-04: the animator's "forward" lean had pitched the
+		 *  Dog BACK -- a rig facing +X tips its top toward -X under a positive pitch -- so the bend is read off the drawn points, signed). */
+		float BendDeg = 0.0f;
+		float HeadAhead = 0.0f;
+		/** The head-and-hips midpoint (the mass, as the body's two ends carry it) ahead of the soles' midpoint, uu. */
+		float MassAhead = 0.0f;
+		/** The hips' midpoint toward +Y of the soles' midpoint, uu (onto the loaded rear leg). */
+		float HipShift = 0.0f;
+		/** The -Y hip LOWER than the +Y hip, uu (the pelvis down to the free leg). */
+		float PelvisDrop = 0.0f;
+		float FrontAhead = 0.0f;
+		float RearBehind = 0.0f;
+		/** The soles apart sideways only, uu. */
+		float SoleGap = 0.0f;
+		/** [0] the +Y leg, [1] the -Y leg. */
+		FVector Sole[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		float KneeDeg[2] = { -1.0f, -1.0f };
+		/** The swords by the side they are DRAWN on -- [0] the Dog's own left (-Y), [1] its right (+Y) -- never by the slot they came from. */
+		float SwordPresence = 0.0f;
+		int32 BladesOn[2] = { 0, 0 };
+		float TipAbove[2] = { 0.0f, 0.0f };
+		float TipBelowFist[2] = { 0.0f, 0.0f };
+		float TipBehind[2] = { 0.0f, 0.0f };
+		float TipOut[2] = { 0.0f, 0.0f };
+		/** The drawn colour's warmth (QaSwordWarmth) and how many coloured parts it was read over. */
+		float Warmth[2] = { 0.0f, 0.0f };
+		int32 Coloured[2] = { 0, 0 };
+	};
+
+	/**
+	 * A drawn sword's colour as its parts' materials hold it (Second's review of round 6: ST2S judged the SLOTS, not the colours): the mean
+	 * over its visible part instancers of (R - B) / (R + G + B) of each one's "Color". Every part of the gold sword is warm (+0.03..+0.49 by
+	 * WonderlandHandoffSwords::PartColour) and every part of the cyan cool (-0.02..-0.42), so the mean reads ~+0.23 gold and ~-0.14 cyan,
+	 * whatever the exposure scales the emissive parts by. False when no part's colour could be read.
+	 */
+	bool QaSwordWarmth(const WonderlandHandoffSwords::FPresentation& Swords, bool bSlot, float& OutWarmth, int32& OutParts)
+	{
+		TArray<const UInstancedStaticMeshComponent*> Parts;
+		Swords.GetPartMeshes(bSlot, Parts);
+		double Sum = 0.0;
+		OutParts = 0;
+		for (const UInstancedStaticMeshComponent* Part : Parts)
+		{
+			const UMaterialInstanceDynamic* Mid = Part != nullptr && Part->IsVisible() && Part->GetInstanceCount() > 0
+				? Cast<UMaterialInstanceDynamic>(Part->GetMaterial(0)) : nullptr;
+			FLinearColor Colour = FLinearColor::Black;
+			if (Mid == nullptr || !Mid->GetVectorParameterValue(FMaterialParameterInfo(TEXT("Color")), Colour))
+			{
+				continue;
+			}
+			const double Total = static_cast<double>(Colour.R) + Colour.G + Colour.B;
+			if (Total <= 1.0e-6)
+			{
+				continue;
+			}
+			Sum += (static_cast<double>(Colour.R) - Colour.B) / Total;
+			++OutParts;
+		}
+		OutWarmth = OutParts > 0 ? static_cast<float>(Sum / OutParts) : 0.0f;
+		return OutParts > 0;
+	}
+
+	FQaChargeReading QaReadCharge(const ARelayDogCharacter* Dog)
+	{
+		FQaChargeReading R;
+		FVector Head;
+		FVector HipPlus;
+		FVector HipMinus;
+		FVector KneePlus;
+		FVector KneeMinus;
+		FVector SolePlus;
+		FVector SoleMinus;
+		if (Dog == nullptr || !Dog->QaDrawnBody(Head, HipPlus, HipMinus, KneePlus, KneeMinus, SolePlus, SoleMinus))
+		{
+			return R;
+		}
+		R.bRead = true;
+		const FVector Fwd = Dog->GetActorForwardVector().GetSafeNormal2D();
+		const FVector Right = Dog->GetActorRightVector().GetSafeNormal2D();
+		const FVector HipMid = (HipPlus + HipMinus) * 0.5;
+		const FVector SoleMid = (SolePlus + SoleMinus) * 0.5;
+		const FVector ToHead = Head - HipMid;
+		R.BendDeg = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(FVector::DotProduct(ToHead, Fwd), ToHead.Z)));
+		R.HeadAhead = static_cast<float>(FVector::DotProduct(ToHead, Fwd));
+		R.MassAhead = static_cast<float>(FVector::DotProduct((Head + HipMid) * 0.5 - SoleMid, Fwd));
+		R.HipShift = static_cast<float>(FVector::DotProduct(HipMid - SoleMid, Right));
+		R.PelvisDrop = static_cast<float>(HipPlus.Z - HipMinus.Z);
+		R.FrontAhead = static_cast<float>(FVector::DotProduct(SoleMinus - HipMid, Fwd));
+		R.RearBehind = static_cast<float>(-FVector::DotProduct(SolePlus - HipMid, Fwd));
+		R.SoleGap = static_cast<float>(FMath::Abs(FVector::DotProduct(SolePlus - SoleMinus, Right)));
+		R.Sole[0] = SolePlus;
+		R.Sole[1] = SoleMinus;
+		// a knee's bend from the drawn points: 0 when hip, knee and sole are in a line
+		auto Bent = [](const FVector& Hip, const FVector& Knee, const FVector& Sole)
+		{
+			const FVector Thigh = (Knee - Hip).GetSafeNormal();
+			const FVector Shin = (Sole - Knee).GetSafeNormal();
+			return Thigh.IsNearlyZero() || Shin.IsNearlyZero() ? -1.0f
+				: static_cast<float>(FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Thigh, Shin), -1.0, 1.0))));
+		};
+		R.KneeDeg[0] = Bent(HipPlus, KneePlus, SolePlus);
+		R.KneeDeg[1] = Bent(HipMinus, KneeMinus, SoleMinus);
+		// the swords, each by the side it is DRAWN on
+		const WonderlandHandoffSwords::FPresentation& Swords = Dog->GetHandoffSwords();
+		R.SwordPresence = Swords.GetPresence();
+		const double Ground = FMath::Min(SolePlus.Z, SoleMinus.Z);
+		for (const bool bSlot : { true, false })
+		{
+			const FTransform Held = Swords.GetSwordWorld(bSlot);
+			const FVector Grip = Held.GetLocation();
+			const FVector Tip = Held.TransformPosition(FVector(0.0, 0.0, WonderlandHandoffSwords::TipZ));
+			const int32 Side = FVector::DotProduct(Grip - Dog->GetActorLocation(), Right) < 0.0 ? 0 : 1;
+			const double OwnSide = Side == 0 ? -1.0 : 1.0;
+			++R.BladesOn[Side];
+			R.TipAbove[Side] = static_cast<float>(Tip.Z - Ground);
+			R.TipBelowFist[Side] = static_cast<float>(Grip.Z - Tip.Z);
+			R.TipBehind[Side] = static_cast<float>(-FVector::DotProduct(Tip - Grip, Fwd));
+			R.TipOut[Side] = static_cast<float>(FVector::DotProduct(Tip - Grip, Right) * OwnSide);
+			QaSwordWarmth(Swords, bSlot, R.Warmth[Side], R.Coloured[Side]);
+		}
+		return R;
+	}
+
+	FString QaDescribeCharge(const FQaChargeReading& R)
+	{
+		if (!R.bRead)
+		{
+			return FString(TEXT("the drawn body could not be read"));
+		}
+		return FString::Printf(TEXT("bend %+.1f deg, head %+.1f ahead of the hips, mass %+.1f ahead of the soles, hips %+.1f toward +Y, the -Y hip %+.1f lower, ")
+			TEXT("the -Y sole %+.1f ahead and the +Y %+.1f behind, %.1f apart sideways, knees %.0f / %.0f deg (+Y / -Y); blades by side (-Y / +Y): ")
+			TEXT("%d / %d drawn, tips %+.0f / %+.0f above the ground, %+.0f / %+.0f below the fist, %+.0f / %+.0f behind it, %+.0f / %+.0f out, ")
+			TEXT("warmth %+.2f / %+.2f over %d / %d parts; presence %.2f"),
+			R.BendDeg, R.HeadAhead, R.MassAhead, R.HipShift, R.PelvisDrop, R.FrontAhead, R.RearBehind, R.SoleGap, R.KneeDeg[0], R.KneeDeg[1],
+			R.BladesOn[0], R.BladesOn[1], R.TipAbove[0], R.TipAbove[1], R.TipBelowFist[0], R.TipBelowFist[1], R.TipBehind[0], R.TipBehind[1],
+			R.TipOut[0], R.TipOut[1], R.Warmth[0], R.Warmth[1], R.Coloured[0], R.Coloured[1], R.SwordPresence);
+	}
+
+	/** ST2C1-C8, each with its line; [0] is unused. */
+	struct FQaChargeVerdict
+	{
+		bool bOk[9] = { true, false, false, false, false, false, false, false, false };
+		FString Line[9];
+	};
+
+	/**
+	 * C1-C8 against the founder's 10-04 charging stance (CORE's canon numbers: the bend ~24 forward, the hips 3 forward and ~3 toward +Y, the
+	 * -Y hip lower, the -Y foot 12 ahead and the +Y foot 14 back, the blades trailing low). The unarmed reading is the same body's own zero:
+	 * a skin whose head sits behind its hips is judged on the bend the stance ADDED, and the soles' sideways gap on how much it GREW.
+	 */
+	FQaChargeVerdict QaJudgeCharge(const FQaChargeReading& R, const FQaChargeReading& U, float BodyH)
+	{
+		FQaChargeVerdict V;
+		if (!R.bRead || !U.bRead)
+		{
+			for (int32 CheckNo = 1; CheckNo <= 8; ++CheckNo)
+			{
+				V.Line[CheckNo] = FString::Printf(TEXT("the drawn body could not be read (armed: %s, unarmed: %s)"), R.bRead ? TEXT("read") : TEXT("NOT read"),
+					U.bRead ? TEXT("read") : TEXT("NOT read"));
+			}
+			return V;
+		}
+		const float Added = R.BendDeg - U.BendDeg;
+		V.bOk[1] = Added >= 15.0f && Added <= 40.0f;
+		V.Line[1] = FString::Printf(TEXT("bend %+.1f deg forward from the hips (unarmed %+.1f): %+.1f added (want 15-40 FORWARD; negative leans back)"),
+			R.BendDeg, U.BendDeg, Added);
+		V.bOk[2] = R.MassAhead >= 0.06f * BodyH;
+		V.Line[2] = FString::Printf(TEXT("the mass (head and hips) %+.1f uu ahead of the soles' midpoint (want >= %.1f: 6%% of the %.0f uu body; unarmed %+.1f)"),
+			R.MassAhead, 0.06f * BodyH, BodyH, U.MassAhead);
+		V.bOk[3] = R.HipShift >= 1.5f;
+		V.Line[3] = FString::Printf(TEXT("the hips %+.1f uu toward +Y (onto the loaded rear leg) of the soles' midpoint (want >= +1.5; unarmed %+.1f)"), R.HipShift, U.HipShift);
+		V.bOk[4] = R.PelvisDrop >= 1.0f;
+		V.Line[4] = FString::Printf(TEXT("the -Y hip %+.1f uu LOWER than the +Y hip (want >= +1.0: the pelvis down to the free leg; unarmed %+.1f)"), R.PelvisDrop, U.PelvisDrop);
+		const float GapGrowth = R.SoleGap - U.SoleGap;
+		const float SinkPlus = static_cast<float>(R.Sole[0].Z - U.Sole[0].Z);
+		const float SinkMinus = static_cast<float>(R.Sole[1].Z - U.Sole[1].Z);
+		V.bOk[5] = R.FrontAhead >= 5.0f && R.RearBehind >= 8.0f && GapGrowth <= 6.0f && FMath::Abs(SinkPlus) <= 1.5f && FMath::Abs(SinkMinus) <= 1.5f;
+		V.Line[5] = FString::Printf(TEXT("the -Y sole %+.1f uu ahead of the hips (want >= 5), the +Y sole %+.1f behind them (want >= 8); the soles %.1f apart sideways, ")
+			TEXT("%+.1f over the unarmed stand (want <= +6: close, sideways only); each sole %+.1f / %+.1f uu off the ground it stood on (+Y / -Y; within 1.5)"),
+			R.FrontAhead, R.RearBehind, R.SoleGap, GapGrowth, SinkPlus, SinkMinus);
+		V.bOk[6] = R.KneeDeg[0] >= 8.0f && R.KneeDeg[1] >= 8.0f && R.KneeDeg[0] - U.KneeDeg[0] >= 5.0f && R.KneeDeg[1] - U.KneeDeg[1] >= 5.0f;
+		V.Line[6] = FString::Printf(TEXT("knees bent %.1f / %.1f deg (+Y / -Y, from the drawn hip, knee and sole; want >= 8 and >= 5 more than the unarmed %.1f / %.1f)"),
+			R.KneeDeg[0], R.KneeDeg[1], U.KneeDeg[0], U.KneeDeg[1]);
+		V.bOk[7] = R.HeadAhead >= 0.12f * BodyH;
+		V.Line[7] = FString::Printf(TEXT("the head %+.1f uu ahead of the hips (want >= %.1f: 12%% of the body; unarmed %+.1f)"), R.HeadAhead, 0.12f * BodyH, U.HeadAhead);
+		bool bBlades = R.SwordPresence >= 0.99f;
+		FString BladeLine;
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			const bool bWantGold = Side == 0;
+			const bool bColour = R.Coloured[Side] >= 3 && (bWantGold ? R.Warmth[Side] >= 0.08f : R.Warmth[Side] <= -0.05f);
+			const bool bThis = R.BladesOn[Side] == 1 && bColour && R.TipAbove[Side] >= 3.0f && R.TipBelowFist[Side] > 0.0f && R.TipBehind[Side] >= 15.0f
+				&& R.TipOut[Side] >= 10.0f;
+			bBlades = bBlades && bThis;
+			BladeLine += FString::Printf(TEXT("%s%s hand: %d blade(s) drawn there, %s by its drawn colour (warmth %+.2f over %d parts; want %s), tip %+.0f above ")
+				TEXT("the ground (>= 3), %+.0f below the fist (> 0), %+.0f behind it (>= 15: trailing), %+.0f out (>= 10)"),
+				BladeLine.IsEmpty() ? TEXT("") : TEXT("; "), Side == 0 ? TEXT("the -Y (LEFT)") : TEXT("the +Y (RIGHT)"), R.BladesOn[Side],
+				R.Warmth[Side] >= 0.08f ? TEXT("GOLD") : (R.Warmth[Side] <= -0.05f ? TEXT("CYAN") : TEXT("neither")), R.Warmth[Side], R.Coloured[Side],
+				bWantGold ? TEXT("gold, >= +0.08") : TEXT("cyan, <= -0.05"), R.TipAbove[Side], R.TipBelowFist[Side], R.TipBehind[Side], R.TipOut[Side]);
+		}
+		V.bOk[8] = bBlades;
+		V.Line[8] = FString::Printf(TEXT("the blades low and TRAILING (presence %.2f, want 1): %s"), R.SwordPresence, *BladeLine);
+		return V;
+	}
+
 	struct FQaStance
 	{
 		TWeakObjectPtr<UWorld> World;
@@ -7897,6 +8227,21 @@ namespace
 		FVector SoleBase[2] = { FVector::ZeroVector, FVector::ZeroVector };
 		FString KneesOutWas;
 		FString CrouchWas;
+		/** ST2C (the founder's 10-04 charging stance): each skin's own unarmed reading, its zero, by its place in FaceRoster */
+		FQaChargeReading ChargeUnarmed[UE_ARRAY_COUNT(FaceRoster)];
+		/** ST2CX*: the knob a control has flipped, and its value before */
+		FString ControlKnob;
+		FString ControlWas;
+		/** ST2C9, the charge into the dash: when the dash began (s into the phase), the bend it added at +0.25 s and at +1.0 s, the ground
+		 *  speed and the dash at +1.0 s, and each canon shoulder's pitch range over +0.25..+1.25 s ([0] Pivot_armLeft, [1] Pivot_armRight) */
+		float C9DashAt = -1.0f;
+		float C9BendEarly = -1000.0f;
+		float C9BendLate = -1000.0f;
+		float C9SpeedLate = 0.0f;
+		bool bC9DashingLate = false;
+		float C9ArmLow[2] = { 1000.0f, 1000.0f };
+		float C9ArmHigh[2] = { -1000.0f, -1000.0f };
+		bool bC9Ground = true;
 		void Check(const FString& Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
@@ -7922,6 +8267,7 @@ namespace
 		R.Pitch = Dog->GetCanonBodyPitch();
 		R.SoleStagger = static_cast<float>(FVector::DotProduct(SoleB - SoleA, Fwd));
 		R.HandHeight = static_cast<float>((HandA.Z + HandB.Z) * 0.5 - At.Z);
+		R.SoleLateral = static_cast<float>(FMath::Abs(FVector::DotProduct(SoleA - SoleB, Dog->GetActorRightVector().GetSafeNormal2D())));
 		return R;
 	}
 
@@ -8029,6 +8375,19 @@ namespace
 		}
 	}
 
+	/** ST2K's set-up (round 6), after ST2/ST2C (and on Relay OG the controls): the crouch it is measured on, FIRST -- then (phase 7) its
+	 *  baseline AT that crouch, then the turn (round 6a: a baseline taken before the crouch changed read the crouch's own ~1.9 uu sole shift
+	 *  as the turn's). THE TURN NEEDS A BENT KNEE TO SHOW (Second, round 6: the rise is ~4 uu at a 58 deg knee, ~1.1 at 15 deg), so ST2K
+	 *  tests the MECHANISM on a crouch of 10, then restores it. */
+	void QaStanceBeginKnees(FQaStance& S, UWorld* World)
+	{
+		const IConsoleVariable* KneesVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Handoff.Stance.KneesOut"));
+		S.KneesOutWas = KneesVar != nullptr ? KneesVar->GetString() : FString(TEXT("0"));
+		const IConsoleVariable* CrouchVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Handoff.Stance.Crouch"));
+		S.CrouchWas = CrouchVar != nullptr ? CrouchVar->GetString() : FString(TEXT("7"));
+		GEngine->Exec(World, TEXT("wl.Handoff.Stance.Crouch 10"));
+	}
+
 	bool QaStanceTick(float)
 	{
 		if (!GQaStance.IsValid())
@@ -8106,6 +8465,9 @@ namespace
 			S.Base = QaReadStance(Dog);
 			S.Check(FString::Printf(TEXT("ST1.%d"), S.Skin + 1), Dog->GetArmedStanceWeight() == 0.0f,
 				FString::Printf(TEXT("%s unarmed (the baseline): stance weight %.3f; %s"), *SkinName, Dog->GetArmedStanceWeight(), *QaDescribeStance(S.Base)));
+			// ST2C's zero: this skin's drawn body, unarmed
+			S.ChargeUnarmed[S.Skin] = QaReadCharge(Dog);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSTQA reading %s unarmed, the drawn body (ST2C's zero): %s"), *SkinName, *QaDescribeCharge(S.ChargeUnarmed[S.Skin]));
 			S.Shot = 0;
 			S.bArmedShots = false;
 			QaStanceShow(S, World, Dog, true);
@@ -8155,77 +8517,53 @@ namespace
 				return In < 10.0f ? true : Stop(TEXT("the swords were never held"));
 			}
 			const FStanceReading R = QaReadStance(Dog);
-			const float Ahead = R.HandForward - S.Base.HandForward;
 			const float Out = R.HandSpread - S.Base.HandSpread;
-			const float Feet = R.SoleSpread - S.Base.SoleSpread;
+			// SIDEWAYS only (Second's review of round 6: the Dist2D spread counted the stagger as width)
+			const float Feet = R.SoleLateral - S.Base.SoleLateral;
 			const float Sink = R.SoleHeight - S.Base.SoleHeight;
-			const float Lean = FMath::Abs(R.Pitch - S.Base.Pitch);
-			// A VISIBLE BEND (Second, 10-03, from the founder's "improve visible leg bend"): both knees bent at least 15 deg, measured
+			// A VISIBLE BEND (Second, 10-03, from the founder's "improve visible leg bend"): measured, not only a pelvis drop
 			float KneeLeft = -1.0f;
 			float KneeRight = -1.0f;
 			QaKneeBend(Dog, KneeLeft, KneeRight);
 			float BehindLeft = -1.0f;
 			float BehindRight = -1.0f;
 			QaKneeBend(Dog, BehindLeft, BehindRight, true);
-			// THE FOUNDER'S CANONICAL STANCE, 10-03 (the reference photo; it supersedes P2's "hands >= 10 forward, feet >= 5 apart, lean >= 5"):
-			// the feet CLOSE (the spread grows by no more than 6 uu over the unarmed stand), one foot a little ahead (the Dog's own left by 3-12
-			// uu), the torso UPRIGHT (pitch moved <= 4 deg), the knees only SLIGHTLY bent (8-40 deg), the same feet (sink within 1.5 uu), the
-			// arms LOWERED (the hands raised by no more than 4 uu) and a little away from the body (>= 3 uu wider)
-			const float Stagger = R.SoleStagger - S.Base.SoleStagger;
-			// THE HANDS AT THE HIP (the reference): their height above the soles as a share of the body's height, 32-55% -- low and relaxed,
-			// never raised into a guard (a guard is the chest, ~70%), and never the Dog's knee-height hanging arms (~25%), where its long
-			// blades cannot sit diagonal without going into the ground (round 6a: tips 16-34 uu under it)
+			// ST2, RE-PINNED TO THE FOUNDER'S 10-04 CHARGING STANCE (it supersedes the 10-03 upright reference): the stance's INVARIANTS on the
+			// canon joints -- the full stance weight, the soles no further apart SIDEWAYS than +6 uu over the unarmed stand, the same ground
+			// (sink within 1.5), the knees bent but never a squat (8-80 deg), the hands LOWERED (12-55% of the height above the soles: never a
+			// guard, never dragging) and never tucked across the body (the spread >= the unarmed hang; the 10-04 arms carry Out 6). RETIRED from
+			// ST2, now ST2C's and signed: the lean (<= 4 deg, upright -- the charge bends ~24 forward), the stagger (3-12 uu -- the charge puts
+			// one foot 12 ahead and the other 14 back) and the hands' forward reach (-4..25 -- the charge's arms trail with the body).
 			const float BodyH = FMath::Max(Dog->GetCanonBodyHeightUu(), 1.0f);
 			const float HipShare = (R.HandHeight - R.SoleHeight) / BodyH;
-			const float Raised = R.HandHeight - S.Base.HandHeight;
-			const bool bOk = Dog->GetArmedStanceWeight() == 1.0f && Feet <= 6.0f && Stagger >= 3.0f && Stagger <= 12.0f && Lean <= 4.0f
-				&& KneeLeft >= 8.0f && KneeRight >= 8.0f && KneeLeft <= 40.0f && KneeRight <= 40.0f && FMath::Abs(Sink) <= 1.5f
-				&& HipShare >= 0.32f && HipShare <= 0.55f && Out >= 3.0f && Ahead >= -4.0f && Ahead <= 25.0f;
+			const bool bOk = Dog->GetArmedStanceWeight() == 1.0f && Feet <= 6.0f && FMath::Abs(Sink) <= 1.5f && KneeLeft >= 8.0f && KneeRight >= 8.0f
+				&& KneeLeft <= 80.0f && KneeRight <= 80.0f && HipShare >= 0.12f && HipShare <= 0.55f && Out >= 0.0f;
 			S.Check(FString::Printf(TEXT("ST2.%d"), S.Skin + 1), bOk,
-				FString::Printf(TEXT("%s armed, standing (the founder's 10-03 reference): stance weight %.3f; soles %+.1f apart (<= 6: close), the left %+.1f ahead ")
-					TEXT("(3-12: one foot a little forward), %+.1f uu off the ground they stood on (within 1.5: the same feet); body pitch moved %.1f deg (<= 4: upright); ")
-					TEXT("knees bent %.0f / %.0f deg (8-40: slightly), %.0f / %.0f of it from behind (reported); hands at %.0f%% of the height (32-55: the hip) ")
-					TEXT("(%+.1f uu over the unarmed hang), %+.1f apart (>= 3), %+.1f forward (-4..25) | %s"),
-					*SkinName, Dog->GetArmedStanceWeight(), Feet, Stagger, Sink, Lean, KneeLeft, KneeRight, BehindLeft, BehindRight, HipShare * 100.0f, Raised, Out,
-					Ahead, *QaDescribeStance(R)));
-			// ST2S: THE BLADES LOW AND DIAGONAL, as the reference holds them -- each tip DOWN from its grip (>= 30 uu), OUT to its own hand's side
-			// (>= 25 uu), never into the ground (>= 2 uu above the soles); gold on the Dog's own LEFT (-Y), cyan on its RIGHT
+				FString::Printf(TEXT("%s armed, standing (the stance's invariants; the 10-04 charge itself is ST2C): stance weight %.3f; soles %+.1f apart ")
+					TEXT("sideways (<= 6: close), %+.1f uu off the ground they stood on (within 1.5); knees bent %.0f / %.0f deg (8-80), %.0f / %.0f of it ")
+					TEXT("from behind (reported); hands at %.0f%% of the height (12-55: lowered), %+.1f apart (>= 0: never tucked in) | %s"),
+					*SkinName, Dog->GetArmedStanceWeight(), Feet, Sink, KneeLeft, KneeRight, BehindLeft, BehindRight, HipShare * 100.0f, Out,
+					*QaDescribeStance(R)));
+			// ST2C1-C8: THE FOUNDER'S CHARGING STANCE (10-04), on the body the player SEES, against this skin's own unarmed zero. ST2S (the 10-03
+			// blades: >= 30 down, >= 25 out, judged by SLOT) is RETIRED into ST2C8: the charge's blades trail, and each is judged by the colour
+			// it is DRAWN in, on the side it is drawn on (Second's review of round 6).
 			{
-				const WonderlandHandoffSwords::FPresentation& Blades = Dog->GetHandoffSwords();
-				const FVector Right = Dog->GetActorRightVector().GetSafeNormal2D();
-				const double SoleGround = FMath::Min(Dog->GetCanonSoleWorld(1.0f).Z, Dog->GetCanonSoleWorld(-1.0f).Z);
-				FString BladeLine;
-				bool bBlades = true;
-				for (const bool bGold : { true, false })
+				const FQaChargeReading Charge = QaReadCharge(Dog);
+				const FQaChargeVerdict Verdict = QaJudgeCharge(Charge, S.ChargeUnarmed[S.Skin], BodyH);
+				for (int32 CheckNo = 1; CheckNo <= 8; ++CheckNo)
 				{
-					const FTransform Blade = Blades.GetSwordWorld(bGold);
-					const FVector Grip = Blade.GetLocation();
-					const FVector BladeTip = Blade.TransformPosition(FVector(0.0, 0.0, WonderlandHandoffSwords::TipZ));
-					const double OwnSide = bGold ? -1.0 : 1.0;
-					const double Down = Grip.Z - BladeTip.Z;
-					const double Outward = FVector::DotProduct(BladeTip - Grip, Right) * OwnSide;
-					const double AboveGround = BladeTip.Z - SoleGround;
-					const bool bSide = FVector::DotProduct(Grip - Dog->GetActorLocation(), Right) * OwnSide > 0.0;
-					const bool bThis = Down >= 30.0 && Outward >= 25.0 && AboveGround >= 2.0 && bSide;
-					bBlades = bBlades && bThis;
-					BladeLine += FString::Printf(TEXT("%s%s: tip %.0f uu down, %.0f out, %.0f above the ground, on its own side %s"), BladeLine.IsEmpty() ? TEXT("") : TEXT("; "),
-						bGold ? TEXT("gold (left)") : TEXT("cyan (right)"), Down, Outward, AboveGround, bSide ? TEXT("yes") : TEXT("NO"));
+					S.Check(FString::Printf(TEXT("ST2C%d.%d"), CheckNo, S.Skin + 1), Verdict.bOk[CheckNo],
+						FString::Printf(TEXT("%s, the charging stance: %s"), *SkinName, *Verdict.Line[CheckNo]));
 				}
-				S.Check(FString::Printf(TEXT("ST2S.%d"), S.Skin + 1), bBlades,
-					FString::Printf(TEXT("%s, the blades low and diagonal (want each tip >= 30 down, >= 25 out, >= 2 above the ground): %s"), *SkinName, *BladeLine));
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSTQA reading %s armed, the drawn body: %s"), *SkinName, *QaDescribeCharge(Charge));
 			}
-			// ST2K next (round 6): the knees turned out by a known angle on the body the player sees, then the armed frames as built.
-			// FIRST the crouch it is measured on, and the baseline taken AT that crouch (round 6a: a baseline taken before the crouch changed
-			// read the crouch's own ~1.9 uu sole shift as the turn's)
+			// THE CONTROLS on Relay OG (control-must-be-able-to-fail): each sign flipped through its own knob must turn ITS check red
+			if (S.Skin == 0)
 			{
-				const IConsoleVariable* KneesVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Handoff.Stance.KneesOut"));
-				S.KneesOutWas = KneesVar != nullptr ? KneesVar->GetString() : FString(TEXT("0"));
-				// THE TURN NEEDS A BENT KNEE TO SHOW (Second, round 6: the rise is ~4 uu at a 58 deg knee, ~1.1 at 15 deg): the founder's 10-03
-				// stance bends the knees only slightly, so ST2K tests the MECHANISM on a crouch of 10 for its own measurement, then restores it
-				const IConsoleVariable* CrouchVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Handoff.Stance.Crouch"));
-				S.CrouchWas = CrouchVar != nullptr ? CrouchVar->GetString() : FString(TEXT("1.5"));
-				GEngine->Exec(World, TEXT("wl.Handoff.Stance.Crouch 10"));
+				Next(30);
+				return true;
 			}
+			QaStanceBeginKnees(S, World);
 			Next(7);
 			return true;
 		}
@@ -8301,6 +8639,22 @@ namespace
 			S.Check(FString::Printf(TEXT("ST3.%d"), S.Skin + 1), bHome,
 				FString::Printf(TEXT("%s given back: stance weight %.3f; %s (the baseline: %s)"), *SkinName, Dog->GetArmedStanceWeight(), *QaDescribeStance(R),
 					*QaDescribeStance(S.Base)));
+			// ST2C10: given back, the drawn body home to its own unarmed zero -- the bend within 3 deg, each sole within 1.5 uu of where it
+			// stood, each knee within 4 deg: the charge leaves nothing on the unarmed Dog
+			{
+				const FQaChargeReading Back = QaReadCharge(Dog);
+				const FQaChargeReading& Zero = S.ChargeUnarmed[S.Skin];
+				const float BendOff = Back.BendDeg - Zero.BendDeg;
+				const float SoleOff[2] = { static_cast<float>(FVector::Dist(Back.Sole[0], Zero.Sole[0])), static_cast<float>(FVector::Dist(Back.Sole[1], Zero.Sole[1])) };
+				const float KneeOff[2] = { Back.KneeDeg[0] - Zero.KneeDeg[0], Back.KneeDeg[1] - Zero.KneeDeg[1] };
+				const bool bZero = Back.bRead && Zero.bRead && FMath::Abs(BendOff) <= 3.0f && SoleOff[0] <= 1.5f && SoleOff[1] <= 1.5f
+					&& FMath::Abs(KneeOff[0]) <= 4.0f && FMath::Abs(KneeOff[1]) <= 4.0f;
+				S.Check(FString::Printf(TEXT("ST2C10.%d"), S.Skin + 1), bZero,
+					FString::Printf(TEXT("%s given back, the drawn body against its unarmed zero: bend %+.1f deg off (within 3; now %+.1f), soles %.2f / %.2f uu ")
+						TEXT("from where they stood (within 1.5), knees %+.1f / %+.1f deg off (within 4)%s"),
+						*SkinName, BendOff, Back.BendDeg, SoleOff[0], SoleOff[1], KneeOff[0], KneeOff[1],
+						Back.bRead && Zero.bRead ? TEXT("") : TEXT(" -- the drawn body could not be read")));
+			}
 			++S.Skin;
 			Next(1);
 			return true;
@@ -8420,9 +8774,189 @@ namespace
 				{
 					PC->SetViewTargetWithBlend(Dog, 0.0f);
 				}
+				// then ST2C9: from the charge, into the dash
+				Next(25);
+			}
+			return true;
+		}
+		case 25:
+		{
+			// ST2C9, THE CHARGE INTO THE DASH (the founder, 10-04: the pose flows naturally into the dash): stopped and standing in the charge
+			// on a clear heading; (26) settled, the dash's cooldown long past; (27) W down, up, down and HELD, the camera at the side -- the
+			// body stays bent through the burst (no snap upright), bends FORWARD in the sprint, and the arms PUMP
+			const float Still = FVector(Dog->GetVelocity().X, Dog->GetVelocity().Y, 0.0f).Size();
+			if (In < 2.0f || Still > 5.0f || Dog->IsDashing())
+			{
+				return In < 12.0f ? true : Stop(TEXT("the Dog never stood still after the dash"));
+			}
+			const float Clear = QaClearHeading(World, Dog, 2200.0f, S.Forward);
+			S.bC9Ground = Clear >= 1400.0f;
+			QaFace(Dog, S.Forward);
+			S.C9DashAt = -1.0f;
+			S.C9BendEarly = -1000.0f;
+			S.C9BendLate = -1000.0f;
+			S.C9SpeedLate = 0.0f;
+			S.bC9DashingLate = false;
+			for (int32 ArmSide = 0; ArmSide < 2; ++ArmSide)
+			{
+				S.C9ArmLow[ArmSide] = 1000.0f;
+				S.C9ArmHigh[ArmSide] = -1000.0f;
+			}
+			S.Key = 0;
+			Next(26);
+			return true;
+		}
+		case 26:
+		{
+			if (In < 2.5f)
+			{
+				return true;
+			}
+			const FString Moving = S.Moving == 0 ? FString(TEXT("relay_og")) : FString(TEXT("shadow_flame"));
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSTQA reading %s armed, standing in the charge before the dash: %s"), *Moving, *QaDescribeCharge(QaReadCharge(Dog)));
+			if (!S.bC9Ground)
+			{
+				S.Check(FString::Printf(TEXT("ST2C9.%d"), S.Moving + 1), false, FString::Printf(TEXT("%s: no open ground to dash from the charge"), *Moving));
 				++S.Moving;
 				Next(20);
+				return true;
 			}
+			QaStanceShow(S, World, Dog, true);
+			Next(27);
+			return true;
+		}
+		case 27:
+		{
+			const FString Moving = S.Moving == 0 ? FString(TEXT("relay_og")) : FString(TEXT("shadow_flame"));
+			const FQaChargeReading& Zero = S.ChargeUnarmed[S.Moving == 0 ? 0 : static_cast<int32>(UE_ARRAY_COUNT(FaceRoster)) - 1];
+			Dog->AddMovementInput(S.Forward, 1.0f);
+			QaStanceCamera(S, World, Dog, 90.0, 420.0, 30.0, 55.0f);
+			const float Ground = FVector(Dog->GetVelocity().X, Dog->GetVelocity().Y, 0.0f).Size();
+			// from a stand: W down, up, down -- the second press within the window -- and HELD
+			if (S.Key == 0 && In >= 0.00f) { Dog->QaForwardKey(false, true); S.Key = 1; }
+			if (S.Key == 1 && In >= 0.04f) { Dog->QaForwardKey(false, false); S.Key = 2; }
+			if (S.Key == 2 && In >= 0.08f) { Dog->QaForwardKey(false, true); S.Key = 3; }
+			if (S.C9DashAt < 0.0f && Dog->IsDashing())
+			{
+				S.C9DashAt = In;
+			}
+			if (S.C9DashAt < 0.0f)
+			{
+				if (In < 1.5f)
+				{
+					return true;
+				}
+				S.Check(FString::Printf(TEXT("ST2C9.%d"), S.Moving + 1), false,
+					FString::Printf(TEXT("%s: no dash started from the charge (W down, up, down and held) within 1.5 s"), *Moving));
+			}
+			else
+			{
+				const float Since = In - S.C9DashAt;
+				if (S.C9BendEarly < -900.0f && Since >= 0.25f)
+				{
+					S.C9BendEarly = QaReadCharge(Dog).BendDeg - Zero.BendDeg;
+					QaStanceFrame(S, FString::Printf(TEXT("m%d_%s_charge_burst_side"), S.Moving + 1, *Moving));
+				}
+				if (Since >= 0.25f && Since <= 1.25f)
+				{
+					static const TCHAR* const ShoulderPivots[] = { TEXT("Pivot_armLeft"), TEXT("Pivot_armRight") };
+					for (int32 ArmSide = 0; ArmSide < 2; ++ArmSide)
+					{
+						const float Pitch = QaCanonPivotPitch(Dog, ShoulderPivots[ArmSide]);
+						if (Pitch > -900.0f)
+						{
+							S.C9ArmLow[ArmSide] = FMath::Min(S.C9ArmLow[ArmSide], Pitch);
+							S.C9ArmHigh[ArmSide] = FMath::Max(S.C9ArmHigh[ArmSide], Pitch);
+						}
+					}
+				}
+				if (S.C9BendLate < -900.0f && Since >= 1.0f)
+				{
+					S.C9BendLate = QaReadCharge(Dog).BendDeg - Zero.BendDeg;
+					S.C9SpeedLate = Ground;
+					S.bC9DashingLate = Dog->IsDashing();
+					QaStanceFrame(S, FString::Printf(TEXT("m%d_%s_charge_sprint_side"), S.Moving + 1, *Moving));
+				}
+				if (Since < 1.3f)
+				{
+					return true;
+				}
+				const IConsoleVariable* SprintVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Handoff.SprintSpeed"));
+				const float Sprint = SprintVar != nullptr ? SprintVar->GetFloat() : 1150.0f;
+				const float Swing[2] = { S.C9ArmHigh[0] - S.C9ArmLow[0], S.C9ArmHigh[1] - S.C9ArmLow[1] };
+				const bool bFlow = Zero.bRead && S.C9BendEarly >= 8.0f && S.C9BendLate >= 8.0f && S.C9BendLate <= 25.0f && S.bC9DashingLate
+					&& S.C9SpeedLate >= 0.8f * Sprint && Swing[0] >= 25.0f && Swing[1] >= 25.0f;
+				S.Check(FString::Printf(TEXT("ST2C9.%d"), S.Moving + 1), bFlow,
+					FString::Printf(TEXT("%s, the charge into the dash: the bend added %+.1f deg at +0.25 s into the burst (>= 8: no snap upright) and %+.1f ")
+						TEXT("at +1.0 s (8-25 FORWARD); at +1.0 s %s at %.0f uu/s (>= %.0f: 80%% of the sprint); the shoulders' pitch range over +0.25..+1.25 s ")
+						TEXT("%.0f / %.0f deg (the left / right pivot; >= 25: the arms PUMP)"),
+						*Moving, S.C9BendEarly, S.C9BendLate, S.bC9DashingLate ? TEXT("sprinting") : TEXT("NOT dashing"), S.C9SpeedLate, 0.8f * Sprint,
+						Swing[0], Swing[1]));
+			}
+			QaHandRelease(Dog);
+			QaStanceShow(S, World, Dog, false);
+			if (APlayerController* PC = World->GetFirstPlayerController())
+			{
+				PC->SetViewTargetWithBlend(Dog, 0.0f);
+			}
+			++S.Moving;
+			Next(20);
+			return true;
+		}
+		case 30:
+		case 31:
+		case 32:
+		{
+			// THE CONTROLS (control-must-be-able-to-fail), on Relay OG, armed: each sign flipped through its own knob -- the bend backward
+			// (Stance.Bend -24), the pelvis the other way (Stance.Tilt -5), the front foot behind (Stance.Front -12) -- must turn ITS check
+			// RED; each knob put back before the next, and ST2CXR then reads the stance green again
+			static const TCHAR* const ControlKnobs[] = { TEXT("wl.Handoff.Stance.Bend"), TEXT("wl.Handoff.Stance.Tilt"), TEXT("wl.Handoff.Stance.Front") };
+			static const TCHAR* const ControlFlips[] = { TEXT("-24"), TEXT("-5"), TEXT("-12") };
+			static const int32 ControlJudged[] = { 1, 4, 5 };
+			const int32 Which = S.Phase - 30;
+			const int32 Judged = ControlJudged[Which];
+			if (S.ControlKnob.IsEmpty())
+			{
+				const IConsoleVariable* Knob = IConsoleManager::Get().FindConsoleVariable(ControlKnobs[Which]);
+				if (Knob == nullptr)
+				{
+					S.Check(FString::Printf(TEXT("ST2CX%d"), Judged), false, FString::Printf(TEXT("the control's knob %s does not exist in this build"), ControlKnobs[Which]));
+					Next(S.Phase + 1);
+					return true;
+				}
+				S.ControlKnob = ControlKnobs[Which];
+				S.ControlWas = Knob->GetString();
+				GEngine->Exec(World, *FString::Printf(TEXT("%s %s"), ControlKnobs[Which], ControlFlips[Which]));
+				S.PhaseAt = Now;
+				return true;
+			}
+			if (In < 1.2f)
+			{
+				return true;
+			}
+			const FQaChargeVerdict Verdict = QaJudgeCharge(QaReadCharge(Dog), S.ChargeUnarmed[0], FMath::Max(Dog->GetCanonBodyHeightUu(), 1.0f));
+			S.Check(FString::Printf(TEXT("ST2CX%d"), Judged), !Verdict.bOk[Judged],
+				FString::Printf(TEXT("the control: %s %s (was %s) must turn ST2C%d RED -- %s: %s"), ControlKnobs[Which], ControlFlips[Which], *S.ControlWas, Judged,
+					Verdict.bOk[Judged] ? TEXT("it stayed GREEN, the check cannot fail") : TEXT("red, as it must be"), *Verdict.Line[Judged]));
+			GEngine->Exec(World, *FString::Printf(TEXT("%s %s"), *S.ControlKnob, *S.ControlWas));
+			S.ControlKnob.Reset();
+			Next(S.Phase + 1);
+			return true;
+		}
+		case 33:
+		{
+			// every knob put back: the stance reads as it did
+			if (In < 1.2f)
+			{
+				return true;
+			}
+			const FQaChargeVerdict Verdict = QaJudgeCharge(QaReadCharge(Dog), S.ChargeUnarmed[0], FMath::Max(Dog->GetCanonBodyHeightUu(), 1.0f));
+			S.Check(TEXT("ST2CXR"), Verdict.bOk[1] && Verdict.bOk[4] && Verdict.bOk[5],
+				FString::Printf(TEXT("the knobs put back, the stance green again: ST2C1 %s (%s); ST2C4 %s (%s); ST2C5 %s (%s)"),
+					Verdict.bOk[1] ? TEXT("green") : TEXT("RED"), *Verdict.Line[1], Verdict.bOk[4] ? TEXT("green") : TEXT("RED"), *Verdict.Line[4],
+					Verdict.bOk[5] ? TEXT("green") : TEXT("RED"), *Verdict.Line[5]));
+			QaStanceBeginKnees(S, World);
+			Next(7);
 			return true;
 		}
 		default:
@@ -8717,6 +9251,35 @@ namespace
 	};
 	TSharedPtr<FQaSwords> GQaSwords;
 
+	/**
+	 * SW1c's reference body: the union of an actor's DRAWN mesh bounds -- registered, visible, not hidden in game, with geometry (an
+	 * instancer only with instances). AActor::GetComponentsBoundingBox counts every registered primitive, drawn or not, and a companion
+	 * carries a ContributionBeam placed in ABSOLUTE world space and a SupportPulse instancer even while both are hidden. Invalid when
+	 * nothing is drawn.
+	 */
+	FBox QaDrawnMeshBox(const AActor* Actor)
+	{
+		FBox Drawn(ForceInit);
+		TInlineComponentArray<UMeshComponent*> Meshes;
+		Actor->GetComponents<UMeshComponent>(Meshes);
+		for (const UMeshComponent* Mesh : Meshes)
+		{
+			if (Mesh == nullptr || !Mesh->IsRegistered() || !Mesh->IsVisible() || Mesh->bHiddenInGame)
+			{
+				continue;
+			}
+			if (const UInstancedStaticMeshComponent* Instanced = Cast<UInstancedStaticMeshComponent>(Mesh))
+			{
+				if (Instanced->GetInstanceCount() == 0)
+				{
+					continue;
+				}
+			}
+			Drawn += Mesh->Bounds.GetBox();
+		}
+		return Drawn;
+	}
+
 	const FStanceShot SwordShots[] = {
 		{ TEXT("front"), 0.0, 300.0, 40.0, 50.0f },
 		{ TEXT("34"), 40.0, 300.0, 40.0, 50.0f },
@@ -8861,13 +9424,20 @@ namespace
 			{
 				return true;
 			}
-			// SW1c's reference: each companion's body as it stands BEFORE anything is drawn in (the QA's own measure, not the product's record)
+			// SW1c's reference: each companion's body as it stands BEFORE anything is drawn in (the QA's own measure, not the product's record).
+			// ITS DRAWN MESHES ONLY (Second's review of round 6, #8: is the "original body" inflated by what is not drawn?): both boxes are
+			// logged, so the inflation is a measured number, and the drawn one is the reference.
 			for (int32 Side = 0; Side < 2; ++Side)
 			{
 				const AActor* Whole = Side == 0 ? LeftBody : RightBody;
-				const FBox WholeBox = Whole != nullptr ? Whole->GetComponentsBoundingBox(true) : FBox(ForceInit);
+				const FBox EveryBox = Whole != nullptr ? Whole->GetComponentsBoundingBox(true) : FBox(ForceInit);
+				const FBox WholeBox = Whole != nullptr ? QaDrawnMeshBox(Whole) : FBox(ForceInit);
 				S.RestOffset[Side] = WholeBox.IsValid ? WholeBox.GetCenter() - Whole->GetActorLocation() : FVector::ZeroVector;
 				S.RestExtent[Side] = WholeBox.IsValid ? WholeBox.GetExtent() : FVector::ZeroVector;
+				const FVector EveryExtent = EveryBox.IsValid ? EveryBox.GetExtent() : FVector::ZeroVector;
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSWQA SW1c reference %s: drawn meshes half-size (%.0f, %.0f, %.0f) uu; every primitive, drawn or not, (%.0f, %.0f, %.0f)"),
+					Side == 0 ? TEXT("gold (the LLM Companion)") : TEXT("cyan (Jhinn)"), S.RestExtent[Side].X, S.RestExtent[Side].Y, S.RestExtent[Side].Z,
+					EveryExtent.X, EveryExtent.Y, EveryExtent.Z);
 				S.ShardsMost[Side] = 0;
 				S.BurstMost[Side] = 0;
 				S.FlightMost[Side] = 0;
@@ -9485,7 +10055,8 @@ namespace
 	 * The founder's stance sheet (checks 1-2): grounded and wide, the arms out and down, the blades angled OUT and UP around the
 	 * body -- never along it, across it or into the ground. Second read the first M6 frames: from the gameplay camera the blades
 	 * could show as glints at the feet. One boot, swords held on Relay OG, four presets set through the live CVars:
-	 *   P0 BEFORE (the forearm grip, the old stance), P1 the new defaults, P2 wider, P3 narrower.
+	 *   P0 BEFORE (the forearm grip, the old stance), P1 the new defaults, P2 wider, P3 narrower -- since 10-04 the presets of the founder's
+	 *   CHARGING stance (StancePresets), each from the knobs as shipped.
 	 * Each: the player's own camera behind, a front and a side frame; P0 and P1 also running, from behind. Measured on the camera
 	 * behind: each blade's tip above its own fist by a share of the body's height on screen, and outside the body's edge on its own
 	 * side (gold on the screen's LEFT). SC1 asserts it for P1, the defaults; the other presets are logged for the judgement.
@@ -9508,6 +10079,8 @@ namespace
 		// comparison mixed the pose with the place and the light): where the clear view was found, and its heading
 		FVector Start = FVector::ZeroVector;
 		float StartYaw = 0.0f;
+		/** The knobs as the build shipped them, read as the calibration starts (QaStanceSnapshot): every preset starts from them. */
+		FString Defaults;
 		void Check(const TCHAR* Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
@@ -9531,13 +10104,18 @@ namespace
 	};
 
 	const FQaStancePreset StancePresets[] = {
-		// THE FOUNDER'S CANONICAL STANCE, 10-03 (the reference photo; it supersedes P2): every preset sets EVERY key, so none leaks into the next.
-		// index 0 is the stance it replaces (P2 wide, the raised V) for the before/after; index 1 is THE DEFAULT (SC1/SC2 measure it);
-		// 2 and 3 are the blade angle either side of it, for the founder's eye
-		{ TEXT("W0_before_P2_wide"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 19;wl.Handoff.Stance.Crouch 10;wl.Handoff.Stance.RunOut 32;wl.Handoff.Stance.Stagger 0;wl.Handoff.Stance.Lean 8;wl.Handoff.Stance.KneesOut 0") },
-		{ TEXT("R1_reference_default"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 122;wl.Handoff.SwordVForward 10;wl.Handoff.Stance.Out 14;wl.Handoff.Stance.Shoulder 4;wl.Handoff.Stance.Elbow 18;wl.Handoff.Stance.FeetOut 2;wl.Handoff.Stance.Crouch 1.5;wl.Handoff.Stance.RunOut 20;wl.Handoff.Stance.Stagger 6;wl.Handoff.Stance.Lean 2;wl.Handoff.Stance.KneesOut 0") },
-		{ TEXT("R2_blades_flatter"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 108;wl.Handoff.SwordVForward 10;wl.Handoff.Stance.Out 14;wl.Handoff.Stance.Shoulder 4;wl.Handoff.Stance.Elbow 18;wl.Handoff.Stance.FeetOut 2;wl.Handoff.Stance.Crouch 1.5;wl.Handoff.Stance.RunOut 20;wl.Handoff.Stance.Stagger 6;wl.Handoff.Stance.Lean 2;wl.Handoff.Stance.KneesOut 0") },
-		{ TEXT("R3_blades_steeper_foot9"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 135;wl.Handoff.SwordVForward 10;wl.Handoff.Stance.Out 14;wl.Handoff.Stance.Shoulder 4;wl.Handoff.Stance.Elbow 24;wl.Handoff.Stance.FeetOut 2;wl.Handoff.Stance.Crouch 1.5;wl.Handoff.Stance.RunOut 20;wl.Handoff.Stance.Stagger 9;wl.Handoff.Stance.Lean 2;wl.Handoff.Stance.KneesOut 0") },
+		// THE FOUNDER'S CHARGING STANCE, 10-04 (it supersedes the 10-03 upright stance and its R* presets). Every preset STARTS FROM THE
+		// SHIPPED KNOBS -- read off the live CVars as the calibration starts (QaStanceSnapshot) -- and then sets its own, so none leaks into
+		// the next and the default is the build's own, never a retyped copy. Index 0 is the P2 stance the 10-03 one replaced (the old raised
+		// V; its "lean 8" was a BACKWARD lean -- the inverted body pitch CORE found on 10-04 -- and is not reproduced); index 1 is THE
+		// DEFAULT, the charge (SC1/SC2 measure it); 2 the 10-03 upright stance, for the before/after; 3-5 the blade angle either side of
+		// the default, and a deeper charge.
+		{ TEXT("W0_before_P2_wide"), TEXT("wl.Handoff.SwordBodyV 1;wl.Handoff.SwordV 42;wl.Handoff.SwordVForward 12;wl.Handoff.SwordChargeV 42;wl.Handoff.SwordChargeVForward 12;wl.Handoff.Stance.Out 44;wl.Handoff.Stance.Shoulder 12;wl.Handoff.Stance.Elbow 25;wl.Handoff.Stance.FeetOut 19;wl.Handoff.Stance.Crouch 10;wl.Handoff.Stance.RunOut 32;wl.Handoff.Stance.Bend 0;wl.Handoff.Stance.HipForward 0;wl.Handoff.Stance.HipShift 0;wl.Handoff.Stance.Tilt 0;wl.Handoff.Stance.Turn 0;wl.Handoff.Stance.Front 0;wl.Handoff.Stance.Rear 0;wl.Handoff.Stance.KneesOut 0") },
+		{ TEXT("C1_charge_default"), TEXT("") },
+		{ TEXT("U0_upright_1003"), TEXT("wl.Handoff.SwordChargeV 122;wl.Handoff.SwordChargeVForward 10;wl.Handoff.Stance.Out 14;wl.Handoff.Stance.Elbow 18;wl.Handoff.Stance.Bend 0;wl.Handoff.Stance.Crouch 1.5;wl.Handoff.Stance.HipForward 0;wl.Handoff.Stance.HipShift 0;wl.Handoff.Stance.Tilt 0;wl.Handoff.Stance.Turn 0;wl.Handoff.Stance.Front 6;wl.Handoff.Stance.Rear 1.8") },
+		{ TEXT("C2_blades_flatter"), TEXT("wl.Handoff.SwordChargeV 110") },
+		{ TEXT("C3_blades_steeper"), TEXT("wl.Handoff.SwordChargeV 130") },
+		{ TEXT("C4_deeper_charge"), TEXT("wl.Handoff.Stance.Bend 30;wl.Handoff.Stance.Crouch 9") },
 	};
 
 	void QaStanceApply(UWorld* World, const TCHAR* Commands)
@@ -9548,6 +10126,45 @@ namespace
 		{
 			GEngine->Exec(World, *Command);
 		}
+	}
+
+	/** EVERY KNOB A PRESET OR THE SWEEP TURNS (the founder's 10-04 charge: Stance.Bend/RunBend/DashBend/HipForward/HipShift/Tilt/Turn/Front/
+	 *  Rear/HeadKeep and SwordChargeV/SwordChargeVForward replaced Stance.Lean/RunLean/DashLean/Stagger), so a QA can put back the SHIPPED
+	 *  values -- read off the live CVars as it starts, never retyped here, where a copied default goes stale the day the product's moves. */
+	const TCHAR* const StanceKnobs[] = { TEXT("wl.Handoff.SwordBodyV"), TEXT("wl.Handoff.SwordV"), TEXT("wl.Handoff.SwordVForward"),
+		TEXT("wl.Handoff.SwordChargeV"), TEXT("wl.Handoff.SwordChargeVForward"), TEXT("wl.Handoff.Stance.Out"), TEXT("wl.Handoff.Stance.Shoulder"),
+		TEXT("wl.Handoff.Stance.Elbow"), TEXT("wl.Handoff.Stance.FeetOut"), TEXT("wl.Handoff.Stance.Crouch"), TEXT("wl.Handoff.Stance.RunOut"),
+		TEXT("wl.Handoff.Stance.Bend"), TEXT("wl.Handoff.Stance.RunBend"), TEXT("wl.Handoff.Stance.DashBend"), TEXT("wl.Handoff.Stance.HipForward"),
+		TEXT("wl.Handoff.Stance.HipShift"), TEXT("wl.Handoff.Stance.Tilt"), TEXT("wl.Handoff.Stance.Turn"), TEXT("wl.Handoff.Stance.Front"),
+		TEXT("wl.Handoff.Stance.Rear"), TEXT("wl.Handoff.Stance.HeadKeep"), TEXT("wl.Handoff.Stance.KneesOut") };
+
+	/** The knobs as they are now, as console commands ("name value;..."); any knob this build lacks is named in OutMissing. */
+	FString QaStanceSnapshot(FString& OutMissing)
+	{
+		FString Commands;
+		OutMissing.Reset();
+		for (const TCHAR* Knob : StanceKnobs)
+		{
+			if (const IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(Knob))
+			{
+				Commands += FString::Printf(TEXT("%s%s %s"), Commands.IsEmpty() ? TEXT("") : TEXT(";"), Knob, *Var->GetString());
+			}
+			else
+			{
+				OutMissing += FString::Printf(TEXT("%s%s"), OutMissing.IsEmpty() ? TEXT("") : TEXT(", "), Knob);
+			}
+		}
+		return Commands;
+	}
+
+	/** A preset: the shipped knobs first, then its own. */
+	void QaStancePresetApply(UWorld* World, const FString& Defaults, const FQaStancePreset& Preset)
+	{
+		if (!Defaults.IsEmpty())
+		{
+			QaStanceApply(World, *Defaults);
+		}
+		QaStanceApply(World, Preset.Commands);
 	}
 
 	/** On the camera now: each tip's rise above its fist (share of the body's screen height) and its distance outside the body's edge
@@ -9579,11 +10196,30 @@ namespace
 			const bool bEdgeIsScreenLeft = (Edge.X < (bGold ? RightEdge.X : LeftEdge.X));
 			Outside[Side] = bEdgeIsScreenLeft ? Edge.X - Tip.X : Tip.X - Edge.X;
 		}
-		// THE FOUNDER'S 10-03 STANCE: the blades held LOW and diagonal -- each tip BELOW its fist (by >= 15% of the body's height on screen)
-		// and past the body's edge on its own side (P2's raised V wanted the tips 20% ABOVE the fists)
-		bOutV = bSeen && Rise[0] <= -0.15 && Rise[1] <= -0.15 && Outside[0] >= 0.0 && Outside[1] >= 0.0;
-		return FString::Printf(TEXT("%s: gold tip %+.0f%% of the body's height above its fist, %+.0f px outside the body's left edge; cyan %+.0f%%, %+.0f px outside its right edge"),
-			bFromFront ? TEXT("in front") : TEXT("behind"), Rise[0] * 100.0, Outside[0], Rise[1] * 100.0, Outside[1]);
+		// THE BLADES LOW, AS THE FOUNDER'S 10-04 CHARGE CARRIES THEM -- re-pinned from the 10-03 stance's "15% of the body below the fist",
+		// which a blade TRAILING back cannot show (the charge model's tips sit ~19 uu, ~11% of the body, under the fists): on the camera each
+		// tip below its fist by >= 5% of the body's height and past the body's edge on its own side; AND IN THE WORLD (Second's review of
+		// round 6, #1: buried tips passed -- a deeper tip satisfies "below the fist" the more) each tip >= 5 uu below its fist, >= 2 uu ABOVE
+		// the ground, and no further from the Dog's centreline than half its height (the founder called P2's ~80 uu a side WAY TOO WIDE)
+		const float BodyHeight = FMath::Max(Dog->GetCanonBodyHeightUu(), 1.0f);
+		const double GroundZ = FMath::Min(Dog->GetCanonSoleWorld(1.0f).Z, Dog->GetCanonSoleWorld(-1.0f).Z);
+		double Drop[2] = { 0.0, 0.0 };
+		double Above[2] = { 0.0, 0.0 };
+		double Wide[2] = { 0.0, 0.0 };
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			const FTransform Held = Swords.GetSwordWorld(Side == 0);
+			const FVector TipAt = Held.TransformPosition(FVector(0.0f, 0.0f, WonderlandHandoffSwords::TipZ));
+			Drop[Side] = Held.GetLocation().Z - TipAt.Z;
+			Above[Side] = TipAt.Z - GroundZ;
+			Wide[Side] = FMath::Abs(FVector::DotProduct(TipAt - At, Right));
+		}
+		bOutV = bSeen && Rise[0] <= -0.05 && Rise[1] <= -0.05 && Outside[0] >= 0.0 && Outside[1] >= 0.0 && Drop[0] >= 5.0 && Drop[1] >= 5.0
+			&& Above[0] >= 2.0 && Above[1] >= 2.0 && Wide[0] <= 0.5 * BodyHeight && Wide[1] <= 0.5 * BodyHeight;
+		return FString::Printf(TEXT("%s: gold tip %+.0f%% of the body's height above its fist, %+.0f px outside the body's left edge; cyan %+.0f%%, %+.0f px outside its right edge; ")
+			TEXT("in the world the tips %.0f / %.0f uu below their fists (>= 5), %.0f / %.0f above the ground (>= 2), %.0f / %.0f from the centreline (<= %.0f: half the body)"),
+			bFromFront ? TEXT("in front") : TEXT("behind"), Rise[0] * 100.0, Outside[0], Rise[1] * 100.0, Outside[1], Drop[0], Drop[1], Above[0], Above[1],
+			Wide[0], Wide[1], 0.5 * BodyHeight);
 	}
 
 	bool QaStanceCalibTick(float)
@@ -9602,7 +10238,10 @@ namespace
 			if (UWorld* W = S.World.Get())
 			{
 				// the defaults back, the swords given back, the player's own camera
-				QaStanceApply(W, StancePresets[1].Commands);
+				if (!S.Defaults.IsEmpty())
+				{
+					QaStanceApply(W, *S.Defaults);
+				}
 				if (FWonderlandMissionHandoff* H = QaHandoff(W))
 				{
 					FString Ignored;
@@ -9669,7 +10308,14 @@ namespace
 			S.Shot = 0;
 			S.StartYaw = QaClearViewHeading(World, Dog, PC);
 			S.Start = Dog->GetActorLocation();
-			QaStanceApply(World, StancePresets[0].Commands);
+			// the SHIPPED knobs, read before any preset touches them: every preset starts from them, and the default IS them
+			{
+				FString Missing;
+				S.Defaults = QaStanceSnapshot(Missing);
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSCQA knobs as shipped: %s%s"), *S.Defaults,
+					Missing.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" | MISSING from this build: %s"), *Missing));
+			}
+			QaStancePresetApply(World, S.Defaults, StancePresets[0]);
 			S.Phase = 2;
 			S.PhaseAt = Now;
 			return true;
@@ -9696,7 +10342,7 @@ namespace
 				{
 					return Stop(nullptr);
 				}
-				QaStanceApply(World, StancePresets[S.Preset].Commands);
+				QaStancePresetApply(World, S.Defaults, StancePresets[S.Preset]);
 				S.Shot = 0;
 				S.PhaseAt = Now;
 				return true;
@@ -9754,11 +10400,11 @@ namespace
 				UE_LOG(LogWonderlandQa, Display, TEXT("WLSCQA %s %s | %s"), Preset.Name, ShotNames[S.Shot], *Reading);
 				if (S.Preset == 1 && S.Shot == 0)
 				{
-					S.Check(TEXT("SC1"), bV, FString::Printf(TEXT("the defaults, the player's own camera behind, held and standing: both blades go DOWN from their fists (>= 15%% of the body) and reach outside the body on their own sides (the founder's 10-03 stance) -- %s"), *Reading));
+					S.Check(TEXT("SC1"), bV, FString::Printf(TEXT("the defaults, the player's own camera behind, held and standing: both blades DOWN from their fists, outside the body on their own sides, ABOVE the ground and within half the body's height of its centreline (the founder's 10-04 charge) -- %s"), *Reading));
 				}
 				if (S.Preset == 1 && S.Shot == 1)
 				{
-					S.Check(TEXT("SC2"), bV, FString::Printf(TEXT("the defaults, in front (mirrored: gold on the screen's RIGHT): the blades still low, down and out -- %s"), *Reading));
+					S.Check(TEXT("SC2"), bV, FString::Printf(TEXT("the defaults, in front (mirrored: gold on the screen's RIGHT): the blades still low, down and out, above the ground and never too wide -- %s"), *Reading));
 				}
 			}
 			S.Frame(FString::Printf(TEXT("stance_%s_%s"), Preset.Name, ShotNames[S.Shot]));
@@ -9773,8 +10419,8 @@ namespace
 
 	FAutoConsoleCommandWithWorldAndArgs GQaStanceCalibCommand(
 		TEXT("wl.Qa.StanceCalib"),
-		TEXT("The stance and the V around the body, judged on frames: swords held on Relay OG under four presets (P0 before, P1 the ")
-		TEXT("defaults, P2 wider, P3 narrower) -- behind, in front, at the side, and running. SC1/SC2 measure the defaults' V. Frames to ")
+		TEXT("The stance and the V around the body, judged on frames: swords held on Relay OG under six presets (W0 the old wide V, C1 the ")
+		TEXT("default charge, U0 the 10-03 upright stance, C2/C3 the blades flatter/steeper, C4 a deeper charge) -- behind, in front, at the side, and running. SC1/SC2 measure the defaults' V. Frames to ")
 		TEXT("Saved/Screenshots/WLSTANCE. `quit` exits after. WLSCQA lines."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
@@ -10479,12 +11125,16 @@ namespace
 			GQaHandoffFilm->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaHandoffFilmTick), 0.0f);
 		}));
 
-	/* ================================================================ wl.Qa.StanceSweep: the arms and the blades, measured in a grid
-	 * To match the founder's 10-03 stance photo with blades of the founder's sword sheet (the grip-to-tip ~123 uu, about 70% of the Dog's
-	 * height) the hands and the blade angle must be CHOSEN from measurements, not guessed: with the swords held, every arm in the grid
-	 * (wl.Handoff.Stance.Shoulder x Elbow, Out 14) is measured -- the hands' height above the soles as a share of the body's height, how
-	 * far ahead, how far apart -- and with each arm every blade angle (wl.Handoff.SwordV x SwordVForward): each tip's height above the
-	 * ground, its drop below its grip, how far out to its own side and how far ahead. WLSWEEP lines; the defaults put back; `quit` exits.
+	/* ================================================================ wl.Qa.StanceSweep: the arms, the blades and the charge, measured in a grid
+	 * The founder's stance (the 10-03 photo, the 10-04 charge) with blades of the founder's sword sheet (the grip-to-tip ~123 uu, about 70%
+	 * of the Dog's height): the numbers are CHOSEN from measurements, never guessed. Swords held on Relay OG, from the knobs AS SHIPPED (read
+	 * as it starts, and put back at the end):
+	 *   1. every arm in the grid (wl.Handoff.Stance.Shoulder x Elbow) -- the hands' height above the soles as a share of the body's height, how
+	 *      far ahead, how far apart -- and with each arm every charge blade angle (wl.Handoff.SwordChargeV x SwordChargeVForward: in the
+	 *      standing charge the blades follow THESE, not SwordV): each tip's height above the ground, its drop, how far out, ahead, behind;
+	 *   2. THE CHARGE (10-04): wl.Handoff.Stance.Bend x Elbow, with each every charge blade angle -- ST2C's verdicts (C1-C8, against the
+	 *      unarmed zero read first) and every reading on one WLSWEEP charge line per combination.
+	 * WLSWEEP lines; `quit` exits after.
 	 */
 	struct FQaStanceSweep
 	{
@@ -10494,15 +11144,21 @@ namespace
 		int32 Step = 0;
 		int32 Arm = 0;
 		int32 Blade = 0;
+		int32 Body = 0;
 		double StepAt = 0.0;
 		float BaseHandHeight = 0.0f;
+		/** The knobs as shipped (QaStanceSnapshot), and the drawn body unarmed (ST2C's zero). */
+		FString Defaults;
+		FQaChargeReading Unarmed;
 	};
 	TSharedPtr<FQaStanceSweep> GQaStanceSweep;
 
 	const float SweepShoulders[] = { 4.0f, 15.0f, 25.0f, 35.0f };
 	const float SweepElbows[] = { 18.0f, 45.0f, 70.0f, 95.0f };
-	const float SweepBladeV[] = { 105.0f, 112.0f, 118.0f };
-	const float SweepBladeForward[] = { 10.0f, 25.0f };
+	const float SweepChargeV[] = { 110.0f, 120.0f, 130.0f };
+	const float SweepChargeForward[] = { -55.0f, -65.0f, -72.0f, -80.0f };
+	const float SweepBends[] = { 18.0f, 24.0f, 30.0f };
+	const float SweepChargeElbows[] = { 25.0f, 40.0f, 55.0f };
 
 	bool QaStanceSweepTick(float)
 	{
@@ -10519,7 +11175,10 @@ namespace
 		{
 			if (UWorld* World2 = W.World.Get())
 			{
-				QaStanceApply(World2, StancePresets[1].Commands);
+				if (!W.Defaults.IsEmpty())
+				{
+					QaStanceApply(World2, *W.Defaults);
+				}
 				if (FWonderlandMissionHandoff* H = QaHandoff(World2))
 				{
 					FString Ignored;
@@ -10542,8 +11201,19 @@ namespace
 		const double Now = QaNow();
 		const double In = Now - W.StepAt;
 		const int32 Arms = static_cast<int32>(UE_ARRAY_COUNT(SweepShoulders) * UE_ARRAY_COUNT(SweepElbows));
-		const int32 Blades = static_cast<int32>(UE_ARRAY_COUNT(SweepBladeV) * UE_ARRAY_COUNT(SweepBladeForward));
+		const int32 Blades = static_cast<int32>(UE_ARRAY_COUNT(SweepChargeV) * UE_ARRAY_COUNT(SweepChargeForward));
+		const int32 Bodies = static_cast<int32>(UE_ARRAY_COUNT(SweepBends) * UE_ARRAY_COUNT(SweepChargeElbows));
 		const float BodyH = FMath::Max(Dog->GetCanonBodyHeightUu(), 1.0f);
+		// the blade being measured, in either grid
+		const float V = SweepChargeV[(W.Blade / UE_ARRAY_COUNT(SweepChargeForward)) % UE_ARRAY_COUNT(SweepChargeV)];
+		const float VF = SweepChargeForward[W.Blade % UE_ARRAY_COUNT(SweepChargeForward)];
+		auto Defaults = [&W, World]()
+		{
+			if (!W.Defaults.IsEmpty())
+			{
+				QaStanceApply(World, *W.Defaults);
+			}
+		};
 		switch (W.Step)
 		{
 		case 0:
@@ -10559,8 +11229,14 @@ namespace
 				return In < 40.0 ? true : Finish(TEXT("never ready"));
 			}
 			GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
-			QaStanceApply(World, StancePresets[1].Commands);
+			{
+				FString Missing;
+				W.Defaults = QaStanceSnapshot(Missing);
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSWEEP knobs as shipped: %s%s"), *W.Defaults,
+					Missing.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" | MISSING from this build: %s"), *Missing));
+			}
 			W.BaseHandHeight = QaReadStance(Dog).HandHeight - QaReadStance(Dog).SoleHeight;
+			W.Unarmed = QaReadCharge(Dog);
 			if (!Handoff->IsEquipped())
 			{
 				FString Said;
@@ -10576,20 +11252,25 @@ namespace
 			}
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLSWEEP BEGIN | body %.1f uu tall, the unarmed hands %.1f uu above the soles (%.0f%%) | %s"), BodyH,
 				W.BaseHandHeight, W.BaseHandHeight / BodyH * 100.0f, *WonderlandBeta::BuildLabel());
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSWEEP unarmed, the drawn body (ST2C's zero): %s"), *QaDescribeCharge(W.Unarmed));
 			W.Arm = 0;
 			W.Step = 2;
 			W.StepAt = Now;
 			return true;
 		case 2:
 		{
-			// the next arm
+			// the next arm (from the shipped knobs)
 			if (W.Arm >= Arms)
 			{
-				return Finish(TEXT("done"));
+				W.Body = 0;
+				W.Step = 6;
+				W.StepAt = Now;
+				return true;
 			}
 			const float Shoulder = SweepShoulders[W.Arm / UE_ARRAY_COUNT(SweepElbows)];
 			const float Elbow = SweepElbows[W.Arm % UE_ARRAY_COUNT(SweepElbows)];
-			QaStanceApply(World, *FString::Printf(TEXT("wl.Handoff.Stance.Shoulder %.0f;wl.Handoff.Stance.Elbow %.0f;wl.Handoff.Stance.Out 14"), Shoulder, Elbow));
+			Defaults();
+			QaStanceApply(World, *FString::Printf(TEXT("wl.Handoff.Stance.Shoulder %.0f;wl.Handoff.Stance.Elbow %.0f"), Shoulder, Elbow));
 			W.Blade = 0;
 			W.Step = 3;
 			W.StepAt = Now;
@@ -10612,8 +11293,7 @@ namespace
 			return true;
 		}
 		case 4:
-		{
-			// the next blade angle with this arm
+			// the next charge blade angle with this arm
 			if (W.Blade >= Blades)
 			{
 				++W.Arm;
@@ -10621,13 +11301,10 @@ namespace
 				W.StepAt = Now;
 				return true;
 			}
-			const float V = SweepBladeV[W.Blade / UE_ARRAY_COUNT(SweepBladeForward)];
-			const float VF = SweepBladeForward[W.Blade % UE_ARRAY_COUNT(SweepBladeForward)];
-			QaStanceApply(World, *FString::Printf(TEXT("wl.Handoff.SwordV %.0f;wl.Handoff.SwordVForward %.0f"), V, VF));
+			QaStanceApply(World, *FString::Printf(TEXT("wl.Handoff.SwordChargeV %.0f;wl.Handoff.SwordChargeVForward %.0f"), V, VF));
 			W.Step = 5;
 			W.StepAt = Now;
 			return true;
-		}
 		case 5:
 		{
 			if (In < 0.3)
@@ -10636,8 +11313,6 @@ namespace
 			}
 			const float Shoulder = SweepShoulders[W.Arm / UE_ARRAY_COUNT(SweepElbows)];
 			const float Elbow = SweepElbows[W.Arm % UE_ARRAY_COUNT(SweepElbows)];
-			const float V = SweepBladeV[W.Blade / UE_ARRAY_COUNT(SweepBladeForward)];
-			const float VF = SweepBladeForward[W.Blade % UE_ARRAY_COUNT(SweepBladeForward)];
 			const WonderlandHandoffSwords::FPresentation& Blades2 = Dog->GetHandoffSwords();
 			const FVector Right = Dog->GetActorRightVector().GetSafeNormal2D();
 			const FVector Fwd = Dog->GetActorForwardVector().GetSafeNormal2D();
@@ -10649,13 +11324,72 @@ namespace
 				const FVector Grip = Blade.GetLocation();
 				const FVector BladeTip = Blade.TransformPosition(FVector(0.0, 0.0, WonderlandHandoffSwords::TipZ));
 				const double OwnSide = bGold ? -1.0 : 1.0;
-				Line += FString::Printf(TEXT("%s%s tip %.0f above the ground, %.0f down, %.0f out, %.0f ahead"), Line.IsEmpty() ? TEXT("") : TEXT("; "),
+				Line += FString::Printf(TEXT("%s%s tip %.0f above the ground, %.0f down, %.0f out, %.0f ahead, %.0f from the centreline"), Line.IsEmpty() ? TEXT("") : TEXT("; "),
 					bGold ? TEXT("gold") : TEXT("cyan"), BladeTip.Z - Ground, Grip.Z - BladeTip.Z, FVector::DotProduct(BladeTip - Grip, Right) * OwnSide,
-					FVector::DotProduct(BladeTip - Grip, Fwd));
+					FVector::DotProduct(BladeTip - Grip, Fwd), FMath::Abs(FVector::DotProduct(BladeTip - Dog->GetActorLocation(), Right)));
 			}
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLSWEEP blade shoulder %.0f elbow %.0f V %.0f forward %.0f | %s"), Shoulder, Elbow, V, VF, *Line);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSWEEP blade shoulder %.0f elbow %.0f chargeV %.0f forward %.0f | %s"), Shoulder, Elbow, V, VF, *Line);
 			++W.Blade;
 			W.Step = 4;
+			W.StepAt = Now;
+			return true;
+		}
+		case 6:
+		{
+			// THE CHARGE: the next bend x elbow (from the shipped knobs)
+			if (W.Body >= Bodies)
+			{
+				return Finish(TEXT("done"));
+			}
+			const float Bend = SweepBends[W.Body / UE_ARRAY_COUNT(SweepChargeElbows)];
+			const float Elbow = SweepChargeElbows[W.Body % UE_ARRAY_COUNT(SweepChargeElbows)];
+			Defaults();
+			QaStanceApply(World, *FString::Printf(TEXT("wl.Handoff.Stance.Bend %.0f;wl.Handoff.Stance.Elbow %.0f"), Bend, Elbow));
+			W.Blade = 0;
+			W.Step = 7;
+			W.StepAt = Now;
+			return true;
+		}
+		case 7:
+			// the body settled into it
+			if (In < 1.2)
+			{
+				return true;
+			}
+			W.Step = 8;
+			W.StepAt = Now;
+			return true;
+		case 8:
+			if (W.Blade >= Blades)
+			{
+				++W.Body;
+				W.Step = 6;
+				W.StepAt = Now;
+				return true;
+			}
+			QaStanceApply(World, *FString::Printf(TEXT("wl.Handoff.SwordChargeV %.0f;wl.Handoff.SwordChargeVForward %.0f"), V, VF));
+			W.Step = 9;
+			W.StepAt = Now;
+			return true;
+		case 9:
+		{
+			if (In < 0.3)
+			{
+				return true;
+			}
+			const float Bend = SweepBends[W.Body / UE_ARRAY_COUNT(SweepChargeElbows)];
+			const float Elbow = SweepChargeElbows[W.Body % UE_ARRAY_COUNT(SweepChargeElbows)];
+			const FQaChargeReading Charge = QaReadCharge(Dog);
+			const FQaChargeVerdict Verdict = QaJudgeCharge(Charge, W.Unarmed, BodyH);
+			FString Marks;
+			for (int32 CheckNo = 1; CheckNo <= 8; ++CheckNo)
+			{
+				Marks += FString::Printf(TEXT("%sC%d %s"), Marks.IsEmpty() ? TEXT("") : TEXT(" "), CheckNo, Verdict.bOk[CheckNo] ? TEXT("pass") : TEXT("FAIL"));
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSWEEP charge bend %.0f elbow %.0f V %.0f forward %.0f | %s | %s"), Bend, Elbow, V, VF, *Marks,
+				*QaDescribeCharge(Charge));
+			++W.Blade;
+			W.Step = 8;
 			W.StepAt = Now;
 			return true;
 		}
@@ -10666,9 +11400,9 @@ namespace
 
 	FAutoConsoleCommandWithWorldAndArgs GQaStanceSweepCommand(
 		TEXT("wl.Qa.StanceSweep"),
-		TEXT("The twin-sword stance's arms and blade angles, measured in a grid with the swords held (the hands' height as a share of the body, ")
-		TEXT("each tip's height above the ground, its drop, reach out and ahead), to choose the founder's 10-03 stance from numbers. WLSWEEP lines; ")
-		TEXT("`quit` exits after."),
+		TEXT("The twin-sword stance measured in a grid with the swords held, from the knobs as shipped: the arms (the hands' height as a share of ")
+		TEXT("the body) with every charge blade angle (each tip's height above the ground, its drop, reach out, ahead and from the centreline), then ")
+		TEXT("the founder's 10-04 charge -- bend x elbow x blade angle -- with ST2C's readings and verdicts. WLSWEEP lines; `quit` exits after."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (GQaStanceSweep.IsValid() || World == nullptr)
@@ -14152,16 +14886,30 @@ namespace
 	/** THE DRAWN FRAME'S FLOORS (Second, round 5b, by eye: frames almost all black, or one cyan face). */
 	constexpr double QaActFrameLumaFloor = 28.0;
 	constexpr double QaActFrameClusterCeiling = 0.70;
+	/**
+	 * ONE FACE, HOWEVER IT IS SHADED (Second's review of round 6, #4: a lit face's shading moves R, G and B together, so the RGB bins split
+	 * one face into a ramp of clusters and passed it -- one cyan face at 80-100% shading read 62.6%, at 70-100% 41.7%, a grey face 33.3%).
+	 * Two more measures, both blind to shading: the share of the frame in ONE CHROMATICITY (r and g over r+g+b; the near-black, where
+	 * chromaticity means nothing, counted as one cluster of its own) with its neighbours, and the share of the frame on an EDGE (a luma step
+	 * of >= 10 to the next pixel right or below), which a face, flat or smoothly shaded, does not have. Calibrated on the 89 close frames of
+	 * act-hands rounds 2-5b: the frames they newly reject were each a near-plane close-up of one or two box faces, and Second's three faces
+	 * read 100% one chromaticity and 0% edges.
+	 */
+	constexpr double QaActFrameChromaCeiling = 0.85;
+	constexpr double QaActFrameEdgeFloor = 0.02;
 
 	/**
 	 * The drawn frame judged before it is kept: over the subject's middle of the frame (x 30-75%, y 12-85%: clear of the HUD's panels), the
-	 * mean luma (0-255) and the share of pixels in ONE colour cluster (the commonest 16-level colour bin and its six face neighbours). Usable
-	 * when the luma is at least the floor and no cluster holds more than the ceiling.
+	 * mean luma (0-255), the share of pixels in ONE colour cluster (the commonest 16-level colour bin and its six face neighbours), the share
+	 * in one chromaticity (24 levels of r and g over r+g+b, each bin with its 8 neighbours) and the share on an edge. Usable when the luma is
+	 * at least its floor, neither cluster holds more than its ceiling, and the edges are at least their floor.
 	 */
-	bool QaActJudgeFrame(const TArray<FColor>& Pixels, int32 Width, int32 Height, double& OutLuma, double& OutCluster)
+	bool QaActJudgeFrame(const TArray<FColor>& Pixels, int32 Width, int32 Height, double& OutLuma, double& OutCluster, double& OutChroma, double& OutEdges)
 	{
 		OutLuma = 0.0;
 		OutCluster = 1.0;
+		OutChroma = 1.0;
+		OutEdges = 0.0;
 		if (Width <= 0 || Height <= 0 || Pixels.Num() != Width * Height)
 		{
 			return false;
@@ -14170,18 +14918,47 @@ namespace
 		const int32 Right = Width * 75 / 100;
 		const int32 Upper = Height * 12 / 100;
 		const int32 Lower = Height * 85 / 100;
+		constexpr int32 ChromaLevels = 24;
 		TArray<int32> Bins;
 		Bins.SetNumZeroed(16 * 16 * 16);
+		TArray<int32> ChromaBins;
+		ChromaBins.SetNumZeroed(ChromaLevels * ChromaLevels);
 		double LumaSum = 0.0;
 		int64 Counted = 0;
+		int64 Dark = 0;
+		int64 EdgeTested = 0;
+		int64 Edged = 0;
+		auto LumaOf = [](const FColor& Pixel)
+		{
+			return 0.299 * Pixel.R + 0.587 * Pixel.G + 0.114 * Pixel.B;
+		};
 		for (int32 Row = Upper; Row < Lower; ++Row)
 		{
 			for (int32 Column = Left; Column < Right; ++Column)
 			{
 				const FColor& Pixel = Pixels[Row * Width + Column];
-				LumaSum += 0.299 * Pixel.R + 0.587 * Pixel.G + 0.114 * Pixel.B;
+				const double Luma = LumaOf(Pixel);
+				LumaSum += Luma;
 				++Bins[(Pixel.R >> 4) * 256 + (Pixel.G >> 4) * 16 + (Pixel.B >> 4)];
 				++Counted;
+				const int32 Sum = Pixel.R + Pixel.G + Pixel.B;
+				if (Sum < 48)
+				{
+					++Dark;
+				}
+				else
+				{
+					const int32 ChromaR = FMath::Min(Pixel.R * ChromaLevels / Sum, ChromaLevels - 1);
+					const int32 ChromaG = FMath::Min(Pixel.G * ChromaLevels / Sum, ChromaLevels - 1);
+					++ChromaBins[ChromaR * ChromaLevels + ChromaG];
+				}
+				if (Row + 1 < Lower && Column + 1 < Right)
+				{
+					++EdgeTested;
+					const double StepAcross = FMath::Abs(Luma - LumaOf(Pixels[Row * Width + Column + 1]));
+					const double StepBelow = FMath::Abs(Luma - LumaOf(Pixels[(Row + 1) * Width + Column]));
+					Edged += StepAcross >= 10.0 || StepBelow >= 10.0 ? 1 : 0;
+				}
 			}
 		}
 		if (Counted == 0)
@@ -14213,7 +14990,28 @@ namespace
 			}
 		}
 		OutCluster = static_cast<double>(Most) / static_cast<double>(Counted);
-		return OutLuma >= QaActFrameLumaFloor && OutCluster <= QaActFrameClusterCeiling;
+		int64 ChromaMost = Dark;
+		for (int32 ChromaR = 0; ChromaR < ChromaLevels; ++ChromaR)
+		{
+			for (int32 ChromaG = 0; ChromaG < ChromaLevels; ++ChromaG)
+			{
+				int64 Near = 0;
+				for (int32 StepR = -1; StepR <= 1; ++StepR)
+				{
+					for (int32 StepG = -1; StepG <= 1; ++StepG)
+					{
+						const int32 AtR = ChromaR + StepR;
+						const int32 AtG = ChromaG + StepG;
+						Near += AtR >= 0 && AtR < ChromaLevels && AtG >= 0 && AtG < ChromaLevels ? ChromaBins[AtR * ChromaLevels + AtG] : 0;
+					}
+				}
+				ChromaMost = FMath::Max(ChromaMost, Near);
+			}
+		}
+		OutChroma = static_cast<double>(ChromaMost) / static_cast<double>(Counted);
+		OutEdges = EdgeTested > 0 ? static_cast<double>(Edged) / static_cast<double>(EdgeTested) : 0.0;
+		return OutLuma >= QaActFrameLumaFloor && OutCluster <= QaActFrameClusterCeiling && OutChroma <= QaActFrameChromaCeiling
+			&& OutEdges >= QaActFrameEdgeFloor;
 	}
 
 	/** The fist's centre in the world (the hand's laid grip centre on its visible forearm). */
@@ -14978,12 +15776,16 @@ namespace
 			int32 DrawnHeight = 0;
 			double DrawnLuma = 0.0;
 			double DrawnCluster = 1.0;
+			double DrawnChroma = 1.0;
+			double DrawnEdges = 0.0;
 			const bool bGrabbed = QaActGrabView(Drawn, DrawnWidth, DrawnHeight);
-			const bool bDrawnOk = bGrabbed && QaActJudgeFrame(Drawn, DrawnWidth, DrawnHeight, DrawnLuma, DrawnCluster);
+			const bool bDrawnOk = bGrabbed && QaActJudgeFrame(Drawn, DrawnWidth, DrawnHeight, DrawnLuma, DrawnCluster, DrawnChroma, DrawnEdges);
 			if (bGrabbed && !bDrawnOk && S.Tries < QaActCloseTries - 1)
 			{
-				UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA REJECTED %s candidate %d: luma %.0f (floor %.0f), one colour cluster %.0f%% (ceiling %.0f%%); next candidate"),
-					*ShotName, S.Tries, DrawnLuma, QaActFrameLumaFloor, DrawnCluster * 100.0, QaActFrameClusterCeiling * 100.0);
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA REJECTED %s candidate %d: luma %.0f (floor %.0f), one colour cluster %.0f%% (ceiling %.0f%%), one chromaticity %.0f%% (ceiling %.0f%%), ")
+					TEXT("edges %.1f%% (floor %.1f%%); next candidate"),
+					*ShotName, S.Tries, DrawnLuma, QaActFrameLumaFloor, DrawnCluster * 100.0, QaActFrameClusterCeiling * 100.0, DrawnChroma * 100.0,
+					QaActFrameChromaCeiling * 100.0, DrawnEdges * 100.0, QaActFrameEdgeFloor * 100.0);
 				++S.Tries;
 				S.ShotAt = 0.0;
 				return true;
@@ -14995,12 +15797,13 @@ namespace
 				++S.Unusable;
 				if (S.FirstUnusable.IsEmpty())
 				{
-					S.FirstUnusable = FString::Printf(TEXT("%s: clear %d, camera free %d (%s), subject %.0f%% of the height, luma %.0f, cluster %.0f%%"), *ShotName,
-						bClear ? 1 : 0, bCameraFree ? 1 : 0, InsideWhy.IsEmpty() ? TEXT("-") : *InsideWhy, FramedShare * 100.0, DrawnLuma, DrawnCluster * 100.0);
+					S.FirstUnusable = FString::Printf(TEXT("%s: clear %d, camera free %d (%s), subject %.0f%% of the height, luma %.0f, cluster %.0f%%, chromaticity %.0f%%, edges %.1f%%"), *ShotName,
+						bClear ? 1 : 0, bCameraFree ? 1 : 0, InsideWhy.IsEmpty() ? TEXT("-") : *InsideWhy, FramedShare * 100.0, DrawnLuma, DrawnCluster * 100.0,
+						DrawnChroma * 100.0, DrawnEdges * 100.0);
 				}
 			}
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA FRAMING %s candidate %d%s: subject %.0f%% of the frame's height (want 20-60), zoom %.2f, luma %.0f, one colour cluster %.0f%%, camera %s -- %s"),
-				*ShotName, S.Tries, CloseTry.bSunSide ? TEXT(" (sun side)") : TEXT(""), FramedShare * 100.0, S.CloseZoom, DrawnLuma, DrawnCluster * 100.0,
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA FRAMING %s candidate %d%s: subject %.0f%% of the frame's height (want 20-60), zoom %.2f, luma %.0f, one colour cluster %.0f%%, one chromaticity %.0f%%, edges %.1f%%, camera %s -- %s"),
+				*ShotName, S.Tries, CloseTry.bSunSide ? TEXT(" (sun side)") : TEXT(""), FramedShare * 100.0, S.CloseZoom, DrawnLuma, DrawnCluster * 100.0, DrawnChroma * 100.0, DrawnEdges * 100.0,
 				bCameraFree ? TEXT("free") : *InsideWhy, bUsable ? TEXT("USABLE") : TEXT("UNUSABLE"));
 			const bool bSaved = bGrabbed ? S.FramePixels(ShotName, Drawn, DrawnWidth, DrawnHeight) : S.Frame(ShotName);
 			S.CloseShots += bSaved ? 1 : 0;
