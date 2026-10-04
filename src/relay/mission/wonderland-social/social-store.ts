@@ -7,6 +7,7 @@ import {
   type WonderlandSocialState,
 } from './social-contracts';
 import { applyWonderlandSocialMutations, decideWonderlandSocialCommand } from './social-commands';
+import { wonderlandLiveState } from './social-liveness';
 
 /**
  * WHERE THE SOCIAL STATE LIVES — the port, and the in-memory store.
@@ -39,9 +40,12 @@ export interface WonderlandSocialStore {
    * would be "Unknown" written over a verified name.
    */
   ensureProfile(playerId: string): Promise<void>;
-  /** `publicInstanceIds`: the instances a listing will count, so their occupants are read too. */
-  stateFor(input: { readonly viewerId: string; readonly publicInstanceIds?: readonly string[] }): Promise<WonderlandSocialState>;
-  voiceStateFor(input: { readonly participantIds: readonly string[] }): Promise<WonderlandSocialState>;
+  /**
+   * `publicInstanceIds`: the instances a listing will count, so their occupants are read too.
+   * `now`: the request's time. Presence that has expired by then is not in the state (`social-liveness.ts`).
+   */
+  stateFor(input: { readonly viewerId: string; readonly publicInstanceIds?: readonly string[]; readonly now: string }): Promise<WonderlandSocialState>;
+  voiceStateFor(input: { readonly participantIds: readonly string[]; readonly now: string }): Promise<WonderlandSocialState>;
 }
 
 export function createMemoryWonderlandSocialStore(initial: WonderlandSocialState = WONDERLAND_EMPTY_SOCIAL_STATE): WonderlandSocialStore & {
@@ -68,8 +72,8 @@ export function createMemoryWonderlandSocialStore(initial: WonderlandSocialState
       if (!isWonderlandPlayerId(playerId)) throw new Error('wonderland_social_player_invalid');
       if (state.profiles[playerId] === undefined) state = { ...state, profiles: { ...state.profiles, [playerId]: { displayName: null } } };
     },
-    async stateFor() { return state; },
-    async voiceStateFor() { return state; },
+    async stateFor({ now }) { return wonderlandLiveState(state, now); },
+    async voiceStateFor({ now }) { return wonderlandLiveState(state, now); },
     snapshot: () => state,
   };
 }

@@ -29,6 +29,10 @@ So a voice room is a disclosure, and **the only enforcement a trusted server has
    - Every committed social command (a block, a hide, a departure, a party change) runs `reconcileWonderlandVoice` for everyone the command could move.
    - Each open issuance the new plan does not hold becomes a trusted-server `removeParticipant`, then is recorded as revoked.
    - **A failure is reported** on the social response (`voice.revocationFailures`). The issuance stays open, and the next reconcile retries it.
+   - **A departure without a word is a departure too.**
+     - A presence that has expired is not presence (`WONDERLAND_SOCIAL.md` decision 6), so the departed player stands in no instance and is planned into no room.
+     - The next heartbeat of a live player in that instance reconciles them out of the room the departed player is still in.
+     - That player's own issuance stays open, truthfully; nobody live shares that room.
 4. **A player proves their EOS identity**: `POST /wonderland/voice/identity` with the EOS Connect ID token.
    - **The signature** is RS256 against Epic's published JWKS. `none` and HMAC are refused before any key lookup, and keys that cannot be fetched are a refusal.
    - **The claims:** issuer, a PUID-shaped `sub`, and our product, sandbox, deployment and client; not expired, and not from the future.
@@ -42,7 +46,7 @@ So a voice room is a disclosure, and **the only enforcement a trusted server has
 | Suite | What it proves |
 |---|---|
 | `wonderland-voice.test.ts` (21) | **300 seeded random social worlds** (hidden players, friendships, blocks, parties): invariants (a)–(c) every time, and determinism. The named cases are one room in the common case, the hidden player and the strangers, the blocked pair, the party, opaque names, and the plan diff. The EOS claim checks cover every refusal. One player, one PUID. **Two planner mutants are killed** (a clique checked against one member only; a doubled pair) |
-| `wonderland-voice-routes.test.ts` (18) | A real RSA key pair and real RS256 tokens: forged, `alg none`, unknown kid, another deployment, expired, garbage, and keys unavailable are all refused. Client config is `no-store` and never carries the trusted markers. Join issues tokens only for the plan. A hidden player is never issued the strangers' room. **A mid-session block removes all three from the shared room on the trusted server; a mid-session hide removes the hidden player.** A failed removal is reported, stays open, and is retried. The port sends the trusted secret only in its Basic header to Epic's OAuth endpoint |
+| `wonderland-voice-routes.test.ts` (20) | A real RSA key pair and real RS256 tokens: forged, `alg none`, unknown kid, another deployment, expired, garbage, and keys unavailable are all refused. Client config is `no-store` and never carries the trusted markers. Join issues tokens only for the plan. A hidden player is never issued the strangers' room. **A mid-session block removes all three from the shared room on the trusted server; a mid-session hide removes the hidden player.** A failed removal is reported, stays open, and is retried. **A player whose presence expired is planned into no room, and the next live heartbeat moves both live players out of the room they shared with them.** The port sends the trusted secret only in its Basic header to Epic's OAuth endpoint |
 | `wonderland-voice.real-postgres.test.ts` (6) | Staged 035: it refuses without 034, refuses before 033, refuses a second application, and has no token or secret column. **Three players race for one PUID, 10 rounds: exactly one binds each time.** Re-bind history; issuances open, revoke and re-open; DOWN is guarded |
 
 ## Not done here

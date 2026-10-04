@@ -12,6 +12,7 @@
 
 export * from './social-contracts';
 export * from './social-relations';
+export * from './social-liveness';
 export * from './social-commands';
 export * from './social-privacy';
 export * from './social-store';

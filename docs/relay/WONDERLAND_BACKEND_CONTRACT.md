@@ -29,6 +29,14 @@ Visibility is `OWNER`, `PARTICIPANTS`, or `PUBLIC`. `PARTICIPANTS` is battle mem
 | `GET` | `/relay-api/wonderland/eos/client-config` | the game client's minimum EOS configuration, at runtime, `no-store`; never the trusted server's credentials — see [WONDERLAND_VOICE.md](WONDERLAND_VOICE.md) |
 | `POST` | `/relay-api/wonderland/voice/identity` · `/voice/join` | bind the EOS PUID the player proves (a verified Connect ID token); voice-room tokens for exactly the rooms the privacy wall's plan gives them |
 
+**Social presence is a lease.** It is separate from the world stream's `/presence/*` lease (45 s), and the client keeps both.
+- While the player stands in an instance, send `UPDATE_PRESENCE` through `/social/commands` at least every **30 s**.
+- A social presence not refreshed for **120 s** is absent everywhere: rosters, populations, friends' lookups, Recent Players and voice.
+- A refresh after that is refused `NOT_IN_INSTANCE` (409). Send `ENTER_INSTANCE` again.
+- When the trusted voice server removes the player from a room (the wall moved, or someone came or went), call `POST /voice/join` again for the new plan.
+
+See [WONDERLAND_SOCIAL.md](WONDERLAND_SOCIAL.md) decision 6.
+
 Every mutating request carries a globally unique `commandId`. Retrying the same command returns its first result and does not duplicate a Mission, battle, worker set, reward, or Avatar progression.
 
 ## SSE, cursor, and reconnect

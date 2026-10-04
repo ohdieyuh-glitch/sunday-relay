@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createMemoryWonderlandSocialStore } from '../src/relay/mission/wonderland-social';
+import { WONDERLAND_PRESENCE_TTL_SECONDS, createMemoryWonderlandSocialStore } from '../src/relay/mission/wonderland-social';
 import { NATIVE_WORLD_AUDIENCE, createBrowserSessionStore } from './browser-session/grants';
 import {
   handleWonderlandSocialRoute,
@@ -41,13 +41,14 @@ function stage(over: Partial<WonderlandSocialRoutePorts> = {}) {
   };
   const ports: WonderlandSocialRoutePorts = { store, sessions, allowNative: false, displayNameFor: async (id) => id.toUpperCase(), ...over };
   /** `NO_ORIGIN` sends no Origin header at all, as a native client does. (A default parameter would swallow `undefined`.) */
-  const call = (token: string | null, method: string, path: string, body?: unknown, origin: string = ORIGIN) =>
+  const call = (token: string | null, method: string, path: string, body?: unknown, origin: string = ORIGIN, now: number = NOW) =>
     handleWonderlandSocialRoute({
-      method, path, url: path, origin: origin === NO_ORIGIN ? undefined : origin, body, now: NOW,
+      method, path, url: path, origin: origin === NO_ORIGIN ? undefined : origin, body, now,
       authorization: token === null ? undefined : `Relay-Session ${token}`,
     } satisfies WonderlandSocialRouteRequest, ports);
   let sequence = 0;
-  const command = (token: string, value: unknown) => call(token, 'POST', '/wonderland/social/commands', { commandId: `c-${String(++sequence)}`, command: value });
+  const command = (token: string, value: unknown, now: number = NOW) =>
+    call(token, 'POST', '/wonderland/social/commands', { commandId: `c-${String(++sequence)}`, command: value }, ORIGIN, now);
   return { sessions, store, ports, player, native, call, command };
 }
 
@@ -158,6 +159,34 @@ describe('what a player is told', () => {
     await command(ben, { kind: 'BLOCK', targetId: 'ann' });
     expect((await call(ann, 'GET', '/wonderland/social/conversations/ben'))?.body).toEqual({ data: [] });
     expect((await call(ben, 'GET', '/wonderland/social/conversations/ann'))?.body).toEqual({ data: [] });
+  });
+
+  it('a player who has gone without a word stops being reported at every route, and their own heartbeat is told to enter again', async () => {
+    const { player, call, command } = stage();
+    const ann = player('ann');
+    const ben = player('ben');
+    for (const token of [ann, ben]) await call(token, 'GET', '/wonderland/social/me');
+    expect((await command(ann, { kind: 'FRIEND_REQUEST', toId: 'ben' }))?.status).toBe(200);
+    expect((await command(ben, { kind: 'FRIEND_ACCEPT', fromId: 'ann' }))?.body).toEqual({ data: { ok: true, code: 'DONE' } });
+    for (const token of [ann, ben]) {
+      await command(token, { kind: 'ENTER_INSTANCE', instanceId: 'public:hub', location: null, activity: 'IDLE', dogId: null });
+    }
+    // Ben keeps his heartbeat. Ann's client is gone and says nothing.
+    expect((await command(ben, { kind: 'UPDATE_PRESENCE', location: null, activity: 'IDLE' }, NOW + 60_000))?.body).toEqual({ data: { ok: true, code: 'DONE' } });
+    const edge = NOW + WONDERLAND_PRESENCE_TTL_SECONDS * 1000;
+    const gone = edge + 1000;
+    const get = (token: string, path: string, now: number) => call(token, 'GET', path, undefined, ORIGIN, now);
+    expect((await get(ben, '/wonderland/social/presence/ann', edge))?.body).toMatchObject({ data: { status: 'AVAILABLE', instanceId: 'public:hub' } });
+    expect((await get(ben, '/wonderland/social/presence/ann', gone))?.body).toEqual({ data: { status: 'UNAVAILABLE' } });
+    const roster = (await get(ben, '/wonderland/social/roster', gone))?.body as { data: { players: Array<{ playerId: string }> } };
+    expect(roster.data.players.map((entry) => entry.playerId)).toEqual(['ben']);
+    expect((await get(ben, '/wonderland/social/instances?ids=public:hub', gone))?.body).toEqual({ data: [{ instanceId: 'public:hub', population: 1 }] });
+    // Ann's client comes back: her heartbeat is not a silent revival, and entering again is.
+    const stale = await command(ann, { kind: 'UPDATE_PRESENCE', location: null, activity: 'IDLE' }, gone);
+    expect([stale?.status, stale?.body]).toEqual([409, { data: { ok: false, code: 'NOT_IN_INSTANCE' } }]);
+    expect((await get(ann, '/wonderland/social/roster', gone))?.body).toEqual({ data: { available: false } });
+    await command(ann, { kind: 'ENTER_INSTANCE', instanceId: 'public:hub', location: null, activity: 'IDLE', dogId: null }, gone);
+    expect((await get(ben, '/wonderland/social/presence/ann', gone))?.body).toMatchObject({ data: { status: 'AVAILABLE' } });
   });
 
   it('a malformed path is a 404, not an exception', async () => {

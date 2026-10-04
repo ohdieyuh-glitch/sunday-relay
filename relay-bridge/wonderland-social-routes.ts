@@ -166,6 +166,8 @@ export async function handleWonderlandSocialRoute(
   // here by a composition that has an authoritative source. A request that knows no name never erases one.
   if (ports.displayNameFor === undefined) await store.ensureProfile(player);
   else await store.upsertProfile({ playerId: player, displayName: await ports.displayNameFor(player) });
+  // Every read is the world as it is at this request: presence that has expired by now is not presence.
+  const now = new Date(input.now).toISOString();
   const tail = input.path.slice(WONDERLAND_SOCIAL_PREFIX.length);
   const segment = (prefix: string): string | null => {
     if (!tail.startsWith(prefix)) return null;
@@ -180,19 +182,19 @@ export async function handleWonderlandSocialRoute(
     const command = parseWonderlandSocialCommand(body?.command);
     if (command === null) return error(400, 'command_invalid', 'The command is not one this backend has, or carries a field it does not have.');
     const at = new Date(input.now).toISOString();
-    const before = ports.afterCommand === undefined ? null : await store.stateFor({ viewerId: player });
+    const before = ports.afterCommand === undefined ? null : await store.stateFor({ viewerId: player, now });
     const outcome = await store.execute({ actorId: player, commandId: body!.commandId as string, command, at });
     if (!outcome.ok) return { status: REFUSAL_STATUS[outcome.code] ?? 409, body: { data: outcome } };
     if (outcome.code !== 'DONE' || ports.afterCommand === undefined || before === null) return { status: 200, body: { data: outcome } };
     // The write is committed; what follows it is reported, and a failure here never reads as success.
-    const followed = await ports.afterCommand({ actorId: player, command, before, after: await store.stateFor({ viewerId: player }), at })
+    const followed = await ports.afterCommand({ actorId: player, command, before, after: await store.stateFor({ viewerId: player, now }), at })
       .catch(() => ({ removed: [], failed: [{ reason: 'after_command_failed' }] }));
     return { status: 200, body: { data: outcome, voice: { revoked: followed.removed.length, revocationFailures: followed.failed.length } } };
   }
   if (input.method !== 'GET') return error(405, 'method_not_allowed', 'Social reads are GET; writes are POST /wonderland/social/commands.');
 
   if (tail === 'me') {
-    const state = await store.stateFor({ viewerId: player });
+    const state = await store.stateFor({ viewerId: player, now });
     return {
       status: 200,
       body: {
@@ -210,29 +212,29 @@ export async function handleWonderlandSocialRoute(
     };
   }
   if (tail === 'roster') {
-    const state = await store.stateFor({ viewerId: player });
+    const state = await store.stateFor({ viewerId: player, now });
     const instanceId = state.presence[player]?.instanceId;
     return { status: 200, body: { data: instanceId === undefined ? { available: false } : projectWonderlandRoster(state, player, instanceId) } };
   }
   if (tail.startsWith('instances')) {
     const requested = (new URL(input.url, 'http://relay.invalid').searchParams.get('ids') ?? '')
       .split(',').map((id) => id.trim()).filter(isWonderlandInstanceId).slice(0, 50);
-    const state = await store.stateFor({ viewerId: player, publicInstanceIds: requested });
+    const state = await store.stateFor({ viewerId: player, publicInstanceIds: requested, now });
     return { status: 200, body: { data: projectWonderlandInstanceListing(state, player, requested) } };
   }
   const presenceOf = segment('presence/');
   if (presenceOf !== null) {
-    const state = await store.stateFor({ viewerId: player });
+    const state = await store.stateFor({ viewerId: player, now });
     return { status: 200, body: { data: projectWonderlandPresenceOf(state, player, presenceOf) } };
   }
   const conversationWith = segment('conversations/');
   if (conversationWith !== null) {
-    const state = await store.stateFor({ viewerId: player });
+    const state = await store.stateFor({ viewerId: player, now });
     return { status: 200, body: { data: projectWonderlandConversation(state, player, conversationWith) } };
   }
   const serverId = segment('servers/');
   if (serverId !== null) {
-    const state = await store.stateFor({ viewerId: player });
+    const state = await store.stateFor({ viewerId: player, now });
     return { status: 200, body: { data: projectWonderlandServer(state, player, serverId) } };
   }
   return error(404, 'social_route_not_found', 'No such social route.');

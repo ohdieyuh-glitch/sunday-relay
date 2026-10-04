@@ -22,6 +22,7 @@ import {
   type WonderlandSocialState,
 } from './social-contracts';
 import { isWonderlandBlockedPair, isWonderlandVisibleTo } from './social-relations';
+import { wonderlandLiveState } from './social-liveness';
 
 /**
  * DECIDE, THEN APPLY — the whole of the social layer's write path.
@@ -148,12 +149,16 @@ function blockCascade(state: WonderlandSocialState, blockerId: string, blockedId
  * Pure and total: a malformed command is `INVALID`, never an exception.
  */
 export function decideWonderlandSocialCommand(
-  state: WonderlandSocialState,
+  stored: WonderlandSocialState,
   actorId: string,
   command: WonderlandSocialCommand,
   at: string,
 ): { readonly outcome: WonderlandSocialOutcome; readonly mutations: readonly WonderlandSocialMutation[] } {
   if (!isWonderlandPlayerId(actorId)) return refuse('INVALID');
+  // Decided as the world IS at the command's time: an expired presence is nobody
+  // standing anywhere (`social-liveness.ts`), so an entry records no encounter
+  // with them and their own stale heartbeat is told to enter again.
+  const state = wonderlandLiveState(stored, at);
   const other = (id: unknown): 'INVALID' | 'SELF' | null => (!isWonderlandPlayerId(id) ? 'INVALID' : id === actorId ? 'SELF' : null);
   // A player EXISTS when the account layer has given them a profile. A command
   // aimed at anyone else is UNAVAILABLE — the answer a block gives — so a typed

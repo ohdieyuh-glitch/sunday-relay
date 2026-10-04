@@ -54,9 +54,32 @@ There is one relation, `wonderlandRelationOf`: `SELF`, `BLOCKED` (either directi
    - No client can name itself.
    - Proven end to end by `relay-bridge/wonderland-social-names.real-postgres.test.ts`: two GitHub sign-ins, each player shown the other's login, a rename, and hiding taking the name away. Two mutants are killed: a nameless upsert, and no recording at sign-in.
 5. **Two ordinary members of one server who block each other both stay.** Neither has authority over the other, and the wall makes them invisible and inaudible to each other.
+6. **Presence is a lease, not a record** (`social-liveness.ts`).
+   - **The problem.** A client that crashes, loses its network or is closed never sends `LEAVE_INSTANCE`. Before this decision its presence stayed true forever. A friend's lookup, a roster, an instance's population, an encounter recorded on someone else's entry, and a voice plan all went on reporting a player who had gone.
+   - **The rule.** A presence not refreshed within `WONDERLAND_PRESENCE_TTL_SECONDS` (120, four heartbeats) is not presence. The client refreshes it with `UPDATE_PRESENCE` every `WONDERLAND_PRESENCE_HEARTBEAT_SECONDS` (30).
+   - **One filter, everywhere at once.** `wonderlandLiveState` is applied by every store read (`stateFor` and `voiceStateFor` now take the request's `now`) and by every decision (`decideWonderlandSocialCommand`, at the command's time). No reader can see a presence the others do not.
+   - **What follows:**
+     - an entry records no encounter with someone who has gone;
+     - a heartbeat from an expired presence is refused `NOT_IN_INSTANCE` (409), never silently revived;
+     - the client then enters again.
+   - **Nothing is deleted.** The row stays until the player's next entry overwrites it. It simply stops counting, in both stores. The parity suite reads the row back from PostgreSQL, and both stores agree on every projection after an expiry.
+   - **Voice.**
+     - The room planned without the departed player has different members, so it is a different room.
+     - The next heartbeat of anyone live in that instance reconciles them, and the trusted server moves every live player out of the room the departed player is still in.
+     - The departed player's own issuance is not pretended revoked; nobody took it back. But nobody live shares that room any more, and their next entry reconciles them like anyone else.
+     - So a player who has gone is reported present for at most the lease. For at most one heartbeat after that, they may still share a room nobody sees them in.
+   - **Proven by:**
+     - the domain suite (`wonderland-social-liveness.test.ts`);
+     - the route suites (a ghost at every social route; a ghost planned into no room; the next heartbeat moving the live players out);
+     - the real-PostgreSQL parity case.
+
+     **Four mutants are killed:** liveness off, the decider ignoring it, the PostgreSQL read ignoring it, and the voice read ignoring it.
 
 ## Not done here, and where it goes
 
 - **Voice (035):** EOS rooms and the trusted voice server enforce `wonderlandVoiceRouting` as per-listener hard mutes. The migration and the client-config endpoint belong to the voice lane.
-- **The client (CORE):** the final RC calls these routes against the hosted HTTPS backend, not `127.0.0.1`.
+- **The client (CORE):**
+  - The final RC calls these routes against the hosted HTTPS backend, not `127.0.0.1`.
+  - While in an instance, it sends `UPDATE_PRESENCE` at least every 30 s, and answers `NOT_IN_INSTANCE` by entering again (decision 6).
+- **A sweep of departed players' own voice issuances.** Not built: nobody live shares those rooms (decision 6). A server-side sweep would make the issuance record tidier, not the wall stronger.
 - **The live store:** applying 033 is JUJU's sequenced local operation (`docs/julius-migrations/033/RUNBOOK.md`), after 031 and 032 are landed and applied. It is **READY FOR LOCAL QUALIFICATION** once the branch lands.

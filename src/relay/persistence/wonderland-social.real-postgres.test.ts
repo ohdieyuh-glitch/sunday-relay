@@ -5,6 +5,7 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
+  WONDERLAND_PRESENCE_TTL_SECONDS,
   createMemoryWonderlandSocialStore,
   projectWonderlandConversation,
   projectWonderlandFriends,
@@ -82,7 +83,8 @@ suite('Wonderland social on real PostgreSQL (migration 033)', () => {
       await admin.query(`DROP DATABASE IF EXISTS ${name}`).catch(() => undefined);
     }
     await admin?.end();
-  });
+    // Eleven databases, each DROP waiting out its last connections: the default ten seconds is not enough under load.
+  }, 90_000);
 
   describe('migration 033', () => {
     it('applies after 032: exactly fifteen social tables, one stamp, and no Recent Players column (P3)', async () => {
@@ -134,7 +136,7 @@ suite('Wonderland social on real PostgreSQL (migration 033)', () => {
       const rows = await pool.query<{ player_id: string; display_name: string | null }>(
         'SELECT player_id, display_name FROM relay_wonderland.social_profiles ORDER BY player_id');
       expect(rows.rows).toEqual([{ player_id: 'ann', display_name: 'ann-on-github' }, { player_id: 'ben', display_name: null }]);
-      expect((await store.stateFor({ viewerId: 'ann' })).profiles.ann).toEqual({ displayName: 'ann-on-github' });
+      expect((await store.stateFor({ viewerId: 'ann', now: '2026-10-04T12:00:00.000Z' })).profiles.ann).toEqual({ displayName: 'ann-on-github' });
       await expect(store.ensureProfile('not a player id')).rejects.toThrow('wonderland_social_player_invalid');
     });
 
@@ -241,17 +243,17 @@ suite('Wonderland social on real PostgreSQL (migration 033)', () => {
       }
       for (const viewer of PLAYERS) {
         const memory = projectionsFor(
-          await stores.memory.stateFor({ viewerId: viewer }), await stores.memory.stateFor({ viewerId: viewer, publicInstanceIds: [HUB, PLAZA] }), viewer);
+          await stores.memory.stateFor({ viewerId: viewer, now: at() }), await stores.memory.stateFor({ viewerId: viewer, publicInstanceIds: [HUB, PLAZA], now: at() }), viewer);
         const postgres = projectionsFor(
-          await stores.postgres.stateFor({ viewerId: viewer }), await stores.postgres.stateFor({ viewerId: viewer, publicInstanceIds: [HUB, PLAZA] }), viewer);
+          await stores.postgres.stateFor({ viewerId: viewer, now: at() }), await stores.postgres.stateFor({ viewerId: viewer, publicInstanceIds: [HUB, PLAZA], now: at() }), viewer);
         expect(postgres, `the world as ${viewer} sees it`).toEqual(memory);
       }
       for (const channel of [['ann', 'ben', 'sam', 'hana', 'fay'], ['owen', 'mia', 'max'], ['lea', 'ned', 'hana', 'mo']]) {
-        expect(wonderlandVoiceRouting(await stores.postgres.voiceStateFor({ participantIds: channel }), channel))
-          .toEqual(wonderlandVoiceRouting(await stores.memory.voiceStateFor({ participantIds: channel }), channel));
+        expect(wonderlandVoiceRouting(await stores.postgres.voiceStateFor({ participantIds: channel, now: at() }), channel))
+          .toEqual(wonderlandVoiceRouting(await stores.memory.voiceStateFor({ participantIds: channel, now: at() }), channel));
         for (const listener of channel) {
-          expect(projectWonderlandVoiceRoster(await stores.postgres.voiceStateFor({ participantIds: channel }), listener, channel))
-            .toEqual(projectWonderlandVoiceRoster(await stores.memory.voiceStateFor({ participantIds: channel }), listener, channel));
+          expect(projectWonderlandVoiceRoster(await stores.postgres.voiceStateFor({ participantIds: channel, now: at() }), listener, channel))
+            .toEqual(projectWonderlandVoiceRoster(await stores.memory.voiceStateFor({ participantIds: channel, now: at() }), listener, channel));
         }
       }
       // And the walls held, read back from PostgreSQL itself.
@@ -261,6 +263,54 @@ suite('Wonderland social on real PostgreSQL (migration 033)', () => {
       expect(party.rows[0].members, 'Mo removed by the leader; Ned left after blocking Hana').toEqual(['lea', 'hana', 'ivy']);
       const refusedDuringBlock = await pool.query("SELECT 1 FROM relay_wonderland.social_messages WHERE message_id='m-5'");
       expect(refusedDuringBlock.rowCount).toBe(0);
+    });
+
+    it('a presence expires in both stores at the same instant: nothing is deleted, and an entry meets only who is live', async () => {
+      const pool = await create('liveness', WONDERLAND_MIGRATIONS);
+      const stores: Record<'memory' | 'postgres', WonderlandSocialStore> = {
+        memory: createMemoryWonderlandSocialStore(),
+        postgres: new WonderlandSocialPostgresStore(pool),
+      };
+      const TTL = WONDERLAND_PRESENCE_TTL_SECONDS;
+      const t = (seconds: number): string => new Date(Date.UTC(2026, 9, 4, 14, 0, 0) + seconds * 1000).toISOString();
+      const enter: WonderlandSocialCommand = { kind: 'ENTER_INSTANCE', instanceId: HUB, location: null, activity: 'IDLE', dogId: null };
+      const heartbeat: WonderlandSocialCommand = { kind: 'UPDATE_PRESENCE', location: null, activity: 'IDLE' };
+      const steps: Array<[string, WonderlandSocialCommand, number, string]> = [
+        ['ann', { kind: 'FRIEND_REQUEST', toId: 'ben' }, 0, 'DONE'], ['ben', { kind: 'FRIEND_ACCEPT', fromId: 'ann' }, 0, 'DONE'],
+        ['ann', enter, 0, 'DONE'], ['ben', enter, 60, 'DONE'], ['cal', enter, 60, 'DONE'],
+        // One second past Ann's time to live: Ben's heartbeat holds, Ann's is told to enter again, and Dee meets only who is there.
+        ['ben', heartbeat, TTL + 1, 'DONE'], ['ann', heartbeat, TTL + 1, 'NOT_IN_INSTANCE'], ['dee', enter, TTL + 2, 'DONE'],
+      ];
+      for (const store of Object.values(stores)) {
+        for (const player of ['ann', 'ben', 'cal', 'dee']) await store.upsertProfile({ playerId: player, displayName: player.toUpperCase() });
+      }
+      for (const [index, [actorId, command, seconds, code]] of steps.entries()) {
+        const outcomes = await Promise.all(Object.values(stores).map((store) =>
+          store.execute({ actorId, commandId: `live-${String(index)}`, command, at: t(seconds) })));
+        expect(outcomes[1], `step ${String(index)} ${command.kind} by ${actorId}`).toEqual(outcomes[0]);
+        expect(outcomes[0]!.code, `step ${String(index)} ${command.kind} by ${actorId}`).toBe(code);
+      }
+      const now = t(TTL + 2);
+      for (const viewer of PLAYERS) {
+        const memory = projectionsFor(
+          await stores.memory.stateFor({ viewerId: viewer, now }), await stores.memory.stateFor({ viewerId: viewer, publicInstanceIds: [HUB, PLAZA], now }), viewer);
+        const postgres = projectionsFor(
+          await stores.postgres.stateFor({ viewerId: viewer, now }), await stores.postgres.stateFor({ viewerId: viewer, publicInstanceIds: [HUB, PLAZA], now }), viewer);
+        expect(postgres, `the world as ${viewer} sees it`).toEqual(memory);
+      }
+      const dee = await stores.postgres.stateFor({ viewerId: 'dee', publicInstanceIds: [HUB], now });
+      expect(projectWonderlandRoster(dee, 'dee', HUB)).toMatchObject({ players: [{ playerId: 'ben' }, { playerId: 'cal' }, { playerId: 'dee' }] });
+      expect(projectWonderlandInstanceListing(dee, 'dee', [HUB])).toEqual([{ instanceId: HUB, population: 3 }]);
+      expect(projectWonderlandPresenceOf(await stores.postgres.stateFor({ viewerId: 'ben', now }), 'ben', 'ann')).toEqual({ status: 'UNAVAILABLE' });
+      const voice = ['ann', 'ben', 'cal', 'dee'];
+      expect(Object.keys((await stores.postgres.voiceStateFor({ participantIds: voice, now })).presence).sort()).toEqual(['ben', 'cal', 'dee']);
+      expect(wonderlandVoiceRouting(await stores.postgres.voiceStateFor({ participantIds: voice, now }), voice))
+        .toEqual(wonderlandVoiceRouting(await stores.memory.voiceStateFor({ participantIds: voice, now }), voice));
+      // Read back from PostgreSQL itself: Ann's row is still there (expiry deletes nothing), and no meeting with her was recorded.
+      const rows = await pool.query<{ player_id: string }>('SELECT player_id FROM relay_wonderland.social_presence ORDER BY player_id');
+      expect(rows.rows.map((row) => row.player_id)).toEqual(['ann', 'ben', 'cal', 'dee']);
+      const met = await pool.query<{ pair: string }>("SELECT player_id || '>' || other_id AS pair FROM relay_wonderland.social_encounters WHERE 'dee' IN (player_id, other_id) ORDER BY 1");
+      expect(met.rows.map((row) => row.pair)).toEqual(['ben>dee', 'cal>dee', 'dee>ben', 'dee>cal']);
     });
 
     it('a command id is one write: a replay returns its first outcome, and another actor cannot reuse it', async () => {

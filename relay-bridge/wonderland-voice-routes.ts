@@ -81,10 +81,12 @@ function channelOf(state: WonderlandSocialState, playerId: string, kind: 'INSTAN
 async function planFor(
   ports: WonderlandVoiceRoutePorts,
   channel: Omit<WonderlandVoiceChannel, 'participantIds'> & { readonly candidates: readonly string[] },
+  now: string,
 ): Promise<{ plan: ReturnType<typeof planWonderlandVoiceRooms>; puids: Readonly<Record<string, string>> }> {
   const puids = await ports.identities!.productUserIdsOf(channel.candidates);
   const participantIds = channel.candidates.filter((id) => puids[id] !== undefined);
-  const state = await ports.social!.voiceStateFor({ participantIds });
+  // Planned among who is actually there now: an expired presence holds no instance room.
+  const state = await ports.social!.voiceStateFor({ participantIds, now });
   return { plan: planWonderlandVoiceRooms(state, { kind: channel.kind, scopeId: channel.scopeId, participantIds }, ports.digest), puids };
 }
 
@@ -105,12 +107,12 @@ export async function reconcileWonderlandVoice(ports: WonderlandVoiceRoutePorts,
     const open = await ports.identities.openRoomsOf(playerId);
     if (open.length === 0) continue;
     const puid = await ports.identities.productUserIdOf(playerId);
-    const state = await ports.social.stateFor({ viewerId: playerId });
+    const state = await ports.social.stateFor({ viewerId: playerId, now: at });
     const allowed = new Set<string>();
     for (const kind of ['INSTANCE', 'PARTY'] as const) {
       const channel = channelOf(state, playerId, kind);
       if (channel === null) continue;
-      const { plan } = await planFor(ports, channel);
+      const { plan } = await planFor(ports, channel, at);
       for (const roomId of plan.joins[playerId] ?? []) allowed.add(roomId);
     }
     for (const roomId of open) {
@@ -180,10 +182,10 @@ export async function handleWonderlandVoiceRoute(input: WonderlandVoiceRouteRequ
     if (kind === null) return error(400, 'channel_invalid', 'channel is INSTANCE or PARTY.');
     const puid = await ports.identities.productUserIdOf(player);
     if (puid === null) return error(409, 'voice_identity_required', 'Bind your EOS identity first (POST /wonderland/voice/identity).');
-    const state = await ports.social.stateFor({ viewerId: player });
+    const state = await ports.social.stateFor({ viewerId: player, now: at });
     const channel = channelOf(state, player, kind);
     if (channel === null) return error(409, kind === 'INSTANCE' ? 'not_in_instance' : 'not_in_party', `You are not in ${kind === 'INSTANCE' ? 'an instance' : 'a party'}.`);
-    const { plan } = await planFor(ports, channel);
+    const { plan } = await planFor(ports, channel, at);
     const rooms: { roomId: string; token: string; clientBaseUrl: string }[] = [];
     for (const roomId of plan.joins[player] ?? []) {
       const issued = await ports.voice.roomToken({ roomId, productUserId: puid });

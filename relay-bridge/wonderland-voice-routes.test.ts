@@ -1,7 +1,7 @@
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-import { createMemoryWonderlandSocialStore } from '../src/relay/mission/wonderland-social';
+import { WONDERLAND_PRESENCE_HEARTBEAT_SECONDS, WONDERLAND_PRESENCE_TTL_SECONDS, createMemoryWonderlandSocialStore } from '../src/relay/mission/wonderland-social';
 import { createMemoryWonderlandVoiceIdentityStore } from '../src/relay/mission/wonderland-voice';
 import { createBrowserSessionStore } from './browser-session/grants';
 import {
@@ -93,11 +93,11 @@ function stage(over: Partial<WonderlandVoiceRoutePorts> = {}) {
     await social.upsertProfile({ playerId: id, displayName: id });
     return minted.session.token;
   };
-  const voice = (id: string, method: string, path: string, body?: unknown) =>
-    handleWonderlandVoiceRoute({ method, path, origin: ORIGIN, body, now: NOW, authorization: `Relay-Session ${tokens.get(id)!}` }, ports);
+  const voice = (id: string, method: string, path: string, body?: unknown, now: number = NOW) =>
+    handleWonderlandVoiceRoute({ method, path, origin: ORIGIN, body, now, authorization: `Relay-Session ${tokens.get(id)!}` }, ports);
   let n = 0;
-  const social$ = (id: string, command: unknown) => handleWonderlandSocialRoute({
-    method: 'POST', path: '/wonderland/social/commands', url: '/wonderland/social/commands', origin: ORIGIN, now: NOW,
+  const social$ = (id: string, command: unknown, now: number = NOW) => handleWonderlandSocialRoute({
+    method: 'POST', path: '/wonderland/social/commands', url: '/wonderland/social/commands', origin: ORIGIN, now,
     authorization: `Relay-Session ${tokens.get(id)!}`, body: { commandId: `c-${String(++n)}`, command },
   }, {
     store: social, sessions, allowNative: false,
@@ -179,6 +179,7 @@ async function hub(names: readonly string[]) {
 }
 const roomsOf = (result: Awaited<ReturnType<typeof handleWonderlandVoiceRoute>>) =>
   ((result?.body as { data: { rooms: Array<{ roomId: string; token: string }> } }).data.rooms);
+const HEARTBEAT = { kind: 'UPDATE_PRESENCE', location: null, activity: 'IDLE' } as const;
 
 describe('joining voice', () => {
   it('needs a proven identity and a channel', async () => {
@@ -203,6 +204,19 @@ describe('joining voice', () => {
     const hanaRooms = roomsOf(await s.voice('hana', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }));
     expect(samRooms).toHaveLength(1);
     expect(hanaRooms, 'Hana shares voice with nobody here: no friend is present').toEqual([]);
+  });
+  it('a player whose presence has expired stands in no instance, and is planned into no room', async () => {
+    const s = await hub(['ann', 'ben', 'cal']);
+    const held = roomsOf(await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }))[0]!.roomId;
+    // Ben and Cal keep their heartbeat; Ann's client is gone and says nothing.
+    for (const id of ['ben', 'cal']) await s.social$(id, HEARTBEAT, NOW + 60_000);
+    const gone = NOW + (WONDERLAND_PRESENCE_TTL_SECONDS + 1) * 1000;
+    s.eos.calls.length = 0;
+    expect((await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }, gone))?.body).toMatchObject({ error: { kind: 'not_in_instance' } });
+    expect(s.eos.calls, 'no token was asked for on her behalf').toEqual([]);
+    const benRooms = roomsOf(await s.voice('ben', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }, gone));
+    expect(benRooms).toHaveLength(1);
+    expect(benRooms[0]!.roomId, 'the room planned without her is not the room she held').not.toBe(held);
   });
 });
 
@@ -243,6 +257,34 @@ describe('the wall moves, and the trusted server takes back what it no longer al
     s.eos.calls.length = 0;
     await s.social$('hana', { kind: 'SET_SETTINGS', settings: { visibility: 'HIDDEN_FROM_STRANGERS' } });
     expect(s.eos.calls).toContainEqual({ op: 'remove', roomId: shared, productUserId: PUID(1) });
+  });
+  it('a player who has gone without a word is left alone in their last room: the next heartbeat moves everyone live out of it', async () => {
+    const s = await hub(['ann', 'ben', 'cal']);
+    const shared = roomsOf(await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }))[0]!.roomId;
+    await s.voice('ben', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
+    await s.voice('cal', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
+    // Ann's client is gone. Ben and Cal keep their heartbeat; while Ann's presence lives, the room stands.
+    const beat = (k: number): number => NOW + k * WONDERLAND_PRESENCE_HEARTBEAT_SECONDS * 1000;
+    for (const k of [1, 2, 3, 4]) {
+      for (const id of ['ben', 'cal']) {
+        expect((await s.social$(id, HEARTBEAT, beat(k)))?.body).toMatchObject({ data: { ok: true, code: 'DONE' }, voice: { revoked: 0, revocationFailures: 0 } });
+      }
+    }
+    expect(s.eos.calls.filter((call) => call.op === 'remove')).toEqual([]);
+    // One second past her time to live, Ben's next heartbeat takes both live players out of the room she is in.
+    const gone = NOW + (WONDERLAND_PRESENCE_TTL_SECONDS + 1) * 1000;
+    const moved = await s.social$('ben', HEARTBEAT, gone);
+    expect((moved?.body as { voice: unknown }).voice).toEqual({ revoked: 2, revocationFailures: 0 });
+    expect(s.eos.calls.filter((call) => call.op === 'remove').map((call) => [call.roomId, call.productUserId]))
+      .toEqual([[shared, PUID(2)], [shared, PUID(3)]]);
+    expect(await s.identities.openRoomsOf('ben')).toEqual([]);
+    expect(await s.identities.openRoomsOf('cal')).toEqual([]);
+    // Her own issuance is not pretended revoked — nobody took it back — but nobody live shares that room any more.
+    expect(await s.identities.openRoomsOf('ann')).toEqual([shared]);
+    // When she enters again she is reconciled like anyone who enters.
+    await s.social$('ann', { kind: 'ENTER_INSTANCE', instanceId: 'public:hub', location: null, activity: 'IDLE', dogId: null }, gone);
+    const back = roomsOf(await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }, gone));
+    expect(back.map((room) => room.roomId)).toEqual([shared]);
   });
 });
 

@@ -7,6 +7,7 @@ import {
   isWonderlandInstanceId,
   isWonderlandPlayerId,
   wonderlandFriendKey,
+  wonderlandLiveState,
   wonderlandServerIdOfInstance,
   type WonderlandActivity,
   type WonderlandLocation,
@@ -380,12 +381,13 @@ export class WonderlandSocialPostgresStore implements WonderlandSocialStore {
     }
   }
 
-  async stateFor(input: { readonly viewerId: string; readonly publicInstanceIds?: readonly string[] }): Promise<WonderlandSocialState> {
+  async stateFor(input: { readonly viewerId: string; readonly publicInstanceIds?: readonly string[]; readonly now: string }): Promise<WonderlandSocialState> {
     if (!isWonderlandPlayerId(input.viewerId)) return WONDERLAND_EMPTY_SOCIAL_STATE;
-    return this.readConsistent({ playerIds: [input.viewerId], viewerId: input.viewerId, instanceIds: input.publicInstanceIds ?? [] });
+    return wonderlandLiveState(
+      await this.readConsistent({ playerIds: [input.viewerId], viewerId: input.viewerId, instanceIds: input.publicInstanceIds ?? [] }), input.now);
   }
 
-  async voiceStateFor(input: { readonly participantIds: readonly string[] }): Promise<WonderlandSocialState> {
-    return this.readConsistent({ playerIds: input.participantIds });
+  async voiceStateFor(input: { readonly participantIds: readonly string[]; readonly now: string }): Promise<WonderlandSocialState> {
+    return wonderlandLiveState(await this.readConsistent({ playerIds: input.participantIds }), input.now);
   }
 }
