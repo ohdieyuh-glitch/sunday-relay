@@ -15,6 +15,8 @@
 //        live view makes it live again
 //   BL8  a review names the memory by Project Brain's reference, never by the text on screen; an index past the end is refused
 //   BL9  the terminal never echoes a pairing code; other /brain lines are echoed as typed (control)
+//   BL10 /brain proposals numbers the pending proposal; adopt/withdraw name its pbr: record AND the version seen; a number past the
+//        end and a word are refused (and BL7: an adopt while cut off is refused)
 // The model and the write delegates are restored at the end. Logs WLBRAINQA lines. `quit` exits after.
 //
 // PLAIN C++: no UCLASS, no UFUNCTION, no log category (LogTemp) -- a new early FName can shift Niagara's type hash (RC1).
@@ -54,16 +56,16 @@ namespace WonderlandBrainQa
 	FString ViewJson(const FString& ProjectId, const FString& Schema, bool bCursor, bool bSurfaceProposals, bool bEntryRef)
 	{
 		const FString Entry = bEntryRef
-			? FString(TEXT("{\"ref\":\"pbr:00000000-0000-4000-8000-000000000001@v1\",\"line\":\"QA fact one\",\"status\":\"ACTIVE\"}"))
+			? FString(TEXT("{\"ref\":\"pbr:00000000-0000-4000-8000-000000000001\",\"line\":\"QA fact one\",\"status\":\"ACTIVE\",\"version\":1}"))
 			: FString(TEXT("{\"line\":\"QA fact one\",\"status\":\"ACTIVE\"}"));
-		const FString Learned = TEXT("{\"ref\":\"pbr:00000000-0000-4000-8000-000000000002@v3\",\"line\":\"QA learned fact\",\"status\":\"PROPOSED\"}");
+		const FString Learned = TEXT("{\"ref\":\"entry:qa-learned-0002\",\"line\":\"QA learned fact\",\"status\":\"PROPOSED\"}");
 		return FString::Printf(TEXT("{\"data\":{\"schemaVersion\":\"%s\",\"projectId\":\"%s\",%s\"brainRevision\":41,\"sourceLine\":\"QA FIXTURE VIEW\","
 			"\"missionTitle\":\"QA mission\",\"surfaces\":["
 			"{\"id\":\"user_facts\",\"entryCount\":7,\"entries\":[%s]%s},"
 			"{\"id\":\"learned_facts\",\"entryCount\":1,\"entries\":[%s],\"proposals\":[]}"
 			"]}}"),
 			*Schema, *ProjectId, bCursor ? TEXT("\"cursor\":\"pbc1.QUFB\",") : TEXT(""), *Entry,
-			bSurfaceProposals ? TEXT(",\"proposals\":[{\"ref\":\"pbr:00000000-0000-4000-8000-000000000003@v1\",\"line\":\"QA pending proposal\"}]") : TEXT(""),
+			bSurfaceProposals ? TEXT(",\"proposals\":[{\"ref\":\"pbr:00000000-0000-4000-8000-000000000003\",\"line\":\"QA pending proposal\",\"status\":\"PROPOSED\",\"version\":2}]") : TEXT(""),
 			*Learned);
 	}
 
@@ -92,6 +94,7 @@ namespace WonderlandBrainQa
 		const FWonderlandBrainModel Saved = Brain->GetModel();
 		const UWonderlandProjectBrainSubsystem::FWonderlandBrainLivePropose SavedPropose = Brain->LivePropose;
 		const UWonderlandProjectBrainSubsystem::FWonderlandBrainLiveReview SavedReview = Brain->LiveReview;
+		const UWonderlandProjectBrainSubsystem::FWonderlandBrainLiveSetStatus SavedSetStatus = Brain->LiveSetStatus;
 		const FString Project = TEXT("qa-brain-project");
 		const FString Good = ViewJson(Project, TEXT("relay-wonderland-project-brain.v1"), true, true, true);
 
@@ -167,6 +170,18 @@ namespace WonderlandBrainQa
 		FString LastReviewRef;
 		Brain->LivePropose.BindLambda([&ProposeCalls, &LastProposeText](FName, const FString& Text) { ++ProposeCalls; LastProposeText = Text; return true; });
 		Brain->LiveReview.BindLambda([&ReviewCalls, &LastReviewRef](FName, const FString& Ref, bool) { ++ReviewCalls; LastReviewRef = Ref; return true; });
+		int32 StatusCalls = 0;
+		FString LastStatusRef;
+		int32 LastStatusVersion = 0;
+		FString LastStatus;
+		Brain->LiveSetStatus.BindLambda([&StatusCalls, &LastStatusRef, &LastStatusVersion, &LastStatus](const FString& Ref, int32 Version, const FString& Status)
+		{
+			++StatusCalls;
+			LastStatusRef = Ref;
+			LastStatusVersion = Version;
+			LastStatus = Status;
+			return true;
+		});
 		const FString Key = SyntheticKey();
 		const FString KeyLine = FString::Printf(TEXT("our deploy key is %s for staging"), *Key);
 		const FString ZwspLine = FString::Printf(TEXT("our deploy key is %s%s%s for staging"), *Key.Left(10), TEXT("​"), *Key.Mid(10));
@@ -213,9 +228,31 @@ namespace WonderlandBrainQa
 		{
 			const bool bSent = Brain->Review(FName(TEXT("learned_facts")), 0, true);
 			const bool bPast = Brain->Review(FName(TEXT("learned_facts")), 5, true);
-			Report(T, TEXT("BL8"), bSent && !bPast && ReviewCalls == 1 && LastReviewRef == TEXT("pbr:00000000-0000-4000-8000-000000000002@v3"),
+			Report(T, TEXT("BL8"), bSent && !bPast && ReviewCalls == 1 && LastReviewRef == TEXT("entry:qa-learned-0002"),
 				FString::Printf(TEXT("review by reference: sent %s naming '%s'; an index past the end %s; reviews sent %d (want 1)"),
 					bSent ? TEXT("yes") : TEXT("NO"), *LastReviewRef, bPast ? TEXT("ACCEPTED") : TEXT("refused"), ReviewCalls));
+		}
+
+		// BL10: the owner decides what they proposed -- /brain proposals numbers it, adopt/withdraw name the record AND the version seen
+		{
+			FString Listed;
+			Brain->HandleTerminalLine(TEXT("proposals"), Listed);
+			FString AdoptSaid;
+			Brain->HandleTerminalLine(TEXT("adopt 1"), AdoptSaid);
+			const bool bAdoptSent = StatusCalls == 1 && LastStatusRef == TEXT("pbr:00000000-0000-4000-8000-000000000003") && LastStatusVersion == 2 && LastStatus == TEXT("ADOPTED");
+			FString PastSaid;
+			Brain->HandleTerminalLine(TEXT("withdraw 9"), PastSaid);
+			FString WordSaid;
+			Brain->HandleTerminalLine(TEXT("adopt one"), WordSaid);
+			FString WithdrawSaid;
+			Brain->HandleTerminalLine(TEXT("withdraw 1"), WithdrawSaid);
+			const bool bWithdrawSent = StatusCalls == 2 && LastStatus == TEXT("WITHDRAWN") && LastStatusVersion == 2;
+			Report(T, TEXT("BL10"), Listed.Contains(TEXT("1. User Facts: QA pending proposal (v2)")) && bAdoptSent && bWithdrawSent && PastSaid.StartsWith(TEXT("Not sent"))
+				&& WordSaid.StartsWith(TEXT("Not sent")),
+				FString::Printf(TEXT("decide a proposal: listed %s; adopt 1 -> %s %s v%d (sent %s); withdraw 9 and 'adopt one' refused %s/%s; withdraw 1 sent %s; status sends %d (want 2)"),
+					Listed.Contains(TEXT("(v2)")) ? TEXT("yes") : TEXT("NO"), *LastStatus, *LastStatusRef.Left(12), LastStatusVersion, bAdoptSent ? TEXT("yes") : TEXT("NO"),
+					PastSaid.StartsWith(TEXT("Not sent")) ? TEXT("yes") : TEXT("NO"), WordSaid.StartsWith(TEXT("Not sent")) ? TEXT("yes") : TEXT("NO"),
+					bWithdrawSent ? TEXT("yes") : TEXT("NO"), StatusCalls));
 		}
 
 		// BL7: cut off, then live again
@@ -227,13 +264,18 @@ namespace WonderlandBrainQa
 			const int32 ReviewsBefore = ReviewCalls;
 			const bool bProposed = Brain->Propose(FName(TEXT("requirements")), TEXT("QA: written while cut off"));
 			const bool bReviewed = Brain->Review(FName(TEXT("learned_facts")), 0, false);
+			const int32 StatusBefore = StatusCalls;
+			FString AdoptCutOff;
+			Brain->HandleTerminalLine(TEXT("adopt 1"), AdoptCutOff);
+			const bool bAdoptRefused = StatusCalls == StatusBefore && AdoptCutOff.StartsWith(TEXT("Not sent"));
 			FWonderlandBrainLiveView View;
 			WonderlandProjectBrainLinkLogic::ParseView(Good, View);
 			Brain->AdoptLive(View);
 			const bool bBack = Brain->IsLive() && !Brain->GetModel().bLinkLost && Brain->GetModel().SourceLine == TEXT("QA FIXTURE VIEW");
-			Report(T, TEXT("BL7"), bLost && !bProposed && !bReviewed && ProposeCalls == SendsBefore && ReviewCalls == ReviewsBefore && bBack,
-				FString::Printf(TEXT("cut off: not live %s, '%s'; a proposal %s, a review %s while cut off; a new view makes it live again %s"),
+			Report(T, TEXT("BL7"), bLost && !bProposed && !bReviewed && bAdoptRefused && ProposeCalls == SendsBefore && ReviewCalls == ReviewsBefore && bBack,
+				FString::Printf(TEXT("cut off: not live %s, '%s'; a proposal %s, a review %s, an adopt %s while cut off; a new view makes it live again %s"),
 					bLost ? TEXT("yes") : TEXT("NO"), *LostLine.Left(48), bProposed ? TEXT("SENT") : TEXT("refused"), bReviewed ? TEXT("SENT") : TEXT("refused"),
+					bAdoptRefused ? TEXT("refused") : TEXT("SENT"),
 					bBack ? TEXT("yes") : TEXT("NO")));
 		}
 
@@ -248,6 +290,7 @@ namespace WonderlandBrainQa
 
 		Brain->LivePropose = SavedPropose;
 		Brain->LiveReview = SavedReview;
+		Brain->LiveSetStatus = SavedSetStatus;
 		Brain->ReplaceModelForQa(Saved);
 		UE_LOG(LogTemp, Display, TEXT("WLBRAINQA restored the model (%s) and the write paths"), Saved.bLive ? TEXT("live") : TEXT("the preview"));
 		UE_LOG(LogTemp, Display, TEXT("WLBRAINQA END pass=%d fail=%d"), T.Pass, T.Fail);
@@ -260,7 +303,7 @@ namespace WonderlandBrainQa
 	FAutoConsoleCommandWithWorldAndArgs GBrainLinkQa(
 		TEXT("wl.Qa.BrainLink"),
 		TEXT("Project Brain link: its rules checked with no bridge -- views, refusals, the secret screen, cut-off, reviews by reference, "
-			"the terminal echo (BL1-BL9). `quit` exits after. WLBRAINQA lines."),
+			"the terminal echo, deciding a proposal (BL1-BL10). `quit` exits after. WLBRAINQA lines."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			Run(World, Args.Contains(TEXT("quit")));

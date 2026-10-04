@@ -65,6 +65,8 @@ public:
 	bool SendProposal(FName SurfaceId, const FString& Text);
 	/** The panel's Accept / Decline on a REVIEW surface, naming the memory by its Project Brain reference. */
 	bool SendReview(FName SurfaceId, const FString& EntryRef, bool bAccept);
+	/** `/brain adopt|withdraw <n>`: SET_STATUS on a Project Brain record, naming the version the player saw (stale = 409). */
+	bool SendStatus(const FString& RecordRef, int32 ExpectedVersion, const FString& Status);
 
 	/** Read the view again now, whatever the feed says. */
 	void Refresh();

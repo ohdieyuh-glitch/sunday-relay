@@ -72,6 +72,10 @@ struct FWonderlandBrainSurface
 	TArray<FString> Reviews;
 	/** Live only: the Project Brain reference of each entry line, index for index -- what a review names. */
 	TArray<FString> EntryRefs;
+	/** Live only: each proposal's record reference (pbr:<uuid>) and current version, index for index with Proposals -- what an
+	 *  adopt or a withdraw names (the bridge refuses a stale version with 409, so a change is never applied to what was not seen). */
+	TArray<FString> ProposalRefs;
+	TArray<int32> ProposalVersions;
 };
 
 /** One line of a live surface, as the bridge sent it. */
@@ -82,6 +86,8 @@ struct FWonderlandBrainLiveEntry
 	FString Status;
 	/** ACCEPTED, DECLINED, or empty when no person has reviewed it. */
 	FString Review;
+	/** The record's version when it is a Project Brain record (0 when the line is not one: a Julius row, a claim). */
+	int32 Version = 0;
 };
 
 /** One surface of the live view, by the panel's own id. */
@@ -186,8 +192,22 @@ public:
 	 * `/brain` IN THE LIVE TERMINAL -- the player's own path to Project Brain (Second, 10-03; until now only the console command
 	 * wl.Julius.Pair could pair): `/brain` or `/brain status` says where things stand; `/brain pair <code>` redeems the website's
 	 * pairing code through the stream (the code is never logged or echoed); `/brain refresh` reads the view again.
+	 * Live: `/brain proposals` numbers every pending proposal on the player's own surfaces; `/brain adopt <n>` asks Project Brain to
+	 * ADOPT it (the owner's decision: it becomes a term Julius reads, at a new version) and `/brain withdraw <n>` to WITHDRAW it.
+	 * The bridge decides who may (an adopt is the owner's; a withdraw the author's or the owner's) and refuses a stale version.
 	 */
 	void HandleTerminalLine(const FString& Argument, FString& OutSaid);
+
+	/** One pending proposal as `/brain proposals` numbers it (1-based, in surface order). */
+	struct FPendingProposal
+	{
+		FName SurfaceId;
+		FString SurfaceTitle;
+		FString Line;
+		FString Ref;
+		int32 Version = 0;
+	};
+	TArray<FPendingProposal> ListPendingProposals() const;
 	/** The line as the terminal may echo it: a pairing code is never shown back. */
 	static FString MaskTerminalEcho(const FString& Line);
 
@@ -202,6 +222,9 @@ public:
 	DECLARE_DELEGATE_RetVal_ThreeParams(bool, FWonderlandBrainLiveReview, FName /*SurfaceId*/, const FString& /*EntryRef*/, bool /*bAccept*/);
 	FWonderlandBrainLivePropose LivePropose;
 	FWonderlandBrainLiveReview LiveReview;
+	/** A status change on a Project Brain record the player can see: ADOPTED or WITHDRAWN, naming the version it changes. */
+	DECLARE_DELEGATE_RetVal_ThreeParams(bool, FWonderlandBrainLiveSetStatus, const FString& /*RecordRef*/, int32 /*ExpectedVersion*/, const FString& /*Status*/);
+	FWonderlandBrainLiveSetStatus LiveSetStatus;
 
 	/** `wl.Brain.Link`: what the link to the bridge's Project Brain is doing. Plain C++ on purpose (no new FNames). */
 	FString DescribeLink() const;

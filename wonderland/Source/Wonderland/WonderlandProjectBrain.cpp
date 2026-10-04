@@ -49,6 +49,7 @@ void UWonderlandProjectBrainSubsystem::Initialize(FSubsystemCollectionBase& Coll
 	Link = MakeShared<FWonderlandProjectBrainLink>(GetGameInstance(), this);
 	LivePropose.BindSP(Link.ToSharedRef(), &FWonderlandProjectBrainLink::SendProposal);
 	LiveReview.BindSP(Link.ToSharedRef(), &FWonderlandProjectBrainLink::SendReview);
+	LiveSetStatus.BindSP(Link.ToSharedRef(), &FWonderlandProjectBrainLink::SendStatus);
 	Link->Start();
 }
 
@@ -56,6 +57,7 @@ void UWonderlandProjectBrainSubsystem::Deinitialize()
 {
 	LivePropose.Unbind();
 	LiveReview.Unbind();
+	LiveSetStatus.Unbind();
 	if (Link.IsValid())
 	{
 		Link->Stop();
@@ -177,6 +179,8 @@ void UWonderlandProjectBrainSubsystem::AdoptLive(const FWonderlandBrainLiveView&
 		// The panel's own definition stays (title, group, access, purpose); only what Project Brain holds changes.
 		Surface.SampleLines.Reset();
 		Surface.EntryRefs.Reset();
+		Surface.ProposalRefs.Reset();
+		Surface.ProposalVersions.Reset();
 		Surface.Proposals.Reset();
 		Surface.Reviews.Reset();
 		Surface.EntryCount = 0;
@@ -196,6 +200,8 @@ void UWonderlandProjectBrainSubsystem::AdoptLive(const FWonderlandBrainLiveView&
 		for (const FWonderlandBrainLiveEntry& Proposal : Live->Proposals)
 		{
 			Surface.Proposals.Add(Proposal.Line);
+			Surface.ProposalRefs.Add(Proposal.Ref);
+			Surface.ProposalVersions.Add(Proposal.Version);
 		}
 	}
 	UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN live view adopted for %s at revision %d"), *View.ProjectId, View.BrainRevision);
@@ -298,7 +304,84 @@ void UWonderlandProjectBrainSubsystem::HandleTerminalLine(const FString& Argumen
 		OutSaid = Model.bLive ? TEXT("Reading Project Brain again from the bridge.") : TEXT("Not paired yet: nothing to read. /brain pair <code> first.");
 		return;
 	}
-	OutSaid = TEXT("/brain [status] | pair <code> | refresh -- Project Brain: where it stands, connect this world with the website's code, read it again.");
+	if (Verb.Equals(TEXT("proposals"), ESearchCase::IgnoreCase))
+	{
+		if (!Model.bLive)
+		{
+			OutSaid = TEXT("Not live: the preview's proposals are not saved anywhere. /brain pair <code> connects Project Brain.");
+			return;
+		}
+		const TArray<FPendingProposal> Pending = ListPendingProposals();
+		if (Pending.Num() == 0)
+		{
+			OutSaid = TEXT("No proposal is waiting on your surfaces.");
+			return;
+		}
+		TArray<FString> Rows;
+		for (int32 Index = 0; Index < Pending.Num(); ++Index)
+		{
+			// THE LINE AS IT MAY BE SHOWN: what Project Brain holds was screened when it was written; masked again here all the same
+			Rows.Add(FString::Printf(TEXT("%d. %s: %s (v%d)"), Index + 1, *Pending[Index].SurfaceTitle,
+				*FWonderlandCardStore::MaskForDisplay(Pending[Index].Line.Left(160)), Pending[Index].Version));
+		}
+		OutSaid = FString::Printf(TEXT("Waiting in Project Brain -- /brain adopt <n> or /brain withdraw <n>:\n%s"), *FString::Join(Rows, TEXT("\n")));
+		return;
+	}
+	const bool bAdopt = Verb.Equals(TEXT("adopt"), ESearchCase::IgnoreCase);
+	if (bAdopt || Verb.Equals(TEXT("withdraw"), ESearchCase::IgnoreCase))
+	{
+		if (!Model.bLive || Model.bLinkLost)
+		{
+			OutSaid = TEXT("Not sent: this world is not connected to Project Brain. /brain pair <code> connects it.");
+			return;
+		}
+		const TArray<FPendingProposal> Pending = ListPendingProposals();
+		const int32 Number = Rest.IsNumeric() ? FCString::Atoi(*Rest) : 0;
+		if (!Pending.IsValidIndex(Number - 1) || Pending[Number - 1].Version < 1 || !Pending[Number - 1].Ref.StartsWith(TEXT("pbr:")))
+		{
+			OutSaid = FString::Printf(TEXT("Not sent: there is no proposal %s. /brain proposals lists them."), Rest.IsEmpty() ? TEXT("with that number") : *Rest.Left(12));
+			return;
+		}
+		const FPendingProposal& Chosen = Pending[Number - 1];
+		const FString Status = bAdopt ? TEXT("ADOPTED") : TEXT("WITHDRAWN");
+		const bool bSent = LiveSetStatus.IsBound() && LiveSetStatus.Execute(Chosen.Ref, Chosen.Version, Status);
+		SetWriteNote(bSent ? FString::Printf(TEXT("Sending: %s proposal %d to Project Brain..."), bAdopt ? TEXT("adopt") : TEXT("withdraw"), Number)
+			: FString(TEXT("Not sent: this world is not linked to Project Brain right now.")));
+		UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN /brain %s %d: %s %s at v%d %s"), bAdopt ? TEXT("adopt") : TEXT("withdraw"), Number,
+			*Chosen.SurfaceId.ToString(), *Chosen.Ref, Chosen.Version, bSent ? TEXT("sent") : TEXT("NOT sent (no link)"));
+		OutSaid = bSent ? FString::Printf(TEXT("Asked Project Brain to %s proposal %d (%s). The bridge decides who may; /brain proposals shows the result."),
+			bAdopt ? TEXT("adopt") : TEXT("withdraw"), Number, *Chosen.SurfaceTitle) : FString(TEXT("Not sent: this world is not linked to Project Brain right now."));
+		return;
+	}
+	OutSaid = TEXT("/brain [status] | pair <code> | refresh | proposals | adopt <n> | withdraw <n> -- Project Brain: where it stands, connect this world "
+		"with the website's code, read it again, and decide what you proposed.");
+}
+
+TArray<UWonderlandProjectBrainSubsystem::FPendingProposal> UWonderlandProjectBrainSubsystem::ListPendingProposals() const
+{
+	TArray<FPendingProposal> Out;
+	if (!Model.bLive)
+	{
+		return Out;
+	}
+	for (const FWonderlandBrainSurface& Surface : Model.Surfaces)
+	{
+		if (Surface.Access != EWonderlandBrainAccess::Yours)
+		{
+			continue;
+		}
+		for (int32 Index = 0; Index < Surface.Proposals.Num(); ++Index)
+		{
+			FPendingProposal Row;
+			Row.SurfaceId = Surface.Id;
+			Row.SurfaceTitle = Surface.Title;
+			Row.Line = Surface.Proposals[Index];
+			Row.Ref = Surface.ProposalRefs.IsValidIndex(Index) ? Surface.ProposalRefs[Index] : FString();
+			Row.Version = Surface.ProposalVersions.IsValidIndex(Index) ? Surface.ProposalVersions[Index] : 0;
+			Out.Add(MoveTemp(Row));
+		}
+	}
+	return Out;
 }
 
 FString UWonderlandProjectBrainSubsystem::GetSurfaceAccess(FName SurfaceId) const

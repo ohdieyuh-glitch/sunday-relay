@@ -100,6 +100,12 @@ namespace WonderlandProjectBrainLinkLogic
 				}
 				Read.Status = OptionalString(*Entry, TEXT("status"));
 				Read.Review = OptionalString(*Entry, TEXT("review"));
+				// a record's version (null for a Julius row or a claim): only a whole positive number is a version
+				double Version = 0.0;
+				if ((*Entry)->TryGetNumberField(TEXT("version"), Version) && Version >= 1.0 && Version <= 2147483647.0 && FMath::Frac(Version) == 0.0)
+				{
+					Read.Version = static_cast<int32>(Version);
+				}
 				Out.Add(MoveTemp(Read));
 			}
 			return true;
@@ -478,6 +484,29 @@ bool FWonderlandProjectBrainLink::SendReview(FName SurfaceId, const FString& Ent
 	FString Payload;
 	WonderlandProjectBrainLinkLogic::SerializeBody(Body, Payload);
 	SendWrite(TEXT("/relay-api/wonderland/brain/reviews"), Payload, TEXT("review"), 1);
+	return true;
+}
+
+bool FWonderlandProjectBrainLink::SendStatus(const FString& RecordRef, int32 ExpectedVersion, const FString& Status)
+{
+	// ONLY A RECORD, ONLY AT A VERSION THE PLAYER SAW, ONLY THE TWO STATUSES THE TERMINAL OFFERS: the bridge refuses everything else
+	// anyway (who may adopt, a stale version), but nothing malformed is ever sent from here
+	if (ProjectId.IsEmpty() || !RecordRef.StartsWith(TEXT("pbr:")) || ExpectedVersion < 1 || Stream() == nullptr
+		|| !(Status == TEXT("ADOPTED") || Status == TEXT("WITHDRAWN")))
+	{
+		return false;
+	}
+	const TSharedPtr<FJsonObject> Body = MakeShared<FJsonObject>();
+	Body->SetStringField(TEXT("operation"), TEXT("SET_STATUS"));
+	Body->SetStringField(TEXT("idempotencyKey"), FString::Printf(TEXT("wl-%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits).ToLower()));
+	Body->SetStringField(TEXT("recordId"), RecordRef);
+	Body->SetNumberField(TEXT("expectedVersion"), ExpectedVersion);
+	Body->SetStringField(TEXT("status"), Status);
+	FString Payload;
+	WonderlandProjectBrainLinkLogic::SerializeBody(Body, Payload);
+	// THE PROJECT IS THE DOOR'S (the query string), never a field of the change -- the bridge drops a body projectId on this route
+	SendWrite(FString::Printf(TEXT("/relay-api/wonderland/brain/mutations?projectId=%s"), *FGenericPlatformHttp::UrlEncode(ProjectId)), Payload,
+		Status == TEXT("ADOPTED") ? TEXT("adoption") : TEXT("withdrawal"), 1);
 	return true;
 }
 
