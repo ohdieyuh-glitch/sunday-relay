@@ -8172,16 +8172,22 @@ namespace
 			// uu), the torso UPRIGHT (pitch moved <= 4 deg), the knees only SLIGHTLY bent (8-40 deg), the same feet (sink within 1.5 uu), the
 			// arms LOWERED (the hands raised by no more than 4 uu) and a little away from the body (>= 3 uu wider)
 			const float Stagger = R.SoleStagger - S.Base.SoleStagger;
+			// THE HANDS AT THE HIP (the reference): their height above the soles as a share of the body's height, 32-55% -- low and relaxed,
+			// never raised into a guard (a guard is the chest, ~70%), and never the Dog's knee-height hanging arms (~25%), where its long
+			// blades cannot sit diagonal without going into the ground (round 6a: tips 16-34 uu under it)
+			const float BodyH = FMath::Max(Dog->GetCanonBodyHeightUu(), 1.0f);
+			const float HipShare = (R.HandHeight - R.SoleHeight) / BodyH;
 			const float Raised = R.HandHeight - S.Base.HandHeight;
 			const bool bOk = Dog->GetArmedStanceWeight() == 1.0f && Feet <= 6.0f && Stagger >= 3.0f && Stagger <= 12.0f && Lean <= 4.0f
 				&& KneeLeft >= 8.0f && KneeRight >= 8.0f && KneeLeft <= 40.0f && KneeRight <= 40.0f && FMath::Abs(Sink) <= 1.5f
-				&& Raised <= 4.0f && Out >= 3.0f && Ahead >= -4.0f && Ahead <= 10.0f;
+				&& HipShare >= 0.32f && HipShare <= 0.55f && Out >= 3.0f && Ahead >= -4.0f && Ahead <= 25.0f;
 			S.Check(FString::Printf(TEXT("ST2.%d"), S.Skin + 1), bOk,
 				FString::Printf(TEXT("%s armed, standing (the founder's 10-03 reference): stance weight %.3f; soles %+.1f apart (<= 6: close), the left %+.1f ahead ")
 					TEXT("(3-12: one foot a little forward), %+.1f uu off the ground they stood on (within 1.5: the same feet); body pitch moved %.1f deg (<= 4: upright); ")
-					TEXT("knees bent %.0f / %.0f deg (8-40: slightly), %.0f / %.0f of it from behind (reported); hands raised %+.1f uu (<= 4: lowered), %+.1f apart (>= 3), ")
-					TEXT("%+.1f forward (-4..10) | %s"),
-					*SkinName, Dog->GetArmedStanceWeight(), Feet, Stagger, Sink, Lean, KneeLeft, KneeRight, BehindLeft, BehindRight, Raised, Out, Ahead, *QaDescribeStance(R)));
+					TEXT("knees bent %.0f / %.0f deg (8-40: slightly), %.0f / %.0f of it from behind (reported); hands at %.0f%% of the height (32-55: the hip) ")
+					TEXT("(%+.1f uu over the unarmed hang), %+.1f apart (>= 3), %+.1f forward (-4..25) | %s"),
+					*SkinName, Dog->GetArmedStanceWeight(), Feet, Stagger, Sink, Lean, KneeLeft, KneeRight, BehindLeft, BehindRight, HipShare * 100.0f, Raised, Out,
+					Ahead, *QaDescribeStance(R)));
 			// ST2S: THE BLADES LOW AND DIAGONAL, as the reference holds them -- each tip DOWN from its grip (>= 30 uu), OUT to its own hand's side
 			// (>= 25 uu), never into the ground (>= 2 uu above the soles); gold on the Dog's own LEFT (-Y), cyan on its RIGHT
 			{
@@ -8208,16 +8214,12 @@ namespace
 				S.Check(FString::Printf(TEXT("ST2S.%d"), S.Skin + 1), bBlades,
 					FString::Printf(TEXT("%s, the blades low and diagonal (want each tip >= 30 down, >= 25 out, >= 2 above the ground): %s"), *SkinName, *BladeLine));
 			}
-			// ST2K next (round 6): the knees turned out by a known angle on the body the player sees, then the armed frames as built
+			// ST2K next (round 6): the knees turned out by a known angle on the body the player sees, then the armed frames as built.
+			// FIRST the crouch it is measured on, and the baseline taken AT that crouch (round 6a: a baseline taken before the crouch changed
+			// read the crouch's own ~1.9 uu sole shift as the turn's)
 			{
-				FString Whose;
-				if (!QaKneesOutOfLine(Dog, S.KneeOffBase, S.SoleBase, Whose))
-				{
-					S.KneeOffBase[0] = S.KneeOffBase[1] = TNumericLimits<float>::Max();   // ST2K then FAILS: the legs were not found
-				}
 				const IConsoleVariable* KneesVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Handoff.Stance.KneesOut"));
 				S.KneesOutWas = KneesVar != nullptr ? KneesVar->GetString() : FString(TEXT("0"));
-				GEngine->Exec(World, TEXT("wl.Handoff.Stance.KneesOut 25"));
 				// THE TURN NEEDS A BENT KNEE TO SHOW (Second, round 6: the rise is ~4 uu at a 58 deg knee, ~1.1 at 15 deg): the founder's 10-03
 				// stance bends the knees only slightly, so ST2K tests the MECHANISM on a crouch of 10 for its own measurement, then restores it
 				const IConsoleVariable* CrouchVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Handoff.Stance.Crouch"));
@@ -8228,6 +8230,24 @@ namespace
 			return true;
 		}
 		case 7:
+		{
+			// ST2K's BASELINE, on the crouch of 10, the knees as found; then the turn
+			if (In < 0.6f)
+			{
+				return true;
+			}
+			{
+				FString Whose;
+				if (!QaKneesOutOfLine(Dog, S.KneeOffBase, S.SoleBase, Whose))
+				{
+					S.KneeOffBase[0] = S.KneeOffBase[1] = TNumericLimits<float>::Max();   // ST2K then FAILS: the legs were not found
+				}
+			}
+			GEngine->Exec(World, TEXT("wl.Handoff.Stance.KneesOut 25"));
+			Next(8);
+			return true;
+		}
+		case 8:
 		{
 			// ST2K: KneesOut 25 -- each knee OUT of its hip-to-sole line by >= 3 uu more than as found (a knee turned IN reads negative,
 			// a turn that never reached the legs reads ~0: both FAIL), and each sole within 1 uu of where it stood (the foot planted).
@@ -10457,6 +10477,209 @@ namespace
 			GQaHandoffFilm->StepAt = QaNow();
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLFILM handoff staging | %s"), *WonderlandBeta::BuildLabel());
 			GQaHandoffFilm->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaHandoffFilmTick), 0.0f);
+		}));
+
+	/* ================================================================ wl.Qa.StanceSweep: the arms and the blades, measured in a grid
+	 * To match the founder's 10-03 stance photo with blades of the founder's sword sheet (the grip-to-tip ~123 uu, about 70% of the Dog's
+	 * height) the hands and the blade angle must be CHOSEN from measurements, not guessed: with the swords held, every arm in the grid
+	 * (wl.Handoff.Stance.Shoulder x Elbow, Out 14) is measured -- the hands' height above the soles as a share of the body's height, how
+	 * far ahead, how far apart -- and with each arm every blade angle (wl.Handoff.SwordV x SwordVForward): each tip's height above the
+	 * ground, its drop below its grip, how far out to its own side and how far ahead. WLSWEEP lines; the defaults put back; `quit` exits.
+	 */
+	struct FQaStanceSweep
+	{
+		TWeakObjectPtr<UWorld> World;
+		FTSTicker::FDelegateHandle Handle;
+		bool bQuit = false;
+		int32 Step = 0;
+		int32 Arm = 0;
+		int32 Blade = 0;
+		double StepAt = 0.0;
+		float BaseHandHeight = 0.0f;
+	};
+	TSharedPtr<FQaStanceSweep> GQaStanceSweep;
+
+	const float SweepShoulders[] = { 4.0f, 15.0f, 25.0f, 35.0f };
+	const float SweepElbows[] = { 18.0f, 45.0f, 70.0f, 95.0f };
+	const float SweepBladeV[] = { 105.0f, 112.0f, 118.0f };
+	const float SweepBladeForward[] = { 10.0f, 25.0f };
+
+	bool QaStanceSweepTick(float)
+	{
+		if (!GQaStanceSweep.IsValid())
+		{
+			return false;
+		}
+		FQaStanceSweep& W = *GQaStanceSweep;
+		UWorld* World = W.World.Get();
+		ARelayDogCharacter* Dog = QaDog(World);
+		FWonderlandMissionHandoff* Handoff = QaHandoff(World);
+		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		auto Finish = [&W](const TCHAR* Why)
+		{
+			if (UWorld* World2 = W.World.Get())
+			{
+				QaStanceApply(World2, StancePresets[1].Commands);
+				if (FWonderlandMissionHandoff* H = QaHandoff(World2))
+				{
+					FString Ignored;
+					H->Return(Ignored);
+				}
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSWEEP END (%s)"), Why);
+			const bool bQuit = W.bQuit;
+			GQaStanceSweep.Reset();
+			if (bQuit)
+			{
+				FPlatformMisc::RequestExit(false);
+			}
+			return false;
+		};
+		if (World == nullptr || Dog == nullptr || Handoff == nullptr || PC == nullptr)
+		{
+			return Finish(TEXT("the world, the Dog or the handoff went away"));
+		}
+		const double Now = QaNow();
+		const double In = Now - W.StepAt;
+		const int32 Arms = static_cast<int32>(UE_ARRAY_COUNT(SweepShoulders) * UE_ARRAY_COUNT(SweepElbows));
+		const int32 Blades = static_cast<int32>(UE_ARRAY_COUNT(SweepBladeV) * UE_ARRAY_COUNT(SweepBladeForward));
+		const float BodyH = FMath::Max(Dog->GetCanonBodyHeightUu(), 1.0f);
+		switch (W.Step)
+		{
+		case 0:
+			if (UWonderlandUiSubsystem* Ui = QaUi(World))
+			{
+				if (Ui->IsWelcomeOpen())
+				{
+					Ui->DismissWelcome();
+				}
+			}
+			if (In < 4.0 || !Dog->GetCharacterMovement()->IsMovingOnGround())
+			{
+				return In < 40.0 ? true : Finish(TEXT("never ready"));
+			}
+			GEngine->Exec(World, TEXT("wl.Skins.Wear relay_og"));
+			QaStanceApply(World, StancePresets[1].Commands);
+			W.BaseHandHeight = QaReadStance(Dog).HandHeight - QaReadStance(Dog).SoleHeight;
+			if (!Handoff->IsEquipped())
+			{
+				FString Said;
+				WonderlandHandoffDirector::Equip(QaLocalPlayer(World), Said);
+			}
+			W.Step = 1;
+			W.StepAt = Now;
+			return true;
+		case 1:
+			if (!Handoff->IsArmed() || In < 5.0)
+			{
+				return In < 20.0 ? true : Finish(TEXT("the swords were never held"));
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSWEEP BEGIN | body %.1f uu tall, the unarmed hands %.1f uu above the soles (%.0f%%) | %s"), BodyH,
+				W.BaseHandHeight, W.BaseHandHeight / BodyH * 100.0f, *WonderlandBeta::BuildLabel());
+			W.Arm = 0;
+			W.Step = 2;
+			W.StepAt = Now;
+			return true;
+		case 2:
+		{
+			// the next arm
+			if (W.Arm >= Arms)
+			{
+				return Finish(TEXT("done"));
+			}
+			const float Shoulder = SweepShoulders[W.Arm / UE_ARRAY_COUNT(SweepElbows)];
+			const float Elbow = SweepElbows[W.Arm % UE_ARRAY_COUNT(SweepElbows)];
+			QaStanceApply(World, *FString::Printf(TEXT("wl.Handoff.Stance.Shoulder %.0f;wl.Handoff.Stance.Elbow %.0f;wl.Handoff.Stance.Out 14"), Shoulder, Elbow));
+			W.Blade = 0;
+			W.Step = 3;
+			W.StepAt = Now;
+			return true;
+		}
+		case 3:
+		{
+			// the arm settled (the stance's own springs), measured; then its blades
+			if (In < 0.9)
+			{
+				return true;
+			}
+			const FStanceReading R = QaReadStance(Dog);
+			const float Shoulder = SweepShoulders[W.Arm / UE_ARRAY_COUNT(SweepElbows)];
+			const float Elbow = SweepElbows[W.Arm % UE_ARRAY_COUNT(SweepElbows)];
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSWEEP arm shoulder %.0f elbow %.0f | hands %.1f uu above the soles (%.0f%% of the height), %.1f ahead, %.1f apart"),
+				Shoulder, Elbow, R.HandHeight - R.SoleHeight, (R.HandHeight - R.SoleHeight) / BodyH * 100.0f, R.HandForward, R.HandSpread);
+			W.Step = 4;
+			W.StepAt = Now;
+			return true;
+		}
+		case 4:
+		{
+			// the next blade angle with this arm
+			if (W.Blade >= Blades)
+			{
+				++W.Arm;
+				W.Step = 2;
+				W.StepAt = Now;
+				return true;
+			}
+			const float V = SweepBladeV[W.Blade / UE_ARRAY_COUNT(SweepBladeForward)];
+			const float VF = SweepBladeForward[W.Blade % UE_ARRAY_COUNT(SweepBladeForward)];
+			QaStanceApply(World, *FString::Printf(TEXT("wl.Handoff.SwordV %.0f;wl.Handoff.SwordVForward %.0f"), V, VF));
+			W.Step = 5;
+			W.StepAt = Now;
+			return true;
+		}
+		case 5:
+		{
+			if (In < 0.3)
+			{
+				return true;
+			}
+			const float Shoulder = SweepShoulders[W.Arm / UE_ARRAY_COUNT(SweepElbows)];
+			const float Elbow = SweepElbows[W.Arm % UE_ARRAY_COUNT(SweepElbows)];
+			const float V = SweepBladeV[W.Blade / UE_ARRAY_COUNT(SweepBladeForward)];
+			const float VF = SweepBladeForward[W.Blade % UE_ARRAY_COUNT(SweepBladeForward)];
+			const WonderlandHandoffSwords::FPresentation& Blades2 = Dog->GetHandoffSwords();
+			const FVector Right = Dog->GetActorRightVector().GetSafeNormal2D();
+			const FVector Fwd = Dog->GetActorForwardVector().GetSafeNormal2D();
+			const double Ground = FMath::Min(Dog->GetCanonSoleWorld(1.0f).Z, Dog->GetCanonSoleWorld(-1.0f).Z);
+			FString Line;
+			for (const bool bGold : { true, false })
+			{
+				const FTransform Blade = Blades2.GetSwordWorld(bGold);
+				const FVector Grip = Blade.GetLocation();
+				const FVector BladeTip = Blade.TransformPosition(FVector(0.0, 0.0, WonderlandHandoffSwords::TipZ));
+				const double OwnSide = bGold ? -1.0 : 1.0;
+				Line += FString::Printf(TEXT("%s%s tip %.0f above the ground, %.0f down, %.0f out, %.0f ahead"), Line.IsEmpty() ? TEXT("") : TEXT("; "),
+					bGold ? TEXT("gold") : TEXT("cyan"), BladeTip.Z - Ground, Grip.Z - BladeTip.Z, FVector::DotProduct(BladeTip - Grip, Right) * OwnSide,
+					FVector::DotProduct(BladeTip - Grip, Fwd));
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSWEEP blade shoulder %.0f elbow %.0f V %.0f forward %.0f | %s"), Shoulder, Elbow, V, VF, *Line);
+			++W.Blade;
+			W.Step = 4;
+			W.StepAt = Now;
+			return true;
+		}
+		default:
+			return Finish(TEXT("an unknown step"));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaStanceSweepCommand(
+		TEXT("wl.Qa.StanceSweep"),
+		TEXT("The twin-sword stance's arms and blade angles, measured in a grid with the swords held (the hands' height as a share of the body, ")
+		TEXT("each tip's height above the ground, its drop, reach out and ahead), to choose the founder's 10-03 stance from numbers. WLSWEEP lines; ")
+		TEXT("`quit` exits after."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaStanceSweep.IsValid() || World == nullptr)
+			{
+				return;
+			}
+			GQaStanceSweep = MakeShared<FQaStanceSweep>();
+			GQaStanceSweep->World = World;
+			GQaStanceSweep->bQuit = Args.Contains(TEXT("quit"));
+			GQaStanceSweep->StepAt = QaNow();
+			GQaStanceSweep->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaStanceSweepTick), 0.0f);
 		}));
 
 	/* ================================================================ wl.Qa.SwordClip: no sword through the body that holds it (A5)
