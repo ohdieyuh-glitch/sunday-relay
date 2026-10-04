@@ -184,6 +184,32 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
   Venue of the frozen rerun: if it is frozen to a local machine, it is
   `READY FOR LOCAL QUALIFICATION`, never a cloud substitute.
 
+### Work in flight from the JUJU MAIN cloud session (2026-10-04; all draft, AWAITING INDEPENDENT REVIEW)
+
+| PR | What | Stack | CI (2026-10-04) |
+|---|---|---|---|
+| **#322** | Decision C corrected carry (`julius-carry.v2`). Only verified repair findings and accepted decisions travel; every exclusion is recorded by code; four-point proof | base `main` | green |
+| **#326** | C on the **paid venue**: a WITH arm learns from its pair's verified evidence bundle (`carryFrom`, input `carry_source_run`, `verify-carry`, `carry-export.json`, `carry.tsv`) | on #322 | green (6/6) |
+| **#324** | 031+032 (+033) migration window tooling (`docs/julius-migrations/window/`) and its Docker rehearsal records | base `relay/julius-13i-completion-r2` | n/a |
+| **#323** | Wonderland social backend and privacy wall P1–P5, migration **033** | on #321 | green |
+| **#325** | Wonderland voice/EOS: rooms are cliques of mutual visibility, PUID binding, **035 staged** behind 034 | on #323 | green |
+| **#327** | Wonderland R16 harness: three-party privacy scenario over HTTP against the real bridge **process**, plus restart durability | on #325 | one re-run pending (see the 032 teardown finding) |
+| **#328** | Wonderland social display names: the verified GitHub login is recorded at sign-in, and a nameless request never erases it | on #325 | pending |
+
+**Findings to act on:**
+- **C could not run on the paid venue.** Every paid job's database is fresh, so a WITH arm was always `CARRY_EMPTY`. #326 is the transport. Without it, no C pair can run.
+- **#321 should fold a one-line test fix** in `julius-migration-031.real-postgres.test.ts`: `pool.on('error', () => undefined)` before `pool.end()`.
+  - Without it, a terminated idle client (57P01) raised unhandled errors that failed `first-live-topology (executor-private)` on a stacked PR.
+  - The fix was proven on #323 as `0873f6e2`.
+- **#321's migration-032 suite teardown can time out under CI load.** Its `afterAll` runs a plain `DROP DATABASE` per database, and each can wait up to about 5 s for terminated backends to exit, against the 10 s hook default.
+  - Seen on #327's run 37237672139 with 219/219 tests passing.
+  - Proposed one-line fix: give that `afterAll` an explicit timeout (e.g. `}, 90_000)`), next to the 031 fix above.
+- **034 (Project Brain) has no spec in the repo.** The founder and SECOND must define it. 035's guard requires a `034_%` stamp.
+- **Hosted R16 needs a hosted PostgreSQL** for the Railway bridge, because the bridge never migrates at boot.
+  - Provisioning is the founder's.
+  - Applying 031–033 there needs a reviewed live-store procedure (`DATABASE_URL` stays parked).
+- **Stale PRs:** #290, #291 and #293–#297 are fully folded into `main` (via #301/#304/#305/#310/#311). Recommend closing; that is the founder's call.
+
 ### Migrations
 
 | No. | What | Where |
@@ -194,9 +220,9 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
 | 030 | outbox stops re-reading its event (row 13 (i)) | landed in #313 |
 | **031** | Julius 13 (i): run transition is a HOT update, plus task-claim work | #321 |
 | **032** | repair of 030's orphan/outbox invariant (two orphan paths closed) | #321 |
-| **033** | Wonderland social | not yet on any branch |
-| **034** | Project Brain (the next Brain migration; 029 is already the first) | not yet on any branch |
-| **035** | voice | not yet on any branch |
+| **033** | Wonderland social (15 `social_*` tables) | #323, stacked on #321; applied in the #324 window rehearsal only |
+| **034** | Project Brain (the next Brain migration; 029 is already the first) | not on any branch; **no spec in the repo** |
+| **035** | voice (`voice_identities`, history, issuances; never a token) | **staged** in #325 (`docs/julius-migrations/035/`); not in the chain until 034 exists |
 
 - **`DATABASE_URL` stays PARKED** unless an explicit, reviewed live-store
   procedure says otherwise. No unlanded migration may touch the permanent store.
@@ -250,11 +276,11 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
 
 - **#321**: above. The only active landing candidate.
 - **#298**: `[DO NOT MERGE]` stack rehearsal, CI only.
-- **#290–#297** (last touched 2026-09-29): Julius PRs for the readiness tenth
-  pass, paused-run lifecycle, NUL evidence, real-PG concurrency, coder served
-  model, tool failure path, and persistence truth (#297 is a draft). Several
-  probably overlap work landed in #310–#320. **Triage each against `main` before
-  reviving; do not merge on its old evidence.**
+- **#290–#297** (last touched 2026-09-29). Triaged 2026-10-04: **#290, #291 and
+  #293–#297 are fully folded into `main`** by test title and content (via
+  #301/#304/#305/#310/#311). Recommend closing; that is the founder's decision.
+  Never merge them on their old evidence.
+- **#322–#328**: see "Work in flight" above.
 - **#255** (brand docs, 2026-09-12), **#138–#144** (Coliseum, Wonderland domain,
   mission ownership, error propagation, 2026-08), **#129** (docs): stale.
 - PR #6 from the August notes is no longer open.
@@ -280,12 +306,19 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
   799 commits off `main` and is mostly art and recovery evidence. It holds no
   social or privacy code.
 
+**On GitHub as draft PRs, not on `main` (2026-10-04):**
+- the hosted social layer and privacy wall (#323): friends, blocks, parties,
+  private servers, Recent Players, DMs and presence privacy, migration 033;
+- the voice/EOS backend (#325): client config at runtime, ID-token
+  verification, PUID binding, server-enforced room planning, 035 staged;
+- the scripted R16 harness (#327): `scripts/wonderland-r16-harness.mjs`;
+- account display names from the verified GitHub login (#328).
+
 **What is NOT on GitHub anywhere:**
 - the RC12/RC14 packages and their evidence;
-- R16 runs;
-- EOS voice integration;
-- any social layer: friends, block lists, parties, private servers, Recent
-  Players, DMs, or presence privacy.
+- real R16 runs: three real identities, the hosted HTTPS backend, actual EOS
+  voice, the shipped RC;
+- the EOS client integration (Unreal).
 
 That is either local-only (the Unreal and EOS client) or not yet built (the
 hosted social backend). Treat any RC or R16 score as UNKNOWN until its package's
@@ -347,8 +380,10 @@ migrations 033/035, endpoint/config delivery and the qualification harnesses.
 ### Next score-bearing action
 
 The **frozen 13 (i) rerun at #321's head `aeba8b2c`**: +0.467 is at stake. After
-it, the apply rehearsal and SECOND's verdict, #321 lands, and C (+1.10) is the
-next score-bearing work, after 033–035.
+it come the apply rehearsal (cloud Docker rehearsal recorded in #324) and SECOND's
+verdict; then #321 lands. C (+1.10) is the next score-bearing work, after 033–035.
+C needs #322 and #326 landed before the freeze, plus the four C contracts
+(WITHOUT/WITH with `carryArm`/`carryFrom`), which belong to the founder and SECOND.
 
 ---
 
