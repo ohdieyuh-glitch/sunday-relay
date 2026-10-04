@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **217 production files** across 20/20 subsystems (2 roots, 188 traced, 8 not composed by the live root, 19 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **218 production files** across 20/20 subsystems (2 roots, 189 traced, 8 not composed by the live root, 19 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -354,7 +354,7 @@ Every authoritative transition has exactly one event type; the trajectory is the
 | production source | role | reached from |
 | --- | --- | --- |
 | `src/relay/mission/julius/julius-artifact-reference.ts` | traced | `src/relay/mission/julius/julius-execution-coordinator.ts` |
-| `src/relay/mission/julius/julius-events.ts` | traced | `src/relay/mission/julius/julius-recovery.ts` |
+| `src/relay/mission/julius/julius-events.ts` | traced | `src/relay/mission/julius/julius-runtime-ports.ts` |
 | `src/relay/mission/julius/julius-learning-loop.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-learning-record.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-metrics.ts` | traced | `src/relay/mission/julius/index.ts` |
