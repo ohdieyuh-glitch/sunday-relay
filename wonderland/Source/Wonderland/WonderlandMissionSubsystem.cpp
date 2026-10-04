@@ -1898,8 +1898,10 @@ void UWonderlandMissionSubsystem::LeavePresentation()
 	// THE HANDOFF PATH, ON THE SPY'S BOOKS: nothing below may write mission truth
 	FWonderlandMissionHandoff::FScope Scope;
 	++PresentationLeaves;
-	UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION Mission Handoff: the presentation is LEFT at beat %s (%s); the mission runs on"),
-		*WonderlandBeatId(Beat).ToString(), IsMissionAnimationRunning() ? TEXT("a mission animation was running") : TEXT("no mission animation was running"));
+	// "the mission runs on" only when there is one (Second's round-5 nit: it was said with none)
+	UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION Mission Handoff: the presentation is LEFT at beat %s (%s)"),
+		*WonderlandBeatId(Beat).ToString(), IsMissionAnimationRunning() ? TEXT("a mission animation was running; the mission runs on")
+			: TEXT("no mission animation was running; nothing to run on"));
 	// The Dog and the companions let go at once -- never waited out. The Contract stays where the mission put it: the work
 	// is there, and the user may roam away from it.
 	TellTheDog();
