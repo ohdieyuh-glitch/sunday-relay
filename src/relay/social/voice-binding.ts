@@ -8,7 +8,7 @@
  *   - a player's own, DIFFERENT PUID re-binds only from a NEW session (a fresh sign-in), never mid-session;
  *   - the voice audience a client is shown carries only server-bound PUID -> player pairs.
  * One pure decision (decideVoiceBinding) for both stores: the in-memory one here, and PostgreSQL
- * (src/relay/persistence/voice-binding-postgres.ts, table relay_wonderland.voice_puid_binding, migration 034).
+ * (src/relay/persistence/voice-binding-postgres.ts, table relay_wonderland.voice_puid_binding, migration 035).
  */
 
 /** An EOS ProductUserId as the store keeps it: 32 lowercase hex characters (EOS issues hex; case is normalised). */

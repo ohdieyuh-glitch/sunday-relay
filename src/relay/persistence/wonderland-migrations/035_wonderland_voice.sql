@@ -6,8 +6,8 @@ BEGIN;
 --   only from a new session (a fresh sign-in) -- session_id is the bridge's opaque session id, never a token.
 -- The party room's id is derived (an HMAC of the party id), so no room is stored here.
 --
--- NUMBER 034: 033 is Project Brain's by agreement (Julius holds 030 and 031, Wonderland Social 032); whichever lands second
--- renumbers. Registered in
+-- NUMBER 035 (the founder's canonical ruling, 2026-10-04 16:30Z: 031 Julius 13(i), 032 the 030 trigger fix, 033 Wonderland Social,
+-- 034 Project Brain, 035 this file; it was 034 until then). Registered in
 -- wonderland-postgres.ts like every other file here (julius-migration-chain.test.ts holds the directory and the list equal).
 -- ADDITIVE ONLY: one new table referencing relay_wonderland.players (001); it touches no existing table or row. Written to the
 -- chain's own rules: one transaction, and it stamps schema_migrations with its own version.
@@ -20,5 +20,5 @@ CREATE TABLE relay_wonderland.voice_puid_binding(
   bound_at timestamptz NOT NULL
 );
 
-INSERT INTO relay_wonderland.schema_migrations(version) VALUES('034_wonderland_voice');
+INSERT INTO relay_wonderland.schema_migrations(version) VALUES('035_wonderland_voice');
 COMMIT;

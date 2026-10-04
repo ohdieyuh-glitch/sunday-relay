@@ -117,7 +117,7 @@ export interface NativeSignInDeps {
    */
   readonly recordPlayer: (player: { readonly participantId: string; readonly login: string }) => Promise<void>;
   /**
-   * THE SOCIAL SCHEMA IS THERE (MAIN JUJU's early read, 10-04; the founder's explicit-apply ruling for 032). With the flag on but the
+   * THE SOCIAL SCHEMA IS THERE (MAIN JUJU's early read, 10-04; the founder's explicit-apply ruling for the social migration, 033 since the 10-04 renumbering). With the flag on but the
    * schema not yet applied to this store, sign-in answers the same 503 the social routes do -- before GitHub is asked and before any
    * players row is written. Absent: ready (the tests' default).
    */

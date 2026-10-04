@@ -9,7 +9,7 @@
  *   - SESSIONS: `POST /dev/session {"player":"kai"}` mints a token for player `usr_kai` holding the `social` capability. No
  *     account, no pairing, no password -- which is why it listens on 127.0.0.1 only and refuses any Origin.
  *   - STORAGE: in memory; a restart forgets everything -- UNLESS started with `--pg <url>` (a THROWAWAY database: the
- *     portable test PostgreSQL), when it runs the real chain (032 included) and the DURABLE store, so a restart of this server
+ *     portable test PostgreSQL), when it runs the real chain (033 included) and the DURABLE store, so a restart of this server
  *     proves what a backend restart gives back. Never pointed at a live database: the URL must be 127.0.0.1.
  *
  *   node_modules/.bin/esbuild relay-bridge/dev-social-server.ts --bundle --platform=node --format=esm --outfile=<scratch>/dev-social.mjs
@@ -28,7 +28,7 @@ import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 const MAX_BODY = 64 * 1024;
 
 /**
- * A throwaway database, migrated by the chain (which carries 032_wonderland_social) and opened as the durable store.
+ * A throwaway database, migrated by the chain (which carries 033_wonderland_social) and opened as the durable store.
  * Loopback URLs only. Run from the repository root: the chain's files are found from the working directory.
  */
 export async function openDevPostgresStore(url: string): Promise<{ store: SocialStore; pool: Pool }> {

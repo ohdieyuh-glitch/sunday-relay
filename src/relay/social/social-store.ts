@@ -12,7 +12,7 @@
  *     (Relay OG, rank and level PENDING, the default privacy, offline until their client reports presence).
  *
  * `createInMemorySocialStore` is the development and test store: correct, atomic within one process, gone on restart.
- * Persistence (032_wonderland_social.sql) implements the same interface.
+ * Persistence (033_wonderland_social.sql) implements the same interface.
  */
 
 import { relayError, type RelayResult } from '../protocol/errors';

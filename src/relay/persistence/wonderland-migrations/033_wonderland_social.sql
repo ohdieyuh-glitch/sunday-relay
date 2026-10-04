@@ -6,10 +6,10 @@ BEGIN;
 -- relationships, messages and parties outlive any one Unreal process.
 --
 -- FOUNDER DECISION (2026-10-02): the social backend lands in MAIN, and this
--- migration follows main's chain. NUMBER 032 (agreed with MAIN JUJU,
--- 2026-10-03): Julius takes 030 (#313) and 031 (the row 13(i) completion), and
--- whichever lands second renumbers -- re-checked when the PR opens and again
--- at merge. Registered in wonderland-postgres.ts like every other file here
+-- migration follows main's chain. NUMBER 033 (the founder's canonical ruling,
+-- 2026-10-04 16:30Z: 031 = Julius 13(i), 032 = the 030 trigger fix, 033 = this
+-- file, 034 = Project Brain, 035 = voice; it was 032 until then). Applied to a
+-- persistent store only after 031 and 032, by its own explicit reviewed apply. Registered in wonderland-postgres.ts like every other file here
 -- (julius-migration-chain.test.ts holds the directory and the list equal).
 -- ADDITIVE ONLY: it creates new relay_wonderland.social_* tables and indexes,
 -- referencing relay_wonderland.players (001), and touches no existing table or
@@ -222,5 +222,5 @@ CREATE TABLE relay_wonderland.social_events(
 CREATE INDEX social_events_audience ON relay_wonderland.social_events USING gin(audience);
 CREATE INDEX social_events_at ON relay_wonderland.social_events(at);
 
-INSERT INTO relay_wonderland.schema_migrations(version) VALUES('032_wonderland_social');
+INSERT INTO relay_wonderland.schema_migrations(version) VALUES('033_wonderland_social');
 COMMIT;

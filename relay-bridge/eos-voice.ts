@@ -29,7 +29,7 @@ import type { PartyVoiceGrant, PartyVoiceTokenMinter } from './wonderland-social
  *   - the participant: DELETE .../participants/{puid} 204.
  * STILL UNVERIFIED: that the DELETE also revokes the removed participant's room token (Epic documents it; not yet observed); the
  * room token's lifetime (the answer carries no expiry field -- roomTokenAssumedTtlMs, 10 min, is an assumption); and Epic does
- * NOT validate PUIDs, so the server-side PUID binding (migration 034) is the ONLY guard
+ * NOT validate PUIDs, so the server-side PUID binding (migration 035) is the ONLY guard
  * on who a room token is minted for.
  * ========================================================================================================================== */
 export const EPIC = Object.freeze({

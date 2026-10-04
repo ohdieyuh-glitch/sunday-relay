@@ -126,7 +126,7 @@ describe('desktop sign-in: who may start it', () => {
     expect(gh.calls).toHaveLength(0);
   });
 
-  it('is 503 while the social schema is absent (032 not applied) -- before GitHub is asked, and no player is recorded', async () => {
+  it('is 503 while the social schema is absent (033 not applied) -- before GitHub is asked, and no player is recorded', async () => {
     const gh = github({ token: [() => ({ access_token: USER_TOKEN })] });
     let ready = false;
     const b = bridge(gh, { socialReady: async () => ready });

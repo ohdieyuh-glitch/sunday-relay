@@ -21,7 +21,7 @@ import { partyOf } from '../social/social-state';
  * collides with one before it). Then a block, and the blocked player is never told.
  *
  * Runs only where JULIUS_TEST_DATABASE_URL names a THROWAWAY database (fresh: the social tables are global); `todo`
- * elsewhere. The chain's own migrate() applies 032_wonderland_social with the rest.
+ * elsewhere. The chain's own migrate() applies 033_wonderland_social with the rest.
  */
 
 const databaseUrl = juliusTestDatabaseUrl();

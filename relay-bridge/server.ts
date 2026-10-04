@@ -263,7 +263,7 @@ export function createBridgeServer(
   /**
    * WONDERLAND SOCIAL (R16): the desktop client's own sign-in (GitHub's device flow) and the social routes. OFF unless the
    * deployment sets WONDERLAND_SOCIAL_ENABLED=1; off, both answer 503 and nothing else changes.
-   *   - The social store opens on the same Julius pool, lazily, and assumes the schema (032_wonderland_social) is already
+   *   - The social store opens on the same Julius pool, lazily, and assumes the schema (033_wonderland_social) is already
    *     migrated: this bridge is NOT a migration entry point. No schema, no store: 503.
    *   - Who a player is (their GitHub login, for their social record) is remembered when they sign in, in memory, beside
    *     their session -- which also dies with the process.
@@ -291,7 +291,7 @@ export function createBridgeServer(
   const socialLogins = new Map<string, string>();
   /**
    * PARTY VOICE = EOS (R16, founder 10-04), behind WONDERLAND_EOS_VOICE_CONFIG (the founder's file; never logged, no fallback;
-   * absent or invalid = voice 503 as before). PUIDs are bound on the Julius pool (migration 034); a committed party departure
+   * absent or invalid = voice 503 as before). PUIDs are bound on the Julius pool (migration 035); a committed party departure
    * removes the departed PUID from that party's room server-side (eos-voice.ts createVoiceRemovals).
    */
   let voiceBindingsCache: VoiceBindingStore | null = null;
@@ -688,7 +688,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             clientId: process.env.RELAY_GITHUB_APP_CLIENT_ID?.trim() || null,
             sessions: browserSessions,
             pending: socialPendingSignIns,
-            // the schema first: a store whose 032 is not applied makes sign-in 503 before anything is written (founder ruling a)
+            // the schema first: a store whose 033 is not applied makes sign-in 503 before anything is written (founder ruling a)
             socialReady: async () => (await socialStore()) !== null,
             recordPlayer: async ({ participantId, login }) => {
               const pool = juliusPool();

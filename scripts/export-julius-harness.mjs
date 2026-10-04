@@ -913,7 +913,7 @@ function renderManifest(result) {
     out.push(`- **${entry.category}** — \`${entry.path}\`: ${entry.reason}. Reached only via ${hits.join(', ') || 'nothing'}.`);
   }
   for (const entry of KERNEL_DEPENDANT_EXCLUSIONS) out.push(`- **legacy local execution** — \`${entry.path}\`: ${entry.reason}.`);
-  // A non-Julius migration numbered after the LAST Julius one (Wonderland Social's 032) is not "pre-Julius": it is listed
+  // A non-Julius migration numbered after the LAST Julius one (Wonderland Social's 033) is not "pre-Julius": it is listed
   // on its own line, so neither sentence says something false about it.
   const lastJulius = Math.max(...result.migrations.map((path) => Number.parseInt(path.slice(MIGRATION_DIR.length), 10)));
   const before = result.migrationsExcluded.filter((path) => Number.parseInt(path.slice(MIGRATION_DIR.length), 10) < lastJulius);

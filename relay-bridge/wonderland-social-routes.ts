@@ -101,7 +101,7 @@ export interface SocialRouteDeps {
   readonly store: SocialStore | null;
   /** The party voice provider's token minter. Absent or null: voice is 503 VOICE TRANSPORT PENDING. */
   readonly voice?: PartyVoiceTokenMinter | null;
-  /** Who holds which EOS PUID (migration 034). Required with a minter; absent: voice is 503. */
+  /** Who holds which EOS PUID (migration 035). Required with a minter; absent: voice is 503. */
   readonly voiceBindings?: VoiceBindingStore | null;
   /** Tests and QA only: told about every events poll and snapshot answered. */
   readonly tap?: ((record: SocialDeliveryRecord) => void) | null;
