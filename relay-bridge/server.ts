@@ -291,7 +291,7 @@ export function createBridgeServer(
   const socialLogins = new Map<string, string>();
   /**
    * PARTY VOICE = EOS (R16, founder 10-04), behind WONDERLAND_EOS_VOICE_CONFIG (the founder's file; never logged, no fallback;
-   * absent or invalid = voice 503 as before). PUIDs are bound on the Julius pool (migration 033); a committed party departure
+   * absent or invalid = voice 503 as before). PUIDs are bound on the Julius pool (migration 034); a committed party departure
    * removes the departed PUID from that party's room server-side (eos-voice.ts createVoiceRemovals).
    */
   let voiceBindingsCache: VoiceBindingStore | null = null;

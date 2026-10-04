@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { decideVoiceBinding, type VoiceBindingRow, type VoiceBindingStore } from '../social/voice-binding';
 
 /**
- * PARTY VOICE PUID BINDINGS, DURABLE: relay_wonderland.voice_puid_binding (wonderland-migrations/033_wonderland_voice.sql).
+ * PARTY VOICE PUID BINDINGS, DURABLE: relay_wonderland.voice_puid_binding (wonderland-migrations/034_wonderland_voice.sql).
  *
  * The rule is decideVoiceBinding's (src/relay/social/voice-binding.ts); this applies it in ONE transaction that locks the
  * caller's row, so two joins cannot both bind. The table's UNIQUE(puid) is the last word: a race that would bind one PUID to two

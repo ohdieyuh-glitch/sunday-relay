@@ -8,9 +8,9 @@ import { createPostgresVoiceBindings } from './voice-binding-postgres';
 import { TransactionalWonderlandDatabase } from './wonderland-postgres';
 
 /**
- * PARTY VOICE PUID BINDINGS ON REAL POSTGRESQL (migration 033): the rule of src/relay/social/voice-binding.ts, durable and race-safe.
+ * PARTY VOICE PUID BINDINGS ON REAL POSTGRESQL (migration 034): the rule of src/relay/social/voice-binding.ts, durable and race-safe.
  *
- * Runs only where JULIUS_TEST_DATABASE_URL names a THROWAWAY database; `todo` elsewhere. The chain's own migrate() applies 033.
+ * Runs only where JULIUS_TEST_DATABASE_URL names a THROWAWAY database; `todo` elsewhere. The chain's own migrate() applies 034.
  */
 
 const databaseUrl = juliusTestDatabaseUrl();
@@ -41,9 +41,9 @@ suite('party voice PUID bindings on real PostgreSQL', () => {
     await (pool === undefined ? Promise.resolve() : removeWhatThisSuiteMade(pool));
   });
 
-  it('migration 033 is applied and binds, refuses and re-binds by the rule -- durably, and never two owners for one PUID', async () => {
+  it('migration 034 is applied and binds, refuses and re-binds by the rule -- durably, and never two owners for one PUID', async () => {
     const applied = await new TransactionalWonderlandDatabase(pool).appliedMigrationVersions();
-    expect(applied.has('033_wonderland_voice')).toBe(true);
+    expect(applied.has('034_wonderland_voice')).toBe(true);
     const bindings = createPostgresVoiceBindings(pool);
     expect(await bindings.bind({ userId: A, puid: P1, sessionId: 's1', nowIso: NOW })).toBe('bound');
     expect(await bindings.bind({ userId: A, puid: P1, sessionId: 's1', nowIso: NOW })).toBe('same');
