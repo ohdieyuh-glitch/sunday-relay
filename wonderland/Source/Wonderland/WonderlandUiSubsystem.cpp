@@ -5104,6 +5104,7 @@ void UWonderlandUiSubsystem::BindSocialEvents()
 	if (UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr)
 	{
 		Social->OnSocialChanged().AddUObject(this, &UWonderlandUiSubsystem::HandleSocialChanged);
+		Social->OnVoiceChanged().AddUObject(this, &UWonderlandUiSubsystem::HandleSocialVoiceChanged);
 		Social->OnSocialAnswered().AddUObject(this, &UWonderlandUiSubsystem::HandleSocialAnswered);
 		bSocialBound = true;
 	}
@@ -5124,6 +5125,21 @@ void UWonderlandUiSubsystem::HandleSocialChanged()
 		Social != nullptr ? Social->GetSourceLine() : FString(), Social == nullptr || Social->GetService() == nullptr || Social->GetService()->IsDevelopmentPreview());
 	// THE VOICE REDRAWS WITH IT (Second's review: an EOS join that landed later left the panel on CONNECTING): the same SetVoice the
 	// commands use, content only -- the layout is unchanged
+	if (const IWonderlandVoiceService* VoiceNow = Social != nullptr ? Social->GetVoice() : nullptr)
+	{
+		SocialHubPanel->SetVoice(VoiceNow->GetState(), VoiceNow->GetPreviewLabel());
+	}
+}
+
+void UWonderlandUiSubsystem::HandleSocialVoiceChanged()
+{
+	// THE VOICE ALONE CHANGED: its part of the panel only (SetVoice redraws the Party tab when it is showing), never the whole hub
+	if (Open != EOverlay::Social || !SocialHubPanel.IsValid())
+	{
+		return;
+	}
+	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+	const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
 	if (const IWonderlandVoiceService* VoiceNow = Social != nullptr ? Social->GetVoice() : nullptr)
 	{
 		SocialHubPanel->SetVoice(VoiceNow->GetState(), VoiceNow->GetPreviewLabel());

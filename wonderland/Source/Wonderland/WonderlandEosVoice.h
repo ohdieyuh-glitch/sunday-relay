@@ -18,7 +18,7 @@
 //     shows before the authority has bound them makes the client ask again (the join is idempotent) and re-name them.
 //   - LEAVING: the panel's LEAVE, the party gone or changed (the subsystem), or the authority's removal (EXIT "by the server"; Epic
 //     revokes the token, so an old token cannot rejoin -- wl.Qa.VoiceReplayOldToken tries it, for the R16 evidence).
-//   - WLVOICE lines carry hashed ids only -- sha256(id) first 12 hex, PUIDs lowercased: the same as the backend's, so the evidence
+//   - WLVOICE lines carry hashed ids only -- sha1(id) first 12 hex, PUIDs lowercased: the same as the backend's, so the evidence
 //     lines join -- never a token, a URL's query or a credential.
 // With no -WLEosConfig the subsystem keeps FWonderlandVoiceUnavailable: honestly pending, never a faked "connected". EOSShared itself
 // initializes the SDK at every boot (unless -NoEOS): the R16 package's boot test covers both, with and without the file.
@@ -92,12 +92,15 @@ private:
 	bool bSigningIn = false;
 	int32 SignInAttempts = 0;
 	bool bVoiceReady = false;
+	/** The voice start (Initialize / Connect / Login) failed: the next JOIN VOICE starts it again. */
+	bool bVoiceFailed = false;
 	/** A join under way (the authority asked, or the channel joining); a LEAVE meanwhile cancels it when it lands. */
 	bool bJoining = false;
 	bool bCancelJoin = false;
 	bool bLeaving = false;
 	bool bLocalMicMuted = false;
 	bool bAudienceRefreshing = false;
+	bool bAudienceRefreshPending = false;
 	double LastAudienceRefresh = -100.0;
 	/** The last room and token this client was given (memory only; the R16 old-token replay). Never logged. */
 	FString LastRoomId;
@@ -112,7 +115,7 @@ private:
 
 namespace WonderlandEosVoice
 {
-	/** An id for the log, never the id itself: "#" + sha256(id) first 12 hex -- the backend's own hash (eos-voice.ts), so lines join. */
+	/** An id for the log, never the id itself: "#" + sha1(id) first 12 lowercase hex -- the backend's own (eos-voice.ts), so lines join. */
 	WONDERLAND_API FString Hashed(const FString& Id);
 	/** The same for a PUID, lowercased first (the backend normalizes them). */
 	WONDERLAND_API FString HashedPuid(const FString& InProductUserId);

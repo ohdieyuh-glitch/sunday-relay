@@ -5,6 +5,7 @@
 #include "Containers/Ticker.h"
 #include "Dom/JsonObject.h"
 #include "HAL/PlatformMisc.h"
+#include "Misc/SecureHash.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
@@ -55,14 +56,10 @@ namespace WonderlandEosVoice
 		{
 			return FString();
 		}
-		// the backend's own: createHash('sha256').update(id, 'utf8').digest('hex').slice(0, 12)
+		// SHA-1, first 12 lowercase hex -- the backend's own (Second, 10-04). NOT FPlatformMisc::GetSHA256Signature: on UE 5.8 only the
+		// generic one exists and it is checkf(false) -- every -WLEosConfig session would have crashed at its first hashed line.
 		const FTCHARToUTF8 Utf8(*Id);
-		FSHA256Signature Signature;
-		if (!FPlatformMisc::GetSHA256Signature(Utf8.Get(), static_cast<uint32>(Utf8.Length()), Signature))
-		{
-			return TEXT("#?");
-		}
-		return TEXT("#") + Signature.ToString().ToLower().Left(12);
+		return TEXT("#") + FSHA1::HashBuffer(Utf8.Get(), static_cast<uint64>(Utf8.Length())).ToString().ToLower().Left(12);
 	}
 
 	FString HashedPuid(const FString& InProductUserId)
@@ -82,18 +79,46 @@ namespace WonderlandEosVoice
 		// EOS_GAME_CLIENT_ID, EOS_GAME_CLIENT_SECRET; '#' comments and quotes allowed. A JSON object with productId ... clientSecret is
 		// still read. Values are kept in memory only; a problem names the key, never its value.
 		TMap<FString, FString> Env;
+		// a JSON object is read as JSON (its values may hold '='); everything else as KEY=VALUE lines
+		const bool bJson = Text.TrimStart().StartsWith(TEXT("{"));
 		TArray<FString> Lines;
 		Text.ParseIntoArrayLines(Lines);
-		for (const FString& Line : Lines)
+		for (const FString& Line : bJson ? TArray<FString>() : Lines)
 		{
-			const FString Trimmed = Line.TrimStartAndEnd();
+			FString Trimmed = Line.TrimStartAndEnd();
+			if (Trimmed.StartsWith(TEXT("export ")))
+			{
+				Trimmed = Trimmed.RightChop(7).TrimStart();
+			}
 			FString Key;
 			FString Value;
 			if (Trimmed.IsEmpty() || Trimmed.StartsWith(TEXT("#")) || !Trimmed.Split(TEXT("="), &Key, &Value))
 			{
 				continue;
 			}
-			Env.Add(Key.TrimStartAndEnd(), Value.TrimStartAndEnd().TrimQuotes());
+			Value = Value.TrimStartAndEnd();
+			if (Value.Len() >= 2 && ((Value.StartsWith(TEXT("\"")) && Value.EndsWith(TEXT("\""))) || (Value.StartsWith(TEXT("'")) && Value.EndsWith(TEXT("'")))))
+			{
+				Value = Value.Mid(1, Value.Len() - 2);
+			}
+			else
+			{
+				// an inline comment: " # ..." after whitespace (ids and secrets hold no spaces)
+				int32 Hash = INDEX_NONE;
+				for (int32 At = 1; At < Value.Len(); ++At)
+				{
+					if (Value[At] == TEXT('#') && FChar::IsWhitespace(Value[At - 1]))
+					{
+						Hash = At;
+						break;
+					}
+				}
+				if (Hash != INDEX_NONE)
+				{
+					Value = Value.Left(Hash).TrimEnd();
+				}
+			}
+			Env.Add(Key.TrimStartAndEnd(), Value);
 		}
 		if (Env.Num() > 0)
 		{
@@ -349,6 +374,7 @@ void FWonderlandEosVoice::StartVoice()
 		if (!Impl->VoiceChat.IsValid() || !Impl->VoiceChat->Initialize())
 		{
 			Impl->VoiceChat.Reset();
+			bVoiceFailed = true;
 			SetConnection(TEXT("FAILED"), TEXT("EOS voice did not start"));
 			return;
 		}
@@ -363,6 +389,7 @@ void FWonderlandEosVoice::StartVoice()
 		}
 		if (!Result.IsSuccess())
 		{
+			bVoiceFailed = true;
 			SetConnection(TEXT("FAILED"), FString::Printf(TEXT("EOS voice did not connect (%s)"), *Result.ErrorCode));
 			return;
 		}
@@ -375,6 +402,7 @@ void FWonderlandEosVoice::StartVoice()
 			}
 			if (!LoginResult.IsSuccess())
 			{
+				bVoiceFailed = true;
 				SetConnection(TEXT("FAILED"), FString::Printf(TEXT("EOS voice login failed (%s)"), *LoginResult.ErrorCode));
 				return;
 			}
@@ -476,6 +504,12 @@ FWonderlandVoiceCommandResult FWonderlandEosVoice::Connect(const FString& PartyI
 {
 	if (!bVoiceReady)
 	{
+		if (bSignedIn && bVoiceFailed)
+		{
+			bVoiceFailed = false;
+			StartVoice();
+			return FWonderlandVoiceCommandResult{false, TEXT("starting voice again; try JOIN VOICE in a moment")};
+		}
 		if (!bSignedIn && !bSigningIn)
 		{
 			// a sign-in that gave up is started over by the next JOIN VOICE
@@ -564,7 +598,13 @@ void FWonderlandEosVoice::JoinRoom(const FString& Room, const FString& Token)
 			// a LEAVE pressed while the channel was joining: leave it now that it can be left
 			bCancelJoin = false;
 			bLeaving = true;
-			Impl->VoiceChat->LeaveChannel(Channel, FOnVoiceChatChannelLeaveCompleteDelegate());
+			Impl->VoiceChat->LeaveChannel(Channel, FOnVoiceChatChannelLeaveCompleteDelegate::CreateLambda([this, WeakAlive, Channel](const FString&, const FVoiceChatResult&)
+			{
+				if (WeakAlive.IsValid() && RoomId == Channel)
+				{
+					EndRoom(true, FString());
+				}
+			}));
 			return;
 		}
 		FWonderlandVoiceParticipant& Self = SelfParticipant();
@@ -603,8 +643,28 @@ void FWonderlandEosVoice::ReadAudience(const TSharedPtr<FJsonObject>& Data)
 void FWonderlandEosVoice::RefreshAudience()
 {
 	const double NowSeconds = FPlatformTime::Seconds();
-	if (bAudienceRefreshing || Live == nullptr || State.PartyId.IsEmpty() || NowSeconds - LastAudienceRefresh < 1.0)
+	if (Live == nullptr || State.PartyId.IsEmpty())
 	{
+		return;
+	}
+	if (bAudienceRefreshing || NowSeconds - LastAudienceRefresh < 1.0)
+	{
+		// NOT DROPPED (Second's re-review: a member joining within a second of another stayed "unbound"): remembered, and retried once the
+		// throttle allows -- by the answer in flight, or by a ticker
+		if (!bAudienceRefreshPending)
+		{
+			bAudienceRefreshPending = true;
+			TWeakPtr<bool> RetryAlive = Alive;
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([this, RetryAlive](float)
+			{
+				if (RetryAlive.IsValid() && bAudienceRefreshPending && !bAudienceRefreshing)
+				{
+					bAudienceRefreshPending = false;
+					RefreshAudience();
+				}
+				return false;
+			}), 1.2f);
+		}
 		return;
 	}
 	bAudienceRefreshing = true;
@@ -617,6 +677,10 @@ void FWonderlandEosVoice::RefreshAudience()
 			return;
 		}
 		bAudienceRefreshing = false;
+		if (bAudienceRefreshPending)
+		{
+			// one more was asked for while this was in flight: the ticker set then runs it
+		}
 		if (Status != 200 || !Data.IsValid())
 		{
 			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: audience refresh refused (%d)"), Status);
@@ -735,10 +799,16 @@ bool FWonderlandEosVoice::ReplayLastToken()
 {
 	if (!Impl->VoiceChat.IsValid() || LastRoomId.IsEmpty() || LastToken.IsEmpty())
 	{
-		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: REPLAY -- no earlier room token in this session"));
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: QA REPLAY of the previous token -- none in this session"));
 		return false;
 	}
-	UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: REPLAY of the last token for room %s (after a removal it must be refused)"), *WonderlandEosVoice::Hashed(LastRoomId));
+	if (!RoomId.IsEmpty() || bJoining)
+	{
+		// inside a room the engine answers a JoinChannel at once without asking Epic: a "JOINED" there would be false evidence
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: QA REPLAY of the previous token refused -- this client is still in (or joining) a voice room; replay only after a removal"));
+		return false;
+	}
+	UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: QA REPLAY of the previous token for room %s (NOT a normal join; after a removal it must be refused)"), *WonderlandEosVoice::Hashed(LastRoomId));
 	TWeakPtr<bool> WeakAlive = Alive;
 	Impl->VoiceChat->JoinChannel(LastRoomId, LastToken, EVoiceChatChannelType::NonPositional,
 		FOnVoiceChatChannelJoinCompleteDelegate::CreateLambda([this, WeakAlive](const FString& Channel, const FVoiceChatResult& Result)
@@ -747,7 +817,7 @@ bool FWonderlandEosVoice::ReplayLastToken()
 		{
 			return;
 		}
-		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: REPLAY result for room %s: %s"), *WonderlandEosVoice::Hashed(Channel),
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: QA REPLAY of the previous token, result for room %s: %s"), *WonderlandEosVoice::Hashed(Channel),
 			Result.IsSuccess() ? TEXT("JOINED (the old token still works)") : *FString::Printf(TEXT("refused (%s)"), *Result.ErrorCode));
 		if (Result.IsSuccess())
 		{

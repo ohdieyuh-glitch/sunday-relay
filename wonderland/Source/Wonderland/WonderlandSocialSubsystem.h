@@ -69,6 +69,9 @@ public:
 
 	/** Whichever service is current changed its view, or a different service took over. */
 	FOnWonderlandSocialChanged& OnSocialChanged() { return SocialChanged; }
+	/** The VOICE alone changed (a join, someone talking): the panel redraws its voice only, never the whole hub (a half-typed message
+	 *  and the keyboard focus stay -- Second's re-review). */
+	FOnWonderlandSocialChanged& OnVoiceChanged() { return VoiceChanged; }
 	/** A server answered an action asked earlier. */
 	FOnWonderlandSocialAnswered& OnSocialAnswered() { return SocialAnswered; }
 
@@ -107,6 +110,8 @@ private:
 	TUniquePtr<IWonderlandSocialService> Service;
 	class FWonderlandSocialLiveService* Live = nullptr;
 	FOnWonderlandSocialChanged SocialChanged;
+	FOnWonderlandSocialChanged VoiceChanged;
+	void HandleVoiceChanged() { VoiceChanged.Broadcast(); }
 	FOnWonderlandSocialAnswered SocialAnswered;
 	TUniquePtr<IWonderlandVoiceService> Voice;
 	FWonderlandVoicePreviewScript* VoicePreview = nullptr;

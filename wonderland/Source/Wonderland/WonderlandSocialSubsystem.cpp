@@ -263,7 +263,7 @@ bool UWonderlandSocialSubsystem::ConnectWith(const FString& BaseUrl, const FStri
 		{
 			Voice = MoveTemp(Eos);
 			// every voice change redraws the surfaces (Second's review: the panel sat on CONNECTING), and may leave a party's room
-			Voice->OnChanged().AddUObject(this, &UWonderlandSocialSubsystem::HandleServiceChanged);
+			Voice->OnChanged().AddUObject(this, &UWonderlandSocialSubsystem::HandleVoiceChanged);
 			UE_LOG(LogTemp, Display, TEXT("WLVOICE: EOS voice on (the authority mints each room)"));
 		}
 		else
@@ -411,6 +411,8 @@ namespace WonderlandSocialCommands
 			const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
 			const FWonderlandEosVoice* Eos = Social != nullptr ? Social->GetEosVoice() : nullptr;
 			UE_LOG(LogTemp, Display, TEXT("WLVOICE %s"), Eos != nullptr ? *Eos->Describe() : TEXT("no EOS voice in this session (no -WLEosConfig, or not live)"));
+			// the pinned vector both sides hash (Second's backend test): the R16 evidence shows client and authority lines join
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE hash vector 0123456789abcdef0123456789abcdef -> %s"), *WonderlandEosVoice::HashedPuid(TEXT("0123456789abcdef0123456789abcdef")));
 		}));
 
 	/** R16 EVIDENCE: after the authority removed this player, try to rejoin the last room with the last token -- it must be refused. */
