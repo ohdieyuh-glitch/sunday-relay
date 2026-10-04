@@ -7,6 +7,19 @@
 #include "WonderlandMissionHandoff.h"
 #include "WonderlandJuliusStream.h"
 #include "WonderlandProjectBrainLink.h"
+#include "HAL/IConsoleManager.h"
+
+namespace
+{
+	// PAIRING IS OFFERED ONLY WHERE IT CAN BE DONE (Second's RC13 review m5; the founder's hosted deploy 10-04): the shipped bridge
+	// address turns SOCIAL on, but a public bridge may serve no Julius / Project Brain pairing (JUJU: those routes stay Bearer-gated or
+	// off). So /brain offers "pair <code>" only when this is on -- set in the build's config by whoever ships a pairing website.
+	TAutoConsoleVariable<bool> CVarBrainPairingOffered(
+		TEXT("wl.Brain.PairingOffered"),
+		false,
+		TEXT("Whether this build's bridge offers Project Brain pairing codes (a Wonderland website that mints them). Off: /brain says Project Brain is not connected in this build."),
+		ECVF_Default);
+}
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandProjectBrain, Log, All);
 
@@ -265,7 +278,7 @@ void UWonderlandProjectBrainSubsystem::HandleTerminalLine(const FString& Argumen
 	UWonderlandJuliusStreamSubsystem* Stream = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusStreamSubsystem>() : nullptr;
 	// A BUILD WITH NO BRIDGE HAS NOTHING TO PAIR WITH (Second's RC13 review B6): every verb pointed the player at a website code this
 	// build can never redeem. Unless a bridge is configured (or a view is already live), each one gets the same truthful line.
-	if (!Model.bLive && (Stream == nullptr || Stream->GetBridgeUrl().IsEmpty()))
+	if (!Model.bLive && (Stream == nullptr || Stream->GetBridgeUrl().IsEmpty() || !CVarBrainPairingOffered.GetValueOnGameThread()))
 	{
 		OutSaid = TEXT("Project Brain is not connected in this build: the entries you see are samples, and what you propose is kept until you quit, not saved.");
 		// a CLASS of verb, never the word (Second's RC13 review C2: "/brain <a pasted key>" logged 16 characters of it)
