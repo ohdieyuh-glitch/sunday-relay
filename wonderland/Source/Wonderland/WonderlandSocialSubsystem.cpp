@@ -17,6 +17,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "WonderlandUiSubsystem.h"
+#include "WonderlandJuliusStream.h"
 
 // NO NEW LOG CATEGORY: a category is an early FName, and a new early FName shifted the name table under Niagara and
 // crashed a UE 5.8 package at boot (memory: niagara-fname-hash-crash). LogTemp with a WLSOCIAL prefix, like the rest.
@@ -25,6 +26,23 @@ void UWonderlandSocialSubsystem::Initialize(FSubsystemCollectionBase& Collection
 {
 	Super::Initialize(Collection);
 	RemoteTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWonderlandSocialSubsystem::TickRemotePlayers), 0.0f);
+	// ONE BRIDGE: social signs in to the same main-line bridge the Julius link uses, resolved by the same rule (the project
+	// setting; the wl.Julius.Bridge.Url override; https, or plain http to this machine only).
+	SignIn = MakeUnique<FWonderlandSocialSignIn>([](FString& OutProblem) -> FString
+	{
+		IConsoleVariable* Override = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Julius.Bridge.Url"));
+		return WonderlandJuliusStreamLogic::ResolveBridgeUrl(Override != nullptr ? Override->GetString() : FString(),
+			GetDefault<UWonderlandJuliusLinkSettings>()->BridgeUrl, OutProblem);
+	});
+	SignIn->OnChanged().AddUObject(this, &UWonderlandSocialSubsystem::HandleServiceChanged);
+	const TWeakObjectPtr<UWonderlandSocialSubsystem> WeakThis(this);
+	SignIn->OnSignedIn = [WeakThis](const FString& BaseUrl, const FString& Token)
+	{
+		if (WeakThis.IsValid() && WeakThis->ConnectWith(BaseUrl, Token))
+		{
+			WeakThis->bLiveBySignIn = true;
+		}
+	};
 	ReloadPreview();
 }
 
@@ -38,7 +56,89 @@ void UWonderlandSocialSubsystem::Deinitialize()
 	}
 	Live = nullptr;
 	Service.Reset();
+	SignIn.Reset();   // the session dies with the process (memory only); the bridge lets it expire
 	Super::Deinitialize();
+}
+
+const FWonderlandSignInView& UWonderlandSocialSubsystem::GetSignInView() const
+{
+	static const FWonderlandSignInView None;
+	return SignIn.IsValid() ? SignIn->GetView() : None;
+}
+
+void UWonderlandSocialSubsystem::StartSignIn()
+{
+	if (SignIn.IsValid())
+	{
+		SignIn->Start();
+	}
+}
+
+void UWonderlandSocialSubsystem::CancelSignIn()
+{
+	if (SignIn.IsValid())
+	{
+		SignIn->Cancel();
+	}
+}
+
+bool UWonderlandSocialSubsystem::OpenSignInBrowser()
+{
+	return SignIn.IsValid() && SignIn->OpenBrowser();
+}
+
+FString UWonderlandSocialSubsystem::DescribeSignIn() const
+{
+	return SignIn.IsValid() ? SignIn->Describe() : FString(TEXT("no sign-in"));
+}
+
+void UWonderlandSocialSubsystem::SignOut()
+{
+	if (bLiveBySignIn)
+	{
+		DropLive();
+	}
+	if (SignIn.IsValid())
+	{
+		SignIn->SignOut();
+	}
+}
+
+void UWonderlandSocialSubsystem::DropLive()
+{
+	if (Live != nullptr)
+	{
+		Live->ReportPresence(false);   // best effort: the player is leaving live social
+	}
+	Live = nullptr;
+	bLiveBySignIn = false;
+	VoicePreview = nullptr;
+	Voice = MakeUnique<FWonderlandVoiceUnavailable>();
+	Scene = TEXT("base");
+	Adopt(nullptr);   // clears the other players too; every surface then offers SIGN IN
+}
+
+void UWonderlandSocialSubsystem::HandleLiveSessionEnded()
+{
+	// NEVER INSIDE THE SERVICE'S OWN CALLBACK: the live service is broadcasting from its HTTP completion, so it is replaced
+	// on the next tick, once, and only if it is still the current one.
+	const TWeakObjectPtr<UWonderlandSocialSubsystem> WeakThis(this);
+	const FWonderlandSocialLiveService* Ended = Live;
+	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakThis, Ended](float)
+	{
+		if (!WeakThis.IsValid() || WeakThis->Live != Ended || Ended == nullptr)
+		{
+			return false;
+		}
+		const bool bWasSignIn = WeakThis->bLiveBySignIn;
+		WeakThis->DropLive();
+		if (bWasSignIn && WeakThis->SignIn.IsValid())
+		{
+			WeakThis->SignIn->SessionEnded(TEXT("Your Wonderland session ended (the server restarted, or the session expired). Sign in again: your friends, messages and party are kept."));
+		}
+		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL live: left live social after the server ended the session (%s)"), bWasSignIn ? TEXT("signed-in player") : TEXT("developer session"));
+		return false;
+	}), 0.0f);
 }
 
 bool UWonderlandSocialSubsystem::ReloadPreview()
@@ -50,6 +150,7 @@ bool UWonderlandSocialSubsystem::LoadPreviewScene(const FString& InScene)
 {
 	VoicePreview = nullptr;
 	Live = nullptr;
+	bLiveBySignIn = false;
 	Voice = MakeUnique<FWonderlandVoiceUnavailable>();
 	// SYNTHETIC PEOPLE ARE A DEVELOPER FIXTURE (founder, 2026-10-02: "Do not expose synthetic users to beta testers as though
 	// they are real people"; CORE: developer-session-only). A player session gets no service at all -- every social surface
@@ -96,9 +197,15 @@ bool UWonderlandSocialSubsystem::ConnectLive(const FString& BaseUrl, const FStri
 {
 	if (!WonderlandBeta::IsDeveloperSession())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live: not in a player session until the bridge grants the social capability at pairing"));
+		UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live: a token from outside is for developer sessions; a player signs in (SIGN IN in the Social Hub)"));
 		return false;
 	}
+	bLiveBySignIn = false;
+	return ConnectWith(BaseUrl, Token);
+}
+
+bool UWonderlandSocialSubsystem::ConnectWith(const FString& BaseUrl, const FString& Token)
+{
 	if (!(BaseUrl.StartsWith(TEXT("https://")) || BaseUrl.StartsWith(TEXT("http://127.0.0.1")) || BaseUrl.StartsWith(TEXT("http://localhost"))) || Token.IsEmpty())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live: refused (https, or http to this machine only; a token is required)"));
@@ -115,6 +222,7 @@ bool UWonderlandSocialSubsystem::ConnectLive(const FString& BaseUrl, const FStri
 		return WeakThis.IsValid() && WeakThis->ReportLocalPlayer(Out);
 	});
 	Live->OnWorldChanged().AddUObject(this, &UWonderlandSocialSubsystem::HandleWorldChanged);
+	Live->OnSessionEnded().AddUObject(this, &UWonderlandSocialSubsystem::HandleLiveSessionEnded);
 	Adopt(MoveTemp(Connected));
 	Live->JoinWorld(TEXT("PUBLIC"), TEXT("golden_arrival"));
 	UE_LOG(LogTemp, Display, TEXT("WLSOCIAL live: connecting to %s"), *BaseUrl);
@@ -300,5 +408,26 @@ namespace WonderlandSocialCommands
 				}
 			}
 			UE_LOG(LogTemp, Display, TEXT("WLSOCIAL hub: no player to show it to"));
+		}));
+
+	/** The Social Hub's sign-in, by name: the SAME calls its SIGN IN / OPEN GITHUB / CANCEL / SIGN OUT buttons make. */
+	FAutoConsoleCommandWithWorldAndArgs GSocialSignIn(
+		TEXT("wl.Social.SignIn"),
+		TEXT("Sign in to Wonderland social: `wl.Social.SignIn [start|open|cancel|out|status]` (start by default)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UGameInstance* Instance = World != nullptr ? World->GetGameInstance() : nullptr;
+			UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+			if (Social == nullptr)
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLSOCIAL signin: no social subsystem"));
+				return;
+			}
+			const FString Verb = Args.Num() > 0 ? Args[0].ToLower() : FString(TEXT("start"));
+			if (Verb == TEXT("start")) { Social->StartSignIn(); }
+			else if (Verb == TEXT("open")) { Social->OpenSignInBrowser(); }
+			else if (Verb == TEXT("cancel")) { Social->CancelSignIn(); }
+			else if (Verb == TEXT("out")) { Social->SignOut(); }
+			UE_LOG(LogTemp, Display, TEXT("WLSOCIAL signin status: %s"), *Social->DescribeSignIn());
 		}));
 }

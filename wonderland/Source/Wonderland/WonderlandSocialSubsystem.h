@@ -9,6 +9,7 @@
 #include "Containers/Ticker.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "WonderlandSocialService.h"
+#include "WonderlandSocialSignIn.h"
 #include "WonderlandVoice.h"
 #include "WonderlandWorldPresence.h"
 #include "WonderlandSocialSubsystem.generated.h"
@@ -42,11 +43,23 @@ public:
 	FWonderlandVoicePreviewScript* GetVoicePreview() const { return VoicePreview; }
 
 	/**
-	 * LIVE: real people through the social routes at BaseUrl, as the native session Token. Replaces the preview. Developer
-	 * sessions only until the bridge grants the `social` capability at pairing (founder-gated); then a player session
-	 * connects with its paired session the same way.
+	 * LIVE (developer sessions): real people through the social routes at BaseUrl, as the native session Token. Replaces the
+	 * preview. A PLAYER goes live only by signing in (StartSignIn), never with a token from the command line.
 	 */
 	bool ConnectLive(const FString& BaseUrl, const FString& Token);
+
+	// ---- SIGN IN (R16): GitHub's device flow through the main-line bridge; see WonderlandSocialSignIn.h
+	/** Never null after Initialize. */
+	const FWonderlandSignInView& GetSignInView() const;
+	/** SIGN IN WITH GITHUB: a code to enter at github.com/login/device; live once the player approves it. */
+	void StartSignIn();
+	void CancelSignIn();
+	/** SIGN OUT: leave live social, revoke the session (best effort) and forget it. */
+	void SignOut();
+	/** Open GitHub's code page in the player's browser (while a code is shown). */
+	bool OpenSignInBrowser();
+	/** For QA and the log; never the token or the code. */
+	FString DescribeSignIn() const;
 	/** Developer sessions: mint a session for `Player` on the DEVELOPMENT social server (loopback only) and connect to it. */
 	void ConnectDevSession(const FString& BaseUrl, const FString& Player);
 	/** The live service, if this session is live; null otherwise. */
@@ -69,6 +82,12 @@ public:
 	bool OpenProfile(const FString& UserId);
 
 private:
+	/** Go live at BaseUrl as Token. The developer gate is the caller's (ConnectLive); the sign-in path has none. */
+	bool ConnectWith(const FString& BaseUrl, const FString& Token);
+	/** The live service was told its session is over (401): leave live social on the next tick, never inside its callback. */
+	void HandleLiveSessionEnded();
+	/** Leave live social: this player's presence (best effort), the service, the other players, the voice. */
+	void DropLive();
 	/** Make this the service, forward its changes and answers, and tell the surfaces. */
 	void Adopt(TUniquePtr<IWonderlandSocialService> NewService);
 	void HandleServiceChanged() { SocialChanged.Broadcast(); }
@@ -88,4 +107,7 @@ private:
 	TUniquePtr<IWonderlandVoiceService> Voice;
 	FWonderlandVoicePreviewScript* VoicePreview = nullptr;
 	FString Scene = TEXT("base");
+	TUniquePtr<FWonderlandSocialSignIn> SignIn;
+	/** True while live through the sign-in (not a developer token): a 401 then returns the player to SIGN IN. */
+	bool bLiveBySignIn = false;
 };

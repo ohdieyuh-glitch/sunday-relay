@@ -1000,6 +1000,7 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 			.Voice(Social != nullptr && Social->GetVoice() != nullptr ? Social->GetVoice()->GetState() : FWonderlandVoiceState())
 			.VoiceLabel(Social != nullptr && Social->GetVoice() != nullptr ? Social->GetVoice()->GetPreviewLabel() : FString())
 			.OnVoice_Lambda([WeakThis](const FString& Command, const FString& Subject) { if (WeakThis.IsValid()) { WeakThis->HandleVoiceCommand(Command, Subject); } })
+			.SignIn(Social != nullptr ? Social->GetSignInView() : FWonderlandSignInView())
 			.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
 		Panel = SocialHubPanel;
 		Focus = SocialHubPanel;
@@ -4980,6 +4981,23 @@ void UWonderlandUiSubsystem::HandleSocialAction(const FString& OperationId, cons
 	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
 	UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
 	IWonderlandSocialService* Service = Social != nullptr ? Social->GetService() : nullptr;
+	// SIGN IN (R16): the hub's SIGN IN / OPEN GITHUB / CANCEL / SIGN OUT. Not social operations: they go to the sign-in.
+	if (OperationId.StartsWith(TEXT("signin.")))
+	{
+		if (Social == nullptr)
+		{
+			return;
+		}
+		if (OperationId == TEXT("signin.start")) { Social->StartSignIn(); }
+		else if (OperationId == TEXT("signin.cancel")) { Social->CancelSignIn(); }
+		else if (OperationId == TEXT("signin.out")) { Social->SignOut(); }
+		else if (OperationId == TEXT("signin.open") && !Social->OpenSignInBrowser() && SocialHubPanel.IsValid())
+		{
+			SocialHubPanel->ShowActionResult(FString::Printf(TEXT("Couldn't open a browser: go to %s yourself"), *Social->GetSignInView().VerificationUri));
+		}
+		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL hub %s: %s"), *OperationId, *Social->DescribeSignIn());
+		return;
+	}
 	// F1, THE FOUNDER'S FINAL RULE (2026-10-02): a BLOCK on somebody in this player's party is committed only after it is
 	// confirmed. The first BLOCK only WARNS, in the founder's words -- a leader's block also removes them, anybody else's makes
 	// the blocker leave -- and a second BLOCK on the same person within 15 s confirms it (blocks.add.confirm). The server
@@ -5081,6 +5099,7 @@ void UWonderlandUiSubsystem::HandleSocialChanged()
 	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
 	const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
 	const FWonderlandSocialSnapshot* Snapshot = Social != nullptr ? Social->GetSnapshot() : nullptr;
+	SocialHubPanel->SetSignIn(Social != nullptr ? Social->GetSignInView() : FWonderlandSignInView());
 	SocialHubPanel->SetSnapshot(Snapshot != nullptr ? *Snapshot : FWonderlandSocialSnapshot(), Snapshot != nullptr,
 		Social != nullptr ? Social->GetSourceLine() : FString(), Social == nullptr || Social->GetService() == nullptr || Social->GetService()->IsDevelopmentPreview());
 }

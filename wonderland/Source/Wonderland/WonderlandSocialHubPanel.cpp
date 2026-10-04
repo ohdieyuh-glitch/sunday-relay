@@ -159,6 +159,7 @@ void SWonderlandSocialHubPanel::Construct(const FArguments& InArgs)
 	VoiceLabel = InArgs._VoiceLabel;
 	OnVoice = InArgs._OnVoice;
 	OnRequestClose = InArgs._OnRequestClose;
+	SignIn = InArgs._SignIn;
 	OpenConversationId = Snapshot.Conversations.Num() > 0 ? Snapshot.Conversations[0].ConversationId : FString();
 	ScrimBrush.DrawAs = ESlateBrushDrawType::Image;
 	ScrimBrush.TintColor = FSlateColor(WonderlandUi::Srgb(3, 4, 8, 0.70f));
@@ -317,6 +318,19 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeRail()
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
 		[
 			MakeTabButton(ETab::Recent, TEXT("RECENT PLAYERS"), bConnected && Snapshot.RecentPlayers.Num() > 0 ? FString::FromInt(Snapshot.RecentPlayers.Num()) : FString())
+		]
+		// SIGNED IN AS A REAL PERSON: who, and the way out. Shown only for a live sign-in, never over the preview.
+		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f, 18.0f, 4.0f, 2.0f)
+		[
+			SNew(STextBlock).Visibility(bConnected && !bDevelopmentPreview && SignIn.State == EWonderlandSignInState::SignedIn ? EVisibility::Visible : EVisibility::Collapsed)
+			.Text(T(FString::Printf(TEXT("signed in as @%s"), *SignIn.Login))).Font(WonderlandUi::Sans(8, false, 60)).ColorAndOpacity(WonderlandUi::Dim())
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
+		[
+			SNew(SBox).Visibility(bConnected && !bDevelopmentPreview && SignIn.State == EWonderlandSignInState::SignedIn ? EVisibility::Visible : EVisibility::Collapsed)
+			[
+				MakeButton(TEXT("SIGN OUT"), TEXT("signin.out"), FString(), true, true)
+			]
 		];
 }
 
@@ -342,10 +356,70 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeTabButton(ETab Which, const F
 TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeNotConnected()
 {
 	using namespace WonderlandSocialHubLook;
-	return SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
+	if (SignIn.State == EWonderlandSignInState::NoServer)
+	{
+		return SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
+			[
+				SNew(STextBlock).Text(T(FString::Printf(TEXT("Social is not connected in this build.\n%s"), *SignIn.Message)))
+				.Font(WonderlandUi::Sans(12, false, 40)).ColorAndOpacity(WonderlandUi::Cream(0.80f)).Justification(ETextJustify::Center).AutoWrapText(true)
+			];
+	}
+	return MakeSignIn();
+}
+
+TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeSignIn()
+{
+	using namespace WonderlandSocialHubLook;
+	const bool bWaiting = SignIn.State == EWonderlandSignInState::Waiting;
+	const bool bStarting = SignIn.State == EWonderlandSignInState::Starting;
+	const FString Headline = bWaiting ? FString(TEXT("Enter this code at GitHub"))
+		: bStarting ? FString(TEXT("Signing in…"))
+		: FString(TEXT("Sign in to see your friends, messages and party"));
+	const FString Lead = bWaiting
+		? FString::Printf(TEXT("1. OPEN GITHUB below (or go to %s)\n2. Enter the code and approve Wonderland\n3. Come back: this page updates by itself"), *SignIn.VerificationUri)
+		: bStarting ? FString()
+		: FString(TEXT("Wonderland signs you in with your GitHub account. Your password never touches the game."));
+	TSharedRef<SHorizontalBox> Buttons = SNew(SHorizontalBox);
+	if (bWaiting)
+	{
+		Buttons->AddSlot().AutoWidth()[MakeButton(TEXT("OPEN GITHUB"), TEXT("signin.open"), FString(), true)];
+		Buttons->AddSlot().AutoWidth()[MakeButton(TEXT("CANCEL"), TEXT("signin.cancel"), FString(), true, true)];
+	}
+	else if (bStarting)
+	{
+		Buttons->AddSlot().AutoWidth()[MakeButton(TEXT("CANCEL"), TEXT("signin.cancel"), FString(), true, true)];
+	}
+	else
+	{
+		Buttons->AddSlot().AutoWidth()[MakeButton(TEXT("SIGN IN WITH GITHUB"), TEXT("signin.start"), FString(), true)];
+	}
+	return SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center).MaxDesiredWidth(560.0f)
 		[
-			SNew(STextBlock).Text(T(TEXT("Social is not connected in this build.\nFriends, presence, messages and parties appear here when you are signed in to Wonderland's social service.")))
-			.Font(WonderlandUi::Sans(12, false, 40)).ColorAndOpacity(WonderlandUi::Cream(0.80f)).Justification(ETextJustify::Center).AutoWrapText(true)
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 0.0f, 0.0f, 10.0f)
+			[
+				SNew(STextBlock).Text(T(Headline)).Font(WonderlandUi::Sans(14, true, 60)).ColorAndOpacity(WonderlandUi::Cream(0.92f))
+				.Justification(ETextJustify::Center).AutoWrapText(true)
+			]
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 4.0f, 0.0f, 12.0f)
+			[
+				SNew(STextBlock).Visibility(bWaiting ? EVisibility::Visible : EVisibility::Collapsed)
+				.Text(T(SignIn.UserCode)).Font(WonderlandUi::Mono(30)).ColorAndOpacity(WonderlandUi::Gold())
+			]
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 0.0f, 0.0f, 12.0f)
+			[
+				SNew(STextBlock).Visibility(Lead.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible)
+				.Text(T(Lead)).Font(WonderlandUi::Sans(10, false, 40)).ColorAndOpacity(WonderlandUi::Cream(0.80f)).Justification(ETextJustify::Center).AutoWrapText(true)
+			]
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 0.0f, 0.0f, 10.0f)
+			[
+				Buttons
+			]
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+			[
+				SNew(STextBlock).Visibility(SignIn.Message.IsEmpty() || bWaiting ? EVisibility::Collapsed : EVisibility::Visible)
+				.Text(T(SignIn.Message)).Font(WonderlandUi::Sans(9, false, 40)).ColorAndOpacity(WonderlandUi::Dim()).Justification(ETextJustify::Center).AutoWrapText(true)
+			]
 		];
 }
 
@@ -886,6 +960,11 @@ void SWonderlandSocialHubPanel::SetSnapshot(const FWonderlandSocialSnapshot& InS
 	Rebuild();
 }
 
+void SWonderlandSocialHubPanel::SetSignIn(const FWonderlandSignInView& InView)
+{
+	SignIn = InView;
+}
+
 void SWonderlandSocialHubPanel::SetVoice(const FWonderlandVoiceState& State, const FString& Label)
 {
 	Voice = State;
@@ -1202,7 +1281,7 @@ void SWonderlandSocialHubPanel::ShowActionResult(const FString& Line)
 FString SWonderlandSocialHubPanel::Describe() const
 {
 	const TArray<FWonderlandSocialMessage>* History = Snapshot.Messages.Find(OpenConversationId);
-	return FString::Printf(TEXT("tab %s | %s | friends %d (%d on) | requests in %d out %d | party invites %d | recent %d | conversations %d (unread %d) | open %s (%d messages) | party %s (%d members%s) | visible parties %d | voice %s%s | rows %s | action: %s"),
+	return FString::Printf(TEXT("tab %s | %s | friends %d (%d on) | requests in %d out %d | party invites %d | recent %d | conversations %d (unread %d) | open %s (%d messages) | party %s (%d members%s) | visible parties %d | voice %s%s | rows %s | action: %s | signin %s%s"),
 		TabName(Tab), bConnected ? (bDevelopmentPreview ? TEXT("DEVELOPMENT PREVIEW") : TEXT("connected")) : TEXT("NOT CONNECTED"),
 		Snapshot.Friends.Num(), CountOn(), Snapshot.IncomingRequests.Num(), Snapshot.OutgoingRequests.Num(), Snapshot.PartyInvites.Num(),
 		Snapshot.RecentPlayers.Num(), Snapshot.Conversations.Num(), CountUnread(), OpenConversationId.IsEmpty() ? TEXT("none") : *OpenConversationId,
@@ -1210,5 +1289,6 @@ FString SWonderlandSocialHubPanel::Describe() const
 		Snapshot.bHasParty ? *Snapshot.Party.Name : TEXT("none"), Snapshot.bHasParty ? Snapshot.Party.Members.Num() : 0,
 		Snapshot.bHasParty ? *FString::Printf(TEXT(", leader %s%s"), *Snapshot.Party.LeaderId, Snapshot.Party.bViewerIsLeader ? TEXT(" (you)") : TEXT("")) : TEXT(""),
 		Snapshot.VisibleParties.Num(), Voice.Connection.IsEmpty() ? TEXT("UNAVAILABLE") : *Voice.Connection,
-		VoiceLabel.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" [%s]"), *VoiceLabel), ShownRows.Num() > 0 ? *FString::Join(ShownRows, TEXT(",")) : TEXT("none"), *LastActionLine);
+		VoiceLabel.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" [%s]"), *VoiceLabel), ShownRows.Num() > 0 ? *FString::Join(ShownRows, TEXT(",")) : TEXT("none"), *LastActionLine,
+		FWonderlandSocialSignIn::StateName(SignIn.State), SignIn.State == EWonderlandSignInState::Waiting ? *FString::Printf(TEXT(" (code %d chars)"), SignIn.UserCode.Len()) : TEXT(""));
 }

@@ -58,6 +58,9 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 	{
 		if (!Present.Contains(It.Key()) || !It.Value().Body.IsValid())
 		{
+			// R16 EVIDENCE: a figure leaving this player's world is said once, by id (a leave, a silence, or a block).
+			UE_LOG(LogTemp, Display, TEXT("WLWORLD player %s left this view (%s)"), *It.Key(),
+				Present.Contains(It.Key()) ? TEXT("figure lost") : TEXT("no longer in the view"));
 			Remove(It.Value());
 			It.RemoveCurrent();
 		}
@@ -100,6 +103,9 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 			Remote.Body = Body;
 			Remote.Label = Label;
 			Remote.SkinId.Reset();
+			// R16 EVIDENCE: another player's Dog drawn in this player's world, said once, by id and place.
+			UE_LOG(LogTemp, Display, TEXT("WLWORLD player %s (%s) appeared at (%.0f, %.0f, %.0f)"), *A.UserId, *A.DisplayName,
+				A.Location.X, A.Location.Y, A.Location.Z);
 		}
 		// THEIR SKIN, THROUGH THE REGISTRY: a skin this build does not know keeps the figure it has.
 		if (Remote.SkinId != A.SkinId)
