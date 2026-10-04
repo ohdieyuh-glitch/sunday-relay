@@ -9158,21 +9158,21 @@ namespace
 						S.C9TipWide = FMath::Max(S.C9TipWide, HopTipOut);
 						++S.C9TipSamples;
 					}
-					const FQaChargeReading Now = QaReadCharge(Dog);
-					if (Now.bRead)
+					const FQaChargeReading HopRead = QaReadCharge(Dog);
+					if (HopRead.bRead)
 					{
-						const bool bAir = Now.Sole[0].Z > S.C9Ground + 1.5 && Now.Sole[1].Z > S.C9Ground + 1.5;
+						const bool bAir = HopRead.Sole[0].Z > S.C9Ground + 1.5 && HopRead.Sole[1].Z > S.C9Ground + 1.5;
 						++S.C9Frames;
 						S.C9Airborne += bAir ? 1 : 0;
 						S.C9Landings += (!bAir && S.bC9WasAir) ? 1 : 0;
 						S.bC9WasAir = bAir;
-						const float HipZ = Now.HipZ;
+						const float HipZ = HopRead.HipZ;
 						S.C9HipLow = FMath::Min(S.C9HipLow, HipZ);
 						S.C9HipHigh = FMath::Max(S.C9HipHigh, HipZ);
-						if (Now.bHeadLook)
+						if (HopRead.bHeadLook)
 						{
-							S.C9HeadLow = FMath::Min(S.C9HeadLow, Now.HeadLookDeg);
-							S.C9HeadHigh = FMath::Max(S.C9HeadHigh, Now.HeadLookDeg);
+							S.C9HeadLow = FMath::Min(S.C9HeadLow, HopRead.HeadLookDeg);
+							S.C9HeadHigh = FMath::Max(S.C9HeadHigh, HopRead.HeadLookDeg);
 						}
 					}
 					static const TCHAR* const ShoulderPivots[] = { TEXT("Pivot_armLeft"), TEXT("Pivot_armRight") };
