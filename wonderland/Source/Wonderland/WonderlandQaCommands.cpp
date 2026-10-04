@@ -12685,7 +12685,7 @@ namespace
 	 *        from the side and three-quarters; each view's line of sight clear of the world AND of the Dog's own body (its head, its
 	 *        other arm); every frame actually SAVED -- 60 of them
 	 *   HP6 the TOOLS, every tick of each held act and at every shot: the hand drawn whole round the tool, the depth bars above, and
-	 *        two planted controls run through the very same measure -- the handle pushed 3 uu toward the palm must break the hand bar,
+	 *        two planted controls run through the very same measure -- the handle pushed max(3, 2.5 x hand size) uu toward the palm must break the hand bar,
 	 *        a box planted in the tool-side forearm's block must break the arm bar -- with the boxes counted (props, arms per side)
 	 *   HP7 the BOOK and the GLASS the same way, plus CONTACT (a holding hand within 0.5 uu of the prop) and a palm control: FAILS
 	 *        until they are held (their hands still step aside)
@@ -12855,17 +12855,23 @@ namespace
 	}
 
 	/**
-	 * THE HAND CONTROL, through the very measure the verdict uses (Second): the shown tool's handle pushed 3 uu toward the palm, square to its
-	 * own length, among the real props -- the hand share must break the bar. For a book or a glass (no handle), a prop box set on the palm.
+	 * THE HAND CONTROL, through the very measure the verdict uses (Second): the shown tool's handle pushed toward the palm, square to its own
+	 * length, among the real props -- the hand share must break the bar. For a book or a glass (no handle), a prop box set on the palm.
 	 * -1 when there is nothing to plant (no hand drawn, no prop).
+	 * THE PUSH GROWS WITH THE HAND (CORE, round 5b): a fixed 3 uu planted the handle 41% of a size-2.0 hand's thinnest box deep -- UNDER the
+	 * 45% bar, so the control could not fail skeleton_flame's six shots (jack_flame's 1.67 hand: 49%). max(3, 2.5 x hand size) uu reaches
+	 * 73% at every size 1.2-2.0 and keeps 3 uu below (88-90%), simulated against the round-5b SHOT lines (sim_act_grip: 67/65/54/49/41% at
+	 * 3 uu for sizes 1.29/1.32/1.56/1.67/2.0, as measured). The bar itself is unchanged.
 	 */
 	double QaActHandControl(const FQaActBoxes& Boxes, const TArray<FQaObb>& BothHands)
 	{
-		const TArray<FQaObb>& Holding = Boxes.Hands[0].Num() > 0 ? Boxes.Hands[0] : Boxes.Hands[1];
+		const int32 HoldingSide = Boxes.Hands[0].Num() > 0 ? 0 : 1;
+		const TArray<FQaObb>& Holding = Boxes.Hands[HoldingSide];
 		if (Holding.Num() == 0 || Boxes.Props.Num() == 0)
 		{
 			return -1.0;
 		}
+		const double QaActControlPushUU = FMath::Max(3.0, 2.5 * static_cast<double>(Boxes.HandSize[HoldingSide]));
 		TArray<FQaObb> Planted = Boxes.Props;
 		const FQaObb& Palm = Holding[0];
 		FQaObb& Pushed = Planted[Boxes.HandleIndex != INDEX_NONE ? Boxes.HandleIndex : 0];
@@ -12878,7 +12884,7 @@ namespace
 			}
 			FVector ToPalm = Palm.Centre - Pushed.Centre;
 			ToPalm -= Pushed.Axis[LongAxis] * FVector::DotProduct(ToPalm, Pushed.Axis[LongAxis]);
-			Pushed.Centre += ToPalm.GetSafeNormal() * 3.0;
+			Pushed.Centre += ToPalm.GetSafeNormal() * QaActControlPushUU;
 		}
 		else
 		{
@@ -12912,7 +12918,7 @@ namespace
 	 * forearm the fist is on). bOutBodySeen false when the body could not be modelled (the world check then stands alone, and is logged).
 	 */
 	bool QaActSightClear(UWorld* World, const ARelayDogCharacter* Dog, const FVector& Eye, const FVector& Work, const USceneComponent* SkipA,
-		const USceneComponent* SkipB, FQaSolid& Body, bool& bOutBodySeen)
+		const USceneComponent* SkipB, FQaSolid& Body, bool& bOutBodySeen, FString* OutBlocker = nullptr)
 	{
 		FCollisionQueryParams Sight = FCollisionQueryParams::DefaultQueryParam;
 		Sight.AddIgnoredActor(Dog);
@@ -12923,6 +12929,14 @@ namespace
 		FHitResult SightHit;
 		if (World->LineTraceSingleByChannel(SightHit, Eye, Work, ECC_Visibility, Sight) || World->LineTraceSingleByChannel(SightHit, Work, Eye, ECC_Visibility, Sight))
 		{
+			// WHAT BLOCKED IT (CORE, round 5b: every baal shot read BLOCKED with nothing named)
+			if (OutBlocker != nullptr)
+			{
+				const AActor* HitActor = SightHit.GetActor();
+				const UPrimitiveComponent* HitPart = SightHit.GetComponent();
+				*OutBlocker = FString::Printf(TEXT("the world: %s / %s"), HitActor != nullptr ? *HitActor->GetName() : TEXT("?"),
+					HitPart != nullptr ? *HitPart->GetName() : TEXT("?"));
+			}
 			return false;
 		}
 		FString Why;
@@ -12950,11 +12964,34 @@ namespace
 			double Exit = 0.0;
 			if (QaRayObb(BodyPiece, Eye, Unit, Enter, Exit) && Exit > 0.0 && Enter < Length - 1.0)
 			{
+				if (OutBlocker != nullptr)
+				{
+					*OutBlocker = FString::Printf(TEXT("the Dog's own body: %s"), BodyPiece.Mesh != nullptr ? *BodyPiece.Mesh->GetName() : TEXT("?"));
+				}
 				return false;
 			}
 		}
 		return true;
 	}
+
+	/**
+	 * THE CLOSE CAMERA'S CANDIDATES (CORE, round 5b: every one of baal's tool and glass shots, and three skins' book shots, stayed BLOCKED
+	 * through all ten tries -- each try only turned the camera about the prop, at one height and one distance). Each candidate is aimed at
+	 * the same point: turned off the act's own view, raised or lowered, or brought closer. Only where the camera may stand widens; the
+	 * sight test, the Dog's body as one solid and every bar are untouched -- a wing or a back part that hides the fist still blocks.
+	 */
+	struct FQaActCloseTry
+	{
+		double YawDeg;
+		double RiseAdd;
+		double ReachScale;
+	};
+	constexpr int32 QaActCloseTries = 24;
+	const FQaActCloseTry QaActCloseTryTable[QaActCloseTries] = {
+		{ 0.0, 0.0, 1.0 }, { 25.0, 0.0, 1.0 }, { -25.0, 0.0, 1.0 }, { 0.0, 0.35, 1.0 }, { 0.0, -0.35, 1.0 }, { 0.0, 0.0, 0.7 },
+		{ 50.0, 0.0, 1.0 }, { -50.0, 0.0, 1.0 }, { 25.0, 0.35, 0.8 }, { -25.0, 0.35, 0.8 }, { 25.0, -0.35, 0.8 }, { -25.0, -0.35, 0.8 },
+		{ 75.0, 0.0, 1.0 }, { -75.0, 0.0, 1.0 }, { 50.0, 0.35, 0.8 }, { -50.0, 0.35, 0.8 }, { 0.0, 0.75, 0.8 }, { 0.0, 0.35, 0.6 },
+		{ 100.0, 0.0, 1.0 }, { -100.0, 0.0, 1.0 }, { 125.0, 0.0, 1.0 }, { -125.0, 0.0, 1.0 }, { 75.0, 0.35, 0.8 }, { -75.0, 0.35, 0.8 } };
 
 	/** The fist's centre in the world (the hand's laid grip centre on its visible forearm). */
 	bool QaActFist(const ARelayDogCharacter* Dog, bool bLeft, FVector& OutFist)
@@ -13536,12 +13573,12 @@ namespace
 			}
 			const FVector Grip = ActBoxes.HandleIndex != INDEX_NONE ? ActBoxes.Props[ActBoxes.HandleIndex].Centre : PropBox.GetCenter();
 			const FVector AimAt = bToolAct ? (S.ViewIndex == 2 ? Fist : (Fist + PropBox.GetCenter()) * 0.5) : PropBox.GetCenter();
-			const double Reach = S.ViewIndex == 2 ? 35.0 : FMath::Clamp(PropBox.GetExtent().Size() * 2.6, 60.0, 150.0);
+			const FQaActCloseTry& CloseTry = QaActCloseTryTable[FMath::Clamp(S.Tries, 0, QaActCloseTries - 1)];
+			const double Reach = (S.ViewIndex == 2 ? 35.0 : FMath::Clamp(PropBox.GetExtent().Size() * 2.6, 60.0, 150.0)) * CloseTry.ReachScale;
 			const double SideSign = bLeftTool ? -1.0 : 1.0;
-			static const double TryOffsets[] = { 0.0, 25.0, -25.0, 50.0, -50.0, 75.0, -75.0, 100.0, -100.0, 125.0 };
-			const double ViewAngle = SideSign * (S.ViewIndex == 1 ? 40.0 : 90.0) + TryOffsets[FMath::Clamp(S.Tries, 0, 9)];
+			const double ViewAngle = SideSign * (S.ViewIndex == 1 ? 40.0 : 90.0) + CloseTry.YawDeg;
 			const FVector CloseWhere = AimAt + Dog->GetActorForwardVector().GetSafeNormal2D().RotateAngleAxis(ViewAngle, FVector::UpVector) * Reach
-				+ FVector(0.0, 0.0, Reach * (S.ViewIndex == 2 ? 0.2 : 0.25));
+				+ FVector(0.0, 0.0, Reach * ((S.ViewIndex == 2 ? 0.2 : 0.25) + CloseTry.RiseAdd));
 			if (CloseWhere.ContainsNaN() || AimAt.ContainsNaN())
 			{
 				// DRAWABLE ONLY (round 4's GPU hang): a camera is never placed at a point that is not finite
@@ -13563,11 +13600,17 @@ namespace
 			const USceneComponent* ToolArm = Dog->GetVisibleForearm(bLeftTool);
 			const USceneComponent* OtherArm = bToolAct ? nullptr : Dog->GetVisibleForearm(!bLeftTool);
 			bool bBodySeen = true;
-			bool bClear = QaActSightClear(World, Dog, CloseWhere, bToolAct ? Fist : AimAt, ToolArm, OtherArm, S.Body, bBodySeen);
+			FString SightBlocker;
+			bool bClear = QaActSightClear(World, Dog, CloseWhere, bToolAct ? Fist : AimAt, ToolArm, OtherArm, S.Body, bBodySeen, &SightBlocker);
 			if (bClear && bToolAct && S.ViewIndex != 2)
 			{
 				bool bGripBodySeen = true;
-				bClear = QaActSightClear(World, Dog, CloseWhere, Grip, ToolArm, OtherArm, S.Body, bGripBodySeen);
+				bClear = QaActSightClear(World, Dog, CloseWhere, Grip, ToolArm, OtherArm, S.Body, bGripBodySeen, &SightBlocker);
+			}
+			if (!bClear && S.Tries >= QaActCloseTries - 1 && !SightBlocker.IsEmpty())
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA BLOCKED %s %s view %d after %d candidates: %s"), Skin, CloseActs[S.ActIndex], S.ViewIndex,
+					QaActCloseTries, *SightBlocker);
 			}
 			// AND NO PLANT IN THE WAY (round 4: frames shot from inside a flowerbed read "sight clear"; plants have no collision)
 			FString PlantBlocker;
@@ -13575,13 +13618,13 @@ namespace
 			if (bClear && !bPlantsClear)
 			{
 				bClear = false;
-				if (S.Tries >= 9)
+				if (S.Tries >= QaActCloseTries - 1)
 				{
 					++S.PlantBlocked;
 					UE_LOG(LogWonderlandQa, Display, TEXT("WLAHQA BLOCKED %s %s view %d: %s"), Skin, CloseActs[S.ActIndex], S.ViewIndex, *PlantBlocker);
 				}
 			}
-			if (!bClear && S.Tries < 9)
+			if (!bClear && S.Tries < QaActCloseTries - 1)
 			{
 				++S.Tries;
 				S.ShotAt = 0.0;
