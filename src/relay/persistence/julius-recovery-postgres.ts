@@ -55,6 +55,13 @@ export class JuliusRecoveryPostgresRepository {
    */
   async recoverExpired(now: string, limit = 100, projectId?: string): Promise<JuliusRecoveryAction[]> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error('invalid_recovery_limit');
+    // ROW 13 (i), THE TASK PATH (P2-1). The sweep runs before every tick of every loop and almost always finds
+    // nothing, yet as a SERIALIZABLE read it held a predicate lock on every ACTIVE task row: an rw edge into every
+    // serializable task write of that tick. So a lock-free probe asks first, in its own READ COMMITTED, READ ONLY
+    // transaction (explicit, so a database whose default is SERIALIZABLE cannot turn it back into a predicate read),
+    // whether any lease has expired. Only then does the serializable sweep below open, unchanged. A lease that expires
+    // just after a negative probe is swept by the next tick, as one that expired during the sweep's own scan always was.
+    if (!await this.anyLeaseExpired(now, projectId)) return [];
     // SQL over the expired rows it selects, and pure planning: a serialization
     // failure is retried (`juliusSerializable`) — the kernel sweeps before every
     // tick, so an unretried 40001 here threw the tick itself.
@@ -80,6 +87,26 @@ export class JuliusRecoveryPostgresRepository {
       }
       return actions;
     });
+  }
+
+  /** Whether any ACTIVE task's lease has expired, read without a predicate lock (READ COMMITTED, READ ONLY). */
+  private async anyLeaseExpired(now: string, projectId?: string): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY');
+      const probe = await client.query<{ expired: boolean }>(
+        `SELECT EXISTS(SELECT 1 FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id
+          WHERE t.state='ACTIVE' AND t.lease_expires_at<=$1 AND ($2::text IS NULL OR r.project_id=$2)) AS expired`,
+        [now, projectId ?? null],
+      );
+      await client.query('COMMIT');
+      return probe.rows[0]?.expired === true;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }
 
