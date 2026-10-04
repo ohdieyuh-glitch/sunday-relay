@@ -1203,7 +1203,8 @@ void SWonderlandProjectBrainPanel::RebuildInspector()
 	{
 		InspectorBody->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 6.0f)
 		[
-			SNew(STextBlock).Text(INVTEXT("PROPOSED  ·  NOT SAVED")).Font(Font("Bold", 8, 240)).ColorAndOpacity(WonderlandUi::Srgb(0xFF, 0xD2, 0x73))
+			// LIVE, THESE ARE SAVED: Project Brain holds them as proposals until an owner adopts or declines them.
+			SNew(STextBlock).Text(Model.bLive ? INVTEXT("PROPOSED  ·  SAVED IN PROJECT BRAIN") : INVTEXT("PROPOSED  ·  NOT SAVED")).Font(Font("Bold", 8, 240)).ColorAndOpacity(WonderlandUi::Srgb(0xFF, 0xD2, 0x73))
 		];
 		TArray<FString> Pending = Found->Proposals;
 		Pending.Append(Found->Reviews);
@@ -1297,7 +1298,13 @@ void SWonderlandProjectBrainPanel::RebuildInspector()
 	InspectorBody->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
 	[
 		SNew(STextBlock)
-		.Text(INVTEXT("Development preview: sample data, nothing sent. A connected Project Brain gives this world counts and revisions, never entry text, until an owner-scoped read is approved."))
+		// WHAT THE SURFACE IS, SAID PLAINLY: the preview's disclaimer, or -- live -- where the lines come from and what the
+		// last write did, in the bridge's own words.
+		.Text(Model.bLive
+			? FText::FromString(Model.WriteNote.IsEmpty()
+				? FString(TEXT("Live: Project Brain on the bridge. Every line is what it holds; proposals and reviews are sent to it and shown once saved."))
+				: FString::Printf(TEXT("Live: Project Brain on the bridge. %s"), *Model.WriteNote))
+			: INVTEXT("Development preview: sample data, nothing sent. A connected Project Brain gives this world counts and revisions, never entry text, until an owner-scoped read is approved."))
 		.Font(Font("Regular", 8)).ColorAndOpacity(Mist(0.8f)).AutoWrapText(true)
 	];
 }

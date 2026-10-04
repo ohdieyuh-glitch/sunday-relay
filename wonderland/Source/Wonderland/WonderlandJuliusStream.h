@@ -268,6 +268,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius")
 	bool IsPaired() const { return TokenSource.IsValid() && !TokenSource->CurrentToken().IsEmpty(); }
 
+	/**
+	 * A REQUEST TO THIS BUILD'S BRIDGE, AS THIS CLIENT -- for the Project Brain link, which reads and writes the
+	 * Project Brain of the project this session was paired for. Null when no usable bridge is configured or the
+	 * client is not paired. The session goes on the request and nowhere else; it is never returned.
+	 */
+	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> NewBridgeRequest(const FString& Verb, const FString& PathAndQuery) const;
+
+	/**
+	 * The bridge refused this client's session (HTTP 401) on a request this subsystem did not make. Forget it, as the
+	 * stream does, so every surface says "pair again" instead of retrying a session that cannot work.
+	 */
+	void NoteSessionRefused();
+
 	/*
 	 * THE RUN'S USER RESULT (founder decision 5), read after each hydration and each change of Julius's state. For
 	 * surfaces and proofs; each reads the result for the run being FOLLOWED, and says nothing about any other.

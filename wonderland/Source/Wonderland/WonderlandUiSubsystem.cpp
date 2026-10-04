@@ -4460,6 +4460,25 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		return true;
 	}
 
+	if (Command == TEXT("/brain"))
+	{
+		// PROJECT BRAIN (founder 10-03: Second completes it). The action lives in UWonderlandProjectBrainSubsystem; this only routes the
+		// line and answers it. A pairing code is never echoed (MaskTerminalEcho) or logged.
+		FString Said;
+		const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+		UWonderlandProjectBrainSubsystem* Brain = Instance != nullptr ? Instance->GetSubsystem<UWonderlandProjectBrainSubsystem>() : nullptr;
+		if (Brain != nullptr)
+		{
+			Brain->HandleTerminalLine(Argument, Said);
+		}
+		else
+		{
+			Said = TEXT("There is no Project Brain in this world.");
+		}
+		Terminal->AddJuliusRow(TEXT("You"), UWonderlandProjectBrainSubsystem::MaskTerminalEcho(Line), Said);
+		return true;
+	}
+
 	if (Command == TEXT("/card") || Command == TEXT("/cards"))
 	{
 		// C.A.R.D. (founder, 2026-10-02: the fifth Project Brain component). The actions live in WonderlandCardDirector; this only
@@ -4477,7 +4496,8 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 				"/tasks — list your contracts (open N, close N, delete N). /skin NAME — wear a skin (/skin list). "
 				"/cubs [n|off] — summon the Relay Dog's sub-agent cub ghosts. "
 				"/handoff — Mission Handoff: roam while a mission carries on (/handoff again, or /handoff return, to come back). "
-				"/card — your C.A.R.D. loadout (list, select NAME, new NAME, save, rename NAME, delete NAME)."));
+				"/card — your C.A.R.D. loadout (list, select NAME, new NAME, save, rename NAME, delete NAME). "
+				"/brain — Project Brain (status, pair CODE from the Wonderland website, refresh)."));
 		return true;
 	}
 
