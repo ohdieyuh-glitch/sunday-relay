@@ -1050,8 +1050,8 @@ describe('the evidence dump names only tables and columns the migrations create'
     expect([...artifacts.columns].sort(), 'the whole record of each body, and nothing but the record').toEqual([...schema().get('julius_work_artifacts')!].sort());
     const script = read('.github/julius-live-evidence-dump.sh');
     const at = (text: string) => script.indexOf(text);
-    expect(at('node "$here/scripts/julius-evidence-bodies.mjs" "$out"'), 'the bodies are copied').toBeGreaterThan(at('" work-artifacts.tsv'));
-    expect(at('cp "$here/scripts/julius-evidence-resolve.mjs" "$out/resolve-artifacts.mjs"'), 'and the resolver travels with them').toBeGreaterThan(at('" work-artifacts.tsv'));
+    expect(at('node scripts/julius-evidence-bodies.mjs "$out"'), 'the bodies are copied').toBeGreaterThan(at('" work-artifacts.tsv'));
+    expect(at('cp scripts/julius-evidence-resolve.mjs "$out/resolve-artifacts.mjs"'), 'and the resolver travels with them').toBeGreaterThan(at('" work-artifacts.tsv'));
   });
 
   it('is held by the Docker regression against a migrated database as well', () => {

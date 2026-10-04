@@ -159,9 +159,11 @@ dump "SELECT invocation_id,tool_id,state,requested_at,run_id,task_id,exit_code,r
 # as the founder approved, and no TSV column carries them. The credential scan that runs after this dump drops a body
 # that trips it and records the drop (DROPPED_BY_SCAN); a hit anywhere else still refuses the whole bundle.
 dump "SELECT artifact_id,project_id,run_id,task_id,lease_generation,role,kind,content_type,byte_size,content_hash,storage_ref,occurred_at,created_at FROM relay_wonderland.julius_work_artifacts ORDER BY occurred_at,artifact_id" work-artifacts.tsv
-here=$(cd "$(dirname "$0")/.." && pwd)
-node "$here/scripts/julius-evidence-bodies.mjs" "$out" || echo "julius-evidence-bodies: exited $?" >&2
-cp "$here/scripts/julius-evidence-resolve.mjs" "$out/resolve-artifacts.mjs" || echo 'julius-evidence-dump: resolve-artifacts.mjs was not copied' >&2
+# Both run from the checkout root, as every workflow runs this script (./.github/julius-live-evidence-dump.sh) and
+# as julius-live-hermes.sh runs its own node entry: the repository boundary scan must be able to read the file node
+# runs, and a path built at run time ("$here/...") is unanalyzable by design.
+node scripts/julius-evidence-bodies.mjs "$out" || echo "julius-evidence-bodies: exited $?" >&2
+cp scripts/julius-evidence-resolve.mjs "$out/resolve-artifacts.mjs" || echo 'julius-evidence-dump: resolve-artifacts.mjs was not copied' >&2
 
 # WHY A TASK FAILED, WITHOUT A RAW LOG.
 #
