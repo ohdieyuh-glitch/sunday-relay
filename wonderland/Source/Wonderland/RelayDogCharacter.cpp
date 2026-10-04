@@ -1,6 +1,7 @@
 #include "RelayDogCharacter.h"
 #include "WonderlandActGrip.h"
 #include "WonderlandFinite.h"
+#include "WonderlandKneesOut.h"
 #include "RelayDogPresentation.h"
 
 #include "Components/PointLightComponent.h"
@@ -2783,12 +2784,29 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	}
 	// THE STANCE'S SPACED FEET are each hip swept outward (the measured roll that carries a limb away from the centre line);
 	// 0 whenever the swords are not held, so these are the same writes as ever.
-	// THE KNEES OUT (wl.Handoff.Stance.KneesOut): the same hip turned about the vertical, outward by the same measured sign -- a yaw is applied
-	// after the roll and the pitch, so the thigh's forward swing, and the knee's fold with it, face out over the toes
-	if (LegLeft.Hip != nullptr) LegLeft.Hip->SetRelativeRotation(FRotator(SolvedL.HipDeg, StanceKneesOutDeg * LegChainLeft.OutwardSign, StanceFeetOutDeg * LegChainLeft.OutwardSign));
-	if (LegLeft.Shin != nullptr) LegLeft.Shin->SetRelativeRotation(FRotator(-SolvedL.KneeDeg, 0.0f, 0.0f));
-	if (LegRight.Hip != nullptr) LegRight.Hip->SetRelativeRotation(FRotator(SolvedR.HipDeg, StanceKneesOutDeg * LegChainRight.OutwardSign, StanceFeetOutDeg * LegChainRight.OutwardSign));
-	if (LegRight.Shin != nullptr) LegRight.Shin->SetRelativeRotation(FRotator(-SolvedR.KneeDeg, 0.0f, 0.0f));
+	// THE KNEES OUT (wl.Handoff.Stance.KneesOut): each hip turned about its own HIP-TO-SOLE line, so the sole stays planted and
+	// only the knee swings, toward the side the knee itself is measured to move out on (WonderlandKneesOut.h). The thigh and
+	// shin are the animator's own (GetCanonSoleWorld's), so the sole handed to a worn skin does not move with the turn.
+	{
+		const FVector ThighLocal(0.0, 0.0, -(0.8f - 0.5125f) * HeadWidthUU);
+		const float ShinUU = 0.5125f * HeadWidthUU;
+		auto WriteLeg = [&](FRelayDogLeg& Leg, const RelayDogLimbs::FChain& Chain, float HipDeg, float KneeDeg)
+		{
+			const FRotator Fold(-KneeDeg, 0.0f, 0.0f);
+			if (Leg.Hip != nullptr)
+			{
+				const float Side = Leg.Hip->GetRelativeLocation().Y >= 0.0 ? 1.0f : -1.0f;
+				Leg.Hip->SetRelativeRotation(WonderlandKneesOut::TurnAboutSole(FRotator(HipDeg, 0.0f, StanceFeetOutDeg * Chain.OutwardSign), Fold,
+					ThighLocal, ShinUU, Side, StanceKneesOutDeg));
+			}
+			if (Leg.Shin != nullptr)
+			{
+				Leg.Shin->SetRelativeRotation(Fold);
+			}
+		};
+		WriteLeg(LegLeft, LegChainLeft, SolvedL.HipDeg, SolvedL.KneeDeg);
+		WriteLeg(LegRight, LegChainRight, SolvedR.HipDeg, SolvedR.KneeDeg);
+	}
 
 	auto WriteArm = [](const FRelayDogArm& Arm, const RelayDogStride::FArmPose& ArmPose)
 	{
@@ -2844,6 +2862,17 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 			(bPlus ? Dressed.HipPlusY : Dressed.HipMinusY) = Rot(Leg->Hip);
 			(bPlus ? Dressed.ShinPlusY : Dressed.ShinMinusY) = Rot(Leg->Shin);
 		}
+		// THE STANCE'S LEG NUMBERS (round 6; see FWonderlandWornPose): each hip's roll before its knees-out turn, by physical side,
+		// and the turn itself, which a skin applies about its OWN hip-to-sole line.
+		if (LegLeft.Hip != nullptr)
+		{
+			(OnPlusY(LegLeft.Hip) ? Dressed.StanceHipRollPlusY : Dressed.StanceHipRollMinusY) = StanceFeetOutDeg * LegChainLeft.OutwardSign;
+		}
+		if (LegRight.Hip != nullptr)
+		{
+			(OnPlusY(LegRight.Hip) ? Dressed.StanceHipRollPlusY : Dressed.StanceHipRollMinusY) = StanceFeetOutDeg * LegChainRight.OutwardSign;
+		}
+		Dressed.StanceKneesOutDeg = StanceKneesOutDeg;
 		for (const FRelayDogArm* Arm : {&ArmLeft, &ArmRight})
 		{
 			const bool bPlus = OnPlusY(Arm->Shoulder);

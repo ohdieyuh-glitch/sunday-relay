@@ -197,6 +197,9 @@ public:
 	/** QA: what the material named Name is painted with right now -- BaseColor/RimColor on a rim, Color otherwise -- and,
 	 *  for a smoke surface, whether its relief texture is bound. False when the figure has no such material. */
 	bool QaReadPaint(FName Name, FLinearColor& OutBase, FLinearColor& OutRim, FString& OutRelief) const;
+	/** QA (round 6, the knees out): this figure's own leg on one side (+1 = the +Y leg), in WORLD space -- its hip joint, its
+	 *  knee joint, and its sole (the knee plus the shin along the knee's -Z, the length the leg solve uses). False if not found. */
+	bool QaLegAt(float SideSign, FVector& OutHip, FVector& OutKnee, FVector& OutSole) const;
 
 	/**
 	 * Whether the clock is allowed to touch this body's glow at all. False for the wardrobe's preview figure,
