@@ -56,6 +56,11 @@ public:
 	FWonderlandSocialActionResult LeaveWorld();
 	FWonderlandSocialActionResult InviteToWorld(const FString& UserId);
 	const FWonderlandWorldView& GetWorldView() const { return WorldView; }
+
+	/** R16 VOICE: ask the authority for this party's voice room (POST /parties/:id/voice/join) for this player's EOS ProductUserId.
+	 *  Done(status, the grant {providerId, roomId, participantToken, audience}, problem) on the game thread. */
+	void JoinVoice(const FString& PartyId, const FString& EosProductUserId,
+		TFunction<void(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)> Done);
 	FSimpleMulticastDelegate& OnWorldChanged() { return WorldChanged; }
 
 private:

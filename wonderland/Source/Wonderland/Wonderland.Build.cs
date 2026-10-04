@@ -53,6 +53,9 @@ public class Wonderland : ModuleRules
 		// runtime and Wonderland draws its frames -- which is what ImageWrapper is for: decoding them
 		// (WonderlandWonderWebLive.h). It loads nothing until real mode is switched on, and only hosts on the allowlist.
 		PrivateDependencyModuleNames.Add("ImageWrapper");
+		// R16 REAL VOICE (founder, 10-04: EOS Voice): EOSShared's SDK manager makes the platform from the founder's file at run time,
+		// EOSVoiceChat joins the room the authority minted (WonderlandEosVoice.cpp). Nothing of the product's ids is in an .ini.
+		PrivateDependencyModuleNames.AddRange(new string[] { "EOSShared", "EOSSDK", "VoiceChat", "EOSVoiceChat" });
 
 		// FImageCore::ResizeTo, for the HUD test library's scaled film frames (UWonderlandHudTestLibrary::CaptureViewportJpeg).
 		// FImageView and FImageUtils come through Engine; the resize itself lives in ImageCore and does not.

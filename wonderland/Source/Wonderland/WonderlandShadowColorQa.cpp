@@ -74,6 +74,9 @@ namespace WonderlandShadowColourQa
 		TMap<FString, FString> OthersBefore;
 		/** The second card the DEFAULT-secondary step saves to (SC3.13), so the QA card keeps its colours for the restart. */
 		FString DefaultCardId;
+		/** The eye's drawn colour just before COLOR 2 is picked (SC3.2e's control: the old tint was this times the pick). */
+		FLinearColor EyeBeforeSecondary = FLinearColor::Black;
+		bool bEyeBeforeSecondary = false;
 	};
 	TSharedPtr<FSc3Run> GSc3Run;
 
@@ -157,6 +160,34 @@ namespace WonderlandShadowColourQa
 	 * (DescribeMaterialColours), so no surface can escape the comparison; each line is that instance's own BaseColor/Color, rim,
 	 * relief and -- for the body -- the two-colour marble it is wearing. A glow is kept as its hue (its brightness pulses).
 	 */
+	/** The hue in degrees of a colour with a hue (saturation >= 0.05); false for a grey. Brightness plays no part -- a glow pulses. */
+	bool Sc3HueOf(const FLinearColor& C, float& OutHue)
+	{
+		const float Max = FMath::Max3(C.R, C.G, C.B);
+		const float Span = Max - FMath::Min3(C.R, C.G, C.B);
+		if (Max <= 1e-6f || Span / Max < 0.05f)
+		{
+			return false;
+		}
+		float Hue = Max == C.R ? 60.0f * FMath::Fmod((C.G - C.B) / Span, 6.0f)
+			: Max == C.G ? 60.0f * ((C.B - C.R) / Span + 2.0f) : 60.0f * ((C.R - C.G) / Span + 4.0f);
+		OutHue = Hue < 0.0f ? Hue + 360.0f : Hue;
+		return true;
+	}
+
+	/** Two colours with the same hue, within Degrees (round the circle). */
+	bool Sc3SameHue(const FLinearColor& A, const FLinearColor& B, float Degrees)
+	{
+		float HueA = 0.0f;
+		float HueB = 0.0f;
+		if (!Sc3HueOf(A, HueA) || !Sc3HueOf(B, HueB))
+		{
+			return false;
+		}
+		const float Apart = FMath::Abs(HueA - HueB);
+		return FMath::Min(Apart, 360.0f - Apart) <= Degrees;
+	}
+
 	TMap<FString, FString> Sc3Snapshot(const AWonderlandCompanionEmbodiment* Costume)
 	{
 		TMap<FString, FString> Out;
@@ -625,6 +656,12 @@ namespace WonderlandShadowColourQa
 					Changed == TEXT("shadow") ? TEXT("YES (the judge cannot fail)") : TEXT("no")));
 				// PIXEL frame a: COLOR 1 WHITE, no secondary, the strips as designed -- the reference the azure marbling is measured against
 				Sc3Measured(Run, PC, Dog, TEXT("a_c1-white_c2-none_c3-default"));
+				// the eye as drawn before COLOR 2 (SC3.2e's control)
+				{
+					FLinearColor EyeRim;
+					FString EyeRelief;
+					Run.bEyeBeforeSecondary = Costume != nullptr && Costume->QaReadPaint(FName(TEXT("eye")), Run.EyeBeforeSecondary, EyeRim, EyeRelief);
+				}
 				// COLOR 2 -- the Wardrobe's SECONDARY swatch
 				Sc3PickSecondary(Azure->Value);
 				Next(4);
@@ -641,6 +678,23 @@ namespace WonderlandShadowColourQa
 				Sc3Check(Run, TEXT("SC3.2"), bMarble && bNotStrips && bNotDeep && Sc3ChangedWithin(Changed, TEXT("bone,eye,eyehalo"), TEXT("bone")),
 					FString::Printf(TEXT("COLOR 2 AZURE (DATA: the marble the code drew; VISIBLE is judged on the frames, PIXEL M2): changed [%s] (want bone, and the eyes by their existing SECONDARY rule); the body's marble %s; the strips %s, the deep coat %s"),
 						*Changed, *Got, bNotStrips ? TEXT("untouched") : TEXT("MOVED"), bNotDeep ? TEXT("untouched") : TEXT("MOVED")));
+				// SC3.2e: THE EYES TAKE THE SECONDARY'S HUE (Second, RC12 real input: azure drew LIME GREEN eyes -- the skin's yellow TIMES
+				// azure). Read by hue, since the eye's brightness pulses.
+				{
+					FLinearColor Eye;
+					FLinearColor EyeRim;
+					FString EyeRelief;
+					const bool bEyeRead = Costume != nullptr && Costume->QaReadPaint(FName(TEXT("eye")), Eye, EyeRim, EyeRelief);
+					Sc3Check(Run, TEXT("SC3.2e"), bEyeRead && Sc3SameHue(Eye, Azure->Value, 4.0f),
+						FString::Printf(TEXT("COLOR 2 AZURE: the eye drawn %s (%s), want the secondary's hue %s (within 4 deg)"),
+							bEyeRead ? *Sc3Rgb(Eye) : TEXT("unreadable"), bEyeRead ? *Sc3HueWord(Eye) : TEXT("-"), *Sc3HueWord(Azure->Value)));
+					// THE CONTROL: the old rule's colour (the eye before the pick, times azure) asked the same question must say NO
+					const FLinearColor OldTint = Run.EyeBeforeSecondary * Azure->Value;
+					Sc3Check(Run, TEXT("SC3.2ec"), Run.bEyeBeforeSecondary && !Sc3SameHue(OldTint, Azure->Value, 4.0f),
+						FString::Printf(TEXT("control: the old tint %s (%s) read as azure? %s"), *Sc3Rgb(OldTint), *Sc3HueWord(OldTint),
+							!Run.bEyeBeforeSecondary ? TEXT("(the eye before the pick was unreadable)")
+								: Sc3SameHue(OldTint, Azure->Value, 4.0f) ? TEXT("YES (the judge cannot fail)") : TEXT("no")));
+				}
 				Sc3Measured(Run, PC, Dog, TEXT("b_c2-azure"));
 				// COLOR 3 -- the STRIPS row's door
 				WonderlandMascotStyle::PickMascotStrip(Crimson->Key, Crimson->Value);

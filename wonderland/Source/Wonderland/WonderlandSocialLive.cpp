@@ -177,6 +177,14 @@ FString FWonderlandSocialLiveService::Describe() const
 		LastError.IsEmpty() ? TEXT("none") : *LastError);
 }
 
+void FWonderlandSocialLiveService::JoinVoice(const FString& PartyId, const FString& EosProductUserId,
+	TFunction<void(int32, const TSharedPtr<FJsonObject>&, const FString&)> Done)
+{
+	const TSharedPtr<FJsonObject> Body = MakeShared<FJsonObject>();
+	Body->SetStringField(TEXT("eosProductUserId"), EosProductUserId);
+	Call(TEXT("POST"), FString::Printf(TEXT("/parties/%s/voice/join"), *PartyId), Body, MoveTemp(Done));
+}
+
 void FWonderlandSocialLiveService::Call(const FString& Verb, const FString& Path, const TSharedPtr<FJsonObject>& Body,
 	TFunction<void(int32, const TSharedPtr<FJsonObject>&, const FString&)> Done)
 {

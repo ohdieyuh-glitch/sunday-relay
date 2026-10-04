@@ -2199,7 +2199,25 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 			switch (Channel)
 			{
 			case EWonderlandColorChannel::Body: Want *= Primary;   break;
-			case EWonderlandColorChannel::Eye:  Want *= Secondary; break;
+			case EWonderlandColorChannel::Eye:
+			{
+				// ---- THE SECONDARY IS THE EYE'S HUE, NOT A TINT OVER THE SKIN'S OWN (Second, RC12 real input 10-04: Shadow Flame
+				// with SECONDARY AZURE drew LIME GREEN eyes -- its authored yellow times azure). The Dog's canon body already
+				// drives its eyes this way (ARelayDogCharacter::SetEyeGlow: the colour normalised to its peak, times the level):
+				// the hue is the chosen secondary, the brightness is the level the eye was driven to above, halo share included.
+				// ONLY A REAL SECONDARY PICK (Second's review of 6910c590): a PRIMARY-only pick leaves Secondary at its default
+				// gold, and its eyes stay exactly as shipped -- the long-standing bChosen tint -- like the accents above.
+				if (!UWonderlandMascotStyleSettings::Get().HasChosenSecondary())
+				{
+					Want *= Secondary;
+					break;
+				}
+				const float EyeLevel = FMath::Max3(Want.R, Want.G, Want.B);
+				const float SecondaryPeak = FMath::Max3(Secondary.R, FMath::Max(Secondary.G, Secondary.B), KINDA_SMALL_NUMBER);
+				Want = FLinearColor(Secondary.R / SecondaryPeak * EyeLevel, Secondary.G / SecondaryPeak * EyeLevel,
+					Secondary.B / SecondaryPeak * EyeLevel, Want.A);
+				break;
+			}
 			case EWonderlandColorChannel::None: default:                     break;
 			}
 		}

@@ -847,6 +847,7 @@ private:
 	/** Wonderland Social: listen to the social subsystem once (live view changes, a server's answers). */
 	void BindSocialEvents();
 	void HandleSocialChanged();
+	void HandleSocialVoiceChanged();
 	void HandleSocialAnswered(const FString& OperationId, const FString& SubjectId, const struct FWonderlandSocialActionResult& Answer);
 
 	/** Escape heard by the world (no panel holding focus): opens the Menu, or closes whatever is open. */

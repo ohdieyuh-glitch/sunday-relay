@@ -1,5 +1,7 @@
 #include "WonderlandSocialSubsystem.h"
 
+#include "WonderlandEosVoice.h"
+
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
@@ -54,6 +56,8 @@ void UWonderlandSocialSubsystem::Deinitialize()
 	{
 		Live->ReportPresence(false);   // best effort: the player is leaving
 	}
+	VoicePreview = nullptr;
+	Voice.Reset();   // before the service: an EOS voice holds the live service's pointer
 	Live = nullptr;
 	Service.Reset();
 	SignIn.Reset();   // the session dies with the process (memory only); the bridge lets it expire
@@ -181,6 +185,41 @@ bool UWonderlandSocialSubsystem::LoadPreviewScene(const FString& InScene)
 	return bLoaded;
 }
 
+void UWonderlandSocialSubsystem::HandleServiceChanged()
+{
+	LeaveVoiceIfPartyGone();
+	SocialChanged.Broadcast();
+}
+
+void UWonderlandSocialSubsystem::LeaveVoiceIfPartyGone()
+{
+	// THE CLIENT LEAVES TOO (the plan; Second's review: it relied on the authority's removal alone): a room whose party the viewer is no
+	// longer in -- left, removed, a block -- is left at once. The authority removes the PUID from the room as well.
+	FWonderlandEosVoice* Eos = GetEosVoice();
+	if (Eos == nullptr)
+	{
+		return;
+	}
+	const FWonderlandVoiceState& VoiceNow = Eos->GetState();
+	if (VoiceNow.Connection != TEXT("CONNECTED") && VoiceNow.Connection != TEXT("CONNECTING"))
+	{
+		return;
+	}
+	const FWonderlandSocialSnapshot* Snap = GetSnapshot();
+	if (Snap == nullptr || !Snap->bHasParty || Snap->Party.PartyId != VoiceNow.PartyId)
+	{
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE: the party %s is gone from this view: leaving its voice room"), *WonderlandEosVoice::Hashed(VoiceNow.PartyId));
+		Eos->Disconnect();
+	}
+}
+
+FWonderlandEosVoice* UWonderlandSocialSubsystem::GetEosVoice() const
+{
+	// in a live session Voice is either the honest UNAVAILABLE one (provider "") or the EOS one; a preview is never live
+	return Live != nullptr && VoicePreview == nullptr && Voice.IsValid() && Voice->GetProviderId() == TEXT("eos")
+		? static_cast<FWonderlandEosVoice*>(Voice.Get()) : nullptr;
+}
+
 void UWonderlandSocialSubsystem::Adopt(TUniquePtr<IWonderlandSocialService> NewService)
 {
 	RemotePlayers.Clear();   // the other players belonged to the service that is going
@@ -216,6 +255,22 @@ bool UWonderlandSocialSubsystem::ConnectWith(const FString& BaseUrl, const FStri
 	TUniquePtr<FWonderlandSocialLiveService> Connected = MakeUnique<FWonderlandSocialLiveService>(BaseUrl, Token);
 	Live = Connected.Get();
 	Scene = TEXT("live");
+	// R16 REAL VOICE (founder, 10-04: EOS Voice), only with the founder's EOS file (-WLEosConfig); else honestly pending, never faked
+	{
+		FString VoiceWhy;
+		TUniquePtr<FWonderlandEosVoice> Eos = FWonderlandEosVoice::TryCreate(Live, VoiceWhy);
+		if (Eos.IsValid())
+		{
+			Voice = MoveTemp(Eos);
+			// every voice change redraws the surfaces (Second's review: the panel sat on CONNECTING), and may leave a party's room
+			Voice->OnChanged().AddUObject(this, &UWonderlandSocialSubsystem::HandleVoiceChanged);
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE: EOS voice on (the authority mints each room)"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE: no voice provider in this session (%s): VOICE TRANSPORT PENDING"), *VoiceWhy);
+		}
+	}
 	// MULTIPLAYER PHASE 1: report this player's Dog, draw the others, and join the public world this map is.
 	Live->SetAvatarSource([WeakThis = TWeakObjectPtr<UWonderlandSocialSubsystem>(this)](FWonderlandAvatarReport& Out)
 	{
@@ -346,6 +401,40 @@ bool UWonderlandSocialSubsystem::OpenProfile(const FString& UserId)
 // Named, not anonymous: the module builds as one unity translation unit.
 namespace WonderlandSocialCommands
 {
+	/** R16 VOICE: the EOS voice's state, hashed ids only (`wl.Social.Voice`). */
+	FAutoConsoleCommandWithWorldAndArgs GSocialVoice(
+		TEXT("wl.Social.Voice"),
+		TEXT("Say the live session's EOS voice state (hashed ids only): provider, this player's PUID hash, the room, who is talking."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			UGameInstance* Instance = World != nullptr ? World->GetGameInstance() : nullptr;
+			const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+			const FWonderlandEosVoice* Eos = Social != nullptr ? Social->GetEosVoice() : nullptr;
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE %s"), Eos != nullptr ? *Eos->Describe() : TEXT("no EOS voice in this session (no -WLEosConfig, or not live)"));
+			// the pinned vector both sides hash (Second's backend test): the R16 evidence shows client and authority lines join
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE hash vector 0123456789abcdef0123456789abcdef -> %s"), *WonderlandEosVoice::HashedPuid(TEXT("0123456789abcdef0123456789abcdef")));
+		}));
+
+	/** R16 EVIDENCE: after the authority removed this player, try to rejoin the last room with the last token -- it must be refused. */
+	FAutoConsoleCommandWithWorldAndArgs GQaVoiceReplay(
+		TEXT("wl.Qa.VoiceReplayOldToken"),
+		TEXT("R16 evidence: rejoin the last voice room with the last token this client was given (after a removal Epic must refuse it)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			UGameInstance* Instance = World != nullptr ? World->GetGameInstance() : nullptr;
+			UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+			FWonderlandEosVoice* Eos = Social != nullptr ? Social->GetEosVoice() : nullptr;
+			// the service says why it will not (no earlier token; still in a room); only "no EOS voice at all" is said here
+			if (Eos == nullptr)
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: QA REPLAY of the previous token -- no EOS voice in this session"));
+			}
+			else
+			{
+				Eos->ReplayLastToken();
+			}
+		}));
+
 	/** Open a player's profile from the social service's view -- the same path a Friends row will take. */
 	FAutoConsoleCommandWithWorldAndArgs GSocialProfile(
 		TEXT("wl.Social.Profile"),

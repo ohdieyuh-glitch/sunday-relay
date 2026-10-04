@@ -4460,6 +4460,25 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		return true;
 	}
 
+	if (Command == TEXT("/brain"))
+	{
+		// PROJECT BRAIN (founder 10-03: Second completes it). The action lives in UWonderlandProjectBrainSubsystem; this only routes the
+		// line and answers it. A pairing code is never echoed (MaskTerminalEcho) or logged.
+		FString Said;
+		const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+		UWonderlandProjectBrainSubsystem* Brain = Instance != nullptr ? Instance->GetSubsystem<UWonderlandProjectBrainSubsystem>() : nullptr;
+		if (Brain != nullptr)
+		{
+			Brain->HandleTerminalLine(Argument, Said);
+		}
+		else
+		{
+			Said = TEXT("There is no Project Brain in this world.");
+		}
+		Terminal->AddJuliusRow(TEXT("You"), UWonderlandProjectBrainSubsystem::MaskTerminalEcho(Line), Said);
+		return true;
+	}
+
 	if (Command == TEXT("/card") || Command == TEXT("/cards"))
 	{
 		// C.A.R.D. (founder, 2026-10-02: the fifth Project Brain component). The actions live in WonderlandCardDirector; this only
@@ -4470,6 +4489,47 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		return true;
 	}
 
+	if (Command == TEXT("/social") || Command == TEXT("/friends") || Command == TEXT("/party"))
+	{
+		// SOCIAL, THE PLAYER'S WAY IN (R16, Second's review of RC12: the hub opened from the developer console only, so a tester could not
+		// reach it): content in the existing terminal, like /card and /brain -- the HUD is unchanged. /social [friends|requests|recent|
+		// messages|party]; /friends and /party open their own tabs. A build with no social connection opens the hub on its honest "not
+		// connected" view. The answer names the tab that ACTUALLY opened (read back from the hub), never the words typed.
+		FString HubTab = Argument.TrimStartAndEnd().ToLower();
+		if (Command == TEXT("/friends"))
+		{
+			HubTab = TEXT("friends");
+		}
+		else if (Command == TEXT("/party"))
+		{
+			HubTab = TEXT("party");
+		}
+		SWonderlandSocialHubPanel::ETab Wanted = SWonderlandSocialHubPanel::ETab::Friends;
+		if (!HubTab.IsEmpty() && !SWonderlandSocialHubPanel::ParseTab(HubTab, Wanted))
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line,
+				FString::Printf(TEXT("There is no %s tab. Try /social friends, requests, recent, messages or party."), *HubTab));
+			return true;
+		}
+		const bool bHubOpened = OpenSocialHub(HubTab);
+		FString HubWhy;
+		if (bHubOpened && SocialHubPanel.IsValid())
+		{
+			HubWhy = FString::Printf(TEXT("on %s"), SWonderlandSocialHubPanel::TabName(SocialHubPanel->GetTab()));
+		}
+		else
+		{
+			HubWhy = !BoundController.IsValid() ? FString(TEXT("no player is bound to this screen"))
+				: FString::Printf(TEXT("another screen is open (%s)"), OverlayName(Open));
+		}
+		UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL hub from the terminal (%s %s): %s %s"), *Command, *HubTab,
+			bHubOpened ? TEXT("opened") : TEXT("NOT opened:"), *HubWhy);
+		Terminal->AddJuliusRow(TEXT("You"), Line, bHubOpened
+			? FString::Printf(TEXT("Social Hub opened %s."), *HubWhy)
+			: FString::Printf(TEXT("The Social Hub could not open: %s."), *HubWhy));
+		return true;
+	}
+
 	if (Command == TEXT("/help") || Command == TEXT("/commands"))
 	{
 		Terminal->AddJuliusRow(TEXT("You"), Line,
@@ -4477,7 +4537,9 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 				"/tasks — list your contracts (open N, close N, delete N). /skin NAME — wear a skin (/skin list). "
 				"/cubs [n|off] — summon the Relay Dog's sub-agent cub ghosts. "
 				"/handoff — Mission Handoff: roam while a mission carries on (/handoff again, or /handoff return, to come back). "
-				"/card — your C.A.R.D. loadout (list, select NAME, new NAME, save, rename NAME, delete NAME)."));
+				"/card — your C.A.R.D. loadout (list, select NAME, new NAME, save, rename NAME, delete NAME). "
+				"/brain — Project Brain (status, pair CODE from the Wonderland website, refresh). "
+				"/social [friends|requests|recent|messages|party] — the Social Hub (/friends, /party open their tabs)."));
 		return true;
 	}
 
@@ -5084,6 +5146,7 @@ void UWonderlandUiSubsystem::BindSocialEvents()
 	if (UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr)
 	{
 		Social->OnSocialChanged().AddUObject(this, &UWonderlandUiSubsystem::HandleSocialChanged);
+		Social->OnVoiceChanged().AddUObject(this, &UWonderlandUiSubsystem::HandleSocialVoiceChanged);
 		Social->OnSocialAnswered().AddUObject(this, &UWonderlandUiSubsystem::HandleSocialAnswered);
 		bSocialBound = true;
 	}
@@ -5102,6 +5165,27 @@ void UWonderlandUiSubsystem::HandleSocialChanged()
 	SocialHubPanel->SetSignIn(Social != nullptr ? Social->GetSignInView() : FWonderlandSignInView());
 	SocialHubPanel->SetSnapshot(Snapshot != nullptr ? *Snapshot : FWonderlandSocialSnapshot(), Snapshot != nullptr,
 		Social != nullptr ? Social->GetSourceLine() : FString(), Social == nullptr || Social->GetService() == nullptr || Social->GetService()->IsDevelopmentPreview());
+	// THE VOICE REDRAWS WITH IT (Second's review: an EOS join that landed later left the panel on CONNECTING): the same SetVoice the
+	// commands use, content only -- the layout is unchanged
+	if (const IWonderlandVoiceService* VoiceNow = Social != nullptr ? Social->GetVoice() : nullptr)
+	{
+		SocialHubPanel->SetVoice(VoiceNow->GetState(), VoiceNow->GetPreviewLabel());
+	}
+}
+
+void UWonderlandUiSubsystem::HandleSocialVoiceChanged()
+{
+	// THE VOICE ALONE CHANGED: its part of the panel only (SetVoice redraws the Party tab when it is showing), never the whole hub
+	if (Open != EOverlay::Social || !SocialHubPanel.IsValid())
+	{
+		return;
+	}
+	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+	const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+	if (const IWonderlandVoiceService* VoiceNow = Social != nullptr ? Social->GetVoice() : nullptr)
+	{
+		SocialHubPanel->SetVoice(VoiceNow->GetState(), VoiceNow->GetPreviewLabel());
+	}
 }
 
 void UWonderlandUiSubsystem::HandleSocialAnswered(const FString& OperationId, const FString& SubjectId, const FWonderlandSocialActionResult& Answer)

@@ -479,6 +479,25 @@ TSharedRef<IHttpRequest, ESPMode::ThreadSafe> UWonderlandJuliusStreamSubsystem::
 	return Request;
 }
 
+TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> UWonderlandJuliusStreamSubsystem::NewBridgeRequest(const FString& Verb, const FString& PathAndQuery) const
+{
+	const FString Base = BridgeUrl();
+	if (Base.IsEmpty() || !IsPaired())
+	{
+		return nullptr;
+	}
+	return NewRequest(Verb, Base + PathAndQuery);
+}
+
+void UWonderlandJuliusStreamSubsystem::NoteSessionRefused()
+{
+	if (TokenSource.IsValid())
+	{
+		TokenSource->Invalidate();
+	}
+	SetLink(EWonderlandLinkState::SessionExpired, TEXT("The bridge no longer accepts this client's session. Pair again from the website."));
+}
+
 void UWonderlandJuliusStreamSubsystem::SetLink(EWonderlandLinkState State, const FString& Explanation)
 {
 	UWonderlandJuliusSubsystem* Julius = World();
