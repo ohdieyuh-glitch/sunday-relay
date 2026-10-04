@@ -882,6 +882,18 @@ export class JuliusRunLoop {
     if (!JULIUS_TERMINAL_MISSION_STATES.includes(run.state) && haltingFailureClasses !== undefined) {
       const [halting] = (await haltingFailureClasses.call(this.deps.store, runId, projectId))
         .map(juliusRunHaltingFailureClass).filter((value): value is string => value !== null);
+      if (halting === 'context_integrity_unresolved_clash') {
+        // A CLASH MET AT DISPATCH CARRIES ITS PAIR ON THE RUN'S TERMINAL EVENT TOO, as one met at completion does (Codex
+        // review of #314; Second Julius, LOW). The task event holds the pair the dispatch met; `run.failed` now holds the
+        // run-wide check's pairs and every judged pair beside the reason, so the run-level evidence is the same whichever
+        // path halted it. The state and the reason are unchanged.
+        const check = await juliusRunLineageCheckFor(this.deps, run);
+        const facts = {
+          ...juliusAcceptanceJudgementFacts(check.judgements),
+          ...(check.contradictions.length === 0 ? {} : juliusContradictionFacts(check.contradictions)),
+        };
+        return this.#applyTarget(run, { state: 'FAILED', reasonCode: halting, facts }, tasks, decisions, 0);
+      }
       if (halting !== undefined) return this.#applyTarget(run, { state: 'FAILED', reasonCode: halting }, tasks, decisions, 0);
     }
 
