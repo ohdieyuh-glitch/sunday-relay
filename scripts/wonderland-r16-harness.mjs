@@ -33,10 +33,26 @@
  * pair in either direction. A run that skipped a check FAILS: the list is
  * closed, and the summary says how many of it ran.
  *
+ * PRESENCE IS A LEASE (docs/relay/WONDERLAND_SOCIAL.md decision 6): a presence
+ * not refreshed for 120 s is absent everywhere. So the harness keeps the
+ * client's half, refreshing every player standing in the instance every
+ * `R16_HEARTBEAT_MS`. Otherwise a slow backend could let a lease lapse
+ * mid-scenario, and a player who is not there makes privacy checks pass for the
+ * wrong reason. The LEASE check fails on any refused refresh, and on anyone who
+ * is not still standing in the instance at the end.
+ *
  * RESTART. `--state` records every player's views after the scenario: no
  * token, only what the players were shown. After the backend restarts — which
  * revokes every browser session, by design — `--phase verify` signs the same
- * players in again and requires the same views, exactly.
+ * players in again and checks three things in order:
+ *   - DURABLE: what was STORED is shown exactly as before, read before anything
+ *     is sent: friends, requests, blocks, the party, servers, the inbox,
+ *     conversations, Recent Players, names and settings.
+ *   - RECONNECT: each player who stood in the instance does what a client does.
+ *     It refreshes its presence: HELD if the lease outlived the restart. On
+ *     NOT_IN_INSTANCE it enters again: REENTERED.
+ *   - PRESENCE: what the lease derives is shown exactly as before: the roster,
+ *     the population, every presence lookup, and a friend's or party-mate's presence.
  *
  * WHAT IT DOES NOT DO: voice. Voice needs EOS identities on a configured EOS
  * product; the harness reports whether the backend serves voice configuration
@@ -52,6 +68,9 @@ import { pathToFileURL } from 'node:url';
 import { realpathSync } from 'node:fs';
 
 export const R16_VERSION = 'wonderland-r16-harness.v1';
+
+/** How often the harness refreshes a standing player's presence: inside the contract's 30 s, with room for a slow round trip. */
+export const R16_HEARTBEAT_MS = 20_000;
 
 /** THE CLOSED LIST. A check not run is a check failed. */
 export const R16_CHECKS = Object.freeze([
@@ -78,6 +97,7 @@ export const R16_CHECKS = Object.freeze([
   'DM: a message between friends is delivered and listed',
   'DM: a block hides the conversation from both sides and refuses a new message',
   'DM: lifting the block shows the conversation again, with nothing written during the block',
+  'LEASE: every player kept their presence alive by heartbeat, as a client must, and is still in the instance at the end',
 ]);
 
 export function r16Players(nonce) {
@@ -197,7 +217,7 @@ export function compareR16Views(before, after, path = '') {
  * assertion is on a real response. Failures are collected, never thrown, so one
  * broken rule cannot hide the others.
  */
-export async function runR16Scenario({ bridge, origin, sessions, players, nonce, fetch }) {
+export async function runR16Scenario({ bridge, origin, sessions, players, nonce, fetch, clock = Date.now }) {
   const call = client({ bridge, origin, fetch });
   const results = [];
   const check = (name, passed, detail) => {
@@ -208,13 +228,38 @@ export async function runR16Scenario({ bridge, origin, sessions, players, nonce,
   const instance = instanceOf(nonce);
   const token = (player) => sessions[player];
   let commands = 0;
-  const command = async (player, cmd) => {
+  const send = async (player, cmd) => {
     commands += 1;
     const response = await call(token(player), 'POST', '/wonderland/social/commands', { commandId: `r16-${nonce}-${String(commands)}`, command: cmd });
     return { status: response.status, code: ok(response.body)?.code ?? null };
   };
+  // The client's half of the presence lease: every standing player is refreshed before any request once it is due.
+  const leases = new Map();
+  const lapsed = [];
+  let heartbeats = 0;
+  const keepAlive = async () => {
+    for (const [player, lease] of leases) {
+      if (clock() - lease.at < R16_HEARTBEAT_MS) continue;
+      lease.at = clock();
+      heartbeats += 1;
+      const beat = await send(player, { kind: 'UPDATE_PRESENCE', location: lease.location, activity: lease.activity });
+      if (!(beat.status === 200 && beat.code === 'DONE')) lapsed.push({ player, ...beat });
+    }
+  };
+  const command = async (player, cmd) => {
+    await keepAlive();
+    const outcome = await send(player, cmd);
+    if (cmd.kind === 'ENTER_INSTANCE' && outcome.status === 200 && outcome.code === 'DONE') {
+      leases.set(player, { at: clock(), location: cmd.location, activity: cmd.activity });
+    }
+    if (cmd.kind === 'LEAVE_INSTANCE' && outcome.status === 200) leases.delete(player);
+    return outcome;
+  };
   const done = (outcome) => outcome.status === 200 && (outcome.code === 'DONE' || outcome.code === 'NO_CHANGE');
-  const get = async (player, path) => ok((await call(token(player), 'GET', path)).body);
+  const get = async (player, path) => {
+    await keepAlive();
+    return ok((await call(token(player), 'GET', path)).body);
+  };
   const me = (player) => get(player, '/wonderland/social/me');
   const roster = (player) => get(player, '/wonderland/social/roster');
   const listing = async (player) => (await get(player, `/wonderland/social/instances?ids=${encodeURIComponent(instance)}`))?.find?.((row) => row.instanceId === instance) ?? null;
@@ -376,7 +421,102 @@ export async function runR16Scenario({ bridge, origin, sessions, players, nonce,
   check(R16_CHECKS[22], done(lifted) && afterBlock?.length === 1 && afterBlock?.[0]?.messageId === `r16-${nonce}-m1`,
     `after the block B was shown ${JSON.stringify(afterBlock)}`);
 
-  return Object.freeze({ results: Object.freeze(results), commands });
+  // LEASE: nobody was lost on the way, so no check above passed because a player was simply not there.
+  const own = {};
+  for (const player of [a, b, c]) own[player] = await presenceOf(player, player);
+  check(R16_CHECKS[23],
+    lapsed.length === 0 && [a, b, c].every((player) => own[player]?.status === 'AVAILABLE' && own[player]?.instanceId === instance),
+    `refreshes refused ${JSON.stringify(lapsed)}; each player's own presence ${JSON.stringify(own)}`);
+
+  return Object.freeze({ results: Object.freeze(results), commands, heartbeats });
+}
+
+/**
+ * WHAT A VIEW HOLDS, IN TWO PARTS. What is STORED survives any restart. What
+ * the presence LEASE derives lasts only while the player keeps it alive, so a
+ * restart that outlasts the lease ends it, as a disconnection does.
+ */
+export function splitR16View(view) {
+  const withoutPresence = (rows) => (Array.isArray(rows) ? rows.map(({ presence: _presence, ...rest }) => rest) : rows ?? null);
+  const presenceOnly = (rows) => (Array.isArray(rows) ? rows.map((row) => ({ playerId: row?.playerId, presence: row?.presence })) : rows ?? null);
+  const me = view?.me ?? null;
+  const party = me?.party ?? null;
+  const inParty = party?.inParty === true;
+  return {
+    stored: {
+      me: me === null ? null : { ...me, friends: withoutPresence(me.friends), party: inParty ? { ...party, members: withoutPresence(party.members) } : party },
+      conversations: view?.conversations ?? null,
+      server: view?.server ?? null,
+    },
+    lease: {
+      roster: view?.roster ?? null,
+      listing: view?.listing ?? null,
+      presence: view?.presence ?? null,
+      friends: presenceOnly(me?.friends),
+      party: inParty ? presenceOnly(party.members) : null,
+    },
+  };
+}
+
+/**
+ * THE CLIENT'S HALF ON RECONNECT. A player who stood in an instance before the
+ * restart refreshes their presence with what they last sent: HELD when the
+ * lease outlived the restart. When the backend answers NOT_IN_INSTANCE, the
+ * lease ran out while it was down, so the player enters again: REENTERED. A
+ * player who stood nowhere sends nothing: ABSENT. Anything else is REFUSED.
+ */
+export async function reconnectR16Presence({ bridge, origin, sessions, players, nonce, recorded, fetch }) {
+  const call = client({ bridge, origin, fetch });
+  const tag = randomBytes(3).toString('hex');
+  const outcome = {};
+  let sent = 0;
+  for (const player of [players.a, players.b, players.c]) {
+    const own = recorded?.views?.[player]?.presence?.[player];
+    if (own?.status !== 'AVAILABLE') { outcome[player] = 'ABSENT'; continue; }
+    const self = recorded.views[player].roster?.players?.find?.((entry) => entry.playerId === player) ?? null;
+    const send = async (command) => {
+      sent += 1;
+      const response = await call(sessions[player], 'POST', '/wonderland/social/commands', { commandId: `r16-${nonce}-reconnect-${tag}-${String(sent)}`, command });
+      return { status: response.status, code: ok(response.body)?.code ?? null };
+    };
+    const beat = await send({ kind: 'UPDATE_PRESENCE', location: own.location, activity: own.activity });
+    if (beat.status === 200 && beat.code === 'DONE') { outcome[player] = 'HELD'; continue; }
+    if (beat.code !== 'NOT_IN_INSTANCE') { outcome[player] = `REFUSED_${String(beat.status)}_${String(beat.code)}`; continue; }
+    const entered = await send({ kind: 'ENTER_INSTANCE', instanceId: own.instanceId, location: own.location, activity: own.activity, dogId: self?.dogId ?? null });
+    outcome[player] = entered.status === 200 && entered.code === 'DONE' ? 'REENTERED' : `REFUSED_${String(entered.status)}_${String(entered.code)}`;
+  }
+  return outcome;
+}
+
+/**
+ * THE RESTART CHECK. DURABLE is read before anything is sent, so the stored
+ * state is judged as it was stored. Then each player reconnects as a client
+ * does, and PRESENCE judges what the lease derives.
+ */
+export async function verifyR16Restart({ bridge, origin, sessions, players, nonce, recorded, fetch }) {
+  const results = [];
+  const everyone = [players.a, players.b, players.c];
+  const asStored = await readR16Views({ bridge, origin, sessions, players, nonce, fetch });
+  for (const player of everyone) {
+    const differences = compareR16Views(splitR16View(recorded?.views?.[player]).stored, splitR16View(asStored[player]).stored);
+    results.push({
+      name: `DURABLE: ${player} is shown after the restart exactly what was stored before`,
+      result: differences.length === 0 ? 'PASS' : 'FAIL',
+      detail: differences.length === 0 ? '' : `differs at ${differences.join(' ')}`,
+    });
+  }
+  const reconnect = await reconnectR16Presence({ bridge, origin, sessions, players, nonce, recorded, fetch });
+  const reconnected = await readR16Views({ bridge, origin, sessions, players, nonce, fetch });
+  for (const player of everyone) {
+    const differences = compareR16Views(splitR16View(recorded?.views?.[player]).lease, splitR16View(reconnected[player]).lease);
+    const refused = String(reconnect[player]).startsWith('REFUSED');
+    results.push({
+      name: `PRESENCE: ${player} reconnected (${String(reconnect[player])}) and is shown the same world as before`,
+      result: differences.length === 0 && !refused ? 'PASS' : 'FAIL',
+      detail: refused ? `the reconnect was ${String(reconnect[player])}` : differences.length === 0 ? '' : `differs at ${differences.join(' ')}`,
+    });
+  }
+  return Object.freeze({ results: Object.freeze(results), reconnect: Object.freeze(reconnect), views: reconnected });
 }
 
 /** Whether the backend serves voice configuration: reported, never a check (voice is CORE's live step). */
@@ -437,14 +577,11 @@ async function main(argv, env) {
   out(`R16 VOICE ${await probeR16Voice({ bridge, origin, token: sessions[players.a], fetch })} (reported, not checked: voice is CORE's live EOS step)`);
 
   if (phase === 'verify') {
-    const views = await readR16Views({ bridge, origin, sessions, players, nonce, fetch });
-    let failed = 0;
-    for (const player of [players.a, players.b, players.c]) {
-      const differences = compareR16Views(recorded.views[player], views[player]);
-      if (differences.length > 0) failed += 1;
-      out(`R16 ${differences.length === 0 ? 'PASS' : 'FAIL'} DURABLE: ${player} is shown after the restart exactly what they were shown before${differences.length === 0 ? '' : ` — differs at ${differences.join(' ')}`}`);
-    }
-    out(`R16 SUMMARY phase=verify passed=${String(3 - failed)} failed=${String(failed)} of=3`);
+    const verified = await verifyR16Restart({ bridge, origin, sessions, players, nonce, recorded, fetch });
+    out(`R16 RECONNECT ${[players.a, players.b, players.c].map((player) => `${player}=${verified.reconnect[player]}`).join(' ')}`);
+    for (const row of verified.results) out(`R16 ${row.result} ${row.name}${row.result === 'FAIL' ? ` — ${row.detail}` : ''}`);
+    const failed = verified.results.filter((row) => row.result === 'FAIL').length;
+    out(`R16 SUMMARY phase=verify passed=${String(verified.results.length - failed)} failed=${String(failed)} of=${String(verified.results.length)}`);
     return failed === 0 ? 0 : 1;
   }
 

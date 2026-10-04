@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import {
-  R16_CHECKS, compareR16Views, pairR16Sessions, r16Players, readR16Views, runR16Scenario, summarizeR16,
+  R16_CHECKS, pairR16Sessions, r16Players, readR16Views, runR16Scenario, summarizeR16, verifyR16Restart,
 } from '../scripts/wonderland-r16-harness.mjs';
 
 /**
@@ -21,8 +21,11 @@ import {
  * signed in through its own pairing routes, and `scripts/wonderland-r16-harness.mjs`
  * drives every privacy rule over HTTP. Then the process is KILLED and started
  * again: every browser session dies with it (they live in memory, by design),
- * the same players sign in afresh, and each must be shown exactly what they
- * were shown before.
+ * the same players sign in afresh, and each must be shown exactly what was
+ * stored before. Then each reconnects as a client does (its presence is a
+ * lease) and must be shown the same world again. The cases where a lease runs
+ * out, mid-scenario and across a restart, need a clock this suite does not
+ * hold: `wonderland-r16-harness.test.ts` runs them.
  *
  * And the harness has to be able to fail: the same scenario through a fetch
  * that leaks a hidden player back into a stranger's roster, or shows a blocked
@@ -143,10 +146,13 @@ suite('Wonderland R16, scripted, against the real bridge process', () => {
     const again = await pairR16Sessions({ bridge, origin: ORIGIN, operatorToken: OPERATOR, playerIds: [players.a, players.b, players.c], fetch });
     expect(again.ok).toBe(true);
     if (!again.ok) return;
-    const after = await readR16Views({ bridge, origin: ORIGIN, sessions: again.sessions, players, nonce, fetch });
-    expect(compareR16Views(before, after), 'each player is shown exactly what they were shown before').toEqual([]);
+    const verified = await verifyR16Restart({ bridge, origin: ORIGIN, sessions: again.sessions, players, nonce, recorded: { views: before }, fetch });
+    expect(verified.results.filter((row) => row.result === 'FAIL'), 'what was stored is shown as stored, and the world comes back').toEqual([]);
+    expect(verified.results).toHaveLength(6);
+    // A restart this quick is inside the lease, unless the machine is slow enough that it is not: either is a reconnect.
+    expect(Object.values(verified.reconnect).every((outcome) => outcome === 'HELD' || outcome === 'REENTERED'), JSON.stringify(verified.reconnect)).toBe(true);
     // And the views are the substance, not empty answers that would trivially match.
-    const viewsOfA = after[players.a] as { me: { friends: unknown[]; servers: unknown[] }; roster: { players: unknown[] } };
+    const viewsOfA = verified.views[players.a] as { me: { servers: unknown[] }; roster: { players: unknown[] } };
     expect(viewsOfA.me.servers).toHaveLength(1);
     expect(viewsOfA.roster.players.length).toBeGreaterThan(1);
   }, 120_000);
@@ -199,7 +205,8 @@ suite('Wonderland R16, scripted, against the real bridge process', () => {
     expect(scenario.stdout).toMatch(/^R16 VOICE (CONFIGURED|NOT_MOUNTED|NOT_CONFIGURED_\d+) /mu);
     const verify = run(['--phase', 'verify', '--state', state]);
     expect(verify.status, verify.stdout + verify.stderr).toBe(0);
-    expect(verify.stdout).toContain('R16 SUMMARY phase=verify passed=3 failed=0 of=3');
+    expect(verify.stdout).toContain('R16 SUMMARY phase=verify passed=6 failed=0 of=6');
+    expect(verify.stdout).toMatch(/^R16 RECONNECT (\S+=(HELD|REENTERED) ?){3}$/mu);
     for (const output of [scenario.stdout + scenario.stderr, verify.stdout + verify.stderr, readFileSync(state, 'utf8')]) {
       expect(output, 'the operator token never appears').not.toContain(OPERATOR);
       expect(output, 'no session token appears').not.toMatch(/Relay-Session|sessionToken|grantSecret/u);

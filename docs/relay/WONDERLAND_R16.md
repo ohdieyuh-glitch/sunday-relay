@@ -16,7 +16,7 @@ The answer comes from the real server composition, its sessions, its routes and 
 | B | A's friend |
 | C | a stranger to both |
 
-The 23 checks (`R16_CHECKS`) form a closed list. A check that did not run counts as a failure.
+The 24 checks (`R16_CHECKS`) form a closed list. A check that did not run counts as a failure.
 
 | Rule | What is checked over HTTP |
 |---|---|
@@ -29,7 +29,22 @@ The 23 checks (`R16_CHECKS`) form a closed list. A check that did not run counts
 | No inference | a blocked pair sees no roster entry, presence or count of each other, either way; the blocked player's views with the other present **are** the views with them absent |
 | **P4 / P5** | (1) An owner who blocks a member removes them, and the owner stays. (2) A member who blocks the owner leaves, and the owner and server stay. |
 | DM | (1) A message between friends is delivered. (2) A block hides the conversation from **both** sides and refuses a new message. (3) Lifting the block shows the conversation again, with nothing written during the block. |
-| Restart | `--state` records every player's views (never a token). After the backend restarts, which revokes every browser session by design, `--phase verify` signs the same players in again and requires **identical** views. |
+| Lease | every player standing in the instance kept their presence alive by heartbeat, as a client must, and is still there at the end |
+| Restart | `--state` records every player's views (never a token). After the backend restarts (which revokes every browser session by design), `--phase verify` signs the same players in again, then checks DURABLE, RECONNECT and PRESENCE in that order (below) |
+
+**Presence is a lease** (`WONDERLAND_SOCIAL.md` decision 6): a presence not refreshed for 120 s is absent everywhere. Two things follow for the harness.
+- **During the scenario, it keeps the client's half.** Every player standing in the instance is refreshed every 20 s (`R16_HEARTBEAT_MS`).
+  - Without that, a slow hosted backend could let a lease lapse mid-run.
+  - A player who is simply not there makes privacy checks pass for the wrong reason: "B is not in C's roster" is trivially true when C has no roster.
+  - The LEASE check fails on any refused refresh, and on anyone not still standing in the instance at the end.
+- **A restart can outlast a lease**, and then every presence has ended, as a disconnection ends it. So the restart check judges two parts of each view separately, in this order:
+  1. **DURABLE**, read before anything is sent: friends and requests, blocks, the party, servers, the inbox, conversations, Recent Players, names and settings must be shown exactly as stored.
+  2. **RECONNECT:** each player who stood in the instance does what a client does.
+     - It refreshes its presence: `HELD` if the lease outlived the restart.
+     - On `NOT_IN_INSTANCE` it enters again: `REENTERED`.
+  3. **PRESENCE:** the roster, the population, every presence lookup, and each friend's and party-mate's presence must be shown exactly as before.
+
+  An unsplit comparison would report an ended presence as lost state. The in-process suite shows that the difference such a comparison finds lies exactly on these lease-derived paths, and nowhere else.
 
 **Voice is reported, not checked.** The harness says whether the backend serves EOS client configuration (`CONFIGURED` / `NOT_CONFIGURED_<status>` / `NOT_MOUNTED`). Proving voice needs EOS identities on a configured EOS product, which is CORE's final step.
 
@@ -47,7 +62,7 @@ WONDERLAND_R16_SESSIONS='{"<idA>":"<token>","<idB>":"<token>","<idC>":"<token>"}
 ```
 
 - **Exit codes:** 0 when every check passed; 1 when a check failed or the backend could not be reached; 2 for usage.
-- **What it prints:** one `R16 PASS|FAIL <rule>` line per check, then a summary.
+- **What it prints:** one `R16 PASS|FAIL <rule>` line per check, then a summary. The verify phase also prints `R16 RECONNECT <player>=HELD|REENTERED|ABSENT|REFUSED_…` for each player, and six results (three DURABLE, three PRESENCE).
 - **What it never prints:** the operator token or any session token.
 - **A backend with no social database** answers `503 social_store_unavailable`. The harness then says so and stops.
 - **With real players**, the harness changes their social state: a friendship, blocks, a party, a server and messages. It lifts every block it makes. A block's cascade (lost friendship or party seat) stays, as it would for anyone.
@@ -56,8 +71,8 @@ WONDERLAND_R16_SESSIONS='{"<idA>":"<token>","<idB>":"<token>","<idC>":"<token>"}
 
 `relay-bridge/wonderland-r16-harness.real-postgres.test.ts` builds `server.ts` exactly as it ships. It runs it as a **separate process** on a throwaway PostgreSQL migrated through 033.
 
-- **All 23 checks pass over HTTP.**
-- The process is then **killed and restarted**. A pre-restart session answers 401, the same players sign in again, and every view is identical.
+- **All 24 checks pass over HTTP.**
+- The process is then **killed and restarted**. A pre-restart session answers 401, and the same players sign in again. DURABLE and PRESENCE then both pass for all three, after a reconnect that held or re-entered.
 - **The harness can fail.** A fetch that leaks a hidden player into a stranger's roster, or shows a blocked conversation, is reported as exactly the rules it breaks.
 - The CLI runs both phases, exits 0, and prints no credential.
 - **Three backend mutants, each killed through the live process:**
@@ -67,6 +82,21 @@ WONDERLAND_R16_SESSIONS='{"<idA>":"<token>","<idB>":"<token>","<idC>":"<token>"}
 | P4 removal disabled | the P4 check |
 | Blocked conversations visible | the DM block check |
 | Strangers see hidden players | P1 roster and population, P1 present-equals-absent, and P2 read-time |
+
+`relay-bridge/wonderland-r16-harness.test.ts` runs the same harness against the same social routes, in process. Its backend clock moves the way a slow hosted backend's does (every request costs seconds), so leases actually run out:
+- **The scenario on a backend slow enough to outlast a lease twice over:** every standing player is refreshed, and all 24 checks pass.
+- **A client whose heartbeat never fires** loses its presence mid-run, and the LEASE check fails on it.
+- **A restart longer than a lease:**
+  - an unsplit comparison differs only on lease-derived paths;
+  - the split check passes all six results after every player re-enters (`REENTERED`).
+- **A restart inside the lease:** every refresh holds (`HELD`), and nothing is re-entered.
+- **Stored state that changed across the restart** (a server C never created) is a DURABLE failure for C alone.
+
+**Four harness mutants, each killed:**
+- the heartbeat never fires;
+- the restart check does not split;
+- the reconnect never enters again;
+- the LEASE check trusts the refreshes alone.
 
 ## What the hosted final R16 still needs
 
