@@ -110,8 +110,11 @@ export interface SocialRouteDeps {
   readonly verifySession: (token: string, now: number) => SocialSessionFacts | null;
   /** Who the paired player is, for their social record. Null when the account is unknown. */
   readonly identify: (participantId: string) => Promise<SocialPlayerIdentity | null>;
-  /** Null when this bridge has no social store: every call is 503. */
-  readonly store: SocialStore | null;
+  /**
+   * The social store, or null when this bridge has none (every call is 503, after the gates). A FUNCTION is called only once the
+   * session and the table have admitted the call, so an anonymous or refused request never opens it (JUJU MAIN's hosted plan r3).
+   */
+  readonly store: SocialStore | null | (() => Promise<SocialStore | null>);
   /** The party voice provider's token minter. Absent or null: voice is 503 VOICE TRANSPORT PENDING. */
   readonly voice?: PartyVoiceTokenMinter | null;
   /** Who holds which EOS PUID (migration 035). Required with a minter; absent: voice is 503. */
@@ -248,7 +251,8 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
   const scope = facts.scope ?? 'native_world';
   const op = nativeSocialMayCall(request.method, pathname, { scope, participantId: facts.participantId, capabilities: facts.capabilities });
   if (op === null) return err(403, 'not_permitted', 'This session may not do that.');
-  if (deps.store === null) return err(503, 'social_unavailable', 'Social is not available on this server.');
+  const store = typeof deps.store === 'function' ? await deps.store() : deps.store;
+  if (store === null) return err(503, 'social_unavailable', 'Social is not available on this server.');
   // 4. the actor is the session's player
   const body = request.body !== null && typeof request.body === 'object' && !Array.isArray(request.body) ? (request.body as Record<string, unknown>) : {};
   const actor = bindSocialActor({ scope, participantId: facts.participantId, capabilities: facts.capabilities }, body);
@@ -257,13 +261,13 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
   const identity = await deps.identify(actor.actorId);
   if (identity === null) return err(403, 'unknown_player', 'This account has no Wonderland player.');
   const nowIso = new Date(request.now).toISOString();
-  await deps.store.ensureUser(identity, nowIso);
+  await store.ensureUser(identity, nowIso);
 
   const query = parseQuery(search);
   if (op.id === 'events.stream') {
     const after = Number.parseInt(query.after ?? '0', 10);
     const limit = Number.parseInt(query.limit ?? '100', 10);
-    const page = await deps.store.eventsFor(actor.actorId, Number.isFinite(after) && after > 0 ? after : 0, Number.isFinite(limit) && limit > 0 ? limit : 100);
+    const page = await store.eventsFor(actor.actorId, Number.isFinite(after) && after > 0 ? after : 0, Number.isFinite(limit) && limit > 0 ? limit : 100);
     deps.tap?.({ at: nowIso, recipient: actor.actorId, kind: 'events', seqs: page.events.map((e) => e.seq), ops: page.events.map((e) => e.op), userIds: [] });
     return ok(page);
   }
@@ -272,7 +276,7 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
     // The audience is the WALLED one: a non-member gets none at all, and a member never gets anyone blocked either way.
     // Every refusal that concerns WHO the caller is answers exactly as a party that does not exist (the uniform stranger 404).
     const notThere = () => err(404, 'not-found', 'party not found');
-    const audience = voiceAudienceFor(await deps.store.read(), actor.actorId, partyId ?? '');
+    const audience = voiceAudienceFor(await store.read(), actor.actorId, partyId ?? '');
     if (audience.length === 0) return notThere();
     if (deps.voice === undefined || deps.voice === null || deps.voiceBindings === undefined || deps.voiceBindings === null) {
       return err(503, 'voice_unavailable', 'VOICE TRANSPORT PENDING');
@@ -312,7 +316,7 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
     const { productId, sandboxId, deploymentId, clientId, clientSecret } = config;
     return ok({ schema: EOS_CLIENT_CONFIG_SCHEMA, productId, sandboxId, deploymentId, clientId, clientSecret });
   }
-  const result = await deps.store.apply(op.id as SocialOperationId, actor.actorId, { ids: idsOf(op.template, pathname), body, query }, nowIso);
+  const result = await store.apply(op.id as SocialOperationId, actor.actorId, { ids: idsOf(op.template, pathname), body, query }, nowIso);
   // A RETRYABLE FAILURE IS AN OUTAGE, NOT A REFUSAL: a durable write that did not commit changed nothing and says 503.
   if (!result.ok) return err(result.error.retryable === true ? 503 : statusFor(result.error.code), result.error.code, result.error.message);
   if (op.id === 'snapshot.read') {

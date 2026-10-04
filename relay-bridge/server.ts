@@ -743,7 +743,8 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
               const login = socialLogins.get(participantId);
               return login === undefined ? null : { userId: participantId, displayName: login, handle: `@${login}` };
             },
-            store: await socialStore(),
+            // opened only after the session gate: an anonymous request never loads the store (JUJU MAIN's hosted plan r3)
+            store: socialStore,
             voice: eosVoice?.minter ?? null,
             voiceBindings: eosVoice !== null ? voiceBindings() : null,
             eosClientConfig: eosGameConfig,

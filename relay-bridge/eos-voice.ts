@@ -84,6 +84,25 @@ const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const MIN_ENV_SALT = 32;
 
 /**
+ * A config PATH variable set to this reads the SAME keys from the process environment instead of a file: for a host whose secrets
+ * are variables, not files (Railway; JUJU MAIN's hosted deploy plan r3, 10-04, option (iii)). Same refusals, same name-only logs.
+ */
+export const EOS_FROM_ENV = 'env:';
+/** With WONDERLAND_EOS_ROOM_SALT_FILE=env:, the salt itself: 32 to 512 characters, a STABLE secret of the deployment. */
+export const EOS_ROOM_SALT_ENV = 'WONDERLAND_EOS_ROOM_SALT';
+const EOS_VOICE_KEYS = ['EOS_PRODUCT_ID', 'EOS_SANDBOX_ID', 'EOS_DEPLOYMENT_ID', 'EOS_SERVER_CLIENT_ID', 'EOS_SERVER_CLIENT_SECRET', 'EOS_GAME_CLIENT_ID', 'EOS_GAME_CLIENT_SECRET'] as const;
+
+/** Exactly the named keys from the process environment, as parseDotEnv gives them from a file: trimmed; empty = absent. */
+function eosKeysFromEnv(env: NodeJS.ProcessEnv, names: readonly string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const name of names) {
+    const value = env[name]?.trim() ?? '';
+    if (value !== '') out.set(name, value);
+  }
+  return out;
+}
+
+/**
  * A .env file's KEY=VALUE lines: CRLF or LF, an optional UTF-8 BOM, blank lines and '#' comments ignored, whitespace around '='
  * trimmed, one pair of surrounding single or double quotes stripped. Every key is kept; the caller reads only the ones it knows.
  */
@@ -109,6 +128,8 @@ export function parseDotEnv(text: string): Map<string, string> {
  *   else the founder's .env: EOS_PRODUCT_ID, EOS_SANDBOX_ID, EOS_DEPLOYMENT_ID, and the client -- EOS_SERVER_CLIENT_ID +
  *        EOS_SERVER_CLIENT_SECRET (the Trusted Server client) preferred, else EOS_GAME_CLIENT_ID + EOS_GAME_CLIENT_SECRET; the
  *        room salt from the SEPARATE file named by WONDERLAND_EOS_ROOM_SALT_FILE (first line, >= 32 characters).
+ * EITHER path variable may be `env:` (EOS_FROM_ENV): the same .env keys, or the salt as WONDERLAND_EOS_ROOM_SALT, from the process
+ * environment -- a host whose secrets are variables (JUJU MAIN's hosted plan r3).
  * Any missing key, unreadable file, field out of shape or short salt: null -- party voice stays 503, with no fallback. A log line
  * names WHICH key or file is wanting (key names only); it never carries a value, and never a path ("the EOS config file", "the
  * room salt file").
@@ -122,13 +143,15 @@ export function loadEosVoiceConfig(env: NodeJS.ProcessEnv, deps: { readFile?: (p
   };
   const path = env[EOS_VOICE_CONFIG_ENV]?.trim() ?? '';
   if (path === '') return refuse(`${EOS_VOICE_CONFIG_ENV} is not set`);
+  // a host whose secrets are variables: the same keys, from this process's environment (never a file)
+  if (path === EOS_FROM_ENV) return configFromKeys(eosKeysFromEnv(env, EOS_VOICE_KEYS), 'the environment', env, read, refuse, log);
   let text: string;
   try {
     text = read(path).replace(/^﻿/, '');
   } catch {
     return refuse('the EOS config file could not be read');
   }
-  return text.trimStart().startsWith('{') ? configFromJson(text, refuse, log) : configFromDotEnv(text, env, read, refuse, log);
+  return text.trimStart().startsWith('{') ? configFromJson(text, refuse, log) : configFromKeys(parseDotEnv(text), 'the EOS config file', env, read, refuse, log);
 }
 
 function configFromJson(text: string, refuse: (why: string) => null, log: (line: string) => void): EosVoiceConfig | null {
@@ -151,8 +174,7 @@ function configFromJson(text: string, refuse: (why: string) => null, log: (line:
   return config;
 }
 
-function configFromDotEnv(text: string, env: NodeJS.ProcessEnv, read: (path: string) => string, refuse: (why: string) => null, log: (line: string) => void): EosVoiceConfig | null {
-  const keys = parseDotEnv(text);
+function configFromKeys(keys: ReadonlyMap<string, string>, source: string, env: NodeJS.ProcessEnv, read: (path: string) => string, refuse: (why: string) => null, log: (line: string) => void): EosVoiceConfig | null {
   const get = (k: string) => keys.get(k) ?? '';
   const ids = ['EOS_PRODUCT_ID', 'EOS_SANDBOX_ID', 'EOS_DEPLOYMENT_ID'] as const;
   const missingIds = ids.filter((k) => get(k) === '');
@@ -163,21 +185,28 @@ function configFromDotEnv(text: string, env: NodeJS.ProcessEnv, read: (path: str
   const game = pair('EOS_GAME');
   const kind = server.id !== '' && server.secret !== '' ? 'server' : game.id !== '' && game.secret !== '' ? 'game' : null;
   const missing = [...missingIds, ...(kind === null ? ['EOS_SERVER_CLIENT_ID + EOS_SERVER_CLIENT_SECRET (or EOS_GAME_CLIENT_ID + EOS_GAME_CLIENT_SECRET)'] : [])];
-  if (missing.length > 0 || kind === null) return refuse(`the EOS config file is missing ${missing.join(', ')}`);
+  if (missing.length > 0 || kind === null) return refuse(`${source} is missing ${missing.join(', ')}`);
   const client = kind === 'server' ? server : game;
   const clientKeyPrefix = kind === 'server' ? 'EOS_SERVER' : 'EOS_GAME';
   const shapeless = [...shapelessIds, ...(ID.test(client.id) ? [] : [`${clientKeyPrefix}_CLIENT_ID`]), ...(client.secret.length <= 512 ? [] : [`${clientKeyPrefix}_CLIENT_SECRET`])];
-  if (shapeless.length > 0) return refuse(`the EOS config file has out of shape: ${shapeless.join(', ')}`);
+  if (shapeless.length > 0) return refuse(`${source} has out of shape: ${shapeless.join(', ')}`);
   // THE ROOM SALT, from its own file (not a founder credential)
   const saltPath = env[EOS_ROOM_SALT_FILE_ENV]?.trim() ?? '';
   if (saltPath === '') return refuse(`${EOS_ROOM_SALT_FILE_ENV} is not set (the room salt file)`);
   let salt: string;
-  try {
-    salt = (read(saltPath).replace(/^﻿/, '').split(/\r?\n/)[0] ?? '').trim();
-  } catch {
-    return refuse('the room salt file could not be read');
+  if (saltPath === EOS_FROM_ENV) {
+    // the salt as a variable: a STABLE secret of the deployment, never generated here (a new salt orphans every room)
+    salt = (env[EOS_ROOM_SALT_ENV] ?? '').trim();
+  } else {
+    try {
+      salt = (read(saltPath).replace(/^﻿/, '').split(/\r?\n/)[0] ?? '').trim();
+    } catch {
+      return refuse('the room salt file could not be read');
+    }
   }
-  if (salt.length < MIN_ENV_SALT || salt.length > 512) return refuse(`the room salt file must hold one line of ${MIN_ENV_SALT} to 512 characters`);
+  if (salt.length < MIN_ENV_SALT || salt.length > 512) {
+    return refuse(saltPath === EOS_FROM_ENV ? `${EOS_ROOM_SALT_ENV} must hold ${MIN_ENV_SALT} to 512 characters` : `the room salt file must hold one line of ${MIN_ENV_SALT} to 512 characters`);
+  }
   log(kind === 'server' ? 'eos voice: client kind server' : 'eos voice: client kind game (fallback): room actions need a Trusted Server policy');
   return { productId: get('EOS_PRODUCT_ID'), sandboxId: get('EOS_SANDBOX_ID'), deploymentId: get('EOS_DEPLOYMENT_ID'), clientId: client.id, clientSecret: client.secret, roomSalt: salt, clientKind: kind };
 }
@@ -210,6 +239,7 @@ const EOS_GAME_KEYS = ['EOS_PRODUCT_ID', 'EOS_SANDBOX_ID', 'EOS_DEPLOYMENT_ID', 
  * ONLY the EOS_GAME_* pair is ever read. The Trusted Server's EOS_SERVER_* pair is never a client's: a file holding only that
  * pair is refused, and a file holding both serves the game pair. Given `deployment` (the voice config's ids), a game config
  * naming another product, sandbox or deployment is refused, since its clients could never join the rooms the bridge mints.
+ * WONDERLAND_EOS_GAME_CONFIG=env: reads the same five keys from the process environment instead (EOS_FROM_ENV), never EOS_SERVER_*.
  * Absent, unreadable, not the .env form, missing a key, out of shape or mismatched: null, and the route answers 503. The log
  * says "eos game config: loaded (5 keys)", "absent", or why not by key or field NAME; never a value, a length or the path.
  */
@@ -228,24 +258,33 @@ export function loadEosGameClientConfig(
     log('eos game config: absent');
     return null;
   }
-  let text: string;
-  try {
-    text = read(path);
-  } catch {
-    return refuse('the EOS game config file could not be read');
+  let keys: ReadonlyMap<string, string>;
+  let source: string;
+  if (path === EOS_FROM_ENV) {
+    // a host whose secrets are variables: ONLY the five game keys are looked up, so EOS_SERVER_* is never read even beside them
+    keys = eosKeysFromEnv(env, EOS_GAME_KEYS);
+    source = 'the environment';
+  } else {
+    let text: string;
+    try {
+      text = read(path);
+    } catch {
+      return refuse('the EOS game config file could not be read');
+    }
+    // trimStart drops a UTF-8 BOM too (U+FEFF is ECMAScript white space)
+    if (text.trimStart().startsWith('{')) return refuse('the EOS game config file must be the .env form');
+    keys = parseDotEnv(text);
+    source = 'the EOS game config file';
   }
-  // trimStart drops a UTF-8 BOM too (U+FEFF is ECMAScript white space)
-  if (text.trimStart().startsWith('{')) return refuse('the EOS game config file must be the .env form');
-  const keys = parseDotEnv(text);
   const get = (k: (typeof EOS_GAME_KEYS)[number]) => keys.get(k) ?? '';
   const missing = EOS_GAME_KEYS.filter((k) => get(k) === '');
-  if (missing.length > 0) return refuse(`the EOS game config file is missing ${missing.join(', ')}`);
+  if (missing.length > 0) return refuse(`${source} is missing ${missing.join(', ')}`);
   const secret = get('EOS_GAME_CLIENT_SECRET');
   const shapeless = [
     ...EOS_GAME_KEYS.filter((k) => k !== 'EOS_GAME_CLIENT_SECRET' && !ID.test(get(k))),
     ...(secret.length <= 512 && !/\s/.test(secret) ? [] : ['EOS_GAME_CLIENT_SECRET']),
   ];
-  if (shapeless.length > 0) return refuse(`the EOS game config file has out of shape: ${shapeless.join(', ')}`);
+  if (shapeless.length > 0) return refuse(`${source} has out of shape: ${shapeless.join(', ')}`);
   const config: EosGameClientConfig = Object.freeze({
     productId: get('EOS_PRODUCT_ID'),
     sandboxId: get('EOS_SANDBOX_ID'),
@@ -256,7 +295,7 @@ export function loadEosGameClientConfig(
   const expected = deps.deployment ?? null;
   if (expected !== null) {
     const differ = (['productId', 'sandboxId', 'deploymentId'] as const).filter((k) => config[k] !== expected[k]);
-    if (differ.length > 0) return refuse(`the EOS game config file names another ${differ.join(', ')} than the voice config`);
+    if (differ.length > 0) return refuse(`${source} names another ${differ.join(', ')} than the voice config`);
   }
   log('eos game config: loaded (5 keys)');
   return config;

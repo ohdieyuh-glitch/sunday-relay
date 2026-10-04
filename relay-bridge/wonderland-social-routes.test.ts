@@ -308,3 +308,28 @@ describe("the GAME client's EOS config route (founder 10-04: from the backend, h
     noValueIn(log, values);
   });
 });
+
+describe("the store opens only after the session gate (JUJU MAIN's hosted plan r3)", () => {
+  it('an anonymous, unknown, web-page or uncapable request never opens it; an admitted one does; a store that cannot open is 503', async () => {
+    let opened = 0;
+    const memory = createInMemorySocialStore();
+    const deps: SocialRouteDeps = {
+      verifySession: (token) => SESSIONS[token] ?? null,
+      identify: async (participantId) => ({ userId: participantId, displayName: participantId, handle: `@${participantId}` }),
+      store: async () => {
+        opened += 1;
+        return memory;
+      },
+    };
+    const call = async (token: string | null, origin?: string, over: Partial<SocialRouteDeps> = {}) =>
+      (await handleSocialRoute({ method: 'GET', path: '/wonderland/social/snapshot', authorization: token === null ? undefined : `Relay-Session ${token}`, origin, body: null, now: T0 }, { ...deps, ...over }))?.status;
+    expect(await call(null)).toBe(401);
+    expect(await call('tok-nope')).toBe(401);
+    expect(await call('tok-kai', 'https://evil.example')).toBe(403);
+    expect(await call('tok-mira')).toBe(403);
+    expect(opened).toBe(0);
+    expect(await call('tok-kai')).toBe(200);
+    expect(opened).toBe(1);
+    expect(await call('tok-kai', undefined, { store: async () => null })).toBe(503);
+  });
+});
