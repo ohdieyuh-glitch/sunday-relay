@@ -4465,7 +4465,7 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		// PROJECT BRAIN (founder 10-03: Second completes it). The action lives in UWonderlandProjectBrainSubsystem; this only routes the
 		// line and answers it. A pairing code is never echoed (MaskTerminalEcho) or logged.
 		FString Said;
-		UGameInstance* Instance = GetGameInstance();
+		const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
 		UWonderlandProjectBrainSubsystem* Brain = Instance != nullptr ? Instance->GetSubsystem<UWonderlandProjectBrainSubsystem>() : nullptr;
 		if (Brain != nullptr)
 		{
